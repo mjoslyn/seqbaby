@@ -137,8 +137,13 @@ const ELEVEN_ENGINE = {
   defaultNote: 60, poly: true, melodic: true,
 };
 
+const UPLOAD_ENGINE = {
+  key: "upload", label: "upload a sample…", group: "user samples", type: "upload",
+  defaultNote: 60, poly: true, melodic: true,
+};
+
 function buildEngineCatalog() {
-  return [...plaitsEntries(), ...DRUM_SYNTH_ENGINES, CUSTOM_ENGINE, ELEVEN_ENGINE, ...savedPatchEntries(), ...SAMPLE_ENGINES, MIDI_ENGINE];
+  return [...plaitsEntries(), ...DRUM_SYNTH_ENGINES, CUSTOM_ENGINE, ELEVEN_ENGINE, UPLOAD_ENGINE, ...savedPatchEntries(), ...SAMPLE_ENGINES, MIDI_ENGINE];
 }
 
 let ENGINES = [];
@@ -470,6 +475,9 @@ function serializeSet() {
       customConfig: t.customConfig ? JSON.parse(JSON.stringify(t.customConfig)) : null,
       elevenAudio: t.elevenAudio || null,
       elevenAudioMime: t.elevenAudioMime || null,
+      uploadAudio: t.uploadAudio || null,
+      uploadAudioMime: t.uploadAudioMime || null,
+      uploadFileName: t.uploadFileName || null,
       soundPromptText: t.soundPromptText,
       locked: t.locked, muted: t.muted, soloed: t.soloed,
       glide: t.glide, speed: t.speed ?? 1,
@@ -585,8 +593,11 @@ function applySet(s) {
     t.customConfig = td.customConfig || null;
     t.elevenAudio = td.elevenAudio || null;
     t.elevenAudioMime = td.elevenAudioMime || null;
+    t.uploadAudio = td.uploadAudio || null;
+    t.uploadAudioMime = td.uploadAudioMime || null;
+    t.uploadFileName = td.uploadFileName || null;
     t.soundPromptText = td.soundPromptText || "";
-    // decode the saved eleven-labs sample (async; once done the voice picks it up)
+    // decode any saved sample buffers (async; once done the voice picks it up)
     if (t.elevenAudio) {
       (async () => {
         try {
@@ -596,6 +607,17 @@ function applySet(s) {
           t.elevenBuffer = buffer;
           if (t.voice?.type === "eleven") t.voice.setBuffer(buffer);
         } catch (e) { console.warn("eleven buffer decode failed", e); }
+      })();
+    }
+    if (t.uploadAudio) {
+      (async () => {
+        try {
+          const bytes = Uint8Array.from(atob(t.uploadAudio), c => c.charCodeAt(0));
+          await ensureAudio();
+          const buffer = normalizeAudioBuffer(await state.audioCtx.decodeAudioData(bytes.buffer));
+          t.uploadBuffer = buffer;
+          if (t.voice?.type === "upload") t.voice.setBuffer(buffer);
+        } catch (e) { console.warn("upload buffer decode failed", e); }
       })();
     }
     t.locked = !!td.locked;
@@ -1492,6 +1514,61 @@ class ElevenVoice {
   }
 }
 
+class UploadVoice {
+  constructor(ctx, key, params, track) {
+    this.ctx = ctx;
+    this.type = "upload";
+    this.poly = true;
+    this.key = key;
+    this.boost = ctx.createGain();
+    this.boost.gain.value = 1;                    // raw level, user-provided samples are usually already hot
+    this.output = ctx.createGain();
+    this.output.gain.value = params.vol;
+    this.boost.connect(this.output);
+    this.output.connect(ctx.destination);
+    this.buffer = track?.uploadBuffer ?? null;
+    this.active = new Set();
+  }
+  getOutputNode() { return this.output; }
+  setDestination(target) {
+    try { this.output.disconnect(); } catch {}
+    this.output.connect(target);
+  }
+  canInPlaceChange(newKey) { return newKey === "upload"; }
+  setEngine() {}
+  setBuffer(buf) { this.buffer = buf; }
+  setParam(key, val) { if (key === "vol") this.output.gain.value = val; }
+  getAudioParam(key) { return key === "vol" ? this.output.gain : null; }
+  hit(midiNote, time, duration, velocity = 1) {
+    if (!this.buffer) return;
+    const src = this.ctx.createBufferSource();
+    src.buffer = this.buffer;
+    src.playbackRate.value = Math.pow(2, (midiNote - 60) / 12);
+    const g = this.ctx.createGain();
+    const v = Math.max(0, Math.min(1, velocity));
+    const fade = 0.006;
+    const stopTime = time + Math.max(0.1, duration + 0.5);
+    g.gain.setValueAtTime(0, time);
+    g.gain.linearRampToValueAtTime(v, time + fade);
+    g.gain.setValueAtTime(v, Math.max(time + fade, stopTime - fade));
+    g.gain.linearRampToValueAtTime(0, stopTime);
+    src.connect(g).connect(this.boost);
+    src.start(time);
+    src.stop(stopTime + 0.01);
+    this.active.add(src);
+    src.onended = () => this.active.delete(src);
+  }
+  silence(now) {
+    for (const s of this.active) { try { s.stop(now); } catch {} }
+    this.active.clear();
+  }
+  dispose() {
+    this.silence(this.ctx.currentTime);
+    try { this.boost.disconnect(); } catch {}
+    try { this.output.disconnect(); } catch {}
+  }
+}
+
 class MidiVoice {
   constructor(ctx, key, params) {
     this.ctx = ctx;
@@ -1542,6 +1619,7 @@ function buildVoiceForEngine(ctx, key, params, track) {
     case "custom":     return new CustomToneVoice(ctx, key, params, track?.customConfig ?? null);
     case "saved":      return new CustomToneVoice(ctx, key, params, e.config);
     case "eleven":     return new ElevenVoice(ctx, key, params, track);
+    case "upload":     return new UploadVoice(ctx, key, params, track);
   }
   throw new Error("unknown engine type: " + e.type);
 }
@@ -2159,7 +2237,18 @@ function renderTrack(t) {
     const n = Math.max(1, Math.min(128, Number(e.target.value) || 1));
     resizeTrack(t, n);
   });
-  engineSel.addEventListener("change", e => setEngineKey(t, e.target.value));
+  engineSel.addEventListener("change", e => {
+    const val = e.target.value;
+    if (val === "upload") {
+      // intercept — open file picker; only commit the engine change if a file is chosen
+      const prev = t.engineKey;
+      pickAudioFileForTrack(t).then(ok => {
+        if (!ok) engineSel.value = prev;
+      });
+      return;
+    }
+    setEngineKey(t, val);
+  });
 
   node.querySelector(".p-vol").addEventListener("input", e => setParam(t, "vol", Number(e.target.value)));
   node.querySelector(".p-harm").addEventListener("input", e => setParam(t, "harm", Number(e.target.value)));
@@ -3340,6 +3429,62 @@ async function designSoundForTrack(track, prompt, engine, signal) {
   setEngineKey(track, "custom");
   if (track.el) track.el.querySelector(".track-engine").value = "custom";
   if (cfg.fx) applyFxToTrack(track, cfg.fx);
+}
+
+async function pickAudioFileForTrack(t) {
+  return new Promise(resolve => {
+    const inp = document.createElement("input");
+    inp.type = "file";
+    inp.accept = "audio/*,.wav,.mp3,.ogg,.flac,.m4a,.aac";
+    inp.style.display = "none";
+    document.body.appendChild(inp);
+    let resolved = false;
+    inp.addEventListener("change", async () => {
+      const file = inp.files?.[0];
+      inp.remove();
+      if (!file) { if (!resolved) resolve(false); resolved = true; return; }
+      try {
+        setStatus(`loading "${file.name}"...`);
+        const arrayBuf = await file.arrayBuffer();
+        await ensureAudio();
+        // decodeAudioData mutates the buffer, so keep a copy for persistence
+        const persistBytes = arrayBufferToBase64(arrayBuf.slice(0));
+        const audioBuf = normalizeAudioBuffer(await state.audioCtx.decodeAudioData(arrayBuf));
+        t.uploadBuffer = audioBuf;
+        t.uploadAudio = persistBytes;
+        t.uploadAudioMime = file.type || "audio/wav";
+        t.uploadFileName = file.name;
+        t.soundPromptText = file.name;
+        if (t.engineKey === "upload" && t.voice?.type === "upload") {
+          t.voice.setBuffer(audioBuf);
+        } else {
+          setEngineKey(t, "upload");
+          if (t.el) t.el.querySelector(".track-engine").value = "upload";
+        }
+        setStatus(`"${t.name}" ← ${file.name} (${Math.round(audioBuf.duration * 1000)}ms)`);
+        resolve(true);
+      } catch (err) {
+        console.error(err);
+        setStatus(`failed to load "${file.name}"`, true);
+        resolve(false);
+      }
+    }, { once: true });
+    // if user cancels the picker there's no "cancel" event; fall back to a short timeout
+    window.addEventListener("focus", () => {
+      setTimeout(() => { if (!resolved && !inp.files?.length) { resolved = true; inp.remove(); resolve(false); } }, 300);
+    }, { once: true });
+    inp.click();
+  });
+}
+
+function arrayBufferToBase64(buf) {
+  const bytes = new Uint8Array(buf);
+  let binary = "";
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+  }
+  return btoa(binary);
 }
 
 async function designElevenSound(t) {
