@@ -1399,29 +1399,37 @@ class CustomToneVoice {
   }
 }
 
-// Peak-normalize an AudioBuffer in place and taper the last ~5ms to zero so the sample
-// doesn't click at its natural end. ElevenLabs output is typically -12…-18 dB and often
-// cuts abruptly.
+// Loudness-normalize an AudioBuffer in place using an RMS target, capped at a safe peak
+// so transients don't clip. Target is -14 dBFS RMS (≈0.2), matching typical loud-but-not-
+// crushed sample levels. Tapers the last ~5ms to zero to kill end-of-sample clicks.
 function normalizeAudioBuffer(buf) {
   if (!buf) return buf;
   let peak = 0;
+  let sumSq = 0;
+  let count = 0;
   for (let ch = 0; ch < buf.numberOfChannels; ch++) {
     const d = buf.getChannelData(ch);
     for (let i = 0; i < d.length; i++) {
-      const v = Math.abs(d[i]);
-      if (v > peak) peak = v;
+      const v = d[i];
+      const a = Math.abs(v);
+      if (a > peak) peak = a;
+      sumSq += v * v;
+      count++;
     }
   }
-  const scale = (peak === 0 || peak >= 0.95) ? 1 : 0.98 / peak;
+  if (count === 0 || peak === 0) return buf;
+  const rms = Math.sqrt(sumSq / count);
+  const targetRms = 0.2;                           // -14 dBFS
+  const rmsScale = rms > 0 ? targetRms / rms : 1;  // how much to bring up RMS
+  const peakScale = 0.98 / peak;                   // don't exceed -0.18 dBFS peak
+  const scale = Math.min(rmsScale, peakScale);
   const tailSamples = Math.min(buf.length, Math.round(buf.sampleRate * 0.005));
   for (let ch = 0; ch < buf.numberOfChannels; ch++) {
     const d = buf.getChannelData(ch);
     if (scale !== 1) for (let i = 0; i < d.length; i++) d[i] *= scale;
-    // linear taper over the last tailSamples
     for (let i = 0; i < tailSamples; i++) {
       const j = d.length - tailSamples + i;
-      const fade = 1 - (i / tailSamples);
-      d[j] *= fade;
+      d[j] *= 1 - (i / tailSamples);
     }
   }
   return buf;
@@ -1433,8 +1441,13 @@ class ElevenVoice {
     this.type = "eleven";
     this.poly = true;
     this.key = key;
+    // Fixed headroom boost so generated samples match the loudness of the synth engines.
+    // The user's vol slider still scales the final output on top.
+    this.boost = ctx.createGain();
+    this.boost.gain.value = 2.5;  // ≈ +8 dB
     this.output = ctx.createGain();
     this.output.gain.value = params.vol;
+    this.boost.connect(this.output);
     this.output.connect(ctx.destination);
     this.buffer = track?.elevenBuffer ?? null;
     this.active = new Set();
@@ -1462,7 +1475,7 @@ class ElevenVoice {
     g.gain.linearRampToValueAtTime(v, time + fade);
     g.gain.setValueAtTime(v, Math.max(time + fade, stopTime - fade));
     g.gain.linearRampToValueAtTime(0, stopTime);
-    src.connect(g).connect(this.output);
+    src.connect(g).connect(this.boost);
     src.start(time);
     src.stop(stopTime + 0.01);
     this.active.add(src);
@@ -1474,6 +1487,7 @@ class ElevenVoice {
   }
   dispose() {
     this.silence(this.ctx.currentTime);
+    try { this.boost.disconnect(); } catch {}
     try { this.output.disconnect(); } catch {}
   }
 }

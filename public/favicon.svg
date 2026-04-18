@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" shape-rendering="geometricPrecision">
+  <!-- headphone band arc -->
+  <path d="M10 22 Q32 0 54 22" stroke="#e8e6df" stroke-width="3" fill="none" stroke-linecap="round"/>
+  <!-- ear cups -->
+  <rect x="6" y="20" width="8" height="14" rx="3" fill="#e8e6df"/>
+  <rect x="50" y="20" width="8" height="14" rx="3" fill="#e8e6df"/>
+  <!-- face (rounded sequencer-pad) -->
+  <rect x="10" y="18" width="44" height="40" rx="9" fill="#ff6fa3" stroke="#d94f87" stroke-width="1.5"/>
+  <!-- lit step-cell eyes -->
+  <rect x="18" y="28" width="10" height="10" rx="2" fill="#c2f04a"/>
+  <rect x="36" y="28" width="10" height="10" rx="2" fill="#c2f04a"/>
+  <!-- little dark pupils -->
+  <rect x="21.5" y="31.5" width="3" height="3" rx="0.5" fill="#0b0d10"/>
+  <rect x="39.5" y="31.5" width="3" height="3" rx="0.5" fill="#0b0d10"/>
+  <!-- waveform mouth, mid-squeal -->
+  <path d="M16 48 Q20 44 24 48 T32 48 T40 48 T48 48" stroke="#6b2ce5" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- single dangling patch cable -->
+  <path d="M52 56 Q56 60 60 58" stroke="#6ee7ff" stroke-width="2" fill="none" stroke-linecap="round"/>
+  <circle cx="60" cy="58" r="1.6" fill="#6ee7ff"/>
+</svg>

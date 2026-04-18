@@ -38,6 +38,19 @@ html, body {
   flex-wrap: wrap;
 }
 
+.logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding-right: 6px;
+  color: var(--fg);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  user-select: none;
+}
+.logo img { width: 30px; height: 30px; }
+.logo span { font-size: 15px; }
+
 .transport .spacer { flex: 1; }
 
 .field {
