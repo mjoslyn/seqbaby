@@ -360,6 +360,8 @@ const state = {
   nextId: 1,
   audioCtx: null,
   ready: false,
+  masterGain: null,
+  masterAnalyser: null,
   midi: null,
   scale: { active: false, root: 0, mode: "minor" },
   activePattern: 0,
@@ -375,7 +377,7 @@ function emptyPattern(len) {
     steps: new Array(len).fill(0),
     lengths: new Array(len).fill(0),
     notes: new Array(len).fill(null),
-    velocities: new Array(len).fill(1),
+    velocities: new Array(len).fill(0.5),
     chords: new Array(len).fill(""),
     offsets: new Array(len).fill(0),   // micro-timing offset in step fractions (-0.5..+0.5)
     arps: new Array(len).fill(false),           // arpeggiate the chord across the step's duration
@@ -635,7 +637,7 @@ function applySet(s) {
           steps: pad(p.steps, 0, t.length),
           lengths: pad(p.lengths, 0, t.length),
           notes: pad(p.notes, null, t.length),
-          velocities: pad(p.velocities, 1, t.length),
+          velocities: pad(p.velocities, 0.5, t.length),
           chords: pad(p.chords, "", t.length),
         };
       }
@@ -1714,7 +1716,20 @@ function updatePlaitsControlsVisibility(t) {
   if (!t.el) return;
   const isPlaits = engineByKey(t.engineKey)?.type === "plaits";
   const group = t.el.querySelector(".timbre-group");
-  if (group) group.style.display = isPlaits ? "" : "none";
+  if (group) {
+    group.hidden = !isPlaits;
+    group.style.removeProperty("display");
+  }
+  const modPanel = t.el.querySelector(".track-mod-panel");
+  if (modPanel) {
+    for (const key of ["harm", "timb", "morph", "decay"]) {
+      const row = modPanel.querySelector(`.lfo-row[data-key="${key}"]`);
+      if (row) {
+        row.hidden = !isPlaits;
+        row.style.removeProperty("display");
+      }
+    }
+  }
 }
 
 // Force all fx wet levels to 0 (100% dry) — used when switching a track to the
@@ -1730,6 +1745,30 @@ function resetFxDry(t) {
     t.fxRack.applyReverb(cfg.reverb);
   }
   refreshFxPanelUI(t);
+}
+
+// For prompted sounds: start with a clean signal path so the user hears the designed
+// patch as-is. Filter fully open with zero env depth, mod LFOs disabled, fx all dry.
+// Controls remain accessible — just zeroed so they can be dialed in intentionally.
+function resetProcessingForPromptedSound(t) {
+  t.filter.cutoff = 1;
+  t.filter.env = 0;
+  if (t.filterNode) {
+    try {
+      t.filterNode.frequency.cancelScheduledValues(state.audioCtx.currentTime);
+      t.filterNode.frequency.setValueAtTime(cutoffToHz(1), state.audioCtx.currentTime);
+    } catch {}
+  }
+  for (const k of LFO_KEYS) t.lfoConfig[k].enabled = false;
+  if (state.ready) syncAllLFOs(t);
+  resetFxDry(t);
+  const el = t.el;
+  if (el) {
+    const cut = el.querySelector(".p-cutoff"); if (cut) cut.value = 1;
+    const envAmt = el.querySelector(".p-envamt"); if (envAmt) envAmt.value = 0;
+    const modPanel = el.querySelector(".track-mod-panel");
+    if (modPanel) renderModPanel(t, modPanel);
+  }
 }
 
 function setEngineKey(t, newKey) {
@@ -1868,6 +1907,17 @@ function removeTrack(t) {
 function ensureFxRack(t) {
   if (!state.audioCtx || t.fxRack) return;
   t.fxRack = new FXRack(state.audioCtx, t.fxConfig);
+  // Reroute the fx rack away from ctx.destination onto the master bus,
+  // and tap the post-fx signal for the per-track level meter.
+  try { t.fxRack.output.disconnect(); } catch {}
+  const masterDest = state.masterGain || state.audioCtx.destination;
+  t.fxRack.output.connect(masterDest);
+  if (!t.meterAnalyser) {
+    t.meterAnalyser = state.audioCtx.createAnalyser();
+    t.meterAnalyser.fftSize = 512;
+    t.meterAnalyser.smoothingTimeConstant = 0.15;
+  }
+  t.fxRack.output.connect(t.meterAnalyser);
 }
 
 // cutoff slider [0,1] → freq 60-20000 Hz (log)
@@ -2134,7 +2184,7 @@ function resizeTrack(t, len) {
     p.steps      = pad(p.steps, 0);
     p.lengths    = pad(p.lengths, 0);
     p.notes      = pad(p.notes, null);
-    p.velocities = pad(p.velocities, 1);
+    p.velocities = pad(p.velocities, 0.5);
     p.chords     = pad(p.chords, "");
     for (let i = 0; i < len; i++) {
       if (p.steps[i]) p.lengths[i] = Math.max(1, Math.min(p.lengths[i] || 1, len - i));
@@ -2158,7 +2208,7 @@ function clearRange(t, from, to, keep) {
     t.steps[i] = 0;
     t.lengths[i] = 0;
     t.notes[i] = null;
-    t.velocities[i] = 1;
+    t.velocities[i] = 0.5;
     t.chords[i] = "";
   }
 }
@@ -2203,7 +2253,7 @@ function removeNote(t, anchor) {
   t.steps[anchor] = 0;
   t.lengths[anchor] = 0;
   t.notes[anchor] = null;
-  t.velocities[anchor] = 1;
+  t.velocities[anchor] = 0.5;
   t.chords[anchor] = "";
 }
 
@@ -2380,7 +2430,7 @@ function renderTrack(t) {
     t.steps.fill(0);
     t.lengths.fill(0);
     t.notes.fill(null);
-    t.velocities.fill(1);
+    t.velocities.fill(0.5);
     t.chords.fill("");
     renderStepGrid(t);
   });
@@ -2672,7 +2722,7 @@ function makeCell(t, idx, span, on) {
   cell.dataset.span = String(span);
   if (on) {
     cell.classList.add("on");
-    const vel = t.velocities[idx] ?? 1;
+    const vel = t.velocities[idx] ?? 0.5;
     cell.style.setProperty("--vel", String(vel));
   }
   if (span > 1) cell.classList.add("held");
@@ -2818,7 +2868,7 @@ function openStepEditor(t, idx, anchorEl) {
     </div>
     <div class="se-field">
       <label>vel</label>
-      <input class="se-vel" type="range" min="0" max="1" step="0.01" value="${t.velocities[idx] ?? 1}" />
+      <input class="se-vel" type="range" min="0" max="1" step="0.01" value="${t.velocities[idx] ?? 0.5}" />
       <span class="se-vel-label"></span>
     </div>
     <div class="se-field">
@@ -3006,6 +3056,16 @@ async function ensureAudio() {
     Tone.setContext(state.audioCtx);
   }
   await Tone.start();
+  // master bus so we can meter final output and add a one-stop master gain later
+  if (!state.masterGain) {
+    state.masterGain = state.audioCtx.createGain();
+    state.masterGain.gain.value = 1;
+    state.masterGain.connect(state.audioCtx.destination);
+    state.masterAnalyser = state.audioCtx.createAnalyser();
+    state.masterAnalyser.fftSize = 1024;
+    state.masterAnalyser.smoothingTimeConstant = 0.25;
+    state.masterGain.connect(state.masterAnalyser);
+  }
   await wosc.loadOscillator(state.audioCtx);
   await ensureMidi().catch(() => null);
   for (const t of state.tracks) {
@@ -3098,14 +3158,20 @@ async function togglePlay() {
         const hitTime = Math.max(state.audioCtx.currentTime + 0.002,
           time + slot * effDur + swingOffset + microOffset);
         const root = noteForStep(t, idx);
-        const vel = t.velocities[idx] ?? 1;
+        const vel = t.velocities[idx] ?? 0.5;
         const chord = t.chords[idx] || "";
         const arp = !!(t.arps && t.arps[idx]);
         const cpx = (t.complexities && t.complexities[idx]) || 0;
         let notes = chord ? chordNotes(root, chord) : [root];
         if (chord && cpx) notes = invertChord(notes, cpx);
         const list = (t.voice.poly && !arp) ? notes : (arp ? notes : [notes[0]]);
-        try { fireFilterEnv(t, hitTime, duration); } catch (e) { console.warn(e); }
+        // Sample-based voices play longer than the step; extend the envelope sustain
+        // so the ADSR actually shapes the whole sample, not just the first few ms.
+        const sampleDur = (t.voice.buffer && ["sample","eleven","upload"].includes(t.voice.type))
+          ? (t.voice.buffer.duration || 0)
+          : 0;
+        const envDur = Math.max(duration, sampleDur);
+        try { fireFilterEnv(t, hitTime, envDur); } catch (e) { console.warn(e); }
         if (arp && notes.length > 1) {
           // classic arpeggiator: rate (beats per note) × range (octaves) × direction
           const rateBeats = t.arpRates?.[idx] ?? 0.25;
@@ -3327,7 +3393,7 @@ function applyPattern(t, data) {
   });
 
   t.steps.fill(0); t.lengths.fill(0); t.notes.fill(null);
-  t.velocities.fill(1); t.chords.fill("");
+  t.velocities.fill(0.5); t.chords.fill("");
   if (t.offsets) t.offsets.fill(0); else t.offsets = new Array(total).fill(0);
 
   for (let i = 0; i < Math.min(total, steps.length); i++) {
@@ -3335,7 +3401,7 @@ function applyPattern(t, data) {
     t.steps[i] = 1;
     t.notes[i] = notes[i] != null ? applyScale(notes[i]) : null;
     t.lengths[i] = Math.max(1, Math.min(lengths[i] || 1, total - i));
-    t.velocities[i] = vels[i] ?? 1;
+    t.velocities[i] = vels[i] ?? 0.5;
     t.chords[i] = chords[i] || "";
     t.offsets[i] = offsets[i] ?? 0;
   }
@@ -3349,19 +3415,44 @@ function applyPattern(t, data) {
 async function promptCustomSound(t) {
   const isEleven = engineByKey(t.engineKey)?.type === "eleven";
   const seed = t.soundPromptText || "";
-  const description = await showInputDialog({
-    title: isEleven
-      ? `describe the eleven-labs sound for "${t.name}"`
-      : `describe the sound for "${t.name}"`,
+  const result = await showSoundDesignDialog({
+    trackName: t.name,
+    engine: isEleven ? "eleven" : "tone",
     defaultValue: seed,
-    placeholder: isEleven
-      ? "deep sub bass hit, tight decay, vinyl noise tail"
-      : "dark sub bass with soft distortion, resonant filter sweep, short reverb tail",
-    multiline: true,
   });
-  if (!description || !description.trim()) return;
-  t.soundPromptText = description.trim();
-  if (isEleven) return designElevenSound(t);
+  if (!result) return;
+  t.soundPromptText = result.description;
+  if (result.engine === "eleven") {
+    t.elevenAudio = result.sound.audio;
+    t.elevenAudioMime = result.sound.mime || "audio/mpeg";
+    const bytes = Uint8Array.from(atob(result.sound.audio), c => c.charCodeAt(0));
+    await ensureAudio();
+    const buffer = normalizeAudioBuffer(await state.audioCtx.decodeAudioData(bytes.buffer));
+    t.elevenBuffer = buffer;
+    if (t.engineKey === "eleven" && t.voice?.type === "eleven") {
+      t.voice.setBuffer(buffer);
+    } else {
+      setEngineKey(t, "eleven");
+      if (t.el) t.el.querySelector(".track-engine").value = "eleven";
+    }
+    resetProcessingForPromptedSound(t);
+    setStatus(`"${t.name}" ← eleven-labs sample (${Math.round(buffer.duration * 1000)}ms)`);
+    return;
+  }
+  // tone.js patch
+  const cfg = result.sound;
+  t.customConfig = cfg;
+  if (t.engineKey === "custom" && t.voice?.type === "custom") {
+    t.voice.applyConfig(cfg);
+  } else {
+    setEngineKey(t, "custom");
+    if (t.el) t.el.querySelector(".track-engine").value = "custom";
+  }
+  resetProcessingForPromptedSound(t);
+  t._refreshSaveEnabled?.();
+  setStatus(`"${t.name}" → ${cfg.synth}${cfg.poly ? " (poly)" : ""}`);
+  return;
+  // legacy path (unreachable) — kept below for reference
   setStatus(`designing sound for "${t.name}"...`);
   try {
     const r = await fetch("/api/sound", {
@@ -3414,6 +3505,7 @@ async function designSoundForTrack(track, prompt, engine, signal) {
       setEngineKey(track, "eleven");
       if (track.el) track.el.querySelector(".track-engine").value = "eleven";
     }
+    resetProcessingForPromptedSound(track);
     return;
   }
   // tone.js patch
@@ -3428,7 +3520,185 @@ async function designSoundForTrack(track, prompt, engine, signal) {
   track.customConfig = cfg;
   setEngineKey(track, "custom");
   if (track.el) track.el.querySelector(".track-engine").value = "custom";
-  if (cfg.fx) applyFxToTrack(track, cfg.fx);
+  resetProcessingForPromptedSound(track);
+}
+
+// Sound-design dialog with preview + regenerate.
+// Returns { description, sound, engine } on apply, or null on cancel.
+function showSoundDesignDialog({ trackName, engine, defaultValue = "" }) {
+  return new Promise((resolve) => {
+    const overlay = document.createElement("div");
+    overlay.className = "modal-overlay";
+    const esc = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;").replace(/\n/g, "&#10;");
+    const title = engine === "eleven"
+      ? `describe the eleven-labs sound for "${trackName}"`
+      : `describe the sound for "${trackName}"`;
+    const placeholder = engine === "eleven"
+      ? "deep sub bass hit, tight decay, vinyl noise tail"
+      : "dark sub bass with soft distortion, resonant filter sweep, short reverb tail";
+    overlay.innerHTML = `
+      <div class="modal sound-dialog" role="dialog" aria-modal="true">
+        <div class="modal-title">${esc(title)}</div>
+        <textarea class="modal-input modal-multiline" rows="4" placeholder="${esc(placeholder)}">${esc(defaultValue)}</textarea>
+        <div class="sound-dialog-status">type a description, then preview</div>
+        <div class="modal-actions">
+          <button class="modal-cancel ghost">cancel</button>
+          <button class="sound-preview">preview</button>
+          <button class="sound-regen ghost" disabled>regenerate</button>
+          <button class="modal-ok" disabled>apply</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    const input = overlay.querySelector(".modal-input");
+    const statusEl = overlay.querySelector(".sound-dialog-status");
+    const previewBtn = overlay.querySelector(".sound-preview");
+    const regenBtn = overlay.querySelector(".sound-regen");
+    const okBtn = overlay.querySelector(".modal-ok");
+    const cancelBtn = overlay.querySelector(".modal-cancel");
+    setTimeout(() => { input.focus(); try { input.select(); } catch {} }, 0);
+
+    let currentSound = null;        // last generated sound object
+    let currentDescription = "";    // what description was used to generate it
+    let previewAbort = null;
+    let activePreview = null;       // { dispose: () => void }
+
+    const stopPreview = () => {
+      if (activePreview) { try { activePreview.dispose(); } catch {} activePreview = null; }
+    };
+
+    const playPreviewEleven = async () => {
+      if (!currentSound?.audio) return;
+      stopPreview();
+      await ensureAudio();
+      const ctx = state.audioCtx;
+      const bytes = Uint8Array.from(atob(currentSound.audio), c => c.charCodeAt(0));
+      const buf = normalizeAudioBuffer(await ctx.decodeAudioData(bytes.buffer.slice(0)));
+      const src = ctx.createBufferSource();
+      src.buffer = buf;
+      const g = ctx.createGain();
+      g.gain.value = 0.9;
+      src.connect(g).connect(ctx.destination);
+      src.start();
+      activePreview = { dispose: () => { try { src.stop(); } catch {} try { src.disconnect(); } catch {} try { g.disconnect(); } catch {} } };
+      src.onended = () => { if (activePreview) activePreview = null; };
+      statusEl.textContent = `preview: ${Math.round(buf.duration * 1000)}ms`;
+    };
+
+    const playPreviewTone = async () => {
+      if (!currentSound?.synth) return;
+      stopPreview();
+      await ensureAudio();
+      try {
+        const ToneClass = Tone[currentSound.synth];
+        if (!ToneClass) throw new Error("unknown synth " + currentSound.synth);
+        const synth = currentSound.poly
+          ? new Tone.PolySynth(ToneClass, currentSound.options || {})
+          : new ToneClass(currentSound.options || {});
+        const effects = (currentSound.effects || [])
+          .map(e => { try { return new (Tone[e.type])(e.options || {}); } catch { return null; } })
+          .filter(Boolean);
+        let last = synth;
+        for (const fx of effects) { last.connect(fx); last = fx; }
+        last.toDestination();
+        const now = Tone.now();
+        // arpeggiated preview so the user hears the envelope over time
+        const notes = ["C3", "E3", "G3", "C4"];
+        notes.forEach((n, i) => {
+          try { synth.triggerAttackRelease(n, "8n", now + i * 0.22, 0.8); } catch {}
+        });
+        activePreview = {
+          dispose: () => {
+            try { synth.releaseAll?.(); } catch {}
+            try { synth.dispose(); } catch {}
+            effects.forEach(fx => { try { fx.dispose(); } catch {} });
+          },
+        };
+        setTimeout(() => { if (activePreview) { stopPreview(); } }, 2800);
+        statusEl.textContent = `preview: ${currentSound.synth}${currentSound.poly ? " (poly)" : ""}${effects.length ? ` + ${effects.length} fx` : ""}`;
+      } catch (err) {
+        console.warn(err);
+        statusEl.textContent = `preview error: ${err.message}`;
+      }
+    };
+
+    const playPreview = () => engine === "eleven" ? playPreviewEleven() : playPreviewTone();
+
+    const generate = async () => {
+      const desc = input.value.trim();
+      if (!desc) { input.focus(); return; }
+      currentDescription = desc;
+      stopPreview();
+      previewAbort?.abort();
+      previewAbort = new AbortController();
+      const sig = previewAbort.signal;
+      statusEl.textContent = "generating…";
+      previewBtn.disabled = true;
+      regenBtn.disabled = true;
+      okBtn.disabled = true;
+      try {
+        if (engine === "eleven") {
+          const r = await fetch("/api/eleven-sound", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ prompt: desc, duration: 2.0 }),
+            signal: sig,
+          });
+          if (!r.ok) throw new Error(await r.text());
+          currentSound = await r.json();
+        } else {
+          const r = await fetch("/api/sound", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ prompt: desc }),
+            signal: sig,
+          });
+          if (!r.ok) throw new Error(await r.text());
+          currentSound = await r.json();
+        }
+        okBtn.disabled = false;
+        regenBtn.disabled = false;
+        previewBtn.disabled = false;
+        await playPreview();
+      } catch (err) {
+        if (err?.name === "AbortError") { statusEl.textContent = "cancelled"; return; }
+        console.error(err);
+        statusEl.textContent = `error: ${String(err?.message ?? err).slice(0, 140)}`;
+        previewBtn.disabled = false;
+        regenBtn.disabled = !currentSound;
+        okBtn.disabled = !currentSound;
+      }
+    };
+
+    const close = (val) => {
+      stopPreview();
+      previewAbort?.abort();
+      overlay.remove();
+      resolve(val);
+    };
+
+    previewBtn.addEventListener("click", () => {
+      const desc = input.value.trim();
+      if (currentSound && desc === currentDescription) playPreview();
+      else generate();
+    });
+    regenBtn.addEventListener("click", generate);
+    okBtn.addEventListener("click", () => {
+      close(currentSound ? { description: currentDescription, sound: currentSound, engine } : null);
+    });
+    cancelBtn.addEventListener("click", () => close(null));
+    input.addEventListener("input", () => {
+      // description changed after a generation — nudge user to regenerate
+      if (currentSound && input.value.trim() !== currentDescription) {
+        statusEl.textContent = "description changed — regenerate to hear the new one";
+      }
+    });
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") close(null);
+      if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); generate(); }
+    });
+    overlay.addEventListener("click", (e) => { if (e.target === overlay) close(null); });
+  });
 }
 
 async function pickAudioFileForTrack(t) {
@@ -3733,8 +4003,42 @@ function initScaleUI() {
 
 // ---- init --------------------------------------------------------------
 
+// ---- level meters -------------------------------------------------------
+
+const _meterTmp = new Uint8Array(1024);
+function samplePeak(analyser) {
+  const n = Math.min(analyser.fftSize, _meterTmp.length);
+  analyser.getByteTimeDomainData(_meterTmp);
+  let peak = 0;
+  for (let i = 0; i < n; i++) {
+    const v = Math.abs(_meterTmp[i] - 128);
+    if (v > peak) peak = v;
+  }
+  return peak / 128;                 // 0..1
+}
+function paintMeter(el, level) {
+  if (!el) return;
+  const bar = el.querySelector(".meter-bar");
+  if (!bar) return;
+  // Near-linear response: bar width tracks peak so the red zone at 95% lights up
+  // only when the signal is actually near full-scale. A mild pow keeps quiet signals visible.
+  const pct = Math.min(100, Math.round(Math.pow(Math.max(0, Math.min(1, level)), 0.85) * 100));
+  bar.style.width = pct + "%";
+}
+function meterTick() {
+  if (state.masterAnalyser) {
+    paintMeter(document.querySelector(".master-meter"), samplePeak(state.masterAnalyser));
+  }
+  for (const t of state.tracks) {
+    if (!t.meterAnalyser || !t.el) continue;
+    paintMeter(t.el.querySelector(".track-meter"), samplePeak(t.meterAnalyser));
+  }
+  requestAnimationFrame(meterTick);
+}
+
 function init() {
   rebuildEngineCatalog();
+  requestAnimationFrame(meterTick);
 
   document.getElementById("play").addEventListener("click", togglePlay);
   document.getElementById("bpm").addEventListener("input", e => {

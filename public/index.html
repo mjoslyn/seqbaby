@@ -23,6 +23,7 @@
     </div>
     <button id="add-track" class="ghost">add track</button>
     <div class="spacer"></div>
+    <div class="meter master-meter" title="master output level"><div class="meter-bar"></div></div>
     <div id="status" class="status">click play to unlock audio</div>
     <button id="gen-cancel" class="ghost danger" hidden title="cancel the running generation">cancel</button>
   </header>
@@ -105,6 +106,7 @@
           <button class="track-lock-inst ghost" aria-pressed="false" title="lock instrument — engine, params, filter, env, fx, mod are protected from the planner">lock inst</button>
           <button class="track-lock-pat ghost" aria-pressed="false" title="lock pattern — step data is protected from the planner">lock pat</button>
         </div>
+        <div class="meter track-meter" title="track output level"><div class="meter-bar"></div></div>
         <button class="track-solo ghost" aria-pressed="false" title="solo">solo</button>
         <button class="track-mute ghost">mute</button>
         <button class="track-clear ghost">clear</button>

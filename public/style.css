@@ -113,6 +113,31 @@ button.danger { color: var(--danger); }
   min-width: 120px;
   text-align: right;
 }
+
+.meter {
+  position: relative;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.meter-bar {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 0%;
+  /* solid green until the bar reaches the clip zone at the very end */
+  background: linear-gradient(to right,
+    #4ade80 0%,
+    #4ade80 95%,
+    #ef4444 95%,
+    #ef4444 100%);
+  transition: width 40ms linear;
+}
+.master-meter { width: 80px; height: 12px; }
+.track-meter  { width: 48px; height: 8px; }
 .status.err { color: var(--danger); }
 
 .pattern-bar {
@@ -278,6 +303,7 @@ main {
 }
 .param-group .field input[type="range"] { width: 60px; }
 .timbre-group { border-color: color-mix(in oklab, var(--accent) 40%, var(--border)); }
+.timbre-group[hidden] { display: none !important; }
 .filter-group { border-color: color-mix(in oklab, var(--accent-2) 40%, var(--border)); }
 
 .panel-btn-group {
@@ -692,6 +718,22 @@ main {
   color: #0b0d10;
   border-color: var(--accent);
   font-weight: 600;
+}
+.modal-ok:disabled,
+.sound-preview:disabled,
+.sound-regen:disabled { opacity: 0.45; cursor: not-allowed; }
+.sound-preview {
+  background: var(--accent-2);
+  color: #0b0d10;
+  border-color: var(--accent-2);
+  font-weight: 600;
+}
+.sound-dialog { min-width: 460px; max-width: 640px; }
+.sound-dialog-status {
+  color: var(--fg-dim);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  padding: 2px 2px;
 }
 
 .step-note {
