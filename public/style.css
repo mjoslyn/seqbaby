@@ -779,6 +779,22 @@ main {
   touch-action: none;
   background: #0e0f12;
 }
+.step-editor .se-sample-fade {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  font-size: 11px;
+  color: var(--fg-dim);
+}
+.step-editor .se-sample-fade label {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.step-editor .se-sample-fade input[type="range"] { min-width: 0; }
+
 .step-editor .se-sample-meta {
   display: flex;
   align-items: center;

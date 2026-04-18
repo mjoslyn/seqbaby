@@ -452,6 +452,8 @@ function emptyPattern(len) {
     ratchets: new Array(len).fill(1),           // retrigger the single note N times across the step
     sampleStarts: new Array(len).fill(0),       // sample-engine start offset (0..1 of buffer)
     sampleEnds:   new Array(len).fill(1),       // sample-engine end offset   (0..1 of buffer)
+    sampleFadeIns:  new Array(len).fill(0),     // sample fade-in time in seconds (0 = click-guard)
+    sampleFadeOuts: new Array(len).fill(0),     // sample fade-out time in seconds
   };
 }
 
@@ -471,6 +473,8 @@ function aliasPattern(t, idx) {
   t.ratchets     = p.ratchets     ?? (p.ratchets     = new Array(p.steps.length).fill(1));
   t.sampleStarts = p.sampleStarts ?? (p.sampleStarts = new Array(p.steps.length).fill(0));
   t.sampleEnds   = p.sampleEnds   ?? (p.sampleEnds   = new Array(p.steps.length).fill(1));
+  t.sampleFadeIns  = p.sampleFadeIns  ?? (p.sampleFadeIns  = new Array(p.steps.length).fill(0));
+  t.sampleFadeOuts = p.sampleFadeOuts ?? (p.sampleFadeOuts = new Array(p.steps.length).fill(0));
   t._patternIdx = idx;
 }
 
@@ -1436,6 +1440,22 @@ class DrumSynthVoice {
   }
 }
 
+// Shared envelope for sample-based voices: honors opts.fadeIn/fadeOut (seconds)
+// with a 6ms click-guard floor and a cap at ~48% of the wall time per side.
+function applySampleFadeEnvelope(gainNode, time, stopTime, v, opts) {
+  const CLICK = 0.006;
+  const playLen = Math.max(CLICK * 2.1, stopTime - time);
+  const cap = playLen * 0.48;
+  const fadeIn  = Math.max(CLICK, Math.min(cap, Number(opts?.fadeIn)  || 0));
+  const fadeOut = Math.max(CLICK, Math.min(cap, Number(opts?.fadeOut) || 0));
+  const peakStart = time + fadeIn;
+  const peakEnd   = Math.max(peakStart, stopTime - fadeOut);
+  gainNode.gain.setValueAtTime(0, time);
+  gainNode.gain.linearRampToValueAtTime(v, peakStart);
+  gainNode.gain.setValueAtTime(v, peakEnd);
+  gainNode.gain.linearRampToValueAtTime(0, stopTime);
+}
+
 class SampleVoice {
   constructor(ctx, key, params) {
     this.ctx = ctx;
@@ -1473,7 +1493,9 @@ class SampleVoice {
     if (!this.buffer) return;
     const src = this.ctx.createBufferSource();
     src.buffer = this.buffer;
-    const rate = Math.pow(2, (midiNote - 60) / 12);
+    // Percussion samples default to natural pitch (MIDI 48 / C3 = 1.0x) so
+    // blank/default steps don't pitch up or down.
+    const rate = Math.pow(2, (midiNote - 48) / 12);
     src.playbackRate.value = rate;
     const startFrac = Math.max(0, Math.min(1, opts?.startOffset ?? 0));
     const endFrac   = Math.max(startFrac + 0.001, Math.min(1, opts?.endOffset ?? 1));
@@ -1482,12 +1504,8 @@ class SampleVoice {
     const wallTime = playLenSource / Math.max(0.01, rate);
     const g = this.ctx.createGain();
     const v = Math.max(0, Math.min(1, velocity));
-    const fade = 0.006;
     const stopTime = time + Math.min(wallTime, Math.max(0.1, duration + 0.5));
-    g.gain.setValueAtTime(0, time);
-    g.gain.linearRampToValueAtTime(v, time + fade);
-    g.gain.setValueAtTime(v, Math.max(time + fade, stopTime - fade));
-    g.gain.linearRampToValueAtTime(0, stopTime);
+    applySampleFadeEnvelope(g, time, stopTime, v, opts);
     src.connect(g).connect(this.output);
     src.start(time, startSec, playLenSource);
     src.stop(stopTime + 0.01);
@@ -1657,7 +1675,7 @@ class ElevenVoice {
     if (!this.buffer) return;
     const src = this.ctx.createBufferSource();
     src.buffer = this.buffer;
-    const rate = (this.baseRate || 1) * Math.pow(2, (midiNote - 60) / 12);
+    const rate = (this.baseRate || 1) * Math.pow(2, (midiNote - 48) / 12);
     src.playbackRate.value = rate;
     const startFrac = Math.max(0, Math.min(1, opts?.startOffset ?? 0));
     const endFrac   = Math.max(startFrac + 0.001, Math.min(1, opts?.endOffset ?? 1));
@@ -1666,12 +1684,8 @@ class ElevenVoice {
     const wallTime  = playLenSource / Math.max(0.01, rate);
     const g = this.ctx.createGain();
     const v = Math.max(0, Math.min(1, velocity));
-    const fade = 0.006;   // 6ms attack/release fade to avoid clicks at sample edges
     const stopTime = time + Math.min(wallTime, Math.max(0.1, duration + 0.5));
-    g.gain.setValueAtTime(0, time);
-    g.gain.linearRampToValueAtTime(v, time + fade);
-    g.gain.setValueAtTime(v, Math.max(time + fade, stopTime - fade));
-    g.gain.linearRampToValueAtTime(0, stopTime);
+    applySampleFadeEnvelope(g, time, stopTime, v, opts);
     src.connect(g).connect(this.boost);
     src.start(time, startSec, playLenSource);
     src.stop(stopTime + 0.01);
@@ -1720,7 +1734,7 @@ class UploadVoice {
     if (!this.buffer) return;
     const src = this.ctx.createBufferSource();
     src.buffer = this.buffer;
-    const rate = (this.baseRate || 1) * Math.pow(2, (midiNote - 60) / 12);
+    const rate = (this.baseRate || 1) * Math.pow(2, (midiNote - 48) / 12);
     src.playbackRate.value = rate;
     const startFrac = Math.max(0, Math.min(1, opts?.startOffset ?? 0));
     const endFrac   = Math.max(startFrac + 0.001, Math.min(1, opts?.endOffset ?? 1));
@@ -1729,12 +1743,8 @@ class UploadVoice {
     const wallTime  = playLenSource / Math.max(0.01, rate);
     const g = this.ctx.createGain();
     const v = Math.max(0, Math.min(1, velocity));
-    const fade = 0.006;
     const stopTime = time + Math.min(wallTime, Math.max(0.1, duration + 0.5));
-    g.gain.setValueAtTime(0, time);
-    g.gain.linearRampToValueAtTime(v, time + fade);
-    g.gain.setValueAtTime(v, Math.max(time + fade, stopTime - fade));
-    g.gain.linearRampToValueAtTime(0, stopTime);
+    applySampleFadeEnvelope(g, time, stopTime, v, opts);
     src.connect(g).connect(this.boost);
     src.start(time, startSec, playLenSource);
     src.stop(stopTime + 0.01);
@@ -3171,6 +3181,10 @@ function openStepEditor(t, idx, anchorEl) {
           </label>
           <button class="se-preview" type="button">preview</button>
         </div>
+        <div class="se-sample-fade">
+          <label>fade in <input class="se-smp-fade-in" type="range" min="0" max="2" step="0.01" value="0" /><span class="se-smp-fade-in-lbl">0 ms</span></label>
+          <label>fade out <input class="se-smp-fade-out" type="range" min="0" max="2" step="0.01" value="0" /><span class="se-smp-fade-out-lbl">0 ms</span></label>
+        </div>
       </div>
     </div>
     <div class="se-actions">
@@ -3379,6 +3393,32 @@ function openStepEditor(t, idx, anchorEl) {
     }
     if (!t.sampleStarts) t.sampleStarts = new Array(t.length).fill(0);
     if (!t.sampleEnds)   t.sampleEnds   = new Array(t.length).fill(1);
+    if (!t.sampleFadeIns)  t.sampleFadeIns  = new Array(t.length).fill(0);
+    if (!t.sampleFadeOuts) t.sampleFadeOuts = new Array(t.length).fill(0);
+
+    const fadeInInput  = sampleRow.querySelector(".se-smp-fade-in");
+    const fadeOutInput = sampleRow.querySelector(".se-smp-fade-out");
+    const fadeInLbl    = sampleRow.querySelector(".se-smp-fade-in-lbl");
+    const fadeOutLbl   = sampleRow.querySelector(".se-smp-fade-out-lbl");
+    const fmtFade = (sec) => sec < 1 ? `${Math.round(sec * 1000)} ms` : `${sec.toFixed(2)} s`;
+    if (fadeInInput) {
+      fadeInInput.value = String(t.sampleFadeIns[idx] ?? 0);
+      fadeInLbl.textContent = fmtFade(Number(fadeInInput.value));
+      fadeInInput.addEventListener("input", () => {
+        const v = Math.max(0, Math.min(2, Number(fadeInInput.value) || 0));
+        t.sampleFadeIns[idx] = v;
+        fadeInLbl.textContent = fmtFade(v);
+      });
+    }
+    if (fadeOutInput) {
+      fadeOutInput.value = String(t.sampleFadeOuts[idx] ?? 0);
+      fadeOutLbl.textContent = fmtFade(Number(fadeOutInput.value));
+      fadeOutInput.addEventListener("input", () => {
+        const v = Math.max(0, Math.min(2, Number(fadeOutInput.value) || 0));
+        t.sampleFadeOuts[idx] = v;
+        fadeOutLbl.textContent = fmtFade(v);
+      });
+    }
 
     const snapFrac = () => {
       if (snapSel.value === "free") return 0;
@@ -3516,6 +3556,8 @@ function openStepEditor(t, idx, anchorEl) {
         t.voice.hit(note, when, t.voice.buffer.duration, vel, {
           startOffset: t.sampleStarts[idx],
           endOffset:   t.sampleEnds[idx],
+          fadeIn:      t.sampleFadeIns?.[idx]  ?? 0,
+          fadeOut:     t.sampleFadeOuts?.[idx] ?? 0,
         });
       } catch (err) { console.warn(err); }
     });
@@ -3735,7 +3777,12 @@ async function togglePlay() {
           }
         } else {
           const sampleOpts = (t.voice.type === "eleven" || t.voice.type === "upload" || t.voice.type === "sample")
-            ? { startOffset: t.sampleStarts?.[idx] ?? 0, endOffset: t.sampleEnds?.[idx] ?? 1 }
+            ? {
+                startOffset: t.sampleStarts?.[idx] ?? 0,
+                endOffset:   t.sampleEnds?.[idx]   ?? 1,
+                fadeIn:      t.sampleFadeIns?.[idx]  ?? 0,
+                fadeOut:     t.sampleFadeOuts?.[idx] ?? 0,
+              }
             : null;
           const ratchet = Math.max(1, Math.min(8, Math.round(t.ratchets?.[idx] ?? 1)));
           if (ratchet > 1 && !chord) {
