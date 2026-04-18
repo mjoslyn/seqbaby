@@ -132,8 +132,13 @@ const CUSTOM_ENGINE = {
   defaultNote: 60, poly: true, melodic: true,
 };
 
+const ELEVEN_ENGINE = {
+  key: "eleven", label: "prompted eleven-labs sample", group: "eleven labs", type: "eleven",
+  defaultNote: 60, poly: true, melodic: true,
+};
+
 function buildEngineCatalog() {
-  return [...plaitsEntries(), ...DRUM_SYNTH_ENGINES, CUSTOM_ENGINE, ...savedPatchEntries(), ...SAMPLE_ENGINES, MIDI_ENGINE];
+  return [...plaitsEntries(), ...DRUM_SYNTH_ENGINES, CUSTOM_ENGINE, ELEVEN_ENGINE, ...savedPatchEntries(), ...SAMPLE_ENGINES, MIDI_ENGINE];
 }
 
 let ENGINES = [];
@@ -1378,6 +1383,51 @@ class CustomToneVoice {
   }
 }
 
+class ElevenVoice {
+  constructor(ctx, key, params, track) {
+    this.ctx = ctx;
+    this.type = "eleven";
+    this.poly = true;
+    this.key = key;
+    this.output = ctx.createGain();
+    this.output.gain.value = params.vol;
+    this.output.connect(ctx.destination);
+    this.buffer = track?.elevenBuffer ?? null;
+    this.active = new Set();
+  }
+  getOutputNode() { return this.output; }
+  setDestination(target) {
+    try { this.output.disconnect(); } catch {}
+    this.output.connect(target);
+  }
+  canInPlaceChange(newKey) { return newKey === "eleven"; }
+  setEngine() {}
+  setBuffer(buf) { this.buffer = buf; }
+  setParam(key, val) { if (key === "vol") this.output.gain.value = val; }
+  getAudioParam(key) { return key === "vol" ? this.output.gain : null; }
+  hit(midiNote, time, duration, velocity = 1) {
+    if (!this.buffer) return;
+    const src = this.ctx.createBufferSource();
+    src.buffer = this.buffer;
+    src.playbackRate.value = Math.pow(2, (midiNote - 60) / 12);
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(Math.max(0, Math.min(1, velocity)), time);
+    src.connect(g).connect(this.output);
+    src.start(time);
+    src.stop(time + Math.max(0.1, duration + 0.5));
+    this.active.add(src);
+    src.onended = () => this.active.delete(src);
+  }
+  silence(now) {
+    for (const s of this.active) { try { s.stop(now); } catch {} }
+    this.active.clear();
+  }
+  dispose() {
+    this.silence(this.ctx.currentTime);
+    try { this.output.disconnect(); } catch {}
+  }
+}
+
 class MidiVoice {
   constructor(ctx, key, params) {
     this.ctx = ctx;
@@ -1427,6 +1477,7 @@ function buildVoiceForEngine(ctx, key, params, track) {
     case "midi":       return new MidiVoice(ctx, key, params);
     case "custom":     return new CustomToneVoice(ctx, key, params, track?.customConfig ?? null);
     case "saved":      return new CustomToneVoice(ctx, key, params, e.config);
+    case "eleven":     return new ElevenVoice(ctx, key, params, track);
   }
   throw new Error("unknown engine type: " + e.type);
 }
@@ -2920,15 +2971,21 @@ function applyPattern(t, data) {
 }
 
 async function promptCustomSound(t) {
+  const isEleven = engineByKey(t.engineKey)?.type === "eleven";
   const seed = t.soundPromptText || "";
   const description = await showInputDialog({
-    title: `describe the sound for "${t.name}"`,
+    title: isEleven
+      ? `describe the eleven-labs sound for "${t.name}"`
+      : `describe the sound for "${t.name}"`,
     defaultValue: seed,
-    placeholder: "dark sub bass with soft distortion, resonant filter sweep, short reverb tail",
+    placeholder: isEleven
+      ? "deep sub bass hit, tight decay, vinyl noise tail"
+      : "dark sub bass with soft distortion, resonant filter sweep, short reverb tail",
     multiline: true,
   });
   if (!description || !description.trim()) return;
   t.soundPromptText = description.trim();
+  if (isEleven) return designElevenSound(t);
   setStatus(`designing sound for "${t.name}"...`);
   try {
     const r = await fetch("/api/sound", {
@@ -2955,6 +3012,35 @@ async function promptCustomSound(t) {
   } catch (err) {
     if (isAbortError(err)) { setStatus("cancelled", true); }
     else { console.error(err); setStatus("sound design failed — see console", true); }
+  }
+}
+
+async function designElevenSound(t) {
+  setStatus(`generating eleven-labs sample for "${t.name}"...`);
+  try {
+    const r = await fetch("/api/eleven-sound", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ prompt: t.soundPromptText, duration: 2.0 }),
+      signal: currentSignal(),
+    });
+    if (!r.ok) throw new Error(await r.text());
+    const { audio, mime } = await r.json();
+    // decode base64 → ArrayBuffer → AudioBuffer
+    const bytes = Uint8Array.from(atob(audio), c => c.charCodeAt(0));
+    await ensureAudio();
+    const buffer = await state.audioCtx.decodeAudioData(bytes.buffer);
+    t.elevenBuffer = buffer;
+    if (t.engineKey === "eleven" && t.voice?.type === "eleven") {
+      t.voice.setBuffer(buffer);
+    } else {
+      setEngineKey(t, "eleven");
+      if (t.el) t.el.querySelector(".track-engine").value = "eleven";
+    }
+    setStatus(`"${t.name}" ← eleven-labs sample (${Math.round(buffer.duration * 1000)}ms)`);
+  } catch (err) {
+    if (isAbortError(err)) { setStatus("cancelled", true); }
+    else { console.error(err); setStatus("eleven-labs gen failed — see console", true); }
   }
 }
 
