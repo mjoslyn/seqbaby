@@ -2823,6 +2823,20 @@ function attachGridInteraction(t, grid) {
     const cell = grid.querySelector(`.step[data-idx="${anchor}"]`);
     openStepEditor(t, anchor, cell || grid);
   });
+
+  grid.addEventListener("dblclick", (e) => {
+    // Two clicks in the same cell normally toggle on→off; nudge it back on and
+    // crank velocity to full so a double-click slams the step to 100%.
+    const idx = idxFromPoint(e.clientX, e.clientY);
+    if (idx < 0 || idx >= t.length) return;
+    e.preventDefault();
+    if (!t.steps[idx]) startNote(t, idx);
+    if (!t.velocities) t.velocities = new Array(t.length).fill(0.5);
+    const anchor = anchorCovering(t, idx);
+    const target = anchor >= 0 ? anchor : idx;
+    t.velocities[target] = 1;
+    renderStepGrid(t);
+  });
   const endDrag = (e) => {
     if (!drag || e.pointerId !== drag.pointerId) return;
     if (!drag.moved && drag.wasOn) { removeNote(t, drag.anchor); renderStepGrid(t); }
