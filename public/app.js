@@ -482,7 +482,7 @@ function serializeSet() {
       uploadFileName: t.uploadFileName || null,
       soundPromptText: t.soundPromptText,
       locked: t.locked, muted: t.muted, soloed: t.soloed,
-      glide: t.glide, speed: t.speed ?? 1,
+      glide: t.glide, speed: t.speed ?? 1, sampleSpeedMode: t.sampleSpeedMode ?? "native",
       lfoConfig: JSON.parse(JSON.stringify(t.lfoConfig)),
       patterns: t.patterns.map(p => ({
         steps: p.steps.slice(),
@@ -650,7 +650,7 @@ function applySet(s) {
           await ensureAudio();
           const buffer = normalizeAudioBuffer(await state.audioCtx.decodeAudioData(bytes.buffer));
           t.elevenBuffer = buffer;
-          if (t.voice?.type === "eleven") t.voice.setBuffer(buffer);
+          if (t.voice?.type === "eleven") { t.voice.setBuffer(buffer); applySampleSpeed(t); }
         } catch (e) { console.warn("eleven buffer decode failed", e); }
       })();
     }
@@ -661,7 +661,7 @@ function applySet(s) {
           await ensureAudio();
           const buffer = normalizeAudioBuffer(await state.audioCtx.decodeAudioData(bytes.buffer));
           t.uploadBuffer = buffer;
-          if (t.voice?.type === "upload") t.voice.setBuffer(buffer);
+          if (t.voice?.type === "upload") { t.voice.setBuffer(buffer); applySampleSpeed(t); }
         } catch (e) { console.warn("upload buffer decode failed", e); }
       })();
     }
@@ -670,6 +670,7 @@ function applySet(s) {
     t.soloed = !!td.soloed;
     t.glide  = td.glide ?? 0;
     t.speed  = td.speed ?? 1;
+    t.sampleSpeedMode = td.sampleSpeedMode ?? "native";
     Object.assign(t.lfoConfig, td.lfoConfig || {});
     if (Array.isArray(td.patterns)) {
       const pad = (arr, fill, n) => { const out = (arr || []).slice(0, n); while (out.length < n) out.push(fill); return out; };
@@ -1518,7 +1519,9 @@ class ElevenVoice {
     this.output.connect(ctx.destination);
     this.buffer = track?.elevenBuffer ?? null;
     this.active = new Set();
+    this.baseRate = 1;
   }
+  setBaseRate(rate) { this.baseRate = Math.max(0.01, Number(rate) || 1); }
   getOutputNode() { return this.output; }
   setDestination(target) {
     try { this.output.disconnect(); } catch {}
@@ -1533,7 +1536,7 @@ class ElevenVoice {
     if (!this.buffer) return;
     const src = this.ctx.createBufferSource();
     src.buffer = this.buffer;
-    src.playbackRate.value = Math.pow(2, (midiNote - 60) / 12);
+    src.playbackRate.value = (this.baseRate || 1) * Math.pow(2, (midiNote - 60) / 12);
     const g = this.ctx.createGain();
     const v = Math.max(0, Math.min(1, velocity));
     const fade = 0.006;   // 6ms attack/release fade to avoid clicks at sample edges
@@ -1573,6 +1576,7 @@ class UploadVoice {
     this.output.connect(ctx.destination);
     this.buffer = track?.uploadBuffer ?? null;
     this.active = new Set();
+    this.baseRate = 1;
   }
   getOutputNode() { return this.output; }
   setDestination(target) {
@@ -1582,13 +1586,14 @@ class UploadVoice {
   canInPlaceChange(newKey) { return newKey === "upload"; }
   setEngine() {}
   setBuffer(buf) { this.buffer = buf; }
+  setBaseRate(rate) { this.baseRate = Math.max(0.01, Number(rate) || 1); }
   setParam(key, val) { if (key === "vol") this.output.gain.value = val; }
   getAudioParam(key) { return key === "vol" ? this.output.gain : null; }
   hit(midiNote, time, duration, velocity = 1) {
     if (!this.buffer) return;
     const src = this.ctx.createBufferSource();
     src.buffer = this.buffer;
-    src.playbackRate.value = Math.pow(2, (midiNote - 60) / 12);
+    src.playbackRate.value = (this.baseRate || 1) * Math.pow(2, (midiNote - 60) / 12);
     const g = this.ctx.createGain();
     const v = Math.max(0, Math.min(1, velocity));
     const fade = 0.006;
@@ -1680,6 +1685,25 @@ function defaultLFOConfig() {
 }
 
 function currentBpm() { return Number(document.getElementById("bpm").value || 120); }
+
+// Compute the base playback rate for a sample buffer so its natural length fits the
+// selected bar-count at the current BPM. Returns 1 for "native" (no time-sync).
+function computeSampleBaseRate(buffer, mode, bpm) {
+  if (!buffer || mode === "native" || !mode) return 1;
+  const barSec = (60 / bpm) * 4;  // one 4/4 bar at BPM
+  const targets = { "2xbpm": 0.5, "1xbpm": 1, "1/2bpm": 2, "1/4bpm": 4 };
+  const bars = targets[mode];
+  if (!bars) return 1;
+  return buffer.duration / (bars * barSec);
+}
+
+function applySampleSpeed(t) {
+  const type = t.voice?.type;
+  if (type !== "eleven" && type !== "upload") return;
+  const buf = t.voice.buffer;
+  const rate = computeSampleBaseRate(buf, t.sampleSpeedMode, currentBpm());
+  if (t.voice.setBaseRate) t.voice.setBaseRate(rate);
+}
 function rateFromSync(divBeats) { return currentBpm() / 60 / divBeats; }
 function effectiveRate(cfg) { return cfg.sync ? rateFromSync(cfg.div) : cfg.rate; }
 
@@ -1757,7 +1781,9 @@ function setParam(t, key, val) {
 
 function updatePlaitsControlsVisibility(t) {
   if (!t.el) return;
-  const isPlaits = engineByKey(t.engineKey)?.type === "plaits";
+  const engineType = engineByKey(t.engineKey)?.type;
+  const isPlaits = engineType === "plaits";
+  const isSampleLike = engineType === "eleven" || engineType === "upload";
   const group = t.el.querySelector(".timbre-group");
   if (group) {
     group.hidden = !isPlaits;
@@ -1773,6 +1799,8 @@ function updatePlaitsControlsVisibility(t) {
       }
     }
   }
+  const fitField = t.el.querySelector(".sample-speed-field");
+  if (fitField) fitField.hidden = !isSampleLike;
 }
 
 // Force all fx wet levels to 0 (100% dry) — used when switching a track to the
@@ -1839,6 +1867,7 @@ function setEngineKey(t, newKey) {
     }
     if (t.voice.setGlide) t.voice.setGlide(t.glide);
     routeVoiceToRack(t);
+    applySampleSpeed(t);
     syncAllLFOs(t);
   }
   updateMidiUI(t);
@@ -1887,6 +1916,7 @@ function createTrack({ name, engineKey, length = totalSteps() }) {
     lockPattern: false,
     glide: 0,
     swing: 0,
+    sampleSpeedMode: "native",
     density: 0.5,
     speed: 1,
     trackTick: 0,
@@ -2390,6 +2420,14 @@ function renderTrack(t) {
     speedSel.addEventListener("change", e => {
       t.speed = Number(e.target.value) || 1;
       t.speedAccum = 0;
+    });
+  }
+  const sampleSpeedSel = node.querySelector(".sample-speed");
+  if (sampleSpeedSel) {
+    sampleSpeedSel.value = t.sampleSpeedMode || "native";
+    sampleSpeedSel.addEventListener("change", e => {
+      t.sampleSpeedMode = e.target.value || "native";
+      applySampleSpeed(t);
     });
   }
   const densityInput = node.querySelector(".track-density");
@@ -3492,6 +3530,7 @@ async function promptCustomSound(t) {
       setEngineKey(t, "eleven");
       if (t.el) t.el.querySelector(".track-engine").value = "eleven";
     }
+    applySampleSpeed(t);
     resetProcessingForPromptedSound(t);
     setStatus(`"${t.name}" ← eleven-labs sample (${Math.round(buffer.duration * 1000)}ms)`);
     return;
@@ -3562,6 +3601,7 @@ async function designSoundForTrack(track, prompt, engine, signal) {
       setEngineKey(track, "eleven");
       if (track.el) track.el.querySelector(".track-engine").value = "eleven";
     }
+    applySampleSpeed(track);
     resetProcessingForPromptedSound(track);
     return;
   }
@@ -3788,6 +3828,7 @@ async function pickAudioFileForTrack(t) {
           setEngineKey(t, "upload");
           if (t.el) t.el.querySelector(".track-engine").value = "upload";
         }
+        applySampleSpeed(t);
         setStatus(`"${t.name}" ← ${file.name} (${Math.round(audioBuf.duration * 1000)}ms)`);
         resolve(true);
       } catch (err) {
@@ -4103,6 +4144,7 @@ function init() {
     retuneSyncedLFOs();
     for (const t of state.tracks) {
       if (t.fxRack && t.fxConfig.delay.sync) t.fxRack.applyDelay({});
+      applySampleSpeed(t);
     }
     for (const t of state.tracks) {
       for (const key of LFO_KEYS) {
