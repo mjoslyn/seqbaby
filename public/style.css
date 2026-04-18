@@ -532,10 +532,11 @@ main {
   display: flex;
   gap: 8px;
   align-items: center;
+  flex-wrap: wrap;
 }
 
 .track-prompt .prompt-input {
-  flex: 1;
+  flex: 1 1 220px;
   min-width: 0;
 }
 
@@ -666,13 +667,36 @@ main {
   row-gap: 10px;
 }
 .step-editor .se-note-field > label:first-child { align-self: start; padding-top: 4px; }
-.step-editor .se-note-field .se-note-label {
+.step-editor .se-note-header {
   grid-column: 2;
   grid-row: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.step-editor .se-note-header .se-note-label {
   font-size: 11px;
   color: var(--fg-dim);
   letter-spacing: 0.04em;
 }
+.step-editor .se-oct-pager {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  color: var(--fg-dim);
+  letter-spacing: 0.04em;
+}
+.step-editor .se-oct-pager button {
+  padding: 2px 8px;
+  font-size: 10px;
+}
+.step-editor .se-oct-pager button[disabled] {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.step-editor .se-oct-range { min-width: 60px; text-align: center; }
 .step-editor .se-keyboard {
   --se-pad-size: 48px;
   grid-column: 1 / -1;

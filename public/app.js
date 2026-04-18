@@ -909,6 +909,7 @@ function makeFuzzCurve(drive) {
 function defaultFxConfig() {
   return {
     fuzz:   { amount: 0, drive: 0.7, tone: 0.4, level: 0.5 },
+    crush:  { bits: 8, wet: 0 },
     delay:  { time: 0.375, fbk: 0.35, wet: 0, sync: false, div: 0.5 },
     reverb: { decay: 2, wet: 0 },
   };
@@ -945,7 +946,11 @@ class FXRack {
     this.dryBus.connect(this.postFuzz);
     this.wetBus.connect(this.postFuzz);
 
-    // Tone effects chained after fuzz
+    // Tone effects chained after fuzz: crusher → delay → reverb
+    this.crusher = new Tone.BitCrusher({
+      bits: Math.max(1, Math.min(16, config.crush?.bits ?? 8)),
+      wet: config.crush?.wet ?? 0,
+    });
     this.delay = new Tone.FeedbackDelay({
       delayTime: config.delay.time,
       feedback: config.delay.fbk,
@@ -957,8 +962,9 @@ class FXRack {
 
     this.output = ctx.createGain();
     // Native → Tone: target the underlying AudioNode behind each Tone effect's input.
-    const delayIn = this.delay.input?.input ?? this.delay.input;
-    this.postFuzz.connect(delayIn);
+    const crusherIn = this.crusher.input?.input ?? this.crusher.input;
+    this.postFuzz.connect(crusherIn);
+    this.crusher.connect(this.delay);
     this.delay.connect(this.reverb);
     // Tone → native: Tone handles native destinations via connect()
     this.reverb.connect(this.output);
@@ -985,6 +991,18 @@ class FXRack {
     if (level !== undefined) {
       this.config.fuzz.level = level;
       this.fuzzLevel.gain.value = level * 0.9;
+    }
+  }
+  applyCrush({ bits, wet }) {
+    if (!this.config.crush) this.config.crush = { bits: 8, wet: 0 };
+    if (bits !== undefined) {
+      const b = Math.max(1, Math.min(16, Math.round(bits)));
+      this.config.crush.bits = b;
+      try { this.crusher.bits.value = b; } catch { try { this.crusher.set({ bits: b }); } catch {} }
+    }
+    if (wet !== undefined) {
+      this.config.crush.wet = wet;
+      try { this.crusher.wet.value = wet; } catch {}
     }
   }
   applyDelay({ time, fbk, wet, sync, div }) {
@@ -1020,6 +1038,7 @@ class FXRack {
     try { this.output.disconnect(); } catch {}
     try { this.delay.dispose(); } catch {}
     try { this.reverb.dispose(); } catch {}
+    try { this.crusher.dispose(); } catch {}
   }
 }
 
@@ -1851,10 +1870,13 @@ function resetFxDry(t) {
   cfg.fuzz.amount = 0;
   cfg.delay.wet   = 0;
   cfg.reverb.wet  = 0;
+  if (!cfg.crush) cfg.crush = { bits: 8, wet: 0 };
+  cfg.crush.wet   = 0;
   if (t.fxRack) {
     t.fxRack.applyFuzz(cfg.fuzz);
     t.fxRack.applyDelay(cfg.delay);
     t.fxRack.applyReverb(cfg.reverb);
+    t.fxRack.applyCrush(cfg.crush);
   }
   refreshFxPanelUI(t);
 }
@@ -2553,9 +2575,25 @@ function renderTrack(t) {
     renderStepGrid(t);
   });
   node.querySelector(".track-remove").addEventListener("click", () => removeTrack(t));
-  node.querySelector(".prompt-go").addEventListener("click", () => promptTrack(t));
+  const pToggle = node.querySelector(".prompt-pattern-toggle");
+  const iToggle = node.querySelector(".prompt-inst-toggle");
+  if (pToggle) pToggle.addEventListener("click", () => {
+    const pressed = pToggle.getAttribute("aria-pressed") === "true";
+    pToggle.setAttribute("aria-pressed", String(!pressed));
+  });
+  if (iToggle) iToggle.addEventListener("click", () => {
+    iToggle.dataset.state = (iToggle.dataset.state || "off") === "off" ? "on" : "off";
+  });
+  const runTrackGen = () => {
+    const regenPattern = !pToggle || pToggle.getAttribute("aria-pressed") === "true";
+    const designSound = (iToggle?.dataset.state || "off") === "on";
+    if (!regenPattern && !designSound) { setStatus("toggle pattern or instruments first"); return; }
+    if (designSound) return promptTrackFull(t, { regenPattern });
+    return promptTrack(t);
+  };
+  node.querySelector(".prompt-go").addEventListener("click", runTrackGen);
   node.querySelector(".prompt-input").addEventListener("keydown", e => {
-    if (e.key === "Enter") promptTrack(t);
+    if (e.key === "Enter") runTrackGen();
   });
 
   // midi-specific controls
@@ -2675,8 +2713,14 @@ function applyFxToTrack(t, fx) {
     const decay = Number(fx.reverb.decay); if (Number.isFinite(decay)) cfg.reverb.decay = Math.max(0.2, Math.min(10, decay));
     const wet   = Number(fx.reverb.wet);   if (Number.isFinite(wet))   cfg.reverb.wet   = Math.max(0, Math.min(1, wet));
   }
+  if (fx.crush && typeof fx.crush === "object") {
+    if (!cfg.crush) cfg.crush = { bits: 8, wet: 0 };
+    const bits = Number(fx.crush.bits); if (Number.isFinite(bits)) cfg.crush.bits = Math.max(1, Math.min(16, Math.round(bits)));
+    const wet  = Number(fx.crush.wet);  if (Number.isFinite(wet))  cfg.crush.wet  = Math.max(0, Math.min(1, wet));
+  }
   if (t.fxRack) {
     t.fxRack.applyFuzz(cfg.fuzz);
+    t.fxRack.applyCrush(cfg.crush || { bits: 8, wet: 0 });
     t.fxRack.applyDelay(cfg.delay);
     t.fxRack.applyReverb(cfg.reverb);
   }
@@ -2700,11 +2744,16 @@ function refreshFxPanelUI(t) {
   q(".fx-delay-div").value   = String(cfg.delay.div);
   q(".fx-reverb-decay").value = cfg.reverb.decay;
   q(".fx-reverb-wet").value   = cfg.reverb.wet;
+  if (cfg.crush) {
+    const b = q(".fx-crush-bits"); if (b) b.value = cfg.crush.bits;
+    const w = q(".fx-crush-wet");  if (w) w.value = cfg.crush.wet;
+  }
 }
 
 function wireFxPanel(t, panel) {
   const q = (sel) => panel.querySelector(sel);
   const fc = t.fxConfig;
+  if (!fc.crush) fc.crush = { bits: 8, wet: 0 };
   q(".fx-fuzz-amount").value = fc.fuzz.amount;
   q(".fx-fuzz-drive").value  = fc.fuzz.drive;
   q(".fx-fuzz-tone").value   = fc.fuzz.tone;
@@ -2716,6 +2765,8 @@ function wireFxPanel(t, panel) {
   q(".fx-delay-div").value   = String(fc.delay.div);
   q(".fx-reverb-decay").value = fc.reverb.decay;
   q(".fx-reverb-wet").value   = fc.reverb.wet;
+  { const b = q(".fx-crush-bits"); if (b) b.value = fc.crush.bits; }
+  { const w = q(".fx-crush-wet");  if (w) w.value = fc.crush.wet; }
 
   const applyFuzz = () => {
     fc.fuzz.amount = Number(q(".fx-fuzz-amount").value);
@@ -2738,12 +2789,21 @@ function wireFxPanel(t, panel) {
     t.fxRack?.applyReverb(fc.reverb);
   };
 
+  const applyCrush = () => {
+    const b = q(".fx-crush-bits"); const w = q(".fx-crush-wet");
+    if (b) fc.crush.bits = Number(b.value);
+    if (w) fc.crush.wet  = Number(w.value);
+    t.fxRack?.applyCrush(fc.crush);
+  };
+
   ["amount","drive","tone","level"].forEach(n => q(`.fx-fuzz-${n}`).addEventListener("input", applyFuzz));
   ["time","fbk","wet"].forEach(n => q(`.fx-delay-${n}`).addEventListener("input", applyDelay));
   q(".fx-delay-sync").addEventListener("change", applyDelay);
   q(".fx-delay-div").addEventListener("change", applyDelay);
   q(".fx-reverb-decay").addEventListener("input", applyReverb);
   q(".fx-reverb-wet").addEventListener("input", applyReverb);
+  { const b = q(".fx-crush-bits"); if (b) b.addEventListener("input", applyCrush); }
+  { const w = q(".fx-crush-wet");  if (w) w.addEventListener("input", applyCrush); }
 }
 
 function renderModPanel(t, panel) {
@@ -2943,9 +3003,16 @@ function openStepEditor(t, idx, anchorEl) {
     <div class="se-title">step ${idx + 1}</div>
     <div class="se-field se-note-field">
       <label>note</label>
+      <div class="se-note-header">
+        <span class="se-note-label"></span>
+        <div class="se-oct-pager">
+          <button class="se-oct-down" type="button" title="lower octaves">oct −</button>
+          <span class="se-oct-range"></span>
+          <button class="se-oct-up" type="button" title="higher octaves">oct +</button>
+        </div>
+      </div>
       <div class="se-keyboard" tabindex="0"></div>
       <input class="se-note" type="hidden" value="${Math.max(24, Math.min(95, defaultNote))}" />
-      <span class="se-note-label"></span>
     </div>
     <div class="se-field se-chord-field">
       <label>chord</label>
@@ -3103,46 +3170,79 @@ function openStepEditor(t, idx, anchorEl) {
   syncArpRowVisibility();
 
   // Build Launchpad-style pad grid (bottom-left = lowest, top-right = highest).
+  // Only 3 octaves are visible at a time — use the pager (oct +/−) to shift the window.
   // When a scale is active, only in-scale notes are shown and columns = scale length.
   const kb = el.querySelector(".se-keyboard");
+  const octDownBtn  = el.querySelector(".se-oct-down");
+  const octUpBtn    = el.querySelector(".se-oct-up");
+  const octRangeLbl = el.querySelector(".se-oct-range");
   const scaleIntervals = state.scale.active ? (SCALES[state.scale.mode] || null) : null;
   const PC_NAMES = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
-  const midiList = [];
-  for (let m = 24; m <= 95; m++) {
-    if (!scaleIntervals) { midiList.push(m); continue; }
-    const pc = ((m % 12) + 12) % 12;
-    const rel = ((pc - state.scale.root) % 12 + 12) % 12;
-    if (scaleIntervals.includes(rel)) midiList.push(m);
-  }
+  const VIEW_OCTS = 3;
+  const MIN_OCT = 1, MAX_OCT = 6;
+  const octaveOf = (m) => Math.floor(m / 12) - 1;
+  let viewOctStart = Math.max(MIN_OCT, Math.min(MAX_OCT - VIEW_OCTS + 1, octaveOf(defaultNote) - 1));
   const COLS = scaleIntervals ? scaleIntervals.length : 12;
-  const ROWS = Math.max(1, Math.ceil(midiList.length / COLS));
   kb.style.gridTemplateColumns = `repeat(${COLS}, var(--se-pad-size))`;
-  for (let i = 0; i < midiList.length; i++) {
-    const m = midiList[i];
-    const pc = ((m % 12) + 12) % 12;
-    const pad = document.createElement("button");
-    pad.type = "button";
-    pad.className = "se-pad";
-    pad.dataset.note = String(m);
-    if (scaleIntervals) {
-      pad.classList.add("in-scale");
-      if (pc === state.scale.root) pad.classList.add("root");
+
+  const renderPads = () => {
+    kb.replaceChildren();
+    const lo = 24 + (viewOctStart - 1) * 12;
+    const hi = lo + VIEW_OCTS * 12;
+    const visible = [];
+    for (let m = lo; m < hi && m <= 95; m++) {
+      if (!scaleIntervals) { visible.push(m); continue; }
+      const pc = ((m % 12) + 12) % 12;
+      const rel = ((pc - state.scale.root) % 12 + 12) % 12;
+      if (scaleIntervals.includes(rel)) visible.push(m);
     }
-    pad.title = midiToName(m);
-    pad.textContent = pc === 0 ? `C${Math.floor(m / 12) - 1}` : PC_NAMES[pc];
-    // Flip vertical order so lowest notes sit at the bottom
-    pad.style.gridRow = String(ROWS - Math.floor(i / COLS));
-    pad.style.gridColumn = String((i % COLS) + 1);
-    kb.appendChild(pad);
-  }
+    const ROWS = Math.max(1, Math.ceil(visible.length / COLS));
+    for (let i = 0; i < visible.length; i++) {
+      const m = visible[i];
+      const pc = ((m % 12) + 12) % 12;
+      const pad = document.createElement("button");
+      pad.type = "button";
+      pad.className = "se-pad";
+      pad.dataset.note = String(m);
+      if (scaleIntervals) {
+        pad.classList.add("in-scale");
+        if (pc === state.scale.root) pad.classList.add("root");
+      }
+      pad.title = midiToName(m);
+      pad.textContent = `${PC_NAMES[pc]}${octaveOf(m)}`;
+      pad.style.gridRow = String(ROWS - Math.floor(i / COLS));
+      pad.style.gridColumn = String((i % COLS) + 1);
+      kb.appendChild(pad);
+    }
+    // re-apply selected highlight if the current note is in view
+    const cur = Number(noteInput.value);
+    const active = kb.querySelector(`.se-pad[data-note="${cur}"]`);
+    if (active) active.classList.add("selected");
+    if (octRangeLbl) octRangeLbl.textContent = `oct ${viewOctStart}–${viewOctStart + VIEW_OCTS - 1}`;
+    if (octDownBtn) octDownBtn.disabled = viewOctStart <= MIN_OCT;
+    if (octUpBtn)   octUpBtn.disabled   = viewOctStart + VIEW_OCTS - 1 >= MAX_OCT;
+  };
+  renderPads();
+  if (octDownBtn) octDownBtn.addEventListener("click", () => {
+    if (viewOctStart > MIN_OCT) { viewOctStart--; renderPads(); }
+  });
+  if (octUpBtn) octUpBtn.addEventListener("click", () => {
+    if (viewOctStart + VIEW_OCTS - 1 < MAX_OCT) { viewOctStart++; renderPads(); }
+  });
   const setNote = (v, { render = true } = {}) => {
     let n = Math.max(24, Math.min(95, Math.round(v)));
     n = applyScale(n);
     noteInput.value = String(n);
     t.notes[idx] = n;
-    kb.querySelectorAll(".se-pad.selected").forEach(k => k.classList.remove("selected"));
-    const active = kb.querySelector(`.se-pad[data-note="${n}"]`);
-    if (active) active.classList.add("selected");
+    const nOct = octaveOf(n);
+    if (nOct < viewOctStart || nOct > viewOctStart + VIEW_OCTS - 1) {
+      viewOctStart = Math.max(MIN_OCT, Math.min(MAX_OCT - VIEW_OCTS + 1, nOct - 1));
+      renderPads();
+    } else {
+      kb.querySelectorAll(".se-pad.selected").forEach(k => k.classList.remove("selected"));
+      const active = kb.querySelector(`.se-pad[data-note="${n}"]`);
+      if (active) active.classList.add("selected");
+    }
     rebuildChords();
     syncChordOptsVisibility();
     syncArpRowVisibility();
@@ -3620,6 +3720,35 @@ function setStatus(msg, isErr = false) {
   el.classList.toggle("err", isErr);
 }
 
+// Redesign this track's sound from its prompt input, then (optionally) regen its pattern.
+// Mirrors the master generate flow's instruments toggle but scoped to one track.
+async function promptTrackFull(t, { regenPattern = true } = {}) {
+  const input = t.el.querySelector(".prompt-input");
+  const prompt = input.value.trim();
+  if (!prompt) { input.focus(); return; }
+  const btn = t.el.querySelector(".prompt-go");
+  btn.disabled = true;
+  const signal = startGen();
+  try {
+    const soundEngine = document.getElementById("gen-sound-engine")?.value === "eleven" ? "eleven" : "tone";
+    setStatus(`designing ${soundEngine === "eleven" ? "eleven-labs " : ""}sound for "${t.name}"...`);
+    await designSoundForTrack(t, prompt, soundEngine, signal);
+    t.soundPromptText = prompt;
+    if (regenPattern) {
+      btn.disabled = false; // promptTrack re-disables it
+      await promptTrack(t);
+    } else {
+      setStatus(`"${t.name}" sound ready`);
+    }
+  } catch (err) {
+    if (isAbortError(err)) { setStatus("cancelled", true); }
+    else { console.error(err); setStatus("generate failed — see console", true); }
+  } finally {
+    btn.disabled = false;
+    endGen();
+  }
+}
+
 async function promptTrack(t, opts = {}) {
   const input = t.el.querySelector(".prompt-input");
   const btn = t.el.querySelector(".prompt-go");
@@ -3897,10 +4026,10 @@ function showSoundDesignDialog({ trackName, engine, defaultValue = "" }) {
     overlay.className = "modal-overlay";
     const esc = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;").replace(/\n/g, "&#10;");
     const title = engine === "eleven"
-      ? `describe the eleven-labs sound for "${trackName}"`
+      ? `describe the eleven-labs sound for "${trackName}" — one-shot, sustained tone, or loop?`
       : `describe the sound for "${trackName}"`;
     const placeholder = engine === "eleven"
-      ? "deep sub bass hit, tight decay, vinyl noise tail"
+      ? "single 808 kick one-shot, sub boom, tight decay, no loop, no pattern, one hit only"
       : "dark sub bass with soft distortion, resonant filter sweep, short reverb tail";
     overlay.innerHTML = `
       <div class="modal sound-dialog" role="dialog" aria-modal="true">
