@@ -149,6 +149,20 @@ button.danger { color: var(--danger); }
   border-bottom: 1px solid var(--border);
 }
 .master-prompt input[type="text"] { flex: 1; }
+#master-prompt {
+  flex: 1;
+  font: inherit;
+  resize: none;
+  min-height: 32px;
+  max-height: 180px;
+  overflow-y: auto;
+  line-height: 1.35;
+  padding: 6px 8px;
+  background: var(--bg-3);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
 .master-toggle,
 .gen-toggle { display: inline-flex; align-items: center; gap: 6px; color: var(--fg-dim); white-space: nowrap; }
 .gen-toggle-btn[aria-pressed="true"] {
@@ -209,6 +223,7 @@ button.danger { color: var(--danger); }
   color: var(--fg-dim);
 }
 .gen-count-wrap input { width: 50px; text-align: center; }
+.gen-sound-engine { padding: 4px 8px; font-size: 12px; }
 
 main {
   padding: 16px;
@@ -345,6 +360,23 @@ main {
   color: #0b0d10;
   border-color: #ffa94d;
 }
+
+.track-comp-panel {
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  display: grid;
+  gap: 4px;
+}
+.track-comp-panel[hidden] { display: none; }
+.track-comp[aria-pressed="true"] {
+  background: #66d9b4;
+  color: #0b0d10;
+  border-color: #66d9b4;
+}
+.fx-row[data-fx="comp"] .fx-title { color: #66d9b4; }
+.track-comp-panel select.comp-source { min-width: 110px; }
 
 .fx-row {
   display: flex;

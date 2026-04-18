@@ -40,9 +40,13 @@
   </div>
 
   <div class="master-prompt">
-    <input id="master-prompt" type="text" placeholder="describe the whole pattern — dark dub techno in Cm, loose broken boom-bap, etc." />
+    <textarea id="master-prompt" rows="1" placeholder="describe the whole pattern — dark dub techno in Cm, loose broken boom-bap, etc."></textarea>
     <button id="gen-pattern" class="ghost gen-toggle-btn" aria-pressed="true" title="toggle: regenerate step patterns">pattern</button>
     <button id="gen-instruments" class="ghost gen-toggle-btn" data-state="on" title="off → on (reshape for current gen) → all (swap instruments in place across every pattern). Locks are always honored.">instruments</button>
+    <select id="gen-sound-engine" class="gen-sound-engine" title="which engine to use when designing sounds">
+      <option value="tone" selected>tone.js</option>
+      <option value="eleven">eleven labs</option>
+    </select>
     <label class="gen-count-wrap" title="bars per generated pattern (each bar = 16 steps)"><span>bars</span><input id="gen-bars" type="number" min="1" max="8" value="1" /></label>
     <label class="gen-count-wrap" title="generate N patterns; extras are variations using the same instruments, starting from the selected pattern"><span>×</span><input id="gen-count" type="number" min="1" max="4" value="1" /></label>
     <button id="master-prompt-go" title="plan and (re)generate every unlocked track for the current pattern">generate</button>
@@ -89,6 +93,7 @@
           <button class="track-env ghost" aria-pressed="false" title="envelope → cutoff">env</button>
           <button class="track-fx ghost" aria-pressed="false" title="fx rack">fx</button>
           <button class="track-eq ghost" aria-pressed="false" title="3-band eq">eq</button>
+          <button class="track-comp ghost" aria-pressed="false" title="compressor + sidechain">comp</button>
           <button class="track-mod ghost" aria-pressed="false">mod</button>
         </div>
         <div class="lock-stack">
@@ -130,6 +135,21 @@
           <label class="fx-ctl"><span>low</span><input class="p-eq-low" type="range" min="-18" max="18" step="0.5" value="0" /></label>
           <label class="fx-ctl"><span>mid</span><input class="p-eq-mid" type="range" min="-18" max="18" step="0.5" value="0" /></label>
           <label class="fx-ctl"><span>high</span><input class="p-eq-high" type="range" min="-18" max="18" step="0.5" value="0" /></label>
+        </div>
+      </div>
+      <div class="track-comp-panel" hidden>
+        <div class="fx-row" data-fx="comp">
+          <span class="fx-title">compressor</span>
+          <label class="fx-ctl"><span>on</span><input class="comp-enabled" type="checkbox" /></label>
+          <label class="fx-ctl"><span>src</span><select class="comp-source"><option value="self">self</option></select></label>
+        </div>
+        <div class="fx-row" data-fx="comp">
+          <span class="fx-title"></span>
+          <label class="fx-ctl"><span>thr</span><input class="comp-threshold" type="range" min="-60" max="0" step="1" value="-20" /></label>
+          <label class="fx-ctl"><span>ratio</span><input class="comp-ratio" type="range" min="1" max="20" step="0.1" value="4" /></label>
+          <label class="fx-ctl"><span>atk</span><input class="comp-attack" type="range" min="0" max="1" step="0.005" value="0.01" /></label>
+          <label class="fx-ctl"><span>rel</span><input class="comp-release" type="range" min="0.02" max="2" step="0.01" value="0.2" /></label>
+          <label class="fx-ctl"><span>knee</span><input class="comp-knee" type="range" min="0" max="30" step="1" value="6" /></label>
         </div>
       </div>
       <div class="track-fx-panel" hidden>

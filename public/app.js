@@ -468,6 +468,8 @@ function serializeSet() {
       fxConfig: JSON.parse(JSON.stringify(t.fxConfig)),
       midi: { ...t.midi },
       customConfig: t.customConfig ? JSON.parse(JSON.stringify(t.customConfig)) : null,
+      elevenAudio: t.elevenAudio || null,
+      elevenAudioMime: t.elevenAudioMime || null,
       soundPromptText: t.soundPromptText,
       locked: t.locked, muted: t.muted, soloed: t.soloed,
       glide: t.glide, speed: t.speed ?? 1,
@@ -581,7 +583,21 @@ function applySet(s) {
     Object.assign(t.fxConfig, td.fxConfig || {});
     Object.assign(t.midi, td.midi || {});
     t.customConfig = td.customConfig || null;
+    t.elevenAudio = td.elevenAudio || null;
+    t.elevenAudioMime = td.elevenAudioMime || null;
     t.soundPromptText = td.soundPromptText || "";
+    // decode the saved eleven-labs sample (async; once done the voice picks it up)
+    if (t.elevenAudio) {
+      (async () => {
+        try {
+          const bytes = Uint8Array.from(atob(t.elevenAudio), c => c.charCodeAt(0));
+          await ensureAudio();
+          const buffer = normalizeAudioBuffer(await state.audioCtx.decodeAudioData(bytes.buffer));
+          t.elevenBuffer = buffer;
+          if (t.voice?.type === "eleven") t.voice.setBuffer(buffer);
+        } catch (e) { console.warn("eleven buffer decode failed", e); }
+      })();
+    }
     t.locked = !!td.locked;
     t.muted  = !!td.muted;
     t.soloed = !!td.soloed;
@@ -1383,6 +1399,34 @@ class CustomToneVoice {
   }
 }
 
+// Peak-normalize an AudioBuffer in place and taper the last ~5ms to zero so the sample
+// doesn't click at its natural end. ElevenLabs output is typically -12…-18 dB and often
+// cuts abruptly.
+function normalizeAudioBuffer(buf) {
+  if (!buf) return buf;
+  let peak = 0;
+  for (let ch = 0; ch < buf.numberOfChannels; ch++) {
+    const d = buf.getChannelData(ch);
+    for (let i = 0; i < d.length; i++) {
+      const v = Math.abs(d[i]);
+      if (v > peak) peak = v;
+    }
+  }
+  const scale = (peak === 0 || peak >= 0.95) ? 1 : 0.98 / peak;
+  const tailSamples = Math.min(buf.length, Math.round(buf.sampleRate * 0.005));
+  for (let ch = 0; ch < buf.numberOfChannels; ch++) {
+    const d = buf.getChannelData(ch);
+    if (scale !== 1) for (let i = 0; i < d.length; i++) d[i] *= scale;
+    // linear taper over the last tailSamples
+    for (let i = 0; i < tailSamples; i++) {
+      const j = d.length - tailSamples + i;
+      const fade = 1 - (i / tailSamples);
+      d[j] *= fade;
+    }
+  }
+  return buf;
+}
+
 class ElevenVoice {
   constructor(ctx, key, params, track) {
     this.ctx = ctx;
@@ -1411,10 +1455,16 @@ class ElevenVoice {
     src.buffer = this.buffer;
     src.playbackRate.value = Math.pow(2, (midiNote - 60) / 12);
     const g = this.ctx.createGain();
-    g.gain.setValueAtTime(Math.max(0, Math.min(1, velocity)), time);
+    const v = Math.max(0, Math.min(1, velocity));
+    const fade = 0.006;   // 6ms attack/release fade to avoid clicks at sample edges
+    const stopTime = time + Math.max(0.1, duration + 0.5);
+    g.gain.setValueAtTime(0, time);
+    g.gain.linearRampToValueAtTime(v, time + fade);
+    g.gain.setValueAtTime(v, Math.max(time + fade, stopTime - fade));
+    g.gain.linearRampToValueAtTime(0, stopTime);
     src.connect(g).connect(this.output);
     src.start(time);
-    src.stop(time + Math.max(0.1, duration + 0.5));
+    src.stop(stopTime + 0.01);
     this.active.add(src);
     src.onended = () => this.active.delete(src);
   }
@@ -1575,6 +1625,21 @@ function updatePlaitsControlsVisibility(t) {
   if (group) group.style.display = isPlaits ? "" : "none";
 }
 
+// Force all fx wet levels to 0 (100% dry) — used when switching a track to the
+// eleven-labs engine so user-applied fx don't stack on baked-in sample ambience.
+function resetFxDry(t) {
+  const cfg = t.fxConfig;
+  cfg.fuzz.amount = 0;
+  cfg.delay.wet   = 0;
+  cfg.reverb.wet  = 0;
+  if (t.fxRack) {
+    t.fxRack.applyFuzz(cfg.fuzz);
+    t.fxRack.applyDelay(cfg.delay);
+    t.fxRack.applyReverb(cfg.reverb);
+  }
+  refreshFxPanelUI(t);
+}
+
 function setEngineKey(t, newKey) {
   const same = t.engineKey === newKey;
   if (same) { updatePlaitsControlsVisibility(t); return; }
@@ -1604,6 +1669,7 @@ function setEngineKey(t, newKey) {
   }
   updateMidiUI(t);
   updatePlaitsControlsVisibility(t);
+  if (engineByKey(newKey)?.type === "eleven") resetFxDry(t);
   t._refreshSaveEnabled?.();
 }
 
@@ -1657,6 +1723,8 @@ function createTrack({ name, engineKey, length = totalSteps() }) {
     filterNode: null,
     eq: { low: 0, mid: 0, high: 0 },
     eqNode: null,
+    comp: defaultCompConfig(),
+    compNode: null,
     patterns: null,   // set below
     _patternIdx: 0,
     lfoConfig: defaultLFOConfig(),
@@ -1672,6 +1740,7 @@ function createTrack({ name, engineKey, length = totalSteps() }) {
   aliasPattern(t, state.activePattern);
   state.tracks.push(t);
   renderTrack(t);
+  refreshCompSourceDropdowns();
   if (state.ready) {
     ensureFxRack(t);
     t.voice = buildVoiceForEngine(state.audioCtx, engineKey, t.params, t);
@@ -1689,8 +1758,19 @@ function removeTrack(t) {
   disposeLFOs(t);
   if (t.voice) t.voice.dispose();
   if (t.fxRack) t.fxRack.dispose();
+  if (t.compNode) t.compNode.dispose();
   t.el.remove();
   state.tracks = state.tracks.filter(x => x !== t);
+  refreshCompSourceDropdowns();
+  // if any remaining track was sidechained to the removed one, reset it to self
+  for (const x of state.tracks) {
+    if (x.comp.source && x.comp.source !== "self" && !state.tracks.find(y => String(y.id) === String(x.comp.source))) {
+      x.comp.source = "self";
+      applyCompressorConfig(x);
+      const sel = x.el?.querySelector(".comp-source");
+      if (sel) sel.value = "self";
+    }
+  }
 }
 
 function ensureFxRack(t) {
@@ -1743,6 +1823,139 @@ function ensureEQ(t) {
   t.eqNode = new EQChain(state.audioCtx, t.eq);
 }
 
+// Per-track compressor with two modes:
+//   - "self": native DynamicsCompressorNode inline on the track's signal
+//   - "<trackId>": envelope-follower ducking driven by another track's output
+class TrackCompressor {
+  constructor(ctx, config) {
+    this.ctx = ctx;
+    this.config = { ...config };
+    this.input = ctx.createGain();
+    this.output = ctx.createGain();
+    this.bypass = ctx.createGain();
+    this.bypass.gain.value = 1;
+    this.input.connect(this.bypass);
+    this.bypass.connect(this.output);
+    this._mode = "off";
+    this._nativeComp = null;
+    this._duckGain = null;
+    this._analyser = null;
+    this._rafId = null;
+    this._sideSource = null;
+    this._currentDuck = 1;
+  }
+  _teardown() {
+    if (this._rafId) { cancelAnimationFrame(this._rafId); this._rafId = null; }
+    try { this.input.disconnect(); } catch {}
+    try { this.bypass.disconnect(); } catch {}
+    if (this._nativeComp) { try { this._nativeComp.disconnect(); } catch {} this._nativeComp = null; }
+    if (this._duckGain)   { try { this._duckGain.disconnect();   } catch {} this._duckGain = null; }
+    if (this._analyser && this._sideSource) {
+      try { this._sideSource.disconnect(this._analyser); } catch {}
+    }
+    if (this._analyser) { try { this._analyser.disconnect(); } catch {} this._analyser = null; }
+    this._sideSource = null;
+  }
+  configure({ enabled, sourceNode, threshold, ratio, attack, release, knee }) {
+    if (threshold != null) this.config.threshold = threshold;
+    if (ratio != null)     this.config.ratio = ratio;
+    if (attack != null)    this.config.attack = attack;
+    if (release != null)   this.config.release = release;
+    if (knee != null)      this.config.knee = knee;
+    this._teardown();
+    this.input = this.input;   // preserve reference (recreate connections below)
+    if (!enabled) {
+      // straight passthrough: input → output
+      this.bypass = this.ctx.createGain();
+      this.input.connect(this.bypass);
+      this.bypass.connect(this.output);
+      this._mode = "off";
+      return;
+    }
+    if (!sourceNode) {
+      // self-compression with native node
+      const c = this.ctx.createDynamicsCompressor();
+      c.threshold.value = this.config.threshold ?? -20;
+      c.ratio.value     = this.config.ratio ?? 4;
+      c.attack.value    = this.config.attack ?? 0.01;
+      c.release.value   = this.config.release ?? 0.2;
+      c.knee.value      = this.config.knee ?? 6;
+      this.input.connect(c);
+      c.connect(this.output);
+      this._nativeComp = c;
+      this._mode = "self";
+      return;
+    }
+    // external sidechain: tap source audio into analyser, run envelope follower,
+    // apply gain reduction to a ducking gain on our signal path.
+    const a = this.ctx.createAnalyser();
+    a.fftSize = 256;
+    a.smoothingTimeConstant = 0.0;
+    try { sourceNode.connect(a); } catch {}
+    this._analyser = a;
+    this._sideSource = sourceNode;
+    const g = this.ctx.createGain();
+    g.gain.value = 1;
+    this.input.connect(g);
+    g.connect(this.output);
+    this._duckGain = g;
+    this._mode = "sidechain";
+    this._tickSidechain();
+  }
+  _tickSidechain = () => {
+    if (!this._analyser || !this._duckGain) return;
+    const buf = new Float32Array(this._analyser.fftSize);
+    this._analyser.getFloatTimeDomainData(buf);
+    let sum = 0;
+    for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
+    const rms = Math.sqrt(sum / buf.length);
+    const db = 20 * Math.log10(Math.max(rms, 1e-6));
+    const thr = this.config.threshold ?? -20;
+    const ratio = Math.max(1, this.config.ratio ?? 4);
+    const over = db - thr;
+    const reducedDb = over > 0 ? over - over / ratio : 0;
+    const target = Math.pow(10, -reducedDb / 20);
+    const tc = target < this._currentDuck
+      ? Math.max(0.001, this.config.attack ?? 0.01)
+      : Math.max(0.01, this.config.release ?? 0.2);
+    try { this._duckGain.gain.setTargetAtTime(target, this.ctx.currentTime, tc); } catch {}
+    this._currentDuck = target;
+    this._rafId = requestAnimationFrame(this._tickSidechain);
+  };
+  dispose() {
+    this._teardown();
+    try { this.output.disconnect(); } catch {}
+  }
+}
+
+function defaultCompConfig() {
+  return { enabled: false, source: "self", threshold: -20, ratio: 4, attack: 0.01, release: 0.2, knee: 6 };
+}
+
+function ensureCompressor(t) {
+  if (!state.audioCtx || t.compNode) return;
+  t.compNode = new TrackCompressor(state.audioCtx, t.comp);
+  applyCompressorConfig(t);
+}
+
+function applyCompressorConfig(t) {
+  if (!t.compNode) return;
+  let sourceNode = null;
+  if (t.comp.enabled && t.comp.source && t.comp.source !== "self") {
+    const src = state.tracks.find(x => String(x.id) === String(t.comp.source));
+    if (src?.voice?.getOutputNode) sourceNode = src.voice.getOutputNode();
+  }
+  t.compNode.configure({
+    enabled: t.comp.enabled,
+    sourceNode,
+    threshold: t.comp.threshold,
+    ratio: t.comp.ratio,
+    attack: t.comp.attack,
+    release: t.comp.release,
+    knee: t.comp.knee,
+  });
+}
+
 function setEQ(t, band, db) {
   t.eq[band] = db;
   if (t.eqNode) t.eqNode.setBand(band, db);
@@ -1752,22 +1965,29 @@ function routeVoiceToRack(t) {
   if (!t.voice || !t.fxRack) return;
   ensureFilter(t);
   ensureEQ(t);
+  ensureCompressor(t);
   const dest = t.fxRack.input;
-  const eqIn  = t.eqNode?.input;
-  const eqOut = t.eqNode?.output;
+  const eqIn    = t.eqNode?.input;
+  const eqOut   = t.eqNode?.output;
+  const compIn  = t.compNode?.input;
+  const compOut = t.compNode?.output;
   // clear existing wiring
   if (t.filterNode) try { t.filterNode.disconnect(); } catch {}
-  if (eqOut)        try { eqOut.disconnect();        } catch {}
-  // chain: voice → filter (opt) → eq (opt) → fxRack.input
-  if (t.filterNode && eqIn) {
-    t.filterNode.connect(eqIn);
-    eqOut.connect(dest);
-  } else if (t.filterNode) {
-    t.filterNode.connect(dest);
-  } else if (eqIn) {
-    eqOut.connect(dest);
+  if (eqOut)        try { eqOut.disconnect(); } catch {}
+  if (compOut)      try { compOut.disconnect(); } catch {}
+  // build chain: voice → filter? → eq? → comp? → fxRack.input
+  const nodes = [];
+  if (t.filterNode) nodes.push({ in: t.filterNode, out: t.filterNode });
+  if (t.eqNode)     nodes.push({ in: eqIn, out: eqOut });
+  if (t.compNode)   nodes.push({ in: compIn, out: compOut });
+  for (let i = 0; i < nodes.length - 1; i++) {
+    try { nodes[i].out.connect(nodes[i + 1].in); } catch {}
   }
-  const firstIn = t.filterNode || eqIn || dest;
+  const last = nodes[nodes.length - 1];
+  if (last) {
+    try { last.out.connect(dest); } catch {}
+  }
+  const firstIn = nodes[0]?.in || dest;
   if (t.voice.setDestination) t.voice.setDestination(firstIn);
 }
 
@@ -2011,6 +2231,7 @@ function renderTrack(t) {
     { btnSel: ".track-env",    panelSel: ".track-env-panel" },
     { btnSel: ".track-fx",     panelSel: ".track-fx-panel" },
     { btnSel: ".track-eq",     panelSel: ".track-eq-panel" },
+    { btnSel: ".track-comp",   panelSel: ".track-comp-panel" },
   ];
   function closeOtherPanels(keepBtnSel) {
     for (const p of panelPairs) {
@@ -2045,6 +2266,8 @@ function renderTrack(t) {
   bindPanelToggle(".track-env",    ".track-env-panel");
   bindPanelToggle(".track-fx",     ".track-fx-panel");
   bindPanelToggle(".track-eq",     ".track-eq-panel");
+  bindPanelToggle(".track-comp",   ".track-comp-panel");
+  wireCompPanel(t, node.querySelector(".track-comp-panel"));
 
   node.querySelector(".track-mute").addEventListener("click", () => {
     t.muted = !t.muted;
@@ -2109,6 +2332,56 @@ function updateMidiUI(t) {
   }
   sel.value = cur;
   row.querySelector(".midi-ch").value = t.midi.channel;
+}
+
+function refreshCompSourceDropdowns() {
+  for (const t of state.tracks) {
+    const sel = t.el?.querySelector(".comp-source");
+    if (!sel) continue;
+    const cur = t.comp.source || "self";
+    sel.replaceChildren();
+    const optSelf = document.createElement("option");
+    optSelf.value = "self"; optSelf.textContent = "self";
+    sel.appendChild(optSelf);
+    for (const other of state.tracks) {
+      if (other === t) continue;
+      const opt = document.createElement("option");
+      opt.value = String(other.id);
+      opt.textContent = other.name || `track ${other.id}`;
+      sel.appendChild(opt);
+    }
+    sel.value = cur;
+  }
+}
+
+function wireCompPanel(t, panel) {
+  const q = s => panel.querySelector(s);
+  const en = q(".comp-enabled");
+  const src = q(".comp-source");
+  const thr = q(".comp-threshold");
+  const ratio = q(".comp-ratio");
+  const atk = q(".comp-attack");
+  const rel = q(".comp-release");
+  const knee = q(".comp-knee");
+  en.checked = !!t.comp.enabled;
+  thr.value = t.comp.threshold;
+  ratio.value = t.comp.ratio;
+  atk.value = t.comp.attack;
+  rel.value = t.comp.release;
+  knee.value = t.comp.knee;
+  const apply = () => {
+    t.comp.enabled   = en.checked;
+    t.comp.source    = src.value || "self";
+    t.comp.threshold = Number(thr.value);
+    t.comp.ratio     = Number(ratio.value);
+    t.comp.attack    = Number(atk.value);
+    t.comp.release   = Number(rel.value);
+    t.comp.knee      = Number(knee.value);
+    applyCompressorConfig(t);
+  };
+  en.addEventListener("change", apply);
+  src.addEventListener("change", apply);
+  for (const c of [thr, ratio, atk, rel, knee]) c.addEventListener("input", apply);
 }
 
 function applyFxToTrack(t, fx) {
@@ -3015,6 +3288,46 @@ async function promptCustomSound(t) {
   }
 }
 
+// Bulk sound designer used by the planner flow. `engine` is "tone" or "eleven".
+async function designSoundForTrack(track, prompt, engine, signal) {
+  if (engine === "eleven") {
+    const r = await fetch("/api/eleven-sound", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ prompt, duration: 2.0 }),
+      signal,
+    });
+    if (!r.ok) throw new Error(await r.text());
+    const { audio, mime } = await r.json();
+    track.elevenAudio = audio;
+    track.elevenAudioMime = mime || "audio/mpeg";
+    const bytes = Uint8Array.from(atob(audio), c => c.charCodeAt(0));
+    await ensureAudio();
+    const buffer = normalizeAudioBuffer(await state.audioCtx.decodeAudioData(bytes.buffer));
+    track.elevenBuffer = buffer;
+    if (track.engineKey === "eleven" && track.voice?.type === "eleven") {
+      track.voice.setBuffer(buffer);
+    } else {
+      setEngineKey(track, "eleven");
+      if (track.el) track.el.querySelector(".track-engine").value = "eleven";
+    }
+    return;
+  }
+  // tone.js patch
+  const r = await fetch("/api/sound", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ prompt }),
+    signal,
+  });
+  if (!r.ok) throw new Error(await r.text());
+  const cfg = await r.json();
+  track.customConfig = cfg;
+  setEngineKey(track, "custom");
+  if (track.el) track.el.querySelector(".track-engine").value = "custom";
+  if (cfg.fx) applyFxToTrack(track, cfg.fx);
+}
+
 async function designElevenSound(t) {
   setStatus(`generating eleven-labs sample for "${t.name}"...`);
   try {
@@ -3026,10 +3339,12 @@ async function designElevenSound(t) {
     });
     if (!r.ok) throw new Error(await r.text());
     const { audio, mime } = await r.json();
-    // decode base64 → ArrayBuffer → AudioBuffer
+    // keep the raw mp3 so the sample survives save/export; decode for playback now
+    t.elevenAudio = audio;            // base64-encoded mp3
+    t.elevenAudioMime = mime || "audio/mpeg";
     const bytes = Uint8Array.from(atob(audio), c => c.charCodeAt(0));
     await ensureAudio();
-    const buffer = await state.audioCtx.decodeAudioData(bytes.buffer);
+    const buffer = normalizeAudioBuffer(await state.audioCtx.decodeAudioData(bytes.buffer));
     t.elevenBuffer = buffer;
     if (t.engineKey === "eleven" && t.voice?.type === "eleven") {
       t.voice.setBuffer(buffer);
@@ -3175,22 +3490,12 @@ async function promptFromMaster({ reshape = false, designSounds = false, regenPa
         }
       }
       if (designSounds) {
-        setStatus(`designing ${newTracks.length} sound${newTracks.length === 1 ? "" : "s"}...`);
+        const soundEngine = document.getElementById("gen-sound-engine")?.value === "eleven" ? "eleven" : "tone";
+        setStatus(`designing ${newTracks.length} ${soundEngine === "eleven" ? "eleven-labs " : ""}sound${newTracks.length === 1 ? "" : "s"}...`);
         await Promise.all(newTracks.map(async ({ track, soundPrompt }) => {
           if (!soundPrompt) return;
           try {
-            const r2 = await fetch("/api/sound", {
-              method: "POST",
-              headers: { "content-type": "application/json" },
-              body: JSON.stringify({ prompt: soundPrompt }),
-              signal,
-            });
-            if (!r2.ok) throw new Error(await r2.text());
-            const cfg = await r2.json();
-            track.customConfig = cfg;
-            setEngineKey(track, "custom");
-            if (track.el) track.el.querySelector(".track-engine").value = "custom";
-            if (cfg.fx) applyFxToTrack(track, cfg.fx);
+            await designSoundForTrack(track, soundPrompt, soundEngine, signal);
           } catch (e) { console.warn("sound design failed for", track.name, e); }
         }));
       }
@@ -3209,27 +3514,15 @@ async function promptFromMaster({ reshape = false, designSounds = false, regenPa
       t.el.querySelector(".prompt-input").value = data.prompts[i];
     });
     if (designSounds && Array.isArray(data.soundPrompts) && data.soundPrompts.length === empties.length) {
-      setStatus(`designing ${empties.length} sound${empties.length === 1 ? "" : "s"}...`);
-      const results = await Promise.all(data.soundPrompts.map(async (sp, i) => {
-        try {
-          const r2 = await fetch("/api/sound", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ prompt: sp }),
-          });
-          if (!r2.ok) throw new Error(await r2.text());
-          return await r2.json();
-        } catch (e) { console.warn("sound design failed for", empties[i].name, e); return null; }
-      }));
-      results.forEach((cfg, i) => {
-        if (!cfg) return;
+      const soundEngine = document.getElementById("gen-sound-engine")?.value === "eleven" ? "eleven" : "tone";
+      setStatus(`designing ${empties.length} ${soundEngine === "eleven" ? "eleven-labs " : ""}sound${empties.length === 1 ? "" : "s"}...`);
+      await Promise.all(data.soundPrompts.map(async (sp, i) => {
         const t = empties[i];
-        t.customConfig = cfg;
-        t.soundPromptText = data.soundPrompts[i];
-        setEngineKey(t, "custom");
-        if (t.el) t.el.querySelector(".track-engine").value = "custom";
-        if (cfg.fx) applyFxToTrack(t, cfg.fx);
-      });
+        if (!t) return;
+        t.soundPromptText = sp;
+        try { await designSoundForTrack(t, sp, soundEngine, signal); }
+        catch (e) { console.warn("sound design failed for", t.name, e); }
+      }));
     }
     if (regenPatterns) {
       for (const t of empties) await promptTrack(t);
@@ -3435,9 +3728,19 @@ function init() {
     state.patternRepeats[state.activePattern] = v;
   });
   renderPatternGrid();
-  document.getElementById("master-prompt").addEventListener("keydown", e => {
-    if (e.key === "Enter") promptFromMaster();
+  const mp = document.getElementById("master-prompt");
+  const autogrow = () => {
+    mp.style.height = "auto";
+    mp.style.height = `${Math.min(180, mp.scrollHeight)}px`;
+  };
+  mp.addEventListener("input", autogrow);
+  mp.addEventListener("keydown", e => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      document.getElementById("master-prompt-go").click();
+    }
   });
+  requestAnimationFrame(autogrow);
 
   initScaleUI();
 
