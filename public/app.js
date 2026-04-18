@@ -319,6 +319,22 @@ function chordNotes(rootMidi, chordType) {
   return tones.map(i => rootMidi + i);
 }
 
+// Does every tone of chordKey (rooted at rootMidi) fall on the active scale?
+// Returns true when no scale is active.
+function chordFitsScale(rootMidi, chordKey) {
+  if (!state.scale.active) return true;
+  const intervals = SCALES[state.scale.mode];
+  if (!intervals) return true;
+  const tones = CHORD_TYPES[canonicalChord(chordKey)];
+  if (!tones) return false;
+  for (const st of tones) {
+    const pc = ((rootMidi + st) % 12 + 12) % 12;
+    const rel = ((pc - state.scale.root) % 12 + 12) % 12;
+    if (!intervals.includes(rel)) return false;
+  }
+  return true;
+}
+
 // ---- state --------------------------------------------------------------
 
 const PATTERN_COUNT = 32;
@@ -1368,12 +1384,24 @@ class SampleVoice {
     if (!this.buffer) return;
     const src = this.ctx.createBufferSource();
     src.buffer = this.buffer;
-    src.playbackRate.value = Math.pow(2, (midiNote - 60) / 12);
+    const rate = Math.pow(2, (midiNote - 60) / 12);
+    src.playbackRate.value = rate;
+    const startFrac = Math.max(0, Math.min(1, opts?.startOffset ?? 0));
+    const endFrac   = Math.max(startFrac + 0.001, Math.min(1, opts?.endOffset ?? 1));
+    const startSec  = startFrac * this.buffer.duration;
+    const playLenSource = (endFrac - startFrac) * this.buffer.duration;
+    const wallTime = playLenSource / Math.max(0.01, rate);
     const g = this.ctx.createGain();
-    g.gain.setValueAtTime(Math.max(0, Math.min(1, velocity)), time);
+    const v = Math.max(0, Math.min(1, velocity));
+    const fade = 0.006;
+    const stopTime = time + Math.min(wallTime, Math.max(0.1, duration + 0.5));
+    g.gain.setValueAtTime(0, time);
+    g.gain.linearRampToValueAtTime(v, time + fade);
+    g.gain.setValueAtTime(v, Math.max(time + fade, stopTime - fade));
+    g.gain.linearRampToValueAtTime(0, stopTime);
     src.connect(g).connect(this.output);
-    src.start(time);
-    src.stop(time + Math.max(0.1, duration + 0.5));
+    src.start(time, startSec, playLenSource);
+    src.stop(stopTime + 0.01);
     this.active.add(src);
     src.onended = () => this.active.delete(src);
   }
@@ -2910,7 +2938,7 @@ function openStepEditor(t, idx, anchorEl) {
   const defaultNote = t.notes[idx] ?? eng?.defaultNote ?? 60;
   const el = document.createElement("div");
   el.className = "step-editor";
-  const chordOptions = Object.keys(CHORD_TYPES).map(c => `<option value="${c}">${c || "none"}</option>`).join("");
+  const chordOptions = `<option value="">none</option>`;
   el.innerHTML = `
     <div class="se-title">step ${idx + 1}</div>
     <div class="se-field se-note-field">
@@ -3024,7 +3052,24 @@ function openStepEditor(t, idx, anchorEl) {
   cpxInput.value = String(Math.max(0, Math.min(4, (t.complexities && t.complexities[idx]) || 0)));
   const offsetInput = el.querySelector(".se-offset");
   const offsetLbl = el.querySelector(".se-offset-label");
-  chordSel.value = t.chords[idx] || "";
+  const rebuildChords = () => {
+    const root = Number(noteInput.value) || 60;
+    const prev = chordSel.value || t.chords?.[idx] || "";
+    const opts = [`<option value="">none</option>`];
+    for (const key of Object.keys(CHORD_TYPES)) {
+      if (!key) continue;
+      if (!chordFitsScale(root, key)) continue;
+      opts.push(`<option value="${key}">${key}</option>`);
+    }
+    chordSel.innerHTML = opts.join("");
+    const stillThere = Array.from(chordSel.options).some(o => o.value === prev);
+    if (stillThere) chordSel.value = prev;
+    else {
+      chordSel.value = "";
+      if (t.chords) t.chords[idx] = "";
+    }
+  };
+  rebuildChords();
   arpBox.checked = !!(t.arps && t.arps[idx]);
   const arpRow   = el.querySelector(".se-arp-row");
   const arpRate  = el.querySelector(".se-arp-rate");
@@ -3098,6 +3143,9 @@ function openStepEditor(t, idx, anchorEl) {
     kb.querySelectorAll(".se-pad.selected").forEach(k => k.classList.remove("selected"));
     const active = kb.querySelector(`.se-pad[data-note="${n}"]`);
     if (active) active.classList.add("selected");
+    rebuildChords();
+    syncChordOptsVisibility();
+    syncArpRowVisibility();
     if (render) { refresh(); renderStepGrid(t); }
   };
   kb.addEventListener("click", (e) => {
@@ -3139,7 +3187,7 @@ function openStepEditor(t, idx, anchorEl) {
   // sample-engine specific row: waveform with draggable start/end handles + preview
   const sampleRow = el.querySelector(".se-sample-row");
   const engineType = engineByKey(t.engineKey)?.type;
-  const isSampleEngine = engineType === "eleven" || engineType === "upload";
+  const isSampleEngine = engineType === "eleven" || engineType === "upload" || engineType === "sample";
   sampleRow.hidden = !isSampleEngine;
   if (isSampleEngine) {
     const canvas = sampleRow.querySelector(".se-waveform");
@@ -3511,7 +3559,7 @@ async function togglePlay() {
             try { t.voice.hit(n, hitTime + k * rateSec, rateSec * 0.92, vel); } catch (e) { console.warn(e); }
           }
         } else {
-          const sampleOpts = (t.voice.type === "eleven" || t.voice.type === "upload")
+          const sampleOpts = (t.voice.type === "eleven" || t.voice.type === "upload" || t.voice.type === "sample")
             ? { startOffset: t.sampleStarts?.[idx] ?? 0, endOffset: t.sampleEnds?.[idx] ?? 1 }
             : null;
           const ratchet = Math.max(1, Math.min(8, Math.round(t.ratchets?.[idx] ?? 1)));
