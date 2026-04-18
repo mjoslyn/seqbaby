@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.40.1",
+    "@netlify/blobs": "^10.7.4",
     "@vectorsize/woscillators": "^2.0.1"
   }
 }

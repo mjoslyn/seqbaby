@@ -526,6 +526,49 @@ function onExportSet() {
   }
 }
 
+async function onShareSet() {
+  const btn = document.getElementById("set-share");
+  btn.disabled = true;
+  setStatus("packing session…");
+  try {
+    const r = await fetch("/api/share", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ session: serializeSet() }),
+    });
+    if (!r.ok) throw new Error(await r.text());
+    const { id } = await r.json();
+    const url = `${location.origin}${location.pathname}?s=${encodeURIComponent(id)}`;
+    try { await navigator.clipboard.writeText(url); setStatus(`link copied: ${url}`); }
+    catch { setStatus(`share link: ${url}`); prompt("share link", url); }
+  } catch (err) {
+    console.error(err);
+    setStatus("share failed — see console", true);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function loadShareFromUrl() {
+  const qs = new URLSearchParams(location.search);
+  const id = qs.get("s");
+  if (!id) return;
+  setStatus(`loading shared session ${id}…`);
+  try {
+    const r = await fetch(`/api/share?id=${encodeURIComponent(id)}`);
+    if (!r.ok) throw new Error(await r.text());
+    const { session } = await r.json();
+    if (!session) throw new Error("empty session");
+    applySet(session);
+    setStatus(`loaded shared session ${id}`);
+    // Clear the query so subsequent reloads don't keep reapplying it.
+    try { history.replaceState({}, "", location.origin + location.pathname); } catch {}
+  } catch (err) {
+    console.error(err);
+    setStatus(`couldn't load share "${id}"`, true);
+  }
+}
+
 function onImportSet() {
   const inp = document.createElement("input");
   inp.type = "file";
@@ -4180,6 +4223,7 @@ function init() {
   document.getElementById("set-load").addEventListener("click", onLoadSet);
   document.getElementById("set-export").addEventListener("click", onExportSet);
   document.getElementById("set-import").addEventListener("click", onImportSet);
+  document.getElementById("set-share").addEventListener("click", onShareSet);
   document.getElementById("pattern-dup").addEventListener("click", () => {
     const next = (state.activePattern + 1) % PATTERN_COUNT;
     copyPattern(state.activePattern, next);
@@ -4218,6 +4262,8 @@ function init() {
   // prime a starter vibe in the prompt box (user clicks "generate" to run it)
   document.getElementById("master-prompt").value = pickStarterPrompt();
   setStatus("ready");
+  // if the URL carries ?s=<id>, pull that shared session
+  loadShareFromUrl();
 }
 
 init();
