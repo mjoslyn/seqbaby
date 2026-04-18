@@ -335,6 +335,13 @@ function chordFitsScale(rootMidi, chordKey) {
   return true;
 }
 
+// ---- icons --------------------------------------------------------------
+
+const ICON_REPEAT = `<svg class="btn-icon" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10a4 4 0 0 1 4-4h4"/><polyline points="10 4 12 6 10 8"/><path d="M12 6a4 4 0 0 1-4 4H4"/><polyline points="6 12 4 10 6 8"/></svg>`;
+const ICON_CHAIN  = `<svg class="btn-icon" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 8h10"/><polyline points="9 4 13 8 9 12"/></svg>`;
+const ICON_NOW    = `<svg class="btn-icon" viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M9 1.5 3.5 9h3.5l-1 5.5L13.5 7H10l1-5.5z"/></svg>`;
+const ICON_FINISH = `<svg class="btn-icon" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="2" width="8" height="2" rx="0.5"/><rect x="4" y="12" width="8" height="2" rx="0.5"/><path d="M5 4c0 2.5 3 3.2 3 4s-3 1.5-3 4"/><path d="M11 4c0 2.5-3 3.2-3 4s3 1.5 3 4"/></svg>`;
+
 // ---- state --------------------------------------------------------------
 
 const PATTERN_COUNT = 32;
@@ -368,12 +375,52 @@ function isAbortError(err) {
 }
 function currentSignal() { return genController?.signal; }
 
+// ---- undo for generate actions -----------------------------------------
+// Single-slot undo: every generate (master or per-track) snapshots the full
+// session before running. Undo restores that snapshot. Both master and per-
+// track undo buttons point at the same snapshot.
+function pushUndoSnapshot(label) {
+  try {
+    state.undoSnapshot = { session: serializeSet(), label: String(label || "last generate") };
+  } catch (err) {
+    console.warn("undo snapshot failed", err);
+    state.undoSnapshot = null;
+  }
+  refreshUndoUI();
+}
+function undoLastGenerate() {
+  const snap = state.undoSnapshot;
+  if (!snap) return;
+  state.undoSnapshot = null;
+  try {
+    applySet(snap.session);
+    setStatus(`undid: ${snap.label}`);
+  } catch (err) {
+    console.error(err);
+    setStatus("undo failed — see console", true);
+  }
+  refreshUndoUI();
+}
+function refreshUndoUI() {
+  const has = !!state.undoSnapshot;
+  const m = document.getElementById("master-undo");
+  if (m) {
+    m.hidden = !has;
+    if (has) m.title = `undo: ${state.undoSnapshot.label}`;
+  }
+  for (const t of state.tracks) {
+    const b = t.el?.querySelector(".prompt-undo");
+    if (b) b.hidden = !has;
+  }
+}
+
 const state = {
   tracks: [],
   playing: false,
   tick: 0,
   repeatId: null,
   nextId: 1,
+  undoSnapshot: null,
   audioCtx: null,
   ready: false,
   masterGain: null,
@@ -382,6 +429,7 @@ const state = {
   scale: { active: false, root: 0, mode: "minor" },
   activePattern: 0,
   patternMode: "repeat",
+  patternSwitchMode: "immediate", // "immediate" | "finish" — finish waits until bar boundary before switching
   queuedPattern: null,
   patternMeta: Array(32).fill(null).map(() => ({ regenPattern: true, regenInstrument: true })),
   patternRepeats: Array(32).fill(1),
@@ -456,6 +504,20 @@ function findNextNonEmptyPattern(fromIdx) {
   return -1;
 }
 
+// When switch mode is "finish" and the transport is running, defer the switch
+// until the end of the current bar; otherwise swap immediately.
+function requestPatternSwitch(idx) {
+  if (idx < 0 || idx >= PATTERN_COUNT) return;
+  if (idx === state.activePattern) { state.queuedPattern = null; renderPatternGrid(); return; }
+  if (state.patternSwitchMode === "finish" && state.playing) {
+    state.queuedPattern = idx;
+    renderPatternGrid();
+    setStatus(`pattern ${idx + 1} queued`);
+    return;
+  }
+  switchPattern(idx);
+}
+
 function switchPattern(idx) {
   if (idx < 0 || idx >= PATTERN_COUNT) return;
   state.activePattern = idx;
@@ -486,6 +548,7 @@ function serializeSet() {
     scale: { ...state.scale },
     activePattern: state.activePattern,
     patternMode: state.patternMode,
+    patternSwitchMode: state.patternSwitchMode,
     tracks: state.tracks.map(t => ({
       name: t.name,
       engineKey: t.engineKey,
@@ -630,6 +693,7 @@ async function onLoadSet() {
 
 function applySet(s) {
   if (!s) return;
+  state.undoSnapshot = null;
   if (state.playing) {
     Tone.Transport.stop();
     if (state.repeatId !== null) { try { Tone.Transport.clear(state.repeatId); } catch {} state.repeatId = null; }
@@ -649,6 +713,12 @@ function applySet(s) {
   const modeBtn = document.getElementById("pattern-mode");
   modeBtn.textContent = state.patternMode;
   modeBtn.setAttribute("aria-pressed", String(state.patternMode === "chain"));
+  state.patternSwitchMode = s.patternSwitchMode === "finish" ? "finish" : "immediate";
+  const switchBtn = document.getElementById("pattern-switch");
+  if (switchBtn) {
+    switchBtn.textContent = state.patternSwitchMode === "finish" ? "switch: finish" : "switch: now";
+    switchBtn.setAttribute("aria-pressed", String(state.patternSwitchMode === "finish"));
+  }
   for (const td of s.tracks || []) {
     const t = createTrack({ name: td.name || "track", engineKey: td.engineKey || "plaits:0", length: td.length || 16 });
     Object.assign(t.params, td.params || {});
@@ -830,7 +900,7 @@ function renderPatternGrid() {
     cell.title = `pattern ${i + 1} — drag to copy`;
     cell.draggable = true;
     cell.dataset.patternIdx = String(i);
-    cell.addEventListener("click", () => switchPattern(i));
+    cell.addEventListener("click", () => requestPatternSwitch(i));
     cell.addEventListener("dragstart", (e) => {
       e.dataTransfer.setData("text/pattern-idx", String(i));
       e.dataTransfer.effectAllowed = "copy";
@@ -2595,6 +2665,11 @@ function renderTrack(t) {
   node.querySelector(".prompt-input").addEventListener("keydown", e => {
     if (e.key === "Enter") runTrackGen();
   });
+  const undoBtn = node.querySelector(".prompt-undo");
+  if (undoBtn) {
+    undoBtn.hidden = !state.undoSnapshot;
+    undoBtn.addEventListener("click", undoLastGenerate);
+  }
 
   // midi-specific controls
   const midiSel = node.querySelector(".midi-out");
@@ -3682,6 +3757,12 @@ async function togglePlay() {
     }
     Tone.Draw.schedule(paintNowIndicator, time);
     state.tick++;
+    // manual pattern queue: when switch-mode is "finish" and the user queued a
+    // different pattern, commit at the next bar boundary.
+    if (state.patternSwitchMode === "finish" && state.queuedPattern !== null && state.tick % BAR_TICKS === 0) {
+      const next = state.queuedPattern;
+      Tone.Draw.schedule(() => switchPattern(next), time);
+    }
     // pattern chaining: advance at bar boundaries when chain mode is on, respecting per-pattern repeats
     if (state.patternMode === "chain" && state.tick % BAR_TICKS === 0) {
       state.chainBarCount++;
@@ -3726,6 +3807,7 @@ async function promptTrackFull(t, { regenPattern = true } = {}) {
   const input = t.el.querySelector(".prompt-input");
   const prompt = input.value.trim();
   if (!prompt) { input.focus(); return; }
+  pushUndoSnapshot(`track+sound: ${t.name}`);
   const btn = t.el.querySelector(".prompt-go");
   btn.disabled = true;
   const signal = startGen();
@@ -3736,7 +3818,7 @@ async function promptTrackFull(t, { regenPattern = true } = {}) {
     t.soundPromptText = prompt;
     if (regenPattern) {
       btn.disabled = false; // promptTrack re-disables it
-      await promptTrack(t);
+      await promptTrack(t, { skipUndoSnapshot: true });
     } else {
       setStatus(`"${t.name}" sound ready`);
     }
@@ -3755,6 +3837,7 @@ async function promptTrack(t, opts = {}) {
   const extra = opts.extra || {};
   const prompt = (extra.overridePrompt ?? input.value).trim();
   if (!prompt) { input.focus(); return; }
+  if (!opts.skipUndoSnapshot) pushUndoSnapshot(`track: ${t.name}`);
   btn.disabled = true;
   setStatus(`generating "${t.name}"...`);
   try {
@@ -4296,6 +4379,7 @@ async function promptFromMaster({ reshape = false, designSounds = false, regenPa
   const btn = document.getElementById("master-prompt-go");
   const master = input.value.trim();
   if (!master) { input.focus(); return; }
+  pushUndoSnapshot(`master: ${master.slice(0, 40)}`);
   // Reshape normally removes a track (destroying all its patterns), so replaceable = both locks off.
   // keepPatterns mode updates tracks in place (patterns survive), so we only need instrument-unlocked.
   const empties = reshape
@@ -4583,6 +4667,7 @@ function init() {
     iBtn.textContent = next === "all" ? "instruments · all" : "instruments";
   });
   document.getElementById("gen-cancel").addEventListener("click", cancelGen);
+  document.getElementById("master-undo")?.addEventListener("click", undoLastGenerate);
   document.getElementById("master-prompt-go").addEventListener("click", () => {
     const instState = document.getElementById("gen-instruments").dataset.state || "off";
     const patternOn = document.getElementById("gen-pattern").getAttribute("aria-pressed") === "true";
@@ -4602,6 +4687,7 @@ function init() {
     const btn = document.getElementById("master-variate-go");
     const countInput = document.getElementById("gen-count");
     const count = Math.max(1, Math.min(4, Number(countInput?.value) || 1));
+    pushUndoSnapshot(`variate ×${count}`);
     const seedIdx = state.activePattern;
     const seeds = new Map();
     for (const t of state.tracks) {
@@ -4668,11 +4754,37 @@ function init() {
   });
 
   const modeBtn = document.getElementById("pattern-mode");
+  const syncModeLabel = () => {
+    modeBtn.innerHTML = state.patternMode === "chain" ? ICON_CHAIN : ICON_REPEAT;
+    modeBtn.title = state.patternMode === "chain"
+      ? "chain: advance through non-empty patterns (click to switch to repeat)"
+      : "repeat: loop current pattern (click to switch to chain)";
+    modeBtn.setAttribute("aria-pressed", String(state.patternMode === "chain"));
+  };
+  syncModeLabel();
   modeBtn.addEventListener("click", () => {
     state.patternMode = state.patternMode === "chain" ? "repeat" : "chain";
-    modeBtn.textContent = state.patternMode;
-    modeBtn.setAttribute("aria-pressed", String(state.patternMode === "chain"));
+    syncModeLabel();
   });
+  const switchBtn = document.getElementById("pattern-switch");
+  if (switchBtn) {
+    const syncSwitchLabel = () => {
+      switchBtn.innerHTML = state.patternSwitchMode === "finish" ? ICON_FINISH : ICON_NOW;
+      switchBtn.title = state.patternSwitchMode === "finish"
+        ? "switch: finish — wait for the current bar to end before switching"
+        : "switch: now — switch patterns immediately";
+      switchBtn.setAttribute("aria-pressed", String(state.patternSwitchMode === "finish"));
+    };
+    syncSwitchLabel();
+    switchBtn.addEventListener("click", () => {
+      state.patternSwitchMode = state.patternSwitchMode === "finish" ? "immediate" : "finish";
+      syncSwitchLabel();
+      // Flipping back to immediate commits any currently queued switch right away.
+      if (state.patternSwitchMode === "immediate" && state.queuedPattern !== null) {
+        switchPattern(state.queuedPattern);
+      }
+    });
+  }
   document.getElementById("set-save").addEventListener("click", onSaveSet);
   document.getElementById("set-load").addEventListener("click", onLoadSet);
   document.getElementById("set-export").addEventListener("click", onExportSet);

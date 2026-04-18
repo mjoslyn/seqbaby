@@ -99,6 +99,17 @@ button.play {
   min-width: 68px;
 }
 
+#set-share {
+  align-self: stretch;
+  background: var(--accent-2);
+  color: #0b0d10;
+  border-color: var(--accent-2);
+  font-weight: 600;
+  text-transform: none;
+  padding: 0 14px;
+  min-width: 68px;
+}
+
 button.play.playing {
   background: var(--accent-2);
   border-color: var(--accent-2);
@@ -174,16 +185,21 @@ button.danger { color: var(--danger); }
 .repeat-wrap { display: inline-flex; flex-direction: column; align-items: center; gap: 2px; color: var(--fg-dim); font-size: 11px; }
 .repeat-wrap input { width: 48px; text-align: center; }
 #pattern-mode[aria-pressed="true"] { background: var(--accent-2); color: #0b0d10; border-color: var(--accent-2); }
+#pattern-switch[aria-pressed="true"] { background: var(--accent-2); color: #0b0d10; border-color: var(--accent-2); }
 #set-save, #set-load, #set-export, #set-import, #set-share { text-transform: none; }
-#set-save, #set-load, #set-export, #set-import, #set-share,
-#pattern-mode, #pattern-dup { padding: 3px 10px; font-size: 12px; min-width: 64px; }
-#set-share {
-  background: var(--accent-2);
-  color: #0b0d10;
-  border-color: var(--accent-2);
-  font-weight: 600;
+#set-save, #set-load, #set-export, #set-import,
+#pattern-dup { padding: 3px 10px; font-size: 12px; min-width: 64px; }
+.icon-btn {
+  padding: 0;
+  min-width: 32px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
+.icon-btn .btn-icon { display: block; }
 .set-stack, .mode-stack { display: flex; flex-direction: column; gap: 4px; }
+.mode-row { display: flex; gap: 4px; }
 
 .master-prompt {
   display: flex;

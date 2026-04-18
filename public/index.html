@@ -44,6 +44,7 @@
   </header>
 
   <div class="pattern-bar">
+    <button id="set-share" title="create a shareable link for this session">Share</button>
     <div class="set-stack">
       <button id="set-save" class="ghost" title="save the current session">Save</button>
       <button id="set-load" class="ghost" title="load a saved session">Load</button>
@@ -52,11 +53,11 @@
       <button id="set-export" class="ghost" title="download the current session as a json file">Export</button>
       <button id="set-import" class="ghost" title="load a session from a json file">Import</button>
     </div>
-    <div class="set-stack">
-      <button id="set-share" class="ghost" title="create a shareable link for this session">Share</button>
-    </div>
     <div class="mode-stack">
-      <button id="pattern-mode" class="ghost" aria-pressed="false" title="repeat current pattern vs chain through non-empty patterns">repeat</button>
+      <div class="mode-row">
+        <button id="pattern-mode" class="ghost icon-btn" aria-pressed="false" aria-label="pattern mode"></button>
+        <button id="pattern-switch" class="ghost icon-btn" aria-pressed="false" aria-label="switch mode"></button>
+      </div>
       <button id="pattern-dup" class="ghost" title="duplicate current pattern into the next slot">dup</button>
     </div>
     <label class="repeat-wrap" title="bars this pattern plays for before chain advances"><span>rep</span><input id="pattern-repeats" type="number" min="1" max="16" value="1" /></label>
@@ -74,6 +75,7 @@
     <label class="gen-count-wrap" title="bars per generated pattern (each bar = 16 steps)"><span>bars</span><input id="gen-bars" type="number" min="1" max="8" value="1" /></label>
     <label class="gen-count-wrap" title="generate N patterns; extras are variations using the same instruments, starting from the selected pattern"><span>×</span><input id="gen-count" type="number" min="1" max="4" value="1" /></label>
     <button id="master-prompt-go" title="plan and (re)generate every unlocked track for the current pattern">generate</button>
+    <button id="master-undo" class="ghost" hidden title="undo last generate">undo</button>
     <button id="master-variate-go" title="variate the current pattern into the next N slots (same instruments)">variate</button>
   </div>
 
@@ -216,6 +218,7 @@
         <button class="prompt-pattern-toggle gen-toggle-btn ghost" aria-pressed="true" title="toggle: regenerate step pattern for this track">pattern</button>
         <button class="prompt-inst-toggle gen-toggle-btn ghost" data-state="on" title="toggle: redesign this track's sound">instruments</button>
         <button class="prompt-go">generate</button>
+        <button class="prompt-undo ghost" hidden title="undo last generate">undo</button>
       </div>
       <div class="steps"></div>
     </section>
