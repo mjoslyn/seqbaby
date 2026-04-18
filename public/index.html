@@ -99,18 +99,8 @@
             <option value="16">16</option>
           </select>
         </div>
-        <div class="field sample-speed-field" hidden><label>fit</label>
-          <select class="sample-speed">
-            <option value="native" selected>native</option>
-            <option value="2xbpm">2× bpm</option>
-            <option value="1xbpm">1× bpm</option>
-            <option value="1/2bpm">1/2 bpm</option>
-            <option value="1/4bpm">1/4 bpm</option>
-          </select>
-        </div>
         <div class="field"><label>glide</label><input class="track-glide" type="range" min="0" max="0.5" step="0.005" value="0" /></div>
         <div class="field"><label>sw</label><input class="track-swing" type="range" min="0" max="0.75" step="0.01" value="0" /></div>
-        <div class="field"><label>den</label><input class="track-density" type="range" min="0" max="1" step="0.01" value="0.5" /></div>
         <div class="field"><label>vol</label><input class="p-vol" type="range" min="0" max="1" step="0.01" value="0.8" /></div>
         <div class="param-group timbre-group">
           <div class="field"><label>harm</label><input class="p-harm" type="range" min="0" max="1" step="0.01" value="0.5" /></div>
@@ -215,6 +205,7 @@
       </div>
       <div class="track-prompt">
         <input class="prompt-input" type="text" placeholder="describe the pattern..." />
+        <label class="track-density-field" title="density"><span>den</span><input class="track-density" type="range" min="0" max="1" step="0.01" value="0.5" /></label>
         <button class="prompt-go">generate</button>
       </div>
       <div class="steps"></div>

@@ -386,6 +386,8 @@ function emptyPattern(len) {
     arpDirs:   new Array(len).fill("up"),       // up / down / updown / random
     complexities: new Array(len).fill(0),       // chord inversion / voicing level
     ratchets: new Array(len).fill(1),           // retrigger the single note N times across the step
+    sampleStarts: new Array(len).fill(0),       // sample-engine start offset (0..1 of buffer)
+    sampleEnds:   new Array(len).fill(1),       // sample-engine end offset   (0..1 of buffer)
   };
 }
 
@@ -403,6 +405,8 @@ function aliasPattern(t, idx) {
   t.arpDirs      = p.arpDirs      ?? (p.arpDirs      = new Array(p.steps.length).fill("up"));
   t.complexities = p.complexities ?? (p.complexities = new Array(p.steps.length).fill(0));
   t.ratchets     = p.ratchets     ?? (p.ratchets     = new Array(p.steps.length).fill(1));
+  t.sampleStarts = p.sampleStarts ?? (p.sampleStarts = new Array(p.steps.length).fill(0));
+  t.sampleEnds   = p.sampleEnds   ?? (p.sampleEnds   = new Array(p.steps.length).fill(1));
   t._patternIdx = idx;
 }
 
@@ -1360,7 +1364,7 @@ class SampleVoice {
   }
   setParam(key, val) { if (key === "vol") this.output.gain.value = val; }
   getAudioParam(key) { return key === "vol" ? this.output.gain : null; }
-  hit(midiNote, time, duration, velocity = 1) {
+  hit(midiNote, time, duration, velocity = 1, opts = null) {
     if (!this.buffer) return;
     const src = this.ctx.createBufferSource();
     src.buffer = this.buffer;
@@ -1532,21 +1536,27 @@ class ElevenVoice {
   setBuffer(buf) { this.buffer = buf; }
   setParam(key, val) { if (key === "vol") this.output.gain.value = val; }
   getAudioParam(key) { return key === "vol" ? this.output.gain : null; }
-  hit(midiNote, time, duration, velocity = 1) {
+  hit(midiNote, time, duration, velocity = 1, opts = null) {
     if (!this.buffer) return;
     const src = this.ctx.createBufferSource();
     src.buffer = this.buffer;
-    src.playbackRate.value = (this.baseRate || 1) * Math.pow(2, (midiNote - 60) / 12);
+    const rate = (this.baseRate || 1) * Math.pow(2, (midiNote - 60) / 12);
+    src.playbackRate.value = rate;
+    const startFrac = Math.max(0, Math.min(1, opts?.startOffset ?? 0));
+    const endFrac   = Math.max(startFrac + 0.001, Math.min(1, opts?.endOffset ?? 1));
+    const startSec  = startFrac * this.buffer.duration;
+    const playLenSource = (endFrac - startFrac) * this.buffer.duration;
+    const wallTime  = playLenSource / Math.max(0.01, rate);
     const g = this.ctx.createGain();
     const v = Math.max(0, Math.min(1, velocity));
     const fade = 0.006;   // 6ms attack/release fade to avoid clicks at sample edges
-    const stopTime = time + Math.max(0.1, duration + 0.5);
+    const stopTime = time + Math.min(wallTime, Math.max(0.1, duration + 0.5));
     g.gain.setValueAtTime(0, time);
     g.gain.linearRampToValueAtTime(v, time + fade);
     g.gain.setValueAtTime(v, Math.max(time + fade, stopTime - fade));
     g.gain.linearRampToValueAtTime(0, stopTime);
     src.connect(g).connect(this.boost);
-    src.start(time);
+    src.start(time, startSec, playLenSource);
     src.stop(stopTime + 0.01);
     this.active.add(src);
     src.onended = () => this.active.delete(src);
@@ -1589,21 +1599,27 @@ class UploadVoice {
   setBaseRate(rate) { this.baseRate = Math.max(0.01, Number(rate) || 1); }
   setParam(key, val) { if (key === "vol") this.output.gain.value = val; }
   getAudioParam(key) { return key === "vol" ? this.output.gain : null; }
-  hit(midiNote, time, duration, velocity = 1) {
+  hit(midiNote, time, duration, velocity = 1, opts = null) {
     if (!this.buffer) return;
     const src = this.ctx.createBufferSource();
     src.buffer = this.buffer;
-    src.playbackRate.value = (this.baseRate || 1) * Math.pow(2, (midiNote - 60) / 12);
+    const rate = (this.baseRate || 1) * Math.pow(2, (midiNote - 60) / 12);
+    src.playbackRate.value = rate;
+    const startFrac = Math.max(0, Math.min(1, opts?.startOffset ?? 0));
+    const endFrac   = Math.max(startFrac + 0.001, Math.min(1, opts?.endOffset ?? 1));
+    const startSec  = startFrac * this.buffer.duration;
+    const playLenSource = (endFrac - startFrac) * this.buffer.duration;
+    const wallTime  = playLenSource / Math.max(0.01, rate);
     const g = this.ctx.createGain();
     const v = Math.max(0, Math.min(1, velocity));
     const fade = 0.006;
-    const stopTime = time + Math.max(0.1, duration + 0.5);
+    const stopTime = time + Math.min(wallTime, Math.max(0.1, duration + 0.5));
     g.gain.setValueAtTime(0, time);
     g.gain.linearRampToValueAtTime(v, time + fade);
     g.gain.setValueAtTime(v, Math.max(time + fade, stopTime - fade));
     g.gain.linearRampToValueAtTime(0, stopTime);
     src.connect(g).connect(this.boost);
-    src.start(time);
+    src.start(time, startSec, playLenSource);
     src.stop(stopTime + 0.01);
     this.active.add(src);
     src.onended = () => this.active.delete(src);
@@ -1783,7 +1799,6 @@ function updatePlaitsControlsVisibility(t) {
   if (!t.el) return;
   const engineType = engineByKey(t.engineKey)?.type;
   const isPlaits = engineType === "plaits";
-  const isSampleLike = engineType === "eleven" || engineType === "upload";
   const group = t.el.querySelector(".timbre-group");
   if (group) {
     group.hidden = !isPlaits;
@@ -1799,8 +1814,6 @@ function updatePlaitsControlsVisibility(t) {
       }
     }
   }
-  const fitField = t.el.querySelector(".sample-speed-field");
-  if (fitField) fitField.hidden = !isSampleLike;
 }
 
 // Force all fx wet levels to 0 (100% dry) — used when switching a track to the
@@ -2312,6 +2325,10 @@ function startNote(t, anchor) {
   clearRange(t, anchor, anchor, -1);
   t.steps[anchor] = 1;
   t.lengths[anchor] = 1;
+  if (t.notes[anchor] == null) {
+    const base = state.scale.active ? 48 + (state.scale.root | 0) : 48;
+    t.notes[anchor] = applyScale(base);
+  }
 }
 
 function extendNote(t, anchor, toIdx) {
@@ -2420,14 +2437,6 @@ function renderTrack(t) {
     speedSel.addEventListener("change", e => {
       t.speed = Number(e.target.value) || 1;
       t.speedAccum = 0;
-    });
-  }
-  const sampleSpeedSel = node.querySelector(".sample-speed");
-  if (sampleSpeedSel) {
-    sampleSpeedSel.value = t.sampleSpeedMode || "native";
-    sampleSpeedSel.addEventListener("change", e => {
-      t.sampleSpeedMode = e.target.value || "native";
-      applySampleSpeed(t);
     });
   }
   const densityInput = node.querySelector(".track-density");
@@ -2890,9 +2899,8 @@ function attachGridInteraction(t, grid) {
 let stepEditor = null;
 function closeStepEditor() {
   if (!stepEditor) return;
-  document.removeEventListener("pointerdown", stepEditor.outsideHandler, true);
   document.removeEventListener("keydown", stepEditor.escHandler);
-  stepEditor.el.remove();
+  (stepEditor.overlay || stepEditor.el).remove();
   stepEditor = null;
 }
 
@@ -2905,14 +2913,10 @@ function openStepEditor(t, idx, anchorEl) {
   const chordOptions = Object.keys(CHORD_TYPES).map(c => `<option value="${c}">${c || "none"}</option>`).join("");
   el.innerHTML = `
     <div class="se-title">step ${idx + 1}</div>
-    <div class="se-field">
-      <label title="steps from the prior note (scale steps when scale on, semitones otherwise)">Δ prior</label>
-      <input class="se-rel" type="number" min="-12" max="12" step="1" value="0" />
-      <span class="se-rel-label"></span>
-    </div>
-    <div class="se-field">
+    <div class="se-field se-note-field">
       <label>note</label>
-      <input class="se-note" type="range" min="24" max="95" step="1" value="${Math.max(24, Math.min(95, defaultNote))}" />
+      <div class="se-keyboard" tabindex="0"></div>
+      <input class="se-note" type="hidden" value="${Math.max(24, Math.min(95, defaultNote))}" />
       <span class="se-note-label"></span>
     </div>
     <div class="se-field se-chord-field">
@@ -2971,20 +2975,43 @@ function openStepEditor(t, idx, anchorEl) {
       <input class="se-offset" type="range" min="-0.5" max="0.5" step="0.01" value="${t.offsets?.[idx] ?? 0}" />
       <span class="se-offset-label"></span>
     </div>
+    <div class="se-field se-sample-row" hidden>
+      <label>sample</label>
+      <div class="se-sample-ctl">
+        <canvas class="se-waveform" width="440" height="72"></canvas>
+        <div class="se-sample-meta">
+          <span class="se-smp-info">—</span>
+          <label>fit
+            <select class="se-smp-fit">
+              <option value="native" selected>native</option>
+              <option value="2xbpm">2× bpm</option>
+              <option value="1xbpm">1× bpm</option>
+              <option value="1/2bpm">1/2 bpm</option>
+              <option value="1/4bpm">1/4 bpm</option>
+            </select>
+          </label>
+          <label>snap
+            <select class="se-smp-snap">
+              <option value="free" selected>free</option>
+              <option value="1">1 beat</option>
+              <option value="0.5">1/8</option>
+              <option value="0.25">1/16</option>
+              <option value="0.125">1/32</option>
+            </select>
+          </label>
+          <button class="se-preview" type="button">preview</button>
+        </div>
+      </div>
+    </div>
     <div class="se-actions">
       <button class="se-clear ghost">clear note</button>
       <button class="se-close">done</button>
     </div>
   `;
-  document.body.appendChild(el);
-
-  const rect = anchorEl.getBoundingClientRect();
-  el.style.position = "absolute";
-  const topY = rect.bottom + window.scrollY + 6;
-  const leftX = Math.min(rect.left + window.scrollX,
-    window.scrollX + document.documentElement.clientWidth - el.offsetWidth - 12);
-  el.style.top = `${topY}px`;
-  el.style.left = `${Math.max(12, leftX)}px`;
+  const overlay = document.createElement("div");
+  overlay.className = "modal-overlay";
+  overlay.appendChild(el);
+  document.body.appendChild(overlay);
 
   const noteInput = el.querySelector(".se-note");
   const noteLbl = el.querySelector(".se-note-label");
@@ -2995,8 +3022,6 @@ function openStepEditor(t, idx, anchorEl) {
   const arpBox   = el.querySelector(".se-arp");
   const cpxInput = el.querySelector(".se-cpx");
   cpxInput.value = String(Math.max(0, Math.min(4, (t.complexities && t.complexities[idx]) || 0)));
-  const relInput = el.querySelector(".se-rel");
-  const relLbl   = el.querySelector(".se-rel-label");
   const offsetInput = el.querySelector(".se-offset");
   const offsetLbl = el.querySelector(".se-offset-label");
   chordSel.value = t.chords[idx] || "";
@@ -3032,6 +3057,55 @@ function openStepEditor(t, idx, anchorEl) {
   syncChordOptsVisibility();
   syncArpRowVisibility();
 
+  // Build Launchpad-style pad grid (bottom-left = lowest, top-right = highest).
+  // When a scale is active, only in-scale notes are shown and columns = scale length.
+  const kb = el.querySelector(".se-keyboard");
+  const scaleIntervals = state.scale.active ? (SCALES[state.scale.mode] || null) : null;
+  const PC_NAMES = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
+  const midiList = [];
+  for (let m = 24; m <= 95; m++) {
+    if (!scaleIntervals) { midiList.push(m); continue; }
+    const pc = ((m % 12) + 12) % 12;
+    const rel = ((pc - state.scale.root) % 12 + 12) % 12;
+    if (scaleIntervals.includes(rel)) midiList.push(m);
+  }
+  const COLS = scaleIntervals ? scaleIntervals.length : 12;
+  const ROWS = Math.max(1, Math.ceil(midiList.length / COLS));
+  kb.style.gridTemplateColumns = `repeat(${COLS}, var(--se-pad-size))`;
+  for (let i = 0; i < midiList.length; i++) {
+    const m = midiList[i];
+    const pc = ((m % 12) + 12) % 12;
+    const pad = document.createElement("button");
+    pad.type = "button";
+    pad.className = "se-pad";
+    pad.dataset.note = String(m);
+    if (scaleIntervals) {
+      pad.classList.add("in-scale");
+      if (pc === state.scale.root) pad.classList.add("root");
+    }
+    pad.title = midiToName(m);
+    pad.textContent = pc === 0 ? `C${Math.floor(m / 12) - 1}` : PC_NAMES[pc];
+    // Flip vertical order so lowest notes sit at the bottom
+    pad.style.gridRow = String(ROWS - Math.floor(i / COLS));
+    pad.style.gridColumn = String((i % COLS) + 1);
+    kb.appendChild(pad);
+  }
+  const setNote = (v, { render = true } = {}) => {
+    let n = Math.max(24, Math.min(95, Math.round(v)));
+    n = applyScale(n);
+    noteInput.value = String(n);
+    t.notes[idx] = n;
+    kb.querySelectorAll(".se-pad.selected").forEach(k => k.classList.remove("selected"));
+    const active = kb.querySelector(`.se-pad[data-note="${n}"]`);
+    if (active) active.classList.add("selected");
+    if (render) { refresh(); renderStepGrid(t); }
+  };
+  kb.addEventListener("click", (e) => {
+    const k = e.target.closest(".se-pad");
+    if (!k) return;
+    setNote(Number(k.dataset.note));
+  });
+
   const refresh = () => {
     const n = Number(noteInput.value);
     noteLbl.textContent = `${midiToName(n)} (${n})`;
@@ -3049,6 +3123,10 @@ function openStepEditor(t, idx, anchorEl) {
     offsetLbl.textContent = `${off >= 0 ? "+" : ""}${off.toFixed(2)}`;
     arpBox.disabled = !ch;
     cpxInput.disabled = !ch;
+    const cur = Number(noteInput.value);
+    kb.querySelectorAll(".se-pad.selected").forEach(k => k.classList.remove("selected"));
+    const sel = kb.querySelector(`.se-pad[data-note="${cur}"]`);
+    if (sel) sel.classList.add("selected");
   };
   refresh();
 
@@ -3058,27 +3136,168 @@ function openStepEditor(t, idx, anchorEl) {
     refresh();
   });
 
-  noteInput.addEventListener("input", () => {
-    let v = Number(noteInput.value);
-    v = applyScale(v);
-    noteInput.value = v;
-    t.notes[idx] = v;
-    refresh();
-    renderStepGrid(t);
-  });
-  relInput.addEventListener("change", () => {
-    const steps = Math.max(-12, Math.min(12, Number(relInput.value) || 0));
-    relInput.value = steps;
-    if (steps === 0) { relLbl.textContent = ""; return; }
-    const n = applyStepsFromPrior(t, idx, steps);
-    if (n == null) { relLbl.textContent = "(no prior note)"; return; }
-    const clamped = Math.max(24, Math.min(95, n));
-    t.notes[idx] = clamped;
-    noteInput.value = clamped;
-    relLbl.textContent = `→ ${midiToName(clamped)}`;
-    refresh();
-    renderStepGrid(t);
-  });
+  // sample-engine specific row: waveform with draggable start/end handles + preview
+  const sampleRow = el.querySelector(".se-sample-row");
+  const engineType = engineByKey(t.engineKey)?.type;
+  const isSampleEngine = engineType === "eleven" || engineType === "upload";
+  sampleRow.hidden = !isSampleEngine;
+  if (isSampleEngine) {
+    const canvas = sampleRow.querySelector(".se-waveform");
+    const infoEl = sampleRow.querySelector(".se-smp-info");
+    const snapSel = sampleRow.querySelector(".se-smp-snap");
+    const fitSel  = sampleRow.querySelector(".se-smp-fit");
+    const prev    = sampleRow.querySelector(".se-preview");
+    if (fitSel) {
+      fitSel.value = t.sampleSpeedMode || "native";
+      fitSel.addEventListener("change", () => {
+        t.sampleSpeedMode = fitSel.value || "native";
+        applySampleSpeed(t);
+      });
+    }
+    if (!t.sampleStarts) t.sampleStarts = new Array(t.length).fill(0);
+    if (!t.sampleEnds)   t.sampleEnds   = new Array(t.length).fill(1);
+
+    const snapFrac = () => {
+      if (snapSel.value === "free") return 0;
+      const beats = Number(snapSel.value) || 0;
+      if (!beats) return 0;
+      const buf = t.voice?.buffer;
+      if (!buf || !buf.duration) return 0;
+      const stepSec = (60 / currentBpm()) * beats;
+      return stepSec / buf.duration;
+    };
+    const snapTo = (frac) => {
+      const s = snapFrac();
+      if (!s) return frac;
+      return Math.round(frac / s) * s;
+    };
+
+    const drawWave = () => {
+      const ctx2d = canvas.getContext("2d");
+      const w = canvas.width, h = canvas.height;
+      ctx2d.clearRect(0, 0, w, h);
+      ctx2d.fillStyle = "#0e0f12";
+      ctx2d.fillRect(0, 0, w, h);
+      const buf = t.voice?.buffer;
+      if (buf) {
+        const data = buf.getChannelData(0);
+        const step = Math.max(1, Math.floor(data.length / w));
+        ctx2d.strokeStyle = "#6e7280";
+        ctx2d.lineWidth = 1;
+        ctx2d.beginPath();
+        for (let x = 0; x < w; x++) {
+          let mn = 1, mx = -1;
+          const s = x * step;
+          const e = Math.min(data.length, s + step);
+          for (let i = s; i < e; i++) {
+            const v = data[i];
+            if (v < mn) mn = v;
+            if (v > mx) mx = v;
+          }
+          ctx2d.moveTo(x + 0.5, h / 2 - mn * h / 2);
+          ctx2d.lineTo(x + 0.5, h / 2 - mx * h / 2);
+        }
+        ctx2d.stroke();
+      } else {
+        ctx2d.fillStyle = "#8a8c93";
+        ctx2d.font = "11px ui-monospace, monospace";
+        ctx2d.textAlign = "center";
+        ctx2d.textBaseline = "middle";
+        ctx2d.fillText("no sample loaded", w / 2, h / 2);
+      }
+      // Dim outside selection
+      const sFrac = t.sampleStarts[idx] ?? 0;
+      const eFrac = t.sampleEnds[idx] ?? 1;
+      const sx = Math.round(sFrac * w);
+      const ex = Math.round(eFrac * w);
+      ctx2d.fillStyle = "rgba(10,12,16,0.65)";
+      ctx2d.fillRect(0, 0, sx, h);
+      ctx2d.fillRect(ex, 0, w - ex, h);
+      // Handles
+      ctx2d.strokeStyle = "#c2f04a";
+      ctx2d.lineWidth = 2;
+      ctx2d.beginPath();
+      ctx2d.moveTo(sx + 1, 0); ctx2d.lineTo(sx + 1, h);
+      ctx2d.stroke();
+      ctx2d.fillStyle = "#c2f04a";
+      ctx2d.beginPath();
+      ctx2d.moveTo(sx + 1, 0); ctx2d.lineTo(sx + 9, 0); ctx2d.lineTo(sx + 1, 8); ctx2d.closePath();
+      ctx2d.fill();
+
+      ctx2d.strokeStyle = "#ff6fa3";
+      ctx2d.beginPath();
+      ctx2d.moveTo(ex - 1, 0); ctx2d.lineTo(ex - 1, h);
+      ctx2d.stroke();
+      ctx2d.fillStyle = "#ff6fa3";
+      ctx2d.beginPath();
+      ctx2d.moveTo(ex - 1, 0); ctx2d.lineTo(ex - 9, 0); ctx2d.lineTo(ex - 1, 8); ctx2d.closePath();
+      ctx2d.fill();
+
+      if (buf) {
+        const startMs = Math.round(sFrac * buf.duration * 1000);
+        const endMs   = Math.round(eFrac * buf.duration * 1000);
+        infoEl.textContent = `${(buf.duration).toFixed(2)}s · [${startMs} — ${endMs}] ms`;
+      } else {
+        infoEl.textContent = "no sample";
+      }
+    };
+
+    drawWave();
+
+    // pointer-drag editing: grab nearest handle
+    let dragging = null; // "start" | "end" | null
+    const fracFromEvent = (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const x = (e.clientX - rect.left) / rect.width;
+      return Math.max(0, Math.min(1, x));
+    };
+    canvas.addEventListener("pointerdown", (e) => {
+      canvas.setPointerCapture(e.pointerId);
+      const f = fracFromEvent(e);
+      const ds = Math.abs(f - (t.sampleStarts[idx] ?? 0));
+      const de = Math.abs(f - (t.sampleEnds[idx] ?? 1));
+      dragging = ds <= de ? "start" : "end";
+      applyDrag(f);
+    });
+    canvas.addEventListener("pointermove", (e) => {
+      if (!dragging) return;
+      applyDrag(fracFromEvent(e));
+    });
+    const endDrag = (e) => {
+      if (!dragging) return;
+      dragging = null;
+      try { canvas.releasePointerCapture(e.pointerId); } catch {}
+    };
+    canvas.addEventListener("pointerup", endDrag);
+    canvas.addEventListener("pointercancel", endDrag);
+    function applyDrag(frac) {
+      let snapped = snapTo(frac);
+      if (dragging === "start") {
+        const maxStart = (t.sampleEnds[idx] ?? 1) - 0.01;
+        t.sampleStarts[idx] = Math.max(0, Math.min(maxStart, snapped));
+      } else if (dragging === "end") {
+        const minEnd = (t.sampleStarts[idx] ?? 0) + 0.01;
+        t.sampleEnds[idx] = Math.max(minEnd, Math.min(1, snapped));
+      }
+      drawWave();
+    }
+    snapSel.addEventListener("change", drawWave);
+
+    prev.addEventListener("click", async () => {
+      if (!t.voice || !t.voice.buffer) { setStatus("no sample loaded yet", true); return; }
+      await ensureAudio();
+      const when = state.audioCtx.currentTime + 0.02;
+      const note = Number(noteInput.value) || 60;
+      const vel  = Number(velInput.value) || 0.8;
+      try {
+        t.voice.hit(note, when, t.voice.buffer.duration, vel, {
+          startOffset: t.sampleStarts[idx],
+          endOffset:   t.sampleEnds[idx],
+        });
+      } catch (err) { console.warn(err); }
+    });
+  }
+
   velInput.addEventListener("input", () => {
     t.velocities[idx] = Number(velInput.value);
     refresh();
@@ -3122,11 +3341,10 @@ function openStepEditor(t, idx, anchorEl) {
   });
   el.querySelector(".se-close").addEventListener("click", closeStepEditor);
 
-  const outsideHandler = (e) => { if (!el.contains(e.target)) closeStepEditor(); };
   const escHandler = (e) => { if (e.key === "Escape") closeStepEditor(); };
-  document.addEventListener("pointerdown", outsideHandler, true);
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) closeStepEditor(); });
   document.addEventListener("keydown", escHandler);
-  stepEditor = { el, outsideHandler, escHandler };
+  stepEditor = { overlay, el, escHandler };
 }
 
 function paintNowIndicator() {
@@ -3293,18 +3511,21 @@ async function togglePlay() {
             try { t.voice.hit(n, hitTime + k * rateSec, rateSec * 0.92, vel); } catch (e) { console.warn(e); }
           }
         } else {
+          const sampleOpts = (t.voice.type === "eleven" || t.voice.type === "upload")
+            ? { startOffset: t.sampleStarts?.[idx] ?? 0, endOffset: t.sampleEnds?.[idx] ?? 1 }
+            : null;
           const ratchet = Math.max(1, Math.min(8, Math.round(t.ratchets?.[idx] ?? 1)));
           if (ratchet > 1 && !chord) {
             // retrigger the single note N times evenly across the step
             const sub = duration / ratchet;
             for (let r = 0; r < ratchet; r++) {
               for (const n of list) {
-                try { t.voice.hit(n, hitTime + r * sub, sub * 0.92, vel); } catch (e) { console.warn(e); }
+                try { t.voice.hit(n, hitTime + r * sub, sub * 0.92, vel, sampleOpts); } catch (e) { console.warn(e); }
               }
             }
           } else {
             for (const n of list) {
-              try { t.voice.hit(n, hitTime, duration, vel); } catch (e) { console.warn(e); }
+              try { t.voice.hit(n, hitTime, duration, vel, sampleOpts); } catch (e) { console.warn(e); }
             }
           }
         }
