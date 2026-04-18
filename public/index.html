@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>seqbaby</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <header class="transport">
+    <button id="play" class="play">play</button>
+    <div class="field"><label for="bpm">bpm</label><input id="bpm" type="number" value="110" min="40" max="240" /></div>
+    <div class="field"><label for="swing">swing</label><input id="swing" type="range" min="0" max="0.5" step="0.01" value="0" /></div>
+    <div class="scale-field">
+      <label class="scale-toggle"><input id="scale-on" type="checkbox" /> scale</label>
+      <select id="scale-root"></select>
+      <select id="scale-mode"></select>
+    </div>
+    <button id="add-track" class="ghost">add track</button>
+    <div class="spacer"></div>
+    <div id="status" class="status">click play to unlock audio</div>
+    <button id="gen-cancel" class="ghost danger" hidden title="cancel the running generation">cancel</button>
+  </header>
+
+  <div class="pattern-bar">
+    <div class="set-stack">
+      <button id="set-save" class="ghost" title="save the current session">Save</button>
+      <button id="set-load" class="ghost" title="load a saved session">Load</button>
+    </div>
+    <div class="set-stack">
+      <button id="set-export" class="ghost" title="download the current session as a json file">Export</button>
+      <button id="set-import" class="ghost" title="load a session from a json file">Import</button>
+    </div>
+    <div class="mode-stack">
+      <button id="pattern-mode" class="ghost" aria-pressed="false" title="repeat current pattern vs chain through non-empty patterns">repeat</button>
+      <button id="pattern-dup" class="ghost" title="duplicate current pattern into the next slot">dup</button>
+    </div>
+    <label class="repeat-wrap" title="bars this pattern plays for before chain advances"><span>rep</span><input id="pattern-repeats" type="number" min="1" max="16" value="1" /></label>
+    <div id="pattern-grid" class="pattern-grid"></div>
+  </div>
+
+  <div class="master-prompt">
+    <input id="master-prompt" type="text" placeholder="describe the whole pattern — dark dub techno in Cm, loose broken boom-bap, etc." />
+    <button id="gen-pattern" class="ghost gen-toggle-btn" aria-pressed="true" title="toggle: regenerate step patterns">pattern</button>
+    <button id="gen-instruments" class="ghost gen-toggle-btn" data-state="on" title="off → on (reshape for current gen) → all (swap instruments in place across every pattern). Locks are always honored.">instruments</button>
+    <label class="gen-count-wrap" title="bars per generated pattern (each bar = 16 steps)"><span>bars</span><input id="gen-bars" type="number" min="1" max="8" value="1" /></label>
+    <label class="gen-count-wrap" title="generate N patterns; extras are variations using the same instruments, starting from the selected pattern"><span>×</span><input id="gen-count" type="number" min="1" max="4" value="1" /></label>
+    <button id="master-prompt-go" title="plan and (re)generate every unlocked track for the current pattern">generate</button>
+    <button id="master-variate-go" title="variate the current pattern into the next N slots (same instruments)">variate</button>
+  </div>
+
+  <main id="tracks"></main>
+
+  <template id="track-template">
+    <section class="track">
+      <div class="track-head">
+        <input class="track-name" type="text" placeholder="track" />
+        <select class="track-engine"></select>
+        <button class="track-sound ghost" title="prompt a custom Tone.js synth patch">sound…</button>
+        <button class="track-save ghost" title="save the current custom patch">save</button>
+        <div class="field"><label>len</label><input class="track-len" type="number" min="1" max="128" value="16" /></div>
+        <div class="field"><label>spd</label>
+          <select class="track-speed">
+            <option value="0.0625">1/16</option>
+            <option value="0.125">1/8</option>
+            <option value="0.25">1/4</option>
+            <option value="0.5">1/2</option>
+            <option value="1" selected>1</option>
+            <option value="2">2</option>
+            <option value="4">4</option>
+            <option value="6">6</option>
+            <option value="8">8</option>
+            <option value="16">16</option>
+          </select>
+        </div>
+        <div class="field"><label>glide</label><input class="track-glide" type="range" min="0" max="0.5" step="0.005" value="0" /></div>
+        <div class="field"><label>sw</label><input class="track-swing" type="range" min="0" max="0.75" step="0.01" value="0" /></div>
+        <div class="field"><label>den</label><input class="track-density" type="range" min="0" max="1" step="0.01" value="0.5" /></div>
+        <div class="field"><label>vol</label><input class="p-vol" type="range" min="0" max="1" step="0.01" value="0.8" /></div>
+        <div class="param-group timbre-group">
+          <div class="field"><label>harm</label><input class="p-harm" type="range" min="0" max="1" step="0.01" value="0.5" /></div>
+          <div class="field"><label>timb</label><input class="p-timb" type="range" min="0" max="1" step="0.01" value="0.5" /></div>
+          <div class="field"><label>morph</label><input class="p-morph" type="range" min="0" max="1" step="0.01" value="0.5" /></div>
+          <div class="field"><label>decay</label><input class="p-decay" type="range" min="0" max="1" step="0.01" value="0.4" /></div>
+          <button class="track-rand ghost" title="randomize harm/timb/morph/decay">rand</button>
+        </div>
+        <div class="panel-btn-group">
+          <button class="track-filter ghost" aria-pressed="false" title="filter">filter</button>
+          <button class="track-env ghost" aria-pressed="false" title="envelope → cutoff">env</button>
+          <button class="track-fx ghost" aria-pressed="false" title="fx rack">fx</button>
+          <button class="track-eq ghost" aria-pressed="false" title="3-band eq">eq</button>
+          <button class="track-mod ghost" aria-pressed="false">mod</button>
+        </div>
+        <div class="lock-stack">
+          <button class="track-lock-inst ghost" aria-pressed="false" title="lock instrument — engine, params, filter, env, fx, mod are protected from the planner">lock inst</button>
+          <button class="track-lock-pat ghost" aria-pressed="false" title="lock pattern — step data is protected from the planner">lock pat</button>
+        </div>
+        <button class="track-solo ghost" aria-pressed="false" title="solo">solo</button>
+        <button class="track-mute ghost">mute</button>
+        <button class="track-clear ghost">clear</button>
+        <button class="track-remove ghost danger">remove</button>
+      </div>
+      <div class="track-midi field" hidden>
+        <label>midi out</label>
+        <select class="midi-out"></select>
+        <label>ch</label>
+        <input class="midi-ch" type="number" min="1" max="16" value="1" />
+      </div>
+      <div class="track-mod-panel" hidden></div>
+      <div class="track-filter-panel" hidden>
+        <div class="fx-row" data-fx="filter">
+          <span class="fx-title">filter (resonant lp)</span>
+          <label class="fx-ctl"><span>cut</span><input class="p-cutoff" type="range" min="0" max="1" step="0.001" value="1" /></label>
+          <label class="fx-ctl"><span>res</span><input class="p-reson" type="range" min="0" max="1" step="0.01" value="0" /></label>
+        </div>
+      </div>
+      <div class="track-env-panel" hidden>
+        <div class="fx-row" data-fx="env">
+          <span class="fx-title">envelope (adsr → cutoff)</span>
+          <label class="fx-ctl"><span>env</span><input class="p-envamt" type="range" min="0" max="1" step="0.01" value="0" /></label>
+          <label class="fx-ctl"><span>A</span><input class="p-envatk" type="range" min="0" max="1" step="0.01" value="0" /></label>
+          <label class="fx-ctl"><span>D</span><input class="p-envdec" type="range" min="0" max="1" step="0.01" value="0.25" /></label>
+          <label class="fx-ctl"><span>S</span><input class="p-envsus" type="range" min="0" max="1" step="0.01" value="0.4" /></label>
+          <label class="fx-ctl"><span>R</span><input class="p-envrel" type="range" min="0" max="1" step="0.01" value="0.3" /></label>
+        </div>
+      </div>
+      <div class="track-eq-panel" hidden>
+        <div class="fx-row" data-fx="eq">
+          <span class="fx-title">eq (3-band)</span>
+          <label class="fx-ctl"><span>low</span><input class="p-eq-low" type="range" min="-18" max="18" step="0.5" value="0" /></label>
+          <label class="fx-ctl"><span>mid</span><input class="p-eq-mid" type="range" min="-18" max="18" step="0.5" value="0" /></label>
+          <label class="fx-ctl"><span>high</span><input class="p-eq-high" type="range" min="-18" max="18" step="0.5" value="0" /></label>
+        </div>
+      </div>
+      <div class="track-fx-panel" hidden>
+        <div class="fx-row" data-fx="fuzz">
+          <span class="fx-title">fuzz (dba-style)</span>
+          <label class="fx-ctl"><span>amt</span><input class="fx-fuzz-amount" type="range" min="0" max="1" step="0.01" value="0" /></label>
+          <label class="fx-ctl"><span>drive</span><input class="fx-fuzz-drive" type="range" min="0" max="1" step="0.01" value="0.7" /></label>
+          <label class="fx-ctl"><span>tone</span><input class="fx-fuzz-tone" type="range" min="0" max="1" step="0.01" value="0.4" /></label>
+          <label class="fx-ctl"><span>level</span><input class="fx-fuzz-level" type="range" min="0" max="1" step="0.01" value="0.5" /></label>
+        </div>
+        <div class="fx-row" data-fx="delay">
+          <span class="fx-title">delay</span>
+          <label class="fx-ctl"><span>time</span><input class="fx-delay-time" type="range" min="0.05" max="1" step="0.005" value="0.375" /></label>
+          <label class="fx-ctl"><span>fbk</span><input class="fx-delay-fbk" type="range" min="0" max="0.95" step="0.01" value="0.35" /></label>
+          <label class="fx-ctl"><span>wet</span><input class="fx-delay-wet" type="range" min="0" max="1" step="0.01" value="0" /></label>
+          <label class="fx-ctl fx-sync-wrap"><input class="fx-delay-sync" type="checkbox" /><span>sync</span></label>
+          <select class="fx-delay-div">
+            <option value="1">1/4</option>
+            <option value="0.5">1/8</option>
+            <option value="0.75">1/8d</option>
+            <option value="0.333">1/8t</option>
+            <option value="0.25">1/16</option>
+            <option value="0.125">1/32</option>
+          </select>
+        </div>
+        <div class="fx-row" data-fx="reverb">
+          <span class="fx-title">reverb</span>
+          <label class="fx-ctl"><span>decay</span><input class="fx-reverb-decay" type="range" min="0.2" max="8" step="0.1" value="2" /></label>
+          <label class="fx-ctl"><span>wet</span><input class="fx-reverb-wet" type="range" min="0" max="1" step="0.01" value="0" /></label>
+        </div>
+      </div>
+      <div class="track-prompt">
+        <input class="prompt-input" type="text" placeholder="describe the pattern..." />
+        <button class="prompt-go">generate</button>
+      </div>
+      <div class="steps"></div>
+    </section>
+  </template>
+
+  <template id="lfo-row-template">
+    <div class="lfo-row">
+      <label class="lfo-target"></label>
+      <label class="lfo-enable">
+        <input type="checkbox" class="lfo-on" />
+        on
+      </label>
+      <select class="lfo-shape">
+        <option value="sine">sine</option>
+        <option value="triangle">triangle</option>
+        <option value="sawtooth">saw</option>
+        <option value="square">square</option>
+      </select>
+      <label class="lfo-sync-wrap">
+        <input type="checkbox" class="lfo-sync" />
+        sync
+      </label>
+      <div class="field lfo-rate-field">
+        <label>rate</label>
+        <input class="lfo-rate" type="range" min="0" max="1" step="0.001" value="0.35" />
+        <select class="lfo-div">
+          <option value="16">4 bars</option>
+          <option value="8">2 bars</option>
+          <option value="4">1 bar</option>
+          <option value="2">1/2</option>
+          <option value="1" selected>1/4 (beat)</option>
+          <option value="0.5">1/8</option>
+          <option value="0.25">1/16</option>
+          <option value="0.125">1/32</option>
+        </select>
+        <span class="lfo-rate-label">1.00 hz</span>
+      </div>
+      <div class="field">
+        <label>depth</label>
+        <input class="lfo-depth" type="range" min="0" max="1" step="0.01" value="0.5" />
+        <span class="lfo-depth-label">0.50</span>
+      </div>
+    </div>
+  </template>
+
+  <script src="https://cdn.jsdelivr.net/npm/tone@15.0.4/build/Tone.js"></script>
+  <script src="/woscillators.js"></script>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

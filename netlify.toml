@@ -1,0 +1,28 @@
+[build]
+  publish = "public"
+  functions = "netlify/functions"
+
+[functions]
+  node_bundler = "esbuild"
+  # Make sure shared lib gets bundled with each function
+  included_files = ["lib/**"]
+
+[dev]
+  # `netlify dev` serves static + functions on a single port for local testing
+  publish = "public"
+  port = 8888
+
+[[redirects]]
+  from = "/api/generate"
+  to   = "/.netlify/functions/generate"
+  status = 200
+
+[[redirects]]
+  from = "/api/plan"
+  to   = "/.netlify/functions/plan"
+  status = 200
+
+[[redirects]]
+  from = "/api/sound"
+  to   = "/.netlify/functions/sound"
+  status = 200

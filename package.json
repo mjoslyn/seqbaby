@@ -1,0 +1,18 @@
+{
+  "name": "seqbaby",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch --env-file=.env server.js",
+    "start": "node --env-file=.env server.js",
+    "netlify:dev": "netlify dev"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.40.1",
+    "@vectorsize/woscillators": "^2.0.1"
+  }
+}
