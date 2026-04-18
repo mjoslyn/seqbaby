@@ -454,6 +454,7 @@ function emptyPattern(len) {
     sampleEnds:   new Array(len).fill(1),       // sample-engine end offset   (0..1 of buffer)
     sampleFadeIns:  new Array(len).fill(0),     // sample fade-in time in seconds (0 = click-guard)
     sampleFadeOuts: new Array(len).fill(0),     // sample fade-out time in seconds
+    sampleLoopModes: new Array(len).fill("off"),// "off" | "loop" | "pingpong"
   };
 }
 
@@ -475,6 +476,7 @@ function aliasPattern(t, idx) {
   t.sampleEnds   = p.sampleEnds   ?? (p.sampleEnds   = new Array(p.steps.length).fill(1));
   t.sampleFadeIns  = p.sampleFadeIns  ?? (p.sampleFadeIns  = new Array(p.steps.length).fill(0));
   t.sampleFadeOuts = p.sampleFadeOuts ?? (p.sampleFadeOuts = new Array(p.steps.length).fill(0));
+  t.sampleLoopModes = p.sampleLoopModes ?? (p.sampleLoopModes = new Array(p.steps.length).fill("off"));
   t._patternIdx = idx;
 }
 
@@ -569,6 +571,7 @@ function serializeSet() {
       uploadFileName: t.uploadFileName || null,
       soundPromptText: t.soundPromptText,
       locked: t.locked, muted: t.muted, soloed: t.soloed,
+      isDrumKit: !!t.isDrumKit,
       glide: t.glide, speed: t.speed ?? 1, sampleSpeedMode: t.sampleSpeedMode ?? "1xbpm",
       lfoConfig: JSON.parse(JSON.stringify(t.lfoConfig)),
       patterns: t.patterns.map(p => ({
@@ -742,7 +745,7 @@ function applySet(s) {
         try {
           const bytes = Uint8Array.from(atob(t.elevenAudio), c => c.charCodeAt(0));
           await ensureAudio();
-          const buffer = normalizeAudioBuffer(await state.audioCtx.decodeAudioData(bytes.buffer));
+          const buffer = normalizeAudioBuffer(await state.audioCtx.decodeAudioData(bytes.buffer), { trim: true });
           t.elevenBuffer = buffer;
           if (t.voice?.type === "eleven") { t.voice.setBuffer(buffer); applySampleSpeed(t); }
         } catch (e) { console.warn("eleven buffer decode failed", e); }
@@ -762,6 +765,9 @@ function applySet(s) {
     t.locked = !!td.locked;
     t.muted  = !!td.muted;
     t.soloed = !!td.soloed;
+    t.isDrumKit = typeof td.isDrumKit === "boolean"
+      ? td.isDrumKit
+      : guessIsDrumKit({ engineKey: t.engineKey, name: t.name });
     t.glide  = td.glide ?? 0;
     t.speed  = td.speed ?? 1;
     t.sampleSpeedMode = td.sampleSpeedMode ?? "1xbpm";
@@ -1440,6 +1446,66 @@ class DrumSynthVoice {
   }
 }
 
+// Build a ping-pong buffer from a sub-region of an input buffer: [forward | reversed].
+// Caches per (buffer, startFrac, endFrac) so step-loop playback doesn't rebuild it each hit.
+const PINGPONG_CACHE = new WeakMap();
+function getPingPongBuffer(buf, startFrac, endFrac) {
+  if (!buf || endFrac <= startFrac) return null;
+  let forBuf = PINGPONG_CACHE.get(buf);
+  if (!forBuf) { forBuf = new Map(); PINGPONG_CACHE.set(buf, forBuf); }
+  const key = `${startFrac.toFixed(4)}:${endFrac.toFixed(4)}`;
+  const cached = forBuf.get(key);
+  if (cached) return cached;
+  const ch = buf.numberOfChannels;
+  const n = buf.length;
+  const sIdx = Math.max(0, Math.floor(startFrac * n));
+  const eIdx = Math.min(n, Math.ceil(endFrac * n));
+  const segLen = Math.max(1, eIdx - sIdx);
+  const out = new AudioBuffer({ length: segLen * 2, numberOfChannels: ch, sampleRate: buf.sampleRate });
+  for (let c = 0; c < ch; c++) {
+    const src = buf.getChannelData(c);
+    const dst = out.getChannelData(c);
+    for (let i = 0; i < segLen; i++) dst[i] = src[sIdx + i];              // forward
+    for (let i = 0; i < segLen; i++) dst[segLen + i] = src[eIdx - 1 - i]; // reversed
+  }
+  forBuf.set(key, out);
+  return out;
+}
+
+// Set up and start a BufferSource for a sample hit. Honors start/end offsets
+// and three loop modes: "off" (one-shot), "loop" (region repeats), "pingpong"
+// (region plays forward then reversed, repeatedly). Returns { src, stopTime }.
+function startSampleSource(ctx, buffer, rate, time, duration, opts) {
+  const src = ctx.createBufferSource();
+  src.playbackRate.value = rate;
+  const startFrac = Math.max(0, Math.min(1, opts?.startOffset ?? 0));
+  const endFrac   = Math.max(startFrac + 0.001, Math.min(1, opts?.endOffset ?? 1));
+  const startSec  = startFrac * buffer.duration;
+  const endSec    = endFrac   * buffer.duration;
+  const playLenSource = endSec - startSec;
+  const wallTime  = playLenSource / Math.max(0.01, rate);
+  const loopMode  = opts?.loopMode || "off";
+  let stopTime;
+  if (loopMode === "pingpong") {
+    src.buffer = getPingPongBuffer(buffer, startFrac, endFrac) || buffer;
+    src.loop = true;
+    stopTime = time + Math.max(0.1, duration);
+    src.start(time);
+  } else if (loopMode === "loop") {
+    src.buffer = buffer;
+    src.loop = true;
+    src.loopStart = startSec;
+    src.loopEnd   = endSec;
+    stopTime = time + Math.max(0.1, duration);
+    src.start(time, startSec);
+  } else {
+    src.buffer = buffer;
+    stopTime = time + Math.min(wallTime, Math.max(0.1, duration + 0.5));
+    src.start(time, startSec, playLenSource);
+  }
+  return { src, stopTime };
+}
+
 // Shared envelope for sample-based voices: honors opts.fadeIn/fadeOut (seconds)
 // with a 6ms click-guard floor and a cap at ~48% of the wall time per side.
 function applySampleFadeEnvelope(gainNode, time, stopTime, v, opts) {
@@ -1491,23 +1557,14 @@ class SampleVoice {
   getAudioParam(key) { return key === "vol" ? this.output.gain : null; }
   hit(midiNote, time, duration, velocity = 1, opts = null) {
     if (!this.buffer) return;
-    const src = this.ctx.createBufferSource();
-    src.buffer = this.buffer;
-    // Percussion samples default to natural pitch (MIDI 48 / C3 = 1.0x) so
-    // blank/default steps don't pitch up or down.
-    const rate = Math.pow(2, (midiNote - 48) / 12);
-    src.playbackRate.value = rate;
-    const startFrac = Math.max(0, Math.min(1, opts?.startOffset ?? 0));
-    const endFrac   = Math.max(startFrac + 0.001, Math.min(1, opts?.endOffset ?? 1));
-    const startSec  = startFrac * this.buffer.duration;
-    const playLenSource = (endFrac - startFrac) * this.buffer.duration;
-    const wallTime = playLenSource / Math.max(0.01, rate);
+    // Pitching is relative to opts.pitchBase (MIDI note that = 1.0x playback).
+    // Drum-kit tracks pass 36 (C2); other tracks default to 60 (C4).
+    const pitchBase = Number.isFinite(opts?.pitchBase) ? opts.pitchBase : 60;
+    const rate = Math.pow(2, (midiNote - pitchBase) / 12);
+    const { src, stopTime } = startSampleSource(this.ctx, this.buffer, rate, time, duration, opts);
     const g = this.ctx.createGain();
-    const v = Math.max(0, Math.min(1, velocity));
-    const stopTime = time + Math.min(wallTime, Math.max(0.1, duration + 0.5));
-    applySampleFadeEnvelope(g, time, stopTime, v, opts);
+    applySampleFadeEnvelope(g, time, stopTime, Math.max(0, Math.min(1, velocity)), opts);
     src.connect(g).connect(this.output);
-    src.start(time, startSec, playLenSource);
     src.stop(stopTime + 0.01);
     this.active.add(src);
     src.onended = () => this.active.delete(src);
@@ -1609,7 +1666,55 @@ class CustomToneVoice {
 // Loudness-normalize an AudioBuffer in place using an RMS target, capped at a safe peak
 // so transients don't clip. Target is -14 dBFS RMS (≈0.2), matching typical loud-but-not-
 // crushed sample levels. Tapers the last ~5ms to zero to kill end-of-sample clicks.
-function normalizeAudioBuffer(buf) {
+// Return a new AudioBuffer with leading + trailing silence trimmed.
+// Uses a short (~10ms) sliding-window RMS to find the first/last above-threshold
+// region; preserves a small pad on each side so transients aren't clipped.
+function trimSilenceFromBuffer(buf, { threshold = 0.004, padMs = 8 } = {}) {
+  if (!buf || !buf.length) return buf;
+  const n = buf.length;
+  const ch = buf.numberOfChannels;
+  const win = Math.max(1, Math.round(buf.sampleRate * 0.01));
+  // Per-sample max-abs across channels (cheaper than true RMS, good enough for gating)
+  const env = new Float32Array(n);
+  for (let c = 0; c < ch; c++) {
+    const d = buf.getChannelData(c);
+    for (let i = 0; i < n; i++) {
+      const a = Math.abs(d[i]);
+      if (a > env[i]) env[i] = a;
+    }
+  }
+  // Find first index where windowed peak >= threshold
+  let first = 0;
+  for (let i = 0; i < n; i++) {
+    let peak = 0;
+    const end = Math.min(n, i + win);
+    for (let j = i; j < end; j++) if (env[j] > peak) peak = env[j];
+    if (peak >= threshold) { first = i; break; }
+    if (i === n - 1) return buf; // entirely silent — leave it alone
+  }
+  let last = n - 1;
+  for (let i = n - 1; i >= 0; i--) {
+    let peak = 0;
+    const start = Math.max(0, i - win);
+    for (let j = start; j <= i; j++) if (env[j] > peak) peak = env[j];
+    if (peak >= threshold) { last = i; break; }
+  }
+  const pad = Math.round(buf.sampleRate * padMs / 1000);
+  const s = Math.max(0, first - pad);
+  const e = Math.min(n, last + pad);
+  const len = Math.max(1, e - s);
+  if (s === 0 && e === n) return buf; // nothing to trim
+  const out = new AudioBuffer({ length: len, numberOfChannels: ch, sampleRate: buf.sampleRate });
+  for (let c = 0; c < ch; c++) {
+    const src = buf.getChannelData(c);
+    const dst = out.getChannelData(c);
+    dst.set(src.subarray(s, e));
+  }
+  return out;
+}
+
+function normalizeAudioBuffer(buf, opts = null) {
+  if (opts?.trim) buf = trimSilenceFromBuffer(buf);
   if (!buf) return buf;
   let peak = 0;
   let sumSq = 0;
@@ -1673,21 +1778,12 @@ class ElevenVoice {
   getAudioParam(key) { return key === "vol" ? this.output.gain : null; }
   hit(midiNote, time, duration, velocity = 1, opts = null) {
     if (!this.buffer) return;
-    const src = this.ctx.createBufferSource();
-    src.buffer = this.buffer;
-    const rate = (this.baseRate || 1) * Math.pow(2, (midiNote - 48) / 12);
-    src.playbackRate.value = rate;
-    const startFrac = Math.max(0, Math.min(1, opts?.startOffset ?? 0));
-    const endFrac   = Math.max(startFrac + 0.001, Math.min(1, opts?.endOffset ?? 1));
-    const startSec  = startFrac * this.buffer.duration;
-    const playLenSource = (endFrac - startFrac) * this.buffer.duration;
-    const wallTime  = playLenSource / Math.max(0.01, rate);
+    const pitchBase = Number.isFinite(opts?.pitchBase) ? opts.pitchBase : 60;
+    const rate = (this.baseRate || 1) * Math.pow(2, (midiNote - pitchBase) / 12);
+    const { src, stopTime } = startSampleSource(this.ctx, this.buffer, rate, time, duration, opts);
     const g = this.ctx.createGain();
-    const v = Math.max(0, Math.min(1, velocity));
-    const stopTime = time + Math.min(wallTime, Math.max(0.1, duration + 0.5));
-    applySampleFadeEnvelope(g, time, stopTime, v, opts);
+    applySampleFadeEnvelope(g, time, stopTime, Math.max(0, Math.min(1, velocity)), opts);
     src.connect(g).connect(this.boost);
-    src.start(time, startSec, playLenSource);
     src.stop(stopTime + 0.01);
     this.active.add(src);
     src.onended = () => this.active.delete(src);
@@ -1732,21 +1828,12 @@ class UploadVoice {
   getAudioParam(key) { return key === "vol" ? this.output.gain : null; }
   hit(midiNote, time, duration, velocity = 1, opts = null) {
     if (!this.buffer) return;
-    const src = this.ctx.createBufferSource();
-    src.buffer = this.buffer;
-    const rate = (this.baseRate || 1) * Math.pow(2, (midiNote - 48) / 12);
-    src.playbackRate.value = rate;
-    const startFrac = Math.max(0, Math.min(1, opts?.startOffset ?? 0));
-    const endFrac   = Math.max(startFrac + 0.001, Math.min(1, opts?.endOffset ?? 1));
-    const startSec  = startFrac * this.buffer.duration;
-    const playLenSource = (endFrac - startFrac) * this.buffer.duration;
-    const wallTime  = playLenSource / Math.max(0.01, rate);
+    const pitchBase = Number.isFinite(opts?.pitchBase) ? opts.pitchBase : 60;
+    const rate = (this.baseRate || 1) * Math.pow(2, (midiNote - pitchBase) / 12);
+    const { src, stopTime } = startSampleSource(this.ctx, this.buffer, rate, time, duration, opts);
     const g = this.ctx.createGain();
-    const v = Math.max(0, Math.min(1, velocity));
-    const stopTime = time + Math.min(wallTime, Math.max(0.1, duration + 0.5));
-    applySampleFadeEnvelope(g, time, stopTime, v, opts);
+    applySampleFadeEnvelope(g, time, stopTime, Math.max(0, Math.min(1, velocity)), opts);
     src.connect(g).connect(this.boost);
-    src.start(time, startSec, playLenSource);
     src.stop(stopTime + 0.01);
     this.active.add(src);
     src.onended = () => this.active.delete(src);
@@ -2039,6 +2126,15 @@ function autoAccents(len) {
   return set;
 }
 
+// Guess whether a track is playing a drum kit based on engine type + name.
+// Used only at creation time to seed isDrumKit; the user can flip the toggle after.
+function guessIsDrumKit({ engineKey, name }) {
+  const eng = engineByKey(engineKey);
+  if (eng?.type === "sample") return true;
+  const blob = `${engineKey || ""} ${eng?.label || ""} ${name || ""}`.toLowerCase();
+  return /\b(kick|snare|hat|hi-?hat|clap|tom|perc|drum)\b/.test(blob);
+}
+
 function createTrack({ name, engineKey, length = totalSteps() }) {
   const len = Math.max(1, length);
   const t = {
@@ -2057,6 +2153,7 @@ function createTrack({ name, engineKey, length = totalSteps() }) {
     soloed: false,
     lockInstrument: false,
     lockPattern: false,
+    isDrumKit: guessIsDrumKit({ engineKey, name }),
     glide: 0,
     swing: 0,
     sampleSpeedMode: "1xbpm",
@@ -2456,8 +2553,15 @@ function startNote(t, anchor) {
   t.steps[anchor] = 1;
   t.lengths[anchor] = 1;
   if (t.notes[anchor] == null) {
-    const base = state.scale.active ? 48 + (state.scale.root | 0) : 48;
-    t.notes[anchor] = applyScale(base);
+    // Drum-kit tracks default every new step to C2 regardless of scale. The
+    // pitching baseline for their samples is also C2 so that's natural pitch.
+    // Other tracks default to C3 (or scale root in octave 3 when a scale is set).
+    if (t.isDrumKit) {
+      t.notes[anchor] = 36; // C2
+    } else {
+      const base = state.scale.active ? 48 + (state.scale.root | 0) : 48;
+      t.notes[anchor] = applyScale(base);
+    }
   }
 }
 
@@ -2586,6 +2690,29 @@ function renderTrack(t) {
   refreshLockUI();
   lockInstBtn.addEventListener("click", () => { t.lockInstrument = !t.lockInstrument; refreshLockUI(); });
   lockPatBtn.addEventListener("click",  () => { t.lockPattern    = !t.lockPattern;    refreshLockUI(); });
+
+  const drumKitBtn = node.querySelector(".track-drumkit");
+  if (drumKitBtn) {
+    const refreshDrumKitUI = () => {
+      drumKitBtn.setAttribute("aria-pressed", String(!!t.isDrumKit));
+    };
+    refreshDrumKitUI();
+    drumKitBtn.addEventListener("click", () => {
+      t.isDrumKit = !t.isDrumKit;
+      refreshDrumKitUI();
+      // Flipping drum-kit on retroactively conforms every step note to C2 so
+      // existing tracks (e.g. a snare that came back from the planner at D2)
+      // line up with the new default.
+      if (t.isDrumKit) {
+        for (const p of t.patterns) {
+          for (let i = 0; i < p.notes.length; i++) {
+            if (p.steps[i]) p.notes[i] = 36;
+          }
+        }
+        renderStepGrid(t);
+      }
+    });
+  }
 
   const soloBtn = node.querySelector(".track-solo");
   soloBtn.addEventListener("click", () => {
@@ -3179,6 +3306,13 @@ function openStepEditor(t, idx, anchorEl) {
               <option value="0.125">1/32</option>
             </select>
           </label>
+          <label>loop
+            <select class="se-smp-loop">
+              <option value="off" selected>off</option>
+              <option value="loop">loop</option>
+              <option value="pingpong">ping-pong</option>
+            </select>
+          </label>
           <button class="se-preview" type="button">preview</button>
         </div>
         <div class="se-sample-fade">
@@ -3395,6 +3529,16 @@ function openStepEditor(t, idx, anchorEl) {
     if (!t.sampleEnds)   t.sampleEnds   = new Array(t.length).fill(1);
     if (!t.sampleFadeIns)  t.sampleFadeIns  = new Array(t.length).fill(0);
     if (!t.sampleFadeOuts) t.sampleFadeOuts = new Array(t.length).fill(0);
+    if (!t.sampleLoopModes) t.sampleLoopModes = new Array(t.length).fill("off");
+
+    const loopSel = sampleRow.querySelector(".se-smp-loop");
+    if (loopSel) {
+      loopSel.value = t.sampleLoopModes[idx] || "off";
+      loopSel.addEventListener("change", () => {
+        const v = loopSel.value;
+        t.sampleLoopModes[idx] = (v === "loop" || v === "pingpong") ? v : "off";
+      });
+    }
 
     const fadeInInput  = sampleRow.querySelector(".se-smp-fade-in");
     const fadeOutInput = sampleRow.querySelector(".se-smp-fade-out");
@@ -3558,6 +3702,8 @@ function openStepEditor(t, idx, anchorEl) {
           endOffset:   t.sampleEnds[idx],
           fadeIn:      t.sampleFadeIns?.[idx]  ?? 0,
           fadeOut:     t.sampleFadeOuts?.[idx] ?? 0,
+          loopMode:    t.sampleLoopModes?.[idx] ?? "off",
+          pitchBase:   t.isDrumKit ? 36 : 60,
         });
       } catch (err) { console.warn(err); }
     });
@@ -3782,6 +3928,8 @@ async function togglePlay() {
                 endOffset:   t.sampleEnds?.[idx]   ?? 1,
                 fadeIn:      t.sampleFadeIns?.[idx]  ?? 0,
                 fadeOut:     t.sampleFadeOuts?.[idx] ?? 0,
+                loopMode:    t.sampleLoopModes?.[idx] ?? "off",
+                pitchBase:   t.isDrumKit ? 36 : 60,
               }
             : null;
           const ratchet = Math.max(1, Math.min(8, Math.round(t.ratchets?.[idx] ?? 1)));
@@ -4022,7 +4170,10 @@ function applyPattern(t, data) {
   for (let i = 0; i < Math.min(total, steps.length); i++) {
     if (!steps[i]) continue;
     t.steps[i] = 1;
-    t.notes[i] = notes[i] != null ? applyScale(notes[i]) : null;
+    // Drum-kit tracks force every step to C2 regardless of scale and regardless
+    // of whatever pitch the planner returned.
+    if (t.isDrumKit) t.notes[i] = 36;
+    else t.notes[i] = notes[i] != null ? applyScale(notes[i]) : null;
     t.lengths[i] = Math.max(1, Math.min(lengths[i] || 1, total - i));
     t.velocities[i] = vels[i] ?? 0.5;
     t.chords[i] = chords[i] || "";
@@ -4050,7 +4201,7 @@ async function promptCustomSound(t) {
     t.elevenAudioMime = result.sound.mime || "audio/mpeg";
     const bytes = Uint8Array.from(atob(result.sound.audio), c => c.charCodeAt(0));
     await ensureAudio();
-    const buffer = normalizeAudioBuffer(await state.audioCtx.decodeAudioData(bytes.buffer));
+    const buffer = normalizeAudioBuffer(await state.audioCtx.decodeAudioData(bytes.buffer), { trim: true });
     t.elevenBuffer = buffer;
     if (t.engineKey === "eleven" && t.voice?.type === "eleven") {
       t.voice.setBuffer(buffer);
@@ -4121,7 +4272,7 @@ async function designSoundForTrack(track, prompt, engine, signal) {
     track.elevenAudioMime = mime || "audio/mpeg";
     const bytes = Uint8Array.from(atob(audio), c => c.charCodeAt(0));
     await ensureAudio();
-    const buffer = normalizeAudioBuffer(await state.audioCtx.decodeAudioData(bytes.buffer));
+    const buffer = normalizeAudioBuffer(await state.audioCtx.decodeAudioData(bytes.buffer), { trim: true });
     track.elevenBuffer = buffer;
     if (track.engineKey === "eleven" && track.voice?.type === "eleven") {
       track.voice.setBuffer(buffer);
@@ -4198,7 +4349,7 @@ function showSoundDesignDialog({ trackName, engine, defaultValue = "" }) {
       await ensureAudio();
       const ctx = state.audioCtx;
       const bytes = Uint8Array.from(atob(currentSound.audio), c => c.charCodeAt(0));
-      const buf = normalizeAudioBuffer(await ctx.decodeAudioData(bytes.buffer.slice(0)));
+      const buf = normalizeAudioBuffer(await ctx.decodeAudioData(bytes.buffer.slice(0)), { trim: true });
       const src = ctx.createBufferSource();
       src.buffer = buf;
       const g = ctx.createGain();
@@ -4399,7 +4550,7 @@ async function designElevenSound(t) {
     t.elevenAudioMime = mime || "audio/mpeg";
     const bytes = Uint8Array.from(atob(audio), c => c.charCodeAt(0));
     await ensureAudio();
-    const buffer = normalizeAudioBuffer(await state.audioCtx.decodeAudioData(bytes.buffer));
+    const buffer = normalizeAudioBuffer(await state.audioCtx.decodeAudioData(bytes.buffer), { trim: true });
     t.elevenBuffer = buffer;
     if (t.engineKey === "eleven" && t.voice?.type === "eleven") {
       t.voice.setBuffer(buffer);
