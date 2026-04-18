@@ -569,7 +569,7 @@ function serializeSet() {
       uploadFileName: t.uploadFileName || null,
       soundPromptText: t.soundPromptText,
       locked: t.locked, muted: t.muted, soloed: t.soloed,
-      glide: t.glide, speed: t.speed ?? 1, sampleSpeedMode: t.sampleSpeedMode ?? "native",
+      glide: t.glide, speed: t.speed ?? 1, sampleSpeedMode: t.sampleSpeedMode ?? "1xbpm",
       lfoConfig: JSON.parse(JSON.stringify(t.lfoConfig)),
       patterns: t.patterns.map(p => ({
         steps: p.steps.slice(),
@@ -764,7 +764,7 @@ function applySet(s) {
     t.soloed = !!td.soloed;
     t.glide  = td.glide ?? 0;
     t.speed  = td.speed ?? 1;
-    t.sampleSpeedMode = td.sampleSpeedMode ?? "native";
+    t.sampleSpeedMode = td.sampleSpeedMode ?? "1xbpm";
     Object.assign(t.lfoConfig, td.lfoConfig || {});
     if (Array.isArray(td.patterns)) {
       const pad = (arr, fill, n) => { const out = (arr || []).slice(0, n); while (out.length < n) out.push(fill); return out; };
@@ -2059,7 +2059,7 @@ function createTrack({ name, engineKey, length = totalSteps() }) {
     lockPattern: false,
     glide: 0,
     swing: 0,
-    sampleSpeedMode: "native",
+    sampleSpeedMode: "1xbpm",
     density: 0.5,
     speed: 1,
     trackTick: 0,
@@ -3163,9 +3163,9 @@ function openStepEditor(t, idx, anchorEl) {
           <span class="se-smp-info">—</span>
           <label>fit
             <select class="se-smp-fit">
-              <option value="native" selected>native</option>
+              <option value="native">native</option>
               <option value="2xbpm">2× bpm</option>
-              <option value="1xbpm">1× bpm</option>
+              <option value="1xbpm" selected>1× bpm</option>
               <option value="1/2bpm">1/2 bpm</option>
               <option value="1/4bpm">1/4 bpm</option>
             </select>
@@ -3385,9 +3385,9 @@ function openStepEditor(t, idx, anchorEl) {
     const fitSel  = sampleRow.querySelector(".se-smp-fit");
     const prev    = sampleRow.querySelector(".se-preview");
     if (fitSel) {
-      fitSel.value = t.sampleSpeedMode || "native";
+      fitSel.value = t.sampleSpeedMode || "1xbpm";
       fitSel.addEventListener("change", () => {
-        t.sampleSpeedMode = fitSel.value || "native";
+        t.sampleSpeedMode = fitSel.value || "1xbpm";
         applySampleSpeed(t);
       });
     }
