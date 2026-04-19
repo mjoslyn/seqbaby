@@ -908,6 +908,16 @@ main {
   gap: 8px;
   justify-content: flex-end;
 }
+.bounce-opts { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+.bounce-opts label { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--fg-dim); }
+.bounce-opts input[type="number"] { width: 64px; }
+.bounce-opts input[type="text"] { width: 220px; }
+.bounce-note { color: var(--fg-dim); font-size: 11px; }
+.bounce-progress-label { font-size: 11px; color: var(--fg-dim); }
+.bounce-progress-bar { position: relative; height: 10px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 4px; overflow: hidden; }
+.bounce-progress-fill { position: absolute; inset: 0 auto 0 0; width: 0%; background: var(--accent); transition: width 80ms linear; }
+.bounce-progress-status { font-size: 11px; color: var(--fg-dim); }
+
 .patch-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; max-height: 40vh; overflow-y: auto; }
 .patch-list .patch-row { display: flex; gap: 6px; align-items: stretch; }
 .patch-list .patch-load { flex: 1; text-align: left; }
