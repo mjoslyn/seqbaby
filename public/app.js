@@ -529,11 +529,17 @@ function currentIndicatorSteps() {
   const n = state.tracks[0]?.length;
   return Math.max(2, Math.min(64, Number.isFinite(n) ? n : 16));
 }
+function currentIndicatorMeter() {
+  return activeMeter(state.tracks[0]);
+}
 function buildBeatIndicator() {
   const svg = document.getElementById("beat-indicator");
   if (!svg) return;
   const steps = currentIndicatorSteps();
-  if (svg.dataset.steps === String(steps)) return;
+  const meter = currentIndicatorMeter();
+  const spb = stepsPerBeatForMeter(meter);
+  const sig = `${steps}@${meter.num}/${meter.den}`;
+  if (svg.dataset.sig === sig) return;
   while (svg.firstChild) svg.removeChild(svg.firstChild);
   const ns = "http://www.w3.org/2000/svg";
   const r = 16;
@@ -541,12 +547,13 @@ function buildBeatIndicator() {
     const ang = (i / steps) * Math.PI * 2 - Math.PI / 2;
     const cx = Math.cos(ang) * r;
     const cy = Math.sin(ang) * r;
+    const strong = i % spb === 0;
     const dot = document.createElementNS(ns, "circle");
     dot.setAttribute("cx", cx.toFixed(2));
     dot.setAttribute("cy", cy.toFixed(2));
-    dot.setAttribute("r", i % 4 === 0 ? "2.4" : "1.5");
+    dot.setAttribute("r", strong ? "2.4" : "1.5");
     dot.classList.add("beat-dot");
-    if (i % 4 === 0) dot.classList.add("beat-strong");
+    if (strong) dot.classList.add("beat-strong");
     dot.dataset.idx = String(i);
     svg.appendChild(dot);
   }
@@ -558,19 +565,22 @@ function buildBeatIndicator() {
   label.classList.add("beat-label");
   label.textContent = "1.1";
   svg.appendChild(label);
+  svg.dataset.sig = sig;
   svg.dataset.steps = String(steps);
+  svg.dataset.spb = String(spb);
 }
 
 function paintBeatIndicator(tick) {
   const svg = document.getElementById("beat-indicator");
   if (!svg) return;
-  // Rebuild if the reference track's length has changed (e.g., 16 → 12 for 3/4).
-  if (svg.dataset.steps !== String(currentIndicatorSteps())) buildBeatIndicator();
+  const wantSig = `${currentIndicatorSteps()}@${currentIndicatorMeter().num}/${currentIndicatorMeter().den}`;
+  if (svg.dataset.sig !== wantSig) buildBeatIndicator();
   const steps = Number(svg.dataset.steps || 16);
+  const spb = Number(svg.dataset.spb || 4);
   const raw = tick == null ? 0 : tick - 1;
   const idx = ((raw % steps) + steps) % steps;
-  const beat = Math.floor(idx / 4) + 1;      // 1..
-  const sub  = (idx % 4) + 1;                // 1..4
+  const beat = Math.floor(idx / spb) + 1;     // 1..num
+  const sub  = (idx % spb) + 1;               // 1..stepsPerBeat
   for (const dot of svg.querySelectorAll(".beat-dot")) {
     dot.classList.toggle("now", Number(dot.dataset.idx) === idx);
   }
@@ -655,6 +665,7 @@ function emptyPattern(len) {
     sampleFadeIns:  new Array(len).fill(0),     // sample fade-in time in seconds (0 = click-guard)
     sampleFadeOuts: new Array(len).fill(0),     // sample fade-out time in seconds
     sampleLoopModes: new Array(len).fill("off"),// "off" | "loop" | "pingpong"
+    meter: { num: 4, den: 4 },                  // time signature — decides strong-beat positions + accents
   };
 }
 
@@ -677,13 +688,17 @@ function aliasPattern(t, idx) {
   t.sampleFadeIns  = p.sampleFadeIns  ?? (p.sampleFadeIns  = new Array(p.steps.length).fill(0));
   t.sampleFadeOuts = p.sampleFadeOuts ?? (p.sampleFadeOuts = new Array(p.steps.length).fill(0));
   t.sampleLoopModes = p.sampleLoopModes ?? (p.sampleLoopModes = new Array(p.steps.length).fill("off"));
-  // Patterns can have independent lengths; mirror the active pattern's into t.length
-  // so every transport / UI path that reads t.length stays correct.
+  if (!p.meter) p.meter = { num: 4, den: 4 };
+  // Patterns can have independent lengths + meters; mirror the active pattern's
+  // into t.length / t.accents so every transport / UI path reading them stays
+  // correct.
   t.length = p.steps.length;
-  t.accents = autoAccents(t.length);
+  t.accents = autoAccents(t.length, p.meter);
   if (t.el) {
     const lenEl = t.el.querySelector(".track-len");
     if (lenEl) lenEl.value = t.length;
+    const meterEl = t.el.querySelector(".track-meter");
+    if (meterEl) meterEl.value = `${p.meter.num}/${p.meter.den}`;
   }
   t._patternIdx = idx;
 }
@@ -790,6 +805,7 @@ function serializeSet() {
         notes: p.notes.slice(),
         velocities: p.velocities.slice(),
         chords: p.chords.slice(),
+        meter: p.meter ? { num: p.meter.num, den: p.meter.den } : { num: 4, den: 4 },
       })),
     })),
   };
@@ -1031,12 +1047,16 @@ function applySet(s) {
       for (let i = 0; i < Math.min(PATTERN_COUNT, td.patterns.length); i++) {
         const p = td.patterns[i];
         if (!p) continue;
+        // Per-pattern length: prefer the saved pattern's own step array length;
+        // falls back to t.length for older saves that didn't vary per pattern.
+        const n = Math.max(1, Array.isArray(p.steps) ? p.steps.length : t.length);
         t.patterns[i] = {
-          steps: pad(p.steps, 0, t.length),
-          lengths: pad(p.lengths, 0, t.length),
-          notes: pad(p.notes, null, t.length),
-          velocities: pad(p.velocities, 0.5, t.length),
-          chords: pad(p.chords, "", t.length),
+          steps: pad(p.steps, 0, n),
+          lengths: pad(p.lengths, 0, n),
+          notes: pad(p.notes, null, n),
+          velocities: pad(p.velocities, 0.5, n),
+          chords: pad(p.chords, "", n),
+          meter: (p.meter && parseMeter(`${p.meter.num}/${p.meter.den}`)) || { num: 4, den: 4 },
         };
       }
     }
@@ -3000,10 +3020,34 @@ function randomizeTimbre(t) {
 
 function totalSteps() { return STEPS_PER_BAR; }
 
-function autoAccents(len) {
+// Strong-beat accent positions for a pattern. Each "beat" in an N/D meter is
+// 16/D sixteenth-note steps apart (e.g. 4/4 → every 4, 7/8 → every 2, 6/8 → 2).
+function autoAccents(len, meter) {
   const set = new Set();
-  for (let i = 0; i < len; i += 4) set.add(i);
+  const stepsPerBeat = stepsPerBeatForMeter(meter);
+  for (let i = 0; i < len; i += stepsPerBeat) set.add(i);
   return set;
+}
+function stepsPerBeatForMeter(meter) {
+  const den = Number(meter?.den) || 4;
+  return Math.max(1, Math.round(16 / den));
+}
+function stepsPerBarForMeter(meter) {
+  const num = Math.max(1, Math.round(Number(meter?.num) || 4));
+  return num * stepsPerBeatForMeter(meter);
+}
+function activeMeter(t) {
+  const p = t?.patterns?.[t?._patternIdx ?? state.activePattern];
+  return p?.meter || { num: 4, den: 4 };
+}
+const COMMON_METERS = ["4/4", "3/4", "2/4", "6/8", "9/8", "12/8", "5/4", "7/4", "5/8", "7/8"];
+function parseMeter(str) {
+  const m = /^\s*(\d+)\s*\/\s*(\d+)\s*$/.exec(String(str || ""));
+  if (!m) return null;
+  const num = Math.max(1, Math.min(32, Number(m[1])));
+  const den = Math.max(1, Math.min(32, Number(m[2])));
+  if (![1, 2, 4, 8, 16, 32].includes(den)) return null;
+  return { num, den };
 }
 
 // Guess whether a track is playing a drum kit based on engine type + name.
@@ -3022,7 +3066,7 @@ function createTrack({ name, engineKey, length = totalSteps() }) {
     name,
     engineKey,
     length: len,
-    accents: autoAccents(len),
+    accents: autoAccents(len, { num: 4, den: 4 }),
     // steps/lengths/notes/velocities/chords are aliased to t.patterns[activePattern].*
     steps:      null,
     lengths:    null,
@@ -3411,7 +3455,7 @@ function resizePattern(t, patIdx, len) {
   if ((t._patternIdx ?? state.activePattern) === patIdx) {
     aliasPattern(t, patIdx);
     t.length = len;
-    t.accents = autoAccents(len);
+    t.accents = autoAccents(len, p.meter);
     if (t.el) t.el.querySelector(".track-len").value = len;
     renderStepGrid(t);
   }
@@ -3588,6 +3632,22 @@ function renderTrack(t) {
     const n = Math.max(1, Math.min(128, Number(e.target.value) || 1));
     resizeTrack(t, n);
   });
+  const meterSel = node.querySelector(".track-meter");
+  if (meterSel) {
+    const cur = activeMeter(t);
+    meterSel.value = `${cur.num}/${cur.den}`;
+    meterSel.addEventListener("change", () => {
+      const m = parseMeter(meterSel.value);
+      if (!m) return;
+      const p = t.patterns[t._patternIdx ?? state.activePattern];
+      if (!p) return;
+      p.meter = m;
+      t.accents = autoAccents(t.length, m);
+      renderStepGrid(t);
+      // Beat indicator follows track 0's pattern; nudge it to redraw.
+      if (state.tracks[0] === t) paintBeatIndicator(state.tick);
+    });
+  }
   engineSel.addEventListener("change", e => {
     const val = e.target.value;
     if (val === "upload") {
@@ -5370,6 +5430,7 @@ async function promptTrack(t, opts = {}) {
       melodic: isMelodicTrack(t),
       stepCount: t.length,
       accents: [...t.accents].sort((a, b) => a - b).map(i => i + 1),
+      meter: (() => { const m = activeMeter(t); return `${m.num}/${m.den}`; })(),
       density: t.density ?? 0.5,
       scale: state.scale.active ? { root: state.scale.root, mode: state.scale.mode, rootName: NOTE_NAMES[state.scale.root] } : null,
       siblingTracks: siblings,
@@ -5751,6 +5812,7 @@ async function openPatternDialog(t) {
         melodic: isMelodicTrack(t),
         stepCount: t.length,
         accents: [...t.accents].sort((a, b) => a - b).map(i => i + 1),
+      meter: (() => { const m = activeMeter(t); return `${m.num}/${m.den}`; })(),
         density: t.density ?? 0.5,
         scale: state.scale.active ? { root: state.scale.root, mode: state.scale.mode, rootName: NOTE_NAMES[state.scale.root] } : null,
         siblingTracks: siblings,
@@ -6117,6 +6179,7 @@ async function promptFromMaster({ reshape = false, designSounds = false, regenPa
           role: trackRole(t),
           stepCount: t.length,
           accents: [...t.accents].sort((a, b) => a - b).map(i => i + 1),
+      meter: (() => { const m = activeMeter(t); return `${m.num}/${m.den}`; })(),
         })),
         keptTracks: state.tracks.filter(t => !empties.includes(t)).map(t => ({
           name: t.name,

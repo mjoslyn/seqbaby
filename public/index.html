@@ -99,6 +99,20 @@
         <button class="track-save icon-btn ghost" aria-label="save patch" title="save the current custom patch"></button>
         <button class="track-load-patch icon-btn ghost" aria-label="load patch" title="load a saved patch into this track"></button>
         <div class="field"><label>len</label><input class="track-len" type="number" min="1" max="128" value="16" /></div>
+        <div class="field"><label>meter</label>
+          <select class="track-meter" title="time signature for this pattern">
+            <option value="4/4" selected>4/4</option>
+            <option value="3/4">3/4</option>
+            <option value="2/4">2/4</option>
+            <option value="6/8">6/8</option>
+            <option value="9/8">9/8</option>
+            <option value="12/8">12/8</option>
+            <option value="5/4">5/4</option>
+            <option value="7/4">7/4</option>
+            <option value="5/8">5/8</option>
+            <option value="7/8">7/8</option>
+          </select>
+        </div>
         <div class="field"><label>spd</label>
           <select class="track-speed">
             <option value="0.0625">1/16</option>
