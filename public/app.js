@@ -157,6 +157,7 @@ const ANALOG_ENGINES = [
   { key: "dm:juno",       label: "juno 60",        defaultNote: 60, poly: true, melodic: true },
   { key: "dm:guitar",     label: "electric guitar", defaultNote: 52, poly: true, melodic: true },
   { key: "dm:bass",       label: "electric bass",   defaultNote: 40, poly: true, melodic: true },
+  { key: "dm:rhodes",     label: "rhodes piano",    defaultNote: 60, poly: true, melodic: true },
 ].map(e => ({ ...e, group: "Emulators", type: "drum-synth", poly: e.poly ?? false, melodic: e.melodic ?? false }));
 
 const SAMPLE_BASE = "https://tonejs.github.io/audio/drum-samples";
@@ -1688,6 +1689,7 @@ function buildDrumSynthNode(kind, output) {
     case "juno":       return makePolyPool(6, () => buildJunoVoice(output));
     case "guitar":     return makePolyPool(6, () => buildGuitarVoice(output));
     case "bass":       return makePolyPool(4, () => buildBassVoice(output));
+    case "rhodes":     return makePolyPool(6, () => buildRhodesVoice(output));
   }
   throw new Error("unknown drum-synth kind: " + kind);
 }
@@ -2101,6 +2103,59 @@ function buildBassVoice(output) {
       lastFreq = Tone.Frequency(note, "midi").toFrequency();
     },
     release: () => { try { pluck.triggerRelease?.(); } catch {} },
+  };
+}
+
+// ---- rhodes piano builder ----------------------------------------------
+// Rhodes electric piano — FM synthesis (modulator into sine carrier) is the
+// classic DX7 "full tines" recipe. Harmonicity 3 + high modulation index +
+// sharp modulation-envelope decay gives the bell-like attack; amp env long
+// release carries the warm tail. Chorus adds the signature Rhodes warble.
+function buildRhodesVoice(output) {
+  const synth = new Tone.FMSynth({
+    harmonicity: 3,
+    modulationIndex: 14,
+    oscillator: { type: "sine" },
+    envelope: { attack: 0.002, decay: 1.2, sustain: 0, release: 1.6 },
+    modulation: { type: "sine" },
+    modulationEnvelope: { attack: 0.002, decay: 0.4, sustain: 0, release: 0.6 },
+  });
+  const chorus = new Tone.Chorus({ frequency: 1.2, delayTime: 2.8, depth: 0.4, wet: 0.3 }).start();
+  const trim = new Tone.Gain(0.8);
+  synth.connect(chorus);
+  chorus.connect(trim);
+  trim.connect(output);
+
+  let lastFreq = 261.63;
+  let glideSec = 0.002;
+  const setRhodesParam = (key, val) => {
+    const v = Math.max(0, Math.min(1, Number(val) || 0));
+    if (key === "harm")      synth.harmonicity.value = 0.5 + v * 5;        // tine color (bell ↔ deep)
+    else if (key === "timb") synth.modulationIndex.value = 2 + v * 28;     // brightness / bite
+    else if (key === "morph") chorus.wet.value = v;                        // chorus wet
+    else if (key === "decay") {                                            // amp env decay + release
+      synth.envelope.decay  = 0.1 + v * 3.5;
+      synth.envelope.release = 0.3 + v * 4;
+      synth.modulationEnvelope.decay = 0.1 + v * 1.2;
+    }
+  };
+  return {
+    nodes: [synth, chorus, trim],
+    setGlide: (g) => { glideSec = Math.max(0.002, Number(g) || 0); },
+    setParam: setRhodesParam,
+    trigger: (note, time, dur, vel) => {
+      try {
+        const v = Math.max(0.15, Math.min(1, vel || 0.8));
+        // Softer keys = less modulation bite, harder keys = bright tine spank.
+        // Modulate the mod index briefly during attack for velocity-sensitivity.
+        const bright = 6 + v * 20;
+        synth.modulationIndex.cancelScheduledValues(time);
+        synth.modulationIndex.setValueAtTime(bright, time);
+        synth.triggerAttackRelease(Tone.Frequency(note, "midi"), Math.max(0.08, dur), time, v);
+      } catch {}
+      lastFreq = Tone.Frequency(note, "midi").toFrequency();
+    },
+    release: () => { try { synth.triggerRelease?.(); } catch {} },
   };
 }
 
@@ -2777,7 +2832,8 @@ function updatePlaitsControlsVisibility(t) {
   const isJuno      = t.engineKey === "dm:juno";
   const isGuitar    = t.engineKey === "dm:guitar";
   const isBass      = t.engineKey === "dm:bass";
-  const showTimbre = isPlaits || isMiniBrute || isMoog || isJuno || isGuitar || isBass;
+  const isRhodes    = t.engineKey === "dm:rhodes";
+  const showTimbre = isPlaits || isMiniBrute || isMoog || isJuno || isGuitar || isBass || isRhodes;
   const group = t.el.querySelector(".timbre-group");
   if (group) {
     group.hidden = !showTimbre;
@@ -2806,6 +2862,8 @@ function updatePlaitsControlsVisibility(t) {
       ? { harm: "drive",    timb: "bright", morph: "chorus",    decay: "sustain" }
       : isBass
       ? { harm: "drive",    timb: "tone",   morph: "resonance", decay: "sustain" }
+      : isRhodes
+      ? { harm: "tine",     timb: "bite",   morph: "chorus",    decay: "decay" }
       : { harm: "harm",     timb: "timb",    morph: "morph",    decay: "decay" };
     for (const key of Object.keys(labels)) {
       const field = group.querySelector(`.p-${key}`)?.closest(".field");
@@ -2821,7 +2879,7 @@ function updatePlaitsControlsVisibility(t) {
     // Randomize button only makes sense for Plaits' generic harm/timb/morph/decay —
     // hide it for the analog engines where those sliders do engine-specific things.
     const randBtn = group.querySelector(".track-rand");
-    if (randBtn) randBtn.hidden = isMiniBrute || isMoog || isJuno || isGuitar || isBass;
+    if (randBtn) randBtn.hidden = isMiniBrute || isMoog || isJuno || isGuitar || isBass || isRhodes;
   }
   // Per-oscillator volume sliders: only shown for the analog mono engines.
   const oscGroup = t.el.querySelector(".osc-mix-group");
