@@ -406,6 +406,8 @@ const ICON_LOAD     = `<svg class="btn-icon" viewBox="0 0 16 16" width="14" heig
 const ICON_SPARKLE  = `<svg class="btn-icon" viewBox="0 0 16 16" width="13" height="13" fill="currentColor" aria-hidden="true"><path d="M10 1 11.2 4.8 15 6 11.2 7.2 10 11 8.8 7.2 5 6 8.8 4.8z"/><path d="M4 9 4.7 10.8 6.5 11.5 4.7 12.2 4 14 3.3 12.2 1.5 11.5 3.3 10.8z"/></svg>`;
 // Classic metronome — trapezoidal body + pendulum swung slightly right.
 const ICON_METRONOME = `<svg class="btn-icon" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 14h6l-1-11H6z"/><line x1="10.6" y1="3.2" x2="5.4" y2="13.5"/><circle cx="7" cy="10" r="0.9" fill="currentColor" stroke="none"/></svg>`;
+// Download — arrow into a tray.
+const ICON_DOWNLOAD = `<svg class="btn-icon" viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2v8"/><polyline points="5 7 8 10 11 7"/><path d="M2.5 13h11"/></svg>`;
 
 // ---- state --------------------------------------------------------------
 
@@ -674,6 +676,14 @@ function aliasPattern(t, idx) {
   t.sampleFadeIns  = p.sampleFadeIns  ?? (p.sampleFadeIns  = new Array(p.steps.length).fill(0));
   t.sampleFadeOuts = p.sampleFadeOuts ?? (p.sampleFadeOuts = new Array(p.steps.length).fill(0));
   t.sampleLoopModes = p.sampleLoopModes ?? (p.sampleLoopModes = new Array(p.steps.length).fill("off"));
+  // Patterns can have independent lengths; mirror the active pattern's into t.length
+  // so every transport / UI path that reads t.length stays correct.
+  t.length = p.steps.length;
+  t.accents = autoAccents(t.length);
+  if (t.el) {
+    const lenEl = t.el.querySelector(".track-len");
+    if (lenEl) lenEl.value = t.length;
+  }
   t._patternIdx = idx;
 }
 
@@ -3312,25 +3322,47 @@ function setFilter(t, key, val) {
   if (key === "reson") t.filterNode.Q.value = resonToQ(val);
 }
 
-function resizeTrack(t, len) {
+// Resize just one pattern's step arrays. Each pattern can have an independent
+// length. `t.length` mirrors the currently-aliased pattern's length so the rest
+// of the codebase stays aware of "current pattern's steps" via t.length.
+function resizePattern(t, patIdx, len) {
   len = Math.max(1, Math.min(128, len | 0));
-  const pad = (arr, fill) => new Array(len).fill(fill).map((_, i) => arr[i] ?? fill);
-  t.length = len;
-  for (const p of t.patterns) {
-    p.steps      = pad(p.steps, 0);
-    p.lengths    = pad(p.lengths, 0);
-    p.notes      = pad(p.notes, null);
-    p.velocities = pad(p.velocities, 0.5);
-    p.chords     = pad(p.chords, "");
-    for (let i = 0; i < len; i++) {
-      if (p.steps[i]) p.lengths[i] = Math.max(1, Math.min(p.lengths[i] || 1, len - i));
-    }
+  const p = t.patterns[patIdx];
+  if (!p) return;
+  const pad = (arr, fill) => new Array(len).fill(fill).map((_, i) => arr?.[i] ?? fill);
+  p.steps       = pad(p.steps, 0);
+  p.lengths     = pad(p.lengths, 0);
+  p.notes       = pad(p.notes, null);
+  p.velocities  = pad(p.velocities, 0.5);
+  p.chords      = pad(p.chords, "");
+  p.offsets     = pad(p.offsets, 0);
+  p.arps        = pad(p.arps, false);
+  p.arpRates    = pad(p.arpRates, 0.25);
+  p.arpRanges   = pad(p.arpRanges, 1);
+  p.arpDirs     = pad(p.arpDirs, "up");
+  p.complexities= pad(p.complexities, 0);
+  p.ratchets    = pad(p.ratchets, 1);
+  p.sampleStarts    = pad(p.sampleStarts, 0);
+  p.sampleEnds      = pad(p.sampleEnds, 1);
+  p.sampleFadeIns   = pad(p.sampleFadeIns, 0);
+  p.sampleFadeOuts  = pad(p.sampleFadeOuts, 0);
+  p.sampleLoopModes = pad(p.sampleLoopModes, "off");
+  for (let i = 0; i < len; i++) {
+    if (p.steps[i]) p.lengths[i] = Math.max(1, Math.min(p.lengths[i] || 1, len - i));
   }
-  aliasPattern(t, state.activePattern);
-  t.accents = autoAccents(len);
-  if (t.el) t.el.querySelector(".track-len").value = len;
-  renderStepGrid(t);
+  if ((t._patternIdx ?? state.activePattern) === patIdx) {
+    aliasPattern(t, patIdx);
+    t.length = len;
+    t.accents = autoAccents(len);
+    if (t.el) t.el.querySelector(".track-len").value = len;
+    renderStepGrid(t);
+  }
   renderPatternGrid();
+}
+
+// resizeTrack now resizes only the active pattern (per-pattern lengths).
+function resizeTrack(t, len) {
+  resizePattern(t, t._patternIdx ?? state.activePattern, len);
 }
 
 function resizeAllTracks() {
@@ -6278,6 +6310,7 @@ function init() {
   };
   document.getElementById("bounce-audio")?.addEventListener("click", () => runBounce("bounce-audio", "pattern"));
   document.getElementById("bounce-track")?.addEventListener("click", () => runBounce("bounce-track", "track"));
+  for (const btn of document.querySelectorAll(".dl-btn .dl-icon")) btn.innerHTML = ICON_DOWNLOAD;
   document.getElementById("bpm").addEventListener("input", e => {
     if (state.ready) Tone.Transport.bpm.value = Number(e.target.value);
     retuneSyncedLFOs();

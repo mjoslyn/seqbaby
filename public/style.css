@@ -238,6 +238,10 @@ button.danger { color: var(--danger); }
 .ai-btn { display: inline-flex; align-items: center; gap: 5px; }
 .ai-btn .ai-icon { display: inline-flex; color: inherit; }
 .ai-btn:disabled .ai-icon { color: var(--fg-dim); }
+
+.dl-btn { display: inline-flex; align-items: center; gap: 5px; }
+.dl-btn .dl-icon { display: inline-flex; color: inherit; }
+.dl-btn:disabled .dl-icon { color: var(--fg-dim); }
 .set-stack, .mode-stack { display: flex; flex-direction: column; gap: 4px; }
 .mode-row { display: flex; gap: 4px; }
 
