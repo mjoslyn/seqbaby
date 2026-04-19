@@ -139,14 +139,29 @@ button.danger { color: var(--danger); }
   top: 0;
   bottom: 0;
   width: 0%;
-  /* solid green until the bar reaches the clip zone at the very end */
-  background: linear-gradient(to right,
-    #4ade80 0%,
-    #4ade80 95%,
-    #ef4444 95%,
-    #ef4444 100%);
+  background: #4ade80;
   transition: width 40ms linear;
 }
+.meter-bar.clip { background: #ef4444; }
+
+.beat-indicator { flex-shrink: 0; display: block; }
+.beat-indicator .beat-dot { fill: var(--bg-3); stroke: var(--border); stroke-width: 0.6; transition: fill 40ms linear; }
+.beat-indicator .beat-dot.beat-strong { stroke: color-mix(in oklab, var(--accent) 55%, var(--border)); }
+.beat-indicator .beat-dot.now { fill: var(--accent); stroke: var(--accent); }
+.beat-indicator .beat-dot.beat-strong.now { fill: var(--accent-2); stroke: var(--accent-2); }
+.beat-indicator .beat-label {
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+  font-weight: 600;
+  fill: var(--fg);
+  letter-spacing: 0.02em;
+}
+
+#metronome[aria-pressed="true"] { background: var(--accent); color: #0b0d10; border-color: var(--accent); }
+#metronome[aria-pressed="true"] .btn-icon { color: #0b0d10; }
+
+.track-oct { display: inline-flex; gap: 2px; }
+.track-oct button { padding: 3px 8px; font-size: 11px; min-width: 44px; }
 .master-meter { width: 80px; height: 12px; }
 .track-meter  { width: 100%; height: 100%; }
 
@@ -526,7 +541,7 @@ main {
 
 .lfo-row {
   display: grid;
-  grid-template-columns: 52px 52px 96px 62px 1fr 1fr;
+  grid-template-columns: 52px 52px 96px 62px minmax(0, 1fr) minmax(0, 1fr) 28px;
   gap: 10px;
   align-items: center;
   padding: 2px 0;
@@ -927,6 +942,22 @@ main {
 .track-mod-panel .mod-ctl-row { display: flex; gap: 16px; padding-bottom: 4px; margin-bottom: 4px; border-bottom: 1px solid var(--border); }
 .track-mod-panel .mod-ctl { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: var(--fg-dim); }
 .track-mod-panel .mod-ctl input[type="range"] { width: 110px; }
+.track-mod-panel .mod-rows { display: grid; gap: 4px; }
+.track-mod-panel .mod-add-row { display: flex; gap: 6px; align-items: center; margin-top: 4px; padding-top: 6px; border-top: 1px solid var(--border); }
+.track-mod-panel .mod-add-btn { font-size: 11px; padding: 4px 10px; }
+.track-mod-panel .mod-add-select { font-size: 11px; padding: 3px 6px; }
+.track-mod-panel .lfo-row .lfo-remove {
+  padding: 0;
+  font-size: 13px;
+  line-height: 1;
+  color: var(--fg-dim);
+  width: 24px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.track-mod-panel .lfo-row .lfo-remove:hover { color: var(--danger); }
 .modal-ok {
   background: var(--accent);
   color: #0b0d10;

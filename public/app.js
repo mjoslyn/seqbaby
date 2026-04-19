@@ -3,7 +3,12 @@
 const { wosc, oscillatorTypes } = window.woscillators;
 
 const STEPS_PER_BAR = 16;
-const LFO_KEYS = ["vol", "harm", "timb", "morph", "decay", "cutoff", "reson", "fuzz", "delay", "verb"];
+const LFO_KEYS = [
+  "vol", "harm", "timb", "morph", "decay",
+  "cutoff", "reson", "fuzz", "delay", "verb",
+  // Emulator-specific continuous params (MiniBrute / Moog / Juno oscs + fx)
+  "osc1", "osc2", "osc3", "osc4", "ultra", "fm", "noise",
+];
 // How much each target swings per unit of depth:
 //  - 0..1 unit params: amp = depth/2 (swings ±0.5)
 //  - cutoff: depth*3000 Hz
@@ -151,6 +156,7 @@ const ANALOG_ENGINES = [
   { key: "dm:moog",       label: "moog",           defaultNote: 60, poly: true, melodic: true },
   { key: "dm:juno",       label: "juno 60",        defaultNote: 60, poly: true, melodic: true },
   { key: "dm:guitar",     label: "electric guitar", defaultNote: 52, poly: true, melodic: true },
+  { key: "dm:bass",       label: "electric bass",   defaultNote: 40, poly: true, melodic: true },
 ].map(e => ({ ...e, group: "Emulators", type: "drum-synth", poly: e.poly ?? false, melodic: e.melodic ?? false }));
 
 const SAMPLE_BASE = "https://tonejs.github.io/audio/drum-samples";
@@ -398,6 +404,8 @@ const ICON_SAVE     = `<svg class="btn-icon" viewBox="0 0 16 16" width="14" heig
 const ICON_LOAD     = `<svg class="btn-icon" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 4a1 1 0 0 1 1-1h3l2 2h5a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V4z"/></svg>`;
 // Four-point "sparkle" for AI-prompted actions (sound/pattern generate)
 const ICON_SPARKLE  = `<svg class="btn-icon" viewBox="0 0 16 16" width="13" height="13" fill="currentColor" aria-hidden="true"><path d="M10 1 11.2 4.8 15 6 11.2 7.2 10 11 8.8 7.2 5 6 8.8 4.8z"/><path d="M4 9 4.7 10.8 6.5 11.5 4.7 12.2 4 14 3.3 12.2 1.5 11.5 3.3 10.8z"/></svg>`;
+// Classic metronome — trapezoidal body + pendulum swung slightly right.
+const ICON_METRONOME = `<svg class="btn-icon" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 14h6l-1-11H6z"/><line x1="10.6" y1="3.2" x2="5.4" y2="13.5"/><circle cx="7" cy="10" r="0.9" fill="currentColor" stroke="none"/></svg>`;
 
 // ---- state --------------------------------------------------------------
 
@@ -432,29 +440,139 @@ function isAbortError(err) {
 }
 function currentSignal() { return genController?.signal; }
 
-// While a prompted-sound or prompted-pattern preview is open, duck the main
-// output to 20% so the audition doesn't blast. Restore on exit.
+// While a prompted-sound or prompted-pattern preview dialog is open, duck
+// every track EXCEPT the focus track to 20% of its current volume. Focus
+// track stays at its configured level so it sits on top of the mix.
+// Restore on exit. Pass `null` for focusTrack to fall back to a master duck.
 let _previewDuckRestore = null;
-function enterPreviewDuck() {
+function enterPreviewDuck(focusTrack = null) {
   if (_previewDuckRestore) return;
-  const mg = state?.masterGain;
-  if (!mg) return;
-  const prev = mg.gain.value;
-  try {
-    mg.gain.cancelScheduledValues(state.audioCtx.currentTime);
-    mg.gain.linearRampToValueAtTime(prev * 0.2, state.audioCtx.currentTime + 0.05);
-  } catch {}
-  _previewDuckRestore = () => {
+  const ctx = state?.audioCtx;
+  if (!ctx) return;
+  const now = ctx.currentTime;
+  const ramp = 0.05;
+  const restoreFns = [];
+  let ducked = false;
+  for (const tr of state.tracks) {
+    if (tr === focusTrack) continue;
+    const param = tr.voice?.getAudioParam?.("vol");
+    if (!param) continue;
+    const prev = param.value;
     try {
-      mg.gain.cancelScheduledValues(state.audioCtx.currentTime);
-      mg.gain.linearRampToValueAtTime(prev, state.audioCtx.currentTime + 0.05);
+      param.cancelScheduledValues(now);
+      param.linearRampToValueAtTime(prev * 0.2, now + ramp);
     } catch {}
-  };
+    restoreFns.push(() => {
+      try {
+        param.cancelScheduledValues(ctx.currentTime);
+        param.linearRampToValueAtTime(prev, ctx.currentTime + ramp);
+      } catch {}
+    });
+    ducked = true;
+  }
+  // Fallback: if there's nothing to duck (no focus track or no active voices),
+  // quiet the master so sound-design test previews don't blast in silence.
+  if (!ducked && state.masterGain) {
+    const mg = state.masterGain;
+    const prev = mg.gain.value;
+    try {
+      mg.gain.cancelScheduledValues(now);
+      mg.gain.linearRampToValueAtTime(prev * 0.2, now + ramp);
+    } catch {}
+    restoreFns.push(() => {
+      try {
+        mg.gain.cancelScheduledValues(ctx.currentTime);
+        mg.gain.linearRampToValueAtTime(prev, ctx.currentTime + ramp);
+      } catch {}
+    });
+  }
+  _previewDuckRestore = () => { for (const fn of restoreFns) fn(); };
 }
 function exitPreviewDuck() {
   if (!_previewDuckRestore) return;
   _previewDuckRestore();
   _previewDuckRestore = null;
+}
+
+// Simple sine-blip metronome — accent the downbeat (step 0 of every bar).
+let _metroOsc = null;
+let _metroGain = null;
+function fireMetronome(time, accent) {
+  if (!state.audioCtx) return;
+  const ctx = state.audioCtx;
+  if (!_metroGain) {
+    _metroGain = ctx.createGain();
+    _metroGain.gain.value = 0;
+    _metroGain.connect(ctx.destination);
+  }
+  const osc = ctx.createOscillator();
+  osc.type = "sine";
+  osc.frequency.setValueAtTime(accent ? 1760 : 1320, time);
+  const g = ctx.createGain();
+  const peak = accent ? 0.28 : 0.14;
+  g.gain.setValueAtTime(0, time);
+  g.gain.linearRampToValueAtTime(peak, time + 0.002);
+  g.gain.exponentialRampToValueAtTime(0.0001, time + 0.06);
+  osc.connect(g).connect(_metroGain);
+  _metroGain.gain.setValueAtTime(1, time);
+  osc.start(time);
+  osc.stop(time + 0.08);
+}
+
+// Circular beat indicator — N dots around a ring (N = reference track's length
+// so non-4/4 / polymeter still reads correctly), every 4th is a strong-beat
+// dot, with a "beat.step" text readout in the center (always visible).
+function currentIndicatorSteps() {
+  const n = state.tracks[0]?.length;
+  return Math.max(2, Math.min(64, Number.isFinite(n) ? n : 16));
+}
+function buildBeatIndicator() {
+  const svg = document.getElementById("beat-indicator");
+  if (!svg) return;
+  const steps = currentIndicatorSteps();
+  if (svg.dataset.steps === String(steps)) return;
+  while (svg.firstChild) svg.removeChild(svg.firstChild);
+  const ns = "http://www.w3.org/2000/svg";
+  const r = 16;
+  for (let i = 0; i < steps; i++) {
+    const ang = (i / steps) * Math.PI * 2 - Math.PI / 2;
+    const cx = Math.cos(ang) * r;
+    const cy = Math.sin(ang) * r;
+    const dot = document.createElementNS(ns, "circle");
+    dot.setAttribute("cx", cx.toFixed(2));
+    dot.setAttribute("cy", cy.toFixed(2));
+    dot.setAttribute("r", i % 4 === 0 ? "2.4" : "1.5");
+    dot.classList.add("beat-dot");
+    if (i % 4 === 0) dot.classList.add("beat-strong");
+    dot.dataset.idx = String(i);
+    svg.appendChild(dot);
+  }
+  const label = document.createElementNS(ns, "text");
+  label.setAttribute("x", "0");
+  label.setAttribute("y", "0");
+  label.setAttribute("text-anchor", "middle");
+  label.setAttribute("dominant-baseline", "central");
+  label.classList.add("beat-label");
+  label.textContent = "1.1";
+  svg.appendChild(label);
+  svg.dataset.steps = String(steps);
+}
+
+function paintBeatIndicator(tick) {
+  const svg = document.getElementById("beat-indicator");
+  if (!svg) return;
+  // Rebuild if the reference track's length has changed (e.g., 16 → 12 for 3/4).
+  if (svg.dataset.steps !== String(currentIndicatorSteps())) buildBeatIndicator();
+  const steps = Number(svg.dataset.steps || 16);
+  const raw = tick == null ? 0 : tick - 1;
+  const idx = ((raw % steps) + steps) % steps;
+  const beat = Math.floor(idx / 4) + 1;      // 1..
+  const sub  = (idx % 4) + 1;                // 1..4
+  for (const dot of svg.querySelectorAll(".beat-dot")) {
+    dot.classList.toggle("now", Number(dot.dataset.idx) === idx);
+  }
+  const lbl = svg.querySelector(".beat-label");
+  if (lbl) lbl.textContent = `${beat}.${sub}`;
 }
 
 // ---- undo for generate actions -----------------------------------------
@@ -490,10 +608,6 @@ function refreshUndoUI() {
     m.hidden = !has;
     if (has) m.title = `undo: ${state.undoSnapshot.label}`;
   }
-  for (const t of state.tracks) {
-    const b = t.el?.querySelector(".track-undo");
-    if (b) b.hidden = !has;
-  }
 }
 
 const state = {
@@ -503,6 +617,7 @@ const state = {
   repeatId: null,
   nextId: 1,
   undoSnapshot: null,
+  metronome: false,
   audioCtx: null,
   ready: false,
   masterGain: null,
@@ -1404,6 +1519,9 @@ function makePolyPool(size, buildOne) {
     release: (time) => voices.forEach(v => v.release?.(time)),
     setGlide: (g) => voices.forEach(v => v.setGlide?.(g)),
     setParam: (k, val) => voices.forEach(v => v.setParam?.(k, val)),
+    // LFO modulation targets only the first pool voice — identical limitation
+    // as PlaitsVoice's voice pool (documented in CLAUDE.md).
+    getAudioParam: (k) => voices[0].getAudioParam?.(k) ?? null,
   };
 }
 
@@ -1559,6 +1677,7 @@ function buildDrumSynthNode(kind, output) {
     case "moog":       return makePolyPool(4, () => buildMoogVoice(output));
     case "juno":       return makePolyPool(6, () => buildJunoVoice(output));
     case "guitar":     return makePolyPool(6, () => buildGuitarVoice(output));
+    case "bass":       return makePolyPool(4, () => buildBassVoice(output));
   }
   throw new Error("unknown drum-synth kind: " + kind);
 }
@@ -1646,6 +1765,18 @@ function buildMiniBruteVoice(output) {
     nodes: [saw, sawD, pulse, tri, sub, subMul, freqSig, pwmLfo, fmOsc, fmMul, fmDepth, metal, ultra, mixSaw, mixPulse, mixTri, mixSub, brute, amp, trim],
     setGlide: (g) => { glideSec = Math.max(0.002, Number(g) || 0); },
     setParam: setMBParam,
+    getAudioParam: (key) => {
+      switch (key) {
+        case "osc1": return mixSaw.gain;
+        case "osc2": return mixPulse.gain;
+        case "osc3": return mixTri.gain;
+        case "osc4": return mixSub.gain;
+        case "ultra": return ultra.gain;
+        case "fm":    return fmDepth.gain;
+        case "harm":  return pwmLfo.frequency;
+      }
+      return null;
+    },
     trigger: (note, time, dur, vel) => {
       const f = Tone.Frequency(note, "midi").toFrequency();
       freqSig.cancelScheduledValues(time);
@@ -1742,6 +1873,16 @@ function buildMoogVoice(output) {
     nodes: [osc1, osc2, osc3, mul1, mul2, mul3, freqSig, mix1, mix2, mix3, mixNoise, warm, shelf, amp, trim],
     setGlide: (g) => { glideSec = Math.max(0.002, Number(g) || 0); },
     setParam: setMoogParam,
+    getAudioParam: (key) => {
+      switch (key) {
+        case "osc1":  return mix1.gain;
+        case "osc2":  return mix2.gain;
+        case "osc3":  return mix3.gain;
+        case "noise": return mixNoise.gain;
+        case "harm":  return osc2.detune;
+      }
+      return null;
+    },
     trigger: (note, time, dur, vel) => {
       const f = Tone.Frequency(note, "midi").toFrequency();
       freqSig.cancelScheduledValues(time);
@@ -1827,6 +1968,16 @@ function buildJunoVoice(output) {
     nodes: [dco, sub, subMul, freqSig, pwmLfo, mixDco, mixSub, mixNoise, hpf, amp, chorus, trim],
     setGlide: (g) => { glideSec = Math.max(0.002, Number(g) || 0); },
     setParam: setJunoParam,
+    getAudioParam: (key) => {
+      switch (key) {
+        case "osc1":  return mixDco.gain;
+        case "osc2":  return mixSub.gain;
+        case "osc3":  return mixNoise.gain;   // juno's osc3 slot is the noise mix
+        case "noise": return mixNoise.gain;
+        case "harm":  return pwmLfo.frequency;
+      }
+      return null;
+    },
     trigger: (note, time, dur, vel) => {
       const f = Tone.Frequency(note, "midi").toFrequency();
       freqSig.cancelScheduledValues(time);
@@ -1856,7 +2007,7 @@ function buildGuitarVoice(output) {
   const eq = new Tone.EQ3({ low: -2, mid: 2, high: -1 });
   // A little body + space via short reverb and a dash of chorus for chorus-pedal vibe.
   const chorus = new Tone.Chorus({ frequency: 0.7, delayTime: 2.5, depth: 0.25, wet: 0.25 }).start();
-  const trim = new Tone.Gain(0.45);
+  const trim = new Tone.Gain(0.9);
   pluck.connect(drive);
   drive.connect(eq);
   eq.connect(chorus);
@@ -1884,7 +2035,57 @@ function buildGuitarVoice(output) {
         // Harder velocity → brighter pick. Tone's PluckSynth has no velocity arg
         // so we modulate output + dampening per hit.
         const v = Math.max(0.15, Math.min(1, vel || 0.8));
-        trim.gain.setValueAtTime(0.45 * v * 1.4, time);
+        trim.gain.setValueAtTime(0.9 * v * 1.4, time);
+        pluck.triggerAttackRelease(Tone.Frequency(note, "midi"), Math.max(0.05, dur), time);
+      } catch {}
+      lastFreq = Tone.Frequency(note, "midi").toFrequency();
+    },
+    release: () => { try { pluck.triggerRelease?.(); } catch {} },
+  };
+}
+
+// ---- electric bass builder ---------------------------------------------
+// Tuned for low-register Karplus-Strong: darker pluck, longer resonance, mild
+// tube-ish drive, gentle high-shelf roll-off and a low-end boost. No chorus —
+// electric bass usually lives bone-dry.
+function buildBassVoice(output) {
+  const pluck = new Tone.PluckSynth({
+    attackNoise: 0.6,        // softer attack than guitar — fingers, not a pick
+    dampening: 2200,         // darker — bass sits below the fundamental guitar range
+    resonance: 0.97,         // longer string ring
+    release: 1.4,
+  });
+  const drive = new Tone.Distortion({ distortion: 0.12, oversample: "2x", wet: 0.4 });
+  const eq = new Tone.EQ3({ low: 3, mid: 1, high: -4 });   // bass lift + upper cut
+  const compGain = new Tone.Gain(1.5);                       // post-EQ makeup gain
+  const trim = new Tone.Gain(1.8);
+  pluck.connect(drive);
+  drive.connect(eq);
+  eq.connect(compGain);
+  compGain.connect(trim);
+  trim.connect(output);
+
+  let lastFreq = 80;
+  let glideSec = 0.005;
+  const setBassParam = (key, val) => {
+    const v = Math.max(0, Math.min(1, Number(val) || 0));
+    if (key === "harm") {                           // drive amount (finger → pick → overdriven)
+      drive.distortion = 0.03 + v * 0.55;
+      drive.wet.value = 0.2 + v * 0.6;
+    }
+    else if (key === "timb")  pluck.dampening = 400 + v * 4000;    // brightness / pick position
+    else if (key === "morph") pluck.resonance = 0.85 + v * 0.14;   // string resonance
+    else if (key === "decay") pluck.release = 0.25 + v * 3.5;      // sustain
+  };
+  return {
+    nodes: [pluck, drive, eq, compGain, trim],
+    setGlide: (g) => { glideSec = Math.max(0.002, Number(g) || 0); },
+    setParam: setBassParam,
+    trigger: (note, time, dur, vel) => {
+      try {
+        const v = Math.max(0.15, Math.min(1, vel || 0.8));
+        // Harder attack → fuller output; softer → more finger-style dynamic.
+        trim.gain.setValueAtTime(1.8 * (0.7 + v * 0.5), time);
         pluck.triggerAttackRelease(Tone.Frequency(note, "midi"), Math.max(0.05, dur), time);
       } catch {}
       lastFreq = Tone.Frequency(note, "midi").toFrequency();
@@ -1955,7 +2156,7 @@ class DrumSynthVoice {
   }
   getAudioParam(key) {
     if (key === "vol") return this.output.gain;
-    return null;
+    return this.built?.getAudioParam?.(key) ?? null;
   }
   hit(midiNote, time, duration, velocity = 1) {
     try { this.built.trigger(midiNote, time, duration, Math.max(0, Math.min(1, velocity))); }
@@ -2462,7 +2663,7 @@ function rateFromSync(divBeats) { return currentBpm() / 60 / divBeats; }
 function effectiveRate(cfg) { return cfg.sync ? rateFromSync(cfg.div) : cfg.rate; }
 
 function getModTarget(t, key) {
-  if (["vol","harm","timb","morph","decay"].includes(key)) {
+  if (["vol","harm","timb","morph","decay","osc1","osc2","osc3","osc4","ultra","fm","noise"].includes(key)) {
     return t.voice?.getAudioParam(key) ?? null;
   }
   if (key === "cutoff") return t.filterNode?.frequency ?? null;
@@ -2471,6 +2672,26 @@ function getModTarget(t, key) {
   if (key === "delay")  return t.fxRack?.delay?.wet ?? null;
   if (key === "verb")   return t.fxRack?.reverb?.wet ?? null;
   return null;
+}
+
+// Which modulation keys make sense for the current engine? Voice-independent
+// so the picker hides irrelevant entries even before audio is initialized.
+function canModulate(t, key) {
+  // Always-applicable: track-level fx + master vol.
+  if (["vol", "cutoff", "reson", "fuzz", "delay", "verb"].includes(key)) return true;
+  const eng = engineByKey(t.engineKey);
+  if (!eng) return false;
+  // Plaits exposes harm/timb/morph/decay as voice params.
+  if (eng.type === "plaits") return ["harm", "timb", "morph", "decay"].includes(key);
+  // Emulator builders expose specific AudioParams via getAudioParam — only list
+  // the keys that are actually wired (see each builder above).
+  switch (t.engineKey) {
+    case "dm:mini-brute": return ["harm", "osc1", "osc2", "osc3", "osc4", "ultra", "fm"].includes(key);
+    case "dm:moog":       return ["harm", "osc1", "osc2", "osc3", "noise"].includes(key);
+    case "dm:juno":       return ["harm", "osc1", "osc2", "osc3", "noise"].includes(key);
+    // Guitar/bass have no per-voice AudioParam targets beyond vol + track fx.
+  }
+  return false;
 }
 
 function syncLFO(t, key) {
@@ -2545,7 +2766,8 @@ function updatePlaitsControlsVisibility(t) {
   const isMoog      = t.engineKey === "dm:moog";
   const isJuno      = t.engineKey === "dm:juno";
   const isGuitar    = t.engineKey === "dm:guitar";
-  const showTimbre = isPlaits || isMiniBrute || isMoog || isJuno || isGuitar;
+  const isBass      = t.engineKey === "dm:bass";
+  const showTimbre = isPlaits || isMiniBrute || isMoog || isJuno || isGuitar || isBass;
   const group = t.el.querySelector(".timbre-group");
   if (group) {
     group.hidden = !showTimbre;
@@ -2565,14 +2787,16 @@ function updatePlaitsControlsVisibility(t) {
   // visible. null = hide the field (control isn't used by this engine).
   if (group) {
     const labels = isMiniBrute
-      ? { harm: "pwm rate", timb: "pw",     morph: null,     decay: null }
+      ? { harm: "pwm rate", timb: "pw",     morph: null,        decay: null }
       : isMoog
-      ? { harm: "detune",   timb: null,     morph: null,     decay: "warm" }
+      ? { harm: "detune",   timb: null,     morph: null,        decay: "warm" }
       : isJuno
-      ? { harm: "pwm rate", timb: "pw",     morph: "chorus", decay: "dec" }
+      ? { harm: "pwm rate", timb: "pw",     morph: "chorus",    decay: "dec" }
       : isGuitar
-      ? { harm: "drive",    timb: "bright", morph: "chorus", decay: "sustain" }
-      : { harm: "harm",     timb: "timb",    morph: "morph", decay: "decay" };
+      ? { harm: "drive",    timb: "bright", morph: "chorus",    decay: "sustain" }
+      : isBass
+      ? { harm: "drive",    timb: "tone",   morph: "resonance", decay: "sustain" }
+      : { harm: "harm",     timb: "timb",    morph: "morph",    decay: "decay" };
     for (const key of Object.keys(labels)) {
       const field = group.querySelector(`.p-${key}`)?.closest(".field");
       if (!field) continue;
@@ -2587,7 +2811,7 @@ function updatePlaitsControlsVisibility(t) {
     // Randomize button only makes sense for Plaits' generic harm/timb/morph/decay —
     // hide it for the analog engines where those sliders do engine-specific things.
     const randBtn = group.querySelector(".track-rand");
-    if (randBtn) randBtn.hidden = isMiniBrute || isMoog || isJuno || isGuitar;
+    if (randBtn) randBtn.hidden = isMiniBrute || isMoog || isJuno || isGuitar || isBass;
   }
   // Per-oscillator volume sliders: only shown for the analog mono engines.
   const oscGroup = t.el.querySelector(".osc-mix-group");
@@ -3165,6 +3389,24 @@ function startNote(t, anchor) {
   applySampleDefaultsToStep(t, anchor);
 }
 
+// Shift every step's note on every pattern by `semis` semitones (±12 for
+// octaves). Clamps to MIDI 24..95. Works for any track, including drum kits.
+// Redraws the active pattern's grid.
+function shiftTrackOctave(t, semis) {
+  let touched = 0;
+  for (const p of t.patterns) {
+    if (!p) continue;
+    for (let i = 0; i < p.notes.length; i++) {
+      const n = p.notes[i];
+      if (n == null) continue;
+      const next = Math.max(24, Math.min(95, n + semis));
+      if (next !== n) { p.notes[i] = next; touched++; }
+    }
+  }
+  renderStepGrid(t);
+  if (touched) setStatus(`"${t.name}" shifted ${semis > 0 ? "+" : "−"}1 octave (${touched} note${touched === 1 ? "" : "s"})`);
+}
+
 // Seed a step's sample-settings (start/end/fades/loop) from the track default.
 function applySampleDefaultsToStep(t, idx) {
   const d = t.sampleDefaults;
@@ -3360,6 +3602,11 @@ function renderTrack(t) {
   lockInstBtn.addEventListener("click", () => { t.lockInstrument = !t.lockInstrument; refreshLockUI(); });
   lockPatBtn.addEventListener("click",  () => { t.lockPattern    = !t.lockPattern;    refreshLockUI(); });
 
+  const octDownBtn = node.querySelector(".track-oct-down");
+  const octUpBtn   = node.querySelector(".track-oct-up");
+  if (octDownBtn) octDownBtn.addEventListener("click", () => shiftTrackOctave(t, -12));
+  if (octUpBtn)   octUpBtn.addEventListener("click",   () => shiftTrackOctave(t, +12));
+
   const drumKitBtn = node.querySelector(".track-drumkit");
   if (drumKitBtn) {
     const refreshDrumKitUI = () => {
@@ -3456,11 +3703,6 @@ function renderTrack(t) {
     const pIcon = patternBtn.querySelector(".ai-icon");
     if (pIcon) pIcon.innerHTML = ICON_SPARKLE;
     patternBtn.addEventListener("click", () => openPatternDialog(t));
-  }
-  const undoBtn = node.querySelector(".track-undo");
-  if (undoBtn) {
-    undoBtn.hidden = !state.undoSnapshot;
-    undoBtn.addEventListener("click", undoLastGenerate);
   }
 
   // midi-specific controls
@@ -3676,29 +3918,30 @@ function wireFxPanel(t, panel) {
 function renderModPanel(t, panel) {
   const tpl = document.getElementById("lfo-row-template");
   panel.replaceChildren();
-  // Track-level glide + swing share the mod panel with per-param LFOs.
+  // Track-level glide + swing + density — shared strip at top of mod panel.
   const ctl = document.createElement("div");
   ctl.className = "mod-ctl-row";
   ctl.innerHTML = `
     <label class="mod-ctl"><span>glide</span><input class="track-glide" type="range" min="0" max="0.5" step="0.005" value="${t.glide ?? 0}" /></label>
     <label class="mod-ctl"><span>swing</span><input class="track-swing" type="range" min="0" max="0.75" step="0.01" value="${t.swing ?? 0}" /></label>
-    <label class="mod-ctl"><span>density</span><input class="track-density" type="range" min="0" max="1" step="0.01" value="${t.density ?? 0.5}" /></label>
   `;
   panel.appendChild(ctl);
-  const glideInput = ctl.querySelector(".track-glide");
-  glideInput.addEventListener("input", e => {
+  ctl.querySelector(".track-glide").addEventListener("input", e => {
     t.glide = Number(e.target.value);
     if (t.voice?.setGlide) t.voice.setGlide(t.glide);
   });
-  const swingInput = ctl.querySelector(".track-swing");
-  swingInput.addEventListener("input", e => { t.swing = Number(e.target.value); });
-  const densityInput = ctl.querySelector(".track-density");
-  densityInput.addEventListener("input", e => { t.density = Number(e.target.value); });
-  for (const key of LFO_KEYS) {
-    const row = tpl.content.firstElementChild.cloneNode(true);
+  ctl.querySelector(".track-swing").addEventListener("input", e => { t.swing = Number(e.target.value); });
+
+  // Container for the per-param LFO rows (added one at a time via the picker below).
+  const rowsContainer = document.createElement("div");
+  rowsContainer.className = "mod-rows";
+  panel.appendChild(rowsContainer);
+
+  const addRow = (key) => {
     const cfg = t.lfoConfig[key];
+    const row = tpl.content.firstElementChild.cloneNode(true);
     row.dataset.key = key;
-    row.classList.toggle("active", cfg.enabled);
+    row.classList.add("active");
     row.querySelector(".lfo-target").textContent = key;
 
     const cb    = row.querySelector(".lfo-on");
@@ -3710,6 +3953,7 @@ function renderModPanel(t, panel) {
     const syncCb = row.querySelector(".lfo-sync");
     const divSel = row.querySelector(".lfo-div");
     const rateField = row.querySelector(".lfo-rate-field");
+    const removeBtn = row.querySelector(".lfo-remove");
 
     cb.checked   = cfg.enabled;
     shape.value  = cfg.type;
@@ -3736,9 +3980,61 @@ function renderModPanel(t, panel) {
     depth.addEventListener("input", () => { cfg.depth = Number(depth.value); depthLbl.textContent = cfg.depth.toFixed(2); syncLFO(t, key); });
     syncCb.addEventListener("change", () => { cfg.sync = syncCb.checked; rateField.dataset.mode = cfg.sync ? "sync" : "hz"; refreshLbl(); syncLFO(t, key); });
     divSel.addEventListener("change", () => { cfg.div = Number(divSel.value); refreshLbl(); syncLFO(t, key); });
+    if (removeBtn) removeBtn.addEventListener("click", () => {
+      cfg.enabled = false;
+      syncLFO(t, key);
+      row.remove();
+      refreshAdderOptions();
+    });
 
-    panel.appendChild(row);
+    rowsContainer.appendChild(row);
+  };
+
+  // Picker row: a "+ add" button that expands into a select of the remaining
+  // modulation targets; picking one enables the LFO and drops a fresh row in.
+  const adder = document.createElement("div");
+  adder.className = "mod-add-row";
+  adder.innerHTML = `
+    <button class="mod-add-btn ghost" type="button">+ add modulation</button>
+    <select class="mod-add-select" hidden></select>
+  `;
+  panel.appendChild(adder);
+  const addBtn = adder.querySelector(".mod-add-btn");
+  const addSel = adder.querySelector(".mod-add-select");
+  const refreshAdderOptions = () => {
+    // Only show mods that actually apply to the current engine.
+    const available = LFO_KEYS.filter(k => !t.lfoConfig[k]?.enabled && canModulate(t, k));
+    if (available.length === 0) {
+      addBtn.disabled = true;
+      addSel.hidden = true;
+      addBtn.textContent = "(all modulations active)";
+    } else {
+      addBtn.disabled = false;
+      addBtn.textContent = "+ add modulation";
+      addSel.innerHTML = available.map(k => `<option value="${k}">${k}</option>`).join("");
+    }
+  };
+  addBtn.addEventListener("click", () => {
+    refreshAdderOptions();
+    if (addBtn.disabled) return;
+    addSel.hidden = false;
+    addSel.focus();
+  });
+  addSel.addEventListener("change", () => {
+    const key = addSel.value;
+    if (!key || !t.lfoConfig[key]) { addSel.hidden = true; return; }
+    t.lfoConfig[key].enabled = true;
+    syncLFO(t, key);
+    addRow(key);
+    addSel.hidden = true;
+    refreshAdderOptions();
+  });
+
+  // Pre-populate rows for any LFO that's already enabled on this track.
+  for (const key of LFO_KEYS) {
+    if (t.lfoConfig[key]?.enabled) addRow(key);
   }
+  refreshAdderOptions();
 }
 
 function updatePatternCell(idx) {
@@ -4030,7 +4326,6 @@ function openStepEditor(t, idx, anchorEl) {
       </div>
     </div>
     <div class="se-actions">
-      <button class="se-clear ghost">clear note</button>
       <button class="se-close">done</button>
     </div>
   `;
@@ -4472,12 +4767,6 @@ function openStepEditor(t, idx, anchorEl) {
     t.complexities[idx] = Math.max(0, Math.min(4, Number(cpxInput.value) || 0));
     refresh();
   });
-  el.querySelector(".se-clear").addEventListener("click", () => {
-    t.notes[idx] = null;
-    t.chords[idx] = "";
-    renderStepGrid(t);
-    closeStepEditor();
-  });
   el.querySelector(".se-close").addEventListener("click", closeStepEditor);
 
   const escHandler = (e) => { if (e.key === "Escape") closeStepEditor(); };
@@ -4894,6 +5183,8 @@ async function togglePlay() {
       }
     }
     Tone.Draw.schedule(paintNowIndicator, time);
+    Tone.Draw.schedule(() => paintBeatIndicator(state.tick), time);
+    if (state.metronome && state.tick % 4 === 0) fireMetronome(time, state.tick % 16 === 0);
     state.tick++;
     // manual pattern queue: when switch-mode is "finish" and the user queued a
     // different pattern, commit at the next bar boundary.
@@ -5161,6 +5452,7 @@ async function promptCustomSound(t) {
     trackName: t.name,
     engine: isEleven ? "eleven" : "tone",
     defaultValue: seed,
+    focusTrack: t,
   });
   if (!result) return;
   t.soundPromptText = result.description;
@@ -5307,6 +5599,7 @@ async function openPatternDialog(t) {
       <div class="sound-dialog-status">type a description, then preview</div>
       <div class="modal-actions">
         <button class="modal-cancel ghost">cancel</button>
+        <button class="sound-vary ghost">vary current</button>
         <button class="sound-preview">preview</button>
         <button class="sound-regen ghost" disabled>regenerate</button>
         <button class="modal-ok" disabled>apply</button>
@@ -5314,13 +5607,20 @@ async function openPatternDialog(t) {
     </div>
   `;
   document.body.appendChild(overlay);
-  enterPreviewDuck();
+  enterPreviewDuck(t);
   const input = overlay.querySelector(".modal-input");
   const statusEl = overlay.querySelector(".sound-dialog-status");
   const previewBtn = overlay.querySelector(".sound-preview");
   const regenBtn = overlay.querySelector(".sound-regen");
+  const varyBtn = overlay.querySelector(".sound-vary");
   const okBtn = overlay.querySelector(".modal-ok");
   const cancelBtn = overlay.querySelector(".modal-cancel");
+  // Vary only makes sense if the current pattern actually has triggered steps.
+  if (varyBtn) {
+    const hasSeed = Array.isArray(startSnap.steps) && startSnap.steps.some(s => s);
+    varyBtn.disabled = !hasSeed;
+    if (!hasSeed) varyBtn.title = "nothing to vary — pattern is empty";
+  }
   setTimeout(() => { input.focus(); try { input.select(); } catch {} }, 0);
 
   let dirty = false;  // true once we've tentatively applied a generated pattern
@@ -5333,12 +5633,14 @@ async function openPatternDialog(t) {
     overlay.remove();
   };
 
-  const runGenerate = async () => {
-    const prompt = input.value.trim();
+  const runGenerate = async ({ useSeed = false } = {}) => {
+    let prompt = input.value.trim();
+    if (!prompt && useSeed) prompt = "subtle variation of the seed pattern — keep the feel, change the phrasing";
     if (!prompt) { input.focus(); return; }
-    statusEl.textContent = "generating…";
+    statusEl.textContent = useSeed ? "varying current pattern…" : "generating…";
     previewBtn.disabled = true;
     regenBtn.disabled = true;
+    varyBtn && (varyBtn.disabled = true);
     okBtn.disabled = true;
     abortCtrl?.abort();
     abortCtrl = new AbortController();
@@ -5353,27 +5655,41 @@ async function openPatternDialog(t) {
           steps: o.steps.slice(),
           notes: o.notes.slice(),
         }));
+      const body = {
+        prompt,
+        role: trackRole(t),
+        melodic: isMelodicTrack(t),
+        stepCount: t.length,
+        accents: [...t.accents].sort((a, b) => a - b).map(i => i + 1),
+        density: t.density ?? 0.5,
+        scale: state.scale.active ? { root: state.scale.root, mode: state.scale.mode, rootName: NOTE_NAMES[state.scale.root] } : null,
+        siblingTracks: siblings,
+      };
+      if (useSeed) {
+        body.seedPattern = {
+          steps: startSnap.steps.slice(),
+          lengths: startSnap.lengths.slice(),
+          notes: startSnap.notes.slice(),
+          velocities: startSnap.velocities.slice(),
+          chords: startSnap.chords.slice(),
+        };
+        body.variationIndex = 1;
+        body.variationCount = 1;
+      }
       const r = await fetch("/api/generate", {
         method: "POST",
         headers: { "content-type": "application/json" },
         signal: abortCtrl.signal,
-        body: JSON.stringify({
-          prompt,
-          role: trackRole(t),
-          melodic: isMelodicTrack(t),
-          stepCount: t.length,
-          accents: [...t.accents].sort((a, b) => a - b).map(i => i + 1),
-          density: t.density ?? 0.5,
-          scale: state.scale.active ? { root: state.scale.root, mode: state.scale.mode, rootName: NOTE_NAMES[state.scale.root] } : null,
-          siblingTracks: siblings,
-        }),
+        body: JSON.stringify(body),
       });
       if (!r.ok) throw new Error(await r.text());
       const data = await r.json();
       applyPattern(t, data);
       renderStepGrid(t);
       dirty = true;
-      statusEl.textContent = "previewing — play the transport to audition";
+      statusEl.textContent = useSeed
+        ? "variation ready — play the transport to audition"
+        : "previewing — play the transport to audition";
       regenBtn.disabled = false;
       okBtn.disabled = false;
     } catch (err) {
@@ -5381,11 +5697,13 @@ async function openPatternDialog(t) {
       else { console.error(err); statusEl.textContent = `error: ${err.message}`; }
     } finally {
       previewBtn.disabled = false;
+      if (varyBtn) varyBtn.disabled = false;
     }
   };
 
-  previewBtn.addEventListener("click", runGenerate);
-  regenBtn.addEventListener("click", runGenerate);
+  previewBtn.addEventListener("click", () => runGenerate());
+  regenBtn.addEventListener("click", () => runGenerate());
+  if (varyBtn) varyBtn.addEventListener("click", () => runGenerate({ useSeed: true }));
   okBtn.addEventListener("click", () => {
     // Commit: push an undo snapshot first so the user can still revert.
     pushUndoSnapshot(`track: ${t.name}`);
@@ -5401,7 +5719,7 @@ async function openPatternDialog(t) {
   document.addEventListener("keydown", onKey);
 }
 
-function showSoundDesignDialog({ trackName, engine, defaultValue = "" }) {
+function showSoundDesignDialog({ trackName, engine, defaultValue = "", focusTrack = null }) {
   return new Promise((resolve) => {
     const overlay = document.createElement("div");
     overlay.className = "modal-overlay";
@@ -5426,7 +5744,7 @@ function showSoundDesignDialog({ trackName, engine, defaultValue = "" }) {
       </div>
     `;
     document.body.appendChild(overlay);
-    enterPreviewDuck();
+    enterPreviewDuck(focusTrack);
     const input = overlay.querySelector(".modal-input");
     const statusEl = overlay.querySelector(".sound-dialog-status");
     const previewBtn = overlay.querySelector(".sound-preview");
@@ -5900,10 +6218,12 @@ function paintMeter(el, level) {
   if (!el) return;
   const bar = el.querySelector(".meter-bar");
   if (!bar) return;
-  // Near-linear response: bar width tracks peak so the red zone at 95% lights up
-  // only when the signal is actually near full-scale. A mild pow keeps quiet signals visible.
-  const pct = Math.min(100, Math.round(Math.pow(Math.max(0, Math.min(1, level)), 0.85) * 100));
+  const clamped = Math.max(0, Math.min(1, level));
+  // Near-linear response with a mild pow so quiet signals stay visible. The bar
+  // is green until the source is clipping (peak >= 0.995), then flashes red.
+  const pct = Math.round(Math.pow(clamped, 0.85) * 100);
   bar.style.width = pct + "%";
+  bar.classList.toggle("clip", level >= 0.995);
 }
 function meterTick() {
   if (state.masterAnalyser) {
@@ -5921,6 +6241,16 @@ function init() {
   requestAnimationFrame(meterTick);
 
   document.getElementById("play").addEventListener("click", togglePlay);
+  buildBeatIndicator();
+  paintBeatIndicator(1);
+  const metroBtn = document.getElementById("metronome");
+  if (metroBtn) {
+    metroBtn.innerHTML = ICON_METRONOME;
+    metroBtn.addEventListener("click", () => {
+      state.metronome = !state.metronome;
+      metroBtn.setAttribute("aria-pressed", String(state.metronome));
+    });
+  }
   const runBounce = async (btnId, mode) => {
     const opts = await showBounceDialog({ mode });
     if (!opts) return;

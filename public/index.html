@@ -38,6 +38,8 @@
     </div>
     <button id="add-track" class="ghost">add track</button>
     <div class="spacer"></div>
+    <button id="metronome" class="ghost icon-btn" aria-pressed="false" aria-label="metronome" title="metronome click on the downbeat"></button>
+    <svg id="beat-indicator" class="beat-indicator" viewBox="-22 -22 44 44" width="40" height="40" aria-hidden="true"></svg>
     <div class="meter master-meter" title="master output level"><div class="meter-bar"></div></div>
     <div id="status" class="status">click play to unlock audio</div>
     <button id="gen-cancel" class="ghost danger" hidden title="cancel the running generation">cancel</button>
@@ -96,7 +98,6 @@
         <button class="track-lock-pat icon-btn ghost" aria-pressed="false" aria-label="lock pattern" title="lock pattern — protect step data from the planner"></button>
         <button class="track-save icon-btn ghost" aria-label="save patch" title="save the current custom patch"></button>
         <button class="track-load-patch icon-btn ghost" aria-label="load patch" title="load a saved patch into this track"></button>
-        <button class="track-undo ghost" hidden title="undo last generate">undo</button>
         <div class="field"><label>len</label><input class="track-len" type="number" min="1" max="128" value="16" /></div>
         <div class="field"><label>spd</label>
           <select class="track-speed">
@@ -180,6 +181,10 @@
         <button class="track-mute ghost">mute</button>
         <button class="track-clear ghost">clear</button>
         <button class="track-remove ghost danger">remove</button>
+        <div class="track-oct">
+          <button class="track-oct-down ghost" type="button" title="shift every step down an octave">oct −</button>
+          <button class="track-oct-up ghost" type="button" title="shift every step up an octave">oct +</button>
+        </div>
         <div class="panel-btn-group">
           <button class="track-filter ghost" aria-pressed="false" title="filter">filter</button>
           <button class="track-env ghost" aria-pressed="false" title="envelope → cutoff">env</button>
@@ -311,6 +316,7 @@
         <input class="lfo-depth" type="range" min="0" max="1" step="0.01" value="0.5" />
         <span class="lfo-depth-label">0.50</span>
       </div>
+      <button class="lfo-remove ghost" type="button" title="remove this modulation">×</button>
     </div>
   </template>
 
