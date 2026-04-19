@@ -68,6 +68,50 @@ function showInputDialog({ title, defaultValue = "", placeholder = "", multiline
   });
 }
 
+// Modal: pick one of the user's saved patches. Returns patch name or null.
+function showSavedPatchPicker() {
+  return new Promise((resolve) => {
+    const all = loadPatches();
+    const names = Object.keys(all).sort();
+    const overlay = document.createElement("div");
+    overlay.className = "modal-overlay";
+    const esc = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+    const rows = names.length
+      ? names.map(n => `<li class="patch-row"><button class="patch-load" data-name="${esc(n)}">${esc(n)}</button><button class="patch-del ghost" data-name="${esc(n)}" title="delete">×</button></li>`).join("")
+      : `<li class="patch-empty">no saved patches yet — design a sound and click save.</li>`;
+    overlay.innerHTML = `
+      <div class="modal" role="dialog" aria-modal="true">
+        <div class="modal-title">load saved patch</div>
+        <ul class="patch-list">${rows}</ul>
+        <div class="modal-actions">
+          <button class="modal-cancel ghost">cancel</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    const close = (v) => { overlay.remove(); resolve(v); };
+    overlay.querySelectorAll(".patch-load").forEach(btn => {
+      btn.addEventListener("click", () => close(btn.dataset.name));
+    });
+    overlay.querySelectorAll(".patch-del").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const name = btn.dataset.name;
+        const map = loadPatches();
+        delete map[name];
+        storePatches(map);
+        rebuildEngineCatalog();
+        for (const t of state.tracks) refreshEngineSelect(t);
+        btn.closest(".patch-row")?.remove();
+      });
+    });
+    overlay.querySelector(".modal-cancel").addEventListener("click", () => close(null));
+    overlay.addEventListener("click", (e) => { if (e.target === overlay) close(null); });
+    document.addEventListener("keydown", function esc2(e) {
+      if (e.key === "Escape") { close(null); document.removeEventListener("keydown", esc2); }
+    });
+  });
+}
+
 // ---- engine catalog ----------------------------------------------------
 
 const PLAITS_DRUM_IDX = new Set([13, 14, 15]);
@@ -100,8 +144,13 @@ const DRUM_SYNTH_ENGINES = [
   { key: "dm:poly-saw",  label: "poly saw",     defaultNote: 60, poly: true,  melodic: true },
   { key: "dm:fm-bell",   label: "fm bell",      defaultNote: 72, poly: true,  melodic: true },
   { key: "dm:pad",       label: "pad",          defaultNote: 60, poly: true,  melodic: true },
-  { key: "dm:mini-brute",label: "mini brute",   defaultNote: 60, poly: false, melodic: true },
 ].map(e => ({ ...e, group: "drum / synth", type: "drum-synth", poly: e.poly ?? false, melodic: e.melodic ?? false }));
+
+const ANALOG_ENGINES = [
+  { key: "dm:mini-brute", label: "mini brute", defaultNote: 60, poly: true, melodic: true },
+  { key: "dm:moog",       label: "moog",       defaultNote: 60, poly: true, melodic: true },
+  { key: "dm:juno",       label: "juno 60",    defaultNote: 60, poly: true, melodic: true },
+].map(e => ({ ...e, group: "Emulators", type: "drum-synth", poly: e.poly ?? false, melodic: e.melodic ?? false }));
 
 const SAMPLE_BASE = "https://tonejs.github.io/audio/drum-samples";
 const SAMPLE_ENGINES = [
@@ -144,7 +193,7 @@ const UPLOAD_ENGINE = {
 };
 
 function buildEngineCatalog() {
-  return [...plaitsEntries(), ...DRUM_SYNTH_ENGINES, CUSTOM_ENGINE, ELEVEN_ENGINE, UPLOAD_ENGINE, ...savedPatchEntries(), ...SAMPLE_ENGINES, MIDI_ENGINE];
+  return [...plaitsEntries(), ...DRUM_SYNTH_ENGINES, ...ANALOG_ENGINES, CUSTOM_ENGINE, ELEVEN_ENGINE, UPLOAD_ENGINE, ...savedPatchEntries(), ...SAMPLE_ENGINES, MIDI_ENGINE];
 }
 
 let ENGINES = [];
@@ -987,6 +1036,22 @@ function makeFuzzCurve(drive) {
   return curve;
 }
 
+// Triangle-wave folder (MiniBrute Metalizer): amount in 0..1. 0 = untouched, 1 = heavy fold.
+function makeMetalizerCurve(amount) {
+  const n = 2048;
+  const curve = new Float32Array(n);
+  const fold = 1 + amount * 6; // fold depth (number of reflections at max)
+  for (let i = 0; i < n; i++) {
+    const x = (i / (n - 1)) * 2 - 1;
+    // Classic wave-folder: x * fold, then triangle-fold back into [-1, 1]
+    let y = x * fold;
+    while (y > 1)  y = 2 - y;
+    while (y < -1) y = -2 - y;
+    curve[i] = y;
+  }
+  return curve;
+}
+
 function defaultFxConfig() {
   return {
     fuzz:   { amount: 0, drive: 0.7, tone: 0.4, level: 0.5 },
@@ -1239,6 +1304,31 @@ class PlaitsVoice {
   }
 }
 
+// Wrap a mono voice-builder in a round-robin pool so chord tones don't stomp
+// each other. Each voice in the pool is an independent copy of the same build;
+// trigger routes successive hits across voices.
+function makePolyPool(size, buildOne) {
+  const voices = [];
+  const nodes = [];
+  for (let i = 0; i < size; i++) {
+    const v = buildOne();
+    voices.push(v);
+    nodes.push(...v.nodes);
+  }
+  let idx = 0;
+  return {
+    nodes,
+    trigger: (note, time, dur, vel) => {
+      const v = voices[idx];
+      idx = (idx + 1) % size;
+      v.trigger(note, time, dur, vel);
+    },
+    release: (time) => voices.forEach(v => v.release?.(time)),
+    setGlide: (g) => voices.forEach(v => v.setGlide?.(g)),
+    setParam: (k, val) => voices.forEach(v => v.setParam?.(k, val)),
+  };
+}
+
 function buildDrumSynthNode(kind, output) {
   switch (kind) {
     case "808-kick": {
@@ -1387,82 +1477,287 @@ function buildDrumSynthNode(kind, output) {
         release: () => s.releaseAll(),
       };
     }
-    case "mini-brute": {
-      // Arturia MiniBrute-style mono analog voice: saw + pulse + triangle + sub-sine
-      // summed through a soft-clip ("brute factor") and an amp envelope. The track's
-      // own filter + filter envelope provide the Steiner-style sweep.
-      const freqSig = new Tone.Signal({ units: "frequency", value: 110 });
-      const saw   = new Tone.Oscillator({ type: "sawtooth" }).start();
-      const pulse = new Tone.PulseOscillator({ width: 0.5 }).start();
-      const tri   = new Tone.Oscillator({ type: "triangle" }).start();
-      const sub   = new Tone.Oscillator({ type: "sine" }).start();
-      const subMul = new Tone.Multiply(0.5);           // sub runs an octave below the main pitch
-      freqSig.connect(saw.frequency);
-      freqSig.connect(pulse.frequency);
-      freqSig.connect(tri.frequency);
-      freqSig.chain(subMul, sub.frequency);
-
-      const mixSaw   = new Tone.Gain(0.55);
-      const mixPulse = new Tone.Gain(0.35);
-      const mixTri   = new Tone.Gain(0.2);
-      const mixSub   = new Tone.Gain(0.4);
-      saw.connect(mixSaw);
-      pulse.connect(mixPulse);
-      tri.connect(mixTri);
-      sub.connect(mixSub);
-
-      const brute = new Tone.Distortion({ distortion: 0.22, oversample: "2x", wet: 0.55 });
-      const amp   = new Tone.AmplitudeEnvelope({ attack: 0.004, decay: 0.2, sustain: 0.7, release: 0.3 });
-      const trim  = new Tone.Gain(0.38);
-      mixSaw.connect(brute);
-      mixPulse.connect(brute);
-      mixTri.connect(brute);
-      mixSub.connect(amp);   // sub bypasses brute-factor for a cleaner bottom end
-      brute.connect(amp);
-      amp.connect(trim);
-      trim.connect(output);
-
-      let lastFreq = 110;
-      let glideSec = 0.015;
-      // Map the generic track params (harm/timb/morph/decay) onto MiniBrute
-      // controls so the existing param sliders do meaningful work here.
-      const setMBParam = (key, val) => {
-        const v = Math.max(0, Math.min(1, Number(val) || 0));
-        if (key === "harm") {                   // sub mix (0 → none, 1 → full)
-          mixSub.gain.value = v;
-        } else if (key === "timb") {            // pulse width
-          pulse.width.value = 0.1 + v * 0.8;
-        } else if (key === "morph") {           // saw ↔ pulse ↔ triangle crossfade
-          // 0 = pure saw, 0.5 = pure pulse, 1 = pure triangle
-          const sawLvl   = Math.max(0, 1 - v * 2) * 0.55;
-          const pulseLvl = (1 - Math.abs(v - 0.5) * 2) * 0.55;
-          const triLvl   = Math.max(0, (v - 0.5) * 2) * 0.55;
-          mixSaw.gain.value   = sawLvl;
-          mixPulse.gain.value = pulseLvl;
-          mixTri.gain.value   = triLvl;
-        } else if (key === "decay") {            // amp decay time + brute factor
-          amp.decay = 0.05 + v * 1.6;
-          brute.distortion = 0.1 + v * 0.55;
-          brute.wet.value   = 0.35 + v * 0.5;
-        }
-      };
-      return {
-        nodes: [saw, pulse, tri, sub, subMul, freqSig, mixSaw, mixPulse, mixTri, mixSub, brute, amp, trim],
-        setGlide: (g) => { glideSec = Math.max(0.002, Number(g) || 0); },
-        setParam: setMBParam,
-        trigger: (note, time, dur, vel) => {
-          const f = Tone.Frequency(note, "midi").toFrequency();
-          freqSig.cancelScheduledValues(time);
-          freqSig.setValueAtTime(lastFreq, time);
-          freqSig.linearRampToValueAtTime(f, time + glideSec);
-          lastFreq = f;
-          amp.triggerAttackRelease(Math.max(0.02, dur), time, vel);
-        },
-        release: (time) => amp.triggerRelease(time),
-      };
-    }
+    case "mini-brute": return makePolyPool(4, () => buildMiniBruteVoice(output));
+    case "moog":       return makePolyPool(4, () => buildMoogVoice(output));
+    case "juno":       return makePolyPool(6, () => buildJunoVoice(output));
   }
   throw new Error("unknown drum-synth kind: " + kind);
+}
+
+// ---- mini-brute builder -------------------------------------------------
+// One voice instance — see makePolyPool for the 4-voice pool used by the
+// public engine entry. Oscillators: saw + detuned-saw (ultrasaw) + PWM pulse +
+// metalized triangle + sub sine. All summed through a "brute factor" soft-clip
+// and an amp envelope. The track-level filter + filter env provide the sweep.
+function buildMiniBruteVoice(output) {
+  const freqSig = new Tone.Signal({ units: "frequency", value: 110 });
+  const saw   = new Tone.Oscillator({ type: "sawtooth" }).start();
+  const sawD  = new Tone.Oscillator({ type: "sawtooth", detune: 10 }).start();
+  const pulse = new Tone.PulseOscillator({ width: 0 }).start();
+  const tri   = new Tone.Oscillator({ type: "triangle" }).start();
+  const sub   = new Tone.Oscillator({ type: "sine" }).start();
+  const subMul = new Tone.Multiply(0.5);
+  freqSig.connect(saw.frequency);
+  freqSig.connect(sawD.frequency);
+  freqSig.connect(pulse.frequency);
+  freqSig.connect(tri.frequency);
+  freqSig.chain(subMul, sub.frequency);
+
+  let pwBaseVal = 0.5;
+  let pwDepth   = 0;
+  const pwmLfo = new Tone.LFO({ frequency: 0, min: 0.5, max: 0.5, type: "sine" }).start();
+  pwmLfo.connect(pulse.width);
+  const updatePW = () => {
+    pwmLfo.min = Math.max(0.05, pwBaseVal - pwDepth * 0.4);
+    pwmLfo.max = Math.min(0.95, pwBaseVal + pwDepth * 0.4);
+  };
+
+  const metal = new Tone.WaveShaper(makeMetalizerCurve(0), 2048);
+  tri.connect(metal);
+
+  const ultra = new Tone.Gain(0.35);
+  sawD.connect(ultra);
+
+  const fmOsc   = new Tone.Oscillator({ type: "sine" }).start();
+  const fmMul   = new Tone.Multiply(2);
+  freqSig.chain(fmMul, fmOsc.frequency);
+  const fmDepth = new Tone.Gain(0);
+  fmOsc.connect(fmDepth);
+  fmDepth.connect(saw.detune);
+  fmDepth.connect(sawD.detune);
+  fmDepth.connect(pulse.detune);
+  fmDepth.connect(tri.detune);
+
+  const mixSaw   = new Tone.Gain(0.55);
+  const mixPulse = new Tone.Gain(0.35);
+  const mixTri   = new Tone.Gain(0.2);
+  const mixSub   = new Tone.Gain(0.4);
+  saw.connect(mixSaw);
+  ultra.connect(mixSaw);
+  pulse.connect(mixPulse);
+  metal.connect(mixTri);
+  sub.connect(mixSub);
+
+  const brute = new Tone.Distortion({ distortion: 0.22, oversample: "2x", wet: 0.55 });
+  const amp   = new Tone.AmplitudeEnvelope({ attack: 0.004, decay: 0.2, sustain: 0.7, release: 0.3 });
+  const trim  = new Tone.Gain(0.38);
+  mixSaw.connect(brute);
+  mixPulse.connect(brute);
+  mixTri.connect(brute);
+  mixSub.connect(amp);
+  brute.connect(amp);
+  amp.connect(trim);
+  trim.connect(output);
+
+  let lastFreq = 110;
+  let glideSec = 0.015;
+  const setMBParam = (key, val) => {
+    const v = Math.max(0, Math.min(1, Number(val) || 0));
+    if (key === "osc1")         mixSaw.gain.value   = v;
+    else if (key === "osc2")    mixPulse.gain.value = v;
+    else if (key === "osc3")    mixTri.gain.value   = v;
+    else if (key === "osc4")    mixSub.gain.value   = v;
+    else if (key === "harm")    { pwmLfo.frequency.value = v * 8; pwDepth = v; updatePW(); }
+    else if (key === "timb")    { pwBaseVal = 0.1 + v * 0.8; updatePW(); }
+    else if (key === "metal")   metal.curve = makeMetalizerCurve(v);
+    else if (key === "ultra")   ultra.gain.value = v;
+    else if (key === "fm")      fmDepth.gain.value = v * 1800;
+  };
+  return {
+    nodes: [saw, sawD, pulse, tri, sub, subMul, freqSig, pwmLfo, fmOsc, fmMul, fmDepth, metal, ultra, mixSaw, mixPulse, mixTri, mixSub, brute, amp, trim],
+    setGlide: (g) => { glideSec = Math.max(0.002, Number(g) || 0); },
+    setParam: setMBParam,
+    trigger: (note, time, dur, vel) => {
+      const f = Tone.Frequency(note, "midi").toFrequency();
+      freqSig.cancelScheduledValues(time);
+      freqSig.setValueAtTime(lastFreq, time);
+      freqSig.linearRampToValueAtTime(f, time + glideSec);
+      lastFreq = f;
+      amp.triggerAttackRelease(Math.max(0.02, dur), time, vel);
+    },
+    release: (time) => amp.triggerRelease(time),
+  };
+}
+
+// ---- moog builder -------------------------------------------------------
+// Minimoog-style voice: three oscillators each with independent waveform,
+// range, and fine frequency; plus a white/pink noise source. Summed through
+// a Chebyshev warmth + EQ3 shelf + amp envelope.
+function buildMoogVoice(output) {
+  const freqSig = new Tone.Signal({ units: "frequency", value: 110 });
+  const osc1 = new Tone.Oscillator({ type: "sawtooth", detune: 0 }).start();
+  const osc2 = new Tone.Oscillator({ type: "sawtooth", detune: 5 }).start();
+  const osc3 = new Tone.Oscillator({ type: "triangle", detune: -7 }).start();
+  const mul1 = new Tone.Multiply(1);
+  const mul2 = new Tone.Multiply(1);
+  const mul3 = new Tone.Multiply(0.5);
+  freqSig.chain(mul1, osc1.frequency);
+  freqSig.chain(mul2, osc2.frequency);
+  freqSig.chain(mul3, osc3.frequency);
+
+  const mix1 = new Tone.Gain(0.55);
+  const mix2 = new Tone.Gain(0.45);
+  const mix3 = new Tone.Gain(0.35);
+  osc1.connect(mix1);
+  osc2.connect(mix2);
+  osc3.connect(mix3);
+
+  let noise = new Tone.Noise({ type: "white" }).start();
+  const mixNoise = new Tone.Gain(0);
+  noise.connect(mixNoise);
+
+  const warm = new Tone.Chebyshev({ order: 3, wet: 0.35 });
+  const shelf = new Tone.EQ3({ low: 1, mid: 0.5, high: -3 });
+  const amp = new Tone.AmplitudeEnvelope({ attack: 0.006, decay: 0.22, sustain: 0.75, release: 0.45 });
+  const trim = new Tone.Gain(0.34);
+  mix1.connect(warm);
+  mix2.connect(warm);
+  mix3.connect(warm);
+  mixNoise.connect(warm);
+  warm.connect(shelf);
+  shelf.connect(amp);
+  amp.connect(trim);
+  trim.connect(output);
+
+  const osc2SemiBase = { range: 0, freq: 0 };
+  const osc3SemiBase = { range: -1, freq: 0 };
+  const osc1Range = { n: 0 };
+  const updateMul = () => {
+    mul1.factor.value = Math.pow(2, osc1Range.n / 12);
+    mul2.factor.value = Math.pow(2, (osc2SemiBase.range * 12 + osc2SemiBase.freq) / 12);
+    mul3.factor.value = Math.pow(2, (osc3SemiBase.range * 12 + osc3SemiBase.freq) / 12);
+  };
+  updateMul();
+
+  let lastFreq = 110;
+  let glideSec = 0.02;
+  const setMoogParam = (key, val) => {
+    if (key === "osc1")         mix1.gain.value = Math.max(0, Math.min(1, Number(val) || 0));
+    else if (key === "osc2")    mix2.gain.value = Math.max(0, Math.min(1, Number(val) || 0));
+    else if (key === "osc3")    mix3.gain.value = Math.max(0, Math.min(1, Number(val) || 0));
+    else if (key === "harm")    osc2.detune.value = 5 + (Number(val) || 0) * 25;
+    else if (key === "decay") {
+      amp.decay = 0.05 + (Number(val) || 0) * 1.5;
+      warm.wet.value = 0.15 + (Number(val) || 0) * 0.55;
+    }
+    else if (key === "osc1wave") { if (["sine","triangle","sawtooth","square"].includes(val)) osc1.type = val; }
+    else if (key === "osc2wave") { if (["sine","triangle","sawtooth","square"].includes(val)) osc2.type = val; }
+    else if (key === "osc3wave") { if (["sine","triangle","sawtooth","square"].includes(val)) osc3.type = val; }
+    else if (key === "osc1range") { osc1Range.n = Number(val) * 12; updateMul(); }
+    else if (key === "osc2range") { osc2SemiBase.range = Number(val) || 0; updateMul(); }
+    else if (key === "osc3range") { osc3SemiBase.range = Number(val) || 0; updateMul(); }
+    else if (key === "osc2freq")  { osc2SemiBase.freq  = Number(val) || 0; updateMul(); }
+    else if (key === "osc3freq")  { osc3SemiBase.freq  = Number(val) || 0; updateMul(); }
+    else if (key === "noise")     mixNoise.gain.value = Math.max(0, Math.min(1, Number(val) || 0));
+    else if (key === "noisetype") {
+      if (val === "white" || val === "pink") {
+        try { noise.stop(); } catch {}
+        try { noise.disconnect(); } catch {}
+        try { noise.dispose(); } catch {}
+        noise = new Tone.Noise({ type: val }).start();
+        noise.connect(mixNoise);
+      }
+    }
+  };
+  return {
+    nodes: [osc1, osc2, osc3, mul1, mul2, mul3, freqSig, mix1, mix2, mix3, mixNoise, warm, shelf, amp, trim],
+    setGlide: (g) => { glideSec = Math.max(0.002, Number(g) || 0); },
+    setParam: setMoogParam,
+    trigger: (note, time, dur, vel) => {
+      const f = Tone.Frequency(note, "midi").toFrequency();
+      freqSig.cancelScheduledValues(time);
+      freqSig.setValueAtTime(lastFreq, time);
+      freqSig.linearRampToValueAtTime(f, time + glideSec);
+      lastFreq = f;
+      amp.triggerAttackRelease(Math.max(0.02, dur), time, vel);
+    },
+    release: (time) => amp.triggerRelease(time),
+  };
+}
+
+// ---- juno 60 builder ----------------------------------------------------
+// Roland Juno-60-style voice. Single DCO (pulse with LFO-driven PWM) + a sub
+// square one octave below + a noise source, into HPF → soft-saturation → amp
+// envelope → chorus (the iconic Juno chorus). Track-level filter + filter env
+// provide the VCF sweep.
+function buildJunoVoice(output) {
+  const freqSig = new Tone.Signal({ units: "frequency", value: 110 });
+  const dco  = new Tone.PulseOscillator({ width: 0 }).start();       // width driven by LFO below
+  const sub  = new Tone.Oscillator({ type: "square" }).start();
+  const subMul = new Tone.Multiply(0.5);
+  freqSig.connect(dco.frequency);
+  freqSig.chain(subMul, sub.frequency);
+
+  // PWM LFO — min=max sits at base when depth = 0
+  let pwBaseVal = 0.5;
+  let pwDepth   = 0;
+  const pwmLfo = new Tone.LFO({ frequency: 0, min: 0.5, max: 0.5, type: "sine" }).start();
+  pwmLfo.connect(dco.width);
+  const updatePW = () => {
+    pwmLfo.min = Math.max(0.05, pwBaseVal - pwDepth * 0.4);
+    pwmLfo.max = Math.min(0.95, pwBaseVal + pwDepth * 0.4);
+  };
+
+  let noise = new Tone.Noise({ type: "white" }).start();
+  const mixNoise = new Tone.Gain(0);
+  noise.connect(mixNoise);
+
+  const mixDco = new Tone.Gain(0.55);
+  const mixSub = new Tone.Gain(0.4);
+  dco.connect(mixDco);
+  sub.connect(mixSub);
+
+  const hpf = new Tone.Filter({ type: "highpass", frequency: 60, rolloff: -12 });
+  const amp = new Tone.AmplitudeEnvelope({ attack: 0.005, decay: 0.25, sustain: 0.75, release: 0.35 });
+  // Classic Juno stereo chorus — baked in since it defines the character.
+  const chorus = new Tone.Chorus({ frequency: 0.5, delayTime: 3.5, depth: 0.35, feedback: 0, wet: 0.6, spread: 180 }).start();
+  const trim = new Tone.Gain(0.4);
+  mixDco.connect(hpf);
+  mixSub.connect(hpf);
+  mixNoise.connect(hpf);
+  hpf.connect(amp);
+  amp.connect(chorus);
+  chorus.connect(trim);
+  trim.connect(output);
+
+  let lastFreq = 110;
+  let glideSec = 0.015;
+  const setJunoParam = (key, val) => {
+    const v = Math.max(0, Math.min(1, Number(val) || 0));
+    if (key === "osc1")         mixDco.gain.value   = v;                         // DCO level
+    else if (key === "osc2")    mixSub.gain.value   = v;                         // sub level
+    else if (key === "osc3")    mixNoise.gain.value = v;                         // noise level
+    else if (key === "harm")    { pwmLfo.frequency.value = v * 8; pwDepth = v; updatePW(); }  // PWM rate + depth
+    else if (key === "timb")    { pwBaseVal = 0.1 + v * 0.8; updatePW(); }        // pulse width
+    else if (key === "morph")   { chorus.wet.value = v; chorus.depth = 0.2 + v * 0.6; }  // chorus intensity
+    else if (key === "decay") {                                                   // amp decay + HPF freq
+      amp.decay = 0.05 + v * 1.5;
+      hpf.frequency.value = 30 + v * 180;
+    }
+    else if (key === "noisetype") {
+      if (val === "white" || val === "pink") {
+        try { noise.stop(); } catch {}
+        try { noise.disconnect(); } catch {}
+        try { noise.dispose(); } catch {}
+        noise = new Tone.Noise({ type: val }).start();
+        noise.connect(mixNoise);
+      }
+    }
+  };
+  return {
+    nodes: [dco, sub, subMul, freqSig, pwmLfo, mixDco, mixSub, mixNoise, hpf, amp, chorus, trim],
+    setGlide: (g) => { glideSec = Math.max(0.002, Number(g) || 0); },
+    setParam: setJunoParam,
+    trigger: (note, time, dur, vel) => {
+      const f = Tone.Frequency(note, "midi").toFrequency();
+      freqSig.cancelScheduledValues(time);
+      freqSig.setValueAtTime(lastFreq, time);
+      freqSig.linearRampToValueAtTime(f, time + glideSec);
+      lastFreq = f;
+      amp.triggerAttackRelease(Math.max(0.02, dur), time, vel);
+    },
+    release: (time) => amp.triggerRelease(time),
+  };
 }
 
 class DrumSynthVoice {
@@ -1481,7 +1776,12 @@ class DrumSynthVoice {
   }
   _applyParams() {
     if (!this.built.setParam) return;
-    for (const k of ["harm", "timb", "morph", "decay"]) {
+    for (const k of ["harm", "timb", "morph", "decay",
+                     "osc1", "osc2", "osc3", "osc4",
+                     "ultra", "fm", "metal",
+                     "osc1wave", "osc2wave", "osc3wave",
+                     "osc1range", "osc2range", "osc3range",
+                     "osc2freq", "osc3freq", "noise", "noisetype"]) {
       if (this.params?.[k] != null) this.built.setParam(k, this.params[k]);
     }
   }
@@ -1870,11 +2170,7 @@ class ElevenVoice {
   hit(midiNote, time, duration, velocity = 1, opts = null) {
     if (!this.buffer) return;
     const pitchBase = Number.isFinite(opts?.pitchBase) ? opts.pitchBase : 60;
-    // pitchLocked disables pitch mapping entirely — used for drum-kit tracks
-    // so changing the step note doesn't transpose the sample.
-    const rate = opts?.pitchLocked
-      ? (this.baseRate || 1)
-      : (this.baseRate || 1) * Math.pow(2, (midiNote - pitchBase) / 12);
+    const rate = (this.baseRate || 1) * Math.pow(2, (midiNote - pitchBase) / 12);
     const { src, stopTime } = startSampleSource(this.ctx, this.buffer, rate, time, duration, opts);
     const g = this.ctx.createGain();
     applySampleFadeEnvelope(g, time, stopTime, Math.max(0, Math.min(1, velocity)), opts);
@@ -1924,11 +2220,7 @@ class UploadVoice {
   hit(midiNote, time, duration, velocity = 1, opts = null) {
     if (!this.buffer) return;
     const pitchBase = Number.isFinite(opts?.pitchBase) ? opts.pitchBase : 60;
-    // pitchLocked disables pitch mapping entirely — used for drum-kit tracks
-    // so changing the step note doesn't transpose the sample.
-    const rate = opts?.pitchLocked
-      ? (this.baseRate || 1)
-      : (this.baseRate || 1) * Math.pow(2, (midiNote - pitchBase) / 12);
+    const rate = (this.baseRate || 1) * Math.pow(2, (midiNote - pitchBase) / 12);
     const { src, stopTime } = startSampleSource(this.ctx, this.buffer, rate, time, duration, opts);
     const g = this.ctx.createGain();
     applySampleFadeEnvelope(g, time, stopTime, Math.max(0, Math.min(1, velocity)), opts);
@@ -2113,10 +2405,12 @@ function updatePlaitsControlsVisibility(t) {
   const eng = engineByKey(t.engineKey);
   const engineType = eng?.type;
   const isPlaits = engineType === "plaits";
-  // mini-brute reuses the harm/timb/morph/decay sliders as sub-mix / pulse-width
-  // / osc-blend / decay, so keep them visible for that engine too.
+  // The analog mono engines (mini-brute, moog) reuse the harm/timb/morph/decay
+  // sliders for their own params, so keep the timbre group visible for them too.
   const isMiniBrute = t.engineKey === "dm:mini-brute";
-  const showTimbre = isPlaits || isMiniBrute;
+  const isMoog      = t.engineKey === "dm:moog";
+  const isJuno      = t.engineKey === "dm:juno";
+  const showTimbre = isPlaits || isMiniBrute || isMoog || isJuno;
   const group = t.el.querySelector(".timbre-group");
   if (group) {
     group.hidden = !showTimbre;
@@ -2132,18 +2426,59 @@ function updatePlaitsControlsVisibility(t) {
       }
     }
   }
-  // Relabel the timbre sliders for mini-brute so the control intent is visible
-  // (Plaits keeps its original harm/timb/morph/decay wording).
+  // Relabel the timbre sliders for each analog engine so the control intent is
+  // visible. null = hide the field (control isn't used by this engine).
   if (group) {
     const labels = isMiniBrute
-      ? { harm: "sub", timb: "pw", morph: "mix", decay: "dec" }
-      : { harm: "harm", timb: "timb", morph: "morph", decay: "decay" };
+      ? { harm: "pwm rate", timb: "pw",  morph: null,     decay: null }
+      : isMoog
+      ? { harm: "detune",   timb: null,  morph: null,     decay: "warm" }
+      : isJuno
+      ? { harm: "pwm rate", timb: "pw",  morph: "chorus", decay: "dec" }
+      : { harm: "harm",     timb: "timb", morph: "morph", decay: "decay" };
     for (const key of Object.keys(labels)) {
       const field = group.querySelector(`.p-${key}`)?.closest(".field");
-      const lbl = field?.querySelector("label");
-      if (lbl) lbl.textContent = labels[key];
+      if (!field) continue;
+      if (labels[key] == null) {
+        field.hidden = true;
+      } else {
+        field.hidden = false;
+        const lbl = field.querySelector("label");
+        if (lbl) lbl.textContent = labels[key];
+      }
+    }
+    // Randomize button only makes sense for Plaits' generic harm/timb/morph/decay —
+    // hide it for the analog engines where those sliders do engine-specific things.
+    const randBtn = group.querySelector(".track-rand");
+    if (randBtn) randBtn.hidden = isMiniBrute || isMoog || isJuno;
+  }
+  // Per-oscillator volume sliders: only shown for the analog mono engines.
+  const oscGroup = t.el.querySelector(".osc-mix-group");
+  if (oscGroup) {
+    const showOsc = isMiniBrute || isMoog || isJuno;
+    oscGroup.hidden = !showOsc;
+    if (showOsc) {
+      const oscLabels = isMiniBrute
+        ? { osc1: "saw",  osc2: "pulse", osc3: "tri",   osc4: "sub", hide4: false }
+        : isJuno
+        ? { osc1: "dco",  osc2: "sub",   osc3: "noise", osc4: "",    hide4: true }
+        : { osc1: "osc1", osc2: "osc2",  osc3: "osc3",  osc4: "",    hide4: true };
+      for (const k of ["osc1", "osc2", "osc3", "osc4"]) {
+        const field = oscGroup.querySelector(`.p-${k}`)?.closest(".field");
+        if (!field) continue;
+        if (k === "osc4" && oscLabels.hide4) { field.hidden = true; continue; }
+        field.hidden = false;
+        const lbl = field.querySelector("label");
+        if (lbl) lbl.textContent = oscLabels[k];
+      }
     }
   }
+  // Oscillator-modifier group (ultrasaw / FM / metalizer): mini-brute only for now.
+  const modGroup = t.el.querySelector(".osc-mod-group");
+  if (modGroup) modGroup.hidden = !isMiniBrute;
+  // Moog osc-bank group (per-osc range + waveform + osc2/3 freq + noise).
+  const moogGroup = t.el.querySelector(".moog-osc-group");
+  if (moogGroup) moogGroup.hidden = !isMoog;
 }
 
 // Force all fx wet levels to 0 (100% dry) — used when switching a track to the
@@ -2198,7 +2533,7 @@ function setEngineKey(t, newKey) {
   if (e.type === "saved") {
     t.customConfig = e.config;
   }
-  if (!t.voice) { updateMidiUI(t); return; }
+  if (!t.voice) { updateMidiUI(t); updatePlaitsControlsVisibility(t); return; }
   if (t.voice.canInPlaceChange(newKey) && t.voice.type === e.type) {
     t.voice.setEngine(newKey);
   } else {
@@ -2278,7 +2613,16 @@ function createTrack({ name, engineKey, length = totalSteps() }) {
     trackTick: 0,
     repeatId: null,
     soundPromptText: "",
-    params: { vol: 0.8, harm: 0.5, timb: 0.5, morph: 0.5, decay: 0.4 },
+    params: {
+      vol: 0.8, harm: 0.5, timb: 0.5, morph: 0.5, decay: 0.4,
+      osc1: 0.55, osc2: 0.45, osc3: 0.35, osc4: 0.4,
+      ultra: 0.35, fm: 0, metal: 0,
+      // Moog osc-bank params
+      osc1wave: "sawtooth", osc2wave: "sawtooth", osc3wave: "triangle",
+      osc1range: 0, osc2range: 0, osc3range: -1,
+      osc2freq: 0, osc3freq: 0,
+      noise: 0, noisetype: "white",
+    },
     filter: { cutoff: 1, reson: 0, env: 0, attack: 0, decay: 0.25, sustain: 0.4, release: 0.3 },
     filterNode: null,
     eq: { low: 0, mid: 0, high: 0 },
@@ -2716,6 +3060,13 @@ function renderTrack(t) {
   node.querySelector(".p-timb").value = t.params.timb;
   node.querySelector(".p-morph").value = t.params.morph;
   node.querySelector(".p-decay").value = t.params.decay;
+  for (const k of ["osc1", "osc2", "osc3", "osc4", "ultra", "fm", "metal",
+                   "osc1range", "osc2range", "osc3range",
+                   "osc1wave",  "osc2wave",  "osc3wave",
+                   "osc2freq",  "osc3freq",  "noise", "noisetype"]) {
+    const el = node.querySelector(`.p-${k}`);
+    if (el && t.params[k] != null) el.value = t.params[k];
+  }
   node.querySelector(".p-cutoff").value = t.filter.cutoff;
   node.querySelector(".p-reson").value  = t.filter.reson;
   node.querySelector(".p-envamt").value = t.filter.env;
@@ -2745,6 +3096,19 @@ function renderTrack(t) {
   node.querySelector(".p-timb").addEventListener("input", e => setParam(t, "timb", Number(e.target.value)));
   node.querySelector(".p-morph").addEventListener("input", e => setParam(t, "morph", Number(e.target.value)));
   node.querySelector(".p-decay").addEventListener("input", e => setParam(t, "decay", Number(e.target.value)));
+  for (const k of ["osc1", "osc2", "osc3", "osc4", "ultra", "fm", "metal",
+                   "osc2freq", "osc3freq", "noise"]) {
+    const el = node.querySelector(`.p-${k}`);
+    if (el) el.addEventListener("input", e => setParam(t, k, Number(e.target.value)));
+  }
+  for (const k of ["osc1range", "osc2range", "osc3range"]) {
+    const el = node.querySelector(`.p-${k}`);
+    if (el) el.addEventListener("change", e => setParam(t, k, Number(e.target.value)));
+  }
+  for (const k of ["osc1wave", "osc2wave", "osc3wave", "noisetype"]) {
+    const el = node.querySelector(`.p-${k}`);
+    if (el) el.addEventListener("change", e => setParam(t, k, e.target.value));
+  }
   node.querySelector(".p-cutoff").addEventListener("input", e => setFilter(t, "cutoff", Number(e.target.value)));
   node.querySelector(".p-reson").addEventListener("input",  e => setFilter(t, "reson",  Number(e.target.value)));
   node.querySelector(".p-envamt").addEventListener("input", e => setFilter(t, "env",     Number(e.target.value)));
@@ -2771,16 +3135,18 @@ function renderTrack(t) {
     savePatch(name.trim(), t.customConfig);
     setStatus(`saved patch "${name.trim()}"`);
   });
-  node.querySelector(".track-glide").value = t.glide ?? 0;
-  node.querySelector(".track-glide").addEventListener("input", e => {
-    t.glide = Number(e.target.value);
-    if (t.voice?.setGlide) t.voice.setGlide(t.glide);
-  });
-  const swingInput = node.querySelector(".track-swing");
-  if (swingInput) {
-    swingInput.value = t.swing ?? 0;
-    swingInput.addEventListener("input", e => { t.swing = Number(e.target.value); });
+
+  const loadPatchBtn = node.querySelector(".track-load-patch");
+  if (loadPatchBtn) {
+    loadPatchBtn.addEventListener("click", async () => {
+      const name = await showSavedPatchPicker();
+      if (!name) return;
+      setEngineKey(t, `saved:${name}`);
+      if (node.querySelector(".track-engine")) node.querySelector(".track-engine").value = `saved:${name}`;
+      setStatus(`loaded patch "${name}"`);
+    });
   }
+  // glide + swing are wired in renderModPanel (they live in the mod panel row now).
   const speedSel = node.querySelector(".track-speed");
   if (speedSel) {
     speedSel.value = String(t.speed ?? 1);
@@ -3137,6 +3503,21 @@ function wireFxPanel(t, panel) {
 function renderModPanel(t, panel) {
   const tpl = document.getElementById("lfo-row-template");
   panel.replaceChildren();
+  // Track-level glide + swing share the mod panel with per-param LFOs.
+  const ctl = document.createElement("div");
+  ctl.className = "mod-ctl-row";
+  ctl.innerHTML = `
+    <label class="mod-ctl"><span>glide</span><input class="track-glide" type="range" min="0" max="0.5" step="0.005" value="${t.glide ?? 0}" /></label>
+    <label class="mod-ctl"><span>swing</span><input class="track-swing" type="range" min="0" max="0.75" step="0.01" value="${t.swing ?? 0}" /></label>
+  `;
+  panel.appendChild(ctl);
+  const glideInput = ctl.querySelector(".track-glide");
+  glideInput.addEventListener("input", e => {
+    t.glide = Number(e.target.value);
+    if (t.voice?.setGlide) t.voice.setGlide(t.glide);
+  });
+  const swingInput = ctl.querySelector(".track-swing");
+  swingInput.addEventListener("input", e => { t.swing = Number(e.target.value); });
   for (const key of LFO_KEYS) {
     const row = tpl.content.firstElementChild.cloneNode(true);
     const cfg = t.lfoConfig[key];
@@ -3820,7 +4201,6 @@ function openStepEditor(t, idx, anchorEl) {
           fadeOut:     t.sampleFadeOuts?.[idx] ?? 0,
           loopMode:    t.sampleLoopModes?.[idx] ?? "off",
           pitchBase:   t.isDrumKit ? 36 : 60,
-          pitchLocked: t.isDrumKit && (t.voice.type === "eleven" || t.voice.type === "upload"),
         });
       } catch (err) { console.warn(err); }
     });
@@ -4047,7 +4427,6 @@ async function togglePlay() {
                 fadeOut:     t.sampleFadeOuts?.[idx] ?? 0,
                 loopMode:    t.sampleLoopModes?.[idx] ?? "off",
                 pitchBase:   t.isDrumKit ? 36 : 60,
-                pitchLocked: t.isDrumKit && (t.voice.type === "eleven" || t.voice.type === "upload"),
               }
             : null;
           const ratchet = Math.max(1, Math.min(8, Math.round(t.ratchets?.[idx] ?? 1)));

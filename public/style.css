@@ -148,7 +148,29 @@ button.danger { color: var(--danger); }
   transition: width 40ms linear;
 }
 .master-meter { width: 80px; height: 12px; }
-.track-meter  { width: 48px; height: 8px; }
+.track-meter  { width: 100%; height: 100%; }
+
+/* Vol slider + meter: native slider on top, thin meter strip immediately below.
+   Both children stretch to the same width (140px minus any flex-cross-axis trim). */
+.vol-combo {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: stretch;
+  width: 140px;
+  gap: 3px;
+}
+.vol-combo > * { box-sizing: border-box; }
+.vol-combo input[type="range"] {
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  display: block;
+}
+.vol-combo .track-meter {
+  width: 100%;
+  height: 4px;
+  border-radius: 2px;
+}
 .status.err { color: var(--danger); }
 
 .pattern-bar {
@@ -315,6 +337,15 @@ main {
   align-items: center;
   flex-wrap: wrap;
 }
+.track-synth-row {
+  flex-basis: 100%;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: stretch;
+}
+.track-synth-row:empty { display: none; }
+.track-synth-row > .param-group[hidden] + .param-group[hidden] { /* no-op, just a placeholder */ }
 
 .track-head .field input[type="range"] { width: 72px; }
 .track-head .field label { font-size: 11px; }
@@ -331,6 +362,25 @@ main {
 .param-group .field input[type="range"] { width: 60px; }
 .timbre-group { border-color: color-mix(in oklab, var(--accent) 40%, var(--border)); }
 .timbre-group[hidden] { display: none !important; }
+.osc-mix-group { border-color: color-mix(in oklab, var(--accent-2) 40%, var(--border)); }
+.osc-mix-group[hidden] { display: none !important; }
+.osc-mod-group { border-color: color-mix(in oklab, #d5a6ff 40%, var(--border)); }
+.osc-mod-group[hidden] { display: none !important; }
+.moog-osc-group { border-color: color-mix(in oklab, #e0a868 40%, var(--border)); flex-direction: column; align-items: stretch; gap: 4px; }
+.moog-osc-group[hidden] { display: none !important; }
+.moog-osc-group .moog-osc-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+}
+.moog-osc-group .moog-osc-lbl { min-width: 32px; color: var(--fg-dim); }
+.moog-osc-group .moog-freq { display: inline-flex; align-items: center; gap: 4px; }
+.moog-osc-group .moog-freq input[type="range"] { width: 70px; }
+.moog-osc-group select { padding: 2px 6px; font-size: 11px; }
+.moog-osc-group .moog-noise { display: flex; align-items: center; gap: 6px; }
+.moog-osc-group .moog-noise input[type="range"] { width: 70px; }
+.param-group .field[hidden] { display: none !important; }
 .filter-group { border-color: color-mix(in oklab, var(--accent-2) 40%, var(--border)); }
 
 .panel-btn-group {
@@ -893,6 +943,15 @@ main {
   gap: 8px;
   justify-content: flex-end;
 }
+.patch-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; max-height: 40vh; overflow-y: auto; }
+.patch-list .patch-row { display: flex; gap: 6px; align-items: stretch; }
+.patch-list .patch-load { flex: 1; text-align: left; }
+.patch-list .patch-del { padding: 4px 10px; }
+.patch-empty { color: var(--fg-dim); font-size: 12px; padding: 8px 0; }
+
+.track-mod-panel .mod-ctl-row { display: flex; gap: 16px; padding-bottom: 4px; margin-bottom: 4px; border-bottom: 1px solid var(--border); }
+.track-mod-panel .mod-ctl { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: var(--fg-dim); }
+.track-mod-panel .mod-ctl input[type="range"] { width: 110px; }
 .modal-ok {
   background: var(--accent);
   color: #0b0d10;

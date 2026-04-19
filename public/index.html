@@ -88,6 +88,7 @@
         <select class="track-engine"></select>
         <button class="track-sound ghost" title="prompt a custom Tone.js synth patch">sound…</button>
         <button class="track-save ghost" title="save the current custom patch">save</button>
+        <button class="track-load-patch ghost" title="load a saved patch into this track">load</button>
         <div class="field"><label>len</label><input class="track-len" type="number" min="1" max="128" value="16" /></div>
         <div class="field"><label>spd</label>
           <select class="track-speed">
@@ -103,9 +104,13 @@
             <option value="16">16</option>
           </select>
         </div>
-        <div class="field"><label>glide</label><input class="track-glide" type="range" min="0" max="0.5" step="0.005" value="0" /></div>
-        <div class="field"><label>sw</label><input class="track-swing" type="range" min="0" max="0.75" step="0.01" value="0" /></div>
-        <div class="field"><label>vol</label><input class="p-vol" type="range" min="0" max="1" step="0.01" value="0.8" /></div>
+        <div class="field vol-field"><label>vol</label>
+          <div class="vol-combo" title="volume (drag) + output level">
+            <div class="meter track-meter"><div class="meter-bar"></div></div>
+            <input class="p-vol" type="range" min="0" max="1" step="0.01" value="0.8" />
+          </div>
+        </div>
+        <div class="track-synth-row">
         <div class="param-group timbre-group">
           <div class="field"><label>harm</label><input class="p-harm" type="range" min="0" max="1" step="0.01" value="0.5" /></div>
           <div class="field"><label>timb</label><input class="p-timb" type="range" min="0" max="1" step="0.01" value="0.5" /></div>
@@ -113,6 +118,55 @@
           <div class="field"><label>decay</label><input class="p-decay" type="range" min="0" max="1" step="0.01" value="0.4" /></div>
           <button class="track-rand ghost" title="randomize harm/timb/morph/decay">rand</button>
         </div>
+        <div class="param-group osc-mix-group" hidden>
+          <div class="field"><label class="osc1-label">osc1</label><input class="p-osc1" type="range" min="0" max="1" step="0.01" value="0.55" /></div>
+          <div class="field"><label class="osc2-label">osc2</label><input class="p-osc2" type="range" min="0" max="1" step="0.01" value="0.45" /></div>
+          <div class="field"><label class="osc3-label">osc3</label><input class="p-osc3" type="range" min="0" max="1" step="0.01" value="0.35" /></div>
+          <div class="field osc4-field"><label class="osc4-label">sub</label><input class="p-osc4" type="range" min="0" max="1" step="0.01" value="0.4" /></div>
+        </div>
+        <div class="param-group osc-mod-group" hidden>
+          <div class="field"><label>ultra</label><input class="p-ultra" type="range" min="0" max="1" step="0.01" value="0.35" /></div>
+          <div class="field"><label>fm</label><input class="p-fm" type="range" min="0" max="1" step="0.01" value="0" /></div>
+          <div class="field"><label>metal</label><input class="p-metal" type="range" min="0" max="1" step="0.01" value="0" /></div>
+        </div>
+        <div class="param-group moog-osc-group" hidden>
+          <div class="moog-osc-row">
+            <span class="moog-osc-lbl">osc1</span>
+            <select class="p-osc1range" title="range / octave">
+              <option value="-2">32'</option><option value="-1">16'</option><option value="0" selected>8'</option><option value="1">4'</option><option value="2">2'</option>
+            </select>
+            <select class="p-osc1wave" title="waveform">
+              <option value="triangle">tri</option><option value="sawtooth" selected>saw</option><option value="square">sqr</option><option value="sine">sin</option>
+            </select>
+          </div>
+          <div class="moog-osc-row">
+            <span class="moog-osc-lbl">osc2</span>
+            <label class="moog-freq"><span>freq</span><input class="p-osc2freq" type="range" min="-7" max="7" step="1" value="0" /></label>
+            <select class="p-osc2range" title="range / octave">
+              <option value="-2">32'</option><option value="-1">16'</option><option value="0" selected>8'</option><option value="1">4'</option><option value="2">2'</option>
+            </select>
+            <select class="p-osc2wave" title="waveform">
+              <option value="triangle">tri</option><option value="sawtooth" selected>saw</option><option value="square">sqr</option><option value="sine">sin</option>
+            </select>
+          </div>
+          <div class="moog-osc-row">
+            <span class="moog-osc-lbl">osc3</span>
+            <label class="moog-freq"><span>freq</span><input class="p-osc3freq" type="range" min="-7" max="7" step="1" value="0" /></label>
+            <select class="p-osc3range" title="range / octave">
+              <option value="-2">32'</option><option value="-1" selected>16'</option><option value="0">8'</option><option value="1">4'</option><option value="2">2'</option>
+            </select>
+            <select class="p-osc3wave" title="waveform">
+              <option value="triangle" selected>tri</option><option value="sawtooth">saw</option><option value="square">sqr</option><option value="sine">sin</option>
+            </select>
+          </div>
+          <div class="field moog-noise">
+            <label>noise</label><input class="p-noise" type="range" min="0" max="1" step="0.01" value="0" />
+            <select class="p-noisetype" title="noise color">
+              <option value="white" selected>white</option><option value="pink">pink</option>
+            </select>
+          </div>
+        </div>
+        </div><!-- /track-synth-row -->
         <div class="panel-btn-group">
           <button class="track-filter ghost" aria-pressed="false" title="filter">filter</button>
           <button class="track-env ghost" aria-pressed="false" title="envelope → cutoff">env</button>
@@ -126,7 +180,6 @@
           <button class="track-lock-pat ghost" aria-pressed="false" title="lock pattern — step data is protected from the planner">lock pat</button>
         </div>
         <button class="track-drumkit ghost" aria-pressed="false" title="drum kit: blank steps default to C2 and samples pitch from C2 (natural). Otherwise steps default to C3 and samples pitch from C4.">drum</button>
-        <div class="meter track-meter" title="track output level"><div class="meter-bar"></div></div>
         <button class="track-solo ghost" aria-pressed="false" title="solo">solo</button>
         <button class="track-mute ghost">mute</button>
         <button class="track-clear ghost">clear</button>
