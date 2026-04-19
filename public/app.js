@@ -968,12 +968,12 @@ function applySet(s) {
   state.activePattern = Math.max(0, Math.min(PATTERN_COUNT - 1, s.activePattern ?? 0));
   state.patternMode = s.patternMode === "chain" ? "chain" : "repeat";
   const modeBtn = document.getElementById("pattern-mode");
-  modeBtn.textContent = state.patternMode;
+  modeBtn.innerHTML = state.patternMode === "chain" ? ICON_CHAIN : ICON_REPEAT;
   modeBtn.setAttribute("aria-pressed", String(state.patternMode === "chain"));
   state.patternSwitchMode = s.patternSwitchMode === "finish" ? "finish" : "immediate";
   const switchBtn = document.getElementById("pattern-switch");
   if (switchBtn) {
-    switchBtn.textContent = state.patternSwitchMode === "finish" ? "switch: finish" : "switch: now";
+    switchBtn.innerHTML = state.patternSwitchMode === "finish" ? ICON_FINISH : ICON_NOW;
     switchBtn.setAttribute("aria-pressed", String(state.patternSwitchMode === "finish"));
   }
   for (const td of s.tracks || []) {
