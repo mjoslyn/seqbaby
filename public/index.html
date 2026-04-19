@@ -86,9 +86,13 @@
       <div class="track-head">
         <input class="track-name" type="text" placeholder="track" />
         <select class="track-engine"></select>
-        <button class="track-sound ghost" title="prompt a custom Tone.js synth patch">sound…</button>
-        <button class="track-save ghost" title="save the current custom patch">save</button>
-        <button class="track-load-patch ghost" title="load a saved patch into this track">load</button>
+        <button class="track-sound ai-btn ghost" title="prompt a custom Tone.js synth patch"><span class="ai-icon"></span><span class="ai-label">sound</span></button>
+        <button class="track-lock-inst icon-btn ghost" aria-pressed="false" aria-label="lock instrument" title="lock instrument — protect engine/patch from the planner"></button>
+        <button class="track-pattern ai-btn ghost" title="prompt a step pattern for this track"><span class="ai-icon"></span><span class="ai-label">pattern</span></button>
+        <button class="track-lock-pat icon-btn ghost" aria-pressed="false" aria-label="lock pattern" title="lock pattern — protect step data from the planner"></button>
+        <button class="track-save icon-btn ghost" aria-label="save patch" title="save the current custom patch"></button>
+        <button class="track-load-patch icon-btn ghost" aria-label="load patch" title="load a saved patch into this track"></button>
+        <button class="track-undo ghost" hidden title="undo last generate">undo</button>
         <div class="field"><label>len</label><input class="track-len" type="number" min="1" max="128" value="16" /></div>
         <div class="field"><label>spd</label>
           <select class="track-speed">
@@ -167,6 +171,11 @@
           </div>
         </div>
         </div><!-- /track-synth-row -->
+        <button class="track-drumkit ghost" aria-pressed="false" title="drum kit: blank steps default to C2 and samples pitch from C2 (natural). Otherwise steps default to C3 and samples pitch from C4.">drum</button>
+        <button class="track-solo ghost" aria-pressed="false" title="solo">solo</button>
+        <button class="track-mute ghost">mute</button>
+        <button class="track-clear ghost">clear</button>
+        <button class="track-remove ghost danger">remove</button>
         <div class="panel-btn-group">
           <button class="track-filter ghost" aria-pressed="false" title="filter">filter</button>
           <button class="track-env ghost" aria-pressed="false" title="envelope → cutoff">env</button>
@@ -175,15 +184,6 @@
           <button class="track-comp ghost" aria-pressed="false" title="compressor + sidechain">comp</button>
           <button class="track-mod ghost" aria-pressed="false">mod</button>
         </div>
-        <div class="lock-stack">
-          <button class="track-lock-inst ghost" aria-pressed="false" title="lock instrument — engine, params, filter, env, fx, mod are protected from the planner">lock inst</button>
-          <button class="track-lock-pat ghost" aria-pressed="false" title="lock pattern — step data is protected from the planner">lock pat</button>
-        </div>
-        <button class="track-drumkit ghost" aria-pressed="false" title="drum kit: blank steps default to C2 and samples pitch from C2 (natural). Otherwise steps default to C3 and samples pitch from C4.">drum</button>
-        <button class="track-solo ghost" aria-pressed="false" title="solo">solo</button>
-        <button class="track-mute ghost">mute</button>
-        <button class="track-clear ghost">clear</button>
-        <button class="track-remove ghost danger">remove</button>
       </div>
       <div class="track-midi field" hidden>
         <label>midi out</label>
@@ -265,14 +265,6 @@
           <label class="fx-ctl"><span>decay</span><input class="fx-reverb-decay" type="range" min="0.2" max="8" step="0.1" value="2" /></label>
           <label class="fx-ctl"><span>wet</span><input class="fx-reverb-wet" type="range" min="0" max="1" step="0.01" value="0" /></label>
         </div>
-      </div>
-      <div class="track-prompt">
-        <input class="prompt-input" type="text" placeholder="describe the pattern..." />
-        <label class="track-density-field" title="density"><span>den</span><input class="track-density" type="range" min="0" max="1" step="0.01" value="0.5" /></label>
-        <button class="prompt-pattern-toggle gen-toggle-btn ghost" aria-pressed="true" title="toggle: regenerate step pattern for this track">pattern</button>
-        <button class="prompt-inst-toggle gen-toggle-btn ghost" data-state="on" title="toggle: redesign this track's sound">instruments</button>
-        <button class="prompt-go">generate</button>
-        <button class="prompt-undo ghost" hidden title="undo last generate">undo</button>
       </div>
       <div class="steps"></div>
     </section>

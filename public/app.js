@@ -147,9 +147,10 @@ const DRUM_SYNTH_ENGINES = [
 ].map(e => ({ ...e, group: "drum / synth", type: "drum-synth", poly: e.poly ?? false, melodic: e.melodic ?? false }));
 
 const ANALOG_ENGINES = [
-  { key: "dm:mini-brute", label: "mini brute", defaultNote: 60, poly: true, melodic: true },
-  { key: "dm:moog",       label: "moog",       defaultNote: 60, poly: true, melodic: true },
-  { key: "dm:juno",       label: "juno 60",    defaultNote: 60, poly: true, melodic: true },
+  { key: "dm:mini-brute", label: "mini brute",     defaultNote: 60, poly: true, melodic: true },
+  { key: "dm:moog",       label: "moog",           defaultNote: 60, poly: true, melodic: true },
+  { key: "dm:juno",       label: "juno 60",        defaultNote: 60, poly: true, melodic: true },
+  { key: "dm:guitar",     label: "electric guitar", defaultNote: 52, poly: true, melodic: true },
 ].map(e => ({ ...e, group: "Emulators", type: "drum-synth", poly: e.poly ?? false, melodic: e.melodic ?? false }));
 
 const SAMPLE_BASE = "https://tonejs.github.io/audio/drum-samples";
@@ -391,6 +392,12 @@ const ICON_REPEAT = `<svg class="btn-icon" viewBox="0 0 16 16" width="16" height
 const ICON_CHAIN  = `<svg class="btn-icon" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 8h10"/><polyline points="9 4 13 8 9 12"/></svg>`;
 const ICON_NOW    = `<svg class="btn-icon" viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M9 1.5 3.5 9h3.5l-1 5.5L13.5 7H10l1-5.5z"/></svg>`;
 const ICON_FINISH = `<svg class="btn-icon" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="2" width="8" height="2" rx="0.5"/><rect x="4" y="12" width="8" height="2" rx="0.5"/><path d="M5 4c0 2.5 3 3.2 3 4s-3 1.5-3 4"/><path d="M11 4c0 2.5-3 3.2-3 4s3 1.5 3 4"/></svg>`;
+const ICON_LOCKED   = `<svg class="btn-icon" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="7" width="10" height="7" rx="1.5"/><path d="M5 7V5a3 3 0 0 1 6 0v2"/></svg>`;
+const ICON_UNLOCKED = `<svg class="btn-icon" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="7" width="10" height="7" rx="1.5"/><path d="M5 7V5a3 3 0 0 1 5.4-1.8"/></svg>`;
+const ICON_SAVE     = `<svg class="btn-icon" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 2h8l3 3v9a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z"/><path d="M5 2v4h6V2"/><rect x="5" y="9" width="6" height="5"/></svg>`;
+const ICON_LOAD     = `<svg class="btn-icon" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 4a1 1 0 0 1 1-1h3l2 2h5a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V4z"/></svg>`;
+// Four-point "sparkle" for AI-prompted actions (sound/pattern generate)
+const ICON_SPARKLE  = `<svg class="btn-icon" viewBox="0 0 16 16" width="13" height="13" fill="currentColor" aria-hidden="true"><path d="M10 1 11.2 4.8 15 6 11.2 7.2 10 11 8.8 7.2 5 6 8.8 4.8z"/><path d="M4 9 4.7 10.8 6.5 11.5 4.7 12.2 4 14 3.3 12.2 1.5 11.5 3.3 10.8z"/></svg>`;
 
 // ---- state --------------------------------------------------------------
 
@@ -424,6 +431,31 @@ function isAbortError(err) {
   return err && (err.name === "AbortError" || err.code === 20 || /aborted/i.test(String(err.message)));
 }
 function currentSignal() { return genController?.signal; }
+
+// While a prompted-sound or prompted-pattern preview is open, duck the main
+// output to 20% so the audition doesn't blast. Restore on exit.
+let _previewDuckRestore = null;
+function enterPreviewDuck() {
+  if (_previewDuckRestore) return;
+  const mg = state?.masterGain;
+  if (!mg) return;
+  const prev = mg.gain.value;
+  try {
+    mg.gain.cancelScheduledValues(state.audioCtx.currentTime);
+    mg.gain.linearRampToValueAtTime(prev * 0.2, state.audioCtx.currentTime + 0.05);
+  } catch {}
+  _previewDuckRestore = () => {
+    try {
+      mg.gain.cancelScheduledValues(state.audioCtx.currentTime);
+      mg.gain.linearRampToValueAtTime(prev, state.audioCtx.currentTime + 0.05);
+    } catch {}
+  };
+}
+function exitPreviewDuck() {
+  if (!_previewDuckRestore) return;
+  _previewDuckRestore();
+  _previewDuckRestore = null;
+}
 
 // ---- undo for generate actions -----------------------------------------
 // Single-slot undo: every generate (master or per-track) snapshots the full
@@ -459,7 +491,7 @@ function refreshUndoUI() {
     if (has) m.title = `undo: ${state.undoSnapshot.label}`;
   }
   for (const t of state.tracks) {
-    const b = t.el?.querySelector(".prompt-undo");
+    const b = t.el?.querySelector(".track-undo");
     if (b) b.hidden = !has;
   }
 }
@@ -620,6 +652,8 @@ function serializeSet() {
       uploadAudioMime: t.uploadAudioMime || null,
       uploadFileName: t.uploadFileName || null,
       soundPromptText: t.soundPromptText,
+      promptText: t.promptText || "",
+      sampleDefaults: t.sampleDefaults ? { ...t.sampleDefaults } : undefined,
       locked: t.locked, muted: t.muted, soloed: t.soloed,
       isDrumKit: !!t.isDrumKit,
       glide: t.glide, speed: t.speed ?? 1, sampleSpeedMode: t.sampleSpeedMode ?? "native",
@@ -789,6 +823,10 @@ function applySet(s) {
     t.uploadAudioMime = td.uploadAudioMime || null;
     t.uploadFileName = td.uploadFileName || null;
     t.soundPromptText = td.soundPromptText || "";
+    t.promptText = td.promptText || "";
+    t.sampleDefaults = td.sampleDefaults
+      ? { start: 0, end: 1, fadeIn: 0, fadeOut: 0, loopMode: "off", ...td.sampleDefaults }
+      : { start: 0, end: 1, fadeIn: 0, fadeOut: 0, loopMode: "off" };
     // decode any saved sample buffers (async; once done the voice picks it up)
     if (t.elevenAudio) {
       (async () => {
@@ -1480,6 +1518,7 @@ function buildDrumSynthNode(kind, output) {
     case "mini-brute": return makePolyPool(4, () => buildMiniBruteVoice(output));
     case "moog":       return makePolyPool(4, () => buildMoogVoice(output));
     case "juno":       return makePolyPool(6, () => buildJunoVoice(output));
+    case "guitar":     return makePolyPool(6, () => buildGuitarVoice(output));
   }
   throw new Error("unknown drum-synth kind: " + kind);
 }
@@ -1757,6 +1796,60 @@ function buildJunoVoice(output) {
       amp.triggerAttackRelease(Math.max(0.02, dur), time, vel);
     },
     release: (time) => amp.triggerRelease(time),
+  };
+}
+
+// ---- electric guitar builder --------------------------------------------
+// Karplus-Strong plucked-string voice (Tone.PluckSynth) into a drive+tone shaping
+// chain. Track-level filter + filter env can still sweep on top. Per-step
+// velocity maps to pick intensity (brighter = harder pick) via dampening.
+function buildGuitarVoice(output) {
+  const pluck = new Tone.PluckSynth({
+    attackNoise: 1,
+    dampening: 4200,
+    resonance: 0.92,
+    release: 0.8,
+  });
+  // Drive stage — moderate distortion by default; controlled by the "dist" param.
+  const drive = new Tone.Distortion({ distortion: 0.22, oversample: "2x", wet: 0.55 });
+  // Tone shaping — boost mids + slight high roll for a rounded electric-guitar feel.
+  const eq = new Tone.EQ3({ low: -2, mid: 2, high: -1 });
+  // A little body + space via short reverb and a dash of chorus for chorus-pedal vibe.
+  const chorus = new Tone.Chorus({ frequency: 0.7, delayTime: 2.5, depth: 0.25, wet: 0.25 }).start();
+  const trim = new Tone.Gain(0.45);
+  pluck.connect(drive);
+  drive.connect(eq);
+  eq.connect(chorus);
+  chorus.connect(trim);
+  trim.connect(output);
+
+  let lastFreq = 110;
+  let glideSec = 0.005;   // guitars don't really glide, but allow a tiny ramp
+  const setGuitarParam = (key, val) => {
+    const v = Math.max(0, Math.min(1, Number(val) || 0));
+    if (key === "harm") {                                         // drive amount
+      drive.distortion = 0.05 + v * 0.65;
+      drive.wet.value = 0.15 + v * 0.7;
+    }
+    else if (key === "timb") pluck.dampening = 500 + v * 6500;     // brightness (Hz)
+    else if (key === "morph") chorus.wet.value = v;                // chorus wet
+    else if (key === "decay") pluck.release = 0.15 + v * 3.2;      // string sustain
+  };
+  return {
+    nodes: [pluck, drive, eq, chorus, trim],
+    setGlide: (g) => { glideSec = Math.max(0.002, Number(g) || 0); },
+    setParam: setGuitarParam,
+    trigger: (note, time, dur, vel) => {
+      try {
+        // Harder velocity → brighter pick. Tone's PluckSynth has no velocity arg
+        // so we modulate output + dampening per hit.
+        const v = Math.max(0.15, Math.min(1, vel || 0.8));
+        trim.gain.setValueAtTime(0.45 * v * 1.4, time);
+        pluck.triggerAttackRelease(Tone.Frequency(note, "midi"), Math.max(0.05, dur), time);
+      } catch {}
+      lastFreq = Tone.Frequency(note, "midi").toFrequency();
+    },
+    release: () => { try { pluck.triggerRelease?.(); } catch {} },
   };
 }
 
@@ -2402,6 +2495,7 @@ function setParam(t, key, val) {
 
 function updatePlaitsControlsVisibility(t) {
   if (!t.el) return;
+  t._refreshSoundEnabled?.();
   const eng = engineByKey(t.engineKey);
   const engineType = eng?.type;
   const isPlaits = engineType === "plaits";
@@ -2410,7 +2504,8 @@ function updatePlaitsControlsVisibility(t) {
   const isMiniBrute = t.engineKey === "dm:mini-brute";
   const isMoog      = t.engineKey === "dm:moog";
   const isJuno      = t.engineKey === "dm:juno";
-  const showTimbre = isPlaits || isMiniBrute || isMoog || isJuno;
+  const isGuitar    = t.engineKey === "dm:guitar";
+  const showTimbre = isPlaits || isMiniBrute || isMoog || isJuno || isGuitar;
   const group = t.el.querySelector(".timbre-group");
   if (group) {
     group.hidden = !showTimbre;
@@ -2430,12 +2525,14 @@ function updatePlaitsControlsVisibility(t) {
   // visible. null = hide the field (control isn't used by this engine).
   if (group) {
     const labels = isMiniBrute
-      ? { harm: "pwm rate", timb: "pw",  morph: null,     decay: null }
+      ? { harm: "pwm rate", timb: "pw",     morph: null,     decay: null }
       : isMoog
-      ? { harm: "detune",   timb: null,  morph: null,     decay: "warm" }
+      ? { harm: "detune",   timb: null,     morph: null,     decay: "warm" }
       : isJuno
-      ? { harm: "pwm rate", timb: "pw",  morph: "chorus", decay: "dec" }
-      : { harm: "harm",     timb: "timb", morph: "morph", decay: "decay" };
+      ? { harm: "pwm rate", timb: "pw",     morph: "chorus", decay: "dec" }
+      : isGuitar
+      ? { harm: "drive",    timb: "bright", morph: "chorus", decay: "sustain" }
+      : { harm: "harm",     timb: "timb",    morph: "morph", decay: "decay" };
     for (const key of Object.keys(labels)) {
       const field = group.querySelector(`.p-${key}`)?.closest(".field");
       if (!field) continue;
@@ -2450,7 +2547,7 @@ function updatePlaitsControlsVisibility(t) {
     // Randomize button only makes sense for Plaits' generic harm/timb/morph/decay —
     // hide it for the analog engines where those sliders do engine-specific things.
     const randBtn = group.querySelector(".track-rand");
-    if (randBtn) randBtn.hidden = isMiniBrute || isMoog || isJuno;
+    if (randBtn) randBtn.hidden = isMiniBrute || isMoog || isJuno || isGuitar;
   }
   // Per-oscillator volume sliders: only shown for the analog mono engines.
   const oscGroup = t.el.querySelector(".osc-mix-group");
@@ -2613,6 +2710,8 @@ function createTrack({ name, engineKey, length = totalSteps() }) {
     trackTick: 0,
     repeatId: null,
     soundPromptText: "",
+    promptText: "",
+    sampleDefaults: { start: 0, end: 1, fadeIn: 0, fadeOut: 0, loopMode: "off" },
     params: {
       vol: 0.8, harm: 0.5, timb: 0.5, morph: 0.5, decay: 0.4,
       osc1: 0.55, osc2: 0.45, osc3: 0.35, osc4: 0.4,
@@ -3023,6 +3122,45 @@ function startNote(t, anchor) {
       t.notes[anchor] = applyScale(base);
     }
   }
+  applySampleDefaultsToStep(t, anchor);
+}
+
+// Seed a step's sample-settings (start/end/fades/loop) from the track default.
+function applySampleDefaultsToStep(t, idx) {
+  const d = t.sampleDefaults;
+  if (!d) return;
+  if (!t.sampleStarts) t.sampleStarts = new Array(t.length).fill(0);
+  if (!t.sampleEnds)   t.sampleEnds   = new Array(t.length).fill(1);
+  if (!t.sampleFadeIns)  t.sampleFadeIns  = new Array(t.length).fill(0);
+  if (!t.sampleFadeOuts) t.sampleFadeOuts = new Array(t.length).fill(0);
+  if (!t.sampleLoopModes) t.sampleLoopModes = new Array(t.length).fill("off");
+  t.sampleStarts[idx]   = d.start ?? 0;
+  t.sampleEnds[idx]     = d.end ?? 1;
+  t.sampleFadeIns[idx]  = d.fadeIn ?? 0;
+  t.sampleFadeOuts[idx] = d.fadeOut ?? 0;
+  t.sampleLoopModes[idx] = d.loopMode || "off";
+}
+
+// Overwrite every active step's sample settings across every pattern on the track.
+function applySampleSettingsToAllSteps(t, settings) {
+  const { start, end, fadeIn, fadeOut, loopMode } = settings;
+  for (const p of t.patterns) {
+    if (!p) continue;
+    const n = p.steps.length;
+    if (!p.sampleStarts)    p.sampleStarts    = new Array(n).fill(0);
+    if (!p.sampleEnds)      p.sampleEnds      = new Array(n).fill(1);
+    if (!p.sampleFadeIns)   p.sampleFadeIns   = new Array(n).fill(0);
+    if (!p.sampleFadeOuts)  p.sampleFadeOuts  = new Array(n).fill(0);
+    if (!p.sampleLoopModes) p.sampleLoopModes = new Array(n).fill("off");
+    for (let i = 0; i < n; i++) {
+      if (!p.steps[i]) continue;
+      p.sampleStarts[i]   = start;
+      p.sampleEnds[i]     = end;
+      p.sampleFadeIns[i]  = fadeIn;
+      p.sampleFadeOuts[i] = fadeOut;
+      p.sampleLoopModes[i] = loopMode;
+    }
+  }
 }
 
 function extendNote(t, anchor, toIdx) {
@@ -3116,9 +3254,19 @@ function renderTrack(t) {
   node.querySelector(".p-envrel").addEventListener("input", e => setFilter(t, "release", Number(e.target.value)));
 
   node.querySelector(".track-rand").addEventListener("click", () => randomizeTimbre(t));
-  node.querySelector(".track-sound").addEventListener("click", () => promptCustomSound(t));
+  const soundBtn = node.querySelector(".track-sound");
+  const soundIcon = soundBtn.querySelector(".ai-icon");
+  if (soundIcon) soundIcon.innerHTML = ICON_SPARKLE;
+  soundBtn.addEventListener("click", () => promptCustomSound(t));
+  const refreshSoundEnabled = () => {
+    const eType = engineByKey(t.engineKey)?.type;
+    soundBtn.disabled = !(eType === "custom" || eType === "eleven" || eType === "upload" || eType === "saved");
+  };
+  refreshSoundEnabled();
+  t._refreshSoundEnabled = refreshSoundEnabled;
 
   const saveBtn = node.querySelector(".track-save");
+  saveBtn.innerHTML = ICON_SAVE;
   const refreshSaveEnabled = () => {
     saveBtn.disabled = !t.customConfig || (t.engineKey !== "custom" && !t.engineKey.startsWith("saved:"));
   };
@@ -3138,6 +3286,7 @@ function renderTrack(t) {
 
   const loadPatchBtn = node.querySelector(".track-load-patch");
   if (loadPatchBtn) {
+    loadPatchBtn.innerHTML = ICON_LOAD;
     loadPatchBtn.addEventListener("click", async () => {
       const name = await showSavedPatchPicker();
       if (!name) return;
@@ -3155,17 +3304,15 @@ function renderTrack(t) {
       t.speedAccum = 0;
     });
   }
-  const densityInput = node.querySelector(".track-density");
-  if (densityInput) {
-    densityInput.value = t.density ?? 0.5;
-    densityInput.addEventListener("input", e => { t.density = Number(e.target.value); });
-  }
+  // density slider is rendered inside the mod panel alongside glide + swing
 
   const lockInstBtn = node.querySelector(".track-lock-inst");
   const lockPatBtn  = node.querySelector(".track-lock-pat");
   const refreshLockUI = () => {
     lockInstBtn.setAttribute("aria-pressed", String(t.lockInstrument));
     lockPatBtn.setAttribute("aria-pressed", String(t.lockPattern));
+    lockInstBtn.innerHTML = t.lockInstrument ? ICON_LOCKED : ICON_UNLOCKED;
+    lockPatBtn.innerHTML  = t.lockPattern    ? ICON_LOCKED : ICON_UNLOCKED;
     node.classList.toggle("lock-instrument", t.lockInstrument);
     node.classList.toggle("lock-pattern", t.lockPattern);
   };
@@ -3264,27 +3411,13 @@ function renderTrack(t) {
     renderStepGrid(t);
   });
   node.querySelector(".track-remove").addEventListener("click", () => removeTrack(t));
-  const pToggle = node.querySelector(".prompt-pattern-toggle");
-  const iToggle = node.querySelector(".prompt-inst-toggle");
-  if (pToggle) pToggle.addEventListener("click", () => {
-    const pressed = pToggle.getAttribute("aria-pressed") === "true";
-    pToggle.setAttribute("aria-pressed", String(!pressed));
-  });
-  if (iToggle) iToggle.addEventListener("click", () => {
-    iToggle.dataset.state = (iToggle.dataset.state || "off") === "off" ? "on" : "off";
-  });
-  const runTrackGen = () => {
-    const regenPattern = !pToggle || pToggle.getAttribute("aria-pressed") === "true";
-    const designSound = (iToggle?.dataset.state || "off") === "on";
-    if (!regenPattern && !designSound) { setStatus("toggle pattern or instruments first"); return; }
-    if (designSound) return promptTrackFull(t, { regenPattern });
-    return promptTrack(t);
-  };
-  node.querySelector(".prompt-go").addEventListener("click", runTrackGen);
-  node.querySelector(".prompt-input").addEventListener("keydown", e => {
-    if (e.key === "Enter") runTrackGen();
-  });
-  const undoBtn = node.querySelector(".prompt-undo");
+  const patternBtn = node.querySelector(".track-pattern");
+  if (patternBtn) {
+    const pIcon = patternBtn.querySelector(".ai-icon");
+    if (pIcon) pIcon.innerHTML = ICON_SPARKLE;
+    patternBtn.addEventListener("click", () => openPatternDialog(t));
+  }
+  const undoBtn = node.querySelector(".track-undo");
   if (undoBtn) {
     undoBtn.hidden = !state.undoSnapshot;
     undoBtn.addEventListener("click", undoLastGenerate);
@@ -3509,6 +3642,7 @@ function renderModPanel(t, panel) {
   ctl.innerHTML = `
     <label class="mod-ctl"><span>glide</span><input class="track-glide" type="range" min="0" max="0.5" step="0.005" value="${t.glide ?? 0}" /></label>
     <label class="mod-ctl"><span>swing</span><input class="track-swing" type="range" min="0" max="0.75" step="0.01" value="${t.swing ?? 0}" /></label>
+    <label class="mod-ctl"><span>density</span><input class="track-density" type="range" min="0" max="1" step="0.01" value="${t.density ?? 0.5}" /></label>
   `;
   panel.appendChild(ctl);
   const glideInput = ctl.querySelector(".track-glide");
@@ -3518,6 +3652,8 @@ function renderModPanel(t, panel) {
   });
   const swingInput = ctl.querySelector(".track-swing");
   swingInput.addEventListener("input", e => { t.swing = Number(e.target.value); });
+  const densityInput = ctl.querySelector(".track-density");
+  densityInput.addEventListener("input", e => { t.density = Number(e.target.value); });
   for (const key of LFO_KEYS) {
     const row = tpl.content.firstElementChild.cloneNode(true);
     const cfg = t.lfoConfig[key];
@@ -3648,11 +3784,45 @@ function attachGridInteraction(t, grid) {
     if (existing >= 0) { anchor = existing; wasOn = true; }
     else { anchor = idx; startNote(t, anchor); renderStepGrid(t); }
     try { grid.setPointerCapture(e.pointerId); } catch {}
-    drag = { anchor, wasOn, startIdx: idx, lastIdx: idx, moved: false, pointerId: e.pointerId };
+    drag = {
+      anchor, wasOn, startIdx: idx, lastIdx: idx, moved: false, pointerId: e.pointerId,
+      startX: e.clientX, startY: e.clientY,
+      startNote: t.notes[anchor] ?? 60,
+      pitchMode: false,
+    };
     e.preventDefault();
   });
   grid.addEventListener("pointermove", (e) => {
     if (!drag || e.pointerId !== drag.pointerId) return;
+    const dx = e.clientX - drag.startX;
+    const dy = e.clientY - drag.startY;
+    // Enter pitch mode once the drag is clearly more vertical than horizontal.
+    if (!drag.pitchMode && Math.abs(dy) > 10 && Math.abs(dy) > Math.abs(dx)) {
+      drag.pitchMode = true;
+    }
+    if (drag.pitchMode) {
+      let target;
+      if (state.scale.active && SCALES[state.scale.mode]) {
+        // 22 px per scale degree — roomy enough to hold a pitch steady.
+        const intervals = SCALES[state.scale.mode];
+        const startIdx = midiToScaleIndex(drag.startNote, state.scale.root, intervals);
+        const steps = Math.round(-dy / 22);
+        target = (startIdx != null)
+          ? scaleIndexToMidi(startIdx + steps, state.scale.root, intervals)
+          : applyScale(drag.startNote + steps);
+      } else {
+        // 18 px per semitone in chromatic mode.
+        const semis = Math.round(-dy / 18);
+        target = drag.startNote + semis;
+      }
+      target = Math.max(24, Math.min(95, target));
+      if (t.notes[drag.anchor] !== target) {
+        t.notes[drag.anchor] = target;
+        renderStepGrid(t);
+      }
+      drag.moved = true;   // prevent endDrag from treating this as a click-to-toggle-off
+      return;
+    }
     const idx = idxFromPoint(e.clientX, e.clientY);
     if (idx !== drag.startIdx) drag.moved = true;
     if (idx === drag.lastIdx) return;
@@ -3811,6 +3981,7 @@ function openStepEditor(t, idx, anchorEl) {
             </select>
           </label>
           <button class="se-preview" type="button">preview</button>
+          <button class="se-apply-all ghost" type="button" title="apply these sample settings to every step on this track and use as the default for new steps">apply to all</button>
         </div>
         <div class="se-sample-fade">
           <label>fade in <input class="se-smp-fade-in" type="range" min="0" max="2" step="0.01" value="0" /><span class="se-smp-fade-in-lbl">0 ms</span></label>
@@ -4015,6 +4186,7 @@ function openStepEditor(t, idx, anchorEl) {
     const snapSel = sampleRow.querySelector(".se-smp-snap");
     const fitSel  = sampleRow.querySelector(".se-smp-fit");
     const prev    = sampleRow.querySelector(".se-preview");
+    const applyAllBtn = sampleRow.querySelector(".se-apply-all");
     if (fitSel) {
       fitSel.value = t.sampleSpeedMode || "native";
       fitSel.addEventListener("change", () => {
@@ -4204,6 +4376,25 @@ function openStepEditor(t, idx, anchorEl) {
         });
       } catch (err) { console.warn(err); }
     });
+
+    if (applyAllBtn) {
+      applyAllBtn.addEventListener("click", () => {
+        const settings = {
+          start: t.sampleStarts[idx] ?? 0,
+          end: t.sampleEnds[idx] ?? 1,
+          fadeIn: t.sampleFadeIns?.[idx] ?? 0,
+          fadeOut: t.sampleFadeOuts?.[idx] ?? 0,
+          loopMode: t.sampleLoopModes?.[idx] ?? "off",
+        };
+        applySampleSettingsToAllSteps(t, settings);
+        t.sampleDefaults = { ...settings };
+        // Re-alias the active pattern so t.sampleStarts etc. point at the fresh arrays,
+        // then redraw the waveform + step grid to reflect the propagated values.
+        aliasPattern(t, t._patternIdx ?? state.activePattern);
+        renderStepGrid(t);
+        setStatus(`applied sample settings to all steps on "${t.name}"`);
+      });
+    }
   }
 
   velInput.addEventListener("input", () => {
@@ -4496,12 +4687,9 @@ function setStatus(msg, isErr = false) {
 // Redesign this track's sound from its prompt input, then (optionally) regen its pattern.
 // Mirrors the master generate flow's instruments toggle but scoped to one track.
 async function promptTrackFull(t, { regenPattern = true } = {}) {
-  const input = t.el.querySelector(".prompt-input");
-  const prompt = input.value.trim();
-  if (!prompt) { input.focus(); return; }
+  const prompt = (t.promptText ?? "").trim();
+  if (!prompt) return;
   pushUndoSnapshot(`track+sound: ${t.name}`);
-  const btn = t.el.querySelector(".prompt-go");
-  btn.disabled = true;
   const signal = startGen();
   try {
     const soundEngine = document.getElementById("gen-sound-engine")?.value === "eleven" ? "eleven" : "tone";
@@ -4509,7 +4697,6 @@ async function promptTrackFull(t, { regenPattern = true } = {}) {
     await designSoundForTrack(t, prompt, soundEngine, signal);
     t.soundPromptText = prompt;
     if (regenPattern) {
-      btn.disabled = false; // promptTrack re-disables it
       await promptTrack(t, { skipUndoSnapshot: true });
     } else {
       setStatus(`"${t.name}" sound ready`);
@@ -4518,19 +4705,15 @@ async function promptTrackFull(t, { regenPattern = true } = {}) {
     if (isAbortError(err)) { setStatus("cancelled", true); }
     else { console.error(err); setStatus("generate failed — see console", true); }
   } finally {
-    btn.disabled = false;
     endGen();
   }
 }
 
 async function promptTrack(t, opts = {}) {
-  const input = t.el.querySelector(".prompt-input");
-  const btn = t.el.querySelector(".prompt-go");
   const extra = opts.extra || {};
-  const prompt = (extra.overridePrompt ?? input.value).trim();
-  if (!prompt) { input.focus(); return; }
+  const prompt = (extra.overridePrompt ?? t.promptText ?? "").trim();
+  if (!prompt) return;
   if (!opts.skipUndoSnapshot) pushUndoSnapshot(`track: ${t.name}`);
-  btn.disabled = true;
   setStatus(`generating "${t.name}"...`);
   try {
     const eng = engineByKey(t.engineKey);
@@ -4548,6 +4731,7 @@ async function promptTrack(t, opts = {}) {
     const body = {
       prompt,
       role: trackRole(t),
+      melodic: isMelodicTrack(t),
       stepCount: t.length,
       accents: [...t.accents].sort((a, b) => a - b).map(i => i + 1),
       density: t.density ?? 0.5,
@@ -4575,8 +4759,6 @@ async function promptTrack(t, opts = {}) {
   } catch (err) {
     if (isAbortError(err)) { setStatus("cancelled", true); }
     else { console.error(err); setStatus("generate failed — see console", true); }
-  } finally {
-    btn.disabled = false;
   }
 }
 
@@ -4593,6 +4775,17 @@ function trackRole(t) {
   if (eng.type === "sample") return `drum sample "${eng.label}" (percussive)`;
   if (eng.type === "midi") return `external MIDI instrument on channel ${t.midi.channel}`;
   return eng.label;
+}
+
+// Percussive tracks never want melodic shaping; drum-kit flag or percussive engine wins.
+function isMelodicTrack(t) {
+  if (t.isDrumKit) return false;
+  const eng = engineByKey(t.engineKey);
+  if (!eng) return true;
+  if (eng.type === "plaits") return !PLAITS_DRUM_IDX.has(eng.plaitsIdx);
+  if (eng.type === "drum-synth") return !!eng.melodic;
+  if (eng.type === "sample") return false;
+  return true;
 }
 
 function applyPatternTo(t, data, targetIdx) {
@@ -4675,11 +4868,34 @@ function applyPattern(t, data) {
     t.velocities[i] = vels[i] ?? 0.5;
     t.chords[i] = chords[i] || "";
     t.offsets[i] = offsets[i] ?? 0;
+    applySampleDefaultsToStep(t, i);
   }
   for (let i = 0; i < total; i++) {
     if (!t.steps[i]) continue;
     const cap = maxLengthAt(t, i);
     t.lengths[i] = Math.min(t.lengths[i], cap);
+  }
+  // Melodic cleanup: clamp runaway leaps between consecutive triggered notes.
+  // Keeps voice leading sane even when the LLM goes wild; skip for drum-kit tracks.
+  if (!t.isDrumKit && isMelodicTrack(t)) smoothMelodicLeaps(t);
+}
+
+// If two consecutive triggered notes jump more than 12 semitones in a melodic
+// track, drop the later note by octaves until the interval is under 12. Snap
+// back into scale afterwards so scale-active tracks still stay in key.
+function smoothMelodicLeaps(t) {
+  let prev = null;
+  for (let i = 0; i < t.length; i++) {
+    if (!t.steps[i] || t.notes[i] == null) continue;
+    let n = t.notes[i];
+    if (prev != null) {
+      while (n - prev >  12) n -= 12;
+      while (prev - n >  12) n += 12;
+      n = Math.max(24, Math.min(95, n));
+      n = applyScale(n);
+    }
+    t.notes[i] = n;
+    prev = n;
   }
 }
 
@@ -4745,9 +4961,10 @@ async function promptCustomSound(t) {
       setEngineKey(t, "custom");
       if (t.el) t.el.querySelector(".track-engine").value = "custom";
     }
-    if (fxSpec) applyFxToTrack(t, fxSpec);
+    // Generated instruments start clean — ignore any fx/mods the planner returned.
+    resetProcessingForPromptedSound(t);
     t._refreshSaveEnabled?.();
-    setStatus(`"${t.name}" → ${config.synth}${config.poly ? " (poly)" : ""}${fxSpec ? " + fx" : ""}`);
+    setStatus(`"${t.name}" → ${config.synth}${config.poly ? " (poly)" : ""}`);
   } catch (err) {
     if (isAbortError(err)) { setStatus("cancelled", true); }
     else { console.error(err); setStatus("sound design failed — see console", true); }
@@ -4808,6 +5025,127 @@ async function designSoundForTrack(track, prompt, engine, signal) {
 
 // Sound-design dialog with preview + regenerate.
 // Returns { description, sound, engine } on apply, or null on cancel.
+// Per-track pattern dialog: type a prompt, preview (tentatively applies + you
+// can audition with the main play button), regenerate, apply (keep), cancel
+// (revert to the pre-open pattern snapshot).
+async function openPatternDialog(t) {
+  // Snapshot of the current pattern so cancel can restore exactly.
+  const snapshotPattern = (track) => {
+    const p = track.patterns[track._patternIdx ?? state.activePattern];
+    return JSON.parse(JSON.stringify(p));
+  };
+  const restorePattern = (track, snap) => {
+    const idx = track._patternIdx ?? state.activePattern;
+    track.patterns[idx] = snap;
+    aliasPattern(track, idx);
+    renderStepGrid(track);
+  };
+  const startSnap = snapshotPattern(t);
+
+  const overlay = document.createElement("div");
+  overlay.className = "modal-overlay";
+  const esc = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;").replace(/\n/g, "&#10;");
+  overlay.innerHTML = `
+    <div class="modal sound-dialog" role="dialog" aria-modal="true">
+      <div class="modal-title">describe the pattern for "${esc(t.name)}"</div>
+      <textarea class="modal-input modal-multiline" rows="3" placeholder="driving 16th-note bassline, syncopated, occasional fills">${esc(t.promptText || "")}</textarea>
+      <div class="sound-dialog-status">type a description, then preview</div>
+      <div class="modal-actions">
+        <button class="modal-cancel ghost">cancel</button>
+        <button class="sound-preview">preview</button>
+        <button class="sound-regen ghost" disabled>regenerate</button>
+        <button class="modal-ok" disabled>apply</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  enterPreviewDuck();
+  const input = overlay.querySelector(".modal-input");
+  const statusEl = overlay.querySelector(".sound-dialog-status");
+  const previewBtn = overlay.querySelector(".sound-preview");
+  const regenBtn = overlay.querySelector(".sound-regen");
+  const okBtn = overlay.querySelector(".modal-ok");
+  const cancelBtn = overlay.querySelector(".modal-cancel");
+  setTimeout(() => { input.focus(); try { input.select(); } catch {} }, 0);
+
+  let dirty = false;  // true once we've tentatively applied a generated pattern
+  let abortCtrl = null;
+
+  const close = (commit) => {
+    if (!commit && dirty) restorePattern(t, startSnap);
+    abortCtrl?.abort();
+    exitPreviewDuck();
+    overlay.remove();
+  };
+
+  const runGenerate = async () => {
+    const prompt = input.value.trim();
+    if (!prompt) { input.focus(); return; }
+    statusEl.textContent = "generating…";
+    previewBtn.disabled = true;
+    regenBtn.disabled = true;
+    okBtn.disabled = true;
+    abortCtrl?.abort();
+    abortCtrl = new AbortController();
+    try {
+      const siblings = state.tracks
+        .filter(o => o !== t && o.steps && o.steps.some(s => s))
+        .slice(0, 12)
+        .map(o => ({
+          name: o.name,
+          engine: engineByKey(o.engineKey)?.label ?? o.engineKey,
+          stepCount: o.length,
+          steps: o.steps.slice(),
+          notes: o.notes.slice(),
+        }));
+      const r = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        signal: abortCtrl.signal,
+        body: JSON.stringify({
+          prompt,
+          role: trackRole(t),
+          melodic: isMelodicTrack(t),
+          stepCount: t.length,
+          accents: [...t.accents].sort((a, b) => a - b).map(i => i + 1),
+          density: t.density ?? 0.5,
+          scale: state.scale.active ? { root: state.scale.root, mode: state.scale.mode, rootName: NOTE_NAMES[state.scale.root] } : null,
+          siblingTracks: siblings,
+        }),
+      });
+      if (!r.ok) throw new Error(await r.text());
+      const data = await r.json();
+      applyPattern(t, data);
+      renderStepGrid(t);
+      dirty = true;
+      statusEl.textContent = "previewing — play the transport to audition";
+      regenBtn.disabled = false;
+      okBtn.disabled = false;
+    } catch (err) {
+      if (isAbortError(err)) { statusEl.textContent = "cancelled"; }
+      else { console.error(err); statusEl.textContent = `error: ${err.message}`; }
+    } finally {
+      previewBtn.disabled = false;
+    }
+  };
+
+  previewBtn.addEventListener("click", runGenerate);
+  regenBtn.addEventListener("click", runGenerate);
+  okBtn.addEventListener("click", () => {
+    // Commit: push an undo snapshot first so the user can still revert.
+    pushUndoSnapshot(`track: ${t.name}`);
+    t.promptText = input.value.trim();
+    close(true);
+  });
+  cancelBtn.addEventListener("click", () => close(false));
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) close(false); });
+  const onKey = (e) => {
+    if (e.key === "Escape") { e.preventDefault(); close(false); document.removeEventListener("keydown", onKey); }
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); runGenerate(); }
+  };
+  document.addEventListener("keydown", onKey);
+}
+
 function showSoundDesignDialog({ trackName, engine, defaultValue = "" }) {
   return new Promise((resolve) => {
     const overlay = document.createElement("div");
@@ -4833,6 +5171,7 @@ function showSoundDesignDialog({ trackName, engine, defaultValue = "" }) {
       </div>
     `;
     document.body.appendChild(overlay);
+    enterPreviewDuck();
     const input = overlay.querySelector(".modal-input");
     const statusEl = overlay.querySelector(".sound-dialog-status");
     const previewBtn = overlay.querySelector(".sound-preview");
@@ -4956,6 +5295,7 @@ function showSoundDesignDialog({ trackName, engine, defaultValue = "" }) {
     const close = (val) => {
       stopPreview();
       previewAbort?.abort();
+      exitPreviewDuck();
       overlay.remove();
       resolve(val);
     };
@@ -5074,8 +5414,7 @@ async function designElevenSound(t) {
 
 async function promptAll() {
   for (const t of state.tracks) {
-    const input = t.el.querySelector(".prompt-input");
-    if (input.value.trim()) await promptTrack(t);
+    if ((t.promptText ?? "").trim()) await promptTrack(t);
   }
 }
 
@@ -5158,9 +5497,10 @@ async function promptFromMaster({ reshape = false, designSounds = false, regenPa
             const wanted = typeof spec.engineKey === "string" && engineByKey(spec.engineKey) ? spec.engineKey : "plaits:0";
             const len = Math.max(1, Math.min(128, Number(spec.length) || bars * STEPS_PER_BAR));
             const t2 = createTrack({ name: String(spec.name || "track").slice(0, 40), engineKey: wanted, length: len });
-            if (spec.prompt) t2.el.querySelector(".prompt-input").value = String(spec.prompt);
+            if (spec.prompt) t2.promptText = String(spec.prompt);
             if (spec.soundPrompt) t2.soundPromptText = String(spec.soundPrompt);
-            if (spec.fx) applyFxToTrack(t2, spec.fx);
+            // Planner-generated instruments always start clean — no fx or mods.
+            resetProcessingForPromptedSound(t2);
             newTracks.push({ track: t2, soundPrompt: spec.soundPrompt });
             continue;
           }
@@ -5170,14 +5510,14 @@ async function promptFromMaster({ reshape = false, designSounds = false, regenPa
             setEngineKey(track, spec.engineKey);
             track.el.querySelector(".track-engine").value = spec.engineKey;
           }
-          if (spec.fx) applyFxToTrack(track, spec.fx);
+          resetProcessingForPromptedSound(track);
           if (typeof spec.vol === "number" && Number.isFinite(spec.vol)) {
             const vol = Math.max(0, Math.min(1, spec.vol));
             setParam(track, "vol", vol);
             const volEl = track.el?.querySelector(".p-vol");
             if (volEl) volEl.value = vol;
           }
-          if (spec.prompt) track.el.querySelector(".prompt-input").value = String(spec.prompt);
+          if (spec.prompt) track.promptText = String(spec.prompt);
           if (spec.soundPrompt) track.soundPromptText = String(spec.soundPrompt);
           newTracks.push({ track, soundPrompt: spec.soundPrompt });
         }
@@ -5192,9 +5532,9 @@ async function promptFromMaster({ reshape = false, designSounds = false, regenPa
             engineKey: wanted,
             length: len,
           });
-          if (spec.prompt) track.el.querySelector(".prompt-input").value = String(spec.prompt);
+          if (spec.prompt) track.promptText = String(spec.prompt);
           if (spec.soundPrompt) track.soundPromptText = String(spec.soundPrompt);
-          if (spec.fx) applyFxToTrack(track, spec.fx);
+          resetProcessingForPromptedSound(track);
           if (typeof spec.vol === "number" && Number.isFinite(spec.vol)) {
             const vol = Math.max(0, Math.min(1, spec.vol));
             setParam(track, "vol", vol);
@@ -5225,7 +5565,7 @@ async function promptFromMaster({ reshape = false, designSounds = false, regenPa
       throw new Error("plan response shape mismatch");
     }
     empties.forEach((t, i) => {
-      t.el.querySelector(".prompt-input").value = data.prompts[i];
+      t.promptText = data.prompts[i];
     });
     if (designSounds && Array.isArray(data.soundPrompts) && data.soundPrompts.length === empties.length) {
       const soundEngine = document.getElementById("gen-sound-engine")?.value === "eleven" ? "eleven" : "tone";
@@ -5431,8 +5771,7 @@ function init() {
           if (t.lockPattern) continue;
           const seed = seeds.get(t.id);
           if (!seed || !seed.steps.some(s => s)) continue;
-          const input = t.el.querySelector(".prompt-input");
-          const basePrompt = input.value.trim() || `variation of the current pattern`;
+          const basePrompt = (t.promptText ?? "").trim() || `variation of the current pattern`;
           try {
             await promptTrack(t, {
               targetIdx: target,

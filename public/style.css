@@ -220,6 +220,9 @@ button.danger { color: var(--danger); }
   justify-content: center;
 }
 .icon-btn .btn-icon { display: block; }
+.ai-btn { display: inline-flex; align-items: center; gap: 5px; }
+.ai-btn .ai-icon { display: inline-flex; color: inherit; }
+.ai-btn:disabled .ai-icon { color: var(--fg-dim); }
 .set-stack, .mode-stack { display: flex; flex-direction: column; gap: 4px; }
 .mode-row { display: flex; gap: 4px; }
 
@@ -575,11 +578,6 @@ main {
 .track-midi select { min-width: 180px; }
 .track-midi input[type="number"] { width: 56px; }
 
-.track-sound {
-  background: transparent;
-  color: var(--accent-2);
-  border-color: var(--accent-2);
-}
 
 .track-save:disabled { opacity: 0.35; cursor: not-allowed; }
 
@@ -598,39 +596,6 @@ main {
 .track.soloed { border-color: var(--accent); }
 
 .track-glide { width: 70px; }
-
-.track-prompt {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  flex-wrap: wrap;
-}
-
-.track-prompt .prompt-input {
-  flex: 1 1 220px;
-  min-width: 0;
-}
-
-.track-density-field {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 11px;
-  color: var(--fg-dim);
-  white-space: nowrap;
-}
-.track-density-field input[type="range"] { width: 90px; }
-
-.prompt-go {
-  background: var(--accent);
-  color: #0b0d10;
-  border-color: var(--accent);
-  font-weight: 600;
-}
-.prompt-go:disabled {
-  opacity: 0.5;
-  cursor: progress;
-}
 
 .steps {
   display: grid;
