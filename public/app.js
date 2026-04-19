@@ -100,6 +100,7 @@ const DRUM_SYNTH_ENGINES = [
   { key: "dm:poly-saw",  label: "poly saw",     defaultNote: 60, poly: true,  melodic: true },
   { key: "dm:fm-bell",   label: "fm bell",      defaultNote: 72, poly: true,  melodic: true },
   { key: "dm:pad",       label: "pad",          defaultNote: 60, poly: true,  melodic: true },
+  { key: "dm:mini-brute",label: "mini brute",   defaultNote: 60, poly: false, melodic: true },
 ].map(e => ({ ...e, group: "drum / synth", type: "drum-synth", poly: e.poly ?? false, melodic: e.melodic ?? false }));
 
 const SAMPLE_BASE = "https://tonejs.github.io/audio/drum-samples";
@@ -572,7 +573,7 @@ function serializeSet() {
       soundPromptText: t.soundPromptText,
       locked: t.locked, muted: t.muted, soloed: t.soloed,
       isDrumKit: !!t.isDrumKit,
-      glide: t.glide, speed: t.speed ?? 1, sampleSpeedMode: t.sampleSpeedMode ?? "1xbpm",
+      glide: t.glide, speed: t.speed ?? 1, sampleSpeedMode: t.sampleSpeedMode ?? "native",
       lfoConfig: JSON.parse(JSON.stringify(t.lfoConfig)),
       patterns: t.patterns.map(p => ({
         steps: p.steps.slice(),
@@ -770,7 +771,7 @@ function applySet(s) {
       : guessIsDrumKit({ engineKey: t.engineKey, name: t.name });
     t.glide  = td.glide ?? 0;
     t.speed  = td.speed ?? 1;
-    t.sampleSpeedMode = td.sampleSpeedMode ?? "1xbpm";
+    t.sampleSpeedMode = td.sampleSpeedMode ?? "native";
     Object.assign(t.lfoConfig, td.lfoConfig || {});
     if (Array.isArray(td.patterns)) {
       const pad = (arr, fill, n) => { const out = (arr || []).slice(0, n); while (out.length < n) out.push(fill); return out; };
@@ -1386,6 +1387,80 @@ function buildDrumSynthNode(kind, output) {
         release: () => s.releaseAll(),
       };
     }
+    case "mini-brute": {
+      // Arturia MiniBrute-style mono analog voice: saw + pulse + triangle + sub-sine
+      // summed through a soft-clip ("brute factor") and an amp envelope. The track's
+      // own filter + filter envelope provide the Steiner-style sweep.
+      const freqSig = new Tone.Signal({ units: "frequency", value: 110 });
+      const saw   = new Tone.Oscillator({ type: "sawtooth" }).start();
+      const pulse = new Tone.PulseOscillator({ width: 0.5 }).start();
+      const tri   = new Tone.Oscillator({ type: "triangle" }).start();
+      const sub   = new Tone.Oscillator({ type: "sine" }).start();
+      const subMul = new Tone.Multiply(0.5);           // sub runs an octave below the main pitch
+      freqSig.connect(saw.frequency);
+      freqSig.connect(pulse.frequency);
+      freqSig.connect(tri.frequency);
+      freqSig.chain(subMul, sub.frequency);
+
+      const mixSaw   = new Tone.Gain(0.55);
+      const mixPulse = new Tone.Gain(0.35);
+      const mixTri   = new Tone.Gain(0.2);
+      const mixSub   = new Tone.Gain(0.4);
+      saw.connect(mixSaw);
+      pulse.connect(mixPulse);
+      tri.connect(mixTri);
+      sub.connect(mixSub);
+
+      const brute = new Tone.Distortion({ distortion: 0.22, oversample: "2x", wet: 0.55 });
+      const amp   = new Tone.AmplitudeEnvelope({ attack: 0.004, decay: 0.2, sustain: 0.7, release: 0.3 });
+      const trim  = new Tone.Gain(0.38);
+      mixSaw.connect(brute);
+      mixPulse.connect(brute);
+      mixTri.connect(brute);
+      mixSub.connect(amp);   // sub bypasses brute-factor for a cleaner bottom end
+      brute.connect(amp);
+      amp.connect(trim);
+      trim.connect(output);
+
+      let lastFreq = 110;
+      let glideSec = 0.015;
+      // Map the generic track params (harm/timb/morph/decay) onto MiniBrute
+      // controls so the existing param sliders do meaningful work here.
+      const setMBParam = (key, val) => {
+        const v = Math.max(0, Math.min(1, Number(val) || 0));
+        if (key === "harm") {                   // sub mix (0 → none, 1 → full)
+          mixSub.gain.value = v;
+        } else if (key === "timb") {            // pulse width
+          pulse.width.value = 0.1 + v * 0.8;
+        } else if (key === "morph") {           // saw ↔ pulse ↔ triangle crossfade
+          // 0 = pure saw, 0.5 = pure pulse, 1 = pure triangle
+          const sawLvl   = Math.max(0, 1 - v * 2) * 0.55;
+          const pulseLvl = (1 - Math.abs(v - 0.5) * 2) * 0.55;
+          const triLvl   = Math.max(0, (v - 0.5) * 2) * 0.55;
+          mixSaw.gain.value   = sawLvl;
+          mixPulse.gain.value = pulseLvl;
+          mixTri.gain.value   = triLvl;
+        } else if (key === "decay") {            // amp decay time + brute factor
+          amp.decay = 0.05 + v * 1.6;
+          brute.distortion = 0.1 + v * 0.55;
+          brute.wet.value   = 0.35 + v * 0.5;
+        }
+      };
+      return {
+        nodes: [saw, pulse, tri, sub, subMul, freqSig, mixSaw, mixPulse, mixTri, mixSub, brute, amp, trim],
+        setGlide: (g) => { glideSec = Math.max(0.002, Number(g) || 0); },
+        setParam: setMBParam,
+        trigger: (note, time, dur, vel) => {
+          const f = Tone.Frequency(note, "midi").toFrequency();
+          freqSig.cancelScheduledValues(time);
+          freqSig.setValueAtTime(lastFreq, time);
+          freqSig.linearRampToValueAtTime(f, time + glideSec);
+          lastFreq = f;
+          amp.triggerAttackRelease(Math.max(0.02, dur), time, vel);
+        },
+        release: (time) => amp.triggerRelease(time),
+      };
+    }
   }
   throw new Error("unknown drum-synth kind: " + kind);
 }
@@ -1400,7 +1475,15 @@ class DrumSynthVoice {
     this.glide = 0;
     this.output = new Tone.Gain(params.vol).toDestination();
     this.kind = key.split(":")[1];
+    this.params = { ...params };
     this.built = buildDrumSynthNode(this.kind, this.output);
+    this._applyParams();
+  }
+  _applyParams() {
+    if (!this.built.setParam) return;
+    for (const k of ["harm", "timb", "morph", "decay"]) {
+      if (this.params?.[k] != null) this.built.setParam(k, this.params[k]);
+    }
   }
   getOutputNode() { return this.output.output ?? this.output.input; }
   setDestination(target) {
@@ -1413,6 +1496,8 @@ class DrumSynthVoice {
     for (const n of this.built.nodes) {
       if (n instanceof Tone.MonoSynth) n.portamento = this.glide;
     }
+    // Custom voices (e.g. mini-brute) can opt in via built.setGlide
+    this.built.setGlide?.(this.glide);
   }
   canInPlaceChange(newKey) { return false; }
   setEngine(key) {
@@ -1425,9 +1510,15 @@ class DrumSynthVoice {
     const e = engineByKey(key);
     this.poly = !!e?.poly;
     this.built = buildDrumSynthNode(this.kind, this.output);
+    this._applyParams();
   }
   setParam(key, val) {
     if (key === "vol") this.output.gain.value = val;
+    else {
+      if (!this.params) this.params = {};
+      this.params[key] = val;
+      this.built.setParam?.(key, val);
+    }
   }
   getAudioParam(key) {
     if (key === "vol") return this.output.gain;
@@ -1779,7 +1870,11 @@ class ElevenVoice {
   hit(midiNote, time, duration, velocity = 1, opts = null) {
     if (!this.buffer) return;
     const pitchBase = Number.isFinite(opts?.pitchBase) ? opts.pitchBase : 60;
-    const rate = (this.baseRate || 1) * Math.pow(2, (midiNote - pitchBase) / 12);
+    // pitchLocked disables pitch mapping entirely — used for drum-kit tracks
+    // so changing the step note doesn't transpose the sample.
+    const rate = opts?.pitchLocked
+      ? (this.baseRate || 1)
+      : (this.baseRate || 1) * Math.pow(2, (midiNote - pitchBase) / 12);
     const { src, stopTime } = startSampleSource(this.ctx, this.buffer, rate, time, duration, opts);
     const g = this.ctx.createGain();
     applySampleFadeEnvelope(g, time, stopTime, Math.max(0, Math.min(1, velocity)), opts);
@@ -1829,7 +1924,11 @@ class UploadVoice {
   hit(midiNote, time, duration, velocity = 1, opts = null) {
     if (!this.buffer) return;
     const pitchBase = Number.isFinite(opts?.pitchBase) ? opts.pitchBase : 60;
-    const rate = (this.baseRate || 1) * Math.pow(2, (midiNote - pitchBase) / 12);
+    // pitchLocked disables pitch mapping entirely — used for drum-kit tracks
+    // so changing the step note doesn't transpose the sample.
+    const rate = opts?.pitchLocked
+      ? (this.baseRate || 1)
+      : (this.baseRate || 1) * Math.pow(2, (midiNote - pitchBase) / 12);
     const { src, stopTime } = startSampleSource(this.ctx, this.buffer, rate, time, duration, opts);
     const g = this.ctx.createGain();
     applySampleFadeEnvelope(g, time, stopTime, Math.max(0, Math.min(1, velocity)), opts);
@@ -2011,11 +2110,16 @@ function setParam(t, key, val) {
 
 function updatePlaitsControlsVisibility(t) {
   if (!t.el) return;
-  const engineType = engineByKey(t.engineKey)?.type;
+  const eng = engineByKey(t.engineKey);
+  const engineType = eng?.type;
   const isPlaits = engineType === "plaits";
+  // mini-brute reuses the harm/timb/morph/decay sliders as sub-mix / pulse-width
+  // / osc-blend / decay, so keep them visible for that engine too.
+  const isMiniBrute = t.engineKey === "dm:mini-brute";
+  const showTimbre = isPlaits || isMiniBrute;
   const group = t.el.querySelector(".timbre-group");
   if (group) {
-    group.hidden = !isPlaits;
+    group.hidden = !showTimbre;
     group.style.removeProperty("display");
   }
   const modPanel = t.el.querySelector(".track-mod-panel");
@@ -2023,9 +2127,21 @@ function updatePlaitsControlsVisibility(t) {
     for (const key of ["harm", "timb", "morph", "decay"]) {
       const row = modPanel.querySelector(`.lfo-row[data-key="${key}"]`);
       if (row) {
-        row.hidden = !isPlaits;
+        row.hidden = !showTimbre;
         row.style.removeProperty("display");
       }
+    }
+  }
+  // Relabel the timbre sliders for mini-brute so the control intent is visible
+  // (Plaits keeps its original harm/timb/morph/decay wording).
+  if (group) {
+    const labels = isMiniBrute
+      ? { harm: "sub", timb: "pw", morph: "mix", decay: "dec" }
+      : { harm: "harm", timb: "timb", morph: "morph", decay: "decay" };
+    for (const key of Object.keys(labels)) {
+      const field = group.querySelector(`.p-${key}`)?.closest(".field");
+      const lbl = field?.querySelector("label");
+      if (lbl) lbl.textContent = labels[key];
     }
   }
 }
@@ -2156,7 +2272,7 @@ function createTrack({ name, engineKey, length = totalSteps() }) {
     isDrumKit: guessIsDrumKit({ engineKey, name }),
     glide: 0,
     swing: 0,
-    sampleSpeedMode: "1xbpm",
+    sampleSpeedMode: "native",
     density: 0.5,
     speed: 1,
     trackTick: 0,
@@ -3290,9 +3406,9 @@ function openStepEditor(t, idx, anchorEl) {
           <span class="se-smp-info">—</span>
           <label>fit
             <select class="se-smp-fit">
-              <option value="native">native</option>
+              <option value="native" selected>native</option>
               <option value="2xbpm">2× bpm</option>
-              <option value="1xbpm" selected>1× bpm</option>
+              <option value="1xbpm">1× bpm</option>
               <option value="1/2bpm">1/2 bpm</option>
               <option value="1/4bpm">1/4 bpm</option>
             </select>
@@ -3519,9 +3635,9 @@ function openStepEditor(t, idx, anchorEl) {
     const fitSel  = sampleRow.querySelector(".se-smp-fit");
     const prev    = sampleRow.querySelector(".se-preview");
     if (fitSel) {
-      fitSel.value = t.sampleSpeedMode || "1xbpm";
+      fitSel.value = t.sampleSpeedMode || "native";
       fitSel.addEventListener("change", () => {
-        t.sampleSpeedMode = fitSel.value || "1xbpm";
+        t.sampleSpeedMode = fitSel.value || "native";
         applySampleSpeed(t);
       });
     }
@@ -3704,6 +3820,7 @@ function openStepEditor(t, idx, anchorEl) {
           fadeOut:     t.sampleFadeOuts?.[idx] ?? 0,
           loopMode:    t.sampleLoopModes?.[idx] ?? "off",
           pitchBase:   t.isDrumKit ? 36 : 60,
+          pitchLocked: t.isDrumKit && (t.voice.type === "eleven" || t.voice.type === "upload"),
         });
       } catch (err) { console.warn(err); }
     });
@@ -3930,6 +4047,7 @@ async function togglePlay() {
                 fadeOut:     t.sampleFadeOuts?.[idx] ?? 0,
                 loopMode:    t.sampleLoopModes?.[idx] ?? "off",
                 pitchBase:   t.isDrumKit ? 36 : 60,
+                pitchLocked: t.isDrumKit && (t.voice.type === "eleven" || t.voice.type === "upload"),
               }
             : null;
           const ratchet = Math.max(1, Math.min(8, Math.round(t.ratchets?.[idx] ?? 1)));
@@ -4279,6 +4397,16 @@ async function designSoundForTrack(track, prompt, engine, signal) {
     } else {
       setEngineKey(track, "eleven");
       if (track.el) track.el.querySelector(".track-engine").value = "eleven";
+    }
+    // Loop-style prompts (e.g. "seamless 2-bar drum loop") should BPM-sync;
+    // one-shots / sustained tones should stay at native playback rate. We
+    // detect "loop" in the prompt (but not "no loop") since the planner's
+    // one-shot prompts intentionally contain the negation.
+    const isLoopPrompt = /\bloop\b/i.test(prompt) && !/\bno\s+loop\b/i.test(prompt);
+    track.sampleSpeedMode = isLoopPrompt ? "1xbpm" : "native";
+    if (track.el) {
+      const fitSel = track.el.querySelector(".sample-speed") || track.el.querySelector(".se-smp-fit");
+      if (fitSel) fitSel.value = track.sampleSpeedMode;
     }
     applySampleSpeed(track);
     resetProcessingForPromptedSound(track);
