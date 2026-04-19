@@ -5007,12 +5007,9 @@ function paintNowIndicator() {
 
 async function ensureAudio() {
   if (state.ready) return;
-  if (!state.audioCtx) {
-    state.audioCtx = new AudioContext();
-    Tone.setContext(state.audioCtx);
-  }
+  // state.audioCtx + Tone.setContext are wired up at init() time so Tone.Transport
+  // latches onto our context from first access.
   await Tone.start();
-  // master bus so we can meter final output and add a one-stop master gain later
   if (!state.masterGain) {
     state.masterGain = state.audioCtx.createGain();
     state.masterGain.gain.value = 1;
@@ -5280,7 +5277,22 @@ async function togglePlay() {
   const btn = document.getElementById("play");
   if (state.playing) {
     Tone.Transport.stop();
+    Tone.Transport.cancel(0);
     if (state.repeatId !== null) { Tone.Transport.clear(state.repeatId); state.repeatId = null; }
+    // Fast master-gain cut. Tone synth triggerAttackRelease calls issued by the
+    // last few scheduleRepeat callbacks live inside Tone's ~100 ms lookahead and
+    // are already queued as native Web Audio events — stopping the Transport
+    // doesn't unschedule them. Ramping master to 0 for a beat makes them inaudible
+    // so stop actually stops. togglePlay restores the gain on the next start.
+    if (state.masterGain && state.audioCtx) {
+      const now = state.audioCtx.currentTime;
+      const g = state.masterGain.gain;
+      try {
+        g.cancelScheduledValues(now);
+        g.setValueAtTime(g.value, now);
+        g.linearRampToValueAtTime(0, now + 0.02);
+      } catch {}
+    }
     silenceAllVoices();
     state.playing = false;
     btn.textContent = "play";
@@ -5307,6 +5319,17 @@ async function togglePlay() {
   if (state.repeatId !== null) Tone.Transport.clear(state.repeatId);
   state.tick = 0;
   for (const t of state.tracks) { t.trackTick = 0; t.speedAccum = 0; }
+  // Restore master gain — the stop branch ramps it to 0 to kill the lookahead-
+  // queued tail of Tone synth events that Transport.stop() can't unschedule.
+  if (state.masterGain && state.audioCtx) {
+    const now = state.audioCtx.currentTime;
+    const g = state.masterGain.gain;
+    try {
+      g.cancelScheduledValues(now);
+      g.setValueAtTime(g.value, now);
+      g.linearRampToValueAtTime(1, now + 0.02);
+    } catch {}
+  }
   state.repeatId = Tone.Transport.scheduleRepeat((time) => {
     const baseStepDur = Tone.Time("16n").toSeconds();
     const anySolo = state.tracks.some(t => t.soloed);
@@ -5421,7 +5444,13 @@ async function togglePlay() {
     }
   }, "16n");
 
-  Tone.Transport.start();
+  // Start in 100 ms with offset 0. The +0.1 lookahead keeps the first "16n"
+  // callbacks from landing at `time < currentTime` on cold start (context drifted
+  // forward during ensureAudio) — the Math.max clamp above would otherwise pile
+  // their hits onto the same instant, making the first bar unplayable. The
+  // explicit offset 0 is the canonical way to rewind, avoiding the stop/cancel/
+  // position dance which in Tone 15 can leave the first events unscheduled.
+  Tone.Transport.start("+0.1", 0);
   state.playing = true;
   btn.textContent = "stop";
   btn.classList.add("playing");
@@ -6455,6 +6484,17 @@ function meterTick() {
 }
 
 function init() {
+  // Create the AudioContext and bind Tone to it BEFORE anything reads
+  // Tone.Transport. Tone.Transport's internal Clock latches onto the context's
+  // time at first access; if we defer this to the play-click handler, Tone's
+  // default context has already been ticking for several seconds and the clock
+  // stays anchored there, so Transport.start("+0.1") resolves to "default-ctx
+  // time + 0.1", which is several seconds in the future against our fresh
+  // AudioContext. Diagnostics confirmed: drift == time from page load to click.
+  // Creating the context here is fine — it starts suspended and Tone.start()
+  // resumes it inside the user gesture.
+  state.audioCtx = new AudioContext({ latencyHint: "interactive" });
+  Tone.setContext(state.audioCtx);
   rebuildEngineCatalog();
   requestAnimationFrame(meterTick);
 
@@ -6741,6 +6781,14 @@ function init() {
   setStatus("ready");
   // if the URL carries ?s=<id>, pull that shared session
   loadShareFromUrl();
+  // Close the AudioContext on page hide. Chrome reuses its audio process across
+  // tab reloads; a leaked AudioContext from the previous page leaves the worklet
+  // graph and clock in a degraded state, which surfaces as "first play is delayed
+  // and out of sync after a refresh — only a full browser restart clears it".
+  window.addEventListener("pagehide", () => {
+    try { Tone.Transport.stop(); } catch {}
+    try { state.audioCtx?.close(); } catch {}
+  });
 }
 
 init();
