@@ -272,6 +272,10 @@ function populateEngineSelect(sel) {
 
 // ---- scales + chords ---------------------------------------------------
 
+// Interval arrays are pitch-classes modulo 12. Integer values = 12-TET semitones;
+// half-integer values (e.g. 1.5) = 24-TET quarter tones (50 cents above the lower
+// semitone). The whole pitch path — quantizeToScale, scaleIndexToMidi, voice.hit
+// — accepts fractional MIDI, so these intervals round-trip as real microtones.
 const SCALES = {
   off:       null,
   major:     [0, 2, 4, 5, 7, 9, 11],
@@ -285,6 +289,25 @@ const SCALES = {
   pentatonic:       [0, 2, 4, 7, 9],
   "minor pentatonic":[0, 3, 5, 7, 10],
   blues:     [0, 3, 5, 6, 7, 10],
+  // Exotic / world 12-TET subsets.
+  "phrygian dominant": [0, 1, 4, 5, 7, 8, 10],  // Ahava Rabbah / Freygish
+  "double harmonic":   [0, 1, 4, 5, 7, 8, 11],  // Byzantine / Arabic
+  "hungarian minor":   [0, 2, 3, 6, 7, 8, 11],  // Gypsy minor
+  "neapolitan minor":  [0, 1, 3, 5, 7, 8, 11],
+  "persian":           [0, 1, 4, 5, 6, 8, 11],
+  "enigmatic":         [0, 1, 4, 6, 8, 10, 11], // Verdi
+  "hirajoshi":         [0, 2, 3, 7, 8],          // Japanese pentatonic
+  "in sen":            [0, 1, 5, 7, 10],         // Japanese
+  "iwato":             [0, 1, 5, 6, 10],         // Japanese
+  "prometheus":        [0, 2, 4, 6, 9, 10],      // Scriabin
+  "whole tone":        [0, 2, 4, 6, 8, 10],
+  "octatonic h-w":     [0, 1, 3, 4, 6, 7, 9, 10],
+  "octatonic w-h":     [0, 2, 3, 5, 6, 8, 9, 11],
+  // Tuning systems (chromatic fills of the selected EDO).
+  "12-tet":  [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+  "24-tet":  [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6, 6.5, 7, 7.5, 8, 8.5, 9, 9.5, 10, 10.5, 11, 11.5],
+  // Turkish maqam Hüseyni: D, E½♭, F, G, A, B½♭, C — two quarter-flat inflections.
+  "hüseyni": [0, 1.5, 3, 5, 7, 8.5, 10],
   chromatic: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
 };
 
@@ -309,18 +332,23 @@ const CHORD_TYPES = {
 const CHORD_ALIASES = { "7": "dom7" };
 function canonicalChord(c) { return CHORD_ALIASES[c] || c; }
 
+// Snap a MIDI value to the nearest pitch allowed by `intervals` (pc set, mod 12).
+// Interval step is auto-detected: 0.5 when any interval is non-integer (24-EDO /
+// Hüseyni), 1 otherwise (12-EDO). Returns fractional MIDI for microtonal scales.
 function quantizeToScale(midi, rootPc, intervals) {
   if (!intervals) return midi;
-  const target = Math.round(midi);
+  const step = intervals.some(i => i !== Math.floor(i)) ? 0.5 : 1;
+  const EPS = 1e-6;
+  const target = Math.round(midi / step) * step;
   let best = target;
   let bestDist = Infinity;
-  for (let d = -6; d <= 6; d++) {
-    const pc = ((target + d) % 12 + 12) % 12;
-    const relative = ((pc - rootPc) % 12 + 12) % 12;
-    if (intervals.includes(relative)) {
+  for (let d = -6; d <= 6; d += step) {
+    const candidate = target + d;
+    const relative = ((candidate - rootPc) % 12 + 12) % 12;
+    if (intervals.some(i => Math.abs(i - relative) < EPS)) {
       if (Math.abs(d) < bestDist) {
         bestDist = Math.abs(d);
-        best = target + d;
+        best = candidate;
       }
     }
   }
@@ -337,7 +365,8 @@ function applyScale(midi) {
 function midiToScaleIndex(midi, rootPc, intervals) {
   const q = quantizeToScale(midi, rootPc, intervals);
   const pcDiff = ((q - rootPc) % 12 + 12) % 12;
-  const pos = intervals.indexOf(pcDiff);
+  const EPS = 1e-6;
+  const pos = intervals.findIndex(i => Math.abs(i - pcDiff) < EPS);
   if (pos < 0) return null;
   const octave = Math.floor((q - rootPc) / 12);
   return octave * intervals.length + pos;
@@ -1252,9 +1281,14 @@ function rateToSlider(hz) {
 
 const NOTE_NAMES = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
 function midiToName(m) {
-  const n = Math.round(Number(m));
-  if (!Number.isFinite(n)) return "";
-  return NOTE_NAMES[((n % 12) + 12) % 12] + (Math.floor(n / 12) - 1);
+  const raw = Number(m);
+  if (!Number.isFinite(raw)) return "";
+  // Microtonal pitches (quarter tones etc.) display with a cents offset against
+  // the nearest semitone, e.g. "D2-50c" for D2 minus a quarter tone.
+  const base = Math.round(raw);
+  const cents = Math.round((raw - base) * 100);
+  const name = NOTE_NAMES[((base % 12) + 12) % 12] + (Math.floor(base / 12) - 1);
+  return cents === 0 ? name : `${name}${cents > 0 ? "+" : ""}${cents}c`;
 }
 function nameToMidi(name) {
   const m = /^([A-Ga-g])([#b]?)(-?\d+)$/.exec(String(name).trim());
@@ -2717,6 +2751,8 @@ class MidiVoice {
   }
   hit(midiNote, time, duration, velocity = 1) {
     if (!this.output) return;
+    // MIDI is integer-noted; microtonal pitches round to the nearest semitone here.
+    // Real microtonal MIDI output would need per-note pitch-bend or MPE.
     const n = Math.max(0, Math.min(127, Math.round(midiNote)));
     const v = Math.max(1, Math.min(127, Math.round(velocity * 127)));
     const onMs = this._audioTimeToPerf(time);
@@ -4575,6 +4611,10 @@ function openStepEditor(t, idx, anchorEl) {
   const octRangeLbl = el.querySelector(".se-oct-range");
   const scaleIntervals = state.scale.active ? (SCALES[state.scale.mode] || null) : null;
   const PC_NAMES = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
+  // Microtonal scales (Hüseyni, 24-TET) carry half-integer intervals; step the pad
+  // by 0.5 semitones so quarter tones appear as clickable pads.
+  const EPS = 1e-6;
+  const scaleStep = scaleIntervals && scaleIntervals.some(i => i !== Math.floor(i)) ? 0.5 : 1;
   const VIEW_OCTS = 3;
   const MIN_OCT = 1, MAX_OCT = 6;
   const octaveOf = (m) => Math.floor(m / 12) - 1;
@@ -4587,26 +4627,28 @@ function openStepEditor(t, idx, anchorEl) {
     const lo = 24 + (viewOctStart - 1) * 12;
     const hi = lo + VIEW_OCTS * 12;
     const visible = [];
-    for (let m = lo; m < hi && m <= 95; m++) {
+    for (let m = lo; m < hi && m <= 95; m += scaleStep) {
       if (!scaleIntervals) { visible.push(m); continue; }
-      const pc = ((m % 12) + 12) % 12;
-      const rel = ((pc - state.scale.root) % 12 + 12) % 12;
-      if (scaleIntervals.includes(rel)) visible.push(m);
+      const rel = ((m - state.scale.root) % 12 + 12) % 12;
+      if (scaleIntervals.some(i => Math.abs(i - rel) < EPS)) visible.push(m);
     }
     const ROWS = Math.max(1, Math.ceil(visible.length / COLS));
     for (let i = 0; i < visible.length; i++) {
       const m = visible[i];
-      const pc = ((m % 12) + 12) % 12;
+      const basePc = ((Math.round(m) % 12) + 12) % 12;
+      const isMicrotonal = m !== Math.round(m);
       const pad = document.createElement("button");
       pad.type = "button";
       pad.className = "se-pad";
       pad.dataset.note = String(m);
       if (scaleIntervals) {
         pad.classList.add("in-scale");
-        if (pc === state.scale.root) pad.classList.add("root");
+        if (!isMicrotonal && basePc === state.scale.root) pad.classList.add("root");
       }
       pad.title = midiToName(m);
-      pad.textContent = `${PC_NAMES[pc]}${octaveOf(m)}`;
+      pad.textContent = isMicrotonal
+        ? midiToName(m)
+        : `${PC_NAMES[basePc]}${octaveOf(m)}`;
       pad.style.gridRow = String(ROWS - Math.floor(i / COLS));
       pad.style.gridColumn = String((i % COLS) + 1);
       kb.appendChild(pad);
@@ -4627,7 +4669,9 @@ function openStepEditor(t, idx, anchorEl) {
     if (viewOctStart + VIEW_OCTS - 1 < MAX_OCT) { viewOctStart++; renderPads(); }
   });
   const setNote = (v, { render = true } = {}) => {
-    let n = Math.max(24, Math.min(95, Math.round(v)));
+    // Preserve fractional MIDI here — microtonal scales yield quarter-tone notes
+    // that applyScale will snap to the nearest scale pitch.
+    let n = Math.max(24, Math.min(95, Number(v)));
     n = applyScale(n);
     noteInput.value = String(n);
     t.notes[idx] = n;
