@@ -221,6 +221,7 @@ button.danger { color: var(--danger); }
 .pattern-cell.drag-over { border-color: var(--accent); background: color-mix(in oklab, var(--accent) 20%, var(--step)); }
 .repeat-wrap { display: inline-flex; flex-direction: column; align-items: center; gap: 2px; color: var(--fg-dim); font-size: 11px; }
 .repeat-wrap input { width: 48px; text-align: center; }
+.repeat-wrap select { width: 64px; text-align: center; }
 #pattern-mode[aria-pressed="true"] { background: var(--accent-2); color: #0b0d10; border-color: var(--accent-2); }
 #pattern-switch[aria-pressed="true"] { background: var(--accent-2); color: #0b0d10; border-color: var(--accent-2); }
 #set-save, #set-load, #set-export, #set-import, #set-share { text-transform: none; }

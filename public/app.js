@@ -530,7 +530,7 @@ function currentIndicatorSteps() {
   return Math.max(2, Math.min(64, Number.isFinite(n) ? n : 16));
 }
 function currentIndicatorMeter() {
-  return activeMeter(state.tracks[0]);
+  return activeMeter();
 }
 function buildBeatIndicator() {
   const svg = document.getElementById("beat-indicator");
@@ -643,6 +643,10 @@ const state = {
   queuedPattern: null,
   patternMeta: Array(32).fill(null).map(() => ({ regenPattern: true, regenInstrument: true })),
   patternRepeats: Array(32).fill(1),
+  patternMeters: Array(32).fill(null).map(() => ({ num: 4, den: 4 })),
+  // Slots 1..31 follow pattern 1's meter until the user sets one explicitly; pattern 1
+  // is always the source. Any true flag means "user customized — do not inherit from #1".
+  patternMeterCustomized: Array(32).fill(false),
   chainBarCount: 0,
 };
 
@@ -665,7 +669,6 @@ function emptyPattern(len) {
     sampleFadeIns:  new Array(len).fill(0),     // sample fade-in time in seconds (0 = click-guard)
     sampleFadeOuts: new Array(len).fill(0),     // sample fade-out time in seconds
     sampleLoopModes: new Array(len).fill("off"),// "off" | "loop" | "pingpong"
-    meter: { num: 4, den: 4 },                  // time signature — decides strong-beat positions + accents
   };
 }
 
@@ -688,17 +691,14 @@ function aliasPattern(t, idx) {
   t.sampleFadeIns  = p.sampleFadeIns  ?? (p.sampleFadeIns  = new Array(p.steps.length).fill(0));
   t.sampleFadeOuts = p.sampleFadeOuts ?? (p.sampleFadeOuts = new Array(p.steps.length).fill(0));
   t.sampleLoopModes = p.sampleLoopModes ?? (p.sampleLoopModes = new Array(p.steps.length).fill("off"));
-  if (!p.meter) p.meter = { num: 4, den: 4 };
-  // Patterns can have independent lengths + meters; mirror the active pattern's
-  // into t.length / t.accents so every transport / UI path reading them stays
-  // correct.
+  // Patterns can have independent lengths; meter is pattern-global (state.patternMeters).
+  // Mirror the active pattern's length into t.length / t.accents so every transport
+  // / UI path reading them stays correct.
   t.length = p.steps.length;
-  t.accents = autoAccents(t.length, p.meter);
+  t.accents = autoAccents(t.length, state.patternMeters[idx]);
   if (t.el) {
     const lenEl = t.el.querySelector(".track-len");
     if (lenEl) lenEl.value = t.length;
-    const meterEl = t.el.querySelector(".track-meter");
-    if (meterEl) meterEl.value = `${p.meter.num}/${p.meter.den}`;
   }
   t._patternIdx = idx;
 }
@@ -761,7 +761,17 @@ function switchPattern(idx) {
   if (instBtn) instBtn.setAttribute("aria-pressed", String(idx === 0));
   const repInput = document.getElementById("pattern-repeats");
   if (repInput) repInput.value = state.patternRepeats[idx] ?? 1;
+  syncMeterUI();
   state.chainBarCount = 0;
+}
+
+function syncMeterUI() {
+  const sel = document.getElementById("pattern-meter");
+  if (sel) {
+    const m = activeMeter();
+    sel.value = `${m.num}/${m.den}`;
+  }
+  paintBeatIndicator(state.tick);
 }
 
 // ---- session save/load -------------------------------------------------
@@ -778,6 +788,7 @@ function serializeSet() {
     activePattern: state.activePattern,
     patternMode: state.patternMode,
     patternSwitchMode: state.patternSwitchMode,
+    patternMeters: state.patternMeters.map(m => ({ num: m.num, den: m.den })),
     tracks: state.tracks.map(t => ({
       name: t.name,
       engineKey: t.engineKey,
@@ -805,7 +816,6 @@ function serializeSet() {
         notes: p.notes.slice(),
         velocities: p.velocities.slice(),
         chords: p.chords.slice(),
-        meter: p.meter ? { num: p.meter.num, den: p.meter.den } : { num: 4, den: 4 },
       })),
     })),
   };
@@ -982,6 +992,25 @@ function applySet(s) {
   if (Number.isFinite(s.swing)) document.getElementById("swing").value = s.swing;
   if (s.scale) { Object.assign(state.scale, s.scale); syncScaleUI(); }
   state.activePattern = Math.max(0, Math.min(PATTERN_COUNT - 1, s.activePattern ?? 0));
+  // Hoist pattern meters: prefer the new global array; otherwise salvage the
+  // first track's per-pattern meter from legacy saves.
+  const legacyMeters = Array.isArray(s.tracks?.[0]?.patterns)
+    ? s.tracks[0].patterns.map(p => p?.meter && parseMeter(`${p.meter.num}/${p.meter.den}`)).map(m => m || { num: 4, den: 4 })
+    : [];
+  for (let i = 0; i < PATTERN_COUNT; i++) {
+    const src = (s.patternMeters && s.patternMeters[i]) || legacyMeters[i];
+    const parsed = src ? parseMeter(`${src.num}/${src.den}`) : null;
+    state.patternMeters[i] = parsed || { num: 4, den: 4 };
+  }
+  // Derive customization: any slot whose meter differs from pattern 1's is treated
+  // as user-customized (so later edits to #1 don't clobber it).
+  {
+    const m0 = state.patternMeters[0];
+    for (let i = 0; i < PATTERN_COUNT; i++) {
+      const mi = state.patternMeters[i];
+      state.patternMeterCustomized[i] = i !== 0 && (mi.num !== m0.num || mi.den !== m0.den);
+    }
+  }
   state.patternMode = s.patternMode === "chain" ? "chain" : "repeat";
   const modeBtn = document.getElementById("pattern-mode");
   modeBtn.innerHTML = state.patternMode === "chain" ? ICON_CHAIN : ICON_REPEAT;
@@ -1056,7 +1085,6 @@ function applySet(s) {
           notes: pad(p.notes, null, n),
           velocities: pad(p.velocities, 0.5, n),
           chords: pad(p.chords, "", n),
-          meter: (p.meter && parseMeter(`${p.meter.num}/${p.meter.den}`)) || { num: 4, den: 4 },
         };
       }
     }
@@ -1110,6 +1138,7 @@ function applySet(s) {
     renderStepGrid(t);
   }
   renderPatternGrid();
+  syncMeterUI();
   setStatus("set loaded");
 }
 
@@ -1159,6 +1188,12 @@ function copyPattern(from, to) {
       chords: src.chords.slice(),
     };
   }
+  // Meter + customization travel with the duped pattern so it keeps its
+  // time signature and stays independent from pattern 1's meter.
+  const srcMeter = state.patternMeters[from];
+  if (srcMeter) state.patternMeters[to] = { num: srcMeter.num, den: srcMeter.den };
+  if (to !== 0) state.patternMeterCustomized[to] = !!state.patternMeterCustomized[from]
+    || (srcMeter && (srcMeter.num !== state.patternMeters[0].num || srcMeter.den !== state.patternMeters[0].den));
   if (state.activePattern === to) {
     for (const t of state.tracks) {
       aliasPattern(t, to);
@@ -3036,9 +3071,11 @@ function stepsPerBarForMeter(meter) {
   const num = Math.max(1, Math.round(Number(meter?.num) || 4));
   return num * stepsPerBeatForMeter(meter);
 }
-function activeMeter(t) {
-  const p = t?.patterns?.[t?._patternIdx ?? state.activePattern];
-  return p?.meter || { num: 4, den: 4 };
+function activeMeter() {
+  return state.patternMeters[state.activePattern] || { num: 4, den: 4 };
+}
+function patternMeter(idx) {
+  return state.patternMeters[idx] || { num: 4, den: 4 };
 }
 const COMMON_METERS = ["4/4", "3/4", "2/4", "6/8", "9/8", "12/8", "5/4", "7/4", "5/8", "7/8"];
 function parseMeter(str) {
@@ -3455,7 +3492,7 @@ function resizePattern(t, patIdx, len) {
   if ((t._patternIdx ?? state.activePattern) === patIdx) {
     aliasPattern(t, patIdx);
     t.length = len;
-    t.accents = autoAccents(len, p.meter);
+    t.accents = autoAccents(len, patternMeter(patIdx));
     if (t.el) t.el.querySelector(".track-len").value = len;
     renderStepGrid(t);
   }
@@ -3632,22 +3669,6 @@ function renderTrack(t) {
     const n = Math.max(1, Math.min(128, Number(e.target.value) || 1));
     resizeTrack(t, n);
   });
-  const meterSel = node.querySelector(".track-meter");
-  if (meterSel) {
-    const cur = activeMeter(t);
-    meterSel.value = `${cur.num}/${cur.den}`;
-    meterSel.addEventListener("change", () => {
-      const m = parseMeter(meterSel.value);
-      if (!m) return;
-      const p = t.patterns[t._patternIdx ?? state.activePattern];
-      if (!p) return;
-      p.meter = m;
-      t.accents = autoAccents(t.length, m);
-      renderStepGrid(t);
-      // Beat indicator follows track 0's pattern; nudge it to redraw.
-      if (state.tracks[0] === t) paintBeatIndicator(state.tick);
-    });
-  }
   engineSel.addEventListener("change", e => {
     const val = e.target.value;
     if (val === "upload") {
@@ -5430,7 +5451,7 @@ async function promptTrack(t, opts = {}) {
       melodic: isMelodicTrack(t),
       stepCount: t.length,
       accents: [...t.accents].sort((a, b) => a - b).map(i => i + 1),
-      meter: (() => { const m = activeMeter(t); return `${m.num}/${m.den}`; })(),
+      meter: (() => { const m = activeMeter(); return `${m.num}/${m.den}`; })(),
       density: t.density ?? 0.5,
       scale: state.scale.active ? { root: state.scale.root, mode: state.scale.mode, rootName: NOTE_NAMES[state.scale.root] } : null,
       siblingTracks: siblings,
@@ -5812,7 +5833,7 @@ async function openPatternDialog(t) {
         melodic: isMelodicTrack(t),
         stepCount: t.length,
         accents: [...t.accents].sort((a, b) => a - b).map(i => i + 1),
-      meter: (() => { const m = activeMeter(t); return `${m.num}/${m.den}`; })(),
+      meter: (() => { const m = activeMeter(); return `${m.num}/${m.den}`; })(),
         density: t.density ?? 0.5,
         scale: state.scale.active ? { root: state.scale.root, mode: state.scale.mode, rootName: NOTE_NAMES[state.scale.root] } : null,
         siblingTracks: siblings,
@@ -6179,7 +6200,7 @@ async function promptFromMaster({ reshape = false, designSounds = false, regenPa
           role: trackRole(t),
           stepCount: t.length,
           accents: [...t.accents].sort((a, b) => a - b).map(i => i + 1),
-      meter: (() => { const m = activeMeter(t); return `${m.num}/${m.den}`; })(),
+      meter: (() => { const m = activeMeter(); return `${m.num}/${m.den}`; })(),
         })),
         keptTracks: state.tracks.filter(t => !empties.includes(t)).map(t => ({
           name: t.name,
@@ -6610,6 +6631,42 @@ function init() {
     e.target.value = v;
     state.patternRepeats[state.activePattern] = v;
   });
+  const meterSel = document.getElementById("pattern-meter");
+  if (meterSel) {
+    meterSel.addEventListener("change", () => {
+      const m = parseMeter(meterSel.value);
+      if (!m) return;
+      const patIdx = state.activePattern;
+      const prev = state.patternMeters[patIdx] || { num: 4, den: 4 };
+      state.patternMeters[patIdx] = m;
+      if (patIdx === 0) {
+        // Pattern 1 is the source: sync the meter (only) into every slot that
+        // hasn't been explicitly customized. Their step counts stay put.
+        for (let i = 1; i < PATTERN_COUNT; i++) {
+          if (!state.patternMeterCustomized[i]) state.patternMeters[i] = { num: m.num, den: m.den };
+        }
+      } else {
+        // User set a non-#1 pattern's meter explicitly — lock it off from #1.
+        state.patternMeterCustomized[patIdx] = true;
+      }
+      // Resize every track on the active pattern to preserve its bar count under
+      // the new meter (e.g. 1 bar of 4/4 = 16 steps → 1 bar of 7/8 = 14). Tracks
+      // that already match just get their accents + step grid refreshed.
+      const oldSpb = stepsPerBarForMeter(prev);
+      const newSpb = stepsPerBarForMeter(m);
+      for (const t of state.tracks) {
+        const bars = Math.max(1, Math.round((t.length || newSpb) / oldSpb));
+        const newLen = Math.max(1, Math.min(128, bars * newSpb));
+        if (newLen !== t.length) {
+          resizePattern(t, patIdx, newLen);
+        } else {
+          t.accents = autoAccents(t.length, m);
+          renderStepGrid(t);
+        }
+      }
+      paintBeatIndicator(state.tick);
+    });
+  }
   renderPatternGrid();
   const mp = document.getElementById("master-prompt");
   const autogrow = () => {
