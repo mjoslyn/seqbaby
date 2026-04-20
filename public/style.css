@@ -438,6 +438,124 @@ main {
 
 .track-mod-panel[hidden] { display: none; }
 
+.track-roll-panel {
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  display: grid;
+  gap: 6px;
+}
+.track-roll-panel[hidden] { display: none; }
+.track-roll[aria-pressed="true"] {
+  background: #8ec7ff;
+  color: #0b0d10;
+  border-color: #8ec7ff;
+}
+.roll-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 11px;
+  color: var(--fg-dim);
+}
+.roll-head .roll-title { color: #8ec7ff; font-weight: 600; }
+.roll-head label { display: inline-flex; align-items: center; gap: 6px; }
+.roll-head .roll-oct-btns { display: inline-flex; gap: 4px; }
+.roll-head .roll-oct-btns button { padding: 2px 8px; font-size: 11px; }
+.roll-head .roll-range { color: var(--fg-dim); font-variant-numeric: tabular-nums; }
+
+.roll-grid {
+  display: grid;
+  grid-template-columns: 42px 1fr;
+  gap: 2px;
+  max-height: 320px;
+  overflow-y: auto;
+  background: var(--bg-2);
+  border-radius: 4px;
+  padding: 2px;
+}
+.roll-row {
+  display: contents;
+}
+.roll-label {
+  font-size: 10px;
+  color: var(--fg-dim);
+  padding: 2px 6px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  background: var(--bg-3);
+  border-radius: 3px;
+  line-height: 1.4;
+  user-select: none;
+}
+.roll-label.black { color: var(--fg-dim); background: var(--bg-2); }
+.roll-label.root { color: #8ec7ff; font-weight: 600; }
+.roll-cells {
+  display: grid;
+  gap: 1px;
+}
+.roll-cell {
+  height: 16px;
+  background: var(--bg-3);
+  border-radius: 2px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: background 40ms linear, border-color 40ms linear;
+}
+.roll-cell:hover { background: var(--bg-4, #30363d); }
+.roll-cell.beat { border-left: 1px solid var(--border); }
+.roll-cell.row-black { background: var(--bg-2); }
+.roll-cell.on {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.roll-cell.on.chord { background: #8ec7ff; border-color: #8ec7ff; }
+.roll-cell.now { outline: 1px solid #fff6; }
+
+.roll-vel-lane {
+  display: grid;
+  grid-template-columns: 42px 1fr;
+  gap: 2px;
+  background: var(--bg-2);
+  border-radius: 4px;
+  padding: 2px;
+}
+.roll-vel-spacer {
+  font-size: 10px;
+  color: var(--fg-dim);
+  padding: 2px 6px;
+  text-align: right;
+  background: var(--bg-3);
+  border-radius: 3px;
+  align-self: end;
+  user-select: none;
+}
+.roll-vel-cells {
+  display: grid;
+  gap: 1px;
+  height: 48px;
+}
+.roll-vel-cell {
+  background: var(--bg-3);
+  border-radius: 2px;
+  position: relative;
+  cursor: ns-resize;
+  overflow: hidden;
+}
+.roll-vel-cell.beat { border-left: 1px solid var(--border); }
+.roll-vel-cell.on { background: var(--bg-2); }
+.roll-vel-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(to top, var(--accent), #8ec7ff);
+  pointer-events: none;
+  min-height: 2px;
+}
+.roll-vel-cell.now { outline: 1px solid #fff6; }
+
 .track-fx-panel {
   background: var(--bg-3);
   border: 1px solid var(--border);

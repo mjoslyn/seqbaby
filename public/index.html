@@ -198,6 +198,7 @@
           <button class="track-oct-up ghost" type="button" title="shift every step up an octave">oct +</button>
         </div>
         <div class="panel-btn-group">
+          <button class="track-roll ghost" aria-pressed="false" title="piano roll: click cells to place notes per step">roll</button>
           <button class="track-filter ghost" aria-pressed="false" title="filter">filter</button>
           <button class="track-env ghost" aria-pressed="false" title="envelope → cutoff">env</button>
           <button class="track-fx ghost" aria-pressed="false" title="fx rack">fx</button>
@@ -213,6 +214,7 @@
         <input class="midi-ch" type="number" min="1" max="16" value="1" />
       </div>
       <div class="track-mod-panel" hidden></div>
+      <div class="track-roll-panel" hidden></div>
       <div class="track-filter-panel" hidden>
         <div class="fx-row" data-fx="filter">
           <span class="fx-title">filter (resonant lp)</span>

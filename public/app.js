@@ -783,6 +783,7 @@ function switchPattern(idx) {
   for (const t of state.tracks) {
     aliasPattern(t, idx);
     renderStepGrid(t);
+    refreshRollIfOpen(t);
   }
   renderPatternGrid();
   // default instruments toggle: on for pattern 1, off for all others (user can still override)
@@ -3850,6 +3851,7 @@ function renderTrack(t) {
 
   const panelPairs = [
     { btnSel: ".track-mod",    panelSel: ".track-mod-panel" },
+    { btnSel: ".track-roll",   panelSel: ".track-roll-panel" },
     { btnSel: ".track-filter", panelSel: ".track-filter-panel" },
     { btnSel: ".track-env",    panelSel: ".track-env-panel" },
     { btnSel: ".track-fx",     panelSel: ".track-fx-panel" },
@@ -3864,7 +3866,7 @@ function renderTrack(t) {
       if (b && pn) { pn.hidden = true; b.setAttribute("aria-pressed", "false"); }
     }
   }
-  function bindPanelToggle(btnSel, panelSel) {
+  function bindPanelToggle(btnSel, panelSel, onOpen) {
     const btn = node.querySelector(btnSel);
     const panel = node.querySelector(panelSel);
     btn.addEventListener("click", () => {
@@ -3872,6 +3874,7 @@ function renderTrack(t) {
       if (willOpen) closeOtherPanels(btnSel);
       panel.hidden = !willOpen;
       btn.setAttribute("aria-pressed", String(willOpen));
+      if (willOpen && onOpen) onOpen();
     });
   }
 
@@ -3885,6 +3888,8 @@ function renderTrack(t) {
   eqPanel.querySelector(".p-eq-mid").addEventListener("input",  e => setEQ(t, "mid",  Number(e.target.value)));
   eqPanel.querySelector(".p-eq-high").addEventListener("input", e => setEQ(t, "high", Number(e.target.value)));
   bindPanelToggle(".track-mod",    ".track-mod-panel");
+  bindPanelToggle(".track-roll",   ".track-roll-panel",
+    () => renderRollPanel(t, node.querySelector(".track-roll-panel")));
   bindPanelToggle(".track-filter", ".track-filter-panel");
   bindPanelToggle(".track-env",    ".track-env-panel");
   bindPanelToggle(".track-fx",     ".track-fx-panel");
@@ -4279,6 +4284,305 @@ function renderStepGrid(t) {
       i += 1;
     }
   }
+  refreshRollIfOpen(t);
+}
+
+// Piano roll panel: a pitches × steps grid per track. Clicking a cell places
+// (or moves) a note at that pitch on that step; clicking an already-active cell
+// clears the step; double-clicking an active cell sets velocity to full. Shows
+// scale pitches only when a scale is active and "all notes" is off; chromatic
+// otherwise. Viewport spans ROLL_VIEW_OCTS octaves starting at t.rollViewOct.
+const ROLL_VIEW_OCTS = 2;
+const ROLL_MIN_OCT = 1;
+const ROLL_MAX_OCT = 6;
+const BLACK_KEYS = new Set([1, 3, 6, 8, 10]);
+
+function refreshRollIfOpen(t) {
+  const panel = t.el?.querySelector(".track-roll-panel");
+  if (!panel || panel.hidden) return;
+  // A full re-render replaces the grid element, which kills any pointer capture
+  // held by an in-progress drag on the roll. Skip while a drag is live — the
+  // drag handlers paint their own updates via paintColumn.
+  if (panel._rollDragActive) return;
+  renderRollPanel(t, panel);
+}
+
+function renderRollPanel(t, panel) {
+  panel.replaceChildren();
+  if (t.rollViewOct == null) t.rollViewOct = 3;
+  if (t.rollShowAll == null) t.rollShowAll = false;
+  const scaleIntervals = state.scale.active ? (SCALES[state.scale.mode] || null) : null;
+  const chromaticView = !scaleIntervals || t.rollShowAll;
+  const EPS = 1e-6;
+
+  // Header: title + all-notes toggle + octave pager + range readout.
+  const head = document.createElement("div");
+  head.className = "roll-head";
+  const title = document.createElement("span");
+  title.className = "roll-title";
+  title.textContent = "piano roll";
+  head.appendChild(title);
+  if (scaleIntervals) {
+    const toggle = document.createElement("label");
+    toggle.innerHTML = `<input type="checkbox" class="roll-show-all" ${t.rollShowAll ? "checked" : ""}/><span>all notes</span>`;
+    toggle.querySelector(".roll-show-all").addEventListener("change", (e) => {
+      t.rollShowAll = e.target.checked;
+      renderRollPanel(t, panel);
+    });
+    head.appendChild(toggle);
+  }
+  const octBtns = document.createElement("span");
+  octBtns.className = "roll-oct-btns";
+  octBtns.innerHTML = `<button class="ghost" data-d="-1">oct −</button><button class="ghost" data-d="1">oct +</button>`;
+  octBtns.querySelectorAll("button").forEach(b => b.addEventListener("click", () => {
+    const d = Number(b.dataset.d);
+    const next = t.rollViewOct + d;
+    if (next < ROLL_MIN_OCT || next + ROLL_VIEW_OCTS - 1 > ROLL_MAX_OCT) return;
+    t.rollViewOct = next;
+    renderRollPanel(t, panel);
+  }));
+  head.appendChild(octBtns);
+  const range = document.createElement("span");
+  range.className = "roll-range";
+  range.textContent = `C${t.rollViewOct}–B${t.rollViewOct + ROLL_VIEW_OCTS - 1}`;
+  head.appendChild(range);
+  panel.appendChild(head);
+
+  // Visible pitches (high → low so the grid reads like a keyboard).
+  // C<n> in seqbaby's convention is MIDI (n+1)*12 (so C4 = 60, C3 = 48).
+  const lo = (t.rollViewOct + 1) * 12;
+  const hi = lo + ROLL_VIEW_OCTS * 12;                      // exclusive
+  const pitches = [];
+  for (let m = hi - 1; m >= lo; m--) {
+    const pc = ((m % 12) + 12) % 12;
+    if (chromaticView) { pitches.push(m); continue; }
+    const rel = ((pc - state.scale.root) % 12 + 12) % 12;
+    if (scaleIntervals.some(i => Math.abs(i - rel) < EPS)) pitches.push(m);
+  }
+
+  const grid = document.createElement("div");
+  grid.className = "roll-grid";
+  const steps = t.length;
+  for (const m of pitches) {
+    const pc = ((m % 12) + 12) % 12;
+    const isBlack = BLACK_KEYS.has(pc);
+    const isRoot = scaleIntervals && pc === state.scale.root;
+
+    const label = document.createElement("div");
+    label.className = "roll-label" + (isBlack ? " black" : "") + (isRoot ? " root" : "");
+    label.textContent = midiToName(m);
+    grid.appendChild(label);
+
+    const cells = document.createElement("div");
+    cells.className = "roll-cells";
+    cells.style.gridTemplateColumns = `repeat(${steps}, minmax(0, 1fr))`;
+    for (let i = 0; i < steps; i++) {
+      const cell = document.createElement("div");
+      cell.className = "roll-cell" + (isBlack ? " row-black" : "");
+      if (i % 4 === 0) cell.classList.add("beat");
+      cell.dataset.step = String(i);
+      cell.dataset.note = String(m);
+      // Mark the anchor and any "held" continuation columns. A multi-step note
+      // lives on t.lengths[anchor]; the columns after the anchor have steps[i]=0
+      // but still belong to the note visually.
+      const anchor = anchorCovering(t, i);
+      if (anchor >= 0 && t.notes[anchor] === m) {
+        cell.classList.add("on");
+        if (anchor !== i) cell.classList.add("held");
+      }
+      cells.appendChild(cell);
+    }
+    grid.appendChild(cells);
+  }
+  panel.appendChild(grid);
+
+  // Velocity lane — built first so paintColumn() can reference velCells below.
+  const velLane = document.createElement("div");
+  velLane.className = "roll-vel-lane";
+  const velSpacer = document.createElement("div");
+  velSpacer.className = "roll-vel-spacer";
+  velSpacer.textContent = "vel";
+  velLane.appendChild(velSpacer);
+  const velCells = document.createElement("div");
+  velCells.className = "roll-vel-cells";
+  velCells.style.gridTemplateColumns = `repeat(${steps}, minmax(0, 1fr))`;
+  for (let i = 0; i < steps; i++) {
+    const cell = document.createElement("div");
+    cell.className = "roll-vel-cell";
+    if (i % 4 === 0) cell.classList.add("beat");
+    cell.dataset.step = String(i);
+    const bar = document.createElement("div");
+    bar.className = "roll-vel-bar";
+    if (t.steps[i]) {
+      cell.classList.add("on");
+      bar.style.height = `${Math.round((t.velocities[i] ?? 0.5) * 100)}%`;
+    }
+    cell.appendChild(bar);
+    velCells.appendChild(cell);
+  }
+  velLane.appendChild(velCells);
+  panel.appendChild(velLane);
+
+  // In-place cell updater. We mutate the DOM instead of re-rendering the whole
+  // panel on every drag tick — re-rendering destroys the grid element that
+  // holds the active pointer capture, which kills the drag.
+  const paintColumn = (step) => {
+    const anchor = anchorCovering(t, step);
+    const coverNote = anchor >= 0 ? t.notes[anchor] : null;
+    grid.querySelectorAll(`.roll-cell[data-step="${step}"]`).forEach(c => {
+      const note = Number(c.dataset.note);
+      const on = anchor >= 0 && coverNote === note;
+      c.classList.toggle("on", on);
+      c.classList.toggle("held", on && anchor !== step);
+    });
+    const vcell = velCells.querySelector(`.roll-vel-cell[data-step="${step}"]`);
+    if (vcell) {
+      vcell.classList.toggle("on", t.steps[step] === 1);
+      const bar = vcell.querySelector(".roll-vel-bar");
+      if (bar) bar.style.height = t.steps[step] ? `${Math.round((t.velocities[step] ?? 0.5) * 100)}%` : "0";
+    }
+  };
+  const paintRange = (a, b) => {
+    const lo = Math.max(0, Math.min(a, b));
+    const hi = Math.min(steps - 1, Math.max(a, b));
+    for (let i = lo; i <= hi; i++) paintColumn(i);
+  };
+
+  // Drag-to-extend. On pointerdown an anchor is established; dragging to the
+  // right grows the anchor note's length (extendNote) so the note visually
+  // spans the passed-over columns. Click semantics:
+  //   cell not in any note      → create note at that pitch, anchor = click col
+  //   cell at anchor's pitch    → remove the whole note
+  //   cell in note, diff pitch  → move the note's pitch, keep its length
+  //   two clicks in < 400 ms    → activate + velocity to full (manual dblclick)
+  let drag = null;
+  let lastRollClickTime = 0;
+  let lastRollClickKey = "";
+  const ROLL_DBLCLICK_MS = 400;
+  const cellFromPoint = (x, y) => {
+    const el = document.elementFromPoint(x, y);
+    return el?.closest?.(".roll-cell") || null;
+  };
+  // Wrap a single-click mutation in the drag-active flag so renderStepGrid's
+  // refreshRollIfOpen doesn't nuke the grid we just painted locally.
+  const localMutate = (fn) => {
+    panel._rollDragActive = true;
+    try { fn(); }
+    finally { panel._rollDragActive = false; }
+  };
+  grid.addEventListener("pointerdown", (e) => {
+    const cell = e.target.closest?.(".roll-cell");
+    if (!cell || e.button !== 0) return;
+    const step = Number(cell.dataset.step);
+    const note = Number(cell.dataset.note);
+    const key = `${step}:${note}`;
+    const now = performance.now();
+    if (now - lastRollClickTime < ROLL_DBLCLICK_MS && key === lastRollClickKey) {
+      // manual double-click: activate + full velocity
+      localMutate(() => {
+        const anchor = anchorCovering(t, step);
+        const target = anchor >= 0 ? anchor : step;
+        if (!t.steps[target]) startNote(t, target);
+        t.notes[target] = note;
+        t.velocities[target] = 1;
+        paintRange(target, target + Math.max(1, t.lengths[target] || 1) - 1);
+        renderStepGrid(t);
+      });
+      lastRollClickTime = 0;
+      lastRollClickKey = "";
+      drag = null;
+      e.preventDefault();
+      return;
+    }
+    lastRollClickTime = now;
+    lastRollClickKey = key;
+
+    const existing = anchorCovering(t, step);
+    if (existing >= 0 && t.notes[existing] === note) {
+      // click on the note (anchor or held continuation) — remove the whole note
+      localMutate(() => {
+        const a = existing;
+        const oldLen = Math.max(1, t.lengths[a] || 1);
+        removeNote(t, a);
+        paintRange(a, a + oldLen - 1);
+        renderStepGrid(t);
+      });
+      return;
+    }
+    if (existing >= 0) {
+      // different pitch in an active column → move the pitch, keep length
+      localMutate(() => {
+        t.notes[existing] = note;
+        paintRange(existing, existing + Math.max(1, t.lengths[existing] || 1) - 1);
+        renderStepGrid(t);
+      });
+      return;
+    }
+    // empty cell → start a fresh note with anchor here; drag extends it
+    startNote(t, step);
+    t.notes[step] = note;
+    drag = { anchor: step, lastEnd: step, pointerId: e.pointerId };
+    panel._rollDragActive = true;
+    try { grid.setPointerCapture(e.pointerId); } catch {}
+    paintColumn(step);
+    renderStepGrid(t);
+    e.preventDefault();
+  });
+  grid.addEventListener("pointermove", (e) => {
+    if (!drag || e.pointerId !== drag.pointerId) return;
+    const cell = cellFromPoint(e.clientX, e.clientY);
+    if (!cell || !grid.contains(cell)) return;
+    const step = Number(cell.dataset.step);
+    if (step === drag.lastEnd) return;
+    const newEnd = Math.max(drag.anchor, step);
+    extendNote(t, drag.anchor, newEnd);
+    paintRange(drag.anchor, Math.max(drag.lastEnd, newEnd));
+    drag.lastEnd = newEnd;
+    renderStepGrid(t);
+  });
+  const endDrag = (e) => {
+    if (!drag || e.pointerId !== drag.pointerId) return;
+    try { grid.releasePointerCapture(e.pointerId); } catch {}
+    drag = null;
+    panel._rollDragActive = false;
+  };
+  grid.addEventListener("pointerup", endDrag);
+  grid.addEventListener("pointercancel", endDrag);
+
+  let vdrag = null;
+  const updateVelFromPoint = (cell, clientY) => {
+    const step = Number(cell.dataset.step);
+    if (!t.steps[step]) return;
+    const r = cell.getBoundingClientRect();
+    const v = 1 - Math.max(0, Math.min(1, (clientY - r.top) / r.height));
+    t.velocities[step] = Math.max(0.05, Math.min(1, v));
+    cell.querySelector(".roll-vel-bar").style.height = `${Math.round(t.velocities[step] * 100)}%`;
+  };
+  velCells.addEventListener("pointerdown", (e) => {
+    const cell = e.target.closest(".roll-vel-cell.on");
+    if (!cell || e.button !== 0) return;
+    vdrag = { pointerId: e.pointerId };
+    panel._rollDragActive = true;
+    try { velCells.setPointerCapture(e.pointerId); } catch {}
+    updateVelFromPoint(cell, e.clientY);
+    renderStepGrid(t);
+    e.preventDefault();
+  });
+  velCells.addEventListener("pointermove", (e) => {
+    if (!vdrag || e.pointerId !== vdrag.pointerId) return;
+    const cell = document.elementFromPoint(e.clientX, e.clientY)?.closest?.(".roll-vel-cell.on");
+    if (!cell || !velCells.contains(cell)) return;
+    updateVelFromPoint(cell, e.clientY);
+    renderStepGrid(t);
+  });
+  const endVDrag = (e) => {
+    if (!vdrag || e.pointerId !== vdrag.pointerId) return;
+    try { velCells.releasePointerCapture(e.pointerId); } catch {}
+    vdrag = null;
+    panel._rollDragActive = false;
+  };
+  velCells.addEventListener("pointerup", endVDrag);
+  velCells.addEventListener("pointercancel", endVDrag);
 }
 
 function makeCell(t, idx, span, on) {
@@ -4318,10 +4622,36 @@ function attachGridInteraction(t, grid) {
     return Math.max(0, Math.min(total - 1, row * 16 + col));
   };
 
+  // Manual double-click detection — renderStepGrid() rebuilds step cells on
+  // every pointerdown, so the browser's native dblclick (which requires the
+  // same element for both clicks) never fires. Track time+index between clicks.
+  let lastClickTime = 0;
+  let lastClickIdx = -1;
+  const DBLCLICK_MS = 400;
+
   grid.addEventListener("pointerdown", (e) => {
     if (e.button !== 0) return;
     closeStepEditor();
     const idx = idxFromPoint(e.clientX, e.clientY);
+    const now = performance.now();
+    if (now - lastClickTime < DBLCLICK_MS && idx === lastClickIdx) {
+      // Double-click: ensure the step is on at `idx` and bump velocity to full.
+      // The preceding single click may have just toggled it off via endDrag;
+      // re-activate as needed.
+      const anchor = anchorCovering(t, idx);
+      const target = anchor >= 0 ? anchor : idx;
+      if (!t.steps[target]) startNote(t, target);
+      t.velocities[target] = 1;
+      renderStepGrid(t);
+      drag = null;
+      lastClickTime = 0;
+      lastClickIdx = -1;
+      e.preventDefault();
+      return;
+    }
+    lastClickTime = now;
+    lastClickIdx = idx;
+
     const existing = anchorCovering(t, idx);
     let anchor, wasOn = false;
     if (existing >= 0) { anchor = existing; wasOn = true; }
@@ -5000,6 +5330,16 @@ function paintNowIndicator() {
       const span = Number(c.dataset.span) || 1;
       c.classList.toggle("now", tk > 0 && idx >= start && idx < start + span);
     });
+    // Piano roll: highlight the column for the current step, if the roll is open.
+    const rollPanel = t.el.querySelector(".track-roll-panel");
+    if (rollPanel && !rollPanel.hidden) {
+      rollPanel.querySelectorAll(".roll-cell.now, .roll-vel-cell.now")
+        .forEach(c => c.classList.remove("now"));
+      if (tk > 0) {
+        rollPanel.querySelectorAll(`.roll-cell[data-step="${idx}"], .roll-vel-cell[data-step="${idx}"]`)
+          .forEach(c => c.classList.add("now"));
+      }
+    }
   }
 }
 
@@ -6441,9 +6781,10 @@ function initScaleUI() {
     mode.appendChild(opt);
   });
   syncScaleUI();
-  on.addEventListener("change", () => { state.scale.active = on.checked; });
-  root.addEventListener("change", () => { state.scale.root = Number(root.value); });
-  mode.addEventListener("change", () => { state.scale.mode = mode.value; });
+  const refreshOpenRolls = () => { for (const t of state.tracks) refreshRollIfOpen(t); };
+  on.addEventListener("change", () => { state.scale.active = on.checked; refreshOpenRolls(); });
+  root.addEventListener("change", () => { state.scale.root = Number(root.value); refreshOpenRolls(); });
+  mode.addEventListener("change", () => { state.scale.mode = mode.value; refreshOpenRolls(); });
 }
 
 // ---- init --------------------------------------------------------------
