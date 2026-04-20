@@ -4350,13 +4350,15 @@ function renderRollPanel(t, panel) {
 
   // Visible pitches (high → low so the grid reads like a keyboard).
   // C<n> in seqbaby's convention is MIDI (n+1)*12 (so C4 = 60, C3 = 48).
+  // Microtonal scales (24-TET, Hüseyni, …) carry half-integer intervals; step
+  // the row iteration by 0.5 so quarter tones show up as their own rows.
   const lo = (t.rollViewOct + 1) * 12;
   const hi = lo + ROLL_VIEW_OCTS * 12;                      // exclusive
+  const rowStep = scaleIntervals && scaleIntervals.some(i => i !== Math.floor(i)) ? 0.5 : 1;
   const pitches = [];
-  for (let m = hi - 1; m >= lo; m--) {
-    const pc = ((m % 12) + 12) % 12;
+  for (let m = hi - rowStep; m >= lo - EPS; m -= rowStep) {
     if (chromaticView) { pitches.push(m); continue; }
-    const rel = ((pc - state.scale.root) % 12 + 12) % 12;
+    const rel = ((m - state.scale.root) % 12 + 12) % 12;
     if (scaleIntervals.some(i => Math.abs(i - rel) < EPS)) pitches.push(m);
   }
 
@@ -4364,12 +4366,13 @@ function renderRollPanel(t, panel) {
   grid.className = "roll-grid";
   const steps = t.length;
   for (const m of pitches) {
-    const pc = ((m % 12) + 12) % 12;
-    const isBlack = BLACK_KEYS.has(pc);
-    const isRoot = scaleIntervals && pc === state.scale.root;
+    const basePc = ((Math.round(m) % 12) + 12) % 12;
+    const isMicrotonal = Math.abs(m - Math.round(m)) > EPS;
+    const isBlack = !isMicrotonal && BLACK_KEYS.has(basePc);
+    const isRoot = scaleIntervals && !isMicrotonal && basePc === state.scale.root;
 
     const label = document.createElement("div");
-    label.className = "roll-label" + (isBlack ? " black" : "") + (isRoot ? " root" : "");
+    label.className = "roll-label" + (isBlack ? " black" : "") + (isRoot ? " root" : "") + (isMicrotonal ? " micro" : "");
     label.textContent = midiToName(m);
     grid.appendChild(label);
 
@@ -4378,15 +4381,15 @@ function renderRollPanel(t, panel) {
     cells.style.gridTemplateColumns = `repeat(${steps}, minmax(0, 1fr))`;
     for (let i = 0; i < steps; i++) {
       const cell = document.createElement("div");
-      cell.className = "roll-cell" + (isBlack ? " row-black" : "");
+      cell.className = "roll-cell" + (isBlack ? " row-black" : "") + (isMicrotonal ? " row-micro" : "");
       if (i % 4 === 0) cell.classList.add("beat");
       cell.dataset.step = String(i);
       cell.dataset.note = String(m);
       // Mark the anchor and any "held" continuation columns. A multi-step note
       // lives on t.lengths[anchor]; the columns after the anchor have steps[i]=0
-      // but still belong to the note visually.
+      // but still belong to the note visually. Fractional MIDI compares via EPS.
       const anchor = anchorCovering(t, i);
-      if (anchor >= 0 && t.notes[anchor] === m) {
+      if (anchor >= 0 && Math.abs(t.notes[anchor] - m) < EPS) {
         cell.classList.add("on");
         if (anchor !== i) cell.classList.add("held");
       }
@@ -4425,13 +4428,14 @@ function renderRollPanel(t, panel) {
 
   // In-place cell updater. We mutate the DOM instead of re-rendering the whole
   // panel on every drag tick — re-rendering destroys the grid element that
-  // holds the active pointer capture, which kills the drag.
+  // holds the active pointer capture, which kills the drag. Fractional MIDI
+  // (microtonal pitches) compares via EPS to avoid floating-point misses.
   const paintColumn = (step) => {
     const anchor = anchorCovering(t, step);
     const coverNote = anchor >= 0 ? t.notes[anchor] : null;
     grid.querySelectorAll(`.roll-cell[data-step="${step}"]`).forEach(c => {
       const note = Number(c.dataset.note);
-      const on = anchor >= 0 && coverNote === note;
+      const on = anchor >= 0 && Math.abs(coverNote - note) < EPS;
       c.classList.toggle("on", on);
       c.classList.toggle("held", on && anchor !== step);
     });
@@ -4498,7 +4502,7 @@ function renderRollPanel(t, panel) {
     lastRollClickKey = key;
 
     const existing = anchorCovering(t, step);
-    if (existing >= 0 && t.notes[existing] === note) {
+    if (existing >= 0 && Math.abs(t.notes[existing] - note) < EPS) {
       // click on the note (anchor or held continuation) — remove the whole note
       localMutate(() => {
         const a = existing;

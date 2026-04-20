@@ -491,6 +491,7 @@ main {
 }
 .roll-label.black { color: var(--fg-dim); background: var(--bg-2); }
 .roll-label.root { color: #8ec7ff; font-weight: 600; }
+.roll-label.micro { color: color-mix(in oklab, var(--fg-dim) 60%, transparent); font-size: 9px; padding-inline: 3px; }
 .roll-cells {
   display: grid;
   gap: 1px;
@@ -506,6 +507,7 @@ main {
 .roll-cell:hover { background: var(--bg-4, #30363d); }
 .roll-cell.beat { border-left: 1px solid var(--border); }
 .roll-cell.row-black { background: var(--bg-2); }
+.roll-cell.row-micro { background: color-mix(in oklab, var(--bg-3) 70%, var(--bg-2)); }
 .roll-cell.on {
   background: var(--accent);
   border-color: var(--accent);
