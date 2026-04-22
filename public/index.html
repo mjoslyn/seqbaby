@@ -188,7 +188,6 @@
           </div>
         </div>
         </div><!-- /track-synth-row -->
-        <button class="track-drumkit ghost" aria-pressed="false" title="drum kit: blank steps default to C2 and samples pitch from C2 (natural). Otherwise steps default to C3 and samples pitch from C4.">drum</button>
         <button class="track-solo ghost" aria-pressed="false" title="solo">solo</button>
         <button class="track-mute ghost">mute</button>
         <button class="track-clear ghost">clear</button>
@@ -205,6 +204,7 @@
           <button class="track-eq ghost" aria-pressed="false" title="3-band eq">eq</button>
           <button class="track-comp ghost" aria-pressed="false" title="compressor + sidechain">comp</button>
           <button class="track-mod ghost" aria-pressed="false">mod</button>
+          <button class="track-aut ghost" aria-pressed="false" title="per-step automation">aut</button>
         </div>
       </div>
       <div class="track-midi field" hidden>
@@ -214,6 +214,7 @@
         <input class="midi-ch" type="number" min="1" max="16" value="1" />
       </div>
       <div class="track-mod-panel" hidden></div>
+      <div class="track-aut-panel" hidden></div>
       <div class="track-roll-panel" hidden></div>
       <div class="track-filter-panel" hidden>
         <div class="fx-row" data-fx="filter">
@@ -256,6 +257,18 @@
         </div>
       </div>
       <div class="track-fx-panel" hidden>
+        <div class="fx-row" data-fx="vinyl">
+          <span class="fx-title">vinyl sim</span>
+          <label class="fx-ctl"><span>amt</span><input class="fx-vinyl-amount" type="range" min="0" max="1" step="0.01" value="0" /></label>
+          <label class="fx-ctl"><span>warmth</span><input class="fx-vinyl-warmth" type="range" min="0" max="1" step="0.01" value="0.4" /></label>
+          <label class="fx-ctl"><span>wow</span><input class="fx-vinyl-wow" type="range" min="0" max="1" step="0.01" value="0.3" /></label>
+        </div>
+        <div class="fx-row" data-fx="cassette">
+          <span class="fx-title">cassette</span>
+          <label class="fx-ctl"><span>amt</span><input class="fx-cassette-amount" type="range" min="0" max="1" step="0.01" value="0" /></label>
+          <label class="fx-ctl"><span>flutter</span><input class="fx-cassette-flutter" type="range" min="0" max="1" step="0.01" value="0.3" /></label>
+          <label class="fx-ctl"><span>sat</span><input class="fx-cassette-sat" type="range" min="0" max="1" step="0.01" value="0.4" /></label>
+        </div>
         <div class="fx-row" data-fx="fuzz">
           <span class="fx-title">fuzz (dba-style)</span>
           <label class="fx-ctl"><span>amt</span><input class="fx-fuzz-amount" type="range" min="0" max="1" step="0.01" value="0" /></label>
@@ -263,11 +276,50 @@
           <label class="fx-ctl"><span>tone</span><input class="fx-fuzz-tone" type="range" min="0" max="1" step="0.01" value="0.4" /></label>
           <label class="fx-ctl"><span>level</span><input class="fx-fuzz-level" type="range" min="0" max="1" step="0.01" value="0.5" /></label>
         </div>
+        <div class="fx-row" data-fx="ringmod">
+          <span class="fx-title">ring mod</span>
+          <label class="fx-ctl"><span>wet</span><input class="fx-ringmod-wet" type="range" min="0" max="1" step="0.01" value="0" /></label>
+          <label class="fx-ctl"><span>freq</span><input class="fx-ringmod-freq" type="range" min="0" max="1" step="0.01" value="0.35" /></label>
+        </div>
+        <div class="fx-row" data-fx="crush">
+          <span class="fx-title">bitcrush</span>
+          <label class="fx-ctl"><span>wet</span><input class="fx-crush-wet" type="range" min="0" max="1" step="0.01" value="0" /></label>
+          <label class="fx-ctl"><span>bits</span><input class="fx-crush-bits" type="range" min="1" max="16" step="1" value="8" /></label>
+        </div>
+        <div class="fx-row" data-fx="autowah">
+          <span class="fx-title">auto-wah</span>
+          <label class="fx-ctl"><span>wet</span><input class="fx-autowah-wet" type="range" min="0" max="1" step="0.01" value="0" /></label>
+          <label class="fx-ctl"><span>sens</span><input class="fx-autowah-sens" type="range" min="0" max="1" step="0.01" value="0.5" /></label>
+          <label class="fx-ctl"><span>range</span><input class="fx-autowah-range" type="range" min="0" max="1" step="0.01" value="0.5" /></label>
+        </div>
+        <div class="fx-row" data-fx="chorus">
+          <span class="fx-title">chorus</span>
+          <label class="fx-ctl"><span>wet</span><input class="fx-chorus-wet" type="range" min="0" max="1" step="0.01" value="0" /></label>
+          <label class="fx-ctl"><span>rate</span><input class="fx-chorus-rate" type="range" min="0" max="1" step="0.01" value="0.5" /></label>
+          <label class="fx-ctl"><span>depth</span><input class="fx-chorus-depth" type="range" min="0" max="1" step="0.01" value="0.5" /></label>
+        </div>
+        <div class="fx-row" data-fx="phaser">
+          <span class="fx-title">phaser</span>
+          <label class="fx-ctl"><span>wet</span><input class="fx-phaser-wet" type="range" min="0" max="1" step="0.01" value="0" /></label>
+          <label class="fx-ctl"><span>rate</span><input class="fx-phaser-rate" type="range" min="0" max="1" step="0.01" value="0.3" /></label>
+          <label class="fx-ctl"><span>depth</span><input class="fx-phaser-depth" type="range" min="0" max="1" step="0.01" value="0.5" /></label>
+        </div>
+        <div class="fx-row" data-fx="flanger">
+          <span class="fx-title">flanger</span>
+          <label class="fx-ctl"><span>wet</span><input class="fx-flanger-wet" type="range" min="0" max="1" step="0.01" value="0" /></label>
+          <label class="fx-ctl"><span>rate</span><input class="fx-flanger-rate" type="range" min="0" max="1" step="0.01" value="0.3" /></label>
+          <label class="fx-ctl"><span>fbk</span><input class="fx-flanger-fbk" type="range" min="0" max="1" step="0.01" value="0.5" /></label>
+        </div>
+        <div class="fx-row" data-fx="pitchshift">
+          <span class="fx-title">pitch shift</span>
+          <label class="fx-ctl"><span>wet</span><input class="fx-pitchshift-wet" type="range" min="0" max="1" step="0.01" value="0" /></label>
+          <label class="fx-ctl"><span>semi</span><input class="fx-pitchshift-semi" type="range" min="-12" max="12" step="1" value="0" /></label>
+        </div>
         <div class="fx-row" data-fx="delay">
           <span class="fx-title">delay</span>
+          <label class="fx-ctl"><span>wet</span><input class="fx-delay-wet" type="range" min="0" max="1" step="0.01" value="0" /></label>
           <label class="fx-ctl"><span>time</span><input class="fx-delay-time" type="range" min="0.05" max="1" step="0.005" value="0.375" /></label>
           <label class="fx-ctl"><span>fbk</span><input class="fx-delay-fbk" type="range" min="0" max="0.95" step="0.01" value="0.35" /></label>
-          <label class="fx-ctl"><span>wet</span><input class="fx-delay-wet" type="range" min="0" max="1" step="0.01" value="0" /></label>
           <label class="fx-ctl fx-sync-wrap"><input class="fx-delay-sync" type="checkbox" /><span>sync</span></label>
           <select class="fx-delay-div">
             <option value="1">1/4</option>
@@ -278,15 +330,10 @@
             <option value="0.125">1/32</option>
           </select>
         </div>
-        <div class="fx-row" data-fx="crush">
-          <span class="fx-title">bitcrush</span>
-          <label class="fx-ctl"><span>bits</span><input class="fx-crush-bits" type="range" min="1" max="16" step="1" value="8" /></label>
-          <label class="fx-ctl"><span>wet</span><input class="fx-crush-wet" type="range" min="0" max="1" step="0.01" value="0" /></label>
-        </div>
         <div class="fx-row" data-fx="reverb">
           <span class="fx-title">reverb</span>
-          <label class="fx-ctl"><span>decay</span><input class="fx-reverb-decay" type="range" min="0.2" max="8" step="0.1" value="2" /></label>
           <label class="fx-ctl"><span>wet</span><input class="fx-reverb-wet" type="range" min="0" max="1" step="0.01" value="0" /></label>
+          <label class="fx-ctl"><span>decay</span><input class="fx-reverb-decay" type="range" min="0.2" max="8" step="0.1" value="2" /></label>
         </div>
       </div>
       <div class="steps"></div>

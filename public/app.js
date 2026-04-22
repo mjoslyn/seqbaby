@@ -5,7 +5,19 @@ const { wosc, oscillatorTypes } = window.woscillators;
 const STEPS_PER_BAR = 16;
 const LFO_KEYS = [
   "vol", "harm", "timb", "morph", "decay",
-  "cutoff", "reson", "fuzz", "delay", "verb",
+  "cutoff", "reson",
+  // Per-fx wets / amts — existing short keys kept for backward compat.
+  "fuzz", "delay", "verb",
+  "vinyl", "cassette", "ringmod", "crush", "autowah", "chorus", "phaser", "flanger", "pitch",
+  // FX sub-params with AudioParam / Signal targets (modulatable).
+  "fuzz_drive", "fuzz_tone", "fuzz_level",
+  "vinyl_warmth",
+  "ring_freq",
+  "crush_bits",
+  "chorus_rate", "chorus_depth",
+  "phaser_rate",
+  "flanger_rate", "flanger_fbk",
+  "delay_time", "delay_fbk",
   // Emulator-specific continuous params (MiniBrute / Moog / Juno oscs + fx)
   "osc1", "osc2", "osc3", "osc4", "ultra", "fm", "noise",
 ];
@@ -13,11 +25,42 @@ const LFO_KEYS = [
 //  - 0..1 unit params: amp = depth/2 (swings ±0.5)
 //  - cutoff: depth*3000 Hz
 //  - reson: depth*10 (Q units)
+// Display labels for the mod picker — underscore keys show as "foo bar".
+const LFO_LABELS = {
+  vol: "volume", cutoff: "filter cutoff", reson: "filter reson",
+  fuzz: "fuzz amt", delay: "delay wet", verb: "reverb wet",
+  vinyl: "vinyl amt", cassette: "cassette amt", ringmod: "ring mod wet",
+  crush: "bitcrush wet", autowah: "auto-wah wet", chorus: "chorus wet",
+  phaser: "phaser wet", flanger: "flanger wet", pitch: "pitch shift wet",
+  fuzz_drive: "fuzz drive", fuzz_tone: "fuzz tone", fuzz_level: "fuzz level",
+  vinyl_warmth: "vinyl warmth", ring_freq: "ring mod freq",
+  crush_bits: "bitcrush bits",
+  chorus_rate: "chorus rate", chorus_depth: "chorus depth",
+  phaser_rate: "phaser rate",
+  flanger_rate: "flanger rate", flanger_fbk: "flanger fbk",
+  delay_time: "delay time", delay_fbk: "delay fbk",
+};
+const lfoLabel = (k) => LFO_LABELS[k] ?? k;
 const LFO_AMP_SCALE = {
   vol: 1, harm: 1, timb: 1, morph: 1, decay: 1,
   cutoff: 6000,   // Hz
   reson: 15,
   fuzz: 1, delay: 1, verb: 1,
+  vinyl: 1, cassette: 1, ringmod: 1, crush: 1, autowah: 1, chorus: 1, phaser: 1, flanger: 1, pitch: 1,
+  // fx sub-params
+  fuzz_drive: 30,         // +/- 15 on the gain unit (drive path gain is 1+drive*30)
+  fuzz_tone: 4000,        // Hz around tone filter cutoff (200..8000)
+  fuzz_level: 1,
+  vinyl_warmth: 5000,     // Hz around lowpass freq
+  ring_freq: 1500,        // Hz
+  crush_bits: 8,           // bits swing (1..16)
+  chorus_rate: 4,          // Hz
+  chorus_depth: 1,
+  phaser_rate: 3,          // Hz
+  flanger_rate: 3,         // Hz
+  flanger_fbk: 0.8,
+  delay_time: 0.3,         // seconds
+  delay_fbk: 0.8,
 };
 
 const STARTER_PROMPTS = [
@@ -698,6 +741,9 @@ function emptyPattern(len) {
     sampleFadeIns:  new Array(len).fill(0),     // sample fade-in time in seconds (0 = click-guard)
     sampleFadeOuts: new Array(len).fill(0),     // sample fade-out time in seconds
     sampleLoopModes: new Array(len).fill("off"),// "off" | "loop" | "pingpong"
+    // Per-step automation lanes, keyed by AUTOMATION_TARGETS key. Each lane:
+    //   { enabled: bool, values: number[] }   — values normalized 0..1 per step
+    automation: {},
   };
 }
 
@@ -720,6 +766,7 @@ function aliasPattern(t, idx) {
   t.sampleFadeIns  = p.sampleFadeIns  ?? (p.sampleFadeIns  = new Array(p.steps.length).fill(0));
   t.sampleFadeOuts = p.sampleFadeOuts ?? (p.sampleFadeOuts = new Array(p.steps.length).fill(0));
   t.sampleLoopModes = p.sampleLoopModes ?? (p.sampleLoopModes = new Array(p.steps.length).fill("off"));
+  t.automation = p.automation ?? (p.automation = {});
   // Patterns can have independent lengths; meter is pattern-global (state.patternMeters).
   // Mirror the active pattern's length into t.length / t.accents so every transport
   // / UI path reading them stays correct.
@@ -784,6 +831,7 @@ function switchPattern(idx) {
     aliasPattern(t, idx);
     renderStepGrid(t);
     refreshRollIfOpen(t);
+    refreshAutIfOpen(t);
   }
   renderPatternGrid();
   // default instruments toggle: on for pattern 1, off for all others (user can still override)
@@ -846,6 +894,11 @@ function serializeSet() {
         notes: p.notes.slice(),
         velocities: p.velocities.slice(),
         chords: p.chords.slice(),
+        automation: p.automation ? Object.fromEntries(
+          Object.entries(p.automation)
+            .filter(([k]) => AUTOMATION_TARGETS[k])
+            .map(([k, lane]) => [k, { enabled: !!lane.enabled, values: (lane.values || []).slice() }])
+        ) : {},
       })),
     })),
   };
@@ -1109,12 +1162,23 @@ function applySet(s) {
         // Per-pattern length: prefer the saved pattern's own step array length;
         // falls back to t.length for older saves that didn't vary per pattern.
         const n = Math.max(1, Array.isArray(p.steps) ? p.steps.length : t.length);
+        const automation = {};
+        if (p.automation && typeof p.automation === "object") {
+          for (const [k, lane] of Object.entries(p.automation)) {
+            if (!AUTOMATION_TARGETS[k] || !lane) continue;
+            automation[k] = {
+              enabled: !!lane.enabled,
+              values: pad(Array.isArray(lane.values) ? lane.values : [], 0.5, n),
+            };
+          }
+        }
         t.patterns[i] = {
           steps: pad(p.steps, 0, n),
           lengths: pad(p.lengths, 0, n),
           notes: pad(p.notes, null, n),
           velocities: pad(p.velocities, 0.5, n),
           chords: pad(p.chords, "", n),
+          automation,
         };
       }
     }
@@ -1150,7 +1214,16 @@ function applySet(s) {
       if (t.voice) t.voice.dispose();
       ensureFxRack(t);
       if (t.fxRack) {
+        if (t.fxConfig.vinyl)      t.fxRack.applyVinyl(t.fxConfig.vinyl);
+        if (t.fxConfig.cassette)   t.fxRack.applyCassette(t.fxConfig.cassette);
         t.fxRack.applyFuzz(t.fxConfig.fuzz);
+        if (t.fxConfig.ringmod)    t.fxRack.applyRingMod(t.fxConfig.ringmod);
+        if (t.fxConfig.crush)      t.fxRack.applyCrush(t.fxConfig.crush);
+        if (t.fxConfig.autowah)    t.fxRack.applyAutoWah(t.fxConfig.autowah);
+        if (t.fxConfig.chorus)     t.fxRack.applyChorus(t.fxConfig.chorus);
+        if (t.fxConfig.phaser)     t.fxRack.applyPhaser(t.fxConfig.phaser);
+        if (t.fxConfig.flanger)    t.fxRack.applyFlanger(t.fxConfig.flanger);
+        if (t.fxConfig.pitchshift) t.fxRack.applyPitchShift(t.fxConfig.pitchshift);
         t.fxRack.applyDelay(t.fxConfig.delay);
         t.fxRack.applyReverb(t.fxConfig.reverb);
       }
@@ -1348,20 +1421,149 @@ function makeMetalizerCurve(amount) {
 
 function defaultFxConfig() {
   return {
-    fuzz:   { amount: 0, drive: 0.7, tone: 0.4, level: 0.5 },
-    crush:  { bits: 8, wet: 0 },
-    delay:  { time: 0.375, fbk: 0.35, wet: 0, sync: false, div: 0.5 },
-    reverb: { decay: 2, wet: 0 },
+    vinyl:      { amount: 0, warmth: 0.4, wow: 0.3 },
+    cassette:   { amount: 0, flutter: 0.3, sat: 0.4 },
+    fuzz:       { amount: 0, drive: 0.7, tone: 0.4, level: 0.5 },
+    ringmod:    { wet: 0, freq: 0.35 },           // freq is 0..1, log-mapped to ~20..3000 Hz
+    crush:      { bits: 8, wet: 0 },
+    autowah:    { wet: 0, sens: 0.5, range: 0.5 },
+    chorus:     { wet: 0, rate: 0.5, depth: 0.5 },
+    phaser:     { wet: 0, rate: 0.3, depth: 0.5 },
+    flanger:    { wet: 0, rate: 0.3, fbk: 0.5 },
+    pitchshift: { wet: 0, semitones: 0 },
+    delay:      { time: 0.375, fbk: 0.35, wet: 0, sync: false, div: 0.5 },
+    reverb:     { decay: 2, wet: 0 },
   };
+}
+
+// SP-404 "vinyl sim" crackle bed: base hiss with sparse impulsive crackles sprinkled in.
+function makeVinylCrackleBuffer(ctx, seconds) {
+  const len = Math.max(1, Math.floor(seconds * ctx.sampleRate));
+  const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) data[i] = (Math.random() * 2 - 1) * 0.06;
+  const crackles = Math.floor(seconds * 22);
+  for (let c = 0; c < crackles; c++) {
+    const pos = Math.floor(Math.random() * (len - 40));
+    const amp = 0.35 + Math.random() * 0.55;
+    const width = 2 + Math.floor(Math.random() * 10);
+    for (let j = 0; j < width; j++) {
+      data[pos + j] += (Math.random() * 2 - 1) * amp * Math.exp(-j / 4);
+    }
+  }
+  return buf;
+}
+
+// Tape hiss bed: pink-ish noise via a 1-pole lowpass on white noise.
+function makeTapeHissBuffer(ctx, seconds) {
+  const len = Math.max(1, Math.floor(seconds * ctx.sampleRate));
+  const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+  const data = buf.getChannelData(0);
+  let prev = 0;
+  for (let i = 0; i < len; i++) {
+    const w = Math.random() * 2 - 1;
+    prev = prev * 0.85 + w * 0.15;
+    data[i] = prev * 0.6;
+  }
+  return buf;
+}
+
+// Soft tape-style saturation curve (tanh with variable drive).
+function makeCassetteSatCurve(drive) {
+  const n = 2048;
+  const c = new Float32Array(n);
+  const k = 1 + drive * 7;
+  const norm = Math.tanh(k);
+  for (let i = 0; i < n; i++) {
+    const x = (i * 2) / n - 1;
+    c[i] = Math.tanh(x * k) / norm;
+  }
+  return c;
 }
 
 class FXRack {
   constructor(ctx, config) {
     this.ctx = ctx;
     this.config = config;
+    // Make sure legacy configs (pre-SP-404 fx) don't crash.
+    if (!config.vinyl)      config.vinyl      = { amount: 0, warmth: 0.4, wow: 0.3 };
+    if (!config.cassette)   config.cassette   = { amount: 0, flutter: 0.3, sat: 0.4 };
+    if (!config.chorus)     config.chorus     = { wet: 0, rate: 0.5, depth: 0.5 };
+    if (!config.crush)      config.crush      = { bits: 8, wet: 0 };
+    if (!config.ringmod)    config.ringmod    = { wet: 0, freq: 0.35 };
+    if (!config.autowah)    config.autowah    = { wet: 0, sens: 0.5, range: 0.5 };
+    if (!config.phaser)     config.phaser     = { wet: 0, rate: 0.3, depth: 0.5 };
+    if (!config.flanger)    config.flanger    = { wet: 0, rate: 0.3, fbk: 0.5 };
+    if (!config.pitchshift) config.pitchshift = { wet: 0, semitones: 0 };
 
-    // Using native Web Audio for the fuzz chain (simpler + predictable); Tone for delay/reverb
     this.input = ctx.createGain();
+
+    // ── vinyl sim stage (parallel wet/dry + crackle bed) ──
+    // wet path: lowpass (warmth) → wow (LFO-modulated delay)
+    this.vinylDryBus = ctx.createGain();
+    this.vinylWetBus = ctx.createGain();
+    this.vinylSum    = ctx.createGain();
+    this.vinylLP = ctx.createBiquadFilter();
+    this.vinylLP.type = "lowpass";
+    this.vinylLP.Q.value = 0.7;
+    this.vinylWowDelay = ctx.createDelay(0.05);
+    this.vinylWowDelay.delayTime.value = 0.005;
+    this.vinylWowLFO = new Tone.LFO({ frequency: 0.45, min: 0.003, max: 0.007, type: "sine" }).start();
+    this.vinylWowLFO.connect(this.vinylWowDelay.delayTime);
+    // crackle noise bed (level scales with vinyl amount)
+    this.vinylNoiseSrc = ctx.createBufferSource();
+    this.vinylNoiseSrc.buffer = makeVinylCrackleBuffer(ctx, 4);
+    this.vinylNoiseSrc.loop = true;
+    this.vinylNoiseGain = ctx.createGain();
+    this.vinylNoiseGain.gain.value = 0;
+    this.input.connect(this.vinylDryBus);
+    this.input.connect(this.vinylLP);
+    this.vinylLP.connect(this.vinylWowDelay);
+    this.vinylWowDelay.connect(this.vinylWetBus);
+    this.vinylNoiseSrc.connect(this.vinylNoiseGain);
+    this.vinylNoiseGain.connect(this.vinylSum);
+    this.vinylDryBus.connect(this.vinylSum);
+    this.vinylWetBus.connect(this.vinylSum);
+    try { this.vinylNoiseSrc.start(); } catch {}
+
+    // ── cassette stage (parallel wet/dry + flutter + sat + hiss) ──
+    this.cassetteDryBus = ctx.createGain();
+    this.cassetteWetBus = ctx.createGain();
+    this.cassetteSum    = ctx.createGain();
+    // tape bandwidth: gentle HPF + LPF sandwich
+    this.cassetteHP = ctx.createBiquadFilter();
+    this.cassetteHP.type = "highpass";
+    this.cassetteHP.frequency.value = 60;
+    this.cassetteLP = ctx.createBiquadFilter();
+    this.cassetteLP.type = "lowpass";
+    this.cassetteLP.frequency.value = 9500;
+    // flutter: short LFO-modulated delay
+    this.cassetteFlutter = ctx.createDelay(0.03);
+    this.cassetteFlutter.delayTime.value = 0.003;
+    this.cassetteFlutterLFO = new Tone.LFO({ frequency: 5.2, min: 0.002, max: 0.004, type: "sine" }).start();
+    this.cassetteFlutterLFO.connect(this.cassetteFlutter.delayTime);
+    // saturation
+    this.cassetteSat = ctx.createWaveShaper();
+    this.cassetteSat.oversample = "2x";
+    // hiss (gain scales with cassette amount)
+    this.cassetteHissSrc = ctx.createBufferSource();
+    this.cassetteHissSrc.buffer = makeTapeHissBuffer(ctx, 4);
+    this.cassetteHissSrc.loop = true;
+    this.cassetteHissGain = ctx.createGain();
+    this.cassetteHissGain.gain.value = 0;
+    this.vinylSum.connect(this.cassetteDryBus);
+    this.vinylSum.connect(this.cassetteHP);
+    this.cassetteHP.connect(this.cassetteFlutter);
+    this.cassetteFlutter.connect(this.cassetteSat);
+    this.cassetteSat.connect(this.cassetteLP);
+    this.cassetteLP.connect(this.cassetteWetBus);
+    this.cassetteHissSrc.connect(this.cassetteHissGain);
+    this.cassetteHissGain.connect(this.cassetteSum);
+    this.cassetteDryBus.connect(this.cassetteSum);
+    this.cassetteWetBus.connect(this.cassetteSum);
+    try { this.cassetteHissSrc.start(); } catch {}
+
+    // ── fuzz stage (DBA-style parallel wet/dry) ──
     this.dryBus = ctx.createGain();
     this.wetBus = ctx.createGain();
     this.fuzzDrive = ctx.createGain();
@@ -1371,26 +1573,95 @@ class FXRack {
     this.fuzzFilter.type = "lowpass";
     this.fuzzFilter.Q.value = 2.2;
     this.fuzzLevel = ctx.createGain();
-
-    // dry path
-    this.input.connect(this.dryBus);
-    // wet path
-    this.input.connect(this.fuzzDrive);
+    this.cassetteSum.connect(this.dryBus);
+    this.cassetteSum.connect(this.fuzzDrive);
     this.fuzzDrive.connect(this.fuzzShaper);
     this.fuzzShaper.connect(this.fuzzFilter);
     this.fuzzFilter.connect(this.fuzzLevel);
     this.fuzzLevel.connect(this.wetBus);
-
-    // merge
     this.postFuzz = ctx.createGain();
     this.dryBus.connect(this.postFuzz);
     this.wetBus.connect(this.postFuzz);
 
-    // Tone effects chained after fuzz: crusher → delay → reverb
+    // ── ring mod stage (native: carrier-modulated gain, parallel wet/dry) ──
+    // Standard trick: set gain.value = 0, connect carrier osc to gain.gain → output = input * carrier.
+    this.ringDry = ctx.createGain();
+    this.ringWet = ctx.createGain();
+    this.ringSum = ctx.createGain();
+    this.ringMult = ctx.createGain();
+    this.ringMult.gain.value = 0;
+    this.ringCarrier = ctx.createOscillator();
+    this.ringCarrier.type = "sine";
+    this.ringCarrier.frequency.value = 220;
+    this.ringCarrier.connect(this.ringMult.gain);
+    this.postFuzz.connect(this.ringDry);
+    this.postFuzz.connect(this.ringMult);
+    this.ringMult.connect(this.ringWet);
+    this.ringDry.connect(this.ringSum);
+    this.ringWet.connect(this.ringSum);
+    try { this.ringCarrier.start(); } catch {}
+
+    // ── Tone stages: crusher → autowah → chorus → phaser → flanger → pitchshift → delay → reverb ──
     this.crusher = new Tone.BitCrusher({
       bits: Math.max(1, Math.min(16, config.crush?.bits ?? 8)),
       wet: config.crush?.wet ?? 0,
     });
+    this.autowah = new Tone.AutoWah({
+      baseFrequency: 100,
+      octaves: 1 + (config.autowah.range ?? 0.5) * 4,
+      sensitivity: -10 - (config.autowah.sens ?? 0.5) * 30,
+      Q: 2,
+      gain: 2,
+      wet: config.autowah.wet ?? 0,
+    });
+    this.chorus = new Tone.Chorus({
+      frequency: 0.5 + (config.chorus.rate ?? 0.5) * 4.5,
+      delayTime: 3.2,
+      depth: config.chorus.depth ?? 0.5,
+      feedback: 0,
+      wet: config.chorus.wet ?? 0,
+      spread: 180,
+    }).start();
+    this.phaser = new Tone.Phaser({
+      frequency: 0.05 + (config.phaser.rate ?? 0.3) * 3.95,
+      octaves: 1 + (config.phaser.depth ?? 0.5) * 5,
+      baseFrequency: 350,
+      Q: 10,
+      wet: config.phaser.wet ?? 0,
+    });
+
+    // flanger: native short feedback-delay + LFO-modulated delay time
+    this.flangerIn = ctx.createGain();
+    this.flangerDry = ctx.createGain();
+    this.flangerWet = ctx.createGain();
+    this.flangerSum = ctx.createGain();
+    this.flangerDelayNode = ctx.createDelay(0.02);
+    this.flangerDelayNode.delayTime.value = 0.003;
+    this.flangerFeedback = ctx.createGain();
+    this.flangerFeedback.gain.value = 0.5;
+    this.flangerLFO = new Tone.LFO({
+      frequency: 0.05 + (config.flanger.rate ?? 0.3) * 3.95,
+      min: 0.0005,
+      max: 0.005,
+      type: "sine",
+    }).start();
+    this.flangerLFO.connect(this.flangerDelayNode.delayTime);
+    this.flangerIn.connect(this.flangerDry);
+    this.flangerIn.connect(this.flangerDelayNode);
+    this.flangerDelayNode.connect(this.flangerFeedback);
+    this.flangerFeedback.connect(this.flangerDelayNode);
+    this.flangerDelayNode.connect(this.flangerWet);
+    this.flangerDry.connect(this.flangerSum);
+    this.flangerWet.connect(this.flangerSum);
+
+    this.pitchshift = new Tone.PitchShift({
+      pitch: config.pitchshift.semitones ?? 0,
+      windowSize: 0.1,
+      delayTime: 0,
+      feedback: 0,
+      wet: config.pitchshift.wet ?? 0,
+    });
+
     this.delay = new Tone.FeedbackDelay({
       delayTime: config.delay.time,
       feedback: config.delay.fbk,
@@ -1401,16 +1672,157 @@ class FXRack {
     this.reverb.generate().catch(() => {});
 
     this.output = ctx.createGain();
-    // Native → Tone: target the underlying AudioNode behind each Tone effect's input.
-    const crusherIn = this.crusher.input?.input ?? this.crusher.input;
-    this.postFuzz.connect(crusherIn);
-    this.crusher.connect(this.delay);
+    // Native GainNode.connect() in Tone.js 15 rejects Tone wrappers — unwrap to
+    // the underlying native input node before connecting from a native source.
+    const toneIn = (node) => node.input?.input ?? node.input ?? node;
+    this.ringSum.connect(toneIn(this.crusher));
+    this.crusher.connect(this.autowah);
+    this.autowah.connect(this.chorus);
+    this.chorus.connect(this.phaser);
+    this.phaser.connect(this.flangerIn);
+    this.flangerSum.connect(toneIn(this.pitchshift));
+    this.pitchshift.connect(this.delay);
     this.delay.connect(this.reverb);
-    // Tone → native: Tone handles native destinations via connect()
     this.reverb.connect(this.output);
     this.output.connect(ctx.destination);
 
+    this.applyVinyl(config.vinyl);
+    this.applyCassette(config.cassette);
     this.applyFuzz(config.fuzz);
+    this.applyRingMod(config.ringmod);
+    this.applyAutoWah(config.autowah);
+    this.applyChorus(config.chorus);
+    this.applyPhaser(config.phaser);
+    this.applyFlanger(config.flanger);
+    this.applyPitchShift(config.pitchshift);
+  }
+
+  applyVinyl({ amount, warmth, wow }) {
+    if (amount !== undefined) {
+      this.config.vinyl.amount = amount;
+      this.vinylDryBus.gain.value = 1 - amount;
+      this.vinylWetBus.gain.value = amount;
+      this.vinylNoiseGain.gain.value = amount * 0.45;
+    }
+    if (warmth !== undefined) {
+      this.config.vinyl.warmth = warmth;
+      // warmth 0 → 9 kHz (bright), warmth 1 → 1.8 kHz (dull)
+      this.vinylLP.frequency.value = 9000 - warmth * 7200;
+    }
+    if (wow !== undefined) {
+      this.config.vinyl.wow = wow;
+      const base = 0.005;
+      const span = 0.0008 + wow * 0.006; // up to ±6 ms
+      this.vinylWowLFO.min = base - span;
+      this.vinylWowLFO.max = base + span;
+    }
+  }
+
+  applyCassette({ amount, flutter, sat }) {
+    if (amount !== undefined) {
+      this.config.cassette.amount = amount;
+      this.cassetteDryBus.gain.value = 1 - amount;
+      this.cassetteWetBus.gain.value = amount;
+      this.cassetteHissGain.gain.value = amount * 0.18;
+    }
+    if (flutter !== undefined) {
+      this.config.cassette.flutter = flutter;
+      const base = 0.003;
+      const span = 0.0004 + flutter * 0.004;
+      this.cassetteFlutterLFO.min = base - span;
+      this.cassetteFlutterLFO.max = base + span;
+    }
+    if (sat !== undefined) {
+      this.config.cassette.sat = sat;
+      this.cassetteSat.curve = makeCassetteSatCurve(sat);
+    }
+  }
+
+  applyChorus({ wet, rate, depth }) {
+    if (wet !== undefined) {
+      this.config.chorus.wet = wet;
+      try { this.chorus.wet.value = wet; } catch {}
+    }
+    if (rate !== undefined) {
+      this.config.chorus.rate = rate;
+      try { this.chorus.frequency.value = 0.1 + rate * 4.9; } catch {}
+    }
+    if (depth !== undefined) {
+      this.config.chorus.depth = depth;
+      try { this.chorus.depth = depth; } catch {}
+    }
+  }
+
+  applyRingMod({ wet, freq }) {
+    if (wet !== undefined) {
+      this.config.ringmod.wet = wet;
+      this.ringDry.gain.value = 1 - wet;
+      this.ringWet.gain.value = wet;
+    }
+    if (freq !== undefined) {
+      this.config.ringmod.freq = freq;
+      // log map slider 0..1 → 20..3000 Hz
+      const hz = 20 * Math.pow(150, Math.max(0, Math.min(1, freq)));
+      try { this.ringCarrier.frequency.value = hz; } catch {}
+    }
+  }
+
+  applyAutoWah({ wet, sens, range }) {
+    if (wet !== undefined) {
+      this.config.autowah.wet = wet;
+      try { this.autowah.wet.value = wet; } catch {}
+    }
+    if (sens !== undefined) {
+      this.config.autowah.sens = sens;
+      // higher slider = more sensitive (more negative dB threshold)
+      try { this.autowah.sensitivity = -10 - sens * 30; } catch {}
+    }
+    if (range !== undefined) {
+      this.config.autowah.range = range;
+      try { this.autowah.octaves = 1 + range * 4; } catch {}
+    }
+  }
+
+  applyPhaser({ wet, rate, depth }) {
+    if (wet !== undefined) {
+      this.config.phaser.wet = wet;
+      try { this.phaser.wet.value = wet; } catch {}
+    }
+    if (rate !== undefined) {
+      this.config.phaser.rate = rate;
+      try { this.phaser.frequency.value = 0.05 + rate * 3.95; } catch {}
+    }
+    if (depth !== undefined) {
+      this.config.phaser.depth = depth;
+      try { this.phaser.octaves = 1 + depth * 5; } catch {}
+    }
+  }
+
+  applyFlanger({ wet, rate, fbk }) {
+    if (wet !== undefined) {
+      this.config.flanger.wet = wet;
+      this.flangerDry.gain.value = 1 - wet;
+      this.flangerWet.gain.value = wet;
+    }
+    if (rate !== undefined) {
+      this.config.flanger.rate = rate;
+      try { this.flangerLFO.frequency.value = 0.05 + rate * 3.95; } catch {}
+    }
+    if (fbk !== undefined) {
+      this.config.flanger.fbk = fbk;
+      this.flangerFeedback.gain.value = Math.max(0, Math.min(0.9, fbk * 0.9));
+    }
+  }
+
+  applyPitchShift({ wet, semitones }) {
+    if (wet !== undefined) {
+      this.config.pitchshift.wet = wet;
+      try { this.pitchshift.wet.value = wet; } catch {}
+    }
+    if (semitones !== undefined) {
+      this.config.pitchshift.semitones = semitones;
+      try { this.pitchshift.pitch = semitones; } catch {}
+    }
   }
 
   applyFuzz({ amount, drive, tone, level }) {
@@ -1468,6 +1880,28 @@ class FXRack {
   }
   dispose() {
     try { this.input.disconnect(); } catch {}
+    try { this.vinylDryBus.disconnect(); } catch {}
+    try { this.vinylWetBus.disconnect(); } catch {}
+    try { this.vinylLP.disconnect(); } catch {}
+    try { this.vinylWowDelay.disconnect(); } catch {}
+    try { this.vinylSum.disconnect(); } catch {}
+    try { this.vinylNoiseSrc.stop(); } catch {}
+    try { this.vinylNoiseSrc.disconnect(); } catch {}
+    try { this.vinylNoiseGain.disconnect(); } catch {}
+    try { this.vinylWowLFO.stop(); } catch {}
+    try { this.vinylWowLFO.dispose(); } catch {}
+    try { this.cassetteDryBus.disconnect(); } catch {}
+    try { this.cassetteWetBus.disconnect(); } catch {}
+    try { this.cassetteHP.disconnect(); } catch {}
+    try { this.cassetteFlutter.disconnect(); } catch {}
+    try { this.cassetteSat.disconnect(); } catch {}
+    try { this.cassetteLP.disconnect(); } catch {}
+    try { this.cassetteSum.disconnect(); } catch {}
+    try { this.cassetteHissSrc.stop(); } catch {}
+    try { this.cassetteHissSrc.disconnect(); } catch {}
+    try { this.cassetteHissGain.disconnect(); } catch {}
+    try { this.cassetteFlutterLFO.stop(); } catch {}
+    try { this.cassetteFlutterLFO.dispose(); } catch {}
     try { this.dryBus.disconnect(); } catch {}
     try { this.wetBus.disconnect(); } catch {}
     try { this.fuzzDrive.disconnect(); } catch {}
@@ -1475,7 +1909,25 @@ class FXRack {
     try { this.fuzzFilter.disconnect(); } catch {}
     try { this.fuzzLevel.disconnect(); } catch {}
     try { this.postFuzz.disconnect(); } catch {}
+    try { this.ringDry.disconnect(); } catch {}
+    try { this.ringWet.disconnect(); } catch {}
+    try { this.ringMult.disconnect(); } catch {}
+    try { this.ringSum.disconnect(); } catch {}
+    try { this.ringCarrier.stop(); } catch {}
+    try { this.ringCarrier.disconnect(); } catch {}
+    try { this.flangerIn.disconnect(); } catch {}
+    try { this.flangerDry.disconnect(); } catch {}
+    try { this.flangerWet.disconnect(); } catch {}
+    try { this.flangerDelayNode.disconnect(); } catch {}
+    try { this.flangerFeedback.disconnect(); } catch {}
+    try { this.flangerSum.disconnect(); } catch {}
+    try { this.flangerLFO.stop(); } catch {}
+    try { this.flangerLFO.dispose(); } catch {}
     try { this.output.disconnect(); } catch {}
+    try { this.autowah.dispose(); } catch {}
+    try { this.chorus.dispose(); } catch {}
+    try { this.phaser.dispose(); } catch {}
+    try { this.pitchshift.dispose(); } catch {}
     try { this.delay.dispose(); } catch {}
     try { this.reverb.dispose(); } catch {}
     try { this.crusher.dispose(); } catch {}
@@ -1657,14 +2109,14 @@ function buildDrumSynthNode(kind, output) {
         envelope: { attack: 0.001, decay: 0.05, release: 0.01 },
         harmonicity: 5.1, modulationIndex: 32, resonance: 4000, octaves: 1.5,
       }).connect(output);
-      return { nodes: [s], trigger: (n, time, dur, vel) => s.triggerAttackRelease("32n", time, vel), release: () => {} };
+      return { nodes: [s], trigger: (n, time, dur, vel) => s.triggerAttackRelease(Tone.Frequency(n, "midi"), "32n", time, vel), release: () => {} };
     }
     case "808-ohat": {
       const s = new Tone.MetalSynth({
         envelope: { attack: 0.001, decay: 0.5, release: 0.3 },
         harmonicity: 5.1, modulationIndex: 32, resonance: 4000, octaves: 1.5,
       }).connect(output);
-      return { nodes: [s], trigger: (n, time, dur, vel) => s.triggerAttackRelease("4n", time, vel), release: () => {} };
+      return { nodes: [s], trigger: (n, time, dur, vel) => s.triggerAttackRelease(Tone.Frequency(n, "midi"), "4n", time, vel), release: () => {} };
     }
     case "808-clap": {
       const noise = new Tone.NoiseSynth({ noise: { type: "pink" }, envelope: { attack: 0.001, decay: 0.28, sustain: 0 } }).connect(output);
@@ -1712,14 +2164,17 @@ function buildDrumSynthNode(kind, output) {
         envelope: { attack: 0.001, decay: 0.04, release: 0.01 },
         harmonicity: 12, modulationIndex: 40, resonance: 7000, octaves: 1,
       }).connect(output);
-      return { nodes: [s], trigger: (n, time, dur, vel) => s.triggerAttackRelease("32n", time, vel), release: () => {} };
+      // Tone 15's MetalSynth.triggerAttackRelease signature is (note, duration,
+      // time, velocity) — the old (duration, time, velocity) call passed "32n"
+      // as the note, which made the synth fall over silently.
+      return { nodes: [s], trigger: (n, time, dur, vel) => s.triggerAttackRelease(Tone.Frequency(n, "midi"), "32n", time, vel), release: () => {} };
     }
     case "909-ohat": {
       const s = new Tone.MetalSynth({
         envelope: { attack: 0.001, decay: 0.6, release: 0.4 },
         harmonicity: 12, modulationIndex: 40, resonance: 7000, octaves: 1,
       }).connect(output);
-      return { nodes: [s], trigger: (n, time, dur, vel) => s.triggerAttackRelease("4n", time, vel), release: () => {} };
+      return { nodes: [s], trigger: (n, time, dur, vel) => s.triggerAttackRelease(Tone.Frequency(n, "midi"), "4n", time, vel), release: () => {} };
     }
     case "909-clap": {
       const noise = new Tone.NoiseSynth({ noise: { type: "pink" }, envelope: { attack: 0.001, decay: 0.18, sustain: 0 } }).connect(output);
@@ -2825,17 +3280,52 @@ function getModTarget(t, key) {
   }
   if (key === "cutoff") return t.filterNode?.frequency ?? null;
   if (key === "reson")  return t.filterNode?.Q ?? null;
-  if (key === "fuzz")   return t.fxRack?.wetBus?.gain ?? null;
-  if (key === "delay")  return t.fxRack?.delay?.wet ?? null;
-  if (key === "verb")   return t.fxRack?.reverb?.wet ?? null;
+  const rack = t.fxRack;
+  if (!rack) return null;
+  // FX wet/amt targets (LFO adds on top of dry — crossfade fx still get movement).
+  switch (key) {
+    case "fuzz":         return rack.wetBus?.gain ?? null;
+    case "delay":        return rack.delay?.wet ?? null;
+    case "verb":         return rack.reverb?.wet ?? null;
+    case "vinyl":        return rack.vinylWetBus?.gain ?? null;
+    case "cassette":     return rack.cassetteWetBus?.gain ?? null;
+    case "ringmod":      return rack.ringWet?.gain ?? null;
+    case "crush":        return rack.crusher?.wet ?? null;
+    case "autowah":      return rack.autowah?.wet ?? null;
+    case "chorus":       return rack.chorus?.wet ?? null;
+    case "phaser":       return rack.phaser?.wet ?? null;
+    case "flanger":      return rack.flangerWet?.gain ?? null;
+    case "pitch":        return rack.pitchshift?.wet ?? null;
+    // sub-params
+    case "fuzz_drive":   return rack.fuzzDrive?.gain ?? null;
+    case "fuzz_tone":    return rack.fuzzFilter?.frequency ?? null;
+    case "fuzz_level":   return rack.fuzzLevel?.gain ?? null;
+    case "vinyl_warmth": return rack.vinylLP?.frequency ?? null;
+    case "ring_freq":    return rack.ringCarrier?.frequency ?? null;
+    case "crush_bits":   return rack.crusher?.bits ?? null;
+    case "chorus_rate":  return rack.chorus?.frequency ?? null;
+    case "chorus_depth": return rack.chorus?.depth ?? null;  // may not be Signal — returns null if so
+    case "phaser_rate":  return rack.phaser?.frequency ?? null;
+    case "flanger_rate": return rack.flangerLFO?.frequency ?? null;
+    case "flanger_fbk":  return rack.flangerFeedback?.gain ?? null;
+    case "delay_time":   return rack.delay?.delayTime ?? null;
+    case "delay_fbk":    return rack.delay?.feedback ?? null;
+  }
   return null;
 }
+
+const TRACK_FX_LFO_KEYS = new Set([
+  "fuzz","delay","verb","vinyl","cassette","ringmod","crush","autowah","chorus","phaser","flanger","pitch",
+  "fuzz_drive","fuzz_tone","fuzz_level","vinyl_warmth","ring_freq","crush_bits",
+  "chorus_rate","chorus_depth","phaser_rate","flanger_rate","flanger_fbk","delay_time","delay_fbk",
+]);
 
 // Which modulation keys make sense for the current engine? Voice-independent
 // so the picker hides irrelevant entries even before audio is initialized.
 function canModulate(t, key) {
-  // Always-applicable: track-level fx + master vol.
-  if (["vol", "cutoff", "reson", "fuzz", "delay", "verb"].includes(key)) return true;
+  // Always-applicable: track-level fx + master vol + filter.
+  if (key === "vol" || key === "cutoff" || key === "reson") return true;
+  if (TRACK_FX_LFO_KEYS.has(key)) return true;
   const eng = engineByKey(t.engineKey);
   if (!eng) return false;
   // Plaits exposes harm/timb/morph/decay as voice params.
@@ -2846,7 +3336,8 @@ function canModulate(t, key) {
     case "dm:mini-brute": return ["harm", "osc1", "osc2", "osc3", "osc4", "ultra", "fm"].includes(key);
     case "dm:moog":       return ["harm", "osc1", "osc2", "osc3", "noise"].includes(key);
     case "dm:juno":       return ["harm", "osc1", "osc2", "osc3", "noise"].includes(key);
-    // Guitar/bass have no per-voice AudioParam targets beyond vol + track fx.
+    // Guitar/bass/rhodes have no per-voice AudioParam targets beyond vol+track fx;
+    // their timbre params are still automatable via setParam (see canAutomate).
   }
   return false;
 }
@@ -2901,6 +3392,262 @@ function retuneSyncedLFOs() {
     for (const k of LFO_KEYS) {
       if (t.lfoConfig[k].enabled && t.lfoConfig[k].sync) syncLFO(t, k);
     }
+  }
+}
+
+// ---- per-step automation -----------------------------------------------
+// Lanes live on the pattern (t.patterns[i].automation[key] = { enabled, values })
+// and are aliased to t.automation by aliasPattern(). Lane values are normalized
+// 0..1 per step; applyAutomationAtStep maps that to the target's physical range.
+
+const AUTOMATION_TARGETS = {
+  // filter + track
+  "cutoff":        { label: "filter cutoff" },
+  "reson":         { label: "filter reson" },
+  "vol":           { label: "volume" },
+  // voice / instrument params (per-engine availability via canAutomate)
+  "harm":          { label: "harm" },
+  "timb":          { label: "timbre" },
+  "morph":         { label: "morph" },
+  "decay":         { label: "decay" },
+  "osc1":          { label: "osc 1" },
+  "osc2":          { label: "osc 2" },
+  "osc3":          { label: "osc 3" },
+  "osc4":          { label: "osc 4" },
+  "ultra":         { label: "ultra" },
+  "fm":            { label: "fm" },
+  "metal":         { label: "metal" },
+  "noise":         { label: "noise" },
+  // fx wets / amounts
+  "fx.vinyl":           { label: "vinyl amt" },
+  "fx.vinyl.warmth":    { label: "vinyl warmth" },
+  "fx.vinyl.wow":       { label: "vinyl wow" },
+  "fx.cassette":        { label: "cassette amt" },
+  "fx.cassette.flutter":{ label: "cassette flutter" },
+  "fx.cassette.sat":    { label: "cassette sat" },
+  "fx.fuzz":            { label: "fuzz amt" },
+  "fx.fuzz.drive":      { label: "fuzz drive" },
+  "fx.fuzz.tone":       { label: "fuzz tone" },
+  "fx.fuzz.level":      { label: "fuzz level" },
+  "fx.ringmod":         { label: "ring mod wet" },
+  "fx.ringmod.freq":    { label: "ring mod freq" },
+  "fx.crush":           { label: "bitcrush wet" },
+  "fx.crush.bits":      { label: "bitcrush bits" },
+  "fx.autowah":         { label: "auto-wah wet" },
+  "fx.autowah.sens":    { label: "auto-wah sens" },
+  "fx.autowah.range":   { label: "auto-wah range" },
+  "fx.chorus":          { label: "chorus wet" },
+  "fx.chorus.rate":     { label: "chorus rate" },
+  "fx.chorus.depth":    { label: "chorus depth" },
+  "fx.phaser":          { label: "phaser wet" },
+  "fx.phaser.rate":     { label: "phaser rate" },
+  "fx.phaser.depth":    { label: "phaser depth" },
+  "fx.flanger":         { label: "flanger wet" },
+  "fx.flanger.rate":    { label: "flanger rate" },
+  "fx.flanger.fbk":     { label: "flanger fbk" },
+  "fx.pitchshift":      { label: "pitch shift wet" },
+  "fx.pitchshift.semi": { label: "pitch semi" },
+  "fx.delay":           { label: "delay wet" },
+  "fx.delay.time":      { label: "delay time" },
+  "fx.delay.fbk":       { label: "delay fbk" },
+  "fx.reverb":          { label: "reverb wet" },
+  "fx.reverb.decay":    { label: "reverb decay" },
+};
+const AUTOMATION_KEYS = Object.keys(AUTOMATION_TARGETS);
+const VOICE_AUTO_KEYS = ["vol","harm","timb","morph","decay","osc1","osc2","osc3","osc4","ultra","fm","metal","noise"];
+
+// Engine-aware list of voice/instrument keys that can be automated. Broader
+// than canModulate because automation can drive params via setParam even when
+// the voice doesn't expose an AudioParam (guitar/bass/rhodes timbre sliders).
+function voiceAutoKeysForEngine(t) {
+  const eng = engineByKey(t.engineKey);
+  if (!eng) return ["vol"];
+  if (eng.type === "plaits") return ["vol", "harm", "timb", "morph", "decay"];
+  switch (t.engineKey) {
+    case "dm:mini-brute": return ["vol", "harm", "timb", "osc1", "osc2", "osc3", "osc4", "ultra", "fm", "metal"];
+    case "dm:moog":       return ["vol", "harm", "decay", "osc1", "osc2", "osc3", "noise"];
+    case "dm:juno":       return ["vol", "harm", "timb", "morph", "decay", "osc1", "osc2", "osc3", "noise"];
+    case "dm:guitar":     return ["vol", "harm", "timb", "morph", "decay"];
+    case "dm:bass":       return ["vol", "harm", "timb", "morph", "decay"];
+    case "dm:rhodes":     return ["vol", "harm", "timb", "morph", "decay"];
+  }
+  return ["vol"];
+}
+
+function canAutomate(t, key) {
+  if (key === "cutoff" || key === "reson") return true;
+  if (key.startsWith("fx.")) return true;
+  if (VOICE_AUTO_KEYS.includes(key)) return voiceAutoKeysForEngine(t).includes(key);
+  return false;
+}
+
+// Schedule a value change at `time`, linearly ramping to `vNext` over `stepDur`
+// for targets backed by an AudioParam/Signal. For params that require a
+// rebuild (waveshaper curve, IR, integer quantization) the change stays
+// stepwise at `time`.
+function applyAutomationAtStep(t, key, v, time, vNext, stepDur) {
+  const vv = Math.max(0, Math.min(1, Number(v) || 0));
+  const vn = vNext == null ? vv : Math.max(0, Math.min(1, Number(vNext) || 0));
+  const sdur = Math.max(0.005, Number(stepDur) || 0.02);
+  const endT = time + sdur;
+
+  // Helper: cancel any in-flight automation at or after `time`, pin the current
+  // segment start, and ramp to the next step's physical value by the end.
+  const ramp = (param, physFrom, physTo) => {
+    if (!param) return;
+    try {
+      param.cancelScheduledValues(time);
+      param.setValueAtTime(physFrom, time);
+      param.linearRampToValueAtTime(physTo, endT);
+    } catch {
+      try { param.value = physTo; } catch {}
+    }
+  };
+
+  if (VOICE_AUTO_KEYS.includes(key)) {
+    const param = t.voice?.getAudioParam?.(key);
+    if (param && param.linearRampToValueAtTime) {
+      ramp(param, vv, vn);
+      return;
+    }
+    // fallback for voices without AudioParam (guitar/bass/rhodes timbre, mini-brute metal, etc.)
+    try { t.voice?.setParam?.(key, vv); } catch {}
+    if (t.params) t.params[key] = vv;
+    return;
+  }
+  if (key === "cutoff") {
+    t.filter.cutoff = vv;
+    ramp(t.filterNode?.frequency, cutoffToHz(vv), cutoffToHz(vn));
+    return;
+  }
+  if (key === "reson") {
+    t.filter.reson = vv;
+    ramp(t.filterNode?.Q, resonToQ(vv), resonToQ(vn));
+    return;
+  }
+  const rack = t.fxRack;
+  if (!rack || !key.startsWith("fx.")) return;
+
+  switch (key) {
+    // ── top-level wet/amt targets (crossfade fx: ramp both dry+wet) ──
+    case "fx.vinyl":
+      rack.config.vinyl.amount = vv;
+      ramp(rack.vinylWetBus?.gain, vv, vn);
+      ramp(rack.vinylDryBus?.gain, 1 - vv, 1 - vn);
+      ramp(rack.vinylNoiseGain?.gain, vv * 0.45, vn * 0.45);
+      return;
+    case "fx.cassette":
+      rack.config.cassette.amount = vv;
+      ramp(rack.cassetteWetBus?.gain, vv, vn);
+      ramp(rack.cassetteDryBus?.gain, 1 - vv, 1 - vn);
+      ramp(rack.cassetteHissGain?.gain, vv * 0.18, vn * 0.18);
+      return;
+    case "fx.fuzz":
+      rack.config.fuzz.amount = vv;
+      ramp(rack.wetBus?.gain, vv, vn);
+      ramp(rack.dryBus?.gain, 1 - vv, 1 - vn);
+      return;
+    case "fx.ringmod":
+      rack.config.ringmod.wet = vv;
+      ramp(rack.ringWet?.gain, vv, vn);
+      ramp(rack.ringDry?.gain, 1 - vv, 1 - vn);
+      return;
+    case "fx.flanger":
+      rack.config.flanger.wet = vv;
+      ramp(rack.flangerWet?.gain, vv, vn);
+      ramp(rack.flangerDry?.gain, 1 - vv, 1 - vn);
+      return;
+    case "fx.crush":      rack.config.crush.wet = vv;      ramp(rack.crusher?.wet, vv, vn); return;
+    case "fx.autowah":    rack.config.autowah.wet = vv;    ramp(rack.autowah?.wet, vv, vn); return;
+    case "fx.chorus":     rack.config.chorus.wet = vv;     ramp(rack.chorus?.wet, vv, vn); return;
+    case "fx.phaser":     rack.config.phaser.wet = vv;     ramp(rack.phaser?.wet, vv, vn); return;
+    case "fx.pitchshift": rack.config.pitchshift.wet = vv; ramp(rack.pitchshift?.wet, vv, vn); return;
+    case "fx.delay":      rack.config.delay.wet = vv;      ramp(rack.delay?.wet, vv, vn); return;
+    case "fx.reverb":     rack.config.reverb.wet = vv;     ramp(rack.reverb?.wet, vv, vn); return;
+
+    // ── sub-params with AudioParam/Signal targets — ramp directly ──
+    case "fx.fuzz.drive":
+      rack.config.fuzz.drive = vv;
+      ramp(rack.fuzzDrive?.gain, 1 + vv * 30, 1 + vn * 30);
+      // waveshaper curve rebuilds at step boundaries; mid-ramp keeps prior curve.
+      try { rack.fuzzShaper.curve = makeFuzzCurve(vv); } catch {}
+      return;
+    case "fx.fuzz.tone":
+      rack.config.fuzz.tone = vv;
+      ramp(rack.fuzzFilter?.frequency, 200 + vv * 7800, 200 + vn * 7800);
+      return;
+    case "fx.fuzz.level":
+      rack.config.fuzz.level = vv;
+      ramp(rack.fuzzLevel?.gain, vv * 0.9, vn * 0.9);
+      return;
+    case "fx.vinyl.warmth":
+      rack.config.vinyl.warmth = vv;
+      ramp(rack.vinylLP?.frequency, 9000 - vv * 7200, 9000 - vn * 7200);
+      return;
+    case "fx.ringmod.freq":
+      rack.config.ringmod.freq = vv;
+      ramp(rack.ringCarrier?.frequency, 20 * Math.pow(150, vv), 20 * Math.pow(150, vn));
+      return;
+    case "fx.chorus.rate":
+      rack.config.chorus.rate = vv;
+      ramp(rack.chorus?.frequency, 0.1 + vv * 4.9, 0.1 + vn * 4.9);
+      return;
+    case "fx.phaser.rate":
+      rack.config.phaser.rate = vv;
+      ramp(rack.phaser?.frequency, 0.05 + vv * 3.95, 0.05 + vn * 3.95);
+      return;
+    case "fx.flanger.rate":
+      rack.config.flanger.rate = vv;
+      ramp(rack.flangerLFO?.frequency, 0.05 + vv * 3.95, 0.05 + vn * 3.95);
+      return;
+    case "fx.flanger.fbk":
+      rack.config.flanger.fbk = vv;
+      ramp(rack.flangerFeedback?.gain, vv * 0.9, vn * 0.9);
+      return;
+    case "fx.delay.time":
+      rack.config.delay.time = 0.05 + vv * 0.95;
+      rack.config.delay.sync = false;
+      ramp(rack.delay?.delayTime, 0.05 + vv * 0.95, 0.05 + vn * 0.95);
+      return;
+    case "fx.delay.fbk":
+      rack.config.delay.fbk = vv * 0.95;
+      ramp(rack.delay?.feedback, vv * 0.95, vn * 0.95);
+      return;
+
+    // ── stepwise-only: integer-quantized or IR/curve-rebuild targets ──
+    case "fx.vinyl.wow":        try { rack.applyVinyl({ wow: vv }); } catch {} return;
+    case "fx.cassette.flutter": try { rack.applyCassette({ flutter: vv }); } catch {} return;
+    case "fx.cassette.sat":     try { rack.applyCassette({ sat: vv }); } catch {} return;
+    case "fx.crush.bits":       try { rack.applyCrush({ bits: 1 + vv * 15 }); } catch {} return;
+    case "fx.autowah.sens":     try { rack.applyAutoWah({ sens: vv }); } catch {} return;
+    case "fx.autowah.range":    try { rack.applyAutoWah({ range: vv }); } catch {} return;
+    case "fx.chorus.depth":     try { rack.applyChorus({ depth: vv }); } catch {} return;
+    case "fx.phaser.depth":     try { rack.applyPhaser({ depth: vv }); } catch {} return;
+    case "fx.pitchshift.semi":  try { rack.applyPitchShift({ semitones: Math.round(vv * 24 - 12) }); } catch {} return;
+    case "fx.reverb.decay": {
+      const decay = 0.2 + vv * 7.8;
+      const cur = rack.config?.reverb?.decay ?? decay;
+      if (Math.abs(decay - cur) > 0.15) { try { rack.applyReverb({ decay }); } catch {} }
+      return;
+    }
+  }
+}
+
+// Apply every enabled lane at the given audio time, smoothing from the current
+// step's value to the next step's value over `stepDur` seconds.
+function runAutomationForStep(t, stepIdx, time, stepDur) {
+  const auto = t.automation;
+  if (!auto) return;
+  for (const key in auto) {
+    const lane = auto[key];
+    if (!lane || !lane.enabled) continue;
+    const values = lane.values;
+    if (!values || values.length === 0) continue;
+    const len = values.length;
+    const v = values[stepIdx % len];
+    if (v == null) continue;
+    const next = values[(stepIdx + 1) % len];
+    applyAutomationAtStep(t, key, v, time, next, stepDur);
   }
 }
 
@@ -3006,13 +3753,37 @@ function updatePlaitsControlsVisibility(t) {
 // eleven-labs engine so user-applied fx don't stack on baked-in sample ambience.
 function resetFxDry(t) {
   const cfg = t.fxConfig;
-  cfg.fuzz.amount = 0;
-  cfg.delay.wet   = 0;
-  cfg.reverb.wet  = 0;
+  if (!cfg.vinyl)      cfg.vinyl      = { amount: 0, warmth: 0.4, wow: 0.3 };
+  if (!cfg.cassette)   cfg.cassette   = { amount: 0, flutter: 0.3, sat: 0.4 };
+  if (!cfg.chorus)     cfg.chorus     = { wet: 0, rate: 0.5, depth: 0.5 };
+  if (!cfg.ringmod)    cfg.ringmod    = { wet: 0, freq: 0.35 };
+  if (!cfg.autowah)    cfg.autowah    = { wet: 0, sens: 0.5, range: 0.5 };
+  if (!cfg.phaser)     cfg.phaser     = { wet: 0, rate: 0.3, depth: 0.5 };
+  if (!cfg.flanger)    cfg.flanger    = { wet: 0, rate: 0.3, fbk: 0.5 };
+  if (!cfg.pitchshift) cfg.pitchshift = { wet: 0, semitones: 0 };
+  cfg.vinyl.amount      = 0;
+  cfg.cassette.amount   = 0;
+  cfg.fuzz.amount       = 0;
+  cfg.ringmod.wet       = 0;
+  cfg.autowah.wet       = 0;
+  cfg.chorus.wet        = 0;
+  cfg.phaser.wet        = 0;
+  cfg.flanger.wet       = 0;
+  cfg.pitchshift.wet    = 0;
+  cfg.delay.wet         = 0;
+  cfg.reverb.wet        = 0;
   if (!cfg.crush) cfg.crush = { bits: 8, wet: 0 };
-  cfg.crush.wet   = 0;
+  cfg.crush.wet = 0;
   if (t.fxRack) {
+    t.fxRack.applyVinyl(cfg.vinyl);
+    t.fxRack.applyCassette(cfg.cassette);
     t.fxRack.applyFuzz(cfg.fuzz);
+    t.fxRack.applyRingMod(cfg.ringmod);
+    t.fxRack.applyAutoWah(cfg.autowah);
+    t.fxRack.applyChorus(cfg.chorus);
+    t.fxRack.applyPhaser(cfg.phaser);
+    t.fxRack.applyFlanger(cfg.flanger);
+    t.fxRack.applyPitchShift(cfg.pitchshift);
     t.fxRack.applyDelay(cfg.delay);
     t.fxRack.applyReverb(cfg.reverb);
     t.fxRack.applyCrush(cfg.crush);
@@ -3050,6 +3821,7 @@ function setEngineKey(t, newKey) {
   const e = engineByKey(newKey);
   if (!e) return;
   t.engineKey = newKey;
+  redetectDrumKit(t);
   // Saved patches live on the track as customConfig
   if (e.type === "saved") {
     t.customConfig = e.config;
@@ -3125,12 +3897,19 @@ function parseMeter(str) {
 }
 
 // Guess whether a track is playing a drum kit based on engine type + name.
-// Used only at creation time to seed isDrumKit; the user can flip the toggle after.
+// Used at track creation and re-run on engine/name change via redetectDrumKit.
 function guessIsDrumKit({ engineKey, name }) {
   const eng = engineByKey(engineKey);
   if (eng?.type === "sample") return true;
   const blob = `${engineKey || ""} ${eng?.label || ""} ${name || ""}`.toLowerCase();
   return /\b(kick|snare|hat|hi-?hat|clap|tom|perc|drum)\b/.test(blob);
+}
+
+// Recompute t.isDrumKit from current engineKey + name. Existing step notes are
+// left untouched — only future blank steps + sample pitch baseline follow the
+// new flag. Call this whenever engine or track name changes.
+function redetectDrumKit(t) {
+  t.isDrumKit = guessIsDrumKit({ engineKey: t.engineKey, name: t.name });
 }
 
 function createTrack({ name, engineKey, length = totalSteps() }) {
@@ -3523,6 +4302,15 @@ function resizePattern(t, patIdx, len) {
   p.sampleFadeIns   = pad(p.sampleFadeIns, 0);
   p.sampleFadeOuts  = pad(p.sampleFadeOuts, 0);
   p.sampleLoopModes = pad(p.sampleLoopModes, "off");
+  // Resize automation lanes to match new pattern length.
+  if (p.automation) {
+    for (const key in p.automation) {
+      const lane = p.automation[key];
+      if (lane && Array.isArray(lane.values)) {
+        lane.values = pad(lane.values, 0.5);
+      }
+    }
+  }
   for (let i = 0; i < len; i++) {
     if (p.steps[i]) p.lengths[i] = Math.max(1, Math.min(p.lengths[i] || 1, len - i));
   }
@@ -3532,6 +4320,7 @@ function resizePattern(t, patIdx, len) {
     t.accents = autoAccents(len, patternMeter(patIdx));
     if (t.el) t.el.querySelector(".track-len").value = len;
     renderStepGrid(t);
+    refreshAutIfOpen(t);
   }
   renderPatternGrid();
 }
@@ -3701,7 +4490,10 @@ function renderTrack(t) {
   node.querySelector(".p-envatk").value = t.filter.attack;
   node.querySelector(".p-envrel").value = t.filter.release;
 
-  node.querySelector(".track-name").addEventListener("input", e => { t.name = e.target.value; });
+  node.querySelector(".track-name").addEventListener("input", e => {
+    t.name = e.target.value;
+    redetectDrumKit(t);
+  });
   node.querySelector(".track-len").addEventListener("change", e => {
     const n = Math.max(1, Math.min(128, Number(e.target.value) || 1));
     resizeTrack(t, n);
@@ -3815,29 +4607,6 @@ function renderTrack(t) {
   if (octDownBtn) octDownBtn.addEventListener("click", () => shiftTrackOctave(t, -12));
   if (octUpBtn)   octUpBtn.addEventListener("click",   () => shiftTrackOctave(t, +12));
 
-  const drumKitBtn = node.querySelector(".track-drumkit");
-  if (drumKitBtn) {
-    const refreshDrumKitUI = () => {
-      drumKitBtn.setAttribute("aria-pressed", String(!!t.isDrumKit));
-    };
-    refreshDrumKitUI();
-    drumKitBtn.addEventListener("click", () => {
-      t.isDrumKit = !t.isDrumKit;
-      refreshDrumKitUI();
-      // Flipping drum-kit on retroactively conforms every step note to C2 so
-      // existing tracks (e.g. a snare that came back from the planner at D2)
-      // line up with the new default.
-      if (t.isDrumKit) {
-        for (const p of t.patterns) {
-          for (let i = 0; i < p.notes.length; i++) {
-            if (p.steps[i]) p.notes[i] = 36;
-          }
-        }
-        renderStepGrid(t);
-      }
-    });
-  }
-
   const soloBtn = node.querySelector(".track-solo");
   soloBtn.addEventListener("click", () => {
     t.soloed = !t.soloed;
@@ -3851,6 +4620,7 @@ function renderTrack(t) {
 
   const panelPairs = [
     { btnSel: ".track-mod",    panelSel: ".track-mod-panel" },
+    { btnSel: ".track-aut",    panelSel: ".track-aut-panel" },
     { btnSel: ".track-roll",   panelSel: ".track-roll-panel" },
     { btnSel: ".track-filter", panelSel: ".track-filter-panel" },
     { btnSel: ".track-env",    panelSel: ".track-env-panel" },
@@ -3888,6 +4658,8 @@ function renderTrack(t) {
   eqPanel.querySelector(".p-eq-mid").addEventListener("input",  e => setEQ(t, "mid",  Number(e.target.value)));
   eqPanel.querySelector(".p-eq-high").addEventListener("input", e => setEQ(t, "high", Number(e.target.value)));
   bindPanelToggle(".track-mod",    ".track-mod-panel");
+  bindPanelToggle(".track-aut",    ".track-aut-panel",
+    () => renderAutomationPanel(t, node.querySelector(".track-aut-panel")));
   bindPanelToggle(".track-roll",   ".track-roll-panel",
     () => renderRollPanel(t, node.querySelector(".track-roll-panel")));
   bindPanelToggle(".track-filter", ".track-filter-panel");
@@ -4017,11 +4789,32 @@ function wireCompPanel(t, panel) {
 function applyFxToTrack(t, fx) {
   if (!fx || typeof fx !== "object") return;
   const cfg = t.fxConfig;
-  if (fx.fuzz && typeof fx.fuzz === "object") {
-    for (const k of ["amount","drive","tone","level"]) {
-      const v = Number(fx.fuzz[k]);
-      if (Number.isFinite(v)) cfg.fuzz[k] = Math.max(0, Math.min(1, v));
+  if (!cfg.vinyl)      cfg.vinyl      = { amount: 0, warmth: 0.4, wow: 0.3 };
+  if (!cfg.cassette)   cfg.cassette   = { amount: 0, flutter: 0.3, sat: 0.4 };
+  if (!cfg.chorus)     cfg.chorus     = { wet: 0, rate: 0.5, depth: 0.5 };
+  if (!cfg.ringmod)    cfg.ringmod    = { wet: 0, freq: 0.35 };
+  if (!cfg.autowah)    cfg.autowah    = { wet: 0, sens: 0.5, range: 0.5 };
+  if (!cfg.phaser)     cfg.phaser     = { wet: 0, rate: 0.3, depth: 0.5 };
+  if (!cfg.flanger)    cfg.flanger    = { wet: 0, rate: 0.3, fbk: 0.5 };
+  if (!cfg.pitchshift) cfg.pitchshift = { wet: 0, semitones: 0 };
+  const readUnit = (group, keys) => {
+    if (!fx[group] || typeof fx[group] !== "object") return;
+    for (const k of keys) {
+      const v = Number(fx[group][k]);
+      if (Number.isFinite(v)) cfg[group][k] = Math.max(0, Math.min(1, v));
     }
+  };
+  readUnit("vinyl",    ["amount","warmth","wow"]);
+  readUnit("cassette", ["amount","flutter","sat"]);
+  readUnit("fuzz",     ["amount","drive","tone","level"]);
+  readUnit("ringmod",  ["wet","freq"]);
+  readUnit("autowah",  ["wet","sens","range"]);
+  readUnit("chorus",   ["wet","rate","depth"]);
+  readUnit("phaser",   ["wet","rate","depth"]);
+  readUnit("flanger",  ["wet","rate","fbk"]);
+  if (fx.pitchshift && typeof fx.pitchshift === "object") {
+    const w = Number(fx.pitchshift.wet);       if (Number.isFinite(w)) cfg.pitchshift.wet       = Math.max(0, Math.min(1, w));
+    const s = Number(fx.pitchshift.semitones); if (Number.isFinite(s)) cfg.pitchshift.semitones = Math.max(-24, Math.min(24, Math.round(s)));
   }
   if (fx.delay && typeof fx.delay === "object") {
     if (typeof fx.delay.sync === "boolean") cfg.delay.sync = fx.delay.sync;
@@ -4040,8 +4833,16 @@ function applyFxToTrack(t, fx) {
     const wet  = Number(fx.crush.wet);  if (Number.isFinite(wet))  cfg.crush.wet  = Math.max(0, Math.min(1, wet));
   }
   if (t.fxRack) {
+    t.fxRack.applyVinyl(cfg.vinyl);
+    t.fxRack.applyCassette(cfg.cassette);
     t.fxRack.applyFuzz(cfg.fuzz);
+    t.fxRack.applyRingMod(cfg.ringmod);
     t.fxRack.applyCrush(cfg.crush || { bits: 8, wet: 0 });
+    t.fxRack.applyAutoWah(cfg.autowah);
+    t.fxRack.applyChorus(cfg.chorus);
+    t.fxRack.applyPhaser(cfg.phaser);
+    t.fxRack.applyFlanger(cfg.flanger);
+    t.fxRack.applyPitchShift(cfg.pitchshift);
     t.fxRack.applyDelay(cfg.delay);
     t.fxRack.applyReverb(cfg.reverb);
   }
@@ -4053,11 +4854,42 @@ function refreshFxPanelUI(t) {
   const panel = t.el.querySelector(".track-fx-panel");
   if (!panel) return;
   const cfg = t.fxConfig;
+  if (!cfg.vinyl)      cfg.vinyl      = { amount: 0, warmth: 0.4, wow: 0.3 };
+  if (!cfg.cassette)   cfg.cassette   = { amount: 0, flutter: 0.3, sat: 0.4 };
+  if (!cfg.chorus)     cfg.chorus     = { wet: 0, rate: 0.5, depth: 0.5 };
+  if (!cfg.ringmod)    cfg.ringmod    = { wet: 0, freq: 0.35 };
+  if (!cfg.autowah)    cfg.autowah    = { wet: 0, sens: 0.5, range: 0.5 };
+  if (!cfg.phaser)     cfg.phaser     = { wet: 0, rate: 0.3, depth: 0.5 };
+  if (!cfg.flanger)    cfg.flanger    = { wet: 0, rate: 0.3, fbk: 0.5 };
+  if (!cfg.pitchshift) cfg.pitchshift = { wet: 0, semitones: 0 };
   const q = s => panel.querySelector(s);
+  const set = (sel, v) => { const el = q(sel); if (el != null && v != null) el.value = v; };
+  set(".fx-vinyl-amount",    cfg.vinyl.amount);
+  set(".fx-vinyl-warmth",    cfg.vinyl.warmth);
+  set(".fx-vinyl-wow",       cfg.vinyl.wow);
+  set(".fx-cassette-amount", cfg.cassette.amount);
+  set(".fx-cassette-flutter",cfg.cassette.flutter);
+  set(".fx-cassette-sat",    cfg.cassette.sat);
   q(".fx-fuzz-amount").value = cfg.fuzz.amount;
   q(".fx-fuzz-drive").value  = cfg.fuzz.drive;
   q(".fx-fuzz-tone").value   = cfg.fuzz.tone;
   q(".fx-fuzz-level").value  = cfg.fuzz.level;
+  set(".fx-ringmod-wet",      cfg.ringmod.wet);
+  set(".fx-ringmod-freq",     cfg.ringmod.freq);
+  set(".fx-autowah-wet",      cfg.autowah.wet);
+  set(".fx-autowah-sens",     cfg.autowah.sens);
+  set(".fx-autowah-range",    cfg.autowah.range);
+  set(".fx-chorus-wet",       cfg.chorus.wet);
+  set(".fx-chorus-rate",      cfg.chorus.rate);
+  set(".fx-chorus-depth",     cfg.chorus.depth);
+  set(".fx-phaser-wet",       cfg.phaser.wet);
+  set(".fx-phaser-rate",      cfg.phaser.rate);
+  set(".fx-phaser-depth",     cfg.phaser.depth);
+  set(".fx-flanger-wet",      cfg.flanger.wet);
+  set(".fx-flanger-rate",     cfg.flanger.rate);
+  set(".fx-flanger-fbk",      cfg.flanger.fbk);
+  set(".fx-pitchshift-wet",   cfg.pitchshift.wet);
+  set(".fx-pitchshift-semi",  cfg.pitchshift.semitones);
   q(".fx-delay-time").value  = cfg.delay.time;
   q(".fx-delay-fbk").value   = cfg.delay.fbk;
   q(".fx-delay-wet").value   = cfg.delay.wet;
@@ -4074,11 +4906,42 @@ function refreshFxPanelUI(t) {
 function wireFxPanel(t, panel) {
   const q = (sel) => panel.querySelector(sel);
   const fc = t.fxConfig;
-  if (!fc.crush) fc.crush = { bits: 8, wet: 0 };
+  if (!fc.crush)      fc.crush      = { bits: 8, wet: 0 };
+  if (!fc.vinyl)      fc.vinyl      = { amount: 0, warmth: 0.4, wow: 0.3 };
+  if (!fc.cassette)   fc.cassette   = { amount: 0, flutter: 0.3, sat: 0.4 };
+  if (!fc.chorus)     fc.chorus     = { wet: 0, rate: 0.5, depth: 0.5 };
+  if (!fc.ringmod)    fc.ringmod    = { wet: 0, freq: 0.35 };
+  if (!fc.autowah)    fc.autowah    = { wet: 0, sens: 0.5, range: 0.5 };
+  if (!fc.phaser)     fc.phaser     = { wet: 0, rate: 0.3, depth: 0.5 };
+  if (!fc.flanger)    fc.flanger    = { wet: 0, rate: 0.3, fbk: 0.5 };
+  if (!fc.pitchshift) fc.pitchshift = { wet: 0, semitones: 0 };
+  const set = (sel, v) => { const el = q(sel); if (el != null && v != null) el.value = v; };
+  set(".fx-vinyl-amount",    fc.vinyl.amount);
+  set(".fx-vinyl-warmth",    fc.vinyl.warmth);
+  set(".fx-vinyl-wow",       fc.vinyl.wow);
+  set(".fx-cassette-amount", fc.cassette.amount);
+  set(".fx-cassette-flutter",fc.cassette.flutter);
+  set(".fx-cassette-sat",    fc.cassette.sat);
   q(".fx-fuzz-amount").value = fc.fuzz.amount;
   q(".fx-fuzz-drive").value  = fc.fuzz.drive;
   q(".fx-fuzz-tone").value   = fc.fuzz.tone;
   q(".fx-fuzz-level").value  = fc.fuzz.level;
+  set(".fx-ringmod-wet",      fc.ringmod.wet);
+  set(".fx-ringmod-freq",     fc.ringmod.freq);
+  set(".fx-autowah-wet",      fc.autowah.wet);
+  set(".fx-autowah-sens",     fc.autowah.sens);
+  set(".fx-autowah-range",    fc.autowah.range);
+  set(".fx-chorus-wet",       fc.chorus.wet);
+  set(".fx-chorus-rate",      fc.chorus.rate);
+  set(".fx-chorus-depth",     fc.chorus.depth);
+  set(".fx-phaser-wet",       fc.phaser.wet);
+  set(".fx-phaser-rate",      fc.phaser.rate);
+  set(".fx-phaser-depth",     fc.phaser.depth);
+  set(".fx-flanger-wet",      fc.flanger.wet);
+  set(".fx-flanger-rate",     fc.flanger.rate);
+  set(".fx-flanger-fbk",      fc.flanger.fbk);
+  set(".fx-pitchshift-wet",   fc.pitchshift.wet);
+  set(".fx-pitchshift-semi",  fc.pitchshift.semitones);
   q(".fx-delay-time").value  = fc.delay.time;
   q(".fx-delay-fbk").value   = fc.delay.fbk;
   q(".fx-delay-wet").value   = fc.delay.wet;
@@ -4089,12 +4952,58 @@ function wireFxPanel(t, panel) {
   { const b = q(".fx-crush-bits"); if (b) b.value = fc.crush.bits; }
   { const w = q(".fx-crush-wet");  if (w) w.value = fc.crush.wet; }
 
+  const applyVinyl = () => {
+    fc.vinyl.amount = Number(q(".fx-vinyl-amount").value);
+    fc.vinyl.warmth = Number(q(".fx-vinyl-warmth").value);
+    fc.vinyl.wow    = Number(q(".fx-vinyl-wow").value);
+    t.fxRack?.applyVinyl(fc.vinyl);
+  };
+  const applyCassette = () => {
+    fc.cassette.amount  = Number(q(".fx-cassette-amount").value);
+    fc.cassette.flutter = Number(q(".fx-cassette-flutter").value);
+    fc.cassette.sat     = Number(q(".fx-cassette-sat").value);
+    t.fxRack?.applyCassette(fc.cassette);
+  };
   const applyFuzz = () => {
     fc.fuzz.amount = Number(q(".fx-fuzz-amount").value);
     fc.fuzz.drive  = Number(q(".fx-fuzz-drive").value);
     fc.fuzz.tone   = Number(q(".fx-fuzz-tone").value);
     fc.fuzz.level  = Number(q(".fx-fuzz-level").value);
     t.fxRack?.applyFuzz(fc.fuzz);
+  };
+  const applyRingMod = () => {
+    fc.ringmod.wet  = Number(q(".fx-ringmod-wet").value);
+    fc.ringmod.freq = Number(q(".fx-ringmod-freq").value);
+    t.fxRack?.applyRingMod(fc.ringmod);
+  };
+  const applyAutoWah = () => {
+    fc.autowah.wet   = Number(q(".fx-autowah-wet").value);
+    fc.autowah.sens  = Number(q(".fx-autowah-sens").value);
+    fc.autowah.range = Number(q(".fx-autowah-range").value);
+    t.fxRack?.applyAutoWah(fc.autowah);
+  };
+  const applyChorus = () => {
+    fc.chorus.wet   = Number(q(".fx-chorus-wet").value);
+    fc.chorus.rate  = Number(q(".fx-chorus-rate").value);
+    fc.chorus.depth = Number(q(".fx-chorus-depth").value);
+    t.fxRack?.applyChorus(fc.chorus);
+  };
+  const applyPhaser = () => {
+    fc.phaser.wet   = Number(q(".fx-phaser-wet").value);
+    fc.phaser.rate  = Number(q(".fx-phaser-rate").value);
+    fc.phaser.depth = Number(q(".fx-phaser-depth").value);
+    t.fxRack?.applyPhaser(fc.phaser);
+  };
+  const applyFlanger = () => {
+    fc.flanger.wet  = Number(q(".fx-flanger-wet").value);
+    fc.flanger.rate = Number(q(".fx-flanger-rate").value);
+    fc.flanger.fbk  = Number(q(".fx-flanger-fbk").value);
+    t.fxRack?.applyFlanger(fc.flanger);
+  };
+  const applyPitchShift = () => {
+    fc.pitchshift.wet       = Number(q(".fx-pitchshift-wet").value);
+    fc.pitchshift.semitones = Number(q(".fx-pitchshift-semi").value);
+    t.fxRack?.applyPitchShift(fc.pitchshift);
   };
   const applyDelay = () => {
     fc.delay.time = Number(q(".fx-delay-time").value);
@@ -4117,7 +5026,15 @@ function wireFxPanel(t, panel) {
     t.fxRack?.applyCrush(fc.crush);
   };
 
+  ["amount","warmth","wow"].forEach(n => q(`.fx-vinyl-${n}`)?.addEventListener("input", applyVinyl));
+  ["amount","flutter","sat"].forEach(n => q(`.fx-cassette-${n}`)?.addEventListener("input", applyCassette));
   ["amount","drive","tone","level"].forEach(n => q(`.fx-fuzz-${n}`).addEventListener("input", applyFuzz));
+  ["wet","freq"].forEach(n => q(`.fx-ringmod-${n}`)?.addEventListener("input", applyRingMod));
+  ["wet","sens","range"].forEach(n => q(`.fx-autowah-${n}`)?.addEventListener("input", applyAutoWah));
+  ["wet","rate","depth"].forEach(n => q(`.fx-chorus-${n}`)?.addEventListener("input", applyChorus));
+  ["wet","rate","depth"].forEach(n => q(`.fx-phaser-${n}`)?.addEventListener("input", applyPhaser));
+  ["wet","rate","fbk"].forEach(n => q(`.fx-flanger-${n}`)?.addEventListener("input", applyFlanger));
+  ["wet","semi"].forEach(n => q(`.fx-pitchshift-${n}`)?.addEventListener("input", applyPitchShift));
   ["time","fbk","wet"].forEach(n => q(`.fx-delay-${n}`).addEventListener("input", applyDelay));
   q(".fx-delay-sync").addEventListener("change", applyDelay);
   q(".fx-delay-div").addEventListener("change", applyDelay);
@@ -4154,7 +5071,7 @@ function renderModPanel(t, panel) {
     const row = tpl.content.firstElementChild.cloneNode(true);
     row.dataset.key = key;
     row.classList.add("active");
-    row.querySelector(".lfo-target").textContent = key;
+    row.querySelector(".lfo-target").textContent = lfoLabel(key);
 
     const cb    = row.querySelector(".lfo-on");
     const shape = row.querySelector(".lfo-shape");
@@ -4223,7 +5140,7 @@ function renderModPanel(t, panel) {
     } else {
       addBtn.disabled = false;
       addBtn.textContent = "+ add modulation";
-      addSel.innerHTML = available.map(k => `<option value="${k}">${k}</option>`).join("");
+      addSel.innerHTML = available.map(k => `<option value="${k}">${lfoLabel(k)}</option>`).join("");
     }
   };
   addBtn.addEventListener("click", () => {
@@ -4247,6 +5164,142 @@ function renderModPanel(t, panel) {
     if (t.lfoConfig[key]?.enabled) addRow(key);
   }
   refreshAdderOptions();
+}
+
+// Render per-step automation lanes for the track's active pattern. Re-run on
+// pattern switch so the grids reflect the active pattern's lanes.
+function renderAutomationPanel(t, panel) {
+  panel.replaceChildren();
+  if (!t.automation) t.automation = {};
+  const enabledKeys = Object.keys(t.automation).filter(k => AUTOMATION_TARGETS[k]);
+
+  const rows = document.createElement("div");
+  rows.className = "aut-rows";
+  panel.appendChild(rows);
+
+  const emptyMsg = document.createElement("div");
+  emptyMsg.className = "aut-empty";
+  emptyMsg.textContent = "no automation — pick a target below to add a lane";
+  panel.appendChild(emptyMsg);
+
+  const adder = document.createElement("div");
+  adder.className = "aut-add-row";
+  adder.innerHTML = `
+    <button class="aut-add-btn ghost" type="button">+ add automation</button>
+    <select class="aut-add-select" hidden></select>
+  `;
+  panel.appendChild(adder);
+  const addBtn = adder.querySelector(".aut-add-btn");
+  const addSel = adder.querySelector(".aut-add-select");
+
+  const refreshAdder = () => {
+    const avail = AUTOMATION_KEYS.filter(k => !t.automation[k] && canAutomate(t, k));
+    if (avail.length === 0) {
+      addBtn.disabled = true;
+      addSel.hidden = true;
+      addBtn.textContent = "(all targets automated)";
+    } else {
+      addBtn.disabled = false;
+      addBtn.textContent = "+ add automation";
+      addSel.innerHTML = avail.map(k => `<option value="${k}">${AUTOMATION_TARGETS[k].label}</option>`).join("");
+    }
+    emptyMsg.hidden = Object.keys(t.automation).length > 0;
+  };
+
+  const ensureLane = (key) => {
+    if (!t.automation[key]) {
+      t.automation[key] = { enabled: true, values: new Array(t.length).fill(0.5) };
+    }
+    // Resize values if pattern length has changed since the lane was created.
+    const vals = t.automation[key].values;
+    if (vals.length !== t.length) {
+      const out = new Array(t.length).fill(0.5);
+      for (let i = 0; i < Math.min(vals.length, t.length); i++) out[i] = vals[i];
+      t.automation[key].values = out;
+    }
+  };
+
+  const drawRow = (key) => {
+    ensureLane(key);
+    const lane = t.automation[key];
+    const row = document.createElement("div");
+    row.className = "aut-lane" + (lane.enabled ? " active" : "");
+    row.dataset.key = key;
+    row.innerHTML = `
+      <span class="aut-label">${AUTOMATION_TARGETS[key].label}</span>
+      <input type="checkbox" class="aut-enable" ${lane.enabled ? "checked" : ""} title="enable lane" />
+      <div class="aut-grid"></div>
+      <button class="aut-clear ghost" type="button" title="reset to 0.5">clear</button>
+      <button class="aut-remove" type="button" title="remove lane">×</button>
+    `;
+    rows.appendChild(row);
+
+    const grid = row.querySelector(".aut-grid");
+    for (let i = 0; i < t.length; i++) {
+      const cell = document.createElement("div");
+      cell.className = "aut-step";
+      cell.dataset.idx = i;
+      cell.style.setProperty("--v", String(lane.values[i] ?? 0));
+      grid.appendChild(cell);
+    }
+
+    const setFromPointer = (ev) => {
+      const rect = grid.getBoundingClientRect();
+      const cols = t.length;
+      const relX = Math.max(0, Math.min(rect.width - 1, ev.clientX - rect.left));
+      const relY = Math.max(0, Math.min(rect.height, ev.clientY - rect.top));
+      const idx = Math.max(0, Math.min(cols - 1, Math.floor((relX / rect.width) * cols)));
+      const v = 1 - (relY / rect.height);
+      lane.values[idx] = Math.max(0, Math.min(1, v));
+      const cell = grid.children[idx];
+      if (cell) cell.style.setProperty("--v", String(lane.values[idx]));
+    };
+
+    let dragging = false;
+    grid.addEventListener("pointerdown", (ev) => {
+      dragging = true;
+      try { grid.setPointerCapture(ev.pointerId); } catch {}
+      setFromPointer(ev);
+      ev.preventDefault();
+    });
+    grid.addEventListener("pointermove", (ev) => { if (dragging) setFromPointer(ev); });
+    grid.addEventListener("pointerup", (ev) => {
+      dragging = false;
+      try { grid.releasePointerCapture(ev.pointerId); } catch {}
+    });
+    grid.addEventListener("pointercancel", () => { dragging = false; });
+
+    row.querySelector(".aut-enable").addEventListener("change", (ev) => {
+      lane.enabled = !!ev.target.checked;
+      row.classList.toggle("active", lane.enabled);
+    });
+    row.querySelector(".aut-clear").addEventListener("click", () => {
+      for (let i = 0; i < lane.values.length; i++) lane.values[i] = 0.5;
+      for (let i = 0; i < grid.children.length; i++) grid.children[i].style.setProperty("--v", "0.5");
+    });
+    row.querySelector(".aut-remove").addEventListener("click", () => {
+      delete t.automation[key];
+      row.remove();
+      refreshAdder();
+    });
+  };
+
+  for (const key of enabledKeys) drawRow(key);
+  refreshAdder();
+
+  addBtn.addEventListener("click", () => {
+    refreshAdder();
+    if (addBtn.disabled) return;
+    addSel.hidden = false;
+    addSel.focus();
+  });
+  addSel.addEventListener("change", () => {
+    const key = addSel.value;
+    if (!key) { addSel.hidden = true; return; }
+    drawRow(key);
+    addSel.hidden = true;
+    refreshAdder();
+  });
 }
 
 function updatePatternCell(idx) {
@@ -4305,6 +5358,12 @@ function refreshRollIfOpen(t) {
   // drag handlers paint their own updates via paintColumn.
   if (panel._rollDragActive) return;
   renderRollPanel(t, panel);
+}
+
+function refreshAutIfOpen(t) {
+  const panel = t.el?.querySelector(".track-aut-panel");
+  if (!panel || panel.hidden) return;
+  renderAutomationPanel(t, panel);
 }
 
 function renderRollPanel(t, panel) {
@@ -5688,6 +6747,9 @@ async function togglePlay() {
         t.speedAccum -= 1;
         const idx = (t.trackTick ?? 0) % t.length;
         t.trackTick = (t.trackTick ?? 0) + 1;
+        // Automation runs every step regardless of whether a note fires.
+        const autoTime = Math.max(state.audioCtx.currentTime + 0.002, time + slot * effDur);
+        runAutomationForStep(t, idx, autoTime, effDur);
         if (!t.steps[idx]) { slot++; continue; }
         const span = Math.max(1, t.lengths[idx] || 1);
         const duration = span * effDur;
