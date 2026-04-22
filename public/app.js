@@ -4126,6 +4126,151 @@ function createTrack({ name, engineKey, length = totalSteps() }) {
   return t;
 }
 
+// Deep-clone a track's state onto a new track placed after it. Mirrors the
+// per-track apply logic in applySet (createTrack + field fill + audio rebuild);
+// audio-node refs + DOM handles are not copied — they're freshly built. Sample
+// buffers (eleven / upload) are shared as-is since they're immutable decoded
+// AudioBuffers — no copy needed.
+function duplicateTrack(src) {
+  const baseName = (src.name || "track").replace(/\s+copy(\s+\d+)?$/i, "").trim() || "track";
+  const existing = new Set(state.tracks.map(x => x.name));
+  let name = `${baseName} copy`;
+  for (let i = 2; existing.has(name); i++) name = `${baseName} copy ${i}`;
+
+  const dup = createTrack({ name, engineKey: src.engineKey, length: src.length });
+
+  Object.assign(dup.params, src.params);
+  Object.assign(dup.filter, src.filter);
+  Object.assign(dup.eq, src.eq);
+  Object.assign(dup.midi, src.midi);
+  dup.fxConfig = JSON.parse(JSON.stringify(src.fxConfig));
+  dup.comp = JSON.parse(JSON.stringify(src.comp));
+  dup.customConfig = src.customConfig ? JSON.parse(JSON.stringify(src.customConfig)) : null;
+  dup.elevenAudio = src.elevenAudio || null;
+  dup.elevenAudioMime = src.elevenAudioMime || null;
+  dup.elevenBuffer = src.elevenBuffer || null;
+  dup.uploadAudio = src.uploadAudio || null;
+  dup.uploadAudioMime = src.uploadAudioMime || null;
+  dup.uploadFileName = src.uploadFileName || null;
+  dup.uploadBuffer = src.uploadBuffer || null;
+  dup.soundPromptText = src.soundPromptText || "";
+  dup.promptText = src.promptText || "";
+  dup.sampleDefaults = src.sampleDefaults ? { ...src.sampleDefaults } : dup.sampleDefaults;
+  dup.muted = !!src.muted;
+  dup.soloed = !!src.soloed;
+  dup.lockInstrument = !!src.lockInstrument;
+  dup.lockPattern = !!src.lockPattern;
+  dup.isDrumKit = !!src.isDrumKit;
+  dup.glide = src.glide ?? 0;
+  dup.speed = src.speed ?? 1;
+  dup.density = src.density ?? 0.5;
+  dup.sampleSpeedMode = src.sampleSpeedMode ?? "native";
+  // lfoConfig is keyed by LFO_KEYS; copy value by value to keep defaults for any
+  // new keys the source happened to lack.
+  for (const k of Object.keys(dup.lfoConfig)) {
+    if (src.lfoConfig?.[k]) dup.lfoConfig[k] = { ...src.lfoConfig[k] };
+  }
+  // Deep-clone every pattern slot (steps/notes/velocities/etc. + automation).
+  for (let i = 0; i < PATTERN_COUNT; i++) {
+    const sp = src.patterns[i];
+    if (!sp) continue;
+    const automation = {};
+    for (const [key, lane] of Object.entries(sp.automation || {})) {
+      automation[key] = { enabled: !!lane.enabled, values: (lane.values || []).slice() };
+    }
+    dup.patterns[i] = {
+      steps: sp.steps.slice(),
+      lengths: sp.lengths.slice(),
+      notes: sp.notes.slice(),
+      velocities: sp.velocities.slice(),
+      chords: sp.chords.slice(),
+      offsets: (sp.offsets || []).slice(),
+      arps: (sp.arps || []).slice(),
+      arpRates: (sp.arpRates || []).slice(),
+      arpRanges: (sp.arpRanges || []).slice(),
+      arpDirs: (sp.arpDirs || []).slice(),
+      complexities: (sp.complexities || []).slice(),
+      ratchets: (sp.ratchets || []).slice(),
+      sampleStarts: (sp.sampleStarts || []).slice(),
+      sampleEnds: (sp.sampleEnds || []).slice(),
+      sampleFadeIns: (sp.sampleFadeIns || []).slice(),
+      sampleFadeOuts: (sp.sampleFadeOuts || []).slice(),
+      sampleLoopModes: (sp.sampleLoopModes || []).slice(),
+      automation,
+    };
+  }
+  aliasPattern(dup, state.activePattern);
+
+  // Sync header inputs to the duplicated state.
+  if (dup.el) {
+    const q = sel => dup.el.querySelector(sel);
+    q(".track-name").value = dup.name;
+    q(".track-len").value = dup.length;
+    q(".track-engine").value = dup.engineKey;
+    const spd = q(".track-speed"); if (spd) spd.value = String(dup.speed);
+    q(".p-vol").value = dup.params.vol;
+    q(".p-harm").value = dup.params.harm;
+    q(".p-timb").value = dup.params.timb;
+    q(".p-morph").value = dup.params.morph;
+    q(".p-decay").value = dup.params.decay;
+    q(".p-cutoff").value = dup.filter.cutoff;
+    q(".p-reson").value = dup.filter.reson;
+    q(".p-envamt").value = dup.filter.env;
+    q(".p-envatk").value = dup.filter.attack;
+    q(".p-envdec").value = dup.filter.decay;
+    q(".p-envsus").value = dup.filter.sustain;
+    q(".p-envrel").value = dup.filter.release;
+    dup.el.classList.toggle("muted", dup.muted);
+    dup.el.classList.toggle("soloed", dup.soloed);
+    q(".track-solo")?.setAttribute("aria-pressed", String(dup.soloed));
+    refreshFxPanelUI(dup);
+    renderModPanel(dup, dup.el.querySelector(".track-mod-panel"));
+  }
+
+  // Move the duplicate right after the source in DOM + state order.
+  const srcIdx = state.tracks.indexOf(src);
+  if (srcIdx >= 0 && srcIdx < state.tracks.length - 1) {
+    state.tracks.pop();
+    state.tracks.splice(srcIdx + 1, 0, dup);
+    src.el.parentNode.insertBefore(dup.el, src.el.nextSibling);
+  }
+
+  // Rebuild audio side for the new track so fx/voice reflect the copied config.
+  if (state.ready) {
+    disposeLFOs(dup);
+    if (dup.voice) dup.voice.dispose();
+    ensureFxRack(dup);
+    if (dup.fxRack) {
+      if (dup.fxConfig.vinyl)      dup.fxRack.applyVinyl(dup.fxConfig.vinyl);
+      if (dup.fxConfig.cassette)   dup.fxRack.applyCassette(dup.fxConfig.cassette);
+      dup.fxRack.applyFuzz(dup.fxConfig.fuzz);
+      if (dup.fxConfig.ringmod)    dup.fxRack.applyRingMod(dup.fxConfig.ringmod);
+      if (dup.fxConfig.crush)      dup.fxRack.applyCrush(dup.fxConfig.crush);
+      if (dup.fxConfig.autowah)    dup.fxRack.applyAutoWah(dup.fxConfig.autowah);
+      if (dup.fxConfig.chorus)     dup.fxRack.applyChorus(dup.fxConfig.chorus);
+      if (dup.fxConfig.phaser)     dup.fxRack.applyPhaser(dup.fxConfig.phaser);
+      if (dup.fxConfig.flanger)    dup.fxRack.applyFlanger(dup.fxConfig.flanger);
+      if (dup.fxConfig.pitchshift) dup.fxRack.applyPitchShift(dup.fxConfig.pitchshift);
+      dup.fxRack.applyDelay(dup.fxConfig.delay);
+      dup.fxRack.applyReverb(dup.fxConfig.reverb);
+    }
+    dup.voice = buildVoiceForEngine(state.audioCtx, dup.engineKey, dup.params, dup);
+    if (dup.voice.type === "midi") {
+      dup.voice.setChannel(dup.midi.channel);
+      const out = state.midi?.outputs.get(dup.midi.outputId);
+      if (out) dup.voice.setOutput(out);
+    }
+    if (dup.voice.setGlide) dup.voice.setGlide(dup.glide);
+    routeVoiceToRack(dup);
+    applySampleSpeed(dup);
+    syncAllLFOs(dup);
+  }
+  refreshCompSourceDropdowns();
+  updatePlaitsControlsVisibility(dup);
+  renderStepGrid(dup);
+  return dup;
+}
+
 function removeTrack(t) {
   disposeLFOs(t);
   if (t.voice) t.voice.dispose();
@@ -4822,6 +4967,10 @@ function renderTrack(t) {
     renderStepGrid(t);
   });
   node.querySelector(".track-remove").addEventListener("click", () => removeTrack(t));
+  const dupBtn = node.querySelector(".track-dup");
+  if (dupBtn) {
+    dupBtn.addEventListener("click", () => duplicateTrack(t));
+  }
 
   // Phone-only "..." overflow — secondary track actions are hidden by CSS at
   // ≤640px; tapping ... opens a modal that delegates to each original button.
@@ -5984,6 +6133,7 @@ function openTrackMoreMenu(t, trackNode) {
     { sel: ".track-load-patch",  label: "load patch" },
     { sel: ".track-oct-down",    label: "octave down" },
     { sel: ".track-oct-up",      label: "octave up" },
+    { sel: ".track-dup",         label: "duplicate track" },
     { sel: ".track-clear",       label: "clear pattern" },
   ];
   const overlay = document.createElement("div");

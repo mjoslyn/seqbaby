@@ -1239,6 +1239,7 @@ main {
   .track-save,
   .track-load-patch,
   .track-clear,
+  .track-dup,
   .track-oct {
     display: none !important;
   }
