@@ -4,9 +4,13 @@ const { wosc, oscillatorTypes } = window.woscillators;
 
 const STEPS_PER_BAR = 16;
 const LFO_KEYS = [
-  "vol", "harm", "timb", "morph", "decay",
+  // Volume + instrument params first so they lead the picker.
+  "vol",
+  "harm", "timb", "morph", "decay",
+  "osc1", "osc2", "osc3", "osc4", "ultra", "fm", "noise",
+  // Filter
   "cutoff", "reson",
-  // Per-fx wets / amts — existing short keys kept for backward compat.
+  // FX wets/amts (short keys preserved for backward compat).
   "fuzz", "delay", "verb",
   "vinyl", "cassette", "ringmod", "crush", "autowah", "chorus", "phaser", "flanger", "pitch",
   // FX sub-params with AudioParam / Signal targets (modulatable).
@@ -18,8 +22,6 @@ const LFO_KEYS = [
   "phaser_rate",
   "flanger_rate", "flanger_fbk",
   "delay_time", "delay_fbk",
-  // Emulator-specific continuous params (MiniBrute / Moog / Juno oscs + fx)
-  "osc1", "osc2", "osc3", "osc4", "ultra", "fm", "noise",
 ];
 // How much each target swings per unit of depth:
 //  - 0..1 unit params: amp = depth/2 (swings ±0.5)
@@ -201,6 +203,7 @@ const ANALOG_ENGINES = [
   { key: "dm:guitar",     label: "electric guitar", defaultNote: 52, poly: true, melodic: true },
   { key: "dm:bass",       label: "electric bass",   defaultNote: 40, poly: true, melodic: true },
   { key: "dm:rhodes",     label: "rhodes piano",    defaultNote: 60, poly: true, melodic: true },
+  { key: "dm:prophet6",   label: "prophet 6",       defaultNote: 60, poly: true, melodic: true },
 ].map(e => ({ ...e, group: "Emulators", type: "drum-synth", poly: e.poly ?? false, melodic: e.melodic ?? false }));
 
 const SAMPLE_BASE = "https://tonejs.github.io/audio/drum-samples";
@@ -2235,6 +2238,7 @@ function buildDrumSynthNode(kind, output) {
     case "guitar":     return makePolyPool(6, () => buildGuitarVoice(output));
     case "bass":       return makePolyPool(4, () => buildBassVoice(output));
     case "rhodes":     return makePolyPool(6, () => buildRhodesVoice(output));
+    case "prophet6":   return makePolyPool(6, () => buildProphet6Voice(output));
   }
   throw new Error("unknown drum-synth kind: " + kind);
 }
@@ -2701,6 +2705,135 @@ function buildRhodesVoice(output) {
       lastFreq = Tone.Frequency(note, "midi").toFrequency();
     },
     release: () => { try { synth.triggerRelease?.(); } catch {} },
+  };
+}
+
+// ---- prophet 6 builder --------------------------------------------------
+// Two VCOs (saw + saw/pulse morph) with cent-level detune for the classic
+// "fat" unison, a square sub at -1 oct, noise, an analog-style drive stage,
+// amp envelope, and a touch of chorus — the baked-in character of the P6's
+// stereo effects block. Filter + filter-env come from the track's own chain.
+function buildProphet6Voice(output) {
+  const freqSig = new Tone.Signal({ units: "frequency", value: 220 });
+
+  // VCO 1 — saw (the workhorse)
+  const vco1 = new Tone.Oscillator({ type: "sawtooth", frequency: 220 }).start();
+  freqSig.connect(vco1.frequency);
+
+  // VCO 2 — saw/pulse crossfade controlled by `timb`; detuned by `harm`
+  const vco2Saw   = new Tone.Oscillator({ type: "sawtooth", frequency: 220 }).start();
+  const vco2Pulse = new Tone.PulseOscillator({ width: 0.5, frequency: 220 }).start();
+  freqSig.connect(vco2Saw.frequency);
+  freqSig.connect(vco2Pulse.frequency);
+
+  // Sub — square at -1 octave
+  const sub    = new Tone.Oscillator({ type: "square" }).start();
+  const subMul = new Tone.Multiply(0.5);
+  freqSig.chain(subMul, sub.frequency);
+
+  // Noise
+  const noise = new Tone.Noise({ type: "white" }).start();
+
+  // Mixers
+  const mixVco1   = new Tone.Gain(0.6);
+  const mixVco2   = new Tone.Gain(0.5);
+  const mixSub    = new Tone.Gain(0.25);
+  const mixNoise  = new Tone.Gain(0);
+
+  // VCO 2 shape crossfade (saw↔pulse)
+  const vco2SawGain   = new Tone.Gain(1);
+  const vco2PulseGain = new Tone.Gain(0);
+  const vco2Sum       = new Tone.Gain(1);
+  vco2Saw.connect(vco2SawGain);
+  vco2Pulse.connect(vco2PulseGain);
+  vco2SawGain.connect(vco2Sum);
+  vco2PulseGain.connect(vco2Sum);
+  vco2Sum.connect(mixVco2);
+
+  vco1.connect(mixVco1);
+  sub.connect(mixSub);
+  noise.connect(mixNoise);
+
+  // Summing bus → drive → amp envelope → chorus
+  const preDrive = new Tone.Gain(1);
+  mixVco1.connect(preDrive);
+  mixVco2.connect(preDrive);
+  mixSub.connect(preDrive);
+  mixNoise.connect(preDrive);
+
+  // Drive stage — wet controlled by `morph`; distortion kept at 0.5 so turning
+  // morph up crossfades to a fixed-character saturation instead of ramping
+  // harshness without limit.
+  const drive = new Tone.Distortion({ distortion: 0.5, wet: 0 });
+  preDrive.connect(drive);
+
+  const amp = new Tone.AmplitudeEnvelope({ attack: 0.005, decay: 0.35, sustain: 0.7, release: 0.45 });
+  drive.connect(amp);
+
+  const chorus = new Tone.Chorus({ frequency: 0.45, delayTime: 2.8, depth: 0.3, feedback: 0, wet: 0.22, spread: 180 }).start();
+  amp.connect(chorus);
+
+  const trim = new Tone.Gain(0.5);
+  chorus.connect(trim);
+  trim.connect(output);
+
+  let lastFreq = 220;
+  let glideSec = 0.005;
+  const setP6Param = (key, val) => {
+    const v = Math.max(0, Math.min(1, Number(val) || 0));
+    if (key === "osc1")       mixVco1.gain.value  = v;
+    else if (key === "osc2")  mixVco2.gain.value  = v;
+    else if (key === "osc3")  mixSub.gain.value   = v;
+    else if (key === "osc4")  mixNoise.gain.value = v;
+    else if (key === "noise") mixNoise.gain.value = v;
+    else if (key === "harm") {
+      // detune VCO2 ±30 cents; 0.5 = unison, extremes = fat chorus-y width
+      const cents = (v - 0.5) * 60;
+      vco2Saw.detune.value   = cents;
+      vco2Pulse.detune.value = cents;
+    }
+    else if (key === "timb") {
+      // saw↔pulse crossfade via equal-power; also sweep pulse width
+      vco2SawGain.gain.value   = Math.cos(v * Math.PI / 2);
+      vco2PulseGain.gain.value = Math.sin(v * Math.PI / 2);
+      vco2Pulse.width.value    = 0.1 + v * 0.8;
+    }
+    else if (key === "morph") {
+      drive.wet.value = v;
+    }
+    else if (key === "decay") {
+      amp.decay   = 0.05 + v * 2;
+      amp.release = 0.1  + v * 2.5;
+    }
+  };
+
+  return {
+    nodes: [vco1, vco2Saw, vco2Pulse, sub, noise, freqSig, subMul,
+            mixVco1, mixVco2, mixSub, mixNoise,
+            vco2SawGain, vco2PulseGain, vco2Sum,
+            preDrive, drive, amp, chorus, trim],
+    setGlide: (g) => { glideSec = Math.max(0.002, Number(g) || 0); },
+    setParam: setP6Param,
+    getAudioParam: (key) => {
+      switch (key) {
+        case "osc1":  return mixVco1.gain;
+        case "osc2":  return mixVco2.gain;
+        case "osc3":  return mixSub.gain;
+        case "osc4":  return mixNoise.gain;
+        case "noise": return mixNoise.gain;
+        case "harm":  return vco2Saw.detune;
+      }
+      return null;
+    },
+    trigger: (note, time, dur, vel) => {
+      const f = Tone.Frequency(note, "midi").toFrequency();
+      freqSig.cancelScheduledValues(time);
+      freqSig.setValueAtTime(lastFreq, time);
+      freqSig.linearRampToValueAtTime(f, time + glideSec);
+      lastFreq = f;
+      amp.triggerAttackRelease(Math.max(0.05, dur), time, vel);
+    },
+    release: (time) => amp.triggerRelease(time),
   };
 }
 
@@ -3336,6 +3469,7 @@ function canModulate(t, key) {
     case "dm:mini-brute": return ["harm", "osc1", "osc2", "osc3", "osc4", "ultra", "fm"].includes(key);
     case "dm:moog":       return ["harm", "osc1", "osc2", "osc3", "noise"].includes(key);
     case "dm:juno":       return ["harm", "osc1", "osc2", "osc3", "noise"].includes(key);
+    case "dm:prophet6":   return ["harm", "osc1", "osc2", "osc3", "osc4", "noise"].includes(key);
     // Guitar/bass/rhodes have no per-voice AudioParam targets beyond vol+track fx;
     // their timbre params are still automatable via setParam (see canAutomate).
   }
@@ -3401,9 +3535,7 @@ function retuneSyncedLFOs() {
 // 0..1 per step; applyAutomationAtStep maps that to the target's physical range.
 
 const AUTOMATION_TARGETS = {
-  // filter + track
-  "cutoff":        { label: "filter cutoff" },
-  "reson":         { label: "filter reson" },
+  // volume first
   "vol":           { label: "volume" },
   // voice / instrument params (per-engine availability via canAutomate)
   "harm":          { label: "harm" },
@@ -3418,6 +3550,9 @@ const AUTOMATION_TARGETS = {
   "fm":            { label: "fm" },
   "metal":         { label: "metal" },
   "noise":         { label: "noise" },
+  // filter
+  "cutoff":        { label: "filter cutoff" },
+  "reson":         { label: "filter reson" },
   // fx wets / amounts
   "fx.vinyl":           { label: "vinyl amt" },
   "fx.vinyl.warmth":    { label: "vinyl warmth" },
@@ -3470,6 +3605,7 @@ function voiceAutoKeysForEngine(t) {
     case "dm:guitar":     return ["vol", "harm", "timb", "morph", "decay"];
     case "dm:bass":       return ["vol", "harm", "timb", "morph", "decay"];
     case "dm:rhodes":     return ["vol", "harm", "timb", "morph", "decay"];
+    case "dm:prophet6":   return ["vol", "harm", "timb", "morph", "decay", "osc1", "osc2", "osc3", "osc4", "noise"];
   }
   return ["vol"];
 }
@@ -3672,7 +3808,8 @@ function updatePlaitsControlsVisibility(t) {
   const isGuitar    = t.engineKey === "dm:guitar";
   const isBass      = t.engineKey === "dm:bass";
   const isRhodes    = t.engineKey === "dm:rhodes";
-  const showTimbre = isPlaits || isMiniBrute || isMoog || isJuno || isGuitar || isBass || isRhodes;
+  const isProphet6  = t.engineKey === "dm:prophet6";
+  const showTimbre = isPlaits || isMiniBrute || isMoog || isJuno || isGuitar || isBass || isRhodes || isProphet6;
   const group = t.el.querySelector(".timbre-group");
   if (group) {
     group.hidden = !showTimbre;
@@ -3703,6 +3840,8 @@ function updatePlaitsControlsVisibility(t) {
       ? { harm: "drive",    timb: "tone",   morph: "resonance", decay: "sustain" }
       : isRhodes
       ? { harm: "tine",     timb: "bite",   morph: "chorus",    decay: "decay" }
+      : isProphet6
+      ? { harm: "detune",   timb: "shape",  morph: "drive",     decay: "decay" }
       : { harm: "harm",     timb: "timb",    morph: "morph",    decay: "decay" };
     for (const key of Object.keys(labels)) {
       const field = group.querySelector(`.p-${key}`)?.closest(".field");
@@ -3718,18 +3857,20 @@ function updatePlaitsControlsVisibility(t) {
     // Randomize button only makes sense for Plaits' generic harm/timb/morph/decay —
     // hide it for the analog engines where those sliders do engine-specific things.
     const randBtn = group.querySelector(".track-rand");
-    if (randBtn) randBtn.hidden = isMiniBrute || isMoog || isJuno || isGuitar || isBass || isRhodes;
+    if (randBtn) randBtn.hidden = isMiniBrute || isMoog || isJuno || isGuitar || isBass || isRhodes || isProphet6;
   }
   // Per-oscillator volume sliders: only shown for the analog mono engines.
   const oscGroup = t.el.querySelector(".osc-mix-group");
   if (oscGroup) {
-    const showOsc = isMiniBrute || isMoog || isJuno;
+    const showOsc = isMiniBrute || isMoog || isJuno || isProphet6;
     oscGroup.hidden = !showOsc;
     if (showOsc) {
       const oscLabels = isMiniBrute
         ? { osc1: "saw",  osc2: "pulse", osc3: "tri",   osc4: "sub", hide4: false }
         : isJuno
         ? { osc1: "dco",  osc2: "sub",   osc3: "noise", osc4: "",    hide4: true }
+        : isProphet6
+        ? { osc1: "vco1", osc2: "vco2",  osc3: "sub",   osc4: "noise", hide4: false }
         : { osc1: "osc1", osc2: "osc2",  osc3: "osc3",  osc4: "",    hide4: true };
       for (const k of ["osc1", "osc2", "osc3", "osc4"]) {
         const field = oscGroup.querySelector(`.p-${k}`)?.closest(".field");
@@ -3932,7 +4073,6 @@ function createTrack({ name, engineKey, length = totalSteps() }) {
     lockPattern: false,
     isDrumKit: guessIsDrumKit({ engineKey, name }),
     glide: 0,
-    swing: 0,
     sampleSpeedMode: "native",
     density: 0.5,
     speed: 1,
@@ -5047,19 +5187,17 @@ function wireFxPanel(t, panel) {
 function renderModPanel(t, panel) {
   const tpl = document.getElementById("lfo-row-template");
   panel.replaceChildren();
-  // Track-level glide + swing + density — shared strip at top of mod panel.
+  // Track-level glide — shared strip at top of mod panel. Swing is master-only now.
   const ctl = document.createElement("div");
   ctl.className = "mod-ctl-row";
   ctl.innerHTML = `
     <label class="mod-ctl"><span>glide</span><input class="track-glide" type="range" min="0" max="0.5" step="0.005" value="${t.glide ?? 0}" /></label>
-    <label class="mod-ctl"><span>swing</span><input class="track-swing" type="range" min="0" max="0.75" step="0.01" value="${t.swing ?? 0}" /></label>
   `;
   panel.appendChild(ctl);
   ctl.querySelector(".track-glide").addEventListener("input", e => {
     t.glide = Number(e.target.value);
     if (t.voice?.setGlide) t.voice.setGlide(t.glide);
   });
-  ctl.querySelector(".track-swing").addEventListener("input", e => { t.swing = Number(e.target.value); });
 
   // Container for the per-param LFO rows (added one at a time via the picker below).
   const rowsContainer = document.createElement("div");
@@ -6736,6 +6874,7 @@ async function togglePlay() {
   state.repeatId = Tone.Transport.scheduleRepeat((time) => {
     const baseStepDur = Tone.Time("16n").toSeconds();
     const anySolo = state.tracks.some(t => t.soloed);
+    const masterSwing = Number(document.getElementById("swing")?.value) || 0;
     for (const t of state.tracks) {
       if (!t.voice) continue;
       if (anySolo ? !t.soloed : t.muted) continue;
@@ -6753,7 +6892,7 @@ async function togglePlay() {
         if (!t.steps[idx]) { slot++; continue; }
         const span = Math.max(1, t.lengths[idx] || 1);
         const duration = span * effDur;
-        const swingOffset = (idx % 2 === 1) ? effDur * (t.swing ?? 0) : 0;
+        const swingOffset = (idx % 2 === 1) ? effDur * masterSwing : 0;
         const microOffset = (t.offsets?.[idx] ?? 0) * effDur;
         const hitTime = Math.max(state.audioCtx.currentTime + 0.002,
           time + slot * effDur + swingOffset + microOffset);
@@ -7020,11 +7159,7 @@ function applyFilterFromPrompt(t, filter) {
 
 function applyPattern(t, data) {
   if (data.filter) applyFilterFromPrompt(t, data.filter);
-  if (typeof data.swing === "number" && Number.isFinite(data.swing)) {
-    t.swing = Math.max(0, Math.min(0.75, data.swing));
-    const input = t.el?.querySelector(".track-swing");
-    if (input) input.value = t.swing;
-  }
+  // data.swing is ignored — swing is master-only now.
   const total = t.length;
   const steps = (data.steps || []).map(x => (x ? 1 : 0));
   const notes = (data.notes || []).map(n => {
@@ -7963,14 +8098,9 @@ function init() {
       }
     }
   });
-  document.getElementById("swing").addEventListener("input", e => {
-    const v = Number(e.target.value);
-    for (const t of state.tracks) {
-      t.swing = v;
-      const input = t.el?.querySelector(".track-swing");
-      if (input) input.value = v;
-    }
-  });
+  // Master swing — read live by the transport loop each callback; no per-track
+  // swing state to mirror anymore.
+  document.getElementById("swing").addEventListener("input", () => {});
   document.getElementById("add-track").addEventListener("click", () => {
     createTrack({ name: `track ${state.tracks.length + 1}`, engineKey: "plaits:0" });
   });
