@@ -1193,3 +1193,195 @@ main {
   opacity: 0.75;
 }
 .step:not(.on) .step-note { display: none; }
+
+/* ============================================================
+ * Mobile / touch breakpoints — everything below only applies on
+ * narrow viewports or coarse pointers. Desktop layout is untouched.
+ * ============================================================ */
+
+/* Tablet: give existing desktop layout a little breathing room. */
+@media (max-width: 1024px) {
+  main { padding-inline: 12px; }
+  .transport-bar { gap: 8px; padding: 8px 10px; flex-wrap: wrap; }
+  .track-head { gap: 6px; }
+}
+
+/* Phone: reflow track head + master controls + pattern grid. */
+@media (max-width: 640px) {
+  main {
+    padding-inline: max(8px, env(safe-area-inset-left));
+    padding-inline-end: max(8px, env(safe-area-inset-right));
+  }
+  .transport-bar {
+    gap: 6px;
+    padding: 8px 10px;
+    flex-wrap: wrap;
+  }
+  .transport-bar .status { flex-basis: 100%; text-align: left; margin-top: 4px; }
+
+  /* Sliders become fluid instead of fixed-width pixel strips. */
+  .fx-ctl input[type="range"],
+  .mod-ctl input[type="range"],
+  .track-head .field input[type="range"],
+  .param-group .field input[type="range"] {
+    flex: 1 1 80px;
+    min-width: 60px;
+    max-width: 180px;
+    width: auto;
+  }
+
+  /* Track head — hide the secondary actions on phones, the ... overflow
+     button (.track-more) shows them in a modal instead. */
+  .track-sound,
+  .track-lock-inst,
+  .track-pattern,
+  .track-lock-pat,
+  .track-save,
+  .track-load-patch,
+  .track-clear,
+  .track-oct {
+    display: none !important;
+  }
+  .track-head { gap: 6px; }
+  .track-head .track-name { flex: 1 1 120px; width: auto; }
+  .track-head .track-engine { min-width: 120px; flex: 1 1 140px; }
+  .track-head .field,
+  .track-head .vol-field { flex: 1 1 auto; }
+  .track-head .vol-combo { width: 100%; max-width: 220px; }
+
+  /* Timbre sliders stretch across their row. */
+  .track-synth-row { width: 100%; }
+  .track-synth-row .field { flex: 1 1 calc(50% - 8px); }
+
+  /* The 8 panel buttons (roll/filter/env/fx/eq/comp/mod/aut) wrap to 4×2
+     so they don't overflow the phone viewport. */
+  .panel-btn-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px;
+    width: 100%;
+  }
+  .panel-btn-group > button {
+    flex: 1 0 calc(25% - 2px);
+    border-radius: 3px;
+  }
+
+  /* Master pattern grid: 4 columns × 8 rows of tappable tiles. */
+  .pattern-grid {
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+  }
+  .pattern-grid .pattern-cell { aspect-ratio: 1; font-size: 12px; }
+
+  /* Automation lanes stack on phones so the mini-grid gets full width. */
+  .aut-lane {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+  .aut-lane .aut-grid { height: 72px; }
+  .aut-lane .aut-label { font-size: 12px; }
+
+  /* Mod panel LFO rows: let the controls wrap so they're not squeezed. */
+  .lfo-row {
+    grid-template-columns: minmax(60px, 1fr) 36px 1fr 60px minmax(0, 1fr) minmax(0, 1fr) 40px;
+    gap: 6px;
+  }
+
+  /* FX panel rows: let the sliders flex rather than horizontal-scroll. */
+  .fx-row { gap: 8px; row-gap: 6px; }
+  .fx-row .fx-title { min-width: 92px; }
+}
+
+/* Coarse pointer (touchscreens, regardless of viewport width) — bump tap
+   targets to meet Apple HIG 44×44 guideline. Pairs with the width
+   breakpoints above so iPads in landscape still get bigger buttons. */
+@media (pointer: coarse) {
+  button {
+    min-height: 40px;
+  }
+  button:not(.icon-btn):not(.ai-btn) {
+    padding: 10px 14px;
+  }
+  .icon-btn { min-width: 40px; min-height: 40px; }
+  .aut-lane .aut-remove { width: 40px; height: 40px; font-size: 16px; }
+  .lfo-row .lfo-remove { min-width: 40px; min-height: 40px; }
+  input[type="range"] { height: 36px; }
+  input[type="number"], select { min-height: 36px; }
+  .step { min-height: 28px; }
+  .pattern-cell { min-height: 40px; }
+}
+
+/* Overflow menu (phone-only; triggered by .track-more). Reuses the
+   step-editor overlay look. */
+.track-more { display: none; }
+@media (max-width: 640px) {
+  .track-more {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 40px;
+    min-height: 40px;
+    padding: 6px 12px;
+    font-size: 18px;
+    line-height: 1;
+  }
+}
+.track-more-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+}
+.track-more-menu {
+  background: var(--bg-2, #12141a);
+  border: 1px solid var(--border, #2a2f3a);
+  border-radius: 10px;
+  padding: 10px;
+  display: grid;
+  gap: 6px;
+  width: min(360px, 100%);
+  max-height: 80vh;
+  overflow-y: auto;
+}
+.track-more-menu h4 {
+  margin: 0 0 4px;
+  font-size: 12px;
+  text-transform: lowercase;
+  letter-spacing: 0.08em;
+  color: var(--fg-dim, #7a8294);
+  font-weight: 600;
+}
+.track-more-menu button {
+  width: 100%;
+  text-align: left;
+  padding: 12px 14px;
+  min-height: 44px;
+  font-size: 14px;
+}
+.track-more-menu .track-more-close {
+  margin-top: 6px;
+  text-align: center;
+  background: transparent;
+}
+
+/* Resume banner shown after iOS suspends the AudioContext on background. */
+#resume-banner {
+  position: fixed;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  z-index: 70;
+  background: var(--accent, #9fdb4b);
+  color: #0b0d10;
+  padding: 12px 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+  cursor: pointer;
+  user-select: none;
+}
+#resume-banner[hidden] { display: none; }

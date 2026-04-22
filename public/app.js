@@ -4822,6 +4822,13 @@ function renderTrack(t) {
     renderStepGrid(t);
   });
   node.querySelector(".track-remove").addEventListener("click", () => removeTrack(t));
+
+  // Phone-only "..." overflow — secondary track actions are hidden by CSS at
+  // ≤640px; tapping ... opens a modal that delegates to each original button.
+  const moreBtn = node.querySelector(".track-more");
+  if (moreBtn) {
+    moreBtn.addEventListener("click", () => openTrackMoreMenu(t, node));
+  }
   const patternBtn = node.querySelector(".track-pattern");
   if (patternBtn) {
     const pIcon = patternBtn.querySelector(".ai-icon");
@@ -5863,13 +5870,35 @@ function attachGridInteraction(t, grid) {
       startX: e.clientX, startY: e.clientY,
       startNote: t.notes[anchor] ?? 60,
       pitchMode: false,
+      longPressed: false,
+      longPressTimer: null,
     };
+    // Long-press → step editor (touch replacement for right-click contextmenu).
+    // 450ms matches iOS default; cancel on >8px move (see pointermove below) or
+    // on pointerup before firing. Skip if step was newly created (wasOn=false)
+    // so the default tap-to-toggle-on behavior doesn't immediately pop a modal.
+    if (wasOn) {
+      drag.longPressTimer = setTimeout(() => {
+        if (!drag || drag.pointerId !== e.pointerId) return;
+        drag.longPressed = true;
+        drag.longPressTimer = null;
+        const cell = grid.querySelector(`.step[data-idx="${drag.anchor}"]`);
+        try { grid.releasePointerCapture(e.pointerId); } catch {}
+        openStepEditor(t, drag.anchor, cell || grid);
+      }, 450);
+    }
     e.preventDefault();
   });
   grid.addEventListener("pointermove", (e) => {
     if (!drag || e.pointerId !== drag.pointerId) return;
     const dx = e.clientX - drag.startX;
     const dy = e.clientY - drag.startY;
+    // Any meaningful movement cancels the pending long-press so drag-to-pitch
+    // and drag-to-extend stay snappy.
+    if (drag.longPressTimer && (Math.abs(dx) > 8 || Math.abs(dy) > 8)) {
+      clearTimeout(drag.longPressTimer);
+      drag.longPressTimer = null;
+    }
     // Enter pitch mode once the drag is clearly more vertical than horizontal.
     if (!drag.pitchMode && Math.abs(dy) > 10 && Math.abs(dy) > Math.abs(dx)) {
       drag.pitchMode = true;
@@ -5927,12 +5956,74 @@ function attachGridInteraction(t, grid) {
   });
   const endDrag = (e) => {
     if (!drag || e.pointerId !== drag.pointerId) return;
-    if (!drag.moved && drag.wasOn) { removeNote(t, drag.anchor); renderStepGrid(t); }
+    if (drag.longPressTimer) { clearTimeout(drag.longPressTimer); drag.longPressTimer = null; }
+    // Long-press just opened the editor — don't also treat the release as a
+    // click that toggles the step off.
+    if (!drag.longPressed && !drag.moved && drag.wasOn) {
+      removeNote(t, drag.anchor); renderStepGrid(t);
+    }
     try { grid.releasePointerCapture(e.pointerId); } catch {}
     drag = null;
   };
   grid.addEventListener("pointerup", endDrag);
   grid.addEventListener("pointercancel", endDrag);
+}
+
+// ---- phone track "..." overflow menu ------------------------------------
+// Secondary track actions are hidden by CSS on phones; tapping ... opens a
+// modal that mirrors those buttons so they stay reachable without cluttering
+// the track head. Each row proxies .click() back to the real button so there's
+// only one source of truth for the handler.
+function openTrackMoreMenu(t, trackNode) {
+  const items = [
+    { sel: ".track-sound",       label: "✦ sound" },
+    { sel: ".track-lock-inst",   label: "lock instrument" },
+    { sel: ".track-pattern",     label: "✦ pattern" },
+    { sel: ".track-lock-pat",    label: "lock pattern" },
+    { sel: ".track-save",        label: "save patch" },
+    { sel: ".track-load-patch",  label: "load patch" },
+    { sel: ".track-oct-down",    label: "octave down" },
+    { sel: ".track-oct-up",      label: "octave up" },
+    { sel: ".track-clear",       label: "clear pattern" },
+  ];
+  const overlay = document.createElement("div");
+  overlay.className = "track-more-overlay";
+  const menu = document.createElement("div");
+  menu.className = "track-more-menu";
+  const title = document.createElement("h4");
+  title.textContent = t.name || "track";
+  menu.appendChild(title);
+  for (const item of items) {
+    const target = trackNode.querySelector(item.sel);
+    if (!target) continue;
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = "ghost";
+    // Reflect the target's pressed state so locks look right in the menu.
+    const pressed = target.getAttribute("aria-pressed");
+    row.textContent = pressed === "true" ? `${item.label} ✓` : item.label;
+    row.addEventListener("click", () => {
+      close();
+      target.click();
+    });
+    menu.appendChild(row);
+  }
+  const closeBtn = document.createElement("button");
+  closeBtn.type = "button";
+  closeBtn.className = "track-more-close ghost";
+  closeBtn.textContent = "close";
+  closeBtn.addEventListener("click", () => close());
+  menu.appendChild(closeBtn);
+  overlay.appendChild(menu);
+  document.body.appendChild(overlay);
+  const onOverlay = (e) => { if (e.target === overlay) close(); };
+  overlay.addEventListener("click", onOverlay);
+  const onEsc = (e) => { if (e.key === "Escape") close(); };
+  document.addEventListener("keydown", onEsc);
+  function close() {
+    overlay.remove();
+    document.removeEventListener("keydown", onEsc);
+  }
 }
 
 // ---- step editor popover ------------------------------------------------
@@ -6590,6 +6681,49 @@ async function ensureMidi() {
   state.midi.addEventListener("statechange", refresh);
   refresh();
   return state.midi;
+}
+
+// ---- background / foreground audio handling ---------------------------
+// iOS Safari suspends the AudioContext when the tab is backgrounded or the
+// screen locks; Tone.Transport continues internally and fires a backlog of
+// events on return, producing glitch. We pause on hidden, and on visible
+// resume ourselves — but iOS keeps the context suspended until the next user
+// gesture, so we surface a tap-to-resume banner in that case.
+function installVisibilityHandlers() {
+  const banner = document.getElementById("resume-banner");
+  const onVisibility = () => {
+    if (document.hidden) {
+      if (state.ready && Tone.Transport.state === "started") {
+        try { Tone.Transport.pause(); } catch {}
+        state.pausedByVisibility = true;
+      }
+    } else {
+      if (!state.pausedByVisibility) return;
+      const rawCtx = Tone.getContext()?.rawContext;
+      if (rawCtx && rawCtx.state === "suspended") {
+        if (banner) banner.hidden = false;
+      } else {
+        try { Tone.Transport.start(); } catch {}
+        state.pausedByVisibility = false;
+      }
+    }
+  };
+  document.addEventListener("visibilitychange", onVisibility);
+  // pagehide: belt-and-suspenders for Safari's "tab swiped away" path.
+  window.addEventListener("pagehide", () => {
+    if (state.ready && Tone.Transport.state === "started") {
+      try { Tone.Transport.pause(); } catch {}
+      state.pausedByVisibility = true;
+    }
+  });
+  if (banner) {
+    banner.addEventListener("click", async () => {
+      try { await Tone.start(); } catch {}
+      try { Tone.Transport.start(); } catch {}
+      state.pausedByVisibility = false;
+      banner.hidden = true;
+    });
+  }
 }
 
 function silenceAllVoices() {
@@ -8039,6 +8173,7 @@ function init() {
   Tone.setContext(state.audioCtx);
   rebuildEngineCatalog();
   requestAnimationFrame(meterTick);
+  installVisibilityHandlers();
 
   document.getElementById("play").addEventListener("click", togglePlay);
   buildBeatIndicator();

@@ -190,6 +190,7 @@
         </div><!-- /track-synth-row -->
         <button class="track-solo ghost" aria-pressed="false" title="solo">solo</button>
         <button class="track-mute ghost">mute</button>
+        <button class="track-more ghost" type="button" aria-label="more track actions" title="more actions">…</button>
         <button class="track-clear ghost">clear</button>
         <button class="track-remove ghost danger">remove</button>
         <div class="track-oct">
@@ -380,6 +381,8 @@
       <button class="lfo-remove ghost" type="button" title="remove this modulation">×</button>
     </div>
   </template>
+
+  <button id="resume-banner" hidden type="button" aria-live="polite">tap to resume audio</button>
 
   <script src="https://cdn.jsdelivr.net/npm/tone@15.0.4/build/Tone.js"></script>
   <script src="/woscillators.js"></script>
