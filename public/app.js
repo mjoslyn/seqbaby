@@ -3247,7 +3247,7 @@ class ElevenVoice {
   hit(midiNote, time, duration, velocity = 1, opts = null) {
     if (!this.buffer) return;
     const pitchBase = Number.isFinite(opts?.pitchBase) ? opts.pitchBase : 60;
-    const rate = (this.baseRate || 1) * Math.pow(2, (midiNote - pitchBase) / 12);
+    const rate = (this.baseRate || 1) * sliceFitFactor(opts) * Math.pow(2, (midiNote - pitchBase) / 12);
     const { src, stopTime } = startSampleSource(this.ctx, this.buffer, rate, time, duration, opts);
     const g = this.ctx.createGain();
     applySampleFadeEnvelope(g, time, stopTime, Math.max(0, Math.min(1, velocity)), opts);
@@ -3297,7 +3297,7 @@ class UploadVoice {
   hit(midiNote, time, duration, velocity = 1, opts = null) {
     if (!this.buffer) return;
     const pitchBase = Number.isFinite(opts?.pitchBase) ? opts.pitchBase : 60;
-    const rate = (this.baseRate || 1) * Math.pow(2, (midiNote - pitchBase) / 12);
+    const rate = (this.baseRate || 1) * sliceFitFactor(opts) * Math.pow(2, (midiNote - pitchBase) / 12);
     const { src, stopTime } = startSampleSource(this.ctx, this.buffer, rate, time, duration, opts);
     const g = this.ctx.createGain();
     applySampleFadeEnvelope(g, time, stopTime, Math.max(0, Math.min(1, velocity)), opts);
@@ -3395,6 +3395,20 @@ function computeSampleBaseRate(buffer, mode, bpm) {
   const bars = targets[mode];
   if (!bars) return 1;
   return buffer.duration / (bars * barSec);
+}
+
+// Per-hit correction so the TRIMMED slice fits the selected bars, not the full
+// buffer. baseRate is computed from the full buffer duration; if a step only
+// plays 25% of the buffer, the slice would otherwise finish in 25% of a bar.
+// Multiplying the rate by the slice span makes the slice fill the bar.
+// Returns 1 when mode is "native" (no time-sync) or when the whole buffer plays.
+function sliceFitFactor(opts) {
+  const mode = opts?.sampleSpeedMode;
+  if (!mode || mode === "native") return 1;
+  const start = Math.max(0, Math.min(1, opts?.startOffset ?? 0));
+  const end   = Math.max(0, Math.min(1, opts?.endOffset ?? 1));
+  const span = Math.max(0.001, end - start);
+  return span;
 }
 
 function applySampleSpeed(t) {
@@ -6949,6 +6963,10 @@ async function togglePlay() {
                 fadeOut:     t.sampleFadeOuts?.[idx] ?? 0,
                 loopMode:    t.sampleLoopModes?.[idx] ?? "off",
                 pitchBase:   t.isDrumKit ? 36 : 60,
+                // Propagate the time-sync mode so the voice can re-fit the rate
+                // to the trimmed slice (1× bpm should fit a bar whether the
+                // user plays the whole buffer or a quarter of it).
+                sampleSpeedMode: t.sampleSpeedMode,
               }
             : null;
           const ratchet = Math.max(1, Math.min(8, Math.round(t.ratchets?.[idx] ?? 1)));
