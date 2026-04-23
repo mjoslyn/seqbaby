@@ -4746,6 +4746,10 @@ function renderTrack(t) {
   const octUpBtn   = node.querySelector(".track-oct-up");
   if (octDownBtn) octDownBtn.addEventListener("click", () => shiftTrackOctave(t, -12));
   if (octUpBtn)   octUpBtn.addEventListener("click",   () => shiftTrackOctave(t, +12));
+  const semiDownBtn = node.querySelector(".track-semi-down");
+  const semiUpBtn   = node.querySelector(".track-semi-up");
+  if (semiDownBtn) semiDownBtn.addEventListener("click", () => shiftTrackOctave(t, -1));
+  if (semiUpBtn)   semiUpBtn.addEventListener("click",   () => shiftTrackOctave(t, +1));
 
   const soloBtn = node.querySelector(".track-solo");
   soloBtn.addEventListener("click", () => {
