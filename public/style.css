@@ -1194,6 +1194,29 @@ main {
 }
 .step:not(.on) .step-note { display: none; }
 
+/* Step pager + pattern grid pager are mobile-only — hide on desktop. */
+.step-pager, .pattern-grid-pager { display: none; }
+/* Flex-wrap break markers in the transport bar are mobile-only. */
+.tb-break { display: none; }
+
+/* Disable iOS Safari's 300ms double-tap-to-zoom delay on anything the user
+ * is meant to tap. Pinch-zoom still works (would require user-scalable=no
+ * on the viewport meta to block, which we intentionally don't do). */
+button,
+input,
+select,
+textarea,
+label,
+.step,
+.pattern-cell,
+.aut-step,
+.se-pad,
+.roll-cell,
+.mini-beat,
+.chord-btn {
+  touch-action: manipulation;
+}
+
 /* ============================================================
  * Mobile / touch breakpoints — everything below only applies on
  * narrow viewports or coarse pointers. Desktop layout is untouched.
@@ -1208,6 +1231,44 @@ main {
 
 /* Phone: reflow track head + master controls + pattern grid. */
 @media (max-width: 640px) {
+  /* Hard cap every scroll-critical element at viewport width and let flex
+     children shrink below their intrinsic content (default min-width: auto
+     is the #1 cause of horizontal overflow). */
+  html, body {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: clip;
+  }
+  main, .transport-bar, .master-prompt, .pattern-bar, .track, .track-head,
+  .track-synth-row, .track-fx-panel, .track-mod-panel, .track-aut-panel,
+  .track-filter-panel, .track-env-panel, .track-eq-panel, .track-comp-panel,
+  .track-roll-panel, .fx-row, .mod-ctl-row, .param-group, .steps {
+    max-width: 100%;
+    min-width: 0;
+    overflow-x: clip;
+  }
+  /* Flex children default to min-width: auto which forces them as wide as
+     their content — knock that down so they can shrink inside a narrow row. */
+  .track-head > *,
+  .track-synth-row > *,
+  .track-fx-panel > *,
+  .fx-row > *,
+  .pattern-bar > *,
+  .master-prompt > *,
+  .transport-bar > * {
+    min-width: 0;
+    max-width: 100%;
+  }
+  /* Inputs commonly default to 100%+padding, or have fixed widths in pixels
+     (e.g. track-len=64px, bpm=70px) that don't respect the box. Clamp them. */
+  input[type="number"],
+  input[type="text"],
+  textarea,
+  select {
+    max-width: 100%;
+    min-width: 0;
+  }
+
   main {
     padding-inline: max(8px, env(safe-area-inset-left));
     padding-inline-end: max(8px, env(safe-area-inset-right));
@@ -1217,7 +1278,70 @@ main {
     padding: 8px 10px;
     flex-wrap: wrap;
   }
-  .transport-bar .status { flex-basis: 100%; text-align: left; margin-top: 4px; }
+  /* Force a new flex line at each .tb-break marker so logical groups land on
+     their own rows (bpm+swing; metronome+beat+meter). Desktop ignores these. */
+  .transport-bar .tb-break {
+    display: block;
+    flex-basis: 100%;
+    width: 100%;
+    height: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+  }
+  .transport-bar .spacer { display: none; }
+  /* Status shares the add-track row — grows to fill remaining width. */
+  .transport-bar .status { flex: 1 1 auto; text-align: right; min-width: 0; }
+  /* Metronome row: meter takes remaining space so it's visible at a glance. */
+  .transport-bar .master-meter { flex: 1 1 auto; height: 10px; }
+
+  /* Master prompt row: wrap children, textarea gets its own full row, and
+     buttons stay at their intrinsic width instead of each claiming a line. */
+  .master-prompt {
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-start;
+    padding: 8px 10px;
+    gap: 6px;
+  }
+  .master-prompt > * { align-self: center; flex: 0 0 auto; }
+  #master-prompt {
+    flex: 1 0 100%;
+    min-width: 0;
+    min-height: 40px;
+  }
+  .gen-toggle-btn,
+  #master-prompt-go,
+  #master-variate-go,
+  .gen-sound-engine {
+    white-space: nowrap;
+    width: auto;
+  }
+  .gen-count-wrap { min-height: 40px; }
+  .gen-count-wrap input { width: 44px; }
+
+  /* Pattern-bar rows on mobile:
+     - Share takes its own full-width row.
+     - Save / Load / Export / Import share one row (2 pairs side by side).
+     - Pattern / Session (bounce buttons) share one full-width row, each
+       taking half.
+     - Mode-stack + sig + rep wrap naturally below.
+     - #pattern-grid already claims its own row (flex: 1 0 100% above). */
+  .pattern-bar > * { flex: 0 0 auto; }
+  .pattern-bar .set-stack,
+  .pattern-bar .mode-stack {
+    flex-direction: row;
+    gap: 4px;
+  }
+  .pattern-bar .mode-row { gap: 4px; }
+
+  #set-share { flex: 1 0 100%; }
+  /* Save/Load pair + Export/Import pair: each stack takes ~half row. */
+  .pattern-bar .set-stack { flex: 1 1 calc(50% - 3px); }
+  .pattern-bar .set-stack button { flex: 1; }
+  /* Pattern / Session bounce pair: full row, each button half. */
+  .pattern-bar .set-stack:has(.dl-btn) { flex: 1 0 100%; }
+  .pattern-bar .set-stack:has(.dl-btn) button { flex: 1; }
 
   /* Sliders become fluid instead of fixed-width pixel strips. */
   .fx-ctl input[type="range"],
@@ -1243,16 +1367,40 @@ main {
   .track-oct {
     display: none !important;
   }
-  .track-head { gap: 6px; }
+  .track-head { gap: 6px; align-items: center; }
   .track-head .track-name { flex: 1 1 120px; width: auto; }
   .track-head .track-engine { min-width: 120px; flex: 1 1 140px; }
+  /* Don't grow — stay at intrinsic width. Growing makes singleton rows stretch
+     buttons full-width, which is what the user was complaining about. */
   .track-head .field,
-  .track-head .vol-field { flex: 1 1 auto; }
-  .track-head .vol-combo { width: 100%; max-width: 220px; }
+  .track-head .vol-field { flex: 0 1 auto; }
+  .track-head .vol-combo { width: auto; max-width: 220px; }
+  .track-head > button { flex: 0 0 auto; }
 
   /* Timbre sliders stretch across their row. */
-  .track-synth-row { width: 100%; }
+  .track-synth-row { width: 100%; flex-wrap: wrap; }
   .track-synth-row .field { flex: 1 1 calc(50% - 8px); }
+  /* .param-group (timbre-group / osc-mix-group / osc-mod-group / moog-osc-group)
+     defaults to inline-flex no-wrap, which forces 4+ sliders + rand button onto
+     one 800px row. Wrap + shrink on phones. */
+  .param-group {
+    display: flex;
+    flex-wrap: wrap;
+    width: 100%;
+    gap: 6px;
+    padding: 6px;
+  }
+  .param-group .field {
+    flex: 1 1 calc(50% - 6px);
+    min-width: 0;
+  }
+  .param-group .field input[type="range"] {
+    width: auto;
+    flex: 1 1 60px;
+    min-width: 0;
+  }
+  .param-group .field label { font-size: 11px; }
+  .track-rand { flex: 0 0 auto; }
 
   /* The 8 panel buttons (roll/filter/env/fx/eq/comp/mod/aut) wrap to 4×2
      so they don't overflow the phone viewport. */
@@ -1267,12 +1415,65 @@ main {
     border-radius: 3px;
   }
 
-  /* Master pattern grid: 4 columns × 8 rows of tappable tiles. */
+  /* Master pattern grid: on phones it's paged — 2 rows × 4 cols of tappable
+     tiles per page (renderPatternGrid builds only 8 cells at a time;
+     .pattern-grid-pager adds prev/next above). */
+  .pattern-bar { flex-wrap: wrap; row-gap: 8px; }
   .pattern-grid {
+    flex: 1 0 100%;
     grid-template-columns: repeat(4, 1fr);
-    gap: 6px;
+    gap: 4px;
+    grid-auto-rows: auto;
   }
-  .pattern-grid .pattern-cell { aspect-ratio: 1; font-size: 12px; }
+  .pattern-grid .pattern-cell { aspect-ratio: 1; font-size: 14px; }
+  .pattern-grid-pager {
+    flex: 1 0 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 4px 0;
+    color: var(--fg-dim);
+    font-size: 12px;
+  }
+  .pattern-grid-pager button {
+    min-width: 44px;
+    min-height: 36px;
+    padding: 6px 10px;
+    font-size: 16px;
+  }
+  .pattern-grid-pager .pg-info {
+    flex: 1;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+  }
+  .pattern-grid-pager button:disabled { opacity: 0.35; }
+
+  /* Per-track step grid on phone is paged (8 per page) rather than wrapped
+     across multiple rows — the page controls are rendered by renderStepPager
+     just above the grid. Cells grow to full tap-target height. */
+  .steps { gap: 3px; }
+  .step-pager {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 4px 0;
+    color: var(--fg-dim);
+    font-size: 12px;
+  }
+  .step-pager button {
+    min-width: 44px;
+    min-height: 36px;
+    padding: 6px 10px;
+    font-size: 16px;
+  }
+  .step-pager .step-page-info {
+    flex: 1;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+  }
+  .step-pager button:disabled { opacity: 0.35; }
 
   /* Automation lanes stack on phones so the mini-grid gets full width. */
   .aut-lane {
@@ -1291,6 +1492,57 @@ main {
   /* FX panel rows: let the sliders flex rather than horizontal-scroll. */
   .fx-row { gap: 8px; row-gap: 6px; }
   .fx-row .fx-title { min-width: 92px; }
+
+  /* Phone text: bump everything up so it's legible on a 375px viewport. */
+  html, body { font-size: 15px; }
+  button, input, select, textarea { font-size: 15px; }
+  .status,
+  .track-name,
+  .track-engine,
+  .fx-title,
+  .mod-ctl,
+  .fx-ctl span,
+  .field label,
+  label,
+  .se-title,
+  .aut-label { font-size: 13px; }
+  .track-head .track-name { font-size: 15px; }
+  .track-head .field label { font-size: 12px; }
+  .panel-btn-group > button { font-size: 14px; }
+
+  /* Step editor: stack each row label above its controls so nothing clips
+     off-screen on narrow phones. The 3-col 60/1fr/84px template collapses
+     to a two-row stack per field. */
+  .step-editor {
+    padding: 10px 12px;
+    max-width: 96vw;
+    gap: 10px;
+  }
+  .step-editor .se-field,
+  .step-editor .se-cpx-row,
+  .step-editor .se-arp-row,
+  .step-editor .se-sample-row,
+  .step-editor .se-field.se-chord-field {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+  .step-editor .se-field > label:first-child {
+    color: var(--fg-dim);
+    font-size: 12px;
+  }
+  .step-editor .se-field .se-note-label,
+  .step-editor .se-field .se-vel-label { text-align: left; }
+  .step-editor .se-arp-selects { flex-wrap: wrap; }
+  .step-editor .se-arp-selects select { flex: 1 1 30%; }
+  .step-editor .se-sample-ctl,
+  .step-editor .se-sample-fade,
+  .step-editor .se-sample-meta {
+    flex-wrap: wrap;
+  }
+  .step-editor .se-oct-pager { justify-content: space-between; }
+  .step-editor .se-preview { width: 100%; }
+  .step-editor .se-keyboard { gap: 2px; }
+  .step-editor .se-keyboard .se-pad { font-size: 10px; min-width: 0; }
 }
 
 /* Coarse pointer (touchscreens, regardless of viewport width) — bump tap

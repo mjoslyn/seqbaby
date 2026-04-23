@@ -29,18 +29,22 @@
       <span>seqbaby</span>
     </div>
     <button id="play" class="play">play</button>
+    <div class="spacer"></div>
+    <div class="tb-break" aria-hidden="true"></div>
     <div class="field"><label for="bpm">bpm</label><input id="bpm" type="number" value="110" min="40" max="240" /></div>
+    <button id="metronome" class="ghost icon-btn" aria-pressed="false" aria-label="metronome" title="metronome click on the downbeat"></button>
+    <svg id="beat-indicator" class="beat-indicator" viewBox="-22 -22 44 44" width="40" height="40" aria-hidden="true"></svg>
+    <div class="tb-break" aria-hidden="true"></div>
     <div class="field"><label for="swing">swing</label><input id="swing" type="range" min="0" max="0.5" step="0.01" value="0" /></div>
+    <div class="meter master-meter" title="master output level"><div class="meter-bar"></div></div>
+    <div class="tb-break" aria-hidden="true"></div>
     <div class="scale-field">
       <label class="scale-toggle"><input id="scale-on" type="checkbox" /> scale</label>
       <select id="scale-root"></select>
       <select id="scale-mode"></select>
     </div>
+    <div class="tb-break" aria-hidden="true"></div>
     <button id="add-track" class="ghost">add track</button>
-    <div class="spacer"></div>
-    <button id="metronome" class="ghost icon-btn" aria-pressed="false" aria-label="metronome" title="metronome click on the downbeat"></button>
-    <svg id="beat-indicator" class="beat-indicator" viewBox="-22 -22 44 44" width="40" height="40" aria-hidden="true"></svg>
-    <div class="meter master-meter" title="master output level"><div class="meter-bar"></div></div>
     <div id="status" class="status">click play to unlock audio</div>
     <button id="gen-cancel" class="ghost danger" hidden title="cancel the running generation">cancel</button>
   </header>

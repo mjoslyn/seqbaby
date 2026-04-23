@@ -1310,12 +1310,25 @@ function copyPattern(from, to) {
   setStatus(`copied pattern ${from + 1} → ${to + 1}`);
 }
 
+const PATTERN_GRID_PAGE_SIZE = 8;
+
 function renderPatternGrid() {
   const grid = document.getElementById("pattern-grid");
   if (!grid) return;
   refreshVariateButton();
   grid.replaceChildren();
-  for (let i = 0; i < PATTERN_COUNT; i++) {
+  const paged = typeof isPhoneViewport === "function" && isPhoneViewport();
+  let startIdx = 0, endIdx = PATTERN_COUNT;
+  if (paged) {
+    const totalPages = Math.ceil(PATTERN_COUNT / PATTERN_GRID_PAGE_SIZE);
+    if (state.patternGridPage == null) {
+      state.patternGridPage = Math.floor(state.activePattern / PATTERN_GRID_PAGE_SIZE);
+    }
+    state.patternGridPage = Math.max(0, Math.min(totalPages - 1, state.patternGridPage));
+    startIdx = state.patternGridPage * PATTERN_GRID_PAGE_SIZE;
+    endIdx = Math.min(PATTERN_COUNT, startIdx + PATTERN_GRID_PAGE_SIZE);
+  }
+  for (let i = startIdx; i < endIdx; i++) {
     const cell = document.createElement("button");
     cell.className = "pattern-cell";
     if (isPatternNonEmpty(i)) cell.classList.add("filled");
@@ -1344,6 +1357,42 @@ function renderPatternGrid() {
     });
     grid.appendChild(cell);
   }
+  renderPatternGridPager(paged);
+}
+
+function renderPatternGridPager(active) {
+  const bar = document.querySelector(".pattern-bar");
+  if (!bar) return;
+  let pager = bar.querySelector(".pattern-grid-pager");
+  if (!active) {
+    if (pager) pager.remove();
+    return;
+  }
+  const totalPages = Math.ceil(PATTERN_COUNT / PATTERN_GRID_PAGE_SIZE);
+  const curPage = state.patternGridPage ?? 0;
+  if (!pager) {
+    pager = document.createElement("div");
+    pager.className = "pattern-grid-pager";
+    pager.innerHTML = `
+      <button class="pg-prev ghost" type="button" aria-label="previous page of patterns">◀</button>
+      <span class="pg-info"></span>
+      <button class="pg-next ghost" type="button" aria-label="next page of patterns">▶</button>
+    `;
+    const grid = document.getElementById("pattern-grid");
+    bar.insertBefore(pager, grid);
+    pager.querySelector(".pg-prev").addEventListener("click", () => {
+      state.patternGridPage = Math.max(0, (state.patternGridPage ?? 0) - 1);
+      renderPatternGrid();
+    });
+    pager.querySelector(".pg-next").addEventListener("click", () => {
+      const tp = Math.ceil(PATTERN_COUNT / PATTERN_GRID_PAGE_SIZE);
+      state.patternGridPage = Math.min(tp - 1, (state.patternGridPage ?? 0) + 1);
+      renderPatternGrid();
+    });
+  }
+  pager.querySelector(".pg-info").textContent = `patterns ${curPage * PATTERN_GRID_PAGE_SIZE + 1}–${Math.min(PATTERN_COUNT, (curPage + 1) * PATTERN_GRID_PAGE_SIZE)} / ${PATTERN_COUNT}`;
+  pager.querySelector(".pg-prev").disabled = curPage === 0;
+  pager.querySelector(".pg-next").disabled = curPage >= totalPages - 1;
 }
 
 // ---- rate helpers (LFO) ------------------------------------------------
@@ -5610,28 +5659,82 @@ function refreshVariateButton() {
   btn.disabled = !isPatternNonEmpty(state.activePattern);
 }
 
+const STEP_PAGE_SIZE = 8;
+function isPhoneViewport() {
+  return typeof window !== "undefined" && window.matchMedia?.("(max-width: 640px)").matches;
+}
+
 function renderStepGrid(t) {
   const grid = t.el.querySelector(".steps");
   const total = t.length;
-  const cols = Math.min(16, total);
+  // Mobile paging: 8 cells per page when length > 8. Desktop always renders
+  // the full row (capped at 16 cols) — the existing wrap-at-16 logic stays.
+  const paged = isPhoneViewport() && total > STEP_PAGE_SIZE;
+  const pageSize = STEP_PAGE_SIZE;
+  let startIdx = 0, endIdx = total;
+  if (paged) {
+    const totalPages = Math.ceil(total / pageSize);
+    if (t._stepPage == null) t._stepPage = 0;
+    if (t._stepPage >= totalPages) t._stepPage = Math.max(0, totalPages - 1);
+    startIdx = t._stepPage * pageSize;
+    endIdx = Math.min(total, startIdx + pageSize);
+  }
+  const cols = paged ? pageSize : Math.min(16, total);
   grid.style.setProperty("--count", String(cols));
   grid.style.gridTemplateColumns = `repeat(${cols}, minmax(0, 1fr))`;
   grid.replaceChildren();
   updatePatternCell(t._patternIdx);
-  let i = 0;
-  while (i < total) {
+  let i = startIdx;
+  while (i < endIdx) {
     if (t.steps[i]) {
       const cap = maxLengthAt(t, i);
-      const span = Math.max(1, Math.min(t.lengths[i] || 1, cap));
-      t.lengths[i] = span;
-      grid.appendChild(makeCell(t, i, span, true));
-      i += span;
+      const fullSpan = Math.max(1, Math.min(t.lengths[i] || 1, cap));
+      t.lengths[i] = fullSpan;
+      // Clamp visual span to the current page so held notes don't overflow
+      // past the page boundary. Storage stays unclamped.
+      const visSpan = Math.min(fullSpan, endIdx - i);
+      grid.appendChild(makeCell(t, i, visSpan, true));
+      i += visSpan;
     } else {
       grid.appendChild(makeCell(t, i, 1, false));
       i += 1;
     }
   }
+  renderStepPager(t, paged);
   refreshRollIfOpen(t);
+}
+
+function renderStepPager(t, active) {
+  let pager = t.el.querySelector(".step-pager");
+  if (!active) {
+    if (pager) pager.remove();
+    return;
+  }
+  const totalPages = Math.ceil(t.length / STEP_PAGE_SIZE);
+  const curPage = Math.max(0, Math.min(totalPages - 1, t._stepPage ?? 0));
+  if (!pager) {
+    pager = document.createElement("div");
+    pager.className = "step-pager";
+    pager.innerHTML = `
+      <button class="step-page-prev ghost" type="button" aria-label="previous page of steps">◀</button>
+      <span class="step-page-info"></span>
+      <button class="step-page-next ghost" type="button" aria-label="next page of steps">▶</button>
+    `;
+    const grid = t.el.querySelector(".steps");
+    grid.parentNode.insertBefore(pager, grid);
+    pager.querySelector(".step-page-prev").addEventListener("click", () => {
+      t._stepPage = Math.max(0, (t._stepPage ?? 0) - 1);
+      renderStepGrid(t);
+    });
+    pager.querySelector(".step-page-next").addEventListener("click", () => {
+      const tp = Math.ceil(t.length / STEP_PAGE_SIZE);
+      t._stepPage = Math.min(tp - 1, (t._stepPage ?? 0) + 1);
+      renderStepGrid(t);
+    });
+  }
+  pager.querySelector(".step-page-info").textContent = `${curPage + 1} / ${totalPages}`;
+  pager.querySelector(".step-page-prev").disabled = curPage === 0;
+  pager.querySelector(".step-page-next").disabled = curPage >= totalPages - 1;
 }
 
 // Piano roll panel: a pitches × steps grid per track. Clicking a cell places
@@ -6763,9 +6866,19 @@ function openStepEditor(t, idx, anchorEl) {
 }
 
 function paintNowIndicator() {
+  const paged = isPhoneViewport();
   for (const t of state.tracks) {
     const tk = t.trackTick ?? 0;
     const idx = ((tk - 1) % t.length + t.length) % t.length;
+    // Auto-follow the playhead when mobile paging is active — advance the
+    // visible page when the current step crosses a page boundary.
+    if (paged && t.length > STEP_PAGE_SIZE && tk > 0) {
+      const targetPage = Math.floor(idx / STEP_PAGE_SIZE);
+      if (targetPage !== (t._stepPage ?? 0)) {
+        t._stepPage = targetPage;
+        renderStepGrid(t);
+      }
+    }
     const cells = t.el.querySelectorAll(".step");
     cells.forEach(c => {
       const start = Number(c.dataset.idx);
@@ -6867,8 +6980,11 @@ function installVisibilityHandlers() {
     }
   });
   if (banner) {
-    banner.addEventListener("click", async () => {
-      try { await Tone.start(); } catch {}
+    banner.addEventListener("click", () => {
+      // Synchronous unlock — iOS Safari requires resume() in the user-gesture
+      // stack frame, no awaits before it.
+      try { state.audioCtx?.resume(); } catch {}
+      try { Tone.start(); } catch {}
       try { Tone.Transport.start(); } catch {}
       state.pausedByVisibility = false;
       banner.hidden = true;
@@ -7100,6 +7216,25 @@ function suggestBounceFilename() {
 
 async function togglePlay() {
   const btn = document.getElementById("play");
+  // iOS Safari requires the AudioContext.resume() call to happen synchronously
+  // inside the user-gesture stack frame. Any await before it (ensureAudio +
+  // Tone.start()) loses the user-gesture authorization and the context stays
+  // suspended, which is why the app was silent on iPhones. Kick both the raw
+  // context and Tone's context synchronously here before any async work.
+  try { state.audioCtx?.resume(); } catch {}
+  try { Tone.start(); } catch {}
+  // Silent-buffer warmup: play a 1-sample buffer during the gesture to force
+  // iOS to fully unlock the audio output. Harmless on other browsers.
+  try {
+    if (state.audioCtx && !state._unlockedOnce) {
+      const buf = state.audioCtx.createBuffer(1, 1, state.audioCtx.sampleRate);
+      const src = state.audioCtx.createBufferSource();
+      src.buffer = buf;
+      src.connect(state.audioCtx.destination);
+      src.start(0);
+      state._unlockedOnce = true;
+    }
+  } catch {}
   if (state.playing) {
     Tone.Transport.stop();
     Tone.Transport.cancel(0);
@@ -8324,6 +8459,16 @@ function init() {
   rebuildEngineCatalog();
   requestAnimationFrame(meterTick);
   installVisibilityHandlers();
+
+  // Re-render step + pattern grids when the viewport crosses the phone
+  // breakpoint, so paging toggles on/off on rotate / window resize.
+  const phoneMq = window.matchMedia?.("(max-width: 640px)");
+  phoneMq?.addEventListener?.("change", () => {
+    for (const t of state.tracks) {
+      try { renderStepGrid(t); } catch {}
+    }
+    try { renderPatternGrid(); } catch {}
+  });
 
   document.getElementById("play").addEventListener("click", togglePlay);
   buildBeatIndicator();
