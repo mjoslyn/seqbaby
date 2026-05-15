@@ -766,6 +766,8 @@ function serializeSet() {
       length: t.length,
       params: { ...t.params },
       filter: { ...t.filter },
+      eq: { ...t.eq },
+      comp: { ...t.comp },
       fxConfig: JSON.parse(JSON.stringify(t.fxConfig)),
       midi: { ...t.midi },
       customConfig: t.customConfig ? JSON.parse(JSON.stringify(t.customConfig)) : null,
@@ -787,6 +789,18 @@ function serializeSet() {
         notes: p.notes.slice(),
         velocities: p.velocities.slice(),
         chords: p.chords.slice(),
+        offsets:         (p.offsets         ?? []).slice(),
+        arps:            (p.arps            ?? []).slice(),
+        arpRates:        (p.arpRates        ?? []).slice(),
+        arpRanges:       (p.arpRanges       ?? []).slice(),
+        arpDirs:         (p.arpDirs         ?? []).slice(),
+        complexities:    (p.complexities    ?? []).slice(),
+        ratchets:        (p.ratchets        ?? []).slice(),
+        sampleStarts:    (p.sampleStarts    ?? []).slice(),
+        sampleEnds:      (p.sampleEnds      ?? []).slice(),
+        sampleFadeIns:   (p.sampleFadeIns   ?? []).slice(),
+        sampleFadeOuts:  (p.sampleFadeOuts  ?? []).slice(),
+        sampleLoopModes: (p.sampleLoopModes ?? []).slice(),
         automation: p.automation ? Object.fromEntries(
           Object.entries(p.automation)
             .filter(([k]) => AUTOMATION_TARGETS[k])
@@ -1025,6 +1039,8 @@ function applySet(s) {
     const t = createTrack({ name: td.name || "track", engineKey: td.engineKey || "plaits:0", length: td.length || 16 });
     Object.assign(t.params, td.params || {});
     Object.assign(t.filter, td.filter || {});
+    if (td.eq)   Object.assign(t.eq,   td.eq);
+    if (td.comp) Object.assign(t.comp, td.comp);
     Object.assign(t.fxConfig, td.fxConfig || {});
     Object.assign(t.midi, td.midi || {});
     t.customConfig = td.customConfig || null;
@@ -1095,6 +1111,18 @@ function applySet(s) {
           notes: pad(p.notes, null, n),
           velocities: pad(p.velocities, 0.5, n),
           chords: pad(p.chords, "", n),
+          offsets:         pad(p.offsets,         0,      n),
+          arps:            pad(p.arps,            false,  n),
+          arpRates:        pad(p.arpRates,        0.25,   n),
+          arpRanges:       pad(p.arpRanges,       1,      n),
+          arpDirs:         pad(p.arpDirs,         "up",   n),
+          complexities:    pad(p.complexities,    0,      n),
+          ratchets:        pad(p.ratchets,        1,      n),
+          sampleStarts:    pad(p.sampleStarts,    0,      n),
+          sampleEnds:      pad(p.sampleEnds,      1,      n),
+          sampleFadeIns:   pad(p.sampleFadeIns,   0,      n),
+          sampleFadeOuts:  pad(p.sampleFadeOuts,  0,      n),
+          sampleLoopModes: pad(p.sampleLoopModes, "off",  n),
           automation,
         };
       }
@@ -1125,6 +1153,21 @@ function applySet(s) {
       t.el.classList.toggle("soloed", t.soloed);
       refreshFxPanelUI(t);
       renderModPanel(t, t.el.querySelector(".track-mod-panel"));
+      const eqPanel = t.el.querySelector(".track-eq-panel");
+      if (eqPanel) {
+        eqPanel.querySelector(".p-eq-low").value  = t.eq.low;
+        eqPanel.querySelector(".p-eq-mid").value  = t.eq.mid;
+        eqPanel.querySelector(".p-eq-high").value = t.eq.high;
+      }
+      const compPanel = t.el.querySelector(".track-comp-panel");
+      if (compPanel) {
+        compPanel.querySelector(".comp-enabled").checked = !!t.comp.enabled;
+        compPanel.querySelector(".comp-threshold").value = t.comp.threshold;
+        compPanel.querySelector(".comp-ratio").value     = t.comp.ratio;
+        compPanel.querySelector(".comp-attack").value    = t.comp.attack;
+        compPanel.querySelector(".comp-release").value   = t.comp.release;
+        compPanel.querySelector(".comp-knee").value      = t.comp.knee;
+      }
     }
     if (state.ready) {
       disposeLFOs(t);
@@ -1153,11 +1196,21 @@ function applySet(s) {
       }
       if (t.voice.setGlide) t.voice.setGlide(t.glide);
       routeVoiceToRack(t);
+      if (t.eqNode) {
+        t.eqNode.setBand("low",  t.eq.low);
+        t.eqNode.setBand("mid",  t.eq.mid);
+        t.eqNode.setBand("high", t.eq.high);
+      }
+      applyCompressorConfig(t);
       syncAllLFOs(t);
     }
     updatePlaitsControlsVisibility(t);
     renderStepGrid(t);
   }
+  // Re-populate comp-source dropdowns now that every track exists, so cross-
+  // track sidechain selections from the saved set resolve to a real option.
+  refreshCompSourceDropdowns();
+  if (state.ready) for (const t of state.tracks) applyCompressorConfig(t);
   renderPatternGrid();
   syncMeterUI();
   setStatus("set loaded");
@@ -6513,8 +6566,18 @@ function attachGridInteraction(t, grid) {
     };
     e.preventDefault();
   });
+  const endDrag = (e) => {
+    if (!drag || e.pointerId !== drag.pointerId) return;
+    if (!drag.moved && drag.wasOn) { removeNote(t, drag.anchor); renderStepGrid(t); }
+    try { grid.releasePointerCapture(e.pointerId); } catch {}
+    drag = null;
+  };
   grid.addEventListener("pointermove", (e) => {
     if (!drag || e.pointerId !== drag.pointerId) return;
+    // Safety: if no buttons are pressed but pointerup never fired (pointer
+    // capture can get dropped mid-drag when the grid's children are rebuilt
+    // by renderStepGrid), end the drag here so the pitch stops tracking.
+    if (e.buttons === 0) { endDrag(e); return; }
     const dx = e.clientX - drag.startX;
     const dy = e.clientY - drag.startY;
     // Enter pitch mode once the drag is clearly more vertical than horizontal.
@@ -6573,12 +6636,6 @@ function attachGridInteraction(t, grid) {
     t.velocities[target] = 1;
     renderStepGrid(t);
   });
-  const endDrag = (e) => {
-    if (!drag || e.pointerId !== drag.pointerId) return;
-    if (!drag.moved && drag.wasOn) { removeNote(t, drag.anchor); renderStepGrid(t); }
-    try { grid.releasePointerCapture(e.pointerId); } catch {}
-    drag = null;
-  };
   grid.addEventListener("pointerup", endDrag);
   grid.addEventListener("pointercancel", endDrag);
 }
