@@ -275,9 +275,17 @@
           <label class="fx-ctl"><span>freq</span><input class="fx-ringmod-freq" type="range" min="0" max="1" step="0.01" value="0.35" /></label>
         </div>
         <div class="fx-row" data-fx="shaper">
-          <span class="fx-title">wave folder</span>
+          <span class="fx-title">wave shaper</span>
           <label class="fx-ctl"><span>wet</span><input class="fx-shaper-wet" type="range" min="0" max="1" step="0.01" value="0" /></label>
           <label class="fx-ctl"><span>amt</span><input class="fx-shaper-amt" type="range" min="0" max="1" step="0.01" value="0.5" /></label>
+          <label class="fx-ctl"><span>mode</span><select class="fx-shaper-mode">
+            <option value="saturate">saturate</option>
+            <option value="softclip">soft clip</option>
+            <option value="clip">clip</option>
+            <option value="serge">serge</option>
+            <option value="fold" selected>fold</option>
+            <option value="wrap">wrap</option>
+          </select></label>
         </div>
         <div class="fx-row" data-fx="crush">
           <span class="fx-title">bitcrush</span>

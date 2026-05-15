@@ -1293,7 +1293,7 @@ function defaultFxConfig() {
     cassette:   { amount: 0, flutter: 0.3, sat: 0.4 },
     fuzz:       { amount: 0, drive: 0.7, tone: 0.4, level: 0.5 },
     ringmod:    { wet: 0, freq: 0.35 },           // freq is 0..1, log-mapped to ~20..3000 Hz
-    shaper:     { wet: 0, amount: 0.5 },          // wave folder: crossfade wet/dry + fold depth
+    shaper:     { wet: 0, amount: 0.5, mode: "fold" },  // wave shaper: wet/dry + drive + mode
     crush:      { bits: 8, wet: 0 },
     autowah:    { wet: 0, sens: 0.5, range: 0.5 },
     chorus:     { wet: 0, rate: 0.5, depth: 0.5 },
@@ -1337,19 +1337,57 @@ function makeTapeHissBuffer(ctx, seconds) {
   return buf;
 }
 
-// Wave folder curve: reflect (rather than clip) the signal whenever it leaves
-// [-1, 1]. `amount` (0..1) deepens the fold by pre-multiplying drive — small
-// values approach a tanh, large values produce multiple fold creases.
-function makeFolderCurve(amount) {
+// Wave-shaper mode kernels. Each takes an already-driven input value x and
+// returns the shaped output. `amount` deepens the effect via the pre-gain
+// baked into makeShaperCurve.
+function shapeSample(mode, x) {
+  switch (mode) {
+    case "saturate":
+      // gentle tanh saturation — smooth, musical, no hard edge
+      return Math.tanh(x);
+    case "softclip":
+      // cubic soft-clip; ramps to ±1 with rounded shoulder
+      if (x >= 1) return 1;
+      if (x <= -1) return -1;
+      return 1.5 * x - 0.5 * x * x * x;
+    case "clip":
+      // hard clip at ±1
+      return Math.max(-1, Math.min(1, x));
+    case "serge": {
+      // Serge-style sine-folded triangle: smoother than a plain fold,
+      // more harmonics than saturate
+      let y = ((x + 1) % 4 + 4) % 4;
+      if (y > 2) y = 4 - y;
+      return Math.sin((y - 1) * Math.PI / 2);
+    }
+    case "fold": {
+      // Triangle wave-folder: reflects past ±1 instead of clipping
+      let y = ((x + 1) % 4 + 4) % 4;
+      if (y > 2) y = 4 - y;
+      return y - 1;
+    }
+    case "wrap": {
+      // Sawtooth wrap: modulo around [-1, +1] — buzzy, aliased character
+      const y = ((x + 1) % 2 + 2) % 2;
+      return y - 1;
+    }
+  }
+  return Math.tanh(x);
+}
+
+const SHAPER_MODES = ["saturate", "softclip", "clip", "serge", "fold", "wrap"];
+
+// Build a 4096-sample waveshaper curve for the given mode. `amount` (0..1) is
+// the pre-curve drive (1..9x) so harder values push the signal further into
+// the mode's nonlinearity.
+function makeShaperCurve(mode, amount) {
   const n = 4096;
   const c = new Float32Array(n);
   const drive = 1 + Math.max(0, Math.min(1, amount)) * 8;
+  const m = SHAPER_MODES.includes(mode) ? mode : "fold";
   for (let i = 0; i < n; i++) {
-    let x = ((i * 2) / (n - 1) - 1) * drive;
-    // Triangle-fold against ±1; cycle each 4 units.
-    let y = ((x + 1) % 4 + 4) % 4;
-    if (y > 2) y = 4 - y;
-    c[i] = y - 1;
+    const x = ((i * 2) / (n - 1) - 1) * drive;
+    c[i] = shapeSample(m, x);
   }
   return c;
 }
@@ -1487,24 +1525,22 @@ class FXRack {
     this.ringWet.connect(this.ringSum);
     try { this.ringCarrier.start(); } catch {}
 
-    // ── wave folder (native waveshaper, parallel wet/dry crossfade) ──
-    // Drive into a folder curve that reflects the signal back when it leaves
-    // [-1, 1]. Distinct from fuzz: fuzz clips, the folder reflects, so it adds
-    // upper harmonics in a "Buchla west-coast" way.
-    if (!config.shaper) config.shaper = { wet: 0, amount: 0.5 };
+    // ── wave shaper (native waveshaper, parallel wet/dry crossfade) ──
+    // Mode picks the nonlinearity (saturate / softclip / clip / serge / fold /
+    // wrap); amount is the drive baked into the curve. Sits between ring mod
+    // and crusher so it shapes the ring-modulated signal.
+    if (!config.shaper) config.shaper = { wet: 0, amount: 0.5, mode: "fold" };
+    if (!config.shaper.mode) config.shaper.mode = "fold";
     this.shaperDryBus = ctx.createGain();
     this.shaperWetBus = ctx.createGain();
     this.shaperSum    = ctx.createGain();
-    this.shaperDrive  = ctx.createGain();
-    this.shaperDrive.gain.value = 1 + (config.shaper.amount ?? 0.5) * 8;
     this.shaperNode   = ctx.createWaveShaper();
-    this.shaperNode.curve = makeFolderCurve(config.shaper.amount ?? 0.5);
+    this.shaperNode.curve = makeShaperCurve(config.shaper.mode, config.shaper.amount ?? 0.5);
     this.shaperNode.oversample = "2x";
     this.shaperPost = ctx.createGain();
-    this.shaperPost.gain.value = 0.7;  // compensate for folder gain buildup
+    this.shaperPost.gain.value = 0.85;  // small trim — the curve outputs already clamp to ±1
     this.ringSum.connect(this.shaperDryBus);
-    this.ringSum.connect(this.shaperDrive);
-    this.shaperDrive.connect(this.shaperNode);
+    this.ringSum.connect(this.shaperNode);
     this.shaperNode.connect(this.shaperPost);
     this.shaperPost.connect(this.shaperWetBus);
     this.shaperDryBus.connect(this.shaperSum);
@@ -1679,17 +1715,19 @@ class FXRack {
     }
   }
 
-  applyWaveShaper({ wet, amount }) {
-    if (!this.config.shaper) this.config.shaper = { wet: 0, amount: 0.5 };
+  applyWaveShaper({ wet, amount, mode }) {
+    if (!this.config.shaper) this.config.shaper = { wet: 0, amount: 0.5, mode: "fold" };
     if (wet !== undefined) {
       this.config.shaper.wet = wet;
       this.shaperDryBus.gain.value = 1 - wet;
       this.shaperWetBus.gain.value = wet;
     }
-    if (amount !== undefined) {
-      this.config.shaper.amount = amount;
-      try { this.shaperDrive.gain.value = 1 + amount * 8; } catch {}
-      try { this.shaperNode.curve = makeFolderCurve(amount); } catch {}
+    if (amount !== undefined) this.config.shaper.amount = amount;
+    if (mode !== undefined && SHAPER_MODES.includes(mode)) this.config.shaper.mode = mode;
+    if (amount !== undefined || mode !== undefined) {
+      try {
+        this.shaperNode.curve = makeShaperCurve(this.config.shaper.mode, this.config.shaper.amount);
+      } catch {}
     }
   }
 
@@ -1844,7 +1882,6 @@ class FXRack {
     try { this.shaperDryBus.disconnect(); } catch {}
     try { this.shaperWetBus.disconnect(); } catch {}
     try { this.shaperSum.disconnect(); } catch {}
-    try { this.shaperDrive.disconnect(); } catch {}
     try { this.shaperNode.disconnect(); } catch {}
     try { this.shaperPost.disconnect(); } catch {}
     try { this.flangerIn.disconnect(); } catch {}
@@ -3453,8 +3490,10 @@ function applySetterLfoValue(t, key, v) {
       try { rack.cassetteSat.curve = makeCassetteSatCurve(v); } catch {}
       return;
     case "shaper_amt":
-      try { rack.shaperDrive.gain.value = 1 + v * 8; } catch {}
-      try { rack.shaperNode.curve = makeFolderCurve(v); } catch {}
+      try {
+        const mode = rack.config?.shaper?.mode ?? "fold";
+        rack.shaperNode.curve = makeShaperCurve(mode, v);
+      } catch {}
       return;
     case "autowah_sens":
       try { rack.autowah.sensitivity = -10 - v * 30; } catch {}
@@ -5327,7 +5366,8 @@ function refreshFxPanelUI(t) {
   if (!cfg.phaser)     cfg.phaser     = { wet: 0, rate: 0.3, depth: 0.5 };
   if (!cfg.flanger)    cfg.flanger    = { wet: 0, rate: 0.3, fbk: 0.5 };
   if (!cfg.pitchshift) cfg.pitchshift = { wet: 0, semitones: 0 };
-  if (!cfg.shaper)     cfg.shaper     = { wet: 0, amount: 0.5 };
+  if (!cfg.shaper)     cfg.shaper     = { wet: 0, amount: 0.5, mode: "fold" };
+  if (!cfg.shaper.mode) cfg.shaper.mode = "fold";
   const q = s => panel.querySelector(s);
   const set = (sel, v) => { const el = q(sel); if (el != null && v != null) el.value = v; };
   set(".fx-vinyl-amount",    cfg.vinyl.amount);
@@ -5344,6 +5384,7 @@ function refreshFxPanelUI(t) {
   set(".fx-ringmod-freq",     cfg.ringmod.freq);
   set(".fx-shaper-wet",       cfg.shaper.wet);
   set(".fx-shaper-amt",       cfg.shaper.amount);
+  set(".fx-shaper-mode",      cfg.shaper.mode);
   set(".fx-autowah-wet",      cfg.autowah.wet);
   set(".fx-autowah-sens",     cfg.autowah.sens);
   set(".fx-autowah-range",    cfg.autowah.range);
@@ -5383,7 +5424,8 @@ function wireFxPanel(t, panel) {
   if (!fc.phaser)     fc.phaser     = { wet: 0, rate: 0.3, depth: 0.5 };
   if (!fc.flanger)    fc.flanger    = { wet: 0, rate: 0.3, fbk: 0.5 };
   if (!fc.pitchshift) fc.pitchshift = { wet: 0, semitones: 0 };
-  if (!fc.shaper)     fc.shaper     = { wet: 0, amount: 0.5 };
+  if (!fc.shaper)     fc.shaper     = { wet: 0, amount: 0.5, mode: "fold" };
+  if (!fc.shaper.mode) fc.shaper.mode = "fold";
   const set = (sel, v) => { const el = q(sel); if (el != null && v != null) el.value = v; };
   set(".fx-vinyl-amount",    fc.vinyl.amount);
   set(".fx-vinyl-warmth",    fc.vinyl.warmth);
@@ -5399,6 +5441,7 @@ function wireFxPanel(t, panel) {
   set(".fx-ringmod-freq",     fc.ringmod.freq);
   set(".fx-shaper-wet",       fc.shaper.wet);
   set(".fx-shaper-amt",       fc.shaper.amount);
+  set(".fx-shaper-mode",      fc.shaper.mode);
   set(".fx-autowah-wet",      fc.autowah.wet);
   set(".fx-autowah-sens",     fc.autowah.sens);
   set(".fx-autowah-range",    fc.autowah.range);
@@ -5450,6 +5493,8 @@ function wireFxPanel(t, panel) {
   const applyWaveShaper = () => {
     fc.shaper.wet    = Number(q(".fx-shaper-wet").value);
     fc.shaper.amount = Number(q(".fx-shaper-amt").value);
+    const ms = q(".fx-shaper-mode");
+    if (ms) fc.shaper.mode = ms.value;
     t.fxRack?.applyWaveShaper(fc.shaper);
   };
   const applyAutoWah = () => {
@@ -5507,6 +5552,7 @@ function wireFxPanel(t, panel) {
   ["amount","drive","tone","level"].forEach(n => q(`.fx-fuzz-${n}`).addEventListener("input", applyFuzz));
   ["wet","freq"].forEach(n => q(`.fx-ringmod-${n}`)?.addEventListener("input", applyRingMod));
   ["wet","amt"].forEach(n => q(`.fx-shaper-${n}`)?.addEventListener("input", applyWaveShaper));
+  q(".fx-shaper-mode")?.addEventListener("change", applyWaveShaper);
   ["wet","sens","range"].forEach(n => q(`.fx-autowah-${n}`)?.addEventListener("input", applyAutoWah));
   ["wet","rate","depth"].forEach(n => q(`.fx-chorus-${n}`)?.addEventListener("input", applyChorus));
   ["wet","rate","depth"].forEach(n => q(`.fx-phaser-${n}`)?.addEventListener("input", applyPhaser));
