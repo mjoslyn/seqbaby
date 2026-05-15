@@ -608,6 +608,7 @@ const state = {
   nextId: 1,
   metronome: false,
   noteColors: false,  // diatonic pitch-class coloring on the roll + step grid
+  currentSetName: null,  // last loaded/saved session name — drives version-bump suggestions
   audioCtx: null,
   ready: false,
   masterGain: null,
@@ -810,13 +811,38 @@ async function onSaveSet() {
   const suggested = suggestSetName();
   const name = await showInputDialog({ title: "save set as", defaultValue: suggested, placeholder: "my-session" });
   if (!name || !name.trim()) return;
+  const finalName = name.trim();
   const all = loadSetsMap();
-  all[name.trim()] = serializeSet();
+  all[finalName] = serializeSet();
   storeSetsMap(all);
-  setStatus(`saved set "${name.trim()}"`);
+  state.currentSetName = finalName;  // bump the version basis for the next save
+  setStatus(`saved set "${finalName}"`);
 }
 
+// Suggest the next save name. If a session is already loaded/saved under some
+// name, bump its "vN" suffix (or append "v2"); look at every existing saved
+// set with the same stem so successive saves stay on the highest free version.
+// Fresh sessions get a random kenning + 3-char token.
 function suggestSetName() {
+  const cur = state.currentSetName;
+  if (cur && cur.trim()) {
+    const baseM = cur.match(/^(.*?)\s*v(\d+)\s*$/i);
+    const stem = (baseM ? baseM[1] : cur).trim();
+    let highest = baseM ? parseInt(baseM[2], 10) : 1;
+    if (stem) {
+      const all = loadSetsMap();
+      const esc = stem.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const re = new RegExp(`^${esc}\\s*v(\\d+)\\s*$`, "i");
+      for (const n of Object.keys(all)) {
+        const m = n.match(re);
+        if (m) {
+          const v = parseInt(m[1], 10);
+          if (v > highest) highest = v;
+        }
+      }
+      return `${stem} v${highest + 1}`;
+    }
+  }
   const FALLBACK = ["midnight-bloom", "hollow-signal", "copper-ritual", "vapor-drift", "salt-echo", "ash-current", "dusk-thread", "neon-hymn", "glass-tide", "bone-glyph"];
   return FALLBACK[Math.floor(Math.random() * FALLBACK.length)] + "-" + shortToken();
 }
@@ -927,6 +953,7 @@ async function onLoadSet() {
     return;
   }
   applySet(all[choice.value]);
+  state.currentSetName = choice.value;  // remember the basis so save-as suggests "name v(N+1)"
 }
 
 function applySet(s) {
