@@ -809,14 +809,32 @@ function serializeSet() {
 
 async function onSaveSet() {
   const suggested = suggestSetName();
-  const name = await showInputDialog({ title: "save set as", defaultValue: suggested, placeholder: "my-session" });
+  const name = await showInputDialog({ title: "save session as", defaultValue: suggested, placeholder: "my-session" });
   if (!name || !name.trim()) return;
   const finalName = name.trim();
   const all = loadSetsMap();
-  all[finalName] = serializeSet();
+  const data = serializeSet();
+  data._savedAt = new Date().toISOString();
+  all[finalName] = data;
   storeSetsMap(all);
   state.currentSetName = finalName;  // bump the version basis for the next save
   setStatus(`saved set "${finalName}"`);
+}
+
+// Short date+time string for the load-session chooser; returns null if the
+// timestamp is missing or unparseable.
+function formatSavedAt(iso) {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return null;
+  try {
+    return d.toLocaleString(undefined, {
+      month: "short", day: "numeric",
+      hour: "numeric", minute: "2-digit",
+    });
+  } catch {
+    return d.toISOString().slice(0, 16).replace("T", " ");
+  }
 }
 
 // Suggest the next save name. If a session is already loaded/saved under some
@@ -943,8 +961,12 @@ function onImportSet() {
 async function onLoadSet() {
   const all = loadSetsMap();
   const names = Object.keys(all).sort();
-  if (!names.length) { setStatus("no saved sets", true); return; }
-  const choice = await showSelectDialog({ title: "load set", options: names });
+  if (!names.length) { setStatus("no saved sessions", true); return; }
+  const options = names.map(name => {
+    const dt = formatSavedAt(all[name]?._savedAt);
+    return { value: name, label: dt ? `${name} — ${dt}` : name };
+  });
+  const choice = await showSelectDialog({ title: "load session", options });
   if (!choice) return;
   if (choice.action === "delete") {
     delete all[choice.value];
@@ -1149,7 +1171,12 @@ function showSelectDialog({ title, options }) {
     const overlay = document.createElement("div");
     overlay.className = "modal-overlay";
     const esc = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
-    const opts = options.map(o => `<option value="${esc(o)}">${esc(o)}</option>`).join("");
+    // Options may be plain strings or `{label, value}` objects.
+    const opts = options.map(o => {
+      const value = typeof o === "string" ? o : o.value;
+      const label = typeof o === "string" ? o : (o.label ?? o.value);
+      return `<option value="${esc(value)}">${esc(label)}</option>`;
+    }).join("");
     overlay.innerHTML = `
       <div class="modal" role="dialog" aria-modal="true">
         <div class="modal-title">${esc(title)}</div>
