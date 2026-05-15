@@ -4859,21 +4859,34 @@ function anchorCovering(t, idx) {
   return -1;
 }
 
+// Stash the most recently set pitch on the pattern so new steps can inherit
+// it. Pure user-intent writes only (skips clears, bulk octave shifts, etc.).
+function rememberLastNote(t, midi) {
+  if (midi == null || !Number.isFinite(midi)) return;
+  const idx = t._patternIdx ?? state.activePattern;
+  const p = t.patterns?.[idx];
+  if (p) p._lastNote = midi;
+}
+
 function startNote(t, anchor) {
   clearRange(t, anchor, anchor, -1);
   t.steps[anchor] = 1;
   t.lengths[anchor] = 1;
   if (t.notes[anchor] == null) {
-    // Drum-kit tracks default every new step to C2 regardless of scale. The
-    // pitching baseline for their samples is also C2 so that's natural pitch.
-    // Other tracks default to the selected key's root in octave 3 — even when
-    // scale-active is off, the picked key is the natural starting pitch.
+    // Drum-kit tracks default every new step to C2 regardless of scale.
+    // Other tracks default to the most recently set pitch in this pattern,
+    // falling back to the selected key's root in octave 3 — so a melody you
+    // sketched in F# keeps tracking F#-relative pitches as you add steps.
     if (t.isDrumKit) {
       t.notes[anchor] = 36; // C2
     } else {
-      t.notes[anchor] = 48 + (state.scale.root | 0);
+      const last = t.patterns?.[t._patternIdx ?? state.activePattern]?._lastNote;
+      t.notes[anchor] = (last != null && Number.isFinite(last))
+        ? last
+        : 48 + (state.scale.root | 0);
     }
   }
+  rememberLastNote(t, t.notes[anchor]);
   applySampleDefaultsToStep(t, anchor);
 }
 
@@ -6138,6 +6151,7 @@ function renderRollPanel(t, panel) {
         if (!t.steps[target]) startNote(t, target);
         t.notes[target] = note;
         t.velocities[target] = 1;
+        rememberLastNote(t, note);
         paintRange(target, target + Math.max(1, t.lengths[target] || 1) - 1);
         renderStepGrid(t);
       });
@@ -6177,6 +6191,7 @@ function renderRollPanel(t, panel) {
     // empty cell → start a fresh note with anchor here; drag extends it
     startNote(t, step);
     t.notes[step] = note;
+    rememberLastNote(t, note);
     drag = { mode: "create", anchor: step, lastEnd: step, moved: false, pointerId: e.pointerId };
     panel._rollDragActive = true;
     try { grid.setPointerCapture(e.pointerId); } catch {}
@@ -6244,6 +6259,7 @@ function renderRollPanel(t, panel) {
     writeStep(newAnchor, drag.origSnap, newNote);
     // Restore length (snap may have come from a single index — explicit set is clearer).
     t.lengths[newAnchor] = len;
+    rememberLastNote(t, newNote);
 
     paintRange(paintLo, paintHi);
     drag.curAnchor = newAnchor;
@@ -6263,6 +6279,7 @@ function renderRollPanel(t, panel) {
           removeNote(t, a);
         } else {
           t.notes[a] = drag.startNote;
+          rememberLastNote(t, drag.startNote);
         }
         paintRange(a, a + len - 1);
         renderStepGrid(t);
@@ -6420,6 +6437,7 @@ function attachGridInteraction(t, grid) {
       target = Math.max(24, Math.min(95, target));
       if (t.notes[drag.anchor] !== target) {
         t.notes[drag.anchor] = target;
+        rememberLastNote(t, target);
         renderStepGrid(t);
       }
       drag.moved = true;   // prevent endDrag from treating this as a click-to-toggle-off
@@ -6734,6 +6752,7 @@ function openStepEditor(t, idx, anchorEl) {
     n = applyScale(n);
     noteInput.value = String(n);
     t.notes[idx] = n;
+    rememberLastNote(t, n);
     const nOct = octaveOf(n);
     if (nOct < viewOctStart || nOct > viewOctStart + VIEW_OCTS - 1) {
       viewOctStart = Math.max(MIN_OCT, Math.min(MAX_OCT - VIEW_OCTS + 1, nOct - 1));
