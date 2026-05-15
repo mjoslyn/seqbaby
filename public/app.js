@@ -452,24 +452,15 @@ function chordNotes(rootMidi, chordType) {
   return tones.map(i => rootMidi + i);
 }
 
-// Map a midi note to a hue (0..360) by its scale-degree position, so the
-// rainbow rotates once over the scale's length. Returns null when no scale is
-// active or the note doesn't sit on a scale degree — callers then fall back
-// to the engine's default accent color.
-function noteScaleHue(midi) {
-  if (!state.scale.active) return null;
-  const intervals = SCALES[state.scale.mode];
-  if (!intervals || !intervals.length) return null;
-  const pc = ((Math.round(midi) - state.scale.root) % 12 + 12) % 12;
-  const EPS = 1e-6;
-  const idx = intervals.findIndex(i => Math.abs(i - pc) < EPS);
-  if (idx < 0) return null;
-  return (idx / intervals.length) * 360;
-}
+// Diatonic note coloring: each chromatic pitch class gets a fixed hue
+// (30° per semitone) so the same note always reads the same color regardless
+// of the chosen key — C red, D yellow, F# cyan, A purple, etc. Active only
+// while a scale is picked so the palette stays tied to a deliberate musical
+// context; falls back to the accent color otherwise.
 function noteColor(midi) {
-  const h = noteScaleHue(midi);
-  if (h == null) return null;
-  return `hsl(${h.toFixed(1)} 72% 56%)`;
+  if (!state.scale.active) return null;
+  const pc = ((Math.round(midi) % 12) + 12) % 12;
+  return `hsl(${pc * 30} 72% 56%)`;
 }
 
 // Does every tone of chordKey (rooted at rootMidi) fall on the active scale?
