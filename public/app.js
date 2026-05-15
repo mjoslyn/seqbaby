@@ -5153,7 +5153,7 @@ function renderTrack(t) {
 
   node.querySelector(".track-len-plus1")?.addEventListener("click", () => {
     const spb = stepsPerBarForMeter(patternMeter(state.activePattern));
-    extendPatternByDuplicate(t, state.activePattern, t.length + spb, { sourceMode: "lastBar", barLen: spb });
+    resizePattern(t, state.activePattern, t.length + spb);
   });
   node.querySelector(".track-len-2x")?.addEventListener("click", () => {
     extendPatternByDuplicate(t, state.activePattern, t.length * 2);
