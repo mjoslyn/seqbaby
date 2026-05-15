@@ -159,6 +159,9 @@ button.danger { color: var(--danger); }
 
 #metronome[aria-pressed="true"] { background: var(--accent); color: #0b0d10; border-color: var(--accent); }
 #metronome[aria-pressed="true"] .btn-icon { color: #0b0d10; }
+/* Palette toggle: full color when on, desaturated when off. */
+#note-colors .btn-icon { transition: filter 80ms linear, opacity 80ms linear; }
+#note-colors[aria-pressed="false"] .btn-icon { filter: grayscale(1); opacity: 0.55; }
 
 .track-oct { display: inline-flex; gap: 2px; }
 .track-oct button { padding: 3px 8px; font-size: 11px; min-width: 44px; }

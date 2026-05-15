@@ -457,8 +457,11 @@ function chordNotes(rootMidi, chordType) {
 
 // Diatonic note coloring: each chromatic pitch class gets a fixed hue
 // (30° per semitone) so the same note always reads the same color regardless
-// of key — C red, D yellow, F# cyan, A purple, etc.
+// of key — C red, D yellow, F# cyan, A purple, etc. Gated by the palette
+// toggle (state.noteColors); returns null when off so callers fall back to
+// the accent color.
 function noteColor(midi) {
+  if (!state.noteColors) return null;
   if (midi == null || !Number.isFinite(midi)) return null;
   const pc = ((Math.round(midi) % 12) + 12) % 12;
   return `hsl(${pc * 30} 72% 56%)`;
@@ -492,6 +495,9 @@ const ICON_SAVE     = `<svg class="btn-icon" viewBox="0 0 16 16" width="14" heig
 const ICON_LOAD     = `<svg class="btn-icon" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 4a1 1 0 0 1 1-1h3l2 2h5a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V4z"/></svg>`;
 // Classic metronome — trapezoidal body + pendulum swung slightly right.
 const ICON_METRONOME = `<svg class="btn-icon" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 14h6l-1-11H6z"/><line x1="10.6" y1="3.2" x2="5.4" y2="13.5"/><circle cx="7" cy="10" r="0.9" fill="currentColor" stroke="none"/></svg>`;
+// Painter's palette with four colored dots — paints when "on", greys when "off"
+// (CSS handles the desaturation via aria-pressed).
+const ICON_PALETTE = `<svg class="btn-icon" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M8 1.5c-3.6 0-6.5 2.7-6.5 6S4.4 13.5 8 13.5c.9 0 1.5-.5 1.5-1.2 0-.5-.3-.9-.3-1.4 0-.7.6-1.2 1.3-1.2h1c2 0 3.5-1.4 3.5-3.3 0-2.7-3-4.9-7-4.9z" fill="none" stroke="currentColor" stroke-width="1.2"/><circle cx="5" cy="5.2" r="1.05" fill="hsl(0 72% 56%)"/><circle cx="9.5" cy="3.8" r="1.05" fill="hsl(60 72% 56%)"/><circle cx="11.9" cy="6.6" r="1.05" fill="hsl(180 72% 56%)"/><circle cx="4.6" cy="9.2" r="1.05" fill="hsl(270 72% 56%)"/></svg>`;
 // Download — arrow into a tray.
 const ICON_DOWNLOAD = `<svg class="btn-icon" viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2v8"/><polyline points="5 7 8 10 11 7"/><path d="M2.5 13h11"/></svg>`;
 
@@ -598,6 +604,7 @@ const state = {
   repeatId: null,
   nextId: 1,
   metronome: false,
+  noteColors: true,   // diatonic pitch-class coloring on the roll + step grid
   audioCtx: null,
   ready: false,
   masterGain: null,
@@ -7596,6 +7603,18 @@ function initScaleUI() {
   on.addEventListener("change", () => { state.scale.active = on.checked; refreshOnScaleChange(); });
   root.addEventListener("change", () => { state.scale.root = Number(root.value); refreshOnScaleChange(); });
   mode.addEventListener("change", () => { state.scale.mode = mode.value; refreshOnScaleChange(); });
+
+  // Palette toggle — diatonic pitch-class coloring on/off.
+  const palBtn = document.getElementById("note-colors");
+  if (palBtn) {
+    palBtn.innerHTML = ICON_PALETTE;
+    palBtn.setAttribute("aria-pressed", String(state.noteColors));
+    palBtn.addEventListener("click", () => {
+      state.noteColors = !state.noteColors;
+      palBtn.setAttribute("aria-pressed", String(state.noteColors));
+      refreshOnScaleChange();
+    });
+  }
 }
 
 // ---- init --------------------------------------------------------------
