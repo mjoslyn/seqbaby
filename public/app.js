@@ -6188,11 +6188,15 @@ function renderRollPanel(t, panel) {
       e.preventDefault();
       return;
     }
-    // empty cell → start a fresh note with anchor here; drag extends it
+    // empty cell → start a fresh note with anchor here. startNote() defaults
+    // the pitch to the pattern's _lastNote (falling back to key root), so a
+    // dragged-up pitch carries across to the next click. Drag horizontally
+    // to extend; drag vertically to re-pitch (handled in pointermove below).
     startNote(t, step);
-    t.notes[step] = note;
-    rememberLastNote(t, note);
-    drag = { mode: "create", anchor: step, lastEnd: step, moved: false, pointerId: e.pointerId };
+    drag = {
+      mode: "create", anchor: step, lastEnd: step,
+      lastNote: t.notes[step], moved: false, pointerId: e.pointerId,
+    };
     panel._rollDragActive = true;
     try { grid.setPointerCapture(e.pointerId); } catch {}
     paintColumn(step);
@@ -6212,13 +6216,27 @@ function renderRollPanel(t, panel) {
     }
 
     if (drag.mode === "create") {
-      if (step === drag.lastEnd) return;
-      const newEnd = Math.max(drag.anchor, step);
-      extendNote(t, drag.anchor, newEnd);
-      paintRange(drag.anchor, Math.max(drag.lastEnd, newEnd));
-      drag.lastEnd = newEnd;
-      drag.moved = true;
-      renderStepGrid(t);
+      let dirty = false;
+      // Horizontal motion extends the note's length.
+      if (step !== drag.lastEnd) {
+        const newEnd = Math.max(drag.anchor, step);
+        extendNote(t, drag.anchor, newEnd);
+        drag.lastEnd = newEnd;
+        dirty = true;
+      }
+      // Vertical motion re-pitches the in-progress note to whichever row the
+      // pointer is hovering. Updates _lastNote so the NEXT click inherits it.
+      if (drag.lastNote == null || Math.abs(note - drag.lastNote) > EPS) {
+        t.notes[drag.anchor] = note;
+        drag.lastNote = note;
+        rememberLastNote(t, note);
+        dirty = true;
+      }
+      if (dirty) {
+        paintRange(drag.anchor, drag.anchor + Math.max(1, t.lengths[drag.anchor] || 1) - 1);
+        drag.moved = true;
+        renderStepGrid(t);
+      }
       return;
     }
 
