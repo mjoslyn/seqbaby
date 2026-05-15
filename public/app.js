@@ -604,7 +604,7 @@ const state = {
   repeatId: null,
   nextId: 1,
   metronome: false,
-  noteColors: true,   // diatonic pitch-class coloring on the roll + step grid
+  noteColors: false,  // diatonic pitch-class coloring on the roll + step grid
   audioCtx: null,
   ready: false,
   masterGain: null,
