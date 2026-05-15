@@ -960,8 +960,18 @@ function onImportSet() {
 
 async function onLoadSet() {
   const all = loadSetsMap();
-  const names = Object.keys(all).sort();
+  const names = Object.keys(all);
   if (!names.length) { setStatus("no saved sessions", true); return; }
+  // Sort newest-first by _savedAt; sessions saved before timestamps existed
+  // (no _savedAt) sink to the bottom, then alpha-sorted among themselves.
+  names.sort((a, b) => {
+    const ta = Date.parse(all[a]?._savedAt ?? "");
+    const tb = Date.parse(all[b]?._savedAt ?? "");
+    const va = Number.isFinite(ta) ? ta : -Infinity;
+    const vb = Number.isFinite(tb) ? tb : -Infinity;
+    if (vb !== va) return vb - va;
+    return a.localeCompare(b);
+  });
   const options = names.map(name => {
     const dt = formatSavedAt(all[name]?._savedAt);
     return { value: name, label: dt ? `${name} — ${dt}` : name };
