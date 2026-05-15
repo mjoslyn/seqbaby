@@ -13,26 +13,6 @@
   port = 8888
 
 [[redirects]]
-  from = "/api/generate"
-  to   = "/.netlify/functions/generate"
-  status = 200
-
-[[redirects]]
-  from = "/api/plan"
-  to   = "/.netlify/functions/plan"
-  status = 200
-
-[[redirects]]
-  from = "/api/sound"
-  to   = "/.netlify/functions/sound"
-  status = 200
-
-[[redirects]]
-  from = "/api/eleven-sound"
-  to   = "/.netlify/functions/eleven-sound"
-  status = 200
-
-[[redirects]]
   from = "/api/share"
   to   = "/.netlify/functions/share"
   status = 200

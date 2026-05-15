@@ -42,7 +42,6 @@
     <svg id="beat-indicator" class="beat-indicator" viewBox="-22 -22 44 44" width="40" height="40" aria-hidden="true"></svg>
     <div class="meter master-meter" title="master output level"><div class="meter-bar"></div></div>
     <div id="status" class="status">click play to unlock audio</div>
-    <button id="gen-cancel" class="ghost danger" hidden title="cancel the running generation">cancel</button>
   </header>
 
   <div class="pattern-bar">
@@ -82,21 +81,6 @@
     <div id="pattern-grid" class="pattern-grid"></div>
   </div>
 
-  <div class="master-prompt">
-    <textarea id="master-prompt" rows="1" placeholder="describe the whole pattern — dark dub techno in Cm, loose broken boom-bap, etc."></textarea>
-    <button id="gen-pattern" class="ghost gen-toggle-btn" aria-pressed="true" title="toggle: regenerate step patterns">pattern</button>
-    <button id="gen-instruments" class="ghost gen-toggle-btn" data-state="on" title="off → on (reshape for current gen) → all (swap instruments in place across every pattern). Locks are always honored.">instruments</button>
-    <select id="gen-sound-engine" class="gen-sound-engine" title="which engine to use when designing sounds">
-      <option value="tone" selected>tone.js</option>
-      <option value="eleven">eleven labs</option>
-    </select>
-    <label class="gen-count-wrap" title="bars per generated pattern (each bar = 16 steps)"><span>bars</span><input id="gen-bars" type="number" min="1" max="8" value="1" /></label>
-    <label class="gen-count-wrap" title="generate N patterns; extras are variations using the same instruments, starting from the selected pattern"><span>×</span><input id="gen-count" type="number" min="1" max="4" value="1" /></label>
-    <button id="master-prompt-go" title="plan and (re)generate every unlocked track for the current pattern">generate</button>
-    <button id="master-undo" class="ghost" hidden title="undo last generate">undo</button>
-    <button id="master-variate-go" title="variate the current pattern into the next N slots (same instruments)">variate</button>
-  </div>
-
   <main id="tracks"></main>
 
   <template id="track-template">
@@ -104,10 +88,8 @@
       <div class="track-head">
         <input class="track-name" type="text" placeholder="track" />
         <select class="track-engine"></select>
-        <button class="track-sound ai-btn ghost" title="prompt a custom Tone.js synth patch"><span class="ai-icon"></span><span class="ai-label">sound</span></button>
-        <button class="track-lock-inst icon-btn ghost" aria-pressed="false" aria-label="lock instrument" title="lock instrument — protect engine/patch from the planner"></button>
-        <button class="track-pattern ai-btn ghost" title="prompt a step pattern for this track"><span class="ai-icon"></span><span class="ai-label">pattern</span></button>
-        <button class="track-lock-pat icon-btn ghost" aria-pressed="false" aria-label="lock pattern" title="lock pattern — protect step data from the planner"></button>
+        <button class="track-lock-inst icon-btn ghost" aria-pressed="false" aria-label="lock instrument" title="lock instrument"></button>
+        <button class="track-lock-pat icon-btn ghost" aria-pressed="false" aria-label="lock pattern" title="lock pattern"></button>
         <button class="track-save icon-btn ghost" aria-label="save patch" title="save the current custom patch"></button>
         <button class="track-load-patch icon-btn ghost" aria-label="load patch" title="load a saved patch into this track"></button>
         <div class="field"><label>len</label><input class="track-len" type="number" min="1" max="128" value="16" /></div>
@@ -191,6 +173,7 @@
         <button class="track-solo ghost" aria-pressed="false" title="solo">solo</button>
         <button class="track-mute ghost">mute</button>
         <button class="track-clear ghost">clear</button>
+        <button class="track-dup ghost" type="button" title="duplicate this track">dup</button>
         <button class="track-remove ghost danger">remove</button>
         <div class="track-oct">
           <button class="track-oct-down ghost" type="button" title="shift every step down an octave">oct −</button>

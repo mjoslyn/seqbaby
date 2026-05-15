@@ -1,7 +1,7 @@
 import { createServer } from "node:http";
 import { readFile, stat } from "node:fs/promises";
 import { extname, join, resolve } from "node:path";
-import { generate, plan, designSound, elevenSound, putShare, getShare } from "./lib/api.js";
+import { putShare, getShare } from "./lib/api.js";
 
 const PORT = Number(process.env.PORT ?? 5173);
 const PUBLIC_DIR = resolve("public");
@@ -39,30 +39,6 @@ async function readJson(req) {
 
 const server = createServer(async (req, res) => {
   try {
-    if (req.method === "POST" && req.url === "/api/generate") {
-      const out = await generate(await readJson(req));
-      res.writeHead(200, { "content-type": "application/json" });
-      res.end(JSON.stringify(out));
-      return;
-    }
-    if (req.method === "POST" && req.url === "/api/plan") {
-      const out = await plan(await readJson(req));
-      res.writeHead(200, { "content-type": "application/json" });
-      res.end(JSON.stringify(out));
-      return;
-    }
-    if (req.method === "POST" && req.url === "/api/sound") {
-      const out = await designSound(await readJson(req));
-      res.writeHead(200, { "content-type": "application/json" });
-      res.end(JSON.stringify(out));
-      return;
-    }
-    if (req.method === "POST" && req.url === "/api/eleven-sound") {
-      const out = await elevenSound(await readJson(req));
-      res.writeHead(200, { "content-type": "application/json" });
-      res.end(JSON.stringify(out));
-      return;
-    }
     if (req.method === "POST" && req.url === "/api/share") {
       const body = await readJson(req);
       const out = await putShare(body);

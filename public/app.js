@@ -13,7 +13,7 @@ const LFO_KEYS = [
   // FX wets/amts (short keys preserved for backward compat).
   "fuzz", "delay", "verb",
   "vinyl", "cassette", "ringmod", "crush", "autowah", "chorus", "phaser", "flanger", "pitch",
-  // FX sub-params with AudioParam / Signal targets (modulatable).
+  // FX sub-params with AudioParam / Signal targets (audio-rate modable).
   "fuzz_drive", "fuzz_tone", "fuzz_level",
   "vinyl_warmth",
   "ring_freq",
@@ -22,6 +22,13 @@ const LFO_KEYS = [
   "phaser_rate",
   "flanger_rate", "flanger_fbk",
   "delay_time", "delay_fbk",
+  // FX sub-params modulated via setter-driven LFO (no AudioParam target).
+  "vinyl_wow",
+  "cassette_flutter", "cassette_sat",
+  "autowah_sens", "autowah_range",
+  "phaser_depth",
+  "pitch_semi",
+  "reverb_decay",
 ];
 // How much each target swings per unit of depth:
 //  - 0..1 unit params: amp = depth/2 (swings ±0.5)
@@ -35,12 +42,17 @@ const LFO_LABELS = {
   crush: "bitcrush wet", autowah: "auto-wah wet", chorus: "chorus wet",
   phaser: "phaser wet", flanger: "flanger wet", pitch: "pitch shift wet",
   fuzz_drive: "fuzz drive", fuzz_tone: "fuzz tone", fuzz_level: "fuzz level",
-  vinyl_warmth: "vinyl warmth", ring_freq: "ring mod freq",
+  vinyl_warmth: "vinyl warmth", vinyl_wow: "vinyl wow",
+  cassette_flutter: "cassette flutter", cassette_sat: "cassette sat",
+  ring_freq: "ring mod freq",
   crush_bits: "bitcrush bits",
+  autowah_sens: "auto-wah sens", autowah_range: "auto-wah range",
   chorus_rate: "chorus rate", chorus_depth: "chorus depth",
-  phaser_rate: "phaser rate",
+  phaser_rate: "phaser rate", phaser_depth: "phaser depth",
   flanger_rate: "flanger rate", flanger_fbk: "flanger fbk",
+  pitch_semi: "pitch semi",
   delay_time: "delay time", delay_fbk: "delay fbk",
+  reverb_decay: "reverb decay",
 };
 const lfoLabel = (k) => LFO_LABELS[k] ?? k;
 const LFO_AMP_SCALE = {
@@ -49,7 +61,7 @@ const LFO_AMP_SCALE = {
   reson: 15,
   fuzz: 1, delay: 1, verb: 1,
   vinyl: 1, cassette: 1, ringmod: 1, crush: 1, autowah: 1, chorus: 1, phaser: 1, flanger: 1, pitch: 1,
-  // fx sub-params
+  // fx sub-params (audio-rate AudioParam targets)
   fuzz_drive: 30,         // +/- 15 on the gain unit (drive path gain is 1+drive*30)
   fuzz_tone: 4000,        // Hz around tone filter cutoff (200..8000)
   fuzz_level: 1,
@@ -57,31 +69,19 @@ const LFO_AMP_SCALE = {
   ring_freq: 1500,        // Hz
   crush_bits: 8,           // bits swing (1..16)
   chorus_rate: 4,          // Hz
-  chorus_depth: 1,
   phaser_rate: 3,          // Hz
   flanger_rate: 3,         // Hz
   flanger_fbk: 0.8,
   delay_time: 0.3,         // seconds
   delay_fbk: 0.8,
+  // fx sub-params modulated via setter LFO (0..1 swing around the user's base value)
+  vinyl_wow: 1, cassette_flutter: 1, cassette_sat: 1,
+  autowah_sens: 1, autowah_range: 1,
+  phaser_depth: 1,
+  chorus_depth: 1,
+  pitch_semi: 1,
+  reverb_decay: 1,
 };
-
-const STARTER_PROMPTS = [
-  "dusty lo-fi hip-hop, vinyl crackle, head-nod tempo",
-  "melodic minor techno, hypnotic pulse, 122 bpm",
-  "ambient dub, distant echoes, slow chord swell",
-  "acid house, squelchy 303 bassline, four on the floor",
-  "broken beat, syncopated kicks, off-beat hats",
-  "dark drum and bass, amen feel, sub bass pressure",
-  "minimal clicky techno, spare and dry, ticking clock",
-  "dub techno, long delay on hats, muted chord stabs",
-  "trip-hop, filtered samples, smoky snare",
-  "psychedelic krautrock, motorik drums, modal drone",
-  "cold-wave synths, gated snare, haunted pad",
-  "neo-noir downtempo, moody rhodes, brushy kit",
-];
-function pickStarterPrompt() {
-  return STARTER_PROMPTS[Math.floor(Math.random() * STARTER_PROMPTS.length)];
-}
 
 // Non-blocking prompt dialog (browser prompt() halts the transport scheduler)
 function showInputDialog({ title, defaultValue = "", placeholder = "", multiline = false }) {
@@ -478,8 +478,6 @@ const ICON_LOCKED   = `<svg class="btn-icon" viewBox="0 0 16 16" width="14" heig
 const ICON_UNLOCKED = `<svg class="btn-icon" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="7" width="10" height="7" rx="1.5"/><path d="M5 7V5a3 3 0 0 1 5.4-1.8"/></svg>`;
 const ICON_SAVE     = `<svg class="btn-icon" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 2h8l3 3v9a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z"/><path d="M5 2v4h6V2"/><rect x="5" y="9" width="6" height="5"/></svg>`;
 const ICON_LOAD     = `<svg class="btn-icon" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 4a1 1 0 0 1 1-1h3l2 2h5a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V4z"/></svg>`;
-// Four-point "sparkle" for AI-prompted actions (sound/pattern generate)
-const ICON_SPARKLE  = `<svg class="btn-icon" viewBox="0 0 16 16" width="13" height="13" fill="currentColor" aria-hidden="true"><path d="M10 1 11.2 4.8 15 6 11.2 7.2 10 11 8.8 7.2 5 6 8.8 4.8z"/><path d="M4 9 4.7 10.8 6.5 11.5 4.7 12.2 4 14 3.3 12.2 1.5 11.5 3.3 10.8z"/></svg>`;
 // Classic metronome — trapezoidal body + pendulum swung slightly right.
 const ICON_METRONOME = `<svg class="btn-icon" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 14h6l-1-11H6z"/><line x1="10.6" y1="3.2" x2="5.4" y2="13.5"/><circle cx="7" cy="10" r="0.9" fill="currentColor" stroke="none"/></svg>`;
 // Download — arrow into a tray.
@@ -489,88 +487,6 @@ const ICON_DOWNLOAD = `<svg class="btn-icon" viewBox="0 0 16 16" width="13" heig
 
 const PATTERN_COUNT = 32;
 const BAR_TICKS = 16;  // chain advance resolution
-
-// ---- generation cancellation ------------------------------------------
-
-let genController = null;
-function startGen() {
-  genController?.abort();
-  genController = new AbortController();
-  const btn = document.getElementById("gen-cancel");
-  if (btn) btn.hidden = false;
-  return genController.signal;
-}
-function endGen() {
-  genController = null;
-  const btn = document.getElementById("gen-cancel");
-  if (btn) btn.hidden = true;
-}
-function cancelGen() {
-  const c = genController;
-  genController = null;
-  c?.abort();
-  const btn = document.getElementById("gen-cancel");
-  if (btn) btn.hidden = true;
-  setStatus("cancelled", true);
-}
-function isAbortError(err) {
-  return err && (err.name === "AbortError" || err.code === 20 || /aborted/i.test(String(err.message)));
-}
-function currentSignal() { return genController?.signal; }
-
-// While a prompted-sound or prompted-pattern preview dialog is open, duck
-// every track EXCEPT the focus track to 20% of its current volume. Focus
-// track stays at its configured level so it sits on top of the mix.
-// Restore on exit. Pass `null` for focusTrack to fall back to a master duck.
-let _previewDuckRestore = null;
-function enterPreviewDuck(focusTrack = null) {
-  if (_previewDuckRestore) return;
-  const ctx = state?.audioCtx;
-  if (!ctx) return;
-  const now = ctx.currentTime;
-  const ramp = 0.05;
-  const restoreFns = [];
-  let ducked = false;
-  for (const tr of state.tracks) {
-    if (tr === focusTrack) continue;
-    const param = tr.voice?.getAudioParam?.("vol");
-    if (!param) continue;
-    const prev = param.value;
-    try {
-      param.cancelScheduledValues(now);
-      param.linearRampToValueAtTime(prev * 0.2, now + ramp);
-    } catch {}
-    restoreFns.push(() => {
-      try {
-        param.cancelScheduledValues(ctx.currentTime);
-        param.linearRampToValueAtTime(prev, ctx.currentTime + ramp);
-      } catch {}
-    });
-    ducked = true;
-  }
-  // Fallback: if there's nothing to duck (no focus track or no active voices),
-  // quiet the master so sound-design test previews don't blast in silence.
-  if (!ducked && state.masterGain) {
-    const mg = state.masterGain;
-    const prev = mg.gain.value;
-    try {
-      mg.gain.cancelScheduledValues(now);
-      mg.gain.linearRampToValueAtTime(prev * 0.2, now + ramp);
-    } catch {}
-    restoreFns.push(() => {
-      try {
-        mg.gain.cancelScheduledValues(ctx.currentTime);
-        mg.gain.linearRampToValueAtTime(prev, ctx.currentTime + ramp);
-      } catch {}
-    });
-  }
-  _previewDuckRestore = () => { for (const fn of restoreFns) fn(); };
-}
-function exitPreviewDuck() {
-  if (!_previewDuckRestore) return;
-  _previewDuckRestore();
-  _previewDuckRestore = null;
-}
 
 // Simple sine-blip metronome — accent the downbeat (step 0 of every bar).
 let _metroOsc = null;
@@ -663,48 +579,12 @@ function paintBeatIndicator(tick) {
   if (lbl) lbl.textContent = `${beat}.${sub}`;
 }
 
-// ---- undo for generate actions -----------------------------------------
-// Single-slot undo: every generate (master or per-track) snapshots the full
-// session before running. Undo restores that snapshot. Both master and per-
-// track undo buttons point at the same snapshot.
-function pushUndoSnapshot(label) {
-  try {
-    state.undoSnapshot = { session: serializeSet(), label: String(label || "last generate") };
-  } catch (err) {
-    console.warn("undo snapshot failed", err);
-    state.undoSnapshot = null;
-  }
-  refreshUndoUI();
-}
-function undoLastGenerate() {
-  const snap = state.undoSnapshot;
-  if (!snap) return;
-  state.undoSnapshot = null;
-  try {
-    applySet(snap.session);
-    setStatus(`undid: ${snap.label}`);
-  } catch (err) {
-    console.error(err);
-    setStatus("undo failed — see console", true);
-  }
-  refreshUndoUI();
-}
-function refreshUndoUI() {
-  const has = !!state.undoSnapshot;
-  const m = document.getElementById("master-undo");
-  if (m) {
-    m.hidden = !has;
-    if (has) m.title = `undo: ${state.undoSnapshot.label}`;
-  }
-}
-
 const state = {
   tracks: [],
   playing: false,
   tick: 0,
   repeatId: null,
   nextId: 1,
-  undoSnapshot: null,
   metronome: false,
   audioCtx: null,
   ready: false,
@@ -837,9 +717,6 @@ function switchPattern(idx) {
     refreshAutIfOpen(t);
   }
   renderPatternGrid();
-  // default instruments toggle: on for pattern 1, off for all others (user can still override)
-  const instBtn = document.getElementById("gen-instruments");
-  if (instBtn) instBtn.setAttribute("aria-pressed", String(idx === 0));
   const repInput = document.getElementById("pattern-repeats");
   if (repInput) repInput.value = state.patternRepeats[idx] ?? 1;
   syncMeterUI();
@@ -917,39 +794,9 @@ async function onSaveSet() {
   setStatus(`saved set "${name.trim()}"`);
 }
 
-// Craft a suggested session name from the master prompt + track prompts. Picks
-// evocative words, trims stop-words, and appends a short kenning suffix.
 function suggestSetName() {
-  const STOP = new Set("a an and or but the some of to in on at from for with by is it's this that these those my your our into over under after before out up down through about like as over also very just so not do does did been being be into we they them he she i you".split(" "));
-  const MOODS = ["drift", "bloom", "spell", "cut", "echo", "pulse", "rite", "hymn", "glyph", "current", "signal", "ember", "relic", "knot", "thread", "tide"];
   const FALLBACK = ["midnight-bloom", "hollow-signal", "copper-ritual", "vapor-drift", "salt-echo", "ash-current", "dusk-thread", "neon-hymn", "glass-tide", "bone-glyph"];
-
-  const master = (document.getElementById("master-prompt")?.value || "").trim();
-  const trackPrompts = state.tracks.map(t => (t.promptText || "").trim()).filter(Boolean).join(" ");
-  const source = master || trackPrompts;
-
-  if (!source) {
-    return FALLBACK[Math.floor(Math.random() * FALLBACK.length)] + "-" + shortToken();
-  }
-
-  // Extract evocative words — ≤ 12 chars, not a stop-word, not purely numeric.
-  const words = source.toLowerCase()
-    .replace(/[^a-z0-9\s-]/g, " ")
-    .split(/\s+/)
-    .filter(w => w && w.length <= 12 && w.length >= 3 && !STOP.has(w) && !/^\d+$/.test(w));
-  if (words.length === 0) {
-    return FALLBACK[Math.floor(Math.random() * FALLBACK.length)] + "-" + shortToken();
-  }
-  const picked = [];
-  const seen = new Set();
-  for (const w of words) {
-    if (seen.has(w)) continue;
-    seen.add(w);
-    picked.push(w);
-    if (picked.length === 2) break;
-  }
-  const mood = MOODS[Math.floor(Math.random() * MOODS.length)];
-  return `${picked.join("-")}-${mood}-${shortToken()}`;
+  return FALLBACK[Math.floor(Math.random() * FALLBACK.length)] + "-" + shortToken();
 }
 
 function shortToken() {
@@ -1062,7 +909,6 @@ async function onLoadSet() {
 
 function applySet(s) {
   if (!s) return;
-  state.undoSnapshot = null;
   if (state.playing) {
     Tone.Transport.stop();
     if (state.repeatId !== null) { try { Tone.Transport.clear(state.repeatId); } catch {} state.repeatId = null; }
@@ -1313,7 +1159,6 @@ function copyPattern(from, to) {
 function renderPatternGrid() {
   const grid = document.getElementById("pattern-grid");
   if (!grid) return;
-  refreshVariateButton();
   grid.replaceChildren();
   for (let i = 0; i < PATTERN_COUNT; i++) {
     const cell = document.createElement("button");
@@ -3465,7 +3310,127 @@ const TRACK_FX_LFO_KEYS = new Set([
   "fuzz","delay","verb","vinyl","cassette","ringmod","crush","autowah","chorus","phaser","flanger","pitch",
   "fuzz_drive","fuzz_tone","fuzz_level","vinyl_warmth","ring_freq","crush_bits",
   "chorus_rate","chorus_depth","phaser_rate","flanger_rate","flanger_fbk","delay_time","delay_fbk",
+  // setter-driven (non-AudioParam) FX params
+  "vinyl_wow","cassette_flutter","cassette_sat",
+  "autowah_sens","autowah_range",
+  "phaser_depth","pitch_semi","reverb_decay",
 ]);
+
+// FX params with no AudioParam / Signal handle — driven by a JS-side LFO that
+// polls in a RAF loop and applies values through the corresponding setter.
+const SETTER_LFO_KEYS = new Set([
+  "vinyl_wow","cassette_flutter","cassette_sat",
+  "autowah_sens","autowah_range",
+  "phaser_depth","chorus_depth","pitch_semi","reverb_decay",
+]);
+
+// Read the user's current 0..1 base value for a setter LFO target so the LFO
+// swings AROUND that value instead of overwriting it.
+function setterLfoBase(t, key) {
+  const c = t.fxRack?.config;
+  if (!c) return 0.5;
+  switch (key) {
+    case "vinyl_wow":        return c.vinyl?.wow ?? 0.3;
+    case "cassette_flutter": return c.cassette?.flutter ?? 0.3;
+    case "cassette_sat":     return c.cassette?.sat ?? 0.4;
+    case "autowah_sens":     return c.autowah?.sens ?? 0.5;
+    case "autowah_range":    return c.autowah?.range ?? 0.5;
+    case "phaser_depth":     return c.phaser?.depth ?? 0.5;
+    case "chorus_depth":     return c.chorus?.depth ?? 0.5;
+    case "pitch_semi":       return (((c.pitchshift?.semitones ?? 0) + 12) / 24);
+    case "reverb_decay":     return Math.max(0, Math.min(1, ((c.reverb?.decay ?? 2) - 0.2) / 7.8));
+  }
+  return 0.5;
+}
+
+// Apply a 0..1 LFO value to a setter-only FX target. Pokes the audio graph
+// directly WITHOUT updating rack.config — the user's slider value remains the
+// stored base, and the slider's onInput keeps writing config on user moves.
+function applySetterLfoValue(t, key, v) {
+  const rack = t.fxRack;
+  if (!rack) return;
+  v = Math.max(0, Math.min(1, v));
+  switch (key) {
+    case "vinyl_wow": {
+      const base = 0.005, span = 0.0008 + v * 0.006;
+      try { rack.vinylWowLFO.min = base - span; rack.vinylWowLFO.max = base + span; } catch {}
+      return;
+    }
+    case "cassette_flutter": {
+      const base = 0.003, span = 0.0004 + v * 0.004;
+      try { rack.cassetteFlutterLFO.min = base - span; rack.cassetteFlutterLFO.max = base + span; } catch {}
+      return;
+    }
+    case "cassette_sat":
+      try { rack.cassetteSat.curve = makeCassetteSatCurve(v); } catch {}
+      return;
+    case "autowah_sens":
+      try { rack.autowah.sensitivity = -10 - v * 30; } catch {}
+      return;
+    case "autowah_range":
+      try { rack.autowah.octaves = 1 + v * 4; } catch {}
+      return;
+    case "phaser_depth":
+      try { rack.phaser.octaves = 1 + v * 5; } catch {}
+      return;
+    case "chorus_depth":
+      try { rack.chorus.depth = v; } catch {}
+      return;
+    case "pitch_semi":
+      try { rack.pitchshift.pitch = Math.round(v * 24 - 12); } catch {}
+      return;
+    case "reverb_decay": {
+      // IR rebuild is heavy — only regenerate on perceptible change.
+      const decay = 0.2 + v * 7.8;
+      const cur = rack._lfoReverbDecay ?? rack.config?.reverb?.decay ?? decay;
+      if (Math.abs(decay - cur) > 0.3) {
+        rack._lfoReverbDecay = decay;
+        try { rack.reverb.decay = decay; rack.reverb.generate().catch(() => {}); } catch {}
+      }
+      return;
+    }
+  }
+}
+
+function evalLfoShape(type, phase) {
+  const p = phase - Math.floor(phase);
+  switch (type) {
+    case "sine":     return Math.sin(2 * Math.PI * p);
+    case "triangle": return p < 0.5 ? (p * 4 - 1) : (3 - p * 4);
+    case "sawtooth": return p * 2 - 1;
+    case "square":   return p < 0.5 ? 1 : -1;
+  }
+  return 0;
+}
+
+// One RAF loop drives every active setter LFO across every track.
+let _setterLfoRafId = null;
+function startSetterLfoLoopIfNeeded() {
+  if (_setterLfoRafId != null) return;
+  let lastT = (state.audioCtx?.currentTime ?? performance.now() / 1000);
+  const tick = () => {
+    const now = state.audioCtx?.currentTime ?? performance.now() / 1000;
+    const dt = Math.max(0, Math.min(0.1, now - lastT));
+    lastT = now;
+    let anyActive = false;
+    for (const t of state.tracks) {
+      if (!t.fxRack || !t._setterLfoPhase) continue;
+      for (const key of SETTER_LFO_KEYS) {
+        const cfg = t.lfoConfig[key];
+        if (!cfg?.enabled) continue;
+        anyActive = true;
+        const hz = effectiveRate(cfg);
+        const phase = (t._setterLfoPhase[key] ?? 0) + dt * hz;
+        t._setterLfoPhase[key] = phase;
+        const shape = evalLfoShape(cfg.type || "sine", phase);
+        const base = setterLfoBase(t, key);
+        applySetterLfoValue(t, key, base + shape * (cfg.depth ?? 0) * 0.5);
+      }
+    }
+    _setterLfoRafId = anyActive ? requestAnimationFrame(tick) : null;
+  };
+  _setterLfoRafId = requestAnimationFrame(tick);
+}
 
 // Which modulation keys make sense for the current engine? Voice-independent
 // so the picker hides irrelevant entries even before audio is initialized.
@@ -3493,6 +3458,29 @@ function canModulate(t, key) {
 function syncLFO(t, key) {
   const cfg = t.lfoConfig[key];
   let lfo = t.lfos[key];
+
+  // ── setter-driven LFO path (FX params without an AudioParam target) ──
+  if (SETTER_LFO_KEYS.has(key)) {
+    if (lfo) {
+      try { lfo.stop(); } catch {}
+      try { lfo.disconnect(); } catch {}
+      try { lfo.dispose(); } catch {}
+      t.lfos[key] = null;
+    }
+    if (!cfg.enabled) {
+      if (t._setterLfoPhase && t._setterLfoPhase[key] != null) {
+        delete t._setterLfoPhase[key];
+        // restore base value to the audio graph so the param stops where the slider sits
+        if (t.fxRack) applySetterLfoValue(t, key, setterLfoBase(t, key));
+      }
+      return;
+    }
+    if (!t._setterLfoPhase) t._setterLfoPhase = {};
+    if (t._setterLfoPhase[key] == null) t._setterLfoPhase[key] = 0;
+    startSetterLfoLoopIfNeeded();
+    return;
+  }
+
   if (!cfg.enabled) {
     if (lfo) {
       try { lfo.stop(); } catch {}
@@ -3533,6 +3521,7 @@ function disposeLFOs(t) {
     try { lfo.dispose(); } catch {}
     t.lfos[k] = null;
   }
+  if (t._setterLfoPhase) t._setterLfoPhase = {};
 }
 
 function retuneSyncedLFOs() {
@@ -3810,7 +3799,6 @@ function setParam(t, key, val) {
 
 function updatePlaitsControlsVisibility(t) {
   if (!t.el) return;
-  t._refreshSoundEnabled?.();
   const eng = engineByKey(t.engineKey);
   const engineType = eng?.type;
   const isPlaits = engineType === "plaits";
@@ -3944,30 +3932,6 @@ function resetFxDry(t) {
     t.fxRack.applyCrush(cfg.crush);
   }
   refreshFxPanelUI(t);
-}
-
-// For prompted sounds: start with a clean signal path so the user hears the designed
-// patch as-is. Filter fully open with zero env depth, mod LFOs disabled, fx all dry.
-// Controls remain accessible — just zeroed so they can be dialed in intentionally.
-function resetProcessingForPromptedSound(t) {
-  t.filter.cutoff = 1;
-  t.filter.env = 0;
-  if (t.filterNode) {
-    try {
-      t.filterNode.frequency.cancelScheduledValues(state.audioCtx.currentTime);
-      t.filterNode.frequency.setValueAtTime(cutoffToHz(1), state.audioCtx.currentTime);
-    } catch {}
-  }
-  for (const k of LFO_KEYS) t.lfoConfig[k].enabled = false;
-  if (state.ready) syncAllLFOs(t);
-  resetFxDry(t);
-  const el = t.el;
-  if (el) {
-    const cut = el.querySelector(".p-cutoff"); if (cut) cut.value = 1;
-    const envAmt = el.querySelector(".p-envamt"); if (envAmt) envAmt.value = 0;
-    const modPanel = el.querySelector(".track-mod-panel");
-    if (modPanel) renderModPanel(t, modPanel);
-  }
 }
 
 function setEngineKey(t, newKey) {
@@ -4138,6 +4102,146 @@ function createTrack({ name, engineKey, length = totalSteps() }) {
     routeVoiceToRack(t);
   }
   return t;
+}
+
+// Deep-clone a track's state onto a new track placed after it in DOM +
+// state order. Mirrors the per-track apply logic in applySet: createTrack +
+// field fill + audio rebuild. Audio-node refs / DOM handles aren't copied —
+// they're freshly built. Sample buffers (eleven / upload) are shared since
+// they're immutable decoded AudioBuffers.
+function duplicateTrack(src) {
+  const baseName = (src.name || "track").replace(/\s+copy(\s+\d+)?$/i, "").trim() || "track";
+  const existing = new Set(state.tracks.map(x => x.name));
+  let name = `${baseName} copy`;
+  for (let i = 2; existing.has(name); i++) name = `${baseName} copy ${i}`;
+
+  const dup = createTrack({ name, engineKey: src.engineKey, length: src.length });
+
+  Object.assign(dup.params, src.params);
+  Object.assign(dup.filter, src.filter);
+  Object.assign(dup.eq, src.eq);
+  Object.assign(dup.midi, src.midi);
+  dup.fxConfig = JSON.parse(JSON.stringify(src.fxConfig));
+  dup.comp = JSON.parse(JSON.stringify(src.comp));
+  dup.customConfig = src.customConfig ? JSON.parse(JSON.stringify(src.customConfig)) : null;
+  dup.elevenAudio = src.elevenAudio || null;
+  dup.elevenAudioMime = src.elevenAudioMime || null;
+  dup.elevenBuffer = src.elevenBuffer || null;
+  dup.uploadAudio = src.uploadAudio || null;
+  dup.uploadAudioMime = src.uploadAudioMime || null;
+  dup.uploadFileName = src.uploadFileName || null;
+  dup.uploadBuffer = src.uploadBuffer || null;
+  dup.soundPromptText = src.soundPromptText || "";
+  dup.promptText = src.promptText || "";
+  dup.sampleDefaults = src.sampleDefaults ? { ...src.sampleDefaults } : dup.sampleDefaults;
+  dup.muted = !!src.muted;
+  dup.soloed = !!src.soloed;
+  dup.lockInstrument = !!src.lockInstrument;
+  dup.lockPattern = !!src.lockPattern;
+  dup.isDrumKit = !!src.isDrumKit;
+  dup.glide = src.glide ?? 0;
+  dup.speed = src.speed ?? 1;
+  dup.density = src.density ?? 0.5;
+  dup.sampleSpeedMode = src.sampleSpeedMode ?? "native";
+  for (const k of Object.keys(dup.lfoConfig)) {
+    if (src.lfoConfig?.[k]) dup.lfoConfig[k] = { ...src.lfoConfig[k] };
+  }
+  for (let i = 0; i < PATTERN_COUNT; i++) {
+    const sp = src.patterns[i];
+    if (!sp) continue;
+    const automation = {};
+    for (const [key, lane] of Object.entries(sp.automation || {})) {
+      automation[key] = { enabled: !!lane.enabled, values: (lane.values || []).slice() };
+    }
+    dup.patterns[i] = {
+      steps: sp.steps.slice(),
+      lengths: sp.lengths.slice(),
+      notes: sp.notes.slice(),
+      velocities: sp.velocities.slice(),
+      chords: sp.chords.slice(),
+      offsets: (sp.offsets || []).slice(),
+      arps: (sp.arps || []).slice(),
+      arpRates: (sp.arpRates || []).slice(),
+      arpRanges: (sp.arpRanges || []).slice(),
+      arpDirs: (sp.arpDirs || []).slice(),
+      complexities: (sp.complexities || []).slice(),
+      ratchets: (sp.ratchets || []).slice(),
+      sampleStarts: (sp.sampleStarts || []).slice(),
+      sampleEnds: (sp.sampleEnds || []).slice(),
+      sampleFadeIns: (sp.sampleFadeIns || []).slice(),
+      sampleFadeOuts: (sp.sampleFadeOuts || []).slice(),
+      sampleLoopModes: (sp.sampleLoopModes || []).slice(),
+      automation,
+    };
+  }
+  aliasPattern(dup, state.activePattern);
+
+  if (dup.el) {
+    const q = sel => dup.el.querySelector(sel);
+    q(".track-name").value = dup.name;
+    q(".track-len").value = dup.length;
+    q(".track-engine").value = dup.engineKey;
+    const spd = q(".track-speed"); if (spd) spd.value = String(dup.speed);
+    q(".p-vol").value = dup.params.vol;
+    q(".p-harm").value = dup.params.harm;
+    q(".p-timb").value = dup.params.timb;
+    q(".p-morph").value = dup.params.morph;
+    q(".p-decay").value = dup.params.decay;
+    q(".p-cutoff").value = dup.filter.cutoff;
+    q(".p-reson").value = dup.filter.reson;
+    q(".p-envamt").value = dup.filter.env;
+    q(".p-envatk").value = dup.filter.attack;
+    q(".p-envdec").value = dup.filter.decay;
+    q(".p-envsus").value = dup.filter.sustain;
+    q(".p-envrel").value = dup.filter.release;
+    dup.el.classList.toggle("muted", dup.muted);
+    dup.el.classList.toggle("soloed", dup.soloed);
+    q(".track-solo")?.setAttribute("aria-pressed", String(dup.soloed));
+    refreshFxPanelUI(dup);
+    renderModPanel(dup, dup.el.querySelector(".track-mod-panel"));
+  }
+
+  // Move the duplicate right after the source in DOM + state order.
+  const srcIdx = state.tracks.indexOf(src);
+  if (srcIdx >= 0 && srcIdx < state.tracks.length - 1) {
+    state.tracks.pop();
+    state.tracks.splice(srcIdx + 1, 0, dup);
+    src.el.parentNode.insertBefore(dup.el, src.el.nextSibling);
+  }
+
+  if (state.ready) {
+    disposeLFOs(dup);
+    if (dup.voice) dup.voice.dispose();
+    ensureFxRack(dup);
+    if (dup.fxRack) {
+      if (dup.fxConfig.vinyl)      dup.fxRack.applyVinyl(dup.fxConfig.vinyl);
+      if (dup.fxConfig.cassette)   dup.fxRack.applyCassette(dup.fxConfig.cassette);
+      dup.fxRack.applyFuzz(dup.fxConfig.fuzz);
+      if (dup.fxConfig.ringmod)    dup.fxRack.applyRingMod(dup.fxConfig.ringmod);
+      if (dup.fxConfig.crush)      dup.fxRack.applyCrush(dup.fxConfig.crush);
+      if (dup.fxConfig.autowah)    dup.fxRack.applyAutoWah(dup.fxConfig.autowah);
+      if (dup.fxConfig.chorus)     dup.fxRack.applyChorus(dup.fxConfig.chorus);
+      if (dup.fxConfig.phaser)     dup.fxRack.applyPhaser(dup.fxConfig.phaser);
+      if (dup.fxConfig.flanger)    dup.fxRack.applyFlanger(dup.fxConfig.flanger);
+      if (dup.fxConfig.pitchshift) dup.fxRack.applyPitchShift(dup.fxConfig.pitchshift);
+      dup.fxRack.applyDelay(dup.fxConfig.delay);
+      dup.fxRack.applyReverb(dup.fxConfig.reverb);
+    }
+    dup.voice = buildVoiceForEngine(state.audioCtx, dup.engineKey, dup.params, dup);
+    if (dup.voice.type === "midi") {
+      dup.voice.setChannel(dup.midi.channel);
+      const out = state.midi?.outputs.get(dup.midi.outputId);
+      if (out) dup.voice.setOutput(out);
+    }
+    if (dup.voice.setGlide) dup.voice.setGlide(dup.glide);
+    routeVoiceToRack(dup);
+    applySampleSpeed(dup);
+    syncAllLFOs(dup);
+  }
+  refreshCompSourceDropdowns();
+  updatePlaitsControlsVisibility(dup);
+  renderStepGrid(dup);
+  return dup;
 }
 
 function removeTrack(t) {
@@ -4690,16 +4794,6 @@ function renderTrack(t) {
   node.querySelector(".p-envrel").addEventListener("input", e => setFilter(t, "release", Number(e.target.value)));
 
   node.querySelector(".track-rand").addEventListener("click", () => randomizeTimbre(t));
-  const soundBtn = node.querySelector(".track-sound");
-  const soundIcon = soundBtn.querySelector(".ai-icon");
-  if (soundIcon) soundIcon.innerHTML = ICON_SPARKLE;
-  soundBtn.addEventListener("click", () => promptCustomSound(t));
-  const refreshSoundEnabled = () => {
-    const eType = engineByKey(t.engineKey)?.type;
-    soundBtn.disabled = !(eType === "custom" || eType === "eleven" || eType === "upload" || eType === "saved");
-  };
-  refreshSoundEnabled();
-  t._refreshSoundEnabled = refreshSoundEnabled;
 
   const saveBtn = node.querySelector(".track-save");
   saveBtn.innerHTML = ICON_SAVE;
@@ -4840,12 +4934,8 @@ function renderTrack(t) {
     renderStepGrid(t);
   });
   node.querySelector(".track-remove").addEventListener("click", () => removeTrack(t));
-  const patternBtn = node.querySelector(".track-pattern");
-  if (patternBtn) {
-    const pIcon = patternBtn.querySelector(".ai-icon");
-    if (pIcon) pIcon.innerHTML = ICON_SPARKLE;
-    patternBtn.addEventListener("click", () => openPatternDialog(t));
-  }
+  const dupBtn = node.querySelector(".track-dup");
+  if (dupBtn) dupBtn.addEventListener("click", () => duplicateTrack(t));
 
   // midi-specific controls
   const midiSel = node.querySelector(".midi-out");
@@ -5463,13 +5553,6 @@ function updatePatternCell(idx) {
   if (!grid) return;
   const cell = grid.children[idx];
   if (cell) cell.classList.toggle("filled", isPatternNonEmpty(idx));
-  if (idx === state.activePattern) refreshVariateButton();
-}
-
-function refreshVariateButton() {
-  const btn = document.getElementById("master-variate-go");
-  if (!btn) return;
-  btn.disabled = !isPatternNonEmpty(state.activePattern);
 }
 
 function renderStepGrid(t) {
@@ -7041,671 +7124,6 @@ function setStatus(msg, isErr = false) {
   el.classList.toggle("err", isErr);
 }
 
-// Redesign this track's sound from its prompt input, then (optionally) regen its pattern.
-// Mirrors the master generate flow's instruments toggle but scoped to one track.
-async function promptTrackFull(t, { regenPattern = true } = {}) {
-  const prompt = (t.promptText ?? "").trim();
-  if (!prompt) return;
-  pushUndoSnapshot(`track+sound: ${t.name}`);
-  const signal = startGen();
-  try {
-    const soundEngine = document.getElementById("gen-sound-engine")?.value === "eleven" ? "eleven" : "tone";
-    setStatus(`designing ${soundEngine === "eleven" ? "eleven-labs " : ""}sound for "${t.name}"...`);
-    await designSoundForTrack(t, prompt, soundEngine, signal);
-    t.soundPromptText = prompt;
-    if (regenPattern) {
-      await promptTrack(t, { skipUndoSnapshot: true });
-    } else {
-      setStatus(`"${t.name}" sound ready`);
-    }
-  } catch (err) {
-    if (isAbortError(err)) { setStatus("cancelled", true); }
-    else { console.error(err); setStatus("generate failed — see console", true); }
-  } finally {
-    endGen();
-  }
-}
-
-async function promptTrack(t, opts = {}) {
-  const extra = opts.extra || {};
-  const prompt = (extra.overridePrompt ?? t.promptText ?? "").trim();
-  if (!prompt) return;
-  if (!opts.skipUndoSnapshot) pushUndoSnapshot(`track: ${t.name}`);
-  setStatus(`generating "${t.name}"...`);
-  try {
-    const eng = engineByKey(t.engineKey);
-    // Build sibling-track context so prompts referencing other tracks have something to react to.
-    const siblings = state.tracks
-      .filter(o => o !== t && o.steps && o.steps.some(s => s))
-      .slice(0, 12)
-      .map(o => ({
-        name: o.name,
-        engine: engineByKey(o.engineKey)?.label ?? o.engineKey,
-        stepCount: o.length,
-        steps: o.steps.slice(),
-        notes: o.notes.slice(),
-      }));
-    const body = {
-      prompt,
-      role: trackRole(t),
-      melodic: isMelodicTrack(t),
-      stepCount: t.length,
-      accents: [...t.accents].sort((a, b) => a - b).map(i => i + 1),
-      meter: (() => { const m = activeMeter(); return `${m.num}/${m.den}`; })(),
-      density: t.density ?? 0.5,
-      scale: state.scale.active ? { root: state.scale.root, mode: state.scale.mode, rootName: NOTE_NAMES[state.scale.root] } : null,
-      siblingTracks: siblings,
-    };
-    if (extra.seedPattern)     body.seedPattern     = extra.seedPattern;
-    if (extra.variationIndex)  body.variationIndex  = extra.variationIndex;
-    if (extra.variationCount)  body.variationCount  = extra.variationCount;
-    const r = await fetch("/api/generate", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
-      signal: currentSignal(),
-    });
-    if (!r.ok) throw new Error(await r.text());
-    const data = await r.json();
-    if (opts.targetIdx !== undefined) {
-      applyPatternTo(t, data, opts.targetIdx);
-    } else {
-      applyPattern(t, data);
-      renderStepGrid(t);
-    }
-    setStatus(`"${t.name}" ready`);
-  } catch (err) {
-    if (isAbortError(err)) { setStatus("cancelled", true); }
-    else { console.error(err); setStatus("generate failed — see console", true); }
-  }
-}
-
-function trackRole(t) {
-  const eng = engineByKey(t.engineKey);
-  if (!eng) return t.engineKey;
-  if (eng.type === "plaits") {
-    const isDrum = PLAITS_DRUM_IDX.has(eng.plaitsIdx);
-    return `Mutable Instruments Plaits engine "${eng.label}" (${isDrum ? "percussive" : "melodic"})`;
-  }
-  if (eng.type === "drum-synth") {
-    return `${eng.label}${eng.melodic ? " (melodic)" : " (percussive)"}`;
-  }
-  if (eng.type === "sample") return `drum sample "${eng.label}" (percussive)`;
-  if (eng.type === "midi") return `external MIDI instrument on channel ${t.midi.channel}`;
-  return eng.label;
-}
-
-// Percussive tracks never want melodic shaping; drum-kit flag or percussive engine wins.
-function isMelodicTrack(t) {
-  if (t.isDrumKit) return false;
-  const eng = engineByKey(t.engineKey);
-  if (!eng) return true;
-  if (eng.type === "plaits") return !PLAITS_DRUM_IDX.has(eng.plaitsIdx);
-  if (eng.type === "drum-synth") return !!eng.melodic;
-  if (eng.type === "sample") return false;
-  return true;
-}
-
-function applyPatternTo(t, data, targetIdx) {
-  if (targetIdx === state.activePattern) {
-    applyPattern(t, data);
-    renderStepGrid(t);
-    return;
-  }
-  // Swap aliases to the target slot, apply, then swap back to active.
-  const activeIdx = state.activePattern;
-  aliasPattern(t, targetIdx);
-  applyPattern(t, data);
-  aliasPattern(t, activeIdx);
-  updatePatternCell(targetIdx);
-}
-
-function applyFilterFromPrompt(t, filter) {
-  if (!filter || typeof filter !== "object") return;
-  const keys = ["cutoff","reson","env","attack","decay","sustain","release"];
-  for (const k of keys) {
-    const v = Number(filter[k]);
-    if (Number.isFinite(v)) setFilter(t, k, Math.max(0, Math.min(1, v)));
-  }
-  if (t.el) {
-    const map = {
-      cutoff: ".p-cutoff", reson: ".p-reson", env: ".p-envamt",
-      attack: ".p-envatk", decay: ".p-envdec", sustain: ".p-envsus", release: ".p-envrel",
-    };
-    for (const k of keys) {
-      const el = t.el.querySelector(map[k]);
-      if (el && Number.isFinite(t.filter[k])) el.value = t.filter[k];
-    }
-  }
-}
-
-function applyPattern(t, data) {
-  if (data.filter) applyFilterFromPrompt(t, data.filter);
-  // data.swing is ignored — swing is master-only now.
-  const total = t.length;
-  const steps = (data.steps || []).map(x => (x ? 1 : 0));
-  const notes = (data.notes || []).map(n => {
-    if (n == null) return null;
-    if (typeof n === "number") return n;
-    const m = nameToMidi(n);
-    return m ?? null;
-  });
-  const lengths = (data.lengths || []).map(x => {
-    const n = Math.round(Number(x));
-    return Number.isFinite(n) && n >= 1 ? n : 1;
-  });
-  const vels = (data.velocities || []).map(x => {
-    const n = Number(x);
-    return Number.isFinite(n) ? Math.max(0, Math.min(1, n)) : 1;
-  });
-  const chords = (data.chords || []).map(c => {
-    const k = canonicalChord(c);
-    return (k && CHORD_TYPES[k]) ? k : "";
-  });
-  const offsets = (data.offsets || []).map(x => {
-    const n = Number(x);
-    return Number.isFinite(n) ? Math.max(-0.5, Math.min(0.5, n)) : 0;
-  });
-
-  t.steps.fill(0); t.lengths.fill(0); t.notes.fill(null);
-  t.velocities.fill(0.5); t.chords.fill("");
-  if (t.offsets) t.offsets.fill(0); else t.offsets = new Array(total).fill(0);
-
-  for (let i = 0; i < Math.min(total, steps.length); i++) {
-    if (!steps[i]) continue;
-    t.steps[i] = 1;
-    // Drum-kit tracks force every step to C2 regardless of scale and regardless
-    // of whatever pitch the planner returned.
-    if (t.isDrumKit) t.notes[i] = 36;
-    else t.notes[i] = notes[i] != null ? applyScale(notes[i]) : null;
-    t.lengths[i] = Math.max(1, Math.min(lengths[i] || 1, total - i));
-    t.velocities[i] = vels[i] ?? 0.5;
-    t.chords[i] = chords[i] || "";
-    t.offsets[i] = offsets[i] ?? 0;
-    applySampleDefaultsToStep(t, i);
-  }
-  for (let i = 0; i < total; i++) {
-    if (!t.steps[i]) continue;
-    const cap = maxLengthAt(t, i);
-    t.lengths[i] = Math.min(t.lengths[i], cap);
-  }
-  // Melodic cleanup: clamp runaway leaps between consecutive triggered notes.
-  // Keeps voice leading sane even when the LLM goes wild; skip for drum-kit tracks.
-  if (!t.isDrumKit && isMelodicTrack(t)) smoothMelodicLeaps(t);
-}
-
-// If two consecutive triggered notes jump more than 12 semitones in a melodic
-// track, drop the later note by octaves until the interval is under 12. Snap
-// back into scale afterwards so scale-active tracks still stay in key.
-function smoothMelodicLeaps(t) {
-  let prev = null;
-  for (let i = 0; i < t.length; i++) {
-    if (!t.steps[i] || t.notes[i] == null) continue;
-    let n = t.notes[i];
-    if (prev != null) {
-      while (n - prev >  12) n -= 12;
-      while (prev - n >  12) n += 12;
-      n = Math.max(24, Math.min(95, n));
-      n = applyScale(n);
-    }
-    t.notes[i] = n;
-    prev = n;
-  }
-}
-
-async function promptCustomSound(t) {
-  const isEleven = engineByKey(t.engineKey)?.type === "eleven";
-  const seed = t.soundPromptText || "";
-  const result = await showSoundDesignDialog({
-    trackName: t.name,
-    engine: isEleven ? "eleven" : "tone",
-    defaultValue: seed,
-    focusTrack: t,
-  });
-  if (!result) return;
-  t.soundPromptText = result.description;
-  if (result.engine === "eleven") {
-    t.elevenAudio = result.sound.audio;
-    t.elevenAudioMime = result.sound.mime || "audio/mpeg";
-    const bytes = Uint8Array.from(atob(result.sound.audio), c => c.charCodeAt(0));
-    await ensureAudio();
-    const buffer = normalizeAudioBuffer(await state.audioCtx.decodeAudioData(bytes.buffer), { trim: true });
-    t.elevenBuffer = buffer;
-    if (t.engineKey === "eleven" && t.voice?.type === "eleven") {
-      t.voice.setBuffer(buffer);
-    } else {
-      setEngineKey(t, "eleven");
-      if (t.el) t.el.querySelector(".track-engine").value = "eleven";
-    }
-    applySampleSpeed(t);
-    resetProcessingForPromptedSound(t);
-    setStatus(`"${t.name}" ← eleven-labs sample (${Math.round(buffer.duration * 1000)}ms)`);
-    return;
-  }
-  // tone.js patch
-  const cfg = result.sound;
-  t.customConfig = cfg;
-  if (t.engineKey === "custom" && t.voice?.type === "custom") {
-    t.voice.applyConfig(cfg);
-  } else {
-    setEngineKey(t, "custom");
-    if (t.el) t.el.querySelector(".track-engine").value = "custom";
-  }
-  resetProcessingForPromptedSound(t);
-  t._refreshSaveEnabled?.();
-  setStatus(`"${t.name}" → ${cfg.synth}${cfg.poly ? " (poly)" : ""}`);
-  return;
-  // legacy path (unreachable) — kept below for reference
-  setStatus(`designing sound for "${t.name}"...`);
-  try {
-    const r = await fetch("/api/sound", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ prompt: t.soundPromptText }),
-      signal: currentSignal(),
-    });
-    if (!r.ok) throw new Error(await r.text());
-    const config = await r.json();
-    const fxSpec = config.fx;
-    t.customConfig = config;
-    if (t.engineKey === "custom" && t.voice?.type === "custom") {
-      t.voice.applyConfig(config);
-    } else {
-      const prev = t.engineKey;
-      t.engineKey = prev === "custom" ? "" : t.engineKey;
-      setEngineKey(t, "custom");
-      if (t.el) t.el.querySelector(".track-engine").value = "custom";
-    }
-    // Generated instruments start clean — ignore any fx/mods the planner returned.
-    resetProcessingForPromptedSound(t);
-    t._refreshSaveEnabled?.();
-    setStatus(`"${t.name}" → ${config.synth}${config.poly ? " (poly)" : ""}`);
-  } catch (err) {
-    if (isAbortError(err)) { setStatus("cancelled", true); }
-    else { console.error(err); setStatus("sound design failed — see console", true); }
-  }
-}
-
-// Bulk sound designer used by the planner flow. `engine` is "tone" or "eleven".
-async function designSoundForTrack(track, prompt, engine, signal) {
-  if (engine === "eleven") {
-    const r = await fetch("/api/eleven-sound", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ prompt, duration: 2.0 }),
-      signal,
-    });
-    if (!r.ok) throw new Error(await r.text());
-    const { audio, mime } = await r.json();
-    track.elevenAudio = audio;
-    track.elevenAudioMime = mime || "audio/mpeg";
-    const bytes = Uint8Array.from(atob(audio), c => c.charCodeAt(0));
-    await ensureAudio();
-    const buffer = normalizeAudioBuffer(await state.audioCtx.decodeAudioData(bytes.buffer), { trim: true });
-    track.elevenBuffer = buffer;
-    if (track.engineKey === "eleven" && track.voice?.type === "eleven") {
-      track.voice.setBuffer(buffer);
-    } else {
-      setEngineKey(track, "eleven");
-      if (track.el) track.el.querySelector(".track-engine").value = "eleven";
-    }
-    // Loop-style prompts (e.g. "seamless 2-bar drum loop") should BPM-sync;
-    // one-shots / sustained tones should stay at native playback rate. We
-    // detect "loop" in the prompt (but not "no loop") since the planner's
-    // one-shot prompts intentionally contain the negation.
-    const isLoopPrompt = /\bloop\b/i.test(prompt) && !/\bno\s+loop\b/i.test(prompt);
-    track.sampleSpeedMode = isLoopPrompt ? "1xbpm" : "native";
-    if (track.el) {
-      const fitSel = track.el.querySelector(".sample-speed") || track.el.querySelector(".se-smp-fit");
-      if (fitSel) fitSel.value = track.sampleSpeedMode;
-    }
-    applySampleSpeed(track);
-    resetProcessingForPromptedSound(track);
-    return;
-  }
-  // tone.js patch
-  const r = await fetch("/api/sound", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ prompt }),
-    signal,
-  });
-  if (!r.ok) throw new Error(await r.text());
-  const cfg = await r.json();
-  track.customConfig = cfg;
-  setEngineKey(track, "custom");
-  if (track.el) track.el.querySelector(".track-engine").value = "custom";
-  resetProcessingForPromptedSound(track);
-}
-
-// Sound-design dialog with preview + regenerate.
-// Returns { description, sound, engine } on apply, or null on cancel.
-// Per-track pattern dialog: type a prompt, preview (tentatively applies + you
-// can audition with the main play button), regenerate, apply (keep), cancel
-// (revert to the pre-open pattern snapshot).
-async function openPatternDialog(t) {
-  // Snapshot of the current pattern so cancel can restore exactly.
-  const snapshotPattern = (track) => {
-    const p = track.patterns[track._patternIdx ?? state.activePattern];
-    return JSON.parse(JSON.stringify(p));
-  };
-  const restorePattern = (track, snap) => {
-    const idx = track._patternIdx ?? state.activePattern;
-    track.patterns[idx] = snap;
-    aliasPattern(track, idx);
-    renderStepGrid(track);
-  };
-  const startSnap = snapshotPattern(t);
-
-  const overlay = document.createElement("div");
-  overlay.className = "modal-overlay";
-  const esc = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;").replace(/\n/g, "&#10;");
-  overlay.innerHTML = `
-    <div class="modal sound-dialog" role="dialog" aria-modal="true">
-      <div class="modal-title">describe the pattern for "${esc(t.name)}"</div>
-      <textarea class="modal-input modal-multiline" rows="3" placeholder="driving 16th-note bassline, syncopated, occasional fills">${esc(t.promptText || "")}</textarea>
-      <div class="sound-dialog-status">type a description, then preview</div>
-      <div class="modal-actions">
-        <button class="modal-cancel ghost">cancel</button>
-        <button class="sound-vary ghost">vary current</button>
-        <button class="sound-preview">preview</button>
-        <button class="sound-regen ghost" disabled>regenerate</button>
-        <button class="modal-ok" disabled>apply</button>
-      </div>
-    </div>
-  `;
-  document.body.appendChild(overlay);
-  enterPreviewDuck(t);
-  const input = overlay.querySelector(".modal-input");
-  const statusEl = overlay.querySelector(".sound-dialog-status");
-  const previewBtn = overlay.querySelector(".sound-preview");
-  const regenBtn = overlay.querySelector(".sound-regen");
-  const varyBtn = overlay.querySelector(".sound-vary");
-  const okBtn = overlay.querySelector(".modal-ok");
-  const cancelBtn = overlay.querySelector(".modal-cancel");
-  // Vary only makes sense if the current pattern actually has triggered steps.
-  if (varyBtn) {
-    const hasSeed = Array.isArray(startSnap.steps) && startSnap.steps.some(s => s);
-    varyBtn.disabled = !hasSeed;
-    if (!hasSeed) varyBtn.title = "nothing to vary — pattern is empty";
-  }
-  setTimeout(() => { input.focus(); try { input.select(); } catch {} }, 0);
-
-  let dirty = false;  // true once we've tentatively applied a generated pattern
-  let abortCtrl = null;
-
-  const close = (commit) => {
-    if (!commit && dirty) restorePattern(t, startSnap);
-    abortCtrl?.abort();
-    exitPreviewDuck();
-    overlay.remove();
-  };
-
-  const runGenerate = async ({ useSeed = false } = {}) => {
-    let prompt = input.value.trim();
-    if (!prompt && useSeed) prompt = "subtle variation of the seed pattern — keep the feel, change the phrasing";
-    if (!prompt) { input.focus(); return; }
-    statusEl.textContent = useSeed ? "varying current pattern…" : "generating…";
-    previewBtn.disabled = true;
-    regenBtn.disabled = true;
-    varyBtn && (varyBtn.disabled = true);
-    okBtn.disabled = true;
-    abortCtrl?.abort();
-    abortCtrl = new AbortController();
-    try {
-      const siblings = state.tracks
-        .filter(o => o !== t && o.steps && o.steps.some(s => s))
-        .slice(0, 12)
-        .map(o => ({
-          name: o.name,
-          engine: engineByKey(o.engineKey)?.label ?? o.engineKey,
-          stepCount: o.length,
-          steps: o.steps.slice(),
-          notes: o.notes.slice(),
-        }));
-      const body = {
-        prompt,
-        role: trackRole(t),
-        melodic: isMelodicTrack(t),
-        stepCount: t.length,
-        accents: [...t.accents].sort((a, b) => a - b).map(i => i + 1),
-      meter: (() => { const m = activeMeter(); return `${m.num}/${m.den}`; })(),
-        density: t.density ?? 0.5,
-        scale: state.scale.active ? { root: state.scale.root, mode: state.scale.mode, rootName: NOTE_NAMES[state.scale.root] } : null,
-        siblingTracks: siblings,
-      };
-      if (useSeed) {
-        body.seedPattern = {
-          steps: startSnap.steps.slice(),
-          lengths: startSnap.lengths.slice(),
-          notes: startSnap.notes.slice(),
-          velocities: startSnap.velocities.slice(),
-          chords: startSnap.chords.slice(),
-        };
-        body.variationIndex = 1;
-        body.variationCount = 1;
-      }
-      const r = await fetch("/api/generate", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        signal: abortCtrl.signal,
-        body: JSON.stringify(body),
-      });
-      if (!r.ok) throw new Error(await r.text());
-      const data = await r.json();
-      applyPattern(t, data);
-      renderStepGrid(t);
-      dirty = true;
-      statusEl.textContent = useSeed
-        ? "variation ready — play the transport to audition"
-        : "previewing — play the transport to audition";
-      regenBtn.disabled = false;
-      okBtn.disabled = false;
-    } catch (err) {
-      if (isAbortError(err)) { statusEl.textContent = "cancelled"; }
-      else { console.error(err); statusEl.textContent = `error: ${err.message}`; }
-    } finally {
-      previewBtn.disabled = false;
-      if (varyBtn) varyBtn.disabled = false;
-    }
-  };
-
-  previewBtn.addEventListener("click", () => runGenerate());
-  regenBtn.addEventListener("click", () => runGenerate());
-  if (varyBtn) varyBtn.addEventListener("click", () => runGenerate({ useSeed: true }));
-  okBtn.addEventListener("click", () => {
-    // Commit: push an undo snapshot first so the user can still revert.
-    pushUndoSnapshot(`track: ${t.name}`);
-    t.promptText = input.value.trim();
-    close(true);
-  });
-  cancelBtn.addEventListener("click", () => close(false));
-  overlay.addEventListener("click", (e) => { if (e.target === overlay) close(false); });
-  const onKey = (e) => {
-    if (e.key === "Escape") { e.preventDefault(); close(false); document.removeEventListener("keydown", onKey); }
-    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); runGenerate(); }
-  };
-  document.addEventListener("keydown", onKey);
-}
-
-function showSoundDesignDialog({ trackName, engine, defaultValue = "", focusTrack = null }) {
-  return new Promise((resolve) => {
-    const overlay = document.createElement("div");
-    overlay.className = "modal-overlay";
-    const esc = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;").replace(/\n/g, "&#10;");
-    const title = engine === "eleven"
-      ? `describe the eleven-labs sound for "${trackName}" — one-shot, sustained tone, or loop?`
-      : `describe the sound for "${trackName}"`;
-    const placeholder = engine === "eleven"
-      ? "single 808 kick one-shot, sub boom, tight decay, no loop, no pattern, one hit only"
-      : "dark sub bass with soft distortion, resonant filter sweep, short reverb tail";
-    overlay.innerHTML = `
-      <div class="modal sound-dialog" role="dialog" aria-modal="true">
-        <div class="modal-title">${esc(title)}</div>
-        <textarea class="modal-input modal-multiline" rows="4" placeholder="${esc(placeholder)}">${esc(defaultValue)}</textarea>
-        <div class="sound-dialog-status">type a description, then preview</div>
-        <div class="modal-actions">
-          <button class="modal-cancel ghost">cancel</button>
-          <button class="sound-preview">preview</button>
-          <button class="sound-regen ghost" disabled>regenerate</button>
-          <button class="modal-ok" disabled>apply</button>
-        </div>
-      </div>
-    `;
-    document.body.appendChild(overlay);
-    enterPreviewDuck(focusTrack);
-    const input = overlay.querySelector(".modal-input");
-    const statusEl = overlay.querySelector(".sound-dialog-status");
-    const previewBtn = overlay.querySelector(".sound-preview");
-    const regenBtn = overlay.querySelector(".sound-regen");
-    const okBtn = overlay.querySelector(".modal-ok");
-    const cancelBtn = overlay.querySelector(".modal-cancel");
-    setTimeout(() => { input.focus(); try { input.select(); } catch {} }, 0);
-
-    let currentSound = null;        // last generated sound object
-    let currentDescription = "";    // what description was used to generate it
-    let previewAbort = null;
-    let activePreview = null;       // { dispose: () => void }
-
-    const stopPreview = () => {
-      if (activePreview) { try { activePreview.dispose(); } catch {} activePreview = null; }
-    };
-
-    const playPreviewEleven = async () => {
-      if (!currentSound?.audio) return;
-      stopPreview();
-      await ensureAudio();
-      const ctx = state.audioCtx;
-      const bytes = Uint8Array.from(atob(currentSound.audio), c => c.charCodeAt(0));
-      const buf = normalizeAudioBuffer(await ctx.decodeAudioData(bytes.buffer.slice(0)), { trim: true });
-      const src = ctx.createBufferSource();
-      src.buffer = buf;
-      const g = ctx.createGain();
-      g.gain.value = 0.9;
-      src.connect(g).connect(ctx.destination);
-      src.start();
-      activePreview = { dispose: () => { try { src.stop(); } catch {} try { src.disconnect(); } catch {} try { g.disconnect(); } catch {} } };
-      src.onended = () => { if (activePreview) activePreview = null; };
-      statusEl.textContent = `preview: ${Math.round(buf.duration * 1000)}ms`;
-    };
-
-    const playPreviewTone = async () => {
-      if (!currentSound?.synth) return;
-      stopPreview();
-      await ensureAudio();
-      try {
-        const ToneClass = Tone[currentSound.synth];
-        if (!ToneClass) throw new Error("unknown synth " + currentSound.synth);
-        const synth = currentSound.poly
-          ? new Tone.PolySynth(ToneClass, currentSound.options || {})
-          : new ToneClass(currentSound.options || {});
-        const effects = (currentSound.effects || [])
-          .map(e => { try { return new (Tone[e.type])(e.options || {}); } catch { return null; } })
-          .filter(Boolean);
-        let last = synth;
-        for (const fx of effects) { last.connect(fx); last = fx; }
-        last.toDestination();
-        const now = Tone.now();
-        // arpeggiated preview so the user hears the envelope over time
-        const notes = ["C3", "E3", "G3", "C4"];
-        notes.forEach((n, i) => {
-          try { synth.triggerAttackRelease(n, "8n", now + i * 0.22, 0.8); } catch {}
-        });
-        activePreview = {
-          dispose: () => {
-            try { synth.releaseAll?.(); } catch {}
-            try { synth.dispose(); } catch {}
-            effects.forEach(fx => { try { fx.dispose(); } catch {} });
-          },
-        };
-        setTimeout(() => { if (activePreview) { stopPreview(); } }, 2800);
-        statusEl.textContent = `preview: ${currentSound.synth}${currentSound.poly ? " (poly)" : ""}${effects.length ? ` + ${effects.length} fx` : ""}`;
-      } catch (err) {
-        console.warn(err);
-        statusEl.textContent = `preview error: ${err.message}`;
-      }
-    };
-
-    const playPreview = () => engine === "eleven" ? playPreviewEleven() : playPreviewTone();
-
-    const generate = async () => {
-      const desc = input.value.trim();
-      if (!desc) { input.focus(); return; }
-      currentDescription = desc;
-      stopPreview();
-      previewAbort?.abort();
-      previewAbort = new AbortController();
-      const sig = previewAbort.signal;
-      statusEl.textContent = "generating…";
-      previewBtn.disabled = true;
-      regenBtn.disabled = true;
-      okBtn.disabled = true;
-      try {
-        if (engine === "eleven") {
-          const r = await fetch("/api/eleven-sound", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ prompt: desc, duration: 2.0 }),
-            signal: sig,
-          });
-          if (!r.ok) throw new Error(await r.text());
-          currentSound = await r.json();
-        } else {
-          const r = await fetch("/api/sound", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ prompt: desc }),
-            signal: sig,
-          });
-          if (!r.ok) throw new Error(await r.text());
-          currentSound = await r.json();
-        }
-        okBtn.disabled = false;
-        regenBtn.disabled = false;
-        previewBtn.disabled = false;
-        await playPreview();
-      } catch (err) {
-        if (err?.name === "AbortError") { statusEl.textContent = "cancelled"; return; }
-        console.error(err);
-        statusEl.textContent = `error: ${String(err?.message ?? err).slice(0, 140)}`;
-        previewBtn.disabled = false;
-        regenBtn.disabled = !currentSound;
-        okBtn.disabled = !currentSound;
-      }
-    };
-
-    const close = (val) => {
-      stopPreview();
-      previewAbort?.abort();
-      exitPreviewDuck();
-      overlay.remove();
-      resolve(val);
-    };
-
-    previewBtn.addEventListener("click", () => {
-      const desc = input.value.trim();
-      if (currentSound && desc === currentDescription) playPreview();
-      else generate();
-    });
-    regenBtn.addEventListener("click", generate);
-    okBtn.addEventListener("click", () => {
-      close(currentSound ? { description: currentDescription, sound: currentSound, engine } : null);
-    });
-    cancelBtn.addEventListener("click", () => close(null));
-    input.addEventListener("input", () => {
-      // description changed after a generation — nudge user to regenerate
-      if (currentSound && input.value.trim() !== currentDescription) {
-        statusEl.textContent = "description changed — regenerate to hear the new one";
-      }
-    });
-    input.addEventListener("keydown", (e) => {
-      if (e.key === "Escape") close(null);
-      if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); generate(); }
-    });
-    overlay.addEventListener("click", (e) => { if (e.target === overlay) close(null); });
-  });
-}
-
 async function pickAudioFileForTrack(t) {
   return new Promise(resolve => {
     const inp = document.createElement("input");
@@ -7761,217 +7179,6 @@ function arrayBufferToBase64(buf) {
     binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
   }
   return btoa(binary);
-}
-
-async function designElevenSound(t) {
-  setStatus(`generating eleven-labs sample for "${t.name}"...`);
-  try {
-    const r = await fetch("/api/eleven-sound", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ prompt: t.soundPromptText, duration: 2.0 }),
-      signal: currentSignal(),
-    });
-    if (!r.ok) throw new Error(await r.text());
-    const { audio, mime } = await r.json();
-    // keep the raw mp3 so the sample survives save/export; decode for playback now
-    t.elevenAudio = audio;            // base64-encoded mp3
-    t.elevenAudioMime = mime || "audio/mpeg";
-    const bytes = Uint8Array.from(atob(audio), c => c.charCodeAt(0));
-    await ensureAudio();
-    const buffer = normalizeAudioBuffer(await state.audioCtx.decodeAudioData(bytes.buffer), { trim: true });
-    t.elevenBuffer = buffer;
-    if (t.engineKey === "eleven" && t.voice?.type === "eleven") {
-      t.voice.setBuffer(buffer);
-    } else {
-      setEngineKey(t, "eleven");
-      if (t.el) t.el.querySelector(".track-engine").value = "eleven";
-    }
-    setStatus(`"${t.name}" ← eleven-labs sample (${Math.round(buffer.duration * 1000)}ms)`);
-  } catch (err) {
-    if (isAbortError(err)) { setStatus("cancelled", true); }
-    else { console.error(err); setStatus("eleven-labs gen failed — see console", true); }
-  }
-}
-
-async function promptAll() {
-  for (const t of state.tracks) {
-    if ((t.promptText ?? "").trim()) await promptTrack(t);
-  }
-}
-
-async function promptFromMaster({ reshape = false, designSounds = false, regenPatterns = true, keepPatterns = false, bars = 1 } = {}) {
-  const input = document.getElementById("master-prompt");
-  const btn = document.getElementById("master-prompt-go");
-  const master = input.value.trim();
-  if (!master) { input.focus(); return; }
-  pushUndoSnapshot(`master: ${master.slice(0, 40)}`);
-  // Reshape normally removes a track (destroying all its patterns), so replaceable = both locks off.
-  // keepPatterns mode updates tracks in place (patterns survive), so we only need instrument-unlocked.
-  const empties = reshape
-    ? (keepPatterns
-        ? state.tracks.filter(t => !t.lockInstrument)
-        : state.tracks.filter(t => !t.lockInstrument && !t.lockPattern))
-    : state.tracks.filter(t => !t.lockPattern);
-  if (empties.length === 0) {
-    setStatus(reshape ? "nothing to reshape — all tracks are locked" : "all tracks are pattern-locked", true);
-    return;
-  }
-  btn.disabled = true;
-  setStatus(`planning ${empties.length} track${empties.length === 1 ? "" : "s"}${designSounds ? " + sounds" : ""}...`);
-  const signal = startGen();
-  try {
-    const r = await fetch("/api/plan", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      signal,
-      body: JSON.stringify({
-        prompt: master,
-        designSounds,
-        allowReshape: reshape,
-        bars,
-        tracks: empties.map(t => ({
-          name: t.name,
-          engine: engineByKey(t.engineKey)?.label ?? t.engineKey,
-          role: trackRole(t),
-          stepCount: t.length,
-          accents: [...t.accents].sort((a, b) => a - b).map(i => i + 1),
-      meter: (() => { const m = activeMeter(); return `${m.num}/${m.den}`; })(),
-        })),
-        keptTracks: state.tracks.filter(t => !empties.includes(t)).map(t => ({
-          name: t.name,
-          engine: engineByKey(t.engineKey)?.label ?? t.engineKey,
-          locked: t.locked,
-        })),
-        availableEngines: ENGINES.map(e => ({ key: e.key, label: e.label, group: e.group, type: e.type })),
-        scale: state.scale.active ? { root: state.scale.root, mode: state.scale.mode, rootName: NOTE_NAMES[state.scale.root] } : null,
-      }),
-    });
-    if (!r.ok) throw new Error(await r.text());
-    const data = await r.json();
-    if (Number.isFinite(data.bpm)) {
-      const bpm = Math.max(40, Math.min(240, Math.round(data.bpm)));
-      document.getElementById("bpm").value = bpm;
-      if (state.ready) Tone.Transport.bpm.value = bpm;
-      retuneSyncedLFOs();
-    }
-    if (data.scale && data.scale.mode && SCALES[data.scale.mode]) {
-      state.scale.mode = data.scale.mode;
-      if (typeof data.scale.root === "number") state.scale.root = ((data.scale.root % 12) + 12) % 12;
-      else if (typeof data.scale.rootName === "string") {
-        const idx = NOTE_NAMES.findIndex(n => n.toLowerCase() === data.scale.rootName.toLowerCase());
-        if (idx >= 0) state.scale.root = idx;
-      }
-      state.scale.active = true;
-      syncScaleUI();
-    }
-
-    // reshape path — response contains full track specs
-    if (Array.isArray(data.tracks)) {
-      const specs = data.tracks.slice(0, 16);
-      const newTracks = [];
-      if (keepPatterns) {
-        // Update existing tracks in place so all pattern data survives. Map spec[i] → empties[i].
-        for (let i = 0; i < specs.length; i++) {
-          const spec = specs[i];
-          const track = empties[i];
-          if (!track) {
-            // Planner wants more tracks than we have unlocked — create fresh ones for the overflow.
-            const wanted = typeof spec.engineKey === "string" && engineByKey(spec.engineKey) ? spec.engineKey : "plaits:0";
-            const len = Math.max(1, Math.min(128, Number(spec.length) || bars * STEPS_PER_BAR));
-            const t2 = createTrack({ name: String(spec.name || "track").slice(0, 40), engineKey: wanted, length: len });
-            if (spec.prompt) t2.promptText = String(spec.prompt);
-            if (spec.soundPrompt) t2.soundPromptText = String(spec.soundPrompt);
-            // Planner-generated instruments always start clean — no fx or mods.
-            resetProcessingForPromptedSound(t2);
-            newTracks.push({ track: t2, soundPrompt: spec.soundPrompt });
-            continue;
-          }
-          // Update in place
-          if (spec.name) { track.name = String(spec.name).slice(0, 40); track.el.querySelector(".track-name").value = track.name; }
-          if (spec.engineKey && engineByKey(spec.engineKey) && spec.engineKey !== track.engineKey) {
-            setEngineKey(track, spec.engineKey);
-            track.el.querySelector(".track-engine").value = spec.engineKey;
-          }
-          resetProcessingForPromptedSound(track);
-          if (typeof spec.vol === "number" && Number.isFinite(spec.vol)) {
-            const vol = Math.max(0, Math.min(1, spec.vol));
-            setParam(track, "vol", vol);
-            const volEl = track.el?.querySelector(".p-vol");
-            if (volEl) volEl.value = vol;
-          }
-          if (spec.prompt) track.promptText = String(spec.prompt);
-          if (spec.soundPrompt) track.soundPromptText = String(spec.soundPrompt);
-          newTracks.push({ track, soundPrompt: spec.soundPrompt });
-        }
-      } else {
-        // Replace: remove the unlocked tracks, create fresh ones per spec.
-        for (const t of empties) removeTrack(t);
-        for (const spec of specs) {
-          const wanted = typeof spec.engineKey === "string" && engineByKey(spec.engineKey) ? spec.engineKey : "plaits:0";
-          const len = Math.max(1, Math.min(128, Number(spec.length) || bars * STEPS_PER_BAR));
-          const track = createTrack({
-            name: String(spec.name || "track").slice(0, 40),
-            engineKey: wanted,
-            length: len,
-          });
-          if (spec.prompt) track.promptText = String(spec.prompt);
-          if (spec.soundPrompt) track.soundPromptText = String(spec.soundPrompt);
-          resetProcessingForPromptedSound(track);
-          if (typeof spec.vol === "number" && Number.isFinite(spec.vol)) {
-            const vol = Math.max(0, Math.min(1, spec.vol));
-            setParam(track, "vol", vol);
-            track.el?.querySelector(".p-vol") && (track.el.querySelector(".p-vol").value = vol);
-          }
-          newTracks.push({ track, soundPrompt: spec.soundPrompt });
-        }
-      }
-      if (designSounds) {
-        const soundEngine = document.getElementById("gen-sound-engine")?.value === "eleven" ? "eleven" : "tone";
-        setStatus(`designing ${newTracks.length} ${soundEngine === "eleven" ? "eleven-labs " : ""}sound${newTracks.length === 1 ? "" : "s"}...`);
-        await Promise.all(newTracks.map(async ({ track, soundPrompt }) => {
-          if (!soundPrompt) return;
-          try {
-            await designSoundForTrack(track, soundPrompt, soundEngine, signal);
-          } catch (e) { console.warn("sound design failed for", track.name, e); }
-        }));
-      }
-      if (regenPatterns) {
-        for (const { track } of newTracks) await promptTrack(track);
-      }
-      setStatus("done");
-      return;
-    }
-
-    // legacy path — server returned parallel prompts for each input track
-    if (!Array.isArray(data.prompts) || data.prompts.length !== empties.length) {
-      throw new Error("plan response shape mismatch");
-    }
-    empties.forEach((t, i) => {
-      t.promptText = data.prompts[i];
-    });
-    if (designSounds && Array.isArray(data.soundPrompts) && data.soundPrompts.length === empties.length) {
-      const soundEngine = document.getElementById("gen-sound-engine")?.value === "eleven" ? "eleven" : "tone";
-      setStatus(`designing ${empties.length} ${soundEngine === "eleven" ? "eleven-labs " : ""}sound${empties.length === 1 ? "" : "s"}...`);
-      await Promise.all(data.soundPrompts.map(async (sp, i) => {
-        const t = empties[i];
-        if (!t) return;
-        t.soundPromptText = sp;
-        try { await designSoundForTrack(t, sp, soundEngine, signal); }
-        catch (e) { console.warn("sound design failed for", t.name, e); }
-      }));
-    }
-    if (regenPatterns) {
-      for (const t of empties) await promptTrack(t);
-    }
-    setStatus("done");
-  } catch (err) {
-    if (isAbortError(err)) { setStatus("cancelled", true); }
-    else { console.error(err); setStatus("plan failed — see console", true); }
-  } finally {
-    btn.disabled = false;
-    endGen();
-  }
 }
 
 // ---- scale UI ----------------------------------------------------------
@@ -8126,106 +7333,6 @@ function init() {
   document.getElementById("add-track").addEventListener("click", () => {
     createTrack({ name: `track ${state.tracks.length + 1}`, engineKey: "plaits:0" });
   });
-  // gen-pattern: 2-state aria-pressed toggle
-  const pBtn = document.getElementById("gen-pattern");
-  pBtn.addEventListener("click", () => {
-    const pressed = pBtn.getAttribute("aria-pressed") === "true";
-    pBtn.setAttribute("aria-pressed", String(!pressed));
-  });
-  // gen-instruments: 3-state cycle — off → on → all → off
-  const iBtn = document.getElementById("gen-instruments");
-  iBtn.addEventListener("click", () => {
-    const states = ["off", "on", "all"];
-    const cur = iBtn.dataset.state || "off";
-    const next = states[(states.indexOf(cur) + 1) % states.length];
-    iBtn.dataset.state = next;
-    iBtn.textContent = next === "all" ? "instruments · all" : "instruments";
-  });
-  document.getElementById("gen-cancel").addEventListener("click", cancelGen);
-  document.getElementById("master-undo")?.addEventListener("click", undoLastGenerate);
-  document.getElementById("master-prompt-go").addEventListener("click", () => {
-    const instState = document.getElementById("gen-instruments").dataset.state || "off";
-    const patternOn = document.getElementById("gen-pattern").getAttribute("aria-pressed") === "true";
-    const instrumentsOn = instState !== "off";
-    if (!instrumentsOn && !patternOn) { setStatus("toggle pattern or instruments first"); return; }
-    const bars = Math.max(1, Math.min(8, Number(document.getElementById("gen-bars")?.value) || 1));
-    promptFromMaster({
-      reshape: instrumentsOn,
-      designSounds: instrumentsOn,
-      regenPatterns: patternOn,
-      keepPatterns: instState === "all",
-      bars,
-    });
-  });
-
-  document.getElementById("master-variate-go").addEventListener("click", async () => {
-    const btn = document.getElementById("master-variate-go");
-    const countInput = document.getElementById("gen-count");
-    const count = Math.max(1, Math.min(4, Number(countInput?.value) || 1));
-    pushUndoSnapshot(`variate ×${count}`);
-    const seedIdx = state.activePattern;
-    const seeds = new Map();
-    for (const t of state.tracks) {
-      const p = t.patterns[seedIdx];
-      if (!p) continue;
-      seeds.set(t.id, {
-        steps: p.steps.slice(),
-        lengths: p.lengths.slice(),
-        notes: p.notes.slice(),
-        velocities: p.velocities.slice(),
-        chords: p.chords.slice(),
-      });
-    }
-    btn.disabled = true;
-    // Pick the next `count` empty pattern slots after the seed, skipping filled ones.
-    const targetSlots = [];
-    let cursor = seedIdx;
-    while (targetSlots.length < count) {
-      cursor = (cursor + 1) % PATTERN_COUNT;
-      if (cursor === seedIdx) break;
-      if (!isPatternNonEmpty(cursor)) targetSlots.push(cursor);
-    }
-    if (targetSlots.length === 0) {
-      btn.disabled = false;
-      setStatus("no empty pattern slots — delete or clear some first", true);
-      return;
-    }
-    const signal = startGen();
-    try {
-      for (let i = 0; i < targetSlots.length; i++) {
-        if (signal.aborted) break;
-        const target = targetSlots[i];
-        setStatus(`variation ${i + 1} of ${targetSlots.length} → pattern ${target + 1}...`);
-        for (const t of state.tracks) {
-          if (signal.aborted) break;
-          if (t.lockPattern) continue;
-          const seed = seeds.get(t.id);
-          if (!seed || !seed.steps.some(s => s)) continue;
-          const basePrompt = (t.promptText ?? "").trim() || `variation of the current pattern`;
-          try {
-            await promptTrack(t, {
-              targetIdx: target,
-              extra: {
-                seedPattern: seed,
-                variationIndex: i + 1,
-                variationCount: targetSlots.length,
-                overridePrompt: `${basePrompt} — subtle variation, keep key/mood, change rhythm/phrasing`,
-              },
-            });
-          } catch (e) {
-            if (isAbortError(e)) break;
-            console.warn("variation failed", e);
-          }
-        }
-      }
-      if (!signal.aborted) {
-        setStatus(`variated into ${targetSlots.length} pattern${targetSlots.length === 1 ? "" : "s"} (${targetSlots.map(i => i + 1).join(", ")})`);
-      }
-    } finally {
-      btn.disabled = false;
-      endGen();
-    }
-  });
 
   const modeBtn = document.getElementById("pattern-mode");
   const syncModeLabel = () => {
@@ -8311,19 +7418,6 @@ function init() {
     });
   }
   renderPatternGrid();
-  const mp = document.getElementById("master-prompt");
-  const autogrow = () => {
-    mp.style.height = "auto";
-    mp.style.height = `${Math.min(180, mp.scrollHeight)}px`;
-  };
-  mp.addEventListener("input", autogrow);
-  mp.addEventListener("keydown", e => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      document.getElementById("master-prompt-go").click();
-    }
-  });
-  requestAnimationFrame(autogrow);
 
   initScaleUI();
 
@@ -8335,8 +7429,6 @@ function init() {
   createTrack({ name: "bass",   engineKey: "dm:303" });
   createTrack({ name: "lead",   engineKey: "plaits:0" });
 
-  // prime a starter vibe in the prompt box (user clicks "generate" to run it)
-  document.getElementById("master-prompt").value = pickStarterPrompt();
   setStatus("ready");
   // if the URL carries ?s=<id>, pull that shared session
   loadShareFromUrl();
