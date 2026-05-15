@@ -65,11 +65,6 @@
       </div>
       <button id="pattern-dup" class="ghost" title="duplicate current pattern into the next slot">dup</button>
     </div>
-    <div class="len-stack">
-      <button id="pattern-extend-1" class="ghost" title="add one bar to every track on this pattern (duplicates existing content into the new bar)">+1</button>
-      <button id="pattern-extend-2x" class="ghost" title="double every track's length on this pattern (duplicates existing content)">2x</button>
-      <button id="pattern-extend-4x" class="ghost" title="quadruple every track's length on this pattern (duplicates existing content)">4x</button>
-    </div>
     <label class="repeat-wrap" title="time signature for this pattern"><span>sig</span><select id="pattern-meter">
       <option value="4/4" selected>4/4</option>
       <option value="3/4">3/4</option>
@@ -98,6 +93,13 @@
         <button class="track-save icon-btn ghost" aria-label="save patch" title="save the current custom patch"></button>
         <button class="track-load-patch icon-btn ghost" aria-label="load patch" title="load a saved patch into this track"></button>
         <div class="field"><label>len</label><input class="track-len" type="number" min="1" max="128" value="16" /></div>
+        <div class="track-len-extend">
+          <button class="track-len-plus1 ghost" type="button" title="add one bar to this track's pattern (duplicates existing content)">+1</button>
+          <button class="track-len-2x ghost" type="button" title="double this track's pattern length (duplicates content)">x2</button>
+          <button class="track-len-4x ghost" type="button" title="quadruple this track's pattern length (duplicates content)">x4</button>
+          <button class="track-len-half ghost" type="button" title="halve this track's pattern length (truncates to the first half)">/2</button>
+          <button class="track-len-quarter ghost" type="button" title="quarter this track's pattern length (truncates to the first quarter)">/4</button>
+        </div>
         <div class="field"><label>spd</label>
           <select class="track-speed">
             <option value="0.0625">1/16</option>
@@ -270,6 +272,11 @@
           <span class="fx-title">ring mod</span>
           <label class="fx-ctl"><span>wet</span><input class="fx-ringmod-wet" type="range" min="0" max="1" step="0.01" value="0" /></label>
           <label class="fx-ctl"><span>freq</span><input class="fx-ringmod-freq" type="range" min="0" max="1" step="0.01" value="0.35" /></label>
+        </div>
+        <div class="fx-row" data-fx="shaper">
+          <span class="fx-title">wave folder</span>
+          <label class="fx-ctl"><span>wet</span><input class="fx-shaper-wet" type="range" min="0" max="1" step="0.01" value="0" /></label>
+          <label class="fx-ctl"><span>amt</span><input class="fx-shaper-amt" type="range" min="0" max="1" step="0.01" value="0.5" /></label>
         </div>
         <div class="fx-row" data-fx="crush">
           <span class="fx-title">bitcrush</span>

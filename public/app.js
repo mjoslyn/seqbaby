@@ -12,7 +12,7 @@ const LFO_KEYS = [
   "cutoff", "reson",
   // FX wets/amts (short keys preserved for backward compat).
   "fuzz", "delay", "verb",
-  "vinyl", "cassette", "ringmod", "crush", "autowah", "chorus", "phaser", "flanger", "pitch",
+  "vinyl", "cassette", "ringmod", "shaper", "crush", "autowah", "chorus", "phaser", "flanger", "pitch",
   // FX sub-params with AudioParam / Signal targets (audio-rate modable).
   "fuzz_drive", "fuzz_tone", "fuzz_level",
   "vinyl_warmth",
@@ -25,6 +25,7 @@ const LFO_KEYS = [
   // FX sub-params modulated via setter-driven LFO (no AudioParam target).
   "vinyl_wow",
   "cassette_flutter", "cassette_sat",
+  "shaper_amt",
   "autowah_sens", "autowah_range",
   "phaser_depth",
   "pitch_semi",
@@ -39,6 +40,7 @@ const LFO_LABELS = {
   vol: "volume", cutoff: "filter cutoff", reson: "filter reson",
   fuzz: "fuzz amt", delay: "delay wet", verb: "reverb wet",
   vinyl: "vinyl amt", cassette: "cassette amt", ringmod: "ring mod wet",
+  shaper: "wave folder wet", shaper_amt: "wave folder amt",
   crush: "bitcrush wet", autowah: "auto-wah wet", chorus: "chorus wet",
   phaser: "phaser wet", flanger: "flanger wet", pitch: "pitch shift wet",
   fuzz_drive: "fuzz drive", fuzz_tone: "fuzz tone", fuzz_level: "fuzz level",
@@ -60,7 +62,7 @@ const LFO_AMP_SCALE = {
   cutoff: 6000,   // Hz
   reson: 15,
   fuzz: 1, delay: 1, verb: 1,
-  vinyl: 1, cassette: 1, ringmod: 1, crush: 1, autowah: 1, chorus: 1, phaser: 1, flanger: 1, pitch: 1,
+  vinyl: 1, cassette: 1, ringmod: 1, shaper: 1, crush: 1, autowah: 1, chorus: 1, phaser: 1, flanger: 1, pitch: 1,
   // fx sub-params (audio-rate AudioParam targets)
   fuzz_drive: 30,         // +/- 15 on the gain unit (drive path gain is 1+drive*30)
   fuzz_tone: 4000,        // Hz around tone filter cutoff (200..8000)
@@ -76,6 +78,7 @@ const LFO_AMP_SCALE = {
   delay_fbk: 0.8,
   // fx sub-params modulated via setter LFO (0..1 swing around the user's base value)
   vinyl_wow: 1, cassette_flutter: 1, cassette_sat: 1,
+  shaper_amt: 1,
   autowah_sens: 1, autowah_range: 1,
   phaser_depth: 1,
   chorus_depth: 1,
@@ -454,11 +457,9 @@ function chordNotes(rootMidi, chordType) {
 
 // Diatonic note coloring: each chromatic pitch class gets a fixed hue
 // (30° per semitone) so the same note always reads the same color regardless
-// of the chosen key — C red, D yellow, F# cyan, A purple, etc. Active only
-// while a scale is picked so the palette stays tied to a deliberate musical
-// context; falls back to the accent color otherwise.
+// of key — C red, D yellow, F# cyan, A purple, etc.
 function noteColor(midi) {
-  if (!state.scale.active) return null;
+  if (midi == null || !Number.isFinite(midi)) return null;
   const pc = ((Math.round(midi) % 12) + 12) % 12;
   return `hsl(${pc * 30} 72% 56%)`;
 }
@@ -1078,6 +1079,7 @@ function applySet(s) {
         if (t.fxConfig.cassette)   t.fxRack.applyCassette(t.fxConfig.cassette);
         t.fxRack.applyFuzz(t.fxConfig.fuzz);
         if (t.fxConfig.ringmod)    t.fxRack.applyRingMod(t.fxConfig.ringmod);
+        if (t.fxConfig.shaper)     t.fxRack.applyWaveShaper(t.fxConfig.shaper);
         if (t.fxConfig.crush)      t.fxRack.applyCrush(t.fxConfig.crush);
         if (t.fxConfig.autowah)    t.fxRack.applyAutoWah(t.fxConfig.autowah);
         if (t.fxConfig.chorus)     t.fxRack.applyChorus(t.fxConfig.chorus);
@@ -1284,6 +1286,7 @@ function defaultFxConfig() {
     cassette:   { amount: 0, flutter: 0.3, sat: 0.4 },
     fuzz:       { amount: 0, drive: 0.7, tone: 0.4, level: 0.5 },
     ringmod:    { wet: 0, freq: 0.35 },           // freq is 0..1, log-mapped to ~20..3000 Hz
+    shaper:     { wet: 0, amount: 0.5 },          // wave folder: crossfade wet/dry + fold depth
     crush:      { bits: 8, wet: 0 },
     autowah:    { wet: 0, sens: 0.5, range: 0.5 },
     chorus:     { wet: 0, rate: 0.5, depth: 0.5 },
@@ -1325,6 +1328,23 @@ function makeTapeHissBuffer(ctx, seconds) {
     data[i] = prev * 0.6;
   }
   return buf;
+}
+
+// Wave folder curve: reflect (rather than clip) the signal whenever it leaves
+// [-1, 1]. `amount` (0..1) deepens the fold by pre-multiplying drive — small
+// values approach a tanh, large values produce multiple fold creases.
+function makeFolderCurve(amount) {
+  const n = 4096;
+  const c = new Float32Array(n);
+  const drive = 1 + Math.max(0, Math.min(1, amount)) * 8;
+  for (let i = 0; i < n; i++) {
+    let x = ((i * 2) / (n - 1) - 1) * drive;
+    // Triangle-fold against ±1; cycle each 4 units.
+    let y = ((x + 1) % 4 + 4) % 4;
+    if (y > 2) y = 4 - y;
+    c[i] = y - 1;
+  }
+  return c;
 }
 
 // Soft tape-style saturation curve (tanh with variable drive).
@@ -1460,6 +1480,31 @@ class FXRack {
     this.ringWet.connect(this.ringSum);
     try { this.ringCarrier.start(); } catch {}
 
+    // ── wave folder (native waveshaper, parallel wet/dry crossfade) ──
+    // Drive into a folder curve that reflects the signal back when it leaves
+    // [-1, 1]. Distinct from fuzz: fuzz clips, the folder reflects, so it adds
+    // upper harmonics in a "Buchla west-coast" way.
+    if (!config.shaper) config.shaper = { wet: 0, amount: 0.5 };
+    this.shaperDryBus = ctx.createGain();
+    this.shaperWetBus = ctx.createGain();
+    this.shaperSum    = ctx.createGain();
+    this.shaperDrive  = ctx.createGain();
+    this.shaperDrive.gain.value = 1 + (config.shaper.amount ?? 0.5) * 8;
+    this.shaperNode   = ctx.createWaveShaper();
+    this.shaperNode.curve = makeFolderCurve(config.shaper.amount ?? 0.5);
+    this.shaperNode.oversample = "2x";
+    this.shaperPost = ctx.createGain();
+    this.shaperPost.gain.value = 0.7;  // compensate for folder gain buildup
+    this.ringSum.connect(this.shaperDryBus);
+    this.ringSum.connect(this.shaperDrive);
+    this.shaperDrive.connect(this.shaperNode);
+    this.shaperNode.connect(this.shaperPost);
+    this.shaperPost.connect(this.shaperWetBus);
+    this.shaperDryBus.connect(this.shaperSum);
+    this.shaperWetBus.connect(this.shaperSum);
+    this.shaperDryBus.gain.value = 1 - (config.shaper.wet ?? 0);
+    this.shaperWetBus.gain.value = config.shaper.wet ?? 0;
+
     // ── Tone stages: crusher → autowah → chorus → phaser → flanger → pitchshift → delay → reverb ──
     this.crusher = new Tone.BitCrusher({
       bits: Math.max(1, Math.min(16, config.crush?.bits ?? 8)),
@@ -1534,7 +1579,7 @@ class FXRack {
     // Native GainNode.connect() in Tone.js 15 rejects Tone wrappers — unwrap to
     // the underlying native input node before connecting from a native source.
     const toneIn = (node) => node.input?.input ?? node.input ?? node;
-    this.ringSum.connect(toneIn(this.crusher));
+    this.shaperSum.connect(toneIn(this.crusher));
     this.crusher.connect(this.autowah);
     this.autowah.connect(this.chorus);
     this.chorus.connect(this.phaser);
@@ -1549,6 +1594,7 @@ class FXRack {
     this.applyCassette(config.cassette);
     this.applyFuzz(config.fuzz);
     this.applyRingMod(config.ringmod);
+    this.applyWaveShaper(config.shaper);
     this.applyAutoWah(config.autowah);
     this.applyChorus(config.chorus);
     this.applyPhaser(config.phaser);
@@ -1623,6 +1669,20 @@ class FXRack {
       // log map slider 0..1 → 20..3000 Hz
       const hz = 20 * Math.pow(150, Math.max(0, Math.min(1, freq)));
       try { this.ringCarrier.frequency.value = hz; } catch {}
+    }
+  }
+
+  applyWaveShaper({ wet, amount }) {
+    if (!this.config.shaper) this.config.shaper = { wet: 0, amount: 0.5 };
+    if (wet !== undefined) {
+      this.config.shaper.wet = wet;
+      this.shaperDryBus.gain.value = 1 - wet;
+      this.shaperWetBus.gain.value = wet;
+    }
+    if (amount !== undefined) {
+      this.config.shaper.amount = amount;
+      try { this.shaperDrive.gain.value = 1 + amount * 8; } catch {}
+      try { this.shaperNode.curve = makeFolderCurve(amount); } catch {}
     }
   }
 
@@ -1774,6 +1834,12 @@ class FXRack {
     try { this.ringSum.disconnect(); } catch {}
     try { this.ringCarrier.stop(); } catch {}
     try { this.ringCarrier.disconnect(); } catch {}
+    try { this.shaperDryBus.disconnect(); } catch {}
+    try { this.shaperWetBus.disconnect(); } catch {}
+    try { this.shaperSum.disconnect(); } catch {}
+    try { this.shaperDrive.disconnect(); } catch {}
+    try { this.shaperNode.disconnect(); } catch {}
+    try { this.shaperPost.disconnect(); } catch {}
     try { this.flangerIn.disconnect(); } catch {}
     try { this.flangerDry.disconnect(); } catch {}
     try { this.flangerWet.disconnect(); } catch {}
@@ -3293,6 +3359,7 @@ function getModTarget(t, key) {
     case "vinyl":        return rack.vinylWetBus?.gain ?? null;
     case "cassette":     return rack.cassetteWetBus?.gain ?? null;
     case "ringmod":      return rack.ringWet?.gain ?? null;
+    case "shaper":       return rack.shaperWetBus?.gain ?? null;
     case "crush":        return rack.crusher?.wet ?? null;
     case "autowah":      return rack.autowah?.wet ?? null;
     case "chorus":       return rack.chorus?.wet ?? null;
@@ -3318,11 +3385,12 @@ function getModTarget(t, key) {
 }
 
 const TRACK_FX_LFO_KEYS = new Set([
-  "fuzz","delay","verb","vinyl","cassette","ringmod","crush","autowah","chorus","phaser","flanger","pitch",
+  "fuzz","delay","verb","vinyl","cassette","ringmod","shaper","crush","autowah","chorus","phaser","flanger","pitch",
   "fuzz_drive","fuzz_tone","fuzz_level","vinyl_warmth","ring_freq","crush_bits",
   "chorus_rate","chorus_depth","phaser_rate","flanger_rate","flanger_fbk","delay_time","delay_fbk",
   // setter-driven (non-AudioParam) FX params
   "vinyl_wow","cassette_flutter","cassette_sat",
+  "shaper_amt",
   "autowah_sens","autowah_range",
   "phaser_depth","pitch_semi","reverb_decay",
 ]);
@@ -3331,6 +3399,7 @@ const TRACK_FX_LFO_KEYS = new Set([
 // polls in a RAF loop and applies values through the corresponding setter.
 const SETTER_LFO_KEYS = new Set([
   "vinyl_wow","cassette_flutter","cassette_sat",
+  "shaper_amt",
   "autowah_sens","autowah_range",
   "phaser_depth","chorus_depth","pitch_semi","reverb_decay",
 ]);
@@ -3344,6 +3413,7 @@ function setterLfoBase(t, key) {
     case "vinyl_wow":        return c.vinyl?.wow ?? 0.3;
     case "cassette_flutter": return c.cassette?.flutter ?? 0.3;
     case "cassette_sat":     return c.cassette?.sat ?? 0.4;
+    case "shaper_amt":       return c.shaper?.amount ?? 0.5;
     case "autowah_sens":     return c.autowah?.sens ?? 0.5;
     case "autowah_range":    return c.autowah?.range ?? 0.5;
     case "phaser_depth":     return c.phaser?.depth ?? 0.5;
@@ -3374,6 +3444,10 @@ function applySetterLfoValue(t, key, v) {
     }
     case "cassette_sat":
       try { rack.cassetteSat.curve = makeCassetteSatCurve(v); } catch {}
+      return;
+    case "shaper_amt":
+      try { rack.shaperDrive.gain.value = 1 + v * 8; } catch {}
+      try { rack.shaperNode.curve = makeFolderCurve(v); } catch {}
       return;
     case "autowah_sens":
       try { rack.autowah.sensitivity = -10 - v * 30; } catch {}
@@ -3583,6 +3657,8 @@ const AUTOMATION_TARGETS = {
   "fx.fuzz.level":      { label: "fuzz level" },
   "fx.ringmod":         { label: "ring mod wet" },
   "fx.ringmod.freq":    { label: "ring mod freq" },
+  "fx.shaper":          { label: "wave folder wet" },
+  "fx.shaper.amt":      { label: "wave folder amt" },
   "fx.crush":           { label: "bitcrush wet" },
   "fx.crush.bits":      { label: "bitcrush bits" },
   "fx.autowah":         { label: "auto-wah wet" },
@@ -3705,6 +3781,12 @@ function applyAutomationAtStep(t, key, v, time, vNext, stepDur) {
       ramp(rack.ringWet?.gain, vv, vn);
       ramp(rack.ringDry?.gain, 1 - vv, 1 - vn);
       return;
+    case "fx.shaper":
+      if (!rack.config.shaper) rack.config.shaper = { wet: 0, amount: 0.5 };
+      rack.config.shaper.wet = vv;
+      ramp(rack.shaperWetBus?.gain, vv, vn);
+      ramp(rack.shaperDryBus?.gain, 1 - vv, 1 - vn);
+      return;
     case "fx.flanger":
       rack.config.flanger.wet = vv;
       ramp(rack.flangerWet?.gain, vv, vn);
@@ -3771,6 +3853,7 @@ function applyAutomationAtStep(t, key, v, time, vNext, stepDur) {
     case "fx.vinyl.wow":        try { rack.applyVinyl({ wow: vv }); } catch {} return;
     case "fx.cassette.flutter": try { rack.applyCassette({ flutter: vv }); } catch {} return;
     case "fx.cassette.sat":     try { rack.applyCassette({ sat: vv }); } catch {} return;
+    case "fx.shaper.amt":       try { rack.applyWaveShaper({ amount: vv }); } catch {} return;
     case "fx.crush.bits":       try { rack.applyCrush({ bits: 1 + vv * 15 }); } catch {} return;
     case "fx.autowah.sens":     try { rack.applyAutoWah({ sens: vv }); } catch {} return;
     case "fx.autowah.range":    try { rack.applyAutoWah({ range: vv }); } catch {} return;
@@ -3918,10 +4001,12 @@ function resetFxDry(t) {
   if (!cfg.phaser)     cfg.phaser     = { wet: 0, rate: 0.3, depth: 0.5 };
   if (!cfg.flanger)    cfg.flanger    = { wet: 0, rate: 0.3, fbk: 0.5 };
   if (!cfg.pitchshift) cfg.pitchshift = { wet: 0, semitones: 0 };
+  if (!cfg.shaper)     cfg.shaper     = { wet: 0, amount: 0.5 };
   cfg.vinyl.amount      = 0;
   cfg.cassette.amount   = 0;
   cfg.fuzz.amount       = 0;
   cfg.ringmod.wet       = 0;
+  cfg.shaper.wet        = 0;
   cfg.autowah.wet       = 0;
   cfg.chorus.wet        = 0;
   cfg.phaser.wet        = 0;
@@ -3936,6 +4021,7 @@ function resetFxDry(t) {
     t.fxRack.applyCassette(cfg.cassette);
     t.fxRack.applyFuzz(cfg.fuzz);
     t.fxRack.applyRingMod(cfg.ringmod);
+    t.fxRack.applyWaveShaper(cfg.shaper);
     t.fxRack.applyAutoWah(cfg.autowah);
     t.fxRack.applyChorus(cfg.chorus);
     t.fxRack.applyPhaser(cfg.phaser);
@@ -4602,6 +4688,41 @@ function resizeTrack(t, len) {
   resizePattern(t, t._patternIdx ?? state.activePattern, len);
 }
 
+// Shrink a pattern by slicing every per-step array down to `newLen`. Notes
+// that started before newLen but extended past it get clamped. Mirror of
+// extendPatternByDuplicate. Clamps to [1, 128].
+function truncatePattern(t, patIdx, newLen) {
+  newLen = Math.max(1, Math.min(128, newLen | 0));
+  const p = t.patterns[patIdx];
+  if (!p) return;
+  const oldLen = p.steps.length;
+  if (newLen >= oldLen) return;
+  const KEYS = [
+    "steps","lengths","notes","velocities","chords","offsets",
+    "arps","arpRates","arpRanges","arpDirs","complexities","ratchets",
+    "sampleStarts","sampleEnds","sampleFadeIns","sampleFadeOuts","sampleLoopModes",
+  ];
+  for (const k of KEYS) if (Array.isArray(p[k])) p[k] = p[k].slice(0, newLen);
+  if (p.automation) {
+    for (const lane of Object.values(p.automation)) {
+      if (lane && Array.isArray(lane.values)) lane.values = lane.values.slice(0, newLen);
+    }
+  }
+  for (let i = 0; i < newLen; i++) {
+    if (p.steps[i]) p.lengths[i] = Math.max(1, Math.min(p.lengths[i] || 1, newLen - i));
+  }
+  if ((t._patternIdx ?? state.activePattern) === patIdx) {
+    aliasPattern(t, patIdx);
+    t.length = newLen;
+    t.accents = autoAccents(newLen, patternMeter(patIdx));
+    if (t.el) t.el.querySelector(".track-len").value = newLen;
+    renderStepGrid(t);
+    refreshAutIfOpen(t);
+    refreshRollIfOpen(t);
+  }
+  renderPatternGrid();
+}
+
 // Extend a pattern's length while tiling the existing content into the new
 // space. `i >= oldLen` reads from `i % oldLen`, so a 16-step pattern doubled
 // to 32 mirrors itself; quadrupled to 64 plays four copies. Clamps to [1, 128]
@@ -4648,22 +4769,11 @@ function extendPatternByDuplicate(t, patIdx, newLen) {
     if (t.el) t.el.querySelector(".track-len").value = newLen;
     renderStepGrid(t);
     refreshAutIfOpen(t);
-  }
-}
-
-// Extend every track on the active pattern. `factor > 1` multiplies the track's
-// current length; `addBars > 0` adds N bars of the active meter. Tracks whose
-// new length would exceed 128 are clamped.
-function extendActivePattern({ factor = 0, addBars = 0 } = {}) {
-  const patIdx = state.activePattern;
-  const spb = stepsPerBarForMeter(patternMeter(patIdx));
-  for (const t of state.tracks) {
-    const cur = t.length;
-    const target = factor > 0 ? cur * factor : cur + addBars * spb;
-    extendPatternByDuplicate(t, patIdx, target);
+    refreshRollIfOpen(t);
   }
   renderPatternGrid();
 }
+
 
 function resizeAllTracks() {
   const len = totalSteps();
@@ -4936,6 +5046,23 @@ function renderTrack(t) {
   if (semiDownBtn) semiDownBtn.addEventListener("click", () => shiftTrackOctave(t, -1));
   if (semiUpBtn)   semiUpBtn.addEventListener("click",   () => shiftTrackOctave(t, +1));
 
+  node.querySelector(".track-len-plus1")?.addEventListener("click", () => {
+    const spb = stepsPerBarForMeter(patternMeter(state.activePattern));
+    extendPatternByDuplicate(t, state.activePattern, t.length + spb);
+  });
+  node.querySelector(".track-len-2x")?.addEventListener("click", () => {
+    extendPatternByDuplicate(t, state.activePattern, t.length * 2);
+  });
+  node.querySelector(".track-len-4x")?.addEventListener("click", () => {
+    extendPatternByDuplicate(t, state.activePattern, t.length * 4);
+  });
+  node.querySelector(".track-len-half")?.addEventListener("click", () => {
+    truncatePattern(t, state.activePattern, Math.max(1, Math.floor(t.length / 2)));
+  });
+  node.querySelector(".track-len-quarter")?.addEventListener("click", () => {
+    truncatePattern(t, state.activePattern, Math.max(1, Math.floor(t.length / 4)));
+  });
+
   const soloBtn = node.querySelector(".track-solo");
   soloBtn.addEventListener("click", () => {
     t.soloed = !t.soloed;
@@ -4989,8 +5116,13 @@ function renderTrack(t) {
   bindPanelToggle(".track-mod",    ".track-mod-panel");
   bindPanelToggle(".track-aut",    ".track-aut-panel",
     () => renderAutomationPanel(t, node.querySelector(".track-aut-panel")));
-  bindPanelToggle(".track-roll",   ".track-roll-panel",
-    () => renderRollPanel(t, node.querySelector(".track-roll-panel")));
+  bindPanelToggle(".track-roll",   ".track-roll-panel", () => {
+    // Re-center the roll on whichever 2-octave window holds the most notes
+    // from the active pattern. Skip if the pattern is empty so a user who
+    // paged oct +/- on an empty track keeps their position.
+    if (t.steps.some(s => s)) t.rollViewOct = bestRollViewOct(t);
+    renderRollPanel(t, node.querySelector(".track-roll-panel"));
+  });
   bindPanelToggle(".track-filter", ".track-filter-panel");
   bindPanelToggle(".track-env",    ".track-env-panel");
   bindPanelToggle(".track-fx",     ".track-fx-panel");
@@ -5162,6 +5294,7 @@ function applyFxToTrack(t, fx) {
     t.fxRack.applyCassette(cfg.cassette);
     t.fxRack.applyFuzz(cfg.fuzz);
     t.fxRack.applyRingMod(cfg.ringmod);
+    t.fxRack.applyWaveShaper(cfg.shaper || { wet: 0, amount: 0.5 });
     t.fxRack.applyCrush(cfg.crush || { bits: 8, wet: 0 });
     t.fxRack.applyAutoWah(cfg.autowah);
     t.fxRack.applyChorus(cfg.chorus);
@@ -5187,6 +5320,7 @@ function refreshFxPanelUI(t) {
   if (!cfg.phaser)     cfg.phaser     = { wet: 0, rate: 0.3, depth: 0.5 };
   if (!cfg.flanger)    cfg.flanger    = { wet: 0, rate: 0.3, fbk: 0.5 };
   if (!cfg.pitchshift) cfg.pitchshift = { wet: 0, semitones: 0 };
+  if (!cfg.shaper)     cfg.shaper     = { wet: 0, amount: 0.5 };
   const q = s => panel.querySelector(s);
   const set = (sel, v) => { const el = q(sel); if (el != null && v != null) el.value = v; };
   set(".fx-vinyl-amount",    cfg.vinyl.amount);
@@ -5201,6 +5335,8 @@ function refreshFxPanelUI(t) {
   q(".fx-fuzz-level").value  = cfg.fuzz.level;
   set(".fx-ringmod-wet",      cfg.ringmod.wet);
   set(".fx-ringmod-freq",     cfg.ringmod.freq);
+  set(".fx-shaper-wet",       cfg.shaper.wet);
+  set(".fx-shaper-amt",       cfg.shaper.amount);
   set(".fx-autowah-wet",      cfg.autowah.wet);
   set(".fx-autowah-sens",     cfg.autowah.sens);
   set(".fx-autowah-range",    cfg.autowah.range);
@@ -5240,6 +5376,7 @@ function wireFxPanel(t, panel) {
   if (!fc.phaser)     fc.phaser     = { wet: 0, rate: 0.3, depth: 0.5 };
   if (!fc.flanger)    fc.flanger    = { wet: 0, rate: 0.3, fbk: 0.5 };
   if (!fc.pitchshift) fc.pitchshift = { wet: 0, semitones: 0 };
+  if (!fc.shaper)     fc.shaper     = { wet: 0, amount: 0.5 };
   const set = (sel, v) => { const el = q(sel); if (el != null && v != null) el.value = v; };
   set(".fx-vinyl-amount",    fc.vinyl.amount);
   set(".fx-vinyl-warmth",    fc.vinyl.warmth);
@@ -5253,6 +5390,8 @@ function wireFxPanel(t, panel) {
   q(".fx-fuzz-level").value  = fc.fuzz.level;
   set(".fx-ringmod-wet",      fc.ringmod.wet);
   set(".fx-ringmod-freq",     fc.ringmod.freq);
+  set(".fx-shaper-wet",       fc.shaper.wet);
+  set(".fx-shaper-amt",       fc.shaper.amount);
   set(".fx-autowah-wet",      fc.autowah.wet);
   set(".fx-autowah-sens",     fc.autowah.sens);
   set(".fx-autowah-range",    fc.autowah.range);
@@ -5300,6 +5439,11 @@ function wireFxPanel(t, panel) {
     fc.ringmod.wet  = Number(q(".fx-ringmod-wet").value);
     fc.ringmod.freq = Number(q(".fx-ringmod-freq").value);
     t.fxRack?.applyRingMod(fc.ringmod);
+  };
+  const applyWaveShaper = () => {
+    fc.shaper.wet    = Number(q(".fx-shaper-wet").value);
+    fc.shaper.amount = Number(q(".fx-shaper-amt").value);
+    t.fxRack?.applyWaveShaper(fc.shaper);
   };
   const applyAutoWah = () => {
     fc.autowah.wet   = Number(q(".fx-autowah-wet").value);
@@ -5355,6 +5499,7 @@ function wireFxPanel(t, panel) {
   ["amount","flutter","sat"].forEach(n => q(`.fx-cassette-${n}`)?.addEventListener("input", applyCassette));
   ["amount","drive","tone","level"].forEach(n => q(`.fx-fuzz-${n}`).addEventListener("input", applyFuzz));
   ["wet","freq"].forEach(n => q(`.fx-ringmod-${n}`)?.addEventListener("input", applyRingMod));
+  ["wet","amt"].forEach(n => q(`.fx-shaper-${n}`)?.addEventListener("input", applyWaveShaper));
   ["wet","sens","range"].forEach(n => q(`.fx-autowah-${n}`)?.addEventListener("input", applyAutoWah));
   ["wet","rate","depth"].forEach(n => q(`.fx-chorus-${n}`)?.addEventListener("input", applyChorus));
   ["wet","rate","depth"].forEach(n => q(`.fx-phaser-${n}`)?.addEventListener("input", applyPhaser));
@@ -5664,6 +5809,28 @@ function renderStepGrid(t) {
 const ROLL_VIEW_OCTS = 2;
 const ROLL_MIN_OCT = 1;
 const ROLL_MAX_OCT = 6;
+
+// Pick the starting octave whose ROLL_VIEW_OCTS-tall window contains the most
+// triggered notes in the track's active pattern. Used the first time the roll
+// is opened (and whenever rollViewOct is reset). Once the user pages oct +/-
+// manually, their choice is preserved.
+function bestRollViewOct(t) {
+  const counts = new Map();
+  for (let i = 0; i < t.length; i++) {
+    if (!t.steps[i] || t.notes[i] == null) continue;
+    // seqbaby octave naming: C4 = MIDI 60 → octave 4 = floor(60/12) - 1
+    const oct = Math.floor(t.notes[i] / 12) - 1;
+    counts.set(oct, (counts.get(oct) || 0) + 1);
+  }
+  if (counts.size === 0) return 3;
+  let bestStart = 3, bestCount = -1;
+  for (let start = ROLL_MIN_OCT; start + ROLL_VIEW_OCTS - 1 <= ROLL_MAX_OCT; start++) {
+    let c = 0;
+    for (let o = start; o < start + ROLL_VIEW_OCTS; o++) c += counts.get(o) || 0;
+    if (c > bestCount) { bestCount = c; bestStart = start; }
+  }
+  return bestStart;
+}
 const BLACK_KEYS = new Set([1, 3, 6, 8, 10]);
 
 function refreshRollIfOpen(t) {
@@ -5684,7 +5851,7 @@ function refreshAutIfOpen(t) {
 
 function renderRollPanel(t, panel) {
   panel.replaceChildren();
-  if (t.rollViewOct == null) t.rollViewOct = 3;
+  if (t.rollViewOct == null) t.rollViewOct = bestRollViewOct(t);
   if (t.rollShowAll == null) t.rollShowAll = false;
   const scaleIntervals = state.scale.active ? (SCALES[state.scale.mode] || null) : null;
   const chromaticView = !scaleIntervals || t.rollShowAll;
@@ -5749,11 +5916,21 @@ function renderRollPanel(t, panel) {
     const label = document.createElement("div");
     label.className = "roll-label" + (isBlack ? " black" : "") + (isRoot ? " root" : "") + (isMicrotonal ? " micro" : "");
     label.textContent = midiToName(m);
+    // Diatonic pitch-class color: same hue as the corresponding note cells.
+    if (!isMicrotonal) {
+      const labCol = noteColor(m);
+      if (labCol) label.style.setProperty("--note-color", labCol);
+    }
     grid.appendChild(label);
 
     const cells = document.createElement("div");
     cells.className = "roll-cells";
     cells.style.gridTemplateColumns = `repeat(${steps}, minmax(0, 1fr))`;
+    // Row-level pitch color — feeds the hover tint and any other per-row paint.
+    if (!isMicrotonal) {
+      const rowCol = noteColor(m);
+      if (rowCol) cells.style.setProperty("--row-color", rowCol);
+    }
     for (let i = 0; i < steps; i++) {
       const cell = document.createElement("div");
       cell.className = "roll-cell" + (isBlack ? " row-black" : "") + (isMicrotonal ? " row-micro" : "");
@@ -7580,9 +7757,6 @@ function init() {
     copyPattern(state.activePattern, next);
     switchPattern(next);
   });
-  document.getElementById("pattern-extend-1")?.addEventListener("click", () => extendActivePattern({ addBars: 1 }));
-  document.getElementById("pattern-extend-2x")?.addEventListener("click", () => extendActivePattern({ factor: 2 }));
-  document.getElementById("pattern-extend-4x")?.addEventListener("click", () => extendActivePattern({ factor: 4 }));
   document.getElementById("pattern-repeats").addEventListener("change", e => {
     const v = Math.max(1, Math.min(16, Number(e.target.value) || 1));
     e.target.value = v;

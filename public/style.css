@@ -162,6 +162,8 @@ button.danger { color: var(--danger); }
 
 .track-oct { display: inline-flex; gap: 2px; }
 .track-oct button { padding: 3px 8px; font-size: 11px; min-width: 44px; }
+.track-len-extend { display: inline-flex; gap: 2px; }
+.track-len-extend button { padding: 3px 8px; font-size: 11px; min-width: 36px; }
 .master-meter { width: 80px; height: 12px; }
 .track-meter  { width: 100%; height: 100%; }
 
@@ -557,8 +559,9 @@ main {
   line-height: 1.4;
   user-select: none;
 }
-.roll-label.black { color: var(--fg-dim); background: var(--bg-2); }
-.roll-label.root { color: #8ec7ff; font-weight: 600; }
+.roll-label { color: var(--note-color, var(--fg-dim)); }
+.roll-label.black { color: var(--note-color, var(--fg-dim)); background: var(--bg-2); }
+.roll-label.root { color: var(--note-color, #8ec7ff); font-weight: 600; }
 .roll-label.micro { color: color-mix(in oklab, var(--fg-dim) 60%, transparent); font-size: 9px; padding-inline: 3px; }
 .roll-cells {
   display: grid;
@@ -573,7 +576,8 @@ main {
   transition: background 40ms linear, border-color 40ms linear;
   position: relative;
 }
-.roll-cell:hover { background: var(--bg-4, #30363d); }
+.roll-cell:hover { background: color-mix(in srgb, var(--row-color, var(--bg-4, #30363d)) 32%, var(--bg-3)); }
+.roll-cell.on:hover { background: color-mix(in srgb, var(--note-color, var(--accent)) 88%, #fff 12%); }
 .roll-cell.beat { border-left: 1px solid var(--border); }
 .roll-cell.row-black { background: var(--bg-2); }
 .roll-cell.row-micro { background: color-mix(in oklab, var(--bg-3) 70%, var(--bg-2)); }
