@@ -7200,6 +7200,13 @@ async function ensureAudio() {
   // state.audioCtx + Tone.setContext are wired up at init() time so Tone.Transport
   // latches onto our context from first access.
   await Tone.start();
+  // Tone.start() resolves successfully even when our underlying raw AudioContext
+  // (passed to Tone.setContext at init) stays "suspended" — Tone v15 sometimes
+  // doesn't propagate resume() to externally-provided contexts. Resume directly
+  // from inside the user gesture so audio actually unlocks.
+  if (state.audioCtx.state === "suspended") {
+    try { await state.audioCtx.resume(); } catch (e) { console.warn("audioCtx.resume failed", e); }
+  }
   if (!state.masterGain) {
     state.masterGain = state.audioCtx.createGain();
     state.masterGain.gain.value = 1;
