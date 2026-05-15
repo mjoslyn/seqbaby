@@ -979,8 +979,10 @@ async function onLoadSet() {
     setStatus(`deleted "${choice.value}"`);
     return;
   }
+  // Stamp the basis BEFORE applySet so a throw in apply can't leave us with
+  // a loaded session that doesn't bump its version on the next save.
+  state.currentSetName = choice.value;
   applySet(all[choice.value]);
-  state.currentSetName = choice.value;  // remember the basis so save-as suggests "name v(N+1)"
 }
 
 function applySet(s) {
