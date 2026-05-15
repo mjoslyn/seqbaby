@@ -243,7 +243,8 @@ button.danger { color: var(--danger); }
 .dl-btn { display: inline-flex; align-items: center; gap: 5px; }
 .dl-btn .dl-icon { display: inline-flex; color: inherit; }
 .dl-btn:disabled .dl-icon { color: var(--fg-dim); }
-.set-stack, .mode-stack { display: flex; flex-direction: column; gap: 4px; }
+.set-stack, .mode-stack, .len-stack { display: flex; flex-direction: column; gap: 4px; }
+.len-stack button { min-width: 36px; }
 .mode-row { display: flex; gap: 4px; }
 
 .master-prompt {
@@ -570,16 +571,38 @@ main {
   cursor: pointer;
   border: 1px solid transparent;
   transition: background 40ms linear, border-color 40ms linear;
+  position: relative;
 }
 .roll-cell:hover { background: var(--bg-4, #30363d); }
 .roll-cell.beat { border-left: 1px solid var(--border); }
 .roll-cell.row-black { background: var(--bg-2); }
 .roll-cell.row-micro { background: color-mix(in oklab, var(--bg-3) 70%, var(--bg-2)); }
 .roll-cell.on {
-  background: var(--accent);
-  border-color: var(--accent);
+  background: var(--note-color, var(--accent));
+  border-color: var(--note-color, var(--accent));
 }
-.roll-cell.on.chord { background: #8ec7ff; border-color: #8ec7ff; }
+/* Multi-step notes: square the adjoining corners and bridge the 1px grid gap
+   with a pseudo so a held note reads as a single continuous bar. */
+.roll-cell.on.held {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+.roll-cell.on.note-joins-next {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.roll-cell.on.note-joins-next::after {
+  content: "";
+  position: absolute;
+  top: -1px;
+  bottom: -1px;
+  right: -3px;
+  width: 3px;
+  background: var(--note-color, var(--accent));
+  pointer-events: none;
+}
+.roll-cell.on.chord { background: var(--note-color, #8ec7ff); border-color: var(--note-color, #8ec7ff); }
+.roll-cell.on.chord.note-joins-next::after { background: var(--note-color, #8ec7ff); }
 .roll-cell.now { outline: 1px solid #fff6; }
 
 .roll-vel-lane {
@@ -834,14 +857,14 @@ main {
 .steps { align-items: stretch; }
 
 .step.on {
-  background: var(--step-on);
+  background: var(--note-color, var(--step-on));
   filter: brightness(calc(0.35 + var(--vel, 1) * 0.65));
 }
 .step.beat { outline: 1px solid rgba(255,255,255,0.06); }
 .step.now { border-color: var(--step-now); box-shadow: 0 0 0 1px var(--step-now) inset; }
 
 .step.accent { background: #363b47; }
-.step.accent.on { background: color-mix(in oklab, var(--step-on) 85%, #fff 15%); }
+.step.accent.on { background: var(--note-color, color-mix(in oklab, var(--step-on) 85%, #fff 15%)); }
 .step.accent::before {
   content: "";
   position: absolute;

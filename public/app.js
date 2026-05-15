@@ -452,6 +452,26 @@ function chordNotes(rootMidi, chordType) {
   return tones.map(i => rootMidi + i);
 }
 
+// Map a midi note to a hue (0..360) by its scale-degree position, so the
+// rainbow rotates once over the scale's length. Returns null when no scale is
+// active or the note doesn't sit on a scale degree — callers then fall back
+// to the engine's default accent color.
+function noteScaleHue(midi) {
+  if (!state.scale.active) return null;
+  const intervals = SCALES[state.scale.mode];
+  if (!intervals || !intervals.length) return null;
+  const pc = ((Math.round(midi) - state.scale.root) % 12 + 12) % 12;
+  const EPS = 1e-6;
+  const idx = intervals.findIndex(i => Math.abs(i - pc) < EPS);
+  if (idx < 0) return null;
+  return (idx / intervals.length) * 360;
+}
+function noteColor(midi) {
+  const h = noteScaleHue(midi);
+  if (h == null) return null;
+  return `hsl(${h.toFixed(1)} 72% 56%)`;
+}
+
 // Does every tone of chordKey (rooted at rootMidi) fall on the active scale?
 // Returns true when no scale is active.
 function chordFitsScale(rootMidi, chordKey) {
@@ -3377,7 +3397,10 @@ function applySetterLfoValue(t, key, v) {
       try { rack.chorus.depth = v; } catch {}
       return;
     case "pitch_semi":
-      try { rack.pitchshift.pitch = Math.round(v * 24 - 12); } catch {}
+      // Don't round — Tone.PitchShift.pitch accepts fractional semitones, and
+      // rounding eats every modulation narrower than ±0.5 semitone (which is
+      // exactly the range a vibrato-style mod wants to live in).
+      try { rack.pitchshift.pitch = v * 24 - 12; } catch {}
       return;
     case "reverb_decay": {
       // IR rebuild is heavy — only regenerate on perceptible change.
@@ -4588,6 +4611,69 @@ function resizeTrack(t, len) {
   resizePattern(t, t._patternIdx ?? state.activePattern, len);
 }
 
+// Extend a pattern's length while tiling the existing content into the new
+// space. `i >= oldLen` reads from `i % oldLen`, so a 16-step pattern doubled
+// to 32 mirrors itself; quadrupled to 64 plays four copies. Clamps to [1, 128]
+// (the same hard cap resizePattern uses).
+function extendPatternByDuplicate(t, patIdx, newLen) {
+  newLen = Math.max(1, Math.min(128, newLen | 0));
+  const p = t.patterns[patIdx];
+  if (!p) return;
+  const oldLen = p.steps.length;
+  if (newLen <= oldLen) return;
+  const FILL = {
+    steps: 0, lengths: 0, notes: null, velocities: 0.5, chords: "",
+    offsets: 0, arps: false, arpRates: 0.25, arpRanges: 1, arpDirs: "up",
+    complexities: 0, ratchets: 1,
+    sampleStarts: 0, sampleEnds: 1, sampleFadeIns: 0, sampleFadeOuts: 0,
+    sampleLoopModes: "off",
+  };
+  for (const [key, fill] of Object.entries(FILL)) {
+    const arr = p[key];
+    if (!Array.isArray(arr)) continue;
+    const next = new Array(newLen);
+    for (let i = 0; i < newLen; i++) {
+      next[i] = arr[i < oldLen ? i : (i % oldLen)] ?? fill;
+    }
+    p[key] = next;
+  }
+  if (p.automation) {
+    for (const lane of Object.values(p.automation)) {
+      if (!lane || !Array.isArray(lane.values)) continue;
+      const next = new Array(newLen);
+      for (let i = 0; i < newLen; i++) {
+        next[i] = lane.values[i < oldLen ? i : (i % oldLen)] ?? 0.5;
+      }
+      lane.values = next;
+    }
+  }
+  for (let i = 0; i < newLen; i++) {
+    if (p.steps[i]) p.lengths[i] = Math.max(1, Math.min(p.lengths[i] || 1, newLen - i));
+  }
+  if ((t._patternIdx ?? state.activePattern) === patIdx) {
+    aliasPattern(t, patIdx);
+    t.length = newLen;
+    t.accents = autoAccents(newLen, patternMeter(patIdx));
+    if (t.el) t.el.querySelector(".track-len").value = newLen;
+    renderStepGrid(t);
+    refreshAutIfOpen(t);
+  }
+}
+
+// Extend every track on the active pattern. `factor > 1` multiplies the track's
+// current length; `addBars > 0` adds N bars of the active meter. Tracks whose
+// new length would exceed 128 are clamped.
+function extendActivePattern({ factor = 0, addBars = 0 } = {}) {
+  const patIdx = state.activePattern;
+  const spb = stepsPerBarForMeter(patternMeter(patIdx));
+  for (const t of state.tracks) {
+    const cur = t.length;
+    const target = factor > 0 ? cur * factor : cur + addBars * spb;
+    extendPatternByDuplicate(t, patIdx, target);
+  }
+  renderPatternGrid();
+}
+
 function resizeAllTracks() {
   const len = totalSteps();
   state.tracks.forEach(t => resizeTrack(t, len));
@@ -4633,12 +4719,12 @@ function startNote(t, anchor) {
   if (t.notes[anchor] == null) {
     // Drum-kit tracks default every new step to C2 regardless of scale. The
     // pitching baseline for their samples is also C2 so that's natural pitch.
-    // Other tracks default to C3 (or scale root in octave 3 when a scale is set).
+    // Other tracks default to the selected key's root in octave 3 — even when
+    // scale-active is off, the picked key is the natural starting pitch.
     if (t.isDrumKit) {
       t.notes[anchor] = 36; // C2
     } else {
-      const base = state.scale.active ? 48 + (state.scale.root | 0) : 48;
-      t.notes[anchor] = applyScale(base);
+      t.notes[anchor] = 48 + (state.scale.root | 0);
     }
   }
   applySampleDefaultsToStep(t, anchor);
@@ -5686,10 +5772,17 @@ function renderRollPanel(t, panel) {
       // Mark the anchor and any "held" continuation columns. A multi-step note
       // lives on t.lengths[anchor]; the columns after the anchor have steps[i]=0
       // but still belong to the note visually. Fractional MIDI compares via EPS.
+      // `note-joins-next` is set on every cell except the note's last column so
+      // the CSS can square adjoining corners + bridge the 1px grid gap, making
+      // a multi-step note read as one continuous bar.
       const anchor = anchorCovering(t, i);
       if (anchor >= 0 && Math.abs(t.notes[anchor] - m) < EPS) {
+        const len = Math.max(1, t.lengths[anchor] || 1);
         cell.classList.add("on");
         if (anchor !== i) cell.classList.add("held");
+        if (i < anchor + len - 1) cell.classList.add("note-joins-next");
+        const col = noteColor(t.notes[anchor]);
+        if (col) cell.style.setProperty("--note-color", col);
       }
       cells.appendChild(cell);
     }
@@ -5731,11 +5824,16 @@ function renderRollPanel(t, panel) {
   const paintColumn = (step) => {
     const anchor = anchorCovering(t, step);
     const coverNote = anchor >= 0 ? t.notes[anchor] : null;
+    const noteEnd = anchor >= 0 ? anchor + Math.max(1, t.lengths[anchor] || 1) - 1 : -1;
+    const coverCol = anchor >= 0 ? noteColor(coverNote) : null;
     grid.querySelectorAll(`.roll-cell[data-step="${step}"]`).forEach(c => {
       const note = Number(c.dataset.note);
       const on = anchor >= 0 && Math.abs(coverNote - note) < EPS;
       c.classList.toggle("on", on);
       c.classList.toggle("held", on && anchor !== step);
+      c.classList.toggle("note-joins-next", on && step < noteEnd);
+      if (on && coverCol) c.style.setProperty("--note-color", coverCol);
+      else c.style.removeProperty("--note-color");
     });
     const vcell = velCells.querySelector(`.roll-vel-cell[data-step="${step}"]`);
     if (vcell) {
@@ -5750,13 +5848,45 @@ function renderRollPanel(t, panel) {
     for (let i = lo; i <= hi; i++) paintColumn(i);
   };
 
-  // Drag-to-extend. On pointerdown an anchor is established; dragging to the
-  // right grows the anchor note's length (extendNote) so the note visually
-  // spans the passed-over columns. Click semantics:
-  //   cell not in any note      → create note at that pitch, anchor = click col
-  //   cell at anchor's pitch    → remove the whole note
-  //   cell in note, diff pitch  → move the note's pitch, keep its length
-  //   two clicks in < 400 ms    → activate + velocity to full (manual dblclick)
+  // Gestures on the roll grid:
+  //   empty cell down + drag right        → create note, drag extends length
+  //   note's right-edge cell + drag right → resize (grow); drag left → shrink
+  //   note's any-other cell + drag        → move (step + pitch follow pointer)
+  //   length-1 cell (anchor==tail) + drag → mode picked on first move:
+  //                                          horizontal right → resize, else move
+  //   click on note (no drag), same pitch → remove the whole note (legacy)
+  //   click on note (no drag), diff pitch → re-pitch to clicked row, keep length
+  //   two clicks in < 400 ms              → activate + velocity to full
+  const PER_STEP_KEYS = [
+    "lengths","notes","velocities","chords","offsets",
+    "arps","arpRates","arpRanges","arpDirs","complexities","ratchets",
+    "sampleStarts","sampleEnds","sampleFadeIns","sampleFadeOuts","sampleLoopModes",
+  ];
+  const snapStep = (idx) => {
+    const out = {};
+    for (const k of PER_STEP_KEYS) if (Array.isArray(t[k])) out[k] = t[k][idx];
+    return out;
+  };
+  const writeStep = (idx, snap, noteOverride) => {
+    t.steps[idx] = 1;
+    for (const k of PER_STEP_KEYS) {
+      if (!Array.isArray(t[k])) continue;
+      if (k === "notes" && noteOverride != null) { t[k][idx] = noteOverride; continue; }
+      if (snap[k] !== undefined) t[k][idx] = snap[k];
+    }
+  };
+  // Wipe [from,to] inclusive and truncate any prior note whose tail reaches into it.
+  const eraseSpan = (from, to) => {
+    if (from > 0) {
+      const cov = anchorCovering(t, from);
+      if (cov >= 0 && cov < from) t.lengths[cov] = from - cov;
+    }
+    for (let i = Math.max(0, from); i <= Math.min(t.length - 1, to); i++) {
+      t.steps[i] = 0; t.lengths[i] = 0; t.notes[i] = null;
+      t.velocities[i] = 0.5; t.chords[i] = "";
+    }
+  };
+
   let drag = null;
   let lastRollClickTime = 0;
   let lastRollClickKey = "";
@@ -5800,30 +5930,33 @@ function renderRollPanel(t, panel) {
     lastRollClickKey = key;
 
     const existing = anchorCovering(t, step);
-    if (existing >= 0 && Math.abs(t.notes[existing] - note) < EPS) {
-      // click on the note (anchor or held continuation) — remove the whole note
-      localMutate(() => {
-        const a = existing;
-        const oldLen = Math.max(1, t.lengths[a] || 1);
-        removeNote(t, a);
-        paintRange(a, a + oldLen - 1);
-        renderStepGrid(t);
-      });
-      return;
-    }
     if (existing >= 0) {
-      // different pitch in an active column → move the pitch, keep length
-      localMutate(() => {
-        t.notes[existing] = note;
-        paintRange(existing, existing + Math.max(1, t.lengths[existing] || 1) - 1);
-        renderStepGrid(t);
-      });
+      // Grab the note. Mode resolves on first pointermove for ambiguous (length-1) cases.
+      const len = Math.max(1, t.lengths[existing] || 1);
+      const isRightEdge = step === existing + len - 1;
+      const samePitch = Math.abs(t.notes[existing] - note) < EPS;
+      drag = {
+        mode: isRightEdge ? (len === 1 ? "ambiguous" : "resize") : "move",
+        anchor: existing,
+        origLen: len,
+        origSnap: snapStep(existing),
+        startStep: step,
+        startNote: note,
+        curAnchor: existing,
+        curNote: t.notes[existing],
+        samePitch,
+        moved: false,
+        pointerId: e.pointerId,
+      };
+      panel._rollDragActive = true;
+      try { grid.setPointerCapture(e.pointerId); } catch {}
+      e.preventDefault();
       return;
     }
     // empty cell → start a fresh note with anchor here; drag extends it
     startNote(t, step);
     t.notes[step] = note;
-    drag = { anchor: step, lastEnd: step, pointerId: e.pointerId };
+    drag = { mode: "create", anchor: step, lastEnd: step, moved: false, pointerId: e.pointerId };
     panel._rollDragActive = true;
     try { grid.setPointerCapture(e.pointerId); } catch {}
     paintColumn(step);
@@ -5835,16 +5968,85 @@ function renderRollPanel(t, panel) {
     const cell = cellFromPoint(e.clientX, e.clientY);
     if (!cell || !grid.contains(cell)) return;
     const step = Number(cell.dataset.step);
-    if (step === drag.lastEnd) return;
-    const newEnd = Math.max(drag.anchor, step);
-    extendNote(t, drag.anchor, newEnd);
-    paintRange(drag.anchor, Math.max(drag.lastEnd, newEnd));
-    drag.lastEnd = newEnd;
+    const note = Number(cell.dataset.note);
+
+    if (drag.mode === "ambiguous") {
+      if (step === drag.startStep && Math.abs(note - drag.startNote) < EPS) return;
+      drag.mode = (step > drag.startStep) ? "resize" : "move";
+    }
+
+    if (drag.mode === "create") {
+      if (step === drag.lastEnd) return;
+      const newEnd = Math.max(drag.anchor, step);
+      extendNote(t, drag.anchor, newEnd);
+      paintRange(drag.anchor, Math.max(drag.lastEnd, newEnd));
+      drag.lastEnd = newEnd;
+      drag.moved = true;
+      renderStepGrid(t);
+      return;
+    }
+
+    if (drag.mode === "resize") {
+      const newEnd = Math.max(drag.anchor, step);
+      const prevLen = Math.max(1, t.lengths[drag.anchor] || 1);
+      const desired = newEnd - drag.anchor + 1;
+      if (desired === prevLen) return;
+      extendNote(t, drag.anchor, newEnd);
+      const newLen = Math.max(1, t.lengths[drag.anchor] || 1);
+      paintRange(drag.anchor, drag.anchor + Math.max(prevLen, newLen) - 1);
+      drag.moved = true;
+      renderStepGrid(t);
+      return;
+    }
+
+    // ── move ──
+    const stepDelta = step - drag.startStep;
+    const noteDelta = note - drag.startNote;
+    const len = drag.origLen;
+    const newAnchor = Math.max(0, Math.min(t.length - len, drag.anchor + stepDelta));
+    const newNote = (drag.origSnap.notes ?? drag.curNote) + noteDelta;
+    if (newAnchor === drag.curAnchor && Math.abs(newNote - drag.curNote) < EPS) return;
+
+    // Compute paint range BEFORE mutation so we cover any truncated neighbour's old tail.
+    let paintLo = Math.min(drag.curAnchor, newAnchor);
+    let paintHi = Math.max(drag.curAnchor + len - 1, newAnchor + len - 1);
+    if (newAnchor > 0) {
+      const cov = anchorCovering(t, newAnchor);
+      if (cov >= 0 && cov < newAnchor && cov !== drag.curAnchor) {
+        const cLen = Math.max(1, t.lengths[cov] || 1);
+        paintHi = Math.max(paintHi, cov + cLen - 1);
+      }
+    }
+
+    eraseSpan(drag.curAnchor, drag.curAnchor + len - 1);
+    eraseSpan(newAnchor, newAnchor + len - 1);
+    writeStep(newAnchor, drag.origSnap, newNote);
+    // Restore length (snap may have come from a single index — explicit set is clearer).
+    t.lengths[newAnchor] = len;
+
+    paintRange(paintLo, paintHi);
+    drag.curAnchor = newAnchor;
+    drag.curNote = newNote;
+    drag.moved = true;
     renderStepGrid(t);
   });
   const endDrag = (e) => {
     if (!drag || e.pointerId !== drag.pointerId) return;
     try { grid.releasePointerCapture(e.pointerId); } catch {}
+    // Click on existing note without drag — preserve legacy click semantics.
+    if (!drag.moved && (drag.mode === "move" || drag.mode === "resize" || drag.mode === "ambiguous")) {
+      localMutate(() => {
+        const a = drag.anchor;
+        const len = drag.origLen;
+        if (drag.samePitch) {
+          removeNote(t, a);
+        } else {
+          t.notes[a] = drag.startNote;
+        }
+        paintRange(a, a + len - 1);
+        renderStepGrid(t);
+      });
+    }
     drag = null;
     panel._rollDragActive = false;
   };
@@ -5896,6 +6098,10 @@ function makeCell(t, idx, span, on) {
     cell.classList.add("on");
     const vel = t.velocities[idx] ?? 0.5;
     cell.style.setProperty("--vel", String(vel));
+    if (t.notes[idx] != null) {
+      const col = noteColor(t.notes[idx]);
+      if (col) cell.style.setProperty("--note-color", col);
+    }
   }
   if (span > 1) cell.classList.add("held");
   if (span > 1) cell.style.gridColumn = `span ${span}`;
@@ -7211,10 +7417,17 @@ function initScaleUI() {
     mode.appendChild(opt);
   });
   syncScaleUI();
-  const refreshOpenRolls = () => { for (const t of state.tracks) refreshRollIfOpen(t); };
-  on.addEventListener("change", () => { state.scale.active = on.checked; refreshOpenRolls(); });
-  root.addEventListener("change", () => { state.scale.root = Number(root.value); refreshOpenRolls(); });
-  mode.addEventListener("change", () => { state.scale.mode = mode.value; refreshOpenRolls(); });
+  // Scale changes affect both the open piano-roll panels (visible pitch rows)
+  // and the step-grid note coloring on every track — re-render both.
+  const refreshOnScaleChange = () => {
+    for (const t of state.tracks) {
+      refreshRollIfOpen(t);
+      renderStepGrid(t);
+    }
+  };
+  on.addEventListener("change", () => { state.scale.active = on.checked; refreshOnScaleChange(); });
+  root.addEventListener("change", () => { state.scale.root = Number(root.value); refreshOnScaleChange(); });
+  mode.addEventListener("change", () => { state.scale.mode = mode.value; refreshOnScaleChange(); });
 }
 
 // ---- init --------------------------------------------------------------
@@ -7376,6 +7589,9 @@ function init() {
     copyPattern(state.activePattern, next);
     switchPattern(next);
   });
+  document.getElementById("pattern-extend-1")?.addEventListener("click", () => extendActivePattern({ addBars: 1 }));
+  document.getElementById("pattern-extend-2x")?.addEventListener("click", () => extendActivePattern({ factor: 2 }));
+  document.getElementById("pattern-extend-4x")?.addEventListener("click", () => extendActivePattern({ factor: 4 }));
   document.getElementById("pattern-repeats").addEventListener("change", e => {
     const v = Math.max(1, Math.min(16, Number(e.target.value) || 1));
     e.target.value = v;
