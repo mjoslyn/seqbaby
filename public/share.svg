@@ -33,7 +33,7 @@
   <!-- wordmark + tagline -->
   <g font-family="ui-monospace, SF Mono, Menlo, Consolas, monospace" text-rendering="optimizeLegibility">
     <text x="540" y="300" font-size="168" font-weight="700" fill="#e8e6df" letter-spacing="-2">seqbaby</text>
-    <text x="540" y="360" font-size="34" font-weight="500" fill="#c2f04a">prompt-driven step sequencer</text>
+    <text x="540" y="360" font-size="34" font-weight="500" fill="#c2f04a">step sequencer</text>
     <text x="540" y="402" font-size="22" fill="#8a8c93">plaits · 808 / 909 / 303 · samples · eleven-labs · midi</text>
   </g>
 

@@ -237,23 +237,13 @@ const MIDI_ENGINE = {
   defaultNote: 60, poly: true,
 };
 
-const CUSTOM_ENGINE = {
-  key: "custom", label: "prompted tone.js patch", group: "custom", type: "custom",
-  defaultNote: 60, poly: true, melodic: true,
-};
-
-const ELEVEN_ENGINE = {
-  key: "eleven", label: "prompted eleven-labs sample", group: "eleven labs", type: "eleven",
-  defaultNote: 60, poly: true, melodic: true,
-};
-
 const UPLOAD_ENGINE = {
   key: "upload", label: "upload a sample…", group: "user samples", type: "upload",
   defaultNote: 60, poly: true, melodic: true,
 };
 
 function buildEngineCatalog() {
-  return [...plaitsEntries(), ...DRUM_SYNTH_ENGINES, ...ANALOG_ENGINES, CUSTOM_ENGINE, ELEVEN_ENGINE, UPLOAD_ENGINE, ...savedPatchEntries(), ...SAMPLE_ENGINES, MIDI_ENGINE];
+  return [...plaitsEntries(), ...DRUM_SYNTH_ENGINES, ...ANALOG_ENGINES, UPLOAD_ENGINE, ...savedPatchEntries(), ...SAMPLE_ENGINES, MIDI_ENGINE];
 }
 
 let ENGINES = [];
