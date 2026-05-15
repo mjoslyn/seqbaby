@@ -16,6 +16,7 @@ const LFO_KEYS = [
   // FX sub-params with AudioParam / Signal targets (audio-rate modable).
   "fuzz_drive", "fuzz_tone", "fuzz_level",
   "vinyl_warmth",
+  "shaper_preamp",
   "ring_freq",
   "crush_bits",
   "chorus_rate", "chorus_depth",
@@ -45,6 +46,7 @@ const LFO_LABELS = {
   phaser: "phaser wet", flanger: "flanger wet", pitch: "pitch shift wet",
   fuzz_drive: "fuzz drive", fuzz_tone: "fuzz tone", fuzz_level: "fuzz level",
   vinyl_warmth: "vinyl warmth", vinyl_wow: "vinyl wow",
+  shaper_preamp: "wave shaper preamp",
   cassette_flutter: "cassette flutter", cassette_sat: "cassette sat",
   ring_freq: "ring mod freq",
   crush_bits: "bitcrush bits",
@@ -68,6 +70,7 @@ const LFO_AMP_SCALE = {
   fuzz_tone: 4000,        // Hz around tone filter cutoff (200..8000)
   fuzz_level: 1,
   vinyl_warmth: 5000,     // Hz around lowpass freq
+  shaper_preamp: 6,       // swing on shaperPreamp.gain (unit gain ~0.25..8)
   ring_freq: 1500,        // Hz
   crush_bits: 8,           // bits swing (1..16)
   chorus_rate: 4,          // Hz
@@ -1293,7 +1296,7 @@ function defaultFxConfig() {
     cassette:   { amount: 0, flutter: 0.3, sat: 0.4 },
     fuzz:       { amount: 0, drive: 0.7, tone: 0.4, level: 0.5 },
     ringmod:    { wet: 0, freq: 0.35 },           // freq is 0..1, log-mapped to ~20..3000 Hz
-    shaper:     { wet: 0, amount: 0.5, mode: "fold" },  // wave shaper: wet/dry + drive + mode
+    shaper:     { wet: 0, preamp: 0.5, amount: 0.5, mode: "fold" },  // wave shaper: wet/dry + input preamp + curve drive + mode
     crush:      { bits: 8, wet: 0 },
     autowah:    { wet: 0, sens: 0.5, range: 0.5 },
     chorus:     { wet: 0, rate: 0.5, depth: 0.5 },
@@ -1376,6 +1379,16 @@ function shapeSample(mode, x) {
 }
 
 const SHAPER_MODES = ["saturate", "softclip", "clip", "serge", "fold", "wrap"];
+
+// Map a 0..1 preamp knob to a gain multiplier. 0.5 = unity (1x); below cuts
+// the input (down to 0.25x at slider 0); above pushes harder into the curve
+// (up to 8x at slider 1). Exponential so the upper half feels like a "drive".
+function shaperPreampGain(v) {
+  const x = Math.max(0, Math.min(1, Number(v) || 0));
+  return x <= 0.5
+    ? 0.25 + (x / 0.5) * 0.75       // 0.25x → 1x
+    : Math.pow(8, (x - 0.5) / 0.5); // 1x → 8x
+}
 
 // Build a 4096-sample waveshaper curve for the given mode. `amount` (0..1) is
 // the pre-curve drive (1..9x) so harder values push the signal further into
@@ -1527,20 +1540,25 @@ class FXRack {
 
     // ── wave shaper (native waveshaper, parallel wet/dry crossfade) ──
     // Mode picks the nonlinearity (saturate / softclip / clip / serge / fold /
-    // wrap); amount is the drive baked into the curve. Sits between ring mod
-    // and crusher so it shapes the ring-modulated signal.
-    if (!config.shaper) config.shaper = { wet: 0, amount: 0.5, mode: "fold" };
+    // wrap); amount is the drive baked into the curve; preamp is a clean
+    // input boost (0..1 → 0.25x..8x) BEFORE the curve, controllable
+    // independently. Sits between ring mod and crusher.
+    if (!config.shaper) config.shaper = { wet: 0, preamp: 0.5, amount: 0.5, mode: "fold" };
     if (!config.shaper.mode) config.shaper.mode = "fold";
+    if (config.shaper.preamp == null) config.shaper.preamp = 0.5;
     this.shaperDryBus = ctx.createGain();
     this.shaperWetBus = ctx.createGain();
     this.shaperSum    = ctx.createGain();
+    this.shaperPreamp = ctx.createGain();
+    this.shaperPreamp.gain.value = shaperPreampGain(config.shaper.preamp);
     this.shaperNode   = ctx.createWaveShaper();
     this.shaperNode.curve = makeShaperCurve(config.shaper.mode, config.shaper.amount ?? 0.5);
     this.shaperNode.oversample = "2x";
     this.shaperPost = ctx.createGain();
     this.shaperPost.gain.value = 0.85;  // small trim — the curve outputs already clamp to ±1
     this.ringSum.connect(this.shaperDryBus);
-    this.ringSum.connect(this.shaperNode);
+    this.ringSum.connect(this.shaperPreamp);
+    this.shaperPreamp.connect(this.shaperNode);
     this.shaperNode.connect(this.shaperPost);
     this.shaperPost.connect(this.shaperWetBus);
     this.shaperDryBus.connect(this.shaperSum);
@@ -1715,12 +1733,16 @@ class FXRack {
     }
   }
 
-  applyWaveShaper({ wet, amount, mode }) {
-    if (!this.config.shaper) this.config.shaper = { wet: 0, amount: 0.5, mode: "fold" };
+  applyWaveShaper({ wet, preamp, amount, mode }) {
+    if (!this.config.shaper) this.config.shaper = { wet: 0, preamp: 0.5, amount: 0.5, mode: "fold" };
     if (wet !== undefined) {
       this.config.shaper.wet = wet;
       this.shaperDryBus.gain.value = 1 - wet;
       this.shaperWetBus.gain.value = wet;
+    }
+    if (preamp !== undefined) {
+      this.config.shaper.preamp = preamp;
+      try { this.shaperPreamp.gain.value = shaperPreampGain(preamp); } catch {}
     }
     if (amount !== undefined) this.config.shaper.amount = amount;
     if (mode !== undefined && SHAPER_MODES.includes(mode)) this.config.shaper.mode = mode;
@@ -1882,6 +1904,7 @@ class FXRack {
     try { this.shaperDryBus.disconnect(); } catch {}
     try { this.shaperWetBus.disconnect(); } catch {}
     try { this.shaperSum.disconnect(); } catch {}
+    try { this.shaperPreamp.disconnect(); } catch {}
     try { this.shaperNode.disconnect(); } catch {}
     try { this.shaperPost.disconnect(); } catch {}
     try { this.flangerIn.disconnect(); } catch {}
@@ -3404,6 +3427,7 @@ function getModTarget(t, key) {
     case "cassette":     return rack.cassetteWetBus?.gain ?? null;
     case "ringmod":      return rack.ringWet?.gain ?? null;
     case "shaper":       return rack.shaperWetBus?.gain ?? null;
+    case "shaper_preamp":return rack.shaperPreamp?.gain ?? null;
     case "crush":        return rack.crusher?.wet ?? null;
     case "autowah":      return rack.autowah?.wet ?? null;
     case "chorus":       return rack.chorus?.wet ?? null;
@@ -3430,7 +3454,7 @@ function getModTarget(t, key) {
 
 const TRACK_FX_LFO_KEYS = new Set([
   "fuzz","delay","verb","vinyl","cassette","ringmod","shaper","crush","autowah","chorus","phaser","flanger","pitch",
-  "fuzz_drive","fuzz_tone","fuzz_level","vinyl_warmth","ring_freq","crush_bits",
+  "fuzz_drive","fuzz_tone","fuzz_level","vinyl_warmth","shaper_preamp","ring_freq","crush_bits",
   "chorus_rate","chorus_depth","phaser_rate","flanger_rate","flanger_fbk","delay_time","delay_fbk",
   // setter-driven (non-AudioParam) FX params
   "vinyl_wow","cassette_flutter","cassette_sat",
@@ -3703,8 +3727,9 @@ const AUTOMATION_TARGETS = {
   "fx.fuzz.level":      { label: "fuzz level" },
   "fx.ringmod":         { label: "ring mod wet" },
   "fx.ringmod.freq":    { label: "ring mod freq" },
-  "fx.shaper":          { label: "wave folder wet" },
-  "fx.shaper.amt":      { label: "wave folder amt" },
+  "fx.shaper":          { label: "wave shaper wet" },
+  "fx.shaper.preamp":   { label: "wave shaper preamp" },
+  "fx.shaper.amt":      { label: "wave shaper amt" },
   "fx.crush":           { label: "bitcrush wet" },
   "fx.crush.bits":      { label: "bitcrush bits" },
   "fx.autowah":         { label: "auto-wah wet" },
@@ -3828,10 +3853,15 @@ function applyAutomationAtStep(t, key, v, time, vNext, stepDur) {
       ramp(rack.ringDry?.gain, 1 - vv, 1 - vn);
       return;
     case "fx.shaper":
-      if (!rack.config.shaper) rack.config.shaper = { wet: 0, amount: 0.5 };
+      if (!rack.config.shaper) rack.config.shaper = { wet: 0, preamp: 0.5, amount: 0.5, mode: "fold" };
       rack.config.shaper.wet = vv;
       ramp(rack.shaperWetBus?.gain, vv, vn);
       ramp(rack.shaperDryBus?.gain, 1 - vv, 1 - vn);
+      return;
+    case "fx.shaper.preamp":
+      if (!rack.config.shaper) rack.config.shaper = { wet: 0, preamp: 0.5, amount: 0.5, mode: "fold" };
+      rack.config.shaper.preamp = vv;
+      ramp(rack.shaperPreamp?.gain, shaperPreampGain(vv), shaperPreampGain(vn));
       return;
     case "fx.flanger":
       rack.config.flanger.wet = vv;
@@ -4859,13 +4889,20 @@ function anchorCovering(t, idx) {
   return -1;
 }
 
-// Stash the most recently set pitch on the pattern so new steps can inherit
-// it. Pure user-intent writes only (skips clears, bulk octave shifts, etc.).
-function rememberLastNote(t, midi) {
-  if (midi == null || !Number.isFinite(midi)) return;
-  const idx = t._patternIdx ?? state.activePattern;
-  const p = t.patterns?.[idx];
-  if (p) p._lastNote = midi;
+// What pitch should a fresh note take? Prefer the last note the user
+// explicitly placed or moved on this track; fall back to the highest-index
+// existing triggered note in the active pattern; finally, scale root in
+// octave 3 for empty patterns. Drum-kit tracks always return C2 (their
+// per-step pitch is decoupled from key).
+function lastUsedNote(t) {
+  if (t.isDrumKit) return 36;
+  if (t.lastEditedNote != null && Number.isFinite(t.lastEditedNote)) return t.lastEditedNote;
+  if (t.steps && t.notes) {
+    for (let i = t.length - 1; i >= 0; i--) {
+      if (t.steps[i] && t.notes[i] != null) return t.notes[i];
+    }
+  }
+  return 48 + (state.scale.root | 0);
 }
 
 function startNote(t, anchor) {
@@ -4873,20 +4910,12 @@ function startNote(t, anchor) {
   t.steps[anchor] = 1;
   t.lengths[anchor] = 1;
   if (t.notes[anchor] == null) {
-    // Drum-kit tracks default every new step to C2 regardless of scale.
-    // Other tracks default to the most recently set pitch in this pattern,
-    // falling back to the selected key's root in octave 3 — so a melody you
-    // sketched in F# keeps tracking F#-relative pitches as you add steps.
-    if (t.isDrumKit) {
-      t.notes[anchor] = 36; // C2
-    } else {
-      const last = t.patterns?.[t._patternIdx ?? state.activePattern]?._lastNote;
-      t.notes[anchor] = (last != null && Number.isFinite(last))
-        ? last
-        : 48 + (state.scale.root | 0);
-    }
+    // Drum-kit tracks pin to C2; melodic tracks default to whatever pitch the
+    // user last placed/moved, so adding several steps in a row keeps them on
+    // the same note unless they explicitly drag to change it.
+    t.notes[anchor] = lastUsedNote(t);
+    if (!t.isDrumKit) t.lastEditedNote = t.notes[anchor];
   }
-  rememberLastNote(t, t.notes[anchor]);
   applySampleDefaultsToStep(t, anchor);
 }
 
@@ -5379,8 +5408,9 @@ function refreshFxPanelUI(t) {
   if (!cfg.phaser)     cfg.phaser     = { wet: 0, rate: 0.3, depth: 0.5 };
   if (!cfg.flanger)    cfg.flanger    = { wet: 0, rate: 0.3, fbk: 0.5 };
   if (!cfg.pitchshift) cfg.pitchshift = { wet: 0, semitones: 0 };
-  if (!cfg.shaper)     cfg.shaper     = { wet: 0, amount: 0.5, mode: "fold" };
+  if (!cfg.shaper)     cfg.shaper     = { wet: 0, preamp: 0.5, amount: 0.5, mode: "fold" };
   if (!cfg.shaper.mode) cfg.shaper.mode = "fold";
+  if (cfg.shaper.preamp == null) cfg.shaper.preamp = 0.5;
   const q = s => panel.querySelector(s);
   const set = (sel, v) => { const el = q(sel); if (el != null && v != null) el.value = v; };
   set(".fx-vinyl-amount",    cfg.vinyl.amount);
@@ -5396,6 +5426,7 @@ function refreshFxPanelUI(t) {
   set(".fx-ringmod-wet",      cfg.ringmod.wet);
   set(".fx-ringmod-freq",     cfg.ringmod.freq);
   set(".fx-shaper-wet",       cfg.shaper.wet);
+  set(".fx-shaper-preamp",    cfg.shaper.preamp);
   set(".fx-shaper-amt",       cfg.shaper.amount);
   set(".fx-shaper-mode",      cfg.shaper.mode);
   set(".fx-autowah-wet",      cfg.autowah.wet);
@@ -5437,8 +5468,9 @@ function wireFxPanel(t, panel) {
   if (!fc.phaser)     fc.phaser     = { wet: 0, rate: 0.3, depth: 0.5 };
   if (!fc.flanger)    fc.flanger    = { wet: 0, rate: 0.3, fbk: 0.5 };
   if (!fc.pitchshift) fc.pitchshift = { wet: 0, semitones: 0 };
-  if (!fc.shaper)     fc.shaper     = { wet: 0, amount: 0.5, mode: "fold" };
+  if (!fc.shaper)     fc.shaper     = { wet: 0, preamp: 0.5, amount: 0.5, mode: "fold" };
   if (!fc.shaper.mode) fc.shaper.mode = "fold";
+  if (fc.shaper.preamp == null) fc.shaper.preamp = 0.5;
   const set = (sel, v) => { const el = q(sel); if (el != null && v != null) el.value = v; };
   set(".fx-vinyl-amount",    fc.vinyl.amount);
   set(".fx-vinyl-warmth",    fc.vinyl.warmth);
@@ -5453,6 +5485,7 @@ function wireFxPanel(t, panel) {
   set(".fx-ringmod-wet",      fc.ringmod.wet);
   set(".fx-ringmod-freq",     fc.ringmod.freq);
   set(".fx-shaper-wet",       fc.shaper.wet);
+  set(".fx-shaper-preamp",    fc.shaper.preamp);
   set(".fx-shaper-amt",       fc.shaper.amount);
   set(".fx-shaper-mode",      fc.shaper.mode);
   set(".fx-autowah-wet",      fc.autowah.wet);
@@ -5505,6 +5538,7 @@ function wireFxPanel(t, panel) {
   };
   const applyWaveShaper = () => {
     fc.shaper.wet    = Number(q(".fx-shaper-wet").value);
+    fc.shaper.preamp = Number(q(".fx-shaper-preamp").value);
     fc.shaper.amount = Number(q(".fx-shaper-amt").value);
     const ms = q(".fx-shaper-mode");
     if (ms) fc.shaper.mode = ms.value;
@@ -5564,7 +5598,7 @@ function wireFxPanel(t, panel) {
   ["amount","flutter","sat"].forEach(n => q(`.fx-cassette-${n}`)?.addEventListener("input", applyCassette));
   ["amount","drive","tone","level"].forEach(n => q(`.fx-fuzz-${n}`).addEventListener("input", applyFuzz));
   ["wet","freq"].forEach(n => q(`.fx-ringmod-${n}`)?.addEventListener("input", applyRingMod));
-  ["wet","amt"].forEach(n => q(`.fx-shaper-${n}`)?.addEventListener("input", applyWaveShaper));
+  ["wet","amt","preamp"].forEach(n => q(`.fx-shaper-${n}`)?.addEventListener("input", applyWaveShaper));
   q(".fx-shaper-mode")?.addEventListener("change", applyWaveShaper);
   ["wet","sens","range"].forEach(n => q(`.fx-autowah-${n}`)?.addEventListener("input", applyAutoWah));
   ["wet","rate","depth"].forEach(n => q(`.fx-chorus-${n}`)?.addEventListener("input", applyChorus));
@@ -6150,8 +6184,8 @@ function renderRollPanel(t, panel) {
         const target = anchor >= 0 ? anchor : step;
         if (!t.steps[target]) startNote(t, target);
         t.notes[target] = note;
+        if (!t.isDrumKit) t.lastEditedNote = note;
         t.velocities[target] = 1;
-        rememberLastNote(t, note);
         paintRange(target, target + Math.max(1, t.lengths[target] || 1) - 1);
         renderStepGrid(t);
       });
@@ -6188,15 +6222,11 @@ function renderRollPanel(t, panel) {
       e.preventDefault();
       return;
     }
-    // empty cell → start a fresh note with anchor here. startNote() defaults
-    // the pitch to the pattern's _lastNote (falling back to key root), so a
-    // dragged-up pitch carries across to the next click. Drag horizontally
-    // to extend; drag vertically to re-pitch (handled in pointermove below).
+    // empty cell → start a fresh note with anchor here; drag extends it
     startNote(t, step);
-    drag = {
-      mode: "create", anchor: step, lastEnd: step,
-      lastNote: t.notes[step], moved: false, pointerId: e.pointerId,
-    };
+    t.notes[step] = note;
+    if (!t.isDrumKit) t.lastEditedNote = note;
+    drag = { mode: "create", anchor: step, lastEnd: step, moved: false, pointerId: e.pointerId };
     panel._rollDragActive = true;
     try { grid.setPointerCapture(e.pointerId); } catch {}
     paintColumn(step);
@@ -6216,27 +6246,13 @@ function renderRollPanel(t, panel) {
     }
 
     if (drag.mode === "create") {
-      let dirty = false;
-      // Horizontal motion extends the note's length.
-      if (step !== drag.lastEnd) {
-        const newEnd = Math.max(drag.anchor, step);
-        extendNote(t, drag.anchor, newEnd);
-        drag.lastEnd = newEnd;
-        dirty = true;
-      }
-      // Vertical motion re-pitches the in-progress note to whichever row the
-      // pointer is hovering. Updates _lastNote so the NEXT click inherits it.
-      if (drag.lastNote == null || Math.abs(note - drag.lastNote) > EPS) {
-        t.notes[drag.anchor] = note;
-        drag.lastNote = note;
-        rememberLastNote(t, note);
-        dirty = true;
-      }
-      if (dirty) {
-        paintRange(drag.anchor, drag.anchor + Math.max(1, t.lengths[drag.anchor] || 1) - 1);
-        drag.moved = true;
-        renderStepGrid(t);
-      }
+      if (step === drag.lastEnd) return;
+      const newEnd = Math.max(drag.anchor, step);
+      extendNote(t, drag.anchor, newEnd);
+      paintRange(drag.anchor, Math.max(drag.lastEnd, newEnd));
+      drag.lastEnd = newEnd;
+      drag.moved = true;
+      renderStepGrid(t);
       return;
     }
 
@@ -6277,7 +6293,7 @@ function renderRollPanel(t, panel) {
     writeStep(newAnchor, drag.origSnap, newNote);
     // Restore length (snap may have come from a single index — explicit set is clearer).
     t.lengths[newAnchor] = len;
-    rememberLastNote(t, newNote);
+    if (!t.isDrumKit) t.lastEditedNote = newNote;
 
     paintRange(paintLo, paintHi);
     drag.curAnchor = newAnchor;
@@ -6297,7 +6313,7 @@ function renderRollPanel(t, panel) {
           removeNote(t, a);
         } else {
           t.notes[a] = drag.startNote;
-          rememberLastNote(t, drag.startNote);
+          if (!t.isDrumKit) t.lastEditedNote = drag.startNote;
         }
         paintRange(a, a + len - 1);
         renderStepGrid(t);
@@ -6455,7 +6471,7 @@ function attachGridInteraction(t, grid) {
       target = Math.max(24, Math.min(95, target));
       if (t.notes[drag.anchor] !== target) {
         t.notes[drag.anchor] = target;
-        rememberLastNote(t, target);
+        if (!t.isDrumKit) t.lastEditedNote = target;
         renderStepGrid(t);
       }
       drag.moved = true;   // prevent endDrag from treating this as a click-to-toggle-off
@@ -6770,7 +6786,7 @@ function openStepEditor(t, idx, anchorEl) {
     n = applyScale(n);
     noteInput.value = String(n);
     t.notes[idx] = n;
-    rememberLastNote(t, n);
+    if (!t.isDrumKit) t.lastEditedNote = n;
     const nOct = octaveOf(n);
     if (nOct < viewOctStart || nOct > viewOctStart + VIEW_OCTS - 1) {
       viewOctStart = Math.max(MIN_OCT, Math.min(MAX_OCT - VIEW_OCTS + 1, nOct - 1));
