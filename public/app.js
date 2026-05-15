@@ -821,20 +821,15 @@ async function onSaveSet() {
   setStatus(`saved set "${finalName}"`);
 }
 
-// Short date+time string for the load-session chooser; returns null if the
+// MM/DD/YYYY date string for the load-session chooser; returns null if the
 // timestamp is missing or unparseable.
 function formatSavedAt(iso) {
   if (!iso) return null;
   const d = new Date(iso);
   if (isNaN(d.getTime())) return null;
-  try {
-    return d.toLocaleString(undefined, {
-      month: "short", day: "numeric",
-      hour: "numeric", minute: "2-digit",
-    });
-  } catch {
-    return d.toISOString().slice(0, 16).replace("T", " ");
-  }
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${mm}/${dd}/${d.getFullYear()}`;
 }
 
 // Suggest the next save name. If a session is already loaded/saved under some
