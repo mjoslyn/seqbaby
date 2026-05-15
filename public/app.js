@@ -4799,11 +4799,17 @@ function truncatePattern(t, patIdx, newLen) {
   renderPatternGrid();
 }
 
-// Extend a pattern's length while tiling the existing content into the new
-// space. `i >= oldLen` reads from `i % oldLen`, so a 16-step pattern doubled
-// to 32 mirrors itself; quadrupled to 64 plays four copies. Clamps to [1, 128]
-// (the same hard cap resizePattern uses).
-function extendPatternByDuplicate(t, patIdx, newLen) {
+// Extend a pattern's length while duplicating existing content into the new
+// space. Two source modes:
+//   "tile"    — `i % oldLen` wraps from index 0; right for x2 / x4 where the
+//               whole pattern should repeat as a loop.
+//   "lastBar" — the new region copies the LAST `barLen` steps of the old
+//               pattern; right for +1 where the user wants another copy of
+//               "what just played" rather than the start.
+// Clamps to [1, 128].
+function extendPatternByDuplicate(t, patIdx, newLen, opts = {}) {
+  const sourceMode = opts.sourceMode === "lastBar" ? "lastBar" : "tile";
+  const barLen = Math.max(1, opts.barLen | 0 || stepsPerBarForMeter(patternMeter(patIdx)));
   newLen = Math.max(1, Math.min(128, newLen | 0));
   const p = t.patterns[patIdx];
   if (!p) return;
@@ -4816,12 +4822,23 @@ function extendPatternByDuplicate(t, patIdx, newLen) {
     sampleStarts: 0, sampleEnds: 1, sampleFadeIns: 0, sampleFadeOuts: 0,
     sampleLoopModes: "off",
   };
+  // For "lastBar" mode the source window starts `barLen` steps before the
+  // boundary. Falls back to "tile" if there isn't a full bar to copy.
+  const lastBarStart = Math.max(0, oldLen - Math.min(barLen, oldLen));
+  const sourceLen    = Math.min(barLen, oldLen);
+  const srcFor = (i) => {
+    if (i < oldLen) return i;
+    if (sourceMode === "lastBar" && sourceLen > 0) {
+      return lastBarStart + ((i - oldLen) % sourceLen);
+    }
+    return i % oldLen;
+  };
   for (const [key, fill] of Object.entries(FILL)) {
     const arr = p[key];
     if (!Array.isArray(arr)) continue;
     const next = new Array(newLen);
     for (let i = 0; i < newLen; i++) {
-      next[i] = arr[i < oldLen ? i : (i % oldLen)] ?? fill;
+      next[i] = arr[srcFor(i)] ?? fill;
     }
     p[key] = next;
   }
@@ -4830,7 +4847,7 @@ function extendPatternByDuplicate(t, patIdx, newLen) {
       if (!lane || !Array.isArray(lane.values)) continue;
       const next = new Array(newLen);
       for (let i = 0; i < newLen; i++) {
-        next[i] = lane.values[i < oldLen ? i : (i % oldLen)] ?? 0.5;
+        next[i] = lane.values[srcFor(i)] ?? 0.5;
       }
       lane.values = next;
     }
@@ -5136,7 +5153,7 @@ function renderTrack(t) {
 
   node.querySelector(".track-len-plus1")?.addEventListener("click", () => {
     const spb = stepsPerBarForMeter(patternMeter(state.activePattern));
-    extendPatternByDuplicate(t, state.activePattern, t.length + spb);
+    extendPatternByDuplicate(t, state.activePattern, t.length + spb, { sourceMode: "lastBar", barLen: spb });
   });
   node.querySelector(".track-len-2x")?.addEventListener("click", () => {
     extendPatternByDuplicate(t, state.activePattern, t.length * 2);

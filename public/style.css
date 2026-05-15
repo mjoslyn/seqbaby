@@ -891,8 +891,8 @@ main {
 .step.held {
   background: linear-gradient(
     90deg,
-    var(--step-on) 0 calc(100% / var(--span, 1) - 2px),
-    color-mix(in oklab, var(--step-on) 70%, transparent) calc(100% / var(--span, 1))
+    var(--note-color, var(--step-on)) 0 calc(100% / var(--span, 1) - 2px),
+    color-mix(in oklab, var(--note-color, var(--step-on)) 70%, transparent) calc(100% / var(--span, 1))
   );
   position: relative;
 }
