@@ -845,6 +845,11 @@ main {
 .steps {
   display: grid;
   grid-template-columns: repeat(var(--count, 16), minmax(0, 1fr));
+  /* Floor wrapped rows: a multi-bar pattern where a row contains only a
+     single held cell has no aspect-ratio reference, so the row would
+     otherwise collapse to the label height. Cells with aspect-ratio:1
+     still grow rows past this floor when they need to. */
+  grid-auto-rows: minmax(44px, auto);
   gap: 4px;
 }
 
