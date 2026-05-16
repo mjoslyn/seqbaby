@@ -1695,7 +1695,7 @@ main {
   .roll-cell { height: 18px; min-width: 30px; }
   .roll-vel-lane { grid-template-columns: 36px minmax(0, 1fr); }
   .roll-vel-spacer { position: sticky; left: 0; z-index: 2; }
-  .roll-vel-cells { height: 40px; min-width: max-content; }
+  .roll-vel-cells { height: 96px; min-width: max-content; }
   .roll-vel-cell { min-width: 30px; }
 
   /* ---------- STEP GRID (no horizontal scroll) ---------- */
