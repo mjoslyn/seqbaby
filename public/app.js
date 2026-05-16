@@ -486,6 +486,19 @@ const ICON_SAVE     = `<svg class="btn-icon" viewBox="0 0 16 16" width="14" heig
 const ICON_LOAD     = `<svg class="btn-icon" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 4a1 1 0 0 1 1-1h3l2 2h5a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V4z"/></svg>`;
 // Classic metronome — trapezoidal body + pendulum swung slightly right.
 const ICON_METRONOME = `<svg class="btn-icon" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 14h6l-1-11H6z"/><line x1="10.6" y1="3.2" x2="5.4" y2="13.5"/><circle cx="7" cy="10" r="0.9" fill="currentColor" stroke="none"/></svg>`;
+// Question mark in a circle — opens the help/tips dialog.
+const ICON_HELP = `<svg class="btn-icon" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="8" r="6.4"/><path d="M6.1 6.2c0-1.1 0.9-2 1.9-2s1.9 0.9 1.9 2c0 1.2-1.9 1.5-1.9 2.8"/><circle cx="8" cy="11.6" r="0.55" fill="currentColor" stroke="none"/></svg>`;
+
+const HELP_TIPS = [
+  "long-press a step to open the note editor",
+  "long-press a sample step to open the sample editor",
+  "drag a step up or down to change pitch",
+  "tap filter / env / fx / eq / comp / mod on a track to open that panel",
+  "32 pattern slots per session — chain them or loop one",
+  "swap engines mid-session from the track header dropdown",
+  "save patches and reload them from any track",
+  "share a session: tap share to copy a link",
+];
 // Painter's palette with four colored dots — paints when "on", greys when "off"
 // (CSS handles the desaturation via aria-pressed).
 const ICON_PALETTE = `<svg class="btn-icon" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M8 1.5c-3.6 0-6.5 2.7-6.5 6S4.4 13.5 8 13.5c.9 0 1.5-.5 1.5-1.2 0-.5-.3-.9-.3-1.4 0-.7.6-1.2 1.3-1.2h1c2 0 3.5-1.4 3.5-3.3 0-2.7-3-4.9-7-4.9z" fill="none" stroke="currentColor" stroke-width="1.2"/><circle cx="5" cy="5.2" r="1.05" fill="hsl(0 72% 56%)"/><circle cx="9.5" cy="3.8" r="1.05" fill="hsl(60 72% 56%)"/><circle cx="11.9" cy="6.6" r="1.05" fill="hsl(180 72% 56%)"/><circle cx="4.6" cy="9.2" r="1.05" fill="hsl(270 72% 56%)"/></svg>`;
@@ -636,6 +649,14 @@ function emptyPattern(len) {
     sampleFadeIns:  new Array(len).fill(0),     // sample fade-in time in seconds (0 = click-guard)
     sampleFadeOuts: new Array(len).fill(0),     // sample fade-out time in seconds
     sampleLoopModes: new Array(len).fill("off"),// "off" | "loop" | "pingpong"
+    // Extra notes stacked on the anchor (polyphony per step). Each slot is
+    // null or an Array<MIDI>. The anchor's pitch (notes[i]) is always the
+    // root; entries here are additional pitches triggered alongside it.
+    extraNotes: new Array(len).fill(null),
+    // Per-extra lengths, parallel to extraNotes. Each slot is null or an
+    // Array<number> with the same length as the matching extraNotes entry.
+    // null falls back to the anchor's length. Capped at the anchor length.
+    extraLengths: new Array(len).fill(null),
     // Per-step automation lanes, keyed by AUTOMATION_TARGETS key. Each lane:
     //   { enabled: bool, values: number[] }   — values normalized 0..1 per step
     automation: {},
@@ -661,6 +682,8 @@ function aliasPattern(t, idx) {
   t.sampleFadeIns  = p.sampleFadeIns  ?? (p.sampleFadeIns  = new Array(p.steps.length).fill(0));
   t.sampleFadeOuts = p.sampleFadeOuts ?? (p.sampleFadeOuts = new Array(p.steps.length).fill(0));
   t.sampleLoopModes = p.sampleLoopModes ?? (p.sampleLoopModes = new Array(p.steps.length).fill("off"));
+  t.extraNotes = p.extraNotes ?? (p.extraNotes = new Array(p.steps.length).fill(null));
+  t.extraLengths = p.extraLengths ?? (p.extraLengths = new Array(p.steps.length).fill(null));
   t.automation = p.automation ?? (p.automation = {});
   // Patterns can have independent lengths; meter is pattern-global (state.patternMeters).
   // Mirror the active pattern's length into t.length / t.accents so every transport
@@ -780,6 +803,7 @@ function serializeSet() {
       sampleDefaults: t.sampleDefaults ? { ...t.sampleDefaults } : undefined,
       locked: t.locked, muted: t.muted, soloed: t.soloed,
       isDrumKit: !!t.isDrumKit,
+      noteMode: t.noteMode === "trigger" ? "trigger" : "gate",
       glide: t.glide, speed: t.speed ?? 1, sampleSpeedMode: t.sampleSpeedMode ?? "native",
       lfoConfig: JSON.parse(JSON.stringify(t.lfoConfig)),
       patterns: t.patterns.map(p => ({
@@ -800,6 +824,8 @@ function serializeSet() {
         sampleFadeIns:   (p.sampleFadeIns   ?? []).slice(),
         sampleFadeOuts:  (p.sampleFadeOuts  ?? []).slice(),
         sampleLoopModes: (p.sampleLoopModes ?? []).slice(),
+        extraNotes: (p.extraNotes ?? []).map(slot => Array.isArray(slot) ? slot.slice() : null),
+        extraLengths: (p.extraLengths ?? []).map(slot => Array.isArray(slot) ? slot.slice() : null),
         automation: p.automation ? Object.fromEntries(
           Object.entries(p.automation)
             .filter(([k]) => AUTOMATION_TARGETS[k])
@@ -1082,6 +1108,7 @@ function applySet(s) {
     t.isDrumKit = typeof td.isDrumKit === "boolean"
       ? td.isDrumKit
       : guessIsDrumKit({ engineKey: t.engineKey, name: t.name });
+    t.noteMode = td.noteMode === "trigger" ? "trigger" : "gate";
     t.glide  = td.glide ?? 0;
     t.speed  = td.speed ?? 1;
     t.sampleSpeedMode = td.sampleSpeedMode ?? "native";
@@ -1122,6 +1149,8 @@ function applySet(s) {
           sampleFadeIns:   pad(p.sampleFadeIns,   0,      n),
           sampleFadeOuts:  pad(p.sampleFadeOuts,  0,      n),
           sampleLoopModes: pad(p.sampleLoopModes, "off",  n),
+          extraNotes:      pad(p.extraNotes,      null,   n),
+          extraLengths:    pad(p.extraLengths,    null,   n),
           automation,
         };
       }
@@ -1147,6 +1176,12 @@ function applySet(s) {
       q(".p-envrel").value = t.filter.release;
       q(".track-lock")?.setAttribute("aria-pressed", String(t.locked));
       q(".track-solo")?.setAttribute("aria-pressed", String(t.soloed));
+      const nmBtn = q(".track-note-mode");
+      if (nmBtn) {
+        const isGate = t.noteMode !== "trigger";
+        nmBtn.textContent = isGate ? "gate" : "trig";
+        nmBtn.setAttribute("aria-pressed", String(isGate));
+      }
       t.el.classList.toggle("muted", t.muted);
       t.el.classList.toggle("locked", t.locked);
       t.el.classList.toggle("soloed", t.soloed);
@@ -4405,6 +4440,10 @@ function createTrack({ name, engineKey, length = totalSteps() }) {
     muted: false,
     soloed: false,
     isDrumKit: guessIsDrumKit({ engineKey, name }),
+    // "gate" plays each note for its full step length; "trigger" fires a
+    // short hit regardless of step length. Drum-synth recipes ignore this
+    // (their envelopes are fixed); melodic + sample voices honor it.
+    noteMode: "gate",
     glide: 0,
     sampleSpeedMode: "native",
     density: 0.5,
@@ -4524,6 +4563,8 @@ function duplicateTrack(src) {
       sampleFadeIns: (sp.sampleFadeIns || []).slice(),
       sampleFadeOuts: (sp.sampleFadeOuts || []).slice(),
       sampleLoopModes: (sp.sampleLoopModes || []).slice(),
+      extraNotes: (sp.extraNotes || []).map(slot => Array.isArray(slot) ? slot.slice() : null),
+      extraLengths: (sp.extraLengths || []).map(slot => Array.isArray(slot) ? slot.slice() : null),
       automation,
     };
   }
@@ -4914,6 +4955,8 @@ function resizePattern(t, patIdx, len) {
   p.sampleFadeIns   = pad(p.sampleFadeIns, 0);
   p.sampleFadeOuts  = pad(p.sampleFadeOuts, 0);
   p.sampleLoopModes = pad(p.sampleLoopModes, "off");
+  p.extraNotes = pad(p.extraNotes, null);
+  p.extraLengths = pad(p.extraLengths, null);
   // Resize automation lanes to match new pattern length.
   if (p.automation) {
     for (const key in p.automation) {
@@ -4955,6 +4998,7 @@ function truncatePattern(t, patIdx, newLen) {
     "steps","lengths","notes","velocities","chords","offsets",
     "arps","arpRates","arpRanges","arpDirs","complexities","ratchets",
     "sampleStarts","sampleEnds","sampleFadeIns","sampleFadeOuts","sampleLoopModes",
+    "extraNotes","extraLengths",
   ];
   for (const k of KEYS) if (Array.isArray(p[k])) p[k] = p[k].slice(0, newLen);
   if (p.automation) {
@@ -4999,6 +5043,8 @@ function extendPatternByDuplicate(t, patIdx, newLen, opts = {}) {
     complexities: 0, ratchets: 1,
     sampleStarts: 0, sampleEnds: 1, sampleFadeIns: 0, sampleFadeOuts: 0,
     sampleLoopModes: "off",
+    extraNotes: null,
+    extraLengths: null,
   };
   // For "lastBar" mode the source window starts `barLen` steps before the
   // boundary. Falls back to "tile" if there isn't a full bar to copy.
@@ -5059,6 +5105,8 @@ function clearRange(t, from, to, keep) {
     t.notes[i] = null;
     t.velocities[i] = 0.5;
     t.chords[i] = "";
+    if (t.extraNotes) t.extraNotes[i] = null;
+    if (t.extraLengths) t.extraLengths[i] = null;
   }
 }
 
@@ -5203,6 +5251,8 @@ function removeNote(t, anchor) {
   t.notes[anchor] = null;
   t.velocities[anchor] = 0.5;
   t.chords[anchor] = "";
+  if (t.extraNotes) t.extraNotes[anchor] = null;
+  if (t.extraLengths) t.extraLengths[anchor] = null;
 }
 
 // ---- rendering ---------------------------------------------------------
@@ -5356,6 +5406,18 @@ function renderTrack(t) {
     t.soloed = !t.soloed;
     soloBtn.setAttribute("aria-pressed", String(t.soloed));
     node.classList.toggle("soloed", t.soloed);
+  });
+
+  const noteModeBtn = node.querySelector(".track-note-mode");
+  const refreshNoteModeBtn = () => {
+    const isGate = (t.noteMode ?? "gate") === "gate";
+    noteModeBtn.textContent = isGate ? "gate" : "trig";
+    noteModeBtn.setAttribute("aria-pressed", String(isGate));
+  };
+  refreshNoteModeBtn();
+  noteModeBtn.addEventListener("click", () => {
+    t.noteMode = ((t.noteMode ?? "gate") === "gate") ? "trigger" : "gate";
+    refreshNoteModeBtn();
   });
 
   engineSel.addEventListener("change", () => refreshSaveEnabled());
@@ -6236,10 +6298,6 @@ function renderRollPanel(t, panel) {
   title.className = "roll-title";
   title.textContent = "piano roll";
   head.appendChild(title);
-  const dblHint = document.createElement("span");
-  dblHint.className = "roll-hint";
-  dblHint.textContent = "dbl-click to copy note";
-  head.appendChild(dblHint);
   if (scaleIntervals) {
     const toggle = document.createElement("label");
     toggle.innerHTML = `<input type="checkbox" class="roll-show-all" ${t.rollShowAll ? "checked" : ""}/><span>all notes</span>`;
@@ -6268,6 +6326,7 @@ function renderRollPanel(t, panel) {
   const xform = document.createElement("span");
   xform.className = "roll-transforms";
   xform.innerHTML = `
+    <button class="ghost icon-btn" data-x="rand" title="random melody (replaces this pattern)" aria-label="random melody">${ICON_DICE}</button>
     <button class="ghost" data-x="up" title="shift all notes up one (scale-aware)">+1</button>
     <button class="ghost" data-x="x2" title="double pattern length (tile)">x2</button>
     <button class="ghost" data-x="x4" title="quadruple pattern length (tile)">x4</button>
@@ -6277,7 +6336,10 @@ function renderRollPanel(t, panel) {
   xform.querySelectorAll("button").forEach(b => b.addEventListener("click", () => {
     const x = b.dataset.x;
     const pat = t._patternIdx ?? state.activePattern;
-    if (x === "up") {
+    if (x === "rand") {
+      randomizeMelody(t);
+      renderRollPanel(t, panel);
+    } else if (x === "up") {
       applyRollPitchUp(t);
       renderRollPanel(t, panel);
       renderStepGrid(t);
@@ -6385,13 +6447,43 @@ function renderRollPanel(t, panel) {
       // the CSS can square adjoining corners + bridge the 1px grid gap, making
       // a multi-step note read as one continuous bar.
       const anchor = anchorCovering(t, i);
-      if (anchor >= 0 && Math.abs(t.notes[anchor] - m) < EPS) {
-        const len = Math.max(1, t.lengths[anchor] || 1);
-        cell.classList.add("on");
-        if (anchor !== i) cell.classList.add("held");
-        if (i < anchor + len - 1) cell.classList.add("note-joins-next");
-        const col = noteColor(t.notes[anchor]);
-        if (col) cell.style.setProperty("--note-color", col);
+      if (anchor >= 0) {
+        const rootLen = Math.max(1, t.lengths[anchor] || 1);
+        const isRoot = Math.abs(t.notes[anchor] - m) < EPS && i < anchor + rootLen;
+        let isExtra = false;
+        let slotLen = isRoot ? rootLen : 0;
+        if (!isRoot) {
+          const extras = t.extraNotes?.[anchor];
+          const eLens  = t.extraLengths?.[anchor];
+          if (Array.isArray(extras)) {
+            for (let e = 0; e < extras.length; e++) {
+              if (Math.abs(extras[e] - m) < EPS) {
+                const eLen = Math.max(1, Math.min(rootLen, (Array.isArray(eLens) ? eLens[e] : null) ?? rootLen));
+                if (i < anchor + eLen) {
+                  isExtra = true;
+                  slotLen = eLen;
+                }
+                break;
+              }
+            }
+          }
+        }
+        if (isRoot || isExtra) {
+          cell.classList.add("on");
+          if (anchor !== i) cell.classList.add("held");
+          if (i < anchor + slotLen - 1) cell.classList.add("note-joins-next");
+          const col = noteColor(m);
+          if (col) cell.style.setProperty("--note-color", col);
+          // Label the anchor cell only.
+          if (anchor === i) {
+            if (isRoot) {
+              const ch = t.chords[anchor] || "";
+              cell.textContent = ch ? `${midiToName(t.notes[anchor])} ${ch}` : midiToName(t.notes[anchor]);
+            } else {
+              cell.textContent = midiToName(m);
+            }
+          }
+        }
       }
       cells.appendChild(cell);
     }
@@ -6449,17 +6541,48 @@ function renderRollPanel(t, panel) {
   // (microtonal pitches) compares via EPS to avoid floating-point misses.
   const paintColumn = (step) => {
     const anchor = anchorCovering(t, step);
+    const rootLen = anchor >= 0 ? Math.max(1, t.lengths[anchor] || 1) : 0;
     const coverNote = anchor >= 0 ? t.notes[anchor] : null;
-    const noteEnd = anchor >= 0 ? anchor + Math.max(1, t.lengths[anchor] || 1) - 1 : -1;
-    const coverCol = anchor >= 0 ? noteColor(coverNote) : null;
+    const extras = anchor >= 0 ? t.extraNotes?.[anchor] : null;
+    const eLens  = anchor >= 0 ? t.extraLengths?.[anchor] : null;
     grid.querySelectorAll(`.roll-cell[data-step="${step}"]`).forEach(c => {
       const note = Number(c.dataset.note);
-      const on = anchor >= 0 && Math.abs(coverNote - note) < EPS;
+      const isRoot = anchor >= 0 && Math.abs(coverNote - note) < EPS && step < anchor + rootLen;
+      let isExtra = false;
+      let slotLen = isRoot ? rootLen : 0;
+      if (!isRoot && Array.isArray(extras)) {
+        for (let e = 0; e < extras.length; e++) {
+          if (Math.abs(extras[e] - note) < EPS) {
+            const eLen = Math.max(1, Math.min(rootLen, (Array.isArray(eLens) ? eLens[e] : null) ?? rootLen));
+            if (step < anchor + eLen) {
+              isExtra = true;
+              slotLen = eLen;
+            }
+            break;
+          }
+        }
+      }
+      const on = isRoot || isExtra;
       c.classList.toggle("on", on);
       c.classList.toggle("held", on && anchor !== step);
-      c.classList.toggle("note-joins-next", on && step < noteEnd);
-      if (on && coverCol) c.style.setProperty("--note-color", coverCol);
-      else c.style.removeProperty("--note-color");
+      c.classList.toggle("note-joins-next", on && step < anchor + slotLen - 1);
+      if (on) {
+        const col = noteColor(note);
+        if (col) c.style.setProperty("--note-color", col);
+        else c.style.removeProperty("--note-color");
+      } else {
+        c.style.removeProperty("--note-color");
+      }
+      if (on && anchor === step) {
+        if (isRoot) {
+          const ch = t.chords[anchor] || "";
+          c.textContent = ch ? `${midiToName(coverNote)} ${ch}` : midiToName(coverNote);
+        } else {
+          c.textContent = midiToName(note);
+        }
+      } else {
+        c.textContent = "";
+      }
     });
     const vcell = velCells.querySelector(`.roll-vel-cell[data-step="${step}"]`);
     if (vcell) {
@@ -6487,10 +6610,18 @@ function renderRollPanel(t, panel) {
     "lengths","notes","velocities","chords","offsets",
     "arps","arpRates","arpRanges","arpDirs","complexities","ratchets",
     "sampleStarts","sampleEnds","sampleFadeIns","sampleFadeOuts","sampleLoopModes",
+    "extraNotes","extraLengths",
   ];
   const snapStep = (idx) => {
     const out = {};
-    for (const k of PER_STEP_KEYS) if (Array.isArray(t[k])) out[k] = t[k][idx];
+    for (const k of PER_STEP_KEYS) {
+      if (!Array.isArray(t[k])) continue;
+      const v = t[k][idx];
+      // extraNotes entries are themselves arrays — clone so each snapshot
+      // owns an independent copy (writeStep into multiple destinations
+      // would otherwise share the same reference).
+      out[k] = Array.isArray(v) ? v.slice() : v;
+    }
     return out;
   };
   const writeStep = (idx, snap, noteOverride) => {
@@ -6510,6 +6641,8 @@ function renderRollPanel(t, panel) {
     for (let i = Math.max(0, from); i <= Math.min(t.length - 1, to); i++) {
       t.steps[i] = 0; t.lengths[i] = 0; t.notes[i] = null;
       t.velocities[i] = 0.5; t.chords[i] = "";
+      if (t.extraNotes) t.extraNotes[i] = null;
+      if (t.extraLengths) t.extraLengths[i] = null;
     }
   };
 
@@ -6517,6 +6650,12 @@ function renderRollPanel(t, panel) {
   let lastRollClickTime = 0;
   let lastRollClickKey = "";
   const ROLL_DBLCLICK_MS = 400;
+  let longPressTimer = null;
+  let longPressAnchor = -1;
+  const cancelLongPress = () => {
+    if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+    longPressAnchor = -1;
+  };
   const cellFromPoint = (x, y) => {
     const el = document.elementFromPoint(x, y);
     return el?.closest?.(".roll-cell") || null;
@@ -6536,25 +6675,17 @@ function renderRollPanel(t, panel) {
     const key = `${step}:${note}`;
     const now = performance.now();
     if (now - lastRollClickTime < ROLL_DBLCLICK_MS && key === lastRollClickKey) {
-      // manual double-click on an existing note → bump its pitch up one note
-      // (scale-aware) at the same step. Works on multi-step notes too: we
-      // operate on the anchor regardless of which held cell was clicked, and
-      // the length/snapshot stays put.
+      // manual double-click: activate the step (if not already on) and pin
+      // velocity to full. Operates on the anchor so multi-step notes work
+      // when any held cell is clicked.
       localMutate(() => {
         const anchor = anchorCovering(t, step);
-        if (anchor < 0 || t.notes[anchor] == null) return;
-        const origNote = t.notes[anchor];
-        const len = Math.max(1, t.lengths[anchor] || 1);
-        const intervals = state.scale.active ? (SCALES[state.scale.mode] || null) : null;
-        let newNote = origNote + 1;
-        if (intervals) {
-          const idx = midiToScaleIndex(origNote, state.scale.root, intervals);
-          if (idx != null) newNote = scaleIndexToMidi(idx + 1, state.scale.root, intervals);
-        }
-        newNote = Math.max(0, Math.min(127, newNote));
-        t.notes[anchor] = newNote;
-        if (!t.isDrumKit) t.lastEditedNote = newNote;
-        paintRange(anchor, anchor + len - 1);
+        const target = anchor >= 0 ? anchor : step;
+        if (!t.steps[target]) startNote(t, target);
+        t.notes[target] = note;
+        if (!t.isDrumKit) t.lastEditedNote = note;
+        t.velocities[target] = 1;
+        paintRange(target, target + Math.max(1, t.lengths[target] || 1) - 1);
         renderStepGrid(t);
       });
       lastRollClickTime = 0;
@@ -6566,22 +6697,80 @@ function renderRollPanel(t, panel) {
     lastRollClickTime = now;
     lastRollClickKey = key;
 
+    // Long-press on a note opens the step editor (touch alternative to
+    // right-click). Only fires if pointer stays roughly put for 500 ms.
+    if (e.pointerType === "touch") {
+      const anchorIdx = anchorCovering(t, step);
+      if (anchorIdx >= 0) {
+        cancelLongPress();
+        longPressAnchor = anchorIdx;
+        longPressTimer = setTimeout(() => {
+          longPressTimer = null;
+          if (drag) {
+            drag.moved = true;
+            try { grid.releasePointerCapture(drag.pointerId); } catch {}
+            drag = null;
+          }
+          panel._rollDragActive = false;
+          openStepEditor(t, longPressAnchor, cell || grid);
+        }, 500);
+      }
+    }
+
     const existing = anchorCovering(t, step);
     if (existing >= 0) {
-      // Grab the note. Mode resolves on first pointermove for ambiguous (length-1) cases.
-      const len = Math.max(1, t.lengths[existing] || 1);
-      const isRightEdge = step === existing + len - 1;
+      const rootLen = Math.max(1, t.lengths[existing] || 1);
       const samePitch = Math.abs(t.notes[existing] - note) < EPS;
+      const extrasArr = Array.isArray(t.extraNotes?.[existing]) ? t.extraNotes[existing] : null;
+      const extraIdx = extrasArr ? extrasArr.findIndex(x => Math.abs(x - note) < EPS) : -1;
+      const eLensArr = Array.isArray(t.extraLengths?.[existing]) ? t.extraLengths[existing] : null;
+      // Identify the slot the user grabbed.
+      //   "anchor" — clicked the anchor's root pitch (i is within rootLen)
+      //   "extra"  — clicked an existing extra at its pitch (within extraLen)
+      //   "empty"  — clicked an empty row at this step
+      let dragSlot, slotLen;
+      if (samePitch && step < existing + rootLen) {
+        dragSlot = { kind: "anchor" };
+        slotLen  = rootLen;
+      } else if (extraIdx >= 0) {
+        const eLen = Math.max(1, Math.min(rootLen, (eLensArr?.[extraIdx]) ?? rootLen));
+        if (step < existing + eLen) {
+          dragSlot = { kind: "extra", idx: extraIdx };
+          slotLen  = eLen;
+        } else {
+          dragSlot = { kind: "empty" };
+          slotLen  = 0;
+        }
+      } else {
+        dragSlot = { kind: "empty" };
+        slotLen  = 0;
+      }
+      const isRightEdgeOfSlot = slotLen > 0 && step === existing + slotLen - 1;
+      // Right-edge of a slot with length > 1 → resize that slot.
+      if (isRightEdgeOfSlot && slotLen > 1 && dragSlot.kind !== "empty") {
+        drag = {
+          mode: "resize",
+          anchor: existing,
+          origLen: slotLen,
+          anchorLen: rootLen,
+          dragSlot,
+          pointerId: e.pointerId,
+          moved: false,
+        };
+        panel._rollDragActive = true;
+        try { grid.setPointerCapture(e.pointerId); } catch {}
+        e.preventDefault();
+        return;
+      }
       drag = {
-        mode: isRightEdge ? (len === 1 ? "ambiguous" : "resize") : "move",
+        mode: "move",
         anchor: existing,
-        origLen: len,
-        origSnap: snapStep(existing),
+        origLen: rootLen,
         startStep: step,
         startNote: note,
-        curAnchor: existing,
-        curNote: t.notes[existing],
-        samePitch,
+        startX: e.clientX,
+        startY: e.clientY,
+        dragSlot,
         moved: false,
         pointerId: e.pointerId,
       };
@@ -6590,7 +6779,8 @@ function renderRollPanel(t, panel) {
       e.preventDefault();
       return;
     }
-    // empty cell → start a fresh note with anchor here; drag extends it
+    // Empty step → create a fresh note at the clicked position. Dragging
+    // right extends its length.
     startNote(t, step);
     t.notes[step] = note;
     if (!t.isDrumKit) t.lastEditedNote = note;
@@ -6607,11 +6797,8 @@ function renderRollPanel(t, panel) {
     if (!cell || !grid.contains(cell)) return;
     const step = Number(cell.dataset.step);
     const note = Number(cell.dataset.note);
-
-    if (drag.mode === "ambiguous") {
-      if (step === drag.startStep && Math.abs(note - drag.startNote) < EPS) return;
-      drag.mode = (step > drag.startStep) ? "resize" : "move";
-    }
+    // Any cell change cancels the long-press: the user is dragging, not holding.
+    if (longPressTimer) cancelLongPress();
 
     if (drag.mode === "create") {
       if (step === drag.lastEnd) return;
@@ -6625,73 +6812,169 @@ function renderRollPanel(t, panel) {
     }
 
     if (drag.mode === "resize") {
-      const newEnd = Math.max(drag.anchor, step);
-      const prevLen = Math.max(1, t.lengths[drag.anchor] || 1);
-      const desired = newEnd - drag.anchor + 1;
+      const a = drag.anchor;
+      const newEnd = Math.max(a, step);
+      if (drag.dragSlot && drag.dragSlot.kind === "extra") {
+        // Resize a single extra. Capped at the anchor's length (extras can't
+        // outlive the anchor).
+        const eLens = t.extraLengths[a] ?? (t.extraLengths[a] = []);
+        const anchorLen = Math.max(1, t.lengths[a] || 1);
+        const requested = newEnd - a + 1;
+        const newLen = Math.max(1, Math.min(anchorLen, requested));
+        const prev = Math.max(1, Math.min(anchorLen, eLens[drag.dragSlot.idx] ?? anchorLen));
+        if (newLen === prev) return;
+        eLens[drag.dragSlot.idx] = newLen;
+        paintRange(a, a + anchorLen - 1);
+        drag.moved = true;
+        renderStepGrid(t);
+        return;
+      }
+      // Anchor resize (default). Also clamp extras that would outlive the
+      // new anchor length.
+      const prevLen = Math.max(1, t.lengths[a] || 1);
+      const desired = newEnd - a + 1;
       if (desired === prevLen) return;
-      extendNote(t, drag.anchor, newEnd);
-      const newLen = Math.max(1, t.lengths[drag.anchor] || 1);
-      paintRange(drag.anchor, drag.anchor + Math.max(prevLen, newLen) - 1);
+      extendNote(t, a, newEnd);
+      const newLen = Math.max(1, t.lengths[a] || 1);
+      const eLens = t.extraLengths?.[a];
+      if (Array.isArray(eLens)) {
+        for (let e = 0; e < eLens.length; e++) {
+          if (eLens[e] != null && eLens[e] > newLen) eLens[e] = newLen;
+        }
+      }
+      paintRange(a, a + Math.max(prevLen, newLen) - 1);
       drag.moved = true;
       renderStepGrid(t);
       return;
     }
 
-    // ── move ──
-    const stepDelta = step - drag.startStep;
-    const noteDelta = note - drag.startNote;
-    const len = drag.origLen;
-    const newAnchor = Math.max(0, Math.min(t.length - len, drag.anchor + stepDelta));
-    const newNote = (drag.origSnap.notes ?? drag.curNote) + noteDelta;
-    if (newAnchor === drag.curAnchor && Math.abs(newNote - drag.curNote) < EPS) return;
-
-    // Compute paint range BEFORE mutation so we cover any truncated neighbour's old tail.
-    let paintLo = Math.min(drag.curAnchor, newAnchor);
-    let paintHi = Math.max(drag.curAnchor + len - 1, newAnchor + len - 1);
-    if (newAnchor > 0) {
-      const cov = anchorCovering(t, newAnchor);
-      if (cov >= 0 && cov < newAnchor && cov !== drag.curAnchor) {
-        const cLen = Math.max(1, t.lengths[cov] || 1);
-        paintHi = Math.max(paintHi, cov + cLen - 1);
+    if (drag.mode === "move") {
+      // Require ~8 px before committing — small wobble on a click shouldn't
+      // hijack the toggle/polyphony gesture.
+      if (!drag.moved) {
+        const dx = e.clientX - drag.startX;
+        const dy = e.clientY - drag.startY;
+        if (Math.hypot(dx, dy) < 8) return;
       }
+      const a = drag.anchor;
+      const len = drag.origLen;
+      if (drag.dragSlot.kind === "anchor") {
+        if (Math.abs(t.notes[a] - note) < EPS) return;
+        t.notes[a] = note;
+        if (!t.isDrumKit) t.lastEditedNote = note;
+        paintRange(a, a + len - 1);
+        drag.moved = true;
+        renderStepGrid(t);
+        return;
+      }
+      if (drag.dragSlot.kind === "extra") {
+        const extras = t.extraNotes[a];
+        if (!extras || Math.abs(extras[drag.dragSlot.idx] - note) < EPS) return;
+        extras[drag.dragSlot.idx] = note;
+        if (!t.isDrumKit) t.lastEditedNote = note;
+        paintRange(a, a + len - 1);
+        drag.moved = true;
+        renderStepGrid(t);
+        return;
+      }
+      // "empty" — drag from an empty pitch row at an existing step. Commit
+      // the extra now (at the originally-clicked pitch) and switch to
+      // createExtra so further pointermoves extend the new extra's length.
+      if (!Array.isArray(t.extraNotes[a])) t.extraNotes[a] = [];
+      if (!Array.isArray(t.extraLengths[a])) t.extraLengths[a] = [];
+      t.extraNotes[a].push(drag.startNote);
+      t.extraLengths[a].push(1);
+      const newIdx = t.extraNotes[a].length - 1;
+      drag.mode = "createExtra";
+      drag.dragSlot = { kind: "extra", idx: newIdx };
+      drag.lastEnd = drag.startStep;
+      drag.moved = true;
+      if (!t.isDrumKit) t.lastEditedNote = drag.startNote;
+      // Fall through to the createExtra branch to extend right away.
     }
 
-    eraseSpan(drag.curAnchor, drag.curAnchor + len - 1);
-    eraseSpan(newAnchor, newAnchor + len - 1);
-    writeStep(newAnchor, drag.origSnap, newNote);
-    // Restore length (snap may have come from a single index — explicit set is clearer).
-    t.lengths[newAnchor] = len;
-    if (!t.isDrumKit) t.lastEditedNote = newNote;
-
-    paintRange(paintLo, paintHi);
-    drag.curAnchor = newAnchor;
-    drag.curNote = newNote;
-    drag.moved = true;
-    renderStepGrid(t);
+    if (drag.mode === "createExtra") {
+      const a = drag.anchor;
+      const anchorLen = Math.max(1, t.lengths[a] || 1);
+      const newEnd = Math.max(a, step);
+      const desired = Math.min(anchorLen, Math.max(1, newEnd - a + 1));
+      const cur = t.extraLengths[a]?.[drag.dragSlot.idx];
+      if (cur === desired) return;
+      t.extraLengths[a][drag.dragSlot.idx] = desired;
+      paintRange(a, a + anchorLen - 1);
+      drag.lastEnd = newEnd;
+      drag.moved = true;
+      renderStepGrid(t);
+      return;
+    }
   });
   const endDrag = (e) => {
+    cancelLongPress();
     if (!drag || e.pointerId !== drag.pointerId) return;
     try { grid.releasePointerCapture(e.pointerId); } catch {}
-    // Click on existing note without drag — preserve legacy click semantics.
-    if (!drag.moved && (drag.mode === "move" || drag.mode === "resize" || drag.mode === "ambiguous")) {
+    // Click on an existing note without dragging → toggle semantics.
+    if (!drag.moved && drag.mode === "move") {
       localMutate(() => {
         const a = drag.anchor;
         const len = drag.origLen;
-        if (drag.samePitch) {
+        const startStep = drag.startStep;
+        const startNote = drag.startNote;
+        if (drag.dragSlot.kind === "anchor" && startStep === a && len === 1) {
+          // Click on a length-1 anchor at its root pitch → toggle the
+          // whole note off (also clears extras with it).
           removeNote(t, a);
-        } else {
-          t.notes[a] = drag.startNote;
-          if (!t.isDrumKit) t.lastEditedNote = drag.startNote;
+          paintRange(a, a);
+        } else if (drag.dragSlot.kind === "extra") {
+          // Click on an existing extra → remove that extra.
+          const extras = t.extraNotes[a];
+          const eLens  = t.extraLengths?.[a];
+          if (extras) {
+            extras.splice(drag.dragSlot.idx, 1);
+            if (Array.isArray(eLens)) eLens.splice(drag.dragSlot.idx, 1);
+            if (extras.length === 0) {
+              t.extraNotes[a] = null;
+              if (t.extraLengths) t.extraLengths[a] = null;
+            }
+          }
+          paintRange(a, a + len - 1);
+        } else if (drag.dragSlot.kind === "empty") {
+          // Click on an empty pitch row at an existing step → add a 1-step
+          // extra. Drag would have extended it; pure click keeps it short.
+          const list = Array.isArray(t.extraNotes[a]) ? t.extraNotes[a] : (t.extraNotes[a] = []);
+          list.push(startNote);
+          const lens = Array.isArray(t.extraLengths[a]) ? t.extraLengths[a] : (t.extraLengths[a] = []);
+          lens.push(1);
+          if (!t.isDrumKit) t.lastEditedNote = startNote;
+          paintRange(a, a + len - 1);
         }
-        paintRange(a, a + len - 1);
+        // else: anchor mid-body / multi-step anchor click — no-op so we
+        // don't accidentally tear down a long note.
         renderStepGrid(t);
       });
     }
+    // Notes from "create" and "resize" drags are already committed during
+    // pointermove. Nothing else to do here.
     drag = null;
     panel._rollDragActive = false;
   };
   grid.addEventListener("pointerup", endDrag);
   grid.addEventListener("pointercancel", endDrag);
+  // Right-click on a note opens the step editor (matches the pattern grid).
+  grid.addEventListener("contextmenu", (e) => {
+    const cell = e.target.closest?.(".roll-cell");
+    if (!cell) return;
+    const step = Number(cell.dataset.step);
+    const anchor = anchorCovering(t, step);
+    if (anchor < 0) return;
+    e.preventDefault();
+    cancelLongPress();
+    if (drag) {
+      try { grid.releasePointerCapture(drag.pointerId); } catch {}
+      drag = null;
+      panel._rollDragActive = false;
+    }
+    openStepEditor(t, anchor, cell);
+  });
 
   let vdrag = null;
   const updateVelFromPoint = (cell, clientY) => {
@@ -8100,14 +8383,23 @@ function showAudioGateDialog() {
   modal.setAttribute("aria-modal", "true");
   modal.innerHTML = `
     <div class="audio-gate-title">tap to enable audio</div>
-    <div class="audio-gate-hint">
-      mobile browsers require a tap before audio can play.
-    </div>
+    <div class="audio-gate-hint" aria-live="polite"></div>
     <button class="audio-gate-btn" type="button">enable audio</button>
     <div class="audio-gate-status"></div>
   `;
   overlay.appendChild(modal);
   document.body.appendChild(overlay);
+  const hintEl = modal.querySelector(".audio-gate-hint");
+  let tipIdx = Math.floor(Math.random() * HELP_TIPS.length);
+  hintEl.textContent = HELP_TIPS[tipIdx];
+  const tipTimer = setInterval(() => {
+    tipIdx = (tipIdx + 1) % HELP_TIPS.length;
+    hintEl.style.opacity = "0";
+    setTimeout(() => {
+      hintEl.textContent = HELP_TIPS[tipIdx];
+      hintEl.style.opacity = "";
+    }, 180);
+  }, 3200);
   const btn = modal.querySelector(".audio-gate-btn");
   const statusEl = modal.querySelector(".audio-gate-status");
   btn.addEventListener("click", async () => {
@@ -8123,6 +8415,7 @@ function showAudioGateDialog() {
       return;
     }
     statusEl.textContent = `ready (ctx: ${state.audioCtx?.state || "?"})`;
+    clearInterval(tipTimer);
     overlay.remove();
     setStatus(`audio ready (ctx: ${state.audioCtx?.state || "?"})`);
   });
@@ -8284,7 +8577,10 @@ async function togglePlay() {
         runAutomationForStep(t, idx, autoTime, effDur);
         if (!t.steps[idx]) { slot++; continue; }
         const span = Math.max(1, t.lengths[idx] || 1);
-        const duration = span * effDur;
+        // Gate mode plays for the full step length; trigger mode fires a short
+        // hit. Voices that honor `duration` (Plaits, samples, melodic synths)
+        // will follow this; drum-synth recipes with fixed envelopes don't.
+        const duration = (t.noteMode === "trigger") ? 0.05 : span * effDur;
         const swingOffset = (idx % 2 === 1) ? effDur * masterSwing : 0;
         const microOffset = (t.offsets?.[idx] ?? 0) * effDur;
         const hitTime = Math.max(state.audioCtx.currentTime + 0.002,
@@ -8296,7 +8592,23 @@ async function togglePlay() {
         const cpx = (t.complexities && t.complexities[idx]) || 0;
         let notes = chord ? chordNotes(root, chord) : [root];
         if (chord && cpx) notes = invertChord(notes, cpx);
+        const chordCount = notes.length;
+        // Polyphonic extras (from the piano roll) stack on top of the chord/root.
+        // Per-extra length comes from t.extraLengths; falls back to the anchor's
+        // length so the simple "all the same length" stack still works.
+        const extras = t.extraNotes && t.extraNotes[idx];
+        const extraLens = t.extraLengths && t.extraLengths[idx];
+        const extraDurs = [];
+        if (Array.isArray(extras) && extras.length) {
+          for (let e = 0; e < extras.length; e++) {
+            const eSpan = Math.max(1, Math.min(span, (Array.isArray(extraLens) ? extraLens[e] : null) ?? span));
+            const eDur  = (t.noteMode === "trigger") ? 0.05 : eSpan * effDur;
+            extraDurs.push(eDur);
+          }
+          notes = [...notes, ...extras];
+        }
         const list = (t.voice.poly && !arp) ? notes : (arp ? notes : [notes[0]]);
+        const durationFor = (i) => i < chordCount ? duration : (extraDurs[i - chordCount] ?? duration);
         // Sample-based voices play longer than the step; extend the envelope sustain
         // so the ADSR actually shapes the whole sample, not just the first few ms.
         const sampleDur = (t.voice.buffer && ["sample","eleven","upload"].includes(t.voice.type))
@@ -8349,13 +8661,13 @@ async function togglePlay() {
             // retrigger the single note N times evenly across the step
             const sub = duration / ratchet;
             for (let r = 0; r < ratchet; r++) {
-              for (const n of list) {
-                try { t.voice.hit(n, hitTime + r * sub, sub * 0.92, vel, sampleOpts); } catch (e) { console.warn(e); }
+              for (let i = 0; i < list.length; i++) {
+                try { t.voice.hit(list[i], hitTime + r * sub, sub * 0.92, vel, sampleOpts); } catch (e) { console.warn(e); }
               }
             }
           } else {
-            for (const n of list) {
-              try { t.voice.hit(n, hitTime, duration, vel, sampleOpts); } catch (e) { console.warn(e); }
+            for (let i = 0; i < list.length; i++) {
+              try { t.voice.hit(list[i], hitTime, durationFor(i), vel, sampleOpts); } catch (e) { console.warn(e); }
             }
           }
         }

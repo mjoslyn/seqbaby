@@ -602,6 +602,13 @@ main {
   border: 1px solid transparent;
   transition: background 40ms linear, border-color 40ms linear;
   position: relative;
+  font-family: ui-monospace, monospace;
+  font-size: 9px;
+  line-height: 14px;
+  color: #0b0d10;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
 }
 .roll-cell:hover { background: color-mix(in srgb, var(--row-color, var(--bg-4, #30363d)) 32%, var(--bg-3)); }
 .roll-cell.on:hover { background: color-mix(in srgb, var(--note-color, var(--accent)) 88%, #fff 12%); }
@@ -1210,6 +1217,11 @@ main {
   font-size: 12px;
   color: var(--fg-dim);
   line-height: 1.5;
+  min-height: 3.2em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 180ms ease;
 }
 .audio-gate-hint strong { color: var(--fg); }
 .audio-gate-btn {
