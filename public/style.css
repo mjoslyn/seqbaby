@@ -21,9 +21,16 @@
    grid and roll grid still override this with their own touch-action values
    (none / pan-y) where they capture pointer events directly. */
 html, body, button, input, select, textarea, label, a,
-.step, .pattern-cell, .roll-cell, .roll-vel-cell, .se-pad {
+.step, .pattern-cell, .se-pad {
   touch-action: manipulation;
 }
+/* Piano roll cells: JS owns the gesture (tap to add, drag right to extend
+   length, drag up/down to repitch). `manipulation` here would let the browser
+   pan the horizontally-scrollable .roll-grid and cancel the drag mid-gesture,
+   so notes never grow past length 1 on touch. Users still scroll horizontally
+   by touching the sticky label column or beat ruler row, which keep the
+   default touch-action. Same for the velocity lane. */
+.roll-cell, .roll-vel-cell { touch-action: none; }
 
 html, body {
   margin: 0;
