@@ -190,7 +190,7 @@ button.danger { color: var(--danger); }
   gap: 3px;
 }
 .vol-combo > * { box-sizing: border-box; }
-.vol-combo input[type="range"] {
+.track-head .field.vol-field .vol-combo input[type="range"] {
   width: 100%;
   margin: 0;
   padding: 0;
