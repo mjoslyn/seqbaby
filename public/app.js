@@ -4298,10 +4298,16 @@ function randomizeMelody(t) {
 
   // Melodic walk. Step size mostly ±1..3 scale degrees with occasional
   // octave leaps; clamp to MIDI 36..84 by folding wrapped notes back inward.
+  // Always constrain to the selected scale (root + mode), even when the
+  // global scale-quantize toggle is off — the dice is a deliberate musical
+  // act and should follow the chosen key.
   const density = 0.45 + Math.random() * 0.2;
-  const scaleActive = state.scale.active && SCALES[state.scale.mode];
-  const intervals = scaleActive ? SCALES[state.scale.mode] : null;
+  const intervals = SCALES[state.scale.mode] || SCALES.minor;
+  const rootPc = state.scale.root | 0;
   let current = lastUsedNote(t);
+  // Snap the starting note onto the selected scale so the walk begins
+  // in-key even if state.scale.active is false or the prior note was chromatic.
+  current = quantizeToScale(current, rootPc, intervals);
 
   for (let i = 0; i < len; i++) {
     const onBeat = (i % spb) === 0;
@@ -4313,16 +4319,11 @@ function randomizeMelody(t) {
       const stepSize = bigJump
         ? (Math.random() < 0.5 ? -7 : 7)
         : Math.round((Math.random() * 2 - 1) * 3);
-      if (scaleActive) {
-        const idx = midiToScaleIndex(current, state.scale.root, intervals);
-        if (idx != null) current = scaleIndexToMidi(idx + stepSize, state.scale.root, intervals);
-        else             current = applyScale(current + stepSize);
-      } else {
-        current = current + stepSize;
-      }
-    } else if (scaleActive) {
-      current = applyScale(current);
+      const idx = midiToScaleIndex(current, rootPc, intervals);
+      if (idx != null) current = scaleIndexToMidi(idx + stepSize, rootPc, intervals);
+      else             current = quantizeToScale(current + stepSize, rootPc, intervals);
     }
+    // Octave-fold back into a sensible range while staying on scale.
     while (current < 36) current += 12;
     while (current > 84) current -= 12;
 
