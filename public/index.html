@@ -393,6 +393,13 @@
     </div>
   </template>
 
+  <!-- iOS audio session unlock: a brief play() on this element inside a user
+       gesture switches Safari from "ambient" (ringer-controlled, silenced
+       when the side switch is on silent) to "playback" mode, which routes
+       AudioContext output through the regular media volume and ignores the
+       ringer switch. The src is a 44-byte silent WAV. -->
+  <audio id="ios-audio-unlock" playsinline preload="auto"
+         src="data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA="></audio>
   <script src="https://cdn.jsdelivr.net/npm/tone@15.0.4/build/Tone.js"></script>
   <script src="/woscillators.js"></script>
   <script type="module" src="/app.js"></script>

@@ -7723,9 +7723,16 @@ function suggestBounceFilename() {
 // they're invoked synchronously inside a user-gesture task. Awaiting anything
 // before the call drops you off the gesture stack and resume() silently
 // fails. Call this *first thing* in any handler that needs audio, before
-// any `await`. The silent-buffer source is the canonical iOS "audio unlock"
-// trick — without it, even a resumed context stays muted until something
-// actually starts playing through the destination.
+// any `await`. Three nudges, in order, address three distinct iOS quirks:
+//   1. ctx.resume() (sync, no await) — authorizes the suspended→running
+//      transition inside the gesture frame.
+//   2. silent BufferSource through ctx.destination — Safari leaves the
+//      pipeline muted until something actually plays.
+//   3. play() on a hidden <audio> element with a real (silent) src — flips
+//      the iOS audio session from "ambient" (ringer-controlled, muted by
+//      the side silent switch) to "playback", so output ignores the silent
+//      switch.
+let _iosUnlocked = false;
 function primeAudioForIOS() {
   const ctx = state.audioCtx;
   if (!ctx) return;
@@ -7739,6 +7746,16 @@ function primeAudioForIOS() {
     src.connect(ctx.destination);
     src.start(0);
   } catch {}
+  if (!_iosUnlocked) {
+    const el = document.getElementById("ios-audio-unlock");
+    if (el) {
+      try {
+        const p = el.play();
+        if (p && typeof p.catch === "function") p.catch(() => {});
+        _iosUnlocked = true;
+      } catch {}
+    }
+  }
 }
 
 async function togglePlay() {
@@ -7775,14 +7792,17 @@ async function togglePlay() {
   // awaiting anything else. Without this the context resume that ensureAudio
   // attempts later won't be honored on Safari.
   primeAudioForIOS();
-  setStatus("unlocking audio...");
+  setStatus(`unlocking audio (ctx: ${state.audioCtx?.state || "?"})...`);
   try {
     await ensureAudio();
   } catch (err) {
     console.error("ensureAudio failed:", err);
-    setStatus("audio init failed — see console", true);
+    setStatus(`audio init failed: ${err?.message || err}`, true);
     return;
   }
+  // Confirm post-unlock state on screen so a no-dev-console iPhone user can
+  // tell us whether the context actually resumed.
+  setStatus(`audio ready (ctx: ${state.audioCtx?.state || "?"})`);
   Tone.Transport.bpm.value = Number(document.getElementById("bpm").value);
   // Per-track swing is applied manually in the transport loop; keep Tone's global swing disabled.
   Tone.Transport.swing = 0;
