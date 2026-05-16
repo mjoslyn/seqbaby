@@ -1152,13 +1152,13 @@ function applySet(s) {
       t.el.classList.toggle("soloed", t.soloed);
       refreshFxPanelUI(t);
       renderModPanel(t, t._modPanelEl || t.el.querySelector(".track-mod-panel"));
-      const eqPanel = t.el.querySelector(".track-eq-panel");
+      const eqPanel = t._eqPanelEl || t.el.querySelector(".track-eq-panel");
       if (eqPanel) {
         eqPanel.querySelector(".p-eq-low").value  = t.eq.low;
         eqPanel.querySelector(".p-eq-mid").value  = t.eq.mid;
         eqPanel.querySelector(".p-eq-high").value = t.eq.high;
       }
-      const compPanel = t.el.querySelector(".track-comp-panel");
+      const compPanel = t._compPanelEl || t.el.querySelector(".track-comp-panel");
       if (compPanel) {
         compPanel.querySelector(".comp-enabled").checked = !!t.comp.enabled;
         compPanel.querySelector(".comp-threshold").value = t.comp.threshold;
@@ -4088,7 +4088,7 @@ function updatePlaitsControlsVisibility(t) {
   const isRhodes    = t.engineKey === "dm:rhodes";
   const isProphet6  = t.engineKey === "dm:prophet6";
   const showTimbre = isPlaits || isMiniBrute || isMoog || isJuno || isGuitar || isBass || isRhodes || isProphet6;
-  const group = t.el.querySelector(".timbre-group");
+  const group = t._timbreGroupEl || t.el.querySelector(".timbre-group");
   if (group) {
     group.hidden = !showTimbre;
     group.style.removeProperty("display");
@@ -4138,7 +4138,7 @@ function updatePlaitsControlsVisibility(t) {
     if (randBtn) randBtn.hidden = isMiniBrute || isMoog || isJuno || isGuitar || isBass || isRhodes || isProphet6;
   }
   // Per-oscillator volume sliders: only shown for the analog mono engines.
-  const oscGroup = t.el.querySelector(".osc-mix-group");
+  const oscGroup = t._oscMixGroupEl || t.el.querySelector(".osc-mix-group");
   if (oscGroup) {
     const showOsc = isMiniBrute || isMoog || isJuno || isProphet6;
     oscGroup.hidden = !showOsc;
@@ -4161,10 +4161,10 @@ function updatePlaitsControlsVisibility(t) {
     }
   }
   // Oscillator-modifier group (ultrasaw / FM / metalizer): mini-brute only for now.
-  const modGroup = t.el.querySelector(".osc-mod-group");
+  const modGroup = t._oscModGroupEl || t.el.querySelector(".osc-mod-group");
   if (modGroup) modGroup.hidden = !isMiniBrute;
   // Moog osc-bank group (per-osc range + waveform + osc2/3 freq + noise).
-  const moogGroup = t.el.querySelector(".moog-osc-group");
+  const moogGroup = t._moogOscGroupEl || t.el.querySelector(".moog-osc-group");
   if (moogGroup) moogGroup.hidden = !isMoog;
 }
 
@@ -4598,6 +4598,7 @@ function duplicateTrack(src) {
 }
 
 function removeTrack(t) {
+  if (t._trackMenuModal) t._trackMenuModal.close();
   disposeLFOs(t);
   if (t.voice) t.voice.dispose();
   if (t.fxRack) t.fxRack.dispose();
@@ -5417,54 +5418,54 @@ function renderTrack(t) {
   // also update save button when customConfig is assigned later — keep a ref on track
   t._refreshSaveEnabled = refreshSaveEnabled;
 
-  const panelPairs = [
-    { btnSel: ".track-mod",    panelSel: ".track-mod-panel" },
-    { btnSel: ".track-aut",    panelSel: ".track-aut-panel" },
-    { btnSel: ".track-roll",   panelSel: ".track-roll-panel" },
-    { btnSel: ".track-filter", panelSel: ".track-filter-panel" },
-    { btnSel: ".track-env",    panelSel: ".track-env-panel" },
-    { btnSel: ".track-fx",     panelSel: ".track-fx-panel" },
-    { btnSel: ".track-eq",     panelSel: ".track-eq-panel" },
-    { btnSel: ".track-comp",   panelSel: ".track-comp-panel" },
+  const panelModals = [
+    { btnSel: ".track-mod",    modalKey: "_modModal" },
+    { btnSel: ".track-aut",    modalKey: "_autModal" },
+    { btnSel: ".track-roll",   modalKey: "_rollModal" },
+    { btnSel: ".track-filter", modalKey: "_filterModal" },
+    { btnSel: ".track-env",    modalKey: "_envModal" },
+    { btnSel: ".track-fx",     modalKey: "_fxModal" },
+    { btnSel: ".track-eq",     modalKey: "_eqModal" },
+    { btnSel: ".track-comp",   modalKey: "_compModal" },
   ];
   function closeOtherPanels(keepBtnSel) {
-    for (const p of panelPairs) {
+    for (const p of panelModals) {
       if (p.btnSel === keepBtnSel) continue;
-      // The roll/mod/aut panels are hosted in a modal — close via the owning
-      // close fn so the overlay tears down with the panel.
-      if (p.panelSel === ".track-roll-panel" && t._rollModal) { t._rollModal.close(); continue; }
-      if (p.panelSel === ".track-mod-panel"  && t._modModal)  { t._modModal.close();  continue; }
-      if (p.panelSel === ".track-aut-panel"  && t._autModal)  { t._autModal.close();  continue; }
-      const b = node.querySelector(p.btnSel);
-      const pn = node.querySelector(p.panelSel);
-      if (b && pn) { pn.hidden = true; b.setAttribute("aria-pressed", "false"); }
+      if (t[p.modalKey]) t[p.modalKey].close();
     }
   }
-  function bindPanelToggle(btnSel, panelSel, onOpen) {
-    const btn = node.querySelector(btnSel);
-    const panel = node.querySelector(panelSel);
-    btn.addEventListener("click", () => {
-      const willOpen = panel.hidden;
-      if (willOpen) closeOtherPanels(btnSel);
-      panel.hidden = !willOpen;
-      btn.setAttribute("aria-pressed", String(willOpen));
-      if (willOpen && onOpen) onOpen();
-    });
-  }
 
-  // Stash stable refs to the mod/aut/roll panels — once opened as a modal the
+  // Stash stable refs to every collapsible panel — once opened as a modal the
   // panel is reparented out of the track, so t.el.querySelector(...) would
-  // miss it. All three panels open as a centered modal overlay.
-  t._modPanelEl = node.querySelector(".track-mod-panel");
-  t._autPanelEl = node.querySelector(".track-aut-panel");
-  t._rollPanelEl = node.querySelector(".track-roll-panel");
-  t._modModal = null;
-  t._autModal = null;
-  t._rollModal = null;
+  // miss it. All panels open as a centered modal overlay.
+  t._modPanelEl    = node.querySelector(".track-mod-panel");
+  t._autPanelEl    = node.querySelector(".track-aut-panel");
+  t._rollPanelEl   = node.querySelector(".track-roll-panel");
+  t._filterPanelEl = node.querySelector(".track-filter-panel");
+  t._envPanelEl    = node.querySelector(".track-env-panel");
+  t._fxPanelEl     = node.querySelector(".track-fx-panel");
+  t._eqPanelEl     = node.querySelector(".track-eq-panel");
+  t._compPanelEl   = node.querySelector(".track-comp-panel");
+  t._modModal    = null;
+  t._autModal    = null;
+  t._rollModal   = null;
+  t._filterModal = null;
+  t._envModal    = null;
+  t._fxModal     = null;
+  t._eqModal     = null;
+  t._compModal   = null;
+
+  // Same idea for the synth-row sub-groups — they're reparented into the
+  // track-menu-modal on mobile, so updatePlaitsControlsVisibility queries
+  // these stashed refs instead of t.el.querySelector.
+  t._timbreGroupEl  = node.querySelector(".timbre-group");
+  t._oscMixGroupEl  = node.querySelector(".osc-mix-group");
+  t._oscModGroupEl  = node.querySelector(".osc-mod-group");
+  t._moogOscGroupEl = node.querySelector(".moog-osc-group");
 
   renderModPanel(t, t._modPanelEl);
-  wireFxPanel(t, node.querySelector(".track-fx-panel"));
-  const eqPanel = node.querySelector(".track-eq-panel");
+  wireFxPanel(t, t._fxPanelEl);
+  const eqPanel = t._eqPanelEl;
   eqPanel.querySelector(".p-eq-low").value  = t.eq.low;
   eqPanel.querySelector(".p-eq-mid").value  = t.eq.mid;
   eqPanel.querySelector(".p-eq-high").value = t.eq.high;
@@ -5472,36 +5473,27 @@ function renderTrack(t) {
   eqPanel.querySelector(".p-eq-mid").addEventListener("input",  e => setEQ(t, "mid",  Number(e.target.value)));
   eqPanel.querySelector(".p-eq-high").addEventListener("input", e => setEQ(t, "high", Number(e.target.value)));
 
-  const modBtn = node.querySelector(".track-mod");
-  modBtn.addEventListener("click", () => {
-    if (t._modModal) { t._modModal.close(); return; }
-    closeOtherPanels(".track-mod");
-    openModAsModal(t);
-    modBtn.setAttribute("aria-pressed", "true");
-  });
-  const autBtn = node.querySelector(".track-aut");
-  autBtn.addEventListener("click", () => {
-    if (t._autModal) { t._autModal.close(); return; }
-    closeOtherPanels(".track-aut");
-    openAutAsModal(t);
-    autBtn.setAttribute("aria-pressed", "true");
-  });
-  const rollBtn = node.querySelector(".track-roll");
-  rollBtn.addEventListener("click", () => {
-    const panel = t._rollPanelEl;
-    if (!panel) return;
-    if (t._rollModal) { t._rollModal.close(); return; }
-    closeOtherPanels(".track-roll");
+  const bindModalOpen = (btnSel, openFn, modalKey, beforeOpen) => {
+    const btn = node.querySelector(btnSel);
+    btn.addEventListener("click", () => {
+      if (t[modalKey]) { t[modalKey].close(); return; }
+      closeOtherPanels(btnSel);
+      if (beforeOpen) beforeOpen();
+      openFn(t);
+      btn.setAttribute("aria-pressed", "true");
+    });
+  };
+  bindModalOpen(".track-mod",    openModAsModal,    "_modModal");
+  bindModalOpen(".track-aut",    openAutAsModal,    "_autModal");
+  bindModalOpen(".track-roll",   openRollAsModal,   "_rollModal", () => {
     if (t.steps.some(s => s)) t.rollViewOct = bestRollViewOct(t);
-    openRollAsModal(t);
-    rollBtn.setAttribute("aria-pressed", "true");
   });
-  bindPanelToggle(".track-filter", ".track-filter-panel");
-  bindPanelToggle(".track-env",    ".track-env-panel");
-  bindPanelToggle(".track-fx",     ".track-fx-panel");
-  bindPanelToggle(".track-eq",     ".track-eq-panel");
-  bindPanelToggle(".track-comp",   ".track-comp-panel");
-  wireCompPanel(t, node.querySelector(".track-comp-panel"));
+  bindModalOpen(".track-filter", openFilterAsModal, "_filterModal");
+  bindModalOpen(".track-env",    openEnvAsModal,    "_envModal");
+  bindModalOpen(".track-fx",     openFxAsModal,     "_fxModal");
+  bindModalOpen(".track-eq",     openEqAsModal,     "_eqModal");
+  bindModalOpen(".track-comp",   openCompAsModal,   "_compModal");
+  wireCompPanel(t, t._compPanelEl);
 
   node.querySelector(".track-mute").addEventListener("click", () => {
     t.muted = !t.muted;
@@ -5524,8 +5516,8 @@ function renderTrack(t) {
   const dupBtn = node.querySelector(".track-dup");
   if (dupBtn) dupBtn.addEventListener("click", () => duplicateTrack(t));
 
-  // mobile: "more" toggle button reveals the hidden track-head extras
-  // (save/load patch, len-extend, oct/semi, synth params, dup, remove).
+  // mobile: "more" toggle button opens a modal hosting the hidden track-head
+  // extras (save/load patch, len-extend, oct/semi, synth params, dup, remove).
   const moreBtn = document.createElement("button");
   moreBtn.type = "button";
   moreBtn.className = "track-more ghost mobile-only";
@@ -5534,11 +5526,13 @@ function renderTrack(t) {
   moreBtn.title = "more";
   moreBtn.textContent = "…";
   moreBtn.addEventListener("click", () => {
-    const on = node.classList.toggle("show-extras");
-    moreBtn.setAttribute("aria-pressed", String(on));
+    if (t._trackMenuModal) { t._trackMenuModal.close(); return; }
+    openTrackMenu(t);
   });
   const panelGrp = node.querySelector(".panel-btn-group");
   if (panelGrp) panelGrp.before(moreBtn);
+  t._trackMoreBtn = moreBtn;
+  t._trackMenuModal = null;
 
   // midi-specific controls
   const midiSel = node.querySelector(".midi-out");
@@ -5703,7 +5697,7 @@ function applyFxToTrack(t, fx) {
 
 function refreshFxPanelUI(t) {
   if (!t.el) return;
-  const panel = t.el.querySelector(".track-fx-panel");
+  const panel = t._fxPanelEl || t.el.querySelector(".track-fx-panel");
   if (!panel) return;
   const cfg = t.fxConfig;
   if (!cfg.vinyl)      cfg.vinyl      = { amount: 0, warmth: 0.4, wow: 0.3 };
@@ -7020,6 +7014,123 @@ function openAutAsModal(t) {
     modalKey: "_autModal",
     afterMount: () => renderAutomationPanel(t, t._autPanelEl),
   });
+}
+
+function openFilterAsModal(t) {
+  openPanelAsModal(t, {
+    panel: t._filterPanelEl,
+    modalClass: "filter-modal",
+    btnSel: ".track-filter",
+    modalKey: "_filterModal",
+  });
+}
+
+function openEnvAsModal(t) {
+  openPanelAsModal(t, {
+    panel: t._envPanelEl,
+    modalClass: "env-modal",
+    btnSel: ".track-env",
+    modalKey: "_envModal",
+  });
+}
+
+function openFxAsModal(t) {
+  openPanelAsModal(t, {
+    panel: t._fxPanelEl,
+    modalClass: "fx-modal",
+    btnSel: ".track-fx",
+    modalKey: "_fxModal",
+  });
+}
+
+function openEqAsModal(t) {
+  openPanelAsModal(t, {
+    panel: t._eqPanelEl,
+    modalClass: "eq-modal",
+    btnSel: ".track-eq",
+    modalKey: "_eqModal",
+  });
+}
+
+function openCompAsModal(t) {
+  openPanelAsModal(t, {
+    panel: t._compPanelEl,
+    modalClass: "comp-modal",
+    btnSel: ".track-comp",
+    modalKey: "_compModal",
+  });
+}
+
+// Mobile track menu: physically move the "extras" nodes out of the
+// track-head into a centered modal so the user can reach the rarely-used
+// controls (save/load patch, len resize, oct/semi shift, synth params,
+// dup, remove) without horizontal scrolling. Restored to their original
+// DOM positions on close so the desktop layout is unaffected.
+function openTrackMenu(t) {
+  if (t._trackMenuModal) return;
+  const head = t.el?.querySelector(".track-head");
+  if (!head) return;
+
+  const selectors = [
+    ".track-save",
+    ".track-load-patch",
+    ".track-len-extend",
+    ".track-synth-row",
+    ".track-dup",
+    ".track-remove",
+    ".track-oct",
+  ];
+  const captured = [];
+  for (const sel of selectors) {
+    const n = head.querySelector(sel);
+    if (n) captured.push({ node: n, nextSibling: n.nextSibling });
+  }
+  const speedField = head.querySelector(".track-speed")?.closest(".field");
+  if (speedField) captured.push({ node: speedField, nextSibling: speedField.nextSibling });
+
+  const overlay = document.createElement("div");
+  overlay.className = "modal-overlay";
+  const modal = document.createElement("div");
+  modal.className = "modal track-menu-modal";
+  modal.setAttribute("role", "dialog");
+  modal.setAttribute("aria-modal", "true");
+
+  const title = document.createElement("div");
+  title.className = "track-menu-title";
+  title.textContent = t.name?.trim() || "track";
+  modal.appendChild(title);
+
+  for (const { node } of captured) modal.appendChild(node);
+
+  const closeBtn = document.createElement("button");
+  closeBtn.type = "button";
+  closeBtn.className = "track-menu-close";
+  closeBtn.textContent = "done";
+  modal.appendChild(closeBtn);
+
+  const close = () => {
+    if (!t._trackMenuModal) return;
+    for (const { node, nextSibling } of captured) {
+      if (nextSibling && nextSibling.parentNode === head) {
+        head.insertBefore(node, nextSibling);
+      } else {
+        head.appendChild(node);
+      }
+    }
+    overlay.remove();
+    document.removeEventListener("keydown", escHandler);
+    t._trackMenuModal = null;
+    if (t._trackMoreBtn) t._trackMoreBtn.setAttribute("aria-pressed", "false");
+  };
+  const escHandler = (e) => { if (e.key === "Escape") close(); };
+  closeBtn.addEventListener("click", close);
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
+  document.addEventListener("keydown", escHandler);
+
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
+  t._trackMenuModal = { overlay, close };
+  if (t._trackMoreBtn) t._trackMoreBtn.setAttribute("aria-pressed", "true");
 }
 
 // Mobile pattern menu: physically move every pattern-bar child (except the
