@@ -5355,6 +5355,22 @@ function renderTrack(t) {
   const dupBtn = node.querySelector(".track-dup");
   if (dupBtn) dupBtn.addEventListener("click", () => duplicateTrack(t));
 
+  // mobile: "more" toggle button reveals the hidden track-head extras
+  // (lock, save/load patch, len-extend, oct/semi, synth params, dup, remove).
+  const moreBtn = document.createElement("button");
+  moreBtn.type = "button";
+  moreBtn.className = "track-more ghost mobile-only";
+  moreBtn.setAttribute("aria-pressed", "false");
+  moreBtn.setAttribute("aria-label", "show more track controls");
+  moreBtn.title = "more";
+  moreBtn.textContent = "…";
+  moreBtn.addEventListener("click", () => {
+    const on = node.classList.toggle("show-extras");
+    moreBtn.setAttribute("aria-pressed", String(on));
+  });
+  const panelGrp = node.querySelector(".panel-btn-group");
+  if (panelGrp) panelGrp.before(moreBtn);
+
   // midi-specific controls
   const midiSel = node.querySelector(".midi-out");
   const midiCh = node.querySelector(".midi-ch");
@@ -5998,10 +6014,17 @@ function updatePatternCell(idx) {
   if (cell) cell.classList.toggle("filled", isPatternNonEmpty(idx));
 }
 
+// Visual columns per row in the step grid. The data model uses 16-step rows
+// (maxLengthAt enforces a ROW=16 cap on note span), but on mobile we wrap to
+// 8 visual columns per row for finger-friendly tapping. Held notes that
+// exceed the visual row are split into visual chunks at render time without
+// touching the data.
+function stepGridCols() { return window.innerWidth <= 768 ? 8 : 16; }
+
 function renderStepGrid(t) {
   const grid = t.el.querySelector(".steps");
   const total = t.length;
-  const cols = Math.min(16, total);
+  const cols = Math.min(stepGridCols(), total);
   grid.style.setProperty("--count", String(cols));
   grid.style.gridTemplateColumns = `repeat(${cols}, minmax(0, 1fr))`;
   grid.replaceChildren();
@@ -6012,7 +6035,20 @@ function renderStepGrid(t) {
       const cap = maxLengthAt(t, i);
       const span = Math.max(1, Math.min(t.lengths[i] || 1, cap));
       t.lengths[i] = span;
-      grid.appendChild(makeCell(t, i, span, true));
+      // Visually split a held note that crosses row boundaries. Each chunk
+      // points at the same data anchor (data-idx=i); only the first chunk
+      // renders the note-name label.
+      let remaining = span;
+      let visualIdx = i;
+      let first = true;
+      while (remaining > 0) {
+        const colInRow = visualIdx % cols;
+        const chunkSpan = Math.min(remaining, cols - colInRow);
+        grid.appendChild(makeCell(t, i, chunkSpan, true, /* continuation */ !first));
+        remaining -= chunkSpan;
+        visualIdx += chunkSpan;
+        first = false;
+      }
       i += span;
     } else {
       grid.appendChild(makeCell(t, i, 1, false));
@@ -6146,7 +6182,10 @@ function renderRollPanel(t, panel) {
 
     const cells = document.createElement("div");
     cells.className = "roll-cells";
-    cells.style.gridTemplateColumns = `repeat(${steps}, minmax(0, 1fr))`;
+    // On mobile, use a fixed min-width so the row exceeds viewport width and
+    // the roll-grid scrolls horizontally (labels stick via CSS).
+    const rollMinW = window.innerWidth <= 768 ? "30px" : "0";
+    cells.style.gridTemplateColumns = `repeat(${steps}, minmax(${rollMinW}, 1fr))`;
     // Row-level pitch color — feeds the hover tint and any other per-row paint.
     if (!isMicrotonal) {
       const rowCol = noteColor(m);
@@ -6188,7 +6227,7 @@ function renderRollPanel(t, panel) {
   velLane.appendChild(velSpacer);
   const velCells = document.createElement("div");
   velCells.className = "roll-vel-cells";
-  velCells.style.gridTemplateColumns = `repeat(${steps}, minmax(0, 1fr))`;
+  velCells.style.gridTemplateColumns = `repeat(${steps}, minmax(${window.innerWidth <= 768 ? "30px" : "0"}, 1fr))`;
   for (let i = 0; i < steps; i++) {
     const cell = document.createElement("div");
     cell.className = "roll-vel-cell";
@@ -6482,7 +6521,7 @@ function renderRollPanel(t, panel) {
   velCells.addEventListener("pointercancel", endVDrag);
 }
 
-function makeCell(t, idx, span, on) {
+function makeCell(t, idx, span, on, isContinuation = false) {
   const cell = document.createElement("div");
   cell.className = "step";
   cell.dataset.idx = String(idx);
@@ -6498,9 +6537,9 @@ function makeCell(t, idx, span, on) {
   }
   if (span > 1) cell.classList.add("held");
   if (span > 1) cell.style.gridColumn = `span ${span}`;
-  if (idx % 4 === 0) cell.classList.add("beat");
-  if (t.accents.has(idx)) cell.classList.add("accent");
-  if (on && t.notes[idx] != null) {
+  if (idx % 4 === 0 && !isContinuation) cell.classList.add("beat");
+  if (t.accents.has(idx) && !isContinuation) cell.classList.add("accent");
+  if (on && t.notes[idx] != null && !isContinuation) {
     const label = document.createElement("span");
     label.className = "step-note";
     const chord = t.chords[idx];
@@ -6512,15 +6551,21 @@ function makeCell(t, idx, span, on) {
 
 function attachGridInteraction(t, grid) {
   let drag = null;
+  let longPressTimer = null;
+  let longPressIdx = -1;
+  const cancelLongPress = () => {
+    if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+    longPressIdx = -1;
+  };
   const idxFromPoint = (x, y) => {
     const r = grid.getBoundingClientRect();
     const total = t.length;
     if (r.width <= 0 || r.height <= 0) return 0;
-    const cols = Math.min(16, total);
-    const rows = Math.max(1, Math.ceil(total / 16));
+    const cols = Math.min(stepGridCols(), total);
+    const rows = Math.max(1, Math.ceil(total / cols));
     const col = Math.max(0, Math.min(cols - 1, Math.floor(((x - r.left) / r.width) * cols)));
     const row = Math.max(0, Math.min(rows - 1, Math.floor(((y - r.top) / r.height) * rows)));
-    return Math.max(0, Math.min(total - 1, row * 16 + col));
+    return Math.max(0, Math.min(total - 1, row * cols + col));
   };
 
   // Manual double-click detection — renderStepGrid() rebuilds step cells on
@@ -6564,9 +6609,25 @@ function attachGridInteraction(t, grid) {
       startNote: t.notes[anchor] ?? 60,
       pitchMode: false,
     };
+    // Long-press → open step editor (touch alternative to right-click).
+    if (e.pointerType === "touch") {
+      cancelLongPress();
+      longPressIdx = anchor;
+      longPressTimer = setTimeout(() => {
+        longPressTimer = null;
+        if (drag) {
+          drag.moved = true; // prevent endDrag from toggling the step off
+          try { grid.releasePointerCapture(drag.pointerId); } catch {}
+          drag = null;
+        }
+        const cell = grid.querySelector(`.step[data-idx="${longPressIdx}"]`);
+        openStepEditor(t, longPressIdx, cell || grid);
+      }, 500);
+    }
     e.preventDefault();
   });
   const endDrag = (e) => {
+    cancelLongPress();
     if (!drag || e.pointerId !== drag.pointerId) return;
     if (!drag.moved && drag.wasOn) { removeNote(t, drag.anchor); renderStepGrid(t); }
     try { grid.releasePointerCapture(e.pointerId); } catch {}
@@ -6580,6 +6641,7 @@ function attachGridInteraction(t, grid) {
     if (e.buttons === 0) { endDrag(e); return; }
     const dx = e.clientX - drag.startX;
     const dy = e.clientY - drag.startY;
+    if (longPressTimer && (Math.abs(dx) > 8 || Math.abs(dy) > 8)) cancelLongPress();
     // Enter pitch mode once the drag is clearly more vertical than horizontal.
     if (!drag.pitchMode && Math.abs(dy) > 10 && Math.abs(dy) > Math.abs(dx)) {
       drag.pitchMode = true;
@@ -6643,6 +6705,75 @@ function attachGridInteraction(t, grid) {
 // ---- step editor popover ------------------------------------------------
 
 let stepEditor = null;
+// Mobile pattern menu: physically move every pattern-bar child (except the
+// Share + Menu buttons) into a modal. On close, return them in original
+// order so the desktop pattern bar is unchanged. Children retain their
+// event listeners because we only re-parent, never re-create.
+let _patternMenuOpen = null;
+function openPatternMenu() {
+  if (_patternMenuOpen) return;
+  const patternBar = document.querySelector(".pattern-bar");
+  if (!patternBar) return;
+  const overlay = document.createElement("div");
+  overlay.className = "modal-overlay";
+  const modal = document.createElement("div");
+  modal.className = "modal pattern-menu-modal";
+  modal.setAttribute("role", "dialog");
+  modal.setAttribute("aria-modal", "true");
+
+  // Snapshot child order so we can restore on close.
+  const captured = [];
+  for (const child of Array.from(patternBar.children)) {
+    if (child.id === "set-share" || child.id === "pattern-menu-btn") continue;
+    captured.push({ node: child, nextSibling: child.nextSibling });
+  }
+
+  // Group sig + rep + dup into a single row inside the modal for compactness.
+  const row = document.createElement("div");
+  row.className = "pattern-menu-row";
+
+  for (const { node } of captured) {
+    if (node.id === "pattern-meter" || node.id === "pattern-repeats" ||
+        node.id === "pattern-dup" || node.classList?.contains("mode-stack")) {
+      // these go into the inline row
+      row.appendChild(node);
+    } else {
+      modal.appendChild(node);
+    }
+  }
+  if (row.children.length) modal.appendChild(row);
+
+  // Trailing close button.
+  const closeBtn = document.createElement("button");
+  closeBtn.type = "button";
+  closeBtn.className = "pattern-menu-close";
+  closeBtn.textContent = "done";
+  modal.appendChild(closeBtn);
+
+  const close = () => {
+    if (!_patternMenuOpen) return;
+    // Restore children to their original positions in the pattern bar.
+    for (const { node, nextSibling } of captured) {
+      if (nextSibling && nextSibling.parentNode === patternBar) {
+        patternBar.insertBefore(node, nextSibling);
+      } else {
+        patternBar.appendChild(node);
+      }
+    }
+    overlay.remove();
+    document.removeEventListener("keydown", escHandler);
+    _patternMenuOpen = null;
+  };
+  const escHandler = (e) => { if (e.key === "Escape") close(); };
+  closeBtn.addEventListener("click", close);
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
+  document.addEventListener("keydown", escHandler);
+
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
+  _patternMenuOpen = { overlay, close };
+}
+
 function closeStepEditor() {
   if (!stepEditor) return;
   document.removeEventListener("keydown", stepEditor.escHandler);
@@ -8002,6 +8133,7 @@ function init() {
   document.getElementById("set-export").addEventListener("click", onExportSet);
   document.getElementById("set-import").addEventListener("click", onImportSet);
   document.getElementById("set-share").addEventListener("click", onShareSet);
+  document.getElementById("pattern-menu-btn")?.addEventListener("click", openPatternMenu);
   document.getElementById("pattern-dup").addEventListener("click", () => {
     const next = (state.activePattern + 1) % PATTERN_COUNT;
     copyPattern(state.activePattern, next);
@@ -8070,6 +8202,23 @@ function init() {
   window.addEventListener("pagehide", () => {
     try { Tone.Transport.stop(); } catch {}
     try { state.audioCtx?.close(); } catch {}
+  });
+  // Re-render step grids when crossing the mobile/desktop breakpoint so the
+  // visual column count (16 vs 8) tracks the viewport. Debounced + gated so
+  // rotation triggers a single render.
+  let _lastIsMobile = window.innerWidth <= 768;
+  let _resizeTimer = null;
+  window.addEventListener("resize", () => {
+    clearTimeout(_resizeTimer);
+    _resizeTimer = setTimeout(() => {
+      const now = window.innerWidth <= 768;
+      if (now !== _lastIsMobile) {
+        _lastIsMobile = now;
+        for (const t of state.tracks) {
+          try { renderStepGrid(t); } catch {}
+        }
+      }
+    }, 120);
   });
 }
 

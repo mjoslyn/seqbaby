@@ -2,7 +2,11 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0e0f12" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <title>seqbaby</title>
   <meta name="description" content="Prompt-driven step sequencer in the browser: Plaits, 808/909/303, samples, MIDI out, Eleven-Labs prompted voices." />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
@@ -47,6 +51,7 @@
 
   <div class="pattern-bar">
     <button id="set-share" title="create a shareable link for this session">Share</button>
+    <button id="pattern-menu-btn" class="mobile-only" type="button" aria-label="session menu" title="open session menu">Session</button>
     <div class="set-stack">
       <button id="set-save" class="ghost" title="save the current session">Save</button>
       <button id="set-load" class="ghost" title="load a saved session">Load</button>
