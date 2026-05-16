@@ -1542,7 +1542,10 @@ main {
     min-height: 28px;
   }
 
-  /* hide-by-default extras; toggle via .track.show-extras */
+  /* Hide-by-default extras inside the track-head; the "more" button opens
+     these in a centered modal instead (.track-menu-modal). The selectors
+     are scoped to .track-head so when nodes are reparented into the modal
+     they become visible again automatically. */
   .track-head .track-save,
   .track-head .track-load-patch,
   .track-head .track-dup,
@@ -1553,16 +1556,6 @@ main {
   .track-head .field:has(.track-speed) {
     display: none;
   }
-  .track.show-extras .track-head .track-save,
-  .track.show-extras .track-head .track-load-patch,
-  .track.show-extras .track-head .track-dup,
-  .track.show-extras .track-head .track-remove,
-  .track.show-extras .track-head .track-oct,
-  .track.show-extras .track-head .track-len-extend,
-  .track.show-extras .track-head .field:has(.track-speed) {
-    display: inline-flex;
-  }
-  .track.show-extras .track-head .track-synth-row { display: flex; }
 
   /* "more" toggle button injected by JS */
   .track-head .track-more {
@@ -1573,10 +1566,82 @@ main {
     min-width: 36px;
     text-transform: none;
   }
-  .track.show-extras .track-head .track-more {
+  .track-head .track-more[aria-pressed="true"] {
     background: var(--accent);
     color: #0b0d10;
     border-color: var(--accent);
+  }
+
+  /* Track menu modal: hosts the reparented track-head extras. Layout
+     vertically stacks the groups for thumb-friendly tapping. */
+  .track-menu-modal {
+    width: 96vw;
+    max-width: 96vw;
+    min-width: 0;
+    max-height: 92vh;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 14px;
+  }
+  .track-menu-modal .track-menu-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--fg);
+    padding-bottom: 4px;
+    border-bottom: 1px solid var(--border);
+  }
+  .track-menu-modal .track-save,
+  .track-menu-modal .track-load-patch,
+  .track-menu-modal .track-dup,
+  .track-menu-modal .track-remove {
+    padding: 8px 10px;
+    font-size: 12px;
+    min-width: 0;
+    min-height: 36px;
+  }
+  .track-menu-modal .track-len-extend,
+  .track-menu-modal .track-oct {
+    display: flex;
+    gap: 4px;
+    flex-wrap: nowrap;
+  }
+  .track-menu-modal .track-len-extend > button,
+  .track-menu-modal .track-oct > button {
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: 34px;
+    padding: 6px 4px;
+    font-size: 11px;
+  }
+  .track-menu-modal .track-synth-row {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    align-items: stretch;
+  }
+  .track-menu-modal .track-synth-row[hidden],
+  .track-menu-modal .param-group[hidden] { display: none; }
+  .track-menu-modal .param-group {
+    padding: 4px 6px;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .track-menu-modal .field:has(.track-speed) {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .track-menu-modal .track-menu-close {
+    align-self: stretch;
+    margin-top: 4px;
+    padding: 10px;
+    background: var(--accent);
+    color: #0b0d10;
+    border-color: var(--accent);
+    font-weight: 600;
+    min-height: 40px;
   }
 
   /* solo/mute/clear: pinned, finger-friendly */
