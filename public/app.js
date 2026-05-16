@@ -6075,12 +6075,13 @@ function renderStepGrid(t) {
 // (or moves) a note at that pitch on that step; clicking an already-active cell
 // clears the step; double-clicking an active cell sets velocity to full. Shows
 // scale pitches only when a scale is active and "all notes" is off; chromatic
-// otherwise. Viewport spans ROLL_VIEW_OCTS octaves starting at t.rollViewOct.
-const ROLL_VIEW_OCTS = 2;
+// otherwise. Viewport spans rollViewOcts() octaves starting at t.rollViewOct
+// (1 on mobile to fit the screen without vertical scroll, 2 on desktop).
+const rollViewOcts = () => (window.innerWidth <= 768 ? 1 : 2);
 const ROLL_MIN_OCT = 1;
 const ROLL_MAX_OCT = 6;
 
-// Pick the starting octave whose ROLL_VIEW_OCTS-tall window contains the most
+// Pick the starting octave whose rollViewOcts()-tall window contains the most
 // triggered notes in the track's active pattern. Used the first time the roll
 // is opened (and whenever rollViewOct is reset). Once the user pages oct +/-
 // manually, their choice is preserved.
@@ -6094,9 +6095,10 @@ function bestRollViewOct(t) {
   }
   if (counts.size === 0) return 3;
   let bestStart = 3, bestCount = -1;
-  for (let start = ROLL_MIN_OCT; start + ROLL_VIEW_OCTS - 1 <= ROLL_MAX_OCT; start++) {
+  const span = rollViewOcts();
+  for (let start = ROLL_MIN_OCT; start + span - 1 <= ROLL_MAX_OCT; start++) {
     let c = 0;
-    for (let o = start; o < start + ROLL_VIEW_OCTS; o++) c += counts.get(o) || 0;
+    for (let o = start; o < start + span; o++) c += counts.get(o) || 0;
     if (c > bestCount) { bestCount = c; bestStart = start; }
   }
   return bestStart;
@@ -6123,6 +6125,10 @@ function refreshAutIfOpen(t) {
 function renderRollPanel(t, panel) {
   panel.replaceChildren();
   if (t.rollViewOct == null) t.rollViewOct = bestRollViewOct(t);
+  // Clamp in case the viewport size changed (desktop→mobile shrinks span; a
+  // saved start near the top edge is still legal, but mobile→desktop expands
+  // span so the saved start may now overflow ROLL_MAX_OCT).
+  t.rollViewOct = Math.max(ROLL_MIN_OCT, Math.min(ROLL_MAX_OCT - rollViewOcts() + 1, t.rollViewOct));
   if (t.rollShowAll == null) t.rollShowAll = false;
   const scaleIntervals = state.scale.active ? (SCALES[state.scale.mode] || null) : null;
   const chromaticView = !scaleIntervals || t.rollShowAll;
@@ -6150,14 +6156,14 @@ function renderRollPanel(t, panel) {
   octBtns.querySelectorAll("button").forEach(b => b.addEventListener("click", () => {
     const d = Number(b.dataset.d);
     const next = t.rollViewOct + d;
-    if (next < ROLL_MIN_OCT || next + ROLL_VIEW_OCTS - 1 > ROLL_MAX_OCT) return;
+    if (next < ROLL_MIN_OCT || next + rollViewOcts() - 1 > ROLL_MAX_OCT) return;
     t.rollViewOct = next;
     renderRollPanel(t, panel);
   }));
   head.appendChild(octBtns);
   const range = document.createElement("span");
   range.className = "roll-range";
-  range.textContent = `C${t.rollViewOct}–B${t.rollViewOct + ROLL_VIEW_OCTS - 1}`;
+  range.textContent = `C${t.rollViewOct}–B${t.rollViewOct + rollViewOcts() - 1}`;
   head.appendChild(range);
   panel.appendChild(head);
 
@@ -6166,7 +6172,7 @@ function renderRollPanel(t, panel) {
   // Microtonal scales (24-TET, Hüseyni, …) carry half-integer intervals; step
   // the row iteration by 0.5 so quarter tones show up as their own rows.
   const lo = (t.rollViewOct + 1) * 12;
-  const hi = lo + ROLL_VIEW_OCTS * 12;                      // exclusive
+  const hi = lo + rollViewOcts() * 12;                      // exclusive
   const rowStep = scaleIntervals && scaleIntervals.some(i => i !== Math.floor(i)) ? 0.5 : 1;
   const pitches = [];
   for (let m = hi - rowStep; m >= lo - EPS; m -= rowStep) {
