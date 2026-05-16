@@ -1151,7 +1151,7 @@ function applySet(s) {
       t.el.classList.toggle("locked", t.locked);
       t.el.classList.toggle("soloed", t.soloed);
       refreshFxPanelUI(t);
-      renderModPanel(t, t.el.querySelector(".track-mod-panel"));
+      renderModPanel(t, t._modPanelEl || t.el.querySelector(".track-mod-panel"));
       const eqPanel = t.el.querySelector(".track-eq-panel");
       if (eqPanel) {
         eqPanel.querySelector(".p-eq-low").value  = t.eq.low;
@@ -4093,7 +4093,7 @@ function updatePlaitsControlsVisibility(t) {
     group.hidden = !showTimbre;
     group.style.removeProperty("display");
   }
-  const modPanel = t.el.querySelector(".track-mod-panel");
+  const modPanel = t._modPanelEl || t.el.querySelector(".track-mod-panel");
   if (modPanel) {
     for (const key of ["harm", "timb", "morph", "decay"]) {
       const row = modPanel.querySelector(`.lfo-row[data-key="${key}"]`);
@@ -4551,7 +4551,7 @@ function duplicateTrack(src) {
     dup.el.classList.toggle("soloed", dup.soloed);
     q(".track-solo")?.setAttribute("aria-pressed", String(dup.soloed));
     refreshFxPanelUI(dup);
-    renderModPanel(dup, dup.el.querySelector(".track-mod-panel"));
+    renderModPanel(dup, dup._modPanelEl || dup.el.querySelector(".track-mod-panel"));
   }
 
   // Move the duplicate right after the source in DOM + state order.
@@ -5355,12 +5355,11 @@ function renderTrack(t) {
   function closeOtherPanels(keepBtnSel) {
     for (const p of panelPairs) {
       if (p.btnSel === keepBtnSel) continue;
-      // The roll panel may be hosted in a mobile modal — close it via its
-      // owning close fn so the overlay tears down with it.
-      if (p.panelSel === ".track-roll-panel" && t._rollModal) {
-        t._rollModal.close();
-        continue;
-      }
+      // The roll/mod/aut panels are hosted in a modal — close via the owning
+      // close fn so the overlay tears down with the panel.
+      if (p.panelSel === ".track-roll-panel" && t._rollModal) { t._rollModal.close(); continue; }
+      if (p.panelSel === ".track-mod-panel"  && t._modModal)  { t._modModal.close();  continue; }
+      if (p.panelSel === ".track-aut-panel"  && t._autModal)  { t._autModal.close();  continue; }
       const b = node.querySelector(p.btnSel);
       const pn = node.querySelector(p.panelSel);
       if (b && pn) { pn.hidden = true; b.setAttribute("aria-pressed", "false"); }
@@ -5378,7 +5377,17 @@ function renderTrack(t) {
     });
   }
 
-  renderModPanel(t, node.querySelector(".track-mod-panel"));
+  // Stash stable refs to the mod/aut/roll panels — once opened as a modal the
+  // panel is reparented out of the track, so t.el.querySelector(...) would
+  // miss it. All three panels open as a centered modal overlay.
+  t._modPanelEl = node.querySelector(".track-mod-panel");
+  t._autPanelEl = node.querySelector(".track-aut-panel");
+  t._rollPanelEl = node.querySelector(".track-roll-panel");
+  t._modModal = null;
+  t._autModal = null;
+  t._rollModal = null;
+
+  renderModPanel(t, t._modPanelEl);
   wireFxPanel(t, node.querySelector(".track-fx-panel"));
   const eqPanel = node.querySelector(".track-eq-panel");
   eqPanel.querySelector(".p-eq-low").value  = t.eq.low;
@@ -5387,13 +5396,21 @@ function renderTrack(t) {
   eqPanel.querySelector(".p-eq-low").addEventListener("input",  e => setEQ(t, "low",  Number(e.target.value)));
   eqPanel.querySelector(".p-eq-mid").addEventListener("input",  e => setEQ(t, "mid",  Number(e.target.value)));
   eqPanel.querySelector(".p-eq-high").addEventListener("input", e => setEQ(t, "high", Number(e.target.value)));
-  bindPanelToggle(".track-mod",    ".track-mod-panel");
-  bindPanelToggle(".track-aut",    ".track-aut-panel",
-    () => renderAutomationPanel(t, node.querySelector(".track-aut-panel")));
-  // Stash a stable ref to the roll panel — on mobile the panel is reparented
-  // into a modal, so t.el.querySelector(".track-roll-panel") would miss it.
-  t._rollPanelEl = node.querySelector(".track-roll-panel");
-  t._rollModal = null;
+
+  const modBtn = node.querySelector(".track-mod");
+  modBtn.addEventListener("click", () => {
+    if (t._modModal) { t._modModal.close(); return; }
+    closeOtherPanels(".track-mod");
+    openModAsModal(t);
+    modBtn.setAttribute("aria-pressed", "true");
+  });
+  const autBtn = node.querySelector(".track-aut");
+  autBtn.addEventListener("click", () => {
+    if (t._autModal) { t._autModal.close(); return; }
+    closeOtherPanels(".track-aut");
+    openAutAsModal(t);
+    autBtn.setAttribute("aria-pressed", "true");
+  });
   const rollBtn = node.querySelector(".track-roll");
   rollBtn.addEventListener("click", () => {
     const panel = t._rollPanelEl;
@@ -6181,7 +6198,8 @@ function refreshRollIfOpen(t) {
 }
 
 function refreshAutIfOpen(t) {
-  const panel = t.el?.querySelector(".track-aut-panel");
+  // _autPanelEl follows the panel even when it's been moved into a modal.
+  const panel = t._autPanelEl || t.el?.querySelector(".track-aut-panel");
   if (!panel || panel.hidden) return;
   renderAutomationPanel(t, panel);
 }
@@ -6789,20 +6807,20 @@ function attachGridInteraction(t, grid) {
 // ---- step editor popover ------------------------------------------------
 
 let stepEditor = null;
-// Mobile: host the track's piano-roll panel inside a modal. The panel is
-// physically moved into the modal so existing render + event wiring keeps
-// working unchanged; on close it slots back into the track via a
-// placeholder anchor, so DOM order is preserved.
-function openRollAsModal(t) {
-  const panel = t._rollPanelEl;
-  if (!panel || t._rollModal) return;
-  const anchor = document.createComment("roll-panel-anchor");
+// Host a track panel inside a centered modal overlay. The panel is physically
+// moved into the modal so existing render + event wiring keeps working
+// unchanged; on close it slots back into the track via a placeholder anchor,
+// so DOM order is preserved. Used by the piano roll, mod, and aut panels.
+function openPanelAsModal(t, opts) {
+  const { panel, modalClass, btnSel, modalKey, afterMount } = opts;
+  if (!panel || t[modalKey]) return;
+  const anchor = document.createComment("panel-anchor");
   panel.replaceWith(anchor);
 
   const overlay = document.createElement("div");
   overlay.className = "modal-overlay";
   const modal = document.createElement("div");
-  modal.className = "modal roll-modal";
+  modal.className = "modal panel-modal " + modalClass;
   modal.setAttribute("role", "dialog");
   modal.setAttribute("aria-modal", "true");
 
@@ -6811,19 +6829,19 @@ function openRollAsModal(t) {
 
   const closeBtn = document.createElement("button");
   closeBtn.type = "button";
-  closeBtn.className = "roll-modal-close";
+  closeBtn.className = "panel-modal-close";
   closeBtn.textContent = "done";
   modal.appendChild(closeBtn);
 
   const close = () => {
-    if (!t._rollModal) return;
+    if (!t[modalKey]) return;
     anchor.replaceWith(panel);
     panel.hidden = true;
     overlay.remove();
-    const btn = t.el?.querySelector(".track-roll");
+    const btn = t.el?.querySelector(btnSel);
     if (btn) btn.setAttribute("aria-pressed", "false");
     document.removeEventListener("keydown", escHandler);
-    t._rollModal = null;
+    t[modalKey] = null;
   };
   const escHandler = (e) => { if (e.key === "Escape") close(); };
   closeBtn.addEventListener("click", close);
@@ -6832,8 +6850,37 @@ function openRollAsModal(t) {
 
   overlay.appendChild(modal);
   document.body.appendChild(overlay);
-  t._rollModal = { overlay, close };
-  renderRollPanel(t, panel);
+  t[modalKey] = { overlay, close };
+  if (afterMount) afterMount();
+}
+
+function openRollAsModal(t) {
+  openPanelAsModal(t, {
+    panel: t._rollPanelEl,
+    modalClass: "roll-modal",
+    btnSel: ".track-roll",
+    modalKey: "_rollModal",
+    afterMount: () => renderRollPanel(t, t._rollPanelEl),
+  });
+}
+
+function openModAsModal(t) {
+  openPanelAsModal(t, {
+    panel: t._modPanelEl,
+    modalClass: "mod-modal",
+    btnSel: ".track-mod",
+    modalKey: "_modModal",
+  });
+}
+
+function openAutAsModal(t) {
+  openPanelAsModal(t, {
+    panel: t._autPanelEl,
+    modalClass: "aut-modal",
+    btnSel: ".track-aut",
+    modalKey: "_autModal",
+    afterMount: () => renderAutomationPanel(t, t._autPanelEl),
+  });
 }
 
 // Mobile pattern menu: physically move every pattern-bar child (except the
