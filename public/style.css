@@ -302,26 +302,11 @@ button.danger { color: var(--danger); }
   border-color: #ffa94d;
 }
 
-.lock-stack { display: inline-flex; flex-direction: column; gap: 2px; }
-.lock-stack button {
-  padding: 3px 8px;
-  font-size: 10px;
-  min-width: 62px;
-  text-transform: lowercase;
-}
-.track-lock-inst[aria-pressed="true"],
-.track-lock-pat[aria-pressed="true"] {
-  background: var(--accent-2);
-  color: #0b0d10;
-  border-color: var(--accent-2);
-}
 .track-drumkit[aria-pressed="true"] {
   background: var(--accent);
   color: #0b0d10;
   border-color: var(--accent);
 }
-.track.lock-instrument { border-color: var(--accent-2); }
-.track.lock-pattern    { box-shadow: inset 3px 0 0 var(--accent-2); }
 #master-prompt-go {
   background: #ff6fa3;
   color: #0b0d10;
@@ -1491,13 +1476,14 @@ main {
   .track-head .field label { font-size: 10px; }
 
   .track-head .track-name {
-    flex: 1 1 100%;
+    flex: 1 1 0;
+    min-width: 0;
     width: auto;
     font-size: 13px;
     padding: 6px 8px;
   }
   .track-head .track-engine {
-    flex: 1 1 60%;
+    flex: 2 1 0;
     min-width: 0;
     max-width: none;
     padding: 6px 6px;
@@ -1526,8 +1512,6 @@ main {
   }
 
   /* hide-by-default extras; toggle via .track.show-extras */
-  .track-head .track-lock-inst,
-  .track-head .track-lock-pat,
   .track-head .track-save,
   .track-head .track-load-patch,
   .track-head .track-dup,
@@ -1538,8 +1522,6 @@ main {
   .track-head .field:has(.track-speed) {
     display: none;
   }
-  .track.show-extras .track-head .track-lock-inst,
-  .track.show-extras .track-head .track-lock-pat,
   .track.show-extras .track-head .track-save,
   .track.show-extras .track-head .track-load-patch,
   .track.show-extras .track-head .track-dup,
