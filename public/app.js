@@ -4088,7 +4088,7 @@ function updatePlaitsControlsVisibility(t) {
   const isRhodes    = t.engineKey === "dm:rhodes";
   const isProphet6  = t.engineKey === "dm:prophet6";
   const showTimbre = isPlaits || isMiniBrute || isMoog || isJuno || isGuitar || isBass || isRhodes || isProphet6;
-  const group = t.el.querySelector(".timbre-group");
+  const group = t._timbreGroupEl || t.el.querySelector(".timbre-group");
   if (group) {
     group.hidden = !showTimbre;
     group.style.removeProperty("display");
@@ -4138,7 +4138,7 @@ function updatePlaitsControlsVisibility(t) {
     if (randBtn) randBtn.hidden = isMiniBrute || isMoog || isJuno || isGuitar || isBass || isRhodes || isProphet6;
   }
   // Per-oscillator volume sliders: only shown for the analog mono engines.
-  const oscGroup = t.el.querySelector(".osc-mix-group");
+  const oscGroup = t._oscMixGroupEl || t.el.querySelector(".osc-mix-group");
   if (oscGroup) {
     const showOsc = isMiniBrute || isMoog || isJuno || isProphet6;
     oscGroup.hidden = !showOsc;
@@ -4161,10 +4161,10 @@ function updatePlaitsControlsVisibility(t) {
     }
   }
   // Oscillator-modifier group (ultrasaw / FM / metalizer): mini-brute only for now.
-  const modGroup = t.el.querySelector(".osc-mod-group");
+  const modGroup = t._oscModGroupEl || t.el.querySelector(".osc-mod-group");
   if (modGroup) modGroup.hidden = !isMiniBrute;
   // Moog osc-bank group (per-osc range + waveform + osc2/3 freq + noise).
-  const moogGroup = t.el.querySelector(".moog-osc-group");
+  const moogGroup = t._moogOscGroupEl || t.el.querySelector(".moog-osc-group");
   if (moogGroup) moogGroup.hidden = !isMoog;
 }
 
@@ -4598,6 +4598,7 @@ function duplicateTrack(src) {
 }
 
 function removeTrack(t) {
+  if (t._trackMenuModal) t._trackMenuModal.close();
   disposeLFOs(t);
   if (t.voice) t.voice.dispose();
   if (t.fxRack) t.fxRack.dispose();
@@ -5387,6 +5388,14 @@ function renderTrack(t) {
   t._autModal = null;
   t._rollModal = null;
 
+  // Same idea for the synth-row sub-groups — they're reparented into the
+  // track-menu-modal on mobile, so updatePlaitsControlsVisibility queries
+  // these stashed refs instead of t.el.querySelector.
+  t._timbreGroupEl  = node.querySelector(".timbre-group");
+  t._oscMixGroupEl  = node.querySelector(".osc-mix-group");
+  t._oscModGroupEl  = node.querySelector(".osc-mod-group");
+  t._moogOscGroupEl = node.querySelector(".moog-osc-group");
+
   renderModPanel(t, t._modPanelEl);
   wireFxPanel(t, node.querySelector(".track-fx-panel"));
   const eqPanel = node.querySelector(".track-eq-panel");
@@ -5449,8 +5458,8 @@ function renderTrack(t) {
   const dupBtn = node.querySelector(".track-dup");
   if (dupBtn) dupBtn.addEventListener("click", () => duplicateTrack(t));
 
-  // mobile: "more" toggle button reveals the hidden track-head extras
-  // (save/load patch, len-extend, oct/semi, synth params, dup, remove).
+  // mobile: "more" toggle button opens a modal hosting the hidden track-head
+  // extras (save/load patch, len-extend, oct/semi, synth params, dup, remove).
   const moreBtn = document.createElement("button");
   moreBtn.type = "button";
   moreBtn.className = "track-more ghost mobile-only";
@@ -5459,11 +5468,13 @@ function renderTrack(t) {
   moreBtn.title = "more";
   moreBtn.textContent = "…";
   moreBtn.addEventListener("click", () => {
-    const on = node.classList.toggle("show-extras");
-    moreBtn.setAttribute("aria-pressed", String(on));
+    if (t._trackMenuModal) { t._trackMenuModal.close(); return; }
+    openTrackMenu(t);
   });
   const panelGrp = node.querySelector(".panel-btn-group");
   if (panelGrp) panelGrp.before(moreBtn);
+  t._trackMoreBtn = moreBtn;
+  t._trackMenuModal = null;
 
   // midi-specific controls
   const midiSel = node.querySelector(".midi-out");
@@ -6881,6 +6892,78 @@ function openAutAsModal(t) {
     modalKey: "_autModal",
     afterMount: () => renderAutomationPanel(t, t._autPanelEl),
   });
+}
+
+// Mobile track menu: physically move the "extras" nodes out of the
+// track-head into a centered modal so the user can reach the rarely-used
+// controls (save/load patch, len resize, oct/semi shift, synth params,
+// dup, remove) without horizontal scrolling. Restored to their original
+// DOM positions on close so the desktop layout is unaffected.
+function openTrackMenu(t) {
+  if (t._trackMenuModal) return;
+  const head = t.el?.querySelector(".track-head");
+  if (!head) return;
+
+  const selectors = [
+    ".track-save",
+    ".track-load-patch",
+    ".track-len-extend",
+    ".track-synth-row",
+    ".track-dup",
+    ".track-remove",
+    ".track-oct",
+  ];
+  const captured = [];
+  for (const sel of selectors) {
+    const n = head.querySelector(sel);
+    if (n) captured.push({ node: n, nextSibling: n.nextSibling });
+  }
+  const speedField = head.querySelector(".track-speed")?.closest(".field");
+  if (speedField) captured.push({ node: speedField, nextSibling: speedField.nextSibling });
+
+  const overlay = document.createElement("div");
+  overlay.className = "modal-overlay";
+  const modal = document.createElement("div");
+  modal.className = "modal track-menu-modal";
+  modal.setAttribute("role", "dialog");
+  modal.setAttribute("aria-modal", "true");
+
+  const title = document.createElement("div");
+  title.className = "track-menu-title";
+  title.textContent = t.name?.trim() || "track";
+  modal.appendChild(title);
+
+  for (const { node } of captured) modal.appendChild(node);
+
+  const closeBtn = document.createElement("button");
+  closeBtn.type = "button";
+  closeBtn.className = "track-menu-close";
+  closeBtn.textContent = "done";
+  modal.appendChild(closeBtn);
+
+  const close = () => {
+    if (!t._trackMenuModal) return;
+    for (const { node, nextSibling } of captured) {
+      if (nextSibling && nextSibling.parentNode === head) {
+        head.insertBefore(node, nextSibling);
+      } else {
+        head.appendChild(node);
+      }
+    }
+    overlay.remove();
+    document.removeEventListener("keydown", escHandler);
+    t._trackMenuModal = null;
+    if (t._trackMoreBtn) t._trackMoreBtn.setAttribute("aria-pressed", "false");
+  };
+  const escHandler = (e) => { if (e.key === "Escape") close(); };
+  closeBtn.addEventListener("click", close);
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
+  document.addEventListener("keydown", escHandler);
+
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
+  t._trackMenuModal = { overlay, close };
+  if (t._trackMoreBtn) t._trackMoreBtn.setAttribute("aria-pressed", "true");
 }
 
 // Mobile pattern menu: physically move every pattern-bar child (except the
