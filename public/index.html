@@ -393,13 +393,17 @@
     </div>
   </template>
 
-  <!-- iOS audio session unlock: a brief play() on this element inside a user
-       gesture switches Safari from "ambient" (ringer-controlled, silenced
-       when the side switch is on silent) to "playback" mode, which routes
-       AudioContext output through the regular media volume and ignores the
-       ringer switch. The src is a 44-byte silent WAV. -->
-  <audio id="ios-audio-unlock" playsinline preload="auto"
-         src="data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA="></audio>
+  <!-- iOS audio session unlock: play() on this element inside a user gesture
+       switches Safari from "ambient" (ringer-controlled, silenced when the
+       side switch is on silent) to "playback" mode, which routes AudioContext
+       output through the regular media volume and ignores the ringer switch.
+       The element loops a 1-second silent WAV generated at runtime (see
+       initSilentAudioLoop in app.js) — looping keeps the audio session
+       continuously active, which prevents iOS from quietly deactivating the
+       renderer between the unlock tap and the first transport hit. Without an
+       active session, ctx.state reads "running" but no samples are emitted
+       until something forces a session re-eval (e.g., tab switch). -->
+  <audio id="ios-audio-unlock" playsinline preload="auto" loop></audio>
   <script src="https://cdn.jsdelivr.net/npm/tone@15.0.4/build/Tone.js"></script>
   <script src="/woscillators.js"></script>
   <script type="module" src="/app.js"></script>

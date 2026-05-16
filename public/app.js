@@ -7787,7 +7787,37 @@ function showAudioGateDialog() {
   });
 }
 
-let _iosUnlocked = false;
+// Build a 1-second silent WAV (8 kHz mono 8-bit unsigned PCM) and attach it to
+// the iOS audio unlock element. The element has loop=true so once it's playing
+// it keeps the iOS audio session in "playback" mode indefinitely. The HTML
+// previously inlined a 44-byte WAV with zero sample data, which makes play()
+// resolve immediately and lets the session deactivate — symptom: ctx.state
+// stays "running" but no audio is emitted until a tab switch forces iOS to
+// re-engage the session.
+function initSilentAudioLoop() {
+  const el = document.getElementById("ios-audio-unlock");
+  if (!el) return;
+  const sampleRate = 8000;
+  const numSamples = sampleRate; // 1 second
+  const buf = new ArrayBuffer(44 + numSamples);
+  const view = new DataView(buf);
+  view.setUint32(0, 0x52494646, false); // "RIFF"
+  view.setUint32(4, 36 + numSamples, true);
+  view.setUint32(8, 0x57415645, false); // "WAVE"
+  view.setUint32(12, 0x666d7420, false); // "fmt "
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true); // PCM
+  view.setUint16(22, 1, true); // mono
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate, true); // byte rate
+  view.setUint16(32, 1, true); // block align
+  view.setUint16(34, 8, true); // bits/sample
+  view.setUint32(36, 0x64617461, false); // "data"
+  view.setUint32(40, numSamples, true);
+  new Uint8Array(buf, 44).fill(0x80); // 0x80 = silence for unsigned 8-bit PCM
+  try { el.src = URL.createObjectURL(new Blob([buf], { type: "audio/wav" })); } catch {}
+}
+
 function primeAudioForIOS() {
   const ctx = state.audioCtx;
   if (!ctx) return;
@@ -7816,15 +7846,16 @@ function primeAudioForIOS() {
     osc.start(ctx.currentTime);
     osc.stop(ctx.currentTime + 0.03);
   } catch {}
-  if (!_iosUnlocked) {
-    const el = document.getElementById("ios-audio-unlock");
-    if (el) {
-      try {
-        const p = el.play();
-        if (p && typeof p.catch === "function") p.catch(() => {});
-        _iosUnlocked = true;
-      } catch {}
-    }
+  // Always (re-)play inside the gesture. With loop=true the element should
+  // stay playing indefinitely, but if iOS ever pauses it (background tab,
+  // low-power mode, route change) the next gesture will re-engage the
+  // playback session. play() on an already-playing element is a no-op.
+  const el = document.getElementById("ios-audio-unlock");
+  if (el && el.paused) {
+    try {
+      const p = el.play();
+      if (p && typeof p.catch === "function") p.catch(() => {});
+    } catch {}
   }
 }
 
@@ -8205,6 +8236,7 @@ function init() {
   // resumes it inside the user gesture.
   state.audioCtx = new AudioContext({ latencyHint: "interactive" });
   Tone.setContext(state.audioCtx);
+  initSilentAudioLoop();
   rebuildEngineCatalog();
   requestAnimationFrame(meterTick);
 
