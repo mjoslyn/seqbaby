@@ -156,7 +156,7 @@ applicable mod keys per engine so the mod-panel picker only shows what works.
   sampleFadeIns: sec[], sampleFadeOuts: sec[],
   sampleLoopModes: ("off"|"loop"|"pingpong")[],
   // track-level:
-  muted, soloed, lockInstrument, lockPattern, isDrumKit,
+  muted, soloed, isDrumKit,
   glide, swing, density, speed, sampleSpeedMode ("native" default),
   sampleDefaults: { start, end, fadeIn, fadeOut, loopMode }, // seed for new steps
   trackTick, speedAccum, repeatId,
@@ -258,7 +258,7 @@ all-notes-off).
 
 Header row:
 ```
-name | engine | lock-inst | lock-pat | save | load | drum | solo | mute | clear | dup | remove | filter/env/fx/eq/comp/mod
+name | engine | save | load | drum | solo | mute | clear | dup | remove | filter/env/fx/eq/comp/mod
 ```
 
 Second row (conditional, inside `.track-synth-row` that flex-wraps to its own

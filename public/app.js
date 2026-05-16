@@ -482,8 +482,6 @@ const ICON_REPEAT = `<svg class="btn-icon" viewBox="0 0 16 16" width="16" height
 const ICON_CHAIN  = `<svg class="btn-icon" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 8h10"/><polyline points="9 4 13 8 9 12"/></svg>`;
 const ICON_NOW    = `<svg class="btn-icon" viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M9 1.5 3.5 9h3.5l-1 5.5L13.5 7H10l1-5.5z"/></svg>`;
 const ICON_FINISH = `<svg class="btn-icon" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="2" width="8" height="2" rx="0.5"/><rect x="4" y="12" width="8" height="2" rx="0.5"/><path d="M5 4c0 2.5 3 3.2 3 4s-3 1.5-3 4"/><path d="M11 4c0 2.5-3 3.2-3 4s3 1.5 3 4"/></svg>`;
-const ICON_LOCKED   = `<svg class="btn-icon" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="7" width="10" height="7" rx="1.5"/><path d="M5 7V5a3 3 0 0 1 6 0v2"/></svg>`;
-const ICON_UNLOCKED = `<svg class="btn-icon" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="7" width="10" height="7" rx="1.5"/><path d="M5 7V5a3 3 0 0 1 5.4-1.8"/></svg>`;
 const ICON_SAVE     = `<svg class="btn-icon" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 2h8l3 3v9a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z"/><path d="M5 2v4h6V2"/><rect x="5" y="9" width="6" height="5"/></svg>`;
 const ICON_LOAD     = `<svg class="btn-icon" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 4a1 1 0 0 1 1-1h3l2 2h5a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V4z"/></svg>`;
 // Classic metronome — trapezoidal body + pendulum swung slightly right.
@@ -4406,8 +4404,6 @@ function createTrack({ name, engineKey, length = totalSteps() }) {
     chords:     null,
     muted: false,
     soloed: false,
-    lockInstrument: false,
-    lockPattern: false,
     isDrumKit: guessIsDrumKit({ engineKey, name }),
     glide: 0,
     sampleSpeedMode: "native",
@@ -4495,8 +4491,6 @@ function duplicateTrack(src) {
   dup.sampleDefaults = src.sampleDefaults ? { ...src.sampleDefaults } : dup.sampleDefaults;
   dup.muted = !!src.muted;
   dup.soloed = !!src.soloed;
-  dup.lockInstrument = !!src.lockInstrument;
-  dup.lockPattern = !!src.lockPattern;
   dup.isDrumKit = !!src.isDrumKit;
   dup.glide = src.glide ?? 0;
   dup.speed = src.speed ?? 1;
@@ -5311,20 +5305,6 @@ function renderTrack(t) {
   }
   // density slider is rendered inside the mod panel alongside glide + swing
 
-  const lockInstBtn = node.querySelector(".track-lock-inst");
-  const lockPatBtn  = node.querySelector(".track-lock-pat");
-  const refreshLockUI = () => {
-    lockInstBtn.setAttribute("aria-pressed", String(t.lockInstrument));
-    lockPatBtn.setAttribute("aria-pressed", String(t.lockPattern));
-    lockInstBtn.innerHTML = t.lockInstrument ? ICON_LOCKED : ICON_UNLOCKED;
-    lockPatBtn.innerHTML  = t.lockPattern    ? ICON_LOCKED : ICON_UNLOCKED;
-    node.classList.toggle("lock-instrument", t.lockInstrument);
-    node.classList.toggle("lock-pattern", t.lockPattern);
-  };
-  refreshLockUI();
-  lockInstBtn.addEventListener("click", () => { t.lockInstrument = !t.lockInstrument; refreshLockUI(); });
-  lockPatBtn.addEventListener("click",  () => { t.lockPattern    = !t.lockPattern;    refreshLockUI(); });
-
   const octDownBtn = node.querySelector(".track-oct-down");
   const octUpBtn   = node.querySelector(".track-oct-up");
   if (octDownBtn) octDownBtn.addEventListener("click", () => shiftTrackOctave(t, -12));
@@ -5453,7 +5433,7 @@ function renderTrack(t) {
   if (dupBtn) dupBtn.addEventListener("click", () => duplicateTrack(t));
 
   // mobile: "more" toggle button reveals the hidden track-head extras
-  // (lock, save/load patch, len-extend, oct/semi, synth params, dup, remove).
+  // (save/load patch, len-extend, oct/semi, synth params, dup, remove).
   const moreBtn = document.createElement("button");
   moreBtn.type = "button";
   moreBtn.className = "track-more ghost mobile-only";
