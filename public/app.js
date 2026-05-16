@@ -5133,62 +5133,6 @@ function applyRollPitchUp(t) {
   }
 }
 
-// Time-stretch the active pattern. factor > 1 compresses notes into the first
-// 1/factor of the pattern and replicates `factor` times to fill the rest;
-// factor < 1 expands positions/lengths and truncates anything that falls past
-// the track length.
-function applyRollStretch(t, factor) {
-  const L = t.length;
-  const STEP_ARRAYS = [
-    "steps","lengths","notes","velocities","chords","offsets",
-    "arps","arpRates","arpRanges","arpDirs","complexities","ratchets",
-    "sampleStarts","sampleEnds","sampleFadeIns","sampleFadeOuts","sampleLoopModes",
-  ];
-  const DEFAULTS = {
-    steps: 0, lengths: 0, notes: null, velocities: 0.5, chords: "",
-    offsets: 0, arps: false, arpRates: 4, arpRanges: 1, arpDirs: "up",
-    complexities: 0, ratchets: 1,
-    sampleStarts: 0, sampleEnds: 1, sampleFadeIns: 0, sampleFadeOuts: 0,
-    sampleLoopModes: "off",
-  };
-  const snap = {};
-  for (const k of STEP_ARRAYS) {
-    if (Array.isArray(t[k])) snap[k] = t[k].slice();
-  }
-  for (const k of STEP_ARRAYS) {
-    if (!Array.isArray(t[k])) continue;
-    for (let i = 0; i < L; i++) t[k][i] = DEFAULTS[k];
-  }
-  const writeAt = (src, dst, lenMul) => {
-    if (dst < 0 || dst >= L) return;
-    for (const k of STEP_ARRAYS) {
-      if (Array.isArray(snap[k]) && Array.isArray(t[k])) t[k][dst] = snap[k][src];
-    }
-    if (Array.isArray(t.lengths)) {
-      const baseLen = Math.max(1, snap.lengths[src] || 1);
-      t.lengths[dst] = Math.max(1, Math.min(L - dst, Math.round(baseLen * lenMul)));
-    }
-  };
-  if (factor >= 1) {
-    const f = Math.round(factor);
-    const segLen = Math.max(1, Math.floor(L / f));
-    for (let s = 0; s < L; s++) {
-      if (!snap.steps[s]) continue;
-      const localIdx = Math.floor(s / f);
-      if (localIdx >= segLen) continue;
-      for (let r = 0; r < f; r++) writeAt(s, localIdx + r * segLen, 1 / f);
-    }
-  } else {
-    const stretch = Math.max(2, Math.round(1 / factor));
-    for (let s = 0; s < L; s++) {
-      if (!snap.steps[s]) continue;
-      const dst = s * stretch;
-      if (dst >= L) break;
-      writeAt(s, dst, stretch);
-    }
-  }
-}
-
 // Shift every step's note on every pattern by `semis` semitones (±12 for
 // octaves). Clamps to MIDI 24..95. Works for any track, including drum kits.
 // Redraws the active pattern's grid.
@@ -6325,23 +6269,32 @@ function renderRollPanel(t, panel) {
   xform.className = "roll-transforms";
   xform.innerHTML = `
     <button class="ghost" data-x="up" title="shift all notes up one (scale-aware)">+1</button>
-    <button class="ghost" data-x="x2" title="double speed (compress + repeat)">x2</button>
-    <button class="ghost" data-x="x4" title="quadruple speed (compress + repeat)">x4</button>
-    <button class="ghost" data-x="/2" title="half speed (expand, truncate)">/2</button>
-    <button class="ghost" data-x="/4" title="quarter speed (expand, truncate)">/4</button>
+    <button class="ghost" data-x="x2" title="double pattern length (tile)">x2</button>
+    <button class="ghost" data-x="x4" title="quadruple pattern length (tile)">x4</button>
+    <button class="ghost" data-x="/2" title="halve pattern length (truncate)">/2</button>
+    <button class="ghost" data-x="/4" title="quarter pattern length (truncate)">/4</button>
   `;
   xform.querySelectorAll("button").forEach(b => b.addEventListener("click", () => {
     const x = b.dataset.x;
-    if (x === "up") applyRollPitchUp(t);
-    else if (x === "x2") applyRollStretch(t, 2);
-    else if (x === "x4") applyRollStretch(t, 4);
-    else if (x === "/2") applyRollStretch(t, 0.5);
-    else if (x === "/4") applyRollStretch(t, 0.25);
-    renderRollPanel(t, panel);
-    renderStepGrid(t);
+    const pat = t._patternIdx ?? state.activePattern;
+    if (x === "up") {
+      applyRollPitchUp(t);
+      renderRollPanel(t, panel);
+      renderStepGrid(t);
+    } else if (x === "x2") {
+      extendPatternByDuplicate(t, pat, t.length * 2);
+    } else if (x === "x4") {
+      extendPatternByDuplicate(t, pat, t.length * 4);
+    } else if (x === "/2") {
+      truncatePattern(t, pat, Math.max(1, Math.floor(t.length / 2)));
+    } else if (x === "/4") {
+      truncatePattern(t, pat, Math.max(1, Math.floor(t.length / 4)));
+    }
   }));
   head.appendChild(xform);
   panel.appendChild(head);
+
+  const steps = t.length;
 
   // Cell width: pick a min-width so the initial view fits up to 2 bars on
   // desktop / 1 bar on mobile. Bars are sized by the active pattern's meter
@@ -6374,7 +6327,27 @@ function renderRollPanel(t, panel) {
 
   const grid = document.createElement("div");
   grid.className = "roll-grid";
-  const steps = t.length;
+
+  // Beat ruler row: one cell per step, beat number printed on each downbeat.
+  // Steps-per-beat comes from the active pattern's meter (4/4 → 4 steps/beat).
+  const _stepsPerBeat = stepsPerBeatForMeter(activeMeter());
+  const beatLabel = document.createElement("div");
+  beatLabel.className = "roll-label roll-beat-label";
+  grid.appendChild(beatLabel);
+  const beatRow = document.createElement("div");
+  beatRow.className = "roll-cells roll-beat-row";
+  beatRow.style.gridTemplateColumns = `repeat(${steps}, minmax(${rollMinW}, 1fr))`;
+  for (let i = 0; i < steps; i++) {
+    const bc = document.createElement("div");
+    bc.className = "roll-beat-cell";
+    if (i % _stepsPerBeat === 0) {
+      bc.classList.add("beat-start");
+      bc.textContent = String(Math.floor(i / _stepsPerBeat) + 1);
+    }
+    beatRow.appendChild(bc);
+  }
+  grid.appendChild(beatRow);
+
   for (const m of pitches) {
     const basePc = ((Math.round(m) % 12) + 12) % 12;
     const isMicrotonal = Math.abs(m - Math.round(m)) > EPS;

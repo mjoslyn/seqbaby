@@ -578,6 +578,22 @@ main {
   gap: 1px;
   min-width: max-content;
 }
+.roll-beat-label {
+  background: transparent;
+  border: none;
+}
+.roll-beat-row {
+  font-size: 10px;
+  color: var(--fg-dim);
+  font-variant-numeric: tabular-nums;
+}
+.roll-beat-cell {
+  text-align: left;
+  padding: 0 2px;
+  line-height: 14px;
+  min-height: 14px;
+}
+.roll-beat-cell.beat-start { color: var(--fg); }
 .roll-cell {
   height: 16px;
   background: var(--bg-3);
