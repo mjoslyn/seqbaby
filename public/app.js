@@ -7849,8 +7849,7 @@ function showAudioGateDialog() {
   modal.innerHTML = `
     <div class="audio-gate-title">tap to enable audio</div>
     <div class="audio-gate-hint">
-      mobile browsers require a tap before audio can play.<br>
-      on iPhone: flip the side <strong>silent switch off</strong> if you don't hear anything.
+      mobile browsers require a tap before audio can play.
     </div>
     <button class="audio-gate-btn" type="button">enable audio</button>
     <div class="audio-gate-status"></div>
