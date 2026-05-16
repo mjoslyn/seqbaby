@@ -529,17 +529,25 @@ main {
   color: var(--fg-dim);
 }
 .roll-head .roll-title { color: #8ec7ff; font-weight: 600; }
+.roll-head .roll-hint { font-size: 10px; color: var(--fg-dim); font-style: italic; }
 .roll-head label { display: inline-flex; align-items: center; gap: 6px; }
 .roll-head .roll-oct-btns { display: inline-flex; gap: 4px; }
 .roll-head .roll-oct-btns button { padding: 2px 8px; font-size: 11px; }
 .roll-head .roll-range { color: var(--fg-dim); font-variant-numeric: tabular-nums; }
+.roll-head .roll-transforms { display: inline-flex; gap: 4px; margin-left: auto; }
+.roll-head .roll-transforms button {
+  padding: 2px 8px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
 
 .roll-grid {
   display: grid;
-  grid-template-columns: 42px 1fr;
+  grid-template-columns: 42px minmax(0, 1fr);
   gap: 2px;
   max-height: 320px;
-  overflow-y: auto;
+  overflow: auto;
+  overscroll-behavior: contain;
   background: var(--bg-2);
   border-radius: 4px;
   padding: 2px;
@@ -557,6 +565,9 @@ main {
   border-radius: 3px;
   line-height: 1.4;
   user-select: none;
+  position: sticky;
+  left: 0;
+  z-index: 2;
 }
 .roll-label { color: var(--note-color, var(--fg-dim)); }
 .roll-label.black { color: var(--note-color, var(--fg-dim)); background: var(--bg-2); }
@@ -565,6 +576,7 @@ main {
 .roll-cells {
   display: grid;
   gap: 1px;
+  min-width: max-content;
 }
 .roll-cell {
   height: 16px;
@@ -610,11 +622,13 @@ main {
 
 .roll-vel-lane {
   display: grid;
-  grid-template-columns: 42px 1fr;
+  grid-template-columns: 42px minmax(0, 1fr);
   gap: 2px;
   background: var(--bg-2);
   border-radius: 4px;
   padding: 2px;
+  overflow-x: auto;
+  overscroll-behavior: contain;
 }
 .roll-vel-spacer {
   font-size: 10px;
@@ -625,11 +639,15 @@ main {
   border-radius: 3px;
   align-self: end;
   user-select: none;
+  position: sticky;
+  left: 0;
+  z-index: 2;
 }
 .roll-vel-cells {
   display: grid;
   gap: 1px;
   height: 48px;
+  min-width: max-content;
 }
 .roll-vel-cell {
   background: var(--bg-3);

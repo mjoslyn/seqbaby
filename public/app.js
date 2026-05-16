@@ -5113,6 +5113,81 @@ function startNote(t, anchor) {
   applySampleDefaultsToStep(t, anchor);
 }
 
+// Bump every active step's pitch up by one note. Scale-aware: in scale mode
+// it's a scale-degree; chromatic mode is +1 semitone. Drum kits also walk up
+// (no semantic reason to skip; user can always undo by editing).
+function applyRollPitchUp(t) {
+  const intervals = state.scale.active ? (SCALES[state.scale.mode] || null) : null;
+  const root = state.scale.root;
+  for (let i = 0; i < t.length; i++) {
+    if (!t.steps[i] || t.notes[i] == null) continue;
+    const p = t.notes[i];
+    let next = p + 1;
+    if (intervals) {
+      const idx = midiToScaleIndex(p, root, intervals);
+      if (idx != null) next = scaleIndexToMidi(idx + 1, root, intervals);
+    }
+    t.notes[i] = Math.max(0, Math.min(127, next));
+    if (!t.isDrumKit) t.lastEditedNote = t.notes[i];
+  }
+}
+
+// Time-stretch the active pattern. factor > 1 compresses notes into the first
+// 1/factor of the pattern and replicates `factor` times to fill the rest;
+// factor < 1 expands positions/lengths and truncates anything that falls past
+// the track length.
+function applyRollStretch(t, factor) {
+  const L = t.length;
+  const STEP_ARRAYS = [
+    "steps","lengths","notes","velocities","chords","offsets",
+    "arps","arpRates","arpRanges","arpDirs","complexities","ratchets",
+    "sampleStarts","sampleEnds","sampleFadeIns","sampleFadeOuts","sampleLoopModes",
+  ];
+  const DEFAULTS = {
+    steps: 0, lengths: 0, notes: null, velocities: 0.5, chords: "",
+    offsets: 0, arps: false, arpRates: 4, arpRanges: 1, arpDirs: "up",
+    complexities: 0, ratchets: 1,
+    sampleStarts: 0, sampleEnds: 1, sampleFadeIns: 0, sampleFadeOuts: 0,
+    sampleLoopModes: "off",
+  };
+  const snap = {};
+  for (const k of STEP_ARRAYS) {
+    if (Array.isArray(t[k])) snap[k] = t[k].slice();
+  }
+  for (const k of STEP_ARRAYS) {
+    if (!Array.isArray(t[k])) continue;
+    for (let i = 0; i < L; i++) t[k][i] = DEFAULTS[k];
+  }
+  const writeAt = (src, dst, lenMul) => {
+    if (dst < 0 || dst >= L) return;
+    for (const k of STEP_ARRAYS) {
+      if (Array.isArray(snap[k]) && Array.isArray(t[k])) t[k][dst] = snap[k][src];
+    }
+    if (Array.isArray(t.lengths)) {
+      const baseLen = Math.max(1, snap.lengths[src] || 1);
+      t.lengths[dst] = Math.max(1, Math.min(L - dst, Math.round(baseLen * lenMul)));
+    }
+  };
+  if (factor >= 1) {
+    const f = Math.round(factor);
+    const segLen = Math.max(1, Math.floor(L / f));
+    for (let s = 0; s < L; s++) {
+      if (!snap.steps[s]) continue;
+      const localIdx = Math.floor(s / f);
+      if (localIdx >= segLen) continue;
+      for (let r = 0; r < f; r++) writeAt(s, localIdx + r * segLen, 1 / f);
+    }
+  } else {
+    const stretch = Math.max(2, Math.round(1 / factor));
+    for (let s = 0; s < L; s++) {
+      if (!snap.steps[s]) continue;
+      const dst = s * stretch;
+      if (dst >= L) break;
+      writeAt(s, dst, stretch);
+    }
+  }
+}
+
 // Shift every step's note on every pattern by `semis` semitones (±12 for
 // octaves). Clamps to MIDI 24..95. Works for any track, including drum kits.
 // Redraws the active pattern's grid.
@@ -6216,13 +6291,17 @@ function renderRollPanel(t, panel) {
   const chromaticView = !scaleIntervals || t.rollShowAll;
   const EPS = 1e-6;
 
-  // Header: title + all-notes toggle + octave pager + range readout.
+  // Header: title + all-notes toggle + octave pager + range readout + transforms.
   const head = document.createElement("div");
   head.className = "roll-head";
   const title = document.createElement("span");
   title.className = "roll-title";
   title.textContent = "piano roll";
   head.appendChild(title);
+  const dblHint = document.createElement("span");
+  dblHint.className = "roll-hint";
+  dblHint.textContent = "dbl-click to copy note";
+  head.appendChild(dblHint);
   if (scaleIntervals) {
     const toggle = document.createElement("label");
     toggle.innerHTML = `<input type="checkbox" class="roll-show-all" ${t.rollShowAll ? "checked" : ""}/><span>all notes</span>`;
@@ -6247,7 +6326,43 @@ function renderRollPanel(t, panel) {
   range.className = "roll-range";
   range.textContent = `C${t.rollViewOct}–B${t.rollViewOct + rollViewOcts() - 1}`;
   head.appendChild(range);
+  // Destructive pattern transforms — applied to the active pattern only.
+  const xform = document.createElement("span");
+  xform.className = "roll-transforms";
+  xform.innerHTML = `
+    <button class="ghost" data-x="up" title="shift all notes up one (scale-aware)">+1</button>
+    <button class="ghost" data-x="x2" title="double speed (compress + repeat)">x2</button>
+    <button class="ghost" data-x="x4" title="quadruple speed (compress + repeat)">x4</button>
+    <button class="ghost" data-x="/2" title="half speed (expand, truncate)">/2</button>
+    <button class="ghost" data-x="/4" title="quarter speed (expand, truncate)">/4</button>
+  `;
+  xform.querySelectorAll("button").forEach(b => b.addEventListener("click", () => {
+    const x = b.dataset.x;
+    if (x === "up") applyRollPitchUp(t);
+    else if (x === "x2") applyRollStretch(t, 2);
+    else if (x === "x4") applyRollStretch(t, 4);
+    else if (x === "/2") applyRollStretch(t, 0.5);
+    else if (x === "/4") applyRollStretch(t, 0.25);
+    renderRollPanel(t, panel);
+    renderStepGrid(t);
+  }));
+  head.appendChild(xform);
   panel.appendChild(head);
+
+  // Cell width: pick a min-width so the initial view fits up to 2 bars on
+  // desktop / 1 bar on mobile. Bars are sized by the active pattern's meter
+  // (default 4/4 → 16 steps/bar). Tracks shorter than the bar view stretch
+  // (1fr) to fill the area; tracks longer than the bar view overflow and the
+  // roll-grid scrolls horizontally (`.roll-cells { min-width: max-content }`).
+  const _isMobile = window.innerWidth <= 768;
+  const _maxBars = _isMobile ? 1 : 2;
+  const _spb = stepsPerBarForMeter(activeMeter());
+  const _visibleCells = Math.max(1, Math.min(steps, _maxBars * _spb));
+  const _labelCol = _isMobile ? 36 : 42;
+  const _modalW = Math.min(window.innerWidth * 0.96, 1100);
+  const _cellsArea = _modalW - 32 - 4 - _labelCol - 2; // modal pad + grid pad + label + gap
+  const _cellMinPx = Math.max(20, Math.floor((_cellsArea - (_visibleCells - 1)) / _visibleCells));
+  const rollMinW = `${_cellMinPx}px`;
 
   // Visible pitches (high → low so the grid reads like a keyboard).
   // C<n> in seqbaby's convention is MIDI (n+1)*12 (so C4 = 60, C3 = 48).
@@ -6284,9 +6399,6 @@ function renderRollPanel(t, panel) {
 
     const cells = document.createElement("div");
     cells.className = "roll-cells";
-    // On mobile, use a fixed min-width so the row exceeds viewport width and
-    // the roll-grid scrolls horizontally (labels stick via CSS).
-    const rollMinW = window.innerWidth <= 768 ? "30px" : "0";
     cells.style.gridTemplateColumns = `repeat(${steps}, minmax(${rollMinW}, 1fr))`;
     // Row-level pitch color — feeds the hover tint and any other per-row paint.
     if (!isMicrotonal) {
@@ -6329,7 +6441,7 @@ function renderRollPanel(t, panel) {
   velLane.appendChild(velSpacer);
   const velCells = document.createElement("div");
   velCells.className = "roll-vel-cells";
-  velCells.style.gridTemplateColumns = `repeat(${steps}, minmax(${window.innerWidth <= 768 ? "30px" : "0"}, 1fr))`;
+  velCells.style.gridTemplateColumns = `repeat(${steps}, minmax(${rollMinW}, 1fr))`;
   for (let i = 0; i < steps; i++) {
     const cell = document.createElement("div");
     cell.className = "roll-vel-cell";
@@ -6346,6 +6458,23 @@ function renderRollPanel(t, panel) {
   }
   velLane.appendChild(velCells);
   panel.appendChild(velLane);
+
+  // Sync horizontal scroll between the pitch grid and the velocity lane so
+  // dragging either keeps the columns aligned. Guarded by a re-entry flag so
+  // each direction doesn't loop back on the other.
+  let _scrollSyncing = false;
+  grid.addEventListener("scroll", () => {
+    if (_scrollSyncing) return;
+    _scrollSyncing = true;
+    velLane.scrollLeft = grid.scrollLeft;
+    _scrollSyncing = false;
+  });
+  velLane.addEventListener("scroll", () => {
+    if (_scrollSyncing) return;
+    _scrollSyncing = true;
+    grid.scrollLeft = velLane.scrollLeft;
+    _scrollSyncing = false;
+  });
 
   // In-place cell updater. We mutate the DOM instead of re-rendering the whole
   // panel on every drag tick — re-rendering destroys the grid element that
@@ -6440,15 +6569,25 @@ function renderRollPanel(t, panel) {
     const key = `${step}:${note}`;
     const now = performance.now();
     if (now - lastRollClickTime < ROLL_DBLCLICK_MS && key === lastRollClickKey) {
-      // manual double-click: activate + full velocity
+      // manual double-click on an existing note → bump its pitch up one note
+      // (scale-aware) at the same step. Works on multi-step notes too: we
+      // operate on the anchor regardless of which held cell was clicked, and
+      // the length/snapshot stays put.
       localMutate(() => {
         const anchor = anchorCovering(t, step);
-        const target = anchor >= 0 ? anchor : step;
-        if (!t.steps[target]) startNote(t, target);
-        t.notes[target] = note;
-        if (!t.isDrumKit) t.lastEditedNote = note;
-        t.velocities[target] = 1;
-        paintRange(target, target + Math.max(1, t.lengths[target] || 1) - 1);
+        if (anchor < 0 || t.notes[anchor] == null) return;
+        const origNote = t.notes[anchor];
+        const len = Math.max(1, t.lengths[anchor] || 1);
+        const intervals = state.scale.active ? (SCALES[state.scale.mode] || null) : null;
+        let newNote = origNote + 1;
+        if (intervals) {
+          const idx = midiToScaleIndex(origNote, state.scale.root, intervals);
+          if (idx != null) newNote = scaleIndexToMidi(idx + 1, state.scale.root, intervals);
+        }
+        newNote = Math.max(0, Math.min(127, newNote));
+        t.notes[anchor] = newNote;
+        if (!t.isDrumKit) t.lastEditedNote = newNote;
+        paintRange(anchor, anchor + len - 1);
         renderStepGrid(t);
       });
       lastRollClickTime = 0;
@@ -7867,6 +8006,8 @@ function suggestBounceFilename() {
 // unlock dance synchronously inside the gesture.
 function showAudioGateDialog() {
   if (!state.audioCtx) return;
+  const isTouch = ("ontouchstart" in window) || (navigator.maxTouchPoints || 0) > 0;
+  if (!isTouch) return;
   const overlay = document.createElement("div");
   overlay.className = "modal-overlay audio-gate-overlay";
   const modal = document.createElement("div");
