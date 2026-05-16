@@ -7484,6 +7484,17 @@ async function ensureAudio() {
   }
   state.ready = true;
   for (const t of state.tracks) { try { syncAllLFOs(t); } catch (e) { console.warn("lfo sync failed", e); } }
+  // iOS Safari quirk: after AudioWorklet load + voice construction, the
+  // context's state can be "running" while the underlying audio renderer
+  // hasn't actually started pumping — sound only appears after a visibility
+  // change. A suspend+resume cycle forces iOS to re-engage the audio session
+  // and start rendering the worklet graph. Best-effort; ignore failures.
+  try {
+    await state.audioCtx.suspend();
+    await state.audioCtx.resume();
+  } catch (e) {
+    console.warn("audio kick cycle failed", e);
+  }
 }
 
 async function ensureMidi() {
@@ -7783,12 +7794,27 @@ function primeAudioForIOS() {
   if (ctx.state === "suspended") {
     try { ctx.resume(); } catch {}
   }
+  // Silent buffer through destination — token "something played" signal.
   try {
     const buf = ctx.createBuffer(1, 1, 22050);
     const src = ctx.createBufferSource();
     src.buffer = buf;
     src.connect(ctx.destination);
     src.start(0);
+  } catch {}
+  // Real (but inaudible) oscillator briefly. iOS's audio renderer sometimes
+  // refuses to fully engage from a silent BufferSource alone — Safari only
+  // starts pumping the worklet graph once a real signal-producing node has
+  // run through ctx.destination. Volume is at -120 dB and the pulse is 30 ms,
+  // so it's effectively inaudible but it kicks the audio pipeline awake.
+  try {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    gain.gain.value = 0.00001;
+    osc.frequency.value = 440;
+    osc.connect(gain).connect(ctx.destination);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.03);
   } catch {}
   if (!_iosUnlocked) {
     const el = document.getElementById("ios-audio-unlock");
@@ -8353,6 +8379,20 @@ function init() {
   window.addEventListener("pagehide", () => {
     try { Tone.Transport.stop(); } catch {}
     try { state.audioCtx?.close(); } catch {}
+  });
+  // Visibility resume: iOS often suspends the audio context (or just stops
+  // rendering it) when the tab loses focus. Re-resuming on visibility change
+  // gets sound back without requiring a tap.
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible" && state.audioCtx
+        && state.audioCtx.state === "suspended") {
+      state.audioCtx.resume().catch(() => {});
+    }
+  });
+  window.addEventListener("pageshow", () => {
+    if (state.audioCtx && state.audioCtx.state === "suspended") {
+      state.audioCtx.resume().catch(() => {});
+    }
   });
   // Up-front audio permission gate. A single tap on this dialog runs the
   // full iOS unlock dance inside a user-gesture frame (resume + silent
