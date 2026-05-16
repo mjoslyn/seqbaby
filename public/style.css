@@ -1209,7 +1209,12 @@ main {
 }
 .panel-modal > .track-roll-panel,
 .panel-modal > .track-mod-panel,
-.panel-modal > .track-aut-panel {
+.panel-modal > .track-aut-panel,
+.panel-modal > .track-filter-panel,
+.panel-modal > .track-env-panel,
+.panel-modal > .track-fx-panel,
+.panel-modal > .track-eq-panel,
+.panel-modal > .track-comp-panel {
   padding: 0;
   background: transparent;
   border: none;
@@ -1231,8 +1236,22 @@ main {
 .aut-modal {
   width: min(96vw, 820px);
 }
+.filter-modal,
+.env-modal,
+.eq-modal,
+.comp-modal {
+  width: min(96vw, 680px);
+}
+.fx-modal {
+  width: min(96vw, 900px);
+}
 .mod-modal > .track-mod-panel,
-.aut-modal > .track-aut-panel {
+.aut-modal > .track-aut-panel,
+.filter-modal > .track-filter-panel,
+.env-modal > .track-env-panel,
+.fx-modal > .track-fx-panel,
+.eq-modal > .track-eq-panel,
+.comp-modal > .track-comp-panel {
   max-height: calc(92vh - 80px);
 }
 .bounce-opts { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
