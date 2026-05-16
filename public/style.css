@@ -1158,6 +1158,37 @@ main {
   gap: 8px;
   justify-content: flex-end;
 }
+
+/* Piano-roll modal: used on every viewport. Hosts the reparented
+   .track-roll-panel so the roll always opens as a centered overlay. */
+.roll-modal {
+  width: min(96vw, 1100px);
+  max-width: 96vw;
+  min-width: 0;
+  max-height: 92vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px;
+}
+.roll-modal .track-roll-panel {
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+}
+.roll-modal .roll-head { flex-wrap: wrap; }
+.roll-modal .roll-grid { max-height: calc(80vh - 80px); }
+.roll-modal .roll-modal-close {
+  align-self: stretch;
+  padding: 10px;
+  background: var(--accent);
+  color: #0b0d10;
+  border-color: var(--accent);
+  font-weight: 600;
+  min-height: 40px;
+}
 .bounce-opts { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
 .bounce-opts label { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--fg-dim); }
 .bounce-opts input[type="number"] { width: 64px; }

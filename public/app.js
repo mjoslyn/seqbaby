@@ -5296,6 +5296,12 @@ function renderTrack(t) {
   function closeOtherPanels(keepBtnSel) {
     for (const p of panelPairs) {
       if (p.btnSel === keepBtnSel) continue;
+      // The roll panel may be hosted in a mobile modal — close it via its
+      // owning close fn so the overlay tears down with it.
+      if (p.panelSel === ".track-roll-panel" && t._rollModal) {
+        t._rollModal.close();
+        continue;
+      }
       const b = node.querySelector(p.btnSel);
       const pn = node.querySelector(p.panelSel);
       if (b && pn) { pn.hidden = true; b.setAttribute("aria-pressed", "false"); }
@@ -5325,12 +5331,19 @@ function renderTrack(t) {
   bindPanelToggle(".track-mod",    ".track-mod-panel");
   bindPanelToggle(".track-aut",    ".track-aut-panel",
     () => renderAutomationPanel(t, node.querySelector(".track-aut-panel")));
-  bindPanelToggle(".track-roll",   ".track-roll-panel", () => {
-    // Re-center the roll on whichever 2-octave window holds the most notes
-    // from the active pattern. Skip if the pattern is empty so a user who
-    // paged oct +/- on an empty track keeps their position.
+  // Stash a stable ref to the roll panel — on mobile the panel is reparented
+  // into a modal, so t.el.querySelector(".track-roll-panel") would miss it.
+  t._rollPanelEl = node.querySelector(".track-roll-panel");
+  t._rollModal = null;
+  const rollBtn = node.querySelector(".track-roll");
+  rollBtn.addEventListener("click", () => {
+    const panel = t._rollPanelEl;
+    if (!panel) return;
+    if (t._rollModal) { t._rollModal.close(); return; }
+    closeOtherPanels(".track-roll");
     if (t.steps.some(s => s)) t.rollViewOct = bestRollViewOct(t);
-    renderRollPanel(t, node.querySelector(".track-roll-panel"));
+    openRollAsModal(t);
+    rollBtn.setAttribute("aria-pressed", "true");
   });
   bindPanelToggle(".track-filter", ".track-filter-panel");
   bindPanelToggle(".track-env",    ".track-env-panel");
@@ -6091,7 +6104,8 @@ function bestRollViewOct(t) {
 const BLACK_KEYS = new Set([1, 3, 6, 8, 10]);
 
 function refreshRollIfOpen(t) {
-  const panel = t.el?.querySelector(".track-roll-panel");
+  // t._rollPanelEl follows the panel even when it's been moved into a modal.
+  const panel = t._rollPanelEl || t.el?.querySelector(".track-roll-panel");
   if (!panel || panel.hidden) return;
   // A full re-render replaces the grid element, which kills any pointer capture
   // held by an in-progress drag on the roll. Skip while a drag is live — the
@@ -6705,6 +6719,53 @@ function attachGridInteraction(t, grid) {
 // ---- step editor popover ------------------------------------------------
 
 let stepEditor = null;
+// Mobile: host the track's piano-roll panel inside a modal. The panel is
+// physically moved into the modal so existing render + event wiring keeps
+// working unchanged; on close it slots back into the track via a
+// placeholder anchor, so DOM order is preserved.
+function openRollAsModal(t) {
+  const panel = t._rollPanelEl;
+  if (!panel || t._rollModal) return;
+  const anchor = document.createComment("roll-panel-anchor");
+  panel.replaceWith(anchor);
+
+  const overlay = document.createElement("div");
+  overlay.className = "modal-overlay";
+  const modal = document.createElement("div");
+  modal.className = "modal roll-modal";
+  modal.setAttribute("role", "dialog");
+  modal.setAttribute("aria-modal", "true");
+
+  panel.hidden = false;
+  modal.appendChild(panel);
+
+  const closeBtn = document.createElement("button");
+  closeBtn.type = "button";
+  closeBtn.className = "roll-modal-close";
+  closeBtn.textContent = "done";
+  modal.appendChild(closeBtn);
+
+  const close = () => {
+    if (!t._rollModal) return;
+    anchor.replaceWith(panel);
+    panel.hidden = true;
+    overlay.remove();
+    const btn = t.el?.querySelector(".track-roll");
+    if (btn) btn.setAttribute("aria-pressed", "false");
+    document.removeEventListener("keydown", escHandler);
+    t._rollModal = null;
+  };
+  const escHandler = (e) => { if (e.key === "Escape") close(); };
+  closeBtn.addEventListener("click", close);
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
+  document.addEventListener("keydown", escHandler);
+
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
+  t._rollModal = { overlay, close };
+  renderRollPanel(t, panel);
+}
+
 // Mobile pattern menu: physically move every pattern-bar child (except the
 // Share + Menu buttons) into a modal. On close, return them in original
 // order so the desktop pattern bar is unchanged. Children retain their
@@ -7369,7 +7430,7 @@ function paintNowIndicator() {
       c.classList.toggle("now", tk > 0 && idx >= start && idx < start + span);
     });
     // Piano roll: highlight the column for the current step, if the roll is open.
-    const rollPanel = t.el.querySelector(".track-roll-panel");
+    const rollPanel = t._rollPanelEl || t.el.querySelector(".track-roll-panel");
     if (rollPanel && !rollPanel.hidden) {
       rollPanel.querySelectorAll(".roll-cell.now, .roll-vel-cell.now")
         .forEach(c => c.classList.remove("now"));
@@ -7658,6 +7719,28 @@ function suggestBounceFilename() {
   return suggestSetName();
 }
 
+// iOS Safari only honors AudioContext.resume() and BufferSource.start() when
+// they're invoked synchronously inside a user-gesture task. Awaiting anything
+// before the call drops you off the gesture stack and resume() silently
+// fails. Call this *first thing* in any handler that needs audio, before
+// any `await`. The silent-buffer source is the canonical iOS "audio unlock"
+// trick — without it, even a resumed context stays muted until something
+// actually starts playing through the destination.
+function primeAudioForIOS() {
+  const ctx = state.audioCtx;
+  if (!ctx) return;
+  if (ctx.state === "suspended") {
+    try { ctx.resume(); } catch {}
+  }
+  try {
+    const buf = ctx.createBuffer(1, 1, 22050);
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.connect(ctx.destination);
+    src.start(0);
+  } catch {}
+}
+
 async function togglePlay() {
   const btn = document.getElementById("play");
   if (state.playing) {
@@ -7688,6 +7771,10 @@ async function togglePlay() {
     setStatus("stopped");
     return;
   }
+  // iOS: synchronously prime audio inside the click's gesture task BEFORE
+  // awaiting anything else. Without this the context resume that ensureAudio
+  // attempts later won't be honored on Safari.
+  primeAudioForIOS();
   setStatus("unlocking audio...");
   try {
     await ensureAudio();
