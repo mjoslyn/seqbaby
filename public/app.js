@@ -7732,6 +7732,50 @@ function suggestBounceFilename() {
 //      the iOS audio session from "ambient" (ringer-controlled, muted by
 //      the side silent switch) to "playback", so output ignores the silent
 //      switch.
+// Up-front audio permission gate. Mobile browsers (iOS especially) require a
+// user gesture before any AudioContext can produce sound. Rather than relying
+// on the play button — where any await before the unlock can cost gesture
+// authority — show a blocking overlay on page load. One tap runs the full
+// unlock dance synchronously inside the gesture.
+function showAudioGateDialog() {
+  if (!state.audioCtx) return;
+  const overlay = document.createElement("div");
+  overlay.className = "modal-overlay audio-gate-overlay";
+  const modal = document.createElement("div");
+  modal.className = "modal audio-gate-modal";
+  modal.setAttribute("role", "dialog");
+  modal.setAttribute("aria-modal", "true");
+  modal.innerHTML = `
+    <div class="audio-gate-title">tap to enable audio</div>
+    <div class="audio-gate-hint">
+      mobile browsers require a tap before audio can play.<br>
+      on iPhone: flip the side <strong>silent switch off</strong> if you don't hear anything.
+    </div>
+    <button class="audio-gate-btn" type="button">enable audio</button>
+    <div class="audio-gate-status"></div>
+  `;
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
+  const btn = modal.querySelector(".audio-gate-btn");
+  const statusEl = modal.querySelector(".audio-gate-status");
+  btn.addEventListener("click", async () => {
+    primeAudioForIOS();
+    btn.disabled = true;
+    statusEl.textContent = `unlocking… (ctx: ${state.audioCtx?.state || "?"})`;
+    try {
+      await ensureAudio();
+    } catch (err) {
+      statusEl.textContent = `failed: ${err?.message || err}`;
+      btn.disabled = false;
+      btn.textContent = "try again";
+      return;
+    }
+    statusEl.textContent = `ready (ctx: ${state.audioCtx?.state || "?"})`;
+    overlay.remove();
+    setStatus(`audio ready (ctx: ${state.audioCtx?.state || "?"})`);
+  });
+}
+
 let _iosUnlocked = false;
 function primeAudioForIOS() {
   const ctx = state.audioCtx;
@@ -8310,6 +8354,12 @@ function init() {
     try { Tone.Transport.stop(); } catch {}
     try { state.audioCtx?.close(); } catch {}
   });
+  // Up-front audio permission gate. A single tap on this dialog runs the
+  // full iOS unlock dance inside a user-gesture frame (resume + silent
+  // BufferSource + <audio>.play() to switch the iOS audio session to
+  // "playback"). After the gate, the play button only has to start the
+  // Transport — no late awaits, no chance of losing gesture authority.
+  showAudioGateDialog();
   // Re-render step grids when crossing the mobile/desktop breakpoint so the
   // visual column count (16 vs 8) tracks the viewport. Debounced + gated so
   // rotation triggers a single render.

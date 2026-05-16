@@ -1159,6 +1159,45 @@ main {
   justify-content: flex-end;
 }
 
+/* Audio gate dialog: shown on page load until the user taps to unlock
+   audio. Sits above the rest of the UI so it must be the first interaction. */
+.audio-gate-overlay { z-index: 300; }
+.audio-gate-modal {
+  text-align: center;
+  padding: 24px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-width: 380px;
+}
+.audio-gate-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--fg);
+  letter-spacing: 0.02em;
+}
+.audio-gate-hint {
+  font-size: 12px;
+  color: var(--fg-dim);
+  line-height: 1.5;
+}
+.audio-gate-hint strong { color: var(--fg); }
+.audio-gate-btn {
+  padding: 14px 18px;
+  font-size: 14px;
+  background: var(--accent);
+  color: #0b0d10;
+  border-color: var(--accent);
+  font-weight: 700;
+  min-height: 48px;
+}
+.audio-gate-btn:disabled { opacity: 0.6; cursor: progress; }
+.audio-gate-status {
+  font-size: 11px;
+  color: var(--fg-dim);
+  min-height: 14px;
+}
+
 /* Piano-roll modal: used on every viewport. Hosts the reparented
    .track-roll-panel so the roll always opens as a centered overlay. */
 .roll-modal {
