@@ -1208,9 +1208,10 @@ main {
   min-height: 14px;
 }
 
-/* Piano-roll modal: used on every viewport. Hosts the reparented
-   .track-roll-panel so the roll always opens as a centered overlay. */
-.roll-modal {
+/* Panel modal: hosts a reparented track panel (.track-roll-panel,
+   .track-mod-panel, .track-aut-panel) as a centered overlay. The panel keeps
+   its existing render + event wiring; only its parent changes. */
+.panel-modal {
   width: min(96vw, 1100px);
   max-width: 96vw;
   min-width: 0;
@@ -1221,15 +1222,16 @@ main {
   gap: 8px;
   padding: 14px 16px;
 }
-.roll-modal .track-roll-panel {
+.panel-modal > .track-roll-panel,
+.panel-modal > .track-mod-panel,
+.panel-modal > .track-aut-panel {
   padding: 0;
   background: transparent;
   border: none;
   border-radius: 0;
+  overflow-y: auto;
 }
-.roll-modal .roll-head { flex-wrap: wrap; }
-.roll-modal .roll-grid { max-height: calc(80vh - 80px); }
-.roll-modal .roll-modal-close {
+.panel-modal .panel-modal-close {
   align-self: stretch;
   padding: 10px;
   background: var(--accent);
@@ -1237,6 +1239,16 @@ main {
   border-color: var(--accent);
   font-weight: 600;
   min-height: 40px;
+}
+.roll-modal .roll-head { flex-wrap: wrap; }
+.roll-modal .roll-grid { max-height: calc(80vh - 80px); }
+.mod-modal,
+.aut-modal {
+  width: min(96vw, 820px);
+}
+.mod-modal > .track-mod-panel,
+.aut-modal > .track-aut-panel {
+  max-height: calc(92vh - 80px);
 }
 .bounce-opts { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
 .bounce-opts label { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--fg-dim); }
