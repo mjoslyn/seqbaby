@@ -493,6 +493,7 @@ const ICON_METRONOME = `<svg class="btn-icon" viewBox="0 0 16 16" width="14" hei
 const ICON_PALETTE = `<svg class="btn-icon" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M8 1.5c-3.6 0-6.5 2.7-6.5 6S4.4 13.5 8 13.5c.9 0 1.5-.5 1.5-1.2 0-.5-.3-.9-.3-1.4 0-.7.6-1.2 1.3-1.2h1c2 0 3.5-1.4 3.5-3.3 0-2.7-3-4.9-7-4.9z" fill="none" stroke="currentColor" stroke-width="1.2"/><circle cx="5" cy="5.2" r="1.05" fill="hsl(0 72% 56%)"/><circle cx="9.5" cy="3.8" r="1.05" fill="hsl(60 72% 56%)"/><circle cx="11.9" cy="6.6" r="1.05" fill="hsl(180 72% 56%)"/><circle cx="4.6" cy="9.2" r="1.05" fill="hsl(270 72% 56%)"/></svg>`;
 // Download — arrow into a tray.
 const ICON_DOWNLOAD = `<svg class="btn-icon" viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2v8"/><polyline points="5 7 8 10 11 7"/><path d="M2.5 13h11"/></svg>`;
+const ICON_DICE = `<svg class="btn-icon" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="2.5" width="11" height="11" rx="2"/><circle cx="5.5" cy="5.5" r="0.9" fill="currentColor" stroke="none"/><circle cx="10.5" cy="5.5" r="0.9" fill="currentColor" stroke="none"/><circle cx="8"   cy="8"   r="0.9" fill="currentColor" stroke="none"/><circle cx="5.5" cy="10.5" r="0.9" fill="currentColor" stroke="none"/><circle cx="10.5" cy="10.5" r="0.9" fill="currentColor" stroke="none"/></svg>`;
 
 // ---- state --------------------------------------------------------------
 
@@ -4259,6 +4260,84 @@ function randomizeTimbre(t) {
   }
 }
 
+// Replace the active pattern with a random melody. Drum-kit tracks get a
+// random rhythm pinned to C2; melodic tracks walk a random scale-aware path
+// around lastUsedNote(). Strong beats are weighted slightly heavier so the
+// phrasing reads as musical rather than uniformly noisy.
+function randomizeMelody(t) {
+  const len = t.length;
+  t.steps.fill(0);
+  t.lengths.fill(0);
+  t.notes.fill(null);
+  t.velocities.fill(0.7);
+  t.chords.fill("");
+  t.offsets?.fill(0);
+  if (t.arps)         t.arps.fill(false);
+  if (t.ratchets)     t.ratchets.fill(1);
+  if (t.complexities) t.complexities.fill(0);
+
+  const meter = patternMeter(t._patternIdx ?? state.activePattern);
+  const spb = stepsPerBeatForMeter(meter);
+
+  if (t.isDrumKit) {
+    // Rhythmic: 35..60% density, downbeat-biased, all notes pinned to C2.
+    const density = 0.35 + Math.random() * 0.25;
+    for (let i = 0; i < len; i++) {
+      const onBeat = (i % spb) === 0;
+      const p = onBeat ? Math.min(0.95, density + 0.25) : density;
+      if (Math.random() > p) continue;
+      t.steps[i] = 1;
+      t.lengths[i] = 1;
+      t.notes[i] = 36;
+      t.velocities[i] = onBeat ? 0.75 + Math.random() * 0.25 : 0.5 + Math.random() * 0.35;
+    }
+    renderStepGrid(t);
+    setStatus(`"${t.name}" — random pattern`);
+    return;
+  }
+
+  // Melodic walk. Step size mostly ±1..3 scale degrees with occasional
+  // octave leaps; clamp to MIDI 36..84 by folding wrapped notes back inward.
+  // Always constrain to the selected scale (root + mode), even when the
+  // global scale-quantize toggle is off — the dice is a deliberate musical
+  // act and should follow the chosen key.
+  const density = 0.45 + Math.random() * 0.2;
+  const intervals = SCALES[state.scale.mode] || SCALES.minor;
+  const rootPc = state.scale.root | 0;
+  let current = lastUsedNote(t);
+  // Snap the starting note onto the selected scale so the walk begins
+  // in-key even if state.scale.active is false or the prior note was chromatic.
+  current = quantizeToScale(current, rootPc, intervals);
+
+  for (let i = 0; i < len; i++) {
+    const onBeat = (i % spb) === 0;
+    const p = onBeat ? Math.min(0.95, density + 0.2) : density;
+    if (Math.random() > p) continue;
+
+    if (i > 0) {
+      const bigJump = Math.random() < 0.08;
+      const stepSize = bigJump
+        ? (Math.random() < 0.5 ? -7 : 7)
+        : Math.round((Math.random() * 2 - 1) * 3);
+      const idx = midiToScaleIndex(current, rootPc, intervals);
+      if (idx != null) current = scaleIndexToMidi(idx + stepSize, rootPc, intervals);
+      else             current = quantizeToScale(current + stepSize, rootPc, intervals);
+    }
+    // Octave-fold back into a sensible range while staying on scale.
+    while (current < 36) current += 12;
+    while (current > 84) current -= 12;
+
+    t.steps[i] = 1;
+    t.lengths[i] = 1;
+    t.notes[i] = current;
+    t.velocities[i] = onBeat ? 0.7 + Math.random() * 0.3 : 0.5 + Math.random() * 0.35;
+  }
+
+  t.lastEditedNote = current;
+  renderStepGrid(t);
+  setStatus(`"${t.name}" — random melody`);
+}
+
 // ---- track model --------------------------------------------------------
 
 function totalSteps() { return STEPS_PER_BAR; }
@@ -5364,6 +5443,11 @@ function renderTrack(t) {
     t.chords.fill("");
     renderStepGrid(t);
   });
+  const diceBtn = node.querySelector(".track-dice");
+  if (diceBtn) {
+    diceBtn.innerHTML = ICON_DICE;
+    diceBtn.addEventListener("click", () => randomizeMelody(t));
+  }
   node.querySelector(".track-remove").addEventListener("click", () => removeTrack(t));
   const dupBtn = node.querySelector(".track-dup");
   if (dupBtn) dupBtn.addEventListener("click", () => duplicateTrack(t));
