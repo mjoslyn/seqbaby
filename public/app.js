@@ -4293,6 +4293,25 @@ function randomizeTimbre(t) {
   }
 }
 
+// Pick a weighted note length capped at cap (in sixteenth-note steps). Drum
+// hits skew very short; melodic notes get more sustained variation.
+function pickRandomNoteLength(cap, drum) {
+  const r = Math.random();
+  let len;
+  if (drum) {
+    if      (r < 0.82) len = 1;
+    else if (r < 0.95) len = 2;
+    else               len = 3;
+  } else {
+    if      (r < 0.55) len = 1;
+    else if (r < 0.80) len = 2;
+    else if (r < 0.92) len = 3;
+    else if (r < 0.98) len = 4;
+    else               len = 6;
+  }
+  return Math.max(1, Math.min(len, cap | 0));
+}
+
 // Replace the active pattern with a random melody. Drum-kit tracks get a
 // random rhythm pinned to C2; melodic tracks walk a random scale-aware path
 // around lastUsedNote(). Strong beats are weighted slightly heavier so the
@@ -4315,14 +4334,17 @@ function randomizeMelody(t) {
   if (t.isDrumKit) {
     // Rhythmic: 35..60% density, downbeat-biased, all notes pinned to C2.
     const density = 0.35 + Math.random() * 0.25;
-    for (let i = 0; i < len; i++) {
+    let i = 0;
+    while (i < len) {
       const onBeat = (i % spb) === 0;
       const p = onBeat ? Math.min(0.95, density + 0.25) : density;
-      if (Math.random() > p) continue;
+      if (Math.random() > p) { i++; continue; }
+      const dur = pickRandomNoteLength(maxLengthAt(t, i), /*drum*/ true);
       t.steps[i] = 1;
-      t.lengths[i] = 1;
+      t.lengths[i] = dur;
       t.notes[i] = 36;
       t.velocities[i] = onBeat ? 0.75 + Math.random() * 0.25 : 0.5 + Math.random() * 0.35;
+      i += dur;
     }
     renderStepGrid(t);
     setStatus(`"${t.name}" — random pattern`);
@@ -4342,10 +4364,11 @@ function randomizeMelody(t) {
   // in-key even if state.scale.active is false or the prior note was chromatic.
   current = quantizeToScale(current, rootPc, intervals);
 
-  for (let i = 0; i < len; i++) {
+  let i = 0;
+  while (i < len) {
     const onBeat = (i % spb) === 0;
     const p = onBeat ? Math.min(0.95, density + 0.2) : density;
-    if (Math.random() > p) continue;
+    if (Math.random() > p) { i++; continue; }
 
     if (i > 0) {
       const bigJump = Math.random() < 0.08;
@@ -4360,10 +4383,12 @@ function randomizeMelody(t) {
     while (current < 36) current += 12;
     while (current > 84) current -= 12;
 
+    const dur = pickRandomNoteLength(maxLengthAt(t, i), /*drum*/ false);
     t.steps[i] = 1;
-    t.lengths[i] = 1;
+    t.lengths[i] = dur;
     t.notes[i] = current;
     t.velocities[i] = onBeat ? 0.7 + Math.random() * 0.3 : 0.5 + Math.random() * 0.35;
+    i += dur;
   }
 
   t.lastEditedNote = current;
