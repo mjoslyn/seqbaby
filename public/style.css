@@ -247,8 +247,8 @@ button.danger { color: var(--danger); }
 .repeat-wrap select { width: 64px; text-align: center; }
 #pattern-mode[aria-pressed="true"] { background: var(--accent-2); color: #0b0d10; border-color: var(--accent-2); }
 #pattern-switch[aria-pressed="true"] { background: var(--accent-2); color: #0b0d10; border-color: var(--accent-2); }
-#set-save, #set-load, #set-export, #set-import, #set-share { text-transform: none; }
-#set-save, #set-load, #set-export, #set-import,
+#set-new, #set-save, #set-load, #set-export, #set-import, #set-share { text-transform: none; }
+#set-new, #set-save, #set-load, #set-export, #set-import,
 #pattern-dup { padding: 3px 10px; font-size: 12px; min-width: 64px; }
 .icon-btn {
   padding: 0;

@@ -836,6 +836,37 @@ function serializeSet() {
   };
 }
 
+// Wipe the current session and seed the starter kit users see on first load.
+// Follows the same teardown as applySet (stop transport, drop tracks, reset
+// pattern state) — plus the bits applySet doesn't touch (patternRepeats,
+// chainBarCount, queuedPattern, currentSetName).
+function onNewSet() {
+  applySet({
+    bpm: 110,
+    swing: 0,
+    scale: { active: false, root: 0, mode: "minor" },
+    activePattern: 0,
+    patternMode: "repeat",
+    patternSwitchMode: "immediate",
+    patternMeters: Array(PATTERN_COUNT).fill(null).map(() => ({ num: 4, den: 4 })),
+    tracks: [
+      { name: "kick",   engineKey: "dm:808-kick" },
+      { name: "snare",  engineKey: "dm:808-snare" },
+      { name: "hat",    engineKey: "dm:909-chat" },
+      { name: "accent", engineKey: "plaits:12" },
+      { name: "bass",   engineKey: "dm:303" },
+      { name: "lead",   engineKey: "plaits:0" },
+    ],
+  });
+  state.currentSetName = null;
+  state.queuedPattern = null;
+  state.chainBarCount = 0;
+  for (let i = 0; i < PATTERN_COUNT; i++) state.patternRepeats[i] = 1;
+  const repInput = document.getElementById("pattern-repeats");
+  if (repInput) repInput.value = 1;
+  setStatus("new session");
+}
+
 async function onSaveSet() {
   const suggested = suggestSetName();
   const name = await showInputDialog({ title: "save session as", defaultValue: suggested, placeholder: "my-session" });
@@ -9015,6 +9046,7 @@ function init() {
       }
     });
   }
+  document.getElementById("set-new").addEventListener("click", onNewSet);
   document.getElementById("set-save").addEventListener("click", onSaveSet);
   document.getElementById("set-load").addEventListener("click", onLoadSet);
   document.getElementById("set-export").addEventListener("click", onExportSet);
