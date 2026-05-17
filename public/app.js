@@ -3513,6 +3513,60 @@ function defaultLFOConfig() {
 
 function currentBpm() { return Number(document.getElementById("bpm").value || 120); }
 
+// Vertical pointer-drag on the BPM number input. Mobile number inputs have no
+// spinner and tapping pops the numeric keypad — drag-to-scrub gives a way to
+// nudge tempo without typing. A drag past PX_THRESH engages scrub mode and
+// suppresses focus/keyboard; an un-dragged tap focuses the input as normal.
+function attachBpmDrag(el) {
+  if (!el) return;
+  const PX_PER_BPM = 4;
+  const PX_THRESH = 6;
+  let drag = null;
+  el.style.touchAction = "none";
+  el.addEventListener("pointerdown", (e) => {
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    const min = Number(el.min) || 40;
+    const max = Number(el.max) || 240;
+    drag = {
+      id: e.pointerId, type: e.pointerType,
+      startY: e.clientY, startVal: Number(el.value) || 120,
+      min, max, moved: false,
+    };
+    // Touch: block default focus so the keyboard doesn't pop while scrubbing.
+    // We restore focus on pointerup if no drag happened.
+    if (e.pointerType !== "mouse") e.preventDefault();
+  });
+  el.addEventListener("pointermove", (e) => {
+    if (!drag || e.pointerId !== drag.id) return;
+    const dy = e.clientY - drag.startY;
+    if (!drag.moved) {
+      if (Math.abs(dy) < PX_THRESH) return;
+      drag.moved = true;
+      try { el.setPointerCapture(e.pointerId); } catch {}
+      if (document.activeElement === el) el.blur();
+    }
+    const next = Math.max(drag.min, Math.min(drag.max, drag.startVal + Math.round(-dy / PX_PER_BPM)));
+    if (Number(el.value) !== next) {
+      el.value = String(next);
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+    e.preventDefault();
+  });
+  const end = (e) => {
+    if (!drag || e.pointerId !== drag.id) return;
+    try { el.releasePointerCapture(e.pointerId); } catch {}
+    // Tap-without-drag on touch: we suppressed the default focus, so restore it
+    // so the user can still tap-to-type a BPM value.
+    if (!drag.moved && drag.type !== "mouse") {
+      el.focus();
+      try { el.select(); } catch {}
+    }
+    drag = null;
+  };
+  el.addEventListener("pointerup", end);
+  el.addEventListener("pointercancel", end);
+}
+
 // Compute the base playback rate for a sample buffer so its natural length fits the
 // selected bar-count at the current BPM. Returns 1 for "native" (no time-sync).
 function computeSampleBaseRate(buffer, mode, bpm) {
@@ -8976,6 +9030,10 @@ function init() {
       }
     }
   });
+  // Vertical drag on the BPM field — on mobile there's no spinner and tapping
+  // a number input only opens the numeric keypad, so let users drag up/down to
+  // scrub the value. A clean tap still focuses the input to type a value.
+  attachBpmDrag(document.getElementById("bpm"));
   // Master swing — read live by the transport loop each callback; no per-track
   // swing state to mirror anymore.
   document.getElementById("swing").addEventListener("input", () => {});
