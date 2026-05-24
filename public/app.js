@@ -3,6 +3,15 @@
 const { wosc, oscillatorTypes } = window.woscillators;
 
 const STEPS_PER_BAR = 16;
+
+// Coarse mobile/touch detection — used to widen the transport lookahead and
+// throttle meter painting where the main thread is more easily starved.
+function isMobileDevice() {
+  try {
+    if (window.matchMedia?.("(pointer: coarse)").matches) return true;
+  } catch {}
+  return (navigator.maxTouchPoints || 0) > 0 || window.innerWidth <= 768;
+}
 const LFO_KEYS = [
   // Volume + instrument params first so they lead the picker.
   "vol",
@@ -614,6 +623,7 @@ const state = {
   audioCtx: null,
   ready: false,
   masterGain: null,
+  masterLimiter: null,
   masterAnalyser: null,
   midi: null,
   scale: { active: false, root: 0, mode: "minor" },
@@ -8161,10 +8171,23 @@ async function ensureAudio() {
   if (!state.masterGain) {
     state.masterGain = state.audioCtx.createGain();
     state.masterGain.gain.value = 1;
-    state.masterGain.connect(state.audioCtx.destination);
+    // Brickwall-ish safety limiter on the master bus. When many voices stack
+    // (or a burst of late-scheduled events piles onto the same instant on a
+    // janky mobile main thread) the summed signal can rocket past 0 dBFS and
+    // hard-clip at ctx.destination — the "sound blows out" symptom. This catches
+    // peaks transparently: it sits idle until the signal approaches full scale.
+    state.masterLimiter = state.audioCtx.createDynamicsCompressor();
+    state.masterLimiter.threshold.value = -2;
+    state.masterLimiter.knee.value = 0;
+    state.masterLimiter.ratio.value = 20;
+    state.masterLimiter.attack.value = 0.002;
+    state.masterLimiter.release.value = 0.1;
+    state.masterGain.connect(state.masterLimiter);
+    state.masterLimiter.connect(state.audioCtx.destination);
     state.masterAnalyser = state.audioCtx.createAnalyser();
     state.masterAnalyser.fftSize = 1024;
     state.masterAnalyser.smoothingTimeConstant = 0.25;
+    // Tap pre-limiter so the clip indicator still warns when the mix is hot.
     state.masterGain.connect(state.masterAnalyser);
   }
   await wosc.loadOscillator(state.audioCtx);
@@ -8225,10 +8248,13 @@ async function bounceAudio({ bars = 1, format = "wav", chainWhole = false, filen
   await ensureAudio();
   const ctx = state.audioCtx;
   const recDest = ctx.createMediaStreamDestination();
-  state.masterGain.connect(recDest);
-  // Silent render: temporarily disconnect masterGain from ctx.destination so the
+  // Tap the post-limiter node (the one feeding destination) so the bounce
+  // captures the same limited signal the user hears.
+  const masterOut = state.masterLimiter || state.masterGain;
+  masterOut.connect(recDest);
+  // Silent render: temporarily disconnect from ctx.destination so the
   // user doesn't hear the bounce; the recorder still gets the signal via recDest.
-  try { state.masterGain.disconnect(ctx.destination); } catch {}
+  try { masterOut.disconnect(ctx.destination); } catch {}
   const mimeCandidates = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4;codecs=mp4a.40.2", "audio/mp4"];
   const mime = mimeCandidates.find(m => MediaRecorder.isTypeSupported?.(m)) || "";
   const rec = new MediaRecorder(recDest.stream, mime ? { mimeType: mime } : undefined);
@@ -8265,8 +8291,8 @@ async function bounceAudio({ bars = 1, format = "wav", chainWhole = false, filen
   if (state.playing) await togglePlay(); // stop
   rec.stop();
   await stopped;
-  try { state.masterGain.disconnect(recDest); } catch {}
-  try { state.masterGain.connect(ctx.destination); } catch {}
+  try { masterOut.disconnect(recDest); } catch {}
+  try { masterOut.connect(ctx.destination); } catch {}
 
   if (chainWhole) {
     state.patternMode = prevMode;
@@ -8936,24 +8962,42 @@ function samplePeak(analyser) {
 }
 function paintMeter(el, level) {
   if (!el) return;
-  const bar = el.querySelector(".meter-bar");
+  let bar = el._bar;
+  if (!bar || !bar.isConnected) { bar = el._bar = el.querySelector(".meter-bar"); }
   if (!bar) return;
   const clamped = Math.max(0, Math.min(1, level));
   // Near-linear response with a mild pow so quiet signals stay visible. The bar
   // is green until the source is clipping (peak >= 0.995), then flashes red.
   const pct = Math.round(Math.pow(clamped, 0.85) * 100);
-  bar.style.width = pct + "%";
-  bar.classList.toggle("clip", level >= 0.995);
+  // Skip redundant style writes — when the value is unchanged (e.g. a silent,
+  // stopped track) this avoids forcing layout every frame, which matters on
+  // mobile where dozens of meters would otherwise reflow continuously.
+  if (bar._lastPct !== pct) { bar.style.width = pct + "%"; bar._lastPct = pct; }
+  const clip = level >= 0.995;
+  if (bar._lastClip !== clip) { bar.classList.toggle("clip", clip); bar._lastClip = clip; }
 }
-function meterTick() {
+// Meter repaints are throttled to ~30 Hz. rAF fires at the display refresh rate
+// (up to 120 Hz on recent phones); sampling every analyser and touching the DOM
+// that often is pure main-thread load that competes with Tone's scheduler and
+// helps push playback off the grid. 30 Hz is plenty for a level meter.
+const METER_INTERVAL_MS = 1000 / 30;
+let _meterLastPaint = -Infinity;
+let _masterMeterEl = null;
+function meterTick(ts) {
+  requestAnimationFrame(meterTick);
+  const now = ts ?? performance.now();
+  if (now - _meterLastPaint < METER_INTERVAL_MS) return;
+  _meterLastPaint = now;
   if (state.masterAnalyser) {
-    paintMeter(document.querySelector(".master-meter"), samplePeak(state.masterAnalyser));
+    if (!_masterMeterEl || !_masterMeterEl.isConnected) _masterMeterEl = document.querySelector(".master-meter");
+    paintMeter(_masterMeterEl, samplePeak(state.masterAnalyser));
   }
   for (const t of state.tracks) {
     if (!t.meterAnalyser || !t.el) continue;
-    paintMeter(t.el.querySelector(".track-meter"), samplePeak(t.meterAnalyser));
+    let mEl = t._meterEl;
+    if (!mEl || !mEl.isConnected) { mEl = t._meterEl = t.el.querySelector(".track-meter"); }
+    paintMeter(mEl, samplePeak(t.meterAnalyser));
   }
-  requestAnimationFrame(meterTick);
 }
 
 function init() {
@@ -8968,6 +9012,19 @@ function init() {
   // resumes it inside the user gesture.
   state.audioCtx = new AudioContext({ latencyHint: "interactive" });
   Tone.setContext(state.audioCtx);
+  // Widen the transport's scheduler lookahead. Tone's clock ticks on the main
+  // thread; when that thread stalls (layout, GC, a heavy pattern switch — all
+  // worse on mobile), callbacks fire late and every note they schedule gets
+  // clamped to "now" by the Math.max guard in the transport loop. That clamp
+  // both drags the groove off the grid ("falls out of time") and piles the
+  // delayed hits onto one instant (amplitude spike → clipping). A larger
+  // lookahead schedules events far enough ahead that a brief stall is absorbed
+  // before it can reach the audio clock. Latency is irrelevant for pattern
+  // playback, so we can afford a generous window — more so on mobile.
+  try {
+    const ctxWrap = Tone.getContext();
+    ctxWrap.lookAhead = isMobileDevice() ? 0.25 : 0.15;
+  } catch (e) { console.warn("lookAhead tune failed", e); }
   initSilentAudioLoop();
   rebuildEngineCatalog();
   requestAnimationFrame(meterTick);
