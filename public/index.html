@@ -398,7 +398,7 @@
        side switch is on silent) to "playback" mode, which routes AudioContext
        output through the regular media volume and ignores the ringer switch.
        The element loops a 1-second silent WAV generated at runtime (see
-       initSilentAudioLoop in app.js) — looping keeps the audio session
+       initSilentAudioLoop in js/main.js) — looping keeps the audio session
        continuously active, which prevents iOS from quietly deactivating the
        renderer between the unlock tap and the first transport hit. Without an
        active session, ctx.state reads "running" but no samples are emitted
@@ -406,6 +406,6 @@
   <audio id="ios-audio-unlock" playsinline preload="auto" loop></audio>
   <script src="https://cdn.jsdelivr.net/npm/tone@15.0.4/build/Tone.js"></script>
   <script src="/woscillators.js"></script>
-  <script type="module" src="/app.js"></script>
+  <script type="module" src="/js/main.js"></script>
 </body>
 </html>

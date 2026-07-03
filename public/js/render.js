@@ -1,0 +1,924 @@
+import { AUTOMATION_KEYS, AUTOMATION_TARGETS, canAutomate } from "./automation.js";
+import { engineByKey, populateEngineSelect, savePatch } from "./catalog.js";
+import { LFO_KEYS, lfoLabel, rateToSlider, sliderToRate } from "./constants.js";
+import { showInputDialog, showSavedPatchPicker } from "./dialogs.js";
+import { setStatus } from "./dom.js";
+import { randomizeMelody, randomizeTimbre } from "./generate.js";
+import { ICON_DICE, ICON_LOAD, ICON_SAVE } from "./icons.js";
+import { canModulate, rateFromSync, syncLFO } from "./lfo.js";
+import { pickAudioFileForTrack } from "./main.js";
+import { patternMeter, redetectDrumKit, stepsPerBarForMeter } from "./meter.js";
+import { setEngineKey, setParam, updatePlaitsControlsVisibility } from "./params.js";
+import { bestRollViewOct } from "./pianoRoll.js";
+import { applyCompressorConfig, setEQ, setFilter } from "./signal.js";
+import { state } from "./state.js";
+import { openAutAsModal, openCompAsModal, openEnvAsModal, openEqAsModal, openFilterAsModal, openFxAsModal, openModAsModal, openRollAsModal, openTrackMenu } from "./stepEditor.js";
+import { attachGridInteraction, renderStepGrid } from "./stepGrid.js";
+import { duplicateTrack, extendPatternByDuplicate, removeTrack, resizePattern, resizeTrack, shiftTrackOctave, truncatePattern } from "./track.js";
+
+
+/** @typedef {import("./types.js").Track} Track */
+/**
+ * Build (or rebuild) a track's full DOM: head controls, synth row, step
+ * grid, and the collapsible filter/env/fx/eq/comp/mod panels.
+ * @param {Track} t
+ */
+export function renderTrack(t) {
+  const tpl = document.getElementById("track-template");
+  const node = tpl.content.firstElementChild.cloneNode(true);
+  t.el = node;
+  node.dataset.trackId = String(t.id);
+
+  const engineSel = node.querySelector(".track-engine");
+  populateEngineSelect(engineSel);
+  engineSel.value = t.engineKey;
+
+  node.querySelector(".track-name").value = t.name;
+  node.querySelector(".track-len").value = t.length;
+  node.querySelector(".p-vol").value = t.params.vol;
+  node.querySelector(".p-harm").value = t.params.harm;
+  node.querySelector(".p-timb").value = t.params.timb;
+  node.querySelector(".p-morph").value = t.params.morph;
+  node.querySelector(".p-decay").value = t.params.decay;
+  for (const k of ["osc1", "osc2", "osc3", "osc4", "ultra", "fm", "metal",
+                   "osc1range", "osc2range", "osc3range",
+                   "osc1wave",  "osc2wave",  "osc3wave",
+                   "osc2freq",  "osc3freq",  "noise", "noisetype"]) {
+    const el = node.querySelector(`.p-${k}`);
+    if (el && t.params[k] != null) el.value = t.params[k];
+  }
+  node.querySelector(".p-cutoff").value = t.filter.cutoff;
+  node.querySelector(".p-reson").value  = t.filter.reson;
+  node.querySelector(".p-envamt").value = t.filter.env;
+  node.querySelector(".p-envatk").value = t.filter.attack;
+  node.querySelector(".p-envrel").value = t.filter.release;
+
+  node.querySelector(".track-name").addEventListener("input", e => {
+    t.name = e.target.value;
+    redetectDrumKit(t);
+  });
+  node.querySelector(".track-len").addEventListener("change", e => {
+    const n = Math.max(1, Math.min(128, Number(e.target.value) || 1));
+    resizeTrack(t, n);
+  });
+  engineSel.addEventListener("change", e => {
+    const val = e.target.value;
+    if (val === "upload") {
+      // intercept — open file picker; only commit the engine change if a file is chosen
+      const prev = t.engineKey;
+      pickAudioFileForTrack(t).then(ok => {
+        if (!ok) engineSel.value = prev;
+      });
+      return;
+    }
+    setEngineKey(t, val);
+  });
+
+  node.querySelector(".p-vol").addEventListener("input", e => setParam(t, "vol", Number(e.target.value)));
+  node.querySelector(".p-harm").addEventListener("input", e => setParam(t, "harm", Number(e.target.value)));
+  node.querySelector(".p-timb").addEventListener("input", e => setParam(t, "timb", Number(e.target.value)));
+  node.querySelector(".p-morph").addEventListener("input", e => setParam(t, "morph", Number(e.target.value)));
+  node.querySelector(".p-decay").addEventListener("input", e => setParam(t, "decay", Number(e.target.value)));
+  for (const k of ["osc1", "osc2", "osc3", "osc4", "ultra", "fm", "metal",
+                   "osc2freq", "osc3freq", "noise"]) {
+    const el = node.querySelector(`.p-${k}`);
+    if (el) el.addEventListener("input", e => setParam(t, k, Number(e.target.value)));
+  }
+  for (const k of ["osc1range", "osc2range", "osc3range"]) {
+    const el = node.querySelector(`.p-${k}`);
+    if (el) el.addEventListener("change", e => setParam(t, k, Number(e.target.value)));
+  }
+  for (const k of ["osc1wave", "osc2wave", "osc3wave", "noisetype"]) {
+    const el = node.querySelector(`.p-${k}`);
+    if (el) el.addEventListener("change", e => setParam(t, k, e.target.value));
+  }
+  node.querySelector(".p-cutoff").addEventListener("input", e => setFilter(t, "cutoff", Number(e.target.value)));
+  node.querySelector(".p-reson").addEventListener("input",  e => setFilter(t, "reson",  Number(e.target.value)));
+  node.querySelector(".p-envamt").addEventListener("input", e => setFilter(t, "env",     Number(e.target.value)));
+  node.querySelector(".p-envatk").addEventListener("input", e => setFilter(t, "attack",  Number(e.target.value)));
+  node.querySelector(".p-envrel").addEventListener("input", e => setFilter(t, "release", Number(e.target.value)));
+
+  node.querySelector(".track-rand").addEventListener("click", () => randomizeTimbre(t));
+
+  const saveBtn = node.querySelector(".track-save");
+  saveBtn.innerHTML = ICON_SAVE;
+  const refreshSaveEnabled = () => {
+    saveBtn.disabled = !t.customConfig || (t.engineKey !== "custom" && !t.engineKey.startsWith("saved:"));
+  };
+  refreshSaveEnabled();
+  saveBtn.addEventListener("click", async () => {
+    if (!t.customConfig) return;
+    const suggested = t.soundPromptText ? t.soundPromptText.split(/[.,;]/)[0].slice(0, 40) : t.name;
+    const name = await showInputDialog({
+      title: "save patch as",
+      defaultValue: suggested,
+      placeholder: "my-patch-name",
+    });
+    if (!name || !name.trim()) return;
+    savePatch(name.trim(), t.customConfig);
+    setStatus(`saved patch "${name.trim()}"`);
+  });
+
+  const loadPatchBtn = node.querySelector(".track-load-patch");
+  if (loadPatchBtn) {
+    loadPatchBtn.innerHTML = ICON_LOAD;
+    loadPatchBtn.addEventListener("click", async () => {
+      const name = await showSavedPatchPicker();
+      if (!name) return;
+      setEngineKey(t, `saved:${name}`);
+      if (node.querySelector(".track-engine")) node.querySelector(".track-engine").value = `saved:${name}`;
+      setStatus(`loaded patch "${name}"`);
+    });
+  }
+  // glide + swing are wired in renderModPanel (they live in the mod panel row now).
+  const speedSel = node.querySelector(".track-speed");
+  if (speedSel) {
+    speedSel.value = String(t.speed ?? 1);
+    speedSel.addEventListener("change", e => {
+      t.speed = Number(e.target.value) || 1;
+      t.speedAccum = 0;
+    });
+  }
+  // density slider is rendered inside the mod panel alongside glide + swing
+
+  const octDownBtn = node.querySelector(".track-oct-down");
+  const octUpBtn   = node.querySelector(".track-oct-up");
+  if (octDownBtn) octDownBtn.addEventListener("click", () => shiftTrackOctave(t, -12));
+  if (octUpBtn)   octUpBtn.addEventListener("click",   () => shiftTrackOctave(t, +12));
+  const semiDownBtn = node.querySelector(".track-semi-down");
+  const semiUpBtn   = node.querySelector(".track-semi-up");
+  if (semiDownBtn) semiDownBtn.addEventListener("click", () => shiftTrackOctave(t, -1));
+  if (semiUpBtn)   semiUpBtn.addEventListener("click",   () => shiftTrackOctave(t, +1));
+
+  node.querySelector(".track-len-plus1")?.addEventListener("click", () => {
+    const spb = stepsPerBarForMeter(patternMeter(state.activePattern));
+    resizePattern(t, state.activePattern, t.length + spb);
+  });
+  node.querySelector(".track-len-2x")?.addEventListener("click", () => {
+    extendPatternByDuplicate(t, state.activePattern, t.length * 2);
+  });
+  node.querySelector(".track-len-4x")?.addEventListener("click", () => {
+    extendPatternByDuplicate(t, state.activePattern, t.length * 4);
+  });
+  node.querySelector(".track-len-half")?.addEventListener("click", () => {
+    truncatePattern(t, state.activePattern, Math.max(1, Math.floor(t.length / 2)));
+  });
+  node.querySelector(".track-len-quarter")?.addEventListener("click", () => {
+    truncatePattern(t, state.activePattern, Math.max(1, Math.floor(t.length / 4)));
+  });
+
+  const soloBtn = node.querySelector(".track-solo");
+  soloBtn.addEventListener("click", () => {
+    t.soloed = !t.soloed;
+    soloBtn.setAttribute("aria-pressed", String(t.soloed));
+    node.classList.toggle("soloed", t.soloed);
+  });
+
+  const noteModeBtn = node.querySelector(".track-note-mode");
+  const refreshNoteModeBtn = () => {
+    const isGate = (t.noteMode ?? "gate") === "gate";
+    noteModeBtn.textContent = isGate ? "gate" : "trig";
+    noteModeBtn.setAttribute("aria-pressed", String(isGate));
+  };
+  refreshNoteModeBtn();
+  noteModeBtn.addEventListener("click", () => {
+    t.noteMode = ((t.noteMode ?? "gate") === "gate") ? "trigger" : "gate";
+    refreshNoteModeBtn();
+  });
+
+  engineSel.addEventListener("change", () => refreshSaveEnabled());
+  // also update save button when customConfig is assigned later — keep a ref on track
+  t._refreshSaveEnabled = refreshSaveEnabled;
+
+  const panelModals = [
+    { btnSel: ".track-mod",    modalKey: "_modModal" },
+    { btnSel: ".track-aut",    modalKey: "_autModal" },
+    { btnSel: ".track-roll",   modalKey: "_rollModal" },
+    { btnSel: ".track-filter", modalKey: "_filterModal" },
+    { btnSel: ".track-env",    modalKey: "_envModal" },
+    { btnSel: ".track-fx",     modalKey: "_fxModal" },
+    { btnSel: ".track-eq",     modalKey: "_eqModal" },
+    { btnSel: ".track-comp",   modalKey: "_compModal" },
+  ];
+  function closeOtherPanels(keepBtnSel) {
+    for (const p of panelModals) {
+      if (p.btnSel === keepBtnSel) continue;
+      if (t[p.modalKey]) t[p.modalKey].close();
+    }
+  }
+
+  // Stash stable refs to every collapsible panel — once opened as a modal the
+  // panel is reparented out of the track, so t.el.querySelector(...) would
+  // miss it. All panels open as a centered modal overlay.
+  t._modPanelEl    = node.querySelector(".track-mod-panel");
+  t._autPanelEl    = node.querySelector(".track-aut-panel");
+  t._rollPanelEl   = node.querySelector(".track-roll-panel");
+  t._filterPanelEl = node.querySelector(".track-filter-panel");
+  t._envPanelEl    = node.querySelector(".track-env-panel");
+  t._fxPanelEl     = node.querySelector(".track-fx-panel");
+  t._eqPanelEl     = node.querySelector(".track-eq-panel");
+  t._compPanelEl   = node.querySelector(".track-comp-panel");
+  t._modModal    = null;
+  t._autModal    = null;
+  t._rollModal   = null;
+  t._filterModal = null;
+  t._envModal    = null;
+  t._fxModal     = null;
+  t._eqModal     = null;
+  t._compModal   = null;
+
+  // Same idea for the synth-row sub-groups — they're reparented into the
+  // track-menu-modal on mobile, so updatePlaitsControlsVisibility queries
+  // these stashed refs instead of t.el.querySelector.
+  t._timbreGroupEl  = node.querySelector(".timbre-group");
+  t._oscMixGroupEl  = node.querySelector(".osc-mix-group");
+  t._oscModGroupEl  = node.querySelector(".osc-mod-group");
+  t._moogOscGroupEl = node.querySelector(".moog-osc-group");
+
+  renderModPanel(t, t._modPanelEl);
+  wireFxPanel(t, t._fxPanelEl);
+  const eqPanel = t._eqPanelEl;
+  eqPanel.querySelector(".p-eq-low").value  = t.eq.low;
+  eqPanel.querySelector(".p-eq-mid").value  = t.eq.mid;
+  eqPanel.querySelector(".p-eq-high").value = t.eq.high;
+  eqPanel.querySelector(".p-eq-low").addEventListener("input",  e => setEQ(t, "low",  Number(e.target.value)));
+  eqPanel.querySelector(".p-eq-mid").addEventListener("input",  e => setEQ(t, "mid",  Number(e.target.value)));
+  eqPanel.querySelector(".p-eq-high").addEventListener("input", e => setEQ(t, "high", Number(e.target.value)));
+
+  const bindModalOpen = (btnSel, openFn, modalKey, beforeOpen) => {
+    const btn = node.querySelector(btnSel);
+    btn.addEventListener("click", () => {
+      if (t[modalKey]) { t[modalKey].close(); return; }
+      closeOtherPanels(btnSel);
+      if (beforeOpen) beforeOpen();
+      openFn(t);
+      btn.setAttribute("aria-pressed", "true");
+    });
+  };
+  bindModalOpen(".track-mod",    openModAsModal,    "_modModal");
+  bindModalOpen(".track-aut",    openAutAsModal,    "_autModal");
+  bindModalOpen(".track-roll",   openRollAsModal,   "_rollModal", () => {
+    if (t.steps.some(s => s)) t.rollViewOct = bestRollViewOct(t);
+  });
+  bindModalOpen(".track-filter", openFilterAsModal, "_filterModal");
+  bindModalOpen(".track-env",    openEnvAsModal,    "_envModal");
+  bindModalOpen(".track-fx",     openFxAsModal,     "_fxModal");
+  bindModalOpen(".track-eq",     openEqAsModal,     "_eqModal");
+  bindModalOpen(".track-comp",   openCompAsModal,   "_compModal");
+  wireCompPanel(t, t._compPanelEl);
+
+  node.querySelector(".track-mute").addEventListener("click", () => {
+    t.muted = !t.muted;
+    node.classList.toggle("muted", t.muted);
+  });
+  node.querySelector(".track-clear").addEventListener("click", () => {
+    t.steps.fill(0);
+    t.lengths.fill(0);
+    t.notes.fill(null);
+    t.velocities.fill(0.5);
+    t.chords.fill("");
+    renderStepGrid(t);
+  });
+  const diceBtn = node.querySelector(".track-dice");
+  if (diceBtn) {
+    diceBtn.innerHTML = ICON_DICE;
+    diceBtn.addEventListener("click", () => randomizeMelody(t));
+  }
+  node.querySelector(".track-remove").addEventListener("click", () => removeTrack(t));
+  const dupBtn = node.querySelector(".track-dup");
+  if (dupBtn) dupBtn.addEventListener("click", () => duplicateTrack(t));
+
+  // mobile: "more" toggle button opens a modal hosting the hidden track-head
+  // extras (save/load patch, len-extend, oct/semi, synth params, dup, remove).
+  const moreBtn = document.createElement("button");
+  moreBtn.type = "button";
+  moreBtn.className = "track-more ghost mobile-only";
+  moreBtn.setAttribute("aria-pressed", "false");
+  moreBtn.setAttribute("aria-label", "show more track controls");
+  moreBtn.title = "more";
+  moreBtn.textContent = "…";
+  moreBtn.addEventListener("click", () => {
+    if (t._trackMenuModal) { t._trackMenuModal.close(); return; }
+    openTrackMenu(t);
+  });
+  const panelGrp = node.querySelector(".panel-btn-group");
+  if (panelGrp) panelGrp.before(moreBtn);
+  t._trackMoreBtn = moreBtn;
+  t._trackMenuModal = null;
+
+  // midi-specific controls
+  const midiSel = node.querySelector(".midi-out");
+  const midiCh = node.querySelector(".midi-ch");
+  midiSel.addEventListener("change", () => {
+    t.midi.outputId = midiSel.value;
+    if (t.voice?.type === "midi") {
+      const out = state.midi?.outputs.get(midiSel.value) || null;
+      t.voice.setOutput(out);
+    }
+  });
+  midiCh.addEventListener("change", () => {
+    const ch = Math.max(1, Math.min(16, Number(midiCh.value) || 1));
+    midiCh.value = ch;
+    t.midi.channel = ch;
+    if (t.voice?.type === "midi") t.voice.setChannel(ch);
+  });
+
+  attachGridInteraction(t, node.querySelector(".steps"));
+  renderStepGrid(t);
+  document.getElementById("tracks").appendChild(node);
+  updateMidiUI(t);
+  updatePlaitsControlsVisibility(t);
+}
+
+export function updateMidiUI(t) {
+  const row = t.el?.querySelector(".track-midi");
+  if (!row) return;
+  const isMidi = engineByKey(t.engineKey)?.type === "midi";
+  row.hidden = !isMidi;
+  if (!isMidi) return;
+  const sel = row.querySelector(".midi-out");
+  const cur = t.midi.outputId || "";
+  sel.replaceChildren();
+  const none = document.createElement("option");
+  none.value = ""; none.textContent = "— no device —";
+  sel.appendChild(none);
+  if (state.midi) {
+    for (const [id, out] of state.midi.outputs) {
+      const opt = document.createElement("option");
+      opt.value = id; opt.textContent = out.name || id;
+      sel.appendChild(opt);
+    }
+  }
+  sel.value = cur;
+  row.querySelector(".midi-ch").value = t.midi.channel;
+}
+
+export function wireCompPanel(t, panel) {
+  const q = s => panel.querySelector(s);
+  const en = q(".comp-enabled");
+  const src = q(".comp-source");
+  const thr = q(".comp-threshold");
+  const ratio = q(".comp-ratio");
+  const atk = q(".comp-attack");
+  const rel = q(".comp-release");
+  const knee = q(".comp-knee");
+  en.checked = !!t.comp.enabled;
+  thr.value = t.comp.threshold;
+  ratio.value = t.comp.ratio;
+  atk.value = t.comp.attack;
+  rel.value = t.comp.release;
+  knee.value = t.comp.knee;
+  const apply = () => {
+    t.comp.enabled   = en.checked;
+    t.comp.source    = src.value || "self";
+    t.comp.threshold = Number(thr.value);
+    t.comp.ratio     = Number(ratio.value);
+    t.comp.attack    = Number(atk.value);
+    t.comp.release   = Number(rel.value);
+    t.comp.knee      = Number(knee.value);
+    applyCompressorConfig(t);
+  };
+  en.addEventListener("change", apply);
+  src.addEventListener("change", apply);
+  for (const c of [thr, ratio, atk, rel, knee]) c.addEventListener("input", apply);
+}
+
+export function applyFxToTrack(t, fx) {
+  if (!fx || typeof fx !== "object") return;
+  const cfg = t.fxConfig;
+  if (!cfg.vinyl)      cfg.vinyl      = { amount: 0, warmth: 0.4, wow: 0.3 };
+  if (!cfg.cassette)   cfg.cassette   = { amount: 0, flutter: 0.3, sat: 0.4 };
+  if (!cfg.chorus)     cfg.chorus     = { wet: 0, rate: 0.5, depth: 0.5 };
+  if (!cfg.ringmod)    cfg.ringmod    = { wet: 0, freq: 0.35 };
+  if (!cfg.autowah)    cfg.autowah    = { wet: 0, sens: 0.5, range: 0.5 };
+  if (!cfg.phaser)     cfg.phaser     = { wet: 0, rate: 0.3, depth: 0.5 };
+  if (!cfg.flanger)    cfg.flanger    = { wet: 0, rate: 0.3, fbk: 0.5 };
+  if (!cfg.pitchshift) cfg.pitchshift = { wet: 0, semitones: 0 };
+  const readUnit = (group, keys) => {
+    if (!fx[group] || typeof fx[group] !== "object") return;
+    for (const k of keys) {
+      const v = Number(fx[group][k]);
+      if (Number.isFinite(v)) cfg[group][k] = Math.max(0, Math.min(1, v));
+    }
+  };
+  readUnit("vinyl",    ["amount","warmth","wow"]);
+  readUnit("cassette", ["amount","flutter","sat"]);
+  readUnit("fuzz",     ["amount","drive","tone","level"]);
+  readUnit("ringmod",  ["wet","freq"]);
+  readUnit("autowah",  ["wet","sens","range"]);
+  readUnit("chorus",   ["wet","rate","depth"]);
+  readUnit("phaser",   ["wet","rate","depth"]);
+  readUnit("flanger",  ["wet","rate","fbk"]);
+  if (fx.pitchshift && typeof fx.pitchshift === "object") {
+    const w = Number(fx.pitchshift.wet);       if (Number.isFinite(w)) cfg.pitchshift.wet       = Math.max(0, Math.min(1, w));
+    const s = Number(fx.pitchshift.semitones); if (Number.isFinite(s)) cfg.pitchshift.semitones = Math.max(-24, Math.min(24, Math.round(s)));
+  }
+  if (fx.delay && typeof fx.delay === "object") {
+    if (typeof fx.delay.sync === "boolean") cfg.delay.sync = fx.delay.sync;
+    const div = Number(fx.delay.div);  if (Number.isFinite(div)) cfg.delay.div  = div;
+    const time = Number(fx.delay.time);if (Number.isFinite(time)) cfg.delay.time = Math.max(0.02, Math.min(2, time));
+    const fbk = Number(fx.delay.fbk);  if (Number.isFinite(fbk))  cfg.delay.fbk  = Math.max(0, Math.min(0.95, fbk));
+    const wet = Number(fx.delay.wet);  if (Number.isFinite(wet))  cfg.delay.wet  = Math.max(0, Math.min(1, wet));
+  }
+  if (fx.reverb && typeof fx.reverb === "object") {
+    const decay = Number(fx.reverb.decay); if (Number.isFinite(decay)) cfg.reverb.decay = Math.max(0.2, Math.min(10, decay));
+    const wet   = Number(fx.reverb.wet);   if (Number.isFinite(wet))   cfg.reverb.wet   = Math.max(0, Math.min(1, wet));
+  }
+  if (fx.crush && typeof fx.crush === "object") {
+    if (!cfg.crush) cfg.crush = { bits: 8, wet: 0 };
+    const bits = Number(fx.crush.bits); if (Number.isFinite(bits)) cfg.crush.bits = Math.max(1, Math.min(16, Math.round(bits)));
+    const wet  = Number(fx.crush.wet);  if (Number.isFinite(wet))  cfg.crush.wet  = Math.max(0, Math.min(1, wet));
+  }
+  if (t.fxRack) {
+    t.fxRack.applyVinyl(cfg.vinyl);
+    t.fxRack.applyCassette(cfg.cassette);
+    t.fxRack.applyFuzz(cfg.fuzz);
+    t.fxRack.applyRingMod(cfg.ringmod);
+    t.fxRack.applyWaveShaper(cfg.shaper || { wet: 0, amount: 0.5 });
+    t.fxRack.applyCrush(cfg.crush || { bits: 8, wet: 0 });
+    t.fxRack.applyAutoWah(cfg.autowah);
+    t.fxRack.applyChorus(cfg.chorus);
+    t.fxRack.applyPhaser(cfg.phaser);
+    t.fxRack.applyFlanger(cfg.flanger);
+    t.fxRack.applyPitchShift(cfg.pitchshift);
+    t.fxRack.applyDelay(cfg.delay);
+    t.fxRack.applyReverb(cfg.reverb);
+  }
+  refreshFxPanelUI(t);
+}
+
+export function refreshFxPanelUI(t) {
+  if (!t.el) return;
+  const panel = t._fxPanelEl || t.el.querySelector(".track-fx-panel");
+  if (!panel) return;
+  const cfg = t.fxConfig;
+  if (!cfg.vinyl)      cfg.vinyl      = { amount: 0, warmth: 0.4, wow: 0.3 };
+  if (!cfg.cassette)   cfg.cassette   = { amount: 0, flutter: 0.3, sat: 0.4 };
+  if (!cfg.chorus)     cfg.chorus     = { wet: 0, rate: 0.5, depth: 0.5 };
+  if (!cfg.ringmod)    cfg.ringmod    = { wet: 0, freq: 0.35 };
+  if (!cfg.autowah)    cfg.autowah    = { wet: 0, sens: 0.5, range: 0.5 };
+  if (!cfg.phaser)     cfg.phaser     = { wet: 0, rate: 0.3, depth: 0.5 };
+  if (!cfg.flanger)    cfg.flanger    = { wet: 0, rate: 0.3, fbk: 0.5 };
+  if (!cfg.pitchshift) cfg.pitchshift = { wet: 0, semitones: 0 };
+  if (!cfg.shaper)     cfg.shaper     = { wet: 0, preamp: 0.5, amount: 0.5, mode: "fold" };
+  if (!cfg.shaper.mode) cfg.shaper.mode = "fold";
+  if (cfg.shaper.preamp == null) cfg.shaper.preamp = 0.5;
+  const q = s => panel.querySelector(s);
+  const set = (sel, v) => { const el = q(sel); if (el != null && v != null) el.value = v; };
+  set(".fx-vinyl-amount",    cfg.vinyl.amount);
+  set(".fx-vinyl-warmth",    cfg.vinyl.warmth);
+  set(".fx-vinyl-wow",       cfg.vinyl.wow);
+  set(".fx-cassette-amount", cfg.cassette.amount);
+  set(".fx-cassette-flutter",cfg.cassette.flutter);
+  set(".fx-cassette-sat",    cfg.cassette.sat);
+  q(".fx-fuzz-amount").value = cfg.fuzz.amount;
+  q(".fx-fuzz-drive").value  = cfg.fuzz.drive;
+  q(".fx-fuzz-tone").value   = cfg.fuzz.tone;
+  q(".fx-fuzz-level").value  = cfg.fuzz.level;
+  set(".fx-ringmod-wet",      cfg.ringmod.wet);
+  set(".fx-ringmod-freq",     cfg.ringmod.freq);
+  set(".fx-shaper-wet",       cfg.shaper.wet);
+  set(".fx-shaper-preamp",    cfg.shaper.preamp);
+  set(".fx-shaper-amt",       cfg.shaper.amount);
+  set(".fx-shaper-mode",      cfg.shaper.mode);
+  set(".fx-autowah-wet",      cfg.autowah.wet);
+  set(".fx-autowah-sens",     cfg.autowah.sens);
+  set(".fx-autowah-range",    cfg.autowah.range);
+  set(".fx-chorus-wet",       cfg.chorus.wet);
+  set(".fx-chorus-rate",      cfg.chorus.rate);
+  set(".fx-chorus-depth",     cfg.chorus.depth);
+  set(".fx-phaser-wet",       cfg.phaser.wet);
+  set(".fx-phaser-rate",      cfg.phaser.rate);
+  set(".fx-phaser-depth",     cfg.phaser.depth);
+  set(".fx-flanger-wet",      cfg.flanger.wet);
+  set(".fx-flanger-rate",     cfg.flanger.rate);
+  set(".fx-flanger-fbk",      cfg.flanger.fbk);
+  set(".fx-pitchshift-wet",   cfg.pitchshift.wet);
+  set(".fx-pitchshift-semi",  cfg.pitchshift.semitones);
+  q(".fx-delay-time").value  = cfg.delay.time;
+  q(".fx-delay-fbk").value   = cfg.delay.fbk;
+  q(".fx-delay-wet").value   = cfg.delay.wet;
+  q(".fx-delay-sync").checked = !!cfg.delay.sync;
+  q(".fx-delay-div").value   = String(cfg.delay.div);
+  q(".fx-reverb-decay").value = cfg.reverb.decay;
+  q(".fx-reverb-wet").value   = cfg.reverb.wet;
+  if (cfg.crush) {
+    const b = q(".fx-crush-bits"); if (b) b.value = cfg.crush.bits;
+    const w = q(".fx-crush-wet");  if (w) w.value = cfg.crush.wet;
+  }
+}
+
+export function wireFxPanel(t, panel) {
+  const q = (sel) => panel.querySelector(sel);
+  const fc = t.fxConfig;
+  if (!fc.crush)      fc.crush      = { bits: 8, wet: 0 };
+  if (!fc.vinyl)      fc.vinyl      = { amount: 0, warmth: 0.4, wow: 0.3 };
+  if (!fc.cassette)   fc.cassette   = { amount: 0, flutter: 0.3, sat: 0.4 };
+  if (!fc.chorus)     fc.chorus     = { wet: 0, rate: 0.5, depth: 0.5 };
+  if (!fc.ringmod)    fc.ringmod    = { wet: 0, freq: 0.35 };
+  if (!fc.autowah)    fc.autowah    = { wet: 0, sens: 0.5, range: 0.5 };
+  if (!fc.phaser)     fc.phaser     = { wet: 0, rate: 0.3, depth: 0.5 };
+  if (!fc.flanger)    fc.flanger    = { wet: 0, rate: 0.3, fbk: 0.5 };
+  if (!fc.pitchshift) fc.pitchshift = { wet: 0, semitones: 0 };
+  if (!fc.shaper)     fc.shaper     = { wet: 0, preamp: 0.5, amount: 0.5, mode: "fold" };
+  if (!fc.shaper.mode) fc.shaper.mode = "fold";
+  if (fc.shaper.preamp == null) fc.shaper.preamp = 0.5;
+  const set = (sel, v) => { const el = q(sel); if (el != null && v != null) el.value = v; };
+  set(".fx-vinyl-amount",    fc.vinyl.amount);
+  set(".fx-vinyl-warmth",    fc.vinyl.warmth);
+  set(".fx-vinyl-wow",       fc.vinyl.wow);
+  set(".fx-cassette-amount", fc.cassette.amount);
+  set(".fx-cassette-flutter",fc.cassette.flutter);
+  set(".fx-cassette-sat",    fc.cassette.sat);
+  q(".fx-fuzz-amount").value = fc.fuzz.amount;
+  q(".fx-fuzz-drive").value  = fc.fuzz.drive;
+  q(".fx-fuzz-tone").value   = fc.fuzz.tone;
+  q(".fx-fuzz-level").value  = fc.fuzz.level;
+  set(".fx-ringmod-wet",      fc.ringmod.wet);
+  set(".fx-ringmod-freq",     fc.ringmod.freq);
+  set(".fx-shaper-wet",       fc.shaper.wet);
+  set(".fx-shaper-preamp",    fc.shaper.preamp);
+  set(".fx-shaper-amt",       fc.shaper.amount);
+  set(".fx-shaper-mode",      fc.shaper.mode);
+  set(".fx-autowah-wet",      fc.autowah.wet);
+  set(".fx-autowah-sens",     fc.autowah.sens);
+  set(".fx-autowah-range",    fc.autowah.range);
+  set(".fx-chorus-wet",       fc.chorus.wet);
+  set(".fx-chorus-rate",      fc.chorus.rate);
+  set(".fx-chorus-depth",     fc.chorus.depth);
+  set(".fx-phaser-wet",       fc.phaser.wet);
+  set(".fx-phaser-rate",      fc.phaser.rate);
+  set(".fx-phaser-depth",     fc.phaser.depth);
+  set(".fx-flanger-wet",      fc.flanger.wet);
+  set(".fx-flanger-rate",     fc.flanger.rate);
+  set(".fx-flanger-fbk",      fc.flanger.fbk);
+  set(".fx-pitchshift-wet",   fc.pitchshift.wet);
+  set(".fx-pitchshift-semi",  fc.pitchshift.semitones);
+  q(".fx-delay-time").value  = fc.delay.time;
+  q(".fx-delay-fbk").value   = fc.delay.fbk;
+  q(".fx-delay-wet").value   = fc.delay.wet;
+  q(".fx-delay-sync").checked = !!fc.delay.sync;
+  q(".fx-delay-div").value   = String(fc.delay.div);
+  q(".fx-reverb-decay").value = fc.reverb.decay;
+  q(".fx-reverb-wet").value   = fc.reverb.wet;
+  { const b = q(".fx-crush-bits"); if (b) b.value = fc.crush.bits; }
+  { const w = q(".fx-crush-wet");  if (w) w.value = fc.crush.wet; }
+
+  const applyVinyl = () => {
+    fc.vinyl.amount = Number(q(".fx-vinyl-amount").value);
+    fc.vinyl.warmth = Number(q(".fx-vinyl-warmth").value);
+    fc.vinyl.wow    = Number(q(".fx-vinyl-wow").value);
+    t.fxRack?.applyVinyl(fc.vinyl);
+  };
+  const applyCassette = () => {
+    fc.cassette.amount  = Number(q(".fx-cassette-amount").value);
+    fc.cassette.flutter = Number(q(".fx-cassette-flutter").value);
+    fc.cassette.sat     = Number(q(".fx-cassette-sat").value);
+    t.fxRack?.applyCassette(fc.cassette);
+  };
+  const applyFuzz = () => {
+    fc.fuzz.amount = Number(q(".fx-fuzz-amount").value);
+    fc.fuzz.drive  = Number(q(".fx-fuzz-drive").value);
+    fc.fuzz.tone   = Number(q(".fx-fuzz-tone").value);
+    fc.fuzz.level  = Number(q(".fx-fuzz-level").value);
+    t.fxRack?.applyFuzz(fc.fuzz);
+  };
+  const applyRingMod = () => {
+    fc.ringmod.wet  = Number(q(".fx-ringmod-wet").value);
+    fc.ringmod.freq = Number(q(".fx-ringmod-freq").value);
+    t.fxRack?.applyRingMod(fc.ringmod);
+  };
+  const applyWaveShaper = () => {
+    fc.shaper.wet    = Number(q(".fx-shaper-wet").value);
+    fc.shaper.preamp = Number(q(".fx-shaper-preamp").value);
+    fc.shaper.amount = Number(q(".fx-shaper-amt").value);
+    const ms = q(".fx-shaper-mode");
+    if (ms) fc.shaper.mode = ms.value;
+    t.fxRack?.applyWaveShaper(fc.shaper);
+  };
+  const applyAutoWah = () => {
+    fc.autowah.wet   = Number(q(".fx-autowah-wet").value);
+    fc.autowah.sens  = Number(q(".fx-autowah-sens").value);
+    fc.autowah.range = Number(q(".fx-autowah-range").value);
+    t.fxRack?.applyAutoWah(fc.autowah);
+  };
+  const applyChorus = () => {
+    fc.chorus.wet   = Number(q(".fx-chorus-wet").value);
+    fc.chorus.rate  = Number(q(".fx-chorus-rate").value);
+    fc.chorus.depth = Number(q(".fx-chorus-depth").value);
+    t.fxRack?.applyChorus(fc.chorus);
+  };
+  const applyPhaser = () => {
+    fc.phaser.wet   = Number(q(".fx-phaser-wet").value);
+    fc.phaser.rate  = Number(q(".fx-phaser-rate").value);
+    fc.phaser.depth = Number(q(".fx-phaser-depth").value);
+    t.fxRack?.applyPhaser(fc.phaser);
+  };
+  const applyFlanger = () => {
+    fc.flanger.wet  = Number(q(".fx-flanger-wet").value);
+    fc.flanger.rate = Number(q(".fx-flanger-rate").value);
+    fc.flanger.fbk  = Number(q(".fx-flanger-fbk").value);
+    t.fxRack?.applyFlanger(fc.flanger);
+  };
+  const applyPitchShift = () => {
+    fc.pitchshift.wet       = Number(q(".fx-pitchshift-wet").value);
+    fc.pitchshift.semitones = Number(q(".fx-pitchshift-semi").value);
+    t.fxRack?.applyPitchShift(fc.pitchshift);
+  };
+  const applyDelay = () => {
+    fc.delay.time = Number(q(".fx-delay-time").value);
+    fc.delay.fbk  = Number(q(".fx-delay-fbk").value);
+    fc.delay.wet  = Number(q(".fx-delay-wet").value);
+    fc.delay.sync = !!q(".fx-delay-sync").checked;
+    fc.delay.div  = Number(q(".fx-delay-div").value);
+    t.fxRack?.applyDelay(fc.delay);
+  };
+  const applyReverb = () => {
+    fc.reverb.decay = Number(q(".fx-reverb-decay").value);
+    fc.reverb.wet   = Number(q(".fx-reverb-wet").value);
+    t.fxRack?.applyReverb(fc.reverb);
+  };
+
+  const applyCrush = () => {
+    const b = q(".fx-crush-bits"); const w = q(".fx-crush-wet");
+    if (b) fc.crush.bits = Number(b.value);
+    if (w) fc.crush.wet  = Number(w.value);
+    t.fxRack?.applyCrush(fc.crush);
+  };
+
+  ["amount","warmth","wow"].forEach(n => q(`.fx-vinyl-${n}`)?.addEventListener("input", applyVinyl));
+  ["amount","flutter","sat"].forEach(n => q(`.fx-cassette-${n}`)?.addEventListener("input", applyCassette));
+  ["amount","drive","tone","level"].forEach(n => q(`.fx-fuzz-${n}`).addEventListener("input", applyFuzz));
+  ["wet","freq"].forEach(n => q(`.fx-ringmod-${n}`)?.addEventListener("input", applyRingMod));
+  ["wet","amt","preamp"].forEach(n => q(`.fx-shaper-${n}`)?.addEventListener("input", applyWaveShaper));
+  q(".fx-shaper-mode")?.addEventListener("change", applyWaveShaper);
+  ["wet","sens","range"].forEach(n => q(`.fx-autowah-${n}`)?.addEventListener("input", applyAutoWah));
+  ["wet","rate","depth"].forEach(n => q(`.fx-chorus-${n}`)?.addEventListener("input", applyChorus));
+  ["wet","rate","depth"].forEach(n => q(`.fx-phaser-${n}`)?.addEventListener("input", applyPhaser));
+  ["wet","rate","fbk"].forEach(n => q(`.fx-flanger-${n}`)?.addEventListener("input", applyFlanger));
+  ["wet","semi"].forEach(n => q(`.fx-pitchshift-${n}`)?.addEventListener("input", applyPitchShift));
+  ["time","fbk","wet"].forEach(n => q(`.fx-delay-${n}`).addEventListener("input", applyDelay));
+  q(".fx-delay-sync").addEventListener("change", applyDelay);
+  q(".fx-delay-div").addEventListener("change", applyDelay);
+  q(".fx-reverb-decay").addEventListener("input", applyReverb);
+  q(".fx-reverb-wet").addEventListener("input", applyReverb);
+  { const b = q(".fx-crush-bits"); if (b) b.addEventListener("input", applyCrush); }
+  { const w = q(".fx-crush-wet");  if (w) w.addEventListener("input", applyCrush); }
+}
+
+export function renderModPanel(t, panel) {
+  const tpl = document.getElementById("lfo-row-template");
+  panel.replaceChildren();
+  // Track-level glide — shared strip at top of mod panel. Swing is master-only now.
+  const ctl = document.createElement("div");
+  ctl.className = "mod-ctl-row";
+  ctl.innerHTML = `
+    <label class="mod-ctl"><span>glide</span><input class="track-glide" type="range" min="0" max="0.5" step="0.005" value="${t.glide ?? 0}" /></label>
+  `;
+  panel.appendChild(ctl);
+  ctl.querySelector(".track-glide").addEventListener("input", e => {
+    t.glide = Number(e.target.value);
+    if (t.voice?.setGlide) t.voice.setGlide(t.glide);
+  });
+
+  // Container for the per-param LFO rows (added one at a time via the picker below).
+  const rowsContainer = document.createElement("div");
+  rowsContainer.className = "mod-rows";
+  panel.appendChild(rowsContainer);
+
+  const addRow = (key) => {
+    const cfg = t.lfoConfig[key];
+    const row = tpl.content.firstElementChild.cloneNode(true);
+    row.dataset.key = key;
+    row.classList.add("active");
+    row.querySelector(".lfo-target").textContent = lfoLabel(key);
+
+    const cb    = row.querySelector(".lfo-on");
+    const shape = row.querySelector(".lfo-shape");
+    const rate  = row.querySelector(".lfo-rate");
+    const rateLbl  = row.querySelector(".lfo-rate-label");
+    const depth = row.querySelector(".lfo-depth");
+    const depthLbl = row.querySelector(".lfo-depth-label");
+    const syncCb = row.querySelector(".lfo-sync");
+    const divSel = row.querySelector(".lfo-div");
+    const rateField = row.querySelector(".lfo-rate-field");
+    const removeBtn = row.querySelector(".lfo-remove");
+
+    cb.checked   = cfg.enabled;
+    shape.value  = cfg.type;
+    rate.value   = rateToSlider(cfg.rate);
+    depth.value  = cfg.depth;
+    depthLbl.textContent = cfg.depth.toFixed(2);
+    syncCb.checked = cfg.sync;
+    divSel.value = String(cfg.div);
+    rateField.dataset.mode = cfg.sync ? "sync" : "hz";
+
+    const refreshLbl = () => {
+      if (cfg.sync) {
+        const opt = divSel.options[divSel.selectedIndex];
+        rateLbl.textContent = `${opt ? opt.textContent : cfg.div} · ${rateFromSync(cfg.div).toFixed(2)} hz`;
+      } else {
+        rateLbl.textContent = `${cfg.rate.toFixed(2)} hz`;
+      }
+    };
+    refreshLbl();
+
+    cb.addEventListener("change", () => { cfg.enabled = cb.checked; row.classList.toggle("active", cfg.enabled); syncLFO(t, key); });
+    shape.addEventListener("change", () => { cfg.type = shape.value; syncLFO(t, key); });
+    rate.addEventListener("input", () => { cfg.rate = sliderToRate(Number(rate.value)); refreshLbl(); syncLFO(t, key); });
+    depth.addEventListener("input", () => { cfg.depth = Number(depth.value); depthLbl.textContent = cfg.depth.toFixed(2); syncLFO(t, key); });
+    syncCb.addEventListener("change", () => { cfg.sync = syncCb.checked; rateField.dataset.mode = cfg.sync ? "sync" : "hz"; refreshLbl(); syncLFO(t, key); });
+    divSel.addEventListener("change", () => { cfg.div = Number(divSel.value); refreshLbl(); syncLFO(t, key); });
+    if (removeBtn) removeBtn.addEventListener("click", () => {
+      cfg.enabled = false;
+      syncLFO(t, key);
+      row.remove();
+      refreshAdderOptions();
+    });
+
+    rowsContainer.appendChild(row);
+  };
+
+  // Picker row: a "+ add" button that expands into a select of the remaining
+  // modulation targets; picking one enables the LFO and drops a fresh row in.
+  const adder = document.createElement("div");
+  adder.className = "mod-add-row";
+  adder.innerHTML = `
+    <button class="mod-add-btn ghost" type="button">+ add modulation</button>
+    <select class="mod-add-select" hidden></select>
+  `;
+  panel.appendChild(adder);
+  const addBtn = adder.querySelector(".mod-add-btn");
+  const addSel = adder.querySelector(".mod-add-select");
+  const refreshAdderOptions = () => {
+    // Only show mods that actually apply to the current engine.
+    const available = LFO_KEYS.filter(k => !t.lfoConfig[k]?.enabled && canModulate(t, k));
+    if (available.length === 0) {
+      addBtn.disabled = true;
+      addSel.hidden = true;
+      addBtn.textContent = "(all modulations active)";
+    } else {
+      addBtn.disabled = false;
+      addBtn.textContent = "+ add modulation";
+      addSel.innerHTML = available.map(k => `<option value="${k}">${lfoLabel(k)}</option>`).join("");
+    }
+  };
+  addBtn.addEventListener("click", () => {
+    refreshAdderOptions();
+    if (addBtn.disabled) return;
+    addSel.hidden = false;
+    addSel.focus();
+  });
+  addSel.addEventListener("change", () => {
+    const key = addSel.value;
+    if (!key || !t.lfoConfig[key]) { addSel.hidden = true; return; }
+    t.lfoConfig[key].enabled = true;
+    syncLFO(t, key);
+    addRow(key);
+    addSel.hidden = true;
+    refreshAdderOptions();
+  });
+
+  // Pre-populate rows for any LFO that's already enabled on this track.
+  for (const key of LFO_KEYS) {
+    if (t.lfoConfig[key]?.enabled) addRow(key);
+  }
+  refreshAdderOptions();
+}
+
+// Render per-step automation lanes for the track's active pattern. Re-run on
+// pattern switch so the grids reflect the active pattern's lanes.
+export function renderAutomationPanel(t, panel) {
+  panel.replaceChildren();
+  if (!t.automation) t.automation = {};
+  const enabledKeys = Object.keys(t.automation).filter(k => AUTOMATION_TARGETS[k]);
+
+  const rows = document.createElement("div");
+  rows.className = "aut-rows";
+  panel.appendChild(rows);
+
+  const emptyMsg = document.createElement("div");
+  emptyMsg.className = "aut-empty";
+  emptyMsg.textContent = "no automation — pick a target below to add a lane";
+  panel.appendChild(emptyMsg);
+
+  const adder = document.createElement("div");
+  adder.className = "aut-add-row";
+  adder.innerHTML = `
+    <button class="aut-add-btn ghost" type="button">+ add automation</button>
+    <select class="aut-add-select" hidden></select>
+  `;
+  panel.appendChild(adder);
+  const addBtn = adder.querySelector(".aut-add-btn");
+  const addSel = adder.querySelector(".aut-add-select");
+
+  const refreshAdder = () => {
+    const avail = AUTOMATION_KEYS.filter(k => !t.automation[k] && canAutomate(t, k));
+    if (avail.length === 0) {
+      addBtn.disabled = true;
+      addSel.hidden = true;
+      addBtn.textContent = "(all targets automated)";
+    } else {
+      addBtn.disabled = false;
+      addBtn.textContent = "+ add automation";
+      addSel.innerHTML = avail.map(k => `<option value="${k}">${AUTOMATION_TARGETS[k].label}</option>`).join("");
+    }
+    emptyMsg.hidden = Object.keys(t.automation).length > 0;
+  };
+
+  const ensureLane = (key) => {
+    if (!t.automation[key]) {
+      t.automation[key] = { enabled: true, values: new Array(t.length).fill(0.5) };
+    }
+    // Resize values if pattern length has changed since the lane was created.
+    const vals = t.automation[key].values;
+    if (vals.length !== t.length) {
+      const out = new Array(t.length).fill(0.5);
+      for (let i = 0; i < Math.min(vals.length, t.length); i++) out[i] = vals[i];
+      t.automation[key].values = out;
+    }
+  };
+
+  const drawRow = (key) => {
+    ensureLane(key);
+    const lane = t.automation[key];
+    const row = document.createElement("div");
+    row.className = "aut-lane" + (lane.enabled ? " active" : "");
+    row.dataset.key = key;
+    row.innerHTML = `
+      <span class="aut-label">${AUTOMATION_TARGETS[key].label}</span>
+      <input type="checkbox" class="aut-enable" ${lane.enabled ? "checked" : ""} title="enable lane" />
+      <div class="aut-grid"></div>
+      <button class="aut-clear ghost" type="button" title="reset to 0.5">clear</button>
+      <button class="aut-remove" type="button" title="remove lane">×</button>
+    `;
+    rows.appendChild(row);
+
+    const grid = row.querySelector(".aut-grid");
+    for (let i = 0; i < t.length; i++) {
+      const cell = document.createElement("div");
+      cell.className = "aut-step";
+      cell.dataset.idx = i;
+      cell.style.setProperty("--v", String(lane.values[i] ?? 0));
+      grid.appendChild(cell);
+    }
+
+    const setFromPointer = (ev) => {
+      const rect = grid.getBoundingClientRect();
+      const cols = t.length;
+      const relX = Math.max(0, Math.min(rect.width - 1, ev.clientX - rect.left));
+      const relY = Math.max(0, Math.min(rect.height, ev.clientY - rect.top));
+      const idx = Math.max(0, Math.min(cols - 1, Math.floor((relX / rect.width) * cols)));
+      const v = 1 - (relY / rect.height);
+      lane.values[idx] = Math.max(0, Math.min(1, v));
+      const cell = grid.children[idx];
+      if (cell) cell.style.setProperty("--v", String(lane.values[idx]));
+    };
+
+    let dragging = false;
+    grid.addEventListener("pointerdown", (ev) => {
+      dragging = true;
+      try { grid.setPointerCapture(ev.pointerId); } catch {}
+      setFromPointer(ev);
+      ev.preventDefault();
+    });
+    grid.addEventListener("pointermove", (ev) => { if (dragging) setFromPointer(ev); });
+    grid.addEventListener("pointerup", (ev) => {
+      dragging = false;
+      try { grid.releasePointerCapture(ev.pointerId); } catch {}
+    });
+    grid.addEventListener("pointercancel", () => { dragging = false; });
+
+    row.querySelector(".aut-enable").addEventListener("change", (ev) => {
+      lane.enabled = !!ev.target.checked;
+      row.classList.toggle("active", lane.enabled);
+    });
+    row.querySelector(".aut-clear").addEventListener("click", () => {
+      for (let i = 0; i < lane.values.length; i++) lane.values[i] = 0.5;
+      for (let i = 0; i < grid.children.length; i++) grid.children[i].style.setProperty("--v", "0.5");
+    });
+    row.querySelector(".aut-remove").addEventListener("click", () => {
+      delete t.automation[key];
+      row.remove();
+      refreshAdder();
+    });
+  };
+
+  for (const key of enabledKeys) drawRow(key);
+  refreshAdder();
+
+  addBtn.addEventListener("click", () => {
+    refreshAdder();
+    if (addBtn.disabled) return;
+    addSel.hidden = false;
+    addSel.focus();
+  });
+  addSel.addEventListener("change", () => {
+    const key = addSel.value;
+    if (!key) { addSel.hidden = true; return; }
+    drawRow(key);
+    addSel.hidden = true;
+    refreshAdder();
+  });
+}
+

@@ -1,0 +1,401 @@
+import { applyAutomationAtStep, canAutomate } from "./automation.js";
+import { engineByKey } from "./catalog.js";
+import { LFO_AMP_SCALE, LFO_KEYS } from "./constants.js";
+import { makeCassetteSatCurve, makeShaperCurve } from "./curves.js";
+import { setParam } from "./params.js";
+import { aliasPattern, state } from "./state.js";
+
+
+/** @typedef {import("./types.js").Track} Track */
+export function defaultLFOConfig() {
+  const cfg = {};
+  for (const k of LFO_KEYS) {
+    cfg[k] = { enabled: false, type: "sine", rate: 1.0, depth: 0.5, sync: true, div: 1 };
+  }
+  return cfg;
+}
+
+export function currentBpm() { return Number(document.getElementById("bpm").value || 120); }
+
+// Vertical pointer-drag on the BPM number input. Mobile number inputs have no
+// spinner and tapping pops the numeric keypad — drag-to-scrub gives a way to
+// nudge tempo without typing. A drag past PX_THRESH engages scrub mode and
+// suppresses focus/keyboard; an un-dragged tap focuses the input as normal.
+export function attachBpmDrag(el) {
+  if (!el) return;
+  const PX_PER_BPM = 4;
+  const PX_THRESH = 6;
+  let drag = null;
+  el.style.touchAction = "none";
+  el.addEventListener("pointerdown", (e) => {
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    const min = Number(el.min) || 40;
+    const max = Number(el.max) || 240;
+    drag = {
+      id: e.pointerId, type: e.pointerType,
+      startY: e.clientY, startVal: Number(el.value) || 120,
+      min, max, moved: false,
+    };
+    // Touch: block default focus so the keyboard doesn't pop while scrubbing.
+    // We restore focus on pointerup if no drag happened.
+    if (e.pointerType !== "mouse") e.preventDefault();
+  });
+  el.addEventListener("pointermove", (e) => {
+    if (!drag || e.pointerId !== drag.id) return;
+    const dy = e.clientY - drag.startY;
+    if (!drag.moved) {
+      if (Math.abs(dy) < PX_THRESH) return;
+      drag.moved = true;
+      try { el.setPointerCapture(e.pointerId); } catch {}
+      if (document.activeElement === el) el.blur();
+    }
+    const next = Math.max(drag.min, Math.min(drag.max, drag.startVal + Math.round(-dy / PX_PER_BPM)));
+    if (Number(el.value) !== next) {
+      el.value = String(next);
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+    e.preventDefault();
+  });
+  const end = (e) => {
+    if (!drag || e.pointerId !== drag.id) return;
+    try { el.releasePointerCapture(e.pointerId); } catch {}
+    // Tap-without-drag on touch: we suppressed the default focus, so restore it
+    // so the user can still tap-to-type a BPM value.
+    if (!drag.moved && drag.type !== "mouse") {
+      el.focus();
+      try { el.select(); } catch {}
+    }
+    drag = null;
+  };
+  el.addEventListener("pointerup", end);
+  el.addEventListener("pointercancel", end);
+}
+
+// Compute the base playback rate for a sample buffer so its natural length fits the
+// selected bar-count at the current BPM. Returns 1 for "native" (no time-sync).
+export function computeSampleBaseRate(buffer, mode, bpm) {
+  if (!buffer || mode === "native" || !mode) return 1;
+  const barSec = (60 / bpm) * 4;  // one 4/4 bar at BPM
+  const targets = { "2xbpm": 0.5, "1xbpm": 1, "1/2bpm": 2, "1/4bpm": 4 };
+  const bars = targets[mode];
+  if (!bars) return 1;
+  return buffer.duration / (bars * barSec);
+}
+
+// Per-hit correction so the TRIMMED slice fits the selected bars, not the full
+// buffer. baseRate is computed from the full buffer duration; if a step only
+// plays 25% of the buffer, the slice would otherwise finish in 25% of a bar.
+// Multiplying the rate by the slice span makes the slice fill the bar.
+// Returns 1 when mode is "native" (no time-sync) or when the whole buffer plays.
+export function sliceFitFactor(opts) {
+  const mode = opts?.sampleSpeedMode;
+  if (!mode || mode === "native") return 1;
+  const start = Math.max(0, Math.min(1, opts?.startOffset ?? 0));
+  const end   = Math.max(0, Math.min(1, opts?.endOffset ?? 1));
+  const span = Math.max(0.001, end - start);
+  return span;
+}
+
+export function applySampleSpeed(t) {
+  const type = t.voice?.type;
+  if (type !== "eleven" && type !== "upload") return;
+  const buf = t.voice.buffer;
+  const rate = computeSampleBaseRate(buf, t.sampleSpeedMode, currentBpm());
+  if (t.voice.setBaseRate) t.voice.setBaseRate(rate);
+}
+export function rateFromSync(divBeats) { return currentBpm() / 60 / divBeats; }
+export function effectiveRate(cfg) { return cfg.sync ? rateFromSync(cfg.div) : cfg.rate; }
+
+/**
+ * Resolve the AudioParam / Tone.Signal an LFO key modulates for a track.
+ * @param {Track} t @param {string} key @returns {(AudioParam|{value:number}|null)}
+ */
+export function getModTarget(t, key) {
+  if (["vol","harm","timb","morph","decay","osc1","osc2","osc3","osc4","ultra","fm","noise"].includes(key)) {
+    return t.voice?.getAudioParam(key) ?? null;
+  }
+  if (key === "cutoff") return t.filterNode?.frequency ?? null;
+  if (key === "reson")  return t.filterNode?.Q ?? null;
+  const rack = t.fxRack;
+  if (!rack) return null;
+  // FX wet/amt targets (LFO adds on top of dry — crossfade fx still get movement).
+  switch (key) {
+    case "fuzz":         return rack.wetBus?.gain ?? null;
+    case "delay":        return rack.delay?.wet ?? null;
+    case "verb":         return rack.reverb?.wet ?? null;
+    case "vinyl":        return rack.vinylWetBus?.gain ?? null;
+    case "cassette":     return rack.cassetteWetBus?.gain ?? null;
+    case "ringmod":      return rack.ringWet?.gain ?? null;
+    case "shaper":       return rack.shaperWetBus?.gain ?? null;
+    case "shaper_preamp":return rack.shaperPreamp?.gain ?? null;
+    case "crush":        return rack.crusher?.wet ?? null;
+    case "autowah":      return rack.autowah?.wet ?? null;
+    case "chorus":       return rack.chorus?.wet ?? null;
+    case "phaser":       return rack.phaser?.wet ?? null;
+    case "flanger":      return rack.flangerWet?.gain ?? null;
+    case "pitch":        return rack.pitchshift?.wet ?? null;
+    // sub-params
+    case "fuzz_drive":   return rack.fuzzDrive?.gain ?? null;
+    case "fuzz_tone":    return rack.fuzzFilter?.frequency ?? null;
+    case "fuzz_level":   return rack.fuzzLevel?.gain ?? null;
+    case "vinyl_warmth": return rack.vinylLP?.frequency ?? null;
+    case "ring_freq":    return rack.ringCarrier?.frequency ?? null;
+    case "crush_bits":   return rack.crusher?.bits ?? null;
+    case "chorus_rate":  return rack.chorus?.frequency ?? null;
+    case "chorus_depth": return rack.chorus?.depth ?? null;  // may not be Signal — returns null if so
+    case "phaser_rate":  return rack.phaser?.frequency ?? null;
+    case "flanger_rate": return rack.flangerLFO?.frequency ?? null;
+    case "flanger_fbk":  return rack.flangerFeedback?.gain ?? null;
+    case "delay_time":   return rack.delay?.delayTime ?? null;
+    case "delay_fbk":    return rack.delay?.feedback ?? null;
+  }
+  return null;
+}
+
+export const TRACK_FX_LFO_KEYS = new Set([
+  "fuzz","delay","verb","vinyl","cassette","ringmod","shaper","crush","autowah","chorus","phaser","flanger","pitch",
+  "fuzz_drive","fuzz_tone","fuzz_level","vinyl_warmth","shaper_preamp","ring_freq","crush_bits",
+  "chorus_rate","chorus_depth","phaser_rate","flanger_rate","flanger_fbk","delay_time","delay_fbk",
+  // setter-driven (non-AudioParam) FX params
+  "vinyl_wow","cassette_flutter","cassette_sat",
+  "shaper_amt",
+  "autowah_sens","autowah_range",
+  "phaser_depth","pitch_semi","reverb_decay",
+]);
+
+// FX params with no AudioParam / Signal handle — driven by a JS-side LFO that
+// polls in a RAF loop and applies values through the corresponding setter.
+export const SETTER_LFO_KEYS = new Set([
+  "vinyl_wow","cassette_flutter","cassette_sat",
+  "shaper_amt",
+  "autowah_sens","autowah_range",
+  "phaser_depth","chorus_depth","pitch_semi","reverb_decay",
+]);
+
+// Read the user's current 0..1 base value for a setter LFO target so the LFO
+// swings AROUND that value instead of overwriting it.
+export function setterLfoBase(t, key) {
+  const c = t.fxRack?.config;
+  if (!c) return 0.5;
+  switch (key) {
+    case "vinyl_wow":        return c.vinyl?.wow ?? 0.3;
+    case "cassette_flutter": return c.cassette?.flutter ?? 0.3;
+    case "cassette_sat":     return c.cassette?.sat ?? 0.4;
+    case "shaper_amt":       return c.shaper?.amount ?? 0.5;
+    case "autowah_sens":     return c.autowah?.sens ?? 0.5;
+    case "autowah_range":    return c.autowah?.range ?? 0.5;
+    case "phaser_depth":     return c.phaser?.depth ?? 0.5;
+    case "chorus_depth":     return c.chorus?.depth ?? 0.5;
+    case "pitch_semi":       return (((c.pitchshift?.semitones ?? 0) + 12) / 24);
+    case "reverb_decay":     return Math.max(0, Math.min(1, ((c.reverb?.decay ?? 2) - 0.2) / 7.8));
+  }
+  return 0.5;
+}
+
+// Apply a 0..1 LFO value to a setter-only FX target. Pokes the audio graph
+// directly WITHOUT updating rack.config — the user's slider value remains the
+// stored base, and the slider's onInput keeps writing config on user moves.
+export function applySetterLfoValue(t, key, v) {
+  const rack = t.fxRack;
+  if (!rack) return;
+  v = Math.max(0, Math.min(1, v));
+  switch (key) {
+    case "vinyl_wow": {
+      const base = 0.005, span = 0.0008 + v * 0.006;
+      try { rack.vinylWowLFO.min = base - span; rack.vinylWowLFO.max = base + span; } catch {}
+      return;
+    }
+    case "cassette_flutter": {
+      const base = 0.003, span = 0.0004 + v * 0.004;
+      try { rack.cassetteFlutterLFO.min = base - span; rack.cassetteFlutterLFO.max = base + span; } catch {}
+      return;
+    }
+    case "cassette_sat":
+      try { rack.cassetteSat.curve = makeCassetteSatCurve(v); } catch {}
+      return;
+    case "shaper_amt":
+      try {
+        const mode = rack.config?.shaper?.mode ?? "fold";
+        rack.shaperNode.curve = makeShaperCurve(mode, v);
+      } catch {}
+      return;
+    case "autowah_sens":
+      try { rack.autowah.sensitivity = -10 - v * 30; } catch {}
+      return;
+    case "autowah_range":
+      try { rack.autowah.octaves = 1 + v * 4; } catch {}
+      return;
+    case "phaser_depth":
+      try { rack.phaser.octaves = 1 + v * 5; } catch {}
+      return;
+    case "chorus_depth":
+      try { rack.chorus.depth = v; } catch {}
+      return;
+    case "pitch_semi":
+      // Don't round — Tone.PitchShift.pitch accepts fractional semitones, and
+      // rounding eats every modulation narrower than ±0.5 semitone (which is
+      // exactly the range a vibrato-style mod wants to live in).
+      try { rack.pitchshift.pitch = v * 24 - 12; } catch {}
+      return;
+    case "reverb_decay": {
+      // IR rebuild is heavy — only regenerate on perceptible change.
+      const decay = 0.2 + v * 7.8;
+      const cur = rack._lfoReverbDecay ?? rack.config?.reverb?.decay ?? decay;
+      if (Math.abs(decay - cur) > 0.3) {
+        rack._lfoReverbDecay = decay;
+        try { rack.reverb.decay = decay; rack.reverb.generate().catch(() => {}); } catch {}
+      }
+      return;
+    }
+  }
+}
+
+export function evalLfoShape(type, phase) {
+  const p = phase - Math.floor(phase);
+  switch (type) {
+    case "sine":     return Math.sin(2 * Math.PI * p);
+    case "triangle": return p < 0.5 ? (p * 4 - 1) : (3 - p * 4);
+    case "sawtooth": return p * 2 - 1;
+    case "square":   return p < 0.5 ? 1 : -1;
+  }
+  return 0;
+}
+
+// One RAF loop drives every active setter LFO across every track.
+export let _setterLfoRafId = null;
+export function startSetterLfoLoopIfNeeded() {
+  if (_setterLfoRafId != null) return;
+  let lastT = (state.audioCtx?.currentTime ?? performance.now() / 1000);
+  const tick = () => {
+    const now = state.audioCtx?.currentTime ?? performance.now() / 1000;
+    const dt = Math.max(0, Math.min(0.1, now - lastT));
+    lastT = now;
+    let anyActive = false;
+    for (const t of state.tracks) {
+      if (!t.fxRack || !t._setterLfoPhase) continue;
+      for (const key of SETTER_LFO_KEYS) {
+        const cfg = t.lfoConfig[key];
+        if (!cfg?.enabled) continue;
+        anyActive = true;
+        const hz = effectiveRate(cfg);
+        const phase = (t._setterLfoPhase[key] ?? 0) + dt * hz;
+        t._setterLfoPhase[key] = phase;
+        const shape = evalLfoShape(cfg.type || "sine", phase);
+        const base = setterLfoBase(t, key);
+        applySetterLfoValue(t, key, base + shape * (cfg.depth ?? 0) * 0.5);
+      }
+    }
+    _setterLfoRafId = anyActive ? requestAnimationFrame(tick) : null;
+  };
+  _setterLfoRafId = requestAnimationFrame(tick);
+}
+
+// Which modulation keys make sense for the current engine? Voice-independent
+// so the picker hides irrelevant entries even before audio is initialized.
+/**
+ * Whether an LFO key applies to this track's engine (gates the mod picker).
+ * @param {Track} t @param {string} key @returns {boolean}
+ */
+export function canModulate(t, key) {
+  // Always-applicable: track-level fx + master vol + filter.
+  if (key === "vol" || key === "cutoff" || key === "reson") return true;
+  if (TRACK_FX_LFO_KEYS.has(key)) return true;
+  const eng = engineByKey(t.engineKey);
+  if (!eng) return false;
+  // Plaits exposes harm/timb/morph/decay as voice params.
+  if (eng.type === "plaits") return ["harm", "timb", "morph", "decay"].includes(key);
+  // Emulator builders expose specific AudioParams via getAudioParam — only list
+  // the keys that are actually wired (see each builder above).
+  switch (t.engineKey) {
+    case "dm:mini-brute": return ["harm", "osc1", "osc2", "osc3", "osc4", "ultra", "fm"].includes(key);
+    case "dm:moog":       return ["harm", "osc1", "osc2", "osc3", "noise"].includes(key);
+    case "dm:juno":       return ["harm", "osc1", "osc2", "osc3", "noise"].includes(key);
+    case "dm:prophet6":   return ["harm", "osc1", "osc2", "osc3", "osc4", "noise"].includes(key);
+    // Guitar/bass/rhodes have no per-voice AudioParam targets beyond vol+track fx;
+    // their timbre params are still automatable via setParam (see canAutomate).
+  }
+  return false;
+}
+
+export function syncLFO(t, key) {
+  const cfg = t.lfoConfig[key];
+  let lfo = t.lfos[key];
+
+  // ── setter-driven LFO path (FX params without an AudioParam target) ──
+  if (SETTER_LFO_KEYS.has(key)) {
+    if (lfo) {
+      try { lfo.stop(); } catch {}
+      try { lfo.disconnect(); } catch {}
+      try { lfo.dispose(); } catch {}
+      t.lfos[key] = null;
+    }
+    if (!cfg.enabled) {
+      if (t._setterLfoPhase && t._setterLfoPhase[key] != null) {
+        delete t._setterLfoPhase[key];
+        // restore base value to the audio graph so the param stops where the slider sits
+        if (t.fxRack) applySetterLfoValue(t, key, setterLfoBase(t, key));
+      }
+      return;
+    }
+    if (!t._setterLfoPhase) t._setterLfoPhase = {};
+    if (t._setterLfoPhase[key] == null) t._setterLfoPhase[key] = 0;
+    startSetterLfoLoopIfNeeded();
+    return;
+  }
+
+  if (!cfg.enabled) {
+    if (lfo) {
+      try { lfo.stop(); } catch {}
+      try { lfo.disconnect(); } catch {}
+      try { lfo.dispose(); } catch {}
+      t.lfos[key] = null;
+    }
+    return;
+  }
+  if (!state.ready) return;
+  const param = getModTarget(t, key);
+  if (!param) return;
+  const amp = (cfg.depth / 2) * (LFO_AMP_SCALE[key] ?? 1);
+  const hz = effectiveRate(cfg);
+  if (!lfo) {
+    lfo = new Tone.LFO({ frequency: hz, min: -amp, max: amp, type: cfg.type });
+    lfo.start();
+    lfo.connect(param);
+    t.lfos[key] = lfo;
+  } else {
+    lfo.frequency.value = hz;
+    lfo.min = -amp;
+    lfo.max = amp;
+    lfo.type = cfg.type;
+  }
+}
+
+export function syncAllLFOs(t) {
+  for (const k of LFO_KEYS) syncLFO(t, k);
+}
+
+export function disposeLFOs(t) {
+  for (const k of LFO_KEYS) {
+    const lfo = t.lfos[k];
+    if (!lfo) continue;
+    try { lfo.stop(); } catch {}
+    try { lfo.disconnect(); } catch {}
+    try { lfo.dispose(); } catch {}
+    t.lfos[k] = null;
+  }
+  if (t._setterLfoPhase) t._setterLfoPhase = {};
+}
+
+export function retuneSyncedLFOs() {
+  for (const t of state.tracks) {
+    for (const k of LFO_KEYS) {
+      if (t.lfoConfig[k].enabled && t.lfoConfig[k].sync) syncLFO(t, k);
+    }
+  }
+}
+
+// ---- per-step automation -----------------------------------------------
+// Lanes live on the pattern (t.patterns[i].automation[key] = { enabled, values })
+// and are aliased to t.automation by aliasPattern(). Lane values are normalized
+// 0..1 per step; applyAutomationAtStep maps that to the target's physical range.
+
