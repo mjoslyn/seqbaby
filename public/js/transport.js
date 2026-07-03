@@ -17,20 +17,20 @@ export function paintNowIndicator() {
   for (const t of state.tracks) {
     const tk = t.trackTick ?? 0;
     const idx = ((tk - 1) % t.length + t.length) % t.length;
-    const cells = t.el.querySelectorAll(".step");
+    const cells = t.el.querySelectorAll(".sq-step");
     cells.forEach(c => {
       const start = Number(c.dataset.idx);
       const span = Number(c.dataset.span) || 1;
-      c.classList.toggle("now", tk > 0 && idx >= start && idx < start + span);
+      c.classList.toggle("is-now", tk > 0 && idx >= start && idx < start + span);
     });
     // Piano roll: highlight the column for the current step, if the roll is open.
-    const rollPanel = t._rollPanelEl || t.el.querySelector(".track-roll-panel");
+    const rollPanel = t._rollPanelEl || t.el.querySelector(".sq-track__roll-panel");
     if (rollPanel && !rollPanel.hidden) {
-      rollPanel.querySelectorAll(".roll-cell.now, .roll-vel-cell.now")
-        .forEach(c => c.classList.remove("now"));
+      rollPanel.querySelectorAll(".sq-roll__cell.is-now, .sq-roll__vel-cell.is-now")
+        .forEach(c => c.classList.remove("is-now"));
       if (tk > 0) {
-        rollPanel.querySelectorAll(`.roll-cell[data-step="${idx}"], .roll-vel-cell[data-step="${idx}"]`)
-          .forEach(c => c.classList.add("now"));
+        rollPanel.querySelectorAll(`.sq-roll__cell[data-step="${idx}"], .sq-roll__vel-cell[data-step="${idx}"]`)
+          .forEach(c => c.classList.add("is-now"));
       }
     }
   }
@@ -154,7 +154,7 @@ export async function togglePlay() {
     silenceAllVoices();
     state.playing = false;
     btn.textContent = "play";
-    btn.classList.remove("playing");
+    btn.classList.remove("is-playing");
     state.tick = 0;
     for (const t of state.tracks) { t.trackTick = 0; t.speedAccum = 0; }
     paintNowIndicator();
@@ -345,7 +345,7 @@ export async function togglePlay() {
   Tone.Transport.start("+0.1", 0);
   state.playing = true;
   btn.textContent = "stop";
-  btn.classList.add("playing");
+  btn.classList.add("is-playing");
   setStatus("playing");
 }
 

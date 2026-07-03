@@ -284,7 +284,7 @@ export function applySet(s) {
     state.playing = false;
     const btn = document.getElementById("play");
     btn.textContent = "play";
-    btn.classList.remove("playing");
+    btn.classList.remove("is-playing");
     state.tick = 0;
   }
   for (const t of [...state.tracks]) removeTrack(t);
@@ -419,10 +419,10 @@ export function applySet(s) {
     aliasPattern(t, state.activePattern);
     if (t.el) {
       const q = s => t.el.querySelector(s);
-      q(".track-name").value = t.name;
-      q(".track-len").value = t.length;
-      q(".track-engine").value = t.engineKey;
-      q(".track-glide").value = t.glide;
+      q(".sq-track__name").value = t.name;
+      q(".sq-track__len").value = t.length;
+      q(".sq-track__engine").value = t.engineKey;
+      q(".sq-track__glide").value = t.glide;
       q(".p-vol").value = t.params.vol;
       q(".p-harm").value = t.params.harm;
       q(".p-timb").value = t.params.timb;
@@ -435,26 +435,26 @@ export function applySet(s) {
       q(".p-envdec").value = t.filter.decay;
       q(".p-envsus").value = t.filter.sustain;
       q(".p-envrel").value = t.filter.release;
-      q(".track-lock")?.setAttribute("aria-pressed", String(t.locked));
-      q(".track-solo")?.setAttribute("aria-pressed", String(t.soloed));
+      q(".sq-track__lock")?.setAttribute("aria-pressed", String(t.locked));
+      q(".sq-track__solo")?.setAttribute("aria-pressed", String(t.soloed));
       const nmBtn = q(".track-note-mode");
       if (nmBtn) {
         const isGate = t.noteMode !== "trigger";
         nmBtn.textContent = isGate ? "gate" : "trig";
         nmBtn.setAttribute("aria-pressed", String(isGate));
       }
-      t.el.classList.toggle("muted", t.muted);
-      t.el.classList.toggle("locked", t.locked);
-      t.el.classList.toggle("soloed", t.soloed);
+      t.el.classList.toggle("is-muted", t.muted);
+      t.el.classList.toggle("is-locked", t.locked);
+      t.el.classList.toggle("is-soloed", t.soloed);
       refreshFxPanelUI(t);
-      renderModPanel(t, t._modPanelEl || t.el.querySelector(".track-mod-panel"));
-      const eqPanel = t._eqPanelEl || t.el.querySelector(".track-eq-panel");
+      renderModPanel(t, t._modPanelEl || t.el.querySelector(".sq-track__mod-panel"));
+      const eqPanel = t._eqPanelEl || t.el.querySelector(".sq-track__eq-panel");
       if (eqPanel) {
         eqPanel.querySelector(".p-eq-low").value  = t.eq.low;
         eqPanel.querySelector(".p-eq-mid").value  = t.eq.mid;
         eqPanel.querySelector(".p-eq-high").value = t.eq.high;
       }
-      const compPanel = t._compPanelEl || t.el.querySelector(".track-comp-panel");
+      const compPanel = t._compPanelEl || t.el.querySelector(".sq-track__comp-panel");
       if (compPanel) {
         compPanel.querySelector(".comp-enabled").checked = !!t.comp.enabled;
         compPanel.querySelector(".comp-threshold").value = t.comp.threshold;

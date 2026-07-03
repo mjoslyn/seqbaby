@@ -93,18 +93,18 @@ export async function bounceAudio({ bars = 1, format = "wav", chainWhole = false
 // reads the wall-clock elapsed time rather than audio-thread state.
 export function openBounceProgressDialog({ totalSec, bars, format }) {
   const overlay = document.createElement("div");
-  overlay.className = "modal-overlay";
+  overlay.className = "sq-modal-overlay";
   overlay.innerHTML = `
-    <div class="modal" role="dialog" aria-modal="true">
-      <div class="modal-title">rendering audio</div>
-      <div class="bounce-progress-label">${bars} bar${bars === 1 ? "" : "s"} → ${format}</div>
-      <div class="bounce-progress-bar"><div class="bounce-progress-fill"></div></div>
-      <div class="bounce-progress-status">capturing…</div>
+    <div class="sq-modal" role="dialog" aria-modal="true">
+      <div class="sq-modal__title">rendering audio</div>
+      <div class="sq-bounce__progress-label">${bars} bar${bars === 1 ? "" : "s"} → ${format}</div>
+      <div class="sq-bounce__progress-bar"><div class="sq-bounce__progress-fill"></div></div>
+      <div class="sq-bounce__progress-status">capturing…</div>
     </div>
   `;
   document.body.appendChild(overlay);
-  const fill = overlay.querySelector(".bounce-progress-fill");
-  const statusEl = overlay.querySelector(".bounce-progress-status");
+  const fill = overlay.querySelector(".sq-bounce__progress-fill");
+  const statusEl = overlay.querySelector(".sq-bounce__progress-status");
   const startedAt = performance.now();
   let closed = false;
   const tick = () => {
@@ -182,7 +182,7 @@ export function showBounceDialog({ mode = "pattern" } = {}) {
   const isTrack = mode === "track";
   return new Promise((resolve) => {
     const overlay = document.createElement("div");
-    overlay.className = "modal-overlay";
+    overlay.className = "sq-modal-overlay";
     const bars = isTrack ? trackTotalBars() : Math.max(1, Math.ceil((state.tracks[0]?.length ?? 16) / 16));
     const esc = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
     const suggested = suggestBounceFilename(mode);
@@ -190,15 +190,15 @@ export function showBounceDialog({ mode = "pattern" } = {}) {
       ? `chains through every non-empty pattern (${bars} bar${bars === 1 ? "" : "s"}) at ${currentBpm()} bpm.`
       : `captures the current pattern (${bars} bar${bars === 1 ? "" : "s"}) at ${currentBpm()} bpm.`;
     overlay.innerHTML = `
-      <div class="modal" role="dialog" aria-modal="true">
-        <div class="modal-title">${isTrack ? "download session as audio" : "download pattern as audio"}</div>
-        <div class="bounce-opts">
+      <div class="sq-modal" role="dialog" aria-modal="true">
+        <div class="sq-modal__title">${isTrack ? "download session as audio" : "download pattern as audio"}</div>
+        <div class="sq-bounce__opts">
           <label>file name <input class="b-name" type="text" value="${esc(suggested)}" /></label>
         </div>
-        <div class="bounce-note">${note}</div>
-        <div class="modal-actions">
-          <button class="modal-cancel ghost">cancel</button>
-          <button class="modal-ok">${isTrack ? "download session" : "download pattern"}</button>
+        <div class="sq-bounce__note">${note}</div>
+        <div class="sq-modal__actions">
+          <button class="modal-cancel sq-btn--ghost">cancel</button>
+          <button class="sq-modal__ok">${isTrack ? "download session" : "download pattern"}</button>
         </div>
       </div>
     `;
@@ -206,7 +206,7 @@ export function showBounceDialog({ mode = "pattern" } = {}) {
     const nameInput = overlay.querySelector(".b-name");
     setTimeout(() => { try { nameInput.focus(); nameInput.select(); } catch {} }, 0);
     const close = (v) => { overlay.remove(); resolve(v); };
-    overlay.querySelector(".modal-ok").addEventListener("click", () => {
+    overlay.querySelector(".sq-modal__ok").addEventListener("click", () => {
       const filename = (nameInput.value || suggested).trim();
       close({ bars, format: "wav", filename });
     });

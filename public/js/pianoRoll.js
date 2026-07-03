@@ -38,7 +38,7 @@ export const BLACK_KEYS = new Set([1, 3, 6, 8, 10]);
 
 export function refreshRollIfOpen(t) {
   // t._rollPanelEl follows the panel even when it's been moved into a modal.
-  const panel = t._rollPanelEl || t.el?.querySelector(".track-roll-panel");
+  const panel = t._rollPanelEl || t.el?.querySelector(".sq-track__roll-panel");
   if (!panel || panel.hidden) return;
   // A full re-render replaces the grid element, which kills any pointer capture
   // held by an in-progress drag on the roll. Skip while a drag is live — the
@@ -49,7 +49,7 @@ export function refreshRollIfOpen(t) {
 
 export function refreshAutIfOpen(t) {
   // _autPanelEl follows the panel even when it's been moved into a modal.
-  const panel = t._autPanelEl || t.el?.querySelector(".track-aut-panel");
+  const panel = t._autPanelEl || t.el?.querySelector(".sq-track__aut-panel");
   if (!panel || panel.hidden) return;
   renderAutomationPanel(t, panel);
 }
@@ -68,9 +68,9 @@ export function renderRollPanel(t, panel) {
 
   // Header: title + all-notes toggle + octave pager + range readout + transforms.
   const head = document.createElement("div");
-  head.className = "roll-head";
+  head.className = "sq-roll__head";
   const title = document.createElement("span");
-  title.className = "roll-title";
+  title.className = "sq-roll__title";
   title.textContent = "piano roll";
   head.appendChild(title);
   if (scaleIntervals) {
@@ -83,8 +83,8 @@ export function renderRollPanel(t, panel) {
     head.appendChild(toggle);
   }
   const octBtns = document.createElement("span");
-  octBtns.className = "roll-oct-btns";
-  octBtns.innerHTML = `<button class="ghost" data-d="-1">oct −</button><button class="ghost" data-d="1">oct +</button>`;
+  octBtns.className = "sq-roll__oct-btns";
+  octBtns.innerHTML = `<button class="sq-btn--ghost" data-d="-1">oct −</button><button class="sq-btn--ghost" data-d="1">oct +</button>`;
   octBtns.querySelectorAll("button").forEach(b => b.addEventListener("click", () => {
     const d = Number(b.dataset.d);
     const next = t.rollViewOct + d;
@@ -94,19 +94,19 @@ export function renderRollPanel(t, panel) {
   }));
   head.appendChild(octBtns);
   const range = document.createElement("span");
-  range.className = "roll-range";
+  range.className = "sq-roll__range";
   range.textContent = `C${t.rollViewOct}–B${t.rollViewOct + rollViewOcts() - 1}`;
   head.appendChild(range);
   // Destructive pattern transforms — applied to the active pattern only.
   const xform = document.createElement("span");
-  xform.className = "roll-transforms";
+  xform.className = "sq-roll__transforms";
   xform.innerHTML = `
-    <button class="ghost icon-btn" data-x="rand" title="random melody (replaces this pattern)" aria-label="random melody">${ICON_DICE}</button>
-    <button class="ghost" data-x="up" title="shift all notes up one (scale-aware)">+1</button>
-    <button class="ghost" data-x="x2" title="double pattern length (tile)">x2</button>
-    <button class="ghost" data-x="x4" title="quadruple pattern length (tile)">x4</button>
-    <button class="ghost" data-x="/2" title="halve pattern length (truncate)">/2</button>
-    <button class="ghost" data-x="/4" title="quarter pattern length (truncate)">/4</button>
+    <button class="sq-btn--ghost sq-icon-btn" data-x="rand" title="random melody (replaces this pattern)" aria-label="random melody">${ICON_DICE}</button>
+    <button class="sq-btn--ghost" data-x="up" title="shift all notes up one (scale-aware)">+1</button>
+    <button class="sq-btn--ghost" data-x="x2" title="double pattern length (tile)">x2</button>
+    <button class="sq-btn--ghost" data-x="x4" title="quadruple pattern length (tile)">x4</button>
+    <button class="sq-btn--ghost" data-x="/2" title="halve pattern length (truncate)">/2</button>
+    <button class="sq-btn--ghost" data-x="/4" title="quarter pattern length (truncate)">/4</button>
   `;
   xform.querySelectorAll("button").forEach(b => b.addEventListener("click", () => {
     const x = b.dataset.x;
@@ -163,22 +163,22 @@ export function renderRollPanel(t, panel) {
   }
 
   const grid = document.createElement("div");
-  grid.className = "roll-grid";
+  grid.className = "sq-roll__grid";
 
   // Beat ruler row: one cell per step, beat number printed on each downbeat.
   // Steps-per-beat comes from the active pattern's meter (4/4 → 4 steps/beat).
   const _stepsPerBeat = stepsPerBeatForMeter(activeMeter());
   const beatLabel = document.createElement("div");
-  beatLabel.className = "roll-label roll-beat-label";
+  beatLabel.className = "sq-roll__label sq-roll__beat-label";
   grid.appendChild(beatLabel);
   const beatRow = document.createElement("div");
-  beatRow.className = "roll-cells roll-beat-row";
+  beatRow.className = "sq-roll__cells sq-roll__beat-row";
   beatRow.style.gridTemplateColumns = `repeat(${steps}, minmax(${rollMinW}, 1fr))`;
   for (let i = 0; i < steps; i++) {
     const bc = document.createElement("div");
-    bc.className = "roll-beat-cell";
+    bc.className = "sq-roll__beat-cell";
     if (i % _stepsPerBeat === 0) {
-      bc.classList.add("beat-start");
+      bc.classList.add("is-beat-start");
       bc.textContent = String(Math.floor(i / _stepsPerBeat) + 1);
     }
     beatRow.appendChild(bc);
@@ -192,7 +192,7 @@ export function renderRollPanel(t, panel) {
     const isRoot = scaleIntervals && !isMicrotonal && basePc === state.scale.root;
 
     const label = document.createElement("div");
-    label.className = "roll-label" + (isBlack ? " black" : "") + (isRoot ? " root" : "") + (isMicrotonal ? " micro" : "");
+    label.className = "sq-roll__label" + (isBlack ? " black" : "") + (isRoot ? " root" : "") + (isMicrotonal ? " micro" : "");
     label.textContent = midiToName(m);
     // Diatonic pitch-class color: same hue as the corresponding note cells.
     if (!isMicrotonal) {
@@ -202,7 +202,7 @@ export function renderRollPanel(t, panel) {
     grid.appendChild(label);
 
     const cells = document.createElement("div");
-    cells.className = "roll-cells";
+    cells.className = "sq-roll__cells";
     cells.style.gridTemplateColumns = `repeat(${steps}, minmax(${rollMinW}, 1fr))`;
     // Row-level pitch color — feeds the hover tint and any other per-row paint.
     if (!isMicrotonal) {
@@ -211,8 +211,8 @@ export function renderRollPanel(t, panel) {
     }
     for (let i = 0; i < steps; i++) {
       const cell = document.createElement("div");
-      cell.className = "roll-cell" + (isBlack ? " row-black" : "") + (isMicrotonal ? " row-micro" : "");
-      if (i % 4 === 0) cell.classList.add("beat");
+      cell.className = "sq-roll__cell" + (isBlack ? " row-black" : "") + (isMicrotonal ? " row-micro" : "");
+      if (i % 4 === 0) cell.classList.add("is-beat");
       cell.dataset.step = String(i);
       cell.dataset.note = String(m);
       // Mark the anchor and any "held" continuation columns. A multi-step note
@@ -244,9 +244,9 @@ export function renderRollPanel(t, panel) {
           }
         }
         if (isRoot || isExtra) {
-          cell.classList.add("on");
-          if (anchor !== i) cell.classList.add("held");
-          if (i < anchor + slotLen - 1) cell.classList.add("note-joins-next");
+          cell.classList.add("is-on");
+          if (anchor !== i) cell.classList.add("is-held");
+          if (i < anchor + slotLen - 1) cell.classList.add("is-note-joins-next");
           const col = noteColor(m);
           if (col) cell.style.setProperty("--note-color", col);
           // Label the anchor cell only.
@@ -268,23 +268,23 @@ export function renderRollPanel(t, panel) {
 
   // Velocity lane — built first so paintColumn() can reference velCells below.
   const velLane = document.createElement("div");
-  velLane.className = "roll-vel-lane";
+  velLane.className = "sq-roll__vel-lane";
   const velSpacer = document.createElement("div");
-  velSpacer.className = "roll-vel-spacer";
+  velSpacer.className = "sq-roll__vel-spacer";
   velSpacer.textContent = "vel";
   velLane.appendChild(velSpacer);
   const velCells = document.createElement("div");
-  velCells.className = "roll-vel-cells";
+  velCells.className = "sq-roll__vel-cells";
   velCells.style.gridTemplateColumns = `repeat(${steps}, minmax(${rollMinW}, 1fr))`;
   for (let i = 0; i < steps; i++) {
     const cell = document.createElement("div");
-    cell.className = "roll-vel-cell";
-    if (i % 4 === 0) cell.classList.add("beat");
+    cell.className = "sq-roll__vel-cell";
+    if (i % 4 === 0) cell.classList.add("is-beat");
     cell.dataset.step = String(i);
     const bar = document.createElement("div");
-    bar.className = "roll-vel-bar";
+    bar.className = "sq-roll__vel-bar";
     if (t.steps[i]) {
-      cell.classList.add("on");
+      cell.classList.add("is-on");
       bar.style.height = `${Math.round((t.velocities[i] ?? 0.5) * 100)}%`;
     }
     cell.appendChild(bar);
@@ -320,7 +320,7 @@ export function renderRollPanel(t, panel) {
     const coverNote = anchor >= 0 ? t.notes[anchor] : null;
     const extras = anchor >= 0 ? t.extraNotes?.[anchor] : null;
     const eLens  = anchor >= 0 ? t.extraLengths?.[anchor] : null;
-    grid.querySelectorAll(`.roll-cell[data-step="${step}"]`).forEach(c => {
+    grid.querySelectorAll(`.sq-roll__cell[data-step="${step}"]`).forEach(c => {
       const note = Number(c.dataset.note);
       const isRoot = anchor >= 0 && Math.abs(coverNote - note) < EPS && step < anchor + rootLen;
       let isExtra = false;
@@ -338,9 +338,9 @@ export function renderRollPanel(t, panel) {
         }
       }
       const on = isRoot || isExtra;
-      c.classList.toggle("on", on);
-      c.classList.toggle("held", on && anchor !== step);
-      c.classList.toggle("note-joins-next", on && step < anchor + slotLen - 1);
+      c.classList.toggle("is-on", on);
+      c.classList.toggle("is-held", on && anchor !== step);
+      c.classList.toggle("is-note-joins-next", on && step < anchor + slotLen - 1);
       if (on) {
         const col = noteColor(note);
         if (col) c.style.setProperty("--note-color", col);
@@ -359,10 +359,10 @@ export function renderRollPanel(t, panel) {
         c.textContent = "";
       }
     });
-    const vcell = velCells.querySelector(`.roll-vel-cell[data-step="${step}"]`);
+    const vcell = velCells.querySelector(`.sq-roll__vel-cell[data-step="${step}"]`);
     if (vcell) {
-      vcell.classList.toggle("on", t.steps[step] === 1);
-      const bar = vcell.querySelector(".roll-vel-bar");
+      vcell.classList.toggle("is-on", t.steps[step] === 1);
+      const bar = vcell.querySelector(".sq-roll__vel-bar");
       if (bar) bar.style.height = t.steps[step] ? `${Math.round((t.velocities[step] ?? 0.5) * 100)}%` : "0";
     }
   };
@@ -433,7 +433,7 @@ export function renderRollPanel(t, panel) {
   };
   const cellFromPoint = (x, y) => {
     const el = document.elementFromPoint(x, y);
-    return el?.closest?.(".roll-cell") || null;
+    return el?.closest?.(".sq-roll__cell") || null;
   };
   // Wrap a single-click mutation in the drag-active flag so renderStepGrid's
   // refreshRollIfOpen doesn't nuke the grid we just painted locally.
@@ -443,7 +443,7 @@ export function renderRollPanel(t, panel) {
     finally { panel._rollDragActive = false; }
   };
   grid.addEventListener("pointerdown", (e) => {
-    const cell = e.target.closest?.(".roll-cell");
+    const cell = e.target.closest?.(".sq-roll__cell");
     if (!cell || e.button !== 0) return;
     const step = Number(cell.dataset.step);
     const note = Number(cell.dataset.note);
@@ -736,7 +736,7 @@ export function renderRollPanel(t, panel) {
   grid.addEventListener("pointercancel", endDrag);
   // Right-click on a note opens the step editor (matches the pattern grid).
   grid.addEventListener("contextmenu", (e) => {
-    const cell = e.target.closest?.(".roll-cell");
+    const cell = e.target.closest?.(".sq-roll__cell");
     if (!cell) return;
     const step = Number(cell.dataset.step);
     const anchor = anchorCovering(t, step);
@@ -758,10 +758,10 @@ export function renderRollPanel(t, panel) {
     const r = cell.getBoundingClientRect();
     const v = 1 - Math.max(0, Math.min(1, (clientY - r.top) / r.height));
     t.velocities[step] = Math.max(0.05, Math.min(1, v));
-    cell.querySelector(".roll-vel-bar").style.height = `${Math.round(t.velocities[step] * 100)}%`;
+    cell.querySelector(".sq-roll__vel-bar").style.height = `${Math.round(t.velocities[step] * 100)}%`;
   };
   velCells.addEventListener("pointerdown", (e) => {
-    const cell = e.target.closest(".roll-vel-cell.on");
+    const cell = e.target.closest(".sq-roll__vel-cell.is-on");
     if (!cell || e.button !== 0) return;
     vdrag = { pointerId: e.pointerId };
     panel._rollDragActive = true;
@@ -772,7 +772,7 @@ export function renderRollPanel(t, panel) {
   });
   velCells.addEventListener("pointermove", (e) => {
     if (!vdrag || e.pointerId !== vdrag.pointerId) return;
-    const cell = document.elementFromPoint(e.clientX, e.clientY)?.closest?.(".roll-vel-cell.on");
+    const cell = document.elementFromPoint(e.clientX, e.clientY)?.closest?.(".sq-roll__vel-cell.is-on");
     if (!cell || !velCells.contains(cell)) return;
     updateVelFromPoint(cell, e.clientY);
     renderStepGrid(t);

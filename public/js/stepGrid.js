@@ -14,7 +14,7 @@ export function stepGridCols() { return window.innerWidth <= 768 ? 8 : 16; }
  * @param {Track} t
  */
 export function renderStepGrid(t) {
-  const grid = t.el.querySelector(".steps");
+  const grid = t.el.querySelector(".sq-steps");
   const total = t.length;
   const cols = Math.min(stepGridCols(), total);
   grid.style.setProperty("--count", String(cols));
@@ -58,11 +58,11 @@ export function renderStepGrid(t) {
 // (1 on mobile to fit the screen without vertical scroll, 2 on desktop).
 export function makeCell(t, idx, span, on, isContinuation = false) {
   const cell = document.createElement("div");
-  cell.className = "step";
+  cell.className = "sq-step";
   cell.dataset.idx = String(idx);
   cell.dataset.span = String(span);
   if (on) {
-    cell.classList.add("on");
+    cell.classList.add("is-on");
     const vel = t.velocities[idx] ?? 0.5;
     cell.style.setProperty("--vel", String(vel));
     if (t.notes[idx] != null) {
@@ -70,13 +70,13 @@ export function makeCell(t, idx, span, on, isContinuation = false) {
       if (col) cell.style.setProperty("--note-color", col);
     }
   }
-  if (span > 1) cell.classList.add("held");
+  if (span > 1) cell.classList.add("is-held");
   if (span > 1) cell.style.gridColumn = `span ${span}`;
-  if (idx % 4 === 0 && !isContinuation) cell.classList.add("beat");
-  if (t.accents.has(idx) && !isContinuation) cell.classList.add("accent");
+  if (idx % 4 === 0 && !isContinuation) cell.classList.add("is-beat");
+  if (t.accents.has(idx) && !isContinuation) cell.classList.add("is-accent");
   if (on && t.notes[idx] != null && !isContinuation) {
     const label = document.createElement("span");
-    label.className = "step-note";
+    label.className = "sq-step__note";
     const chord = t.chords[idx];
     label.textContent = chord ? `${midiToName(t.notes[idx])}${chord}` : midiToName(t.notes[idx]);
     cell.appendChild(label);
@@ -155,7 +155,7 @@ export function attachGridInteraction(t, grid) {
           try { grid.releasePointerCapture(drag.pointerId); } catch {}
           drag = null;
         }
-        const cell = grid.querySelector(`.step[data-idx="${longPressIdx}"]`);
+        const cell = grid.querySelector(`.sq-step[data-idx="${longPressIdx}"]`);
         openStepEditor(t, longPressIdx, cell || grid);
       }, 500);
     }
@@ -216,7 +216,7 @@ export function attachGridInteraction(t, grid) {
     const anchor = anchorCovering(t, idx);
     if (anchor < 0) return;
     e.preventDefault();
-    const cell = grid.querySelector(`.step[data-idx="${anchor}"]`);
+    const cell = grid.querySelector(`.sq-step[data-idx="${anchor}"]`);
     openStepEditor(t, anchor, cell || grid);
   });
 

@@ -27,7 +27,7 @@ export function fireMetronome(time, accent) {
 
 // Circular beat indicator — N dots around a ring (N = reference track's length
 // so non-4/4 / polymeter still reads correctly), every 4th is a strong-beat
-// dot, with a "beat.step" text readout in the center (always visible).
+// dot, with a "beat.sq-step" text readout in the center (always visible).
 export function currentIndicatorSteps() {
   const n = state.tracks[0]?.length;
   return Math.max(2, Math.min(64, Number.isFinite(n) ? n : 16));
@@ -55,8 +55,8 @@ export function buildBeatIndicator() {
     dot.setAttribute("cx", cx.toFixed(2));
     dot.setAttribute("cy", cy.toFixed(2));
     dot.setAttribute("r", strong ? "2.4" : "1.5");
-    dot.classList.add("beat-dot");
-    if (strong) dot.classList.add("beat-strong");
+    dot.classList.add("sq-beat__dot");
+    if (strong) dot.classList.add("is-beat-strong");
     dot.dataset.idx = String(i);
     svg.appendChild(dot);
   }
@@ -65,7 +65,7 @@ export function buildBeatIndicator() {
   label.setAttribute("y", "0");
   label.setAttribute("text-anchor", "middle");
   label.setAttribute("dominant-baseline", "central");
-  label.classList.add("beat-label");
+  label.classList.add("sq-beat__label");
   label.textContent = "1.1";
   svg.appendChild(label);
   svg.dataset.sig = sig;
@@ -84,10 +84,10 @@ export function paintBeatIndicator(tick) {
   const idx = ((raw % steps) + steps) % steps;
   const beat = Math.floor(idx / spb) + 1;     // 1..num
   const sub  = (idx % spb) + 1;               // 1..stepsPerBeat
-  for (const dot of svg.querySelectorAll(".beat-dot")) {
-    dot.classList.toggle("now", Number(dot.dataset.idx) === idx);
+  for (const dot of svg.querySelectorAll(".sq-beat__dot")) {
+    dot.classList.toggle("is-now", Number(dot.dataset.idx) === idx);
   }
-  const lbl = svg.querySelector(".beat-label");
+  const lbl = svg.querySelector(".sq-beat__label");
   if (lbl) lbl.textContent = `${beat}.${sub}`;
 }
 

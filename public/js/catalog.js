@@ -130,7 +130,7 @@ export function rebuildEngineCatalog() {
 }
 export function refreshEngineSelect(t) {
   if (!t.el) return;
-  const sel = t.el.querySelector(".track-engine");
+  const sel = t.el.querySelector(".sq-track__engine");
   populateEngineSelect(sel);
   sel.value = t.engineKey;
 }

@@ -39,10 +39,10 @@ export function renderPatternGrid() {
   grid.replaceChildren();
   for (let i = 0; i < PATTERN_COUNT; i++) {
     const cell = document.createElement("button");
-    cell.className = "pattern-cell";
-    if (isPatternNonEmpty(i)) cell.classList.add("filled");
-    if (i === state.activePattern) cell.classList.add("active");
-    if (i === state.queuedPattern) cell.classList.add("queued");
+    cell.className = "sq-pattern__cell";
+    if (isPatternNonEmpty(i)) cell.classList.add("is-filled");
+    if (i === state.activePattern) cell.classList.add("is-active");
+    if (i === state.queuedPattern) cell.classList.add("is-queued");
     cell.textContent = String(i + 1);
     cell.title = `pattern ${i + 1} — drag to copy`;
     cell.draggable = true;
@@ -55,12 +55,12 @@ export function renderPatternGrid() {
     cell.addEventListener("dragover", (e) => {
       e.preventDefault();
       e.dataTransfer.dropEffect = "copy";
-      cell.classList.add("drag-over");
+      cell.classList.add("is-drag-over");
     });
-    cell.addEventListener("dragleave", () => cell.classList.remove("drag-over"));
+    cell.addEventListener("dragleave", () => cell.classList.remove("is-drag-over"));
     cell.addEventListener("drop", (e) => {
       e.preventDefault();
-      cell.classList.remove("drag-over");
+      cell.classList.remove("is-drag-over");
       const from = Number(e.dataTransfer.getData("text/pattern-idx"));
       if (Number.isFinite(from)) copyPattern(from, i);
     });
@@ -74,7 +74,7 @@ export function updatePatternCell(idx) {
   const grid = document.getElementById("pattern-grid");
   if (!grid) return;
   const cell = grid.children[idx];
-  if (cell) cell.classList.toggle("filled", isPatternNonEmpty(idx));
+  if (cell) cell.classList.toggle("is-filled", isPatternNonEmpty(idx));
 }
 
 // Visual columns per row in the step grid. The data model uses 16-step rows
@@ -85,12 +85,12 @@ export function updatePatternCell(idx) {
 export let _patternMenuOpen = null;
 export function openPatternMenu() {
   if (_patternMenuOpen) return;
-  const patternBar = document.querySelector(".pattern-bar");
+  const patternBar = document.querySelector(".sq-pattern-bar");
   if (!patternBar) return;
   const overlay = document.createElement("div");
-  overlay.className = "modal-overlay";
+  overlay.className = "sq-modal-overlay";
   const modal = document.createElement("div");
-  modal.className = "modal pattern-menu-modal";
+  modal.className = "sq-modal sq-pattern__menu-modal";
   modal.setAttribute("role", "dialog");
   modal.setAttribute("aria-modal", "true");
 
@@ -103,7 +103,7 @@ export function openPatternMenu() {
 
   // Group sig + rep + dup into a single row inside the modal for compactness.
   const row = document.createElement("div");
-  row.className = "pattern-menu-row";
+  row.className = "sq-pattern__menu-row";
 
   for (const { node } of captured) {
     if (node.id === "pattern-meter" || node.id === "pattern-repeats" ||
@@ -119,7 +119,7 @@ export function openPatternMenu() {
   // Trailing close button.
   const closeBtn = document.createElement("button");
   closeBtn.type = "button";
-  closeBtn.className = "pattern-menu-close";
+  closeBtn.className = "sq-pattern__menu-close";
   closeBtn.textContent = "done";
   modal.appendChild(closeBtn);
 

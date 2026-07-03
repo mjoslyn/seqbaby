@@ -292,7 +292,7 @@ export function setFilter(t, key, val) {
 // of the codebase stays aware of "current pattern's steps" via t.length.
 export function refreshCompSourceDropdowns() {
   for (const t of state.tracks) {
-    const sel = t.el?.querySelector(".comp-source");
+    const sel = t.el?.querySelector(".sq-comp__source");
     if (!sel) continue;
     const cur = t.comp.source || "self";
     sel.replaceChildren();

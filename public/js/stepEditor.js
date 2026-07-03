@@ -23,9 +23,9 @@ export function openPanelAsModal(t, opts) {
   panel.replaceWith(anchor);
 
   const overlay = document.createElement("div");
-  overlay.className = "modal-overlay";
+  overlay.className = "sq-modal-overlay";
   const modal = document.createElement("div");
-  modal.className = "modal panel-modal " + modalClass;
+  modal.className = "sq-modal sq-panel__modal " + modalClass;
   modal.setAttribute("role", "dialog");
   modal.setAttribute("aria-modal", "true");
 
@@ -34,7 +34,7 @@ export function openPanelAsModal(t, opts) {
 
   const closeBtn = document.createElement("button");
   closeBtn.type = "button";
-  closeBtn.className = "panel-modal-close";
+  closeBtn.className = "sq-panel__modal-close";
   closeBtn.textContent = "done";
   modal.appendChild(closeBtn);
 
@@ -63,7 +63,7 @@ export function openRollAsModal(t) {
   openPanelAsModal(t, {
     panel: t._rollPanelEl,
     modalClass: "roll-modal",
-    btnSel: ".track-roll",
+    btnSel: ".sq-track__roll",
     modalKey: "_rollModal",
     afterMount: () => renderRollPanel(t, t._rollPanelEl),
   });
@@ -73,7 +73,7 @@ export function openModAsModal(t) {
   openPanelAsModal(t, {
     panel: t._modPanelEl,
     modalClass: "mod-modal",
-    btnSel: ".track-mod",
+    btnSel: ".sq-track__mod",
     modalKey: "_modModal",
   });
 }
@@ -92,7 +92,7 @@ export function openFilterAsModal(t) {
   openPanelAsModal(t, {
     panel: t._filterPanelEl,
     modalClass: "filter-modal",
-    btnSel: ".track-filter",
+    btnSel: ".sq-track__filter",
     modalKey: "_filterModal",
   });
 }
@@ -101,7 +101,7 @@ export function openEnvAsModal(t) {
   openPanelAsModal(t, {
     panel: t._envPanelEl,
     modalClass: "env-modal",
-    btnSel: ".track-env",
+    btnSel: ".sq-track__env",
     modalKey: "_envModal",
   });
 }
@@ -110,7 +110,7 @@ export function openFxAsModal(t) {
   openPanelAsModal(t, {
     panel: t._fxPanelEl,
     modalClass: "fx-modal",
-    btnSel: ".track-fx",
+    btnSel: ".sq-track__fx",
     modalKey: "_fxModal",
   });
 }
@@ -119,7 +119,7 @@ export function openEqAsModal(t) {
   openPanelAsModal(t, {
     panel: t._eqPanelEl,
     modalClass: "eq-modal",
-    btnSel: ".track-eq",
+    btnSel: ".sq-track__eq",
     modalKey: "_eqModal",
   });
 }
@@ -128,7 +128,7 @@ export function openCompAsModal(t) {
   openPanelAsModal(t, {
     panel: t._compPanelEl,
     modalClass: "comp-modal",
-    btnSel: ".track-comp",
+    btnSel: ".sq-track__comp",
     modalKey: "_compModal",
   });
 }
@@ -140,35 +140,35 @@ export function openCompAsModal(t) {
 // DOM positions on close so the desktop layout is unaffected.
 export function openTrackMenu(t) {
   if (t._trackMenuModal) return;
-  const head = t.el?.querySelector(".track-head");
+  const head = t.el?.querySelector(".sq-track__head");
   if (!head) return;
 
   const selectors = [
-    ".track-save",
-    ".track-load-patch",
-    ".track-len-extend",
-    ".track-synth-row",
-    ".track-dup",
-    ".track-remove",
-    ".track-oct",
+    ".sq-track__save",
+    ".sq-track__load-patch",
+    ".sq-track__len-extend",
+    ".sq-track__synth-row",
+    ".sq-track__dup",
+    ".sq-track__remove",
+    ".sq-track__oct",
   ];
   const captured = [];
   for (const sel of selectors) {
     const n = head.querySelector(sel);
     if (n) captured.push({ node: n, nextSibling: n.nextSibling });
   }
-  const speedField = head.querySelector(".track-speed")?.closest(".field");
+  const speedField = head.querySelector(".sq-track__speed")?.closest(".sq-field");
   if (speedField) captured.push({ node: speedField, nextSibling: speedField.nextSibling });
 
   const overlay = document.createElement("div");
-  overlay.className = "modal-overlay";
+  overlay.className = "sq-modal-overlay";
   const modal = document.createElement("div");
-  modal.className = "modal track-menu-modal";
+  modal.className = "sq-modal sq-track__menu-modal";
   modal.setAttribute("role", "dialog");
   modal.setAttribute("aria-modal", "true");
 
   const title = document.createElement("div");
-  title.className = "track-menu-title";
+  title.className = "sq-track__menu-title";
   title.textContent = t.name?.trim() || "track";
   modal.appendChild(title);
 
@@ -176,7 +176,7 @@ export function openTrackMenu(t) {
 
   const closeBtn = document.createElement("button");
   closeBtn.type = "button";
-  closeBtn.className = "track-menu-close";
+  closeBtn.className = "sq-track__menu-close";
   closeBtn.textContent = "done";
   modal.appendChild(closeBtn);
 
@@ -226,35 +226,35 @@ export function openStepEditor(t, idx, anchorEl) {
   const eng = engineByKey(t.engineKey);
   const defaultNote = t.notes[idx] ?? eng?.defaultNote ?? 60;
   const el = document.createElement("div");
-  el.className = "step-editor";
+  el.className = "sq-step-editor";
   const chordOptions = `<option value="">none</option>`;
   el.innerHTML = `
-    <div class="se-title">step ${idx + 1}</div>
-    <div class="se-field se-note-field">
+    <div class="sq-se__title">step ${idx + 1}</div>
+    <div class="sq-se__field sq-se__note-field">
       <label>note</label>
-      <div class="se-note-header">
-        <span class="se-note-label"></span>
-        <div class="se-oct-pager">
+      <div class="sq-se__note-header">
+        <span class="sq-se__note-label"></span>
+        <div class="sq-se__oct-pager">
           <button class="se-oct-down" type="button" title="lower octaves">oct −</button>
-          <span class="se-oct-range"></span>
+          <span class="sq-se__oct-range"></span>
           <button class="se-oct-up" type="button" title="higher octaves">oct +</button>
         </div>
       </div>
-      <div class="se-keyboard" tabindex="0"></div>
+      <div class="sq-se__keyboard" tabindex="0"></div>
       <input class="se-note" type="hidden" value="${Math.max(24, Math.min(95, defaultNote))}" />
     </div>
-    <div class="se-field se-chord-field">
+    <div class="sq-se__field sq-se__chord-field">
       <label>chord</label>
       <select class="se-chord">${chordOptions}</select>
-      <label class="se-arp-wrap"><input class="se-arp" type="checkbox" /> arp</label>
-      <span class="se-chord-label"></span>
+      <label class="sq-se__arp-wrap"><input class="se-arp" type="checkbox" /> arp</label>
+      <span class="sq-se__chord-label"></span>
     </div>
-    <div class="se-field se-ratchet-row">
+    <div class="sq-se__field se-ratchet-row">
       <label>ratchet</label>
       <input class="se-ratchet" type="range" min="1" max="8" step="1" value="${(t.ratchets && t.ratchets[idx]) || 1}" />
       <span class="se-ratchet-label"></span>
     </div>
-    <div class="se-field se-cpx-row">
+    <div class="sq-se__field sq-se__cpx-row">
       <label>cpx</label>
       <select class="se-cpx">
         <option value="0">root</option>
@@ -264,9 +264,9 @@ export function openStepEditor(t, idx, anchorEl) {
         <option value="4">drop-oct</option>
       </select>
     </div>
-    <div class="se-field se-arp-row" hidden>
+    <div class="sq-se__field sq-se__arp-row" hidden>
       <label>arp</label>
-      <div class="se-arp-selects">
+      <div class="sq-se__arp-selects">
         <select class="se-arp-rate" title="arp rate (beats per note)">
           <option value="1">1/4</option>
           <option value="0.5">1/8</option>
@@ -289,24 +289,24 @@ export function openStepEditor(t, idx, anchorEl) {
         </select>
       </div>
     </div>
-    <div class="se-field">
+    <div class="sq-se__field">
       <label>vel</label>
       <input class="se-vel" type="range" min="0" max="1" step="0.01" value="${t.velocities[idx] ?? 0.5}" />
-      <span class="se-vel-label"></span>
+      <span class="sq-se__vel-label"></span>
     </div>
-    <div class="se-field">
+    <div class="sq-se__field">
       <label>offset</label>
       <input class="se-offset" type="range" min="-0.5" max="0.5" step="0.01" value="${t.offsets?.[idx] ?? 0}" />
       <span class="se-offset-label"></span>
     </div>
-    <div class="se-field se-sample-row" hidden>
+    <div class="sq-se__field sq-se__sample-row" hidden>
       <label>sample</label>
-      <div class="se-sample-ctl">
-        <canvas class="se-waveform" width="440" height="72"></canvas>
-        <div class="se-sample-meta">
-          <span class="se-smp-info">—</span>
+      <div class="sq-se__sample-ctl">
+        <canvas class="sq-se__waveform" width="440" height="72"></canvas>
+        <div class="sq-se__sample-meta">
+          <span class="sq-se__smp-info">—</span>
           <label>fit
-            <select class="se-smp-fit">
+            <select class="sq-se__smp-fit">
               <option value="native" selected>native</option>
               <option value="2xbpm">2× bpm</option>
               <option value="1xbpm">1× bpm</option>
@@ -315,7 +315,7 @@ export function openStepEditor(t, idx, anchorEl) {
             </select>
           </label>
           <label>snap
-            <select class="se-smp-snap">
+            <select class="sq-se__smp-snap">
               <option value="free" selected>free</option>
               <option value="1">1 beat</option>
               <option value="0.5">1/8</option>
@@ -330,30 +330,30 @@ export function openStepEditor(t, idx, anchorEl) {
               <option value="pingpong">ping-pong</option>
             </select>
           </label>
-          <button class="se-preview" type="button">preview</button>
-          <button class="se-apply-all ghost" type="button" title="apply these sample settings to every step on this track and use as the default for new steps">apply to all</button>
+          <button class="sq-se__preview" type="button">preview</button>
+          <button class="se-apply-all sq-btn--ghost" type="button" title="apply these sample settings to every step on this track and use as the default for new steps">apply to all</button>
         </div>
-        <div class="se-sample-fade">
+        <div class="sq-se__sample-fade">
           <label>fade in <input class="se-smp-fade-in" type="range" min="0" max="2" step="0.01" value="0" /><span class="se-smp-fade-in-lbl">0 ms</span></label>
           <label>fade out <input class="se-smp-fade-out" type="range" min="0" max="2" step="0.01" value="0" /><span class="se-smp-fade-out-lbl">0 ms</span></label>
         </div>
       </div>
     </div>
-    <div class="se-actions">
-      <button class="se-close">done</button>
+    <div class="sq-se__actions">
+      <button class="sq-se__close">done</button>
     </div>
   `;
   const overlay = document.createElement("div");
-  overlay.className = "modal-overlay";
+  overlay.className = "sq-modal-overlay";
   overlay.appendChild(el);
   document.body.appendChild(overlay);
 
   const noteInput = el.querySelector(".se-note");
-  const noteLbl = el.querySelector(".se-note-label");
+  const noteLbl = el.querySelector(".sq-se__note-label");
   const velInput = el.querySelector(".se-vel");
-  const velLbl = el.querySelector(".se-vel-label");
+  const velLbl = el.querySelector(".sq-se__vel-label");
   const chordSel = el.querySelector(".se-chord");
-  const chordLbl = el.querySelector(".se-chord-label");
+  const chordLbl = el.querySelector(".sq-se__chord-label");
   const arpBox   = el.querySelector(".se-arp");
   const cpxInput = el.querySelector(".se-cpx");
   cpxInput.value = String(Math.max(0, Math.min(4, (t.complexities && t.complexities[idx]) || 0)));
@@ -378,15 +378,15 @@ export function openStepEditor(t, idx, anchorEl) {
   };
   rebuildChords();
   arpBox.checked = !!(t.arps && t.arps[idx]);
-  const arpRow   = el.querySelector(".se-arp-row");
+  const arpRow   = el.querySelector(".sq-se__arp-row");
   const arpRate  = el.querySelector(".se-arp-rate");
   const arpRange = el.querySelector(".se-arp-range");
   const arpDir   = el.querySelector(".se-arp-dir");
   arpRate.value  = String(t.arpRates?.[idx]  ?? 0.25);
   arpRange.value = String(t.arpRanges?.[idx] ?? 1);
   arpDir.value   = String(t.arpDirs?.[idx]   ?? "up");
-  const arpWrap = el.querySelector(".se-arp-wrap");
-  const cpxRow  = el.querySelector(".se-cpx-row");
+  const arpWrap = el.querySelector(".sq-se__arp-wrap");
+  const cpxRow  = el.querySelector(".sq-se__cpx-row");
   const ratchetRow = el.querySelector(".se-ratchet-row");
   const ratchetInput = el.querySelector(".se-ratchet");
   const ratchetLbl = el.querySelector(".se-ratchet-label");
@@ -412,10 +412,10 @@ export function openStepEditor(t, idx, anchorEl) {
   // Build Launchpad-style pad grid (bottom-left = lowest, top-right = highest).
   // Only 3 octaves are visible at a time — use the pager (oct +/−) to shift the window.
   // When a scale is active, only in-scale notes are shown and columns = scale length.
-  const kb = el.querySelector(".se-keyboard");
+  const kb = el.querySelector(".sq-se__keyboard");
   const octDownBtn  = el.querySelector(".se-oct-down");
   const octUpBtn    = el.querySelector(".se-oct-up");
-  const octRangeLbl = el.querySelector(".se-oct-range");
+  const octRangeLbl = el.querySelector(".sq-se__oct-range");
   const scaleIntervals = state.scale.active ? (SCALES[state.scale.mode] || null) : null;
   const PC_NAMES = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
   // Microtonal scales (Hüseyni, 24-TET) carry half-integer intervals; step the pad
@@ -446,11 +446,11 @@ export function openStepEditor(t, idx, anchorEl) {
       const isMicrotonal = m !== Math.round(m);
       const pad = document.createElement("button");
       pad.type = "button";
-      pad.className = "se-pad";
+      pad.className = "sq-se__pad";
       pad.dataset.note = String(m);
       if (scaleIntervals) {
         pad.classList.add("in-scale");
-        if (!isMicrotonal && basePc === state.scale.root) pad.classList.add("root");
+        if (!isMicrotonal && basePc === state.scale.root) pad.classList.add("is-root");
       }
       pad.title = midiToName(m);
       pad.textContent = isMicrotonal
@@ -462,8 +462,8 @@ export function openStepEditor(t, idx, anchorEl) {
     }
     // re-apply selected highlight if the current note is in view
     const cur = Number(noteInput.value);
-    const active = kb.querySelector(`.se-pad[data-note="${cur}"]`);
-    if (active) active.classList.add("selected");
+    const active = kb.querySelector(`.sq-se__pad[data-note="${cur}"]`);
+    if (active) active.classList.add("is-selected");
     if (octRangeLbl) octRangeLbl.textContent = `oct ${viewOctStart}–${viewOctStart + VIEW_OCTS - 1}`;
     if (octDownBtn) octDownBtn.disabled = viewOctStart <= MIN_OCT;
     if (octUpBtn)   octUpBtn.disabled   = viewOctStart + VIEW_OCTS - 1 >= MAX_OCT;
@@ -488,9 +488,9 @@ export function openStepEditor(t, idx, anchorEl) {
       viewOctStart = Math.max(MIN_OCT, Math.min(MAX_OCT - VIEW_OCTS + 1, nOct - 1));
       renderPads();
     } else {
-      kb.querySelectorAll(".se-pad.selected").forEach(k => k.classList.remove("selected"));
-      const active = kb.querySelector(`.se-pad[data-note="${n}"]`);
-      if (active) active.classList.add("selected");
+      kb.querySelectorAll(".sq-se__pad.is-selected").forEach(k => k.classList.remove("is-selected"));
+      const active = kb.querySelector(`.sq-se__pad[data-note="${n}"]`);
+      if (active) active.classList.add("is-selected");
     }
     rebuildChords();
     syncChordOptsVisibility();
@@ -498,7 +498,7 @@ export function openStepEditor(t, idx, anchorEl) {
     if (render) { refresh(); renderStepGrid(t); }
   };
   kb.addEventListener("click", (e) => {
-    const k = e.target.closest(".se-pad");
+    const k = e.target.closest(".sq-se__pad");
     if (!k) return;
     setNote(Number(k.dataset.note));
   });
@@ -521,9 +521,9 @@ export function openStepEditor(t, idx, anchorEl) {
     arpBox.disabled = !ch;
     cpxInput.disabled = !ch;
     const cur = Number(noteInput.value);
-    kb.querySelectorAll(".se-pad.selected").forEach(k => k.classList.remove("selected"));
-    const sel = kb.querySelector(`.se-pad[data-note="${cur}"]`);
-    if (sel) sel.classList.add("selected");
+    kb.querySelectorAll(".sq-se__pad.is-selected").forEach(k => k.classList.remove("is-selected"));
+    const sel = kb.querySelector(`.sq-se__pad[data-note="${cur}"]`);
+    if (sel) sel.classList.add("is-selected");
   };
   refresh();
 
@@ -534,16 +534,16 @@ export function openStepEditor(t, idx, anchorEl) {
   });
 
   // sample-engine specific row: waveform with draggable start/end handles + preview
-  const sampleRow = el.querySelector(".se-sample-row");
+  const sampleRow = el.querySelector(".sq-se__sample-row");
   const engineType = engineByKey(t.engineKey)?.type;
   const isSampleEngine = engineType === "eleven" || engineType === "upload" || engineType === "sample";
   sampleRow.hidden = !isSampleEngine;
   if (isSampleEngine) {
-    const canvas = sampleRow.querySelector(".se-waveform");
-    const infoEl = sampleRow.querySelector(".se-smp-info");
-    const snapSel = sampleRow.querySelector(".se-smp-snap");
-    const fitSel  = sampleRow.querySelector(".se-smp-fit");
-    const prev    = sampleRow.querySelector(".se-preview");
+    const canvas = sampleRow.querySelector(".sq-se__waveform");
+    const infoEl = sampleRow.querySelector(".sq-se__smp-info");
+    const snapSel = sampleRow.querySelector(".sq-se__smp-snap");
+    const fitSel  = sampleRow.querySelector(".sq-se__smp-fit");
+    const prev    = sampleRow.querySelector(".sq-se__preview");
     const applyAllBtn = sampleRow.querySelector(".se-apply-all");
     if (fitSel) {
       fitSel.value = t.sampleSpeedMode || "native";
@@ -758,7 +758,7 @@ export function openStepEditor(t, idx, anchorEl) {
   velInput.addEventListener("input", () => {
     t.velocities[idx] = Number(velInput.value);
     refresh();
-    const cell = t.el.querySelector(`.step[data-idx="${idx}"]`);
+    const cell = t.el.querySelector(`.sq-step[data-idx="${idx}"]`);
     if (cell) cell.style.setProperty("--vel", String(t.velocities[idx]));
   });
   chordSel.addEventListener("change", () => {
@@ -790,7 +790,7 @@ export function openStepEditor(t, idx, anchorEl) {
     t.complexities[idx] = Math.max(0, Math.min(4, Number(cpxInput.value) || 0));
     refresh();
   });
-  el.querySelector(".se-close").addEventListener("click", closeStepEditor);
+  el.querySelector(".sq-se__close").addEventListener("click", closeStepEditor);
 
   const escHandler = (e) => { if (e.key === "Escape") closeStepEditor(); };
   overlay.addEventListener("click", (e) => { if (e.target === overlay) closeStepEditor(); });

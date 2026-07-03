@@ -29,12 +29,12 @@ export function renderTrack(t) {
   t.el = node;
   node.dataset.trackId = String(t.id);
 
-  const engineSel = node.querySelector(".track-engine");
+  const engineSel = node.querySelector(".sq-track__engine");
   populateEngineSelect(engineSel);
   engineSel.value = t.engineKey;
 
-  node.querySelector(".track-name").value = t.name;
-  node.querySelector(".track-len").value = t.length;
+  node.querySelector(".sq-track__name").value = t.name;
+  node.querySelector(".sq-track__len").value = t.length;
   node.querySelector(".p-vol").value = t.params.vol;
   node.querySelector(".p-harm").value = t.params.harm;
   node.querySelector(".p-timb").value = t.params.timb;
@@ -53,11 +53,11 @@ export function renderTrack(t) {
   node.querySelector(".p-envatk").value = t.filter.attack;
   node.querySelector(".p-envrel").value = t.filter.release;
 
-  node.querySelector(".track-name").addEventListener("input", e => {
+  node.querySelector(".sq-track__name").addEventListener("input", e => {
     t.name = e.target.value;
     redetectDrumKit(t);
   });
-  node.querySelector(".track-len").addEventListener("change", e => {
+  node.querySelector(".sq-track__len").addEventListener("change", e => {
     const n = Math.max(1, Math.min(128, Number(e.target.value) || 1));
     resizeTrack(t, n);
   });
@@ -100,7 +100,7 @@ export function renderTrack(t) {
 
   node.querySelector(".track-rand").addEventListener("click", () => randomizeTimbre(t));
 
-  const saveBtn = node.querySelector(".track-save");
+  const saveBtn = node.querySelector(".sq-track__save");
   saveBtn.innerHTML = ICON_SAVE;
   const refreshSaveEnabled = () => {
     saveBtn.disabled = !t.customConfig || (t.engineKey !== "custom" && !t.engineKey.startsWith("saved:"));
@@ -119,19 +119,19 @@ export function renderTrack(t) {
     setStatus(`saved patch "${name.trim()}"`);
   });
 
-  const loadPatchBtn = node.querySelector(".track-load-patch");
+  const loadPatchBtn = node.querySelector(".sq-track__load-patch");
   if (loadPatchBtn) {
     loadPatchBtn.innerHTML = ICON_LOAD;
     loadPatchBtn.addEventListener("click", async () => {
       const name = await showSavedPatchPicker();
       if (!name) return;
       setEngineKey(t, `saved:${name}`);
-      if (node.querySelector(".track-engine")) node.querySelector(".track-engine").value = `saved:${name}`;
+      if (node.querySelector(".sq-track__engine")) node.querySelector(".sq-track__engine").value = `saved:${name}`;
       setStatus(`loaded patch "${name}"`);
     });
   }
   // glide + swing are wired in renderModPanel (they live in the mod panel row now).
-  const speedSel = node.querySelector(".track-speed");
+  const speedSel = node.querySelector(".sq-track__speed");
   if (speedSel) {
     speedSel.value = String(t.speed ?? 1);
     speedSel.addEventListener("change", e => {
@@ -167,11 +167,11 @@ export function renderTrack(t) {
     truncatePattern(t, state.activePattern, Math.max(1, Math.floor(t.length / 4)));
   });
 
-  const soloBtn = node.querySelector(".track-solo");
+  const soloBtn = node.querySelector(".sq-track__solo");
   soloBtn.addEventListener("click", () => {
     t.soloed = !t.soloed;
     soloBtn.setAttribute("aria-pressed", String(t.soloed));
-    node.classList.toggle("soloed", t.soloed);
+    node.classList.toggle("is-soloed", t.soloed);
   });
 
   const noteModeBtn = node.querySelector(".track-note-mode");
@@ -191,14 +191,14 @@ export function renderTrack(t) {
   t._refreshSaveEnabled = refreshSaveEnabled;
 
   const panelModals = [
-    { btnSel: ".track-mod",    modalKey: "_modModal" },
+    { btnSel: ".sq-track__mod",    modalKey: "_modModal" },
     { btnSel: ".track-aut",    modalKey: "_autModal" },
-    { btnSel: ".track-roll",   modalKey: "_rollModal" },
-    { btnSel: ".track-filter", modalKey: "_filterModal" },
-    { btnSel: ".track-env",    modalKey: "_envModal" },
-    { btnSel: ".track-fx",     modalKey: "_fxModal" },
-    { btnSel: ".track-eq",     modalKey: "_eqModal" },
-    { btnSel: ".track-comp",   modalKey: "_compModal" },
+    { btnSel: ".sq-track__roll",   modalKey: "_rollModal" },
+    { btnSel: ".sq-track__filter", modalKey: "_filterModal" },
+    { btnSel: ".sq-track__env",    modalKey: "_envModal" },
+    { btnSel: ".sq-track__fx",     modalKey: "_fxModal" },
+    { btnSel: ".sq-track__eq",     modalKey: "_eqModal" },
+    { btnSel: ".sq-track__comp",   modalKey: "_compModal" },
   ];
   function closeOtherPanels(keepBtnSel) {
     for (const p of panelModals) {
@@ -210,14 +210,14 @@ export function renderTrack(t) {
   // Stash stable refs to every collapsible panel — once opened as a modal the
   // panel is reparented out of the track, so t.el.querySelector(...) would
   // miss it. All panels open as a centered modal overlay.
-  t._modPanelEl    = node.querySelector(".track-mod-panel");
-  t._autPanelEl    = node.querySelector(".track-aut-panel");
-  t._rollPanelEl   = node.querySelector(".track-roll-panel");
-  t._filterPanelEl = node.querySelector(".track-filter-panel");
-  t._envPanelEl    = node.querySelector(".track-env-panel");
-  t._fxPanelEl     = node.querySelector(".track-fx-panel");
-  t._eqPanelEl     = node.querySelector(".track-eq-panel");
-  t._compPanelEl   = node.querySelector(".track-comp-panel");
+  t._modPanelEl    = node.querySelector(".sq-track__mod-panel");
+  t._autPanelEl    = node.querySelector(".sq-track__aut-panel");
+  t._rollPanelEl   = node.querySelector(".sq-track__roll-panel");
+  t._filterPanelEl = node.querySelector(".sq-track__filter-panel");
+  t._envPanelEl    = node.querySelector(".sq-track__env-panel");
+  t._fxPanelEl     = node.querySelector(".sq-track__fx-panel");
+  t._eqPanelEl     = node.querySelector(".sq-track__eq-panel");
+  t._compPanelEl   = node.querySelector(".sq-track__comp-panel");
   t._modModal    = null;
   t._autModal    = null;
   t._rollModal   = null;
@@ -230,10 +230,10 @@ export function renderTrack(t) {
   // Same idea for the synth-row sub-groups — they're reparented into the
   // track-menu-modal on mobile, so updatePlaitsControlsVisibility queries
   // these stashed refs instead of t.el.querySelector.
-  t._timbreGroupEl  = node.querySelector(".timbre-group");
-  t._oscMixGroupEl  = node.querySelector(".osc-mix-group");
-  t._oscModGroupEl  = node.querySelector(".osc-mod-group");
-  t._moogOscGroupEl = node.querySelector(".moog-osc-group");
+  t._timbreGroupEl  = node.querySelector(".sq-param-group--timbre");
+  t._oscMixGroupEl  = node.querySelector(".sq-param-group--osc-mix");
+  t._oscModGroupEl  = node.querySelector(".sq-param-group--osc-mod");
+  t._moogOscGroupEl = node.querySelector(".sq-param-group--moog");
 
   renderModPanel(t, t._modPanelEl);
   wireFxPanel(t, t._fxPanelEl);
@@ -255,23 +255,23 @@ export function renderTrack(t) {
       btn.setAttribute("aria-pressed", "true");
     });
   };
-  bindModalOpen(".track-mod",    openModAsModal,    "_modModal");
+  bindModalOpen(".sq-track__mod",    openModAsModal,    "_modModal");
   bindModalOpen(".track-aut",    openAutAsModal,    "_autModal");
-  bindModalOpen(".track-roll",   openRollAsModal,   "_rollModal", () => {
+  bindModalOpen(".sq-track__roll",   openRollAsModal,   "_rollModal", () => {
     if (t.steps.some(s => s)) t.rollViewOct = bestRollViewOct(t);
   });
-  bindModalOpen(".track-filter", openFilterAsModal, "_filterModal");
-  bindModalOpen(".track-env",    openEnvAsModal,    "_envModal");
-  bindModalOpen(".track-fx",     openFxAsModal,     "_fxModal");
-  bindModalOpen(".track-eq",     openEqAsModal,     "_eqModal");
-  bindModalOpen(".track-comp",   openCompAsModal,   "_compModal");
+  bindModalOpen(".sq-track__filter", openFilterAsModal, "_filterModal");
+  bindModalOpen(".sq-track__env",    openEnvAsModal,    "_envModal");
+  bindModalOpen(".sq-track__fx",     openFxAsModal,     "_fxModal");
+  bindModalOpen(".sq-track__eq",     openEqAsModal,     "_eqModal");
+  bindModalOpen(".sq-track__comp",   openCompAsModal,   "_compModal");
   wireCompPanel(t, t._compPanelEl);
 
-  node.querySelector(".track-mute").addEventListener("click", () => {
+  node.querySelector(".sq-track__mute").addEventListener("click", () => {
     t.muted = !t.muted;
-    node.classList.toggle("muted", t.muted);
+    node.classList.toggle("is-muted", t.muted);
   });
-  node.querySelector(".track-clear").addEventListener("click", () => {
+  node.querySelector(".sq-track__clear").addEventListener("click", () => {
     t.steps.fill(0);
     t.lengths.fill(0);
     t.notes.fill(null);
@@ -284,15 +284,15 @@ export function renderTrack(t) {
     diceBtn.innerHTML = ICON_DICE;
     diceBtn.addEventListener("click", () => randomizeMelody(t));
   }
-  node.querySelector(".track-remove").addEventListener("click", () => removeTrack(t));
-  const dupBtn = node.querySelector(".track-dup");
+  node.querySelector(".sq-track__remove").addEventListener("click", () => removeTrack(t));
+  const dupBtn = node.querySelector(".sq-track__dup");
   if (dupBtn) dupBtn.addEventListener("click", () => duplicateTrack(t));
 
   // mobile: "more" toggle button opens a modal hosting the hidden track-head
   // extras (save/load patch, len-extend, oct/semi, synth params, dup, remove).
   const moreBtn = document.createElement("button");
   moreBtn.type = "button";
-  moreBtn.className = "track-more ghost mobile-only";
+  moreBtn.className = "sq-track__more sq-btn--ghost sq-mobile-only";
   moreBtn.setAttribute("aria-pressed", "false");
   moreBtn.setAttribute("aria-label", "show more track controls");
   moreBtn.title = "more";
@@ -301,7 +301,7 @@ export function renderTrack(t) {
     if (t._trackMenuModal) { t._trackMenuModal.close(); return; }
     openTrackMenu(t);
   });
-  const panelGrp = node.querySelector(".panel-btn-group");
+  const panelGrp = node.querySelector(".sq-panel__btn-group");
   if (panelGrp) panelGrp.before(moreBtn);
   t._trackMoreBtn = moreBtn;
   t._trackMenuModal = null;
@@ -323,7 +323,7 @@ export function renderTrack(t) {
     if (t.voice?.type === "midi") t.voice.setChannel(ch);
   });
 
-  attachGridInteraction(t, node.querySelector(".steps"));
+  attachGridInteraction(t, node.querySelector(".sq-steps"));
   renderStepGrid(t);
   document.getElementById("tracks").appendChild(node);
   updateMidiUI(t);
@@ -331,7 +331,7 @@ export function renderTrack(t) {
 }
 
 export function updateMidiUI(t) {
-  const row = t.el?.querySelector(".track-midi");
+  const row = t.el?.querySelector(".sq-track__midi");
   if (!row) return;
   const isMidi = engineByKey(t.engineKey)?.type === "midi";
   row.hidden = !isMidi;
@@ -356,7 +356,7 @@ export function updateMidiUI(t) {
 export function wireCompPanel(t, panel) {
   const q = s => panel.querySelector(s);
   const en = q(".comp-enabled");
-  const src = q(".comp-source");
+  const src = q(".sq-comp__source");
   const thr = q(".comp-threshold");
   const ratio = q(".comp-ratio");
   const atk = q(".comp-attack");
@@ -449,7 +449,7 @@ export function applyFxToTrack(t, fx) {
 
 export function refreshFxPanelUI(t) {
   if (!t.el) return;
-  const panel = t._fxPanelEl || t.el.querySelector(".track-fx-panel");
+  const panel = t._fxPanelEl || t.el.querySelector(".sq-track__fx-panel");
   if (!panel) return;
   const cfg = t.fxConfig;
   if (!cfg.vinyl)      cfg.vinyl      = { amount: 0, warmth: 0.4, wow: 0.3 };
@@ -671,38 +671,38 @@ export function renderModPanel(t, panel) {
   panel.replaceChildren();
   // Track-level glide — shared strip at top of mod panel. Swing is master-only now.
   const ctl = document.createElement("div");
-  ctl.className = "mod-ctl-row";
+  ctl.className = "sq-mod__ctl-row";
   ctl.innerHTML = `
-    <label class="mod-ctl"><span>glide</span><input class="track-glide" type="range" min="0" max="0.5" step="0.005" value="${t.glide ?? 0}" /></label>
+    <label class="sq-mod__ctl"><span>glide</span><input class="sq-track__glide" type="range" min="0" max="0.5" step="0.005" value="${t.glide ?? 0}" /></label>
   `;
   panel.appendChild(ctl);
-  ctl.querySelector(".track-glide").addEventListener("input", e => {
+  ctl.querySelector(".sq-track__glide").addEventListener("input", e => {
     t.glide = Number(e.target.value);
     if (t.voice?.setGlide) t.voice.setGlide(t.glide);
   });
 
   // Container for the per-param LFO rows (added one at a time via the picker below).
   const rowsContainer = document.createElement("div");
-  rowsContainer.className = "mod-rows";
+  rowsContainer.className = "sq-mod__rows";
   panel.appendChild(rowsContainer);
 
   const addRow = (key) => {
     const cfg = t.lfoConfig[key];
     const row = tpl.content.firstElementChild.cloneNode(true);
     row.dataset.key = key;
-    row.classList.add("active");
-    row.querySelector(".lfo-target").textContent = lfoLabel(key);
+    row.classList.add("is-active");
+    row.querySelector(".sq-lfo__target").textContent = lfoLabel(key);
 
     const cb    = row.querySelector(".lfo-on");
-    const shape = row.querySelector(".lfo-shape");
-    const rate  = row.querySelector(".lfo-rate");
-    const rateLbl  = row.querySelector(".lfo-rate-label");
+    const shape = row.querySelector(".sq-lfo__shape");
+    const rate  = row.querySelector(".sq-lfo__rate");
+    const rateLbl  = row.querySelector(".sq-lfo__rate-label");
     const depth = row.querySelector(".lfo-depth");
-    const depthLbl = row.querySelector(".lfo-depth-label");
+    const depthLbl = row.querySelector(".sq-lfo__depth-label");
     const syncCb = row.querySelector(".lfo-sync");
-    const divSel = row.querySelector(".lfo-div");
-    const rateField = row.querySelector(".lfo-rate-field");
-    const removeBtn = row.querySelector(".lfo-remove");
+    const divSel = row.querySelector(".sq-lfo__div");
+    const rateField = row.querySelector(".sq-lfo__rate-field");
+    const removeBtn = row.querySelector(".sq-lfo__remove");
 
     cb.checked   = cfg.enabled;
     shape.value  = cfg.type;
@@ -723,7 +723,7 @@ export function renderModPanel(t, panel) {
     };
     refreshLbl();
 
-    cb.addEventListener("change", () => { cfg.enabled = cb.checked; row.classList.toggle("active", cfg.enabled); syncLFO(t, key); });
+    cb.addEventListener("change", () => { cfg.enabled = cb.checked; row.classList.toggle("is-active", cfg.enabled); syncLFO(t, key); });
     shape.addEventListener("change", () => { cfg.type = shape.value; syncLFO(t, key); });
     rate.addEventListener("input", () => { cfg.rate = sliderToRate(Number(rate.value)); refreshLbl(); syncLFO(t, key); });
     depth.addEventListener("input", () => { cfg.depth = Number(depth.value); depthLbl.textContent = cfg.depth.toFixed(2); syncLFO(t, key); });
@@ -742,14 +742,14 @@ export function renderModPanel(t, panel) {
   // Picker row: a "+ add" button that expands into a select of the remaining
   // modulation targets; picking one enables the LFO and drops a fresh row in.
   const adder = document.createElement("div");
-  adder.className = "mod-add-row";
+  adder.className = "sq-mod__add-row";
   adder.innerHTML = `
-    <button class="mod-add-btn ghost" type="button">+ add modulation</button>
-    <select class="mod-add-select" hidden></select>
+    <button class="sq-mod__add-btn sq-btn--ghost" type="button">+ add modulation</button>
+    <select class="sq-mod__add-select" hidden></select>
   `;
   panel.appendChild(adder);
-  const addBtn = adder.querySelector(".mod-add-btn");
-  const addSel = adder.querySelector(".mod-add-select");
+  const addBtn = adder.querySelector(".sq-mod__add-btn");
+  const addSel = adder.querySelector(".sq-mod__add-select");
   const refreshAdderOptions = () => {
     // Only show mods that actually apply to the current engine.
     const available = LFO_KEYS.filter(k => !t.lfoConfig[k]?.enabled && canModulate(t, k));
@@ -798,19 +798,19 @@ export function renderAutomationPanel(t, panel) {
   panel.appendChild(rows);
 
   const emptyMsg = document.createElement("div");
-  emptyMsg.className = "aut-empty";
+  emptyMsg.className = "sq-aut__empty";
   emptyMsg.textContent = "no automation — pick a target below to add a lane";
   panel.appendChild(emptyMsg);
 
   const adder = document.createElement("div");
-  adder.className = "aut-add-row";
+  adder.className = "sq-aut__add-row";
   adder.innerHTML = `
-    <button class="aut-add-btn ghost" type="button">+ add automation</button>
-    <select class="aut-add-select" hidden></select>
+    <button class="sq-aut__add-btn sq-btn--ghost" type="button">+ add automation</button>
+    <select class="sq-aut__add-select" hidden></select>
   `;
   panel.appendChild(adder);
-  const addBtn = adder.querySelector(".aut-add-btn");
-  const addSel = adder.querySelector(".aut-add-select");
+  const addBtn = adder.querySelector(".sq-aut__add-btn");
+  const addSel = adder.querySelector(".sq-aut__add-select");
 
   const refreshAdder = () => {
     const avail = AUTOMATION_KEYS.filter(k => !t.automation[k] && canAutomate(t, k));
@@ -843,21 +843,21 @@ export function renderAutomationPanel(t, panel) {
     ensureLane(key);
     const lane = t.automation[key];
     const row = document.createElement("div");
-    row.className = "aut-lane" + (lane.enabled ? " active" : "");
+    row.className = "sq-aut__lane" + (lane.enabled ? " active" : "");
     row.dataset.key = key;
     row.innerHTML = `
-      <span class="aut-label">${AUTOMATION_TARGETS[key].label}</span>
-      <input type="checkbox" class="aut-enable" ${lane.enabled ? "checked" : ""} title="enable lane" />
-      <div class="aut-grid"></div>
-      <button class="aut-clear ghost" type="button" title="reset to 0.5">clear</button>
-      <button class="aut-remove" type="button" title="remove lane">×</button>
+      <span class="sq-aut__label">${AUTOMATION_TARGETS[key].label}</span>
+      <input type="checkbox" class="sq-aut__enable" ${lane.enabled ? "checked" : ""} title="enable lane" />
+      <div class="sq-aut__grid"></div>
+      <button class="sq-aut__clear sq-btn--ghost" type="button" title="reset to 0.5">clear</button>
+      <button class="sq-aut__remove" type="button" title="remove lane">×</button>
     `;
     rows.appendChild(row);
 
-    const grid = row.querySelector(".aut-grid");
+    const grid = row.querySelector(".sq-aut__grid");
     for (let i = 0; i < t.length; i++) {
       const cell = document.createElement("div");
-      cell.className = "aut-step";
+      cell.className = "sq-aut__step";
       cell.dataset.idx = i;
       cell.style.setProperty("--v", String(lane.values[i] ?? 0));
       grid.appendChild(cell);
@@ -889,15 +889,15 @@ export function renderAutomationPanel(t, panel) {
     });
     grid.addEventListener("pointercancel", () => { dragging = false; });
 
-    row.querySelector(".aut-enable").addEventListener("change", (ev) => {
+    row.querySelector(".sq-aut__enable").addEventListener("change", (ev) => {
       lane.enabled = !!ev.target.checked;
-      row.classList.toggle("active", lane.enabled);
+      row.classList.toggle("is-active", lane.enabled);
     });
-    row.querySelector(".aut-clear").addEventListener("click", () => {
+    row.querySelector(".sq-aut__clear").addEventListener("click", () => {
       for (let i = 0; i < lane.values.length; i++) lane.values[i] = 0.5;
       for (let i = 0; i < grid.children.length; i++) grid.children[i].style.setProperty("--v", "0.5");
     });
-    row.querySelector(".aut-remove").addEventListener("click", () => {
+    row.querySelector(".sq-aut__remove").addEventListener("click", () => {
       delete t.automation[key];
       row.remove();
       refreshAdder();

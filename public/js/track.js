@@ -174,10 +174,10 @@ export function duplicateTrack(src) {
 
   if (dup.el) {
     const q = sel => dup.el.querySelector(sel);
-    q(".track-name").value = dup.name;
-    q(".track-len").value = dup.length;
-    q(".track-engine").value = dup.engineKey;
-    const spd = q(".track-speed"); if (spd) spd.value = String(dup.speed);
+    q(".sq-track__name").value = dup.name;
+    q(".sq-track__len").value = dup.length;
+    q(".sq-track__engine").value = dup.engineKey;
+    const spd = q(".sq-track__speed"); if (spd) spd.value = String(dup.speed);
     q(".p-vol").value = dup.params.vol;
     q(".p-harm").value = dup.params.harm;
     q(".p-timb").value = dup.params.timb;
@@ -190,11 +190,11 @@ export function duplicateTrack(src) {
     q(".p-envdec").value = dup.filter.decay;
     q(".p-envsus").value = dup.filter.sustain;
     q(".p-envrel").value = dup.filter.release;
-    dup.el.classList.toggle("muted", dup.muted);
-    dup.el.classList.toggle("soloed", dup.soloed);
-    q(".track-solo")?.setAttribute("aria-pressed", String(dup.soloed));
+    dup.el.classList.toggle("is-muted", dup.muted);
+    dup.el.classList.toggle("is-soloed", dup.soloed);
+    q(".sq-track__solo")?.setAttribute("aria-pressed", String(dup.soloed));
     refreshFxPanelUI(dup);
-    renderModPanel(dup, dup._modPanelEl || dup.el.querySelector(".track-mod-panel"));
+    renderModPanel(dup, dup._modPanelEl || dup.el.querySelector(".sq-track__mod-panel"));
   }
 
   // Move the duplicate right after the source in DOM + state order.
@@ -254,7 +254,7 @@ export function removeTrack(t) {
     if (x.comp.source && x.comp.source !== "self" && !state.tracks.find(y => String(y.id) === String(x.comp.source))) {
       x.comp.source = "self";
       applyCompressorConfig(x);
-      const sel = x.el?.querySelector(".comp-source");
+      const sel = x.el?.querySelector(".sq-comp__source");
       if (sel) sel.value = "self";
     }
   }
@@ -300,7 +300,7 @@ export function resizePattern(t, patIdx, len) {
     aliasPattern(t, patIdx);
     t.length = len;
     t.accents = autoAccents(len, patternMeter(patIdx));
-    if (t.el) t.el.querySelector(".track-len").value = len;
+    if (t.el) t.el.querySelector(".sq-track__len").value = len;
     renderStepGrid(t);
     refreshAutIfOpen(t);
   }
@@ -340,7 +340,7 @@ export function truncatePattern(t, patIdx, newLen) {
     aliasPattern(t, patIdx);
     t.length = newLen;
     t.accents = autoAccents(newLen, patternMeter(patIdx));
-    if (t.el) t.el.querySelector(".track-len").value = newLen;
+    if (t.el) t.el.querySelector(".sq-track__len").value = newLen;
     renderStepGrid(t);
     refreshAutIfOpen(t);
     refreshRollIfOpen(t);
@@ -410,7 +410,7 @@ export function extendPatternByDuplicate(t, patIdx, newLen, opts = {}) {
     aliasPattern(t, patIdx);
     t.length = newLen;
     t.accents = autoAccents(newLen, patternMeter(patIdx));
-    if (t.el) t.el.querySelector(".track-len").value = newLen;
+    if (t.el) t.el.querySelector(".sq-track__len").value = newLen;
     renderStepGrid(t);
     refreshAutIfOpen(t);
     refreshRollIfOpen(t);

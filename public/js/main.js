@@ -22,20 +22,20 @@ export function showAudioGateDialog() {
   const isTouch = ("ontouchstart" in window) || (navigator.maxTouchPoints || 0) > 0;
   if (!isTouch) return;
   const overlay = document.createElement("div");
-  overlay.className = "modal-overlay audio-gate-overlay";
+  overlay.className = "sq-modal-overlay sq-audio__gate-overlay";
   const modal = document.createElement("div");
-  modal.className = "modal audio-gate-modal";
+  modal.className = "sq-modal sq-audio__gate-modal";
   modal.setAttribute("role", "dialog");
   modal.setAttribute("aria-modal", "true");
   modal.innerHTML = `
-    <div class="audio-gate-title">tap to enable audio</div>
-    <div class="audio-gate-hint" aria-live="polite"></div>
-    <button class="audio-gate-btn" type="button">enable audio</button>
-    <div class="audio-gate-status"></div>
+    <div class="sq-audio__gate-title">tap to enable audio</div>
+    <div class="sq-audio__gate-hint" aria-live="polite"></div>
+    <button class="sq-audio__gate-btn" type="button">enable audio</button>
+    <div class="sq-audio__gate-status"></div>
   `;
   overlay.appendChild(modal);
   document.body.appendChild(overlay);
-  const hintEl = modal.querySelector(".audio-gate-hint");
+  const hintEl = modal.querySelector(".sq-audio__gate-hint");
   let tipIdx = Math.floor(Math.random() * HELP_TIPS.length);
   hintEl.textContent = HELP_TIPS[tipIdx];
   const tipTimer = setInterval(() => {
@@ -46,8 +46,8 @@ export function showAudioGateDialog() {
       hintEl.style.opacity = "";
     }, 180);
   }, 3200);
-  const btn = modal.querySelector(".audio-gate-btn");
-  const statusEl = modal.querySelector(".audio-gate-status");
+  const btn = modal.querySelector(".sq-audio__gate-btn");
+  const statusEl = modal.querySelector(".sq-audio__gate-status");
   btn.addEventListener("click", async () => {
     primeAudioForIOS();
     btn.disabled = true;
@@ -167,7 +167,7 @@ export async function pickAudioFileForTrack(t) {
           t.voice.setBuffer(audioBuf);
         } else {
           setEngineKey(t, "upload");
-          if (t.el) t.el.querySelector(".track-engine").value = "upload";
+          if (t.el) t.el.querySelector(".sq-track__engine").value = "upload";
         }
         applySampleSpeed(t);
         setStatus(`"${t.name}" ← ${file.name} (${Math.round(audioBuf.duration * 1000)}ms)`);
@@ -265,7 +265,7 @@ export function init() {
   };
   document.getElementById("bounce-audio")?.addEventListener("click", () => runBounce("bounce-audio", "pattern"));
   document.getElementById("bounce-track")?.addEventListener("click", () => runBounce("bounce-track", "track"));
-  for (const btn of document.querySelectorAll(".dl-btn .dl-icon")) btn.innerHTML = ICON_DOWNLOAD;
+  for (const btn of document.querySelectorAll(".sq-dl__btn .sq-dl__icon")) btn.innerHTML = ICON_DOWNLOAD;
   document.getElementById("bpm").addEventListener("input", e => {
     if (state.ready) Tone.Transport.bpm.value = Number(e.target.value);
     retuneSyncedLFOs();
@@ -276,10 +276,10 @@ export function init() {
     for (const t of state.tracks) {
       for (const key of LFO_KEYS) {
         if (!t.lfoConfig[key].sync) continue;
-        const row = t.el.querySelector(`.lfo-row[data-key="${key}"]`);
+        const row = t.el.querySelector(`.sq-lfo__row[data-key="${key}"]`);
         if (!row) continue;
-        const lbl = row.querySelector(".lfo-rate-label");
-        const divSel = row.querySelector(".lfo-div");
+        const lbl = row.querySelector(".sq-lfo__rate-label");
+        const divSel = row.querySelector(".sq-lfo__div");
         const opt = divSel.options[divSel.selectedIndex];
         lbl.textContent = `${opt ? opt.textContent : t.lfoConfig[key].div} · ${rateFromSync(t.lfoConfig[key].div).toFixed(2)} hz`;
       }

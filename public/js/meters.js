@@ -14,7 +14,7 @@ export function samplePeak(analyser) {
 export function paintMeter(el, level) {
   if (!el) return;
   let bar = el._bar;
-  if (!bar || !bar.isConnected) { bar = el._bar = el.querySelector(".meter-bar"); }
+  if (!bar || !bar.isConnected) { bar = el._bar = el.querySelector(".sq-meter__bar"); }
   if (!bar) return;
   const clamped = Math.max(0, Math.min(1, level));
   // Near-linear response with a mild pow so quiet signals stay visible. The bar
@@ -25,7 +25,7 @@ export function paintMeter(el, level) {
   // mobile where dozens of meters would otherwise reflow continuously.
   if (bar._lastPct !== pct) { bar.style.width = pct + "%"; bar._lastPct = pct; }
   const clip = level >= 0.995;
-  if (bar._lastClip !== clip) { bar.classList.toggle("clip", clip); bar._lastClip = clip; }
+  if (bar._lastClip !== clip) { bar.classList.toggle("is-clip", clip); bar._lastClip = clip; }
 }
 // Meter repaints are throttled to ~30 Hz. rAF fires at the display refresh rate
 // (up to 120 Hz on recent phones); sampling every analyser and touching the DOM
@@ -40,13 +40,13 @@ export function meterTick(ts) {
   if (now - _meterLastPaint < METER_INTERVAL_MS) return;
   _meterLastPaint = now;
   if (state.masterAnalyser) {
-    if (!_masterMeterEl || !_masterMeterEl.isConnected) _masterMeterEl = document.querySelector(".master-meter");
+    if (!_masterMeterEl || !_masterMeterEl.isConnected) _masterMeterEl = document.querySelector(".sq-meter--master");
     paintMeter(_masterMeterEl, samplePeak(state.masterAnalyser));
   }
   for (const t of state.tracks) {
     if (!t.meterAnalyser || !t.el) continue;
     let mEl = t._meterEl;
-    if (!mEl || !mEl.isConnected) { mEl = t._meterEl = t.el.querySelector(".track-meter"); }
+    if (!mEl || !mEl.isConnected) { mEl = t._meterEl = t.el.querySelector(".sq-track__meter"); }
     paintMeter(mEl, samplePeak(t.meterAnalyser));
   }
 }

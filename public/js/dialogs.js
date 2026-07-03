@@ -4,26 +4,26 @@ import { state } from "./state.js";
 export function showInputDialog({ title, defaultValue = "", placeholder = "", multiline = false }) {
   return new Promise((resolve) => {
     const overlay = document.createElement("div");
-    overlay.className = "modal-overlay";
+    overlay.className = "sq-modal-overlay";
     const esc = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;").replace(/\n/g, "&#10;");
     const field = multiline
-      ? `<textarea class="modal-input modal-multiline" rows="5" placeholder="${esc(placeholder)}">${esc(defaultValue)}</textarea>`
-      : `<input class="modal-input" type="text" value="${esc(defaultValue)}" placeholder="${esc(placeholder)}" />`;
+      ? `<textarea class="sq-modal__input sq-modal__input--multiline" rows="5" placeholder="${esc(placeholder)}">${esc(defaultValue)}</textarea>`
+      : `<input class="sq-modal__input" type="text" value="${esc(defaultValue)}" placeholder="${esc(placeholder)}" />`;
     overlay.innerHTML = `
-      <div class="modal" role="dialog" aria-modal="true">
-        <div class="modal-title">${esc(title)}</div>
+      <div class="sq-modal" role="dialog" aria-modal="true">
+        <div class="sq-modal__title">${esc(title)}</div>
         ${field}
-        <div class="modal-actions">
-          <button class="modal-cancel ghost">cancel</button>
-          <button class="modal-ok">ok</button>
+        <div class="sq-modal__actions">
+          <button class="modal-cancel sq-btn--ghost">cancel</button>
+          <button class="sq-modal__ok">ok</button>
         </div>
       </div>
     `;
     document.body.appendChild(overlay);
-    const input = overlay.querySelector(".modal-input");
+    const input = overlay.querySelector(".sq-modal__input");
     setTimeout(() => { input.focus(); if (input.select) input.select(); }, 0);
     const close = (val) => { overlay.remove(); resolve(val); };
-    overlay.querySelector(".modal-ok").addEventListener("click", () => close(input.value));
+    overlay.querySelector(".sq-modal__ok").addEventListener("click", () => close(input.value));
     overlay.querySelector(".modal-cancel").addEventListener("click", () => close(null));
     input.addEventListener("keydown", (e) => {
       // single-line: Enter submits. multiline: Cmd/Ctrl+Enter submits, plain Enter adds newline.
@@ -41,26 +41,26 @@ export function showSavedPatchPicker() {
     const all = loadPatches();
     const names = Object.keys(all).sort();
     const overlay = document.createElement("div");
-    overlay.className = "modal-overlay";
+    overlay.className = "sq-modal-overlay";
     const esc = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
     const rows = names.length
-      ? names.map(n => `<li class="patch-row"><button class="patch-load" data-name="${esc(n)}">${esc(n)}</button><button class="patch-del ghost" data-name="${esc(n)}" title="delete">×</button></li>`).join("")
-      : `<li class="patch-empty">no saved patches yet — design a sound and click save.</li>`;
+      ? names.map(n => `<li class="sq-patch__row"><button class="sq-patch__load" data-name="${esc(n)}">${esc(n)}</button><button class="sq-patch__del sq-btn--ghost" data-name="${esc(n)}" title="delete">×</button></li>`).join("")
+      : `<li class="sq-patch__empty">no saved patches yet — design a sound and click save.</li>`;
     overlay.innerHTML = `
-      <div class="modal" role="dialog" aria-modal="true">
-        <div class="modal-title">load saved patch</div>
-        <ul class="patch-list">${rows}</ul>
-        <div class="modal-actions">
-          <button class="modal-cancel ghost">cancel</button>
+      <div class="sq-modal" role="dialog" aria-modal="true">
+        <div class="sq-modal__title">load saved patch</div>
+        <ul class="sq-patch__list">${rows}</ul>
+        <div class="sq-modal__actions">
+          <button class="modal-cancel sq-btn--ghost">cancel</button>
         </div>
       </div>
     `;
     document.body.appendChild(overlay);
     const close = (v) => { overlay.remove(); resolve(v); };
-    overlay.querySelectorAll(".patch-load").forEach(btn => {
+    overlay.querySelectorAll(".sq-patch__load").forEach(btn => {
       btn.addEventListener("click", () => close(btn.dataset.name));
     });
-    overlay.querySelectorAll(".patch-del").forEach(btn => {
+    overlay.querySelectorAll(".sq-patch__del").forEach(btn => {
       btn.addEventListener("click", () => {
         const name = btn.dataset.name;
         const map = loadPatches();
@@ -68,7 +68,7 @@ export function showSavedPatchPicker() {
         storePatches(map);
         rebuildEngineCatalog();
         for (const t of state.tracks) refreshEngineSelect(t);
-        btn.closest(".patch-row")?.remove();
+        btn.closest(".sq-patch__row")?.remove();
       });
     });
     overlay.querySelector(".modal-cancel").addEventListener("click", () => close(null));
@@ -84,7 +84,7 @@ export function showSavedPatchPicker() {
 export function showSelectDialog({ title, options }) {
   return new Promise(resolve => {
     const overlay = document.createElement("div");
-    overlay.className = "modal-overlay";
+    overlay.className = "sq-modal-overlay";
     const esc = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
     // Options may be plain strings or `{label, value}` objects.
     const opts = options.map(o => {
@@ -93,21 +93,21 @@ export function showSelectDialog({ title, options }) {
       return `<option value="${esc(value)}">${esc(label)}</option>`;
     }).join("");
     overlay.innerHTML = `
-      <div class="modal" role="dialog" aria-modal="true">
-        <div class="modal-title">${esc(title)}</div>
-        <select class="modal-input" size="8" style="min-height:140px">${opts}</select>
-        <div class="modal-actions">
-          <button class="modal-cancel ghost">cancel</button>
-          <button class="modal-delete ghost danger">delete</button>
-          <button class="modal-ok">load</button>
+      <div class="sq-modal" role="dialog" aria-modal="true">
+        <div class="sq-modal__title">${esc(title)}</div>
+        <select class="sq-modal__input" size="8" style="min-height:140px">${opts}</select>
+        <div class="sq-modal__actions">
+          <button class="modal-cancel sq-btn--ghost">cancel</button>
+          <button class="modal-delete sq-btn--ghost sq-btn--danger">delete</button>
+          <button class="sq-modal__ok">load</button>
         </div>
       </div>
     `;
     document.body.appendChild(overlay);
-    const sel = overlay.querySelector(".modal-input");
+    const sel = overlay.querySelector(".sq-modal__input");
     setTimeout(() => sel.focus(), 0);
     const close = (val) => { overlay.remove(); resolve(val); };
-    overlay.querySelector(".modal-ok").addEventListener("click", () => close({ action: "load", value: sel.value }));
+    overlay.querySelector(".sq-modal__ok").addEventListener("click", () => close({ action: "load", value: sel.value }));
     overlay.querySelector(".modal-cancel").addEventListener("click", () => close(null));
     overlay.querySelector(".modal-delete").addEventListener("click", () => close({ action: "delete", value: sel.value }));
     sel.addEventListener("keydown", e => {

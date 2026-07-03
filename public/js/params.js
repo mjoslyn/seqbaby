@@ -32,15 +32,15 @@ export function updatePlaitsControlsVisibility(t) {
   const isRhodes    = t.engineKey === "dm:rhodes";
   const isProphet6  = t.engineKey === "dm:prophet6";
   const showTimbre = isPlaits || isMiniBrute || isMoog || isJuno || isGuitar || isBass || isRhodes || isProphet6;
-  const group = t._timbreGroupEl || t.el.querySelector(".timbre-group");
+  const group = t._timbreGroupEl || t.el.querySelector(".sq-param-group--timbre");
   if (group) {
     group.hidden = !showTimbre;
     group.style.removeProperty("display");
   }
-  const modPanel = t._modPanelEl || t.el.querySelector(".track-mod-panel");
+  const modPanel = t._modPanelEl || t.el.querySelector(".sq-track__mod-panel");
   if (modPanel) {
     for (const key of ["harm", "timb", "morph", "decay"]) {
-      const row = modPanel.querySelector(`.lfo-row[data-key="${key}"]`);
+      const row = modPanel.querySelector(`.sq-lfo__row[data-key="${key}"]`);
       if (row) {
         row.hidden = !showTimbre;
         row.style.removeProperty("display");
@@ -66,7 +66,7 @@ export function updatePlaitsControlsVisibility(t) {
       ? { harm: "detune",   timb: "shape",  morph: "drive",     decay: "decay" }
       : { harm: "harm",     timb: "timb",    morph: "morph",    decay: "decay" };
     for (const key of Object.keys(labels)) {
-      const field = group.querySelector(`.p-${key}`)?.closest(".field");
+      const field = group.querySelector(`.p-${key}`)?.closest(".sq-field");
       if (!field) continue;
       if (labels[key] == null) {
         field.hidden = true;
@@ -82,7 +82,7 @@ export function updatePlaitsControlsVisibility(t) {
     if (randBtn) randBtn.hidden = isMiniBrute || isMoog || isJuno || isGuitar || isBass || isRhodes || isProphet6;
   }
   // Per-oscillator volume sliders: only shown for the analog mono engines.
-  const oscGroup = t._oscMixGroupEl || t.el.querySelector(".osc-mix-group");
+  const oscGroup = t._oscMixGroupEl || t.el.querySelector(".sq-param-group--osc-mix");
   if (oscGroup) {
     const showOsc = isMiniBrute || isMoog || isJuno || isProphet6;
     oscGroup.hidden = !showOsc;
@@ -95,7 +95,7 @@ export function updatePlaitsControlsVisibility(t) {
         ? { osc1: "vco1", osc2: "vco2",  osc3: "sub",   osc4: "noise", hide4: false }
         : { osc1: "osc1", osc2: "osc2",  osc3: "osc3",  osc4: "",    hide4: true };
       for (const k of ["osc1", "osc2", "osc3", "osc4"]) {
-        const field = oscGroup.querySelector(`.p-${k}`)?.closest(".field");
+        const field = oscGroup.querySelector(`.p-${k}`)?.closest(".sq-field");
         if (!field) continue;
         if (k === "osc4" && oscLabels.hide4) { field.hidden = true; continue; }
         field.hidden = false;
@@ -105,10 +105,10 @@ export function updatePlaitsControlsVisibility(t) {
     }
   }
   // Oscillator-modifier group (ultrasaw / FM / metalizer): mini-brute only for now.
-  const modGroup = t._oscModGroupEl || t.el.querySelector(".osc-mod-group");
+  const modGroup = t._oscModGroupEl || t.el.querySelector(".sq-param-group--osc-mod");
   if (modGroup) modGroup.hidden = !isMiniBrute;
   // Moog osc-bank group (per-osc range + waveform + osc2/3 freq + noise).
-  const moogGroup = t._moogOscGroupEl || t.el.querySelector(".moog-osc-group");
+  const moogGroup = t._moogOscGroupEl || t.el.querySelector(".sq-param-group--moog");
   if (moogGroup) moogGroup.hidden = !isMoog;
 }
 

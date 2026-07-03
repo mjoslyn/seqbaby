@@ -27,51 +27,51 @@
   <meta name="twitter:image" content="https://seqbaby.netlify.app/share.png" />
 </head>
 <body>
-  <header class="transport">
-    <div class="logo" title="seqbaby">
+  <header class="sq-transport">
+    <div class="sq-logo" title="seqbaby">
       <img src="/favicon.svg" alt="" />
       <span>seqbaby</span>
     </div>
-    <button id="play" class="play">play</button>
-    <div class="field"><label for="bpm">bpm</label><input id="bpm" type="number" value="110" min="40" max="240" /></div>
-    <div class="field"><label for="swing">swing</label><input id="swing" type="range" min="0" max="0.5" step="0.01" value="0" /></div>
-    <div class="scale-field">
-      <label class="scale-toggle"><input id="scale-on" type="checkbox" /> scale</label>
+    <button id="play" class="sq-play">play</button>
+    <div class="sq-field"><label for="bpm">bpm</label><input id="bpm" type="number" value="110" min="40" max="240" /></div>
+    <div class="sq-field"><label for="swing">swing</label><input id="swing" type="range" min="0" max="0.5" step="0.01" value="0" /></div>
+    <div class="sq-scale__field">
+      <label class="sq-scale__toggle"><input id="scale-on" type="checkbox" /> scale</label>
       <select id="scale-root"></select>
       <select id="scale-mode"></select>
-      <button id="note-colors" class="ghost icon-btn" aria-pressed="false" aria-label="note colors" title="toggle diatonic note coloring on the piano roll + step grid"></button>
+      <button id="note-colors" class="sq-btn--ghost sq-icon-btn" aria-pressed="false" aria-label="note colors" title="toggle diatonic note coloring on the piano roll + step grid"></button>
     </div>
-    <button id="add-track" class="ghost">add track</button>
-    <div class="spacer"></div>
-    <button id="metronome" class="ghost icon-btn" aria-pressed="false" aria-label="metronome" title="metronome click on the downbeat"></button>
-    <svg id="beat-indicator" class="beat-indicator" viewBox="-22 -22 44 44" width="40" height="40" aria-hidden="true"></svg>
-    <div class="meter master-meter" title="master output level"><div class="meter-bar"></div></div>
-    <div id="status" class="status">click play to unlock audio</div>
+    <button id="add-track" class="sq-btn--ghost">add track</button>
+    <div class="sq-spacer"></div>
+    <button id="metronome" class="sq-btn--ghost sq-icon-btn" aria-pressed="false" aria-label="metronome" title="metronome click on the downbeat"></button>
+    <svg id="beat-indicator" class="sq-beat-indicator" viewBox="-22 -22 44 44" width="40" height="40" aria-hidden="true"></svg>
+    <div class="sq-meter sq-meter--master" title="master output level"><div class="sq-meter__bar"></div></div>
+    <div id="status" class="sq-status">click play to unlock audio</div>
   </header>
 
-  <div class="pattern-bar">
+  <div class="sq-pattern-bar">
     <button id="set-share" title="create a shareable link for this session">Share</button>
-    <button id="pattern-menu-btn" class="mobile-only" type="button" aria-label="session menu" title="open session menu">Session</button>
-    <div class="set-stack">
-      <button id="set-save" class="ghost" title="save the current session">Save</button>
-      <button id="set-load" class="ghost" title="load a saved session">Load</button>
+    <button id="pattern-menu-btn" class="sq-mobile-only" type="button" aria-label="session menu" title="open session menu">Session</button>
+    <div class="sq-set__stack">
+      <button id="set-save" class="sq-btn--ghost" title="save the current session">Save</button>
+      <button id="set-load" class="sq-btn--ghost" title="load a saved session">Load</button>
     </div>
-    <div class="set-stack">
-      <button id="set-export" class="ghost" title="download the current session as a json file">Export</button>
-      <button id="set-import" class="ghost" title="load a session from a json file">Import</button>
+    <div class="sq-set__stack">
+      <button id="set-export" class="sq-btn--ghost" title="download the current session as a json file">Export</button>
+      <button id="set-import" class="sq-btn--ghost" title="load a session from a json file">Import</button>
     </div>
-    <div class="set-stack">
-      <button id="bounce-audio" class="ghost dl-btn" title="render the current pattern to audio and download it"><span class="dl-icon"></span><span class="dl-label">Pattern</span></button>
-      <button id="bounce-track" class="ghost dl-btn" title="chain through all non-empty patterns and render the whole arrangement"><span class="dl-icon"></span><span class="dl-label">Session</span></button>
+    <div class="sq-set__stack">
+      <button id="bounce-audio" class="sq-btn--ghost sq-dl__btn" title="render the current pattern to audio and download it"><span class="sq-dl__icon"></span><span class="sq-dl__label">Pattern</span></button>
+      <button id="bounce-track" class="sq-btn--ghost sq-dl__btn" title="chain through all non-empty patterns and render the whole arrangement"><span class="sq-dl__icon"></span><span class="sq-dl__label">Session</span></button>
     </div>
-    <div class="mode-stack">
-      <div class="mode-row">
-        <button id="pattern-mode" class="ghost icon-btn" aria-pressed="false" aria-label="pattern mode"></button>
-        <button id="pattern-switch" class="ghost icon-btn" aria-pressed="false" aria-label="switch mode"></button>
+    <div class="sq-mode__stack">
+      <div class="sq-mode__row">
+        <button id="pattern-mode" class="sq-btn--ghost sq-icon-btn" aria-pressed="false" aria-label="pattern mode"></button>
+        <button id="pattern-switch" class="sq-btn--ghost sq-icon-btn" aria-pressed="false" aria-label="switch mode"></button>
       </div>
-      <button id="pattern-dup" class="ghost" title="duplicate current pattern into the next slot">dup</button>
+      <button id="pattern-dup" class="sq-btn--ghost" title="duplicate current pattern into the next slot">dup</button>
     </div>
-    <label class="repeat-wrap" title="time signature for this pattern"><span>sig</span><select id="pattern-meter">
+    <label class="sq-repeat__wrap" title="time signature for this pattern"><span>sig</span><select id="pattern-meter">
       <option value="4/4" selected>4/4</option>
       <option value="3/4">3/4</option>
       <option value="2/4">2/4</option>
@@ -83,29 +83,29 @@
       <option value="5/8">5/8</option>
       <option value="7/8">7/8</option>
     </select></label>
-    <label class="repeat-wrap" title="bars this pattern plays for before chain advances"><span>rep</span><input id="pattern-repeats" type="number" min="1" max="16" value="1" /></label>
-    <div id="pattern-grid" class="pattern-grid"></div>
+    <label class="sq-repeat__wrap" title="bars this pattern plays for before chain advances"><span>rep</span><input id="pattern-repeats" type="number" min="1" max="16" value="1" /></label>
+    <div id="pattern-grid" class="sq-pattern__grid"></div>
   </div>
 
   <main id="tracks"></main>
 
   <template id="track-template">
-    <section class="track">
-      <div class="track-head">
-        <input class="track-name" type="text" placeholder="track" />
-        <select class="track-engine"></select>
-        <button class="track-save icon-btn ghost" aria-label="save patch" title="save the current custom patch"></button>
-        <button class="track-load-patch icon-btn ghost" aria-label="load patch" title="load a saved patch into this track"></button>
-        <div class="field"><label>len</label><input class="track-len" type="number" min="1" max="128" value="16" /></div>
-        <div class="track-len-extend">
-          <button class="track-len-plus1 ghost" type="button" title="add one bar to this track's pattern (duplicates existing content)">+1</button>
-          <button class="track-len-2x ghost" type="button" title="double this track's pattern length (duplicates content)">x2</button>
-          <button class="track-len-4x ghost" type="button" title="quadruple this track's pattern length (duplicates content)">x4</button>
-          <button class="track-len-half ghost" type="button" title="halve this track's pattern length (truncates to the first half)">/2</button>
-          <button class="track-len-quarter ghost" type="button" title="quarter this track's pattern length (truncates to the first quarter)">/4</button>
+    <section class="sq-track">
+      <div class="sq-track__head">
+        <input class="sq-track__name" type="text" placeholder="track" />
+        <select class="sq-track__engine"></select>
+        <button class="sq-track__save sq-icon-btn sq-btn--ghost" aria-label="save patch" title="save the current custom patch"></button>
+        <button class="sq-track__load-patch sq-icon-btn sq-btn--ghost" aria-label="load patch" title="load a saved patch into this track"></button>
+        <div class="sq-field"><label>len</label><input class="sq-track__len" type="number" min="1" max="128" value="16" /></div>
+        <div class="sq-track__len-extend">
+          <button class="track-len-plus1 sq-btn--ghost" type="button" title="add one bar to this track's pattern (duplicates existing content)">+1</button>
+          <button class="track-len-2x sq-btn--ghost" type="button" title="double this track's pattern length (duplicates content)">x2</button>
+          <button class="track-len-4x sq-btn--ghost" type="button" title="quadruple this track's pattern length (duplicates content)">x4</button>
+          <button class="track-len-half sq-btn--ghost" type="button" title="halve this track's pattern length (truncates to the first half)">/2</button>
+          <button class="track-len-quarter sq-btn--ghost" type="button" title="quarter this track's pattern length (truncates to the first quarter)">/4</button>
         </div>
-        <div class="field"><label>spd</label>
-          <select class="track-speed">
+        <div class="sq-field"><label>spd</label>
+          <select class="sq-track__speed">
             <option value="0.0625">1/16</option>
             <option value="0.125">1/8</option>
             <option value="0.25">1/4</option>
@@ -118,34 +118,34 @@
             <option value="16">16</option>
           </select>
         </div>
-        <div class="field vol-field"><label>vol</label>
-          <div class="vol-combo" title="volume (drag) + output level">
-            <div class="meter track-meter"><div class="meter-bar"></div></div>
+        <div class="sq-field sq-vol__field"><label>vol</label>
+          <div class="sq-vol-combo" title="volume (drag) + output level">
+            <div class="sq-meter sq-track__meter"><div class="sq-meter__bar"></div></div>
             <input class="p-vol" type="range" min="0" max="1" step="0.01" value="0.8" />
           </div>
         </div>
-        <div class="track-synth-row">
-        <div class="param-group timbre-group">
-          <div class="field"><label>harm</label><input class="p-harm" type="range" min="0" max="1" step="0.01" value="0.5" /></div>
-          <div class="field"><label>timb</label><input class="p-timb" type="range" min="0" max="1" step="0.01" value="0.5" /></div>
-          <div class="field"><label>morph</label><input class="p-morph" type="range" min="0" max="1" step="0.01" value="0.5" /></div>
-          <div class="field"><label>decay</label><input class="p-decay" type="range" min="0" max="1" step="0.01" value="0.4" /></div>
-          <button class="track-rand ghost" title="randomize harm/timb/morph/decay">rand</button>
+        <div class="sq-track__synth-row">
+        <div class="sq-param-group sq-param-group--timbre">
+          <div class="sq-field"><label>harm</label><input class="p-harm" type="range" min="0" max="1" step="0.01" value="0.5" /></div>
+          <div class="sq-field"><label>timb</label><input class="p-timb" type="range" min="0" max="1" step="0.01" value="0.5" /></div>
+          <div class="sq-field"><label>morph</label><input class="p-morph" type="range" min="0" max="1" step="0.01" value="0.5" /></div>
+          <div class="sq-field"><label>decay</label><input class="p-decay" type="range" min="0" max="1" step="0.01" value="0.4" /></div>
+          <button class="track-rand sq-btn--ghost" title="randomize harm/timb/morph/decay">rand</button>
         </div>
-        <div class="param-group osc-mix-group" hidden>
-          <div class="field"><label class="osc1-label">osc1</label><input class="p-osc1" type="range" min="0" max="1" step="0.01" value="0.55" /></div>
-          <div class="field"><label class="osc2-label">osc2</label><input class="p-osc2" type="range" min="0" max="1" step="0.01" value="0.45" /></div>
-          <div class="field"><label class="osc3-label">osc3</label><input class="p-osc3" type="range" min="0" max="1" step="0.01" value="0.35" /></div>
-          <div class="field osc4-field"><label class="osc4-label">sub</label><input class="p-osc4" type="range" min="0" max="1" step="0.01" value="0.4" /></div>
+        <div class="sq-param-group sq-param-group--osc-mix" hidden>
+          <div class="sq-field"><label class="osc1-label">osc1</label><input class="p-osc1" type="range" min="0" max="1" step="0.01" value="0.55" /></div>
+          <div class="sq-field"><label class="osc2-label">osc2</label><input class="p-osc2" type="range" min="0" max="1" step="0.01" value="0.45" /></div>
+          <div class="sq-field"><label class="osc3-label">osc3</label><input class="p-osc3" type="range" min="0" max="1" step="0.01" value="0.35" /></div>
+          <div class="sq-field osc4-field"><label class="osc4-label">sub</label><input class="p-osc4" type="range" min="0" max="1" step="0.01" value="0.4" /></div>
         </div>
-        <div class="param-group osc-mod-group" hidden>
-          <div class="field"><label>ultra</label><input class="p-ultra" type="range" min="0" max="1" step="0.01" value="0.35" /></div>
-          <div class="field"><label>fm</label><input class="p-fm" type="range" min="0" max="1" step="0.01" value="0" /></div>
-          <div class="field"><label>metal</label><input class="p-metal" type="range" min="0" max="1" step="0.01" value="0" /></div>
+        <div class="sq-param-group sq-param-group--osc-mod" hidden>
+          <div class="sq-field"><label>ultra</label><input class="p-ultra" type="range" min="0" max="1" step="0.01" value="0.35" /></div>
+          <div class="sq-field"><label>fm</label><input class="p-fm" type="range" min="0" max="1" step="0.01" value="0" /></div>
+          <div class="sq-field"><label>metal</label><input class="p-metal" type="range" min="0" max="1" step="0.01" value="0" /></div>
         </div>
-        <div class="param-group moog-osc-group" hidden>
-          <div class="moog-osc-row">
-            <span class="moog-osc-lbl">osc1</span>
+        <div class="sq-param-group sq-param-group--moog" hidden>
+          <div class="sq-moog__osc-row">
+            <span class="sq-moog__osc-lbl">osc1</span>
             <select class="p-osc1range" title="range / octave">
               <option value="-2">32'</option><option value="-1">16'</option><option value="0" selected>8'</option><option value="1">4'</option><option value="2">2'</option>
             </select>
@@ -153,9 +153,9 @@
               <option value="triangle">tri</option><option value="sawtooth" selected>saw</option><option value="square">sqr</option><option value="sine">sin</option>
             </select>
           </div>
-          <div class="moog-osc-row">
-            <span class="moog-osc-lbl">osc2</span>
-            <label class="moog-freq"><span>freq</span><input class="p-osc2freq" type="range" min="-7" max="7" step="1" value="0" /></label>
+          <div class="sq-moog__osc-row">
+            <span class="sq-moog__osc-lbl">osc2</span>
+            <label class="sq-moog__freq"><span>freq</span><input class="p-osc2freq" type="range" min="-7" max="7" step="1" value="0" /></label>
             <select class="p-osc2range" title="range / octave">
               <option value="-2">32'</option><option value="-1">16'</option><option value="0" selected>8'</option><option value="1">4'</option><option value="2">2'</option>
             </select>
@@ -163,9 +163,9 @@
               <option value="triangle">tri</option><option value="sawtooth" selected>saw</option><option value="square">sqr</option><option value="sine">sin</option>
             </select>
           </div>
-          <div class="moog-osc-row">
-            <span class="moog-osc-lbl">osc3</span>
-            <label class="moog-freq"><span>freq</span><input class="p-osc3freq" type="range" min="-7" max="7" step="1" value="0" /></label>
+          <div class="sq-moog__osc-row">
+            <span class="sq-moog__osc-lbl">osc3</span>
+            <label class="sq-moog__freq"><span>freq</span><input class="p-osc3freq" type="range" min="-7" max="7" step="1" value="0" /></label>
             <select class="p-osc3range" title="range / octave">
               <option value="-2">32'</option><option value="-1" selected>16'</option><option value="0">8'</option><option value="1">4'</option><option value="2">2'</option>
             </select>
@@ -173,7 +173,7 @@
               <option value="triangle" selected>tri</option><option value="sawtooth">saw</option><option value="square">sqr</option><option value="sine">sin</option>
             </select>
           </div>
-          <div class="field moog-noise">
+          <div class="sq-field sq-moog__noise">
             <label>noise</label><input class="p-noise" type="range" min="0" max="1" step="0.01" value="0" />
             <select class="p-noisetype" title="noise color">
               <option value="white" selected>white</option><option value="pink">pink</option>
@@ -181,110 +181,110 @@
           </div>
         </div>
         </div><!-- /track-synth-row -->
-        <button class="track-solo ghost" aria-pressed="false" title="solo">solo</button>
-        <button class="track-mute ghost">mute</button>
-        <button class="track-note-mode ghost" aria-pressed="true" title="gate plays the full step length; trigger fires a short hit">gate</button>
-        <button class="track-clear ghost">clear</button>
-        <button class="track-dice icon-btn ghost" type="button" aria-label="random melody" title="random melody (replaces this pattern)"></button>
-        <button class="track-dup ghost" type="button" title="duplicate this track">dup</button>
-        <button class="track-remove ghost danger">remove</button>
-        <div class="track-oct">
-          <button class="track-oct-down ghost" type="button" title="shift every step down an octave">oct −</button>
-          <button class="track-oct-up ghost" type="button" title="shift every step up an octave">oct +</button>
-          <button class="track-semi-down ghost" type="button" title="shift every step down a semitone">semi −</button>
-          <button class="track-semi-up ghost" type="button" title="shift every step up a semitone">semi +</button>
+        <button class="sq-track__solo sq-btn--ghost" aria-pressed="false" title="solo">solo</button>
+        <button class="sq-track__mute sq-btn--ghost">mute</button>
+        <button class="track-note-mode sq-btn--ghost" aria-pressed="true" title="gate plays the full step length; trigger fires a short hit">gate</button>
+        <button class="sq-track__clear sq-btn--ghost">clear</button>
+        <button class="track-dice sq-icon-btn sq-btn--ghost" type="button" aria-label="random melody" title="random melody (replaces this pattern)"></button>
+        <button class="sq-track__dup sq-btn--ghost" type="button" title="duplicate this track">dup</button>
+        <button class="sq-track__remove sq-btn--ghost sq-btn--danger">remove</button>
+        <div class="sq-track__oct">
+          <button class="track-oct-down sq-btn--ghost" type="button" title="shift every step down an octave">oct −</button>
+          <button class="track-oct-up sq-btn--ghost" type="button" title="shift every step up an octave">oct +</button>
+          <button class="track-semi-down sq-btn--ghost" type="button" title="shift every step down a semitone">semi −</button>
+          <button class="track-semi-up sq-btn--ghost" type="button" title="shift every step up a semitone">semi +</button>
         </div>
-        <div class="panel-btn-group">
-          <button class="track-roll ghost" aria-pressed="false" title="piano roll: click cells to place notes per step">roll</button>
-          <button class="track-filter ghost" aria-pressed="false" title="filter">filter</button>
-          <button class="track-env ghost" aria-pressed="false" title="envelope → cutoff">env</button>
-          <button class="track-fx ghost" aria-pressed="false" title="fx rack">fx</button>
-          <button class="track-eq ghost" aria-pressed="false" title="3-band eq">eq</button>
-          <button class="track-comp ghost" aria-pressed="false" title="compressor + sidechain">comp</button>
-          <button class="track-mod ghost" aria-pressed="false">mod</button>
-          <button class="track-aut ghost" aria-pressed="false" title="per-step automation">aut</button>
+        <div class="sq-panel__btn-group">
+          <button class="sq-track__roll sq-btn--ghost" aria-pressed="false" title="piano roll: click cells to place notes per step">roll</button>
+          <button class="sq-track__filter sq-btn--ghost" aria-pressed="false" title="filter">filter</button>
+          <button class="sq-track__env sq-btn--ghost" aria-pressed="false" title="envelope → cutoff">env</button>
+          <button class="sq-track__fx sq-btn--ghost" aria-pressed="false" title="fx rack">fx</button>
+          <button class="sq-track__eq sq-btn--ghost" aria-pressed="false" title="3-band eq">eq</button>
+          <button class="sq-track__comp sq-btn--ghost" aria-pressed="false" title="compressor + sidechain">comp</button>
+          <button class="sq-track__mod sq-btn--ghost" aria-pressed="false">mod</button>
+          <button class="track-aut sq-btn--ghost" aria-pressed="false" title="per-step automation">aut</button>
         </div>
       </div>
-      <div class="track-midi field" hidden>
+      <div class="sq-track__midi sq-field" hidden>
         <label>midi out</label>
         <select class="midi-out"></select>
         <label>ch</label>
         <input class="midi-ch" type="number" min="1" max="16" value="1" />
       </div>
-      <div class="track-mod-panel" hidden></div>
-      <div class="track-aut-panel" hidden></div>
-      <div class="track-roll-panel" hidden></div>
-      <div class="track-filter-panel" hidden>
-        <div class="fx-row" data-fx="filter">
-          <span class="fx-title">filter (resonant lp)</span>
-          <label class="fx-ctl"><span>cut</span><input class="p-cutoff" type="range" min="0" max="1" step="0.001" value="1" /></label>
-          <label class="fx-ctl"><span>res</span><input class="p-reson" type="range" min="0" max="1" step="0.01" value="0" /></label>
+      <div class="sq-track__mod-panel" hidden></div>
+      <div class="sq-track__aut-panel" hidden></div>
+      <div class="sq-track__roll-panel" hidden></div>
+      <div class="sq-track__filter-panel" hidden>
+        <div class="sq-fx__row" data-fx="filter">
+          <span class="sq-fx__title">filter (resonant lp)</span>
+          <label class="sq-fx__ctl"><span>cut</span><input class="p-cutoff" type="range" min="0" max="1" step="0.001" value="1" /></label>
+          <label class="sq-fx__ctl"><span>res</span><input class="p-reson" type="range" min="0" max="1" step="0.01" value="0" /></label>
         </div>
       </div>
-      <div class="track-env-panel" hidden>
-        <div class="fx-row" data-fx="env">
-          <span class="fx-title">envelope (adsr → cutoff)</span>
-          <label class="fx-ctl"><span>env</span><input class="p-envamt" type="range" min="0" max="1" step="0.01" value="0" /></label>
-          <label class="fx-ctl"><span>A</span><input class="p-envatk" type="range" min="0" max="1" step="0.01" value="0" /></label>
-          <label class="fx-ctl"><span>D</span><input class="p-envdec" type="range" min="0" max="1" step="0.01" value="0.25" /></label>
-          <label class="fx-ctl"><span>S</span><input class="p-envsus" type="range" min="0" max="1" step="0.01" value="0.4" /></label>
-          <label class="fx-ctl"><span>R</span><input class="p-envrel" type="range" min="0" max="1" step="0.01" value="0.3" /></label>
+      <div class="sq-track__env-panel" hidden>
+        <div class="sq-fx__row" data-fx="env">
+          <span class="sq-fx__title">envelope (adsr → cutoff)</span>
+          <label class="sq-fx__ctl"><span>env</span><input class="p-envamt" type="range" min="0" max="1" step="0.01" value="0" /></label>
+          <label class="sq-fx__ctl"><span>A</span><input class="p-envatk" type="range" min="0" max="1" step="0.01" value="0" /></label>
+          <label class="sq-fx__ctl"><span>D</span><input class="p-envdec" type="range" min="0" max="1" step="0.01" value="0.25" /></label>
+          <label class="sq-fx__ctl"><span>S</span><input class="p-envsus" type="range" min="0" max="1" step="0.01" value="0.4" /></label>
+          <label class="sq-fx__ctl"><span>R</span><input class="p-envrel" type="range" min="0" max="1" step="0.01" value="0.3" /></label>
         </div>
       </div>
-      <div class="track-eq-panel" hidden>
-        <div class="fx-row" data-fx="eq">
-          <span class="fx-title">eq (3-band)</span>
-          <label class="fx-ctl"><span>low</span><input class="p-eq-low" type="range" min="-18" max="18" step="0.5" value="0" /></label>
-          <label class="fx-ctl"><span>mid</span><input class="p-eq-mid" type="range" min="-18" max="18" step="0.5" value="0" /></label>
-          <label class="fx-ctl"><span>high</span><input class="p-eq-high" type="range" min="-18" max="18" step="0.5" value="0" /></label>
+      <div class="sq-track__eq-panel" hidden>
+        <div class="sq-fx__row" data-fx="eq">
+          <span class="sq-fx__title">eq (3-band)</span>
+          <label class="sq-fx__ctl"><span>low</span><input class="p-eq-low" type="range" min="-18" max="18" step="0.5" value="0" /></label>
+          <label class="sq-fx__ctl"><span>mid</span><input class="p-eq-mid" type="range" min="-18" max="18" step="0.5" value="0" /></label>
+          <label class="sq-fx__ctl"><span>high</span><input class="p-eq-high" type="range" min="-18" max="18" step="0.5" value="0" /></label>
         </div>
       </div>
-      <div class="track-comp-panel" hidden>
-        <div class="fx-row" data-fx="comp">
-          <span class="fx-title">compressor</span>
-          <label class="fx-ctl"><span>on</span><input class="comp-enabled" type="checkbox" /></label>
-          <label class="fx-ctl"><span>src</span><select class="comp-source"><option value="self">self</option></select></label>
+      <div class="sq-track__comp-panel" hidden>
+        <div class="sq-fx__row" data-fx="comp">
+          <span class="sq-fx__title">compressor</span>
+          <label class="sq-fx__ctl"><span>on</span><input class="comp-enabled" type="checkbox" /></label>
+          <label class="sq-fx__ctl"><span>src</span><select class="sq-comp__source"><option value="self">self</option></select></label>
         </div>
-        <div class="fx-row" data-fx="comp">
-          <span class="fx-title"></span>
-          <label class="fx-ctl"><span>thr</span><input class="comp-threshold" type="range" min="-60" max="0" step="1" value="-20" /></label>
-          <label class="fx-ctl"><span>ratio</span><input class="comp-ratio" type="range" min="1" max="20" step="0.1" value="4" /></label>
-          <label class="fx-ctl"><span>atk</span><input class="comp-attack" type="range" min="0" max="1" step="0.005" value="0.01" /></label>
-          <label class="fx-ctl"><span>rel</span><input class="comp-release" type="range" min="0.02" max="2" step="0.01" value="0.2" /></label>
-          <label class="fx-ctl"><span>knee</span><input class="comp-knee" type="range" min="0" max="30" step="1" value="6" /></label>
+        <div class="sq-fx__row" data-fx="comp">
+          <span class="sq-fx__title"></span>
+          <label class="sq-fx__ctl"><span>thr</span><input class="comp-threshold" type="range" min="-60" max="0" step="1" value="-20" /></label>
+          <label class="sq-fx__ctl"><span>ratio</span><input class="comp-ratio" type="range" min="1" max="20" step="0.1" value="4" /></label>
+          <label class="sq-fx__ctl"><span>atk</span><input class="comp-attack" type="range" min="0" max="1" step="0.005" value="0.01" /></label>
+          <label class="sq-fx__ctl"><span>rel</span><input class="comp-release" type="range" min="0.02" max="2" step="0.01" value="0.2" /></label>
+          <label class="sq-fx__ctl"><span>knee</span><input class="comp-knee" type="range" min="0" max="30" step="1" value="6" /></label>
         </div>
       </div>
-      <div class="track-fx-panel" hidden>
-        <div class="fx-row" data-fx="vinyl">
-          <span class="fx-title">vinyl sim</span>
-          <label class="fx-ctl"><span>amt</span><input class="fx-vinyl-amount" type="range" min="0" max="1" step="0.01" value="0" /></label>
-          <label class="fx-ctl"><span>warmth</span><input class="fx-vinyl-warmth" type="range" min="0" max="1" step="0.01" value="0.4" /></label>
-          <label class="fx-ctl"><span>wow</span><input class="fx-vinyl-wow" type="range" min="0" max="1" step="0.01" value="0.3" /></label>
+      <div class="sq-track__fx-panel" hidden>
+        <div class="sq-fx__row" data-fx="vinyl">
+          <span class="sq-fx__title">vinyl sim</span>
+          <label class="sq-fx__ctl"><span>amt</span><input class="fx-vinyl-amount" type="range" min="0" max="1" step="0.01" value="0" /></label>
+          <label class="sq-fx__ctl"><span>warmth</span><input class="fx-vinyl-warmth" type="range" min="0" max="1" step="0.01" value="0.4" /></label>
+          <label class="sq-fx__ctl"><span>wow</span><input class="fx-vinyl-wow" type="range" min="0" max="1" step="0.01" value="0.3" /></label>
         </div>
-        <div class="fx-row" data-fx="cassette">
-          <span class="fx-title">cassette</span>
-          <label class="fx-ctl"><span>amt</span><input class="fx-cassette-amount" type="range" min="0" max="1" step="0.01" value="0" /></label>
-          <label class="fx-ctl"><span>flutter</span><input class="fx-cassette-flutter" type="range" min="0" max="1" step="0.01" value="0.3" /></label>
-          <label class="fx-ctl"><span>sat</span><input class="fx-cassette-sat" type="range" min="0" max="1" step="0.01" value="0.4" /></label>
+        <div class="sq-fx__row" data-fx="cassette">
+          <span class="sq-fx__title">cassette</span>
+          <label class="sq-fx__ctl"><span>amt</span><input class="fx-cassette-amount" type="range" min="0" max="1" step="0.01" value="0" /></label>
+          <label class="sq-fx__ctl"><span>flutter</span><input class="fx-cassette-flutter" type="range" min="0" max="1" step="0.01" value="0.3" /></label>
+          <label class="sq-fx__ctl"><span>sat</span><input class="fx-cassette-sat" type="range" min="0" max="1" step="0.01" value="0.4" /></label>
         </div>
-        <div class="fx-row" data-fx="fuzz">
-          <span class="fx-title">fuzz (dba-style)</span>
-          <label class="fx-ctl"><span>amt</span><input class="fx-fuzz-amount" type="range" min="0" max="1" step="0.01" value="0" /></label>
-          <label class="fx-ctl"><span>drive</span><input class="fx-fuzz-drive" type="range" min="0" max="1" step="0.01" value="0.7" /></label>
-          <label class="fx-ctl"><span>tone</span><input class="fx-fuzz-tone" type="range" min="0" max="1" step="0.01" value="0.4" /></label>
-          <label class="fx-ctl"><span>level</span><input class="fx-fuzz-level" type="range" min="0" max="1" step="0.01" value="0.5" /></label>
+        <div class="sq-fx__row" data-fx="fuzz">
+          <span class="sq-fx__title">fuzz (dba-style)</span>
+          <label class="sq-fx__ctl"><span>amt</span><input class="fx-fuzz-amount" type="range" min="0" max="1" step="0.01" value="0" /></label>
+          <label class="sq-fx__ctl"><span>drive</span><input class="fx-fuzz-drive" type="range" min="0" max="1" step="0.01" value="0.7" /></label>
+          <label class="sq-fx__ctl"><span>tone</span><input class="fx-fuzz-tone" type="range" min="0" max="1" step="0.01" value="0.4" /></label>
+          <label class="sq-fx__ctl"><span>level</span><input class="fx-fuzz-level" type="range" min="0" max="1" step="0.01" value="0.5" /></label>
         </div>
-        <div class="fx-row" data-fx="ringmod">
-          <span class="fx-title">ring mod</span>
-          <label class="fx-ctl"><span>wet</span><input class="fx-ringmod-wet" type="range" min="0" max="1" step="0.01" value="0" /></label>
-          <label class="fx-ctl"><span>freq</span><input class="fx-ringmod-freq" type="range" min="0" max="1" step="0.01" value="0.35" /></label>
+        <div class="sq-fx__row" data-fx="ringmod">
+          <span class="sq-fx__title">ring mod</span>
+          <label class="sq-fx__ctl"><span>wet</span><input class="fx-ringmod-wet" type="range" min="0" max="1" step="0.01" value="0" /></label>
+          <label class="sq-fx__ctl"><span>freq</span><input class="fx-ringmod-freq" type="range" min="0" max="1" step="0.01" value="0.35" /></label>
         </div>
-        <div class="fx-row" data-fx="shaper">
-          <span class="fx-title">wave shaper</span>
-          <label class="fx-ctl"><span>wet</span><input class="fx-shaper-wet" type="range" min="0" max="1" step="0.01" value="0" /></label>
-          <label class="fx-ctl"><span>pre</span><input class="fx-shaper-preamp" type="range" min="0" max="1" step="0.01" value="0.5" /></label>
-          <label class="fx-ctl"><span>amt</span><input class="fx-shaper-amt" type="range" min="0" max="1" step="0.01" value="0.5" /></label>
-          <label class="fx-ctl"><span>mode</span><select class="fx-shaper-mode">
+        <div class="sq-fx__row" data-fx="shaper">
+          <span class="sq-fx__title">wave shaper</span>
+          <label class="sq-fx__ctl"><span>wet</span><input class="fx-shaper-wet" type="range" min="0" max="1" step="0.01" value="0" /></label>
+          <label class="sq-fx__ctl"><span>pre</span><input class="fx-shaper-preamp" type="range" min="0" max="1" step="0.01" value="0.5" /></label>
+          <label class="sq-fx__ctl"><span>amt</span><input class="fx-shaper-amt" type="range" min="0" max="1" step="0.01" value="0.5" /></label>
+          <label class="sq-fx__ctl"><span>mode</span><select class="fx-shaper-mode">
             <option value="saturate">saturate</option>
             <option value="softclip">soft clip</option>
             <option value="clip">clip</option>
@@ -293,46 +293,46 @@
             <option value="wrap">wrap</option>
           </select></label>
         </div>
-        <div class="fx-row" data-fx="crush">
-          <span class="fx-title">bitcrush</span>
-          <label class="fx-ctl"><span>wet</span><input class="fx-crush-wet" type="range" min="0" max="1" step="0.01" value="0" /></label>
-          <label class="fx-ctl"><span>bits</span><input class="fx-crush-bits" type="range" min="1" max="16" step="1" value="8" /></label>
+        <div class="sq-fx__row" data-fx="crush">
+          <span class="sq-fx__title">bitcrush</span>
+          <label class="sq-fx__ctl"><span>wet</span><input class="fx-crush-wet" type="range" min="0" max="1" step="0.01" value="0" /></label>
+          <label class="sq-fx__ctl"><span>bits</span><input class="fx-crush-bits" type="range" min="1" max="16" step="1" value="8" /></label>
         </div>
-        <div class="fx-row" data-fx="autowah">
-          <span class="fx-title">auto-wah</span>
-          <label class="fx-ctl"><span>wet</span><input class="fx-autowah-wet" type="range" min="0" max="1" step="0.01" value="0" /></label>
-          <label class="fx-ctl"><span>sens</span><input class="fx-autowah-sens" type="range" min="0" max="1" step="0.01" value="0.5" /></label>
-          <label class="fx-ctl"><span>range</span><input class="fx-autowah-range" type="range" min="0" max="1" step="0.01" value="0.5" /></label>
+        <div class="sq-fx__row" data-fx="autowah">
+          <span class="sq-fx__title">auto-wah</span>
+          <label class="sq-fx__ctl"><span>wet</span><input class="fx-autowah-wet" type="range" min="0" max="1" step="0.01" value="0" /></label>
+          <label class="sq-fx__ctl"><span>sens</span><input class="fx-autowah-sens" type="range" min="0" max="1" step="0.01" value="0.5" /></label>
+          <label class="sq-fx__ctl"><span>range</span><input class="fx-autowah-range" type="range" min="0" max="1" step="0.01" value="0.5" /></label>
         </div>
-        <div class="fx-row" data-fx="chorus">
-          <span class="fx-title">chorus</span>
-          <label class="fx-ctl"><span>wet</span><input class="fx-chorus-wet" type="range" min="0" max="1" step="0.01" value="0" /></label>
-          <label class="fx-ctl"><span>rate</span><input class="fx-chorus-rate" type="range" min="0" max="1" step="0.01" value="0.5" /></label>
-          <label class="fx-ctl"><span>depth</span><input class="fx-chorus-depth" type="range" min="0" max="1" step="0.01" value="0.5" /></label>
+        <div class="sq-fx__row" data-fx="chorus">
+          <span class="sq-fx__title">chorus</span>
+          <label class="sq-fx__ctl"><span>wet</span><input class="fx-chorus-wet" type="range" min="0" max="1" step="0.01" value="0" /></label>
+          <label class="sq-fx__ctl"><span>rate</span><input class="fx-chorus-rate" type="range" min="0" max="1" step="0.01" value="0.5" /></label>
+          <label class="sq-fx__ctl"><span>depth</span><input class="fx-chorus-depth" type="range" min="0" max="1" step="0.01" value="0.5" /></label>
         </div>
-        <div class="fx-row" data-fx="phaser">
-          <span class="fx-title">phaser</span>
-          <label class="fx-ctl"><span>wet</span><input class="fx-phaser-wet" type="range" min="0" max="1" step="0.01" value="0" /></label>
-          <label class="fx-ctl"><span>rate</span><input class="fx-phaser-rate" type="range" min="0" max="1" step="0.01" value="0.3" /></label>
-          <label class="fx-ctl"><span>depth</span><input class="fx-phaser-depth" type="range" min="0" max="1" step="0.01" value="0.5" /></label>
+        <div class="sq-fx__row" data-fx="phaser">
+          <span class="sq-fx__title">phaser</span>
+          <label class="sq-fx__ctl"><span>wet</span><input class="fx-phaser-wet" type="range" min="0" max="1" step="0.01" value="0" /></label>
+          <label class="sq-fx__ctl"><span>rate</span><input class="fx-phaser-rate" type="range" min="0" max="1" step="0.01" value="0.3" /></label>
+          <label class="sq-fx__ctl"><span>depth</span><input class="fx-phaser-depth" type="range" min="0" max="1" step="0.01" value="0.5" /></label>
         </div>
-        <div class="fx-row" data-fx="flanger">
-          <span class="fx-title">flanger</span>
-          <label class="fx-ctl"><span>wet</span><input class="fx-flanger-wet" type="range" min="0" max="1" step="0.01" value="0" /></label>
-          <label class="fx-ctl"><span>rate</span><input class="fx-flanger-rate" type="range" min="0" max="1" step="0.01" value="0.3" /></label>
-          <label class="fx-ctl"><span>fbk</span><input class="fx-flanger-fbk" type="range" min="0" max="1" step="0.01" value="0.5" /></label>
+        <div class="sq-fx__row" data-fx="flanger">
+          <span class="sq-fx__title">flanger</span>
+          <label class="sq-fx__ctl"><span>wet</span><input class="fx-flanger-wet" type="range" min="0" max="1" step="0.01" value="0" /></label>
+          <label class="sq-fx__ctl"><span>rate</span><input class="fx-flanger-rate" type="range" min="0" max="1" step="0.01" value="0.3" /></label>
+          <label class="sq-fx__ctl"><span>fbk</span><input class="fx-flanger-fbk" type="range" min="0" max="1" step="0.01" value="0.5" /></label>
         </div>
-        <div class="fx-row" data-fx="pitchshift">
-          <span class="fx-title">pitch shift</span>
-          <label class="fx-ctl"><span>wet</span><input class="fx-pitchshift-wet" type="range" min="0" max="1" step="0.01" value="0" /></label>
-          <label class="fx-ctl"><span>semi</span><input class="fx-pitchshift-semi" type="range" min="-12" max="12" step="1" value="0" /></label>
+        <div class="sq-fx__row" data-fx="pitchshift">
+          <span class="sq-fx__title">pitch shift</span>
+          <label class="sq-fx__ctl"><span>wet</span><input class="fx-pitchshift-wet" type="range" min="0" max="1" step="0.01" value="0" /></label>
+          <label class="sq-fx__ctl"><span>semi</span><input class="fx-pitchshift-semi" type="range" min="-12" max="12" step="1" value="0" /></label>
         </div>
-        <div class="fx-row" data-fx="delay">
-          <span class="fx-title">delay</span>
-          <label class="fx-ctl"><span>wet</span><input class="fx-delay-wet" type="range" min="0" max="1" step="0.01" value="0" /></label>
-          <label class="fx-ctl"><span>time</span><input class="fx-delay-time" type="range" min="0.05" max="1" step="0.005" value="0.375" /></label>
-          <label class="fx-ctl"><span>fbk</span><input class="fx-delay-fbk" type="range" min="0" max="0.95" step="0.01" value="0.35" /></label>
-          <label class="fx-ctl fx-sync-wrap"><input class="fx-delay-sync" type="checkbox" /><span>sync</span></label>
+        <div class="sq-fx__row" data-fx="delay">
+          <span class="sq-fx__title">delay</span>
+          <label class="sq-fx__ctl"><span>wet</span><input class="fx-delay-wet" type="range" min="0" max="1" step="0.01" value="0" /></label>
+          <label class="sq-fx__ctl"><span>time</span><input class="fx-delay-time" type="range" min="0.05" max="1" step="0.005" value="0.375" /></label>
+          <label class="sq-fx__ctl"><span>fbk</span><input class="fx-delay-fbk" type="range" min="0" max="0.95" step="0.01" value="0.35" /></label>
+          <label class="sq-fx__ctl sq-fx__sync-wrap"><input class="fx-delay-sync" type="checkbox" /><span>sync</span></label>
           <select class="fx-delay-div">
             <option value="1">1/4</option>
             <option value="0.5">1/8</option>
@@ -342,37 +342,37 @@
             <option value="0.125">1/32</option>
           </select>
         </div>
-        <div class="fx-row" data-fx="reverb">
-          <span class="fx-title">reverb</span>
-          <label class="fx-ctl"><span>wet</span><input class="fx-reverb-wet" type="range" min="0" max="1" step="0.01" value="0" /></label>
-          <label class="fx-ctl"><span>decay</span><input class="fx-reverb-decay" type="range" min="0.2" max="8" step="0.1" value="2" /></label>
+        <div class="sq-fx__row" data-fx="reverb">
+          <span class="sq-fx__title">reverb</span>
+          <label class="sq-fx__ctl"><span>wet</span><input class="fx-reverb-wet" type="range" min="0" max="1" step="0.01" value="0" /></label>
+          <label class="sq-fx__ctl"><span>decay</span><input class="fx-reverb-decay" type="range" min="0.2" max="8" step="0.1" value="2" /></label>
         </div>
       </div>
-      <div class="steps"></div>
+      <div class="sq-steps"></div>
     </section>
   </template>
 
   <template id="lfo-row-template">
-    <div class="lfo-row">
-      <label class="lfo-target"></label>
-      <label class="lfo-enable">
+    <div class="sq-lfo__row">
+      <label class="sq-lfo__target"></label>
+      <label class="sq-lfo__enable">
         <input type="checkbox" class="lfo-on" />
         on
       </label>
-      <select class="lfo-shape">
+      <select class="sq-lfo__shape">
         <option value="sine">sine</option>
         <option value="triangle">triangle</option>
         <option value="sawtooth">saw</option>
         <option value="square">square</option>
       </select>
-      <label class="lfo-sync-wrap">
+      <label class="sq-lfo__sync-wrap">
         <input type="checkbox" class="lfo-sync" />
         sync
       </label>
-      <div class="field lfo-rate-field">
+      <div class="sq-field sq-lfo__rate-field">
         <label>rate</label>
-        <input class="lfo-rate" type="range" min="0" max="1" step="0.001" value="0.35" />
-        <select class="lfo-div">
+        <input class="sq-lfo__rate" type="range" min="0" max="1" step="0.001" value="0.35" />
+        <select class="sq-lfo__div">
           <option value="16">4 bars</option>
           <option value="8">2 bars</option>
           <option value="4">1 bar</option>
@@ -382,14 +382,14 @@
           <option value="0.25">1/16</option>
           <option value="0.125">1/32</option>
         </select>
-        <span class="lfo-rate-label">1.00 hz</span>
+        <span class="sq-lfo__rate-label">1.00 hz</span>
       </div>
-      <div class="field">
+      <div class="sq-field">
         <label>depth</label>
         <input class="lfo-depth" type="range" min="0" max="1" step="0.01" value="0.5" />
-        <span class="lfo-depth-label">0.50</span>
+        <span class="sq-lfo__depth-label">0.50</span>
       </div>
-      <button class="lfo-remove ghost" type="button" title="remove this modulation">×</button>
+      <button class="sq-lfo__remove sq-btn--ghost" type="button" title="remove this modulation">×</button>
     </div>
   </template>
 

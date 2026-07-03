@@ -7,6 +7,6 @@ export function isMobileDevice() {
 export function setStatus(msg, isErr = false) {
   const el = document.getElementById("status");
   el.textContent = msg;
-  el.classList.toggle("err", isErr);
+  el.classList.toggle("is-err", isErr);
 }
 

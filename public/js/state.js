@@ -132,7 +132,7 @@ export function aliasPattern(t, idx) {
   t.length = p.steps.length;
   t.accents = autoAccents(t.length, state.patternMeters[idx]);
   if (t.el) {
-    const lenEl = t.el.querySelector(".track-len");
+    const lenEl = t.el.querySelector(".sq-track__len");
     if (lenEl) lenEl.value = t.length;
   }
   t._patternIdx = idx;
