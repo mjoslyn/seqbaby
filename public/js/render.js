@@ -760,7 +760,8 @@ export function renderModPanel(t, panel) {
     } else {
       addBtn.disabled = false;
       addBtn.textContent = "+ add modulation";
-      addSel.innerHTML = available.map(k => `<option value="${k}">${lfoLabel(k)}</option>`).join("");
+      addSel.innerHTML = `<option value="" disabled selected>pick a target…</option>`
+        + available.map(k => `<option value="${k}">${lfoLabel(k)}</option>`).join("");
     }
   };
   addBtn.addEventListener("click", () => {
@@ -821,7 +822,8 @@ export function renderAutomationPanel(t, panel) {
     } else {
       addBtn.disabled = false;
       addBtn.textContent = "+ add automation";
-      addSel.innerHTML = avail.map(k => `<option value="${k}">${AUTOMATION_TARGETS[k].label}</option>`).join("");
+      addSel.innerHTML = `<option value="" disabled selected>pick a target…</option>`
+        + avail.map(k => `<option value="${k}">${AUTOMATION_TARGETS[k].label}</option>`).join("");
     }
     emptyMsg.hidden = Object.keys(t.automation).length > 0;
   };
