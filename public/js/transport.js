@@ -7,9 +7,7 @@ import { currentBpm, syncAllLFOs } from "./lfo.js";
 import { init, primeAudioForIOS } from "./main.js";
 import { FXRack } from "./fxRack.js";
 import { applyGlobalFxAutomation, defaultGlobalFxConfig, syncAllGlobalFxLFOs } from "./globalFx.js";
-import { MorphageneNode, defaultMorphageneConfig, loadMorphageneModule } from "./morphagene.js";
-import { applyMorphageneAutomation, syncAllMorphageneLFOs } from "./morphageneMod.js";
-import { refreshMorphageneSync, updateMidiUI } from "./render.js";
+import { updateMidiUI } from "./render.js";
 import { ensureFxRack, fireFilterEnv, routeVoiceToRack } from "./signal.js";
 import { findNextNonEmptyPattern, invertChord, state, switchPattern } from "./state.js";
 import { applyScale, chordNotes, nameToMidi } from "./theory.js";
@@ -81,38 +79,17 @@ export async function ensureAudio() {
     // Tap pre-limiter so the clip indicator still warns when the mix is hot.
     state.masterGain.connect(state.masterAnalyser);
   }
-  // Morphagene: a global granular tape processor spliced between masterGain and
-  // masterLimiter so it catches the whole mix (and stays inside bounces, which
-  // tap the limiter). addModule is async, so this lives outside the synchronous
-  // master-bus block. A worklet failure leaves the master chain intact.
-  if (!state.morphagene) {
-    try {
-      if (!state.morphageneConfig) state.morphageneConfig = defaultMorphageneConfig();
-      await loadMorphageneModule(state.audioCtx);
-      const mg = new MorphageneNode(state.audioCtx, state.morphageneConfig, state.morphageneFxConfig);
-      // Targeted disconnect only — a bare disconnect() would drop the
-      // masterGain -> masterAnalyser meter tap wired just above.
-      state.masterGain.disconnect(state.masterLimiter);
-      state.masterGain.connect(mg.input);
-      mg.output.connect(state.masterLimiter);
-      if (state.morphageneStatusCb) mg.onStatus = state.morphageneStatusCb;
-      state.morphagene = mg;
-      refreshMorphageneSync();  // apply tempo-locked loop length if sync is on
-    } catch (e) {
-      console.warn("morphagene init failed", e);
-    }
-  }
-  // Master fx rack: a full FXRack on the whole mix, inserted after the
-  // morphagene (or straight after masterGain if the morphagene failed) and
-  // before the limiter, so it's the final master coloring and stays in bounces.
+  // Master fx rack: a full FXRack on the whole mix, inserted between masterGain
+  // and the limiter, so it's the final master coloring and stays in bounces.
   if (!state.globalFx) {
     try {
       if (!state.globalFxConfig) state.globalFxConfig = defaultGlobalFxConfig();
       const gfx = new FXRack(state.audioCtx, state.globalFxConfig);
       try { gfx.output.disconnect(); } catch {}  // undo its default ctx.destination
-      const upstream = state.morphagene ? state.morphagene.output : state.masterGain;
-      try { upstream.disconnect(state.masterLimiter); } catch {}
-      upstream.connect(gfx.input);
+      // Targeted disconnect only — a bare disconnect() would drop the
+      // masterGain -> masterAnalyser meter tap.
+      try { state.masterGain.disconnect(state.masterLimiter); } catch {}
+      state.masterGain.connect(gfx.input);
       gfx.output.connect(state.masterLimiter);
       state.globalFx = gfx;
     } catch (e) {
@@ -138,7 +115,6 @@ export async function ensureAudio() {
   }
   state.ready = true;
   for (const t of state.tracks) { try { syncAllLFOs(t); } catch (e) { console.warn("lfo sync failed", e); } }
-  try { syncAllMorphageneLFOs(); } catch (e) { console.warn("morphagene lfo sync failed", e); }
   try { syncAllGlobalFxLFOs(); } catch (e) { console.warn("global fx lfo sync failed", e); }
   // iOS Safari quirk: after AudioWorklet load + voice construction, the
   // context's state can be "running" while the underlying audio renderer
@@ -356,15 +332,10 @@ export async function togglePlay() {
         slot++;
       }
     }
-    // Global morphagene step automation — one 16-step lane set, indexed by the
-    // master tick, applied once per 16th note.
-    {
-      const autoT = Math.max(state.audioCtx.currentTime + 0.002, time);
-      try { applyMorphageneAutomation(state.tick, autoT, baseStepDur); }
-      catch (e) { console.warn("morphagene automation failed", e); }
-      try { applyGlobalFxAutomation(state.tick, autoT, baseStepDur); }
-      catch (e) { console.warn("global fx automation failed", e); }
-    }
+    // Master fx step automation — one 16-step lane set, indexed by the master
+    // tick, applied once per 16th note.
+    try { applyGlobalFxAutomation(state.tick, Math.max(state.audioCtx.currentTime + 0.002, time), baseStepDur); }
+    catch (e) { console.warn("global fx automation failed", e); }
     Tone.Draw.schedule(paintNowIndicator, time);
     Tone.Draw.schedule(() => paintBeatIndicator(state.tick), time);
     if (state.metronome && state.tick % 4 === 0) fireMetronome(time, state.tick % 16 === 0);

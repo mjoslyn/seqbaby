@@ -11,8 +11,7 @@ import { meterTick } from "./meters.js";
 import { setEngineKey } from "./params.js";
 import { copyPattern, openPatternMenu, renderPatternGrid } from "./patternBar.js";
 import { syncAllGlobalFxLFOs } from "./globalFx.js";
-import { syncAllMorphageneLFOs } from "./morphageneMod.js";
-import { refreshMorphageneSync, wireGlobalFxPanels, wireMorphagenePanel } from "./render.js";
+import { wireGlobalFxPanels } from "./render.js";
 import { initScaleUI } from "./scaleUI.js";
 import { loadShareFromUrl, onExportSet, onImportSet, onLoadSet, onSaveSet, onShareSet } from "./session.js";
 import { state, switchPattern } from "./state.js";
@@ -231,20 +230,16 @@ export function init() {
   requestAnimationFrame(meterTick);
 
   document.getElementById("play").addEventListener("click", togglePlay);
-  wireMorphagenePanel();
   wireGlobalFxPanels();
-  const wirePanelToggle = (btnId, panelId) => {
-    const btn = document.getElementById(btnId);
-    const panel = document.getElementById(panelId);
-    if (!btn || !panel) return;
-    btn.addEventListener("click", () => {
-      const show = panel.hidden;
-      panel.hidden = !show;
-      btn.setAttribute("aria-pressed", String(show));
+  const gfxToggle = document.getElementById("globalfx-toggle");
+  const gfxPanel = document.getElementById("globalfx-panel");
+  if (gfxToggle && gfxPanel) {
+    gfxToggle.addEventListener("click", () => {
+      const show = gfxPanel.hidden;
+      gfxPanel.hidden = !show;
+      gfxToggle.setAttribute("aria-pressed", String(show));
     });
-  };
-  wirePanelToggle("morph-toggle", "morph-panel");
-  wirePanelToggle("globalfx-toggle", "globalfx-panel");
+  }
   buildBeatIndicator();
   paintBeatIndicator(1);
   const metroBtn = document.getElementById("metronome");
@@ -286,8 +281,6 @@ export function init() {
   document.getElementById("bpm").addEventListener("input", e => {
     if (state.ready) Tone.Transport.bpm.value = Number(e.target.value);
     retuneSyncedLFOs();
-    refreshMorphageneSync();
-    syncAllMorphageneLFOs();
     syncAllGlobalFxLFOs();
     for (const t of state.tracks) {
       if (t.fxRack && t.fxConfig.delay.sync) t.fxRack.applyDelay({});

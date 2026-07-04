@@ -42,7 +42,6 @@
       <button id="note-colors" class="sq-btn--ghost sq-icon-btn" aria-pressed="false" aria-label="note colors" title="toggle diatonic note coloring on the piano roll + step grid"></button>
     </div>
     <button id="add-track" class="sq-btn--ghost">add track</button>
-    <button id="morph-toggle" class="sq-btn--ghost" aria-pressed="false" title="morphagene — master granular tape processor">tape</button>
     <button id="globalfx-toggle" class="sq-btn--ghost" aria-pressed="false" title="master fx rack — global effects on the whole mix, with mods + automation">master fx</button>
     <div class="sq-spacer"></div>
     <button id="metronome" class="sq-btn--ghost sq-icon-btn" aria-pressed="false" aria-label="metronome" title="metronome click on the downbeat"></button>
@@ -88,43 +87,6 @@
     <label class="sq-repeat__wrap" title="bars this pattern plays for before chain advances"><span>rep</span><input id="pattern-repeats" type="number" min="1" max="16" value="1" /></label>
     <div id="pattern-grid" class="sq-pattern__grid"></div>
   </div>
-
-  <section id="morph-panel" class="sq-morph" hidden>
-    <div class="sq-morph__head">
-      <span class="sq-morph__title">morphagene — master tape</span>
-      <button type="button" class="sq-morph__btn morph-record" aria-pressed="false" title="punch in a fresh reel from the live mix (press again to stop)">rec</button>
-      <button type="button" class="sq-morph__btn morph-freeze" aria-pressed="false" title="stop live recording and hold the reel to mangle it">freeze</button>
-      <label class="sq-morph__ctl sq-morph__sync-wrap" title="sync — lock the recording / reel length to the transport tempo, so the tape captures an exact beat-locked loop."><input class="morph-sync" type="checkbox" /><span>sync rec</span></label>
-      <select class="morph-div" title="synced record length" disabled>
-        <option value="16">4 bars</option>
-        <option value="8">2 bars</option>
-        <option value="4" selected>1 bar</option>
-        <option value="2">1/2</option>
-        <option value="1">1/4</option>
-        <option value="0.5">1/8</option>
-        <option value="0.25">1/16</option>
-      </select>
-      <div class="sq-morph__reel" title="reel fill"><div class="sq-morph__reel-bar"></div></div>
-    </div>
-    <div class="sq-morph__row">
-      <label class="sq-morph__ctl" title="vari-speed — playback speed & direction. center = STOP, +1 = original pitch, right = faster/higher, left = reverse."><span>speed</span><input class="morph-varispeed" type="range" min="-2" max="2" step="0.01" value="1" /></label>
-      <label class="sq-morph__ctl" title="organize — selects which splice plays (stepped). with splices = 1 it scans a play position across the whole reel."><span>organize</span><input class="morph-organize" type="range" min="0" max="1" step="0.001" value="0" /></label>
-      <label class="sq-morph__ctl" title="gene size — playback-window length. left = whole splice (clean loop), right = tiny grains (granular clouds/tones)."><span>gene</span><input class="morph-genesize" type="range" min="0" max="1" step="0.001" value="0" /></label>
-      <label class="sq-morph__ctl" title="slide — where inside the splice playback begins (scrub / start-point offset)."><span>slide</span><input class="morph-slide" type="range" min="0" max="1" step="0.001" value="0" /></label>
-      <label class="sq-morph__ctl" title="morph — gene overlap. left = silent gaps (pointillist), ~1/5 in = seamless loop, right = dense overlapping cloud + detuned genes."><span>morph</span><input class="morph-morph" type="range" min="0" max="1" step="0.01" value="0.2" /></label>
-      <label class="sq-morph__ctl" title="sound-on-sound — overdub feedback. bakes the played-back audio back into the reel for tape-style layering/buildup."><span>sos</span><input class="morph-sos" type="range" min="0" max="1" step="0.01" value="0" /></label>
-      <label class="sq-morph__ctl" title="splices — divide the reel into N evenly-selected segments that organize steps through."><span>splices</span><input class="morph-splices" type="number" min="1" max="16" step="1" value="1" /></label>
-      <label class="sq-morph__ctl" title="mix — dry/wet blend of the morphagene into the master bus (0 = bypass, 1 = fully wet)."><span>mix</span><input class="morph-mix" type="range" min="0" max="1" step="0.01" value="0" /></label>
-    </div>
-    <div class="sq-morph__tabs">
-      <button type="button" class="sq-morph__tab morph-fx-toggle" aria-pressed="false" title="fx rack on the granular (wet) output">fx</button>
-      <button type="button" class="sq-morph__tab morph-mod-toggle" aria-pressed="false" title="lfo modulation rack">mod</button>
-      <button type="button" class="sq-morph__tab morph-aut-toggle" aria-pressed="false" title="step automation lanes">aut</button>
-    </div>
-    <div id="morph-fx-panel" class="sq-morph__subpanel" hidden></div>
-    <div id="morph-mod-panel" class="sq-morph__subpanel" hidden></div>
-    <div id="morph-aut-panel" class="sq-morph__subpanel" hidden></div>
-  </section>
 
   <section id="globalfx-panel" class="sq-morph" hidden>
     <div class="sq-morph__head">
