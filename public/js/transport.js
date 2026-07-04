@@ -5,7 +5,9 @@ import { BAR_TICKS, wosc } from "./constants.js";
 import { setStatus } from "./dom.js";
 import { currentBpm, syncAllLFOs } from "./lfo.js";
 import { init, primeAudioForIOS } from "./main.js";
-import { updateMidiUI } from "./render.js";
+import { MorphageneNode, defaultMorphageneConfig, loadMorphageneModule } from "./morphagene.js";
+import { applyMorphageneAutomation, syncAllMorphageneLFOs } from "./morphageneMod.js";
+import { refreshMorphageneSync, updateMidiUI } from "./render.js";
 import { ensureFxRack, fireFilterEnv, routeVoiceToRack } from "./signal.js";
 import { findNextNonEmptyPattern, invertChord, state, switchPattern } from "./state.js";
 import { applyScale, chordNotes, nameToMidi } from "./theory.js";
@@ -77,6 +79,27 @@ export async function ensureAudio() {
     // Tap pre-limiter so the clip indicator still warns when the mix is hot.
     state.masterGain.connect(state.masterAnalyser);
   }
+  // Morphagene: a global granular tape processor spliced between masterGain and
+  // masterLimiter so it catches the whole mix (and stays inside bounces, which
+  // tap the limiter). addModule is async, so this lives outside the synchronous
+  // master-bus block. A worklet failure leaves the master chain intact.
+  if (!state.morphagene) {
+    try {
+      if (!state.morphageneConfig) state.morphageneConfig = defaultMorphageneConfig();
+      await loadMorphageneModule(state.audioCtx);
+      const mg = new MorphageneNode(state.audioCtx, state.morphageneConfig, state.morphageneFxConfig);
+      // Targeted disconnect only — a bare disconnect() would drop the
+      // masterGain -> masterAnalyser meter tap wired just above.
+      state.masterGain.disconnect(state.masterLimiter);
+      state.masterGain.connect(mg.input);
+      mg.output.connect(state.masterLimiter);
+      if (state.morphageneStatusCb) mg.onStatus = state.morphageneStatusCb;
+      state.morphagene = mg;
+      refreshMorphageneSync();  // apply tempo-locked loop length if sync is on
+    } catch (e) {
+      console.warn("morphagene init failed", e);
+    }
+  }
   await wosc.loadOscillator(state.audioCtx);
   await ensureMidi().catch(() => null);
   for (const t of state.tracks) {
@@ -96,6 +119,7 @@ export async function ensureAudio() {
   }
   state.ready = true;
   for (const t of state.tracks) { try { syncAllLFOs(t); } catch (e) { console.warn("lfo sync failed", e); } }
+  try { syncAllMorphageneLFOs(); } catch (e) { console.warn("morphagene lfo sync failed", e); }
   // iOS Safari quirk: after AudioWorklet load + voice construction, the
   // context's state can be "running" while the underlying audio renderer
   // hasn't actually started pumping — sound only appears after a visibility
@@ -312,6 +336,10 @@ export async function togglePlay() {
         slot++;
       }
     }
+    // Global morphagene step automation — one 16-step lane set, indexed by the
+    // master tick, applied once per 16th note.
+    try { applyMorphageneAutomation(state.tick, Math.max(state.audioCtx.currentTime + 0.002, time), baseStepDur); }
+    catch (e) { console.warn("morphagene automation failed", e); }
     Tone.Draw.schedule(paintNowIndicator, time);
     Tone.Draw.schedule(() => paintBeatIndicator(state.tick), time);
     if (state.metronome && state.tick % 4 === 0) fireMetronome(time, state.tick % 16 === 0);

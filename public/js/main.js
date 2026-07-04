@@ -10,6 +10,8 @@ import { autoAccents, parseMeter, stepsPerBarForMeter } from "./meter.js";
 import { meterTick } from "./meters.js";
 import { setEngineKey } from "./params.js";
 import { copyPattern, openPatternMenu, renderPatternGrid } from "./patternBar.js";
+import { syncAllMorphageneLFOs } from "./morphageneMod.js";
+import { refreshMorphageneSync, wireMorphagenePanel } from "./render.js";
 import { initScaleUI } from "./scaleUI.js";
 import { loadShareFromUrl, onExportSet, onImportSet, onLoadSet, onSaveSet, onShareSet } from "./session.js";
 import { state, switchPattern } from "./state.js";
@@ -228,6 +230,16 @@ export function init() {
   requestAnimationFrame(meterTick);
 
   document.getElementById("play").addEventListener("click", togglePlay);
+  wireMorphagenePanel();
+  const morphToggle = document.getElementById("morph-toggle");
+  const morphPanel = document.getElementById("morph-panel");
+  if (morphToggle && morphPanel) {
+    morphToggle.addEventListener("click", () => {
+      const show = morphPanel.hidden;
+      morphPanel.hidden = !show;
+      morphToggle.setAttribute("aria-pressed", String(show));
+    });
+  }
   buildBeatIndicator();
   paintBeatIndicator(1);
   const metroBtn = document.getElementById("metronome");
@@ -269,6 +281,8 @@ export function init() {
   document.getElementById("bpm").addEventListener("input", e => {
     if (state.ready) Tone.Transport.bpm.value = Number(e.target.value);
     retuneSyncedLFOs();
+    refreshMorphageneSync();
+    syncAllMorphageneLFOs();
     for (const t of state.tracks) {
       if (t.fxRack && t.fxConfig.delay.sync) t.fxRack.applyDelay({});
       applySampleSpeed(t);

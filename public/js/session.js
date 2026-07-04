@@ -8,7 +8,10 @@ import { applySampleSpeed, disposeLFOs, syncAllLFOs } from "./lfo.js";
 import { guessIsDrumKit, parseMeter } from "./meter.js";
 import { updatePlaitsControlsVisibility } from "./params.js";
 import { renderPatternGrid } from "./patternBar.js";
-import { refreshFxPanelUI, renderModPanel } from "./render.js";
+import { defaultFxConfig } from "./fxRack.js";
+import { defaultMorphageneConfig } from "./morphagene.js";
+import { defaultMorphageneModConfig, syncAllMorphageneLFOs } from "./morphageneMod.js";
+import { applyMorphageneFx, refreshFxPanelUI, refreshMorphagenePanelUI, refreshMorphageneSync, renderMorphageneAutPanel, renderMorphageneModPanel, renderModPanel } from "./render.js";
 import { syncScaleUI } from "./scaleUI.js";
 import { applyCompressorConfig, ensureFxRack, refreshCompSourceDropdowns, routeVoiceToRack } from "./signal.js";
 import { aliasPattern, state, syncMeterUI } from "./state.js";
@@ -38,6 +41,12 @@ export function serializeSet() {
     patternMode: state.patternMode,
     patternSwitchMode: state.patternSwitchMode,
     patternMeters: state.patternMeters.map(m => ({ num: m.num, den: m.den })),
+    // Master morphagene control settings only — the reel audio is live-captured
+    // and deliberately not serialized.
+    morphagene: { ...(state.morphageneConfig || defaultMorphageneConfig()) },
+    morphageneFx: state.morphageneFxConfig ? JSON.parse(JSON.stringify(state.morphageneFxConfig)) : undefined,
+    morphageneMod: state.morphageneModConfig ? JSON.parse(JSON.stringify(state.morphageneModConfig)) : undefined,
+    morphageneAutomation: state.morphageneAutomation ? JSON.parse(JSON.stringify(state.morphageneAutomation)) : undefined,
     tracks: state.tracks.map(t => ({
       name: t.name,
       engineKey: t.engineKey,
@@ -321,6 +330,20 @@ export function applySet(s) {
     switchBtn.innerHTML = state.patternSwitchMode === "finish" ? ICON_FINISH : ICON_NOW;
     switchBtn.setAttribute("aria-pressed", String(state.patternSwitchMode === "finish"));
   }
+  // Master morphagene settings. Force frozen:false — the reel loads empty, so a
+  // restored freeze would just be silent until the user records.
+  state.morphageneConfig = { ...defaultMorphageneConfig(), ...(s.morphagene || {}), frozen: false };
+  refreshMorphagenePanelUI();
+  if (state.morphagene) state.morphagene.applyAll(state.morphageneConfig);
+  refreshMorphageneSync();
+  // Morphagene fx rack / LFO mod / step automation.
+  state.morphageneFxConfig = s.morphageneFx ? { ...defaultFxConfig(), ...s.morphageneFx } : defaultFxConfig();
+  state.morphageneModConfig = { ...defaultMorphageneModConfig(), ...(s.morphageneMod || {}) };
+  state.morphageneAutomation = s.morphageneAutomation ? JSON.parse(JSON.stringify(s.morphageneAutomation)) : {};
+  applyMorphageneFx();
+  renderMorphageneModPanel();
+  renderMorphageneAutPanel();
+  syncAllMorphageneLFOs();
   for (const td of s.tracks || []) {
     const t = createTrack({ name: td.name || "track", engineKey: td.engineKey || "plaits:0", length: td.length || 16 });
     Object.assign(t.params, td.params || {});
