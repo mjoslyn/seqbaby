@@ -8,6 +8,7 @@ import { ICON_DICE, ICON_LOAD, ICON_SAVE } from "./icons.js";
 import { canModulate, currentBpm, rateFromSync, syncLFO } from "./lfo.js";
 import { pickAudioFileForTrack } from "./main.js";
 import { defaultFxConfig } from "./fxRack.js";
+import { GLOBAL_FX_AUTO_STEPS, defaultGlobalFxConfig, defaultGlobalFxModConfig, globalFxAutoKeys, globalFxModKeys, syncGlobalFxLFO } from "./globalFx.js";
 import { defaultMorphageneConfig } from "./morphagene.js";
 import { MG_AUTO_KEYS, MG_AUTO_LABEL, MG_AUTO_STEPS, MG_MOD_KEYS, MG_MOD_LABEL, defaultMorphageneModConfig, syncMorphageneLFO } from "./morphageneMod.js";
 import { patternMeter, redetectDrumKit, stepsPerBarForMeter } from "./meter.js";
@@ -896,13 +897,10 @@ export function applyMorphageneFx() {
   applyFxToTrack(morphFxTarget(host._fxNode), state.morphageneFxConfig);
 }
 
-// ---- morphagene LFO modulation rack ------------------------------------
+// ---- generic mod / aut rack builders (shared by morphagene + master fx) --
 
-export function renderMorphageneModPanel() {
-  const panel = document.getElementById("morph-mod-panel");
-  if (!panel) return;
-  if (!state.morphageneModConfig) state.morphageneModConfig = defaultMorphageneModConfig();
-  const cfg = state.morphageneModConfig;
+/** Build an LFO modulation rack UI into `panel`. opts: {cfg, keys, labelOf, syncFn} */
+function renderModRack(panel, { cfg, keys, labelOf, syncFn }) {
   const tpl = document.getElementById("lfo-row-template");
   panel.replaceChildren();
 
@@ -920,12 +918,12 @@ export function renderMorphageneModPanel() {
   const addSel = adder.querySelector(".sq-mod__add-select");
 
   const refreshAdder = () => {
-    const avail = MG_MOD_KEYS.filter(k => !cfg[k]?.enabled);
+    const avail = keys.filter(k => !cfg[k]?.enabled);
     if (!avail.length) { addBtn.disabled = true; addSel.hidden = true; addBtn.textContent = "(all modulations active)"; }
     else {
       addBtn.disabled = false; addBtn.textContent = "+ add modulation";
       addSel.innerHTML = `<option value="" disabled selected>pick a target…</option>`
-        + avail.map(k => `<option value="${k}">${MG_MOD_LABEL[k]}</option>`).join("");
+        + avail.map(k => `<option value="${k}">${labelOf(k)}</option>`).join("");
     }
   };
 
@@ -934,7 +932,7 @@ export function renderMorphageneModPanel() {
     const row = tpl.content.firstElementChild.cloneNode(true);
     row.dataset.key = key;
     row.classList.add("is-active");
-    row.querySelector(".sq-lfo__target").textContent = MG_MOD_LABEL[key];
+    row.querySelector(".sq-lfo__target").textContent = labelOf(key);
     const cb = row.querySelector(".lfo-on");
     const shape = row.querySelector(".sq-lfo__shape");
     const rate = row.querySelector(".sq-lfo__rate");
@@ -958,13 +956,13 @@ export function renderMorphageneModPanel() {
       else rateLbl.textContent = `${c.rate.toFixed(2)} hz`;
     };
     refreshLbl();
-    cb.addEventListener("change", () => { c.enabled = cb.checked; row.classList.toggle("is-active", c.enabled); syncMorphageneLFO(key); });
-    shape.addEventListener("change", () => { c.type = shape.value; syncMorphageneLFO(key); });
-    rate.addEventListener("input", () => { c.rate = sliderToRate(Number(rate.value)); refreshLbl(); syncMorphageneLFO(key); });
-    depth.addEventListener("input", () => { c.depth = Number(depth.value); depthLbl.textContent = c.depth.toFixed(2); syncMorphageneLFO(key); });
-    syncCb.addEventListener("change", () => { c.sync = syncCb.checked; rateField.dataset.mode = c.sync ? "sync" : "hz"; refreshLbl(); syncMorphageneLFO(key); });
-    divSel.addEventListener("change", () => { c.div = Number(divSel.value); refreshLbl(); syncMorphageneLFO(key); });
-    removeBtn?.addEventListener("click", () => { c.enabled = false; syncMorphageneLFO(key); row.remove(); refreshAdder(); });
+    cb.addEventListener("change", () => { c.enabled = cb.checked; row.classList.toggle("is-active", c.enabled); syncFn(key); });
+    shape.addEventListener("change", () => { c.type = shape.value; syncFn(key); });
+    rate.addEventListener("input", () => { c.rate = sliderToRate(Number(rate.value)); refreshLbl(); syncFn(key); });
+    depth.addEventListener("input", () => { c.depth = Number(depth.value); depthLbl.textContent = c.depth.toFixed(2); syncFn(key); });
+    syncCb.addEventListener("change", () => { c.sync = syncCb.checked; rateField.dataset.mode = c.sync ? "sync" : "hz"; refreshLbl(); syncFn(key); });
+    divSel.addEventListener("change", () => { c.div = Number(divSel.value); refreshLbl(); syncFn(key); });
+    removeBtn?.addEventListener("click", () => { c.enabled = false; syncFn(key); row.remove(); refreshAdder(); });
     rows.appendChild(row);
   };
 
@@ -974,22 +972,17 @@ export function renderMorphageneModPanel() {
     if (!key) return;
     cfg[key].enabled = true;
     addRow(key);
-    syncMorphageneLFO(key);
+    syncFn(key);
     addSel.hidden = true;
     refreshAdder();
   });
 
-  for (const k of MG_MOD_KEYS) if (cfg[k]?.enabled) addRow(k);
+  for (const k of keys) if (cfg[k]?.enabled) addRow(k);
   refreshAdder();
 }
 
-// ---- morphagene step automation lanes (global, 16 steps / bar) ---------
-
-export function renderMorphageneAutPanel() {
-  const panel = document.getElementById("morph-aut-panel");
-  if (!panel) return;
-  if (!state.morphageneAutomation) state.morphageneAutomation = {};
-  const auto = state.morphageneAutomation;
+/** Build a step-automation lane rack UI into `panel`. opts: {auto, keys, labelOf, steps} */
+function renderAutRack(panel, { auto, keys, labelOf, steps }) {
   panel.replaceChildren();
 
   const rows = document.createElement("div");
@@ -998,7 +991,7 @@ export function renderMorphageneAutPanel() {
 
   const emptyMsg = document.createElement("div");
   emptyMsg.className = "sq-aut__empty";
-  emptyMsg.textContent = "no automation — pick a target below (loops every bar · 16 steps)";
+  emptyMsg.textContent = `no automation — pick a target below (loops every bar · ${steps} steps)`;
   panel.appendChild(emptyMsg);
 
   const adder = document.createElement("div");
@@ -1011,36 +1004,36 @@ export function renderMorphageneAutPanel() {
   const addSel = adder.querySelector(".sq-aut__add-select");
 
   const refreshAdder = () => {
-    const avail = MG_AUTO_KEYS.filter(k => !auto[k]);
+    const avail = keys.filter(k => !auto[k]);
     if (!avail.length) { addBtn.disabled = true; addSel.hidden = true; addBtn.textContent = "(all targets automated)"; }
     else {
       addBtn.disabled = false; addBtn.textContent = "+ add automation";
       addSel.innerHTML = `<option value="" disabled selected>pick a target…</option>`
-        + avail.map(k => `<option value="${k}">${MG_AUTO_LABEL[k]}</option>`).join("");
+        + avail.map(k => `<option value="${k}">${labelOf(k)}</option>`).join("");
     }
     emptyMsg.hidden = Object.keys(auto).length > 0;
   };
 
   const drawRow = (key) => {
-    if (!auto[key]) auto[key] = { enabled: true, values: new Array(MG_AUTO_STEPS).fill(0.5) };
+    if (!auto[key]) auto[key] = { enabled: true, values: new Array(steps).fill(0.5) };
     const lane = auto[key];
-    if (lane.values.length !== MG_AUTO_STEPS) {
-      const o = new Array(MG_AUTO_STEPS).fill(0.5);
-      for (let i = 0; i < Math.min(lane.values.length, MG_AUTO_STEPS); i++) o[i] = lane.values[i];
+    if (lane.values.length !== steps) {
+      const o = new Array(steps).fill(0.5);
+      for (let i = 0; i < Math.min(lane.values.length, steps); i++) o[i] = lane.values[i];
       lane.values = o;
     }
     const row = document.createElement("div");
     row.className = "sq-aut__lane" + (lane.enabled ? " is-active" : "");
     row.dataset.key = key;
     row.innerHTML = `
-      <span class="sq-aut__label">${MG_AUTO_LABEL[key]}</span>
+      <span class="sq-aut__label">${labelOf(key)}</span>
       <input type="checkbox" class="sq-aut__enable" ${lane.enabled ? "checked" : ""} title="enable lane" />
       <div class="sq-aut__grid"></div>
       <button class="sq-aut__clear sq-btn--ghost" type="button" title="reset to 0.5">clear</button>
       <button class="sq-aut__remove" type="button" title="remove lane">×</button>`;
     rows.appendChild(row);
     const grid = row.querySelector(".sq-aut__grid");
-    for (let i = 0; i < MG_AUTO_STEPS; i++) {
+    for (let i = 0; i < steps; i++) {
       const cell = document.createElement("div");
       cell.className = "sq-aut__step";
       cell.dataset.idx = i;
@@ -1051,7 +1044,7 @@ export function renderMorphageneAutPanel() {
       const rect = grid.getBoundingClientRect();
       const relX = Math.max(0, Math.min(rect.width - 1, ev.clientX - rect.left));
       const relY = Math.max(0, Math.min(rect.height, ev.clientY - rect.top));
-      const idx = Math.max(0, Math.min(MG_AUTO_STEPS - 1, Math.floor((relX / rect.width) * MG_AUTO_STEPS)));
+      const idx = Math.max(0, Math.min(steps - 1, Math.floor((relX / rect.width) * steps)));
       lane.values[idx] = Math.max(0, Math.min(1, 1 - (relY / rect.height)));
       grid.children[idx]?.style.setProperty("--v", String(lane.values[idx]));
     };
@@ -1071,8 +1064,93 @@ export function renderMorphageneAutPanel() {
   addBtn.addEventListener("click", () => { if (addSel.hidden) addSel.hidden = false; });
   addSel.addEventListener("change", () => { const key = addSel.value; if (!key) return; drawRow(key); addSel.hidden = true; refreshAdder(); });
 
-  for (const key of Object.keys(auto)) if (MG_AUTO_LABEL[key]) drawRow(key);
+  for (const key of Object.keys(auto)) if (keys.includes(key)) drawRow(key);
   refreshAdder();
+}
+
+// ---- morphagene mod / aut (thin wrappers over the generic racks) --------
+
+export function renderMorphageneModPanel() {
+  const panel = document.getElementById("morph-mod-panel");
+  if (!panel) return;
+  if (!state.morphageneModConfig) state.morphageneModConfig = defaultMorphageneModConfig();
+  renderModRack(panel, { cfg: state.morphageneModConfig, keys: MG_MOD_KEYS, labelOf: k => MG_MOD_LABEL[k], syncFn: syncMorphageneLFO });
+}
+
+export function renderMorphageneAutPanel() {
+  const panel = document.getElementById("morph-aut-panel");
+  if (!panel) return;
+  if (!state.morphageneAutomation) state.morphageneAutomation = {};
+  renderAutRack(panel, { auto: state.morphageneAutomation, keys: MG_AUTO_KEYS, labelOf: k => MG_AUTO_LABEL[k], steps: MG_AUTO_STEPS });
+}
+
+// ---- master (global) fx rack: fx panel + mod + aut ----------------------
+
+function globalFxTarget(fxNode) {
+  return {
+    fxConfig: state.globalFxConfig,
+    get fxRack() { return state.globalFx; },
+    el: fxNode,
+    _fxPanelEl: fxNode,
+  };
+}
+
+/** Clone the track fx-panel markup into the master-fx container and wire it. */
+export function wireGlobalFxPanel() {
+  const host = document.getElementById("globalfx-fx-panel");
+  if (!host || host._wired) return;
+  if (!state.globalFxConfig) state.globalFxConfig = defaultGlobalFxConfig();
+  const tpl = document.getElementById("track-template");
+  const fxNode = tpl?.content.querySelector(".sq-track__fx-panel")?.cloneNode(true);
+  if (!fxNode) return;
+  fxNode.hidden = false;
+  fxNode.classList.add("sq-morph__fx");
+  host.replaceChildren(fxNode);
+  host._fxNode = fxNode;
+  wireFxPanel(globalFxTarget(fxNode), fxNode);
+  host._wired = true;
+}
+
+/** Re-apply the whole master fx config to its rack + sliders (session load). */
+export function applyGlobalFxUI() {
+  const host = document.getElementById("globalfx-fx-panel");
+  if (!host?._fxNode || !state.globalFxConfig) return;
+  applyFxToTrack(globalFxTarget(host._fxNode), state.globalFxConfig);
+}
+
+export function renderGlobalFxModPanel() {
+  const panel = document.getElementById("globalfx-mod-panel");
+  if (!panel) return;
+  if (!state.globalFxModConfig) state.globalFxModConfig = defaultGlobalFxModConfig();
+  renderModRack(panel, { cfg: state.globalFxModConfig, keys: globalFxModKeys(), labelOf: lfoLabel, syncFn: syncGlobalFxLFO });
+}
+
+export function renderGlobalFxAutPanel() {
+  const panel = document.getElementById("globalfx-aut-panel");
+  if (!panel) return;
+  if (!state.globalFxAutomation) state.globalFxAutomation = {};
+  renderAutRack(panel, { auto: state.globalFxAutomation, keys: globalFxAutoKeys(), labelOf: k => AUTOMATION_TARGETS[k]?.label || k, steps: GLOBAL_FX_AUTO_STEPS });
+}
+
+/** Wire the master fx panel: fx/mod/aut sub-panels + tab toggles. */
+export function wireGlobalFxPanels() {
+  const panel = document.getElementById("globalfx-panel");
+  if (!panel) return;
+  wireGlobalFxPanel();
+  renderGlobalFxModPanel();
+  renderGlobalFxAutPanel();
+  const tab = (btnSel, panelId) => {
+    const btn = panel.querySelector(btnSel);
+    const p = document.getElementById(panelId);
+    btn?.addEventListener("click", () => {
+      const show = p.hidden;
+      p.hidden = !show;
+      btn.setAttribute("aria-pressed", String(show));
+    });
+  };
+  tab(".gfx-fx-toggle", "globalfx-fx-panel");
+  tab(".gfx-mod-toggle", "globalfx-mod-panel");
+  tab(".gfx-aut-toggle", "globalfx-aut-panel");
 }
 
 export function renderModPanel(t, panel) {

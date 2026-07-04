@@ -5,6 +5,8 @@ import { BAR_TICKS, wosc } from "./constants.js";
 import { setStatus } from "./dom.js";
 import { currentBpm, syncAllLFOs } from "./lfo.js";
 import { init, primeAudioForIOS } from "./main.js";
+import { FXRack } from "./fxRack.js";
+import { applyGlobalFxAutomation, defaultGlobalFxConfig, syncAllGlobalFxLFOs } from "./globalFx.js";
 import { MorphageneNode, defaultMorphageneConfig, loadMorphageneModule } from "./morphagene.js";
 import { applyMorphageneAutomation, syncAllMorphageneLFOs } from "./morphageneMod.js";
 import { refreshMorphageneSync, updateMidiUI } from "./render.js";
@@ -100,6 +102,23 @@ export async function ensureAudio() {
       console.warn("morphagene init failed", e);
     }
   }
+  // Master fx rack: a full FXRack on the whole mix, inserted after the
+  // morphagene (or straight after masterGain if the morphagene failed) and
+  // before the limiter, so it's the final master coloring and stays in bounces.
+  if (!state.globalFx) {
+    try {
+      if (!state.globalFxConfig) state.globalFxConfig = defaultGlobalFxConfig();
+      const gfx = new FXRack(state.audioCtx, state.globalFxConfig);
+      try { gfx.output.disconnect(); } catch {}  // undo its default ctx.destination
+      const upstream = state.morphagene ? state.morphagene.output : state.masterGain;
+      try { upstream.disconnect(state.masterLimiter); } catch {}
+      upstream.connect(gfx.input);
+      gfx.output.connect(state.masterLimiter);
+      state.globalFx = gfx;
+    } catch (e) {
+      console.warn("global fx init failed", e);
+    }
+  }
   await wosc.loadOscillator(state.audioCtx);
   await ensureMidi().catch(() => null);
   for (const t of state.tracks) {
@@ -120,6 +139,7 @@ export async function ensureAudio() {
   state.ready = true;
   for (const t of state.tracks) { try { syncAllLFOs(t); } catch (e) { console.warn("lfo sync failed", e); } }
   try { syncAllMorphageneLFOs(); } catch (e) { console.warn("morphagene lfo sync failed", e); }
+  try { syncAllGlobalFxLFOs(); } catch (e) { console.warn("global fx lfo sync failed", e); }
   // iOS Safari quirk: after AudioWorklet load + voice construction, the
   // context's state can be "running" while the underlying audio renderer
   // hasn't actually started pumping — sound only appears after a visibility
@@ -338,8 +358,13 @@ export async function togglePlay() {
     }
     // Global morphagene step automation — one 16-step lane set, indexed by the
     // master tick, applied once per 16th note.
-    try { applyMorphageneAutomation(state.tick, Math.max(state.audioCtx.currentTime + 0.002, time), baseStepDur); }
-    catch (e) { console.warn("morphagene automation failed", e); }
+    {
+      const autoT = Math.max(state.audioCtx.currentTime + 0.002, time);
+      try { applyMorphageneAutomation(state.tick, autoT, baseStepDur); }
+      catch (e) { console.warn("morphagene automation failed", e); }
+      try { applyGlobalFxAutomation(state.tick, autoT, baseStepDur); }
+      catch (e) { console.warn("global fx automation failed", e); }
+    }
     Tone.Draw.schedule(paintNowIndicator, time);
     Tone.Draw.schedule(() => paintBeatIndicator(state.tick), time);
     if (state.metronome && state.tick % 4 === 0) fireMetronome(time, state.tick % 16 === 0);

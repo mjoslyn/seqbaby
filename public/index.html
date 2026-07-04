@@ -43,6 +43,7 @@
     </div>
     <button id="add-track" class="sq-btn--ghost">add track</button>
     <button id="morph-toggle" class="sq-btn--ghost" aria-pressed="false" title="morphagene — master granular tape processor">tape</button>
+    <button id="globalfx-toggle" class="sq-btn--ghost" aria-pressed="false" title="master fx rack — global effects on the whole mix, with mods + automation">master fx</button>
     <div class="sq-spacer"></div>
     <button id="metronome" class="sq-btn--ghost sq-icon-btn" aria-pressed="false" aria-label="metronome" title="metronome click on the downbeat"></button>
     <svg id="beat-indicator" class="sq-beat-indicator" viewBox="-22 -22 44 44" width="40" height="40" aria-hidden="true"></svg>
@@ -123,6 +124,20 @@
     <div id="morph-fx-panel" class="sq-morph__subpanel" hidden></div>
     <div id="morph-mod-panel" class="sq-morph__subpanel" hidden></div>
     <div id="morph-aut-panel" class="sq-morph__subpanel" hidden></div>
+  </section>
+
+  <section id="globalfx-panel" class="sq-morph" hidden>
+    <div class="sq-morph__head">
+      <span class="sq-morph__title">master fx rack</span>
+      <div class="sq-morph__tabs">
+        <button type="button" class="sq-morph__tab gfx-fx-toggle" aria-pressed="true" title="fx rack on the whole master mix">fx</button>
+        <button type="button" class="sq-morph__tab gfx-mod-toggle" aria-pressed="false" title="lfo modulation rack">mod</button>
+        <button type="button" class="sq-morph__tab gfx-aut-toggle" aria-pressed="false" title="step automation lanes">aut</button>
+      </div>
+    </div>
+    <div id="globalfx-fx-panel" class="sq-morph__subpanel"></div>
+    <div id="globalfx-mod-panel" class="sq-morph__subpanel" hidden></div>
+    <div id="globalfx-aut-panel" class="sq-morph__subpanel" hidden></div>
   </section>
 
   <main id="tracks"></main>

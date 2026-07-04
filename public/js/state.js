@@ -53,6 +53,10 @@ export const state = {
   morphageneFxConfig: null,  // FXRack config for the morphagene wet path (defaultFxConfig shape)
   morphageneModConfig: null, // LFO modulation rack config (per MG_MOD_KEYS)
   morphageneAutomation: null,// global 16-step automation lanes keyed by param
+  globalFx: null,            // master-bus FXRack (post-morphagene, pre-limiter)
+  globalFxConfig: null,      // its FXRack config (defaultFxConfig shape)
+  globalFxModConfig: null,   // its LFO modulation rack config
+  globalFxAutomation: null,  // its global 16-step automation lanes
   midi: null,
   scale: { active: false, root: 0, mode: "minor" },
   activePattern: 0,

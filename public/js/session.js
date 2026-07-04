@@ -9,9 +9,10 @@ import { guessIsDrumKit, parseMeter } from "./meter.js";
 import { updatePlaitsControlsVisibility } from "./params.js";
 import { renderPatternGrid } from "./patternBar.js";
 import { defaultFxConfig } from "./fxRack.js";
+import { defaultGlobalFxConfig, defaultGlobalFxModConfig, syncAllGlobalFxLFOs } from "./globalFx.js";
 import { defaultMorphageneConfig } from "./morphagene.js";
 import { defaultMorphageneModConfig, syncAllMorphageneLFOs } from "./morphageneMod.js";
-import { applyMorphageneFx, refreshFxPanelUI, refreshMorphagenePanelUI, refreshMorphageneSync, renderMorphageneAutPanel, renderMorphageneModPanel, renderModPanel } from "./render.js";
+import { applyGlobalFxUI, applyMorphageneFx, refreshFxPanelUI, refreshMorphagenePanelUI, refreshMorphageneSync, renderGlobalFxAutPanel, renderGlobalFxModPanel, renderMorphageneAutPanel, renderMorphageneModPanel, renderModPanel } from "./render.js";
 import { syncScaleUI } from "./scaleUI.js";
 import { applyCompressorConfig, ensureFxRack, refreshCompSourceDropdowns, routeVoiceToRack } from "./signal.js";
 import { aliasPattern, state, syncMeterUI } from "./state.js";
@@ -47,6 +48,9 @@ export function serializeSet() {
     morphageneFx: state.morphageneFxConfig ? JSON.parse(JSON.stringify(state.morphageneFxConfig)) : undefined,
     morphageneMod: state.morphageneModConfig ? JSON.parse(JSON.stringify(state.morphageneModConfig)) : undefined,
     morphageneAutomation: state.morphageneAutomation ? JSON.parse(JSON.stringify(state.morphageneAutomation)) : undefined,
+    globalFx: state.globalFxConfig ? JSON.parse(JSON.stringify(state.globalFxConfig)) : undefined,
+    globalFxMod: state.globalFxModConfig ? JSON.parse(JSON.stringify(state.globalFxModConfig)) : undefined,
+    globalFxAutomation: state.globalFxAutomation ? JSON.parse(JSON.stringify(state.globalFxAutomation)) : undefined,
     tracks: state.tracks.map(t => ({
       name: t.name,
       engineKey: t.engineKey,
@@ -344,6 +348,14 @@ export function applySet(s) {
   renderMorphageneModPanel();
   renderMorphageneAutPanel();
   syncAllMorphageneLFOs();
+  // Master (global) fx rack + its mods + automation.
+  state.globalFxConfig = s.globalFx ? { ...defaultGlobalFxConfig(), ...s.globalFx } : defaultGlobalFxConfig();
+  state.globalFxModConfig = { ...defaultGlobalFxModConfig(), ...(s.globalFxMod || {}) };
+  state.globalFxAutomation = s.globalFxAutomation ? JSON.parse(JSON.stringify(s.globalFxAutomation)) : {};
+  applyGlobalFxUI();
+  renderGlobalFxModPanel();
+  renderGlobalFxAutPanel();
+  syncAllGlobalFxLFOs();
   for (const td of s.tracks || []) {
     const t = createTrack({ name: td.name || "track", engineKey: td.engineKey || "plaits:0", length: td.length || 16 });
     Object.assign(t.params, td.params || {});

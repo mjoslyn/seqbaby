@@ -936,7 +936,8 @@ main {
 }
 .sq-morph__subpanel[hidden] { display: none; }
 .sq-morph__fx { background: transparent; border: 0; padding: 0; }
-#morph-toggle[aria-pressed="true"] {
+#morph-toggle[aria-pressed="true"],
+#globalfx-toggle[aria-pressed="true"] {
   background: #e0a8ff;
   color: #0b0d10;
   border-color: #e0a8ff;
