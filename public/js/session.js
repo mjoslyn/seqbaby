@@ -10,7 +10,9 @@ import { updatePlaitsControlsVisibility } from "./params.js";
 import { renderPatternGrid } from "./patternBar.js";
 import { defaultFxConfig } from "./fxRack.js";
 import { defaultGlobalFxConfig, defaultGlobalFxModConfig, syncAllGlobalFxLFOs } from "./globalFx.js";
-import { applyGlobalFxUI, refreshFxPanelUI, renderGlobalFxAutPanel, renderGlobalFxModPanel, renderModPanel } from "./render.js";
+import { defaultMorphageneConfig } from "./morphagene.js";
+import { defaultMorphageneModConfig, syncAllMorphageneLFOs } from "./morphageneMod.js";
+import { applyGlobalFxUI, applyMorphageneFx, refreshFxPanelUI, refreshMorphagenePanelUI, refreshMorphageneSync, renderGlobalFxAutPanel, renderGlobalFxModPanel, renderMorphageneAutPanel, renderMorphageneModPanel, renderModPanel } from "./render.js";
 import { syncScaleUI } from "./scaleUI.js";
 import { applyCompressorConfig, ensureFxRack, refreshCompSourceDropdowns, routeVoiceToRack } from "./signal.js";
 import { aliasPattern, state, syncMeterUI } from "./state.js";
@@ -40,6 +42,12 @@ export function serializeSet() {
     patternMode: state.patternMode,
     patternSwitchMode: state.patternSwitchMode,
     patternMeters: state.patternMeters.map(m => ({ num: m.num, den: m.den })),
+    // Master morphagene control settings only — the reel audio is live-captured
+    // and deliberately not serialized.
+    morphagene: { ...(state.morphageneConfig || defaultMorphageneConfig()) },
+    morphageneFx: state.morphageneFxConfig ? JSON.parse(JSON.stringify(state.morphageneFxConfig)) : undefined,
+    morphageneMod: state.morphageneModConfig ? JSON.parse(JSON.stringify(state.morphageneModConfig)) : undefined,
+    morphageneAutomation: state.morphageneAutomation ? JSON.parse(JSON.stringify(state.morphageneAutomation)) : undefined,
     globalFx: state.globalFxConfig ? JSON.parse(JSON.stringify(state.globalFxConfig)) : undefined,
     globalFxMod: state.globalFxModConfig ? JSON.parse(JSON.stringify(state.globalFxModConfig)) : undefined,
     globalFxAutomation: state.globalFxAutomation ? JSON.parse(JSON.stringify(state.globalFxAutomation)) : undefined,
@@ -326,6 +334,20 @@ export function applySet(s) {
     switchBtn.innerHTML = state.patternSwitchMode === "finish" ? ICON_FINISH : ICON_NOW;
     switchBtn.setAttribute("aria-pressed", String(state.patternSwitchMode === "finish"));
   }
+  // Master morphagene settings. Force frozen:false — the reel loads empty, so a
+  // restored freeze would just be silent until the user records.
+  state.morphageneConfig = { ...defaultMorphageneConfig(), ...(s.morphagene || {}), frozen: false };
+  refreshMorphagenePanelUI();
+  if (state.morphagene) state.morphagene.applyAll(state.morphageneConfig);
+  refreshMorphageneSync();
+  // Morphagene fx rack / LFO mod / step automation.
+  state.morphageneFxConfig = s.morphageneFx ? { ...defaultFxConfig(), ...s.morphageneFx } : defaultFxConfig();
+  state.morphageneModConfig = { ...defaultMorphageneModConfig(), ...(s.morphageneMod || {}) };
+  state.morphageneAutomation = s.morphageneAutomation ? JSON.parse(JSON.stringify(s.morphageneAutomation)) : {};
+  applyMorphageneFx();
+  renderMorphageneModPanel();
+  renderMorphageneAutPanel();
+  syncAllMorphageneLFOs();
   // Master (global) fx rack + its mods + automation.
   state.globalFxConfig = s.globalFx ? { ...defaultGlobalFxConfig(), ...s.globalFx } : defaultGlobalFxConfig();
   state.globalFxModConfig = { ...defaultGlobalFxModConfig(), ...(s.globalFxMod || {}) };
