@@ -86,6 +86,67 @@ export async function forkSong(
   return { id: row.id, title };
 }
 
+// Save the current session under a name, with an optional public toggle. Updates
+// the existing same-named song for this user (so re-saving doesn't pile up dupes),
+// otherwise inserts. When public, ensures a share slug and returns it.
+export async function saveNamedSong(input: {
+  title: string;
+  data: unknown;
+  isPublic: boolean;
+}): Promise<{ id?: string; slug?: string; error?: string }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Not signed in" };
+  const title = (input.title || "untitled").slice(0, 200);
+
+  const { data: existingRows } = await supabase
+    .from("songs")
+    .select("id,share_slug")
+    .eq("owner_id", user.id)
+    .eq("title", title)
+    .order("updated_at", { ascending: false })
+    .limit(1);
+  let id = existingRows?.[0]?.id as string | undefined;
+  let slug = existingRows?.[0]?.share_slug as string | null | undefined;
+
+  if (id) {
+    const { error } = await supabase
+      .from("songs")
+      .update({ data: input.data })
+      .eq("id", id)
+      .eq("owner_id", user.id);
+    if (error) return { error: error.message };
+  } else {
+    const { data: row, error } = await supabase
+      .from("songs")
+      .insert({ owner_id: user.id, title, data: input.data })
+      .select("id,share_slug")
+      .single();
+    if (error) return { error: error.message };
+    id = row.id;
+    slug = row.share_slug;
+  }
+
+  if (input.isPublic) {
+    if (!slug) slug = newSlug();
+    const { error } = await supabase
+      .from("songs")
+      .update({ is_public: true, share_slug: slug })
+      .eq("id", id)
+      .eq("owner_id", user.id);
+    if (error) return { error: error.message };
+    return { id, slug: slug ?? undefined };
+  }
+  await supabase
+    .from("songs")
+    .update({ is_public: false })
+    .eq("id", id)
+    .eq("owner_id", user.id);
+  return { id };
+}
+
 export async function listSongs(): Promise<{
   songs: SongListItem[];
   error?: string;

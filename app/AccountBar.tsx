@@ -2,6 +2,7 @@
 
 import { signOut } from "@/app/auth/actions";
 import SongsMenu from "@/app/SongsMenu";
+import SaveButton from "@/app/SaveButton";
 import styles from "@/app/ui.module.css";
 
 // A dedicated account bar that sits above the transport (rendered as the first
@@ -15,6 +16,7 @@ export function AccountBar({
 }) {
   return (
     <div className={styles.topBar}>
+      {name && <SaveButton />}
       <button
         className={styles.shareBtn}
         onClick={() => window.seqbaby?.onShareSet?.()}
