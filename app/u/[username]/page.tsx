@@ -98,7 +98,23 @@ export default async function ProfilePage({
                   <span className={styles.repoName}>{s.title}</span>
                 )}
                 <div className={styles.repoMeta}>
-                  {s.forked_from && "⑂ fork · "}updated {fmtDate(s.updated_at)}
+                  {s.forkedFrom ? (
+                    <>
+                      ⑂ forked from {s.forkedFrom.title}
+                      {s.forkedFrom.username && (
+                        <>
+                          {" by "}
+                          <Link href={`/u/${s.forkedFrom.username}`}>
+                            @{s.forkedFrom.username}
+                          </Link>
+                        </>
+                      )}
+                      {" · "}
+                    </>
+                  ) : s.forked_from ? (
+                    "⑂ fork · "
+                  ) : null}
+                  updated {fmtDate(s.updated_at)}
                 </div>
               </div>
               <ForkButton songId={s.id} />

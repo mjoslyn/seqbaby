@@ -19,6 +19,7 @@ export type ProfileSong = {
   share_slug: string | null;
   updated_at: string;
   forked_from: string | null;
+  forkedFrom: { title: string; username: string | null } | null;
 };
 export type ProfilePatch = {
   id: string;
@@ -127,10 +128,41 @@ export async function getPublicProfile(
       .order("created_at", { ascending: false }),
   ]);
 
+  // Resolve fork lineage (source title + author handle) for any forked sessions,
+  // limited to sources the viewer can read (public or owned).
+  const songRows = (songs ?? []) as Omit<ProfileSong, "forkedFrom">[];
+  const forkIds = [
+    ...new Set(songRows.map((s) => s.forked_from).filter(Boolean)),
+  ] as string[];
+  const lineage = new Map<string, { title: string; username: string | null }>();
+  if (forkIds.length) {
+    const { data: sources } = await supabase
+      .from("songs")
+      .select("id,title,owner_id")
+      .in("id", forkIds);
+    const ownerIds = [...new Set((sources ?? []).map((s) => s.owner_id))];
+    const handles = new Map<string, string | null>();
+    if (ownerIds.length) {
+      const { data: profs } = await supabase
+        .from("profiles")
+        .select("id,username")
+        .in("id", ownerIds);
+      for (const p of profs ?? []) handles.set(p.id, p.username);
+    }
+    for (const s of sources ?? [])
+      lineage.set(s.id, {
+        title: s.title,
+        username: handles.get(s.owner_id) ?? null,
+      });
+  }
+
   return {
     profile: profile as Profile,
     isOwner,
-    songs: (songs as ProfileSong[]) ?? [],
+    songs: songRows.map((s) => ({
+      ...s,
+      forkedFrom: s.forked_from ? (lineage.get(s.forked_from) ?? null) : null,
+    })),
     patches: (patches as ProfilePatch[]) ?? [],
   };
 }
