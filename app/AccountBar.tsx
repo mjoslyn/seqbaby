@@ -1,13 +1,22 @@
+"use client";
+
 import { signOut } from "@/app/auth/actions";
 import SongsMenu from "@/app/SongsMenu";
 import PatchesMenu from "@/app/PatchesMenu";
 import styles from "@/app/ui.module.css";
 
-// Floating account indicator, top-right of the studio. Server component: the
-// signed-in name is resolved in the page and passed in; sign-out is a server action.
+// A dedicated account bar that sits above the transport (rendered as the first
+// element on the page, ahead of the engine markup).
 export function AccountBar({ name }: { name: string | null }) {
   return (
-    <div className={styles.accountBar}>
+    <div className={styles.topBar}>
+      <button
+        className={styles.accountBtn}
+        onClick={() => window.seqbaby?.onShareSet?.()}
+        title="create a shareable link for this session"
+      >
+        share
+      </button>
       {name ? (
         <>
           <SongsMenu />

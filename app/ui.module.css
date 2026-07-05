@@ -95,15 +95,15 @@
 .hint { color: #6b7280; font-size: 11px; margin-top: 16px; text-align: center; }
 .hint a { color: #9aa0aa; }
 
-/* --- account bar (floating, top-right of the studio) --- */
-.accountBar {
-  position: fixed;
-  top: 8px;
-  right: 12px;
-  z-index: 50;
+/* --- account bar: its own strip above the transport --- */
+.topBar {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 8px;
+  padding: 6px 16px;
+  background: #0b0c0e;
+  border-bottom: 1px solid #2a2d35;
   font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   font-size: 12px;
 }
@@ -126,6 +126,7 @@
   position: absolute;
   top: 28px;
   right: 0;
+  z-index: 100;
   width: 300px;
   max-height: 70vh;
   overflow: auto;
