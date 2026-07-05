@@ -349,11 +349,13 @@ export function init() {
       }
     });
   }
-  document.getElementById("set-save").addEventListener("click", onSaveSet);
-  document.getElementById("set-load").addEventListener("click", onLoadSet);
-  document.getElementById("set-export").addEventListener("click", onExportSet);
-  document.getElementById("set-import").addEventListener("click", onImportSet);
-  document.getElementById("set-share").addEventListener("click", onShareSet);
+  // These session buttons moved to the top account bar; guard in case they're
+  // absent from the markup.
+  document.getElementById("set-save")?.addEventListener("click", onSaveSet);
+  document.getElementById("set-load")?.addEventListener("click", onLoadSet);
+  document.getElementById("set-export")?.addEventListener("click", onExportSet);
+  document.getElementById("set-import")?.addEventListener("click", onImportSet);
+  document.getElementById("set-share")?.addEventListener("click", onShareSet);
   document.getElementById("pattern-menu-btn")?.addEventListener("click", openPatternMenu);
   document.getElementById("pattern-dup").addEventListener("click", () => {
     const next = (state.activePattern + 1) % PATTERN_COUNT;

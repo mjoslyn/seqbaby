@@ -186,7 +186,7 @@ export function onExportSet() {
 
 export async function onShareSet() {
   const btn = document.getElementById("set-share");
-  btn.disabled = true;
+  if (btn) btn.disabled = true;
   setStatus("packing session…");
   try {
     const r = await fetch("/api/share", {
@@ -203,7 +203,7 @@ export async function onShareSet() {
     console.error(err);
     setStatus("share failed — see console", true);
   } finally {
-    btn.disabled = false;
+    if (btn) btn.disabled = false;
   }
 }
 

@@ -28,16 +28,7 @@ export const STUDIO_BODY = String.raw`
   </header>
 
   <div class="sq-pattern-bar">
-    <button id="set-share" title="create a shareable link for this session">Share</button>
     <button id="pattern-menu-btn" class="sq-mobile-only" type="button" aria-label="session menu" title="open session menu">Session</button>
-    <div class="sq-set__stack">
-      <button id="set-save" class="sq-btn--ghost" title="save the current session">Save</button>
-      <button id="set-load" class="sq-btn--ghost" title="load a saved session">Load</button>
-    </div>
-    <div class="sq-set__stack">
-      <button id="set-export" class="sq-btn--ghost" title="download the current session as a json file">Export</button>
-      <button id="set-import" class="sq-btn--ghost" title="load a session from a json file">Import</button>
-    </div>
     <div class="sq-set__stack">
       <button id="bounce-audio" class="sq-btn--ghost sq-dl__btn" title="render the current pattern to audio and download it"><span class="sq-dl__icon"></span><span class="sq-dl__label">Pattern</span></button>
       <button id="bounce-track" class="sq-btn--ghost sq-dl__btn" title="chain through all non-empty patterns and render the whole arrangement"><span class="sq-dl__icon"></span><span class="sq-dl__label">Session</span></button>
