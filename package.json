@@ -4,15 +4,27 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "node --watch --env-file=.env server.js",
-    "start": "node --env-file=.env server.js",
-    "netlify:dev": "netlify dev"
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "netlify:dev": "netlify dev",
+    "legacy:dev": "node --watch --env-file=.env server.js"
   },
   "engines": {
     "node": ">=20"
   },
   "dependencies": {
     "@netlify/blobs": "^10.7.4",
-    "@vectorsize/woscillators": "^2.0.1"
+    "@vectorsize/woscillators": "^2.0.1",
+    "next": "^15.1.6",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@netlify/plugin-nextjs": "^5.9.4",
+    "@types/node": "^22.10.7",
+    "@types/react": "^19.0.7",
+    "@types/react-dom": "^19.0.3",
+    "typescript": "^5.7.3"
   }
 }

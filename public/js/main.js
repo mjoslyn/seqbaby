@@ -1,3 +1,4 @@
+import { installAppApi } from "./appApi.js";
 import { buildBeatIndicator, paintBeatIndicator } from "./beat.js";
 import { bounceAudio, showBounceDialog } from "./bounce.js";
 import { normalizeAudioBuffer } from "./buffers.js";
@@ -413,6 +414,8 @@ export function init() {
   createTrack({ name: "lead",   engineKey: "plaits:0" });
 
   setStatus("ready");
+  // Expose the engine API on window.seqbaby for the Next.js shell.
+  installAppApi();
   // if the URL carries ?s=<id>, pull that shared session
   loadShareFromUrl();
   // Close the AudioContext on page hide. Chrome reuses its audio process across

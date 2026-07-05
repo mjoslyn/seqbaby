@@ -1,33 +1,9 @@
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
-  <meta name="theme-color" content="#0e0f12" />
-  <meta name="mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <title>seqbaby</title>
-  <meta name="description" content="Prompt-driven step sequencer in the browser: Plaits, 808/909/303, samples, MIDI out, Eleven-Labs prompted voices." />
-  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-  <link rel="stylesheet" href="/style.css" />
-
-  <!-- social share card -->
-  <meta property="og:type" content="website" />
-  <meta property="og:title" content="seqbaby" />
-  <meta property="og:description" content="Prompt-driven step sequencer — Plaits, 808/909/303, samples, MIDI, Eleven-Labs." />
-  <meta property="og:url" content="https://seqbaby.netlify.app/" />
-  <meta property="og:image" content="https://seqbaby.netlify.app/share.png" />
-  <meta property="og:image:type" content="image/png" />
-  <meta property="og:image:width" content="1200" />
-  <meta property="og:image:height" content="630" />
-  <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="seqbaby" />
-  <meta name="twitter:description" content="Prompt-driven step sequencer — Plaits, 808/909/303, samples, MIDI, Eleven-Labs." />
-  <meta name="twitter:image" content="https://seqbaby.netlify.app/share.png" />
-</head>
-<body>
-  <header class="sq-transport">
+// AUTO-PORTED from the original public/index.html <body> (scripts stripped).
+// This is the exact static DOM skeleton the vanilla engine (public/js/main.js)
+// queries by id/class at boot. Rendered server-side via dangerouslySetInnerHTML;
+// the three engine <script>s are injected client-side by ScriptLoader in order.
+export const STUDIO_BODY = String.raw`
+<header class="sq-transport">
     <div class="sq-logo" title="seqbaby">
       <img src="/favicon.svg" alt="" />
       <span>seqbaby</span>
@@ -457,8 +433,4 @@
        active session, ctx.state reads "running" but no samples are emitted
        until something forces a session re-eval (e.g., tab switch). -->
   <audio id="ios-audio-unlock" playsinline preload="auto" loop></audio>
-  <script src="https://cdn.jsdelivr.net/npm/tone@15.0.4/build/Tone.js"></script>
-  <script src="/woscillators.js"></script>
-  <script type="module" src="/js/main.js"></script>
-</body>
-</html>
+`;
