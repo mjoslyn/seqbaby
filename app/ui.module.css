@@ -95,6 +95,84 @@
 .hint { color: #6b7280; font-size: 11px; margin-top: 16px; text-align: center; }
 .hint a { color: #9aa0aa; }
 
+/* --- full pages (settings, profile) --- */
+.page {
+  min-height: 100dvh;
+  background: #0e0f12;
+  color: #e8e8ea;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+.pageInner {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 28px 20px 64px;
+}
+.pageNav {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 24px;
+  font-size: 13px;
+}
+.pageNav a { color: #9aa0aa; text-decoration: none; }
+.pageNav a:hover { color: #e8e8ea; }
+.pageTitle { font-size: 20px; font-weight: 700; margin: 0 0 4px; }
+.pageSub { color: #9aa0aa; font-size: 13px; margin: 0 0 24px; }
+
+.textarea {
+  background: #0e0f12;
+  border: 1px solid #2a2d35;
+  border-radius: 8px;
+  padding: 10px 12px;
+  color: #e8e8ea;
+  font: inherit;
+  min-height: 72px;
+  resize: vertical;
+}
+.textarea:focus { outline: none; border-color: #6ee7b7; }
+.checkRow { display: flex; align-items: center; gap: 8px; margin: 14px 0; font-size: 13px; color: #cfd3da; }
+.hintText { color: #6b7280; font-size: 11px; margin-top: 4px; }
+
+/* profile header */
+.profileHead { display: flex; gap: 16px; align-items: center; margin-bottom: 8px; }
+.avatar {
+  width: 64px; height: 64px; border-radius: 50%;
+  background: #22252c; border: 1px solid #2a2d35;
+  object-fit: cover; flex: none;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 24px; font-weight: 700; color: #6ee7b7;
+}
+.profileName { font-size: 22px; font-weight: 700; }
+.profileHandle { color: #6b7280; font-size: 13px; }
+.profileBio { color: #cfd3da; font-size: 14px; margin: 12px 0 4px; white-space: pre-wrap; }
+.privateBadge {
+  display: inline-block; font-size: 11px; color: #f0b866;
+  border: 1px solid #5a4a2a; border-radius: 4px; padding: 1px 6px; margin-left: 8px;
+}
+
+.sectionHead {
+  display: flex; align-items: baseline; gap: 8px;
+  margin: 28px 0 10px; padding-bottom: 6px; border-bottom: 1px solid #22252c;
+}
+.sectionHead h3 { font-size: 15px; margin: 0; }
+.sectionCount { color: #6b7280; font-size: 12px; }
+
+.repoRow {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 0; border-bottom: 1px solid #1a1c20;
+}
+.repoMain { flex: 1; min-width: 0; }
+.repoName { font-size: 15px; color: #7fd6f2; text-decoration: none; font-weight: 600; }
+.repoName:hover { text-decoration: underline; }
+.repoMeta { color: #6b7280; font-size: 11px; margin-top: 2px; }
+.repoAction {
+  padding: 5px 10px; border: 1px solid #2a2d35; border-radius: 6px;
+  background: #16181d; color: #e8e8ea; font: inherit; font-size: 12px;
+  cursor: pointer; text-decoration: none;
+}
+.repoAction:hover { border-color: #3a3d45; }
+.emptyBig { color: #6b7280; font-size: 13px; padding: 16px 0; }
+
 /* --- account bar: its own strip above the transport --- */
 .topBar {
   display: flex;
@@ -107,7 +185,8 @@
   font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   font-size: 12px;
 }
-.accountName { color: #9aa0aa; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.accountName { color: #9aa0aa; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-decoration: none; cursor: pointer; }
+.accountName:hover { color: #e8e8ea; }
 .accountBtn {
   padding: 5px 10px;
   border: 1px solid #2a2d35;

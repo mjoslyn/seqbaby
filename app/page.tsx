@@ -15,9 +15,10 @@ export default async function StudioPage() {
     data: { user },
   } = await supabase.auth.getUser();
 
-  // Resolve a display name. Tolerates the profiles table not existing yet
-  // (before the migration is applied) by falling back to the email.
+  // Resolve a display name + handle. Tolerates the profiles table not existing
+  // yet (before the migration is applied) by falling back to the email.
   let name: string | null = null;
+  let username: string | null = null;
   if (user) {
     const { data: profile } = await supabase
       .from("profiles")
@@ -25,11 +26,12 @@ export default async function StudioPage() {
       .eq("id", user.id)
       .maybeSingle();
     name = profile?.display_name || profile?.username || user.email || null;
+    username = profile?.username ?? null;
   }
 
   return (
     <>
-      <AccountBar name={name} />
+      <AccountBar name={name} username={username} />
       <div
         style={{ display: "contents" }}
         dangerouslySetInnerHTML={{ __html: STUDIO_BODY }}

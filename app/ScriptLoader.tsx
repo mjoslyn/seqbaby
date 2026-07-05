@@ -24,7 +24,19 @@ function loadScript(src: string, asModule = false): Promise<void> {
 
 export default function ScriptLoader() {
   useEffect(() => {
-    if (booted) return;
+    if (booted) {
+      // Soft navigation back into the studio (e.g. the post-sign-in redirect)
+      // re-renders the markup with a fresh, empty #tracks, orphaning the nodes
+      // the engine created imperatively. If a prior boot completed (window.seqbaby
+      // exists) but #tracks is now empty, a full reload re-boots cleanly.
+      if (
+        window.seqbaby &&
+        document.querySelectorAll("#tracks .sq-track").length === 0
+      ) {
+        window.location.reload();
+      }
+      return;
+    }
     booted = true;
     (async () => {
       try {
