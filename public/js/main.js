@@ -5,7 +5,7 @@ import { normalizeAudioBuffer } from "./buffers.js";
 import { rebuildEngineCatalog } from "./catalog.js";
 import { LFO_KEYS, PATTERN_COUNT } from "./constants.js";
 import { isMobileDevice, setStatus } from "./dom.js";
-import { HELP_TIPS, ICON_CHAIN, ICON_DOWNLOAD, ICON_FINISH, ICON_METRONOME, ICON_NOW, ICON_REPEAT } from "./icons.js";
+import { HELP_TIPS, ICON_BOUNCE, ICON_CHAIN, ICON_FINISH, ICON_METRONOME, ICON_NOW, ICON_REPEAT } from "./icons.js";
 import { applySampleSpeed, attachBpmDrag, rateFromSync, retuneSyncedLFOs } from "./lfo.js";
 import { autoAccents, parseMeter, stepsPerBarForMeter } from "./meter.js";
 import { meterTick } from "./meters.js";
@@ -283,7 +283,7 @@ export function init() {
   };
   document.getElementById("bounce-audio")?.addEventListener("click", () => runBounce("bounce-audio", "pattern"));
   document.getElementById("bounce-track")?.addEventListener("click", () => runBounce("bounce-track", "track"));
-  for (const btn of document.querySelectorAll(".sq-dl__btn .sq-dl__icon")) btn.innerHTML = ICON_DOWNLOAD;
+  for (const btn of document.querySelectorAll(".sq-dl__btn .sq-dl__icon")) btn.innerHTML = ICON_BOUNCE;
   document.getElementById("bpm").addEventListener("input", e => {
     if (state.ready) Tone.Transport.bpm.value = Number(e.target.value);
     retuneSyncedLFOs();
