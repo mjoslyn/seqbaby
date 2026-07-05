@@ -18,6 +18,7 @@ export type ProfileSong = {
   title: string;
   share_slug: string | null;
   updated_at: string;
+  forked_from: string | null;
 };
 export type ProfilePatch = {
   id: string;
@@ -114,7 +115,7 @@ export async function getPublicProfile(
   const [{ data: songs }, { data: patches }] = await Promise.all([
     supabase
       .from("songs")
-      .select("id,title,share_slug,updated_at")
+      .select("id,title,share_slug,updated_at,forked_from")
       .eq("owner_id", profile.id)
       .eq("is_public", true)
       .order("updated_at", { ascending: false }),

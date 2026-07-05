@@ -7,6 +7,7 @@ import {
   loadSong,
   deleteSong,
   publishSong,
+  forkSong,
   type SongListItem,
 } from "@/app/songs/actions";
 import styles from "@/app/ui.module.css";
@@ -99,6 +100,20 @@ export default function SongsMenu() {
     [currentId, refresh],
   );
 
+  const doFork = useCallback(
+    async (song: SongListItem) => {
+      setStatus({ text: "Forking…" });
+      const res = await forkSong(song.id);
+      if (res.error || !res.id)
+        return setStatus({ text: res.error ?? "Fork failed", err: true });
+      setCurrentId(res.id);
+      if (res.title) setTitle(res.title);
+      setStatus({ text: `Forked "${song.title}"` });
+      refresh();
+    },
+    [refresh],
+  );
+
   const doPublish = useCallback(
     async (song: SongListItem) => {
       const res = await publishSong(song.id);
@@ -171,6 +186,13 @@ export default function SongsMenu() {
                 >
                   {song.is_public && <span className={styles.pubDot}>● </span>}
                   {song.title}
+                </button>
+                <button
+                  className={styles.iconBtn}
+                  onClick={() => doFork(song)}
+                  title="fork into a new session"
+                >
+                  fork
                 </button>
                 <button
                   className={styles.iconBtn}

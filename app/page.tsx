@@ -1,5 +1,6 @@
 import { STUDIO_BODY } from "./studioMarkup";
 import ScriptLoader from "./ScriptLoader";
+import OpenSongOnLoad from "./OpenSongOnLoad";
 import { AccountBar } from "./AccountBar";
 import { createClient } from "@/lib/supabase/server";
 
@@ -37,6 +38,7 @@ export default async function StudioPage() {
         dangerouslySetInnerHTML={{ __html: STUDIO_BODY }}
       />
       <ScriptLoader />
+      <OpenSongOnLoad />
     </>
   );
 }

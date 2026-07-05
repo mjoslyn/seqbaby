@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { getPublicProfile } from "@/app/profile/actions";
+import ForkButton from "./ForkButton";
 import styles from "@/app/ui.module.css";
 
 export const dynamic = "force-dynamic";
@@ -97,9 +98,10 @@ export default async function ProfilePage({
                   <span className={styles.repoName}>{s.title}</span>
                 )}
                 <div className={styles.repoMeta}>
-                  updated {fmtDate(s.updated_at)}
+                  {s.forked_from && "⑂ fork · "}updated {fmtDate(s.updated_at)}
                 </div>
               </div>
+              <ForkButton songId={s.id} />
               {s.share_slug && (
                 <Link className={styles.repoAction} href={`/?s=${s.share_slug}`}>
                   open

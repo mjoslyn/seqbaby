@@ -51,6 +51,41 @@ export async function saveSong(input: {
   return { id: row.id };
 }
 
+// Fork a public (or owned) song into the current user's account. The copy starts
+// private and records its ancestry via forked_from.
+export async function forkSong(
+  sourceId: string,
+): Promise<{ id?: string; title?: string; error?: string }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Not signed in" };
+
+  const { data: src, error: readErr } = await supabase
+    .from("songs")
+    .select("title,data")
+    .eq("id", sourceId)
+    .maybeSingle();
+  if (readErr) return { error: readErr.message };
+  if (!src) return { error: "Source session not found" };
+
+  const title = `${src.title} (fork)`.slice(0, 200);
+  const { data: row, error } = await supabase
+    .from("songs")
+    .insert({
+      owner_id: user.id,
+      title,
+      data: src.data,
+      forked_from: sourceId,
+      is_public: false,
+    })
+    .select("id")
+    .single();
+  if (error) return { error: error.message };
+  return { id: row.id, title };
+}
+
 export async function listSongs(): Promise<{
   songs: SongListItem[];
   error?: string;
