@@ -1,5 +1,6 @@
 [build]
   command = "next build"
+  publish = ".next"
 
 [build.environment]
   # @netlify/plugin-nextjs requires Node 22+.
