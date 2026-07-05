@@ -56,3 +56,21 @@ export async function updatePassword(
   if (error) return { error: error.message };
   return { message: "Password updated." };
 }
+
+// Permanently delete the signed-in user's account and all their data (cascades
+// to profile, songs, patches). Guarded server-side by a typed confirmation.
+export async function deleteAccount(
+  confirm: string,
+): Promise<{ ok?: boolean; error?: string }> {
+  if (confirm !== "DELETE") return { error: 'Type "DELETE" to confirm' };
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Not signed in" };
+
+  const { error } = await supabase.rpc("delete_own_account");
+  if (error) return { error: error.message };
+  await supabase.auth.signOut();
+  return { ok: true };
+}

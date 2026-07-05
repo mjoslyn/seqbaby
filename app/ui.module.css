@@ -173,6 +173,29 @@
 .repoAction:hover { border-color: #3a3d45; }
 .emptyBig { color: #6b7280; font-size: 13px; padding: 16px 0; }
 
+/* danger zone */
+.dangerTitle { color: #f87171; }
+.dangerBtn {
+  padding: 9px 14px;
+  border: 1px solid #7f2a2a;
+  border-radius: 8px;
+  background: #2a1416;
+  color: #f87171;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.dangerBtn:hover:not(:disabled) { background: #3a1a1d; }
+.dangerBtn:disabled { opacity: 0.5; cursor: default; }
+.dangerBox {
+  border: 1px solid #5a2a2a;
+  border-radius: 10px;
+  padding: 16px;
+  background: #170e0f;
+}
+.dangerText { color: #cfa9a9; font-size: 13px; margin: 0 0 12px; line-height: 1.5; }
+.dangerActions { display: flex; gap: 8px; align-items: center; margin-top: 12px; }
+
 /* --- account bar: its own strip above the transport --- */
 .topBar {
   display: flex;
