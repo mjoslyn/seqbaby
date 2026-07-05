@@ -1,6 +1,9 @@
 [build]
   command = "next build"
 
+[build.environment]
+  NODE_VERSION = "20"
+
 # Next.js runtime for Netlify: builds the App Router app, serves public/ static
 # assets (the engine: /js/*, /woscillators.js, /style.css, etc.) at web root, and
 # routes App Router route handlers (e.g. /api/share) to Netlify Functions.
