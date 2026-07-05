@@ -120,6 +120,18 @@
 }
 .accountBtn:hover { border-color: #3a3d45; }
 
+.shareBtn {
+  padding: 5px 12px;
+  border: 1px solid #3aa6d8;
+  border-radius: 6px;
+  background: #7fd6f2;
+  color: #06202b;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.shareBtn:hover { background: #97e0f8; }
+
 /* --- songs menu --- */
 .songsWrap { position: relative; }
 .panel {

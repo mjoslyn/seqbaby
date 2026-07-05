@@ -2,7 +2,6 @@
 
 import { signOut } from "@/app/auth/actions";
 import SongsMenu from "@/app/SongsMenu";
-import PatchesMenu from "@/app/PatchesMenu";
 import styles from "@/app/ui.module.css";
 
 // A dedicated account bar that sits above the transport (rendered as the first
@@ -11,7 +10,7 @@ export function AccountBar({ name }: { name: string | null }) {
   return (
     <div className={styles.topBar}>
       <button
-        className={styles.accountBtn}
+        className={styles.shareBtn}
         onClick={() => window.seqbaby?.onShareSet?.()}
         title="create a shareable link for this session"
       >
@@ -20,7 +19,6 @@ export function AccountBar({ name }: { name: string | null }) {
       {name ? (
         <>
           <SongsMenu />
-          <PatchesMenu />
           <span className={styles.accountName} title={name}>
             {name}
           </span>
