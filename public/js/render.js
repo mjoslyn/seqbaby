@@ -1,5 +1,6 @@
 import { AUTOMATION_KEYS, AUTOMATION_TARGETS, canAutomate } from "./automation.js";
-import { engineByKey, populateEngineSelect, savePatch } from "./catalog.js";
+import { engineByKey, loadPatches, populateEngineSelect, savePatch } from "./catalog.js";
+import { applyTrackPatch, serializeTrackPatch } from "./session.js";
 import { LFO_KEYS, lfoLabel, rateToSlider, sliderToRate } from "./constants.js";
 import { showInputDialog, showSavedPatchPicker } from "./dialogs.js";
 import { setStatus } from "./dom.js";
@@ -106,12 +107,10 @@ export function renderTrack(t) {
 
   const saveBtn = node.querySelector(".sq-track__save");
   saveBtn.innerHTML = ICON_SAVE;
-  const refreshSaveEnabled = () => {
-    saveBtn.disabled = !t.customConfig || (t.engineKey !== "custom" && !t.engineKey.startsWith("saved:"));
-  };
+  // Any track's sound can be saved as a patch now (engine + params + fx + audio).
+  const refreshSaveEnabled = () => { saveBtn.disabled = false; };
   refreshSaveEnabled();
   saveBtn.addEventListener("click", async () => {
-    if (!t.customConfig) return;
     const suggested = t.soundPromptText ? t.soundPromptText.split(/[.,;]/)[0].slice(0, 40) : t.name;
     const name = await showInputDialog({
       title: "save patch as",
@@ -119,7 +118,7 @@ export function renderTrack(t) {
       placeholder: "my-patch-name",
     });
     if (!name || !name.trim()) return;
-    savePatch(name.trim(), t.customConfig);
+    savePatch(name.trim(), serializeTrackPatch(t));
     setStatus(`saved patch "${name.trim()}"`);
   });
 
@@ -129,8 +128,15 @@ export function renderTrack(t) {
     loadPatchBtn.addEventListener("click", async () => {
       const name = await showSavedPatchPicker();
       if (!name) return;
-      setEngineKey(t, `saved:${name}`);
-      if (node.querySelector(".sq-track__engine")) node.querySelector(".sq-track__engine").value = `saved:${name}`;
+      const patch = loadPatches()[name];
+      if (!patch) return;
+      if (patch._kind === "track-patch") {
+        applyTrackPatch(t, patch);
+      } else {
+        // legacy custom-Tone patch: load it as a saved engine
+        setEngineKey(t, `saved:${name}`);
+        if (node.querySelector(".sq-track__engine")) node.querySelector(".sq-track__engine").value = `saved:${name}`;
+      }
       setStatus(`loaded patch "${name}"`);
     });
   }

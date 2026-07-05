@@ -17,6 +17,8 @@ function engineTypeOf(config: unknown): string | null {
   const c = config as Record<string, unknown> | null;
   const synth = c?.synth as Record<string, unknown> | undefined;
   return (
+    // track-patches carry the engine key directly
+    (typeof c?.engineKey === "string" && c.engineKey) ||
     (typeof c?.type === "string" && c.type) ||
     (typeof synth?.type === "string" && synth.type) ||
     null

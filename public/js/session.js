@@ -546,3 +546,170 @@ export function applySet(s) {
   setStatus("set loaded");
 }
 
+// ---- track patches -----------------------------------------------------
+// A "patch" is a track's whole SOUND (engine + params + filter/eq/comp/fx/lfo +
+// any embedded audio), independent of its pattern/steps and track-level state
+// (name, mute/solo/lock, length). Serialize captures it; apply installs it onto
+// any existing track, reusing the same voice/UI rebuild path as session load.
+
+/** @param {Track} t */
+export function serializeTrackPatch(t) {
+  return {
+    _kind: "track-patch",
+    // A saved custom-Tone patch is stored as engineKey "custom" + customConfig.
+    engineKey: t.engineKey.startsWith("saved:") ? "custom" : t.engineKey,
+    params: { ...t.params },
+    filter: { ...t.filter },
+    eq: { ...t.eq },
+    comp: { ...t.comp },
+    fxConfig: JSON.parse(JSON.stringify(t.fxConfig)),
+    lfoConfig: JSON.parse(JSON.stringify(t.lfoConfig)),
+    customConfig: t.customConfig ? JSON.parse(JSON.stringify(t.customConfig)) : null,
+    elevenAudio: t.elevenAudio || null,
+    elevenAudioMime: t.elevenAudioMime || null,
+    uploadAudio: t.uploadAudio || null,
+    uploadAudioMime: t.uploadAudioMime || null,
+    uploadFileName: t.uploadFileName || null,
+    soundPromptText: t.soundPromptText || "",
+    sampleDefaults: t.sampleDefaults ? { ...t.sampleDefaults } : undefined,
+    isDrumKit: !!t.isDrumKit,
+    noteMode: t.noteMode === "trigger" ? "trigger" : "gate",
+    glide: t.glide ?? 0,
+    speed: t.speed ?? 1,
+    sampleSpeedMode: t.sampleSpeedMode ?? "native",
+  };
+}
+
+/** @param {Track} t @param {any} patch */
+export function applyTrackPatch(t, patch) {
+  if (!patch) return;
+  if (patch.engineKey) t.engineKey = patch.engineKey;
+  if (patch.params)   Object.assign(t.params, patch.params);
+  if (patch.filter)   Object.assign(t.filter, patch.filter);
+  if (patch.eq)       Object.assign(t.eq, patch.eq);
+  if (patch.comp)     Object.assign(t.comp, patch.comp);
+  if (patch.fxConfig) Object.assign(t.fxConfig, patch.fxConfig);
+  if (patch.lfoConfig) {
+    for (const k of Object.keys(t.lfoConfig)) delete t.lfoConfig[k];
+    Object.assign(t.lfoConfig, patch.lfoConfig);
+  }
+  t.customConfig     = patch.customConfig || null;
+  t.elevenAudio      = patch.elevenAudio || null;
+  t.elevenAudioMime  = patch.elevenAudioMime || null;
+  t.uploadAudio      = patch.uploadAudio || null;
+  t.uploadAudioMime  = patch.uploadAudioMime || null;
+  t.uploadFileName   = patch.uploadFileName || null;
+  t.soundPromptText  = patch.soundPromptText || "";
+  if (patch.sampleDefaults) {
+    t.sampleDefaults = { start: 0, end: 1, fadeIn: 0, fadeOut: 0, loopMode: "off", ...patch.sampleDefaults };
+  }
+  t.isDrumKit        = !!patch.isDrumKit;
+  t.noteMode         = patch.noteMode === "trigger" ? "trigger" : "gate";
+  t.glide            = patch.glide ?? 0;
+  t.speed            = patch.speed ?? 1;
+  t.sampleSpeedMode  = patch.sampleSpeedMode ?? "native";
+
+  // Decode embedded sample audio (async; the voice picks it up when ready).
+  if (t.elevenAudio) {
+    (async () => {
+      try {
+        const bytes = Uint8Array.from(atob(t.elevenAudio), c => c.charCodeAt(0));
+        await ensureAudio();
+        const buffer = normalizeAudioBuffer(await state.audioCtx.decodeAudioData(bytes.buffer), { trim: true });
+        t.elevenBuffer = buffer;
+        if (t.voice?.type === "eleven") { t.voice.setBuffer(buffer); applySampleSpeed(t); }
+      } catch (e) { console.warn("eleven buffer decode failed", e); }
+    })();
+  } else t.elevenBuffer = null;
+  if (t.uploadAudio) {
+    (async () => {
+      try {
+        const bytes = Uint8Array.from(atob(t.uploadAudio), c => c.charCodeAt(0));
+        await ensureAudio();
+        const buffer = normalizeAudioBuffer(await state.audioCtx.decodeAudioData(bytes.buffer));
+        t.uploadBuffer = buffer;
+        if (t.voice?.type === "upload") { t.voice.setBuffer(buffer); applySampleSpeed(t); }
+      } catch (e) { console.warn("upload buffer decode failed", e); }
+    })();
+  } else t.uploadBuffer = null;
+
+  if (t.el) {
+    const q = s => t.el.querySelector(s);
+    q(".sq-track__engine").value = t.engineKey;
+    q(".p-vol").value    = t.params.vol;
+    q(".p-harm").value   = t.params.harm;
+    q(".p-timb").value   = t.params.timb;
+    q(".p-morph").value  = t.params.morph;
+    q(".p-decay").value  = t.params.decay;
+    q(".p-cutoff").value = t.filter.cutoff;
+    q(".p-reson").value  = t.filter.reson;
+    q(".p-envamt").value = t.filter.env;
+    q(".p-envatk").value = t.filter.attack;
+    q(".p-envdec").value = t.filter.decay;
+    q(".p-envsus").value = t.filter.sustain;
+    q(".p-envrel").value = t.filter.release;
+    const eqPanel = t._eqPanelEl || q(".sq-track__eq-panel");
+    if (eqPanel) {
+      eqPanel.querySelector(".p-eq-low").value  = t.eq.low;
+      eqPanel.querySelector(".p-eq-mid").value  = t.eq.mid;
+      eqPanel.querySelector(".p-eq-high").value = t.eq.high;
+    }
+    const compPanel = t._compPanelEl || q(".sq-track__comp-panel");
+    if (compPanel) {
+      compPanel.querySelector(".comp-enabled").checked = !!t.comp.enabled;
+      compPanel.querySelector(".comp-threshold").value = t.comp.threshold;
+      compPanel.querySelector(".comp-ratio").value     = t.comp.ratio;
+      compPanel.querySelector(".comp-attack").value    = t.comp.attack;
+      compPanel.querySelector(".comp-release").value   = t.comp.release;
+      compPanel.querySelector(".comp-knee").value      = t.comp.knee;
+    }
+    const nmBtn = q(".track-note-mode");
+    if (nmBtn) {
+      const isGate = t.noteMode !== "trigger";
+      nmBtn.textContent = isGate ? "gate" : "trig";
+      nmBtn.setAttribute("aria-pressed", String(isGate));
+    }
+    refreshFxPanelUI(t);
+    renderModPanel(t, t._modPanelEl || q(".sq-track__mod-panel"));
+  }
+
+  if (state.ready) {
+    disposeLFOs(t);
+    if (t.voice) t.voice.dispose();
+    ensureFxRack(t);
+    if (t.fxRack) {
+      if (t.fxConfig.vinyl)      t.fxRack.applyVinyl(t.fxConfig.vinyl);
+      if (t.fxConfig.cassette)   t.fxRack.applyCassette(t.fxConfig.cassette);
+      t.fxRack.applyFuzz(t.fxConfig.fuzz);
+      if (t.fxConfig.ringmod)    t.fxRack.applyRingMod(t.fxConfig.ringmod);
+      if (t.fxConfig.shaper)     t.fxRack.applyWaveShaper(t.fxConfig.shaper);
+      if (t.fxConfig.crush)      t.fxRack.applyCrush(t.fxConfig.crush);
+      if (t.fxConfig.autowah)    t.fxRack.applyAutoWah(t.fxConfig.autowah);
+      if (t.fxConfig.chorus)     t.fxRack.applyChorus(t.fxConfig.chorus);
+      if (t.fxConfig.phaser)     t.fxRack.applyPhaser(t.fxConfig.phaser);
+      if (t.fxConfig.flanger)    t.fxRack.applyFlanger(t.fxConfig.flanger);
+      if (t.fxConfig.pitchshift) t.fxRack.applyPitchShift(t.fxConfig.pitchshift);
+      t.fxRack.applyDelay(t.fxConfig.delay);
+      t.fxRack.applyReverb(t.fxConfig.reverb);
+    }
+    t.voice = buildVoiceForEngine(state.audioCtx, t.engineKey, t.params, t);
+    if (t.voice.type === "midi") {
+      t.voice.setChannel(t.midi.channel);
+      const out = state.midi?.outputs.get(t.midi.outputId);
+      if (out) t.voice.setOutput(out);
+    }
+    if (t.voice.setGlide) t.voice.setGlide(t.glide);
+    routeVoiceToRack(t);
+    if (t.eqNode) {
+      t.eqNode.setBand("low",  t.eq.low);
+      t.eqNode.setBand("mid",  t.eq.mid);
+      t.eqNode.setBand("high", t.eq.high);
+    }
+    applyCompressorConfig(t);
+    syncAllLFOs(t);
+  }
+  updatePlaitsControlsVisibility(t);
+  renderStepGrid(t);
+  t._refreshSaveEnabled?.();
+}
+

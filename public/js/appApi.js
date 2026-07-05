@@ -8,12 +8,14 @@
 import { loadPatches, savePatch, storePatches } from "./catalog.js";
 import {
   applySet,
+  applyTrackPatch,
   onExportSet,
   onImportSet,
   onLoadSet,
   onSaveSet,
   onShareSet,
   serializeSet,
+  serializeTrackPatch,
 } from "./session.js";
 import { state } from "./state.js";
 
@@ -35,6 +37,9 @@ export function installAppApi() {
     storePatches,
     // add/replace a single patch and refresh the catalog + engine selects
     savePatch,
+    // a track's whole sound as a portable patch (engine + params + fx + audio)
+    serializeTrackPatch,
+    applyTrackPatch,
     // live engine state (read-only handle; mutate via the functions above)
     get state() {
       return state;

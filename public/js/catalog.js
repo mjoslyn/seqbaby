@@ -112,7 +112,12 @@ export function savePatch(name, config) {
 }
 export function savedPatchEntries() {
   const all = loadPatches();
-  return Object.keys(all).sort().map(name => ({
+  return Object.keys(all).sort()
+    // Full "track patches" (engine + params + fx) are applied to a track via the
+    // per-track load button, not selected as a dropdown engine. Only legacy
+    // custom-Tone patches remain selectable engines here.
+    .filter(name => all[name]?._kind !== "track-patch")
+    .map(name => ({
     key: `saved:${name}`,
     label: name,
     group: "saved patches",

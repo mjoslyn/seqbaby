@@ -15,6 +15,8 @@ declare global {
       loadPatches: () => Record<string, unknown>;
       storePatches: (obj: Record<string, unknown>) => void;
       savePatch: (name: string, config: unknown) => void;
+      serializeTrackPatch: (track: unknown) => unknown;
+      applyTrackPatch: (track: unknown, patch: unknown) => void;
       state: unknown;
     };
   }
