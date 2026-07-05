@@ -1,5 +1,6 @@
 import { signOut } from "@/app/auth/actions";
 import SongsMenu from "@/app/SongsMenu";
+import PatchesMenu from "@/app/PatchesMenu";
 import styles from "@/app/ui.module.css";
 
 // Floating account indicator, top-right of the studio. Server component: the
@@ -10,6 +11,7 @@ export function AccountBar({ name }: { name: string | null }) {
       {name ? (
         <>
           <SongsMenu />
+          <PatchesMenu />
           <span className={styles.accountName} title={name}>
             {name}
           </span>

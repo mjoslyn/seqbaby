@@ -5,7 +5,7 @@
 // patch browser) drive the engine without touching the audio/UI code, we attach a
 // small, stable API to `window.seqbaby` and fire a `seqbaby:ready` event once it's
 // installed. Keep this surface intentional and additive.
-import { loadPatches, storePatches } from "./catalog.js";
+import { loadPatches, savePatch, storePatches } from "./catalog.js";
 import {
   applySet,
   onExportSet,
@@ -33,6 +33,8 @@ export function installAppApi() {
     // saved Tone.js patches (localStorage)
     loadPatches,
     storePatches,
+    // add/replace a single patch and refresh the catalog + engine selects
+    savePatch,
     // live engine state (read-only handle; mutate via the functions above)
     get state() {
       return state;

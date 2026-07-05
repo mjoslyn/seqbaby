@@ -14,6 +14,7 @@ declare global {
       onImportSet: () => void;
       loadPatches: () => Record<string, unknown>;
       storePatches: (obj: Record<string, unknown>) => void;
+      savePatch: (name: string, config: unknown) => void;
       state: unknown;
     };
   }
