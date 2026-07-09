@@ -7,9 +7,12 @@
 // near kbdBase) and the black keys play the accidental a semitone above the white
 // key to their left. With no scale it's a plain chromatic piano.
 
-import { state } from "./state.js";
-import { SCALES, midiToScaleIndex, quantizeToScale, scaleIndexToMidi } from "./theory.js";
+import { invertChord, state } from "./state.js";
+import { renderStepGrid } from "./stepGrid.js";
+import { SCALES, chordNotes, midiToScaleIndex, quantizeToScale, scaleIndexToMidi } from "./theory.js";
 import { ensureAudio } from "./transport.js";
+
+const KBD_REC_VEL = 0.85;
 
 // Chromatic offset from the base note (state.kbdBase = the "a" key).
 const KEY_SEMITONES = {
@@ -68,6 +71,28 @@ function hitOptsFor(t) {
   };
 }
 
+// The note/chord a keypress represents, for click-to-apply on a step. Chord mode
+// → root + chord type + cpx; otherwise the currently-held notes as root + extras.
+function kbdSelection(pressedMidi) {
+  if (state.kbdChordType) {
+    return { root: Math.round(pressedMidi), chord: state.kbdChordType, cpx: state.kbdChordCpx | 0, extras: null };
+  }
+  const notes = [...new Set([...held.values()].map(r => Math.round(r.midi)).filter(Number.isFinite))].sort((a, b) => a - b);
+  const root = notes.length ? notes[0] : Math.round(pressedMidi);
+  return { root, chord: "", cpx: 0, extras: notes.length > 1 ? notes.slice(1) : null };
+}
+
+// In chord mode each single key plays a whole chord (type + inversion); otherwise
+// just the one note. Returns the actual tones to sound.
+function tonesFor(midi) {
+  if (state.kbdChordType) {
+    let tones = chordNotes(midi, state.kbdChordType);
+    if (state.kbdChordCpx) tones = invertChord(tones, state.kbdChordCpx | 0);
+    return tones.map(clampNote);
+  }
+  return [midi];
+}
+
 async function pressNote(k, midi) {
   const t = targetTrack();
   if (!t) return;
@@ -77,12 +102,14 @@ async function pressNote(k, midi) {
   const opts = hitOptsFor(t);
   const rec = held.get(k);
   rec.t = t; rec.midi = midi;
+  const tones = tonesFor(midi);
+  rec.tones = tones;
   if (typeof t.voice.noteOn === "function") {
     rec.usedNoteOn = true;
-    try { t.voice.noteOn(midi, now, 0.85, opts); } catch (e) { console.warn("kbd noteOn", e); }
+    for (const n of tones) { try { t.voice.noteOn(n, now, 0.85, opts); } catch (e) { console.warn("kbd noteOn", e); } }
   } else {
     rec.usedNoteOn = false;
-    try { t.voice.hit(midi, now, HELD_HIT_DUR, 0.85, opts); } catch (e) { console.warn("kbd hit", e); }
+    for (const n of tones) { try { t.voice.hit(n, now, HELD_HIT_DUR, 0.85, opts); } catch (e) { console.warn("kbd hit", e); } }
   }
 }
 
@@ -91,7 +118,46 @@ function releaseNote(k) {
   held.delete(k);
   if (!rec || !rec.usedNoteOn || !rec.t?.voice) return;
   const now = (state.audioCtx?.currentTime ?? 0) + 0.005;
-  try { rec.t.voice.noteOff?.(rec.midi, now); } catch (e) { console.warn("kbd noteOff", e); }
+  for (const n of (rec.tones || [])) { try { rec.t.voice.noteOff?.(n, now); } catch (e) { console.warn("kbd noteOff", e); } }
+}
+
+// Live-record onto the active track's currently-playing step (round-to-current-
+// step quantize). In chord mode the pressed key writes root + chord type + cpx.
+// Otherwise every held key is recorded as its own note — the lowest is the step's
+// root, the rest go into the step's polyphonic extras (t.extraNotes).
+function captureNote(pressedMidi) {
+  if (!state.kbdRecord || !state.playing) return;
+  const t = targetTrack();
+  if (!t || !Array.isArray(t.steps)) return;
+  const len = t.length || t.steps.length;
+  if (!len) return;
+  const idx = (((t.trackTick ?? 0) - 1) % len + len) % len;
+  const noteLen = Array.isArray(t.lengths) ? Math.max(1, t.lengths[idx] || 1) : 1;
+  t.steps[idx] = 1;
+  if (Array.isArray(t.lengths)) t.lengths[idx] = noteLen;
+  if (Array.isArray(t.velocities)) t.velocities[idx] = KBD_REC_VEL;
+  if (Array.isArray(t.extraNotes))   t.extraNotes[idx]   = null;
+  if (Array.isArray(t.extraLengths)) t.extraLengths[idx] = null;
+  if (state.kbdChordType) {
+    // chord mode: store root + chord type + inversion (the transport expands it)
+    const root = Math.round(pressedMidi);
+    if (Array.isArray(t.notes)) t.notes[idx] = root;
+    if (Array.isArray(t.chords)) t.chords[idx] = state.kbdChordType;
+    if (Array.isArray(t.complexities)) t.complexities[idx] = state.kbdChordCpx | 0;
+    if (!t.isDrumKit) t.lastEditedNote = root;
+  } else {
+    const notes = [...new Set([...held.values()].map(r => Math.round(r.midi)).filter(Number.isFinite))].sort((a, b) => a - b);
+    if (!notes.length) return;
+    const root = notes[0];
+    const extras = notes.slice(1);
+    if (Array.isArray(t.notes)) t.notes[idx] = root;
+    if (Array.isArray(t.chords)) t.chords[idx] = "";
+    if (Array.isArray(t.complexities)) t.complexities[idx] = 0;
+    if (Array.isArray(t.extraNotes))   t.extraNotes[idx]   = extras.length ? extras : null;
+    if (Array.isArray(t.extraLengths)) t.extraLengths[idx] = extras.length ? extras.map(() => noteLen) : null;
+    if (!t.isDrumKit) t.lastEditedNote = root;
+  }
+  try { renderStepGrid(t); } catch {}
 }
 
 function onKeyDown(e) {
@@ -103,8 +169,10 @@ function onKeyDown(e) {
   if (KEY_SEMITONES[k] == null || held.has(k)) return;
   const midi = noteForKey(k);
   if (midi == null) return;
-  held.set(k, { t: null, midi, usedNoteOn: false });
+  held.set(k, { t: null, midi, tones: null, usedNoteOn: false });
   e.preventDefault();
+  state.kbdLast = kbdSelection(midi);   // remember for click-to-apply on a step
+  captureNote(midi);
   pressNote(k, midi);
 }
 
@@ -123,4 +191,5 @@ export function initComputerKeyboard() {
 export function resetKbdKeys() {
   for (const k of [...held.keys()]) releaseNote(k);
   held.clear();
+  state.kbdLast = null;
 }

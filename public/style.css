@@ -893,7 +893,14 @@ main {
 
 /* Computer-keyboard target: only highlighted while kbd-notes mode is on. */
 #kbd-notes[aria-pressed="true"] { background: var(--accent-2); color: #0b0d10; border-color: var(--accent-2); }
+.sq-kbd-chord { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--fg-dim); }
+.sq-kbd-chord[hidden] { display: none; }
+.sq-kbd-chord select { font-size: 11px; padding: 2px 4px; }
+#kbd-record .sq-btn-icon circle { fill: #e5484d; }
+#kbd-record[aria-pressed="true"] { background: #e5484d; border-color: #e5484d; }
+#kbd-record[aria-pressed="true"] .sq-btn-icon circle { fill: #fff; }
 body.kbd-notes-on .sq-track.is-kbd-active { border-color: var(--accent-2); box-shadow: 0 0 0 1px var(--accent-2) inset; }
+body.kbd-recording .sq-track.is-kbd-active { border-color: #e5484d; box-shadow: 0 0 0 1px #e5484d inset; }
 
 .sq-track__glide { width: 70px; }
 

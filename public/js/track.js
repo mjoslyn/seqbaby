@@ -501,11 +501,22 @@ export function startNote(t, anchor) {
   t.steps[anchor] = 1;
   t.lengths[anchor] = 1;
   if (t.notes[anchor] == null) {
-    // Drum-kit tracks pin to C2; melodic tracks default to whatever pitch the
-    // user last placed/moved, so adding several steps in a row keeps them on
-    // the same note unless they explicitly drag to change it.
-    t.notes[anchor] = lastUsedNote(t);
-    if (!t.isDrumKit) t.lastEditedNote = t.notes[anchor];
+    // If the keyboard is active and a note/chord was just played, paint that onto
+    // the new step (root + chord type + inversion + polyphonic extras). Otherwise
+    // drum-kit tracks pin to C2 and melodic tracks reuse the last placed pitch.
+    const sel = state.kbdNotesOn ? state.kbdLast : null;
+    if (sel) {
+      t.notes[anchor] = sel.root;
+      if (Array.isArray(t.chords)) t.chords[anchor] = sel.chord || "";
+      if (Array.isArray(t.complexities)) t.complexities[anchor] = sel.cpx | 0;
+      const extras = sel.extras && sel.extras.length ? sel.extras.slice() : null;
+      if (Array.isArray(t.extraNotes)) t.extraNotes[anchor] = extras;
+      if (Array.isArray(t.extraLengths)) t.extraLengths[anchor] = extras ? extras.map(() => 1) : null;
+      if (!t.isDrumKit) t.lastEditedNote = sel.root;
+    } else {
+      t.notes[anchor] = lastUsedNote(t);
+      if (!t.isDrumKit) t.lastEditedNote = t.notes[anchor];
+    }
   }
   applySampleDefaultsToStep(t, anchor);
 }

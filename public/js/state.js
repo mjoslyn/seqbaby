@@ -52,7 +52,11 @@ export const state = {
   // voice (chromatic piano layout, z/x shift octave). activeTrackId is the track
   // that receives them (last clicked; defaults to the first track).
   kbdNotesOn: false,
+  kbdRecord: false,     // capture keyboard notes into the active track's steps while playing
   kbdBase: 60,          // MIDI note of the "a" key (C4); shifted by z/x
+  kbdChordType: "",     // chord mode: "" = single notes, else each key plays this chord type
+  kbdChordCpx: 0,       // chord inversion / voicing level (0..4), same as a step's complexity
+  kbdLast: null,        // last note/chord played on the keyboard {root,chord,cpx,extras} — applied when a step is clicked
   activeTrackId: null,
   scale: { active: false, root: 0, mode: "minor" },
   activePattern: 0,

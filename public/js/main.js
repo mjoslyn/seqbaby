@@ -5,7 +5,7 @@ import { loadBuffer, normalizeAudioBuffer } from "./buffers.js";
 import { BUNDLED_SAMPLES, SAMPLE_BASE, rebuildEngineCatalog } from "./catalog.js";
 import { LFO_KEYS, PATTERN_COUNT } from "./constants.js";
 import { isMobileDevice, setStatus } from "./dom.js";
-import { HELP_TIPS, ICON_BOUNCE, ICON_CHAIN, ICON_FINISH, ICON_METRONOME, ICON_NOW, ICON_REPEAT } from "./icons.js";
+import { HELP_TIPS, ICON_BOUNCE, ICON_CHAIN, ICON_FINISH, ICON_METRONOME, ICON_NOW, ICON_REC, ICON_REPEAT } from "./icons.js";
 import { applySampleSpeed, attachBpmDrag, rateFromSync, retuneSyncedLFOs } from "./lfo.js";
 import { initComputerKeyboard, resetKbdKeys } from "./keyboard.js";
 import { autoAccents, parseMeter, redetectDrumKit, stepsPerBarForMeter } from "./meter.js";
@@ -378,17 +378,54 @@ export function init() {
   // Computer keyboard → notes.
   initComputerKeyboard();
   const kbdBtn = document.getElementById("kbd-notes");
+  // Chord mode panel — visible only while keyboard input is on.
+  const kbdChordPanel = document.getElementById("kbd-chord");
+  const showKbdChord = (on) => { if (kbdChordPanel) kbdChordPanel.hidden = !on; };
   if (kbdBtn) kbdBtn.addEventListener("click", () => {
     state.kbdNotesOn = !state.kbdNotesOn;
     kbdBtn.setAttribute("aria-pressed", String(state.kbdNotesOn));
     kbdBtn.classList.toggle("is-on", state.kbdNotesOn);
     document.body.classList.toggle("kbd-notes-on", state.kbdNotesOn);
+    showKbdChord(state.kbdNotesOn);
     if (state.kbdNotesOn) {
       if (state.activeTrackId == null && state.tracks[0]) setActiveTrack(state.tracks[0]);
       setStatus("computer keyboard → notes: on — a s d f… = white keys, w e t y u = black, z/x = octave. click a track to target it.");
     } else {
       resetKbdKeys();
       setStatus("computer keyboard notes off");
+      setKbdRecord(false);   // no keyboard input → nothing to record
+    }
+  });
+  const chordTypeSel = document.getElementById("kbd-chord-type");
+  if (chordTypeSel) { chordTypeSel.value = state.kbdChordType; chordTypeSel.addEventListener("change", () => { state.kbdChordType = chordTypeSel.value; }); }
+  const chordCpxSel = document.getElementById("kbd-chord-cpx");
+  if (chordCpxSel) { chordCpxSel.value = String(state.kbdChordCpx); chordCpxSel.addEventListener("change", () => { state.kbdChordCpx = Math.max(0, Math.min(4, Number(chordCpxSel.value) || 0)); }); }
+
+  // Record computer-keyboard notes into the active track (while the transport plays).
+  const recBtn = document.getElementById("kbd-record");
+  if (recBtn) recBtn.innerHTML = ICON_REC;
+  const setKbdRecord = (on) => {
+    state.kbdRecord = on;
+    if (recBtn) recBtn.setAttribute("aria-pressed", String(on));
+    document.body.classList.toggle("kbd-recording", on);
+  };
+  if (recBtn) recBtn.addEventListener("click", () => {
+    if (!state.kbdRecord) {
+      // Recording implies live keyboard input — arm the keyboard if it's off.
+      if (!state.kbdNotesOn) {
+        state.kbdNotesOn = true;
+        kbdBtn?.setAttribute("aria-pressed", "true");
+        kbdBtn?.classList.add("is-on");
+        document.body.classList.add("kbd-notes-on");
+        showKbdChord(true);
+      }
+      if (state.activeTrackId == null && state.tracks[0]) setActiveTrack(state.tracks[0]);
+      setKbdRecord(true);
+      setStatus("recording keyboard → active track — notes land on the current step. click a track to target it.");
+      if (!state.playing) togglePlay();   // roll the transport so notes get captured
+    } else {
+      setKbdRecord(false);
+      setStatus("keyboard recording off");
     }
   });
 

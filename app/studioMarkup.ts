@@ -9,6 +9,7 @@ export const STUDIO_BODY = String.raw`
       <span>seqbaby</span>
     </div>
     <button id="play" class="sq-play">play</button>
+    <button id="kbd-record" class="sq-btn--ghost sq-icon-btn" type="button" aria-pressed="false" aria-label="record keyboard notes" title="record computer-keyboard notes into the active track while the transport plays"></button>
     <div class="sq-field"><label for="bpm">bpm</label><input id="bpm" type="number" value="110" min="40" max="240" /></div>
     <div class="sq-field"><label for="swing">swing</label><input id="swing" type="range" min="0" max="0.5" step="0.01" value="0" /></div>
     <div class="sq-scale__field">
@@ -19,6 +20,30 @@ export const STUDIO_BODY = String.raw`
     </div>
     <button id="add-track" class="sq-btn--ghost">add track</button>
     <button id="kbd-notes" class="sq-btn--ghost" aria-pressed="false" title="play the active track from your computer keyboard (a s d f… = white keys, w e t y u = black, z/x = octave)">kbd</button>
+    <div id="kbd-chord" class="sq-kbd-chord" hidden>
+      <span class="sq-kbd-chord__lbl">chord</span>
+      <select id="kbd-chord-type" title="chord mode — play each key as a chord (off = single notes)">
+        <option value="">off</option>
+        <option value="maj">maj</option>
+        <option value="min">min</option>
+        <option value="sus2">sus2</option>
+        <option value="sus4">sus4</option>
+        <option value="dim">dim</option>
+        <option value="aug">aug</option>
+        <option value="maj7">maj7</option>
+        <option value="min7">min7</option>
+        <option value="dom7">dom7</option>
+        <option value="m7b5">m7b5</option>
+        <option value="add9">add9</option>
+      </select>
+      <select id="kbd-chord-cpx" title="voicing / inversion">
+        <option value="0">root</option>
+        <option value="1">1st inv</option>
+        <option value="2">2nd inv</option>
+        <option value="3">3rd inv</option>
+        <option value="4">drop-oct</option>
+      </select>
+    </div>
     <div class="sq-spacer"></div>
     <button id="metronome" class="sq-btn--ghost sq-icon-btn" aria-pressed="false" aria-label="metronome" title="metronome click on the downbeat"></button>
     <svg id="beat-indicator" class="sq-beat-indicator" viewBox="-22 -22 44 44" width="40" height="40" aria-hidden="true"></svg>
