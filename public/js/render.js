@@ -5,21 +5,19 @@ import { LFO_KEYS, lfoLabel, rateToSlider, sliderToRate } from "./constants.js";
 import { showInputDialog, showSavedPatchPicker } from "./dialogs.js";
 import { setStatus } from "./dom.js";
 import { randomizeMelody, randomizeTimbre } from "./generate.js";
-import { ICON_DICE, ICON_LOAD, ICON_SAVE } from "./icons.js";
+import { ICON_DICE, ICON_LOAD, ICON_SAVE, ICON_WAV } from "./icons.js";
 import { canModulate, currentBpm, rateFromSync, syncLFO } from "./lfo.js";
-import { pickAudioFileForTrack } from "./main.js";
+import { openSamplerSourceModal, pickAudioFileForTrack } from "./main.js";
 import { defaultFxConfig } from "./fxRack.js";
-import { GLOBAL_FX_AUTO_STEPS, defaultGlobalFxConfig, defaultGlobalFxModConfig, globalFxAutoKeys, globalFxModKeys, syncGlobalFxLFO } from "./globalFx.js";
-import { defaultMorphageneConfig } from "./morphagene.js";
-import { MG_AUTO_KEYS, MG_AUTO_LABEL, MG_AUTO_STEPS, MG_MOD_KEYS, MG_MOD_LABEL, defaultMorphageneModConfig, syncMorphageneLFO } from "./morphageneMod.js";
 import { patternMeter, redetectDrumKit, stepsPerBarForMeter } from "./meter.js";
 import { setEngineKey, setParam, updatePlaitsControlsVisibility } from "./params.js";
 import { bestRollViewOct } from "./pianoRoll.js";
 import { applyCompressorConfig, setEQ, setFilter } from "./signal.js";
 import { state } from "./state.js";
-import { openAutAsModal, openCompAsModal, openEnvAsModal, openEqAsModal, openFilterAsModal, openFxAsModal, openModAsModal, openRollAsModal, openTrackMenu } from "./stepEditor.js";
+import { openAutAsModal, openCompAsModal, openEnvAsModal, openEqAsModal, openFilterAsModal, openFxAsModal, openGranularWavModal, openModAsModal, openRollAsModal, openSampleEditorModal, openTrackMenu } from "./stepEditor.js";
 import { attachGridInteraction, renderStepGrid } from "./stepGrid.js";
 import { duplicateTrack, extendPatternByDuplicate, removeTrack, resizePattern, resizeTrack, shiftTrackOctave, truncatePattern } from "./track.js";
+import { GRAN_DEFAULTS } from "./voices.js";
 
 
 /** @typedef {import("./types.js").Track} Track */
@@ -28,11 +26,26 @@ import { duplicateTrack, extendPatternByDuplicate, removeTrack, resizePattern, r
  * grid, and the collapsible filter/env/fx/eq/comp/mod panels.
  * @param {Track} t
  */
+/**
+ * Mark a track as the target for computer-keyboard notes (and highlight it).
+ * The highlight only shows while keyboard-notes mode is on (body.kbd-notes-on).
+ * @param {Track} t
+ */
+export function setActiveTrack(t) {
+  if (!t) return;
+  state.activeTrackId = t.id;
+  for (const other of state.tracks) other.el?.classList.toggle("is-kbd-active", other.id === t.id);
+}
+
 export function renderTrack(t) {
   const tpl = document.getElementById("track-template");
   const node = tpl.content.firstElementChild.cloneNode(true);
   t.el = node;
   node.dataset.trackId = String(t.id);
+  // Clicking anywhere in a track makes it the active target for computer-keyboard
+  // notes. Capture phase + no preventDefault so it never interferes with the
+  // control the user actually clicked.
+  node.addEventListener("pointerdown", () => setActiveTrack(t), true);
 
   const engineSel = node.querySelector(".sq-track__engine");
   populateEngineSelect(engineSel);
@@ -52,6 +65,14 @@ export function renderTrack(t) {
     const el = node.querySelector(`.p-${k}`);
     if (el && t.params[k] != null) el.value = t.params[k];
   }
+  // Granular grain-engine controls fall back to GRAN_DEFAULTS when the track has
+  // no saved value yet (fresh track or a session predating these params).
+  for (const k of ["gspeed", "gwindow", "gjitter", "gdetune", "gpan", "gplay", "gloop", "gpattern", "grate"]) {
+    const el = node.querySelector(`.p-${k}`);
+    if (el) el.value = t.params[k] ?? GRAN_DEFAULTS[k];
+  }
+  const gsyncEl = node.querySelector(".p-gsync");
+  if (gsyncEl) gsyncEl.checked = t.params.gsync ?? GRAN_DEFAULTS.gsync;
   node.querySelector(".p-cutoff").value = t.filter.cutoff;
   node.querySelector(".p-reson").value  = t.filter.reson;
   node.querySelector(".p-envamt").value = t.filter.env;
@@ -68,12 +89,17 @@ export function renderTrack(t) {
   });
   engineSel.addEventListener("change", e => {
     const val = e.target.value;
-    if (val === "upload") {
-      // intercept — open file picker; only commit the engine change if a file is chosen
+    // The sampler needs a source (file or bundled) and the granular engine needs
+    // a file: intercept and open the matching picker, only committing the engine
+    // change if a source is chosen (revert the dropdown otherwise).
+    if (val === "sampler") {
       const prev = t.engineKey;
-      pickAudioFileForTrack(t).then(ok => {
-        if (!ok) engineSel.value = prev;
-      });
+      openSamplerSourceModal(t).then(ok => { if (!ok) engineSel.value = prev; });
+      return;
+    }
+    if (val === "dm:granular") {
+      const prev = t.engineKey;
+      pickAudioFileForTrack(t, val).then(ok => { if (!ok) engineSel.value = prev; });
       return;
     }
     setEngineKey(t, val);
@@ -96,6 +122,28 @@ export function renderTrack(t) {
   for (const k of ["osc1wave", "osc2wave", "osc3wave", "noisetype"]) {
     const el = node.querySelector(`.p-${k}`);
     if (el) el.addEventListener("change", e => setParam(t, k, e.target.value));
+  }
+  // Granular grain-engine controls: numeric sliders, string selects, sync toggle.
+  for (const k of ["gspeed", "gwindow", "gjitter", "gdetune", "gpan"]) {
+    const el = node.querySelector(`.p-${k}`);
+    if (el) el.addEventListener("input", e => setParam(t, k, Number(e.target.value)));
+  }
+  for (const k of ["gplay", "gloop", "gpattern", "grate"]) {
+    const el = node.querySelector(`.p-${k}`);
+    if (el) el.addEventListener("change", e => setParam(t, k, e.target.value));
+  }
+  const gsyncInput = node.querySelector(".p-gsync");
+  if (gsyncInput) gsyncInput.addEventListener("change", e => setParam(t, "gsync", e.target.checked));
+  // Header wave/sample icon (between engine dropdown + save): opens the granular
+  // visualizer for the granular engine, else the sampler's sample/slice editor.
+  // Visibility is toggled per engine in updatePlaitsControlsVisibility.
+  const wavBtn = node.querySelector(".sq-track__wav");
+  if (wavBtn) {
+    wavBtn.innerHTML = ICON_WAV;
+    wavBtn.addEventListener("click", () => {
+      if (t.engineKey === "dm:granular") openGranularWavModal(t);
+      else if (t.engineKey === "sampler") openSampleEditorModal(t);
+    });
   }
   node.querySelector(".p-cutoff").addEventListener("input", e => setFilter(t, "cutoff", Number(e.target.value)));
   node.querySelector(".p-reson").addEventListener("input",  e => setFilter(t, "reson",  Number(e.target.value)));
@@ -244,6 +292,7 @@ export function renderTrack(t) {
   t._oscMixGroupEl  = node.querySelector(".sq-param-group--osc-mix");
   t._oscModGroupEl  = node.querySelector(".sq-param-group--osc-mod");
   t._moogOscGroupEl = node.querySelector(".sq-param-group--moog");
+  t._granGroupEl    = node.querySelector(".sq-param-group--granular");
 
   renderModPanel(t, t._modPanelEl);
   wireFxPanel(t, t._fxPanelEl);
@@ -674,489 +723,6 @@ export function wireFxPanel(t, panel) {
   q(".fx-reverb-wet").addEventListener("input", applyReverb);
   { const b = q(".fx-crush-bits"); if (b) b.addEventListener("input", applyCrush); }
   { const w = q(".fx-crush-wet");  if (w) w.addEventListener("input", applyCrush); }
-}
-
-// ---- morphagene (global master tape processor) -------------------------
-
-// Main tape controls: selector, config key, wrapper setter, default, formatter.
-// Shared by wireMorphagenePanel (readouts + reset) and refreshMorphagenePanelUI.
-const fmt2 = v => Number(v).toFixed(2);
-// Organize is a stepped splice selector: with >1 splice show which splice is
-// active (matching the worklet's floor(organize*splices)); with one splice it's
-// a continuous scan position.
-const spliceIndex = (v, n) => Math.max(0, Math.min(n - 1, Math.floor(v * n - 1e-9)));
-const fmtOrganize = v => {
-  const n = state.morphageneConfig?.splices || 1;
-  if (n <= 1) return fmt2(v);
-  return `${spliceIndex(v, n) + 1}/${n}`;
-};
-// Hardware Organize is stepped: snap to the center of the selected splice band
-// so it detents onto each splice. Continuous (scan) when there's one splice.
-const snapOrganize = raw => {
-  const n = state.morphageneConfig?.splices || 1;
-  if (n <= 1) return raw;
-  return (spliceIndex(raw, n) + 0.5) / n;
-};
-const MORPH_CTRLS = [
-  { sel: ".morph-varispeed", key: "variSpeed", set: "setVariSpeed", def: 1,   fmt: v => Math.abs(v) < 0.02 ? "stop" : fmt2(v) },
-  { sel: ".morph-organize",  key: "organize",  set: "setOrganize",  def: 0,   fmt: fmtOrganize, snap: snapOrganize },
-  { sel: ".morph-genesize",  key: "geneSize",  set: "setGeneSize",  def: 0,   fmt: fmt2 },
-  { sel: ".morph-slide",     key: "slide",     set: "setSlide",     def: 0,   fmt: fmt2 },
-  { sel: ".morph-morph",     key: "morph",     set: "setMorph",     def: 0.2, fmt: fmt2 },
-  { sel: ".morph-sos",       key: "sos",       set: "setSos",       def: 0,   fmt: fmt2 },
-  { sel: ".morph-mix",       key: "mix",       set: "setMix",       def: 0,   fmt: fmt2 },
-];
-
-/** Ensure each control label has a value readout and refresh its text. */
-function paintMorphReadouts(panel) {
-  const cfg = state.morphageneConfig;
-  for (const c of MORPH_CTRLS) {
-    const el = panel.querySelector(c.sel);
-    if (!el) continue;
-    const label = el.closest(".sq-morph__ctl");
-    let val = label?.querySelector(".sq-morph__val");
-    if (label && !val) { val = document.createElement("span"); val.className = "sq-morph__val"; label.appendChild(val); }
-    if (val) val.textContent = c.fmt(cfg?.[c.key] ?? el.value);
-  }
-}
-
-/** Push state.morphageneConfig into the panel controls (config -> DOM). */
-export function refreshMorphagenePanelUI() {
-  const panel = document.getElementById("morph-panel");
-  if (!panel) return;
-  const cfg = state.morphageneConfig || (state.morphageneConfig = defaultMorphageneConfig());
-  const set = (sel, v) => { const el = panel.querySelector(sel); if (el != null && v != null) el.value = v; };
-  set(".morph-varispeed", cfg.variSpeed);
-  set(".morph-organize",  cfg.organize);
-  set(".morph-genesize",  cfg.geneSize);
-  set(".morph-slide",     cfg.slide);
-  set(".morph-morph",     cfg.morph);
-  set(".morph-sos",       cfg.sos);
-  set(".morph-mix",       cfg.mix);
-  set(".morph-splices",   cfg.splices);
-  const sync = panel.querySelector(".morph-sync");
-  if (sync) sync.checked = !!cfg.sync;
-  set(".morph-div", String(cfg.div ?? 4));
-  syncMorphSyncEnabled(panel, !!cfg.sync);
-  paintMorphReadouts(panel);
-  panel.querySelector(".morph-freeze")?.setAttribute("aria-pressed", String(!!cfg.frozen));
-  panel.querySelector(".morph-record")?.setAttribute("aria-pressed", "false");
-}
-
-/** The record-length division only matters while sync is on. */
-function syncMorphSyncEnabled(panel, on) {
-  const div = panel.querySelector(".morph-div");
-  if (div) div.disabled = !on;
-}
-
-/**
- * Push the tempo-locked reel/record length to the worklet (seconds =
- * beats/bpm*60), or 0 for a free ring buffer. Call on sync/div change, bpm
- * change, node build, and session load.
- */
-export function refreshMorphageneSync() {
-  const cfg = state.morphageneConfig;
-  if (!cfg) return;
-  const seconds = cfg.sync ? (60 / currentBpm()) * Number(cfg.div || 4) : 0;
-  state.morphagene?.setLoopLen(seconds);
-}
-
-/**
- * Wire the singular master morphagene panel once at init. Mirrors wireFxPanel:
- * DOM input -> state.morphageneConfig -> state.morphagene?.setX (guarded so it
- * works before audio init; the node picks the config up via applyAll on build).
- */
-export function wireMorphagenePanel() {
-  const panel = document.getElementById("morph-panel");
-  if (!panel) return;
-  const cfg = state.morphageneConfig || (state.morphageneConfig = defaultMorphageneConfig());
-  const q = sel => panel.querySelector(sel);
-  refreshMorphagenePanelUI();
-
-  // Each slider: live readout + write-through, with double-click-the-name reset.
-  // Controls with a `snap` quantize the slider (e.g. organize detents to splices).
-  for (const c of MORPH_CTRLS) {
-    const el = q(c.sel);
-    if (!el) continue;
-    const label = el.closest(".sq-morph__ctl");
-    const name = label?.querySelector("span");
-    const apply = (v) => { cfg[c.key] = v; state.morphagene?.[c.set](v); paintMorphReadouts(panel); };
-    el.addEventListener("input", () => {
-      let v = Number(el.value);
-      if (c.snap) { v = c.snap(v); el.value = v; }
-      apply(v);
-    });
-    name?.addEventListener("dblclick", () => { el.value = c.def; apply(c.def); });
-  }
-  paintMorphReadouts(panel);
-
-  const organize = q(".morph-organize");
-  const splices = q(".morph-splices");
-  const applySplices = (n) => {
-    n = Math.max(1, Math.min(16, n | 0));
-    cfg.splices = n; splices.value = n;
-    state.morphagene?.setSplices(n);
-    // Re-snap organize onto a splice center for the new count.
-    if (organize) {
-      const v = snapOrganize(Number(organize.value));
-      organize.value = v; cfg.organize = v; state.morphagene?.setOrganize(v);
-    }
-    paintMorphReadouts(panel);  // organize readout is splice-count dependent
-  };
-  splices?.addEventListener("change", () => applySplices(Number(splices.value)));
-  splices?.closest(".sq-morph__ctl")?.querySelector("span")
-    ?.addEventListener("dblclick", () => applySplices(1));
-
-  const sync = q(".morph-sync");
-  sync?.addEventListener("change", () => {
-    cfg.sync = sync.checked;
-    syncMorphSyncEnabled(panel, cfg.sync);
-    refreshMorphageneSync();
-  });
-  const div = q(".morph-div");
-  div?.addEventListener("change", () => {
-    cfg.div = Number(div.value);
-    refreshMorphageneSync();
-  });
-
-  const freeze = q(".morph-freeze");
-  freeze?.addEventListener("click", () => {
-    cfg.frozen = !cfg.frozen;
-    freeze.setAttribute("aria-pressed", String(cfg.frozen));
-    state.morphagene?.setFreeze(cfg.frozen);
-  });
-
-  const rec = q(".morph-record");
-  rec?.addEventListener("click", () => {
-    const on = rec.getAttribute("aria-pressed") !== "true";
-    rec.setAttribute("aria-pressed", String(on));
-    if (on) {
-      cfg.frozen = false;
-      freeze?.setAttribute("aria-pressed", "false");
-      state.morphagene?.setFreeze(false);
-      state.morphagene?.captureStart();
-    } else {
-      state.morphagene?.captureStop();
-      cfg.frozen = true;
-      freeze?.setAttribute("aria-pressed", "true");
-    }
-  });
-
-  // Reel-fill meter, fed by the worklet's throttled status messages. The node
-  // may not exist until first play, so register the callback on state for
-  // ensureAudio to attach when it builds the MorphageneNode.
-  const bar = q(".sq-morph__reel-bar");
-  if (bar) {
-    state.morphageneStatusCb = d => { bar.style.width = `${Math.round((d.filled || 0) * 100)}%`; };
-    if (state.morphagene) state.morphagene.onStatus = state.morphageneStatusCb;
-  }
-
-  // fx / mod / aut sub-panels and their tab toggles.
-  wireMorphageneFxPanel();
-  renderMorphageneModPanel();
-  renderMorphageneAutPanel();
-  const tab = (btnSel, panelId) => {
-    const btn = q(btnSel);
-    const p = document.getElementById(panelId);
-    btn?.addEventListener("click", () => {
-      const show = p.hidden;
-      p.hidden = !show;
-      btn.setAttribute("aria-pressed", String(show));
-    });
-  };
-  tab(".morph-fx-toggle", "morph-fx-panel");
-  tab(".morph-mod-toggle", "morph-mod-panel");
-  tab(".morph-aut-toggle", "morph-aut-panel");
-}
-
-// ---- morphagene fx rack (wet path) — reuse the track fx panel + wiring -----
-
-function morphFxTarget(fxNode) {
-  return {
-    fxConfig: state.morphageneFxConfig,
-    get fxRack() { return state.morphagene?.fxRack; },
-    el: fxNode,
-    _fxPanelEl: fxNode,
-  };
-}
-
-/** Clone the track fx-panel markup into the morph fx container and wire it. */
-export function wireMorphageneFxPanel() {
-  const host = document.getElementById("morph-fx-panel");
-  if (!host || host._wired) return;
-  if (!state.morphageneFxConfig) state.morphageneFxConfig = defaultFxConfig();
-  const tpl = document.getElementById("track-template");
-  const fxNode = tpl?.content.querySelector(".sq-track__fx-panel")?.cloneNode(true);
-  if (!fxNode) return;
-  fxNode.hidden = false;
-  fxNode.classList.add("sq-morph__fx");
-  host.replaceChildren(fxNode);
-  host._fxNode = fxNode;
-  wireFxPanel(morphFxTarget(fxNode), fxNode);
-  host._wired = true;
-}
-
-/** Re-apply the whole morphagene fx config to its rack + sliders (session load). */
-export function applyMorphageneFx() {
-  const host = document.getElementById("morph-fx-panel");
-  if (!host?._fxNode || !state.morphageneFxConfig) return;
-  applyFxToTrack(morphFxTarget(host._fxNode), state.morphageneFxConfig);
-}
-
-// ---- generic mod / aut rack builders (shared by morphagene + master fx) --
-
-/** Build an LFO modulation rack UI into `panel`. opts: {cfg, keys, labelOf, syncFn} */
-function renderModRack(panel, { cfg, keys, labelOf, syncFn }) {
-  const tpl = document.getElementById("lfo-row-template");
-  panel.replaceChildren();
-
-  const rows = document.createElement("div");
-  rows.className = "sq-mod__rows";
-  panel.appendChild(rows);
-
-  const adder = document.createElement("div");
-  adder.className = "sq-mod__add-row";
-  adder.innerHTML = `
-    <button class="sq-mod__add-btn sq-btn--ghost" type="button">+ add modulation</button>
-    <select class="sq-mod__add-select" hidden></select>`;
-  panel.appendChild(adder);
-  const addBtn = adder.querySelector(".sq-mod__add-btn");
-  const addSel = adder.querySelector(".sq-mod__add-select");
-
-  const refreshAdder = () => {
-    const avail = keys.filter(k => !cfg[k]?.enabled);
-    if (!avail.length) { addBtn.disabled = true; addSel.hidden = true; addBtn.textContent = "(all modulations active)"; }
-    else {
-      addBtn.disabled = false; addBtn.textContent = "+ add modulation";
-      addSel.innerHTML = `<option value="" disabled selected>pick a target…</option>`
-        + avail.map(k => `<option value="${k}">${labelOf(k)}</option>`).join("");
-    }
-  };
-
-  const addRow = (key) => {
-    const c = cfg[key];
-    const row = tpl.content.firstElementChild.cloneNode(true);
-    row.dataset.key = key;
-    row.classList.add("is-active");
-    row.querySelector(".sq-lfo__target").textContent = labelOf(key);
-    const cb = row.querySelector(".lfo-on");
-    const shape = row.querySelector(".sq-lfo__shape");
-    const rate = row.querySelector(".sq-lfo__rate");
-    const rateLbl = row.querySelector(".sq-lfo__rate-label");
-    const depth = row.querySelector(".lfo-depth");
-    const depthLbl = row.querySelector(".sq-lfo__depth-label");
-    const syncCb = row.querySelector(".lfo-sync");
-    const divSel = row.querySelector(".sq-lfo__div");
-    const rateField = row.querySelector(".sq-lfo__rate-field");
-    const removeBtn = row.querySelector(".sq-lfo__remove");
-    cb.checked = c.enabled;
-    shape.value = c.type;
-    rate.value = rateToSlider(c.rate);
-    depth.value = c.depth;
-    depthLbl.textContent = c.depth.toFixed(2);
-    syncCb.checked = c.sync;
-    divSel.value = String(c.div);
-    rateField.dataset.mode = c.sync ? "sync" : "hz";
-    const refreshLbl = () => {
-      if (c.sync) { const o = divSel.options[divSel.selectedIndex]; rateLbl.textContent = `${o ? o.textContent : c.div} · ${rateFromSync(c.div).toFixed(2)} hz`; }
-      else rateLbl.textContent = `${c.rate.toFixed(2)} hz`;
-    };
-    refreshLbl();
-    cb.addEventListener("change", () => { c.enabled = cb.checked; row.classList.toggle("is-active", c.enabled); syncFn(key); });
-    shape.addEventListener("change", () => { c.type = shape.value; syncFn(key); });
-    rate.addEventListener("input", () => { c.rate = sliderToRate(Number(rate.value)); refreshLbl(); syncFn(key); });
-    depth.addEventListener("input", () => { c.depth = Number(depth.value); depthLbl.textContent = c.depth.toFixed(2); syncFn(key); });
-    syncCb.addEventListener("change", () => { c.sync = syncCb.checked; rateField.dataset.mode = c.sync ? "sync" : "hz"; refreshLbl(); syncFn(key); });
-    divSel.addEventListener("change", () => { c.div = Number(divSel.value); refreshLbl(); syncFn(key); });
-    removeBtn?.addEventListener("click", () => { c.enabled = false; syncFn(key); row.remove(); refreshAdder(); });
-    rows.appendChild(row);
-  };
-
-  addBtn.addEventListener("click", () => { if (addSel.hidden) addSel.hidden = false; });
-  addSel.addEventListener("change", () => {
-    const key = addSel.value;
-    if (!key) return;
-    cfg[key].enabled = true;
-    addRow(key);
-    syncFn(key);
-    addSel.hidden = true;
-    refreshAdder();
-  });
-
-  for (const k of keys) if (cfg[k]?.enabled) addRow(k);
-  refreshAdder();
-}
-
-/** Build a step-automation lane rack UI into `panel`. opts: {auto, keys, labelOf, steps} */
-function renderAutRack(panel, { auto, keys, labelOf, steps }) {
-  panel.replaceChildren();
-
-  const rows = document.createElement("div");
-  rows.className = "aut-rows";
-  panel.appendChild(rows);
-
-  const emptyMsg = document.createElement("div");
-  emptyMsg.className = "sq-aut__empty";
-  emptyMsg.textContent = `no automation — pick a target below (loops every bar · ${steps} steps)`;
-  panel.appendChild(emptyMsg);
-
-  const adder = document.createElement("div");
-  adder.className = "sq-aut__add-row";
-  adder.innerHTML = `
-    <button class="sq-aut__add-btn sq-btn--ghost" type="button">+ add automation</button>
-    <select class="sq-aut__add-select" hidden></select>`;
-  panel.appendChild(adder);
-  const addBtn = adder.querySelector(".sq-aut__add-btn");
-  const addSel = adder.querySelector(".sq-aut__add-select");
-
-  const refreshAdder = () => {
-    const avail = keys.filter(k => !auto[k]);
-    if (!avail.length) { addBtn.disabled = true; addSel.hidden = true; addBtn.textContent = "(all targets automated)"; }
-    else {
-      addBtn.disabled = false; addBtn.textContent = "+ add automation";
-      addSel.innerHTML = `<option value="" disabled selected>pick a target…</option>`
-        + avail.map(k => `<option value="${k}">${labelOf(k)}</option>`).join("");
-    }
-    emptyMsg.hidden = Object.keys(auto).length > 0;
-  };
-
-  const drawRow = (key) => {
-    if (!auto[key]) auto[key] = { enabled: true, values: new Array(steps).fill(0.5) };
-    const lane = auto[key];
-    if (lane.values.length !== steps) {
-      const o = new Array(steps).fill(0.5);
-      for (let i = 0; i < Math.min(lane.values.length, steps); i++) o[i] = lane.values[i];
-      lane.values = o;
-    }
-    const row = document.createElement("div");
-    row.className = "sq-aut__lane" + (lane.enabled ? " is-active" : "");
-    row.dataset.key = key;
-    row.innerHTML = `
-      <span class="sq-aut__label">${labelOf(key)}</span>
-      <input type="checkbox" class="sq-aut__enable" ${lane.enabled ? "checked" : ""} title="enable lane" />
-      <div class="sq-aut__grid"></div>
-      <button class="sq-aut__clear sq-btn--ghost" type="button" title="reset to 0.5">clear</button>
-      <button class="sq-aut__remove" type="button" title="remove lane">×</button>`;
-    rows.appendChild(row);
-    const grid = row.querySelector(".sq-aut__grid");
-    for (let i = 0; i < steps; i++) {
-      const cell = document.createElement("div");
-      cell.className = "sq-aut__step";
-      cell.dataset.idx = i;
-      cell.style.setProperty("--v", String(lane.values[i] ?? 0));
-      grid.appendChild(cell);
-    }
-    const setFromPointer = (ev) => {
-      const rect = grid.getBoundingClientRect();
-      const relX = Math.max(0, Math.min(rect.width - 1, ev.clientX - rect.left));
-      const relY = Math.max(0, Math.min(rect.height, ev.clientY - rect.top));
-      const idx = Math.max(0, Math.min(steps - 1, Math.floor((relX / rect.width) * steps)));
-      lane.values[idx] = Math.max(0, Math.min(1, 1 - (relY / rect.height)));
-      grid.children[idx]?.style.setProperty("--v", String(lane.values[idx]));
-    };
-    let dragging = false;
-    grid.addEventListener("pointerdown", (ev) => { dragging = true; try { grid.setPointerCapture(ev.pointerId); } catch {} setFromPointer(ev); ev.preventDefault(); });
-    grid.addEventListener("pointermove", (ev) => { if (dragging) setFromPointer(ev); });
-    grid.addEventListener("pointerup", (ev) => { dragging = false; try { grid.releasePointerCapture(ev.pointerId); } catch {} });
-    grid.addEventListener("pointercancel", () => { dragging = false; });
-    row.querySelector(".sq-aut__enable").addEventListener("change", (ev) => { lane.enabled = !!ev.target.checked; row.classList.toggle("is-active", lane.enabled); });
-    row.querySelector(".sq-aut__clear").addEventListener("click", () => {
-      for (let i = 0; i < lane.values.length; i++) lane.values[i] = 0.5;
-      for (let i = 0; i < grid.children.length; i++) grid.children[i].style.setProperty("--v", "0.5");
-    });
-    row.querySelector(".sq-aut__remove").addEventListener("click", () => { delete auto[key]; row.remove(); refreshAdder(); });
-  };
-
-  addBtn.addEventListener("click", () => { if (addSel.hidden) addSel.hidden = false; });
-  addSel.addEventListener("change", () => { const key = addSel.value; if (!key) return; drawRow(key); addSel.hidden = true; refreshAdder(); });
-
-  for (const key of Object.keys(auto)) if (keys.includes(key)) drawRow(key);
-  refreshAdder();
-}
-
-// ---- morphagene mod / aut (thin wrappers over the generic racks) --------
-
-export function renderMorphageneModPanel() {
-  const panel = document.getElementById("morph-mod-panel");
-  if (!panel) return;
-  if (!state.morphageneModConfig) state.morphageneModConfig = defaultMorphageneModConfig();
-  renderModRack(panel, { cfg: state.morphageneModConfig, keys: MG_MOD_KEYS, labelOf: k => MG_MOD_LABEL[k], syncFn: syncMorphageneLFO });
-}
-
-export function renderMorphageneAutPanel() {
-  const panel = document.getElementById("morph-aut-panel");
-  if (!panel) return;
-  if (!state.morphageneAutomation) state.morphageneAutomation = {};
-  renderAutRack(panel, { auto: state.morphageneAutomation, keys: MG_AUTO_KEYS, labelOf: k => MG_AUTO_LABEL[k], steps: MG_AUTO_STEPS });
-}
-
-// ---- master (global) fx rack: fx panel + mod + aut ----------------------
-
-function globalFxTarget(fxNode) {
-  return {
-    fxConfig: state.globalFxConfig,
-    get fxRack() { return state.globalFx; },
-    el: fxNode,
-    _fxPanelEl: fxNode,
-  };
-}
-
-/** Clone the track fx-panel markup into the master-fx container and wire it. */
-export function wireGlobalFxPanel() {
-  const host = document.getElementById("globalfx-fx-panel");
-  if (!host || host._wired) return;
-  if (!state.globalFxConfig) state.globalFxConfig = defaultGlobalFxConfig();
-  const tpl = document.getElementById("track-template");
-  const fxNode = tpl?.content.querySelector(".sq-track__fx-panel")?.cloneNode(true);
-  if (!fxNode) return;
-  fxNode.hidden = false;
-  fxNode.classList.add("sq-morph__fx");
-  host.replaceChildren(fxNode);
-  host._fxNode = fxNode;
-  wireFxPanel(globalFxTarget(fxNode), fxNode);
-  host._wired = true;
-}
-
-/** Re-apply the whole master fx config to its rack + sliders (session load). */
-export function applyGlobalFxUI() {
-  const host = document.getElementById("globalfx-fx-panel");
-  if (!host?._fxNode || !state.globalFxConfig) return;
-  applyFxToTrack(globalFxTarget(host._fxNode), state.globalFxConfig);
-}
-
-export function renderGlobalFxModPanel() {
-  const panel = document.getElementById("globalfx-mod-panel");
-  if (!panel) return;
-  if (!state.globalFxModConfig) state.globalFxModConfig = defaultGlobalFxModConfig();
-  renderModRack(panel, { cfg: state.globalFxModConfig, keys: globalFxModKeys(), labelOf: lfoLabel, syncFn: syncGlobalFxLFO });
-}
-
-export function renderGlobalFxAutPanel() {
-  const panel = document.getElementById("globalfx-aut-panel");
-  if (!panel) return;
-  if (!state.globalFxAutomation) state.globalFxAutomation = {};
-  renderAutRack(panel, { auto: state.globalFxAutomation, keys: globalFxAutoKeys(), labelOf: k => AUTOMATION_TARGETS[k]?.label || k, steps: GLOBAL_FX_AUTO_STEPS });
-}
-
-/** Wire the master fx panel: fx/mod/aut sub-panels + tab toggles. */
-export function wireGlobalFxPanels() {
-  const panel = document.getElementById("globalfx-panel");
-  if (!panel) return;
-  wireGlobalFxPanel();
-  renderGlobalFxModPanel();
-  renderGlobalFxAutPanel();
-  const tab = (btnSel, panelId) => {
-    const btn = panel.querySelector(btnSel);
-    const p = document.getElementById(panelId);
-    btn?.addEventListener("click", () => {
-      const show = p.hidden;
-      p.hidden = !show;
-      btn.setAttribute("aria-pressed", String(show));
-    });
-  };
-  tab(".gfx-fx-toggle", "globalfx-fx-panel");
-  tab(".gfx-mod-toggle", "globalfx-mod-panel");
-  tab(".gfx-aut-toggle", "globalfx-aut-panel");
 }
 
 export function renderModPanel(t, panel) {

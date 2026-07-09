@@ -1,19 +1,18 @@
 import { installAppApi } from "./appApi.js";
 import { buildBeatIndicator, paintBeatIndicator } from "./beat.js";
 import { bounceAudio, showBounceDialog } from "./bounce.js";
-import { normalizeAudioBuffer } from "./buffers.js";
-import { rebuildEngineCatalog } from "./catalog.js";
+import { loadBuffer, normalizeAudioBuffer } from "./buffers.js";
+import { BUNDLED_SAMPLES, SAMPLE_BASE, rebuildEngineCatalog } from "./catalog.js";
 import { LFO_KEYS, PATTERN_COUNT } from "./constants.js";
 import { isMobileDevice, setStatus } from "./dom.js";
 import { HELP_TIPS, ICON_BOUNCE, ICON_CHAIN, ICON_FINISH, ICON_METRONOME, ICON_NOW, ICON_REPEAT } from "./icons.js";
 import { applySampleSpeed, attachBpmDrag, rateFromSync, retuneSyncedLFOs } from "./lfo.js";
-import { autoAccents, parseMeter, stepsPerBarForMeter } from "./meter.js";
+import { initComputerKeyboard, resetKbdKeys } from "./keyboard.js";
+import { autoAccents, parseMeter, redetectDrumKit, stepsPerBarForMeter } from "./meter.js";
 import { meterTick } from "./meters.js";
 import { setEngineKey } from "./params.js";
 import { copyPattern, openPatternMenu, renderPatternGrid } from "./patternBar.js";
-import { syncAllGlobalFxLFOs } from "./globalFx.js";
-import { syncAllMorphageneLFOs } from "./morphageneMod.js";
-import { refreshMorphageneSync, wireGlobalFxPanels, wireMorphagenePanel } from "./render.js";
+import { setActiveTrack } from "./render.js";
 import { initScaleUI } from "./scaleUI.js";
 import { loadShareFromUrl, onExportSet, onImportSet, onLoadSet, onSaveSet, onShareSet } from "./session.js";
 import { state, switchPattern } from "./state.js";
@@ -143,7 +142,7 @@ export function primeAudioForIOS() {
   }
 }
 
-export async function pickAudioFileForTrack(t) {
+export async function pickAudioFileForTrack(t, targetEngine = "sampler") {
   return new Promise(resolve => {
     const inp = document.createElement("input");
     inp.type = "file";
@@ -167,12 +166,22 @@ export async function pickAudioFileForTrack(t) {
         t.uploadAudioMime = file.type || "audio/wav";
         t.uploadFileName = file.name;
         t.soundPromptText = file.name;
-        if (t.engineKey === "upload" && t.voice?.type === "upload") {
+        if (targetEngine === "sampler") t.sampleSource = { kind: "upload", name: file.name };
+        // Push the decoded buffer to the matching live voice if we're already on
+        // the target engine; otherwise switch to it (which rebuilds the voice and
+        // picks up the freshly-set uploadBuffer). Both the sampler and the granular
+        // engine read from track.uploadBuffer.
+        const targetType = targetEngine === "dm:granular" ? "granular" : "sampler";
+        if (t.engineKey === targetEngine && t.voice?.type === targetType) {
           t.voice.setBuffer(audioBuf);
         } else {
-          setEngineKey(t, "upload");
-          if (t.el) t.el.querySelector(".sq-track__engine").value = "upload";
+          setEngineKey(t, targetEngine);
+          if (t.el) t.el.querySelector(".sq-track__engine").value = targetEngine;
         }
+        // Root note tracks the sample's natural-playback octave: C2 for drum-kit
+        // samples, C4 otherwise. New notes on an empty grid anchor to this root
+        // (via lastUsedNote), so clear the stale last-edited pitch on load.
+        if (targetEngine === "sampler") { redetectDrumKit(t); t.sliceBase = t.isDrumKit ? 36 : 60; t.lastEditedNote = null; }
         applySampleSpeed(t);
         setStatus(`"${t.name}" ← ${file.name} (${Math.round(audioBuf.duration * 1000)}ms)`);
         resolve(true);
@@ -187,6 +196,72 @@ export async function pickAudioFileForTrack(t) {
       setTimeout(() => { if (!resolved && !inp.files?.length) { resolved = true; inp.remove(); resolve(false); } }, 300);
     }, { once: true });
     inp.click();
+  });
+}
+
+// Sampler source picker: choose "load file…" or one of the bundled samples.
+// Resolves true if a source was chosen (and the track switched to the sampler),
+// false if the user dismissed it. Mirrors pickAudioFileForTrack's commit/cancel
+// contract so the engine dropdown can revert on cancel.
+export function openSamplerSourceModal(t) {
+  return new Promise(resolve => {
+    let done = false;
+    const finish = (ok) => { if (done) return; done = true; overlay.remove(); document.removeEventListener("keydown", esc); resolve(ok); };
+    const overlay = document.createElement("div");
+    overlay.className = "sq-modal-overlay";
+    const modal = document.createElement("div");
+    modal.className = "sq-modal sq-sampler__src-modal";
+    modal.setAttribute("role", "dialog");
+    modal.setAttribute("aria-modal", "true");
+    modal.innerHTML = `
+      <div class="sq-modal__title">sampler source</div>
+      <button type="button" class="sq-sampler__src-file sq-btn">load file…</button>
+      <div class="sq-sampler__src-sep">or a bundled sample</div>
+      <div class="sq-sampler__src-list"></div>
+      <div class="sq-modal__actions"><button type="button" class="sq-sampler__src-cancel sq-btn--ghost">cancel</button></div>`;
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+
+    const chooseBundled = async (id, label) => {
+      t.sampleSource = { kind: "bundled", id, name: label };
+      t.uploadBuffer = null; t.uploadAudio = null; t.uploadFileName = label;
+      const already = t.engineKey === "sampler";
+      if (already) {
+        if (t.voice?.type === "sampler") { t.voice.buffer = null; t.voice.loadBundled?.(id); }
+      } else {
+        setEngineKey(t, "sampler");
+        if (t.el) t.el.querySelector(".sq-track__engine").value = "sampler";
+      }
+      redetectDrumKit(t);
+      t.sliceBase = t.isDrumKit ? 36 : 60;   // root note matches the sample octave
+      t.lastEditedNote = null;               // new grid notes anchor to that root
+      try {
+        await ensureAudio();
+        const buf = await loadBuffer(state.audioCtx, `${SAMPLE_BASE}/${id}.mp3`);
+        t.uploadBuffer = buf;
+        if (t.voice?.type === "sampler") t.voice.setBuffer(buf);
+        applySampleSpeed(t);
+      } catch (e) { console.warn("bundled sample load", e); }
+      setStatus(`"${t.name}" ← ${label}`);
+      finish(true);
+    };
+
+    const list = modal.querySelector(".sq-sampler__src-list");
+    for (const s of BUNDLED_SAMPLES) {
+      const b = document.createElement("button");
+      b.type = "button"; b.className = "sq-sampler__src-item sq-btn--ghost"; b.textContent = s.label;
+      b.addEventListener("click", () => chooseBundled(s.id, s.label));
+      list.appendChild(b);
+    }
+    modal.querySelector(".sq-sampler__src-file").addEventListener("click", async () => {
+      // hand off to the file picker; keep this modal's promise tied to its result
+      const ok = await pickAudioFileForTrack(t, "sampler");
+      finish(ok);
+    });
+    modal.querySelector(".sq-sampler__src-cancel").addEventListener("click", () => finish(false));
+    overlay.addEventListener("click", (e) => { if (e.target === overlay) finish(false); });
+    const esc = (e) => { if (e.key === "Escape") finish(false); };
+    document.addEventListener("keydown", esc);
   });
 }
 
@@ -232,20 +307,6 @@ export function init() {
   requestAnimationFrame(meterTick);
 
   document.getElementById("play").addEventListener("click", togglePlay);
-  wireMorphagenePanel();
-  wireGlobalFxPanels();
-  const wirePanelToggle = (btnId, panelId) => {
-    const btn = document.getElementById(btnId);
-    const panel = document.getElementById(panelId);
-    if (!btn || !panel) return;
-    btn.addEventListener("click", () => {
-      const show = panel.hidden;
-      panel.hidden = !show;
-      btn.setAttribute("aria-pressed", String(show));
-    });
-  };
-  wirePanelToggle("morph-toggle", "morph-panel");
-  wirePanelToggle("globalfx-toggle", "globalfx-panel");
   buildBeatIndicator();
   paintBeatIndicator(1);
   const metroBtn = document.getElementById("metronome");
@@ -287,9 +348,6 @@ export function init() {
   document.getElementById("bpm").addEventListener("input", e => {
     if (state.ready) Tone.Transport.bpm.value = Number(e.target.value);
     retuneSyncedLFOs();
-    refreshMorphageneSync();
-    syncAllMorphageneLFOs();
-    syncAllGlobalFxLFOs();
     for (const t of state.tracks) {
       if (t.fxRack && t.fxConfig.delay.sync) t.fxRack.applyDelay({});
       applySampleSpeed(t);
@@ -315,6 +373,23 @@ export function init() {
   document.getElementById("swing").addEventListener("input", () => {});
   document.getElementById("add-track").addEventListener("click", () => {
     createTrack({ name: `track ${state.tracks.length + 1}`, engineKey: "plaits:0" });
+  });
+
+  // Computer keyboard → notes.
+  initComputerKeyboard();
+  const kbdBtn = document.getElementById("kbd-notes");
+  if (kbdBtn) kbdBtn.addEventListener("click", () => {
+    state.kbdNotesOn = !state.kbdNotesOn;
+    kbdBtn.setAttribute("aria-pressed", String(state.kbdNotesOn));
+    kbdBtn.classList.toggle("is-on", state.kbdNotesOn);
+    document.body.classList.toggle("kbd-notes-on", state.kbdNotesOn);
+    if (state.kbdNotesOn) {
+      if (state.activeTrackId == null && state.tracks[0]) setActiveTrack(state.tracks[0]);
+      setStatus("computer keyboard → notes: on — a s d f… = white keys, w e t y u = black, z/x = octave. click a track to target it.");
+    } else {
+      resetKbdKeys();
+      setStatus("computer keyboard notes off");
+    }
   });
 
   const modeBtn = document.getElementById("pattern-mode");

@@ -46,7 +46,23 @@ export const ANALOG_ENGINES = [
   { key: "dm:prophet6",   label: "prophet 6",       defaultNote: 60, poly: true, melodic: true },
 ].map(e => ({ ...e, group: "Emulators", type: "drum-synth", poly: e.poly ?? false, melodic: e.melodic ?? false }));
 
+export const TEXTURE_ENGINES = [
+  { key: "dm:granular", label: "granular sampler", defaultNote: 60, poly: true, melodic: true },
+].map(e => ({ ...e, group: "texture", type: "granular", poly: e.poly ?? false, melodic: e.melodic ?? false }));
+
+export const WAVETABLE_ENGINES = [
+  { key: "wt:akwf", label: "wavetable", defaultNote: 60, poly: true, melodic: true },
+].map(e => ({ ...e, group: "wavetable", type: "wavetable", poly: e.poly ?? false, melodic: e.melodic ?? false }));
+
 export const SAMPLE_BASE = "https://tonejs.github.io/audio/drum-samples";
+// The one unified sampler engine. Absorbs the old `upload` + per-sample `smp:*`
+// engines: a sampler track loads either a user file or one of the bundled
+// samples (see BUNDLED_SAMPLES) via its source picker. The legacy `eleven`
+// engine is gone — old sessions migrate to a sampler upload on load.
+export const SAMPLER_ENGINE = {
+  key: "sampler", label: "sampler", group: "sampler", type: "sampler",
+  defaultNote: 60, poly: true, melodic: true,
+};
 export const SAMPLE_ENGINES = [
   { key: "smp:Techno/kick",   label: "techno kick" },
   { key: "smp:Techno/snare",  label: "techno snare" },
@@ -66,6 +82,10 @@ export const SAMPLE_ENGINES = [
   { key: "smp:R8/hihat",  label: "r8 hat" },
 ].map(e => ({ ...e, group: "sample", type: "sample", defaultNote: 60, poly: true }));
 
+// Bundled samples offered inside the sampler's source picker (id = key sans
+// "smp:", used to build the load URL and stored as t.sampleSource.id).
+export const BUNDLED_SAMPLES = SAMPLE_ENGINES.map(e => ({ id: e.key.replace(/^smp:/, ""), label: e.label }));
+
 export const MIDI_ENGINE = {
   key: "midi", label: "midi out", group: "midi", type: "midi",
   defaultNote: 60, poly: true,
@@ -82,7 +102,7 @@ export const UPLOAD_ENGINE = {
  * @returns {EngineEntry[]}
  */
 export function buildEngineCatalog() {
-  return [...plaitsEntries(), ...DRUM_SYNTH_ENGINES, ...ANALOG_ENGINES, UPLOAD_ENGINE, ...savedPatchEntries(), ...SAMPLE_ENGINES, MIDI_ENGINE];
+  return [...plaitsEntries(), ...DRUM_SYNTH_ENGINES, ...ANALOG_ENGINES, ...TEXTURE_ENGINES, ...WAVETABLE_ENGINES, SAMPLER_ENGINE, ...savedPatchEntries(), MIDI_ENGINE];
 }
 
 export let ENGINES = [];

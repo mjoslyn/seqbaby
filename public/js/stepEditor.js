@@ -3,11 +3,11 @@ import { setStatus } from "./dom.js";
 import { applySampleSpeed, currentBpm } from "./lfo.js";
 import { renderRollPanel } from "./pianoRoll.js";
 import { renderAutomationPanel } from "./render.js";
-import { aliasPattern, invertChord, state } from "./state.js";
+import { invertChord, state } from "./state.js";
 import { renderStepGrid } from "./stepGrid.js";
 import { CHORD_TYPES, SCALES, applyScale, chordFitsScale, chordNotes, midiToName } from "./theory.js";
-import { applySampleSettingsToAllSteps } from "./track.js";
 import { ensureAudio } from "./transport.js";
+import { GRAN_DEFAULTS } from "./voices.js";
 
 
 /** @typedef {import("./types.js").Track} Track */
@@ -131,6 +131,476 @@ export function openCompAsModal(t) {
     btnSel: ".sq-track__comp",
     modalKey: "_compModal",
   });
+}
+
+// Granular WAV viewer — a self-contained modal (not a moved panel) that draws
+// the sample waveform, the play head + window band, and live white bars for the
+// grains playing right now (the nanobox lemondrop's signature grain graph). The
+// rAF loop lives only while the modal is open and "animate" is on, so nothing
+// runs in the background. `t.gWavAnimate` persists the toggle across opens.
+export function openGranularWavModal(t) {
+  if (t._gWavModal) return;
+  const overlay = document.createElement("div");
+  overlay.className = "sq-modal-overlay";
+  const modal = document.createElement("div");
+  modal.className = "sq-modal sq-gwav__modal";
+  modal.setAttribute("role", "dialog");
+  modal.setAttribute("aria-modal", "true");
+  modal.innerHTML = `
+    <div class="sq-gwav__head">
+      <span class="sq-gwav__title">granular · <span class="sq-gwav__file"></span></span>
+      <label class="sq-gwav__anim"><input type="checkbox" class="sq-gwav__anim-cb" /> animate</label>
+    </div>
+    <canvas class="sq-gwav__canvas" width="640" height="200"></canvas>
+    <div class="sq-gwav__info"></div>
+    <div class="sq-gwav__hint">drag the waveform to set play position + window</div>
+    <div class="sq-gwav__ctl">
+      <div class="sq-gwav__ctl-row">
+        <label>play <select class="gw-gplay"><option value="fixed">fixed</option><option value="moving">moving</option></select></label>
+        <label>speed <input type="range" class="gw-gspeed" min="0" max="1" step="0.01" /></label>
+        <label>loop <select class="gw-gloop"><option value="none">none</option><option value="fwd">fwd</option><option value="bidir">bidir</option></select></label>
+      </div>
+      <div class="sq-gwav__ctl-row">
+        <label>window <input type="range" class="gw-gwindow" min="0" max="1" step="0.01" /></label>
+        <label>jitter <input type="range" class="gw-gjitter" min="0" max="1" step="0.01" /></label>
+        <label>detune <input type="range" class="gw-gdetune" min="0" max="1" step="0.01" /></label>
+        <label>pan <input type="range" class="gw-gpan" min="0" max="1" step="0.01" /></label>
+      </div>
+      <div class="sq-gwav__ctl-row">
+        <label>pattern <select class="gw-gpattern"><option value="none">none</option><option value="oct">octaves</option><option value="fifth">fifths</option></select></label>
+        <label class="gw-sync-wrap"><input type="checkbox" class="gw-gsync" /> sync</label>
+        <label>rate <select class="gw-grate">
+          <option value="1/64">1/64</option><option value="1/32t">1/32T</option><option value="1/32">1/32</option>
+          <option value="1/16t">1/16T</option><option value="1/16">1/16</option><option value="1/8t">1/8T</option>
+          <option value="1/8">1/8</option><option value="1/4t">1/4T</option><option value="1/4">1/4</option>
+          <option value="1/2t">1/2T</option><option value="1/2">1/2</option><option value="1bar">1 bar</option>
+          <option value="2bar">2 bar</option><option value="4bar">4 bar</option><option value="8bar">8 bar</option>
+        </select></label>
+      </div>
+    </div>
+    <button type="button" class="sq-panel__modal-close">done</button>`;
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
+
+  const canvas = modal.querySelector(".sq-gwav__canvas");
+  const animCb = modal.querySelector(".sq-gwav__anim-cb");
+  const infoEl = modal.querySelector(".sq-gwav__info");
+  modal.querySelector(".sq-gwav__file").textContent = t.uploadFileName || "sample";
+  animCb.checked = t.gWavAnimate !== false;
+
+  let raf = 0;
+  let peaks = null, peaksFor = null, peaksW = 0;
+  const computePeaks = (buf, w) => {
+    const data = buf.getChannelData(0);
+    const step = Math.max(1, Math.floor(data.length / w));
+    const arr = new Float32Array(w * 2);
+    for (let x = 0; x < w; x++) {
+      let mn = 1, mx = -1;
+      const s = x * step, e = Math.min(data.length, s + step);
+      for (let i = s; i < e; i++) { const v = data[i]; if (v < mn) mn = v; if (v > mx) mx = v; }
+      arr[x * 2] = mn; arr[x * 2 + 1] = mx;
+    }
+    return arr;
+  };
+
+  const draw = () => {
+    const c = canvas.getContext("2d");
+    const w = canvas.width, h = canvas.height, mid = h / 2;
+    c.clearRect(0, 0, w, h);
+    c.fillStyle = "#0e0f12"; c.fillRect(0, 0, w, h);
+    const buf = t.voice?.buffer;
+    if (!buf) {
+      c.fillStyle = "#8a8c93"; c.font = "12px ui-monospace, monospace";
+      c.textAlign = "center"; c.textBaseline = "middle";
+      c.fillText("no sample loaded", w / 2, mid);
+      infoEl.textContent = "no sample";
+      return;
+    }
+    if (peaksFor !== buf || peaksW !== w) { peaks = computePeaks(buf, w); peaksFor = buf; peaksW = w; }
+    // waveform (lemondrop yellow)
+    c.strokeStyle = "#c2f04a"; c.lineWidth = 1; c.beginPath();
+    for (let x = 0; x < w; x++) {
+      c.moveTo(x + 0.5, mid - peaks[x * 2] * mid);
+      c.lineTo(x + 0.5, mid - peaks[x * 2 + 1] * mid);
+    }
+    c.stroke();
+    const vf = t.voice?.vizFrame ? t.voice.vizFrame() : { head: t.params.morph ?? 0, windowFrac: 0, grains: [] };
+    // window band around the play head
+    if (vf.windowFrac > 0) {
+      const cx = vf.head * w, half = vf.windowFrac * w;
+      c.fillStyle = "rgba(194,240,74,0.12)";
+      c.fillRect(cx - half, 0, half * 2, h);
+    }
+    // live grain bars (white)
+    if (animCb.checked && vf.grains.length) {
+      c.strokeStyle = "rgba(255,255,255,0.85)"; c.lineWidth = 1; c.beginPath();
+      for (const p of vf.grains) { const gx = p * w; c.moveTo(gx + 0.5, 0); c.lineTo(gx + 0.5, h); }
+      c.stroke();
+    }
+    // play head
+    const hx = vf.head * w;
+    c.strokeStyle = "#ff6fa3"; c.lineWidth = 2; c.beginPath();
+    c.moveTo(hx, 0); c.lineTo(hx, h); c.stroke();
+    const mode = (t.params.gplay === "moving") ? "moving" : "fixed";
+    infoEl.textContent = `${buf.duration.toFixed(2)}s · ${mode} · grains ${vf.grains.length}`;
+  };
+
+  const loop = () => { draw(); raf = requestAnimationFrame(loop); };
+  const startLoop = () => { if (!raf) raf = requestAnimationFrame(loop); };
+  const stopLoop = () => { if (raf) cancelAnimationFrame(raf); raf = 0; };
+
+  const fit = () => {
+    const cw = Math.max(320, Math.min(900, (modal.clientWidth || 660) - 24));
+    if (canvas.width !== cw) canvas.width = cw;
+  };
+
+  // Granular controls live in the visualizer too — same params as the track's
+  // granular group. Writing a param updates the voice, keeps the track group's
+  // control in sync, and redraws so the window band / play head react at once.
+  const setP = (k, v) => {
+    t.params[k] = v; t.voice?.setParam(k, v);
+    const gEl = t.el?.querySelector(".p-" + k);
+    if (gEl) { if (gEl.type === "checkbox") gEl.checked = !!v; else gEl.value = v; }
+    const mEl = modal.querySelector(".gw-" + k);
+    if (mEl && mEl !== document.activeElement) { if (mEl.type === "checkbox") mEl.checked = !!v; else mEl.value = v; }
+    draw();
+  };
+  const gp = t.params;
+  const gq = s => modal.querySelector(s);
+  gq(".gw-gplay").value    = gp.gplay    ?? GRAN_DEFAULTS.gplay;
+  gq(".gw-gspeed").value   = gp.gspeed   ?? GRAN_DEFAULTS.gspeed;
+  gq(".gw-gloop").value    = gp.gloop    ?? GRAN_DEFAULTS.gloop;
+  gq(".gw-gwindow").value  = gp.gwindow  ?? GRAN_DEFAULTS.gwindow;
+  gq(".gw-gjitter").value  = gp.gjitter  ?? GRAN_DEFAULTS.gjitter;
+  gq(".gw-gdetune").value  = gp.gdetune  ?? GRAN_DEFAULTS.gdetune;
+  gq(".gw-gpan").value     = gp.gpan     ?? GRAN_DEFAULTS.gpan;
+  gq(".gw-gpattern").value = gp.gpattern ?? GRAN_DEFAULTS.gpattern;
+  gq(".gw-grate").value    = gp.grate    ?? GRAN_DEFAULTS.grate;
+  gq(".gw-gsync").checked  = gp.gsync    ?? GRAN_DEFAULTS.gsync;
+  for (const k of ["gspeed", "gwindow", "gjitter", "gdetune", "gpan"]) gq(".gw-" + k).addEventListener("input", e => setP(k, Number(e.target.value)));
+  for (const k of ["gplay", "gloop", "gpattern", "grate"]) gq(".gw-" + k).addEventListener("change", e => setP(k, e.target.value));
+  gq(".gw-gsync").addEventListener("change", e => setP("gsync", e.target.checked));
+
+  // Drag across the waveform to set the grain window: the drag centre becomes the
+  // play position (morph/pos) and the drag span sets the window width. The window
+  // band redraws live as you drag. A near-zero drag just repositions the head.
+  // (Inverts vizFrame's windowSec = (gwindow + spray*0.5)*2 so the band matches.)
+  const winFracFromEvent = e => { const r = canvas.getBoundingClientRect(); return Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)); };
+  let winDrag = null;
+  canvas.addEventListener("pointerdown", e => { canvas.setPointerCapture(e.pointerId); winDrag = { x1: winFracFromEvent(e) }; });
+  canvas.addEventListener("pointermove", e => {
+    if (!winDrag) return;
+    const x2 = winFracFromEvent(e);
+    const center = (winDrag.x1 + x2) / 2;
+    const half = Math.min(0.5, Math.abs(x2 - winDrag.x1) / 2);
+    setP("morph", Math.max(0, Math.min(1, center)));
+    if (half > 0.002) {
+      const bufDur = t.voice?.buffer?.duration || 1;
+      const spray = Math.max(0, Math.min(1, Number(t.params.decay) || 0));
+      setP("gwindow", Math.max(0, Math.min(1, (half * bufDur) / 2 - spray * 0.5)));
+    }
+  });
+  const endWinDrag = e => { if (winDrag) { winDrag = null; try { canvas.releasePointerCapture(e.pointerId); } catch {} } };
+  canvas.addEventListener("pointerup", endWinDrag);
+  canvas.addEventListener("pointercancel", endWinDrag);
+  canvas.style.cursor = "ew-resize";
+
+  animCb.addEventListener("change", () => {
+    t.gWavAnimate = animCb.checked;
+    if (animCb.checked) { draw(); startLoop(); } else { stopLoop(); draw(); }
+  });
+
+  const close = () => {
+    stopLoop();
+    overlay.remove();
+    document.removeEventListener("keydown", esc);
+    t._gWavModal = null;
+  };
+  const esc = (e) => { if (e.key === "Escape") close(); };
+  modal.querySelector(".sq-panel__modal-close").addEventListener("click", close);
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
+  document.addEventListener("keydown", esc);
+
+  t._gWavModal = { overlay, close };
+  fit();
+  draw();                        // paint one frame immediately (before any rAF)
+  if (animCb.checked) startLoop();
+}
+
+// Draw a mono waveform (background + min/max peaks) into a canvas. Returns true
+// if a buffer was drawn, false (placeholder text) if none. Shared by the sample
+// + slice modals.
+function drawWaveformBase(c, cv, buffer, color = "#6e7280") {
+  const w = cv.width, h = cv.height, mid = h / 2;
+  c.clearRect(0, 0, w, h);
+  c.fillStyle = "#0e0f12"; c.fillRect(0, 0, w, h);
+  if (!buffer) {
+    c.fillStyle = "#8a8c93"; c.font = "12px ui-monospace, monospace";
+    c.textAlign = "center"; c.textBaseline = "middle";
+    c.fillText("no sample loaded", w / 2, mid);
+    return false;
+  }
+  const data = buffer.getChannelData(0);
+  const step = Math.max(1, Math.floor(data.length / w));
+  c.strokeStyle = color; c.lineWidth = 1; c.beginPath();
+  for (let x = 0; x < w; x++) {
+    let mn = 1, mx = -1;
+    const s = x * step, e = Math.min(data.length, s + step);
+    for (let i = s; i < e; i++) { const v = data[i]; if (v < mn) mn = v; if (v > mx) mx = v; }
+    c.moveTo(x + 0.5, mid - mn * mid); c.lineTo(x + 0.5, mid - mx * mid);
+  }
+  c.stroke();
+  return true;
+}
+
+// Onset detection for the slicer's "detect transients": short-time RMS energy →
+// positive flux → adaptive-threshold peak-pick with a min spacing. Returns sorted
+// 0..1 slice-start fractions within [region.start, region.end], first = start.
+function detectTransients(buffer, region, maxSlices = 32) {
+  const data = buffer.getChannelData(0);
+  const sr = buffer.sampleRate;
+  const startI = Math.floor((region.start ?? 0) * data.length);
+  const endI = Math.floor((region.end ?? 1) * data.length);
+  const win = Math.max(256, Math.floor(sr * 0.01));   // ~10 ms
+  const hop = Math.max(128, Math.floor(win / 2));
+  const frames = [];
+  for (let i = startI; i < endI; i += hop) {
+    let e = 0; const end = Math.min(endI, i + win);
+    for (let j = i; j < end; j++) e += data[j] * data[j];
+    frames.push({ i, e: Math.sqrt(e / Math.max(1, end - i)) });
+  }
+  const flux = frames.map((f, k) => (k === 0 ? 0 : Math.max(0, f.e - frames[k - 1].e)));
+  const mean = flux.reduce((a, b) => a + b, 0) / Math.max(1, flux.length);
+  const peak = Math.max(1e-9, ...flux);
+  const thr = mean + (peak - mean) * 0.25;
+  const minGap = Math.max(1, Math.floor((sr * 0.05) / hop));   // 50 ms min spacing
+  const onsets = [];
+  let last = -minGap;
+  for (let k = 1; k < flux.length - 1; k++) {
+    if (flux[k] >= thr && flux[k] >= flux[k - 1] && flux[k] >= flux[k + 1] && (k - last) >= minGap) {
+      onsets.push(frames[k].i / data.length);
+      last = k;
+    }
+  }
+  let slices = onsets;
+  const rs = region.start ?? 0;
+  if (!slices.length || slices[0] > rs + 0.001) slices = [rs, ...slices];
+  slices = slices.map(x => Math.max(0, Math.min(1, x))).sort((a, b) => a - b);
+  return slices.slice(0, maxSlices);
+}
+
+// Track-level sampler editor — one view combining the sample region (start/end +
+// fades + loop + fit + pitch-lock) AND the note-triggered slicer (markers,
+// equal-N / transient auto-slice, base note, region/to-end, per-slice pads). On
+// the shared waveform: drag the green/pink handles to set the region, click to
+// add a slice, drag a marker to move it, double-click to remove. Edits
+// t.sampleDefaults + the track slicer fields.
+export function openSampleEditorModal(t) {
+  if (t._sampleModal) return;
+  const sd = t.sampleDefaults || (t.sampleDefaults = { start: 0, end: 1, fadeIn: 0, fadeOut: 0, loopMode: "off" });
+  if (!Array.isArray(t.slices)) t.slices = [];
+  const overlay = document.createElement("div");
+  overlay.className = "sq-modal-overlay";
+  const modal = document.createElement("div");
+  modal.className = "sq-modal sq-samp__modal";
+  modal.setAttribute("role", "dialog");
+  modal.setAttribute("aria-modal", "true");
+  modal.innerHTML = `
+    <div class="sq-samp__head">
+      <span class="sq-samp__title">sample · <span class="sq-samp__file"></span></span>
+      <span class="sq-samp__info"></span>
+    </div>
+    <canvas class="sq-samp__canvas" width="640" height="150"></canvas>
+    <div class="sq-samp__row">
+      <label>snap <select class="sq-samp__snap">
+        <option value="free" selected>free</option><option value="1">1 beat</option><option value="0.5">1/8</option><option value="0.25">1/16</option><option value="0.125">1/32</option>
+      </select></label>
+      <label>fit <select class="sq-samp__fit">
+        <option value="native">native</option><option value="2xbpm">2× bpm</option><option value="1xbpm">1× bpm</option><option value="1/2bpm">1/2 bpm</option><option value="1/4bpm">1/4 bpm</option>
+      </select></label>
+      <label class="sq-samp__pl"><input type="checkbox" class="sq-samp__pitchlock" /> pitch lock</label>
+      <label>loop <select class="sq-samp__loop">
+        <option value="off">off</option><option value="loop">loop</option><option value="pingpong">ping-pong</option>
+      </select></label>
+      <button type="button" class="sq-samp__preview sq-btn--ghost">preview</button>
+    </div>
+    <div class="sq-samp__row">
+      <label>fade in <input type="range" class="sq-samp__fadein" min="0" max="2" step="0.01" /> <span class="sq-samp__fadein-lbl"></span></label>
+      <label>fade out <input type="range" class="sq-samp__fadeout" min="0" max="2" step="0.01" /> <span class="sq-samp__fadeout-lbl"></span></label>
+    </div>
+    <div class="sq-samp__row sq-samp__slice-row">
+      <label class="sq-slice__on"><input type="checkbox" class="sq-slice__on-cb" /> slice mode</label>
+      <label>equal <select class="sq-slice__n"><option>2</option><option>4</option><option selected>8</option><option>16</option><option>32</option></select></label>
+      <button type="button" class="sq-slice__make sq-btn--ghost">make</button>
+      <button type="button" class="sq-slice__detect sq-btn--ghost">detect</button>
+      <button type="button" class="sq-slice__clear sq-btn--ghost">clear</button>
+      <label>base <input type="number" class="sq-slice__base" min="0" max="127" /> <span class="sq-slice__base-name"></span></label>
+      <label>play <select class="sq-slice__mode"><option value="region">region</option><option value="toend">to end</option></select></label>
+    </div>
+    <div class="sq-slice__pads"></div>
+    <div class="sq-slice__hint">green/pink handles = region · click = add slice · drag = move · double-click = remove</div>
+    <button type="button" class="sq-panel__modal-close">done</button>`;
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
+
+  const canvas = modal.querySelector(".sq-samp__canvas");
+  const infoEl = modal.querySelector(".sq-samp__info");
+  modal.querySelector(".sq-samp__file").textContent = t.uploadFileName || t.sampleSource?.name || "sample";
+  const snapSel = modal.querySelector(".sq-samp__snap");
+  const fitSel = modal.querySelector(".sq-samp__fit");
+  const loopSel = modal.querySelector(".sq-samp__loop");
+  const plCb = modal.querySelector(".sq-samp__pitchlock");
+  const fiI = modal.querySelector(".sq-samp__fadein"), foI = modal.querySelector(".sq-samp__fadeout");
+  const fiL = modal.querySelector(".sq-samp__fadein-lbl"), foL = modal.querySelector(".sq-samp__fadeout-lbl");
+  const onCb = modal.querySelector(".sq-slice__on-cb");
+  const nSel = modal.querySelector(".sq-slice__n");
+  const baseIn = modal.querySelector(".sq-slice__base");
+  const baseName = modal.querySelector(".sq-slice__base-name");
+  const modeSel = modal.querySelector(".sq-slice__mode");
+  const pads = modal.querySelector(".sq-slice__pads");
+  fitSel.value = t.sampleSpeedMode || "native";
+  loopSel.value = sd.loopMode || "off";
+  plCb.checked = t.pitchLock !== false;
+  fiI.value = String(sd.fadeIn ?? 0); foI.value = String(sd.fadeOut ?? 0);
+  onCb.checked = !!t.sliceOn;
+  baseIn.value = String(t.sliceBase ?? 60);
+  modeSel.value = t.slicePlayMode === "toend" ? "toend" : "region";
+  const fmtFade = s => s < 1 ? `${Math.round(s * 1000)} ms` : `${s.toFixed(2)} s`;
+  fiL.textContent = fmtFade(Number(fiI.value)); foL.textContent = fmtFade(Number(foI.value));
+  const setBaseName = () => { baseName.textContent = midiToName(t.sliceBase ?? 60); };
+  setBaseName();
+
+  const snapFrac = () => {
+    if (snapSel.value === "free") return 0;
+    const beats = Number(snapSel.value) || 0; const buf = t.voice?.buffer;
+    if (!beats || !buf?.duration) return 0;
+    return ((60 / currentBpm()) * beats) / buf.duration;
+  };
+  const snapTo = f => { const s = snapFrac(); return s ? Math.round(f / s) * s : f; };
+
+  const draw = () => {
+    const c = canvas.getContext("2d"); const w = canvas.width, h = canvas.height;
+    const buf = t.voice?.buffer;
+    const ok = drawWaveformBase(c, canvas, buf, "#6e7280");
+    const sx = Math.round((sd.start ?? 0) * w), ex = Math.round((sd.end ?? 1) * w);
+    c.fillStyle = "rgba(10,12,16,0.6)"; c.fillRect(0, 0, sx, h); c.fillRect(ex, 0, w - ex, h);
+    // slice markers (cyan), then the region handles (green start / pink end) on top
+    c.strokeStyle = "#5ad1ff"; c.lineWidth = 1.5;
+    for (const s of t.slices) { const x = Math.round(s * w) + 0.5; c.beginPath(); c.moveTo(x, 0); c.lineTo(x, h); c.stroke(); }
+    c.strokeStyle = "#c2f04a"; c.lineWidth = 2; c.beginPath(); c.moveTo(sx + 1, 0); c.lineTo(sx + 1, h); c.stroke();
+    c.strokeStyle = "#ff6fa3"; c.beginPath(); c.moveTo(ex - 1, 0); c.lineTo(ex - 1, h); c.stroke();
+    const base = t.sliceBase ?? 60;
+    infoEl.textContent = (ok && buf)
+      ? `${buf.duration.toFixed(2)}s · [${Math.round((sd.start ?? 0) * buf.duration * 1000)}—${Math.round((sd.end ?? 1) * buf.duration * 1000)}]ms · ${t.slices.length} slices${t.slices.length ? " " + midiToName(base) + "–" + midiToName(base + t.slices.length - 1) : ""}`
+      : "no sample";
+  };
+
+  const renderPads = () => {
+    pads.replaceChildren();
+    const base = t.sliceBase ?? 60;
+    t.slices.forEach((_, i) => {
+      const b = document.createElement("button");
+      b.type = "button"; b.className = "sq-slice__pad sq-btn--ghost";
+      b.textContent = midiToName(base + i);
+      b.addEventListener("click", () => previewSlice(i));
+      pads.appendChild(b);
+    });
+  };
+  const previewSlice = async (i) => {
+    if (!t.voice?.buffer) { setStatus("no sample loaded yet", true); return; }
+    await ensureAudio();
+    const wasOn = t.sliceOn; t.sliceOn = true;   // force a slice hit regardless of the toggle
+    try { t.voice.hit((t.sliceBase ?? 60) + i, state.audioCtx.currentTime + 0.02, 1, 0.85, {}); }
+    catch (e) { console.warn(e); }
+    t.sliceOn = wasOn;
+  };
+
+  const fracFromEvent = e => { const r = canvas.getBoundingClientRect(); return Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)); };
+  const nearestMarker = f => {
+    let best = -1, bd = Infinity;
+    t.slices.forEach((s, i) => { const d = Math.abs(s - f); if (d < bd) { bd = d; best = i; } });
+    return { idx: best, distPx: bd * canvas.width };
+  };
+  // One shared canvas: region handles win when closest within 8px, else a nearby
+  // slice marker (6px) drags, else a click drops a new slice marker.
+  let drag = null;   // { type: "region", which } | { type: "slice", idx }
+  canvas.addEventListener("pointerdown", e => {
+    canvas.setPointerCapture(e.pointerId);
+    const f = fracFromEvent(e), w = canvas.width;
+    const startPx = Math.abs(f - (sd.start ?? 0)) * w;
+    const endPx = Math.abs(f - (sd.end ?? 1)) * w;
+    const nm = nearestMarker(f);
+    if (startPx <= 8 && startPx <= endPx && startPx <= nm.distPx) drag = { type: "region", which: "start" };
+    else if (endPx <= 8 && endPx <= nm.distPx) drag = { type: "region", which: "end" };
+    else if (nm.idx >= 0 && nm.distPx <= 6) drag = { type: "slice", idx: nm.idx };
+    else { const v = snapTo(f); t.slices.push(v); t.slices.sort((a, b) => a - b); drag = { type: "slice", idx: t.slices.indexOf(v) }; renderPads(); }
+    applyDrag(f);
+  });
+  canvas.addEventListener("pointermove", e => { if (drag) applyDrag(fracFromEvent(e)); });
+  const endDrag = e => { if (drag) { drag = null; try { canvas.releasePointerCapture(e.pointerId); } catch {} } };
+  canvas.addEventListener("pointerup", endDrag);
+  canvas.addEventListener("pointercancel", endDrag);
+  canvas.addEventListener("dblclick", e => {
+    const nm = nearestMarker(fracFromEvent(e));
+    if (nm.idx >= 0 && nm.distPx <= 8) { t.slices.splice(nm.idx, 1); renderPads(); draw(); }
+  });
+  function applyDrag(f) {
+    if (!drag) return;
+    if (drag.type === "region") {
+      const s = snapTo(f);
+      if (drag.which === "start") sd.start = Math.max(0, Math.min((sd.end ?? 1) - 0.01, s));
+      else sd.end = Math.max((sd.start ?? 0) + 0.01, Math.min(1, s));
+    } else {
+      const v = snapTo(f);
+      t.slices[drag.idx] = v;
+      t.slices.sort((a, b) => a - b);
+      drag.idx = t.slices.indexOf(v);
+    }
+    draw();
+  }
+
+  snapSel.addEventListener("change", draw);
+  fitSel.addEventListener("change", () => { t.sampleSpeedMode = fitSel.value || "native"; applySampleSpeed(t); });
+  plCb.addEventListener("change", () => { t.pitchLock = plCb.checked; });
+  loopSel.addEventListener("change", () => { sd.loopMode = loopSel.value; });
+  fiI.addEventListener("input", () => { const v = Math.max(0, Math.min(2, Number(fiI.value) || 0)); sd.fadeIn = v; fiL.textContent = fmtFade(v); });
+  foI.addEventListener("input", () => { const v = Math.max(0, Math.min(2, Number(foI.value) || 0)); sd.fadeOut = v; foL.textContent = fmtFade(v); });
+  onCb.addEventListener("change", () => { t.sliceOn = onCb.checked; });
+  modeSel.addEventListener("change", () => { t.slicePlayMode = modeSel.value === "toend" ? "toend" : "region"; });
+  baseIn.addEventListener("input", () => { t.sliceBase = Math.max(0, Math.min(127, Number(baseIn.value) || 60)); setBaseName(); renderPads(); draw(); });
+  modal.querySelector(".sq-slice__make").addEventListener("click", () => {
+    const n = Number(nSel.value) || 8; const a = sd.start ?? 0, b = sd.end ?? 1;
+    t.slices = Array.from({ length: n }, (_, i) => a + (i / n) * (b - a));
+    renderPads(); draw();
+  });
+  modal.querySelector(".sq-slice__detect").addEventListener("click", () => {
+    const buf = t.voice?.buffer; if (!buf) { setStatus("no sample loaded yet", true); return; }
+    t.slices = detectTransients(buf, { start: sd.start ?? 0, end: sd.end ?? 1 }, 32);
+    renderPads(); draw();
+    setStatus(`detected ${t.slices.length} slices`);
+  });
+  modal.querySelector(".sq-slice__clear").addEventListener("click", () => { t.slices = []; renderPads(); draw(); });
+  modal.querySelector(".sq-samp__preview").addEventListener("click", async () => {
+    if (!t.voice?.buffer) { setStatus("no sample loaded yet", true); return; }
+    await ensureAudio();
+    const wasSlice = t.sliceOn; t.sliceOn = false;   // audition the plain region
+    try {
+      t.voice.hit(t.isDrumKit ? 36 : 60, state.audioCtx.currentTime + 0.02, t.voice.buffer.duration, 0.85, {
+        startOffset: sd.start, endOffset: sd.end, fadeIn: sd.fadeIn, fadeOut: sd.fadeOut, loopMode: sd.loopMode,
+        pitchBase: t.isDrumKit ? 36 : 60, isDrumKit: t.isDrumKit, sampleSpeedMode: t.sampleSpeedMode, pitchLocked: t.pitchLock !== false,
+      });
+    } catch (e) { console.warn(e); }
+    t.sliceOn = wasSlice;
+  });
+
+  const fit = () => { const cw = Math.max(360, Math.min(880, (modal.clientWidth || 700) - 24)); if (canvas.width !== cw) canvas.width = cw; };
+  const close = () => { overlay.remove(); document.removeEventListener("keydown", esc); t._sampleModal = null; };
+  const esc = e => { if (e.key === "Escape") close(); };
+  modal.querySelector(".sq-panel__modal-close").addEventListener("click", close);
+  overlay.addEventListener("click", e => { if (e.target === overlay) close(); });
+  document.addEventListener("keydown", esc);
+  t._sampleModal = { overlay, close };
+  fit(); renderPads(); draw();
 }
 
 // Mobile track menu: physically move the "extras" nodes out of the
@@ -329,6 +799,9 @@ export function openStepEditor(t, idx, anchorEl) {
               <option value="loop">loop</option>
               <option value="pingpong">ping-pong</option>
             </select>
+          </label>
+          <label class="sq-se__smp-pitchlock" title="Ignore the step note and play the sample at its fit/natural rate — keeps bpm-fitted loops on the grid. Uncheck to let notes transpose the sample.">
+            <input class="se-smp-pitchlock" type="checkbox" /> pitch lock
           </label>
           <button class="sq-se__preview" type="button">preview</button>
           <button class="se-apply-all sq-btn--ghost" type="button" title="apply these sample settings to every step on this track and use as the default for new steps">apply to all</button>
@@ -533,227 +1006,11 @@ export function openStepEditor(t, idx, anchorEl) {
     refresh();
   });
 
-  // sample-engine specific row: waveform with draggable start/end handles + preview
+  // Sample region / fades / loop / slicing now live in the one track-level
+  // "sample" modal (openSampleEditorModal), not per-step — so the step editor's
+  // sample row is always hidden.
   const sampleRow = el.querySelector(".sq-se__sample-row");
-  const engineType = engineByKey(t.engineKey)?.type;
-  const isSampleEngine = engineType === "eleven" || engineType === "upload" || engineType === "sample";
-  sampleRow.hidden = !isSampleEngine;
-  if (isSampleEngine) {
-    const canvas = sampleRow.querySelector(".sq-se__waveform");
-    const infoEl = sampleRow.querySelector(".sq-se__smp-info");
-    const snapSel = sampleRow.querySelector(".sq-se__smp-snap");
-    const fitSel  = sampleRow.querySelector(".sq-se__smp-fit");
-    const prev    = sampleRow.querySelector(".sq-se__preview");
-    const applyAllBtn = sampleRow.querySelector(".se-apply-all");
-    if (fitSel) {
-      fitSel.value = t.sampleSpeedMode || "native";
-      fitSel.addEventListener("change", () => {
-        t.sampleSpeedMode = fitSel.value || "native";
-        applySampleSpeed(t);
-      });
-    }
-    if (!t.sampleStarts) t.sampleStarts = new Array(t.length).fill(0);
-    if (!t.sampleEnds)   t.sampleEnds   = new Array(t.length).fill(1);
-    if (!t.sampleFadeIns)  t.sampleFadeIns  = new Array(t.length).fill(0);
-    if (!t.sampleFadeOuts) t.sampleFadeOuts = new Array(t.length).fill(0);
-    if (!t.sampleLoopModes) t.sampleLoopModes = new Array(t.length).fill("off");
-
-    const loopSel = sampleRow.querySelector(".se-smp-loop");
-    if (loopSel) {
-      loopSel.value = t.sampleLoopModes[idx] || "off";
-      loopSel.addEventListener("change", () => {
-        const v = loopSel.value;
-        t.sampleLoopModes[idx] = (v === "loop" || v === "pingpong") ? v : "off";
-      });
-    }
-
-    const fadeInInput  = sampleRow.querySelector(".se-smp-fade-in");
-    const fadeOutInput = sampleRow.querySelector(".se-smp-fade-out");
-    const fadeInLbl    = sampleRow.querySelector(".se-smp-fade-in-lbl");
-    const fadeOutLbl   = sampleRow.querySelector(".se-smp-fade-out-lbl");
-    const fmtFade = (sec) => sec < 1 ? `${Math.round(sec * 1000)} ms` : `${sec.toFixed(2)} s`;
-    if (fadeInInput) {
-      fadeInInput.value = String(t.sampleFadeIns[idx] ?? 0);
-      fadeInLbl.textContent = fmtFade(Number(fadeInInput.value));
-      fadeInInput.addEventListener("input", () => {
-        const v = Math.max(0, Math.min(2, Number(fadeInInput.value) || 0));
-        t.sampleFadeIns[idx] = v;
-        fadeInLbl.textContent = fmtFade(v);
-      });
-    }
-    if (fadeOutInput) {
-      fadeOutInput.value = String(t.sampleFadeOuts[idx] ?? 0);
-      fadeOutLbl.textContent = fmtFade(Number(fadeOutInput.value));
-      fadeOutInput.addEventListener("input", () => {
-        const v = Math.max(0, Math.min(2, Number(fadeOutInput.value) || 0));
-        t.sampleFadeOuts[idx] = v;
-        fadeOutLbl.textContent = fmtFade(v);
-      });
-    }
-
-    const snapFrac = () => {
-      if (snapSel.value === "free") return 0;
-      const beats = Number(snapSel.value) || 0;
-      if (!beats) return 0;
-      const buf = t.voice?.buffer;
-      if (!buf || !buf.duration) return 0;
-      const stepSec = (60 / currentBpm()) * beats;
-      return stepSec / buf.duration;
-    };
-    const snapTo = (frac) => {
-      const s = snapFrac();
-      if (!s) return frac;
-      return Math.round(frac / s) * s;
-    };
-
-    const drawWave = () => {
-      const ctx2d = canvas.getContext("2d");
-      const w = canvas.width, h = canvas.height;
-      ctx2d.clearRect(0, 0, w, h);
-      ctx2d.fillStyle = "#0e0f12";
-      ctx2d.fillRect(0, 0, w, h);
-      const buf = t.voice?.buffer;
-      if (buf) {
-        const data = buf.getChannelData(0);
-        const step = Math.max(1, Math.floor(data.length / w));
-        ctx2d.strokeStyle = "#6e7280";
-        ctx2d.lineWidth = 1;
-        ctx2d.beginPath();
-        for (let x = 0; x < w; x++) {
-          let mn = 1, mx = -1;
-          const s = x * step;
-          const e = Math.min(data.length, s + step);
-          for (let i = s; i < e; i++) {
-            const v = data[i];
-            if (v < mn) mn = v;
-            if (v > mx) mx = v;
-          }
-          ctx2d.moveTo(x + 0.5, h / 2 - mn * h / 2);
-          ctx2d.lineTo(x + 0.5, h / 2 - mx * h / 2);
-        }
-        ctx2d.stroke();
-      } else {
-        ctx2d.fillStyle = "#8a8c93";
-        ctx2d.font = "11px ui-monospace, monospace";
-        ctx2d.textAlign = "center";
-        ctx2d.textBaseline = "middle";
-        ctx2d.fillText("no sample loaded", w / 2, h / 2);
-      }
-      // Dim outside selection
-      const sFrac = t.sampleStarts[idx] ?? 0;
-      const eFrac = t.sampleEnds[idx] ?? 1;
-      const sx = Math.round(sFrac * w);
-      const ex = Math.round(eFrac * w);
-      ctx2d.fillStyle = "rgba(10,12,16,0.65)";
-      ctx2d.fillRect(0, 0, sx, h);
-      ctx2d.fillRect(ex, 0, w - ex, h);
-      // Handles
-      ctx2d.strokeStyle = "#c2f04a";
-      ctx2d.lineWidth = 2;
-      ctx2d.beginPath();
-      ctx2d.moveTo(sx + 1, 0); ctx2d.lineTo(sx + 1, h);
-      ctx2d.stroke();
-      ctx2d.fillStyle = "#c2f04a";
-      ctx2d.beginPath();
-      ctx2d.moveTo(sx + 1, 0); ctx2d.lineTo(sx + 9, 0); ctx2d.lineTo(sx + 1, 8); ctx2d.closePath();
-      ctx2d.fill();
-
-      ctx2d.strokeStyle = "#ff6fa3";
-      ctx2d.beginPath();
-      ctx2d.moveTo(ex - 1, 0); ctx2d.lineTo(ex - 1, h);
-      ctx2d.stroke();
-      ctx2d.fillStyle = "#ff6fa3";
-      ctx2d.beginPath();
-      ctx2d.moveTo(ex - 1, 0); ctx2d.lineTo(ex - 9, 0); ctx2d.lineTo(ex - 1, 8); ctx2d.closePath();
-      ctx2d.fill();
-
-      if (buf) {
-        const startMs = Math.round(sFrac * buf.duration * 1000);
-        const endMs   = Math.round(eFrac * buf.duration * 1000);
-        infoEl.textContent = `${(buf.duration).toFixed(2)}s · [${startMs} — ${endMs}] ms`;
-      } else {
-        infoEl.textContent = "no sample";
-      }
-    };
-
-    drawWave();
-
-    // pointer-drag editing: grab nearest handle
-    let dragging = null; // "start" | "end" | null
-    const fracFromEvent = (e) => {
-      const rect = canvas.getBoundingClientRect();
-      const x = (e.clientX - rect.left) / rect.width;
-      return Math.max(0, Math.min(1, x));
-    };
-    canvas.addEventListener("pointerdown", (e) => {
-      canvas.setPointerCapture(e.pointerId);
-      const f = fracFromEvent(e);
-      const ds = Math.abs(f - (t.sampleStarts[idx] ?? 0));
-      const de = Math.abs(f - (t.sampleEnds[idx] ?? 1));
-      dragging = ds <= de ? "start" : "end";
-      applyDrag(f);
-    });
-    canvas.addEventListener("pointermove", (e) => {
-      if (!dragging) return;
-      applyDrag(fracFromEvent(e));
-    });
-    const endDrag = (e) => {
-      if (!dragging) return;
-      dragging = null;
-      try { canvas.releasePointerCapture(e.pointerId); } catch {}
-    };
-    canvas.addEventListener("pointerup", endDrag);
-    canvas.addEventListener("pointercancel", endDrag);
-    function applyDrag(frac) {
-      let snapped = snapTo(frac);
-      if (dragging === "start") {
-        const maxStart = (t.sampleEnds[idx] ?? 1) - 0.01;
-        t.sampleStarts[idx] = Math.max(0, Math.min(maxStart, snapped));
-      } else if (dragging === "end") {
-        const minEnd = (t.sampleStarts[idx] ?? 0) + 0.01;
-        t.sampleEnds[idx] = Math.max(minEnd, Math.min(1, snapped));
-      }
-      drawWave();
-    }
-    snapSel.addEventListener("change", drawWave);
-
-    prev.addEventListener("click", async () => {
-      if (!t.voice || !t.voice.buffer) { setStatus("no sample loaded yet", true); return; }
-      await ensureAudio();
-      const when = state.audioCtx.currentTime + 0.02;
-      const note = Number(noteInput.value) || 60;
-      const vel  = Number(velInput.value) || 0.8;
-      try {
-        t.voice.hit(note, when, t.voice.buffer.duration, vel, {
-          startOffset: t.sampleStarts[idx],
-          endOffset:   t.sampleEnds[idx],
-          fadeIn:      t.sampleFadeIns?.[idx]  ?? 0,
-          fadeOut:     t.sampleFadeOuts?.[idx] ?? 0,
-          loopMode:    t.sampleLoopModes?.[idx] ?? "off",
-          pitchBase:   t.isDrumKit ? 36 : 60,
-        });
-      } catch (err) { console.warn(err); }
-    });
-
-    if (applyAllBtn) {
-      applyAllBtn.addEventListener("click", () => {
-        const settings = {
-          start: t.sampleStarts[idx] ?? 0,
-          end: t.sampleEnds[idx] ?? 1,
-          fadeIn: t.sampleFadeIns?.[idx] ?? 0,
-          fadeOut: t.sampleFadeOuts?.[idx] ?? 0,
-          loopMode: t.sampleLoopModes?.[idx] ?? "off",
-        };
-        applySampleSettingsToAllSteps(t, settings);
-        t.sampleDefaults = { ...settings };
-        // Re-alias the active pattern so t.sampleStarts etc. point at the fresh arrays,
-        // then redraw the waveform + step grid to reflect the propagated values.
-        aliasPattern(t, t._patternIdx ?? state.activePattern);
-        renderStepGrid(t);
-        setStatus(`applied sample settings to all steps on "${t.name}"`);
-      });
-    }
-  }
+  if (sampleRow) sampleRow.hidden = true;
 
   velInput.addEventListener("input", () => {
     t.velocities[idx] = Number(velInput.value);

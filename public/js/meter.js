@@ -38,10 +38,11 @@ export function parseMeter(str) {
 
 // Guess whether a track is playing a drum kit based on engine type + name.
 // Used at track creation and re-run on engine/name change via redetectDrumKit.
-export function guessIsDrumKit({ engineKey, name }) {
+export function guessIsDrumKit({ engineKey, name, sourceId }) {
   const eng = engineByKey(engineKey);
-  if (eng?.type === "sample") return true;
-  const blob = `${engineKey || ""} ${eng?.label || ""} ${name || ""}`.toLowerCase();
+  // A sampler track loading a bundled drum sample (e.g. "Techno/kick") reads as a
+  // drum kit via its source id; plain synth engines fall through to the regex.
+  const blob = `${engineKey || ""} ${eng?.label || ""} ${name || ""} ${sourceId || ""}`.toLowerCase();
   return /\b(kick|snare|hat|hi-?hat|clap|tom|perc|drum)\b/.test(blob);
 }
 
@@ -49,6 +50,6 @@ export function guessIsDrumKit({ engineKey, name }) {
 // left untouched — only future blank steps + sample pitch baseline follow the
 // new flag. Call this whenever engine or track name changes.
 export function redetectDrumKit(t) {
-  t.isDrumKit = guessIsDrumKit({ engineKey: t.engineKey, name: t.name });
+  t.isDrumKit = guessIsDrumKit({ engineKey: t.engineKey, name: t.name, sourceId: t.sampleSource?.id });
 }
 

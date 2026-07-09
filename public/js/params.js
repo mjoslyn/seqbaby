@@ -31,7 +31,9 @@ export function updatePlaitsControlsVisibility(t) {
   const isBass      = t.engineKey === "dm:bass";
   const isRhodes    = t.engineKey === "dm:rhodes";
   const isProphet6  = t.engineKey === "dm:prophet6";
-  const showTimbre = isPlaits || isMiniBrute || isMoog || isJuno || isGuitar || isBass || isRhodes || isProphet6;
+  const isGranular  = t.engineKey === "dm:granular";
+  const isWavetable = t.engineKey === "wt:akwf";
+  const showTimbre = isPlaits || isMiniBrute || isMoog || isJuno || isGuitar || isBass || isRhodes || isProphet6 || isGranular || isWavetable;
   const group = t._timbreGroupEl || t.el.querySelector(".sq-param-group--timbre");
   if (group) {
     group.hidden = !showTimbre;
@@ -64,6 +66,10 @@ export function updatePlaitsControlsVisibility(t) {
       ? { harm: "tine",     timb: "bite",   morph: "chorus",    decay: "decay" }
       : isProphet6
       ? { harm: "detune",   timb: "shape",  morph: "drive",     decay: "decay" }
+      : isGranular
+      ? { harm: "grain",    timb: "dense",  morph: "pos",       decay: "spray" }
+      : isWavetable
+      ? { harm: "wave",     timb: "warm",   morph: "detune",    decay: "decay" }
       : { harm: "harm",     timb: "timb",    morph: "morph",    decay: "decay" };
     for (const key of Object.keys(labels)) {
       const field = group.querySelector(`.p-${key}`)?.closest(".sq-field");
@@ -79,7 +85,7 @@ export function updatePlaitsControlsVisibility(t) {
     // Randomize button only makes sense for Plaits' generic harm/timb/morph/decay —
     // hide it for the analog engines where those sliders do engine-specific things.
     const randBtn = group.querySelector(".track-rand");
-    if (randBtn) randBtn.hidden = isMiniBrute || isMoog || isJuno || isGuitar || isBass || isRhodes || isProphet6;
+    if (randBtn) randBtn.hidden = isMiniBrute || isMoog || isJuno || isGuitar || isBass || isRhodes || isProphet6 || isGranular || isWavetable;
   }
   // Per-oscillator volume sliders: only shown for the analog mono engines.
   const oscGroup = t._oscMixGroupEl || t.el.querySelector(".sq-param-group--osc-mix");
@@ -110,6 +116,14 @@ export function updatePlaitsControlsVisibility(t) {
   // Moog osc-bank group (per-osc range + waveform + osc2/3 freq + noise).
   const moogGroup = t._moogOscGroupEl || t.el.querySelector(".sq-param-group--moog");
   if (moogGroup) moogGroup.hidden = !isMoog;
+  // Granular grain-engine group (play mode / window / jitter / detune / pan / …).
+  const granGroup = t._granGroupEl || t.el.querySelector(".sq-param-group--granular");
+  if (granGroup) granGroup.hidden = !isGranular;
+  // Header wave/sample icon button (between the engine dropdown and save): shown
+  // for the granular + sampler engines, opens their editor.
+  const isSampler = t.engineKey === "sampler";
+  const wavBtn = t.el.querySelector(".sq-track__wav");
+  if (wavBtn) wavBtn.hidden = !(isGranular || isSampler);
 }
 
 // Force all fx wet levels to 0 (100% dry) — used when switching a track to the
@@ -193,7 +207,6 @@ export function setEngineKey(t, newKey) {
   }
   updateMidiUI(t);
   updatePlaitsControlsVisibility(t);
-  if (engineByKey(newKey)?.type === "eleven") resetFxDry(t);
   t._refreshSaveEnabled?.();
 }
 

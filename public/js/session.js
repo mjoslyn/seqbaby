@@ -8,11 +8,7 @@ import { applySampleSpeed, disposeLFOs, syncAllLFOs } from "./lfo.js";
 import { guessIsDrumKit, parseMeter } from "./meter.js";
 import { updatePlaitsControlsVisibility } from "./params.js";
 import { renderPatternGrid } from "./patternBar.js";
-import { defaultFxConfig } from "./fxRack.js";
-import { defaultGlobalFxConfig, defaultGlobalFxModConfig, syncAllGlobalFxLFOs } from "./globalFx.js";
-import { defaultMorphageneConfig } from "./morphagene.js";
-import { defaultMorphageneModConfig, syncAllMorphageneLFOs } from "./morphageneMod.js";
-import { applyGlobalFxUI, applyMorphageneFx, refreshFxPanelUI, refreshMorphagenePanelUI, refreshMorphageneSync, renderGlobalFxAutPanel, renderGlobalFxModPanel, renderMorphageneAutPanel, renderMorphageneModPanel, renderModPanel } from "./render.js";
+import { refreshFxPanelUI, renderModPanel } from "./render.js";
 import { syncScaleUI } from "./scaleUI.js";
 import { applyCompressorConfig, ensureFxRack, refreshCompSourceDropdowns, routeVoiceToRack } from "./signal.js";
 import { aliasPattern, state, syncMeterUI } from "./state.js";
@@ -42,15 +38,6 @@ export function serializeSet() {
     patternMode: state.patternMode,
     patternSwitchMode: state.patternSwitchMode,
     patternMeters: state.patternMeters.map(m => ({ num: m.num, den: m.den })),
-    // Master morphagene control settings only — the reel audio is live-captured
-    // and deliberately not serialized.
-    morphagene: { ...(state.morphageneConfig || defaultMorphageneConfig()) },
-    morphageneFx: state.morphageneFxConfig ? JSON.parse(JSON.stringify(state.morphageneFxConfig)) : undefined,
-    morphageneMod: state.morphageneModConfig ? JSON.parse(JSON.stringify(state.morphageneModConfig)) : undefined,
-    morphageneAutomation: state.morphageneAutomation ? JSON.parse(JSON.stringify(state.morphageneAutomation)) : undefined,
-    globalFx: state.globalFxConfig ? JSON.parse(JSON.stringify(state.globalFxConfig)) : undefined,
-    globalFxMod: state.globalFxModConfig ? JSON.parse(JSON.stringify(state.globalFxModConfig)) : undefined,
-    globalFxAutomation: state.globalFxAutomation ? JSON.parse(JSON.stringify(state.globalFxAutomation)) : undefined,
     tracks: state.tracks.map(t => ({
       name: t.name,
       engineKey: t.engineKey,
@@ -62,8 +49,11 @@ export function serializeSet() {
       fxConfig: JSON.parse(JSON.stringify(t.fxConfig)),
       midi: { ...t.midi },
       customConfig: t.customConfig ? JSON.parse(JSON.stringify(t.customConfig)) : null,
-      elevenAudio: t.elevenAudio || null,
-      elevenAudioMime: t.elevenAudioMime || null,
+      sampleSource: t.sampleSource ? { ...t.sampleSource } : null,
+      slices: Array.isArray(t.slices) ? t.slices.slice() : [],
+      sliceOn: !!t.sliceOn,
+      sliceBase: t.sliceBase ?? 60,
+      slicePlayMode: t.slicePlayMode === "toend" ? "toend" : "region",
       uploadAudio: t.uploadAudio || null,
       uploadAudioMime: t.uploadAudioMime || null,
       uploadFileName: t.uploadFileName || null,
@@ -74,6 +64,7 @@ export function serializeSet() {
       isDrumKit: !!t.isDrumKit,
       noteMode: t.noteMode === "trigger" ? "trigger" : "gate",
       glide: t.glide, speed: t.speed ?? 1, sampleSpeedMode: t.sampleSpeedMode ?? "native",
+      pitchLock: t.pitchLock ?? true,
       lfoConfig: JSON.parse(JSON.stringify(t.lfoConfig)),
       patterns: t.patterns.map(p => ({
         steps: p.steps.slice(),
@@ -334,30 +325,22 @@ export function applySet(s) {
     switchBtn.innerHTML = state.patternSwitchMode === "finish" ? ICON_FINISH : ICON_NOW;
     switchBtn.setAttribute("aria-pressed", String(state.patternSwitchMode === "finish"));
   }
-  // Master morphagene settings. Force frozen:false — the reel loads empty, so a
-  // restored freeze would just be silent until the user records.
-  state.morphageneConfig = { ...defaultMorphageneConfig(), ...(s.morphagene || {}), frozen: false };
-  refreshMorphagenePanelUI();
-  if (state.morphagene) state.morphagene.applyAll(state.morphageneConfig);
-  refreshMorphageneSync();
-  // Morphagene fx rack / LFO mod / step automation.
-  state.morphageneFxConfig = s.morphageneFx ? { ...defaultFxConfig(), ...s.morphageneFx } : defaultFxConfig();
-  state.morphageneModConfig = { ...defaultMorphageneModConfig(), ...(s.morphageneMod || {}) };
-  state.morphageneAutomation = s.morphageneAutomation ? JSON.parse(JSON.stringify(s.morphageneAutomation)) : {};
-  applyMorphageneFx();
-  renderMorphageneModPanel();
-  renderMorphageneAutPanel();
-  syncAllMorphageneLFOs();
-  // Master (global) fx rack + its mods + automation.
-  state.globalFxConfig = s.globalFx ? { ...defaultGlobalFxConfig(), ...s.globalFx } : defaultGlobalFxConfig();
-  state.globalFxModConfig = { ...defaultGlobalFxModConfig(), ...(s.globalFxMod || {}) };
-  state.globalFxAutomation = s.globalFxAutomation ? JSON.parse(JSON.stringify(s.globalFxAutomation)) : {};
-  applyGlobalFxUI();
-  renderGlobalFxModPanel();
-  renderGlobalFxAutPanel();
-  syncAllGlobalFxLFOs();
   for (const td of s.tracks || []) {
-    const t = createTrack({ name: td.name || "track", engineKey: td.engineKey || "plaits:0", length: td.length || 16 });
+    // Migrate legacy sample engines (upload / smp:* / eleven) onto the unified
+    // sampler. eleven's separately-persisted audio folds into the upload buffer.
+    let ek = td.engineKey || "plaits:0";
+    let src = td.sampleSource || null;
+    let uploadAudio = td.uploadAudio || null;
+    let uploadMime  = td.uploadAudioMime || null;
+    if (ek === "upload") {
+      ek = "sampler"; src = src || { kind: "upload", name: td.uploadFileName || "sample" };
+    } else if (ek === "eleven") {
+      ek = "sampler"; src = src || { kind: "upload", name: td.uploadFileName || "sample" };
+      if (!uploadAudio && td.elevenAudio) { uploadAudio = td.elevenAudio; uploadMime = td.elevenAudioMime || uploadMime; }
+    } else if (ek.startsWith("smp:")) {
+      const id = ek.slice(4); ek = "sampler"; src = src || { kind: "bundled", id, name: id };
+    }
+    const t = createTrack({ name: td.name || "track", engineKey: ek, length: td.length || 16 });
     Object.assign(t.params, td.params || {});
     Object.assign(t.filter, td.filter || {});
     if (td.eq)   Object.assign(t.eq,   td.eq);
@@ -365,28 +348,21 @@ export function applySet(s) {
     Object.assign(t.fxConfig, td.fxConfig || {});
     Object.assign(t.midi, td.midi || {});
     t.customConfig = td.customConfig || null;
-    t.elevenAudio = td.elevenAudio || null;
-    t.elevenAudioMime = td.elevenAudioMime || null;
-    t.uploadAudio = td.uploadAudio || null;
-    t.uploadAudioMime = td.uploadAudioMime || null;
+    t.sampleSource = src;
+    t.uploadAudio = uploadAudio;
+    t.uploadAudioMime = uploadMime;
     t.uploadFileName = td.uploadFileName || null;
     t.soundPromptText = td.soundPromptText || "";
     t.promptText = td.promptText || "";
     t.sampleDefaults = td.sampleDefaults
       ? { start: 0, end: 1, fadeIn: 0, fadeOut: 0, loopMode: "off", ...td.sampleDefaults }
       : { start: 0, end: 1, fadeIn: 0, fadeOut: 0, loopMode: "off" };
-    // decode any saved sample buffers (async; once done the voice picks it up)
-    if (t.elevenAudio) {
-      (async () => {
-        try {
-          const bytes = Uint8Array.from(atob(t.elevenAudio), c => c.charCodeAt(0));
-          await ensureAudio();
-          const buffer = normalizeAudioBuffer(await state.audioCtx.decodeAudioData(bytes.buffer), { trim: true });
-          t.elevenBuffer = buffer;
-          if (t.voice?.type === "eleven") { t.voice.setBuffer(buffer); applySampleSpeed(t); }
-        } catch (e) { console.warn("eleven buffer decode failed", e); }
-      })();
-    }
+    t.slices = Array.isArray(td.slices) ? td.slices.slice() : [];
+    t.sliceOn = !!td.sliceOn;
+    t.sliceBase = td.sliceBase ?? 60;
+    t.slicePlayMode = td.slicePlayMode === "toend" ? "toend" : "region";
+    // decode any saved upload/eleven audio (async; the sampler picks it up).
+    // Bundled sources need no decode — the SamplerVoice fetches by id when built.
     if (t.uploadAudio) {
       (async () => {
         try {
@@ -394,7 +370,7 @@ export function applySet(s) {
           await ensureAudio();
           const buffer = normalizeAudioBuffer(await state.audioCtx.decodeAudioData(bytes.buffer));
           t.uploadBuffer = buffer;
-          if (t.voice?.type === "upload") { t.voice.setBuffer(buffer); applySampleSpeed(t); }
+          if (t.voice?.type === "sampler" || t.voice?.type === "granular") { t.voice.setBuffer(buffer); applySampleSpeed(t); }
         } catch (e) { console.warn("upload buffer decode failed", e); }
       })();
     }
@@ -408,6 +384,7 @@ export function applySet(s) {
     t.glide  = td.glide ?? 0;
     t.speed  = td.speed ?? 1;
     t.sampleSpeedMode = td.sampleSpeedMode ?? "native";
+    t.pitchLock = td.pitchLock ?? true;
     Object.assign(t.lfoConfig, td.lfoConfig || {});
     if (Array.isArray(td.patterns)) {
       const pad = (arr, fill, n) => { const out = (arr || []).slice(0, n); while (out.length < n) out.push(fill); return out; };
@@ -463,6 +440,12 @@ export function applySet(s) {
       q(".p-timb").value = t.params.timb;
       q(".p-morph").value = t.params.morph;
       q(".p-decay").value = t.params.decay;
+      for (const k of ["gspeed", "gwindow", "gjitter", "gdetune", "gpan", "gplay", "gloop", "gpattern", "grate"]) {
+        const el = q(`.p-${k}`);
+        if (el && t.params[k] != null) el.value = t.params[k];
+      }
+      const gsyncEl = q(".p-gsync");
+      if (gsyncEl) gsyncEl.checked = !!t.params.gsync;
       q(".p-cutoff").value = t.filter.cutoff;
       q(".p-reson").value = t.filter.reson;
       q(".p-envamt").value = t.filter.env;
@@ -565,8 +548,11 @@ export function serializeTrackPatch(t) {
     fxConfig: JSON.parse(JSON.stringify(t.fxConfig)),
     lfoConfig: JSON.parse(JSON.stringify(t.lfoConfig)),
     customConfig: t.customConfig ? JSON.parse(JSON.stringify(t.customConfig)) : null,
-    elevenAudio: t.elevenAudio || null,
-    elevenAudioMime: t.elevenAudioMime || null,
+    sampleSource: t.sampleSource ? { ...t.sampleSource } : null,
+    slices: Array.isArray(t.slices) ? t.slices.slice() : [],
+    sliceOn: !!t.sliceOn,
+    sliceBase: t.sliceBase ?? 60,
+    slicePlayMode: t.slicePlayMode === "toend" ? "toend" : "region",
     uploadAudio: t.uploadAudio || null,
     uploadAudioMime: t.uploadAudioMime || null,
     uploadFileName: t.uploadFileName || null,
@@ -577,13 +563,21 @@ export function serializeTrackPatch(t) {
     glide: t.glide ?? 0,
     speed: t.speed ?? 1,
     sampleSpeedMode: t.sampleSpeedMode ?? "native",
+    pitchLock: t.pitchLock ?? true,
   };
 }
 
 /** @param {Track} t @param {any} patch */
 export function applyTrackPatch(t, patch) {
   if (!patch) return;
-  if (patch.engineKey) t.engineKey = patch.engineKey;
+  // Migrate legacy sample engines in saved patches onto the unified sampler.
+  if (patch.engineKey) {
+    let ek = patch.engineKey;
+    if (ek === "upload" || ek === "eleven") { patch.sampleSource = patch.sampleSource || { kind: "upload", name: patch.uploadFileName || "sample" }; ek = "sampler"; }
+    else if (ek.startsWith("smp:")) { patch.sampleSource = patch.sampleSource || { kind: "bundled", id: ek.slice(4), name: ek.slice(4) }; ek = "sampler"; }
+    if (ek === "sampler" && !patch.uploadAudio && patch.elevenAudio) { patch.uploadAudio = patch.elevenAudio; patch.uploadAudioMime = patch.elevenAudioMime || patch.uploadAudioMime; }
+    t.engineKey = ek;
+  }
   if (patch.params)   Object.assign(t.params, patch.params);
   if (patch.filter)   Object.assign(t.filter, patch.filter);
   if (patch.eq)       Object.assign(t.eq, patch.eq);
@@ -594,8 +588,7 @@ export function applyTrackPatch(t, patch) {
     Object.assign(t.lfoConfig, patch.lfoConfig);
   }
   t.customConfig     = patch.customConfig || null;
-  t.elevenAudio      = patch.elevenAudio || null;
-  t.elevenAudioMime  = patch.elevenAudioMime || null;
+  t.sampleSource     = patch.sampleSource || null;
   t.uploadAudio      = patch.uploadAudio || null;
   t.uploadAudioMime  = patch.uploadAudioMime || null;
   t.uploadFileName   = patch.uploadFileName || null;
@@ -603,24 +596,18 @@ export function applyTrackPatch(t, patch) {
   if (patch.sampleDefaults) {
     t.sampleDefaults = { start: 0, end: 1, fadeIn: 0, fadeOut: 0, loopMode: "off", ...patch.sampleDefaults };
   }
+  t.slices = Array.isArray(patch.slices) ? patch.slices.slice() : [];
+  t.sliceOn = !!patch.sliceOn;
+  t.sliceBase = patch.sliceBase ?? 60;
+  t.slicePlayMode = patch.slicePlayMode === "toend" ? "toend" : "region";
   t.isDrumKit        = !!patch.isDrumKit;
   t.noteMode         = patch.noteMode === "trigger" ? "trigger" : "gate";
   t.glide            = patch.glide ?? 0;
   t.speed            = patch.speed ?? 1;
   t.sampleSpeedMode  = patch.sampleSpeedMode ?? "native";
+  t.pitchLock        = patch.pitchLock ?? true;
 
-  // Decode embedded sample audio (async; the voice picks it up when ready).
-  if (t.elevenAudio) {
-    (async () => {
-      try {
-        const bytes = Uint8Array.from(atob(t.elevenAudio), c => c.charCodeAt(0));
-        await ensureAudio();
-        const buffer = normalizeAudioBuffer(await state.audioCtx.decodeAudioData(bytes.buffer), { trim: true });
-        t.elevenBuffer = buffer;
-        if (t.voice?.type === "eleven") { t.voice.setBuffer(buffer); applySampleSpeed(t); }
-      } catch (e) { console.warn("eleven buffer decode failed", e); }
-    })();
-  } else t.elevenBuffer = null;
+  // Decode embedded sample audio (async; the sampler picks it up when ready).
   if (t.uploadAudio) {
     (async () => {
       try {
@@ -628,7 +615,7 @@ export function applyTrackPatch(t, patch) {
         await ensureAudio();
         const buffer = normalizeAudioBuffer(await state.audioCtx.decodeAudioData(bytes.buffer));
         t.uploadBuffer = buffer;
-        if (t.voice?.type === "upload") { t.voice.setBuffer(buffer); applySampleSpeed(t); }
+        if (t.voice?.type === "sampler" || t.voice?.type === "granular") { t.voice.setBuffer(buffer); applySampleSpeed(t); }
       } catch (e) { console.warn("upload buffer decode failed", e); }
     })();
   } else t.uploadBuffer = null;
@@ -641,6 +628,12 @@ export function applyTrackPatch(t, patch) {
     q(".p-timb").value   = t.params.timb;
     q(".p-morph").value  = t.params.morph;
     q(".p-decay").value  = t.params.decay;
+    for (const k of ["gspeed", "gwindow", "gjitter", "gdetune", "gpan", "gplay", "gloop", "gpattern", "grate"]) {
+      const el = q(`.p-${k}`);
+      if (el && t.params[k] != null) el.value = t.params[k];
+    }
+    const gsyncEl2 = q(".p-gsync");
+    if (gsyncEl2) gsyncEl2.checked = !!t.params.gsync;
     q(".p-cutoff").value = t.filter.cutoff;
     q(".p-reson").value  = t.filter.reson;
     q(".p-envamt").value = t.filter.env;

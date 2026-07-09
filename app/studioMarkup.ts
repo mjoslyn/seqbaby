@@ -18,8 +18,7 @@ export const STUDIO_BODY = String.raw`
       <button id="note-colors" class="sq-btn--ghost sq-icon-btn" aria-pressed="false" aria-label="note colors" title="toggle diatonic note coloring on the piano roll + step grid"></button>
     </div>
     <button id="add-track" class="sq-btn--ghost">add track</button>
-    <button id="morph-toggle" class="sq-btn--ghost" aria-pressed="false" title="master granular tape processor">tape</button>
-    <button id="globalfx-toggle" class="sq-btn--ghost" aria-pressed="false" title="master fx rack — global effects on the whole mix, with mods + automation">master fx</button>
+    <button id="kbd-notes" class="sq-btn--ghost" aria-pressed="false" title="play the active track from your computer keyboard (a s d f… = white keys, w e t y u = black, z/x = octave)">kbd</button>
     <div class="sq-spacer"></div>
     <button id="metronome" class="sq-btn--ghost sq-icon-btn" aria-pressed="false" aria-label="metronome" title="metronome click on the downbeat"></button>
     <svg id="beat-indicator" class="sq-beat-indicator" viewBox="-22 -22 44 44" width="40" height="40" aria-hidden="true"></svg>
@@ -56,56 +55,6 @@ export const STUDIO_BODY = String.raw`
     <div id="pattern-grid" class="sq-pattern__grid"></div>
   </div>
 
-  <section id="morph-panel" class="sq-morph" hidden>
-    <div class="sq-morph__head">
-      <span class="sq-morph__title">master tape</span>
-      <button type="button" class="sq-morph__btn morph-record" aria-pressed="false" title="punch in a fresh reel from the live mix (press again to stop)">rec</button>
-      <button type="button" class="sq-morph__btn morph-freeze" aria-pressed="false" title="stop live recording and hold the reel to mangle it">freeze</button>
-      <label class="sq-morph__ctl sq-morph__sync-wrap" title="sync — lock the recording / reel length to the transport tempo, so the tape captures an exact beat-locked loop."><input class="morph-sync" type="checkbox" /><span>sync rec</span></label>
-      <select class="morph-div" title="synced record length" disabled>
-        <option value="16">4 bars</option>
-        <option value="8">2 bars</option>
-        <option value="4" selected>1 bar</option>
-        <option value="2">1/2</option>
-        <option value="1">1/4</option>
-        <option value="0.5">1/8</option>
-        <option value="0.25">1/16</option>
-      </select>
-      <div class="sq-morph__reel" title="reel fill"><div class="sq-morph__reel-bar"></div></div>
-    </div>
-    <div class="sq-morph__row">
-      <label class="sq-morph__ctl" title="vari-speed — playback speed & direction. center = STOP, +1 = original pitch, right = faster/higher, left = reverse."><span>speed</span><input class="morph-varispeed" type="range" min="-2" max="2" step="0.01" value="1" /></label>
-      <label class="sq-morph__ctl" title="organize — selects which splice plays (stepped). with splices = 1 it scans a play position across the whole reel."><span>organize</span><input class="morph-organize" type="range" min="0" max="1" step="0.001" value="0" /></label>
-      <label class="sq-morph__ctl" title="gene size — playback-window length. left = whole splice (clean loop), right = tiny grains (granular clouds/tones)."><span>gene</span><input class="morph-genesize" type="range" min="0" max="1" step="0.001" value="0" /></label>
-      <label class="sq-morph__ctl" title="slide — where inside the splice playback begins (scrub / start-point offset)."><span>slide</span><input class="morph-slide" type="range" min="0" max="1" step="0.001" value="0" /></label>
-      <label class="sq-morph__ctl" title="morph — gene overlap. left = silent gaps (pointillist), ~1/5 in = seamless loop, right = dense overlapping cloud + detuned genes."><span>morph</span><input class="morph-morph" type="range" min="0" max="1" step="0.01" value="0.2" /></label>
-      <label class="sq-morph__ctl" title="sound-on-sound — overdub feedback. bakes the played-back audio back into the reel for tape-style layering/buildup."><span>sos</span><input class="morph-sos" type="range" min="0" max="1" step="0.01" value="0" /></label>
-      <label class="sq-morph__ctl" title="splices — divide the reel into N evenly-selected segments that organize steps through."><span>splices</span><input class="morph-splices" type="number" min="1" max="16" step="1" value="1" /></label>
-      <label class="sq-morph__ctl" title="mix — dry/wet blend of the tape into the master bus (0 = bypass, 1 = fully wet)."><span>mix</span><input class="morph-mix" type="range" min="0" max="1" step="0.01" value="0" /></label>
-    </div>
-    <div class="sq-morph__tabs">
-      <button type="button" class="sq-morph__tab morph-fx-toggle" aria-pressed="false" title="fx rack on the granular (wet) output">fx</button>
-      <button type="button" class="sq-morph__tab morph-mod-toggle" aria-pressed="false" title="lfo modulation rack">mod</button>
-      <button type="button" class="sq-morph__tab morph-aut-toggle" aria-pressed="false" title="step automation lanes">aut</button>
-    </div>
-    <div id="morph-fx-panel" class="sq-morph__subpanel" hidden></div>
-    <div id="morph-mod-panel" class="sq-morph__subpanel" hidden></div>
-    <div id="morph-aut-panel" class="sq-morph__subpanel" hidden></div>
-  </section>
-
-  <section id="globalfx-panel" class="sq-morph" hidden>
-    <div class="sq-morph__head">
-      <span class="sq-morph__title">master fx rack</span>
-      <div class="sq-morph__tabs">
-        <button type="button" class="sq-morph__tab gfx-fx-toggle" aria-pressed="true" title="fx rack on the whole master mix">fx</button>
-        <button type="button" class="sq-morph__tab gfx-mod-toggle" aria-pressed="false" title="lfo modulation rack">mod</button>
-        <button type="button" class="sq-morph__tab gfx-aut-toggle" aria-pressed="false" title="step automation lanes">aut</button>
-      </div>
-    </div>
-    <div id="globalfx-fx-panel" class="sq-morph__subpanel"></div>
-    <div id="globalfx-mod-panel" class="sq-morph__subpanel" hidden></div>
-    <div id="globalfx-aut-panel" class="sq-morph__subpanel" hidden></div>
-  </section>
 
   <main id="tracks"></main>
 
@@ -114,6 +63,7 @@ export const STUDIO_BODY = String.raw`
       <div class="sq-track__head">
         <input class="sq-track__name" type="text" placeholder="track" />
         <select class="sq-track__engine"></select>
+        <button class="sq-track__wav sq-icon-btn sq-btn--ghost" type="button" aria-label="sample / wave editor" title="sample / wave editor" hidden></button>
         <button class="sq-track__save sq-icon-btn sq-btn--ghost" aria-label="save patch" title="save the current custom patch"></button>
         <button class="sq-track__load-patch sq-icon-btn sq-btn--ghost" aria-label="load patch" title="load a saved patch into this track"></button>
         <div class="sq-field"><label>len</label><input class="sq-track__len" type="number" min="1" max="128" value="16" /></div>
@@ -197,6 +147,40 @@ export const STUDIO_BODY = String.raw`
             <label>noise</label><input class="p-noise" type="range" min="0" max="1" step="0.01" value="0" />
             <select class="p-noisetype" title="noise color">
               <option value="white" selected>white</option><option value="pink">pink</option>
+            </select>
+          </div>
+        </div>
+        <div class="sq-param-group sq-param-group--granular" hidden>
+          <div class="sq-gran__row">
+            <label class="sq-gran__lbl">play</label>
+            <select class="p-gplay" title="playhead mode">
+              <option value="fixed" selected>fixed</option><option value="moving">moving</option>
+            </select>
+            <div class="sq-field"><label>speed</label><input class="p-gspeed" type="range" min="0" max="1" step="0.01" value="0.5" title="playhead speed (0.5 = 100%)" /></div>
+            <label class="sq-gran__lbl">loop</label>
+            <select class="p-gloop" title="loop mode when moving">
+              <option value="none">none</option><option value="fwd" selected>fwd</option><option value="bidir">bidir</option>
+            </select>
+          </div>
+          <div class="sq-gran__row">
+            <div class="sq-field"><label>window</label><input class="p-gwindow" type="range" min="0" max="1" step="0.01" value="0.15" title="position spread around the play head" /></div>
+            <div class="sq-field"><label>jitter</label><input class="p-gjitter" type="range" min="0" max="1" step="0.01" value="0.1" title="grain timing randomness" /></div>
+            <div class="sq-field"><label>detune</label><input class="p-gdetune" type="range" min="0" max="1" step="0.01" value="0" title="per-grain random pitch (0-1 semitone)" /></div>
+            <div class="sq-field"><label>pan</label><input class="p-gpan" type="range" min="0" max="1" step="0.01" value="0.3" title="random stereo width per grain" /></div>
+          </div>
+          <div class="sq-gran__row">
+            <label class="sq-gran__lbl">pattern</label>
+            <select class="p-gpattern" title="add octave / fifth pitch variation per grain">
+              <option value="none" selected>none</option><option value="oct">octaves</option><option value="fifth">fifths</option>
+            </select>
+            <label class="sq-gran__sync"><input class="p-gsync" type="checkbox" /> sync</label>
+            <label class="sq-gran__lbl">rate</label>
+            <select class="p-grate" title="grain rate when sync is on">
+              <option value="1/64">1/64</option><option value="1/32t">1/32T</option><option value="1/32">1/32</option>
+              <option value="1/16t">1/16T</option><option value="1/16" selected>1/16</option><option value="1/8t">1/8T</option>
+              <option value="1/8">1/8</option><option value="1/4t">1/4T</option><option value="1/4">1/4</option>
+              <option value="1/2t">1/2T</option><option value="1/2">1/2</option><option value="1bar">1 bar</option>
+              <option value="2bar">2 bar</option><option value="4bar">4 bar</option><option value="8bar">8 bar</option>
             </select>
           </div>
         </div>

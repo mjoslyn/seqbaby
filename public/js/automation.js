@@ -81,6 +81,8 @@ export function voiceAutoKeysForEngine(t) {
     case "dm:bass":       return ["vol", "harm", "timb", "morph", "decay"];
     case "dm:rhodes":     return ["vol", "harm", "timb", "morph", "decay"];
     case "dm:prophet6":   return ["vol", "harm", "timb", "morph", "decay", "osc1", "osc2", "osc3", "osc4", "noise"];
+    case "dm:granular":   return ["vol", "harm", "timb", "morph", "decay"];
+    case "wt:akwf":       return ["vol", "harm", "timb", "morph", "decay"];
   }
   return ["vol"];
 }

@@ -72,6 +72,11 @@ export function makeCell(t, idx, span, on, isContinuation = false) {
   }
   if (span > 1) cell.classList.add("is-held");
   if (span > 1) cell.style.gridColumn = `span ${span}`;
+  // Drive the held cell's aspect-ratio off its column span so its height
+  // stays one-column-tall (width / span) even when it fills the whole row.
+  // Without this a full-bar note has no aspect-ratio:1 sibling to reference
+  // and the row collapses to the grid-auto-rows floor.
+  if (span > 1) cell.style.setProperty("--hspan", String(span));
   if (idx % 4 === 0 && !isContinuation) cell.classList.add("is-beat");
   if (t.accents.has(idx) && !isContinuation) cell.classList.add("is-accent");
   if (on && t.notes[idx] != null && !isContinuation) {
@@ -177,8 +182,10 @@ export function attachGridInteraction(t, grid) {
     const dx = e.clientX - drag.startX;
     const dy = e.clientY - drag.startY;
     if (longPressTimer && (Math.abs(dx) > 8 || Math.abs(dy) > 8)) cancelLongPress();
-    // Enter pitch mode once the drag is clearly more vertical than horizontal.
-    if (!drag.pitchMode && Math.abs(dy) > 10 && Math.abs(dy) > Math.abs(dx)) {
+    // Enter pitch mode once the drag is clearly more vertical than horizontal —
+    // but not once a horizontal resize has begun, so dragging down into the next
+    // bar row keeps extending the note instead of flipping to pitch.
+    if (!drag.pitchMode && !drag.lengthMode && Math.abs(dy) > 10 && Math.abs(dy) > Math.abs(dx)) {
       drag.pitchMode = true;
     }
     if (drag.pitchMode) {
@@ -209,6 +216,7 @@ export function attachGridInteraction(t, grid) {
     if (idx !== drag.startIdx) drag.moved = true;
     if (idx === drag.lastIdx) return;
     drag.lastIdx = idx;
+    if (idx > drag.anchor) drag.lengthMode = true;  // committed to resizing
     if (idx >= drag.anchor) { extendNote(t, drag.anchor, idx); renderStepGrid(t); }
   });
   grid.addEventListener("contextmenu", (e) => {

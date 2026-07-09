@@ -16,7 +16,7 @@
 /**
  * Voice engine family. The engine key string (e.g. "plaits:0", "dm:808-kick",
  * "smp:Techno/kick", "saved:name") is the source of truth; this is its type tag.
- * @typedef {"plaits"|"drum-synth"|"sample"|"custom"|"saved"|"eleven"|"upload"|"midi"} EngineType
+ * @typedef {"plaits"|"drum-synth"|"sampler"|"granular"|"wavetable"|"custom"|"saved"|"midi"} EngineType
  */
 
 /**

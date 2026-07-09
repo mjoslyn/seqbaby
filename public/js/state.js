@@ -47,17 +47,13 @@ export const state = {
   masterGain: null,
   masterLimiter: null,
   masterAnalyser: null,
-  morphagene: null,          // MorphageneNode (master-bus granular tape processor)
-  morphageneConfig: null,    // its control settings; init'd to defaultMorphageneConfig()
-  morphageneStatusCb: null,  // reel-fill meter callback, attached when the node builds
-  morphageneFxConfig: null,  // FXRack config for the morphagene wet path (defaultFxConfig shape)
-  morphageneModConfig: null, // LFO modulation rack config (per MG_MOD_KEYS)
-  morphageneAutomation: null,// global 16-step automation lanes keyed by param
-  globalFx: null,            // master-bus FXRack (post-morphagene, pre-limiter)
-  globalFxConfig: null,      // its FXRack config (defaultFxConfig shape)
-  globalFxModConfig: null,   // its LFO modulation rack config
-  globalFxAutomation: null,  // its global 16-step automation lanes
   midi: null,
+  // Computer-keyboard-as-notes: when on, letter keys play the active track's
+  // voice (chromatic piano layout, z/x shift octave). activeTrackId is the track
+  // that receives them (last clicked; defaults to the first track).
+  kbdNotesOn: false,
+  kbdBase: 60,          // MIDI note of the "a" key (C4); shifted by z/x
+  activeTrackId: null,
   scale: { active: false, root: 0, mode: "minor" },
   activePattern: 0,
   patternMode: "repeat",

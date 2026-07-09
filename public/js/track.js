@@ -44,13 +44,27 @@ export function createTrack({ name, engineKey, length = totalSteps() }) {
     noteMode: "gate",
     glide: 0,
     sampleSpeedMode: "native",
+    // When on, sample voices ignore the step's note pitch and play at their
+    // fit/natural rate — keeps bpm-fitted loops locked to the grid. Off lets
+    // the note transpose the sample (classic melodic sampler behavior).
+    pitchLock: true,
     density: 0.5,
     speed: 1,
     trackTick: 0,
     repeatId: null,
     soundPromptText: "",
     promptText: "",
+    // Track-level sample settings (the sampler's region / fades / loop). Edited
+    // in the "sample" modal; the transport reads these for every hit. (Formerly
+    // per-step; now one setting for the whole track.)
     sampleDefaults: { start: 0, end: 1, fadeIn: 0, fadeOut: 0, loopMode: "off" },
+    // Note-triggered slicer. slices = 0..1 slice START positions (sorted).
+    // sliceOn routes notes to slices; sliceBase = MIDI note of slice 0;
+    // slicePlayMode "region" (to next marker) | "toend" (marker → sample end).
+    slices: [],
+    sliceOn: false,
+    sliceBase: 60,
+    slicePlayMode: "region",
     params: {
       vol: 0.8, harm: 0.5, timb: 0.5, morph: 0.5, decay: 0.4,
       osc1: 0.55, osc2: 0.45, osc3: 0.35, osc4: 0.4,
@@ -120,9 +134,7 @@ export function duplicateTrack(src) {
   dup.fxConfig = JSON.parse(JSON.stringify(src.fxConfig));
   dup.comp = JSON.parse(JSON.stringify(src.comp));
   dup.customConfig = src.customConfig ? JSON.parse(JSON.stringify(src.customConfig)) : null;
-  dup.elevenAudio = src.elevenAudio || null;
-  dup.elevenAudioMime = src.elevenAudioMime || null;
-  dup.elevenBuffer = src.elevenBuffer || null;
+  dup.sampleSource = src.sampleSource ? { ...src.sampleSource } : null;
   dup.uploadAudio = src.uploadAudio || null;
   dup.uploadAudioMime = src.uploadAudioMime || null;
   dup.uploadFileName = src.uploadFileName || null;
@@ -130,6 +142,10 @@ export function duplicateTrack(src) {
   dup.soundPromptText = src.soundPromptText || "";
   dup.promptText = src.promptText || "";
   dup.sampleDefaults = src.sampleDefaults ? { ...src.sampleDefaults } : dup.sampleDefaults;
+  dup.slices = Array.isArray(src.slices) ? src.slices.slice() : [];
+  dup.sliceOn = !!src.sliceOn;
+  dup.sliceBase = src.sliceBase ?? 60;
+  dup.slicePlayMode = src.slicePlayMode === "toend" ? "toend" : "region";
   dup.muted = !!src.muted;
   dup.soloed = !!src.soloed;
   dup.isDrumKit = !!src.isDrumKit;
@@ -137,6 +153,7 @@ export function duplicateTrack(src) {
   dup.speed = src.speed ?? 1;
   dup.density = src.density ?? 0.5;
   dup.sampleSpeedMode = src.sampleSpeedMode ?? "native";
+  dup.pitchLock = src.pitchLock ?? true;
   for (const k of Object.keys(dup.lfoConfig)) {
     if (src.lfoConfig?.[k]) dup.lfoConfig[k] = { ...src.lfoConfig[k] };
   }
@@ -439,10 +456,11 @@ export function clearRange(t, from, to, keep) {
 
 export function maxLengthAt(t, anchor) {
   const total = t.steps.length;
-  const ROW = 16;
-  const rowEnd = Math.min(total, (Math.floor(anchor / ROW) + 1) * ROW);
-  let cap = rowEnd - anchor;
-  for (let j = anchor + 1; j < rowEnd; j++) {
+  // A note can extend to the next active step, or to the end of the track —
+  // including across bar rows (the step grid renders a cross-row held note as
+  // per-row chunks). Only the track length (and the next note) bound it.
+  let cap = total - anchor;
+  for (let j = anchor + 1; j < total; j++) {
     if (t.steps[j]) { cap = Math.min(cap, j - anchor); break; }
   }
   return Math.max(1, cap);
@@ -461,17 +479,20 @@ export function anchorCovering(t, idx) {
 
 // What pitch should a fresh note take? Prefer the last note the user
 // explicitly placed or moved on this track; fall back to the highest-index
-// existing triggered note in the active pattern; finally, scale root in
-// octave 3 for empty patterns. Drum-kit tracks always return C2 (their
-// per-step pitch is decoupled from key).
+// existing triggered note in the active pattern; finally an engine-appropriate
+// root for empty patterns. Sampler tracks anchor to the slice root (sliceBase,
+// set to the sample's natural octave on load) so the first note plays the sample
+// naturally / triggers slice 0. Drum-kit tracks return C2.
 export function lastUsedNote(t) {
-  if (t.isDrumKit) return 36;
+  const isSampler = t.engineKey === "sampler";
   if (t.lastEditedNote != null && Number.isFinite(t.lastEditedNote)) return t.lastEditedNote;
   if (t.steps && t.notes) {
     for (let i = t.length - 1; i >= 0; i--) {
       if (t.steps[i] && t.notes[i] != null) return t.notes[i];
     }
   }
+  if (isSampler) return t.sliceBase ?? (t.isDrumKit ? 36 : 60);
+  if (t.isDrumKit) return 36;
   return 48 + (state.scale.root | 0);
 }
 

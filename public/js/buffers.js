@@ -64,7 +64,12 @@ export function startSampleSource(ctx, buffer, rate, time, duration, opts) {
     src.start(time, startSec);
   } else {
     src.buffer = buffer;
-    stopTime = time + Math.min(wallTime, Math.max(0.1, duration + 0.5));
+    // One-shots gate to the note length so a short note actually stops the
+    // sample. Drum-kit hits keep a 0.5s ring-out grace so a 16th-note step
+    // doesn't chop a kick/snare tail. Either way, never play past the sample's
+    // own end (wallTime).
+    const gate = opts?.isDrumKit ? duration + 0.5 : duration;
+    stopTime = time + Math.min(wallTime, Math.max(0.1, gate));
     src.start(time, startSec, playLenSource);
   }
   return { src, stopTime };

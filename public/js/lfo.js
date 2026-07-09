@@ -96,9 +96,22 @@ export function sliceFitFactor(opts) {
   return span;
 }
 
+// Playback rate for one hit of a bpm-fittable sample voice (upload / eleven).
+// `fit` is the bar-fit rate (baseRate × slice span) — it's 1 in "native" mode
+// and stretches the loop to the selected bars in a bpm mode. When pitch-lock is
+// on, timing wins: the fit rate is used verbatim and per-note pitch is ignored,
+// so the sample stays on the grid (and at natural pitch) whatever note the step
+// plays. When off, the note transposes the sample on top of the fit rate.
+export function sampleHitRate(baseRate, midiNote, opts) {
+  const fit = (baseRate || 1) * sliceFitFactor(opts);
+  if (opts?.pitchLocked) return fit;
+  const pitchBase = Number.isFinite(opts?.pitchBase) ? opts.pitchBase : 60;
+  return fit * Math.pow(2, (midiNote - pitchBase) / 12);
+}
+
 export function applySampleSpeed(t) {
   const type = t.voice?.type;
-  if (type !== "eleven" && type !== "upload") return;
+  if (type !== "sampler") return;
   const buf = t.voice.buffer;
   const rate = computeSampleBaseRate(buf, t.sampleSpeedMode, currentBpm());
   if (t.voice.setBaseRate) t.voice.setBaseRate(rate);

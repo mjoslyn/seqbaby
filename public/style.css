@@ -412,6 +412,13 @@ main {
 .sq-param-group--moog select { padding: 2px 6px; font-size: 11px; }
 .sq-param-group--moog .sq-moog__noise { display: flex; align-items: center; gap: 6px; }
 .sq-param-group--moog .sq-moog__noise input[type="range"] { width: 70px; }
+.sq-param-group--granular { border-color: color-mix(in oklab, #ffd35a 45%, var(--border)); flex-direction: column; align-items: stretch; gap: 4px; }
+.sq-param-group--granular[hidden] { display: none !important; }
+.sq-param-group--granular .sq-gran__row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 11px; }
+.sq-param-group--granular .sq-gran__lbl { color: var(--fg-dim); }
+.sq-param-group--granular .sq-gran__sync { display: inline-flex; align-items: center; gap: 4px; color: var(--fg-dim); }
+.sq-param-group--granular select { padding: 2px 6px; font-size: 11px; }
+.sq-param-group--granular .sq-field input[type="range"] { width: 64px; }
 .sq-param-group .sq-field[hidden] { display: none !important; }
 .sq-filter__group { border-color: color-mix(in oklab, var(--accent-2) 40%, var(--border)); }
 
@@ -813,136 +820,6 @@ main {
 .sq-fx__ctl input[type="range"] { width: 88px; }
 .sq-fx__sync-wrap { gap: 4px; }
 
-/* Morphagene — global master tape processor panel */
-.sq-morph {
-  margin: 0 8px 8px;
-  background: var(--bg-3);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 8px 10px;
-  display: grid;
-  gap: 6px;
-}
-.sq-morph[hidden] { display: none; }
-.sq-morph__head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-.sq-morph__title {
-  color: #e0a8ff;
-  text-transform: lowercase;
-  font-size: 11px;
-  letter-spacing: 0.08em;
-  min-width: 150px;
-}
-.sq-morph__btn {
-  background: var(--bg-2);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  color: var(--fg-dim);
-  font-size: 11px;
-  padding: 3px 10px;
-  cursor: pointer;
-}
-.sq-morph__btn.morph-record[aria-pressed="true"] {
-  background: #ff5c6a;
-  color: #0b0d10;
-  border-color: #ff5c6a;
-}
-.sq-morph__btn.morph-freeze[aria-pressed="true"] {
-  background: #9fd7ff;
-  color: #0b0d10;
-  border-color: #9fd7ff;
-}
-.sq-morph__reel {
-  flex: 1;
-  min-width: 80px;
-  height: 5px;
-  background: var(--bg-2);
-  border-radius: 3px;
-  overflow: hidden;
-}
-.sq-morph__reel-bar {
-  height: 100%;
-  width: 0%;
-  background: #e0a8ff;
-  transition: width 0.12s linear;
-}
-.sq-morph__row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-.sq-morph__ctl {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  color: var(--fg-dim);
-}
-.sq-morph__ctl span { min-width: 34px; font-size: 11px; }
-/* control name: double-click resets to default */
-.sq-morph__ctl > span:first-child { cursor: pointer; user-select: none; }
-.sq-morph__ctl > span:first-child:hover { color: var(--fg); }
-.sq-morph__val {
-  min-width: 30px !important;
-  font-size: 11px;
-  color: var(--accent);
-  font-variant-numeric: tabular-nums;
-  text-align: right;
-}
-.sq-morph__ctl input[type="range"] { width: 96px; }
-.sq-morph__ctl input[type="range"]:disabled { opacity: 0.4; }
-.sq-morph__ctl input[type="number"] { width: 48px; }
-.sq-morph__sync-wrap { gap: 5px; }
-.sq-morph__sync-wrap span { min-width: 0; }
-.sq-morph .morph-div {
-  background: var(--bg-2);
-  color: var(--fg-dim);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  font-size: 11px;
-  padding: 3px 4px;
-}
-.sq-morph .morph-div:disabled { opacity: 0.4; }
-.sq-morph__tabs {
-  display: flex;
-  gap: 6px;
-  margin-top: 2px;
-}
-.sq-morph__tab {
-  background: var(--bg-2);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  color: var(--fg-dim);
-  font-size: 11px;
-  letter-spacing: 0.05em;
-  padding: 3px 12px;
-  cursor: pointer;
-}
-.sq-morph__tab[aria-pressed="true"] {
-  background: #e0a8ff;
-  color: #0b0d10;
-  border-color: #e0a8ff;
-}
-.sq-morph__subpanel {
-  margin-top: 4px;
-  padding: 6px 8px;
-  background: var(--bg-2);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-}
-.sq-morph__subpanel[hidden] { display: none; }
-.sq-morph__fx { background: transparent; border: 0; padding: 0; }
-#morph-toggle[aria-pressed="true"],
-#globalfx-toggle[aria-pressed="true"] {
-  background: #e0a8ff;
-  color: #0b0d10;
-  border-color: #e0a8ff;
-}
-
 .sq-lfo__row {
   display: grid;
   grid-template-columns: 52px 52px 96px 62px minmax(0, 1fr) minmax(0, 1fr) 28px;
@@ -1014,6 +891,10 @@ main {
 }
 .sq-track.is-soloed { border-color: var(--accent); }
 
+/* Computer-keyboard target: only highlighted while kbd-notes mode is on. */
+#kbd-notes[aria-pressed="true"] { background: var(--accent-2); color: #0b0d10; border-color: var(--accent-2); }
+body.kbd-notes-on .sq-track.is-kbd-active { border-color: var(--accent-2); box-shadow: 0 0 0 1px var(--accent-2) inset; }
+
 .sq-track__glide { width: 70px; }
 
 .sq-steps {
@@ -1039,7 +920,7 @@ main {
 }
 
 /* held cells span multiple columns; stop them from also doubling in height */
-.sq-step.is-held { aspect-ratio: auto; height: auto; align-self: stretch; }
+.sq-step.is-held { aspect-ratio: var(--hspan, 1) / 1; height: auto; align-self: stretch; }
 .sq-steps { align-items: stretch; }
 
 .sq-step.is-on {
@@ -1332,6 +1213,60 @@ main {
   gap: 8px;
   justify-content: flex-end;
 }
+
+/* Sample-editor + slicer modals. */
+.sq-samp__modal, .sq-slice__modal { width: min(94vw, 720px); gap: 10px; }
+.sq-samp__head, .sq-slice__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 12px; color: var(--fg-dim); }
+.sq-samp__title { color: var(--fg); }
+.sq-samp__canvas, .sq-slice__canvas { width: 100%; height: auto; border: 1px solid var(--border); border-radius: 6px; background: #0e0f12; touch-action: none; }
+.sq-samp__row, .sq-slice__row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 11px; color: var(--fg-dim); }
+.sq-samp__slice-row { border-top: 1px solid var(--border); padding-top: 8px; margin-top: 2px; }
+.sq-samp__row select, .sq-slice__row select, .sq-slice__row input[type="number"] { font-size: 11px; padding: 2px 4px; }
+.sq-samp__row input[type="range"] { width: 90px; }
+.sq-slice__pads { display: flex; flex-wrap: wrap; gap: 4px; max-height: 96px; overflow-y: auto; }
+.sq-slice__pad { font-size: 10px; padding: 4px 6px; min-width: 34px; }
+.sq-slice__hint { font-size: 10px; color: var(--fg-dim); opacity: 0.8; }
+
+/* Sampler source picker modal: load-file button + bundled sample list. */
+.sq-sampler__src-modal { width: min(92vw, 420px); }
+.sq-sampler__src-sep { font-size: 11px; color: var(--fg-dim); text-align: center; }
+.sq-sampler__src-list { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; max-height: 44vh; overflow-y: auto; }
+.sq-sampler__src-item { font-size: 11px; padding: 6px 4px; }
+
+/* Granular WAV viewer modal: waveform canvas + live grain bars. */
+.sq-gwav__modal {
+  width: min(94vw, 720px);
+  max-width: 94vw;
+  gap: 10px;
+}
+.sq-gwav__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--fg-dim);
+}
+.sq-gwav__title { color: var(--fg); }
+.sq-gwav__file { color: var(--fg-dim); }
+.sq-gwav__anim { display: inline-flex; align-items: center; gap: 6px; }
+.sq-gwav__canvas {
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #0e0f12;
+}
+.sq-gwav__info {
+  font: 11px ui-monospace, monospace;
+  color: var(--fg-dim);
+}
+.sq-gwav__hint { font-size: 10px; color: var(--fg-dim); opacity: 0.8; }
+.sq-gwav__ctl { display: flex; flex-direction: column; gap: 6px; border-top: 1px solid var(--border); padding-top: 8px; }
+.sq-gwav__ctl-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 11px; color: var(--fg-dim); }
+.sq-gwav__ctl-row label { display: inline-flex; align-items: center; gap: 4px; }
+.sq-gwav__ctl-row select { font-size: 11px; padding: 2px 4px; }
+.sq-gwav__ctl-row input[type="range"] { width: 84px; }
 
 /* Audio gate dialog: shown on page load until the user taps to unlock
    audio. Sits above the rest of the UI so it must be the first interaction. */
