@@ -173,21 +173,6 @@ export async function togglePlay() {
     setStatus(`audio init failed: ${err?.message || err}`, true);
     return;
   }
-  // Confirm the context actually resumed. Chrome's autoplay policy can leave it
-  // "suspended" even after the resume attempts above if the play click didn't
-  // register as a user gesture. Try once more directly, then — if it's STILL not
-  // running — don't silently "play" to nothing: surface an explicit "enable
-  // audio" button (its own click is an unambiguous gesture that reliably resumes)
-  // and bail this attempt. state.playing is still false and the button still
-  // reads "play", so nothing else needs unwinding.
-  if (state.audioCtx && state.audioCtx.state !== "running") {
-    try { await state.audioCtx.resume(); } catch (e) { console.warn("audioCtx.resume retry failed", e); }
-  }
-  if (!state.audioCtx || state.audioCtx.state !== "running") {
-    setStatus(`audio blocked by the browser (ctx: ${state.audioCtx?.state || "?"}) — click "enable audio"`, true);
-    showAudioUnlockPrompt();
-    return;
-  }
   // Confirm post-unlock state on screen so a no-dev-console iPhone user can
   // tell us whether the context actually resumed.
   setStatus(`audio ready (ctx: ${state.audioCtx?.state || "?"})`);
@@ -381,37 +366,4 @@ export function noteForStep(t, idx) {
 }
 
 // ---- prompting ---------------------------------------------------------
-
-// Browser autoplay-policy fallback. If the AudioContext is still "suspended"
-// after hitting play, show an explicit unlock button — its click is a fresh,
-// unambiguous user gesture that reliably resumes the context, after which we
-// start playback for real. Only one prompt is shown at a time.
-let _audioUnlockOverlay = null;
-function showAudioUnlockPrompt() {
-  if (_audioUnlockOverlay) return;
-  const overlay = document.createElement("div");
-  overlay.className = "sq-modal-overlay";
-  overlay.innerHTML = `
-    <div class="sq-modal" role="dialog" aria-modal="true">
-      <div class="sq-modal__title">audio is blocked</div>
-      <p class="sq-modal__msg">Your browser blocked audio until you interact with the page. Click below to enable sound and start playing.</p>
-      <div class="sq-modal__actions">
-        <button class="sq-modal__ok" type="button">enable audio</button>
-      </div>
-    </div>`;
-  document.body.appendChild(overlay);
-  _audioUnlockOverlay = overlay;
-  const close = () => { overlay.remove(); _audioUnlockOverlay = null; };
-  overlay.querySelector(".sq-modal__ok").addEventListener("click", async () => {
-    // Resume synchronously inside this gesture (primeAudioForIOS), then confirm.
-    primeAudioForIOS();
-    try { await state.audioCtx?.resume(); } catch (e) { console.warn("unlock resume failed", e); }
-    if (state.audioCtx && state.audioCtx.state === "running") {
-      close();
-      if (!state.playing) togglePlay();   // audio is live now — start for real
-    } else {
-      setStatus(`still blocked (ctx: ${state.audioCtx?.state || "?"}) — click again`, true);
-    }
-  });
-}
 
