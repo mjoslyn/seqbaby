@@ -13,9 +13,18 @@ import { buildVoiceForEngine } from "./voices.js";
 
 
 /** @typedef {import("./types.js").Track} Track */
-export function paintNowIndicator() {
-  for (const t of state.tracks) {
-    const tk = t.trackTick ?? 0;
+/**
+ * Paint the "now" step highlight. `ticks` is an optional per-track snapshot of
+ * trackTick values captured at schedule time — the transport schedules audio
+ * ~lookAhead ahead of what's audible, so by the time this fires at the audible
+ * moment the live trackTick has already advanced past the step being heard.
+ * Callers outside the transport (stop, re-renders) omit it and read live.
+ * @param {number[]} [ticks]
+ */
+export function paintNowIndicator(ticks) {
+  for (let ti = 0; ti < state.tracks.length; ti++) {
+    const t = state.tracks[ti];
+    const tk = ticks ? (ticks[ti] ?? 0) : (t.trackTick ?? 0);
     const idx = ((tk - 1) % t.length + t.length) % t.length;
     const cells = t.el.querySelectorAll(".sq-step");
     cells.forEach(c => {
@@ -51,19 +60,41 @@ const VISUAL_LATENCY_OVERRIDE = (() => {
   return Number.isFinite(n) && n >= 0 ? n : null;
 })();
 const IS_SAFARI = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
-const SAFARI_OUTPUT_LATENCY_EST = 0.18;
+// Safari reports no outputLatency; this estimates the real render→speaker
+// latency. (An earlier 0.18 value was tuned against the broken Tone.Draw
+// scheduler that painted ~0.32s early — with correct scheduling the estimate
+// should be an actual device latency, not a bug offset.)
+const SAFARI_OUTPUT_LATENCY_EST = 0.09;
 // Paints land ~2-3 display frames after their scheduled time anyway (next rAF
 // + compositor), which already cancels small audio output latencies. Only
 // compensate beyond that, or Chrome visuals go late and the audio reads early.
-const DISPLAY_LAG_EST = 0.045;
+const DISPLAY_LAG_EST = 0.03;
 export function visualOutputLatency() {
   if (VISUAL_LATENCY_OVERRIDE !== null) return VISUAL_LATENCY_OVERRIDE;
   const ctx = state.audioCtx;
   if (!ctx) return 0;
-  // Safari constant is ear-tuned as a net value — use as-is.
   if (IS_SAFARI) return SAFARI_OUTPUT_LATENCY_EST;
   const reported = ctx.outputLatency || ctx.baseLatency || 0;
   return Math.max(0, reported - DISPLAY_LAG_EST);
+}
+
+/**
+ * Schedule a UI callback for the wall-clock moment an audio event becomes
+ * AUDIBLE. Deliberately not Tone.Draw: measured on Chrome, Tone.Draw fired
+ * callbacks a rock-constant ~316ms before the audio graph even rendered the
+ * event — a fixed clock skew (its timeline latches onto Tone's default
+ * context, which starts ticking at page load, not the raw context we pass to
+ * Tone.setContext). Mapping audio time → wall clock against OUR context
+ * sidesteps that whole class of bug, and works while the tab is hidden
+ * (setTimeout still fires, throttled; rAF-driven Draw stops entirely — which
+ * silently stalled pattern-switch commits in background tabs).
+ * @param {() => void} cb @param {number} audioTime context time of the event
+ * @param {number} [extra] additional seconds (e.g. output latency compensation)
+ */
+function scheduleAtAudible(cb, audioTime, extra = 0) {
+  const ctx = state.audioCtx;
+  const delayMs = Math.max(0, (audioTime - ctx.currentTime + extra) * 1000);
+  setTimeout(cb, delayMs);
 }
 
 /**
@@ -407,17 +438,22 @@ export async function togglePlay() {
       }
     }
     // Paint at the time the audio actually reaches the speakers, not when the
-    // graph renders it (see visualOutputLatency above).
-    const drawAt = time + visualOutputLatency();
-    Tone.Draw.schedule(paintNowIndicator, drawAt);
-    Tone.Draw.schedule(() => paintBeatIndicator(state.tick), drawAt);
+    // graph renders it (see visualOutputLatency + scheduleAtAudible above).
+    // Snapshot tick state now — it advances before the deferred paint fires.
+    const lat = visualOutputLatency();
+    const tickSnap = state.tracks.map(t => t.trackTick ?? 0);
+    const globalTickSnap = state.tick;
+    scheduleAtAudible(() => paintNowIndicator(tickSnap), time, lat);
+    scheduleAtAudible(() => paintBeatIndicator(globalTickSnap), time, lat);
     if (state.metronome && state.tick % 4 === 0) fireMetronome(time, state.tick % 16 === 0);
     state.tick++;
     // manual pattern queue: when switch-mode is "finish" and the user queued a
-    // different pattern, commit at the next bar boundary.
+    // different pattern, commit at the next bar boundary. Synchronous, NOT
+    // deferred to the audible moment: this callback runs ~lookAhead ahead of
+    // the speakers, and the next callback (the new bar's first step) must read
+    // the switched pattern's data or it plays the old pattern's opening steps.
     if (state.patternSwitchMode === "finish" && state.queuedPattern !== null && state.tick % BAR_TICKS === 0) {
-      const next = state.queuedPattern;
-      Tone.Draw.schedule(() => switchPattern(next), time);
+      switchPattern(state.queuedPattern);
     }
     // pattern chaining: advance at bar boundaries when chain mode is on, respecting per-pattern repeats
     if (state.patternMode === "chain" && state.tick % BAR_TICKS === 0) {
@@ -427,7 +463,7 @@ export async function togglePlay() {
         state.chainBarCount = 0;
         const next = findNextNonEmptyPattern(state.activePattern);
         if (next >= 0 && next !== state.activePattern) {
-          Tone.Draw.schedule(() => switchPattern(next), time);
+          switchPattern(next); // synchronous — same reasoning as the manual queue above
         }
       }
     }
