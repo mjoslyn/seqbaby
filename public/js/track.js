@@ -12,6 +12,7 @@ import { applyCompressorConfig, defaultCompConfig, ensureFxRack, refreshCompSour
 import { aliasPattern, emptyPattern, state } from "./state.js";
 import { renderStepGrid } from "./stepGrid.js";
 import { SCALES, midiToScaleIndex, scaleIndexToMidi } from "./theory.js";
+import { requestMidiIfNeeded } from "./transport.js";
 import { buildVoiceForEngine } from "./voices.js";
 
 
@@ -104,6 +105,7 @@ export function createTrack({ name, engineKey, length = totalSteps() }) {
       t.voice.setChannel(t.midi.channel);
       const out = state.midi?.outputs.get(t.midi.outputId);
       if (out) t.voice.setOutput(out);
+      requestMidiIfNeeded(); // MIDI access is lazy; this may be the first MIDI track
     }
     routeVoiceToRack(t);
   }

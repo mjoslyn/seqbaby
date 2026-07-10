@@ -14,7 +14,7 @@ import { applyCompressorConfig, ensureFxRack, refreshCompSourceDropdowns, routeV
 import { aliasPattern, state, syncMeterUI } from "./state.js";
 import { renderStepGrid } from "./stepGrid.js";
 import { createTrack, removeTrack } from "./track.js";
-import { ensureAudio, silenceAllVoices } from "./transport.js";
+import { ensureAudio, requestMidiIfNeeded, silenceAllVoices } from "./transport.js";
 import { buildVoiceForEngine } from "./voices.js";
 
 
@@ -526,6 +526,9 @@ export function applySet(s) {
   // track sidechain selections from the saved set resolve to a real option.
   refreshCompSourceDropdowns();
   if (state.ready) for (const t of state.tracks) applyCompressorConfig(t);
+  // MIDI access is lazy (only requested when a track uses a MIDI engine); a
+  // loaded set may introduce the first MIDI track after audio init already ran.
+  requestMidiIfNeeded();
   renderPatternGrid();
   syncMeterUI();
   setStatus("set loaded");
@@ -703,6 +706,7 @@ export function applyTrackPatch(t, patch) {
     applyCompressorConfig(t);
     syncAllLFOs(t);
   }
+  requestMidiIfNeeded();
   updatePlaitsControlsVisibility(t);
   renderStepGrid(t);
   t._refreshSaveEnabled?.();

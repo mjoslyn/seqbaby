@@ -4,6 +4,7 @@ import { redetectDrumKit } from "./meter.js";
 import { refreshFxPanelUI, updateMidiUI } from "./render.js";
 import { ensureFxRack, routeVoiceToRack } from "./signal.js";
 import { state } from "./state.js";
+import { requestMidiIfNeeded } from "./transport.js";
 import { buildVoiceForEngine } from "./voices.js";
 
 
@@ -206,6 +207,9 @@ export function setEngineKey(t, newKey) {
     applySampleSpeed(t);
     syncAllLFOs(t);
   }
+  // MIDI access is lazy — this switch may be the first MIDI engine in the
+  // session. Requests in the background, then wires outputs + dropdowns.
+  if (e.type === "midi") requestMidiIfNeeded();
   updateMidiUI(t);
   updatePlaitsControlsVisibility(t);
   t._refreshSaveEnabled?.();

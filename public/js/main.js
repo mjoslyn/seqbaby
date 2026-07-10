@@ -18,7 +18,7 @@ import { loadShareFromUrl, onExportSet, onImportSet, onLoadSet, onSaveSet, onSha
 import { state, switchPattern } from "./state.js";
 import { renderStepGrid } from "./stepGrid.js";
 import { createTrack, resizePattern } from "./track.js";
-import { ensureAudio, togglePlay } from "./transport.js";
+import { ensureAudio, loadWorklet, togglePlay } from "./transport.js";
 
 export function showAudioGateDialog() {
   if (!state.audioCtx) return;
@@ -302,6 +302,46 @@ export function init() {
     const ctxWrap = Tone.getContext();
     ctxWrap.lookAhead = isMobileDevice() ? 0.25 : 0.15;
   } catch (e) { console.warn("lookAhead tune failed", e); }
+  // Track when the output pipeline first actually starts running, and pin it
+  // open. Two jobs:
+  //  1. `_outputRunningSince` lets togglePlay size the transport lead — on a
+  //     cold start macOS drops the first fraction of a second of DAC output
+  //     while the device spins up (clock advances, no sound), so a
+  //     freshly-started output needs a longer lead than a warm one.
+  //  2. A session-long silent ConstantSource keep-alive (offset 0 = pure DC,
+  //     inaudible) holds the render graph and output device engaged between
+  //     plays, so only the very first start can ever be cold.
+  state.audioCtx.addEventListener("statechange", () => {
+    if (state.audioCtx.state !== "running") return;
+    if (!state._outputRunningSince) state._outputRunningSince = performance.now();
+    if (!state._keepAlive) {
+      try {
+        const ka = state.audioCtx.createConstantSource();
+        ka.offset.value = 0;
+        ka.connect(state.audioCtx.destination);
+        ka.start();
+        state._keepAlive = ka;
+      } catch (e) { console.warn("keep-alive init failed", e); }
+    }
+  });
+  // Resume/unlock on the first gesture of ANY kind, not just the play button —
+  // a session usually taps steps, drags sliders, or presses note keys first.
+  // Autoplay policy requires the resume to originate inside a real gesture;
+  // doing it on the earliest one also warms the output device seconds before
+  // play is hit, so the play click starts against an already-running pipeline.
+  // Kept installed permanently: it's a cheap no-op while running and quietly
+  // recovers whenever the browser re-suspends the context.
+  const unlockAudio = () => {
+    if (state.audioCtx.state === "suspended") primeAudioForIOS();
+  };
+  for (const ev of ["pointerdown", "keydown", "touchstart"]) {
+    document.addEventListener(ev, unlockAudio, { capture: true, passive: true });
+  }
+  // Warm the Plaits worklet/WASM fetch+compile off the play path (addModule
+  // works fine on a suspended context). By play time this is usually resolved,
+  // so ensureAudio's await is instant instead of a network+compile stall
+  // between the click and Transport.start.
+  loadWorklet().catch(() => {});
   initSilentAudioLoop();
   rebuildEngineCatalog();
   requestAnimationFrame(meterTick);
@@ -525,9 +565,14 @@ export function init() {
   // tab reloads; a leaked AudioContext from the previous page leaves the worklet
   // graph and clock in a degraded state, which surfaces as "first play is delayed
   // and out of sync after a refresh — only a full browser restart clears it".
-  window.addEventListener("pagehide", () => {
+  // Only close on a real unload. When the page goes into the back/forward
+  // cache instead (e.persisted — common on iOS Safari), it comes back with all
+  // JS state intact; closing the context here would restore the page around a
+  // permanently-dead "closed" AudioContext that no resume() can revive, so the
+  // app looks fine but never makes sound again until a manual reload.
+  window.addEventListener("pagehide", (e) => {
     try { Tone.Transport.stop(); } catch {}
-    try { state.audioCtx?.close(); } catch {}
+    if (!e.persisted) { try { state.audioCtx?.close(); } catch {} }
   });
   // Visibility resume: iOS often suspends the audio context (or just stops
   // rendering it) when the tab loses focus. Re-resuming on visibility change
