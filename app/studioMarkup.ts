@@ -4,12 +4,15 @@
 // the three engine <script>s are injected client-side by ScriptLoader in order.
 export const STUDIO_BODY = String.raw`
 <header class="sq-transport">
+    <div id="status" class="sq-status sq-status--bar">click play to unlock audio</div>
+    <div class="sq-transport__main">
     <div class="sq-logo" title="seqbaby">
       <img src="/favicon.svg" alt="" />
       <span>seqbaby</span>
     </div>
     <button id="play" class="sq-play">play</button>
-    <button id="kbd-record" class="sq-btn--ghost sq-icon-btn" type="button" aria-pressed="false" aria-label="record keyboard notes" title="record computer-keyboard notes into the active track while the transport plays"></button>
+    <button id="kbd-record" class="sq-btn--ghost sq-icon-btn" type="button" disabled aria-pressed="false" aria-label="record keyboard notes" title="record computer-keyboard notes into the active track while the transport plays (enable the keyboard first)"></button>
+    <button id="kbd-capture" class="sq-btn--ghost sq-icon-btn" type="button" disabled aria-label="capture keyboard notes" title="capture the notes you just played on the keyboard into the active track (retroactive — enable the keyboard first)"></button>
     <div class="sq-field"><label for="bpm">bpm</label><input id="bpm" type="number" value="110" min="40" max="240" /></div>
     <div class="sq-field"><label for="swing">swing</label><input id="swing" type="range" min="0" max="0.5" step="0.01" value="0" /></div>
     <div class="sq-scale__field">
@@ -18,7 +21,6 @@ export const STUDIO_BODY = String.raw`
       <select id="scale-mode"></select>
       <button id="note-colors" class="sq-btn--ghost sq-icon-btn" aria-pressed="false" aria-label="note colors" title="toggle diatonic note coloring on the piano roll + step grid"></button>
     </div>
-    <button id="add-track" class="sq-btn--ghost">add track</button>
     <button id="kbd-notes" class="sq-btn--ghost" aria-pressed="false" title="play the active track from your computer keyboard (a s d f… = white keys, w e t y u = black, z/x = octave)">kbd</button>
     <div id="kbd-chord" class="sq-kbd-chord" hidden>
       <span class="sq-kbd-chord__lbl">chord</span>
@@ -44,11 +46,12 @@ export const STUDIO_BODY = String.raw`
         <option value="4">drop-oct</option>
       </select>
     </div>
-    <div class="sq-spacer"></div>
-    <button id="metronome" class="sq-btn--ghost sq-icon-btn" aria-pressed="false" aria-label="metronome" title="metronome click on the downbeat"></button>
-    <svg id="beat-indicator" class="sq-beat-indicator" viewBox="-22 -22 44 44" width="40" height="40" aria-hidden="true"></svg>
-    <div class="sq-meter sq-meter--master" title="master output level"><div class="sq-meter__bar"></div></div>
-    <div id="status" class="sq-status">click play to unlock audio</div>
+    </div><!-- /sq-transport__main -->
+    <div class="sq-transport__right">
+      <button id="metronome" class="sq-btn--ghost sq-icon-btn" aria-pressed="false" aria-label="metronome" title="metronome click on the downbeat"></button>
+      <svg id="beat-indicator" class="sq-beat-indicator" viewBox="-22 -22 44 44" width="40" height="40" aria-hidden="true"></svg>
+      <div class="sq-meter sq-meter--master" title="master output level"><div class="sq-meter__bar"></div></div>
+    </div>
   </header>
 
   <div class="sq-pattern-bar">
@@ -82,13 +85,16 @@ export const STUDIO_BODY = String.raw`
 
 
   <main id="tracks"></main>
+  <div class="sq-add-track-row">
+    <button id="add-track" class="sq-btn--ghost">+ add track</button>
+  </div>
 
   <template id="track-template">
     <section class="sq-track">
       <div class="sq-track__head">
         <input class="sq-track__name" type="text" placeholder="track" />
         <select class="sq-track__engine"></select>
-        <button class="sq-track__wav sq-icon-btn sq-btn--ghost" type="button" aria-label="sample / wave editor" title="sample / wave editor" hidden></button>
+        <button class="sq-track__wav sq-icon-btn sq-btn--ghost" type="button" aria-label="sample / wave editor" title="sample / wave editor" disabled></button>
         <button class="sq-track__save sq-icon-btn sq-btn--ghost" aria-label="save patch" title="save the current custom patch"></button>
         <button class="sq-track__load-patch sq-icon-btn sq-btn--ghost" aria-label="load patch" title="load a saved patch into this track"></button>
         <div class="sq-field"><label>len</label><input class="sq-track__len" type="number" min="1" max="128" value="16" /></div>

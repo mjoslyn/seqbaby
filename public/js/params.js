@@ -119,11 +119,12 @@ export function updatePlaitsControlsVisibility(t) {
   // Granular grain-engine group (play mode / window / jitter / detune / pan / …).
   const granGroup = t._granGroupEl || t.el.querySelector(".sq-param-group--granular");
   if (granGroup) granGroup.hidden = !isGranular;
-  // Header wave/sample icon button (between the engine dropdown and save): shown
-  // for the granular + sampler engines, opens their editor.
+  // Header wave/sample icon button (between the engine dropdown and save): only
+  // usable for the granular + sampler engines; greyed out (disabled) otherwise.
+  // (The icon-button display overrides [hidden], so disable rather than hide.)
   const isSampler = t.engineKey === "sampler";
   const wavBtn = t.el.querySelector(".sq-track__wav");
-  if (wavBtn) wavBtn.hidden = !(isGranular || isSampler);
+  if (wavBtn) wavBtn.disabled = !(isGranular || isSampler || isWavetable);
 }
 
 // Force all fx wet levels to 0 (100% dry) — used when switching a track to the

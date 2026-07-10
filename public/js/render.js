@@ -15,6 +15,7 @@ import { bestRollViewOct } from "./pianoRoll.js";
 import { applyCompressorConfig, setEQ, setFilter } from "./signal.js";
 import { state } from "./state.js";
 import { openAutAsModal, openCompAsModal, openEnvAsModal, openEqAsModal, openFilterAsModal, openFxAsModal, openGranularWavModal, openModAsModal, openRollAsModal, openSampleEditorModal, openTrackMenu } from "./stepEditor.js";
+import { openWavetableEditor } from "./wavetableEditor.js";
 import { attachGridInteraction, renderStepGrid } from "./stepGrid.js";
 import { duplicateTrack, extendPatternByDuplicate, removeTrack, resizePattern, resizeTrack, shiftTrackOctave, truncatePattern } from "./track.js";
 import { GRAN_DEFAULTS } from "./voices.js";
@@ -143,6 +144,7 @@ export function renderTrack(t) {
     wavBtn.addEventListener("click", () => {
       if (t.engineKey === "dm:granular") openGranularWavModal(t);
       else if (t.engineKey === "sampler") openSampleEditorModal(t);
+      else if (t.engineKey === "wt:akwf") openWavetableEditor(t);
     });
   }
   node.querySelector(".p-cutoff").addEventListener("input", e => setFilter(t, "cutoff", Number(e.target.value)));

@@ -69,6 +69,11 @@ html, body {
 .sq-logo span { font-size: 15px; }
 
 .sq-transport .sq-spacer { flex: 1; }
+/* Main controls fill the row and wrap internally; the right cluster (metronome +
+   clock + master meter) stays beside them, pinned to the right and never bumped
+   to its own line. */
+.sq-transport__main { flex: 1 1 0; min-width: 0; display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+.sq-transport__right { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
 
 .sq-field {
   display: inline-flex;
@@ -210,6 +215,19 @@ button.sq-btn--danger { color: var(--danger); }
   border: 0;
 }
 .sq-status.is-err { color: var(--danger); }
+/* Status on its own line at the top of the sticky transport, right-aligned. */
+.sq-status.sq-status--bar {
+  flex: 0 0 100%;
+  box-sizing: border-box;
+  text-align: right;
+  min-width: 0;
+  margin-bottom: 2px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 .sq-pattern-bar {
   display: flex;
@@ -351,6 +369,14 @@ main {
   max-width: 1400px;
   margin: 0 auto;
 }
+
+/* Add-track button lives under the track list. */
+.sq-add-track-row {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 16px 24px;
+}
+.sq-add-track-row #add-track { width: 100%; padding: 12px; border-style: dashed; }
 
 .sq-track {
   background: var(--bg-2);
@@ -894,6 +920,8 @@ main {
 /* Computer-keyboard target: only highlighted while kbd-notes mode is on. */
 #kbd-notes[aria-pressed="true"] { background: var(--accent-2); color: #0b0d10; border-color: var(--accent-2); }
 .sq-kbd-chord { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--fg-dim); }
+.sq-kbd-chord[hidden] { display: none !important; }
+#kbd-record:disabled, #kbd-capture:disabled, .sq-track__wav:disabled { opacity: 0.35; cursor: not-allowed; }
 .sq-kbd-chord[hidden] { display: none; }
 .sq-kbd-chord select { font-size: 11px; padding: 2px 4px; }
 #kbd-record .sq-btn-icon circle { fill: #e5484d; }
@@ -1221,6 +1249,20 @@ body.kbd-recording .sq-track.is-kbd-active { border-color: #e5484d; box-shadow: 
   justify-content: flex-end;
 }
 
+/* Wavetable editor modal. */
+.sq-wt__modal { width: min(94vw, 720px); gap: 10px; }
+.sq-wt__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 12px; color: var(--fg-dim); }
+.sq-wt__title { color: var(--fg); }
+.sq-wt__frames { display: flex; gap: 6px; flex-wrap: wrap; }
+.sq-wt__thumb { border: 1px solid var(--border); border-radius: 4px; cursor: pointer; }
+.sq-wt__thumb.is-sel { border-color: var(--accent); }
+.sq-wt__frames-ctl { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 11px; color: var(--fg-dim); }
+.sq-wt__frames-ctl select { font-size: 11px; padding: 2px 4px; }
+.sq-wt__canvas { width: 100%; height: auto; border: 1px solid var(--border); border-radius: 6px; background: #0e0f12; touch-action: none; cursor: crosshair; }
+.sq-wt__harm { display: flex; align-items: flex-end; gap: 3px; height: 60px; }
+.sq-wt__harm-bar { -webkit-appearance: slider-vertical; writing-mode: vertical-lr; width: 14px; height: 56px; }
+.sq-wt__hint { font-size: 10px; color: var(--fg-dim); opacity: 0.8; }
+
 /* Sample-editor + slicer modals. */
 .sq-samp__modal, .sq-slice__modal { width: min(94vw, 720px); gap: 10px; }
 .sq-samp__head, .sq-slice__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 12px; color: var(--fg-dim); }
@@ -1479,6 +1521,11 @@ body.kbd-recording .sq-track.is-kbd-active { border-color: #e5484d; box-shadow: 
     align-items: center;
     row-gap: 4px;
   }
+  /* Dissolve the desktop wrappers so the order-based mobile layout below applies
+     to the controls directly, as it did before the wrappers existed. */
+  .sq-transport__main, .sq-transport__right { display: contents; }
+  /* No physical keyboard on mobile — hide the computer-keyboard controls. */
+  #kbd-notes, #kbd-record, #kbd-capture, #kbd-chord { display: none !important; }
   .sq-transport .sq-logo { padding-right: 4px; gap: 6px; }
   .sq-transport .sq-logo img { width: 26px; height: 26px; }
   .sq-transport .sq-logo span { display: none; }

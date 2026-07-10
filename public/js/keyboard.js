@@ -7,12 +7,26 @@
 // near kbdBase) and the black keys play the accidental a semitone above the white
 // key to their left. With no scale it's a plain chromatic piano.
 
+import { currentBpm } from "./lfo.js";
 import { invertChord, state } from "./state.js";
 import { renderStepGrid } from "./stepGrid.js";
+import { resizeTrack } from "./track.js";
 import { SCALES, chordNotes, midiToScaleIndex, quantizeToScale, scaleIndexToMidi } from "./theory.js";
 import { ensureAudio } from "./transport.js";
 
 const KBD_REC_VEL = 0.85;
+const CAPTURE_WINDOW_SEC = 32;   // rolling lookback buffer for "capture"
+const CAPTURE_GAP_SEC = 1.5;     // silence gap that separates phrases
+
+// Rolling buffer of recently-played notes { midi, time } for Ableton-style
+// retroactive capture — always accumulating while the keyboard plays.
+const captureBuffer = [];
+function bufferForCapture(midi, time) {
+  captureBuffer.push({ midi, time });
+  const cutoff = time - CAPTURE_WINDOW_SEC;
+  while (captureBuffer.length && captureBuffer[0].time < cutoff) captureBuffer.shift();
+  if (captureBuffer.length > 4000) captureBuffer.splice(0, captureBuffer.length - 4000);
+}
 
 // Chromatic offset from the base note (state.kbdBase = the "a" key).
 const KEY_SEMITONES = {
@@ -38,10 +52,23 @@ function targetTrack() {
   return state.tracks[0] || null;
 }
 
+// True only for fields that actually consume typed letters, so a focused control
+// swallows the keys. A range slider (or checkbox/button) keeps focus after you
+// drag it but doesn't type — note keys should still play there without a re-click.
+const TEXT_INPUT_TYPES = new Set([
+  "text", "number", "search", "email", "password", "tel", "url",
+  "date", "time", "datetime-local", "month", "week",
+]);
 function isTypingTarget(el) {
   if (!el) return false;
+  if (el.isContentEditable) return true;
   const tag = el.tagName;
-  return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || el.isContentEditable;
+  // Only genuine text entry blocks note keys. A <select> keeps focus after you
+  // pick a value, and its letter type-ahead would otherwise steal note keys (and
+  // change the dropdown) — while the keyboard is on, note keys win instead.
+  if (tag === "TEXTAREA") return true;
+  if (tag === "INPUT") return TEXT_INPUT_TYPES.has((el.type || "text").toLowerCase());
+  return false;
 }
 
 // Resolve a key to a MIDI note for the current mode (chromatic or scale).
@@ -113,6 +140,61 @@ async function pressNote(k, midi) {
   }
 }
 
+// Ableton-style Capture: quantize the last played phrase (the tail of the rolling
+// buffer, after the most recent silence gap) into the active track's pattern,
+// sizing the clip to the phrase (rounded up to whole bars). Notes on the same
+// 16th step stack as root + polyphonic extras. Works whether or not playing.
+export function captureSequence() {
+  const t = targetTrack();
+  if (!t) return { ok: false, msg: "no active track" };
+  if (!captureBuffer.length) return { ok: false, msg: "nothing to capture — play some keys first" };
+  // Isolate the last contiguous phrase (after any gap > CAPTURE_GAP_SEC).
+  let start = 0;
+  for (let i = captureBuffer.length - 1; i > 0; i--) {
+    if (captureBuffer[i].time - captureBuffer[i - 1].time > CAPTURE_GAP_SEC) { start = i; break; }
+  }
+  const phrase = captureBuffer.slice(start);
+  const bpm = currentBpm();
+  const stepDur = (60 / bpm) / 4;          // one 16th-note step
+  const t0 = phrase[0].time;
+  const events = phrase.map(e => ({ midi: Math.round(e.midi), step: Math.max(0, Math.round((e.time - t0) / stepDur)) }));
+  const maxStep = events.reduce((m, e) => Math.max(m, e.step), 0);
+  const totalSteps = Math.min(128, Math.max(16, Math.ceil((maxStep + 1) / 16) * 16));
+  // Size the clip, then clear it for a fresh capture.
+  resizeTrack(t, totalSteps);
+  for (let i = 0; i < totalSteps; i++) {
+    t.steps[i] = 0; if (Array.isArray(t.lengths)) t.lengths[i] = 0;
+    if (Array.isArray(t.notes)) t.notes[i] = null;
+    if (Array.isArray(t.chords)) t.chords[i] = "";
+    if (Array.isArray(t.complexities)) t.complexities[i] = 0;
+    if (Array.isArray(t.extraNotes)) t.extraNotes[i] = null;
+    if (Array.isArray(t.extraLengths)) t.extraLengths[i] = null;
+  }
+  // Group by step (wrap into length); root = lowest, rest → extras.
+  const byStep = new Map();
+  for (const ev of events) {
+    const s = ev.step % totalSteps;
+    if (!byStep.has(s)) byStep.set(s, new Set());
+    byStep.get(s).add(ev.midi);
+  }
+  let noteCount = 0;
+  for (const [s, set] of byStep) {
+    const notes = [...set].sort((a, b) => a - b);
+    t.steps[s] = 1;
+    if (Array.isArray(t.lengths)) t.lengths[s] = 1;
+    if (Array.isArray(t.notes)) t.notes[s] = notes[0];
+    if (Array.isArray(t.velocities)) t.velocities[s] = KBD_REC_VEL;
+    const extras = notes.slice(1);
+    if (Array.isArray(t.extraNotes)) t.extraNotes[s] = extras.length ? extras : null;
+    if (Array.isArray(t.extraLengths)) t.extraLengths[s] = extras.length ? extras.map(() => 1) : null;
+    noteCount += notes.length;
+  }
+  if (!t.isDrumKit && byStep.size) t.lastEditedNote = t.notes[[...byStep.keys()].sort((a, b) => a - b)[0]];
+  captureBuffer.length = 0;
+  try { renderStepGrid(t); } catch {}
+  return { ok: true, msg: `captured ${noteCount} note${noteCount === 1 ? "" : "s"} into ${totalSteps} steps on "${t.name}"` };
+}
+
 function releaseNote(k) {
   const rec = held.get(k);
   held.delete(k);
@@ -172,6 +254,9 @@ function onKeyDown(e) {
   held.set(k, { t: null, midi, tones: null, usedNoteOn: false });
   e.preventDefault();
   state.kbdLast = kbdSelection(midi);   // remember for click-to-apply on a step
+  // Buffer for capture at press time (monotonic clock) — independent of whether
+  // audio is unlocked, so Capture works like Ableton's retroactive capture.
+  { const now = performance.now() / 1000; for (const n of tonesFor(midi)) bufferForCapture(n, now); }
   captureNote(midi);
   pressNote(k, midi);
 }

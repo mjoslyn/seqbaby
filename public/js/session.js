@@ -49,6 +49,7 @@ export function serializeSet() {
       fxConfig: JSON.parse(JSON.stringify(t.fxConfig)),
       midi: { ...t.midi },
       customConfig: t.customConfig ? JSON.parse(JSON.stringify(t.customConfig)) : null,
+      wavetable: t.wavetable?.frames?.length ? { frames: t.wavetable.frames.map(f => Array.from(f, x => Math.round(x * 1e4) / 1e4)) } : null,
       sampleSource: t.sampleSource ? { ...t.sampleSource } : null,
       slices: Array.isArray(t.slices) ? t.slices.slice() : [],
       sliceOn: !!t.sliceOn,
@@ -348,6 +349,7 @@ export function applySet(s) {
     Object.assign(t.fxConfig, td.fxConfig || {});
     Object.assign(t.midi, td.midi || {});
     t.customConfig = td.customConfig || null;
+    t.wavetable = td.wavetable?.frames?.length ? { frames: td.wavetable.frames.map(f => Array.from(f)) } : null;
     t.sampleSource = src;
     t.uploadAudio = uploadAudio;
     t.uploadAudioMime = uploadMime;

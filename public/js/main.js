@@ -5,9 +5,9 @@ import { loadBuffer, normalizeAudioBuffer } from "./buffers.js";
 import { BUNDLED_SAMPLES, SAMPLE_BASE, rebuildEngineCatalog } from "./catalog.js";
 import { LFO_KEYS, PATTERN_COUNT } from "./constants.js";
 import { isMobileDevice, setStatus } from "./dom.js";
-import { HELP_TIPS, ICON_BOUNCE, ICON_CHAIN, ICON_FINISH, ICON_METRONOME, ICON_NOW, ICON_REC, ICON_REPEAT } from "./icons.js";
+import { HELP_TIPS, ICON_BOUNCE, ICON_CAPTURE, ICON_CHAIN, ICON_FINISH, ICON_METRONOME, ICON_NOW, ICON_REC, ICON_REPEAT } from "./icons.js";
 import { applySampleSpeed, attachBpmDrag, rateFromSync, retuneSyncedLFOs } from "./lfo.js";
-import { initComputerKeyboard, resetKbdKeys } from "./keyboard.js";
+import { captureSequence, initComputerKeyboard, resetKbdKeys } from "./keyboard.js";
 import { autoAccents, parseMeter, redetectDrumKit, stepsPerBarForMeter } from "./meter.js";
 import { meterTick } from "./meters.js";
 import { setEngineKey } from "./params.js";
@@ -380,7 +380,19 @@ export function init() {
   const kbdBtn = document.getElementById("kbd-notes");
   // Chord mode panel — visible only while keyboard input is on.
   const kbdChordPanel = document.getElementById("kbd-chord");
-  const showKbdChord = (on) => { if (kbdChordPanel) kbdChordPanel.hidden = !on; };
+  const kbdCaptureBtn = document.getElementById("kbd-capture");
+  if (kbdCaptureBtn) kbdCaptureBtn.innerHTML = ICON_CAPTURE;
+  const showKbdChord = (on) => {
+    if (kbdChordPanel) kbdChordPanel.hidden = !on;
+    // Record + capture are only usable while the keyboard is on — grey them out
+    // otherwise (the icon-button display overrides [hidden], so use disabled).
+    if (kbdCaptureBtn) kbdCaptureBtn.disabled = !on;
+    if (recBtn) recBtn.disabled = !on;
+  };
+  if (kbdCaptureBtn) kbdCaptureBtn.addEventListener("click", () => {
+    const res = captureSequence();
+    setStatus(res.msg, !res.ok);
+  });
   if (kbdBtn) kbdBtn.addEventListener("click", () => {
     state.kbdNotesOn = !state.kbdNotesOn;
     kbdBtn.setAttribute("aria-pressed", String(state.kbdNotesOn));

@@ -1299,6 +1299,18 @@ export const GRAN_DEFAULTS = {
   gdetune: 0, gpan: 0.3, gpattern: "none", gsync: false, grate: "1/16",
 };
 
+// WaveShaper curve: tanh(drive·x). High drive strongly amplifies the (quiet)
+// grain sum near 0 while smoothly saturating peaks toward ±1 — makeup gain
+// without hard clipping.
+function makeGranularDriveCurve(drive = 12, n = 2048) {
+  const curve = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    const x = (i / (n - 1)) * 2 - 1;
+    curve[i] = Math.tanh(drive * x);
+  }
+  return curve;
+}
+
 export class GranularVoice {
   constructor(ctx, key, params, track) {
     this.ctx = ctx;
@@ -1308,6 +1320,16 @@ export class GranularVoice {
     this.output = ctx.createGain();
     this.output.gain.value = params.vol ?? 0.8;
     this.output.connect(ctx.destination);
+    // Two-stage makeup amp: the overlap normalization leaves the grain sum far
+    // quieter than the other engines and its level swings a lot with density, so
+    // a linear pre-gain lifts it hard, then a tanh shaper gives a soft ceiling —
+    // loud without hard-clipping, robust across sparse/dense clouds + quiet samples.
+    this.boost = ctx.createGain();
+    this.boost.gain.value = 12;
+    this.shaper = ctx.createWaveShaper();
+    this.shaper.curve = makeGranularDriveCurve(4);
+    this.boost.connect(this.shaper);
+    this.shaper.connect(this.output);
     this.buffer = track?.uploadBuffer ?? null;
     this.params = { ...params };
     this.active = new Set();
@@ -1485,7 +1507,7 @@ export class GranularVoice {
       src._pan = p;
     }
     src.connect(g);
-    tail.connect(this.output);
+    tail.connect(this.boost);
     src.onended = () => {
       try { src.disconnect(); } catch {}
       try { g.disconnect(); } catch {}
@@ -1502,6 +1524,8 @@ export class GranularVoice {
   }
   dispose() {
     this.silence(this.ctx.currentTime);
+    try { this.boost.disconnect(); } catch {}
+    try { this.shaper.disconnect(); } catch {}
     try { this.output.disconnect(); } catch {}
   }
 }
@@ -1540,8 +1564,11 @@ function loadWavetable(ctx) {
   return _wtLoading;
 }
 
+// Single-cycle frame length for custom wavetables built in the editor.
+export const WT_FRAME_LEN = 256;
+
 export class WavetableVoice {
-  constructor(ctx, key, params) {
+  constructor(ctx, key, params, track) {
     this.ctx = ctx;
     this.type = "wavetable";
     this.poly = true;
@@ -1557,8 +1584,38 @@ export class WavetableVoice {
     this.ampDecay = 0.3;  // (unused directly; kept for parity)
     this.ampRelease = 0.3;
     this.buffers = null;
+    // Custom multi-frame wavetable (built in the editor). When present it replaces
+    // the AKWF palette; the wave knob morphs (crossfades) across the frames.
+    this.frameBufs = null;   // AudioBuffer[] — one single-cycle buffer per frame
     loadWavetable(ctx).then(b => { this.buffers = b; }).catch(e => console.warn("wavetable load", e));
+    if (track?.wavetable?.frames?.length) this.setWavetable(track.wavetable.frames);
     this._applyParams();
+  }
+  /** Build per-frame single-cycle AudioBuffers from raw sample arrays. */
+  setWavetable(frames) {
+    if (!Array.isArray(frames) || !frames.length) { this.frameBufs = null; return; }
+    const sr = this.ctx.sampleRate;
+    this.frameBufs = frames.map(fr => {
+      const N = fr.length || WT_FRAME_LEN;
+      const b = this.ctx.createBuffer(1, N, sr);
+      b.getChannelData(0).set(Float32Array.from(fr));
+      return b;
+    });
+  }
+  /** Interpolate the two frames bracketing wavePos into one single-cycle buffer. */
+  _morphBuffer(pos) {
+    const bufs = this.frameBufs;
+    const n = bufs.length;
+    if (n === 1) return bufs[0];
+    const f = Math.max(0, Math.min(1, pos)) * (n - 1);
+    const i0 = Math.floor(f), i1 = Math.min(n - 1, i0 + 1), frac = f - i0;
+    if (frac < 1e-4) return bufs[i0];
+    const a = bufs[i0].getChannelData(0), b = bufs[i1].getChannelData(0);
+    const N = a.length;
+    const out = this.ctx.createBuffer(1, N, this.ctx.sampleRate);
+    const d = out.getChannelData(0);
+    for (let i = 0; i < N; i++) d[i] = a[i] * (1 - frac) + b[i] * frac;
+    return out;
   }
   _applyParams() {
     for (const k of ["harm", "timb", "morph", "decay"]) {
@@ -1585,9 +1642,13 @@ export class WavetableVoice {
   }
   getAudioParam(key) { return key === "vol" ? this.output.gain : null; }
   hit(midiNote, time, duration, velocity = 1) {
-    if (!this.buffers || !this.buffers.length) return;
-    const idx = Math.min(this.buffers.length - 1, Math.max(0, Math.round(this.wavePos * (this.buffers.length - 1))));
-    const buf = this.buffers[idx];
+    let buf;
+    if (this.frameBufs && this.frameBufs.length) {
+      buf = this._morphBuffer(this.wavePos);       // custom wavetable: morph frames
+    } else if (this.buffers && this.buffers.length) {
+      const idx = Math.min(this.buffers.length - 1, Math.max(0, Math.round(this.wavePos * (this.buffers.length - 1))));
+      buf = this.buffers[idx];                      // AKWF palette fallback
+    }
     if (!buf || !(buf.duration > 0)) return;
     const loopFreq = 1 / buf.duration;                       // Hz the raw cycle loops at
     const targetFreq = Tone.Frequency(midiNote, "midi").toFrequency();
@@ -1722,7 +1783,7 @@ export function buildVoiceForEngine(ctx, key, params, track) {
     case "custom":     return new CustomToneVoice(ctx, key, params, track?.customConfig ?? null);
     case "saved":      return new CustomToneVoice(ctx, key, params, e.config);
     case "granular":   return new GranularVoice(ctx, key, params, track);
-    case "wavetable":  return new WavetableVoice(ctx, key, params);
+    case "wavetable":  return new WavetableVoice(ctx, key, params, track);
   }
   throw new Error("unknown engine type: " + e.type);
 }
