@@ -52,12 +52,18 @@ const VISUAL_LATENCY_OVERRIDE = (() => {
 })();
 const IS_SAFARI = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
 const SAFARI_OUTPUT_LATENCY_EST = 0.18;
+// Paints land ~2-3 display frames after their scheduled time anyway (next rAF
+// + compositor), which already cancels small audio output latencies. Only
+// compensate beyond that, or Chrome visuals go late and the audio reads early.
+const DISPLAY_LAG_EST = 0.045;
 export function visualOutputLatency() {
   if (VISUAL_LATENCY_OVERRIDE !== null) return VISUAL_LATENCY_OVERRIDE;
   const ctx = state.audioCtx;
   if (!ctx) return 0;
-  if (ctx.outputLatency) return ctx.outputLatency;
-  return IS_SAFARI ? SAFARI_OUTPUT_LATENCY_EST : (ctx.baseLatency || 0);
+  // Safari constant is ear-tuned as a net value — use as-is.
+  if (IS_SAFARI) return SAFARI_OUTPUT_LATENCY_EST;
+  const reported = ctx.outputLatency || ctx.baseLatency || 0;
+  return Math.max(0, reported - DISPLAY_LAG_EST);
 }
 
 /**
