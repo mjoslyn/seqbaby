@@ -7,7 +7,7 @@ import { LFO_KEYS, PATTERN_COUNT } from "./constants.js";
 import { isMobileDevice, setStatus } from "./dom.js";
 import { HELP_TIPS, ICON_BOUNCE, ICON_CAPTURE, ICON_CHAIN, ICON_FINISH, ICON_METRONOME, ICON_NOW, ICON_REC, ICON_REPEAT } from "./icons.js";
 import { applySampleSpeed, attachBpmDrag, rateFromSync, retuneSyncedLFOs } from "./lfo.js";
-import { captureSequence, initComputerKeyboard, resetKbdKeys } from "./keyboard.js";
+import { captureSequence, initComputerKeyboard, isDesktopKeyboard, resetKbdKeys } from "./keyboard.js";
 import { autoAccents, parseMeter, redetectDrumKit, stepsPerBarForMeter } from "./meter.js";
 import { meterTick } from "./meters.js";
 import { setEngineKey } from "./params.js";
@@ -375,38 +375,23 @@ export function init() {
     createTrack({ name: `track ${state.tracks.length + 1}`, engineKey: "plaits:0" });
   });
 
-  // Computer keyboard → notes.
-  initComputerKeyboard();
-  const kbdBtn = document.getElementById("kbd-notes");
-  // Chord mode panel — visible only while keyboard input is on.
+  // Computer keyboard → notes. On desktop it's always active — letter keys play
+  // the active track's voice unless a text field is focused (see keyboard.js).
+  // Skipped on mobile: no physical keyboard, and the kbd controls are hidden by
+  // CSS below 768px.
   const kbdChordPanel = document.getElementById("kbd-chord");
   const kbdCaptureBtn = document.getElementById("kbd-capture");
   if (kbdCaptureBtn) kbdCaptureBtn.innerHTML = ICON_CAPTURE;
-  const showKbdChord = (on) => {
-    if (kbdChordPanel) kbdChordPanel.hidden = !on;
-    // Record + capture are only usable while the keyboard is on — grey them out
-    // otherwise (the icon-button display overrides [hidden], so use disabled).
-    if (kbdCaptureBtn) kbdCaptureBtn.disabled = !on;
-    if (recBtn) recBtn.disabled = !on;
-  };
+  if (isDesktopKeyboard()) {
+    initComputerKeyboard();
+    if (kbdChordPanel) kbdChordPanel.hidden = false;
+    if (kbdCaptureBtn) kbdCaptureBtn.disabled = false;
+    document.body.classList.add("kbd-notes-on");
+    if (state.activeTrackId == null && state.tracks[0]) setActiveTrack(state.tracks[0]);
+  }
   if (kbdCaptureBtn) kbdCaptureBtn.addEventListener("click", () => {
     const res = captureSequence();
     setStatus(res.msg, !res.ok);
-  });
-  if (kbdBtn) kbdBtn.addEventListener("click", () => {
-    state.kbdNotesOn = !state.kbdNotesOn;
-    kbdBtn.setAttribute("aria-pressed", String(state.kbdNotesOn));
-    kbdBtn.classList.toggle("is-on", state.kbdNotesOn);
-    document.body.classList.toggle("kbd-notes-on", state.kbdNotesOn);
-    showKbdChord(state.kbdNotesOn);
-    if (state.kbdNotesOn) {
-      if (state.activeTrackId == null && state.tracks[0]) setActiveTrack(state.tracks[0]);
-      setStatus("computer keyboard → notes: on — a s d f… = white keys, w e t y u = black, z/x = octave. click a track to target it.");
-    } else {
-      resetKbdKeys();
-      setStatus("computer keyboard notes off");
-      setKbdRecord(false);   // no keyboard input → nothing to record
-    }
   });
   const chordTypeSel = document.getElementById("kbd-chord-type");
   if (chordTypeSel) { chordTypeSel.value = state.kbdChordType; chordTypeSel.addEventListener("change", () => { state.kbdChordType = chordTypeSel.value; }); }
@@ -415,7 +400,7 @@ export function init() {
 
   // Record computer-keyboard notes into the active track (while the transport plays).
   const recBtn = document.getElementById("kbd-record");
-  if (recBtn) recBtn.innerHTML = ICON_REC;
+  if (recBtn) { recBtn.innerHTML = ICON_REC; recBtn.disabled = !isDesktopKeyboard(); }
   const setKbdRecord = (on) => {
     state.kbdRecord = on;
     if (recBtn) recBtn.setAttribute("aria-pressed", String(on));
@@ -423,14 +408,6 @@ export function init() {
   };
   if (recBtn) recBtn.addEventListener("click", () => {
     if (!state.kbdRecord) {
-      // Recording implies live keyboard input — arm the keyboard if it's off.
-      if (!state.kbdNotesOn) {
-        state.kbdNotesOn = true;
-        kbdBtn?.setAttribute("aria-pressed", "true");
-        kbdBtn?.classList.add("is-on");
-        document.body.classList.add("kbd-notes-on");
-        showKbdChord(true);
-      }
       if (state.activeTrackId == null && state.tracks[0]) setActiveTrack(state.tracks[0]);
       setKbdRecord(true);
       setStatus("recording keyboard → active track — notes land on the current step. click a track to target it.");

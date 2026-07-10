@@ -917,8 +917,7 @@ main {
 }
 .sq-track.is-soloed { border-color: var(--accent); }
 
-/* Computer-keyboard target: only highlighted while kbd-notes mode is on. */
-#kbd-notes[aria-pressed="true"] { background: var(--accent-2); color: #0b0d10; border-color: var(--accent-2); }
+/* The computer keyboard is always active; the targeted track is highlighted. */
 .sq-kbd-chord { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--fg-dim); }
 .sq-kbd-chord[hidden] { display: none !important; }
 #kbd-record:disabled, #kbd-capture:disabled, .sq-track__wav:disabled { opacity: 0.35; cursor: not-allowed; }
@@ -1525,7 +1524,7 @@ body.kbd-recording .sq-track.is-kbd-active { border-color: #e5484d; box-shadow: 
      to the controls directly, as it did before the wrappers existed. */
   .sq-transport__main, .sq-transport__right { display: contents; }
   /* No physical keyboard on mobile — hide the computer-keyboard controls. */
-  #kbd-notes, #kbd-record, #kbd-capture, #kbd-chord { display: none !important; }
+  #kbd-label, #kbd-record, #kbd-capture, #kbd-chord { display: none !important; }
   .sq-transport .sq-logo { padding-right: 4px; gap: 6px; }
   .sq-transport .sq-logo img { width: 26px; height: 26px; }
   .sq-transport .sq-logo span { display: none; }

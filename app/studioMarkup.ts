@@ -11,8 +11,8 @@ export const STUDIO_BODY = String.raw`
       <span>seqbaby</span>
     </div>
     <button id="play" class="sq-play">play</button>
-    <button id="kbd-record" class="sq-btn--ghost sq-icon-btn" type="button" disabled aria-pressed="false" aria-label="record keyboard notes" title="record computer-keyboard notes into the active track while the transport plays (enable the keyboard first)"></button>
-    <button id="kbd-capture" class="sq-btn--ghost sq-icon-btn" type="button" disabled aria-label="capture keyboard notes" title="capture the notes you just played on the keyboard into the active track (retroactive — enable the keyboard first)"></button>
+    <button id="kbd-record" class="sq-btn--ghost sq-icon-btn" type="button" aria-pressed="false" aria-label="record keyboard notes" title="record computer-keyboard notes into the active track while the transport plays"></button>
+    <button id="kbd-capture" class="sq-btn--ghost sq-icon-btn" type="button" aria-label="capture keyboard notes" title="capture the notes you just played on the keyboard into the active track (retroactive)"></button>
     <div class="sq-field"><label for="bpm">bpm</label><input id="bpm" type="number" value="110" min="40" max="240" /></div>
     <div class="sq-field"><label for="swing">swing</label><input id="swing" type="range" min="0" max="0.5" step="0.01" value="0" /></div>
     <div class="sq-scale__field">
@@ -21,8 +21,8 @@ export const STUDIO_BODY = String.raw`
       <select id="scale-mode"></select>
       <button id="note-colors" class="sq-btn--ghost sq-icon-btn" aria-pressed="false" aria-label="note colors" title="toggle diatonic note coloring on the piano roll + step grid"></button>
     </div>
-    <button id="kbd-notes" class="sq-btn--ghost" aria-pressed="false" title="play the active track from your computer keyboard (a s d f… = white keys, w e t y u = black, z/x = octave)">kbd</button>
-    <div id="kbd-chord" class="sq-kbd-chord" hidden>
+    <span id="kbd-label" class="sq-kbd-chord__lbl" title="play the active track from your computer keyboard (a s d f… = white keys, w e t y u = black, z/x = octave)">kbd</span>
+    <div id="kbd-chord" class="sq-kbd-chord">
       <span class="sq-kbd-chord__lbl">chord</span>
       <select id="kbd-chord-type" title="chord mode — play each key as a chord (off = single notes)">
         <option value="">off</option>

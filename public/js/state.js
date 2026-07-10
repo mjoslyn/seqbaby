@@ -51,7 +51,7 @@ export const state = {
   // Computer-keyboard-as-notes: when on, letter keys play the active track's
   // voice (chromatic piano layout, z/x shift octave). activeTrackId is the track
   // that receives them (last clicked; defaults to the first track).
-  kbdNotesOn: false,
+  kbdNotesOn: true,     // keyboard is always active (only blocked while a text field is focused)
   kbdRecord: false,     // capture keyboard notes into the active track's steps while playing
   kbdBase: 60,          // MIDI note of the "a" key (C4); shifted by z/x
   kbdChordType: "",     // chord mode: "" = single notes, else each key plays this chord type

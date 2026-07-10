@@ -1,6 +1,7 @@
-// Computer keyboard → notes. When state.kbdNotesOn is on, letter keys play the
-// active track's voice, sustaining while held (note-on on keydown, note-off on
-// keyup). Layout is Ableton-style: bottom row = white keys (a s d f g h j k l),
+// Computer keyboard → notes. Letter keys always play the active track's voice
+// (except while a text field is focused), sustaining while held (note-on on
+// keydown, note-off on keyup). Layout is Ableton-style: bottom row = white keys
+// (a s d f g h j k l),
 // top row = black keys (w e t y u o), z / x shift the octave.
 //
 // When a scale is active the WHITE keys map to the scale's degrees (root anchored
@@ -37,6 +38,11 @@ const KEY_SEMITONES = {
 // above the white key to their left.
 const WHITE_DEGREE = { a: 0, s: 1, d: 2, f: 3, g: 4, h: 5, j: 6, k: 7, l: 8, p: 9 };
 const BLACK_LEFT   = { w: "a", e: "s", t: "f", y: "g", u: "h", o: "k" };
+
+// Desktop-only: mobile has no physical keyboard (and the kbd controls are hidden
+// by CSS below the 768px breakpoint), so note keys are gated to desktop widths.
+const _desktopMQ = typeof matchMedia === "function" ? matchMedia("(min-width: 769px)") : null;
+export function isDesktopKeyboard() { return _desktopMQ ? _desktopMQ.matches : true; }
 
 const HELD_HIT_DUR = 1.5;      // fallback note length for voices without note-off
 
@@ -243,7 +249,8 @@ function captureNote(pressedMidi) {
 }
 
 function onKeyDown(e) {
-  if (!state.kbdNotesOn || e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
+  if (!isDesktopKeyboard()) return;
   if (isTypingTarget(e.target)) return;
   const k = e.key.toLowerCase();
   if (k === "z") { state.kbdBase = Math.max(0, state.kbdBase - 12); e.preventDefault(); return; }
