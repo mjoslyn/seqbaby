@@ -38,6 +38,28 @@ export function paintNowIndicator() {
 
 // ---- transport ---------------------------------------------------------
 
+// How far the audible output trails the render clock, used to delay the
+// playhead/beat visuals so they track what you HEAR. Chrome reports it
+// (ctx.outputLatency, including Bluetooth). Safari has no outputLatency API
+// and its real render→speaker latency on macOS is large enough to see (the
+// playhead visibly leads the sound), so it gets an ear-tuned estimate.
+// `?vlat=<seconds>` overrides for calibration or unusual outputs.
+const VISUAL_LATENCY_OVERRIDE = (() => {
+  const v = new URLSearchParams(location.search).get("vlat");
+  if (v === null) return null;
+  const n = Number(v);
+  return Number.isFinite(n) && n >= 0 ? n : null;
+})();
+const IS_SAFARI = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+const SAFARI_OUTPUT_LATENCY_EST = 0.18;
+export function visualOutputLatency() {
+  if (VISUAL_LATENCY_OVERRIDE !== null) return VISUAL_LATENCY_OVERRIDE;
+  const ctx = state.audioCtx;
+  if (!ctx) return 0;
+  if (ctx.outputLatency) return ctx.outputLatency;
+  return IS_SAFARI ? SAFARI_OUTPUT_LATENCY_EST : (ctx.baseLatency || 0);
+}
+
 /**
  * Lazily build the AudioContext, master bus, and every track voice on the
  * first play. Safe to call repeatedly.
@@ -379,11 +401,8 @@ export async function togglePlay() {
       }
     }
     // Paint at the time the audio actually reaches the speakers, not when the
-    // graph renders it. `time` is render time; the DAC emits it outputLatency
-    // later — small on Chrome, but large enough on Safari (and any Bluetooth
-    // output) that the playhead visibly leads the sound. Safari doesn't expose
-    // outputLatency, so fall back to baseLatency (partial compensation).
-    const drawAt = time + (state.audioCtx.outputLatency || state.audioCtx.baseLatency || 0);
+    // graph renders it (see visualOutputLatency above).
+    const drawAt = time + visualOutputLatency();
     Tone.Draw.schedule(paintNowIndicator, drawAt);
     Tone.Draw.schedule(() => paintBeatIndicator(state.tick), drawAt);
     if (state.metronome && state.tick % 4 === 0) fireMetronome(time, state.tick % 16 === 0);
