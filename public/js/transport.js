@@ -101,11 +101,30 @@ export async function ensureAudio() {
   // hasn't actually started pumping — sound only appears after a visibility
   // change. A suspend+resume cycle forces iOS to re-engage the audio session
   // and start rendering the worklet graph. Best-effort; ignore failures.
-  try {
-    await state.audioCtx.suspend();
-    await state.audioCtx.resume();
-  } catch (e) {
-    console.warn("audio kick cycle failed", e);
+  //
+  // TOUCH DEVICES ONLY. On desktop Chrome this cycle runs many awaits past the
+  // original play-click gesture (Tone.start → worklet load → voice build), so
+  // the resume() after suspend() is no longer covered by user activation and
+  // Chrome silently rejects it — leaving the context suspended and the app
+  // dead-silent even though the status line reads "ready". The kick is only
+  // needed for the iOS renderer, so gate it to touch devices.
+  const isTouch = ("ontouchstart" in window) || (navigator.maxTouchPoints || 0) > 0;
+  if (isTouch) {
+    try {
+      await state.audioCtx.suspend();
+      await state.audioCtx.resume();
+    } catch (e) {
+      console.warn("audio kick cycle failed", e);
+    }
+  }
+  // Belt-and-suspenders: if the context is still suspended here (e.g. an
+  // earlier resume was rejected), the status readout would misleadingly show
+  // "ready". Try one more resume and surface the real state.
+  if (state.audioCtx.state === "suspended") {
+    try { await state.audioCtx.resume(); } catch (e) { console.warn("final resume failed", e); }
+    if (state.audioCtx.state === "suspended") {
+      console.warn("audioCtx still suspended after ensureAudio — audio will be silent");
+    }
   }
 }
 
