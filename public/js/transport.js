@@ -38,6 +38,28 @@ export function paintNowIndicator() {
 
 // ---- transport ---------------------------------------------------------
 
+// How far the audible output trails the render clock, used to delay the
+// playhead/beat visuals so they track what you HEAR. Chrome reports it
+// (ctx.outputLatency, including Bluetooth). Safari has no outputLatency API
+// and its real render→speaker latency on macOS is large enough to see (the
+// playhead visibly leads the sound), so it gets an ear-tuned estimate.
+// `?vlat=<seconds>` overrides for calibration or unusual outputs.
+const VISUAL_LATENCY_OVERRIDE = (() => {
+  const v = new URLSearchParams(location.search).get("vlat");
+  if (v === null) return null;
+  const n = Number(v);
+  return Number.isFinite(n) && n >= 0 ? n : null;
+})();
+const IS_SAFARI = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+const SAFARI_OUTPUT_LATENCY_EST = 0.18;
+export function visualOutputLatency() {
+  if (VISUAL_LATENCY_OVERRIDE !== null) return VISUAL_LATENCY_OVERRIDE;
+  const ctx = state.audioCtx;
+  if (!ctx) return 0;
+  if (ctx.outputLatency) return ctx.outputLatency;
+  return IS_SAFARI ? SAFARI_OUTPUT_LATENCY_EST : (ctx.baseLatency || 0);
+}
+
 /**
  * Lazily build the AudioContext, master bus, and every track voice on the
  * first play. Safe to call repeatedly.
@@ -77,8 +99,15 @@ export async function ensureAudio() {
     // Tap pre-limiter so the clip indicator still warns when the mix is hot.
     state.masterGain.connect(state.masterAnalyser);
   }
-  await wosc.loadOscillator(state.audioCtx);
-  await ensureMidi().catch(() => null);
+  // Worklet WASM is kicked off at init() (loadWorklet below is single-flight),
+  // so this await is usually instant by the time the user hits play.
+  await loadWorklet();
+  // Web MIDI is NOT awaited here. Chrome 124+ shows a permission prompt for
+  // requestMIDIAccess even without sysex; awaiting it stalls audio init on the
+  // prompt and burns the play click's user activation, after which the context
+  // resume() below gets silently rejected and the app starts dead-silent. It's
+  // requested in the background — and only when a track actually uses MIDI.
+  requestMidiIfNeeded();
   for (const t of state.tracks) {
     try { ensureFxRack(t); } catch (e) { console.warn("fx rack init failed for", t.name, e); }
     if (!t.voice) {
@@ -125,6 +154,43 @@ export async function ensureAudio() {
     if (state.audioCtx.state === "suspended") {
       console.warn("audioCtx still suspended after ensureAudio — audio will be silent");
     }
+  }
+}
+
+/**
+ * Load the Plaits AudioWorklet + WASM exactly once. Single-flight so a preload
+ * at init() and the await in ensureAudio can't double-register the processor;
+ * a failed load clears the slot so the next play retries.
+ * @returns {Promise<void>}
+ */
+export function loadWorklet() {
+  if (!state.woscLoad) {
+    state.woscLoad = wosc.loadOscillator(state.audioCtx);
+    state.woscLoad.catch(() => { state.woscLoad = null; });
+  }
+  return state.woscLoad;
+}
+
+/**
+ * Request Web MIDI access in the background — but only if a track actually
+ * uses a MIDI engine (the Chrome permission prompt shouldn't appear for
+ * sessions that never touch MIDI). Once granted, wire the outputs onto any
+ * already-built MIDI voices. Never awaited on the play path.
+ */
+export function requestMidiIfNeeded() {
+  if (state.midi) { wireMidiOutputs(); return; }
+  const anyMidi = state.tracks.some(t => engineByKey(t.engineKey)?.type === "midi");
+  if (!anyMidi) return;
+  ensureMidi().then(wireMidiOutputs).catch(() => null);
+}
+
+function wireMidiOutputs() {
+  if (!state.midi) return;
+  for (const t of state.tracks) {
+    if (t.voice?.type !== "midi") continue;
+    t.voice.setChannel(t.midi.channel);
+    const out = state.midi.outputs.get(t.midi.outputId);
+    if (out) t.voice.setOutput(out);
   }
 }
 
@@ -334,8 +400,11 @@ export async function togglePlay() {
         slot++;
       }
     }
-    Tone.Draw.schedule(paintNowIndicator, time);
-    Tone.Draw.schedule(() => paintBeatIndicator(state.tick), time);
+    // Paint at the time the audio actually reaches the speakers, not when the
+    // graph renders it (see visualOutputLatency above).
+    const drawAt = time + visualOutputLatency();
+    Tone.Draw.schedule(paintNowIndicator, drawAt);
+    Tone.Draw.schedule(() => paintBeatIndicator(state.tick), drawAt);
     if (state.metronome && state.tick % 4 === 0) fireMetronome(time, state.tick % 16 === 0);
     state.tick++;
     // manual pattern queue: when switch-mode is "finish" and the user queued a
@@ -358,13 +427,25 @@ export async function togglePlay() {
     }
   }, "16n");
 
-  // Start in 100 ms with offset 0. The +0.1 lookahead keeps the first "16n"
-  // callbacks from landing at `time < currentTime` on cold start (context drifted
-  // forward during ensureAudio) — the Math.max clamp above would otherwise pile
-  // their hits onto the same instant, making the first bar unplayable. The
-  // explicit offset 0 is the canonical way to rewind, avoiding the stop/cancel/
-  // position dance which in Tone 15 can leave the first events unscheduled.
-  Tone.Transport.start("+0.1", 0);
+  // Start with offset 0 — the explicit offset is the canonical way to rewind,
+  // avoiding the stop/cancel/position dance which in Tone 15 can leave the
+  // first events unscheduled. The lead keeps the first "16n" callbacks from
+  // landing at `time < currentTime` (the Math.max clamp above would otherwise
+  // pile their hits onto one instant, making the first bar unplayable).
+  //
+  // The lead is adaptive: when the output pipeline only just started running
+  // (first-ever play, and the play click itself was the unlocking gesture),
+  // macOS Core Audio drops the first fraction of a second of DAC output while
+  // the device spins up — the context clock advances but nothing is audible,
+  // so a 100 ms lead lands the opening notes inside the drop window ("playhead
+  // moves, no sound"). Give a cold output a longer runway; warm starts (the
+  // usual case — init()'s first-gesture unlock resumed the context long before
+  // play, and the keep-alive node holds the device open) keep the snappy 0.1 s.
+  if (!state._outputRunningSince && state.audioCtx.state === "running") {
+    state._outputRunningSince = performance.now();
+  }
+  const outputAgeMs = performance.now() - (state._outputRunningSince ?? performance.now());
+  Tone.Transport.start(outputAgeMs < 1500 ? "+0.5" : "+0.1", 0);
   state.playing = true;
   btn.textContent = "stop";
   btn.classList.add("is-playing");
