@@ -378,8 +378,14 @@ export async function togglePlay() {
         slot++;
       }
     }
-    Tone.Draw.schedule(paintNowIndicator, time);
-    Tone.Draw.schedule(() => paintBeatIndicator(state.tick), time);
+    // Paint at the time the audio actually reaches the speakers, not when the
+    // graph renders it. `time` is render time; the DAC emits it outputLatency
+    // later — small on Chrome, but large enough on Safari (and any Bluetooth
+    // output) that the playhead visibly leads the sound. Safari doesn't expose
+    // outputLatency, so fall back to baseLatency (partial compensation).
+    const drawAt = time + (state.audioCtx.outputLatency || state.audioCtx.baseLatency || 0);
+    Tone.Draw.schedule(paintNowIndicator, drawAt);
+    Tone.Draw.schedule(() => paintBeatIndicator(state.tick), drawAt);
     if (state.metronome && state.tick % 4 === 0) fireMetronome(time, state.tick % 16 === 0);
     state.tick++;
     // manual pattern queue: when switch-mode is "finish" and the user queued a

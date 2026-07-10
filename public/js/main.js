@@ -300,7 +300,12 @@ export function init() {
   // playback, so we can afford a generous window — more so on mobile.
   try {
     const ctxWrap = Tone.getContext();
-    ctxWrap.lookAhead = isMobileDevice() ? 0.25 : 0.15;
+    // Safari's main-thread timers fire late more often than Chrome's, which
+    // pushes scheduled hits into the Math.max "now" clamp in the transport
+    // loop (audio lands late relative to the beat). Give it the same wider
+    // window as mobile; latency is irrelevant for pattern playback.
+    const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+    ctxWrap.lookAhead = (isMobileDevice() || isSafari) ? 0.25 : 0.15;
   } catch (e) { console.warn("lookAhead tune failed", e); }
   // Track when the output pipeline first actually starts running, and pin it
   // open. Two jobs:
