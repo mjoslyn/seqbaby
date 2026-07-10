@@ -126,47 +126,6 @@ export async function ensureAudio() {
       console.warn("audioCtx still suspended after ensureAudio — audio will be silent");
     }
   }
-  await warmUpOutput();
-}
-
-/**
- * Bridge the cold-start output gap. After a first-ever resume() the context
- * clock begins advancing immediately — so Tone.Draw paints the playhead — but
- * on macOS Core Audio the physical output device drops its first fraction of a
- * second of samples while it spins up. With the transport leading by only
- * ~100 ms, the opening bar lands inside that drop window: playhead moves, no
- * sound, for a cold start only. Two-part fix, both run once (ensureAudio
- * early-returns on subsequent plays):
- *
- *   1. Attach a permanently-silent ConstantSource keep-alive so the DAC stays
- *      engaged for the rest of the session — later plays never re-warm.
- *   2. Busy-wait (async) until the audio clock has genuinely advanced in real
- *      time, confirming the device is pumping, before returning to togglePlay
- *      and starting the transport. Bounded so a stuck clock can't hang play.
- */
-async function warmUpOutput() {
-  const ctx = state.audioCtx;
-  if (!ctx || ctx.state !== "running") return;
-  // (1) Session-long silent keep-alive — offset 0 is pure DC (inaudible) but
-  // keeps the render graph and output device alive between plays.
-  if (!state._keepAlive) {
-    try {
-      const ka = ctx.createConstantSource();
-      ka.offset.value = 0;
-      ka.connect(ctx.destination);
-      ka.start();
-      state._keepAlive = ka;
-    } catch (e) { console.warn("keep-alive init failed", e); }
-  }
-  // (2) Wait for the render clock to advance ~0.25 s of real time, capped at
-  // 1.2 s of wall-clock so a misbehaving device can't block play indefinitely.
-  try {
-    const startCtx = ctx.currentTime;
-    const startWall = performance.now();
-    while (ctx.currentTime - startCtx < 0.25 && performance.now() - startWall < 1200) {
-      await new Promise(r => setTimeout(r, 20));
-    }
-  } catch (e) { console.warn("output warmup wait failed", e); }
 }
 
 export async function ensureMidi() {
