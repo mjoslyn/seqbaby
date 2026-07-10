@@ -303,6 +303,22 @@ export function init() {
     ctxWrap.lookAhead = isMobileDevice() ? 0.25 : 0.15;
   } catch (e) { console.warn("lookAhead tune failed", e); }
   initSilentAudioLoop();
+  // Chrome/Safari autoplay policy: an AudioContext created before a user gesture
+  // starts "suspended", and only a real user gesture can resume it. The play
+  // button primes it synchronously, but a session might first press a note key,
+  // drag a slider, or click a step — none of which resumed the context, so on
+  // Chrome desktop it could stay suspended and "audio won't happen." Resume it on
+  // the first gesture of ANY kind (and again if the browser ever re-suspends it).
+  // Capture-phase + passive so it runs before any handler and never blocks it.
+  // The resume() call is synchronous within the gesture task, which is what the
+  // autoplay policy requires. Cheap no-op once the context is running.
+  const unlockAudio = () => {
+    const ctx = state.audioCtx;
+    if (ctx && ctx.state === "suspended") ctx.resume().catch(() => {});
+  };
+  for (const ev of ["pointerdown", "keydown", "touchstart"]) {
+    document.addEventListener(ev, unlockAudio, { capture: true, passive: true });
+  }
   rebuildEngineCatalog();
   requestAnimationFrame(meterTick);
 
