@@ -1,397 +1,374 @@
 # seqbaby
 
-Multi-engine browser step sequencer. Mutable Instruments Plaits (via
-`@vectorsize/woscillators`) plus Tone.js drum/synth recipes (808/909/303 etc.),
-analog-mono emulator voices (MiniBrute, Moog, Juno-60, electric guitar, electric
-bass), drum samples, user uploads, saved Tone.js patches, and Web MIDI — all
-triggerable from a 32-pattern bank with filter / env / fx / eq / comp / mod per
-track.
+Multi-engine browser step sequencer. A hand-written vanilla Web Audio engine
+(Mutable Instruments Plaits via `@vectorsize/woscillators`, Tone.js drum/synth
+recipes, seven analog-mono emulators, wavetable + granular + unified sampler
+engines, Web MIDI) wrapped in a thin Next.js + Supabase shell for accounts,
+cloud songs, a patch gallery, and share links. 32-pattern bank with filter /
+env / fx / eq / comp / mod / automation per track.
 
 ## Tech stack
 
-- Frontend: vanilla ES modules in `public/`, Tone.js 15 via CDN, `woscillators.js`
-  (Plaits WASM port) served from `public/`. No bundler — change files, reload.
-- Backend (sessions sharing only):
-  - Local dev: `server.js` (Node 20+, `node --env-file=.env --watch`), plain HTTP,
-    serves `public/` + handles `/api/share`.
-  - Deployed: Netlify. Static files from `public/`; `/api/share` routes to
-    `netlify/functions/share.mjs` which imports from `lib/api.js`. Redirect
-    configured in `netlify.toml`.
-- Persistence:
-  - localStorage keys: `seqbaby.patches.v1` (saved Tone.js patches),
-    `seqbaby.sets.v1` (saved sessions).
-  - Netlify Blobs (`@netlify/blobs`) for shareable session links. Local dev
-    uses an in-memory Map fallback (lost on server restart).
+- **Shell**: Next.js 15 (App Router) + React 19 in `app/`. SSRs the engine's
+  static DOM (`app/studioMarkup.ts`), then `app/ScriptLoader.tsx` injects the
+  engine scripts in order: Tone.js 15 (CDN) → `public/woscillators.js` →
+  `public/js/main.js` (ES module). `middleware.ts` refreshes the Supabase
+  session on every request *except* static engine assets.
+- **Engine**: ~35 dependency-free vanilla ES modules in `public/js/`. No
+  bundler — edit, reload. `window.seqbaby` (from `appApi.js`) exposes `state`
+  and serialize/apply hooks to the React shell (typed in `app/seqbaby.d.ts`).
+- **Accounts + data**: Supabase (Postgres + Auth + RLS). Tables: `profiles`,
+  `songs`, `patches` (see `supabase/migrations/`). Server actions in
+  `app/{songs,patches,profile,auth,account}/actions.ts`.
+- **Anonymous sharing**: `app/api/share/route.ts` (public songs rows);
+  `lib/api.js` + `netlify/functions/share.mjs` are the legacy Netlify Blobs
+  path.
+- **Persistence (local)**: localStorage `seqbaby.patches.v1` (saved patches),
+  `seqbaby.sets.v1` (saved sessions).
+- **Deploy**: Netlify via `@netlify/plugin-nextjs` (`netlify.toml`, Node 22).
+  Push to `main` auto-deploys production; branch pushes get deploy previews
+  (stable alias: `<branch-with-dashes>--seqbaby.netlify.app`).
 
 ## Layout
 
 ```
 .
+├── app/                       Next.js shell — routing, auth, account UI, server actions
+│   ├── page.tsx               studio route: SSRs engine DOM, boots engine, AccountBar
+│   ├── studioMarkup.ts        engine's static DOM skeleton (raw HTML string)
+│   ├── ScriptLoader.tsx       injects Tone → woscillators → js/main.js in order
+│   ├── AccountBar/SongsMenu/PatchesMenu/SaveButton/OpenSongOnLoad.tsx
+│   ├── login/ settings/ u/[username]/       auth, account settings, public profiles
+│   ├── api/share/route.ts     anonymous ?s=<slug> share endpoint
+│   └── {songs,patches,profile,auth,account}/actions.ts   Supabase server actions
 ├── public/
-│   ├── index.html         UI shell + <template> for tracks + OG meta + favicon
-│   ├── app.js             ALL client logic — single file
-│   ├── style.css
-│   ├── woscillators.js    Plaits WASM port, exposes window.woscillators
-│   ├── favicon.svg
-│   └── share.{svg,png}    1200×630 OpenGraph card (png rendered from svg)
+│   ├── js/                    THE ENGINE — see module map below
+│   ├── woscillators.js        Plaits WASM port, exposes window.woscillators
+│   ├── wavetables/akwf/       bundled AKWF wavetables (CC0)
+│   └── style.css  favicon.svg  share.{svg,png}
 ├── lib/
-│   └── api.js             Shared share put/get fns (Netlify Blobs + memory fallback)
-├── netlify/functions/     Thin wrapper: share
-├── server.js              Local Node HTTP server wrapping lib/api.js
-├── netlify.toml           publish=public, functions=netlify/functions, redirects
-├── .env.example           PORT
-└── package.json           "dev" = node --watch --env-file=.env server.js
+│   ├── supabase/{client,server,middleware}.ts   Supabase SSR helpers
+│   └── api.js                 legacy Blobs share put/get (+ in-memory dev fallback)
+├── middleware.ts              Supabase session refresh (skips engine assets)
+├── supabase/migrations/       profiles, songs, patches, delete_own_account RPC
+├── netlify/functions/share.mjs  legacy function wrapper
+├── server.js                  legacy static server (npm run legacy:dev)
+└── netlify.toml  next.config.mjs  tsconfig.json (excludes public/js from TS)
 ```
+
+### Engine module map (`public/js/`)
+
+- `main.js` — bootstrap `init()`: creates the AudioContext, binds Tone to it,
+  wires all UI, starter tracks, unlock listeners. Entry point.
+- `transport.js` — `ensureAudio()`, `togglePlay()`, the single
+  `Tone.Transport.scheduleRepeat` loop, `loadWorklet()`, `requestMidiIfNeeded()`.
+- `voices.js` — every voice class + `buildVoiceForEngine` dispatch + the
+  emulator builder functions.
+- `state.js` — global `state`, `emptyPattern`, `aliasPattern`, `switchPattern`.
+- `catalog.js` — `buildEngineCatalog()`, saved-patch storage, engine dropdowns.
+- `signal.js` — per-track graph wiring (filter/eq/comp/fxRack), filter env.
+- `fxRack.js` — `FXRack` chain + `defaultFxConfig`.
+- `lfo.js` — LFO configs, `getModTarget`/`canModulate`, tempo sync, setter loop.
+- `automation.js` — per-step parameter automation (`AUTOMATION_TARGETS`).
+- `render.js` / `stepGrid.js` / `stepEditor.js` / `pianoRoll.js` /
+  `patternBar.js` / `scaleUI.js` / `meters.js` / `beat.js` — UI.
+- `keyboard.js` — computer-keyboard performance mode + capture.
+- `session.js` — serialize/apply sets + track patches, legacy migration.
+- `track.js` — track lifecycle (create/resize/clone).
+- `bounce.js` — WAV render via MediaRecorder.
+- `buffers.js` — sample decode/normalize cache, `startSampleSource`.
+- `wavetableEditor.js` — in-app wavetable frame editor for `wt:akwf`.
+- `theory.js` / `meter.js` / `generate.js` / `curves.js` / `params.js` /
+  `constants.js` / `dialogs.js` / `dom.js` / `icons.js` / `appApi.js` /
+  `types.js` (JSDoc typedefs — data-model source of truth).
 
 ## Dev commands
 
 ```
-npm run dev            # local server on :5173
-npm run netlify:dev    # full Netlify emulation (functions + static) on :8888
-npm run start          # prod-ish local server
+npm run dev            # Next.js dev server on :3000 (studio + engine work with no env)
+npm run build && npm run start   # production build + serve
+npm run netlify:dev    # full Netlify emulation on :8888
+npm run legacy:dev     # pre-Next static Node server on :5173 (engine assets only)
 ```
+
+Account features need `NEXT_PUBLIC_SUPABASE_URL` + `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+(see `.env.example`). The engine itself runs without any env.
 
 ## Audio signal chain (per track)
 
 ```
-voice → filterNode → eqNode → compressor → fxRack(input → fuzz → crusher → delay → reverb → output) → masterGain → ctx.destination
-                                                                                         ↑
-                                             per-track meterAnalyser taps fxRack.output
-                                             state.masterAnalyser taps masterGain
+voice → filterNode → eqNode → compressor → fxRack → masterGain → masterLimiter → ctx.destination
+                                              ↑                        ↑
+                       per-track meterAnalyser taps fxRack.output      masterAnalyser taps masterGain (pre-limiter)
 ```
 
 - `filterNode` — native `BiquadFilterNode` (lowpass). `fireFilterEnv(t, time,
-  duration)` schedules an ADSR on `frequency` that sweeps from a closed
-  position (env depth octaves below cutoff) up to cutoff, then to sustain, then
-  back down on release. For sample voices, sustain extends to
-  `max(stepDuration, bufferDuration)` so the envelope shapes the entire sample.
-- `eqNode` — `EQChain`: lowshelf 250Hz / peaking 1.2kHz Q=0.8 / highshelf 5kHz,
-  ±18 dB.
-- `compressor` — `TrackCompressor`: either native `DynamicsCompressorNode`
-  (self) or an analyser-driven envelope follower ducking a pre-output gain
-  (sidechain). Source can be any track's `voice.getOutputNode()`.
-- `fxRack` — `FXRack`: custom fuzz (WaveShaper with DBA Fuzz War asymmetric
-  curve + resonant lowpass + crossfade wet/dry) → `Tone.BitCrusher` →
-  `Tone.FeedbackDelay` → `Tone.Reverb`. Chain order matters for modulation
-  targets (see `getModTarget`).
+  duration)` schedules an ADSR sweep on `frequency`. For sampler voices the
+  sustain extends to the buffer duration so the env shapes the whole sample.
+- `eqNode` — `EQChain`: lowshelf 250Hz / peaking 1.2kHz / highshelf 5kHz.
+- `compressor` — `TrackCompressor`: native `DynamicsCompressorNode` (self) or
+  an analyser-driven envelope follower ducking a pre-output gain (sidechain
+  from any track's `voice.getOutputNode()`).
+- `fxRack` — `FXRack`, serial chain in this order: **vinyl → cassette → fuzz →
+  ring mod → wave shaper → crush → auto-wah → chorus → phaser → flanger →
+  pitch shift → delay → reverb**. `defaultFxConfig()` keys match. Chain order
+  matters for LFO/automation targets.
+- Master bus: `masterGain` → `masterLimiter` (DynamicsCompressor as brickwall
+  safety, threshold −2dB ratio 20) → destination.
 
-## Voice types (`buildVoiceForEngine`)
+## Audio start / unlock (hard-won — don't regress)
 
-| engine type    | class              | notes |
+All of this lives in `main.js` `init()` and `transport.js`:
+
+- The AudioContext is created at `init()` and `Tone.setContext(ctx)` runs
+  BEFORE anything reads `Tone.Transport` (its clock latches onto the context's
+  time at first access).
+- **First-gesture unlock**: capture-phase `pointerdown/keydown/touchstart`
+  listeners call `primeAudioForIOS()` whenever the context is suspended.
+  Installed permanently — also recovers from browser re-suspends.
+- **Keep-alive**: on the context's first transition to "running" (statechange),
+  a silent ConstantSource pins the output device open for the session, and
+  `state._outputRunningSince` is recorded.
+- **Adaptive transport lead**: `togglePlay` starts at `+0.5` when the output
+  just spun up (macOS drops the first fraction of a second of DAC output on
+  cold start — playhead moves, no sound), `+0.1` when warm.
+- **Web MIDI is lazy and never awaited on the play path**: Chrome 124+ pops a
+  permission prompt for `requestMIDIAccess`, which burns the play click's user
+  activation and leaves the context suspended. `requestMidiIfNeeded()` fires
+  in the background, and only when a track actually uses a MIDI engine (play,
+  engine switch, session load, track create all call it).
+- **Worklet preload**: `loadWorklet()` (single-flight, retries on failure)
+  starts the Plaits WASM fetch+compile at init; `ensureAudio`'s await is
+  usually instant. `addModule` works on a suspended context.
+- **bfcache**: `pagehide` only closes the context when `!e.persisted` —
+  closing on bfcache entry leaves the restored page with a dead "closed"
+  context (silent forever until reload).
+- **Visual latency compensation**: playhead/beat paints are scheduled at
+  `time + visualOutputLatency()` — Chrome's reported `ctx.outputLatency`,
+  or an ear-tuned 0.18s estimate on Safari (no outputLatency API there).
+  `?vlat=<seconds>` URL param overrides for calibration.
+- The iOS unlock dance (silent looping `<audio>`, silent buffer + inaudible
+  osc primer, touch-only suspend/resume kick, up-front gate dialog on touch
+  devices) is in `main.js` — the kick cycle must stay touch-only (on desktop
+  Chrome it runs past the gesture and the resume gets rejected).
+
+## Voice types (`buildVoiceForEngine`, voices.js)
+
+| engine type   | class            | notes |
 |---|---|---|
-| `plaits`       | `PlaitsVoice`      | 4-voice round-robin pool of Plaits oscillators. modTrigger/modLevel patched; glide via `linearRampToValueAtTime` on `noteAudioParameter`. `getAudioParam(key)` returns voice0's harm/timb/morph/decay param (LFO mod only hits voice 0). |
-| `drum-synth`   | `DrumSynthVoice`   | Tone.js recipes dispatched via `buildDrumSynthNode(kind, output)`. Groups: 808/909 kit + 303/poly-saw/fm-bell/pad + Emulators. `setParam`/`getAudioParam` delegate into `this.built` (which may be a poly pool). |
-| `sample`       | `SampleVoice`      | Drum samples fetched from tonejs.github.io. Per-hit BufferSource. Pitch baseline = MIDI 48 (C3) so C3 plays natural; drum-kit tracks override with pitchBase=36 so C2 plays natural. |
-| `custom`       | `CustomToneVoice`  | Tone.js synth + effects tree built from a saved-patch JSON config. |
-| `saved`        | `CustomToneVoice`  | Same class; config loaded from `loadPatches()` (localStorage). |
-| `eleven`       | `ElevenVoice`      | Plays a base64 MP3 persisted on the track, decoded + cached. +2.5× headroom. Legacy — only relevant when loading older sessions that stored ElevenLabs samples. |
-| `upload`       | `UploadVoice`      | User-picked file, decoded + base64-persisted. |
-| `midi`         | `MidiVoice`        | Web MIDI output; converts audio-time → DOMHighResTimeStamp for `output.send`. |
+| `plaits`      | `PlaitsVoice`    | 4-voice round-robin pool of Plaits WASM oscillators. `modLevelPatched=1, modLevel=0` at init (without the zero, empty tracks emit a continuous tone). Glide via ramp on `noteAudioParameter`. |
+| `drum-synth`  | `DrumSynthVoice` | Tone.js recipes via `buildDrumSynthGraph(kind, output)`: 808/909 kit, 303, poly-saw, fm-bell, pad, plus the seven emulators (below). |
+| `sampler`     | `SamplerVoice`   | THE unified sample voice — plays a user upload or a bundled kit sample chosen via `track.sampleSource` ({kind:"upload"|"bundled", ...}). Absorbed the old `SampleVoice`/`UploadVoice`/`ElevenVoice`. Per-step region/fade/loop via `startSampleSource`; slicing via `t.slices`/`sliceOn`. Pitch from `pitchBase` (36 drum-kit, 60 otherwise); `t.pitchLock` keeps 1×bpm fits pitch-true. |
+| `custom` / `saved` | `CustomToneVoice` | Tone.js synth tree from a saved-patch JSON config (`saved:<name>` keys, localStorage). |
+| `granular`    | `GranularVoice`  | Granular sampler (`dm:granular`, "texture" group). |
+| `wavetable`   | `WavetableVoice` | Multi-frame AKWF wavetable synth (`wt:akwf`), morphable, editable in `wavetableEditor.js`. |
+| `midi`        | `MidiVoice`      | Web MIDI out; converts audio time → DOMHighResTimeStamp for `output.send`. |
 
-Voice interface:
-`hit(midi, time, dur, vel, opts?)`, `setParam(k, v)`, `getAudioParam(k)`,
-`setEngine(k)`, `canInPlaceChange(newKey)`, `getOutputNode()`,
-`setDestination(target)`, `silence(now)`, `dispose()`.
+Voice interface: `hit(midi, time, dur, vel, opts?)`, `setParam`,
+`getAudioParam`, `setEngine`, `canInPlaceChange`, `getOutputNode`,
+`setDestination`, `silence`, `dispose`. Legacy engine keys (`smp:*`, `upload`,
+`eleven`) are migrated to `sampler` in `session.js` on load.
 
-`opts` for sample voices: `{ startOffset, endOffset, fadeIn, fadeOut, loopMode,
-pitchBase, pitchLocked? }`. See `startSampleSource()` — shared helper used by
-`SampleVoice`, `ElevenVoice`, and `UploadVoice` for one-shot / loop / ping-pong
-playback (loop = `src.loop = true` + `loopStart`/`loopEnd`; ping-pong = cached
-forward+reversed buffer via `getPingPongBuffer`).
+## Emulators (Tone.js analog-mono presets, `"Emulators"` optgroup)
 
-## Emulators group (Tone.js analog-mono presets)
+All engine type `drum-synth`, each wrapped in `makePolyPool(size, buildOne)`:
 
-Five additional `drum-synth` engines in their own `"Emulators"` optgroup, each
-wrapped in a voice pool via `makePolyPool(size, buildOne)` so chord tones
-round-robin across N independent voices:
-
-| key           | builder              | pool | character |
+| key             | builder               | pool | character |
 |---|---|---|---|
-| `dm:mini-brute` | `buildMiniBruteVoice` | 4 | Arturia MiniBrute — saw + ultrasaw (detuned twin) + PWM pulse + metalized triangle + sub sine. Brute Factor distortion, PWM LFO into `pulse.width`, triangle wave-folder via `makeMetalizerCurve`, FM sine modulator → every osc `.detune` (depth in cents). |
-| `dm:moog`       | `buildMoogVoice`     | 4 | Minimoog — 3 oscillators with independent waveform + range select (32'/16'/8'/4'/2') + ±7-semitone fine freq on osc 2/3. White/pink noise mix. Tone.Chebyshev warmth + EQ3 shelf. |
-| `dm:juno`       | `buildJunoVoice`     | 6 | Roland Juno-60 — single DCO (PulseOscillator + LFO-PWM) + sub square + noise → HPF → baked-in Tone.Chorus (the Juno character). |
-| `dm:guitar`     | `buildGuitarVoice`   | 6 | Electric guitar — Tone.PluckSynth (Karplus-Strong) → Distortion drive → EQ3 mid-forward → subtle Chorus. Per-hit velocity shapes trim gain (harder pick = louder + brighter). |
-| `dm:bass`       | `buildBassVoice`     | 4 | Electric bass — PluckSynth tuned darker (dampening 2200, resonance 0.97) + mild Distortion + EQ3 with low-end boost / upper cut. No chorus (dry). Default MIDI 40 (E1). |
+| `dm:mini-brute` | `buildMiniBruteVoice` | 4 | saw + ultrasaw + PWM pulse + metalized tri + sub, Brute Factor |
+| `dm:moog`       | `buildMoogVoice`      | 4 | 3 osc w/ wave + range selects, ±7-semi osc2/3, noise |
+| `dm:juno`       | `buildJunoVoice`      | 6 | DCO + sub + noise → HPF → baked-in chorus |
+| `dm:guitar`     | `buildGuitarVoice`    | 6 | Karplus-Strong pluck → drive → EQ → chorus |
+| `dm:bass`       | `buildBassVoice`      | 4 | darker pluck, low-end EQ, dry |
+| `dm:rhodes`     | `buildRhodesVoice`    | 6 | electric piano |
+| `dm:prophet6`   | `buildProphet6Voice`  | 6 | poly analog |
 
-`makePolyPool` exposes `trigger` (round-robin), `release`, `setGlide`,
-`setParam` (broadcast to every voice), and `getAudioParam(k)` (returns voice
-0's param — same "first-voice" limitation as PlaitsVoice, noted as LFO mod
-affects only voice 0).
+`makePolyPool` exposes `trigger` (round-robin) / `release` / `setGlide` /
+`setParam` (broadcast) / `getAudioParam` (voice 0 only — LFO mod hits voice 0,
+chord tones on other voices play the baseline; same limitation as
+`PlaitsVoice`). The stock harm/timb/morph/decay sliders are relabeled
+per-engine by `updatePlaitsControlsVisibility`.
 
-### Param mapping per emulator
+## Data model (source of truth: `public/js/types.js`)
 
-The stock track params (harm / timb / morph / decay + vol) are repurposed per
-engine. `updatePlaitsControlsVisibility` relabels the timbre-group sliders and
-hides the `rand` button for emulator engines:
+### Pattern (per track, 32 slots — every field a per-step parallel array)
 
-- MiniBrute: `pwm rate / pw / (hidden) / (hidden)` + osc-mix (saw / pulse /
-  tri / sub) + osc-mod (ultra / fm / metal)
-- Moog: `detune / (hidden) / (hidden) / warm` + osc-mix (osc1 / osc2 / osc3)
-  + moog-osc-group (per-osc wave select + range select + osc2/osc3 ±7-semi
-  freq + noise white/pink + level)
-- Juno: `pwm rate / pw / chorus / dec` + osc-mix (dco / sub / noise)
-- Guitar: `drive / bright / chorus / sustain`
-- Bass: `drive / tone / resonance / sustain`
+`steps, lengths, notes, velocities, chords, offsets, arps, arpRates,
+arpRanges, arpDirs, complexities, ratchets, sampleStarts, sampleEnds,
+sampleFadeIns, sampleFadeOuts, sampleLoopModes, extraNotes, extraLengths,
+automation`
 
-Each emulator builder returns a `getAudioParam(key)` that maps mod keys
-(`osc1..osc4 / ultra / fm / noise / harm`) to actual `AudioParam`s for LFO
-modulation (e.g., mini-brute `harm → pwmLfo.frequency`, moog `harm →
-osc2.detune`, juno `harm → pwmLfo.frequency`). `canModulate(t, key)` lists the
-applicable mod keys per engine so the mod-panel picker only shows what works.
+- `extraNotes`/`extraLengths` — stacked polyphony per step (from the piano
+  roll), on top of the chord/root.
+- `automation` — `{ [targetKey]: {enabled, values: number[]} }` per-step
+  parameter automation (see `AUTOMATION_TARGETS` in automation.js).
 
-## Data model
-
-### Track (`state.tracks[]`)
-
-```js
-{
-  id, name, engineKey, length, accents (Set of 0-indexed),
-  // aliased from patterns[activePattern] (see below):
-  steps: Int[], lengths: Int[], notes: (MIDI|null)[],
-  velocities: 0..1[], chords: ("" | "maj" | "min" | ... )[],
-  offsets: -0.5..0.5[], arps: bool[], arpRates: number[],
-  arpRanges: 1..4[], arpDirs: ("up"|"down"|"updown"|"random")[],
-  complexities: 0..4[], ratchets: 1..8[],
-  sampleStarts: 0..1[], sampleEnds: 0..1[],
-  sampleFadeIns: sec[], sampleFadeOuts: sec[],
-  sampleLoopModes: ("off"|"loop"|"pingpong")[],
-  // track-level:
-  muted, soloed, isDrumKit,
-  glide, swing, density, speed, sampleSpeedMode ("native" default),
-  sampleDefaults: { start, end, fadeIn, fadeOut, loopMode }, // seed for new steps
-  trackTick, speedAccum, repeatId,
-  elevenAudio, elevenAudioMime, elevenBuffer,  // legacy session payload
-  uploadAudio, uploadAudioMime, uploadFileName, uploadBuffer,
-  params: { vol, harm, timb, morph, decay, osc1..osc4, ultra, fm, metal,
-           // moog-only: osc1wave/osc2wave/osc3wave, osc1range/osc2range/osc3range,
-           // osc2freq/osc3freq, noise, noisetype
-  },
-  filter: { cutoff, reson, env, attack, decay, sustain, release },
-  filterNode, eq: {low, mid, high}, eqNode,
-  comp: { enabled, source, threshold, ratio, attack, release, knee }, compNode,
-  lfoConfig: { [key]: { enabled, type, rate, depth, sync, div } }, lfos: {},
-  fxConfig: defaultFxConfig(), fxRack,
-  midi: { outputId, channel }, voice, meterAnalyser,
-  patterns: emptyPattern(len)[32], _patternIdx,
-  el,  // DOM node
-  _refreshSaveEnabled, // cached UI callback
-}
-```
-
-### Pattern (per track, 32 slots)
-
-```js
-{ steps, lengths, notes, velocities, chords, offsets,
-  arps, arpRates, arpRanges, arpDirs, complexities, ratchets,
-  sampleStarts, sampleEnds, sampleFadeIns, sampleFadeOuts, sampleLoopModes }
-```
-
-`aliasPattern(t, idx)` rebinds `t.steps` / `lengths` / etc. to reference
-`t.patterns[idx].*` directly so UI mutations flow straight into the pattern.
+`aliasPattern(t, idx)` rebinds `t.steps`/`t.notes`/etc. to reference
+`t.patterns[idx].*` directly, so UI mutations flow straight into the pattern.
 Switching patterns = re-aliasing + re-render.
 
-### Global state (`state`)
+### Track (`state.tracks[]`) — highlights beyond the aliased pattern fields
 
-```js
-{
-  tracks, playing, tick, repeatId, nextId,
-  audioCtx, masterGain, masterAnalyser, ready,
-  midi, scale: { active, root, mode },
-  activePattern, patternMode ("repeat"|"chain"),
-  patternSwitchMode ("immediate"|"finish"),
-  queuedPattern, patternRepeats: Int[32], chainBarCount,
-}
-```
+`id, name, engineKey, length, accents(Set)`, flags `muted/soloed/isDrumKit`,
+`noteMode ("gate"|"trigger")`, `glide, swing, density, speed`,
+`sampleSpeedMode ("native"|"1xbpm"), sampleDefaults, sampleSource, slices,
+sliceOn, sliceBase, slicePlayMode, pitchLock`, sound config
+`params/filter/eq/comp/lfoConfig/fxConfig` + live handles
+`filterNode/eqNode/compNode/fxRack/lfos/voice/meterAnalyser`,
+`midi {outputId, channel}`, `patterns[32]`, `el`, legacy
+`uploadAudio/elevenAudio` (base64-persisted sample payloads).
+
+### Global `state`
+
+`tracks, playing, tick, repeatId, nextId, metronome, noteColors,
+currentSetName, audioCtx, ready, masterGain, masterLimiter, masterAnalyser,
+midi, scale {active, root, mode}, activePattern, patternMode
+("repeat"|"chain"), patternSwitchMode ("immediate"|"finish"), queuedPattern,
+patternRepeats[32], patternMeters[32] ({num,den} time signatures),
+chainBarCount` — plus runtime slots added by the unlock architecture
+(`woscLoad, _keepAlive, _outputRunningSince`).
 
 ## Transport
 
-Single `Tone.Transport.scheduleRepeat` at `"16n"`. Each callback:
+Single `Tone.Transport.scheduleRepeat` at `"16n"`. Each callback, per track:
 
-1. Per track, accumulate `t.speedAccum += t.speed`; while `≥ 1`, fire a step.
-2. Per firing: read chord tones (with complexity/inversion), expand for arp if
-   on, apply per-track swing + per-step offset, compute `hitTime`, fire filter
-   envelope, then `voice.hit(n, hitTime, duration, velocity, opts)` per tone.
-   For sample voices `opts` includes `startOffset`, `endOffset`, `fadeIn`,
-   `fadeOut`, `loopMode`, and `pitchBase` (36 for drum-kit tracks, 60
-   otherwise). Ratchet retriggers the single note N times when no chord.
-3. `Tone.Draw.schedule(paintNowIndicator, time)`.
-4. Manual-queue switch: in `patternSwitchMode === "finish"`, commit the queued
-   pattern at bar boundaries.
-5. Chain mode: every `BAR_TICKS=16`, increment `chainBarCount`; if `≥
-   patternRepeats[active]`, `switchPattern(findNextNonEmptyPattern(active))`.
+1. Accumulate `t.speedAccum += t.speed`; while `≥ 1`, fire a step (per-track
+   tempo multiples / polymeter).
+2. Every step (even silent ones) runs `runAutomationForStep(t, idx, ...)`.
+3. Per firing step: chord tones (with complexity/inversion) + piano-roll
+   `extraNotes`, arp expansion, master swing + per-step offset → `hitTime`
+   (clamped to `now + 0.002`), filter env, then `voice.hit(...)` per tone.
+   `noteMode` "gate" plays the step length; "trigger" fires 50ms. Ratchet
+   retriggers 1–8× when no chord. Sampler opts carry region/fade/loop/
+   pitchBase/pitchLock/sampleSpeedMode.
+4. Visuals: `Tone.Draw.schedule` at `time + visualOutputLatency()` (playhead +
+   beat indicator). Metronome fires on quarters when enabled.
+5. Bar boundaries: manual-queue commit (`patternSwitchMode === "finish"`) and
+   chain-mode advance honoring `patternRepeats` / `patternMeters`.
 
-Stop silences all voices (`cancelScheduledValues` on Plaits modTrigger/modLevel,
-`triggerRelease` on Tone synths, `stop()` on active BufferSources, MIDI
-all-notes-off).
+Stop cuts masterGain to 0 over 20ms (Tone's ~100ms lookahead keeps already-
+queued native events playing otherwise), silences all voices, and restores
+gain on next start. `Tone.Transport.start(lead, 0)` with the explicit 0 offset
+is the canonical rewind (avoids Tone 15's stop/cancel/position bugs).
 
-## Server endpoints (shared via `lib/api.js`)
+## Modulation: LFO vs automation (two systems)
 
-| route             | fn              | notes |
-|---|---|---|
-| `POST /api/share`       | `putShare({session})`| writes to Netlify Blobs (in-memory locally); returns `{id}`. |
-| `GET /api/share?id=…`   | `getShare({id})`     | reads back. |
+- **LFO** (`lfo.js`, mod panel): audio-rate, targets real `AudioParam`s /
+  Tone Signals via `getModTarget(t, key)`. `LFO_KEYS` covers voice params,
+  cutoff/reson, and every FX wet + sub-param; FX sub-params without an
+  AudioParam handle are driven by a rAF setter loop (`SETTER_LFO_KEYS`).
+  `canModulate(t, key)` gates the picker per engine.
+- **Automation** (`automation.js`, aut panel): per-step value lanes stored in
+  the pattern (`automation` field), applied at step time via `setParam`-style
+  setters. `canAutomate` is broader than `canModulate` since it doesn't need
+  an AudioParam.
 
-## Key UI flows
+## Keyboard performance mode (`keyboard.js`)
 
-- **Share** (`set-share`). `serializeSet()` → `putShare` → copies `?s=<id>`
-  URL to clipboard. `loadShareFromUrl()` fetches + `applySet()` on page load.
-- **Save / Load / Export / Import**. Same `serializeSet`/`applySet` shape;
-  save/load use localStorage; export/import use JSON files. `onSaveSet`
-  pre-fills the dialog with `suggestSetName()` — a kenning-style name pulled
-  from a 10-entry palette + 3-char base-36 token.
-- **Download Pattern / Download Session** (pattern-bar). Opens a dialog with
-  a filename input pre-filled by `suggestBounceFilename()` (same palette as
-  session-save). `bounceAudio({bars, chainWhole, filename})`:
-  1. Attaches a `MediaStreamAudioDestinationNode` to `state.masterGain`;
-     disconnects masterGain from `ctx.destination` so the render is silent.
-  2. Resets transport to pattern 1 (in `chain` mode for session, restored
-     after).
-  3. Starts `MediaRecorder`; waits `bars × 4 × 60/bpm + 0.4s` tail so
-     reverbs/releases finish.
-  4. Decodes the webm/mp4 blob via `decodeAudioData`, encodes to 16-bit PCM
-     WAV via `audioBufferToWav` (RIFF header + interleaved int16).
-  5. Shows a progress modal (`openBounceProgressDialog`) driven by rAF on
-     wall-clock elapsed; closes on completion.
-  6. `.wav` extension auto-appended.
+Always live on desktop (≥769px; text inputs swallow keys). Ableton-style:
+`a s d f g h j k l` = white keys, `w e t y u o` = black keys, `z/x` octave.
+Scale-aware mapping when a scale is active; chord mode (off/root). Live
+record onto the playing pattern, plus retroactive **Capture** (32s rolling
+buffer, slices back to the last 1.5s silence gap and writes a clip).
 
-## Track UI (per track)
+## Server / data surface
 
-Header row:
-```
-name | engine | save | load | drum | solo | mute | clear | dup | remove | filter/env/fx/eq/comp/mod
-```
+| surface | what |
+|---|---|
+| `POST/GET app/api/share/route.ts` | anonymous `?s=<slug>` share links (public `songs` rows) |
+| `app/songs/actions.ts` | `saveSong` (autosave upsert), `saveNamedSong`, `listSongs`, `loadSong`, `forkSong` |
+| `app/patches/actions.ts` | `publishPatch`, `listMyPatches`, `listPublicPatches`, `getPatch`, `deletePatch` |
+| `app/profile/actions.ts` | `getMyProfile`, `updateProfile`, `getPublicProfile` (+ that user's public songs/patches) |
+| `app/auth/actions.ts` | `signIn`, `signUp`, `signInWithMagicLink`, `signOut` |
+| `app/account/actions.ts` | `updateEmail`, `updatePassword`, `deleteAccount` (RPC `delete_own_account`) |
 
-Second row (conditional, inside `.track-synth-row` that flex-wraps to its own
-line): `.timbre-group` (4 sliders) + `.osc-mix-group` (4 osc sliders) +
-`.osc-mod-group` (mini-brute only: ultra/fm/metal) + `.moog-osc-group` (moog
-only: 3 per-osc rows + noise).
+`/u/<username>` is the public profile page with fork buttons. The engine side
+of save/share lives in `session.js` (`serializeSet`/`applySet`) and is bridged
+through `window.seqbaby`.
 
-Each of `filter / env / fx / eq / comp / mod` toggles a collapsible panel
-below the track head.
+## Bounce (`bounce.js`)
 
-The **mod panel**:
-- Top strip: `glide` + `swing` sliders.
-- One row per *enabled* LFO modulation (lazy-add). Each row: target label, on
-  checkbox, waveform, sync checkbox, rate/div, depth, and an `×` remove
-  button (single grid row with a 7-column template).
-- Footer: `+ add modulation` picker → expands to a `<select>` of available
-  targets (filtered by `canModulate(t, k)` so only engine-applicable keys
-  show). Picking one enables the LFO and drops a fresh row.
+Pattern or whole-session render: taps the post-limiter master into a
+`MediaStreamDestination` (disconnecting the speakers so it renders silent),
+records via `MediaRecorder` (webm/mp4), decodes, re-encodes 16-bit PCM WAV by
+hand (`audioBufferToWav`); falls back to the raw recording if WAV encode
+fails. Real-time capture — see Known limitations.
 
-The **step editor** (right-click a step) is a centered modal with:
-- Note-pad grid (Launchpad-style, 3-octave viewport with oct +/− pager,
-  scale-filtered when a scale is active — root highlighted, chromatic-mode
-  shows all 12 pcs)
-- Chord / arp / cpx / ratchet / vel / offset controls
-- Sample row (shown for `sample` / `eleven` / `upload` engines): waveform
-  canvas with draggable start/end handles + snap-to-beat dropdown + fit-speed
-  select + loop mode (off / loop / ping-pong) + fade in/out sliders + preview
-  + **apply to all** button (writes current settings to every active step on
-  every pattern + stores as `t.sampleDefaults` so future new steps inherit).
-- Chord options are filtered to scale-fitting chord types per `chordFitsScale`.
+## Engines catalog (`buildEngineCatalog`)
 
-Per-step **vertical drag** on the grid adjusts the note pitch: 18px/semitone
-chromatic, 22px/scale-degree scale-aware (via `midiToScaleIndex` +
-`scaleIndexToMidi`). Enters pitch-mode when `|dy| > 10 && |dy| > |dx|`.
+Groups in order: `plaits` (16) · `drum / synth` (808/909 kit + 303 /
+poly-saw / fm-bell / pad) · `Emulators` (7) · `texture` (`dm:granular`) ·
+`wavetable` (`wt:akwf`) · `sampler` (single unified entry) · `saved patches`
+(`saved:<name>`) · `midi`. The engine key string is the source of truth.
+Bundled drum kits are no longer separate engines — they live in
+`BUNDLED_SAMPLES` and are picked *inside* the sampler's source picker
+(legacy `smp:Kit/part` keys migrate on load).
 
-## Vol + meter control (`.vol-combo`)
-
-Native `<input type="range">` stacked on top of a 4px meter strip at matching
-width. `.meter-bar` is solid green; `paintMeter` toggles a `.clip` class
-(red) when the sampled peak is `≥ 0.995` (effective 0 dBFS).
-
-## Engines catalog
-
-Built in `buildEngineCatalog()` — rebuilt whenever saved patches change.
-Groups: `plaits` (16) · `drum / synth` (808/909/303/poly-saw/fm-bell/pad) ·
-`Emulators` (mini-brute/moog/juno/guitar/bass) · `custom` · `eleven labs` ·
-`user samples` (upload + saved patches) · `sample` (bundled drum kits) ·
-`midi`. Engine key string is the source of truth (`"plaits:0"`,
-`"dm:808-kick"`, `"dm:mini-brute"`, `"smp:Techno/kick"`, `"saved:name"`,
-etc.).
-
-Adding a new engine: extend `buildEngineCatalog()` + add a case to
-`buildVoiceForEngine()` (or for drum-synth-family voices, add a case to
-`buildDrumSynthNode` + a builder function) + (if it has unique state) extend
-`serializeSet`/`applySet` + add it to `canModulate()` if it exposes
-modulatable params.
+Adding a new engine: catalog entry + voice class dispatch in
+`buildVoiceForEngine` (or a `buildDrumSynthGraph` case + builder fn for
+analog-mono style) + `updatePlaitsControlsVisibility` labels +
+`canModulate`/`voiceAutoKeysForEngine` entries + serialize/apply if it has
+unique state.
 
 ## Drum-kit flag (`t.isDrumKit`)
 
-Auto-detected at track creation via `guessIsDrumKit({engineKey, name})`
-(engine type `"sample"` or regex match on kick/snare/hat/clap/tom/perc/drum in
-engine key, label, or name). Per-track toggle via the `drum` button. Effects:
-
-- Blank steps default to **C2** (MIDI 36) regardless of scale.
-- Sample voices (`SampleVoice`, `ElevenVoice`, `UploadVoice`) pitch from
-  `pitchBase: 36` so C2 = natural rate. Other tracks use `pitchBase: 60` (C4).
-- Flipping the toggle on retroactively rewrites every active step on every
-  pattern to C2.
+Auto-detected at creation (`guessIsDrumKit`), per-track toggle. Blank steps
+default to C2 (MIDI 36); the sampler pitches from `pitchBase: 36` (C2
+natural) instead of 60; toggling on rewrites active steps to C2 across
+patterns.
 
 ## Gotchas + conventions
 
-- **Plaits `modLevelPatched=1, modLevel=0` at init** — without the zero, empty
-  tracks emit a continuous tone.
-- **Audio init is lazy** — all voice construction is deferred until
-  `ensureAudio()` (first `play` click). Before that `t.voice === null`. Most
-  functions tolerate this.
-- **Sample audio is persisted as base64** on the track (`elevenAudio`,
-  `uploadAudio`). Decoded in `applySet` and `pickAudioFileForTrack`.
-  `normalizeAudioBuffer(buf, {trim})` runs on every decode; `trim: true`
-  removes leading/trailing silence via `trimSilenceFromBuffer` before the
-  RMS+peak normalize.
-- **Sample default playback speed** is `"native"`. Loop-style samples can be
-  switched to `"1xbpm"` per-step from the step editor.
-- **Chord key renamed `"7"` → `"dom7"`** — JS engines hoist integer-looking
-  keys to the top of iteration order, which broke the dropdown order.
-  `canonicalChord()` aliases legacy `"7"`.
-- **Hidden attribute vs display** — `.step-editor .se-field`, `.timbre-group`,
-  `.osc-mix-group`, `.osc-mod-group`, `.moog-osc-group` all have explicit
-  `[hidden] { display: none !important }` rules because their default
-  `display: grid | flex` would otherwise beat the attribute.
-- **Per-track compressor sidechain** — the analyser lives on the source
-  track's voice output, surviving voice rebuilds via
+- **Audio init is lazy** — voices are built in `ensureAudio()` on first play
+  (or the touch gate dialog). Before that `t.voice === null`; most code
+  tolerates it. Everything in "Audio start / unlock" above is load-bearing.
+- **Plaits `modLevelPatched=1, modLevel=0` at init** — without the zero,
+  empty tracks emit a continuous tone.
+- **Voice-pool LFO limitation** — `getAudioParam` returns voice 0's param
+  only (pools and PlaitsVoice both).
+- **`canModulate` gates the mod picker** — new mod targets need `LFO_KEYS` +
+  `getModTarget` + `LFO_AMP_SCALE` + `canModulate`, and a `getAudioParam(key)`
+  on the voice/builder for voice-internal params.
+- **Sample audio persists as base64** on the track; decoded on load with
+  `normalizeAudioBuffer` (RMS+peak normalize, optional silence trim).
+- **Chord key `"7"` renamed `"dom7"`** — integer-looking keys hoist to the
+  top of JS object iteration; `canonicalChord()` aliases legacy `"7"`.
+- **Hidden attribute vs display** — panels/groups with `display: grid|flex`
+  need the explicit `[hidden] { display: none !important }` rules in
+  style.css.
+- **Sidechain compressor sources** survive voice rebuilds via
   `refreshCompSourceDropdowns()`.
-- **Voice-pool LFO limitation** — `makePolyPool.getAudioParam` returns the
-  first voice's param only. LFO modulation on emulator engines affects voice
-  0; chord tones on voices 1..N-1 play the baseline. Same limitation as
-  `PlaitsVoice`.
-- **`canModulate` gates the mod picker** — if you add a new modulation target,
-  update `canModulate` and ensure the voice's `getAudioParam(key)` returns an
-  `AudioParam` / `Signal` so the LFO connect works.
+- **`tsconfig.json` excludes `public/js/`** — the engine is plain JS with
+  JSDoc types; don't rename it to TS or import it into the Next graph.
+- **Netlify deploy-preview hash URLs are pinned to one deploy** — retest on
+  the branch alias URL, not an old hash URL. A same-SHA force-push does not
+  trigger a rebuild; amend for a fresh SHA.
 
 ## Adding a feature — quick map
 
-- New audio effect → extend `FXRack` (native node chain; Tone Signals work as
-  LFO targets via `getAudioParam`). Add to `defaultFxConfig`,
-  `applyFxToTrack`, `refreshFxPanelUI`, `wireFxPanel`, and `resetFxDry`.
-- New LFO mod target → add to `LFO_KEYS`, extend `getModTarget(t, key)`, add
-  a target-specific amp in `LFO_AMP_SCALE`, and update `canModulate` so it
-  appears in the picker for engines that support it. For voice-internal
-  params expose a `getAudioParam(key)` on the builder.
-- New per-step editor control → data array on `emptyPattern()` + aliased
-  field on `aliasPattern()` + row in the step-editor HTML + wire-up in the
-  modal + consume in the transport loop.
-- New engine → catalog entry + voice class + `buildVoiceForEngine` dispatch
-  (or `buildDrumSynthNode` case + builder fn for analog-mono style) +
-  `updatePlaitsControlsVisibility` if it hides/shows any track-head fields +
-  `canModulate` entry if it has modulatable params.
-- New server endpoint → add function to `lib/api.js`, route in `server.js`,
-  create matching `netlify/functions/<name>.mjs`, add redirect in
-  `netlify.toml`.
+- New FX → extend `FXRack` + `defaultFxConfig` + apply/refresh/wire fns in
+  signal.js/render.js, and (optionally) `LFO_KEYS`/`AUTOMATION_TARGETS`.
+- New LFO target → see canModulate gotcha above.
+- New automation target → `AUTOMATION_TARGETS` + a setter path in
+  `applyAutomationAtStep`.
+- New per-step control → array on `emptyPattern()` + `aliasPattern()` field +
+  step-editor UI + consume in the transport loop + serialize/apply.
+- New engine → see Engines catalog above.
+- New server data → Supabase migration + server action in `app/*/actions.ts`
+  + UI in the relevant `app/*.tsx`; keep the engine side behind
+  `window.seqbaby`.
 
 ## Known limitations / TODO breadcrumbs
 
 - No undo/redo.
-- Voice-pool LFO only targets voice 0 — chord tones don't pick up mod.
-- Netlify Blobs share IDs reset on local server restart (in-memory
-  fallback). On deployed Netlify, Blobs is persistent.
-- Bounce captures live via `MediaRecorder` (real-time). Offline rendering
-  would require rebuilding every voice under an `OfflineAudioContext`, which
-  doesn't play well with the native Plaits WASM voice.
-- Keyboard shortcuts minimal (Escape to close dialogs).
+- Voice-pool LFO only targets voice 0.
+- Bounce is real-time capture (offline rendering would need rebuilding voices
+  under an OfflineAudioContext, which the Plaits WASM voice doesn't support).
+- Keyboard performance mode is desktop-only.
+- Safari can't report output latency — visuals use the 0.18s estimate
+  (`?vlat=` to calibrate).
 
 ## Deployment
 
-Push to `main`; Netlify auto-deploys via `netlify.toml`. Repo:
-https://github.com/mjoslyn/seqbaby.
+Push to `main`; Netlify auto-deploys (`@netlify/plugin-nextjs`, Node 22).
+Repo: https://github.com/mjoslyn/seqbaby.
