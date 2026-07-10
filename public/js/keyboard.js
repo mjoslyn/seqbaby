@@ -253,6 +253,13 @@ function onKeyDown(e) {
   if (!isDesktopKeyboard()) return;
   if (isTypingTarget(e.target)) return;
   const k = e.key.toLowerCase();
+  // A <select> keeps focus after a pick, and its native letter type-ahead can
+  // run as the keydown's default action — the note key then switches the
+  // dropdown (e.g. the engine) instead of playing. preventDefault alone isn't
+  // reliable across browsers for select type-ahead, so drop the focus first.
+  if (e.target?.tagName === "SELECT" && (KEY_SEMITONES[k] != null || k === "z" || k === "x")) {
+    e.target.blur();
+  }
   if (k === "z") { state.kbdBase = Math.max(0, state.kbdBase - 12); e.preventDefault(); return; }
   if (k === "x") { state.kbdBase = Math.min(108, state.kbdBase + 12); e.preventDefault(); return; }
   if (KEY_SEMITONES[k] == null || held.has(k)) return;
@@ -277,6 +284,12 @@ export function initComputerKeyboard() {
   document.addEventListener("keydown", onKeyDown);
   document.addEventListener("keyup", onKeyUp);
   window.addEventListener("blur", resetKbdKeys);
+  // Selects don't need to keep focus once a value is committed, and a focused
+  // select turns the next note key into type-ahead (see onKeyDown). Blur on
+  // change so the keyboard goes straight back to playing notes.
+  document.addEventListener("change", (e) => {
+    if (e.target?.tagName === "SELECT") e.target.blur();
+  });
 }
 
 /** Release + forget all held keys — call when the feature is toggled off. */

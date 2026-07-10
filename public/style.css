@@ -944,6 +944,13 @@ body.kbd-recording .sq-track.is-kbd-active { border-color: #e5484d; box-shadow: 
 
 .sq-step {
   aspect-ratio: 1 / 1;
+  /* Explicit inline size + start alignment. Without these, Safari resolves
+     the square against the 44px grid-auto-rows floor instead of the column
+     width (WebKit transfers the block size through aspect-ratio before
+     applying inline-axis stretch) — cells render as small squares with big
+     gaps and stop tracking the column. Chrome happened to stretch first. */
+  width: 100%;
+  align-self: start;
   background: var(--step);
   border: 1px solid transparent;
   border-radius: 4px;
