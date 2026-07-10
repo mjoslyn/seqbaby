@@ -163,7 +163,10 @@ netlify.toml  next.config.mjs
 - The computer-keyboard performance mode is desktop-only (no physical keyboard on
   mobile).
 
-## License
+## Credits & license
 
 Personal project. Plaits synthesis models originate from Mutable Instruments
-(open-source hardware); Tone.js is MIT-licensed.
+(open-source hardware); Tone.js is MIT-licensed. The bundled wavetable preset
+waveforms are from [AKWF — Adventure Kid Waveforms](https://github.com/KristofferKarlAxelEkstrand/AKWF-FREE)
+by Kristoffer Karl Axel Ekstrand, released under CC0-1.0 (public domain — see
+[`public/wavetables/akwf/ATTRIBUTION.md`](./public/wavetables/akwf/ATTRIBUTION.md)).

@@ -1261,6 +1261,8 @@ body.kbd-recording .sq-track.is-kbd-active { border-color: #e5484d; box-shadow: 
 .sq-wt__harm { display: flex; align-items: flex-end; gap: 3px; height: 60px; }
 .sq-wt__harm-bar { -webkit-appearance: slider-vertical; writing-mode: vertical-lr; width: 14px; height: 56px; }
 .sq-wt__hint { font-size: 10px; color: var(--fg-dim); opacity: 0.8; }
+.sq-wt__credit { font-size: 10px; color: var(--fg-dim); opacity: 0.65; }
+.sq-wt__credit a { color: inherit; text-decoration: underline; }
 
 /* Sample-editor + slicer modals. */
 .sq-samp__modal, .sq-slice__modal { width: min(94vw, 720px); gap: 10px; }

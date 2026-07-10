@@ -123,6 +123,7 @@ export function openWavetableEditor(t) {
     <canvas class="sq-wt__canvas" width="640" height="200"></canvas>
     <div class="sq-wt__harm"></div>
     <div class="sq-wt__hint">draw the frame · harmonic bars build it additively · the synth "wave" knob morphs across frames</div>
+    <div class="sq-wt__credit">preset waveforms from <a href="https://github.com/KristofferKarlAxelEkstrand/AKWF-FREE" target="_blank" rel="noopener">AKWF — Adventure Kid Waveforms</a> by Kristoffer Ekstrand (CC0)</div>
     <button type="button" class="sq-panel__modal-close">done</button>`;
   overlay.appendChild(modal);
   document.body.appendChild(overlay);
