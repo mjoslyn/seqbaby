@@ -9,6 +9,7 @@ import { WAVETABLE_WAVES, WT_FRAME_LEN } from "./voices.js";
 import { loadBuffer } from "./buffers.js";
 import { state } from "./state.js";
 import { ensureAudio } from "./transport.js";
+import { applyWavetableScan, defaultWavetableScan } from "./lfo.js";
 
 const N = WT_FRAME_LEN;
 const NHARM = 16;
@@ -76,9 +77,10 @@ function resampleToN(data) {
 }
 
 function ensureFrames(t) {
+  const scan = t.wavetable?.scan;
   if (!t.wavetable || !Array.isArray(t.wavetable.frames) || !t.wavetable.frames.length) {
-    // Seed a starter table so there's something to morph across.
-    t.wavetable = { frames: BASIC.map(basicWave).map(f => Array.from(f)) };
+    // Seed a starter table so there's something to morph across (keep any scan config).
+    t.wavetable = { frames: BASIC.map(basicWave).map(f => Array.from(f)), scan };
   }
   // Ensure Float32Array-friendly numeric arrays of length N.
   t.wavetable.frames = t.wavetable.frames.map(f => {
@@ -115,14 +117,48 @@ export function openWavetableEditor(t) {
       <button type="button" class="sq-wt__add sq-btn--ghost">+ frame</button>
       <button type="button" class="sq-wt__dup sq-btn--ghost">duplicate</button>
       <button type="button" class="sq-wt__del sq-btn--ghost">remove</button>
-      <label>load <select class="sq-wt__preset">${prebuiltOpts}</select></label>
-      <button type="button" class="sq-wt__load sq-btn--ghost">→ frame</button>
+      <select class="sq-wt__preset" title="load a preset waveform into the current frame"><option value="" selected>load</option>${prebuiltOpts}</select>
       <button type="button" class="sq-wt__norm sq-btn--ghost">normalize</button>
       <button type="button" class="sq-wt__clear sq-btn--ghost">clear</button>
     </div>
     <canvas class="sq-wt__canvas" width="640" height="200"></canvas>
     <div class="sq-wt__harm"></div>
-    <div class="sq-wt__hint">draw the frame · harmonic bars build it additively · the synth "wave" knob morphs across frames</div>
+    <div class="sq-wt__scan">
+      <label class="sq-wt__scan-en-wrap"><input type="checkbox" class="sq-wt__scan-en" /> <span>wave scan</span></label>
+      <div class="sq-wt__scan-ctl">
+        <label>dir
+          <select class="sq-wt__scan-dir">
+            <option value="up">up</option>
+            <option value="down">down</option>
+            <option value="updown">up / down</option>
+            <option value="random">random</option>
+          </select>
+        </label>
+        <label class="sq-wt__scan-sync-wrap"><input type="checkbox" class="sq-wt__scan-sync" /> sync</label>
+        <label class="sq-wt__scan-rate-wrap">speed
+          <input type="range" class="sq-wt__scan-rate" min="0.01" max="8" step="0.01" value="0.5" />
+        </label>
+        <label class="sq-wt__scan-div-wrap">rate
+          <select class="sq-wt__scan-div">
+            <option value="16">4 bars</option>
+            <option value="8">2 bars</option>
+            <option value="4">1 bar</option>
+            <option value="2">1/2</option>
+            <option value="1">1/4 (beat)</option>
+            <option value="0.5">1/8</option>
+            <option value="0.25">1/16</option>
+            <option value="0.125">1/32</option>
+          </select>
+        </label>
+        <label>start
+          <input type="range" class="sq-wt__scan-start" min="0" max="1" step="0.01" value="0" />
+        </label>
+        <label>range
+          <input type="range" class="sq-wt__scan-range" min="0" max="1" step="0.01" value="1" />
+        </label>
+      </div>
+    </div>
+    <div class="sq-wt__hint">draw the frame · harmonic bars build it additively · the synth "wave" knob morphs across frames · wave scan auto-cycles through them</div>
     <div class="sq-wt__credit">preset waveforms from <a href="https://github.com/KristofferKarlAxelEkstrand/AKWF-FREE" target="_blank" rel="noopener">AKWF — Adventure Kid Waveforms</a> by Kristoffer Ekstrand (CC0)</div>
     <button type="button" class="sq-panel__modal-close">done</button>`;
   overlay.appendChild(modal);
@@ -218,8 +254,13 @@ export function openWavetableEditor(t) {
   modal.querySelector(".sq-wt__del").addEventListener("click", () => { if (frames.length > 1) { frames.splice(sel, 1); sel = Math.min(sel, frames.length - 1); refresh(); pushToVoice(t); } });
   modal.querySelector(".sq-wt__norm").addEventListener("click", () => { normalize(frames[sel]); refresh(); pushToVoice(t); });
   modal.querySelector(".sq-wt__clear").addEventListener("click", () => { frames[sel] = new Float32Array(N); refresh(); pushToVoice(t); });
-  modal.querySelector(".sq-wt__load").addEventListener("click", async () => {
-    const name = modal.querySelector(".sq-wt__preset").value;
+  // Picking a preset loads it straight into the current frame; the select then
+  // snaps back to its "load" placeholder so it reads as an action, not a value.
+  const presetSel = modal.querySelector(".sq-wt__preset");
+  presetSel.addEventListener("change", async () => {
+    const name = presetSel.value;
+    presetSel.value = "";
+    if (!name) return;
     if (BASIC.includes(name)) { frames[sel] = basicWave(name); refresh(); pushToVoice(t); return; }
     try {
       await ensureAudio();
@@ -231,10 +272,45 @@ export function openWavetableEditor(t) {
 
   const refresh = () => { drawFrame(); syncHarmSlidersFromFrame(); renderFrameStrip(); };
 
+  // ---- wave-scan modulator (auto-cycles the table position over time) ----
+  const scan = (t.wavetable.scan = t.wavetable.scan || defaultWavetableScan());
+  const scanEn    = modal.querySelector(".sq-wt__scan-en");
+  const scanDir   = modal.querySelector(".sq-wt__scan-dir");
+  const scanSync  = modal.querySelector(".sq-wt__scan-sync");
+  const scanRate  = modal.querySelector(".sq-wt__scan-rate");
+  const scanDiv    = modal.querySelector(".sq-wt__scan-div");
+  const scanStart = modal.querySelector(".sq-wt__scan-start");
+  const scanRange = modal.querySelector(".sq-wt__scan-range");
+  const scanBody  = modal.querySelector(".sq-wt__scan-ctl");
+  const rateWrap  = modal.querySelector(".sq-wt__scan-rate-wrap");
+  const divWrap   = modal.querySelector(".sq-wt__scan-div-wrap");
+  const syncScanUI = () => {
+    scanEn.checked   = !!scan.enabled;
+    scanDir.value    = scan.dir || "up";
+    scanSync.checked = !!scan.sync;
+    scanRate.value   = String(scan.rate ?? 0.5);
+    scanDiv.value    = String(scan.div ?? 1);
+    scanStart.value  = String(scan.start ?? 0);
+    scanRange.value  = String(scan.range ?? 1);
+    scanBody.toggleAttribute("hidden", !scan.enabled);
+    rateWrap.toggleAttribute("hidden", !!scan.sync);
+    divWrap.toggleAttribute("hidden", !scan.sync);
+  };
+  const pushScan = () => applyWavetableScan(t);
+  scanEn.addEventListener("change",    () => { scan.enabled = scanEn.checked; syncScanUI(); pushScan(); });
+  scanDir.addEventListener("change",   () => { scan.dir = scanDir.value; pushScan(); });
+  scanSync.addEventListener("change",  () => { scan.sync = scanSync.checked; syncScanUI(); pushScan(); });
+  scanRate.addEventListener("input",   () => { scan.rate = Number(scanRate.value); pushScan(); });
+  scanDiv.addEventListener("change",   () => { scan.div = Number(scanDiv.value); pushScan(); });
+  scanStart.addEventListener("input",  () => { scan.start = Number(scanStart.value); pushScan(); });
+  scanRange.addEventListener("input",  () => { scan.range = Number(scanRange.value); pushScan(); });
+  syncScanUI();
+
   const close = () => {
-    // persist as plain numeric arrays
-    t.wavetable = { frames: frames.map(f => Array.from(f)) };
+    // persist as plain numeric arrays (keep the scan config alongside the frames)
+    t.wavetable = { frames: frames.map(f => Array.from(f)), scan: t.wavetable.scan };
     pushToVoice(t);
+    applyWavetableScan(t);
     overlay.remove();
     document.removeEventListener("keydown", esc);
     t.el?.querySelector(".sq-track__wav")?.setAttribute("aria-pressed", "false");

@@ -1,4 +1,4 @@
-import { loadPatches, rebuildEngineCatalog, refreshEngineSelect, storePatches } from "./catalog.js";
+import { engineByKey, loadPatches, rebuildEngineCatalog, refreshEngineSelect, storePatches } from "./catalog.js";
 import { state } from "./state.js";
 
 export function showInputDialog({ title, defaultValue = "", placeholder = "", multiline = false }) {
@@ -43,8 +43,19 @@ export function showSavedPatchPicker() {
     const overlay = document.createElement("div");
     overlay.className = "sq-modal-overlay";
     const esc = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+    // Friendly engine label for a saved patch: track-patches carry engineKey,
+    // legacy custom-Tone patches are the "custom" engine.
+    const engineLabelOf = (cfg) => {
+      const key = cfg?.engineKey || (cfg?.synth ? "custom" : null);
+      if (!key) return null;
+      return engineByKey(key)?.label || key;
+    };
     const rows = names.length
-      ? names.map(n => `<li class="sq-patch__row"><button class="sq-patch__load" data-name="${esc(n)}">${esc(n)}</button><button class="sq-patch__del sq-btn--ghost" data-name="${esc(n)}" title="delete">×</button></li>`).join("")
+      ? names.map(n => {
+          const eng = engineLabelOf(all[n]);
+          const suffix = eng ? ` <span class="sq-patch__eng">- ${esc(eng)}</span>` : "";
+          return `<li class="sq-patch__row"><button class="sq-patch__load" data-name="${esc(n)}">${esc(n)}${suffix}</button><button class="sq-patch__del sq-btn--ghost" data-name="${esc(n)}" title="delete">×</button></li>`;
+        }).join("")
       : `<li class="sq-patch__empty">no saved patches yet — design a sound and click save.</li>`;
     overlay.innerHTML = `
       <div class="sq-modal" role="dialog" aria-modal="true">

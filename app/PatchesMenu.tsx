@@ -147,6 +147,9 @@ export default function PatchesMenu() {
                 <div className={styles.songRow} key={p.id}>
                   <span className={styles.songRowTitle} title={p.name}>
                     {p.name}
+                    {p.engine_type && (
+                      <span className={styles.empty}> - {p.engine_type}</span>
+                    )}
                     {p.author && (
                       <span className={styles.empty}> · {p.author}</span>
                     )}
@@ -179,6 +182,9 @@ export default function PatchesMenu() {
               <div className={styles.songRow} key={p.name}>
                 <span className={styles.songRowTitle} title={p.name}>
                   {p.name}
+                  {engineTypeOf(p.config) && (
+                    <span className={styles.empty}> - {engineTypeOf(p.config)}</span>
+                  )}
                 </span>
                 <button
                   className={styles.iconBtn}

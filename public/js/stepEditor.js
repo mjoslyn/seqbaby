@@ -356,7 +356,9 @@ function drawWaveformBase(c, cv, buffer, color = "#6e7280") {
 // Onset detection for the slicer's "detect transients": short-time RMS energy →
 // positive flux → adaptive-threshold peak-pick with a min spacing. Returns sorted
 // 0..1 slice-start fractions within [region.start, region.end], first = start.
-function detectTransients(buffer, region, maxSlices = 32) {
+// `sensitivity` 0..1 (default 0.5): higher = more slices (lower flux threshold +
+// tighter min spacing), lower = only the strongest transients.
+function detectTransients(buffer, region, maxSlices = 32, sensitivity = 0.5) {
   const data = buffer.getChannelData(0);
   const sr = buffer.sampleRate;
   const startI = Math.floor((region.start ?? 0) * data.length);
@@ -372,8 +374,10 @@ function detectTransients(buffer, region, maxSlices = 32) {
   const flux = frames.map((f, k) => (k === 0 ? 0 : Math.max(0, f.e - frames[k - 1].e)));
   const mean = flux.reduce((a, b) => a + b, 0) / Math.max(1, flux.length);
   const peak = Math.max(1e-9, ...flux);
-  const thr = mean + (peak - mean) * 0.25;
-  const minGap = Math.max(1, Math.floor((sr * 0.05) / hop));   // 50 ms min spacing
+  const s = Math.max(0, Math.min(1, sensitivity));
+  const thr = mean + (peak - mean) * (0.5 - s * 0.45);   // s=0.5 → 0.275 (≈ old 0.25)
+  const gapMs = 0.09 - s * 0.07;                          // 90 ms (low) … 20 ms (high)
+  const minGap = Math.max(1, Math.floor((sr * gapMs) / hop));
   const onsets = [];
   let last = -minGap;
   for (let k = 1; k < flux.length - 1; k++) {
@@ -384,7 +388,15 @@ function detectTransients(buffer, region, maxSlices = 32) {
   }
   let slices = onsets;
   const rs = region.start ?? 0;
-  if (!slices.length || slices[0] > rs + 0.001) slices = [rs, ...slices];
+  // Flux can't fire on frame 0 (nothing to diff against), so a sample that
+  // starts right on a hit needs region.start prepended as slice 0. But if the
+  // lead-in is quiet, prepending it makes a silent first slice that plays
+  // nothing — in that case the first detected onset IS slice 0. Gate on the
+  // energy at the region start.
+  const peakE = Math.max(1e-9, ...frames.map(f => f.e));
+  const startEnergetic = frames.length && frames[0].e >= peakE * 0.15;
+  if (!slices.length) slices = [rs];
+  else if (startEnergetic && slices[0] > rs + 0.001) slices = [rs, ...slices];
   slices = slices.map(x => Math.max(0, Math.min(1, x))).sort((a, b) => a - b);
   return slices.slice(0, maxSlices);
 }
@@ -433,6 +445,7 @@ export function openSampleEditorModal(t) {
       <label>equal <select class="sq-slice__n"><option>2</option><option>4</option><option selected>8</option><option>16</option><option>32</option></select></label>
       <button type="button" class="sq-slice__make sq-btn--ghost">make</button>
       <button type="button" class="sq-slice__detect sq-btn--ghost">detect</button>
+      <label>sens <input type="range" class="sq-slice__sens" min="0" max="1" step="0.01" /></label>
       <button type="button" class="sq-slice__clear sq-btn--ghost">clear</button>
       <label>base <input type="number" class="sq-slice__base" min="0" max="127" /> <span class="sq-slice__base-name"></span></label>
       <label>play <select class="sq-slice__mode"><option value="region">region</option><option value="toend">to end</option></select></label>
@@ -457,6 +470,7 @@ export function openSampleEditorModal(t) {
   const baseIn = modal.querySelector(".sq-slice__base");
   const baseName = modal.querySelector(".sq-slice__base-name");
   const modeSel = modal.querySelector(".sq-slice__mode");
+  const sensIn = modal.querySelector(".sq-slice__sens");
   const pads = modal.querySelector(".sq-slice__pads");
   fitSel.value = t.sampleSpeedMode || "native";
   loopSel.value = sd.loopMode || "off";
@@ -465,6 +479,7 @@ export function openSampleEditorModal(t) {
   onCb.checked = !!t.sliceOn;
   baseIn.value = String(t.sliceBase ?? 60);
   modeSel.value = t.slicePlayMode === "toend" ? "toend" : "region";
+  sensIn.value = String(t.sliceSensitivity ?? 0.5);
   const fmtFade = s => s < 1 ? `${Math.round(s * 1000)} ms` : `${s.toFixed(2)} s`;
   fiL.textContent = fmtFade(Number(fiI.value)); foL.textContent = fmtFade(Number(foI.value));
   const setBaseName = () => { baseName.textContent = midiToName(t.sliceBase ?? 60); };
@@ -573,11 +588,18 @@ export function openSampleEditorModal(t) {
     t.slices = Array.from({ length: n }, (_, i) => a + (i / n) * (b - a));
     renderPads(); draw();
   });
-  modal.querySelector(".sq-slice__detect").addEventListener("click", () => {
+  const runDetect = () => {
     const buf = t.voice?.buffer; if (!buf) { setStatus("no sample loaded yet", true); return; }
-    t.slices = detectTransients(buf, { start: sd.start ?? 0, end: sd.end ?? 1 }, 32);
+    t.slices = detectTransients(buf, { start: sd.start ?? 0, end: sd.end ?? 1 }, 32, t.sliceSensitivity ?? 0.5);
     renderPads(); draw();
     setStatus(`detected ${t.slices.length} slices`);
+  };
+  modal.querySelector(".sq-slice__detect").addEventListener("click", runDetect);
+  // Live re-detect while dragging the sensitivity slider, but only once markers
+  // already came from a detect pass (don't clobber hand-placed/equal-N slices).
+  sensIn.addEventListener("input", () => {
+    t.sliceSensitivity = Math.max(0, Math.min(1, Number(sensIn.value)));
+    if (t.slices?.length) runDetect();
   });
   modal.querySelector(".sq-slice__clear").addEventListener("click", () => { t.slices = []; renderPads(); draw(); });
   modal.querySelector(".sq-samp__preview").addEventListener("click", async () => {

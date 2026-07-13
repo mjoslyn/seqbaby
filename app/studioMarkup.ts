@@ -21,7 +21,7 @@ export const STUDIO_BODY = String.raw`
       <select id="scale-mode"></select>
       <button id="note-colors" class="sq-btn--ghost sq-icon-btn" aria-pressed="false" aria-label="note colors" title="toggle diatonic note coloring on the piano roll + step grid"></button>
     </div>
-    <span id="kbd-label" class="sq-kbd-chord__lbl" title="play the active track from your computer keyboard (a s d f… = white keys, w e t y u = black, z/x = octave)">kbd</span>
+    <span id="kbd-octave" class="sq-kbd-oct" title="keyboard base octave — press z / x to shift down / up">C4</span>
     <div id="kbd-chord" class="sq-kbd-chord">
       <span class="sq-kbd-chord__lbl">chord</span>
       <select id="kbd-chord-type" title="chord mode — play each key as a chord (off = single notes)">

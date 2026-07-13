@@ -4,7 +4,26 @@ import { init } from "./main.js";
 import { refreshRollIfOpen } from "./pianoRoll.js";
 import { state } from "./state.js";
 import { renderStepGrid } from "./stepGrid.js";
-import { SCALES } from "./theory.js";
+import { CHORD_TYPES, SCALES } from "./theory.js";
+
+// The keyboard chord-type selector collapses to a simple off/on when a scale is
+// active (chords are built diatonically from the scale, so the fixed maj/min/…
+// qualities don't apply); it expands back to the full chord list otherwise.
+export function refreshChordTypeSelect() {
+  const sel = document.getElementById("kbd-chord-type");
+  if (!sel) return;
+  if (state.scale.active) {
+    const on = !!state.kbdChordType;
+    sel.innerHTML = '<option value="">off</option><option value="on">on</option>';
+    state.kbdChordType = on ? "on" : "";
+    sel.title = "chord mode — on plays diatonic chords quantized to the scale";
+  } else {
+    sel.innerHTML = Object.keys(CHORD_TYPES).map(k => `<option value="${k}">${k || "off"}</option>`).join("");
+    if (!CHORD_TYPES[state.kbdChordType]) state.kbdChordType = "";   // "on" isn't a real chord type
+    sel.title = "chord mode — play each key as a chord (off = single notes)";
+  }
+  sel.value = state.kbdChordType;
+}
 
 export function syncScaleUI() {
   const on = document.getElementById("scale-on");
@@ -13,6 +32,7 @@ export function syncScaleUI() {
   on.checked = state.scale.active;
   root.value = String(state.scale.root);
   mode.value = state.scale.mode;
+  refreshChordTypeSelect();
 }
 
 export function initScaleUI() {
@@ -42,7 +62,7 @@ export function initScaleUI() {
       renderStepGrid(t);
     }
   };
-  on.addEventListener("change", () => { state.scale.active = on.checked; refreshOnScaleChange(); });
+  on.addEventListener("change", () => { state.scale.active = on.checked; refreshChordTypeSelect(); refreshOnScaleChange(); });
   root.addEventListener("change", () => { state.scale.root = Number(root.value); refreshOnScaleChange(); });
   mode.addEventListener("change", () => { state.scale.mode = mode.value; refreshOnScaleChange(); });
 

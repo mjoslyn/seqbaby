@@ -1234,6 +1234,19 @@ export class CustomToneVoice {
       );
     } catch (e) { console.warn("custom hit", e); }
   }
+  // Keyboard gate: hold on keydown, release on keyup.
+  noteOn(midiNote, time, velocity = 1) {
+    if (!this.synth) return;
+    try { this.synth.triggerAttack(Tone.Frequency(midiNote, "midi"), time, Math.max(0, Math.min(1, velocity))); }
+    catch (e) { console.warn("custom noteOn", e); }
+  }
+  noteOff(midiNote, time) {
+    if (!this.synth) return;
+    try {
+      if (this.poly) this.synth.triggerRelease(Tone.Frequency(midiNote, "midi"), time);
+      else this.synth.triggerRelease(time);
+    } catch (e) { console.warn("custom noteOff", e); }
+  }
   silence() {
     try { this.synth?.releaseAll?.(); } catch {}
     try { this.synth?.triggerRelease?.(); } catch {}
@@ -1486,6 +1499,77 @@ export class GranularVoice {
     // Bound the viz log so long held notes don't grow it without limit.
     if (this.grainViz.length > 600) this.grainViz.splice(0, this.grainViz.length - 600);
   }
+  // Keyboard gate: keep spraying grains while the key is held (a lookahead
+  // scheduler tops up the cloud), stop scheduling on release so the last grains
+  // ring out naturally. Live param tweaks apply mid-note since params are read
+  // each scheduler tick.
+  noteOn(midiNote, time, velocity = 1, opts = null) {
+    if (!this.buffer || !(this.buffer.duration > 0)) return;
+    const pitchBase = Number.isFinite(opts?.pitchBase) ? opts.pitchBase : 60;
+    const t0 = Math.max(time, this.ctx.currentTime + 0.005);
+    const rec = {
+      baseRate: Math.pow(2, (midiNote - pitchBase) / 12),
+      velocity: Math.max(0.05, Math.min(1, velocity)),
+      startT: t0, nextGrain: t0, movingBase: this.pos, timer: null, released: false,
+    };
+    this.headViz = { t0, startPos: this.pos, speed: this.gspeed * 2, moving: this.gplay === "moving", loop: this.gloop, until: t0 + 3600 };
+    const LOOKAHEAD = 0.12;
+    const tick = () => { if (!rec.released) this._spraySustainGrains(rec, this.ctx.currentTime + LOOKAHEAD); };
+    tick();
+    rec.timer = setInterval(tick, 50);
+    if (!this._grainHeld) this._grainHeld = new Map();
+    let arr = this._grainHeld.get(midiNote);
+    if (!arr) { arr = []; this._grainHeld.set(midiNote, arr); }
+    arr.push(rec);
+  }
+  noteOff(midiNote, time) {
+    const arr = this._grainHeld?.get(midiNote);
+    if (!arr) return;
+    this._grainHeld.delete(midiNote);
+    for (const rec of arr) { rec.released = true; if (rec.timer != null) { clearInterval(rec.timer); rec.timer = null; } }
+  }
+  // Schedule grains from rec.nextGrain up to `until`, reading live params each call.
+  _spraySustainGrains(rec, until) {
+    const bufDur = this.buffer?.duration;
+    if (!(bufDur > 0)) return;
+    const gs = this.grainSize;
+    let interval;
+    if (this.gsync) {
+      const bpm = (typeof Tone !== "undefined" && Tone.Transport?.bpm?.value) || 120;
+      const beats = GRAN_RATE_BEATS[this.grate] ?? 0.25;
+      interval = Math.max(0.01, beats * (60 / bpm));
+    } else {
+      interval = 1 / this.density;
+    }
+    const spray = this.spray;
+    const windowSec = Math.min((this.gwindow + spray * 0.5) * 2.0, bufDur * 0.5);
+    const jitterAmt = Math.min(1, this.gjitter + spray * 0.4);
+    const detuneCents = this.gdetune * 100 + spray * 50;
+    const moving = this.gplay === "moving";
+    const speed = this.gspeed * 2;
+    const overlap = Math.max(1, (1 / interval) * gs);
+    const grainAmp = (0.9 / Math.sqrt(overlap)) * rec.velocity;
+    let guard = 0;
+    while (rec.nextGrain < until && guard++ < 400) {
+      const jit = (Math.random() - 0.5) * interval * jitterAmt * 2;
+      const at = rec.nextGrain + Math.max(0, jit);
+      const dt = at - rec.startT;
+      const atkScale = Math.min(1, dt / 0.02);   // brief note-onset fade-in
+      const center = moving ? this._scanPos(rec.movingBase, (speed * dt) / bufDur) : this.pos;
+      const winJit = (Math.random() * 2 - 1) * (windowSec / bufDur);
+      const posFrac = ((center + winJit) % 1 + 1) % 1;
+      const cents = (Math.random() * 2 - 1) * detuneCents;
+      let semis = 0;
+      if (this.gpattern === "oct") semis = (Math.floor(Math.random() * 3) - 1) * 12;
+      else if (this.gpattern === "fifth") semis = (Math.floor(Math.random() * 3) - 1) * 7;
+      const rate = rec.baseRate * Math.pow(2, semis / 12 + cents / 1200);
+      const pan = (Math.random() * 2 - 1) * this.gpan;
+      this._scheduleGrain(at, posFrac * bufDur, gs, rate, grainAmp * atkScale, pan);
+      this.grainViz.push({ s: at, e: at + gs, p: posFrac });
+      rec.nextGrain += interval;
+    }
+    if (this.grainViz.length > 600) this.grainViz.splice(0, this.grainViz.length - 600);
+  }
   _scheduleGrain(startT, offset, gs, rate, amp, pan) {
     const src = this.ctx.createBufferSource();
     src.buffer = this.buffer;
@@ -1521,6 +1605,10 @@ export class GranularVoice {
   silence(now) {
     const at = Math.max(this.ctx.currentTime, Number(now) || this.ctx.currentTime);
     for (const s of this.active) { try { s.stop(at); } catch {} }
+    if (this._grainHeld) {
+      for (const arr of this._grainHeld.values()) for (const rec of arr) { rec.released = true; if (rec.timer != null) clearInterval(rec.timer); }
+      this._grainHeld.clear();
+    }
   }
   dispose() {
     this.silence(this.ctx.currentTime);
@@ -1587,9 +1675,161 @@ export class WavetableVoice {
     // Custom multi-frame wavetable (built in the editor). When present it replaces
     // the AKWF palette; the wave knob morphs (crossfades) across the frames.
     this.frameBufs = null;   // AudioBuffer[] — one single-cycle buffer per frame
+    // Wave-scan modulator: automatically sweeps the table position over time so
+    // the timbre cycles through the frames. null when off. See setScan().
+    this.scan = null;
+    this.scanPhase = 0;      // advances at scan.hz cycles/sec
+    this.scanPos = 0;        // resolved 0..1 table position
+    this._scanRaf = null;
+    this._scanRecs = new Set();  // per-note morph records (frame crossfader)
+    this._randCycle = -1; this._randFrom = 0; this._randTo = 0;
+    this._held = new Map();  // midi -> [handle] for keyboard gate (noteOn/noteOff)
     loadWavetable(ctx).then(b => { this.buffers = b; }).catch(e => console.warn("wavetable load", e));
     if (track?.wavetable?.frames?.length) this.setWavetable(track.wavetable.frames);
     this._applyParams();
+  }
+  /** The frame buffers the scan sweeps across: custom table if built, else AKWF palette. */
+  _frameList() {
+    if (this.frameBufs && this.frameBufs.length) return this.frameBufs;
+    if (this.buffers && this.buffers.length) return this.buffers.filter(Boolean);
+    return [];
+  }
+  /**
+   * Configure (or clear) the wave-scan modulator.
+   * @param {?{enabled:boolean,dir:string,start:number,range:number}} cfg
+   * @param {number} hz cycles per second (resolved from rate or bpm-sync by the caller)
+   */
+  setScan(cfg, hz) {
+    if (!cfg?.enabled) {
+      this.scan = null;
+      if (this._scanRecs.size) this._startScanLoop();  // keep draining any ringing notes
+      return;
+    }
+    const clamp01 = (x) => Math.max(0, Math.min(1, Number(x) || 0));
+    this.scan = {
+      enabled: true,
+      hz: Math.max(0.0001, Number(hz) || 0.0001),
+      dir: cfg.dir || "up",
+      start: clamp01(cfg.start ?? 0),
+      range: clamp01(cfg.range ?? 1),
+    };
+    this.scanPos = this._scanPosition();
+    this._startScanLoop();
+  }
+  /** Resolve the current 0..1 table position from scanPhase + direction. */
+  _scanPosition() {
+    const sc = this.scan;
+    if (!sc) return this.scanPos;
+    const r = this.scanPhase - Math.floor(this.scanPhase);  // 0..1 within this cycle
+    let s;
+    switch (sc.dir) {
+      case "down":   s = 1 - r; break;
+      case "updown": s = r < 0.5 ? r * 2 : 2 - r * 2; break;
+      case "random": {
+        const cyc = Math.floor(this.scanPhase);
+        if (cyc !== this._randCycle) {
+          this._randCycle = cyc;
+          this._randFrom = this._randTo;
+          this._randTo = Math.random();
+        }
+        s = this._randFrom + (this._randTo - this._randFrom) * r;
+        break;
+      }
+      default: s = r;  // up
+    }
+    let pos = sc.start + s * sc.range;
+    pos -= Math.floor(pos);  // wrap into 0..1 so it keeps cycling
+    return pos;
+  }
+  _startScanLoop() {
+    if (this._scanRaf != null) return;
+    let last = this.ctx.currentTime;
+    const tick = () => {
+      const now = this.ctx.currentTime;
+      const dt = Math.max(0, Math.min(0.1, now - last)); last = now;
+      if (this.scan?.enabled) {
+        this.scanPhase += dt * this.scan.hz;
+        this.scanPos = this._scanPosition();
+        for (const rec of this._scanRecs) this._applyScanToRec(rec, now);
+      }
+      this._pruneScanRecs(now);   // keep pruning even when off so ringing notes drain
+      this._scanRaf = (this.scan?.enabled || this._scanRecs.size) ? requestAnimationFrame(tick) : null;
+    };
+    this._scanRaf = requestAnimationFrame(tick);
+  }
+  _stopScanLoop() {
+    if (this._scanRaf != null) { try { cancelAnimationFrame(this._scanRaf); } catch {} this._scanRaf = null; }
+  }
+  /** Create a phase-aligned looping source for one frame of a morph record. */
+  _makeFrameSlot(rec, idx, now, initGain) {
+    const buf = rec.frames[idx];
+    if (!buf || !(buf.duration > 0)) return null;
+    const src = this.ctx.createBufferSource();
+    src.buffer = buf; src.loop = true; src.loopStart = 0; src.loopEnd = buf.duration;
+    src.playbackRate.value = rec.targetFreq * buf.duration;   // loop at the note's pitch
+    const gain = this.ctx.createGain();
+    gain.gain.value = Math.max(0, initGain || 0);
+    src.connect(gain); gain.connect(rec.mix);
+    const startAt = Math.max(now, rec.t0);
+    // Align to the note's global loop phase so frames sum without comb filtering.
+    const phase = (startAt - rec.t0) * rec.targetFreq;
+    const offset = (phase - Math.floor(phase)) * buf.duration;
+    try { src.start(startAt, offset); } catch { try { src.start(startAt); } catch {} }
+    if (Number.isFinite(rec.stopAt)) { try { src.stop(rec.stopAt); } catch {} }  // held notes stop on release
+    const slot = { src, gain, idx, retireAt: null };
+    src.onended = () => {
+      try { src.disconnect(); } catch {}
+      try { gain.disconnect(); } catch {}
+      if (rec.slots.get(idx) === slot) rec.slots.delete(idx);
+    };
+    rec.slots.set(idx, slot);
+    return slot;
+  }
+  /** Set each frame's crossfade gain for one note record from the current scanPos. */
+  _applyScanToRec(rec, now) {
+    const n = rec.n;
+    const fp = Math.max(0, Math.min(1, this.scanPos)) * (n - 1);
+    const i0 = Math.floor(fp), i1 = Math.min(n - 1, i0 + 1), frac = fp - i0;
+    const targets = new Map();
+    targets.set(i0, 1 - frac);
+    if (i1 !== i0) targets.set(i1, frac);
+    for (const [idx, g] of targets) {
+      const slot = rec.slots.get(idx);
+      if (slot) { slot.retireAt = null; slot.gain.gain.setTargetAtTime(g, now, 0.02); }
+      else {
+        // New frame always fades up from 0 so the table wrap (n-1 → 0) crossfades
+        // click-free instead of the incoming source snapping to full gain.
+        const ns = this._makeFrameSlot(rec, idx, now, 0);
+        if (ns) ns.gain.gain.setTargetAtTime(g, now, 0.02);
+      }
+    }
+    for (const [idx, slot] of rec.slots) {
+      if (targets.has(idx)) continue;
+      slot.gain.gain.setTargetAtTime(0, now, 0.02);
+      if (slot.retireAt == null) slot.retireAt = now + 0.15;   // stop once faded out
+    }
+  }
+  _pruneScanRecs(now) {
+    for (const rec of this._scanRecs) {
+      for (const [, slot] of rec.slots) {
+        if (slot.retireAt != null && now >= slot.retireAt) {
+          slot.retireAt = null;
+          try { slot.src.stop(now); } catch {}   // onended disconnects + removes the slot
+        }
+      }
+      if (now >= rec.stopAt + 0.06) {
+        for (const [, slot] of rec.slots) {
+          try { slot.src.stop(); } catch {}
+          try { slot.src.disconnect(); } catch {}
+          try { slot.gain.disconnect(); } catch {}
+        }
+        rec.slots.clear();
+        try { rec.mix.disconnect(); } catch {}
+        try { rec.filt && rec.filt.disconnect(); } catch {}
+        try { rec.amp.disconnect(); } catch {}
+        this._scanRecs.delete(rec);
+      }
+    }
   }
   /** Build per-frame single-cycle AudioBuffers from raw sample arrays. */
   setWavetable(frames) {
@@ -1642,6 +1882,10 @@ export class WavetableVoice {
   }
   getAudioParam(key) { return key === "vol" ? this.output.gain : null; }
   hit(midiNote, time, duration, velocity = 1) {
+    if (this.scan?.enabled && this._frameList().length) {
+      this._hitScan(midiNote, time, duration, velocity);
+      return;
+    }
     let buf;
     if (this.frameBufs && this.frameBufs.length) {
       buf = this._morphBuffer(this.wavePos);       // custom wavetable: morph frames
@@ -1700,12 +1944,179 @@ export class WavetableVoice {
     };
     this.active.add(rec);
   }
+  /**
+   * Scan-mode note: a bank of phase-aligned looping frame sources crossfaded by
+   * the wave-scan modulator, so the timbre morphs across the table while the
+   * note sustains (and every new note picks up the sweep's current position).
+   */
+  _hitScan(midiNote, time, duration, velocity = 1) {
+    const frames = this._frameList();
+    if (!frames.length) return;
+    const targetFreq = Tone.Frequency(midiNote, "midi").toFrequency();
+    const t0 = Math.max(time, this.ctx.currentTime + 0.002);
+    const noteDur = Math.max(0.03, duration);
+    const peak = Math.max(0.0001, Math.min(1, velocity)) * 0.5;
+    const atk = 0.005;
+    const amp = this.ctx.createGain();
+    amp.gain.setValueAtTime(0.0001, t0);
+    amp.gain.exponentialRampToValueAtTime(peak, t0 + atk);
+    const relStart = Math.max(t0 + atk, t0 + noteDur);
+    amp.gain.setValueAtTime(peak, relStart);
+    amp.gain.exponentialRampToValueAtTime(0.0001, relStart + this.ampRelease);
+    let tail = amp, filt = null;
+    if (this.warm < 0.99) {
+      filt = this.ctx.createBiquadFilter();
+      filt.type = "lowpass";
+      filt.frequency.value = 200 * Math.pow(2, this.warm * 7);
+      filt.Q.value = 0.3;
+      amp.connect(filt);
+      tail = filt;
+    }
+    tail.connect(this.output);
+    const mix = this.ctx.createGain();
+    mix.gain.value = 1;
+    mix.connect(amp);
+    const stopAt = relStart + this.ampRelease + 0.02;
+    const rec = { frames, n: frames.length, targetFreq, t0, amp, filt, mix, stopAt, slots: new Map() };
+    this._scanRecs.add(rec);
+    this._applyScanToRec(rec, t0);   // seed the initial frame pair so sound starts immediately
+    this._startScanLoop();
+  }
+  // ---- keyboard gate: sustain while held, release on noteOff ----
+  _addHeld(midi, handle) {
+    let arr = this._held.get(midi);
+    if (!arr) { arr = []; this._held.set(midi, arr); }
+    arr.push(handle);
+  }
+  noteOn(midiNote, time, velocity = 1) {
+    if (this.scan?.enabled && this._frameList().length) { this._noteOnScan(midiNote, time, velocity); return; }
+    let buf;
+    if (this.frameBufs && this.frameBufs.length) buf = this._morphBuffer(this.wavePos);
+    else if (this.buffers && this.buffers.length) {
+      const idx = Math.min(this.buffers.length - 1, Math.max(0, Math.round(this.wavePos * (this.buffers.length - 1))));
+      buf = this.buffers[idx];
+    }
+    if (!buf || !(buf.duration > 0)) return;
+    const targetFreq = Tone.Frequency(midiNote, "midi").toFrequency();
+    const rate = targetFreq * buf.duration;               // loop the single cycle at pitch
+    const t0 = Math.max(time, this.ctx.currentTime + 0.002);
+    const peak = Math.max(0.0001, Math.min(1, velocity)) * 0.5;
+    const amp = this.ctx.createGain();
+    amp.gain.setValueAtTime(0.0001, t0);
+    amp.gain.exponentialRampToValueAtTime(peak, t0 + 0.005);   // attack, then sustain until release
+    let tail = amp, filt = null;
+    if (this.warm < 0.99) {
+      filt = this.ctx.createBiquadFilter();
+      filt.type = "lowpass";
+      filt.frequency.value = 200 * Math.pow(2, this.warm * 7);
+      filt.Q.value = 0.3;
+      amp.connect(filt);
+      tail = filt;
+    }
+    tail.connect(this.output);
+    const detCents = this.detune * this.detune * 30;
+    const voicesN = this.detune > 0.01 ? 2 : 1;
+    const srcs = [];
+    for (let u = 0; u < voicesN; u++) {
+      const src = this.ctx.createBufferSource();
+      src.buffer = buf; src.loop = true; src.loopStart = 0; src.loopEnd = buf.duration;
+      src.playbackRate.value = rate;
+      if (voicesN === 2) src.detune.value = u === 0 ? -detCents : detCents;
+      src.connect(amp);
+      src.start(t0);
+      srcs.push(src);
+    }
+    this._addHeld(midiNote, { srcs, amp, filt, released: false });
+  }
+  /** Held note in scan mode: a sustaining crossfader that keeps sweeping until release. */
+  _noteOnScan(midiNote, time, velocity = 1) {
+    const frames = this._frameList();
+    if (!frames.length) return;
+    const targetFreq = Tone.Frequency(midiNote, "midi").toFrequency();
+    const t0 = Math.max(time, this.ctx.currentTime + 0.002);
+    const peak = Math.max(0.0001, Math.min(1, velocity)) * 0.5;
+    const amp = this.ctx.createGain();
+    amp.gain.setValueAtTime(0.0001, t0);
+    amp.gain.exponentialRampToValueAtTime(peak, t0 + 0.005);
+    let tail = amp, filt = null;
+    if (this.warm < 0.99) {
+      filt = this.ctx.createBiquadFilter();
+      filt.type = "lowpass";
+      filt.frequency.value = 200 * Math.pow(2, this.warm * 7);
+      filt.Q.value = 0.3;
+      amp.connect(filt);
+      tail = filt;
+    }
+    tail.connect(this.output);
+    const mix = this.ctx.createGain();
+    mix.gain.value = 1;
+    mix.connect(amp);
+    // stopAt Infinity → frame sources loop open-endedly; release() sets it finite.
+    const rec = { frames, n: frames.length, targetFreq, t0, amp, filt, mix, stopAt: Infinity, slots: new Map() };
+    this._scanRecs.add(rec);
+    this._applyScanToRec(rec, t0);
+    this._startScanLoop();
+    this._addHeld(midiNote, { rec, released: false });
+  }
+  noteOff(midiNote, time) {
+    const arr = this._held.get(midiNote);
+    if (!arr) return;
+    this._held.delete(midiNote);
+    for (const h of arr) h.rec ? this._releaseScanNote(h, time) : this._releaseStaticNote(h, time);
+  }
+  _releaseStaticNote(h, time) {
+    if (h.released) return; h.released = true;
+    const now = Math.max(this.ctx.currentTime, Number(time) || 0);
+    try {
+      h.amp.gain.cancelScheduledValues(now);
+      h.amp.gain.setValueAtTime(Math.max(0.0001, h.amp.gain.value), now);
+      h.amp.gain.exponentialRampToValueAtTime(0.0001, now + this.ampRelease);
+    } catch {}
+    const stopAt = now + this.ampRelease + 0.02;
+    for (const s of h.srcs) { try { s.stop(stopAt); } catch {} }
+    const first = h.srcs[0];
+    if (first) first.onended = () => {
+      for (const s of h.srcs) { try { s.disconnect(); } catch {} }
+      try { h.amp.disconnect(); } catch {}
+      try { h.filt && h.filt.disconnect(); } catch {}
+    };
+  }
+  _releaseScanNote(h, time) {
+    if (h.released) return; h.released = true;
+    const rec = h.rec;
+    const now = Math.max(this.ctx.currentTime, Number(time) || 0);
+    try {
+      rec.amp.gain.cancelScheduledValues(now);
+      rec.amp.gain.setValueAtTime(Math.max(0.0001, rec.amp.gain.value), now);
+      rec.amp.gain.exponentialRampToValueAtTime(0.0001, now + this.ampRelease);
+    } catch {}
+    const stopAt = now + this.ampRelease + 0.02;
+    rec.stopAt = stopAt;                                   // let _pruneScanRecs finalize it
+    for (const [, slot] of rec.slots) { try { slot.src.stop(stopAt); } catch {} }
+    this._startScanLoop();
+  }
   silence(now) {
     const at = Math.max(this.ctx.currentTime, Number(now) || this.ctx.currentTime);
     for (const rec of this.active) { for (const s of rec.srcs) { try { s.stop(at); } catch {} } }
+    for (const rec of this._scanRecs) {
+      rec.stopAt = Math.min(rec.stopAt, at);
+      for (const [, slot] of rec.slots) { try { slot.src.stop(at); } catch {} }
+    }
+    for (const arr of this._held.values()) {
+      for (const h of arr) {
+        if (h.rec) { h.rec.stopAt = Math.min(h.rec.stopAt, at); }
+        else for (const s of h.srcs) { try { s.stop(at); } catch {} }
+      }
+    }
+    this._held.clear();
   }
   dispose() {
     this.silence(this.ctx.currentTime);
+    this._stopScanLoop();
+    for (const rec of this._scanRecs) {
+      for (const [, slot] of rec.slots) { try { slot.src.stop(); } catch {} try { slot.src.disconnect(); } catch {} }
+    }
+    this._scanRecs.clear();
     try { this.output.disconnect(); } catch {}
   }
 }

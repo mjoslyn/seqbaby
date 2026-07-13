@@ -12,7 +12,7 @@ import { currentBpm } from "./lfo.js";
 import { invertChord, state } from "./state.js";
 import { renderStepGrid } from "./stepGrid.js";
 import { resizeTrack } from "./track.js";
-import { SCALES, chordNotes, midiToScaleIndex, quantizeToScale, scaleIndexToMidi } from "./theory.js";
+import { SCALES, chordNotes, diatonicChordNotes, midiToScaleIndex, quantizeToScale, scaleIndexToMidi } from "./theory.js";
 import { ensureAudio } from "./transport.js";
 
 const KBD_REC_VEL = 0.85;
@@ -104,9 +104,19 @@ function hitOptsFor(t) {
   };
 }
 
-// The note/chord a keypress represents, for click-to-apply on a step. Chord mode
-// → root + chord type + cpx; otherwise the currently-held notes as root + extras.
+// Whether keyboard chord mode is producing diatonic (scale-quantized) chords.
+function scaleChordActive() {
+  return !!(state.scale.active && SCALES[state.scale.mode] && state.kbdChordType);
+}
+
+// The note/chord a keypress represents, for click-to-apply on a step. Under a
+// scale the diatonic chord is stored as explicit notes (root + extras) so it
+// reproduces exactly; otherwise chord mode stores root + chord type + cpx.
 function kbdSelection(pressedMidi) {
+  if (scaleChordActive()) {
+    const tones = tonesFor(pressedMidi);
+    return { root: tones[0], chord: "", cpx: 0, extras: tones.length > 1 ? tones.slice(1) : null };
+  }
   if (state.kbdChordType) {
     return { root: Math.round(pressedMidi), chord: state.kbdChordType, cpx: state.kbdChordCpx | 0, extras: null };
   }
@@ -115,9 +125,16 @@ function kbdSelection(pressedMidi) {
   return { root, chord: "", cpx: 0, extras: notes.length > 1 ? notes.slice(1) : null };
 }
 
-// In chord mode each single key plays a whole chord (type + inversion); otherwise
-// just the one note. Returns the actual tones to sound.
+// In chord mode each single key plays a whole chord; otherwise just the one note.
+// Under an active scale the chord is built diatonically (stacked scale-thirds, so
+// the quality follows the scale degree) instead of from a fixed chord type.
+// Returns the actual tones to sound.
 function tonesFor(midi) {
+  if (scaleChordActive()) {
+    let tones = diatonicChordNotes(midi, 3);
+    if (state.kbdChordCpx) tones = invertChord(tones, state.kbdChordCpx | 0);
+    return tones.map(clampNote);
+  }
   if (state.kbdChordType) {
     let tones = chordNotes(midi, state.kbdChordType);
     if (state.kbdChordCpx) tones = invertChord(tones, state.kbdChordCpx | 0);
@@ -226,7 +243,18 @@ function captureNote(pressedMidi) {
   if (Array.isArray(t.velocities)) t.velocities[idx] = KBD_REC_VEL;
   if (Array.isArray(t.extraNotes))   t.extraNotes[idx]   = null;
   if (Array.isArray(t.extraLengths)) t.extraLengths[idx] = null;
-  if (state.kbdChordType) {
+  if (scaleChordActive()) {
+    // diatonic chord under a scale: store the actual tones as root + extras
+    const tones = tonesFor(pressedMidi);
+    const root = tones[0];
+    const extras = tones.slice(1);
+    if (Array.isArray(t.notes)) t.notes[idx] = root;
+    if (Array.isArray(t.chords)) t.chords[idx] = "";
+    if (Array.isArray(t.complexities)) t.complexities[idx] = 0;
+    if (Array.isArray(t.extraNotes))   t.extraNotes[idx]   = extras.length ? extras : null;
+    if (Array.isArray(t.extraLengths)) t.extraLengths[idx] = extras.length ? extras.map(() => noteLen) : null;
+    if (!t.isDrumKit) t.lastEditedNote = root;
+  } else if (state.kbdChordType) {
     // chord mode: store root + chord type + inversion (the transport expands it)
     const root = Math.round(pressedMidi);
     if (Array.isArray(t.notes)) t.notes[idx] = root;
@@ -260,8 +288,8 @@ function onKeyDown(e) {
   if (e.target?.tagName === "SELECT" && (KEY_SEMITONES[k] != null || k === "z" || k === "x")) {
     e.target.blur();
   }
-  if (k === "z") { state.kbdBase = Math.max(0, state.kbdBase - 12); e.preventDefault(); return; }
-  if (k === "x") { state.kbdBase = Math.min(108, state.kbdBase + 12); e.preventDefault(); return; }
+  if (k === "z") { state.kbdBase = Math.max(0, state.kbdBase - 12); updateKbdOctaveLabel(); e.preventDefault(); return; }
+  if (k === "x") { state.kbdBase = Math.min(108, state.kbdBase + 12); updateKbdOctaveLabel(); e.preventDefault(); return; }
   if (KEY_SEMITONES[k] == null || held.has(k)) return;
   const midi = noteForKey(k);
   if (midi == null) return;
@@ -277,10 +305,20 @@ function onKeyDown(e) {
 
 function onKeyUp(e) { releaseNote((e.key || "").toLowerCase()); }
 
+const _OCT_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+/** Update the top-bar readout of the keyboard's current base octave (z/x shifts). */
+export function updateKbdOctaveLabel() {
+  const el = document.getElementById("kbd-octave");
+  if (!el) return;
+  const b = Math.round(state.kbdBase);
+  el.textContent = _OCT_NAMES[((b % 12) + 12) % 12] + (Math.floor(b / 12) - 1);
+}
+
 let _installed = false;
 export function initComputerKeyboard() {
   if (_installed) return;
   _installed = true;
+  updateKbdOctaveLabel();
   document.addEventListener("keydown", onKeyDown);
   document.addEventListener("keyup", onKeyUp);
   window.addEventListener("blur", resetKbdKeys);

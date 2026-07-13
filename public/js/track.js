@@ -66,6 +66,7 @@ export function createTrack({ name, engineKey, length = totalSteps() }) {
     sliceOn: false,
     sliceBase: 60,
     slicePlayMode: "region",
+    sliceSensitivity: 0.5,
     params: {
       vol: 0.8, harm: 0.5, timb: 0.5, morph: 0.5, decay: 0.4,
       osc1: 0.55, osc2: 0.45, osc3: 0.35, osc4: 0.4,
@@ -148,6 +149,7 @@ export function duplicateTrack(src) {
   dup.sliceOn = !!src.sliceOn;
   dup.sliceBase = src.sliceBase ?? 60;
   dup.slicePlayMode = src.slicePlayMode === "toend" ? "toend" : "region";
+  dup.sliceSensitivity = src.sliceSensitivity ?? 0.5;
   dup.muted = !!src.muted;
   dup.soloed = !!src.soloed;
   dup.isDrumKit = !!src.isDrumKit;

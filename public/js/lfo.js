@@ -17,6 +17,20 @@ export function defaultLFOConfig() {
 
 export function currentBpm() { return Number(document.getElementById("bpm").value || 120); }
 
+/** Default wave-scan config for the wavetable synth (see WavetableVoice.setScan). */
+export function defaultWavetableScan() {
+  return { enabled: false, rate: 0.5, sync: true, div: 1, dir: "up", start: 0, range: 1 };
+}
+
+/** Push a track's wavetable wave-scan config down to its voice (resolving bpm-sync to Hz). */
+export function applyWavetableScan(t) {
+  if (t.voice?.type !== "wavetable" || typeof t.voice.setScan !== "function") return;
+  const cfg = t.wavetable?.scan;
+  if (!cfg?.enabled) { t.voice.setScan(null, 0); return; }
+  const hz = cfg.sync ? rateFromSync(cfg.div) : cfg.rate;
+  t.voice.setScan(cfg, hz);
+}
+
 // Vertical pointer-drag on the BPM number input. Mobile number inputs have no
 // spinner and tapping pops the numeric keypad — drag-to-scrub gives a way to
 // nudge tempo without typing. A drag past PX_THRESH engages scrub mode and
@@ -385,6 +399,7 @@ export function syncLFO(t, key) {
 
 export function syncAllLFOs(t) {
   for (const k of LFO_KEYS) syncLFO(t, k);
+  try { applyWavetableScan(t); } catch (e) { console.warn("wavetable scan sync failed", e); }
 }
 
 export function disposeLFOs(t) {
@@ -404,6 +419,7 @@ export function retuneSyncedLFOs() {
     for (const k of LFO_KEYS) {
       if (t.lfoConfig[k].enabled && t.lfoConfig[k].sync) syncLFO(t, k);
     }
+    if (t.wavetable?.scan?.enabled && t.wavetable.scan.sync) applyWavetableScan(t);
   }
 }
 

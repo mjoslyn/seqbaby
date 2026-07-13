@@ -49,12 +49,16 @@ export function serializeSet() {
       fxConfig: JSON.parse(JSON.stringify(t.fxConfig)),
       midi: { ...t.midi },
       customConfig: t.customConfig ? JSON.parse(JSON.stringify(t.customConfig)) : null,
-      wavetable: t.wavetable?.frames?.length ? { frames: t.wavetable.frames.map(f => Array.from(f, x => Math.round(x * 1e4) / 1e4)) } : null,
+      wavetable: (t.wavetable?.frames?.length || t.wavetable?.scan) ? {
+        frames: (t.wavetable.frames || []).map(f => Array.from(f, x => Math.round(x * 1e4) / 1e4)),
+        scan: t.wavetable.scan ? { ...t.wavetable.scan } : undefined,
+      } : null,
       sampleSource: t.sampleSource ? { ...t.sampleSource } : null,
       slices: Array.isArray(t.slices) ? t.slices.slice() : [],
       sliceOn: !!t.sliceOn,
       sliceBase: t.sliceBase ?? 60,
       slicePlayMode: t.slicePlayMode === "toend" ? "toend" : "region",
+      sliceSensitivity: t.sliceSensitivity ?? 0.5,
       uploadAudio: t.uploadAudio || null,
       uploadAudioMime: t.uploadAudioMime || null,
       uploadFileName: t.uploadFileName || null,
@@ -349,7 +353,10 @@ export function applySet(s) {
     Object.assign(t.fxConfig, td.fxConfig || {});
     Object.assign(t.midi, td.midi || {});
     t.customConfig = td.customConfig || null;
-    t.wavetable = td.wavetable?.frames?.length ? { frames: td.wavetable.frames.map(f => Array.from(f)) } : null;
+    t.wavetable = (td.wavetable?.frames?.length || td.wavetable?.scan) ? {
+      frames: td.wavetable.frames?.length ? td.wavetable.frames.map(f => Array.from(f)) : [],
+      scan: td.wavetable.scan || undefined,
+    } : null;
     t.sampleSource = src;
     t.uploadAudio = uploadAudio;
     t.uploadAudioMime = uploadMime;
@@ -363,6 +370,7 @@ export function applySet(s) {
     t.sliceOn = !!td.sliceOn;
     t.sliceBase = td.sliceBase ?? 60;
     t.slicePlayMode = td.slicePlayMode === "toend" ? "toend" : "region";
+    t.sliceSensitivity = td.sliceSensitivity ?? 0.5;
     // decode any saved upload/eleven audio (async; the sampler picks it up).
     // Bundled sources need no decode — the SamplerVoice fetches by id when built.
     if (t.uploadAudio) {
@@ -558,6 +566,7 @@ export function serializeTrackPatch(t) {
     sliceOn: !!t.sliceOn,
     sliceBase: t.sliceBase ?? 60,
     slicePlayMode: t.slicePlayMode === "toend" ? "toend" : "region",
+    sliceSensitivity: t.sliceSensitivity ?? 0.5,
     uploadAudio: t.uploadAudio || null,
     uploadAudioMime: t.uploadAudioMime || null,
     uploadFileName: t.uploadFileName || null,
@@ -605,6 +614,7 @@ export function applyTrackPatch(t, patch) {
   t.sliceOn = !!patch.sliceOn;
   t.sliceBase = patch.sliceBase ?? 60;
   t.slicePlayMode = patch.slicePlayMode === "toend" ? "toend" : "region";
+  t.sliceSensitivity = patch.sliceSensitivity ?? 0.5;
   t.isDrumKit        = !!patch.isDrumKit;
   t.noteMode         = patch.noteMode === "trigger" ? "trigger" : "gate";
   t.glide            = patch.glide ?? 0;

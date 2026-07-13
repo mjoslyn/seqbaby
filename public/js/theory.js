@@ -118,6 +118,23 @@ export function chordNotes(rootMidi, chordType) {
   return tones.map(i => rootMidi + i);
 }
 
+/**
+ * Build a diatonic chord by stacking scale-thirds from a root, entirely within
+ * the active scale — so the quality (maj/min/dim…) follows the scale degree
+ * automatically. Used for keyboard chord mode while a scale is on.
+ * @param {number} rootMidi @param {number} count notes to stack (3 = triad) @returns {number[]}
+ */
+export function diatonicChordNotes(rootMidi, count = 3) {
+  const intervals = SCALES[state.scale.mode];
+  if (!intervals) return [rootMidi];
+  const rootPc = state.scale.root;
+  const idx = midiToScaleIndex(rootMidi, rootPc, intervals);
+  if (idx == null) return [rootMidi];
+  const out = [];
+  for (let i = 0; i < count; i++) out.push(scaleIndexToMidi(idx + i * 2, rootPc, intervals));
+  return out;
+}
+
 // Diatonic note coloring: each chromatic pitch class gets a fixed hue
 // (30° per semitone) so the same note always reads the same color regardless
 // of key — C red, D yellow, F# cyan, A purple, etc. Gated by the palette
