@@ -4,7 +4,7 @@ import { engineByKey } from "./catalog.js";
 import { BAR_TICKS, wosc } from "./constants.js";
 import { setStatus } from "./dom.js";
 import { currentBpm, syncAllLFOs } from "./lfo.js";
-import { init, primeAudioForIOS } from "./main.js";
+import { init, needsResume, primeAudioForIOS } from "./main.js";
 import { updateMidiUI } from "./render.js";
 import { ensureFxRack, fireFilterEnv, routeVoiceToRack } from "./signal.js";
 import { findNextNonEmptyPattern, invertChord, state, switchPattern } from "./state.js";
@@ -111,7 +111,7 @@ export async function ensureAudio() {
   // (passed to Tone.setContext at init) stays "suspended" — Tone v15 sometimes
   // doesn't propagate resume() to externally-provided contexts. Resume directly
   // from inside the user gesture so audio actually unlocks.
-  if (state.audioCtx.state === "suspended") {
+  if (needsResume(state.audioCtx)) {
     try { await state.audioCtx.resume(); } catch (e) { console.warn("audioCtx.resume failed", e); }
   }
   if (!state.masterGain) {
@@ -186,10 +186,10 @@ export async function ensureAudio() {
   // Belt-and-suspenders: if the context is still suspended here (e.g. an
   // earlier resume was rejected), the status readout would misleadingly show
   // "ready". Try one more resume and surface the real state.
-  if (state.audioCtx.state === "suspended") {
+  if (needsResume(state.audioCtx)) {
     try { await state.audioCtx.resume(); } catch (e) { console.warn("final resume failed", e); }
-    if (state.audioCtx.state === "suspended") {
-      console.warn("audioCtx still suspended after ensureAudio — audio will be silent");
+    if (needsResume(state.audioCtx)) {
+      console.warn(`audioCtx still ${state.audioCtx.state} after ensureAudio — audio will be silent`);
     }
   }
 }

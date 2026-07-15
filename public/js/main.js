@@ -101,10 +101,19 @@ export function initSilentAudioLoop() {
   try { el.src = URL.createObjectURL(new Blob([buf], { type: "audio/wav" })); } catch {}
 }
 
+// iOS Safari parks the AudioContext in a non-standard "interrupted" state
+// (not "suspended") when the tab is backgrounded, the screen locks, or a
+// call/Siri/another app takes the audio session. Any strict === "suspended"
+// check misses it, so no recovery path ever fires and the app stays silent
+// until reload. Use this everywhere a resume decision is made.
+export function needsResume(ctx) {
+  return !!ctx && (ctx.state === "suspended" || ctx.state === "interrupted");
+}
+
 export function primeAudioForIOS() {
   const ctx = state.audioCtx;
   if (!ctx) return;
-  if (ctx.state === "suspended") {
+  if (needsResume(ctx)) {
     try { ctx.resume(); } catch {}
   }
   // Silent buffer through destination — token "something played" signal.
@@ -139,6 +148,43 @@ export function primeAudioForIOS() {
       const p = el.play();
       if (p && typeof p.catch === "function") p.catch(() => {});
     } catch {}
+  }
+}
+
+// Recovery when the tab becomes visible again (visibilitychange/pageshow).
+// Three iOS failure modes on return from background:
+//  1. state "suspended" — a plain resume() works.
+//  2. state "interrupted" — resume() sometimes works without a gesture; when
+//     it's rejected, the permanent gesture unlock listener picks it up on the
+//     next tap.
+//  3. state "running" but the renderer isn't actually pumping (audio session
+//     lost while backgrounded) — detectable as a frozen currentTime; a
+//     suspend+resume cycle re-engages the session. Touch devices only: on
+//     desktop Chrome a resume() outside user activation can be silently
+//     rejected, and the suspend would then leave a previously-working
+//     context dead (same reasoning as the kick in ensureAudio).
+let _recoveringAudio = false;
+async function recoverAudioAfterReturn() {
+  const ctx = state.audioCtx;
+  if (!ctx || ctx.state === "closed" || _recoveringAudio) return;
+  _recoveringAudio = true;
+  try {
+    if (needsResume(ctx)) {
+      try { await ctx.resume(); } catch {}
+    }
+    if (ctx.state !== "running") return; // gesture unlock will handle it
+    const isTouch = ("ontouchstart" in window) || (navigator.maxTouchPoints || 0) > 0;
+    if (!isTouch) return;
+    const t0 = ctx.currentTime;
+    await new Promise((r) => setTimeout(r, 250));
+    if (document.visibilityState !== "visible" || ctx.state !== "running") return;
+    if (ctx.currentTime > t0) return; // renderer is healthy
+    try {
+      await ctx.suspend();
+      await ctx.resume();
+    } catch {}
+  } finally {
+    _recoveringAudio = false;
   }
 }
 
@@ -337,7 +383,12 @@ export function init() {
   // Kept installed permanently: it's a cheap no-op while running and quietly
   // recovers whenever the browser re-suspends the context.
   const unlockAudio = () => {
-    if (state.audioCtx.state === "suspended") primeAudioForIOS();
+    // Also re-prime when the silent unlock <audio> element has been paused —
+    // iOS pauses media elements on background, which demotes the audio
+    // session; the context can then read "running" while nothing is actually
+    // rendered. Replaying the element (inside this gesture) re-engages it.
+    const el = document.getElementById("ios-audio-unlock");
+    if (needsResume(state.audioCtx) || (el && el.paused)) primeAudioForIOS();
   };
   for (const ev of ["pointerdown", "keydown", "touchstart"]) {
     document.addEventListener(ev, unlockAudio, { capture: true, passive: true });
@@ -579,20 +630,15 @@ export function init() {
     try { Tone.Transport.stop(); } catch {}
     if (!e.persisted) { try { state.audioCtx?.close(); } catch {} }
   });
-  // Visibility resume: iOS often suspends the audio context (or just stops
-  // rendering it) when the tab loses focus. Re-resuming on visibility change
-  // gets sound back without requiring a tap.
+  // Visibility resume: iOS often suspends or "interrupts" the audio context
+  // (or just stops rendering it) when the tab loses focus. Re-resuming on
+  // visibility change gets sound back without requiring a tap; when the
+  // resume needs gesture authority (common from "interrupted") the permanent
+  // unlockAudio listener above catches the next tap.
   document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible" && state.audioCtx
-        && state.audioCtx.state === "suspended") {
-      state.audioCtx.resume().catch(() => {});
-    }
+    if (document.visibilityState === "visible") recoverAudioAfterReturn();
   });
-  window.addEventListener("pageshow", () => {
-    if (state.audioCtx && state.audioCtx.state === "suspended") {
-      state.audioCtx.resume().catch(() => {});
-    }
-  });
+  window.addEventListener("pageshow", () => { recoverAudioAfterReturn(); });
   // Up-front audio permission gate. A single tap on this dialog runs the
   // full iOS unlock dance inside a user-gesture frame (resume + silent
   // BufferSource + <audio>.play() to switch the iOS audio session to
