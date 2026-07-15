@@ -2,6 +2,7 @@ import { applySampleFadeEnvelope, loadBuffer, startSampleSource } from "./buffer
 import { SAMPLE_BASE, engineByKey } from "./catalog.js";
 import { wosc } from "./constants.js";
 import { makeMetalizerCurve } from "./curves.js";
+import { isMobileDevice } from "./dom.js";
 import { sampleHitRate } from "./lfo.js";
 import { setParam } from "./params.js";
 
@@ -17,7 +18,10 @@ export class PlaitsVoice {
     this.poly = true;                 // fan-out across a voice pool for chords
     this.glide = 0;
     this.setKey(key);
-    this.poolSize = 4;
+    // Pool oscillators render continuously from creation (WASM DSP per voice,
+    // even when silent) — halve the pool on mobile to keep the render thread
+    // from starving. Chords beyond the pool size steal the oldest voice.
+    this.poolSize = isMobileDevice() ? 2 : 4;
     this.pool = [];
     this.voiceIdx = 0;
     this.output = ctx.createGain();

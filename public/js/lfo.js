@@ -348,6 +348,10 @@ export function syncLFO(t, key) {
   const cfg = t.lfoConfig[key];
   let lfo = t.lfos[key];
 
+  // FX-target LFOs must keep their stage wired into the rack's chain even at
+  // wet 0 (the LFO signal adds on top of the base) — re-evaluate stage bypass.
+  try { t.fxRack?.refreshStageActivity?.(); } catch {}
+
   // ── setter-driven LFO path (FX params without an AudioParam target) ──
   if (SETTER_LFO_KEYS.has(key)) {
     if (lfo) {
@@ -412,6 +416,7 @@ export function disposeLFOs(t) {
     t.lfos[k] = null;
   }
   if (t._setterLfoPhase) t._setterLfoPhase = {};
+  try { t.fxRack?.refreshStageActivity?.(); } catch {}
 }
 
 export function retuneSyncedLFOs() {

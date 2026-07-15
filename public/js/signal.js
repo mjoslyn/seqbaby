@@ -1,11 +1,23 @@
-import { FXRack } from "./fxRack.js";
+import { FXRack, FX_LFO_STAGE } from "./fxRack.js";
 import { state } from "./state.js";
 
 
 /** @typedef {import("./types.js").Track} Track */
+
+// A stage stays wired into the rack's chain while any enabled LFO targets one
+// of its params — the LFO adds on top of a stored wet of 0 (see FXRack bypass).
+function stageHeldByLfo(t, stage) {
+  for (const lfoKey in FX_LFO_STAGE) {
+    if (FX_LFO_STAGE[lfoKey] === stage && t.lfoConfig?.[lfoKey]?.enabled) return true;
+  }
+  return false;
+}
+
 export function ensureFxRack(t) {
   if (!state.audioCtx || t.fxRack) return;
-  t.fxRack = new FXRack(state.audioCtx, t.fxConfig);
+  t.fxRack = new FXRack(state.audioCtx, t.fxConfig, {
+    isStageHeld: (stage) => stageHeldByLfo(t, stage),
+  });
   // Reroute the fx rack away from ctx.destination onto the master bus,
   // and tap the post-fx signal for the per-track level meter.
   try { t.fxRack.output.disconnect(); } catch {}

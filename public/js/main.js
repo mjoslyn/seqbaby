@@ -333,7 +333,12 @@ export function init() {
   // AudioContext. Diagnostics confirmed: drift == time from page load to click.
   // Creating the context here is fine — it starts suspended and Tone.start()
   // resumes it inside the user gesture.
-  state.audioCtx = new AudioContext({ latencyHint: "interactive" });
+  // "interactive" asks for the smallest render buffer the device supports,
+  // which leaves no headroom on phones — one long render quantum and the
+  // output crackles. Pattern playback is scheduled ahead of time, so mobile
+  // can afford "playback" (larger buffer); Chrome's ctx.outputLatency feeds
+  // visualOutputLatency() so the playhead stays aligned with the ear.
+  state.audioCtx = new AudioContext({ latencyHint: isMobileDevice() ? "playback" : "interactive" });
   Tone.setContext(state.audioCtx);
   // Widen the transport's scheduler lookahead. Tone's clock ticks on the main
   // thread; when that thread stalls (layout, GC, a heavy pattern switch — all

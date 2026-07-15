@@ -20,9 +20,28 @@ export function defaultFxConfig() {
   };
 }
 
+// LFO mod keys (see lfo.js getModTarget) → the FX stage they touch. Used to
+// keep a stage engaged (see FXRack chain rewiring) while an LFO targets it,
+// even when its stored wet is 0 — the LFO signal adds on top of that base.
+export const FX_LFO_STAGE = {
+  vinyl: "vinyl", vinyl_warmth: "vinyl", vinyl_wow: "vinyl",
+  cassette: "cassette", cassette_flutter: "cassette", cassette_sat: "cassette",
+  fuzz: "fuzz", fuzz_drive: "fuzz", fuzz_tone: "fuzz", fuzz_level: "fuzz",
+  ringmod: "ringmod", ring_freq: "ringmod",
+  shaper: "shaper", shaper_preamp: "shaper", shaper_amt: "shaper",
+  crush: "crush", crush_bits: "crush",
+  autowah: "autowah", autowah_sens: "autowah", autowah_range: "autowah",
+  chorus: "chorus", chorus_rate: "chorus", chorus_depth: "chorus",
+  phaser: "phaser", phaser_rate: "phaser", phaser_depth: "phaser",
+  flanger: "flanger", flanger_rate: "flanger", flanger_fbk: "flanger",
+  pitch: "pitchshift", pitch_semi: "pitchshift",
+  delay: "delay", delay_time: "delay", delay_fbk: "delay",
+  verb: "reverb", reverb_decay: "reverb",
+};
+
 // SP-404 "vinyl sim" crackle bed: base hiss with sparse impulsive crackles sprinkled in.
 export class FXRack {
-  constructor(ctx, config) {
+  constructor(ctx, config, opts) {
     this.ctx = ctx;
     this.config = config;
     // Make sure legacy configs (pre-SP-404 fx) don't crash.
@@ -56,8 +75,6 @@ export class FXRack {
     this.vinylNoiseSrc.loop = true;
     this.vinylNoiseGain = ctx.createGain();
     this.vinylNoiseGain.gain.value = 0;
-    this.input.connect(this.vinylDryBus);
-    this.input.connect(this.vinylLP);
     this.vinylLP.connect(this.vinylWowDelay);
     this.vinylWowDelay.connect(this.vinylWetBus);
     this.vinylNoiseSrc.connect(this.vinylNoiseGain);
@@ -91,8 +108,6 @@ export class FXRack {
     this.cassetteHissSrc.loop = true;
     this.cassetteHissGain = ctx.createGain();
     this.cassetteHissGain.gain.value = 0;
-    this.vinylSum.connect(this.cassetteDryBus);
-    this.vinylSum.connect(this.cassetteHP);
     this.cassetteHP.connect(this.cassetteFlutter);
     this.cassetteFlutter.connect(this.cassetteSat);
     this.cassetteSat.connect(this.cassetteLP);
@@ -113,8 +128,6 @@ export class FXRack {
     this.fuzzFilter.type = "lowpass";
     this.fuzzFilter.Q.value = 2.2;
     this.fuzzLevel = ctx.createGain();
-    this.cassetteSum.connect(this.dryBus);
-    this.cassetteSum.connect(this.fuzzDrive);
     this.fuzzDrive.connect(this.fuzzShaper);
     this.fuzzShaper.connect(this.fuzzFilter);
     this.fuzzFilter.connect(this.fuzzLevel);
@@ -134,8 +147,6 @@ export class FXRack {
     this.ringCarrier.type = "sine";
     this.ringCarrier.frequency.value = 220;
     this.ringCarrier.connect(this.ringMult.gain);
-    this.postFuzz.connect(this.ringDry);
-    this.postFuzz.connect(this.ringMult);
     this.ringMult.connect(this.ringWet);
     this.ringDry.connect(this.ringSum);
     this.ringWet.connect(this.ringSum);
@@ -159,8 +170,6 @@ export class FXRack {
     this.shaperNode.oversample = "2x";
     this.shaperPost = ctx.createGain();
     this.shaperPost.gain.value = 0.85;  // small trim — the curve outputs already clamp to ±1
-    this.ringSum.connect(this.shaperDryBus);
-    this.ringSum.connect(this.shaperPreamp);
     this.shaperPreamp.connect(this.shaperNode);
     this.shaperNode.connect(this.shaperPost);
     this.shaperPost.connect(this.shaperWetBus);
@@ -243,15 +252,39 @@ export class FXRack {
     // Native GainNode.connect() in Tone.js 15 rejects Tone wrappers — unwrap to
     // the underlying native input node before connecting from a native source.
     const toneIn = (node) => node.input?.input ?? node.input ?? node;
-    this.shaperSum.connect(toneIn(this.crusher));
-    this.crusher.connect(this.autowah);
-    this.autowah.connect(this.chorus);
-    this.chorus.connect(this.phaser);
-    this.phaser.connect(this.flangerIn);
-    this.flangerSum.connect(toneIn(this.pitchshift));
-    this.pitchshift.connect(this.delay);
-    this.delay.connect(this.reverb);
-    this.reverb.connect(this.output);
+
+    // ── dynamic serial chain with per-stage bypass ──
+    // Every stage's DSP (convolver reverb, granular pitch shift, worklet
+    // crusher, noise beds, LFO-modulated delays) runs even at wet 0 — the
+    // wet control is a crossfade after the effect, not a bypass. Thirteen
+    // always-on stages per track starve the render thread on mobile. So the
+    // serial chain only wires in engaged stages; a bypassed stage is
+    // unreachable from the destination and the browser skips it entirely.
+    // A stage engages when its wet/amount goes above 0 or an LFO holds it
+    // (opts.isStageHeld); it disengages a few seconds after both stop being
+    // true — the debounce rides out per-step automation flapping.
+    this._stages = [
+      { key: "vinyl",      ins: [this.vinylDryBus, this.vinylLP],       out: this.vinylSum },
+      { key: "cassette",   ins: [this.cassetteDryBus, this.cassetteHP], out: this.cassetteSum },
+      { key: "fuzz",       ins: [this.dryBus, this.fuzzDrive],          out: this.postFuzz },
+      { key: "ringmod",    ins: [this.ringDry, this.ringMult],          out: this.ringSum },
+      { key: "shaper",     ins: [this.shaperDryBus, this.shaperPreamp], out: this.shaperSum },
+      { key: "crush",      ins: [toneIn(this.crusher)],                 out: this.crusher },
+      { key: "autowah",    ins: [toneIn(this.autowah)],                 out: this.autowah },
+      { key: "chorus",     ins: [toneIn(this.chorus)],                  out: this.chorus },
+      { key: "phaser",     ins: [toneIn(this.phaser)],                  out: this.phaser },
+      { key: "flanger",    ins: [this.flangerIn],                       out: this.flangerSum },
+      { key: "pitchshift", ins: [toneIn(this.pitchshift)],              out: this.pitchshift },
+      { key: "delay",      ins: [toneIn(this.delay)],                   out: this.delay },
+      { key: "reverb",     ins: [toneIn(this.reverb)],                  out: this.reverb },
+    ];
+    this._isStageHeld = opts?.isStageHeld ?? null;
+    this._active = {};
+    this._bypassTimers = {};
+    for (const s of this._stages) {
+      this._active[s.key] = this._stageLevel(s.key) > 0 || !!this._isStageHeld?.(s.key);
+    }
+    this._rewire();
     this.output.connect(ctx.destination);
 
     this.applyVinyl(config.vinyl);
@@ -264,6 +297,64 @@ export class FXRack {
     this.applyPhaser(config.phaser);
     this.applyFlanger(config.flanger);
     this.applyPitchShift(config.pitchshift);
+  }
+
+  // The wet/amount level that decides whether a stage needs to be in the chain.
+  _stageLevel(key) {
+    const c = this.config;
+    switch (key) {
+      case "vinyl":      return c.vinyl?.amount ?? 0;
+      case "cassette":   return c.cassette?.amount ?? 0;
+      case "fuzz":       return c.fuzz?.amount ?? 0;
+      case "ringmod":    return c.ringmod?.wet ?? 0;
+      case "shaper":     return c.shaper?.wet ?? 0;
+      case "crush":      return c.crush?.wet ?? 0;
+      case "autowah":    return c.autowah?.wet ?? 0;
+      case "chorus":     return c.chorus?.wet ?? 0;
+      case "phaser":     return c.phaser?.wet ?? 0;
+      case "flanger":    return c.flanger?.wet ?? 0;
+      case "pitchshift": return c.pitchshift?.wet ?? 0;
+      case "delay":      return c.delay?.wet ?? 0;
+      case "reverb":     return c.reverb?.wet ?? 0;
+    }
+    return 0;
+  }
+
+  // Rebuild the serial chain from only the engaged stages. Chain edges are the
+  // ONLY outgoing connections of this.input and each stage's out node, so a
+  // blanket disconnect() is safe — stage-internal wiring is untouched.
+  // this.output is never disconnected here (master bus + meter tap live on it).
+  _rewire() {
+    try { this.input.disconnect(); } catch {}
+    for (const s of this._stages) { try { s.out.disconnect(); } catch {} }
+    let prev = this.input;
+    for (const s of this._stages) {
+      if (!this._active[s.key]) continue;
+      for (const dest of s.ins) { try { prev.connect(dest); } catch {} }
+      prev = s.out;
+    }
+    try { prev.connect(this.output); } catch {}
+  }
+
+  _updateStage(key) {
+    const want = this._stageLevel(key) > 0 || !!this._isStageHeld?.(key);
+    if (want) {
+      if (this._bypassTimers[key]) { clearTimeout(this._bypassTimers[key]); delete this._bypassTimers[key]; }
+      if (!this._active[key]) { this._active[key] = true; this._rewire(); }
+      return;
+    }
+    if (!this._active[key] || this._bypassTimers[key]) return;
+    this._bypassTimers[key] = setTimeout(() => {
+      delete this._bypassTimers[key];
+      const still = this._stageLevel(key) > 0 || !!this._isStageHeld?.(key);
+      if (!still && this._active[key]) { this._active[key] = false; this._rewire(); }
+    }, 2500);
+  }
+
+  // Re-evaluate every stage's engagement. Poked by lfo.js whenever an LFO is
+  // (de)configured — a stage targeted by an LFO must stay wired at wet 0.
+  refreshStageActivity() {
+    for (const s of this._stages) this._updateStage(s.key);
   }
 
   applyVinyl({ amount, warmth, wow }) {
@@ -285,6 +376,7 @@ export class FXRack {
       this.vinylWowLFO.min = base - span;
       this.vinylWowLFO.max = base + span;
     }
+    this._updateStage("vinyl");
   }
 
   applyCassette({ amount, flutter, sat }) {
@@ -305,6 +397,7 @@ export class FXRack {
       this.config.cassette.sat = sat;
       this.cassetteSat.curve = makeCassetteSatCurve(sat);
     }
+    this._updateStage("cassette");
   }
 
   applyChorus({ wet, rate, depth }) {
@@ -320,6 +413,7 @@ export class FXRack {
       this.config.chorus.depth = depth;
       try { this.chorus.depth = depth; } catch {}
     }
+    this._updateStage("chorus");
   }
 
   applyRingMod({ wet, freq }) {
@@ -334,6 +428,7 @@ export class FXRack {
       const hz = 20 * Math.pow(150, Math.max(0, Math.min(1, freq)));
       try { this.ringCarrier.frequency.value = hz; } catch {}
     }
+    this._updateStage("ringmod");
   }
 
   applyWaveShaper({ wet, preamp, amount, mode }) {
@@ -354,6 +449,7 @@ export class FXRack {
         this.shaperNode.curve = makeShaperCurve(this.config.shaper.mode, this.config.shaper.amount);
       } catch {}
     }
+    this._updateStage("shaper");
   }
 
   applyAutoWah({ wet, sens, range }) {
@@ -370,6 +466,7 @@ export class FXRack {
       this.config.autowah.range = range;
       try { this.autowah.octaves = 1 + range * 4; } catch {}
     }
+    this._updateStage("autowah");
   }
 
   applyPhaser({ wet, rate, depth }) {
@@ -385,6 +482,7 @@ export class FXRack {
       this.config.phaser.depth = depth;
       try { this.phaser.octaves = 1 + depth * 5; } catch {}
     }
+    this._updateStage("phaser");
   }
 
   applyFlanger({ wet, rate, fbk }) {
@@ -401,6 +499,7 @@ export class FXRack {
       this.config.flanger.fbk = fbk;
       this.flangerFeedback.gain.value = Math.max(0, Math.min(0.9, fbk * 0.9));
     }
+    this._updateStage("flanger");
   }
 
   applyPitchShift({ wet, semitones }) {
@@ -412,6 +511,7 @@ export class FXRack {
       this.config.pitchshift.semitones = semitones;
       try { this.pitchshift.pitch = semitones; } catch {}
     }
+    this._updateStage("pitchshift");
   }
 
   applyFuzz({ amount, drive, tone, level }) {
@@ -433,6 +533,7 @@ export class FXRack {
       this.config.fuzz.level = level;
       this.fuzzLevel.gain.value = level * 0.9;
     }
+    this._updateStage("fuzz");
   }
   applyCrush({ bits, wet }) {
     if (!this.config.crush) this.config.crush = { bits: 8, wet: 0 };
@@ -445,6 +546,7 @@ export class FXRack {
       this.config.crush.wet = wet;
       try { this.crusher.wet.value = wet; } catch {}
     }
+    this._updateStage("crush");
   }
   applyDelay({ time, fbk, wet, sync, div }) {
     if (sync !== undefined) this.config.delay.sync = sync;
@@ -458,6 +560,7 @@ export class FXRack {
       ? secPerBeat * this.config.delay.div
       : this.config.delay.time;
     this.delay.delayTime.value = Math.max(0.02, Math.min(2, eff));
+    this._updateStage("delay");
   }
   applyReverb({ decay, wet }) {
     if (decay !== undefined) {
@@ -466,8 +569,11 @@ export class FXRack {
       this.reverb.generate().catch(() => {});
     }
     if (wet !== undefined) { this.config.reverb.wet = wet; this.reverb.wet.value = wet; }
+    this._updateStage("reverb");
   }
   dispose() {
+    for (const k in this._bypassTimers) { try { clearTimeout(this._bypassTimers[k]); } catch {} }
+    this._bypassTimers = {};
     try { this.input.disconnect(); } catch {}
     try { this.vinylDryBus.disconnect(); } catch {}
     try { this.vinylWetBus.disconnect(); } catch {}
