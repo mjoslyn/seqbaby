@@ -33,5 +33,12 @@ export const ICON_DOWNLOAD = `<svg class="sq-btn-icon" viewBox="0 0 16 16" width
 export const ICON_BOUNCE = `<svg class="sq-btn-icon" viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M1.5 8h1.6M4.6 5.4v5.2M7 3v10M9.4 5.4v5.2M11.8 6.6v2.8M14.4 8h.1"/></svg>`;
 export const ICON_DICE = `<svg class="sq-btn-icon" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="2.5" width="11" height="11" rx="2"/><circle cx="5.5" cy="5.5" r="0.9" fill="currentColor" stroke="none"/><circle cx="10.5" cy="5.5" r="0.9" fill="currentColor" stroke="none"/><circle cx="8"   cy="8"   r="0.9" fill="currentColor" stroke="none"/><circle cx="5.5" cy="10.5" r="0.9" fill="currentColor" stroke="none"/><circle cx="10.5" cy="10.5" r="0.9" fill="currentColor" stroke="none"/></svg>`;
 
+// three horizontal fader tracks with staggered knobs — the mobile track menu
+// (hosts the sound-shaping panels: filter/env/fx/eq/comp/mod/aut)
+export const ICON_SLIDERS = `<svg class="sq-btn-icon" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><line x1="2" y1="3.5" x2="14" y2="3.5"/><line x1="2" y1="8" x2="14" y2="8"/><line x1="2" y1="12.5" x2="14" y2="12.5"/><circle cx="10.5" cy="3.5" r="1.8" fill="currentColor" stroke="none"/><circle cx="5" cy="8" r="1.8" fill="currentColor" stroke="none"/><circle cx="11.5" cy="12.5" r="1.8" fill="currentColor" stroke="none"/></svg>`;
+
+// staggered note bars — piano roll
+export const ICON_ROLL = `<svg class="sq-btn-icon" viewBox="0 0 16 16" width="14" height="14" fill="currentColor" aria-hidden="true"><rect x="2" y="2.5" width="6" height="2.6" rx="1.3"/><rect x="7" y="6.7" width="7" height="2.6" rx="1.3"/><rect x="3.5" y="10.9" width="5" height="2.6" rx="1.3"/></svg>`;
+
 // ---- state --------------------------------------------------------------
 

@@ -627,30 +627,26 @@ export function openSampleEditorModal(t) {
 
 // Mobile track menu: physically move the "extras" nodes out of the
 // track-head into a centered modal so the user can reach the rarely-used
-// controls (save/load patch, len resize, oct/semi shift, synth params,
-// dup, remove) without horizontal scrolling. Restored to their original
-// DOM positions on close so the desktop layout is unaffected.
+// controls (panel buttons, save/load patch, len resize, oct/semi shift,
+// dup, remove) without horizontal scrolling. The synth params (harm/timb/
+// morph/etc.) stay inline in the head — they're the primary sound controls
+// on mobile. Restored to their original DOM positions on close so the
+// desktop layout is unaffected.
 export function openTrackMenu(t) {
   if (t._trackMenuModal) return;
   const head = t.el?.querySelector(".sq-track__head");
   if (!head) return;
 
-  const selectors = [
-    ".sq-track__save",
-    ".sq-track__load-patch",
-    ".sq-track__len-extend",
-    ".sq-track__synth-row",
-    ".sq-track__dup",
-    ".sq-track__remove",
-    ".sq-track__oct",
-  ];
+  // captured entries remember their real parent — the panel buttons live
+  // inside .sq-panel__btn-group, everything else is a direct head child.
+  // Restoring in capture order (= DOM order per parent) rebuilds each
+  // parent correctly even when every anchor sibling moved out too.
   const captured = [];
-  for (const sel of selectors) {
-    const n = head.querySelector(sel);
-    if (n) captured.push({ node: n, nextSibling: n.nextSibling });
-  }
-  const speedField = head.querySelector(".sq-track__speed")?.closest(".sq-field");
-  if (speedField) captured.push({ node: speedField, nextSibling: speedField.nextSibling });
+  const capture = (root, sel) => {
+    const n = root.querySelector(sel);
+    if (n) captured.push({ node: n, parent: n.parentNode, nextSibling: n.nextSibling });
+    return n;
+  };
 
   const overlay = document.createElement("div");
   overlay.className = "sq-modal-overlay";
@@ -664,7 +660,35 @@ export function openTrackMenu(t) {
   title.textContent = t.name?.trim() || "track";
   modal.appendChild(title);
 
-  for (const { node } of captured) modal.appendChild(node);
+  // sound-shaping panel buttons first — a tap-friendly grid at the top
+  const panelWrap = document.createElement("div");
+  panelWrap.className = "sq-track__menu-panels";
+  for (const sel of [
+    ".sq-track__filter", ".sq-track__env", ".sq-track__fx", ".sq-track__eq",
+    ".sq-track__comp", ".sq-track__mod", ".track-aut",
+  ]) {
+    const n = capture(head, sel);
+    if (n) panelWrap.appendChild(n);
+  }
+  modal.appendChild(panelWrap);
+
+  const selectors = [
+    ".sq-track__save",
+    ".sq-track__load-patch",
+    ".sq-track__len-extend",
+    ".sq-track__dup",
+    ".sq-track__remove",
+    ".sq-track__oct",
+  ];
+  for (const sel of selectors) {
+    const n = capture(head, sel);
+    if (n) modal.appendChild(n);
+  }
+  const speedField = head.querySelector(".sq-track__speed")?.closest(".sq-field");
+  if (speedField) {
+    captured.push({ node: speedField, parent: speedField.parentNode, nextSibling: speedField.nextSibling });
+    modal.appendChild(speedField);
+  }
 
   const closeBtn = document.createElement("button");
   closeBtn.type = "button";
@@ -674,11 +698,11 @@ export function openTrackMenu(t) {
 
   const close = () => {
     if (!t._trackMenuModal) return;
-    for (const { node, nextSibling } of captured) {
-      if (nextSibling && nextSibling.parentNode === head) {
-        head.insertBefore(node, nextSibling);
+    for (const { node, parent, nextSibling } of captured) {
+      if (nextSibling && nextSibling.parentNode === parent) {
+        parent.insertBefore(node, nextSibling);
       } else {
-        head.appendChild(node);
+        parent.appendChild(node);
       }
     }
     overlay.remove();

@@ -277,6 +277,8 @@ button.sq-btn--danger { color: var(--danger); }
   justify-content: center;
 }
 .sq-icon-btn .sq-btn-icon { display: block; }
+/* roll: text on desktop, icon on mobile (media block flips these) */
+.sq-track__roll .sq-btn-icon { display: none; }
 .sq-ai__btn { display: inline-flex; align-items: center; gap: 5px; }
 .sq-ai__btn .sq-ai__icon { display: inline-flex; color: inherit; }
 .sq-ai__btn:disabled .sq-ai__icon { color: var(--fg-dim); }
@@ -1736,27 +1738,45 @@ body.kbd-recording .sq-track.is-kbd-active { border-color: #e5484d; box-shadow: 
   /* Hide-by-default extras inside the track-head; the "more" button opens
      these in a centered modal instead (.sq-track__menu-modal). The selectors
      are scoped to .sq-track__head so when nodes are reparented into the modal
-     they become visible again automatically. */
+     they become visible again automatically. The synth-row (harm/timb/morph/
+     decay + engine groups) stays inline — it's the primary sound surface on
+     mobile; the sound-shaping panel buttons (filter/env/fx/eq/comp/mod/aut)
+     move to the modal instead. roll keeps its inline spot. */
   .sq-track__head .sq-track__save,
   .sq-track__head .sq-track__load-patch,
   .sq-track__head .sq-track__dup,
   .sq-track__head .sq-track__remove,
   .sq-track__head .sq-track__oct,
   .sq-track__head .sq-track__len-extend,
-  .sq-track__head .sq-track__synth-row,
+  .sq-track__head .sq-panel__btn-group > button:not(.sq-track__roll),
   .sq-track__head .sq-field:has(.sq-track__speed) {
     display: none;
   }
 
-  /* "more" toggle button injected by JS */
+  /* synth-row inline: full-width sliders sized for fingers */
+  .sq-track__head .sq-track__synth-row { flex: 1 1 100%; }
+  .sq-track__head .sq-param-group .sq-field {
+    flex: 1 1 42%;
+    min-width: 0;
+  }
+  .sq-track__head .sq-param-group .sq-field input[type="range"] {
+    width: auto;
+    flex: 1 1 auto;
+    min-width: 40px;
+  }
+
+  /* "more" toggle button injected by JS (sliders icon) */
   .sq-track__head .sq-track__more {
     padding: 6px 10px;
     min-height: 32px;
-    font-size: 16px;
-    line-height: 1;
+    height: auto;
     min-width: 36px;
-    text-transform: none;
   }
+
+  /* roll: icon-only on mobile */
+  .sq-track__head .sq-track__roll { display: inline-flex; align-items: center; justify-content: center; }
+  .sq-track__head .sq-track__roll .sq-btn-icon { display: block; }
+  .sq-track__head .sq-track__roll .sq-btn__label { display: none; }
   .sq-track__head .sq-track__more[aria-pressed="true"] {
     background: var(--accent);
     color: #0b0d10;
@@ -1806,18 +1826,24 @@ body.kbd-recording .sq-track.is-kbd-active { border-color: #e5484d; box-shadow: 
     padding: 6px 4px;
     font-size: 11px;
   }
-  .sq-track__menu-modal .sq-track__synth-row {
-    display: flex;
-    flex-direction: column;
+  /* sound-shaping panel buttons: tap-friendly grid at the top of the menu */
+  .sq-track__menu-modal .sq-track__menu-panels {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 6px;
-    align-items: stretch;
   }
-  .sq-track__menu-modal .sq-track__synth-row[hidden],
-  .sq-track__menu-modal .sq-param-group[hidden] { display: none; }
-  .sq-track__menu-modal .sq-param-group {
-    padding: 4px 6px;
-    gap: 6px;
-    flex-wrap: wrap;
+  .sq-track__menu-modal .sq-track__menu-panels > button {
+    min-width: 0;
+    min-height: 40px;
+    padding: 8px 4px;
+    font-size: 12px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+  }
+  .sq-track__menu-modal .sq-track__menu-panels > button[aria-pressed="true"] {
+    background: var(--accent);
+    color: #0b0d10;
+    border-color: var(--accent);
   }
   .sq-track__menu-modal .sq-field:has(.sq-track__speed) {
     display: inline-flex;
@@ -1851,20 +1877,20 @@ body.kbd-recording .sq-track.is-kbd-active { border-color: #e5484d; box-shadow: 
   .sq-param-group--moog .sq-moog__osc-row { flex-wrap: wrap; }
   .sq-param-group--moog .sq-moog__freq input[type="range"] { width: 60px; }
 
-  /* panel-btn-group: full-width row, smaller buttons */
+  /* panel-btn-group: only roll stays inline (rest live in the "more" menu) —
+     let it flow beside solo/mute/clear instead of claiming a full row */
   .sq-track__head .sq-panel__btn-group {
-    flex: 1 1 100%;
-    flex-wrap: wrap;
+    flex: 0 1 auto;
     border-radius: 6px;
   }
   .sq-track__head .sq-panel__btn-group > button {
-    flex: 1 1 0;
-    padding: 8px 4px;
-    font-size: 11px;
+    padding: 6px 10px;
+    font-size: 12px;
     min-width: 0;
-    min-height: 34px;
+    min-height: 32px;
     border-right: 1px solid var(--border);
   }
+  .sq-track__head .sq-panel__btn-group > .sq-track__roll { border-right: none; }
 
   /* ---------- FX / FILTER / EQ / COMP / ENV panels ---------- */
   .sq-track__fx-panel,

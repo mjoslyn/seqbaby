@@ -5,7 +5,7 @@ import { LFO_KEYS, lfoLabel, rateToSlider, sliderToRate } from "./constants.js";
 import { showInputDialog, showSavedPatchPicker } from "./dialogs.js";
 import { setStatus } from "./dom.js";
 import { randomizeMelody, randomizeTimbre } from "./generate.js";
-import { ICON_DICE, ICON_LOAD, ICON_SAVE, ICON_WAV } from "./icons.js";
+import { ICON_DICE, ICON_LOAD, ICON_ROLL, ICON_SAVE, ICON_SLIDERS, ICON_WAV } from "./icons.js";
 import { canModulate, currentBpm, rateFromSync, syncLFO } from "./lfo.js";
 import { openSamplerSourceModal, pickAudioFileForTrack } from "./main.js";
 import { defaultFxConfig } from "./fxRack.js";
@@ -345,6 +345,10 @@ export function renderTrack(t) {
     diceBtn.innerHTML = ICON_DICE;
     diceBtn.addEventListener("click", () => randomizeMelody(t));
   }
+  // roll: icon + label — desktop shows the label (matches its text siblings),
+  // mobile shows the icon (see the roll rules in the mobile media block)
+  const rollBtn = node.querySelector(".sq-track__roll");
+  if (rollBtn) rollBtn.innerHTML = `${ICON_ROLL}<span class="sq-btn__label">roll</span>`;
   node.querySelector(".sq-track__remove").addEventListener("click", () => removeTrack(t));
   const dupBtn = node.querySelector(".sq-track__dup");
   if (dupBtn) dupBtn.addEventListener("click", () => duplicateTrack(t));
@@ -353,11 +357,11 @@ export function renderTrack(t) {
   // extras (save/load patch, len-extend, oct/semi, synth params, dup, remove).
   const moreBtn = document.createElement("button");
   moreBtn.type = "button";
-  moreBtn.className = "sq-track__more sq-btn--ghost sq-mobile-only";
+  moreBtn.className = "sq-track__more sq-icon-btn sq-btn--ghost sq-mobile-only";
   moreBtn.setAttribute("aria-pressed", "false");
   moreBtn.setAttribute("aria-label", "show more track controls");
   moreBtn.title = "more";
-  moreBtn.textContent = "…";
+  moreBtn.innerHTML = ICON_SLIDERS;
   moreBtn.addEventListener("click", () => {
     if (t._trackMenuModal) { t._trackMenuModal.close(); return; }
     openTrackMenu(t);
