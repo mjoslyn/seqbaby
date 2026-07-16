@@ -655,12 +655,42 @@ export function openTrackMenu(t) {
   modal.setAttribute("role", "dialog");
   modal.setAttribute("aria-modal", "true");
 
+  // section label + horizontal row helpers — pure chrome, discarded on close
+  const addLabel = (text) => {
+    const h = document.createElement("div");
+    h.className = "sq-track__menu-label";
+    h.textContent = text;
+    modal.appendChild(h);
+  };
+  const addRow = (nodes) => {
+    const r = document.createElement("div");
+    r.className = "sq-track__menu-row";
+    for (const n of nodes) if (n) r.appendChild(n);
+    modal.appendChild(r);
+  };
+  // icon-only buttons get a visible text label while hosted in the modal;
+  // the spans are stripped in close() before the nodes go back to the head
+  const withLabel = (btn, text) => {
+    if (!btn) return btn;
+    const span = document.createElement("span");
+    span.className = "sq-menu-btn-label";
+    span.textContent = text;
+    btn.appendChild(span);
+    return btn;
+  };
+
   const title = document.createElement("div");
   title.className = "sq-track__menu-title";
-  title.textContent = t.name?.trim() || "track";
+  const nameEl = document.createElement("span");
+  nameEl.textContent = t.name?.trim() || "track";
+  const engEl = document.createElement("span");
+  engEl.className = "sq-track__menu-engine";
+  engEl.textContent = engineByKey(t.engineKey)?.label ?? "";
+  title.append(nameEl, engEl);
   modal.appendChild(title);
 
-  // sound-shaping panel buttons first — a tap-friendly grid at the top
+  // sound-shaping panels first — the most-used controls in here
+  addLabel("sound");
   const panelWrap = document.createElement("div");
   panelWrap.className = "sq-track__menu-panels";
   for (const sel of [
@@ -672,22 +702,31 @@ export function openTrackMenu(t) {
   }
   modal.appendChild(panelWrap);
 
-  const selectors = [
-    ".sq-track__save",
-    ".sq-track__load-patch",
-    ".sq-track__len-extend",
-    ".sq-track__dup",
-    ".sq-track__remove",
-    ".sq-track__oct",
-  ];
-  for (const sel of selectors) {
-    const n = capture(head, sel);
-    if (n) modal.appendChild(n);
-  }
+  const lenExtend = capture(head, ".sq-track__len-extend");
+  if (lenExtend) { addLabel("length"); modal.appendChild(lenExtend); }
+
+  const oct = capture(head, ".sq-track__oct");
+  if (oct) { addLabel("pitch"); modal.appendChild(oct); }
+
   const speedField = head.querySelector(".sq-track__speed")?.closest(".sq-field");
   if (speedField) {
     captured.push({ node: speedField, parent: speedField.parentNode, nextSibling: speedField.nextSibling });
+    addLabel("speed");
     modal.appendChild(speedField);
+  }
+
+  const saveBtn = capture(head, ".sq-track__save");
+  const loadBtn = capture(head, ".sq-track__load-patch");
+  if (saveBtn || loadBtn) {
+    addLabel("patch");
+    addRow([withLabel(saveBtn, "save"), withLabel(loadBtn, "load")]);
+  }
+
+  const dupBtn = capture(head, ".sq-track__dup");
+  const removeBtn = capture(head, ".sq-track__remove");
+  if (dupBtn || removeBtn) {
+    addLabel("track");
+    addRow([dupBtn, removeBtn]);
   }
 
   const closeBtn = document.createElement("button");
@@ -698,6 +737,8 @@ export function openTrackMenu(t) {
 
   const close = () => {
     if (!t._trackMenuModal) return;
+    // strip the modal-only text labels before the buttons go home
+    for (const span of modal.querySelectorAll(".sq-menu-btn-label")) span.remove();
     for (const { node, parent, nextSibling } of captured) {
       if (nextSibling && nextSibling.parentNode === parent) {
         parent.insertBefore(node, nextSibling);
