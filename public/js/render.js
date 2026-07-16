@@ -5,7 +5,7 @@ import { LFO_KEYS, lfoLabel, rateToSlider, sliderToRate } from "./constants.js";
 import { showInputDialog, showSavedPatchPicker } from "./dialogs.js";
 import { setStatus } from "./dom.js";
 import { randomizeMelody, randomizeTimbre } from "./generate.js";
-import { ICON_DICE, ICON_LOAD, ICON_ROLL, ICON_SAVE, ICON_SLIDERS, ICON_WAV } from "./icons.js";
+import { ICON_CLEAR, ICON_DICE, ICON_LOAD, ICON_ROLL, ICON_SAVE, ICON_SLIDERS, ICON_WAV } from "./icons.js";
 import { canModulate, currentBpm, rateFromSync, syncLFO } from "./lfo.js";
 import { openSamplerSourceModal, pickAudioFileForTrack } from "./main.js";
 import { defaultFxConfig } from "./fxRack.js";
@@ -332,7 +332,11 @@ export function renderTrack(t) {
     t.muted = !t.muted;
     node.classList.toggle("is-muted", t.muted);
   });
-  node.querySelector(".sq-track__clear").addEventListener("click", () => {
+  // clear: icon + label — desktop shows the label, mobile the icon (same
+  // flip as roll, see the mobile media block)
+  const clearBtn = node.querySelector(".sq-track__clear");
+  clearBtn.innerHTML = `${ICON_CLEAR}<span class="sq-btn__label">clear</span>`;
+  clearBtn.addEventListener("click", () => {
     t.steps.fill(0);
     t.lengths.fill(0);
     t.notes.fill(null);
