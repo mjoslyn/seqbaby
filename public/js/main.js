@@ -323,6 +323,34 @@ export function arrayBufferToBase64(buf) {
 
 // ---- scale UI ----------------------------------------------------------
 
+// Firefox still hasn't implemented the AudioListener position/orientation
+// AudioParams (positionX…upZ are undefined — bugzilla #1283029). Tone v15
+// dropped the standardized-audio-context polyfill that used to paper over
+// this, so its Listener wraps those undefineds in Tone.Param during the lazy
+// context init and the "param must be an AudioParam" assert throws. That
+// poisons Tone.getDestination()/getListener() for the whole session: every
+// Tone-based voice and FX rack build fails, and the transport runs without
+// producing sound (keyboard-played Plaits voices still work — they never
+// touch Tone). Stand in real AudioParams borrowed from dangling
+// ConstantSourceNodes (never started or connected, so they're inert and
+// cost nothing). seqbaby does no 3D spatialization, so the values are moot.
+function shimFirefoxListenerParams(ctx) {
+  const l = ctx.listener;
+  if (!l || l.positionX) return;
+  const defaults = {
+    positionX: 0, positionY: 0, positionZ: 0,
+    forwardX: 0, forwardY: 0, forwardZ: -1,
+    upX: 0, upY: 1, upZ: 0,
+  };
+  for (const [key, dv] of Object.entries(defaults)) {
+    try {
+      const src = ctx.createConstantSource();
+      src.offset.value = dv;
+      Object.defineProperty(l, key, { value: src.offset, configurable: true });
+    } catch (e) { console.warn("listener param shim failed for", key, e); }
+  }
+}
+
 export function init() {
   // Create the AudioContext and bind Tone to it BEFORE anything reads
   // Tone.Transport. Tone.Transport's internal Clock latches onto the context's
@@ -339,6 +367,7 @@ export function init() {
   // can afford "playback" (larger buffer); Chrome's ctx.outputLatency feeds
   // visualOutputLatency() so the playhead stays aligned with the ear.
   state.audioCtx = new AudioContext({ latencyHint: isMobileDevice() ? "playback" : "interactive" });
+  shimFirefoxListenerParams(state.audioCtx);
   Tone.setContext(state.audioCtx);
   // Widen the transport's scheduler lookahead. Tone's clock ticks on the main
   // thread; when that thread stalls (layout, GC, a heavy pattern switch — all
