@@ -60,8 +60,10 @@ const VISUAL_LATENCY_OVERRIDE = (() => {
   return Number.isFinite(n) && n >= 0 ? n : null;
 })();
 const IS_SAFARI = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
-// Safari reports no outputLatency; this estimates the real render→speaker
-// latency. (An earlier 0.18 value was tuned against the broken Tone.Draw
+// Fallback for Safari ≤18.3, which has no outputLatency API: an ear-tuned
+// net estimate of the render→speaker latency. Safari 18.4+ (WebKit, Jan
+// 2025) reports the real ctx.outputLatency and takes the measured path
+// below. (An earlier 0.18 value was tuned against the broken Tone.Draw
 // scheduler that painted ~0.32s early — with correct scheduling the estimate
 // should be an actual device latency, not a bug offset.)
 const SAFARI_OUTPUT_LATENCY_EST = 0.09;
@@ -73,9 +75,12 @@ export function visualOutputLatency() {
   if (VISUAL_LATENCY_OVERRIDE !== null) return VISUAL_LATENCY_OVERRIDE;
   const ctx = state.audioCtx;
   if (!ctx) return 0;
+  // outputLatency reads 0 until the context is actually running (and on old
+  // Safari it's undefined) — the || chain treats both as "not reported".
+  const reported = ctx.outputLatency || 0;
+  if (reported > 0) return Math.max(0, reported - DISPLAY_LAG_EST);
   if (IS_SAFARI) return SAFARI_OUTPUT_LATENCY_EST;
-  const reported = ctx.outputLatency || ctx.baseLatency || 0;
-  return Math.max(0, reported - DISPLAY_LAG_EST);
+  return Math.max(0, (ctx.baseLatency || 0) - DISPLAY_LAG_EST);
 }
 
 /**
