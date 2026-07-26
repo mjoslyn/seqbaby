@@ -36,7 +36,12 @@
 # Bare /js/* etc. are still published and keep Netlify's default
 # revalidate-always headers, so anything loading unversioned URLs can't get
 # stuck on a stale copy for a year.
+#
+# Capitalised to match the casing @netlify/plugin-nextjs uses for static assets.
+# Netlify dedupes header names case-sensitively, so a lowercase `cache-control`
+# here is a second, distinct key — it warns at build time and leaves which one
+# wins up to the merge order rather than to us.
 [[headers]]
   for = "/e/*"
   [headers.values]
-    cache-control = "public, max-age=31536000, immutable"
+    Cache-Control = "public, max-age=31536000, immutable"
