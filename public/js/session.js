@@ -1,5 +1,6 @@
 import { AUTOMATION_TARGETS } from "./automation.js";
-import { normalizeAudioBuffer } from "./buffers.js";
+import { loadBuffer, normalizeAudioBuffer } from "./buffers.js";
+import { GRANULAR_SAMPLE_BASE } from "./catalog.js";
 import { PATTERN_COUNT } from "./constants.js";
 import { showInputDialog, showSelectDialog } from "./dialogs.js";
 import { setStatus } from "./dom.js";
@@ -62,6 +63,9 @@ export function serializeSet() {
       sliceSensitivity: t.sliceSensitivity ?? 0.5,
       uploadAudio: t.uploadAudio || null,
       uploadAudioMime: t.uploadAudioMime || null,
+      // Granular textures stream from the sample library, so only the id is
+      // stored — no base64 payload, and the session stays small.
+      granularSample: t.granularSample ? { ...t.granularSample } : null,
       uploadFileName: t.uploadFileName || null,
       soundPromptText: t.soundPromptText,
       promptText: t.promptText || "",
@@ -373,6 +377,7 @@ export function applySet(s) {
     t.sliceBase = td.sliceBase ?? 60;
     t.slicePlayMode = td.slicePlayMode === "toend" ? "toend" : "region";
     t.sliceSensitivity = td.sliceSensitivity ?? 0.5;
+    t.granularSample = td.granularSample || null;
     // decode any saved upload/eleven audio (async; the sampler picks it up).
     // Bundled sources need no decode — the SamplerVoice fetches by id when built.
     if (t.uploadAudio) {
@@ -384,6 +389,16 @@ export function applySet(s) {
           t.uploadBuffer = buffer;
           if (t.voice?.type === "sampler" || t.voice?.type === "granular") { t.voice.setBuffer(buffer); applySampleSpeed(t); }
         } catch (e) { console.warn("upload buffer decode failed", e); }
+      })();
+    } else if (t.granularSample?.id) {
+      // Library texture: re-fetch it by id (nothing of it is stored in the song).
+      (async () => {
+        try {
+          await ensureAudio();
+          const buffer = await loadBuffer(state.audioCtx, `${GRANULAR_SAMPLE_BASE}/${t.granularSample.id}.wav`);
+          t.uploadBuffer = buffer;
+          if (t.voice?.type === "granular") t.voice.setBuffer(buffer);
+        } catch (e) { console.warn("granular texture load failed", e); }
       })();
     }
     t.locked = !!td.locked;

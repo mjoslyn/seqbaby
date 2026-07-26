@@ -2,7 +2,7 @@ import { installAppApi } from "./appApi.js";
 import { buildBeatIndicator, paintBeatIndicator } from "./beat.js";
 import { bounceAudio, showBounceDialog } from "./bounce.js";
 import { loadBuffer, normalizeAudioBuffer } from "./buffers.js";
-import { BUNDLED_SAMPLES, SAMPLE_BASE, rebuildEngineCatalog } from "./catalog.js";
+import { BUNDLED_SAMPLES, GRANULAR_SAMPLES, GRANULAR_SAMPLE_BASE, GRANULAR_SAMPLE_CREDIT, SAMPLE_BASE, rebuildEngineCatalog } from "./catalog.js";
 import { LFO_KEYS, PATTERN_COUNT } from "./constants.js";
 import { isMobileDevice, setStatus } from "./dom.js";
 import { HELP_TIPS, ICON_BOUNCE, ICON_CAPTURE, ICON_CHAIN, ICON_FINISH, ICON_KEYBOARD, ICON_METRONOME, ICON_NOW, ICON_REC, ICON_REPEAT } from "./icons.js";
@@ -302,6 +302,72 @@ export function openSamplerSourceModal(t) {
     modal.querySelector(".sq-sampler__src-file").addEventListener("click", async () => {
       // hand off to the file picker; keep this modal's promise tied to its result
       const ok = await pickAudioFileForTrack(t, "sampler");
+      finish(ok);
+    });
+    modal.querySelector(".sq-sampler__src-cancel").addEventListener("click", () => finish(false));
+    overlay.addEventListener("click", (e) => { if (e.target === overlay) finish(false); });
+    const esc = (e) => { if (e.key === "Escape") finish(false); };
+    document.addEventListener("keydown", esc);
+  });
+}
+
+// Source picker for the granular engine: the bundled texture library or your own
+// file. Same commit/cancel contract as openSamplerSourceModal so the engine
+// dropdown can revert when it's dismissed.
+export function openGranularSourceModal(t) {
+  return new Promise(resolve => {
+    let done = false;
+    const finish = (ok) => { if (done) return; done = true; overlay.remove(); document.removeEventListener("keydown", esc); resolve(ok); };
+    const overlay = document.createElement("div");
+    overlay.className = "sq-modal-overlay";
+    const modal = document.createElement("div");
+    modal.className = "sq-modal sq-sampler__src-modal";
+    modal.setAttribute("role", "dialog");
+    modal.setAttribute("aria-modal", "true");
+    const c = GRANULAR_SAMPLE_CREDIT;
+    modal.innerHTML = `
+      <div class="sq-modal__title">granular source</div>
+      <button type="button" class="sq-sampler__src-file sq-btn">load file…</button>
+      <div class="sq-sampler__src-sep">or a texture to granulate</div>
+      <div class="sq-sampler__src-list"></div>
+      <div class="sq-modal__credit">textures from <a href="${c.url}" target="_blank" rel="noopener">${c.title}</a> by ${c.author} (${c.license})</div>
+      <div class="sq-modal__actions"><button type="button" class="sq-sampler__src-cancel sq-btn--ghost">cancel</button></div>`;
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+
+    const chooseTexture = async (id, label) => {
+      const already = t.engineKey === "dm:granular";
+      t.uploadAudio = null;                 // streamed, not persisted as base64
+      t.uploadFileName = label;
+      t.soundPromptText = label;
+      t.granularSample = { id, label };     // remembered so a reload restores it
+      if (!already) {
+        setEngineKey(t, "dm:granular");
+        if (t.el) t.el.querySelector(".sq-track__engine").value = "dm:granular";
+      }
+      setStatus(`loading "${label}"…`);
+      try {
+        await ensureAudio();
+        const buf = await loadBuffer(state.audioCtx, `${GRANULAR_SAMPLE_BASE}/${id}.wav`);
+        t.uploadBuffer = buf;
+        if (t.voice?.type === "granular") t.voice.setBuffer(buf);
+        setStatus(`"${t.name}" ← ${label} (${Math.round(buf.duration * 1000)}ms)`);
+      } catch (e) {
+        console.warn("granular texture load", e);
+        setStatus(`failed to load "${label}"`, true);
+      }
+      finish(true);
+    };
+
+    const list = modal.querySelector(".sq-sampler__src-list");
+    for (const s of GRANULAR_SAMPLES) {
+      const b = document.createElement("button");
+      b.type = "button"; b.className = "sq-sampler__src-item sq-btn--ghost"; b.textContent = s.label;
+      b.addEventListener("click", () => chooseTexture(s.id, s.label));
+      list.appendChild(b);
+    }
+    modal.querySelector(".sq-sampler__src-file").addEventListener("click", async () => {
+      const ok = await pickAudioFileForTrack(t, "dm:granular");
       finish(ok);
     });
     modal.querySelector(".sq-sampler__src-cancel").addEventListener("click", () => finish(false));

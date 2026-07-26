@@ -7,7 +7,7 @@ import { setStatus } from "./dom.js";
 import { randomizeMelody, randomizeTimbre } from "./generate.js";
 import { ICON_CLEAR, ICON_DICE, ICON_LOAD, ICON_ROLL, ICON_SAVE, ICON_SLIDERS, ICON_WAV } from "./icons.js";
 import { canModulate, currentBpm, rateFromSync, syncLFO } from "./lfo.js";
-import { openSamplerSourceModal, pickAudioFileForTrack } from "./main.js";
+import { openGranularSourceModal, openSamplerSourceModal, pickAudioFileForTrack } from "./main.js";
 import { defaultFxConfig } from "./fxRack.js";
 import { patternMeter, redetectDrumKit, stepsPerBarForMeter } from "./meter.js";
 import { setEngineKey, setParam, updatePlaitsControlsVisibility } from "./params.js";
@@ -100,7 +100,7 @@ export function renderTrack(t) {
     }
     if (val === "dm:granular") {
       const prev = t.engineKey;
-      pickAudioFileForTrack(t, val).then(ok => { if (!ok) engineSel.value = prev; });
+      openGranularSourceModal(t).then(ok => { if (!ok) engineSel.value = prev; });
       return;
     }
     setEngineKey(t, val);

@@ -23,6 +23,7 @@ const SECTIONS = [
   ["motion", "Modulation and automation"],
   ["saving", "Saving, sharing and export"],
   ["trouble", "If something sounds wrong"],
+  ["credits", "Credits and licences"],
 ];
 
 export default function ManualPage() {
@@ -506,6 +507,59 @@ export default function ManualPage() {
               page; the audio engine reconnects on your next interaction.
             </li>
           </ul>
+        </section>
+
+        <section className={styles.section} id="credits">
+          <h2>Credits and licences</h2>
+          <p>
+            seqbaby is built on other people&apos;s work. Thank you to everyone
+            below — and if you use the sounds in something you release, the
+            licences here are the ones that travel with them.
+          </p>
+          <div className={styles.tableWrap}>
+            <table className={styles.table}>
+              <thead>
+                <tr><th>Project</th><th>Used for</th><th>Licence</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><a href="https://tonejs.github.io/" target="_blank" rel="noopener">Tone.js</a></td>
+                  <td>Transport and scheduling, and the synth voices behind the drum, emulator and 303 engines</td>
+                  <td>MIT</td>
+                </tr>
+                <tr>
+                  <td><a href="https://github.com/vectorsize/woscillators" target="_blank" rel="noopener">woscillators</a></td>
+                  <td>A WebAssembly port of Mutable Instruments&apos; <a href="https://github.com/pichenettes/eurorack" target="_blank" rel="noopener">Plaits</a>, which is the plaits engine group</td>
+                  <td>MIT (Plaits: MIT)</td>
+                </tr>
+                <tr>
+                  <td><a href="https://github.com/KristofferKarlAxelEkstrand/AKWF-FREE" target="_blank" rel="noopener">AKWF — Adventure Kid Waveforms</a> by Kristoffer Ekstrand</td>
+                  <td>The single-cycle waveforms in the wavetable engine and its editor</td>
+                  <td>CC0</td>
+                </tr>
+                <tr>
+                  <td><a href="https://github.com/callimero/Lemondrop_Pack" target="_blank" rel="noopener">Lemondrop Pack</a> by callimero</td>
+                  <td>The texture library offered to the granular engine</td>
+                  <td>GPL-3.0</td>
+                </tr>
+                <tr>
+                  <td><a href="https://github.com/Tonejs/audio" target="_blank" rel="noopener">Tone.js audio samples</a></td>
+                  <td>The bundled drum kits in the sampler (808, CR-78, breakbeat, acoustic)</td>
+                  <td>MIT</td>
+                </tr>
+                <tr>
+                  <td><a href="https://nextjs.org/" target="_blank" rel="noopener">Next.js</a> and <a href="https://supabase.com/" target="_blank" rel="noopener">Supabase</a></td>
+                  <td>The shell around the studio: accounts, saved songs, the patch gallery and share links</td>
+                  <td>MIT / Apache-2.0</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            The 808 and 909 engines are original models of those machines&apos;
+            circuits rather than recordings of them, and Roland&apos;s trademarks
+            belong to Roland.
+          </p>
         </section>
 
         <div className={styles.footer}>

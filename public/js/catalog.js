@@ -86,6 +86,35 @@ export const SAMPLE_ENGINES = [
 // "smp:", used to build the load URL and stored as t.sampleSource.id).
 export const BUNDLED_SAMPLES = SAMPLE_ENGINES.map(e => ({ id: e.key.replace(/^smp:/, ""), label: e.label }));
 
+// Texture library for the granular engine. Sustained, evolving material — what
+// granular synthesis actually wants — from the Lemondrop Pack (GPL-3.0, by
+// callimero). Served from jsDelivr rather than committed: the pack is ~105 MB
+// and jsDelivr sends `access-control-allow-origin: *`, so decodeAudioData can
+// read it the same way the bundled drum kits stream from tonejs.github.io.
+export const GRANULAR_SAMPLE_BASE = "https://cdn.jsdelivr.net/gh/callimero/Lemondrop_Pack@main/Samples";
+export const GRANULAR_SAMPLE_CREDIT = {
+  title: "Lemondrop Pack",
+  author: "callimero",
+  url: "https://github.com/callimero/Lemondrop_Pack",
+  license: "GPL-3.0",
+};
+export const GRANULAR_SAMPLES = [
+  { id: "Reface/Reface_AmbPad",        label: "ambient pad" },
+  { id: "Reface/Reface_Ambience",      label: "ambience" },
+  { id: "Reface/Reface_AmbientGrain",  label: "ambient grain" },
+  { id: "Reface/Reface_BassPad",       label: "bass pad" },
+  { id: "Reface/Reface_Choir",         label: "choir" },
+  { id: "Reface/HardSadPad",           label: "sad pad" },
+  { id: "Reface/Reface_ClickAmbience", label: "click ambience" },
+  { id: "Reface/Reface_LeadRev",       label: "reverse lead" },
+  { id: "Microfreak/Aeonoium",         label: "aeonium drone" },
+  { id: "Microfreak/BeckonForth",      label: "beckon drone" },
+  { id: "Microfreak/HarmoXtrins",      label: "harmonic strings" },
+  { id: "Microfreak/SleepyTines",      label: "sleepy tines" },
+  { id: "Microfreak/Wohane",           label: "wohane" },
+  { id: "Microfreak/PsyPhase",         label: "psy phase" },
+];
+
 export const MIDI_ENGINE = {
   key: "midi", label: "midi out", group: "midi", type: "midi",
   defaultNote: 60, poly: true,

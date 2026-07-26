@@ -1311,6 +1311,9 @@ body.kbd-recording .sq-track.is-kbd-active { border-color: #e5484d; box-shadow: 
 
 /* Sampler source picker modal: load-file button + bundled sample list. */
 .sq-sampler__src-modal { width: min(92vw, 420px); }
+/* Attribution line in a source picker (see the wavetable editor's credit). */
+.sq-modal__credit { font-size: 10px; color: var(--fg-dim); text-align: center; margin-top: 8px; line-height: 1.5; }
+.sq-modal__credit a { color: var(--fg-dim); }
 .sq-sampler__src-sep { font-size: 11px; color: var(--fg-dim); text-align: center; }
 .sq-sampler__src-list { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; max-height: 44vh; overflow-y: auto; }
 .sq-sampler__src-item { font-size: 11px; padding: 6px 4px; }
