@@ -19,5 +19,9 @@ declare global {
       applyTrackPatch: (track: unknown, patch: unknown) => void;
       state: unknown;
     };
+    // Set by EngineScripts' inline marker, which only executes when the studio
+    // HTML is parsed from the document (i.e. not on a client-side navigation).
+    // ScriptLoader reads it to decide whether to run its fallback boot.
+    __seqbabyServerBoot?: number;
   }
 }

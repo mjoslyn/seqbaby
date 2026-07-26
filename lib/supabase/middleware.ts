@@ -27,9 +27,17 @@ export async function updateSession(request: NextRequest) {
     },
   );
 
-  // IMPORTANT: do not run code between createServerClient and getUser() — it
+  // IMPORTANT: do not run code between createServerClient and this call — it
   // refreshes the token and is what keeps the session alive.
-  await supabase.auth.getUser();
+  //
+  // getClaims() rather than getUser(): both refresh an expiring session (via
+  // getSession internally), but getClaims verifies the JWT locally against the
+  // cached JWKS instead of making a blocking round trip to the auth server on
+  // every single request. Since middleware runs before the studio HTML starts
+  // streaming, that round trip sat directly in front of the engine's download
+  // for signed-in visitors. On projects still using legacy HS256 secrets
+  // getClaims falls back to getUser internally, so this is never slower.
+  await supabase.auth.getClaims();
 
   return supabaseResponse;
 }
