@@ -756,6 +756,39 @@ export function wireFxPanel(t, panel) {
   q(".fx-reverb-wet").addEventListener("input", applyReverb);
   { const b = q(".fx-crush-bits"); if (b) b.addEventListener("input", applyCrush); }
   { const w = q(".fx-crush-wet");  if (w) w.addEventListener("input", applyCrush); }
+
+  // Double-click an effect's name to put that effect back to its defaults. The
+  // panel has a lot of knobs and no undo, so getting back to a known state
+  // otherwise means dragging each one to where you think it started.
+  const RESET = {
+    amp: applyAmp, vinyl: applyVinyl, cassette: applyCassette, fuzz: applyFuzz,
+    ringmod: applyRingMod, shaper: applyWaveShaper, crush: applyCrush,
+    autowah: applyAutoWah, chorus: applyChorus, phaser: applyPhaser,
+    flanger: applyFlanger, pitchshift: applyPitchShift, delay: applyDelay,
+    reverb: applyReverb,
+  };
+  const defaults = defaultFxConfig();
+  panel.querySelectorAll(".sq-fx__row").forEach(row => {
+    const title = row.querySelector(".sq-fx__title");
+    const stage = row.dataset.fx;
+    if (!title || !stage) return;
+    title.title = "double-click to reset";
+    title.classList.add("is-resettable");
+    title.addEventListener("dblclick", () => {
+      if (stage === "glide") {                 // not an fx-rack stage; lives on the track
+        t.glide = 0;
+        const g = q(".sq-track__glide");
+        if (g) g.value = "0";
+        if (t.voice?.setGlide) t.voice.setGlide(0);
+        return;
+      }
+      const apply = RESET[stage];
+      if (!apply || !defaults[stage]) return;
+      fc[stage] = { ...defaults[stage] };
+      refreshFxPanelUI(t);                     // writes every control from the config
+      apply();                                 // …then re-read them into the rack
+    });
+  });
 }
 
 export function renderModPanel(t, panel) {

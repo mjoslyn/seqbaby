@@ -827,6 +827,9 @@ main {
   letter-spacing: 0.08em;
   min-width: 120px;
 }
+/* Effect names double-click to reset that effect (see wireFxPanel). */
+.sq-fx__title.is-resettable { cursor: pointer; }
+.sq-fx__title.is-resettable:hover { text-decoration: underline dotted; }
 .sq-fx__row[data-fx="vinyl"] .sq-fx__title { color: #c79a74; }
 .sq-fx__row[data-fx="cassette"] .sq-fx__title { color: #d9c07a; }
 .sq-fx__row[data-fx="fuzz"] .sq-fx__title { color: #ff7a7a; }
