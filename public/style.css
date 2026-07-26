@@ -667,6 +667,7 @@ main {
   cursor: move;        /* body of a note: drag moves it (step + pitch) */
 }
 .sq-roll__cell.is-on.is-edge { cursor: ew-resize; }   /* head / tail: drag resizes */
+.sq-roll__cell.is-on.is-tail-zone { cursor: ew-resize; }   /* length-1 note: its right sliver */
 /* Multi-step notes: square the adjoining corners and bridge the 1px grid gap so
    a held note reads as a single continuous bar. */
 .sq-roll__cell.is-on.is-held {

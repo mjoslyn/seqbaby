@@ -386,7 +386,8 @@ export function renderRollPanel(t, panel) {
   //   note's left-edge cell + drag        → resize: the start follows, end stays
   //   note's middle + drag                → move the whole note (step + pitch
   //                                          follow the pointer, length kept)
-  //   length-1 note + drag                → move (the single cell is all middle)
+  //   length-1 note + drag                → move, or resize from the cell's right
+  //                                          sliver (its only tail — RESIZE_ZONE)
   //   two clicks in < 400 ms on a note    → delete it (an extra's row deletes
   //                                          only that extra)
   //   click on note (no drag), same pitch → remove the whole note (legacy)
@@ -433,6 +434,8 @@ export function renderRollPanel(t, panel) {
   };
 
   let drag = null;
+  // Fraction across a length-1 note's cell where the tail (resize) zone starts.
+  const RESIZE_ZONE = 0.7;
   let lastRollClickTime = 0;
   let lastRollClickKey = "";
   const ROLL_DBLCLICK_MS = 400;
@@ -545,6 +548,13 @@ export function renderRollPanel(t, panel) {
         slotLen  = 0;
       }
       const isRightEdgeOfSlot = slotLen > 0 && step === existing + slotLen - 1;
+      // A length-1 note is its own head *and* tail, so it has no cell to spare
+      // for a resize edge. Split the one cell instead: the right sliver grabs
+      // like a tail, the rest like a body — otherwise single notes could only
+      // ever be moved, never lengthened.
+      const cellRect = cell.getBoundingClientRect();
+      const grabFrac = cellRect.width > 0 ? (e.clientX - cellRect.left) / cellRect.width : 0;
+      const inTailZone = slotLen === 1 && grabFrac >= RESIZE_ZONE;
       // Left edge of a multi-step note → drag the start; the end stays put.
       // (Only the anchor's own note: an extra always starts where the anchor does.)
       if (slotLen > 1 && step === existing && dragSlot.kind === "anchor") {
@@ -560,8 +570,8 @@ export function renderRollPanel(t, panel) {
         e.preventDefault();
         return;
       }
-      // Right-edge of a slot with length > 1 → resize that slot.
-      if (isRightEdgeOfSlot && slotLen > 1 && dragSlot.kind !== "empty") {
+      // Tail of the slot → resize it.
+      if (dragSlot.kind !== "empty" && ((isRightEdgeOfSlot && slotLen > 1) || inTailZone)) {
         drag = {
           mode: "resize",
           anchor: existing,
@@ -607,6 +617,23 @@ export function renderRollPanel(t, panel) {
     paintColumn(step);
     renderStepGrid(t);
     e.preventDefault();
+  });
+  // Hover affordance for that split cell: the cursor has to change within one
+  // cell, which CSS can't express, so mark the sliver as the pointer enters it.
+  grid.addEventListener("pointermove", (e) => {
+    if (drag) return;
+    const cell = e.target.closest?.(".sq-roll__cell");
+    if (!cell) return;
+    let inZone = false;
+    if (cell.classList.contains("is-on") && !cell.classList.contains("is-edge")
+        && !cell.classList.contains("is-held") && !cell.classList.contains("is-note-joins-next")) {
+      const r = cell.getBoundingClientRect();
+      inZone = r.width > 0 && (e.clientX - r.left) / r.width >= RESIZE_ZONE;
+    }
+    if (cell.classList.contains("is-tail-zone") !== inZone) cell.classList.toggle("is-tail-zone", inZone);
+  });
+  grid.addEventListener("pointerout", (e) => {
+    e.target.closest?.(".sq-roll__cell")?.classList.remove("is-tail-zone");
   });
   grid.addEventListener("pointermove", (e) => {
     if (!drag || e.pointerId !== drag.pointerId) return;
