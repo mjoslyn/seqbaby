@@ -16,6 +16,9 @@ export function AccountBar({
 }) {
   return (
     <div className={styles.topBar}>
+      <a className={styles.manualLink} href="/manual" title="how seqbaby works">
+        manual
+      </a>
       {name && <SaveButton />}
       <button
         className={styles.shareBtn}

@@ -1,0 +1,517 @@
+import type { Metadata } from "next";
+import styles from "./manual.module.css";
+
+export const metadata: Metadata = {
+  title: "seqbaby manual",
+  description: "How to use seqbaby: transport, patterns, tracks, engines, the piano roll, effects, saving and sharing.",
+};
+
+const SECTIONS = [
+  ["start", "Getting started"],
+  ["transport", "Transport"],
+  ["patterns", "Patterns"],
+  ["tracks", "Tracks"],
+  ["steps", "The step grid"],
+  ["roll", "The piano roll"],
+  ["step-editor", "The step editor"],
+  ["keyboard", "Playing from your keyboard"],
+  ["scale", "Scale and chords"],
+  ["engines", "Sound engines"],
+  ["sampler", "Samples"],
+  ["wavetable", "The wavetable editor"],
+  ["shaping", "Filter, effects and dynamics"],
+  ["motion", "Modulation and automation"],
+  ["saving", "Saving, sharing and export"],
+  ["trouble", "If something sounds wrong"],
+];
+
+export default function ManualPage() {
+  return (
+    <div className={styles.page}>
+      <div className={styles.wrap}>
+        <div className={styles.top}>
+          <a className={styles.brand} href="/">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/favicon.svg" alt="" />
+            seqbaby
+          </a>
+          <a className={styles.backBtn} href="/">back to the studio</a>
+        </div>
+
+        <h1>Manual</h1>
+        <p className={styles.lede}>
+          seqbaby is a step sequencer that runs entirely in your browser. You build
+          patterns on a grid, each track playing its own instrument, and layer
+          effects and movement on top. Nothing is installed and nothing is uploaded
+          unless you choose to save or share.
+        </p>
+
+        <nav className={styles.toc}>
+          <h2>Contents</h2>
+          <ol>
+            {SECTIONS.map(([id, title]) => (
+              <li key={id}><a href={`#${id}`}>{title}</a></li>
+            ))}
+          </ol>
+        </nav>
+
+        <section className={styles.section} id="start">
+          <h2>Getting started</h2>
+          <p>
+            Press <span className={styles.ui}>play</span>. Browsers keep audio muted
+            until you interact with the page, so the first press is what switches the
+            sound on — if you hear nothing at first, press it once more.
+          </p>
+          <p>
+            A new session opens with a few drum tracks already playing. Click any cell
+            in a track&apos;s row of squares to add or remove a hit, and you are
+            sequencing. From there:
+          </p>
+          <ul>
+            <li>Change what a track sounds like with the dropdown next to its name.</li>
+            <li>Click <span className={styles.ui}>+ add track</span> at the bottom for another instrument.</li>
+            <li>Use the numbered buttons at the top to move between 32 pattern slots.</li>
+          </ul>
+        </section>
+
+        <section className={styles.section} id="transport">
+          <h2>Transport</h2>
+          <p>The bar across the top controls playback for everything.</p>
+          <div className={styles.tableWrap}>
+            <table className={styles.table}>
+              <thead>
+                <tr><th>Control</th><th>What it does</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>play</td><td>Starts and stops the sequencer. Playback always restarts from the top.</td></tr>
+                <tr><td>record</td><td>While the sequencer runs, notes you play on your computer keyboard are written into the active track.</td></tr>
+                <tr><td>capture</td><td>Writes the phrase you just played into the active track, even though you were not recording. It keeps the last 32 seconds and takes the run of notes after the most recent pause, with the note lengths you actually held.</td></tr>
+                <tr><td>bpm</td><td>Tempo. Type a number, or drag the field up and down.</td></tr>
+                <tr><td>swing</td><td>Delays every second step, from straight to a heavy shuffle.</td></tr>
+                <tr><td>metronome</td><td>A click on each downbeat, for playing along. It is never included in an export.</td></tr>
+                <tr><td>meter</td><td>The bar at the far right shows the output level. If it sits at the very top, turn some tracks down.</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            The second row is the keyboard-performance strip — scale, octave, chord
+            and arp. It is covered under <a href="#keyboard">playing from your keyboard</a>.
+          </p>
+        </section>
+
+        <section className={styles.section} id="patterns">
+          <h2>Patterns</h2>
+          <p>
+            Every session holds 32 pattern slots, numbered 1–32. Click a number to
+            switch to it; the one you are editing is outlined. An empty slot is a
+            blank canvas, so a slot per section (intro, verse, chorus) is a good way
+            to build an arrangement.
+          </p>
+          <div className={styles.tableWrap}>
+            <table className={styles.table}>
+              <thead>
+                <tr><th>Control</th><th>What it does</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>repeat / chain</td><td>Repeat loops the current pattern forever. Chain plays through your non-empty patterns in order, like a song.</td></tr>
+                <tr><td>immediate / finish</td><td>Whether clicking another pattern switches instantly or waits for the current bar to finish.</td></tr>
+                <tr><td>dup</td><td>Copies this pattern into the next free slot — the usual way to make a variation.</td></tr>
+                <tr><td>sig</td><td>Time signature for this pattern, from 4/4 to 7/8.</td></tr>
+                <tr><td>rep</td><td>In chain mode, how many bars this pattern plays before moving on.</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div className={styles.note}>
+            Patterns store notes, not sounds. Switching patterns never changes your
+            instruments, effects or mixer settings — those belong to the track.
+          </div>
+        </section>
+
+        <section className={styles.section} id="tracks">
+          <h2>Tracks</h2>
+          <p>
+            A track is one instrument plus its pattern. The header row holds its name,
+            its engine (the instrument), and the length of its pattern.
+          </p>
+          <div className={styles.tableWrap}>
+            <table className={styles.table}>
+              <thead>
+                <tr><th>Control</th><th>What it does</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>len</td><td>How many steps this track loops over. Tracks can differ — a 12-step track against a 16-step one drifts in and out of phase.</td></tr>
+                <tr><td>+1 x2 x4 /2 /4</td><td>Grow or shrink the pattern. Growing copies what is already there.</td></tr>
+                <tr><td>spd</td><td>Plays this track faster or slower than the rest, from 1/16 to 16 times.</td></tr>
+                <tr><td>vol</td><td>Track volume, with its level meter behind the slider.</td></tr>
+                <tr><td>solo / mute</td><td>Hear only this track, or silence it.</td></tr>
+                <tr><td>gate</td><td>Switches between notes lasting their written length and every note being a short stab.</td></tr>
+                <tr><td>clear</td><td>Empties this pattern on this track.</td></tr>
+                <tr><td>dice</td><td>Generates a new pattern. Keep pressing until something sticks.</td></tr>
+                <tr><td>dup / remove</td><td>Copy the whole track (sound and all), or delete it.</td></tr>
+                <tr><td>oct / semi</td><td>Transposes everything in the pattern up or down.</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            The second row of buttons — <span className={styles.ui}>roll</span>,{" "}
+            <span className={styles.ui}>filter</span>, <span className={styles.ui}>env</span>,{" "}
+            <span className={styles.ui}>fx</span>, <span className={styles.ui}>eq</span>,{" "}
+            <span className={styles.ui}>comp</span>, <span className={styles.ui}>mod</span>,{" "}
+            <span className={styles.ui}>aut</span> — opens the panels described in{" "}
+            <a href="#shaping">filter, effects and dynamics</a> and{" "}
+            <a href="#motion">modulation and automation</a>.
+          </p>
+        </section>
+
+        <section className={styles.section} id="steps">
+          <h2>The step grid</h2>
+          <p>
+            The row of squares is the pattern. A filled square is a note; every fourth
+            square is marked so you can find the beat.
+          </p>
+          <ul>
+            <li><strong>Click</strong> an empty square to add a note, or a filled one to remove it.</li>
+            <li><strong>Drag right</strong> from a note to make it longer.</li>
+            <li><strong>Drag up or down</strong> on a note to change its pitch.</li>
+            <li><strong>Double-click</strong> to set a note to full velocity.</li>
+            <li><strong>Right-click</strong> (or press and hold on a touchscreen) to open the step editor.</li>
+          </ul>
+          <p>
+            For drum tracks the pitch rarely matters, so the grid is all you need. For
+            melodies, the piano roll is easier.
+          </p>
+        </section>
+
+        <section className={styles.section} id="roll">
+          <h2>The piano roll</h2>
+          <p>
+            <span className={styles.ui}>roll</span> opens a pitch-by-time grid: pitches
+            up the side, steps across. It is the best place to write a melody, and the
+            only place to stack notes into a chord you draw by hand.
+          </p>
+          <div className={styles.tableWrap}>
+            <table className={styles.table}>
+              <thead>
+                <tr><th>Gesture</th><th>Result</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>Click empty space</td><td>Adds a one-step note. Keep dragging right to make it longer as you create it.</td></tr>
+                <tr><td>Drag a note&apos;s middle</td><td>Moves the whole note — left and right in time, up and down in pitch. Its length is kept.</td></tr>
+                <tr><td>Drag a note&apos;s edge</td><td>Resizes it. The left edge moves the start, the right edge moves the end.</td></tr>
+                <tr><td>Drag a one-step note</td><td>Its single cell does both: the right sliver resizes, the rest moves. The cursor tells you which you are on.</td></tr>
+                <tr><td>Double-click a note</td><td>Deletes it. On a stacked note it deletes only the row you clicked.</td></tr>
+                <tr><td>Click an empty row above a note</td><td>Stacks another pitch onto that step, for chords you voice yourself.</td></tr>
+                <tr><td>Right-click / long press</td><td>Opens the step editor for that note.</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            The lane underneath is velocity — drag a bar to make that step harder or
+            softer. The buttons along the top shift every note up a step, double or
+            halve the pattern length, or roll a new melody.
+          </p>
+          <div className={styles.note}>
+            A track plays one note at a time per step, so a note stops where the next
+            one begins. To play pitches together, stack them on the same step or use a
+            chord in the step editor.
+          </div>
+        </section>
+
+        <section className={styles.section} id="step-editor">
+          <h2>The step editor</h2>
+          <p>
+            Right-click any step to open everything that step can do beyond pitch and
+            length.
+          </p>
+          <div className={styles.tableWrap}>
+            <table className={styles.table}>
+              <thead>
+                <tr><th>Setting</th><th>What it does</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>note</td><td>The pitch, on a small keyboard.</td></tr>
+                <tr><td>chord</td><td>Plays a whole chord from that root — major, minor, sevenths and so on — plus an inversion.</td></tr>
+                <tr><td>arp</td><td>Instead of sounding together, the chord&apos;s notes play one after another for the length of the note. Set how fast, how many octaves, and which direction.</td></tr>
+                <tr><td>ratchet</td><td>Retriggers the step up to 8 times — drum rolls and stutters.</td></tr>
+                <tr><td>vel</td><td>How hard the note hits.</td></tr>
+                <tr><td>offset</td><td>Nudges the step slightly early or late for a looser feel.</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div className={styles.note}>
+            An arp fills the note&apos;s length, so give it room. A one-step note at a
+            1/16 arp rate only has space for a single note — lengthen the note, or pick
+            a faster rate, to hear the pattern.
+          </div>
+        </section>
+
+        <section className={styles.section} id="keyboard">
+          <h2>Playing from your keyboard</h2>
+          <p>
+            On a desktop machine your computer keyboard always plays the active track —
+            the one you clicked last, which is outlined. Typing in a text box is safe;
+            note keys only play when no text field has focus.
+          </p>
+          <p>
+            The layout is a piano: the home row is the white keys and the row above
+            holds the black keys.
+          </p>
+          <ul>
+            <li>
+              <span className={styles.key}>a</span> <span className={styles.key}>s</span>{" "}
+              <span className={styles.key}>d</span> <span className={styles.key}>f</span>{" "}
+              <span className={styles.key}>g</span> <span className={styles.key}>h</span>{" "}
+              <span className={styles.key}>j</span> <span className={styles.key}>k</span>{" "}
+              <span className={styles.key}>l</span> — white keys
+            </li>
+            <li>
+              <span className={styles.key}>w</span> <span className={styles.key}>e</span>{" "}
+              <span className={styles.key}>t</span> <span className={styles.key}>y</span>{" "}
+              <span className={styles.key}>u</span> <span className={styles.key}>o</span> — black keys
+            </li>
+            <li>
+              <span className={styles.key}>z</span> <span className={styles.key}>x</span> — down and up an octave
+            </li>
+          </ul>
+          <p>Two ways to get what you play into a pattern:</p>
+          <ul>
+            <li>
+              <strong>Record</strong> — switch on <span className={styles.ui}>record</span>,
+              start playback, and notes land on the step passing underneath.
+            </li>
+            <li>
+              <strong>Capture</strong> — play freely with the sequencer stopped or
+              running, then press <span className={styles.ui}>capture</span>. Your last
+              phrase is written into the track with its timing and note lengths, and
+              the pattern is sized to fit.
+            </li>
+          </ul>
+        </section>
+
+        <section className={styles.section} id="scale">
+          <h2>Scale and chords</h2>
+          <p>
+            Tick <span className={styles.ui}>scale</span> and pick a root and a mode to
+            lock your playing to a key. Everything you play on the white keys then
+            belongs to that scale — the black keys go quiet, so there are no wrong
+            notes. There are major and minor modes, pentatonics, blues, several exotic
+            scales, and microtonal tunings.
+          </p>
+          <p>
+            The palette button next to it colours notes by pitch across the roll and
+            grid, which makes repeated shapes easy to spot.
+          </p>
+          <h3>Chord mode</h3>
+          <p>
+            With <span className={styles.ui}>chord</span> on, each key plays a whole
+            chord instead of one note. Pick the chord type and a voicing. With a scale
+            active the choice collapses to on or off, because the chord is built from
+            the scale itself — so each degree gets the quality it should have, and
+            everything stays in key.
+          </p>
+          <p>
+            Chords you record or capture are stored as a chord, not as loose notes, so
+            the roll shows a single labelled note you can retune or move in one go.
+          </p>
+          <h3>Arp</h3>
+          <p>
+            The <span className={styles.ui}>arp</span> box appears next to the chord
+            picker. Switch it on and a held key arpeggiates as you play, at the rate,
+            octave range and direction you choose. Chords you then record or capture
+            carry those arp settings into the pattern.
+          </p>
+        </section>
+
+        <section className={styles.section} id="engines">
+          <h2>Sound engines</h2>
+          <p>
+            The dropdown beside a track&apos;s name chooses its instrument. They are
+            grouped:
+          </p>
+          <div className={styles.tableWrap}>
+            <table className={styles.table}>
+              <thead>
+                <tr><th>Group</th><th>What is in it</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>plaits</td><td>Sixteen synthesis models from the Mutable Instruments Plaits oscillator — virtual analogue, FM, wavetable, granular, noise, and physical models.</td></tr>
+                <tr><td>drum / synth</td><td>An 808 and 909 kit, a 303-style bass, a poly saw, an FM bell and a pad.</td></tr>
+                <tr><td>Emulators</td><td>Seven monosynth voices in the spirit of classic hardware: MiniBrute, Moog, Juno, Rhodes, Prophet, plus plucked guitar and bass.</td></tr>
+                <tr><td>texture</td><td>A granular engine that plays a sample as a cloud of tiny grains.</td></tr>
+                <tr><td>wavetable</td><td>A wavetable synth with its own <a href="#wavetable">editor</a>.</td></tr>
+                <tr><td>sampler</td><td>Your own audio, or one of the bundled kits. See <a href="#sampler">samples</a>.</td></tr>
+                <tr><td>saved patches</td><td>Sounds you have saved yourself.</td></tr>
+                <tr><td>midi</td><td>Sends notes to external hardware or software instead of making sound itself.</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            The four sliders under the name — labelled per engine, for example{" "}
+            <span className={styles.ui}>harm</span>, <span className={styles.ui}>timb</span>,{" "}
+            <span className={styles.ui}>morph</span> and <span className={styles.ui}>decay</span>{" "}
+            on a Plaits model — are that instrument&apos;s main tone controls. The
+            labels change with the engine, so they always say what they actually do.
+          </p>
+        </section>
+
+        <section className={styles.section} id="sampler">
+          <h2>Samples</h2>
+          <p>
+            Choose <span className={styles.ui}>sampler</span> as a track&apos;s engine
+            and you are asked for a source: a file from your machine, or one of the
+            bundled drum kits. The waveform button in the track header then opens the
+            sample editor.
+          </p>
+          <ul>
+            <li>Trim the start and end, and fade either edge.</li>
+            <li>Slice a loop and play the slices from the grid, one per note.</li>
+            <li>Fit a loop to the tempo, or leave it at its natural speed.</li>
+            <li>Keep pitch locked so a tempo-fitted loop stays in tune, or unlock it to play the sample melodically.</li>
+          </ul>
+          <p>
+            Files you load stay in your browser. They are only sent anywhere if you
+            save the session to an account or make a share link.
+          </p>
+        </section>
+
+        <section className={styles.section} id="wavetable">
+          <h2>The wavetable editor</h2>
+          <p>
+            With the wavetable engine selected, the waveform button opens an editor
+            where you draw the sound itself. A wavetable is a series of frames — single
+            cycles of a waveform — and the wave slider sweeps between them.
+          </p>
+          <ul>
+            <li><strong>Draw</strong> straight onto the canvas, or build the shape with the harmonic sliders underneath.</li>
+            <li><strong>Load</strong> a starting point: basic shapes, or any of the bundled waveforms.</li>
+            <li><strong>Add frames</strong> and the wave slider morphs smoothly between them.</li>
+            <li><strong>Unison</strong> stacks up to 7 copies of the voice per note, spread apart by the track&apos;s detune slider, for a wide supersaw-style sound.</li>
+            <li><strong>Wave scan</strong> sweeps through the frames on its own — set the speed (free or in time with the tempo), the direction, and which part of the table it covers. Retrigger restarts the sweep on every note instead of letting it run continuously.</li>
+          </ul>
+        </section>
+
+        <section className={styles.section} id="shaping">
+          <h2>Filter, effects and dynamics</h2>
+          <p>Each track has its own chain, opened from the buttons under its name.</p>
+          <div className={styles.tableWrap}>
+            <table className={styles.table}>
+              <thead>
+                <tr><th>Panel</th><th>What it holds</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>filter</td><td>A low-pass filter with cutoff and resonance — the classic way to open and close a sound.</td></tr>
+                <tr><td>env</td><td>An envelope that sweeps the filter on every note: how far it moves, and how it attacks, decays, sustains and releases.</td></tr>
+                <tr><td>fx</td><td>The effects chain, below.</td></tr>
+                <tr><td>eq</td><td>Three bands — low, middle and high — to sit a track in the mix.</td></tr>
+                <tr><td>comp</td><td>Compression, either on the track itself or ducked by another track, which is how you get a pumping bass under a kick.</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <h3>The effects chain</h3>
+          <p>
+            Effects run in the order they appear in the panel, starting with{" "}
+            <span className={styles.ui}>amp</span>: <span className={styles.ui}>drive</span>{" "}
+            pushes the signal into everything that follows, so fuzz, the wave shaper,
+            tape saturation and the crusher all bite harder, and{" "}
+            <span className={styles.ui}>out</span> trims the level back afterwards. Both
+            sit at unity in the middle.
+          </p>
+          <p>
+            After that come vinyl and cassette (wear, warble and noise), fuzz, ring
+            modulation, a wave shaper, a bit crusher, auto-wah, chorus, phaser,
+            flanger, pitch shift, delay and reverb. Each has a wet or amount control
+            that does nothing at zero, so the panel is safe to explore.
+          </p>
+          <p>
+            <span className={styles.ui}>glide</span> lives here too: it slides the pitch
+            between notes rather than jumping, for portamento leads and basses.
+          </p>
+        </section>
+
+        <section className={styles.section} id="motion">
+          <h2>Modulation and automation</h2>
+          <p>
+            Two ways to make a sound move. Both are per track, and both are worth using
+            on almost anything that repeats for long.
+          </p>
+          <h3>mod — continuous</h3>
+          <p>
+            Assign an LFO to a parameter and it sweeps back and forth on its own. Pick
+            the target, a shape, a depth, and either a speed in hertz or a division of
+            the tempo so it stays in time. Filter cutoff is the classic target;
+            effect amounts and the instrument&apos;s own tone controls work too.
+          </p>
+          <h3>aut — per step</h3>
+          <p>
+            Automation draws a value for each step of the pattern instead. Choose a
+            parameter, and you get a lane under the grid where each step holds its own
+            value — a filter that opens over 16 steps, a delay that only appears on the
+            last beat. Automation lanes belong to the pattern, so each pattern can move
+            differently.
+          </p>
+        </section>
+
+        <section className={styles.section} id="saving">
+          <h2>Saving, sharing and export</h2>
+          <div className={styles.tableWrap}>
+            <table className={styles.table}>
+              <thead>
+                <tr><th>Action</th><th>What happens</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>session</td><td>Saves the whole session — every track, pattern and setting — into this browser.</td></tr>
+                <tr><td>save (signed in)</td><td>Stores the session to your account so you can open it anywhere, and keep a library of songs.</td></tr>
+                <tr><td>share</td><td>Creates a link anyone can open. They get a playable copy; your original is untouched.</td></tr>
+                <tr><td>patch</td><td>The save icon in a track header stores that instrument&apos;s sound, which then appears under saved patches for any track. Signed in, you can publish patches to the gallery for others to use.</td></tr>
+                <tr><td>Pattern / Session</td><td>Renders audio and downloads a WAV — either the current pattern, or the whole chained arrangement. Recording happens in real time, so a long session takes as long as it plays.</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            Without an account everything stays in your browser, which means clearing
+            site data clears your work. An account is the way to keep it.
+          </p>
+        </section>
+
+        <section className={styles.section} id="trouble">
+          <h2>If something sounds wrong</h2>
+          <ul>
+            <li>
+              <strong>No sound at all.</strong> Press <span className={styles.ui}>play</span>{" "}
+              once more — browsers hold audio back until you interact with the page.
+              Then check that no other track is soloed, and that the track&apos;s volume
+              is up.
+            </li>
+            <li>
+              <strong>A track is silent.</strong> Look for a soloed track elsewhere, a
+              muted one here, or a filter cutoff closed all the way down.
+            </li>
+            <li>
+              <strong>Playback stutters.</strong> Reverb, granular and pitch shift are
+              the expensive effects; a lot of them at once on a slow machine will do
+              it. Closing other tabs helps more than you would expect.
+            </li>
+            <li>
+              <strong>The playhead looks out of time with what you hear.</strong> Safari
+              cannot report its audio delay, so the display is an estimate. Add{" "}
+              <span className={styles.ui}>?vlat=0.2</span> to the address to tune it to
+              your machine.
+            </li>
+            <li>
+              <strong>An arp is not audible.</strong> The note is probably too short to
+              fit more than one arp note. Lengthen it or choose a faster arp rate.
+            </li>
+            <li>
+              <strong>Sound cut out after switching apps.</strong> Click anywhere on the
+              page; the audio engine reconnects on your next interaction.
+            </li>
+          </ul>
+        </section>
+
+        <div className={styles.footer}>
+          <a href="/">Back to the studio</a>
+        </div>
+      </div>
+    </div>
+  );
+}

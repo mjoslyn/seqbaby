@@ -208,6 +208,9 @@
   font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   font-size: 12px;
 }
+/* Sits at the left of the bar (the rest of the row is right-aligned). */
+.manualLink { margin-right: auto; color: #9aa0aa; text-decoration: none; }
+.manualLink:hover { color: #e8e8ea; }
 .accountName { color: #9aa0aa; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-decoration: none; cursor: pointer; }
 .accountName:hover { color: #e8e8ea; }
 .accountBtn {
