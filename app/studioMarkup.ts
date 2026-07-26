@@ -214,29 +214,29 @@ export const STUDIO_BODY = String.raw`
         <div class="sq-param-group sq-param-group--granular" hidden>
           <div class="sq-gran__row">
             <label class="sq-gran__lbl">play</label>
-            <select class="p-gplay" title="playhead mode">
+            <select class="p-gplay" title="fixed = every grain reads from one spot; moving = the play head scans through the sample">
               <option value="fixed" selected>fixed</option><option value="moving">moving</option>
             </select>
-            <div class="sq-field"><label>speed</label><input class="p-gspeed" type="range" min="0" max="1" step="0.01" value="0.5" title="playhead speed (0.5 = 100%)" /></div>
+            <div class="sq-field"><label>speed</label><input class="p-gspeed" type="range" min="0" max="1" step="0.01" value="0.5" title="how fast the play head scans, when play is set to moving (centre = 100%, left = slower, right = up to 2x)" /></div>
             <label class="sq-gran__lbl">loop</label>
-            <select class="p-gloop" title="loop mode when moving">
+            <select class="p-gloop" title="what the moving play head does at the end of the sample: stop, wrap to the start, or bounce back">
               <option value="none">none</option><option value="fwd" selected>fwd</option><option value="bidir">bidir</option>
             </select>
           </div>
           <div class="sq-gran__row">
-            <div class="sq-field"><label>window</label><input class="p-gwindow" type="range" min="0" max="1" step="0.01" value="0.15" title="position spread around the play head" /></div>
-            <div class="sq-field"><label>jitter</label><input class="p-gjitter" type="range" min="0" max="1" step="0.01" value="0.1" title="grain timing randomness" /></div>
-            <div class="sq-field"><label>detune</label><input class="p-gdetune" type="range" min="0" max="1" step="0.01" value="0" title="per-grain random pitch (0-1 semitone)" /></div>
-            <div class="sq-field"><label>pan</label><input class="p-gpan" type="range" min="0" max="1" step="0.01" value="0.3" title="random stereo width per grain" /></div>
+            <div class="sq-field"><label>window</label><input class="p-gwindow" type="range" min="0" max="1" step="0.01" value="0.15" title="how far each grain may stray from the play head — the band drawn across the waveform. Narrow reads one instant over and over; wide smears across a chunk of the sample" /></div>
+            <div class="sq-field"><label>jitter</label><input class="p-gjitter" type="range" min="0" max="1" step="0.01" value="0.1" title="randomises when each grain fires. At zero the grain train is perfectly regular and hums a tone at the grain rate; raise it to break that up into texture" /></div>
+            <div class="sq-field"><label>detune</label><input class="p-gdetune" type="range" min="0" max="1" step="0.01" value="0" title="random pitch per grain, up to a semitone either way — thickens a cloud into a chorus" /></div>
+            <div class="sq-field"><label>pan</label><input class="p-gpan" type="range" min="0" max="1" step="0.01" value="0.3" title="random stereo placement per grain — widens the cloud without touching its tone" /></div>
           </div>
           <div class="sq-gran__row">
             <label class="sq-gran__lbl">pattern</label>
-            <select class="p-gpattern" title="add octave / fifth pitch variation per grain">
+            <select class="p-gpattern" title="sprinkles octave or fifth jumps across the grains, for a harmonised cloud rather than a flat one">
               <option value="none" selected>none</option><option value="oct">octaves</option><option value="fifth">fifths</option>
             </select>
-            <label class="sq-gran__sync"><input class="p-gsync" type="checkbox" /> sync</label>
+            <label class="sq-gran__sync" title="lock the grain rate to the tempo instead of the dense slider — rhythmic granulation rather than a wash"><input class="p-gsync" type="checkbox" title="lock the grain rate to the tempo instead of the dense slider — rhythmic granulation rather than a wash" /> sync</label>
             <label class="sq-gran__lbl">rate</label>
-            <select class="p-grate" title="grain rate when sync is on">
+            <select class="p-grate" title="grain rate as a division of the tempo, used while sync is on (dense does nothing then)">
               <option value="1/64">1/64</option><option value="1/32t">1/32T</option><option value="1/32">1/32</option>
               <option value="1/16t">1/16T</option><option value="1/16" selected>1/16</option><option value="1/8t">1/8T</option>
               <option value="1/8">1/8</option><option value="1/4t">1/4T</option><option value="1/4">1/4</option>

@@ -1,4 +1,5 @@
-import { engineByKey } from "./catalog.js";
+import { BUNDLED_SAMPLES, GRANULAR_SAMPLES, GRANULAR_SAMPLE_BASE, SAMPLE_BASE, engineByKey } from "./catalog.js";
+import { loadBuffer } from "./buffers.js";
 import { setStatus } from "./dom.js";
 import { applySampleSpeed, currentBpm } from "./lfo.js";
 import { renderRollPanel } from "./pianoRoll.js";
@@ -148,28 +149,34 @@ export function openGranularWavModal(t) {
   modal.setAttribute("aria-modal", "true");
   modal.innerHTML = `
     <div class="sq-gwav__head">
-      <span class="sq-gwav__title">granular · <span class="sq-gwav__file"></span></span>
+      <span class="sq-gwav__title">granular · <select class="sq-gwav__file" title="switch the sample this track granulates"></select></span>
       <label class="sq-gwav__anim"><input type="checkbox" class="sq-gwav__anim-cb" /> animate</label>
     </div>
     <canvas class="sq-gwav__canvas" width="640" height="200"></canvas>
     <div class="sq-gwav__info"></div>
-    <div class="sq-gwav__hint">drag the waveform to set play position + window</div>
+    <div class="sq-gwav__hint">drag the window\u2019s middle to move it, its edges to resize \u00b7 click elsewhere to jump there</div>
     <div class="sq-gwav__ctl">
       <div class="sq-gwav__ctl-row">
-        <label>play <select class="gw-gplay"><option value="fixed">fixed</option><option value="moving">moving</option></select></label>
-        <label>speed <input type="range" class="gw-gspeed" min="0" max="1" step="0.01" /></label>
-        <label>loop <select class="gw-gloop"><option value="none">none</option><option value="fwd">fwd</option><option value="bidir">bidir</option></select></label>
+        <label title="grain length. Short grains rattle and buzz; long ones overlap into a smooth wash">grain <input type="range" class="gw-harm" min="0" max="1" step="0.01" /></label>
+        <label title="grains per second, 8 to 90. Ignored while sync is on — rate takes over">dense <input type="range" class="gw-timb" min="0" max="1" step="0.01" /></label>
+        <label title="play position in the sample. Dragging the window in the wave editor sets this too">pos <input type="range" class="gw-morph" min="0" max="1" step="0.01" /></label>
+        <label title="diffusion macro: widens the window, loosens the jitter and adds detune, all at once. Leave it at zero if you want a tight, in-tune cloud">spray <input type="range" class="gw-decay" min="0" max="1" step="0.01" /></label>
       </div>
       <div class="sq-gwav__ctl-row">
-        <label>window <input type="range" class="gw-gwindow" min="0" max="1" step="0.01" /></label>
-        <label>jitter <input type="range" class="gw-gjitter" min="0" max="1" step="0.01" /></label>
-        <label>detune <input type="range" class="gw-gdetune" min="0" max="1" step="0.01" /></label>
-        <label>pan <input type="range" class="gw-gpan" min="0" max="1" step="0.01" /></label>
+        <label title="fixed = every grain reads from one spot; moving = the play head scans through the sample">play <select class="gw-gplay"><option value="fixed">fixed</option><option value="moving">moving</option></select></label>
+        <label title="how fast the play head scans, when play is set to moving (centre = 100%, left = slower, right = up to 2x)">speed <input type="range" class="gw-gspeed" min="0" max="1" step="0.01" /></label>
+        <label title="what the moving play head does at the end of the sample: stop, wrap to the start, or bounce back">loop <select class="gw-gloop"><option value="none">none</option><option value="fwd">fwd</option><option value="bidir">bidir</option></select></label>
       </div>
       <div class="sq-gwav__ctl-row">
-        <label>pattern <select class="gw-gpattern"><option value="none">none</option><option value="oct">octaves</option><option value="fifth">fifths</option></select></label>
-        <label class="gw-sync-wrap"><input type="checkbox" class="gw-gsync" /> sync</label>
-        <label>rate <select class="gw-grate">
+        <label title="how far each grain may stray from the play head — the band drawn across the waveform. Narrow reads one instant over and over; wide smears across a chunk of the sample">window <input type="range" class="gw-gwindow" min="0" max="1" step="0.01" /></label>
+        <label title="randomises when each grain fires. At zero the grain train is perfectly regular and hums a tone at the grain rate; raise it to break that up into texture">jitter <input type="range" class="gw-gjitter" min="0" max="1" step="0.01" /></label>
+        <label title="random pitch per grain, up to a semitone either way — thickens a cloud into a chorus">detune <input type="range" class="gw-gdetune" min="0" max="1" step="0.01" /></label>
+        <label title="random stereo placement per grain — widens the cloud without touching its tone">pan <input type="range" class="gw-gpan" min="0" max="1" step="0.01" /></label>
+      </div>
+      <div class="sq-gwav__ctl-row">
+        <label title="sprinkles octave or fifth jumps across the grains, for a harmonised cloud rather than a flat one">pattern <select class="gw-gpattern"><option value="none">none</option><option value="oct">octaves</option><option value="fifth">fifths</option></select></label>
+        <label class="gw-sync-wrap" title="lock the grain rate to the tempo instead of the dense slider — rhythmic granulation rather than a wash"><input type="checkbox" class="gw-gsync" /> sync</label>
+        <label title="grain rate as a division of the tempo, used while sync is on (dense does nothing then)">rate <select class="gw-grate">
           <option value="1/64">1/64</option><option value="1/32t">1/32T</option><option value="1/32">1/32</option>
           <option value="1/16t">1/16T</option><option value="1/16">1/16</option><option value="1/8t">1/8T</option>
           <option value="1/8">1/8</option><option value="1/4t">1/4T</option><option value="1/4">1/4</option>
@@ -185,7 +192,49 @@ export function openGranularWavModal(t) {
   const canvas = modal.querySelector(".sq-gwav__canvas");
   const animCb = modal.querySelector(".sq-gwav__anim-cb");
   const infoEl = modal.querySelector(".sq-gwav__info");
-  modal.querySelector(".sq-gwav__file").textContent = t.uploadFileName || "sample";
+  // Sample picker: the texture library, plus the track's own file when it has
+  // one (a loaded file has no library id, so it gets its own entry rather than
+  // showing whichever texture happens to be first).
+  const fileSel = modal.querySelector(".sq-gwav__file");
+  const rebuildFileOptions = () => {
+    fileSel.replaceChildren();
+    if (!t.granularSample) {
+      const own = document.createElement("option");
+      own.value = "";
+      own.textContent = t.uploadFileName || "sample";
+      fileSel.appendChild(own);
+    }
+    for (const s of GRANULAR_SAMPLES) {
+      const o = document.createElement("option");
+      o.value = s.id; o.textContent = s.label;
+      fileSel.appendChild(o);
+    }
+    fileSel.value = t.granularSample?.id ?? "";
+  };
+  rebuildFileOptions();
+  fileSel.addEventListener("change", async () => {
+    const id = fileSel.value;
+    if (!id) return;
+    const label = GRANULAR_SAMPLES.find(s => s.id === id)?.label || id;
+    setStatus(`loading "${label}"…`);
+    try {
+      const buf = await loadBuffer(state.audioCtx, `${GRANULAR_SAMPLE_BASE}/${id}.wav`);
+      if (!t._gWavModal) return;                 // modal closed while it loaded
+      t.uploadBuffer = buf;
+      t.uploadAudio = null;                      // streamed, nothing to persist
+      t.uploadFileName = label;
+      t.soundPromptText = label;
+      t.granularSample = { id, label };
+      if (t.voice?.type === "granular") t.voice.setBuffer(buf);
+      rebuildFileOptions();
+      draw();                                    // recomputes peaks for the new buffer
+      setStatus(`"${t.name}" ← ${label} (${Math.round(buf.duration * 1000)}ms)`);
+    } catch (e) {
+      console.warn("granular texture load", e);
+      setStatus(`failed to load "${label}"`, true);
+      rebuildFileOptions();
+    }
+  });
   animCb.checked = t.gWavAnimate !== false;
 
   let raf = 0;
@@ -243,6 +292,16 @@ export function openGranularWavModal(t) {
     c.moveTo(hx, 0); c.lineTo(hx, h); c.stroke();
     const mode = (t.params.gplay === "moving") ? "moving" : "fixed";
     infoEl.textContent = `${buf.duration.toFixed(2)}s · ${mode} · grains ${vf.grains.length}`;
+    // The macro sliders can be moved from outside this modal — per-step
+    // automation drives all four — so re-read them on each paint. Never touch
+    // the one under the pointer, and only write on a change so dragging one
+    // doesn't fight the repaint.
+    for (const k of ["harm", "timb", "morph", "decay"]) {
+      const el = modal.querySelector(".gw-" + k);
+      if (!el || el === document.activeElement) continue;
+      const v = String(t.params[k] ?? 0.5);
+      if (el.value !== v) el.value = v;
+    }
   };
 
   const loop = () => { draw(); raf = requestAnimationFrame(loop); };
@@ -277,33 +336,84 @@ export function openGranularWavModal(t) {
   gq(".gw-gpattern").value = gp.gpattern ?? GRAN_DEFAULTS.gpattern;
   gq(".gw-grate").value    = gp.grate    ?? GRAN_DEFAULTS.grate;
   gq(".gw-gsync").checked  = gp.gsync    ?? GRAN_DEFAULTS.gsync;
+  // The four track macros live here too: grain size, density, play position and
+  // spray. setP() writes through to both this modal and the track's own slider,
+  // so dragging the window (which sets pos) moves the pos slider with it.
+  for (const [cls, key] of [["harm", "harm"], ["timb", "timb"], ["morph", "morph"], ["decay", "decay"]]) {
+    gq(".gw-" + cls).value = gp[key] ?? 0.5;
+  }
+  for (const k of ["harm", "timb", "morph", "decay"]) {
+    gq(".gw-" + k).addEventListener("input", e => setP(k, Number(e.target.value)));
+  }
   for (const k of ["gspeed", "gwindow", "gjitter", "gdetune", "gpan"]) gq(".gw-" + k).addEventListener("input", e => setP(k, Number(e.target.value)));
   for (const k of ["gplay", "gloop", "gpattern", "grate"]) gq(".gw-" + k).addEventListener("change", e => setP(k, e.target.value));
   gq(".gw-gsync").addEventListener("change", e => setP("gsync", e.target.checked));
 
-  // Drag across the waveform to set the grain window: the drag centre becomes the
-  // play position (morph/pos) and the drag span sets the window width. The window
-  // band redraws live as you drag. A near-zero drag just repositions the head.
-  // (Inverts vizFrame's windowSec = (gwindow + spray*0.5)*2 so the band matches.)
-  const winFracFromEvent = e => { const r = canvas.getBoundingClientRect(); return Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)); };
-  let winDrag = null;
-  canvas.addEventListener("pointerdown", e => { canvas.setPointerCapture(e.pointerId); winDrag = { x1: winFracFromEvent(e) }; });
-  canvas.addEventListener("pointermove", e => {
-    if (!winDrag) return;
-    const x2 = winFracFromEvent(e);
-    const center = (winDrag.x1 + x2) / 2;
-    const half = Math.min(0.5, Math.abs(x2 - winDrag.x1) / 2);
-    setP("morph", Math.max(0, Math.min(1, center)));
+  // The grain window is dragged like a note in the piano roll: grab its middle to
+  // slide the whole window along the sample, grab an edge to resize from that
+  // side while the other stays put. Clicking outside it moves the window there.
+  // (Window width is stored as gwindow; vizFrame reports the band it draws as a
+  // half-width in 0..1, so convert through the same windowSec relation it uses.)
+  const EDGE_PX = 7;
+  const fracFromEvent = e => { const r = canvas.getBoundingClientRect(); return Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)); };
+  const bandNow = () => {
+    const vf = t.voice?.vizFrame ? t.voice.vizFrame() : null;
+    return { head: vf ? vf.head : (t.params.morph ?? 0), half: vf ? vf.windowFrac : 0 };
+  };
+  const setHalf = (half) => {
+    const bufDur = t.voice?.buffer?.duration || 1;
+    const spray = Math.max(0, Math.min(1, Number(t.params.decay) || 0));
+    setP("gwindow", Math.max(0, Math.min(1, (half * bufDur) / 2 - spray * 0.5)));
+  };
+  const zoneAt = (x) => {
+    const { head, half } = bandNow();
+    const r = canvas.getBoundingClientRect();
+    const edge = EDGE_PX / Math.max(1, r.width);
     if (half > 0.002) {
-      const bufDur = t.voice?.buffer?.duration || 1;
-      const spray = Math.max(0, Math.min(1, Number(t.params.decay) || 0));
-      setP("gwindow", Math.max(0, Math.min(1, (half * bufDur) / 2 - spray * 0.5)));
+      if (Math.abs(x - (head - half)) <= edge) return "left";
+      if (Math.abs(x - (head + half)) <= edge) return "right";
+      if (x > head - half && x < head + half) return "move";
     }
+    return "outside";
+  };
+  let winDrag = null;
+  canvas.addEventListener("pointerdown", e => {
+    canvas.setPointerCapture(e.pointerId);
+    const x = fracFromEvent(e);
+    const zone = zoneAt(x);
+    const { head, half } = bandNow();
+    if (zone === "outside") {
+      // Jump the window here, then let the same drag carry it (grabbed centrally).
+      setP("morph", x);
+      winDrag = { zone: "move", grabOffset: 0, left: x - half, right: x + half };
+    } else if (zone === "move") {
+      winDrag = { zone: "move", grabOffset: x - head, left: head - half, right: head + half };
+    } else {
+      winDrag = { zone, grabOffset: 0, left: head - half, right: head + half };
+    }
+  });
+  canvas.addEventListener("pointermove", e => {
+    const x = fracFromEvent(e);
+    if (!winDrag) {                       // hover: advertise what a drag would do
+      const z = zoneAt(x);
+      canvas.style.cursor = z === "left" || z === "right" ? "ew-resize" : z === "move" ? "move" : "pointer";
+      return;
+    }
+    if (winDrag.zone === "move") {
+      setP("morph", Math.max(0, Math.min(1, x - winDrag.grabOffset)));
+      return;
+    }
+    // Resize: the grabbed edge follows the pointer, the opposite one stays put.
+    const anchor = winDrag.zone === "left" ? winDrag.right : winDrag.left;
+    const moving = winDrag.zone === "left" ? Math.min(x, anchor - 0.002) : Math.max(x, anchor + 0.002);
+    const lo = Math.min(anchor, moving), hi = Math.max(anchor, moving);
+    setHalf((hi - lo) / 2);
+    setP("morph", Math.max(0, Math.min(1, (lo + hi) / 2)));
   });
   const endWinDrag = e => { if (winDrag) { winDrag = null; try { canvas.releasePointerCapture(e.pointerId); } catch {} } };
   canvas.addEventListener("pointerup", endWinDrag);
   canvas.addEventListener("pointercancel", endWinDrag);
-  canvas.style.cursor = "ew-resize";
+  canvas.style.cursor = "pointer";
 
   animCb.addEventListener("change", () => {
     t.gWavAnimate = animCb.checked;
@@ -419,7 +529,7 @@ export function openSampleEditorModal(t) {
   modal.setAttribute("aria-modal", "true");
   modal.innerHTML = `
     <div class="sq-samp__head">
-      <span class="sq-samp__title">sample · <span class="sq-samp__file"></span></span>
+      <span class="sq-samp__title">sample · <select class="sq-samp__file" title="switch this track's sample"></select></span>
       <span class="sq-samp__info"></span>
     </div>
     <canvas class="sq-samp__canvas" width="640" height="150"></canvas>
@@ -458,7 +568,54 @@ export function openSampleEditorModal(t) {
 
   const canvas = modal.querySelector(".sq-samp__canvas");
   const infoEl = modal.querySelector(".sq-samp__info");
-  modal.querySelector(".sq-samp__file").textContent = t.uploadFileName || t.sampleSource?.name || "sample";
+  // Sample picker, same idea as the granular editor's: the bundled kits, plus
+  // the track's own file when it has one. Switching here swaps the buffer in
+  // place — the region, fades and slices belong to the old sample, so they're
+  // reset rather than silently re-applied to different audio.
+  const fileSel = modal.querySelector(".sq-samp__file");
+  const rebuildFileOptions = () => {
+    fileSel.replaceChildren();
+    if (t.sampleSource?.kind !== "bundled") {
+      const own = document.createElement("option");
+      own.value = "";
+      own.textContent = t.uploadFileName || t.sampleSource?.name || "sample";
+      fileSel.appendChild(own);
+    }
+    for (const b of BUNDLED_SAMPLES) {
+      const o = document.createElement("option");
+      o.value = b.id; o.textContent = b.label;
+      fileSel.appendChild(o);
+    }
+    fileSel.value = t.sampleSource?.kind === "bundled" ? (t.sampleSource.id ?? "") : "";
+  };
+  rebuildFileOptions();
+  fileSel.addEventListener("change", async () => {
+    const id = fileSel.value;
+    if (!id) return;
+    const label = BUNDLED_SAMPLES.find(b => b.id === id)?.label || id;
+    setStatus(`loading "${label}"…`);
+    try {
+      const buf = await loadBuffer(state.audioCtx, `${SAMPLE_BASE}/${id}.mp3`);
+      if (!t._sampleModal) return;                  // modal closed while it loaded
+      t.sampleSource = { kind: "bundled", id, name: label };
+      t.uploadBuffer = buf;
+      t.uploadAudio = null;                         // bundled: fetched by id, not stored
+      t.uploadFileName = label;
+      t.soundPromptText = label;
+      if (t.voice?.type === "sampler") t.voice.setBuffer(buf);
+      t.slices = [];                                // markers belonged to the old audio
+      sd.start = 0; sd.end = 1;
+      applySampleSpeed(t);
+      rebuildFileOptions();
+      renderPads();
+      draw();                                       // repaints from the new buffer
+      setStatus(`"${t.name}" ← ${label} (${Math.round(buf.duration * 1000)}ms)`);
+    } catch (e) {
+      console.warn("bundled sample load", e);
+      setStatus(`failed to load "${label}"`, true);
+      rebuildFileOptions();
+    }
+  });
   const snapSel = modal.querySelector(".sq-samp__snap");
   const fitSel = modal.querySelector(".sq-samp__fit");
   const loopSel = modal.querySelector(".sq-samp__loop");
