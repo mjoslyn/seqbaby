@@ -5,8 +5,8 @@
 // top row = black keys (w e t y u o), z / x shift the octave.
 //
 // When a scale is active the WHITE keys map to the scale's degrees (root anchored
-// near kbdBase) and the black keys play the accidental a semitone above the white
-// key to their left. With no scale it's a plain chromatic piano.
+// near kbdBase) and the black keys go inert — everything you can play is in key.
+// With no scale it's a plain chromatic piano.
 
 import { currentBpm } from "./lfo.js";
 import { invertChord, state } from "./state.js";
@@ -34,10 +34,9 @@ const KEY_SEMITONES = {
   a: 0, w: 1, s: 2, e: 3, d: 4, f: 5, t: 6, g: 7, y: 8, h: 9, u: 10, j: 11,
   k: 12, o: 13, l: 14, p: 15,
 };
-// Scale layout: white keys → scale-degree offsets; black keys → the accidental
-// above the white key to their left.
+// Scale layout: white keys → scale-degree offsets. Keys absent from this map
+// (the black row: w e t y u o) are silent while a scale is active.
 const WHITE_DEGREE = { a: 0, s: 1, d: 2, f: 3, g: 4, h: 5, j: 6, k: 7, l: 8, p: 9 };
-const BLACK_LEFT   = { w: "a", e: "s", t: "f", y: "g", u: "h", o: "k" };
 
 // Desktop-only: mobile has no physical keyboard (and the kbd controls are hidden
 // by CSS below the 768px breakpoint), so note keys are gated to desktop widths.
@@ -78,17 +77,18 @@ function isTypingTarget(el) {
 }
 
 // Resolve a key to a MIDI note for the current mode (chromatic or scale).
+// Returns null for a key that plays nothing — under a scale that's the black
+// row, which has no accidentals to play once every degree lives on a white key.
 function noteForKey(k) {
   const semi = KEY_SEMITONES[k];
   if (semi == null) return null;
   const intervals = state.scale.active ? SCALES[state.scale.mode] : null;
   if (!intervals) return clampNote(state.kbdBase + semi);
+  const degree = WHITE_DEGREE[k];
+  if (degree == null) return null;
   const root = state.scale.root | 0;
   const baseIdx = midiToScaleIndex(quantizeToScale(state.kbdBase, root, intervals), root, intervals) ?? 0;
-  if (WHITE_DEGREE[k] != null) return clampNote(scaleIndexToMidi(baseIdx + WHITE_DEGREE[k], root, intervals));
-  const leftWhite = BLACK_LEFT[k];
-  if (leftWhite != null) return clampNote(scaleIndexToMidi(baseIdx + WHITE_DEGREE[leftWhite], root, intervals) + 1);
-  return clampNote(state.kbdBase + semi);
+  return clampNote(scaleIndexToMidi(baseIdx + degree, root, intervals));
 }
 const clampNote = n => Math.max(0, Math.min(127, Math.round(n)));
 
@@ -292,7 +292,9 @@ function onKeyDown(e) {
   if (k === "x") { state.kbdBase = Math.min(108, state.kbdBase + 12); updateKbdOctaveLabel(); e.preventDefault(); return; }
   if (KEY_SEMITONES[k] == null || held.has(k)) return;
   const midi = noteForKey(k);
-  if (midi == null) return;
+  // Inert note key (the black row under a scale) — still swallow it, so it can't
+  // reach a focused control as type-ahead.
+  if (midi == null) { e.preventDefault(); return; }
   held.set(k, { t: null, midi, tones: null, usedNoteOn: false });
   e.preventDefault();
   state.kbdLast = kbdSelection(midi);   // remember for click-to-apply on a step

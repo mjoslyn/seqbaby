@@ -16,7 +16,7 @@ export const STUDIO_BODY = String.raw`
     <div class="sq-field"><label for="bpm">bpm</label><input id="bpm" type="number" value="110" min="40" max="240" /></div>
     <div class="sq-field"><label for="swing">swing</label><input id="swing" type="range" min="0" max="0.5" step="0.01" value="0" /></div>
     <div class="sq-scale__field">
-      <label class="sq-scale__toggle"><input id="scale-on" type="checkbox" /> scale</label>
+      <label class="sq-scale__toggle" title="lock to a scale — the computer keyboard's white keys (a s d f g h j k l) play the scale's degrees and the black keys go silent"><input id="scale-on" type="checkbox" /> scale</label>
       <select id="scale-root"></select>
       <select id="scale-mode"></select>
       <button id="note-colors" class="sq-btn--ghost sq-icon-btn" aria-pressed="false" aria-label="note colors" title="toggle diatonic note coloring on the piano roll + step grid"></button>
