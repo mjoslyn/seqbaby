@@ -4,7 +4,6 @@
 // the three engine <script>s are injected client-side by ScriptLoader in order.
 export const STUDIO_BODY = String.raw`
 <header class="sq-transport">
-    <div id="status" class="sq-status sq-status--bar">click play to unlock audio</div>
     <div class="sq-transport__main">
     <div class="sq-logo" title="seqbaby">
       <img src="/favicon.svg" alt="" />
@@ -81,6 +80,7 @@ export const STUDIO_BODY = String.raw`
         </span>
       </span>
     </div>
+    <div id="status" class="sq-status sq-status--bar">click play to unlock audio</div>
     </div><!-- /sq-transport__kbd-row -->
   </header>
 

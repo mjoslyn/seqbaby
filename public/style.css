@@ -218,15 +218,14 @@ button.sq-btn--danger { color: var(--danger); }
   border: 0;
 }
 .sq-status.is-err { color: var(--danger); }
-/* Status on its own line at the top of the sticky transport, right-aligned. */
+/* Status shares the keyboard row, taking whatever width is left over at its
+   right end. A zero flex-basis is what keeps it there: sized from its content it
+   would claim the width of the message and wrap the row instead of ellipsing. */
 .sq-status.sq-status--bar {
-  flex: 0 0 100%;
+  flex: 1 1 0;
   box-sizing: border-box;
   text-align: right;
   min-width: 0;
-  margin-bottom: 2px;
-  padding-bottom: 4px;
-  border-bottom: 1px solid var(--border);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
