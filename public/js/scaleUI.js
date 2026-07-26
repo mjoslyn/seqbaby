@@ -1,5 +1,6 @@
 import { NOTE_NAMES } from "./constants.js";
 import { ICON_PALETTE } from "./icons.js";
+import { syncKbdArpUI } from "./keyboard.js";
 import { init } from "./main.js";
 import { refreshRollIfOpen } from "./pianoRoll.js";
 import { state } from "./state.js";
@@ -23,6 +24,7 @@ export function refreshChordTypeSelect() {
     sel.title = "chord mode — play each key as a chord (off = single notes)";
   }
   sel.value = state.kbdChordType;
+  syncKbdArpUI();   // the arp group only shows while chord mode is on
 }
 
 export function syncScaleUI() {

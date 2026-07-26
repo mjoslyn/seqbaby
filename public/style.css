@@ -74,6 +74,9 @@ html, body {
    to its own line. */
 .sq-transport__main { flex: 1 1 0; min-width: 0; display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
 .sq-transport__right { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+/* Scale → octave → chord → arp are one keyboard-performance cluster; flex-basis
+   100% drops them onto their own line under transport + bpm + swing. */
+.sq-transport__kbd-row { flex: 1 0 100%; display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
 
 .sq-field {
   display: inline-flex;
@@ -917,12 +920,19 @@ main {
 .sq-track.is-soloed { border-color: var(--accent); }
 
 /* The computer keyboard is always active; the targeted track is highlighted. */
+.sq-kbd-icon { display: inline-flex; align-items: center; color: var(--fg-dim); cursor: help; }
 .sq-kbd-oct { font-size: 11px; color: var(--fg-dim); font-variant-numeric: tabular-nums; min-width: 22px; text-align: center; }
 .sq-kbd-chord { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--fg-dim); }
 .sq-kbd-chord[hidden] { display: none !important; }
 #kbd-record:disabled, #kbd-capture:disabled, .sq-track__wav:disabled { opacity: 0.35; cursor: not-allowed; }
 .sq-kbd-chord[hidden] { display: none; }
 .sq-kbd-chord select { font-size: 11px; padding: 2px 4px; }
+/* Arp settings for keyboard chords — only shown while chord mode is on, and the
+   rate/range/direction only once arp itself is on (see syncKbdArpUI). */
+.sq-kbd-arp, .sq-kbd-arp__opts { display: inline-flex; align-items: center; gap: 5px; }
+.sq-kbd-arp[hidden], .sq-kbd-arp__opts[hidden] { display: none !important; }
+.sq-kbd-arp__toggle { display: inline-flex; align-items: center; gap: 3px; cursor: pointer; }
+.sq-kbd-arp select { font-size: 11px; padding: 2px 4px; }
 #kbd-record .sq-btn-icon circle { fill: #e5484d; }
 #kbd-record[aria-pressed="true"] { background: #e5484d; border-color: #e5484d; }
 #kbd-record[aria-pressed="true"] .sq-btn-icon circle { fill: #fff; }
@@ -1540,9 +1550,9 @@ body.kbd-recording .sq-track.is-kbd-active { border-color: #e5484d; box-shadow: 
   }
   /* Dissolve the desktop wrappers so the order-based mobile layout below applies
      to the controls directly, as it did before the wrappers existed. */
-  .sq-transport__main, .sq-transport__right { display: contents; }
+  .sq-transport__main, .sq-transport__right, .sq-transport__kbd-row { display: contents; }
   /* No physical keyboard on mobile — hide the computer-keyboard controls. */
-  #kbd-label, #kbd-record, #kbd-capture, #kbd-chord { display: none !important; }
+  #kbd-label, #kbd-record, #kbd-capture, #kbd-chord, #kbd-arp, #kbd-icon { display: none !important; }
   .sq-transport .sq-logo { padding-right: 4px; gap: 6px; }
   .sq-transport .sq-logo img { width: 26px; height: 26px; }
   .sq-transport .sq-logo span { display: none; }

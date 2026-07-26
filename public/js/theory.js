@@ -119,6 +119,26 @@ export function chordNotes(rootMidi, chordType) {
 }
 
 /**
+ * The CHORD_TYPES key whose intervals match `tones` (measured from the lowest
+ * tone), or "" when the voicing isn't one of them. Lets a chord that was *played*
+ * be stored the way the step editor stores one — root + chord type — instead of
+ * a stack of explicit notes, so the piano roll shows a single labelled root.
+ * @param {number[]} tones @returns {string}
+ */
+export function chordTypeForTones(tones) {
+  if (!Array.isArray(tones) || tones.length < 2) return "";
+  const sorted = tones.map(Number).filter(Number.isFinite).sort((a, b) => a - b);
+  if (sorted.length < 2) return "";
+  const rel = sorted.map(n => n - sorted[0]);
+  const EPS = 1e-6;
+  for (const [key, ivs] of Object.entries(CHORD_TYPES)) {
+    if (!key || ivs.length !== rel.length) continue;
+    if (ivs.every((v, i) => Math.abs(v - rel[i]) < EPS)) return key;
+  }
+  return "";
+}
+
+/**
  * Build a diatonic chord by stacking scale-thirds from a root, entirely within
  * the active scale — so the quality (maj/min/dim…) follows the scale degree
  * automatically. Used for keyboard chord mode while a scale is on.

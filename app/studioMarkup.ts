@@ -15,6 +15,16 @@ export const STUDIO_BODY = String.raw`
     <button id="kbd-capture" class="sq-btn--ghost sq-icon-btn" type="button" aria-label="capture keyboard notes" title="capture the notes you just played on the keyboard into the active track (retroactive)"></button>
     <div class="sq-field"><label for="bpm">bpm</label><input id="bpm" type="number" value="110" min="40" max="240" /></div>
     <div class="sq-field"><label for="swing">swing</label><input id="swing" type="range" min="0" max="0.5" step="0.01" value="0" /></div>
+    </div><!-- /sq-transport__main -->
+    <div class="sq-transport__right">
+      <button id="metronome" class="sq-btn--ghost sq-icon-btn" aria-pressed="false" aria-label="metronome" title="metronome click on the downbeat"></button>
+      <svg id="beat-indicator" class="sq-beat-indicator" viewBox="-22 -22 44 44" width="40" height="40" aria-hidden="true"></svg>
+      <div class="sq-meter sq-meter--master" title="master output level"><div class="sq-meter__bar"></div></div>
+    </div><!-- /sq-transport__right -->
+    <!-- Keyboard-performance cluster: its own full-width line under the transport
+         controls (see .sq-transport__kbd-row). -->
+    <div class="sq-transport__kbd-row">
+    <span id="kbd-icon" class="sq-kbd-icon" title="computer keyboard plays the active track — a s d f g h j k l are the white keys, w e t y u o the black ones, z / x shift octave. With a scale on, the white keys play its degrees and the black keys go silent."></span>
     <div class="sq-scale__field">
       <label class="sq-scale__toggle" title="lock to a scale — the computer keyboard's white keys (a s d f g h j k l) play the scale's degrees and the black keys go silent"><input id="scale-on" type="checkbox" /> scale</label>
       <select id="scale-root"></select>
@@ -45,13 +55,33 @@ export const STUDIO_BODY = String.raw`
         <option value="3">3rd inv</option>
         <option value="4">drop-oct</option>
       </select>
+      <span id="kbd-arp" class="sq-kbd-arp" hidden>
+        <label class="sq-kbd-arp__toggle" title="arpeggiate chords played from the keyboard — the steps they land on are written as arps"><input id="kbd-arp-on" type="checkbox" /> arp</label>
+        <span id="kbd-arp-opts" class="sq-kbd-arp__opts" hidden>
+          <select id="kbd-arp-rate" title="arp rate (beats per note)">
+            <option value="1">1/4</option>
+            <option value="0.5">1/8</option>
+            <option value="0.333">1/8t</option>
+            <option value="0.25" selected>1/16</option>
+            <option value="0.167">1/16t</option>
+            <option value="0.125">1/32</option>
+          </select>
+          <select id="kbd-arp-range" title="octaves spanned">
+            <option value="1" selected>1 oct</option>
+            <option value="2">2 oct</option>
+            <option value="3">3 oct</option>
+            <option value="4">4 oct</option>
+          </select>
+          <select id="kbd-arp-dir" title="arp direction">
+            <option value="up" selected>up</option>
+            <option value="down">down</option>
+            <option value="updown">up-down</option>
+            <option value="random">random</option>
+          </select>
+        </span>
+      </span>
     </div>
-    </div><!-- /sq-transport__main -->
-    <div class="sq-transport__right">
-      <button id="metronome" class="sq-btn--ghost sq-icon-btn" aria-pressed="false" aria-label="metronome" title="metronome click on the downbeat"></button>
-      <svg id="beat-indicator" class="sq-beat-indicator" viewBox="-22 -22 44 44" width="40" height="40" aria-hidden="true"></svg>
-      <div class="sq-meter sq-meter--master" title="master output level"><div class="sq-meter__bar"></div></div>
-    </div>
+    </div><!-- /sq-transport__kbd-row -->
   </header>
 
   <div class="sq-pattern-bar">

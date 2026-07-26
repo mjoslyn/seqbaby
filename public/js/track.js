@@ -500,6 +500,22 @@ export function lastUsedNote(t) {
   return 48 + (state.scale.root | 0);
 }
 
+/**
+ * Stamp the keyboard's arp settings onto a step that just received a chord from
+ * the keyboard (record / capture / click-to-apply). `hasChord` gates it because
+ * there's nothing to arpeggiate on a single note. Clears the flag otherwise, so
+ * arp state doesn't ghost onto a step that's being rewritten without one.
+ */
+export function applyKbdArpToStep(t, idx, hasChord) {
+  if (!Array.isArray(t.arps)) return;
+  const on = !!(hasChord && state.kbdChordType && state.kbdArp);
+  t.arps[idx] = on;
+  if (!on) return;
+  if (Array.isArray(t.arpRates))  t.arpRates[idx]  = Number(state.kbdArpRate) || 0.25;
+  if (Array.isArray(t.arpRanges)) t.arpRanges[idx] = Math.max(1, Math.min(4, Number(state.kbdArpRange) || 1));
+  if (Array.isArray(t.arpDirs))   t.arpDirs[idx]   = state.kbdArpDir || "up";
+}
+
 export function startNote(t, anchor) {
   clearRange(t, anchor, anchor, -1);
   t.steps[anchor] = 1;
@@ -516,6 +532,7 @@ export function startNote(t, anchor) {
       const extras = sel.extras && sel.extras.length ? sel.extras.slice() : null;
       if (Array.isArray(t.extraNotes)) t.extraNotes[anchor] = extras;
       if (Array.isArray(t.extraLengths)) t.extraLengths[anchor] = extras ? extras.map(() => 1) : null;
+      applyKbdArpToStep(t, anchor, !!sel.chord);
       if (!t.isDrumKit) t.lastEditedNote = sel.root;
     } else {
       t.notes[anchor] = lastUsedNote(t);

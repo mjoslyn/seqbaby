@@ -401,10 +401,20 @@ export async function togglePlay() {
               [seq[k], seq[j]] = [seq[j], seq[k]];
             }
           } else seq = expanded;
-          const count = Math.max(1, Math.floor(duration / rateSec));
+          // The arp runs for the note's whole written length. That's the step
+          // span, not `duration` — in trigger mode `duration` is a fixed 50 ms,
+          // which would collapse the whole arp to a single hit. Round the count
+          // up so a length that isn't a whole number of arp notes still gets
+          // filled to its end (the last note is trimmed to what's left).
+          const arpSpan = span * effDur;
+          const count = Math.max(1, Math.ceil(arpSpan / rateSec - 1e-6));
           for (let k = 0; k < count; k++) {
             const n = seq[k % seq.length];
-            try { t.voice.hit(n, hitTime + k * rateSec, rateSec * 0.92, vel); } catch (e) { console.warn(e); }
+            const remain = arpSpan - k * rateSec;
+            const noteDur = (t.noteMode === "trigger")
+              ? 0.05
+              : Math.max(0.01, Math.min(rateSec, remain) * 0.92);
+            try { t.voice.hit(n, hitTime + k * rateSec, noteDur, vel); } catch (e) { console.warn(e); }
           }
         } else {
           const sd = t.sampleDefaults || {};

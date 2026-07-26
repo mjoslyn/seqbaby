@@ -5,9 +5,9 @@ import { loadBuffer, normalizeAudioBuffer } from "./buffers.js";
 import { BUNDLED_SAMPLES, SAMPLE_BASE, rebuildEngineCatalog } from "./catalog.js";
 import { LFO_KEYS, PATTERN_COUNT } from "./constants.js";
 import { isMobileDevice, setStatus } from "./dom.js";
-import { HELP_TIPS, ICON_BOUNCE, ICON_CAPTURE, ICON_CHAIN, ICON_FINISH, ICON_METRONOME, ICON_NOW, ICON_REC, ICON_REPEAT } from "./icons.js";
+import { HELP_TIPS, ICON_BOUNCE, ICON_CAPTURE, ICON_CHAIN, ICON_FINISH, ICON_KEYBOARD, ICON_METRONOME, ICON_NOW, ICON_REC, ICON_REPEAT } from "./icons.js";
 import { applySampleSpeed, attachBpmDrag, rateFromSync, retuneSyncedLFOs } from "./lfo.js";
-import { captureSequence, initComputerKeyboard, isDesktopKeyboard, resetKbdKeys } from "./keyboard.js";
+import { captureSequence, initComputerKeyboard, isDesktopKeyboard, resetKbdKeys, syncKbdArpUI } from "./keyboard.js";
 import { autoAccents, parseMeter, redetectDrumKit, stepsPerBarForMeter } from "./meter.js";
 import { meterTick } from "./meters.js";
 import { setEngineKey } from "./params.js";
@@ -509,6 +509,8 @@ export function init() {
   // the active track's voice unless a text field is focused (see keyboard.js).
   // Skipped on mobile: no physical keyboard, and the kbd controls are hidden by
   // CSS below 768px.
+  const kbdIcon = document.getElementById("kbd-icon");
+  if (kbdIcon) kbdIcon.innerHTML = ICON_KEYBOARD;
   const kbdChordPanel = document.getElementById("kbd-chord");
   const kbdCaptureBtn = document.getElementById("kbd-capture");
   if (kbdCaptureBtn) kbdCaptureBtn.innerHTML = ICON_CAPTURE;
@@ -524,9 +526,19 @@ export function init() {
     setStatus(res.msg, !res.ok);
   });
   const chordTypeSel = document.getElementById("kbd-chord-type");
-  if (chordTypeSel) { chordTypeSel.value = state.kbdChordType; chordTypeSel.addEventListener("change", () => { state.kbdChordType = chordTypeSel.value; }); }
+  if (chordTypeSel) { chordTypeSel.value = state.kbdChordType; chordTypeSel.addEventListener("change", () => { state.kbdChordType = chordTypeSel.value; syncKbdArpUI(); }); }
   const chordCpxSel = document.getElementById("kbd-chord-cpx");
   if (chordCpxSel) { chordCpxSel.value = String(state.kbdChordCpx); chordCpxSel.addEventListener("change", () => { state.kbdChordCpx = Math.max(0, Math.min(4, Number(chordCpxSel.value) || 0)); }); }
+  // Arp settings for keyboard chords — the group only appears in chord mode.
+  const arpOnBox   = document.getElementById("kbd-arp-on");
+  const arpRateSel = document.getElementById("kbd-arp-rate");
+  const arpRngSel  = document.getElementById("kbd-arp-range");
+  const arpDirSel  = document.getElementById("kbd-arp-dir");
+  if (arpOnBox) { arpOnBox.checked = !!state.kbdArp; arpOnBox.addEventListener("change", () => { state.kbdArp = arpOnBox.checked; syncKbdArpUI(); }); }
+  if (arpRateSel) { arpRateSel.value = String(state.kbdArpRate); arpRateSel.addEventListener("change", () => { state.kbdArpRate = Number(arpRateSel.value) || 0.25; }); }
+  if (arpRngSel)  { arpRngSel.value  = String(state.kbdArpRange); arpRngSel.addEventListener("change", () => { state.kbdArpRange = Number(arpRngSel.value) || 1; }); }
+  if (arpDirSel)  { arpDirSel.value  = String(state.kbdArpDir); arpDirSel.addEventListener("change", () => { state.kbdArpDir = arpDirSel.value || "up"; }); }
+  syncKbdArpUI();
 
   // Record computer-keyboard notes into the active track (while the transport plays).
   const recBtn = document.getElementById("kbd-record");

@@ -11,23 +11,30 @@
 import { currentBpm } from "./lfo.js";
 import { invertChord, state } from "./state.js";
 import { renderStepGrid } from "./stepGrid.js";
-import { resizeTrack } from "./track.js";
-import { SCALES, chordNotes, diatonicChordNotes, midiToScaleIndex, quantizeToScale, scaleIndexToMidi } from "./theory.js";
+import { applyKbdArpToStep, resizeTrack } from "./track.js";
+import { SCALES, chordNotes, chordTypeForTones, diatonicChordNotes, midiToScaleIndex, quantizeToScale, scaleIndexToMidi } from "./theory.js";
 import { ensureAudio } from "./transport.js";
 
 const KBD_REC_VEL = 0.85;
 const CAPTURE_WINDOW_SEC = 32;   // rolling lookback buffer for "capture"
 const CAPTURE_GAP_SEC = 1.5;     // silence gap that separates phrases
 
-// Rolling buffer of recently-played notes { midi, time } for Ableton-style
-// retroactive capture — always accumulating while the keyboard plays.
+// Rolling buffer of recently-played notes { midi, time, dur, chord, cpx } for
+// Ableton-style retroactive capture — always accumulating while the keyboard
+// plays. `dur` is filled in on key release (null while the note is still held),
+// so capture can reproduce how long each note was actually held. A chord-mode
+// press buffers one entry carrying its chord type instead of one per tone.
 const captureBuffer = [];
-function bufferForCapture(midi, time) {
-  captureBuffer.push({ midi, time });
+function bufferForCapture(midi, time, chord = "", cpx = 0) {
+  const entry = { midi, time, dur: null, chord, cpx };
+  captureBuffer.push(entry);
   const cutoff = time - CAPTURE_WINDOW_SEC;
   while (captureBuffer.length && captureBuffer[0].time < cutoff) captureBuffer.shift();
   if (captureBuffer.length > 4000) captureBuffer.splice(0, captureBuffer.length - 4000);
+  return entry;
 }
+/** Same monotonic clock the buffer is stamped with (independent of the audio ctx). */
+const captureNow = () => performance.now() / 1000;
 
 // Chromatic offset from the base note (state.kbdBase = the "a" key).
 const KEY_SEMITONES = {
@@ -109,17 +116,41 @@ function scaleChordActive() {
   return !!(state.scale.active && SCALES[state.scale.mode] && state.kbdChordType);
 }
 
-// The note/chord a keypress represents, for click-to-apply on a step. Under a
-// scale the diatonic chord is stored as explicit notes (root + extras) so it
-// reproduces exactly; otherwise chord mode stores root + chord type + cpx.
+// The arp controls only mean anything while chord mode is on (a single note has
+// nothing to arpeggiate), so the group follows the chord picker, and its
+// rate/range/direction follow the arp checkbox.
+export function syncKbdArpUI() {
+  const group = document.getElementById("kbd-arp");
+  const opts = document.getElementById("kbd-arp-opts");
+  if (!group || !opts) return;
+  group.toggleAttribute("hidden", !state.kbdChordType);
+  opts.toggleAttribute("hidden", !state.kbdArp);
+  const on = document.getElementById("kbd-arp-on");
+  if (on) on.checked = !!state.kbdArp;
+}
+
+// What a single chord-mode keypress writes to a step: root + chord type + cpx,
+// exactly like the step editor's own chord settings, so the piano roll shows one
+// labelled root note instead of a stack. Under a scale the chord is diatonic, so
+// its quality is looked up from the tones (Dmin for ii of C major, etc.); a
+// voicing that isn't one of CHORD_TYPES (stacked thirds in a pentatonic scale,
+// say) falls back to explicit notes so it still reproduces exactly.
+function chordPressSelection(pressedMidi) {
+  const root = Math.round(pressedMidi);
+  const cpx = state.kbdChordCpx | 0;
+  if (!scaleChordActive()) return { root, chord: state.kbdChordType, cpx, extras: null };
+  const base = diatonicChordNotes(pressedMidi, 3).map(clampNote);
+  const type = chordTypeForTones(base);
+  if (type) return { root, chord: type, cpx, extras: null };
+  const tones = tonesFor(pressedMidi);
+  return { root: tones[0], chord: "", cpx: 0, extras: tones.length > 1 ? tones.slice(1) : null };
+}
+
+// The note/chord a keypress represents, for click-to-apply on a step. Chord mode
+// yields a chord config (above); otherwise every held key is its own note — the
+// lowest is the root, the rest are polyphonic extras.
 function kbdSelection(pressedMidi) {
-  if (scaleChordActive()) {
-    const tones = tonesFor(pressedMidi);
-    return { root: tones[0], chord: "", cpx: 0, extras: tones.length > 1 ? tones.slice(1) : null };
-  }
-  if (state.kbdChordType) {
-    return { root: Math.round(pressedMidi), chord: state.kbdChordType, cpx: state.kbdChordCpx | 0, extras: null };
-  }
+  if (state.kbdChordType) return chordPressSelection(pressedMidi);
   const notes = [...new Set([...held.values()].map(r => Math.round(r.midi)).filter(Number.isFinite))].sort((a, b) => a - b);
   const root = notes.length ? notes[0] : Math.round(pressedMidi);
   return { root, chord: "", cpx: 0, extras: notes.length > 1 ? notes.slice(1) : null };
@@ -143,6 +174,59 @@ function tonesFor(midi) {
   return [midi];
 }
 
+// ---- live arpeggiator (held chord keys) ---------------------------------
+// The transport arps a *step*; this arps what you're playing right now, firing
+// one note at a time for as long as the key is held. Notes are scheduled ahead
+// on the audio clock (a timer only decides *when to schedule*, never when a note
+// sounds), so the rate stays steady even when the JS timer drifts.
+const ARP_LOOKAHEAD = 0.12;   // seconds of notes queued ahead of the audio clock
+const ARP_TICK_MS = 25;
+
+/** Expand chord tones into the arp's note order — same shape as the transport's. */
+function arpSequence(tones) {
+  const range = Math.max(1, Math.min(4, Number(state.kbdArpRange) || 1));
+  const expanded = [];
+  for (let o = 0; o < range; o++) for (const n of tones) expanded.push(clampNote(n + o * 12));
+  switch (state.kbdArpDir) {
+    case "down": return expanded.slice().reverse();
+    case "updown": {
+      const seq = expanded.concat(expanded.slice(0, -1).reverse().slice(0, -1));
+      return seq.length ? seq : expanded;
+    }
+    default: return expanded;   // "up", and "random" (which picks per note below)
+  }
+}
+
+/** Start arpeggiating `tones` on the track until the key is released. */
+function startLiveArp(rec, t, tones, startAt, opts) {
+  const seq = arpSequence(tones);
+  if (!seq.length) return false;
+  const rateSec = Math.max(0.02, (Number(state.kbdArpRate) || 0.25) * (60 / currentBpm()));
+  const random = state.kbdArpDir === "random";
+  const arp = { seq, i: 0, next: startAt, rateSec, timer: null };
+  const tick = () => {
+    const ctx = state.audioCtx;
+    if (!ctx || !t.voice) return;
+    while (arp.next < ctx.currentTime + ARP_LOOKAHEAD) {
+      const n = random ? seq[Math.floor(Math.random() * seq.length)] : seq[arp.i % seq.length];
+      const at = Math.max(arp.next, ctx.currentTime + 0.002);
+      try { t.voice.hit(n, at, rateSec * 0.92, 0.85, opts); } catch (e) { console.warn("kbd arp hit", e); }
+      arp.i++;
+      arp.next += rateSec;
+    }
+  };
+  tick();                                   // first note immediately
+  arp.timer = setInterval(tick, ARP_TICK_MS);
+  rec.arp = arp;
+  return true;
+}
+
+function stopLiveArp(rec) {
+  if (!rec?.arp) return;
+  clearInterval(rec.arp.timer);
+  rec.arp = null;
+}
+
 async function pressNote(k, midi) {
   const t = targetTrack();
   if (!t) return;
@@ -154,6 +238,12 @@ async function pressNote(k, midi) {
   rec.t = t; rec.midi = midi;
   const tones = tonesFor(midi);
   rec.tones = tones;
+  // Arp mode plays the chord one note at a time instead of as a block. It always
+  // uses hit() (each arp note has its own length), so there's no note-off to send.
+  if (state.kbdChordType && state.kbdArp && tones.length > 1) {
+    rec.usedNoteOn = false;
+    if (startLiveArp(rec, t, tones, now, opts)) return;
+  }
   if (typeof t.voice.noteOn === "function") {
     rec.usedNoteOn = true;
     for (const n of tones) { try { t.voice.noteOn(n, now, 0.85, opts); } catch (e) { console.warn("kbd noteOn", e); } }
@@ -165,8 +255,10 @@ async function pressNote(k, midi) {
 
 // Ableton-style Capture: quantize the last played phrase (the tail of the rolling
 // buffer, after the most recent silence gap) into the active track's pattern,
-// sizing the clip to the phrase (rounded up to whole bars). Notes on the same
-// 16th step stack as root + polyphonic extras. Works whether or not playing.
+// sizing the clip to the phrase (rounded up to whole bars). Note lengths come
+// from how long each key was held, quantized to 16ths (minimum one step). Notes
+// on the same 16th step stack as root + polyphonic extras. Works whether or not
+// playing.
 export function captureSequence() {
   const t = targetTrack();
   if (!t) return { ok: false, msg: "no active track" };
@@ -180,8 +272,17 @@ export function captureSequence() {
   const bpm = currentBpm();
   const stepDur = (60 / bpm) / 4;          // one 16th-note step
   const t0 = phrase[0].time;
-  const events = phrase.map(e => ({ midi: Math.round(e.midi), step: Math.max(0, Math.round((e.time - t0) / stepDur)) }));
-  const maxStep = events.reduce((m, e) => Math.max(m, e.step), 0);
+  const now = captureNow();
+  const events = phrase.map(e => ({
+    midi: Math.round(e.midi),
+    step: Math.max(0, Math.round((e.time - t0) / stepDur)),
+    // Still-held keys have no dur yet — measure them up to this moment.
+    len: Math.max(1, Math.round((e.dur ?? Math.max(0, now - e.time)) / stepDur)),
+    chord: e.chord || "",
+    cpx: e.cpx | 0,
+  }));
+  // Size to where the last note *ends*, so a held tail isn't clipped away.
+  const maxStep = events.reduce((m, e) => Math.max(m, e.step + e.len - 1), 0);
   const totalSteps = Math.min(128, Math.max(16, Math.ceil((maxStep + 1) / 16) * 16));
   // Size the clip, then clear it for a fresh capture.
   resizeTrack(t, totalSteps);
@@ -193,23 +294,39 @@ export function captureSequence() {
     if (Array.isArray(t.extraNotes)) t.extraNotes[i] = null;
     if (Array.isArray(t.extraLengths)) t.extraLengths[i] = null;
   }
-  // Group by step (wrap into length); root = lowest, rest → extras.
+  // Group by step (wrap into length): midi → { len, chord, cpx }, longest wins
+  // for a repeated note on the same step. Root = lowest, rest → extras.
   const byStep = new Map();
   for (const ev of events) {
     const s = ev.step % totalSteps;
-    if (!byStep.has(s)) byStep.set(s, new Set());
-    byStep.get(s).add(ev.midi);
+    if (!byStep.has(s)) byStep.set(s, new Map());
+    const at = byStep.get(s);
+    const prev = at.get(ev.midi);
+    at.set(ev.midi, {
+      len: Math.max(prev?.len || 1, ev.len),
+      chord: ev.chord || prev?.chord || "",
+      cpx: ev.chord ? ev.cpx : (prev?.cpx | 0),
+    });
   }
   let noteCount = 0;
-  for (const [s, set] of byStep) {
-    const notes = [...set].sort((a, b) => a - b);
+  for (const [s, at] of byStep) {
+    const notes = [...at.keys()].sort((a, b) => a - b);
+    // Don't run past the clip. (A note that overlaps the *next* captured step is
+    // also trimmed back to it — renderStepGrid enforces that, see maxLengthAt:
+    // a track lane is monophonic in time, polyphony being chords + extras.)
+    const lenOf = n => Math.max(1, Math.min(totalSteps - s, at.get(n)?.len || 1));
+    const rootInfo = at.get(notes[0]);
     t.steps[s] = 1;
-    if (Array.isArray(t.lengths)) t.lengths[s] = 1;
+    if (Array.isArray(t.lengths)) t.lengths[s] = lenOf(notes[0]);
     if (Array.isArray(t.notes)) t.notes[s] = notes[0];
     if (Array.isArray(t.velocities)) t.velocities[s] = KBD_REC_VEL;
+    // A chord-mode press restores as a chord config, so the roll shows one root.
+    if (Array.isArray(t.chords)) t.chords[s] = rootInfo?.chord || "";
+    if (Array.isArray(t.complexities)) t.complexities[s] = rootInfo?.chord ? (rootInfo.cpx | 0) : 0;
+    applyKbdArpToStep(t, s, !!rootInfo?.chord);
     const extras = notes.slice(1);
     if (Array.isArray(t.extraNotes)) t.extraNotes[s] = extras.length ? extras : null;
-    if (Array.isArray(t.extraLengths)) t.extraLengths[s] = extras.length ? extras.map(() => 1) : null;
+    if (Array.isArray(t.extraLengths)) t.extraLengths[s] = extras.length ? extras.map(lenOf) : null;
     noteCount += notes.length;
   }
   if (!t.isDrumKit && byStep.size) t.lastEditedNote = t.notes[[...byStep.keys()].sort((a, b) => a - b)[0]];
@@ -221,6 +338,11 @@ export function captureSequence() {
 function releaseNote(k) {
   const rec = held.get(k);
   held.delete(k);
+  stopLiveArp(rec);
+  if (rec?.capture) {
+    const now = captureNow();
+    for (const e of rec.capture) e.dur = Math.max(0, now - e.time);
+  }
   if (!rec || !rec.usedNoteOn || !rec.t?.voice) return;
   const now = (state.audioCtx?.currentTime ?? 0) + 0.005;
   for (const n of (rec.tones || [])) { try { rec.t.voice.noteOff?.(n, now); } catch (e) { console.warn("kbd noteOff", e); } }
@@ -243,24 +365,17 @@ function captureNote(pressedMidi) {
   if (Array.isArray(t.velocities)) t.velocities[idx] = KBD_REC_VEL;
   if (Array.isArray(t.extraNotes))   t.extraNotes[idx]   = null;
   if (Array.isArray(t.extraLengths)) t.extraLengths[idx] = null;
-  if (scaleChordActive()) {
-    // diatonic chord under a scale: store the actual tones as root + extras
-    const tones = tonesFor(pressedMidi);
-    const root = tones[0];
-    const extras = tones.slice(1);
-    if (Array.isArray(t.notes)) t.notes[idx] = root;
-    if (Array.isArray(t.chords)) t.chords[idx] = "";
-    if (Array.isArray(t.complexities)) t.complexities[idx] = 0;
-    if (Array.isArray(t.extraNotes))   t.extraNotes[idx]   = extras.length ? extras : null;
-    if (Array.isArray(t.extraLengths)) t.extraLengths[idx] = extras.length ? extras.map(() => noteLen) : null;
-    if (!t.isDrumKit) t.lastEditedNote = root;
-  } else if (state.kbdChordType) {
-    // chord mode: store root + chord type + inversion (the transport expands it)
-    const root = Math.round(pressedMidi);
-    if (Array.isArray(t.notes)) t.notes[idx] = root;
-    if (Array.isArray(t.chords)) t.chords[idx] = state.kbdChordType;
-    if (Array.isArray(t.complexities)) t.complexities[idx] = state.kbdChordCpx | 0;
-    if (!t.isDrumKit) t.lastEditedNote = root;
+  if (state.kbdChordType) {
+    // chord mode: store root + chord type + inversion (the transport expands it),
+    // so the step reads as one chord rather than a stack of notes
+    const sel = chordPressSelection(pressedMidi);
+    if (Array.isArray(t.notes)) t.notes[idx] = sel.root;
+    if (Array.isArray(t.chords)) t.chords[idx] = sel.chord;
+    if (Array.isArray(t.complexities)) t.complexities[idx] = sel.cpx;
+    if (Array.isArray(t.extraNotes))   t.extraNotes[idx]   = sel.extras;
+    if (Array.isArray(t.extraLengths)) t.extraLengths[idx] = sel.extras ? sel.extras.map(() => noteLen) : null;
+    applyKbdArpToStep(t, idx, !!sel.chord);
+    if (!t.isDrumKit) t.lastEditedNote = sel.root;
   } else {
     const notes = [...new Set([...held.values()].map(r => Math.round(r.midi)).filter(Number.isFinite))].sort((a, b) => a - b);
     if (!notes.length) return;
@@ -295,12 +410,19 @@ function onKeyDown(e) {
   // Inert note key (the black row under a scale) — still swallow it, so it can't
   // reach a focused control as type-ahead.
   if (midi == null) { e.preventDefault(); return; }
-  held.set(k, { t: null, midi, tones: null, usedNoteOn: false });
+  held.set(k, { t: null, midi, tones: null, usedNoteOn: false, arp: null });
   e.preventDefault();
   state.kbdLast = kbdSelection(midi);   // remember for click-to-apply on a step
   // Buffer for capture at press time (monotonic clock) — independent of whether
-  // audio is unlocked, so Capture works like Ableton's retroactive capture.
-  { const now = performance.now() / 1000; for (const n of tonesFor(midi)) bufferForCapture(n, now); }
+  // audio is unlocked, so Capture works like Ableton's retroactive capture. The
+  // entries are kept on the held record so the release can stamp their length.
+  {
+    const now = captureNow();
+    const sel = state.kbdLast;
+    held.get(k).capture = sel.chord
+      ? [bufferForCapture(sel.root, now, sel.chord, sel.cpx)]   // one chord, not one entry per tone
+      : tonesFor(midi).map(n => bufferForCapture(n, now));
+  }
   captureNote(midi);
   pressNote(k, midi);
 }

@@ -56,6 +56,13 @@ export const state = {
   kbdBase: 60,          // MIDI note of the "a" key (C4); shifted by z/x
   kbdChordType: "",     // chord mode: "" = single notes, else each key plays this chord type
   kbdChordCpx: 0,       // chord inversion / voicing level (0..4), same as a step's complexity
+  // Arp settings for chords played from the keyboard — written onto the steps a
+  // chord lands on (record / capture / click-to-apply), same fields the step
+  // editor's arp row edits. Only meaningful while chord mode is on.
+  kbdArp: false,
+  kbdArpRate: 0.25,     // beats per note
+  kbdArpRange: 1,       // octaves spanned
+  kbdArpDir: "up",      // up | down | updown | random
   kbdLast: null,        // last note/chord played on the keyboard {root,chord,cpx,extras} — applied when a step is clicked
   activeTrackId: null,
   scale: { active: false, root: 0, mode: "minor" },
