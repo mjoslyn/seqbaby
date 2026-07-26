@@ -455,6 +455,7 @@ export function wireCompPanel(t, panel) {
 export function applyFxToTrack(t, fx) {
   if (!fx || typeof fx !== "object") return;
   const cfg = t.fxConfig;
+  if (!cfg.amp)        cfg.amp        = { preamp: 0.5, level: 0.5 };
   if (!cfg.vinyl)      cfg.vinyl      = { amount: 0, warmth: 0.4, wow: 0.3 };
   if (!cfg.cassette)   cfg.cassette   = { amount: 0, flutter: 0.3, sat: 0.4 };
   if (!cfg.chorus)     cfg.chorus     = { wet: 0, rate: 0.5, depth: 0.5 };
@@ -499,6 +500,7 @@ export function applyFxToTrack(t, fx) {
     const wet  = Number(fx.crush.wet);  if (Number.isFinite(wet))  cfg.crush.wet  = Math.max(0, Math.min(1, wet));
   }
   if (t.fxRack) {
+    t.fxRack.applyAmp(cfg.amp);
     t.fxRack.applyVinyl(cfg.vinyl);
     t.fxRack.applyCassette(cfg.cassette);
     t.fxRack.applyFuzz(cfg.fuzz);
@@ -521,6 +523,7 @@ export function refreshFxPanelUI(t) {
   const panel = t._fxPanelEl || t.el.querySelector(".sq-track__fx-panel");
   if (!panel) return;
   const cfg = t.fxConfig;
+  if (!cfg.amp)        cfg.amp        = { preamp: 0.5, level: 0.5 };
   if (!cfg.vinyl)      cfg.vinyl      = { amount: 0, warmth: 0.4, wow: 0.3 };
   if (!cfg.cassette)   cfg.cassette   = { amount: 0, flutter: 0.3, sat: 0.4 };
   if (!cfg.chorus)     cfg.chorus     = { wet: 0, rate: 0.5, depth: 0.5 };
@@ -534,6 +537,9 @@ export function refreshFxPanelUI(t) {
   if (cfg.shaper.preamp == null) cfg.shaper.preamp = 0.5;
   const q = s => panel.querySelector(s);
   const set = (sel, v) => { const el = q(sel); if (el != null && v != null) el.value = v; };
+  set(".sq-track__glide",    t.glide ?? 0);
+  set(".fx-amp-preamp",      cfg.amp.preamp);
+  set(".fx-amp-level",       cfg.amp.level);
   set(".fx-vinyl-amount",    cfg.vinyl.amount);
   set(".fx-vinyl-warmth",    cfg.vinyl.warmth);
   set(".fx-vinyl-wow",       cfg.vinyl.wow);
@@ -580,6 +586,7 @@ export function refreshFxPanelUI(t) {
 export function wireFxPanel(t, panel) {
   const q = (sel) => panel.querySelector(sel);
   const fc = t.fxConfig;
+  if (!fc.amp)        fc.amp        = { preamp: 0.5, level: 0.5 };
   if (!fc.crush)      fc.crush      = { bits: 8, wet: 0 };
   if (!fc.vinyl)      fc.vinyl      = { amount: 0, warmth: 0.4, wow: 0.3 };
   if (!fc.cassette)   fc.cassette   = { amount: 0, flutter: 0.3, sat: 0.4 };
@@ -593,6 +600,16 @@ export function wireFxPanel(t, panel) {
   if (!fc.shaper.mode) fc.shaper.mode = "fold";
   if (fc.shaper.preamp == null) fc.shaper.preamp = 0.5;
   const set = (sel, v) => { const el = q(sel); if (el != null && v != null) el.value = v; };
+  // Portamento. Not an fx-rack effect (it lives on the voice, as t.glide), but it
+  // belongs with the per-track sound controls rather than buried in the mod panel.
+  set(".sq-track__glide", t.glide ?? 0);
+  { const g = q(".sq-track__glide"); if (g) g.addEventListener("input", e => {
+      t.glide = Number(e.target.value);
+      if (t.voice?.setGlide) t.voice.setGlide(t.glide);
+    });
+  }
+  set(".fx-amp-preamp",      fc.amp.preamp);
+  set(".fx-amp-level",       fc.amp.level);
   set(".fx-vinyl-amount",    fc.vinyl.amount);
   set(".fx-vinyl-warmth",    fc.vinyl.warmth);
   set(".fx-vinyl-wow",       fc.vinyl.wow);
@@ -633,6 +650,11 @@ export function wireFxPanel(t, panel) {
   { const b = q(".fx-crush-bits"); if (b) b.value = fc.crush.bits; }
   { const w = q(".fx-crush-wet");  if (w) w.value = fc.crush.wet; }
 
+  const applyAmp = () => {
+    fc.amp.preamp = Number(q(".fx-amp-preamp").value);
+    fc.amp.level  = Number(q(".fx-amp-level").value);
+    t.fxRack?.applyAmp(fc.amp);
+  };
   const applyVinyl = () => {
     fc.vinyl.amount = Number(q(".fx-vinyl-amount").value);
     fc.vinyl.warmth = Number(q(".fx-vinyl-warmth").value);
@@ -715,6 +737,7 @@ export function wireFxPanel(t, panel) {
     t.fxRack?.applyCrush(fc.crush);
   };
 
+  ["preamp","level"].forEach(n => q(`.fx-amp-${n}`)?.addEventListener("input", applyAmp));
   ["amount","warmth","wow"].forEach(n => q(`.fx-vinyl-${n}`)?.addEventListener("input", applyVinyl));
   ["amount","flutter","sat"].forEach(n => q(`.fx-cassette-${n}`)?.addEventListener("input", applyCassette));
   ["amount","drive","tone","level"].forEach(n => q(`.fx-fuzz-${n}`).addEventListener("input", applyFuzz));
@@ -738,17 +761,7 @@ export function wireFxPanel(t, panel) {
 export function renderModPanel(t, panel) {
   const tpl = document.getElementById("lfo-row-template");
   panel.replaceChildren();
-  // Track-level glide — shared strip at top of mod panel. Swing is master-only now.
-  const ctl = document.createElement("div");
-  ctl.className = "sq-mod__ctl-row";
-  ctl.innerHTML = `
-    <label class="sq-mod__ctl"><span>glide</span><input class="sq-track__glide" type="range" min="0" max="0.5" step="0.005" value="${t.glide ?? 0}" /></label>
-  `;
-  panel.appendChild(ctl);
-  ctl.querySelector(".sq-track__glide").addEventListener("input", e => {
-    t.glide = Number(e.target.value);
-    if (t.voice?.setGlide) t.voice.setGlide(t.glide);
-  });
+  // (glide lives in the fx panel now — see wireFxPanel. Swing is master-only.)
 
   // Container for the per-param LFO rows (added one at a time via the picker below).
   const rowsContainer = document.createElement("div");

@@ -33,11 +33,14 @@ export function makeVinylCrackleBuffer(ctx, seconds) {
   const len = Math.max(1, Math.floor(seconds * ctx.sampleRate));
   const buf = ctx.createBuffer(1, len, ctx.sampleRate);
   const data = buf.getChannelData(0);
-  for (let i = 0; i < len; i++) data[i] = (Math.random() * 2 - 1) * 0.06;
-  const crackles = Math.floor(seconds * 22);
+  // Surface-noise floor + crackle amplitudes are deliberately low: this bed sits
+  // under the source at all times, and anything louder reads as broken rather
+  // than worn. Level is set by the amount knob (see FXRack.applyVinyl).
+  for (let i = 0; i < len; i++) data[i] = (Math.random() * 2 - 1) * 0.012;
+  const crackles = Math.floor(seconds * 14);
   for (let c = 0; c < crackles; c++) {
     const pos = Math.floor(Math.random() * (len - 40));
-    const amp = 0.35 + Math.random() * 0.55;
+    const amp = 0.18 + Math.random() * 0.3;
     const width = 2 + Math.floor(Math.random() * 10);
     for (let j = 0; j < width; j++) {
       data[pos + j] += (Math.random() * 2 - 1) * amp * Math.exp(-j / 4);
@@ -55,7 +58,7 @@ export function makeTapeHissBuffer(ctx, seconds) {
   for (let i = 0; i < len; i++) {
     const w = Math.random() * 2 - 1;
     prev = prev * 0.85 + w * 0.15;
-    data[i] = prev * 0.6;
+    data[i] = prev * 0.28;   // quiet bed — see makeVinylCrackleBuffer
   }
   return buf;
 }
@@ -129,7 +132,7 @@ export function makeShaperCurve(mode, amount) {
 export function makeCassetteSatCurve(drive) {
   const n = 2048;
   const c = new Float32Array(n);
-  const k = 1 + drive * 7;
+  const k = 1 + drive * 4;   // gentler than a fuzz — tape compresses, it doesn't clip
   const norm = Math.tanh(k);
   for (let i = 0; i < n; i++) {
     const x = (i * 2) / n - 1;

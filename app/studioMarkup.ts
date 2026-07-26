@@ -320,6 +320,15 @@ export const STUDIO_BODY = String.raw`
         </div>
       </div>
       <div class="sq-track__fx-panel" hidden>
+        <div class="sq-fx__row" data-fx="glide">
+          <span class="sq-fx__title">glide</span>
+          <label class="sq-fx__ctl"><span>time</span><input class="sq-track__glide" type="range" min="0" max="0.5" step="0.005" value="0" /></label>
+        </div>
+        <div class="sq-fx__row" data-fx="amp">
+          <span class="sq-fx__title">amp</span>
+          <label class="sq-fx__ctl" title="input drive — hits every effect below harder (fuzz, shaper, cassette sat, crush all respond). Centre = unity, full = +18dB"><span>drive</span><input class="fx-amp-preamp" type="range" min="0" max="1" step="0.01" value="0.5" /></label>
+          <label class="sq-fx__ctl" title="output level after the whole chain — trims back what drive adds. Centre = unity, full = +6dB"><span>out</span><input class="fx-amp-level" type="range" min="0" max="1" step="0.01" value="0.5" /></label>
+        </div>
         <div class="sq-fx__row" data-fx="vinyl">
           <span class="sq-fx__title">vinyl sim</span>
           <label class="sq-fx__ctl"><span>amt</span><input class="fx-vinyl-amount" type="range" min="0" max="1" step="0.01" value="0" /></label>

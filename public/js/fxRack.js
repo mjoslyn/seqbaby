@@ -4,6 +4,8 @@ import { setParam } from "./params.js";
 
 export function defaultFxConfig() {
   return {
+    // Rack input drive + output level. 0.5 = unity on both.
+    amp:        { preamp: 0.5, level: 0.5 },
     vinyl:      { amount: 0, warmth: 0.4, wow: 0.3 },
     cassette:   { amount: 0, flutter: 0.3, sat: 0.4 },
     fuzz:       { amount: 0, drive: 0.7, tone: 0.4, level: 0.5 },
@@ -39,12 +41,28 @@ export const FX_LFO_STAGE = {
   verb: "reverb", reverb_decay: "reverb",
 };
 
+/**
+ * Map a 0..1 amp knob to a gain multiplier: 0.5 is unity, the lower half fades
+ * toward silence-ish and the upper half is exponential up to `top`, so the top
+ * of the range reads as drive rather than a sudden jump.
+ */
+function ampGain(v, top) {
+  const x = Math.max(0, Math.min(1, Number(v) || 0));
+  return x <= 0.5 ? x * 2 : Math.pow(top, (x - 0.5) / 0.5);
+}
+
+// Base delay of the wow / flutter lines. The dry path is delayed to match (see
+// the constructor), so the wet/dry mix stays phase-aligned.
+const VINYL_WOW_BASE = 0.005;
+const CASSETTE_FLUTTER_BASE = 0.003;
+
 // SP-404 "vinyl sim" crackle bed: base hiss with sparse impulsive crackles sprinkled in.
 export class FXRack {
   constructor(ctx, config, opts) {
     this.ctx = ctx;
     this.config = config;
     // Make sure legacy configs (pre-SP-404 fx) don't crash.
+    if (!config.amp)        config.amp        = { preamp: 0.5, level: 0.5 };
     if (!config.vinyl)      config.vinyl      = { amount: 0, warmth: 0.4, wow: 0.3 };
     if (!config.cassette)   config.cassette   = { amount: 0, flutter: 0.3, sat: 0.4 };
     if (!config.chorus)     config.chorus     = { wet: 0, rate: 0.5, depth: 0.5 };
@@ -66,9 +84,15 @@ export class FXRack {
     this.vinylLP.type = "lowpass";
     this.vinylLP.Q.value = 0.7;
     this.vinylWowDelay = ctx.createDelay(0.05);
-    this.vinylWowDelay.delayTime.value = 0.005;
+    this.vinylWowDelay.delayTime.value = VINYL_WOW_BASE;
     this.vinylWowLFO = new Tone.LFO({ frequency: 0.45, min: 0.003, max: 0.007, type: "sine" }).start();
     this.vinylWowLFO.connect(this.vinylWowDelay.delayTime);
+    // The wet path runs through the wow delay, so the dry path gets the same base
+    // delay to keep the two time-aligned. Summing a 5 ms-delayed copy with the
+    // original is a comb filter — that hollow, phasey tone the mix knob used to
+    // sweep through, worst at 50/50. Aligned, the mix just blends tone + warble.
+    this.vinylDryDelay = ctx.createDelay(0.05);
+    this.vinylDryDelay.delayTime.value = VINYL_WOW_BASE;
     // crackle noise bed (level scales with vinyl amount)
     this.vinylNoiseSrc = ctx.createBufferSource();
     this.vinylNoiseSrc.buffer = makeVinylCrackleBuffer(ctx, 4);
@@ -79,7 +103,8 @@ export class FXRack {
     this.vinylWowDelay.connect(this.vinylWetBus);
     this.vinylNoiseSrc.connect(this.vinylNoiseGain);
     this.vinylNoiseGain.connect(this.vinylSum);
-    this.vinylDryBus.connect(this.vinylSum);
+    this.vinylDryBus.connect(this.vinylDryDelay);
+    this.vinylDryDelay.connect(this.vinylSum);
     this.vinylWetBus.connect(this.vinylSum);
     try { this.vinylNoiseSrc.start(); } catch {}
 
@@ -96,7 +121,11 @@ export class FXRack {
     this.cassetteLP.frequency.value = 9500;
     // flutter: short LFO-modulated delay
     this.cassetteFlutter = ctx.createDelay(0.03);
-    this.cassetteFlutter.delayTime.value = 0.003;
+    this.cassetteFlutter.delayTime.value = CASSETTE_FLUTTER_BASE;
+    // Same time-alignment as vinyl above — the dry path matches the flutter line's
+    // base delay so the wet/dry mix doesn't comb.
+    this.cassetteDryDelay = ctx.createDelay(0.03);
+    this.cassetteDryDelay.delayTime.value = CASSETTE_FLUTTER_BASE;
     this.cassetteFlutterLFO = new Tone.LFO({ frequency: 5.2, min: 0.002, max: 0.004, type: "sine" }).start();
     this.cassetteFlutterLFO.connect(this.cassetteFlutter.delayTime);
     // saturation
@@ -114,7 +143,8 @@ export class FXRack {
     this.cassetteLP.connect(this.cassetteWetBus);
     this.cassetteHissSrc.connect(this.cassetteHissGain);
     this.cassetteHissGain.connect(this.cassetteSum);
-    this.cassetteDryBus.connect(this.cassetteSum);
+    this.cassetteDryBus.connect(this.cassetteDryDelay);
+    this.cassetteDryDelay.connect(this.cassetteSum);
     this.cassetteWetBus.connect(this.cassetteSum);
     try { this.cassetteHissSrc.start(); } catch {}
 
@@ -287,6 +317,7 @@ export class FXRack {
     this._rewire();
     this.output.connect(ctx.destination);
 
+    this.applyAmp(config.amp);
     this.applyVinyl(config.vinyl);
     this.applyCassette(config.cassette);
     this.applyFuzz(config.fuzz);
@@ -357,46 +388,59 @@ export class FXRack {
     for (const s of this._stages) this._updateStage(s.key);
   }
 
+  /**
+   * Rack preamp + output level. The rack's own input/output gains double as the
+   * amp — no extra nodes and nothing to bypass, and because the preamp sits ahead
+   * of every stage it drives the whole chain (fuzz, shaper, cassette sat and the
+   * compressor all respond to it), while level trims what comes back out.
+   * Both knobs are 0..1 with 0.5 = unity.
+   */
+  applyAmp({ preamp, level }) {
+    const c = this.config.amp || (this.config.amp = { preamp: 0.5, level: 0.5 });
+    if (preamp !== undefined) c.preamp = preamp;
+    if (level  !== undefined) c.level = level;
+    this.input.gain.value  = ampGain(c.preamp ?? 0.5, 8);    // 0.25x .. 8x  (-12..+18 dB)
+    this.output.gain.value = ampGain(c.level ?? 0.5, 2);     // silent .. 2x (   ..+6 dB)
+  }
+
+  // Both tape/vinyl stages scale their *character* with amount, not just the
+  // wet/dry mix: at 10% you want a hint of a worn record, not 10% of a destroyed
+  // one. So the tone rolls off from clean, the warble opens up from none, and the
+  // noise bed — by far the most obtrusive part — follows amount squared.
   applyVinyl({ amount, warmth, wow }) {
-    if (amount !== undefined) {
-      this.config.vinyl.amount = amount;
-      this.vinylDryBus.gain.value = 1 - amount;
-      this.vinylWetBus.gain.value = amount;
-      this.vinylNoiseGain.gain.value = amount * 0.45;
-    }
-    if (warmth !== undefined) {
-      this.config.vinyl.warmth = warmth;
-      // warmth 0 → 9 kHz (bright), warmth 1 → 1.8 kHz (dull)
-      this.vinylLP.frequency.value = 9000 - warmth * 7200;
-    }
-    if (wow !== undefined) {
-      this.config.vinyl.wow = wow;
-      const base = 0.005;
-      const span = 0.0008 + wow * 0.006; // up to ±6 ms
-      this.vinylWowLFO.min = base - span;
-      this.vinylWowLFO.max = base + span;
-    }
+    const c = this.config.vinyl;
+    if (amount !== undefined) c.amount = amount;
+    if (warmth !== undefined) c.warmth = warmth;
+    if (wow    !== undefined) c.wow = wow;
+    const a = Math.max(0, Math.min(1, c.amount ?? 0));
+    this.vinylDryBus.gain.value = 1 - a;
+    this.vinylWetBus.gain.value = a;
+    // warmth 0 → 9 kHz (bright), warmth 1 → 1.8 kHz (dull), reached at amount 1
+    const warmTarget = 9000 - (c.warmth ?? 0.4) * 7200;
+    this.vinylLP.frequency.value = 18000 - a * (18000 - warmTarget);
+    const span = (0.0008 + (c.wow ?? 0.3) * 0.006) * a;   // up to ±6.8 ms
+    this.vinylWowLFO.min = VINYL_WOW_BASE - span;
+    this.vinylWowLFO.max = VINYL_WOW_BASE + span;
+    this.vinylNoiseGain.gain.value = a * a * 0.12;
     this._updateStage("vinyl");
   }
 
   applyCassette({ amount, flutter, sat }) {
-    if (amount !== undefined) {
-      this.config.cassette.amount = amount;
-      this.cassetteDryBus.gain.value = 1 - amount;
-      this.cassetteWetBus.gain.value = amount;
-      this.cassetteHissGain.gain.value = amount * 0.18;
-    }
-    if (flutter !== undefined) {
-      this.config.cassette.flutter = flutter;
-      const base = 0.003;
-      const span = 0.0004 + flutter * 0.004;
-      this.cassetteFlutterLFO.min = base - span;
-      this.cassetteFlutterLFO.max = base + span;
-    }
-    if (sat !== undefined) {
-      this.config.cassette.sat = sat;
-      this.cassetteSat.curve = makeCassetteSatCurve(sat);
-    }
+    const c = this.config.cassette;
+    if (amount  !== undefined) c.amount = amount;
+    if (flutter !== undefined) c.flutter = flutter;
+    if (sat     !== undefined) c.sat = sat;
+    const a = Math.max(0, Math.min(1, c.amount ?? 0));
+    this.cassetteDryBus.gain.value = 1 - a;
+    this.cassetteWetBus.gain.value = a;
+    // Tape bandwidth closes in as the amount rises (full range → 60 Hz / 9.5 kHz).
+    this.cassetteHP.frequency.value = 20 + a * 40;
+    this.cassetteLP.frequency.value = 18000 - a * (18000 - 9500);
+    const span = (0.0004 + (c.flutter ?? 0.3) * 0.004) * a;
+    this.cassetteFlutterLFO.min = CASSETTE_FLUTTER_BASE - span;
+    this.cassetteFlutterLFO.max = CASSETTE_FLUTTER_BASE + span;
+    this.cassetteSat.curve = makeCassetteSatCurve((c.sat ?? 0.4) * a);
+    this.cassetteHissGain.gain.value = a * a * 0.09;
     this._updateStage("cassette");
   }
 
