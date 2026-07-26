@@ -247,6 +247,12 @@ export function renderRollPanel(t, panel) {
           cell.classList.add("is-on");
           if (anchor !== i) cell.classList.add("is-held");
           if (i < anchor + slotLen - 1) cell.classList.add("is-note-joins-next");
+          // Mark the cells a resize gesture grabs (see the gesture map below), so
+          // the cursor advertises resize vs move. A length-1 note has no edges —
+          // dragging it anywhere moves it.
+          if (slotLen > 1 && (i === anchor + slotLen - 1 || (isRoot && i === anchor))) {
+            cell.classList.add("is-edge");
+          }
           const col = noteColor(m);
           if (col) cell.style.setProperty("--note-color", col);
           // Label the anchor cell only.
@@ -341,6 +347,8 @@ export function renderRollPanel(t, panel) {
       c.classList.toggle("is-on", on);
       c.classList.toggle("is-held", on && anchor !== step);
       c.classList.toggle("is-note-joins-next", on && step < anchor + slotLen - 1);
+      c.classList.toggle("is-edge", on && slotLen > 1 &&
+        (step === anchor + slotLen - 1 || (isRoot && step === anchor)));
       if (on) {
         const col = noteColor(note);
         if (col) c.style.setProperty("--note-color", col);
@@ -374,10 +382,13 @@ export function renderRollPanel(t, panel) {
 
   // Gestures on the roll grid:
   //   empty cell down + drag right        → create note, drag extends length
-  //   note's right-edge cell + drag right → resize (grow); drag left → shrink
-  //   note's any-other cell + drag        → move (step + pitch follow pointer)
-  //   length-1 cell (anchor==tail) + drag → mode picked on first move:
-  //                                          horizontal right → resize, else move
+  //   note's right-edge cell + drag       → resize: the end follows the pointer
+  //   note's left-edge cell + drag        → resize: the start follows, end stays
+  //   note's middle + drag                → move the whole note (step + pitch
+  //                                          follow the pointer, length kept)
+  //   length-1 note + drag                → move (the single cell is all middle)
+  //   two clicks in < 400 ms on a note    → delete it (an extra's row deletes
+  //                                          only that extra)
   //   click on note (no drag), same pitch → remove the whole note (legacy)
   //   click on note (no drag), diff pitch → re-pitch to clicked row, keep length
   //   two clicks in < 400 ms              → activate + velocity to full
@@ -450,17 +461,30 @@ export function renderRollPanel(t, panel) {
     const key = `${step}:${note}`;
     const now = performance.now();
     if (now - lastRollClickTime < ROLL_DBLCLICK_MS && key === lastRollClickKey) {
-      // manual double-click: activate the step (if not already on) and pin
-      // velocity to full. Operates on the anchor so multi-step notes work
-      // when any held cell is clicked.
+      // Manual double-click deletes the note under the pointer. It works from any
+      // of a multi-step note's cells (the anchor owns the data), and only on the
+      // pitch row that was actually clicked: on the root it removes the note, on
+      // a stacked extra just that extra. A row holding neither does nothing —
+      // which is also what makes the double-click safe on a length-1 note, whose
+      // first click already removed it.
       localMutate(() => {
         const anchor = anchorCovering(t, step);
-        const target = anchor >= 0 ? anchor : step;
-        if (!t.steps[target]) startNote(t, target);
-        t.notes[target] = note;
-        if (!t.isDrumKit) t.lastEditedNote = note;
-        t.velocities[target] = 1;
-        paintRange(target, target + Math.max(1, t.lengths[target] || 1) - 1);
+        if (anchor < 0) return;
+        const len = Math.max(1, t.lengths[anchor] || 1);
+        const extras = Array.isArray(t.extraNotes?.[anchor]) ? t.extraNotes[anchor] : null;
+        const extraIdx = extras ? extras.findIndex(x => Math.abs(x - note) < EPS) : -1;
+        if (Math.abs(t.notes[anchor] - note) < EPS) {
+          removeNote(t, anchor);            // root pitch → the whole note (extras included)
+        } else if (extraIdx >= 0) {
+          const eLens = t.extraLengths?.[anchor];
+          extras.splice(extraIdx, 1);
+          if (Array.isArray(eLens)) eLens.splice(extraIdx, 1);
+          if (!extras.length) {
+            t.extraNotes[anchor] = null;
+            if (t.extraLengths) t.extraLengths[anchor] = null;
+          }
+        } else return;
+        paintRange(anchor, anchor + len - 1);
         renderStepGrid(t);
       });
       lastRollClickTime = 0;
@@ -521,6 +545,21 @@ export function renderRollPanel(t, panel) {
         slotLen  = 0;
       }
       const isRightEdgeOfSlot = slotLen > 0 && step === existing + slotLen - 1;
+      // Left edge of a multi-step note → drag the start; the end stays put.
+      // (Only the anchor's own note: an extra always starts where the anchor does.)
+      if (slotLen > 1 && step === existing && dragSlot.kind === "anchor") {
+        drag = {
+          mode: "resizeLeft",
+          anchor: existing,
+          end: existing + rootLen - 1,
+          pointerId: e.pointerId,
+          moved: false,
+        };
+        panel._rollDragActive = true;
+        try { grid.setPointerCapture(e.pointerId); } catch {}
+        e.preventDefault();
+        return;
+      }
       // Right-edge of a slot with length > 1 → resize that slot.
       if (isRightEdgeOfSlot && slotLen > 1 && dragSlot.kind !== "empty") {
         drag = {
@@ -541,6 +580,9 @@ export function renderRollPanel(t, panel) {
         mode: "move",
         anchor: existing,
         origLen: rootLen,
+        // How far into the note the pointer grabbed, so the note slides with the
+        // cursor instead of snapping its head to it.
+        grabOffset: step - existing,
         startStep: step,
         startNote: note,
         startX: e.clientX,
@@ -581,6 +623,30 @@ export function renderRollPanel(t, panel) {
       extendNote(t, drag.anchor, newEnd);
       paintRange(drag.anchor, Math.max(drag.lastEnd, newEnd));
       drag.lastEnd = newEnd;
+      drag.moved = true;
+      renderStepGrid(t);
+      return;
+    }
+
+    if (drag.mode === "resizeLeft") {
+      // The tail is pinned; the head follows the pointer. Moving the head means
+      // relocating the anchor, since a note's data lives on its first step.
+      const end = drag.end;
+      const oldA = drag.anchor;
+      const newA = Math.max(0, Math.min(end, step));
+      if (newA === oldA) return;
+      const snap = snapStep(oldA);
+      eraseSpan(Math.min(oldA, newA), end);   // clears the old span + trims a note above it
+      writeStep(newA, snap);
+      t.lengths[newA] = end - newA + 1;
+      const eLens = t.extraLengths?.[newA];   // extras can't outlive the anchor
+      if (Array.isArray(eLens)) {
+        for (let i = 0; i < eLens.length; i++) {
+          if (eLens[i] != null && eLens[i] > t.lengths[newA]) eLens[i] = t.lengths[newA];
+        }
+      }
+      drag.anchor = newA;
+      paintRange(Math.min(oldA, newA), end);
       drag.moved = true;
       renderStepGrid(t);
       return;
@@ -634,10 +700,25 @@ export function renderRollPanel(t, panel) {
       const a = drag.anchor;
       const len = drag.origLen;
       if (drag.dragSlot.kind === "anchor") {
-        if (Math.abs(t.notes[a] - note) < EPS) return;
-        t.notes[a] = note;
+        // The whole note follows the pointer: horizontally by whole steps (the
+        // grab point stays under the cursor), vertically by pitch row.
+        const noteLen = Math.max(1, t.lengths[a] || len);
+        const target = Math.max(0, Math.min(t.length - noteLen, step - drag.grabOffset));
+        const pitchChanged = Math.abs(t.notes[a] - note) > EPS;
+        if (target === a && !pitchChanged) return;
+        if (target !== a) {
+          // Lift the note (with every per-step field) and set it down again.
+          const snap = snapStep(a);
+          eraseSpan(a, a + noteLen - 1);
+          eraseSpan(target, target + noteLen - 1);   // also trims a note it lands on
+          writeStep(target, snap, note);
+          drag.anchor = target;
+          paintRange(Math.min(a, target), Math.max(a, target) + noteLen - 1);
+        } else {
+          t.notes[a] = note;
+          paintRange(a, a + noteLen - 1);
+        }
         if (!t.isDrumKit) t.lastEditedNote = note;
-        paintRange(a, a + len - 1);
         drag.moved = true;
         renderStepGrid(t);
         return;
