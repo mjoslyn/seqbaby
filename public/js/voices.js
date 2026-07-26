@@ -185,108 +185,370 @@ export function makePolyPool(size, buildOne) {
   };
 }
 
+// ---- TR-808 voice models -------------------------------------------------
+// These follow the machine's own circuits rather than generic drum presets: a
+// bridged-T network rung by a trigger pulse for the drums (which is why an 808
+// kick is a decaying sine with a short pitch drop, not a filtered noise thump),
+// and the six-square-oscillator cluster the metal voices share. Native nodes
+// are built per hit — cheap, and it means overlapping hits ring independently
+// instead of stealing each other's envelope.
+// Pitch: on the real machines only the bass drum is meaningfully tunable per hit
+// (and people do play 808 kicks melodically), so the kicks track the step's note
+// while every other voice sits at its fixed factory tuning with TUNE as its
+// trimmer. That also keeps them right in normal use: an 808 track is a drum-kit
+// track, so its steps are C2, and a voice that transposed from its own reference
+// note would land octaves below where the circuit sits. TUNE is automatable
+// per step if you do want a pitched hat or cowbell.
+const rawCtx = () => Tone.getContext().rawContext;
+// Tone wrappers don't accept a native connect() — unwrap to the node underneath.
+const nativeIn = (node) => node?.input?.input ?? node?.input ?? node;
+
+// The 808's cymbal/hi-hat section runs six square oscillators at these fixed
+// frequencies. Their inharmonic beating *is* the 808 metal sound; a noise
+// source can't stand in for it.
+const TR808_METAL_HZ = [205.3, 254.3, 369.6, 304.4, 522.7, 800];
+
+const clamp01 = (v) => Math.max(0, Math.min(1, Number(v) || 0));
+/** Map a 0..1 knob onto [lo, hi] exponentially (how a real pot feels on a rate). */
+const knobExp = (v, lo, hi) => lo * Math.pow(hi / lo, clamp01(v));
+const knobLin = (v, lo, hi) => lo + (hi - lo) * clamp01(v);
+
+/**
+ * A bridged-T drum voice: one sine rung by a trigger, decaying exponentially,
+ * with the fast downward pitch bend the network's excitation produces.
+ * Returns the oscillator so callers can add their own routing.
+ */
+function ringSine(ctx, dest, { freq, bend = 1, bendTime = 0.03, peak, decay, t0 }) {
+  const osc = ctx.createOscillator();
+  osc.type = "sine";
+  osc.frequency.setValueAtTime(freq * bend, t0);
+  if (bend !== 1) osc.frequency.exponentialRampToValueAtTime(freq, t0 + bendTime);
+  const vca = ctx.createGain();
+  vca.gain.setValueAtTime(0.0001, t0);
+  vca.gain.exponentialRampToValueAtTime(Math.max(0.0002, peak), t0 + 0.002);
+  vca.gain.exponentialRampToValueAtTime(0.0001, t0 + decay);
+  osc.connect(vca).connect(dest);
+  osc.start(t0);
+  osc.stop(t0 + decay + 0.05);
+  return osc;
+}
+
+/** White-noise burst through `filters`, shaped by an exponential VCA. */
+function noiseBurst(ctx, dest, { peak, decay, t0, attack = 0.001, filters = [] }) {
+  const len = Math.max(1, Math.ceil((decay + 0.05) * ctx.sampleRate));
+  const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+  const src = ctx.createBufferSource();
+  src.buffer = buf;
+  const vca = ctx.createGain();
+  vca.gain.setValueAtTime(0.0001, t0);
+  vca.gain.exponentialRampToValueAtTime(Math.max(0.0002, peak), t0 + attack);
+  vca.gain.exponentialRampToValueAtTime(0.0001, t0 + decay);
+  let node = src;
+  for (const f of filters) { node.connect(f); node = f; }
+  node.connect(vca).connect(dest);
+  src.start(t0);
+  src.stop(t0 + decay + 0.05);
+  return src;
+}
+
+/** Soft clipper standing in for the mixer saturation an 808 hits on the way out. */
+function saturator(ctx, amount) {
+  const ws = ctx.createWaveShaper();
+  const n = 1024;
+  const c = new Float32Array(n);
+  const k = 1 + amount * 12;
+  const norm = Math.tanh(k);
+  for (let i = 0; i < n; i++) c[i] = Math.tanh(((i * 2) / n - 1) * k) / norm;
+  ws.curve = c;
+  ws.oversample = "2x";
+  return ws;
+}
+
+/**
+ * Shared scaffolding for the 808 voices: a native sum bus into the voice's Tone
+ * output, plus the four track sliders kept as 0..1 knob values.
+ * @param {*} output @param {Record<string, number>} defaults
+ */
+function drumMachineVoice(output, defaults, trigger) {
+  const ctx = rawCtx();
+  const bus = ctx.createGain();
+  bus.gain.value = 1;
+  bus.connect(nativeIn(output));
+  const knobs = { ...defaults };
+  // The track's four generic sliders drive the panel controls; params.js labels
+  // them per engine so they read as the real knobs.
+  const MAP = { harm: "tune", timb: "tone", morph: "colour", decay: "decay" };
+  return {
+    nodes: [],
+    setParam: (key, val) => {
+      const k = MAP[key];
+      if (k && knobs[k] !== undefined) knobs[k] = clamp01(val);
+    },
+    trigger: (note, time, dur, vel) => {
+      const t0 = Math.max(Number(time) || 0, ctx.currentTime + 0.001);
+      trigger({ ctx, bus, knobs, note, t0, vel: Math.max(0.02, Math.min(1, vel ?? 1)), dur });
+    },
+    release: () => {},
+  };
+}
+
+/**
+ * The 808's metal voice: six square oscillators through a high-pass and a
+ * resonant band-pass, shaped by one VCA. Both hats are this same source — only
+ * the envelope differs, exactly as on the machine, where they share a circuit
+ * (and why they cut each other off).
+ */
+function buildTr808Metal({ ctx, bus, knobs, note, t0, vel }, { decay, level }) {
+  const ratio = knobExp(knobs.tune, 0.7, 1.4);   // fixed tuning; TUNE is the trimmer
+  const hp = ctx.createBiquadFilter();
+  hp.type = "highpass";
+  hp.frequency.value = knobExp(knobs.tone, 5000, 10000);
+  const bp = ctx.createBiquadFilter();
+  bp.type = "bandpass";
+  bp.frequency.value = knobExp(knobs.tone, 8000, 13000);
+  bp.Q.value = 1.4;
+  const vca = ctx.createGain();
+  vca.gain.setValueAtTime(0.0001, t0);
+  vca.gain.exponentialRampToValueAtTime(Math.max(0.0002, vel * level), t0 + 0.001);
+  vca.gain.exponentialRampToValueAtTime(0.0001, t0 + decay);
+  vca.connect(hp).connect(bp).connect(bus);
+  for (const hz of TR808_METAL_HZ) {
+    const osc = ctx.createOscillator();
+    osc.type = "square";
+    osc.frequency.value = hz * ratio;
+    osc.connect(vca);
+    osc.start(t0);
+    osc.stop(t0 + decay + 0.05);
+  }
+}
+
+/**
+ * The 909 metal voice. Its hats were 6-bit samples of a real hi-hat rather than
+ * an oscillator bank, so the model mixes broadband noise over the same square
+ * cluster: the cluster keeps the metallic pitch, the noise supplies the sizzle
+ * an oscillator bank can't.
+ */
+function build909Metal({ ctx, bus, knobs, note, t0, vel }, { decay, level }) {
+  const ratio = knobExp(knobs.tune, 0.75, 1.35);
+  const hp = ctx.createBiquadFilter();
+  hp.type = "highpass";
+  hp.frequency.value = knobExp(knobs.tone, 4500, 9000);
+  const peaking = ctx.createBiquadFilter();
+  peaking.type = "peaking";
+  peaking.frequency.value = 10000;
+  peaking.Q.value = 1.2;
+  peaking.gain.value = 6;
+  hp.connect(peaking).connect(bus);
+  const vca = ctx.createGain();
+  vca.gain.setValueAtTime(0.0001, t0);
+  vca.gain.exponentialRampToValueAtTime(Math.max(0.0002, vel * level), t0 + 0.001);
+  vca.gain.exponentialRampToValueAtTime(0.0001, t0 + decay);
+  vca.connect(hp);
+  for (const hz of TR808_METAL_HZ) {
+    const osc = ctx.createOscillator();
+    osc.type = "square";
+    osc.frequency.value = hz * ratio * 1.18;   // the 909's sample sits brighter
+    osc.connect(vca);
+    osc.start(t0);
+    osc.stop(t0 + decay + 0.05);
+  }
+  noiseBurst(ctx, hp, { peak: vel * level * 1.1, decay, t0 });
+}
+
 export function buildDrumSynthNode(kind, output) {
   switch (kind) {
-    case "808-kick": {
-      const s = new Tone.MembraneSynth({
-        pitchDecay: 0.08, octaves: 10,
-        oscillator: { type: "sine" },
-        envelope: { attack: 0.001, decay: 0.5, sustain: 0.01, release: 1.4, attackCurve: "exponential" },
-      }).connect(output);
-      return {
-        nodes: [s],
-        trigger: (note, time, dur, vel) => s.triggerAttackRelease(Tone.Frequency(note, "midi"), Math.max(0.08, dur), time, vel),
-        release: (time) => s.triggerRelease(time),
-      };
-    }
-    case "808-snare": {
-      const noise = new Tone.NoiseSynth({ noise: { type: "white" }, envelope: { attack: 0.001, decay: 0.15, sustain: 0 } }).connect(output);
-      const tone = new Tone.MembraneSynth({ pitchDecay: 0.02, octaves: 2, envelope: { attack: 0.001, decay: 0.1, sustain: 0 } }).connect(output);
-      return {
-        nodes: [noise, tone],
-        trigger: (note, time, dur, vel) => {
-          noise.triggerAttackRelease(0.12, time, vel);
-          tone.triggerAttackRelease(Tone.Frequency(note, "midi"), 0.08, time, vel * 0.6);
-        },
-        release: () => {},
-      };
-    }
-    case "808-chat": {
-      const s = new Tone.MetalSynth({
-        envelope: { attack: 0.001, decay: 0.05, release: 0.01 },
-        harmonicity: 5.1, modulationIndex: 32, resonance: 4000, octaves: 1.5,
-      }).connect(output);
-      return { nodes: [s], trigger: (n, time, dur, vel) => s.triggerAttackRelease(Tone.Frequency(n, "midi"), "32n", time, vel), release: () => {} };
-    }
-    case "808-ohat": {
-      const s = new Tone.MetalSynth({
-        envelope: { attack: 0.001, decay: 0.5, release: 0.3 },
-        harmonicity: 5.1, modulationIndex: 32, resonance: 4000, octaves: 1.5,
-      }).connect(output);
-      return { nodes: [s], trigger: (n, time, dur, vel) => s.triggerAttackRelease(Tone.Frequency(n, "midi"), "4n", time, vel), release: () => {} };
-    }
-    case "808-clap": {
-      const noise = new Tone.NoiseSynth({ noise: { type: "pink" }, envelope: { attack: 0.001, decay: 0.28, sustain: 0 } }).connect(output);
-      return { nodes: [noise], trigger: (n, time, dur, vel) => noise.triggerAttackRelease(0.3, time, vel), release: () => {} };
-    }
-    case "808-cowbell": {
-      const a = new Tone.Synth({ oscillator: { type: "square" }, envelope: { attack: 0.001, decay: 0.3, sustain: 0, release: 0.2 } }).connect(output);
-      const b = new Tone.Synth({ oscillator: { type: "square" }, envelope: { attack: 0.001, decay: 0.3, sustain: 0, release: 0.2 } }).connect(output);
-      return {
-        nodes: [a, b],
-        trigger: (n, time, dur, vel) => {
-          a.triggerAttackRelease(560, 0.2, time, vel * 0.6);
-          b.triggerAttackRelease(845, 0.2, time, vel * 0.6);
-        },
-        release: () => {},
-      };
-    }
-    case "909-kick": {
-      const s = new Tone.MembraneSynth({
-        pitchDecay: 0.04, octaves: 6,
-        envelope: { attack: 0.001, decay: 0.18, sustain: 0, release: 0.5 },
+    // Bass drum: a 55 Hz bridged-T rung by the trigger. TONE mixes in the attack
+    // click the pulse shaper produces, DECAY lengthens the ring by lowering the
+    // network's damping — the two knobs that are actually on the machine.
+    case "808-kick":
+      return drumMachineVoice(output, { tune: 0.5, tone: 0.35, colour: 0.25, decay: 0.55 }, (v) => {
+        const { ctx, bus, knobs, note, t0, vel } = v;
+        const base = 55 * Math.pow(2, (note - 36) / 12) * knobExp(knobs.tune, 0.7, 1.45);
+        const decay = knobExp(knobs.decay, 0.14, 1.5);
+        const drive = saturator(ctx, knobs.colour);
+        drive.connect(bus);
+        // Body: the ring, with the short downward bend the excitation puts on it.
+        ringSine(ctx, drive, { freq: base, bend: 1.42, bendTime: 0.035, peak: vel, decay, t0 });
+        // Click: the attack transient, ~2 ms of bright noise through the same
+        // path so it saturates with the body.
+        const hp = ctx.createBiquadFilter();
+        hp.type = "highpass";
+        hp.frequency.value = 1200;
+        noiseBurst(ctx, drive, { peak: vel * knobs.tone * 0.5, decay: 0.004, t0, filters: [hp] });
       });
-      const dist = new Tone.Distortion({ distortion: 0.2, wet: 0.35 });
-      s.connect(dist); dist.connect(output);
-      return {
-        nodes: [s, dist],
-        trigger: (note, time, dur, vel) => s.triggerAttackRelease(Tone.Frequency(note, "midi"), 0.2, time, vel),
-        release: (time) => s.triggerRelease(time),
-      };
-    }
-    case "909-snare": {
-      const noise = new Tone.NoiseSynth({ noise: { type: "white" }, envelope: { attack: 0.001, decay: 0.1, sustain: 0 } }).connect(output);
-      const body = new Tone.MembraneSynth({ pitchDecay: 0.01, octaves: 2, envelope: { attack: 0.001, decay: 0.08, sustain: 0 } }).connect(output);
-      return {
-        nodes: [noise, body],
-        trigger: (note, time, dur, vel) => {
-          noise.triggerAttackRelease(0.08, time, vel);
-          body.triggerAttackRelease(Tone.Frequency(note, "midi"), 0.06, time, vel * 0.7);
-        },
-        release: () => {},
-      };
-    }
-    case "909-chat": {
-      const s = new Tone.MetalSynth({
-        envelope: { attack: 0.001, decay: 0.04, release: 0.01 },
-        harmonicity: 12, modulationIndex: 40, resonance: 7000, octaves: 1,
-      }).connect(output);
-      // Tone 15's MetalSynth.triggerAttackRelease signature is (note, duration,
-      // time, velocity) — the old (duration, time, velocity) call passed "32n"
-      // as the note, which made the synth fall over silently.
-      return { nodes: [s], trigger: (n, time, dur, vel) => s.triggerAttackRelease(Tone.Frequency(n, "midi"), "32n", time, vel), release: () => {} };
-    }
-    case "909-ohat": {
-      const s = new Tone.MetalSynth({
-        envelope: { attack: 0.001, decay: 0.6, release: 0.4 },
-        harmonicity: 12, modulationIndex: 40, resonance: 7000, octaves: 1,
-      }).connect(output);
-      return { nodes: [s], trigger: (n, time, dur, vel) => s.triggerAttackRelease(Tone.Frequency(n, "midi"), "4n", time, vel), release: () => {} };
-    }
-    case "909-clap": {
-      const noise = new Tone.NoiseSynth({ noise: { type: "pink" }, envelope: { attack: 0.001, decay: 0.18, sustain: 0 } }).connect(output);
-      return { nodes: [noise], trigger: (n, time, dur, vel) => noise.triggerAttackRelease(0.18, time, vel), release: () => {} };
-    }
+
+    // Snare: two bridged-T shells (185 / 330 Hz) plus a noise "snare" band.
+    // SNAPPY balances noise against the shells, TONE opens the noise band up.
+    case "808-snare":
+      return drumMachineVoice(output, { tune: 0.5, tone: 0.5, colour: 0.5, decay: 0.4 }, (v) => {
+        const { ctx, bus, knobs, note, t0, vel } = v;
+        const ratio = knobExp(knobs.tune, 0.7, 1.4);
+        const shellDecay = knobLin(knobs.decay, 0.05, 0.25);
+        const snappy = knobs.colour;                       // noise vs. shell balance
+        ringSine(ctx, bus, { freq: 185 * ratio, bend: 1.1, bendTime: 0.008, peak: vel * (1 - snappy * 0.55) * 0.74, decay: shellDecay, t0 });
+        ringSine(ctx, bus, { freq: 330 * ratio, bend: 1.1, bendTime: 0.008, peak: vel * (1 - snappy * 0.55) * 0.5, decay: shellDecay * 0.7, t0 });
+        const hp = ctx.createBiquadFilter();
+        hp.type = "highpass";
+        hp.frequency.value = knobExp(knobs.tone, 800, 4000);
+        const bp = ctx.createBiquadFilter();
+        bp.type = "bandpass";
+        bp.frequency.value = knobExp(knobs.tone, 3000, 9000);
+        bp.Q.value = 0.6;
+        noiseBurst(ctx, bus, {
+          peak: vel * (0.25 + snappy * 0.75) * 0.62,
+          decay: knobLin(knobs.decay, 0.08, 0.4),
+          t0, filters: [hp, bp],
+        });
+      });
+
+    // Closed hat: the six-oscillator metal cluster, high-passed and cut short.
+    case "808-chat":
+      return drumMachineVoice(output, { tune: 0.5, tone: 0.5, colour: 0.5, decay: 0.3 }, (v) => {
+        buildTr808Metal(v, { decay: knobExp(v.knobs.decay, 0.02, 0.12), level: 1.5 });
+      });
+
+    // Open hat: the same cluster held open — DECAY is the panel knob for it.
+    case "808-ohat":
+      return drumMachineVoice(output, { tune: 0.5, tone: 0.5, colour: 0.5, decay: 0.5 }, (v) => {
+        buildTr808Metal(v, { decay: knobExp(v.knobs.decay, 0.12, 1.1), level: 1.25 });
+      });
+
+    // Hand clap: a band of noise struck three times ~10 ms apart, then the
+    // longer "room" tail — the retrigger is what makes it read as hands.
+    case "808-clap":
+      return drumMachineVoice(output, { tune: 0.5, tone: 0.5, colour: 0.45, decay: 0.4 }, (v) => {
+        const { ctx, bus, knobs, t0, vel } = v;
+        const centre = knobExp(knobs.tune, 700, 1800);
+        const mkBand = () => {
+          const bp = ctx.createBiquadFilter();
+          bp.type = "bandpass";
+          bp.frequency.value = centre;
+          bp.Q.value = knobLin(knobs.tone, 1.2, 4);
+          return bp;
+        };
+        const gap = knobLin(knobs.colour, 0.006, 0.016);   // spacing of the three slaps
+        for (let i = 0; i < 3; i++) {
+          noiseBurst(ctx, bus, { peak: vel * 5.4, decay: 0.01, t0: t0 + i * gap, filters: [mkBand()] });
+        }
+        noiseBurst(ctx, bus, {
+          peak: vel * 4.6, decay: knobExp(knobs.decay, 0.1, 0.6),
+          t0: t0 + 3 * gap, attack: 0.002, filters: [mkBand()],
+        });
+      });
+
+    // Cowbell: two of the cymbal section's square oscillators, 540 and 800 Hz —
+    // a 1.48 ratio, which is what makes it clang rather than ring. The band-pass
+    // has to stay near those fundamentals: park it up on their harmonics and the
+    // bell turns thin and whistly. A gentle high-pass takes the square waves'
+    // boxiness out instead, and the envelope is the 808's hard spike into a tail.
+    case "808-cowbell":
+      return drumMachineVoice(output, { tune: 0.5, tone: 0.5, colour: 0.5, decay: 0.45 }, (v) => {
+        const { ctx, bus, knobs, note, t0, vel } = v;
+        const ratio = knobExp(knobs.tune, 0.7, 1.4);
+        const hp = ctx.createBiquadFilter();
+        hp.type = "highpass";
+        hp.frequency.value = 400;
+        const bp = ctx.createBiquadFilter();
+        bp.type = "bandpass";
+        bp.frequency.value = knobExp(knobs.tone, 900, 2600);   // sits on the fundamentals
+        bp.Q.value = 0.7;                                      // wide: both tones speak
+        hp.connect(bp).connect(bus);
+        const decay = knobExp(knobs.decay, 0.15, 0.9);
+        const vca = ctx.createGain();
+        vca.gain.setValueAtTime(0.0001, t0);
+        vca.gain.exponentialRampToValueAtTime(vel * 0.5, t0 + 0.001);
+        vca.gain.exponentialRampToValueAtTime(vel * 0.25, t0 + 0.04);   // clonk, then tail
+        vca.gain.exponentialRampToValueAtTime(0.0001, t0 + decay);
+        vca.connect(hp);
+        for (const hz of [540, 800]) {
+          const osc = ctx.createOscillator();
+          osc.type = "square";
+          osc.frequency.value = hz * ratio;
+          osc.connect(vca);
+          osc.start(t0);
+          osc.stop(t0 + decay + 0.05);
+        }
+      });
+    // TR-909 bass drum: same bridged-T idea as the 808, but the pitch envelope
+    // sweeps far deeper and faster, and the beater click is a voice of its own —
+    // that click is most of why a 909 kick cuts through where an 808 sits under.
+    // Panel: TUNE, ATTACK, DECAY.
+    case "909-kick":
+      return drumMachineVoice(output, { tune: 0.5, tone: 0.55, colour: 0.3, decay: 0.35 }, (v) => {
+        const { ctx, bus, knobs, note, t0, vel } = v;
+        const base = 50 * Math.pow(2, (note - 36) / 12) * knobExp(knobs.tune, 0.75, 1.5);
+        const decay = knobExp(knobs.decay, 0.1, 0.9);
+        const drive = saturator(ctx, 0.15 + knobs.colour * 0.85);
+        drive.connect(bus);
+        ringSine(ctx, drive, { freq: base, bend: 4.2, bendTime: 0.028, peak: vel, decay, t0 });
+        // Beater: a bandpassed noise crack, level set by ATTACK.
+        const bp = ctx.createBiquadFilter();
+        bp.type = "bandpass";
+        bp.frequency.value = 2400;
+        bp.Q.value = 0.8;
+        noiseBurst(ctx, drive, { peak: vel * knobs.tone * 0.85, decay: 0.006, t0, filters: [bp] });
+      });
+
+    // TR-909 snare: the shells are shorter than the 808's and the noise carries
+    // the sound. TONE opens the noise band, SNAPPY sets how much of it there is.
+    case "909-snare":
+      return drumMachineVoice(output, { tune: 0.5, tone: 0.55, colour: 0.65, decay: 0.35 }, (v) => {
+        const { ctx, bus, knobs, note, t0, vel } = v;
+        const ratio = knobExp(knobs.tune, 0.7, 1.4);
+        const shell = knobLin(knobs.decay, 0.03, 0.12);
+        const snappy = knobs.colour;
+        ringSine(ctx, bus, { freq: 185 * ratio, bend: 1.08, bendTime: 0.006, peak: vel * (1 - snappy * 0.5) * 0.56, decay: shell, t0 });
+        ringSine(ctx, bus, { freq: 330 * ratio, bend: 1.08, bendTime: 0.006, peak: vel * (1 - snappy * 0.5) * 0.4, decay: shell * 0.8, t0 });
+        const hp = ctx.createBiquadFilter();
+        hp.type = "highpass";
+        hp.frequency.value = knobExp(knobs.tone, 500, 6000);
+        noiseBurst(ctx, bus, {
+          peak: vel * (0.3 + snappy * 0.7) * 0.75,
+          decay: knobLin(knobs.decay, 0.06, 0.35),
+          t0, filters: [hp],
+        });
+      });
+
+    // The 909's hats were samples of a real hi-hat, not the 808's oscillator
+    // bank — hence the sizzle. Modelled as the metal cluster with noise mixed in
+    // over the top, which is what separates it from the 808's purer ring.
+    case "909-chat":
+      return drumMachineVoice(output, { tune: 0.5, tone: 0.5, colour: 0.5, decay: 0.3 }, (v) => {
+        build909Metal(v, { decay: knobExp(v.knobs.decay, 0.02, 0.1), level: 0.33 });
+      });
+
+    case "909-ohat":
+      return drumMachineVoice(output, { tune: 0.5, tone: 0.5, colour: 0.5, decay: 0.5 }, (v) => {
+        build909Metal(v, { decay: knobExp(v.knobs.decay, 0.12, 1.2), level: 0.31 });
+      });
+
+    // TR-909 clap: tighter slaps than the 808's and a noisier tail behind them.
+    case "909-clap":
+      return drumMachineVoice(output, { tune: 0.5, tone: 0.5, colour: 0.4, decay: 0.35 }, (v) => {
+        const { ctx, bus, knobs, t0, vel } = v;
+        const centre = knobExp(knobs.tune, 900, 2200);
+        const mkBand = () => {
+          const bp = ctx.createBiquadFilter();
+          bp.type = "bandpass";
+          bp.frequency.value = centre;
+          bp.Q.value = knobLin(knobs.tone, 0.8, 2.5);
+          return bp;
+        };
+        const gap = knobLin(knobs.colour, 0.005, 0.012);
+        for (let i = 0; i < 3; i++) {
+          noiseBurst(ctx, bus, { peak: vel * 1.5, decay: 0.008, t0: t0 + i * gap, filters: [mkBand()] });
+        }
+        const hp = ctx.createBiquadFilter();
+        hp.type = "highpass";
+        hp.frequency.value = centre * 0.6;
+        noiseBurst(ctx, bus, {
+          peak: vel * 1.2, decay: knobExp(knobs.decay, 0.09, 0.5),
+          t0: t0 + 3 * gap, attack: 0.002, filters: [hp],
+        });
+      });
+
     case "303": {
       const s = new Tone.MonoSynth({
         oscillator: { type: "sawtooth" },

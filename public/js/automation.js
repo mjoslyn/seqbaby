@@ -88,6 +88,14 @@ export function voiceAutoKeysForEngine(t) {
     case "dm:granular":   return ["vol", "harm", "timb", "morph", "decay"];
     case "wt:akwf":       return ["vol", "harm", "timb", "morph", "decay"];
   }
+  // 808 / 909 voices: tune / tone / colour / decay all take effect on the next
+  // hit, so per-step automation drives them even with no AudioParam to ramp.
+  if (t.engineKey.startsWith("dm:808-") || t.engineKey.startsWith("dm:909-")) {
+    const noColour = ["dm:808-chat", "dm:808-ohat", "dm:808-cowbell", "dm:909-chat", "dm:909-ohat"];
+    return noColour.includes(t.engineKey)
+      ? ["vol", "harm", "timb", "decay"]
+      : ["vol", "harm", "timb", "morph", "decay"];
+  }
   return ["vol"];
 }
 

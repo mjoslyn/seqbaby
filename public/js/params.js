@@ -34,7 +34,11 @@ export function updatePlaitsControlsVisibility(t) {
   const isProphet6  = t.engineKey === "dm:prophet6";
   const isGranular  = t.engineKey === "dm:granular";
   const isWavetable = t.engineKey === "wt:akwf";
-  const showTimbre = isPlaits || isMiniBrute || isMoog || isJuno || isGuitar || isBass || isRhodes || isProphet6 || isGranular || isWavetable;
+  // The 808 voices are modelled on the machine's circuits, so their sliders are
+  // its panel knobs (see buildDrumSynthNode).
+  const is808 = t.engineKey.startsWith("dm:808-");
+  const is909 = t.engineKey.startsWith("dm:909-");
+  const showTimbre = isPlaits || isMiniBrute || isMoog || isJuno || isGuitar || isBass || isRhodes || isProphet6 || isGranular || isWavetable || is808 || is909;
   const group = t._timbreGroupEl || t.el.querySelector(".sq-param-group--timbre");
   if (group) {
     group.hidden = !showTimbre;
@@ -71,7 +75,54 @@ export function updatePlaitsControlsVisibility(t) {
       ? { harm: "grain",    timb: "dense",  morph: "pos",       decay: "spray" }
       : isWavetable
       ? { harm: "wave",     timb: "warm",   morph: "detune",    decay: "decay" }
+      : t.engineKey === "dm:808-kick"
+      ? { harm: "tune",     timb: "tone",   morph: "drive",     decay: "decay" }
+      : t.engineKey === "dm:808-snare"
+      ? { harm: "tune",     timb: "tone",   morph: "snappy",    decay: "decay" }
+      : t.engineKey === "dm:808-clap"
+      ? { harm: "tune",     timb: "tone",   morph: "spread",    decay: "decay" }
+      : (t.engineKey === "dm:808-chat" || t.engineKey === "dm:808-ohat" || t.engineKey === "dm:808-cowbell")
+      ? { harm: "tune",     timb: "tone",   morph: null,        decay: "decay" }
+      : t.engineKey === "dm:909-kick"
+      ? { harm: "tune",     timb: "attack", morph: "drive",     decay: "decay" }
+      : t.engineKey === "dm:909-snare"
+      ? { harm: "tune",     timb: "tone",   morph: "snappy",    decay: "decay" }
+      : t.engineKey === "dm:909-clap"
+      ? { harm: "tune",     timb: "tone",   morph: "spread",    decay: "decay" }
+      : (t.engineKey === "dm:909-chat" || t.engineKey === "dm:909-ohat")
+      ? { harm: "tune",     timb: "tone",   morph: null,        decay: "decay" }
       : { harm: "harm",     timb: "timb",    morph: "morph",    decay: "decay" };
+    // What the four sliders do varies enough per engine that the label alone
+    // isn't much help — hang an explanation off the ones worth explaining.
+    const tips = isGranular
+      ? {
+          harm: "grain length. Short grains rattle and buzz; long ones overlap into a smooth wash",
+          timb: "grains per second, 8 to 90. Ignored while sync is on — rate takes over",
+          morph: "play position in the sample. Dragging the window in the wave editor sets this too",
+          decay: "diffusion macro: widens the window, loosens the jitter and adds detune, all at once. Leave it at zero if you want a tight, in-tune cloud",
+        }
+      : (is808 || is909)
+      ? {
+          harm: "tuning for this voice. The machines tune only their toms, so this stands in for the trimmer inside — and unlike the kick, these voices ignore the step's note",
+          timb: t.engineKey === "dm:909-kick"
+            ? "level of the beater click on the attack — most of what makes a 909 kick cut through"
+            : t.engineKey.endsWith("-kick")
+            ? "level of the attack click mixed in over the body"
+            : t.engineKey.endsWith("-snare")
+            ? "opens the noise band up, from a dull rasp to a bright crack"
+            : t.engineKey.endsWith("-clap")
+            ? "width of the noise band the slaps are struck through"
+            : "brightness of the filter the metal cluster runs through",
+          morph: t.engineKey.endsWith("-kick")
+            ? "saturation on the way out — pushes the body into soft clipping"
+            : t.engineKey.endsWith("-snare")
+            ? "balance between the noise and the drum shells"
+            : t.engineKey.endsWith("-clap")
+            ? "spacing of the three slaps that make up the clap"
+            : null,
+          decay: "how long the voice rings out",
+        }
+      : null;
     for (const key of Object.keys(labels)) {
       const field = group.querySelector(`.p-${key}`)?.closest(".sq-field");
       if (!field) continue;
@@ -81,12 +132,14 @@ export function updatePlaitsControlsVisibility(t) {
         field.hidden = false;
         const lbl = field.querySelector("label");
         if (lbl) lbl.textContent = labels[key];
+        // Clear a previous engine's tip rather than leaving it behind.
+        field.title = tips?.[key] ?? "";
       }
     }
     // Randomize button only makes sense for Plaits' generic harm/timb/morph/decay —
     // hide it for the analog engines where those sliders do engine-specific things.
     const randBtn = group.querySelector(".track-rand");
-    if (randBtn) randBtn.hidden = isMiniBrute || isMoog || isJuno || isGuitar || isBass || isRhodes || isProphet6 || isGranular || isWavetable;
+    if (randBtn) randBtn.hidden = isMiniBrute || isMoog || isJuno || isGuitar || isBass || isRhodes || isProphet6 || isGranular || isWavetable || is808 || is909;
   }
   // Per-oscillator volume sliders: only shown for the analog mono engines.
   const oscGroup = t._oscMixGroupEl || t.el.querySelector(".sq-param-group--osc-mix");
