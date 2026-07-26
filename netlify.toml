@@ -1,5 +1,10 @@
 [build]
-  command = "next build"
+  # NEXT_PUBLIC_ENGINE_VERSION stamps every engine asset URL with this deploy's
+  # commit SHA (see app/engineAssets.ts), and stamp-engine-assets.mjs copies the
+  # assets to the matching public/e/<sha>/ path. Netlify sets COMMIT_REF for us;
+  # when it's absent (a plain local `next build`) both steps no-op and assets
+  # stay at their bare paths, which is exactly the old behaviour.
+  command = "export NEXT_PUBLIC_ENGINE_VERSION=$COMMIT_REF && node scripts/stamp-engine-assets.mjs && next build"
   publish = ".next"
 
 [build.environment]
@@ -11,3 +16,27 @@
 # routes App Router route handlers (e.g. /api/share) to Netlify Functions.
 [[plugins]]
   package = "@netlify/plugin-nextjs"
+
+# ---------------------------------------------------------------------------
+# Versioned engine assets
+#
+# The engine is 33 unbundled ES modules plus woscillators.js and style.css, all
+# served from public/ at stable paths. That combination made long caching unsafe:
+# a browser could pair a fresh main.js with a stale voices.js after a deploy, and
+# a 33-module engine is the worst possible place for that kind of version skew.
+# So everything was `max-age=0, must-revalidate`, and every repeat visit paid
+# ~35 revalidation round trips before the engine could boot.
+#
+# The build now also publishes those assets under /e/<commit-sha>/, giving each
+# deploy its own URL namespace over identical bytes. A page load can only ever
+# mix assets from one deploy, so skew is unrepresentable — which is what makes
+# `immutable` safe here. A new deploy means new URLs, so nothing has to expire,
+# and repeat visits within a deploy make zero requests.
+#
+# Bare /js/* etc. are still published and keep Netlify's default
+# revalidate-always headers, so anything loading unversioned URLs can't get
+# stuck on a stale copy for a year.
+[[headers]]
+  for = "/e/*"
+  [headers.values]
+    cache-control = "public, max-age=31536000, immutable"

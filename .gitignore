@@ -7,3 +7,6 @@ next-env.d.ts
 dist/
 *.tsbuildinfo
 .claude/settings.local.json
+# Build-time copies of the engine assets at their version-stamped paths,
+# produced by scripts/stamp-engine-assets.mjs.
+public/e/

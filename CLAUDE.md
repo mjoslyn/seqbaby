@@ -372,3 +372,35 @@ patterns.
 
 Push to `main`; Netlify auto-deploys (`@netlify/plugin-nextjs`, Node 22).
 Repo: https://github.com/mjoslyn/seqbaby.
+
+### Engine asset loading (load-bearing — see also "Audio start / unlock")
+
+- `app/EngineScripts.tsx` server-renders the Tone → woscillators → main.js
+  script tags into the document so the parser starts them immediately, rather
+  than injecting them after React hydrates. It uses `dangerouslySetInnerHTML`
+  **deliberately**: the parser executes those scripts on a fresh page load
+  (`defer` + document order honoured), while React's innerHTML assignment on a
+  client-side navigation never does — so React can't insert them unordered.
+  An inline marker (`window.__seqbabyServerBoot`) tells the paths apart, and
+  `ScriptLoader.tsx` keeps its onload-chained injection for the soft-nav case
+  (e.g. arriving from `/login`).
+- `app/EnginePreload.tsx` emits `modulepreload` for all 33 modules listed in
+  `app/engineAssets.ts`. The graph is 8 levels deep, so without it the browser
+  needs up to eight sequential round trips just to discover the code.
+  **Adding or removing a module in `public/js/` means updating that list** —
+  there's a regeneration one-liner in the file's comment.
+- The account bar is behind `<Suspense>` in `app/page.tsx`. Don't await
+  Supabase in the page body again: it blocks the whole document, including the
+  preload hints, on two sequential round trips.
+- **Asset versioning**: Netlify's build exports
+  `NEXT_PUBLIC_ENGINE_VERSION=$COMMIT_REF`, and
+  `scripts/stamp-engine-assets.mjs` publishes `public/js`, `woscillators.js`
+  and `style.css` under `public/e/<sha>/` (gitignored). `engineAsset()` in
+  `app/engineAssets.ts` points every URL at that prefix, and the prefix
+  propagates through the module graph for free because relative specifiers
+  resolve against the importing module's URL. That's why the version is a path
+  and not a `?query` — a query is dropped during that resolution and would
+  reach only `main.js`. Per-deploy URLs are what make the `immutable`
+  cache-control in `netlify.toml` safe on an unbundled 33-module engine.
+  Unset locally, so `npm run dev` and a plain `next build` keep the bare paths
+  and the edit-and-reload loop.

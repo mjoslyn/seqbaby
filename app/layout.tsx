@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { STYLE_SRC } from "./engineAssets";
 
 export const metadata: Metadata = {
   title: "seqbaby",
@@ -56,8 +57,9 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <head>
         {/* The engine's global stylesheet — plain CSS served from public/, kept
-            out of the bundler pipeline (same as the original index.html). */}
-        <link rel="stylesheet" href="/style.css" />
+            out of the bundler pipeline (same as the original index.html).
+            Version-prefixed so it can be cached immutably; see engineAssets. */}
+        <link rel="stylesheet" href={STYLE_SRC} />
       </head>
       <body suppressHydrationWarning>{children}</body>
     </html>
