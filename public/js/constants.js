@@ -32,6 +32,8 @@ export const LFO_KEYS = [
   "phaser_depth",
   "pitch_semi",
   "reverb_decay",
+  // Wavetable wave-scan window (setter-driven too — the scan config isn't an AudioParam).
+  "wt_scan_start", "wt_scan_range",
 ];
 // How much each target swings per unit of depth:
 //  - 0..1 unit params: amp = depth/2 (swings ±0.5)
@@ -56,6 +58,7 @@ export const LFO_LABELS = {
   phaser_rate: "phaser rate", phaser_depth: "phaser depth",
   flanger_rate: "flanger rate", flanger_fbk: "flanger fbk",
   pitch_semi: "pitch semi",
+  wt_scan_start: "wave scan start", wt_scan_range: "wave scan range",
   delay_time: "delay time", delay_fbk: "delay fbk",
   reverb_decay: "reverb decay",
 };

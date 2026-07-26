@@ -19,7 +19,7 @@ export function currentBpm() { return Number(document.getElementById("bpm").valu
 
 /** Default wave-scan config for the wavetable synth (see WavetableVoice.setScan). */
 export function defaultWavetableScan() {
-  return { enabled: false, rate: 0.5, sync: true, div: 1, dir: "up", start: 0, range: 1 };
+  return { enabled: false, rate: 0.5, sync: true, div: 1, dir: "up", start: 0, range: 1, retrig: false };
 }
 
 /** Push a track's wavetable wave-scan config down to its voice (resolving bpm-sync to Hz). */
@@ -197,11 +197,15 @@ export const SETTER_LFO_KEYS = new Set([
   "shaper_amt",
   "autowah_sens","autowah_range",
   "phaser_depth","chorus_depth","pitch_semi","reverb_decay",
+  "wt_scan_start","wt_scan_range",
 ]);
 
 // Read the user's current 0..1 base value for a setter LFO target so the LFO
 // swings AROUND that value instead of overwriting it.
 export function setterLfoBase(t, key) {
+  // Wave-scan window lives on the track's wavetable config, not the fx rack.
+  if (key === "wt_scan_start") return t.wavetable?.scan?.start ?? 0;
+  if (key === "wt_scan_range") return t.wavetable?.scan?.range ?? 1;
   const c = t.fxRack?.config;
   if (!c) return 0.5;
   switch (key) {
@@ -223,9 +227,16 @@ export function setterLfoBase(t, key) {
 // directly WITHOUT updating rack.config — the user's slider value remains the
 // stored base, and the slider's onInput keeps writing config on user moves.
 export function applySetterLfoValue(t, key, v) {
+  v = Math.max(0, Math.min(1, v));
+  // The wave scan reads its window off the voice's own live scan object, so the
+  // modulation moves the sweep without disturbing the stored slider values.
+  if (key === "wt_scan_start" || key === "wt_scan_range") {
+    const sc = t.voice?.scan;
+    if (sc) sc[key === "wt_scan_start" ? "start" : "range"] = v;
+    return;
+  }
   const rack = t.fxRack;
   if (!rack) return;
-  v = Math.max(0, Math.min(1, v));
   switch (key) {
     case "vinyl_wow": {
       const base = 0.005, span = 0.0008 + v * 0.006;
@@ -327,6 +338,8 @@ export function canModulate(t, key) {
   // Always-applicable: track-level fx + master vol + filter.
   if (key === "vol" || key === "cutoff" || key === "reson") return true;
   if (TRACK_FX_LFO_KEYS.has(key)) return true;
+  // Wave-scan window — wavetable engine only.
+  if (key === "wt_scan_start" || key === "wt_scan_range") return t.engineKey === "wt:akwf";
   const eng = engineByKey(t.engineKey);
   if (!eng) return false;
   // Plaits exposes harm/timb/morph/decay as voice params.
@@ -364,7 +377,7 @@ export function syncLFO(t, key) {
       if (t._setterLfoPhase && t._setterLfoPhase[key] != null) {
         delete t._setterLfoPhase[key];
         // restore base value to the audio graph so the param stops where the slider sits
-        if (t.fxRack) applySetterLfoValue(t, key, setterLfoBase(t, key));
+        applySetterLfoValue(t, key, setterLfoBase(t, key));   // no-ops safely without a rack
       }
       return;
     }

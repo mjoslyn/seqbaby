@@ -49,9 +49,10 @@ export function serializeSet() {
       fxConfig: JSON.parse(JSON.stringify(t.fxConfig)),
       midi: { ...t.midi },
       customConfig: t.customConfig ? JSON.parse(JSON.stringify(t.customConfig)) : null,
-      wavetable: (t.wavetable?.frames?.length || t.wavetable?.scan) ? {
+      wavetable: (t.wavetable?.frames?.length || t.wavetable?.scan || t.wavetable?.unison != null) ? {
         frames: (t.wavetable.frames || []).map(f => Array.from(f, x => Math.round(x * 1e4) / 1e4)),
         scan: t.wavetable.scan ? { ...t.wavetable.scan } : undefined,
+        unison: t.wavetable.unison ?? undefined,
       } : null,
       sampleSource: t.sampleSource ? { ...t.sampleSource } : null,
       slices: Array.isArray(t.slices) ? t.slices.slice() : [],
@@ -353,9 +354,10 @@ export function applySet(s) {
     Object.assign(t.fxConfig, td.fxConfig || {});
     Object.assign(t.midi, td.midi || {});
     t.customConfig = td.customConfig || null;
-    t.wavetable = (td.wavetable?.frames?.length || td.wavetable?.scan) ? {
+    t.wavetable = (td.wavetable?.frames?.length || td.wavetable?.scan || td.wavetable?.unison != null) ? {
       frames: td.wavetable.frames?.length ? td.wavetable.frames.map(f => Array.from(f)) : [],
       scan: td.wavetable.scan || undefined,
+      unison: td.wavetable.unison ?? undefined,
     } : null;
     t.sampleSource = src;
     t.uploadAudio = uploadAudio;

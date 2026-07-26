@@ -26,6 +26,10 @@ export const AUTOMATION_TARGETS = {
   "cutoff":        { label: "filter cutoff" },
   "reson":         { label: "filter reson" },
   // fx wets / amounts
+  // wavetable wave-scan window (wavetable engine only — see canAutomate)
+  "wt.scan.start":      { label: "wave scan start" },
+  "wt.scan.range":      { label: "wave scan range" },
+  // fx
   "fx.vinyl":           { label: "vinyl amt" },
   "fx.vinyl.warmth":    { label: "vinyl warmth" },
   "fx.vinyl.wow":       { label: "vinyl wow" },
@@ -89,6 +93,7 @@ export function voiceAutoKeysForEngine(t) {
 
 export function canAutomate(t, key) {
   if (key === "cutoff" || key === "reson") return true;
+  if (key.startsWith("wt.scan.")) return t.engineKey === "wt:akwf";
   if (key.startsWith("fx.")) return true;
   if (VOICE_AUTO_KEYS.includes(key)) return voiceAutoKeysForEngine(t).includes(key);
   return false;
@@ -138,22 +143,31 @@ export function applyAutomationAtStep(t, key, v, time, vNext, stepDur) {
     ramp(t.filterNode?.Q, resonToQ(vv), resonToQ(vn));
     return;
   }
+  // Wave-scan window: no AudioParam behind it, so write the voice's live scan
+  // object directly (the stored slider values stay untouched).
+  if (key === "wt.scan.start" || key === "wt.scan.range") {
+    const sc = t.voice?.scan;
+    if (sc) sc[key === "wt.scan.start" ? "start" : "range"] = vv;
+    return;
+  }
   const rack = t.fxRack;
   if (!rack || !key.startsWith("fx.")) return;
 
   switch (key) {
     // ── top-level wet/amt targets (crossfade fx: ramp both dry+wet) ──
     case "fx.vinyl":
-      rack.config.vinyl.amount = vv;
+      // applyVinyl also moves the tone/warble with the amount; the ramps then
+      // smooth the gains across the step.
+      rack.applyVinyl({ amount: vv });
       ramp(rack.vinylWetBus?.gain, vv, vn);
       ramp(rack.vinylDryBus?.gain, 1 - vv, 1 - vn);
-      ramp(rack.vinylNoiseGain?.gain, vv * 0.45, vn * 0.45);
+      ramp(rack.vinylNoiseGain?.gain, vv * vv * 0.12, vn * vn * 0.12);
       return;
     case "fx.cassette":
-      rack.config.cassette.amount = vv;
+      rack.applyCassette({ amount: vv });
       ramp(rack.cassetteWetBus?.gain, vv, vn);
       ramp(rack.cassetteDryBus?.gain, 1 - vv, 1 - vn);
-      ramp(rack.cassetteHissGain?.gain, vv * 0.18, vn * 0.18);
+      ramp(rack.cassetteHissGain?.gain, vv * vv * 0.09, vn * vn * 0.09);
       return;
     case "fx.fuzz":
       rack.config.fuzz.amount = vv;

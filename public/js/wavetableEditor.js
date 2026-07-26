@@ -76,11 +76,32 @@ function resampleToN(data) {
   return normalize(out);
 }
 
+/**
+ * The single cycle the voice is playing right now, taken from the AKWF palette
+ * at its current wave position. Used to seed a brand-new table so opening the
+ * editor doesn't change what you were already hearing.
+ */
+function currentVoiceWave(t) {
+  const v = t.voice;
+  const bufs = (v?.type === "wavetable" && Array.isArray(v.buffers)) ? v.buffers.filter(Boolean) : null;
+  if (!bufs?.length) return null;
+  const idx = Math.min(bufs.length - 1, Math.max(0, Math.round((v.wavePos ?? 0) * (bufs.length - 1))));
+  const data = bufs[idx]?.getChannelData?.(0);
+  if (!data?.length) return null;
+  return data.length === N ? Float32Array.from(data) : resampleToN(data);
+}
+
 function ensureFrames(t) {
   const scan = t.wavetable?.scan;
+  const unison = t.wavetable?.unison;
   if (!t.wavetable || !Array.isArray(t.wavetable.frames) || !t.wavetable.frames.length) {
-    // Seed a starter table so there's something to morph across (keep any scan config).
-    t.wavetable = { frames: BASIC.map(basicWave).map(f => Array.from(f)), scan };
+    // Seed the table with the wave the track is currently playing, so opening the
+    // editor is silent — a custom table replaces the AKWF palette the moment it
+    // exists, and seeding generic shapes here changed the patch just by looking
+    // at it. Falls back to a sine when the voice hasn't loaded a palette yet.
+    // (Keep any scan config + unison setting.)
+    const seed = currentVoiceWave(t) || basicWave("sine");
+    t.wavetable = { frames: [Array.from(seed)], scan, unison };
   }
   // Ensure Float32Array-friendly numeric arrays of length N.
   t.wavetable.frames = t.wavetable.frames.map(f => {
@@ -123,6 +144,18 @@ export function openWavetableEditor(t) {
     </div>
     <canvas class="sq-wt__canvas" width="640" height="200"></canvas>
     <div class="sq-wt__harm"></div>
+    <div class="sq-wt__uni">
+      <label class="sq-wt__uni-wrap">unison
+        <select class="sq-wt__uni-count" title="voices stacked per note — how far apart they are tuned is set by the track's detune slider">
+          <option value="1">off</option>
+          <option value="2" selected>2 voices</option>
+          <option value="3">3 voices</option>
+          <option value="5">5 voices</option>
+          <option value="7">7 voices</option>
+        </select>
+      </label>
+      <span class="sq-wt__uni-hint">spread set by the track's detune slider</span>
+    </div>
     <div class="sq-wt__scan">
       <label class="sq-wt__scan-en-wrap"><input type="checkbox" class="sq-wt__scan-en" /> <span>wave scan</span></label>
       <div class="sq-wt__scan-ctl">
@@ -135,6 +168,7 @@ export function openWavetableEditor(t) {
           </select>
         </label>
         <label class="sq-wt__scan-sync-wrap"><input type="checkbox" class="sq-wt__scan-sync" /> sync</label>
+        <label class="sq-wt__scan-retrig-wrap" title="restart the sweep from its start position on every note (off = one free-running sweep every note joins mid-flight)"><input type="checkbox" class="sq-wt__scan-retrig" /> retrig</label>
         <label class="sq-wt__scan-rate-wrap">speed
           <input type="range" class="sq-wt__scan-rate" min="0.01" max="8" step="0.01" value="0.5" />
         </label>
@@ -272,11 +306,21 @@ export function openWavetableEditor(t) {
 
   const refresh = () => { drawFrame(); syncHarmSlidersFromFrame(); renderFrameStrip(); };
 
+  // ---- unison (voices per note; the track's detune slider sets the spread) ----
+  const uniSel = modal.querySelector(".sq-wt__uni-count");
+  if (t.wavetable.unison == null) t.wavetable.unison = 2;
+  uniSel.value = String(t.wavetable.unison);
+  uniSel.addEventListener("change", () => {
+    t.wavetable.unison = Number(uniSel.value) || 1;
+    if (t.voice?.setUnison) t.voice.setUnison(t.wavetable.unison);
+  });
+
   // ---- wave-scan modulator (auto-cycles the table position over time) ----
   const scan = (t.wavetable.scan = t.wavetable.scan || defaultWavetableScan());
   const scanEn    = modal.querySelector(".sq-wt__scan-en");
   const scanDir   = modal.querySelector(".sq-wt__scan-dir");
   const scanSync  = modal.querySelector(".sq-wt__scan-sync");
+  const scanRetrig = modal.querySelector(".sq-wt__scan-retrig");
   const scanRate  = modal.querySelector(".sq-wt__scan-rate");
   const scanDiv    = modal.querySelector(".sq-wt__scan-div");
   const scanStart = modal.querySelector(".sq-wt__scan-start");
@@ -288,6 +332,7 @@ export function openWavetableEditor(t) {
     scanEn.checked   = !!scan.enabled;
     scanDir.value    = scan.dir || "up";
     scanSync.checked = !!scan.sync;
+    scanRetrig.checked = !!scan.retrig;
     scanRate.value   = String(scan.rate ?? 0.5);
     scanDiv.value    = String(scan.div ?? 1);
     scanStart.value  = String(scan.start ?? 0);
@@ -300,6 +345,7 @@ export function openWavetableEditor(t) {
   scanEn.addEventListener("change",    () => { scan.enabled = scanEn.checked; syncScanUI(); pushScan(); });
   scanDir.addEventListener("change",   () => { scan.dir = scanDir.value; pushScan(); });
   scanSync.addEventListener("change",  () => { scan.sync = scanSync.checked; syncScanUI(); pushScan(); });
+  scanRetrig.addEventListener("change", () => { scan.retrig = scanRetrig.checked; pushScan(); });
   scanRate.addEventListener("input",   () => { scan.rate = Number(scanRate.value); pushScan(); });
   scanDiv.addEventListener("change",   () => { scan.div = Number(scanDiv.value); pushScan(); });
   scanStart.addEventListener("input",  () => { scan.start = Number(scanStart.value); pushScan(); });
@@ -308,7 +354,7 @@ export function openWavetableEditor(t) {
 
   const close = () => {
     // persist as plain numeric arrays (keep the scan config alongside the frames)
-    t.wavetable = { frames: frames.map(f => Array.from(f)), scan: t.wavetable.scan };
+    t.wavetable = { frames: frames.map(f => Array.from(f)), scan: t.wavetable.scan, unison: t.wavetable.unison };
     pushToVoice(t);
     applyWavetableScan(t);
     overlay.remove();

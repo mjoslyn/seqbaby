@@ -1277,6 +1277,10 @@ body.kbd-recording .sq-track.is-kbd-active { border-color: #e5484d; box-shadow: 
 .sq-wt__canvas { width: 100%; height: auto; border: 1px solid var(--border); border-radius: 6px; background: #0e0f12; touch-action: none; cursor: crosshair; }
 .sq-wt__harm { display: flex; align-items: flex-end; justify-content: space-between; gap: 4px; height: 60px; width: 100%; }
 .sq-wt__harm-bar { -webkit-appearance: slider-vertical; writing-mode: vertical-lr; flex: 1 1 0; min-width: 0; width: auto; height: 56px; }
+.sq-wt__uni { display: flex; align-items: center; gap: 10px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 12px; color: var(--fg); }
+.sq-wt__uni-wrap { display: flex; align-items: center; gap: 6px; }
+.sq-wt__uni select { font-size: 11px; padding: 2px 4px; }
+.sq-wt__uni-hint { font-size: 11px; color: var(--fg-dim); }
 .sq-wt__scan { display: flex; flex-direction: column; gap: 8px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; }
 .sq-wt__scan-en-wrap { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--fg); cursor: pointer; }
 .sq-wt__scan-ctl { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 11px; color: var(--fg-dim); }

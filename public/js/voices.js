@@ -1672,7 +1672,12 @@ export class WavetableVoice {
     this.params = { ...params };
     this.wavePos = 0;     // 0..1 index into the table (harm)
     this.warm = 0.7;      // lowpass amount (timb)
-    this.detune = 0;      // unison detune (morph)
+    this.detune = 0;      // unison detune spread (the "detune" slider = morph param)
+    // Unison voice count. Each note plays this many copies of the wave, spread
+    // symmetrically across ±detune cents — 1 is a single clean voice, higher
+    // counts thicken it supersaw-style. Level is compensated so stacking voices
+    // doesn't just get louder.
+    this.unison = 2;
     this.ampDecay = 0.3;  // (unused directly; kept for parity)
     this.ampRelease = 0.3;
     this.buffers = null;
@@ -1682,15 +1687,39 @@ export class WavetableVoice {
     // Wave-scan modulator: automatically sweeps the table position over time so
     // the timbre cycles through the frames. null when off. See setScan().
     this.scan = null;
-    this.scanPhase = 0;      // advances at scan.hz cycles/sec
+    this.scanPhase = 0;      // advances at scan.hz cycles/sec (free-running)
     this.scanPos = 0;        // resolved 0..1 table position
     this._scanRaf = null;
     this._scanRecs = new Set();  // per-note morph records (frame crossfader)
-    this._randCycle = -1; this._randFrom = 0; this._randTo = 0;
+    // Interpolation state for the "random" direction — one per independent
+    // sweep: the shared free-running one, plus a private one per retriggered note.
+    this._rand = { cycle: -1, from: 0, to: 0 };
     this._held = new Map();  // midi -> [handle] for keyboard gate (noteOn/noteOff)
     loadWavetable(ctx).then(b => { this.buffers = b; }).catch(e => console.warn("wavetable load", e));
     if (track?.wavetable?.frames?.length) this.setWavetable(track.wavetable.frames);
+    if (track?.wavetable?.unison != null) this.setUnison(track.wavetable.unison);
     this._applyParams();
+  }
+  /** Set the unison voice count (1–7). */
+  setUnison(n) {
+    this.unison = Math.max(1, Math.min(7, Math.round(Number(n) || 1)));
+  }
+  /**
+   * Per-voice detune offsets in cents for one note, spread evenly across the
+   * unison stack (…−d, 0, +d…), plus the gain each copy gets so the stack sums
+   * to roughly the level of a single voice.
+   */
+  _unisonSpread() {
+    const n = Math.max(1, this.unison | 0);
+    const cents = this.detune * this.detune * 30;   // "detune" slider → up to ±30 cents
+    const offsets = [];
+    for (let u = 0; u < n; u++) offsets.push(n === 1 ? 0 : ((u / (n - 1)) * 2 - 1) * cents);
+    // Gain compensation depends on how correlated the copies are: at zero detune
+    // they're identical and sum coherently (1/n keeps the level), and by a few
+    // cents apart they drift out of phase and sum like noise (1/√n). Anything
+    // fixed would make the stack jump in level as the detune knob leaves zero.
+    const decorrelated = Math.min(1, cents / 6);
+    return { offsets, gain: 1 / Math.pow(n, 0.5 + 0.5 * (1 - decorrelated)) };
   }
   /** The frame buffers the scan sweeps across: custom table if built, else AKWF palette. */
   _frameList() {
@@ -1700,7 +1729,7 @@ export class WavetableVoice {
   }
   /**
    * Configure (or clear) the wave-scan modulator.
-   * @param {?{enabled:boolean,dir:string,start:number,range:number}} cfg
+   * @param {?{enabled:boolean,dir:string,start:number,range:number,retrig:boolean}} cfg
    * @param {number} hz cycles per second (resolved from rate or bpm-sync by the caller)
    */
   setScan(cfg, hz) {
@@ -1716,27 +1745,34 @@ export class WavetableVoice {
       dir: cfg.dir || "up",
       start: clamp01(cfg.start ?? 0),
       range: clamp01(cfg.range ?? 1),
+      retrig: !!cfg.retrig,
     };
     this.scanPos = this._scanPosition();
     this._startScanLoop();
   }
-  /** Resolve the current 0..1 table position from scanPhase + direction. */
-  _scanPosition() {
+  /**
+   * Resolve a 0..1 table position from a sweep phase + direction.
+   * @param {number} [phase] sweep phase in cycles — the free-running one by
+   *   default, or a note's own (retriggered) phase.
+   * @param {{cycle:number,from:number,to:number}} [rand] that sweep's "random"
+   *   interpolation state, so retriggered notes pick their own targets.
+   */
+  _scanPosition(phase = this.scanPhase, rand = this._rand) {
     const sc = this.scan;
     if (!sc) return this.scanPos;
-    const r = this.scanPhase - Math.floor(this.scanPhase);  // 0..1 within this cycle
+    const r = phase - Math.floor(phase);  // 0..1 within this cycle
     let s;
     switch (sc.dir) {
       case "down":   s = 1 - r; break;
       case "updown": s = r < 0.5 ? r * 2 : 2 - r * 2; break;
       case "random": {
-        const cyc = Math.floor(this.scanPhase);
-        if (cyc !== this._randCycle) {
-          this._randCycle = cyc;
-          this._randFrom = this._randTo;
-          this._randTo = Math.random();
+        const cyc = Math.floor(phase);
+        if (cyc !== rand.cycle) {
+          rand.cycle = cyc;
+          rand.from = rand.to;
+          rand.to = Math.random();
         }
-        s = this._randFrom + (this._randTo - this._randFrom) * r;
+        s = rand.from + (rand.to - rand.from) * r;
         break;
       }
       default: s = r;  // up
@@ -1744,6 +1780,21 @@ export class WavetableVoice {
     let pos = sc.start + s * sc.range;
     pos -= Math.floor(pos);  // wrap into 0..1 so it keeps cycling
     return pos;
+  }
+  /**
+   * A note's own scan sweep state. With retrig off every note shares the
+   * free-running sweep (phase offset 0); with it on the note zeroes its phase at
+   * note-on, so each hit starts the sweep from the scan's start position.
+   */
+  _newScanSweep() {
+    return this.scan?.retrig
+      ? { phase0: this.scanPhase, rand: { cycle: -1, from: 0, to: 0 } }
+      : { phase0: 0, rand: this._rand };
+  }
+  /** Advance a note record's resolved table position from the current phase. */
+  _updateRecPos(rec) {
+    rec.pos = this._scanPosition(this.scanPhase - (rec.phase0 || 0), rec.rand || this._rand);
+    return rec.pos;
   }
   _startScanLoop() {
     if (this._scanRaf != null) return;
@@ -1754,7 +1805,7 @@ export class WavetableVoice {
       if (this.scan?.enabled) {
         this.scanPhase += dt * this.scan.hz;
         this.scanPos = this._scanPosition();
-        for (const rec of this._scanRecs) this._applyScanToRec(rec, now);
+        for (const rec of this._scanRecs) { this._updateRecPos(rec); this._applyScanToRec(rec, now); }
       }
       this._pruneScanRecs(now);   // keep pruning even when off so ringing notes drain
       this._scanRaf = (this.scan?.enabled || this._scanRecs.size) ? requestAnimationFrame(tick) : null;
@@ -1764,35 +1815,48 @@ export class WavetableVoice {
   _stopScanLoop() {
     if (this._scanRaf != null) { try { cancelAnimationFrame(this._scanRaf); } catch {} this._scanRaf = null; }
   }
-  /** Create a phase-aligned looping source for one frame of a morph record. */
+  /** Create the phase-aligned looping source(s) for one frame of a morph record. */
   _makeFrameSlot(rec, idx, now, initGain) {
     const buf = rec.frames[idx];
     if (!buf || !(buf.duration > 0)) return null;
-    const src = this.ctx.createBufferSource();
-    src.buffer = buf; src.loop = true; src.loopStart = 0; src.loopEnd = buf.duration;
-    src.playbackRate.value = rec.targetFreq * buf.duration;   // loop at the note's pitch
     const gain = this.ctx.createGain();
     gain.gain.value = Math.max(0, initGain || 0);
-    src.connect(gain); gain.connect(rec.mix);
+    gain.connect(rec.mix);
     const startAt = Math.max(now, rec.t0);
     // Align to the note's global loop phase so frames sum without comb filtering.
     const phase = (startAt - rec.t0) * rec.targetFreq;
     const offset = (phase - Math.floor(phase)) * buf.duration;
-    try { src.start(startAt, offset); } catch { try { src.start(startAt); } catch {} }
-    if (Number.isFinite(rec.stopAt)) { try { src.stop(rec.stopAt); } catch {} }  // held notes stop on release
-    const slot = { src, gain, idx, retireAt: null };
-    src.onended = () => {
-      try { src.disconnect(); } catch {}
+    // One source per unison voice, all sharing this frame's crossfade gain.
+    const { offsets, gain: uniGain } = rec.unison || { offsets: [0], gain: 1 };
+    const srcs = [];
+    for (const cents of offsets) {
+      const src = this.ctx.createBufferSource();
+      src.buffer = buf; src.loop = true; src.loopStart = 0; src.loopEnd = buf.duration;
+      src.playbackRate.value = rec.targetFreq * buf.duration;   // loop at the note's pitch
+      src.detune.value = cents;
+      if (uniGain !== 1) {
+        const ug = this.ctx.createGain();
+        ug.gain.value = uniGain;
+        src.connect(ug); ug.connect(gain);
+      } else src.connect(gain);
+      try { src.start(startAt, offset); } catch { try { src.start(startAt); } catch {} }
+      if (Number.isFinite(rec.stopAt)) { try { src.stop(rec.stopAt); } catch {} }  // held notes stop on release
+      srcs.push(src);
+    }
+    if (!srcs.length) { try { gain.disconnect(); } catch {} return null; }
+    const slot = { src: srcs[0], srcs, gain, idx, retireAt: null };
+    srcs[0].onended = () => {
+      for (const s of srcs) { try { s.disconnect(); } catch {} }
       try { gain.disconnect(); } catch {}
       if (rec.slots.get(idx) === slot) rec.slots.delete(idx);
     };
     rec.slots.set(idx, slot);
     return slot;
   }
-  /** Set each frame's crossfade gain for one note record from the current scanPos. */
+  /** Set each frame's crossfade gain for one note record from its scan position. */
   _applyScanToRec(rec, now) {
     const n = rec.n;
-    const fp = Math.max(0, Math.min(1, this.scanPos)) * (n - 1);
+    const fp = Math.max(0, Math.min(1, rec.pos ?? this.scanPos)) * (n - 1);
     const i0 = Math.floor(fp), i1 = Math.min(n - 1, i0 + 1), frac = fp - i0;
     const targets = new Map();
     targets.set(i0, 1 - frac);
@@ -1818,13 +1882,12 @@ export class WavetableVoice {
       for (const [, slot] of rec.slots) {
         if (slot.retireAt != null && now >= slot.retireAt) {
           slot.retireAt = null;
-          try { slot.src.stop(now); } catch {}   // onended disconnects + removes the slot
+          for (const sc of slot.srcs) { try { sc.stop(now); } catch {} }   // onended disconnects + removes the slot
         }
       }
       if (now >= rec.stopAt + 0.06) {
         for (const [, slot] of rec.slots) {
-          try { slot.src.stop(); } catch {}
-          try { slot.src.disconnect(); } catch {}
+          for (const sc of slot.srcs) { try { sc.stop(); } catch {} try { sc.disconnect(); } catch {} }
           try { slot.gain.disconnect(); } catch {}
         }
         rec.slots.clear();
@@ -1923,18 +1986,21 @@ export class WavetableVoice {
     }
     tail.connect(this.output);
     const stopAt = relStart + this.ampRelease + 0.02;
-    const detCents = this.detune * this.detune * 30;             // up to ±30 cents
-    const voicesN = this.detune > 0.01 ? 2 : 1;
+    const { offsets, gain: uniGain } = this._unisonSpread();
     const srcs = [];
-    for (let u = 0; u < voicesN; u++) {
+    for (const cents of offsets) {
       const src = this.ctx.createBufferSource();
       src.buffer = buf;
       src.loop = true;
       src.loopStart = 0;
       src.loopEnd = buf.duration;
       src.playbackRate.value = rate;
-      if (voicesN === 2) src.detune.value = u === 0 ? -detCents : detCents;
-      src.connect(amp);
+      src.detune.value = cents;
+      if (uniGain !== 1) {
+        const g = this.ctx.createGain();
+        g.gain.value = uniGain;
+        src.connect(g); g.connect(amp);
+      } else src.connect(amp);
       src.start(t0);
       src.stop(stopAt);
       srcs.push(src);
@@ -1981,8 +2047,9 @@ export class WavetableVoice {
     mix.gain.value = 1;
     mix.connect(amp);
     const stopAt = relStart + this.ampRelease + 0.02;
-    const rec = { frames, n: frames.length, targetFreq, t0, amp, filt, mix, stopAt, slots: new Map() };
+    const rec = { frames, n: frames.length, targetFreq, t0, amp, filt, mix, stopAt, slots: new Map(), unison: this._unisonSpread(), ...this._newScanSweep() };
     this._scanRecs.add(rec);
+    this._updateRecPos(rec);
     this._applyScanToRec(rec, t0);   // seed the initial frame pair so sound starts immediately
     this._startScanLoop();
   }
@@ -2018,15 +2085,18 @@ export class WavetableVoice {
       tail = filt;
     }
     tail.connect(this.output);
-    const detCents = this.detune * this.detune * 30;
-    const voicesN = this.detune > 0.01 ? 2 : 1;
+    const { offsets, gain: uniGain } = this._unisonSpread();
     const srcs = [];
-    for (let u = 0; u < voicesN; u++) {
+    for (const cents of offsets) {
       const src = this.ctx.createBufferSource();
       src.buffer = buf; src.loop = true; src.loopStart = 0; src.loopEnd = buf.duration;
       src.playbackRate.value = rate;
-      if (voicesN === 2) src.detune.value = u === 0 ? -detCents : detCents;
-      src.connect(amp);
+      src.detune.value = cents;
+      if (uniGain !== 1) {
+        const g = this.ctx.createGain();
+        g.gain.value = uniGain;
+        src.connect(g); g.connect(amp);
+      } else src.connect(amp);
       src.start(t0);
       srcs.push(src);
     }
@@ -2056,8 +2126,9 @@ export class WavetableVoice {
     mix.gain.value = 1;
     mix.connect(amp);
     // stopAt Infinity → frame sources loop open-endedly; release() sets it finite.
-    const rec = { frames, n: frames.length, targetFreq, t0, amp, filt, mix, stopAt: Infinity, slots: new Map() };
+    const rec = { frames, n: frames.length, targetFreq, t0, amp, filt, mix, stopAt: Infinity, slots: new Map(), unison: this._unisonSpread(), ...this._newScanSweep() };
     this._scanRecs.add(rec);
+    this._updateRecPos(rec);
     this._applyScanToRec(rec, t0);
     this._startScanLoop();
     this._addHeld(midiNote, { rec, released: false });
@@ -2096,7 +2167,7 @@ export class WavetableVoice {
     } catch {}
     const stopAt = now + this.ampRelease + 0.02;
     rec.stopAt = stopAt;                                   // let _pruneScanRecs finalize it
-    for (const [, slot] of rec.slots) { try { slot.src.stop(stopAt); } catch {} }
+    for (const [, slot] of rec.slots) for (const sc of slot.srcs) { try { sc.stop(stopAt); } catch {} }
     this._startScanLoop();
   }
   silence(now) {
@@ -2104,7 +2175,7 @@ export class WavetableVoice {
     for (const rec of this.active) { for (const s of rec.srcs) { try { s.stop(at); } catch {} } }
     for (const rec of this._scanRecs) {
       rec.stopAt = Math.min(rec.stopAt, at);
-      for (const [, slot] of rec.slots) { try { slot.src.stop(at); } catch {} }
+      for (const [, slot] of rec.slots) for (const sc of slot.srcs) { try { sc.stop(at); } catch {} }
     }
     for (const arr of this._held.values()) {
       for (const h of arr) {
@@ -2118,7 +2189,7 @@ export class WavetableVoice {
     this.silence(this.ctx.currentTime);
     this._stopScanLoop();
     for (const rec of this._scanRecs) {
-      for (const [, slot] of rec.slots) { try { slot.src.stop(); } catch {} try { slot.src.disconnect(); } catch {} }
+      for (const [, slot] of rec.slots) for (const sc of slot.srcs) { try { sc.stop(); } catch {} try { sc.disconnect(); } catch {} }
     }
     this._scanRecs.clear();
     try { this.output.disconnect(); } catch {}
