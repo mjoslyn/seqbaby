@@ -63,7 +63,15 @@ export default function StudioPage() {
       <Suspense fallback={<AccountBarFallback />}>
         <AccountBarSlot />
       </Suspense>
+      {/* The engine's deferred scripts run before React hydrates and immediately
+          rewrite this subtree (populating the scale/engine selects, the pattern
+          grid, the starter tracks), so React always finds the DOM different from
+          the HTML it served and logs a hydration mismatch. It can't "fix" it
+          either — the __html string is constant, so nothing gets re-rendered.
+          suppressHydrationWarning is React's escape hatch for exactly this
+          third-party-mutation case; it applies to this element only. */}
       <div
+        suppressHydrationWarning
         style={{ display: "contents" }}
         dangerouslySetInnerHTML={{ __html: STUDIO_BODY }}
       />
