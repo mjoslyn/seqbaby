@@ -1617,13 +1617,18 @@ export const GRAN_DEFAULTS = {
 // Speed and pitch are signed, but automation lanes and the mod matrix both
 // speak 0..1, so they convert through here — a lane sweeping 0→1 covers exactly
 // the same ground as dragging the slider end to end.
-export const GRAN_MOD_RANGE = { gspeed: [-2, 2], gpitch: [-24, 24] };
-/** 0..1 → the param's own units. @param {"gspeed"|"gpitch"} key @param {number} v */
+// The rest of the grain controls are 0..1 sliders already, but they go through
+// the same conversion so every mod/automation path is one code path.
+export const GRAN_MOD_RANGE = {
+  gspeed: [-2, 2], gpitch: [-24, 24],
+  gwindow: [0, 1], gjitter: [0, 1], gdetune: [0, 1], gpan: [0, 1],
+};
+/** 0..1 → the param's own units. @param {string} key @param {number} v */
 export function granFromUnit(key, v) {
   const [lo, hi] = GRAN_MOD_RANGE[key];
   return lo + Math.max(0, Math.min(1, Number(v) || 0)) * (hi - lo);
 }
-/** The param's own units → 0..1. @param {"gspeed"|"gpitch"} key @param {number} x */
+/** The param's own units → 0..1. @param {string} key @param {number} x */
 export function granToUnit(key, x) {
   const [lo, hi] = GRAN_MOD_RANGE[key];
   return Math.max(0, Math.min(1, ((Number(x) || 0) - lo) / (hi - lo)));

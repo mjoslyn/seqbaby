@@ -70,6 +70,9 @@ env / fx / eq / comp / mod / automation per track.
 - `fxRack.js` — `FXRack` chain + `defaultFxConfig`.
 - `lfo.js` — LFO configs, `getModTarget`/`canModulate`, tempo sync, setter loop.
 - `automation.js` — per-step parameter automation (`AUTOMATION_TARGETS`).
+- `paramTargets.js` — control class → `{lfo, auto}` key map, the mod/automation
+  exclusivity helpers, and the per-parameter descriptions.
+- `paramMenu.js` — right-click a parameter → its mod + automation, in a modal.
 - `render.js` / `stepGrid.js` / `stepEditor.js` / `pianoRoll.js` /
   `patternBar.js` / `scaleUI.js` / `meters.js` / `beat.js` — UI.
 - `keyboard.js` — computer-keyboard performance mode + capture.
@@ -160,7 +163,7 @@ All of this lives in `main.js` `init()` and `transport.js`:
 
 | engine type   | class            | notes |
 |---|---|---|
-| `plaits`      | `PlaitsVoice`    | 4-voice round-robin pool of Plaits WASM oscillators. `modLevelPatched=1, modLevel=0` at init (without the zero, empty tracks emit a continuous tone). Glide via ramp on `noteAudioParameter`. |
+| `plaits`      | `PlaitsVoice`    | 4-voice round-robin pool of Plaits WASM oscillators. `modLevelPatched=1, modLevel=0` at init (without the zero, empty tracks emit a continuous tone). Glide via ramp on `noteAudioParameter`. The four sliders keep the hardware's generic names across all 16 models; what each does per model is `PLAITS_MACRO_TIPS` (catalog.js), hung on the fields by `updatePlaitsControlsVisibility`. |
 | `drum-synth`  | `DrumSynthVoice` | Recipes via `buildDrumSynthGraph(kind, output)`: 808/909 kit, poly-saw, fm-bell, pad, plus the emulators (below). All Tone.js except the 303 and the Virus, which are AudioWorklet models (`tb303.js`, `virus.js`). |
 | `sampler`     | `SamplerVoice`   | THE unified sample voice — plays a user upload or a bundled kit sample chosen via `track.sampleSource` ({kind:"upload"|"bundled", ...}). Absorbed the old `SampleVoice`/`UploadVoice`/`ElevenVoice`. Per-step region/fade/loop via `startSampleSource`; slicing via `t.slices`/`sliceOn`. Pitch from `pitchBase` (36 drum-kit, 60 otherwise); `t.pitchLock` keeps 1×bpm fits pitch-true. |
 | `custom` / `saved` | `CustomToneVoice` | Tone.js synth tree from a saved-patch JSON config (`saved:<name>` keys, localStorage). |
@@ -281,7 +284,14 @@ ring ─┘                    └─ FILTER 2 (multimode, 2 pole) ────�
   `sq-param-group--virus` as `VIRUS_NUM_KEYS` / `VIRUS_SEL_KEYS` (render.js and
   session.js walk those lists, as they do for granular).
 - **Mod + automation** — LFO `virus_*` and automation `virus.*`, gated to
-  `dm:virus`, all real AudioParams. `virus_cut2` / `virus_envamt` are bipolar.
+  `dm:virus`, all real AudioParams: every numeric control on the panel is
+  reachable, envelope and osc detail included (the k-rate ones take a connection
+  and a ramp fine — the value is sampled once per control block). `virus_cut2` /
+  `virus_envamt` are bipolar and `virus_osc2semi` spans ±24 semitones, so their
+  automation lanes map through their own range, not 0..1. One key doesn't match
+  its param: `virus_sat` is the saturation *amount*, `vsatamt` on the voice
+  (`vsat` is the curve select), aliased in `getModTarget` /
+  `applyAutomationAtStep`.
 - **Resonance is cubed** (`0.7 + reso³·12`). `timb` defaults to 0.5 for every
   engine, and a squared curve put that default far too resonant.
 - **Noise is squared** for the same reason: `osc4` defaults to 0.4 everywhere,
@@ -310,11 +320,14 @@ gpattern, gsync, grate` in `t.params`.
 - **`gwindow` is a fraction of the sample, not seconds** — `_windowFrac()` is the
   one place that relation lives; 100% spans the whole sample whatever its
   length, and the WAV modal's band + resize drag both invert that same function.
-- **Mod + automation** — `gran_speed`/`gran_pitch` (LFO, setter-driven) and
-  `gran.speed`/`gran.pitch` (automation lanes) map 0..1 across the slider range
-  via `granFromUnit`/`granToUnit`, and write the live voice only, never
-  `t.params` — the slider stays the base. Grains read both when scheduled, so a
-  sequenced note takes one value per hit; a held note re-reads per scheduler tick.
+- **Mod + automation** — speed, pitch, window, jitter, detune and pan, as LFO
+  `gran_*` (setter-driven, `GRAN_LFO_PARAM` maps key → param) and automation
+  `gran.*` (`gran.window` → `gwindow`, mechanically). Both map 0..1 across the
+  slider's range via `granFromUnit`/`granToUnit` — `GRAN_MOD_RANGE` holds every
+  range, including the plain `[0, 1]` ones so there's one code path — and write
+  the live voice only, never `t.params`, so the slider stays the base. Grains
+  read them when scheduled, so a sequenced note takes one value per hit; a held
+  note re-reads per scheduler tick.
 
 ## Data model (source of truth: `public/js/types.js`)
 
@@ -391,6 +404,49 @@ is the canonical rewind (avoids Tone 15's stop/cancel/position bugs).
   the pattern (`automation` field), applied at step time via `setParam`-style
   setters. `canAutomate` is broader than `canModulate` since it doesn't need
   an AudioParam.
+
+**One owner per parameter.** A parameter takes an LFO or an automation lane,
+never both — they write the same `AudioParam` from two schedules and whichever
+ran last wins until it lets go, which reads as one of them randomly dropping
+out. The two namespaces don't share a spelling (the delay wet slider is
+`delay` to the LFO and `fx.delay` to automation), so the pairing lives in
+`paramTargets.js` (`CONTROL_TARGETS` → derived `AUTO_FOR_LFO` / `LFO_FOR_AUTO`,
+plus `autoOwns` / `modOwns`). Both panel pickers filter on it, and the
+parameter menu says which side holds the control.
+
+**Right-click a parameter** opens `paramMenu.js`: what the control does, its
+LFO row and its automation lane — the same widgets the panels use
+(`buildLfoRow` / `buildAutomationLane` in render.js), over the same track state
+— plus a way to attach whichever side is free. One delegated `contextmenu`
+listener installed from `init()` covers every track; it resolves the owning
+track by walking up to a `data-track-id` (stamped on the track node, every
+panel, every synth group, and the granular / wavetable / sample modals — panels
+get reparented into modals, so track ancestry isn't reliable).
+
+Which controls get it: any range/select/checkbox that's either in
+`CONTROL_TARGETS` or inside `PARAM_SCOPE_SELECTOR` — the synth groups, the
+filter/env/fx/eq/comp panels, and the engine modals' own control rows. That
+whitelist keeps it off the sequencer's widgets (step editor, piano roll, the
+mod/aut rows themselves) and off text/number fields, which keep the browser's
+own menu. A control with no target still opens the menu as a **setting** — one
+line saying so, plus the description, because "what does this do" is worth a
+right-click on its own.
+
+**The dot beside a label** — `refreshParamIndicators(t)` (paramTargets.js)
+stamps `data-motion="mod" | "aut" | "off"` on each control's field wrapper, and
+style.css paints a dot from it (accent / accent-2 / dim). It walks the DOM under
+every `[data-track-id]` root rather than a fixed control list, so a parameter
+that appears twice (the granular row and the wav modal both have speed) lights
+up in both. Call it after anything that changes `lfoConfig` or `automation` —
+renderTrack, both panels' add/remove/toggle paths, the parameter menu's `draw`,
+and `switchPattern` (lanes belong to the pattern, so the dots change with it).
+
+Adding a control to the menu: a `CONTROL_TARGETS` entry keyed by the class the
+markup already uses (or nothing at all, if it's inside a scope and has no
+target), plus `PARAM_DESCRIPTIONS` / `CONTROL_LABELS` lines where the DOM has
+nothing to read. Lookup order for both is class entry → markup `title` →
+target-key entry, so the per-engine tooltips (rewritten by
+`updatePlaitsControlsVisibility`) win over anything generic.
 
 ## Keyboard performance mode (`keyboard.js`)
 
@@ -485,9 +541,10 @@ patterns.
 
 - New FX → extend `FXRack` + `defaultFxConfig` + apply/refresh/wire fns in
   signal.js/render.js, and (optionally) `LFO_KEYS`/`AUTOMATION_TARGETS`.
-- New LFO target → see canModulate gotcha above.
+- New LFO target → see canModulate gotcha above, + a `CONTROL_TARGETS` entry
+  (paramTargets.js) so its control's right-click menu finds it.
 - New automation target → `AUTOMATION_TARGETS` + a setter path in
-  `applyAutomationAtStep`.
+  `applyAutomationAtStep`, + the same `CONTROL_TARGETS` entry.
 - New per-step control → array on `emptyPattern()` + `aliasPattern()` field +
   step-editor UI + consume in the transport loop + serialize/apply.
 - New engine → see Engines catalog above.

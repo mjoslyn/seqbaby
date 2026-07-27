@@ -1519,6 +1519,57 @@ body.kbd-recording .sq-track.is-kbd-active { border-color: #e5484d; box-shadow: 
   justify-content: center;
 }
 .sq-track__mod-panel .sq-lfo__row .sq-lfo__remove:hover { color: var(--danger); }
+.sq-mod__hint { font-size: 11px; color: var(--fg-dim); opacity: 0.8; }
+
+/* A dot beside a parameter's label when something is moving it: green for an
+   lfo, blue for a live automation lane, grey for a lane that's switched off.
+   Painted by refreshParamIndicators (paramTargets.js). */
+[data-motion="mod"] { --motion-dot: var(--accent); }
+[data-motion="aut"] { --motion-dot: var(--accent-2); }
+[data-motion="off"] { --motion-dot: var(--fg-dim); }
+.sq-field[data-motion] > label::after,
+.sq-fx__ctl[data-motion] > span::after,
+.sq-virus__f[data-motion] > span::after,
+label[data-motion]:not(.sq-fx__ctl):not(.sq-virus__f)::before {
+  content: "";
+  display: inline-block;
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  background: var(--motion-dot);
+  vertical-align: middle;
+  margin: 0 0 1px 5px;
+}
+label[data-motion]:not(.sq-fx__ctl):not(.sq-virus__f)::before { margin: 0 5px 1px 0; }
+.sq-field[data-motion="off"] > label,
+.sq-fx__ctl[data-motion="off"] > span,
+.sq-virus__f[data-motion="off"] > span { opacity: 0.8; }
+
+/* Right-click a parameter → what is modulating / automating that one control. */
+.sq-pmenu__modal { width: min(96vw, 900px); max-width: 96vw; gap: 10px; }
+.sq-pmenu__sub { color: var(--fg-dim); }
+.sq-pmenu__desc { font-size: 11px; color: var(--fg-dim); line-height: 1.5; max-width: 68ch; }
+.sq-pmenu__sec { display: grid; gap: 6px; padding-top: 8px; border-top: 1px solid var(--border); }
+.sq-pmenu__sec-head { font-size: 11px; color: var(--fg-dim); text-transform: lowercase; }
+.sq-pmenu__key { color: var(--accent); }
+.sq-pmenu__body { display: grid; gap: 6px; }
+.sq-pmenu__none { font-size: 11px; color: var(--fg-dim); }
+.sq-pmenu__blocked { color: var(--fg-dim); opacity: 0.85; font-style: italic; }
+.sq-pmenu__add { font-size: 11px; padding: 4px 10px; justify-self: start; }
+.sq-pmenu__modal .sq-lfo__row { grid-template-columns: 52px 52px 88px 58px minmax(0, 1fr) minmax(0, 1fr) 28px; }
+.sq-pmenu__modal .sq-lfo__row .sq-lfo__rate-label { min-width: 92px; }
+.sq-pmenu__modal .sq-lfo__row .sq-lfo__remove {
+  padding: 0;
+  font-size: 13px;
+  line-height: 1;
+  color: var(--fg-dim);
+  width: 24px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.sq-pmenu__modal .sq-lfo__row .sq-lfo__remove:hover { color: var(--danger); }
+.sq-pmenu__modal .sq-aut__grid { height: 120px; }
 .sq-modal__ok {
   background: var(--accent);
   color: #0b0d10;

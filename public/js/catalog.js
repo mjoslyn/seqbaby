@@ -18,6 +18,99 @@ export function plaitsEntries() {
   }));
 }
 
+// What harm / timb / morph do in each Plaits model, by model index. The four
+// sliders are one set of controls wired to sixteen different synths, and unlike
+// the emulators (which relabel them) Plaits keeps the hardware's generic names —
+// so the explanation has to live somewhere. updatePlaitsControlsVisibility hangs
+// these on the fields as tooltips, and the right-click parameter menu reads them
+// from there.
+const PLAITS_LPG_DECAY =
+  "the internal low-pass gate: how long each trigger rings, and how far the tone closes down as it falls away";
+const PLAITS_DRUM_DECAY =
+  "the low-pass gate's decay, on top of the model's own — pull it down for a tighter hit";
+export const PLAITS_MACRO_TIPS = [
+  { // 0 virtual analog
+    harm: "detuning between the two oscillators — one fat tone at zero, a beating pair by the top",
+    timb: "pulse width of the square, from a thin nasal pulse out to a hollow square",
+    morph: "the second wave's shape, sweeping from triangle through saw with a widening notch",
+    decay: PLAITS_LPG_DECAY },
+  { // 1 waveshaping
+    harm: "which waveshaping curve the oscillator is pushed through",
+    timb: "wavefolder amount — the further up, the more times the wave folds back on itself and the more harmonics come out of it",
+    morph: "asymmetry of the waveform, which is what brings the even harmonics in",
+    decay: PLAITS_LPG_DECAY },
+  { // 2 fm
+    harm: "frequency ratio between the two operators. Whole-number ratios stay harmonic; everything in between goes bell-like and clangorous",
+    timb: "modulation index — how hard operator 2 drives operator 1, so how bright and how wide the sidebands spread",
+    morph: "feedback: below centre operator 2 modulates operator 1 harder, above it feeds back into itself — both ends head toward noise",
+    decay: PLAITS_LPG_DECAY },
+  { // 3 grain
+    harm: "ratio between the two formant frequencies",
+    timb: "formant frequency — the resonant peak the grains are shaped around, which is what makes this one sound vocal",
+    morph: "shape and width of the grain window",
+    decay: PLAITS_LPG_DECAY },
+  { // 4 additive
+    harm: "how the energy is grouped across the harmonic series",
+    timb: "sweeps the emphasised peak up and down that series — the drawbar sweep",
+    morph: "how wide the peak spreads, from something close to a sine out to a full stack",
+    decay: PLAITS_LPG_DECAY },
+  { // 5 wavetable
+    harm: "which bank of wavetables is read",
+    timb: "position along the wavetable map",
+    morph: "position across the map's other axis. The two together pick the wave, and neither moves smoothly — that steppiness is the model",
+    decay: PLAITS_LPG_DECAY },
+  { // 6 chord
+    harm: "which chord is played — this model sounds four voices at once and this picks the intervals",
+    timb: "the chord's inversion and how far it spreads",
+    morph: "the waveform those four voices use, from sine up through richer waves",
+    decay: PLAITS_LPG_DECAY },
+  { // 7 speech
+    harm: "the sound bank: formant filtering at the bottom, then the vintage speech-synth modes and their word lists",
+    timb: "species — shifts the formants, so the same phoneme reads as a different size of voice",
+    morph: "which phoneme or word comes out",
+    decay: PLAITS_LPG_DECAY },
+  { // 8 swarm
+    harm: "how far the swarm's voices scatter in pitch",
+    timb: "density of the swarm — how many grains, how often",
+    morph: "grain duration and envelope shape",
+    decay: PLAITS_LPG_DECAY },
+  { // 9 noise
+    harm: "spacing between the two resonant peaks the noise is filtered through",
+    timb: "where those peaks sit",
+    morph: "how narrow they are — wide is a wash, narrow is a pitched whistle",
+    decay: PLAITS_LPG_DECAY },
+  { // 10 particle
+    harm: "how far each particle's pitch is randomised",
+    timb: "particle density, from occasional ticks to a continuous shower",
+    morph: "resonance and ring of the filter each particle is fired through",
+    decay: PLAITS_LPG_DECAY },
+  { // 11 string
+    harm: "inharmonicity — how stiff the string is, from a clean harmonic series to a dull, bell-like one",
+    timb: "brightness of the excitation that plucks it",
+    morph: "how long it rings",
+    decay: PLAITS_LPG_DECAY },
+  { // 12 modal
+    harm: "the material's inharmonicity — the difference between a tube, a bar and a bell",
+    timb: "brightness and grit of the strike",
+    morph: "how long the resonator rings",
+    decay: PLAITS_LPG_DECAY },
+  { // 13 bass drum
+    harm: "attack sharpness, and how hard the drum is overdriven",
+    timb: "brightness — the balance of click against body",
+    morph: "the drum's own decay",
+    decay: PLAITS_DRUM_DECAY },
+  { // 14 snare drum
+    harm: "balance between the drum's tone and its noise",
+    timb: "brightness — how much of the noise is filtered away",
+    morph: "the drum's own decay",
+    decay: PLAITS_DRUM_DECAY },
+  { // 15 hi hat
+    harm: "balance between the metallic cluster and plain noise",
+    timb: "brightness of the filter that cluster runs through",
+    morph: "decay — closed hat at the bottom, open at the top",
+    decay: PLAITS_DRUM_DECAY },
+];
+
 export const DRUM_SYNTH_ENGINES = [
   { key: "dm:808-kick",  label: "808 kick",     defaultNote: 36 },
   { key: "dm:808-snare", label: "808 snare",    defaultNote: 60 },

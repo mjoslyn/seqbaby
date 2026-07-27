@@ -146,6 +146,7 @@ export function openGranularWavModal(t) {
   overlay.className = "sq-modal-overlay";
   const modal = document.createElement("div");
   modal.className = "sq-modal sq-gwav__modal";
+  modal.dataset.trackId = String(t.id);   // lets the right-click param menu find the track
   modal.setAttribute("role", "dialog");
   modal.setAttribute("aria-modal", "true");
   modal.innerHTML = `
@@ -522,6 +523,7 @@ export function openSampleEditorModal(t) {
   overlay.className = "sq-modal-overlay";
   const modal = document.createElement("div");
   modal.className = "sq-modal sq-samp__modal";
+  modal.dataset.trackId = String(t.id);   // lets the right-click param menu find the track
   modal.setAttribute("role", "dialog");
   modal.setAttribute("aria-modal", "true");
   modal.innerHTML = `

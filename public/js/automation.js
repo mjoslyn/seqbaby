@@ -30,9 +30,13 @@ export const AUTOMATION_TARGETS = {
   // wavetable wave-scan window (wavetable engine only — see canAutomate)
   "wt.scan.start":      { label: "wave scan start" },
   "wt.scan.range":      { label: "wave scan range" },
-  // granular play-head speed + grain pitch (granular engine only)
+  // granular grain controls (granular engine only)
   "gran.speed":         { label: "grain speed" },
   "gran.pitch":         { label: "grain pitch" },
+  "gran.window":        { label: "grain window" },
+  "gran.jitter":        { label: "grain jitter" },
+  "gran.detune":        { label: "grain detune" },
+  "gran.pan":           { label: "grain pan" },
   // TB-303 panel controls outside the four sliders (303 engine only)
   "tb303.accent":       { label: "303 accent" },
   "tb303.tune":         { label: "303 tune" },
@@ -46,6 +50,12 @@ export const AUTOMATION_TARGETS = {
   "virus.bal":          { label: "virus filter balance" },
   "virus.sat":          { label: "virus saturation" },
   "virus.envamt":       { label: "virus env amount" },
+  "virus.osc2semi":     { label: "virus osc2 semi" },
+  "virus.osc2det":      { label: "virus osc2 detune" },
+  "virus.unispread":    { label: "virus unison spread" },
+  "virus.atk":          { label: "virus attack" },
+  "virus.sus":          { label: "virus sustain" },
+  "virus.rel":          { label: "virus release" },
   // fx
   "fx.vinyl":           { label: "vinyl amt" },
   "fx.vinyl.warmth":    { label: "vinyl warmth" },
@@ -180,12 +190,12 @@ export function applyAutomationAtStep(t, key, v, time, vNext, stepDur) {
     if (sc) sc[key === "wt.scan.start" ? "start" : "range"] = vv;
     return;
   }
-  // Granular speed/pitch: same idea — the lane drives the live voice across the
-  // slider's full range and the stored slider value is left alone. The step's
-  // grains are scheduled right after this, so they pick the new value up. No
-  // ramp: a grain cloud reads these once when it's scheduled, not per sample.
-  if (key === "gran.speed" || key === "gran.pitch") {
-    const p = key === "gran.speed" ? "gspeed" : "gpitch";
+  // Granular: same idea — the lane drives the live voice across the slider's
+  // full range and the stored slider value is left alone. The step's grains are
+  // scheduled right after this, so they pick the new value up. No ramp: a grain
+  // cloud reads these once when it's scheduled, not per sample.
+  if (key.startsWith("gran.")) {
+    const p = "g" + key.slice(5);          // gran.window → gwindow
     try { t.voice?.setParam?.(p, granFromUnit(p, vv)); } catch {}
     return;
   }
@@ -207,9 +217,14 @@ export function applyAutomationAtStep(t, key, v, time, vNext, stepDur) {
   // like any other. cut2 and envamt are bipolar; the lane spans their full range.
   if (key.startsWith("virus.")) {
     const which = key.slice(6);
-    const bipolar = which === "cut2" || which === "envamt";
-    const map = bipolar ? (u) => u * 2 - 1 : (u) => u;
-    ramp(t.voice?.getAudioParam?.("v" + which), map(vv), map(vn));
+    // Most are 0..1; cut2 / env amount are bipolar, and osc2 semi is in
+    // semitones — each lane spans the slider's own range.
+    const map = which === "osc2semi" ? (u) => u * 48 - 24
+              : (which === "cut2" || which === "envamt") ? (u) => u * 2 - 1
+              : (u) => u;
+    // `sat` is the saturation amount, which the voice calls `vsatamt` (`vsat`
+    // is the curve select beside it) — see getModTarget for the same aliasing.
+    ramp(t.voice?.getAudioParam?.("v" + (which === "sat" ? "satamt" : which)), map(vv), map(vn));
     return;
   }
   const rack = t.fxRack;

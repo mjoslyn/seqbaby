@@ -1,4 +1,4 @@
-import { engineByKey } from "./catalog.js";
+import { PLAITS_MACRO_TIPS, engineByKey } from "./catalog.js";
 import { applySampleSpeed, disposeLFOs, syncAllLFOs } from "./lfo.js";
 import { redetectDrumKit } from "./meter.js";
 import { refreshFxPanelUI, updateMidiUI } from "./render.js";
@@ -155,6 +155,9 @@ export function updatePlaitsControlsVisibility(t) {
             : null,
           decay: "how long the voice rings out",
         }
+      // Plaits keeps the hardware's generic slider names across all sixteen
+      // models, so the per-model explanation has to come through the tooltip.
+      : isPlaits ? (PLAITS_MACRO_TIPS[eng?.plaitsIdx] ?? null)
       : null;
     for (const key of Object.keys(labels)) {
       const field = group.querySelector(`.p-${key}`)?.closest(".sq-field");

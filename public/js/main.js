@@ -11,6 +11,7 @@ import { captureSequence, initComputerKeyboard, isDesktopKeyboard, resetKbdKeys,
 import { autoAccents, parseMeter, redetectDrumKit, stepsPerBarForMeter } from "./meter.js";
 import { meterTick } from "./meters.js";
 import { setEngineKey } from "./params.js";
+import { installParamContextMenu } from "./paramMenu.js";
 import { copyPattern, openPatternMenu, renderPatternGrid } from "./patternBar.js";
 import { setActiveTrack } from "./render.js";
 import { initScaleUI } from "./scaleUI.js";
@@ -564,6 +565,9 @@ export function init() {
   // a number input only opens the numeric keypad, so let users drag up/down to
   // scrub the value. A clean tap still focuses the input to type a value.
   attachBpmDrag(document.getElementById("bpm"));
+  // Right-click any parameter control → its mods + automation lanes. One
+  // delegated listener covers every track, now and after any rebuild.
+  installParamContextMenu();
   // Master swing — read live by the transport loop each callback; no per-track
   // swing state to mirror anymore.
   document.getElementById("swing").addEventListener("input", () => {});

@@ -164,6 +164,11 @@ export default function ManualPage() {
             <a href="#shaping">filter, effects and dynamics</a> and{" "}
             <a href="#motion">modulation and automation</a>.
           </p>
+          <p>
+            Wherever you meet a control you do not recognise, in a track row or in
+            any of those panels, <a href="#motion">right-click it</a>: you get what
+            it does, and whatever movement is on it.
+          </p>
         </section>
 
         <section className={styles.section} id="steps">
@@ -540,6 +545,32 @@ export default function ManualPage() {
             last beat. Automation lanes belong to the pattern, so each pattern can move
             differently.
           </p>
+          <h3>Right-click any parameter</h3>
+          <p>
+            The two panels above list a whole track at once, which is the long way
+            round when the question is what is moving <em>this</em> control.
+            Right-click a slider, a switch or its label — anywhere: the instrument
+            row, the filter, effects, eq and comp panels, the sample and wavetable
+            editors — and you get a small window for that one parameter: what it
+            does, whatever LFO or automation is on it, and a button to add either.
+            It is also the quickest way to learn an unfamiliar control, since the
+            explanation is the first thing in the window.
+          </p>
+          <p>
+            You do not have to go looking, either: a parameter with something on
+            it wears a dot next to its label — green for an LFO, blue for an
+            automation lane, grey for a lane you have switched off. Scan a track
+            and you can see where its movement is coming from.
+          </p>
+          <div className={styles.note}>
+            A parameter takes an LFO or an automation lane, not both — two things
+            writing the same value fight, and you hear one of them drop out at
+            random. Whichever side is free offers to be added; the other says what
+            is holding the parameter, and removing that frees it up again. Controls
+            that are a setting rather than a value — a waveform, a filter mode, a
+            routing switch — open the same window with the explanation and no
+            movement to add.
+          </div>
         </section>
 
         <section className={styles.section} id="saving">

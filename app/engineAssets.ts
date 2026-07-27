@@ -59,6 +59,8 @@ export const ENGINE_MODULES = [
   "main.js",
   "meter.js",
   "meters.js",
+  "paramMenu.js",
+  "paramTargets.js",
   "params.js",
   "patternBar.js",
   "pianoRoll.js",

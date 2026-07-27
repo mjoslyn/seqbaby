@@ -7,6 +7,7 @@ import { setStatus } from "./dom.js";
 import { randomizeMelody, randomizeTimbre } from "./generate.js";
 import { ICON_CLEAR, ICON_DICE, ICON_LOAD, ICON_ROLL, ICON_SAVE, ICON_SLIDERS, ICON_WAV } from "./icons.js";
 import { canModulate, currentBpm, rateFromSync, syncLFO } from "./lfo.js";
+import { autoOwns, modOwns, refreshParamIndicators } from "./paramTargets.js";
 import { openGranularSourceModal, openSamplerSourceModal, pickAudioFileForTrack } from "./main.js";
 import { defaultFxConfig } from "./fxRack.js";
 import { patternMeter, redetectDrumKit, stepsPerBarForMeter } from "./meter.js";
@@ -371,6 +372,17 @@ export function renderTrack(t) {
   t._virusGroupEl   = node.querySelector(".sq-param-group--virus");
   t._granGroupEl    = node.querySelector(".sq-param-group--granular");
 
+  // Everything above can be reparented out of the track (panels into their
+  // modals, the synth groups into the mobile track menu), and the right-click
+  // parameter menu resolves a control's track by walking up to a track id —
+  // so stamp each one rather than relying on the track node being an ancestor.
+  for (const el of [t._modPanelEl, t._autPanelEl, t._rollPanelEl, t._filterPanelEl,
+                    t._envPanelEl, t._fxPanelEl, t._eqPanelEl, t._compPanelEl,
+                    t._timbreGroupEl, t._oscMixGroupEl, t._oscModGroupEl,
+                    t._moogOscGroupEl, t._tb303GroupEl, t._virusGroupEl, t._granGroupEl]) {
+    if (el) el.dataset.trackId = String(t.id);
+  }
+
   renderModPanel(t, t._modPanelEl);
   wireFxPanel(t, t._fxPanelEl);
   const eqPanel = t._eqPanelEl;
@@ -472,6 +484,7 @@ export function renderTrack(t) {
   document.getElementById("tracks").appendChild(node);
   updateMidiUI(t);
   updatePlaitsControlsVisibility(t);
+  refreshParamIndicators(t);
 }
 
 export function updateMidiUI(t) {
@@ -866,8 +879,74 @@ export function wireFxPanel(t, panel) {
   });
 }
 
-export function renderModPanel(t, panel) {
+/**
+ * Build a live LFO row for one modulation target. The row drives
+ * `t.lfoConfig[key]` directly, so the mod panel and the right-click parameter
+ * menu can each host one without either becoming the owner of the state.
+ * @param {Track} t @param {string} key @param {() => void} [onRemove]
+ * @returns {HTMLElement}
+ */
+export function buildLfoRow(t, key, onRemove) {
   const tpl = document.getElementById("lfo-row-template");
+  const cfg = t.lfoConfig[key] || (t.lfoConfig[key] =
+    { enabled: false, type: "sine", rate: 1.0, depth: 0.5, sync: true, div: 1 });
+  const row = tpl.content.firstElementChild.cloneNode(true);
+  row.dataset.key = key;
+  row.classList.add("is-active");
+  row.querySelector(".sq-lfo__target").textContent = lfoLabel(key);
+
+  const cb    = row.querySelector(".lfo-on");
+  const shape = row.querySelector(".sq-lfo__shape");
+  const rate  = row.querySelector(".sq-lfo__rate");
+  const rateLbl  = row.querySelector(".sq-lfo__rate-label");
+  const depth = row.querySelector(".lfo-depth");
+  const depthLbl = row.querySelector(".sq-lfo__depth-label");
+  const syncCb = row.querySelector(".lfo-sync");
+  const divSel = row.querySelector(".sq-lfo__div");
+  const rateField = row.querySelector(".sq-lfo__rate-field");
+  const removeBtn = row.querySelector(".sq-lfo__remove");
+
+  cb.checked   = cfg.enabled;
+  shape.value  = cfg.type;
+  rate.value   = rateToSlider(cfg.rate);
+  depth.value  = cfg.depth;
+  depthLbl.textContent = cfg.depth.toFixed(2);
+  syncCb.checked = cfg.sync;
+  divSel.value = String(cfg.div);
+  rateField.dataset.mode = cfg.sync ? "sync" : "hz";
+  row.classList.toggle("is-active", cfg.enabled);
+
+  const refreshLbl = () => {
+    if (cfg.sync) {
+      const opt = divSel.options[divSel.selectedIndex];
+      rateLbl.textContent = `${opt ? opt.textContent : cfg.div} · ${rateFromSync(cfg.div).toFixed(2)} hz`;
+    } else {
+      rateLbl.textContent = `${cfg.rate.toFixed(2)} hz`;
+    }
+  };
+  refreshLbl();
+
+  cb.addEventListener("change", () => {
+    cfg.enabled = cb.checked;
+    row.classList.toggle("is-active", cfg.enabled);
+    syncLFO(t, key);
+    refreshParamIndicators(t);
+  });
+  shape.addEventListener("change", () => { cfg.type = shape.value; syncLFO(t, key); });
+  rate.addEventListener("input", () => { cfg.rate = sliderToRate(Number(rate.value)); refreshLbl(); syncLFO(t, key); });
+  depth.addEventListener("input", () => { cfg.depth = Number(depth.value); depthLbl.textContent = cfg.depth.toFixed(2); syncLFO(t, key); });
+  syncCb.addEventListener("change", () => { cfg.sync = syncCb.checked; rateField.dataset.mode = cfg.sync ? "sync" : "hz"; refreshLbl(); syncLFO(t, key); });
+  divSel.addEventListener("change", () => { cfg.div = Number(divSel.value); refreshLbl(); syncLFO(t, key); });
+  if (removeBtn) removeBtn.addEventListener("click", () => {
+    cfg.enabled = false;
+    syncLFO(t, key);
+    row.remove();
+    onRemove?.();
+  });
+  return row;
+}
+
+export function renderModPanel(t, panel) {
   panel.replaceChildren();
   // (glide lives in the fx panel now — see wireFxPanel. Swing is master-only.)
 
@@ -877,56 +956,7 @@ export function renderModPanel(t, panel) {
   panel.appendChild(rowsContainer);
 
   const addRow = (key) => {
-    const cfg = t.lfoConfig[key];
-    const row = tpl.content.firstElementChild.cloneNode(true);
-    row.dataset.key = key;
-    row.classList.add("is-active");
-    row.querySelector(".sq-lfo__target").textContent = lfoLabel(key);
-
-    const cb    = row.querySelector(".lfo-on");
-    const shape = row.querySelector(".sq-lfo__shape");
-    const rate  = row.querySelector(".sq-lfo__rate");
-    const rateLbl  = row.querySelector(".sq-lfo__rate-label");
-    const depth = row.querySelector(".lfo-depth");
-    const depthLbl = row.querySelector(".sq-lfo__depth-label");
-    const syncCb = row.querySelector(".lfo-sync");
-    const divSel = row.querySelector(".sq-lfo__div");
-    const rateField = row.querySelector(".sq-lfo__rate-field");
-    const removeBtn = row.querySelector(".sq-lfo__remove");
-
-    cb.checked   = cfg.enabled;
-    shape.value  = cfg.type;
-    rate.value   = rateToSlider(cfg.rate);
-    depth.value  = cfg.depth;
-    depthLbl.textContent = cfg.depth.toFixed(2);
-    syncCb.checked = cfg.sync;
-    divSel.value = String(cfg.div);
-    rateField.dataset.mode = cfg.sync ? "sync" : "hz";
-
-    const refreshLbl = () => {
-      if (cfg.sync) {
-        const opt = divSel.options[divSel.selectedIndex];
-        rateLbl.textContent = `${opt ? opt.textContent : cfg.div} · ${rateFromSync(cfg.div).toFixed(2)} hz`;
-      } else {
-        rateLbl.textContent = `${cfg.rate.toFixed(2)} hz`;
-      }
-    };
-    refreshLbl();
-
-    cb.addEventListener("change", () => { cfg.enabled = cb.checked; row.classList.toggle("is-active", cfg.enabled); syncLFO(t, key); });
-    shape.addEventListener("change", () => { cfg.type = shape.value; syncLFO(t, key); });
-    rate.addEventListener("input", () => { cfg.rate = sliderToRate(Number(rate.value)); refreshLbl(); syncLFO(t, key); });
-    depth.addEventListener("input", () => { cfg.depth = Number(depth.value); depthLbl.textContent = cfg.depth.toFixed(2); syncLFO(t, key); });
-    syncCb.addEventListener("change", () => { cfg.sync = syncCb.checked; rateField.dataset.mode = cfg.sync ? "sync" : "hz"; refreshLbl(); syncLFO(t, key); });
-    divSel.addEventListener("change", () => { cfg.div = Number(divSel.value); refreshLbl(); syncLFO(t, key); });
-    if (removeBtn) removeBtn.addEventListener("click", () => {
-      cfg.enabled = false;
-      syncLFO(t, key);
-      row.remove();
-      refreshAdderOptions();
-    });
-
-    rowsContainer.appendChild(row);
+    rowsContainer.appendChild(buildLfoRow(t, key, () => { refreshAdderOptions(); refreshParamIndicators(t); }));
   };
 
   // Picker row: a "+ add" button that expands into a select of the remaining
@@ -936,17 +966,19 @@ export function renderModPanel(t, panel) {
   adder.innerHTML = `
     <button class="sq-mod__add-btn sq-btn--ghost" type="button">+ add modulation</button>
     <select class="sq-mod__add-select" hidden></select>
+    <span class="sq-mod__hint">one lfo or one automation lane per parameter · right-click a parameter to see what's on it</span>
   `;
   panel.appendChild(adder);
   const addBtn = adder.querySelector(".sq-mod__add-btn");
   const addSel = adder.querySelector(".sq-mod__add-select");
   const refreshAdderOptions = () => {
-    // Only show mods that actually apply to the current engine.
-    const available = LFO_KEYS.filter(k => !t.lfoConfig[k]?.enabled && canModulate(t, k));
+    // Only show mods that apply to the current engine, and only for parameters
+    // an automation lane hasn't already claimed (see paramTargets.js).
+    const available = LFO_KEYS.filter(k => !t.lfoConfig[k]?.enabled && canModulate(t, k) && !autoOwns(t, k));
     if (available.length === 0) {
       addBtn.disabled = true;
       addSel.hidden = true;
-      addBtn.textContent = "(all modulations active)";
+      addBtn.textContent = "(nothing left to modulate)";
     } else {
       addBtn.disabled = false;
       addBtn.textContent = "+ add modulation";
@@ -968,6 +1000,7 @@ export function renderModPanel(t, panel) {
     addRow(key);
     addSel.hidden = true;
     refreshAdderOptions();
+    refreshParamIndicators(t);
   });
 
   // Pre-populate rows for any LFO that's already enabled on this track.
@@ -975,6 +1008,99 @@ export function renderModPanel(t, panel) {
     if (t.lfoConfig[key]?.enabled) addRow(key);
   }
   refreshAdderOptions();
+  refreshParamIndicators(t);
+}
+
+/**
+ * Create the lane for an automation target if it doesn't exist, and resize its
+ * values to the track's current length.
+ * @param {Track} t @param {string} key
+ */
+export function ensureAutomationLane(t, key) {
+  if (!t.automation) t.automation = {};
+  if (!t.automation[key]) {
+    t.automation[key] = { enabled: true, values: new Array(t.length).fill(0.5) };
+  }
+  const vals = t.automation[key].values;
+  if (vals.length !== t.length) {
+    const out = new Array(t.length).fill(0.5);
+    for (let i = 0; i < Math.min(vals.length, t.length); i++) out[i] = vals[i];
+    t.automation[key].values = out;
+  }
+  return t.automation[key];
+}
+
+/**
+ * Build a per-step automation lane (label, enable, draggable value grid). Draws
+ * straight from `t.automation[key].values`, so the aut panel and the
+ * right-click parameter menu can each show one over the same data.
+ * @param {Track} t @param {string} key @param {() => void} [onRemove]
+ * @returns {HTMLElement}
+ */
+export function buildAutomationLane(t, key, onRemove) {
+  const lane = ensureAutomationLane(t, key);
+  const row = document.createElement("div");
+  row.className = "sq-aut__lane" + (lane.enabled ? " is-active" : "");
+  row.dataset.key = key;
+  row.innerHTML = `
+    <span class="sq-aut__label">${AUTOMATION_TARGETS[key]?.label ?? key}</span>
+    <input type="checkbox" class="sq-aut__enable" ${lane.enabled ? "checked" : ""} title="enable lane" />
+    <div class="sq-aut__grid"></div>
+    <button class="sq-aut__clear sq-btn--ghost" type="button" title="reset to 0.5">clear</button>
+    <button class="sq-aut__remove" type="button" title="remove lane">×</button>
+  `;
+
+  const grid = row.querySelector(".sq-aut__grid");
+  for (let i = 0; i < t.length; i++) {
+    const cell = document.createElement("div");
+    cell.className = "sq-aut__step";
+    cell.dataset.idx = i;
+    cell.style.setProperty("--v", String(lane.values[i] ?? 0));
+    grid.appendChild(cell);
+  }
+
+  const setFromPointer = (ev) => {
+    const rect = grid.getBoundingClientRect();
+    const cols = t.length;
+    const relX = Math.max(0, Math.min(rect.width - 1, ev.clientX - rect.left));
+    const relY = Math.max(0, Math.min(rect.height, ev.clientY - rect.top));
+    const idx = Math.max(0, Math.min(cols - 1, Math.floor((relX / rect.width) * cols)));
+    const v = 1 - (relY / rect.height);
+    lane.values[idx] = Math.max(0, Math.min(1, v));
+    const cell = grid.children[idx];
+    if (cell) cell.style.setProperty("--v", String(lane.values[idx]));
+  };
+
+  let dragging = false;
+  grid.addEventListener("pointerdown", (ev) => {
+    dragging = true;
+    try { grid.setPointerCapture(ev.pointerId); } catch {}
+    setFromPointer(ev);
+    ev.preventDefault();
+  });
+  grid.addEventListener("pointermove", (ev) => { if (dragging) setFromPointer(ev); });
+  grid.addEventListener("pointerup", (ev) => {
+    dragging = false;
+    try { grid.releasePointerCapture(ev.pointerId); } catch {}
+  });
+  grid.addEventListener("pointercancel", () => { dragging = false; });
+
+  row.querySelector(".sq-aut__enable").addEventListener("change", (ev) => {
+    lane.enabled = !!ev.target.checked;
+    row.classList.toggle("is-active", lane.enabled);
+    refreshParamIndicators(t);
+  });
+  row.querySelector(".sq-aut__clear").addEventListener("click", () => {
+    for (let i = 0; i < lane.values.length; i++) lane.values[i] = 0.5;
+    for (let i = 0; i < grid.children.length; i++) grid.children[i].style.setProperty("--v", "0.5");
+  });
+  row.querySelector(".sq-aut__remove").addEventListener("click", () => {
+    delete t.automation[key];
+    row.remove();
+    onRemove?.();
+    refreshParamIndicators(t);
+  });
+  return row;
 }
 
 // Render per-step automation lanes for the track's active pattern. Re-run on
@@ -1004,11 +1130,12 @@ export function renderAutomationPanel(t, panel) {
   const addSel = adder.querySelector(".sq-aut__add-select");
 
   const refreshAdder = () => {
-    const avail = AUTOMATION_KEYS.filter(k => !t.automation[k] && canAutomate(t, k));
+    // Parameters an LFO is already driving are off the list — one owner each.
+    const avail = AUTOMATION_KEYS.filter(k => !t.automation[k] && canAutomate(t, k) && !modOwns(t, k));
     if (avail.length === 0) {
       addBtn.disabled = true;
       addSel.hidden = true;
-      addBtn.textContent = "(all targets automated)";
+      addBtn.textContent = "(nothing left to automate)";
     } else {
       addBtn.disabled = false;
       addBtn.textContent = "+ add automation";
@@ -1018,86 +1145,13 @@ export function renderAutomationPanel(t, panel) {
     emptyMsg.hidden = Object.keys(t.automation).length > 0;
   };
 
-  const ensureLane = (key) => {
-    if (!t.automation[key]) {
-      t.automation[key] = { enabled: true, values: new Array(t.length).fill(0.5) };
-    }
-    // Resize values if pattern length has changed since the lane was created.
-    const vals = t.automation[key].values;
-    if (vals.length !== t.length) {
-      const out = new Array(t.length).fill(0.5);
-      for (let i = 0; i < Math.min(vals.length, t.length); i++) out[i] = vals[i];
-      t.automation[key].values = out;
-    }
-  };
-
   const drawRow = (key) => {
-    ensureLane(key);
-    const lane = t.automation[key];
-    const row = document.createElement("div");
-    row.className = "sq-aut__lane" + (lane.enabled ? " active" : "");
-    row.dataset.key = key;
-    row.innerHTML = `
-      <span class="sq-aut__label">${AUTOMATION_TARGETS[key].label}</span>
-      <input type="checkbox" class="sq-aut__enable" ${lane.enabled ? "checked" : ""} title="enable lane" />
-      <div class="sq-aut__grid"></div>
-      <button class="sq-aut__clear sq-btn--ghost" type="button" title="reset to 0.5">clear</button>
-      <button class="sq-aut__remove" type="button" title="remove lane">×</button>
-    `;
-    rows.appendChild(row);
-
-    const grid = row.querySelector(".sq-aut__grid");
-    for (let i = 0; i < t.length; i++) {
-      const cell = document.createElement("div");
-      cell.className = "sq-aut__step";
-      cell.dataset.idx = i;
-      cell.style.setProperty("--v", String(lane.values[i] ?? 0));
-      grid.appendChild(cell);
-    }
-
-    const setFromPointer = (ev) => {
-      const rect = grid.getBoundingClientRect();
-      const cols = t.length;
-      const relX = Math.max(0, Math.min(rect.width - 1, ev.clientX - rect.left));
-      const relY = Math.max(0, Math.min(rect.height, ev.clientY - rect.top));
-      const idx = Math.max(0, Math.min(cols - 1, Math.floor((relX / rect.width) * cols)));
-      const v = 1 - (relY / rect.height);
-      lane.values[idx] = Math.max(0, Math.min(1, v));
-      const cell = grid.children[idx];
-      if (cell) cell.style.setProperty("--v", String(lane.values[idx]));
-    };
-
-    let dragging = false;
-    grid.addEventListener("pointerdown", (ev) => {
-      dragging = true;
-      try { grid.setPointerCapture(ev.pointerId); } catch {}
-      setFromPointer(ev);
-      ev.preventDefault();
-    });
-    grid.addEventListener("pointermove", (ev) => { if (dragging) setFromPointer(ev); });
-    grid.addEventListener("pointerup", (ev) => {
-      dragging = false;
-      try { grid.releasePointerCapture(ev.pointerId); } catch {}
-    });
-    grid.addEventListener("pointercancel", () => { dragging = false; });
-
-    row.querySelector(".sq-aut__enable").addEventListener("change", (ev) => {
-      lane.enabled = !!ev.target.checked;
-      row.classList.toggle("is-active", lane.enabled);
-    });
-    row.querySelector(".sq-aut__clear").addEventListener("click", () => {
-      for (let i = 0; i < lane.values.length; i++) lane.values[i] = 0.5;
-      for (let i = 0; i < grid.children.length; i++) grid.children[i].style.setProperty("--v", "0.5");
-    });
-    row.querySelector(".sq-aut__remove").addEventListener("click", () => {
-      delete t.automation[key];
-      row.remove();
-      refreshAdder();
-    });
+    rows.appendChild(buildAutomationLane(t, key, () => refreshAdder()));
   };
 
   for (const key of enabledKeys) drawRow(key);
   refreshAdder();
+  refreshParamIndicators(t);
 
   addBtn.addEventListener("click", () => {
     refreshAdder();
@@ -1111,6 +1165,7 @@ export function renderAutomationPanel(t, panel) {
     drawRow(key);
     addSel.hidden = true;
     refreshAdder();
+    refreshParamIndicators(t);
   });
 }
 

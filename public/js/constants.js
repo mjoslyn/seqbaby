@@ -34,13 +34,14 @@ export const LFO_KEYS = [
   "reverb_decay",
   // Wavetable wave-scan window (setter-driven too — the scan config isn't an AudioParam).
   "wt_scan_start", "wt_scan_range",
-  // Granular play-head speed + grain pitch (setter-driven; read per grain).
-  "gran_speed", "gran_pitch",
+  // Granular grain controls (setter-driven; each grain reads them as it's scheduled).
+  "gran_speed", "gran_pitch", "gran_window", "gran_jitter", "gran_detune", "gran_pan",
   // TB-303 panel controls outside the four timbre sliders. Real AudioParams on
   // the worklet node, so these take the normal audio-rate path.
   "tb303_accent", "tb303_tune",
   // Access Virus panel controls outside the four sliders — AudioParams too.
   "virus_pw", "virus_fm", "virus_ring", "virus_unidet", "virus_cut2", "virus_bal", "virus_sat", "virus_envamt",
+  "virus_osc2semi", "virus_osc2det", "virus_unispread", "virus_atk", "virus_sus", "virus_rel",
 ];
 // How much each target swings per unit of depth:
 //  - 0..1 unit params: amp = depth/2 (swings ±0.5)
@@ -67,10 +68,15 @@ export const LFO_LABELS = {
   pitch_semi: "pitch semi",
   wt_scan_start: "wave scan start", wt_scan_range: "wave scan range",
   gran_speed: "grain speed", gran_pitch: "grain pitch",
+  gran_window: "grain window", gran_jitter: "grain jitter",
+  gran_detune: "grain detune", gran_pan: "grain pan",
   tb303_accent: "303 accent", tb303_tune: "303 tune",
   virus_pw: "virus pulse width", virus_fm: "virus fm", virus_ring: "virus ring mod",
   virus_unidet: "virus unison detune", virus_cut2: "virus cutoff 2", virus_bal: "virus filter balance",
   virus_sat: "virus saturation", virus_envamt: "virus env amount",
+  virus_osc2semi: "virus osc2 semi", virus_osc2det: "virus osc2 detune",
+  virus_unispread: "virus unison spread",
+  virus_atk: "virus attack", virus_sus: "virus sustain", virus_rel: "virus release",
   delay_time: "delay time", delay_fbk: "delay fbk",
   reverb_decay: "reverb decay",
 };
@@ -109,6 +115,11 @@ export const LFO_AMP_SCALE = {
   // All 0..1 knobs except cut2 and envamt, which are bipolar over the same span.
   virus_pw: 1, virus_fm: 1, virus_ring: 1, virus_unidet: 1,
   virus_cut2: 2, virus_bal: 1, virus_sat: 1, virus_envamt: 2,
+  // osc2 semi is in semitones over ±24, so depth 1 swings an octave either way.
+  virus_osc2semi: 24,
+  virus_osc2det: 1, virus_unispread: 1, virus_atk: 1, virus_sus: 1, virus_rel: 1,
+  // Granular grain controls — 0..1 swing around wherever the slider sits.
+  gran_window: 1, gran_jitter: 1, gran_detune: 1, gran_pan: 1,
 };
 
 // Non-blocking prompt dialog (browser prompt() halts the transport scheduler)

@@ -4,6 +4,7 @@ import { PATTERN_COUNT } from "./constants.js";
 import { setStatus } from "./dom.js";
 import { activeMeter, autoAccents } from "./meter.js";
 import { renderPatternGrid } from "./patternBar.js";
+import { refreshParamIndicators } from "./paramTargets.js";
 import { refreshAutIfOpen, refreshRollIfOpen } from "./pianoRoll.js";
 import { renderStepGrid } from "./stepGrid.js";
 import { SCALES, midiToScaleIndex, scaleIndexToMidi } from "./theory.js";
@@ -212,6 +213,7 @@ export function switchPattern(idx) {
     renderStepGrid(t);
     refreshRollIfOpen(t);
     refreshAutIfOpen(t);
+    refreshParamIndicators(t);   // automation lanes belong to the pattern
   }
   renderPatternGrid();
   const repInput = document.getElementById("pattern-repeats");

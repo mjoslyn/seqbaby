@@ -594,6 +594,15 @@ export function buildVirusVoice(output) {
         case "vbal":       return P.balance;
         case "vsatamt":    return P.satAmt;
         case "venvamt":    return P.envAmt;
+        // The rest of the panel's sliders. These are k-rate (they only matter
+        // per control block), which an LFO connection and an automation ramp
+        // both handle — the value is just sampled once per block.
+        case "vosc2semi":  return P.osc2semi;
+        case "vosc2det":   return P.osc2det;
+        case "vunispread": return P.uniSpread;
+        case "vatk":       return P.attack;
+        case "vsus":       return P.sustain;
+        case "vrel":       return P.release;
       }
       return null;
     },

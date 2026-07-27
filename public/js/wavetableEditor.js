@@ -124,6 +124,7 @@ export function openWavetableEditor(t) {
   overlay.className = "sq-modal-overlay";
   const modal = document.createElement("div");
   modal.className = "sq-modal sq-wt__modal";
+  modal.dataset.trackId = String(t.id);   // lets the right-click param menu find the track
   modal.setAttribute("role", "dialog");
   modal.setAttribute("aria-modal", "true");
   const prebuiltOpts = [...BASIC, ...WAVETABLE_WAVES.map(w => w.name)]
