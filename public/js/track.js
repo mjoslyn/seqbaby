@@ -10,7 +10,7 @@ import { refreshAutIfOpen, refreshRollIfOpen } from "./pianoRoll.js";
 import { paintDiceDensity, refreshFxPanelUI, renderModPanel, renderTrack } from "./render.js";
 import { applySet } from "./session.js";
 import { applyCompressorConfig, defaultCompConfig, ensureFxRack, refreshCompSourceDropdowns, routeVoiceToRack } from "./signal.js";
-import { aliasPattern, emptyPattern, state } from "./state.js";
+import { aliasPattern, clonePattern, emptyPattern, state } from "./state.js";
 import { renderStepGrid } from "./stepGrid.js";
 import { SCALES, midiToScaleIndex, scaleIndexToMidi } from "./theory.js";
 import { requestMidiIfNeeded } from "./transport.js";
@@ -53,7 +53,9 @@ export function createTrack({ name, engineKey, length = totalSteps() }) {
     pitchLock: true,
     density: 0.5,
     speed: 1,
-    trackTick: 0,
+    // A track added mid-play joins on the step everyone else is on, not at 0.
+    // At 1x the per-track counter advances once per 16n, so it tracks state.tick.
+    trackTick: state.playing ? state.tick : 0,
     repeatId: null,
     soundPromptText: "",
     promptText: "",
@@ -161,6 +163,13 @@ export function duplicateTrack(src) {
   dup.isDrumKit = !!src.isDrumKit;
   dup.glide = src.glide ?? 0;
   dup.speed = src.speed ?? 1;
+  // Land the copy on the step its source is on. trackTick is the per-track step
+  // counter the transport reads; createTrack starts it at 0, so duplicating
+  // mid-play would drop the copy in at step 0 while the original is mid-pattern
+  // — the two run out of phase, audibly and in the playhead. speedAccum is the
+  // sub-step remainder for tracks that aren't at 1× and has to travel with it.
+  dup.trackTick = src.trackTick ?? 0;
+  dup.speedAccum = src.speedAccum ?? 0;
   dup.density = src.density ?? 0.5;
   dup.sampleSpeedMode = src.sampleSpeedMode ?? "native";
   dup.pitchLock = src.pitchLock ?? true;
@@ -170,32 +179,7 @@ export function duplicateTrack(src) {
   for (let i = 0; i < PATTERN_COUNT; i++) {
     const sp = src.patterns[i];
     if (!sp) continue;
-    const automation = {};
-    for (const [key, lane] of Object.entries(sp.automation || {})) {
-      automation[key] = { enabled: !!lane.enabled, values: (lane.values || []).slice() };
-    }
-    dup.patterns[i] = {
-      steps: sp.steps.slice(),
-      lengths: sp.lengths.slice(),
-      notes: sp.notes.slice(),
-      velocities: sp.velocities.slice(),
-      chords: sp.chords.slice(),
-      offsets: (sp.offsets || []).slice(),
-      arps: (sp.arps || []).slice(),
-      arpRates: (sp.arpRates || []).slice(),
-      arpRanges: (sp.arpRanges || []).slice(),
-      arpDirs: (sp.arpDirs || []).slice(),
-      complexities: (sp.complexities || []).slice(),
-      ratchets: (sp.ratchets || []).slice(),
-      sampleStarts: (sp.sampleStarts || []).slice(),
-      sampleEnds: (sp.sampleEnds || []).slice(),
-      sampleFadeIns: (sp.sampleFadeIns || []).slice(),
-      sampleFadeOuts: (sp.sampleFadeOuts || []).slice(),
-      sampleLoopModes: (sp.sampleLoopModes || []).slice(),
-      extraNotes: (sp.extraNotes || []).map(slot => Array.isArray(slot) ? slot.slice() : null),
-      extraLengths: (sp.extraLengths || []).map(slot => Array.isArray(slot) ? slot.slice() : null),
-      automation,
-    };
+    dup.patterns[i] = clonePattern(sp);
   }
   aliasPattern(dup, state.activePattern);
 

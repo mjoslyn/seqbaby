@@ -118,6 +118,35 @@ export function emptyPattern(len) {
 }
 
 /**
+ * Deep-copy a pattern — every per-step array by value, automation lanes rebuilt,
+ * so the clone shares nothing with the source. THE one place a pattern is
+ * copied: duplicating a pattern and duplicating a track both go through here, so
+ * a new per-step field can't be added to emptyPattern and forgotten by one of
+ * them (arps, ratchets, chord inversions, per-step sample regions and the piano
+ * roll's stacked notes were all silently dropped when this was open-coded).
+ * Fields the source lacks keep the fresh pattern's defaults, which is how a save
+ * written before a field existed gets healed on copy.
+ * @param {Pattern} src @returns {Pattern}
+ */
+export function clonePattern(src) {
+  const out = emptyPattern(src?.steps?.length ?? 0);
+  for (const key of Object.keys(out)) {
+    const v = src?.[key];
+    if (!Array.isArray(v)) continue;              // automation, and anything missing
+    const dst = out[key];
+    const n = Math.min(dst.length, v.length);     // a legacy pattern can be short
+    for (let i = 0; i < n; i++) dst[i] = v[i];
+  }
+  // These hold nested arrays; the copy above would have shared them by reference.
+  out.extraNotes   = out.extraNotes.map(s => Array.isArray(s) ? s.slice() : null);
+  out.extraLengths = out.extraLengths.map(s => Array.isArray(s) ? s.slice() : null);
+  for (const [key, lane] of Object.entries(src?.automation || {})) {
+    out.automation[key] = { enabled: !!lane.enabled, values: (lane.values || []).slice() };
+  }
+  return out;
+}
+
+/**
  * Rebind a track's step arrays to reference patterns[idx] directly so UI
  * mutations flow straight into that pattern.
  * @param {Track} t @param {PatternIndex} idx

@@ -1,6 +1,6 @@
 import { PATTERN_COUNT } from "./constants.js";
 import { setStatus } from "./dom.js";
-import { aliasPattern, isPatternNonEmpty, requestPatternSwitch, state } from "./state.js";
+import { aliasPattern, clonePattern, isPatternNonEmpty, requestPatternSwitch, state } from "./state.js";
 import { renderStepGrid } from "./stepGrid.js";
 import { maxLengthAt } from "./track.js";
 
@@ -9,13 +9,7 @@ export function copyPattern(from, to) {
   for (const t of state.tracks) {
     const src = t.patterns?.[from];
     if (!src) continue;
-    t.patterns[to] = {
-      steps: src.steps.slice(),
-      lengths: src.lengths.slice(),
-      notes: src.notes.slice(),
-      velocities: src.velocities.slice(),
-      chords: src.chords.slice(),
-    };
+    t.patterns[to] = clonePattern(src);
   }
   // Meter + customization travel with the duped pattern so it keeps its
   // time signature and stays independent from pattern 1's meter.
