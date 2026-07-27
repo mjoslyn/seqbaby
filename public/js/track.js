@@ -1,6 +1,7 @@
 import { PATTERN_COUNT } from "./constants.js";
 import { setStatus } from "./dom.js";
 import { defaultFxConfig } from "./fxRack.js";
+import { chordSelectionFor } from "./keyboard.js";
 import { applySampleSpeed, defaultLFOConfig, disposeLFOs, syncAllLFOs } from "./lfo.js";
 import { autoAccents, guessIsDrumKit, patternMeter, stepsPerBarForMeter, totalSteps } from "./meter.js";
 import { updatePlaitsControlsVisibility } from "./params.js";
@@ -522,7 +523,12 @@ export function applyKbdArpToStep(t, idx, hasChord) {
   if (Array.isArray(t.arpDirs))   t.arpDirs[idx]   = state.kbdArpDir || "up";
 }
 
-export function startNote(t, anchor) {
+/**
+ * Turn on the step at `anchor`. `noteHint` is the pitch the caller already knows
+ * the step will take (the piano roll clicks a specific row), so chord mode can
+ * build its chord on that root rather than guessing.
+ */
+export function startNote(t, anchor, noteHint = null) {
   clearRange(t, anchor, anchor, -1);
   t.steps[anchor] = 1;
   t.lengths[anchor] = 1;
@@ -530,7 +536,20 @@ export function startNote(t, anchor) {
     // If the keyboard is active and a note/chord was just played, paint that onto
     // the new step (root + chord type + inversion + polyphonic extras). Otherwise
     // drum-kit tracks pin to C2 and melodic tracks reuse the last placed pitch.
-    const sel = state.kbdNotesOn ? state.kbdLast : null;
+    const kbd = state.kbdNotesOn ? state.kbdLast : null;
+    // Chord mode is a mode, not a memory of the last keypress: while it's on, a
+    // plain step click gets the chord (and the keyboard's arp settings, via
+    // applyKbdArpToStep below) built on whatever root the step would have taken.
+    // Drum kits sit chord mode out entirely — chord mode is a global toggle and
+    // a chord on a kit is just the same sample fired at three pitches, so the
+    // step keeps its root and nothing else (also for a chord already sitting in
+    // kbdLast from a keypress, and for the diatonic fallback's explicit tones).
+    let sel = (state.kbdChordType && !t.isDrumKit)
+      ? chordSelectionFor(noteHint ?? kbd?.root ?? lastUsedNote(t))
+      : kbd;
+    if (sel && t.isDrumKit && (sel.chord || state.kbdChordType)) {
+      sel = { root: sel.root, chord: "", cpx: 0, extras: null };
+    }
     if (sel) {
       t.notes[anchor] = sel.root;
       if (Array.isArray(t.chords)) t.chords[anchor] = sel.chord || "";

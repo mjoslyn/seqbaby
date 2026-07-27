@@ -608,7 +608,7 @@ export function renderRollPanel(t, panel) {
     }
     // Empty step → create a fresh note at the clicked position. Dragging
     // right extends its length.
-    startNote(t, step);
+    startNote(t, step, note);
     t.notes[step] = note;
     if (!t.isDrumKit) t.lastEditedNote = note;
     drag = { mode: "create", anchor: step, lastEnd: step, moved: false, pointerId: e.pointerId };

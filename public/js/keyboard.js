@@ -12,7 +12,7 @@ import { currentBpm } from "./lfo.js";
 import { invertChord, state } from "./state.js";
 import { renderStepGrid } from "./stepGrid.js";
 import { applyKbdArpToStep, resizeTrack } from "./track.js";
-import { SCALES, chordNotes, chordTypeForTones, diatonicChordNotes, midiToScaleIndex, quantizeToScale, scaleIndexToMidi } from "./theory.js";
+import { CHORD_TYPES, SCALES, chordNotes, chordTypeForTones, diatonicChordNotes, midiToScaleIndex, quantizeToScale, scaleIndexToMidi } from "./theory.js";
 import { ensureAudio } from "./transport.js";
 
 const KBD_REC_VEL = 0.85;
@@ -129,20 +129,29 @@ export function syncKbdArpUI() {
   if (on) on.checked = !!state.kbdArp;
 }
 
-// What a single chord-mode keypress writes to a step: root + chord type + cpx,
+// What chord mode writes to a step for a given root: root + chord type + cpx,
 // exactly like the step editor's own chord settings, so the piano roll shows one
 // labelled root note instead of a stack. Under a scale the chord is diatonic, so
 // its quality is looked up from the tones (Dmin for ii of C major, etc.); a
 // voicing that isn't one of CHORD_TYPES (stacked thirds in a pentatonic scale,
 // say) falls back to explicit notes so it still reproduces exactly.
-function chordPressSelection(pressedMidi) {
-  const root = Math.round(pressedMidi);
+// Used by a keypress and by a plain step click alike (see startNote).
+export function chordSelectionFor(rootMidi) {
+  const root = clampNote(rootMidi);
   const cpx = state.kbdChordCpx | 0;
-  if (!scaleChordActive()) return { root, chord: state.kbdChordType, cpx, extras: null };
-  const base = diatonicChordNotes(pressedMidi, 3).map(clampNote);
+  if (!scaleChordActive()) {
+    // "on" is the scale-mode picker's value and isn't a real chord type — if the
+    // scale went off before the picker was resynced, fall back to a plain note.
+    const chord = CHORD_TYPES[state.kbdChordType] ? state.kbdChordType : "";
+    return { root, chord, cpx: chord ? cpx : 0, extras: null };
+  }
+  // A keypress is already in-scale; a step click's root (the track's last-used
+  // note) may not be, and an off-scale root has no diatonic chord at all.
+  const inScale = clampNote(quantizeToScale(root, state.scale.root, SCALES[state.scale.mode]));
+  const base = diatonicChordNotes(inScale, 3).map(clampNote);
   const type = chordTypeForTones(base);
-  if (type) return { root, chord: type, cpx, extras: null };
-  const tones = tonesFor(pressedMidi);
+  if (type) return { root: inScale, chord: type, cpx, extras: null };
+  const tones = tonesFor(inScale);
   return { root: tones[0], chord: "", cpx: 0, extras: tones.length > 1 ? tones.slice(1) : null };
 }
 
@@ -150,7 +159,7 @@ function chordPressSelection(pressedMidi) {
 // yields a chord config (above); otherwise every held key is its own note — the
 // lowest is the root, the rest are polyphonic extras.
 function kbdSelection(pressedMidi) {
-  if (state.kbdChordType) return chordPressSelection(pressedMidi);
+  if (state.kbdChordType) return chordSelectionFor(pressedMidi);
   const notes = [...new Set([...held.values()].map(r => Math.round(r.midi)).filter(Number.isFinite))].sort((a, b) => a - b);
   const root = notes.length ? notes[0] : Math.round(pressedMidi);
   return { root, chord: "", cpx: 0, extras: notes.length > 1 ? notes.slice(1) : null };
