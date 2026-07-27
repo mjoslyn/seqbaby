@@ -1,4 +1,4 @@
-import { PLAITS_MACRO_TIPS, engineByKey } from "./catalog.js";
+import { ENGINE_MACRO_TIPS, PLAITS_MACRO_TIPS, engineByKey } from "./catalog.js";
 import { applySampleSpeed, disposeLFOs, syncAllLFOs } from "./lfo.js";
 import { redetectDrumKit } from "./meter.js";
 import { refreshFxPanelUI, updateMidiUI } from "./render.js";
@@ -158,7 +158,8 @@ export function updatePlaitsControlsVisibility(t) {
       // Plaits keeps the hardware's generic slider names across all sixteen
       // models, so the per-model explanation has to come through the tooltip.
       : isPlaits ? (PLAITS_MACRO_TIPS[eng?.plaitsIdx] ?? null)
-      : null;
+      // Every other engine that borrows these four sliders (see catalog.js).
+      : (ENGINE_MACRO_TIPS[t.engineKey] ?? null);
     for (const key of Object.keys(labels)) {
       const field = group.querySelector(`.p-${key}`)?.closest(".sq-field");
       if (!field) continue;
@@ -192,6 +193,7 @@ export function updatePlaitsControlsVisibility(t) {
         : isVirus
         ? { osc1: "osc1", osc2: "osc2",  osc3: "sub",   osc4: "noise", hide4: false }
         : { osc1: "osc1", osc2: "osc2",  osc3: "osc3",  osc4: "",    hide4: true };
+      const oscTips = ENGINE_MACRO_TIPS[t.engineKey]?.osc;
       for (const k of ["osc1", "osc2", "osc3", "osc4"]) {
         const field = oscGroup.querySelector(`.p-${k}`)?.closest(".sq-field");
         if (!field) continue;
@@ -199,12 +201,20 @@ export function updatePlaitsControlsVisibility(t) {
         field.hidden = false;
         const lbl = field.querySelector("label");
         if (lbl) lbl.textContent = oscLabels[k];
+        field.title = oscTips?.[k] ?? "";      // clear the last engine's line
       }
     }
   }
   // Oscillator-modifier group (ultrasaw / FM / metalizer): mini-brute only for now.
   const modGroup = t._oscModGroupEl || t.el.querySelector(".sq-param-group--osc-mod");
-  if (modGroup) modGroup.hidden = !isMiniBrute;
+  if (modGroup) {
+    modGroup.hidden = !isMiniBrute;
+    const modTips = ENGINE_MACRO_TIPS[t.engineKey]?.oscMod;
+    for (const k of ["ultra", "fm", "metal"]) {
+      const field = modGroup.querySelector(`.p-${k}`)?.closest(".sq-field");
+      if (field) field.title = modTips?.[k] ?? "";
+    }
+  }
   // Moog osc-bank group (per-osc range + waveform + osc2/3 freq + noise).
   const moogGroup = t._moogOscGroupEl || t.el.querySelector(".sq-param-group--moog");
   if (moogGroup) moogGroup.hidden = !isMoog;

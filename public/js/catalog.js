@@ -111,6 +111,94 @@ export const PLAITS_MACRO_TIPS = [
     decay: PLAITS_DRUM_DECAY },
 ];
 
+// The same four sliders again, for the engines that aren't Plaits. Each entry is
+// keyed by engine key, with `osc` for the oscillator-mix row and `oscMod` for
+// the ultrasaw / FM / metalizer row where an engine uses them. Only the controls
+// an engine actually shows need a line — updatePlaitsControlsVisibility hides
+// the rest. (The 303, the Virus, the granular engine and the 808/909 voices keep
+// their tips inline in params.js, next to the labels they go with.)
+export const ENGINE_MACRO_TIPS = {
+  "dm:mini-brute": {
+    harm: "speed of the LFO sweeping the pulse wave's width, and its depth, on one control — at zero the pulse holds still",
+    timb: "the pulse wave's resting width, from a thin nasal 10% out to a hollow square. The pwm rate slider sweeps around wherever this sits",
+    osc: {
+      osc1: "level of the sawtooth — the Brute's main voice",
+      osc2: "level of the pulse wave, shaped by the two pw controls",
+      osc3: "level of the triangle, which is what the metalizer folds",
+      osc4: "level of the sub oscillator, an octave below",
+    },
+    oscMod: {
+      ultra: "ultrasaw: detuned copies stacked around the saw, for width out of a single oscillator",
+      fm: "audio-rate frequency modulation from the sub — clangorous and metallic as it climbs",
+      metal: "metalizer: folds the triangle back on itself into hard upper harmonics",
+    },
+  },
+  "dm:moog": {
+    harm: "how far oscillator 2 sits off oscillator 1, 5 to 30 cents. The slow beat between them is most of why the stack sounds thick",
+    decay: "one control doing two things: how long a note takes to fall away, and how much of the warming filter stage is mixed in as it does",
+    osc: {
+      osc1: "level of oscillator 1 in the mixer",
+      osc2: "level of oscillator 2 — the detuned one",
+      osc3: "level of oscillator 3, usually dropped an octave for weight",
+    },
+  },
+  "dm:juno": {
+    harm: "speed and depth of the LFO sweeping the DCO's pulse width — the Juno's built-in movement",
+    timb: "the pulse's resting width, which that sweep moves around",
+    morph: "the chorus, wet and depth together. It is what a Juno sounds like; almost nobody turns it off",
+    decay: "how long a note falls away — and the high-pass with it, so the sound thins as it shortens",
+    osc: {
+      osc1: "level of the main DCO",
+      osc2: "level of the square sub, an octave below",
+      osc3: "level of the noise source",
+    },
+  },
+  "dm:guitar": {
+    harm: "how hard the pluck is pushed into the overdrive stage, from clean up into grit",
+    timb: "damping of the string — low is a muted thud, high is a bright pick",
+    morph: "how much chorus sits on the output",
+    decay: "how long the string rings, from a short pluck to a long sustain",
+  },
+  "dm:bass": {
+    harm: "how hard the string is driven — finger, then pick, then overdriven",
+    timb: "damping: roughly where along the string it is plucked, dull to bright",
+    morph: "how much energy the string keeps on each pass. Higher rings longer and harder",
+    decay: "how long the note rings out",
+  },
+  "dm:rhodes": {
+    harm: "the ratio between the tine and the tone bar — low is deep and hollow, high goes bell-like",
+    timb: "how hard the hammer hits, so how much of that metallic attack comes through",
+    morph: "how much chorus is on the output — the stereo shimmer",
+    decay: "how long each note rings, and how long it takes to let go once released",
+  },
+  "dm:prophet6": {
+    harm: "detunes VCO2 against VCO1 by up to 30 cents either way. Centre is unison; the ends beat",
+    timb: "crossfades VCO2 from saw to pulse, sweeping the pulse width as it goes",
+    morph: "how much of the output runs through the overdrive stage",
+    decay: "how long each note falls away, and its release with it",
+    osc: {
+      osc1: "level of VCO1",
+      osc2: "level of VCO2 — the detuned one the shape control sweeps",
+      osc3: "level of the sub oscillator",
+      osc4: "level of the noise source",
+    },
+  },
+  "wt:akwf": {
+    harm: "position across the table, morphing between the frames — the ones you drew in the editor, or the AKWF palette. Wave scan can sweep this on its own",
+    timb: "a lowpass on each voice, on top of the track filter: dark at the bottom, fully open at the top",
+    morph: "how far the stacked unison voices spread in pitch, up to ±30 cents. Zero is a single clean voice",
+    decay: "how long each note takes to fall away, and its release",
+  },
+  "dm:virus": {
+    osc: {
+      osc1: "level of oscillator 1",
+      osc2: "level of oscillator 2 — the one semi, detune and sync act on",
+      osc3: "level of the sub oscillator, an octave under osc 1 (its shape is the sub select)",
+      osc4: "level of the noise source. Squared, so the bottom of the slider stays usable",
+    },
+  },
+};
+
 export const DRUM_SYNTH_ENGINES = [
   { key: "dm:808-kick",  label: "808 kick",     defaultNote: 36 },
   { key: "dm:808-snare", label: "808 snare",    defaultNote: 60 },

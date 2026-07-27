@@ -170,9 +170,12 @@ export const CONTROL_LABELS = {
 /** @type {Record<string, string>} */
 export const PARAM_DESCRIPTIONS = {
   vol:   "the track's output level, tapped for the meter and fed to the master bus",
-  harm:  "first timbre macro. Harmonics on Plaits; every other engine reuses it for something of its own — the slider's label says which",
-  timb:  "second timbre macro. Timbre on Plaits, relabelled per engine",
-  morph: "third timbre macro. Morph on Plaits, relabelled per engine",
+  // Fallbacks only: every engine that shows these four sliders describes them
+  // itself (PLAITS_MACRO_TIPS / ENGINE_MACRO_TIPS in catalog.js, and the tips
+  // written inline in updatePlaitsControlsVisibility), and those win.
+  harm:  "the first of the four shared timbre sliders — what it does depends on the engine, and the label says which",
+  timb:  "the second of the four shared timbre sliders, engine-dependent like the rest",
+  morph: "the third of the four shared timbre sliders, engine-dependent like the rest",
   decay: "how long a note takes to fall away after it is struck",
   osc1:  "level of the first oscillator in the mix",
   osc2:  "level of the second oscillator in the mix",

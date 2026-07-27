@@ -71,7 +71,8 @@ env / fx / eq / comp / mod / automation per track.
 - `lfo.js` — LFO configs, `getModTarget`/`canModulate`, tempo sync, setter loop.
 - `automation.js` — per-step parameter automation (`AUTOMATION_TARGETS`).
 - `paramTargets.js` — control class → `{lfo, auto}` key map, the mod/automation
-  exclusivity helpers, and the per-parameter descriptions.
+  exclusivity helpers, the label indicators, and the per-parameter descriptions
+  (generic fallbacks only — the engines describe their own sliders, see below).
 - `paramMenu.js` — right-click a parameter → its mod + automation, in a modal.
 - `render.js` / `stepGrid.js` / `stepEditor.js` / `pianoRoll.js` /
   `patternBar.js` / `scaleUI.js` / `meters.js` / `beat.js` — UI.
@@ -491,9 +492,19 @@ Bundled drum kits are no longer separate engines — they live in
 
 Adding a new engine: catalog entry + voice class dispatch in
 `buildVoiceForEngine` (or a `buildDrumSynthGraph` case + builder fn for
-analog-mono style) + `updatePlaitsControlsVisibility` labels +
+analog-mono style) + `updatePlaitsControlsVisibility` labels + tips +
 `canModulate`/`voiceAutoKeysForEngine` entries + serialize/apply if it has
 unique state.
+
+**Slider tips per engine.** harm / timb / morph / decay (and the osc-mix and
+osc-mod rows) are one set of controls wired to every engine, so what they do is
+explained per engine as a tooltip, applied by `updatePlaitsControlsVisibility`
+alongside the relabelling: `PLAITS_MACRO_TIPS` (by Plaits model index) and
+`ENGINE_MACRO_TIPS` (by engine key, with `osc` / `oscMod` sub-objects) in
+catalog.js, plus the 303 / Virus / granular / 808 / 909 tips written inline next
+to their labels. Each entry only needs the controls its engine actually shows.
+The right-click parameter menu reads these from the DOM, so the generic lines in
+`PARAM_DESCRIPTIONS` are a fallback for anything not covered.
 
 ## Drum-kit flag (`t.isDrumKit`)
 
