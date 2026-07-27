@@ -16,34 +16,46 @@ import { buildVoiceForEngine } from "./voices.js";
 
 /** @typedef {import("./types.js").Track} Track */
 /**
- * Paint the "now" step highlight. `ticks` is an optional per-track snapshot of
- * trackTick values captured at schedule time — the transport schedules audio
- * ~lookAhead ahead of what's audible, so by the time this fires at the audible
- * moment the live trackTick has already advanced past the step being heard.
- * Callers outside the transport (stop, re-renders) omit it and read live.
+ * Paint ONE track's "now" highlight (step grid + piano roll column) on `idx`.
+ * `idx < 0` clears it. Per-track because there's no single moment that's "now"
+ * for the whole rig: swing, per-step nudges and per-track speed all move a
+ * step off the grid, so each track's playhead is scheduled on its own time.
+ * @param {Track} t @param {number} idx
+ */
+export function paintTrackNow(t, idx) {
+  const on = idx >= 0;
+  const cells = t.el.querySelectorAll(".sq-step");
+  cells.forEach(c => {
+    const start = Number(c.dataset.idx);
+    const span = Number(c.dataset.span) || 1;
+    c.classList.toggle("is-now", on && idx >= start && idx < start + span);
+  });
+  // Piano roll: highlight the column for the current step, if the roll is open.
+  const rollPanel = t._rollPanelEl || t.el.querySelector(".sq-track__roll-panel");
+  if (rollPanel && !rollPanel.hidden) {
+    rollPanel.querySelectorAll(".sq-roll__cell.is-now, .sq-roll__vel-cell.is-now")
+      .forEach(c => c.classList.remove("is-now"));
+    if (on) {
+      rollPanel.querySelectorAll(`.sq-roll__cell[data-step="${idx}"], .sq-roll__vel-cell[data-step="${idx}"]`)
+        .forEach(c => c.classList.add("is-now"));
+    }
+  }
+}
+
+/**
+ * Repaint every track's "now" highlight at once, from their tick counters.
+ * The transport doesn't use this while running — it paints each track from the
+ * step loop, on that step's own time (see paintTrackNow). This is for the
+ * callers that need a whole-rig repaint outside the schedule: stop, re-renders.
+ * `ticks` is an optional per-track snapshot of trackTick values; omit it to
+ * read live.
  * @param {number[]} [ticks]
  */
 export function paintNowIndicator(ticks) {
   for (let ti = 0; ti < state.tracks.length; ti++) {
     const t = state.tracks[ti];
     const tk = ticks ? (ticks[ti] ?? 0) : (t.trackTick ?? 0);
-    const idx = ((tk - 1) % t.length + t.length) % t.length;
-    const cells = t.el.querySelectorAll(".sq-step");
-    cells.forEach(c => {
-      const start = Number(c.dataset.idx);
-      const span = Number(c.dataset.span) || 1;
-      c.classList.toggle("is-now", tk > 0 && idx >= start && idx < start + span);
-    });
-    // Piano roll: highlight the column for the current step, if the roll is open.
-    const rollPanel = t._rollPanelEl || t.el.querySelector(".sq-track__roll-panel");
-    if (rollPanel && !rollPanel.hidden) {
-      rollPanel.querySelectorAll(".sq-roll__cell.is-now, .sq-roll__vel-cell.is-now")
-        .forEach(c => c.classList.remove("is-now"));
-      if (tk > 0) {
-        rollPanel.querySelectorAll(`.sq-roll__cell[data-step="${idx}"], .sq-roll__vel-cell[data-step="${idx}"]`)
-          .forEach(c => c.classList.add("is-now"));
-      }
-    }
+    paintTrackNow(t, tk > 0 ? ((tk - 1) % t.length + t.length) % t.length : -1);
   }
 }
 
@@ -332,6 +344,7 @@ export async function togglePlay() {
     const baseStepDur = Tone.Time("16n").toSeconds();
     const anySolo = state.tracks.some(t => t.soloed);
     const masterSwing = Number(document.getElementById("swing")?.value) || 0;
+    const lat = visualOutputLatency();
     for (const t of state.tracks) {
       if (!t.voice) continue;
       if (anySolo ? !t.soloed : t.muted) continue;
@@ -343,19 +356,31 @@ export async function togglePlay() {
         t.speedAccum -= 1;
         const idx = (t.trackTick ?? 0) % t.length;
         t.trackTick = (t.trackTick ?? 0) + 1;
-        // Automation runs every step regardless of whether a note fires.
-        const autoTime = Math.max(state.audioCtx.currentTime + 0.002, time + slot * effDur);
-        runAutomationForStep(t, idx, autoTime, effDur);
+        // Where this step actually lands: the grid slot, pushed by master swing
+        // (odd steps only) and the step's own micro-nudge.
+        const swingOffset = (idx % 2 === 1) ? effDur * masterSwing : 0;
+        const microOffset = (t.offsets?.[idx] ?? 0) * effDur;
+        const stepTime = Math.max(state.audioCtx.currentTime + 0.002,
+          time + slot * effDur + swingOffset + microOffset);
+        // Automation runs every step regardless of whether a note fires — at the
+        // step's real time, not the bare grid time, or a swung/nudged step's lane
+        // lands up to half a step early and the *previous* note hears the value.
+        // Silent steps swing too, so the lane keeps the same groove as the notes.
+        runAutomationForStep(t, idx, stepTime, effDur);
+        // Same for the playhead: paint it when this step is AUDIBLE, so a swung
+        // or nudged step lights up with its note instead of on the bare grid.
+        // Also before the silent-step bail — the playhead moves on every step.
+        // The `playing` guard matters because these are scheduled up to the
+        // lookahead plus a swung step ahead: stop clears the highlights, and
+        // without it a paint still in flight would re-light a step afterwards.
+        scheduleAtAudible(() => { if (state.playing) paintTrackNow(t, idx); }, stepTime, lat);
         if (!t.steps[idx]) { slot++; continue; }
         const span = Math.max(1, t.lengths[idx] || 1);
         // Gate mode plays for the full step length; trigger mode fires a short
         // hit. Voices that honor `duration` (Plaits, samples, melodic synths)
         // will follow this; drum-synth recipes with fixed envelopes don't.
         const duration = (t.noteMode === "trigger") ? 0.05 : span * effDur;
-        const swingOffset = (idx % 2 === 1) ? effDur * masterSwing : 0;
-        const microOffset = (t.offsets?.[idx] ?? 0) * effDur;
-        const hitTime = Math.max(state.audioCtx.currentTime + 0.002,
-          time + slot * effDur + swingOffset + microOffset);
+        const hitTime = stepTime;
         const root = noteForStep(t, idx);
         const vel = t.velocities[idx] ?? 0.5;
         const chord = t.chords[idx] || "";
@@ -465,11 +490,11 @@ export async function togglePlay() {
     }
     // Paint at the time the audio actually reaches the speakers, not when the
     // graph renders it (see visualOutputLatency + scheduleAtAudible above).
-    // Snapshot tick state now — it advances before the deferred paint fires.
-    const lat = visualOutputLatency();
-    const tickSnap = state.tracks.map(t => t.trackTick ?? 0);
+    // The step playheads are scheduled per track inside the loop above, on each
+    // step's own swung/nudged time. The beat indicator stays on the bare grid:
+    // it marks quarters, which land on even 16ths and never swing.
+    // Snapshot the tick now — it advances before the deferred paint fires.
     const globalTickSnap = state.tick;
-    scheduleAtAudible(() => paintNowIndicator(tickSnap), time, lat);
     scheduleAtAudible(() => paintBeatIndicator(globalTickSnap), time, lat);
     if (state.metronome && state.tick % 4 === 0) fireMetronome(time, state.tick % 16 === 0);
     state.tick++;

@@ -568,9 +568,9 @@ export function init() {
   // Right-click any parameter control → its mods + automation lanes. One
   // delegated listener covers every track, now and after any rebuild.
   installParamContextMenu();
-  // Master swing — read live by the transport loop each callback; no per-track
-  // swing state to mirror anymore.
-  document.getElementById("swing").addEventListener("input", () => {});
+  // The master swing slider has no listener on purpose: the transport loop reads
+  // its value straight off the DOM each callback (~0.1 µs), so there's nothing to
+  // mirror into state and nothing to do when it moves.
   document.getElementById("add-track").addEventListener("click", () => {
     createTrack({ name: `track ${state.tracks.length + 1}`, engineKey: "plaits:0" });
   });

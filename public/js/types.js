@@ -160,7 +160,6 @@
  * @property {boolean} soloed
  * @property {boolean} isDrumKit
  * @property {number} glide
- * @property {number} swing
  * @property {number} density
  * @property {number} speed
  * @property {string} sampleSpeedMode       "native" default.
