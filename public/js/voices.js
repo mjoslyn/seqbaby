@@ -5,6 +5,8 @@ import { makeMetalizerCurve } from "./curves.js";
 import { isMobileDevice } from "./dom.js";
 import { sampleHitRate } from "./lfo.js";
 import { setParam } from "./params.js";
+import { buildTb303Voice } from "./tb303.js";
+import { buildVirusVoice, VIRUS_NUM_KEYS, VIRUS_SEL_KEYS } from "./virus.js";
 
 
 /** @typedef {import("./types.js").Voice} Voice */
@@ -549,17 +551,21 @@ export function buildDrumSynthNode(kind, output) {
         });
       });
 
+    // TB-303: a model of the machine's own circuits, in an AudioWorklet — see
+    // tb303.js. The fallback below only runs if the worklet failed to register,
+    // so a track is never silent because of it.
     case "303": {
+      const v = buildTb303Voice(output);
+      if (v) return v;
       const s = new Tone.MonoSynth({
         oscillator: { type: "sawtooth" },
         envelope: { attack: 0.002, decay: 0.2, sustain: 0.2, release: 0.1 },
         filter: { Q: 8, rolloff: -24, type: "lowpass" },
         filterEnvelope: { attack: 0.002, decay: 0.25, sustain: 0.15, release: 0.3, baseFrequency: 80, octaves: 4.5, exponent: 2 },
       });
-      const dist = new Tone.Distortion({ distortion: 0.2, wet: 0.25 });
-      s.connect(dist); dist.connect(output);
+      s.connect(output);
       return {
-        nodes: [s, dist],
+        nodes: [s],
         trigger: (note, time, dur, vel) => s.triggerAttackRelease(Tone.Frequency(note, "midi"), dur, time, vel),
         release: (time) => s.triggerRelease(time),
       };
@@ -595,6 +601,22 @@ export function buildDrumSynthNode(kind, output) {
       return {
         nodes: [s],
         trigger: (note, time, dur, vel) => s.triggerAttackRelease(Tone.Frequency(note, "midi"), Math.max(dur, 0.3), time, vel),
+        release: () => s.releaseAll(),
+      };
+    }
+    // Access Virus: a model of the machine's architecture, in an AudioWorklet
+    // that handles its own polyphony — see virus.js. The fallback runs only if
+    // the worklet failed to register, so a track is never silent because of it.
+    case "virus": {
+      const v = buildVirusVoice(output);
+      if (v) return v;
+      const s = new Tone.PolySynth(Tone.Synth, {
+        oscillator: { type: "sawtooth" },
+        envelope: { attack: 0.02, decay: 0.3, sustain: 0.6, release: 0.4 },
+      }).connect(output);
+      return {
+        nodes: [s],
+        trigger: (note, time, dur, vel) => s.triggerAttackRelease(Tone.Frequency(note, "midi"), dur, time, vel),
         release: () => s.releaseAll(),
       };
     }
@@ -1224,7 +1246,9 @@ export class DrumSynthVoice {
                      "ultra", "fm", "metal",
                      "osc1wave", "osc2wave", "osc3wave",
                      "osc1range", "osc2range", "osc3range",
-                     "osc2freq", "osc3freq", "noise", "noisetype"]) {
+                     "osc2freq", "osc3freq", "noise", "noisetype",
+                     "wave303", "accent303", "tune303",
+                     ...VIRUS_NUM_KEYS, ...VIRUS_SEL_KEYS]) {
       if (this.params?.[k] != null) this.built.setParam(k, this.params[k]);
     }
   }
@@ -1267,8 +1291,10 @@ export class DrumSynthVoice {
     if (key === "vol") return this.output.gain;
     return this.built?.getAudioParam?.(key) ?? null;
   }
-  hit(midiNote, time, duration, velocity = 1) {
-    try { this.built.trigger(midiNote, time, duration, Math.max(0, Math.min(1, velocity))); }
+  // `opts` carries the step's written span, which the 303 needs to tell a tie
+  // (which slides into the next note) from a plain step. Other builders ignore it.
+  hit(midiNote, time, duration, velocity = 1, opts = null) {
+    try { this.built.trigger(midiNote, time, duration, Math.max(0, Math.min(1, velocity)), opts); }
     catch (e) { console.warn("drum-synth trigger", e); }
   }
   // Held-note support for the computer keyboard: attack with a long duration so
@@ -1561,10 +1587,17 @@ function envAt(dt, noteDur, attackT, releaseT) {
 // octave/fifth pitch jumps. Grain rate follows `density` grains/sec, or a
 // tempo-locked musical division when `sync` is on. No sample → silent.
 //
+// Speed and pitch are independent, which is the whole point of granulating:
+// `gspeed` is how fast the play head travels through the sample (0 = frozen,
+// negative = backwards, ±2× either way) and changes duration without touching
+// pitch; `gpitch` transposes every grain ±24 semitones without changing how
+// fast the sample plays through.
+//
 // Macro params (track sliders): harm → grain size, timb → density,
 // morph → play position, decay → spray (a global diffusion macro that boosts
 // window + detune + jitter together). Detailed params (granular group):
-// gplay, gspeed, gloop, gwindow, gjitter, gdetune, gpan, gpattern, gsync, grate.
+// gplay, gspeed, gpitch, gloop, gwindow, gjitter, gdetune, gpan, gpattern,
+// gsync, grate.
 
 // Musical division → beats (quarter note = 1 beat) for beat-synced grain rate.
 export const GRAN_RATE_BEATS = {
@@ -1573,10 +1606,56 @@ export const GRAN_RATE_BEATS = {
   "1bar": 4, "2bar": 8, "4bar": 16, "8bar": 32,
 };
 
+// gspeed is the play-head rate as a plain multiplier (1 = the sample's own
+// speed). Sessions written before it went bipolar stored 0..1 for 0..2× —
+// migrateGranularParams() converts those on load.
 export const GRAN_DEFAULTS = {
-  gplay: "fixed", gspeed: 0.5, gloop: "fwd", gwindow: 0.15, gjitter: 0.1,
+  gplay: "fixed", gspeed: 1, gpitch: 0, gloop: "fwd", gwindow: 0.15, gjitter: 0.1,
   gdetune: 0, gpan: 0.3, gpattern: "none", gsync: false, grate: "1/16",
 };
+
+// Speed and pitch are signed, but automation lanes and the mod matrix both
+// speak 0..1, so they convert through here — a lane sweeping 0→1 covers exactly
+// the same ground as dragging the slider end to end.
+export const GRAN_MOD_RANGE = { gspeed: [-2, 2], gpitch: [-24, 24] };
+/** 0..1 → the param's own units. @param {"gspeed"|"gpitch"} key @param {number} v */
+export function granFromUnit(key, v) {
+  const [lo, hi] = GRAN_MOD_RANGE[key];
+  return lo + Math.max(0, Math.min(1, Number(v) || 0)) * (hi - lo);
+}
+/** The param's own units → 0..1. @param {"gspeed"|"gpitch"} key @param {number} x */
+export function granToUnit(key, x) {
+  const [lo, hi] = GRAN_MOD_RANGE[key];
+  return Math.max(0, Math.min(1, ((Number(x) || 0) - lo) / (hi - lo)));
+}
+
+// Granular params the track group / WAV modal drive, in UI order. The lists in
+// render.js, session.js and stepEditor.js walk these.
+export const GRAN_NUM_KEYS = ["gspeed", "gpitch", "gwindow", "gjitter", "gdetune", "gpan"];
+export const GRAN_SEL_KEYS = ["gplay", "gloop", "gpattern", "grate"];
+
+/**
+ * One-shot migration of a serialized params blob: legacy `gspeed` was a 0..1
+ * slider meaning 0..2×, it is now the multiplier itself (so it can go past 1
+ * and reverse). Old blobs carry no marker and their range overlaps the new
+ * one, so stamp `gspeedV` once converted.
+ * @param {Record<string, any>} params
+ */
+export function migrateGranularParams(params) {
+  if (!params || params.gspeed == null) return;
+  if (params.gspeedV !== 2) params.gspeed = (Number(params.gspeed) || 0) * 2;
+  params.gspeedV = 2;
+}
+
+/**
+ * The write side of that migration: mark a params blob as already using the
+ * current gspeed semantics, so loading it back doesn't convert it again.
+ * @param {Record<string, any>} params @returns {Record<string, any>}
+ */
+export function stampGranularParams(params) {
+  if (params && params.gspeed != null) params.gspeedV = 2;
+  return params;
+}
 
 // WaveShaper curve: tanh(drive·x). High drive strongly amplifies the (quiet)
 // grain sum near 0 while smoothly saturating peaks toward ±1 — makeup gain
@@ -1620,6 +1699,7 @@ export class GranularVoice {
     // detailed grain params (granular group) — seeded from defaults
     this.gplay    = GRAN_DEFAULTS.gplay;
     this.gspeed   = GRAN_DEFAULTS.gspeed;
+    this.gpitch   = GRAN_DEFAULTS.gpitch;
     this.gloop    = GRAN_DEFAULTS.gloop;
     this.gwindow  = GRAN_DEFAULTS.gwindow;
     this.gjitter  = GRAN_DEFAULTS.gjitter;
@@ -1634,7 +1714,7 @@ export class GranularVoice {
     this._applyParams();
   }
   _applyParams() {
-    for (const k of ["harm", "timb", "morph", "decay", "gplay", "gspeed", "gloop",
+    for (const k of ["harm", "timb", "morph", "decay", "gplay", "gspeed", "gpitch", "gloop",
                      "gwindow", "gjitter", "gdetune", "gpan", "gpattern", "gsync", "grate"]) {
       if (this.params?.[k] != null) this.setParam(k, this.params[k]);
     }
@@ -1660,7 +1740,10 @@ export class GranularVoice {
       case "timb":  this.density   = 8 + v * 82;       break;  // sparse ↔ dense
       case "morph": this.pos       = v;                break;  // play position
       case "decay": this.spray     = v;                break;  // diffusion macro
-      case "gspeed":  this.gspeed  = v; break;
+      // speed + pitch are the two signed controls here, so they read `val`
+      // rather than the 0..1-clamped `v`.
+      case "gspeed":  this.gspeed  = Math.max(-4, Math.min(4, Number(val) || 0)); break;
+      case "gpitch":  this.gpitch  = Math.max(-24, Math.min(24, Number(val) || 0)); break;
       case "gwindow": this.gwindow = v; break;
       case "gjitter": this.gjitter = v; break;
       case "gdetune": this.gdetune = v; break;
@@ -1683,14 +1766,21 @@ export class GranularVoice {
     }
     return ((x % 1) + 1) % 1;                  // forward wrap
   }
+  // How far a grain may stray from the play head, as a half-width in 0..1 of
+  // the buffer — a fraction of the sample, not a span in seconds, so window at
+  // 100% covers the whole sample whatever its length. Spray widens it further.
+  // The one place this relation lives: grain scheduling, the WAV modal's band
+  // and its resize drag all read it from here.
+  _windowFrac() {
+    return Math.min(1, this.gwindow + this.spray * 0.5) * 0.5;
+  }
   // Snapshot for the WAV modal: the current play-head position, the window
   // half-width (as a 0..1 fraction), and the read positions of every grain
   // playing at `now`. Grain + head records are stamped during hit().
   vizFrame(now) {
     const t = Number.isFinite(now) ? now : this.ctx.currentTime;
     const bufDur = this.buffer?.duration || 1;
-    const windowSec = Math.min((this.gwindow + this.spray * 0.5) * 2.0, bufDur * 0.5);
-    const windowFrac = windowSec / bufDur;
+    const windowFrac = this._windowFrac();
     let head = this.pos;
     const h = this.headViz;
     if (h && h.moving && t <= h.until) {
@@ -1731,11 +1821,12 @@ export class GranularVoice {
 
     // spray (decay macro) boosts window / detune / jitter together.
     const spray = this.spray;
-    const windowSec = Math.min((this.gwindow + spray * 0.5) * 2.0, bufDur * 0.5);
+    const windowFrac = this._windowFrac();
     const jitterAmt = Math.min(1, this.gjitter + spray * 0.4);
     const detuneCents = this.gdetune * 100 + spray * 50;
     const moving = this.gplay === "moving";
-    const speed = this.gspeed * 2;            // 0..200%
+    const speed = this.gspeed;                // ±2×, 0 = frozen head
+    const pitchMul = Math.pow(2, this.gpitch / 12);
 
     // Sum overlapping grains toward unity rather than clipping.
     const overlap = Math.max(1, (1 / interval) * gs);
@@ -1750,14 +1841,14 @@ export class GranularVoice {
       if (env < 0.02) continue;
       // Play-head center: fixed at `pos`, or scanning while moving.
       const center = moving ? this._scanPos(this.pos, (speed * dt) / bufDur) : this.pos;
-      const winJit = (Math.random() * 2 - 1) * (windowSec / bufDur);
+      const winJit = (Math.random() * 2 - 1) * windowFrac;
       const posFrac = ((center + winJit) % 1 + 1) % 1;
       // Per-grain pitch: random detune + optional octave/fifth pattern jump.
       const cents = (Math.random() * 2 - 1) * detuneCents;
       let semis = 0;
       if (this.gpattern === "oct")   semis = (Math.floor(Math.random() * 3) - 1) * 12;
       else if (this.gpattern === "fifth") semis = (Math.floor(Math.random() * 3) - 1) * 7;
-      const rate = baseRate * Math.pow(2, semis / 12 + cents / 1200);
+      const rate = baseRate * pitchMul * Math.pow(2, semis / 12 + cents / 1200);
       const pan = (Math.random() * 2 - 1) * this.gpan;
       this._scheduleGrain(t0 + dt, posFrac * bufDur, gs, rate, grainAmp * env, pan);
       this.grainViz.push({ s: t0 + dt, e: t0 + dt + gs, p: posFrac });
@@ -1778,7 +1869,7 @@ export class GranularVoice {
       velocity: Math.max(0.05, Math.min(1, velocity)),
       startT: t0, nextGrain: t0, movingBase: this.pos, timer: null, released: false,
     };
-    this.headViz = { t0, startPos: this.pos, speed: this.gspeed * 2, moving: this.gplay === "moving", loop: this.gloop, until: t0 + 3600 };
+    this.headViz = { t0, startPos: this.pos, speed: this.gspeed, moving: this.gplay === "moving", loop: this.gloop, until: t0 + 3600 };
     const LOOKAHEAD = 0.12;
     const tick = () => { if (!rec.released) this._spraySustainGrains(rec, this.ctx.currentTime + LOOKAHEAD); };
     tick();
@@ -1808,11 +1899,12 @@ export class GranularVoice {
       interval = 1 / this.density;
     }
     const spray = this.spray;
-    const windowSec = Math.min((this.gwindow + spray * 0.5) * 2.0, bufDur * 0.5);
+    const windowFrac = this._windowFrac();
     const jitterAmt = Math.min(1, this.gjitter + spray * 0.4);
     const detuneCents = this.gdetune * 100 + spray * 50;
     const moving = this.gplay === "moving";
-    const speed = this.gspeed * 2;
+    const speed = this.gspeed;
+    const pitchMul = Math.pow(2, this.gpitch / 12);
     const overlap = Math.max(1, (1 / interval) * gs);
     const grainAmp = (0.9 / Math.sqrt(overlap)) * rec.velocity;
     let guard = 0;
@@ -1822,13 +1914,13 @@ export class GranularVoice {
       const dt = at - rec.startT;
       const atkScale = Math.min(1, dt / 0.02);   // brief note-onset fade-in
       const center = moving ? this._scanPos(rec.movingBase, (speed * dt) / bufDur) : this.pos;
-      const winJit = (Math.random() * 2 - 1) * (windowSec / bufDur);
+      const winJit = (Math.random() * 2 - 1) * windowFrac;
       const posFrac = ((center + winJit) % 1 + 1) % 1;
       const cents = (Math.random() * 2 - 1) * detuneCents;
       let semis = 0;
       if (this.gpattern === "oct") semis = (Math.floor(Math.random() * 3) - 1) * 12;
       else if (this.gpattern === "fifth") semis = (Math.floor(Math.random() * 3) - 1) * 7;
-      const rate = rec.baseRate * Math.pow(2, semis / 12 + cents / 1200);
+      const rate = rec.baseRate * pitchMul * Math.pow(2, semis / 12 + cents / 1200);
       const pan = (Math.random() * 2 - 1) * this.gpan;
       this._scheduleGrain(at, posFrac * bufDur, gs, rate, grainAmp * atkScale, pan);
       this.grainViz.push({ s: at, e: at + gs, p: posFrac });

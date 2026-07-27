@@ -78,6 +78,10 @@ env / fx / eq / comp / mod / automation per track.
 - `bounce.js` — WAV render via MediaRecorder.
 - `buffers.js` — sample decode/normalize cache, `startSampleSource`.
 - `wavetableEditor.js` — in-app wavetable frame editor for `wt:akwf`.
+- `tb303.js` — the TB-303 circuit model: AudioWorklet processor source +
+  registration + voice builder. See the TB-303 section below.
+- `virus.js` — the Access Virus model, same shape: processor source string,
+  Blob-URL registration, voice builder, and its panel key lists.
 - `theory.js` / `meter.js` / `generate.js` / `curves.js` / `params.js` /
   `constants.js` / `dialogs.js` / `dom.js` / `icons.js` / `appApi.js` /
   `types.js` (JSDoc typedefs — data-model source of truth).
@@ -157,10 +161,10 @@ All of this lives in `main.js` `init()` and `transport.js`:
 | engine type   | class            | notes |
 |---|---|---|
 | `plaits`      | `PlaitsVoice`    | 4-voice round-robin pool of Plaits WASM oscillators. `modLevelPatched=1, modLevel=0` at init (without the zero, empty tracks emit a continuous tone). Glide via ramp on `noteAudioParameter`. |
-| `drum-synth`  | `DrumSynthVoice` | Tone.js recipes via `buildDrumSynthGraph(kind, output)`: 808/909 kit, 303, poly-saw, fm-bell, pad, plus the seven emulators (below). |
+| `drum-synth`  | `DrumSynthVoice` | Recipes via `buildDrumSynthGraph(kind, output)`: 808/909 kit, poly-saw, fm-bell, pad, plus the emulators (below). All Tone.js except the 303 and the Virus, which are AudioWorklet models (`tb303.js`, `virus.js`). |
 | `sampler`     | `SamplerVoice`   | THE unified sample voice — plays a user upload or a bundled kit sample chosen via `track.sampleSource` ({kind:"upload"|"bundled", ...}). Absorbed the old `SampleVoice`/`UploadVoice`/`ElevenVoice`. Per-step region/fade/loop via `startSampleSource`; slicing via `t.slices`/`sliceOn`. Pitch from `pitchBase` (36 drum-kit, 60 otherwise); `t.pitchLock` keeps 1×bpm fits pitch-true. |
 | `custom` / `saved` | `CustomToneVoice` | Tone.js synth tree from a saved-patch JSON config (`saved:<name>` keys, localStorage). |
-| `granular`    | `GranularVoice`  | Granular sampler (`dm:granular`, "texture" group). |
+| `granular`    | `GranularVoice`  | Granular sampler (`dm:granular`, "texture" group). See the granular section below. |
 | `wavetable`   | `WavetableVoice` | Multi-frame AKWF wavetable synth (`wt:akwf`), morphable, editable in `wavetableEditor.js`. |
 | `midi`        | `MidiVoice`      | Web MIDI out; converts audio time → DOMHighResTimeStamp for `output.send`. |
 
@@ -169,12 +173,17 @@ Voice interface: `hit(midi, time, dur, vel, opts?)`, `setParam`,
 `setDestination`, `silence`, `dispose`. Legacy engine keys (`smp:*`, `upload`,
 `eleven`) are migrated to `sampler` in `session.js` on load.
 
-## Emulators (Tone.js analog-mono presets, `"Emulators"` optgroup)
+## Emulators (`"Emulators"` optgroup)
 
-All engine type `drum-synth`, each wrapped in `makePolyPool(size, buildOne)`:
+All engine type `drum-synth`. The seven Tone.js analog-mono presets are each
+wrapped in `makePolyPool(size, buildOne)`; the 303 and the Virus are the odd
+ones out — AudioWorklet models that handle their own voicing (the 303 is mono
+like the machine, the Virus polyphonic). See their sections below.
 
 | key             | builder               | pool | character |
 |---|---|---|---|
+| `dm:303`        | `buildTb303Voice`     | mono | TB-303 circuit model, AudioWorklet (`tb303.js`) |
+| `dm:virus`      | `buildVirusVoice`     | 8 (internal) | Access Virus architecture, AudioWorklet (`virus.js`) |
 | `dm:mini-brute` | `buildMiniBruteVoice` | 4 | saw + ultrasaw + PWM pulse + metalized tri + sub, Brute Factor |
 | `dm:moog`       | `buildMoogVoice`      | 4 | 3 osc w/ wave + range selects, ±7-semi osc2/3, noise |
 | `dm:juno`       | `buildJunoVoice`      | 6 | DCO + sub + noise → HPF → baked-in chorus |
@@ -188,6 +197,124 @@ All engine type `drum-synth`, each wrapped in `makePolyPool(size, buildOne)`:
 chord tones on other voices play the baseline; same limitation as
 `PlaitsVoice`). The stock harm/timb/morph/decay sliders are relabeled
 per-engine by `updatePlaitsControlsVisibility`.
+
+## TB-303 (`dm:303`, `public/js/tb303.js`)
+
+A model of the machine's circuits, not a saw-through-a-lowpass preset. It runs
+as an AudioWorklet because none of it is expressible in native nodes: Web Audio
+has no 3-pole filter, no way to put a saturator inside a filter's feedback path,
+and no sample-accurate way to run an envelope into a cutoff.
+
+```
+VCO ──▶ VCF (3-pole diode ladder, 18 dB/oct) ──▶ VCA ──▶ out
+         ▲                                       ▲
+         │  MEG × ENV MOD                        │  ACCENT
+         └── accent sweep (RC, resonance-fed) ────┘
+```
+
+- **Filter** — three one-pole TPT stages with asymmetric (diode) soft clipping
+  in the feedback path, 2× oversampled, decimated through a 2-pole Butterworth.
+  18 dB/oct, no key tracking, and the passband loses level as resonance climbs
+  (only partially compensated — that thinning is the 303).
+- **Accent** is one circuit doing three things: louder note, MEG decay forced to
+  a fixed 200 ms, and a charge into an RC network whose time constant tracks
+  RESONANCE — so consecutive accents at high reso stack instead of resetting.
+  Driven by **step velocity** (accent ramps in above 0.6).
+- **Slide** — a note slides when the step before it was written longer than one
+  step and this one lands as that gate ends. Pitch lags ~60 ms (linear in
+  pitch, it's a CV lag) and the envelopes are *not* retriggered. Untied steps
+  get the machine's short gate (60% of the step), which is why the part reads
+  clipped rather than legato. The transport passes the written span in the hit
+  `opts` (`{span}`) for this.
+- **Controls** — the four timbre sliders are CUTOFF / RESONANCE / ENV MOD /
+  DECAY (real `AudioParam`s on the worklet node, so LFO + automation work
+  normally). `sq-param-group--tb303` carries wave, accent depth, and tuning
+  (`wave303` / `accent303` / `tune303` in `t.params`).
+- **Mod + automation for those three** — accent and tune are AudioParams too,
+  reached under their own keys and gated to `dm:303`: LFO `tb303_accent` /
+  `tb303_tune` (`LFO_KEYS` + `LFO_LABELS` + `LFO_AMP_SCALE` in constants.js,
+  `getModTarget` + `canModulate` in lfo.js, `getAudioParam` in tb303.js), and
+  automation `tb303.accent` / `tb303.tune` / `tb303.wave`. Tune's lane spans
+  the slider's own ±50 cents. Wave has no AudioParam — the lane flips it at
+  0.5, written to the live voice so the track's select stays put (same
+  convention as `gran.*` and `wt.scan.*`).
+  Note ACCENT is a *depth*: it scales an accent the step already has from its
+  velocity, so it does nothing on unaccented steps — as on the machine.
+- **Loading** — the processor source is a string in `tb303.js`, registered from
+  a Blob URL so it travels with the module graph (no extra fetch, no coupling to
+  the `public/e/<sha>/` asset versioning). `loadWorklet()` in transport.js
+  registers it alongside Plaits; a failure is swallowed and `buildVoiceForEngine`
+  falls back to a Tone.MonoSynth so the track is never silent.
+
+## Access Virus (`dm:virus`, `public/js/virus.js`)
+
+The Virus is a digital synth, so the model is of its architecture, not its
+circuits — there aren't any. Four things define it:
+
+```
+osc1 ─┐                    ┌─ FILTER 1 (multimode, 2 or 4 pole) ─┐
+osc2 ─┤                    │              │                      │
+sub  ─┼─ mix ─▶ routing ──▶┤            SAT stage                ├─ bal ─▶ VCA ─▶ L/R
+noise─┤                    │              │                      │
+ring ─┘                    └─ FILTER 2 (multimode, 2 pole) ──────┘
+```
+
+- **Two multimode filters** (LP/HP/BP/BS each) in series, parallel or split
+  across the stereo field, with BALANCE crossfading their outputs. Both are TPT
+  state-variable filters — one structure, all four responses. Filter 1's 4-pole
+  mode cascades two SVF stages; **each carries `sqrt(Q)`, not the full Q**, or
+  the peaks multiply and the resonance doubles in dB.
+- **A saturation stage between them** (9 curves, off → rate reducer), which is
+  where the hardware puts it: filter 2 tidies up what the saturator did.
+- **A continuous shape morph**, sine → tri → saw → pulse, all four derived from
+  one phase accumulator so the crossfades stay coherent. polyBLEP on saw/pulse.
+- **Unison to 8** with detune and stereo spread — the hypersaw.
+
+- **Polyphony lives inside the processor** (8 voices, steal-quietest), not in
+  `makePolyPool`. That's a real gain: a pool exposes only voice 0's params to
+  modulation, while one node with one param set modulates the whole instrument.
+- **Control blocks** — envelopes, cutoff and filter coefficients update every 16
+  samples, so `tan()` runs at 3 kHz rather than per sample. Note events are
+  handled at block boundaries (≤0.33 ms late, never early).
+- **Controls** — the four timbre sliders are CUTOFF / RESONANCE / SHAPE / DECAY;
+  the shared osc1..osc4 sliders are osc1 / osc2 / sub / noise; the rest live in
+  `sq-param-group--virus` as `VIRUS_NUM_KEYS` / `VIRUS_SEL_KEYS` (render.js and
+  session.js walk those lists, as they do for granular).
+- **Mod + automation** — LFO `virus_*` and automation `virus.*`, gated to
+  `dm:virus`, all real AudioParams. `virus_cut2` / `virus_envamt` are bipolar.
+- **Resonance is cubed** (`0.7 + reso³·12`). `timb` defaults to 0.5 for every
+  engine, and a squared curve put that default far too resonant.
+- **Noise is squared** for the same reason: `osc4` defaults to 0.4 everywhere,
+  and linear noise at 0.4 hisses over the patch.
+- Simplifications, stated in the file too: unison copies share their note's
+  filter pair; the morph crossfades four classic waves rather than walking the
+  Virus's 64 spectral wavetables; no oversampling, so the saturator aliases (as
+  the hardware's does); cutoff keyfollow is fixed at 33%.
+
+## Granular (`dm:granular`, `GranularVoice` in voices.js)
+
+Every note sprays a cloud of Hann-windowed grains read from `track.uploadBuffer`.
+Macros: harm = grain size, timb = density, morph = play position, decay = spray.
+The `sq-param-group--granular` row (and the same controls inside the WAV modal)
+carries `gplay, gspeed, gpitch, gloop, gwindow, gjitter, gdetune, gpan,
+gpattern, gsync, grate` in `t.params`.
+
+- **speed / pitch are independent** — `gspeed` is the play-head rate as a plain
+  multiplier (−2…2, 0 freezes, negative scans backwards; only meaningful in
+  `gplay: "moving"`, so the slider greys out in fixed mode via
+  `updateGranularSpeedEnabled`). `gpitch` transposes every grain ±24 semitones
+  without changing how fast the sample plays through.
+- **`gspeed` changed format** — it used to be a 0..1 slider meaning 0..2×. New
+  ranges overlap the old, so serialized blobs carry a `gspeedV: 2` marker
+  (`stampGranularParams` on write, `migrateGranularParams` on read).
+- **`gwindow` is a fraction of the sample, not seconds** — `_windowFrac()` is the
+  one place that relation lives; 100% spans the whole sample whatever its
+  length, and the WAV modal's band + resize drag both invert that same function.
+- **Mod + automation** — `gran_speed`/`gran_pitch` (LFO, setter-driven) and
+  `gran.speed`/`gran.pitch` (automation lanes) map 0..1 across the slider range
+  via `granFromUnit`/`granToUnit`, and write the live voice only, never
+  `t.params` — the slider stays the base. Grains read both when scheduled, so a
+  sequenced note takes one value per hit; a held note re-reads per scheduler tick.
 
 ## Data model (source of truth: `public/js/types.js`)
 
@@ -210,7 +337,9 @@ Switching patterns = re-aliasing + re-render.
 ### Track (`state.tracks[]`) — highlights beyond the aliased pattern fields
 
 `id, name, engineKey, length, accents(Set)`, flags `muted/soloed/isDrumKit`,
-`noteMode ("gate"|"trigger")`, `glide, swing, density, speed`,
+`noteMode ("gate"|"trigger")`, `glide, swing, density, speed` (`density` is the
+dice button's fill level — how full `randomizeMelody` rolls; drag the dice
+up/down, painted by `paintDiceDensity`),
 `sampleSpeedMode ("native"|"1xbpm"), sampleDefaults, sampleSource, slices,
 sliceOn, sliceBase, slicePlayMode, pitchLock`, sound config
 `params/filter/eq/comp/lfoConfig/fxConfig` + live handles
@@ -296,8 +425,8 @@ fails. Real-time capture — see Known limitations.
 
 ## Engines catalog (`buildEngineCatalog`)
 
-Groups in order: `plaits` (16) · `drum / synth` (808/909 kit + 303 /
-poly-saw / fm-bell / pad) · `Emulators` (7) · `texture` (`dm:granular`) ·
+Groups in order: `plaits` (16) · `drum / synth` (808/909 kit + poly-saw /
+fm-bell / pad) · `Emulators` (303 + virus + 7 analog-mono) · `texture` (`dm:granular`) ·
 `wavetable` (`wt:akwf`) · `sampler` (single unified entry) · `saved patches`
 (`saved:<name>`) · `midi`. The engine key string is the source of truth.
 Bundled drum kits are no longer separate engines — they live in
@@ -340,6 +469,14 @@ patterns.
   `refreshCompSourceDropdowns()`.
 - **`tsconfig.json` excludes `public/js/`** — the engine is plain JS with
   JSDoc types; don't rename it to TS or import it into the Next graph.
+- **Worklet processor sources are template literals** (`tb303.js`, `virus.js`),
+  so a stray backtick or `${` inside one — including in a comment — truncates
+  the string. The module still parses, `node --check` still passes, and the
+  failure only shows up as a SyntaxError at engine boot. When editing inside a
+  processor source, extract it and syntax-check the extracted text:
+  `node -e 'const s=require("fs").readFileSync("public/js/virus.js","utf8");
+  require("fs").writeFileSync("/tmp/p.js",s.match(/SOURCE = \`([\s\S]*?)\n\`;/)[1])'
+  && node --check /tmp/p.js`
 - **Netlify deploy-preview hash URLs are pinned to one deploy** — retest on
   the branch alias URL, not an old hash URL. A same-SHA force-push does not
   trigger a rebuild; amend for a fresh SHA.

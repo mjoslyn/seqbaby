@@ -110,6 +110,7 @@
  * @property {number} harm @property {number} timb @property {number} morph @property {number} decay
  * @property {number} [osc1] @property {number} [osc2] @property {number} [osc3] @property {number} [osc4]
  * @property {number} [ultra] @property {number} [fm] @property {number} [metal] @property {number} [noise]
+ * @property {"saw"|"square"} [wave303] @property {number} [accent303] @property {number} [tune303] TB-303 panel.
  */
 
 /**

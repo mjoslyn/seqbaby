@@ -34,6 +34,13 @@ export const LFO_KEYS = [
   "reverb_decay",
   // Wavetable wave-scan window (setter-driven too — the scan config isn't an AudioParam).
   "wt_scan_start", "wt_scan_range",
+  // Granular play-head speed + grain pitch (setter-driven; read per grain).
+  "gran_speed", "gran_pitch",
+  // TB-303 panel controls outside the four timbre sliders. Real AudioParams on
+  // the worklet node, so these take the normal audio-rate path.
+  "tb303_accent", "tb303_tune",
+  // Access Virus panel controls outside the four sliders — AudioParams too.
+  "virus_pw", "virus_fm", "virus_ring", "virus_unidet", "virus_cut2", "virus_bal", "virus_sat", "virus_envamt",
 ];
 // How much each target swings per unit of depth:
 //  - 0..1 unit params: amp = depth/2 (swings ±0.5)
@@ -59,6 +66,11 @@ export const LFO_LABELS = {
   flanger_rate: "flanger rate", flanger_fbk: "flanger fbk",
   pitch_semi: "pitch semi",
   wt_scan_start: "wave scan start", wt_scan_range: "wave scan range",
+  gran_speed: "grain speed", gran_pitch: "grain pitch",
+  tb303_accent: "303 accent", tb303_tune: "303 tune",
+  virus_pw: "virus pulse width", virus_fm: "virus fm", virus_ring: "virus ring mod",
+  virus_unidet: "virus unison detune", virus_cut2: "virus cutoff 2", virus_bal: "virus filter balance",
+  virus_sat: "virus saturation", virus_envamt: "virus env amount",
   delay_time: "delay time", delay_fbk: "delay fbk",
   reverb_decay: "reverb decay",
 };
@@ -91,6 +103,12 @@ export const LFO_AMP_SCALE = {
   chorus_depth: 1,
   pitch_semi: 1,
   reverb_decay: 1,
+  // 303 accent is a 0..1 knob; 303 tune is in semitones, so depth 1 is a
+  // half-semitone vibrato either side of wherever the tune slider sits.
+  tb303_accent: 1, tb303_tune: 1,
+  // All 0..1 knobs except cut2 and envamt, which are bipolar over the same span.
+  virus_pw: 1, virus_fm: 1, virus_ring: 1, virus_unidet: 1,
+  virus_cut2: 2, virus_bal: 1, virus_sat: 1, virus_envamt: 2,
 };
 
 // Non-blocking prompt dialog (browser prompt() halts the transport scheduler)

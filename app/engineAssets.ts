@@ -69,9 +69,11 @@ export const ENGINE_MODULES = [
   "state.js",
   "stepEditor.js",
   "stepGrid.js",
+  "tb303.js",
   "theory.js",
   "track.js",
   "transport.js",
+  "virus.js",
   "voices.js",
   "wavetableEditor.js",
 ].map((f) => engineAsset(`/js/${f}`));

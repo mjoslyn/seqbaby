@@ -3,6 +3,7 @@ import { makeFuzzCurve, shaperPreampGain } from "./curves.js";
 import { canModulate } from "./lfo.js";
 import { setParam } from "./params.js";
 import { cutoffToHz, resonToQ } from "./signal.js";
+import { granFromUnit } from "./voices.js";
 
 
 /** @typedef {import("./types.js").Track} Track */
@@ -29,6 +30,22 @@ export const AUTOMATION_TARGETS = {
   // wavetable wave-scan window (wavetable engine only — see canAutomate)
   "wt.scan.start":      { label: "wave scan start" },
   "wt.scan.range":      { label: "wave scan range" },
+  // granular play-head speed + grain pitch (granular engine only)
+  "gran.speed":         { label: "grain speed" },
+  "gran.pitch":         { label: "grain pitch" },
+  // TB-303 panel controls outside the four sliders (303 engine only)
+  "tb303.accent":       { label: "303 accent" },
+  "tb303.tune":         { label: "303 tune" },
+  "tb303.wave":         { label: "303 wave" },
+  // Access Virus panel controls (virus engine only)
+  "virus.pw":           { label: "virus pulse width" },
+  "virus.fm":           { label: "virus fm" },
+  "virus.ring":         { label: "virus ring mod" },
+  "virus.unidet":       { label: "virus unison detune" },
+  "virus.cut2":         { label: "virus cutoff 2" },
+  "virus.bal":          { label: "virus filter balance" },
+  "virus.sat":          { label: "virus saturation" },
+  "virus.envamt":       { label: "virus env amount" },
   // fx
   "fx.vinyl":           { label: "vinyl amt" },
   "fx.vinyl.warmth":    { label: "vinyl warmth" },
@@ -78,6 +95,7 @@ export function voiceAutoKeysForEngine(t) {
   if (!eng) return ["vol"];
   if (eng.type === "plaits") return ["vol", "harm", "timb", "morph", "decay"];
   switch (t.engineKey) {
+    case "dm:303":        return ["vol", "harm", "timb", "morph", "decay"];
     case "dm:mini-brute": return ["vol", "harm", "timb", "osc1", "osc2", "osc3", "osc4", "ultra", "fm", "metal"];
     case "dm:moog":       return ["vol", "harm", "decay", "osc1", "osc2", "osc3", "noise"];
     case "dm:juno":       return ["vol", "harm", "timb", "morph", "decay", "osc1", "osc2", "osc3", "noise"];
@@ -86,6 +104,7 @@ export function voiceAutoKeysForEngine(t) {
     case "dm:rhodes":     return ["vol", "harm", "timb", "morph", "decay"];
     case "dm:prophet6":   return ["vol", "harm", "timb", "morph", "decay", "osc1", "osc2", "osc3", "osc4", "noise"];
     case "dm:granular":   return ["vol", "harm", "timb", "morph", "decay"];
+    case "dm:virus":      return ["vol", "harm", "timb", "morph", "decay", "osc1", "osc2", "osc3", "osc4", "noise"];
     case "wt:akwf":       return ["vol", "harm", "timb", "morph", "decay"];
   }
   // 808 / 909 voices: tune / tone / colour / decay all take effect on the next
@@ -102,6 +121,9 @@ export function voiceAutoKeysForEngine(t) {
 export function canAutomate(t, key) {
   if (key === "cutoff" || key === "reson") return true;
   if (key.startsWith("wt.scan.")) return t.engineKey === "wt:akwf";
+  if (key.startsWith("gran.")) return t.engineKey === "dm:granular";
+  if (key.startsWith("tb303.")) return t.engineKey === "dm:303";
+  if (key.startsWith("virus.")) return t.engineKey === "dm:virus";
   if (key.startsWith("fx.")) return true;
   if (VOICE_AUTO_KEYS.includes(key)) return voiceAutoKeysForEngine(t).includes(key);
   return false;
@@ -156,6 +178,38 @@ export function applyAutomationAtStep(t, key, v, time, vNext, stepDur) {
   if (key === "wt.scan.start" || key === "wt.scan.range") {
     const sc = t.voice?.scan;
     if (sc) sc[key === "wt.scan.start" ? "start" : "range"] = vv;
+    return;
+  }
+  // Granular speed/pitch: same idea — the lane drives the live voice across the
+  // slider's full range and the stored slider value is left alone. The step's
+  // grains are scheduled right after this, so they pick the new value up. No
+  // ramp: a grain cloud reads these once when it's scheduled, not per sample.
+  if (key === "gran.speed" || key === "gran.pitch") {
+    const p = key === "gran.speed" ? "gspeed" : "gpitch";
+    try { t.voice?.setParam?.(p, granFromUnit(p, vv)); } catch {}
+    return;
+  }
+  // 303 accent / tune are real AudioParams on the worklet node, so they ramp
+  // like any other. Tune's lane spans the tune slider's own range, ±50 cents.
+  if (key === "tb303.accent" || key === "tb303.tune") {
+    const tune = key === "tb303.tune";
+    const map = tune ? (u) => u - 0.5 : (u) => u;
+    ramp(t.voice?.getAudioParam?.(tune ? "tune303" : "accent303"), map(vv), map(vn));
+    return;
+  }
+  // Waveform is a switch, not a value — flip at the halfway point. Written to
+  // the live voice only, so the track's own select stays where the user left it.
+  if (key === "tb303.wave") {
+    try { t.voice?.setParam?.("wave303", vv >= 0.5 ? "square" : "saw"); } catch {}
+    return;
+  }
+  // Virus panel controls are all AudioParams on its worklet node, so they ramp
+  // like any other. cut2 and envamt are bipolar; the lane spans their full range.
+  if (key.startsWith("virus.")) {
+    const which = key.slice(6);
+    const bipolar = which === "cut2" || which === "envamt";
+    const map = bipolar ? (u) => u * 2 - 1 : (u) => u;
+    ramp(t.voice?.getAudioParam?.("v" + which), map(vv), map(vn));
     return;
   }
   const rack = t.fxRack;

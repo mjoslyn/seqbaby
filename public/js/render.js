@@ -10,7 +10,7 @@ import { canModulate, currentBpm, rateFromSync, syncLFO } from "./lfo.js";
 import { openGranularSourceModal, openSamplerSourceModal, pickAudioFileForTrack } from "./main.js";
 import { defaultFxConfig } from "./fxRack.js";
 import { patternMeter, redetectDrumKit, stepsPerBarForMeter } from "./meter.js";
-import { setEngineKey, setParam, updatePlaitsControlsVisibility } from "./params.js";
+import { setEngineKey, setParam, updateGranularSpeedEnabled, updatePlaitsControlsVisibility } from "./params.js";
 import { bestRollViewOct } from "./pianoRoll.js";
 import { applyCompressorConfig, setEQ, setFilter } from "./signal.js";
 import { state } from "./state.js";
@@ -18,7 +18,8 @@ import { openAutAsModal, openCompAsModal, openEnvAsModal, openEqAsModal, openFil
 import { openWavetableEditor } from "./wavetableEditor.js";
 import { attachGridInteraction, renderStepGrid } from "./stepGrid.js";
 import { duplicateTrack, extendPatternByDuplicate, removeTrack, resizePattern, resizeTrack, shiftTrackOctave, truncatePattern } from "./track.js";
-import { GRAN_DEFAULTS } from "./voices.js";
+import { VIRUS_NUM_KEYS, VIRUS_SEL_KEYS } from "./virus.js";
+import { GRAN_DEFAULTS, GRAN_NUM_KEYS, GRAN_SEL_KEYS } from "./voices.js";
 
 
 /** @typedef {import("./types.js").Track} Track */
@@ -36,6 +37,72 @@ export function setActiveTrack(t) {
   if (!t) return;
   state.activeTrackId = t.id;
   for (const other of state.tracks) other.el?.classList.toggle("is-kbd-active", other.id === t.id);
+}
+
+/**
+ * Paint the dice button's fill level from the track's density, so the icon
+ * shows how full the next roll will be.
+ * @param {Track} t
+ */
+export function paintDiceDensity(t) {
+  const btn = t.el?.querySelector(".track-dice");
+  if (!btn) return;
+  const d = Math.max(0, Math.min(1, t.density ?? 0.5));
+  btn.style.setProperty("--dice-level", `${Math.round(d * 100)}%`);
+  btn.title = `random pattern — ${Math.round(d * 100)}% dense (drag up/down to set)`;
+  btn.setAttribute("aria-valuenow", String(Math.round(d * 100)));
+}
+
+// The dice is also the density control: click rolls a new pattern, dragging it
+// up/down sets how full that roll comes out (drawn as the fill behind the icon).
+// Same drag idiom as the BPM field — a press only becomes a drag past a few
+// pixels, so an ordinary click still rolls.
+function attachDiceDensity(t, btn) {
+  const PX_FULL_TRAVEL = 90;    // px from empty to full
+  const PX_THRESH = 4;
+  btn.style.touchAction = "none";
+  btn.setAttribute("role", "button");
+  btn.setAttribute("aria-valuemin", "0");
+  btn.setAttribute("aria-valuemax", "100");
+  paintDiceDensity(t);
+  let drag = null;
+  btn.addEventListener("pointerdown", (e) => {
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    drag = { id: e.pointerId, startY: e.clientY, startVal: t.density ?? 0.5, moved: false };
+    // Capture straight away: the button is only ~28px tall, so a drag leaves it
+    // almost immediately and without capture the moves would go elsewhere.
+    try { btn.setPointerCapture(e.pointerId); } catch {}
+  });
+  btn.addEventListener("pointermove", (e) => {
+    if (!drag || e.pointerId !== drag.id) return;
+    // Pointer capture retargets every move here until the button is released —
+    // and Chrome emits a synthetic move after a scroll. If no button is down,
+    // the drag is over (a pointerup we never saw), so drop it.
+    if (e.pointerType === "mouse" && e.buttons === 0) { drag = null; return; }
+    const dy = e.clientY - drag.startY;
+    if (!drag.moved) {
+      if (Math.abs(dy) < PX_THRESH) return;
+      drag.moved = true;
+    }
+    t.density = Math.max(0, Math.min(1, drag.startVal - dy / PX_FULL_TRAVEL));
+    paintDiceDensity(t);
+    e.preventDefault();
+  });
+  const end = (e) => {
+    if (!drag || e.pointerId !== drag.id) return;
+    try { btn.releasePointerCapture(e.pointerId); } catch {}
+    // A drag ends with a click event we don't want to act on — swallow it.
+    btn._diceDragged = drag.moved;
+    drag = null;
+  };
+  btn.addEventListener("pointerup", end);
+  btn.addEventListener("pointercancel", end);
+  btn.addEventListener("lostpointercapture", end);
+  // Kept as a click handler so the keyboard (Enter / Space) still rolls.
+  btn.addEventListener("click", () => {
+    if (btn._diceDragged) { btn._diceDragged = false; return; }
+    randomizeMelody(t);
+  });
 }
 
 export function renderTrack(t) {
@@ -62,13 +129,15 @@ export function renderTrack(t) {
   for (const k of ["osc1", "osc2", "osc3", "osc4", "ultra", "fm", "metal",
                    "osc1range", "osc2range", "osc3range",
                    "osc1wave",  "osc2wave",  "osc3wave",
-                   "osc2freq",  "osc3freq",  "noise", "noisetype"]) {
+                   "osc2freq",  "osc3freq",  "noise", "noisetype",
+                   "wave303",   "accent303", "tune303",
+                   ...VIRUS_NUM_KEYS, ...VIRUS_SEL_KEYS]) {
     const el = node.querySelector(`.p-${k}`);
     if (el && t.params[k] != null) el.value = t.params[k];
   }
   // Granular grain-engine controls fall back to GRAN_DEFAULTS when the track has
   // no saved value yet (fresh track or a session predating these params).
-  for (const k of ["gspeed", "gwindow", "gjitter", "gdetune", "gpan", "gplay", "gloop", "gpattern", "grate"]) {
+  for (const k of [...GRAN_NUM_KEYS, ...GRAN_SEL_KEYS]) {
     const el = node.querySelector(`.p-${k}`);
     if (el) el.value = t.params[k] ?? GRAN_DEFAULTS[k];
   }
@@ -112,7 +181,8 @@ export function renderTrack(t) {
   node.querySelector(".p-morph").addEventListener("input", e => setParam(t, "morph", Number(e.target.value)));
   node.querySelector(".p-decay").addEventListener("input", e => setParam(t, "decay", Number(e.target.value)));
   for (const k of ["osc1", "osc2", "osc3", "osc4", "ultra", "fm", "metal",
-                   "osc2freq", "osc3freq", "noise"]) {
+                   "osc2freq", "osc3freq", "noise", "accent303", "tune303",
+                   ...VIRUS_NUM_KEYS]) {
     const el = node.querySelector(`.p-${k}`);
     if (el) el.addEventListener("input", e => setParam(t, k, Number(e.target.value)));
   }
@@ -120,18 +190,21 @@ export function renderTrack(t) {
     const el = node.querySelector(`.p-${k}`);
     if (el) el.addEventListener("change", e => setParam(t, k, Number(e.target.value)));
   }
-  for (const k of ["osc1wave", "osc2wave", "osc3wave", "noisetype"]) {
+  for (const k of ["osc1wave", "osc2wave", "osc3wave", "noisetype", "wave303", ...VIRUS_SEL_KEYS]) {
     const el = node.querySelector(`.p-${k}`);
     if (el) el.addEventListener("change", e => setParam(t, k, e.target.value));
   }
   // Granular grain-engine controls: numeric sliders, string selects, sync toggle.
-  for (const k of ["gspeed", "gwindow", "gjitter", "gdetune", "gpan"]) {
+  for (const k of GRAN_NUM_KEYS) {
     const el = node.querySelector(`.p-${k}`);
     if (el) el.addEventListener("input", e => setParam(t, k, Number(e.target.value)));
   }
-  for (const k of ["gplay", "gloop", "gpattern", "grate"]) {
+  for (const k of GRAN_SEL_KEYS) {
     const el = node.querySelector(`.p-${k}`);
-    if (el) el.addEventListener("change", e => setParam(t, k, e.target.value));
+    if (el) el.addEventListener("change", e => {
+      setParam(t, k, e.target.value);
+      if (k === "gplay") updateGranularSpeedEnabled(t);   // speed is moving-only
+    });
   }
   const gsyncInput = node.querySelector(".p-gsync");
   if (gsyncInput) gsyncInput.addEventListener("change", e => setParam(t, "gsync", e.target.checked));
@@ -294,6 +367,8 @@ export function renderTrack(t) {
   t._oscMixGroupEl  = node.querySelector(".sq-param-group--osc-mix");
   t._oscModGroupEl  = node.querySelector(".sq-param-group--osc-mod");
   t._moogOscGroupEl = node.querySelector(".sq-param-group--moog");
+  t._tb303GroupEl   = node.querySelector(".sq-param-group--tb303");
+  t._virusGroupEl   = node.querySelector(".sq-param-group--virus");
   t._granGroupEl    = node.querySelector(".sq-param-group--granular");
 
   renderModPanel(t, t._modPanelEl);
@@ -347,7 +422,7 @@ export function renderTrack(t) {
   const diceBtn = node.querySelector(".track-dice");
   if (diceBtn) {
     diceBtn.innerHTML = ICON_DICE;
-    diceBtn.addEventListener("click", () => randomizeMelody(t));
+    attachDiceDensity(t, diceBtn);
   }
   // roll: icon + label — desktop shows the label (matches its text siblings),
   // mobile shows the icon (see the roll rules in the mobile media block)

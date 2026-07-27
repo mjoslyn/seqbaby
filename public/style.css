@@ -279,6 +279,19 @@ button.sq-btn--danger { color: var(--danger); }
   justify-content: center;
 }
 .sq-icon-btn .sq-btn-icon { display: block; }
+/* The dice button doubles as the density control: it fills from the bottom to
+   show how full the next roll will be, and drags up/down to set it. */
+.track-dice { position: relative; overflow: hidden; touch-action: none; }
+.track-dice::before {
+  content: "";
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  height: var(--dice-level, 50%);
+  background: color-mix(in oklab, var(--accent) 26%, transparent);
+  pointer-events: none;
+  transition: height 60ms linear;
+}
+.track-dice .sq-btn-icon { position: relative; }
 /* roll + clear: text on desktop, icon on mobile (media block flips these) */
 .sq-track__roll .sq-btn-icon,
 .sq-track__clear .sq-btn-icon { display: none; }
@@ -443,6 +456,16 @@ main {
 .sq-param-group--moog select { padding: 2px 6px; font-size: 11px; }
 .sq-param-group--moog .sq-moog__noise { display: flex; align-items: center; gap: 6px; }
 .sq-param-group--moog .sq-moog__noise input[type="range"] { width: 70px; }
+.sq-param-group--virus { border-color: color-mix(in oklab, #6ec6ff 45%, var(--border)); flex-direction: column; align-items: stretch; gap: 4px; }
+.sq-param-group--virus[hidden] { display: none !important; }
+.sq-param-group--virus .sq-virus__row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 11px; }
+.sq-param-group--virus .sq-virus__lbl { color: var(--fg-dim); min-width: 44px; }
+.sq-param-group--virus .sq-virus__f { display: inline-flex; align-items: center; gap: 4px; color: var(--fg-dim); }
+.sq-param-group--virus .sq-virus__f input[type="range"] { width: 62px; }
+.sq-param-group--virus select { padding: 2px 6px; font-size: 11px; }
+.sq-param-group--tb303 { border-color: color-mix(in oklab, #ff7a4d 45%, var(--border)); }
+.sq-param-group--tb303[hidden] { display: none !important; }
+.sq-param-group--tb303 select { padding: 2px 6px; font-size: 11px; }
 .sq-param-group--granular { border-color: color-mix(in oklab, #ffd35a 45%, var(--border)); flex-direction: column; align-items: stretch; gap: 4px; }
 .sq-param-group--granular[hidden] { display: none !important; }
 .sq-param-group--granular .sq-gran__row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 11px; }

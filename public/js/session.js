@@ -5,18 +5,19 @@ import { PATTERN_COUNT } from "./constants.js";
 import { showInputDialog, showSelectDialog } from "./dialogs.js";
 import { setStatus } from "./dom.js";
 import { ICON_CHAIN, ICON_FINISH, ICON_NOW, ICON_REPEAT } from "./icons.js";
-import { applySampleSpeed, disposeLFOs, syncAllLFOs } from "./lfo.js";
+import { applySampleSpeed, defaultLFOConfig, disposeLFOs, syncAllLFOs } from "./lfo.js";
 import { guessIsDrumKit, parseMeter } from "./meter.js";
 import { updatePlaitsControlsVisibility } from "./params.js";
 import { renderPatternGrid } from "./patternBar.js";
-import { refreshFxPanelUI, renderModPanel } from "./render.js";
+import { paintDiceDensity, refreshFxPanelUI, renderModPanel } from "./render.js";
 import { syncScaleUI } from "./scaleUI.js";
 import { applyCompressorConfig, ensureFxRack, refreshCompSourceDropdowns, routeVoiceToRack } from "./signal.js";
 import { aliasPattern, state, syncMeterUI } from "./state.js";
 import { renderStepGrid } from "./stepGrid.js";
 import { createTrack, removeTrack } from "./track.js";
 import { ensureAudio, requestMidiIfNeeded, silenceAllVoices } from "./transport.js";
-import { buildVoiceForEngine } from "./voices.js";
+import { VIRUS_NUM_KEYS, VIRUS_SEL_KEYS } from "./virus.js";
+import { buildVoiceForEngine, GRAN_NUM_KEYS, GRAN_SEL_KEYS, migrateGranularParams, stampGranularParams } from "./voices.js";
 
 
 /** @typedef {import("./types.js").AppState} AppState */
@@ -43,7 +44,7 @@ export function serializeSet() {
       name: t.name,
       engineKey: t.engineKey,
       length: t.length,
-      params: { ...t.params },
+      params: stampGranularParams({ ...t.params }),
       filter: { ...t.filter },
       eq: { ...t.eq },
       comp: { ...t.comp },
@@ -75,6 +76,7 @@ export function serializeSet() {
       noteMode: t.noteMode === "trigger" ? "trigger" : "gate",
       glide: t.glide, speed: t.speed ?? 1, sampleSpeedMode: t.sampleSpeedMode ?? "native",
       pitchLock: t.pitchLock ?? true,
+      density: t.density ?? 0.5,          // the dice button's fill level
       lfoConfig: JSON.parse(JSON.stringify(t.lfoConfig)),
       patterns: t.patterns.map(p => ({
         steps: p.steps.slice(),
@@ -351,6 +353,7 @@ export function applySet(s) {
       const id = ek.slice(4); ek = "sampler"; src = src || { kind: "bundled", id, name: id };
     }
     const t = createTrack({ name: td.name || "track", engineKey: ek, length: td.length || 16 });
+    migrateGranularParams(td.params);
     Object.assign(t.params, td.params || {});
     Object.assign(t.filter, td.filter || {});
     if (td.eq)   Object.assign(t.eq,   td.eq);
@@ -412,6 +415,7 @@ export function applySet(s) {
     t.speed  = td.speed ?? 1;
     t.sampleSpeedMode = td.sampleSpeedMode ?? "native";
     t.pitchLock = td.pitchLock ?? true;
+    t.density = Math.max(0, Math.min(1, td.density ?? 0.5));
     Object.assign(t.lfoConfig, td.lfoConfig || {});
     if (Array.isArray(td.patterns)) {
       const pad = (arr, fill, n) => { const out = (arr || []).slice(0, n); while (out.length < n) out.push(fill); return out; };
@@ -467,7 +471,8 @@ export function applySet(s) {
       q(".p-timb").value = t.params.timb;
       q(".p-morph").value = t.params.morph;
       q(".p-decay").value = t.params.decay;
-      for (const k of ["gspeed", "gwindow", "gjitter", "gdetune", "gpan", "gplay", "gloop", "gpattern", "grate"]) {
+      for (const k of [...GRAN_NUM_KEYS, ...GRAN_SEL_KEYS, "wave303", "accent303", "tune303",
+                     ...VIRUS_NUM_KEYS, ...VIRUS_SEL_KEYS]) {
         const el = q(`.p-${k}`);
         if (el && t.params[k] != null) el.value = t.params[k];
       }
@@ -491,6 +496,7 @@ export function applySet(s) {
       t.el.classList.toggle("is-muted", t.muted);
       t.el.classList.toggle("is-locked", t.locked);
       t.el.classList.toggle("is-soloed", t.soloed);
+      paintDiceDensity(t);
       refreshFxPanelUI(t);
       renderModPanel(t, t._modPanelEl || t.el.querySelector(".sq-track__mod-panel"));
       const eqPanel = t._eqPanelEl || t.el.querySelector(".sq-track__eq-panel");
@@ -571,7 +577,7 @@ export function serializeTrackPatch(t) {
     _kind: "track-patch",
     // A saved custom-Tone patch is stored as engineKey "custom" + customConfig.
     engineKey: t.engineKey.startsWith("saved:") ? "custom" : t.engineKey,
-    params: { ...t.params },
+    params: stampGranularParams({ ...t.params }),
     filter: { ...t.filter },
     eq: { ...t.eq },
     comp: { ...t.comp },
@@ -609,14 +615,17 @@ export function applyTrackPatch(t, patch) {
     if (ek === "sampler" && !patch.uploadAudio && patch.elevenAudio) { patch.uploadAudio = patch.elevenAudio; patch.uploadAudioMime = patch.elevenAudioMime || patch.uploadAudioMime; }
     t.engineKey = ek;
   }
-  if (patch.params)   Object.assign(t.params, patch.params);
+  if (patch.params)   { migrateGranularParams(patch.params); Object.assign(t.params, patch.params); }
   if (patch.filter)   Object.assign(t.filter, patch.filter);
   if (patch.eq)       Object.assign(t.eq, patch.eq);
   if (patch.comp)     Object.assign(t.comp, patch.comp);
   if (patch.fxConfig) Object.assign(t.fxConfig, patch.fxConfig);
   if (patch.lfoConfig) {
+    // The patch replaces the whole mod matrix, but layer it over the defaults so
+    // keys added since the patch was saved still exist — syncAllLFOs walks every
+    // current LFO_KEY and would trip over a missing entry.
     for (const k of Object.keys(t.lfoConfig)) delete t.lfoConfig[k];
-    Object.assign(t.lfoConfig, patch.lfoConfig);
+    Object.assign(t.lfoConfig, defaultLFOConfig(), patch.lfoConfig);
   }
   t.customConfig     = patch.customConfig || null;
   t.sampleSource     = patch.sampleSource || null;
@@ -660,7 +669,8 @@ export function applyTrackPatch(t, patch) {
     q(".p-timb").value   = t.params.timb;
     q(".p-morph").value  = t.params.morph;
     q(".p-decay").value  = t.params.decay;
-    for (const k of ["gspeed", "gwindow", "gjitter", "gdetune", "gpan", "gplay", "gloop", "gpattern", "grate"]) {
+    for (const k of [...GRAN_NUM_KEYS, ...GRAN_SEL_KEYS, "wave303", "accent303", "tune303",
+                     ...VIRUS_NUM_KEYS, ...VIRUS_SEL_KEYS]) {
       const el = q(`.p-${k}`);
       if (el && t.params[k] != null) el.value = t.params[k];
     }

@@ -6,13 +6,14 @@ import { autoAccents, guessIsDrumKit, patternMeter, stepsPerBarForMeter, totalSt
 import { updatePlaitsControlsVisibility } from "./params.js";
 import { renderPatternGrid } from "./patternBar.js";
 import { refreshAutIfOpen, refreshRollIfOpen } from "./pianoRoll.js";
-import { refreshFxPanelUI, renderModPanel, renderTrack } from "./render.js";
+import { paintDiceDensity, refreshFxPanelUI, renderModPanel, renderTrack } from "./render.js";
 import { applySet } from "./session.js";
 import { applyCompressorConfig, defaultCompConfig, ensureFxRack, refreshCompSourceDropdowns, routeVoiceToRack } from "./signal.js";
 import { aliasPattern, emptyPattern, state } from "./state.js";
 import { renderStepGrid } from "./stepGrid.js";
 import { SCALES, midiToScaleIndex, scaleIndexToMidi } from "./theory.js";
 import { requestMidiIfNeeded } from "./transport.js";
+import { VIRUS_DEFAULTS } from "./virus.js";
 import { buildVoiceForEngine } from "./voices.js";
 
 
@@ -76,6 +77,10 @@ export function createTrack({ name, engineKey, length = totalSteps() }) {
       osc1range: 0, osc2range: 0, osc3range: -1,
       osc2freq: 0, osc3freq: 0,
       noise: 0, noisetype: "white",
+      // TB-303 panel controls that don't fit the four timbre sliders
+      wave303: "saw", accent303: 0.6, tune303: 0,
+      // Access Virus panel (see virus.js)
+      ...VIRUS_DEFAULTS,
     },
     filter: { cutoff: 1, reson: 0, env: 0, attack: 0, decay: 0.25, sustain: 0.4, release: 0.3 },
     filterNode: null,
@@ -257,6 +262,7 @@ export function duplicateTrack(src) {
   }
   refreshCompSourceDropdowns();
   updatePlaitsControlsVisibility(dup);
+  paintDiceDensity(dup);          // density is copied after the row is rendered
   renderStepGrid(dup);
   return dup;
 }

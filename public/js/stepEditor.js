@@ -3,12 +3,13 @@ import { loadBuffer } from "./buffers.js";
 import { setStatus } from "./dom.js";
 import { applySampleSpeed, currentBpm } from "./lfo.js";
 import { renderRollPanel } from "./pianoRoll.js";
+import { updateGranularSpeedEnabled } from "./params.js";
 import { renderAutomationPanel } from "./render.js";
 import { invertChord, state } from "./state.js";
 import { renderStepGrid } from "./stepGrid.js";
 import { CHORD_TYPES, SCALES, applyScale, chordFitsScale, chordNotes, midiToName } from "./theory.js";
 import { ensureAudio } from "./transport.js";
-import { GRAN_DEFAULTS } from "./voices.js";
+import { GRAN_DEFAULTS, GRAN_NUM_KEYS, GRAN_SEL_KEYS } from "./voices.js";
 
 
 /** @typedef {import("./types.js").Track} Track */
@@ -164,11 +165,12 @@ export function openGranularWavModal(t) {
       </div>
       <div class="sq-gwav__ctl-row">
         <label title="fixed = every grain reads from one spot; moving = the play head scans through the sample">play <select class="gw-gplay"><option value="fixed">fixed</option><option value="moving">moving</option></select></label>
-        <label title="how fast the play head scans, when play is set to moving (centre = 100%, left = slower, right = up to 2x)">speed <input type="range" class="gw-gspeed" min="0" max="1" step="0.01" /></label>
+        <label title="how fast the play head travels through the sample, when play is set to moving. 1 = the sample's own speed, 0 = frozen, negative = backwards, up to 2x either way. Pitch is unaffected">speed <input type="range" class="gw-gspeed" min="-2" max="2" step="0.01" /></label>
+        <label title="transposes every grain, in semitones, up or down two octaves. Independent of speed — the sample still plays through in the same time">pitch <input type="range" class="gw-gpitch" min="-24" max="24" step="1" /></label>
         <label title="what the moving play head does at the end of the sample: stop, wrap to the start, or bounce back">loop <select class="gw-gloop"><option value="none">none</option><option value="fwd">fwd</option><option value="bidir">bidir</option></select></label>
       </div>
       <div class="sq-gwav__ctl-row">
-        <label title="how far each grain may stray from the play head — the band drawn across the waveform. Narrow reads one instant over and over; wide smears across a chunk of the sample">window <input type="range" class="gw-gwindow" min="0" max="1" step="0.01" /></label>
+        <label title="how far each grain may stray from the play head — the band drawn across the waveform. Narrow reads one instant over and over; at 100% the band is the whole sample, so grains come from anywhere in it">window <input type="range" class="gw-gwindow" min="0" max="1" step="0.01" /></label>
         <label title="randomises when each grain fires. At zero the grain train is perfectly regular and hums a tone at the grain rate; raise it to break that up into texture">jitter <input type="range" class="gw-gjitter" min="0" max="1" step="0.01" /></label>
         <label title="random pitch per grain, up to a semitone either way — thickens a cloud into a chorus">detune <input type="range" class="gw-gdetune" min="0" max="1" step="0.01" /></label>
         <label title="random stereo placement per grain — widens the cloud without touching its tone">pan <input type="range" class="gw-gpan" min="0" max="1" step="0.01" /></label>
@@ -274,11 +276,13 @@ export function openGranularWavModal(t) {
     }
     c.stroke();
     const vf = t.voice?.vizFrame ? t.voice.vizFrame() : { head: t.params.morph ?? 0, windowFrac: 0, grains: [] };
-    // window band around the play head
+    // Window band around the play head. Grain positions wrap around the sample,
+    // so the band does too — draw the copies either side, which is what makes a
+    // 100% window read as the whole waveform wherever the head sits.
     if (vf.windowFrac > 0) {
       const cx = vf.head * w, half = vf.windowFrac * w;
       c.fillStyle = "rgba(194,240,74,0.12)";
-      c.fillRect(cx - half, 0, half * 2, h);
+      for (const dx of [-w, 0, w]) c.fillRect(cx - half + dx, 0, half * 2, h);
     }
     // live grain bars (white)
     if (animCb.checked && vf.grains.length) {
@@ -322,19 +326,12 @@ export function openGranularWavModal(t) {
     if (gEl) { if (gEl.type === "checkbox") gEl.checked = !!v; else gEl.value = v; }
     const mEl = modal.querySelector(".gw-" + k);
     if (mEl && mEl !== document.activeElement) { if (mEl.type === "checkbox") mEl.checked = !!v; else mEl.value = v; }
+    if (k === "gplay") updateGranularSpeedEnabled(t);      // speed is moving-only
     draw();
   };
   const gp = t.params;
   const gq = s => modal.querySelector(s);
-  gq(".gw-gplay").value    = gp.gplay    ?? GRAN_DEFAULTS.gplay;
-  gq(".gw-gspeed").value   = gp.gspeed   ?? GRAN_DEFAULTS.gspeed;
-  gq(".gw-gloop").value    = gp.gloop    ?? GRAN_DEFAULTS.gloop;
-  gq(".gw-gwindow").value  = gp.gwindow  ?? GRAN_DEFAULTS.gwindow;
-  gq(".gw-gjitter").value  = gp.gjitter  ?? GRAN_DEFAULTS.gjitter;
-  gq(".gw-gdetune").value  = gp.gdetune  ?? GRAN_DEFAULTS.gdetune;
-  gq(".gw-gpan").value     = gp.gpan     ?? GRAN_DEFAULTS.gpan;
-  gq(".gw-gpattern").value = gp.gpattern ?? GRAN_DEFAULTS.gpattern;
-  gq(".gw-grate").value    = gp.grate    ?? GRAN_DEFAULTS.grate;
+  for (const k of [...GRAN_NUM_KEYS, ...GRAN_SEL_KEYS]) gq(".gw-" + k).value = gp[k] ?? GRAN_DEFAULTS[k];
   gq(".gw-gsync").checked  = gp.gsync    ?? GRAN_DEFAULTS.gsync;
   // The four track macros live here too: grain size, density, play position and
   // spray. setP() writes through to both this modal and the track's own slider,
@@ -345,15 +342,15 @@ export function openGranularWavModal(t) {
   for (const k of ["harm", "timb", "morph", "decay"]) {
     gq(".gw-" + k).addEventListener("input", e => setP(k, Number(e.target.value)));
   }
-  for (const k of ["gspeed", "gwindow", "gjitter", "gdetune", "gpan"]) gq(".gw-" + k).addEventListener("input", e => setP(k, Number(e.target.value)));
-  for (const k of ["gplay", "gloop", "gpattern", "grate"]) gq(".gw-" + k).addEventListener("change", e => setP(k, e.target.value));
+  for (const k of GRAN_NUM_KEYS) gq(".gw-" + k).addEventListener("input", e => setP(k, Number(e.target.value)));
+  for (const k of GRAN_SEL_KEYS) gq(".gw-" + k).addEventListener("change", e => setP(k, e.target.value));
   gq(".gw-gsync").addEventListener("change", e => setP("gsync", e.target.checked));
 
   // The grain window is dragged like a note in the piano roll: grab its middle to
   // slide the whole window along the sample, grab an edge to resize from that
   // side while the other stays put. Clicking outside it moves the window there.
   // (Window width is stored as gwindow; vizFrame reports the band it draws as a
-  // half-width in 0..1, so convert through the same windowSec relation it uses.)
+  // half-width in 0..1 of the sample, so setHalf inverts _windowFrac().)
   const EDGE_PX = 7;
   const fracFromEvent = e => { const r = canvas.getBoundingClientRect(); return Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)); };
   const bandNow = () => {
@@ -361,9 +358,8 @@ export function openGranularWavModal(t) {
     return { head: vf ? vf.head : (t.params.morph ?? 0), half: vf ? vf.windowFrac : 0 };
   };
   const setHalf = (half) => {
-    const bufDur = t.voice?.buffer?.duration || 1;
     const spray = Math.max(0, Math.min(1, Number(t.params.decay) || 0));
-    setP("gwindow", Math.max(0, Math.min(1, (half * bufDur) / 2 - spray * 0.5)));
+    setP("gwindow", Math.max(0, Math.min(1, half * 2 - spray * 0.5)));
   };
   const zoneAt = (x) => {
     const { head, half } = bandNow();
@@ -432,6 +428,7 @@ export function openGranularWavModal(t) {
   document.addEventListener("keydown", esc);
 
   t._gWavModal = { overlay, close };
+  updateGranularSpeedEnabled(t);   // now that the modal is findable from the track
   fit();
   draw();                        // paint one frame immediately (before any rAF)
   if (animCb.checked) startLoop();

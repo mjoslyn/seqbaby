@@ -211,20 +211,85 @@ export const STUDIO_BODY = String.raw`
             </select>
           </div>
         </div>
+        <div class="sq-param-group sq-param-group--virus" hidden>
+          <div class="sq-virus__row">
+            <span class="sq-virus__lbl">osc</span>
+            <label class="sq-virus__f"><span>semi</span><input class="p-vosc2semi" type="range" min="-24" max="24" step="1" value="0" title="osc 2 pitch offset in semitones" /></label>
+            <label class="sq-virus__f"><span>detune</span><input class="p-vosc2det" type="range" min="0" max="1" step="0.01" value="0.08" title="fine detune between the two oscillators — a little is what makes it sound wide rather than sterile" /></label>
+            <label class="sq-virus__f"><span>pw</span><input class="p-vpw" type="range" min="0.02" max="0.98" step="0.01" value="0.5" title="pulse width. Only heard at the top of the shape morph, where the wave becomes a pulse" /></label>
+            <label class="sq-virus__f"><span>fm</span><input class="p-vfm" type="range" min="0" max="1" step="0.01" value="0" title="osc 2 phase-modulates osc 1" /></label>
+            <label class="sq-virus__f"><span>ring</span><input class="p-vring" type="range" min="0" max="1" step="0.01" value="0" title="ring modulation — osc 1 times osc 2, for clangorous metallic tones" /></label>
+            <select class="p-vsync" title="hard sync: osc 2 is reset every time osc 1 completes a cycle, so it is forced to osc 1's pitch. Sweep the semi slider with sync on for the classic tearing lead">
+              <option value="off" selected>sync off</option><option value="on">sync on</option>
+            </select>
+            <select class="p-vsubwave" title="sub oscillator waveform, one octave below osc 1 (its level is the sub slider)">
+              <option value="square" selected>sub sqr</option><option value="triangle">sub tri</option>
+            </select>
+          </div>
+          <div class="sq-virus__row">
+            <span class="sq-virus__lbl">unison</span>
+            <select class="p-vuni" title="how many detuned copies of the whole oscillator section each note plays — this is the hypersaw">
+              <option value="1" selected>1</option><option value="2">2</option><option value="3">3</option>
+              <option value="4">4</option><option value="6">6</option><option value="8">8</option>
+            </select>
+            <label class="sq-virus__f"><span>detune</span><input class="p-vunidet" type="range" min="0" max="1" step="0.01" value="0.3" title="how far the unison copies spread in pitch" /></label>
+            <label class="sq-virus__f"><span>spread</span><input class="p-vunispread" type="range" min="0" max="1" step="0.01" value="0.6" title="how far the unison copies spread across the stereo field" /></label>
+            <span class="sq-virus__lbl">env</span>
+            <label class="sq-virus__f"><span>atk</span><input class="p-vatk" type="range" min="0" max="1" step="0.01" value="0.02" /></label>
+            <label class="sq-virus__f"><span>sus</span><input class="p-vsus" type="range" min="0" max="1" step="0.01" value="0.6" /></label>
+            <label class="sq-virus__f"><span>rel</span><input class="p-vrel" type="range" min="0" max="1" step="0.01" value="0.25" /></label>
+            <label class="sq-virus__f"><span>env amt</span><input class="p-venvamt" type="range" min="-1" max="1" step="0.01" value="0.5" title="how much the envelope moves the cutoff. Negative sweeps downward" /></label>
+          </div>
+          <div class="sq-virus__row">
+            <span class="sq-virus__lbl">filter 1</span>
+            <select class="p-vmode1" title="filter 1 response">
+              <option value="lp" selected>lp</option><option value="hp">hp</option><option value="bp">bp</option><option value="bs">bs</option>
+            </select>
+            <select class="p-vpoles" title="filter 1 slope: 2-pole is 12dB per octave, 4-pole is 24">
+              <option value="2">2-pole</option><option value="4" selected>4-pole</option>
+            </select>
+            <span class="sq-virus__lbl">filter 2</span>
+            <select class="p-vmode2" title="filter 2 response">
+              <option value="lp" selected>lp</option><option value="hp">hp</option><option value="bp">bp</option><option value="bs">bs</option>
+            </select>
+            <label class="sq-virus__f"><span>cut 2</span><input class="p-vcut2" type="range" min="-1" max="1" step="0.01" value="0" title="filter 2's cutoff, offset from filter 1 by up to two octaves either way" /></label>
+            <select class="p-vroute" title="how the two filters are connected: series (one into the other), parallel (both from the same source), or split (filter 1 to the left, filter 2 to the right)">
+              <option value="ser" selected>series</option><option value="par">parallel</option><option value="split">split</option>
+            </select>
+            <label class="sq-virus__f"><span>balance</span><input class="p-vbal" type="range" min="0" max="1" step="0.01" value="0" title="crossfade between the two filters' outputs" /></label>
+            <span class="sq-virus__lbl">sat</span>
+            <select class="p-vsat" title="the saturation stage between the two filters — the Virus's signature. Filter 2 cleans up whatever this does to filter 1's output">
+              <option value="off">off</option><option value="light">light</option><option value="soft" selected>soft</option>
+              <option value="hard">hard</option><option value="digital">digital</option><option value="shaper">shaper</option>
+              <option value="rectify">rectify</option><option value="bits">bit reduce</option><option value="rate">rate reduce</option>
+            </select>
+            <label class="sq-virus__f"><span>amt</span><input class="p-vsatamt" type="range" min="0" max="1" step="0.01" value="0.3" /></label>
+          </div>
+        </div>
+        <div class="sq-param-group sq-param-group--tb303" hidden>
+          <div class="sq-field"><label>wave</label>
+            <select class="p-wave303" title="the 303's two waveforms. Saw is the classic acid tone; square is hollower and sits lower">
+              <option value="saw" selected>saw</option><option value="square">square</option>
+            </select>
+          </div>
+          <div class="sq-field"><label>accent</label><input class="p-accent303" type="range" min="0" max="1" step="0.01" value="0.6" title="how hard an accented step hits. Accent makes the note louder, forces the filter decay to a fixed 200ms, and pushes a charge into the accent circuit — at high resonance consecutive accents pile up into a rising squelch" /></div>
+          <div class="sq-field"><label>tune</label><input class="p-tune303" type="range" min="-50" max="50" step="1" value="0" title="master tuning, in cents" /></div>
+        </div>
         <div class="sq-param-group sq-param-group--granular" hidden>
           <div class="sq-gran__row">
             <label class="sq-gran__lbl">play</label>
             <select class="p-gplay" title="fixed = every grain reads from one spot; moving = the play head scans through the sample">
               <option value="fixed" selected>fixed</option><option value="moving">moving</option>
             </select>
-            <div class="sq-field"><label>speed</label><input class="p-gspeed" type="range" min="0" max="1" step="0.01" value="0.5" title="how fast the play head scans, when play is set to moving (centre = 100%, left = slower, right = up to 2x)" /></div>
+            <div class="sq-field"><label>speed</label><input class="p-gspeed" type="range" min="-2" max="2" step="0.01" value="1" title="how fast the play head travels through the sample, when play is set to moving. 1 = the sample&#39;s own speed, 0 = frozen, negative = backwards, up to 2x either way. Pitch is unaffected" /></div>
+            <div class="sq-field"><label>pitch</label><input class="p-gpitch" type="range" min="-24" max="24" step="1" value="0" title="transposes every grain, in semitones, up or down two octaves. Independent of speed — the sample still plays through in the same time" /></div>
             <label class="sq-gran__lbl">loop</label>
             <select class="p-gloop" title="what the moving play head does at the end of the sample: stop, wrap to the start, or bounce back">
               <option value="none">none</option><option value="fwd" selected>fwd</option><option value="bidir">bidir</option>
             </select>
           </div>
           <div class="sq-gran__row">
-            <div class="sq-field"><label>window</label><input class="p-gwindow" type="range" min="0" max="1" step="0.01" value="0.15" title="how far each grain may stray from the play head — the band drawn across the waveform. Narrow reads one instant over and over; wide smears across a chunk of the sample" /></div>
+            <div class="sq-field"><label>window</label><input class="p-gwindow" type="range" min="0" max="1" step="0.01" value="0.15" title="how far each grain may stray from the play head — the band drawn across the waveform. Narrow reads one instant over and over; at 100% the band is the whole sample, so grains come from anywhere in it" /></div>
             <div class="sq-field"><label>jitter</label><input class="p-gjitter" type="range" min="0" max="1" step="0.01" value="0.1" title="randomises when each grain fires. At zero the grain train is perfectly regular and hums a tone at the grain rate; raise it to break that up into texture" /></div>
             <div class="sq-field"><label>detune</label><input class="p-gdetune" type="range" min="0" max="1" step="0.01" value="0" title="random pitch per grain, up to a semitone either way — thickens a cloud into a chorus" /></div>
             <div class="sq-field"><label>pan</label><input class="p-gpan" type="range" min="0" max="1" step="0.01" value="0.3" title="random stereo placement per grain — widens the cloud without touching its tone" /></div>
@@ -250,7 +315,7 @@ export const STUDIO_BODY = String.raw`
         <button class="sq-track__mute sq-btn--ghost">mute</button>
         <button class="track-note-mode sq-btn--ghost" aria-pressed="true" title="gate plays the full step length; trigger fires a short hit">gate</button>
         <button class="sq-track__clear sq-btn--ghost">clear</button>
-        <button class="track-dice sq-icon-btn sq-btn--ghost" type="button" aria-label="random melody" title="random melody (replaces this pattern)"></button>
+        <button class="track-dice sq-icon-btn sq-btn--ghost" type="button" aria-label="random pattern, drag up or down to set density" title="random pattern (drag up/down to set density)"></button>
         <button class="sq-track__dup sq-btn--ghost" type="button" title="duplicate this track">dup</button>
         <button class="sq-track__remove sq-btn--ghost sq-btn--danger">remove</button>
         <div class="sq-track__oct">

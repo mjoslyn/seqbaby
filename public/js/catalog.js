@@ -30,13 +30,16 @@ export const DRUM_SYNTH_ENGINES = [
   { key: "dm:909-chat",  label: "909 closed hat", defaultNote: 72 },
   { key: "dm:909-ohat",  label: "909 open hat",   defaultNote: 72 },
   { key: "dm:909-clap",  label: "909 clap",     defaultNote: 60 },
-  { key: "dm:303",       label: "303 acid bass", defaultNote: 36, poly: false, melodic: true },
   { key: "dm:poly-saw",  label: "poly saw",     defaultNote: 60, poly: true,  melodic: true },
   { key: "dm:fm-bell",   label: "fm bell",      defaultNote: 72, poly: true,  melodic: true },
   { key: "dm:pad",       label: "pad",          defaultNote: 60, poly: true,  melodic: true },
 ].map(e => ({ ...e, group: "drum / synth", type: "drum-synth", poly: e.poly ?? false, melodic: e.melodic ?? false }));
 
 export const ANALOG_ENGINES = [
+  // Monophonic, like the machine — no makePolyPool wrapper (see tb303.js).
+  { key: "dm:303",        label: "303",            defaultNote: 36, poly: false, melodic: true },
+  // Polyphony lives inside the worklet rather than in makePolyPool (virus.js).
+  { key: "dm:virus",      label: "virus",          defaultNote: 60, poly: true, melodic: true },
   { key: "dm:mini-brute", label: "mini brute",     defaultNote: 60, poly: true, melodic: true },
   { key: "dm:moog",       label: "moog",           defaultNote: 60, poly: true, melodic: true },
   { key: "dm:juno",       label: "juno 60",        defaultNote: 60, poly: true, melodic: true },

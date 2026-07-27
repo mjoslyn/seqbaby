@@ -4,6 +4,7 @@ import { LFO_AMP_SCALE, LFO_KEYS } from "./constants.js";
 import { makeCassetteSatCurve, makeShaperCurve } from "./curves.js";
 import { setParam } from "./params.js";
 import { aliasPattern, state } from "./state.js";
+import { GRAN_DEFAULTS, granFromUnit, granToUnit } from "./voices.js";
 
 
 /** @typedef {import("./types.js").Track} Track */
@@ -141,6 +142,12 @@ export function getModTarget(t, key) {
   if (["vol","harm","timb","morph","decay","osc1","osc2","osc3","osc4","ultra","fm","noise"].includes(key)) {
     return t.voice?.getAudioParam(key) ?? null;
   }
+  // 303 accent + tune: AudioParams on the worklet node, under their own keys
+  // (the generic list above only covers the shared slider names).
+  if (key === "tb303_accent") return t.voice?.getAudioParam?.("accent303") ?? null;
+  if (key === "tb303_tune")   return t.voice?.getAudioParam?.("tune303") ?? null;
+  // Virus panel controls: AudioParams on its worklet node, under their own keys.
+  if (key.startsWith("virus_")) return t.voice?.getAudioParam?.("v" + key.slice(6)) ?? null;
   if (key === "cutoff") return t.filterNode?.frequency ?? null;
   if (key === "reson")  return t.filterNode?.Q ?? null;
   const rack = t.fxRack;
@@ -198,6 +205,7 @@ export const SETTER_LFO_KEYS = new Set([
   "autowah_sens","autowah_range",
   "phaser_depth","chorus_depth","pitch_semi","reverb_decay",
   "wt_scan_start","wt_scan_range",
+  "gran_speed","gran_pitch",
 ]);
 
 // Read the user's current 0..1 base value for a setter LFO target so the LFO
@@ -206,6 +214,10 @@ export function setterLfoBase(t, key) {
   // Wave-scan window lives on the track's wavetable config, not the fx rack.
   if (key === "wt_scan_start") return t.wavetable?.scan?.start ?? 0;
   if (key === "wt_scan_range") return t.wavetable?.scan?.range ?? 1;
+  // Granular speed/pitch: the track's own sliders are the base, converted into
+  // the 0..1 the LFO swings around.
+  if (key === "gran_speed") return granToUnit("gspeed", t.params?.gspeed ?? GRAN_DEFAULTS.gspeed);
+  if (key === "gran_pitch") return granToUnit("gpitch", t.params?.gpitch ?? GRAN_DEFAULTS.gpitch);
   const c = t.fxRack?.config;
   if (!c) return 0.5;
   switch (key) {
@@ -233,6 +245,15 @@ export function applySetterLfoValue(t, key, v) {
   if (key === "wt_scan_start" || key === "wt_scan_range") {
     const sc = t.voice?.scan;
     if (sc) sc[key === "wt_scan_start" ? "start" : "range"] = v;
+    return;
+  }
+  // Granular speed/pitch: write the live voice only, never t.params, so the
+  // slider stays the base the LFO swings around. Grains read both when they are
+  // scheduled — a held note re-reads every scheduler tick, a sequenced note
+  // takes the value at its hit, so the mod moves note-to-note there.
+  if (key === "gran_speed" || key === "gran_pitch") {
+    const p = key === "gran_speed" ? "gspeed" : "gpitch";
+    try { t.voice?.setParam?.(p, granFromUnit(p, v)); } catch {}
     return;
   }
   const rack = t.fxRack;
@@ -340,6 +361,12 @@ export function canModulate(t, key) {
   if (TRACK_FX_LFO_KEYS.has(key)) return true;
   // Wave-scan window — wavetable engine only.
   if (key === "wt_scan_start" || key === "wt_scan_range") return t.engineKey === "wt:akwf";
+  // Grain speed/pitch — granular engine only.
+  if (key === "gran_speed" || key === "gran_pitch") return t.engineKey === "dm:granular";
+  // Accent depth + tuning — 303 only.
+  if (key === "tb303_accent" || key === "tb303_tune") return t.engineKey === "dm:303";
+  // Virus oscillator / filter-pair controls — virus only.
+  if (key.startsWith("virus_")) return t.engineKey === "dm:virus";
   const eng = engineByKey(t.engineKey);
   if (!eng) return false;
   // Plaits exposes harm/timb/morph/decay as voice params.
@@ -347,6 +374,11 @@ export function canModulate(t, key) {
   // Emulator builders expose specific AudioParams via getAudioParam — only list
   // the keys that are actually wired (see each builder above).
   switch (t.engineKey) {
+    // The 303's four panel knobs are AudioParams on its worklet node.
+    case "dm:303":        return ["harm", "timb", "morph", "decay"].includes(key);
+    // Real polyphony inside the worklet, so unlike the pooled emulators the
+    // whole instrument follows the LFO, not just voice 0.
+    case "dm:virus":      return ["harm", "timb", "morph", "decay", "osc1", "osc2", "osc3", "osc4", "noise"].includes(key);
     case "dm:mini-brute": return ["harm", "osc1", "osc2", "osc3", "osc4", "ultra", "fm"].includes(key);
     case "dm:moog":       return ["harm", "osc1", "osc2", "osc3", "noise"].includes(key);
     case "dm:juno":       return ["harm", "osc1", "osc2", "osc3", "noise"].includes(key);

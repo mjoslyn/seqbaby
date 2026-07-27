@@ -5,10 +5,23 @@ import { refreshFxPanelUI, updateMidiUI } from "./render.js";
 import { ensureFxRack, routeVoiceToRack } from "./signal.js";
 import { state } from "./state.js";
 import { requestMidiIfNeeded } from "./transport.js";
-import { buildVoiceForEngine } from "./voices.js";
+import { buildVoiceForEngine, GRAN_DEFAULTS } from "./voices.js";
 
 
 /** @typedef {import("./types.js").Track} Track */
+/**
+ * Play-head speed only means anything while the head is moving, so grey the
+ * slider out in fixed mode rather than letting it look broken. Pitch stays live
+ * in both modes. Call after anything that can change `gplay`.
+ * @param {Track} t
+ */
+export function updateGranularSpeedEnabled(t) {
+  const moving = (t.params.gplay ?? GRAN_DEFAULTS.gplay) === "moving";
+  const el = t.el?.querySelector(".p-gspeed");
+  if (el) el.disabled = !moving;
+  const modalEl = t._gWavModal?.overlay?.querySelector(".gw-gspeed");
+  if (modalEl) modalEl.disabled = !moving;
+}
 /**
  * Set a track synth param and push it to the live voice.
  * @param {Track} t @param {string} key @param {number} val
@@ -34,11 +47,13 @@ export function updatePlaitsControlsVisibility(t) {
   const isProphet6  = t.engineKey === "dm:prophet6";
   const isGranular  = t.engineKey === "dm:granular";
   const isWavetable = t.engineKey === "wt:akwf";
+  const isTb303     = t.engineKey === "dm:303";
+  const isVirus     = t.engineKey === "dm:virus";
   // The 808 voices are modelled on the machine's circuits, so their sliders are
   // its panel knobs (see buildDrumSynthNode).
   const is808 = t.engineKey.startsWith("dm:808-");
   const is909 = t.engineKey.startsWith("dm:909-");
-  const showTimbre = isPlaits || isMiniBrute || isMoog || isJuno || isGuitar || isBass || isRhodes || isProphet6 || isGranular || isWavetable || is808 || is909;
+  const showTimbre = isPlaits || isMiniBrute || isMoog || isJuno || isGuitar || isBass || isRhodes || isProphet6 || isGranular || isWavetable || isTb303 || isVirus || is808 || is909;
   const group = t._timbreGroupEl || t.el.querySelector(".sq-param-group--timbre");
   if (group) {
     group.hidden = !showTimbre;
@@ -75,6 +90,10 @@ export function updatePlaitsControlsVisibility(t) {
       ? { harm: "grain",    timb: "dense",  morph: "pos",       decay: "spray" }
       : isWavetable
       ? { harm: "wave",     timb: "warm",   morph: "detune",    decay: "decay" }
+      : isTb303
+      ? { harm: "cutoff",   timb: "reso",   morph: "env mod",   decay: "decay" }
+      : isVirus
+      ? { harm: "cutoff",   timb: "reso",   morph: "shape",     decay: "decay" }
       : t.engineKey === "dm:808-kick"
       ? { harm: "tune",     timb: "tone",   morph: "drive",     decay: "decay" }
       : t.engineKey === "dm:808-snare"
@@ -100,6 +119,20 @@ export function updatePlaitsControlsVisibility(t) {
           timb: "grains per second, 8 to 90. Ignored while sync is on — rate takes over",
           morph: "play position in the sample. Dragging the window in the wave editor sets this too",
           decay: "diffusion macro: widens the window, loosens the jitter and adds detune, all at once. Leave it at zero if you want a tight, in-tune cloud",
+        }
+      : isTb303
+      ? {
+          harm: "the 303's own filter — an 18dB/oct diode ladder, ahead of the track filter. It doesn't track the keyboard, so high notes really are duller than low ones",
+          timb: "resonance. The feedback costs the passband level as it climbs, so the line gets thinner and squelchier the further you push it — that thinning is why a 303 wants a distortion after it",
+          morph: "how much of the filter envelope reaches the cutoff",
+          decay: "filter envelope decay, 200ms to 2.5s. Accented steps ignore this and use a fixed 200ms, exactly as the accent circuit does on the machine",
+        }
+      : isVirus
+      ? {
+          harm: "cutoff for both filters — filter 2 sits at whatever offset its own cut 2 slider sets. Tracks the keyboard at a third of an octave per octave",
+          timb: "resonance, shared by both filters",
+          morph: "oscillator shape, a continuous morph from sine through triangle and saw to pulse. Pulse width takes over at the very top",
+          decay: "decay for both envelopes — how fast each note falls from its peak to the sustain level",
         }
       : (is808 || is909)
       ? {
@@ -139,12 +172,12 @@ export function updatePlaitsControlsVisibility(t) {
     // Randomize button only makes sense for Plaits' generic harm/timb/morph/decay —
     // hide it for the analog engines where those sliders do engine-specific things.
     const randBtn = group.querySelector(".track-rand");
-    if (randBtn) randBtn.hidden = isMiniBrute || isMoog || isJuno || isGuitar || isBass || isRhodes || isProphet6 || isGranular || isWavetable || is808 || is909;
+    if (randBtn) randBtn.hidden = isMiniBrute || isMoog || isJuno || isGuitar || isBass || isRhodes || isProphet6 || isGranular || isWavetable || isTb303 || isVirus || is808 || is909;
   }
   // Per-oscillator volume sliders: only shown for the analog mono engines.
   const oscGroup = t._oscMixGroupEl || t.el.querySelector(".sq-param-group--osc-mix");
   if (oscGroup) {
-    const showOsc = isMiniBrute || isMoog || isJuno || isProphet6;
+    const showOsc = isMiniBrute || isMoog || isJuno || isProphet6 || isVirus;
     oscGroup.hidden = !showOsc;
     if (showOsc) {
       const oscLabels = isMiniBrute
@@ -153,6 +186,8 @@ export function updatePlaitsControlsVisibility(t) {
         ? { osc1: "dco",  osc2: "sub",   osc3: "noise", osc4: "",    hide4: true }
         : isProphet6
         ? { osc1: "vco1", osc2: "vco2",  osc3: "sub",   osc4: "noise", hide4: false }
+        : isVirus
+        ? { osc1: "osc1", osc2: "osc2",  osc3: "sub",   osc4: "noise", hide4: false }
         : { osc1: "osc1", osc2: "osc2",  osc3: "osc3",  osc4: "",    hide4: true };
       for (const k of ["osc1", "osc2", "osc3", "osc4"]) {
         const field = oscGroup.querySelector(`.p-${k}`)?.closest(".sq-field");
@@ -170,9 +205,16 @@ export function updatePlaitsControlsVisibility(t) {
   // Moog osc-bank group (per-osc range + waveform + osc2/3 freq + noise).
   const moogGroup = t._moogOscGroupEl || t.el.querySelector(".sq-param-group--moog");
   if (moogGroup) moogGroup.hidden = !isMoog;
+  // TB-303 panel controls with no home among the four timbre sliders.
+  const tb303Group = t._tb303GroupEl || t.el.querySelector(".sq-param-group--tb303");
+  if (tb303Group) tb303Group.hidden = !isTb303;
+  // Virus oscillator / unison / filter-pair panel.
+  const virusGroup = t._virusGroupEl || t.el.querySelector(".sq-param-group--virus");
+  if (virusGroup) virusGroup.hidden = !isVirus;
   // Granular grain-engine group (play mode / window / jitter / detune / pan / …).
   const granGroup = t._granGroupEl || t.el.querySelector(".sq-param-group--granular");
   if (granGroup) granGroup.hidden = !isGranular;
+  if (isGranular) updateGranularSpeedEnabled(t);
   // Header wave/sample icon button (between the engine dropdown and save): only
   // usable for the granular + sampler engines; greyed out (disabled) otherwise.
   // (The icon-button display overrides [hidden], so disable rather than hide.)

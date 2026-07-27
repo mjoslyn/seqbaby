@@ -60,13 +60,18 @@ export function randomizeMelody(t) {
   const meter = patternMeter(t._patternIdx ?? state.activePattern);
   const spb = stepsPerBeatForMeter(meter);
 
+  // How full the roll comes out: the level on the track's dice button (drag it
+  // up/down). Downbeats stay weighted heavier, but proportionally, so a level of
+  // 0 really is empty and 1 really is every step.
+  const density = Math.max(0, Math.min(1, t.density ?? 0.5));
+  const onBeatP = Math.min(0.98, density * 1.5);
+
   if (t.isDrumKit) {
-    // Rhythmic: 35..60% density, downbeat-biased, all notes pinned to C2.
-    const density = 0.35 + Math.random() * 0.25;
+    // Rhythmic: downbeat-biased, all notes pinned to C2.
     let i = 0;
     while (i < len) {
       const onBeat = (i % spb) === 0;
-      const p = onBeat ? Math.min(0.95, density + 0.25) : density;
+      const p = onBeat ? onBeatP : density;
       if (Math.random() > p) { i++; continue; }
       const dur = pickRandomNoteLength(maxLengthAt(t, i), /*drum*/ true);
       t.steps[i] = 1;
@@ -85,7 +90,6 @@ export function randomizeMelody(t) {
   // Always constrain to the selected scale (root + mode), even when the
   // global scale-quantize toggle is off — the dice is a deliberate musical
   // act and should follow the chosen key.
-  const density = 0.45 + Math.random() * 0.2;
   const intervals = SCALES[state.scale.mode] || SCALES.minor;
   const rootPc = state.scale.root | 0;
   let current = lastUsedNote(t);
@@ -96,7 +100,7 @@ export function randomizeMelody(t) {
   let i = 0;
   while (i < len) {
     const onBeat = (i % spb) === 0;
-    const p = onBeat ? Math.min(0.95, density + 0.2) : density;
+    const p = onBeat ? onBeatP : density;
     if (Math.random() > p) { i++; continue; }
 
     if (i > 0) {

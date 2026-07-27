@@ -8,6 +8,8 @@ import { init, needsResume, primeAudioForIOS } from "./main.js";
 import { updateMidiUI } from "./render.js";
 import { ensureFxRack, fireFilterEnv, routeVoiceToRack } from "./signal.js";
 import { findNextNonEmptyPattern, invertChord, state, switchPattern } from "./state.js";
+import { loadTb303Worklet } from "./tb303.js";
+import { loadVirusWorklet } from "./virus.js";
 import { applyScale, chordNotes, nameToMidi } from "./theory.js";
 import { buildVoiceForEngine } from "./voices.js";
 
@@ -200,17 +202,21 @@ export async function ensureAudio() {
 }
 
 /**
- * Load the Plaits AudioWorklet + WASM exactly once. Single-flight so a preload
- * at init() and the await in ensureAudio can't double-register the processor;
- * a failed load clears the slot so the next play retries.
- * @returns {Promise<void>}
+ * Load the engine's AudioWorklets exactly once: Plaits (+ its WASM), the
+ * TB-303 and the Virus. Single-flight so a preload at init() and the await in
+ * ensureAudio can't double-register a processor; a failed load clears the slot
+ * so the next play retries. A synth worklet's failure is swallowed — it falls
+ * back to a Tone voice (see voices.js) rather than taking the play path down.
+ * @returns {Promise<unknown>}
  */
 export function loadWorklet() {
   if (!state.woscLoad) {
     state.woscLoad = wosc.loadOscillator(state.audioCtx);
     state.woscLoad.catch(() => { state.woscLoad = null; });
   }
-  return state.woscLoad;
+  const tb303 = loadTb303Worklet(state.audioCtx).catch(e => { console.warn("tb-303 worklet load failed", e); });
+  const virus = loadVirusWorklet(state.audioCtx).catch(e => { console.warn("virus worklet load failed", e); });
+  return Promise.all([state.woscLoad, tb303, virus]);
 }
 
 /**
@@ -418,8 +424,11 @@ export async function togglePlay() {
           }
         } else {
           const sd = t.sampleDefaults || {};
-          const sampleOpts = (t.voice.type === "sampler")
-            ? {
+          // Non-sampler voices still get the step's written span — the 303
+          // reads it to tell a tie (slides into the next note) from a plain step.
+          const sampleOpts = (t.voice.type !== "sampler")
+            ? { span }
+            : {
                 startOffset: sd.start ?? 0,
                 endOffset:   sd.end   ?? 1,
                 fadeIn:      sd.fadeIn  ?? 0,
@@ -432,15 +441,17 @@ export async function togglePlay() {
                 // user plays the whole buffer or a quarter of it).
                 sampleSpeedMode: t.sampleSpeedMode,
                 pitchLocked: t.pitchLock !== false,
-              }
-            : null;
+              };
           const ratchet = Math.max(1, Math.min(8, Math.round(t.ratchets?.[idx] ?? 1)));
           if (ratchet > 1 && !chord) {
             // retrigger the single note N times evenly across the step
             const sub = duration / ratchet;
+            // Each retrigger is its own note, tie or not — otherwise the 303
+            // would read a tied step's repeats as one long slide and swallow them.
+            const ratchetOpts = (t.voice.type !== "sampler") ? { span: 1 } : sampleOpts;
             for (let r = 0; r < ratchet; r++) {
               for (let i = 0; i < list.length; i++) {
-                try { t.voice.hit(list[i], hitTime + r * sub, sub * 0.92, vel, sampleOpts); } catch (e) { console.warn(e); }
+                try { t.voice.hit(list[i], hitTime + r * sub, sub * 0.92, vel, ratchetOpts); } catch (e) { console.warn(e); }
               }
             }
           } else {

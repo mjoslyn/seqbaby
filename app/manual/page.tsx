@@ -17,6 +17,8 @@ const SECTIONS = [
   ["keyboard", "Playing from your keyboard"],
   ["scale", "Scale and chords"],
   ["engines", "Sound engines"],
+  ["tb303", "The 303"],
+  ["virus", "The virus"],
   ["sampler", "Samples"],
   ["wavetable", "The wavetable editor"],
   ["shaping", "Filter, effects and dynamics"],
@@ -147,7 +149,7 @@ export default function ManualPage() {
                 <tr><td>solo / mute</td><td>Hear only this track, or silence it.</td></tr>
                 <tr><td>gate</td><td>Switches between notes lasting their written length and every note being a short stab.</td></tr>
                 <tr><td>clear</td><td>Empties this pattern on this track.</td></tr>
-                <tr><td>dice</td><td>Generates a new pattern. Keep pressing until something sticks.</td></tr>
+                <tr><td>dice</td><td>Generates a new pattern. Keep pressing until something sticks. The fill level behind the icon is how busy the roll comes out — drag the dice up or down to set it.</td></tr>
                 <tr><td>dup / remove</td><td>Copy the whole track (sound and all), or delete it.</td></tr>
                 <tr><td>oct / semi</td><td>Transposes everything in the pattern up or down.</td></tr>
               </tbody>
@@ -336,8 +338,8 @@ export default function ManualPage() {
               </thead>
               <tbody>
                 <tr><td>plaits</td><td>Sixteen synthesis models from the Mutable Instruments Plaits oscillator — virtual analogue, FM, wavetable, granular, noise, and physical models.</td></tr>
-                <tr><td>drum / synth</td><td>An 808 and 909 kit, a 303-style bass, a poly saw, an FM bell and a pad.</td></tr>
-                <tr><td>Emulators</td><td>Seven monosynth voices in the spirit of classic hardware: MiniBrute, Moog, Juno, Rhodes, Prophet, plus plucked guitar and bass.</td></tr>
+                <tr><td>drum / synth</td><td>An 808 and 909 kit, a poly saw, an FM bell and a pad.</td></tr>
+                <tr><td>Emulators</td><td>The 303 — a model of the acid machine&rsquo;s own circuits, down to the diode-ladder filter and the accent behaviour (see <a href="#tb303">below</a>). The virus, a polyphonic model of the digital synth that defined trance and drum and bass, with its two routable filters and its hypersaw (see <a href="#virus">below</a>). Plus seven monosynth voices in the spirit of classic hardware: MiniBrute, Moog, Juno, Rhodes, Prophet, and plucked guitar and bass.</td></tr>
                 <tr><td>texture</td><td>A granular engine that plays a sample as a cloud of tiny grains.</td></tr>
                 <tr><td>wavetable</td><td>A wavetable synth with its own <a href="#wavetable">editor</a>.</td></tr>
                 <tr><td>sampler</td><td>Your own audio, or one of the bundled kits. See <a href="#sampler">samples</a>.</td></tr>
@@ -352,6 +354,94 @@ export default function ManualPage() {
             <span className={styles.ui}>morph</span> and <span className={styles.ui}>decay</span>{" "}
             on a Plaits model — are that instrument&apos;s main tone controls. The
             labels change with the engine, so they always say what they actually do.
+          </p>
+        </section>
+
+        <section className={styles.section} id="tb303">
+          <h2>The 303</h2>
+          <p>
+            The <span className={styles.ui}>303</span> engine is modelled on the
+            machine rather than approximated with a filter preset, so it responds
+            to a pattern the way the original does. Its four sliders are the panel
+            knobs: <span className={styles.ui}>cutoff</span>,{" "}
+            <span className={styles.ui}>reso</span>,{" "}
+            <span className={styles.ui}>env mod</span> and{" "}
+            <span className={styles.ui}>decay</span>. Beside them sit the waveform
+            switch, the accent depth and tuning.
+          </p>
+          <p>Three things are worth knowing, because they are how you play it:</p>
+          <ul>
+            <li>
+              <strong>Accent comes from step velocity.</strong> Push a step past
+              about two-thirds and it accents: louder, brighter, and with the
+              filter decay forced short. Turn the resonance up and consecutive
+              accents stack into a rising squelch instead of each being separate —
+              that pile-up is the sound of an acid line.
+            </li>
+            <li>
+              <strong>Slide comes from note length.</strong> Draw a step longer
+              than one cell and the note after it slides out of it: the pitch
+              glides across and the envelope is not retriggered.
+            </li>
+            <li>
+              <strong>Plain steps are clipped short</strong>, a little over half
+              the step, which is what makes the part drive rather than run
+              together. Lengthen a note if you want it to hold.
+            </li>
+          </ul>
+          <p>
+            The filter loses low end as the resonance climbs, exactly as the real
+            one does. That is why acid records run a 303 into a distortion pedal —
+            reach for the track&apos;s <span className={styles.ui}>fx</span> panel
+            and do the same.
+          </p>
+        </section>
+
+        <section className={styles.section} id="virus">
+          <h2>The virus</h2>
+          <p>
+            Where the 303 is one idea done perfectly, the virus is a big
+            polyphonic synth built for movement. Its four sliders are{" "}
+            <span className={styles.ui}>cutoff</span>,{" "}
+            <span className={styles.ui}>reso</span>,{" "}
+            <span className={styles.ui}>shape</span> and{" "}
+            <span className={styles.ui}>decay</span>; the four beside them are
+            the levels of osc 1, osc 2, the sub and the noise. Everything else
+            is in the three rows underneath.
+          </p>
+          <p>Four things are worth reaching for first:</p>
+          <ul>
+            <li>
+              <strong>Shape</strong> is one continuous morph from a sine,
+              through a triangle and a saw, to a pulse — and at the very top the
+              pulse width slider takes over. Sweep it and the tone changes
+              character rather than just brightness.
+            </li>
+            <li>
+              <strong>Unison</strong> is the hypersaw. Each note plays up to
+              eight detuned copies of the whole oscillator section, spread
+              across the stereo field. Two or three is a thickening; eight with
+              the detune up is the wide trance sound.
+            </li>
+            <li>
+              <strong>Two filters, not one.</strong> Each can be a low pass,
+              high pass, band pass or notch, and you choose how they connect:
+              in series (one into the other), in parallel, or split so filter 1
+              plays the left ear and filter 2 the right. A low pass into a high
+              pass in series is a band pass you can sweep from both ends.
+            </li>
+            <li>
+              <strong>Saturation sits between them</strong>, which is the whole
+              trick — filter 2 tidies up whatever the saturator did to filter
+              1&apos;s output, so you can be filthy and controlled at once. It
+              runs from a gentle warmth through hard clipping to a bit reducer
+              and a rate reducer.
+            </li>
+          </ul>
+          <p>
+            Sync is the other one to know: turn it on and osc 2 is forced to osc
+            1&apos;s pitch, so dragging the <span className={styles.ui}>semi</span>{" "}
+            slider (or automating it) gives the classic tearing sync lead.
           </p>
         </section>
 
