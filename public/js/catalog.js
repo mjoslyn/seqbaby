@@ -221,6 +221,8 @@ export const ANALOG_ENGINES = [
   { key: "dm:303",        label: "303",            defaultNote: 36, poly: false, melodic: true },
   // Polyphony lives inside the worklet rather than in makePolyPool (virus.js).
   { key: "dm:virus",      label: "virus",          defaultNote: 60, poly: true, melodic: true },
+  // Six sine operators and 32 algorithms, 16-voice, also worklet-internal (dx7.js).
+  { key: "dm:dx7",        label: "dx7",            defaultNote: 60, poly: true, melodic: true },
   { key: "dm:mini-brute", label: "mini brute",     defaultNote: 60, poly: true, melodic: true },
   { key: "dm:moog",       label: "moog",           defaultNote: 60, poly: true, melodic: true },
   { key: "dm:juno",       label: "juno 60",        defaultNote: 60, poly: true, melodic: true },

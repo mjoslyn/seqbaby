@@ -2,6 +2,84 @@
 // This is the exact static DOM skeleton the vanilla engine (public/js/main.js)
 // queries by id/class at boot. Rendered server-side via dangerouslySetInnerHTML;
 // the three engine <script>s are injected client-side by ScriptLoader in order.
+// The DX7's operator matrix: six operators by eight controls. Written as a loop
+// rather than 54 hand-copied inputs — the columns only differ by operator
+// number, and a typo in one of them would be invisible until that operator
+// stopped responding. The algorithm and preset dropdowns are filled at runtime
+// (populateDx7Selects in render.js) so their lists live only in dx7.js.
+// Ranges and defaults must match DX7_DEFAULTS there.
+const DX7_OP_COLS: Array<{ k: string; min: string; max: string; step: string; head: string; title: string }> = [
+  { k: "lvl", min: "0", max: "1", step: "0.01", head: "level",
+    title: "the operator's output level, and the single most important control on the machine. It is exponential: a modulator at half is a sixteenth of full scale, so the top of the slider is where the spectrum opens up. For a carrier it is volume in the mix; for a modulator it is how much it bends the operator below it" },
+  { k: "rat", min: "0", max: "31", step: "1", head: "ratio",
+    title: "frequency as a multiple of the note, 1 to 31 (the bottom step is the machine's half-ratio, an octave down). Whole numbers give harmonic, pitched tones; the interesting ones for bells and mallets are the ratios that do not divide" },
+  { k: "fin", min: "0", max: "0.99", step: "0.01", head: "fine",
+    title: "fine ratio, up to one whole ratio above the coarse setting. This is where inharmonicity comes from — a modulator at 3.5 rather than 3 is the difference between an organ and a bell" },
+  { k: "det", min: "-7", max: "7", step: "1", head: "det",
+    title: "detune, seven steps of about 1.75 cents either way — the machine's own unit. Two operators at the same ratio, detuned apart, beat against each other" },
+  { k: "atk", min: "0", max: "1", step: "0.01", head: "atk",
+    title: "how long this operator takes to reach full level. On a modulator it is how long the tone takes to open up, which is what separates a brass swell from a struck bell" },
+  { k: "dec", min: "0", max: "1", step: "0.01", head: "dec",
+    title: "how fast it falls from full level to its sustain. A modulator that decays under a carrier that does not is the entire trick behind the DX7's electric pianos" },
+  { k: "sus", min: "0", max: "1", step: "0.01", head: "sus",
+    title: "the level this operator holds at for as long as the note lasts. At zero the operator is gone once the decay finishes — percussive; up high it holds — sustained" },
+  { k: "rel", min: "0", max: "1", step: "0.01", head: "rel",
+    title: "how long this operator takes to fade once the note ends" },
+];
+const DX7_OP_DEFAULTS: Record<string, (op: number) => string> = {
+  lvl: (i) => (i === 1 ? "1" : i === 2 ? "0.72" : "0"),
+  rat: () => "1", fin: () => "0", det: () => "0",
+  atk: () => "0.01", dec: () => "0.45",
+  sus: (i) => (i === 1 ? "0.8" : "0.4"), rel: () => "0.3",
+};
+const dx7OpRows = () => [1, 2, 3, 4, 5, 6].map(i => `
+          <div class="sq-dx7__oprow" data-op="${i}">
+            <span class="sq-dx7__opn">op ${i}</span>
+${DX7_OP_COLS.map(c => `            <label class="sq-dx7__f"><input class="p-d${i}${c.k}" type="range" min="${c.min}" max="${c.max}" step="${c.step}" value="${DX7_OP_DEFAULTS[c.k](i)}" title="${c.title}" /></label>`).join("\n")}
+            <select class="p-d${i}fix" title="ratio mode tunes this operator to the note; fixed mode pins it to a frequency between 1Hz and 10kHz (set by ratio and fine) whatever note you play, ignoring the pitch envelope and the lfo with it. Fixed operators are where the DX7's knocks, breaths and cymbals come from">
+              <option value="ratio" selected>ratio</option><option value="fixed">fixed</option>
+            </select>
+          </div>`).join("");
+
+const DX7_PANEL = `
+        <div class="sq-param-group sq-param-group--dx7" hidden>
+          <div class="sq-dx7__row">
+            <span class="sq-dx7__lbl">alg</span>
+            <select class="p-dalg" title="which of the machine's 32 fixed wirings the six operators run in. The arrows say what modulates what: 1←2 means operator 2 modulates operator 1, and everything with no arrow into it is a carrier you actually hear"></select>
+            <span class="sq-dx7__alg"></span>
+            <span class="sq-dx7__lbl">voice</span>
+            <select class="sq-dx7__preset" title="load a complete voice — all six operators, the algorithm, and the four sliders. In the spirit of the machine's own presets rather than its rom, and the honest way to start: change one operator level at a time from here and you are programming a DX7"></select>
+          </div>
+          <div class="sq-dx7__row">
+            <label class="sq-dx7__f"><span>key scale</span><input class="p-dks" type="range" min="0" max="1" step="0.01" value="0.35" title="how much the modulators are pulled back as you play up the keyboard. Without it the top octave screams, because a fixed modulation index is far brighter at 2kHz than at 100Hz — every acoustic instrument gets duller as it goes up, and this is how the DX7 gets away with it" /></label>
+            <label class="sq-dx7__f"><span>vel</span><input class="p-dvs" type="range" min="0" max="1" step="0.01" value="0.5" title="how much playing harder raises the modulation index. This is the DX7's defining gesture: velocity changes the timbre, not just the volume, so a hard note is brighter and not merely louder" /></label>
+            <label class="sq-dx7__f"><span>pitch env</span><input class="p-dpeg" type="range" min="-1" max="1" step="0.01" value="0" title="a pitch sweep at the start of every note, up to two octaves either way. Small amounts are the wooden knock at the front of a mallet sound; large ones are the sound of 1985" /></label>
+            <label class="sq-dx7__f"><span>rate</span><input class="p-dpegr" type="range" min="0" max="1" step="0.01" value="0.3" title="how fast that pitch sweep settles back to the note" /></label>
+          </div>
+          <div class="sq-dx7__row">
+            <span class="sq-dx7__lbl">lfo</span>
+            <select class="p-dlfow" title="lfo waveform — one lfo for the whole instrument, as on the machine">
+              <option value="tri" selected>tri</option><option value="sine">sine</option>
+              <option value="sawdn">saw dn</option><option value="sawup">saw up</option>
+              <option value="square">square</option><option value="sh">s+h</option>
+            </select>
+            <label class="sq-dx7__f"><span>speed</span><input class="p-dlfor" type="range" min="0" max="1" step="0.01" value="0.35" title="lfo speed, from a slow drift to 24Hz — fast enough to be an audio-rate wobble rather than a vibrato" /></label>
+            <label class="sq-dx7__f"><span>delay</span><input class="p-dlfod" type="range" min="0" max="1" step="0.01" value="0" title="how long the lfo takes to fade in after a note starts. Delayed vibrato is what makes a held note sound played rather than held" /></label>
+            <label class="sq-dx7__f"><span>pitch</span><input class="p-dpmd" type="range" min="0" max="1" step="0.01" value="0" title="how far the lfo moves the pitch — vibrato, up to a semitone" /></label>
+            <label class="sq-dx7__f"><span>amp</span><input class="p-damd" type="range" min="0" max="1" step="0.01" value="0" title="how far the lfo moves the level — tremolo" /></label>
+            <select class="p-dlfok" title="key sync restarts the lfo on every note, so the vibrato arrives at the same point each time. Off leaves one free-running lfo that every note joins wherever it happens to be">
+              <option value="on" selected>key sync</option><option value="off">free run</option>
+            </select>
+          </div>
+          <div class="sq-dx7__ops">
+            <div class="sq-dx7__ophead">
+              <span></span>
+${DX7_OP_COLS.map(c => `              <span>${c.head}</span>`).join("\n")}
+              <span></span>
+            </div>${dx7OpRows()}
+          </div>
+        </div>`;
+
 export const STUDIO_BODY = String.raw`
 <header class="sq-transport">
     <div class="sq-transport__main">
@@ -266,6 +344,7 @@ export const STUDIO_BODY = String.raw`
             <label class="sq-virus__f"><span>amt</span><input class="p-vsatamt" type="range" min="0" max="1" step="0.01" value="0.3" /></label>
           </div>
         </div>
+${DX7_PANEL}
         <div class="sq-param-group sq-param-group--tb303" hidden>
           <div class="sq-field"><label>wave</label>
             <select class="p-wave303" title="the 303's two waveforms. Saw is the classic acid tone; square is hollower and sits lower">

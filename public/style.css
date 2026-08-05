@@ -463,6 +463,33 @@ main {
 .sq-param-group--virus .sq-virus__f { display: inline-flex; align-items: center; gap: 4px; color: var(--fg-dim); }
 .sq-param-group--virus .sq-virus__f input[type="range"] { width: 62px; }
 .sq-param-group--virus select { padding: 2px 6px; font-size: 11px; }
+/* DX7. The operator rows are a grid rather than a flex row: six operators by
+   eight controls only reads as an instrument if the columns line up, which is
+   how the machine's own operator page was laid out too. */
+.sq-param-group--dx7 { border-color: color-mix(in oklab, #b48cff 45%, var(--border)); flex-direction: column; align-items: stretch; gap: 4px; }
+.sq-param-group--dx7[hidden] { display: none !important; }
+.sq-param-group--dx7 .sq-dx7__row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 11px; }
+.sq-param-group--dx7 .sq-dx7__lbl { color: var(--fg-dim); min-width: 40px; }
+.sq-param-group--dx7 .sq-dx7__f { display: inline-flex; align-items: center; gap: 4px; color: var(--fg-dim); }
+.sq-param-group--dx7 .sq-dx7__row .sq-dx7__f input[type="range"] { width: 62px; }
+.sq-param-group--dx7 select { padding: 2px 6px; font-size: 11px; }
+.sq-param-group--dx7 .sq-dx7__alg { color: var(--accent); font-size: 11px; letter-spacing: 0.02em; }
+.sq-param-group--dx7 .sq-dx7__alg-fb { color: var(--fg-dim); }
+.sq-dx7__ops { display: grid; gap: 2px; overflow-x: auto; }
+.sq-dx7__ophead, .sq-dx7__oprow {
+  display: grid;
+  grid-template-columns: 34px repeat(8, minmax(44px, 1fr)) 58px;
+  align-items: center;
+  gap: 4px;
+  min-width: 520px;
+}
+.sq-dx7__ophead > span { font-size: 10px; color: var(--fg-dim); text-align: center; opacity: 0.75; }
+.sq-dx7__opn { font-size: 10px; color: var(--fg-dim); }
+.sq-dx7__oprow.is-carrier .sq-dx7__opn { color: var(--accent); }
+.sq-dx7__oprow.is-feedback .sq-dx7__opn::after { content: "↻"; margin-left: 2px; color: var(--accent-2); }
+.sq-dx7__ops .sq-dx7__f { display: flex; align-items: center; min-width: 0; }
+.sq-dx7__ops .sq-dx7__f input[type="range"] { width: 100%; min-width: 0; }
+.sq-dx7__ops select { padding: 1px 4px; font-size: 10px; }
 .sq-param-group--tb303 { border-color: color-mix(in oklab, #ff7a4d 45%, var(--border)); }
 .sq-param-group--tb303[hidden] { display: none !important; }
 .sq-param-group--tb303 select { padding: 2px 6px; font-size: 11px; }
@@ -1530,7 +1557,8 @@ body.kbd-recording .sq-track.is-kbd-active { border-color: #e5484d; box-shadow: 
 .sq-field[data-motion] > label::after,
 .sq-fx__ctl[data-motion] > span::after,
 .sq-virus__f[data-motion] > span::after,
-label[data-motion]:not(.sq-fx__ctl):not(.sq-virus__f)::before {
+.sq-dx7__f[data-motion]::after,
+label[data-motion]:not(.sq-fx__ctl):not(.sq-virus__f):not(.sq-dx7__f)::before {
   content: "";
   display: inline-block;
   width: 5px; height: 5px;
@@ -1539,7 +1567,10 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-virus__f)::before {
   vertical-align: middle;
   margin: 0 0 1px 5px;
 }
-label[data-motion]:not(.sq-fx__ctl):not(.sq-virus__f)::before { margin: 0 5px 1px 0; }
+label[data-motion]:not(.sq-fx__ctl):not(.sq-virus__f):not(.sq-dx7__f)::before { margin: 0 5px 1px 0; }
+/* The dx7's operator cells have no label text of their own (the column heading
+   names them), so the dot goes after the slider rather than beside a word. */
+.sq-dx7__f[data-motion]::after { flex: 0 0 auto; margin: 0 0 0 3px; }
 .sq-field[data-motion="off"] > label,
 .sq-fx__ctl[data-motion="off"] > span,
 .sq-virus__f[data-motion="off"] > span { opacity: 0.8; }

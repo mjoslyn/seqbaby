@@ -6,6 +6,7 @@ import { isMobileDevice } from "./dom.js";
 import { sampleHitRate } from "./lfo.js";
 import { setParam } from "./params.js";
 import { buildTb303Voice } from "./tb303.js";
+import { buildDx7Voice, DX7_NUM_KEYS, DX7_SEL_KEYS } from "./dx7.js";
 import { buildVirusVoice, VIRUS_NUM_KEYS, VIRUS_SEL_KEYS } from "./virus.js";
 
 
@@ -613,6 +614,23 @@ export function buildDrumSynthNode(kind, output) {
       const s = new Tone.PolySynth(Tone.Synth, {
         oscillator: { type: "sawtooth" },
         envelope: { attack: 0.02, decay: 0.3, sustain: 0.6, release: 0.4 },
+      }).connect(output);
+      return {
+        nodes: [s],
+        trigger: (note, time, dur, vel) => s.triggerAttackRelease(Tone.Frequency(note, "midi"), dur, time, vel),
+        release: () => s.releaseAll(),
+      };
+    }
+    // DX7: six sine operators through one of 32 algorithms, 16-voice, all
+    // inside an AudioWorklet — see dx7.js. Falls back to Tone's FM synth (two
+    // operators, one algorithm) if the worklet never registered.
+    case "dx7": {
+      const v = buildDx7Voice(output);
+      if (v) return v;
+      const s = new Tone.PolySynth(Tone.FMSynth, {
+        harmonicity: 1, modulationIndex: 6,
+        envelope: { attack: 0.01, decay: 0.4, sustain: 0.6, release: 0.4 },
+        modulationEnvelope: { attack: 0.01, decay: 0.4, sustain: 0.4, release: 0.3 },
       }).connect(output);
       return {
         nodes: [s],
@@ -1248,7 +1266,8 @@ export class DrumSynthVoice {
                      "osc1range", "osc2range", "osc3range",
                      "osc2freq", "osc3freq", "noise", "noisetype",
                      "wave303", "accent303", "tune303",
-                     ...VIRUS_NUM_KEYS, ...VIRUS_SEL_KEYS]) {
+                     ...VIRUS_NUM_KEYS, ...VIRUS_SEL_KEYS,
+                     ...DX7_NUM_KEYS, ...DX7_SEL_KEYS]) {
       if (this.params?.[k] != null) this.built.setParam(k, this.params[k]);
     }
   }

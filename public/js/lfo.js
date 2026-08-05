@@ -153,6 +153,9 @@ export function getModTarget(t, key) {
     const which = key.slice(6);
     return t.voice?.getAudioParam?.("v" + (which === "sat" ? "satamt" : which)) ?? null;
   }
+  // DX7: every panel control is an AudioParam on its worklet node, and the key
+  // spells the param — dx7_3lvl is operator 3's level, d3lvl on the voice.
+  if (key.startsWith("dx7_")) return t.voice?.getAudioParam?.("d" + key.slice(4)) ?? null;
   if (key === "cutoff") return t.filterNode?.frequency ?? null;
   if (key === "reson")  return t.filterNode?.Q ?? null;
   const rack = t.fxRack;
@@ -378,6 +381,8 @@ export function canModulate(t, key) {
   if (key === "tb303_accent" || key === "tb303_tune") return t.engineKey === "dm:303";
   // Virus oscillator / filter-pair controls — virus only.
   if (key.startsWith("virus_")) return t.engineKey === "dm:virus";
+  // DX7 operator matrix + globals — dx7 only.
+  if (key.startsWith("dx7_")) return t.engineKey === "dm:dx7";
   const eng = engineByKey(t.engineKey);
   if (!eng) return false;
   // Plaits exposes harm/timb/morph/decay as voice params.
@@ -390,6 +395,10 @@ export function canModulate(t, key) {
     // Real polyphony inside the worklet, so unlike the pooled emulators the
     // whole instrument follows the LFO, not just voice 0.
     case "dm:virus":      return ["harm", "timb", "morph", "decay", "osc1", "osc2", "osc3", "osc4", "noise"].includes(key);
+    // Same: one node, one set of params, so the LFO moves the whole instrument.
+    // The oscillator-mix sliders aren't wired — a DX7's six operators have their
+    // own levels in the panel, which are reachable under their own keys.
+    case "dm:dx7":        return ["harm", "timb", "morph", "decay"].includes(key);
     case "dm:mini-brute": return ["harm", "osc1", "osc2", "osc3", "osc4", "ultra", "fm"].includes(key);
     case "dm:moog":       return ["harm", "osc1", "osc2", "osc3", "noise"].includes(key);
     case "dm:juno":       return ["harm", "osc1", "osc2", "osc3", "noise"].includes(key);

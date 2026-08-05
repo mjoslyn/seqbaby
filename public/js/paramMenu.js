@@ -33,7 +33,7 @@ function controlLabel(el, fallback) {
   const parts = [];
   const title = el.closest(".sq-fx__row")?.querySelector(".sq-fx__title")?.textContent?.trim();
   if (title) parts.push(title);
-  const field = el.closest(".sq-field, .sq-fx__ctl, .sq-virus__f, label");
+  const field = el.closest(".sq-field, .sq-fx__ctl, .sq-virus__f, .sq-dx7__f, label");
   const own = (field?.querySelector("label, span")?.textContent || field?.textContent || "").trim();
   if (own) parts.push(own);
   return parts.join(" · ") || fallback;
@@ -49,7 +49,7 @@ function describe(el, spec) {
   }
   const own = el.title?.trim();
   if (own) return own;
-  const field = el.closest(".sq-field, .sq-fx__ctl, .sq-virus__f, label");
+  const field = el.closest(".sq-field, .sq-fx__ctl, .sq-virus__f, .sq-dx7__f, label");
   const inherited = field?.title?.trim();
   if (inherited) return inherited;
   return PARAM_DESCRIPTIONS[spec.auto] || PARAM_DESCRIPTIONS[spec.lfo] || "";
@@ -180,7 +180,7 @@ function controlFromEventTarget(target) {
   // The field that wraps the control, then the label. In that order: the volume
   // field puts its label beside a wrapper div rather than around the slider, so
   // starting from the label would find nothing.
-  for (const sel of [".sq-field, .sq-fx__ctl, .sq-virus__f", "label"]) {
+  for (const sel of [".sq-field, .sq-fx__ctl, .sq-virus__f, .sq-dx7__f", "label"]) {
     const inside = target.closest(sel)?.querySelector(CONTROL_SEL);
     if (inside) return inside;
   }

@@ -1,5 +1,6 @@
 import { PATTERN_COUNT } from "./constants.js";
 import { setStatus } from "./dom.js";
+import { DX7_DEFAULTS } from "./dx7.js";
 import { defaultFxConfig } from "./fxRack.js";
 import { chordSelectionFor } from "./keyboard.js";
 import { applySampleSpeed, defaultLFOConfig, disposeLFOs, syncAllLFOs } from "./lfo.js";
@@ -84,6 +85,8 @@ export function createTrack({ name, engineKey, length = totalSteps() }) {
       wave303: "saw", accent303: 0.6, tune303: 0,
       // Access Virus panel (see virus.js)
       ...VIRUS_DEFAULTS,
+      // DX7 operator matrix + globals (see dx7.js)
+      ...DX7_DEFAULTS,
     },
     filter: { cutoff: 1, reson: 0, env: 0, attack: 0, decay: 0.25, sustain: 0.4, release: 0.3 },
     filterNode: null,

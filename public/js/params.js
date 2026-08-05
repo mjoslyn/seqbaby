@@ -1,4 +1,5 @@
 import { ENGINE_MACRO_TIPS, PLAITS_MACRO_TIPS, engineByKey } from "./catalog.js";
+import { DX7_ALG_FEEDBACK, DX7_ALG_LABELS, dx7Carriers } from "./dx7.js";
 import { applySampleSpeed, disposeLFOs, syncAllLFOs } from "./lfo.js";
 import { redetectDrumKit } from "./meter.js";
 import { refreshFxPanelUI, updateMidiUI } from "./render.js";
@@ -22,6 +23,39 @@ export function updateGranularSpeedEnabled(t) {
   const modalEl = t._gWavModal?.overlay?.querySelector(".gw-gspeed");
   if (modalEl) modalEl.disabled = !moving;
 }
+/**
+ * Redraw the dx7 panel's algorithm readout: the chain diagram beside the
+ * dropdown, which operators are carriers (the ones you actually hear), and
+ * which one the feedback loop runs through. Programming FM is guesswork until
+ * you know those two things, and the algorithm's number alone doesn't say.
+ * @param {Track} t
+ */
+export function refreshDx7Algorithm(t) {
+  const root = t._dx7GroupEl || t.el?.querySelector(".sq-param-group--dx7");
+  if (!root) return;
+  const n = Math.max(1, Math.min(32, Number(t.params.dalg) || 1));
+  const fb = DX7_ALG_FEEDBACK[n - 1] ?? "6";
+  const car = dx7Carriers(n);
+  const out = root.querySelector(".sq-dx7__alg");
+  if (out) {
+    // The dropdown already shows the diagram, so say the thing it doesn't:
+    // which operators you actually hear, and where the feedback is wired.
+    out.textContent = `carrier${car.length > 1 ? "s" : ""} ${car.join(" ")}`;
+    const tail = document.createElement("span");
+    tail.className = "sq-dx7__alg-fb";
+    tail.textContent = ` · feedback ${fb}`;
+    out.appendChild(tail);
+    out.title = `operators ${car.join(", ")} go straight to the output — those are the ones you hear, and their levels are volume. Every other operator is a modulator: its level is how hard it bends the one below it. Feedback runs through operator ${fb.replace("→", " into ")}`;
+  }
+  const carriers = new Set(car);
+  const fbOp = Number(fb.split("→")[0]);
+  for (const row of root.querySelectorAll(".sq-dx7__oprow")) {
+    const op = Number(row.dataset.op);
+    row.classList.toggle("is-carrier", carriers.has(op));
+    row.classList.toggle("is-feedback", op === fbOp);
+  }
+}
+
 /**
  * Set a track synth param and push it to the live voice.
  * @param {Track} t @param {string} key @param {number} val
@@ -49,11 +83,12 @@ export function updatePlaitsControlsVisibility(t) {
   const isWavetable = t.engineKey === "wt:akwf";
   const isTb303     = t.engineKey === "dm:303";
   const isVirus     = t.engineKey === "dm:virus";
+  const isDx7       = t.engineKey === "dm:dx7";
   // The 808 voices are modelled on the machine's circuits, so their sliders are
   // its panel knobs (see buildDrumSynthNode).
   const is808 = t.engineKey.startsWith("dm:808-");
   const is909 = t.engineKey.startsWith("dm:909-");
-  const showTimbre = isPlaits || isMiniBrute || isMoog || isJuno || isGuitar || isBass || isRhodes || isProphet6 || isGranular || isWavetable || isTb303 || isVirus || is808 || is909;
+  const showTimbre = isPlaits || isMiniBrute || isMoog || isJuno || isGuitar || isBass || isRhodes || isProphet6 || isGranular || isWavetable || isTb303 || isVirus || isDx7 || is808 || is909;
   const group = t._timbreGroupEl || t.el.querySelector(".sq-param-group--timbre");
   if (group) {
     group.hidden = !showTimbre;
@@ -94,6 +129,8 @@ export function updatePlaitsControlsVisibility(t) {
       ? { harm: "cutoff",   timb: "reso",   morph: "env mod",   decay: "decay" }
       : isVirus
       ? { harm: "cutoff",   timb: "reso",   morph: "shape",     decay: "decay" }
+      : isDx7
+      ? { harm: "bright",   timb: "fbk",    morph: "mod dec",   decay: "decay" }
       : t.engineKey === "dm:808-kick"
       ? { harm: "tune",     timb: "tone",   morph: "drive",     decay: "decay" }
       : t.engineKey === "dm:808-snare"
@@ -126,6 +163,13 @@ export function updatePlaitsControlsVisibility(t) {
           timb: "resonance. The feedback costs the passband level as it climbs, so the line gets thinner and squelchier the further you push it — that thinning is why a 303 wants a distortion after it",
           morph: "how much of the filter envelope reaches the cutoff",
           decay: "filter envelope decay, 200ms to 2.5s. Accented steps ignore this and use a fixed 200ms, exactly as the accent circuit does on the machine",
+        }
+      : isDx7
+      ? {
+          harm: "every modulator's output level at once — the master modulation index, and the one control that takes an FM patch from a sine to a scream. On the machine this lives per operator (and it still does, in the panel); this rides all six together",
+          timb: "how much the feedback operator's output is fed back into its own input. It is the only thing in the machine making harmonics that isn't another operator, and wound right up it stops being a tone and turns to noise — which is where the DX7's breath and cymbals come from. Which operator carries it depends on the algorithm, and the panel says which",
+          morph: "scales every modulator's decay together: how fast the timbre falls away, independently of how fast the note does. A modulator decaying under a carrier that isn't is the whole trick behind an FM electric piano",
+          decay: "scales every carrier's decay and release together — how fast the note itself falls away. The operators keep their relative shapes; this moves them as one",
         }
       : isVirus
       ? {
@@ -176,7 +220,7 @@ export function updatePlaitsControlsVisibility(t) {
     // Randomize button only makes sense for Plaits' generic harm/timb/morph/decay —
     // hide it for the analog engines where those sliders do engine-specific things.
     const randBtn = group.querySelector(".track-rand");
-    if (randBtn) randBtn.hidden = isMiniBrute || isMoog || isJuno || isGuitar || isBass || isRhodes || isProphet6 || isGranular || isWavetable || isTb303 || isVirus || is808 || is909;
+    if (randBtn) randBtn.hidden = isMiniBrute || isMoog || isJuno || isGuitar || isBass || isRhodes || isProphet6 || isGranular || isWavetable || isTb303 || isVirus || isDx7 || is808 || is909;
   }
   // Per-oscillator volume sliders: only shown for the analog mono engines.
   const oscGroup = t._oscMixGroupEl || t.el.querySelector(".sq-param-group--osc-mix");
@@ -224,6 +268,12 @@ export function updatePlaitsControlsVisibility(t) {
   // Virus oscillator / unison / filter-pair panel.
   const virusGroup = t._virusGroupEl || t.el.querySelector(".sq-param-group--virus");
   if (virusGroup) virusGroup.hidden = !isVirus;
+  // DX7 operator matrix. The algorithm readout has to be redrawn with it — the
+  // panel is the same six rows whichever wiring they're in, so the carrier and
+  // feedback markers are the only thing saying what the rows mean.
+  const dx7Group = t._dx7GroupEl || t.el.querySelector(".sq-param-group--dx7");
+  if (dx7Group) dx7Group.hidden = !isDx7;
+  if (isDx7) refreshDx7Algorithm(t);
   // Granular grain-engine group (play mode / window / jitter / detune / pan / …).
   const granGroup = t._granGroupEl || t.el.querySelector(".sq-param-group--granular");
   if (granGroup) granGroup.hidden = !isGranular;

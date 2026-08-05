@@ -3,6 +3,7 @@ import { loadBuffer, normalizeAudioBuffer } from "./buffers.js";
 import { GRANULAR_SAMPLE_BASE } from "./catalog.js";
 import { PATTERN_COUNT } from "./constants.js";
 import { showInputDialog, showSelectDialog } from "./dialogs.js";
+import { DX7_NUM_KEYS, DX7_SEL_KEYS } from "./dx7.js";
 import { setStatus } from "./dom.js";
 import { ICON_CHAIN, ICON_FINISH, ICON_NOW, ICON_REPEAT } from "./icons.js";
 import { applySampleSpeed, defaultLFOConfig, disposeLFOs, syncAllLFOs } from "./lfo.js";
@@ -472,7 +473,8 @@ export function applySet(s) {
       q(".p-morph").value = t.params.morph;
       q(".p-decay").value = t.params.decay;
       for (const k of [...GRAN_NUM_KEYS, ...GRAN_SEL_KEYS, "wave303", "accent303", "tune303",
-                     ...VIRUS_NUM_KEYS, ...VIRUS_SEL_KEYS]) {
+                     ...VIRUS_NUM_KEYS, ...VIRUS_SEL_KEYS,
+                     ...DX7_NUM_KEYS, ...DX7_SEL_KEYS]) {
         const el = q(`.p-${k}`);
         if (el && t.params[k] != null) el.value = t.params[k];
       }
@@ -670,7 +672,8 @@ export function applyTrackPatch(t, patch) {
     q(".p-morph").value  = t.params.morph;
     q(".p-decay").value  = t.params.decay;
     for (const k of [...GRAN_NUM_KEYS, ...GRAN_SEL_KEYS, "wave303", "accent303", "tune303",
-                     ...VIRUS_NUM_KEYS, ...VIRUS_SEL_KEYS]) {
+                     ...VIRUS_NUM_KEYS, ...VIRUS_SEL_KEYS,
+                     ...DX7_NUM_KEYS, ...DX7_SEL_KEYS]) {
       const el = q(`.p-${k}`);
       if (el && t.params[k] != null) el.value = t.params[k];
     }

@@ -1,4 +1,5 @@
 import { LFO_KEYS } from "./constants.js";
+import { DX7_MOD_KEYS, DX7_MOD_LABELS } from "./dx7.js";
 
 
 /** @typedef {import("./types.js").Track} Track */
@@ -42,6 +43,9 @@ for (const [cls, name] of [["vpw", "pw"], ["vfm", "fm"], ["vring", "ring"],
                            ["vatk", "atk"], ["vsus", "sus"], ["vrel", "rel"]]) {
   def(`p-${cls}`, `virus_${name}`, `virus.${name}`);
 }
+// DX7 panel. Every control is `d` + a short key, and that short key spells both
+// namespaces — so all 56 of them are one loop rather than 56 lines.
+for (const k of DX7_MOD_KEYS) def(`p-d${k}`, `dx7_${k}`, `dx7.${k}`);
 // Granular grain controls. Also reachable from the wav modal's own copies.
 for (const k of ["speed", "pitch", "window", "jitter", "detune", "pan"]) {
   def(`p-g${k}`,  `gran_${k}`, `gran.${k}`);
@@ -151,6 +155,12 @@ export const CONTROL_LABELS = {
   "p-gpattern": "grain pattern", "p-grate": "grain rate", "p-gsync": "grain sync",
   "gw-gplay": "grain play mode", "gw-gloop": "grain loop mode",
   "gw-gpattern": "grain pattern", "gw-grate": "grain rate", "gw-gsync": "grain sync",
+  // DX7: the operator cells are named by their column heading, not by a label
+  // of their own, so the right-click menu has nothing in the DOM to read.
+  ...Object.fromEntries(DX7_MOD_KEYS.map(k => [`p-d${k}`, DX7_MOD_LABELS[k]])),
+  "p-dalg": "dx7 algorithm", "p-dlfow": "dx7 lfo waveform", "p-dlfok": "dx7 lfo key sync",
+  "sq-dx7__preset": "dx7 voice",
+  ...Object.fromEntries([1, 2, 3, 4, 5, 6].map(i => [`p-d${i}fix`, `dx7 op${i} ratio / fixed`])),
   "fx-delay-div": "delay division", "fx-shaper-mode": "shaper mode",
   "sq-wt__scan-en": "wave scan", "sq-wt__scan-dir": "scan direction",
   "sq-wt__scan-sync": "scan sync", "sq-wt__scan-retrig": "scan retrigger",
@@ -307,7 +317,7 @@ export function refreshParamIndicators(t) {
     for (const el of root.querySelectorAll("input[type=range], select, input[type=checkbox]")) {
       const tg = targetsForControl(el);
       if (!tg) continue;
-      const wrap = el.closest(".sq-field, .sq-fx__ctl, .sq-virus__f, label");
+      const wrap = el.closest(".sq-field, .sq-fx__ctl, .sq-virus__f, .sq-dx7__f, label");
       if (!wrap) continue;
       // An LFO config exists for every key whether or not it was ever used, so
       // only `enabled` means anything. A lane is only there if it was added, so

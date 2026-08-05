@@ -1,3 +1,5 @@
+import { DX7_MOD_KEYS, DX7_MOD_LABELS, DX7_MOD_RANGE } from "./dx7.js";
+
 export const { wosc, oscillatorTypes } = window.woscillators;
 
 export const STEPS_PER_BAR = 16;
@@ -42,6 +44,10 @@ export const LFO_KEYS = [
   // Access Virus panel controls outside the four sliders — AudioParams too.
   "virus_pw", "virus_fm", "virus_ring", "virus_unidet", "virus_cut2", "virus_bal", "virus_sat", "virus_envamt",
   "virus_osc2semi", "virus_osc2det", "virus_unispread", "virus_atk", "virus_sus", "virus_rel",
+  // DX7: the globals, then every control of all six operators. Generated from
+  // the one list in dx7.js — 56 keys is too many to keep in step by hand, and
+  // the picker only ever shows them on a dx7 track (see canModulate).
+  ...DX7_MOD_KEYS.map(k => `dx7_${k}`),
 ];
 // How much each target swings per unit of depth:
 //  - 0..1 unit params: amp = depth/2 (swings ±0.5)
@@ -79,6 +85,7 @@ export const LFO_LABELS = {
   virus_atk: "virus attack", virus_sus: "virus sustain", virus_rel: "virus release",
   delay_time: "delay time", delay_fbk: "delay fbk",
   reverb_decay: "reverb decay",
+  ...Object.fromEntries(DX7_MOD_KEYS.map(k => [`dx7_${k}`, DX7_MOD_LABELS[k]])),
 };
 export const lfoLabel = (k) => LFO_LABELS[k] ?? k;
 export const LFO_AMP_SCALE = {
@@ -120,6 +127,12 @@ export const LFO_AMP_SCALE = {
   virus_osc2det: 1, virus_unispread: 1, virus_atk: 1, virus_sus: 1, virus_rel: 1,
   // Granular grain controls — 0..1 swing around wherever the slider sits.
   gran_window: 1, gran_jitter: 1, gran_detune: 1, gran_pan: 1,
+  // DX7: each key swings its own control's full span, so an operator's ratio
+  // (0..31) sweeps ratios and its level (0..1) sweeps level.
+  ...Object.fromEntries(DX7_MOD_KEYS.map(k => {
+    const [lo, hi] = DX7_MOD_RANGE[k];
+    return [`dx7_${k}`, hi - lo];
+  })),
 };
 
 // Non-blocking prompt dialog (browser prompt() halts the transport scheduler)

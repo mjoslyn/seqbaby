@@ -4,6 +4,7 @@ import { applyTrackPatch, serializeTrackPatch } from "./session.js";
 import { LFO_KEYS, lfoLabel, rateToSlider, sliderToRate } from "./constants.js";
 import { showInputDialog, showSavedPatchPicker } from "./dialogs.js";
 import { setStatus } from "./dom.js";
+import { DX7_ALG_LABELS, DX7_DEFAULTS, DX7_NUM_KEYS, DX7_PRESET_NAMES, DX7_SEL_KEYS, dx7Preset } from "./dx7.js";
 import { randomizeMelody, randomizeTimbre } from "./generate.js";
 import { ICON_CLEAR, ICON_DICE, ICON_LOAD, ICON_ROLL, ICON_SAVE, ICON_SLIDERS, ICON_WAV } from "./icons.js";
 import { canModulate, currentBpm, rateFromSync, syncLFO } from "./lfo.js";
@@ -11,7 +12,7 @@ import { autoOwns, modOwns, refreshParamIndicators } from "./paramTargets.js";
 import { openGranularSourceModal, openSamplerSourceModal, pickAudioFileForTrack } from "./main.js";
 import { defaultFxConfig } from "./fxRack.js";
 import { patternMeter, redetectDrumKit, stepsPerBarForMeter } from "./meter.js";
-import { setEngineKey, setParam, updateGranularSpeedEnabled, updatePlaitsControlsVisibility } from "./params.js";
+import { refreshDx7Algorithm, setEngineKey, setParam, updateGranularSpeedEnabled, updatePlaitsControlsVisibility } from "./params.js";
 import { bestRollViewOct } from "./pianoRoll.js";
 import { applyCompressorConfig, setEQ, setFilter } from "./signal.js";
 import { state } from "./state.js";
@@ -106,6 +107,29 @@ function attachDiceDensity(t, btn) {
   });
 }
 
+/**
+ * Push a track's dx7 params back into the panel. Needed wherever the values
+ * change underneath the controls rather than because of them — loading a voice,
+ * applying a session or a patch. The four track sliders come too: brightness
+ * and feedback are part of an FM voice, so a preset sets them.
+ * @param {Track} t
+ */
+export function syncDx7Panel(t) {
+  const root = t._dx7GroupEl || t.el?.querySelector(".sq-param-group--dx7");
+  if (root) {
+    for (const k of [...DX7_NUM_KEYS, ...DX7_SEL_KEYS]) {
+      const el = root.querySelector(`.p-${k}`);
+      if (el && t.params[k] != null) el.value = t.params[k];
+    }
+  }
+  const timbre = t._timbreGroupEl || t.el;
+  for (const k of ["harm", "timb", "morph", "decay"]) {
+    const el = timbre?.querySelector(`.p-${k}`);
+    if (el && t.params[k] != null) el.value = t.params[k];
+  }
+  refreshDx7Algorithm(t);
+}
+
 export function renderTrack(t) {
   const tpl = document.getElementById("track-template");
   const node = tpl.content.firstElementChild.cloneNode(true);
@@ -141,6 +165,30 @@ export function renderTrack(t) {
   for (const k of [...GRAN_NUM_KEYS, ...GRAN_SEL_KEYS]) {
     const el = node.querySelector(`.p-${k}`);
     if (el) el.value = t.params[k] ?? GRAN_DEFAULTS[k];
+  }
+  // The dx7's algorithm and voice dropdowns ship empty: their contents live in
+  // dx7.js, so the 32 wirings are written down exactly once.
+  const algSel = node.querySelector(".p-dalg");
+  if (algSel && !algSel.options.length) {
+    for (let i = 0; i < DX7_ALG_LABELS.length; i++) {
+      const o = document.createElement("option");
+      o.value = String(i + 1);
+      o.textContent = `${i + 1}   ${DX7_ALG_LABELS[i]}`;
+      algSel.appendChild(o);
+    }
+  }
+  const presetSel = node.querySelector(".sq-dx7__preset");
+  if (presetSel && !presetSel.options.length) {
+    for (const name of ["", ...DX7_PRESET_NAMES]) {
+      const o = document.createElement("option");
+      o.value = name;
+      o.textContent = name || "—";
+      presetSel.appendChild(o);
+    }
+  }
+  for (const k of [...DX7_NUM_KEYS, ...DX7_SEL_KEYS]) {
+    const el = node.querySelector(`.p-${k}`);
+    if (el) el.value = t.params[k] ?? DX7_DEFAULTS[k];
   }
   const gsyncEl = node.querySelector(".p-gsync");
   if (gsyncEl) gsyncEl.checked = t.params.gsync ?? GRAN_DEFAULTS.gsync;
@@ -209,6 +257,31 @@ export function renderTrack(t) {
   }
   const gsyncInput = node.querySelector(".p-gsync");
   if (gsyncInput) gsyncInput.addEventListener("change", e => setParam(t, "gsync", e.target.checked));
+  // DX7: 48 operator sliders plus the globals, then the selects — the algorithm
+  // redraws the panel's carrier / feedback markers, the rest just set a param.
+  for (const k of DX7_NUM_KEYS) {
+    const el = node.querySelector(`.p-${k}`);
+    if (el) el.addEventListener("input", e => setParam(t, k, Number(e.target.value)));
+  }
+  for (const k of DX7_SEL_KEYS) {
+    const el = node.querySelector(`.p-${k}`);
+    if (el) el.addEventListener("change", e => {
+      setParam(t, k, e.target.value);
+      if (k === "dalg") refreshDx7Algorithm(t);
+    });
+  }
+  // Loading a voice writes every panel control at once — the operators, the
+  // algorithm, and the four track sliders, which are as much part of an FM
+  // patch as the operators are.
+  if (presetSel) {
+    presetSel.addEventListener("change", e => {
+      const preset = dx7Preset(e.target.value);
+      if (!preset) return;
+      for (const [key, val] of Object.entries(preset)) setParam(t, key, val);
+      syncDx7Panel(t);
+      setStatus(`dx7 voice "${e.target.value}"`);
+    });
+  }
   // Header wave/sample icon (between engine dropdown + save): opens the granular
   // visualizer for the granular engine, else the sampler's sample/slice editor.
   // Visibility is toggled per engine in updatePlaitsControlsVisibility.
@@ -370,6 +443,7 @@ export function renderTrack(t) {
   t._moogOscGroupEl = node.querySelector(".sq-param-group--moog");
   t._tb303GroupEl   = node.querySelector(".sq-param-group--tb303");
   t._virusGroupEl   = node.querySelector(".sq-param-group--virus");
+  t._dx7GroupEl     = node.querySelector(".sq-param-group--dx7");
   t._granGroupEl    = node.querySelector(".sq-param-group--granular");
 
   // Everything above can be reparented out of the track (panels into their
@@ -379,7 +453,8 @@ export function renderTrack(t) {
   for (const el of [t._modPanelEl, t._autPanelEl, t._rollPanelEl, t._filterPanelEl,
                     t._envPanelEl, t._fxPanelEl, t._eqPanelEl, t._compPanelEl,
                     t._timbreGroupEl, t._oscMixGroupEl, t._oscModGroupEl,
-                    t._moogOscGroupEl, t._tb303GroupEl, t._virusGroupEl, t._granGroupEl]) {
+                    t._moogOscGroupEl, t._tb303GroupEl, t._virusGroupEl,
+                    t._dx7GroupEl, t._granGroupEl]) {
     if (el) el.dataset.trackId = String(t.id);
   }
 

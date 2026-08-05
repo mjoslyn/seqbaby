@@ -7,7 +7,7 @@
 // The version goes in the PATH, not a ?query, and that distinction is the whole
 // design. Relative specifiers inside the engine ("./voices.js") resolve against
 // the importing module's URL, which keeps the path but drops the query — so a
-// path prefix propagates through all 33 modules for free, while ?v= would reach
+// path prefix propagates through all 38 modules for free, while ?v= would reach
 // only main.js and leave its imports unversioned. It also means zero changes to
 // public/js: no rewritten specifiers, no bundler.
 //
@@ -51,6 +51,7 @@ export const ENGINE_MODULES = [
   "curves.js",
   "dialogs.js",
   "dom.js",
+  "dx7.js",
   "fxRack.js",
   "generate.js",
   "icons.js",

@@ -2,7 +2,8 @@
 
 Multi-engine browser step sequencer. A hand-written vanilla Web Audio engine
 (Mutable Instruments Plaits via `@vectorsize/woscillators`, Tone.js drum/synth
-recipes, seven analog-mono emulators, wavetable + granular + unified sampler
+recipes, worklet models of the TB-303 / Access Virus / DX7 plus seven
+analog-mono emulators, wavetable + granular + unified sampler
 engines, Web MIDI) wrapped in a thin Next.js + Supabase shell for accounts,
 cloud songs, a patch gallery, and share links. 32-pattern bank with filter /
 env / fx / eq / comp / mod / automation per track.
@@ -14,7 +15,7 @@ env / fx / eq / comp / mod / automation per track.
   engine scripts in order: Tone.js 15 (CDN) → `public/woscillators.js` →
   `public/js/main.js` (ES module). `middleware.ts` refreshes the Supabase
   session on every request *except* static engine assets.
-- **Engine**: ~35 dependency-free vanilla ES modules in `public/js/`. No
+- **Engine**: ~38 dependency-free vanilla ES modules in `public/js/`. No
   bundler — edit, reload. `window.seqbaby` (from `appApi.js`) exposes `state`
   and serialize/apply hooks to the React shell (typed in `app/seqbaby.d.ts`).
 - **Accounts + data**: Supabase (Postgres + Auth + RLS). Tables: `profiles`,
@@ -86,6 +87,9 @@ env / fx / eq / comp / mod / automation per track.
   registration + voice builder. See the TB-303 section below.
 - `virus.js` — the Access Virus model, same shape: processor source string,
   Blob-URL registration, voice builder, and its panel key lists.
+- `dx7.js` — the Yamaha DX7 model, same shape again, plus the 32-algorithm
+  table, the panel's generated key lists and the preset voices. See the DX7
+  section below.
 - `theory.js` / `meter.js` / `generate.js` / `curves.js` / `params.js` /
   `constants.js` / `dialogs.js` / `dom.js` / `icons.js` / `appApi.js` /
   `types.js` (JSDoc typedefs — data-model source of truth).
@@ -180,14 +184,15 @@ Voice interface: `hit(midi, time, dur, vel, opts?)`, `setParam`,
 ## Emulators (`"Emulators"` optgroup)
 
 All engine type `drum-synth`. The seven Tone.js analog-mono presets are each
-wrapped in `makePolyPool(size, buildOne)`; the 303 and the Virus are the odd
-ones out — AudioWorklet models that handle their own voicing (the 303 is mono
-like the machine, the Virus polyphonic). See their sections below.
+wrapped in `makePolyPool(size, buildOne)`; the 303, the Virus and the DX7 are
+the odd ones out — AudioWorklet models that handle their own voicing (the 303
+is mono like the machine, the other two polyphonic). See their sections below.
 
 | key             | builder               | pool | character |
 |---|---|---|---|
 | `dm:303`        | `buildTb303Voice`     | mono | TB-303 circuit model, AudioWorklet (`tb303.js`) |
 | `dm:virus`      | `buildVirusVoice`     | 8 (internal) | Access Virus architecture, AudioWorklet (`virus.js`) |
+| `dm:dx7`        | `buildDx7Voice`       | 16 (internal) | Yamaha DX7, 6-op FM, AudioWorklet (`dx7.js`) |
 | `dm:mini-brute` | `buildMiniBruteVoice` | 4 | saw + ultrasaw + PWM pulse + metalized tri + sub, Brute Factor |
 | `dm:moog`       | `buildMoogVoice`      | 4 | 3 osc w/ wave + range selects, ±7-semi osc2/3, noise |
 | `dm:juno`       | `buildJunoVoice`      | 6 | DCO + sub + noise → HPF → baked-in chorus |
@@ -301,6 +306,66 @@ ring ─┘                    └─ FILTER 2 (multimode, 2 pole) ────�
   filter pair; the morph crossfades four classic waves rather than walking the
   Virus's 64 spectral wavetables; no oversampling, so the saturator aliases (as
   the hardware's does); cutoff keyfollow is fixed at 33%.
+
+## Yamaha DX7 (`dm:dx7`, `public/js/dx7.js`)
+
+Six sine operators through one of 32 fixed algorithms. No filter, no sub, no
+analogue anything — the instrument *is* the routing plus the levels.
+
+```
+op6 ─▶ op5 ─▶ op4 ─▶ op3 ─┐          (alg 1: two stacks, ops 1 and 3 audible)
+              op2 ─▶ op1 ─┴─▶ out     feedback: op6 into itself
+```
+
+- **The algorithm table is decoded, not remembered.** The 32 wirings come from
+  the bit-encoded table in Dexed's `fm_core.cc` (Apache 2.0), decoded once into
+  the adjacency list at the top of the processor source: per operator, who
+  modulates it; which are carriers; and the feedback path's `[source,
+  destination]` (the same operator except algorithms 4 and 6, whose loops span
+  three and two operators). Operators always run **6 → 1**: in every algorithm a
+  modulator has a higher number than its target, so one pass per sample is
+  enough.
+- **Output level is exponential** (`2^((lvl-1)*7)`): half the slider is a
+  sixteenth of full scale. That law is most of what makes programming an FM
+  synth feel like an FM synth, and it's why the useful range is all at the top.
+- **Per-operator envelopes** are what make it an instrument rather than a
+  spectrum — a modulator decaying under a sustaining carrier is a struck sound.
+  Modulator decay/release scale with the `morph` macro, carriers' with `decay`,
+  so which macro an operator follows depends on the current algorithm.
+- **Key scaling and velocity go to the modulators**, not the amplifier: playing
+  harder raises the modulation index (brighter, not just louder) and playing
+  higher lowers it (or the top octave screams).
+- **Controls** — the four track sliders are BRIGHT (master modulation index) /
+  FBK (feedback) / MOD DEC / DECAY. Everything else is `sq-param-group--dx7`:
+  three global rows plus a 6×8 operator grid (level, ratio, fine, detune, and an
+  ADSR each) with a ratio/fixed select per operator. The osc-mix row is hidden —
+  a DX7's six operator levels live in the grid.
+- **One list, three namespaces.** Every control is `d` + a short key, and that
+  short key spells its LFO target (`dx7_<short>`) and its automation lane
+  (`dx7.<short>`) — so `d3lvl` / `dx7_3lvl` / `dx7.3lvl` are one control.
+  `DX7_MOD_KEYS` in dx7.js generates all 56 of them, and `constants.js`,
+  `automation.js` and `paramTargets.js` map over it rather than listing them.
+  `DX7_MOD_RANGE` gives each its span, so a ratio lane sweeps 0..31 and a detune
+  lane ±7. Adding a control is one entry in `DX7_OP_CTLS` / `DX7_GLOBAL_CTLS`
+  plus its markup column.
+- **The panel markup is generated** in `app/studioMarkup.ts` (`DX7_PANEL`) — 54
+  hand-copied inputs differing only by operator number is a typo waiting to
+  happen. The algorithm and voice dropdowns ship **empty** and are filled at
+  runtime by `renderTrack` from `DX7_ALG_LABELS` / `DX7_PRESET_NAMES`, so the 32
+  diagrams live only in dx7.js. Ranges and defaults in the markup must match
+  `DX7_DEFAULTS`.
+- **`refreshDx7Algorithm`** (params.js) redraws the carrier / feedback markers on
+  the operator rows when the algorithm changes — the panel is the same six rows
+  in every wiring, so those markers are the only thing saying what a row means.
+  Called from `updatePlaitsControlsVisibility`, so engine switch / session load /
+  patch apply all cover it.
+- **Presets** (`dx7Preset(name)`) return a *complete* set of panel params plus
+  the four track sliders, so nothing of the previous voice survives a load.
+  They're in the spirit of the machine's own, not its ROM (which is 155-byte
+  sysex of controls this panel doesn't have).
+- **Loading** — same Blob-URL registration as the 303 and the Virus, from
+  `loadWorklet()` in transport.js; a failure falls back to a Tone `FMSynth`
+  (two operators, one algorithm) so the track is never silent.
 
 ## Granular (`dm:granular`, `GranularVoice` in voices.js)
 
@@ -483,7 +548,7 @@ fails. Real-time capture — see Known limitations.
 ## Engines catalog (`buildEngineCatalog`)
 
 Groups in order: `plaits` (16) · `drum / synth` (808/909 kit + poly-saw /
-fm-bell / pad) · `Emulators` (303 + virus + 7 analog-mono) · `texture` (`dm:granular`) ·
+fm-bell / pad) · `Emulators` (303 + virus + dx7 + 7 analog-mono) · `texture` (`dm:granular`) ·
 `wavetable` (`wt:akwf`) · `sampler` (single unified entry) · `saved patches`
 (`saved:<name>`) · `midi`. The engine key string is the source of truth.
 Bundled drum kits are no longer separate engines — they live in
@@ -536,7 +601,8 @@ patterns.
   `refreshCompSourceDropdowns()`.
 - **`tsconfig.json` excludes `public/js/`** — the engine is plain JS with
   JSDoc types; don't rename it to TS or import it into the Next graph.
-- **Worklet processor sources are template literals** (`tb303.js`, `virus.js`),
+- **Worklet processor sources are template literals** (`tb303.js`, `virus.js`,
+  `dx7.js`),
   so a stray backtick or `${` inside one — including in a comment — truncates
   the string. The module still parses, `node --check` still passes, and the
   failure only shows up as a SyntaxError at engine boot. When editing inside a
@@ -589,7 +655,7 @@ Repo: https://github.com/mjoslyn/seqbaby.
   An inline marker (`window.__seqbabyServerBoot`) tells the paths apart, and
   `ScriptLoader.tsx` keeps its onload-chained injection for the soft-nav case
   (e.g. arriving from `/login`).
-- `app/EnginePreload.tsx` emits `modulepreload` for all 33 modules listed in
+- `app/EnginePreload.tsx` emits `modulepreload` for all 38 modules listed in
   `app/engineAssets.ts`. The graph is 8 levels deep, so without it the browser
   needs up to eight sequential round trips just to discover the code.
   **Adding or removing a module in `public/js/` means updating that list** —

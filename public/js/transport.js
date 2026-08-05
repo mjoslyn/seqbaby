@@ -3,6 +3,7 @@ import { fireMetronome, paintBeatIndicator } from "./beat.js";
 import { engineByKey } from "./catalog.js";
 import { BAR_TICKS, wosc } from "./constants.js";
 import { setStatus } from "./dom.js";
+import { loadDx7Worklet } from "./dx7.js";
 import { currentBpm, syncAllLFOs } from "./lfo.js";
 import { init, needsResume, primeAudioForIOS } from "./main.js";
 import { updateMidiUI } from "./render.js";
@@ -215,7 +216,7 @@ export async function ensureAudio() {
 
 /**
  * Load the engine's AudioWorklets exactly once: Plaits (+ its WASM), the
- * TB-303 and the Virus. Single-flight so a preload at init() and the await in
+ * TB-303, the Virus and the DX7. Single-flight so a preload at init() and the await in
  * ensureAudio can't double-register a processor; a failed load clears the slot
  * so the next play retries. A synth worklet's failure is swallowed — it falls
  * back to a Tone voice (see voices.js) rather than taking the play path down.
@@ -228,7 +229,8 @@ export function loadWorklet() {
   }
   const tb303 = loadTb303Worklet(state.audioCtx).catch(e => { console.warn("tb-303 worklet load failed", e); });
   const virus = loadVirusWorklet(state.audioCtx).catch(e => { console.warn("virus worklet load failed", e); });
-  return Promise.all([state.woscLoad, tb303, virus]);
+  const dx7 = loadDx7Worklet(state.audioCtx).catch(e => { console.warn("dx7 worklet load failed", e); });
+  return Promise.all([state.woscLoad, tb303, virus, dx7]);
 }
 
 /**

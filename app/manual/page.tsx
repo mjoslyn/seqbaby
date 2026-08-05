@@ -19,6 +19,7 @@ const SECTIONS = [
   ["engines", "Sound engines"],
   ["tb303", "The 303"],
   ["virus", "The virus"],
+  ["dx7", "The dx7"],
   ["sampler", "Samples"],
   ["wavetable", "The wavetable editor"],
   ["shaping", "Filter, effects and dynamics"],
@@ -344,7 +345,7 @@ export default function ManualPage() {
               <tbody>
                 <tr><td>plaits</td><td>Sixteen synthesis models from the Mutable Instruments Plaits oscillator — virtual analogue, FM, wavetable, granular, noise, and physical models.</td></tr>
                 <tr><td>drum / synth</td><td>An 808 and 909 kit, a poly saw, an FM bell and a pad.</td></tr>
-                <tr><td>Emulators</td><td>The 303 — a model of the acid machine&rsquo;s own circuits, down to the diode-ladder filter and the accent behaviour (see <a href="#tb303">below</a>). The virus, a polyphonic model of the digital synth that defined trance and drum and bass, with its two routable filters and its hypersaw (see <a href="#virus">below</a>). Plus seven monosynth voices in the spirit of classic hardware: MiniBrute, Moog, Juno, Rhodes, Prophet, and plucked guitar and bass.</td></tr>
+                <tr><td>Emulators</td><td>The 303 — a model of the acid machine&rsquo;s own circuits, down to the diode-ladder filter and the accent behaviour (see <a href="#tb303">below</a>). The virus, a polyphonic model of the digital synth that defined trance and drum and bass, with its two routable filters and its hypersaw (see <a href="#virus">below</a>). The dx7, six sine operators through the machine&rsquo;s own 32 algorithms (see <a href="#dx7">below</a>). Plus seven monosynth voices in the spirit of classic hardware: MiniBrute, Moog, Juno, Rhodes, Prophet, and plucked guitar and bass.</td></tr>
                 <tr><td>texture</td><td>A granular engine that plays a sample as a cloud of tiny grains.</td></tr>
                 <tr><td>wavetable</td><td>A wavetable synth with its own <a href="#wavetable">editor</a>.</td></tr>
                 <tr><td>sampler</td><td>Your own audio, or one of the bundled kits. See <a href="#sampler">samples</a>.</td></tr>
@@ -447,6 +448,73 @@ export default function ManualPage() {
             Sync is the other one to know: turn it on and osc 2 is forced to osc
             1&apos;s pitch, so dragging the <span className={styles.ui}>semi</span>{" "}
             slider (or automating it) gives the classic tearing sync lead.
+          </p>
+        </section>
+
+        <section className={styles.section} id="dx7">
+          <h2>The dx7</h2>
+          <p>
+            Six sine waves. That is the entire instrument — no filter, no sub
+            oscillator, nothing else. What you get out of it depends only on
+            which sines are wired into which, and how hard. The panel is the
+            same six rows whatever you are making: one row per operator, with
+            its level, its frequency as a ratio of the note, and its own
+            envelope.
+          </p>
+          <p>Four things to know, in the order they matter:</p>
+          <ul>
+            <li>
+              <strong>The algorithm is the wiring.</strong> There are 32 of
+              them and you cannot make your own — that was true of the machine
+              too. The dropdown draws each one:{" "}
+              <span className={styles.ui}>1←2</span> means operator 2 modulates
+              operator 1. Beside it the panel says which operators are{" "}
+              <em>carriers</em> — the ones that reach your ears, whose level is
+              simply volume. Every other operator is a modulator, and its level
+              is how hard it bends the one below it. The carrier rows are
+              highlighted, so you can always see which is which.
+            </li>
+            <li>
+              <strong>Level is exponential, and level is everything.</strong> A
+              modulator at half its slider is a sixteenth of full scale, so
+              almost all of the interesting range is in the top quarter. Nudging
+              one modulator level is how you program this thing.
+            </li>
+            <li>
+              <strong>Every operator has its own envelope</strong>, which means
+              the timbre has an envelope. A modulator that decays fast under a
+              carrier that does not is a struck sound — that is the whole trick
+              behind an FM electric piano, and it is why the dx7 made a noise
+              nothing before it could.
+            </li>
+            <li>
+              <strong>Feedback</strong> is the only thing in the machine making
+              harmonics that is not another operator. Wind the{" "}
+              <span className={styles.ui}>fbk</span> slider up and it stops
+              being a tone and turns into noise — which is where the breaths and
+              cymbals come from. Which operator carries it depends on the
+              algorithm; the panel says which.
+            </li>
+          </ul>
+          <p>
+            The four track sliders ride all six operators at once:{" "}
+            <span className={styles.ui}>bright</span> is every modulator&apos;s
+            level together (the fastest way to hear what a patch can do),{" "}
+            <span className={styles.ui}>fbk</span> is the feedback,{" "}
+            <span className={styles.ui}>mod dec</span> scales how fast the
+            timbre falls away and <span className={styles.ui}>decay</span> how
+            fast the note does.
+          </p>
+          <p>
+            Start from the <span className={styles.ui}>voice</span> dropdown
+            rather than from silence — an electric piano, a bass, a bell, brass,
+            a marimba, an organ and a pad. Load one and change a single operator
+            level, and you are programming a dx7. Two others are worth knowing:{" "}
+            <span className={styles.ui}>vel</span> makes playing harder raise
+            the modulation index, so hard notes are brighter and not just
+            louder, and <span className={styles.ui}>key scale</span> pulls the
+            modulators back as you play up the keyboard — without it the top
+            octave screams.
           </p>
         </section>
 

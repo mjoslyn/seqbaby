@@ -1,5 +1,6 @@
 import { engineByKey } from "./catalog.js";
 import { makeFuzzCurve, shaperPreampGain } from "./curves.js";
+import { DX7_MOD_KEYS, DX7_MOD_LABELS, dx7FromUnit } from "./dx7.js";
 import { canModulate } from "./lfo.js";
 import { setParam } from "./params.js";
 import { cutoffToHz, resonToQ } from "./signal.js";
@@ -56,6 +57,9 @@ export const AUTOMATION_TARGETS = {
   "virus.atk":          { label: "virus attack" },
   "virus.sus":          { label: "virus sustain" },
   "virus.rel":          { label: "virus release" },
+  // DX7 panel controls (dx7 engine only) — globals, then all six operators.
+  // Generated from the same list the LFO keys come from (dx7.js).
+  ...Object.fromEntries(DX7_MOD_KEYS.map(k => [`dx7.${k}`, { label: DX7_MOD_LABELS[k] }])),
   // fx
   "fx.vinyl":           { label: "vinyl amt" },
   "fx.vinyl.warmth":    { label: "vinyl warmth" },
@@ -115,6 +119,7 @@ export function voiceAutoKeysForEngine(t) {
     case "dm:prophet6":   return ["vol", "harm", "timb", "morph", "decay", "osc1", "osc2", "osc3", "osc4", "noise"];
     case "dm:granular":   return ["vol", "harm", "timb", "morph", "decay"];
     case "dm:virus":      return ["vol", "harm", "timb", "morph", "decay", "osc1", "osc2", "osc3", "osc4", "noise"];
+    case "dm:dx7":        return ["vol", "harm", "timb", "morph", "decay"];
     case "wt:akwf":       return ["vol", "harm", "timb", "morph", "decay"];
   }
   // 808 / 909 voices: tune / tone / colour / decay all take effect on the next
@@ -134,6 +139,7 @@ export function canAutomate(t, key) {
   if (key.startsWith("gran.")) return t.engineKey === "dm:granular";
   if (key.startsWith("tb303.")) return t.engineKey === "dm:303";
   if (key.startsWith("virus.")) return t.engineKey === "dm:virus";
+  if (key.startsWith("dx7.")) return t.engineKey === "dm:dx7";
   if (key.startsWith("fx.")) return true;
   if (VOICE_AUTO_KEYS.includes(key)) return voiceAutoKeysForEngine(t).includes(key);
   return false;
@@ -225,6 +231,14 @@ export function applyAutomationAtStep(t, key, v, time, vNext, stepDur) {
     // `sat` is the saturation amount, which the voice calls `vsatamt` (`vsat`
     // is the curve select beside it) — see getModTarget for the same aliasing.
     ramp(t.voice?.getAudioParam?.("v" + (which === "sat" ? "satamt" : which)), map(vv), map(vn));
+    return;
+  }
+  // DX7 panel controls are AudioParams on its worklet node too. Each lane spans
+  // the control's own range — a ratio lane sweeps 0..31, a detune lane ±7 — so
+  // a step's value means the same thing here as on the slider it came from.
+  if (key.startsWith("dx7.")) {
+    const which = key.slice(4);
+    ramp(t.voice?.getAudioParam?.("d" + which), dx7FromUnit(which, vv), dx7FromUnit(which, vn));
     return;
   }
   const rack = t.fxRack;
