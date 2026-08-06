@@ -958,12 +958,13 @@ main {
 
 .sq-track__save:disabled { opacity: 0.35; cursor: not-allowed; }
 
-.sq-track__lock[aria-pressed="true"] {
+/* Pattern lock: this track's sound belongs to the pattern (patternSound.js). */
+.sq-track__plock[aria-pressed="true"] {
   background: var(--accent-2);
   color: #0b0d10;
   border-color: var(--accent-2);
 }
-.sq-track.is-locked { border-color: var(--accent-2); }
+.sq-track.is-plocked { border-color: var(--accent-2); }
 
 .sq-track__solo[aria-pressed="true"] {
   background: var(--accent);

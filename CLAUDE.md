@@ -75,10 +75,16 @@ env / fx / eq / comp / mod / automation per track.
   exclusivity helpers, the label indicators, and the per-parameter descriptions
   (generic fallbacks only — the engines describe their own sliders, see below).
 - `paramMenu.js` — right-click a parameter → its mod + automation, in a modal.
+- `syncTrackSoundUI(t)` (render.js) — writes a track's whole sound back into its
+  controls. The one place that job lives: session load, patch load and a
+  pattern-lock recall all call it (it used to be copy-pasted in two of them,
+  which is how the eq/comp sliders came to be missing from session load).
 - `render.js` / `stepGrid.js` / `stepEditor.js` / `pianoRoll.js` /
   `patternBar.js` / `scaleUI.js` / `meters.js` / `beat.js` — UI.
 - `keyboard.js` — computer-keyboard performance mode + capture.
 - `session.js` — serialize/apply sets + track patches, legacy migration.
+- `patternSound.js` — p-lock: a track's sound stored per pattern, captured on
+  the way out of a pattern and diff-applied on the way in.
 - `track.js` — track lifecycle (create/resize/clone).
 - `bounce.js` — WAV render via MediaRecorder.
 - `buffers.js` — sample decode/normalize cache, `startSampleSource`.
@@ -408,6 +414,9 @@ automation`
   roll), on top of the chord/root.
 - `automation` — `{ [targetKey]: {enabled, values: number[]} }` per-step
   parameter automation (see `AUTOMATION_TARGETS` in automation.js).
+- `soundLocked` / `sound` — p-lock: whether this track's sound is locked to this
+  pattern, and the sound itself if so. Unlocked patterns share the track's
+  `baseSound` (see the p-lock section below).
 
 `aliasPattern(t, idx)` rebinds `t.steps`/`t.notes`/etc. to reference
 `t.patterns[idx].*` directly, so UI mutations flow straight into the pattern.
@@ -416,7 +425,8 @@ Switching patterns = re-aliasing + re-render.
 ### Track (`state.tracks[]`) — highlights beyond the aliased pattern fields
 
 `id, name, engineKey, length, accents(Set)`, flags `muted/soloed/isDrumKit`,
-`noteMode ("gate"|"trigger")`, `glide, swing, density, speed` (`density` is the
+`baseSound` (the sound every unlocked pattern shares),
+`glide, swing, density, speed` (`density` is the
 dice button's fill level — how full `randomizeMelody` rolls; drag the dice
 up/down, painted by `paintDiceDensity`),
 `sampleSpeedMode ("native"|"1xbpm"), sampleDefaults, sampleSource, slices,
@@ -446,7 +456,7 @@ Single `Tone.Transport.scheduleRepeat` at `"16n"`. Each callback, per track:
 3. Per firing step: chord tones (with complexity/inversion) + piano-roll
    `extraNotes`, arp expansion, master swing + per-step offset → `hitTime`
    (clamped to `now + 0.002`), filter env, then `voice.hit(...)` per tone.
-   `noteMode` "gate" plays the step length; "trigger" fires 50ms. Ratchet
+   A note plays for its written step length. Ratchet
    retriggers 1–8× when no chord. Sampler opts carry region/fade/loop/
    pitchBase/pitchLock/sampleSpeedMode.
 4. Visuals: `Tone.Draw.schedule` at `time + visualOutputLatency()` (playhead +
@@ -513,6 +523,52 @@ target), plus `PARAM_DESCRIPTIONS` / `CONTROL_LABELS` lines where the DOM has
 nothing to read. Lookup order for both is class entry → markup `title` →
 target-key entry, so the per-engine tooltips (rewritten by
 `updatePlaitsControlsVisibility`) win over anything generic.
+
+## p-lock — a sound per pattern (`patternSound.js`)
+
+Normally a track has one sound and 32 patterns of notes: move the cutoff and it
+moves in all of them. **p-lock is per track AND per pattern** — the button lives
+on the track, its state lives on the pattern you're on. So the bass can have its
+own sound in the chorus while the verse and the middle eight go on sharing the
+track's.
+
+```
+bass   pattern 1  unlocked -> t.baseSound   \ these two move together
+       pattern 3  unlocked -> t.baseSound   /
+       pattern 2  LOCKED   -> t.patterns[1].sound
+```
+
+- **Two stores, one live state.** `t.params` / `t.filter` / `t.eq` / `t.comp` /
+  `t.fxConfig` / `t.lfoConfig` stay the one truth every other module reads.
+  `switchPattern` writes the live sound back to whichever store owns the pattern
+  being left (`p.sound` if `p.soundLocked`, else `t.baseSound`) and reads
+  whichever owns the one being entered. Editing on an unlocked pattern is
+  therefore editing the shared sound — that's what makes them move together.
+- **The recall is diffed, and that's load-bearing.** Chain mode advances patterns
+  at bar boundaries *inside the transport's scheduler callback*. Applying every
+  parameter each time would re-register ~130 LFOs and regenerate the reverb IR
+  every bar. Only what differs is touched: measured at +0.2ms over the unlocked
+  baseline when two patterns share a sound, +2.5ms when they differ. The reverb
+  decay only reaches `applyReverb` when it really moved (it rebuilds the IR).
+- **Only enabled LFO entries are stored.** The mod matrix has an entry per target
+  whether used or not; keeping all of them made a snapshot 12.9KB, so 32 patterns
+  of one track was 0.4MB of a session that has to fit in a share link. Pruned
+  it's 2.3KB. A key absent from a snapshot means *not modulated*, so
+  `applyPatternSound` walks the **live** matrix and falls back to
+  `defaultLFOConfig()` — otherwise an LFO from the outgoing pattern would keep
+  running under the incoming one.
+- **The toggle round-trips.** Locking keeps the sound you can hear, or restores
+  what this pattern had if it was locked before. Unlocking hands the pattern back
+  to `baseSound` but *keeps* its snapshot. There's no undo in this app, so
+  neither direction may destroy anything.
+- **The button state belongs to the pattern**, so it changes under you on a
+  switch — `switchPattern` calls `refreshAllPatternLockUI()`.
+- `serializeSet` calls `flushAllPatternSounds()` first: a sound is only written
+  back when you *leave* a pattern, so without the flush the sound you can
+  currently hear is the one thing a save would miss.
+- `clonePattern` copies `soundLocked` and deep-copies `sound`, so duplicating a
+  locked pattern (button or drag) gives a locked duplicate that sounds the same
+  and then diverges.
 
 ## Keyboard performance mode (`keyboard.js`)
 
@@ -601,6 +657,16 @@ patterns.
   `refreshCompSourceDropdowns()`.
 - **`tsconfig.json` excludes `public/js/`** — the engine is plain JS with
   JSDoc types; don't rename it to TS or import it into the Next graph.
+- **Don't use `Tone.Time(...)` for the step duration.** `Tone.setContext()` at
+  init leaves Tone's time helpers resolving against a different transport than
+  the one the sequence is scheduled on, so `Tone.Time("16n").toSeconds()`
+  answers 0.125s — the 120bpm value — at *every* tempo, while
+  `Tone.Transport.bpm` reads correctly. That silently scaled note lengths,
+  swing, per-step micro-timing, automation ramps and arp spans to a fixed
+  120bpm (notes half the length of their step at 60bpm, overlapping the next
+  one at 180). `baseStepDur` in transport.js derives it arithmetically from
+  `Tone.Transport.bpm.value` instead. Anything else needing musical time should
+  do the same, or use `currentBpm()` (lfo.js) as the sync helpers do.
 - **Worklet processor sources are template literals** (`tb303.js`, `virus.js`,
   `dx7.js`),
   so a stray backtick or `${` inside one — including in a comment — truncates
@@ -624,6 +690,9 @@ patterns.
   `applyAutomationAtStep`, + the same `CONTROL_TARGETS` entry.
 - New per-step control → array on `emptyPattern()` + `aliasPattern()` field +
   step-editor UI + consume in the transport loop + serialize/apply.
+- New per-track sound setting → if it should follow p-lock, add it to
+  `capturePatternSound` / `applyPatternSound` (patternSound.js) too, or a locked
+  pattern will leave it behind on a switch.
 - New engine → see Engines catalog above.
 - New server data → Supabase migration + server action in `app/*/actions.ts`
   + UI in the relevant `app/*.tsx`; keep the engine side behind

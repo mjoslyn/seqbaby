@@ -9,6 +9,7 @@ import { randomizeMelody, randomizeTimbre } from "./generate.js";
 import { ICON_CLEAR, ICON_DICE, ICON_LOAD, ICON_ROLL, ICON_SAVE, ICON_SLIDERS, ICON_WAV } from "./icons.js";
 import { canModulate, currentBpm, rateFromSync, syncLFO } from "./lfo.js";
 import { autoOwns, modOwns, refreshParamIndicators } from "./paramTargets.js";
+import { patternLocked, refreshPatternLockUI, refreshPatternSoundUI, setPatternLock } from "./patternSound.js";
 import { openGranularSourceModal, openSamplerSourceModal, pickAudioFileForTrack } from "./main.js";
 import { defaultFxConfig } from "./fxRack.js";
 import { patternMeter, redetectDrumKit, stepsPerBarForMeter } from "./meter.js";
@@ -105,6 +106,64 @@ function attachDiceDensity(t, btn) {
     if (btn._diceDragged) { btn._diceDragged = false; return; }
     randomizeMelody(t);
   });
+}
+
+/**
+ * Write a track's whole sound — every synth param, the filter and its
+ * envelope, the eq and the compressor — from the track state back into its
+ * controls. For wherever the values changed underneath the sliders rather than
+ * because of them: a session load, a patch load, a pattern-locked track
+ * recalling a different sound.
+ *
+ * The fx rack and the mod matrix have their own repaint (refreshFxPanelUI /
+ * renderModPanel) because they rebuild rows rather than set values.
+ * @param {Track} t
+ */
+export function syncTrackSoundUI(t) {
+  if (!t?.el) return;
+  const q = (s) => (t.el.querySelector(s));
+  const set = (sel, val) => { const el = q(sel); if (el != null && val != null) el.value = val; };
+  set(".p-vol",   t.params.vol);
+  set(".p-harm",  t.params.harm);
+  set(".p-timb",  t.params.timb);
+  set(".p-morph", t.params.morph);
+  set(".p-decay", t.params.decay);
+  for (const k of ["osc1", "osc2", "osc3", "osc4", "ultra", "fm", "metal",
+                   "osc1range", "osc2range", "osc3range",
+                   "osc1wave", "osc2wave", "osc3wave",
+                   "osc2freq", "osc3freq", "noise", "noisetype",
+                   "wave303", "accent303", "tune303",
+                   ...GRAN_NUM_KEYS, ...GRAN_SEL_KEYS,
+                   ...VIRUS_NUM_KEYS, ...VIRUS_SEL_KEYS,
+                   ...DX7_NUM_KEYS, ...DX7_SEL_KEYS]) {
+    const el = q(`.p-${k}`);
+    if (el && t.params[k] != null) el.value = t.params[k];
+  }
+  const gsync = q(".p-gsync");
+  if (gsync) gsync.checked = !!t.params.gsync;
+  set(".p-cutoff", t.filter.cutoff);
+  set(".p-reson",  t.filter.reson);
+  set(".p-envamt", t.filter.env);
+  set(".p-envatk", t.filter.attack);
+  set(".p-envdec", t.filter.decay);
+  set(".p-envsus", t.filter.sustain);
+  set(".p-envrel", t.filter.release);
+  const eqPanel = t._eqPanelEl || q(".sq-track__eq-panel");
+  if (eqPanel) {
+    eqPanel.querySelector(".p-eq-low").value  = t.eq.low;
+    eqPanel.querySelector(".p-eq-mid").value  = t.eq.mid;
+    eqPanel.querySelector(".p-eq-high").value = t.eq.high;
+  }
+  const compPanel = t._compPanelEl || q(".sq-track__comp-panel");
+  if (compPanel) {
+    compPanel.querySelector(".comp-enabled").checked = !!t.comp.enabled;
+    compPanel.querySelector(".comp-threshold").value = t.comp.threshold;
+    compPanel.querySelector(".comp-ratio").value     = t.comp.ratio;
+    compPanel.querySelector(".comp-attack").value    = t.comp.attack;
+    compPanel.querySelector(".comp-release").value   = t.comp.release;
+    compPanel.querySelector(".comp-knee").value      = t.comp.knee;
+  }
+  refreshDx7Algorithm(t);
 }
 
 /**
@@ -381,17 +440,21 @@ export function renderTrack(t) {
     node.classList.toggle("is-soloed", t.soloed);
   });
 
-  const noteModeBtn = node.querySelector(".track-note-mode");
-  const refreshNoteModeBtn = () => {
-    const isGate = (t.noteMode ?? "gate") === "gate";
-    noteModeBtn.textContent = isGate ? "gate" : "trig";
-    noteModeBtn.setAttribute("aria-pressed", String(isGate));
-  };
-  refreshNoteModeBtn();
-  noteModeBtn.addEventListener("click", () => {
-    t.noteMode = ((t.noteMode ?? "gate") === "gate") ? "trigger" : "gate";
-    refreshNoteModeBtn();
-  });
+  // p-lock: this track's sound becomes part of THIS pattern (patternSound.js).
+  // The state belongs to the pattern, so the button is repainted on every
+  // pattern switch as well as here.
+  const plockBtn = node.querySelector(".sq-track__plock");
+  if (plockBtn) {
+    refreshPatternLockUI(t);
+    plockBtn.addEventListener("click", () => {
+      const idx = state.activePattern;
+      const on = !patternLocked(t, idx);
+      if (setPatternLock(t, idx, on)) refreshPatternSoundUI(t);
+      setStatus(on
+        ? `"${t.name}" locked to pattern ${idx + 1} — its sound lives here now`
+        : `"${t.name}" unlocked on pattern ${idx + 1} — back to the track's sound`);
+    });
+  }
 
   engineSel.addEventListener("change", () => refreshSaveEnabled());
   // also update save button when customConfig is assigned later — keep a ref on track

@@ -42,10 +42,6 @@ export function createTrack({ name, engineKey, length = totalSteps() }) {
     muted: false,
     soloed: false,
     isDrumKit: guessIsDrumKit({ engineKey, name }),
-    // "gate" plays each note for its full step length; "trigger" fires a
-    // short hit regardless of step length. Drum-synth recipes ignore this
-    // (their envelopes are fixed); melodic + sample voices honor it.
-    noteMode: "gate",
     glide: 0,
     sampleSpeedMode: "native",
     // When on, sample voices ignore the step's note pitch and play at their
@@ -88,6 +84,9 @@ export function createTrack({ name, engineKey, length = totalSteps() }) {
       // DX7 operator matrix + globals (see dx7.js)
       ...DX7_DEFAULTS,
     },
+    // The sound every unlocked pattern shares; a p-locked pattern keeps its
+    // own on the pattern instead (patternSound.js). Filled on the first flush.
+    baseSound: null,
     filter: { cutoff: 1, reson: 0, env: 0, attack: 0, decay: 0.25, sustain: 0.4, release: 0.3 },
     filterNode: null,
     eq: { low: 0, mid: 0, high: 0 },

@@ -23,6 +23,7 @@ const SECTIONS = [
   ["sampler", "Samples"],
   ["wavetable", "The wavetable editor"],
   ["shaping", "Filter, effects and dynamics"],
+  ["lock", "p-lock"],
   ["motion", "Modulation and automation"],
   ["saving", "Saving, sharing and export"],
   ["trouble", "If something sounds wrong"],
@@ -120,14 +121,19 @@ export default function ManualPage() {
                 <tr><td>repeat / chain</td><td>Repeat loops the current pattern forever. Chain plays through your non-empty patterns in order, like a song.</td></tr>
                 <tr><td>immediate / finish</td><td>Whether clicking another pattern switches instantly or waits for the current bar to finish.</td></tr>
                 <tr><td>dup</td><td>Copies this pattern into the next free slot — the usual way to make a variation.</td></tr>
+                <tr><td>drag a number</td><td>Drops a copy of that pattern onto any other slot, and takes you there to work on it. (While playing in finish mode it waits for the bar, like any other switch.)</td></tr>
                 <tr><td>sig</td><td>Time signature for this pattern, from 4/4 to 7/8.</td></tr>
                 <tr><td>rep</td><td>In chain mode, how many bars this pattern plays before moving on.</td></tr>
               </tbody>
             </table>
           </div>
           <div className={styles.note}>
-            Patterns store notes, not sounds. Switching patterns never changes your
-            instruments, effects or mixer settings — those belong to the track.
+            Patterns store notes, not sounds: switching patterns leaves your
+            instruments, effects and mixer settings alone, because those belong to
+            the track. Unless you want otherwise — a track&apos;s{" "}
+            <span className={styles.ui}>p-lock</span> button gives it a sound of its
+            own in <em>this</em> pattern, so one track can be a different instrument
+            in the chorus than in the verse. See <a href="#lock">p-lock</a>.
           </div>
         </section>
 
@@ -148,7 +154,7 @@ export default function ManualPage() {
                 <tr><td>spd</td><td>Plays this track faster or slower than the rest, from 1/16 to 16 times.</td></tr>
                 <tr><td>vol</td><td>Track volume, with its level meter behind the slider.</td></tr>
                 <tr><td>solo / mute</td><td>Hear only this track, or silence it.</td></tr>
-                <tr><td>gate</td><td>Switches between notes lasting their written length and every note being a short stab.</td></tr>
+                <tr><td>p-lock</td><td>Gives this track a sound of its own in the pattern you are on. Per pattern, so it changes as you move between them. See <a href="#lock">below</a>.</td></tr>
                 <tr><td>clear</td><td>Empties this pattern on this track.</td></tr>
                 <tr><td>dice</td><td>Generates a new pattern. Keep pressing until something sticks. The fill level behind the icon is how busy the roll comes out — drag the dice up or down to set it.</td></tr>
                 <tr><td>dup / remove</td><td>Copy the whole track (sound and all), or delete it.</td></tr>
@@ -590,6 +596,46 @@ export default function ManualPage() {
             <span className={styles.ui}>glide</span> lives here too: it slides the pitch
             between notes rather than jumping, for portamento leads and basses.
           </p>
+        </section>
+
+        <section className={styles.section} id="lock">
+          <h2>p-lock</h2>
+          <p>
+            A track normally has one sound and 32 patterns of notes. Move its
+            filter and it moves everywhere, because the sound belongs to the
+            track and only the notes belong to the pattern.
+          </p>
+          <p>
+            The <span className={styles.ui}>p-lock</span> button in a track&apos;s
+            button row changes that for the pattern you are on. Locked, that
+            pattern keeps its own sound; every pattern you leave unlocked goes on
+            sharing the track&apos;s. So you can give the bass a bright, delayed
+            sound for the chorus and leave the verse and the middle eight alone —
+            and they still move together when you tweak them.
+          </p>
+          <p>
+            It is per pattern, so the button changes as you move around: it lights
+            up on the patterns you have locked. In chain mode the sound changes
+            come with the arrangement, on the bar.
+          </p>
+          <p>Everything about the sound comes along:</p>
+          <ul>
+            <li>the engine&apos;s own controls — the four sliders and whatever panel it has</li>
+            <li>the filter and its envelope</li>
+            <li>the effects rack, the eq and the compressor</li>
+            <li>the modulation assignments in the mod panel</li>
+          </ul>
+          <p>
+            What does <em>not</em> move is the instrument itself: the engine, and
+            any sample loaded into it, stay put. A locked pattern is one instrument
+            being played differently, not a different instrument.
+          </p>
+          <div className={styles.note}>
+            Editing while on an unlocked pattern edits the shared track sound, so
+            every other unlocked pattern follows. Editing on a locked one changes
+            only that pattern. Unlocking hands a pattern back to the shared sound
+            but keeps what it had, so locking it again brings it straight back.
+          </div>
         </section>
 
         <section className={styles.section} id="motion">

@@ -137,6 +137,23 @@
  * @property {(number[]|null)[]} extraNotes    Stacked polyphony pitches per step.
  * @property {(number[]|null)[]} extraLengths  Parallel per-extra lengths.
  * @property {Object<string, {enabled:boolean, values:number[]}>} automation
+ * @property {boolean} soundLocked      p-lock: this track's sound is locked to
+ *   this pattern rather than shared with the track (patternSound.js).
+ * @property {PatternSound|null} sound   The locked sound, when it is. Unlocked
+ *   patterns share the track's `baseSound` instead.
+ */
+
+/**
+ * A pattern-locked track's sound, as stored on the pattern. `lfoConfig` holds
+ * only the ENABLED modulation entries — a key that isn't there means "not
+ * modulated" (the full matrix has ~130 entries and would dwarf the session).
+ * @typedef {Object} PatternSound
+ * @property {TrackParams} params
+ * @property {FilterConfig} filter
+ * @property {EQConfig} eq
+ * @property {CompConfig} comp
+ * @property {Object} fxConfig
+ * @property {Object<string, LFOConfig>} lfoConfig
  */
 
 /**
@@ -158,6 +175,8 @@
  * @property {boolean[]} arps
  * @property {boolean} muted
  * @property {boolean} soloed
+ * @property {PatternSound|null} baseSound  The sound every UNLOCKED pattern
+ *   shares. A p-locked pattern keeps its own on the pattern.
  * @property {boolean} isDrumKit
  * @property {number} glide
  * @property {number} density

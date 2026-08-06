@@ -3,22 +3,21 @@ import { loadBuffer, normalizeAudioBuffer } from "./buffers.js";
 import { GRANULAR_SAMPLE_BASE } from "./catalog.js";
 import { PATTERN_COUNT } from "./constants.js";
 import { showInputDialog, showSelectDialog } from "./dialogs.js";
-import { DX7_NUM_KEYS, DX7_SEL_KEYS } from "./dx7.js";
 import { setStatus } from "./dom.js";
 import { ICON_CHAIN, ICON_FINISH, ICON_NOW, ICON_REPEAT } from "./icons.js";
 import { applySampleSpeed, defaultLFOConfig, disposeLFOs, syncAllLFOs } from "./lfo.js";
 import { guessIsDrumKit, parseMeter } from "./meter.js";
 import { updatePlaitsControlsVisibility } from "./params.js";
 import { renderPatternGrid } from "./patternBar.js";
-import { paintDiceDensity, refreshFxPanelUI, renderModPanel } from "./render.js";
+import { paintDiceDensity, refreshFxPanelUI, renderModPanel, syncTrackSoundUI } from "./render.js";
+import { flushAllPatternSounds, recallPatternSound, refreshPatternLockUI, refreshPatternSoundUI } from "./patternSound.js";
 import { syncScaleUI } from "./scaleUI.js";
 import { applyCompressorConfig, ensureFxRack, refreshCompSourceDropdowns, routeVoiceToRack } from "./signal.js";
 import { aliasPattern, state, syncMeterUI } from "./state.js";
 import { renderStepGrid } from "./stepGrid.js";
 import { createTrack, removeTrack } from "./track.js";
 import { ensureAudio, requestMidiIfNeeded, silenceAllVoices } from "./transport.js";
-import { VIRUS_NUM_KEYS, VIRUS_SEL_KEYS } from "./virus.js";
-import { buildVoiceForEngine, GRAN_NUM_KEYS, GRAN_SEL_KEYS, migrateGranularParams, stampGranularParams } from "./voices.js";
+import { buildVoiceForEngine, migrateGranularParams, stampGranularParams } from "./voices.js";
 
 
 /** @typedef {import("./types.js").AppState} AppState */
@@ -33,6 +32,10 @@ export function storeSetsMap(m) { try { localStorage.setItem(SETS_KEY, JSON.stri
  * @returns {Object}
  */
 export function serializeSet() {
+  // A locked track's current pattern only gets its snapshot written when you
+  // leave the pattern — flush first or the sound you can hear right now is the
+  // one thing the save would miss.
+  flushAllPatternSounds();
   return {
     bpm: Number(document.getElementById("bpm").value),
     swing: Number(document.getElementById("swing").value),
@@ -72,9 +75,11 @@ export function serializeSet() {
       soundPromptText: t.soundPromptText,
       promptText: t.promptText || "",
       sampleDefaults: t.sampleDefaults ? { ...t.sampleDefaults } : undefined,
-      locked: t.locked, muted: t.muted, soloed: t.soloed,
+      // The sound every UNLOCKED pattern shares (patternSound.js). A locked
+      // pattern keeps its own in the pattern below.
+      baseSound: t.baseSound ? JSON.parse(JSON.stringify(t.baseSound)) : null,
+      muted: t.muted, soloed: t.soloed,
       isDrumKit: !!t.isDrumKit,
-      noteMode: t.noteMode === "trigger" ? "trigger" : "gate",
       glide: t.glide, speed: t.speed ?? 1, sampleSpeedMode: t.sampleSpeedMode ?? "native",
       pitchLock: t.pitchLock ?? true,
       density: t.density ?? 0.5,          // the dice button's fill level
@@ -104,6 +109,9 @@ export function serializeSet() {
             .filter(([k]) => AUTOMATION_TARGETS[k])
             .map(([k, lane]) => [k, { enabled: !!lane.enabled, values: (lane.values || []).slice() }])
         ) : {},
+        // p-lock, per track per pattern (patternSound.js).
+        soundLocked: !!p.soundLocked,
+        sound: p.sound ? JSON.parse(JSON.stringify(p.sound)) : null,
       })),
     })),
   };
@@ -405,13 +413,12 @@ export function applySet(s) {
         } catch (e) { console.warn("granular texture load failed", e); }
       })();
     }
-    t.locked = !!td.locked;
+    t.baseSound = td.baseSound ? JSON.parse(JSON.stringify(td.baseSound)) : null;
     t.muted  = !!td.muted;
     t.soloed = !!td.soloed;
     t.isDrumKit = typeof td.isDrumKit === "boolean"
       ? td.isDrumKit
       : guessIsDrumKit({ engineKey: t.engineKey, name: t.name });
-    t.noteMode = td.noteMode === "trigger" ? "trigger" : "gate";
     t.glide  = td.glide ?? 0;
     t.speed  = td.speed ?? 1;
     t.sampleSpeedMode = td.sampleSpeedMode ?? "native";
@@ -457,6 +464,12 @@ export function applySet(s) {
           extraNotes:      pad(p.extraNotes,      null,   n),
           extraLengths:    pad(p.extraLengths,    null,   n),
           automation,
+          // p-lock (patternSound.js). Absent in every session saved before the
+          // lock existed, and in every unlocked pattern.
+          // `td.patternLock` is the short-lived per-TRACK form of this flag:
+          // any pattern that got a snapshot under it was, in effect, locked.
+          soundLocked: !!p.soundLocked || (!!td.patternLock && !!p.sound),
+          sound: p.sound && typeof p.sound === "object" ? JSON.parse(JSON.stringify(p.sound)) : null,
         };
       }
     }
@@ -467,36 +480,10 @@ export function applySet(s) {
       q(".sq-track__len").value = t.length;
       q(".sq-track__engine").value = t.engineKey;
       q(".sq-track__glide").value = t.glide;
-      q(".p-vol").value = t.params.vol;
-      q(".p-harm").value = t.params.harm;
-      q(".p-timb").value = t.params.timb;
-      q(".p-morph").value = t.params.morph;
-      q(".p-decay").value = t.params.decay;
-      for (const k of [...GRAN_NUM_KEYS, ...GRAN_SEL_KEYS, "wave303", "accent303", "tune303",
-                     ...VIRUS_NUM_KEYS, ...VIRUS_SEL_KEYS,
-                     ...DX7_NUM_KEYS, ...DX7_SEL_KEYS]) {
-        const el = q(`.p-${k}`);
-        if (el && t.params[k] != null) el.value = t.params[k];
-      }
-      const gsyncEl = q(".p-gsync");
-      if (gsyncEl) gsyncEl.checked = !!t.params.gsync;
-      q(".p-cutoff").value = t.filter.cutoff;
-      q(".p-reson").value = t.filter.reson;
-      q(".p-envamt").value = t.filter.env;
-      q(".p-envatk").value = t.filter.attack;
-      q(".p-envdec").value = t.filter.decay;
-      q(".p-envsus").value = t.filter.sustain;
-      q(".p-envrel").value = t.filter.release;
-      q(".sq-track__lock")?.setAttribute("aria-pressed", String(t.locked));
+      syncTrackSoundUI(t);
+      refreshPatternLockUI(t);
       q(".sq-track__solo")?.setAttribute("aria-pressed", String(t.soloed));
-      const nmBtn = q(".track-note-mode");
-      if (nmBtn) {
-        const isGate = t.noteMode !== "trigger";
-        nmBtn.textContent = isGate ? "gate" : "trig";
-        nmBtn.setAttribute("aria-pressed", String(isGate));
-      }
       t.el.classList.toggle("is-muted", t.muted);
-      t.el.classList.toggle("is-locked", t.locked);
       t.el.classList.toggle("is-soloed", t.soloed);
       paintDiceDensity(t);
       refreshFxPanelUI(t);
@@ -552,6 +539,11 @@ export function applySet(s) {
       applyCompressorConfig(t);
       syncAllLFOs(t);
     }
+    // The live sound is whatever owns the active pattern. Normally that is
+    // already what the track-level fields hold (serializeSet flushes before it
+    // writes), so this only bites for a blob assembled some other way — but it
+    // has to run after the voice and rack exist, not with the pattern data.
+    if (recallPatternSound(t, state.activePattern)) refreshPatternSoundUI(t);
     updatePlaitsControlsVisibility(t);
     renderStepGrid(t);
   }
@@ -598,7 +590,6 @@ export function serializeTrackPatch(t) {
     soundPromptText: t.soundPromptText || "",
     sampleDefaults: t.sampleDefaults ? { ...t.sampleDefaults } : undefined,
     isDrumKit: !!t.isDrumKit,
-    noteMode: t.noteMode === "trigger" ? "trigger" : "gate",
     glide: t.glide ?? 0,
     speed: t.speed ?? 1,
     sampleSpeedMode: t.sampleSpeedMode ?? "native",
@@ -644,7 +635,6 @@ export function applyTrackPatch(t, patch) {
   t.slicePlayMode = patch.slicePlayMode === "toend" ? "toend" : "region";
   t.sliceSensitivity = patch.sliceSensitivity ?? 0.5;
   t.isDrumKit        = !!patch.isDrumKit;
-  t.noteMode         = patch.noteMode === "trigger" ? "trigger" : "gate";
   t.glide            = patch.glide ?? 0;
   t.speed            = patch.speed ?? 1;
   t.sampleSpeedMode  = patch.sampleSpeedMode ?? "native";
@@ -666,47 +656,7 @@ export function applyTrackPatch(t, patch) {
   if (t.el) {
     const q = s => t.el.querySelector(s);
     q(".sq-track__engine").value = t.engineKey;
-    q(".p-vol").value    = t.params.vol;
-    q(".p-harm").value   = t.params.harm;
-    q(".p-timb").value   = t.params.timb;
-    q(".p-morph").value  = t.params.morph;
-    q(".p-decay").value  = t.params.decay;
-    for (const k of [...GRAN_NUM_KEYS, ...GRAN_SEL_KEYS, "wave303", "accent303", "tune303",
-                     ...VIRUS_NUM_KEYS, ...VIRUS_SEL_KEYS,
-                     ...DX7_NUM_KEYS, ...DX7_SEL_KEYS]) {
-      const el = q(`.p-${k}`);
-      if (el && t.params[k] != null) el.value = t.params[k];
-    }
-    const gsyncEl2 = q(".p-gsync");
-    if (gsyncEl2) gsyncEl2.checked = !!t.params.gsync;
-    q(".p-cutoff").value = t.filter.cutoff;
-    q(".p-reson").value  = t.filter.reson;
-    q(".p-envamt").value = t.filter.env;
-    q(".p-envatk").value = t.filter.attack;
-    q(".p-envdec").value = t.filter.decay;
-    q(".p-envsus").value = t.filter.sustain;
-    q(".p-envrel").value = t.filter.release;
-    const eqPanel = t._eqPanelEl || q(".sq-track__eq-panel");
-    if (eqPanel) {
-      eqPanel.querySelector(".p-eq-low").value  = t.eq.low;
-      eqPanel.querySelector(".p-eq-mid").value  = t.eq.mid;
-      eqPanel.querySelector(".p-eq-high").value = t.eq.high;
-    }
-    const compPanel = t._compPanelEl || q(".sq-track__comp-panel");
-    if (compPanel) {
-      compPanel.querySelector(".comp-enabled").checked = !!t.comp.enabled;
-      compPanel.querySelector(".comp-threshold").value = t.comp.threshold;
-      compPanel.querySelector(".comp-ratio").value     = t.comp.ratio;
-      compPanel.querySelector(".comp-attack").value    = t.comp.attack;
-      compPanel.querySelector(".comp-release").value   = t.comp.release;
-      compPanel.querySelector(".comp-knee").value      = t.comp.knee;
-    }
-    const nmBtn = q(".track-note-mode");
-    if (nmBtn) {
-      const isGate = t.noteMode !== "trigger";
-      nmBtn.textContent = isGate ? "gate" : "trig";
-      nmBtn.setAttribute("aria-pressed", String(isGate));
-    }
+    syncTrackSoundUI(t);
     refreshFxPanelUI(t);
     renderModPanel(t, t._modPanelEl || q(".sq-track__mod-panel"));
   }

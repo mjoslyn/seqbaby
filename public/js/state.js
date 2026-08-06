@@ -5,6 +5,7 @@ import { setStatus } from "./dom.js";
 import { activeMeter, autoAccents } from "./meter.js";
 import { renderPatternGrid } from "./patternBar.js";
 import { refreshParamIndicators } from "./paramTargets.js";
+import { flushPatternSound, recallPatternSound, refreshAllPatternLockUI, refreshPatternSoundUI } from "./patternSound.js";
 import { refreshAutIfOpen, refreshRollIfOpen } from "./pianoRoll.js";
 import { renderStepGrid } from "./stepGrid.js";
 import { SCALES, midiToScaleIndex, scaleIndexToMidi } from "./theory.js";
@@ -114,6 +115,11 @@ export function emptyPattern(len) {
     // Per-step automation lanes, keyed by AUTOMATION_TARGETS key. Each lane:
     //   { enabled: bool, values: number[] }   — values normalized 0..1 per step
     automation: {},
+    // p-lock: whether this track's sound is locked to this pattern, and the
+    // sound itself if so — see patternSound.js. Unlocked patterns share the
+    // track's `baseSound` instead, which is the normal case.
+    soundLocked: false,
+    sound: null,
   };
 }
 
@@ -143,6 +149,11 @@ export function clonePattern(src) {
   for (const [key, lane] of Object.entries(src?.automation || {})) {
     out.automation[key] = { enabled: !!lane.enabled, values: (lane.values || []).slice() };
   }
+  // A locked pattern's sound travels with it, so a duplicate is locked too and
+  // carries the sound — deep, or the copy would share the original's fx and
+  // mod config by reference.
+  out.soundLocked = !!src?.soundLocked;
+  out.sound = src?.sound ? JSON.parse(JSON.stringify(src.sound)) : null;
   return out;
 }
 
@@ -235,15 +246,26 @@ export function requestPatternSwitch(idx) {
  */
 export function switchPattern(idx) {
   if (idx < 0 || idx >= PATTERN_COUNT) return;
+  // p-lock: the sound of the pattern being left goes back to whichever store
+  // owns it, and the one being entered is recalled. Chain mode lands here on a
+  // bar boundary mid-transport, which is why the recall diffs rather than
+  // re-applying everything (see patternSound.js).
+  const prev = state.activePattern;
+  if (prev !== idx) {
+    for (const t of state.tracks) flushPatternSound(t, prev);
+  }
   state.activePattern = idx;
   state.queuedPattern = null;
   for (const t of state.tracks) {
     aliasPattern(t, idx);
+    if (recallPatternSound(t, idx)) refreshPatternSoundUI(t);
     renderStepGrid(t);
     refreshRollIfOpen(t);
     refreshAutIfOpen(t);
     refreshParamIndicators(t);   // automation lanes belong to the pattern
   }
+  // The p-lock button's state belongs to the pattern, so it changes under you.
+  refreshAllPatternLockUI();
   renderPatternGrid();
   const repInput = document.getElementById("pattern-repeats");
   if (repInput) repInput.value = state.patternRepeats[idx] ?? 1;

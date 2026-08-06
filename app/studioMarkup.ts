@@ -392,7 +392,7 @@ ${DX7_PANEL}
         </div><!-- /track-synth-row -->
         <button class="sq-track__solo sq-btn--ghost" aria-pressed="false" title="solo">solo</button>
         <button class="sq-track__mute sq-btn--ghost">mute</button>
-        <button class="track-note-mode sq-btn--ghost" aria-pressed="true" title="gate plays the full step length; trigger fires a short hit">gate</button>
+        <button class="sq-track__plock sq-btn--ghost" aria-pressed="false" title="p-lock: give this track its own sound in THIS pattern. Normally a track has one sound and 32 patterns of notes — change the cutoff and it changes everywhere. Locked, this pattern keeps its own params, filter, fx, eq, comp and mod settings, while every unlocked pattern goes on sharing the track's. It is per pattern, so the button changes as you move between them. Unlocking hands the pattern back to the track's sound and keeps what it had, so locking again brings it straight back">p-lock</button>
         <button class="sq-track__clear sq-btn--ghost">clear</button>
         <button class="track-dice sq-icon-btn sq-btn--ghost" type="button" aria-label="random pattern, drag up or down to set density" title="random pattern (drag up/down to set density)"></button>
         <button class="sq-track__dup sq-btn--ghost" type="button" title="duplicate this track">dup</button>

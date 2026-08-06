@@ -1,5 +1,6 @@
 import { PATTERN_COUNT } from "./constants.js";
 import { setStatus } from "./dom.js";
+import { recallPatternSound, refreshPatternSoundUI } from "./patternSound.js";
 import { aliasPattern, clonePattern, isPatternNonEmpty, requestPatternSwitch, state } from "./state.js";
 import { renderStepGrid } from "./stepGrid.js";
 import { maxLengthAt } from "./track.js";
@@ -18,8 +19,13 @@ export function copyPattern(from, to) {
   if (to !== 0) state.patternMeterCustomized[to] = !!state.patternMeterCustomized[from]
     || (srcMeter && (srcMeter.num !== state.patternMeters[0].num || srcMeter.den !== state.patternMeters[0].den));
   if (state.activePattern === to) {
+    // Copying over the pattern you're standing on: nothing switches, so re-bind
+    // and repaint here. A locked track's sound came with the copy, so it has to
+    // be recalled too or the pattern would sound like the one it replaced until
+    // you next left it and came back.
     for (const t of state.tracks) {
       aliasPattern(t, to);
+      if (recallPatternSound(t, to)) refreshPatternSoundUI(t);
       renderStepGrid(t);
     }
   }
@@ -38,7 +44,7 @@ export function renderPatternGrid() {
     if (i === state.activePattern) cell.classList.add("is-active");
     if (i === state.queuedPattern) cell.classList.add("is-queued");
     cell.textContent = String(i + 1);
-    cell.title = `pattern ${i + 1} — drag to copy`;
+    cell.title = `pattern ${i + 1} — drag onto another slot to copy it there and go to it`;
     cell.draggable = true;
     cell.dataset.patternIdx = String(i);
     cell.addEventListener("click", () => requestPatternSwitch(i));
@@ -56,7 +62,13 @@ export function renderPatternGrid() {
       e.preventDefault();
       cell.classList.remove("is-drag-over");
       const from = Number(e.dataTransfer.getData("text/pattern-idx"));
-      if (Number.isFinite(from)) copyPattern(from, i);
+      if (!Number.isFinite(from) || from === i) return;
+      copyPattern(from, i);
+      // Land on the copy, the way the dup button does — you dragged it here to
+      // work on it. Routed through requestPatternSwitch rather than switching
+      // outright so it still obeys the finish/immediate setting: mid-bar in
+      // finish mode this queues, exactly as clicking the slot would.
+      requestPatternSwitch(i);
     });
     grid.appendChild(cell);
   }

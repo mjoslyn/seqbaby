@@ -343,7 +343,15 @@ export async function togglePlay() {
     } catch {}
   }
   state.repeatId = Tone.Transport.scheduleRepeat((time) => {
-    const baseStepDur = Tone.Time("16n").toSeconds();
+    // Derived from the transport that is actually running the sequence, not
+    // from Tone.Time("16n"). `Tone.setContext` leaves Tone's time helpers
+    // resolving against a different transport than the one we schedule on, so
+    // Tone.Time("16n").toSeconds() answers 0.125s — the 120bpm value — at every
+    // tempo. Everything scaled by a step took that: note lengths, swing, the
+    // per-step micro-timing offsets, automation ramps and arp spans. At 60bpm
+    // notes came out half the length of their step; at 180 they overlapped the
+    // next one.
+    const baseStepDur = 60 / (Tone.Transport.bpm.value || currentBpm()) / 4;
     const anySolo = state.tracks.some(t => t.soloed);
     const masterSwing = Number(document.getElementById("swing")?.value) || 0;
     const lat = visualOutputLatency();
@@ -378,10 +386,10 @@ export async function togglePlay() {
         scheduleAtAudible(() => { if (state.playing) paintTrackNow(t, idx); }, stepTime, lat);
         if (!t.steps[idx]) { slot++; continue; }
         const span = Math.max(1, t.lengths[idx] || 1);
-        // Gate mode plays for the full step length; trigger mode fires a short
-        // hit. Voices that honor `duration` (Plaits, samples, melodic synths)
-        // will follow this; drum-synth recipes with fixed envelopes don't.
-        const duration = (t.noteMode === "trigger") ? 0.05 : span * effDur;
+        // A note lasts its written step length. Voices that honor `duration`
+        // (Plaits, samples, melodic synths) follow it; drum-synth recipes with
+        // fixed envelopes don't.
+        const duration = span * effDur;
         const hitTime = stepTime;
         const root = noteForStep(t, idx);
         const vel = t.velocities[idx] ?? 0.5;
@@ -400,7 +408,7 @@ export async function togglePlay() {
         if (Array.isArray(extras) && extras.length) {
           for (let e = 0; e < extras.length; e++) {
             const eSpan = Math.max(1, Math.min(span, (Array.isArray(extraLens) ? extraLens[e] : null) ?? span));
-            const eDur  = (t.noteMode === "trigger") ? 0.05 : eSpan * effDur;
+            const eDur  = eSpan * effDur;
             extraDurs.push(eDur);
           }
           notes = [...notes, ...extras];
@@ -444,9 +452,7 @@ export async function togglePlay() {
           for (let k = 0; k < count; k++) {
             const n = seq[k % seq.length];
             const remain = arpSpan - k * rateSec;
-            const noteDur = (t.noteMode === "trigger")
-              ? 0.05
-              : Math.max(0.01, Math.min(rateSec, remain) * 0.92);
+            const noteDur = Math.max(0.01, Math.min(rateSec, remain) * 0.92);
             try { t.voice.hit(n, hitTime + k * rateSec, noteDur, vel); } catch (e) { console.warn(e); }
           }
         } else {
