@@ -20,6 +20,7 @@ const SECTIONS = [
   ["tb303", "The 303"],
   ["virus", "The virus"],
   ["dx7", "The dx7"],
+  ["guitar", "The guitar and the bass"],
   ["sampler", "Samples"],
   ["wavetable", "The wavetable editor"],
   ["shaping", "Filter, effects and dynamics"],
@@ -351,7 +352,7 @@ export default function ManualPage() {
               <tbody>
                 <tr><td>plaits</td><td>Sixteen synthesis models from the Mutable Instruments Plaits oscillator — virtual analogue, FM, wavetable, granular, noise, and physical models.</td></tr>
                 <tr><td>drum / synth</td><td>An 808 and 909 kit, a poly saw, an FM bell and a pad.</td></tr>
-                <tr><td>Emulators</td><td>The 303 — a model of the acid machine&rsquo;s own circuits, down to the diode-ladder filter and the accent behaviour (see <a href="#tb303">below</a>). The virus, a polyphonic model of the digital synth that defined trance and drum and bass, with its two routable filters and its hypersaw (see <a href="#virus">below</a>). The dx7, six sine operators through the machine&rsquo;s own 32 algorithms (see <a href="#dx7">below</a>). Plus seven monosynth voices in the spirit of classic hardware: MiniBrute, Moog, Juno, Rhodes, Prophet, and plucked guitar and bass.</td></tr>
+                <tr><td>Emulators</td><td>The 303 — a model of the acid machine&rsquo;s own circuits, down to the diode-ladder filter and the accent behaviour (see <a href="#tb303">below</a>). The virus, a polyphonic model of the digital synth that defined trance and drum and bass, with its two routable filters and its hypersaw (see <a href="#virus">below</a>). The dx7, six sine operators through the machine&rsquo;s own 32 algorithms (see <a href="#dx7">below</a>). An electric guitar and an electric bass, each modelled as a whole rig — string, pickup, amp, cab — with a dropdown of famous tones (see <a href="#guitar">below</a>). Plus five monosynth voices in the spirit of classic hardware: MiniBrute, Moog, Juno, Rhodes and Prophet.</td></tr>
                 <tr><td>texture</td><td>A granular engine that plays a sample as a cloud of tiny grains.</td></tr>
                 <tr><td>wavetable</td><td>A wavetable synth with its own <a href="#wavetable">editor</a>.</td></tr>
                 <tr><td>sampler</td><td>Your own audio, or one of the bundled kits. See <a href="#sampler">samples</a>.</td></tr>
@@ -521,6 +522,80 @@ export default function ManualPage() {
             louder, and <span className={styles.ui}>key scale</span> pulls the
             modulators back as you play up the keyboard — without it the top
             octave screams.
+          </p>
+        </section>
+
+        <section className={styles.section} id="guitar">
+          <h2>The guitar and the bass</h2>
+          <p>
+            Neither of these is a plucked-string preset. Each one models the
+            whole chain a real one goes through — the string, the pickup that
+            reads it, the amp it runs into and the speaker in front of the mic —
+            because on these instruments the sound is the chain and not the note.
+          </p>
+          <p>
+            Both start from a <span className={styles.ui}>tone</span> dropdown of
+            famous rigs. That is the honest way in: load the nearest one, then
+            move a control and hear what that control is actually for. Loading a
+            tone replaces everything, including the four track sliders, so
+            nothing of the last one is left behind.
+          </p>
+          <h3>The guitar</h3>
+          <p>
+            The string is a waveguide with the losses of a real one: the highs
+            die before the fundamental does, which is why a guitar note gets
+            duller as it rings rather than merely quieter. Where you pick it
+            notches harmonics out of it — bridge is thin and cutting, over the
+            neck is round — and the pickup does the same again on the way out.
+            Which pickup you choose is really a choice of where its resonance
+            sits: a single coil peaks high and glassy, a humbucker low and fat.
+          </p>
+          <p>
+            The four track sliders are <span className={styles.ui}>drive</span>{" "}
+            (how hard the amp is hit, on a log taper like the real pot),{" "}
+            <span className={styles.ui}>tone</span> (the knob on the guitar
+            itself, not the amp — roll it right down with a neck humbucker for
+            the darkest sound the instrument has),{" "}
+            <span className={styles.ui}>bloom</span> and{" "}
+            <span className={styles.ui}>sustain</span>.
+          </p>
+          <p>
+            <span className={styles.ui}>bloom</span> is feedback, and it is worth
+            knowing what it does. The speaker is coupled back into the strings,
+            so past a certain point the energy coming back beats the string&apos;s
+            own losses and the note stops decaying and starts growing. It needs
+            volume — a clean amp barely blooms, a cranked one sings — and it stops
+            when the note ends, exactly as taking your hand off the string does.
+            Hold a long step on a high setting and listen to it climb.
+          </p>
+          <h3>The bass</h3>
+          <p>
+            Same string, wound and stiffer: its harmonics sit noticeably sharp of
+            where the arithmetic says, and that disagreement between the pitch and
+            the clank is most of what a bass sounds like. Flatwounds take it away
+            along with the high end, which is why every record made before about
+            1970 sounds the way it does — that is the{" "}
+            <span className={styles.ui}>roundwound / flatwound</span> select.
+          </p>
+          <p>
+            Two things on the panel are worth finding.{" "}
+            <span className={styles.ui}>fret</span> is how hard the string is
+            allowed to clatter against the fretboard; wound up with the hand
+            control at the top, that clatter is what slap is.{" "}
+            <span className={styles.ui}>grind</span> is distortion, but only above
+            the <span className={styles.ui}>xover</span> frequency, with the clean
+            low end put back underneath — distort a bass whole and the bottom
+            disappears, which is why every bass overdrive worth having works this
+            way.
+          </p>
+          <p>
+            The sliders are <span className={styles.ui}>drive</span>,{" "}
+            <span className={styles.ui}>tone</span>,{" "}
+            <span className={styles.ui}>comp</span> and{" "}
+            <span className={styles.ui}>sustain</span>. Compression gets a slider
+            of its own because a bass part sitting perfectly still under
+            everything else is a compressor doing that, and it is as much the
+            sound as the amp is.
           </p>
         </section>
 

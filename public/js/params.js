@@ -114,9 +114,9 @@ export function updatePlaitsControlsVisibility(t) {
       : isJuno
       ? { harm: "pwm rate", timb: "pw",     morph: "chorus",    decay: "dec" }
       : isGuitar
-      ? { harm: "drive",    timb: "bright", morph: "chorus",    decay: "sustain" }
+      ? { harm: "drive",    timb: "tone",   morph: "bloom",     decay: "sustain" }
       : isBass
-      ? { harm: "drive",    timb: "tone",   morph: "resonance", decay: "sustain" }
+      ? { harm: "drive",    timb: "tone",   morph: "comp",      decay: "sustain" }
       : isRhodes
       ? { harm: "tine",     timb: "bite",   morph: "chorus",    decay: "decay" }
       : isProphet6
@@ -170,6 +170,20 @@ export function updatePlaitsControlsVisibility(t) {
           timb: "how much the feedback operator's output is fed back into its own input. It is the only thing in the machine making harmonics that isn't another operator, and wound right up it stops being a tone and turns to noise — which is where the DX7's breath and cymbals come from. Which operator carries it depends on the algorithm, and the panel says which",
           morph: "scales every modulator's decay together: how fast the timbre falls away, independently of how fast the note does. A modulator decaying under a carrier that isn't is the whole trick behind an FM electric piano",
           decay: "scales every carrier's decay and release together — how fast the note itself falls away. The operators keep their relative shapes; this moves them as one",
+        }
+      : isGuitar
+      ? {
+          harm: "how hard the pickup drives the amp. It is an exponential taper, like the pot on the front of the amp is — halfway up a hundred-times preamp is ten times, not fifty, which is why every useful crunch setting lives in the middle rather than the first inch",
+          timb: "the tone knob on the guitar itself, not on the amp: a passive lowpass between the pickup and the lead, from 700Hz to wide open. Rolled all the way down with a neck humbucker into a cranked amp is the darkest, most vocal sound the instrument has, and there is no way to get it from the amp's treble control",
+          morph: "how much the speaker feeds back into the strings. Below a threshold it is a lift on a held note; past it the injection beats the string's own losses and the note stops decaying and starts growing — a real howl, arrived at the same way. It needs volume, so a clean amp barely blooms and a cranked one sings, and it stops when the note is released, as taking your hand off the string does",
+          decay: "how long a string rings — the loss in the waveguide's loop, so it is longer for low notes than high ones, exactly as it is on the instrument. At the top a note lasts most of a bar; the release when a step ends is scaled from it too",
+        }
+      : isBass
+      ? {
+          harm: "how hard the bass drives the amp. Which amp decides what that means — a clean preamp barely notices, a small valve amp is round and forgiving, and the solid-state one grinds",
+          timb: "the tone knob on the bass itself: a lowpass between the pickup and the lead, 400Hz to wide open. Rolled down with flatwounds is every record made before about 1970",
+          morph: "the rig compressor, threshold and makeup on one control. A bass part sitting perfectly still under everything else is this doing that, and it is as much the sound as the amp is — which is why it gets a slider rather than a corner of the panel",
+          decay: "how long a string rings. Bass strings are heavy and lose very little per trip round the loop, so even the middle of this slider rings for seconds — the left hand, not the string, is what usually stops a bass note",
         }
       : isVirus
       ? {
@@ -274,6 +288,13 @@ export function updatePlaitsControlsVisibility(t) {
   const dx7Group = t._dx7GroupEl || t.el.querySelector(".sq-param-group--dx7");
   if (dx7Group) dx7Group.hidden = !isDx7;
   if (isDx7) refreshDx7Algorithm(t);
+  // The guitar's rig: where the string is picked and read, and the amp it runs
+  // into. None of it fits the four timbre sliders.
+  const guitarGroup = t._guitarGroupEl || t.el.querySelector(".sq-param-group--guitar");
+  if (guitarGroup) guitarGroup.hidden = !isGuitar;
+  // The bass's rig: the right hand, the parallel dirt, and the amp under it.
+  const bassGroup = t._bassGroupEl || t.el.querySelector(".sq-param-group--bass");
+  if (bassGroup) bassGroup.hidden = !isBass;
   // Granular grain-engine group (play mode / window / jitter / detune / pan / …).
   const granGroup = t._granGroupEl || t.el.querySelector(".sq-param-group--granular");
   if (granGroup) granGroup.hidden = !isGranular;

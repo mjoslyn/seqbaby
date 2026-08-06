@@ -490,6 +490,25 @@ main {
 .sq-dx7__ops .sq-dx7__f { display: flex; align-items: center; min-width: 0; }
 .sq-dx7__ops .sq-dx7__f input[type="range"] { width: 100%; min-width: 0; }
 .sq-dx7__ops select { padding: 1px 4px; font-size: 10px; }
+/* Electric guitar: four rows, one per link in the chain — tone, string, amp,
+   cab — because that is the order the signal goes in. */
+.sq-param-group--guitar { border-color: color-mix(in oklab, #e8a33d 45%, var(--border)); flex-direction: column; align-items: stretch; gap: 4px; }
+.sq-param-group--guitar[hidden] { display: none !important; }
+.sq-param-group--guitar .sq-guitar__row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 11px; }
+.sq-param-group--guitar .sq-guitar__lbl { color: var(--fg-dim); min-width: 44px; }
+.sq-param-group--guitar .sq-guitar__f { display: inline-flex; align-items: center; gap: 4px; color: var(--fg-dim); }
+.sq-param-group--guitar .sq-guitar__f input[type="range"] { width: 62px; }
+.sq-param-group--guitar select { padding: 2px 6px; font-size: 11px; }
+.sq-param-group--guitar .sq-guitar__desc { color: var(--fg-dim); font-size: 11px; opacity: 0.85; flex: 1 1 220px; min-width: 0; }
+/* Electric bass: hand, dirt, amp — the chain again, one row per link. */
+.sq-param-group--bass { border-color: color-mix(in oklab, #8fbf6a 45%, var(--border)); flex-direction: column; align-items: stretch; gap: 4px; }
+.sq-param-group--bass[hidden] { display: none !important; }
+.sq-param-group--bass .sq-bass__row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 11px; }
+.sq-param-group--bass .sq-bass__lbl { color: var(--fg-dim); min-width: 44px; }
+.sq-param-group--bass .sq-bass__f { display: inline-flex; align-items: center; gap: 4px; color: var(--fg-dim); }
+.sq-param-group--bass .sq-bass__f input[type="range"] { width: 62px; }
+.sq-param-group--bass select { padding: 2px 6px; font-size: 11px; }
+.sq-param-group--bass .sq-bass__desc { color: var(--fg-dim); font-size: 11px; opacity: 0.85; flex: 1 1 220px; min-width: 0; }
 .sq-param-group--tb303 { border-color: color-mix(in oklab, #ff7a4d 45%, var(--border)); }
 .sq-param-group--tb303[hidden] { display: none !important; }
 .sq-param-group--tb303 select { padding: 2px 6px; font-size: 11px; }
@@ -1558,8 +1577,10 @@ body.kbd-recording .sq-track.is-kbd-active { border-color: #e5484d; box-shadow: 
 .sq-field[data-motion] > label::after,
 .sq-fx__ctl[data-motion] > span::after,
 .sq-virus__f[data-motion] > span::after,
+.sq-guitar__f[data-motion] > span::after,
+.sq-bass__f[data-motion] > span::after,
 .sq-dx7__f[data-motion]::after,
-label[data-motion]:not(.sq-fx__ctl):not(.sq-virus__f):not(.sq-dx7__f)::before {
+label[data-motion]:not(.sq-fx__ctl):not(.sq-virus__f):not(.sq-guitar__f):not(.sq-bass__f):not(.sq-dx7__f)::before {
   content: "";
   display: inline-block;
   width: 5px; height: 5px;
@@ -1568,13 +1589,15 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-virus__f):not(.sq-dx7__f)::before {
   vertical-align: middle;
   margin: 0 0 1px 5px;
 }
-label[data-motion]:not(.sq-fx__ctl):not(.sq-virus__f):not(.sq-dx7__f)::before { margin: 0 5px 1px 0; }
+label[data-motion]:not(.sq-fx__ctl):not(.sq-virus__f):not(.sq-guitar__f):not(.sq-bass__f):not(.sq-dx7__f)::before { margin: 0 5px 1px 0; }
 /* The dx7's operator cells have no label text of their own (the column heading
    names them), so the dot goes after the slider rather than beside a word. */
 .sq-dx7__f[data-motion]::after { flex: 0 0 auto; margin: 0 0 0 3px; }
 .sq-field[data-motion="off"] > label,
 .sq-fx__ctl[data-motion="off"] > span,
-.sq-virus__f[data-motion="off"] > span { opacity: 0.8; }
+.sq-virus__f[data-motion="off"] > span,
+.sq-guitar__f[data-motion="off"] > span,
+.sq-bass__f[data-motion="off"] > span { opacity: 0.8; }
 
 /* Right-click a parameter → what is modulating / automating that one control. */
 .sq-pmenu__modal { width: min(96vw, 900px); max-width: 96vw; gap: 10px; }

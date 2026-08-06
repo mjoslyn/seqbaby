@@ -6,7 +6,9 @@ import { isMobileDevice } from "./dom.js";
 import { sampleHitRate } from "./lfo.js";
 import { setParam } from "./params.js";
 import { buildTb303Voice } from "./tb303.js";
+import { buildBassVoice, BASS_NUM_KEYS, BASS_SEL_KEYS } from "./bass.js";
 import { buildDx7Voice, DX7_NUM_KEYS, DX7_SEL_KEYS } from "./dx7.js";
+import { buildGuitarVoice, GUITAR_NUM_KEYS, GUITAR_SEL_KEYS } from "./guitar.js";
 import { buildVirusVoice, VIRUS_NUM_KEYS, VIRUS_SEL_KEYS } from "./virus.js";
 
 
@@ -638,11 +640,25 @@ export function buildDrumSynthNode(kind, output) {
         release: () => s.releaseAll(),
       };
     }
+    // Electric guitar: six strings and one amp inside an AudioWorklet — see
+    // guitar.js. Falls back to Tone's Karplus-Strong pluck through a distortion
+    // (which is what this engine used to be) if the worklet never registered.
+    case "guitar": {
+      const v = buildGuitarVoice(output);
+      if (v) return v;
+      return makePolyPool(6, () => buildPluckGuitarVoice(output));
+    }
     case "mini-brute": return makePolyPool(4, () => buildMiniBruteVoice(output));
     case "moog":       return makePolyPool(4, () => buildMoogVoice(output));
     case "juno":       return makePolyPool(6, () => buildJunoVoice(output));
-    case "guitar":     return makePolyPool(6, () => buildGuitarVoice(output));
-    case "bass":       return makePolyPool(4, () => buildBassVoice(output));
+    // Electric bass: four strings, a parallel dirt path, a compressor and an
+    // amp, all inside an AudioWorklet — see bass.js. Same fallback story as the
+    // guitar's: the pluck-through-a-drive voice this engine used to be.
+    case "bass": {
+      const v = buildBassVoice(output);
+      if (v) return v;
+      return makePolyPool(4, () => buildPluckBassVoice(output));
+    }
     case "rhodes":     return makePolyPool(6, () => buildRhodesVoice(output));
     case "prophet6":   return makePolyPool(6, () => buildProphet6Voice(output));
   }
@@ -957,11 +973,13 @@ export function buildJunoVoice(output) {
   };
 }
 
-// ---- electric guitar builder --------------------------------------------
-// Karplus-Strong plucked-string voice (Tone.PluckSynth) into a drive+tone shaping
-// chain. Track-level filter + filter env can still sweep on top. Per-step
-// velocity maps to pick intensity (brighter = harder pick) via dampening.
-export function buildGuitarVoice(output) {
+// ---- electric guitar: the fallback --------------------------------------
+// The guitar engine is a worklet model of the whole rig now (string, pickup,
+// amp, cab, feedback — see guitar.js). This is what it used to be, kept as the
+// fallback for when that worklet fails to register: Tone's Karplus-Strong pluck
+// into a drive and tone stage, six of them in a pool. It answers to the same
+// four sliders so a track is never silent and never unrecognisable.
+export function buildPluckGuitarVoice(output) {
   const pluck = new Tone.PluckSynth({
     attackNoise: 1,
     dampening: 4200,
@@ -1011,11 +1029,12 @@ export function buildGuitarVoice(output) {
   };
 }
 
-// ---- electric bass builder ---------------------------------------------
-// Tuned for low-register Karplus-Strong: darker pluck, longer resonance, mild
-// tube-ish drive, gentle high-shelf roll-off and a low-end boost. No chorus —
-// electric bass usually lives bone-dry.
-export function buildBassVoice(output) {
+// ---- electric bass: the fallback ---------------------------------------
+// As with the guitar above, the bass engine is a worklet model of the whole rig
+// now (bass.js) and this is what it used to be, kept for when that worklet
+// fails to register: low-register Karplus-Strong with a darker pluck, a mild
+// drive and a low-end boost, four in a pool.
+export function buildPluckBassVoice(output) {
   const pluck = new Tone.PluckSynth({
     attackNoise: 0.6,        // softer attack than guitar — fingers, not a pick
     dampening: 2200,         // darker — bass sits below the fundamental guitar range
@@ -1267,7 +1286,9 @@ export class DrumSynthVoice {
                      "osc2freq", "osc3freq", "noise", "noisetype",
                      "wave303", "accent303", "tune303",
                      ...VIRUS_NUM_KEYS, ...VIRUS_SEL_KEYS,
-                     ...DX7_NUM_KEYS, ...DX7_SEL_KEYS]) {
+                     ...DX7_NUM_KEYS, ...DX7_SEL_KEYS,
+                     ...GUITAR_NUM_KEYS, ...GUITAR_SEL_KEYS,
+                     ...BASS_NUM_KEYS, ...BASS_SEL_KEYS]) {
       if (this.params?.[k] != null) this.built.setParam(k, this.params[k]);
     }
   }

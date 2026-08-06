@@ -156,6 +156,10 @@ export function getModTarget(t, key) {
   // DX7: every panel control is an AudioParam on its worklet node, and the key
   // spells the param — dx7_3lvl is operator 3's level, d3lvl on the voice.
   if (key.startsWith("dx7_")) return t.voice?.getAudioParam?.("d" + key.slice(4)) ?? null;
+  // Electric guitar: same shape — gtr_bass is the amp's bass control, gtbass on
+  // the voice, and an AudioParam on its worklet node.
+  if (key.startsWith("gtr_")) return t.voice?.getAudioParam?.("gt" + key.slice(4)) ?? null;
+  if (key.startsWith("bas_")) return t.voice?.getAudioParam?.("bs" + key.slice(4)) ?? null;
   if (key === "cutoff") return t.filterNode?.frequency ?? null;
   if (key === "reson")  return t.filterNode?.Q ?? null;
   const rack = t.fxRack;
@@ -383,6 +387,10 @@ export function canModulate(t, key) {
   if (key.startsWith("virus_")) return t.engineKey === "dm:virus";
   // DX7 operator matrix + globals — dx7 only.
   if (key.startsWith("dx7_")) return t.engineKey === "dm:dx7";
+  // The guitar rig's string / pickup / amp / cab controls — guitar only.
+  if (key.startsWith("gtr_")) return t.engineKey === "dm:guitar";
+  // The bass rig's right hand, dirt and amp — bass only.
+  if (key.startsWith("bas_")) return t.engineKey === "dm:bass";
   const eng = engineByKey(t.engineKey);
   if (!eng) return false;
   // Plaits exposes harm/timb/morph/decay as voice params.
@@ -399,12 +407,16 @@ export function canModulate(t, key) {
     // The oscillator-mix sliders aren't wired — a DX7's six operators have their
     // own levels in the panel, which are reachable under their own keys.
     case "dm:dx7":        return ["harm", "timb", "morph", "decay"].includes(key);
+    // Six strings and one amp in one worklet node, so the same holds here: drive
+    // and tone are AudioParams the whole instrument follows.
+    case "dm:guitar":     return ["harm", "timb", "morph", "decay"].includes(key);
+    case "dm:bass":       return ["harm", "timb", "morph", "decay"].includes(key);
     case "dm:mini-brute": return ["harm", "osc1", "osc2", "osc3", "osc4", "ultra", "fm"].includes(key);
     case "dm:moog":       return ["harm", "osc1", "osc2", "osc3", "noise"].includes(key);
     case "dm:juno":       return ["harm", "osc1", "osc2", "osc3", "noise"].includes(key);
     case "dm:prophet6":   return ["harm", "osc1", "osc2", "osc3", "osc4", "noise"].includes(key);
-    // Guitar/bass/rhodes have no per-voice AudioParam targets beyond vol+track fx;
-    // their timbre params are still automatable via setParam (see canAutomate).
+    // Rhodes has no per-voice AudioParam targets beyond vol+track fx; its
+    // timbre params are still automatable via setParam (see canAutomate).
   }
   return false;
 }

@@ -5,7 +5,9 @@ import { LFO_KEYS, lfoLabel, rateToSlider, sliderToRate } from "./constants.js";
 import { showInputDialog, showSavedPatchPicker } from "./dialogs.js";
 import { setStatus } from "./dom.js";
 import { DX7_ALG_LABELS, DX7_DEFAULTS, DX7_NUM_KEYS, DX7_PRESET_NAMES, DX7_SEL_KEYS, dx7Preset } from "./dx7.js";
+import { BASS_DEFAULTS, BASS_NUM_KEYS, BASS_SEL_KEYS, BASS_TONE_NAMES, bassTone, bassToneDescription } from "./bass.js";
 import { randomizeMelody, randomizeTimbre } from "./generate.js";
+import { GUITAR_DEFAULTS, GUITAR_NUM_KEYS, GUITAR_SEL_KEYS, GUITAR_TONE_NAMES, guitarTone, guitarToneDescription } from "./guitar.js";
 import { ICON_CLEAR, ICON_DICE, ICON_LOAD, ICON_ROLL, ICON_SAVE, ICON_SLIDERS, ICON_WAV } from "./icons.js";
 import { canModulate, currentBpm, rateFromSync, syncLFO } from "./lfo.js";
 import { autoOwns, modOwns, refreshParamIndicators } from "./paramTargets.js";
@@ -135,7 +137,9 @@ export function syncTrackSoundUI(t) {
                    "wave303", "accent303", "tune303",
                    ...GRAN_NUM_KEYS, ...GRAN_SEL_KEYS,
                    ...VIRUS_NUM_KEYS, ...VIRUS_SEL_KEYS,
-                   ...DX7_NUM_KEYS, ...DX7_SEL_KEYS]) {
+                   ...DX7_NUM_KEYS, ...DX7_SEL_KEYS,
+                   ...GUITAR_NUM_KEYS, ...GUITAR_SEL_KEYS,
+                   ...BASS_NUM_KEYS, ...BASS_SEL_KEYS]) {
     const el = q(`.p-${k}`);
     if (el && t.params[k] != null) el.value = t.params[k];
   }
@@ -187,6 +191,48 @@ export function syncDx7Panel(t) {
     if (el && t.params[k] != null) el.value = t.params[k];
   }
   refreshDx7Algorithm(t);
+}
+
+/**
+ * Push a track's guitar params back into the panel, for wherever they changed
+ * underneath the controls rather than because of them — loading a tone, a
+ * session, a patch. The four track sliders come too: on a guitar the drive and
+ * the sustain are as much part of the sound as the amp is.
+ * @param {Track} t
+ */
+export function syncGuitarPanel(t) {
+  const root = t._guitarGroupEl || t.el?.querySelector(".sq-param-group--guitar");
+  if (root) {
+    for (const k of [...GUITAR_NUM_KEYS, ...GUITAR_SEL_KEYS]) {
+      const el = root.querySelector(`.p-${k}`);
+      if (el && t.params[k] != null) el.value = t.params[k];
+    }
+  }
+  const timbre = t._timbreGroupEl || t.el;
+  for (const k of ["harm", "timb", "morph", "decay"]) {
+    const el = timbre?.querySelector(`.p-${k}`);
+    if (el && t.params[k] != null) el.value = t.params[k];
+  }
+}
+
+/**
+ * The same, for the bass panel — a tone loads the whole rig, so every control
+ * and the four track sliders have to be written back at once.
+ * @param {Track} t
+ */
+export function syncBassPanel(t) {
+  const root = t._bassGroupEl || t.el?.querySelector(".sq-param-group--bass");
+  if (root) {
+    for (const k of [...BASS_NUM_KEYS, ...BASS_SEL_KEYS]) {
+      const el = root.querySelector(`.p-${k}`);
+      if (el && t.params[k] != null) el.value = t.params[k];
+    }
+  }
+  const timbre = t._timbreGroupEl || t.el;
+  for (const k of ["harm", "timb", "morph", "decay"]) {
+    const el = timbre?.querySelector(`.p-${k}`);
+    if (el && t.params[k] != null) el.value = t.params[k];
+  }
 }
 
 export function renderTrack(t) {
@@ -248,6 +294,36 @@ export function renderTrack(t) {
   for (const k of [...DX7_NUM_KEYS, ...DX7_SEL_KEYS]) {
     const el = node.querySelector(`.p-${k}`);
     if (el) el.value = t.params[k] ?? DX7_DEFAULTS[k];
+  }
+  // The guitar's tone dropdown ships empty for the same reason the dx7's does:
+  // the rigs live in guitar.js, and the markup should not be a second copy.
+  const toneSel = node.querySelector(".sq-guitar__tone");
+  if (toneSel && !toneSel.options.length) {
+    for (const name of ["", ...GUITAR_TONE_NAMES]) {
+      const o = document.createElement("option");
+      o.value = name;
+      o.textContent = name || "—";
+      o.title = guitarToneDescription(name);
+      toneSel.appendChild(o);
+    }
+  }
+  for (const k of [...GUITAR_NUM_KEYS, ...GUITAR_SEL_KEYS]) {
+    const el = node.querySelector(`.p-${k}`);
+    if (el) el.value = t.params[k] ?? GUITAR_DEFAULTS[k];
+  }
+  const bassToneSel = node.querySelector(".sq-bass__tone");
+  if (bassToneSel && !bassToneSel.options.length) {
+    for (const name of ["", ...BASS_TONE_NAMES]) {
+      const o = document.createElement("option");
+      o.value = name;
+      o.textContent = name || "—";
+      o.title = bassToneDescription(name);
+      bassToneSel.appendChild(o);
+    }
+  }
+  for (const k of [...BASS_NUM_KEYS, ...BASS_SEL_KEYS]) {
+    const el = node.querySelector(`.p-${k}`);
+    if (el) el.value = t.params[k] ?? BASS_DEFAULTS[k];
   }
   const gsyncEl = node.querySelector(".p-gsync");
   if (gsyncEl) gsyncEl.checked = t.params.gsync ?? GRAN_DEFAULTS.gsync;
@@ -327,6 +403,51 @@ export function renderTrack(t) {
     if (el) el.addEventListener("change", e => {
       setParam(t, k, e.target.value);
       if (k === "dalg") refreshDx7Algorithm(t);
+    });
+  }
+  // Guitar rig: sliders on input, the amp / cab / pickup / tremolo selects on
+  // change, and the tone dropdown loading a whole rig at once.
+  for (const k of GUITAR_NUM_KEYS) {
+    const el = node.querySelector(`.p-${k}`);
+    if (el) el.addEventListener("input", e => setParam(t, k, Number(e.target.value)));
+  }
+  for (const k of GUITAR_SEL_KEYS) {
+    const el = node.querySelector(`.p-${k}`);
+    if (el) el.addEventListener("change", e => setParam(t, k, e.target.value));
+  }
+  if (toneSel) {
+    const descEl = node.querySelector(".sq-guitar__desc");
+    toneSel.addEventListener("change", e => {
+      const name = e.target.value;
+      const tone = guitarTone(name);
+      if (descEl) descEl.textContent = guitarToneDescription(name);
+      if (!tone) return;
+      for (const [key, val] of Object.entries(tone)) setParam(t, key, val);
+      syncGuitarPanel(t);
+      refreshParamIndicators(t);
+      setStatus(`guitar tone "${name}" — ${guitarToneDescription(name)}`);
+    });
+  }
+  // Bass rig: the same three groups again.
+  for (const k of BASS_NUM_KEYS) {
+    const el = node.querySelector(`.p-${k}`);
+    if (el) el.addEventListener("input", e => setParam(t, k, Number(e.target.value)));
+  }
+  for (const k of BASS_SEL_KEYS) {
+    const el = node.querySelector(`.p-${k}`);
+    if (el) el.addEventListener("change", e => setParam(t, k, e.target.value));
+  }
+  if (bassToneSel) {
+    const descEl = node.querySelector(".sq-bass__desc");
+    bassToneSel.addEventListener("change", e => {
+      const name = e.target.value;
+      const tone = bassTone(name);
+      if (descEl) descEl.textContent = bassToneDescription(name);
+      if (!tone) return;
+      for (const [key, val] of Object.entries(tone)) setParam(t, key, val);
+      syncBassPanel(t);
+      refreshParamIndicators(t);
+      setStatus(`bass tone "${name}" — ${bassToneDescription(name)}`);
     });
   }
   // Loading a voice writes every panel control at once — the operators, the
@@ -507,6 +628,8 @@ export function renderTrack(t) {
   t._tb303GroupEl   = node.querySelector(".sq-param-group--tb303");
   t._virusGroupEl   = node.querySelector(".sq-param-group--virus");
   t._dx7GroupEl     = node.querySelector(".sq-param-group--dx7");
+  t._guitarGroupEl  = node.querySelector(".sq-param-group--guitar");
+  t._bassGroupEl    = node.querySelector(".sq-param-group--bass");
   t._granGroupEl    = node.querySelector(".sq-param-group--granular");
 
   // Everything above can be reparented out of the track (panels into their
@@ -517,7 +640,7 @@ export function renderTrack(t) {
                     t._envPanelEl, t._fxPanelEl, t._eqPanelEl, t._compPanelEl,
                     t._timbreGroupEl, t._oscMixGroupEl, t._oscModGroupEl,
                     t._moogOscGroupEl, t._tb303GroupEl, t._virusGroupEl,
-                    t._dx7GroupEl, t._granGroupEl]) {
+                    t._dx7GroupEl, t._guitarGroupEl, t._bassGroupEl, t._granGroupEl]) {
     if (el) el.dataset.trackId = String(t.id);
   }
 

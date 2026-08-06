@@ -80,6 +80,110 @@ ${DX7_OP_COLS.map(c => `              <span>${c.head}</span>`).join("\n")}
           </div>
         </div>`;
 
+// The electric guitar's rig: where the string is picked, which pickup reads it,
+// and the amp and cab it runs into. The tone dropdown ships EMPTY and is filled
+// at runtime by renderTrack from GUITAR_TONE_NAMES, so the tones live only in
+// public/js/guitar.js. Ranges and defaults here must match GUITAR_NUM_CTLS
+// there — that file is the source of truth for both.
+const GUITAR_PANEL = `
+        <div class="sq-param-group sq-param-group--guitar" hidden>
+          <div class="sq-guitar__row">
+            <span class="sq-guitar__lbl">tone</span>
+            <select class="sq-guitar__tone" title="load a famous rig: the pickup, where the string is picked, the amp and how hard it is driven, the cab, and the four track sliders with it. Every one of them is reachable by hand from here — start on the nearest one and move one control"></select>
+            <span class="sq-guitar__desc"></span>
+          </div>
+          <div class="sq-guitar__row">
+            <span class="sq-guitar__lbl">string</span>
+            <label class="sq-guitar__f"><span>pick pos</span><input class="p-gtpick" type="range" min="0.02" max="0.5" step="0.01" value="0.28" title="where along the string you pick, from hard by the bridge to over the twelfth fret. The string cannot carry a harmonic that has a node where it was struck, so this notches those harmonics out — which is the whole reason picking by the bridge is thin and cutting and picking over the neck is round" /></label>
+            <label class="sq-guitar__f"><span>pick</span><input class="p-gtpnoise" type="range" min="0" max="1" step="0.01" value="0.5" title="how hard the thing striking the string is: a thumb at the bottom, a plectrum at the top. It sets how much high-frequency energy the pluck puts into the string in the first place" /></label>
+            <label class="sq-guitar__f"><span>stiff</span><input class="p-gtstiff" type="range" min="0" max="1" step="0.01" value="0.25" title="string stiffness. A real string's harmonics sit slightly sharp of where the arithmetic says, and the thicker and more wound it is the further out they go. A little is a wound low string; a lot goes piano-like and metallic" /></label>
+            <label class="sq-guitar__f"><span>pkup pos</span><input class="p-gtpkup" type="range" min="0.02" max="0.5" step="0.01" value="0.12" title="where along the string the pickup sits: bridge at the bottom, neck at the top. Same comb as the pick position, applied on the way out instead of on the way in" /></label>
+            <select class="p-gtpkupt" title="which pickup. What you hear when you flick the selector is not the number of coils but where the pickup's own resonance sits — a single coil peaks around 6kHz and a humbucker around 3, and everything else follows from that">
+              <option value="single">single coil</option><option value="hum" selected>humbucker</option><option value="p90">p90</option>
+            </select>
+            <label class="sq-guitar__f"><span>palm</span><input class="p-gtmute" type="range" min="0" max="1" step="0.01" value="0" title="the heel of the picking hand resting on the strings at the bridge: shorter, darker and tighter all at once. It is what makes a high-gain riff a riff rather than a wall" /></label>
+          </div>
+          <div class="sq-guitar__row">
+            <span class="sq-guitar__lbl">amp</span>
+            <select class="p-gtamp" title="which amp. They differ in how much gain they have, where the tone stack works, how asymmetrically the first stage clips, and whether the distortion comes from the preamp or the power amp">
+              <option value="clean">clean</option><option value="tweed">tweed</option>
+              <option value="brit" selected>brit</option><option value="hi">hi-gain</option>
+              <option value="jazz">jazz</option>
+            </select>
+            <label class="sq-guitar__f"><span>bass</span><input class="p-gtbass" type="range" min="0" max="1" step="0.01" value="0.5" title="the amp's bass control. It sits after the first gain stage, as it does in the chassis — so it shapes what is already distorted, not what goes in" /></label>
+            <label class="sq-guitar__f"><span>mid</span><input class="p-gtmid" type="range" min="0" max="1" step="0.01" value="0.5" title="the amp's mid control, at whichever frequency this amp puts it. Taking it out is the eighties metal rhythm sound; leaving it in is why a seventies riff cuts through a band" /></label>
+            <label class="sq-guitar__f"><span>treble</span><input class="p-gttreb" type="range" min="0" max="1" step="0.01" value="0.5" title="the amp's treble control" /></label>
+            <label class="sq-guitar__f"><span>presence</span><input class="p-gtpres" type="range" min="0" max="1" step="0.01" value="0.4" title="presence, which is a treble control in the power amp's feedback loop rather than in the tone stack — it works on the distortion instead of on the signal, so it bites where treble only brightens" /></label>
+            <label class="sq-guitar__f"><span>master</span><input class="p-gtmast" type="range" min="0" max="1" step="0.01" value="0.5" title="how hard the power amp is driven. On a small amp this is where most of the distortion actually comes from, and it is a different, softer thing than preamp gain" /></label>
+            <label class="sq-guitar__f"><span>sag</span><input class="p-gtsag" type="range" min="0" max="1" step="0.01" value="0.3" title="how far the power supply droops under load. The note ducks as it is struck and swells back as it decays — the give of a small valve amp, and the thing solid-state ones never had" /></label>
+          </div>
+          <div class="sq-guitar__row">
+            <span class="sq-guitar__lbl">cab</span>
+            <select class="p-gtcab" title="the speaker, which is the biggest filter in the whole chain: nothing below about 90Hz and nothing above 5kHz survives it, and that is the only reason a distorted guitar is listenable">
+              <option value="4x12" selected>4x12</option><option value="2x12">2x12</option>
+              <option value="1x12">1x12</option><option value="1x8">1x8</option><option value="di">di (no cab)</option>
+            </select>
+            <label class="sq-guitar__f"><span>mic</span><input class="p-gtmic" type="range" min="0" max="1" step="0.01" value="0.35" title="where the mic sits in front of the speaker: off-axis at the bottom, straight down the middle of the cone at the top. In a room this is a whole afternoon's work, and it is mostly a lowpass" /></label>
+            <label class="sq-guitar__f"><span>trem</span><input class="p-gttrem" type="range" min="0" max="1" step="0.01" value="0" title="amp tremolo — the level wobble built into the back of an old combo, after the power tubes. The one every surf record is made of" /></label>
+            <label class="sq-guitar__f"><span>rate</span><input class="p-gttremr" type="range" min="0" max="1" step="0.01" value="0.4" title="tremolo speed, 1.5Hz to about 13" /></label>
+            <select class="p-gttremw" title="tremolo shape: a sine wobbles, a square chops">
+              <option value="sine" selected>sine</option><option value="square">square</option>
+            </select>
+            <label class="sq-guitar__f"><span>spring</span><input class="p-gtsprg" type="range" min="0" max="1" step="0.01" value="0" title="the reverb tank bolted into the amp — a real one is springs with transducers at each end, which is why it is dispersive and clangy rather than smooth like the rack's reverb. Turn it up and drip" /></label>
+          </div>
+        </div>`;
+
+// The electric bass's rig. Same arrangement as the guitar panel above — the
+// tone dropdown ships empty and is filled at runtime from BASS_TONE_NAMES, and
+// the ranges and defaults must match BASS_NUM_CTLS in public/js/bass.js.
+const BASS_PANEL = `
+        <div class="sq-param-group sq-param-group--bass" hidden>
+          <div class="sq-bass__row">
+            <span class="sq-bass__lbl">tone</span>
+            <select class="sq-bass__tone" title="load a famous rig: the bass, what it is strung with, how it is played, the amp and how compressed. Every control is reachable by hand from here"></select>
+            <span class="sq-bass__desc"></span>
+          </div>
+          <div class="sq-bass__row">
+            <span class="sq-bass__lbl">hand</span>
+            <label class="sq-bass__f"><span>pluck pos</span><input class="p-bspick" type="range" min="0.02" max="0.5" step="0.01" value="0.14" title="where along the string it is plucked, from hard by the bridge to over the neck. It notches out the harmonics that have a node there, which is why playing by the bridge is nasal and playing over the neck is round" /></label>
+            <label class="sq-bass__f"><span>hand</span><input class="p-bsattack" type="range" min="0" max="1" step="0.01" value="0.4" title="what is hitting the string: a thumb at the bottom, fingers in the middle, a plectrum at the top. Three different instruments before the amp hears anything" /></label>
+            <label class="sq-bass__f"><span>fret</span><input class="p-bsfret" type="range" min="0" max="1" step="0.01" value="0.25" title="how hard the string is allowed to clatter against the frets. It is a one-sided limit inside the string's own loop, because the fretboard is only on one side of it — and wound right up, with a thumb, it is what slap actually is" /></label>
+            <label class="sq-bass__f"><span>stiff</span><input class="p-bsstiff" type="range" min="0" max="1" step="0.01" value="0.45" title="string stiffness. A wound bass string's harmonics sit noticeably sharp of where the arithmetic says, far more than a guitar's — that disagreement between the pitch and the clank is most of what a bass sounds like" /></label>
+            <label class="sq-bass__f"><span>pkup pos</span><input class="p-bspkup" type="range" min="0.02" max="0.5" step="0.01" value="0.1" title="which pickup, as a position along the string: bridge at the bottom, neck at the top" /></label>
+            <select class="p-bspkupt" title="which pickup. The resonance is what you are choosing: a jazz single coil peaks high and growls, a precision's split humbucker sits low and thick, and a musicman is the hi-fi one">
+              <option value="j">jazz</option><option value="p" selected>precision</option><option value="mm">musicman</option>
+            </select>
+            <select class="p-bsstrs" title="roundwound or flatwound. Flats lose their high end almost as soon as they are struck and have far less clank, which is why every record made before about 1970 sounds like that">
+              <option value="round" selected>roundwound</option><option value="flat">flatwound</option>
+            </select>
+            <label class="sq-bass__f"><span>palm</span><input class="p-bsmute" type="range" min="0" max="1" step="0.01" value="0" title="the palm resting on the strings by the bridge — shorter and darker. With flatwounds this is the foam mute under a sixties bridge cover" /></label>
+          </div>
+          <div class="sq-bass__row">
+            <span class="sq-bass__lbl">dirt</span>
+            <label class="sq-bass__f"><span>grind</span><input class="p-bsgrind" type="range" min="0" max="1" step="0.01" value="0" title="how much distortion is mixed in. It only ever works on what is above the crossover, and the clean low end goes back underneath it — distort a bass whole and the fundamental intermodulates with everything above it and the bottom disappears" /></label>
+            <label class="sq-bass__f"><span>xover</span><input class="p-bsxover" type="range" min="0" max="1" step="0.01" value="0.4" title="the frequency the dirt starts at, 120Hz to about 1.4kHz. Low is a fully dirty bass; high leaves a clean instrument with a snarl on top of it" /></label>
+            <label class="sq-bass__f"><span>sub</span><input class="p-bssub" type="range" min="0" max="1" step="0.01" value="0" title="an octave below the note, tracked and following the string's own level. Half bass, half synth, and it sits where nothing else in a mix does" /></label>
+          </div>
+          <div class="sq-bass__row">
+            <span class="sq-bass__lbl">amp</span>
+            <select class="p-bsamp" title="which amp: a clean preamp with no colour, the small valve flip-top under every sixties record, the big valve stack, or the solid-state one that grinds rather than saturates">
+              <option value="di">di</option><option value="flip">flip-top</option>
+              <option value="svt" selected>svt</option><option value="gk">gk</option>
+            </select>
+            <label class="sq-bass__f"><span>bass</span><input class="p-bsbass" type="range" min="0" max="1" step="0.01" value="0.5" title="the amp's bass control" /></label>
+            <label class="sq-bass__f"><span>lo mid</span><input class="p-bslomid" type="range" min="0" max="1" step="0.01" value="0.5" title="low mids, around 250Hz. This is where a bass either has weight or has mud, and it is the first thing anyone reaches for" /></label>
+            <label class="sq-bass__f"><span>hi mid</span><input class="p-bshimid" type="range" min="0" max="1" step="0.01" value="0.5" title="high mids, around 800Hz — where the note becomes audible on a small speaker. Take it out for the scooped slap sound, put it in to be heard in a band" /></label>
+            <label class="sq-bass__f"><span>treble</span><input class="p-bstreb" type="range" min="0" max="1" step="0.01" value="0.5" title="the amp's treble, which on a bass is mostly the sound of the strings rather than the notes" /></label>
+            <label class="sq-bass__f"><span>low cut</span><input class="p-bshpf" type="range" min="0" max="1" step="0.01" value="0.15" title="high-pass filter, 28Hz to 150Hz. Below about 30Hz there is nothing but cone excursion, and this is the control every live engineer reaches for first" /></label>
+            <span class="sq-bass__lbl">cab</span>
+            <select class="p-bscab" title="the speaker cabinet. An eight-by-ten pushes air and rolls off early; a fifteen is all low end and no top; a DI is no cab at all">
+              <option value="8x10" selected>8x10</option><option value="4x10">4x10</option>
+              <option value="1x15">1x15</option><option value="2x12">2x12</option><option value="di">di (no cab)</option>
+            </select>
+            <label class="sq-bass__f"><span>mic</span><input class="p-bsmic" type="range" min="0" max="1" step="0.01" value="0.4" title="where the mic sits in front of the cab: off-axis and dark at the bottom, straight at the cone at the top" /></label>
+          </div>
+        </div>`;
+
 export const STUDIO_BODY = String.raw`
 <header class="sq-transport">
     <div class="sq-transport__main">
@@ -345,6 +449,8 @@ export const STUDIO_BODY = String.raw`
           </div>
         </div>
 ${DX7_PANEL}
+${GUITAR_PANEL}
+${BASS_PANEL}
         <div class="sq-param-group sq-param-group--tb303" hidden>
           <div class="sq-field"><label>wave</label>
             <select class="p-wave303" title="the 303's two waveforms. Saw is the classic acid tone; square is hollower and sits lower">

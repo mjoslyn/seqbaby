@@ -1,6 +1,8 @@
 import { engineByKey } from "./catalog.js";
 import { makeFuzzCurve, shaperPreampGain } from "./curves.js";
+import { BASS_MOD_KEYS, BASS_MOD_LABELS, bassFromUnit } from "./bass.js";
 import { DX7_MOD_KEYS, DX7_MOD_LABELS, dx7FromUnit } from "./dx7.js";
+import { GUITAR_MOD_KEYS, GUITAR_MOD_LABELS, guitarFromUnit } from "./guitar.js";
 import { canModulate } from "./lfo.js";
 import { setParam } from "./params.js";
 import { cutoffToHz, resonToQ } from "./signal.js";
@@ -60,6 +62,10 @@ export const AUTOMATION_TARGETS = {
   // DX7 panel controls (dx7 engine only) — globals, then all six operators.
   // Generated from the same list the LFO keys come from (dx7.js).
   ...Object.fromEntries(DX7_MOD_KEYS.map(k => [`dx7.${k}`, { label: DX7_MOD_LABELS[k] }])),
+  // Electric guitar rig (guitar engine only) — string, pickup, amp, cab.
+  ...Object.fromEntries(GUITAR_MOD_KEYS.map(k => [`gtr.${k}`, { label: GUITAR_MOD_LABELS[k] }])),
+  // Electric bass rig (bass engine only).
+  ...Object.fromEntries(BASS_MOD_KEYS.map(k => [`bas.${k}`, { label: BASS_MOD_LABELS[k] }])),
   // fx
   "fx.vinyl":           { label: "vinyl amt" },
   "fx.vinyl.warmth":    { label: "vinyl warmth" },
@@ -140,6 +146,8 @@ export function canAutomate(t, key) {
   if (key.startsWith("tb303.")) return t.engineKey === "dm:303";
   if (key.startsWith("virus.")) return t.engineKey === "dm:virus";
   if (key.startsWith("dx7.")) return t.engineKey === "dm:dx7";
+  if (key.startsWith("gtr.")) return t.engineKey === "dm:guitar";
+  if (key.startsWith("bas.")) return t.engineKey === "dm:bass";
   if (key.startsWith("fx.")) return true;
   if (VOICE_AUTO_KEYS.includes(key)) return voiceAutoKeysForEngine(t).includes(key);
   return false;
@@ -239,6 +247,19 @@ export function applyAutomationAtStep(t, key, v, time, vNext, stepDur) {
   if (key.startsWith("dx7.")) {
     const which = key.slice(4);
     ramp(t.voice?.getAudioParam?.("d" + which), dx7FromUnit(which, vv), dx7FromUnit(which, vn));
+    return;
+  }
+  // The guitar rig, same again: every knob on it is an AudioParam, and each
+  // lane spans that knob's own range — a pick-position lane sweeps 0.02..0.5
+  // (bridge to twelfth fret), not 0..1.
+  if (key.startsWith("gtr.")) {
+    const which = key.slice(4);
+    ramp(t.voice?.getAudioParam?.("gt" + which), guitarFromUnit(which, vv), guitarFromUnit(which, vn));
+    return;
+  }
+  if (key.startsWith("bas.")) {
+    const which = key.slice(4);
+    ramp(t.voice?.getAudioParam?.("bs" + which), bassFromUnit(which, vv), bassFromUnit(which, vn));
     return;
   }
   const rack = t.fxRack;

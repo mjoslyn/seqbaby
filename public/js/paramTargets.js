@@ -1,5 +1,7 @@
 import { LFO_KEYS } from "./constants.js";
+import { BASS_MOD_KEYS, BASS_MOD_LABELS } from "./bass.js";
 import { DX7_MOD_KEYS, DX7_MOD_LABELS } from "./dx7.js";
+import { GUITAR_MOD_KEYS, GUITAR_MOD_LABELS } from "./guitar.js";
 
 
 /** @typedef {import("./types.js").Track} Track */
@@ -46,6 +48,10 @@ for (const [cls, name] of [["vpw", "pw"], ["vfm", "fm"], ["vring", "ring"],
 // DX7 panel. Every control is `d` + a short key, and that short key spells both
 // namespaces — so all 56 of them are one loop rather than 56 lines.
 for (const k of DX7_MOD_KEYS) def(`p-d${k}`, `dx7_${k}`, `dx7.${k}`);
+// Electric guitar panel — the same one-list-three-namespaces arrangement.
+for (const k of GUITAR_MOD_KEYS) def(`p-gt${k}`, `gtr_${k}`, `gtr.${k}`);
+// Electric bass panel — likewise.
+for (const k of BASS_MOD_KEYS) def(`p-bs${k}`, `bas_${k}`, `bas.${k}`);
 // Granular grain controls. Also reachable from the wav modal's own copies.
 for (const k of ["speed", "pitch", "window", "jitter", "detune", "pan"]) {
   def(`p-g${k}`,  `gran_${k}`, `gran.${k}`);
@@ -161,6 +167,14 @@ export const CONTROL_LABELS = {
   "p-dalg": "dx7 algorithm", "p-dlfow": "dx7 lfo waveform", "p-dlfok": "dx7 lfo key sync",
   "sq-dx7__preset": "dx7 voice",
   ...Object.fromEntries([1, 2, 3, 4, 5, 6].map(i => [`p-d${i}fix`, `dx7 op${i} ratio / fixed`])),
+  ...Object.fromEntries(GUITAR_MOD_KEYS.map(k => [`p-gt${k}`, GUITAR_MOD_LABELS[k]])),
+  "p-gtamp": "amp model", "p-gtcab": "speaker cabinet",
+  "p-gtpkupt": "pickup type", "p-gttremw": "tremolo shape",
+  "sq-guitar__tone": "guitar tone",
+  ...Object.fromEntries(BASS_MOD_KEYS.map(k => [`p-bs${k}`, BASS_MOD_LABELS[k]])),
+  "p-bsamp": "bass amp", "p-bscab": "bass cabinet",
+  "p-bspkupt": "bass pickup", "p-bsstrs": "string type",
+  "sq-bass__tone": "bass tone",
   "fx-delay-div": "delay division", "fx-shaper-mode": "shaper mode",
   "sq-wt__scan-en": "wave scan", "sq-wt__scan-dir": "scan direction",
   "sq-wt__scan-sync": "scan sync", "sq-wt__scan-retrig": "scan retrigger",

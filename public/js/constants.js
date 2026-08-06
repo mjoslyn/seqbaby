@@ -1,4 +1,6 @@
+import { BASS_MOD_KEYS, BASS_MOD_LABELS, BASS_MOD_RANGE } from "./bass.js";
 import { DX7_MOD_KEYS, DX7_MOD_LABELS, DX7_MOD_RANGE } from "./dx7.js";
+import { GUITAR_MOD_KEYS, GUITAR_MOD_LABELS, GUITAR_MOD_RANGE } from "./guitar.js";
 
 export const { wosc, oscillatorTypes } = window.woscillators;
 
@@ -48,6 +50,13 @@ export const LFO_KEYS = [
   // the one list in dx7.js — 56 keys is too many to keep in step by hand, and
   // the picker only ever shows them on a dx7 track (see canModulate).
   ...DX7_MOD_KEYS.map(k => `dx7_${k}`),
+  // Electric guitar: the rig's own controls — where the string is picked, which
+  // pickup reads it, and every knob on the amp. Generated from the one list in
+  // guitar.js, and only offered on a guitar track (see canModulate).
+  ...GUITAR_MOD_KEYS.map(k => `gtr_${k}`),
+  // Electric bass: the right hand, the parallel dirt, and the amp. Guitar only
+  // in spirit — see canModulate for the gate.
+  ...BASS_MOD_KEYS.map(k => `bas_${k}`),
 ];
 // How much each target swings per unit of depth:
 //  - 0..1 unit params: amp = depth/2 (swings ±0.5)
@@ -86,6 +95,8 @@ export const LFO_LABELS = {
   delay_time: "delay time", delay_fbk: "delay fbk",
   reverb_decay: "reverb decay",
   ...Object.fromEntries(DX7_MOD_KEYS.map(k => [`dx7_${k}`, DX7_MOD_LABELS[k]])),
+  ...Object.fromEntries(GUITAR_MOD_KEYS.map(k => [`gtr_${k}`, GUITAR_MOD_LABELS[k]])),
+  ...Object.fromEntries(BASS_MOD_KEYS.map(k => [`bas_${k}`, BASS_MOD_LABELS[k]])),
 };
 export const lfoLabel = (k) => LFO_LABELS[k] ?? k;
 export const LFO_AMP_SCALE = {
@@ -132,6 +143,16 @@ export const LFO_AMP_SCALE = {
   ...Object.fromEntries(DX7_MOD_KEYS.map(k => {
     const [lo, hi] = DX7_MOD_RANGE[k];
     return [`dx7_${k}`, hi - lo];
+  })),
+  // Guitar: same again — the pick and pickup positions live in 0.02..0.5, every
+  // amp control in 0..1, and each swings its own span.
+  ...Object.fromEntries(GUITAR_MOD_KEYS.map(k => {
+    const [lo, hi] = GUITAR_MOD_RANGE[k];
+    return [`gtr_${k}`, hi - lo];
+  })),
+  ...Object.fromEntries(BASS_MOD_KEYS.map(k => {
+    const [lo, hi] = BASS_MOD_RANGE[k];
+    return [`bas_${k}`, hi - lo];
   })),
 };
 

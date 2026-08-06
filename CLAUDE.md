@@ -15,7 +15,7 @@ env / fx / eq / comp / mod / automation per track.
   engine scripts in order: Tone.js 15 (CDN) → `public/woscillators.js` →
   `public/js/main.js` (ES module). `middleware.ts` refreshes the Supabase
   session on every request *except* static engine assets.
-- **Engine**: ~38 dependency-free vanilla ES modules in `public/js/`. No
+- **Engine**: ~41 dependency-free vanilla ES modules in `public/js/`. No
   bundler — edit, reload. `window.seqbaby` (from `appApi.js`) exposes `state`
   and serialize/apply hooks to the React shell (typed in `app/seqbaby.d.ts`).
 - **Accounts + data**: Supabase (Postgres + Auth + RLS). Tables: `profiles`,
@@ -93,7 +93,12 @@ env / fx / eq / comp / mod / automation per track.
   registration + voice builder. See the TB-303 section below.
 - `virus.js` — the Access Virus model, same shape: processor source string,
   Blob-URL registration, voice builder, and its panel key lists.
-- `dx7.js` — the Yamaha DX7 model, same shape again, plus the 32-algorithm
+- `guitar.js` — the electric guitar: the whole rig (waveguide string, pickup,
+  amp, cab, speaker-to-string feedback) in one AudioWorklet, plus the famous-tone
+  table. Same file shape as the three above. See the guitar section below.
+- `bass.js` — the electric bass, guitar.js's sibling: same waveguide, wound and
+  stiffer, with a parallel dirt path, a rig compressor and an octaver.
+- `dx7.js` — the Yamaha DX7, same shape again, plus the 32-algorithm
   table, the panel's generated key lists and the preset voices. See the DX7
   section below.
 - `theory.js` / `meter.js` / `generate.js` / `curves.js` / `params.js` /
@@ -189,10 +194,12 @@ Voice interface: `hit(midi, time, dur, vel, opts?)`, `setParam`,
 
 ## Emulators (`"Emulators"` optgroup)
 
-All engine type `drum-synth`. The seven Tone.js analog-mono presets are each
-wrapped in `makePolyPool(size, buildOne)`; the 303, the Virus and the DX7 are
-the odd ones out — AudioWorklet models that handle their own voicing (the 303
-is mono like the machine, the other two polyphonic). See their sections below.
+All engine type `drum-synth`. The five Tone.js analog-mono presets are each
+wrapped in `makePolyPool(size, buildOne)`; the 303, the Virus, the DX7, the
+guitar and the bass are the odd ones out — AudioWorklet models that handle their
+own voicing (the 303 is mono like the machine, the rest polyphonic). See their
+sections below. The guitar and bass keep their old pluck builders in voices.js
+(`buildPluckGuitarVoice` / `buildPluckBassVoice`) purely as worklet fallbacks.
 
 | key             | builder               | pool | character |
 |---|---|---|---|
@@ -202,8 +209,8 @@ is mono like the machine, the other two polyphonic). See their sections below.
 | `dm:mini-brute` | `buildMiniBruteVoice` | 4 | saw + ultrasaw + PWM pulse + metalized tri + sub, Brute Factor |
 | `dm:moog`       | `buildMoogVoice`      | 4 | 3 osc w/ wave + range selects, ±7-semi osc2/3, noise |
 | `dm:juno`       | `buildJunoVoice`      | 6 | DCO + sub + noise → HPF → baked-in chorus |
-| `dm:guitar`     | `buildGuitarVoice`    | 6 | Karplus-Strong pluck → drive → EQ → chorus |
-| `dm:bass`       | `buildBassVoice`      | 4 | darker pluck, low-end EQ, dry |
+| `dm:guitar`     | `buildGuitarVoice`    | 6 (internal) | electric guitar rig, AudioWorklet (`guitar.js`) |
+| `dm:bass`       | `buildBassVoice`      | 4 (internal) | electric bass rig, AudioWorklet (`bass.js`) |
 | `dm:rhodes`     | `buildRhodesVoice`    | 6 | electric piano |
 | `dm:prophet6`   | `buildProphet6Voice`  | 6 | poly analog |
 
@@ -372,6 +379,90 @@ op6 ─▶ op5 ─▶ op4 ─▶ op3 ─┐          (alg 1: two stacks, ops 1 a
 - **Loading** — same Blob-URL registration as the 303 and the Virus, from
   `loadWorklet()` in transport.js; a failure falls back to a Tone `FMSynth`
   (two operators, one algorithm) so the track is never silent.
+
+## Electric guitar (`dm:guitar`, `public/js/guitar.js`)
+
+Not a pluck through a distortion box — the whole chain, because on a guitar the
+chain *is* the instrument:
+
+```
+STRING ──▶ PICKUP ──▶ tone pot ──▶ AMP ──▶ CAB ──▶ air ──┐
+(six)      (position   (on the      (gain   (speaker)     │
+            + LC peak)   guitar)     stack)      ▲        │
+                                                 └─ feedback ─┘
+```
+
+- **The string is a waveguide** — a delay line one period long with a damping
+  filter (highs die first, which is why a guitar note gets duller as it rings),
+  two allpasses for stiffness/inharmonicity, and a fractional-delay allpass so
+  it's actually in tune. Measured at ≤1.2 cents across four octaves; the
+  compensation for the loop filters' own phase delay in `retune()` is what buys
+  that, and removing it makes the whole instrument play flat.
+- **The pluck is a noise burst combed at the pick position**, which is the
+  difference between picking over the neck and by the bridge. The pickup combs
+  it again on the way out and adds its own LC resonance (single 6.2kHz /
+  humbucker 3.1kHz / p90 4.4kHz — that peak is what you hear when you flick the
+  selector, not the coil count).
+- **Amp**: asymmetric first stage → tone stack → second stage → presence in the
+  power-amp loop → soft clip into a sagging supply. Five models (clean / tweed /
+  brit / hi-gain / jazz) differing in gain, bias, stack frequencies and voicing.
+  Drive is **exponential** (`0.7·g^drive²`) because a gain pot is.
+- **Cab**: four biquads, five cabs. It's the biggest filter in the chain.
+- **BLOOM is real feedback**: a delayed, bandpassed copy of the cab output is
+  injected back into each *gated* string, scaled by that string's own envelope.
+  That gating makes it a **threshold** rather than a switch — below it the
+  injection is smaller than the string's losses and the note decays, above it
+  they swap over and the note grows into a howl. Gated-only, or a bloomed note
+  would ring for the rest of the session. `bloom` is cubed (morph defaults to
+  0.5 on every engine and a rig that howls on load would be a joke).
+- **Controls** — the four sliders are DRIVE / TONE (the knob on the guitar, a
+  passive lowpass 700Hz→open) / BLOOM / SUSTAIN. The rest is
+  `sq-param-group--guitar`: string row, amp row, cab row, plus the tone dropdown.
+- **One list, three namespaces**, as in dx7.js: every control is `gt` + a short
+  key, which spells its LFO target (`gtr_<short>`) and its automation lane
+  (`gtr.<short>`). `GUITAR_NUM_CTLS` generates all of them and constants.js /
+  automation.js / paramTargets.js map over `GUITAR_MOD_KEYS` rather than listing.
+  `GUITAR_MOD_RANGE` gives each its span (pick/pickup position are 0.02..0.5).
+- **The famous tones** (`guitarTone(name)`) return a *complete* set of params
+  plus the four sliders. Named for what they sound like, with a one-line
+  description shown beside the dropdown and in the status bar. The panel markup
+  is in `app/studioMarkup.ts` (`GUITAR_PANEL`) and the dropdown ships **empty** —
+  `renderTrack` fills it from `GUITAR_TONE_NAMES`, so the tones live only here.
+- **Loading** — same Blob-URL registration as the 303/Virus/DX7 from
+  `loadWorklet()`; a failure falls back to `buildPluckGuitarVoice` (the old
+  PluckSynth voice, still in voices.js) so a track is never silent.
+
+## Electric bass (`dm:bass`, `public/js/bass.js`)
+
+guitar.js's sibling — same waveguide, wound and stiffer — with the four things
+that make a bass its own instrument:
+
+```
+STRING ──▶ PICKUP ──▶ tone ──┬── clean (lows, kept clean) ──┐
+(four)                       ├── dirt (highpassed, clipped) ┼─▶ COMP ─▶ AMP ─▶ CAB
+                             └── sub octave (tracked) ──────┘
+```
+
+- **The dirt is parallel and highpassed.** Distorting a bass whole makes the
+  fundamental intermodulate with everything above it and the low end vanishes,
+  so GRIND only works above XOVER and the clean lows go back underneath.
+- **There is always a compressor**, and it gets a track slider (`morph`) rather
+  than a corner of the panel: threshold down and makeup up together, so it's one
+  "more compression" control.
+- **Fret buzz is a one-sided clip inside the string's own loop** (the fretboard
+  is only on one side of the string). Wound up with the hand control at the top,
+  that *is* slap.
+- **Round vs flat** (`bsstrs`) scales the loop damping, the excitation
+  brightness and the dispersion together — flats lose their highs at once and
+  have far less clank.
+- The octaver is a tracked oscillator following the string's envelope, not a
+  flip-flop divider, so it never glitches (a real one does).
+- **Controls** — DRIVE / TONE / COMP / SUSTAIN plus `sq-param-group--bass`
+  (hand row, dirt row, amp+cab row). Keys are `bs` + short key → `bas_<short>` /
+  `bas.<short>`, generated from `BASS_NUM_CTLS`. Four amps (di / flip-top / svt /
+  gk), five cabs, three pickups. Tones via `bassTone(name)`; panel markup is
+  `BASS_PANEL` in `app/studioMarkup.ts` with the dropdown filled at runtime.
+- **Loading** — as above; falls back to `buildPluckBassVoice`.
 
 ## Granular (`dm:granular`, `GranularVoice` in voices.js)
 
@@ -610,7 +701,7 @@ fails. Real-time capture — see Known limitations.
 ## Engines catalog (`buildEngineCatalog`)
 
 Groups in order: `plaits` (16) · `drum / synth` (808/909 kit + poly-saw /
-fm-bell / pad) · `Emulators` (303 + virus + dx7 + 7 analog-mono) · `texture` (`dm:granular`) ·
+fm-bell / pad) · `Emulators` (303 + virus + dx7 + guitar + bass + 5 analog-mono) · `texture` (`dm:granular`) ·
 `wavetable` (`wt:akwf`) · `sampler` (single unified entry) · `saved patches`
 (`saved:<name>`) · `midi`. The engine key string is the source of truth.
 Bundled drum kits are no longer separate engines — they live in
@@ -730,7 +821,7 @@ Repo: https://github.com/mjoslyn/seqbaby.
   An inline marker (`window.__seqbabyServerBoot`) tells the paths apart, and
   `ScriptLoader.tsx` keeps its onload-chained injection for the soft-nav case
   (e.g. arriving from `/login`).
-- `app/EnginePreload.tsx` emits `modulepreload` for all 38 modules listed in
+- `app/EnginePreload.tsx` emits `modulepreload` for all 41 modules listed in
   `app/engineAssets.ts`. The graph is 8 levels deep, so without it the browser
   needs up to eight sequential round trips just to discover the code.
   **Adding or removing a module in `public/js/` means updating that list** —
@@ -747,6 +838,6 @@ Repo: https://github.com/mjoslyn/seqbaby.
   resolve against the importing module's URL. That's why the version is a path
   and not a `?query` — a query is dropped during that resolution and would
   reach only `main.js`. Per-deploy URLs are what make the `immutable`
-  cache-control in `netlify.toml` safe on an unbundled 33-module engine.
+  cache-control in `netlify.toml` safe on an unbundled 41-module engine.
   Unset locally, so `npm run dev` and a plain `next build` keep the bare paths
   and the edit-and-reload loop.

@@ -1,7 +1,9 @@
 import { PATTERN_COUNT } from "./constants.js";
 import { setStatus } from "./dom.js";
 import { DX7_DEFAULTS } from "./dx7.js";
+import { BASS_DEFAULTS } from "./bass.js";
 import { defaultFxConfig } from "./fxRack.js";
+import { GUITAR_DEFAULTS } from "./guitar.js";
 import { chordSelectionFor } from "./keyboard.js";
 import { applySampleSpeed, defaultLFOConfig, disposeLFOs, syncAllLFOs } from "./lfo.js";
 import { autoAccents, guessIsDrumKit, patternMeter, stepsPerBarForMeter, totalSteps } from "./meter.js";
@@ -83,6 +85,10 @@ export function createTrack({ name, engineKey, length = totalSteps() }) {
       ...VIRUS_DEFAULTS,
       // DX7 operator matrix + globals (see dx7.js)
       ...DX7_DEFAULTS,
+      // Electric guitar: string, pickup, amp, cab (see guitar.js)
+      ...GUITAR_DEFAULTS,
+      // Electric bass: the same chain again, wound differently (see bass.js)
+      ...BASS_DEFAULTS,
     },
     // The sound every unlocked pattern shares; a p-locked pattern keeps its
     // own on the pattern instead (patternSound.js). Filled on the first flush.

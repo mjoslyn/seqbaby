@@ -115,8 +115,9 @@ export const PLAITS_MACRO_TIPS = [
 // keyed by engine key, with `osc` for the oscillator-mix row and `oscMod` for
 // the ultrasaw / FM / metalizer row where an engine uses them. Only the controls
 // an engine actually shows need a line — updatePlaitsControlsVisibility hides
-// the rest. (The 303, the Virus, the granular engine and the 808/909 voices keep
-// their tips inline in params.js, next to the labels they go with.)
+// the rest. (The 303, the Virus, the DX7, the guitar, the granular engine and
+// the 808/909 voices keep their tips inline in params.js, next to the labels
+// they go with.)
 export const ENGINE_MACRO_TIPS = {
   "dm:mini-brute": {
     harm: "speed of the LFO sweeping the pulse wave's width, and its depth, on one control — at zero the pulse holds still",
@@ -152,18 +153,6 @@ export const ENGINE_MACRO_TIPS = {
       osc2: "level of the square sub, an octave below",
       osc3: "level of the noise source",
     },
-  },
-  "dm:guitar": {
-    harm: "how hard the pluck is pushed into the overdrive stage, from clean up into grit",
-    timb: "damping of the string — low is a muted thud, high is a bright pick",
-    morph: "how much chorus sits on the output",
-    decay: "how long the string rings, from a short pluck to a long sustain",
-  },
-  "dm:bass": {
-    harm: "how hard the string is driven — finger, then pick, then overdriven",
-    timb: "damping: roughly where along the string it is plucked, dull to bright",
-    morph: "how much energy the string keeps on each pass. Higher rings longer and harder",
-    decay: "how long the note rings out",
   },
   "dm:rhodes": {
     harm: "the ratio between the tine and the tone bar — low is deep and hollow, high goes bell-like",

@@ -3,7 +3,9 @@ import { fireMetronome, paintBeatIndicator } from "./beat.js";
 import { engineByKey } from "./catalog.js";
 import { BAR_TICKS, wosc } from "./constants.js";
 import { setStatus } from "./dom.js";
+import { loadBassWorklet } from "./bass.js";
 import { loadDx7Worklet } from "./dx7.js";
+import { loadGuitarWorklet } from "./guitar.js";
 import { currentBpm, syncAllLFOs } from "./lfo.js";
 import { init, needsResume, primeAudioForIOS } from "./main.js";
 import { updateMidiUI } from "./render.js";
@@ -230,7 +232,9 @@ export function loadWorklet() {
   const tb303 = loadTb303Worklet(state.audioCtx).catch(e => { console.warn("tb-303 worklet load failed", e); });
   const virus = loadVirusWorklet(state.audioCtx).catch(e => { console.warn("virus worklet load failed", e); });
   const dx7 = loadDx7Worklet(state.audioCtx).catch(e => { console.warn("dx7 worklet load failed", e); });
-  return Promise.all([state.woscLoad, tb303, virus, dx7]);
+  const guitar = loadGuitarWorklet(state.audioCtx).catch(e => { console.warn("guitar worklet load failed", e); });
+  const bass = loadBassWorklet(state.audioCtx).catch(e => { console.warn("bass worklet load failed", e); });
+  return Promise.all([state.woscLoad, tb303, virus, dx7, guitar, bass]);
 }
 
 /**
