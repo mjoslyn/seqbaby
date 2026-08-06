@@ -234,6 +234,29 @@ export function loadWorklet() {
 }
 
 /**
+ * Open the master bus back up.
+ *
+ * Stop ramps the master to 0 to swallow the events Tone's lookahead had already
+ * queued, and leaves it there — a timer can't restore it, because silencing a
+ * voice releases it and a long-release patch would fade back in over the top.
+ * But the master is also what the computer keyboard plays through, and that is
+ * meant to work whether the transport runs or not: before this, every key was
+ * silent once you'd pressed stop. So anything that wants to make a sound while
+ * stopped asks for the bus first.
+ */
+export function wakeMasterBus() {
+  if (state.playing) return;                       // already open
+  const g = state.masterGain?.gain;
+  if (!g || !state.audioCtx || g.value > 0.999) return;
+  const now = state.audioCtx.currentTime;
+  try {
+    g.cancelScheduledValues(now);
+    g.setValueAtTime(g.value, now);
+    g.linearRampToValueAtTime(1, now + 0.015);
+  } catch {}
+}
+
+/**
  * Request Web MIDI access in the background — but only if a track actually
  * uses a MIDI engine (the Chrome permission prompt shouldn't appear for
  * sessions that never touch MIDI). Once granted, wire the outputs onto any
@@ -287,8 +310,8 @@ export async function togglePlay() {
     // Fast master-gain cut. Tone synth triggerAttackRelease calls issued by the
     // last few scheduleRepeat callbacks live inside Tone's ~100 ms lookahead and
     // are already queued as native Web Audio events — stopping the Transport
-    // doesn't unschedule them. Ramping master to 0 for a beat makes them inaudible
-    // so stop actually stops. togglePlay restores the gain on the next start.
+    // doesn't unschedule them. Ramping master to 0 makes them inaudible so stop
+    // actually stops.
     if (state.masterGain && state.audioCtx) {
       const now = state.audioCtx.currentTime;
       const g = state.masterGain.gain;
@@ -298,6 +321,10 @@ export async function togglePlay() {
         g.linearRampToValueAtTime(0, now + 0.02);
       } catch {}
     }
+    // The gain stays down until something asks for the bus back (see
+    // wakeMasterBus). Restoring it on a timer instead sounds wrong: silencing a
+    // voice *releases* it, and a long-release patch would then fade back in
+    // over the top of the silence you just asked for.
     silenceAllVoices();
     state.playing = false;
     btn.textContent = "play";

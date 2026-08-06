@@ -465,8 +465,14 @@ Single `Tone.Transport.scheduleRepeat` at `"16n"`. Each callback, per track:
    chain-mode advance honoring `patternRepeats` / `patternMeters`.
 
 Stop cuts masterGain to 0 over 20ms (Tone's ~100ms lookahead keeps already-
-queued native events playing otherwise), silences all voices, and restores
-gain on next start. `Tone.Transport.start(lead, 0)` with the explicit 0 offset
+queued native events playing otherwise) and silences all voices. The gain then
+**stays down until something asks for it back** — `wakeMasterBus()`, which the
+computer keyboard calls on every note. It can't be restored on a timer: silencing
+a voice *releases* it, so a long-release patch fades back in over the top of the
+silence you just asked for (measured: a pad still audible a second after stop).
+And it can't be left down until the next start either, which is what it used to
+do — the keyboard plays through the same bus, so every key was silent once you'd
+pressed stop. `Tone.Transport.start(lead, 0)` with the explicit 0 offset
 is the canonical rewind (avoids Tone 15's stop/cancel/position bugs).
 
 ## Modulation: LFO vs automation (two systems)

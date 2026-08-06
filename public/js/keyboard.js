@@ -13,7 +13,7 @@ import { invertChord, state } from "./state.js";
 import { renderStepGrid } from "./stepGrid.js";
 import { applyKbdArpToStep, resizeTrack } from "./track.js";
 import { CHORD_TYPES, SCALES, chordNotes, chordTypeForTones, diatonicChordNotes, midiToScaleIndex, quantizeToScale, scaleIndexToMidi } from "./theory.js";
-import { ensureAudio } from "./transport.js";
+import { ensureAudio, wakeMasterBus } from "./transport.js";
 
 const KBD_REC_VEL = 0.85;
 const CAPTURE_WINDOW_SEC = 32;   // rolling lookback buffer for "capture"
@@ -241,6 +241,9 @@ async function pressNote(k, midi) {
   if (!t) return;
   await ensureAudio();
   if (!t.voice || !held.has(k)) return;   // key may have been released during await
+  // Stop leaves the master bus muted (see wakeMasterBus) — ask for it back, or
+  // the note plays into a zeroed gain and you hear nothing.
+  wakeMasterBus();
   const now = state.audioCtx.currentTime + 0.01;
   const opts = hitOptsFor(t);
   const rec = held.get(k);
