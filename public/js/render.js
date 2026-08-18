@@ -9,6 +9,7 @@ import { BASS_DEFAULTS, BASS_NUM_KEYS, BASS_SEL_KEYS, BASS_TONE_NAMES, bassTone,
 import { randomizeMelody, randomizeTimbre } from "./generate.js";
 import { GUITAR_DEFAULTS, GUITAR_NUM_KEYS, GUITAR_SEL_KEYS, GUITAR_TONE_NAMES, guitarTone, guitarToneDescription } from "./guitar.js";
 import { ICON_CLEAR, ICON_DICE, ICON_LOAD, ICON_ROLL, ICON_SAVE, ICON_SLIDERS, ICON_WAV } from "./icons.js";
+import { upgradeKnobs } from "./knob.js";
 import { canModulate, currentBpm, rateFromSync, syncLFO } from "./lfo.js";
 import { autoOwns, modOwns, refreshParamIndicators } from "./paramTargets.js";
 import { patternLocked, refreshPatternLockUI, refreshPatternSoundUI, setPatternLock } from "./patternSound.js";
@@ -743,6 +744,10 @@ export function renderTrack(t) {
   attachGridInteraction(t, node.querySelector(".sq-steps"));
   renderStepGrid(t);
   document.getElementById("tracks").appendChild(node);
+  // After the subtree is in the document: the knob measures nothing at upgrade
+  // time, but the readout positions against a laid-out box, and the panels
+  // below are all built by now.
+  upgradeKnobs(node);
   updateMidiUI(t);
   updatePlaitsControlsVisibility(t);
   refreshParamIndicators(t);
@@ -1204,6 +1209,7 @@ export function buildLfoRow(t, key, onRemove) {
     row.remove();
     onRemove?.();
   });
+  upgradeKnobs(row);
   return row;
 }
 

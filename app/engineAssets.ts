@@ -58,6 +58,7 @@ export const ENGINE_MODULES = [
   "guitar.js",
   "icons.js",
   "keyboard.js",
+  "knob.js",
   "lfo.js",
   "main.js",
   "meter.js",

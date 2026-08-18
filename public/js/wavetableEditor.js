@@ -5,6 +5,7 @@
 // / AKWF wave into it. Frames live on t.wavetable.frames and persist in sessions.
 
 import { setStatus } from "./dom.js";
+import { upgradeKnobs } from "./knob.js";
 import { WAVETABLE_WAVES, WT_FRAME_LEN } from "./voices.js";
 import { loadBuffer } from "./buffers.js";
 import { state } from "./state.js";
@@ -198,6 +199,7 @@ export function openWavetableEditor(t) {
     <button type="button" class="sq-panel__modal-close">done</button>`;
   overlay.appendChild(modal);
   document.body.appendChild(overlay);
+  upgradeKnobs(overlay);
 
   const framesEl = modal.querySelector(".sq-wt__frames");
   const canvas = modal.querySelector(".sq-wt__canvas");
