@@ -100,7 +100,188 @@ select {
 }
 
 input[type="number"] { width: 64px; }
+/* Ranges that knob.js hasn't upgraded (the wavetable's harmonic bars) keep the
+   native look. Everything else is drawn by the .sq-knob block below. */
 input[type="range"] { accent-color: var(--accent); }
+
+/* ---------- KNOBS ----------------------------------------------------------
+   knob.js wraps every range input in .sq-knob and writes two custom properties
+   on it: --knob-v (the value, 0..1) and --knob-a (the same as an angle). It
+   knows nothing about circles — all the shape is here, which is what lets a
+   rack that reads badly as dials become bars by overriding one selector.
+
+   The native input stays inside, transparent and stretched over the whole
+   dial: it is still the value, still the focus target, and still what the
+   pointer hits, so the parameter menu's DOM walk and the mod/aut dots keep
+   working without knowing knobs exist. */
+.sq-knob {
+  --knob-size: 36px;
+  /* The unfilled arc has to read against the panel behind it, or a knob at 20%
+     looks identical to one at 80% and the rack stops being scannable — which is
+     the one thing dials are worse at than bars. */
+  --knob-track: #3a4050;
+  --knob-fill: var(--accent);
+  --knob-thickness: 5px;
+  position: relative;
+  display: inline-block;
+  flex: 0 0 auto;
+  width: var(--knob-size);
+  height: var(--knob-size);
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* --knob-hit is the minimum target size. The input below is inset by a
+   negative amount to reach it, so a knob drawn at 26px is still grabbable at
+   44px on a phone — the drawing shrinks for density, the target does not.
+   Applied to the input rather than a pseudo-element on the wrapper: the input
+   is what carries the drag handlers, so anything else would just be paint. */
+.sq-knob { --knob-hit: 30px; }
+/* `any-pointer` rather than `pointer`, so a laptop with a touchscreen gets the
+   big target too — its primary pointer is the trackpad, but the finger is the
+   one that needs the room. The 768px arm is there because this stylesheet
+   decides what "phone" means by width everywhere else; a layout that has gone
+   to its mobile arrangement should not still be carrying desktop-sized targets
+   because a media feature disagreed. */
+@media (any-pointer: coarse), (max-width: 768px) {
+  .sq-knob { --knob-hit: 44px; }
+}
+
+/* The value arc. A conic gradient from --knob-v, masked to a ring, over a 270°
+   sweep that starts at 7 o'clock — the gap sits at the bottom where a rack of
+   knobs has nothing to say. The arc is deliberately thick and high-contrast:
+   angle is a weaker visual channel than length, so a wall of these only stays
+   scannable if the filled part is unmissable. */
+.sq-knob__dial {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background:
+    conic-gradient(from 225deg,
+      var(--knob-fill) 0deg,
+      var(--knob-fill) calc(var(--knob-v, 0) * 270deg),
+      var(--knob-track) calc(var(--knob-v, 0) * 270deg),
+      var(--knob-track) 270deg,
+      transparent 270deg);
+  -webkit-mask: radial-gradient(circle at 50% 50%,
+    transparent calc(50% - var(--knob-thickness)), #000 calc(50% - var(--knob-thickness) + 1px));
+  mask: radial-gradient(circle at 50% 50%,
+    transparent calc(50% - var(--knob-thickness)), #000 calc(50% - var(--knob-thickness) + 1px));
+  pointer-events: none;
+}
+
+/* The body and the pointer line. The line is what you read at a glance when
+   the arc is short; the body gives the control a grabbable-looking mass. */
+.sq-knob__dial::before {
+  content: "";
+  position: absolute;
+  inset: calc(var(--knob-thickness) + 2px);
+  border-radius: 50%;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+}
+/* The pointer line. Its transform-origin is the knob's centre expressed as a
+   distance from the line's own top edge — percentages here would resolve
+   against the line's box, not the dial's. */
+.sq-knob__dial::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: calc(var(--knob-thickness) + 3px);
+  width: 2px;
+  height: calc(var(--knob-size) * 0.22);
+  margin-left: -1px;
+  border-radius: 1px;
+  background: var(--fg);
+  transform-origin: 50% calc(var(--knob-size) / 2 - var(--knob-thickness) - 3px);
+  transform: rotate(var(--knob-a, -135deg));
+}
+
+/* A control that runs through zero reads from twelve o'clock, so you can see
+   at a glance which side of centre it is on — the 303's tuning, the DX7's
+   pitch envelope, the Virus's filter-2 offset. */
+.sq-knob[data-bipolar] .sq-knob__dial {
+  background:
+    conic-gradient(from 225deg,
+      var(--knob-track) 0deg,
+      var(--knob-track) min(135deg, calc(var(--knob-v, 0.5) * 270deg)),
+      var(--knob-fill) min(135deg, calc(var(--knob-v, 0.5) * 270deg)),
+      var(--knob-fill) max(135deg, calc(var(--knob-v, 0.5) * 270deg)),
+      var(--knob-track) max(135deg, calc(var(--knob-v, 0.5) * 270deg)),
+      var(--knob-track) 270deg,
+      transparent 270deg);
+}
+
+/* The input itself: invisible, but present, focusable and hit-testable. */
+.sq-knob input[type="range"] {
+  position: absolute;
+  /* Never smaller than the dial, larger when --knob-hit asks for it. Sized
+     explicitly and centred rather than stretched with insets: a range input has
+     an intrinsic width, so `left` and `right` together leave it over-constrained
+     and it keeps its own size. */
+  left: 50%;
+  top: 50%;
+  width: max(var(--knob-size), var(--knob-hit));
+  height: max(var(--knob-size), var(--knob-hit));
+  transform: translate(-50%, -50%);
+  margin: 0;
+  padding: 0;
+  opacity: 0;
+  cursor: grab;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.sq-knob input[type="range"]:active { cursor: grabbing; }
+.sq-knob:hover { --knob-track: color-mix(in oklab, var(--bg-3) 60%, var(--fg-dim)); }
+.sq-knob:has(input:focus-visible) { --knob-track: var(--accent-2); }
+.sq-knob:has(input:focus-visible) .sq-knob__dial::before { border-color: var(--accent-2); }
+
+/* Above the knob, because on a phone everything below it is under the finger. */
+.sq-knob__readout {
+  position: fixed;
+  z-index: 400;
+  transform: translate(-50%, calc(-100% - 8px));
+  padding: 3px 7px;
+  border-radius: 4px;
+  background: var(--bg-3);
+  border: 1px solid var(--accent);
+  color: var(--fg);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+  white-space: nowrap;
+}
+.sq-knob__readout[hidden] { display: none; }
+
+/* Fields hold a wide slider beside their label; a knob is square, so the label
+   goes under it. Flagged by knob.js per field so any slider left unupgraded
+   keeps its original layout. */
+.sq-field[data-knob],
+.sq-fx__ctl[data-knob],
+.sq-virus__f[data-knob],
+.sq-dx7__f[data-knob],
+.sq-guitar__f[data-knob],
+.sq-bass__f[data-knob],
+.sq-moog__freq[data-knob],
+.sq-moog__noise[data-knob] {
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  text-align: center;
+}
+.sq-field[data-knob] > label,
+.sq-fx__ctl[data-knob] > span,
+.sq-virus__f[data-knob] > span,
+.sq-guitar__f[data-knob] > span,
+.sq-bass__f[data-knob] > span,
+.sq-moog__freq[data-knob] > span,
+.sq-moog__noise[data-knob] > span {
+  font-size: 10px;
+  line-height: 1.1;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 button {
   background: var(--bg-3);
@@ -205,11 +386,11 @@ button.sq-btn--danger { color: var(--danger); }
   gap: 3px;
 }
 .sq-vol-combo > * { box-sizing: border-box; }
-.sq-track__head .sq-field.sq-vol__field .sq-vol-combo input[type="range"] {
-  width: 100%;
-  margin: 0;
-  padding: 0;
-  display: block;
+/* Volume sits above its level meter. It is the most-reached-for control on the
+   track, so it gets the biggest knob, centred over the meter. */
+.sq-track__head .sq-field.sq-vol__field .sq-vol-combo .sq-knob {
+  --knob-size: 44px;
+  align-self: center;
 }
 .sq-vol-combo .sq-track__meter {
   width: 100%;
@@ -423,7 +604,7 @@ main {
 .sq-track__synth-row:empty { display: none; }
 .sq-track__synth-row > .sq-param-group[hidden] + .sq-param-group[hidden] { /* no-op, just a placeholder */ }
 
-.sq-track__head .sq-field input[type="range"] { width: 72px; }
+.sq-track__head .sq-field .sq-knob { --knob-size: 40px; }
 .sq-track__head .sq-field label { font-size: 11px; }
 
 .sq-param-group {
@@ -435,7 +616,7 @@ main {
   border-radius: 6px;
   background: rgba(255,255,255,0.015);
 }
-.sq-param-group .sq-field input[type="range"] { width: 60px; }
+.sq-param-group .sq-field .sq-knob { --knob-size: 36px; }
 .sq-param-group--timbre { border-color: color-mix(in oklab, var(--accent) 40%, var(--border)); }
 .sq-param-group--timbre[hidden] { display: none !important; }
 .sq-param-group--osc-mix { border-color: color-mix(in oklab, var(--accent-2) 40%, var(--border)); }
@@ -452,16 +633,16 @@ main {
 }
 .sq-param-group--moog .sq-moog__osc-lbl { min-width: 32px; color: var(--fg-dim); }
 .sq-param-group--moog .sq-moog__freq { display: inline-flex; align-items: center; gap: 4px; }
-.sq-param-group--moog .sq-moog__freq input[type="range"] { width: 70px; }
+.sq-param-group--moog .sq-moog__freq .sq-knob { --knob-size: 38px; }
 .sq-param-group--moog select { padding: 2px 6px; font-size: 11px; }
 .sq-param-group--moog .sq-moog__noise { display: flex; align-items: center; gap: 6px; }
-.sq-param-group--moog .sq-moog__noise input[type="range"] { width: 70px; }
+.sq-param-group--moog .sq-moog__noise .sq-knob { --knob-size: 38px; }
 .sq-param-group--virus { border-color: color-mix(in oklab, #6ec6ff 45%, var(--border)); flex-direction: column; align-items: stretch; gap: 4px; }
 .sq-param-group--virus[hidden] { display: none !important; }
 .sq-param-group--virus .sq-virus__row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 11px; }
 .sq-param-group--virus .sq-virus__lbl { color: var(--fg-dim); min-width: 44px; }
 .sq-param-group--virus .sq-virus__f { display: inline-flex; align-items: center; gap: 4px; color: var(--fg-dim); }
-.sq-param-group--virus .sq-virus__f input[type="range"] { width: 62px; }
+.sq-param-group--virus .sq-virus__f .sq-knob { --knob-size: 34px; }
 .sq-param-group--virus select { padding: 2px 6px; font-size: 11px; }
 /* DX7. The operator rows are a grid rather than a flex row: six operators by
    eight controls only reads as an instrument if the columns line up, which is
@@ -471,24 +652,26 @@ main {
 .sq-param-group--dx7 .sq-dx7__row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 11px; }
 .sq-param-group--dx7 .sq-dx7__lbl { color: var(--fg-dim); min-width: 40px; }
 .sq-param-group--dx7 .sq-dx7__f { display: inline-flex; align-items: center; gap: 4px; color: var(--fg-dim); }
-.sq-param-group--dx7 .sq-dx7__row .sq-dx7__f input[type="range"] { width: 62px; }
+.sq-param-group--dx7 .sq-dx7__row .sq-dx7__f .sq-knob { --knob-size: 34px; }
 .sq-param-group--dx7 select { padding: 2px 6px; font-size: 11px; }
 .sq-param-group--dx7 .sq-dx7__alg { color: var(--accent); font-size: 11px; letter-spacing: 0.02em; }
 .sq-param-group--dx7 .sq-dx7__alg-fb { color: var(--fg-dim); }
 .sq-dx7__ops { display: grid; gap: 2px; overflow-x: auto; }
 .sq-dx7__ophead, .sq-dx7__oprow {
   display: grid;
-  grid-template-columns: 34px repeat(8, minmax(44px, 1fr)) 58px;
+  grid-template-columns: 34px repeat(8, minmax(32px, 1fr)) 54px;
   align-items: center;
-  gap: 4px;
-  min-width: 520px;
+  gap: 3px;
+  min-width: 400px;
 }
 .sq-dx7__ophead > span { font-size: 10px; color: var(--fg-dim); text-align: center; opacity: 0.75; }
 .sq-dx7__opn { font-size: 10px; color: var(--fg-dim); }
 .sq-dx7__oprow.is-carrier .sq-dx7__opn { color: var(--accent); }
 .sq-dx7__oprow.is-feedback .sq-dx7__opn::after { content: "↻"; margin-left: 2px; color: var(--accent-2); }
-.sq-dx7__ops .sq-dx7__f { display: flex; align-items: center; min-width: 0; }
-.sq-dx7__ops .sq-dx7__f input[type="range"] { width: 100%; min-width: 0; }
+/* Cells in the operator grid carry no label of their own — the column heads
+   name them — so they just centre their knob. */
+.sq-dx7__ops .sq-dx7__f { display: flex; align-items: center; justify-content: center; min-width: 0; }
+.sq-dx7__ops .sq-dx7__f .sq-knob { --knob-size: 26px; --knob-thickness: 4px; }
 .sq-dx7__ops select { padding: 1px 4px; font-size: 10px; }
 /* Electric guitar: four rows, one per link in the chain — tone, string, amp,
    cab — because that is the order the signal goes in. */
@@ -497,7 +680,7 @@ main {
 .sq-param-group--guitar .sq-guitar__row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 11px; }
 .sq-param-group--guitar .sq-guitar__lbl { color: var(--fg-dim); min-width: 44px; }
 .sq-param-group--guitar .sq-guitar__f { display: inline-flex; align-items: center; gap: 4px; color: var(--fg-dim); }
-.sq-param-group--guitar .sq-guitar__f input[type="range"] { width: 62px; }
+.sq-param-group--guitar .sq-guitar__f .sq-knob { --knob-size: 34px; }
 .sq-param-group--guitar select { padding: 2px 6px; font-size: 11px; }
 .sq-param-group--guitar .sq-guitar__desc { color: var(--fg-dim); font-size: 11px; opacity: 0.85; flex: 1 1 220px; min-width: 0; }
 /* Electric bass: hand, dirt, amp — the chain again, one row per link. */
@@ -506,7 +689,7 @@ main {
 .sq-param-group--bass .sq-bass__row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 11px; }
 .sq-param-group--bass .sq-bass__lbl { color: var(--fg-dim); min-width: 44px; }
 .sq-param-group--bass .sq-bass__f { display: inline-flex; align-items: center; gap: 4px; color: var(--fg-dim); }
-.sq-param-group--bass .sq-bass__f input[type="range"] { width: 62px; }
+.sq-param-group--bass .sq-bass__f .sq-knob { --knob-size: 34px; }
 .sq-param-group--bass select { padding: 2px 6px; font-size: 11px; }
 .sq-param-group--bass .sq-bass__desc { color: var(--fg-dim); font-size: 11px; opacity: 0.85; flex: 1 1 220px; min-width: 0; }
 .sq-param-group--tb303 { border-color: color-mix(in oklab, #ff7a4d 45%, var(--border)); }
@@ -518,7 +701,7 @@ main {
 .sq-param-group--granular .sq-gran__lbl { color: var(--fg-dim); }
 .sq-param-group--granular .sq-gran__sync { display: inline-flex; align-items: center; gap: 4px; color: var(--fg-dim); }
 .sq-param-group--granular select { padding: 2px 6px; font-size: 11px; }
-.sq-param-group--granular .sq-field input[type="range"] { width: 64px; }
+.sq-param-group--granular .sq-field .sq-knob { --knob-size: 36px; }
 .sq-param-group .sq-field[hidden] { display: none !important; }
 .sq-filter__group { border-color: color-mix(in oklab, var(--accent-2) 40%, var(--border)); }
 
@@ -917,7 +1100,7 @@ main {
   color: var(--fg-dim);
 }
 .sq-fx__ctl span { min-width: 30px; font-size: 11px; }
-.sq-fx__ctl input[type="range"] { width: 88px; }
+.sq-fx__ctl .sq-knob { --knob-size: 38px; }
 .sq-fx__sync-wrap { gap: 4px; }
 
 .sq-lfo__row {
@@ -938,7 +1121,7 @@ main {
 .sq-lfo__row .sq-lfo__target { color: var(--fg-dim); text-transform: lowercase; }
 .sq-lfo__row .sq-lfo__enable { color: var(--fg-dim); display: inline-flex; align-items: center; gap: 4px; }
 .sq-lfo__row .sq-field { width: 100%; }
-.sq-lfo__row .sq-field input[type="range"] { flex: 1; width: auto; min-width: 40px; }
+.sq-lfo__row .sq-field .sq-knob { --knob-size: 34px; }
 .sq-lfo__row .sq-lfo__rate-label,
 .sq-lfo__row .sq-lfo__depth-label { color: var(--fg-dim); font-size: 11px; min-width: 56px; }
 
@@ -1242,7 +1425,7 @@ body.kbd-recording .sq-track.is-kbd-active { border-color: #e5484d; box-shadow: 
   gap: 6px;
   white-space: nowrap;
 }
-.sq-step-editor .sq-se__sample-fade input[type="range"] { min-width: 0; }
+.sq-step-editor .sq-se__sample-fade .sq-knob { --knob-size: 40px; }
 
 .sq-step-editor .sq-se__sample-meta {
   display: flex;
@@ -1273,7 +1456,7 @@ body.kbd-recording .sq-track.is-kbd-active { border-color: #e5484d; box-shadow: 
   text-overflow: ellipsis;
 }
 .sq-step-editor .sq-se__field label { color: var(--fg-dim); }
-.sq-step-editor .sq-se__field input[type="range"] { width: 100%; }
+.sq-step-editor .sq-se__field .sq-knob { --knob-size: 40px; }
 .sq-step-editor .sq-se__field .sq-se__note-label,
 .sq-step-editor .sq-se__field .sq-se__vel-label { color: var(--fg); font-size: 12px; text-align: right; }
 .sq-step-editor .sq-se__actions {
@@ -1360,7 +1543,7 @@ body.kbd-recording .sq-track.is-kbd-active { border-color: #e5484d; box-shadow: 
 .sq-wt__scan-ctl[hidden] { display: none !important; }
 .sq-wt__scan-ctl label { display: flex; align-items: center; gap: 4px; }
 .sq-wt__scan-ctl select { font-size: 11px; padding: 2px 4px; }
-.sq-wt__scan-ctl input[type="range"] { width: 84px; }
+.sq-wt__scan-ctl .sq-knob { --knob-size: 38px; }
 .sq-wt__scan-rate-wrap[hidden], .sq-wt__scan-div-wrap[hidden] { display: none !important; }
 .sq-wt__hint { font-size: 10px; color: var(--fg-dim); opacity: 0.8; }
 .sq-wt__credit { font-size: 10px; color: var(--fg-dim); opacity: 0.65; }
@@ -1375,7 +1558,7 @@ body.kbd-recording .sq-track.is-kbd-active { border-color: #e5484d; box-shadow: 
 .sq-samp__row, .sq-slice__row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 11px; color: var(--fg-dim); }
 .sq-samp__slice-row { border-top: 1px solid var(--border); padding-top: 8px; margin-top: 2px; }
 .sq-samp__row select, .sq-slice__row select, .sq-slice__row input[type="number"] { font-size: 11px; padding: 2px 4px; }
-.sq-samp__row input[type="range"] { width: 90px; }
+.sq-samp__row .sq-knob { --knob-size: 38px; }
 .sq-slice__pads { display: flex; flex-wrap: wrap; gap: 4px; max-height: 96px; overflow-y: auto; }
 .sq-slice__pad { font-size: 10px; padding: 4px 6px; min-width: 34px; }
 .sq-slice__hint { font-size: 10px; color: var(--fg-dim); opacity: 0.8; }
@@ -1423,7 +1606,7 @@ body.kbd-recording .sq-track.is-kbd-active { border-color: #e5484d; box-shadow: 
 .sq-gwav__ctl-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 11px; color: var(--fg-dim); }
 .sq-gwav__ctl-row label { display: inline-flex; align-items: center; gap: 4px; }
 .sq-gwav__ctl-row select { font-size: 11px; padding: 2px 4px; }
-.sq-gwav__ctl-row input[type="range"] { width: 84px; }
+.sq-gwav__ctl-row .sq-knob { --knob-size: 38px; }
 
 /* Audio gate dialog: shown on page load until the user taps to unlock
    audio. Sits above the rest of the UI so it must be the first interaction. */
@@ -1549,7 +1732,7 @@ body.kbd-recording .sq-track.is-kbd-active { border-color: #e5484d; box-shadow: 
 
 .sq-track__mod-panel .sq-mod__ctl-row { display: flex; gap: 16px; padding-bottom: 4px; margin-bottom: 4px; border-bottom: 1px solid var(--border); }
 .sq-track__mod-panel .sq-mod__ctl { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: var(--fg-dim); }
-.sq-track__mod-panel .sq-mod__ctl input[type="range"] { width: 110px; }
+.sq-track__mod-panel .sq-mod__ctl .sq-knob { --knob-size: 40px; }
 .sq-track__mod-panel .sq-mod__rows { display: grid; gap: 4px; }
 .sq-track__mod-panel .sq-mod__add-row { display: flex; gap: 6px; align-items: center; margin-top: 4px; padding-top: 6px; border-top: 1px solid var(--border); }
 .sq-track__mod-panel .sq-mod__add-btn { font-size: 11px; padding: 4px 10px; }
@@ -1574,6 +1757,9 @@ body.kbd-recording .sq-track.is-kbd-active { border-color: #e5484d; box-shadow: 
 [data-motion="mod"] { --motion-dot: var(--accent); }
 [data-motion="aut"] { --motion-dot: var(--accent-2); }
 [data-motion="off"] { --motion-dot: var(--fg-dim); }
+/* A macro pad is the third thing that can own a parameter, alongside an lfo and
+   an automation lane — so it gets its own dot for the same reason they do. */
+[data-motion="macro"] { --motion-dot: #ff9ad5; }
 .sq-field[data-motion] > label::after,
 .sq-fx__ctl[data-motion] > span::after,
 .sq-virus__f[data-motion] > span::after,
@@ -1610,6 +1796,107 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-virus__f):not(.sq-guitar__f):not(.sq
 .sq-pmenu__none { font-size: 11px; color: var(--fg-dim); }
 .sq-pmenu__blocked { color: var(--fg-dim); opacity: 0.85; font-style: italic; }
 .sq-pmenu__add { font-size: 11px; padding: 4px 10px; justify-self: start; }
+.sq-pmenu__macro-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 11px; }
+.sq-pmenu__macro-on { color: #ff9ad5; }
+.sq-pmenu__macro-row input[type="number"] { width: 60px; padding: 3px 6px; font-size: 11px; }
+
+/* ---------- MACRO PADS -----------------------------------------------------
+   An XY surface per pad, each axis driving a list of parameters that may span
+   tracks. The pad wants to be big — it is played, not adjusted — so it takes
+   the left half on a desktop and the full width on a phone. */
+.sq-macro__modal { width: min(96vw, 860px); max-width: 96vw; gap: 10px; }
+/* Learn mode: the backdrop stops eating pointers so the control you are trying
+   to assign is actually reachable, and the panel gets out of the middle of the
+   screen. Only the modal keeps its own pointer events. */
+.sq-modal-overlay.is-learning {
+  pointer-events: none;
+  background: transparent;
+  align-content: end;
+}
+.sq-modal-overlay.is-learning .sq-macro__modal {
+  pointer-events: auto;
+  margin-bottom: 12px;
+  box-shadow: 0 0 0 1px var(--accent), 0 10px 40px rgba(0, 0, 0, 0.7);
+}
+.sq-macro__head { display: flex; align-items: center; gap: 10px; justify-content: space-between; }
+.sq-macro__tabs { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.sq-macro__tab { font-size: 11px; padding: 4px 10px; }
+.sq-macro__tab.is-on { border-color: var(--accent); color: var(--accent); }
+.sq-macro__add { font-size: 13px; padding: 2px 10px; line-height: 1; }
+.sq-macro__body { display: grid; grid-template-columns: minmax(0, 320px) minmax(0, 1fr); gap: 14px; align-items: start; }
+.sq-macro__stage { display: grid; gap: 6px; }
+
+.sq-macro__pad {
+  position: relative;
+  aspect-ratio: 1;
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background:
+    linear-gradient(to right, rgba(255,255,255,0.05) 1px, transparent 1px) 0 0 / 25% 100%,
+    linear-gradient(to top, rgba(255,255,255,0.05) 1px, transparent 1px) 0 100% / 100% 25%,
+    radial-gradient(circle at 50% 50%, rgba(194,240,74,0.06), transparent 70%),
+    var(--bg-3);
+  cursor: crosshair;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+  overflow: hidden;
+}
+.sq-macro__pad.is-held { border-color: var(--accent); }
+.sq-macro__cursor {
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  margin: -11px 0 0 -11px;
+  border-radius: 50%;
+  border: 2px solid var(--accent);
+  background: rgba(194, 240, 74, 0.18);
+  pointer-events: none;
+}
+/* Crosshair, so the position still reads when a finger covers the dot. */
+.sq-macro__cursor::before,
+.sq-macro__cursor::after {
+  content: "";
+  position: absolute;
+  background: rgba(194, 240, 74, 0.35);
+}
+.sq-macro__cursor::before { left: 50%; top: -100vh; width: 1px; height: 200vh; }
+.sq-macro__cursor::after { top: 50%; left: -100vw; height: 1px; width: 200vw; }
+/* Dimmed unless held: in momentary mode the parameters have already sprung back
+   by the time you see this, so a fully lit cursor would claim the pad is still
+   doing something. A latched pad stays lit, because it is. */
+.sq-macro__cursor { opacity: 0.4; }
+.sq-macro__pad.is-held .sq-macro__cursor,
+.sq-macro__pad.is-latched .sq-macro__cursor { opacity: 1; }
+.sq-macro__pad.is-held .sq-macro__cursor { background: rgba(194, 240, 74, 0.32); }
+
+.sq-macro__padfoot { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 11px; }
+.sq-macro__latch { display: inline-flex; align-items: center; gap: 5px; color: var(--fg); }
+.sq-macro__hint { color: var(--fg-dim); flex: 1 1 140px; min-width: 0; }
+.sq-macro__del { font-size: 11px; padding: 3px 8px; color: var(--danger); }
+
+.sq-macro__axes { display: grid; gap: 12px; }
+.sq-macro__axis { display: grid; gap: 5px; padding: 8px; border: 1px solid var(--border); border-radius: 6px; }
+.sq-macro__axis-head { display: flex; align-items: center; gap: 8px; }
+.sq-macro__axis-name { font-size: 12px; color: var(--accent-2); text-transform: uppercase; letter-spacing: 0.08em; }
+.sq-macro__learn { font-size: 11px; padding: 3px 10px; margin-left: auto; }
+.sq-macro__learn.is-on { border-color: var(--accent); color: var(--accent); }
+.sq-macro__assign { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 11px; }
+.sq-macro__assign-name { flex: 1 1 140px; min-width: 0; color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sq-macro__range { display: inline-flex; align-items: center; gap: 4px; color: var(--fg-dim); }
+.sq-macro__range input[type="number"] { width: 58px; padding: 3px 6px; font-size: 11px; }
+.sq-macro__inv { display: inline-flex; align-items: center; gap: 4px; color: var(--fg-dim); }
+.sq-macro__rm { padding: 2px 8px; font-size: 13px; line-height: 1; color: var(--fg-dim); }
+.sq-macro__empty { font-size: 11px; color: var(--fg-dim); font-style: italic; }
+.sq-macro__note { font-size: 11px; color: var(--danger); }
+
+@media (max-width: 768px) {
+  /* The pad goes full width and the assignment lists sit under it — playing is
+     the point, editing the assignments is the rare part. */
+  .sq-macro__body { grid-template-columns: minmax(0, 1fr); }
+  .sq-macro__pad { max-width: min(80vw, 420px); justify-self: center; }
+  .sq-macro__assign-name { flex: 1 1 100%; }
+}
 .sq-pmenu__modal .sq-lfo__row { grid-template-columns: 52px 52px 88px 58px minmax(0, 1fr) minmax(0, 1fr) 28px; }
 .sq-pmenu__modal .sq-lfo__row .sq-lfo__rate-label { min-width: 92px; }
 .sq-pmenu__modal .sq-lfo__row .sq-lfo__remove {
@@ -1708,7 +1995,7 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-virus__f):not(.sq-guitar__f):not(.sq
   .sq-transport .sq-field { gap: 4px; }
   .sq-transport .sq-field label { font-size: 10px; }
   .sq-transport input[type="number"] { width: 48px; padding: 5px 6px; }
-  .sq-transport input[type="range"] { width: 80px; }
+  .sq-transport .sq-knob { --knob-size: 42px; }
 
   .sq-transport .sq-scale__field {
     flex: 1 1 100%;
@@ -1844,7 +2131,7 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-virus__f):not(.sq-guitar__f):not(.sq
 
   /* ---------- TRACK HEAD ---------- */
   .sq-track__head { gap: 6px; row-gap: 4px; }
-  .sq-track__head .sq-field input[type="range"] { width: 70px; }
+  .sq-track__head .sq-field .sq-knob { --knob-size: 44px; }
   .sq-track__head .sq-field label { font-size: 10px; }
 
   .sq-track__head .sq-track__name {
@@ -1903,15 +2190,14 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-virus__f):not(.sq-guitar__f):not(.sq
 
   /* synth-row inline: full-width sliders sized for fingers */
   .sq-track__head .sq-track__synth-row { flex: 1 1 100%; }
+  /* Four knobs fit across a phone where four sliders never did — 4x44px plus
+     gaps is under 200px — so the timbre macros stay on one row and the step
+     grid keeps its place on screen. */
   .sq-track__head .sq-param-group .sq-field {
-    flex: 1 1 42%;
+    flex: 1 1 20%;
     min-width: 0;
   }
-  .sq-track__head .sq-param-group .sq-field input[type="range"] {
-    width: auto;
-    flex: 1 1 auto;
-    min-width: 40px;
-  }
+  .sq-track__head .sq-param-group .sq-field .sq-knob { --knob-size: 44px; }
 
   /* "more" toggle button injected by JS (sliders icon) */
   .sq-track__head .sq-track__more {
@@ -2069,9 +2355,9 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-virus__f):not(.sq-guitar__f):not(.sq
   /* synth-row: stack groups */
   .sq-track__synth-row { gap: 4px; flex-direction: column; align-items: stretch; }
   .sq-param-group { padding: 4px 6px; gap: 6px; flex-wrap: wrap; }
-  .sq-param-group .sq-field input[type="range"] { width: 60px; }
+  .sq-param-group .sq-field .sq-knob { --knob-size: 44px; }
   .sq-param-group--moog .sq-moog__osc-row { flex-wrap: wrap; }
-  .sq-param-group--moog .sq-moog__freq input[type="range"] { width: 60px; }
+  .sq-param-group--moog .sq-moog__freq .sq-knob { --knob-size: 42px; }
 
   /* panel-btn-group: only roll stays inline (rest live in the "more" menu) —
      let it flow beside solo/mute/clear instead of claiming a full row */
@@ -2111,7 +2397,21 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-virus__f):not(.sq-guitar__f):not(.sq
   }
   .sq-fx__ctl { gap: 4px; }
   .sq-fx__ctl span { min-width: 28px; font-size: 10px; }
-  .sq-fx__ctl input[type="range"] { width: 70px; }
+  .sq-fx__ctl .sq-knob { --knob-size: 42px; }
+
+  /* Dense engine panels on a phone. The 44px target is non-negotiable, so
+     rather than let neighbouring targets overlap in a tight grid, the knobs
+     themselves grow and the grid scrolls sideways — which .sq-dx7__ops was
+     already set up to do. */
+  .sq-dx7__ops .sq-dx7__f .sq-knob { --knob-size: 40px; --knob-thickness: 5px; }
+  .sq-dx7__ophead, .sq-dx7__oprow {
+    grid-template-columns: 34px repeat(8, minmax(44px, 1fr)) 60px;
+    min-width: 500px;
+  }
+  .sq-param-group--virus .sq-virus__f .sq-knob,
+  .sq-param-group--guitar .sq-guitar__f .sq-knob,
+  .sq-param-group--bass .sq-bass__f .sq-knob,
+  .sq-param-group--dx7 .sq-dx7__row .sq-dx7__f .sq-knob { --knob-size: 42px; }
   .sq-fx__ctl select { padding: 3px 4px; font-size: 11px; }
 
   /* lfo row: 2-column stacked layout */

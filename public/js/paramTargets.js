@@ -2,6 +2,7 @@ import { LFO_KEYS } from "./constants.js";
 import { BASS_MOD_KEYS, BASS_MOD_LABELS } from "./bass.js";
 import { DX7_MOD_KEYS, DX7_MOD_LABELS } from "./dx7.js";
 import { GUITAR_MOD_KEYS, GUITAR_MOD_LABELS } from "./guitar.js";
+import { state } from "./state.js";
 
 
 /** @typedef {import("./types.js").Track} Track */
@@ -137,14 +138,44 @@ for (const { lfo, auto } of Object.values(CONTROL_TARGETS)) {
   LFO_FOR_AUTO[auto] = lfo;
 }
 
+// The table read backwards: an automation key → the class of the control that
+// drives it. A macro pad needs this to find the slider behind a parameter, both
+// to read the base value it should return to and to move the knob while the pad
+// is played. First class wins — the granular controls appear twice (the inline
+// row and the wav modal's copy), and the track's own row is the canonical one.
+/** @type {Record<string,string>} automation key → control class */
+export const CLASS_FOR_AUTO = {};
+for (const [cls, { auto }] of Object.entries(CONTROL_TARGETS)) {
+  if (auto && !CLASS_FOR_AUTO[auto]) CLASS_FOR_AUTO[auto] = cls;
+}
+
 /** Does this track have an LFO running on `lfoKey`? @param {Track} t */
 export function hasMod(t, lfoKey) { return !!(lfoKey && t.lfoConfig?.[lfoKey]?.enabled); }
 /** Does this track have an automation lane on `autoKey`? @param {Track} t */
 export function hasAutomation(t, autoKey) { return !!(autoKey && t.automation?.[autoKey]); }
-/** An automation lane already owns the parameter this LFO key targets. @param {Track} t */
-export function autoOwns(t, lfoKey) { return hasAutomation(t, AUTO_FOR_LFO[lfoKey]); }
-/** An LFO already owns the parameter this automation key targets. @param {Track} t */
-export function modOwns(t, autoKey) { return hasMod(t, LFO_FOR_AUTO[autoKey]); }
+/** Is this track's parameter attached to a macro pad? Kept here rather than in
+ *  macro.js so the exclusivity checks stay in one place and macro.js doesn't
+ *  have to be imported by every picker. @param {Track} t */
+export function hasMacroOn(t, autoKey) {
+  if (!t || !autoKey) return false;
+  for (const pad of state.macroPads || []) {
+    for (const axis of ["x", "y"]) {
+      for (const a of pad[axis] || []) if (a.trackId === t.id && a.key === autoKey) return true;
+    }
+  }
+  return false;
+}
+/** An automation lane or a macro pad already owns the parameter this LFO key
+ *  targets. @param {Track} t */
+export function autoOwns(t, lfoKey) {
+  const auto = AUTO_FOR_LFO[lfoKey];
+  return hasAutomation(t, auto) || hasMacroOn(t, auto);
+}
+/** An LFO or a macro pad already owns the parameter this automation key
+ *  targets. @param {Track} t */
+export function modOwns(t, autoKey) {
+  return hasMod(t, LFO_FOR_AUTO[autoKey]) || hasMacroOn(t, autoKey);
+}
 
 // Names for the controls the markup labels only in passing — a bare <select>
 // sitting after a row heading ("filter 1", "unison") has no label of its own to
@@ -337,7 +368,8 @@ export function refreshParamIndicators(t) {
       // only `enabled` means anything. A lane is only there if it was added, so
       // a disabled one is worth showing as dimmed rather than hiding.
       const lane = tg.auto ? t.automation?.[tg.auto] : null;
-      const motion = (tg.lfo && t.lfoConfig?.[tg.lfo]?.enabled) ? "mod"
+      const motion = hasMacroOn(t, tg.auto) ? "macro"
+                   : (tg.lfo && t.lfoConfig?.[tg.lfo]?.enabled) ? "mod"
                    : lane?.enabled ? "aut"
                    : lane ? "off"
                    : null;
@@ -345,6 +377,42 @@ export function refreshParamIndicators(t) {
       else delete wrap.dataset.motion;
     }
   }
+}
+
+// Sliders, selects and toggles only: text and number fields keep the browser's
+// own menu, which is where cut/paste lives.
+export const CONTROL_SEL = "select, input[type=range], input[type=checkbox]";
+
+/**
+ * The parameter control an event landed on. A knob's label is a bigger target
+ * than the knob, so aiming at the word "harm" has to count as aiming at the
+ * control — otherwise the right-click menu looks broken (you get Chrome's
+ * "Look Up harm" instead). Shared by that menu and by the macro pads' learn
+ * mode, so the two agree on what counts as touching a parameter.
+ */
+export function controlFromEventTarget(target) {
+  if (!(target instanceof Element)) return null;
+  if (target.matches(CONTROL_SEL)) return target;
+  // The field that wraps the control, then the label. In that order: the volume
+  // field puts its label beside a wrapper div rather than around the slider, so
+  // starting from the label would find nothing.
+  for (const sel of [".sq-field, .sq-fx__ctl, .sq-virus__f, .sq-dx7__f", "label"]) {
+    const inside = target.closest(sel)?.querySelector(CONTROL_SEL);
+    if (inside) return inside;
+  }
+  // Row headings ("filter 1", "unison", "play") sit beside the control they name.
+  const heading = target.closest("label, span");
+  const beside = heading?.nextElementSibling;
+  return beside?.matches?.(CONTROL_SEL) ? beside : null;
+}
+
+/** The track that owns a control — panels are reparented into modals, so this
+ *  walks to the nearest element stamped with a track id (see renderTrack). */
+export function trackForControl(el) {
+  const host = el?.closest?.("[data-track-id]");
+  if (!host) return null;
+  const id = Number(host.dataset.trackId);
+  return state.tracks.find(t => t.id === id) || null;
 }
 
 /** The mod/automation targets behind a control element, or null if it has none. */

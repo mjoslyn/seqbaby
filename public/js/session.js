@@ -13,6 +13,7 @@ import { paintDiceDensity, refreshFxPanelUI, renderModPanel, syncTrackSoundUI } 
 import { flushAllPatternSounds, recallPatternSound, refreshPatternLockUI, refreshPatternSoundUI } from "./patternSound.js";
 import { syncScaleUI } from "./scaleUI.js";
 import { applyCompressorConfig, ensureFxRack, refreshCompSourceDropdowns, routeVoiceToRack } from "./signal.js";
+import { applyMacroPads, serializeMacroPads } from "./macro.js";
 import { aliasPattern, state, syncMeterUI } from "./state.js";
 import { renderStepGrid } from "./stepGrid.js";
 import { createTrack, removeTrack } from "./track.js";
@@ -44,6 +45,10 @@ export function serializeSet() {
     patternMode: state.patternMode,
     patternSwitchMode: state.patternSwitchMode,
     patternMeters: state.patternMeters.map(m => ({ num: m.num, den: m.den })),
+    // Pads are global and cross-track, so they sit up here beside the tempo
+    // rather than inside a track. Assignments are stored by track index — ids
+    // are handed out fresh by createTrack on load and would not survive.
+    macroPads: serializeMacroPads(),
     tracks: state.tracks.map(t => ({
       name: t.name,
       engineKey: t.engineKey,
@@ -554,6 +559,8 @@ export function applySet(s) {
   // MIDI access is lazy (only requested when a track uses a MIDI engine); a
   // loaded set may introduce the first MIDI track after audio init already ran.
   requestMidiIfNeeded();
+  // After the tracks exist, so the stored indices resolve to real tracks.
+  applyMacroPads(s.macroPads);
   renderPatternGrid();
   syncMeterUI();
   setStatus("set loaded");

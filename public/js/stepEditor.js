@@ -1,6 +1,7 @@
 import { BUNDLED_SAMPLES, GRANULAR_SAMPLES, GRANULAR_SAMPLE_BASE, SAMPLE_BASE, engineByKey } from "./catalog.js";
 import { loadBuffer } from "./buffers.js";
 import { setStatus } from "./dom.js";
+import { upgradeKnobs } from "./knob.js";
 import { applySampleSpeed, currentBpm } from "./lfo.js";
 import { renderRollPanel } from "./pianoRoll.js";
 import { updateGranularSpeedEnabled } from "./params.js";
@@ -57,6 +58,7 @@ export function openPanelAsModal(t, opts) {
 
   overlay.appendChild(modal);
   document.body.appendChild(overlay);
+  upgradeKnobs(overlay);
   t[modalKey] = { overlay, close };
   if (afterMount) afterMount();
 }
@@ -191,6 +193,7 @@ export function openGranularWavModal(t) {
     <button type="button" class="sq-panel__modal-close">done</button>`;
   overlay.appendChild(modal);
   document.body.appendChild(overlay);
+  upgradeKnobs(overlay);
 
   const canvas = modal.querySelector(".sq-gwav__canvas");
   const animCb = modal.querySelector(".sq-gwav__anim-cb");
@@ -564,6 +567,7 @@ export function openSampleEditorModal(t) {
     <button type="button" class="sq-panel__modal-close">done</button>`;
   overlay.appendChild(modal);
   document.body.appendChild(overlay);
+  upgradeKnobs(overlay);
 
   const canvas = modal.querySelector(".sq-samp__canvas");
   const infoEl = modal.querySelector(".sq-samp__info");
@@ -914,6 +918,7 @@ export function openTrackMenu(t) {
 
   overlay.appendChild(modal);
   document.body.appendChild(overlay);
+  upgradeKnobs(overlay);
   t._trackMenuModal = { overlay, close };
   if (t._trackMoreBtn) t._trackMoreBtn.setAttribute("aria-pressed", "true");
 }
@@ -1063,6 +1068,7 @@ export function openStepEditor(t, idx, anchorEl) {
   overlay.className = "sq-modal-overlay";
   overlay.appendChild(el);
   document.body.appendChild(overlay);
+  upgradeKnobs(overlay);
 
   const noteInput = el.querySelector(".se-note");
   const noteLbl = el.querySelector(".sq-se__note-label");

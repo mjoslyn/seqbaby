@@ -27,9 +27,16 @@ Open `http://localhost:3000/` in Chrome (claude-in-chrome tools work well).
 - Measure audio without ears: `getFloatTimeDomainData` RMS on an analyser,
   sampled in a loop. Silence floor is ~0.0002 (keep-alive source); a kick hit
   peaks ~0.2.
-- Range sliders don't respond to synthetic drags; drive them via the native
-  value setter + `dispatchEvent(new Event("input", {bubbles:true}))`, which
-  runs the app's real onInput handler.
+- Every range input is wrapped in a `.sq-knob` by `knob.js` and driven by a
+  relative pointer drag, so a synthetic pointer drag on the knob DOES work
+  (~140px of vertical travel covers the full range). Setting the native value
+  + `dispatchEvent(new Event("input", {bubbles:true}))` also still works and is
+  quicker for setting an exact value. Note the input is `opacity:0` and sized
+  to the knob, so drag at the `.sq-knob` wrapper's centre.
+- Scope control lookups to the track (`t.el.querySelector(...)`), not the
+  document: panels get reparented into modals, so `.sq-track .p-cutoff` can
+  land on a different track once a panel is open. Controls inside a closed
+  panel have a zero rect and can't be dragged until it's open.
 - FX panel per track: the "fx" button on the track row opens it.
 
 ## Gotchas

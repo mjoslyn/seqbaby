@@ -229,6 +229,41 @@
  * @property {number[]} patternRepeats
  * @property {Array<{num:number, den:number}>} patternMeters
  * @property {number} chainBarCount
+ * @property {MacroPad[]} macroPads
+ */
+
+/**
+ * One parameter on one axis of a macro pad. `key` is an automation key
+ * (AUTOMATION_TARGETS) because that namespace is the superset of what can be
+ * driven. `lo`/`hi` are where the axis's ends put the parameter, so an axis can
+ * sweep a narrow window rather than the whole range, and swapping them (or
+ * setting `invert`) runs it backwards.
+ *
+ * `trackId` is live state only — a save stores the track's *index*, since ids
+ * are handed out fresh by createTrack on load.
+ *
+ * @typedef {Object} MacroAssign
+ * @property {number} trackId
+ * @property {string} key
+ * @property {number} lo
+ * @property {number} hi
+ * @property {boolean} invert
+ * @property {number|null} [_base] where the parameter was when the pad was
+ *   touched, so a momentary gesture can put it back
+ */
+
+/**
+ * An XY macro pad. Global, not per-track: both axes may carry parameters from
+ * different tracks, which is the whole point of the thing.
+ *
+ * @typedef {Object} MacroPad
+ * @property {number} id
+ * @property {string} name
+ * @property {boolean} latch when true the pad's position sticks and commits
+ *   into the tracks' sounds; otherwise parameters spring back on release
+ * @property {{x:number, y:number}} pos 0..1, y measured upward
+ * @property {MacroAssign[]} x
+ * @property {MacroAssign[]} y
  */
 
 export {}; // ensure this file is treated as a module
