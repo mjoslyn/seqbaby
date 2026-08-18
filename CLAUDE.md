@@ -15,7 +15,7 @@ env / fx / eq / comp / mod / automation per track.
   engine scripts in order: Tone.js 15 (CDN) → `public/woscillators.js` →
   `public/js/main.js` (ES module). `middleware.ts` refreshes the Supabase
   session on every request *except* static engine assets.
-- **Engine**: ~41 dependency-free vanilla ES modules in `public/js/`. No
+- **Engine**: ~43 dependency-free vanilla ES modules in `public/js/`. No
   bundler — edit, reload. `window.seqbaby` (from `appApi.js`) exposes `state`
   and serialize/apply hooks to the React shell (typed in `app/seqbaby.d.ts`).
 - **Accounts + data**: Supabase (Postgres + Auth + RLS). Tables: `profiles`,
@@ -82,6 +82,9 @@ env / fx / eq / comp / mod / automation per track.
 - `render.js` / `stepGrid.js` / `stepEditor.js` / `pianoRoll.js` /
   `patternBar.js` / `scaleUI.js` / `meters.js` / `beat.js` — UI.
 - `keyboard.js` — computer-keyboard performance mode + capture.
+- `knob.js` — the rotary knob layer, drawn over the native range inputs without
+  replacing them. See the Knobs section below.
+- `macro.js` — XY macro pads, cross-track. See the Macro pads section below.
 - `session.js` — serialize/apply sets + track patches, legacy migration.
 - `patternSound.js` — p-lock: a track's sound stored per pattern, captured on
   the way out of a pattern and diff-applied on the way in.
@@ -566,7 +569,52 @@ do — the keyboard plays through the same bus, so every key was silent once you
 pressed stop. `Tone.Transport.start(lead, 0)` with the explicit 0 offset
 is the canonical rewind (avoids Tone 15's stop/cancel/position bugs).
 
-## Modulation: LFO vs automation (two systems)
+## Knobs (`knob.js`) — a skin over the range inputs
+
+Every parameter is a native `<input type=range>` — ~180 in the markup, and
+`#track-template` is cloned per track, so a six-track session has **1063** of
+them live. They were wired in a hundred places, read back by class, resolved
+from the DOM by the right-click menu, and written to directly with no event. So
+they stay. `upgradeKnobs(root)` wraps each one, hides it, and draws a knob over
+it; the input is still the value, the focus target and the pointer target.
+
+- **Nothing else knows.** `setParam` / `setFilter` / `setEQ` and the fx
+  `applyX()` closures still hear their own `input` events (the knob dispatches
+  one, the `attachBpmDrag` idiom); `targetsForControl` still matches the
+  input's class; `refreshParamIndicators` still finds the same `.sq-field`
+  wrapper; the parameter menu still walks from a right-click down to the input.
+- **The `value` accessor is shadowed per element**, and that is the
+  load-bearing bit. `syncTrackSoundUI`, `refreshFxPanelUI`, the DX7 / guitar /
+  bass panel syncs, `applyPatternSound` and `applySet` all assign straight to
+  `.value` without dispatching, because until now nothing was listening.
+  Shadowing means none of those call sites changed and none can be forgotten.
+- **The drag is what makes it playable**, not the shape: grab anywhere on the
+  body, the value doesn't move until the pointer does (a native range jumps to
+  your click — fatal on a control you play), travel is unbounded at 140px for
+  the full range, and resolution falls off with horizontal distance so one
+  gesture does both the sweep and the trim. No modifier needed, so fine mode
+  works on touch too; Shift also forces it.
+- Wheel, double-click-to-default, and — on touch — **long-press opens the
+  parameter menu**, re-raised as a `contextmenu` event so `paramMenu.js` does
+  the work unchanged. That is the only route to LFO / automation / macro
+  assignment on a phone.
+- **JS writes two custom properties and knows nothing about circles**:
+  `--knob-v` (0..1) and `--knob-a` (the same as an angle). All the shape is in
+  `style.css`, so a rack that reads badly as dials becomes bars by overriding
+  one selector. Paints are rAF-batched through a dirty set, so a macro pad
+  sweeping twenty parameters costs one frame, not twenty.
+- **Sizing is `--knob-size` per context** (44px volume, 36px timbre, 26px in the
+  DX7 operator grid), and `--knob-hit` guarantees a **≥44px target wherever the
+  layout has gone mobile** even when the dial is drawn smaller — keyed on
+  `(any-pointer: coarse), (max-width: 768px)`, because a touchscreen laptop and
+  a phone-width layout both need fingers' room.
+- `KNOB_EXCLUDE` keeps the wavetable's 16 harmonic bars as sliders: side by side
+  they *are* the waveform, and a row of little dials would say nothing.
+- Called from `renderTrack`, from every modal that builds controls
+  (`stepEditor.js`, `wavetableEditor.js`), from `buildLfoRow`, and once over the
+  document in `init()`. Idempotent.
+
+## Modulation: LFO vs automation vs macro (three systems)
 
 - **LFO** (`lfo.js`, mod panel): audio-rate, targets real `AudioParam`s /
   Tone Signals via `getModTarget(t, key)`. `LFO_KEYS` covers voice params,
@@ -577,22 +625,28 @@ is the canonical rewind (avoids Tone 15's stop/cancel/position bugs).
   the pattern (`automation` field), applied at step time via `setParam`-style
   setters. `canAutomate` is broader than `canModulate` since it doesn't need
   an AudioParam.
+- **Macro pads** (`macro.js`): an XY surface you play, driving a list of
+  parameters per axis that may span tracks. See the macro-pads section below.
 
-**One owner per parameter.** A parameter takes an LFO or an automation lane,
-never both — they write the same `AudioParam` from two schedules and whichever
-ran last wins until it lets go, which reads as one of them randomly dropping
-out. The two namespaces don't share a spelling (the delay wet slider is
-`delay` to the LFO and `fx.delay` to automation), so the pairing lives in
-`paramTargets.js` (`CONTROL_TARGETS` → derived `AUTO_FOR_LFO` / `LFO_FOR_AUTO`,
-plus `autoOwns` / `modOwns`). Both panel pickers filter on it, and the
-parameter menu says which side holds the control.
+**One owner per parameter.** A parameter takes an LFO, an automation lane or a
+macro axis — never two — because they write the same `AudioParam` from
+different schedules and whichever ran last wins until it lets go, which reads
+as one of them randomly dropping out. The namespaces don't share a spelling
+(the delay wet slider is `delay` to the LFO and `fx.delay` to automation and
+the macro), so the pairing lives in `paramTargets.js` (`CONTROL_TARGETS` →
+derived `AUTO_FOR_LFO` / `LFO_FOR_AUTO` / `CLASS_FOR_AUTO`, plus `autoOwns` /
+`modOwns` / `hasMacroOn`). Every picker filters on it, and the parameter menu
+says which side holds the control.
 
 **Right-click a parameter** opens `paramMenu.js`: what the control does, its
-LFO row and its automation lane — the same widgets the panels use
+LFO row, its automation lane and its macro assignment — the same widgets the panels use
 (`buildLfoRow` / `buildAutomationLane` in render.js), over the same track state
 — plus a way to attach whichever side is free. One delegated `contextmenu`
-listener installed from `init()` covers every track; it resolves the owning
-track by walking up to a `data-track-id` (stamped on the track node, every
+listener installed from `init()` covers every track; it resolves the control
+with `controlFromEventTarget` and the owning track with `trackForControl`
+(both in paramTargets.js, shared with the macro pads' learn mode so the two
+agree on what counts as touching a parameter), walking up to a
+`data-track-id` (stamped on the track node, every
 panel, every synth group, and the granular / wavetable / sample modals — panels
 get reparented into modals, so track ancestry isn't reliable).
 
@@ -620,6 +674,50 @@ target), plus `PARAM_DESCRIPTIONS` / `CONTROL_LABELS` lines where the DOM has
 nothing to read. Lookup order for both is class entry → markup `title` →
 target-key entry, so the per-engine tooltips (rewritten by
 `updatePlaitsControlsVisibility`) win over anything generic.
+
+## Macro pads (`macro.js`) — a Kaoss pad for the whole session
+
+Several XY pads, each axis driving a list of parameters that **may span
+tracks**. That crossing is the point: one thumb opening the bass filter while
+ducking the lead's reverb is a move neither the mod matrix nor the automation
+lanes can make, because both of those belong to a single track.
+
+```
+pad "sweep"   X -> bass · filter cutoff      Y -> lead · reverb wet
+                   drums · crush                  pad  · delay fbk
+```
+
+- **Assignments speak the automation namespace** (`AUTOMATION_TARGETS`), which
+  is the superset — `canAutomate` is broader than `canModulate` because it
+  doesn't need an AudioParam — and `applyAutomationAtStep` already knows how to
+  write every one of those keys with a short ramp, which is exactly what a pad
+  wants. A pad move is one call per assignment into code that already existed.
+- **The knobs move.** An LFO deliberately writes around the slider and leaves it
+  as the base, because you aren't looking at an LFO. A pad is a control you
+  stare at while playing it, so the assigned knobs sweep — the pad writes
+  `input.value` (repainting via the knob's shadowed accessor) without
+  dispatching, so a momentary move never reaches the stored sound.
+- **Momentary is non-destructive by snapshot, not by avoidance.** Rather than
+  route around the branches of `applyAutomationAtStep` that write `t.params` /
+  `t.filter`, the pad records where every assigned parameter was on
+  `pointerdown` and ramps back on release. **Latch** instead commits, by
+  dispatching each control's ordinary `input` event — which is precisely "as if
+  you had moved the knobs", so the patch, the p-lock snapshot and a save all
+  see it.
+- **Two ways to assign**: the right-click parameter menu (a third section
+  beside the LFO and the lane), and **learn** — arm an axis, then touch any
+  control. Learn puts `is-learning` on the overlay so the backdrop stops eating
+  pointers and the panel drops out of the middle of the screen; without that
+  there is no way to reach the control you're assigning.
+- **Persistence**: `state.macroPads`, serialized beside `bpm` / `scale` /
+  `patternMeters`. Assignments are stored **by track index**, not `t.id` —
+  `createTrack` hands out fresh ids on every load, so ids don't survive. Live
+  state keeps the id, so removing a track can't silently repoint an assignment.
+- Pads are **global and not p-locked** on purpose: a performance macro that
+  rearranged itself at every pattern switch would be unplayable.
+- `CLASS_FOR_AUTO` (paramTargets.js) is the automation key → control class map
+  the pad uses to find the slider behind a parameter, both to read the base it
+  returns to and to move the knob. All 162 automation keys resolve.
 
 ## p-lock — a sound per pattern (`patternSound.js`)
 
@@ -791,6 +889,9 @@ patterns.
   `capturePatternSound` / `applyPatternSound` (patternSound.js) too, or a locked
   pattern will leave it behind on a switch.
 - New engine → see Engines catalog above.
+- New macro-pad behaviour → `macro.js`; assignment targets come from
+  `AUTOMATION_TARGETS` for free, so a new automation target is macro-assignable
+  the moment it has a `CONTROL_TARGETS` entry.
 - New server data → Supabase migration + server action in `app/*/actions.ts`
   + UI in the relevant `app/*.tsx`; keep the engine side behind
   `window.seqbaby`.
@@ -821,7 +922,7 @@ Repo: https://github.com/mjoslyn/seqbaby.
   An inline marker (`window.__seqbabyServerBoot`) tells the paths apart, and
   `ScriptLoader.tsx` keeps its onload-chained injection for the soft-nav case
   (e.g. arriving from `/login`).
-- `app/EnginePreload.tsx` emits `modulepreload` for all 41 modules listed in
+- `app/EnginePreload.tsx` emits `modulepreload` for all 43 modules listed in
   `app/engineAssets.ts`. The graph is 8 levels deep, so without it the browser
   needs up to eight sequential round trips just to discover the code.
   **Adding or removing a module in `public/js/` means updating that list** —

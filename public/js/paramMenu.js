@@ -1,7 +1,8 @@
 import { AUTOMATION_TARGETS, canAutomate } from "./automation.js";
 import { lfoLabel } from "./constants.js";
 import { canModulate, syncLFO } from "./lfo.js";
-import { CONTROL_LABELS, PARAM_DESCRIPTIONS, PARAM_SCOPE_SELECTOR, autoOwns, modOwns, refreshParamIndicators, targetsForControl } from "./paramTargets.js";
+import { addMacroPad, assignToAxis, assignmentsFor, macroPads, unassign } from "./macro.js";
+import { CONTROL_LABELS, PARAM_DESCRIPTIONS, PARAM_SCOPE_SELECTOR, autoOwns, controlFromEventTarget, hasAutomation, hasMacroOn, hasMod, LFO_FOR_AUTO, modOwns, refreshParamIndicators, targetsForControl, trackForControl } from "./paramTargets.js";
 import { buildAutomationLane, buildLfoRow, renderAutomationPanel, renderModPanel } from "./render.js";
 import { state } from "./state.js";
 
@@ -14,15 +15,6 @@ import { state } from "./state.js";
 // is "what is moving THIS knob". The control → target-key map lives in
 // paramTargets.js, along with the rule that only one of the two can own a
 // parameter at a time.
-
-/** Which track owns a control — panels are reparented into modals, so this
- *  walks to the nearest element stamped with a track id (see renderTrack). */
-function trackFor(el) {
-  const host = el.closest("[data-track-id]");
-  if (!host) return null;
-  const id = Number(host.dataset.trackId);
-  return state.tracks.find(t => t.id === id) || null;
-}
 
 // What the control is called on screen — the engine relabels these (the 303's
 // "harm" slider says cutoff), so read the DOM rather than the key.
@@ -88,11 +80,16 @@ export function openParamMenu(t, spec) {
     <section class="sq-pmenu__sec">
       <div class="sq-pmenu__sec-head">per-step automation${spec.auto ? ` <span class="sq-pmenu__key">${esc(AUTOMATION_TARGETS[spec.auto]?.label ?? spec.auto)}</span>` : ""}</div>
       <div class="sq-pmenu__body sq-pmenu__body--aut"></div>
+    </section>
+    <section class="sq-pmenu__sec">
+      <div class="sq-pmenu__sec-head">macro pad</div>
+      <div class="sq-pmenu__body sq-pmenu__body--macro"></div>
     </section>`}
     <div class="sq-modal__actions"><button class="sq-modal__ok" type="button">done</button></div>
   `;
   const modBody = modal.querySelector(".sq-pmenu__body--mod");
   const autBody = modal.querySelector(".sq-pmenu__body--aut");
+  const macBody = modal.querySelector(".sq-pmenu__body--macro");
 
   const note = (text, cls) => {
     const d = document.createElement("div");
@@ -109,13 +106,57 @@ export function openParamMenu(t, spec) {
     return b;
   };
 
-  // Both sections redraw together: taking one side off frees the parameter for
-  // the other, so neither can be refreshed alone.
+  // The macro section: which pad axis holds this parameter, or the way to put
+  // it on one. Same shape as the other two — a parameter takes one owner, so
+  // attaching here is refused while an lfo or a lane has it.
+  const drawMacro = () => {
+    if (!spec.auto) { macBody.appendChild(note("this control can't go on a macro pad")); return; }
+    if (!canAutomate(t, spec.auto)) { macBody.appendChild(note("not available on this engine")); return; }
+    const held = assignmentsFor(t, spec.auto);
+    if (held.length) {
+      for (const { pad, axis, a } of held) {
+        const row = document.createElement("div");
+        row.className = "sq-pmenu__macro-row";
+        row.innerHTML = `<span class="sq-pmenu__macro-on">${esc(pad.name)} · ${axis}</span>` +
+          `<label class="sq-macro__range">from <input type="number" class="sq-pmenu__lo" min="0" max="1" step="0.01" value="${a.lo}" /></label>` +
+          `<label class="sq-macro__range">to <input type="number" class="sq-pmenu__hi" min="0" max="1" step="0.01" value="${a.hi}" /></label>`;
+        row.querySelector(".sq-pmenu__lo").addEventListener("input", e => { a.lo = Number(e.target.value); });
+        row.querySelector(".sq-pmenu__hi").addEventListener("input", e => { a.hi = Number(e.target.value); });
+        row.appendChild(addButton("remove", () => { unassign(pad, axis, a); draw(); }));
+        macBody.appendChild(row);
+      }
+      return;
+    }
+    if (hasMod(t, LFO_FOR_AUTO[spec.auto])) {
+      macBody.appendChild(note("an lfo has this parameter — remove it to use a macro", "sq-pmenu__blocked"));
+      return;
+    }
+    if (hasAutomation(t, spec.auto)) {
+      macBody.appendChild(note("automation has this parameter — remove its lane to use a macro", "sq-pmenu__blocked"));
+      return;
+    }
+    macBody.appendChild(note("not on a macro pad"));
+    const pads = macroPads();
+    if (!pads.length) pads.push(addMacroPad());
+    for (const pad of pads) {
+      for (const axis of ["x", "y"]) {
+        macBody.appendChild(addButton(`+ ${pad.name} · ${axis}`, () => {
+          assignToAxis(pad, axis, t, spec.auto);
+          draw();
+        }));
+      }
+    }
+  };
+
+  // All three sections redraw together: taking one off frees the parameter for
+  // the others, so none can be refreshed alone.
   const draw = () => {
     refreshParamIndicators(t);      // the label's dot follows whatever happens here
     if (settingOnly) return;
     modBody.replaceChildren();
     autBody.replaceChildren();
+    macBody.replaceChildren();
+    drawMacro();
 
     if (!spec.lfo) modBody.appendChild(note("this control can't be modulated"));
     else if (!canModulate(t, spec.lfo)) modBody.appendChild(note("not modulatable on this engine"));
@@ -168,28 +209,6 @@ export function openParamMenu(t, spec) {
   state._paramMenu = { overlay, close };
 }
 
-// Sliders, selects and toggles only: text and number fields keep the browser's
-// own menu, which is where cut/paste lives.
-const CONTROL_SEL = "select, input[type=range], input[type=checkbox]";
-
-// A slider is a few pixels tall and its label is the bigger target, so aiming
-// at the word "harm" has to count as aiming at the slider — otherwise the menu
-// looks broken (you get Chrome's "Look Up harm" instead).
-function controlFromEventTarget(target) {
-  if (target.matches(CONTROL_SEL)) return target;
-  // The field that wraps the control, then the label. In that order: the volume
-  // field puts its label beside a wrapper div rather than around the slider, so
-  // starting from the label would find nothing.
-  for (const sel of [".sq-field, .sq-fx__ctl, .sq-virus__f, .sq-dx7__f", "label"]) {
-    const inside = target.closest(sel)?.querySelector(CONTROL_SEL);
-    if (inside) return inside;
-  }
-  // Row headings ("filter 1", "unison", "play") sit beside the control they name.
-  const heading = target.closest("label, span");
-  const beside = heading?.nextElementSibling;
-  return beside?.matches?.(CONTROL_SEL) ? beside : null;
-}
-
 /**
  * One document-level contextmenu listener for every parameter control, present
  * and future — track DOM is rebuilt constantly (engine switches, session
@@ -206,7 +225,7 @@ export function installParamContextMenu() {
     const targets = targetsForControl(el)
       || (el.closest(PARAM_SCOPE_SELECTOR) ? { lfo: null, auto: null } : null);
     if (!targets) return;                    // not a parameter — native menu
-    const t = trackFor(el);
+    const t = trackForControl(el);
     if (!t) return;
     e.preventDefault();
     openParamMenu(t, {

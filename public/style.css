@@ -1757,6 +1757,9 @@ body.kbd-recording .sq-track.is-kbd-active { border-color: #e5484d; box-shadow: 
 [data-motion="mod"] { --motion-dot: var(--accent); }
 [data-motion="aut"] { --motion-dot: var(--accent-2); }
 [data-motion="off"] { --motion-dot: var(--fg-dim); }
+/* A macro pad is the third thing that can own a parameter, alongside an lfo and
+   an automation lane — so it gets its own dot for the same reason they do. */
+[data-motion="macro"] { --motion-dot: #ff9ad5; }
 .sq-field[data-motion] > label::after,
 .sq-fx__ctl[data-motion] > span::after,
 .sq-virus__f[data-motion] > span::after,
@@ -1793,6 +1796,107 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-virus__f):not(.sq-guitar__f):not(.sq
 .sq-pmenu__none { font-size: 11px; color: var(--fg-dim); }
 .sq-pmenu__blocked { color: var(--fg-dim); opacity: 0.85; font-style: italic; }
 .sq-pmenu__add { font-size: 11px; padding: 4px 10px; justify-self: start; }
+.sq-pmenu__macro-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 11px; }
+.sq-pmenu__macro-on { color: #ff9ad5; }
+.sq-pmenu__macro-row input[type="number"] { width: 60px; padding: 3px 6px; font-size: 11px; }
+
+/* ---------- MACRO PADS -----------------------------------------------------
+   An XY surface per pad, each axis driving a list of parameters that may span
+   tracks. The pad wants to be big — it is played, not adjusted — so it takes
+   the left half on a desktop and the full width on a phone. */
+.sq-macro__modal { width: min(96vw, 860px); max-width: 96vw; gap: 10px; }
+/* Learn mode: the backdrop stops eating pointers so the control you are trying
+   to assign is actually reachable, and the panel gets out of the middle of the
+   screen. Only the modal keeps its own pointer events. */
+.sq-modal-overlay.is-learning {
+  pointer-events: none;
+  background: transparent;
+  align-content: end;
+}
+.sq-modal-overlay.is-learning .sq-macro__modal {
+  pointer-events: auto;
+  margin-bottom: 12px;
+  box-shadow: 0 0 0 1px var(--accent), 0 10px 40px rgba(0, 0, 0, 0.7);
+}
+.sq-macro__head { display: flex; align-items: center; gap: 10px; justify-content: space-between; }
+.sq-macro__tabs { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.sq-macro__tab { font-size: 11px; padding: 4px 10px; }
+.sq-macro__tab.is-on { border-color: var(--accent); color: var(--accent); }
+.sq-macro__add { font-size: 13px; padding: 2px 10px; line-height: 1; }
+.sq-macro__body { display: grid; grid-template-columns: minmax(0, 320px) minmax(0, 1fr); gap: 14px; align-items: start; }
+.sq-macro__stage { display: grid; gap: 6px; }
+
+.sq-macro__pad {
+  position: relative;
+  aspect-ratio: 1;
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background:
+    linear-gradient(to right, rgba(255,255,255,0.05) 1px, transparent 1px) 0 0 / 25% 100%,
+    linear-gradient(to top, rgba(255,255,255,0.05) 1px, transparent 1px) 0 100% / 100% 25%,
+    radial-gradient(circle at 50% 50%, rgba(194,240,74,0.06), transparent 70%),
+    var(--bg-3);
+  cursor: crosshair;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+  overflow: hidden;
+}
+.sq-macro__pad.is-held { border-color: var(--accent); }
+.sq-macro__cursor {
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  margin: -11px 0 0 -11px;
+  border-radius: 50%;
+  border: 2px solid var(--accent);
+  background: rgba(194, 240, 74, 0.18);
+  pointer-events: none;
+}
+/* Crosshair, so the position still reads when a finger covers the dot. */
+.sq-macro__cursor::before,
+.sq-macro__cursor::after {
+  content: "";
+  position: absolute;
+  background: rgba(194, 240, 74, 0.35);
+}
+.sq-macro__cursor::before { left: 50%; top: -100vh; width: 1px; height: 200vh; }
+.sq-macro__cursor::after { top: 50%; left: -100vw; height: 1px; width: 200vw; }
+/* Dimmed unless held: in momentary mode the parameters have already sprung back
+   by the time you see this, so a fully lit cursor would claim the pad is still
+   doing something. A latched pad stays lit, because it is. */
+.sq-macro__cursor { opacity: 0.4; }
+.sq-macro__pad.is-held .sq-macro__cursor,
+.sq-macro__pad.is-latched .sq-macro__cursor { opacity: 1; }
+.sq-macro__pad.is-held .sq-macro__cursor { background: rgba(194, 240, 74, 0.32); }
+
+.sq-macro__padfoot { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 11px; }
+.sq-macro__latch { display: inline-flex; align-items: center; gap: 5px; color: var(--fg); }
+.sq-macro__hint { color: var(--fg-dim); flex: 1 1 140px; min-width: 0; }
+.sq-macro__del { font-size: 11px; padding: 3px 8px; color: var(--danger); }
+
+.sq-macro__axes { display: grid; gap: 12px; }
+.sq-macro__axis { display: grid; gap: 5px; padding: 8px; border: 1px solid var(--border); border-radius: 6px; }
+.sq-macro__axis-head { display: flex; align-items: center; gap: 8px; }
+.sq-macro__axis-name { font-size: 12px; color: var(--accent-2); text-transform: uppercase; letter-spacing: 0.08em; }
+.sq-macro__learn { font-size: 11px; padding: 3px 10px; margin-left: auto; }
+.sq-macro__learn.is-on { border-color: var(--accent); color: var(--accent); }
+.sq-macro__assign { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 11px; }
+.sq-macro__assign-name { flex: 1 1 140px; min-width: 0; color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sq-macro__range { display: inline-flex; align-items: center; gap: 4px; color: var(--fg-dim); }
+.sq-macro__range input[type="number"] { width: 58px; padding: 3px 6px; font-size: 11px; }
+.sq-macro__inv { display: inline-flex; align-items: center; gap: 4px; color: var(--fg-dim); }
+.sq-macro__rm { padding: 2px 8px; font-size: 13px; line-height: 1; color: var(--fg-dim); }
+.sq-macro__empty { font-size: 11px; color: var(--fg-dim); font-style: italic; }
+.sq-macro__note { font-size: 11px; color: var(--danger); }
+
+@media (max-width: 768px) {
+  /* The pad goes full width and the assignment lists sit under it — playing is
+     the point, editing the assignments is the rare part. */
+  .sq-macro__body { grid-template-columns: minmax(0, 1fr); }
+  .sq-macro__pad { max-width: min(80vw, 420px); justify-self: center; }
+  .sq-macro__assign-name { flex: 1 1 100%; }
+}
 .sq-pmenu__modal .sq-lfo__row { grid-template-columns: 52px 52px 88px 58px minmax(0, 1fr) minmax(0, 1fr) 28px; }
 .sq-pmenu__modal .sq-lfo__row .sq-lfo__rate-label { min-width: 92px; }
 .sq-pmenu__modal .sq-lfo__row .sq-lfo__remove {

@@ -196,6 +196,7 @@ export const STUDIO_BODY = String.raw`
     <button id="kbd-capture" class="sq-btn--ghost sq-icon-btn" type="button" aria-label="capture keyboard notes" title="capture the notes you just played on the keyboard into the active track (retroactive)"></button>
     <div class="sq-field"><label for="bpm">bpm</label><input id="bpm" type="number" value="110" min="40" max="240" /></div>
     <div class="sq-field"><label for="swing">swing</label><input id="swing" type="range" min="0" max="0.5" step="0.01" value="0" /></div>
+    <button id="macro-pads" class="sq-btn--ghost" type="button" title="xy macro pads — one gesture moving parameters across several tracks at once">macro</button>
     </div><!-- /sq-transport__main -->
     <div class="sq-transport__right">
       <button id="metronome" class="sq-btn--ghost sq-icon-btn" aria-pressed="false" aria-label="metronome" title="metronome click on the downbeat"></button>
