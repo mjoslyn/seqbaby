@@ -24,6 +24,7 @@ const SECTIONS = [
   ["sampler", "Samples"],
   ["wavetable", "The wavetable editor"],
   ["shaping", "Filter, effects and dynamics"],
+  ["bus", "Fx buses"],
   ["lock", "p-lock"],
   ["motion", "Modulation and automation"],
   ["saving", "Saving, sharing and export"],
@@ -155,6 +156,7 @@ export default function ManualPage() {
                 <tr><td>spd</td><td>Plays this track faster or slower than the rest, from 1/16 to 16 times.</td></tr>
                 <tr><td>vol</td><td>Track volume, with its level meter behind the slider.</td></tr>
                 <tr><td>solo / mute</td><td>Hear only this track, or silence it.</td></tr>
+                <tr><td>out</td><td>Where the track goes: straight to the master, or into an fx bus. Only appears once a bus exists. See <a href="#bus">fx buses</a>.</td></tr>
                 <tr><td>p-lock</td><td>Gives this track a sound of its own in the pattern you are on. Per pattern, so it changes as you move between them. See <a href="#lock">below</a>.</td></tr>
                 <tr><td>clear</td><td>Empties this pattern on this track.</td></tr>
                 <tr><td>dice</td><td>Generates a new pattern. Keep pressing until something sticks. The fill level behind the icon is how busy the roll comes out — drag the dice up or down to set it.</td></tr>
@@ -670,6 +672,41 @@ export default function ManualPage() {
           <p>
             <span className={styles.ui}>glide</span> lives here too: it slides the pitch
             between notes rather than jumping, for portamento leads and basses.
+          </p>
+        </section>
+
+        <section className={styles.section} id="bus">
+          <h2>Fx buses</h2>
+          <p>
+            Everything in the panels above belongs to one track. So does the mod
+            matrix, and so do the automation lanes. An <span className={styles.ui}>fx bus</span>{" "}
+            is how several tracks come to share them: it is a track with no
+            instrument in it, and other tracks are routed through it instead of
+            going straight to the master.
+          </p>
+          <p>
+            Press <span className={styles.ui}>+ add fx bus</span> under the tracks (or
+            pick <span className={styles.ui}>fx bus</span> from any track&apos;s engine
+            dropdown). An <span className={styles.ui}>out</span> control then appears on
+            every track: set it to the bus and that track arrives there with its own
+            sound intact, exactly as an output assignment works on a mixer.
+          </p>
+          <p>
+            The bus itself is an ordinary track in every other respect. Its filter,
+            its effects, its eq and its compressor act on everything feeding it at
+            once; its <span className={styles.ui}>mod</span> panel sweeps that whole
+            group with one LFO; its <span className={styles.ui}>aut</span> lanes draw
+            per-step movement across all of it; and it can be{" "}
+            <a href="#lock">p-locked</a>, so the group is drenched in one pattern and
+            dry in the next. A bus can also be sent into another bus. Sends that
+            would loop back on themselves are refused.
+          </p>
+          <p>
+            A bus plays no notes, so its step grid and roll are gone.{" "}
+            <span className={styles.ui}>mute</span> on a bus cuts the audio passing
+            through it — everywhere else mute only withholds a track&apos;s notes, and
+            a bus has none. <span className={styles.ui}>solo</span> on a bus keeps
+            whatever feeds it, which is what you meant by soloing it.
           </p>
         </section>
 

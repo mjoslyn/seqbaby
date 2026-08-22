@@ -582,6 +582,13 @@ export function init() {
     createTrack({ name: `track ${state.tracks.length + 1}`, engineKey: "plaits:0" });
   });
 
+  // The fx bus is reachable from the engine dropdown like everything else, but
+  // it isn't an instrument and nobody goes looking for it there.
+  document.getElementById("add-bus")?.addEventListener("click", () => {
+    const n = state.tracks.filter(t => t.engineKey === "bus").length + 1;
+    createTrack({ name: n === 1 ? "bus" : `bus ${n}`, engineKey: "bus" });
+  });
+
   // Computer keyboard → notes. On desktop it's always active — letter keys play
   // the active track's voice unless a text field is focused (see keyboard.js).
   // Skipped on mobile: no physical keyboard, and the kbd controls are hidden by

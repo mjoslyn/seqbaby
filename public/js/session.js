@@ -9,10 +9,10 @@ import { applySampleSpeed, defaultLFOConfig, disposeLFOs, syncAllLFOs } from "./
 import { guessIsDrumKit, parseMeter } from "./meter.js";
 import { updatePlaitsControlsVisibility } from "./params.js";
 import { renderPatternGrid } from "./patternBar.js";
-import { paintDiceDensity, refreshFxPanelUI, renderModPanel, syncTrackSoundUI } from "./render.js";
+import { applyBusMute, paintDiceDensity, refreshFxPanelUI, renderModPanel, syncTrackSoundUI } from "./render.js";
 import { flushAllPatternSounds, recallPatternSound, refreshPatternLockUI, refreshPatternSoundUI } from "./patternSound.js";
 import { syncScaleUI } from "./scaleUI.js";
-import { applyCompressorConfig, ensureFxRack, refreshCompSourceDropdowns, routeVoiceToRack } from "./signal.js";
+import { applyCompressorConfig, ensureFxRack, refreshAllTrackOutputs, refreshCompSourceDropdowns, refreshOutputSelects, routeVoiceToRack, wouldFeedback } from "./signal.js";
 import { applyMacroPads, serializeMacroPads } from "./macro.js";
 import { aliasPattern, state, syncMeterUI } from "./state.js";
 import { renderStepGrid } from "./stepGrid.js";
@@ -84,6 +84,19 @@ export function serializeSet() {
       // pattern keeps its own in the pattern below.
       baseSound: t.baseSound ? JSON.parse(JSON.stringify(t.baseSound)) : null,
       muted: t.muted, soloed: t.soloed,
+      // The send, stored by track INDEX rather than id: createTrack hands out
+      // fresh ids on every load, so an id wouldn't survive the round trip (the
+      // macro pads store their assignments the same way, for the same reason).
+      // -1 means the master.
+      outIndex: t.out && t.out !== "master"
+        ? state.tracks.findIndex(x => String(x.id) === String(t.out))
+        : -1,
+      // The sidechain source, by index for exactly the same reason. `comp` above
+      // still carries the raw id for older readers, but this is what load uses.
+      // -1 means self.
+      compSourceIndex: t.comp?.source && t.comp.source !== "self"
+        ? state.tracks.findIndex(x => String(x.id) === String(t.comp.source))
+        : -1,
       isDrumKit: !!t.isDrumKit,
       glide: t.glide, speed: t.speed ?? 1, sampleSpeedMode: t.sampleSpeedMode ?? "native",
       pitchLock: t.pitchLock ?? true,
@@ -552,6 +565,34 @@ export function applySet(s) {
     updatePlaitsControlsVisibility(t);
     renderStepGrid(t);
   }
+  // Cross-track references resolve now that every track exists — both are
+  // stored as indices (see serializeSet), and the track pointed at has to be
+  // real before anything can point at it.
+  (s.tracks || []).forEach((td, i) => {
+    const t = state.tracks[i];
+    if (!t) return;
+    const j = Number.isInteger(td.outIndex) ? td.outIndex : -1;
+    const bus = j >= 0 ? state.tracks[j] : null;
+    t.out = bus && bus !== t && bus.engineKey === "bus" ? String(bus.id) : "master";
+    // Sidechain source. A session saved before compSourceIndex existed carries
+    // only the id it had when it was written, and nothing in the file maps that
+    // to a track — so those fall back to self rather than guess at a track and
+    // duck the wrong one. (Before this they kept the dead id and silently
+    // self-compressed instead, which at least the panel now agrees with.)
+    const k = Number.isInteger(td.compSourceIndex) ? td.compSourceIndex : -1;
+    const src = k >= 0 ? state.tracks[k] : null;
+    t.comp.source = src && src !== t ? String(src.id) : "self";
+  });
+  // A chain can still describe a loop — a hand-edited song, or a bus that was
+  // re-engined between the save and now. Drop any send that does.
+  for (const t of state.tracks) {
+    if (t.out !== "master" && wouldFeedback(t, t.out)) t.out = "master";
+  }
+  refreshOutputSelects();
+  if (state.ready) {
+    refreshAllTrackOutputs();
+    for (const t of state.tracks) applyBusMute(t);
+  }
   // Re-populate comp-source dropdowns now that every track exists, so cross-
   // track sidechain selections from the saved set resolve to a real option.
   refreshCompSourceDropdowns();
@@ -704,6 +745,20 @@ export function applyTrackPatch(t, patch) {
     syncAllLFOs(t);
   }
   requestMidiIfNeeded();
+  // A patch can carry an engine, so this track may have just become — or
+  // stopped being — a bus, and its voice was rebuilt either way.
+  refreshOutputSelects();
+  if (state.ready) {
+    refreshAllTrackOutputs();
+    applyBusMute(t);
+  }
+  // A patch is a portable SOUND, but `comp.source` in one is a track id, which
+  // means nothing in another session (or after this one has reloaded). Applying
+  // one within the session it was saved in still resolves; anything else falls
+  // back to self here rather than silently self-compressing while the panel
+  // says otherwise.
+  refreshCompSourceDropdowns();
+  if (state.ready) applyCompressorConfig(t);
   updatePlaitsControlsVisibility(t);
   renderStepGrid(t);
   t._refreshSaveEnabled?.();

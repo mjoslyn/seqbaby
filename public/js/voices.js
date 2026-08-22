@@ -2649,6 +2649,69 @@ export class MidiVoice {
 }
 
 /**
+ * The fx bus. Not an instrument: a summing point other tracks are routed into,
+ * so one filter / eq / comp / fx rack — and one mod matrix, and one set of
+ * automation lanes — shapes all of them together.
+ *
+ * Everything past the summing gain is the ordinary per-track chain, because a
+ * bus IS an ordinary track; `routeVoiceToRack` wires it exactly as it wires a
+ * synth. Two gains rather than one: `input` carries the bus fader (so `vol` is
+ * a real AudioParam the LFO and the automation lanes can ramp), and `muteGain`
+ * carries the mute, which on a bus really has to cut the audio — a bus plays no
+ * notes, so the transport's mute (which only withholds triggers) would do
+ * nothing at all.
+ */
+export class BusVoice {
+  constructor(ctx, key, params) {
+    this.ctx = ctx;
+    this.type = "bus";
+    this.poly = true;
+    this.key = key;
+    this.input = ctx.createGain();
+    this.input.gain.value = params?.vol ?? 0.8;
+    this.muteGain = ctx.createGain();
+    this.muteGain.gain.value = 1;
+    this.input.connect(this.muteGain);
+  }
+  canInPlaceChange(key) { return key === "bus"; }
+  setEngine() {}
+  setParam(key, val) {
+    if (key !== "vol") return;   // a bus has no timbre — the rack downstream is its sound
+    const v = Math.max(0, Math.min(2, Number(val) || 0));
+    try { this.input.gain.setTargetAtTime(v, this.ctx.currentTime, 0.01); }
+    catch { this.input.gain.value = v; }
+  }
+  getAudioParam(key) { return key === "vol" ? this.input.gain : null; }
+  /** Where feeder tracks connect — ahead of the fader, so it rides the sum. */
+  getInputNode() { return this.input; }
+  /** Post-fader, pre-rack: what a sidechain compressor on another track reads. */
+  getOutputNode() { return this.muteGain; }
+  setDestination(node) {
+    try { this.muteGain.disconnect(); } catch {}
+    if (node) { try { this.muteGain.connect(node); } catch {} }
+  }
+  setMuted(on) {
+    const g = this.muteGain.gain;
+    const now = this.ctx.currentTime;
+    // Ramped, not switched: a bus can be carrying the whole mix, and a step
+    // change on that would click.
+    try {
+      g.cancelScheduledValues(now);
+      g.setValueAtTime(g.value, now);
+      g.linearRampToValueAtTime(on ? 0 : 1, now + 0.02);
+    } catch { g.value = on ? 0 : 1; }
+  }
+  hit() {}        // no notes of its own
+  noteOn() {}
+  noteOff() {}
+  silence() {}    // nothing to stop here — the feeding tracks get silenced themselves
+  dispose() {
+    try { this.input.disconnect(); } catch {}
+    try { this.muteGain.disconnect(); } catch {}
+  }
+}
+
+/**
  * Construct the runtime voice for an engine key. Dispatches on engine type
  * (plaits / drum-synth / sample / custom / eleven / upload / midi).
  * @param {AudioContext} ctx
@@ -2669,6 +2732,7 @@ export function buildVoiceForEngine(ctx, key, params, track) {
     case "saved":      return new CustomToneVoice(ctx, key, params, e.config);
     case "granular":   return new GranularVoice(ctx, key, params, track);
     case "wavetable":  return new WavetableVoice(ctx, key, params, track);
+    case "bus":        return new BusVoice(ctx, key, params);
   }
   throw new Error("unknown engine type: " + e.type);
 }

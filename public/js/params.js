@@ -2,8 +2,8 @@ import { ENGINE_MACRO_TIPS, PLAITS_MACRO_TIPS, engineByKey } from "./catalog.js"
 import { DX7_ALG_FEEDBACK, DX7_ALG_LABELS, dx7Carriers } from "./dx7.js";
 import { applySampleSpeed, disposeLFOs, syncAllLFOs } from "./lfo.js";
 import { redetectDrumKit } from "./meter.js";
-import { refreshFxPanelUI, updateMidiUI } from "./render.js";
-import { ensureFxRack, routeVoiceToRack } from "./signal.js";
+import { applyBusMute, refreshFxPanelUI, updateMidiUI } from "./render.js";
+import { ensureFxRack, refreshAllTrackOutputs, refreshOutputSelects, routeVoiceToRack } from "./signal.js";
 import { state } from "./state.js";
 import { requestMidiIfNeeded } from "./transport.js";
 import { buildVoiceForEngine, GRAN_DEFAULTS } from "./voices.js";
@@ -305,6 +305,11 @@ export function updatePlaitsControlsVisibility(t) {
   const isSampler = t.engineKey === "sampler";
   const wavBtn = t.el.querySelector(".sq-track__wav");
   if (wavBtn) wavBtn.disabled = !(isGranular || isSampler || isWavetable);
+  // An fx bus is a track with no instrument in it. Everything that writes or
+  // plays notes goes away (style.css keys off this class); the signal chain, the
+  // mod matrix and the automation lanes stay, which is the entire point of it
+  // being a track. The envelope goes too — it only fires on a note.
+  t.el.classList.toggle("is-bus", t.engineKey === "bus");
 }
 
 // Force all fx wet levels to 0 (100% dry) — used when switching a track to the
@@ -368,6 +373,9 @@ export function setEngineKey(t, newKey) {
   if (e.type === "saved") {
     t.customConfig = e.config;
   }
+  // Becoming (or ceasing to be) a bus changes what every other track may send
+  // to, and the dropdowns are how a send is picked.
+  refreshOutputSelects();
   if (!t.voice) { updateMidiUI(t); updatePlaitsControlsVisibility(t); return; }
   if (t.voice.canInPlaceChange(newKey) && t.voice.type === e.type) {
     t.voice.setEngine(newKey);
@@ -389,6 +397,10 @@ export function setEngineKey(t, newKey) {
   // MIDI access is lazy — this switch may be the first MIDI engine in the
   // session. Requests in the background, then wires outputs + dropdowns.
   if (e.type === "midi") requestMidiIfNeeded();
+  // The voice was rebuilt, so a bus's summing gain is a new node and the tracks
+  // feeding it are still connected to the old one.
+  refreshAllTrackOutputs();
+  applyBusMute(t);
   updateMidiUI(t);
   updatePlaitsControlsVisibility(t);
   t._refreshSaveEnabled?.();

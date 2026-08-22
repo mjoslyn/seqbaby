@@ -67,7 +67,9 @@ env / fx / eq / comp / mod / automation per track.
   emulator builder functions.
 - `state.js` — global `state`, `emptyPattern`, `aliasPattern`, `switchPattern`.
 - `catalog.js` — `buildEngineCatalog()`, saved-patch storage, engine dropdowns.
-- `signal.js` — per-track graph wiring (filter/eq/comp/fxRack), filter env.
+- `signal.js` — per-track graph wiring (filter/eq/comp/fxRack), filter env, and
+  output routing: `t.out` → master or an fx bus track (`routeTrackOutput`,
+  `wouldFeedback`, `soloAudibleTracks`, `refreshOutputSelects`).
 - `fxRack.js` — `FXRack` chain + `defaultFxConfig`.
 - `lfo.js` — LFO configs, `getModTarget`/`canModulate`, tempo sync, setter loop.
 - `automation.js` — per-step parameter automation (`AUTOMATION_TARGETS`).
@@ -78,7 +80,10 @@ env / fx / eq / comp / mod / automation per track.
 - `syncTrackSoundUI(t)` (render.js) — writes a track's whole sound back into its
   controls. The one place that job lives: session load, patch load and a
   pattern-lock recall all call it (it used to be copy-pasted in two of them,
-  which is how the eq/comp sliders came to be missing from session load).
+  which is how the eq/comp sliders came to be missing from session load — and
+  the sidechain-source select, which is in the p-lock snapshot, was missing from
+  all three). It writes the source select's VALUE only; the options belong to
+  `refreshCompSourceDropdowns`, which is the one that knows the track list.
 - `render.js` / `stepGrid.js` / `stepEditor.js` / `pianoRoll.js` /
   `patternBar.js` / `scaleUI.js` / `meters.js` / `beat.js` — UI.
 - `keyboard.js` — computer-keyboard performance mode + capture.
@@ -124,8 +129,11 @@ Account features need `NEXT_PUBLIC_SUPABASE_URL` + `NEXT_PUBLIC_SUPABASE_ANON_KE
 
 ```
 voice → filterNode → eqNode → compressor → fxRack → masterGain → masterLimiter → ctx.destination
-                                              ↑                        ↑
-                       per-track meterAnalyser taps fxRack.output      masterAnalyser taps masterGain (pre-limiter)
+                                              ↑           ↑            ↑
+       per-track meterAnalyser taps fxRack.output         │   masterAnalyser taps masterGain (pre-limiter)
+                                                          │
+                            or, when t.out names an fx bus track, into that
+                            track's BusVoice input and down its chain instead
 ```
 
 - `filterNode` — native `BiquadFilterNode` (lowpass). `fireFilterEnv(t, time,
@@ -141,6 +149,8 @@ voice → filterNode → eqNode → compressor → fxRack → masterGain → mas
   matters for LFO/automation targets.
 - Master bus: `masterGain` → `masterLimiter` (DynamicsCompressor as brickwall
   safety, threshold −2dB ratio 20) → destination.
+- Where the rack's output goes is `t.out` — `"master"` or an fx bus track's id
+  (`routeTrackOutput` in signal.js). See the fx bus section below.
 
 ## Audio start / unlock (hard-won — don't regress)
 
@@ -189,6 +199,7 @@ All of this lives in `main.js` `init()` and `transport.js`:
 | `granular`    | `GranularVoice`  | Granular sampler (`dm:granular`, "texture" group). See the granular section below. |
 | `wavetable`   | `WavetableVoice` | Multi-frame AKWF wavetable synth (`wt:akwf`), morphable, editable in `wavetableEditor.js`. |
 | `midi`        | `MidiVoice`      | Web MIDI out; converts audio time → DOMHighResTimeStamp for `output.send`. |
+| `bus`         | `BusVoice`       | The fx bus (`bus`). No instrument — a summing gain other tracks are routed into, plus a mute gain, then the ordinary per-track chain. See the fx bus section below. |
 
 Voice interface: `hit(midi, time, dur, vel, opts?)`, `setParam`,
 `getAudioParam`, `setEngine`, `canInPlaceChange`, `getOutputNode`,
@@ -519,6 +530,7 @@ Switching patterns = re-aliasing + re-render.
 ### Track (`state.tracks[]`) — highlights beyond the aliased pattern fields
 
 `id, name, engineKey, length, accents(Set)`, flags `muted/soloed/isDrumKit`,
+`out` (`"master"` or an fx bus track's id — where the rack's output goes),
 `baseSound` (the sound every unlocked pattern shares),
 `glide, swing, density, speed` (`density` is the
 dice button's fill level — how full `randomizeMelody` rolls; drag the dice
@@ -675,6 +687,59 @@ nothing to read. Lookup order for both is class entry → markup `title` →
 target-key entry, so the per-engine tooltips (rewritten by
 `updatePlaitsControlsVisibility`) win over anything generic.
 
+## Fx buses (`bus` engine — `BusVoice` in voices.js, routing in signal.js)
+
+Everything that shapes a sound in this app belongs to one track: the rack and
+the mod matrix are the track's, the automation lanes are the track's pattern's.
+An **fx bus** is how several tracks come to share them — a track with no
+instrument in it, that other tracks are routed through on the way to the master.
+
+```
+bass  ─┐
+lead  ─┼─▶ BusVoice.input ─▶ filter ─▶ eq ─▶ comp ─▶ fxRack ─▶ masterGain
+drums ─┘   (fader, vol)      one filter, one rack, one mod matrix, one set of lanes
+```
+
+- **It is an engine, not a fourth kind of node**, and that is the whole design:
+  the summing gain is the only new part, and everything downstream of it is the
+  ordinary per-track chain. p-lock, the mod panel, the automation lanes, the
+  macro pads, the meter, save/load and the parameter menu all work on a bus
+  without knowing it exists.
+- **The tap is `fxRack.output`** — a track keeps its own sound on the way to the
+  bus, exactly as a mixer's output assignment works. `routeTrackOutput(t)`
+  points it at `outputTargetFor(t)`; `refreshAllTrackOutputs()` re-points every
+  track, and has to run after anything that rebuilds a voice (a bus's summing
+  gain is a new node, and the feeders are still on the old one): `ensureAudio`,
+  `setEngineKey`, `applySet`, `applyTrackPatch`, create/duplicate/remove track.
+- **`t.out` is `"master"` or a bus track's id**, and it is deliberately outside
+  the p-lock snapshot — a send that rewired itself at every pattern switch would
+  be a trap. Serialized as `outIndex`, a track INDEX, because `createTrack`
+  hands out fresh ids on every load (same reason the macro pads store indices).
+- **Cycles are refused.** `wouldFeedback(t, busId)` walks the send chain;
+  `setTrackOutput` leaves the track on the master and says so, the dropdowns
+  never offer a bus that would loop, and `applySet` drops any loop a
+  hand-edited song describes. Web Audio would build that graph quite happily.
+- **What a bus can modulate falls out of the existing gates.** `canModulate`
+  already answers true for `vol` / `cutoff` / `reson` / every fx key and false
+  for the voice params of an unknown engine type; `voiceAutoKeysForEngine`
+  already returns `["vol"]` by default. 39 mod targets and 39 lanes, no voice
+  keys, without a line of bus-specific gating. `vol` is a real AudioParam on the
+  summing gain, so the fader is modulatable too.
+- **Mute cuts the audio** (`BusVoice.setMuted`, via `applyBusMute`). Everywhere
+  else mute is the transport withholding triggers, and a bus has none — the
+  literal reading would do nothing at all. Hence two gains: `input` carries the
+  fader (the modulation target), `muteGain` the mute.
+- **Solo follows the chain.** `soloAudibleTracks()` (signal.js) keeps whatever
+  feeds a soloed bus, because a bus makes no sound of its own and the literal
+  reading would leave the session silent.
+- The transport skips a bus after `runAutomationForStep` — mute/solo can't gate
+  it there (its lanes have to keep running for the tracks feeding it), and
+  everything below that line fires a note.
+- UI: `+ add fx bus` under the track list, an `out` select per track (hidden
+  until a bus exists), a `◂ what feeds me` line on the bus, and `is-bus` on the
+  track node, which style.css uses to hide the step grid, the roll, the dice,
+  the octave shifts, the patch buttons and the envelope — a bus plays no notes.
+
 ## Macro pads (`macro.js`) — a Kaoss pad for the whole session
 
 Several XY pads, each axis driving a list of parameters that **may span
@@ -801,7 +866,8 @@ fails. Real-time capture — see Known limitations.
 Groups in order: `plaits` (16) · `drum / synth` (808/909 kit + poly-saw /
 fm-bell / pad) · `Emulators` (303 + virus + dx7 + guitar + bass + 5 analog-mono) · `texture` (`dm:granular`) ·
 `wavetable` (`wt:akwf`) · `sampler` (single unified entry) · `saved patches`
-(`saved:<name>`) · `midi`. The engine key string is the source of truth.
+(`saved:<name>`) · `midi` · `bus` (the fx bus — not an instrument, see below).
+The engine key string is the source of truth.
 Bundled drum kits are no longer separate engines — they live in
 `BUNDLED_SAMPLES` and are picked *inside* the sampler's source picker
 (legacy `smp:Kit/part` keys migrate on load).
@@ -849,7 +915,17 @@ patterns.
   need the explicit `[hidden] { display: none !important }` rules in
   style.css.
 - **Sidechain compressor sources** survive voice rebuilds via
-  `refreshCompSourceDropdowns()`.
+  `refreshCompSourceDropdowns()`, which is also the one place a source that has
+  stopped resolving falls back to `"self"` — in `t.comp.source`, in the select
+  and in the compressor (it re-runs `applyCompressorConfig`). Leaving a dead id
+  there is worse than it looks: `applyCompressorConfig` finds no source node and
+  takes the `!sourceNode` branch, so the track quietly self-compresses while the
+  panel still claims a sidechain.
+- **`comp.source` serializes as `compSourceIndex`**, a track INDEX, for the same
+  reason `t.out` does — `createTrack` hands out fresh ids on every load, so the
+  id in a saved song names nothing. (`comp.source` itself is still written, for
+  older readers; load ignores it. A session saved before the index existed has
+  no way back to the track it meant, so it falls back to `"self"`.)
 - **`tsconfig.json` excludes `public/js/`** — the engine is plain JS with
   JSDoc types; don't rename it to TS or import it into the Next graph.
 - **Don't use `Tone.Time(...)` for the step duration.** `Tone.setContext()` at
@@ -889,6 +965,8 @@ patterns.
   `capturePatternSound` / `applyPatternSound` (patternSound.js) too, or a locked
   pattern will leave it behind on a switch.
 - New engine → see Engines catalog above.
+- New cross-track routing → `t.out` + signal.js's routing block; anything that
+  rebuilds a voice must call `refreshAllTrackOutputs()`.
 - New macro-pad behaviour → `macro.js`; assignment targets come from
   `AUTOMATION_TARGETS` for free, so a new automation target is macro-assignable
   the moment it has a `CONTROL_TARGETS` entry.
