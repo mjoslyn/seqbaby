@@ -588,6 +588,38 @@ main {
 
 .sq-track.is-muted { opacity: 0.45; }
 
+/* An fx bus (engine `bus`): a track other tracks are routed into, so one rack,
+   one mod matrix and one set of automation lanes shape all of them at once.
+   There is no instrument in it, so everything that writes or plays a note goes
+   away — the step grid, the roll, the dice, the octave shifts, the patch
+   buttons, and the envelope, which only ever fires on a note. What is left is
+   the signal chain and the two modulation panels, which is the whole point. */
+.sq-track.is-bus { border-color: color-mix(in srgb, var(--accent-2) 45%, var(--border)); }
+.sq-track.is-bus .sq-steps,
+.sq-track.is-bus .sq-track__roll,
+.sq-track.is-bus .sq-track__env,
+.sq-track.is-bus .sq-track__clear,
+.sq-track.is-bus .track-dice,
+.sq-track.is-bus .sq-track__oct,
+.sq-track.is-bus .sq-track__len-extend,
+.sq-track.is-bus .sq-track__save,
+.sq-track.is-bus .sq-track__load-patch,
+.sq-track.is-bus .sq-track__wav { display: none !important; }
+
+/* What is feeding a bus, written on the bus. Without it the routing is only
+   legible from the sending end. */
+.sq-track__bus-in {
+  font-size: 11px;
+  color: var(--accent-2);
+  opacity: 0.85;
+  max-width: 22ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sq-track__bus-in[hidden] { display: none; }
+.sq-track__out-field[hidden] { display: none !important; }
+
 .sq-track__head {
   display: flex;
   gap: 10px;

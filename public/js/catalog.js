@@ -295,6 +295,19 @@ export const MIDI_ENGINE = {
   defaultNote: 60, poly: true,
 };
 
+// An fx bus: a track with no instrument in it. Other tracks send their output
+// here instead of to the master, and this track's filter / eq / comp / fx rack,
+// its mod matrix and its automation lanes then shape all of them at once —
+// which is a thing neither the mod matrix nor the lanes could do before, since
+// both belong to a single track. Building it as an engine rather than a fourth
+// kind of node is what makes all of that come for free: the summing gain is the
+// only part that is new, and everything downstream of it is the ordinary
+// per-track chain (see BusVoice in voices.js, routeTrackOutput in signal.js).
+export const BUS_ENGINE = {
+  key: "bus", label: "fx bus", group: "bus", type: "bus",
+  defaultNote: 60, poly: true,
+};
+
 export const UPLOAD_ENGINE = {
   key: "upload", label: "upload a sample…", group: "user samples", type: "upload",
   defaultNote: 60, poly: true, melodic: true,
@@ -306,7 +319,7 @@ export const UPLOAD_ENGINE = {
  * @returns {EngineEntry[]}
  */
 export function buildEngineCatalog() {
-  return [...plaitsEntries(), ...DRUM_SYNTH_ENGINES, ...ANALOG_ENGINES, ...TEXTURE_ENGINES, ...WAVETABLE_ENGINES, SAMPLER_ENGINE, ...savedPatchEntries(), MIDI_ENGINE];
+  return [...plaitsEntries(), ...DRUM_SYNTH_ENGINES, ...ANALOG_ENGINES, ...TEXTURE_ENGINES, ...WAVETABLE_ENGINES, SAMPLER_ENGINE, ...savedPatchEntries(), MIDI_ENGINE, BUS_ENGINE];
 }
 
 export let ENGINES = [];

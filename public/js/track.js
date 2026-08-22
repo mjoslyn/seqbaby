@@ -12,7 +12,7 @@ import { renderPatternGrid } from "./patternBar.js";
 import { refreshAutIfOpen, refreshRollIfOpen } from "./pianoRoll.js";
 import { paintDiceDensity, refreshFxPanelUI, renderModPanel, renderTrack } from "./render.js";
 import { applySet } from "./session.js";
-import { applyCompressorConfig, defaultCompConfig, ensureFxRack, refreshCompSourceDropdowns, routeVoiceToRack } from "./signal.js";
+import { applyCompressorConfig, defaultCompConfig, ensureFxRack, refreshAllTrackOutputs, refreshCompSourceDropdowns, refreshOutputSelects, routeVoiceToRack } from "./signal.js";
 import { aliasPattern, clonePattern, emptyPattern, state } from "./state.js";
 import { renderStepGrid } from "./stepGrid.js";
 import { SCALES, midiToScaleIndex, scaleIndexToMidi } from "./theory.js";
@@ -43,6 +43,11 @@ export function createTrack({ name, engineKey, length = totalSteps() }) {
     chords:     null,
     muted: false,
     soloed: false,
+    // Where this track's fx-rack output goes: "master", or the id of a track
+    // running the `bus` engine (signal.js). Not part of the sound, so it is
+    // deliberately outside the p-lock snapshot — a send that rewired itself at
+    // every pattern switch would be a trap, not a feature.
+    out: "master",
     isDrumKit: guessIsDrumKit({ engineKey, name }),
     glide: 0,
     sampleSpeedMode: "native",
@@ -115,6 +120,7 @@ export function createTrack({ name, engineKey, length = totalSteps() }) {
   state.tracks.push(t);
   renderTrack(t);
   refreshCompSourceDropdowns();
+  refreshOutputSelects();
   if (state.ready) {
     ensureFxRack(t);
     t.voice = buildVoiceForEngine(state.audioCtx, engineKey, t.params, t);
@@ -125,6 +131,9 @@ export function createTrack({ name, engineKey, length = totalSteps() }) {
       requestMidiIfNeeded(); // MIDI access is lazy; this may be the first MIDI track
     }
     routeVoiceToRack(t);
+    // A new bus has a fresh summing gain; anything already pointed at one has
+    // to be re-connected to it (and this track needs its own send wired).
+    refreshAllTrackOutputs();
   }
   return t;
 }
@@ -168,6 +177,9 @@ export function duplicateTrack(src) {
   dup.sliceSensitivity = src.sliceSensitivity ?? 0.5;
   dup.muted = !!src.muted;
   dup.soloed = !!src.soloed;
+  // The copy sends where the original does — duplicating a track feeding a
+  // reverb bus and having it land dry on the master would be a surprise.
+  dup.out = src.out || "master";
   dup.isDrumKit = !!src.isDrumKit;
   dup.glide = src.glide ?? 0;
   dup.speed = src.speed ?? 1;
@@ -254,6 +266,8 @@ export function duplicateTrack(src) {
     syncAllLFOs(dup);
   }
   refreshCompSourceDropdowns();
+  refreshOutputSelects();
+  if (state.ready) refreshAllTrackOutputs();
   updatePlaitsControlsVisibility(dup);
   paintDiceDensity(dup);          // density is copied after the row is rendered
   renderStepGrid(dup);
@@ -269,6 +283,16 @@ export function removeTrack(t) {
   t.el.remove();
   state.tracks = state.tracks.filter(x => x !== t);
   refreshCompSourceDropdowns();
+  // Anything sending into the removed track goes back to the master. The
+  // routing already falls back on its own, but the stored value has to follow
+  // or a save would carry a send to a track that no longer exists.
+  for (const x of state.tracks) {
+    if (x.out && x.out !== "master" && !state.tracks.find(y => String(y.id) === String(x.out))) {
+      x.out = "master";
+    }
+  }
+  refreshOutputSelects();
+  if (state.ready) refreshAllTrackOutputs();
   // if any remaining track was sidechained to the removed one, reset it to self
   for (const x of state.tracks) {
     if (x.comp.source && x.comp.source !== "self" && !state.tracks.find(y => String(y.id) === String(x.comp.source))) {

@@ -8,8 +8,8 @@ import { loadDx7Worklet } from "./dx7.js";
 import { loadGuitarWorklet } from "./guitar.js";
 import { currentBpm, syncAllLFOs } from "./lfo.js";
 import { init, needsResume, primeAudioForIOS } from "./main.js";
-import { updateMidiUI } from "./render.js";
-import { ensureFxRack, fireFilterEnv, routeVoiceToRack } from "./signal.js";
+import { applyBusMute, updateMidiUI } from "./render.js";
+import { ensureFxRack, fireFilterEnv, refreshAllTrackOutputs, routeVoiceToRack, soloAudibleTracks } from "./signal.js";
 import { findNextNonEmptyPattern, invertChord, state, switchPattern } from "./state.js";
 import { loadTb303Worklet } from "./tb303.js";
 import { loadVirusWorklet } from "./virus.js";
@@ -182,6 +182,11 @@ export async function ensureAudio() {
     }
     try { routeVoiceToRack(t); } catch (e) { console.warn("route failed for", t.name, e); }
   }
+  // Sends resolve only now: a track routed into a bus further down the list had
+  // no summing gain to connect to when its own rack was built, and fell back to
+  // the master. One pass over the finished graph fixes every such case.
+  try { refreshAllTrackOutputs(); } catch (e) { console.warn("output routing failed", e); }
+  for (const t of state.tracks) { try { applyBusMute(t); } catch {} }
   state.ready = true;
   for (const t of state.tracks) { try { syncAllLFOs(t); } catch (e) { console.warn("lfo sync failed", e); } }
   // iOS Safari quirk: after AudioWorklet load + voice construction, the
@@ -383,12 +388,20 @@ export async function togglePlay() {
     // notes came out half the length of their step; at 180 they overlapped the
     // next one.
     const baseStepDur = 60 / (Tone.Transport.bpm.value || currentBpm()) / 4;
-    const anySolo = state.tracks.some(t => t.soloed);
+    // null when nothing is soloed; otherwise the set that stays audible, which
+    // includes whatever feeds a soloed bus (see soloAudibleTracks).
+    const soloAudible = soloAudibleTracks();
     const masterSwing = Number(document.getElementById("swing")?.value) || 0;
     const lat = visualOutputLatency();
     for (const t of state.tracks) {
       if (!t.voice) continue;
-      if (anySolo ? !t.soloed : t.muted) continue;
+      const isBus = t.voice.type === "bus";
+      // Mute and solo here mean "withhold this track's triggers", which says
+      // nothing about a bus — it has none. Its lanes and its mod are the only
+      // thing it contributes, and they have to keep running for the tracks
+      // feeding it, so a soloed lead still arrives through its reverb. Muting a
+      // bus cuts its audio instead (BusVoice.setMuted, via applyBusMute).
+      if (!isBus && (soloAudible ? !soloAudible.has(t) : t.muted)) continue;
       const speed = Math.max(0.0001, t.speed ?? 1);
       const effDur = baseStepDur / speed;
       t.speedAccum = (t.speedAccum ?? 0) + speed;
@@ -415,7 +428,9 @@ export async function togglePlay() {
         // lookahead plus a swung step ahead: stop clears the highlights, and
         // without it a paint still in flight would re-light a step afterwards.
         scheduleAtAudible(() => { if (state.playing) paintTrackNow(t, idx); }, stepTime, lat);
-        if (!t.steps[idx]) { slot++; continue; }
+        // A bus stops here every step: it has just run its automation, and
+        // everything below this line is about firing a note.
+        if (isBus || !t.steps[idx]) { slot++; continue; }
         const span = Math.max(1, t.lengths[idx] || 1);
         // A note lasts its written step length. Voices that honor `duration`
         // (Plaits, samples, melodic synths) follow it; drum-synth recipes with

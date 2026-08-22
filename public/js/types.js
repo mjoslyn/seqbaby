@@ -175,6 +175,8 @@
  * @property {boolean[]} arps
  * @property {boolean} muted
  * @property {boolean} soloed
+ * @property {"master"|string} out          Where the fx rack's output goes:
+ *   "master", or the id of a track running the `bus` engine (signal.js).
  * @property {PatternSound|null} baseSound  The sound every UNLOCKED pattern
  *   shares. A p-locked pattern keeps its own on the pattern.
  * @property {boolean} isDrumKit

@@ -875,6 +875,15 @@ export function openTrackMenu(t) {
     modal.appendChild(speedField);
   }
 
+  // The send. Hidden in the head while there is no bus to send to, and the
+  // menu keeps that — an empty "routing" section would say nothing.
+  const outField = head.querySelector(".sq-track__out-field");
+  if (outField && !outField.hidden) {
+    captured.push({ node: outField, parent: outField.parentNode, nextSibling: outField.nextSibling });
+    addLabel("routing");
+    modal.appendChild(outField);
+  }
+
   const saveBtn = capture(head, ".sq-track__save");
   const loadBtn = capture(head, ".sq-track__load-patch");
   if (saveBtn || loadBtn) {

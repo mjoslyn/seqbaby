@@ -18,7 +18,7 @@ import { defaultFxConfig } from "./fxRack.js";
 import { patternMeter, redetectDrumKit, stepsPerBarForMeter } from "./meter.js";
 import { refreshDx7Algorithm, setEngineKey, setParam, updateGranularSpeedEnabled, updatePlaitsControlsVisibility } from "./params.js";
 import { bestRollViewOct } from "./pianoRoll.js";
-import { applyCompressorConfig, setEQ, setFilter } from "./signal.js";
+import { applyCompressorConfig, refreshOutputSelects, setEQ, setFilter, setTrackOutput } from "./signal.js";
 import { state } from "./state.js";
 import { openAutAsModal, openCompAsModal, openEnvAsModal, openEqAsModal, openFilterAsModal, openFxAsModal, openGranularWavModal, openModAsModal, openRollAsModal, openSampleEditorModal, openTrackMenu } from "./stepEditor.js";
 import { openWavetableEditor } from "./wavetableEditor.js";
@@ -41,8 +41,22 @@ import { GRAN_DEFAULTS, GRAN_NUM_KEYS, GRAN_SEL_KEYS } from "./voices.js";
  */
 export function setActiveTrack(t) {
   if (!t) return;
+  // An fx bus has no instrument in it, so making it the keyboard's target would
+  // just swallow every key. Clicking one leaves the previous track selected.
+  if (t.engineKey === "bus") return;
   state.activeTrackId = t.id;
   for (const other of state.tracks) other.el?.classList.toggle("is-kbd-active", other.id === t.id);
+}
+
+/**
+ * Mute on an fx bus has to cut the audio. Everywhere else mute is the transport
+ * withholding triggers, and a bus has none to withhold — it would go on passing
+ * the tracks feeding it, untouched.
+ * @param {Track} t
+ */
+export function applyBusMute(t) {
+  if (t.voice?.type !== "bus") return;
+  t.voice.setMuted?.(!!t.muted);
 }
 
 /**
@@ -337,6 +351,9 @@ export function renderTrack(t) {
   node.querySelector(".sq-track__name").addEventListener("input", e => {
     t.name = e.target.value;
     redetectDrumKit(t);
+    // A bus is picked by name in every other track's out dropdown, and named in
+    // the "what feeds me" line on the bus itself.
+    refreshOutputSelects();
   });
   node.querySelector(".sq-track__len").addEventListener("change", e => {
     const n = Math.max(1, Math.min(128, Number(e.target.value) || 1));
@@ -359,6 +376,9 @@ export function renderTrack(t) {
     }
     setEngineKey(t, val);
   });
+
+  const outSel = node.querySelector(".sq-track__out");
+  if (outSel) outSel.addEventListener("change", () => setTrackOutput(t, outSel.value));
 
   node.querySelector(".p-vol").addEventListener("input", e => setParam(t, "vol", Number(e.target.value)));
   node.querySelector(".p-harm").addEventListener("input", e => setParam(t, "harm", Number(e.target.value)));
@@ -680,6 +700,7 @@ export function renderTrack(t) {
   node.querySelector(".sq-track__mute").addEventListener("click", () => {
     t.muted = !t.muted;
     node.classList.toggle("is-muted", t.muted);
+    applyBusMute(t);
   });
   // clear: icon + label — desktop shows the label, mobile the icon (same
   // flip as roll, see the mobile media block)

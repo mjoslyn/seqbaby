@@ -300,6 +300,7 @@ export const STUDIO_BODY = String.raw`
   <main id="tracks"></main>
   <div class="sq-add-track-row">
     <button id="add-track" class="sq-btn--ghost">+ add track</button>
+    <button id="add-bus" class="sq-btn--ghost" title="add an fx bus: a track with no instrument that other tracks are sent into, so one filter, one fx rack, one mod matrix and one set of automation lanes shape all of them together">+ add fx bus</button>
   </div>
 
   <template id="track-template">
@@ -332,6 +333,10 @@ export const STUDIO_BODY = String.raw`
             <option value="16">16</option>
           </select>
         </div>
+        <div class="sq-field sq-track__out-field" hidden><label>out</label>
+          <select class="sq-track__out" title="where this track's output goes. Send several tracks into one fx bus track and its filter, effects, mod matrix and automation lanes act on all of them at once — a thing no per-track rack can do, since every one of those belongs to a single track"><option value="master">master</option></select>
+        </div>
+        <span class="sq-track__bus-in" hidden></span>
         <div class="sq-field sq-vol__field"><label>vol</label>
           <div class="sq-vol-combo" title="volume (drag) + output level">
             <div class="sq-meter sq-track__meter"><div class="sq-meter__bar"></div></div>
