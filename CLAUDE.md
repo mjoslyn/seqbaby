@@ -80,7 +80,10 @@ env / fx / eq / comp / mod / automation per track.
 - `syncTrackSoundUI(t)` (render.js) — writes a track's whole sound back into its
   controls. The one place that job lives: session load, patch load and a
   pattern-lock recall all call it (it used to be copy-pasted in two of them,
-  which is how the eq/comp sliders came to be missing from session load).
+  which is how the eq/comp sliders came to be missing from session load — and
+  the sidechain-source select, which is in the p-lock snapshot, was missing from
+  all three). It writes the source select's VALUE only; the options belong to
+  `refreshCompSourceDropdowns`, which is the one that knows the track list.
 - `render.js` / `stepGrid.js` / `stepEditor.js` / `pianoRoll.js` /
   `patternBar.js` / `scaleUI.js` / `meters.js` / `beat.js` — UI.
 - `keyboard.js` — computer-keyboard performance mode + capture.
@@ -912,7 +915,17 @@ patterns.
   need the explicit `[hidden] { display: none !important }` rules in
   style.css.
 - **Sidechain compressor sources** survive voice rebuilds via
-  `refreshCompSourceDropdowns()`.
+  `refreshCompSourceDropdowns()`, which is also the one place a source that has
+  stopped resolving falls back to `"self"` — in `t.comp.source`, in the select
+  and in the compressor (it re-runs `applyCompressorConfig`). Leaving a dead id
+  there is worse than it looks: `applyCompressorConfig` finds no source node and
+  takes the `!sourceNode` branch, so the track quietly self-compresses while the
+  panel still claims a sidechain.
+- **`comp.source` serializes as `compSourceIndex`**, a track INDEX, for the same
+  reason `t.out` does — `createTrack` hands out fresh ids on every load, so the
+  id in a saved song names nothing. (`comp.source` itself is still written, for
+  older readers; load ignores it. A session saved before the index existed has
+  no way back to the track it meant, so it falls back to `"self"`.)
 - **`tsconfig.json` excludes `public/js/`** — the engine is plain JS with
   JSDoc types; don't rename it to TS or import it into the Next graph.
 - **Don't use `Tone.Time(...)` for the step duration.** `Tone.setContext()` at

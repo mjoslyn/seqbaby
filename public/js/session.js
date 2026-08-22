@@ -91,6 +91,12 @@ export function serializeSet() {
       outIndex: t.out && t.out !== "master"
         ? state.tracks.findIndex(x => String(x.id) === String(t.out))
         : -1,
+      // The sidechain source, by index for exactly the same reason. `comp` above
+      // still carries the raw id for older readers, but this is what load uses.
+      // -1 means self.
+      compSourceIndex: t.comp?.source && t.comp.source !== "self"
+        ? state.tracks.findIndex(x => String(x.id) === String(t.comp.source))
+        : -1,
       isDrumKit: !!t.isDrumKit,
       glide: t.glide, speed: t.speed ?? 1, sampleSpeedMode: t.sampleSpeedMode ?? "native",
       pitchLock: t.pitchLock ?? true,
@@ -559,15 +565,23 @@ export function applySet(s) {
     updatePlaitsControlsVisibility(t);
     renderStepGrid(t);
   }
-  // Sends resolve now that every track exists — they were stored as indices
-  // (see serializeSet), and a bus has to be a real track before anything can be
-  // pointed at it.
+  // Cross-track references resolve now that every track exists — both are
+  // stored as indices (see serializeSet), and the track pointed at has to be
+  // real before anything can point at it.
   (s.tracks || []).forEach((td, i) => {
     const t = state.tracks[i];
     if (!t) return;
     const j = Number.isInteger(td.outIndex) ? td.outIndex : -1;
     const bus = j >= 0 ? state.tracks[j] : null;
     t.out = bus && bus !== t && bus.engineKey === "bus" ? String(bus.id) : "master";
+    // Sidechain source. A session saved before compSourceIndex existed carries
+    // only the id it had when it was written, and nothing in the file maps that
+    // to a track — so those fall back to self rather than guess at a track and
+    // duck the wrong one. (Before this they kept the dead id and silently
+    // self-compressed instead, which at least the panel now agrees with.)
+    const k = Number.isInteger(td.compSourceIndex) ? td.compSourceIndex : -1;
+    const src = k >= 0 ? state.tracks[k] : null;
+    t.comp.source = src && src !== t ? String(src.id) : "self";
   });
   // A chain can still describe a loop — a hand-edited song, or a bus that was
   // re-engined between the save and now. Drop any send that does.
@@ -738,6 +752,13 @@ export function applyTrackPatch(t, patch) {
     refreshAllTrackOutputs();
     applyBusMute(t);
   }
+  // A patch is a portable SOUND, but `comp.source` in one is a track id, which
+  // means nothing in another session (or after this one has reloaded). Applying
+  // one within the session it was saved in still resolves; anything else falls
+  // back to self here rather than silently self-compressing while the panel
+  // says otherwise.
+  refreshCompSourceDropdowns();
+  if (state.ready) applyCompressorConfig(t);
   updatePlaitsControlsVisibility(t);
   renderStepGrid(t);
   t._refreshSaveEnabled?.();

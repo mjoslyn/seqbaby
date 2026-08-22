@@ -477,6 +477,18 @@ export function refreshCompSourceDropdowns() {
   for (const t of state.tracks) {
     const sel = t.el?.querySelector(".sq-comp__source");
     if (!sel) continue;
+    // A source that names no live track falls back to self, in the STATE and in
+    // the audio graph, not just in the select. Leaving the dead id in place is
+    // worse than it looks: applyCompressorConfig finds no source node and takes
+    // the `!sourceNode` branch, so the track silently becomes self-compressed
+    // while the panel claims a sidechain. Reconfiguring here rather than at each
+    // call site is what makes this true wherever the track list changes —
+    // removing a track, loading a session, applying a patch.
+    if (t.comp.source && t.comp.source !== "self" &&
+        !state.tracks.some(x => x !== t && String(x.id) === String(t.comp.source))) {
+      t.comp.source = "self";
+      if (state.ready) applyCompressorConfig(t);
+    }
     const cur = t.comp.source || "self";
     sel.replaceChildren();
     const optSelf = document.createElement("option");

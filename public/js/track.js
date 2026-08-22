@@ -12,7 +12,7 @@ import { renderPatternGrid } from "./patternBar.js";
 import { refreshAutIfOpen, refreshRollIfOpen } from "./pianoRoll.js";
 import { paintDiceDensity, refreshFxPanelUI, renderModPanel, renderTrack } from "./render.js";
 import { applySet } from "./session.js";
-import { applyCompressorConfig, defaultCompConfig, ensureFxRack, refreshAllTrackOutputs, refreshCompSourceDropdowns, refreshOutputSelects, routeVoiceToRack } from "./signal.js";
+import { defaultCompConfig, ensureFxRack, refreshAllTrackOutputs, refreshCompSourceDropdowns, refreshOutputSelects, routeVoiceToRack } from "./signal.js";
 import { aliasPattern, clonePattern, emptyPattern, state } from "./state.js";
 import { renderStepGrid } from "./stepGrid.js";
 import { SCALES, midiToScaleIndex, scaleIndexToMidi } from "./theory.js";
@@ -293,15 +293,10 @@ export function removeTrack(t) {
   }
   refreshOutputSelects();
   if (state.ready) refreshAllTrackOutputs();
-  // if any remaining track was sidechained to the removed one, reset it to self
-  for (const x of state.tracks) {
-    if (x.comp.source && x.comp.source !== "self" && !state.tracks.find(y => String(y.id) === String(x.comp.source))) {
-      x.comp.source = "self";
-      applyCompressorConfig(x);
-      const sel = x.el?.querySelector(".sq-comp__source");
-      if (sel) sel.value = "self";
-    }
-  }
+  // Anything sidechained to the removed track resets to self — state, select
+  // and compressor alike. That now lives in refreshCompSourceDropdowns (called
+  // above), which rebuilds the options and so is the one place that knows a
+  // source has stopped resolving.
 }
 
 export function resizePattern(t, patIdx, len) {
