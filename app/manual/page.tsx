@@ -764,6 +764,21 @@ export default function ManualPage() {
             the tempo so it stays in time. Filter cutoff is the classic target;
             effect amounts and the instrument&apos;s own tone controls work too.
           </p>
+          <p>
+            The fifth shape, <span className={styles.ui}>euclid</span>, is a rhythm
+            rather than a waveform: instead of sweeping, the parameter is tapped in a
+            euclidean pattern. The rate becomes the <em>step</em> rate — 1/16 means one
+            ring step per sixteenth — and you set the pulses, the cycle length and a
+            rotation as you would on the track. <span className={styles.ui}>decay</span>{" "}
+            at zero holds each tap for its whole step, which is a gate; turn it up and
+            each tap falls away instead, which is a pluck. Taps lift the parameter off
+            wherever its knob sits and let it fall back, so the knob stays the base.
+            It locks to the transport, so the rhythm it plays is the same rhythm the
+            sequencer is. Put it on a filter for a gated sweep, on reverb for throws
+            that land on the offbeats, or on a live euclid track&apos;s{" "}
+            <span className={styles.ui}>rotate</span> to have one euclidean pattern
+            turn another.
+          </p>
           <h3>aut — per step</h3>
           <p>
             Automation draws a value for each step of the pattern instead. Choose a

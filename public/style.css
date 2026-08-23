@@ -1555,6 +1555,43 @@ body.kbd-recording .sq-track.is-kbd-active { border-color: #e5484d; box-shadow: 
   justify-content: flex-end;
 }
 
+/* The euclid LFO shape's own controls — a second line inside the mod row,
+   only there when the shape is euclid. The written-out ring stands in for the
+   dial the track panel gets: the mod panel has no room for a circle, and
+   "x..x..x." says the same thing on one line. */
+.sq-lfo__euc {
+  /* The row is a fixed seven-column grid; this is a second line under all of
+     it, not an eighth cell. */
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  width: 100%;
+  padding: 4px 2px 0;
+  border-top: 1px solid var(--border);
+}
+.sq-lfo__euc[hidden] { display: none; }
+.sq-lfo__euc-bits {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  color: var(--accent);
+  word-break: break-all;
+  flex: 1 1 8ch;
+  min-width: 8ch;
+}
+.sq-lfo__euc-f {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  font-size: 10px;
+  line-height: 1.1;
+  color: var(--fg-dim);
+}
+.sq-lfo__euc-f .sq-knob { --knob-size: 34px; }
+.sq-lfo__euc-val { color: var(--fg); font-size: 11px; font-variant-numeric: tabular-nums; }
+
 /* Euclidean rhythm panel. The ring is the point: evenness is visible on a
    circle and invisible on a line, so the panel leads with the circle and puts
    the tiled-out track strip underneath it. Lives on the track like the filter

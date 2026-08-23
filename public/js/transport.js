@@ -337,6 +337,7 @@ export async function togglePlay() {
     // over the top of the silence you just asked for.
     silenceAllVoices();
     state.playing = false;
+    state._transportStartTime = null;
     btn.textContent = "play";
     btn.classList.remove("is-playing");
     state.tick = 0;
@@ -601,7 +602,13 @@ export async function togglePlay() {
     state._outputRunningSince = performance.now();
   }
   const outputAgeMs = performance.now() - (state._outputRunningSince ?? performance.now());
-  Tone.Transport.start(outputAgeMs < 1500 ? "+0.5" : "+0.1", 0);
+  const lead = outputAgeMs < 1500 ? 0.5 : 0.1;
+  // Where bar 1 beat 1 lands on the audio clock. A euclid-shaped LFO hangs its
+  // ring off this so the rhythm it plays is the same rhythm the sequencer is
+  // (see euclidOrigin in lfo.js) — a sine drifting against the beat is a
+  // texture, a gate pattern drifting against it is a mistake.
+  state._transportStartTime = state.audioCtx.currentTime + lead;
+  Tone.Transport.start(`+${lead}`, 0);
   state.playing = true;
   btn.textContent = "stop";
   btn.classList.add("is-playing");

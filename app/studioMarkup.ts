@@ -735,6 +735,7 @@ ${BASS_PANEL}
         <option value="triangle">triangle</option>
         <option value="sawtooth">saw</option>
         <option value="square">square</option>
+        <option value="euclid">euclid</option>
       </select>
       <label class="sq-lfo__sync-wrap">
         <input type="checkbox" class="lfo-sync" />
@@ -761,6 +762,29 @@ ${BASS_PANEL}
         <span class="sq-lfo__depth-label">0.50</span>
       </div>
       <button class="sq-lfo__remove sq-btn--ghost" type="button" title="remove this modulation">×</button>
+      <div class="sq-lfo__euc" hidden>
+        <span class="sq-lfo__euc-bits" aria-hidden="true"></span>
+        <label class="sq-lfo__euc-f" title="how many taps go in the cycle">
+          <span>pulses</span>
+          <input class="sq-lfo__euc-pulses" type="range" min="0" max="32" step="1" value="4" />
+          <output class="sq-lfo__euc-val"></output>
+        </label>
+        <label class="sq-lfo__euc-f" title="how many steps the cycle is before it repeats. The rate above is the step rate, so 1/16 with 8 steps is a half-bar cycle">
+          <span>steps</span>
+          <input class="sq-lfo__euc-steps" type="range" min="1" max="32" step="1" value="8" />
+          <output class="sq-lfo__euc-val"></output>
+        </label>
+        <label class="sq-lfo__euc-f" title="turn the ring — the same rhythm, landing later">
+          <span>rotate</span>
+          <input class="sq-lfo__euc-rotate" type="range" min="0" max="31" step="1" value="0" />
+          <output class="sq-lfo__euc-val"></output>
+        </label>
+        <label class="sq-lfo__euc-f" title="0 holds each tap for its whole step, which is a gate. Turn it up and the tap falls away instead — a pluck">
+          <span>decay</span>
+          <input class="sq-lfo__euc-decay" type="range" min="0" max="1" step="0.01" value="0.4" />
+          <output class="sq-lfo__euc-val"></output>
+        </label>
+      </div>
     </div>
   </template>
 
