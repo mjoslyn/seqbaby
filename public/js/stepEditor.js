@@ -1,6 +1,7 @@
 import { BUNDLED_SAMPLES, GRANULAR_SAMPLES, GRANULAR_SAMPLE_BASE, SAMPLE_BASE, engineByKey } from "./catalog.js";
 import { loadBuffer } from "./buffers.js";
 import { setStatus } from "./dom.js";
+import { renderEuclidPanel } from "./euclid.js";
 import { upgradeKnobs } from "./knob.js";
 import { applySampleSpeed, currentBpm } from "./lfo.js";
 import { renderRollPanel } from "./pianoRoll.js";
@@ -130,6 +131,16 @@ export function openEqAsModal(t) {
     modalClass: "sq-eq__modal",
     btnSel: ".sq-track__eq",
     modalKey: "_eqModal",
+  });
+}
+
+export function openEuclidAsModal(t) {
+  openPanelAsModal(t, {
+    panel: t._euclidPanelEl,
+    modalClass: "euclid-modal",
+    btnSel: ".track-euclid",
+    modalKey: "_euclidModal",
+    afterMount: () => renderEuclidPanel(t, t._euclidPanelEl),
   });
 }
 

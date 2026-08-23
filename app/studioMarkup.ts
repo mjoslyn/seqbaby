@@ -507,6 +507,7 @@ ${BASS_PANEL}
         <button class="sq-track__plock sq-btn--ghost" aria-pressed="false" title="p-lock: give this track its own sound in THIS pattern. Normally a track has one sound and 32 patterns of notes — change the cutoff and it changes everywhere. Locked, this pattern keeps its own params, filter, fx, eq, comp and mod settings, while every unlocked pattern goes on sharing the track's. It is per pattern, so the button changes as you move between them. Unlocking hands the pattern back to the track's sound and keeps what it had, so locking again brings it straight back">p-lock</button>
         <button class="sq-track__clear sq-btn--ghost">clear</button>
         <button class="track-dice sq-icon-btn sq-btn--ghost" type="button" aria-label="random pattern, drag up or down to set density" title="random pattern (drag up/down to set density)"></button>
+        <button class="track-euclid sq-icon-btn sq-btn--ghost" type="button" aria-pressed="false" aria-label="euclidean rhythm generator" title="euclidean rhythm — spread N hits as evenly as possible over the pattern"></button>
         <button class="sq-track__dup sq-btn--ghost" type="button" title="duplicate this track">dup</button>
         <button class="sq-track__remove sq-btn--ghost sq-btn--danger">remove</button>
         <div class="sq-track__oct">
@@ -535,6 +536,46 @@ ${BASS_PANEL}
       <div class="sq-track__mod-panel" hidden></div>
       <div class="sq-track__aut-panel" hidden></div>
       <div class="sq-track__roll-panel" hidden></div>
+      <div class="sq-track__euclid-panel" hidden>
+        <div class="sq-euclid__title">euclidean rhythm</div>
+        <div class="sq-euclid__viz">
+          <svg class="sq-euclid__ring" viewBox="0 0 120 120" width="120" height="120" aria-hidden="true"></svg>
+          <div class="sq-euclid__readout">
+            <div class="sq-euclid__formula"></div>
+            <div class="sq-euclid__bits"></div>
+            <div class="sq-euclid__hint"></div>
+          </div>
+        </div>
+        <div class="sq-euclid__strip" aria-hidden="true"></div>
+        <div class="sq-euclid__ctls">
+          <label class="sq-euclid__f" title="how many hits go in the cycle">
+            <span>pulses</span>
+            <input class="p-eucpulses" type="range" min="0" max="32" step="1" value="4" />
+            <output class="sq-euclid__val sq-euclid__val--pulses"></output>
+          </label>
+          <label class="sq-euclid__f" title="how long the cycle is before it repeats across the track">
+            <span>steps</span>
+            <input class="p-eucsteps" type="range" min="1" max="32" step="1" value="16" />
+            <output class="sq-euclid__val sq-euclid__val--steps"></output>
+          </label>
+          <label class="sq-euclid__f" title="turn the ring — the same rhythm, landing later">
+            <span>rotate</span>
+            <input class="p-eucrotate" type="range" min="0" max="31" step="1" value="0" />
+            <output class="sq-euclid__val sq-euclid__val--rotate"></output>
+          </label>
+        </div>
+        <div class="sq-euclid__opts">
+          <label title="hold each hit until the next one instead of a one-step gate">gate <select class="sq-euclid__gate">
+            <option value="short">short</option>
+            <option value="legato">legato</option>
+          </select></label>
+          <label title="louder on the beat, quieter off it — the pattern reads as a groove rather than a flat line"><input class="sq-euclid__accent" type="checkbox" checked /> accent the beat</label>
+        </div>
+        <div class="sq-euclid__actions">
+          <label class="sq-euclid__live" title="generate this track's rhythm live instead of playing the written steps. Nothing is written, so pulses, steps and rotate can take an LFO, an automation lane or a macro pad — and switching it off hands back the pattern exactly as you left it. The step grid shows what is being generated and goes read-only while it is on"><input class="sq-euclid__on" type="checkbox" /> live</label>
+          <button class="sq-euclid__write sq-btn--ghost" type="button" title="print this rhythm into the pattern as ordinary steps, replacing what is there. Hits landing where you already had a note keep its pitch">write to pattern</button>
+        </div>
+      </div>
       <div class="sq-track__filter-panel" hidden>
         <div class="sq-fx__row" data-fx="filter">
           <span class="sq-fx__title">filter (resonant lp)</span>
@@ -694,6 +735,7 @@ ${BASS_PANEL}
         <option value="triangle">triangle</option>
         <option value="sawtooth">saw</option>
         <option value="square">square</option>
+        <option value="euclid">euclid</option>
       </select>
       <label class="sq-lfo__sync-wrap">
         <input type="checkbox" class="lfo-sync" />
@@ -720,6 +762,29 @@ ${BASS_PANEL}
         <span class="sq-lfo__depth-label">0.50</span>
       </div>
       <button class="sq-lfo__remove sq-btn--ghost" type="button" title="remove this modulation">×</button>
+      <div class="sq-lfo__euc" hidden>
+        <span class="sq-lfo__euc-bits" aria-hidden="true"></span>
+        <label class="sq-lfo__euc-f" title="how many taps go in the cycle">
+          <span>pulses</span>
+          <input class="sq-lfo__euc-pulses" type="range" min="0" max="32" step="1" value="4" />
+          <output class="sq-lfo__euc-val"></output>
+        </label>
+        <label class="sq-lfo__euc-f" title="how many steps the cycle is before it repeats. The rate above is the step rate, so 1/16 with 8 steps is a half-bar cycle">
+          <span>steps</span>
+          <input class="sq-lfo__euc-steps" type="range" min="1" max="32" step="1" value="8" />
+          <output class="sq-lfo__euc-val"></output>
+        </label>
+        <label class="sq-lfo__euc-f" title="turn the ring — the same rhythm, landing later">
+          <span>rotate</span>
+          <input class="sq-lfo__euc-rotate" type="range" min="0" max="31" step="1" value="0" />
+          <output class="sq-lfo__euc-val"></output>
+        </label>
+        <label class="sq-lfo__euc-f" title="0 holds each tap for its whole step, which is a gate. Turn it up and the tap falls away instead — a pluck">
+          <span>decay</span>
+          <input class="sq-lfo__euc-decay" type="range" min="0" max="1" step="0.01" value="0.4" />
+          <output class="sq-lfo__euc-val"></output>
+        </label>
+      </div>
     </div>
   </template>
 

@@ -15,7 +15,7 @@ env / fx / eq / comp / mod / automation per track.
   engine scripts in order: Tone.js 15 (CDN) → `public/woscillators.js` →
   `public/js/main.js` (ES module). `middleware.ts` refreshes the Supabase
   session on every request *except* static engine assets.
-- **Engine**: ~43 dependency-free vanilla ES modules in `public/js/`. No
+- **Engine**: ~44 dependency-free vanilla ES modules in `public/js/`. No
   bundler — edit, reload. `window.seqbaby` (from `appApi.js`) exposes `state`
   and serialize/apply hooks to the React shell (typed in `app/seqbaby.d.ts`).
 - **Accounts + data**: Supabase (Postgres + Auth + RLS). Tables: `profiles`,
@@ -109,6 +109,12 @@ env / fx / eq / comp / mod / automation per track.
 - `dx7.js` — the Yamaha DX7, same shape again, plus the 32-algorithm
   table, the panel's generated key lists and the preset voices. See the DX7
   section below.
+- `euclid.js` — the euclidean rhythm generator behind the ring button beside the
+  dice: Bjorklund proper (not the `(i*k)%n < k` shortcut, which lands on a
+  rotation of the canonical pattern), its panel, and **live mode** — where the
+  transport generates the track's rhythm instead of reading its steps, which is
+  what makes the three counts modulatable. The ring is also an LFO shape
+  (lfo.js). See the euclid section below.
 - `theory.js` / `meter.js` / `generate.js` / `curves.js` / `params.js` /
   `constants.js` / `dialogs.js` / `dom.js` / `icons.js` / `appApi.js` /
   `types.js` (JSDoc typedefs — data-model source of truth).
@@ -506,6 +512,94 @@ gpattern, gsync, grate` in `t.params`.
   read them when scheduled, so a sequenced note takes one value per hit; a held
   note re-reads per scheduler tick.
 
+## Euclidean rhythms (`euclid.js`)
+
+Bjorklund's algorithm — N hits spread as evenly as possible over M steps — with
+the ring button beside the dice. The dice rolls; this one divides.
+
+**The algorithm is the real recursion**, not the `(i*k)%n < k` shortcut. The
+shortcut is maximally even too, but it lands on a *rotation* of the canonical
+pattern, so E(5,8) would come out `x.x.xx.x` instead of the `x.xx.xx.` printed
+on the box of every drum machine with this feature.
+
+**Two ways to use it, and the split is the whole design:**
+
+- **write to pattern** — print the ring into the step grid, once. Ordinary
+  steps afterwards, editable by hand. Destructive and labelled so, like `clear`
+  and the dice.
+- **live** (`t.euclid.on`) — the transport asks the generator for every step
+  instead of reading the written pattern (`stepGateAt`, called from
+  transport.js and from `renderStepGrid`). Nothing is ever written, so the
+  three counts can take an LFO, an automation lane or a macro pad. Switch it
+  off and the pattern you wrote is exactly as you left it.
+
+Modulating the *one-shot* was the alternative, and it would mean rewriting the
+pattern under the playhead sixty times a second in an app with no undo.
+
+- **Only the step mask is generated.** Pitch, chords, arps, ratchets, nudges
+  and the automation lanes all still come from the pattern, so a live euclid
+  track is an ordinary track with its rhythm replaced. A generated hit on a
+  step the pattern never wrote falls back to C2 on a drum kit, the track's
+  last-used note otherwise.
+- **The grid shows what is playing** and goes read-only with it
+  (`.sq-track.is-euclid`) — it can't be both a picture of a generated rhythm
+  and the thing you edit.
+- **Modulation writes `t._euclidMod`, never `t.euclid`** — the knobs stay the
+  base an LFO swings around, exactly as the granular controls do, and the
+  overrides are live-only (never saved). The panel marks a driven control
+  (`is-driven`) because a still knob beside a turning ring reads as a bug.
+- **One list, three namespaces**: `p-euc<key>` / `euclid_<key>` / `euclid.<key>`
+  for pulses, steps and rotate. `canModulate` / `canAutomate` gate all three on
+  live mode being on — with the pattern in charge they would say nothing.
+  The LFO path is setter-driven (`SETTER_LFO_KEYS`); the generator reads the
+  value at step time. Ranges move with the track length, so `euclidRange` is a
+  function where the other engines have a constant table.
+- **The panel lives on the track**, not in a modal built on demand, for the
+  same reason the filter and the rack do: the controls have to be in the DOM
+  whether or not anyone has opened it, or the parameter menu, the mod/aut dots
+  and the macro pads have nothing to find. The button hosts it in a modal
+  (`openPanelAsModal`) like every other panel.
+- The plan is cached on the resolved config, and repaints are coalesced onto
+  one frame and skipped when the rhythm hasn't moved — the LFO setter loop runs
+  at 60Hz while these controls are counts.
+- Settings are **outside the p-lock snapshot**, like `t.out` and the macro
+  pads: a generator that rearranged itself at every pattern switch would be a
+  trap, not a feature.
+
+### The euclid LFO shape (`lfo.js`)
+
+The same ring, as the mod matrix's fifth shape — so any of the ~180 LFO targets
+can be tapped in a euclidean rhythm instead of swept by a waveform. One shape
+entry buys "euclidean filter gate", "euclidean reverb throw" and "a euclidean
+LFO rotating a euclidean track".
+
+- **The rate is the STEP rate**, not the cycle rate: a division of 1/16 is one
+  ring step per sixteenth, as on every euclidean module, so the cycle is
+  `steps` long. The rate label says `hz/step` when the shape is euclid, because
+  1/16 otherwise reads as a very long cycle.
+- **It is unipolar** where the waveforms are bipolar: rests sit at zero and
+  taps rise to the full depth. A tap should lift a parameter off its knob and
+  let it fall back, not swing it either side. Same peak-to-peak from the same
+  depth slider (`euclidAmp` uses the whole depth, the waveform path half).
+- **`decay` 0 is a gate**, holding the tap for its whole step; above that each
+  tap decays exponentially (`setTargetAtTime`), which is the pluck.
+- **A rhythm is not an oscillator type**, so the audio path swaps the source: a
+  `Tone.Signal` scheduled ahead (`scheduleEuclidTaps`, 250ms lookahead) instead
+  of a `Tone.LFO`, summed onto the same param the same way — so the slider is
+  still the base and disconnect/dispose/`t.lfos` are unchanged. Scheduling
+  ahead is what keeps the tap edges sample-accurate off a 60Hz loop, the same
+  bargain the transport strikes. Switching *shape* between euclid and a
+  waveform rebuilds rather than retunes.
+- **Synced rings hang off `state._transportStartTime`** (`euclidOrigin`), not
+  off whenever the LFO was switched on. A sine drifting against the beat is a
+  texture; a gate pattern drifting against it is a mistake.
+- Setter-path targets (reverb decay, the granular controls, euclid's own
+  counts) take the shape too, sampled per frame from the same absolute phase.
+- **The four settings are written lazily**, only once the euclid shape is
+  picked (`lfoEuclid` reads with defaults). `lfoConfig` serializes all ~180
+  entries per track, and four more numbers on each of them, forever, to say
+  "this one is a sine" is real weight in a share link.
+
 ## Data model (source of truth: `public/js/types.js`)
 
 ### Pattern (per track, 32 slots — every field a per-step parallel array)
@@ -535,6 +629,8 @@ Switching patterns = re-aliasing + re-render.
 `glide, swing, density, speed` (`density` is the
 dice button's fill level — how full `randomizeMelody` rolls; drag the dice
 up/down, painted by `paintDiceDensity`),
+`euclid {on, pulses, steps, rotate, gate, accent}` (the euclid generator; `on`
+is live mode — see below),
 `sampleSpeedMode ("native"|"1xbpm"), sampleDefaults, sampleSource, slices,
 sliceOn, sliceBase, slicePlayMode, pitchLock`, sound config
 `params/filter/eq/comp/lfoConfig/fxConfig` + live handles
@@ -632,7 +728,9 @@ it; the input is still the value, the focus target and the pointer target.
   Tone Signals via `getModTarget(t, key)`. `LFO_KEYS` covers voice params,
   cutoff/reson, and every FX wet + sub-param; FX sub-params without an
   AudioParam handle are driven by a rAF setter loop (`SETTER_LFO_KEYS`).
-  `canModulate(t, key)` gates the picker per engine.
+  `canModulate(t, key)` gates the picker per engine. Shapes are sine /
+  triangle / saw / square and **euclid**, which is a rhythm rather than a
+  waveform — see the euclid section.
 - **Automation** (`automation.js`, aut panel): per-step value lanes stored in
   the pattern (`automation` field), applied at step time via `setParam`-style
   setters. `canAutomate` is broader than `canModulate` since it doesn't need
@@ -1000,7 +1098,7 @@ Repo: https://github.com/mjoslyn/seqbaby.
   An inline marker (`window.__seqbabyServerBoot`) tells the paths apart, and
   `ScriptLoader.tsx` keeps its onload-chained injection for the soft-nav case
   (e.g. arriving from `/login`).
-- `app/EnginePreload.tsx` emits `modulepreload` for all 43 modules listed in
+- `app/EnginePreload.tsx` emits `modulepreload` for all 44 modules listed in
   `app/engineAssets.ts`. The graph is 8 levels deep, so without it the browser
   needs up to eight sequential round trips just to discover the code.
   **Adding or removing a module in `public/js/` means updating that list** —

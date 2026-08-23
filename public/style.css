@@ -473,6 +473,7 @@ button.sq-btn--danger { color: var(--danger); }
   transition: height 60ms linear;
 }
 .track-dice .sq-btn-icon { position: relative; }
+.track-euclid[aria-pressed="true"] { background: var(--accent); color: #0b0d10; border-color: var(--accent); }
 /* roll + clear: text on desktop, icon on mobile (media block flips these) */
 .sq-track__roll .sq-btn-icon,
 .sq-track__clear .sq-btn-icon { display: none; }
@@ -600,6 +601,7 @@ main {
 .sq-track.is-bus .sq-track__env,
 .sq-track.is-bus .sq-track__clear,
 .sq-track.is-bus .track-dice,
+.sq-track.is-bus .track-euclid,
 .sq-track.is-bus .sq-track__oct,
 .sq-track.is-bus .sq-track__len-extend,
 .sq-track.is-bus .sq-track__save,
@@ -1553,6 +1555,141 @@ body.kbd-recording .sq-track.is-kbd-active { border-color: #e5484d; box-shadow: 
   justify-content: flex-end;
 }
 
+/* The euclid LFO shape's own controls — a second line inside the mod row,
+   only there when the shape is euclid. The written-out ring stands in for the
+   dial the track panel gets: the mod panel has no room for a circle, and
+   "x..x..x." says the same thing on one line. */
+.sq-lfo__euc {
+  /* The row is a fixed seven-column grid; this is a second line under all of
+     it, not an eighth cell. */
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  width: 100%;
+  padding: 4px 2px 0;
+  border-top: 1px solid var(--border);
+}
+.sq-lfo__euc[hidden] { display: none; }
+.sq-lfo__euc-bits {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  color: var(--accent);
+  word-break: break-all;
+  flex: 1 1 8ch;
+  min-width: 8ch;
+}
+.sq-lfo__euc-f {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  font-size: 10px;
+  line-height: 1.1;
+  color: var(--fg-dim);
+}
+.sq-lfo__euc-f .sq-knob { --knob-size: 34px; }
+.sq-lfo__euc-val { color: var(--fg); font-size: 11px; font-variant-numeric: tabular-nums; }
+
+/* Euclidean rhythm panel. The ring is the point: evenness is visible on a
+   circle and invisible on a line, so the panel leads with the circle and puts
+   the tiled-out track strip underneath it. Lives on the track like the filter
+   and the rack — its three counts are parameters, so they have to be in the
+   DOM whether or not anyone has opened it. */
+.sq-track__euclid-panel {
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  display: grid;
+  gap: 8px;
+  max-width: 460px;
+}
+.sq-track__euclid-panel[hidden] { display: none; }
+.track-euclid[aria-pressed="true"] { background: var(--accent); color: #0b0d10; border-color: var(--accent); }
+/* Live: the track's rhythm is coming from here, not from the grid. Worth
+   saying on the button, which is all you can see with the panel closed. */
+.track-euclid.is-live { box-shadow: 0 0 0 1px var(--accent-2) inset; color: var(--accent-2); }
+
+.sq-euclid__title { color: var(--fg); font-size: 12px; }
+.sq-euclid__viz { display: flex; align-items: center; gap: 14px; }
+.sq-euclid__ring { flex: 0 0 auto; }
+.sq-euclid__orbit { fill: none; stroke: var(--border); stroke-width: 1.5; }
+.sq-euclid__poly {
+  fill: color-mix(in oklab, var(--accent) 16%, transparent);
+  stroke: color-mix(in oklab, var(--accent) 60%, transparent);
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+}
+.sq-euclid__node { fill: var(--fg-dim); opacity: 0.5; }
+.sq-euclid__node.is-on { fill: var(--accent); opacity: 1; }
+.sq-euclid__readout { display: grid; gap: 6px; min-width: 0; font-size: 12px; }
+.sq-euclid__formula { color: var(--fg); font-size: 13px; }
+.sq-euclid__bits {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--accent);
+  word-break: break-all;
+}
+.sq-euclid__hint { color: var(--fg-dim); font-size: 11px; line-height: 1.4; }
+.sq-euclid__strip { display: flex; gap: 2px; }
+.sq-euclid__cell {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 16px;
+  border-radius: 2px;
+  background: var(--step);
+  border: 1px solid transparent;
+}
+.sq-euclid__cell.is-beat { border-color: var(--border); }
+.sq-euclid__cell.is-on { background: var(--step-on); }
+/* Where the cycle starts over — the one thing the ring cannot show. */
+.sq-euclid__cell.is-cycle { box-shadow: -2px 0 0 var(--accent-2); }
+
+/* Three knobs, like every other played control in the app. Counts, so the
+   value is written under the dial rather than left to the drag bubble. */
+.sq-euclid__ctls { display: flex; justify-content: center; gap: 22px; padding: 2px 0; }
+.sq-euclid__f {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  line-height: 1.1;
+  color: var(--fg-dim);
+}
+.sq-euclid__f .sq-knob { --knob-size: 46px; }
+.sq-euclid__val {
+  color: var(--fg);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+/* Something else is driving this count right now — an LFO, a lane or a pad.
+   The knob deliberately stays where you left it (it is the base the modulation
+   swings around), so without this the still knob beside a turning ring reads
+   as a bug. */
+.sq-euclid__f.is-driven > span { color: var(--accent-2); }
+.sq-euclid__f.is-driven .sq-euclid__val { color: var(--accent-2); }
+
+.sq-euclid__opts { display: flex; gap: 16px; align-items: center; font-size: 12px; color: var(--fg-dim); }
+.sq-euclid__opts label { display: inline-flex; align-items: center; gap: 6px; }
+.sq-euclid__actions { display: flex; gap: 12px; align-items: center; justify-content: space-between; }
+.sq-euclid__live { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--fg-dim); }
+.sq-euclid__live:has(:checked) { color: var(--accent-2); }
+.sq-euclid__write { font-size: 12px; }
+
+/* Live euclid: the grid is showing a rhythm nobody wrote, so it cannot also be
+   the thing you edit — a click would land on a step the generator is about to
+   overwrite on its next turn. Read-only and visibly so, until live goes off
+   and the written pattern (untouched all along) comes back. */
+.sq-track.is-euclid .sq-steps { pointer-events: none; opacity: 0.85; }
+.sq-track.is-euclid .sq-step.is-on {
+  background-image: repeating-linear-gradient(
+    135deg, transparent 0 5px, color-mix(in oklab, var(--accent-2) 30%, transparent) 5px 7px);
+}
+
 /* Wavetable editor modal. */
 .sq-wt__modal { width: min(94vw, 720px); gap: 10px; }
 .sq-wt__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 12px; color: var(--fg-dim); }
@@ -1705,7 +1842,8 @@ body.kbd-recording .sq-track.is-kbd-active { border-color: #e5484d; box-shadow: 
 .sq-panel__modal > .sq-track__env-panel,
 .sq-panel__modal > .sq-track__fx-panel,
 .sq-panel__modal > .sq-track__eq-panel,
-.sq-panel__modal > .sq-track__comp-panel {
+.sq-panel__modal > .sq-track__comp-panel,
+.sq-panel__modal > .sq-track__euclid-panel {
   padding: 0;
   background: transparent;
   border: none;
@@ -1721,6 +1859,7 @@ body.kbd-recording .sq-track.is-kbd-active { border-color: #e5484d; box-shadow: 
   font-weight: 600;
   min-height: 40px;
 }
+.euclid-modal { width: min(94vw, 460px); }
 .sq-roll__modal .sq-roll__head { flex-wrap: wrap; }
 .sq-roll__modal .sq-roll__grid { max-height: calc(80vh - 80px); }
 .sq-mod__modal,

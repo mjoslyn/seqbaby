@@ -10,6 +10,7 @@ import { autoAccents, guessIsDrumKit, patternMeter, stepsPerBarForMeter, totalSt
 import { updatePlaitsControlsVisibility } from "./params.js";
 import { renderPatternGrid } from "./patternBar.js";
 import { refreshAutIfOpen, refreshRollIfOpen } from "./pianoRoll.js";
+import { refreshEuclidUI, renderEuclidPanel } from "./euclid.js";
 import { paintDiceDensity, refreshFxPanelUI, renderModPanel, renderTrack } from "./render.js";
 import { applySet } from "./session.js";
 import { defaultCompConfig, ensureFxRack, refreshAllTrackOutputs, refreshCompSourceDropdowns, refreshOutputSelects, routeVoiceToRack } from "./signal.js";
@@ -56,6 +57,11 @@ export function createTrack({ name, engineKey, length = totalSteps() }) {
     // the note transpose the sample (classic melodic sampler behavior).
     pitchLock: true,
     density: 0.5,
+    // The euclid generator's settings, live mode included (euclid.js). Null
+    // until the panel is touched; trackEuclid() defaults and clamps it to the
+    // track length, which the length buttons can shrink underneath it. The
+    // modulated values live in t._euclidMod and are never stored.
+    euclid: null,
     speed: 1,
     // A track added mid-play joins on the step everyone else is on, not at 0.
     // At 1x the per-track counter advances once per 16n, so it tracks state.tick.
@@ -191,6 +197,7 @@ export function duplicateTrack(src) {
   dup.trackTick = src.trackTick ?? 0;
   dup.speedAccum = src.speedAccum ?? 0;
   dup.density = src.density ?? 0.5;
+  dup.euclid = src.euclid ? { ...src.euclid } : null;
   dup.sampleSpeedMode = src.sampleSpeedMode ?? "native";
   dup.pitchLock = src.pitchLock ?? true;
   for (const k of Object.keys(dup.lfoConfig)) {
@@ -270,12 +277,15 @@ export function duplicateTrack(src) {
   if (state.ready) refreshAllTrackOutputs();
   updatePlaitsControlsVisibility(dup);
   paintDiceDensity(dup);          // density is copied after the row is rendered
+  renderEuclidPanel(dup);         // same: the euclid settings arrive after renderTrack
+  refreshEuclidUI(dup);
   renderStepGrid(dup);
   return dup;
 }
 
 export function removeTrack(t) {
   if (t._trackMenuModal) t._trackMenuModal.close();
+  if (t._euclidModal) t._euclidModal.close();
   disposeLFOs(t);
   if (t.voice) t.voice.dispose();
   if (t.fxRack) t.fxRack.dispose();
@@ -340,6 +350,9 @@ export function resizePattern(t, patIdx, len) {
     t.length = len;
     t.accents = autoAccents(len, patternMeter(patIdx));
     if (t.el) t.el.querySelector(".sq-track__len").value = len;
+    // The euclid counts are bounded by the track length, so their knobs have
+    // to be re-ranged before the grid is drawn from them.
+    renderEuclidPanel(t);
     renderStepGrid(t);
     refreshAutIfOpen(t);
   }

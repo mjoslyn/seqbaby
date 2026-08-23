@@ -1,3 +1,4 @@
+import { stepGateAt } from "./euclid.js";
 import { updatePatternCell } from "./patternBar.js";
 import { refreshRollIfOpen, rollViewOcts } from "./pianoRoll.js";
 import { state } from "./state.js";
@@ -21,12 +22,18 @@ export function renderStepGrid(t) {
   grid.style.gridTemplateColumns = `repeat(${cols}, minmax(0, 1fr))`;
   grid.replaceChildren();
   updatePatternCell(t._patternIdx);
+  // A track in live euclid mode plays a generated rhythm rather than its
+  // written steps, so that is what the grid has to show — otherwise the one
+  // picture of what the track is doing would be a lie. It goes read-only with
+  // it (see `.sq-track.is-euclid` in style.css); the pattern underneath is
+  // untouched and comes straight back when live mode goes off.
+  const live = !!t.euclid?.on;
   let i = 0;
   while (i < total) {
-    if (t.steps[i]) {
-      const cap = maxLengthAt(t, i);
-      const span = Math.max(1, Math.min(t.lengths[i] || 1, cap));
-      t.lengths[i] = span;
+    const gate = stepGateAt(t, i);
+    if (gate) {
+      const span = live ? gate.span : Math.max(1, Math.min(t.lengths[i] || 1, maxLengthAt(t, i)));
+      if (!live) t.lengths[i] = span;
       // Visually split a held note that crosses row boundaries. Each chunk
       // points at the same data anchor (data-idx=i); only the first chunk
       // renders the note-name label.
@@ -36,7 +43,7 @@ export function renderStepGrid(t) {
       while (remaining > 0) {
         const colInRow = visualIdx % cols;
         const chunkSpan = Math.min(remaining, cols - colInRow);
-        grid.appendChild(makeCell(t, i, chunkSpan, true, /* continuation */ !first));
+        grid.appendChild(makeCell(t, i, chunkSpan, true, /* continuation */ !first, gate.vel));
         remaining -= chunkSpan;
         visualIdx += chunkSpan;
         first = false;
@@ -56,14 +63,14 @@ export function renderStepGrid(t) {
 // scale pitches only when a scale is active and "all notes" is off; chromatic
 // otherwise. Viewport spans rollViewOcts() octaves starting at t.rollViewOct
 // (1 on mobile to fit the screen without vertical scroll, 2 on desktop).
-export function makeCell(t, idx, span, on, isContinuation = false) {
+export function makeCell(t, idx, span, on, isContinuation = false, velOverride) {
   const cell = document.createElement("div");
   cell.className = "sq-step";
   cell.dataset.idx = String(idx);
   cell.dataset.span = String(span);
   if (on) {
     cell.classList.add("is-on");
-    const vel = t.velocities[idx] ?? 0.5;
+    const vel = velOverride ?? t.velocities[idx] ?? 0.5;
     cell.style.setProperty("--vel", String(vel));
     if (t.notes[idx] != null) {
       const col = noteColor(t.notes[idx]);

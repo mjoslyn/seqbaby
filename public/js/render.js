@@ -6,11 +6,12 @@ import { showInputDialog, showSavedPatchPicker } from "./dialogs.js";
 import { setStatus } from "./dom.js";
 import { DX7_ALG_LABELS, DX7_DEFAULTS, DX7_NUM_KEYS, DX7_PRESET_NAMES, DX7_SEL_KEYS, dx7Preset } from "./dx7.js";
 import { BASS_DEFAULTS, BASS_NUM_KEYS, BASS_SEL_KEYS, BASS_TONE_NAMES, bassTone, bassToneDescription } from "./bass.js";
+import { euclideanRhythm, refreshEuclidUI, renderEuclidPanel, wireEuclidPanel } from "./euclid.js";
 import { randomizeMelody, randomizeTimbre } from "./generate.js";
 import { GUITAR_DEFAULTS, GUITAR_NUM_KEYS, GUITAR_SEL_KEYS, GUITAR_TONE_NAMES, guitarTone, guitarToneDescription } from "./guitar.js";
-import { ICON_CLEAR, ICON_DICE, ICON_LOAD, ICON_ROLL, ICON_SAVE, ICON_SLIDERS, ICON_WAV } from "./icons.js";
-import { upgradeKnobs } from "./knob.js";
-import { canModulate, currentBpm, rateFromSync, syncLFO } from "./lfo.js";
+import { ICON_CLEAR, ICON_DICE, ICON_EUCLID, ICON_LOAD, ICON_ROLL, ICON_SAVE, ICON_SLIDERS, ICON_WAV } from "./icons.js";
+import { refreshKnobRange, upgradeKnobs } from "./knob.js";
+import { canModulate, currentBpm, lfoEuclid, rateFromSync, syncLFO } from "./lfo.js";
 import { autoOwns, modOwns, refreshParamIndicators } from "./paramTargets.js";
 import { patternLocked, refreshPatternLockUI, refreshPatternSoundUI, setPatternLock } from "./patternSound.js";
 import { openGranularSourceModal, openSamplerSourceModal, pickAudioFileForTrack } from "./main.js";
@@ -20,7 +21,7 @@ import { refreshDx7Algorithm, setEngineKey, setParam, updateGranularSpeedEnabled
 import { bestRollViewOct } from "./pianoRoll.js";
 import { applyCompressorConfig, refreshCompSourceDropdowns, refreshOutputSelects, setEQ, setFilter, setTrackOutput } from "./signal.js";
 import { state } from "./state.js";
-import { openAutAsModal, openCompAsModal, openEnvAsModal, openEqAsModal, openFilterAsModal, openFxAsModal, openGranularWavModal, openModAsModal, openRollAsModal, openSampleEditorModal, openTrackMenu } from "./stepEditor.js";
+import { openAutAsModal, openCompAsModal, openEnvAsModal, openEqAsModal, openFilterAsModal, openFxAsModal, openGranularWavModal, openModAsModal, openEuclidAsModal, openRollAsModal, openSampleEditorModal, openTrackMenu } from "./stepEditor.js";
 import { openWavetableEditor } from "./wavetableEditor.js";
 import { attachGridInteraction, renderStepGrid } from "./stepGrid.js";
 import { duplicateTrack, extendPatternByDuplicate, removeTrack, resizePattern, resizeTrack, shiftTrackOctave, truncatePattern } from "./track.js";
@@ -640,6 +641,7 @@ export function renderTrack(t) {
   t._fxPanelEl     = node.querySelector(".sq-track__fx-panel");
   t._eqPanelEl     = node.querySelector(".sq-track__eq-panel");
   t._compPanelEl   = node.querySelector(".sq-track__comp-panel");
+  t._euclidPanelEl = node.querySelector(".sq-track__euclid-panel");
   t._modModal    = null;
   t._autModal    = null;
   t._rollModal   = null;
@@ -648,6 +650,7 @@ export function renderTrack(t) {
   t._fxModal     = null;
   t._eqModal     = null;
   t._compModal   = null;
+  t._euclidModal = null;
 
   // Same idea for the synth-row sub-groups — they're reparented into the
   // track-menu-modal on mobile, so updatePlaitsControlsVisibility queries
@@ -669,6 +672,7 @@ export function renderTrack(t) {
   // so stamp each one rather than relying on the track node being an ancestor.
   for (const el of [t._modPanelEl, t._autPanelEl, t._rollPanelEl, t._filterPanelEl,
                     t._envPanelEl, t._fxPanelEl, t._eqPanelEl, t._compPanelEl,
+                    t._euclidPanelEl,
                     t._timbreGroupEl, t._oscMixGroupEl, t._oscModGroupEl,
                     t._moogOscGroupEl, t._tb303GroupEl, t._virusGroupEl,
                     t._dx7GroupEl, t._guitarGroupEl, t._bassGroupEl, t._granGroupEl]) {
@@ -705,6 +709,7 @@ export function renderTrack(t) {
   bindModalOpen(".sq-track__fx",     openFxAsModal,     "_fxModal");
   bindModalOpen(".sq-track__eq",     openEqAsModal,     "_eqModal");
   bindModalOpen(".sq-track__comp",   openCompAsModal,   "_compModal");
+  bindModalOpen(".track-euclid",     openEuclidAsModal, "_euclidModal");
   wireCompPanel(t, t._compPanelEl);
 
   node.querySelector(".sq-track__mute").addEventListener("click", () => {
@@ -729,6 +734,9 @@ export function renderTrack(t) {
     diceBtn.innerHTML = ICON_DICE;
     attachDiceDensity(t, diceBtn);
   }
+  // The other generator, beside the dice: the dice rolls, this one divides.
+  const euclidBtn = node.querySelector(".track-euclid");
+  if (euclidBtn) euclidBtn.innerHTML = ICON_EUCLID;
   // roll: icon + label — desktop shows the label (matches its text siblings),
   // mobile shows the icon (see the roll rules in the mobile media block)
   const rollBtn = node.querySelector(".sq-track__roll");
@@ -781,6 +789,13 @@ export function renderTrack(t) {
   upgradeKnobs(node);
   updateMidiUI(t);
   updatePlaitsControlsVisibility(t);
+  // The euclid panel wires once here rather than on open: its three counts are
+  // ordinary parameters, so they have to exist in the track's DOM for the
+  // parameter menu, the mod/aut dots and the macro pads to find them whether
+  // or not the panel has ever been looked at.
+  wireEuclidPanel(t, t._euclidPanelEl);
+  renderEuclidPanel(t, t._euclidPanelEl);
+  refreshEuclidUI(t);
   refreshParamIndicators(t);
 }
 
@@ -1202,6 +1217,8 @@ export function buildLfoRow(t, key, onRemove) {
   const divSel = row.querySelector(".sq-lfo__div");
   const rateField = row.querySelector(".sq-lfo__rate-field");
   const removeBtn = row.querySelector(".sq-lfo__remove");
+  const eucWrap = row.querySelector(".sq-lfo__euc");
+  const eucBits = row.querySelector(".sq-lfo__euc-bits");
 
   cb.checked   = cfg.enabled;
   shape.value  = cfg.type;
@@ -1214,14 +1231,57 @@ export function buildLfoRow(t, key, onRemove) {
   row.classList.toggle("is-active", cfg.enabled);
 
   const refreshLbl = () => {
+    // For the euclid shape the rate is the STEP rate, not the cycle rate — one
+    // ring step per division, as on every euclidean module — so the label has
+    // to say which it is or 1/16 reads as a very long cycle.
+    const per = cfg.type === "euclid" ? "/step" : "";
     if (cfg.sync) {
       const opt = divSel.options[divSel.selectedIndex];
-      rateLbl.textContent = `${opt ? opt.textContent : cfg.div} · ${rateFromSync(cfg.div).toFixed(2)} hz`;
+      rateLbl.textContent = `${opt ? opt.textContent : cfg.div} · ${rateFromSync(cfg.div).toFixed(2)} hz${per}`;
     } else {
-      rateLbl.textContent = `${cfg.rate.toFixed(2)} hz`;
+      rateLbl.textContent = `${cfg.rate.toFixed(2)} hz${per}`;
     }
   };
   refreshLbl();
+
+  // The euclid shape's own controls, and a written-out picture of the ring —
+  // the mod panel has no room for the dial the track panel gets, and "x..x..x."
+  // says the same thing in one line.
+  const eucCtls = eucWrap ? [
+    ["pulses", ".sq-lfo__euc-pulses", "epulses", 4, 0],
+    ["steps",  ".sq-lfo__euc-steps",  "esteps",  8, 0],
+    ["rotate", ".sq-lfo__euc-rotate", "erotate", 0, 0],
+    ["decay",  ".sq-lfo__euc-decay",  "edecay",  0.4, 2],
+  ].map(([name, sel, field, dflt, dp]) => ({ name, field, dflt, dp, el: row.querySelector(sel) })) : [];
+
+  const refreshEuc = () => {
+    if (!eucWrap) return;
+    const isEuc = cfg.type === "euclid";
+    eucWrap.hidden = !isEuc;
+    if (!isEuc) return;
+    const e = lfoEuclid(cfg);
+    // pulses can't exceed the cycle and a rotation past its end is the same
+    // ring again — the same bookkeeping the track panel does, and the knob
+    // caches its range, so it has to be told (refreshKnobRange).
+    for (const c of eucCtls) {
+      if (!c.el) continue;
+      const max = c.field === "epulses" ? e.steps
+                : c.field === "erotate" ? Math.max(0, e.steps - 1)
+                : Number(c.el.max);
+      if (c.el.max !== String(max)) { c.el.max = String(max); refreshKnobRange(c.el); }
+      const v = Math.min(e[c.name], Number(c.el.max));
+      if (Number(c.el.value) !== v) c.el.value = String(v);
+      // `closest`, not parentElement: upgradeKnobs wraps the input in a
+      // .sq-knob span, so the field is a grandparent once the row is live.
+      const out = c.el.closest(".sq-lfo__euc-f")?.querySelector(".sq-lfo__euc-val");
+      if (out) out.textContent = c.dp ? v.toFixed(c.dp) : String(v);
+    }
+    if (eucBits) {
+      eucBits.textContent = euclideanRhythm(e.steps, Math.min(e.pulses, e.steps), e.rotate)
+        .map(on => (on ? "x" : ".")).join("");
+    }
+  };
+  refreshEuc();
 
   cb.addEventListener("change", () => {
     cfg.enabled = cb.checked;
@@ -1229,11 +1289,36 @@ export function buildLfoRow(t, key, onRemove) {
     syncLFO(t, key);
     refreshParamIndicators(t);
   });
-  shape.addEventListener("change", () => { cfg.type = shape.value; syncLFO(t, key); });
+  shape.addEventListener("change", () => {
+    cfg.type = shape.value;
+    // The euclid fields are written only once the shape is chosen — carrying
+    // four extra numbers on each of the ~180 mod entries per track, forever,
+    // just to say "this one is a sine" is a real cost in a share link.
+    if (cfg.type === "euclid") {
+      const e = lfoEuclid(cfg);
+      cfg.epulses = e.pulses; cfg.esteps = e.steps; cfg.erotate = e.rotate; cfg.edecay = e.decay;
+    }
+    refreshEuc();
+    refreshLbl();
+    syncLFO(t, key);
+  });
   rate.addEventListener("input", () => { cfg.rate = sliderToRate(Number(rate.value)); refreshLbl(); syncLFO(t, key); });
   depth.addEventListener("input", () => { cfg.depth = Number(depth.value); depthLbl.textContent = cfg.depth.toFixed(2); syncLFO(t, key); });
   syncCb.addEventListener("change", () => { cfg.sync = syncCb.checked; rateField.dataset.mode = cfg.sync ? "sync" : "hz"; refreshLbl(); syncLFO(t, key); });
   divSel.addEventListener("change", () => { cfg.div = Number(divSel.value); refreshLbl(); syncLFO(t, key); });
+  for (const c of eucCtls) {
+    c.el?.addEventListener("input", () => {
+      cfg[c.field] = c.dp ? Number(c.el.value) : Math.round(Number(c.el.value));
+      // Shrinking the cycle pulls the other two in with it.
+      if (c.field === "esteps") {
+        const e = lfoEuclid(cfg);
+        cfg.epulses = Math.min(e.pulses, e.steps);
+        cfg.erotate = Math.min(e.rotate, Math.max(0, e.steps - 1));
+      }
+      refreshEuc();
+      syncLFO(t, key);
+    });
+  }
   if (removeBtn) removeBtn.addEventListener("click", () => {
     cfg.enabled = false;
     syncLFO(t, key);

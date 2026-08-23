@@ -53,6 +53,8 @@ for (const k of DX7_MOD_KEYS) def(`p-d${k}`, `dx7_${k}`, `dx7.${k}`);
 for (const k of GUITAR_MOD_KEYS) def(`p-gt${k}`, `gtr_${k}`, `gtr.${k}`);
 // Electric bass panel — likewise.
 for (const k of BASS_MOD_KEYS) def(`p-bs${k}`, `bas_${k}`, `bas.${k}`);
+// Euclid's three counts — one list, three namespaces, as in dx7.js.
+for (const k of ["pulses", "steps", "rotate"]) def(`p-euc${k}`, `euclid_${k}`, `euclid.${k}`);
 // Granular grain controls. Also reachable from the wav modal's own copies.
 for (const k of ["speed", "pitch", "window", "jitter", "detune", "pan"]) {
   def(`p-g${k}`,  `gran_${k}`, `gran.${k}`);
@@ -117,6 +119,7 @@ export const PARAM_SCOPE_SELECTOR = [
   ".sq-track__fx-panel",
   ".sq-track__eq-panel",
   ".sq-track__comp-panel",
+  ".sq-track__euclid-panel",   // the euclid generator's counts
   ".sq-gwav__ctl",             // granular wav modal's copies of the grain controls
   ".sq-wt__scan", ".sq-wt__uni",   // wavetable editor
   ".sq-samp__row",             // sample editor

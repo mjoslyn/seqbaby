@@ -160,6 +160,7 @@ export default function ManualPage() {
                 <tr><td>p-lock</td><td>Gives this track a sound of its own in the pattern you are on. Per pattern, so it changes as you move between them. See <a href="#lock">below</a>.</td></tr>
                 <tr><td>clear</td><td>Empties this pattern on this track.</td></tr>
                 <tr><td>dice</td><td>Generates a new pattern. Keep pressing until something sticks. The fill level behind the icon is how busy the roll comes out — drag the dice up or down to set it.</td></tr>
+                <tr><td>ring</td><td>Euclidean rhythms — spreads a number of hits as evenly as possible over a cycle, which is where most of the world&rsquo;s rhythms live. Set the hits, the cycle length and a rotation; the cycle tiles across the track. <strong>Write to pattern</strong> prints it as ordinary steps. <strong>Live</strong> instead has the track generate its rhythm as it plays, without writing anything — so the three counts can take an LFO, an automation lane or a macro pad, and turning it off gives you back the pattern you had. The step grid shows what is being generated and goes read-only while live is on.</td></tr>
                 <tr><td>dup / remove</td><td>Copy the whole track (sound and all), or delete it.</td></tr>
                 <tr><td>oct / semi</td><td>Transposes everything in the pattern up or down.</td></tr>
               </tbody>
@@ -762,6 +763,21 @@ export default function ManualPage() {
             the target, a shape, a depth, and either a speed in hertz or a division of
             the tempo so it stays in time. Filter cutoff is the classic target;
             effect amounts and the instrument&apos;s own tone controls work too.
+          </p>
+          <p>
+            The fifth shape, <span className={styles.ui}>euclid</span>, is a rhythm
+            rather than a waveform: instead of sweeping, the parameter is tapped in a
+            euclidean pattern. The rate becomes the <em>step</em> rate — 1/16 means one
+            ring step per sixteenth — and you set the pulses, the cycle length and a
+            rotation as you would on the track. <span className={styles.ui}>decay</span>{" "}
+            at zero holds each tap for its whole step, which is a gate; turn it up and
+            each tap falls away instead, which is a pluck. Taps lift the parameter off
+            wherever its knob sits and let it fall back, so the knob stays the base.
+            It locks to the transport, so the rhythm it plays is the same rhythm the
+            sequencer is. Put it on a filter for a gated sweep, on reverb for throws
+            that land on the offbeats, or on a live euclid track&apos;s{" "}
+            <span className={styles.ui}>rotate</span> to have one euclidean pattern
+            turn another.
           </p>
           <h3>aut — per step</h3>
           <p>

@@ -3,6 +3,7 @@ import { makeFuzzCurve, shaperPreampGain } from "./curves.js";
 import { BASS_MOD_KEYS, BASS_MOD_LABELS, bassFromUnit } from "./bass.js";
 import { DX7_MOD_KEYS, DX7_MOD_LABELS, dx7FromUnit } from "./dx7.js";
 import { GUITAR_MOD_KEYS, GUITAR_MOD_LABELS, guitarFromUnit } from "./guitar.js";
+import { EUCLID_MOD_KEYS, EUCLID_MOD_LABELS, euclidFromUnit, setEuclidLive } from "./euclid.js";
 import { canModulate } from "./lfo.js";
 import { setParam } from "./params.js";
 import { cutoffToHz, resonToQ } from "./signal.js";
@@ -33,6 +34,8 @@ export const AUTOMATION_TARGETS = {
   // wavetable wave-scan window (wavetable engine only — see canAutomate)
   "wt.scan.start":      { label: "wave scan start" },
   "wt.scan.range":      { label: "wave scan range" },
+  // euclid's three counts (only while live euclid is generating — see canAutomate)
+  ...Object.fromEntries(EUCLID_MOD_KEYS.map(k => [`euclid.${k}`, { label: EUCLID_MOD_LABELS[k] }])),
   // granular grain controls (granular engine only)
   "gran.speed":         { label: "grain speed" },
   "gran.pitch":         { label: "grain pitch" },
@@ -142,6 +145,7 @@ export function voiceAutoKeysForEngine(t) {
 export function canAutomate(t, key) {
   if (key === "cutoff" || key === "reson") return true;
   if (key.startsWith("wt.scan.")) return t.engineKey === "wt:akwf";
+  if (key.startsWith("euclid.")) return !!t.euclid?.on;
   if (key.startsWith("gran.")) return t.engineKey === "dm:granular";
   if (key.startsWith("tb303.")) return t.engineKey === "dm:303";
   if (key.startsWith("virus.")) return t.engineKey === "dm:virus";
@@ -195,6 +199,15 @@ export function applyAutomationAtStep(t, key, v, time, vNext, stepDur) {
   if (key === "reson") {
     t.filter.reson = vv;
     ramp(t.filterNode?.Q, resonToQ(vv), resonToQ(vn));
+    return;
+  }
+  // Euclid: the lane drives the generator's live override, never the stored
+  // knob, and the transport reads it a few lines further down the same step —
+  // so a lane on `rotate` turns the ring in time rather than rewriting the
+  // pattern. No ramp: these are counts.
+  if (key.startsWith("euclid.")) {
+    const k = key.slice(7);
+    setEuclidLive(t, k, euclidFromUnit(t, k, vv));
     return;
   }
   // Wave-scan window: no AudioParam behind it, so write the voice's live scan
