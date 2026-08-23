@@ -6,9 +6,10 @@ import { showInputDialog, showSavedPatchPicker } from "./dialogs.js";
 import { setStatus } from "./dom.js";
 import { DX7_ALG_LABELS, DX7_DEFAULTS, DX7_NUM_KEYS, DX7_PRESET_NAMES, DX7_SEL_KEYS, dx7Preset } from "./dx7.js";
 import { BASS_DEFAULTS, BASS_NUM_KEYS, BASS_SEL_KEYS, BASS_TONE_NAMES, bassTone, bassToneDescription } from "./bass.js";
+import { openEuclidDialog } from "./euclid.js";
 import { randomizeMelody, randomizeTimbre } from "./generate.js";
 import { GUITAR_DEFAULTS, GUITAR_NUM_KEYS, GUITAR_SEL_KEYS, GUITAR_TONE_NAMES, guitarTone, guitarToneDescription } from "./guitar.js";
-import { ICON_CLEAR, ICON_DICE, ICON_LOAD, ICON_ROLL, ICON_SAVE, ICON_SLIDERS, ICON_WAV } from "./icons.js";
+import { ICON_CLEAR, ICON_DICE, ICON_EUCLID, ICON_LOAD, ICON_ROLL, ICON_SAVE, ICON_SLIDERS, ICON_WAV } from "./icons.js";
 import { upgradeKnobs } from "./knob.js";
 import { canModulate, currentBpm, rateFromSync, syncLFO } from "./lfo.js";
 import { autoOwns, modOwns, refreshParamIndicators } from "./paramTargets.js";
@@ -728,6 +729,15 @@ export function renderTrack(t) {
   if (diceBtn) {
     diceBtn.innerHTML = ICON_DICE;
     attachDiceDensity(t, diceBtn);
+  }
+  // The other generator, beside the dice: the dice rolls, this one divides.
+  const euclidBtn = node.querySelector(".track-euclid");
+  if (euclidBtn) {
+    euclidBtn.innerHTML = ICON_EUCLID;
+    euclidBtn.addEventListener("click", () => {
+      if (t._euclidModal) { t._euclidModal.close(); return; }
+      openEuclidDialog(t);
+    });
   }
   // roll: icon + label — desktop shows the label (matches its text siblings),
   // mobile shows the icon (see the roll rules in the mobile media block)

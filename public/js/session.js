@@ -101,6 +101,7 @@ export function serializeSet() {
       glide: t.glide, speed: t.speed ?? 1, sampleSpeedMode: t.sampleSpeedMode ?? "native",
       pitchLock: t.pitchLock ?? true,
       density: t.density ?? 0.5,          // the dice button's fill level
+      euclid: t.euclid ? { ...t.euclid } : null,   // last euclid dialog settings
       lfoConfig: JSON.parse(JSON.stringify(t.lfoConfig)),
       patterns: t.patterns.map(p => ({
         steps: p.steps.slice(),
@@ -442,6 +443,7 @@ export function applySet(s) {
     t.sampleSpeedMode = td.sampleSpeedMode ?? "native";
     t.pitchLock = td.pitchLock ?? true;
     t.density = Math.max(0, Math.min(1, td.density ?? 0.5));
+    t.euclid = td.euclid ? { ...td.euclid } : null;
     Object.assign(t.lfoConfig, td.lfoConfig || {});
     if (Array.isArray(td.patterns)) {
       const pad = (arr, fill, n) => { const out = (arr || []).slice(0, n); while (out.length < n) out.push(fill); return out; };

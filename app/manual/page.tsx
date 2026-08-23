@@ -160,6 +160,7 @@ export default function ManualPage() {
                 <tr><td>p-lock</td><td>Gives this track a sound of its own in the pattern you are on. Per pattern, so it changes as you move between them. See <a href="#lock">below</a>.</td></tr>
                 <tr><td>clear</td><td>Empties this pattern on this track.</td></tr>
                 <tr><td>dice</td><td>Generates a new pattern. Keep pressing until something sticks. The fill level behind the icon is how busy the roll comes out — drag the dice up or down to set it.</td></tr>
+                <tr><td>ring</td><td>Euclidean rhythms — spreads a number of hits as evenly as possible over a cycle, which is where most of the world&rsquo;s rhythms live. Set the hits, the cycle length and a rotation; the cycle tiles across the track, and the pattern changes as you move the sliders so you can hear it against the transport. Cancel puts back what was there.</td></tr>
                 <tr><td>dup / remove</td><td>Copy the whole track (sound and all), or delete it.</td></tr>
                 <tr><td>oct / semi</td><td>Transposes everything in the pattern up or down.</td></tr>
               </tbody>

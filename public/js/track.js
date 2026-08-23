@@ -56,6 +56,10 @@ export function createTrack({ name, engineKey, length = totalSteps() }) {
     // the note transpose the sample (classic melodic sampler behavior).
     pitchLock: true,
     density: 0.5,
+    // Last settings used in the euclidean rhythm dialog (euclid.js). Null until
+    // the dialog is opened; trackEuclid() defaults and clamps it to the track
+    // length, which the length buttons can shrink underneath it.
+    euclid: null,
     speed: 1,
     // A track added mid-play joins on the step everyone else is on, not at 0.
     // At 1x the per-track counter advances once per 16n, so it tracks state.tick.
@@ -191,6 +195,7 @@ export function duplicateTrack(src) {
   dup.trackTick = src.trackTick ?? 0;
   dup.speedAccum = src.speedAccum ?? 0;
   dup.density = src.density ?? 0.5;
+  dup.euclid = src.euclid ? { ...src.euclid } : null;
   dup.sampleSpeedMode = src.sampleSpeedMode ?? "native";
   dup.pitchLock = src.pitchLock ?? true;
   for (const k of Object.keys(dup.lfoConfig)) {
@@ -276,6 +281,7 @@ export function duplicateTrack(src) {
 
 export function removeTrack(t) {
   if (t._trackMenuModal) t._trackMenuModal.close();
+  if (t._euclidModal) t._euclidModal.close();
   disposeLFOs(t);
   if (t.voice) t.voice.dispose();
   if (t.fxRack) t.fxRack.dispose();

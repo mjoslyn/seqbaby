@@ -15,7 +15,7 @@ env / fx / eq / comp / mod / automation per track.
   engine scripts in order: Tone.js 15 (CDN) → `public/woscillators.js` →
   `public/js/main.js` (ES module). `middleware.ts` refreshes the Supabase
   session on every request *except* static engine assets.
-- **Engine**: ~43 dependency-free vanilla ES modules in `public/js/`. No
+- **Engine**: ~44 dependency-free vanilla ES modules in `public/js/`. No
   bundler — edit, reload. `window.seqbaby` (from `appApi.js`) exposes `state`
   and serialize/apply hooks to the React shell (typed in `app/seqbaby.d.ts`).
 - **Accounts + data**: Supabase (Postgres + Auth + RLS). Tables: `profiles`,
@@ -109,6 +109,10 @@ env / fx / eq / comp / mod / automation per track.
 - `dx7.js` — the Yamaha DX7, same shape again, plus the 32-algorithm
   table, the panel's generated key lists and the preset voices. See the DX7
   section below.
+- `euclid.js` — the euclidean rhythm generator behind the ring button beside the
+  dice: Bjorklund proper (not the `(i*k)%n < k` shortcut, which lands on a
+  rotation of the canonical pattern) plus its dialog. Writes live and restores a
+  snapshot on cancel, so a rotation sweep is audible while you make it.
 - `theory.js` / `meter.js` / `generate.js` / `curves.js` / `params.js` /
   `constants.js` / `dialogs.js` / `dom.js` / `icons.js` / `appApi.js` /
   `types.js` (JSDoc typedefs — data-model source of truth).
@@ -1000,7 +1004,7 @@ Repo: https://github.com/mjoslyn/seqbaby.
   An inline marker (`window.__seqbabyServerBoot`) tells the paths apart, and
   `ScriptLoader.tsx` keeps its onload-chained injection for the soft-nav case
   (e.g. arriving from `/login`).
-- `app/EnginePreload.tsx` emits `modulepreload` for all 43 modules listed in
+- `app/EnginePreload.tsx` emits `modulepreload` for all 44 modules listed in
   `app/engineAssets.ts`. The graph is 8 levels deep, so without it the browser
   needs up to eight sequential round trips just to discover the code.
   **Adding or removing a module in `public/js/` means updating that list** —

@@ -182,6 +182,9 @@
  * @property {boolean} isDrumKit
  * @property {number} glide
  * @property {number} density
+ * @property {?{pulses: number, steps: number, rotate: number,
+ *            gate: "short"|"legato", accent: boolean}} [euclid]
+ *   Last settings used in the euclidean rhythm dialog (euclid.js).
  * @property {number} speed
  * @property {string} sampleSpeedMode       "native" default.
  * @property {SampleDefaults} sampleDefaults
