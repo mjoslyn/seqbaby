@@ -1582,7 +1582,7 @@ body.kbd-recording .sq-track.is-kbd-active { border-color: #e5484d; box-shadow: 
 .sq-wt__credit a { color: inherit; text-decoration: underline; }
 
 /* Sample-editor + slicer modals. */
-.sq-samp__modal, .sq-slice__modal { width: min(94vw, 720px); gap: 10px; }
+.sq-samp__modal { width: min(94vw, 720px); gap: 10px; }
 .sq-samp__head, .sq-slice__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 12px; color: var(--fg-dim); }
 .sq-samp__file { font: inherit; color: inherit; background: var(--bg-3); border: 1px solid var(--border); border-radius: 4px; padding: 1px 4px; max-width: 220px; }
 .sq-samp__title { color: var(--fg); }

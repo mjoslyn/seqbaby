@@ -20,6 +20,11 @@ export let stepEditor = null;
 // unchanged; on close it slots back into the track via a placeholder anchor,
 // so DOM order is preserved. Used by the piano roll, mod, and aut panels.
 export function openPanelAsModal(t, opts) {
+  // `modalClass` is the hook style.css sizes each panel by (a filter wants 680px
+  // where the fx rack wants 900), so it has to be the class the stylesheet
+  // actually names — every other modal in the app is `sq-<thing>__modal`, and
+  // for a while these eight were not, which quietly left all of them at the
+  // generic 1100px.
   const { panel, modalClass, btnSel, modalKey, afterMount } = opts;
   if (!panel || t[modalKey]) return;
   const anchor = document.createComment("panel-anchor");
@@ -66,7 +71,7 @@ export function openPanelAsModal(t, opts) {
 export function openRollAsModal(t) {
   openPanelAsModal(t, {
     panel: t._rollPanelEl,
-    modalClass: "roll-modal",
+    modalClass: "sq-roll__modal",
     btnSel: ".sq-track__roll",
     modalKey: "_rollModal",
     afterMount: () => renderRollPanel(t, t._rollPanelEl),
@@ -76,7 +81,7 @@ export function openRollAsModal(t) {
 export function openModAsModal(t) {
   openPanelAsModal(t, {
     panel: t._modPanelEl,
-    modalClass: "mod-modal",
+    modalClass: "sq-mod__modal",
     btnSel: ".sq-track__mod",
     modalKey: "_modModal",
   });
@@ -85,7 +90,7 @@ export function openModAsModal(t) {
 export function openAutAsModal(t) {
   openPanelAsModal(t, {
     panel: t._autPanelEl,
-    modalClass: "aut-modal",
+    modalClass: "sq-aut__modal",
     btnSel: ".track-aut",
     modalKey: "_autModal",
     afterMount: () => renderAutomationPanel(t, t._autPanelEl),
@@ -95,7 +100,7 @@ export function openAutAsModal(t) {
 export function openFilterAsModal(t) {
   openPanelAsModal(t, {
     panel: t._filterPanelEl,
-    modalClass: "filter-modal",
+    modalClass: "sq-filter__modal",
     btnSel: ".sq-track__filter",
     modalKey: "_filterModal",
   });
@@ -104,7 +109,7 @@ export function openFilterAsModal(t) {
 export function openEnvAsModal(t) {
   openPanelAsModal(t, {
     panel: t._envPanelEl,
-    modalClass: "env-modal",
+    modalClass: "sq-env__modal",
     btnSel: ".sq-track__env",
     modalKey: "_envModal",
   });
@@ -113,7 +118,7 @@ export function openEnvAsModal(t) {
 export function openFxAsModal(t) {
   openPanelAsModal(t, {
     panel: t._fxPanelEl,
-    modalClass: "fx-modal",
+    modalClass: "sq-fx__modal",
     btnSel: ".sq-track__fx",
     modalKey: "_fxModal",
   });
@@ -122,7 +127,7 @@ export function openFxAsModal(t) {
 export function openEqAsModal(t) {
   openPanelAsModal(t, {
     panel: t._eqPanelEl,
-    modalClass: "eq-modal",
+    modalClass: "sq-eq__modal",
     btnSel: ".sq-track__eq",
     modalKey: "_eqModal",
   });
@@ -131,7 +136,7 @@ export function openEqAsModal(t) {
 export function openCompAsModal(t) {
   openPanelAsModal(t, {
     panel: t._compPanelEl,
-    modalClass: "comp-modal",
+    modalClass: "sq-comp__modal",
     btnSel: ".sq-track__comp",
     modalKey: "_compModal",
   });
