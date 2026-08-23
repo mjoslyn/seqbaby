@@ -9,6 +9,7 @@ import { applySampleSpeed, defaultLFOConfig, disposeLFOs, syncAllLFOs } from "./
 import { guessIsDrumKit, parseMeter } from "./meter.js";
 import { updatePlaitsControlsVisibility } from "./params.js";
 import { renderPatternGrid } from "./patternBar.js";
+import { refreshEuclidUI, renderEuclidPanel } from "./euclid.js";
 import { applyBusMute, paintDiceDensity, refreshFxPanelUI, renderModPanel, syncTrackSoundUI } from "./render.js";
 import { flushAllPatternSounds, recallPatternSound, refreshPatternLockUI, refreshPatternSoundUI } from "./patternSound.js";
 import { syncScaleUI } from "./scaleUI.js";
@@ -101,7 +102,7 @@ export function serializeSet() {
       glide: t.glide, speed: t.speed ?? 1, sampleSpeedMode: t.sampleSpeedMode ?? "native",
       pitchLock: t.pitchLock ?? true,
       density: t.density ?? 0.5,          // the dice button's fill level
-      euclid: t.euclid ? { ...t.euclid } : null,   // last euclid dialog settings
+      euclid: t.euclid ? { ...t.euclid } : null,   // the euclid generator, live mode included
       lfoConfig: JSON.parse(JSON.stringify(t.lfoConfig)),
       patterns: t.patterns.map(p => ({
         steps: p.steps.slice(),
@@ -444,6 +445,7 @@ export function applySet(s) {
     t.pitchLock = td.pitchLock ?? true;
     t.density = Math.max(0, Math.min(1, td.density ?? 0.5));
     t.euclid = td.euclid ? { ...td.euclid } : null;
+    t._euclidMod = null;                // live overrides are never saved
     Object.assign(t.lfoConfig, td.lfoConfig || {});
     if (Array.isArray(td.patterns)) {
       const pad = (arr, fill, n) => { const out = (arr || []).slice(0, n); while (out.length < n) out.push(fill); return out; };
@@ -506,6 +508,11 @@ export function applySet(s) {
       t.el.classList.toggle("is-muted", t.muted);
       t.el.classList.toggle("is-soloed", t.soloed);
       paintDiceDensity(t);
+      // After the fields are filled, not from renderTrack: the track's DOM is
+      // built by createTrack before any of this is set, so live mode would
+      // load without its read-only grid.
+      renderEuclidPanel(t);
+      refreshEuclidUI(t);
       refreshFxPanelUI(t);
       renderModPanel(t, t._modPanelEl || t.el.querySelector(".sq-track__mod-panel"));
       const eqPanel = t._eqPanelEl || t.el.querySelector(".sq-track__eq-panel");

@@ -1,3 +1,20 @@
+/**
+ * Euclidean rhythms — Bjorklund's algorithm, and the two ways a track can use
+ * it.
+ *
+ *   - **write to pattern**: print the ring into the step grid, once. What you
+ *     get is ordinary steps, editable by hand from then on.
+ *   - **live**: the transport asks the generator for every step instead of
+ *     reading the written pattern. Nothing is written, so pulses / steps /
+ *     rotate can be driven by an LFO, an automation lane or a macro pad — a
+ *     rotation sweep is a performance, not an edit, and switching live off
+ *     hands you back exactly the pattern you had.
+ *
+ * That split is the whole reason live mode exists. Modulating the one-shot
+ * would mean rewriting the pattern under the playhead sixty times a second,
+ * and this app has no undo.
+ */
+
 import { setStatus } from "./dom.js";
 import { refreshKnobRange, upgradeKnobs } from "./knob.js";
 import { patternMeter, stepsPerBeatForMeter } from "./meter.js";
@@ -10,6 +27,7 @@ import { lastUsedNote } from "./track.js";
 
 /**
  * @typedef {Object} EuclidConfig
+ * @property {boolean} on      Live mode: the transport generates instead of reading steps.
  * @property {number} pulses   Hits in the cycle.
  * @property {number} steps    Cycle length in sixteenth-note steps.
  * @property {number} rotate   Steps to push the cycle later (0..steps-1).
@@ -18,15 +36,25 @@ import { lastUsedNote } from "./track.js";
  */
 
 /** @type {EuclidConfig} */
-export const EUCLID_DEFAULTS = { pulses: 4, steps: 16, rotate: 0, gate: "short", accent: true };
+export const EUCLID_DEFAULTS = { on: false, pulses: 4, steps: 16, rotate: 0, gate: "short", accent: true };
 
-// The fields a generated rhythm writes. Snapshot/restore and the clear pass
-// both walk this list, so a new per-step array is added in one place.
+/** The three modulatable controls, in every namespace they answer to. */
+export const EUCLID_MOD_KEYS = ["pulses", "steps", "rotate"];
+export const EUCLID_MOD_LABELS = {
+  pulses: "euclid pulses", steps: "euclid cycle", rotate: "euclid rotate",
+};
+
+// The fields a written rhythm touches. Snapshot and the clear pass both walk
+// this list, so a new per-step array is added in one place.
 const EUCLID_FIELDS = [
   "steps", "lengths", "notes", "velocities", "chords", "offsets",
   "arps", "arpRates", "arpRanges", "arpDirs", "ratchets", "complexities",
   "extraNotes", "extraLengths",
 ];
+
+const clampInt = (v, lo, hi) => Math.max(lo, Math.min(hi, Math.round(Number(v) || 0)));
+
+// ---- the algorithm -------------------------------------------------------
 
 /**
  * Bjorklund's algorithm — spread `pulses` hits as evenly as possible over
@@ -89,8 +117,10 @@ function bjorklund(n, k) {
   return first <= 0 ? out : out.slice(first).concat(out.slice(0, first));
 }
 
+// ---- the track's settings ------------------------------------------------
+
 /**
- * A track's euclid settings, defaulted on first use and clamped to the
+ * A track's stored euclid settings, defaulted on first use and clamped to the
  * track's current length (which the length buttons can shrink underneath it).
  * @param {Track} t
  * @returns {EuclidConfig}
@@ -100,22 +130,162 @@ export function trackEuclid(t) {
   const src = t.euclid || {};
   const cycle = clampInt(src.steps ?? Math.min(len, EUCLID_DEFAULTS.steps), 1, len);
   return {
+    on: !!src.on,
     steps: cycle,
     pulses: clampInt(src.pulses ?? EUCLID_DEFAULTS.pulses, 0, cycle),
-    rotate: clampInt(src.rotate ?? 0, 0, cycle - 1),
+    rotate: clampInt(src.rotate ?? 0, 0, Math.max(0, cycle - 1)),
     gate: src.gate === "legato" ? "legato" : "short",
     accent: src.accent !== false,
   };
 }
 
-const clampInt = (v, lo, hi) => Math.max(lo, Math.min(hi, Math.round(Number(v) || 0)));
+/**
+ * The settings the generator is actually running on: the stored ones with any
+ * live modulation laid over the top.
+ *
+ * The overrides live in `t._euclidMod` and are never written back or saved —
+ * the same bargain the granular LFOs strike with their sliders. A knob you can
+ * see stays where you left it while something else drives the sound.
+ * @param {Track} t
+ * @returns {EuclidConfig}
+ */
+export function liveEuclid(t) {
+  const stored = trackEuclid(t);
+  const mod = t._euclidMod;
+  if (!mod) return stored;
+  const len = Math.max(1, t.length | 0);
+  // Resolve the cycle first: it is what bounds the other two.
+  const steps = mod.steps != null ? clampInt(mod.steps, 1, len) : stored.steps;
+  return {
+    on: stored.on,
+    steps,
+    pulses: clampInt(mod.pulses != null ? mod.pulses : stored.pulses, 0, steps),
+    rotate: clampInt(mod.rotate != null ? mod.rotate : stored.rotate, 0, Math.max(0, steps - 1)),
+    gate: stored.gate,
+    accent: stored.accent,
+  };
+}
 
-// The note a generated hit gets when there was nothing at that step before.
+/**
+ * A control's range, in the units the knob shows. Every other engine has a
+ * constant table here; euclid's ranges move, because two of them are bounded
+ * by the cycle and the cycle is bounded by the track length.
+ * @param {Track} t @param {"pulses"|"steps"|"rotate"} key
+ * @returns {[number, number]}
+ */
+export function euclidRange(t, key) {
+  const len = Math.max(1, t.length | 0);
+  if (key === "steps") return [1, len];
+  const cyc = liveEuclid(t).steps;
+  if (key === "pulses") return [0, cyc];
+  return [0, Math.max(0, cyc - 1)];       // rotate
+}
+
+/** A 0..1 modulation value as a count. @param {Track} t */
+export function euclidFromUnit(t, key, u) {
+  const [lo, hi] = euclidRange(t, key);
+  return clampInt(lo + Math.max(0, Math.min(1, u)) * (hi - lo), lo, hi);
+}
+
+/** A count back to the 0..1 an LFO swings around. @param {Track} t */
+export function euclidToUnit(t, key, v) {
+  const [lo, hi] = euclidRange(t, key);
+  return hi > lo ? Math.max(0, Math.min(1, (Number(v) - lo) / (hi - lo))) : 0;
+}
+
+/**
+ * Drive one control live. Called by the LFO setter loop (rAF), by an
+ * automation lane at step time, and by a macro pad — all of which speak counts
+ * once they have been through `euclidFromUnit`.
+ * @param {Track} t @param {"pulses"|"steps"|"rotate"} key @param {number} v
+ */
+export function setEuclidLive(t, key, v) {
+  if (!EUCLID_MOD_KEYS.includes(key)) return;
+  const mod = t._euclidMod || (t._euclidMod = {});
+  mod[key] = v;
+  refreshEuclidLive(t);
+}
+
+/** Hand a control back to its knob — the LFO was switched off. @param {Track} t */
+export function clearEuclidLive(t, key) {
+  if (!t._euclidMod) return;
+  delete t._euclidMod[key];
+  refreshEuclidLive(t);
+}
+
+// ---- the generated rhythm ------------------------------------------------
+
+// The note a generated hit gets when the pattern has nothing at that step.
 // Drum kits are pinned to C2 like every other blank step in the app; a melodic
 // track carries on from whatever it last played.
-function noteForHit(t) {
+/** @param {Track} t */
+export function euclidFallbackNote(t) {
   return t.isDrumKit ? 36 : lastUsedNote(t);
 }
+
+/** Identity of the rhythm a track is currently generating — everything the
+ *  plan depends on, so a cached plan can be reused until one of them moves. */
+function planKey(t, cfg) {
+  return `${t.length}|${t._patternIdx}|${cfg.steps}|${cfg.pulses}|${cfg.rotate}|${cfg.gate}|${cfg.accent}`;
+}
+
+/**
+ * The generated rhythm as one entry per step: `{span, vel}` for a hit, null
+ * for a rest. Cached, because the transport asks for it once per step per
+ * track and the answer only changes when a control moves.
+ * @param {Track} t
+ */
+export function euclidPlan(t) {
+  const cfg = liveEuclid(t);
+  const key = planKey(t, cfg);
+  if (t._euclidPlan?.key === key) return t._euclidPlan.plan;
+
+  const len = Math.max(1, t.length | 0);
+  const ring = euclideanRhythm(cfg.steps, cfg.pulses, cfg.rotate);
+  const spb = stepsPerBeatForMeter(patternMeter(t._patternIdx ?? state.activePattern));
+  const hits = [];
+  for (let i = 0; i < len; i++) if (ring[i % cfg.steps]) hits.push(i);
+
+  const plan = new Array(len).fill(null);
+  for (let h = 0; h < hits.length; h++) {
+    const i = hits[h];
+    const next = h + 1 < hits.length ? hits[h + 1] : len;
+    plan[i] = {
+      span: cfg.gate === "legato" ? Math.max(1, next - i) : 1,
+      vel: cfg.accent ? ((i % spb) === 0 ? 0.95 : 0.62) : 0.8,
+    };
+  }
+  t._euclidPlan = { key, plan, ring };
+  return plan;
+}
+
+/** The ring itself (one cycle), for the panel's drawing. @param {Track} t */
+export function euclidRing(t) {
+  euclidPlan(t);
+  return t._euclidPlan.ring;
+}
+
+/**
+ * What a step plays — the one question the transport and the step grid both
+ * ask. In live mode the answer is generated; otherwise it is read from the
+ * written pattern. Null means silence.
+ *
+ * Only the *rhythm* is generated: pitch, chord, arp, ratchet, nudge and the
+ * automation lanes all still come from the pattern, so a live euclid track is
+ * an ordinary track with its step mask replaced.
+ * @param {Track} t @param {number} idx
+ * @returns {{span: number, vel: number}|null}
+ */
+export function stepGateAt(t, idx) {
+  if (!t.euclid?.on) {
+    return t.steps[idx]
+      ? { span: Math.max(1, t.lengths[idx] || 1), vel: t.velocities[idx] ?? 0.5 }
+      : null;
+  }
+  return euclidPlan(t)[idx] || null;
+}
+
+// ---- writing the pattern -------------------------------------------------
 
 /**
  * The pattern object a generator writes into: the one currently aliased onto
@@ -130,9 +300,8 @@ export function livePattern(t) {
 }
 
 /**
- * Copy a pattern's per-step arrays. Used as the base a generated rhythm reads
- * its pitches back from, and as the restore point when the dialog is
- * cancelled.
+ * Copy a pattern's per-step arrays — the base a written rhythm reads its
+ * pitches back from.
  * @param {Track} t
  * @param {Object} [pat] Defaults to the pattern aliased onto the track now.
  */
@@ -145,44 +314,26 @@ export function snapshotSteps(t, pat) {
 }
 
 /**
- * Write a snapshot back. In place, element by element: the track's arrays are
- * the pattern's arrays (aliasPattern), so reassigning one would quietly detach
- * the track from its own pattern.
- * @param {Track} t
- * @param {Record<string, any[]>} snap
- * @param {Object} [pat] Defaults to the pattern aliased onto the track now.
- */
-export function restoreSteps(t, snap, pat) {
-  const p = pat || livePattern(t) || t;
-  for (const f of EUCLID_FIELDS) {
-    const src = snap?.[f], dst = p[f];
-    if (!Array.isArray(src) || !Array.isArray(dst)) continue;
-    for (let i = 0; i < dst.length && i < src.length; i++) dst[i] = src[i];
-  }
-}
-
-/**
- * Replace a pattern's rhythm with a euclidean one. The cycle tiles
- * across the track length, so E(3,8) on a 16-step track plays twice.
+ * Print the generated rhythm into a pattern, as ordinary steps.
  *
- * Pitch is not this tool's business: a hit landing where `base` already had a
- * note keeps that note (and its chord), so euclid-ing a written line rewrites
- * its rhythm rather than flattening it to one pitch. Everywhere else it falls
- * back to the track's last-used note.
+ * Pitch is not this tool's business: a hit landing where the pattern already
+ * had a note keeps that note (and its chord), so euclid-ing a written line
+ * rewrites its rhythm rather than flattening it to one pitch. Everywhere else
+ * it falls back to `euclidFallbackNote`.
  *
  * @param {Track} t
- * @param {EuclidConfig} cfg
- * @param {Record<string, any[]>} [base] Snapshot to read kept pitches from
- *   (defaults to what is in the pattern right now).
+ * @param {EuclidConfig} [cfg] Defaults to what the track is generating now.
  * @param {Object} [pat] Pattern to write (defaults to the aliased one).
+ * @returns {number} how many hits were written
  */
-export function applyEuclid(t, cfg, base, pat) {
+export function applyEuclid(t, cfg, pat) {
   const p = pat || livePattern(t) || t;
+  const c = cfg || liveEuclid(t);
   const patIdx = t.patterns?.indexOf(p);
-  const len = t.length;
-  const cycle = clampInt(cfg.steps, 1, len);
-  const ring = euclideanRhythm(cycle, cfg.pulses, cfg.rotate);
-  const src = base || snapshotSteps(t, p);
+  const len = Math.max(1, t.length | 0);
+  const cycle = clampInt(c.steps, 1, len);
+  const ring = euclideanRhythm(cycle, c.pulses, c.rotate);
+  const src = snapshotSteps(t, p);
 
   for (let i = 0; i < len; i++) {
     p.steps[i] = 0;
@@ -204,142 +355,165 @@ export function applyEuclid(t, cfg, base, pat) {
   for (let i = 0; i < len; i++) if (ring[i % cycle]) hits.push(i);
 
   const spb = stepsPerBeatForMeter(patternMeter(patIdx >= 0 ? patIdx : state.activePattern));
-  const fallback = noteForHit(t);
+  const fallback = euclidFallbackNote(t);
   for (let h = 0; h < hits.length; h++) {
     const i = hits[h];
     const next = h + 1 < hits.length ? hits[h + 1] : len;
     const kept = src.steps?.[i] ? src.notes?.[i] : null;
     p.steps[i] = 1;
-    p.lengths[i] = cfg.gate === "legato" ? Math.max(1, next - i) : 1;
+    p.lengths[i] = c.gate === "legato" ? Math.max(1, next - i) : 1;
     p.notes[i] = kept != null ? kept : fallback;
     if (kept != null && p.chords && src.chords) {
       p.chords[i] = src.chords[i] || "";
       if (p.complexities && src.complexities) p.complexities[i] = src.complexities[i] | 0;
     }
-    const onBeat = (i % spb) === 0;
-    p.velocities[i] = cfg.accent ? (onBeat ? 0.95 : 0.62) : 0.8;
+    p.velocities[i] = c.accent ? ((i % spb) === 0 ? 0.95 : 0.62) : 0.8;
   }
   return hits.length;
 }
 
+// ---- the panel -----------------------------------------------------------
+//
+// A permanent panel on the track rather than a modal built on demand, for the
+// same reason the filter and the fx rack are: the controls have to exist in
+// the track's DOM whether or not anyone is looking at them, or the parameter
+// menu, the mod/aut dots and the macro pads have nothing to find.
+
+const euclidPanelOf = (t) => t?._euclidPanelEl || t?.el?.querySelector(".sq-track__euclid-panel") || null;
+
+/** @param {Track} t */
+function ensureEuclid(t) {
+  if (!t.euclid) t.euclid = { ...EUCLID_DEFAULTS };
+  return t.euclid;
+}
+
+// Repaints are coalesced onto one frame and skipped when the resolved rhythm
+// hasn't moved: the LFO setter loop writes at 60Hz, while these controls are
+// counts, so most frames are asking for the rhythm already on screen.
+/** @type {Set<Track>} */
+const dirty = new Set();
+let rafId = null;
+
+function flushEuclid() {
+  rafId = null;
+  for (const t of dirty) {
+    if (!state.tracks.includes(t)) continue;
+    drawEuclidViz(t);
+    if (t.euclid?.on) renderStepGrid(t);
+  }
+  dirty.clear();
+}
+
 /**
- * The euclid dialog: pulses / cycle length / rotation, drawn as the ring the
- * algorithm is named for.
- *
- * It writes the pattern on every change rather than on OK, so a rotation sweep
- * is audible against the transport while you make it — and takes a snapshot on
- * open to put back on cancel, which is the only undo this app has (the same
- * bargain the macro pads strike for a momentary move).
- *
+ * Something drove a control live. Repaint if — and only if — the rhythm the
+ * track is generating actually changed.
  * @param {Track} t
  */
-export function openEuclidDialog(t) {
-  if (t._euclidModal) return;
-  const len = Math.max(1, t.length | 0);
+export function refreshEuclidLive(t) {
+  const key = planKey(t, liveEuclid(t));
+  if (t._euclidPaintedKey === key) return;
+  t._euclidPaintedKey = key;
+  dirty.add(t);
+  if (rafId == null) rafId = requestAnimationFrame(flushEuclid);
+}
+
+/**
+ * The track-level consequences of live mode: the grid shows what is being
+ * generated rather than what is written, so it goes read-only and says so.
+ * @param {Track} t
+ */
+export function refreshEuclidUI(t) {
+  const on = !!t.euclid?.on;
+  t.el?.classList.toggle("is-euclid", on);
+  const btn = t.el?.querySelector(".track-euclid");
+  if (btn) btn.classList.toggle("is-live", on);
+  const panel = euclidPanelOf(t);
+  const live = panel?.querySelector(".sq-euclid__on");
+  if (live) live.checked = on;
+  t._euclidPaintedKey = null;
+  renderStepGrid(t);
+}
+
+/**
+ * Fill the panel from the track: knob values and ranges from the STORED
+ * settings (they are the base an LFO swings around), the drawing from what is
+ * actually being generated.
+ * @param {Track} t @param {HTMLElement} [panelEl]
+ */
+export function renderEuclidPanel(t, panelEl) {
+  const panel = panelEl || euclidPanelOf(t);
+  if (!panel) return;
+  syncEuclidControls(t, panel);
+  drawEuclidViz(t, panel);
+}
+
+/** Knob values + ranges from the stored config. @param {Track} t */
+function syncEuclidControls(t, panelEl) {
+  const panel = panelEl || euclidPanelOf(t);
+  if (!panel) return;
   const cfg = trackEuclid(t);
-  // Hold the pattern, not the track's aliases: chain mode can advance the
-  // pattern under an open dialog, and writing (or cancelling) into whatever
-  // came next would overwrite a pattern nobody asked to change.
-  const pat = livePattern(t);
-  if (!pat) return;
-  const base = snapshotSteps(t, pat);
-
-  const overlay = document.createElement("div");
-  overlay.className = "sq-modal-overlay";
-  const esc = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
-  overlay.innerHTML = `
-    <div class="sq-modal sq-euclid__modal" role="dialog" aria-modal="true" aria-label="euclidean rhythm">
-      <div class="sq-modal__title">euclidean rhythm — ${esc(t.name?.trim() || "track")}</div>
-      <div class="sq-euclid__viz">
-        <svg class="sq-euclid__ring" viewBox="0 0 120 120" width="120" height="120" aria-hidden="true"></svg>
-        <div class="sq-euclid__readout">
-          <div class="sq-euclid__formula"></div>
-          <div class="sq-euclid__bits"></div>
-          <div class="sq-euclid__hint">the cycle tiles across the track's ${len} steps</div>
-        </div>
-      </div>
-      <div class="sq-euclid__strip" aria-hidden="true"></div>
-      <div class="sq-euclid__ctls">
-        <label class="sq-euclid__f" title="how many hits go in the cycle">
-          <span>pulses</span>
-          <input class="sq-euclid__pulses" type="range" min="0" max="${len}" step="1" value="${cfg.pulses}" />
-          <output class="sq-euclid__val"></output>
-        </label>
-        <label class="sq-euclid__f" title="how long the cycle is before it repeats across the track">
-          <span>steps</span>
-          <input class="sq-euclid__steps" type="range" min="1" max="${len}" step="1" value="${cfg.steps}" />
-          <output class="sq-euclid__val"></output>
-        </label>
-        <label class="sq-euclid__f" title="turn the ring — same rhythm, landing later">
-          <span>rotate</span>
-          <input class="sq-euclid__rotate" type="range" min="0" max="${Math.max(0, cfg.steps - 1)}" step="1" value="${cfg.rotate}" />
-          <output class="sq-euclid__val"></output>
-        </label>
-      </div>
-      <div class="sq-euclid__opts">
-        <label title="hold each hit until the next one instead of a one-step gate"
-          >gate <select class="sq-euclid__gate">
-            <option value="short">short</option>
-            <option value="legato">legato</option>
-          </select></label>
-        <label title="louder on the beat, quieter off it — the pattern reads as a groove rather than a flat line"
-          ><input class="sq-euclid__accent" type="checkbox" /> accent the beat</label>
-      </div>
-      <div class="sq-modal__actions">
-        <button class="modal-cancel sq-btn--ghost" type="button">cancel</button>
-        <button class="sq-modal__ok" type="button">apply</button>
-      </div>
-    </div>
-  `;
-
-  const q = (sel) => overlay.querySelector(sel);
-  const pulsesEl = q(".sq-euclid__pulses");
-  const stepsEl  = q(".sq-euclid__steps");
-  const rotateEl = q(".sq-euclid__rotate");
-  const gateEl   = q(".sq-euclid__gate");
-  const accentEl = q(".sq-euclid__accent");
-  gateEl.value = cfg.gate;
-  accentEl.checked = cfg.accent;
-
-  const read = () => {
-    const cycle = clampInt(stepsEl.value, 1, len);
-    return {
-      steps: cycle,
-      pulses: clampInt(pulsesEl.value, 0, cycle),
-      rotate: clampInt(rotateEl.value, 0, Math.max(0, cycle - 1)),
-      gate: gateEl.value === "legato" ? "legato" : "short",
-      accent: accentEl.checked,
-    };
-  };
-
-  const ring = q(".sq-euclid__ring");
-  const strip = q(".sq-euclid__strip");
-  const formula = q(".sq-euclid__formula");
-  const bits = q(".sq-euclid__bits");
-  const vals = overlay.querySelectorAll(".sq-euclid__val");
-
-  const draw = (c) => {
-    // pulses can't exceed the cycle, and a rotation past its end is the same
-    // pattern again — keep both controls honest about that. The knob caches the
-    // range it was upgraded with (the drag reads it per pointer sample), so a
-    // rewritten max has to be handed back to it or the dial keeps scaling to
-    // the old span.
-    for (const [el, max] of [[pulsesEl, c.steps], [rotateEl, Math.max(0, c.steps - 1)]]) {
-      if (el.max !== String(max)) { el.max = String(max); refreshKnobRange(el); }
+  const len = Math.max(1, t.length | 0);
+  // The knobs are bounded by the STORED cycle, not the modulated one — a knob
+  // whose travel changed under a moving LFO would be unplayable.
+  const bounds = { pulses: [0, cfg.steps], steps: [1, len], rotate: [0, Math.max(0, cfg.steps - 1)] };
+  for (const key of EUCLID_MOD_KEYS) {
+    const el = panel.querySelector(`.p-euc${key}`);
+    if (!el) continue;
+    const [lo, hi] = bounds[key];
+    if (el.min !== String(lo) || el.max !== String(hi)) {
+      el.min = String(lo); el.max = String(hi);
+      refreshKnobRange(el);
     }
-    if (Number(pulsesEl.value) !== c.pulses) pulsesEl.value = String(c.pulses);
-    if (Number(rotateEl.value) !== c.rotate) rotateEl.value = String(c.rotate);
-    vals[0].textContent = String(c.pulses);
-    vals[1].textContent = String(c.steps);
-    vals[2].textContent = String(c.rotate);
+    if (Number(el.value) !== cfg[key]) el.value = String(cfg[key]);
+  }
+  const gate = panel.querySelector(".sq-euclid__gate");
+  if (gate) gate.value = cfg.gate;
+  const accent = panel.querySelector(".sq-euclid__accent");
+  if (accent) accent.checked = cfg.accent;
+  const live = panel.querySelector(".sq-euclid__on");
+  if (live) live.checked = cfg.on;
+  const write = panel.querySelector(".sq-euclid__write");
+  if (write) write.disabled = cfg.on;
+}
 
-    const pat = euclideanRhythm(c.steps, c.pulses, c.rotate);
-    formula.textContent = `E(${c.pulses}, ${c.steps})${c.rotate ? ` rotated ${c.rotate}` : ""}`;
-    bits.textContent = pat.map(on => (on ? "x" : ".")).join("");
+/**
+ * The ring, the tiled strip and the formula — all from the LIVE config, so
+ * they show what is playing rather than where the knobs sit. Watching the ring
+ * turn under a still knob is what modulation looks like here.
+ * @param {Track} t
+ */
+function drawEuclidViz(t, panelEl) {
+  const panel = panelEl || euclidPanelOf(t);
+  if (!panel) return;
+  const c = liveEuclid(t);
+  const len = Math.max(1, t.length | 0);
+  const pat = euclideanRhythm(c.steps, c.pulses, c.rotate);
 
-    // The ring: one node per step of the cycle, playhead order clockwise from
-    // the top. This is the picture the algorithm is actually about — evenness
-    // is visible on a circle and invisible on a line.
+  for (const key of EUCLID_MOD_KEYS) {
+    const out = panel.querySelector(`.sq-euclid__val--${key}`);
+    if (out) out.textContent = String(c[key]);
+    const field = panel.querySelector(`.p-euc${key}`)?.closest(".sq-euclid__f");
+    // Say when a control is being driven from somewhere else, or the still
+    // knob beside a moving ring reads as a bug.
+    if (field) field.classList.toggle("is-driven", t._euclidMod?.[key] != null);
+  }
+
+  const formula = panel.querySelector(".sq-euclid__formula");
+  if (formula) formula.textContent = `E(${c.pulses}, ${c.steps})${c.rotate ? ` rotated ${c.rotate}` : ""}`;
+  const bits = panel.querySelector(".sq-euclid__bits");
+  if (bits) bits.textContent = pat.map(on => (on ? "x" : ".")).join("");
+  const hint = panel.querySelector(".sq-euclid__hint");
+  if (hint) {
+    hint.textContent = c.on
+      ? `generating live across the track's ${len} steps — the grid is read-only until you switch it off`
+      : `the cycle tiles across the track's ${len} steps`;
+  }
+
+  // The ring: one node per step of the cycle, playhead order clockwise from
+  // the top. This is the picture the algorithm is actually about — evenness is
+  // visible on a circle and invisible on a line.
+  const ring = panel.querySelector(".sq-euclid__ring");
+  if (ring) {
     const R = 46, cx = 60, cy = 60;
     const n = pat.length;
     const pts = pat.map((_, i) => {
@@ -353,73 +527,77 @@ export function openEuclidDialog(t) {
     const dots = pts.map(([x, y], i) =>
       `<circle class="sq-euclid__node${pat[i] ? " is-on" : ""}" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${pat[i] ? 5.4 : 2.6}" />`
     ).join("");
-    ring.innerHTML =
-      `<circle class="sq-euclid__orbit" cx="${cx}" cy="${cy}" r="${R}" />${shape}${dots}`;
+    ring.innerHTML = `<circle class="sq-euclid__orbit" cx="${cx}" cy="${cy}" r="${R}" />${shape}${dots}`;
+  }
 
-    // The strip is the track as the sequencer sees it: the cycle tiled out to
-    // the track's length, with the cycle joins marked.
+  // The strip is the track as the sequencer sees it: the cycle tiled out to
+  // the track's length, with the cycle joins marked.
+  const strip = panel.querySelector(".sq-euclid__strip");
+  if (strip) {
     strip.innerHTML = Array.from({ length: len }, (_, i) => {
-      const on = pat[i % c.steps];
       const cls = ["sq-euclid__cell"];
-      if (on) cls.push("is-on");
+      if (pat[i % c.steps]) cls.push("is-on");
       if (i && i % c.steps === 0) cls.push("is-cycle");
       if (i % 4 === 0) cls.push("is-beat");
       return `<span class="${cls.join(" ")}"></span>`;
     }).join("");
-  };
+  }
+  t._euclidPaintedKey = planKey(t, c);
+}
 
-  // A knob drag dispatches `input` per coalesced pointer sample, and a value
-  // that clamps against the cycle arrives unchanged — so the same rhythm can be
-  // asked for several times a frame. Regenerating and repainting the grid for
-  // each of those is work nobody sees.
-  let lastWritten = "";
-  const write = () => {
-    const c = read();
-    draw(c);
-    const key = JSON.stringify(c);
-    if (key === lastWritten) return;
-    lastWritten = key;
-    applyEuclid(t, c, base, pat);
-    renderStepGrid(t);
+/**
+ * Wire the panel once, at track render. The three counts write the track's
+ * stored settings — they are ordinary parameters, and everything that can
+ * drive them (LFO, lane, macro pad) goes through `setEuclidLive` instead, so
+ * a performance never touches the base.
+ * @param {Track} t @param {HTMLElement} panel
+ */
+export function wireEuclidPanel(t, panel) {
+  if (!panel) return;
+  const changed = () => {
+    syncEuclidControls(t, panel);
+    drawEuclidViz(t, panel);
+    if (t.euclid?.on) renderStepGrid(t);
   };
-
-  for (const el of [pulsesEl, stepsEl, rotateEl]) el.addEventListener("input", write);
-  for (const el of [gateEl, accentEl]) el.addEventListener("change", write);
-
-  const close = () => {
-    if (!t._euclidModal) return;
-    overlay.remove();
-    document.removeEventListener("keydown", escHandler);
-    t._euclidModal = null;
-    t.el?.querySelector(".track-euclid")?.setAttribute("aria-pressed", "false");
-  };
-  const cancel = () => {
-    restoreSteps(t, base, pat);
-    renderStepGrid(t);
-    close();
-  };
-  const commit = () => {
-    const c = read();
-    t.euclid = { ...c };
-    applyEuclid(t, c, base, pat);
-    renderStepGrid(t);
-    close();
-    setStatus(`"${t.name}" — E(${c.pulses}, ${c.steps})${c.rotate ? ` rot ${c.rotate}` : ""}`);
-  };
-  const escHandler = (e) => {
-    if (e.key === "Escape") { e.preventDefault(); cancel(); }
-    if (e.key === "Enter" && !e.repeat) { e.preventDefault(); commit(); }
-  };
-  q(".modal-cancel").addEventListener("click", cancel);
-  q(".sq-modal__ok").addEventListener("click", commit);
-  overlay.addEventListener("click", (e) => { if (e.target === overlay) cancel(); });
-  document.addEventListener("keydown", escHandler);
-
-  document.body.appendChild(overlay);
-  // After the append, as every other modal does: the knob's readout bubble
-  // positions against a laid-out box.
-  upgradeKnobs(overlay);
-  t._euclidModal = { overlay, close: cancel };
-  t.el?.querySelector(".track-euclid")?.setAttribute("aria-pressed", "true");
-  write();
+  for (const key of EUCLID_MOD_KEYS) {
+    const el = panel.querySelector(`.p-euc${key}`);
+    el?.addEventListener("input", () => {
+      const cfg = ensureEuclid(t);
+      cfg[key] = clampInt(el.value, Number(el.min), Number(el.max));
+      // The cycle bounds the other two, so shrinking it pulls them in.
+      if (key === "steps") {
+        cfg.pulses = clampInt(cfg.pulses, 0, cfg.steps);
+        cfg.rotate = clampInt(cfg.rotate, 0, Math.max(0, cfg.steps - 1));
+      }
+      changed();
+    });
+  }
+  panel.querySelector(".sq-euclid__gate")?.addEventListener("change", (e) => {
+    ensureEuclid(t).gate = e.target.value === "legato" ? "legato" : "short";
+    changed();
+  });
+  panel.querySelector(".sq-euclid__accent")?.addEventListener("change", (e) => {
+    ensureEuclid(t).accent = !!e.target.checked;
+    changed();
+  });
+  panel.querySelector(".sq-euclid__on")?.addEventListener("change", (e) => {
+    ensureEuclid(t).on = !!e.target.checked;
+    refreshEuclidUI(t);
+    renderEuclidPanel(t, panel);
+    setStatus(t.euclid.on
+      ? `"${t.name}" — euclid live`
+      : `"${t.name}" — euclid off, pattern as you left it`);
+  });
+  panel.querySelector(".sq-euclid__write")?.addEventListener("click", () => {
+    // Destructive and labelled as such, like clear and the dice — and unlike
+    // those two it has a non-destructive rehearsal right beside it, which is
+    // what live mode is.
+    const n = applyEuclid(t);
+    ensureEuclid(t).on = false;
+    refreshEuclidUI(t);
+    renderEuclidPanel(t, panel);
+    const c = liveEuclid(t);
+    setStatus(`"${t.name}" — wrote E(${c.pulses}, ${c.steps})${c.rotate ? ` rot ${c.rotate}` : ""}, ${n} hits`);
+  });
+  upgradeKnobs(panel);
 }

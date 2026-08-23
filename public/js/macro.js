@@ -116,9 +116,14 @@ export function unassign(pad, axis, a) {
 function controlFor(t, key) {
   const cls = CLASS_FOR_AUTO[key];
   if (!cls || !t?.el) return null;
-  // The track's own row is the canonical copy; panels reparented into modals
-  // are still inside t.el, so one query covers both.
-  return t.el.querySelector(`.${cls}`);
+  const own = t.el.querySelector(`.${cls}`);
+  if (own) return own;
+  // A panel open as a modal has been reparented out of the track and onto the
+  // body, so the query above misses it — and a pad played over an open panel
+  // would then read no base and leave the knob behind. Every panel that can
+  // move is stamped with its track id on the way out (renderTrack), which is
+  // exactly what makes it findable from here.
+  return document.querySelector(`[data-track-id="${CSS.escape(String(t.id))}"] .${cls}`);
 }
 
 /** A control's value as the 0..1 an automation lane speaks. The lane and the

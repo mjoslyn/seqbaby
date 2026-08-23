@@ -40,6 +40,9 @@ export const LFO_KEYS = [
   "wt_scan_start", "wt_scan_range",
   // Granular grain controls (setter-driven; each grain reads them as it's scheduled).
   "gran_speed", "gran_pitch", "gran_window", "gran_jitter", "gran_detune", "gran_pan",
+  // Euclid's three counts (setter-driven; the generator reads them at step
+  // time). Only on a track with live euclid running — see canModulate.
+  "euclid_pulses", "euclid_steps", "euclid_rotate",
   // TB-303 panel controls outside the four timbre sliders. Real AudioParams on
   // the worklet node, so these take the normal audio-rate path.
   "tb303_accent", "tb303_tune",
@@ -64,6 +67,7 @@ export const LFO_KEYS = [
 //  - reson: depth*10 (Q units)
 // Display labels for the mod picker — underscore keys show as "foo bar".
 export const LFO_LABELS = {
+  euclid_pulses: "euclid pulses", euclid_steps: "euclid cycle", euclid_rotate: "euclid rotate",
   vol: "volume", cutoff: "filter cutoff", reson: "filter reson",
   fuzz: "fuzz amt", delay: "delay wet", verb: "reverb wet",
   vinyl: "vinyl amt", cassette: "cassette amt", ringmod: "ring mod wet",

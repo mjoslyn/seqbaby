@@ -1,5 +1,6 @@
 import { applyAutomationAtStep, canAutomate } from "./automation.js";
 import { engineByKey } from "./catalog.js";
+import { clearEuclidLive, euclidFromUnit, euclidToUnit, setEuclidLive, trackEuclid } from "./euclid.js";
 import { LFO_AMP_SCALE, LFO_KEYS } from "./constants.js";
 import { makeCassetteSatCurve, makeShaperCurve } from "./curves.js";
 import { setParam } from "./params.js";
@@ -218,6 +219,7 @@ export const SETTER_LFO_KEYS = new Set([
   "phaser_depth","chorus_depth","pitch_semi","reverb_decay",
   "wt_scan_start","wt_scan_range",
   "gran_speed","gran_pitch","gran_window","gran_jitter","gran_detune","gran_pan",
+  "euclid_pulses","euclid_steps","euclid_rotate",
 ]);
 
 // Granular mod keys → the track param each drives. Grains read these when they
@@ -231,6 +233,14 @@ export const GRAN_LFO_PARAM = {
 // Read the user's current 0..1 base value for a setter LFO target so the LFO
 // swings AROUND that value instead of overwriting it.
 export function setterLfoBase(t, key) {
+  // Euclid's counts: the knobs on the panel are the base, as 0..1 across their
+  // own (track-length-dependent) range.
+  if (key.startsWith("euclid_")) {
+    const k = key.slice(7);
+    // trackEuclid, not liveEuclid: the base has to be the stored knob, or the
+    // LFO would swing around its own output.
+    return euclidToUnit(t, k, trackEuclid(t)[k]);
+  }
   // Wave-scan window lives on the track's wavetable config, not the fx rack.
   if (key === "wt_scan_start") return t.wavetable?.scan?.start ?? 0;
   if (key === "wt_scan_range") return t.wavetable?.scan?.range ?? 1;
@@ -260,6 +270,12 @@ export function setterLfoBase(t, key) {
 // stored base, and the slider's onInput keeps writing config on user moves.
 export function applySetterLfoValue(t, key, v) {
   v = Math.max(0, Math.min(1, v));
+  // Euclid: write the live override, never the stored setting, so the knob
+  // stays the base the LFO swings around. The generator reads it at step time.
+  if (key.startsWith("euclid_")) {
+    setEuclidLive(t, key.slice(7), euclidFromUnit(t, key.slice(7), v));
+    return;
+  }
   // The wave scan reads its window off the voice's own live scan object, so the
   // modulation moves the sweep without disturbing the stored slider values.
   if (key === "wt_scan_start" || key === "wt_scan_range") {
@@ -349,10 +365,14 @@ export function startSetterLfoLoopIfNeeded() {
     lastT = now;
     let anyActive = false;
     for (const t of state.tracks) {
-      if (!t.fxRack || !t._setterLfoPhase) continue;
+      // The rack gate is for the fx targets; euclid's counts are the
+      // sequencer's, and run whether or not audio has been built.
+      if (!t._setterLfoPhase) continue;
+      const hasRack = !!t.fxRack;
       for (const key of SETTER_LFO_KEYS) {
         const cfg = t.lfoConfig[key];
         if (!cfg?.enabled) continue;
+        if (!hasRack && !key.startsWith("euclid_")) continue;
         anyActive = true;
         const hz = effectiveRate(cfg);
         const phase = (t._setterLfoPhase[key] ?? 0) + dt * hz;
@@ -379,6 +399,10 @@ export function canModulate(t, key) {
   if (TRACK_FX_LFO_KEYS.has(key)) return true;
   // Wave-scan window — wavetable engine only.
   if (key === "wt_scan_start" || key === "wt_scan_range") return t.engineKey === "wt:akwf";
+  // Euclid's counts — any engine, but only while the generator is the thing
+  // making the rhythm. Modulating them with the pattern in charge would say
+  // nothing at all.
+  if (key.startsWith("euclid_")) return !!t.euclid?.on;
   // Grain controls — granular engine only.
   if (key.startsWith("gran_")) return t.engineKey === "dm:granular";
   // Accent depth + tuning — 303 only.
@@ -440,8 +464,12 @@ export function syncLFO(t, key) {
     if (!cfg.enabled) {
       if (t._setterLfoPhase && t._setterLfoPhase[key] != null) {
         delete t._setterLfoPhase[key];
+        // Euclid keeps its live overrides in a separate object rather than in
+        // the audio graph, so releasing means deleting the override — writing
+        // the base back would leave the control looking driven forever.
+        if (key.startsWith("euclid_")) clearEuclidLive(t, key.slice(7));
         // restore base value to the audio graph so the param stops where the slider sits
-        applySetterLfoValue(t, key, setterLfoBase(t, key));   // no-ops safely without a rack
+        else applySetterLfoValue(t, key, setterLfoBase(t, key));   // no-ops safely without a rack
       }
       return;
     }

@@ -6,7 +6,7 @@ import { showInputDialog, showSavedPatchPicker } from "./dialogs.js";
 import { setStatus } from "./dom.js";
 import { DX7_ALG_LABELS, DX7_DEFAULTS, DX7_NUM_KEYS, DX7_PRESET_NAMES, DX7_SEL_KEYS, dx7Preset } from "./dx7.js";
 import { BASS_DEFAULTS, BASS_NUM_KEYS, BASS_SEL_KEYS, BASS_TONE_NAMES, bassTone, bassToneDescription } from "./bass.js";
-import { openEuclidDialog } from "./euclid.js";
+import { refreshEuclidUI, renderEuclidPanel, wireEuclidPanel } from "./euclid.js";
 import { randomizeMelody, randomizeTimbre } from "./generate.js";
 import { GUITAR_DEFAULTS, GUITAR_NUM_KEYS, GUITAR_SEL_KEYS, GUITAR_TONE_NAMES, guitarTone, guitarToneDescription } from "./guitar.js";
 import { ICON_CLEAR, ICON_DICE, ICON_EUCLID, ICON_LOAD, ICON_ROLL, ICON_SAVE, ICON_SLIDERS, ICON_WAV } from "./icons.js";
@@ -21,7 +21,7 @@ import { refreshDx7Algorithm, setEngineKey, setParam, updateGranularSpeedEnabled
 import { bestRollViewOct } from "./pianoRoll.js";
 import { applyCompressorConfig, refreshCompSourceDropdowns, refreshOutputSelects, setEQ, setFilter, setTrackOutput } from "./signal.js";
 import { state } from "./state.js";
-import { openAutAsModal, openCompAsModal, openEnvAsModal, openEqAsModal, openFilterAsModal, openFxAsModal, openGranularWavModal, openModAsModal, openRollAsModal, openSampleEditorModal, openTrackMenu } from "./stepEditor.js";
+import { openAutAsModal, openCompAsModal, openEnvAsModal, openEqAsModal, openFilterAsModal, openFxAsModal, openGranularWavModal, openModAsModal, openEuclidAsModal, openRollAsModal, openSampleEditorModal, openTrackMenu } from "./stepEditor.js";
 import { openWavetableEditor } from "./wavetableEditor.js";
 import { attachGridInteraction, renderStepGrid } from "./stepGrid.js";
 import { duplicateTrack, extendPatternByDuplicate, removeTrack, resizePattern, resizeTrack, shiftTrackOctave, truncatePattern } from "./track.js";
@@ -641,6 +641,7 @@ export function renderTrack(t) {
   t._fxPanelEl     = node.querySelector(".sq-track__fx-panel");
   t._eqPanelEl     = node.querySelector(".sq-track__eq-panel");
   t._compPanelEl   = node.querySelector(".sq-track__comp-panel");
+  t._euclidPanelEl = node.querySelector(".sq-track__euclid-panel");
   t._modModal    = null;
   t._autModal    = null;
   t._rollModal   = null;
@@ -649,6 +650,7 @@ export function renderTrack(t) {
   t._fxModal     = null;
   t._eqModal     = null;
   t._compModal   = null;
+  t._euclidModal = null;
 
   // Same idea for the synth-row sub-groups — they're reparented into the
   // track-menu-modal on mobile, so updatePlaitsControlsVisibility queries
@@ -670,6 +672,7 @@ export function renderTrack(t) {
   // so stamp each one rather than relying on the track node being an ancestor.
   for (const el of [t._modPanelEl, t._autPanelEl, t._rollPanelEl, t._filterPanelEl,
                     t._envPanelEl, t._fxPanelEl, t._eqPanelEl, t._compPanelEl,
+                    t._euclidPanelEl,
                     t._timbreGroupEl, t._oscMixGroupEl, t._oscModGroupEl,
                     t._moogOscGroupEl, t._tb303GroupEl, t._virusGroupEl,
                     t._dx7GroupEl, t._guitarGroupEl, t._bassGroupEl, t._granGroupEl]) {
@@ -706,6 +709,7 @@ export function renderTrack(t) {
   bindModalOpen(".sq-track__fx",     openFxAsModal,     "_fxModal");
   bindModalOpen(".sq-track__eq",     openEqAsModal,     "_eqModal");
   bindModalOpen(".sq-track__comp",   openCompAsModal,   "_compModal");
+  bindModalOpen(".track-euclid",     openEuclidAsModal, "_euclidModal");
   wireCompPanel(t, t._compPanelEl);
 
   node.querySelector(".sq-track__mute").addEventListener("click", () => {
@@ -732,13 +736,7 @@ export function renderTrack(t) {
   }
   // The other generator, beside the dice: the dice rolls, this one divides.
   const euclidBtn = node.querySelector(".track-euclid");
-  if (euclidBtn) {
-    euclidBtn.innerHTML = ICON_EUCLID;
-    euclidBtn.addEventListener("click", () => {
-      if (t._euclidModal) { t._euclidModal.close(); return; }
-      openEuclidDialog(t);
-    });
-  }
+  if (euclidBtn) euclidBtn.innerHTML = ICON_EUCLID;
   // roll: icon + label — desktop shows the label (matches its text siblings),
   // mobile shows the icon (see the roll rules in the mobile media block)
   const rollBtn = node.querySelector(".sq-track__roll");
@@ -791,6 +789,13 @@ export function renderTrack(t) {
   upgradeKnobs(node);
   updateMidiUI(t);
   updatePlaitsControlsVisibility(t);
+  // The euclid panel wires once here rather than on open: its three counts are
+  // ordinary parameters, so they have to exist in the track's DOM for the
+  // parameter menu, the mod/aut dots and the macro pads to find them whether
+  // or not the panel has ever been looked at.
+  wireEuclidPanel(t, t._euclidPanelEl);
+  renderEuclidPanel(t, t._euclidPanelEl);
+  refreshEuclidUI(t);
   refreshParamIndicators(t);
 }
 

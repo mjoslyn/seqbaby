@@ -111,8 +111,9 @@ env / fx / eq / comp / mod / automation per track.
   section below.
 - `euclid.js` — the euclidean rhythm generator behind the ring button beside the
   dice: Bjorklund proper (not the `(i*k)%n < k` shortcut, which lands on a
-  rotation of the canonical pattern) plus its dialog. Writes live and restores a
-  snapshot on cancel, so a rotation sweep is audible while you make it.
+  rotation of the canonical pattern), its panel, and **live mode** — where the
+  transport generates the track's rhythm instead of reading its steps, which is
+  what makes the three counts modulatable. See the euclid section below.
 - `theory.js` / `meter.js` / `generate.js` / `curves.js` / `params.js` /
   `constants.js` / `dialogs.js` / `dom.js` / `icons.js` / `appApi.js` /
   `types.js` (JSDoc typedefs — data-model source of truth).
@@ -510,6 +511,60 @@ gpattern, gsync, grate` in `t.params`.
   read them when scheduled, so a sequenced note takes one value per hit; a held
   note re-reads per scheduler tick.
 
+## Euclidean rhythms (`euclid.js`)
+
+Bjorklund's algorithm — N hits spread as evenly as possible over M steps — with
+the ring button beside the dice. The dice rolls; this one divides.
+
+**The algorithm is the real recursion**, not the `(i*k)%n < k` shortcut. The
+shortcut is maximally even too, but it lands on a *rotation* of the canonical
+pattern, so E(5,8) would come out `x.x.xx.x` instead of the `x.xx.xx.` printed
+on the box of every drum machine with this feature.
+
+**Two ways to use it, and the split is the whole design:**
+
+- **write to pattern** — print the ring into the step grid, once. Ordinary
+  steps afterwards, editable by hand. Destructive and labelled so, like `clear`
+  and the dice.
+- **live** (`t.euclid.on`) — the transport asks the generator for every step
+  instead of reading the written pattern (`stepGateAt`, called from
+  transport.js and from `renderStepGrid`). Nothing is ever written, so the
+  three counts can take an LFO, an automation lane or a macro pad. Switch it
+  off and the pattern you wrote is exactly as you left it.
+
+Modulating the *one-shot* was the alternative, and it would mean rewriting the
+pattern under the playhead sixty times a second in an app with no undo.
+
+- **Only the step mask is generated.** Pitch, chords, arps, ratchets, nudges
+  and the automation lanes all still come from the pattern, so a live euclid
+  track is an ordinary track with its rhythm replaced. A generated hit on a
+  step the pattern never wrote falls back to C2 on a drum kit, the track's
+  last-used note otherwise.
+- **The grid shows what is playing** and goes read-only with it
+  (`.sq-track.is-euclid`) — it can't be both a picture of a generated rhythm
+  and the thing you edit.
+- **Modulation writes `t._euclidMod`, never `t.euclid`** — the knobs stay the
+  base an LFO swings around, exactly as the granular controls do, and the
+  overrides are live-only (never saved). The panel marks a driven control
+  (`is-driven`) because a still knob beside a turning ring reads as a bug.
+- **One list, three namespaces**: `p-euc<key>` / `euclid_<key>` / `euclid.<key>`
+  for pulses, steps and rotate. `canModulate` / `canAutomate` gate all three on
+  live mode being on — with the pattern in charge they would say nothing.
+  The LFO path is setter-driven (`SETTER_LFO_KEYS`); the generator reads the
+  value at step time. Ranges move with the track length, so `euclidRange` is a
+  function where the other engines have a constant table.
+- **The panel lives on the track**, not in a modal built on demand, for the
+  same reason the filter and the rack do: the controls have to be in the DOM
+  whether or not anyone has opened it, or the parameter menu, the mod/aut dots
+  and the macro pads have nothing to find. The button hosts it in a modal
+  (`openPanelAsModal`) like every other panel.
+- The plan is cached on the resolved config, and repaints are coalesced onto
+  one frame and skipped when the rhythm hasn't moved — the LFO setter loop runs
+  at 60Hz while these controls are counts.
+- Settings are **outside the p-lock snapshot**, like `t.out` and the macro
+  pads: a generator that rearranged itself at every pattern switch would be a
+  trap, not a feature.
+
 ## Data model (source of truth: `public/js/types.js`)
 
 ### Pattern (per track, 32 slots — every field a per-step parallel array)
@@ -539,6 +594,8 @@ Switching patterns = re-aliasing + re-render.
 `glide, swing, density, speed` (`density` is the
 dice button's fill level — how full `randomizeMelody` rolls; drag the dice
 up/down, painted by `paintDiceDensity`),
+`euclid {on, pulses, steps, rotate, gate, accent}` (the euclid generator; `on`
+is live mode — see below),
 `sampleSpeedMode ("native"|"1xbpm"), sampleDefaults, sampleSource, slices,
 sliceOn, sliceBase, slicePlayMode, pitchLock`, sound config
 `params/filter/eq/comp/lfoConfig/fxConfig` + live handles

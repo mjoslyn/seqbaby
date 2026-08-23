@@ -536,6 +536,46 @@ ${BASS_PANEL}
       <div class="sq-track__mod-panel" hidden></div>
       <div class="sq-track__aut-panel" hidden></div>
       <div class="sq-track__roll-panel" hidden></div>
+      <div class="sq-track__euclid-panel" hidden>
+        <div class="sq-euclid__title">euclidean rhythm</div>
+        <div class="sq-euclid__viz">
+          <svg class="sq-euclid__ring" viewBox="0 0 120 120" width="120" height="120" aria-hidden="true"></svg>
+          <div class="sq-euclid__readout">
+            <div class="sq-euclid__formula"></div>
+            <div class="sq-euclid__bits"></div>
+            <div class="sq-euclid__hint"></div>
+          </div>
+        </div>
+        <div class="sq-euclid__strip" aria-hidden="true"></div>
+        <div class="sq-euclid__ctls">
+          <label class="sq-euclid__f" title="how many hits go in the cycle">
+            <span>pulses</span>
+            <input class="p-eucpulses" type="range" min="0" max="32" step="1" value="4" />
+            <output class="sq-euclid__val sq-euclid__val--pulses"></output>
+          </label>
+          <label class="sq-euclid__f" title="how long the cycle is before it repeats across the track">
+            <span>steps</span>
+            <input class="p-eucsteps" type="range" min="1" max="32" step="1" value="16" />
+            <output class="sq-euclid__val sq-euclid__val--steps"></output>
+          </label>
+          <label class="sq-euclid__f" title="turn the ring — the same rhythm, landing later">
+            <span>rotate</span>
+            <input class="p-eucrotate" type="range" min="0" max="31" step="1" value="0" />
+            <output class="sq-euclid__val sq-euclid__val--rotate"></output>
+          </label>
+        </div>
+        <div class="sq-euclid__opts">
+          <label title="hold each hit until the next one instead of a one-step gate">gate <select class="sq-euclid__gate">
+            <option value="short">short</option>
+            <option value="legato">legato</option>
+          </select></label>
+          <label title="louder on the beat, quieter off it — the pattern reads as a groove rather than a flat line"><input class="sq-euclid__accent" type="checkbox" checked /> accent the beat</label>
+        </div>
+        <div class="sq-euclid__actions">
+          <label class="sq-euclid__live" title="generate this track's rhythm live instead of playing the written steps. Nothing is written, so pulses, steps and rotate can take an LFO, an automation lane or a macro pad — and switching it off hands back the pattern exactly as you left it. The step grid shows what is being generated and goes read-only while it is on"><input class="sq-euclid__on" type="checkbox" /> live</label>
+          <button class="sq-euclid__write sq-btn--ghost" type="button" title="print this rhythm into the pattern as ordinary steps, replacing what is there. Hits landing where you already had a note keep its pitch">write to pattern</button>
+        </div>
+      </div>
       <div class="sq-track__filter-panel" hidden>
         <div class="sq-fx__row" data-fx="filter">
           <span class="sq-fx__title">filter (resonant lp)</span>

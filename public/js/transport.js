@@ -3,6 +3,7 @@ import { fireMetronome, paintBeatIndicator } from "./beat.js";
 import { engineByKey } from "./catalog.js";
 import { BAR_TICKS, wosc } from "./constants.js";
 import { setStatus } from "./dom.js";
+import { euclidFallbackNote, stepGateAt } from "./euclid.js";
 import { loadBassWorklet } from "./bass.js";
 import { loadDx7Worklet } from "./dx7.js";
 import { loadGuitarWorklet } from "./guitar.js";
@@ -430,15 +431,23 @@ export async function togglePlay() {
         scheduleAtAudible(() => { if (state.playing) paintTrackNow(t, idx); }, stepTime, lat);
         // A bus stops here every step: it has just run its automation, and
         // everything below this line is about firing a note.
-        if (isBus || !t.steps[idx]) { slot++; continue; }
-        const span = Math.max(1, t.lengths[idx] || 1);
+        // What this step plays. Normally the written pattern; on a track in
+        // live euclid mode the rhythm is generated instead (euclid.js) — only
+        // the step mask, so pitch, chords, arps, ratchets and nudges below all
+        // still come from the pattern.
+        const gate = stepGateAt(t, idx);
+        if (isBus || !gate) { slot++; continue; }
+        const span = gate.span;
         // A note lasts its written step length. Voices that honor `duration`
         // (Plaits, samples, melodic synths) follow it; drum-synth recipes with
         // fixed envelopes don't.
         const duration = span * effDur;
         const hitTime = stepTime;
-        const root = noteForStep(t, idx);
-        const vel = t.velocities[idx] ?? 0.5;
+        // A generated hit on a step the pattern never wrote falls back to C2
+        // on a drum kit, the track's last-used note otherwise — the same
+        // choice the written generator makes.
+        const root = noteForStep(t, idx, t.euclid?.on ? euclidFallbackNote(t) : undefined);
+        const vel = gate.vel;
         const chord = t.chords[idx] || "";
         const arp = !!(t.arps && t.arps[idx]);
         const cpx = (t.complexities && t.complexities[idx]) || 0;
@@ -603,12 +612,13 @@ export async function togglePlay() {
  * The effective MIDI note a step will play (respecting drum-kit defaults).
  * @param {Track} t @param {number} idx @returns {number}
  */
-export function noteForStep(t, idx) {
+export function noteForStep(t, idx, fallback) {
+  const dflt = fallback ?? engineByKey(t.engineKey)?.defaultNote ?? 60;
   const raw = t.notes[idx];
   let n;
   if (typeof raw === "number" && Number.isFinite(raw)) n = raw;
-  else if (typeof raw === "string") { const m = nameToMidi(raw); n = m != null ? m : (engineByKey(t.engineKey)?.defaultNote ?? 60); }
-  else n = engineByKey(t.engineKey)?.defaultNote ?? 60;
+  else if (typeof raw === "string") { const m = nameToMidi(raw); n = m != null ? m : dflt; }
+  else n = dflt;
   return applyScale(n);
 }
 

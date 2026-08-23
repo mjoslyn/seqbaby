@@ -182,9 +182,11 @@
  * @property {boolean} isDrumKit
  * @property {number} glide
  * @property {number} density
- * @property {?{pulses: number, steps: number, rotate: number,
+ * @property {?{on: boolean, pulses: number, steps: number, rotate: number,
  *            gate: "short"|"legato", accent: boolean}} [euclid]
- *   Last settings used in the euclidean rhythm dialog (euclid.js).
+ *   The euclid generator (euclid.js). `on` is live mode: the transport
+ *   generates this track's rhythm instead of reading its written steps.
+ *   Modulated values are live-only, in `_euclidMod`.
  * @property {number} speed
  * @property {string} sampleSpeedMode       "native" default.
  * @property {SampleDefaults} sampleDefaults
