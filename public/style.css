@@ -1593,14 +1593,22 @@ body.kbd-recording .sq-track.is-kbd-active { border-color: #e5484d; box-shadow: 
 .sq-euclid__cell.is-on { background: var(--step-on); }
 /* Where the cycle starts over — the one thing the ring cannot show. */
 .sq-euclid__cell.is-cycle { box-shadow: -2px 0 0 var(--accent-2); }
-.sq-euclid__ctls { display: grid; gap: 6px; }
-.sq-euclid__row { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--fg-dim); }
-.sq-euclid__row > span { flex: 0 0 52px; }
-.sq-euclid__row input[type="range"] { flex: 1 1 auto; min-width: 0; }
+/* Three knobs, like every other played control in the app. Counts, so the
+   value is written under the dial rather than left to the drag bubble. */
+.sq-euclid__ctls { display: flex; justify-content: center; gap: 22px; padding: 2px 0; }
+.sq-euclid__f {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  line-height: 1.1;
+  color: var(--fg-dim);
+}
+.sq-euclid__f .sq-knob { --knob-size: 46px; }
 .sq-euclid__val {
-  flex: 0 0 28px;
-  text-align: right;
   color: var(--fg);
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
 .sq-euclid__opts { display: flex; gap: 16px; align-items: center; font-size: 12px; color: var(--fg-dim); }

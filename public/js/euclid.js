@@ -1,4 +1,5 @@
 import { setStatus } from "./dom.js";
+import { refreshKnobRange, upgradeKnobs } from "./knob.js";
 import { patternMeter, stepsPerBeatForMeter } from "./meter.js";
 import { state } from "./state.js";
 import { renderStepGrid } from "./stepGrid.js";
@@ -259,17 +260,17 @@ export function openEuclidDialog(t) {
       </div>
       <div class="sq-euclid__strip" aria-hidden="true"></div>
       <div class="sq-euclid__ctls">
-        <label class="sq-euclid__row">
+        <label class="sq-euclid__f" title="how many hits go in the cycle">
           <span>pulses</span>
           <input class="sq-euclid__pulses" type="range" min="0" max="${len}" step="1" value="${cfg.pulses}" />
           <output class="sq-euclid__val"></output>
         </label>
-        <label class="sq-euclid__row">
+        <label class="sq-euclid__f" title="how long the cycle is before it repeats across the track">
           <span>steps</span>
           <input class="sq-euclid__steps" type="range" min="1" max="${len}" step="1" value="${cfg.steps}" />
           <output class="sq-euclid__val"></output>
         </label>
-        <label class="sq-euclid__row">
+        <label class="sq-euclid__f" title="turn the ring — same rhythm, landing later">
           <span>rotate</span>
           <input class="sq-euclid__rotate" type="range" min="0" max="${Math.max(0, cfg.steps - 1)}" step="1" value="${cfg.rotate}" />
           <output class="sq-euclid__val"></output>
@@ -319,9 +320,13 @@ export function openEuclidDialog(t) {
 
   const draw = (c) => {
     // pulses can't exceed the cycle, and a rotation past its end is the same
-    // pattern again — keep the sliders honest about both.
-    pulsesEl.max = String(c.steps);
-    rotateEl.max = String(Math.max(0, c.steps - 1));
+    // pattern again — keep both controls honest about that. The knob caches the
+    // range it was upgraded with (the drag reads it per pointer sample), so a
+    // rewritten max has to be handed back to it or the dial keeps scaling to
+    // the old span.
+    for (const [el, max] of [[pulsesEl, c.steps], [rotateEl, Math.max(0, c.steps - 1)]]) {
+      if (el.max !== String(max)) { el.max = String(max); refreshKnobRange(el); }
+    }
     if (Number(pulsesEl.value) !== c.pulses) pulsesEl.value = String(c.pulses);
     if (Number(rotateEl.value) !== c.rotate) rotateEl.value = String(c.rotate);
     vals[0].textContent = String(c.pulses);
@@ -363,9 +368,17 @@ export function openEuclidDialog(t) {
     }).join("");
   };
 
+  // A knob drag dispatches `input` per coalesced pointer sample, and a value
+  // that clamps against the cycle arrives unchanged — so the same rhythm can be
+  // asked for several times a frame. Regenerating and repainting the grid for
+  // each of those is work nobody sees.
+  let lastWritten = "";
   const write = () => {
     const c = read();
     draw(c);
+    const key = JSON.stringify(c);
+    if (key === lastWritten) return;
+    lastWritten = key;
     applyEuclid(t, c, base, pat);
     renderStepGrid(t);
   };
@@ -403,6 +416,9 @@ export function openEuclidDialog(t) {
   document.addEventListener("keydown", escHandler);
 
   document.body.appendChild(overlay);
+  // After the append, as every other modal does: the knob's readout bubble
+  // positions against a laid-out box.
+  upgradeKnobs(overlay);
   t._euclidModal = { overlay, close: cancel };
   t.el?.querySelector(".track-euclid")?.setAttribute("aria-pressed", "true");
   write();

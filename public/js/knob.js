@@ -322,6 +322,27 @@ function upgradeOne(input) {
 }
 
 /**
+ * Re-read a control's min/max/step after code has changed them.
+ *
+ * The range is cached at upgrade time because the drag reads it on every
+ * pointer sample, and for the ~1000 knobs in a session it never moves. A
+ * control whose bounds are rewritten at runtime — the euclid dialog's pulses
+ * knob, which can only reach as far as the current cycle length — has to say
+ * so, or the knob would go on scaling its drag and its arc to the old span.
+ * @param {HTMLInputElement} input
+ */
+export function refreshKnobRange(input) {
+  const k = input?._knob;
+  if (!k) return;
+  k.min = Number(input.min === "" ? 0 : input.min);
+  k.max = Number(input.max === "" ? 100 : input.max);
+  k.step = Number(input.step === "" || input.step === "any" ? 0 : input.step);
+  k.decimals = decimalsOf(input.step || "1");
+  k.wrap.toggleAttribute("data-bipolar", k.min < 0 && k.max > 0);
+  paintNow(input);
+}
+
+/**
  * Make `el.value = x` repaint. Half the codebase writes values back into these
  * inputs without dispatching anything — syncTrackSoundUI, refreshFxPanelUI, the
  * DX7 / guitar / bass panel syncs, applyPatternSound, applySet — because until
