@@ -122,8 +122,26 @@ function openReadout(input) {
 
 function updateReadout(input) {
   if (readoutEl && !readoutEl.hidden) {
-    readoutEl.textContent = Number(input.value).toFixed(input._knob.decimals);
+    readoutEl.textContent = readoutText(input);
   }
+}
+
+/** What the bubble says. A knob whose value is an INDEX into a list of musical
+ *  values — the mod row's cycle length — reads out as "16 steps", not as "5";
+ *  everything else is its own number at the control's own precision. */
+function readoutText(input) {
+  const fmt = input._knobText;
+  if (fmt) { try { return String(fmt(Number(input.value))); } catch { /* fall through */ } }
+  return Number(input.value).toFixed(input._knob.decimals);
+}
+
+/**
+ * Give a knob a readout of its own, for a control whose number isn't the thing
+ * the user is choosing.
+ * @param {HTMLInputElement} input @param {(v: number) => string} fn
+ */
+export function setKnobReadout(input, fn) {
+  if (input) input._knobText = fn;
 }
 
 function hideReadout() {

@@ -742,24 +742,21 @@ ${BASS_PANEL}
         sync
       </label>
       <div class="sq-field sq-lfo__rate-field">
-        <label>rate</label>
-        <input class="sq-lfo__rate" type="range" min="0" max="1" step="0.001" value="0.35" />
-        <select class="sq-lfo__div">
-          <option value="16">4 bars</option>
-          <option value="8">2 bars</option>
-          <option value="4">1 bar</option>
-          <option value="2">1/2</option>
-          <option value="1" selected>1/4 (beat)</option>
-          <option value="0.5">1/8</option>
-          <option value="0.25">1/16</option>
-          <option value="0.125">1/32</option>
-        </select>
+        <label class="sq-lfo__rate-name">length</label>
+        <input class="sq-lfo__rate" type="range" min="0" max="1" step="0.001" value="0.35" title="free-running speed in hz, ignoring the tempo" />
+        <input class="sq-lfo__div" type="range" min="0" max="7" step="1" value="3" title="how long one cycle is, counted in sequencer steps" />
         <span class="sq-lfo__rate-label">1.00 hz</span>
       </div>
       <div class="sq-field">
-        <label>depth</label>
+        <label>amount</label>
         <input class="lfo-depth" type="range" min="0" max="1" step="0.01" value="0.5" />
-        <span class="sq-lfo__depth-label">0.50</span>
+        <span class="sq-lfo__depth-line">
+          <span class="sq-lfo__depth-label">0.50</span>
+          <label class="sq-lfo__bip" title="bipolar: the modulation swings either side of where the knob sits. Switch it off and it only lifts the parameter above the knob, never below — same peak-to-peak either way. A waveform starts bipolar, a euclid ring unipolar, which is what each one wants">
+            <input type="checkbox" class="lfo-bip" />
+            <span aria-hidden="true">±</span>
+          </label>
+        </span>
       </div>
       <button class="sq-lfo__remove sq-btn--ghost" type="button" title="remove this modulation">×</button>
       <div class="sq-lfo__euc" hidden>

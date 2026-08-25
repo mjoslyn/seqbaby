@@ -1,7 +1,7 @@
 import { AUTOMATION_KEYS, AUTOMATION_TARGETS, canAutomate } from "./automation.js";
 import { engineByKey, loadPatches, populateEngineSelect, savePatch } from "./catalog.js";
 import { applyTrackPatch, serializeTrackPatch } from "./session.js";
-import { LFO_KEYS, lfoLabel, rateToSlider, sliderToRate } from "./constants.js";
+import { LFO_DIVS, LFO_KEYS, lfoDivIndex, lfoLabel, rateToSlider, sliderToRate } from "./constants.js";
 import { showInputDialog, showSavedPatchPicker } from "./dialogs.js";
 import { setStatus } from "./dom.js";
 import { DX7_ALG_LABELS, DX7_DEFAULTS, DX7_NUM_KEYS, DX7_PRESET_NAMES, DX7_SEL_KEYS, dx7Preset } from "./dx7.js";
@@ -10,8 +10,8 @@ import { euclideanRhythm, refreshEuclidUI, renderEuclidPanel, wireEuclidPanel } 
 import { randomizeMelody, randomizeTimbre } from "./generate.js";
 import { GUITAR_DEFAULTS, GUITAR_NUM_KEYS, GUITAR_SEL_KEYS, GUITAR_TONE_NAMES, guitarTone, guitarToneDescription } from "./guitar.js";
 import { ICON_CLEAR, ICON_DICE, ICON_EUCLID, ICON_LOAD, ICON_ROLL, ICON_SAVE, ICON_SLIDERS, ICON_WAV } from "./icons.js";
-import { refreshKnobRange, upgradeKnobs } from "./knob.js";
-import { canModulate, currentBpm, lfoEuclid, rateFromSync, syncLFO } from "./lfo.js";
+import { refreshKnobRange, setKnobReadout, upgradeKnobs } from "./knob.js";
+import { canModulate, lfoBipolar, lfoEuclid, lfoRateLabel, syncLFO } from "./lfo.js";
 import { autoOwns, modOwns, refreshParamIndicators } from "./paramTargets.js";
 import { patternLocked, refreshPatternLockUI, refreshPatternSoundUI, setPatternLock } from "./patternSound.js";
 import { openGranularSourceModal, openSamplerSourceModal, pickAudioFileForTrack } from "./main.js";
@@ -1214,8 +1214,10 @@ export function buildLfoRow(t, key, onRemove) {
   const depth = row.querySelector(".lfo-depth");
   const depthLbl = row.querySelector(".sq-lfo__depth-label");
   const syncCb = row.querySelector(".lfo-sync");
-  const divSel = row.querySelector(".sq-lfo__div");
+  const divKnob = row.querySelector(".sq-lfo__div");
+  const bipCb = row.querySelector(".lfo-bip");
   const rateField = row.querySelector(".sq-lfo__rate-field");
+  const rateName = row.querySelector(".sq-lfo__rate-name");
   const removeBtn = row.querySelector(".sq-lfo__remove");
   const eucWrap = row.querySelector(".sq-lfo__euc");
   const eucBits = row.querySelector(".sq-lfo__euc-bits");
@@ -1226,21 +1228,21 @@ export function buildLfoRow(t, key, onRemove) {
   depth.value  = cfg.depth;
   depthLbl.textContent = cfg.depth.toFixed(2);
   syncCb.checked = cfg.sync;
-  divSel.value = String(cfg.div);
+  // The length knob is an INDEX into LFO_DIVS, so the markup's range is only a
+  // placeholder — the list is the truth, and taking the bound from it here means
+  // adding a division is one line in constants.js.
+  divKnob.max = String(LFO_DIVS.length - 1);
+  divKnob.value = String(lfoDivIndex(cfg.div));
+  setKnobReadout(divKnob, (i) => LFO_DIVS[i]?.label ?? "");
+  bipCb.checked = lfoBipolar(cfg);
   rateField.dataset.mode = cfg.sync ? "sync" : "hz";
   row.classList.toggle("is-active", cfg.enabled);
 
   const refreshLbl = () => {
-    // For the euclid shape the rate is the STEP rate, not the cycle rate — one
-    // ring step per division, as on every euclidean module — so the label has
-    // to say which it is or 1/16 reads as a very long cycle.
-    const per = cfg.type === "euclid" ? "/step" : "";
-    if (cfg.sync) {
-      const opt = divSel.options[divSel.selectedIndex];
-      rateLbl.textContent = `${opt ? opt.textContent : cfg.div} · ${rateFromSync(cfg.div).toFixed(2)} hz${per}`;
-    } else {
-      rateLbl.textContent = `${cfg.rate.toFixed(2)} hz${per}`;
-    }
+    rateLbl.textContent = lfoRateLabel(cfg);
+    // Synced, the control is a cycle LENGTH off the tempo; free, it's a rate in
+    // hz. Same slot, two different questions, so the label has to move too.
+    if (rateName) rateName.textContent = cfg.sync ? "length" : "rate";
   };
   refreshLbl();
 
@@ -1298,14 +1300,24 @@ export function buildLfoRow(t, key, onRemove) {
       const e = lfoEuclid(cfg);
       cfg.epulses = e.pulses; cfg.esteps = e.steps; cfg.erotate = e.rotate; cfg.edecay = e.decay;
     }
+    // Polarity defaults per shape (a wave swings, a ring taps), so the switch
+    // moves under a shape change — until it's been set by hand, after which it
+    // is the user's and stays put.
+    bipCb.checked = lfoBipolar(cfg);
     refreshEuc();
     refreshLbl();
     syncLFO(t, key);
   });
   rate.addEventListener("input", () => { cfg.rate = sliderToRate(Number(rate.value)); refreshLbl(); syncLFO(t, key); });
   depth.addEventListener("input", () => { cfg.depth = Number(depth.value); depthLbl.textContent = cfg.depth.toFixed(2); syncLFO(t, key); });
+  bipCb.addEventListener("change", () => { cfg.bipolar = bipCb.checked; syncLFO(t, key); });
   syncCb.addEventListener("change", () => { cfg.sync = syncCb.checked; rateField.dataset.mode = cfg.sync ? "sync" : "hz"; refreshLbl(); syncLFO(t, key); });
-  divSel.addEventListener("change", () => { cfg.div = Number(divSel.value); refreshLbl(); syncLFO(t, key); });
+  divKnob.addEventListener("input", () => {
+    const i = Math.max(0, Math.min(LFO_DIVS.length - 1, Math.round(Number(divKnob.value))));
+    cfg.div = LFO_DIVS[i].div;
+    refreshLbl();
+    syncLFO(t, key);
+  });
   for (const c of eucCtls) {
     c.el?.addEventListener("input", () => {
       cfg[c.field] = c.dp ? Number(c.el.value) : Math.round(Number(c.el.value));

@@ -578,10 +578,13 @@ LFO rotating a euclidean track".
   ring step per sixteenth, as on every euclidean module, so the cycle is
   `steps` long. The rate label says `hz/step` when the shape is euclid, because
   1/16 otherwise reads as a very long cycle.
-- **It is unipolar** where the waveforms are bipolar: rests sit at zero and
-  taps rise to the full depth. A tap should lift a parameter off its knob and
-  let it fall back, not swing it either side. Same peak-to-peak from the same
-  depth slider (`euclidAmp` uses the whole depth, the waveform path half).
+- **It starts unipolar** where the waveforms start bipolar: rests sit at zero
+  and taps rise to the full amount. A tap should lift a parameter off its knob
+  and let it fall back, not swing it either side. That is now the ± switch's
+  default rather than a fixed property of the shape (see `lfoBipolar` in the
+  modulation section) — bipolar hangs the same peak-to-peak half either side,
+  so rests pull down as far as taps push up. Same peak-to-peak from the same
+  amount knob whichever way it is set.
 - **`decay` 0 is a gate**, holding the tap for its whole step; above that each
   tap decays exponentially (`setTargetAtTime`), which is the pluck.
 - **A rhythm is not an oscillator type**, so the audio path swaps the source: a
@@ -732,6 +735,24 @@ it; the input is still the value, the focus target and the pointer target.
   `canModulate(t, key)` gates the picker per engine. Shapes are sine /
   triangle / saw / square and **euclid**, which is a rhythm rather than a
   waveform — see the euclid section.
+  - The row's two numbers are **amount** and **length**. Amount is the
+    peak-to-peak; the **± switch** beside it (`cfg.bipolar`, `lfoBipolar`)
+    decides where that hangs — half either side of the slider, or all of it
+    above. Unset means the shape's default (a waveform swings, a euclid ring
+    taps upward), which is what both did before the switch existed, so no
+    saved song changes; it's written only when the switch is touched, for the
+    same reason the euclid fields are. One formula covers all three paths
+    (Tone.LFO min/max, the scheduled euclid gate, the rAF setter loop):
+    normalize the shape to a 0..1 lift, then `(u - 0.5) * amt` or `u * amt`.
+  - **Length** is a knob indexing `LFO_DIVS` (constants.js) — the synced
+    `cfg.div` in beats, named in steps (½ step … 64 steps), shortest first so
+    a rightward turn lengthens the cycle. The knob rounds an off-list value
+    (a hand-edited song) to the nearest entry but nothing snaps `cfg.div`, so
+    `lfoDivLabel` prints the true step count rather than the nearest name.
+    `lfoRateLabel` is the one place the reading beside it is written — the bpm
+    field repaints it too. Unsynced, the same slot shows the hz knob and the
+    field's label says "rate"; `setKnobReadout` (knob.js) is what makes the
+    length knob's drag bubble say "16 steps" instead of "5".
 - **Automation** (`automation.js`, aut panel): per-step value lanes stored in
   the pattern (`automation` field), applied at step time via `setParam`-style
   setters. `canAutomate` is broader than `canModulate` since it doesn't need
