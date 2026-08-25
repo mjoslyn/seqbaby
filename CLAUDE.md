@@ -39,6 +39,7 @@ env / fx / eq / comp / mod / automation per track.
 │   ├── studioMarkup.ts        engine's static DOM skeleton (raw HTML string)
 │   ├── ScriptLoader.tsx       injects Tone → woscillators → js/main.js in order
 │   ├── AccountBar/SongsMenu/PatchesMenu/SaveButton/OpenSongOnLoad.tsx
+│   ├── Preloader.tsx + preloader.ts   loading overlay: markup + inline driver
 │   ├── login/ settings/ u/[username]/       auth, account settings, public profiles
 │   ├── api/share/route.ts     anonymous ?s=<slug> share endpoint
 │   └── {songs,patches,profile,auth,account}/actions.ts   Supabase server actions
@@ -1106,6 +1107,35 @@ Repo: https://github.com/mjoslyn/seqbaby.
 - The account bar is behind `<Suspense>` in `app/page.tsx`. Don't await
   Supabase in the page body again: it blocks the whole document, including the
   preload hints, on two sequential round trips.
+- **The preloader** (`app/Preloader.tsx` + `app/preloader.ts`) covers the gap
+  between first paint and a booted engine — the studio's DOM is server-rendered,
+  so without it the visitor gets a complete-looking sequencer with empty engine
+  dropdowns and no tracks for as long as ~1.7MB of Tone + woscillators + 44
+  modules takes to arrive. Load-bearing details:
+  - **Raw markup plus an inline `<script>`, not a React component.** The engine's
+    deferred scripts run before React hydrates, so a hydrated overlay would
+    appear after the wait it exists to hide. It lands in the first ~14KB of the
+    document, ahead of the studio markup.
+  - **It ships `display:none` and the driver reveals it**, so a page whose
+    scripts never run shows the bare skeleton rather than a screen that never
+    leaves. Same reasoning behind the stall watchdog: the escape hatch (6s) and
+    the last-resort dismissal (25s) key off progress having STOPPED, never off
+    the wall clock — a phone legitimately takes half a minute, and tearing the
+    overlay off a boot that is still running is worse than the wait.
+  - **Progress is measured, not faked**: a PerformanceObserver counts the
+    engine's own resources (weighted by size — the two big files are most of the
+    wait, so counting files froze the bar at 70% for eight seconds), and the boot
+    milestones raise a floor under that. Milestones come from `onload` attributes
+    in EngineScripts and `window.__sqPreload?.step("engine")` / `.done()` in
+    main.js's `init()`; every call site is guarded, so the engine never depends
+    on the overlay existing (the legacy static server has none).
+  - `PRELOADER_SCRIPT` is a source *string* because both boot paths need it: the
+    server path inlines it, and ScriptLoader injects the same text on the
+    soft-navigation path (scripts parsed out of innerHTML never execute).
+  - The tips it rotates are scoped `any` / `touch` / `desktop` — a right-click
+    hint on a phone is an instruction the reader can't follow. Related to but
+    deliberately separate from `HELP_TIPS` (icons.js), which the audio gate
+    rotates after this overlay clears.
 - **Asset versioning**: Netlify's build exports
   `NEXT_PUBLIC_ENGINE_VERSION=$COMMIT_REF`, and
   `scripts/stamp-engine-assets.mjs` publishes `public/js`, `woscillators.js`

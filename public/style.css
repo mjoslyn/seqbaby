@@ -2763,3 +2763,130 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-virus__f):not(.sq-guitar__f):not(.sq
   .sq-step { min-height: 48px; height: 48px; }
 }
 
+
+/* ── Preloader ──────────────────────────────────────────────────────────────
+   Covers the server-rendered studio skeleton until the engine has booted (see
+   app/preloader.ts). Ships hidden and is revealed by its inline driver, so a
+   page whose scripts never run shows the bare app rather than a screen that
+   never leaves. */
+.sq-preload { display: none; }
+.sq-preload.is-on {
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: var(--bg);
+  /* Fade only. A scale/slide-away would move the wordmark, which sits in very
+     nearly the same place in the header underneath. */
+  transition: opacity 300ms ease;
+}
+.sq-preload.is-out { opacity: 0; pointer-events: none; }
+/* No scrolling the skeleton around behind the overlay. */
+html.sq-preloading, html.sq-preloading body { overflow: hidden; }
+
+.sq-preload__box {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  width: min(420px, 100%);
+}
+.sq-preload__logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--fg);
+}
+.sq-preload__logo img { display: block; }
+
+/* The progress bar is a step row, because that is what this app is. Cells fill
+   left to right; the leading cell is the playhead. */
+.sq-preload__steps {
+  display: grid;
+  grid-template-columns: repeat(16, 1fr);
+  gap: 4px;
+}
+.sq-preload__step {
+  height: 26px;
+  border-radius: 3px;
+  background: var(--step);
+  border: 1px solid var(--border);
+  transition: background-color 140ms linear, border-color 140ms linear;
+}
+.sq-preload__step.is-on {
+  background: var(--step-on);
+  border-color: var(--step-on);
+}
+.sq-preload__step.is-head {
+  background: var(--accent-2);
+  border-color: var(--accent-2);
+  animation: sq-preload-head 900ms ease-in-out infinite;
+}
+@keyframes sq-preload-head {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 1; }
+}
+
+.sq-preload__foot {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 11px;
+  color: var(--fg-dim);
+}
+.sq-preload__pct { font-variant-numeric: tabular-nums; }
+.sq-preload.is-error .sq-preload__phase { color: var(--danger); }
+.sq-preload.is-error .sq-preload__step.is-head {
+  background: var(--danger);
+  border-color: var(--danger);
+  animation: none;
+}
+
+/* The hint line. min-height holds two lines whatever the tip's length, so the
+   box never resizes under a rotation — the progress row above it would twitch
+   every four seconds otherwise. */
+.sq-preload__tip {
+  margin: 0;
+  min-height: 2.8em;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--fg-dim);
+  transition: opacity 200ms ease;
+}
+.sq-preload__tip.is-fading { opacity: 0; }
+
+/* The escape hatch: appears once the wait stops looking normal. */
+.sq-preload__slow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--fg-dim);
+  line-height: 1.5;
+}
+/* Explicit, because `display: flex` beats the UA's [hidden] rule (see the
+   Hidden-attribute gotcha in CLAUDE.md). */
+.sq-preload__slow[hidden] { display: none !important; }
+.sq-preload__slow-msg { flex: 1 1 180px; }
+.sq-preload__slow-btn {
+  padding: 8px 12px;
+  font-size: 11px;
+  min-height: 36px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sq-preload.is-on { transition: none; }
+  .sq-preload__step { transition: none; }
+  .sq-preload__step.is-head { animation: none; opacity: 1; }
+  .sq-preload__tip { transition: none; }
+}

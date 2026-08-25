@@ -23,11 +23,17 @@ import { MAIN_SRC, TONE_SRC, WOSC_SRC } from "./engineAssets";
 // The inline marker is what tells the two apart, synchronously: it only runs on
 // the parser path, so ScriptLoader can check `window.__seqbabyServerBoot` and
 // know whether the engine is already booting.
+//
+// The onload/onerror attributes report boot milestones to the preloader (which
+// is already on screen by the time these run). Attributes rather than a marker
+// script between the tags: an inline script is not deferred, so it would
+// execute during parsing — before any of these — and say nothing. Every call is
+// guarded, so a missing preloader is simply a no-op.
 const ENGINE_SCRIPTS_HTML = `
 <script>window.__seqbabyServerBoot=1<\/script>
-<script src="${TONE_SRC}" defer><\/script>
-<script src="${WOSC_SRC}" defer><\/script>
-<script src="${MAIN_SRC}" type="module"><\/script>
+<script src="${TONE_SRC}" defer onload="window.__sqPreload&&window.__sqPreload.step('tone')" onerror="window.__sqPreload&&window.__sqPreload.fail('tone.js')"><\/script>
+<script src="${WOSC_SRC}" defer onload="window.__sqPreload&&window.__sqPreload.step('wosc')" onerror="window.__sqPreload&&window.__sqPreload.fail('woscillators')"><\/script>
+<script src="${MAIN_SRC}" type="module" onerror="window.__sqPreload&&window.__sqPreload.fail('the engine')"><\/script>
 `;
 
 export default function EngineScripts() {

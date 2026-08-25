@@ -421,6 +421,10 @@ function shimFirefoxListenerParams(ctx) {
 }
 
 export function init() {
+  // The engine's code is all here — tell the preloader it's past downloading
+  // and into building the studio. Guarded: nothing in the engine requires the
+  // preloader to exist (the legacy static server serves no overlay at all).
+  try { window.__sqPreload?.step("engine"); } catch {}
   // Create the AudioContext and bind Tone to it BEFORE anything reads
   // Tone.Transport. Tone.Transport's internal Clock latches onto the context's
   // time at first access; if we defer this to the play-click handler, Tone's
@@ -769,6 +773,10 @@ export function init() {
     if (document.visibilityState === "visible") recoverAudioAfterReturn();
   });
   window.addEventListener("pageshow", () => { recoverAudioAfterReturn(); });
+  // The studio is built and wired: drop the preloader. It fades over the audio
+  // gate below rather than the other way round, which is why it goes first —
+  // the gate is the next thing the visitor is meant to be looking at.
+  try { window.__sqPreload?.done(); } catch {}
   // Up-front audio permission gate. A single tap on this dialog runs the
   // full iOS unlock dance inside a user-gesture frame (resume + silent
   // BufferSource + <audio>.play() to switch the iOS audio session to
