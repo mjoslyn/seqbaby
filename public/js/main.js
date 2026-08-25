@@ -8,7 +8,7 @@ import { isMobileDevice, setStatus } from "./dom.js";
 import { HELP_TIPS, ICON_BOUNCE, ICON_CAPTURE, ICON_CHAIN, ICON_FINISH, ICON_KEYBOARD, ICON_METRONOME, ICON_NOW, ICON_REC, ICON_REPEAT } from "./icons.js";
 import { upgradeKnobs } from "./knob.js";
 import { openMacroPads } from "./macro.js";
-import { applySampleSpeed, attachBpmDrag, rateFromSync, retuneSyncedLFOs } from "./lfo.js";
+import { applySampleSpeed, attachBpmDrag, lfoRateLabel, retuneSyncedLFOs } from "./lfo.js";
 import { captureSequence, initComputerKeyboard, isDesktopKeyboard, resetKbdKeys, syncKbdArpUI } from "./keyboard.js";
 import { autoAccents, parseMeter, redetectDrumKit, stepsPerBarForMeter } from "./meter.js";
 import { meterTick } from "./meters.js";
@@ -551,15 +551,15 @@ export function init() {
       if (t.fxRack && t.fxConfig.delay.sync) t.fxRack.applyDelay({});
       applySampleSpeed(t);
     }
+    // A synced mod's length is quoted in hz off the tempo, so the reading beside
+    // every open row is stale the moment the tempo moves. lfoRateLabel is the
+    // one place that sentence is written (buildLfoRow draws the same text).
     for (const t of state.tracks) {
       for (const key of LFO_KEYS) {
         if (!t.lfoConfig[key].sync) continue;
         const row = t.el.querySelector(`.sq-lfo__row[data-key="${key}"]`);
-        if (!row) continue;
-        const lbl = row.querySelector(".sq-lfo__rate-label");
-        const divSel = row.querySelector(".sq-lfo__div");
-        const opt = divSel.options[divSel.selectedIndex];
-        lbl.textContent = `${opt ? opt.textContent : t.lfoConfig[key].div} · ${rateFromSync(t.lfoConfig[key].div).toFixed(2)} hz`;
+        const lbl = row?.querySelector(".sq-lfo__rate-label");
+        if (lbl) lbl.textContent = lfoRateLabel(t.lfoConfig[key]);
       }
     }
   });

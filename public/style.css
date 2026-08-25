@@ -1146,10 +1146,28 @@ main {
 }
 
 .sq-lfo__sync-wrap { color: var(--fg-dim); display: inline-flex; align-items: center; gap: 4px; }
-.sq-lfo__rate-field .sq-lfo__rate,
-.sq-lfo__rate-field .sq-lfo__div { flex: 1; }
-.sq-lfo__rate-field[data-mode="sync"] .sq-lfo__rate { display: none; }
-.sq-lfo__rate-field[data-mode="hz"] .sq-lfo__div { display: none; }
+/* One slot, two controls: synced, the length knob picks a cycle off the tempo;
+   free-running, the rate knob picks hz. Both are knobs now, so the wrapper has
+   to go with the input — hiding the input alone would leave its dial behind. */
+.sq-lfo__rate-field[data-mode="sync"] .sq-lfo__rate,
+.sq-lfo__rate-field[data-mode="sync"] .sq-knob:has(.sq-lfo__rate),
+.sq-lfo__rate-field[data-mode="hz"] .sq-lfo__div,
+.sq-lfo__rate-field[data-mode="hz"] .sq-knob:has(.sq-lfo__div) { display: none; }
+
+/* The amount's reading and its polarity switch share a line under the knob:
+   how much, and which side of the slider it sits. */
+.sq-lfo__depth-line { display: inline-flex; align-items: center; gap: 6px; }
+.sq-lfo__bip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--fg-dim);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+.sq-lfo__bip input { margin: 0; }
+.sq-lfo__bip:has(input:checked) { color: var(--accent); }
 
 .sq-lfo__row.is-active .sq-lfo__target { color: var(--accent); font-weight: 600; }
 .sq-lfo__row .sq-lfo__target { color: var(--fg-dim); text-transform: lowercase; }
@@ -1158,6 +1176,7 @@ main {
 .sq-lfo__row .sq-field .sq-knob { --knob-size: 34px; }
 .sq-lfo__row .sq-lfo__rate-label,
 .sq-lfo__row .sq-lfo__depth-label { color: var(--fg-dim); font-size: 11px; min-width: 56px; }
+.sq-lfo__row .sq-lfo__depth-line .sq-lfo__depth-label { min-width: 32px; text-align: right; }
 
 .sq-track__name {
   width: 120px;

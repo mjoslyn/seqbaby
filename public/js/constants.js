@@ -171,6 +171,65 @@ export function rateToSlider(hz) {
   return Math.log(Math.max(RATE_MIN, hz) / RATE_MIN) / Math.log(RATE_MAX / RATE_MIN);
 }
 
+// ---- how long a synced lfo's cycle is ------------------------------------
+//
+// `cfg.div` is the cycle in BEATS (what rateFromSync divides the beat rate by),
+// and these are the values the length knob offers. Ordered shortest first, so a
+// rightward turn lengthens the cycle.
+//
+// Named in STEPS from a beat upward: this is a step sequencer, and "16 steps"
+// says what "1 bar" says with one conversion less in the reader's head — a
+// modulation you want to line up with a 16-step pattern shouldn't need arithmetic
+// to find. Below a beat a step count would be a fraction, so those keep their
+// note values. (For the euclid shape the rate is the RING STEP rate rather than
+// the cycle — see lfo.js — so "2 steps" there means each tap lasts two steps.)
+//
+// The knob is an index into this list rather than a continuous control: a cycle
+// length is a menu of musical values, and quantising the drag to the list is
+// what keeps it playable.
+export const LFO_DIVS = [
+  { div: 0.125, label: "½ step" },
+  { div: 0.25,  label: "1 step" },
+  { div: 0.5,   label: "2 steps" },
+  { div: 1,     label: "4 steps" },
+  { div: 2,     label: "8 steps" },
+  { div: 4,     label: "16 steps" },
+  { div: 8,     label: "32 steps" },
+  { div: 16,    label: "64 steps" },
+];
+
+/** Nearest entry for a div in beats — a saved song (or an older one) can hold a
+ *  value the list doesn't, and the knob has to land somewhere. Nearest in
+ *  RATIO, not difference: these are musical divisions, so 3 belongs with 2, not
+ *  with 4. */
+export function lfoDivIndex(div) {
+  const d = Number(div) > 0 ? Number(div) : 1;
+  let best = 0, bestErr = Infinity;
+  for (let i = 0; i < LFO_DIVS.length; i++) {
+    const err = Math.abs(Math.log(LFO_DIVS[i].div / d));
+    if (err < bestErr) { bestErr = err; best = i; }
+  }
+  return best;
+}
+
+/**
+ * The name of a div in beats, for the readout beside the knob.
+ *
+ * A song saved before the list existed (or hand-edited) can hold a division
+ * that isn't on it — and it goes on running at exactly that rate, because
+ * nothing snaps a loaded value. So the readout says what it really is rather
+ * than the nearest entry's name: the knob has to round, the label doesn't, and
+ * a row reading "16 steps · 0.61 hz" when it is neither would be worse than
+ * either. Touching the knob lands on the list and the two agree again.
+ */
+export function lfoDivLabel(div) {
+  const near = LFO_DIVS[lfoDivIndex(div)];
+  const d = Number(div) > 0 ? Number(div) : 1;
+  if (Math.abs(near.div - d) < 1e-9) return near.label;
+  const steps = d * 4;                                   // a beat is four sixteenths
+  return `${Number.isInteger(steps) ? steps : +steps.toFixed(2)} step${steps === 1 ? "" : "s"}`;
+}
+
 // ---- note helpers ------------------------------------------------------
 
 export const NOTE_NAMES = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];

@@ -68,9 +68,15 @@
  * @property {boolean} enabled
  * @property {"sine"|"triangle"|"square"|"saw"|"random"} type
  * @property {number} rate   Free-run rate in Hz.
- * @property {number} depth  0..1 modulation depth.
+ * @property {number} depth  0..1 modulation amount (peak-to-peak).
  * @property {boolean} sync  Sync rate to transport division.
- * @property {number} div    Beats per cycle when synced.
+ * @property {number} div    Beats per cycle when synced (one of LFO_DIVS).
+ * @property {boolean} [bipolar]  Swing either side of the control (true) or only
+ *   lift it (false). Absent means the shape's default — see lfoBipolar.
+ * @property {number} [epulses]  Euclid shape only, written lazily (see lfoEuclid).
+ * @property {number} [esteps]
+ * @property {number} [erotate]
+ * @property {number} [edecay]
  */
 
 /**

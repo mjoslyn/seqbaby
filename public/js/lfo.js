@@ -1,7 +1,7 @@
 import { applyAutomationAtStep, canAutomate } from "./automation.js";
 import { engineByKey } from "./catalog.js";
 import { clearEuclidLive, euclidFromUnit, euclidToUnit, euclideanRhythm, setEuclidLive, trackEuclid } from "./euclid.js";
-import { LFO_AMP_SCALE, LFO_KEYS } from "./constants.js";
+import { LFO_AMP_SCALE, LFO_KEYS, lfoDivLabel } from "./constants.js";
 import { makeCassetteSatCurve, makeShaperCurve } from "./curves.js";
 import { setParam } from "./params.js";
 import { aliasPattern, state } from "./state.js";
@@ -134,6 +134,36 @@ export function applySampleSpeed(t) {
 }
 export function rateFromSync(divBeats) { return currentBpm() / 60 / divBeats; }
 export function effectiveRate(cfg) { return cfg.sync ? rateFromSync(cfg.div) : cfg.rate; }
+
+/**
+ * Whether a modulation swings either side of where the knob sits (bipolar) or
+ * only lifts it (unipolar).
+ *
+ * Unset means the shape's own default — a waveform swings, a euclid ring taps
+ * upward — which is what each of them wants, and is exactly what they did
+ * before the switch existed. It's written only when the switch is actually
+ * touched, for the same reason the euclid fields are: `lfoConfig` carries an
+ * entry per target per track whether used or not, and a field on every one of
+ * them, forever, to say "this one is a sine" is real weight in a share link.
+ *
+ * Either way the peak-to-peak is the amount knob, so flipping the switch moves
+ * where the modulation sits, not how much of it there is.
+ */
+export function lfoBipolar(cfg) { return cfg?.bipolar ?? (cfg?.type !== "euclid"); }
+
+/**
+ * The text beside the length knob. Here rather than in the row that draws it
+ * because the bpm field repaints it too — a synced length is a tempo reading.
+ */
+export function lfoRateLabel(cfg) {
+  // For the euclid shape the rate is the RING STEP rate, not the cycle rate —
+  // one ring step per division, as on every euclidean module — so the label has
+  // to say which it is, or 1/16 reads as a very long cycle.
+  const per = cfg?.type === "euclid" ? "/step" : "";
+  return cfg?.sync
+    ? `${lfoDivLabel(cfg.div)} · ${rateFromSync(cfg.div).toFixed(2)} hz${per}`
+    : `${(cfg?.rate ?? 0).toFixed(2)} hz${per}`;
+}
 
 /**
  * Resolve the AudioParam / Tone.Signal an LFO key modulates for a track.
@@ -427,8 +457,8 @@ function euclidPhase(cfg, now) {
   return (now - euclidOrigin(cfg)) * stepHz;
 }
 
-/** How much a euclid tap lifts its target: the full depth, where a bipolar
- *  waveform gets half either side of the base. Same peak-to-peak either way. */
+/** A tap's peak-to-peak: the whole amount knob. Where it hangs relative to the
+ *  slider is the polarity switch's business (see lfoBipolar). */
 function euclidAmp(key, cfg) {
   return (cfg.depth ?? 0) * (LFO_AMP_SCALE[key] ?? 1);
 }
@@ -466,6 +496,12 @@ function scheduleEuclidTaps(t, key, cfg, now) {
   const stepDur = 1 / Math.max(0.01, effectiveRate(cfg));
   const origin = euclidOrigin(cfg);
   const peak = euclidAmp(key, cfg);
+  // Unipolar (the ring's default): rests sit on the knob and taps lift off it.
+  // Bipolar: the same peak-to-peak, hung half either side, so a rest pulls the
+  // parameter down as far as a tap pushes it up.
+  const bip = lfoBipolar(cfg);
+  const restV = bip ? -peak / 2 : 0;
+  const tapV = bip ? peak / 2 : peak;
   // The transport starting (or stopping) moves the ring's origin under us, so
   // anything already queued against the old one has to go.
   if (g.origin !== origin) {
@@ -481,9 +517,9 @@ function scheduleEuclidTaps(t, key, cfg, now) {
       const on = ring[((n % ring.length) + ring.length) % ring.length];
       const when = Math.max(at, now);
       try {
-        g.signal.setValueAtTime(on ? peak : 0, when);
+        g.signal.setValueAtTime(on ? tapV : restV, when);
         if (on && e.decay > 0.02) {
-          g.signal.setTargetAtTime(0, when, Math.max(0.004, stepDur * 0.6 * (1 - e.decay)));
+          g.signal.setTargetAtTime(restV, when, Math.max(0.004, stepDur * 0.6 * (1 - e.decay)));
         }
       } catch {}
     }
@@ -536,10 +572,12 @@ export function startSetterLfoLoopIfNeeded() {
         t._setterLfoPhase[key] = phase;
         const shape = evalLfoShape(cfg.type || "sine", phase, cfg);
         const base = setterLfoBase(t, key);
-        // Unipolar shapes lift by the whole depth; bipolar ones swing half
-        // either side of the base. Same peak-to-peak from the same slider.
-        const swing = euclidShape ? (cfg.depth ?? 0) : (cfg.depth ?? 0) * 0.5;
-        applySetterLfoValue(t, key, base + shape * swing);
+        // Normalize every shape to a 0..1 lift first — the waveforms come back
+        // bipolar, the ring unipolar — then place that lift either side of the
+        // base or wholly above it. Same peak-to-peak from the same knob.
+        const u = euclidShape ? shape : (shape + 1) * 0.5;
+        const amt = cfg.depth ?? 0;
+        applySetterLfoValue(t, key, base + (lfoBipolar(cfg) ? (u - 0.5) * amt : u * amt));
       }
     }
     _setterLfoRafId = anyActive ? requestAnimationFrame(tick) : null;
@@ -675,17 +713,22 @@ export function syncLFO(t, key) {
     return;
   }
 
-  const amp = (cfg.depth / 2) * (LFO_AMP_SCALE[key] ?? 1);
+  // The amount knob is the peak-to-peak; the polarity switch decides where it
+  // hangs — half either side of the slider, or all of it above.
+  const span = cfg.depth * (LFO_AMP_SCALE[key] ?? 1);
+  const bipolar = lfoBipolar(cfg);
+  const lo = bipolar ? -span / 2 : 0;
+  const hi = bipolar ? span / 2 : span;
   const hz = effectiveRate(cfg);
   if (!lfo) {
-    lfo = new Tone.LFO({ frequency: hz, min: -amp, max: amp, type: cfg.type });
+    lfo = new Tone.LFO({ frequency: hz, min: lo, max: hi, type: cfg.type });
     lfo.start();
     lfo.connect(param);
     t.lfos[key] = lfo;
   } else {
     lfo.frequency.value = hz;
-    lfo.min = -amp;
-    lfo.max = amp;
+    lfo.min = lo;
+    lfo.max = hi;
     lfo.type = cfg.type;
   }
 }
