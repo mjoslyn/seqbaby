@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import { STUDIO_BODY } from "./studioMarkup";
+import Preloader from "./Preloader";
 import ScriptLoader from "./ScriptLoader";
 import EnginePreload from "./EnginePreload";
 import EngineScripts from "./EngineScripts";
@@ -59,6 +60,9 @@ function AccountBarFallback() {
 export default function StudioPage() {
   return (
     <>
+      {/* First in the document: it covers the un-booted skeleton below, and it
+          can only do that if the parser reaches it before everything else. */}
+      <Preloader />
       <EnginePreload />
       <Suspense fallback={<AccountBarFallback />}>
         <AccountBarSlot />
