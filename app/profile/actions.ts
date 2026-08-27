@@ -81,15 +81,19 @@ export async function updateProfile(input: {
     patch.avatar_url = input.avatar_url.trim().slice(0, 500) || null;
   if (input.is_public !== undefined) patch.is_public = !!input.is_public;
 
-  const { error } = await supabase
+  const { data: rows, error } = await supabase
     .from("profiles")
     .update(patch)
-    .eq("id", user.id);
+    .eq("id", user.id)
+    .select("id");
   if (error) {
     if (/duplicate key|unique/i.test(error.message))
       return { error: "That username is taken" };
     return { error: error.message };
   }
+  // The signup trigger creates this row, so a miss here means it is genuinely
+  // absent -- report that rather than a save that silently did nothing.
+  if (!rows?.length) return { error: "Profile not found" };
   revalidatePath("/", "layout");
   return { ok: true };
 }

@@ -33,12 +33,18 @@ export async function saveSong(input: {
   const title = (input.title || "untitled").slice(0, 200);
 
   if (input.id) {
-    const { error } = await supabase
+    // An update matching zero rows is not an error to PostgREST -- a wrong id,
+    // someone else's id, or a row deleted in another tab all come back clean. So
+    // every write here asks for the affected rows back and checks them; without
+    // that the caller is told the save succeeded when nothing was written.
+    const { data: rows, error } = await supabase
       .from("songs")
       .update({ title, data: input.data })
       .eq("id", input.id)
-      .eq("owner_id", user.id);
+      .eq("owner_id", user.id)
+      .select("id");
     if (error) return { error: error.message };
+    if (!rows?.length) return { error: "Song not found" };
     return { id: input.id };
   }
 
@@ -112,12 +118,16 @@ export async function saveNamedSong(input: {
   let slug = existingRows?.[0]?.share_slug as string | null | undefined;
 
   if (id) {
-    const { error } = await supabase
+    const { data: rows, error } = await supabase
       .from("songs")
       .update({ data: input.data })
       .eq("id", id)
-      .eq("owner_id", user.id);
+      .eq("owner_id", user.id)
+      .select("id");
     if (error) return { error: error.message };
+    // The SELECT above and this UPDATE are not atomic: the row can go away in
+    // between.
+    if (!rows?.length) return { error: "Song not found" };
   } else {
     const { data: row, error } = await supabase
       .from("songs")
@@ -131,19 +141,24 @@ export async function saveNamedSong(input: {
 
   if (input.isPublic) {
     if (!slug) slug = newSlug();
-    const { error } = await supabase
+    const { data: rows, error } = await supabase
       .from("songs")
       .update({ is_public: true, share_slug: slug })
       .eq("id", id)
-      .eq("owner_id", user.id);
+      .eq("owner_id", user.id)
+      .select("id");
     if (error) return { error: error.message };
+    if (!rows?.length) return { error: "Song not found" };
     return { id, slug: slug ?? undefined };
   }
-  await supabase
+  const { data: privRows, error: privErr } = await supabase
     .from("songs")
     .update({ is_public: false })
     .eq("id", id)
-    .eq("owner_id", user.id);
+    .eq("owner_id", user.id)
+    .select("id");
+  if (privErr) return { error: privErr.message };
+  if (!privRows?.length) return { error: "Song not found" };
   return { id };
 }
 
@@ -189,12 +204,15 @@ export async function renameSong(
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { error: "Not signed in" };
-  const { error } = await supabase
+  const { data: rows, error } = await supabase
     .from("songs")
     .update({ title: (title || "untitled").slice(0, 200) })
     .eq("id", id)
-    .eq("owner_id", user.id);
-  return error ? { error: error.message } : { ok: true };
+    .eq("owner_id", user.id)
+    .select("id");
+  if (error) return { error: error.message };
+  if (!rows?.length) return { error: "Song not found" };
+  return { ok: true };
 }
 
 export async function deleteSong(
@@ -205,12 +223,15 @@ export async function deleteSong(
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { error: "Not signed in" };
-  const { error } = await supabase
+  const { data: rows, error } = await supabase
     .from("songs")
     .delete()
     .eq("id", id)
-    .eq("owner_id", user.id);
-  return error ? { error: error.message } : { ok: true };
+    .eq("owner_id", user.id)
+    .select("id");
+  if (error) return { error: error.message };
+  if (!rows?.length) return { error: "Song not found" };
+  return { ok: true };
 }
 
 // Publish (or re-publish) a song: mark public and ensure it has a share slug.
@@ -236,12 +257,16 @@ export async function publishSong(
   // Assign a fresh unique slug if none, retrying on the unique constraint.
   for (let attempt = 0; !slug && attempt < 5; attempt++) {
     const candidate = newSlug();
-    const { error } = await supabase
+    const { data: rows, error } = await supabase
       .from("songs")
       .update({ is_public: true, share_slug: candidate })
       .eq("id", id)
-      .eq("owner_id", user.id);
+      .eq("owner_id", user.id)
+      .select("id");
     if (!error) {
+      // Clean, but nothing written: the song went away between the read above
+      // and this write. Handing back a share link for it would be a lie.
+      if (!rows?.length) return { error: "Song not found" };
       slug = candidate;
       break;
     }
@@ -250,12 +275,14 @@ export async function publishSong(
   if (!slug) return { error: "Could not allocate a share link" };
 
   // Ensure is_public is set even when a slug already existed.
-  const { error: pubErr } = await supabase
+  const { data: pubRows, error: pubErr } = await supabase
     .from("songs")
     .update({ is_public: true })
     .eq("id", id)
-    .eq("owner_id", user.id);
+    .eq("owner_id", user.id)
+    .select("id");
   if (pubErr) return { error: pubErr.message };
+  if (!pubRows?.length) return { error: "Song not found" };
 
   return { slug };
 }
@@ -268,10 +295,13 @@ export async function unpublishSong(
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { error: "Not signed in" };
-  const { error } = await supabase
+  const { data: rows, error } = await supabase
     .from("songs")
     .update({ is_public: false })
     .eq("id", id)
-    .eq("owner_id", user.id);
-  return error ? { error: error.message } : { ok: true };
+    .eq("owner_id", user.id)
+    .select("id");
+  if (error) return { error: error.message };
+  if (!rows?.length) return { error: "Song not found" };
+  return { ok: true };
 }

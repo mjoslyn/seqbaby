@@ -129,10 +129,15 @@ export async function deletePatch(
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { error: "Not signed in" };
-  const { error } = await supabase
+  // Zero rows deleted is not an error to PostgREST -- check what was affected
+  // rather than reporting a delete that never happened.
+  const { data: rows, error } = await supabase
     .from("patches")
     .delete()
     .eq("id", id)
-    .eq("owner_id", user.id);
-  return error ? { error: error.message } : { ok: true };
+    .eq("owner_id", user.id)
+    .select("id");
+  if (error) return { error: error.message };
+  if (!rows?.length) return { error: "Patch not found" };
+  return { ok: true };
 }
