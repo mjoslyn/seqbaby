@@ -102,12 +102,20 @@ export async function getPublicProfile(
     data: { user },
   } = await supabase.auth.getUser();
 
-  const { data: profile } = await supabase
+  // Exact match on the stored folded handle, never ILIKE: `_` and `%` are ILIKE
+  // wildcards and `_` is a legal username character, so /u/a_c also matched
+  // `abc` and then 404'd on maybeSingle's multi-row error, while /u/a%25 matched
+  // every handle starting with "a". Equality on the generated column also means
+  // the lookup uses profiles_username_lower_key instead of scanning the table.
+  const { data: profile, error } = await supabase
     .from("profiles")
     .select("id,username,display_name,bio,avatar_url,is_public,created_at")
-    .ilike("username", username)
+    .eq("username_lower", username.toLowerCase())
     .maybeSingle();
 
+  // A lookup that failed is not the same answer as "no such user". Reporting one
+  // as the other is what hid the duplicate-handle breakage in the first place.
+  if (error) throw new Error(`Profile lookup failed: ${error.message}`);
   if (!profile) return { notFound: true };
   const isOwner = !!user && user.id === profile.id;
   if (!profile.is_public && !isOwner)
