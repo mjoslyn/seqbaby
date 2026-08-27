@@ -6,7 +6,18 @@ declare global {
     seqbaby?: {
       version: number;
       serializeSet: () => unknown;
-      applySet: (data: unknown) => void;
+      applySet: (data: unknown) => {
+        version: number;
+        warnings: string[];
+      } | void;
+      /** Format version of the blob serializeSet() writes (not `version`). */
+      setVersion: number;
+      validateSet: (data: unknown) => {
+        ok: boolean;
+        version: number;
+        errors: string[];
+        warnings: string[];
+      };
       onSaveSet: () => void;
       onLoadSet: () => void;
       onShareSet: () => void;

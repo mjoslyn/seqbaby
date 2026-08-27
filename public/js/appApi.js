@@ -16,6 +16,8 @@ import {
   onShareSet,
   serializeSet,
   serializeTrackPatch,
+  SET_VERSION,
+  validateSet,
 } from "./session.js";
 import { state } from "./state.js";
 
@@ -26,6 +28,12 @@ export function installAppApi() {
     // session (song) snapshot <-> live engine
     serializeSet,
     applySet,
+    // The serialized-session format version, and a check of a blob against it.
+    // applySet validates on its own, so this is for a caller that wants to
+    // refuse a blob before offering to load it -- note `version` above is the
+    // version of THIS api surface, which is a different thing.
+    setVersion: SET_VERSION,
+    validateSet,
     // built-in flows (localStorage + share) — reused as-is for now
     onSaveSet,
     onLoadSet,
