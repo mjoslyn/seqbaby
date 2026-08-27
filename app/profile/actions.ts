@@ -111,17 +111,45 @@ export async function getPublicProfile(
   // `abc` and then 404'd on maybeSingle's multi-row error, while /u/a%25 matched
   // every handle starting with "a". Equality on the generated column also means
   // the lookup uses profiles_username_lower_key instead of scanning the table.
+  const handle = username.toLowerCase();
   const { data: profile, error } = await supabase
     .from("profiles")
     .select("id,username,display_name,bio,avatar_url,is_public,created_at")
-    .eq("username_lower", username.toLowerCase())
+    .eq("username_lower", handle)
     .maybeSingle();
 
   // A lookup that failed is not the same answer as "no such user". Reporting one
   // as the other is what hid the duplicate-handle breakage in the first place.
   if (error) throw new Error(`Profile lookup failed: ${error.message}`);
-  if (!profile) return { notFound: true };
+
+  if (!profile) {
+    // Empty means one of two different things, and the page says different
+    // things about them: no such handle, or a private profile the RLS policy
+    // withheld. profile_cards carries display fields for every profile and no
+    // private ones, so it distinguishes them -- which is what keeps "This
+    // profile is private" on the page instead of a bare 404.
+    const { data: card, error: cardErr } = await supabase
+      .from("profile_cards")
+      .select("username")
+      .eq("username_lower", handle)
+      .maybeSingle();
+    // 42P01 is "relation does not exist" -- 0007 has not been applied yet. In
+    // that world the policy from 0001 is still in force, so a private profile
+    // came back from the query above and is caught below; reaching here means
+    // the handle really is unused. Tolerating it keeps this file correct on
+    // either side of the migration, rather than turning every 404 into a 500
+    // during the window. (Same tactic as api/share/route.ts.)
+    if (cardErr && cardErr.code !== "42P01")
+      throw new Error(`Profile lookup failed: ${cardErr.message}`);
+    if (!card) return { notFound: true };
+    return { private: true, username: card.username ?? username };
+  }
+
   const isOwner = !!user && user.id === profile.id;
+  // Unreachable once 0007 is applied -- the policy already withheld the row.
+  // Kept deliberately: it means this file is correct whether or not the
+  // migration has run, so the deploy is safe in either order, and it is the
+  // second lock on a door that should not have been relying on one.
   if (!profile.is_public && !isOwner)
     return { private: true, username: profile.username ?? username };
 
@@ -155,8 +183,10 @@ export async function getPublicProfile(
     const ownerIds = [...new Set((sources ?? []).map((s) => s.owner_id))];
     const handles = new Map<string, string | null>();
     if (ownerIds.length) {
+      // profile_cards, not profiles: a public song forked from someone whose
+      // own page is private should still say who wrote it.
       const { data: profs } = await supabase
-        .from("profiles")
+        .from("profile_cards")
         .select("id,username")
         .in("id", ownerIds);
       for (const p of profs ?? []) handles.set(p.id, p.username);

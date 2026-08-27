@@ -86,8 +86,10 @@ export async function listPublicPatches(
   const ownerIds = [...new Set(rows.map((r) => r.owner_id))];
   const names = new Map<string, string>();
   if (ownerIds.length) {
+    // profile_cards, not profiles: the gallery is read by anonymous visitors,
+    // and a public patch by someone whose page is private still gets a byline.
     const { data: profs } = await supabase
-      .from("profiles")
+      .from("profile_cards")
       .select("id,display_name,username")
       .in("id", ownerIds);
     for (const p of profs ?? [])
