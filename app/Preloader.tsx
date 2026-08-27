@@ -1,8 +1,8 @@
-import { PRELOADER_HTML, PRELOADER_SCRIPT } from "./preloader";
+import { PRELOADER_HTML, PRELOADER_SCRIPT } from "./preloaderMarkup";
 
 // Server-rendered so the overlay is in the very first bytes of the document and
 // paints with the first frame — the whole point is to cover the seconds before
-// the engine (and React) exist. See preloader.ts for why the driver is inline
+// the engine (and React) exist. See preloaderMarkup.ts for why the driver is inline
 // source rather than a component.
 //
 // dangerouslySetInnerHTML for the same reason EngineScripts uses it: on the

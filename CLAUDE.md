@@ -39,7 +39,7 @@ env / fx / eq / comp / mod / automation per track.
 │   ├── studioMarkup.ts        engine's static DOM skeleton (raw HTML string)
 │   ├── ScriptLoader.tsx       injects Tone → woscillators → js/main.js in order
 │   ├── AccountBar/SongsMenu/PatchesMenu/SaveButton/OpenSongOnLoad.tsx
-│   ├── Preloader.tsx + preloader.ts   loading overlay: markup + inline driver
+│   ├── Preloader.tsx + preloaderMarkup.ts  loading overlay: markup + inline driver
 │   ├── login/ settings/ u/[username]/       auth, account settings, public profiles
 │   ├── api/share/route.ts     anonymous ?s=<slug> share endpoint
 │   └── {songs,patches,profile,auth,account}/actions.ts   Supabase server actions
@@ -1128,7 +1128,7 @@ Repo: https://github.com/mjoslyn/seqbaby.
 - The account bar is behind `<Suspense>` in `app/page.tsx`. Don't await
   Supabase in the page body again: it blocks the whole document, including the
   preload hints, on two sequential round trips.
-- **The preloader** (`app/Preloader.tsx` + `app/preloader.ts`) covers the gap
+- **The preloader** (`app/Preloader.tsx` + `app/preloaderMarkup.ts`) covers the gap
   between first paint and a booted engine — the studio's DOM is server-rendered,
   so without it the visitor gets a complete-looking sequencer with empty engine
   dropdowns and no tracks for as long as ~1.7MB of Tone + woscillators + 44
