@@ -16,9 +16,8 @@ import {
   onShareSet,
   serializeSet,
   serializeTrackPatch,
-  SET_VERSION,
-  validateSet,
 } from "./session.js";
+import { SET_VERSION, validateSet } from "./sessionFormat.js";
 import { state } from "./state.js";
 
 export function installAppApi() {

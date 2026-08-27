@@ -7,6 +7,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "test": "node --test \"test/**/*.test.js\"",
+    "test:rls": "bash scripts/test-rls.sh",
     "netlify:dev": "netlify dev",
     "legacy:dev": "node --watch --env-file=.env server.js"
   },

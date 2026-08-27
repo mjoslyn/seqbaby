@@ -74,6 +74,7 @@ export const ENGINE_MODULES = [
   "render.js",
   "scaleUI.js",
   "session.js",
+  "sessionFormat.js",
   "signal.js",
   "state.js",
   "stepEditor.js",
