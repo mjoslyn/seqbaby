@@ -52,7 +52,10 @@ env / fx / eq / comp / mod / automation per track.
 │   ├── supabase/{client,server,middleware}.ts   Supabase SSR helpers
 │   └── api.js                 legacy Blobs share put/get (+ in-memory dev fallback)
 ├── middleware.ts              Supabase session refresh (skips engine assets)
-├── supabase/migrations/       profiles, songs, patches, delete_own_account RPC
+├── supabase/
+│   ├── migrations/            profiles, songs, patches, delete_own_account RPC
+│   └── tests/                 negative RLS tests + the local auth stub they need
+├── test/                      node --test suites (engine-side, no browser)
 ├── netlify/functions/share.mjs  legacy function wrapper
 ├── server.js                  legacy static server (npm run legacy:dev)
 └── netlify.toml  next.config.mjs  tsconfig.json (excludes public/js from TS)
@@ -92,6 +95,11 @@ env / fx / eq / comp / mod / automation per track.
   replacing them. See the Knobs section below.
 - `macro.js` — XY macro pads, cross-track. See the Macro pads section below.
 - `session.js` — serialize/apply sets + track patches, legacy migration.
+- `sessionFormat.js` — the serialized-session format: `SET_VERSION` and
+  `validateSet()`. No imports, deliberately: every other engine module
+  touches the DOM or Tone at import time, and keeping this one pure is what
+  lets `node --test` exercise it outside a browser. `applySet` calls it
+  before its teardown, so a bad blob fails instead of emptying the session.
 - `patternSound.js` — p-lock: a track's sound stored per pattern, captured on
   the way out of a pattern and diff-applied on the way in.
 - `track.js` — track lifecycle (create/resize/clone).
@@ -127,6 +135,8 @@ npm run dev            # Next.js dev server on :3000 (studio + engine work with 
 npm run build && npm run start   # production build + serve
 npm run netlify:dev    # full Netlify emulation on :8888
 npm run legacy:dev     # pre-Next static Node server on :5173 (engine assets only)
+npm test               # node --test: the session-format validator
+npm run test:rls       # RLS policy tests — builds a throwaway Postgres in docker
 ```
 
 Account features need `NEXT_PUBLIC_SUPABASE_URL` + `NEXT_PUBLIC_SUPABASE_ANON_KEY`
