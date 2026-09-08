@@ -6,6 +6,7 @@ import { upgradeKnobs } from "./knob.js";
 import { applySampleSpeed, currentBpm } from "./lfo.js";
 import { renderRollPanel } from "./pianoRoll.js";
 import { updateGranularSpeedEnabled } from "./params.js";
+import { refreshParamIndicators } from "./paramTargets.js";
 import { renderAutomationPanel } from "./render.js";
 import { invertChord, state } from "./state.js";
 import { renderStepGrid } from "./stepGrid.js";
@@ -210,6 +211,10 @@ export function openGranularWavModal(t) {
   overlay.appendChild(modal);
   document.body.appendChild(overlay);
   upgradeKnobs(overlay);
+  // These are the track's own grain controls under a second set of classes, so
+  // they carry the same mod/aut dots and the same live needle — but only once
+  // something walks them, and this modal is built long after renderTrack ran.
+  refreshParamIndicators(t);
 
   const canvas = modal.querySelector(".sq-gwav__canvas");
   const animCb = modal.querySelector(".sq-gwav__anim-cb");

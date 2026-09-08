@@ -528,6 +528,30 @@ function scheduleEuclidTaps(t, key, cfg, now) {
   g.nextStep = n;
 }
 
+/**
+ * Where an LFO's shape is right now, as a 0..1 lift, so the knob it is moving
+ * can draw a needle at the value the parameter has actually been pushed to
+ * (modMotion.js). Null when the key isn't a running LFO of this kind.
+ *
+ * Two shapes of clock, for the same reason the setter loop has two: a ring is
+ * timed absolutely off the transport so it can't drift away from the bar, and
+ * a waveform keeps a running phase so changing its rate doesn't jump it. This
+ * phase is the display's own — the Tone.LFO driving the audio free-runs inside
+ * the graph with no phase to read back, so the two agree on rate and depth but
+ * not on where in the cycle they happen to be.
+ * @param {Track} t @param {string} key @param {number} now @param {number} dt
+ * @returns {number|null}
+ */
+export function lfoLiftNow(t, key, now, dt) {
+  const cfg = t.lfoConfig?.[key];
+  if (!cfg?.enabled) return null;
+  if (cfg.type === "euclid") return evalLfoShape("euclid", euclidPhase(cfg, now), cfg);
+  const phases = t._modPhase || (t._modPhase = {});
+  const phase = (phases[key] ?? 0) + dt * effectiveRate(cfg);
+  phases[key] = phase;
+  return (evalLfoShape(cfg.type || "sine", phase, cfg) + 1) * 0.5;
+}
+
 // One RAF loop drives every active setter LFO across every track.
 export let _setterLfoRafId = null;
 export function startSetterLfoLoopIfNeeded() {
@@ -577,7 +601,13 @@ export function startSetterLfoLoopIfNeeded() {
         // base or wholly above it. Same peak-to-peak from the same knob.
         const u = euclidShape ? shape : (shape + 1) * 0.5;
         const amt = cfg.depth ?? 0;
-        applySetterLfoValue(t, key, base + (lfoBipolar(cfg) ? (u - 0.5) * amt : u * amt));
+        const v = base + (lfoBipolar(cfg) ? (u - 0.5) * amt : u * amt);
+        // These targets are already in the slider's own 0..1, so the value the
+        // setter writes is exactly where the knob's needle belongs. Recorded
+        // rather than recomputed: modMotion.js would otherwise have to keep a
+        // second phase accumulator alongside this one and hope they agreed.
+        (t._modLive || (t._modLive = {}))[key] = v;
+        applySetterLfoValue(t, key, v);
       }
     }
     _setterLfoRafId = anyActive ? requestAnimationFrame(tick) : null;
@@ -662,6 +692,7 @@ export function syncLFO(t, key) {
     if (!cfg.enabled) {
       if (t._setterLfoPhase && t._setterLfoPhase[key] != null) {
         delete t._setterLfoPhase[key];
+        if (t._modLive) delete t._modLive[key];
         // Euclid keeps its live overrides in a separate object rather than in
         // the audio graph, so releasing means deleting the override — writing
         // the base back would leave the control looking driven forever.

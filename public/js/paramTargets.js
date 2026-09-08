@@ -357,12 +357,26 @@ export const PARAM_DESCRIPTIONS = {
  * Driven off the DOM rather than a list of controls because the same parameter
  * appears in more than one place (the granular row and the wav modal both have
  * a speed slider), and both should light up.
+ *
+ * The same pass collects the knobs that are being MOVED — the "mod" and "aut"
+ * ones — into `t._motionCtls`, for modMotion.js to draw a live needle on. That
+ * list is built here rather than there because this walk already resolves
+ * every control's owner and works out which of them is driving it, and because
+ * everything that changes the answer already calls this: renderTrack, both
+ * panels, the parameter menu and switchPattern. A macro pad is left out on
+ * purpose — a pad moves the knob itself, so it has nothing to shadow.
  * @param {Track} t
  */
 export function refreshParamIndicators(t) {
   if (!t || t.id == null) return;
+  const moving = [];
+  // The track node and every panel inside it carry the id, so a control sits
+  // under more than one root and would otherwise be walked several times.
+  const seen = new Set();
   for (const root of document.querySelectorAll(`[data-track-id="${t.id}"]`)) {
     for (const el of root.querySelectorAll("input[type=range], select, input[type=checkbox]")) {
+      if (seen.has(el)) continue;
+      seen.add(el);
       const tg = targetsForControl(el);
       if (!tg) continue;
       const wrap = el.closest(".sq-field, .sq-fx__ctl, .sq-virus__f, .sq-dx7__f, label");
@@ -378,8 +392,13 @@ export function refreshParamIndicators(t) {
                    : null;
       if (motion) wrap.dataset.motion = motion;
       else delete wrap.dataset.motion;
+      // Knobs only: a select or a checkbox has no travel to draw a needle on.
+      if (el._knob && (motion === "mod" || motion === "aut")) {
+        moving.push({ el, kind: motion, key: motion === "mod" ? tg.lfo : tg.auto });
+      }
     }
   }
+  t._motionCtls = moving;
 }
 
 // Sliders, selects and toggles only: text and number fields keep the browser's

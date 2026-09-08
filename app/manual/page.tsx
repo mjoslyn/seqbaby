@@ -814,6 +814,14 @@ export default function ManualPage() {
             lane, grey for a lane you&apos;ve switched off. Scan a track and you can see
             where its movement is coming from.
           </p>
+          <p>
+            And you can watch it happen. A knob being driven grows a second needle in
+            that same colour, at wherever the LFO or the lane has pushed the parameter
+            to right now, while the knob itself stays where you left it. That gap is
+            the point: the knob is the base the movement swings around, so the two
+            needles together tell you how far it is actually travelling and where it
+            comes back to.
+          </p>
           <div className={styles.note}>
             A parameter takes an LFO or an automation lane, not both. Two things
             writing the same value fight each other, and what you hear is one of them

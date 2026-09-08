@@ -230,6 +230,36 @@ input[type="range"] { accent-color: var(--accent); }
   touch-action: none;
   -webkit-tap-highlight-color: transparent;
 }
+/* The second needle: where an lfo or an automation lane has actually pushed
+   this parameter, drawn over the knob's own pointer without moving it. Its
+   colour is --motion-dot, set on the field wrapper by refreshParamIndicators
+   for the dot beside the label, so the needle and the dot always agree about
+   which of the two is driving the control.
+
+   On .sq-knob's own ::after rather than a third element: there are over a
+   thousand knobs in a full session, and a span each — hidden or not — is a
+   thousand nodes bought to draw a handful of needles. It comes after the input
+   in the box order, so it paints over the dial without a stacking context.
+
+   Longer than the base pointer and starting further out, so you can still tell
+   the two apart when the modulation is resting exactly on the slider. */
+.sq-knob[data-moving]::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: calc(var(--knob-thickness) - 1px);
+  width: 2px;
+  height: calc(var(--knob-size) * 0.36);
+  margin-left: -1px;
+  border-radius: 1px;
+  background: var(--motion-dot, var(--accent));
+  /* A hairline of the panel behind it, so the needle still separates when it
+     crosses the value arc — which is exactly where it spends its time. */
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.55);
+  transform-origin: 50% calc(var(--knob-size) / 2 - var(--knob-thickness) + 1px);
+  transform: rotate(var(--knob-ma, -135deg));
+  pointer-events: none;
+}
 .sq-knob input[type="range"]:active { cursor: grabbing; }
 .sq-knob:hover { --knob-track: color-mix(in oklab, var(--bg-3) 60%, var(--fg-dim)); }
 .sq-knob:has(input:focus-visible) { --knob-track: var(--accent-2); }
@@ -1950,11 +1980,14 @@ body.kbd-recording .sq-track.is-kbd-active { border-color: #e5484d; box-shadow: 
 /* A macro pad is the third thing that can own a parameter, alongside an lfo and
    an automation lane — so it gets its own dot for the same reason they do. */
 [data-motion="macro"] { --motion-dot: #ff9ad5; }
+/* `:not(.sq-knob)` because the knob's own wrapper is a span too, and a direct
+   child of these labels — without it the dot is drawn twice, once beside the
+   word and once floating on the dial. */
 .sq-field[data-motion] > label::after,
-.sq-fx__ctl[data-motion] > span::after,
-.sq-virus__f[data-motion] > span::after,
-.sq-guitar__f[data-motion] > span::after,
-.sq-bass__f[data-motion] > span::after,
+.sq-fx__ctl[data-motion] > span:not(.sq-knob)::after,
+.sq-virus__f[data-motion] > span:not(.sq-knob)::after,
+.sq-guitar__f[data-motion] > span:not(.sq-knob)::after,
+.sq-bass__f[data-motion] > span:not(.sq-knob)::after,
 .sq-dx7__f[data-motion]::after,
 label[data-motion]:not(.sq-fx__ctl):not(.sq-virus__f):not(.sq-guitar__f):not(.sq-bass__f):not(.sq-dx7__f)::before {
   content: "";
@@ -1970,10 +2003,10 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-virus__f):not(.sq-guitar__f):not(.sq
    names them), so the dot goes after the slider rather than beside a word. */
 .sq-dx7__f[data-motion]::after { flex: 0 0 auto; margin: 0 0 0 3px; }
 .sq-field[data-motion="off"] > label,
-.sq-fx__ctl[data-motion="off"] > span,
-.sq-virus__f[data-motion="off"] > span,
-.sq-guitar__f[data-motion="off"] > span,
-.sq-bass__f[data-motion="off"] > span { opacity: 0.8; }
+.sq-fx__ctl[data-motion="off"] > span:not(.sq-knob),
+.sq-virus__f[data-motion="off"] > span:not(.sq-knob),
+.sq-guitar__f[data-motion="off"] > span:not(.sq-knob),
+.sq-bass__f[data-motion="off"] > span:not(.sq-knob) { opacity: 0.8; }
 
 /* Right-click a parameter → what is modulating / automating that one control. */
 .sq-pmenu__modal { width: min(96vw, 900px); max-width: 96vw; gap: 10px; }

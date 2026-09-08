@@ -65,6 +65,7 @@ export const ENGINE_MODULES = [
   "main.js",
   "meter.js",
   "meters.js",
+  "modMotion.js",
   "paramMenu.js",
   "paramTargets.js",
   "patternSound.js",
