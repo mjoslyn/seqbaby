@@ -7,6 +7,7 @@ import { LFO_KEYS, PATTERN_COUNT } from "./constants.js";
 import { isMobileDevice, setStatus } from "./dom.js";
 import { HELP_TIPS, ICON_BOUNCE, ICON_CAPTURE, ICON_CHAIN, ICON_FINISH, ICON_KEYBOARD, ICON_METRONOME, ICON_NOW, ICON_REC, ICON_REPEAT } from "./icons.js";
 import { upgradeKnobs } from "./knob.js";
+import { startModMotion } from "./modMotion.js";
 import { openMacroPads } from "./macro.js";
 import { applySampleSpeed, attachBpmDrag, lfoRateLabel, retuneSyncedLFOs } from "./lfo.js";
 import { captureSequence, initComputerKeyboard, isDesktopKeyboard, resetKbdKeys, syncKbdArpUI } from "./keyboard.js";
@@ -578,6 +579,10 @@ export function init() {
   // their own subtree in renderTrack and the modals theirs as they build, so
   // this only has to cover what was in the document from the start.
   upgradeKnobs(document);
+  // An lfo and an automation lane both write around the slider rather than to
+  // it, so a swept parameter used to draw the same knob as a still one. This
+  // puts a second needle on it at wherever the parameter actually is.
+  startModMotion();
   document.getElementById("macro-pads")?.addEventListener("click", openMacroPads);
   // The master swing slider has no listener on purpose: the transport loop reads
   // its value straight off the DOM each callback (~0.1 µs), so there's nothing to

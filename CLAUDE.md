@@ -93,6 +93,9 @@ env / fx / eq / comp / mod / automation per track.
 - `keyboard.js` — computer-keyboard performance mode + capture.
 - `knob.js` — the rotary knob layer, drawn over the native range inputs without
   replacing them. See the Knobs section below.
+- `modMotion.js` — the second needle: where an LFO or an automation lane has
+  actually pushed a parameter, drawn on the knob while the slider stays the
+  base. See the modulation section below.
 - `macro.js` — XY macro pads, cross-track. See the Macro pads section below.
 - `session.js` — serialize/apply sets + track patches, legacy migration.
 - `sessionFormat.js` — the serialized-session format: `SET_VERSION` and
@@ -725,6 +728,13 @@ it; the input is still the value, the focus target and the pointer target.
   `style.css`, so a rack that reads badly as dials becomes bars by overriding
   one selector. Paints are rAF-batched through a dirty set, so a macro pad
   sweeping twenty parameters costs one frame, not twenty.
+- **`setKnobMotion` writes two more** — `--knob-m` / `--knob-ma` plus a
+  `data-moving` flag — for the second needle a driven parameter gets
+  (modMotion.js). It paints from `--motion-dot`, the same property the dot
+  beside the label reads, so the needle and the dot can't disagree about which
+  of the two is driving the control. The needle is `.sq-knob`'s own `::after`
+  rather than a third element: a span each, hidden or not, is a thousand nodes
+  bought to draw a handful of needles.
 - **Sizing is `--knob-size` per context** (44px volume, 36px timbre, 26px in the
   DX7 operator grid), and `--knob-hit` guarantees a **≥44px target wherever the
   layout has gone mobile** even when the dial is drawn smaller — keyed on
@@ -779,6 +789,36 @@ the macro), so the pairing lives in `paramTargets.js` (`CONTROL_TARGETS` →
 derived `AUTO_FOR_LFO` / `LFO_FOR_AUTO` / `CLASS_FOR_AUTO`, plus `autoOwns` /
 `modOwns` / `hasMacroOn`). Every picker filters on it, and the parameter menu
 says which side holds the control.
+
+**The knob shows where the modulation has got to** (`modMotion.js`). An LFO and
+a lane both write around the slider and leave it as the base, which is right —
+but it also meant a parameter being swept four times a bar drew exactly the same
+knob as one sitting still. One rAF loop resolves each driven parameter's current
+value and hands it to `setKnobMotion`, which draws a second needle in the same
+colour as the label's dot. Nothing here writes a value: the slider, the stored
+sound and a save are all untouched, and a macro pad is left out because a pad
+moves the real knob already.
+
+- **The list of what to draw is built by `refreshParamIndicators`**
+  (`t._motionCtls`), not by modMotion: that walk already resolves every
+  control's owner and works out which side is driving it, and everything that
+  changes the answer already calls it.
+- **Automation and the setter-driven LFOs are exact.** `runAutomationForStep`
+  records the segment it just scheduled (`t._autoLive`) and the loop
+  interpolates it at the audio time being heard, so the needle steps with the
+  part rather than with the scheduler's lookahead; the setter LFO loop records
+  the value it wrote (`t._modLive`), already in the slider's own 0..1.
+- **AudioParam LFOs are computed from the shape** (`lfoLiftNow` in lfo.js),
+  because a Tone.LFO free-runs inside the graph with nothing to read back — a
+  param with a signal connected still reports only its intrinsic value. Rate,
+  depth and shape are right; the phase is the display's own.
+- **A depth is in the TARGET's units, a needle is in the knob's.** For most
+  keys those are the same (`LFO_AMP_SCALE` for a dx7 / guitar / bass / virus
+  control IS its knob's range), so the knob's own min..max is the divisor.
+  `PARAM_SPAN` in modMotion.js holds the ones that differ — a fuzz drive in
+  gain, a 303 tune knob reading cents into a param in semitones — and
+  `PARAM_CURVE` the three that aren't linear at all, cutoff above all: 3kHz is
+  most of the dial at 200Hz and a nudge at 15k.
 
 **Right-click a parameter** opens `paramMenu.js`: what the control does, its
 LFO row, its automation lane and its macro assignment — the same widgets the panels use
@@ -1086,7 +1126,10 @@ patterns.
 - New FX → extend `FXRack` + `defaultFxConfig` + apply/refresh/wire fns in
   signal.js/render.js, and (optionally) `LFO_KEYS`/`AUTOMATION_TARGETS`.
 - New LFO target → see canModulate gotcha above, + a `CONTROL_TARGETS` entry
-  (paramTargets.js) so its control's right-click menu finds it.
+  (paramTargets.js) so its control's right-click menu finds it. If its
+  `LFO_AMP_SCALE` isn't in the same units as the slider's own range, it needs a
+  `PARAM_SPAN` / `PARAM_CURVE` entry too (modMotion.js) or the live needle
+  swings by the wrong amount.
 - New automation target → `AUTOMATION_TARGETS` + a setter path in
   `applyAutomationAtStep`, + the same `CONTROL_TARGETS` entry.
 - New per-step control → array on `emptyPattern()` + `aliasPattern()` field +

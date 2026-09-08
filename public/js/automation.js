@@ -415,6 +415,11 @@ export function runAutomationForStep(t, stepIdx, time, stepDur) {
     const v = values[stepIdx % len];
     if (v == null) continue;
     const next = values[(stepIdx + 1) % len];
+    // Remember the segment this step just scheduled, so the knob behind the
+    // lane can show where it is being moved to (modMotion.js). Recorded here
+    // rather than inside applyAutomationAtStep because a macro pad calls that
+    // too, and a pad moves the real knob — it has nothing to shadow.
+    (t._autoLive || (t._autoLive = {}))[key] = { from: v, to: next, t0: time, t1: time + stepDur };
     applyAutomationAtStep(t, key, v, time, next, stepDur);
   }
 }

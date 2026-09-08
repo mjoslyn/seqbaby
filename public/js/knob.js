@@ -22,6 +22,12 @@
  *     `.value`, and without the shadow every knob on screen would keep drawing
  *     the value the sound used to have.
  *
+ * A knob also draws what is MOVING it. An lfo or an automation lane writes
+ * around the slider rather than to it — deliberately, so the slider stays the
+ * base — which used to mean a swept parameter looked identical to a still one.
+ * `setKnobMotion` adds a second needle at wherever the parameter actually is
+ * right now; `modMotion.js` is what works that value out and drives it.
+ *
  * What makes it playable is the drag, not the shape. A native range jumps to
  * wherever you click, which is the one thing a control you play must never do,
  * and its travel is the width of the widget, which in the DX7 grid is 60px for
@@ -88,7 +94,39 @@ function paintNow(input) {
   wrap.style.setProperty("--knob-v", String(v));
   // 270° of sweep starting at 7 o'clock, so the dead zone sits at the bottom
   // where a rack of knobs has nothing to say anyway.
-  wrap.style.setProperty("--knob-a", `${-135 + v * 270}deg`);
+  wrap.style.setProperty("--knob-a", angleOf(v));
+}
+
+/** The angle a 0..1 value sits at: 270° of sweep starting at 7 o'clock. */
+function angleOf(v) { return `${-135 + v * 270}deg`; }
+
+/**
+ * Show where something else has pushed this parameter — an lfo's sweep, an
+ * automation lane's step — as a second needle over the knob's own.
+ *
+ * The value is a fraction of the knob's travel, or null to say nothing is
+ * driving it. Written straight through rather than through the dirty set: the
+ * caller is already inside one rAF pass (modMotion.js), and a whole rack of
+ * these lands in that same frame. Repeats are dropped at the resolution the
+ * dial can actually draw, so a parked lfo costs nothing per frame.
+ * @param {HTMLInputElement} input @param {number|null} unit
+ */
+export function setKnobMotion(input, unit) {
+  const k = input?._knob;
+  if (!k) return;
+  if (unit == null || !Number.isFinite(unit)) {
+    if (k.motionQ == null) return;
+    k.motionQ = null;
+    k.wrap.removeAttribute("data-moving");
+    return;
+  }
+  const v = clamp(unit, 0, 1);
+  const q = Math.round(v * 360);
+  if (q === k.motionQ) return;
+  k.motionQ = q;
+  k.wrap.style.setProperty("--knob-m", String(v));
+  k.wrap.style.setProperty("--knob-ma", angleOf(v));
+  k.wrap.setAttribute("data-moving", "");
 }
 
 // ---- readout -------------------------------------------------------------
@@ -325,7 +363,7 @@ function upgradeOne(input) {
   input.dataset.knob = "1";
 
   input._knob = { wrap, min, max, step, decimals: decimalsOf(input.step || "1"),
-                  longPressId: null, lastTapAt: 0, lastTapMoved: false };
+                  longPressId: null, lastTapAt: 0, lastTapMoved: false, motionQ: null };
 
   // The field wrapper is what the mod/aut dot and the parameter menu look at,
   // and it now has to stack the label under a square control rather than beside
