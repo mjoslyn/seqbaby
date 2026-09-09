@@ -1,4 +1,5 @@
 import { engineByKey } from "./catalog.js";
+import { afterPrefix as after } from "./constants.js";
 import { makeFuzzCurve, shaperPreampGain } from "./curves.js";
 import { BASS_MOD_KEYS, BASS_MOD_LABELS, bassFromUnit } from "./bass.js";
 import { HEXOP_MOD_KEYS, HEXOP_MOD_LABELS, hexopFromUnit } from "./hexop.js";
@@ -248,7 +249,7 @@ export function applyAutomationAtStep(t, key, v, time, vNext, stepDur) {
   // Contagion panel controls are all AudioParams on its worklet node, so they ramp
   // like any other. cut2 and envamt are bipolar; the lane spans their full range.
   if (key.startsWith("contagion.")) {
-    const which = key.slice(6);
+    const which = after(key, "contagion.");
     // Most are 0..1; cut2 / env amount are bipolar, and osc2 semi is in
     // semitones — each lane spans the slider's own range.
     const map = which === "osc2semi" ? (u) => u * 48 - 24
@@ -263,7 +264,7 @@ export function applyAutomationAtStep(t, key, v, time, vNext, stepDur) {
   // the control's own range — a ratio lane sweeps 0..31, a detune lane ±7 — so
   // a step's value means the same thing here as on the slider it came from.
   if (key.startsWith("hexop.")) {
-    const which = key.slice(4);
+    const which = after(key, "hexop.");
     ramp(t.voice?.getAudioParam?.("d" + which), hexopFromUnit(which, vv), hexopFromUnit(which, vn));
     return;
   }
@@ -271,12 +272,12 @@ export function applyAutomationAtStep(t, key, v, time, vNext, stepDur) {
   // lane spans that knob's own range — a pick-position lane sweeps 0.02..0.5
   // (bridge to twelfth fret), not 0..1.
   if (key.startsWith("gtr.")) {
-    const which = key.slice(4);
+    const which = after(key, "gtr.");
     ramp(t.voice?.getAudioParam?.("gt" + which), guitarFromUnit(which, vv), guitarFromUnit(which, vn));
     return;
   }
   if (key.startsWith("bas.")) {
-    const which = key.slice(4);
+    const which = after(key, "bas.");
     ramp(t.voice?.getAudioParam?.("bs" + which), bassFromUnit(which, vv), bassFromUnit(which, vn));
     return;
   }
@@ -284,7 +285,7 @@ export function applyAutomationAtStep(t, key, v, time, vNext, stepDur) {
   // mapping is the identity — it goes through subFromUnit anyway so there is
   // one code path if a range is ever widened.
   if (key.startsWith("sub.")) {
-    const which = key.slice(4);
+    const which = after(key, "sub.");
     ramp(t.voice?.getAudioParam?.("sub" + which), subFromUnit(which, vv), subFromUnit(which, vn));
     return;
   }

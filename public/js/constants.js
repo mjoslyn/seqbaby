@@ -7,6 +7,16 @@ export const { wosc, oscillatorTypes } = window.woscillators;
 
 export const STEPS_PER_BAR = 16;
 
+/**
+ * The rest of a namespaced key, after its prefix. The engine prefixes are
+ * spelled once here rather than counted into a `slice(n)` at each call site:
+ * the emulator rename grew `virus_`/`dx7_` into `contagion_`/`hexop_` and the
+ * hand-counted offsets stayed behind, which silently unhooked every contagion
+ * and hexop panel control from its AudioParam.
+ * @param {string} key @param {string} prefix @returns {string}
+ */
+export function afterPrefix(key, prefix) { return key.slice(prefix.length); }
+
 // Coarse mobile/touch detection — used to widen the transport lookahead and
 // throttle meter painting where the main thread is more easily starved.
 export const LFO_KEYS = [
