@@ -19,8 +19,9 @@ env / fx / eq / comp / mod / automation per track.
   bundler — edit, reload. `window.seqbaby` (from `appApi.js`) exposes `state`
   and serialize/apply hooks to the React shell (typed in `app/seqbaby.d.ts`).
 - **Accounts + data**: Supabase (Postgres + Auth + RLS). Tables: `profiles`,
-  `songs`, `patches` (see `supabase/migrations/`). Server actions in
-  `app/{songs,patches,profile,auth,account}/actions.ts`.
+  `songs`, `song_versions`, `patches` (see `supabase/migrations/`). Server
+  actions in `app/{songs,patches,profile,auth,account}/actions.ts`. Saving an
+  existing song appends to its version tree — see the song versions section.
 - **Anonymous sharing**: `app/api/share/route.ts` (public songs rows);
   `lib/api.js` + `netlify/functions/share.mjs` are the legacy Netlify Blobs
   path.
@@ -39,6 +40,8 @@ env / fx / eq / comp / mod / automation per track.
 │   ├── studioMarkup.ts        engine's static DOM skeleton (raw HTML string)
 │   ├── ScriptLoader.tsx       injects Tone → woscillators → js/main.js in order
 │   ├── AccountBar/SongsMenu/PatchesMenu/SaveButton/OpenSongOnLoad.tsx
+│   ├── VersionTree.tsx        a song's version history, drawn as the tree it is
+│   ├── songs/openSong.ts      which song + version the studio holds (shared by the two save UIs)
 │   ├── Preloader.tsx + preloaderMarkup.ts  loading overlay: markup + inline driver
 │   ├── login/ settings/ u/[username]/       auth, account settings, public profiles
 │   ├── api/share/route.ts     anonymous ?s=<slug> share endpoint
@@ -1110,7 +1113,7 @@ buffer, slices back to the last 1.5s silence gap and writes a clip).
 | surface | what |
 |---|---|
 | `POST/GET app/api/share/route.ts` | anonymous `?s=<slug>` share links (public `songs` rows) |
-| `app/songs/actions.ts` | `saveSong` (autosave upsert), `saveNamedSong`, `listSongs`, `loadSong`, `forkSong` |
+| `app/songs/actions.ts` | `saveSong` / `saveNamedSong` (both append a version), `listSongs`, `loadSong`, `forkSong`, `listVersions`, `loadVersion`, `labelVersion`, `deleteVersion` |
 | `app/patches/actions.ts` | `publishPatch`, `listMyPatches`, `listPublicPatches`, `getPatch`, `deletePatch` |
 | `app/profile/actions.ts` | `getMyProfile`, `updateProfile`, `getPublicProfile` (+ that user's public songs/patches) |
 | `app/auth/actions.ts` | `signIn`, `signUp`, `signInWithMagicLink`, `signOut` |
@@ -1119,6 +1122,53 @@ buffer, slices back to the last 1.5s silence gap and writes a clip).
 `/u/<username>` is the public profile page with fork buttons. The engine side
 of save/share lives in `session.js` (`serializeSet`/`applySet`) and is bridged
 through `window.seqbaby`.
+
+## Song versions — a tree, not a blob (`song_versions`)
+
+Saving an existing song used to overwrite `songs.data`, so the state before that
+save was gone. Every save now also appends a row to `song_versions`, pointing at
+the version it was saved FROM — which is what makes the history a tree rather
+than a list:
+
+```
+v1 ──▶ v2 ──▶ v3 ──▶ v5      (kept editing)
+        └───▶ v4              (opened v2, saved: a branch)
+```
+
+- **`songs.data` is untouched by all this** and still holds the song's current
+  state. Share links, `/u/<username>`, `loadSong` and the anonymous `?s=` route
+  read it and none of them learned anything about versions. It mirrors whatever
+  `songs.current_version_id` names.
+- **The parent is the client's**, not the server's: `saveSong` /
+  `saveNamedSong` take `parentVersionId`, defaulting to the song's tip. Open v2
+  and the next save names v2, so it branches instead of burying it. That is the
+  entire mechanism.
+- **Which version is open is shared module state** (`app/songs/openSong.ts`),
+  because two islands need the same answer — the songs menu opens versions and
+  the top-bar save is what people press afterwards. Both are mounted separately
+  by a server component, so there is no React parent to hang a context on.
+- **A save identical to its parent returns the parent.** These blobs are whole
+  sessions, base64 sample payloads included; pressing save twice must not put a
+  duplicate copy in the tree.
+- **`seq` is the version's name** (`v4`), unique per song, and stable when a
+  sibling branch appears later. `max()+1` is not atomic, so the writer retries on
+  the unique violation the way `publishSong` retries a slug.
+- **No public-read policy, deliberately** — `songs_public_read` has no
+  counterpart on `song_versions`. Publishing a song publishes the state you chose
+  to publish, not every draft behind it. `supabase/tests/rls_test.sql` asserts
+  that both behaviourally and structurally, because adding one to "match" songs
+  is exactly the plausible-looking mistake.
+- **Deleting a version is refused for the tip and for any version with children**
+  — `parent_id` cascades, so pruning a version with a branch under it would take
+  the branch too, and this app has no undo. Deleting the SONG still takes its
+  whole history (`song_id` cascades).
+- **A fork starts a fresh tree** rooted at the copied state. The source's history
+  belongs to the source's owner and isn't readable anyway; `songs.forked_from`
+  still records the ancestry between songs. `split` in the version tree is the
+  same thing from one version — a way to turn a branch into its own song.
+- Migration `0009` backfills a root version for every existing song, so the
+  first save after deploying branches off something rather than starting a second
+  root.
 
 ## Bounce (`bounce.js`)
 
