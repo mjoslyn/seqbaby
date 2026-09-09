@@ -819,7 +819,12 @@ it; the input is still the value, the focus target and the pointer target.
   `--knob-v` (0..1) and `--knob-a` (the same as an angle). All the shape is in
   `style.css`, so a rack that reads badly as dials becomes bars by overriding
   one selector. Paints are rAF-batched through a dirty set, so a macro pad
-  sweeping twenty parameters costs one frame, not twenty.
+  sweeping twenty parameters costs one frame, not twenty. All four are
+  **registered with `@property`**, and written to the dial as well as the
+  wrapper: the arc is a stop in a cached background-image and the pointer is a
+  pseudo-element inheriting from its ancestor, which are the two cases WebKit
+  does not re-resolve when an untyped custom property changes — on iOS the
+  value moved and the dial went on drawing where the parameter used to be.
 - **`setKnobMotion` writes two more** — `--knob-m` / `--knob-ma` plus a
   `data-moving` flag — for the second needle a driven parameter gets
   (modMotion.js). It paints from `--motion-dot`, the same property the dot

@@ -114,6 +114,24 @@ input[type="range"] { accent-color: var(--accent); }
    dial: it is still the value, still the focus target, and still what the
    pointer hits, so the parameter menu's DOM walk and the mod/aut dots keep
    working without knowing knobs exist. */
+
+/* The four properties knob.js writes are REGISTERED, and on mobile that is
+   load-bearing rather than tidy. An untyped custom property is a token list,
+   and WebKit does not reliably re-resolve the two places these are read from
+   when one changes: a gradient stop inside a cached background-image, and a
+   pseudo-element inheriting the new value from its originating element. Both
+   describe this knob exactly — the arc is a conic-gradient stop, the pointer
+   is `.sq-knob__dial::after`'s transform — so on iOS the value moved, the
+   readout and the sound moved with it, and the dial went on drawing where the
+   parameter used to be. Typed, they are real properties with real
+   invalidation. Nothing here transitions, so making them animatable costs
+   nothing; a browser without @property (iOS < 16.4) ignores the block and is
+   no worse off than before. */
+@property --knob-v  { syntax: "<number>"; inherits: true; initial-value: 0; }
+@property --knob-a  { syntax: "<angle>";  inherits: true; initial-value: -135deg; }
+@property --knob-m  { syntax: "<number>"; inherits: true; initial-value: 0; }
+@property --knob-ma { syntax: "<angle>";  inherits: true; initial-value: -135deg; }
+
 .sq-knob {
   --knob-size: 36px;
   /* The unfilled arc has to read against the panel behind it, or a knob at 20%
