@@ -1,6 +1,6 @@
 import { LFO_KEYS } from "./constants.js";
 import { BASS_MOD_KEYS, BASS_MOD_LABELS } from "./bass.js";
-import { DX7_MOD_KEYS, DX7_MOD_LABELS } from "./dx7.js";
+import { HEXOP_MOD_KEYS, HEXOP_MOD_LABELS } from "./hexop.js";
 import { GUITAR_MOD_KEYS, GUITAR_MOD_LABELS } from "./guitar.js";
 import { state } from "./state.js";
 
@@ -10,15 +10,15 @@ import { state } from "./state.js";
 // The join between a control in the DOM and the two key namespaces behind it —
 // LFO keys (constants.js LFO_KEYS) and automation keys (automation.js
 // AUTOMATION_TARGETS). They don't share a spelling: the fx delay wet slider is
-// "delay" to the LFO and "fx.delay" to automation, and the 303's accent is
-// "tb303_accent" / "tb303.accent".
+// "delay" to the LFO and "fx.delay" to automation, and the silverbox's accent is
+// "silverbox_accent" / "silverbox.accent".
 //
 // Two things read this: the right-click parameter menu (paramMenu.js), and the
 // mod/aut exclusivity below — a parameter takes an LFO or an automation lane,
 // never both, and knowing that they're the same parameter needs this table.
 //
 // Adding a control: one entry, keyed by the class the markup already uses.
-// `null` on a side means that side has no target for it (e.g. the 303 waveform
+// `null` on a side means that side has no target for it (e.g. the silverbox waveform
 // is a switch — automatable, not modulatable).
 /** @type {Record<string, {lfo: string|null, auto: string|null}>} */
 export const CONTROL_TARGETS = {};
@@ -32,11 +32,11 @@ for (const k of ["vol", "harm", "timb", "morph", "decay",
 // Track filter.
 def("p-cutoff", "cutoff", "cutoff");
 def("p-reson",  "reson",  "reson");
-// TB-303 panel.
-def("p-accent303", "tb303_accent", "tb303.accent");
-def("p-tune303",   "tb303_tune",   "tb303.tune");
-def("p-wave303",   null,           "tb303.wave");
-// Access Virus panel. The slider classes carry the "v" prefix the worklet uses;
+// Silverbox panel.
+def("p-sbaccent", "silverbox_accent", "silverbox.accent");
+def("p-sbtune",   "silverbox_tune",   "silverbox.tune");
+def("p-sbwave",   null,               "silverbox.wave");
+// Contagion panel. The slider classes carry the "v" prefix the worklet uses;
 // the LFO / automation keys spell the same control out differently.
 for (const [cls, name] of [["vpw", "pw"], ["vfm", "fm"], ["vring", "ring"],
                            ["vunidet", "unidet"], ["vcut2", "cut2"], ["vbal", "bal"],
@@ -44,16 +44,16 @@ for (const [cls, name] of [["vpw", "pw"], ["vfm", "fm"], ["vring", "ring"],
                            ["vosc2semi", "osc2semi"], ["vosc2det", "osc2det"],
                            ["vunispread", "unispread"],
                            ["vatk", "atk"], ["vsus", "sus"], ["vrel", "rel"]]) {
-  def(`p-${cls}`, `virus_${name}`, `virus.${name}`);
+  def(`p-${cls}`, `contagion_${name}`, `contagion.${name}`);
 }
-// DX7 panel. Every control is `d` + a short key, and that short key spells both
+// Hexop panel. Every control is `d` + a short key, and that short key spells both
 // namespaces — so all 56 of them are one loop rather than 56 lines.
-for (const k of DX7_MOD_KEYS) def(`p-d${k}`, `dx7_${k}`, `dx7.${k}`);
+for (const k of HEXOP_MOD_KEYS) def(`p-d${k}`, `hexop_${k}`, `hexop.${k}`);
 // Electric guitar panel — the same one-list-three-namespaces arrangement.
 for (const k of GUITAR_MOD_KEYS) def(`p-gt${k}`, `gtr_${k}`, `gtr.${k}`);
 // Electric bass panel — likewise.
 for (const k of BASS_MOD_KEYS) def(`p-bs${k}`, `bas_${k}`, `bas.${k}`);
-// Euclid's three counts — one list, three namespaces, as in dx7.js.
+// Euclid's three counts — one list, three namespaces, as in hexop.js.
 for (const k of ["pulses", "steps", "rotate"]) def(`p-euc${k}`, `euclid_${k}`, `euclid.${k}`);
 // Granular grain controls. Also reachable from the wav modal's own copies.
 for (const k of ["speed", "pitch", "window", "jitter", "detune", "pan"]) {
@@ -195,12 +195,12 @@ export const CONTROL_LABELS = {
   "p-gpattern": "grain pattern", "p-grate": "grain rate", "p-gsync": "grain sync",
   "gw-gplay": "grain play mode", "gw-gloop": "grain loop mode",
   "gw-gpattern": "grain pattern", "gw-grate": "grain rate", "gw-gsync": "grain sync",
-  // DX7: the operator cells are named by their column heading, not by a label
+  // Hexop: the operator cells are named by their column heading, not by a label
   // of their own, so the right-click menu has nothing in the DOM to read.
-  ...Object.fromEntries(DX7_MOD_KEYS.map(k => [`p-d${k}`, DX7_MOD_LABELS[k]])),
-  "p-dalg": "dx7 algorithm", "p-dlfow": "dx7 lfo waveform", "p-dlfok": "dx7 lfo key sync",
-  "sq-dx7__preset": "dx7 voice",
-  ...Object.fromEntries([1, 2, 3, 4, 5, 6].map(i => [`p-d${i}fix`, `dx7 op${i} ratio / fixed`])),
+  ...Object.fromEntries(HEXOP_MOD_KEYS.map(k => [`p-d${k}`, HEXOP_MOD_LABELS[k]])),
+  "p-dalg": "hexop algorithm", "p-dlfow": "hexop lfo waveform", "p-dlfok": "hexop lfo key sync",
+  "sq-hexop__preset": "hexop voice",
+  ...Object.fromEntries([1, 2, 3, 4, 5, 6].map(i => [`p-d${i}fix`, `hexop op${i} ratio / fixed`])),
   ...Object.fromEntries(GUITAR_MOD_KEYS.map(k => [`p-gt${k}`, GUITAR_MOD_LABELS[k]])),
   "p-gtamp": "amp model", "p-gtcab": "speaker cabinet",
   "p-gtpkupt": "pickup type", "p-gttremw": "tremolo shape",
@@ -223,7 +223,7 @@ export const CONTROL_LABELS = {
 // the markup's tooltip, then by automation key (falling back to the LFO key) —
 // see `describe` in paramMenu.js. A class entry wins over a tooltip because the
 // tooltips that exist were written for hover: some are a couple of words, and a
-// few (the 303's, the Virus's, the 808's) are rewritten per engine and say it
+// few (the silverbox's, the contagion's, the 808's) are rewritten per engine and say it
 // better than anything generic could, so those controls have no entry here.
 /** @type {Record<string, string>} */
 export const PARAM_DESCRIPTIONS = {
@@ -239,9 +239,9 @@ export const PARAM_DESCRIPTIONS = {
   osc2:  "level of the second oscillator in the mix",
   osc3:  "level of the third oscillator (the sub, on most engines)",
   osc4:  "level of the fourth source — sub or noise, depending on the engine",
-  ultra: "mini-brute ultrasaw: detuned copies of the saw, for a thicker single oscillator",
-  fm:    "mini-brute oscillator FM depth — metallic, inharmonic tone as it climbs",
-  metal: "mini-brute metalizer: folds the triangle back on itself into harsh upper harmonics",
+  ultra: "snarl ultrasaw: detuned copies of the saw, for a thicker single oscillator",
+  fm:    "snarl oscillator FM depth — metallic, inharmonic tone as it climbs",
+  metal: "snarl metalizer: folds the triangle back on itself into harsh upper harmonics",
   noise: "level of the noise source in the oscillator mix",
   cutoff: "the track's lowpass filter — sits after the voice, before the eq. The env panel can sweep it per note",
   reson:  "resonance of that lowpass: a peak right at the cutoff, from a gentle emphasis to a whistle",
@@ -282,14 +282,14 @@ export const PARAM_DESCRIPTIONS = {
   "fx.reverb":           "how much reverb is mixed in",
   "fx.reverb.decay":     "reverb tail length. Changing it rebuilds the impulse response, so it moves in steps rather than smoothly",
 
-  // Virus envelope sliders (no tooltip in the markup — the four track sliders
+  // Contagion envelope sliders (no tooltip in the markup — the four track sliders
   // carry the engine's own tips, these don't).
-  "virus.atk": "how long each note takes to reach full level. Past a few percent it stops being a click and starts being a swell",
-  "virus.sus": "the level the envelope holds at after the decay, for as long as the note is held",
-  "virus.rel": "how long the note takes to fade once it ends",
+  "contagion.atk": "how long each note takes to reach full level. Past a few percent it stops being a click and starts being a swell",
+  "contagion.sus": "the level the envelope holds at after the decay, for as long as the note is held",
+  "contagion.rel": "how long the note takes to fade once it ends",
 
   // ── controls with no lfo or automation target: keyed by class ──
-  // Moog oscillator bank.
+  // Ladder oscillator bank.
   "p-osc1range": "octave for oscillator 1, in organ footages — 32' is two octaves down, 8' is concert pitch, 2' is two up",
   "p-osc2range": "octave for oscillator 2, in organ footages — 32' is two octaves down, 8' is concert pitch, 2' is two up",
   "p-osc3range": "octave for oscillator 3, in organ footages — 32' is two octaves down, 8' is concert pitch, 2' is two up",
@@ -299,7 +299,7 @@ export const PARAM_DESCRIPTIONS = {
   "p-osc2freq":  "oscillator 2's tuning against oscillator 1, ±7 semitones. A little off is what makes the stack move",
   "p-osc3freq":  "oscillator 3's tuning against oscillator 1, ±7 semitones. On the real thing this one is often detuned far enough to beat rather than harmonise",
   "p-noisetype": "noise colour: white is flat across the spectrum, pink falls 3dB an octave and sits behind a mix more easily",
-  // Virus filter selects the markup only labels in passing.
+  // Contagion filter selects the markup only labels in passing.
   "p-vmode1": "what filter 1 does with the signal — low pass, high pass, band pass or band stop",
   "p-vmode2": "what filter 2 does with the signal — low pass, high pass, band pass or band stop",
   // Filter envelope (env panel). Not modulation targets: they shape the sweep
@@ -379,7 +379,7 @@ export function refreshParamIndicators(t) {
       seen.add(el);
       const tg = targetsForControl(el);
       if (!tg) continue;
-      const wrap = el.closest(".sq-field, .sq-fx__ctl, .sq-virus__f, .sq-dx7__f, label");
+      const wrap = el.closest(".sq-field, .sq-fx__ctl, .sq-contagion__f, .sq-hexop__f, label");
       if (!wrap) continue;
       // An LFO config exists for every key whether or not it was ever used, so
       // only `enabled` means anything. A lane is only there if it was added, so
@@ -418,7 +418,7 @@ export function controlFromEventTarget(target) {
   // The field that wraps the control, then the label. In that order: the volume
   // field puts its label beside a wrapper div rather than around the slider, so
   // starting from the label would find nothing.
-  for (const sel of [".sq-field, .sq-fx__ctl, .sq-virus__f, .sq-dx7__f", "label"]) {
+  for (const sel of [".sq-field, .sq-fx__ctl, .sq-contagion__f, .sq-hexop__f", "label"]) {
     const inside = target.closest(sel)?.querySelector(CONTROL_SEL);
     if (inside) return inside;
   }

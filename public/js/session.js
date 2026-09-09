@@ -13,7 +13,7 @@ import { refreshEuclidUI, renderEuclidPanel } from "./euclid.js";
 import { applyBusMute, paintDiceDensity, refreshFxPanelUI, renderModPanel, syncTrackSoundUI } from "./render.js";
 import { flushAllPatternSounds, recallPatternSound, refreshPatternLockUI, refreshPatternSoundUI } from "./patternSound.js";
 import { syncScaleUI } from "./scaleUI.js";
-import { SET_VERSION, validateSet } from "./sessionFormat.js";
+import { migrateLegacyNames, migrateTrackNames, SET_VERSION, validateSet } from "./sessionFormat.js";
 import { applyCompressorConfig, ensureFxRack, refreshAllTrackOutputs, refreshCompSourceDropdowns, refreshOutputSelects, routeVoiceToRack, wouldFeedback } from "./signal.js";
 import { applyMacroPads, serializeMacroPads } from "./macro.js";
 import { aliasPattern, state, syncMeterUI } from "./state.js";
@@ -330,6 +330,9 @@ export function applySet(s) {
   for (const w of check.warnings) console.warn(`[seqbaby] session: ${w}`);
   if (!check.ok)
     throw new Error(`Not a readable seqbaby session: ${check.errors.join("; ")}`);
+  // Songs written before the emulators were renamed still spell them after the
+  // hardware — undo that here so nothing below has to know either spelling.
+  migrateLegacyNames(s);
   if (state.playing) {
     Tone.Transport.stop();
     if (state.repeatId !== null) { try { Tone.Transport.clear(state.repeatId); } catch {} state.repeatId = null; }
@@ -669,6 +672,7 @@ export function serializeTrackPatch(t) {
 /** @param {Track} t @param {any} patch */
 export function applyTrackPatch(t, patch) {
   if (!patch) return;
+  migrateTrackNames(patch);   // patches saved before the emulators were renamed
   // Migrate legacy sample engines in saved patches onto the unified sampler.
   if (patch.engineKey) {
     let ek = patch.engineKey;

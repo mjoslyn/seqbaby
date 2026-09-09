@@ -5,15 +5,15 @@ import { BAR_TICKS, wosc } from "./constants.js";
 import { setStatus } from "./dom.js";
 import { euclidFallbackNote, stepGateAt } from "./euclid.js";
 import { loadBassWorklet } from "./bass.js";
-import { loadDx7Worklet } from "./dx7.js";
+import { loadHexopWorklet } from "./hexop.js";
 import { loadGuitarWorklet } from "./guitar.js";
 import { currentBpm, syncAllLFOs } from "./lfo.js";
 import { init, needsResume, primeAudioForIOS } from "./main.js";
 import { applyBusMute, updateMidiUI } from "./render.js";
 import { ensureFxRack, fireFilterEnv, refreshAllTrackOutputs, routeVoiceToRack, soloAudibleTracks } from "./signal.js";
 import { findNextNonEmptyPattern, invertChord, state, switchPattern } from "./state.js";
-import { loadTb303Worklet } from "./tb303.js";
-import { loadVirusWorklet } from "./virus.js";
+import { loadSilverboxWorklet } from "./silverbox.js";
+import { loadContagionWorklet } from "./contagion.js";
 import { applyScale, chordNotes, nameToMidi } from "./theory.js";
 import { buildVoiceForEngine } from "./voices.js";
 
@@ -224,10 +224,11 @@ export async function ensureAudio() {
 
 /**
  * Load the engine's AudioWorklets exactly once: Plaits (+ its WASM), the
- * TB-303, the Virus and the DX7. Single-flight so a preload at init() and the await in
- * ensureAudio can't double-register a processor; a failed load clears the slot
- * so the next play retries. A synth worklet's failure is swallowed — it falls
- * back to a Tone voice (see voices.js) rather than taking the play path down.
+ * silverbox, the contagion and the hexop. Single-flight so a preload at init()
+ * and the await in ensureAudio can't double-register a processor; a failed
+ * load clears the slot so the next play retries. A synth worklet's failure is
+ * swallowed — it falls back to a Tone voice (see voices.js) rather than taking
+ * the play path down.
  * @returns {Promise<unknown>}
  */
 export function loadWorklet() {
@@ -235,12 +236,12 @@ export function loadWorklet() {
     state.woscLoad = wosc.loadOscillator(state.audioCtx);
     state.woscLoad.catch(() => { state.woscLoad = null; });
   }
-  const tb303 = loadTb303Worklet(state.audioCtx).catch(e => { console.warn("tb-303 worklet load failed", e); });
-  const virus = loadVirusWorklet(state.audioCtx).catch(e => { console.warn("virus worklet load failed", e); });
-  const dx7 = loadDx7Worklet(state.audioCtx).catch(e => { console.warn("dx7 worklet load failed", e); });
+  const silverbox = loadSilverboxWorklet(state.audioCtx).catch(e => { console.warn("silverbox worklet load failed", e); });
+  const contagion = loadContagionWorklet(state.audioCtx).catch(e => { console.warn("contagion worklet load failed", e); });
+  const hexop = loadHexopWorklet(state.audioCtx).catch(e => { console.warn("hexop worklet load failed", e); });
   const guitar = loadGuitarWorklet(state.audioCtx).catch(e => { console.warn("guitar worklet load failed", e); });
   const bass = loadBassWorklet(state.audioCtx).catch(e => { console.warn("bass worklet load failed", e); });
-  return Promise.all([state.woscLoad, tb303, virus, dx7, guitar, bass]);
+  return Promise.all([state.woscLoad, silverbox, contagion, hexop, guitar, bass]);
 }
 
 /**
@@ -513,7 +514,7 @@ export async function togglePlay() {
           }
         } else {
           const sd = t.sampleDefaults || {};
-          // Non-sampler voices still get the step's written span — the 303
+          // Non-sampler voices still get the step's written span — the silverbox
           // reads it to tell a tie (slides into the next note) from a plain step.
           const sampleOpts = (t.voice.type !== "sampler")
             ? { span }
@@ -535,7 +536,7 @@ export async function togglePlay() {
           if (ratchet > 1 && !chord) {
             // retrigger the single note N times evenly across the step
             const sub = duration / ratchet;
-            // Each retrigger is its own note, tie or not — otherwise the 303
+            // Each retrigger is its own note, tie or not — otherwise the silverbox
             // would read a tied step's repeats as one long slide and swallow them.
             const ratchetOpts = (t.voice.type !== "sampler") ? { span: 1 } : sampleOpts;
             for (let r = 0; r < ratchet; r++) {

@@ -13,7 +13,7 @@ export function makeFuzzCurve(drive) {
   return curve;
 }
 
-// Triangle-wave folder (MiniBrute Metalizer): amount in 0..1. 0 = untouched, 1 = heavy fold.
+// Triangle-wave folder (the snarl's metalizer): amount in 0..1. 0 = untouched, 1 = heavy fold.
 export function makeMetalizerCurve(amount) {
   const n = 2048;
   const curve = new Float32Array(n);

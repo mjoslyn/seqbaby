@@ -2,7 +2,7 @@
 
 Multi-engine browser step sequencer. A hand-written vanilla Web Audio engine
 (Mutable Instruments Plaits via `@vectorsize/woscillators`, Tone.js drum/synth
-recipes, worklet models of the TB-303 / Access Virus / DX7 plus seven
+recipes, worklet models of the silverbox / contagion / hexop plus seven
 analog-mono emulators, wavetable + granular + unified sampler
 engines, Web MIDI) wrapped in a thin Next.js + Supabase shell for accounts,
 cloud songs, a patch gallery, and share links. 32-pattern bank with filter /
@@ -103,23 +103,25 @@ env / fx / eq / comp / mod / automation per track.
   touches the DOM or Tone at import time, and keeping this one pure is what
   lets `node --test` exercise it outside a browser. `applySet` calls it
   before its teardown, so a bad blob fails instead of emptying the session.
+  Also `migrateLegacyNames` / `migrateTrackNames`, which undo the emulator
+  rename on the way in — same reasoning, same test file.
 - `patternSound.js` — p-lock: a track's sound stored per pattern, captured on
   the way out of a pattern and diff-applied on the way in.
 - `track.js` — track lifecycle (create/resize/clone).
 - `bounce.js` — WAV render via MediaRecorder.
 - `buffers.js` — sample decode/normalize cache, `startSampleSource`.
 - `wavetableEditor.js` — in-app wavetable frame editor for `wt:akwf`.
-- `tb303.js` — the TB-303 circuit model: AudioWorklet processor source +
-  registration + voice builder. See the TB-303 section below.
-- `virus.js` — the Access Virus model, same shape: processor source string,
+- `silverbox.js` — the silverbox circuit model: AudioWorklet processor source +
+  registration + voice builder. See the silverbox section below.
+- `contagion.js` — the contagion model, same shape: processor source string,
   Blob-URL registration, voice builder, and its panel key lists.
 - `guitar.js` — the electric guitar: the whole rig (waveguide string, pickup,
   amp, cab, speaker-to-string feedback) in one AudioWorklet, plus the famous-tone
   table. Same file shape as the three above. See the guitar section below.
 - `bass.js` — the electric bass, guitar.js's sibling: same waveguide, wound and
   stiffer, with a parallel dirt path, a rig compressor and an octaver.
-- `dx7.js` — the Yamaha DX7, same shape again, plus the 32-algorithm
-  table, the panel's generated key lists and the preset voices. See the DX7
+- `hexop.js` — the hexop, same shape again, plus the 32-algorithm
+  table, the panel's generated key lists and the preset voices. See the hexop
   section below.
 - `euclid.js` — the euclidean rhythm generator behind the ring button beside the
   dice: Bjorklund proper (not the `(i*k)%n < k` shortcut, which lands on a
@@ -213,7 +215,7 @@ All of this lives in `main.js` `init()` and `transport.js`:
 | engine type   | class            | notes |
 |---|---|---|
 | `plaits`      | `PlaitsVoice`    | 4-voice round-robin pool of Plaits WASM oscillators. `modLevelPatched=1, modLevel=0` at init (without the zero, empty tracks emit a continuous tone). Glide via ramp on `noteAudioParameter`. The four sliders keep the hardware's generic names across all 16 models; what each does per model is `PLAITS_MACRO_TIPS` (catalog.js), hung on the fields by `updatePlaitsControlsVisibility`. |
-| `drum-synth`  | `DrumSynthVoice` | Recipes via `buildDrumSynthGraph(kind, output)`: 808/909 kit, poly-saw, fm-bell, pad, plus the emulators (below). All Tone.js except the 303 and the Virus, which are AudioWorklet models (`tb303.js`, `virus.js`). |
+| `drum-synth`  | `DrumSynthVoice` | Recipes via `buildDrumSynthGraph(kind, output)`: 808/909 kit, poly-saw, fm-bell, pad, plus the emulators (below). All Tone.js except the silverbox and the contagion, which are AudioWorklet models (`silverbox.js`, `contagion.js`). |
 | `sampler`     | `SamplerVoice`   | THE unified sample voice — plays a user upload or a bundled kit sample chosen via `track.sampleSource` ({kind:"upload"|"bundled", ...}). Absorbed the old `SampleVoice`/`UploadVoice`/`ElevenVoice`. Per-step region/fade/loop via `startSampleSource`; slicing via `t.slices`/`sliceOn`. Pitch from `pitchBase` (36 drum-kit, 60 otherwise); `t.pitchLock` keeps 1×bpm fits pitch-true. |
 | `custom` / `saved` | `CustomToneVoice` | Tone.js synth tree from a saved-patch JSON config (`saved:<name>` keys, localStorage). |
 | `granular`    | `GranularVoice`  | Granular sampler (`dm:granular`, "texture" group). See the granular section below. |
@@ -229,24 +231,45 @@ Voice interface: `hit(midi, time, dur, vel, opts?)`, `setParam`,
 ## Emulators (`"Emulators"` optgroup)
 
 All engine type `drum-synth`. The five Tone.js analog-mono presets are each
-wrapped in `makePolyPool(size, buildOne)`; the 303, the Virus, the DX7, the
+wrapped in `makePolyPool(size, buildOne)`; the silverbox, the contagion, the hexop, the
 guitar and the bass are the odd ones out — AudioWorklet models that handle their
-own voicing (the 303 is mono like the machine, the rest polyphonic). See their
+own voicing (the silverbox is mono like the machine, the rest polyphonic). See their
 sections below. The guitar and bass keep their old pluck builders in voices.js
 (`buildPluckGuitarVoice` / `buildPluckBassVoice`) purely as worklet fallbacks.
 
 | key             | builder               | pool | character |
 |---|---|---|---|
-| `dm:303`        | `buildTb303Voice`     | mono | TB-303 circuit model, AudioWorklet (`tb303.js`) |
-| `dm:virus`      | `buildVirusVoice`     | 8 (internal) | Access Virus architecture, AudioWorklet (`virus.js`) |
-| `dm:dx7`        | `buildDx7Voice`       | 16 (internal) | Yamaha DX7, 6-op FM, AudioWorklet (`dx7.js`) |
-| `dm:mini-brute` | `buildMiniBruteVoice` | 4 | saw + ultrasaw + PWM pulse + metalized tri + sub, Brute Factor |
-| `dm:moog`       | `buildMoogVoice`      | 4 | 3 osc w/ wave + range selects, ±7-semi osc2/3, noise |
-| `dm:juno`       | `buildJunoVoice`      | 6 | DCO + sub + noise → HPF → baked-in chorus |
-| `dm:guitar`     | `buildGuitarVoice`    | 6 (internal) | electric guitar rig, AudioWorklet (`guitar.js`) |
-| `dm:bass`       | `buildBassVoice`      | 4 (internal) | electric bass rig, AudioWorklet (`bass.js`) |
-| `dm:rhodes`     | `buildRhodesVoice`    | 6 | electric piano |
-| `dm:prophet6`   | `buildProphet6Voice`  | 6 | poly analog |
+| `dm:silverbox` | `buildSilverboxVoice` | mono | acid-box circuit model, AudioWorklet (`silverbox.js`) |
+| `dm:contagion` | `buildContagionVoice` | 8 (internal) | digital multi-filter architecture, AudioWorklet (`contagion.js`) |
+| `dm:hexop`     | `buildHexopVoice`     | 16 (internal) | 6-op FM, AudioWorklet (`hexop.js`) |
+| `dm:snarl`     | `buildSnarlVoice`     | 4 | saw + ultrasaw + PWM pulse + metalized tri + sub, growl soft-clip |
+| `dm:ladder`    | `buildLadderVoice`    | 4 | 3 osc w/ wave + range selects, ±7-semi osc2/3, noise |
+| `dm:drift`     | `buildDriftVoice`     | 6 | DCO + sub + noise → HPF → baked-in chorus |
+| `dm:guitar`    | `buildGuitarVoice`    | 6 (internal) | electric guitar rig, AudioWorklet (`guitar.js`) |
+| `dm:bass`      | `buildBassVoice`      | 4 (internal) | electric bass rig, AudioWorklet (`bass.js`) |
+| `dm:tines`     | `buildTinesVoice`     | 6 | electric piano |
+| `dm:oracle`    | `buildOracleVoice`    | 6 | poly analog |
+
+### The emulator names (`migrateLegacyNames`, sessionFormat.js)
+
+All eight are named for what they do rather than for the hardware they model:
+`dm:303 → dm:silverbox`, `dm:virus → dm:contagion`, `dm:dx7 → dm:hexop`,
+`dm:mini-brute → dm:snarl`, `dm:moog → dm:ladder`, `dm:juno → dm:drift`,
+`dm:rhodes → dm:tines`, `dm:prophet6 → dm:oracle`.
+
+A name is spelled in four places, not one — the engine key, the silverbox's
+three `params` keys (`sbwave` / `sbaccent` / `sbtune`), the LFO targets
+(`hexop_3lvl`) and the automation lanes (`hexop.3lvl`), which the macro pads
+store too — so a song written before the rename is rewritten on the way in by
+`migrateLegacyNames`, called from `applySet` before it tears anything down, and
+`migrateTrackNames` from `applyTrackPatch` for saved patches. Both live in
+sessionFormat.js for the reason `validateSet` does: pure functions over a plain
+object, so `node --test` can exercise them.
+
+The `params` keys the other emulators use were already spelled with a neutral
+prefix and did not move: the contagion's are `v…` and the hexop's `d…`, which
+is why `d3lvl` / `hexop_3lvl` / `hexop.3lvl` are one control with three
+spellings rather than a consistent one.
 
 `makePolyPool` exposes `trigger` (round-robin) / `release` / `setGlide` /
 `setParam` (broadcast) / `getAudioParam` (voice 0 only — LFO mod hits voice 0,
@@ -254,7 +277,7 @@ chord tones on other voices play the baseline; same limitation as
 `PlaitsVoice`). The stock harm/timb/morph/decay sliders are relabeled
 per-engine by `updatePlaitsControlsVisibility`.
 
-## TB-303 (`dm:303`, `public/js/tb303.js`)
+## Silverbox (`dm:silverbox`, `public/js/silverbox.js`)
 
 A model of the machine's circuits, not a saw-through-a-lowpass preset. It runs
 as an AudioWorklet because none of it is expressible in native nodes: Web Audio
@@ -271,7 +294,7 @@ VCO ──▶ VCF (3-pole diode ladder, 18 dB/oct) ──▶ VCA ──▶ out
 - **Filter** — three one-pole TPT stages with asymmetric (diode) soft clipping
   in the feedback path, 2× oversampled, decimated through a 2-pole Butterworth.
   18 dB/oct, no key tracking, and the passband loses level as resonance climbs
-  (only partially compensated — that thinning is the 303).
+  (only partially compensated — that thinning is the silverbox).
 - **Accent** is one circuit doing three things: louder note, MEG decay forced to
   a fixed 200 ms, and a charge into an RC network whose time constant tracks
   RESONANCE — so consecutive accents at high reso stack instead of resetting.
@@ -284,27 +307,27 @@ VCO ──▶ VCF (3-pole diode ladder, 18 dB/oct) ──▶ VCA ──▶ out
   `opts` (`{span}`) for this.
 - **Controls** — the four timbre sliders are CUTOFF / RESONANCE / ENV MOD /
   DECAY (real `AudioParam`s on the worklet node, so LFO + automation work
-  normally). `sq-param-group--tb303` carries wave, accent depth, and tuning
-  (`wave303` / `accent303` / `tune303` in `t.params`).
+  normally). `sq-param-group--silverbox` carries wave, accent depth, and tuning
+  (`sbwave` / `sbaccent` / `sbtune` in `t.params`).
 - **Mod + automation for those three** — accent and tune are AudioParams too,
-  reached under their own keys and gated to `dm:303`: LFO `tb303_accent` /
-  `tb303_tune` (`LFO_KEYS` + `LFO_LABELS` + `LFO_AMP_SCALE` in constants.js,
-  `getModTarget` + `canModulate` in lfo.js, `getAudioParam` in tb303.js), and
-  automation `tb303.accent` / `tb303.tune` / `tb303.wave`. Tune's lane spans
+  reached under their own keys and gated to `dm:silverbox`: LFO `silverbox_accent` /
+  `silverbox_tune` (`LFO_KEYS` + `LFO_LABELS` + `LFO_AMP_SCALE` in constants.js,
+  `getModTarget` + `canModulate` in lfo.js, `getAudioParam` in silverbox.js), and
+  automation `silverbox.accent` / `silverbox.tune` / `silverbox.wave`. Tune's lane spans
   the slider's own ±50 cents. Wave has no AudioParam — the lane flips it at
   0.5, written to the live voice so the track's select stays put (same
   convention as `gran.*` and `wt.scan.*`).
   Note ACCENT is a *depth*: it scales an accent the step already has from its
   velocity, so it does nothing on unaccented steps — as on the machine.
-- **Loading** — the processor source is a string in `tb303.js`, registered from
+- **Loading** — the processor source is a string in `silverbox.js`, registered from
   a Blob URL so it travels with the module graph (no extra fetch, no coupling to
   the `public/e/<sha>/` asset versioning). `loadWorklet()` in transport.js
   registers it alongside Plaits; a failure is swallowed and `buildVoiceForEngine`
   falls back to a Tone.MonoSynth so the track is never silent.
 
-## Access Virus (`dm:virus`, `public/js/virus.js`)
+## Contagion (`dm:contagion`, `public/js/contagion.js`)
 
-The Virus is a digital synth, so the model is of its architecture, not its
+The contagion is a digital synth, so the model is of its architecture, not its
 circuits — there aren't any. Four things define it:
 
 ```
@@ -334,15 +357,15 @@ ring ─┘                    └─ FILTER 2 (multimode, 2 pole) ────�
   handled at block boundaries (≤0.33 ms late, never early).
 - **Controls** — the four timbre sliders are CUTOFF / RESONANCE / SHAPE / DECAY;
   the shared osc1..osc4 sliders are osc1 / osc2 / sub / noise; the rest live in
-  `sq-param-group--virus` as `VIRUS_NUM_KEYS` / `VIRUS_SEL_KEYS` (render.js and
+  `sq-param-group--contagion` as `CONTAGION_NUM_KEYS` / `CONTAGION_SEL_KEYS` (render.js and
   session.js walk those lists, as they do for granular).
-- **Mod + automation** — LFO `virus_*` and automation `virus.*`, gated to
-  `dm:virus`, all real AudioParams: every numeric control on the panel is
+- **Mod + automation** — LFO `contagion_*` and automation `contagion.*`, gated to
+  `dm:contagion`, all real AudioParams: every numeric control on the panel is
   reachable, envelope and osc detail included (the k-rate ones take a connection
-  and a ramp fine — the value is sampled once per control block). `virus_cut2` /
-  `virus_envamt` are bipolar and `virus_osc2semi` spans ±24 semitones, so their
+  and a ramp fine — the value is sampled once per control block). `contagion_cut2` /
+  `contagion_envamt` are bipolar and `contagion_osc2semi` spans ±24 semitones, so their
   automation lanes map through their own range, not 0..1. One key doesn't match
-  its param: `virus_sat` is the saturation *amount*, `vsatamt` on the voice
+  its param: `contagion_sat` is the saturation *amount*, `vsatamt` on the voice
   (`vsat` is the curve select), aliased in `getModTarget` /
   `applyAutomationAtStep`.
 - **Resonance is cubed** (`0.7 + reso³·12`). `timb` defaults to 0.5 for every
@@ -351,10 +374,10 @@ ring ─┘                    └─ FILTER 2 (multimode, 2 pole) ────�
   and linear noise at 0.4 hisses over the patch.
 - Simplifications, stated in the file too: unison copies share their note's
   filter pair; the morph crossfades four classic waves rather than walking the
-  Virus's 64 spectral wavetables; no oversampling, so the saturator aliases (as
+  contagion's 64 spectral wavetables; no oversampling, so the saturator aliases (as
   the hardware's does); cutoff keyfollow is fixed at 33%.
 
-## Yamaha DX7 (`dm:dx7`, `public/js/dx7.js`)
+## Hexop (`dm:hexop`, `public/js/hexop.js`)
 
 Six sine operators through one of 32 fixed algorithms. No filter, no sub, no
 analogue anything — the instrument *is* the routing plus the levels.
@@ -383,34 +406,34 @@ op6 ─▶ op5 ─▶ op4 ─▶ op3 ─┐          (alg 1: two stacks, ops 1 a
   harder raises the modulation index (brighter, not just louder) and playing
   higher lowers it (or the top octave screams).
 - **Controls** — the four track sliders are BRIGHT (master modulation index) /
-  FBK (feedback) / MOD DEC / DECAY. Everything else is `sq-param-group--dx7`:
+  FBK (feedback) / MOD DEC / DECAY. Everything else is `sq-param-group--hexop`:
   three global rows plus a 6×8 operator grid (level, ratio, fine, detune, and an
   ADSR each) with a ratio/fixed select per operator. The osc-mix row is hidden —
-  a DX7's six operator levels live in the grid.
+  a hexop's six operator levels live in the grid.
 - **One list, three namespaces.** Every control is `d` + a short key, and that
-  short key spells its LFO target (`dx7_<short>`) and its automation lane
-  (`dx7.<short>`) — so `d3lvl` / `dx7_3lvl` / `dx7.3lvl` are one control.
-  `DX7_MOD_KEYS` in dx7.js generates all 56 of them, and `constants.js`,
+  short key spells its LFO target (`hexop_<short>`) and its automation lane
+  (`hexop.<short>`) — so `d3lvl` / `hexop_3lvl` / `hexop.3lvl` are one control.
+  `HEXOP_MOD_KEYS` in hexop.js generates all 56 of them, and `constants.js`,
   `automation.js` and `paramTargets.js` map over it rather than listing them.
-  `DX7_MOD_RANGE` gives each its span, so a ratio lane sweeps 0..31 and a detune
-  lane ±7. Adding a control is one entry in `DX7_OP_CTLS` / `DX7_GLOBAL_CTLS`
+  `HEXOP_MOD_RANGE` gives each its span, so a ratio lane sweeps 0..31 and a detune
+  lane ±7. Adding a control is one entry in `HEXOP_OP_CTLS` / `HEXOP_GLOBAL_CTLS`
   plus its markup column.
-- **The panel markup is generated** in `app/studioMarkup.ts` (`DX7_PANEL`) — 54
+- **The panel markup is generated** in `app/studioMarkup.ts` (`HEXOP_PANEL`) — 54
   hand-copied inputs differing only by operator number is a typo waiting to
   happen. The algorithm and voice dropdowns ship **empty** and are filled at
-  runtime by `renderTrack` from `DX7_ALG_LABELS` / `DX7_PRESET_NAMES`, so the 32
-  diagrams live only in dx7.js. Ranges and defaults in the markup must match
-  `DX7_DEFAULTS`.
-- **`refreshDx7Algorithm`** (params.js) redraws the carrier / feedback markers on
+  runtime by `renderTrack` from `HEXOP_ALG_LABELS` / `HEXOP_PRESET_NAMES`, so the 32
+  diagrams live only in hexop.js. Ranges and defaults in the markup must match
+  `HEXOP_DEFAULTS`.
+- **`refreshHexopAlgorithm`** (params.js) redraws the carrier / feedback markers on
   the operator rows when the algorithm changes — the panel is the same six rows
   in every wiring, so those markers are the only thing saying what a row means.
   Called from `updatePlaitsControlsVisibility`, so engine switch / session load /
   patch apply all cover it.
-- **Presets** (`dx7Preset(name)`) return a *complete* set of panel params plus
+- **Presets** (`hexopPreset(name)`) return a *complete* set of panel params plus
   the four track sliders, so nothing of the previous voice survives a load.
   They're in the spirit of the machine's own, not its ROM (which is 155-byte
   sysex of controls this panel doesn't have).
-- **Loading** — same Blob-URL registration as the 303 and the Virus, from
+- **Loading** — same Blob-URL registration as the silverbox and the contagion, from
   `loadWorklet()` in transport.js; a failure falls back to a Tone `FMSynth`
   (two operators, one algorithm) so the track is never silent.
 
@@ -452,7 +475,7 @@ STRING ──▶ PICKUP ──▶ tone pot ──▶ AMP ──▶ CAB ──▶
 - **Controls** — the four sliders are DRIVE / TONE (the knob on the guitar, a
   passive lowpass 700Hz→open) / BLOOM / SUSTAIN. The rest is
   `sq-param-group--guitar`: string row, amp row, cab row, plus the tone dropdown.
-- **One list, three namespaces**, as in dx7.js: every control is `gt` + a short
+- **One list, three namespaces**, as in hexop.js: every control is `gt` + a short
   key, which spells its LFO target (`gtr_<short>`) and its automation lane
   (`gtr.<short>`). `GUITAR_NUM_CTLS` generates all of them and constants.js /
   automation.js / paramTargets.js map over `GUITAR_MOD_KEYS` rather than listing.
@@ -462,7 +485,7 @@ STRING ──▶ PICKUP ──▶ tone pot ──▶ AMP ──▶ CAB ──▶
   description shown beside the dropdown and in the status bar. The panel markup
   is in `app/studioMarkup.ts` (`GUITAR_PANEL`) and the dropdown ships **empty** —
   `renderTrack` fills it from `GUITAR_TONE_NAMES`, so the tones live only here.
-- **Loading** — same Blob-URL registration as the 303/Virus/DX7 from
+- **Loading** — same Blob-URL registration as the silverbox/contagion/hexop from
   `loadWorklet()`; a failure falls back to `buildPluckGuitarVoice` (the old
   PluckSynth voice, still in voices.js) so a track is never silent.
 
@@ -709,7 +732,7 @@ it; the input is still the value, the focus target and the pointer target.
   input's class; `refreshParamIndicators` still finds the same `.sq-field`
   wrapper; the parameter menu still walks from a right-click down to the input.
 - **The `value` accessor is shadowed per element**, and that is the
-  load-bearing bit. `syncTrackSoundUI`, `refreshFxPanelUI`, the DX7 / guitar /
+  load-bearing bit. `syncTrackSoundUI`, `refreshFxPanelUI`, the hexop / guitar /
   bass panel syncs, `applyPatternSound` and `applySet` all assign straight to
   `.value` without dispatching, because until now nothing was listening.
   Shadowing means none of those call sites changed and none can be forgotten.
@@ -736,7 +759,7 @@ it; the input is still the value, the focus target and the pointer target.
   rather than a third element: a span each, hidden or not, is a thousand nodes
   bought to draw a handful of needles.
 - **Sizing is `--knob-size` per context** (44px volume, 36px timbre, 26px in the
-  DX7 operator grid), and `--knob-hit` guarantees a **≥44px target wherever the
+  hexop operator grid), and `--knob-hit` guarantees a **≥44px target wherever the
   layout has gone mobile** even when the dial is drawn smaller — keyed on
   `(any-pointer: coarse), (max-width: 768px)`, because a touchscreen laptop and
   a phone-width layout both need fingers' room.
@@ -813,10 +836,10 @@ moves the real knob already.
   param with a signal connected still reports only its intrinsic value. Rate,
   depth and shape are right; the phase is the display's own.
 - **A depth is in the TARGET's units, a needle is in the knob's.** For most
-  keys those are the same (`LFO_AMP_SCALE` for a dx7 / guitar / bass / virus
+  keys those are the same (`LFO_AMP_SCALE` for a hexop / guitar / bass / contagion
   control IS its knob's range), so the knob's own min..max is the divisor.
   `PARAM_SPAN` in modMotion.js holds the ones that differ — a fuzz drive in
-  gain, a 303 tune knob reading cents into a param in semitones — and
+  gain, a silverbox tune knob reading cents into a param in semitones — and
   `PARAM_CURVE` the three that aren't linear at all, cutoff above all: 3kHz is
   most of the dial at 200Hz and a nudge at 15k.
 
@@ -1034,7 +1057,7 @@ fails. Real-time capture — see Known limitations.
 ## Engines catalog (`buildEngineCatalog`)
 
 Groups in order: `plaits` (16) · `drum / synth` (808/909 kit + poly-saw /
-fm-bell / pad) · `Emulators` (303 + virus + dx7 + guitar + bass + 5 analog-mono) · `texture` (`dm:granular`) ·
+fm-bell / pad) · `Emulators` (silverbox + contagion + hexop + guitar + bass + 5 analog-mono) · `texture` (`dm:granular`) ·
 `wavetable` (`wt:akwf`) · `sampler` (single unified entry) · `saved patches`
 (`saved:<name>`) · `midi` · `bus` (the fx bus — not an instrument, see below).
 The engine key string is the source of truth.
@@ -1053,7 +1076,7 @@ osc-mod rows) are one set of controls wired to every engine, so what they do is
 explained per engine as a tooltip, applied by `updatePlaitsControlsVisibility`
 alongside the relabelling: `PLAITS_MACRO_TIPS` (by Plaits model index) and
 `ENGINE_MACRO_TIPS` (by engine key, with `osc` / `oscMod` sub-objects) in
-catalog.js, plus the 303 / Virus / granular / 808 / 909 tips written inline next
+catalog.js, plus the silverbox / contagion / granular / 808 / 909 tips written inline next
 to their labels. Each entry only needs the controls its engine actually shows.
 The right-click parameter menu reads these from the DOM, so the generic lines in
 `PARAM_DESCRIPTIONS` are a fallback for anything not covered.
@@ -1108,13 +1131,13 @@ patterns.
   one at 180). `baseStepDur` in transport.js derives it arithmetically from
   `Tone.Transport.bpm.value` instead. Anything else needing musical time should
   do the same, or use `currentBpm()` (lfo.js) as the sync helpers do.
-- **Worklet processor sources are template literals** (`tb303.js`, `virus.js`,
-  `dx7.js`),
+- **Worklet processor sources are template literals** (`silverbox.js`, `contagion.js`,
+  `hexop.js`),
   so a stray backtick or `${` inside one — including in a comment — truncates
   the string. The module still parses, `node --check` still passes, and the
   failure only shows up as a SyntaxError at engine boot. When editing inside a
   processor source, extract it and syntax-check the extracted text:
-  `node -e 'const s=require("fs").readFileSync("public/js/virus.js","utf8");
+  `node -e 'const s=require("fs").readFileSync("public/js/contagion.js","utf8");
   require("fs").writeFileSync("/tmp/p.js",s.match(/SOURCE = \`([\s\S]*?)\n\`;/)[1])'
   && node --check /tmp/p.js`
 - **Netlify deploy-preview hash URLs are pinned to one deploy** — retest on

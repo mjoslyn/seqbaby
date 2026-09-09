@@ -748,7 +748,7 @@ export function init() {
   createTrack({ name: "snare",  engineKey: "dm:808-snare" });
   createTrack({ name: "hat",    engineKey: "dm:909-chat" });
   createTrack({ name: "accent", engineKey: "plaits:12" });
-  createTrack({ name: "bass",   engineKey: "dm:303" });
+  createTrack({ name: "bass",   engineKey: "dm:silverbox" });
   createTrack({ name: "lead",   engineKey: "plaits:0" });
 
   setStatus("ready");

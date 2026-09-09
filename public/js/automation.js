@@ -1,7 +1,7 @@
 import { engineByKey } from "./catalog.js";
 import { makeFuzzCurve, shaperPreampGain } from "./curves.js";
 import { BASS_MOD_KEYS, BASS_MOD_LABELS, bassFromUnit } from "./bass.js";
-import { DX7_MOD_KEYS, DX7_MOD_LABELS, dx7FromUnit } from "./dx7.js";
+import { HEXOP_MOD_KEYS, HEXOP_MOD_LABELS, hexopFromUnit } from "./hexop.js";
 import { GUITAR_MOD_KEYS, GUITAR_MOD_LABELS, guitarFromUnit } from "./guitar.js";
 import { EUCLID_MOD_KEYS, EUCLID_MOD_LABELS, euclidFromUnit, setEuclidLive } from "./euclid.js";
 import { canModulate } from "./lfo.js";
@@ -43,28 +43,28 @@ export const AUTOMATION_TARGETS = {
   "gran.jitter":        { label: "grain jitter" },
   "gran.detune":        { label: "grain detune" },
   "gran.pan":           { label: "grain pan" },
-  // TB-303 panel controls outside the four sliders (303 engine only)
-  "tb303.accent":       { label: "303 accent" },
-  "tb303.tune":         { label: "303 tune" },
-  "tb303.wave":         { label: "303 wave" },
-  // Access Virus panel controls (virus engine only)
-  "virus.pw":           { label: "virus pulse width" },
-  "virus.fm":           { label: "virus fm" },
-  "virus.ring":         { label: "virus ring mod" },
-  "virus.unidet":       { label: "virus unison detune" },
-  "virus.cut2":         { label: "virus cutoff 2" },
-  "virus.bal":          { label: "virus filter balance" },
-  "virus.sat":          { label: "virus saturation" },
-  "virus.envamt":       { label: "virus env amount" },
-  "virus.osc2semi":     { label: "virus osc2 semi" },
-  "virus.osc2det":      { label: "virus osc2 detune" },
-  "virus.unispread":    { label: "virus unison spread" },
-  "virus.atk":          { label: "virus attack" },
-  "virus.sus":          { label: "virus sustain" },
-  "virus.rel":          { label: "virus release" },
-  // DX7 panel controls (dx7 engine only) — globals, then all six operators.
-  // Generated from the same list the LFO keys come from (dx7.js).
-  ...Object.fromEntries(DX7_MOD_KEYS.map(k => [`dx7.${k}`, { label: DX7_MOD_LABELS[k] }])),
+  // Silverbox panel controls outside the four sliders (silverbox engine only)
+  "silverbox.accent":   { label: "silverbox accent" },
+  "silverbox.tune":     { label: "silverbox tune" },
+  "silverbox.wave":     { label: "silverbox wave" },
+  // Contagion panel controls (contagion engine only)
+  "contagion.pw":       { label: "contagion pulse width" },
+  "contagion.fm":       { label: "contagion fm" },
+  "contagion.ring":     { label: "contagion ring mod" },
+  "contagion.unidet":   { label: "contagion unison detune" },
+  "contagion.cut2":     { label: "contagion cutoff 2" },
+  "contagion.bal":      { label: "contagion filter balance" },
+  "contagion.sat":      { label: "contagion saturation" },
+  "contagion.envamt":   { label: "contagion env amount" },
+  "contagion.osc2semi": { label: "contagion osc2 semi" },
+  "contagion.osc2det":  { label: "contagion osc2 detune" },
+  "contagion.unispread": { label: "contagion unison spread" },
+  "contagion.atk":      { label: "contagion attack" },
+  "contagion.sus":      { label: "contagion sustain" },
+  "contagion.rel":      { label: "contagion release" },
+  // Hexop panel controls (hexop engine only) — globals, then all six operators.
+  // Generated from the same list the LFO keys come from (hexop.js).
+  ...Object.fromEntries(HEXOP_MOD_KEYS.map(k => [`hexop.${k}`, { label: HEXOP_MOD_LABELS[k] }])),
   // Electric guitar rig (guitar engine only) — string, pickup, amp, cab.
   ...Object.fromEntries(GUITAR_MOD_KEYS.map(k => [`gtr.${k}`, { label: GUITAR_MOD_LABELS[k] }])),
   // Electric bass rig (bass engine only).
@@ -112,23 +112,23 @@ export const VOICE_AUTO_KEYS = ["vol","harm","timb","morph","decay","osc1","osc2
 
 // Engine-aware list of voice/instrument keys that can be automated. Broader
 // than canModulate because automation can drive params via setParam even when
-// the voice doesn't expose an AudioParam (guitar/bass/rhodes timbre sliders).
+// the voice doesn't expose an AudioParam (guitar/bass/tines timbre sliders).
 export function voiceAutoKeysForEngine(t) {
   const eng = engineByKey(t.engineKey);
   if (!eng) return ["vol"];
   if (eng.type === "plaits") return ["vol", "harm", "timb", "morph", "decay"];
   switch (t.engineKey) {
-    case "dm:303":        return ["vol", "harm", "timb", "morph", "decay"];
-    case "dm:mini-brute": return ["vol", "harm", "timb", "osc1", "osc2", "osc3", "osc4", "ultra", "fm", "metal"];
-    case "dm:moog":       return ["vol", "harm", "decay", "osc1", "osc2", "osc3", "noise"];
-    case "dm:juno":       return ["vol", "harm", "timb", "morph", "decay", "osc1", "osc2", "osc3", "noise"];
+    case "dm:silverbox":        return ["vol", "harm", "timb", "morph", "decay"];
+    case "dm:snarl": return ["vol", "harm", "timb", "osc1", "osc2", "osc3", "osc4", "ultra", "fm", "metal"];
+    case "dm:ladder":       return ["vol", "harm", "decay", "osc1", "osc2", "osc3", "noise"];
+    case "dm:drift":       return ["vol", "harm", "timb", "morph", "decay", "osc1", "osc2", "osc3", "noise"];
     case "dm:guitar":     return ["vol", "harm", "timb", "morph", "decay"];
     case "dm:bass":       return ["vol", "harm", "timb", "morph", "decay"];
-    case "dm:rhodes":     return ["vol", "harm", "timb", "morph", "decay"];
-    case "dm:prophet6":   return ["vol", "harm", "timb", "morph", "decay", "osc1", "osc2", "osc3", "osc4", "noise"];
+    case "dm:tines":     return ["vol", "harm", "timb", "morph", "decay"];
+    case "dm:oracle":   return ["vol", "harm", "timb", "morph", "decay", "osc1", "osc2", "osc3", "osc4", "noise"];
     case "dm:granular":   return ["vol", "harm", "timb", "morph", "decay"];
-    case "dm:virus":      return ["vol", "harm", "timb", "morph", "decay", "osc1", "osc2", "osc3", "osc4", "noise"];
-    case "dm:dx7":        return ["vol", "harm", "timb", "morph", "decay"];
+    case "dm:contagion":      return ["vol", "harm", "timb", "morph", "decay", "osc1", "osc2", "osc3", "osc4", "noise"];
+    case "dm:hexop":        return ["vol", "harm", "timb", "morph", "decay"];
     case "wt:akwf":       return ["vol", "harm", "timb", "morph", "decay"];
   }
   // 808 / 909 voices: tune / tone / colour / decay all take effect on the next
@@ -147,9 +147,9 @@ export function canAutomate(t, key) {
   if (key.startsWith("wt.scan.")) return t.engineKey === "wt:akwf";
   if (key.startsWith("euclid.")) return !!t.euclid?.on;
   if (key.startsWith("gran.")) return t.engineKey === "dm:granular";
-  if (key.startsWith("tb303.")) return t.engineKey === "dm:303";
-  if (key.startsWith("virus.")) return t.engineKey === "dm:virus";
-  if (key.startsWith("dx7.")) return t.engineKey === "dm:dx7";
+  if (key.startsWith("silverbox.")) return t.engineKey === "dm:silverbox";
+  if (key.startsWith("contagion.")) return t.engineKey === "dm:contagion";
+  if (key.startsWith("hexop.")) return t.engineKey === "dm:hexop";
   if (key.startsWith("gtr.")) return t.engineKey === "dm:guitar";
   if (key.startsWith("bas.")) return t.engineKey === "dm:bass";
   if (key.startsWith("fx.")) return true;
@@ -186,7 +186,7 @@ export function applyAutomationAtStep(t, key, v, time, vNext, stepDur) {
       ramp(param, vv, vn);
       return;
     }
-    // fallback for voices without AudioParam (guitar/bass/rhodes timbre, mini-brute metal, etc.)
+    // fallback for voices without AudioParam (guitar/bass/tines timbre, snarl metal, etc.)
     try { t.voice?.setParam?.(key, vv); } catch {}
     if (t.params) t.params[key] = vv;
     return;
@@ -226,23 +226,23 @@ export function applyAutomationAtStep(t, key, v, time, vNext, stepDur) {
     try { t.voice?.setParam?.(p, granFromUnit(p, vv)); } catch {}
     return;
   }
-  // 303 accent / tune are real AudioParams on the worklet node, so they ramp
+  // silverbox accent / tune are real AudioParams on the worklet node, so they ramp
   // like any other. Tune's lane spans the tune slider's own range, ±50 cents.
-  if (key === "tb303.accent" || key === "tb303.tune") {
-    const tune = key === "tb303.tune";
+  if (key === "silverbox.accent" || key === "silverbox.tune") {
+    const tune = key === "silverbox.tune";
     const map = tune ? (u) => u - 0.5 : (u) => u;
-    ramp(t.voice?.getAudioParam?.(tune ? "tune303" : "accent303"), map(vv), map(vn));
+    ramp(t.voice?.getAudioParam?.(tune ? "sbtune" : "sbaccent"), map(vv), map(vn));
     return;
   }
   // Waveform is a switch, not a value — flip at the halfway point. Written to
   // the live voice only, so the track's own select stays where the user left it.
-  if (key === "tb303.wave") {
-    try { t.voice?.setParam?.("wave303", vv >= 0.5 ? "square" : "saw"); } catch {}
+  if (key === "silverbox.wave") {
+    try { t.voice?.setParam?.("sbwave", vv >= 0.5 ? "square" : "saw"); } catch {}
     return;
   }
-  // Virus panel controls are all AudioParams on its worklet node, so they ramp
+  // Contagion panel controls are all AudioParams on its worklet node, so they ramp
   // like any other. cut2 and envamt are bipolar; the lane spans their full range.
-  if (key.startsWith("virus.")) {
+  if (key.startsWith("contagion.")) {
     const which = key.slice(6);
     // Most are 0..1; cut2 / env amount are bipolar, and osc2 semi is in
     // semitones — each lane spans the slider's own range.
@@ -254,12 +254,12 @@ export function applyAutomationAtStep(t, key, v, time, vNext, stepDur) {
     ramp(t.voice?.getAudioParam?.("v" + (which === "sat" ? "satamt" : which)), map(vv), map(vn));
     return;
   }
-  // DX7 panel controls are AudioParams on its worklet node too. Each lane spans
+  // Hexop panel controls are AudioParams on its worklet node too. Each lane spans
   // the control's own range — a ratio lane sweeps 0..31, a detune lane ±7 — so
   // a step's value means the same thing here as on the slider it came from.
-  if (key.startsWith("dx7.")) {
+  if (key.startsWith("hexop.")) {
     const which = key.slice(4);
-    ramp(t.voice?.getAudioParam?.("d" + which), dx7FromUnit(which, vv), dx7FromUnit(which, vn));
+    ramp(t.voice?.getAudioParam?.("d" + which), hexopFromUnit(which, vv), hexopFromUnit(which, vn));
     return;
   }
   // The guitar rig, same again: every knob on it is an AudioParam, and each

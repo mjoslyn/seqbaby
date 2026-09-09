@@ -19,7 +19,7 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
-import { SET_VERSION, validateSet } from "../public/js/sessionFormat.js";
+import { migrateLegacyNames, migrateModKey, migrateTrackNames, SET_VERSION, validateSet } from "../public/js/sessionFormat.js";
 
 const track = (over = {}) => ({ engineKey: "plaits:0", length: 16, ...over });
 const session = (over = {}) => ({ _version: SET_VERSION, bpm: 120, swing: 0, tracks: [track()], ...over });
@@ -161,4 +161,86 @@ test("the expressions applySet runs really do break on the rejected shapes", asy
   await t.test("Object.assign over a primitive is a no-op, so bad params are only a warning", () => {
     assert.deepEqual(Object.assign({}, /** @type {any} */ (5)), {});
   });
+});
+
+// ---- the emulator rename ------------------------------------------------
+//
+// Same stakes as validateSet's "accepts" half: every song and share link
+// written before the emulators were renamed still spells them after the
+// hardware, and a miss here is a track that loads with the wrong engine, or a
+// mod matrix and a set of automation lanes that silently go missing.
+
+test("migrateModKey rewrites both namespaces and leaves everything else alone", () => {
+  assert.equal(migrateModKey("dx7_3lvl"), "hexop_3lvl");        // LFO target
+  assert.equal(migrateModKey("dx7.3lvl"), "hexop.3lvl");        // automation lane
+  assert.equal(migrateModKey("virus_cut2"), "contagion_cut2");
+  assert.equal(migrateModKey("virus.osc2semi"), "contagion.osc2semi");
+  assert.equal(migrateModKey("tb303_accent"), "silverbox_accent");
+  assert.equal(migrateModKey("tb303.wave"), "silverbox.wave");
+  assert.equal(migrateModKey("hexop_3lvl"), "hexop_3lvl", "idempotent — a current name matches nothing");
+  assert.equal(migrateModKey("gtr_drv"), "gtr_drv");
+  assert.equal(migrateModKey("fx.delay"), "fx.delay");
+  assert.equal(migrateModKey("dx7"), "dx7", "the bare prefix is not a key");
+});
+
+test("every renamed engine key is migrated", () => {
+  const pairs = [
+    ["dm:303", "dm:silverbox"], ["dm:virus", "dm:contagion"], ["dm:dx7", "dm:hexop"],
+    ["dm:mini-brute", "dm:snarl"], ["dm:moog", "dm:ladder"], ["dm:juno", "dm:drift"],
+    ["dm:rhodes", "dm:tines"], ["dm:prophet6", "dm:oracle"],
+  ];
+  for (const [old, now] of pairs)
+    assert.equal(migrateTrackNames({ engineKey: old }).engineKey, now);
+  assert.equal(migrateTrackNames({ engineKey: "plaits:0" }).engineKey, "plaits:0");
+  assert.equal(migrateTrackNames({ engineKey: "dm:guitar" }).engineKey, "dm:guitar");
+});
+
+test("a track's sound is migrated everywhere it is stored", () => {
+  const td = migrateTrackNames({
+    engineKey: "dm:303",
+    params: { wave303: "square", accent303: 0.8, tune303: 5, harm: 0.5 },
+    lfoConfig: { tb303_accent: { enabled: true }, cutoff: { enabled: false } },
+    baseSound: { params: { wave303: "saw" }, lfoConfig: { dx7_3lvl: { enabled: true } } },
+    patterns: [
+      null,
+      { automation: { "tb303.wave": { enabled: true }, "fx.delay": { enabled: true } },
+        sound: { params: { tune303: -3 }, lfoConfig: { virus_sat: { enabled: true } } } },
+    ],
+  });
+  assert.deepEqual(td.params, { sbwave: "square", sbaccent: 0.8, sbtune: 5, harm: 0.5 });
+  assert.deepEqual(Object.keys(td.lfoConfig).sort(), ["cutoff", "silverbox_accent"]);
+  assert.deepEqual(td.baseSound.params, { sbwave: "saw" });
+  assert.ok("hexop_3lvl" in td.baseSound.lfoConfig);
+  assert.ok("silverbox.wave" in td.patterns[1].automation);
+  assert.ok("fx.delay" in td.patterns[1].automation);
+  assert.deepEqual(td.patterns[1].sound.params, { sbtune: -3 });
+  assert.ok("contagion_sat" in td.patterns[1].sound.lfoConfig);
+});
+
+test("macro pad assignments speak the automation namespace, so they migrate too", () => {
+  const s = migrateLegacyNames({
+    tracks: [{ engineKey: "dm:dx7" }],
+    macroPads: [{ name: "sweep",
+      x: [{ track: 0, key: "dx7.3lvl" }, { track: 0, key: "fx.delay" }],
+      y: [{ track: 0, key: "virus.cut2" }] }],
+  });
+  assert.equal(s.tracks[0].engineKey, "dm:hexop");
+  assert.deepEqual(s.macroPads[0].x.map(a => a.key), ["hexop.3lvl", "fx.delay"]);
+  assert.deepEqual(s.macroPads[0].y.map(a => a.key), ["contagion.cut2"]);
+});
+
+test("migration survives the shapes validateSet lets through", () => {
+  for (const bad of [null, undefined, 5, "x", []])
+    assert.doesNotThrow(() => migrateLegacyNames(/** @type {any} */ (bad)));
+  assert.doesNotThrow(() => migrateLegacyNames({ tracks: [null, 5, { params: 7 }] }));
+  assert.doesNotThrow(() => migrateLegacyNames({ macroPads: [null, { x: 5 }, {}] }));
+  assert.doesNotThrow(() => migrateTrackNames({ patterns: "not an array" }));
+});
+
+test("migration is idempotent — running it twice changes nothing", () => {
+  const once  = migrateLegacyNames(JSON.parse(JSON.stringify(session({
+    tracks: [{ engineKey: "dm:virus", params: { wave303: 1 }, lfoConfig: { virus_sat: {} } }],
+  }))));
+  const twice = migrateLegacyNames(JSON.parse(JSON.stringify(once)));
+  assert.deepEqual(twice, once);
 });
