@@ -542,7 +542,7 @@ export function loadBassWorklet(ctx) {
 export function bassReady(ctx) { return !!ctx && _ready.has(ctx); }
 
 // ---- the panel ----------------------------------------------------------
-// One list, three namespaces, as in dx7.js and guitar.js: every control is `bs`
+// One list, three namespaces, as in hexop.js and guitar.js: every control is `bs`
 // + a short key, and that short key spells its LFO target (`bas_<short>`) and
 // its automation lane (`bas.<short>`).
 

@@ -46,14 +46,14 @@ const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
 // drives is in — Hz for a cutoff, seconds for a delay time, a gain for a fuzz
 // drive — while the needle has to be placed in the units the knob is drawn in.
 // For most targets those are the same thing (a 0..1 knob on a 0..1 param, and
-// every dx7 / guitar / bass / virus control, whose scale IS its knob's range),
+// every hexop / guitar / bass / contagion control, whose scale IS its knob's range),
 // so the knob's own min..max is the divisor and there is nothing to say.
 //
 // These are the ones where they differ: how much of the target's unit one full
 // sweep of the knob covers.
 const PARAM_SPAN = {
   reson: 19.5,            // Q 0.5 → 20
-  tb303_tune: 1,          // the knob reads in cents, the param in semitones
+  silverbox_tune: 1,          // the knob reads in cents, the param in semitones
   fuzz_drive: 30,         // gain 1 → 31
   fuzz_tone: 7800,        // Hz 200 → 8000
   fuzz_level: 0.9,        // gain 0 → 0.9

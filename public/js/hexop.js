@@ -1,5 +1,5 @@
-// ---- Yamaha DX7 ---------------------------------------------------------
-// The DX7 has no filter, no sub oscillator and no analogue anything. Six sine
+// ---- Hexop ---------------------------------------------------------
+// The hexop has no filter, no sub oscillator and no analogue anything. Six sine
 // operators, wired into one of 32 fixed algorithms, is the whole instrument —
 // every sound it ever made came out of deciding which sines modulate which:
 //
@@ -12,14 +12,14 @@
 //                         \ |
 //                          1 ▼
 //
-// Four things make it sound like a DX7 rather than "an FM synth":
+// Four things make it sound like a hexop rather than "an FM synth":
 //
 // - **An operator's output level is its modulation index.** The level control
 //   is exponential, so the top of the slider is where the spectrum explodes and
 //   the bottom is a whisper. Everything about programming one is level.
 // - **Every operator has its own envelope**, which means the *timbre* has an
 //   envelope. A modulator that decays fast under a carrier that doesn't is a
-//   struck sound; it's the whole reason the DX7's electric pianos and basses
+//   struck sound; it's the whole reason the hexop's electric pianos and basses
 //   sounded like nothing before them.
 // - **Feedback** on one operator per algorithm — the only thing in the machine
 //   that makes anything other than a sine's harmonics. Wound up it goes to
@@ -35,7 +35,7 @@
 // and where the feedback path runs.
 //
 // Simplifications, stated plainly: the envelopes are four-stage ADSR rather
-// than the DX7's four rate/level pairs (so you can't program a rising decay);
+// than the hexop's four rate/level pairs (so you can't program a rising decay);
 // key scaling is one global depth on the modulators rather than a breakpoint
 // with two curves per operator; the LFO is global with no per-op sensitivity;
 // and there's no per-op amp-mod switch. What is here is the architecture, the
@@ -45,14 +45,14 @@
 
 // Processor source. Kept as a string so it travels with the module graph and
 // registers from a Blob URL — no extra fetch, no coupling to the versioned
-// asset path (same approach as tb303.js and virus.js). No backticks or ${ here.
-const DX7_PROCESSOR_SOURCE = `
+// asset path (same approach as silverbox.js and contagion.js). No backticks or ${ here.
+const HEXOP_PROCESSOR_SOURCE = `
 const MAXV = 16;     // voices, as the machine had
 const NOP  = 6;      // operators
 const BLK  = 16;     // control-block size: envelopes, ratios, gains, the LFO
 
 // Sine table. Six operators across sixteen voices is a hundred sines a sample,
-// which is exactly why the DX7 had a sine ROM rather than a sine calculation.
+// which is exactly why the hexop had a sine ROM rather than a sine calculation.
 const LUTN = 2048;
 const SIN = new Float32Array(LUTN + 1);
 for (let i = 0; i <= LUTN; i++) SIN[i] = Math.sin(2 * Math.PI * i / LUTN);
@@ -117,7 +117,7 @@ function makeVoice() {
   };
 }
 
-class Dx7Processor extends AudioWorkletProcessor {
+class HexopProcessor extends AudioWorkletProcessor {
   static get parameterDescriptors() {
     const a = (name, defaultValue, minValue, maxValue) =>
       ({ name, defaultValue, minValue, maxValue, automationRate: "a-rate" });
@@ -232,7 +232,7 @@ class Dx7Processor extends AudioWorkletProcessor {
     v.fb1 = 0; v.fb2 = 0;
     for (let i = 0; i < NOP; i++) { v.stage[i] = 1; v.env[i] = 0; v.ph[i] = 0; v.out[i] = 0; }
     // Operators start in phase on every note, as the machine does — it is why
-    // a DX7 attack is identical every time, and why it sounds so consistent.
+    // a hexop attack is identical every time, and why it sounds so consistent.
     if (this.lfoKeySync) { this.lfoPh = 0; this.lfoDelay = 0; }
   }
 
@@ -299,7 +299,7 @@ class Dx7Processor extends AudioWorkletProcessor {
       // the top, where it stops being a harmonic and starts being noise.
       const fbAmt = fbK * fbK * 3;
 
-      // ---- LFO (one for the whole instrument, as on the DX7) ----
+      // ---- LFO (one for the whole instrument, as on the hexop) ----
       this.lfoPh += lfoRate * BLK / sr;
       if (this.lfoPh >= 1) {
         this.lfoPh -= Math.floor(this.lfoPh);
@@ -336,7 +336,7 @@ class Dx7Processor extends AudioWorkletProcessor {
         fixHz[i] = Math.pow(10, (coarse % 4) + fine) * det;
         // Output level is exponential. Half-way is a sixteenth of full scale:
         // that is what makes the top of the slider the only place a modulator
-        // gets violent, and it is the single most DX7 thing about the panel.
+        // gets violent, and it is the single most hexop thing about the panel.
         const L = kv(P["lv" + (i + 1)]);
         lvl[i] = L <= 0.004 ? 0 : Math.pow(2, (L - 1) * 7);
         const dScale = isCar[i] ? carDecScale : modDecScale;
@@ -431,25 +431,25 @@ class Dx7Processor extends AudioWorkletProcessor {
   }
 }
 
-registerProcessor("yamaha-dx7", Dx7Processor);
+registerProcessor("hexop", HexopProcessor);
 `;
 
 // One registration per AudioContext, single-flight; a failure clears the slot
-// so the next attempt retries (same contract as the Plaits, 303 and Virus
+// so the next attempt retries (same contract as the Plaits, silverbox and contagion
 // worklets).
 const _loads = new WeakMap();
 const _ready = new WeakSet();
 
 /**
- * Register the yamaha-dx7 processor on this context. Called at init() so the
+ * Register the hexop processor on this context. Called at init() so the
  * await on the play path has already resolved by the time a voice is built.
  * @param {BaseAudioContext} ctx @returns {Promise<void>}
  */
-export function loadDx7Worklet(ctx) {
+export function loadHexopWorklet(ctx) {
   if (!ctx?.audioWorklet) return Promise.reject(new Error("no AudioWorklet"));
   let p = _loads.get(ctx);
   if (!p) {
-    const url = URL.createObjectURL(new Blob([DX7_PROCESSOR_SOURCE], { type: "text/javascript" }));
+    const url = URL.createObjectURL(new Blob([HEXOP_PROCESSOR_SOURCE], { type: "text/javascript" }));
     p = ctx.audioWorklet.addModule(url)
       .then(() => { URL.revokeObjectURL(url); _ready.add(ctx); })
       .catch((e) => { URL.revokeObjectURL(url); _loads.delete(ctx); throw e; });
@@ -459,71 +459,71 @@ export function loadDx7Worklet(ctx) {
 }
 
 /** Has the processor finished registering on this context? */
-export function dx7Ready(ctx) { return !!ctx && _ready.has(ctx); }
+export function hexopReady(ctx) { return !!ctx && _ready.has(ctx); }
 
 // ---- panel wiring -------------------------------------------------------
 // Every control is `d` + a short key, and the same short key spells its LFO
-// target (`dx7_<short>`) and its automation lane (`dx7.<short>`) — so the three
+// target (`hexop_<short>`) and its automation lane (`hexop.<short>`) — so the three
 // namespaces are one list rather than three, and adding a control is one line.
 
 /** Per-operator controls, in panel column order. */
-export const DX7_OP_CTLS = ["lvl", "rat", "fin", "det", "atk", "dec", "sus", "rel"];
-export const DX7_OPS = [1, 2, 3, 4, 5, 6];
+export const HEXOP_OP_CTLS = ["lvl", "rat", "fin", "det", "atk", "dec", "sus", "rel"];
+export const HEXOP_OPS = [1, 2, 3, 4, 5, 6];
 
 /** Global (non-per-operator) numeric controls, in panel order. */
-export const DX7_GLOBAL_CTLS = ["ks", "vs", "peg", "pegr", "lfor", "lfod", "pmd", "amd"];
+export const HEXOP_GLOBAL_CTLS = ["ks", "vs", "peg", "pegr", "lfor", "lfod", "pmd", "amd"];
 
-/** Short keys — what follows `dx7_` / `dx7.`; prefix with "d" for the param. */
-export const DX7_MOD_KEYS = [
-  ...DX7_GLOBAL_CTLS,
-  ...DX7_OPS.flatMap(i => DX7_OP_CTLS.map(c => `${i}${c}`)),
+/** Short keys — what follows `hexop_` / `hexop.`; prefix with "d" for the param. */
+export const HEXOP_MOD_KEYS = [
+  ...HEXOP_GLOBAL_CTLS,
+  ...HEXOP_OPS.flatMap(i => HEXOP_OP_CTLS.map(c => `${i}${c}`)),
 ];
 
 /** Track param keys — what render.js / session.js / the voice walk. */
-export const DX7_NUM_KEYS = DX7_MOD_KEYS.map(k => `d${k}`);
-export const DX7_SEL_KEYS = ["dalg", "dlfow", "dlfok", ...DX7_OPS.map(i => `d${i}fix`)];
+export const HEXOP_NUM_KEYS = HEXOP_MOD_KEYS.map(k => `d${k}`);
+export const HEXOP_SEL_KEYS = ["dalg", "dlfow", "dlfok", ...HEXOP_OPS.map(i => `d${i}fix`)];
 
 const OP_CTL_LABEL = {
   lvl: "level", rat: "ratio", fin: "fine", det: "detune",
   atk: "attack", dec: "decay", sus: "sustain", rel: "release",
 };
 const GLOBAL_LABEL = {
-  ks: "dx7 key scale", vs: "dx7 velocity", peg: "dx7 pitch env", pegr: "dx7 pitch env rate",
-  lfor: "dx7 lfo speed", lfod: "dx7 lfo delay", pmd: "dx7 pitch mod", amd: "dx7 amp mod",
+  ks: "hexop key scale", vs: "hexop velocity", peg: "hexop pitch env", pegr: "hexop pitch env rate",
+  lfor: "hexop lfo speed", lfod: "hexop lfo delay", pmd: "hexop pitch mod", amd: "hexop amp mod",
 };
 
 /** Picker labels for the mod / automation menus. */
-export const DX7_MOD_LABELS = Object.fromEntries(DX7_MOD_KEYS.map(k => [
+export const HEXOP_MOD_LABELS = Object.fromEntries(HEXOP_MOD_KEYS.map(k => [
   k,
-  GLOBAL_LABEL[k] ?? `dx7 op${k[0]} ${OP_CTL_LABEL[k.slice(1)]}`,
+  GLOBAL_LABEL[k] ?? `hexop op${k[0]} ${OP_CTL_LABEL[k.slice(1)]}`,
 ]));
 
 /** [min, max] per short key. Modulation and automation both map through this,
  *  so a lane spans the slider's own range rather than a hardcoded 0..1. Keys
  *  not listed are plain 0..1 — kept in the table anyway so there's one path. */
 const CTL_RANGE = { rat: [0, 31], det: [-7, 7], fin: [0, 0.99] };
-export const DX7_MOD_RANGE = Object.fromEntries(DX7_MOD_KEYS.map(k => {
+export const HEXOP_MOD_RANGE = Object.fromEntries(HEXOP_MOD_KEYS.map(k => {
   if (k === "peg") return [k, [-1, 1]];                     // bipolar pitch env
   if (GLOBAL_LABEL[k]) return [k, [0, 1]];
   return [k, CTL_RANGE[k.slice(1)] ?? [0, 1]];              // per-operator
 }));
 
 /** 0..1 → the parameter's own units (automation lanes, and the mod base). */
-export function dx7FromUnit(short, u) {
-  const [lo, hi] = DX7_MOD_RANGE[short] ?? [0, 1];
+export function hexopFromUnit(short, u) {
+  const [lo, hi] = HEXOP_MOD_RANGE[short] ?? [0, 1];
   return lo + Math.max(0, Math.min(1, u)) * (hi - lo);
 }
 
 // An init voice: one carrier, one modulator at a musical level, everything else
 // silent. It is what the machine powers up with, and the honest starting point
 // for programming — the presets below are where the sounds are.
-export const DX7_DEFAULTS = (() => {
+export const HEXOP_DEFAULTS = (() => {
   const d = {
     dalg: "1", dlfow: "tri", dlfok: "on",
     dks: 0.35, dvs: 0.5, dpeg: 0, dpegr: 0.3,
     dlfor: 0.35, dlfod: 0, dpmd: 0, damd: 0,
   };
-  for (const i of DX7_OPS) {
+  for (const i of HEXOP_OPS) {
     d[`d${i}lvl`] = i === 1 ? 1 : i === 2 ? 0.72 : 0;
     d[`d${i}rat`] = 1;
     d[`d${i}fin`] = 0;
@@ -568,7 +568,7 @@ const PRESET_VOICES = {
     op(0.34, 0, 0,    0.002, 0.3,  0.14, 0.16),
     op(0.3,  3, 0.02, 0.002, 0.18, 0,    0.14)] },
 
-  // Inharmonic ratios and a long tail — the sound that put the DX7 on every
+  // Inharmonic ratios and a long tail — the sound that put the hexop on every
   // record of 1984. Nothing here is a whole number but the carriers.
   "bell": { alg: 5, bright: 0.6, fb: 0.05, ks: 0.5, vs: 0.7, ops: [
     op(1,    1, 0,    0.002, 0.78, 0, 0.72),
@@ -623,10 +623,10 @@ const PRESET_VOICES = {
  * @param {string} name
  * @returns {Record<string, number|string>|null}
  */
-export function dx7Preset(name) {
+export function hexopPreset(name) {
   const v = PRESET_VOICES[name];
   if (!v) return null;
-  const p = { ...DX7_DEFAULTS, dalg: String(v.alg) };
+  const p = { ...HEXOP_DEFAULTS, dalg: String(v.alg) };
   if (v.ks != null) p.dks = v.ks;
   if (v.vs != null) p.dvs = v.vs;
   v.ops.forEach((o, idx) => {
@@ -645,12 +645,12 @@ export function dx7Preset(name) {
   return p;
 }
 
-export const DX7_PRESET_NAMES = Object.keys(PRESET_VOICES);
+export const HEXOP_PRESET_NAMES = Object.keys(PRESET_VOICES);
 
 // A one-line diagram per algorithm for the dropdown: "1←2 3←4←5←6" reads as
 // "operator 2 modulates 1, and 6 through 4 stack into 3", which is the only
 // thing about an algorithm anyone needs at picking time.
-export const DX7_ALG_LABELS = [
+export const HEXOP_ALG_LABELS = [
   "1←2 3←4←5←6", "1←2 3←4←5←6", "1←2←3 4←5←6", "1←2←3 4←5←6",
   "1←2 3←4 5←6", "1←2 3←4 5←6", "1←2 3←4+5←6", "1←2 3←4+5←6",
   "1←2 3←4+5←6", "1←2←3 4←5+6", "1←2←3 4←5+6", "1←2 3←4+5+6",
@@ -668,14 +668,14 @@ export const DX7_ALG_LABELS = [
  * of each group in the label means.
  * @param {number} alg 1-based algorithm number @returns {number[]}
  */
-export function dx7Carriers(alg) {
-  const d = DX7_ALG_LABELS[Math.max(0, Math.min(31, (alg | 0) - 1))] || "";
+export function hexopCarriers(alg) {
+  const d = HEXOP_ALG_LABELS[Math.max(0, Math.min(31, (alg | 0) - 1))] || "";
   return d.split(" ").map(g => Number(g.split("←")[0])).filter(Boolean);
 }
 
 // Which operator carries the feedback loop, per algorithm — the panel says so,
 // because "feedback" means nothing until you know where it is wired.
-export const DX7_ALG_FEEDBACK = [
+export const HEXOP_ALG_FEEDBACK = [
   "6", "2", "6", "6→4", "6", "6→5", "6", "4", "2", "3", "6", "2",
   "6", "6", "2", "6", "2", "3", "6", "3", "3", "6", "6", "6",
   "6", "6", "3", "5", "6", "5", "6", "6",
@@ -687,29 +687,29 @@ const LFO_WAVES = { tri: 0, sawdn: 1, sawup: 2, square: 3, sine: 4, sh: 5 };
 const nativeIn = (node) => node?.input?.input ?? node?.input ?? node;
 
 /**
- * Build the DX7 voice. Returns null when the worklet isn't registered yet, so
+ * Build the hexop voice. Returns null when the worklet isn't registered yet, so
  * the caller can fall back rather than leave the track silent.
  * @param {*} output Tone node the voice writes into.
  */
-export function buildDx7Voice(output) {
+export function buildHexopVoice(output) {
   const ctx = Tone.getContext().rawContext;
-  if (!dx7Ready(ctx)) { loadDx7Worklet(ctx).catch(() => {}); return null; }
+  if (!hexopReady(ctx)) { loadHexopWorklet(ctx).catch(() => {}); return null; }
 
   let node;
   try {
-    node = new AudioWorkletNode(ctx, "yamaha-dx7",
+    node = new AudioWorkletNode(ctx, "hexop",
       { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [1] });
   } catch (e) {
-    console.warn("yamaha-dx7 worklet node failed", e);
+    console.warn("hexop worklet node failed", e);
     return null;
   }
   node.connect(nativeIn(output));
 
   // Track param key → worklet parameter name.
   const PARAM_OF = { harm: "bright", timb: "feedback", morph: "modDecay", decay: "decay" };
-  for (const g of DX7_GLOBAL_CTLS) PARAM_OF[`d${g}`] = g;
+  for (const g of HEXOP_GLOBAL_CTLS) PARAM_OF[`d${g}`] = g;
   const OP_PARAM = { lvl: "lv", rat: "rt", fin: "fn", det: "dt", atk: "ea", dec: "ed", sus: "es", rel: "er" };
-  for (const i of DX7_OPS) for (const c of DX7_OP_CTLS) PARAM_OF[`d${i}${c}`] = OP_PARAM[c] + i;
+  for (const i of HEXOP_OPS) for (const c of HEXOP_OP_CTLS) PARAM_OF[`d${i}${c}`] = OP_PARAM[c] + i;
 
   const P = {};
   for (const name of Object.values(PARAM_OF)) P[name] = node.parameters.get(name);

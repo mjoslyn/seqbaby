@@ -115,15 +115,15 @@ export const PLAITS_MACRO_TIPS = [
 // keyed by engine key, with `osc` for the oscillator-mix row and `oscMod` for
 // the ultrasaw / FM / metalizer row where an engine uses them. Only the controls
 // an engine actually shows need a line — updatePlaitsControlsVisibility hides
-// the rest. (The 303, the Virus, the DX7, the guitar, the granular engine and
+// the rest. (The silverbox, the contagion, the hexop, the guitar, the granular engine and
 // the 808/909 voices keep their tips inline in params.js, next to the labels
 // they go with.)
 export const ENGINE_MACRO_TIPS = {
-  "dm:mini-brute": {
+  "dm:snarl": {
     harm: "speed of the LFO sweeping the pulse wave's width, and its depth, on one control — at zero the pulse holds still",
     timb: "the pulse wave's resting width, from a thin nasal 10% out to a hollow square. The pwm rate slider sweeps around wherever this sits",
     osc: {
-      osc1: "level of the sawtooth — the Brute's main voice",
+      osc1: "level of the sawtooth — the snarl's main voice",
       osc2: "level of the pulse wave, shaped by the two pw controls",
       osc3: "level of the triangle, which is what the metalizer folds",
       osc4: "level of the sub oscillator, an octave below",
@@ -134,7 +134,7 @@ export const ENGINE_MACRO_TIPS = {
       metal: "metalizer: folds the triangle back on itself into hard upper harmonics",
     },
   },
-  "dm:moog": {
+  "dm:ladder": {
     harm: "how far oscillator 2 sits off oscillator 1, 5 to 30 cents. The slow beat between them is most of why the stack sounds thick",
     decay: "one control doing two things: how long a note takes to fall away, and how much of the warming filter stage is mixed in as it does",
     osc: {
@@ -143,10 +143,10 @@ export const ENGINE_MACRO_TIPS = {
       osc3: "level of oscillator 3, usually dropped an octave for weight",
     },
   },
-  "dm:juno": {
-    harm: "speed and depth of the LFO sweeping the DCO's pulse width — the Juno's built-in movement",
+  "dm:drift": {
+    harm: "speed and depth of the LFO sweeping the DCO's pulse width — the drift's built-in movement",
     timb: "the pulse's resting width, which that sweep moves around",
-    morph: "the chorus, wet and depth together. It is what a Juno sounds like; almost nobody turns it off",
+    morph: "the chorus, wet and depth together. It is what a drift sounds like; almost nobody turns it off",
     decay: "how long a note falls away — and the high-pass with it, so the sound thins as it shortens",
     osc: {
       osc1: "level of the main DCO",
@@ -154,13 +154,13 @@ export const ENGINE_MACRO_TIPS = {
       osc3: "level of the noise source",
     },
   },
-  "dm:rhodes": {
+  "dm:tines": {
     harm: "the ratio between the tine and the tone bar — low is deep and hollow, high goes bell-like",
     timb: "how hard the hammer hits, so how much of that metallic attack comes through",
     morph: "how much chorus is on the output — the stereo shimmer",
     decay: "how long each note rings, and how long it takes to let go once released",
   },
-  "dm:prophet6": {
+  "dm:oracle": {
     harm: "detunes VCO2 against VCO1 by up to 30 cents either way. Centre is unison; the ends beat",
     timb: "crossfades VCO2 from saw to pulse, sweeping the pulse width as it goes",
     morph: "how much of the output runs through the overdrive stage",
@@ -178,7 +178,7 @@ export const ENGINE_MACRO_TIPS = {
     morph: "how far the stacked unison voices spread in pitch, up to ±30 cents. Zero is a single clean voice",
     decay: "how long each note takes to fall away, and its release",
   },
-  "dm:virus": {
+  "dm:contagion": {
     osc: {
       osc1: "level of oscillator 1",
       osc2: "level of oscillator 2 — the one semi, detune and sync act on",
@@ -206,19 +206,19 @@ export const DRUM_SYNTH_ENGINES = [
 ].map(e => ({ ...e, group: "drum / synth", type: "drum-synth", poly: e.poly ?? false, melodic: e.melodic ?? false }));
 
 export const ANALOG_ENGINES = [
-  // Monophonic, like the machine — no makePolyPool wrapper (see tb303.js).
-  { key: "dm:303",        label: "303",            defaultNote: 36, poly: false, melodic: true },
-  // Polyphony lives inside the worklet rather than in makePolyPool (virus.js).
-  { key: "dm:virus",      label: "virus",          defaultNote: 60, poly: true, melodic: true },
-  // Six sine operators and 32 algorithms, 16-voice, also worklet-internal (dx7.js).
-  { key: "dm:dx7",        label: "dx7",            defaultNote: 60, poly: true, melodic: true },
-  { key: "dm:mini-brute", label: "mini brute",     defaultNote: 60, poly: true, melodic: true },
-  { key: "dm:moog",       label: "moog",           defaultNote: 60, poly: true, melodic: true },
-  { key: "dm:juno",       label: "juno 60",        defaultNote: 60, poly: true, melodic: true },
-  { key: "dm:guitar",     label: "electric guitar", defaultNote: 52, poly: true, melodic: true },
-  { key: "dm:bass",       label: "electric bass",   defaultNote: 40, poly: true, melodic: true },
-  { key: "dm:rhodes",     label: "rhodes piano",    defaultNote: 60, poly: true, melodic: true },
-  { key: "dm:prophet6",   label: "prophet 6",       defaultNote: 60, poly: true, melodic: true },
+  // Monophonic, like the machine — no makePolyPool wrapper (see silverbox.js).
+  { key: "dm:silverbox", label: "silverbox",       defaultNote: 36, poly: false, melodic: true },
+  // Polyphony lives inside the worklet rather than in makePolyPool (contagion.js).
+  { key: "dm:contagion", label: "contagion",       defaultNote: 60, poly: true, melodic: true },
+  // Six sine operators and 32 algorithms, 16-voice, also worklet-internal (hexop.js).
+  { key: "dm:hexop",     label: "hexop",           defaultNote: 60, poly: true, melodic: true },
+  { key: "dm:snarl",     label: "snarl",           defaultNote: 60, poly: true, melodic: true },
+  { key: "dm:ladder",    label: "ladder",          defaultNote: 60, poly: true, melodic: true },
+  { key: "dm:drift",     label: "drift",           defaultNote: 60, poly: true, melodic: true },
+  { key: "dm:guitar",    label: "electric guitar", defaultNote: 52, poly: true, melodic: true },
+  { key: "dm:bass",      label: "electric bass",   defaultNote: 40, poly: true, melodic: true },
+  { key: "dm:tines",     label: "tines",           defaultNote: 60, poly: true, melodic: true },
+  { key: "dm:oracle",    label: "oracle",          defaultNote: 60, poly: true, melodic: true },
 ].map(e => ({ ...e, group: "Emulators", type: "drum-synth", poly: e.poly ?? false, melodic: e.melodic ?? false }));
 
 export const TEXTURE_ENGINES = [

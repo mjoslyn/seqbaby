@@ -30,7 +30,7 @@
  *
  * What makes it playable is the drag, not the shape. A native range jumps to
  * wherever you click, which is the one thing a control you play must never do,
- * and its travel is the width of the widget, which in the DX7 grid is 60px for
+ * and its travel is the width of the widget, which in the hexop grid is 60px for
  * the whole parameter. Here the whole body is the target, the value doesn't move
  * until the pointer does, travel is unbounded, and resolution gets finer the
  * further out you drag. None of that is round — the shape is CSS's business
@@ -350,8 +350,8 @@ function upgradeOne(input) {
 
   const wrap = document.createElement("span");
   wrap.className = "sq-knob";
-  // A control that runs through zero reads from twelve o'clock — the 303's
-  // tuning and the DX7's pitch envelope are the whole point of the variant.
+  // A control that runs through zero reads from twelve o'clock — the silverbox's
+  // tuning and the hexop's pitch envelope are the whole point of the variant.
   if (min < 0 && max > 0) wrap.dataset.bipolar = "1";
   const dial = document.createElement("span");
   dial.className = "sq-knob__dial";
@@ -368,7 +368,7 @@ function upgradeOne(input) {
   // The field wrapper is what the mod/aut dot and the parameter menu look at,
   // and it now has to stack the label under a square control rather than beside
   // a wide one. Flagging it here keeps that CSS off any slider left unupgraded.
-  input.closest(".sq-field, .sq-fx__ctl, .sq-virus__f, .sq-dx7__f, .sq-guitar__f, .sq-bass__f, .sq-moog__freq, .sq-moog__noise, label")
+  input.closest(".sq-field, .sq-fx__ctl, .sq-contagion__f, .sq-hexop__f, .sq-guitar__f, .sq-bass__f, .sq-ladder__freq, .sq-ladder__noise, label")
     ?.setAttribute("data-knob", "");
 
   shadowValue(input);
@@ -401,7 +401,7 @@ export function refreshKnobRange(input) {
 /**
  * Make `el.value = x` repaint. Half the codebase writes values back into these
  * inputs without dispatching anything — syncTrackSoundUI, refreshFxPanelUI, the
- * DX7 / guitar / bass panel syncs, applyPatternSound, applySet — because until
+ * hexop / guitar / bass panel syncs, applyPatternSound, applySet — because until
  * now nothing was listening. Shadowing the accessor per element means none of
  * those call sites has to change and none of them can be forgotten.
  */

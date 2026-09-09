@@ -50,7 +50,7 @@
 
 // Processor source. Kept as a string so it travels with the module graph and
 // registers from a Blob URL — no extra fetch, no coupling to the versioned
-// asset path (same approach as tb303.js, virus.js and dx7.js). No backticks or
+// asset path (same approach as silverbox.js, contagion.js and hexop.js). No backticks or
 // dollar-brace in here: this whole thing is one template literal.
 const GUITAR_PROCESSOR_SOURCE = `
 const MAXV = 6;        // six strings
@@ -644,7 +644,7 @@ export function loadGuitarWorklet(ctx) {
 export function guitarReady(ctx) { return !!ctx && _ready.has(ctx); }
 
 // ---- the panel ----------------------------------------------------------
-// One list, three namespaces — the same trick the dx7 panel uses. Every control
+// One list, three namespaces — the same trick the hexop panel uses. Every control
 // is `gt` + a short key, and that short key spells its LFO target (`gtr_<short>`)
 // and its automation lane (`gtr.<short>`), so `gtbass` / `gtr_bass` / `gtr.bass`
 // are one control. constants.js, automation.js and paramTargets.js map over

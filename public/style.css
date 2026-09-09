@@ -197,8 +197,8 @@ input[type="range"] { accent-color: var(--accent); }
 }
 
 /* A control that runs through zero reads from twelve o'clock, so you can see
-   at a glance which side of centre it is on — the 303's tuning, the DX7's
-   pitch envelope, the Virus's filter-2 offset. */
+   at a glance which side of centre it is on — the silverbox's tuning, the hexop's
+   pitch envelope, the contagion's filter-2 offset. */
 .sq-knob[data-bipolar] .sq-knob__dial {
   background:
     conic-gradient(from 225deg,
@@ -287,12 +287,12 @@ input[type="range"] { accent-color: var(--accent); }
    keeps its original layout. */
 .sq-field[data-knob],
 .sq-fx__ctl[data-knob],
-.sq-virus__f[data-knob],
-.sq-dx7__f[data-knob],
+.sq-contagion__f[data-knob],
+.sq-hexop__f[data-knob],
 .sq-guitar__f[data-knob],
 .sq-bass__f[data-knob],
-.sq-moog__freq[data-knob],
-.sq-moog__noise[data-knob] {
+.sq-ladder__freq[data-knob],
+.sq-ladder__noise[data-knob] {
   flex-direction: column;
   align-items: center;
   gap: 2px;
@@ -300,11 +300,11 @@ input[type="range"] { accent-color: var(--accent); }
 }
 .sq-field[data-knob] > label,
 .sq-fx__ctl[data-knob] > span,
-.sq-virus__f[data-knob] > span,
+.sq-contagion__f[data-knob] > span,
 .sq-guitar__f[data-knob] > span,
 .sq-bass__f[data-knob] > span,
-.sq-moog__freq[data-knob] > span,
-.sq-moog__noise[data-knob] > span {
+.sq-ladder__freq[data-knob] > span,
+.sq-ladder__noise[data-knob] > span {
   font-size: 10px;
   line-height: 1.1;
   max-width: 100%;
@@ -687,56 +687,56 @@ main {
 .sq-param-group--osc-mix[hidden] { display: none !important; }
 .sq-param-group--osc-mod { border-color: color-mix(in oklab, #d5a6ff 40%, var(--border)); }
 .sq-param-group--osc-mod[hidden] { display: none !important; }
-.sq-param-group--moog { border-color: color-mix(in oklab, #e0a868 40%, var(--border)); flex-direction: column; align-items: stretch; gap: 4px; }
-.sq-param-group--moog[hidden] { display: none !important; }
-.sq-param-group--moog .sq-moog__osc-row {
+.sq-param-group--ladder { border-color: color-mix(in oklab, #e0a868 40%, var(--border)); flex-direction: column; align-items: stretch; gap: 4px; }
+.sq-param-group--ladder[hidden] { display: none !important; }
+.sq-param-group--ladder .sq-ladder__osc-row {
   display: flex;
   align-items: center;
   gap: 6px;
   font-size: 11px;
 }
-.sq-param-group--moog .sq-moog__osc-lbl { min-width: 32px; color: var(--fg-dim); }
-.sq-param-group--moog .sq-moog__freq { display: inline-flex; align-items: center; gap: 4px; }
-.sq-param-group--moog .sq-moog__freq .sq-knob { --knob-size: 38px; }
-.sq-param-group--moog select { padding: 2px 6px; font-size: 11px; }
-.sq-param-group--moog .sq-moog__noise { display: flex; align-items: center; gap: 6px; }
-.sq-param-group--moog .sq-moog__noise .sq-knob { --knob-size: 38px; }
-.sq-param-group--virus { border-color: color-mix(in oklab, #6ec6ff 45%, var(--border)); flex-direction: column; align-items: stretch; gap: 4px; }
-.sq-param-group--virus[hidden] { display: none !important; }
-.sq-param-group--virus .sq-virus__row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 11px; }
-.sq-param-group--virus .sq-virus__lbl { color: var(--fg-dim); min-width: 44px; }
-.sq-param-group--virus .sq-virus__f { display: inline-flex; align-items: center; gap: 4px; color: var(--fg-dim); }
-.sq-param-group--virus .sq-virus__f .sq-knob { --knob-size: 34px; }
-.sq-param-group--virus select { padding: 2px 6px; font-size: 11px; }
-/* DX7. The operator rows are a grid rather than a flex row: six operators by
+.sq-param-group--ladder .sq-ladder__osc-lbl { min-width: 32px; color: var(--fg-dim); }
+.sq-param-group--ladder .sq-ladder__freq { display: inline-flex; align-items: center; gap: 4px; }
+.sq-param-group--ladder .sq-ladder__freq .sq-knob { --knob-size: 38px; }
+.sq-param-group--ladder select { padding: 2px 6px; font-size: 11px; }
+.sq-param-group--ladder .sq-ladder__noise { display: flex; align-items: center; gap: 6px; }
+.sq-param-group--ladder .sq-ladder__noise .sq-knob { --knob-size: 38px; }
+.sq-param-group--contagion { border-color: color-mix(in oklab, #6ec6ff 45%, var(--border)); flex-direction: column; align-items: stretch; gap: 4px; }
+.sq-param-group--contagion[hidden] { display: none !important; }
+.sq-param-group--contagion .sq-contagion__row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 11px; }
+.sq-param-group--contagion .sq-contagion__lbl { color: var(--fg-dim); min-width: 44px; }
+.sq-param-group--contagion .sq-contagion__f { display: inline-flex; align-items: center; gap: 4px; color: var(--fg-dim); }
+.sq-param-group--contagion .sq-contagion__f .sq-knob { --knob-size: 34px; }
+.sq-param-group--contagion select { padding: 2px 6px; font-size: 11px; }
+/* Hexop. The operator rows are a grid rather than a flex row: six operators by
    eight controls only reads as an instrument if the columns line up, which is
    how the machine's own operator page was laid out too. */
-.sq-param-group--dx7 { border-color: color-mix(in oklab, #b48cff 45%, var(--border)); flex-direction: column; align-items: stretch; gap: 4px; }
-.sq-param-group--dx7[hidden] { display: none !important; }
-.sq-param-group--dx7 .sq-dx7__row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 11px; }
-.sq-param-group--dx7 .sq-dx7__lbl { color: var(--fg-dim); min-width: 40px; }
-.sq-param-group--dx7 .sq-dx7__f { display: inline-flex; align-items: center; gap: 4px; color: var(--fg-dim); }
-.sq-param-group--dx7 .sq-dx7__row .sq-dx7__f .sq-knob { --knob-size: 34px; }
-.sq-param-group--dx7 select { padding: 2px 6px; font-size: 11px; }
-.sq-param-group--dx7 .sq-dx7__alg { color: var(--accent); font-size: 11px; letter-spacing: 0.02em; }
-.sq-param-group--dx7 .sq-dx7__alg-fb { color: var(--fg-dim); }
-.sq-dx7__ops { display: grid; gap: 2px; overflow-x: auto; }
-.sq-dx7__ophead, .sq-dx7__oprow {
+.sq-param-group--hexop { border-color: color-mix(in oklab, #b48cff 45%, var(--border)); flex-direction: column; align-items: stretch; gap: 4px; }
+.sq-param-group--hexop[hidden] { display: none !important; }
+.sq-param-group--hexop .sq-hexop__row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 11px; }
+.sq-param-group--hexop .sq-hexop__lbl { color: var(--fg-dim); min-width: 40px; }
+.sq-param-group--hexop .sq-hexop__f { display: inline-flex; align-items: center; gap: 4px; color: var(--fg-dim); }
+.sq-param-group--hexop .sq-hexop__row .sq-hexop__f .sq-knob { --knob-size: 34px; }
+.sq-param-group--hexop select { padding: 2px 6px; font-size: 11px; }
+.sq-param-group--hexop .sq-hexop__alg { color: var(--accent); font-size: 11px; letter-spacing: 0.02em; }
+.sq-param-group--hexop .sq-hexop__alg-fb { color: var(--fg-dim); }
+.sq-hexop__ops { display: grid; gap: 2px; overflow-x: auto; }
+.sq-hexop__ophead, .sq-hexop__oprow {
   display: grid;
   grid-template-columns: 34px repeat(8, minmax(32px, 1fr)) 54px;
   align-items: center;
   gap: 3px;
   min-width: 400px;
 }
-.sq-dx7__ophead > span { font-size: 10px; color: var(--fg-dim); text-align: center; opacity: 0.75; }
-.sq-dx7__opn { font-size: 10px; color: var(--fg-dim); }
-.sq-dx7__oprow.is-carrier .sq-dx7__opn { color: var(--accent); }
-.sq-dx7__oprow.is-feedback .sq-dx7__opn::after { content: "↻"; margin-left: 2px; color: var(--accent-2); }
+.sq-hexop__ophead > span { font-size: 10px; color: var(--fg-dim); text-align: center; opacity: 0.75; }
+.sq-hexop__opn { font-size: 10px; color: var(--fg-dim); }
+.sq-hexop__oprow.is-carrier .sq-hexop__opn { color: var(--accent); }
+.sq-hexop__oprow.is-feedback .sq-hexop__opn::after { content: "↻"; margin-left: 2px; color: var(--accent-2); }
 /* Cells in the operator grid carry no label of their own — the column heads
    name them — so they just centre their knob. */
-.sq-dx7__ops .sq-dx7__f { display: flex; align-items: center; justify-content: center; min-width: 0; }
-.sq-dx7__ops .sq-dx7__f .sq-knob { --knob-size: 26px; --knob-thickness: 4px; }
-.sq-dx7__ops select { padding: 1px 4px; font-size: 10px; }
+.sq-hexop__ops .sq-hexop__f { display: flex; align-items: center; justify-content: center; min-width: 0; }
+.sq-hexop__ops .sq-hexop__f .sq-knob { --knob-size: 26px; --knob-thickness: 4px; }
+.sq-hexop__ops select { padding: 1px 4px; font-size: 10px; }
 /* Electric guitar: four rows, one per link in the chain — tone, string, amp,
    cab — because that is the order the signal goes in. */
 .sq-param-group--guitar { border-color: color-mix(in oklab, #e8a33d 45%, var(--border)); flex-direction: column; align-items: stretch; gap: 4px; }
@@ -756,9 +756,9 @@ main {
 .sq-param-group--bass .sq-bass__f .sq-knob { --knob-size: 34px; }
 .sq-param-group--bass select { padding: 2px 6px; font-size: 11px; }
 .sq-param-group--bass .sq-bass__desc { color: var(--fg-dim); font-size: 11px; opacity: 0.85; flex: 1 1 220px; min-width: 0; }
-.sq-param-group--tb303 { border-color: color-mix(in oklab, #ff7a4d 45%, var(--border)); }
-.sq-param-group--tb303[hidden] { display: none !important; }
-.sq-param-group--tb303 select { padding: 2px 6px; font-size: 11px; }
+.sq-param-group--silverbox { border-color: color-mix(in oklab, #ff7a4d 45%, var(--border)); }
+.sq-param-group--silverbox[hidden] { display: none !important; }
+.sq-param-group--silverbox select { padding: 2px 6px; font-size: 11px; }
 .sq-param-group--granular { border-color: color-mix(in oklab, #ffd35a 45%, var(--border)); flex-direction: column; align-items: stretch; gap: 4px; }
 .sq-param-group--granular[hidden] { display: none !important; }
 .sq-param-group--granular .sq-gran__row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 11px; }
@@ -1985,11 +1985,11 @@ body.kbd-recording .sq-track.is-kbd-active { border-color: #e5484d; box-shadow: 
    word and once floating on the dial. */
 .sq-field[data-motion] > label::after,
 .sq-fx__ctl[data-motion] > span:not(.sq-knob)::after,
-.sq-virus__f[data-motion] > span:not(.sq-knob)::after,
+.sq-contagion__f[data-motion] > span:not(.sq-knob)::after,
 .sq-guitar__f[data-motion] > span:not(.sq-knob)::after,
 .sq-bass__f[data-motion] > span:not(.sq-knob)::after,
-.sq-dx7__f[data-motion]::after,
-label[data-motion]:not(.sq-fx__ctl):not(.sq-virus__f):not(.sq-guitar__f):not(.sq-bass__f):not(.sq-dx7__f)::before {
+.sq-hexop__f[data-motion]::after,
+label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not(.sq-bass__f):not(.sq-hexop__f)::before {
   content: "";
   display: inline-block;
   width: 5px; height: 5px;
@@ -1998,13 +1998,13 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-virus__f):not(.sq-guitar__f):not(.sq
   vertical-align: middle;
   margin: 0 0 1px 5px;
 }
-label[data-motion]:not(.sq-fx__ctl):not(.sq-virus__f):not(.sq-guitar__f):not(.sq-bass__f):not(.sq-dx7__f)::before { margin: 0 5px 1px 0; }
-/* The dx7's operator cells have no label text of their own (the column heading
+label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not(.sq-bass__f):not(.sq-hexop__f)::before { margin: 0 5px 1px 0; }
+/* The hexop's operator cells have no label text of their own (the column heading
    names them), so the dot goes after the slider rather than beside a word. */
-.sq-dx7__f[data-motion]::after { flex: 0 0 auto; margin: 0 0 0 3px; }
+.sq-hexop__f[data-motion]::after { flex: 0 0 auto; margin: 0 0 0 3px; }
 .sq-field[data-motion="off"] > label,
 .sq-fx__ctl[data-motion="off"] > span:not(.sq-knob),
-.sq-virus__f[data-motion="off"] > span:not(.sq-knob),
+.sq-contagion__f[data-motion="off"] > span:not(.sq-knob),
 .sq-guitar__f[data-motion="off"] > span:not(.sq-knob),
 .sq-bass__f[data-motion="off"] > span:not(.sq-knob) { opacity: 0.8; }
 
@@ -2579,8 +2579,8 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-virus__f):not(.sq-guitar__f):not(.sq
   .sq-track__synth-row { gap: 4px; flex-direction: column; align-items: stretch; }
   .sq-param-group { padding: 4px 6px; gap: 6px; flex-wrap: wrap; }
   .sq-param-group .sq-field .sq-knob { --knob-size: 44px; }
-  .sq-param-group--moog .sq-moog__osc-row { flex-wrap: wrap; }
-  .sq-param-group--moog .sq-moog__freq .sq-knob { --knob-size: 42px; }
+  .sq-param-group--ladder .sq-ladder__osc-row { flex-wrap: wrap; }
+  .sq-param-group--ladder .sq-ladder__freq .sq-knob { --knob-size: 42px; }
 
   /* panel-btn-group: only roll stays inline (rest live in the "more" menu) —
      let it flow beside solo/mute/clear instead of claiming a full row */
@@ -2624,17 +2624,17 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-virus__f):not(.sq-guitar__f):not(.sq
 
   /* Dense engine panels on a phone. The 44px target is non-negotiable, so
      rather than let neighbouring targets overlap in a tight grid, the knobs
-     themselves grow and the grid scrolls sideways — which .sq-dx7__ops was
+     themselves grow and the grid scrolls sideways — which .sq-hexop__ops was
      already set up to do. */
-  .sq-dx7__ops .sq-dx7__f .sq-knob { --knob-size: 40px; --knob-thickness: 5px; }
-  .sq-dx7__ophead, .sq-dx7__oprow {
+  .sq-hexop__ops .sq-hexop__f .sq-knob { --knob-size: 40px; --knob-thickness: 5px; }
+  .sq-hexop__ophead, .sq-hexop__oprow {
     grid-template-columns: 34px repeat(8, minmax(44px, 1fr)) 60px;
     min-width: 500px;
   }
-  .sq-param-group--virus .sq-virus__f .sq-knob,
+  .sq-param-group--contagion .sq-contagion__f .sq-knob,
   .sq-param-group--guitar .sq-guitar__f .sq-knob,
   .sq-param-group--bass .sq-bass__f .sq-knob,
-  .sq-param-group--dx7 .sq-dx7__row .sq-dx7__f .sq-knob { --knob-size: 42px; }
+  .sq-param-group--hexop .sq-hexop__row .sq-hexop__f .sq-knob { --knob-size: 42px; }
   .sq-fx__ctl select { padding: 3px 4px; font-size: 11px; }
 
   /* lfo row: 2-column stacked layout */

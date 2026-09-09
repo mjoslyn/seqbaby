@@ -4,7 +4,7 @@ import { STYLE_SRC } from "./engineAssets";
 export const metadata: Metadata = {
   title: "seqbaby",
   description:
-    "Prompt-driven step sequencer in the browser: Plaits, 808/909/303, samples, MIDI out.",
+    "Prompt-driven step sequencer in the browser: Plaits, 808/909 kits, hand-built analog and FM emulations, samples, MIDI out.",
   icons: { icon: "/favicon.svg" },
   appleWebApp: {
     capable: true,
@@ -16,7 +16,7 @@ export const metadata: Metadata = {
     type: "website",
     title: "seqbaby",
     description:
-      "Prompt-driven step sequencer — Plaits, 808/909/303, samples, MIDI.",
+      "Prompt-driven step sequencer — Plaits, 808/909 kits, hand-built emulations, samples, MIDI.",
     url: "https://seqbaby.netlify.app/",
     images: [
       {
@@ -31,7 +31,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "seqbaby",
     description:
-      "Prompt-driven step sequencer — Plaits, 808/909/303, samples, MIDI.",
+      "Prompt-driven step sequencer — Plaits, 808/909 kits, hand-built emulations, samples, MIDI.",
     images: ["https://seqbaby.netlify.app/share.png"],
   },
 };

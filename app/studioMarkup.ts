@@ -2,13 +2,13 @@
 // This is the exact static DOM skeleton the vanilla engine (public/js/main.js)
 // queries by id/class at boot. Rendered server-side via dangerouslySetInnerHTML;
 // the three engine <script>s are injected client-side by ScriptLoader in order.
-// The DX7's operator matrix: six operators by eight controls. Written as a loop
+// The hexop's operator matrix: six operators by eight controls. Written as a loop
 // rather than 54 hand-copied inputs — the columns only differ by operator
 // number, and a typo in one of them would be invisible until that operator
 // stopped responding. The algorithm and preset dropdowns are filled at runtime
-// (populateDx7Selects in render.js) so their lists live only in dx7.js.
-// Ranges and defaults must match DX7_DEFAULTS there.
-const DX7_OP_COLS: Array<{ k: string; min: string; max: string; step: string; head: string; title: string }> = [
+// (populateHexopSelects in render.js) so their lists live only in hexop.js.
+// Ranges and defaults must match HEXOP_DEFAULTS there.
+const HEXOP_OP_COLS: Array<{ k: string; min: string; max: string; step: string; head: string; title: string }> = [
   { k: "lvl", min: "0", max: "1", step: "0.01", head: "level",
     title: "the operator's output level, and the single most important control on the machine. It is exponential: a modulator at half is a sixteenth of full scale, so the top of the slider is where the spectrum opens up. For a carrier it is volume in the mix; for a modulator it is how much it bends the operator below it" },
   { k: "rat", min: "0", max: "31", step: "1", head: "ratio",
@@ -20,63 +20,63 @@ const DX7_OP_COLS: Array<{ k: string; min: string; max: string; step: string; he
   { k: "atk", min: "0", max: "1", step: "0.01", head: "atk",
     title: "how long this operator takes to reach full level. On a modulator it is how long the tone takes to open up, which is what separates a brass swell from a struck bell" },
   { k: "dec", min: "0", max: "1", step: "0.01", head: "dec",
-    title: "how fast it falls from full level to its sustain. A modulator that decays under a carrier that does not is the entire trick behind the DX7's electric pianos" },
+    title: "how fast it falls from full level to its sustain. A modulator that decays under a carrier that does not is the entire trick behind the hexop's electric pianos" },
   { k: "sus", min: "0", max: "1", step: "0.01", head: "sus",
     title: "the level this operator holds at for as long as the note lasts. At zero the operator is gone once the decay finishes — percussive; up high it holds — sustained" },
   { k: "rel", min: "0", max: "1", step: "0.01", head: "rel",
     title: "how long this operator takes to fade once the note ends" },
 ];
-const DX7_OP_DEFAULTS: Record<string, (op: number) => string> = {
+const HEXOP_OP_DEFAULTS: Record<string, (op: number) => string> = {
   lvl: (i) => (i === 1 ? "1" : i === 2 ? "0.72" : "0"),
   rat: () => "1", fin: () => "0", det: () => "0",
   atk: () => "0.01", dec: () => "0.45",
   sus: (i) => (i === 1 ? "0.8" : "0.4"), rel: () => "0.3",
 };
-const dx7OpRows = () => [1, 2, 3, 4, 5, 6].map(i => `
-          <div class="sq-dx7__oprow" data-op="${i}">
-            <span class="sq-dx7__opn">op ${i}</span>
-${DX7_OP_COLS.map(c => `            <label class="sq-dx7__f"><input class="p-d${i}${c.k}" type="range" min="${c.min}" max="${c.max}" step="${c.step}" value="${DX7_OP_DEFAULTS[c.k](i)}" title="${c.title}" /></label>`).join("\n")}
-            <select class="p-d${i}fix" title="ratio mode tunes this operator to the note; fixed mode pins it to a frequency between 1Hz and 10kHz (set by ratio and fine) whatever note you play, ignoring the pitch envelope and the lfo with it. Fixed operators are where the DX7's knocks, breaths and cymbals come from">
+const hexopOpRows = () => [1, 2, 3, 4, 5, 6].map(i => `
+          <div class="sq-hexop__oprow" data-op="${i}">
+            <span class="sq-hexop__opn">op ${i}</span>
+${HEXOP_OP_COLS.map(c => `            <label class="sq-hexop__f"><input class="p-d${i}${c.k}" type="range" min="${c.min}" max="${c.max}" step="${c.step}" value="${HEXOP_OP_DEFAULTS[c.k](i)}" title="${c.title}" /></label>`).join("\n")}
+            <select class="p-d${i}fix" title="ratio mode tunes this operator to the note; fixed mode pins it to a frequency between 1Hz and 10kHz (set by ratio and fine) whatever note you play, ignoring the pitch envelope and the lfo with it. Fixed operators are where the hexop's knocks, breaths and cymbals come from">
               <option value="ratio" selected>ratio</option><option value="fixed">fixed</option>
             </select>
           </div>`).join("");
 
-const DX7_PANEL = `
-        <div class="sq-param-group sq-param-group--dx7" hidden>
-          <div class="sq-dx7__row">
-            <span class="sq-dx7__lbl">alg</span>
+const HEXOP_PANEL = `
+        <div class="sq-param-group sq-param-group--hexop" hidden>
+          <div class="sq-hexop__row">
+            <span class="sq-hexop__lbl">alg</span>
             <select class="p-dalg" title="which of the machine's 32 fixed wirings the six operators run in. The arrows say what modulates what: 1←2 means operator 2 modulates operator 1, and everything with no arrow into it is a carrier you actually hear"></select>
-            <span class="sq-dx7__alg"></span>
-            <span class="sq-dx7__lbl">voice</span>
-            <select class="sq-dx7__preset" title="load a complete voice — all six operators, the algorithm, and the four sliders. In the spirit of the machine's own presets rather than its rom, and the honest way to start: change one operator level at a time from here and you are programming a DX7"></select>
+            <span class="sq-hexop__alg"></span>
+            <span class="sq-hexop__lbl">voice</span>
+            <select class="sq-hexop__preset" title="load a complete voice — all six operators, the algorithm, and the four sliders. In the spirit of the machine's own presets rather than its rom, and the honest way to start: change one operator level at a time from here and you are programming a hexop"></select>
           </div>
-          <div class="sq-dx7__row">
-            <label class="sq-dx7__f"><span>key scale</span><input class="p-dks" type="range" min="0" max="1" step="0.01" value="0.35" title="how much the modulators are pulled back as you play up the keyboard. Without it the top octave screams, because a fixed modulation index is far brighter at 2kHz than at 100Hz — every acoustic instrument gets duller as it goes up, and this is how the DX7 gets away with it" /></label>
-            <label class="sq-dx7__f"><span>vel</span><input class="p-dvs" type="range" min="0" max="1" step="0.01" value="0.5" title="how much playing harder raises the modulation index. This is the DX7's defining gesture: velocity changes the timbre, not just the volume, so a hard note is brighter and not merely louder" /></label>
-            <label class="sq-dx7__f"><span>pitch env</span><input class="p-dpeg" type="range" min="-1" max="1" step="0.01" value="0" title="a pitch sweep at the start of every note, up to two octaves either way. Small amounts are the wooden knock at the front of a mallet sound; large ones are the sound of 1985" /></label>
-            <label class="sq-dx7__f"><span>rate</span><input class="p-dpegr" type="range" min="0" max="1" step="0.01" value="0.3" title="how fast that pitch sweep settles back to the note" /></label>
+          <div class="sq-hexop__row">
+            <label class="sq-hexop__f"><span>key scale</span><input class="p-dks" type="range" min="0" max="1" step="0.01" value="0.35" title="how much the modulators are pulled back as you play up the keyboard. Without it the top octave screams, because a fixed modulation index is far brighter at 2kHz than at 100Hz — every acoustic instrument gets duller as it goes up, and this is how the hexop gets away with it" /></label>
+            <label class="sq-hexop__f"><span>vel</span><input class="p-dvs" type="range" min="0" max="1" step="0.01" value="0.5" title="how much playing harder raises the modulation index. This is the hexop's defining gesture: velocity changes the timbre, not just the volume, so a hard note is brighter and not merely louder" /></label>
+            <label class="sq-hexop__f"><span>pitch env</span><input class="p-dpeg" type="range" min="-1" max="1" step="0.01" value="0" title="a pitch sweep at the start of every note, up to two octaves either way. Small amounts are the wooden knock at the front of a mallet sound; large ones are the sound of 1985" /></label>
+            <label class="sq-hexop__f"><span>rate</span><input class="p-dpegr" type="range" min="0" max="1" step="0.01" value="0.3" title="how fast that pitch sweep settles back to the note" /></label>
           </div>
-          <div class="sq-dx7__row">
-            <span class="sq-dx7__lbl">lfo</span>
+          <div class="sq-hexop__row">
+            <span class="sq-hexop__lbl">lfo</span>
             <select class="p-dlfow" title="lfo waveform — one lfo for the whole instrument, as on the machine">
               <option value="tri" selected>tri</option><option value="sine">sine</option>
               <option value="sawdn">saw dn</option><option value="sawup">saw up</option>
               <option value="square">square</option><option value="sh">s+h</option>
             </select>
-            <label class="sq-dx7__f"><span>speed</span><input class="p-dlfor" type="range" min="0" max="1" step="0.01" value="0.35" title="lfo speed, from a slow drift to 24Hz — fast enough to be an audio-rate wobble rather than a vibrato" /></label>
-            <label class="sq-dx7__f"><span>delay</span><input class="p-dlfod" type="range" min="0" max="1" step="0.01" value="0" title="how long the lfo takes to fade in after a note starts. Delayed vibrato is what makes a held note sound played rather than held" /></label>
-            <label class="sq-dx7__f"><span>pitch</span><input class="p-dpmd" type="range" min="0" max="1" step="0.01" value="0" title="how far the lfo moves the pitch — vibrato, up to a semitone" /></label>
-            <label class="sq-dx7__f"><span>amp</span><input class="p-damd" type="range" min="0" max="1" step="0.01" value="0" title="how far the lfo moves the level — tremolo" /></label>
+            <label class="sq-hexop__f"><span>speed</span><input class="p-dlfor" type="range" min="0" max="1" step="0.01" value="0.35" title="lfo speed, from a slow drift to 24Hz — fast enough to be an audio-rate wobble rather than a vibrato" /></label>
+            <label class="sq-hexop__f"><span>delay</span><input class="p-dlfod" type="range" min="0" max="1" step="0.01" value="0" title="how long the lfo takes to fade in after a note starts. Delayed vibrato is what makes a held note sound played rather than held" /></label>
+            <label class="sq-hexop__f"><span>pitch</span><input class="p-dpmd" type="range" min="0" max="1" step="0.01" value="0" title="how far the lfo moves the pitch — vibrato, up to a semitone" /></label>
+            <label class="sq-hexop__f"><span>amp</span><input class="p-damd" type="range" min="0" max="1" step="0.01" value="0" title="how far the lfo moves the level — tremolo" /></label>
             <select class="p-dlfok" title="key sync restarts the lfo on every note, so the vibrato arrives at the same point each time. Off leaves one free-running lfo that every note joins wherever it happens to be">
               <option value="on" selected>key sync</option><option value="off">free run</option>
             </select>
           </div>
-          <div class="sq-dx7__ops">
-            <div class="sq-dx7__ophead">
+          <div class="sq-hexop__ops">
+            <div class="sq-hexop__ophead">
               <span></span>
-${DX7_OP_COLS.map(c => `              <span>${c.head}</span>`).join("\n")}
+${HEXOP_OP_COLS.map(c => `              <span>${c.head}</span>`).join("\n")}
               <span></span>
-            </div>${dx7OpRows()}
+            </div>${hexopOpRows()}
           </div>
         </div>`;
 
@@ -362,9 +362,9 @@ export const STUDIO_BODY = String.raw`
           <div class="sq-field"><label>fm</label><input class="p-fm" type="range" min="0" max="1" step="0.01" value="0" /></div>
           <div class="sq-field"><label>metal</label><input class="p-metal" type="range" min="0" max="1" step="0.01" value="0" /></div>
         </div>
-        <div class="sq-param-group sq-param-group--moog" hidden>
-          <div class="sq-moog__osc-row">
-            <span class="sq-moog__osc-lbl">osc1</span>
+        <div class="sq-param-group sq-param-group--ladder" hidden>
+          <div class="sq-ladder__osc-row">
+            <span class="sq-ladder__osc-lbl">osc1</span>
             <select class="p-osc1range" title="range / octave">
               <option value="-2">32'</option><option value="-1">16'</option><option value="0" selected>8'</option><option value="1">4'</option><option value="2">2'</option>
             </select>
@@ -372,9 +372,9 @@ export const STUDIO_BODY = String.raw`
               <option value="triangle">tri</option><option value="sawtooth" selected>saw</option><option value="square">sqr</option><option value="sine">sin</option>
             </select>
           </div>
-          <div class="sq-moog__osc-row">
-            <span class="sq-moog__osc-lbl">osc2</span>
-            <label class="sq-moog__freq"><span>freq</span><input class="p-osc2freq" type="range" min="-7" max="7" step="1" value="0" /></label>
+          <div class="sq-ladder__osc-row">
+            <span class="sq-ladder__osc-lbl">osc2</span>
+            <label class="sq-ladder__freq"><span>freq</span><input class="p-osc2freq" type="range" min="-7" max="7" step="1" value="0" /></label>
             <select class="p-osc2range" title="range / octave">
               <option value="-2">32'</option><option value="-1">16'</option><option value="0" selected>8'</option><option value="1">4'</option><option value="2">2'</option>
             </select>
@@ -382,9 +382,9 @@ export const STUDIO_BODY = String.raw`
               <option value="triangle">tri</option><option value="sawtooth" selected>saw</option><option value="square">sqr</option><option value="sine">sin</option>
             </select>
           </div>
-          <div class="sq-moog__osc-row">
-            <span class="sq-moog__osc-lbl">osc3</span>
-            <label class="sq-moog__freq"><span>freq</span><input class="p-osc3freq" type="range" min="-7" max="7" step="1" value="0" /></label>
+          <div class="sq-ladder__osc-row">
+            <span class="sq-ladder__osc-lbl">osc3</span>
+            <label class="sq-ladder__freq"><span>freq</span><input class="p-osc3freq" type="range" min="-7" max="7" step="1" value="0" /></label>
             <select class="p-osc3range" title="range / octave">
               <option value="-2">32'</option><option value="-1" selected>16'</option><option value="0">8'</option><option value="1">4'</option><option value="2">2'</option>
             </select>
@@ -392,21 +392,21 @@ export const STUDIO_BODY = String.raw`
               <option value="triangle" selected>tri</option><option value="sawtooth">saw</option><option value="square">sqr</option><option value="sine">sin</option>
             </select>
           </div>
-          <div class="sq-field sq-moog__noise">
+          <div class="sq-field sq-ladder__noise">
             <label>noise</label><input class="p-noise" type="range" min="0" max="1" step="0.01" value="0" />
             <select class="p-noisetype" title="noise color">
               <option value="white" selected>white</option><option value="pink">pink</option>
             </select>
           </div>
         </div>
-        <div class="sq-param-group sq-param-group--virus" hidden>
-          <div class="sq-virus__row">
-            <span class="sq-virus__lbl">osc</span>
-            <label class="sq-virus__f"><span>semi</span><input class="p-vosc2semi" type="range" min="-24" max="24" step="1" value="0" title="osc 2 pitch offset in semitones" /></label>
-            <label class="sq-virus__f"><span>detune</span><input class="p-vosc2det" type="range" min="0" max="1" step="0.01" value="0.08" title="fine detune between the two oscillators — a little is what makes it sound wide rather than sterile" /></label>
-            <label class="sq-virus__f"><span>pw</span><input class="p-vpw" type="range" min="0.02" max="0.98" step="0.01" value="0.5" title="pulse width. Only heard at the top of the shape morph, where the wave becomes a pulse" /></label>
-            <label class="sq-virus__f"><span>fm</span><input class="p-vfm" type="range" min="0" max="1" step="0.01" value="0" title="osc 2 phase-modulates osc 1" /></label>
-            <label class="sq-virus__f"><span>ring</span><input class="p-vring" type="range" min="0" max="1" step="0.01" value="0" title="ring modulation — osc 1 times osc 2, for clangorous metallic tones" /></label>
+        <div class="sq-param-group sq-param-group--contagion" hidden>
+          <div class="sq-contagion__row">
+            <span class="sq-contagion__lbl">osc</span>
+            <label class="sq-contagion__f"><span>semi</span><input class="p-vosc2semi" type="range" min="-24" max="24" step="1" value="0" title="osc 2 pitch offset in semitones" /></label>
+            <label class="sq-contagion__f"><span>detune</span><input class="p-vosc2det" type="range" min="0" max="1" step="0.01" value="0.08" title="fine detune between the two oscillators — a little is what makes it sound wide rather than sterile" /></label>
+            <label class="sq-contagion__f"><span>pw</span><input class="p-vpw" type="range" min="0.02" max="0.98" step="0.01" value="0.5" title="pulse width. Only heard at the top of the shape morph, where the wave becomes a pulse" /></label>
+            <label class="sq-contagion__f"><span>fm</span><input class="p-vfm" type="range" min="0" max="1" step="0.01" value="0" title="osc 2 phase-modulates osc 1" /></label>
+            <label class="sq-contagion__f"><span>ring</span><input class="p-vring" type="range" min="0" max="1" step="0.01" value="0" title="ring modulation — osc 1 times osc 2, for clangorous metallic tones" /></label>
             <select class="p-vsync" title="hard sync: osc 2 is reset every time osc 1 completes a cycle, so it is forced to osc 1's pitch. Sweep the semi slider with sync on for the classic tearing lead">
               <option value="off" selected>sync off</option><option value="on">sync on</option>
             </select>
@@ -414,57 +414,57 @@ export const STUDIO_BODY = String.raw`
               <option value="square" selected>sub sqr</option><option value="triangle">sub tri</option>
             </select>
           </div>
-          <div class="sq-virus__row">
-            <span class="sq-virus__lbl">unison</span>
+          <div class="sq-contagion__row">
+            <span class="sq-contagion__lbl">unison</span>
             <select class="p-vuni" title="how many detuned copies of the whole oscillator section each note plays — this is the hypersaw">
               <option value="1" selected>1</option><option value="2">2</option><option value="3">3</option>
               <option value="4">4</option><option value="6">6</option><option value="8">8</option>
             </select>
-            <label class="sq-virus__f"><span>detune</span><input class="p-vunidet" type="range" min="0" max="1" step="0.01" value="0.3" title="how far the unison copies spread in pitch" /></label>
-            <label class="sq-virus__f"><span>spread</span><input class="p-vunispread" type="range" min="0" max="1" step="0.01" value="0.6" title="how far the unison copies spread across the stereo field" /></label>
-            <span class="sq-virus__lbl">env</span>
-            <label class="sq-virus__f"><span>atk</span><input class="p-vatk" type="range" min="0" max="1" step="0.01" value="0.02" /></label>
-            <label class="sq-virus__f"><span>sus</span><input class="p-vsus" type="range" min="0" max="1" step="0.01" value="0.6" /></label>
-            <label class="sq-virus__f"><span>rel</span><input class="p-vrel" type="range" min="0" max="1" step="0.01" value="0.25" /></label>
-            <label class="sq-virus__f"><span>env amt</span><input class="p-venvamt" type="range" min="-1" max="1" step="0.01" value="0.5" title="how much the envelope moves the cutoff. Negative sweeps downward" /></label>
+            <label class="sq-contagion__f"><span>detune</span><input class="p-vunidet" type="range" min="0" max="1" step="0.01" value="0.3" title="how far the unison copies spread in pitch" /></label>
+            <label class="sq-contagion__f"><span>spread</span><input class="p-vunispread" type="range" min="0" max="1" step="0.01" value="0.6" title="how far the unison copies spread across the stereo field" /></label>
+            <span class="sq-contagion__lbl">env</span>
+            <label class="sq-contagion__f"><span>atk</span><input class="p-vatk" type="range" min="0" max="1" step="0.01" value="0.02" /></label>
+            <label class="sq-contagion__f"><span>sus</span><input class="p-vsus" type="range" min="0" max="1" step="0.01" value="0.6" /></label>
+            <label class="sq-contagion__f"><span>rel</span><input class="p-vrel" type="range" min="0" max="1" step="0.01" value="0.25" /></label>
+            <label class="sq-contagion__f"><span>env amt</span><input class="p-venvamt" type="range" min="-1" max="1" step="0.01" value="0.5" title="how much the envelope moves the cutoff. Negative sweeps downward" /></label>
           </div>
-          <div class="sq-virus__row">
-            <span class="sq-virus__lbl">filter 1</span>
+          <div class="sq-contagion__row">
+            <span class="sq-contagion__lbl">filter 1</span>
             <select class="p-vmode1" title="filter 1 response">
               <option value="lp" selected>lp</option><option value="hp">hp</option><option value="bp">bp</option><option value="bs">bs</option>
             </select>
             <select class="p-vpoles" title="filter 1 slope: 2-pole is 12dB per octave, 4-pole is 24">
               <option value="2">2-pole</option><option value="4" selected>4-pole</option>
             </select>
-            <span class="sq-virus__lbl">filter 2</span>
+            <span class="sq-contagion__lbl">filter 2</span>
             <select class="p-vmode2" title="filter 2 response">
               <option value="lp" selected>lp</option><option value="hp">hp</option><option value="bp">bp</option><option value="bs">bs</option>
             </select>
-            <label class="sq-virus__f"><span>cut 2</span><input class="p-vcut2" type="range" min="-1" max="1" step="0.01" value="0" title="filter 2's cutoff, offset from filter 1 by up to two octaves either way" /></label>
+            <label class="sq-contagion__f"><span>cut 2</span><input class="p-vcut2" type="range" min="-1" max="1" step="0.01" value="0" title="filter 2's cutoff, offset from filter 1 by up to two octaves either way" /></label>
             <select class="p-vroute" title="how the two filters are connected: series (one into the other), parallel (both from the same source), or split (filter 1 to the left, filter 2 to the right)">
               <option value="ser" selected>series</option><option value="par">parallel</option><option value="split">split</option>
             </select>
-            <label class="sq-virus__f"><span>balance</span><input class="p-vbal" type="range" min="0" max="1" step="0.01" value="0" title="crossfade between the two filters' outputs" /></label>
-            <span class="sq-virus__lbl">sat</span>
-            <select class="p-vsat" title="the saturation stage between the two filters — the Virus's signature. Filter 2 cleans up whatever this does to filter 1's output">
+            <label class="sq-contagion__f"><span>balance</span><input class="p-vbal" type="range" min="0" max="1" step="0.01" value="0" title="crossfade between the two filters' outputs" /></label>
+            <span class="sq-contagion__lbl">sat</span>
+            <select class="p-vsat" title="the saturation stage between the two filters — the contagion's signature. Filter 2 cleans up whatever this does to filter 1's output">
               <option value="off">off</option><option value="light">light</option><option value="soft" selected>soft</option>
               <option value="hard">hard</option><option value="digital">digital</option><option value="shaper">shaper</option>
               <option value="rectify">rectify</option><option value="bits">bit reduce</option><option value="rate">rate reduce</option>
             </select>
-            <label class="sq-virus__f"><span>amt</span><input class="p-vsatamt" type="range" min="0" max="1" step="0.01" value="0.3" /></label>
+            <label class="sq-contagion__f"><span>amt</span><input class="p-vsatamt" type="range" min="0" max="1" step="0.01" value="0.3" /></label>
           </div>
         </div>
-${DX7_PANEL}
+${HEXOP_PANEL}
 ${GUITAR_PANEL}
 ${BASS_PANEL}
-        <div class="sq-param-group sq-param-group--tb303" hidden>
+        <div class="sq-param-group sq-param-group--silverbox" hidden>
           <div class="sq-field"><label>wave</label>
-            <select class="p-wave303" title="the 303's two waveforms. Saw is the classic acid tone; square is hollower and sits lower">
+            <select class="p-sbwave" title="the silverbox's two waveforms. Saw is the classic acid tone; square is hollower and sits lower">
               <option value="saw" selected>saw</option><option value="square">square</option>
             </select>
           </div>
-          <div class="sq-field"><label>accent</label><input class="p-accent303" type="range" min="0" max="1" step="0.01" value="0.6" title="how hard an accented step hits. Accent makes the note louder, forces the filter decay to a fixed 200ms, and pushes a charge into the accent circuit — at high resonance consecutive accents pile up into a rising squelch" /></div>
-          <div class="sq-field"><label>tune</label><input class="p-tune303" type="range" min="-50" max="50" step="1" value="0" title="master tuning, in cents" /></div>
+          <div class="sq-field"><label>accent</label><input class="p-sbaccent" type="range" min="0" max="1" step="0.01" value="0.6" title="how hard an accented step hits. Accent makes the note louder, forces the filter decay to a fixed 200ms, and pushes a charge into the accent circuit — at high resonance consecutive accents pile up into a rising squelch" /></div>
+          <div class="sq-field"><label>tune</label><input class="p-sbtune" type="range" min="-50" max="50" step="1" value="0" title="master tuning, in cents" /></div>
         </div>
         <div class="sq-param-group sq-param-group--granular" hidden>
           <div class="sq-gran__row">

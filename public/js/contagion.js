@@ -1,6 +1,6 @@
-// ---- Access Virus -------------------------------------------------------
-// The Virus is a digital synth, so "modelling" it means its architecture, not
-// its circuits — there aren't any. What makes a Virus sound like a Virus is the
+// ---- Contagion -------------------------------------------------------
+// The contagion is a digital synth, so "modelling" it means its architecture, not
+// its circuits — there aren't any. What makes a contagion sound like a contagion is the
 // shape of the signal path, and specifically four things nothing else had:
 //
 //   osc1 ─┐                    ┌─ FILTER 1 (multimode, 2 or 4 pole) ─┐
@@ -12,11 +12,11 @@
 // - **Two independent multimode filters** (LP/HP/BP/BS each) that can run in
 //   series, in parallel, or split across the stereo field, with a BALANCE knob
 //   crossfading their outputs. Almost every other synth of the era had one
-//   filter and one response; the Virus's filter pair is the instrument.
+//   filter and one response; the contagion's filter pair is the instrument.
 // - **A saturation stage between them.** On the real thing it offers everything
 //   from a gentle tube-ish curve to a bit reducer, and it sits *inside* the
 //   filter chain, so filter 2 cleans up what the saturator did to filter 1's
-//   output. That ordering is why a Virus can be filthy and still controlled.
+//   output. That ordering is why a contagion can be filthy and still controlled.
 // - **A continuous oscillator shape morph.** One knob sweeps sine → triangle →
 //   saw → pulse, with pulse width taking over at the top.
 // - **Unison up to 8** with detune and stereo spread — the hypersaw. Detuned
@@ -30,7 +30,7 @@
 // Simplifications, stated plainly: the unison copies share their note's filter
 // pair rather than each getting its own (the detune is what you hear, not the
 // eight filters); the shape morph crossfades four classic waves rather than
-// walking the Virus's 64 spectral wavetables; and there is no oversampling, so
+// walking the contagion's 64 spectral wavetables; and there is no oversampling, so
 // the saturator aliases — as the hardware's does. Filter cutoff tracks the
 // keyboard at a fixed 33%.
 
@@ -38,8 +38,8 @@
 
 // Processor source. Kept as a string so it travels with the module graph and
 // registers from a Blob URL — no extra fetch, no coupling to the versioned
-// asset path (same approach as tb303.js). No backticks or ${ in here.
-const VIRUS_PROCESSOR_SOURCE = `
+// asset path (same approach as silverbox.js). No backticks or ${ in here.
+const CONTAGION_PROCESSOR_SOURCE = `
 const MAXV = 8;      // voices
 const MAXU = 8;      // unison copies per voice
 const BLK  = 16;     // control-block size: envelopes + filter coefficients
@@ -83,7 +83,7 @@ function oscAt(ph, dt, shape, pw) {
   return saw * (1 - m) + sq * m;
 }
 
-// The saturation stage. Sits between the two filters, exactly where the Virus
+// The saturation stage. Sits between the two filters, exactly where the contagion
 // puts it, so filter 2 tidies up whatever this does to filter 1's output.
 function saturate(x, curve, a, st, si) {
   if (curve === 0 || a <= 0.001) return x;
@@ -145,7 +145,7 @@ function makeVoice() {
   };
 }
 
-class VirusProcessor extends AudioWorkletProcessor {
+class ContagionProcessor extends AudioWorkletProcessor {
   static get parameterDescriptors() {
     const a = (name, defaultValue, minValue, maxValue) =>
       ({ name, defaultValue, minValue, maxValue, automationRate: "a-rate" });
@@ -226,7 +226,7 @@ class VirusProcessor extends AudioWorkletProcessor {
     v.id = ev.id; v.note = ev.note; v.vel = ev.vel;
     v.active = true; v.gate = true; v.age = ++this.tick;
     v.target = ev.freq;
-    // Portamento glides from the note played before, as the Virus does in poly.
+    // Portamento glides from the note played before, as the contagion does in poly.
     const gl = ev.glide > 0 ? ev.glide : this.glideSec;
     if (gl > 0) { v.freq = this.lastFreq; v.glide = 1 - Math.exp(-3 / (gl * this.sr / BLK)); }
     else { v.freq = ev.freq; v.glide = 1; }
@@ -447,24 +447,24 @@ function svf(v0, s, o, a1, a2, a3, k, mode) {
   return v0 - k * v1;                        // band stop
 }
 
-registerProcessor("access-virus", VirusProcessor);
+registerProcessor("contagion", ContagionProcessor);
 `;
 
 // One registration per AudioContext, single-flight; a failure clears the slot
-// so the next attempt retries (same contract as the Plaits and 303 worklets).
+// so the next attempt retries (same contract as the Plaits and silverbox worklets).
 const _loads = new WeakMap();
 const _ready = new WeakSet();
 
 /**
- * Register the access-virus processor on this context. Called at init() so the
+ * Register the contagion processor on this context. Called at init() so the
  * await on the play path has already resolved by the time a voice is built.
  * @param {BaseAudioContext} ctx @returns {Promise<void>}
  */
-export function loadVirusWorklet(ctx) {
+export function loadContagionWorklet(ctx) {
   if (!ctx?.audioWorklet) return Promise.reject(new Error("no AudioWorklet"));
   let p = _loads.get(ctx);
   if (!p) {
-    const url = URL.createObjectURL(new Blob([VIRUS_PROCESSOR_SOURCE], { type: "text/javascript" }));
+    const url = URL.createObjectURL(new Blob([CONTAGION_PROCESSOR_SOURCE], { type: "text/javascript" }));
     p = ctx.audioWorklet.addModule(url)
       .then(() => { URL.revokeObjectURL(url); _ready.add(ctx); })
       .catch((e) => { URL.revokeObjectURL(url); _loads.delete(ctx); throw e; });
@@ -474,19 +474,19 @@ export function loadVirusWorklet(ctx) {
 }
 
 /** Has the processor finished registering on this context? */
-export function virusReady(ctx) { return !!ctx && _ready.has(ctx); }
+export function contagionReady(ctx) { return !!ctx && _ready.has(ctx); }
 
 // Panel controls, in UI order. render.js / session.js walk these lists so the
 // wiring stays in one place (same convention as GRAN_NUM_KEYS).
-export const VIRUS_NUM_KEYS = [
+export const CONTAGION_NUM_KEYS = [
   "vosc2semi", "vosc2det", "vpw", "vfm", "vring",
   "vunidet", "vunispread",
   "vcut2", "vbal", "vsatamt", "venvamt",
   "vatk", "vsus", "vrel",
 ];
-export const VIRUS_SEL_KEYS = ["vmode1", "vpoles", "vmode2", "vroute", "vsat", "vsubwave", "vsync", "vuni"];
+export const CONTAGION_SEL_KEYS = ["vmode1", "vpoles", "vmode2", "vroute", "vsat", "vsubwave", "vsync", "vuni"];
 
-export const VIRUS_DEFAULTS = {
+export const CONTAGION_DEFAULTS = {
   vosc2semi: 0, vosc2det: 0.08, vpw: 0.5, vfm: 0, vring: 0,
   vunidet: 0.3, vunispread: 0.6,
   vcut2: 0, vbal: 0, vsatamt: 0.3, venvamt: 0.5,
@@ -503,20 +503,20 @@ const SAT_CURVES = { off: 0, light: 1, soft: 2, hard: 3, digital: 4, shaper: 5, 
 const nativeIn = (node) => node?.input?.input ?? node?.input ?? node;
 
 /**
- * Build the Virus voice. Returns null when the worklet isn't registered yet, so
+ * Build the contagion voice. Returns null when the worklet isn't registered yet, so
  * the caller can fall back rather than leave the track silent.
  * @param {*} output Tone node the voice writes into.
  */
-export function buildVirusVoice(output) {
+export function buildContagionVoice(output) {
   const ctx = Tone.getContext().rawContext;
-  if (!virusReady(ctx)) { loadVirusWorklet(ctx).catch(() => {}); return null; }
+  if (!contagionReady(ctx)) { loadContagionWorklet(ctx).catch(() => {}); return null; }
 
   let node;
   try {
-    node = new AudioWorkletNode(ctx, "access-virus",
+    node = new AudioWorkletNode(ctx, "contagion",
       { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [2] });
   } catch (e) {
-    console.warn("access-virus worklet node failed", e);
+    console.warn("contagion worklet node failed", e);
     return null;
   }
   node.connect(nativeIn(output));
@@ -548,7 +548,7 @@ export function buildVirusVoice(output) {
         case "osc2":   P.lvl2.value     = num(val, 0, 1); return;
         case "osc3":   P.lvlSub.value   = num(val, 0, 1); return;
         case "osc4":   P.lvlNoise.value = num(val, 0, 1); return;
-        // Virus group — numeric
+        // Contagion group — numeric
         case "vosc2semi":  P.osc2semi.value  = num(val, -24, 24); return;
         case "vosc2det":   P.osc2det.value   = num(val, 0, 1); return;
         case "vpw":        P.pw.value        = num(val, 0.02, 0.98); return;
@@ -563,7 +563,7 @@ export function buildVirusVoice(output) {
         case "vatk":       P.attack.value    = num(val, 0, 1); return;
         case "vsus":       P.sustain.value   = num(val, 0, 1); return;
         case "vrel":       P.release.value   = num(val, 0, 1); return;
-        // Virus group — discrete
+        // Contagion group — discrete
         case "vmode1":   post({ type: "set", mode1: FILTER_MODES[val] ?? 0 }); return;
         case "vmode2":   post({ type: "set", mode2: FILTER_MODES[val] ?? 0 }); return;
         case "vpoles":   post({ type: "set", poles: Number(val) === 2 ? 2 : 4 }); return;
@@ -585,7 +585,7 @@ export function buildVirusVoice(output) {
         case "osc3":  return P.lvlSub;
         case "osc4":  return P.lvlNoise;
         case "noise": return P.lvlNoise;
-        // Virus-only mod targets, reached under their own keys
+        // Contagion-only mod targets, reached under their own keys
         case "vpw":        return P.pw;
         case "vfm":        return P.fm;
         case "vring":      return P.ring;

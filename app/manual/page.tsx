@@ -17,9 +17,9 @@ const SECTIONS = [
   ["keyboard", "Playing from your keyboard"],
   ["scale", "Scale and chords"],
   ["engines", "Sound engines"],
-  ["tb303", "The 303"],
-  ["virus", "The virus"],
-  ["dx7", "The dx7"],
+  ["silverbox", "The silverbox"],
+  ["contagion", "The contagion"],
+  ["hexop", "The hexop"],
   ["guitar", "The guitar and the bass"],
   ["sampler", "Samples"],
   ["wavetable", "The wavetable editor"],
@@ -356,7 +356,7 @@ export default function ManualPage() {
               <tbody>
                 <tr><td>plaits</td><td>Sixteen synthesis models from the Mutable Instruments Plaits oscillator: virtual analogue, FM, wavetable, granular, noise and physical models.</td></tr>
                 <tr><td>drum / synth</td><td>An 808 and 909 kit, a poly saw, an FM bell and a pad.</td></tr>
-                <tr><td>Emulators</td><td>The 303, modelled from the acid machine&apos;s own circuits down to the diode-ladder filter and the accent behaviour (<a href="#tb303">more below</a>). The virus, a polyphonic take on the digital synth that defined trance and drum and bass, with its two routable filters and its hypersaw (<a href="#virus">below</a>). The dx7, six sine operators through the machine&apos;s own 32 algorithms (<a href="#dx7">below</a>). An electric guitar and an electric bass, each modelled as a whole rig (string, pickup, amp, cab) with a dropdown of famous tones (<a href="#guitar">below</a>). Then five monosynth voices in the spirit of classic hardware: MiniBrute, Moog, Juno, Rhodes and Prophet.</td></tr>
+                <tr><td>Emulators</td><td>The silverbox, modelled from the acid machine&apos;s own circuits down to the diode-ladder filter and the accent behaviour (<a href="#silverbox">more below</a>). The contagion, a polyphonic take on the digital synth that defined trance and drum and bass, with its two routable filters and its hypersaw (<a href="#contagion">below</a>). The hexop, six sine operators through the machine&apos;s own 32 algorithms (<a href="#hexop">below</a>). An electric guitar and an electric bass, each modelled as a whole rig (string, pickup, amp, cab) with a dropdown of famous tones (<a href="#guitar">below</a>). Then five monosynth voices in the spirit of classic hardware: snarl, ladder, drift, tines and oracle.</td></tr>
                 <tr><td>texture</td><td>A granular engine that plays a sample as a cloud of tiny grains.</td></tr>
                 <tr><td>wavetable</td><td>A wavetable synth with its own <a href="#wavetable">editor</a>.</td></tr>
                 <tr><td>sampler</td><td>Your own audio, or one of the bundled kits. See <a href="#sampler">samples</a>.</td></tr>
@@ -376,10 +376,10 @@ export default function ManualPage() {
           </p>
         </section>
 
-        <section className={styles.section} id="tb303">
-          <h2>The 303</h2>
+        <section className={styles.section} id="silverbox">
+          <h2>The silverbox</h2>
           <p>
-            The <span className={styles.ui}>303</span> engine models the machine
+            The <span className={styles.ui}>silverbox</span> engine models the machine
             instead of approximating it with a filter preset, so it answers a pattern
             the way the original does. Its four sliders are the panel knobs:{" "}
             <span className={styles.ui}>cutoff</span>,{" "}
@@ -404,22 +404,22 @@ export default function ManualPage() {
             </li>
             <li>
               <strong>Plain steps get clipped short</strong>, a little over half the
-              step, which is what makes a 303 part drive instead of running together.
+              step, which is what makes a silverbox part drive instead of running together.
               Lengthen a note if you want it to hold.
             </li>
           </ul>
           <p>
             The filter thins out as you wind the resonance up, same as the real one.
-            That&apos;s why acid records run a 303 into a distortion pedal, and you can
+            That&apos;s why acid records run a silverbox into a distortion pedal, and you can
             do the same from the track&apos;s <span className={styles.ui}>fx</span>{" "}
             panel.
           </p>
         </section>
 
-        <section className={styles.section} id="virus">
-          <h2>The virus</h2>
+        <section className={styles.section} id="contagion">
+          <h2>The contagion</h2>
           <p>
-            Where the 303 is one idea done perfectly, the virus is a big polyphonic
+            Where the silverbox is one idea done perfectly, the contagion is a big polyphonic
             synth built for movement. Its four sliders are{" "}
             <span className={styles.ui}>cutoff</span>,{" "}
             <span className={styles.ui}>reso</span>,{" "}
@@ -463,8 +463,8 @@ export default function ManualPage() {
           </p>
         </section>
 
-        <section className={styles.section} id="dx7">
-          <h2>The dx7</h2>
+        <section className={styles.section} id="hexop">
+          <h2>The hexop</h2>
           <p>
             Six sine waves. That&apos;s the whole instrument: no filter, no sub
             oscillator, nothing else. What comes out depends entirely on which sines
@@ -493,7 +493,7 @@ export default function ManualPage() {
               <strong>Every operator has its own envelope</strong>, so the timbre has
               an envelope. A modulator that decays fast under a carrier that
               doesn&apos;t is a struck sound. That&apos;s the trick behind an FM
-              electric piano, and it&apos;s why the dx7 made a noise nothing before it
+              electric piano, and it&apos;s why the hexop made a noise nothing before it
               could.
             </li>
             <li>
@@ -518,7 +518,7 @@ export default function ManualPage() {
             Start from the <span className={styles.ui}>voice</span> dropdown rather
             than from silence: an electric piano, a bass, a bell, brass, a marimba, an
             organ and a pad. Load one, change a single operator level, and
-            you&apos;re programming a dx7. Two more controls are worth finding.{" "}
+            you&apos;re programming a hexop. Two more controls are worth finding.{" "}
             <span className={styles.ui}>vel</span> makes playing harder raise the
             modulation index, so hard notes come out brighter and not just louder, and{" "}
             <span className={styles.ui}>key scale</span> pulls the modulators back as
@@ -906,7 +906,7 @@ export default function ManualPage() {
               <tbody>
                 <tr>
                   <td><a href="https://tonejs.github.io/" target="_blank" rel="noopener">Tone.js</a></td>
-                  <td>Transport and scheduling, and the synth voices behind the drum, emulator and 303 engines</td>
+                  <td>Transport and scheduling, and the synth voices behind the drum, emulator and silverbox engines</td>
                   <td>MIT</td>
                 </tr>
                 <tr>
