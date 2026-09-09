@@ -1,6 +1,7 @@
 import { engineByKey } from "./catalog.js";
 import { makeFuzzCurve, shaperPreampGain } from "./curves.js";
 import { BASS_MOD_KEYS, BASS_MOD_LABELS, bassFromUnit } from "./bass.js";
+import { SUB_MOD_KEYS, SUB_MOD_LABELS, subFromUnit } from "./subbass.js";
 import { DX7_MOD_KEYS, DX7_MOD_LABELS, dx7FromUnit } from "./dx7.js";
 import { GUITAR_MOD_KEYS, GUITAR_MOD_LABELS, guitarFromUnit } from "./guitar.js";
 import { EUCLID_MOD_KEYS, EUCLID_MOD_LABELS, euclidFromUnit, setEuclidLive } from "./euclid.js";
@@ -69,6 +70,8 @@ export const AUTOMATION_TARGETS = {
   ...Object.fromEntries(GUITAR_MOD_KEYS.map(k => [`gtr.${k}`, { label: GUITAR_MOD_LABELS[k] }])),
   // Electric bass rig (bass engine only).
   ...Object.fromEntries(BASS_MOD_KEYS.map(k => [`bas.${k}`, { label: BASS_MOD_LABELS[k] }])),
+  // Sub bass (sub engine only) — oscillator, drop, harmonics, output.
+  ...Object.fromEntries(SUB_MOD_KEYS.map(k => [`sub.${k}`, { label: SUB_MOD_LABELS[k] }])),
   // fx
   "fx.vinyl":           { label: "vinyl amt" },
   "fx.vinyl.warmth":    { label: "vinyl warmth" },
@@ -124,6 +127,7 @@ export function voiceAutoKeysForEngine(t) {
     case "dm:juno":       return ["vol", "harm", "timb", "morph", "decay", "osc1", "osc2", "osc3", "noise"];
     case "dm:guitar":     return ["vol", "harm", "timb", "morph", "decay"];
     case "dm:bass":       return ["vol", "harm", "timb", "morph", "decay"];
+    case "dm:sub":        return ["vol", "harm", "timb", "morph", "decay"];
     case "dm:rhodes":     return ["vol", "harm", "timb", "morph", "decay"];
     case "dm:prophet6":   return ["vol", "harm", "timb", "morph", "decay", "osc1", "osc2", "osc3", "osc4", "noise"];
     case "dm:granular":   return ["vol", "harm", "timb", "morph", "decay"];
@@ -152,6 +156,7 @@ export function canAutomate(t, key) {
   if (key.startsWith("dx7.")) return t.engineKey === "dm:dx7";
   if (key.startsWith("gtr.")) return t.engineKey === "dm:guitar";
   if (key.startsWith("bas.")) return t.engineKey === "dm:bass";
+  if (key.startsWith("sub.")) return t.engineKey === "dm:sub";
   if (key.startsWith("fx.")) return true;
   if (VOICE_AUTO_KEYS.includes(key)) return voiceAutoKeysForEngine(t).includes(key);
   return false;
@@ -273,6 +278,14 @@ export function applyAutomationAtStep(t, key, v, time, vNext, stepDur) {
   if (key.startsWith("bas.")) {
     const which = key.slice(4);
     ramp(t.voice?.getAudioParam?.("bs" + which), bassFromUnit(which, vv), bassFromUnit(which, vn));
+    return;
+  }
+  // Sub bass, same again. Every one of its numeric controls is 0..1, so the
+  // mapping is the identity — it goes through subFromUnit anyway so there is
+  // one code path if a range is ever widened.
+  if (key.startsWith("sub.")) {
+    const which = key.slice(4);
+    ramp(t.voice?.getAudioParam?.("sb" + which), subFromUnit(which, vv), subFromUnit(which, vn));
     return;
   }
   const rack = t.fxRack;

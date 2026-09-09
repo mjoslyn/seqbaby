@@ -184,6 +184,53 @@ const BASS_PANEL = `
           </div>
         </div>`;
 
+
+// The sub bass. Same arrangement as the two rig panels above — the tone
+// dropdown ships empty and is filled at runtime from SUB_TONE_NAMES, and the
+// ranges and defaults must match SUB_NUM_CTLS in public/js/subbass.js.
+const SUB_PANEL = `
+        <div class="sq-param-group sq-param-group--sub" hidden>
+          <div class="sq-sub__row">
+            <span class="sq-sub__lbl">tone</span>
+            <select class="sq-sub__tone" title="load a complete patch: the oscillator, the pitch drop, how hard it is driven and what shapes it. Every control is reachable by hand from here"></select>
+            <span class="sq-sub__desc"></span>
+          </div>
+          <div class="sq-sub__row">
+            <span class="sq-sub__lbl">osc</span>
+            <label class="sq-sub__f"><span>sub oct</span><input class="p-sbsub" type="range" min="0" max="1" step="0.01" value="0" title="a sine an octave below the note. It is there to be felt rather than heard, so it is always a sine — anything with harmonics of its own at 20Hz is just mud" /></label>
+            <label class="sq-sub__f"><span>detune</span><input class="p-sbdetune" type="range" min="0" max="1" step="0.01" value="0" title="how far apart the stacked oscillators sit, up to 25 cents. The spread narrows as the note falls: what is a lush reese at 80Hz is a wobble that fights the kick at 40. Needs a stack of more than one to do anything" /></label>
+            <select class="p-sbstack" title="how many oscillators. Two or three detuned against each other beat, and that beating is the reese — the whole drum-and-bass sub. The spread always hangs either side of the note, so changing this never retunes the track">
+              <option value="1" selected>1 osc</option><option value="2">2 osc</option><option value="3">3 osc</option>
+            </select>
+            <label class="sq-sub__f"><span>phase</span><input class="p-sbphase" type="range" min="0" max="1" step="0.01" value="0" title="where in its cycle the oscillator starts each note. Down here this is audible: a sine started at zero spends its first quarter cycle — 6ms at 40Hz — climbing to its peak, which is a soft note, while one started at the peak hits immediately. It is also how you stop a sub fighting the kick underneath it" /></label>
+            <label class="sq-sub__f"><span>drift</span><input class="p-sbdrift" type="range" min="0" max="1" step="0.01" value="0.06" title="a slow random wander in the tuning, a few cents wide. A digitally perfect sub is very still, and a little drift is most of what makes one sound like hardware" /></label>
+            <select class="p-sbglidem" title="when the glide applies. Always slides into every note; legato slides only into a note that arrives while another is still sounding — which is the 808 slide, and the reason a drill bassline sounds the way it does. The glide TIME is the track's own glide control">
+              <option value="always" selected>glide always</option><option value="legato">glide legato</option>
+            </select>
+          </div>
+          <div class="sq-sub__row">
+            <span class="sq-sub__lbl">env</span>
+            <label class="sq-sub__f"><span>drop</span><input class="p-sbdrop" type="range" min="0" max="1" step="0.01" value="0.15" title="how far above the note the pitch starts before falling onto it, up to 40 semitones. This fall IS the attack transient — it is why an 808 has a beater sound at all when it is otherwise a sine, and wound right up it is the trailer hit" /></label>
+            <label class="sq-sub__f"><span>drop time</span><input class="p-sbdroptm" type="range" min="0" max="1" step="0.01" value="0.2" title="how long that fall takes, 4ms to half a second. Short is a click on the front of the note; long is a whole gesture you hear arriving" /></label>
+            <label class="sq-sub__f"><span>attack</span><input class="p-sbatk" type="range" min="0" max="1" step="0.01" value="0.02" title="how fast the note comes in. At the bottom it is instant, which is what a sub usually wants; wound up it swells, which is the only way to get a note that arrives without a transient at all" /></label>
+            <label class="sq-sub__f"><span>release</span><input class="p-sbrel" type="range" min="0" max="1" step="0.01" value="0.15" title="how fast the note stops when its step ends. It can only ever shorten the decay, never extend it — at the top the note simply keeps ringing as though the step were still held" /></label>
+            <label class="sq-sub__f"><span>click</span><input class="p-sbclick" type="range" min="0" max="1" step="0.01" value="0.2" title="a short band of noise on the attack — the beater. On a small speaker it is very often the only part of the note that arrives at all, which is why an 808 with no click disappears on a phone" /></label>
+          </div>
+          <div class="sq-sub__row">
+            <span class="sq-sub__lbl">harm</span>
+            <select class="p-sbsat" title="what makes the harmonics. Tube is an asymmetric soft clip — even and odd, and the octave-up is the strongest, which is exactly what a small speaker can reproduce. Fold reflects instead of clipping, so it keeps making new harmonics as it is driven rather than settling into a square. Fuzz is a hard clip: odd harmonics, hollow and loud. Rect rectifies, which doubles the frequency outright">
+              <option value="tube" selected>tube</option><option value="fold">fold</option>
+              <option value="fuzz">fuzz</option><option value="rect">rectify</option>
+            </select>
+            <label class="sq-sub__f"><span>xover</span><input class="p-sbxover" type="range" min="0" max="1" step="0.01" value="0.3" title="the frequency the harmonics start at, 60Hz to about 800Hz. Nothing below this is ever distorted — which is the whole trick, because distorting a sub whole makes the fundamental intermodulate with everything above it and the bottom disappears" /></label>
+            <label class="sq-sub__f"><span>edge</span><input class="p-sbedge" type="range" min="0" max="1" step="0.01" value="0.35" title="how asymmetric the shaping is. Symmetric gives odd harmonics — hollow and growling; asymmetric gives even ones, an octave up, and far more audible on something small. It is a bias going into the stage, so a clipper turns into a pulse whose duty cycle is no longer half, and an uneven duty cycle is what even harmonics are" /></label>
+            <span class="sq-sub__lbl">out</span>
+            <label class="sq-sub__f"><span>low cut</span><input class="p-sbhpf" type="range" min="0" max="1" step="0.01" value="0.1" title="high-pass filter, 16Hz to 70Hz. Below about 25Hz there is no pitch left, only cone excursion spending headroom on air the speaker cannot move" /></label>
+            <label class="sq-sub__f"><span>glue</span><input class="p-sbglue" type="range" min="0" max="1" step="0.01" value="0.35" title="the compressor, threshold and makeup on one control. A sub that sits perfectly still under a mix is this doing that" /></label>
+            <label class="sq-sub__f"><span>ceiling</span><input class="p-sbceil" type="range" min="0" max="1" step="0.01" value="0.85" title="the limiter's ceiling. It stays perfectly linear until the signal is genuinely near it and only then bends, so a patch whose whole point is having no harmonics really has none" /></label>
+          </div>
+        </div>`;
+
 export const STUDIO_BODY = String.raw`
 <header class="sq-transport">
     <div class="sq-transport__main">
@@ -457,6 +504,7 @@ export const STUDIO_BODY = String.raw`
 ${DX7_PANEL}
 ${GUITAR_PANEL}
 ${BASS_PANEL}
+${SUB_PANEL}
         <div class="sq-param-group sq-param-group--tb303" hidden>
           <div class="sq-field"><label>wave</label>
             <select class="p-wave303" title="the 303's two waveforms. Saw is the classic acid tone; square is hollower and sits lower">

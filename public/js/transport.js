@@ -5,6 +5,7 @@ import { BAR_TICKS, wosc } from "./constants.js";
 import { setStatus } from "./dom.js";
 import { euclidFallbackNote, stepGateAt } from "./euclid.js";
 import { loadBassWorklet } from "./bass.js";
+import { loadSubBassWorklet } from "./subbass.js";
 import { loadDx7Worklet } from "./dx7.js";
 import { loadGuitarWorklet } from "./guitar.js";
 import { currentBpm, syncAllLFOs } from "./lfo.js";
@@ -240,7 +241,8 @@ export function loadWorklet() {
   const dx7 = loadDx7Worklet(state.audioCtx).catch(e => { console.warn("dx7 worklet load failed", e); });
   const guitar = loadGuitarWorklet(state.audioCtx).catch(e => { console.warn("guitar worklet load failed", e); });
   const bass = loadBassWorklet(state.audioCtx).catch(e => { console.warn("bass worklet load failed", e); });
-  return Promise.all([state.woscLoad, tb303, virus, dx7, guitar, bass]);
+  const sub = loadSubBassWorklet(state.audioCtx).catch(e => { console.warn("sub bass worklet load failed", e); });
+  return Promise.all([state.woscLoad, tb303, virus, dx7, guitar, bass, sub]);
 }
 
 /**

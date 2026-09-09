@@ -1,6 +1,7 @@
 import { BASS_MOD_KEYS, BASS_MOD_LABELS, BASS_MOD_RANGE } from "./bass.js";
 import { DX7_MOD_KEYS, DX7_MOD_LABELS, DX7_MOD_RANGE } from "./dx7.js";
 import { GUITAR_MOD_KEYS, GUITAR_MOD_LABELS, GUITAR_MOD_RANGE } from "./guitar.js";
+import { SUB_MOD_KEYS, SUB_MOD_LABELS, SUB_MOD_RANGE } from "./subbass.js";
 
 export const { wosc, oscillatorTypes } = window.woscillators;
 
@@ -60,6 +61,9 @@ export const LFO_KEYS = [
   // Electric bass: the right hand, the parallel dirt, and the amp. Guitar only
   // in spirit — see canModulate for the gate.
   ...BASS_MOD_KEYS.map(k => `bas_${k}`),
+  // Sub bass: the oscillator, the drop, the harmonics path and the output
+  // stage. Sub only — see canModulate.
+  ...SUB_MOD_KEYS.map(k => `sub_${k}`),
 ];
 // How much each target swings per unit of depth:
 //  - 0..1 unit params: amp = depth/2 (swings ±0.5)
@@ -101,6 +105,7 @@ export const LFO_LABELS = {
   ...Object.fromEntries(DX7_MOD_KEYS.map(k => [`dx7_${k}`, DX7_MOD_LABELS[k]])),
   ...Object.fromEntries(GUITAR_MOD_KEYS.map(k => [`gtr_${k}`, GUITAR_MOD_LABELS[k]])),
   ...Object.fromEntries(BASS_MOD_KEYS.map(k => [`bas_${k}`, BASS_MOD_LABELS[k]])),
+  ...Object.fromEntries(SUB_MOD_KEYS.map(k => [`sub_${k}`, SUB_MOD_LABELS[k]])),
 };
 export const lfoLabel = (k) => LFO_LABELS[k] ?? k;
 export const LFO_AMP_SCALE = {
@@ -157,6 +162,10 @@ export const LFO_AMP_SCALE = {
   ...Object.fromEntries(BASS_MOD_KEYS.map(k => {
     const [lo, hi] = BASS_MOD_RANGE[k];
     return [`bas_${k}`, hi - lo];
+  })),
+  ...Object.fromEntries(SUB_MOD_KEYS.map(k => {
+    const [lo, hi] = SUB_MOD_RANGE[k];
+    return [`sub_${k}`, hi - lo];
   })),
 };
 

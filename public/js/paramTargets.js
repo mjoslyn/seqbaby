@@ -1,5 +1,6 @@
 import { LFO_KEYS } from "./constants.js";
 import { BASS_MOD_KEYS, BASS_MOD_LABELS } from "./bass.js";
+import { SUB_MOD_KEYS, SUB_MOD_LABELS } from "./subbass.js";
 import { DX7_MOD_KEYS, DX7_MOD_LABELS } from "./dx7.js";
 import { GUITAR_MOD_KEYS, GUITAR_MOD_LABELS } from "./guitar.js";
 import { state } from "./state.js";
@@ -53,6 +54,8 @@ for (const k of DX7_MOD_KEYS) def(`p-d${k}`, `dx7_${k}`, `dx7.${k}`);
 for (const k of GUITAR_MOD_KEYS) def(`p-gt${k}`, `gtr_${k}`, `gtr.${k}`);
 // Electric bass panel — likewise.
 for (const k of BASS_MOD_KEYS) def(`p-bs${k}`, `bas_${k}`, `bas.${k}`);
+// Sub bass panel — likewise.
+for (const k of SUB_MOD_KEYS) def(`p-sb${k}`, `sub_${k}`, `sub.${k}`);
 // Euclid's three counts — one list, three namespaces, as in dx7.js.
 for (const k of ["pulses", "steps", "rotate"]) def(`p-euc${k}`, `euclid_${k}`, `euclid.${k}`);
 // Granular grain controls. Also reachable from the wav modal's own copies.
@@ -206,6 +209,9 @@ export const CONTROL_LABELS = {
   "p-gtpkupt": "pickup type", "p-gttremw": "tremolo shape",
   "sq-guitar__tone": "guitar tone",
   ...Object.fromEntries(BASS_MOD_KEYS.map(k => [`p-bs${k}`, BASS_MOD_LABELS[k]])),
+  ...Object.fromEntries(SUB_MOD_KEYS.map(k => [`p-sb${k}`, SUB_MOD_LABELS[k]])),
+  "p-sbstack": "oscillator stack", "p-sbsat": "shaper",
+  "p-sbglidem": "glide mode", "sq-sub__tone": "sub bass tone",
   "p-bsamp": "bass amp", "p-bscab": "bass cabinet",
   "p-bspkupt": "bass pickup", "p-bsstrs": "string type",
   "sq-bass__tone": "bass tone",

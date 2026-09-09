@@ -15,7 +15,7 @@ env / fx / eq / comp / mod / automation per track.
   engine scripts in order: Tone.js 15 (CDN) → `public/woscillators.js` →
   `public/js/main.js` (ES module). `middleware.ts` refreshes the Supabase
   session on every request *except* static engine assets.
-- **Engine**: ~44 dependency-free vanilla ES modules in `public/js/`. No
+- **Engine**: ~47 dependency-free vanilla ES modules in `public/js/`. No
   bundler — edit, reload. `window.seqbaby` (from `appApi.js`) exposes `state`
   and serialize/apply hooks to the React shell (typed in `app/seqbaby.d.ts`).
 - **Accounts + data**: Supabase (Postgres + Auth + RLS). Tables: `profiles`,
@@ -118,6 +118,9 @@ env / fx / eq / comp / mod / automation per track.
   table. Same file shape as the three above. See the guitar section below.
 - `bass.js` — the electric bass, guitar.js's sibling: same waveguide, wound and
   stiffer, with a parallel dirt path, a rig compressor and an octaver.
+- `subbass.js` — the sub bass: a monophonic synth for the bottom two octaves,
+  whose defining part is the parallel harmonics path that makes a 40Hz note
+  audible on a speaker that cannot reproduce 40Hz. See the sub bass section.
 - `dx7.js` — the Yamaha DX7, same shape again, plus the 32-algorithm
   table, the panel's generated key lists and the preset voices. See the DX7
   section below.
@@ -230,8 +233,9 @@ Voice interface: `hit(midi, time, dur, vel, opts?)`, `setParam`,
 
 All engine type `drum-synth`. The five Tone.js analog-mono presets are each
 wrapped in `makePolyPool(size, buildOne)`; the 303, the Virus, the DX7, the
-guitar and the bass are the odd ones out — AudioWorklet models that handle their
-own voicing (the 303 is mono like the machine, the rest polyphonic). See their
+guitar, the bass and the sub bass are the odd ones out — AudioWorklet models
+that handle their own voicing (the 303 and the sub bass are mono, deliberately;
+the rest polyphonic). See their
 sections below. The guitar and bass keep their old pluck builders in voices.js
 (`buildPluckGuitarVoice` / `buildPluckBassVoice`) purely as worklet fallbacks.
 
@@ -245,6 +249,7 @@ sections below. The guitar and bass keep their old pluck builders in voices.js
 | `dm:juno`       | `buildJunoVoice`      | 6 | DCO + sub + noise → HPF → baked-in chorus |
 | `dm:guitar`     | `buildGuitarVoice`    | 6 (internal) | electric guitar rig, AudioWorklet (`guitar.js`) |
 | `dm:bass`       | `buildBassVoice`      | 4 (internal) | electric bass rig, AudioWorklet (`bass.js`) |
+| `dm:sub`        | `buildSubBassVoice`   | mono | sub bass, AudioWorklet (`subbass.js`) |
 | `dm:rhodes`     | `buildRhodesVoice`    | 6 | electric piano |
 | `dm:prophet6`   | `buildProphet6Voice`  | 6 | poly analog |
 
@@ -497,6 +502,67 @@ STRING ──▶ PICKUP ──▶ tone ──┬── clean (lows, kept clean) 
   gk), five cabs, three pickups. Tones via `bassTone(name)`; panel markup is
   `BASS_PANEL` in `app/studioMarkup.ts` with the dropdown filled at runtime.
 - **Loading** — as above; falls back to `buildPluckBassVoice`.
+
+## Sub bass (`dm:sub`, `public/js/subbass.js`)
+
+An instrument for the bottom two octaves and nothing else. The 20-80Hz region
+has four problems no general-purpose engine solves, and each one is a feature
+here:
+
+```
+        PITCH ENV (the 808 drop)
+                |
+                v
+OSC x stack ----+--> clean (the actual sub, kept clean) ------+
+(shape morph,   |                                             |
+ detuned)       +--> SHAPER -> HPF(xover) -> LPF(tone) -------+--> GLUE -> CEILING
+                |    (the harmonics that make it audible)     |
+SUB OCT --------+---------------------------------------------+
+```
+
+- **Most listeners cannot hear it.** A phone speaker starts around 500Hz and a
+  laptop around 180Hz, so a 35Hz sine is *literally silent* on the two things
+  most people listen on. The fix isn't level, it's **harmonics**: generate them
+  and the ear rebuilds the fundamental it cannot hear. That parallel harmonics
+  path is the whole reason the engine exists, and it's why DRIVE gets a track
+  slider. Measured: at drive 0.9 the >180Hz energy is ~1.7x the fundamental; at
+  drive 0 it's -47dB (a genuinely pure sine).
+- **The shaping is parallel and highpassed**, for the same reason bass.js's dirt
+  is — distort a sub whole and the fundamental intermodulates with everything
+  above it and the bottom disappears. `xover` (60Hz..800Hz) is where the shaped
+  path starts; nothing below it is ever distorted.
+- **EDGE biases the signal BEFORE the drive gain**, which is the only place it
+  does anything (past a 50x gain an offset is invisible). Biased first, a
+  clipper makes a pulse whose duty cycle is no longer half — and an uneven duty
+  cycle *is* the even harmonics. Four shapers: tube / fold / fuzz / **rect**,
+  and rect has to rectify the *bounded* signal, because full-wave rectifying an
+  already-clipped square gives a constant that the DC blocker then eats.
+- **Monophonic, always.** Two notes a third apart at 40Hz beat at a rate you
+  feel as lumpiness rather than hear as harmony. Last-note priority plus glide,
+  and `sbglidem` picks always/legato — legato slides only into a note arriving
+  while another sounds, which is the 808 slide and the whole of a drill bassline.
+  The glide TIME is the track's own `glide`.
+- **Asymmetric shaping at 30Hz makes DC**, and DC is a cone held off-centre with
+  the amplifier's headroom spent holding it there. Hence DC blockers after the
+  shaper and at the output, a rumble filter (`hpf`), and a ceiling that stays
+  **linear until 75% of the limit** — a curve that bent everywhere put harmonics
+  on the one patch whose point is having none.
+- **The pitch drop is the attack transient.** It's why an 808 has a beater sound
+  at all when it is otherwise a sine. `drop` spans 40 semitones and lands exactly
+  on the note; `click` adds the band of noise that is often the only part of the
+  note a small speaker reproduces at all.
+- **The shapes share one phase accumulator** (sine -> tri -> saw -> square,
+  polyBLEP on saw/square) and are **zero-crossing aligned**, so `phase` means the
+  same thing whichever shape is loaded. The detune spread hangs either side of
+  the note, so changing `stack` never retunes the track.
+- **Controls** — the four sliders are DRIVE / TONE / SHAPE / DECAY; the rest is
+  `sq-param-group--sub`. Keys are `sb` + short key -> `sub_<short>` /
+  `sub.<short>`, generated from `SUB_NUM_CTLS`. Patches via `subTone(name)`;
+  panel markup is `SUB_PANEL` in `app/studioMarkup.ts` with the dropdown filled
+  at runtime from `SUB_TONE_NAMES`.
+- **Loading** — same Blob-URL registration as the 303/Virus/DX7/guitar/bass from
+  `loadWorklet()`; a failure falls back to a plain Tone `MonoSynth` sine (no
+  harmonics path, so inaudible on a small speaker, but never silent).
 
 ## Granular (`dm:granular`, `GranularVoice` in voices.js)
 
@@ -1034,7 +1100,7 @@ fails. Real-time capture — see Known limitations.
 ## Engines catalog (`buildEngineCatalog`)
 
 Groups in order: `plaits` (16) · `drum / synth` (808/909 kit + poly-saw /
-fm-bell / pad) · `Emulators` (303 + virus + dx7 + guitar + bass + 5 analog-mono) · `texture` (`dm:granular`) ·
+fm-bell / pad) · `Emulators` (303 + virus + dx7 + guitar + bass + sub bass + 5 analog-mono) · `texture` (`dm:granular`) ·
 `wavetable` (`wt:akwf`) · `sampler` (single unified entry) · `saved patches`
 (`saved:<name>`) · `midi` · `bus` (the fx bus — not an instrument, see below).
 The engine key string is the source of truth.
@@ -1109,7 +1175,7 @@ patterns.
   `Tone.Transport.bpm.value` instead. Anything else needing musical time should
   do the same, or use `currentBpm()` (lfo.js) as the sync helpers do.
 - **Worklet processor sources are template literals** (`tb303.js`, `virus.js`,
-  `dx7.js`),
+  `dx7.js`, `guitar.js`, `bass.js`, `subbass.js`),
   so a stray backtick or `${` inside one — including in a comment — truncates
   the string. The module still parses, `node --check` still passes, and the
   failure only shows up as a SyntaxError at engine boot. When editing inside a
@@ -1173,7 +1239,7 @@ Repo: https://github.com/mjoslyn/seqbaby.
   An inline marker (`window.__seqbabyServerBoot`) tells the paths apart, and
   `ScriptLoader.tsx` keeps its onload-chained injection for the soft-nav case
   (e.g. arriving from `/login`).
-- `app/EnginePreload.tsx` emits `modulepreload` for all 44 modules listed in
+- `app/EnginePreload.tsx` emits `modulepreload` for all 47 modules listed in
   `app/engineAssets.ts`. The graph is 8 levels deep, so without it the browser
   needs up to eight sequential round trips just to discover the code.
   **Adding or removing a module in `public/js/` means updating that list** —
@@ -1219,6 +1285,6 @@ Repo: https://github.com/mjoslyn/seqbaby.
   resolve against the importing module's URL. That's why the version is a path
   and not a `?query` — a query is dropped during that resolution and would
   reach only `main.js`. Per-deploy URLs are what make the `immutable`
-  cache-control in `netlify.toml` safe on an unbundled 41-module engine.
+  cache-control in `netlify.toml` safe on an unbundled 47-module engine.
   Unset locally, so `npm run dev` and a plain `next build` keep the bare paths
   and the edit-and-reload loop.

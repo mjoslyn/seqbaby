@@ -77,6 +77,7 @@ export function updatePlaitsControlsVisibility(t) {
   const isJuno      = t.engineKey === "dm:juno";
   const isGuitar    = t.engineKey === "dm:guitar";
   const isBass      = t.engineKey === "dm:bass";
+  const isSub       = t.engineKey === "dm:sub";
   const isRhodes    = t.engineKey === "dm:rhodes";
   const isProphet6  = t.engineKey === "dm:prophet6";
   const isGranular  = t.engineKey === "dm:granular";
@@ -88,7 +89,7 @@ export function updatePlaitsControlsVisibility(t) {
   // its panel knobs (see buildDrumSynthNode).
   const is808 = t.engineKey.startsWith("dm:808-");
   const is909 = t.engineKey.startsWith("dm:909-");
-  const showTimbre = isPlaits || isMiniBrute || isMoog || isJuno || isGuitar || isBass || isRhodes || isProphet6 || isGranular || isWavetable || isTb303 || isVirus || isDx7 || is808 || is909;
+  const showTimbre = isPlaits || isMiniBrute || isMoog || isJuno || isGuitar || isBass || isSub || isRhodes || isProphet6 || isGranular || isWavetable || isTb303 || isVirus || isDx7 || is808 || is909;
   const group = t._timbreGroupEl || t.el.querySelector(".sq-param-group--timbre");
   if (group) {
     group.hidden = !showTimbre;
@@ -117,6 +118,8 @@ export function updatePlaitsControlsVisibility(t) {
       ? { harm: "drive",    timb: "tone",   morph: "bloom",     decay: "sustain" }
       : isBass
       ? { harm: "drive",    timb: "tone",   morph: "comp",      decay: "sustain" }
+      : isSub
+      ? { harm: "drive",    timb: "tone",   morph: "shape",     decay: "decay" }
       : isRhodes
       ? { harm: "tine",     timb: "bite",   morph: "chorus",    decay: "decay" }
       : isProphet6
@@ -185,6 +188,13 @@ export function updatePlaitsControlsVisibility(t) {
           morph: "the rig compressor, threshold and makeup on one control. A bass part sitting perfectly still under everything else is this doing that, and it is as much the sound as the amp is — which is why it gets a slider rather than a corner of the panel",
           decay: "how long a string rings. Bass strings are heavy and lose very little per trip round the loop, so even the middle of this slider rings for seconds — the left hand, not the string, is what usually stops a bass note",
         }
+      : isSub
+      ? {
+          harm: "how much harmonic content is generated from the note and mixed in above the crossover. This is the whole instrument: a 40Hz sine is literally silent on a phone and most laptops, and what makes a sub bass audible on them is not level but HARMONICS — the ear rebuilds a fundamental it cannot hear from the ones it can. Wound up, the harmonics are louder than the note itself. The shaping is parallel and highpassed, so the clean low end never gets intermodulated the way it would if the whole signal were distorted",
+          timb: "the lid on those harmonics, 300Hz to 9kHz — it filters ONLY the shaped path, never the sub underneath. Low is a warm note that just about reads on a laptop; high is an aggressive one that cuts through a car stereo",
+          morph: "the oscillator, morphed continuously from sine through triangle and saw to square. Down here this matters more than anywhere else on the instrument: a sine has no harmonics of its own to reconstruct the fundamental from and needs the drive to make any, while a square arrives with too many and turns to mud",
+          decay: "how long the note rings, from 30ms to about eight seconds. It runs whether or not the step is still held — that is what an 808 does, and it is why an 808 line rings over the bar line. The release only ever shortens it",
+        }
       : isVirus
       ? {
           harm: "cutoff for both filters — filter 2 sits at whatever offset its own cut 2 slider sets. Tracks the keyboard at a third of an octave per octave",
@@ -234,7 +244,7 @@ export function updatePlaitsControlsVisibility(t) {
     // Randomize button only makes sense for Plaits' generic harm/timb/morph/decay —
     // hide it for the analog engines where those sliders do engine-specific things.
     const randBtn = group.querySelector(".track-rand");
-    if (randBtn) randBtn.hidden = isMiniBrute || isMoog || isJuno || isGuitar || isBass || isRhodes || isProphet6 || isGranular || isWavetable || isTb303 || isVirus || isDx7 || is808 || is909;
+    if (randBtn) randBtn.hidden = isMiniBrute || isMoog || isJuno || isGuitar || isBass || isSub || isRhodes || isProphet6 || isGranular || isWavetable || isTb303 || isVirus || isDx7 || is808 || is909;
   }
   // Per-oscillator volume sliders: only shown for the analog mono engines.
   const oscGroup = t._oscMixGroupEl || t.el.querySelector(".sq-param-group--osc-mix");
@@ -295,6 +305,10 @@ export function updatePlaitsControlsVisibility(t) {
   // The bass's rig: the right hand, the parallel dirt, and the amp under it.
   const bassGroup = t._bassGroupEl || t.el.querySelector(".sq-param-group--bass");
   if (bassGroup) bassGroup.hidden = !isBass;
+  // The sub bass's oscillator, its pitch drop, the harmonics path that makes it
+  // audible on something small, and the output stage that keeps it safe.
+  const subGroup = t._subGroupEl || t.el.querySelector(".sq-param-group--sub");
+  if (subGroup) subGroup.hidden = !isSub;
   // Granular grain-engine group (play mode / window / jitter / detune / pan / …).
   const granGroup = t._granGroupEl || t.el.querySelector(".sq-param-group--granular");
   if (granGroup) granGroup.hidden = !isGranular;

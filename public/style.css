@@ -291,6 +291,7 @@ input[type="range"] { accent-color: var(--accent); }
 .sq-dx7__f[data-knob],
 .sq-guitar__f[data-knob],
 .sq-bass__f[data-knob],
+.sq-sub__f[data-knob],
 .sq-moog__freq[data-knob],
 .sq-moog__noise[data-knob] {
   flex-direction: column;
@@ -303,6 +304,7 @@ input[type="range"] { accent-color: var(--accent); }
 .sq-virus__f[data-knob] > span,
 .sq-guitar__f[data-knob] > span,
 .sq-bass__f[data-knob] > span,
+.sq-sub__f[data-knob] > span,
 .sq-moog__freq[data-knob] > span,
 .sq-moog__noise[data-knob] > span {
   font-size: 10px;
@@ -756,6 +758,14 @@ main {
 .sq-param-group--bass .sq-bass__f .sq-knob { --knob-size: 34px; }
 .sq-param-group--bass select { padding: 2px 6px; font-size: 11px; }
 .sq-param-group--bass .sq-bass__desc { color: var(--fg-dim); font-size: 11px; opacity: 0.85; flex: 1 1 220px; min-width: 0; }
+.sq-param-group--sub { border-color: color-mix(in oklab, #6a7fbf 45%, var(--border)); flex-direction: column; align-items: stretch; gap: 4px; }
+.sq-param-group--sub[hidden] { display: none !important; }
+.sq-param-group--sub .sq-sub__row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 11px; }
+.sq-param-group--sub .sq-sub__lbl { color: var(--fg-dim); min-width: 44px; }
+.sq-param-group--sub .sq-sub__f { display: inline-flex; align-items: center; gap: 4px; color: var(--fg-dim); }
+.sq-param-group--sub .sq-sub__f .sq-knob { --knob-size: 34px; }
+.sq-param-group--sub select { padding: 2px 6px; font-size: 11px; }
+.sq-param-group--sub .sq-sub__desc { color: var(--fg-dim); font-size: 11px; opacity: 0.85; flex: 1 1 220px; min-width: 0; }
 .sq-param-group--tb303 { border-color: color-mix(in oklab, #ff7a4d 45%, var(--border)); }
 .sq-param-group--tb303[hidden] { display: none !important; }
 .sq-param-group--tb303 select { padding: 2px 6px; font-size: 11px; }
@@ -1988,8 +1998,9 @@ body.kbd-recording .sq-track.is-kbd-active { border-color: #e5484d; box-shadow: 
 .sq-virus__f[data-motion] > span:not(.sq-knob)::after,
 .sq-guitar__f[data-motion] > span:not(.sq-knob)::after,
 .sq-bass__f[data-motion] > span:not(.sq-knob)::after,
+.sq-sub__f[data-motion] > span:not(.sq-knob)::after,
 .sq-dx7__f[data-motion]::after,
-label[data-motion]:not(.sq-fx__ctl):not(.sq-virus__f):not(.sq-guitar__f):not(.sq-bass__f):not(.sq-dx7__f)::before {
+label[data-motion]:not(.sq-fx__ctl):not(.sq-virus__f):not(.sq-guitar__f):not(.sq-bass__f):not(.sq-sub__f):not(.sq-dx7__f)::before {
   content: "";
   display: inline-block;
   width: 5px; height: 5px;
@@ -1998,7 +2009,7 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-virus__f):not(.sq-guitar__f):not(.sq
   vertical-align: middle;
   margin: 0 0 1px 5px;
 }
-label[data-motion]:not(.sq-fx__ctl):not(.sq-virus__f):not(.sq-guitar__f):not(.sq-bass__f):not(.sq-dx7__f)::before { margin: 0 5px 1px 0; }
+label[data-motion]:not(.sq-fx__ctl):not(.sq-virus__f):not(.sq-guitar__f):not(.sq-bass__f):not(.sq-sub__f):not(.sq-dx7__f)::before { margin: 0 5px 1px 0; }
 /* The dx7's operator cells have no label text of their own (the column heading
    names them), so the dot goes after the slider rather than beside a word. */
 .sq-dx7__f[data-motion]::after { flex: 0 0 auto; margin: 0 0 0 3px; }
@@ -2006,7 +2017,8 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-virus__f):not(.sq-guitar__f):not(.sq
 .sq-fx__ctl[data-motion="off"] > span:not(.sq-knob),
 .sq-virus__f[data-motion="off"] > span:not(.sq-knob),
 .sq-guitar__f[data-motion="off"] > span:not(.sq-knob),
-.sq-bass__f[data-motion="off"] > span:not(.sq-knob) { opacity: 0.8; }
+.sq-bass__f[data-motion="off"] > span:not(.sq-knob),
+.sq-sub__f[data-motion="off"] > span:not(.sq-knob) { opacity: 0.8; }
 
 /* Right-click a parameter → what is modulating / automating that one control. */
 .sq-pmenu__modal { width: min(96vw, 900px); max-width: 96vw; gap: 10px; }
