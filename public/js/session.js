@@ -651,6 +651,64 @@ export function applySet(s) {
   return { version: check.version, warnings: check.warnings };
 }
 
+// ---- a new session -----------------------------------------------------
+
+// The six tracks a first-time visitor gets. Exported because two places have to
+// agree on what "blank" means: main.js builds them at boot, and newSet() below
+// rebuilds them when you ask for a new song.
+export const STARTER_TRACKS = [
+  { name: "kick",   engineKey: "dm:808-kick" },
+  { name: "snare",  engineKey: "dm:808-snare" },
+  { name: "hat",    engineKey: "dm:909-chat" },
+  { name: "accent", engineKey: "plaits:12" },
+  { name: "bass",   engineKey: "dm:silverbox" },
+  { name: "lead",   engineKey: "plaits:0" },
+];
+
+/** Is there anything written in this session? Drives the confirm below. */
+function sessionHasNotes() {
+  return state.tracks.some(t => (t.patterns || []).some(p => p?.steps?.some(Boolean)));
+}
+
+/**
+ * Blank the session — back to the starter tracks with nothing written on them.
+ *
+ * Routed through applySet rather than tearing down on its own, deliberately:
+ * applySet writes every global a song can touch (bpm, swing, scale, the pattern
+ * meters / repeats, chain mode, the macro pads) whether the blob carries them or
+ * not, so what comes out really is blank, and a field a song learns to store
+ * later cannot be left behind here. The three the blob spells out are the ones
+ * applySet writes only when they are present.
+ */
+export function newSet() {
+  applySet({
+    _version: SET_VERSION,
+    bpm: 110,
+    swing: 0,
+    scale: { active: false, root: 0, mode: "minor" },
+    tracks: STARTER_TRACKS.map(t => ({ ...t })),
+  });
+  state.currentSetName = null;
+  setStatus("new session");
+  // The React shell keeps its own answer to "which cloud song is open", and
+  // after this nothing is. Announced from here rather than left to each caller
+  // so the engine's logo and the shell's button can't disagree about it.
+  try { window.dispatchEvent(new CustomEvent("seqbaby:newset")); } catch {}
+}
+
+/**
+ * The UI flow around newSet: there is no undo in this app, so anything written
+ * is confirmed before it goes. A session with no steps in it has nothing to
+ * lose and skips the prompt — clicking the logo on a freshly-loaded page should
+ * not ask.
+ */
+export function onNewSet() {
+  if (sessionHasNotes() &&
+      !window.confirm("Start a new song? Anything unsaved in this session will be lost."))
+    return;
+  newSet();
+}
+
 // ---- track patches -----------------------------------------------------
 // A "patch" is a track's whole SOUND (engine + params + filter/eq/comp/fx/lfo +
 // any embedded audio), independent of its pattern/steps and track-level state
