@@ -125,7 +125,9 @@ env / fx / eq / comp / mod / automation per track.
   stiffer, with a parallel dirt path, a rig compressor and an octaver.
 - `subbass.js` — **subby**, the sub bass: a monophonic synth for the bottom two
   octaves, whose defining part is the parallel harmonics path that makes a 40Hz
-  note audible on a speaker that cannot reproduce 40Hz. See the subby section.
+  note audible on a speaker that cannot reproduce 40Hz, plus a 303 resonator
+  band-split above the crossover so the acid never reaches the fundamental. See
+  the subby section.
 - `hexop.js` — the hexop, same shape again, plus the 32-algorithm
   table, the panel's generated key lists and the preset voices. See the hexop
   section below.
@@ -540,9 +542,9 @@ has four problems no general-purpose engine solves, and each one is a feature:
                 v
 OSC x stack ----+--> clean (the actual sub, kept clean) ------+
 (shape morph,   |                                             |
- detuned)       +--> SHAPER -> HPF(xover) -> LPF(tone) -------+--> GLUE -> CEILING
-                |    (the harmonics that make it audible)     |
-SUB OCT --------+---------------------------------------------+
+ detuned)       +--> SHAPER -> HPF(xover) -> LPF(tone) -------+--> [split at xover] -> GLUE -> CEILING
+                |    (the harmonics that make it audible)     |     below: straight past
+SUB OCT --------+---------------------------------------------+     above: RESONATOR
 ```
 
 - **Most listeners cannot hear it.** A phone speaker starts around 500Hz and a
@@ -572,6 +574,24 @@ SUB OCT --------+---------------------------------------------+
   shaper and at the output, a rumble filter (`hpf`), and a ceiling that stays
   **linear until 75% of the limit** — a curve that bent everywhere put harmonics
   on the one patch whose point is having none.
+- **The 303 resonator is a band split, not a stage in the chain.** The
+  silverbox's filter — 3-pole diode ladder, 18dB/oct, diode-clipped feedback,
+  2x oversampled — with its own MEG (`renv` / `rdec`) and its own accent RC
+  whose time constant tracks resonance, so consecutive hard-hit steps stack
+  into a climb instead of each being an isolated blip (velocity above 0.6,
+  same ramp as the silverbox's). It hangs behind a highpass at **the same
+  `xover`** the harmonics path uses, and the low band is taken as the
+  *complement* of that highpass (`sig - hi`) so the two always sum: below the
+  crossover the sub goes past untouched, above it everything goes through the
+  ladder. Measured, the fundamental moves under 0.4dB across the whole cutoff
+  range while 2-6kHz drops 13dB.
+  The obvious wrong version is putting it inside the harmonics path, and it
+  looks right until you morph the shape towards saw: the clean path is the RAW
+  oscillator, full range, so its harmonics run straight past a filter buried in
+  the shaped branch — measured, that cut 3.2kHz by 0.3dB where it should have
+  cut 30. `reso` 0 bypasses the whole stage (and resets its state), so every
+  patch written before it exists is unchanged and a sub that isn't acid costs
+  nothing.
 - **The pitch drop is the attack transient.** It's why an 808 has a beater sound
   at all when it is otherwise a sine. `drop` spans 40 semitones and lands exactly
   on the note; `click` adds the band of noise that is often the only part of the
