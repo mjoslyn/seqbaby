@@ -88,13 +88,22 @@ function schedulePaint(input) {
 function paintNow(input) {
   const k = input._knob;
   if (!k) return;
-  const { wrap, min, max } = k;
+  const { wrap, dial, min, max } = k;
   const span = max - min;
   const v = span > 0 ? clamp((Number(input.value) - min) / span, 0, 1) : 0;
-  wrap.style.setProperty("--knob-v", String(v));
+  const a = angleOf(v);
   // 270° of sweep starting at 7 o'clock, so the dead zone sits at the bottom
   // where a rack of knobs has nothing to say anyway.
-  wrap.style.setProperty("--knob-a", angleOf(v));
+  wrap.style.setProperty("--knob-v", String(v));
+  wrap.style.setProperty("--knob-a", a);
+  // Written to the dial as well as the wrapper, which is not redundant on
+  // WebKit: the arc is a stop in the dial's own background and the pointer is
+  // the dial's ::after, and an inherited custom property changing on an
+  // ancestor is the case Safari misses — the value moved, the dial did not.
+  // The wrapper keeps them because they are the documented handle a different
+  // knob skin styles from (see the KNOBS block in style.css).
+  dial.style.setProperty("--knob-v", String(v));
+  dial.style.setProperty("--knob-a", a);
 }
 
 /** The angle a 0..1 value sits at: 270° of sweep starting at 7 o'clock. */
@@ -362,7 +371,7 @@ function upgradeOne(input) {
   wrap.appendChild(input);
   input.dataset.knob = "1";
 
-  input._knob = { wrap, min, max, step, decimals: decimalsOf(input.step || "1"),
+  input._knob = { wrap, dial, min, max, step, decimals: decimalsOf(input.step || "1"),
                   longPressId: null, lastTapAt: 0, lastTapMoved: false, motionQ: null };
 
   // The field wrapper is what the mod/aut dot and the parameter menu look at,
