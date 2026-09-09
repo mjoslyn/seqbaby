@@ -1620,6 +1620,13 @@ body.kbd-recording .sq-track.is-kbd-active { border-color: #e5484d; box-shadow: 
   color: var(--fg);
   font-size: 13px;
 }
+/* The message under a confirm dialog's title — the title asks, this says what
+   it costs, so it reads as body text rather than a second question. */
+.sq-modal__body {
+  color: var(--fg-dim);
+  font-size: 12px;
+  line-height: 1.5;
+}
 .sq-modal__input {
   width: 100%;
   font: inherit;

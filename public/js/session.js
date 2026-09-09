@@ -2,7 +2,7 @@ import { AUTOMATION_TARGETS } from "./automation.js";
 import { loadBuffer, normalizeAudioBuffer } from "./buffers.js";
 import { GRANULAR_SAMPLE_BASE } from "./catalog.js";
 import { PATTERN_COUNT } from "./constants.js";
-import { showInputDialog, showSelectDialog } from "./dialogs.js";
+import { showConfirmDialog, showInputDialog, showSelectDialog } from "./dialogs.js";
 import { setStatus } from "./dom.js";
 import { ICON_CHAIN, ICON_FINISH, ICON_NOW, ICON_REPEAT } from "./icons.js";
 import { applySampleSpeed, defaultLFOConfig, disposeLFOs, syncAllLFOs } from "./lfo.js";
@@ -702,10 +702,12 @@ export function newSet() {
  * lose and skips the prompt — clicking the logo on a freshly-loaded page should
  * not ask.
  */
-export function onNewSet() {
-  if (sessionHasNotes() &&
-      !window.confirm("Start a new song? Anything unsaved in this session will be lost."))
-    return;
+export async function onNewSet() {
+  if (sessionHasNotes() && !await showConfirmDialog({
+    title: "start a new song?",
+    body: "This session goes back to empty tracks. Anything you have not saved or shared is lost — there is no undo.",
+    confirmLabel: "new song",
+  })) return;
   newSet();
 }
 

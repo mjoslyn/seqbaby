@@ -35,7 +35,7 @@ export default function NewSongButton() {
         if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
         if (!window.seqbaby?.onNewSet) return; // engine not up: let the link navigate
         e.preventDefault();
-        window.seqbaby.onNewSet();
+        void window.seqbaby.onNewSet();
       }}
     >
       new
