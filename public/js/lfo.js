@@ -191,6 +191,8 @@ export function getModTarget(t, key) {
   // the voice, and an AudioParam on its worklet node.
   if (key.startsWith("gtr_")) return t.voice?.getAudioParam?.("gt" + key.slice(4)) ?? null;
   if (key.startsWith("bas_")) return t.voice?.getAudioParam?.("bs" + key.slice(4)) ?? null;
+  // Subby: same again — sub_xover is the crossover, subxover on the voice.
+  if (key.startsWith("sub_")) return t.voice?.getAudioParam?.("sub" + key.slice(4)) ?? null;
   if (key === "cutoff") return t.filterNode?.frequency ?? null;
   if (key === "reson")  return t.filterNode?.Q ?? null;
   const rack = t.fxRack;
@@ -643,6 +645,8 @@ export function canModulate(t, key) {
   if (key.startsWith("gtr_")) return t.engineKey === "dm:guitar";
   // The bass rig's right hand, dirt and amp — bass only.
   if (key.startsWith("bas_")) return t.engineKey === "dm:bass";
+  // Subby's oscillator, drop, harmonics and output stage — subby only.
+  if (key.startsWith("sub_")) return t.engineKey === "dm:sub";
   const eng = engineByKey(t.engineKey);
   if (!eng) return false;
   // Plaits exposes harm/timb/morph/decay as voice params.
@@ -663,6 +667,9 @@ export function canModulate(t, key) {
     // and tone are AudioParams the whole instrument follows.
     case "dm:guitar":     return ["harm", "timb", "morph", "decay"].includes(key);
     case "dm:bass":       return ["harm", "timb", "morph", "decay"].includes(key);
+    // One node, one voice, so the LFO moves the whole instrument. Putting one
+    // on DRIVE is a wobble, because drive is what makes the note audible.
+    case "dm:sub":   return ["harm", "timb", "morph", "decay"].includes(key);
     case "dm:snarl": return ["harm", "osc1", "osc2", "osc3", "osc4", "ultra", "fm"].includes(key);
     case "dm:ladder":       return ["harm", "osc1", "osc2", "osc3", "noise"].includes(key);
     case "dm:drift":       return ["harm", "osc1", "osc2", "osc3", "noise"].includes(key);

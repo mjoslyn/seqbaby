@@ -217,6 +217,10 @@ export const ANALOG_ENGINES = [
   { key: "dm:drift",     label: "drift",           defaultNote: 60, poly: true, melodic: true },
   { key: "dm:guitar",    label: "electric guitar", defaultNote: 52, poly: true, melodic: true },
   { key: "dm:bass",      label: "electric bass",   defaultNote: 40, poly: true, melodic: true },
+  // Monophonic on purpose: two notes at 40Hz beat against each other at a rate
+  // you feel as lumpiness rather than hear as harmony. Worklet-internal, one
+  // voice (subbass.js).
+  { key: "dm:sub",       label: "subby",           defaultNote: 28, poly: false, melodic: true },
   { key: "dm:tines",     label: "tines",           defaultNote: 60, poly: true, melodic: true },
   { key: "dm:oracle",    label: "oracle",          defaultNote: 60, poly: true, melodic: true },
 ].map(e => ({ ...e, group: "Emulators", type: "drum-synth", poly: e.poly ?? false, melodic: e.melodic ?? false }));

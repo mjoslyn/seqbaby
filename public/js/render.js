@@ -6,6 +6,7 @@ import { showInputDialog, showSavedPatchPicker } from "./dialogs.js";
 import { setStatus } from "./dom.js";
 import { HEXOP_ALG_LABELS, HEXOP_DEFAULTS, HEXOP_NUM_KEYS, HEXOP_PRESET_NAMES, HEXOP_SEL_KEYS, hexopPreset } from "./hexop.js";
 import { BASS_DEFAULTS, BASS_NUM_KEYS, BASS_SEL_KEYS, BASS_TONE_NAMES, bassTone, bassToneDescription } from "./bass.js";
+import { SUB_DEFAULTS, SUB_NUM_KEYS, SUB_SEL_KEYS, SUB_TONE_NAMES, subTone, subToneDescription } from "./subbass.js";
 import { euclideanRhythm, refreshEuclidUI, renderEuclidPanel, wireEuclidPanel } from "./euclid.js";
 import { randomizeMelody, randomizeTimbre } from "./generate.js";
 import { GUITAR_DEFAULTS, GUITAR_NUM_KEYS, GUITAR_SEL_KEYS, GUITAR_TONE_NAMES, guitarTone, guitarToneDescription } from "./guitar.js";
@@ -155,7 +156,8 @@ export function syncTrackSoundUI(t) {
                    ...CONTAGION_NUM_KEYS, ...CONTAGION_SEL_KEYS,
                    ...HEXOP_NUM_KEYS, ...HEXOP_SEL_KEYS,
                    ...GUITAR_NUM_KEYS, ...GUITAR_SEL_KEYS,
-                   ...BASS_NUM_KEYS, ...BASS_SEL_KEYS]) {
+                   ...BASS_NUM_KEYS, ...BASS_SEL_KEYS,
+                   ...SUB_NUM_KEYS, ...SUB_SEL_KEYS]) {
     const el = q(`.p-${k}`);
     if (el && t.params[k] != null) el.value = t.params[k];
   }
@@ -260,6 +262,26 @@ export function syncBassPanel(t) {
   }
 }
 
+/**
+ * The same, for subby's panel — a tone loads the whole patch, so every
+ * control and the four track sliders have to be written back at once.
+ * @param {Track} t
+ */
+export function syncSubPanel(t) {
+  const root = t._subGroupEl || t.el?.querySelector(".sq-param-group--sub");
+  if (root) {
+    for (const k of [...SUB_NUM_KEYS, ...SUB_SEL_KEYS]) {
+      const el = root.querySelector(`.p-${k}`);
+      if (el && t.params[k] != null) el.value = t.params[k];
+    }
+  }
+  const timbre = t._timbreGroupEl || t.el;
+  for (const k of ["harm", "timb", "morph", "decay"]) {
+    const el = timbre?.querySelector(`.p-${k}`);
+    if (el && t.params[k] != null) el.value = t.params[k];
+  }
+}
+
 export function renderTrack(t) {
   const tpl = document.getElementById("track-template");
   const node = tpl.content.firstElementChild.cloneNode(true);
@@ -349,6 +371,20 @@ export function renderTrack(t) {
   for (const k of [...BASS_NUM_KEYS, ...BASS_SEL_KEYS]) {
     const el = node.querySelector(`.p-${k}`);
     if (el) el.value = t.params[k] ?? BASS_DEFAULTS[k];
+  }
+  const subToneSel = node.querySelector(".sq-sub__tone");
+  if (subToneSel && !subToneSel.options.length) {
+    for (const name of ["", ...SUB_TONE_NAMES]) {
+      const o = document.createElement("option");
+      o.value = name;
+      o.textContent = name || "—";
+      o.title = subToneDescription(name);
+      subToneSel.appendChild(o);
+    }
+  }
+  for (const k of [...SUB_NUM_KEYS, ...SUB_SEL_KEYS]) {
+    const el = node.querySelector(`.p-${k}`);
+    if (el) el.value = t.params[k] ?? SUB_DEFAULTS[k];
   }
   const gsyncEl = node.querySelector(".p-gsync");
   if (gsyncEl) gsyncEl.checked = t.params.gsync ?? GRAN_DEFAULTS.gsync;
@@ -480,6 +516,28 @@ export function renderTrack(t) {
       syncBassPanel(t);
       refreshParamIndicators(t);
       setStatus(`bass tone "${name}" — ${bassToneDescription(name)}`);
+    });
+  }
+  // Subby: the same three groups again.
+  for (const k of SUB_NUM_KEYS) {
+    const el = node.querySelector(`.p-${k}`);
+    if (el) el.addEventListener("input", e => setParam(t, k, Number(e.target.value)));
+  }
+  for (const k of SUB_SEL_KEYS) {
+    const el = node.querySelector(`.p-${k}`);
+    if (el) el.addEventListener("change", e => setParam(t, k, e.target.value));
+  }
+  if (subToneSel) {
+    const descEl = node.querySelector(".sq-sub__desc");
+    subToneSel.addEventListener("change", e => {
+      const name = e.target.value;
+      const tone = subTone(name);
+      if (descEl) descEl.textContent = subToneDescription(name);
+      if (!tone) return;
+      for (const [key, val] of Object.entries(tone)) setParam(t, key, val);
+      syncSubPanel(t);
+      refreshParamIndicators(t);
+      setStatus(`subby "${name}" — ${subToneDescription(name)}`);
     });
   }
   // Loading a voice writes every panel control at once — the operators, the
@@ -664,6 +722,7 @@ export function renderTrack(t) {
   t._hexopGroupEl     = node.querySelector(".sq-param-group--hexop");
   t._guitarGroupEl  = node.querySelector(".sq-param-group--guitar");
   t._bassGroupEl    = node.querySelector(".sq-param-group--bass");
+  t._subGroupEl     = node.querySelector(".sq-param-group--sub");
   t._granGroupEl    = node.querySelector(".sq-param-group--granular");
 
   // Everything above can be reparented out of the track (panels into their
@@ -675,7 +734,8 @@ export function renderTrack(t) {
                     t._euclidPanelEl,
                     t._timbreGroupEl, t._oscMixGroupEl, t._oscModGroupEl,
                     t._ladderOscGroupEl, t._silverboxGroupEl, t._contagionGroupEl,
-                    t._hexopGroupEl, t._guitarGroupEl, t._bassGroupEl, t._granGroupEl]) {
+                    t._hexopGroupEl, t._guitarGroupEl, t._bassGroupEl, t._subGroupEl,
+                    t._granGroupEl]) {
     if (el) el.dataset.trackId = String(t.id);
   }
 

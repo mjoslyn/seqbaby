@@ -6,6 +6,7 @@ import { setStatus } from "./dom.js";
 import { euclidFallbackNote, stepGateAt } from "./euclid.js";
 import { loadBassWorklet } from "./bass.js";
 import { loadHexopWorklet } from "./hexop.js";
+import { loadSubBassWorklet } from "./subbass.js";
 import { loadGuitarWorklet } from "./guitar.js";
 import { currentBpm, syncAllLFOs } from "./lfo.js";
 import { init, needsResume, primeAudioForIOS } from "./main.js";
@@ -241,7 +242,8 @@ export function loadWorklet() {
   const hexop = loadHexopWorklet(state.audioCtx).catch(e => { console.warn("hexop worklet load failed", e); });
   const guitar = loadGuitarWorklet(state.audioCtx).catch(e => { console.warn("guitar worklet load failed", e); });
   const bass = loadBassWorklet(state.audioCtx).catch(e => { console.warn("bass worklet load failed", e); });
-  return Promise.all([state.woscLoad, silverbox, contagion, hexop, guitar, bass]);
+  const sub = loadSubBassWorklet(state.audioCtx).catch(e => { console.warn("subby worklet load failed", e); });
+  return Promise.all([state.woscLoad, silverbox, contagion, hexop, guitar, bass, sub]);
 }
 
 /**

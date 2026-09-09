@@ -368,7 +368,7 @@ function upgradeOne(input) {
   // The field wrapper is what the mod/aut dot and the parameter menu look at,
   // and it now has to stack the label under a square control rather than beside
   // a wide one. Flagging it here keeps that CSS off any slider left unupgraded.
-  input.closest(".sq-field, .sq-fx__ctl, .sq-contagion__f, .sq-hexop__f, .sq-guitar__f, .sq-bass__f, .sq-ladder__freq, .sq-ladder__noise, label")
+  input.closest(".sq-field, .sq-fx__ctl, .sq-contagion__f, .sq-hexop__f, .sq-guitar__f, .sq-bass__f, .sq-sub__f, .sq-ladder__freq, .sq-ladder__noise, label")
     ?.setAttribute("data-knob", "");
 
   shadowValue(input);

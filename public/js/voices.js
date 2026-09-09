@@ -7,6 +7,7 @@ import { sampleHitRate } from "./lfo.js";
 import { setParam } from "./params.js";
 import { buildSilverboxVoice } from "./silverbox.js";
 import { buildBassVoice, BASS_NUM_KEYS, BASS_SEL_KEYS } from "./bass.js";
+import { buildSubBassVoice, SUB_NUM_KEYS, SUB_SEL_KEYS } from "./subbass.js";
 import { buildHexopVoice, HEXOP_NUM_KEYS, HEXOP_SEL_KEYS } from "./hexop.js";
 import { buildGuitarVoice, GUITAR_NUM_KEYS, GUITAR_SEL_KEYS } from "./guitar.js";
 import { buildContagionVoice, CONTAGION_NUM_KEYS, CONTAGION_SEL_KEYS } from "./contagion.js";
@@ -659,6 +660,25 @@ export function buildDrumSynthNode(kind, output) {
       if (v) return v;
       return makePolyPool(4, () => buildPluckBassVoice(output));
     }
+    // Subby: one monophonic voice in an AudioWorklet — see subbass.js. The
+    // fallback is a plain sine with an amp envelope: no harmonics path, so it
+    // is inaudible on a small speaker, but a track is never silent because a
+    // worklet failed to register.
+    case "sub": {
+      const v = buildSubBassVoice(output);
+      if (v) return v;
+      const s = new Tone.MonoSynth({
+        oscillator: { type: "sine" },
+        envelope: { attack: 0.005, decay: 1.2, sustain: 0.4, release: 0.4 },
+        filterEnvelope: { attack: 0, decay: 0, sustain: 1, release: 0, baseFrequency: 20000, octaves: 0 },
+      }).connect(output);
+      return {
+        nodes: [s],
+        trigger: (note, time, dur, vel) => s.triggerAttackRelease(Tone.Frequency(note, "midi"), dur, time, vel),
+        release: (time) => s.triggerRelease(time),
+        setGlide: (g) => { s.portamento = Math.max(0, Number(g) || 0); },
+      };
+    }
     case "tines":     return makePolyPool(6, () => buildTinesVoice(output));
     case "oracle":   return makePolyPool(6, () => buildOracleVoice(output));
   }
@@ -1288,7 +1308,8 @@ export class DrumSynthVoice {
                      ...CONTAGION_NUM_KEYS, ...CONTAGION_SEL_KEYS,
                      ...HEXOP_NUM_KEYS, ...HEXOP_SEL_KEYS,
                      ...GUITAR_NUM_KEYS, ...GUITAR_SEL_KEYS,
-                     ...BASS_NUM_KEYS, ...BASS_SEL_KEYS]) {
+                     ...BASS_NUM_KEYS, ...BASS_SEL_KEYS,
+                     ...SUB_NUM_KEYS, ...SUB_SEL_KEYS]) {
       if (this.params?.[k] != null) this.built.setParam(k, this.params[k]);
     }
   }

@@ -80,6 +80,7 @@ export const ENGINE_MODULES = [
   "state.js",
   "stepEditor.js",
   "stepGrid.js",
+  "subbass.js",
   "silverbox.js",
   "theory.js",
   "track.js",

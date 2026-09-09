@@ -1,6 +1,7 @@
 import { LFO_KEYS } from "./constants.js";
 import { BASS_MOD_KEYS, BASS_MOD_LABELS } from "./bass.js";
 import { HEXOP_MOD_KEYS, HEXOP_MOD_LABELS } from "./hexop.js";
+import { SUB_MOD_KEYS, SUB_MOD_LABELS } from "./subbass.js";
 import { GUITAR_MOD_KEYS, GUITAR_MOD_LABELS } from "./guitar.js";
 import { state } from "./state.js";
 
@@ -53,6 +54,8 @@ for (const k of HEXOP_MOD_KEYS) def(`p-d${k}`, `hexop_${k}`, `hexop.${k}`);
 for (const k of GUITAR_MOD_KEYS) def(`p-gt${k}`, `gtr_${k}`, `gtr.${k}`);
 // Electric bass panel — likewise.
 for (const k of BASS_MOD_KEYS) def(`p-bs${k}`, `bas_${k}`, `bas.${k}`);
+// Subby — likewise. `p-sub*`, not `p-sb*`: that is the silverbox's.
+for (const k of SUB_MOD_KEYS) def(`p-sub${k}`, `sub_${k}`, `sub.${k}`);
 // Euclid's three counts — one list, three namespaces, as in hexop.js.
 for (const k of ["pulses", "steps", "rotate"]) def(`p-euc${k}`, `euclid_${k}`, `euclid.${k}`);
 // Granular grain controls. Also reachable from the wav modal's own copies.
@@ -206,6 +209,9 @@ export const CONTROL_LABELS = {
   "p-gtpkupt": "pickup type", "p-gttremw": "tremolo shape",
   "sq-guitar__tone": "guitar tone",
   ...Object.fromEntries(BASS_MOD_KEYS.map(k => [`p-bs${k}`, BASS_MOD_LABELS[k]])),
+  ...Object.fromEntries(SUB_MOD_KEYS.map(k => [`p-sub${k}`, SUB_MOD_LABELS[k]])),
+  "p-substack": "oscillator stack", "p-subsat": "shaper",
+  "p-subglidem": "glide mode", "sq-sub__tone": "subby tone",
   "p-bsamp": "bass amp", "p-bscab": "bass cabinet",
   "p-bspkupt": "bass pickup", "p-bsstrs": "string type",
   "sq-bass__tone": "bass tone",

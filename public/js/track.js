@@ -2,6 +2,7 @@ import { PATTERN_COUNT } from "./constants.js";
 import { setStatus } from "./dom.js";
 import { HEXOP_DEFAULTS } from "./hexop.js";
 import { BASS_DEFAULTS } from "./bass.js";
+import { SUB_DEFAULTS } from "./subbass.js";
 import { defaultFxConfig } from "./fxRack.js";
 import { GUITAR_DEFAULTS } from "./guitar.js";
 import { chordSelectionFor } from "./keyboard.js";
@@ -100,6 +101,9 @@ export function createTrack({ name, engineKey, length = totalSteps() }) {
       ...GUITAR_DEFAULTS,
       // Electric bass: the same chain again, wound differently (see bass.js)
       ...BASS_DEFAULTS,
+      // Sub bass: the oscillator, the drop, and the harmonics that make a
+      // 40Hz note audible on something small (see subbass.js)
+      ...SUB_DEFAULTS,
     },
     // The sound every unlocked pattern shares; a p-locked pattern keeps its
     // own on the pattern instead (patternSound.js). Filled on the first flush.
