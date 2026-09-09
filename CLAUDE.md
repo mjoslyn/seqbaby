@@ -861,8 +861,32 @@ it; the input is still the value, the focus target and the pointer target.
   cutoff/reson, and every FX wet + sub-param; FX sub-params without an
   AudioParam handle are driven by a rAF setter loop (`SETTER_LFO_KEYS`).
   `canModulate(t, key)` gates the picker per engine. Shapes are sine /
-  triangle / saw / square and **euclid**, which is a rhythm rather than a
-  waveform — see the euclid section.
+  triangle / saw / square, **rnd square** and **euclid**. The last two aren't
+  waveforms — they hold a value for a whole step and then jump, so neither is a
+  Tone.LFO oscillator type and both take the scheduled-signal path
+  (`isSteppedShape`, `makeStepGate`, `scheduleSteppedTaps`); what differs
+  between them is only where step *n*'s value comes from, the ring or the hash.
+  See the euclid section, and:
+  - **rnd square** is sample-and-hold: a fresh random value each cycle, held
+    flat until the next. Step *n*'s value is a **hash** of (track id, target,
+    *n*) rather than a draw from a running generator, because three paths have
+    to agree on it — the taps scheduled into the graph, the rAF setter loop and
+    the needle on the knob — and a hash gives all three the same answer from
+    the step index alone, with no shared state and nothing extra in the saved
+    song. The track id is in the seed so two tracks with a random square on the
+    same parameter don't move together; ids are handed out afresh on load, so a
+    song replays with a different sequence than it was written with (a random
+    modulation that came back identical every time would be a sequence).
+  - The row's **phase** knob (`cfg.phase`, 0..1 turns, read through `lfoPhase`,
+    shown in degrees) is where in its cycle a shape starts — a quarter turn
+    between two LFOs at the same rate is a circular pan. It's applied in one
+    place for the value paths (`evalLfoShape` adds it, so the setter loop and
+    modMotion's needle get it for free), as degrees on the oscillator for a
+    Tone.LFO, and as a shift of the ring's origin for the scheduled shapes,
+    which is the only way a scheduled edge can express it. On the euclid ring
+    the cycle is one ring STEP — that's what its rate counts — so the knob
+    nudges taps off the grid where `rotate` moves whole steps.
+    Written lazily, like the euclid fields and for the same reason.
   - The row's two numbers are **amount** and **length**. Amount is the
     peak-to-peak; the **± switch** beside it (`cfg.bipolar`, `lfoBipolar`)
     decides where that hangs — half either side of the slider, or all of it
