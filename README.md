@@ -33,12 +33,12 @@ generation stays pure Web Audio.
 
 - **Real synthesis, in the browser.** Integrates a WebAssembly port of Mutable
   Instruments' *Plaits* oscillator (16 synthesis models) alongside Tone.js
-  drum/synth recipes (808/909 kits, a 303-style mono, FM bell, poly saw, pad).
+  drum/synth recipes (808/909 kits, an acid mono, FM bell, poly saw, pad).
 - **Hand-built analog emulations.** Seven mono/poly voices modeled from the
-  ground up in the Web Audio graph — MiniBrute, Minimoog, Juno-60, electric
-  guitar, electric bass, Rhodes, and Prophet-6 — each with period-appropriate
-  quirks (Brute Factor distortion, 3-oscillator Moog tuning with octave/range
-  selects, the Juno's baked-in chorus, Karplus-Strong plucked strings).
+  ground up in the Web Audio graph — *snarl*, *ladder*, *drift*, electric
+  guitar, electric bass, *tines*, and *oracle* — each with period-appropriate
+  quirks (a growl soft-clip, 3-oscillator tuning with octave/range selects,
+  the drift's baked-in chorus, Karplus-Strong plucked strings).
 - **Wavetable, granular, and sampler engines.** An AKWF wavetable engine with an
   in-app wavetable editor, a granular "texture" engine, and a unified sampler
   that plays bundled drum kits or your own uploads (persisted with the session),

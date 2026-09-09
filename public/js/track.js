@@ -1,6 +1,6 @@
 import { PATTERN_COUNT } from "./constants.js";
 import { setStatus } from "./dom.js";
-import { DX7_DEFAULTS } from "./dx7.js";
+import { HEXOP_DEFAULTS } from "./hexop.js";
 import { BASS_DEFAULTS } from "./bass.js";
 import { SUB_DEFAULTS } from "./subbass.js";
 import { defaultFxConfig } from "./fxRack.js";
@@ -19,7 +19,7 @@ import { aliasPattern, clonePattern, emptyPattern, state } from "./state.js";
 import { renderStepGrid } from "./stepGrid.js";
 import { SCALES, midiToScaleIndex, scaleIndexToMidi } from "./theory.js";
 import { requestMidiIfNeeded } from "./transport.js";
-import { VIRUS_DEFAULTS } from "./virus.js";
+import { CONTAGION_DEFAULTS } from "./contagion.js";
 import { buildVoiceForEngine } from "./voices.js";
 
 
@@ -86,17 +86,17 @@ export function createTrack({ name, engineKey, length = totalSteps() }) {
       vol: 0.8, harm: 0.5, timb: 0.5, morph: 0.5, decay: 0.4,
       osc1: 0.55, osc2: 0.45, osc3: 0.35, osc4: 0.4,
       ultra: 0.35, fm: 0, metal: 0,
-      // Moog osc-bank params
+      // Ladder osc-bank params
       osc1wave: "sawtooth", osc2wave: "sawtooth", osc3wave: "triangle",
       osc1range: 0, osc2range: 0, osc3range: -1,
       osc2freq: 0, osc3freq: 0,
       noise: 0, noisetype: "white",
-      // TB-303 panel controls that don't fit the four timbre sliders
-      wave303: "saw", accent303: 0.6, tune303: 0,
-      // Access Virus panel (see virus.js)
-      ...VIRUS_DEFAULTS,
-      // DX7 operator matrix + globals (see dx7.js)
-      ...DX7_DEFAULTS,
+      // Silverbox panel controls that don't fit the four timbre sliders
+      sbwave: "saw", sbaccent: 0.6, sbtune: 0,
+      // Contagion panel (see contagion.js)
+      ...CONTAGION_DEFAULTS,
+      // Hexop operator matrix + globals (see hexop.js)
+      ...HEXOP_DEFAULTS,
       // Electric guitar: string, pickup, amp, cab (see guitar.js)
       ...GUITAR_DEFAULTS,
       // Electric bass: the same chain again, wound differently (see bass.js)

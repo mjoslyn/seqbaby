@@ -16,7 +16,7 @@ import { state } from "./state.js";
 // paramTargets.js, along with the rule that only one of the two can own a
 // parameter at a time.
 
-// What the control is called on screen — the engine relabels these (the 303's
+// What the control is called on screen — the engine relabels these (the silverbox's
 // "harm" slider says cutoff), so read the DOM rather than the key.
 function controlLabel(el, fallback) {
   for (const cls of el.classList) {
@@ -25,14 +25,14 @@ function controlLabel(el, fallback) {
   const parts = [];
   const title = el.closest(".sq-fx__row")?.querySelector(".sq-fx__title")?.textContent?.trim();
   if (title) parts.push(title);
-  const field = el.closest(".sq-field, .sq-fx__ctl, .sq-virus__f, .sq-dx7__f, label");
+  const field = el.closest(".sq-field, .sq-fx__ctl, .sq-contagion__f, .sq-hexop__f, label");
   const own = (field?.querySelector("label, span")?.textContent || field?.textContent || "").trim();
   if (own) parts.push(own);
   return parts.join(" · ") || fallback;
 }
 
 // What the parameter itself does. A line written for this control wins; then
-// the markup's tooltip, which for the 303 / Virus / 808 sliders is rewritten
+// the markup's tooltip, which for the silverbox / contagion / 808 sliders is rewritten
 // per engine by updatePlaitsControlsVisibility and says it better than anything
 // generic could; then the line for the target it drives.
 function describe(el, spec) {
@@ -41,7 +41,7 @@ function describe(el, spec) {
   }
   const own = el.title?.trim();
   if (own) return own;
-  const field = el.closest(".sq-field, .sq-fx__ctl, .sq-virus__f, .sq-dx7__f, label");
+  const field = el.closest(".sq-field, .sq-fx__ctl, .sq-contagion__f, .sq-hexop__f, label");
   const inherited = field?.title?.trim();
   if (inherited) return inherited;
   return PARAM_DESCRIPTIONS[spec.auto] || PARAM_DESCRIPTIONS[spec.lfo] || "";

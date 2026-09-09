@@ -1,5 +1,5 @@
 import { ENGINE_MACRO_TIPS, PLAITS_MACRO_TIPS, engineByKey } from "./catalog.js";
-import { DX7_ALG_FEEDBACK, DX7_ALG_LABELS, dx7Carriers } from "./dx7.js";
+import { HEXOP_ALG_FEEDBACK, HEXOP_ALG_LABELS, hexopCarriers } from "./hexop.js";
 import { applySampleSpeed, disposeLFOs, syncAllLFOs } from "./lfo.js";
 import { redetectDrumKit } from "./meter.js";
 import { applyBusMute, refreshFxPanelUI, updateMidiUI } from "./render.js";
@@ -24,32 +24,32 @@ export function updateGranularSpeedEnabled(t) {
   if (modalEl) modalEl.disabled = !moving;
 }
 /**
- * Redraw the dx7 panel's algorithm readout: the chain diagram beside the
+ * Redraw the hexop panel's algorithm readout: the chain diagram beside the
  * dropdown, which operators are carriers (the ones you actually hear), and
  * which one the feedback loop runs through. Programming FM is guesswork until
  * you know those two things, and the algorithm's number alone doesn't say.
  * @param {Track} t
  */
-export function refreshDx7Algorithm(t) {
-  const root = t._dx7GroupEl || t.el?.querySelector(".sq-param-group--dx7");
+export function refreshHexopAlgorithm(t) {
+  const root = t._hexopGroupEl || t.el?.querySelector(".sq-param-group--hexop");
   if (!root) return;
   const n = Math.max(1, Math.min(32, Number(t.params.dalg) || 1));
-  const fb = DX7_ALG_FEEDBACK[n - 1] ?? "6";
-  const car = dx7Carriers(n);
-  const out = root.querySelector(".sq-dx7__alg");
+  const fb = HEXOP_ALG_FEEDBACK[n - 1] ?? "6";
+  const car = hexopCarriers(n);
+  const out = root.querySelector(".sq-hexop__alg");
   if (out) {
     // The dropdown already shows the diagram, so say the thing it doesn't:
     // which operators you actually hear, and where the feedback is wired.
     out.textContent = `carrier${car.length > 1 ? "s" : ""} ${car.join(" ")}`;
     const tail = document.createElement("span");
-    tail.className = "sq-dx7__alg-fb";
+    tail.className = "sq-hexop__alg-fb";
     tail.textContent = ` · feedback ${fb}`;
     out.appendChild(tail);
     out.title = `operators ${car.join(", ")} go straight to the output — those are the ones you hear, and their levels are volume. Every other operator is a modulator: its level is how hard it bends the one below it. Feedback runs through operator ${fb.replace("→", " into ")}`;
   }
   const carriers = new Set(car);
   const fbOp = Number(fb.split("→")[0]);
-  for (const row of root.querySelectorAll(".sq-dx7__oprow")) {
+  for (const row of root.querySelectorAll(".sq-hexop__oprow")) {
     const op = Number(row.dataset.op);
     row.classList.toggle("is-carrier", carriers.has(op));
     row.classList.toggle("is-feedback", op === fbOp);
@@ -70,26 +70,26 @@ export function updatePlaitsControlsVisibility(t) {
   const eng = engineByKey(t.engineKey);
   const engineType = eng?.type;
   const isPlaits = engineType === "plaits";
-  // The analog mono engines (mini-brute, moog) reuse the harm/timb/morph/decay
+  // The analog mono engines (snarl, ladder) reuse the harm/timb/morph/decay
   // sliders for their own params, so keep the timbre group visible for them too.
-  const isMiniBrute = t.engineKey === "dm:mini-brute";
-  const isMoog      = t.engineKey === "dm:moog";
-  const isJuno      = t.engineKey === "dm:juno";
+  const isSnarl = t.engineKey === "dm:snarl";
+  const isLadder      = t.engineKey === "dm:ladder";
+  const isDrift      = t.engineKey === "dm:drift";
   const isGuitar    = t.engineKey === "dm:guitar";
   const isBass      = t.engineKey === "dm:bass";
   const isSub       = t.engineKey === "dm:sub";
-  const isRhodes    = t.engineKey === "dm:rhodes";
-  const isProphet6  = t.engineKey === "dm:prophet6";
+  const isTines    = t.engineKey === "dm:tines";
+  const isOracle  = t.engineKey === "dm:oracle";
   const isGranular  = t.engineKey === "dm:granular";
   const isWavetable = t.engineKey === "wt:akwf";
-  const isTb303     = t.engineKey === "dm:303";
-  const isVirus     = t.engineKey === "dm:virus";
-  const isDx7       = t.engineKey === "dm:dx7";
+  const isSilverbox     = t.engineKey === "dm:silverbox";
+  const isContagion     = t.engineKey === "dm:contagion";
+  const isHexop       = t.engineKey === "dm:hexop";
   // The 808 voices are modelled on the machine's circuits, so their sliders are
   // its panel knobs (see buildDrumSynthNode).
   const is808 = t.engineKey.startsWith("dm:808-");
   const is909 = t.engineKey.startsWith("dm:909-");
-  const showTimbre = isPlaits || isMiniBrute || isMoog || isJuno || isGuitar || isBass || isSub || isRhodes || isProphet6 || isGranular || isWavetable || isTb303 || isVirus || isDx7 || is808 || is909;
+  const showTimbre = isPlaits || isSnarl || isLadder || isDrift || isGuitar || isBass || isSub || isTines || isOracle || isGranular || isWavetable || isSilverbox || isContagion || isHexop || is808 || is909;
   const group = t._timbreGroupEl || t.el.querySelector(".sq-param-group--timbre");
   if (group) {
     group.hidden = !showTimbre;
@@ -108,11 +108,11 @@ export function updatePlaitsControlsVisibility(t) {
   // Relabel the timbre sliders for each analog engine so the control intent is
   // visible. null = hide the field (control isn't used by this engine).
   if (group) {
-    const labels = isMiniBrute
+    const labels = isSnarl
       ? { harm: "pwm rate", timb: "pw",     morph: null,        decay: null }
-      : isMoog
+      : isLadder
       ? { harm: "detune",   timb: null,     morph: null,        decay: "warm" }
-      : isJuno
+      : isDrift
       ? { harm: "pwm rate", timb: "pw",     morph: "chorus",    decay: "dec" }
       : isGuitar
       ? { harm: "drive",    timb: "tone",   morph: "bloom",     decay: "sustain" }
@@ -120,19 +120,19 @@ export function updatePlaitsControlsVisibility(t) {
       ? { harm: "drive",    timb: "tone",   morph: "comp",      decay: "sustain" }
       : isSub
       ? { harm: "drive",    timb: "tone",   morph: "shape",     decay: "decay" }
-      : isRhodes
+      : isTines
       ? { harm: "tine",     timb: "bite",   morph: "chorus",    decay: "decay" }
-      : isProphet6
+      : isOracle
       ? { harm: "detune",   timb: "shape",  morph: "drive",     decay: "decay" }
       : isGranular
       ? { harm: "grain",    timb: "dense",  morph: "pos",       decay: "spray" }
       : isWavetable
       ? { harm: "wave",     timb: "warm",   morph: "detune",    decay: "decay" }
-      : isTb303
+      : isSilverbox
       ? { harm: "cutoff",   timb: "reso",   morph: "env mod",   decay: "decay" }
-      : isVirus
+      : isContagion
       ? { harm: "cutoff",   timb: "reso",   morph: "shape",     decay: "decay" }
-      : isDx7
+      : isHexop
       ? { harm: "bright",   timb: "fbk",    morph: "mod dec",   decay: "decay" }
       : t.engineKey === "dm:808-kick"
       ? { harm: "tune",     timb: "tone",   morph: "drive",     decay: "decay" }
@@ -160,17 +160,17 @@ export function updatePlaitsControlsVisibility(t) {
           morph: "play position in the sample. Dragging the window in the wave editor sets this too",
           decay: "diffusion macro: widens the window, loosens the jitter and adds detune, all at once. Leave it at zero if you want a tight, in-tune cloud",
         }
-      : isTb303
+      : isSilverbox
       ? {
-          harm: "the 303's own filter — an 18dB/oct diode ladder, ahead of the track filter. It doesn't track the keyboard, so high notes really are duller than low ones",
-          timb: "resonance. The feedback costs the passband level as it climbs, so the line gets thinner and squelchier the further you push it — that thinning is why a 303 wants a distortion after it",
+          harm: "the silverbox's own filter — an 18dB/oct diode ladder, ahead of the track filter. It doesn't track the keyboard, so high notes really are duller than low ones",
+          timb: "resonance. The feedback costs the passband level as it climbs, so the line gets thinner and squelchier the further you push it — that thinning is why a silverbox wants a distortion after it",
           morph: "how much of the filter envelope reaches the cutoff",
           decay: "filter envelope decay, 200ms to 2.5s. Accented steps ignore this and use a fixed 200ms, exactly as the accent circuit does on the machine",
         }
-      : isDx7
+      : isHexop
       ? {
           harm: "every modulator's output level at once — the master modulation index, and the one control that takes an FM patch from a sine to a scream. On the machine this lives per operator (and it still does, in the panel); this rides all six together",
-          timb: "how much the feedback operator's output is fed back into its own input. It is the only thing in the machine making harmonics that isn't another operator, and wound right up it stops being a tone and turns to noise — which is where the DX7's breath and cymbals come from. Which operator carries it depends on the algorithm, and the panel says which",
+          timb: "how much the feedback operator's output is fed back into its own input. It is the only thing in the machine making harmonics that isn't another operator, and wound right up it stops being a tone and turns to noise — which is where the hexop's breath and cymbals come from. Which operator carries it depends on the algorithm, and the panel says which",
           morph: "scales every modulator's decay together: how fast the timbre falls away, independently of how fast the note does. A modulator decaying under a carrier that isn't is the whole trick behind an FM electric piano",
           decay: "scales every carrier's decay and release together — how fast the note itself falls away. The operators keep their relative shapes; this moves them as one",
         }
@@ -190,12 +190,12 @@ export function updatePlaitsControlsVisibility(t) {
         }
       : isSub
       ? {
-          harm: "how much harmonic content is generated from the note and mixed in above the crossover. This is the whole instrument: a 40Hz sine is literally silent on a phone and most laptops, and what makes a sub bass audible on them is not level but HARMONICS — the ear rebuilds a fundamental it cannot hear from the ones it can. Wound up, the harmonics are louder than the note itself. The shaping is parallel and highpassed, so the clean low end never gets intermodulated the way it would if the whole signal were distorted",
+          harm: "how much harmonic content is generated from the note and mixed in above the crossover. This is the whole instrument: a 40Hz sine is literally silent on a phone and most laptops, and what makes a sub audible on them is not level but HARMONICS — the ear rebuilds a fundamental it cannot hear from the ones it can. Wound up, the harmonics are louder than the note itself. The shaping is parallel and highpassed, so the clean low end never gets intermodulated the way it would if the whole signal were distorted",
           timb: "the lid on those harmonics, 300Hz to 9kHz — it filters ONLY the shaped path, never the sub underneath. Low is a warm note that just about reads on a laptop; high is an aggressive one that cuts through a car stereo",
           morph: "the oscillator, morphed continuously from sine through triangle and saw to square. Down here this matters more than anywhere else on the instrument: a sine has no harmonics of its own to reconstruct the fundamental from and needs the drive to make any, while a square arrives with too many and turns to mud",
           decay: "how long the note rings, from 30ms to about eight seconds. It runs whether or not the step is still held — that is what an 808 does, and it is why an 808 line rings over the bar line. The release only ever shortens it",
         }
-      : isVirus
+      : isContagion
       ? {
           harm: "cutoff for both filters — filter 2 sits at whatever offset its own cut 2 slider sets. Tracks the keyboard at a third of an octave per octave",
           timb: "resonance, shared by both filters",
@@ -244,21 +244,21 @@ export function updatePlaitsControlsVisibility(t) {
     // Randomize button only makes sense for Plaits' generic harm/timb/morph/decay —
     // hide it for the analog engines where those sliders do engine-specific things.
     const randBtn = group.querySelector(".track-rand");
-    if (randBtn) randBtn.hidden = isMiniBrute || isMoog || isJuno || isGuitar || isBass || isSub || isRhodes || isProphet6 || isGranular || isWavetable || isTb303 || isVirus || isDx7 || is808 || is909;
+    if (randBtn) randBtn.hidden = isSnarl || isLadder || isDrift || isGuitar || isBass || isSub || isTines || isOracle || isGranular || isWavetable || isSilverbox || isContagion || isHexop || is808 || is909;
   }
   // Per-oscillator volume sliders: only shown for the analog mono engines.
   const oscGroup = t._oscMixGroupEl || t.el.querySelector(".sq-param-group--osc-mix");
   if (oscGroup) {
-    const showOsc = isMiniBrute || isMoog || isJuno || isProphet6 || isVirus;
+    const showOsc = isSnarl || isLadder || isDrift || isOracle || isContagion;
     oscGroup.hidden = !showOsc;
     if (showOsc) {
-      const oscLabels = isMiniBrute
+      const oscLabels = isSnarl
         ? { osc1: "saw",  osc2: "pulse", osc3: "tri",   osc4: "sub", hide4: false }
-        : isJuno
+        : isDrift
         ? { osc1: "dco",  osc2: "sub",   osc3: "noise", osc4: "",    hide4: true }
-        : isProphet6
+        : isOracle
         ? { osc1: "vco1", osc2: "vco2",  osc3: "sub",   osc4: "noise", hide4: false }
-        : isVirus
+        : isContagion
         ? { osc1: "osc1", osc2: "osc2",  osc3: "sub",   osc4: "noise", hide4: false }
         : { osc1: "osc1", osc2: "osc2",  osc3: "osc3",  osc4: "",    hide4: true };
       const oscTips = ENGINE_MACRO_TIPS[t.engineKey]?.osc;
@@ -273,31 +273,31 @@ export function updatePlaitsControlsVisibility(t) {
       }
     }
   }
-  // Oscillator-modifier group (ultrasaw / FM / metalizer): mini-brute only for now.
+  // Oscillator-modifier group (ultrasaw / FM / metalizer): snarl only for now.
   const modGroup = t._oscModGroupEl || t.el.querySelector(".sq-param-group--osc-mod");
   if (modGroup) {
-    modGroup.hidden = !isMiniBrute;
+    modGroup.hidden = !isSnarl;
     const modTips = ENGINE_MACRO_TIPS[t.engineKey]?.oscMod;
     for (const k of ["ultra", "fm", "metal"]) {
       const field = modGroup.querySelector(`.p-${k}`)?.closest(".sq-field");
       if (field) field.title = modTips?.[k] ?? "";
     }
   }
-  // Moog osc-bank group (per-osc range + waveform + osc2/3 freq + noise).
-  const moogGroup = t._moogOscGroupEl || t.el.querySelector(".sq-param-group--moog");
-  if (moogGroup) moogGroup.hidden = !isMoog;
-  // TB-303 panel controls with no home among the four timbre sliders.
-  const tb303Group = t._tb303GroupEl || t.el.querySelector(".sq-param-group--tb303");
-  if (tb303Group) tb303Group.hidden = !isTb303;
-  // Virus oscillator / unison / filter-pair panel.
-  const virusGroup = t._virusGroupEl || t.el.querySelector(".sq-param-group--virus");
-  if (virusGroup) virusGroup.hidden = !isVirus;
-  // DX7 operator matrix. The algorithm readout has to be redrawn with it — the
+  // Ladder osc-bank group (per-osc range + waveform + osc2/3 freq + noise).
+  const ladderGroup = t._ladderOscGroupEl || t.el.querySelector(".sq-param-group--ladder");
+  if (ladderGroup) ladderGroup.hidden = !isLadder;
+  // Silverbox panel controls with no home among the four timbre sliders.
+  const silverboxGroup = t._silverboxGroupEl || t.el.querySelector(".sq-param-group--silverbox");
+  if (silverboxGroup) silverboxGroup.hidden = !isSilverbox;
+  // Contagion oscillator / unison / filter-pair panel.
+  const contagionGroup = t._contagionGroupEl || t.el.querySelector(".sq-param-group--contagion");
+  if (contagionGroup) contagionGroup.hidden = !isContagion;
+  // Hexop operator matrix. The algorithm readout has to be redrawn with it — the
   // panel is the same six rows whichever wiring they're in, so the carrier and
   // feedback markers are the only thing saying what the rows mean.
-  const dx7Group = t._dx7GroupEl || t.el.querySelector(".sq-param-group--dx7");
-  if (dx7Group) dx7Group.hidden = !isDx7;
-  if (isDx7) refreshDx7Algorithm(t);
+  const hexopGroup = t._hexopGroupEl || t.el.querySelector(".sq-param-group--hexop");
+  if (hexopGroup) hexopGroup.hidden = !isHexop;
+  if (isHexop) refreshHexopAlgorithm(t);
   // The guitar's rig: where the string is picked and read, and the amp it runs
   // into. None of it fits the four timbre sliders.
   const guitarGroup = t._guitarGroupEl || t.el.querySelector(".sq-param-group--guitar");
@@ -305,7 +305,7 @@ export function updatePlaitsControlsVisibility(t) {
   // The bass's rig: the right hand, the parallel dirt, and the amp under it.
   const bassGroup = t._bassGroupEl || t.el.querySelector(".sq-param-group--bass");
   if (bassGroup) bassGroup.hidden = !isBass;
-  // The sub bass's oscillator, its pitch drop, the harmonics path that makes it
+  // Subby's oscillator, its pitch drop, the harmonics path that makes it
   // audible on something small, and the output stage that keeps it safe.
   const subGroup = t._subGroupEl || t.el.querySelector(".sq-param-group--sub");
   if (subGroup) subGroup.hidden = !isSub;

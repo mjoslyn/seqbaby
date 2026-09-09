@@ -173,26 +173,26 @@ export function getModTarget(t, key) {
   if (["vol","harm","timb","morph","decay","osc1","osc2","osc3","osc4","ultra","fm","noise"].includes(key)) {
     return t.voice?.getAudioParam(key) ?? null;
   }
-  // 303 accent + tune: AudioParams on the worklet node, under their own keys
+  // silverbox accent + tune: AudioParams on the worklet node, under their own keys
   // (the generic list above only covers the shared slider names).
-  if (key === "tb303_accent") return t.voice?.getAudioParam?.("accent303") ?? null;
-  if (key === "tb303_tune")   return t.voice?.getAudioParam?.("tune303") ?? null;
-  // Virus panel controls: AudioParams on its worklet node, under their own keys.
+  if (key === "silverbox_accent") return t.voice?.getAudioParam?.("sbaccent") ?? null;
+  if (key === "silverbox_tune")   return t.voice?.getAudioParam?.("sbtune") ?? null;
+  // Contagion panel controls: AudioParams on its worklet node, under their own keys.
   // The saturation AMOUNT is `vsatamt` on the voice (`vsat` is the curve select
   // next to it, which isn't a param at all), so that one key needs translating.
-  if (key.startsWith("virus_")) {
+  if (key.startsWith("contagion_")) {
     const which = key.slice(6);
     return t.voice?.getAudioParam?.("v" + (which === "sat" ? "satamt" : which)) ?? null;
   }
-  // DX7: every panel control is an AudioParam on its worklet node, and the key
-  // spells the param — dx7_3lvl is operator 3's level, d3lvl on the voice.
-  if (key.startsWith("dx7_")) return t.voice?.getAudioParam?.("d" + key.slice(4)) ?? null;
+  // Hexop: every panel control is an AudioParam on its worklet node, and the key
+  // spells the param — hexop_3lvl is operator 3's level, d3lvl on the voice.
+  if (key.startsWith("hexop_")) return t.voice?.getAudioParam?.("d" + key.slice(4)) ?? null;
   // Electric guitar: same shape — gtr_bass is the amp's bass control, gtbass on
   // the voice, and an AudioParam on its worklet node.
   if (key.startsWith("gtr_")) return t.voice?.getAudioParam?.("gt" + key.slice(4)) ?? null;
   if (key.startsWith("bas_")) return t.voice?.getAudioParam?.("bs" + key.slice(4)) ?? null;
-  // Sub bass: same again — sub_xover is the crossover, sbxover on the voice.
-  if (key.startsWith("sub_")) return t.voice?.getAudioParam?.("sb" + key.slice(4)) ?? null;
+  // Subby: same again — sub_xover is the crossover, subxover on the voice.
+  if (key.startsWith("sub_")) return t.voice?.getAudioParam?.("sub" + key.slice(4)) ?? null;
   if (key === "cutoff") return t.filterNode?.frequency ?? null;
   if (key === "reson")  return t.filterNode?.Q ?? null;
   const rack = t.fxRack;
@@ -635,17 +635,17 @@ export function canModulate(t, key) {
   if (key.startsWith("euclid_")) return !!t.euclid?.on;
   // Grain controls — granular engine only.
   if (key.startsWith("gran_")) return t.engineKey === "dm:granular";
-  // Accent depth + tuning — 303 only.
-  if (key === "tb303_accent" || key === "tb303_tune") return t.engineKey === "dm:303";
-  // Virus oscillator / filter-pair controls — virus only.
-  if (key.startsWith("virus_")) return t.engineKey === "dm:virus";
-  // DX7 operator matrix + globals — dx7 only.
-  if (key.startsWith("dx7_")) return t.engineKey === "dm:dx7";
+  // Accent depth + tuning — silverbox only.
+  if (key === "silverbox_accent" || key === "silverbox_tune") return t.engineKey === "dm:silverbox";
+  // Contagion oscillator / filter-pair controls — contagion only.
+  if (key.startsWith("contagion_")) return t.engineKey === "dm:contagion";
+  // Hexop operator matrix + globals — hexop only.
+  if (key.startsWith("hexop_")) return t.engineKey === "dm:hexop";
   // The guitar rig's string / pickup / amp / cab controls — guitar only.
   if (key.startsWith("gtr_")) return t.engineKey === "dm:guitar";
   // The bass rig's right hand, dirt and amp — bass only.
   if (key.startsWith("bas_")) return t.engineKey === "dm:bass";
-  // The sub bass's oscillator, drop, harmonics and output stage — sub only.
+  // Subby's oscillator, drop, harmonics and output stage — subby only.
   if (key.startsWith("sub_")) return t.engineKey === "dm:sub";
   const eng = engineByKey(t.engineKey);
   if (!eng) return false;
@@ -654,27 +654,27 @@ export function canModulate(t, key) {
   // Emulator builders expose specific AudioParams via getAudioParam — only list
   // the keys that are actually wired (see each builder above).
   switch (t.engineKey) {
-    // The 303's four panel knobs are AudioParams on its worklet node.
-    case "dm:303":        return ["harm", "timb", "morph", "decay"].includes(key);
+    // The silverbox's four panel knobs are AudioParams on its worklet node.
+    case "dm:silverbox":        return ["harm", "timb", "morph", "decay"].includes(key);
     // Real polyphony inside the worklet, so unlike the pooled emulators the
     // whole instrument follows the LFO, not just voice 0.
-    case "dm:virus":      return ["harm", "timb", "morph", "decay", "osc1", "osc2", "osc3", "osc4", "noise"].includes(key);
+    case "dm:contagion":      return ["harm", "timb", "morph", "decay", "osc1", "osc2", "osc3", "osc4", "noise"].includes(key);
     // Same: one node, one set of params, so the LFO moves the whole instrument.
-    // The oscillator-mix sliders aren't wired — a DX7's six operators have their
+    // The oscillator-mix sliders aren't wired — a hexop's six operators have their
     // own levels in the panel, which are reachable under their own keys.
-    case "dm:dx7":        return ["harm", "timb", "morph", "decay"].includes(key);
+    case "dm:hexop":        return ["harm", "timb", "morph", "decay"].includes(key);
     // Six strings and one amp in one worklet node, so the same holds here: drive
     // and tone are AudioParams the whole instrument follows.
     case "dm:guitar":     return ["harm", "timb", "morph", "decay"].includes(key);
     case "dm:bass":       return ["harm", "timb", "morph", "decay"].includes(key);
     // One node, one voice, so the LFO moves the whole instrument. Putting one
     // on DRIVE is a wobble, because drive is what makes the note audible.
-    case "dm:sub":        return ["harm", "timb", "morph", "decay"].includes(key);
-    case "dm:mini-brute": return ["harm", "osc1", "osc2", "osc3", "osc4", "ultra", "fm"].includes(key);
-    case "dm:moog":       return ["harm", "osc1", "osc2", "osc3", "noise"].includes(key);
-    case "dm:juno":       return ["harm", "osc1", "osc2", "osc3", "noise"].includes(key);
-    case "dm:prophet6":   return ["harm", "osc1", "osc2", "osc3", "osc4", "noise"].includes(key);
-    // Rhodes has no per-voice AudioParam targets beyond vol+track fx; its
+    case "dm:sub":   return ["harm", "timb", "morph", "decay"].includes(key);
+    case "dm:snarl": return ["harm", "osc1", "osc2", "osc3", "osc4", "ultra", "fm"].includes(key);
+    case "dm:ladder":       return ["harm", "osc1", "osc2", "osc3", "noise"].includes(key);
+    case "dm:drift":       return ["harm", "osc1", "osc2", "osc3", "noise"].includes(key);
+    case "dm:oracle":   return ["harm", "osc1", "osc2", "osc3", "osc4", "noise"].includes(key);
+    // Tines has no per-voice AudioParam targets beyond vol+track fx; its
     // timbre params are still automatable via setParam (see canAutomate).
   }
   return false;

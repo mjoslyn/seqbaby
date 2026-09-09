@@ -32,9 +32,12 @@
 //                  |    (the harmonics that make it audible)     |
 //   SUB OCT -------+---------------------------------------------+
 //
-// One list, three namespaces, as in dx7.js / guitar.js / bass.js: every control
-// is `sb` + a short key, and that short key spells its LFO target (`sub_<short>`)
-// and its automation lane (`sub.<short>`).
+// One list, three namespaces, as in hexop.js / guitar.js / bass.js: every control
+// is `sub` + a short key, and that short key spells its LFO target
+// (`sub_<short>`) and its automation lane (`sub.<short>`). NOT `sb` — that
+// prefix belongs to the silverbox (sbwave / sbaccent / sbtune), and two
+// engines sharing one prefix on the same flat `t.params` is a collision
+// waiting for whichever of them gains a control the other already has.
 //
 // Worklet, not native nodes, for the usual reasons: Web Audio has no continuous
 // shape morph off one phase accumulator, no wavefolder, no sample-accurate
@@ -136,7 +139,7 @@ class SubBassProcessor extends AudioWorkletProcessor {
       // The four track sliders
       a("drive", 0.35, 0, 1), a("tone", 0.5, 0, 1), a("shape", 0, 0, 1), k("decay", 0.5, 0, 1),
       // Oscillator
-      a("sub", 0, 0, 1), k("detune", 0, 0, 1), k("phase", 0, 0, 1), k("drift", 0.06, 0, 1),
+      a("oct", 0, 0, 1), k("detune", 0, 0, 1), k("phase", 0, 0, 1), k("drift", 0.06, 0, 1),
       // Envelopes
       k("drop", 0.15, 0, 1), k("droptm", 0.2, 0, 1), k("atk", 0.02, 0, 1),
       k("rel", 0.15, 0, 1), k("click", 0.2, 0, 1),
@@ -199,7 +202,8 @@ class SubBassProcessor extends AudioWorkletProcessor {
   noteOn(ev, P) {
     const drop = P.drop, droptm = P.droptm, atk = P.atk, click = P.click, phase = P.phase;
     // In legato mode the glide only happens when a note arrives while another
-    // is still held — which is exactly the 808 slide, and how a 303 ties notes.
+    // is still held — which is exactly the 808 slide, and how the silverbox
+    // ties notes.
     const gl = ev.glide > 0 ? ev.glide : this.glideSec;
     const sliding = gl > 0 && (!this.legato || this.held);
     this.target = ev.freq;
@@ -267,7 +271,7 @@ class SubBassProcessor extends AudioWorkletProcessor {
       const at = startFrame + base;
 
       // Note events land on control-block boundaries: at most 0.33ms late,
-      // never early. Same bargain the virus and the bass strike.
+      // never early. Same bargain the contagion and the bass strike.
       if (this.allOff !== undefined && at >= this.allOff) { this.noteOff(); this.allOff = undefined; }
       while (this.queue.length && this.queue[0].at <= at + blk) {
         const ev = this.queue.shift();
@@ -286,7 +290,7 @@ class SubBassProcessor extends AudioWorkletProcessor {
       const tone   = P.tone.length   > 1 ? P.tone[i]   : P.tone[0];
       const shp    = P.shape.length  > 1 ? P.shape[i]  : P.shape[0];
       const decay  = P.decay.length  > 1 ? P.decay[i]  : P.decay[0];
-      const subL   = P.sub.length    > 1 ? P.sub[i]    : P.sub[0];
+      const subL   = P.oct.length    > 1 ? P.oct[i]    : P.oct[0];
       const detune = P.detune.length > 1 ? P.detune[i] : P.detune[0];
       const drift  = P.drift.length  > 1 ? P.drift[i]  : P.drift[0];
       const rel    = P.rel.length    > 1 ? P.rel[i]    : P.rel[0];
@@ -386,7 +390,7 @@ class SubBassProcessor extends AudioWorkletProcessor {
 
         // ---- the oscillator: one phase accumulator, four waves ----
         // Sine -> triangle -> saw -> square, all derived from the same phase so
-        // the crossfades stay coherent (the same reason virus.js does it that
+        // the crossfades stay coherent (the same reason contagion.js does it that
         // way). Down here the choice really matters: a sine has no harmonics to
         // reconstruct the fundamental from, and a square has too many.
         let osc = 0;
@@ -525,7 +529,7 @@ export function subBassReady(ctx) { return !!ctx && _ready.has(ctx); }
 
 /** Numeric panel controls: [short key, min, max, default, label]. */
 export const SUB_NUM_CTLS = [
-  ["sub",    0, 1, 0,    "sub oct"],
+  ["oct",    0, 1, 0,    "sub oct"],
   ["detune", 0, 1, 0,    "detune"],
   ["phase",  0, 1, 0,    "phase"],
   ["drift",  0, 1, 0.06, "drift"],
@@ -549,8 +553,8 @@ export const SUB_SEL_CTLS = [
 ];
 
 export const SUB_MOD_KEYS = SUB_NUM_CTLS.map(c => c[0]);
-export const SUB_NUM_KEYS = SUB_MOD_KEYS.map(k => `sb${k}`);
-export const SUB_SEL_KEYS = SUB_SEL_CTLS.map(c => `sb${c[0]}`);
+export const SUB_NUM_KEYS = SUB_MOD_KEYS.map(k => `sub${k}`);
+export const SUB_SEL_KEYS = SUB_SEL_CTLS.map(c => `sub${c[0]}`);
 
 export const SUB_MOD_RANGE = Object.fromEntries(SUB_NUM_CTLS.map(c => [c[0], [c[1], c[2]]]));
 
@@ -558,8 +562,8 @@ export const SUB_MOD_LABELS = Object.fromEntries(
   SUB_NUM_CTLS.map(([k, , , , label]) => [k, `subby ${label}`]));
 
 export const SUB_DEFAULTS = {
-  ...Object.fromEntries(SUB_NUM_CTLS.map(c => [`sb${c[0]}`, c[3]])),
-  ...Object.fromEntries(SUB_SEL_CTLS.map(c => [`sb${c[0]}`, c[1]])),
+  ...Object.fromEntries(SUB_NUM_CTLS.map(c => [`sub${c[0]}`, c[3]])),
+  ...Object.fromEntries(SUB_SEL_CTLS.map(c => [`sub${c[0]}`, c[1]])),
 };
 
 /** A 0..1 lane value in this control's own units. @param {string} k short key */
@@ -576,70 +580,70 @@ const TONES = {
   "808": {
     d: "the trap 808: a sine with a short pitch drop for the beater, a decay that rings over the bar, and just enough drive to survive a phone speaker",
     drive: 0.52, tone: 0.42, shape: 0, decay: 0.62,
-    p: { sub: 0, detune: 0, phase: 0.25, drift: 0.04, drop: 0.22, droptm: 0.16,
+    p: { oct: 0, detune: 0, phase: 0.25, drift: 0.04, drop: 0.22, droptm: 0.16,
          atk: 0.01, rel: 0.12, click: 0.22, xover: 0.34, edge: 0.4,
          hpf: 0.08, glue: 0.3, ceil: 0.85, stack: "1", sat: "tube", glidem: "legato" },
   },
   "distorted 808": {
     d: "the same 808 driven until the harmonics are louder than the fundamental — the version that still reads as bass on a laptop, because on a laptop that is all you are hearing",
     drive: 0.82, tone: 0.62, shape: 0.08, decay: 0.6,
-    p: { sub: 0, detune: 0, phase: 0.25, drift: 0.05, drop: 0.2, droptm: 0.14,
+    p: { oct: 0, detune: 0, phase: 0.25, drift: 0.05, drop: 0.2, droptm: 0.14,
          atk: 0.01, rel: 0.1, click: 0.3, xover: 0.4, edge: 0.55,
          hpf: 0.14, glue: 0.5, ceil: 0.8, stack: "1", sat: "tube", glidem: "legato" },
   },
   "pure sine": {
     d: "no harmonics at all — the reference sub. Inaudible on anything small by design: this is the one you use when something else in the mix is already carrying the note",
     drive: 0, tone: 0.3, shape: 0, decay: 0.45,
-    p: { sub: 0, detune: 0, phase: 0.25, drift: 0, drop: 0, droptm: 0.2,
+    p: { oct: 0, detune: 0, phase: 0.25, drift: 0, drop: 0, droptm: 0.2,
          atk: 0.05, rel: 0.2, click: 0, xover: 0.3, edge: 0,
          hpf: 0.06, glue: 0.15, ceil: 0.9, stack: "1", sat: "tube", glidem: "always" },
   },
   "reese": {
     d: "three detuned oscillators beating against each other and then folded — the drum-and-bass sub, where the movement is the sound and the notch sweeping through it is the rest",
     drive: 0.6, tone: 0.7, shape: 0.75, decay: 0.75,
-    p: { sub: 0.3, detune: 0.55, phase: 0, drift: 0.12, drop: 0, droptm: 0.2,
+    p: { oct: 0.3, detune: 0.55, phase: 0, drift: 0.12, drop: 0, droptm: 0.2,
          atk: 0.06, rel: 0.25, click: 0, xover: 0.28, edge: 0.2,
          hpf: 0.12, glue: 0.45, ceil: 0.82, stack: "3", sat: "fold", glidem: "always" },
   },
   "dub": {
     d: "slow in, slow out, an octave underneath and nothing above 200Hz. A note you feel arriving before you hear it",
     drive: 0.14, tone: 0.18, shape: 0.12, decay: 0.7,
-    p: { sub: 0.55, detune: 0.08, phase: 0, drift: 0.14, drop: 0, droptm: 0.2,
+    p: { oct: 0.55, detune: 0.08, phase: 0, drift: 0.14, drop: 0, droptm: 0.2,
          atk: 0.22, rel: 0.4, click: 0, xover: 0.2, edge: 0.15,
          hpf: 0.02, glue: 0.5, ceil: 0.88, stack: "2", sat: "tube", glidem: "always" },
   },
   "drill slide": {
     d: "808 with the glide on legato, so tied notes slide into each other and separate ones do not — which is the entire bassline in half of what is on the radio",
     drive: 0.58, tone: 0.5, shape: 0, decay: 0.55,
-    p: { sub: 0, detune: 0, phase: 0.25, drift: 0.05, drop: 0.12, droptm: 0.1,
+    p: { oct: 0, detune: 0, phase: 0.25, drift: 0.05, drop: 0.12, droptm: 0.1,
          atk: 0.01, rel: 0.08, click: 0.18, xover: 0.36, edge: 0.45,
          hpf: 0.1, glue: 0.38, ceil: 0.84, stack: "1", sat: "tube", glidem: "legato" },
   },
   "memphis": {
     d: "driven past the point of politeness through a fuzz, tone up, glue hard — the tape-saturated sub that sounds like it has been through a generation of dubbing",
     drive: 0.9, tone: 0.78, shape: 0.3, decay: 0.5,
-    p: { sub: 0.15, detune: 0, phase: 0.25, drift: 0.2, drop: 0.18, droptm: 0.2,
+    p: { oct: 0.15, detune: 0, phase: 0.25, drift: 0.2, drop: 0.18, droptm: 0.2,
          atk: 0.01, rel: 0.12, click: 0.35, xover: 0.3, edge: 0.7,
          hpf: 0.16, glue: 0.65, ceil: 0.72, stack: "1", sat: "fuzz", glidem: "legato" },
   },
   "house sub": {
     d: "short, tight and gone before the next kick — a clean fundamental with only enough top on it to be findable, ducking out of the way rather than filling the bar",
     drive: 0.38, tone: 0.45, shape: 0.35, decay: 0.2,
-    p: { sub: 0.1, detune: 0, phase: 0.25, drift: 0.03, drop: 0.05, droptm: 0.08,
+    p: { oct: 0.1, detune: 0, phase: 0.25, drift: 0.03, drop: 0.05, droptm: 0.08,
          atk: 0.02, rel: 0.06, click: 0.08, xover: 0.32, edge: 0.25,
          hpf: 0.18, glue: 0.3, ceil: 0.88, stack: "1", sat: "tube", glidem: "always" },
   },
   "growl": {
     d: "folded hard and wide open on top: the harmonics are the note now and the sub is only there to be felt under them. Put an LFO on edge and this is a wobble",
     drive: 0.95, tone: 0.9, shape: 0.6, decay: 0.7,
-    p: { sub: 0.4, detune: 0.3, phase: 0, drift: 0.1, drop: 0, droptm: 0.2,
+    p: { oct: 0.4, detune: 0.3, phase: 0, drift: 0.1, drop: 0, droptm: 0.2,
          atk: 0.04, rel: 0.2, click: 0, xover: 0.42, edge: 0.6,
          hpf: 0.14, glue: 0.55, ceil: 0.78, stack: "2", sat: "fold", glidem: "always" },
   },
   "cinematic drop": {
     d: "a very deep, very slow pitch fall onto the note, rectified so the octave above carries it. The trailer hit, and it needs a long step to be worth anything",
     drive: 0.5, tone: 0.35, shape: 0.05, decay: 0.85,
-    p: { sub: 0.5, detune: 0.12, phase: 0.25, drift: 0.08, drop: 0.75, droptm: 0.62,
+    p: { oct: 0.5, detune: 0.12, phase: 0.25, drift: 0.08, drop: 0.75, droptm: 0.62,
          atk: 0.03, rel: 0.5, click: 0.1, xover: 0.24, edge: 0.3,
          hpf: 0.04, glue: 0.6, ceil: 0.9, stack: "2", sat: "rect", glidem: "always" },
   },
@@ -660,7 +664,7 @@ export function subTone(name) {
   const v = TONES[name];
   if (!v) return null;
   const out = { ...SUB_DEFAULTS };
-  for (const [k, val] of Object.entries(v.p)) out[`sb${k}`] = val;
+  for (const [k, val] of Object.entries(v.p)) out[`sub${k}`] = val;
   out.harm = v.drive; out.timb = v.tone; out.morph = v.shape; out.decay = v.decay;
   return out;
 }
@@ -690,7 +694,7 @@ export function buildSubBassVoice(output) {
   node.connect(nativeIn(output));
 
   const PARAM_OF = { harm: "drive", timb: "tone", morph: "shape", decay: "decay" };
-  for (const k of SUB_MOD_KEYS) PARAM_OF[`sb${k}`] = k;
+  for (const k of SUB_MOD_KEYS) PARAM_OF[`sub${k}`] = k;
 
   const P = {};
   for (const name of Object.values(PARAM_OF)) P[name] = node.parameters.get(name);
@@ -705,9 +709,9 @@ export function buildSubBassVoice(output) {
     nodes: [{ dispose() { try { node.port.postMessage({ type: "dispose" }); } catch {} try { node.disconnect(); } catch {} } }],
     setGlide: (g) => { glide = Math.max(0, Number(g) || 0); post({ type: "set", glide }); },
     setParam: (key, val) => {
-      if (key === "sbstack")  { post({ type: "set", stack: parseInt(val, 10) || 1 }); return; }
-      if (key === "sbsat")    { post({ type: "set", sat: SAT_IDX[val] ?? 0 }); return; }
-      if (key === "sbglidem") { post({ type: "set", legato: val === "legato" }); return; }
+      if (key === "substack")  { post({ type: "set", stack: parseInt(val, 10) || 1 }); return; }
+      if (key === "subsat")    { post({ type: "set", sat: SAT_IDX[val] ?? 0 }); return; }
+      if (key === "subglidem") { post({ type: "set", legato: val === "legato" }); return; }
       const p = paramFor(key);
       if (!p) return;
       const v = Number(val);

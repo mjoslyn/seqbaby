@@ -15,7 +15,12 @@
 //   2 — the first stamped format, identical in shape to 1. The number exists so
 //     the next meaning-change has something to branch on, rather than needing
 //     another per-field marker the way granular's gspeed needed `gspeedV`.
-export const SET_VERSION = 2;
+//   3 — the eight brand-derived emulators were renamed (dm:dx7 → dm:hexop and
+//     the rest, see migrateLegacyNames below), which renames their engine keys,
+//     LFO targets and automation lanes. Nothing here branches on the number —
+//     the migration is name-driven and idempotent — but an older build reading
+//     a 3 would silently drop those engines, so the warning it raises is true.
+export const SET_VERSION = 3;
 
 /**
  * Check a serialized session before applySet() commits to it.
@@ -77,4 +82,104 @@ export function validateSet(data) {
       warnings.push(`${k} is not a number, keeping the current value`);
 
   return { ok: errors.length === 0, version, errors, warnings };
+}
+
+// ---- the emulator rename ------------------------------------------------
+//
+// The eight brand-derived emulators were renamed to names of their own:
+//
+//   dm:303 → dm:silverbox   dm:virus → dm:contagion   dm:dx7 → dm:hexop
+//   dm:mini-brute → dm:snarl   dm:moog → dm:ladder    dm:juno → dm:drift
+//   dm:rhodes → dm:tines       dm:prophet6 → dm:oracle
+//
+// A song written before that still spells them the old way, and the name is in
+// four places, not one: the engine key, three of the silverbox's `params` keys,
+// the LFO target keys (`dx7_3lvl`) and the automation lane keys (`dx7.3lvl`) —
+// which the macro pads store too. So the rename is undone on the way in, here,
+// rather than left to `applySet` to defend against key by key.
+//
+// It lives in this module for the same reason validateSet does: it is a pure
+// function over a plain object, so `node --test` can exercise it. It is
+// idempotent — a current name matches nothing — and mutates in place, which is
+// what applySet and applyTrackPatch already do with the granular params.
+
+const LEGACY_ENGINE_KEYS = {
+  "dm:303":        "dm:silverbox",
+  "dm:virus":      "dm:contagion",
+  "dm:dx7":        "dm:hexop",
+  "dm:mini-brute": "dm:snarl",
+  "dm:moog":       "dm:ladder",
+  "dm:juno":       "dm:drift",
+  "dm:rhodes":     "dm:tines",
+  "dm:prophet6":   "dm:oracle",
+};
+
+// The three silverbox panel params. The other emulators' params were already
+// spelled with a neutral prefix (`v…`, `d…`), so only these carry a model name.
+const LEGACY_PARAM_KEYS = { wave303: "sbwave", accent303: "sbaccent", tune303: "sbtune" };
+
+// LFO targets and automation lanes differ only in their separator, so one
+// pattern covers both: `dx7_3lvl` → `hexop_3lvl`, `dx7.3lvl` → `hexop.3lvl`.
+const LEGACY_MOD_PREFIXES = { tb303: "silverbox", virus: "contagion", dx7: "hexop" };
+const LEGACY_MOD_KEY = /^(tb303|virus|dx7)([_.])(.+)$/;
+
+/** One LFO-target or automation-lane key, old spelling → new. @param {string} k */
+export function migrateModKey(k) {
+  const m = typeof k === "string" && LEGACY_MOD_KEY.exec(k);
+  return m ? LEGACY_MOD_PREFIXES[m[1]] + m[2] + m[3] : k;
+}
+
+/** Rewrite an object's keys in place. A key already at its new spelling wins —
+ *  a hand-edited song holding both would otherwise have the stale one clobber
+ *  the current one. */
+function renameKeys(obj, rename) {
+  if (!obj || typeof obj !== "object") return;
+  for (const k of Object.keys(obj)) {
+    const n = rename(k);
+    if (n === k) continue;
+    if (!(n in obj)) obj[n] = obj[k];
+    delete obj[k];
+  }
+}
+
+/** A sound snapshot, or anything shaped like one (a track, a saved patch). */
+function migrateSoundNames(o) {
+  if (!o || typeof o !== "object") return;
+  renameKeys(o.params, (k) => LEGACY_PARAM_KEYS[k] || k);
+  renameKeys(o.lfoConfig, migrateModKey);
+}
+
+/**
+ * One serialized track — also the shape of a saved patch, which carries the
+ * same engineKey / params / lfoConfig fields.
+ * @param {any} td @returns {any} the same object
+ */
+export function migrateTrackNames(td) {
+  if (!td || typeof td !== "object") return td;
+  if (LEGACY_ENGINE_KEYS[td.engineKey]) td.engineKey = LEGACY_ENGINE_KEYS[td.engineKey];
+  migrateSoundNames(td);          // the live sound
+  migrateSoundNames(td.baseSound); // the sound every unlocked pattern shares
+  for (const p of Array.isArray(td.patterns) ? td.patterns : []) {
+    if (!p || typeof p !== "object") continue;
+    renameKeys(p.automation, migrateModKey);
+    migrateSoundNames(p.sound);   // a p-locked pattern's own sound
+  }
+  return td;
+}
+
+/**
+ * A whole serialized session: every track, plus the macro pads, whose
+ * assignments are stored as automation keys.
+ * @param {any} data @returns {any} the same object
+ */
+export function migrateLegacyNames(data) {
+  if (!data || typeof data !== "object") return data;
+  for (const td of Array.isArray(data.tracks) ? data.tracks : []) migrateTrackNames(td);
+  for (const pad of Array.isArray(data.macroPads) ? data.macroPads : []) {
+    for (const axis of ["x", "y"]) {
+      for (const a of Array.isArray(pad?.[axis]) ? pad[axis] : [])
+        if (a && typeof a === "object") a.key = migrateModKey(a.key);
+    }
+  }
+  return data;
 }

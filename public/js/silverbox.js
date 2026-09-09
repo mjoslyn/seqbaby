@@ -1,6 +1,6 @@
-// ---- TB-303 -------------------------------------------------------------
-// A model of the Roland TB-303's actual signal path rather than a "saw through
-// a resonant lowpass" preset. The things that make a 303 sound like a 303 are
+// ---- Silverbox -------------------------------------------------------------
+// A model of the silverbox's actual signal path rather than a "saw through
+// a resonant lowpass" preset. The things that make a silverbox sound like a silverbox are
 // all in the details the generic version threw away:
 //
 //   VCO ──▶ VCF (3-pole diode ladder, 18 dB/oct) ──▶ VCA ──▶ out
@@ -11,7 +11,7 @@
 // - The filter is 18 dB/octave, not 24, and its resonance feedback runs through
 //   a diode pair — asymmetric soft clipping, which is where the squelch and the
 //   even harmonics come from. It's a feedback topology, so the passband loses
-//   level as resonance goes up: a high-resonance 303 line really is thin, which
+//   level as resonance goes up: a high-resonance silverbox line really is thin, which
 //   is exactly why everyone runs one into a distortion pedal.
 // - There is no keyboard tracking on the filter. High notes are duller than low
 //   ones, and that's correct.
@@ -36,9 +36,9 @@
 
 // The processor source. Lives here as a string (see the note above); keep it
 // free of backticks and ${ so the template literal stays intact.
-const TB303_PROCESSOR_SOURCE = `
-// One TB-303 voice. Monophonic, like the machine.
-class TB303Processor extends AudioWorkletProcessor {
+const SILVERBOX_PROCESSOR_SOURCE = `
+// One Silverbox voice. Monophonic, like the machine.
+class SilverboxProcessor extends AudioWorkletProcessor {
   static get parameterDescriptors() {
     return [
       // The four panel knobs the track's timbre sliders drive. a-rate so LFOs
@@ -168,7 +168,7 @@ class TB303Processor extends AudioWorkletProcessor {
     const cutA = params.cutoff, resA = params.resonance, envA = params.envMod;
     const decK = params.decay[0], accK = params.accent[0], tuneK = params.tune[0];
     const tuneMul = Math.pow(2, tuneK / 12);
-    const B = TB303Processor.blep;
+    const B = SilverboxProcessor.blep;
 
     // The accent cap drains through the resonance network, so its time constant
     // moves with the RESONANCE control — the reason accents stack at high reso.
@@ -213,8 +213,8 @@ class TB303Processor extends AudioWorkletProcessor {
       const g = G / (1 + G);
       const k = 7.2 * res;
       // Partial makeup only: the feedback costs ~1/(1+k) of passband level and
-      // the 303 never compensated. Clawing all of it back would erase the
-      // thinning that makes a high-resonance line sound like a 303.
+      // the silverbox never compensated. Clawing all of it back would erase the
+      // thinning that makes a high-resonance line sound like a silverbox.
       const makeup = Math.pow(1 + k, 0.35);
 
       let y = 0;
@@ -229,7 +229,7 @@ class TB303Processor extends AudioWorkletProcessor {
           let p2 = this.phase - 0.5; if (p2 < 0) p2 += 1;
           osc -= B(p2, dt);
         } else {
-          // Falling saw, as the 303's core produces it. Polarity matters here
+          // Falling saw, as the silverbox's core produces it. Polarity matters here
           // because the resonance clipper below is asymmetric.
           osc = 1 - 2 * this.phase + B(this.phase, dt);
         }
@@ -263,7 +263,7 @@ class TB303Processor extends AudioWorkletProcessor {
     return true;
   }
 }
-registerProcessor("tb-303", TB303Processor);
+registerProcessor("silverbox", SilverboxProcessor);
 `;
 
 // One registration per AudioContext. Single-flight, and a failure clears the
@@ -272,15 +272,15 @@ const _loads = new WeakMap();
 const _ready = new WeakSet();
 
 /**
- * Register the tb-303 processor on this context. Called at init() so the await
+ * Register the silverbox processor on this context. Called at init() so the await
  * on the play path is already resolved by the time a voice is built.
  * @param {BaseAudioContext} ctx @returns {Promise<void>}
  */
-export function loadTb303Worklet(ctx) {
+export function loadSilverboxWorklet(ctx) {
   if (!ctx?.audioWorklet) return Promise.reject(new Error("no AudioWorklet"));
   let p = _loads.get(ctx);
   if (!p) {
-    const url = URL.createObjectURL(new Blob([TB303_PROCESSOR_SOURCE], { type: "text/javascript" }));
+    const url = URL.createObjectURL(new Blob([SILVERBOX_PROCESSOR_SOURCE], { type: "text/javascript" }));
     p = ctx.audioWorklet.addModule(url)
       .then(() => { URL.revokeObjectURL(url); _ready.add(ctx); })
       .catch((e) => { URL.revokeObjectURL(url); _loads.delete(ctx); throw e; });
@@ -290,25 +290,25 @@ export function loadTb303Worklet(ctx) {
 }
 
 /** Has the processor finished registering on this context? */
-export function tb303Ready(ctx) { return !!ctx && _ready.has(ctx); }
+export function silverboxReady(ctx) { return !!ctx && _ready.has(ctx); }
 
 // Tone wrappers don't accept a native connect() — unwrap to the node underneath.
 const nativeIn = (node) => node?.input?.input ?? node?.input ?? node;
 
 /**
- * Build the 303 voice. Returns null when the worklet isn't registered yet, so
+ * Build the silverbox voice. Returns null when the worklet isn't registered yet, so
  * the caller can fall back rather than leave the track silent.
  * @param {*} output Tone node the voice writes into.
  */
-export function buildTb303Voice(output) {
+export function buildSilverboxVoice(output) {
   const ctx = Tone.getContext().rawContext;
-  if (!tb303Ready(ctx)) { loadTb303Worklet(ctx).catch(() => {}); return null; }
+  if (!silverboxReady(ctx)) { loadSilverboxWorklet(ctx).catch(() => {}); return null; }
 
   let node;
   try {
-    node = new AudioWorkletNode(ctx, "tb-303", { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [1] });
+    node = new AudioWorkletNode(ctx, "silverbox", { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [1] });
   } catch (e) {
-    console.warn("tb-303 worklet node failed", e);
+    console.warn("silverbox worklet node failed", e);
     return null;
   }
   node.connect(nativeIn(output));
@@ -326,7 +326,7 @@ export function buildTb303Voice(output) {
   let slideTime = 0.058;      // the machine's slide is a fixed ~60 ms lag
   // Slide state: a note slides when the note before it was written longer than
   // one step and this one starts as that gate ends. That's the tie-into-the-
-  // next-note gesture, which is what the 303's SLIDE switch does.
+  // next-note gesture, which is what the silverbox's SLIDE switch does.
   let prevEnd = -1;
   let prevTied = false;
 
@@ -342,9 +342,9 @@ export function buildTb303Voice(output) {
         case "timb":      P.resonance.value = clamp01(val); return;   // RESONANCE
         case "morph":     P.envMod.value    = clamp01(val); return;   // ENV MOD
         case "decay":     P.decay.value     = clamp01(val); return;   // DECAY
-        case "accent303": P.accent.value    = clamp01(val); return;   // ACCENT
-        case "tune303":   P.tune.value      = Math.max(-1, Math.min(1, (Number(val) || 0) / 100)); return;
-        case "wave303":   post({ type: "wave", value: val === "square" ? "square" : "saw" }); return;
+        case "sbaccent": P.accent.value    = clamp01(val); return;   // ACCENT
+        case "sbtune":   P.tune.value      = Math.max(-1, Math.min(1, (Number(val) || 0) / 100)); return;
+        case "sbwave":   post({ type: "wave", value: val === "square" ? "square" : "saw" }); return;
       }
     },
     getAudioParam: (key) => {
@@ -354,9 +354,9 @@ export function buildTb303Voice(output) {
         case "morph":     return P.envMod;
         case "decay":     return P.decay;
         // Not among the generic slider names, so LFO/automation reach these
-        // through their own keys (tb303_accent / tb303.accent, and tune).
-        case "accent303": return P.accent;
-        case "tune303":   return P.tune;
+        // through their own keys (silverbox_accent / silverbox.accent, and tune).
+        case "sbaccent": return P.accent;
+        case "sbtune":   return P.tune;
       }
       return null;
     },
@@ -367,11 +367,11 @@ export function buildTb303Voice(output) {
       // A slide needs the previous note to have been tied and this one to land
       // where that gate ended (allowing for swing / micro-offset nudges).
       const slide = prevTied && prevEnd >= 0 && when <= prevEnd + Math.min(0.05, dur * 0.35);
-      // Untied notes get the machine's short gate — a 303 sequencer holds a
+      // Untied notes get the machine's short gate — a silverbox sequencer holds a
       // plain step for a bit over half its length, which is most of why the
       // part sounds clipped and driving rather than legato.
       const gate = tied ? dur : dur * 0.6;
-      // The 303 has no velocity, only ACCENT. Map the top of the step's
+      // The silverbox has no velocity, only ACCENT. Map the top of the step's
       // velocity range onto it so the step editor drives the accent switch.
       const accent = Math.max(0, Math.min(1, ((vel ?? 0.5) - 0.6) / 0.4));
       post({ type: "note", when, freq: 440 * Math.pow(2, (note - 69) / 12), gate, accent, slide, slideTime });

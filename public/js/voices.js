@@ -5,12 +5,12 @@ import { makeMetalizerCurve } from "./curves.js";
 import { isMobileDevice } from "./dom.js";
 import { sampleHitRate } from "./lfo.js";
 import { setParam } from "./params.js";
-import { buildTb303Voice } from "./tb303.js";
+import { buildSilverboxVoice } from "./silverbox.js";
 import { buildBassVoice, BASS_NUM_KEYS, BASS_SEL_KEYS } from "./bass.js";
 import { buildSubBassVoice, SUB_NUM_KEYS, SUB_SEL_KEYS } from "./subbass.js";
-import { buildDx7Voice, DX7_NUM_KEYS, DX7_SEL_KEYS } from "./dx7.js";
+import { buildHexopVoice, HEXOP_NUM_KEYS, HEXOP_SEL_KEYS } from "./hexop.js";
 import { buildGuitarVoice, GUITAR_NUM_KEYS, GUITAR_SEL_KEYS } from "./guitar.js";
-import { buildVirusVoice, VIRUS_NUM_KEYS, VIRUS_SEL_KEYS } from "./virus.js";
+import { buildContagionVoice, CONTAGION_NUM_KEYS, CONTAGION_SEL_KEYS } from "./contagion.js";
 
 
 /** @typedef {import("./types.js").Voice} Voice */
@@ -555,11 +555,11 @@ export function buildDrumSynthNode(kind, output) {
         });
       });
 
-    // TB-303: a model of the machine's own circuits, in an AudioWorklet — see
-    // tb303.js. The fallback below only runs if the worklet failed to register,
+    // Silverbox: a model of the machine's own circuits, in an AudioWorklet — see
+    // silverbox.js. The fallback below only runs if the worklet failed to register,
     // so a track is never silent because of it.
-    case "303": {
-      const v = buildTb303Voice(output);
+    case "silverbox": {
+      const v = buildSilverboxVoice(output);
       if (v) return v;
       const s = new Tone.MonoSynth({
         oscillator: { type: "sawtooth" },
@@ -608,11 +608,11 @@ export function buildDrumSynthNode(kind, output) {
         release: () => s.releaseAll(),
       };
     }
-    // Access Virus: a model of the machine's architecture, in an AudioWorklet
-    // that handles its own polyphony — see virus.js. The fallback runs only if
+    // Contagion: a model of the machine's architecture, in an AudioWorklet
+    // that handles its own polyphony — see contagion.js. The fallback runs only if
     // the worklet failed to register, so a track is never silent because of it.
-    case "virus": {
-      const v = buildVirusVoice(output);
+    case "contagion": {
+      const v = buildContagionVoice(output);
       if (v) return v;
       const s = new Tone.PolySynth(Tone.Synth, {
         oscillator: { type: "sawtooth" },
@@ -624,11 +624,11 @@ export function buildDrumSynthNode(kind, output) {
         release: () => s.releaseAll(),
       };
     }
-    // DX7: six sine operators through one of 32 algorithms, 16-voice, all
-    // inside an AudioWorklet — see dx7.js. Falls back to Tone's FM synth (two
+    // Hexop: six sine operators through one of 32 algorithms, 16-voice, all
+    // inside an AudioWorklet — see hexop.js. Falls back to Tone's FM synth (two
     // operators, one algorithm) if the worklet never registered.
-    case "dx7": {
-      const v = buildDx7Voice(output);
+    case "hexop": {
+      const v = buildHexopVoice(output);
       if (v) return v;
       const s = new Tone.PolySynth(Tone.FMSynth, {
         harmonicity: 1, modulationIndex: 6,
@@ -649,9 +649,9 @@ export function buildDrumSynthNode(kind, output) {
       if (v) return v;
       return makePolyPool(6, () => buildPluckGuitarVoice(output));
     }
-    case "mini-brute": return makePolyPool(4, () => buildMiniBruteVoice(output));
-    case "moog":       return makePolyPool(4, () => buildMoogVoice(output));
-    case "juno":       return makePolyPool(6, () => buildJunoVoice(output));
+    case "snarl": return makePolyPool(4, () => buildSnarlVoice(output));
+    case "ladder":       return makePolyPool(4, () => buildLadderVoice(output));
+    case "drift":       return makePolyPool(6, () => buildDriftVoice(output));
     // Electric bass: four strings, a parallel dirt path, a compressor and an
     // amp, all inside an AudioWorklet — see bass.js. Same fallback story as the
     // guitar's: the pluck-through-a-drive voice this engine used to be.
@@ -660,7 +660,7 @@ export function buildDrumSynthNode(kind, output) {
       if (v) return v;
       return makePolyPool(4, () => buildPluckBassVoice(output));
     }
-    // Sub bass: one monophonic voice in an AudioWorklet — see subbass.js. The
+    // Subby: one monophonic voice in an AudioWorklet — see subbass.js. The
     // fallback is a plain sine with an amp envelope: no harmonics path, so it
     // is inaudible on a small speaker, but a track is never silent because a
     // worklet failed to register.
@@ -679,18 +679,18 @@ export function buildDrumSynthNode(kind, output) {
         setGlide: (g) => { s.portamento = Math.max(0, Number(g) || 0); },
       };
     }
-    case "rhodes":     return makePolyPool(6, () => buildRhodesVoice(output));
-    case "prophet6":   return makePolyPool(6, () => buildProphet6Voice(output));
+    case "tines":     return makePolyPool(6, () => buildTinesVoice(output));
+    case "oracle":   return makePolyPool(6, () => buildOracleVoice(output));
   }
   throw new Error("unknown drum-synth kind: " + kind);
 }
 
-// ---- mini-brute builder -------------------------------------------------
+// ---- snarl builder -------------------------------------------------
 // One voice instance — see makePolyPool for the 4-voice pool used by the
 // public engine entry. Oscillators: saw + detuned-saw (ultrasaw) + PWM pulse +
-// metalized triangle + sub sine. All summed through a "brute factor" soft-clip
+// metalized triangle + sub sine. All summed through a growl soft-clip
 // and an amp envelope. The track-level filter + filter env provide the sweep.
-export function buildMiniBruteVoice(output) {
+export function buildSnarlVoice(output) {
   const freqSig = new Tone.Signal({ units: "frequency", value: 110 });
   const saw   = new Tone.Oscillator({ type: "sawtooth" }).start();
   const sawD  = new Tone.Oscillator({ type: "sawtooth", detune: 10 }).start();
@@ -739,14 +739,14 @@ export function buildMiniBruteVoice(output) {
   metal.connect(mixTri);
   sub.connect(mixSub);
 
-  const brute = new Tone.Distortion({ distortion: 0.22, oversample: "2x", wet: 0.55 });
+  const growl = new Tone.Distortion({ distortion: 0.22, oversample: "2x", wet: 0.55 });
   const amp   = new Tone.AmplitudeEnvelope({ attack: 0.004, decay: 0.2, sustain: 0.7, release: 0.3 });
   const trim  = new Tone.Gain(0.38);
-  mixSaw.connect(brute);
-  mixPulse.connect(brute);
-  mixTri.connect(brute);
+  mixSaw.connect(growl);
+  mixPulse.connect(growl);
+  mixTri.connect(growl);
   mixSub.connect(amp);
-  brute.connect(amp);
+  growl.connect(amp);
   amp.connect(trim);
   trim.connect(output);
 
@@ -765,7 +765,7 @@ export function buildMiniBruteVoice(output) {
     else if (key === "fm")      fmDepth.gain.value = v * 1800;
   };
   return {
-    nodes: [saw, sawD, pulse, tri, sub, subMul, freqSig, pwmLfo, fmOsc, fmMul, fmDepth, metal, ultra, mixSaw, mixPulse, mixTri, mixSub, brute, amp, trim],
+    nodes: [saw, sawD, pulse, tri, sub, subMul, freqSig, pwmLfo, fmOsc, fmMul, fmDepth, metal, ultra, mixSaw, mixPulse, mixTri, mixSub, growl, amp, trim],
     setGlide: (g) => { glideSec = Math.max(0.002, Number(g) || 0); },
     setParam: setMBParam,
     getAudioParam: (key) => {
@@ -792,11 +792,11 @@ export function buildMiniBruteVoice(output) {
   };
 }
 
-// ---- moog builder -------------------------------------------------------
-// Minimoog-style voice: three oscillators each with independent waveform,
+// ---- ladder builder -------------------------------------------------------
+// Ladder voice: three oscillators each with independent waveform,
 // range, and fine frequency; plus a white/pink noise source. Summed through
 // a Chebyshev warmth + EQ3 shelf + amp envelope.
-export function buildMoogVoice(output) {
+export function buildLadderVoice(output) {
   const freqSig = new Tone.Signal({ units: "frequency", value: 110 });
   const osc1 = new Tone.Oscillator({ type: "sawtooth", detune: 0 }).start();
   const osc2 = new Tone.Oscillator({ type: "sawtooth", detune: 5 }).start();
@@ -844,7 +844,7 @@ export function buildMoogVoice(output) {
 
   let lastFreq = 110;
   let glideSec = 0.02;
-  const setMoogParam = (key, val) => {
+  const setLadderParam = (key, val) => {
     if (key === "osc1")         mix1.gain.value = Math.max(0, Math.min(1, Number(val) || 0));
     else if (key === "osc2")    mix2.gain.value = Math.max(0, Math.min(1, Number(val) || 0));
     else if (key === "osc3")    mix3.gain.value = Math.max(0, Math.min(1, Number(val) || 0));
@@ -875,7 +875,7 @@ export function buildMoogVoice(output) {
   return {
     nodes: [osc1, osc2, osc3, mul1, mul2, mul3, freqSig, mix1, mix2, mix3, mixNoise, warm, shelf, amp, trim],
     setGlide: (g) => { glideSec = Math.max(0.002, Number(g) || 0); },
-    setParam: setMoogParam,
+    setParam: setLadderParam,
     getAudioParam: (key) => {
       switch (key) {
         case "osc1":  return mix1.gain;
@@ -898,12 +898,12 @@ export function buildMoogVoice(output) {
   };
 }
 
-// ---- juno 60 builder ----------------------------------------------------
-// Roland Juno-60-style voice. Single DCO (pulse with LFO-driven PWM) + a sub
+// ---- drift 60 builder ----------------------------------------------------
+// Drift voice. Single DCO (pulse with LFO-driven PWM) + a sub
 // square one octave below + a noise source, into HPF → soft-saturation → amp
-// envelope → chorus (the iconic Juno chorus). Track-level filter + filter env
+// envelope → chorus (the iconic drift chorus). Track-level filter + filter env
 // provide the VCF sweep.
-export function buildJunoVoice(output) {
+export function buildDriftVoice(output) {
   const freqSig = new Tone.Signal({ units: "frequency", value: 110 });
   const dco  = new Tone.PulseOscillator({ width: 0 }).start();       // width driven by LFO below
   const sub  = new Tone.Oscillator({ type: "square" }).start();
@@ -932,7 +932,7 @@ export function buildJunoVoice(output) {
 
   const hpf = new Tone.Filter({ type: "highpass", frequency: 60, rolloff: -12 });
   const amp = new Tone.AmplitudeEnvelope({ attack: 0.005, decay: 0.25, sustain: 0.75, release: 0.35 });
-  // Classic Juno stereo chorus — baked in since it defines the character.
+  // Classic drift stereo chorus — baked in since it defines the character.
   const chorus = new Tone.Chorus({ frequency: 0.5, delayTime: 3.5, depth: 0.35, feedback: 0, wet: 0.6, spread: 180 }).start();
   const trim = new Tone.Gain(0.4);
   mixDco.connect(hpf);
@@ -945,7 +945,7 @@ export function buildJunoVoice(output) {
 
   let lastFreq = 110;
   let glideSec = 0.015;
-  const setJunoParam = (key, val) => {
+  const setDriftParam = (key, val) => {
     const v = Math.max(0, Math.min(1, Number(val) || 0));
     if (key === "osc1")         mixDco.gain.value   = v;                         // DCO level
     else if (key === "osc2")    mixSub.gain.value   = v;                         // sub level
@@ -970,12 +970,12 @@ export function buildJunoVoice(output) {
   return {
     nodes: [dco, sub, subMul, freqSig, pwmLfo, mixDco, mixSub, mixNoise, hpf, amp, chorus, trim],
     setGlide: (g) => { glideSec = Math.max(0.002, Number(g) || 0); },
-    setParam: setJunoParam,
+    setParam: setDriftParam,
     getAudioParam: (key) => {
       switch (key) {
         case "osc1":  return mixDco.gain;
         case "osc2":  return mixSub.gain;
-        case "osc3":  return mixNoise.gain;   // juno's osc3 slot is the noise mix
+        case "osc3":  return mixNoise.gain;   // drift's osc3 slot is the noise mix
         case "noise": return mixNoise.gain;
         case "harm":  return pwmLfo.frequency;
       }
@@ -1100,12 +1100,12 @@ export function buildPluckBassVoice(output) {
   };
 }
 
-// ---- rhodes piano builder ----------------------------------------------
-// Rhodes electric piano — FM synthesis (modulator into sine carrier) is the
-// classic DX7 "full tines" recipe. Harmonicity 3 + high modulation index +
+// ---- tines piano builder ----------------------------------------------
+// Tines electric piano — FM synthesis (modulator into sine carrier) is the
+// classic Hexop "full tines" recipe. Harmonicity 3 + high modulation index +
 // sharp modulation-envelope decay gives the bell-like attack; amp env long
-// release carries the warm tail. Chorus adds the signature Rhodes warble.
-export function buildRhodesVoice(output) {
+// release carries the warm tail. Chorus adds the signature Tines warble.
+export function buildTinesVoice(output) {
   const synth = new Tone.FMSynth({
     harmonicity: 3,
     modulationIndex: 14,
@@ -1122,7 +1122,7 @@ export function buildRhodesVoice(output) {
 
   let lastFreq = 261.63;
   let glideSec = 0.002;
-  const setRhodesParam = (key, val) => {
+  const setTinesParam = (key, val) => {
     const v = Math.max(0, Math.min(1, Number(val) || 0));
     if (key === "harm")      synth.harmonicity.value = 0.5 + v * 5;        // tine color (bell ↔ deep)
     else if (key === "timb") synth.modulationIndex.value = 2 + v * 28;     // brightness / bite
@@ -1136,7 +1136,7 @@ export function buildRhodesVoice(output) {
   return {
     nodes: [synth, chorus, trim],
     setGlide: (g) => { glideSec = Math.max(0.002, Number(g) || 0); },
-    setParam: setRhodesParam,
+    setParam: setTinesParam,
     trigger: (note, time, dur, vel) => {
       try {
         const v = Math.max(0.15, Math.min(1, vel || 0.8));
@@ -1153,12 +1153,12 @@ export function buildRhodesVoice(output) {
   };
 }
 
-// ---- prophet 6 builder --------------------------------------------------
+// ---- oracle 6 builder --------------------------------------------------
 // Two VCOs (saw + saw/pulse morph) with cent-level detune for the classic
 // "fat" unison, a square sub at -1 oct, noise, an analog-style drive stage,
 // amp envelope, and a touch of chorus — the baked-in character of the P6's
 // stereo effects block. Filter + filter-env come from the track's own chain.
-export function buildProphet6Voice(output) {
+export function buildOracleVoice(output) {
   const freqSig = new Tone.Signal({ units: "frequency", value: 220 });
 
   // VCO 1 — saw (the workhorse)
@@ -1304,9 +1304,9 @@ export class DrumSynthVoice {
                      "osc1wave", "osc2wave", "osc3wave",
                      "osc1range", "osc2range", "osc3range",
                      "osc2freq", "osc3freq", "noise", "noisetype",
-                     "wave303", "accent303", "tune303",
-                     ...VIRUS_NUM_KEYS, ...VIRUS_SEL_KEYS,
-                     ...DX7_NUM_KEYS, ...DX7_SEL_KEYS,
+                     "sbwave", "sbaccent", "sbtune",
+                     ...CONTAGION_NUM_KEYS, ...CONTAGION_SEL_KEYS,
+                     ...HEXOP_NUM_KEYS, ...HEXOP_SEL_KEYS,
                      ...GUITAR_NUM_KEYS, ...GUITAR_SEL_KEYS,
                      ...BASS_NUM_KEYS, ...BASS_SEL_KEYS,
                      ...SUB_NUM_KEYS, ...SUB_SEL_KEYS]) {
@@ -1324,7 +1324,7 @@ export class DrumSynthVoice {
     for (const n of this.built.nodes) {
       if (n instanceof Tone.MonoSynth) n.portamento = this.glide;
     }
-    // Custom voices (e.g. mini-brute) can opt in via built.setGlide
+    // Custom voices (e.g. snarl) can opt in via built.setGlide
     this.built.setGlide?.(this.glide);
   }
   canInPlaceChange(newKey) { return false; }
@@ -1352,7 +1352,7 @@ export class DrumSynthVoice {
     if (key === "vol") return this.output.gain;
     return this.built?.getAudioParam?.(key) ?? null;
   }
-  // `opts` carries the step's written span, which the 303 needs to tell a tie
+  // `opts` carries the step's written span, which the silverbox needs to tell a tie
   // (which slides into the next note) from a plain step. Other builders ignore it.
   hit(midiNote, time, duration, velocity = 1, opts = null) {
     try { this.built.trigger(midiNote, time, duration, Math.max(0, Math.min(1, velocity)), opts); }

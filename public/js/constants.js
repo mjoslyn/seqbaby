@@ -1,5 +1,5 @@
 import { BASS_MOD_KEYS, BASS_MOD_LABELS, BASS_MOD_RANGE } from "./bass.js";
-import { DX7_MOD_KEYS, DX7_MOD_LABELS, DX7_MOD_RANGE } from "./dx7.js";
+import { HEXOP_MOD_KEYS, HEXOP_MOD_LABELS, HEXOP_MOD_RANGE } from "./hexop.js";
 import { GUITAR_MOD_KEYS, GUITAR_MOD_LABELS, GUITAR_MOD_RANGE } from "./guitar.js";
 import { SUB_MOD_KEYS, SUB_MOD_LABELS, SUB_MOD_RANGE } from "./subbass.js";
 
@@ -44,16 +44,18 @@ export const LFO_KEYS = [
   // Euclid's three counts (setter-driven; the generator reads them at step
   // time). Only on a track with live euclid running — see canModulate.
   "euclid_pulses", "euclid_steps", "euclid_rotate",
-  // TB-303 panel controls outside the four timbre sliders. Real AudioParams on
+  // Silverbox panel controls outside the four timbre sliders. Real AudioParams on
   // the worklet node, so these take the normal audio-rate path.
-  "tb303_accent", "tb303_tune",
-  // Access Virus panel controls outside the four sliders — AudioParams too.
-  "virus_pw", "virus_fm", "virus_ring", "virus_unidet", "virus_cut2", "virus_bal", "virus_sat", "virus_envamt",
-  "virus_osc2semi", "virus_osc2det", "virus_unispread", "virus_atk", "virus_sus", "virus_rel",
-  // DX7: the globals, then every control of all six operators. Generated from
-  // the one list in dx7.js — 56 keys is too many to keep in step by hand, and
-  // the picker only ever shows them on a dx7 track (see canModulate).
-  ...DX7_MOD_KEYS.map(k => `dx7_${k}`),
+  "silverbox_accent", "silverbox_tune",
+  // Contagion panel controls outside the four sliders — AudioParams too.
+  "contagion_pw", "contagion_fm", "contagion_ring", "contagion_unidet",
+  "contagion_cut2", "contagion_bal", "contagion_sat", "contagion_envamt",
+  "contagion_osc2semi", "contagion_osc2det", "contagion_unispread",
+  "contagion_atk", "contagion_sus", "contagion_rel",
+  // Hexop: the globals, then every control of all six operators. Generated from
+  // the one list in hexop.js — 56 keys is too many to keep in step by hand, and
+  // the picker only ever shows them on a hexop track (see canModulate).
+  ...HEXOP_MOD_KEYS.map(k => `hexop_${k}`),
   // Electric guitar: the rig's own controls — where the string is picked, which
   // pickup reads it, and every knob on the amp. Generated from the one list in
   // guitar.js, and only offered on a guitar track (see canModulate).
@@ -93,16 +95,17 @@ export const LFO_LABELS = {
   gran_speed: "grain speed", gran_pitch: "grain pitch",
   gran_window: "grain window", gran_jitter: "grain jitter",
   gran_detune: "grain detune", gran_pan: "grain pan",
-  tb303_accent: "303 accent", tb303_tune: "303 tune",
-  virus_pw: "virus pulse width", virus_fm: "virus fm", virus_ring: "virus ring mod",
-  virus_unidet: "virus unison detune", virus_cut2: "virus cutoff 2", virus_bal: "virus filter balance",
-  virus_sat: "virus saturation", virus_envamt: "virus env amount",
-  virus_osc2semi: "virus osc2 semi", virus_osc2det: "virus osc2 detune",
-  virus_unispread: "virus unison spread",
-  virus_atk: "virus attack", virus_sus: "virus sustain", virus_rel: "virus release",
+  silverbox_accent: "silverbox accent", silverbox_tune: "silverbox tune",
+  contagion_pw: "contagion pulse width", contagion_fm: "contagion fm",
+  contagion_ring: "contagion ring mod", contagion_unidet: "contagion unison detune",
+  contagion_cut2: "contagion cutoff 2", contagion_bal: "contagion filter balance",
+  contagion_sat: "contagion saturation", contagion_envamt: "contagion env amount",
+  contagion_osc2semi: "contagion osc2 semi", contagion_osc2det: "contagion osc2 detune",
+  contagion_unispread: "contagion unison spread",
+  contagion_atk: "contagion attack", contagion_sus: "contagion sustain", contagion_rel: "contagion release",
   delay_time: "delay time", delay_fbk: "delay fbk",
   reverb_decay: "reverb decay",
-  ...Object.fromEntries(DX7_MOD_KEYS.map(k => [`dx7_${k}`, DX7_MOD_LABELS[k]])),
+  ...Object.fromEntries(HEXOP_MOD_KEYS.map(k => [`hexop_${k}`, HEXOP_MOD_LABELS[k]])),
   ...Object.fromEntries(GUITAR_MOD_KEYS.map(k => [`gtr_${k}`, GUITAR_MOD_LABELS[k]])),
   ...Object.fromEntries(BASS_MOD_KEYS.map(k => [`bas_${k}`, BASS_MOD_LABELS[k]])),
   ...Object.fromEntries(SUB_MOD_KEYS.map(k => [`sub_${k}`, SUB_MOD_LABELS[k]])),
@@ -136,22 +139,22 @@ export const LFO_AMP_SCALE = {
   chorus_depth: 1,
   pitch_semi: 1,
   reverb_decay: 1,
-  // 303 accent is a 0..1 knob; 303 tune is in semitones, so depth 1 is a
+  // silverbox accent is a 0..1 knob; silverbox tune is in semitones, so depth 1 is a
   // half-semitone vibrato either side of wherever the tune slider sits.
-  tb303_accent: 1, tb303_tune: 1,
+  silverbox_accent: 1, silverbox_tune: 1,
   // All 0..1 knobs except cut2 and envamt, which are bipolar over the same span.
-  virus_pw: 1, virus_fm: 1, virus_ring: 1, virus_unidet: 1,
-  virus_cut2: 2, virus_bal: 1, virus_sat: 1, virus_envamt: 2,
+  contagion_pw: 1, contagion_fm: 1, contagion_ring: 1, contagion_unidet: 1,
+  contagion_cut2: 2, contagion_bal: 1, contagion_sat: 1, contagion_envamt: 2,
   // osc2 semi is in semitones over ±24, so depth 1 swings an octave either way.
-  virus_osc2semi: 24,
-  virus_osc2det: 1, virus_unispread: 1, virus_atk: 1, virus_sus: 1, virus_rel: 1,
+  contagion_osc2semi: 24,
+  contagion_osc2det: 1, contagion_unispread: 1, contagion_atk: 1, contagion_sus: 1, contagion_rel: 1,
   // Granular grain controls — 0..1 swing around wherever the slider sits.
   gran_window: 1, gran_jitter: 1, gran_detune: 1, gran_pan: 1,
-  // DX7: each key swings its own control's full span, so an operator's ratio
+  // Hexop: each key swings its own control's full span, so an operator's ratio
   // (0..31) sweeps ratios and its level (0..1) sweeps level.
-  ...Object.fromEntries(DX7_MOD_KEYS.map(k => {
-    const [lo, hi] = DX7_MOD_RANGE[k];
-    return [`dx7_${k}`, hi - lo];
+  ...Object.fromEntries(HEXOP_MOD_KEYS.map(k => {
+    const [lo, hi] = HEXOP_MOD_RANGE[k];
+    return [`hexop_${k}`, hi - lo];
   })),
   // Guitar: same again — the pick and pickup positions live in 0.02..0.5, every
   // amp control in 0..1, and each swings its own span.
