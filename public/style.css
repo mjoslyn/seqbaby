@@ -766,7 +766,6 @@ main {
 .sq-param-group--guitar .sq-guitar__f { display: inline-flex; align-items: center; gap: 4px; color: var(--fg-dim); }
 .sq-param-group--guitar .sq-guitar__f .sq-knob { --knob-size: 34px; }
 .sq-param-group--guitar select { padding: 2px 6px; font-size: 11px; }
-.sq-param-group--guitar .sq-guitar__desc { color: var(--fg-dim); font-size: 11px; opacity: 0.85; flex: 1 1 220px; min-width: 0; }
 /* Electric bass: hand, dirt, amp — the chain again, one row per link. */
 .sq-param-group--bass { border-color: color-mix(in oklab, #8fbf6a 45%, var(--border)); flex-direction: column; align-items: stretch; gap: 4px; }
 .sq-param-group--bass[hidden] { display: none !important; }
@@ -775,7 +774,6 @@ main {
 .sq-param-group--bass .sq-bass__f { display: inline-flex; align-items: center; gap: 4px; color: var(--fg-dim); }
 .sq-param-group--bass .sq-bass__f .sq-knob { --knob-size: 34px; }
 .sq-param-group--bass select { padding: 2px 6px; font-size: 11px; }
-.sq-param-group--bass .sq-bass__desc { color: var(--fg-dim); font-size: 11px; opacity: 0.85; flex: 1 1 220px; min-width: 0; }
 .sq-param-group--sub { border-color: color-mix(in oklab, #6a7fbf 45%, var(--border)); flex-direction: column; align-items: stretch; gap: 4px; }
 .sq-param-group--sub[hidden] { display: none !important; }
 .sq-param-group--sub .sq-sub__row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 11px; }
@@ -783,7 +781,6 @@ main {
 .sq-param-group--sub .sq-sub__f { display: inline-flex; align-items: center; gap: 4px; color: var(--fg-dim); }
 .sq-param-group--sub .sq-sub__f .sq-knob { --knob-size: 34px; }
 .sq-param-group--sub select { padding: 2px 6px; font-size: 11px; }
-.sq-param-group--sub .sq-sub__desc { color: var(--fg-dim); font-size: 11px; opacity: 0.85; flex: 1 1 220px; min-width: 0; }
 .sq-param-group--silverbox { border-color: color-mix(in oklab, #ff7a4d 45%, var(--border)); }
 .sq-param-group--silverbox[hidden] { display: none !important; }
 .sq-param-group--silverbox select { padding: 2px 6px; font-size: 11px; }

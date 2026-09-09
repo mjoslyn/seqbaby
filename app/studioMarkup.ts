@@ -90,7 +90,6 @@ const GUITAR_PANEL = `
           <div class="sq-guitar__row">
             <span class="sq-guitar__lbl">tone</span>
             <select class="sq-guitar__tone" title="load a famous rig: the pickup, where the string is picked, the amp and how hard it is driven, the cab, and the four track sliders with it. Every one of them is reachable by hand from here — start on the nearest one and move one control"></select>
-            <span class="sq-guitar__desc"></span>
           </div>
           <div class="sq-guitar__row">
             <span class="sq-guitar__lbl">string</span>
@@ -141,7 +140,6 @@ const BASS_PANEL = `
           <div class="sq-bass__row">
             <span class="sq-bass__lbl">tone</span>
             <select class="sq-bass__tone" title="load a famous rig: the bass, what it is strung with, how it is played, the amp and how compressed. Every control is reachable by hand from here"></select>
-            <span class="sq-bass__desc"></span>
           </div>
           <div class="sq-bass__row">
             <span class="sq-bass__lbl">hand</span>
@@ -194,7 +192,6 @@ const SUB_PANEL = `
           <div class="sq-sub__row">
             <span class="sq-sub__lbl">tone</span>
             <select class="sq-sub__tone" title="load a complete patch: the oscillator, the pitch drop, how hard it is driven and what shapes it. Every control is reachable by hand from here"></select>
-            <span class="sq-sub__desc"></span>
           </div>
           <div class="sq-sub__row">
             <span class="sq-sub__lbl">osc</span>

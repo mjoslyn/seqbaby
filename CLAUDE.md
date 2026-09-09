@@ -487,7 +487,7 @@ STRING ──▶ PICKUP ──▶ tone pot ──▶ AMP ──▶ CAB ──▶
   `GUITAR_MOD_RANGE` gives each its span (pick/pickup position are 0.02..0.5).
 - **The famous tones** (`guitarTone(name)`) return a *complete* set of params
   plus the four sliders. Named for what they sound like, with a one-line
-  description shown beside the dropdown and in the status bar. The panel markup
+  description on each option's tooltip and in the status bar. The panel markup
   is in `app/studioMarkup.ts` (`GUITAR_PANEL`) and the dropdown ships **empty** —
   `renderTrack` fills it from `GUITAR_TONE_NAMES`, so the tones live only here.
 - **Loading** — same Blob-URL registration as the silverbox/contagion/hexop from
