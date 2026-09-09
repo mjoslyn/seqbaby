@@ -1,7 +1,7 @@
 import { applyAutomationAtStep, canAutomate } from "./automation.js";
 import { engineByKey } from "./catalog.js";
 import { clearEuclidLive, euclidFromUnit, euclidToUnit, euclideanRhythm, setEuclidLive, trackEuclid } from "./euclid.js";
-import { LFO_AMP_SCALE, LFO_KEYS, lfoDivLabel } from "./constants.js";
+import { afterPrefix as after, LFO_AMP_SCALE, LFO_KEYS, lfoDivLabel } from "./constants.js";
 import { makeCassetteSatCurve, makeShaperCurve } from "./curves.js";
 import { setParam } from "./params.js";
 import { aliasPattern, state } from "./state.js";
@@ -181,18 +181,18 @@ export function getModTarget(t, key) {
   // The saturation AMOUNT is `vsatamt` on the voice (`vsat` is the curve select
   // next to it, which isn't a param at all), so that one key needs translating.
   if (key.startsWith("contagion_")) {
-    const which = key.slice(6);
+    const which = after(key, "contagion_");
     return t.voice?.getAudioParam?.("v" + (which === "sat" ? "satamt" : which)) ?? null;
   }
   // Hexop: every panel control is an AudioParam on its worklet node, and the key
   // spells the param — hexop_3lvl is operator 3's level, d3lvl on the voice.
-  if (key.startsWith("hexop_")) return t.voice?.getAudioParam?.("d" + key.slice(4)) ?? null;
+  if (key.startsWith("hexop_")) return t.voice?.getAudioParam?.("d" + after(key, "hexop_")) ?? null;
   // Electric guitar: same shape — gtr_bass is the amp's bass control, gtbass on
   // the voice, and an AudioParam on its worklet node.
-  if (key.startsWith("gtr_")) return t.voice?.getAudioParam?.("gt" + key.slice(4)) ?? null;
-  if (key.startsWith("bas_")) return t.voice?.getAudioParam?.("bs" + key.slice(4)) ?? null;
+  if (key.startsWith("gtr_")) return t.voice?.getAudioParam?.("gt" + after(key, "gtr_")) ?? null;
+  if (key.startsWith("bas_")) return t.voice?.getAudioParam?.("bs" + after(key, "bas_")) ?? null;
   // Subby: same again — sub_xover is the crossover, subxover on the voice.
-  if (key.startsWith("sub_")) return t.voice?.getAudioParam?.("sub" + key.slice(4)) ?? null;
+  if (key.startsWith("sub_")) return t.voice?.getAudioParam?.("sub" + after(key, "sub_")) ?? null;
   if (key === "cutoff") return t.filterNode?.frequency ?? null;
   if (key === "reson")  return t.filterNode?.Q ?? null;
   const rack = t.fxRack;
