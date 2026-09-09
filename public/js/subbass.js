@@ -28,9 +28,27 @@
 //                  v
 //   OSC x stack ---+--> clean (the actual sub, kept clean) ------+
 //   (shape morph,  |                                             |
-//    detuned)      +--> SHAPER --> HPF(xover) --> LPF(tone) -----+--> GLUE --> CEILING
-//                  |    (the harmonics that make it audible)     |
-//   SUB OCT -------+---------------------------------------------+
+//    detuned)      +--> SHAPER --> HPF(xover) --> LPF(tone) -----+--> [ split at xover ] --> GLUE --> CEILING
+//                  |    (the harmonics that make it audible)     |     below: straight past
+//   SUB OCT -------+---------------------------------------------+     above: RESONATOR
+//                                                                              (3-pole diode ladder,
+//                                                                               MEG x ENV MOD + ACCENT)
+//
+// The RESONATOR is the silverbox's filter — a 3-pole diode ladder with its own
+// envelope — and where it sits is the whole of the idea. A 303 filter across
+// the entire signal would sweep the fundamental, which is the one thing this
+// instrument exists to keep still. So it goes behind a band split at the SAME
+// crossover the harmonics path uses: below that frequency the sub goes past
+// untouched, above it everything — the raw oscillator's harmonics as much as
+// the shaper's — goes through the ladder. Acid on top of a fundamental the
+// filter can never reach.
+//
+// It has to be a split of the MIX rather than a stage inside the harmonics
+// path, and that is worth stating because the wrong version is the obvious
+// one: the clean path is the raw oscillator, full range, so with the shape
+// morphed anywhere near saw its harmonics run straight past a filter buried in
+// the shaped branch. Measured, that version cut 3.2kHz by 0.3dB when it should
+// have cut it by 30 — the filter was there and doing nothing.
 //
 // One list, three namespaces, as in hexop.js / guitar.js / bass.js: every control
 // is `sub` + a short key, and that short key spells its LFO target
@@ -145,6 +163,9 @@ class SubBassProcessor extends AudioWorkletProcessor {
       k("rel", 0.15, 0, 1), k("click", 0.2, 0, 1),
       // Harmonics path
       a("xover", 0.3, 0, 1), a("edge", 0.35, 0, 1),
+      // The 303 resonator, behind the split at that same crossover
+      a("reso", 0, 0, 1), a("rcut", 0.5, 0, 1), a("renv", 0.55, 0, 1),
+      k("rdec", 0.35, 0, 1), k("racc", 0.35, 0, 1),
       // Output
       a("hpf", 0.1, 0, 1), a("glue", 0.35, 0, 1), a("ceil", 0.85, 0, 1),
     ];
@@ -167,6 +188,20 @@ class SubBassProcessor extends AudioWorkletProcessor {
     this.clickEnv = 0; this.clickC = 0;
     this.noteId = 0;
     this.drift1 = 0; this.drift2 = 0; this.driftT = 0;
+
+    // The 303 resonator: three one-pole TPT stages, the ladder's feedback tap,
+    // its own MEG and its own accent cap. 2x oversampled, so it carries a
+    // decimator of its own — designed at sr2, run at sr2, every second sample
+    // kept.
+    this.r1 = 0; this.r2 = 0; this.r3 = 0; this.rfb = 0;
+    this.resHP = bq();
+    this.rDecim = bq();
+    bqLP(this.rDecim, this.sr * 2, this.sr * 0.44, Math.SQRT1_2);
+    this.rMeg = 0; this.rStage = 0;
+    this.rAtkC = 1 - Math.exp(-1 / (0.0009 * this.sr));   // fixed ~3ms attack
+    this.rDecMul = Math.exp(-3 / (0.5 * this.sr));
+    this.rAcc = 0; this.rAccC = 0;
+    this.rG = 0; this.rK = 0; this.rMake = 1;
 
     this.hcHP = bq(); this.hcLP = bq(); this.outHP = bq(); this.clickBP = bq();
     this.shDC = 0; this.shDCx = 0;
@@ -248,11 +283,52 @@ class SubBassProcessor extends AudioWorkletProcessor {
       this.clickEnv = click * (0.4 + ev.vel * 0.6);
       this.clickC = Math.exp(-1 / (0.0035 * this.sr));
     }
+
+    // ---- the resonator's MEG + accent ----
+    // Attack/decay with no sustain, and it goes on decaying whether or not the
+    // gate is still open — that envelope is as much of the 303 as the filter
+    // is. Roughly 200ms to 2.5s, the machine's own span.
+    this.rStage = 1;
+    this.rDecMul = Math.exp(-3 / (0.2 * Math.pow(12.5, P.rdec) * this.sr));
+    // ACCENT is a charge into an RC network whose time constant tracks the
+    // RESONANCE control (see the decay coefficient in process()), so
+    // consecutive accents at high reso STACK rather than each being an
+    // isolated blip. Driven by step velocity, ramping in above 0.6, exactly as
+    // the silverbox's is — subby has no accent switch, it has a velocity lane.
+    const acc = P.racc * Math.max(0, Math.min(1, (ev.vel - 0.6) / 0.4));
+    if (acc > 0) this.rAcc = Math.min(1.8, this.rAcc + acc);
   }
 
   noteOff(id) {
     if (id !== undefined && id !== this.noteId) return;
     this.gate = false; this.held = false;
+  }
+
+  // The resonator. Three one-pole TPT stages with a diode pair inside the
+  // feedback path — asymmetric soft clipping, which is where the squelch and
+  // the even harmonics come from. 18 dB/oct, not 24, because the machine's is
+  // 3-pole and the missing pole is most of why it sounds nasal rather than
+  // fat.
+  //
+  // 2x oversampled: the clipper is inside the loop, so at high resonance it
+  // folds harmonics back down, and this is the one instrument that cannot
+  // afford aliases in the bottom two octaves. The input is held across both
+  // sub-samples and the output decimated through a 2-pole Butterworth.
+  ladder(x) {
+    const g = this.rG, k = this.rK;
+    let y = 0;
+    for (let o = 0; o < 2; o++) {
+      const f = this.rfb;
+      const sat = f >= 0 ? f / (1 + 0.6 * f) : f / (1 - 1.1 * f);
+      let u = x - k * sat;
+      u = u / (1 + 0.25 * (u < 0 ? -u : u));    // the input stage clips too
+      let v = (u - this.r1) * g; const y1 = v + this.r1; this.r1 = y1 + v;
+      v = (y1 - this.r2) * g;    const y2 = v + this.r2; this.r2 = y2 + v;
+      v = (y2 - this.r3) * g;    const y3 = v + this.r3; this.r3 = y3 + v;
+      this.rfb = y3;
+      y = bqRun(this.rDecim, y3);
+    }
+    return y * this.rMake;
   }
 
   process(inputs, outputs, params) {
@@ -282,6 +358,8 @@ class SubBassProcessor extends AudioWorkletProcessor {
           atk:    P.atk.length    > 1 ? P.atk[i]    : P.atk[0],
           click:  P.click.length  > 1 ? P.click[i]  : P.click[0],
           phase:  P.phase.length  > 1 ? P.phase[i]  : P.phase[0],
+          rdec:   P.rdec.length   > 1 ? P.rdec[i]   : P.rdec[0],
+          racc:   P.racc.length   > 1 ? P.racc[i]   : P.racc[0],
         });
       }
 
@@ -296,6 +374,9 @@ class SubBassProcessor extends AudioWorkletProcessor {
       const rel    = P.rel.length    > 1 ? P.rel[i]    : P.rel[0];
       const xover  = P.xover.length  > 1 ? P.xover[i]  : P.xover[0];
       const edge   = P.edge.length   > 1 ? P.edge[i]   : P.edge[0];
+      const reso   = P.reso.length   > 1 ? P.reso[i]   : P.reso[0];
+      const rcut   = P.rcut.length   > 1 ? P.rcut[i]   : P.rcut[0];
+      const renv   = P.renv.length   > 1 ? P.renv[i]   : P.renv[0];
       const hpf    = P.hpf.length    > 1 ? P.hpf[i]    : P.hpf[0];
       const glue   = P.glue.length   > 1 ? P.glue[i]   : P.glue[0];
       const ceil   = P.ceil.length   > 1 ? P.ceil[i]   : P.ceil[0];
@@ -309,12 +390,52 @@ class SubBassProcessor extends AudioWorkletProcessor {
         // clean fundamental underneath is never intermodulated.
         const xf = 60 * Math.pow(2, xover * 3.8);
         bqHP(this.hcHP, sr, xf, 0.7);
+        // The resonator splits at the same frequency, and deliberately so:
+        // this control already means "where the sub ends", and a second one
+        // saying the same thing an octave away would only ever be a mistake
+        // waiting to be made.
+        bqHP(this.resHP, sr, xf, 0.7);
         // TONE is the lid on the harmonics, not on the sub — 300Hz to 9kHz.
         bqLP(this.hcLP, sr, 300 * Math.pow(2, tone * 4.9), 0.7);
         // The rumble filter. Below about 25Hz there is no pitch left, only
         // cone excursion spending headroom on air it cannot move.
         bqHP(this.outHP, sr, 16 + hpf * hpf * 55, 0.7);
         bqBP(this.clickBP, sr, 1800, 0.9);
+      }
+
+      // ---- the resonator's cutoff CV ----
+      // tan() once per control block rather than once per sample. The sweep is
+      // an envelope hundreds of milliseconds long and a block is 0.33ms, so the
+      // staircase is far below anything audible — the same bargain contagion.js
+      // strikes with its filter coefficients.
+      const resOn = reso > 0.001;
+      if (resOn) {
+        const sr2 = sr * 2;
+        // No key tracking, because the machine has none: its high notes really
+        // are duller than its low ones and that is not a bug to fix. Resonance
+        // pulls the corner down a little, as the diode ladder's loading does.
+        let fc = 100 * Math.pow(2, rcut * 6.3) * (1 - 0.16 * reso);
+        // ENV MOD in octaves, plus whatever charge the accent cap is holding —
+        // the second term is why an accented run climbs.
+        fc *= Math.exp((renv * this.rMeg * 4.2 + this.rAcc * (0.5 + 1.5 * reso)) * Math.LN2);
+        const fMax = Math.min(16000, sr2 * 0.44);
+        if (fc > fMax) fc = fMax; else if (fc < 30) fc = 30;
+        const G = Math.tan(Math.PI * fc / sr2);
+        this.rG = G / (1 + G);
+        this.rK = 7.2 * reso;
+        // Partial makeup only: the feedback costs about 1/(1+k) of the passband
+        // and the machine never clawed it back. Restoring all of it would erase
+        // the thinning that IS a high-resonance acid line.
+        this.rMake = Math.pow(1 + this.rK, 0.35);
+        // The accent cap drains through the resonance network, so its time
+        // constant moves with RESO. That is the stacking.
+        this.rAccC = Math.exp(-1 / ((0.05 + 0.28 * reso) * sr));
+      } else {
+        // Turned off, so it must not be holding yesterday's state for whenever
+        // it is turned back on.
+        this.r1 = 0; this.r2 = 0; this.r3 = 0; this.rfb = 0;
+        this.resHP.z1 = 0; this.resHP.z2 = 0;
+        this.rAccC = 0;
       }
 
       // The decay runs whether or not the step is still held — that is what an
@@ -381,6 +502,18 @@ class SubBassProcessor extends AudioWorkletProcessor {
         if (this.pEnv > 1e-5) this.pEnv *= this.pDecC; else this.pEnv = 0;
         if (this.clickEnv > 1e-5) this.clickEnv *= this.clickC; else this.clickEnv = 0;
 
+        // The resonator's MEG and accent cap run BEFORE the silence bail-out
+        // below: the cap has to go on draining through the gaps between notes,
+        // or the stacking would depend on whether the last note had finished.
+        if (this.rStage === 1) {
+          this.rMeg += (1.05 - this.rMeg) * this.rAtkC;
+          if (this.rMeg >= 1) { this.rMeg = 1; this.rStage = 2; }
+        } else if (this.rStage === 2) {
+          this.rMeg *= this.rDecMul;
+          if (this.rMeg < 1e-5) { this.rMeg = 0; this.rStage = 0; }
+        }
+        if (this.rAcc > 1e-5) this.rAcc *= this.rAccC; else this.rAcc = 0;
+
         if (this.env === 0 && this.clickEnv === 0) { o[base + s] = 0; continue; }
 
         // The drop, in semitones, on top of the note.
@@ -434,6 +567,17 @@ class SubBassProcessor extends AudioWorkletProcessor {
         // small speaker it is often the only part of the note that arrives.
         if (this.clickEnv > 1e-5) {
           sig += bqRun(this.clickBP, (Math.random() * 2 - 1)) * this.clickEnv * 0.8;
+        }
+
+        // ---- the 303 resonator, behind a split at the crossover ----
+        // Everything above the crossover goes through the ladder; what is
+        // below it — the fundamental, the sub octave, the part this instrument
+        // is for — bypasses the filter entirely and is added back. The low
+        // band is taken as the complement of the highpass rather than as a
+        // second filter, so the two always sum to the signal that went in.
+        if (resOn) {
+          const hi = bqRun(this.resHP, sig);
+          sig = (sig - hi) + this.ladder(hi);
         }
 
         sig = bqRun(this.outHP, sig);
@@ -540,6 +684,11 @@ export const SUB_NUM_CTLS = [
   ["click",  0, 1, 0.2,  "click"],
   ["xover",  0, 1, 0.3,  "xover"],
   ["edge",   0, 1, 0.35, "edge"],
+  ["reso",   0, 1, 0,    "reso"],
+  ["rcut",   0, 1, 0.5,  "reso cutoff"],
+  ["renv",   0, 1, 0.55, "reso env"],
+  ["rdec",   0, 1, 0.35, "reso decay"],
+  ["racc",   0, 1, 0.35, "reso accent"],
   ["hpf",    0, 1, 0.1,  "low cut"],
   ["glue",   0, 1, 0.35, "glue"],
   ["ceil",   0, 1, 0.85, "ceiling"],
@@ -604,6 +753,14 @@ const TONES = {
     p: { oct: 0.3, detune: 0.55, phase: 0, drift: 0.12, drop: 0, droptm: 0.2,
          atk: 0.06, rel: 0.25, click: 0, xover: 0.28, edge: 0.2,
          hpf: 0.12, glue: 0.45, ceil: 0.82, stack: "3", sat: "fold", glidem: "always" },
+  },
+  "acid": {
+    d: "a saw through the 3-pole ladder, squelching on top of a fundamental the filter can never reach. Write the velocities high on a few steps and the accents pile up into the climb",
+    drive: 0.66, tone: 0.72, shape: 0.66, decay: 0.35,
+    p: { oct: 0, detune: 0, phase: 0.25, drift: 0.05, drop: 0, droptm: 0.2,
+         atk: 0.01, rel: 0.1, click: 0.06, xover: 0.22, edge: 0.3,
+         reso: 0.72, rcut: 0.3, renv: 0.62, rdec: 0.3, racc: 0.6,
+         hpf: 0.12, glue: 0.4, ceil: 0.84, stack: "1", sat: "tube", glidem: "legato" },
   },
   "dub": {
     d: "slow in, slow out, an octave underneath and nothing above 200Hz. A note you feel arriving before you hear it",
