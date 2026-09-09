@@ -263,7 +263,7 @@ export function syncBassPanel(t) {
 }
 
 /**
- * The same, for the sub bass panel — a tone loads the whole patch, so every
+ * The same, for subby's panel — a tone loads the whole patch, so every
  * control and the four track sliders have to be written back at once.
  * @param {Track} t
  */
@@ -537,7 +537,7 @@ export function renderTrack(t) {
       for (const [key, val] of Object.entries(tone)) setParam(t, key, val);
       syncSubPanel(t);
       refreshParamIndicators(t);
-      setStatus(`sub bass "${name}" — ${subToneDescription(name)}`);
+      setStatus(`subby "${name}" — ${subToneDescription(name)}`);
     });
   }
   // Loading a voice writes every panel control at once — the operators, the

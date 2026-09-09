@@ -118,9 +118,9 @@ env / fx / eq / comp / mod / automation per track.
   table. Same file shape as the three above. See the guitar section below.
 - `bass.js` — the electric bass, guitar.js's sibling: same waveguide, wound and
   stiffer, with a parallel dirt path, a rig compressor and an octaver.
-- `subbass.js` — the sub bass: a monophonic synth for the bottom two octaves,
+- `subbass.js` — **subby**, the sub bass: a monophonic synth for the bottom two octaves,
   whose defining part is the parallel harmonics path that makes a 40Hz note
-  audible on a speaker that cannot reproduce 40Hz. See the sub bass section.
+  audible on a speaker that cannot reproduce 40Hz. See the subby section.
 - `dx7.js` — the Yamaha DX7, same shape again, plus the 32-algorithm
   table, the panel's generated key lists and the preset voices. See the DX7
   section below.
@@ -233,8 +233,8 @@ Voice interface: `hit(midi, time, dur, vel, opts?)`, `setParam`,
 
 All engine type `drum-synth`. The five Tone.js analog-mono presets are each
 wrapped in `makePolyPool(size, buildOne)`; the 303, the Virus, the DX7, the
-guitar, the bass and the sub bass are the odd ones out — AudioWorklet models
-that handle their own voicing (the 303 and the sub bass are mono, deliberately;
+guitar, the bass and subby are the odd ones out — AudioWorklet models
+that handle their own voicing (the 303 and subby are mono, deliberately;
 the rest polyphonic). See their
 sections below. The guitar and bass keep their old pluck builders in voices.js
 (`buildPluckGuitarVoice` / `buildPluckBassVoice`) purely as worklet fallbacks.
@@ -249,7 +249,7 @@ sections below. The guitar and bass keep their old pluck builders in voices.js
 | `dm:juno`       | `buildJunoVoice`      | 6 | DCO + sub + noise → HPF → baked-in chorus |
 | `dm:guitar`     | `buildGuitarVoice`    | 6 (internal) | electric guitar rig, AudioWorklet (`guitar.js`) |
 | `dm:bass`       | `buildBassVoice`      | 4 (internal) | electric bass rig, AudioWorklet (`bass.js`) |
-| `dm:sub`        | `buildSubBassVoice`   | mono | sub bass, AudioWorklet (`subbass.js`) |
+| `dm:sub`        | `buildSubBassVoice`   | mono | subby, the sub bass, AudioWorklet (`subbass.js`) |
 | `dm:rhodes`     | `buildRhodesVoice`    | 6 | electric piano |
 | `dm:prophet6`   | `buildProphet6Voice`  | 6 | poly analog |
 
@@ -503,7 +503,7 @@ STRING ──▶ PICKUP ──▶ tone ──┬── clean (lows, kept clean) 
   `BASS_PANEL` in `app/studioMarkup.ts` with the dropdown filled at runtime.
 - **Loading** — as above; falls back to `buildPluckBassVoice`.
 
-## Sub bass (`dm:sub`, `public/js/subbass.js`)
+## Subby — the sub bass (`dm:sub`, `public/js/subbass.js`)
 
 An instrument for the bottom two octaves and nothing else. The 20-80Hz region
 has four problems no general-purpose engine solves, and each one is a feature
@@ -1100,7 +1100,7 @@ fails. Real-time capture — see Known limitations.
 ## Engines catalog (`buildEngineCatalog`)
 
 Groups in order: `plaits` (16) · `drum / synth` (808/909 kit + poly-saw /
-fm-bell / pad) · `Emulators` (303 + virus + dx7 + guitar + bass + sub bass + 5 analog-mono) · `texture` (`dm:granular`) ·
+fm-bell / pad) · `Emulators` (303 + virus + dx7 + guitar + bass + subby + 5 analog-mono) · `texture` (`dm:granular`) ·
 `wavetable` (`wt:akwf`) · `sampler` (single unified entry) · `saved patches`
 (`saved:<name>`) · `midi` · `bus` (the fx bus — not an instrument, see below).
 The engine key string is the source of truth.

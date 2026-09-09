@@ -1,4 +1,4 @@
-// ---- sub bass -----------------------------------------------------------
+// ---- subby: the sub bass ------------------------------------------------
 // An instrument for the bottom two octaves and nothing else. Not "a synth you
 // can play low" — a synth that only makes sense down there, because the 20-80Hz
 // region has four problems that no general-purpose engine solves and that a
@@ -555,7 +555,7 @@ export const SUB_SEL_KEYS = SUB_SEL_CTLS.map(c => `sb${c[0]}`);
 export const SUB_MOD_RANGE = Object.fromEntries(SUB_NUM_CTLS.map(c => [c[0], [c[1], c[2]]]));
 
 export const SUB_MOD_LABELS = Object.fromEntries(
-  SUB_NUM_CTLS.map(([k, , , , label]) => [k, `sub ${label}`]));
+  SUB_NUM_CTLS.map(([k, , , , label]) => [k, `subby ${label}`]));
 
 export const SUB_DEFAULTS = {
   ...Object.fromEntries(SUB_NUM_CTLS.map(c => [`sb${c[0]}`, c[3]])),

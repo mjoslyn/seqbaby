@@ -241,7 +241,7 @@ export function loadWorklet() {
   const dx7 = loadDx7Worklet(state.audioCtx).catch(e => { console.warn("dx7 worklet load failed", e); });
   const guitar = loadGuitarWorklet(state.audioCtx).catch(e => { console.warn("guitar worklet load failed", e); });
   const bass = loadBassWorklet(state.audioCtx).catch(e => { console.warn("bass worklet load failed", e); });
-  const sub = loadSubBassWorklet(state.audioCtx).catch(e => { console.warn("sub bass worklet load failed", e); });
+  const sub = loadSubBassWorklet(state.audioCtx).catch(e => { console.warn("subby worklet load failed", e); });
   return Promise.all([state.woscLoad, tb303, virus, dx7, guitar, bass, sub]);
 }
 

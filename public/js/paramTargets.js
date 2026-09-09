@@ -211,7 +211,7 @@ export const CONTROL_LABELS = {
   ...Object.fromEntries(BASS_MOD_KEYS.map(k => [`p-bs${k}`, BASS_MOD_LABELS[k]])),
   ...Object.fromEntries(SUB_MOD_KEYS.map(k => [`p-sb${k}`, SUB_MOD_LABELS[k]])),
   "p-sbstack": "oscillator stack", "p-sbsat": "shaper",
-  "p-sbglidem": "glide mode", "sq-sub__tone": "sub bass tone",
+  "p-sbglidem": "glide mode", "sq-sub__tone": "subby tone",
   "p-bsamp": "bass amp", "p-bscab": "bass cabinet",
   "p-bspkupt": "bass pickup", "p-bsstrs": "string type",
   "sq-bass__tone": "bass tone",
