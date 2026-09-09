@@ -242,10 +242,10 @@ const SUB_PANEL = `
 export const STUDIO_BODY = String.raw`
 <header class="sq-transport">
     <div class="sq-transport__main">
-    <div class="sq-logo" title="seqbaby">
+    <a class="sq-logo" href="/" title="seqbaby — start a new song">
       <img src="/favicon.svg" alt="" />
       <span>seqbaby</span>
-    </div>
+    </a>
     <button id="play" class="sq-play">play</button>
     <button id="kbd-record" class="sq-btn--ghost sq-icon-btn" type="button" aria-pressed="false" aria-label="record keyboard notes" title="record computer-keyboard notes into the active track while the transport plays"></button>
     <button id="kbd-capture" class="sq-btn--ghost sq-icon-btn" type="button" aria-label="capture keyboard notes" title="capture the notes you just played on the keyboard into the active track (retroactive)"></button>
@@ -791,6 +791,7 @@ ${SUB_PANEL}
         <option value="triangle">triangle</option>
         <option value="sawtooth">saw</option>
         <option value="square">square</option>
+        <option value="randsq">rnd square</option>
         <option value="euclid">euclid</option>
       </select>
       <label class="sq-lfo__sync-wrap">
@@ -803,7 +804,7 @@ ${SUB_PANEL}
         <input class="sq-lfo__div" type="range" min="0" max="7" step="1" value="3" title="how long one cycle is, counted in sequencer steps" />
         <span class="sq-lfo__rate-label">1.00 hz</span>
       </div>
-      <div class="sq-field">
+      <div class="sq-field sq-lfo__amt-field">
         <label>amount</label>
         <input class="lfo-depth" type="range" min="0" max="1" step="0.01" value="0.5" />
         <span class="sq-lfo__depth-line">
@@ -813,6 +814,11 @@ ${SUB_PANEL}
             <span aria-hidden="true">±</span>
           </label>
         </span>
+      </div>
+      <div class="sq-field sq-lfo__phase-field">
+        <label>phase</label>
+        <input class="lfo-phase" type="range" min="0" max="1" step="0.005" value="0" title="where in its cycle the shape starts. A quarter turn between two lfos at the same rate is a circular pan; half a turn is the same sweep upside down. On the euclid ring the cycle is one step, so this nudges the taps off the grid — whole steps are what rotate moves" />
+        <span class="sq-lfo__phase-label">0°</span>
       </div>
       <button class="sq-lfo__remove sq-btn--ghost" type="button" title="remove this modulation">×</button>
       <div class="sq-lfo__euc" hidden>

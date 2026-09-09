@@ -3,6 +3,7 @@
 import { signOut } from "@/app/auth/actions";
 import SongsMenu from "@/app/SongsMenu";
 import SaveButton from "@/app/SaveButton";
+import NewSongButton from "@/app/NewSongButton";
 import styles from "@/app/ui.module.css";
 
 // A dedicated account bar that sits above the transport (rendered as the first
@@ -19,6 +20,7 @@ export function AccountBar({
       <a className={styles.manualLink} href="/manual" title="how seqbaby works">
         manual
       </a>
+      <NewSongButton />
       {name && <SaveButton />}
       <button
         className={styles.shareBtn}

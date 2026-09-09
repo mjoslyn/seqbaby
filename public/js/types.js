@@ -66,13 +66,16 @@
  * Configuration for one LFO modulation lane (see defaultLFOConfig / lfo.js).
  * @typedef {Object} LFOConfig
  * @property {boolean} enabled
- * @property {"sine"|"triangle"|"square"|"saw"|"random"} type
+ * @property {"sine"|"triangle"|"sawtooth"|"square"|"randsq"|"euclid"} type
  * @property {number} rate   Free-run rate in Hz.
  * @property {number} depth  0..1 modulation amount (peak-to-peak).
  * @property {boolean} sync  Sync rate to transport division.
  * @property {number} div    Beats per cycle when synced (one of LFO_DIVS).
  * @property {boolean} [bipolar]  Swing either side of the control (true) or only
  *   lift it (false). Absent means the shape's default — see lfoBipolar.
+ * @property {number} [phase]  Where in its cycle the shape starts, 0..1 turns.
+ *   Written lazily (see lfoPhase); absent means 0, which is what every shape did
+ *   before the knob existed.
  * @property {number} [epulses]  Euclid shape only, written lazily (see lfoEuclid).
  * @property {number} [esteps]
  * @property {number} [erotate]

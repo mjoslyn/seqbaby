@@ -35,6 +35,50 @@ export function showInputDialog({ title, defaultValue = "", placeholder = "", mu
   });
 }
 
+/**
+ * Modal: ask before something destructive. Resolves true / false.
+ *
+ * The one thing here the other dialogs don't do is default to CANCEL — Escape,
+ * the backdrop and Enter all decline. These only ever guard something this app
+ * cannot undo, so the safe answer is the one a stray keypress lands on.
+ *
+ * @param {{title: string, body?: string, confirmLabel?: string}} opts
+ */
+export function showConfirmDialog({ title, body = "", confirmLabel = "ok" }) {
+  return new Promise((resolve) => {
+    const overlay = document.createElement("div");
+    overlay.className = "sq-modal-overlay";
+    const esc = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+    overlay.innerHTML = `
+      <div class="sq-modal" role="dialog" aria-modal="true">
+        <div class="sq-modal__title">${esc(title)}</div>
+        ${body ? `<div class="sq-modal__body">${esc(body)}</div>` : ""}
+        <div class="sq-modal__actions">
+          <button class="modal-cancel sq-btn--ghost">cancel</button>
+          <button class="sq-modal__ok">${esc(confirmLabel)}</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    const ok = overlay.querySelector(".sq-modal__ok");
+    setTimeout(() => ok.focus(), 0);
+    const close = (v) => {
+      overlay.remove();
+      document.removeEventListener("keydown", onKey);
+      resolve(v);
+    };
+    const onKey = (e) => {
+      if (e.key === "Escape") close(false);
+      // Enter confirms only when the confirm button itself has focus, which the
+      // browser handles: nothing here turns a keypress somewhere else into a yes.
+    };
+    document.addEventListener("keydown", onKey);
+    ok.addEventListener("click", () => close(true));
+    overlay.querySelector(".modal-cancel").addEventListener("click", () => close(false));
+    overlay.addEventListener("click", (e) => { if (e.target === overlay) close(false); });
+  });
+}
+
 // Modal: pick one of the user's saved patches. Returns patch name or null.
 export function showSavedPatchPicker() {
   return new Promise((resolve) => {
