@@ -1002,6 +1002,16 @@ drums ─┘   (fader, vol)      one filter, one rack, one mod matrix, one set o
 - The transport skips a bus after `runAutomationForStep` — mute/solo can't gate
   it there (its lanes have to keep running for the tracks feeding it), and
   everything below that line fires a note.
+- **A bus always sits at the bottom of the track list** (`placeBusesLast` in
+  render.js, which moves `state.tracks` and the DOM together): it is the end of
+  a chain, so the tracks feeding it read as a group above it. Called from
+  `createTrack`, `duplicateTrack`, `setEngineKey` and `applyTrackPatch` (a patch
+  carries an engine, so a track can become one), and once at the end of
+  `applySet`. Once, at the end — not per track — because every cross-track
+  reference in a song is an INDEX INTO THE SERIALIZED ORDER (`outIndex`,
+  `compSourceIndex`, the macro pads' `track`), so `applySet` resolves those
+  against the order it created the tracks in (`made`, and `applyMacroPads`'s
+  second argument) and reorders only once they are ids.
 - UI: `+ add fx bus` under the track list, an `out` select per track (hidden
   until a bus exists), a `◂ what feeds me` line on the bus, and `is-bus` on the
   track node, which style.css uses to hide the step grid, the roll, the dice,

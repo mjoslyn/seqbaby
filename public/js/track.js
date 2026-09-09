@@ -12,7 +12,7 @@ import { updatePlaitsControlsVisibility } from "./params.js";
 import { renderPatternGrid } from "./patternBar.js";
 import { refreshAutIfOpen, refreshRollIfOpen } from "./pianoRoll.js";
 import { refreshEuclidUI, renderEuclidPanel } from "./euclid.js";
-import { paintDiceDensity, refreshFxPanelUI, renderModPanel, renderTrack } from "./render.js";
+import { paintDiceDensity, placeBusesLast, refreshFxPanelUI, renderModPanel, renderTrack } from "./render.js";
 import { applySet } from "./session.js";
 import { defaultCompConfig, ensureFxRack, refreshAllTrackOutputs, refreshCompSourceDropdowns, refreshOutputSelects, routeVoiceToRack } from "./signal.js";
 import { aliasPattern, clonePattern, emptyPattern, state } from "./state.js";
@@ -129,6 +129,9 @@ export function createTrack({ name, engineKey, length = totalSteps() }) {
   aliasPattern(t, state.activePattern);
   state.tracks.push(t);
   renderTrack(t);
+  // Buses live at the bottom, so a new instrument track lands above them
+  // rather than after the sends it feeds (render.js).
+  placeBusesLast();
   refreshCompSourceDropdowns();
   refreshOutputSelects();
   if (state.ready) {
@@ -239,13 +242,18 @@ export function duplicateTrack(src) {
     renderModPanel(dup, dup._modPanelEl || dup.el.querySelector(".sq-track__mod-panel"));
   }
 
-  // Move the duplicate right after the source in DOM + state order.
+  // Move the duplicate right after the source in DOM + state order. It isn't
+  // necessarily last: createTrack has already dropped it above any buses.
+  const dupIdx = state.tracks.indexOf(dup);
   const srcIdx = state.tracks.indexOf(src);
-  if (srcIdx >= 0 && srcIdx < state.tracks.length - 1) {
-    state.tracks.pop();
-    state.tracks.splice(srcIdx + 1, 0, dup);
+  if (srcIdx >= 0 && dupIdx >= 0 && dupIdx !== srcIdx + 1) {
+    state.tracks.splice(dupIdx, 1);
+    state.tracks.splice(state.tracks.indexOf(src) + 1, 0, dup);
     src.el.parentNode.insertBefore(dup.el, src.el.nextSibling);
   }
+  // A copy always lands in its source's own group, so this is a no-op — but
+  // the splice above is the one place track order is written by hand.
+  placeBusesLast();
 
   if (state.ready) {
     disposeLFOs(dup);

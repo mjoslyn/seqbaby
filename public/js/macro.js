@@ -434,13 +434,19 @@ export function serializeMacroPads() {
   return macroPads().map(p => ({ name: p.name, latch: !!p.latch, x: conv(p.x), y: conv(p.y) }));
 }
 
-export function applyMacroPads(data) {
+/**
+ * @param {any} data serialized pads
+ * @param {Track[]} [order] the tracks in the order the stored indices count
+ *   along — the order the session file listed them in, which is not
+ *   `state.tracks` once applySet has moved the fx buses to the bottom.
+ */
+export function applyMacroPads(data, order = state.tracks) {
   state.macroPads = [];
   _nextPadId = 1;
   if (!Array.isArray(data)) return;
   const conv = (list) => (Array.isArray(list) ? list : [])
     .map(a => {
-      const t = state.tracks[a.track];
+      const t = order[a.track];
       return t ? { trackId: t.id, key: a.key, lo: Number(a.lo) || 0,
                    hi: a.hi == null ? 1 : Number(a.hi), invert: !!a.invert } : null;
     })
