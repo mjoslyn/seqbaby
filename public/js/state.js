@@ -272,10 +272,15 @@ export function switchPattern(idx) {
   // The p-lock button's state belongs to the pattern, so it changes under you.
   refreshAllPatternLockUI();
   renderPatternGrid();
-  const repInput = document.getElementById("pattern-repeats");
-  if (repInput) repInput.value = state.patternRepeats[idx] ?? 1;
+  syncRepeatsUI();
   syncMeterUI();
   state.chainBarCount = 0;
+}
+
+/** Write the active pattern's repeat count back into the rep field. */
+export function syncRepeatsUI() {
+  const repInput = document.getElementById("pattern-repeats");
+  if (repInput) repInput.value = state.patternRepeats[state.activePattern] ?? 1;
 }
 
 export function syncMeterUI() {

@@ -16,7 +16,7 @@ import { syncScaleUI } from "./scaleUI.js";
 import { migrateLegacyNames, migrateTrackNames, SET_VERSION, validateSet } from "./sessionFormat.js";
 import { applyCompressorConfig, ensureFxRack, refreshAllTrackOutputs, refreshCompSourceDropdowns, refreshOutputSelects, routeVoiceToRack, wouldFeedback } from "./signal.js";
 import { applyMacroPads, serializeMacroPads } from "./macro.js";
-import { aliasPattern, state, syncMeterUI } from "./state.js";
+import { aliasPattern, state, syncMeterUI, syncRepeatsUI } from "./state.js";
 import { renderStepGrid } from "./stepGrid.js";
 import { createTrack, removeTrack } from "./track.js";
 import { ensureAudio, requestMidiIfNeeded, silenceAllVoices } from "./transport.js";
@@ -48,6 +48,7 @@ export function serializeSet() {
     patternMode: state.patternMode,
     patternSwitchMode: state.patternSwitchMode,
     patternMeters: state.patternMeters.map(m => ({ num: m.num, den: m.den })),
+    patternRepeats: state.patternRepeats.map(r => Number(r) || 1),
     // Pads are global and cross-track, so they sit up here beside the tempo
     // rather than inside a track. Assignments are stored by track index — ids
     // are handed out fresh by createTrack on load and would not survive.
@@ -367,6 +368,14 @@ export function applySet(s) {
       state.patternMeterCustomized[i] = i !== 0 && (mi.num !== m0.num || mi.den !== m0.den);
     }
   }
+  // Chain-mode bar counts. Written unconditionally (not only when the set
+  // carries them) so loading a song can't leave the previous one's repeats
+  // behind; a set saved before these were serialized loads as all-1s, which is
+  // what it played with.
+  for (let i = 0; i < PATTERN_COUNT; i++) {
+    const r = Math.round(Number(s.patternRepeats?.[i]));
+    state.patternRepeats[i] = Number.isFinite(r) ? Math.max(1, Math.min(16, r)) : 1;
+  }
   state.patternMode = s.patternMode === "chain" ? "chain" : "repeat";
   const modeBtn = document.getElementById("pattern-mode");
   modeBtn.innerHTML = state.patternMode === "chain" ? ICON_CHAIN : ICON_REPEAT;
@@ -623,6 +632,7 @@ export function applySet(s) {
   // After the tracks exist, so the stored indices resolve to real tracks.
   applyMacroPads(s.macroPads);
   renderPatternGrid();
+  syncRepeatsUI();
   syncMeterUI();
   setStatus("set loaded");
   // Handed back so a caller can surface a warning (chiefly "saved by a newer
