@@ -9,10 +9,14 @@
 -- that what the tests actually measure is the POLICIES.
 
 grant select, insert, update, delete
-  on public.profiles, public.songs, public.patches
+  on public.profiles, public.songs, public.patches, public.song_versions
   to authenticated;
 
-grant select on public.profiles, public.songs, public.patches to anon;
+-- song_versions is granted to anon on purpose, even though no policy lets anon
+-- read a row: a missing grant would make the "anon cannot see history" tests
+-- pass without the policy doing any of the work.
+grant select on public.profiles, public.songs, public.patches, public.song_versions
+  to anon;
 
 -- 0007 grants profile_cards itself; repeated here so the file is self-contained
 -- if the view is ever recreated by hand.

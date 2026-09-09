@@ -1,11 +1,27 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { saveNamedSong } from "@/app/songs/actions";
+import {
+  getOpenSong,
+  setOpenSong,
+  subscribeOpenSong,
+} from "@/app/songs/openSong";
 import styles from "@/app/ui.module.css";
 
 // Top-bar "save" with a name + public popup. Saves the current session to the
 // cloud (upsert by name); when public, publishes it and copies the share link.
+//
+// A save under the open song's own name is a new version of it, branching off
+// whichever version is loaded -- the same rule the songs menu follows. Saving
+// under a different name is a different song, so the parent is dropped and that
+// song starts its own tree.
 export default function SaveButton() {
   const [ready, setReady] = useState(false);
   const [open, setOpen] = useState(false);
@@ -16,6 +32,17 @@ export default function SaveButton() {
     text: "",
   });
   const wrapRef = useRef<HTMLDivElement>(null);
+  const openSong = useSyncExternalStore(
+    subscribeOpenSong,
+    getOpenSong,
+    getOpenSong,
+  );
+
+  // Opening the popup offers the name of whatever is loaded, so the common case
+  // (save what I am working on) is one click and does not fork by typo.
+  useEffect(() => {
+    if (open && !title && openSong.title) setTitle(openSong.title);
+  }, [open, title, openSong.title]);
 
   useEffect(() => {
     if (window.seqbaby) return setReady(true);
@@ -39,13 +66,21 @@ export default function SaveButton() {
     setSaving(true);
     setStatus({ text: "Saving…" });
     const data = window.seqbaby.serializeSet();
+    const t = title.trim() || "untitled";
+    const sameSong = t === openSong.title && openSong.versionId;
     const res = await saveNamedSong({
-      title: title.trim() || "untitled",
+      title: t,
       data,
       isPublic,
+      parentVersionId: sameSong ? openSong.versionId : undefined,
     });
     setSaving(false);
     if (res.error) return setStatus({ text: res.error, err: true });
+    setOpenSong({
+      id: res.id ?? null,
+      title: t,
+      versionId: res.versionId ?? null,
+    });
     if (isPublic && res.slug) {
       const url = `${location.origin}/?s=${res.slug}`;
       try {
@@ -55,9 +90,13 @@ export default function SaveButton() {
         setStatus({ text: "Saved (public)" });
       }
     } else {
-      setStatus({ text: "Saved" });
+      setStatus({
+        text: res.unchanged
+          ? `No changes since v${res.versionSeq}`
+          : `Saved as v${res.versionSeq}`,
+      });
     }
-  }, [title, isPublic]);
+  }, [title, isPublic, openSong.title, openSong.versionId]);
 
   if (!ready) return null;
 
@@ -88,6 +127,11 @@ export default function SaveButton() {
             />
             public — shareable + shown on your profile
           </label>
+          {openSong.title && title.trim() === openSong.title && (
+            <div className={styles.treeHint}>
+              saves as a new version of &ldquo;{openSong.title}&rdquo;
+            </div>
+          )}
           <button
             className={`${styles.smallBtn} ${styles.smallBtnPrimary}`}
             style={{ width: "100%" }}

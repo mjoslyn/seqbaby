@@ -43,6 +43,15 @@ insert into public.songs (id, owner_id, title, data, is_public) values
   ('a0000000-0000-4000-8000-00000000000a', 'a11ce000-0000-4000-8000-000000000001', 'alice public', '{}', true),
   ('a0000000-0000-4000-8000-00000000000b', 'a11ce000-0000-4000-8000-000000000001', 'alice private', '{}', false);
 
+-- Alice's public song has a two-version history: publishing a song publishes
+-- the state she chose to publish, and the drafts behind it must stay hers.
+insert into public.song_versions (id, song_id, owner_id, parent_id, data, seq, label) values
+  ('d0000000-0000-4000-8000-00000000000a', 'a0000000-0000-4000-8000-00000000000a', 'a11ce000-0000-4000-8000-000000000001', null, '{"v":1}', 1, 'first save'),
+  ('d0000000-0000-4000-8000-00000000000b', 'a0000000-0000-4000-8000-00000000000a', 'a11ce000-0000-4000-8000-000000000001', 'd0000000-0000-4000-8000-00000000000a', '{"v":2}', 2, null);
+
+update public.songs set current_version_id = 'd0000000-0000-4000-8000-00000000000b'
+ where id = 'a0000000-0000-4000-8000-00000000000a';
+
 insert into public.patches (id, owner_id, name, config, is_public) values
   ('c0000000-0000-4000-8000-00000000000a', 'a11ce000-0000-4000-8000-000000000001', 'alice public patch', '{}', true),
   ('c0000000-0000-4000-8000-00000000000b', 'a11ce000-0000-4000-8000-000000000001', 'alice private patch', '{}', false),
@@ -131,6 +140,128 @@ begin
   raise notice 'PASS  bob can still write and read his own songs';
 end $$;
 rollback;
+
+\echo ''
+\echo '== song_versions: history is the owner''s, even for a public song =='
+
+begin;
+set local role authenticated;
+set local request.jwt.claims = '{"sub":"b0b00000-0000-4000-8000-000000000002","role":"authenticated"}';
+do $$
+declare n bigint;
+begin
+  -- The asymmetry that matters: bob can read the public song itself, and none
+  -- of its versions. songs_public_read has no counterpart here on purpose.
+  select count(*) into n from public.songs
+   where id = 'a0000000-0000-4000-8000-00000000000a';
+  if n <> 1 then raise exception 'FAIL  fixture wrong: bob cannot see alice''s public song'; end if;
+
+  select count(*) into n from public.song_versions
+   where song_id = 'a0000000-0000-4000-8000-00000000000a';
+  if n <> 0 then raise exception 'FAIL  bob read % versions of alice''s PUBLIC song', n; end if;
+  raise notice 'PASS  bob cannot read the history behind alice''s public song';
+
+  select count(*) into n from public.song_versions
+   where id = 'd0000000-0000-4000-8000-00000000000a';   -- by id, in case a filter changes the plan
+  if n <> 0 then raise exception 'FAIL  bob read one of alice''s versions by id'; end if;
+  raise notice 'PASS  bob cannot reach a version by id either';
+
+  with u as (
+    update public.song_versions set data = '{"defaced":true}'
+     where song_id = 'a0000000-0000-4000-8000-00000000000a' returning 1)
+  select count(*) into n from u;
+  if n <> 0 then raise exception 'FAIL  bob rewrote % of alice''s versions', n; end if;
+  raise notice 'PASS  bob cannot rewrite alice''s history';
+end $$;
+rollback;
+
+begin;
+set local role authenticated;
+set local request.jwt.claims = '{"sub":"b0b00000-0000-4000-8000-000000000002","role":"authenticated"}';
+do $$
+begin
+  -- owner_id alone is not enough: without the songs-ownership half of the WITH
+  -- CHECK, bob could hang his own rows off alice's tree. She would never see
+  -- them, and they would still be rows on her song.
+  begin
+    insert into public.song_versions (song_id, owner_id, parent_id, data, seq)
+      values ('a0000000-0000-4000-8000-00000000000a',
+              'b0b00000-0000-4000-8000-000000000002', null, '{}', 99);
+    raise exception 'FAIL  bob appended a version to alice''s song';
+  exception when insufficient_privilege then
+    raise notice 'PASS  bob cannot append a version to alice''s song (WITH CHECK)';
+  end;
+
+  begin
+    insert into public.song_versions (song_id, owner_id, parent_id, data, seq)
+      values ('a0000000-0000-4000-8000-00000000000a',
+              'a11ce000-0000-4000-8000-000000000001', null, '{}', 98);
+    raise exception 'FAIL  bob forged a version owned by alice';
+  exception when insufficient_privilege then
+    raise notice 'PASS  bob cannot forge a version owned by alice';
+  end;
+end $$;
+rollback;
+
+begin;
+set local role authenticated;
+set local request.jwt.claims = '{"sub":"b0b00000-0000-4000-8000-000000000002","role":"authenticated"}';
+do $$
+declare sid uuid; n bigint;
+begin
+  insert into public.songs (owner_id, title, data)
+    values ('b0b00000-0000-4000-8000-000000000002', 'bob''s own', '{}')
+    returning id into sid;
+  insert into public.song_versions (song_id, owner_id, parent_id, data, seq)
+    values (sid, 'b0b00000-0000-4000-8000-000000000002', null, '{"v":1}', 1);
+  select count(*) into n from public.song_versions where song_id = sid;
+  if n <> 1 then raise exception 'FAIL  bob cannot read back his own version (n=%)', n; end if;
+  raise notice 'PASS  bob can build and read his own version tree';
+
+  -- Two saves off one parent are two branches; the tree must accept that.
+  insert into public.song_versions (song_id, owner_id, parent_id, data, seq)
+    select sid, 'b0b00000-0000-4000-8000-000000000002', v.id, '{"v":"branch-a"}', 2
+      from public.song_versions v where v.song_id = sid and v.seq = 1;
+  insert into public.song_versions (song_id, owner_id, parent_id, data, seq)
+    select sid, 'b0b00000-0000-4000-8000-000000000002', v.id, '{"v":"branch-b"}', 3
+      from public.song_versions v where v.song_id = sid and v.seq = 1;
+  select count(*) into n from public.song_versions v
+   where v.song_id = sid and v.parent_id is not null;
+  if n <> 2 then raise exception 'FAIL  a parent cannot hold two branches (n=%)', n; end if;
+  raise notice 'PASS  one version can carry two branches';
+
+  -- seq is the version's human name, so it must not repeat within a song.
+  begin
+    insert into public.song_versions (song_id, owner_id, parent_id, data, seq)
+      values (sid, 'b0b00000-0000-4000-8000-000000000002', null, '{}', 1);
+    raise exception 'FAIL  a duplicate seq was accepted';
+  exception when unique_violation then
+    raise notice 'PASS  seq is unique within a song';
+  end;
+
+  delete from public.songs where id = sid;
+  select count(*) into n from public.song_versions where song_id = sid;
+  if n <> 0 then raise exception 'FAIL  % versions outlived their deleted song', n; end if;
+  raise notice 'PASS  deleting a song takes its history with it';
+end $$;
+rollback;
+
+-- Structural, like the profile_cards column check: a public-read policy here
+-- would expose every draft behind every published song, and would look like a
+-- reasonable thing to add to match songs_public_read.
+do $$
+declare bad text;
+begin
+  select string_agg(policyname, ', ') into bad
+    from pg_policies
+   where schemaname = 'public' and tablename = 'song_versions'
+     and cmd in ('SELECT', 'ALL')
+     and coalesce(qual, '') not like '%auth.uid()%';
+  if bad is not null then
+    raise exception 'FAIL  song_versions grants reads with no owner check: %  (that publishes every draft)', bad;
+  end if;
+  raise notice 'PASS  every song_versions read policy checks the owner';
+end $$;
 
 \echo ''
 \echo '== patches =='
