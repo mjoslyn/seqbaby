@@ -484,11 +484,9 @@ export function renderTrack(t) {
     if (el) el.addEventListener("change", e => setParam(t, k, e.target.value));
   }
   if (toneSel) {
-    const descEl = node.querySelector(".sq-guitar__desc");
     toneSel.addEventListener("change", e => {
       const name = e.target.value;
       const tone = guitarTone(name);
-      if (descEl) descEl.textContent = guitarToneDescription(name);
       if (!tone) return;
       for (const [key, val] of Object.entries(tone)) setParam(t, key, val);
       syncGuitarPanel(t);
@@ -506,11 +504,9 @@ export function renderTrack(t) {
     if (el) el.addEventListener("change", e => setParam(t, k, e.target.value));
   }
   if (bassToneSel) {
-    const descEl = node.querySelector(".sq-bass__desc");
     bassToneSel.addEventListener("change", e => {
       const name = e.target.value;
       const tone = bassTone(name);
-      if (descEl) descEl.textContent = bassToneDescription(name);
       if (!tone) return;
       for (const [key, val] of Object.entries(tone)) setParam(t, key, val);
       syncBassPanel(t);
@@ -528,11 +524,9 @@ export function renderTrack(t) {
     if (el) el.addEventListener("change", e => setParam(t, k, e.target.value));
   }
   if (subToneSel) {
-    const descEl = node.querySelector(".sq-sub__desc");
     subToneSel.addEventListener("change", e => {
       const name = e.target.value;
       const tone = subTone(name);
-      if (descEl) descEl.textContent = subToneDescription(name);
       if (!tone) return;
       for (const [key, val] of Object.entries(tone)) setParam(t, key, val);
       syncSubPanel(t);
