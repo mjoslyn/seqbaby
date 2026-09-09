@@ -40,6 +40,7 @@ env / fx / eq / comp / mod / automation per track.
 │   ├── studioMarkup.ts        engine's static DOM skeleton (raw HTML string)
 │   ├── ScriptLoader.tsx       injects Tone → woscillators → js/main.js in order
 │   ├── AccountBar/SongsMenu/PatchesMenu/SaveButton/OpenSongOnLoad.tsx
+│   ├── NewSongButton.tsx      top-bar `new`: blanks the engine, clears the open song
 │   ├── VersionTree.tsx        a song's version history, drawn as the tree it is
 │   ├── songs/openSong.ts      which song + version the studio holds (shared by the two save UIs)
 │   ├── Preloader.tsx + preloaderMarkup.ts  loading overlay: markup + inline driver
@@ -100,7 +101,14 @@ env / fx / eq / comp / mod / automation per track.
   actually pushed a parameter, drawn on the knob while the slider stays the
   base. See the modulation section below.
 - `macro.js` — XY macro pads, cross-track. See the Macro pads section below.
-- `session.js` — serialize/apply sets + track patches, legacy migration.
+- `session.js` — serialize/apply sets + track patches, legacy migration, and
+  `newSet()` / `onNewSet()`: blanking the session back to `STARTER_TRACKS`
+  (the same list main.js builds at boot) by running a blank blob through
+  `applySet`, so every global a song can touch is written rather than left
+  behind. Behind the top bar's `new` and a click on the logo — which is an
+  `<a href="/">`, so opening it in a new tab gives a blank editor too. It
+  fires `seqbaby:newset` for the shell, whose open-song slot has to clear
+  with it (`app/NewSongButton.tsx`).
 - `sessionFormat.js` — the serialized-session format: `SET_VERSION` and
   `validateSet()`. No imports, deliberately: every other engine module
   touches the DOM or Tone at import time, and keeping this one pure is what

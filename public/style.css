@@ -55,6 +55,9 @@ html, body {
   flex-wrap: wrap;
 }
 
+/* An anchor, not a heading: it points at the studio's own URL, so it is a blank
+   editor whichever way you open it (main.js intercepts the plain click and
+   resets in place instead of reloading the engine). */
 .sq-logo {
   display: inline-flex;
   align-items: center;
@@ -64,7 +67,10 @@ html, body {
   font-weight: 700;
   letter-spacing: 0.02em;
   user-select: none;
+  text-decoration: none;
+  cursor: pointer;
 }
+.sq-logo:hover span { color: var(--accent); }
 .sq-logo img { width: 30px; height: 30px; }
 .sq-logo span { font-size: 15px; }
 
@@ -1615,6 +1621,13 @@ body.kbd-recording .sq-track.is-kbd-active { border-color: #e5484d; box-shadow: 
 .sq-modal__title {
   color: var(--fg);
   font-size: 13px;
+}
+/* The message under a confirm dialog's title — the title asks, this says what
+   it costs, so it reads as body text rather than a second question. */
+.sq-modal__body {
+  color: var(--fg-dim);
+  font-size: 12px;
+  line-height: 1.5;
 }
 .sq-modal__input {
   width: 100%;

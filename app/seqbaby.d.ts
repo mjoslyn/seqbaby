@@ -18,6 +18,10 @@ declare global {
         errors: string[];
         warnings: string[];
       };
+      /** Blank the session (starter tracks, nothing written). No prompt. */
+      newSet: () => void;
+      /** The flow around newSet: asks first when there is work to lose. */
+      onNewSet: () => Promise<void>;
       onSaveSet: () => void;
       onLoadSet: () => void;
       onShareSet: () => void;
