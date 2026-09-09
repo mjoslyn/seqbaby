@@ -232,10 +232,10 @@ const SUB_PANEL = `
 export const STUDIO_BODY = String.raw`
 <header class="sq-transport">
     <div class="sq-transport__main">
-    <div class="sq-logo" title="seqbaby">
+    <a class="sq-logo" href="/" title="seqbaby — start a new song">
       <img src="/favicon.svg" alt="" />
       <span>seqbaby</span>
-    </div>
+    </a>
     <button id="play" class="sq-play">play</button>
     <button id="kbd-record" class="sq-btn--ghost sq-icon-btn" type="button" aria-pressed="false" aria-label="record keyboard notes" title="record computer-keyboard notes into the active track while the transport plays"></button>
     <button id="kbd-capture" class="sq-btn--ghost sq-icon-btn" type="button" aria-label="capture keyboard notes" title="capture the notes you just played on the keyboard into the active track (retroactive)"></button>

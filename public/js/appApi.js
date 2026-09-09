@@ -9,9 +9,11 @@ import { loadPatches, savePatch, storePatches } from "./catalog.js";
 import {
   applySet,
   applyTrackPatch,
+  newSet,
   onExportSet,
   onImportSet,
   onLoadSet,
+  onNewSet,
   onSaveSet,
   onShareSet,
   serializeSet,
@@ -27,6 +29,11 @@ export function installAppApi() {
     // session (song) snapshot <-> live engine
     serializeSet,
     applySet,
+    // blank the session -- back to the starter tracks with nothing written.
+    // `newSet` resets; `onNewSet` is the flow around it (confirms first when
+    // there is something to lose), which is what a button should call.
+    newSet,
+    onNewSet,
     // The serialized-session format version, and a check of a blob against it.
     // applySet validates on its own, so this is for a caller that wants to
     // refuse a blob before offering to load it -- note `version` above is the

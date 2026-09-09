@@ -18,7 +18,7 @@ import { installParamContextMenu } from "./paramMenu.js";
 import { copyPattern, openPatternMenu, renderPatternGrid } from "./patternBar.js";
 import { setActiveTrack } from "./render.js";
 import { initScaleUI } from "./scaleUI.js";
-import { loadShareFromUrl, onExportSet, onImportSet, onLoadSet, onSaveSet, onShareSet } from "./session.js";
+import { loadShareFromUrl, onExportSet, onImportSet, onLoadSet, onNewSet, onSaveSet, onShareSet, STARTER_TRACKS } from "./session.js";
 import { state, switchPattern } from "./state.js";
 import { renderStepGrid } from "./stepGrid.js";
 import { createTrack, resizePattern } from "./track.js";
@@ -692,6 +692,15 @@ export function init() {
   document.getElementById("set-export")?.addEventListener("click", onExportSet);
   document.getElementById("set-import")?.addEventListener("click", onImportSet);
   document.getElementById("set-share")?.addEventListener("click", onShareSet);
+  // The logo is a real link to the studio's own URL, so opening it in a new tab
+  // (or reaching it from /manual) gives a blank editor the ordinary way. On the
+  // page itself a plain click resets in place instead — a full reboot to show
+  // the same six empty tracks is 1.7MB of engine for nothing.
+  document.querySelector(".sq-logo")?.addEventListener("click", e => {
+    if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    e.preventDefault();
+    onNewSet();
+  });
   document.getElementById("pattern-menu-btn")?.addEventListener("click", openPatternMenu);
   document.getElementById("pattern-dup").addEventListener("click", () => {
     const next = (state.activePattern + 1) % PATTERN_COUNT;
@@ -743,13 +752,9 @@ export function init() {
 
   initScaleUI();
 
-  // starter kit
-  createTrack({ name: "kick",   engineKey: "dm:808-kick" });
-  createTrack({ name: "snare",  engineKey: "dm:808-snare" });
-  createTrack({ name: "hat",    engineKey: "dm:909-chat" });
-  createTrack({ name: "accent", engineKey: "plaits:12" });
-  createTrack({ name: "bass",   engineKey: "dm:silverbox" });
-  createTrack({ name: "lead",   engineKey: "plaits:0" });
+  // starter kit — the same list newSet() rebuilds, so "new song" and a fresh
+  // page load land on the same session (session.js).
+  for (const t of STARTER_TRACKS) createTrack({ ...t });
 
   setStatus("ready");
   // Expose the engine API on window.seqbaby for the Next.js shell.
