@@ -282,6 +282,36 @@ export function syncSubPanel(t) {
   }
 }
 
+// An fx bus is the END of a signal chain — the tracks feeding it read as a
+// group above it — so buses always sit at the bottom of the track list, however
+// they got there (added, loaded, or an instrument track re-engined into one).
+// Stable in both groups: this only ever lifts non-bus tracks above the buses
+// that follow them, so hand-ordered tracks keep their order.
+//
+// State and DOM move together. `state.tracks` order is what the transport
+// walks and what `outIndex` / `compSourceIndex` / the macro pads serialize
+// against, so the two can never be allowed to disagree — and everything
+// cross-track is stored as an INDEX INTO THE SERIALIZED ORDER, which is why
+// `applySet` resolves those against the order it created the tracks in and
+// calls this once at the end, rather than reordering under itself.
+/** @returns {boolean} whether anything moved */
+export function placeBusesLast() {
+  const isBus = t => t.engineKey === "bus";
+  if (!state.tracks.some(isBus)) return false;
+  const sorted = [...state.tracks.filter(t => !isBus(t)), ...state.tracks.filter(isBus)];
+  if (sorted.every((t, i) => t === state.tracks[i])) return false;
+  state.tracks = sorted;
+  // Only the buses need moving: appending them in order leaves every other row
+  // where it is, which matters because re-parenting a node blurs it — and the
+  // engine dropdown that turned a track into a bus is inside one of these.
+  const host = document.getElementById("tracks");
+  const focused = document.activeElement;
+  if (host) for (const t of sorted) if (isBus(t) && t.el) host.appendChild(t.el);
+  if (focused instanceof HTMLElement && document.activeElement !== focused && host?.contains(focused))
+    focused.focus({ preventScroll: true });
+  return true;
+}
+
 export function renderTrack(t) {
   const tpl = document.getElementById("track-template");
   const node = tpl.content.firstElementChild.cloneNode(true);

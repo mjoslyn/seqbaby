@@ -2,7 +2,7 @@ import { ENGINE_MACRO_TIPS, PLAITS_MACRO_TIPS, engineByKey } from "./catalog.js"
 import { HEXOP_ALG_FEEDBACK, HEXOP_ALG_LABELS, hexopCarriers } from "./hexop.js";
 import { applySampleSpeed, disposeLFOs, syncAllLFOs } from "./lfo.js";
 import { redetectDrumKit } from "./meter.js";
-import { applyBusMute, refreshFxPanelUI, updateMidiUI } from "./render.js";
+import { applyBusMute, placeBusesLast, refreshFxPanelUI, updateMidiUI } from "./render.js";
 import { ensureFxRack, refreshAllTrackOutputs, refreshOutputSelects, routeVoiceToRack } from "./signal.js";
 import { state } from "./state.js";
 import { requestMidiIfNeeded } from "./transport.js";
@@ -388,8 +388,10 @@ export function setEngineKey(t, newKey) {
     t.customConfig = e.config;
   }
   // Becoming (or ceasing to be) a bus changes what every other track may send
-  // to, and the dropdowns are how a send is picked.
+  // to, and the dropdowns are how a send is picked. It also changes where the
+  // track belongs in the list: buses sit at the bottom.
   refreshOutputSelects();
+  placeBusesLast();
   if (!t.voice) { updateMidiUI(t); updatePlaitsControlsVisibility(t); return; }
   if (t.voice.canInPlaceChange(newKey) && t.voice.type === e.type) {
     t.voice.setEngine(newKey);

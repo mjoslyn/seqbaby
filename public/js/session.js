@@ -10,13 +10,13 @@ import { guessIsDrumKit, parseMeter } from "./meter.js";
 import { updatePlaitsControlsVisibility } from "./params.js";
 import { renderPatternGrid } from "./patternBar.js";
 import { refreshEuclidUI, renderEuclidPanel } from "./euclid.js";
-import { applyBusMute, paintDiceDensity, refreshFxPanelUI, renderModPanel, syncTrackSoundUI } from "./render.js";
+import { applyBusMute, paintDiceDensity, placeBusesLast, refreshFxPanelUI, renderModPanel, syncTrackSoundUI } from "./render.js";
 import { flushAllPatternSounds, recallPatternSound, refreshPatternLockUI, refreshPatternSoundUI } from "./patternSound.js";
 import { syncScaleUI } from "./scaleUI.js";
 import { migrateLegacyNames, migrateTrackNames, SET_VERSION, validateSet } from "./sessionFormat.js";
 import { applyCompressorConfig, ensureFxRack, refreshAllTrackOutputs, refreshCompSourceDropdowns, refreshOutputSelects, routeVoiceToRack, wouldFeedback } from "./signal.js";
 import { applyMacroPads, serializeMacroPads } from "./macro.js";
-import { aliasPattern, state, syncMeterUI } from "./state.js";
+import { aliasPattern, state, syncMeterUI, syncRepeatsUI } from "./state.js";
 import { renderStepGrid } from "./stepGrid.js";
 import { createTrack, removeTrack } from "./track.js";
 import { ensureAudio, requestMidiIfNeeded, silenceAllVoices } from "./transport.js";
@@ -48,6 +48,7 @@ export function serializeSet() {
     patternMode: state.patternMode,
     patternSwitchMode: state.patternSwitchMode,
     patternMeters: state.patternMeters.map(m => ({ num: m.num, den: m.den })),
+    patternRepeats: state.patternRepeats.map(r => Number(r) || 1),
     // Pads are global and cross-track, so they sit up here beside the tempo
     // rather than inside a track. Assignments are stored by track index — ids
     // are handed out fresh by createTrack on load and would not survive.
@@ -367,6 +368,14 @@ export function applySet(s) {
       state.patternMeterCustomized[i] = i !== 0 && (mi.num !== m0.num || mi.den !== m0.den);
     }
   }
+  // Chain-mode bar counts. Written unconditionally (not only when the set
+  // carries them) so loading a song can't leave the previous one's repeats
+  // behind; a set saved before these were serialized loads as all-1s, which is
+  // what it played with.
+  for (let i = 0; i < PATTERN_COUNT; i++) {
+    const r = Math.round(Number(s.patternRepeats?.[i]));
+    state.patternRepeats[i] = Number.isFinite(r) ? Math.max(1, Math.min(16, r)) : 1;
+  }
   state.patternMode = s.patternMode === "chain" ? "chain" : "repeat";
   const modeBtn = document.getElementById("pattern-mode");
   modeBtn.innerHTML = state.patternMode === "chain" ? ICON_CHAIN : ICON_REPEAT;
@@ -377,6 +386,11 @@ export function applySet(s) {
     switchBtn.innerHTML = state.patternSwitchMode === "finish" ? ICON_FINISH : ICON_NOW;
     switchBtn.setAttribute("aria-pressed", String(state.patternSwitchMode === "finish"));
   }
+  // The tracks in the order the file lists them — which is what every stored
+  // cross-track INDEX (outIndex / compSourceIndex / the macro pads) counts
+  // along. `state.tracks` is not that order once the buses are moved to the
+  // bottom, so the resolution passes below walk this instead.
+  const made = [];
   for (const td of s.tracks || []) {
     // Migrate legacy sample engines (upload / smp:* / eleven) onto the unified
     // sampler. eleven's separately-persisted audio folds into the upload buffer.
@@ -393,6 +407,7 @@ export function applySet(s) {
       const id = ek.slice(4); ek = "sampler"; src = src || { kind: "bundled", id, name: id };
     }
     const t = createTrack({ name: td.name || "track", engineKey: ek, length: td.length || 16 });
+    made.push(t);
     migrateGranularParams(td.params);
     Object.assign(t.params, td.params || {});
     Object.assign(t.filter, td.filter || {});
@@ -589,10 +604,10 @@ export function applySet(s) {
   // stored as indices (see serializeSet), and the track pointed at has to be
   // real before anything can point at it.
   (s.tracks || []).forEach((td, i) => {
-    const t = state.tracks[i];
+    const t = made[i];
     if (!t) return;
     const j = Number.isInteger(td.outIndex) ? td.outIndex : -1;
-    const bus = j >= 0 ? state.tracks[j] : null;
+    const bus = j >= 0 ? made[j] : null;
     t.out = bus && bus !== t && bus.engineKey === "bus" ? String(bus.id) : "master";
     // Sidechain source. A session saved before compSourceIndex existed carries
     // only the id it had when it was written, and nothing in the file maps that
@@ -600,7 +615,7 @@ export function applySet(s) {
     // duck the wrong one. (Before this they kept the dead id and silently
     // self-compressed instead, which at least the panel now agrees with.)
     const k = Number.isInteger(td.compSourceIndex) ? td.compSourceIndex : -1;
-    const src = k >= 0 ? state.tracks[k] : null;
+    const src = k >= 0 ? made[k] : null;
     t.comp.source = src && src !== t ? String(src.id) : "self";
   });
   // A chain can still describe a loop — a hand-edited song, or a bus that was
@@ -620,9 +635,14 @@ export function applySet(s) {
   // MIDI access is lazy (only requested when a track uses a MIDI engine); a
   // loaded set may introduce the first MIDI track after audio init already ran.
   requestMidiIfNeeded();
-  // After the tracks exist, so the stored indices resolve to real tracks.
-  applyMacroPads(s.macroPads);
+  // After the tracks exist, so the stored indices resolve to real tracks — in
+  // the order the file wrote them, not the order they now sit in.
+  applyMacroPads(s.macroPads, made);
+  // Every cross-track reference is an id by now, so the list can be reordered:
+  // fx buses to the bottom, once, rather than under the loop above.
+  placeBusesLast();
   renderPatternGrid();
+  syncRepeatsUI();
   syncMeterUI();
   setStatus("set loaded");
   // Handed back so a caller can surface a warning (chiefly "saved by a newer
@@ -771,8 +791,10 @@ export function applyTrackPatch(t, patch) {
   }
   requestMidiIfNeeded();
   // A patch can carry an engine, so this track may have just become — or
-  // stopped being — a bus, and its voice was rebuilt either way.
+  // stopped being — a bus, and its voice was rebuilt either way. Which also
+  // decides where in the list it belongs: buses at the bottom.
   refreshOutputSelects();
+  placeBusesLast();
   if (state.ready) {
     refreshAllTrackOutputs();
     applyBusMute(t);
