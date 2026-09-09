@@ -152,6 +152,22 @@ export function effectiveRate(cfg) { return cfg.sync ? rateFromSync(cfg.div) : c
 export function lfoBipolar(cfg) { return cfg?.bipolar ?? (cfg?.type !== "euclid"); }
 
 /**
+ * Where in its own cycle a shape starts, in turns (0..1).
+ *
+ * One knob, one meaning, whatever the shape: a quarter turn is a quarter of a
+ * cycle. For a waveform that is the classic phase offset — two LFOs at the same
+ * rate a quarter apart is a circular pan, and half a turn is the same sweep
+ * upside down. For the euclid ring the cycle is one ring STEP (that is what its
+ * rate counts), so the knob nudges the taps off the grid — a shuffle. Whole
+ * steps are what `rotate` moves; this is the space between them.
+ *
+ * Written lazily like the euclid fields — 0 is the default and the behaviour
+ * every existing song already has, and `lfoConfig` carries an entry per target
+ * per track whether used or not.
+ */
+export function lfoPhase(cfg) { return cfg?.phase ?? 0; }
+
+/**
  * The text beside the length knob. Here rather than in the row that draws it
  * because the bpm field repaints it too — a synced length is a tempo reading.
  */
@@ -375,6 +391,51 @@ export function applySetterLfoValue(t, key, v) {
   }
 }
 
+// ---- the stepped shapes: euclid + random square --------------------------
+//
+// Two of the six shapes aren't waveforms, and they share their machinery: they
+// hold a value for a whole step and then jump, so neither is expressible as a
+// Tone.LFO oscillator type and both are driven by a Tone.Signal scheduled ahead
+// (see makeStepGate). What differs between them is only where the value for
+// step n comes from — the ring, or the hash.
+
+/** Shapes that step rather than sweep, and so take the scheduled-signal path
+ *  instead of a Tone.LFO. */
+export function isSteppedShape(type) { return type === "euclid" || type === "randsq"; }
+
+// ---- the random square shape ---------------------------------------------
+//
+// Sample-and-hold: a fresh random value each cycle, held flat until the next
+// one. The value for step n is a HASH of (this lfo, n) rather than a draw from
+// a running generator, because three separate code paths have to agree on it —
+// the taps scheduled ahead into the audio graph, the rAF setter loop, and the
+// needle modMotion.js draws on the knob. A hash gives all three the same answer
+// from the step index alone, with no shared state to keep in step and nothing
+// extra in the saved song.
+//
+// The seed is the track's id and the target's key, so two tracks with a random
+// square on the same parameter don't move together. Ids are handed out afresh
+// on load (see the macro pads), so a song replays with a different sequence
+// than it was written with — a random modulation that came back identical every
+// time would be a sequence, not a random one.
+
+/** @param {Track} t @param {string} key */
+function lfoSeed(t, key) {
+  const str = `${t?.id ?? 0}|${key}`;
+  let h = 2166136261 >>> 0;
+  for (let i = 0; i < str.length; i++) h = Math.imul(h ^ str.charCodeAt(i), 16777619) >>> 0;
+  return h;
+}
+
+/** 0..1 for step `n` of the sequence `seed` names. */
+function randStep(seed, n) {
+  let h = (seed ^ Math.imul(n | 0, 0x9e3779b1)) >>> 0;
+  h = Math.imul(h ^ (h >>> 16), 0x85ebca6b) >>> 0;
+  h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35) >>> 0;
+  h = (h ^ (h >>> 16)) >>> 0;
+  return h / 4294967296;
+}
+
 // ---- the euclid shape ----------------------------------------------------
 //
 // A fifth LFO shape, and the odd one out: the other four are waveforms, this
@@ -415,14 +476,15 @@ function lfoRing(e) {
 }
 
 /**
- * Where step 0 of the ring sits on the audio clock.
+ * Where step 0 of a stepped shape sits on the audio clock.
  *
  * A drifting sine is a texture; a drifting rhythm is a mistake, so a synced
- * euclid LFO hangs its ring off the moment the transport started rather than
- * free-running from whenever it was switched on. Unsynced (or stopped), it
- * runs from the context's own zero, which is stable for as long as the page is.
+ * euclid ring — or a synced random square, which is just as much a rhythm —
+ * hangs off the moment the transport started rather than free-running from
+ * whenever it was switched on. Unsynced (or stopped), it runs from the
+ * context's own zero, which is stable for as long as the page is.
  */
-function euclidOrigin(cfg) {
+function stepOrigin(cfg) {
   if (cfg.sync && state.playing && state._transportStartTime != null) return state._transportStartTime;
   return 0;
 }
@@ -433,53 +495,67 @@ function tapEnvelope(frac, decay) {
   return Math.exp(-frac / Math.max(0.02, 0.6 * (1 - decay) + 0.02));
 }
 
-export function evalLfoShape(type, phase, cfg) {
-  const p = phase - Math.floor(phase);
+/**
+ * A shape's value at `phase` cycles in. Bipolar -1..1, except euclid, which is
+ * a tap and so is 0..1 (see lfoBipolar for what happens to either afterwards).
+ *
+ * The phase knob is applied HERE, once, so every path that asks a shape where
+ * it is — the setter loop and the display needle both — gets the offset for
+ * free. The scheduled paths place taps in time instead and shift their origin.
+ * @param {string} type @param {number} phase @param {LFOConfig} [cfg]
+ * @param {number} [seed] identifies the sequence for the random shape
+ */
+export function evalLfoShape(type, phase, cfg, seed = 0) {
+  const ph = phase + lfoPhase(cfg);
+  const p = ph - Math.floor(ph);
   switch (type) {
     case "sine":     return Math.sin(2 * Math.PI * p);
     case "triangle": return p < 0.5 ? (p * 4 - 1) : (3 - p * 4);
     case "sawtooth": return p * 2 - 1;
     case "square":   return p < 0.5 ? 1 : -1;
+    // Sample-and-hold: one draw per cycle, held flat across it.
+    case "randsq":   return randStep(seed, Math.floor(ph)) * 2 - 1;
     // Unipolar 0..1: `phase` counts ring STEPS here, not wave cycles.
     case "euclid": {
       const e = lfoEuclid(cfg);
       const ring = lfoRing(e);
-      const n = Math.floor(phase);
+      const n = Math.floor(ph);
       const on = ring[((n % ring.length) + ring.length) % ring.length];
-      return on ? tapEnvelope(phase - n, e.decay) : 0;
+      return on ? tapEnvelope(ph - n, e.decay) : 0;
     }
   }
   return 0;
 }
 
-/** Ring steps elapsed at `now`. Absolute rather than accumulated, so the ring
+/** Steps elapsed at `now`. Absolute rather than accumulated, so a stepped shape
  *  can't drift away from the bar over a long session. */
-function euclidPhase(cfg, now) {
+function steppedPhase(cfg, now) {
   const stepHz = Math.max(0.01, effectiveRate(cfg));
-  return (now - euclidOrigin(cfg)) * stepHz;
+  return (now - stepOrigin(cfg)) * stepHz;
 }
 
-/** A tap's peak-to-peak: the whole amount knob. Where it hangs relative to the
+/** A step's peak-to-peak: the whole amount knob. Where it hangs relative to the
  *  slider is the polarity switch's business (see lfoBipolar). */
-function euclidAmp(key, cfg) {
+function steppedAmp(key, cfg) {
   return (cfg.depth ?? 0) * (LFO_AMP_SCALE[key] ?? 1);
 }
 
-// A euclid LFO on an AudioParam target is a constant source scheduled ahead,
-// not a Tone.LFO: there is no oscillator type for a rhythm. The signal is
-// summed onto the param exactly as the oscillator was, so the slider stays the
-// base and everything downstream (disconnect, dispose, t.lfos) is unchanged.
+// A stepped LFO on an AudioParam target is a constant source scheduled ahead,
+// not a Tone.LFO: there is no oscillator type for a rhythm, and none for a
+// sample-and-hold either. The signal is summed onto the param exactly as the
+// oscillator was, so the slider stays the base and everything downstream
+// (disconnect, dispose, t.lfos) is unchanged.
 //
 // Scheduling ahead is what keeps the edges sample-accurate off a 60Hz loop —
-// the same bargain the transport strikes. A tap decided this frame is placed
+// the same bargain the transport strikes. A step decided this frame is placed
 // at the audio time it actually belongs at.
-const EUCLID_LOOKAHEAD = 0.25;
+const STEP_LOOKAHEAD = 0.25;
 
-function makeEuclidGate(param) {
+function makeStepGate(param) {
   const signal = new Tone.Signal(0);
   try { signal.connect(param); } catch {}
   return {
-    isEuclid: true,
+    isStepped: true,
     signal,
     nextStep: null,
     origin: null,
@@ -489,23 +565,29 @@ function makeEuclidGate(param) {
   };
 }
 
-/** Place every tap that starts inside the lookahead window. */
-function scheduleEuclidTaps(t, key, cfg, now) {
+/** Place every step that starts inside the lookahead window. */
+function scheduleSteppedTaps(t, key, cfg, now) {
   const g = t.lfos[key];
-  if (!g?.isEuclid) return;
-  const e = lfoEuclid(cfg);
-  const ring = lfoRing(e);
+  if (!g?.isStepped) return;
+  const isRing = cfg.type === "euclid";
+  const e = isRing ? lfoEuclid(cfg) : null;
+  const ring = isRing ? lfoRing(e) : null;
+  const seed = isRing ? 0 : lfoSeed(t, key);
   const stepDur = 1 / Math.max(0.01, effectiveRate(cfg));
-  const origin = euclidOrigin(cfg);
-  const peak = euclidAmp(key, cfg);
+  // The phase knob moves the steps in time rather than changing their values,
+  // which is the same offset the waveforms get, expressed the only way a
+  // scheduled edge can express it.
+  const origin = stepOrigin(cfg) - lfoPhase(cfg) * stepDur;
+  const peak = steppedAmp(key, cfg);
   // Unipolar (the ring's default): rests sit on the knob and taps lift off it.
   // Bipolar: the same peak-to-peak, hung half either side, so a rest pulls the
   // parameter down as far as a tap pushes it up.
   const bip = lfoBipolar(cfg);
-  const restV = bip ? -peak / 2 : 0;
-  const tapV = bip ? peak / 2 : peak;
-  // The transport starting (or stopping) moves the ring's origin under us, so
-  // anything already queued against the old one has to go.
+  const level = (u) => (bip ? (u - 0.5) * peak : u * peak);
+  const restV = level(0);
+  const tapV = level(1);
+  // The transport starting (or stopping) moves the origin under us, so anything
+  // already queued against the old one has to go.
   if (g.origin !== origin) {
     g.origin = origin;
     g.nextStep = null;
@@ -514,16 +596,22 @@ function scheduleEuclidTaps(t, key, cfg, now) {
   let n = g.nextStep ?? Math.floor((now - origin) / stepDur);
   for (let guard = 0; guard < 256; guard++) {
     const at = origin + n * stepDur;
-    if (at > now + EUCLID_LOOKAHEAD) break;
+    if (at > now + STEP_LOOKAHEAD) break;
     if (at >= now - stepDur) {
-      const on = ring[((n % ring.length) + ring.length) % ring.length];
       const when = Math.max(at, now);
-      try {
-        g.signal.setValueAtTime(on ? tapV : restV, when);
-        if (on && e.decay > 0.02) {
-          g.signal.setTargetAtTime(restV, when, Math.max(0.004, stepDur * 0.6 * (1 - e.decay)));
-        }
-      } catch {}
+      if (isRing) {
+        const on = ring[((n % ring.length) + ring.length) % ring.length];
+        try {
+          g.signal.setValueAtTime(on ? tapV : restV, when);
+          if (on && e.decay > 0.02) {
+            g.signal.setTargetAtTime(restV, when, Math.max(0.004, stepDur * 0.6 * (1 - e.decay)));
+          }
+        } catch {}
+      } else {
+        // Random square: one draw per cycle, held flat until the next — the
+        // hold IS the shape, so there is no envelope on it.
+        try { g.signal.setValueAtTime(level(randStep(seed, n)), when); } catch {}
+      }
     }
     n++;
   }
@@ -547,11 +635,16 @@ function scheduleEuclidTaps(t, key, cfg, now) {
 export function lfoLiftNow(t, key, now, dt) {
   const cfg = t.lfoConfig?.[key];
   if (!cfg?.enabled) return null;
-  if (cfg.type === "euclid") return evalLfoShape("euclid", euclidPhase(cfg, now), cfg);
+  const seed = lfoSeed(t, key);
+  if (isSteppedShape(cfg.type)) {
+    const v = evalLfoShape(cfg.type, steppedPhase(cfg, now), cfg, seed);
+    // The ring is already a 0..1 lift; the random square is a wave's -1..1.
+    return cfg.type === "euclid" ? v : (v + 1) * 0.5;
+  }
   const phases = t._modPhase || (t._modPhase = {});
   const phase = (phases[key] ?? 0) + dt * effectiveRate(cfg);
   phases[key] = phase;
-  return (evalLfoShape(cfg.type || "sine", phase, cfg) + 1) * 0.5;
+  return (evalLfoShape(cfg.type || "sine", phase, cfg, seed) + 1) * 0.5;
 }
 
 // One RAF loop drives every active setter LFO across every track.
@@ -565,15 +658,15 @@ export function startSetterLfoLoopIfNeeded() {
     lastT = now;
     let anyActive = false;
     for (const t of state.tracks) {
-      // Euclid-shaped LFOs on AudioParam targets: this loop only decides what
-      // to queue — the taps themselves are placed at their exact audio times
-      // (scheduleEuclidTaps), so the edges don't inherit the frame rate.
-      if (t._euclidLfoKeys?.size) {
-        for (const key of t._euclidLfoKeys) {
+      // Stepped LFOs on AudioParam targets: this loop only decides what to
+      // queue — the steps themselves are placed at their exact audio times
+      // (scheduleSteppedTaps), so the edges don't inherit the frame rate.
+      if (t._stepLfoKeys?.size) {
+        for (const key of t._stepLfoKeys) {
           const cfg = t.lfoConfig[key];
-          if (!cfg?.enabled || cfg.type !== "euclid") continue;
+          if (!cfg?.enabled || !isSteppedShape(cfg.type)) continue;
           anyActive = true;
-          scheduleEuclidTaps(t, key, cfg, now);
+          scheduleSteppedTaps(t, key, cfg, now);
         }
       }
       // The rack gate is for the fx targets; euclid's counts are the
@@ -585,23 +678,23 @@ export function startSetterLfoLoopIfNeeded() {
         if (!cfg?.enabled) continue;
         if (!hasRack && !key.startsWith("euclid_")) continue;
         anyActive = true;
-        const euclidShape = cfg.type === "euclid";
-        // A rhythm is timed from the clock, not accumulated frame by frame —
-        // see euclidOrigin. A waveform can keep its running phase, which is
-        // what lets its rate change without a jump.
+        // A stepped shape is timed from the clock, not accumulated frame by
+        // frame — see stepOrigin. A waveform can keep its running phase, which
+        // is what lets its rate change without a jump.
         let phase;
-        if (euclidShape) {
-          phase = euclidPhase(cfg, now);
+        if (isSteppedShape(cfg.type)) {
+          phase = steppedPhase(cfg, now);
         } else {
           phase = (t._setterLfoPhase[key] ?? 0) + dt * effectiveRate(cfg);
         }
         t._setterLfoPhase[key] = phase;
-        const shape = evalLfoShape(cfg.type || "sine", phase, cfg);
+        const shape = evalLfoShape(cfg.type || "sine", phase, cfg, lfoSeed(t, key));
         const base = setterLfoBase(t, key);
-        // Normalize every shape to a 0..1 lift first — the waveforms come back
-        // bipolar, the ring unipolar — then place that lift either side of the
-        // base or wholly above it. Same peak-to-peak from the same knob.
-        const u = euclidShape ? shape : (shape + 1) * 0.5;
+        // Normalize every shape to a 0..1 lift first — the waveforms and the
+        // random square come back bipolar, the ring unipolar — then place that
+        // lift either side of the base or wholly above it. Same peak-to-peak
+        // from the same knob.
+        const u = cfg.type === "euclid" ? shape : (shape + 1) * 0.5;
         const amt = cfg.depth ?? 0;
         const v = base + (lfoBipolar(cfg) ? (u - 0.5) * amt : u * amt);
         // These targets are already in the slider's own 0..1, so the value the
@@ -722,31 +815,32 @@ export function syncLFO(t, key) {
       try { lfo.dispose(); } catch {}
       t.lfos[key] = null;
     }
-    t._euclidLfoKeys?.delete(key);
+    t._stepLfoKeys?.delete(key);
     return;
   }
   if (!state.ready) return;
   const param = getModTarget(t, key);
   if (!param) return;
 
-  // A rhythm is not an oscillator type, so the euclid shape swaps the source:
-  // a scheduled constant instead of a Tone.LFO, summed onto the same param.
-  // Switching shape between the two therefore means rebuilding, not retuning.
-  const wantEuclid = cfg.type === "euclid";
-  if (lfo && !!lfo.isEuclid !== wantEuclid) {
+  // Neither a rhythm nor a sample-and-hold is an oscillator type, so the
+  // stepped shapes swap the source: a scheduled constant instead of a Tone.LFO,
+  // summed onto the same param. Switching between a stepped shape and a
+  // waveform therefore means rebuilding, not retuning.
+  const wantStepped = isSteppedShape(cfg.type);
+  if (lfo && !!lfo.isStepped !== wantStepped) {
     try { lfo.stop(); } catch {}
     try { lfo.disconnect(); } catch {}
     try { lfo.dispose(); } catch {}
     lfo = t.lfos[key] = null;
   }
-  if (wantEuclid) {
-    if (!lfo) lfo = t.lfos[key] = makeEuclidGate(param);
+  if (wantStepped) {
+    if (!lfo) lfo = t.lfos[key] = makeStepGate(param);
     // Anything already queued was placed against the settings that just
-    // changed — depth, rate and the ring all move the taps.
+    // changed — depth, rate, phase and the ring all move the steps.
     lfo.nextStep = null;
     lfo.origin = null;
     try { lfo.signal.cancelScheduledValues(state.audioCtx?.currentTime ?? 0); } catch {}
-    (t._euclidLfoKeys || (t._euclidLfoKeys = new Set())).add(key);
+    (t._stepLfoKeys || (t._stepLfoKeys = new Set())).add(key);
     startSetterLfoLoopIfNeeded();
     return;
   }
@@ -758,8 +852,12 @@ export function syncLFO(t, key) {
   const lo = bipolar ? -span / 2 : 0;
   const hi = bipolar ? span / 2 : span;
   const hz = effectiveRate(cfg);
+  // Tone counts phase in degrees. Assigning it rebuilds the wave, so it is only
+  // written when it has actually moved — every other control on the row calls
+  // through here too, and a depth nudge shouldn't restart the oscillator.
+  const phaseDeg = lfoPhase(cfg) * 360;
   if (!lfo) {
-    lfo = new Tone.LFO({ frequency: hz, min: lo, max: hi, type: cfg.type });
+    lfo = new Tone.LFO({ frequency: hz, min: lo, max: hi, type: cfg.type, phase: phaseDeg });
     lfo.start();
     lfo.connect(param);
     t.lfos[key] = lfo;
@@ -768,6 +866,7 @@ export function syncLFO(t, key) {
     lfo.min = lo;
     lfo.max = hi;
     lfo.type = cfg.type;
+    if (Math.abs((lfo.phase ?? 0) - phaseDeg) > 0.001) lfo.phase = phaseDeg;
   }
 }
 
@@ -786,7 +885,7 @@ export function disposeLFOs(t) {
     t.lfos[k] = null;
   }
   if (t._setterLfoPhase) t._setterLfoPhase = {};
-  t._euclidLfoKeys?.clear();
+  t._stepLfoKeys?.clear();
   try { t.fxRack?.refreshStageActivity?.(); } catch {}
 }
 

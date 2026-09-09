@@ -12,7 +12,7 @@ import { randomizeMelody, randomizeTimbre } from "./generate.js";
 import { GUITAR_DEFAULTS, GUITAR_NUM_KEYS, GUITAR_SEL_KEYS, GUITAR_TONE_NAMES, guitarTone, guitarToneDescription } from "./guitar.js";
 import { ICON_CLEAR, ICON_DICE, ICON_EUCLID, ICON_LOAD, ICON_ROLL, ICON_SAVE, ICON_SLIDERS, ICON_WAV } from "./icons.js";
 import { refreshKnobRange, setKnobReadout, upgradeKnobs } from "./knob.js";
-import { canModulate, lfoBipolar, lfoEuclid, lfoRateLabel, syncLFO } from "./lfo.js";
+import { canModulate, lfoBipolar, lfoEuclid, lfoPhase, lfoRateLabel, syncLFO } from "./lfo.js";
 import { autoOwns, modOwns, refreshParamIndicators } from "./paramTargets.js";
 import { patternLocked, refreshPatternLockUI, refreshPatternSoundUI, setPatternLock } from "./patternSound.js";
 import { openGranularSourceModal, openSamplerSourceModal, pickAudioFileForTrack } from "./main.js";
@@ -1297,6 +1297,8 @@ export function buildLfoRow(t, key, onRemove) {
   const rateLbl  = row.querySelector(".sq-lfo__rate-label");
   const depth = row.querySelector(".lfo-depth");
   const depthLbl = row.querySelector(".sq-lfo__depth-label");
+  const phase = row.querySelector(".lfo-phase");
+  const phaseLbl = row.querySelector(".sq-lfo__phase-label");
   const syncCb = row.querySelector(".lfo-sync");
   const divKnob = row.querySelector(".sq-lfo__div");
   const bipCb = row.querySelector(".lfo-bip");
@@ -1311,6 +1313,15 @@ export function buildLfoRow(t, key, onRemove) {
   rate.value   = rateToSlider(cfg.rate);
   depth.value  = cfg.depth;
   depthLbl.textContent = cfg.depth.toFixed(2);
+  // Turns in the config, degrees on the face of it — a phase knob reads in
+  // degrees everywhere else in the world, and 90° says "a quarter of the way
+  // round" in a way 0.25 doesn't.
+  const phaseDeg = (v) => `${Math.round(v * 360)}°`;
+  if (phase) {
+    phase.value = String(lfoPhase(cfg));
+    setKnobReadout(phase, phaseDeg);
+    if (phaseLbl) phaseLbl.textContent = phaseDeg(lfoPhase(cfg));
+  }
   syncCb.checked = cfg.sync;
   // The length knob is an INDEX into LFO_DIVS, so the markup's range is only a
   // placeholder — the list is the truth, and taking the bound from it here means
@@ -1394,6 +1405,14 @@ export function buildLfoRow(t, key, onRemove) {
   });
   rate.addEventListener("input", () => { cfg.rate = sliderToRate(Number(rate.value)); refreshLbl(); syncLFO(t, key); });
   depth.addEventListener("input", () => { cfg.depth = Number(depth.value); depthLbl.textContent = cfg.depth.toFixed(2); syncLFO(t, key); });
+  // Written only once the knob is touched, for the same reason the euclid
+  // fields are: an entry per target per track carrying "phase: 0" forever is
+  // real weight in a share link.
+  phase?.addEventListener("input", () => {
+    cfg.phase = Number(phase.value);
+    if (phaseLbl) phaseLbl.textContent = phaseDeg(cfg.phase);
+    syncLFO(t, key);
+  });
   bipCb.addEventListener("change", () => { cfg.bipolar = bipCb.checked; syncLFO(t, key); });
   syncCb.addEventListener("change", () => { cfg.sync = syncCb.checked; rateField.dataset.mode = cfg.sync ? "sync" : "hz"; refreshLbl(); syncLFO(t, key); });
   divKnob.addEventListener("input", () => {
