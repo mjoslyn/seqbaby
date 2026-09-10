@@ -93,13 +93,13 @@ export default function VersionTree({
     [refresh, setStatus],
   );
 
-  const branchOut = useCallback(
+  const fork = useCallback(
     async (v: SongVersion) => {
-      setStatus({ text: "Branching…" });
+      setStatus({ text: "Forking…" });
       const res = await forkSong(songId, v.id);
       if (res.error || !res.id)
-        return setStatus({ text: res.error ?? "Branch failed", err: true });
-      setStatus({ text: `v${v.seq} branched into "${res.title}"` });
+        return setStatus({ text: res.error ?? "Fork failed", err: true });
+      setStatus({ text: `v${v.seq} forked into "${res.title}"` });
       onChanged();
     },
     [songId, onChanged, setStatus],
@@ -151,10 +151,10 @@ export default function VersionTree({
             </button>
             <button
               className={styles.iconBtn}
-              onClick={() => branchOut(v)}
-              title="copy this version into a separate song"
+              onClick={() => fork(v)}
+              title="fork this version into a song of its own"
             >
-              split
+              fork
             </button>
             <button
               className={styles.iconBtn}
