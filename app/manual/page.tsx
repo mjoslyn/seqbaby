@@ -843,7 +843,7 @@ export default function ManualPage() {
               <tbody>
                 <tr><td>session</td><td>Saves the whole session, every track, pattern and setting, into this browser.</td></tr>
                 <tr><td>save (signed in)</td><td>Stores the session to your account, so you can open it anywhere and keep a library of songs. Saving a song you already have keeps the older one: each save is a new version of it.</td></tr>
-                <tr><td>hist</td><td>The version history of a song, in the songs menu. Open any version to hear it again; save after that and the new version branches off the one you opened, so trying something out never costs you the version you liked. <span className={styles.ui}>name</span> labels a version, <span className={styles.ui}>split</span> copies one into a song of its own.</td></tr>
+                <tr><td>hist</td><td>The version history of a song, in the songs menu. Open any version to hear it again; save after that and the new version branches off the one you opened, so trying something out never costs you the version you liked. <span className={styles.ui}>name</span> labels a version, <span className={styles.ui}>fork</span> copies one into a song of its own, with its own history from there.</td></tr>
                 <tr><td>share</td><td>Makes a link anyone can open. They get a playable copy and your original is untouched.</td></tr>
                 <tr><td>patch</td><td>The save icon in a track header stores that instrument&apos;s sound, which then shows up under saved patches for any track. Signed in, you can publish patches to the gallery for other people to use.</td></tr>
                 <tr><td>Pattern / Session</td><td>Renders audio and downloads a WAV, either the current pattern or the whole chained arrangement. Recording happens in real time, so a long session takes as long as it plays.</td></tr>
@@ -857,9 +857,11 @@ export default function ManualPage() {
           <p>
             A saved song is a tree, not a file that gets overwritten. Every save hangs
             off the version you are working from, so the history keeps its shape: a
-            straight line while you keep going forward, and a fork the moment you open
-            an older version and carry on from there. Sharing a song shares the state
-            you saved, never the versions behind it.
+            straight line while you keep going forward, and a branch the moment you
+            open an older version and carry on from there. Forking a version is the
+            other move: it leaves the tree entirely and starts a new song, the same
+            way forking someone else&apos;s session does. Sharing a song shares the
+            state you saved, never the versions behind it.
           </p>
         </section>
 

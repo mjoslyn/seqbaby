@@ -1226,8 +1226,12 @@ v1 ──▶ v2 ──▶ v3 ──▶ v5      (kept editing)
   whole history (`song_id` cascades).
 - **A fork starts a fresh tree** rooted at the copied state. The source's history
   belongs to the source's owner and isn't readable anyway; `songs.forked_from`
-  still records the ancestry between songs. `split` in the version tree is the
-  same thing from one version — a way to turn a branch into its own song.
+  still records the ancestry between songs. `fork` in the version tree is the
+  same thing from one version — a way to turn a branch into its own song, and it
+  is deliberately spelled the same as the songs-menu and profile buttons because
+  it is the same operation with a different starting point. `branch` stays the
+  word for the in-tree move (saving from an older version); `fork` always means
+  leaving the tree.
 - Migration `0009` backfills a root version for every existing song, so the
   first save after deploying branches off something rather than starting a second
   root.
