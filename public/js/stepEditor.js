@@ -2,6 +2,7 @@ import { BUNDLED_SAMPLES, GRANULAR_SAMPLES, GRANULAR_SAMPLE_BASE, SAMPLE_BASE, e
 import { loadBuffer } from "./buffers.js";
 import { setStatus } from "./dom.js";
 import { renderEuclidPanel } from "./euclid.js";
+import { renderChancePanel } from "./chance.js";
 import { upgradeKnobs } from "./knob.js";
 import { applySampleSpeed, currentBpm } from "./lfo.js";
 import { renderRollPanel } from "./pianoRoll.js";
@@ -142,6 +143,16 @@ export function openEuclidAsModal(t) {
     btnSel: ".track-euclid",
     modalKey: "_euclidModal",
     afterMount: () => renderEuclidPanel(t, t._euclidPanelEl),
+  });
+}
+
+export function openChanceAsModal(t) {
+  openPanelAsModal(t, {
+    panel: t._chancePanelEl,
+    modalClass: "chance-modal",
+    btnSel: ".track-chance",
+    modalKey: "_chanceModal",
+    afterMount: () => renderChancePanel(t, t._chancePanelEl),
   });
 }
 

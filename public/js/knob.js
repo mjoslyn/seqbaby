@@ -41,7 +41,10 @@
 /** Controls that stay as they are. The wavetable's harmonic bars are a drawing
  *  of a spectrum — sixteen of them side by side ARE the waveform, and a row of
  *  little dials would say nothing. */
-const KNOB_EXCLUDE = ".sq-wt__harm-bar";
+// Two rows of sliders that stay sliders. Side by side they ARE the shape they
+// describe — the wavetable's harmonic spectrum, the chance generator's pitch
+// profile — and a row of little dials would say nothing about either.
+const KNOB_EXCLUDE = ".sq-wt__harm-bar, .sq-chance__pc";
 
 /** Pixels of vertical drag for the full range at normal resolution. */
 const PX_FULL_TRAVEL = 140;

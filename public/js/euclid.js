@@ -19,6 +19,7 @@ import { setStatus } from "./dom.js";
 import { refreshKnobRange, upgradeKnobs } from "./knob.js";
 import { patternMeter, stepsPerBeatForMeter } from "./meter.js";
 import { state } from "./state.js";
+import { setLiveGenerator } from "./stepSource.js";
 import { renderStepGrid } from "./stepGrid.js";
 import { lastUsedNote } from "./track.js";
 
@@ -266,9 +267,9 @@ export function euclidRing(t) {
 }
 
 /**
- * What a step plays — the one question the transport and the step grid both
- * ask. In live mode the answer is generated; otherwise it is read from the
- * written pattern. Null means silence.
+ * What a step plays when the ring is the one in charge. Null means silence.
+ * Which generator that is — the ring, the dice or the written pattern — is
+ * stepSource.js's question; this only answers for the ring.
  *
  * Only the *rhythm* is generated: pitch, chord, arp, ratchet, nudge and the
  * automation lanes all still come from the pattern, so a live euclid track is
@@ -276,12 +277,7 @@ export function euclidRing(t) {
  * @param {Track} t @param {number} idx
  * @returns {{span: number, vel: number}|null}
  */
-export function stepGateAt(t, idx) {
-  if (!t.euclid?.on) {
-    return t.steps[idx]
-      ? { span: Math.max(1, t.lengths[idx] || 1), vel: t.velocities[idx] ?? 0.5 }
-      : null;
-  }
+export function euclidGateAt(t, idx) {
   return euclidPlan(t)[idx] || null;
 }
 
@@ -581,7 +577,10 @@ export function wireEuclidPanel(t, panel) {
     changed();
   });
   panel.querySelector(".sq-euclid__on")?.addEventListener("change", (e) => {
-    ensureEuclid(t).on = !!e.target.checked;
+    ensureEuclid(t);
+    // One rhythm source at a time — switching the ring on switches the dice off
+    // (see stepSource.js).
+    setLiveGenerator(t, e.target.checked ? "euclid" : null);
     refreshEuclidUI(t);
     renderEuclidPanel(t, panel);
     setStatus(t.euclid.on

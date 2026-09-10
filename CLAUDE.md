@@ -15,7 +15,7 @@ env / fx / eq / comp / mod / automation per track.
   engine scripts in order: Tone.js 15 (CDN) → `public/woscillators.js` →
   `public/js/main.js` (ES module). `middleware.ts` refreshes the Supabase
   session on every request *except* static engine assets.
-- **Engine**: ~47 dependency-free vanilla ES modules in `public/js/`. No
+- **Engine**: ~50 dependency-free vanilla ES modules in `public/js/`. No
   bundler — edit, reload. `window.seqbaby` (from `appApi.js`) exposes `state`
   and serialize/apply hooks to the React shell (typed in `app/seqbaby.d.ts`).
 - **Accounts + data**: Supabase (Postgres + Auth + RLS). Tables: `profiles`,
@@ -145,6 +145,17 @@ env / fx / eq / comp / mod / automation per track.
   transport generates the track's rhythm instead of reading its steps, which is
   what makes the three counts modulatable. The ring is also an LFO shape
   (lfo.js). See the euclid section below.
+- `chance.js` / `chanceGen.js` — the chance generator behind the die button
+  beside the ring: a whole part (rhythm AND pitch) from probabilities, in the
+  manner of Vermona's meloDICER. `chanceGen.js` is the generator proper and has
+  **no imports**, for `sessionFormat.js`'s reasons; `chance.js` is the track and
+  DOM half. See the chance section below.
+- `stepSource.js` — `stepGateAt(t, idx)`: what a step plays, and which of the
+  three things decided it — the written pattern, the euclid ring, or the chance
+  generator. Also the exclusivity: a track has ONE rhythm source, so switching
+  one generator on switches the other off (`setLiveGenerator`). transport.js and
+  stepGrid.js ask this rather than asking a generator, and neither generator
+  imports the other.
 - `theory.js` / `meter.js` / `generate.js` / `curves.js` / `params.js` /
   `constants.js` / `dialogs.js` / `dom.js` / `icons.js` / `appApi.js` /
   `types.js` (JSDoc typedefs — data-model source of truth).
@@ -740,6 +751,69 @@ LFO rotating a euclidean track".
   entries per track, and four more numbers on each of them, forever, to say
   "this one is a sine" is real weight in a share link.
 
+## Chance — a part from probabilities (`chance.js` + `chanceGen.js`)
+
+A stochastic melody generator in the manner of Vermona's meloDICER, behind the
+die button beside the ring. Where euclid divides a cycle evenly, this throws
+dice — and unlike euclid it decides the **pitch** as well as the rhythm, which
+is the point of it: dicing the rhythm and reading the melody off the grid would
+be two unrelated parts stacked on each other.
+
+```
+RHYTHM   note value · variation · legato · rest        [dice]  [realtime]
+MELODY   twelve semitone probabilities · low + high    [dice]  [realtime]
+WINDOW   first step · last step
+```
+
+- **The rhythm is a chain of note values, not a step mask.** From the window's
+  first step: draw a length, decide what happens over it (a rest, a tie onto the
+  note before, or a note of its own), advance by that length, draw again. That
+  is the one structural difference from euclid, which can only say yes or no to
+  a step that was already there — and it is why the part has phrasing rather
+  than holes.
+- **A throw is a SEED**, and every decision is a hash of (seed, step, which
+  decision) — never a draw from a running generator. Same bargain as the random
+  square LFO (lfo.js), same three payoffs: the transport, the step grid and
+  `write to pattern` agree without sharing state; a saved song replays note for
+  note with none of the notes in it; and realtime-mode is one number away (mix
+  the pass count into the seed). Two seeds, because the machine has two dice —
+  a rhythm that repeats under a melody that never does is what they are for.
+- **Each decision gets its own hash stream, keyed by STEP.** Deliberately better
+  than the machine, which runs one: turning REST up only removes notes and the
+  faders only change pitches, instead of reshuffling the part every time a knob
+  moves. A part you are half happy with survives being tuned.
+- **The triplets and the 1/32s are ratchets.** The transport runs on sixteenths,
+  so a 1/8 triplet is not a step length — it is three notes evenly across a
+  quarter, which is exactly the `ratchet` the transport already has. Hence the
+  ladder's `{span, hits}`: 1/4T is 8 steps × 3, 1/8T is 4 × 3, 1/32 is 1 × 2.
+  **A value cut to fit the window loses its ratchet with its length** (a 1/4T
+  squeezed into six steps is three notes across a dotted quarter, which is not a
+  triplet), and `applyChance` cuts the written one the same way.
+- **Only six controls are modulatable**: note value, variation, legato, rest and
+  the two range knobs — precisely the ones the hardware puts under CV. The twelve
+  probabilities, the window and the dice are knobs and buttons only, which is
+  what keeps one generator from adding a seventh of the app's mod targets.
+  `chance_*` / `chance.*`, setter-driven, gated on `t.chance.on` (`canModulate` /
+  `canAutomate`), overrides in `t._chanceMod` and never saved.
+- **The generated pitch bypasses `applyScale`.** Every other note in the app is
+  snapped on its way out, but here the twelve faders ARE the scale, and snapping
+  would quietly delete whichever faders the session scale disagreed with while
+  the panel went on claiming them. `from scale` is where the two meet instead.
+- **The window tiles across the track** from `first`, exactly as euclid's cycle
+  does, and no note crosses its seam.
+- **`chanceGen.js` has no imports** — `constants.js` needs the mod-key tables at
+  the top of the module graph, and (the better reason) the generator is then a
+  pure function that `node --test` can exercise: `test/chanceGen.test.js` pins
+  the properties the panel promises, which for the one part of this app whose
+  output is *random* is worth a great deal.
+- **Settings are outside the p-lock snapshot**, like euclid's and `t.out`.
+  Serialized whole (`cloneChance`, not a spread — `pcs` is an array).
+- The twelve probabilities stay **sliders**, in `KNOB_EXCLUDE` beside the
+  wavetable's harmonic bars and for the same reason: side by side they are the
+  pitch profile, and a row of little dials would say nothing.
+- The panel's picture is **pitch against time**, not a ring: there is no evenness
+  to see here, and a rest, a tie and a leap all have to read at a glance.
+
 ## Data model (source of truth: `public/js/types.js`)
 
 ### Pattern (per track, 32 slots — every field a per-step parallel array)
@@ -1309,6 +1383,11 @@ patterns.
   id in a saved song names nothing. (`comp.source` itself is still written, for
   older readers; load ignores it. A session saved before the index existed has
   no way back to the track it meant, so it falls back to `"self"`.)
+- **A track has one rhythm source.** The euclid ring and the chance generator
+  both answer "what does this step play", so `stepSource.js` keeps them
+  exclusive and both live checkboxes go through `setLiveGenerator`. It also owns
+  `stepGateAt`, which used to live in euclid.js — a generator must not be the
+  place the dispatch lives, or the second one has to import the first.
 - **`tsconfig.json` excludes `public/js/`** — the engine is plain JS with
   JSDoc types; don't rename it to TS or import it into the Next graph.
 - **Don't use `Tone.Time(...)` for the step duration.** `Tone.setContext()` at
@@ -1352,6 +1431,9 @@ patterns.
   `capturePatternSound` / `applyPatternSound` (patternSound.js) too, or a locked
   pattern will leave it behind on a switch.
 - New engine → see Engines catalog above.
+- New rhythm/melody generator → a module beside `euclid.js` / `chance.js`, a
+  `<gen>GateAt` for it, and a branch in `stepSource.js` (which also owns the
+  one-source-at-a-time rule). The transport and the step grid learn nothing.
 - New cross-track routing → `t.out` + signal.js's routing block; anything that
   rebuilds a voice must call `refreshAllTrackOutputs()`.
 - New macro-pad behaviour → `macro.js`; assignment targets come from
@@ -1387,7 +1469,7 @@ Repo: https://github.com/mjoslyn/seqbaby.
   An inline marker (`window.__seqbabyServerBoot`) tells the paths apart, and
   `ScriptLoader.tsx` keeps its onload-chained injection for the soft-nav case
   (e.g. arriving from `/login`).
-- `app/EnginePreload.tsx` emits `modulepreload` for all 47 modules listed in
+- `app/EnginePreload.tsx` emits `modulepreload` for all 50 modules listed in
   `app/engineAssets.ts`. The graph is 8 levels deep, so without it the browser
   needs up to eight sequential round trips just to discover the code.
   **Adding or removing a module in `public/js/` means updating that list** —

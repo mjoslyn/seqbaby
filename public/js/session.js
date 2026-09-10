@@ -10,6 +10,7 @@ import { guessIsDrumKit, parseMeter } from "./meter.js";
 import { updatePlaitsControlsVisibility } from "./params.js";
 import { renderPatternGrid } from "./patternBar.js";
 import { refreshEuclidUI, renderEuclidPanel } from "./euclid.js";
+import { cloneChance, refreshChanceUI, renderChancePanel } from "./chance.js";
 import { applyBusMute, paintDiceDensity, placeBusesLast, refreshFxPanelUI, renderModPanel, syncTrackSoundUI } from "./render.js";
 import { flushAllPatternSounds, recallPatternSound, refreshPatternLockUI, refreshPatternSoundUI } from "./patternSound.js";
 import { syncScaleUI } from "./scaleUI.js";
@@ -106,6 +107,10 @@ export function serializeSet() {
       pitchLock: t.pitchLock ?? true,
       density: t.density ?? 0.5,          // the dice button's fill level
       euclid: t.euclid ? { ...t.euclid } : null,   // the euclid generator, live mode included
+      // The chance generator, live mode and both throws included — a throw is a
+      // seed, so a saved song replays note for note without the notes being in
+      // it (chanceGen.js). cloneChance, not a spread: `pcs` is an array.
+      chance: cloneChance(t.chance),
       lfoConfig: JSON.parse(JSON.stringify(t.lfoConfig)),
       patterns: t.patterns.map(p => ({
         steps: p.steps.slice(),
@@ -472,6 +477,9 @@ export function applySet(s) {
     t.density = Math.max(0, Math.min(1, td.density ?? 0.5));
     t.euclid = td.euclid ? { ...td.euclid } : null;
     t._euclidMod = null;                // live overrides are never saved
+    t.chance = cloneChance(td.chance);
+    t._chanceMod = null;
+    t._chancePlan = null;               // built on demand; nothing to carry in
     Object.assign(t.lfoConfig, td.lfoConfig || {});
     if (Array.isArray(td.patterns)) {
       const pad = (arr, fill, n) => { const out = (arr || []).slice(0, n); while (out.length < n) out.push(fill); return out; };
@@ -539,6 +547,8 @@ export function applySet(s) {
       // load without its read-only grid.
       renderEuclidPanel(t);
       refreshEuclidUI(t);
+      renderChancePanel(t);
+      refreshChanceUI(t);
       refreshFxPanelUI(t);
       renderModPanel(t, t._modPanelEl || t.el.querySelector(".sq-track__mod-panel"));
       const eqPanel = t._eqPanelEl || t.el.querySelector(".sq-track__eq-panel");

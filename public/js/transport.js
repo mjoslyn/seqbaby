@@ -3,7 +3,8 @@ import { fireMetronome, paintBeatIndicator } from "./beat.js";
 import { engineByKey } from "./catalog.js";
 import { BAR_TICKS, wosc } from "./constants.js";
 import { setStatus } from "./dom.js";
-import { euclidFallbackNote, stepGateAt } from "./euclid.js";
+import { euclidFallbackNote } from "./euclid.js";
+import { stepGateAt } from "./stepSource.js";
 import { loadBassWorklet } from "./bass.js";
 import { loadHexopWorklet } from "./hexop.js";
 import { loadSubBassWorklet } from "./subbass.js";
@@ -435,10 +436,12 @@ export async function togglePlay() {
         scheduleAtAudible(() => { if (state.playing) paintTrackNow(t, idx); }, stepTime, lat);
         // A bus stops here every step: it has just run its automation, and
         // everything below this line is about firing a note.
-        // What this step plays. Normally the written pattern; on a track in
-        // live euclid mode the rhythm is generated instead (euclid.js) — only
-        // the step mask, so pitch, chords, arps, ratchets and nudges below all
-        // still come from the pattern.
+        // What this step plays, and which of the three things decided it —
+        // the written pattern, the euclid ring or the chance generator
+        // (stepSource.js). The ring replaces only the step mask, so pitch,
+        // chords, arps, ratchets and nudges below all still come from the
+        // pattern; the dice replaces the pitch and the ratchet too, and says so
+        // by handing them back on the gate.
         const gate = stepGateAt(t, idx);
         if (isBus || !gate) { slot++; continue; }
         const span = gate.span;
@@ -450,7 +453,15 @@ export async function togglePlay() {
         // A generated hit on a step the pattern never wrote falls back to C2
         // on a drum kit, the track's last-used note otherwise — the same
         // choice the written generator makes.
-        const root = noteForStep(t, idx, t.euclid?.on ? euclidFallbackNote(t) : undefined);
+        //
+        // A generator that decided the PITCH is taken at its word and skips
+        // `applyScale`: the chance generator's twelve semitone probabilities ARE
+        // its scale, and snapping its notes to the session's would quietly
+        // delete whichever faders the two disagreed about while the panel went
+        // on claiming them (chance.js has the button that meets them properly).
+        const root = gate.note != null
+          ? gate.note
+          : noteForStep(t, idx, t.euclid?.on ? euclidFallbackNote(t) : undefined);
         const vel = gate.vel;
         const chord = t.chords[idx] || "";
         const arp = !!(t.arps && t.arps[idx]);
@@ -534,7 +545,7 @@ export async function togglePlay() {
                 sampleSpeedMode: t.sampleSpeedMode,
                 pitchLocked: t.pitchLock !== false,
               };
-          const ratchet = Math.max(1, Math.min(8, Math.round(t.ratchets?.[idx] ?? 1)));
+          const ratchet = Math.max(1, Math.min(8, Math.round(gate.ratchet ?? t.ratchets?.[idx] ?? 1)));
           if (ratchet > 1 && !chord) {
             // retrigger the single note N times evenly across the step
             const sub = duration / ratchet;

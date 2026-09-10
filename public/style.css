@@ -1769,15 +1769,185 @@ body.kbd-recording .sq-track.is-kbd-active { border-color: #e5484d; box-shadow: 
 .sq-euclid__live:has(:checked) { color: var(--accent-2); }
 .sq-euclid__write { font-size: 12px; }
 
-/* Live euclid: the grid is showing a rhythm nobody wrote, so it cannot also be
-   the thing you edit — a click would land on a step the generator is about to
-   overwrite on its next turn. Read-only and visibly so, until live goes off
-   and the written pattern (untouched all along) comes back. */
-.sq-track.is-euclid .sq-steps { pointer-events: none; opacity: 0.85; }
-.sq-track.is-euclid .sq-step.is-on {
+/* A generator running live: the grid is showing a part nobody wrote, so it
+   cannot also be the thing you edit — a click would land on a step the
+   generator is about to overwrite on its next turn. Read-only and visibly so,
+   until live goes off and the written pattern (untouched all along) comes back. */
+.sq-track.is-euclid .sq-steps,
+.sq-track.is-chance .sq-steps { pointer-events: none; opacity: 0.85; }
+.sq-track.is-euclid .sq-step.is-on,
+.sq-track.is-chance .sq-step.is-on {
   background-image: repeating-linear-gradient(
     135deg, transparent 0 5px, color-mix(in oklab, var(--accent-2) 30%, transparent) 5px 7px);
 }
+
+/* Chance panel. Two sections stacked, each with its own dice, and the generated
+   part drawn above them as pitch against time — which is the only picture in
+   which a rest, a tie and a leap all read at a glance (the ring's polygon says
+   nothing here: there is no evenness to see). Lives on the track like the ring
+   and the rack, because its six modulatable controls are parameters and have to
+   be in the DOM whether or not anyone has opened it. */
+.sq-track__chance-panel {
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  display: grid;
+  gap: 8px;
+  max-width: 520px;
+}
+.sq-track__chance-panel[hidden] { display: none; }
+.track-chance[aria-pressed="true"] { background: var(--accent); color: #0b0d10; border-color: var(--accent); }
+/* Live: the track's part is coming from here, not from the grid. Worth saying on
+   the button, which is all you can see with the panel closed. */
+.track-chance.is-live { box-shadow: 0 0 0 1px var(--accent-2) inset; color: var(--accent-2); }
+
+.sq-chance__title { color: var(--fg); font-size: 12px; }
+.sq-chance__readout { display: grid; gap: 4px; font-size: 11px; }
+.sq-chance__summary { color: var(--fg); font-size: 12px; font-variant-numeric: tabular-nums; }
+.sq-chance__hint { color: var(--fg-dim); font-size: 11px; line-height: 1.4; }
+
+/* The throw. One column per step of the window; a note is a bar whose height is
+   its pitch within the range and whose width is how long it is held. */
+.sq-chance__roll {
+  display: grid;
+  /* The column count is written from JS (drawChanceViz) — it is the window's
+     length, and `repeat()` will not take a custom property as its count. */
+  grid-template-columns: repeat(16, minmax(0, 1fr));
+  align-items: end;
+  gap: 1px;
+  height: 74px;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--step);
+}
+.sq-chance__cell { min-width: 0; height: 100%; border-radius: 2px; }
+/* A bare cell is a rest — faintly floored so the row still reads as steps. A
+   step covered by a note already sounding gets no cell at all: that note's bar
+   spans it (see drawChanceViz). */
+.sq-chance__cell { background: linear-gradient(to top, var(--border) 0 1px, transparent 1px); }
+.sq-chance__cell[data-beat="1"] { box-shadow: -1px 0 0 var(--border); }
+/* A note. `--h` places the band in the range and `--span` is how many columns it
+   holds; the transparent blocks above and below are what lift the band off the
+   floor, so height and position are one gradient rather than a wrapper each. */
+.sq-chance__cell.is-on {
+  grid-column: span var(--span, 1);
+  background:
+    linear-gradient(to top,
+      transparent 0 calc(var(--h, 50%) - 3px),
+      var(--accent) calc(var(--h, 50%) - 3px) calc(var(--h, 50%) + 3px),
+      transparent calc(var(--h, 50%) + 3px));
+}
+/* A ratcheted note is struck more than once inside its span — the triplets and
+   the 1/32s, which a sixteenth grid can only say this way. The band is split
+   into `--hits` segments, and the splitting layer is sized and placed to the
+   band itself: full height it would rule the whole column and the row would
+   read as texture rather than as notes. */
+.sq-chance__cell.is-on[data-hits="2"],
+.sq-chance__cell.is-on[data-hits="3"] {
+  background-image:
+    repeating-linear-gradient(90deg,
+      transparent 0 calc(100% / var(--hits, 1) - 2px),
+      var(--bg-3) calc(100% / var(--hits, 1) - 2px) calc(100% / var(--hits, 1))),
+    linear-gradient(to top,
+      transparent 0 calc(var(--h, 50%) - 3px),
+      var(--accent-2) calc(var(--h, 50%) - 3px) calc(var(--h, 50%) + 3px),
+      transparent calc(var(--h, 50%) + 3px));
+  background-size: 100% 6px, 100% 100%;
+  background-position: 0 calc(100% - var(--h, 50%) - 3px), 0 0;
+  background-repeat: no-repeat, no-repeat;
+}
+
+/* A section head: which half of the machine, its dice, and its realtime switch. */
+.sq-chance__sec {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-top: 2px;
+  border-top: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--fg-dim);
+}
+.sq-chance__sec-t { color: var(--fg); letter-spacing: 0.06em; text-transform: uppercase; font-size: 10px; }
+.sq-chance__sec button { font-size: 11px; margin-left: auto; }
+.sq-chance__free { display: inline-flex; align-items: center; gap: 5px; }
+.sq-chance__free:has(:checked) { color: var(--accent-2); }
+
+/* Knobs, like every other played control in the app, with the value written
+   under the dial rather than left to the drag bubble — these read as words
+   ("1/8T", "shorter 40%") and a bubble you have to hold the knob to see would
+   hide exactly the thing you are setting. */
+.sq-chance__ctls { display: flex; justify-content: center; gap: 18px; flex-wrap: wrap; padding: 2px 0; }
+.sq-chance__f {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  line-height: 1.1;
+  color: var(--fg-dim);
+}
+.sq-chance__f .sq-knob { --knob-size: 42px; }
+.sq-chance__val { color: var(--fg); font-size: 11px; font-variant-numeric: tabular-nums; }
+/* Something else is driving this control right now — an LFO, a lane or a pad.
+   The knob deliberately stays where you left it (it is the base the modulation
+   swings around), so without this the still knob beside a changing part reads as
+   a bug. */
+.sq-chance__f.is-driven > span,
+.sq-chance__f.is-driven .sq-chance__val { color: var(--accent-2); }
+
+/* The twelve semitone probabilities. Sliders and not knobs (see KNOB_EXCLUDE in
+   knob.js): side by side they are the pitch profile, and a row of dials would
+   say nothing about which notes this part is made of. */
+.sq-chance__keys {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 3px;
+  padding: 4px 2px 0;
+}
+.sq-chance__key {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  flex: 1 1 0;
+  min-width: 0;
+  font-size: 9px;
+  color: var(--fg-dim);
+}
+.sq-chance__key > input {
+  -webkit-appearance: slider-vertical;
+  writing-mode: vertical-lr;
+  direction: rtl;
+  flex: 0 0 auto;
+  width: 100%;
+  min-width: 0;
+  height: 58px;
+}
+/* The black keys dimmer, so the row reads as a keyboard and you can find F♯
+   without counting. */
+.sq-chance__key.is-black { color: color-mix(in oklab, var(--fg-dim) 70%, transparent); }
+/* Raised and reachable, versus raised and out of range — a fader asking for a
+   note the range cannot play does nothing, and should look like it. */
+.sq-chance__key.is-live > span { color: var(--accent); }
+.sq-chance__key.is-dead > span { color: var(--danger); text-decoration: line-through; }
+
+.sq-chance__opts {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  flex-wrap: wrap;
+  font-size: 11px;
+  color: var(--fg-dim);
+}
+.sq-chance__opts label { display: inline-flex; align-items: center; gap: 5px; }
+.sq-chance__opts button { font-size: 11px; }
+.sq-chance__actions { display: flex; gap: 12px; align-items: center; justify-content: space-between; }
+.sq-chance__live { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--fg-dim); }
+.sq-chance__live:has(:checked) { color: var(--accent-2); }
+.sq-chance__write { font-size: 12px; }
 
 /* Wavetable editor modal. */
 .sq-wt__modal { width: min(94vw, 720px); gap: 10px; }
@@ -1932,7 +2102,8 @@ body.kbd-recording .sq-track.is-kbd-active { border-color: #e5484d; box-shadow: 
 .sq-panel__modal > .sq-track__fx-panel,
 .sq-panel__modal > .sq-track__eq-panel,
 .sq-panel__modal > .sq-track__comp-panel,
-.sq-panel__modal > .sq-track__euclid-panel {
+.sq-panel__modal > .sq-track__euclid-panel,
+.sq-panel__modal > .sq-track__chance-panel {
   padding: 0;
   background: transparent;
   border: none;
@@ -1949,6 +2120,7 @@ body.kbd-recording .sq-track.is-kbd-active { border-color: #e5484d; box-shadow: 
   min-height: 40px;
 }
 .euclid-modal { width: min(94vw, 460px); }
+.chance-modal { width: min(94vw, 540px); }
 .sq-roll__modal .sq-roll__head { flex-wrap: wrap; }
 .sq-roll__modal .sq-roll__grid { max-height: calc(80vh - 80px); }
 .sq-mod__modal,

@@ -76,7 +76,7 @@ function pathOf(url: string): string {
   }
 }
 
-// Weighted by transfer size, not file count: the 44 modules are ~1MB between
+// Weighted by transfer size, not file count: the 50 modules are ~1MB between
 // them (so ~1 unit each at ~23KB a unit), Tone.js is 346KB and woscillators.js
 // is 379KB. Counting files instead put 44 of the 46 units on the modules, which
 // finish first — the bar hit 70% in two seconds and then sat there for eight

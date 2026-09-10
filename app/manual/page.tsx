@@ -14,6 +14,7 @@ const SECTIONS = [
   ["steps", "The step grid"],
   ["roll", "The piano roll"],
   ["step-editor", "The step editor"],
+  ["generators", "The two generators"],
   ["keyboard", "Playing from your keyboard"],
   ["scale", "Scale and chords"],
   ["engines", "Sound engines"],
@@ -161,7 +162,8 @@ export default function ManualPage() {
                 <tr><td>p-lock</td><td>Gives this track a sound of its own on the pattern you&apos;re on. It&apos;s per pattern, so it changes as you move around. See <a href="#lock">below</a>.</td></tr>
                 <tr><td>clear</td><td>Empties this pattern on this track.</td></tr>
                 <tr><td>dice</td><td>Rolls a new pattern. Keep pressing until one sticks. The fill level behind the icon is how busy the results come out; drag the dice up or down to set it.</td></tr>
-                <tr><td>ring</td><td>Euclidean rhythms: a number of hits spread as evenly as possible over a cycle, which covers a startling amount of the world&apos;s drumming. Set the hits, the cycle length and a rotation, and the cycle tiles across the track. <strong>Write to pattern</strong> prints it as ordinary steps you can edit afterwards. <strong>Live</strong> has the track generate its rhythm as it plays without writing anything, so the three counts can take an LFO, an automation lane or a macro pad. Turn it off and the pattern you had is still there. While live is on the grid shows what&apos;s being generated, and won&apos;t let you edit it.</td></tr>
+                <tr><td>ring</td><td>Euclidean rhythms: a number of hits spread as evenly as possible over a cycle, which covers a startling amount of the world&apos;s drumming. Set the hits, the cycle length and a rotation, and the cycle tiles across the track. <strong>Write to pattern</strong> prints it as ordinary steps you can edit afterwards. <strong>Live</strong> has the track generate its rhythm as it plays without writing anything, so the three counts can take an LFO, an automation lane or a macro pad. Turn it off and the pattern you had is still there. While live is on the grid shows what&apos;s being generated, and won&apos;t let you edit it. See <a href="#generators">the two generators</a>.</td></tr>
+                <tr><td>dice (the die)</td><td>Chance: a whole part &mdash; rhythm <em>and</em> pitches &mdash; from probabilities rather than from notes you place. See <a href="#generators">the two generators</a>.</td></tr>
                 <tr><td>dup / remove</td><td>Copy the whole track, sound and all, or delete it.</td></tr>
                 <tr><td>oct / semi</td><td>Transposes everything in the pattern up or down.</td></tr>
               </tbody>
@@ -263,6 +265,92 @@ export default function ManualPage() {
             1/16 arp rate has space for exactly one note, which sounds like nothing
             happening. Lengthen the note or pick a faster rate.
           </div>
+        </section>
+
+        <section className={styles.section} id="generators">
+          <h2>The two generators</h2>
+          <p>
+            Two buttons on the track row fill the grid for you instead of you filling
+            it. Both work the same two ways: <strong>write to pattern</strong> prints
+            one result into the grid as ordinary steps you can then edit, and{" "}
+            <strong>live</strong> has the track generate as it plays without writing
+            anything &mdash; so the controls can take an LFO, an automation lane or a
+            macro pad, and switching live off hands back the pattern exactly as you
+            left it. While live is on, the grid shows what&apos;s being generated and
+            won&apos;t let you edit it. A track has one rhythm at a time, so turning
+            one generator on turns the other off.
+          </p>
+
+          <h3>The ring: euclidean rhythms</h3>
+          <p>
+            A number of hits spread as evenly as possible over a cycle, which covers a
+            startling amount of the world&apos;s drumming. Set the hits, the cycle
+            length and a rotation, and the cycle tiles across the track. It decides
+            only <em>when</em> notes happen &mdash; the pitches stay whatever the
+            pattern already had.
+          </p>
+
+          <h3>The die: chance</h3>
+          <p>
+            Chance is the other half of that: it decides the pitches as well. You
+            don&apos;t write notes, you write the <em>odds</em> of notes, and it plays
+            something that fits them. Two sections, each with its own dice.
+          </p>
+          <p>
+            <strong>Rhythm.</strong> <span className={styles.ui}>note value</span> is
+            the base rhythm, from 1/1 down to 1/32 by way of the triplets, and nothing
+            random happens to it on its own.{" "}
+            <span className={styles.ui}>variation</span> is off in the middle: turn it
+            left to bring in longer note values, right for shorter ones, and how far
+            you turn it is both how often another value turns up and how far from the
+            base it strays. <span className={styles.ui}>legato</span> is how likely a
+            note is to be tied to the one before instead of gating again &mdash; all
+            the way up you get a single held note.{" "}
+            <span className={styles.ui}>rest</span> is how likely a note is to be
+            dropped; all the way up, silence. The two checkboxes let variation reach
+            the triplets and the 1/32s, which are off to start with.
+          </p>
+          <p>
+            <strong>Melody.</strong> The twelve faders are the probability of each
+            semitone, not a switch on each: one at half height turns up half as often
+            as one at full, and a single raised fader is certain wherever it sits.
+            That&apos;s how you write a scale here &mdash; or a scale with a bias, by
+            leaning on the notes you want to hear most.{" "}
+            <span className={styles.ui}>from scale</span> loads the session&apos;s
+            active scale into them, which is where the two meet: generated notes are
+            deliberately <em>not</em> snapped to the session scale, because these
+            faders are the scale. <span className={styles.ui}>low note</span> and{" "}
+            <span className={styles.ui}>high note</span> set the range, up to five
+            octaves wide; a semitone raised outside it can&apos;t play, and its label
+            greys out and strikes through to say so.
+          </p>
+          <p>
+            <strong>The dice.</strong> Each section&apos;s{" "}
+            <span className={styles.ui}>roll</span> takes a new throw. A throw is
+            <em>held</em>, so the part repeats and you can play against it &mdash; keep
+            rolling until one sticks. Tick{" "}
+            <span className={styles.ui}>realtime</span> on a section and it stops
+            holding: a new throw every time round, so that section never repeats. Two
+            dice rather than one because a rhythm that repeats under a melody that
+            never does is the thing this generator is for.
+          </p>
+          <p>
+            <strong>The window</strong> is the first and last step it generates over,
+            and it tiles across the track like the ring&apos;s cycle. Moving{" "}
+            <span className={styles.ui}>first step</span> slides the window without
+            changing its length.
+          </p>
+          <p>
+            Six of the controls can be modulated while live is on: the four rhythm
+            knobs and the two range knobs. An LFO on{" "}
+            <span className={styles.ui}>rest</span> breathes the part in and out; a
+            lane on <span className={styles.ui}>low note</span> walks it up the
+            register over a bar; a macro pad can do both at once across several tracks.
+            The picture at the top of the panel is the part it&apos;s currently
+            playing &mdash; height is pitch, width is how long a note is held, and a
+            note in the second colour is one struck more than once, which is how the
+            triplets and the 1/32s fit a grid of sixteenths.
+          </p>
         </section>
 
         <section className={styles.section} id="keyboard">

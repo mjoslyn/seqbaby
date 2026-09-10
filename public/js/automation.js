@@ -6,6 +6,8 @@ import { HEXOP_MOD_KEYS, HEXOP_MOD_LABELS, hexopFromUnit } from "./hexop.js";
 import { SUB_MOD_KEYS, SUB_MOD_LABELS, subFromUnit } from "./subbass.js";
 import { GUITAR_MOD_KEYS, GUITAR_MOD_LABELS, guitarFromUnit } from "./guitar.js";
 import { EUCLID_MOD_KEYS, EUCLID_MOD_LABELS, euclidFromUnit, setEuclidLive } from "./euclid.js";
+import { setChanceLive } from "./chance.js";
+import { CHANCE_MOD_KEYS, CHANCE_MOD_LABELS, chanceFromUnit } from "./chanceGen.js";
 import { canModulate } from "./lfo.js";
 import { setParam } from "./params.js";
 import { cutoffToHz, resonToQ } from "./signal.js";
@@ -38,6 +40,8 @@ export const AUTOMATION_TARGETS = {
   "wt.scan.range":      { label: "wave scan range" },
   // euclid's three counts (only while live euclid is generating — see canAutomate)
   ...Object.fromEntries(EUCLID_MOD_KEYS.map(k => [`euclid.${k}`, { label: EUCLID_MOD_LABELS[k] }])),
+  // the chance generator's six (only while the dice are generating — same gate)
+  ...Object.fromEntries(CHANCE_MOD_KEYS.map(k => [`chance.${k}`, { label: CHANCE_MOD_LABELS[k] }])),
   // granular grain controls (granular engine only)
   "gran.speed":         { label: "grain speed" },
   "gran.pitch":         { label: "grain pitch" },
@@ -151,6 +155,7 @@ export function canAutomate(t, key) {
   if (key === "cutoff" || key === "reson") return true;
   if (key.startsWith("wt.scan.")) return t.engineKey === "wt:akwf";
   if (key.startsWith("euclid.")) return !!t.euclid?.on;
+  if (key.startsWith("chance.")) return !!t.chance?.on;
   if (key.startsWith("gran.")) return t.engineKey === "dm:granular";
   if (key.startsWith("silverbox.")) return t.engineKey === "dm:silverbox";
   if (key.startsWith("contagion.")) return t.engineKey === "dm:contagion";
@@ -214,6 +219,15 @@ export function applyAutomationAtStep(t, key, v, time, vNext, stepDur) {
   if (key.startsWith("euclid.")) {
     const k = key.slice(7);
     setEuclidLive(t, k, euclidFromUnit(t, k, vv));
+    return;
+  }
+  // Chance: the same arrangement. A lane on `rest` thins the part out over the
+  // bar, and one on `lo`/`hi` walks the register — without touching a knob, and
+  // without writing a note anywhere. No ramp: these are the odds a throw is
+  // built from, read once when it is built.
+  if (key.startsWith("chance.")) {
+    const k = key.slice(7);
+    setChanceLive(t, k, chanceFromUnit(k, vv));
     return;
   }
   // Wave-scan window: no AudioParam behind it, so write the voice's live scan

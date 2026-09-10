@@ -196,6 +196,11 @@
  *   The euclid generator (euclid.js). `on` is live mode: the transport
  *   generates this track's rhythm instead of reading its written steps.
  *   Modulated values are live-only, in `_euclidMod`.
+ * @property {?import("./chanceGen.js").ChanceConfig} [chance]
+ *   The chance generator (chance.js / chanceGen.js). `on` is live mode, and it
+ *   replaces the PITCH as well as the rhythm — a track has one rhythm source,
+ *   so it and `euclid.on` are mutually exclusive (stepSource.js). Modulated
+ *   values are live-only, in `_chanceMod`.
  * @property {number} speed
  * @property {string} sampleSpeedMode       "native" default.
  * @property {SampleDefaults} sampleDefaults
