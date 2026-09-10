@@ -564,6 +564,7 @@ ${SUB_PANEL}
         <button class="sq-track__clear sq-btn--ghost">clear</button>
         <button class="track-dice sq-icon-btn sq-btn--ghost" type="button" aria-label="random pattern, drag up or down to set density" title="random pattern (drag up/down to set density)"></button>
         <button class="track-euclid sq-icon-btn sq-btn--ghost" type="button" aria-pressed="false" aria-label="euclidean rhythm generator" title="euclidean rhythm — spread N hits as evenly as possible over the pattern"></button>
+        <button class="track-chance sq-icon-btn sq-btn--ghost" type="button" aria-pressed="false" aria-label="chance melody generator" title="chance — a part from probabilities: how long the notes are, how often they rest or tie, and how likely each of the twelve semitones is"></button>
         <button class="sq-track__dup sq-btn--ghost" type="button" title="duplicate this track">dup</button>
         <button class="sq-track__remove sq-btn--ghost sq-btn--danger">remove</button>
         <div class="sq-track__oct">
@@ -630,6 +631,137 @@ ${SUB_PANEL}
         <div class="sq-euclid__actions">
           <label class="sq-euclid__live" title="generate this track's rhythm live instead of playing the written steps. Nothing is written, so pulses, steps and rotate can take an LFO, an automation lane or a macro pad — and switching it off hands back the pattern exactly as you left it. The step grid shows what is being generated and goes read-only while it is on"><input class="sq-euclid__on" type="checkbox" /> live</label>
           <button class="sq-euclid__write sq-btn--ghost" type="button" title="print this rhythm into the pattern as ordinary steps, replacing what is there. Hits landing where you already had a note keep its pitch">write to pattern</button>
+        </div>
+      </div>
+      <div class="sq-track__chance-panel" hidden>
+        <div class="sq-chance__title">chance — a part from probabilities</div>
+        <div class="sq-chance__roll" aria-hidden="true"></div>
+        <div class="sq-chance__readout">
+          <div class="sq-chance__summary"></div>
+          <div class="sq-chance__hint"></div>
+        </div>
+
+        <div class="sq-chance__sec">
+          <span class="sq-chance__sec-t">rhythm</span>
+          <button class="sq-chance__dice-r sq-btn--ghost" type="button" title="throw the rhythm dice: a new set of random values for the note lengths, the rests and the ties. The throw is held, so the part repeats — keep pressing until one sticks">roll</button>
+          <label class="sq-chance__free" title="realtime: stop holding the throw and take a new one every time the window comes round, so the rhythm never repeats. The hardware calls the held version dice-mode and this its counterpart"><input class="sq-chance__rfree" type="checkbox" /> realtime</label>
+        </div>
+        <div class="sq-chance__ctls">
+          <label class="sq-chance__f" title="the base rhythm, from 1/1 down to 1/32 by way of the triplets. Nothing random about it — this is the grid the rest of the section varies">
+            <span>note value</span>
+            <input class="p-chnnote" type="range" min="0" max="7" step="1" value="4" />
+            <output class="sq-chance__val sq-chance__val--note"></output>
+          </label>
+          <label class="sq-chance__f" title="how often another note length turns up instead of the base one, and how far from it. Off in the middle; turn left for longer values, right for shorter">
+            <span>variation</span>
+            <input class="p-chnvar" type="range" min="-1" max="1" step="0.01" value="0" />
+            <output class="sq-chance__val sq-chance__val--var"></output>
+          </label>
+          <label class="sq-chance__f" title="how likely a note is to be tied to the one before instead of gating again. All the way up, nothing ever re-gates and you get one held note">
+            <span>legato</span>
+            <input class="p-chnleg" type="range" min="0" max="1" step="0.01" value="0" />
+            <output class="sq-chance__val sq-chance__val--leg"></output>
+          </label>
+          <label class="sq-chance__f" title="how likely a note is to be dropped for a rest. All the way up, silence">
+            <span>rest</span>
+            <input class="p-chnrest" type="range" min="0" max="1" step="0.01" value="0" />
+            <output class="sq-chance__val sq-chance__val--rest"></output>
+          </label>
+        </div>
+        <div class="sq-chance__opts">
+          <label title="let variation reach the triplet values (1/4T, 1/8T). They are played as a ratcheted step, because the sequencer's grid is sixteenths — three notes evenly across the space, which is what a triplet is"><input class="sq-chance__trips" type="checkbox" /> triplets</label>
+          <label title="let variation reach 1/32 notes — one step, struck twice"><input class="sq-chance__x32" type="checkbox" /> 1/32s</label>
+        </div>
+
+        <div class="sq-chance__sec">
+          <span class="sq-chance__sec-t">melody</span>
+          <button class="sq-chance__dice-m sq-btn--ghost" type="button" title="throw the melody dice: new pitches, same rhythm. Separate from the rhythm's throw on purpose — a part that repeats its rhythm while the notes keep moving is the thing this generator is for">roll</button>
+          <label class="sq-chance__free" title="realtime: a new melody every time the window comes round, so the pitches never repeat"><input class="sq-chance__mfree" type="checkbox" /> realtime</label>
+        </div>
+        <div class="sq-chance__keys">
+          <label class="sq-chance__key" title="how likely C is to turn up — a probability, not a switch, so half height means half as often. One raised fader on its own is certain wherever it sits">
+            <input class="sq-chance__pc" data-pc="0" type="range" min="0" max="1" step="0.01" value="1" aria-label="C probability" />
+            <span>C</span>
+          </label>
+          <label class="sq-chance__key is-black" title="how likely C♯ is to turn up — a probability, not a switch, so half height means half as often. One raised fader on its own is certain wherever it sits">
+            <input class="sq-chance__pc" data-pc="1" type="range" min="0" max="1" step="0.01" value="0" aria-label="C♯ probability" />
+            <span>C♯</span>
+          </label>
+          <label class="sq-chance__key" title="how likely D is to turn up — a probability, not a switch, so half height means half as often. One raised fader on its own is certain wherever it sits">
+            <input class="sq-chance__pc" data-pc="2" type="range" min="0" max="1" step="0.01" value="0" aria-label="D probability" />
+            <span>D</span>
+          </label>
+          <label class="sq-chance__key is-black" title="how likely D♯ is to turn up — a probability, not a switch, so half height means half as often. One raised fader on its own is certain wherever it sits">
+            <input class="sq-chance__pc" data-pc="3" type="range" min="0" max="1" step="0.01" value="0.7" aria-label="D♯ probability" />
+            <span>D♯</span>
+          </label>
+          <label class="sq-chance__key" title="how likely E is to turn up — a probability, not a switch, so half height means half as often. One raised fader on its own is certain wherever it sits">
+            <input class="sq-chance__pc" data-pc="4" type="range" min="0" max="1" step="0.01" value="0" aria-label="E probability" />
+            <span>E</span>
+          </label>
+          <label class="sq-chance__key" title="how likely F is to turn up — a probability, not a switch, so half height means half as often. One raised fader on its own is certain wherever it sits">
+            <input class="sq-chance__pc" data-pc="5" type="range" min="0" max="1" step="0.01" value="0.6" aria-label="F probability" />
+            <span>F</span>
+          </label>
+          <label class="sq-chance__key is-black" title="how likely F♯ is to turn up — a probability, not a switch, so half height means half as often. One raised fader on its own is certain wherever it sits">
+            <input class="sq-chance__pc" data-pc="6" type="range" min="0" max="1" step="0.01" value="0" aria-label="F♯ probability" />
+            <span>F♯</span>
+          </label>
+          <label class="sq-chance__key" title="how likely G is to turn up — a probability, not a switch, so half height means half as often. One raised fader on its own is certain wherever it sits">
+            <input class="sq-chance__pc" data-pc="7" type="range" min="0" max="1" step="0.01" value="0.9" aria-label="G probability" />
+            <span>G</span>
+          </label>
+          <label class="sq-chance__key is-black" title="how likely G♯ is to turn up — a probability, not a switch, so half height means half as often. One raised fader on its own is certain wherever it sits">
+            <input class="sq-chance__pc" data-pc="8" type="range" min="0" max="1" step="0.01" value="0" aria-label="G♯ probability" />
+            <span>G♯</span>
+          </label>
+          <label class="sq-chance__key" title="how likely A is to turn up — a probability, not a switch, so half height means half as often. One raised fader on its own is certain wherever it sits">
+            <input class="sq-chance__pc" data-pc="9" type="range" min="0" max="1" step="0.01" value="0" aria-label="A probability" />
+            <span>A</span>
+          </label>
+          <label class="sq-chance__key is-black" title="how likely A♯ is to turn up — a probability, not a switch, so half height means half as often. One raised fader on its own is certain wherever it sits">
+            <input class="sq-chance__pc" data-pc="10" type="range" min="0" max="1" step="0.01" value="0.5" aria-label="A♯ probability" />
+            <span>A♯</span>
+          </label>
+          <label class="sq-chance__key" title="how likely B is to turn up — a probability, not a switch, so half height means half as often. One raised fader on its own is certain wherever it sits">
+            <input class="sq-chance__pc" data-pc="11" type="range" min="0" max="1" step="0.01" value="0" aria-label="B probability" />
+            <span>B</span>
+          </label>
+        </div>
+        <div class="sq-chance__opts">
+          <button class="sq-chance__scale sq-btn--ghost" type="button" title="set the twelve probabilities from the session's active scale, the root loudest. Generated notes are deliberately NOT snapped to the scale — these faders are the scale — so this is where the two meet">from scale</button>
+          <button class="sq-chance__clear-pcs sq-btn--ghost" type="button" title="put every semitone probability back to zero">none</button>
+        </div>
+        <div class="sq-chance__ctls">
+          <label class="sq-chance__f" title="the lowest note that can be played. A semitone raised outside the range cannot turn up, and its fader greys out to say so">
+            <span>low note</span>
+            <input class="p-chnlo" type="range" min="24" max="96" step="1" value="48" />
+            <output class="sq-chance__val sq-chance__val--lo"></output>
+          </label>
+          <label class="sq-chance__f" title="the highest note that can be played. Five octaves above the low note at most, as on the machine">
+            <span>high note</span>
+            <input class="p-chnhi" type="range" min="24" max="96" step="1" value="72" />
+            <output class="sq-chance__val sq-chance__val--hi"></output>
+          </label>
+        </div>
+
+        <div class="sq-chance__sec"><span class="sq-chance__sec-t">window</span></div>
+        <div class="sq-chance__ctls">
+          <label class="sq-chance__f" title="where the generated window starts. Moving it slides the window without changing its length">
+            <span>first step</span>
+            <input class="p-chnfirst" type="range" min="0" max="31" step="1" value="0" />
+            <output class="sq-chance__val sq-chance__val--first"></output>
+          </label>
+          <label class="sq-chance__f" title="where the generated window ends. The window tiles across the track, so a short one repeats within a long track">
+            <span>last step</span>
+            <input class="p-chnlast" type="range" min="0" max="31" step="1" value="15" />
+            <output class="sq-chance__val sq-chance__val--last"></output>
+          </label>
+        </div>
+
+        <div class="sq-chance__actions">
+          <label class="sq-chance__live" title="generate this track's part live instead of playing the written steps — the rhythm and the pitches both. Nothing is written, so note value, variation, legato, rest and the two range knobs can take an LFO, an automation lane or a macro pad, and switching it off hands back the pattern exactly as you left it. The step grid shows what is being generated and goes read-only while it is on. A track has one rhythm source, so this switches the euclid ring off"><input class="sq-chance__on" type="checkbox" /> live</label>
+          <button class="sq-chance__write sq-btn--ghost" type="button" title="print this throw into the pattern as ordinary steps, pitches and all, replacing what is there">write to pattern</button>
         </div>
       </div>
       <div class="sq-track__filter-panel" hidden>

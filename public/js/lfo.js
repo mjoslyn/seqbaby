@@ -1,6 +1,8 @@
 import { applyAutomationAtStep, canAutomate } from "./automation.js";
 import { engineByKey } from "./catalog.js";
 import { clearEuclidLive, euclidFromUnit, euclidToUnit, euclideanRhythm, setEuclidLive, trackEuclid } from "./euclid.js";
+import { clearChanceLive, setChanceLive, trackChance } from "./chance.js";
+import { CHANCE_MOD_KEYS, chanceFromUnit, chanceToUnit } from "./chanceGen.js";
 import { afterPrefix as after, LFO_AMP_SCALE, LFO_KEYS, lfoDivLabel } from "./constants.js";
 import { makeCassetteSatCurve, makeShaperCurve } from "./curves.js";
 import { setParam } from "./params.js";
@@ -268,6 +270,7 @@ export const SETTER_LFO_KEYS = new Set([
   "wt_scan_start","wt_scan_range",
   "gran_speed","gran_pitch","gran_window","gran_jitter","gran_detune","gran_pan",
   "euclid_pulses","euclid_steps","euclid_rotate",
+  ...CHANCE_MOD_KEYS.map(k => `chance_${k}`),
 ]);
 
 // Granular mod keys → the track param each drives. Grains read these when they
@@ -288,6 +291,13 @@ export function setterLfoBase(t, key) {
     // trackEuclid, not liveEuclid: the base has to be the stored knob, or the
     // LFO would swing around its own output.
     return euclidToUnit(t, k, trackEuclid(t)[k]);
+  }
+  // The chance generator's six: the knobs on its panel are the base, as 0..1
+  // across their own (constant) ranges. trackChance, not liveChance, for the
+  // reason above — an LFO must not swing around its own output.
+  if (key.startsWith("chance_")) {
+    const k = key.slice(7);
+    return chanceToUnit(k, trackChance(t)[k]);
   }
   // Wave-scan window lives on the track's wavetable config, not the fx rack.
   if (key === "wt_scan_start") return t.wavetable?.scan?.start ?? 0;
@@ -322,6 +332,13 @@ export function applySetterLfoValue(t, key, v) {
   // stays the base the LFO swings around. The generator reads it at step time.
   if (key.startsWith("euclid_")) {
     setEuclidLive(t, key.slice(7), euclidFromUnit(t, key.slice(7), v));
+    return;
+  }
+  // Chance: same as euclid — write the live override, never the stored knob. The
+  // generator reads it when it next builds a throw.
+  if (key.startsWith("chance_")) {
+    const k = key.slice(7);
+    setChanceLive(t, k, chanceFromUnit(k, v));
     return;
   }
   // The wave scan reads its window off the voice's own live scan object, so the
@@ -669,14 +686,14 @@ export function startSetterLfoLoopIfNeeded() {
           scheduleSteppedTaps(t, key, cfg, now);
         }
       }
-      // The rack gate is for the fx targets; euclid's counts are the
-      // sequencer's, and run whether or not audio has been built.
+      // The rack gate is for the fx targets; the two generators' controls are
+      // the sequencer's, and run whether or not audio has been built.
       if (!t._setterLfoPhase) continue;
       const hasRack = !!t.fxRack;
       for (const key of SETTER_LFO_KEYS) {
         const cfg = t.lfoConfig[key];
         if (!cfg?.enabled) continue;
-        if (!hasRack && !key.startsWith("euclid_")) continue;
+        if (!hasRack && !key.startsWith("euclid_") && !key.startsWith("chance_")) continue;
         anyActive = true;
         // A stepped shape is timed from the clock, not accumulated frame by
         // frame — see stepOrigin. A waveform can keep its running phase, which
@@ -726,6 +743,9 @@ export function canModulate(t, key) {
   // making the rhythm. Modulating them with the pattern in charge would say
   // nothing at all.
   if (key.startsWith("euclid_")) return !!t.euclid?.on;
+  // The chance generator's six — likewise any engine, but only while the dice
+  // are the thing making the part (chance.js).
+  if (key.startsWith("chance_")) return !!t.chance?.on;
   // Grain controls — granular engine only.
   if (key.startsWith("gran_")) return t.engineKey === "dm:granular";
   // Accent depth + tuning — silverbox only.
@@ -797,6 +817,7 @@ export function syncLFO(t, key) {
         // the audio graph, so releasing means deleting the override — writing
         // the base back would leave the control looking driven forever.
         if (key.startsWith("euclid_")) clearEuclidLive(t, key.slice(7));
+        else if (key.startsWith("chance_")) clearChanceLive(t, key.slice(7));
         // restore base value to the audio graph so the param stops where the slider sits
         else applySetterLfoValue(t, key, setterLfoBase(t, key));   // no-ops safely without a rack
       }

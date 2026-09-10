@@ -3,6 +3,7 @@ import { BASS_MOD_KEYS, BASS_MOD_LABELS } from "./bass.js";
 import { HEXOP_MOD_KEYS, HEXOP_MOD_LABELS } from "./hexop.js";
 import { SUB_MOD_KEYS, SUB_MOD_LABELS } from "./subbass.js";
 import { GUITAR_MOD_KEYS, GUITAR_MOD_LABELS } from "./guitar.js";
+import { CHANCE_MOD_KEYS, CHANCE_MOD_LABELS } from "./chanceGen.js";
 import { state } from "./state.js";
 
 
@@ -58,6 +59,11 @@ for (const k of BASS_MOD_KEYS) def(`p-bs${k}`, `bas_${k}`, `bas.${k}`);
 for (const k of SUB_MOD_KEYS) def(`p-sub${k}`, `sub_${k}`, `sub.${k}`);
 // Euclid's three counts — one list, three namespaces, as in hexop.js.
 for (const k of ["pulses", "steps", "rotate"]) def(`p-euc${k}`, `euclid_${k}`, `euclid.${k}`);
+// The chance generator's six, likewise. Its other controls (the twelve semitone
+// probabilities, the window, the dice) reach neither namespace on purpose — see
+// CHANCE_MOD_KEYS — so they get the menu from PARAM_SCOPE_SELECTOR as settings,
+// which is exactly what they are.
+for (const k of CHANCE_MOD_KEYS) def(`p-chn${k}`, `chance_${k}`, `chance.${k}`);
 // Granular grain controls. Also reachable from the wav modal's own copies.
 for (const k of ["speed", "pitch", "window", "jitter", "detune", "pan"]) {
   def(`p-g${k}`,  `gran_${k}`, `gran.${k}`);
@@ -123,6 +129,7 @@ export const PARAM_SCOPE_SELECTOR = [
   ".sq-track__eq-panel",
   ".sq-track__comp-panel",
   ".sq-track__euclid-panel",   // the euclid generator's counts
+  ".sq-track__chance-panel",   // the chance generator's odds
   ".sq-gwav__ctl",             // granular wav modal's copies of the grain controls
   ".sq-wt__scan", ".sq-wt__uni",   // wavetable editor
   ".sq-samp__row",             // sample editor

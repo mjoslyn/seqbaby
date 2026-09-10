@@ -1,4 +1,4 @@
-import { stepGateAt } from "./euclid.js";
+import { liveGeneratorOf, stepGateAt } from "./stepSource.js";
 import { updatePatternCell } from "./patternBar.js";
 import { refreshRollIfOpen, rollViewOcts } from "./pianoRoll.js";
 import { state } from "./state.js";
@@ -22,12 +22,12 @@ export function renderStepGrid(t) {
   grid.style.gridTemplateColumns = `repeat(${cols}, minmax(0, 1fr))`;
   grid.replaceChildren();
   updatePatternCell(t._patternIdx);
-  // A track in live euclid mode plays a generated rhythm rather than its
+  // A track with a generator running live plays a rhythm rather than its
   // written steps, so that is what the grid has to show — otherwise the one
   // picture of what the track is doing would be a lie. It goes read-only with
-  // it (see `.sq-track.is-euclid` in style.css); the pattern underneath is
-  // untouched and comes straight back when live mode goes off.
-  const live = !!t.euclid?.on;
+  // it (see `.sq-track.is-euclid` / `.is-chance` in style.css); the pattern
+  // underneath is untouched and comes straight back when live mode goes off.
+  const live = !!liveGeneratorOf(t);
   let i = 0;
   while (i < total) {
     const gate = stepGateAt(t, i);
@@ -43,7 +43,7 @@ export function renderStepGrid(t) {
       while (remaining > 0) {
         const colInRow = visualIdx % cols;
         const chunkSpan = Math.min(remaining, cols - colInRow);
-        grid.appendChild(makeCell(t, i, chunkSpan, true, /* continuation */ !first, gate.vel));
+        grid.appendChild(makeCell(t, i, chunkSpan, true, /* continuation */ !first, gate.vel, gate.note));
         remaining -= chunkSpan;
         visualIdx += chunkSpan;
         first = false;
@@ -63,17 +63,20 @@ export function renderStepGrid(t) {
 // scale pitches only when a scale is active and "all notes" is off; chromatic
 // otherwise. Viewport spans rollViewOcts() octaves starting at t.rollViewOct
 // (1 on mobile to fit the screen without vertical scroll, 2 on desktop).
-export function makeCell(t, idx, span, on, isContinuation = false, velOverride) {
+export function makeCell(t, idx, span, on, isContinuation = false, velOverride, noteOverride) {
   const cell = document.createElement("div");
   cell.className = "sq-step";
   cell.dataset.idx = String(idx);
   cell.dataset.span = String(span);
+  // A generator that decides the pitch (chance.js) is what the cell has to
+  // show — the note under it in the pattern is not what you are hearing.
+  const note = noteOverride ?? t.notes[idx];
   if (on) {
     cell.classList.add("is-on");
     const vel = velOverride ?? t.velocities[idx] ?? 0.5;
     cell.style.setProperty("--vel", String(vel));
-    if (t.notes[idx] != null) {
-      const col = noteColor(t.notes[idx]);
+    if (note != null) {
+      const col = noteColor(note);
       if (col) cell.style.setProperty("--note-color", col);
     }
   }
@@ -86,11 +89,11 @@ export function makeCell(t, idx, span, on, isContinuation = false, velOverride) 
   if (span > 1) cell.style.setProperty("--hspan", String(span));
   if (idx % 4 === 0 && !isContinuation) cell.classList.add("is-beat");
   if (t.accents.has(idx) && !isContinuation) cell.classList.add("is-accent");
-  if (on && t.notes[idx] != null && !isContinuation) {
+  if (on && note != null && !isContinuation) {
     const label = document.createElement("span");
     label.className = "sq-step__note";
     const chord = t.chords[idx];
-    label.textContent = chord ? `${midiToName(t.notes[idx])}${chord}` : midiToName(t.notes[idx]);
+    label.textContent = chord ? `${midiToName(note)}${chord}` : midiToName(note);
     cell.appendChild(label);
   }
   return cell;

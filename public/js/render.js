@@ -8,9 +8,10 @@ import { HEXOP_ALG_LABELS, HEXOP_DEFAULTS, HEXOP_NUM_KEYS, HEXOP_PRESET_NAMES, H
 import { BASS_DEFAULTS, BASS_NUM_KEYS, BASS_SEL_KEYS, BASS_TONE_NAMES, bassTone, bassToneDescription } from "./bass.js";
 import { SUB_DEFAULTS, SUB_NUM_KEYS, SUB_SEL_KEYS, SUB_TONE_NAMES, subTone, subToneDescription } from "./subbass.js";
 import { euclideanRhythm, refreshEuclidUI, renderEuclidPanel, wireEuclidPanel } from "./euclid.js";
+import { refreshChanceUI, renderChancePanel, wireChancePanel } from "./chance.js";
 import { randomizeMelody, randomizeTimbre } from "./generate.js";
 import { GUITAR_DEFAULTS, GUITAR_NUM_KEYS, GUITAR_SEL_KEYS, GUITAR_TONE_NAMES, guitarTone, guitarToneDescription } from "./guitar.js";
-import { ICON_CLEAR, ICON_DICE, ICON_EUCLID, ICON_LOAD, ICON_ROLL, ICON_SAVE, ICON_SLIDERS, ICON_WAV } from "./icons.js";
+import { ICON_CHANCE, ICON_CLEAR, ICON_DICE, ICON_EUCLID, ICON_LOAD, ICON_ROLL, ICON_SAVE, ICON_SLIDERS, ICON_WAV } from "./icons.js";
 import { refreshKnobRange, setKnobReadout, upgradeKnobs } from "./knob.js";
 import { canModulate, lfoBipolar, lfoEuclid, lfoPhase, lfoRateLabel, syncLFO } from "./lfo.js";
 import { autoOwns, modOwns, refreshParamIndicators } from "./paramTargets.js";
@@ -22,7 +23,7 @@ import { refreshHexopAlgorithm, setEngineKey, setParam, updateGranularSpeedEnabl
 import { bestRollViewOct } from "./pianoRoll.js";
 import { applyCompressorConfig, refreshCompSourceDropdowns, refreshOutputSelects, setEQ, setFilter, setTrackOutput } from "./signal.js";
 import { state } from "./state.js";
-import { openAutAsModal, openCompAsModal, openEnvAsModal, openEqAsModal, openFilterAsModal, openFxAsModal, openGranularWavModal, openModAsModal, openEuclidAsModal, openRollAsModal, openSampleEditorModal, openTrackMenu } from "./stepEditor.js";
+import { openAutAsModal, openChanceAsModal, openCompAsModal, openEnvAsModal, openEqAsModal, openFilterAsModal, openFxAsModal, openGranularWavModal, openModAsModal, openEuclidAsModal, openRollAsModal, openSampleEditorModal, openTrackMenu } from "./stepEditor.js";
 import { openWavetableEditor } from "./wavetableEditor.js";
 import { attachGridInteraction, renderStepGrid } from "./stepGrid.js";
 import { duplicateTrack, extendPatternByDuplicate, removeTrack, resizePattern, resizeTrack, shiftTrackOctave, truncatePattern } from "./track.js";
@@ -724,6 +725,7 @@ export function renderTrack(t) {
   t._eqPanelEl     = node.querySelector(".sq-track__eq-panel");
   t._compPanelEl   = node.querySelector(".sq-track__comp-panel");
   t._euclidPanelEl = node.querySelector(".sq-track__euclid-panel");
+  t._chancePanelEl = node.querySelector(".sq-track__chance-panel");
   t._modModal    = null;
   t._autModal    = null;
   t._rollModal   = null;
@@ -733,6 +735,7 @@ export function renderTrack(t) {
   t._eqModal     = null;
   t._compModal   = null;
   t._euclidModal = null;
+  t._chanceModal = null;
 
   // Same idea for the synth-row sub-groups — they're reparented into the
   // track-menu-modal on mobile, so updatePlaitsControlsVisibility queries
@@ -755,7 +758,7 @@ export function renderTrack(t) {
   // so stamp each one rather than relying on the track node being an ancestor.
   for (const el of [t._modPanelEl, t._autPanelEl, t._rollPanelEl, t._filterPanelEl,
                     t._envPanelEl, t._fxPanelEl, t._eqPanelEl, t._compPanelEl,
-                    t._euclidPanelEl,
+                    t._euclidPanelEl, t._chancePanelEl,
                     t._timbreGroupEl, t._oscMixGroupEl, t._oscModGroupEl,
                     t._ladderOscGroupEl, t._silverboxGroupEl, t._contagionGroupEl,
                     t._hexopGroupEl, t._guitarGroupEl, t._bassGroupEl, t._subGroupEl,
@@ -794,6 +797,7 @@ export function renderTrack(t) {
   bindModalOpen(".sq-track__eq",     openEqAsModal,     "_eqModal");
   bindModalOpen(".sq-track__comp",   openCompAsModal,   "_compModal");
   bindModalOpen(".track-euclid",     openEuclidAsModal, "_euclidModal");
+  bindModalOpen(".track-chance",     openChanceAsModal, "_chanceModal");
   wireCompPanel(t, t._compPanelEl);
 
   node.querySelector(".sq-track__mute").addEventListener("click", () => {
@@ -821,6 +825,8 @@ export function renderTrack(t) {
   // The other generator, beside the dice: the dice rolls, this one divides.
   const euclidBtn = node.querySelector(".track-euclid");
   if (euclidBtn) euclidBtn.innerHTML = ICON_EUCLID;
+  const chanceBtn = node.querySelector(".track-chance");
+  if (chanceBtn) chanceBtn.innerHTML = ICON_CHANCE;
   // roll: icon + label — desktop shows the label (matches its text siblings),
   // mobile shows the icon (see the roll rules in the mobile media block)
   const rollBtn = node.querySelector(".sq-track__roll");
@@ -880,6 +886,10 @@ export function renderTrack(t) {
   wireEuclidPanel(t, t._euclidPanelEl);
   renderEuclidPanel(t, t._euclidPanelEl);
   refreshEuclidUI(t);
+  // Same for the chance generator, and for the same reason.
+  wireChancePanel(t, t._chancePanelEl);
+  renderChancePanel(t, t._chancePanelEl);
+  refreshChanceUI(t);
   refreshParamIndicators(t);
 }
 

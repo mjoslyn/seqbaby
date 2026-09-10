@@ -12,6 +12,7 @@ import { updatePlaitsControlsVisibility } from "./params.js";
 import { renderPatternGrid } from "./patternBar.js";
 import { refreshAutIfOpen, refreshRollIfOpen } from "./pianoRoll.js";
 import { refreshEuclidUI, renderEuclidPanel } from "./euclid.js";
+import { cloneChance, refreshChanceUI, renderChancePanel } from "./chance.js";
 import { paintDiceDensity, placeBusesLast, refreshFxPanelUI, renderModPanel, renderTrack } from "./render.js";
 import { applySet } from "./session.js";
 import { defaultCompConfig, ensureFxRack, refreshAllTrackOutputs, refreshCompSourceDropdowns, refreshOutputSelects, routeVoiceToRack } from "./signal.js";
@@ -63,6 +64,11 @@ export function createTrack({ name, engineKey, length = totalSteps() }) {
     // track length, which the length buttons can shrink underneath it. The
     // modulated values live in t._euclidMod and are never stored.
     euclid: null,
+    // The chance generator's settings, live mode included (chance.js). Null
+    // until the panel is touched, and defaulted/clamped the same way; its
+    // modulated values live in t._chanceMod and are never stored either. A
+    // track's rhythm comes from one generator at a time — stepSource.js.
+    chance: null,
     speed: 1,
     // A track added mid-play joins on the step everyone else is on, not at 0.
     // At 1x the per-track counter advances once per 16n, so it tracks state.tick.
@@ -205,6 +211,9 @@ export function duplicateTrack(src) {
   dup.speedAccum = src.speedAccum ?? 0;
   dup.density = src.density ?? 0.5;
   dup.euclid = src.euclid ? { ...src.euclid } : null;
+  // cloneChance and not a spread: `pcs` is an array, and a copy sharing it
+  // would move the original's semitone probabilities with the duplicate's.
+  dup.chance = cloneChance(src.chance);
   dup.sampleSpeedMode = src.sampleSpeedMode ?? "native";
   dup.pitchLock = src.pitchLock ?? true;
   for (const k of Object.keys(dup.lfoConfig)) {
@@ -291,6 +300,8 @@ export function duplicateTrack(src) {
   paintDiceDensity(dup);          // density is copied after the row is rendered
   renderEuclidPanel(dup);         // same: the euclid settings arrive after renderTrack
   refreshEuclidUI(dup);
+  renderChancePanel(dup);
+  refreshChanceUI(dup);
   renderStepGrid(dup);
   return dup;
 }
@@ -298,6 +309,7 @@ export function duplicateTrack(src) {
 export function removeTrack(t) {
   if (t._trackMenuModal) t._trackMenuModal.close();
   if (t._euclidModal) t._euclidModal.close();
+  if (t._chanceModal) t._chanceModal.close();
   disposeLFOs(t);
   if (t.voice) t.voice.dispose();
   if (t.fxRack) t.fxRack.dispose();
@@ -362,9 +374,10 @@ export function resizePattern(t, patIdx, len) {
     t.length = len;
     t.accents = autoAccents(len, patternMeter(patIdx));
     if (t.el) t.el.querySelector(".sq-track__len").value = len;
-    // The euclid counts are bounded by the track length, so their knobs have
-    // to be re-ranged before the grid is drawn from them.
+    // The euclid counts and the chance window are bounded by the track length,
+    // so their knobs have to be re-ranged before the grid is drawn from them.
     renderEuclidPanel(t);
+    renderChancePanel(t);
     renderStepGrid(t);
     refreshAutIfOpen(t);
   }

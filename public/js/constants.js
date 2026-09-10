@@ -2,6 +2,7 @@ import { BASS_MOD_KEYS, BASS_MOD_LABELS, BASS_MOD_RANGE } from "./bass.js";
 import { HEXOP_MOD_KEYS, HEXOP_MOD_LABELS, HEXOP_MOD_RANGE } from "./hexop.js";
 import { GUITAR_MOD_KEYS, GUITAR_MOD_LABELS, GUITAR_MOD_RANGE } from "./guitar.js";
 import { SUB_MOD_KEYS, SUB_MOD_LABELS, SUB_MOD_RANGE } from "./subbass.js";
+import { CHANCE_MOD_KEYS, CHANCE_MOD_LABELS } from "./chanceGen.js";
 
 export const { wosc, oscillatorTypes } = window.woscillators;
 
@@ -54,6 +55,9 @@ export const LFO_KEYS = [
   // Euclid's three counts (setter-driven; the generator reads them at step
   // time). Only on a track with live euclid running — see canModulate.
   "euclid_pulses", "euclid_steps", "euclid_rotate",
+  // The chance generator's six — the ones the machine puts under CV (chance.js).
+  // Setter-driven too, and only while it is the thing making the part.
+  ...CHANCE_MOD_KEYS.map(k => `chance_${k}`),
   // Silverbox panel controls outside the four timbre sliders. Real AudioParams on
   // the worklet node, so these take the normal audio-rate path.
   "silverbox_accent", "silverbox_tune",
@@ -84,6 +88,7 @@ export const LFO_KEYS = [
 // Display labels for the mod picker — underscore keys show as "foo bar".
 export const LFO_LABELS = {
   euclid_pulses: "euclid pulses", euclid_steps: "euclid cycle", euclid_rotate: "euclid rotate",
+  ...Object.fromEntries(CHANCE_MOD_KEYS.map(k => [`chance_${k}`, CHANCE_MOD_LABELS[k]])),
   vol: "volume", cutoff: "filter cutoff", reson: "filter reson",
   fuzz: "fuzz amt", delay: "delay wet", verb: "reverb wet",
   vinyl: "vinyl amt", cassette: "cassette amt", ringmod: "ring mod wet",
