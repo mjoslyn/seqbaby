@@ -363,3 +363,82 @@ export function buildChancePlan(c, opts = {}) {
   }
   return plan;
 }
+
+// ---- throwing the dice ---------------------------------------------------
+
+/**
+ * What one section's dice actually decides, as a string two plans can be
+ * compared by. The rhythm's is where the notes fall and how long they are held
+ * (a rest and a tie both read as an empty slot, which is what they are on the
+ * grid); the melody's is the pitches, and nothing else.
+ * @param {({span: number, hits: number, vel: number, note: number}|null)[]} plan
+ * @param {"rhythm"|"melody"} which
+ */
+export function chancePlanSignature(plan, which) {
+  return plan.map((h) => (h ? (which === "melody" ? String(h.note) : `${h.span}:${h.hits}`) : "."))
+    .join(",");
+}
+
+/**
+ * Throw one section's dice: a fresh seed that actually changes the part, rather
+ * than whatever number comes up first.
+ *
+ * A throw is only a seed, and a seed only matters where there is a decision left
+ * to make with it — so a dice pressed against a part with nothing random in it
+ * (variation, legato and rest all at zero is the panel's *default*) rolls a new
+ * number and produces the identical rhythm, and one pressed with a single
+ * semitone raised produces the identical note. Both read as a dead button.
+ *
+ * The generator is pure and cheap, so the honest fix is to look: draw until the
+ * part differs, and when nothing could differ say which of the reasons it is
+ * rather than pretending something happened. `why` is never a guess — it is only
+ * read once `tries` throws have all come back the same.
+ *
+ * @param {ChanceConfig} c   The config the part is currently generated from.
+ * @param {"rhythm"|"melody"} which
+ * @param {Object} [opts]    The same build options the caller generates with.
+ * @param {number} [tries]
+ * @returns {{seed: number|null, why: string}} `seed` null when the dice is dead.
+ */
+export function throwChanceDice(c, which, opts = {}, tries = 48) {
+  const key = which === "melody" ? "mseed" : "rseed";
+  const sig = (cfg) => chancePlanSignature(buildChancePlan(cfg, opts), which);
+  const before = sig(c);
+  for (let i = 0; i < tries; i++) {
+    const seed = newThrow();
+    if (seed === (c[key] | 0)) continue;
+    if (sig({ ...c, [key]: seed }) !== before) return { seed, why: "" };
+  }
+  return { seed: null, why: chanceDiceDead(c, which, opts) || "same" };
+}
+
+/**
+ * Why a section's dice has nothing to throw, or "" when it has. The reasons a
+ * settings object states outright — no decision is left in the rhythm, or the
+ * melody has at most one note to choose from — so the panel can mark a dead
+ * button without throwing anything, and `throwChanceDice` can name the cause
+ * once its own throws have all come back the same.
+ *
+ * Deliberately conservative: "" means "worth throwing", not "guaranteed to
+ * differ". A short window with few outcomes can still land on the part it is
+ * already playing, and only the throwing loop can know that.
+ * @param {ChanceConfig} c @param {"rhythm"|"melody"} which
+ * @param {Object} [opts] The build options, for the one reason that needs a plan.
+ * @returns {"" | "no-variance" | "no-pitch" | "one-pitch" | "no-notes"}
+ */
+export function chanceDiceDead(c, which, opts = {}) {
+  if (which === "melody") {
+    const cand = chanceCandidates(c);
+    if (!cand.total) return "no-pitch";
+    if (cand.notes.length === 1) return "one-pitch";
+    // Nothing sounds, so there is no pitch to decide. Cheap: the plan is already
+    // built for every other reason the panel repaints.
+    if (!buildChancePlan(c, opts).some(Boolean)) return "no-notes";
+    return "";
+  }
+  // Variation, legato and rest are the whole of the rhythm's randomness — with
+  // all three at zero (which is the panel's DEFAULT state) the walk lays the
+  // base note value end to end and the seed is never consulted.
+  if (Math.abs(c.var) < 1e-3 && c.leg <= 0 && c.rest <= 0) return "no-variance";
+  return "";
+}

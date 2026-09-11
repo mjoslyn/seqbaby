@@ -3,8 +3,8 @@ import test from "node:test";
 
 import {
   CHANCE_DEFAULTS, CHANCE_MOD_KEYS, CHANCE_MOD_RANGE, CHANCE_NOTE_VALUES,
-  buildChancePlan, chanceCandidates, chanceFromUnit, chanceToUnit, chanceWindow,
-  cloneChance, normalizeChance,
+  buildChancePlan, chanceCandidates, chanceDiceDead, chanceFromUnit, chancePlanSignature,
+  chanceToUnit, chanceWindow, cloneChance, normalizeChance, throwChanceDice,
 } from "../public/js/chanceGen.js";
 
 // The chance generator is the one part of this app whose output is *random*, and
@@ -354,4 +354,79 @@ test("accents land on the beat, and follow the window rather than the bar", () =
     { spb: 4 });
   assert.equal(off[0].vel, 0.68);
   assert.equal(off[2].vel, 0.95);
+});
+
+// ---- the dice, thrown ----------------------------------------------------
+// `roll` used to hand back whatever number came up, which on a fresh track is a
+// button that visibly does nothing: the panel's defaults leave variation, legato
+// and rest all at zero, so the rhythm has no decision in it for a seed to make.
+
+test("a section with nothing random in it is reported as a dead dice", () => {
+  // The panel's own defaults — this is the state a new track arrives in.
+  assert.equal(chanceDiceDead(cfg(), "rhythm"), "no-variance");
+  for (const over of [{ var: 0.4 }, { leg: 0.3 }, { rest: 0.3 }]) {
+    assert.equal(chanceDiceDead(cfg(over), "rhythm"), "", JSON.stringify(over));
+  }
+});
+
+test("the melody dice is dead with nothing, or one thing, to choose from", () => {
+  assert.equal(chanceDiceDead(cfg({ pcs: new Array(12).fill(0) }), "melody"), "no-pitch");
+  const one = new Array(12).fill(0); one[0] = 1;
+  assert.equal(chanceDiceDead(cfg({ pcs: one, lo: 48, hi: 59 }), "melody"), "one-pitch");
+  assert.equal(chanceDiceDead(cfg({ pcs: one, lo: 48, hi: 72 }), "melody"), "");
+  assert.equal(chanceDiceDead(cfg({ rest: 1 }), "melody"), "no-notes");
+});
+
+test("a throw is only accepted when it changes the part", () => {
+  const rhythm = cfg({ var: 0.6, rest: 0.3, leg: 0.2 });
+  const before = chancePlanSignature(buildChancePlan(rhythm), "rhythm");
+  for (let i = 0; i < 200; i++) {
+    const { seed, why } = throwChanceDice(rhythm, "rhythm");
+    assert.equal(why, "");
+    assert.notEqual(seed, null);
+    assert.notEqual(chancePlanSignature(buildChancePlan({ ...rhythm, rseed: seed }), "rhythm"), before);
+  }
+});
+
+test("a melody throw changes the notes and leaves the rhythm exactly", () => {
+  const c = cfg({ var: 0.5, rest: 0.2, note: NV["1/8"] });
+  const rhy = chancePlanSignature(buildChancePlan(c), "rhythm");
+  const mel = chancePlanSignature(buildChancePlan(c), "melody");
+  for (let i = 0; i < 200; i++) {
+    const { seed } = throwChanceDice(c, "melody");
+    const plan = buildChancePlan({ ...c, mseed: seed });
+    assert.equal(chancePlanSignature(plan, "rhythm"), rhy);
+    assert.notEqual(chancePlanSignature(plan, "melody"), mel);
+  }
+});
+
+test("a dead dice throws nothing and says which reason it is", () => {
+  assert.deepEqual(throwChanceDice(cfg(), "rhythm"), { seed: null, why: "no-variance" });
+  assert.deepEqual(throwChanceDice(cfg({ pcs: new Array(12).fill(0) }), "melody"),
+    { seed: null, why: "no-pitch" });
+});
+
+test("a dice with too few outcomes to differ is dead rather than silent", () => {
+  // One note over the window, two pitches to put it on: half the throws would
+  // land on the note already playing, so the loop has to look rather than roll.
+  const two = new Array(12).fill(0); two[0] = 1; two[7] = 1;
+  const c = cfg({ note: NV["1/1"], pcs: two, lo: 48, hi: 55 });
+  const mel = chancePlanSignature(buildChancePlan(c), "melody");
+  for (let i = 0; i < 100; i++) {
+    const { seed, why } = throwChanceDice(c, "melody");
+    if (seed == null) { assert.equal(why, "same"); continue; }
+    assert.notEqual(chancePlanSignature(buildChancePlan({ ...c, mseed: seed }), "melody"), mel);
+  }
+});
+
+test("realtime mode is where the throw moves on its own, so the dice still reports", () => {
+  // The dice generates with the same pass the transport is on, so it compares
+  // against the part being heard rather than pass zero's.
+  const c = cfg({ var: 0.6, rest: 0.3, rfree: true });
+  const opts = { rpass: 5 };
+  const before = chancePlanSignature(buildChancePlan(c, opts), "rhythm");
+  const { seed } = throwChanceDice(c, "rhythm", opts);
+  assert.notEqual(seed, null);
+  assert.notEqual(
+    chancePlanSignature(buildChancePlan({ ...c, rseed: seed }, opts), "rhythm"), before);
 });

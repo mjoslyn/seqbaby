@@ -54,7 +54,7 @@
 import {
   CHANCE_DEFAULTS, CHANCE_MOD_INT, CHANCE_MOD_KEYS, CHANCE_MOD_RANGE, CHANCE_NOTE_MAX,
   CHANCE_NOTE_MIN, CHANCE_NOTE_VALUES, CHANCE_SPAN_MAX, buildChancePlan, chanceCandidates,
-  chanceWindow, cloneChance, newThrow, normalizeChance,
+  chanceDiceDead, chanceWindow, cloneChance, normalizeChance, throwChanceDice,
 } from "./chanceGen.js";
 import { setStatus } from "./dom.js";
 import { refreshKnobRange, setKnobReadout, upgradeKnobs } from "./knob.js";
@@ -72,6 +72,21 @@ export { cloneChance } from "./chanceGen.js";
 
 const clampInt = (v, lo, hi) => Math.max(lo, Math.min(hi, Math.round(Number(v) || 0)));
 const clampNum = (v, lo, hi) => Math.max(lo, Math.min(hi, Number.isFinite(+v) ? +v : lo));
+
+/**
+ * What a dead dice says. A dice with nothing to decide is the commonest way this
+ * panel looks broken — press roll on a fresh track and the part is identical,
+ * because variation, legato and rest all start at zero and there is nothing
+ * random in the rhythm yet. So the button says which knob to turn rather than
+ * silently rolling a number that changes nothing.
+ */
+const DEAD_DICE = {
+  "no-variance": "nothing in the rhythm is random yet — turn variation, legato or rest up and the dice has something to throw",
+  "no-pitch": "no semitone is raised — the melody dice has nothing to choose from",
+  "one-pitch": "only one pitch is playable — raise another semitone, or widen the range",
+  "no-notes": "the part is all rests — there is no note for the melody dice to pitch",
+  same: "every throw comes out the same here — there are too few outcomes to choose between",
+};
 
 // ---- the track's settings ------------------------------------------------
 
@@ -155,6 +170,22 @@ function planKey(t, c) {
 }
 
 /**
+ * The build options a plan is generated with — the meter's beat, for where the
+ * accents fall, and which pass of the window realtime-mode is on. Named because
+ * the dice has to generate with exactly the same ones as the transport, or it
+ * would be comparing its candidate throws against a part nobody is playing.
+ * @param {Track} t @param {ChanceConfig} c
+ */
+function planOpts(t, c) {
+  const win = chanceWindow(c);
+  return {
+    spb: stepsPerBeatForMeter(patternMeter(t._patternIdx ?? state.activePattern)),
+    rpass: passOf(t, win),
+    mpass: passOf(t, win),
+  };
+}
+
+/**
  * The current throw, built and cached — the transport asks once per step per
  * track, and the answer only changes when a control moves or the throw does.
  * @param {Track} t
@@ -169,12 +200,7 @@ export function chancePlan(t) {
   // throw before last is a lie about what you are hearing.
   const staleGrid = !!t._chancePlan && !!t.chance?.on;
 
-  const win = chanceWindow(c);
-  const plan = buildChancePlan(c, {
-    spb: stepsPerBeatForMeter(patternMeter(t._patternIdx ?? state.activePattern)),
-    rpass: passOf(t, win),
-    mpass: passOf(t, win),
-  });
+  const plan = buildChancePlan(c, planOpts(t, c));
   t._chancePlan = { key, plan, cfg: c };
   if (staleGrid) requestChanceRepaint(t);
   return plan;
@@ -471,6 +497,17 @@ function drawChanceViz(t, panelEl) {
     + ` · ${cand.notes.length} playable pitch${cand.notes.length === 1 ? "" : "es"}`
     + ` across ${octs.toFixed(1)} octave${octs === 1 ? "" : "s"}`);
 
+  // A dice with nothing to decide is marked as such, so the reason is visible
+  // before the button is pressed rather than only in the status line after.
+  for (const [sel, which] of [[".sq-chance__dice-r", "rhythm"], [".sq-chance__dice-m", "melody"]]) {
+    const btn = panel.querySelector(sel);
+    if (!btn) continue;
+    const why = chanceDiceDead(c, which, planOpts(t, c));
+    btn.classList.toggle("is-dead", !!why);
+    if (!btn.dataset.title) btn.dataset.title = btn.title;
+    btn.title = why ? DEAD_DICE[why] : btn.dataset.title;
+  }
+
   const hint = panel.querySelector(".sq-chance__hint");
   if (hint) {
     let s = !cand.total
@@ -582,10 +619,20 @@ export function wireChancePanel(t, panel) {
   flag(".sq-chance__rfree", "rfree");
   flag(".sq-chance__mfree", "mfree");
 
-  const dice = (sel, key, what) => panel.querySelector(sel)?.addEventListener("click", () => {
-    ensureChance(t)[key] = newThrow();
+  const dice = (sel, key, which) => panel.querySelector(sel)?.addEventListener("click", () => {
+    const c = ensureChance(t);
+    // Throw against the config the part is actually generated from, not the
+    // stored one: with a lane or a pad driving `rest`, a throw that changes the
+    // unmodulated part but not the one being played is no throw at all.
+    const live = liveChance(t);
+    const { seed, why } = throwChanceDice(live, which, planOpts(t, live));
+    if (seed == null) {
+      setStatus(`"${t.name}" — ${DEAD_DICE[why] || DEAD_DICE.same}`);
+      return;
+    }
+    c[key] = seed;
     changed();
-    setStatus(`"${t.name}" — new ${what} throw`);
+    setStatus(`"${t.name}" — new ${which} throw`);
   });
   dice(".sq-chance__dice-r", "rseed", "rhythm");
   dice(".sq-chance__dice-m", "mseed", "melody");

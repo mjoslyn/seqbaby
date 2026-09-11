@@ -778,6 +778,14 @@ WINDOW   first step · last step
   note with none of the notes in it; and realtime-mode is one number away (mix
   the pass count into the seed). Two seeds, because the machine has two dice —
   a rhythm that repeats under a melody that never does is what they are for.
+- **A throw is only accepted if it changes the part.** A seed only matters where
+  a decision is left to make with it, so on a fresh track — variation, legato and
+  rest all at zero, which is the panel's default — the rhythm dice rolled a new
+  number and produced the identical part, and one semitone raised did the same to
+  the melody dice. `throwChanceDice` draws until the plan's signature moves
+  (the generator is pure and cheap, so it just looks), and `chanceDiceDead` names
+  the reason when nothing could: the button is struck through and says which knob
+  to turn instead of silently doing nothing.
 - **Each decision gets its own hash stream, keyed by STEP.** Deliberately better
   than the machine, which runs one: turning REST up only removes notes and the
   faders only change pitches, instead of reshuffling the part every time a knob
