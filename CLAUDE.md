@@ -43,6 +43,7 @@ env / fx / eq / comp / mod / automation per track.
 │   ├── NewSongButton.tsx      top-bar `new`: blanks the engine, clears the open song
 │   ├── VersionTree.tsx        a song's version history, drawn as the tree it is
 │   ├── songs/openSong.ts      which song + version the studio holds (shared by the two save UIs)
+│   ├── songs/songName.js     names a song nobody named, from what is in it
 │   ├── Preloader.tsx + preloaderMarkup.ts  loading overlay: markup + inline driver
 │   ├── login/ settings/ u/[username]/       auth, account settings, public profiles
 │   ├── api/share/route.ts     anonymous ?s=<slug> share endpoint
@@ -167,7 +168,8 @@ npm run dev            # Next.js dev server on :3000 (studio + engine work with 
 npm run build && npm run start   # production build + serve
 npm run netlify:dev    # full Netlify emulation on :8888
 npm run legacy:dev     # pre-Next static Node server on :5173 (engine assets only)
-npm test               # node --test: the session-format validator
+npm test               # node --test: the pure modules (session format, chance gen,
+                       #   version tree, song names)
 npm run test:rls       # RLS policy tests — builds a throwaway Postgres in docker
 ```
 
@@ -1317,6 +1319,42 @@ v1 ──▶ v2 ──▶ v3 ──▶ v5      (kept editing)
 - Migration `0009` backfills a root version for every existing song, so the
   first save after deploying branches off something rather than starting a second
   root.
+
+## Naming a song nobody named (`app/songs/songName.js`)
+
+Saving with the name field blank used to produce `untitled`, and an account's
+songs menu is unscannable once four rows say it. A counter would not help --
+`untitled 12` is as anonymous as `untitled`. So a blank field gets a name
+derived from the session itself: `<adjective> <noun>`, e.g. `basement squelch`,
+`soft vapour`, `feral fretwork`.
+
+- **Both halves mean something.** The adjective comes from the tempo band (five,
+  `drift` .. `rush`) crossed with the scale's mood (bright / dark, or -- with no
+  scale switched on, which is most sessions -- a seeded pick, since there is
+  nothing to read). The noun comes from the engine the song is mostly made of:
+  engine key -> family -> a small word pool. Two songs with different names
+  really are different songs.
+- **Drums lose ties.** Nearly every session has a kit in it, so the kit is the
+  least distinguishing thing about any of them; it names the song only when it is
+  all there is. A bus is never what a song is named for, and a session with
+  nothing written in it gets told so (`shadow blank`).
+- **Deterministic on the session's content**, so saving one session twice cannot
+  invent two songs. The seed is a digest of tempo, swing, scale and each track's
+  engine key + step mask -- deliberately NOT a hash of the whole blob, which
+  carries base64 sample payloads and would rename a song for re-uploading the
+  same drum hit.
+- **Only when nothing else names it.** A song already open keeps its name even if
+  the field was cleared: clearing it means "save this again", not "rename it".
+- **The server disambiguates, because only it knows the account.** Two different
+  sessions can still land on the same two common words, and `saveNamedSong`
+  upserts by title -- right for a name you typed, silent data loss for one the
+  app picked. Hence `titleGenerated` on both save actions and `freeTitle`
+  (`cold squelch`, `cold squelch 2`), and both return the final `title` so the
+  save UI can show what the song actually got called.
+- No imports, for `versionTree.js`'s reason: pure, so `node --test` exercises it
+  (`test/songName.test.js`) without a browser or a React renderer. Never throws
+  and never returns empty -- it is on the save path, and losing work to a name
+  generator choking on a hand-edited blob would be absurd.
 
 ## Bounce (`bounce.js`)
 

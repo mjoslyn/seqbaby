@@ -8,6 +8,7 @@ import {
   useSyncExternalStore,
 } from "react";
 import { saveNamedSong } from "@/app/songs/actions";
+import { generateSongName } from "@/app/songs/songName";
 import {
   getOpenSong,
   setOpenSong,
@@ -66,19 +67,31 @@ export default function SaveButton() {
     setSaving(true);
     setStatus({ text: "Saving…" });
     const data = window.seqbaby.serializeSet();
-    const t = title.trim() || "untitled";
+    // Nothing typed and nothing open: the session names itself from what is in
+    // it, rather than joining a list of rows all called "untitled". Falling
+    // back to the open song's name first matters -- clearing the field on a
+    // loaded song means "save this again", not "rename it to something else".
+    const typed = title.trim();
+    const generated = !typed && !openSong.title.trim();
+    const t = typed || openSong.title.trim() || generateSongName(data);
     const sameSong = t === openSong.title && openSong.versionId;
     const res = await saveNamedSong({
       title: t,
       data,
       isPublic,
       parentVersionId: sameSong ? openSong.versionId : undefined,
+      titleGenerated: generated,
     });
     setSaving(false);
     if (res.error) return setStatus({ text: res.error, err: true });
+    // The server disambiguates a generated name against the account's songs, so
+    // what came back is what it is actually called. Show it: a save that names
+    // your song for you has to say what it named it.
+    const saved = res.title ?? t;
+    setTitle(saved);
     setOpenSong({
       id: res.id ?? null,
-      title: t,
+      title: saved,
       versionId: res.versionId ?? null,
     });
     if (isPublic && res.slug) {
@@ -93,7 +106,9 @@ export default function SaveButton() {
       setStatus({
         text: res.unchanged
           ? `No changes since v${res.versionSeq}`
-          : `Saved as v${res.versionSeq}`,
+          : generated
+            ? `Saved “${saved}” as v${res.versionSeq}`
+            : `Saved as v${res.versionSeq}`,
       });
     }
   }, [title, isPublic, openSong.title, openSong.versionId]);
@@ -111,7 +126,7 @@ export default function SaveButton() {
           <input
             className={styles.saveInput}
             style={{ width: "100%", marginBottom: 8 }}
-            placeholder="session name"
+            placeholder="session name (or leave blank)"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             autoFocus

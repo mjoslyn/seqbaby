@@ -112,6 +112,35 @@ async function appendVersion(
   return { error: "Could not allocate a version number" };
 }
 
+// A free title for a name the USER DID NOT CHOOSE.
+//
+// `saveNamedSong` upserts by title, which is right when someone typed the name
+// -- re-saving "my track" should be a new version of my track -- and wrong when
+// the name was generated, because two unrelated sessions can land on the same
+// two common words and merging them would be silent data loss. Generated names
+// are therefore disambiguated instead: "cold squelch", "cold squelch 2".
+//
+// One bounded `in` query rather than a prefix `like`: no wildcard escaping to
+// get subtly wrong, and no fetching an account's whole song list.
+async function freeTitle(
+  supabase: SupabaseClient,
+  ownerId: string,
+  base: string,
+): Promise<string> {
+  const candidates = [base, ...Array.from({ length: 24 }, (_, i) => `${base} ${i + 2}`)];
+  const { data, error } = await supabase
+    .from("songs")
+    .select("title")
+    .eq("owner_id", ownerId)
+    .in("title", candidates);
+  // A failed lookup is not worth failing a save over; the worst case is a
+  // duplicate row in the list, which the user can rename.
+  if (error) return base;
+  const taken = new Set((data ?? []).map((r) => r.title as string));
+  const free = candidates.find((c) => !taken.has(c));
+  return (free ?? `${base} ${Date.now().toString(36)}`).slice(0, 200);
+}
+
 // Save the current song. Insert when no id, update in place when id is owned.
 // Either way a version is appended: `parentVersionId` is the version being
 // edited (the client's idea of where it is in the tree), defaulting to the
@@ -121,8 +150,11 @@ export async function saveSong(input: {
   title: string;
   data: unknown;
   parentVersionId?: string | null;
+  /** The title was generated for an unnamed song rather than typed. */
+  titleGenerated?: boolean;
 }): Promise<{
   id?: string;
+  title?: string;
   versionId?: string;
   versionSeq?: number;
   unchanged?: boolean;
@@ -134,7 +166,10 @@ export async function saveSong(input: {
   } = await supabase.auth.getUser();
   if (!user) return { error: "Not signed in" };
 
-  const title = (input.title || "untitled").slice(0, 200);
+  let title = (input.title || "untitled").slice(0, 200);
+  // Only the insert path: updating a song in place is not creating a name that
+  // has to be free, it is keeping the one the song already has.
+  if (input.titleGenerated && !input.id) title = await freeTitle(supabase, user.id, title);
 
   if (input.id) {
     // An update matching zero rows is not an error to PostgREST -- a wrong id,
@@ -164,6 +199,7 @@ export async function saveSong(input: {
     await setCurrentVersion(supabase, input.id, user.id, ver.versionId!);
     return {
       id: input.id,
+      title,
       versionId: ver.versionId,
       versionSeq: ver.seq,
       unchanged: ver.unchanged,
@@ -183,9 +219,9 @@ export async function saveSong(input: {
     data: input.data,
     label: "first save",
   });
-  if (ver.error) return { id: row.id, error: ver.error };
+  if (ver.error) return { id: row.id, title, error: ver.error };
   await setCurrentVersion(supabase, row.id, user.id, ver.versionId!);
-  return { id: row.id, versionId: ver.versionId, versionSeq: ver.seq };
+  return { id: row.id, title, versionId: ver.versionId, versionSeq: ver.seq };
 }
 
 // Point a song at the version its `data` now mirrors. Failing this leaves the
@@ -276,8 +312,12 @@ export async function saveNamedSong(input: {
   data: unknown;
   isPublic: boolean;
   parentVersionId?: string | null;
+  /** The title was generated for an unnamed song rather than typed, so it must
+   *  not upsert onto an unrelated song that happens to share it. */
+  titleGenerated?: boolean;
 }): Promise<{
   id?: string;
+  title?: string;
   slug?: string;
   versionId?: string;
   versionSeq?: number;
@@ -289,7 +329,8 @@ export async function saveNamedSong(input: {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { error: "Not signed in" };
-  const title = (input.title || "untitled").slice(0, 200);
+  let title = (input.title || "untitled").slice(0, 200);
+  if (input.titleGenerated) title = await freeTitle(supabase, user.id, title);
 
   const { data: existingRows } = await supabase
     .from("songs")
@@ -362,7 +403,7 @@ export async function saveNamedSong(input: {
       .select("id");
     if (error) return { error: error.message };
     if (!rows?.length) return { error: "Song not found" };
-    return { id, slug: slug ?? undefined, versionId, versionSeq, unchanged };
+    return { id, title, slug: slug ?? undefined, versionId, versionSeq, unchanged };
   }
   const { data: privRows, error: privErr } = await supabase
     .from("songs")
@@ -372,7 +413,7 @@ export async function saveNamedSong(input: {
     .select("id");
   if (privErr) return { error: privErr.message };
   if (!privRows?.length) return { error: "Song not found" };
-  return { id, versionId, versionSeq, unchanged };
+  return { id, title, versionId, versionSeq, unchanged };
 }
 
 export async function listSongs(): Promise<{
