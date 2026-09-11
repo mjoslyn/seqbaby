@@ -21,6 +21,7 @@ import {
   setOpenSong,
   subscribeOpenSong,
 } from "@/app/songs/openSong";
+import { generateSongName } from "@/app/songs/songName";
 import VersionTree from "@/app/VersionTree";
 import styles from "@/app/ui.module.css";
 
@@ -90,7 +91,13 @@ export default function SongsMenu() {
     async (asNew: boolean) => {
       if (!window.seqbaby) return;
       const data = window.seqbaby.serializeSet();
-      const t = title.trim() || "untitled";
+      // An unnamed song names itself from what is in it rather than joining a
+      // list of rows all called "untitled". A song already open keeps its name
+      // even if the field was cleared: clearing it is not a rename.
+      const typed = title.trim();
+      const fallback = asNew ? "" : openSong.title.trim();
+      const generated = !typed && !fallback;
+      const t = typed || fallback || generateSongName(data);
       setStatus({ text: "Saving…" });
       const res = await saveSong({
         id: asNew ? undefined : (currentId ?? undefined),
@@ -98,21 +105,28 @@ export default function SongsMenu() {
         data,
         // undefined means "off the tip"; a version id means "branch from here".
         parentVersionId: asNew ? undefined : (baseVersionId ?? undefined),
+        titleGenerated: generated,
       });
       if (res.error) return setStatus({ text: res.error, err: true });
+      // A generated name is disambiguated server-side against the account's
+      // songs, so what came back is what the song is actually called.
+      const saved = res.title ?? t;
+      setTitle(saved);
       setOpenSong({
         id: res.id ?? null,
-        title: t,
+        title: saved,
         versionId: res.versionId ?? null,
       });
       setStatus({
         text: res.unchanged
           ? `No changes since v${res.versionSeq}`
-          : `Saved as v${res.versionSeq}`,
+          : generated
+            ? `Saved “${saved}” as v${res.versionSeq}`
+            : `Saved as v${res.versionSeq}`,
       });
       refresh();
     },
-    [title, currentId, baseVersionId, refresh],
+    [title, currentId, baseVersionId, openSong.title, refresh],
   );
 
   const doLoad = useCallback(async (song: SongListItem) => {
@@ -205,7 +219,7 @@ export default function SongsMenu() {
           <div className={styles.saveRow}>
             <input
               className={styles.saveInput}
-              placeholder="song title"
+              placeholder="song title (or leave blank)"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
             />
