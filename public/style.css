@@ -1871,6 +1871,10 @@ body.kbd-recording .sq-track.is-kbd-active { border-color: #e5484d; box-shadow: 
 }
 .sq-chance__sec-t { color: var(--fg); letter-spacing: 0.06em; text-transform: uppercase; font-size: 10px; }
 .sq-chance__sec button { font-size: 11px; margin-left: auto; }
+/* A dice with nothing to decide. Not `disabled`: the button is how you find out
+   why, and on a touch screen its title is out of reach — pressing it puts the
+   reason in the status bar. Same strike-through the unreachable semitones get. */
+.sq-chance__sec button.is-dead { color: var(--fg-dim); text-decoration: line-through; }
 .sq-chance__free { display: inline-flex; align-items: center; gap: 5px; }
 .sq-chance__free:has(:checked) { color: var(--accent-2); }
 
