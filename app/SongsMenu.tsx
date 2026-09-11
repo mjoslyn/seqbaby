@@ -22,6 +22,7 @@ import {
   subscribeOpenSong,
 } from "@/app/songs/openSong";
 import { generateSongName } from "@/app/songs/songName";
+import { suggestSongName } from "@/app/songs/suggestName";
 import VersionTree from "@/app/VersionTree";
 import styles from "@/app/ui.module.css";
 
@@ -50,12 +51,33 @@ export default function SongsMenu() {
   const baseVersionId = openSong.versionId;
   const [title, setTitle] = useState(openSong.title);
   const wrapRef = useRef<HTMLDivElement>(null);
+  // The name this panel offered, so save can tell an offer left alone from a
+  // name the user typed -- only the first is the app's to disambiguate.
+  const suggestedRef = useRef("");
+  const offeredRef = useRef(false);
 
   // Follow the shared store when something else opens a song, but leave what
   // the user is typing alone otherwise.
   useEffect(() => {
     setTitle(openSong.title);
   }, [openSong.title]);
+
+  // A session that has never been saved gets a name offered in the field when
+  // the panel opens -- visible and editable before you press save rather than
+  // sprung on you after. Once per opening, tracked by a ref rather than by
+  // depending on `title`: re-offering the moment the field goes empty would
+  // make it unclearable.
+  useEffect(() => {
+    if (!open) {
+      offeredRef.current = false;
+      return;
+    }
+    if (offeredRef.current || title || openSong.title) return;
+    offeredRef.current = true;
+    const name = suggestSongName();
+    suggestedRef.current = name;
+    if (name) setTitle(name);
+  }, [open, title, openSong.title]);
 
   // Wait for the engine to install window.seqbaby.
   useEffect(() => {
@@ -95,9 +117,12 @@ export default function SongsMenu() {
       // list of rows all called "untitled". A song already open keeps its name
       // even if the field was cleared: clearing it is not a rename.
       const typed = title.trim();
-      const fallback = asNew ? "" : openSong.title.trim();
-      const generated = !typed && !fallback;
-      const t = typed || fallback || generateSongName(data);
+      const carried = asNew ? "" : openSong.title.trim();
+      // Generated covers both ways of not naming it: the offered name accepted
+      // as it stood, and an empty field. A name typed over the offer is the
+      // user's own.
+      const generated = !carried && (!typed || typed === suggestedRef.current);
+      const t = typed || carried || generateSongName(data);
       setStatus({ text: "Saving…" });
       const res = await saveSong({
         id: asNew ? undefined : (currentId ?? undefined),
@@ -219,7 +244,7 @@ export default function SongsMenu() {
           <div className={styles.saveRow}>
             <input
               className={styles.saveInput}
-              placeholder="song title (or leave blank)"
+              placeholder="song title"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
             />

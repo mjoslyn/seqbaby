@@ -44,6 +44,7 @@ env / fx / eq / comp / mod / automation per track.
 │   ├── VersionTree.tsx        a song's version history, drawn as the tree it is
 │   ├── songs/openSong.ts      which song + version the studio holds (shared by the two save UIs)
 │   ├── songs/songName.js     names a song nobody named, from what is in it
+│   ├── songs/suggestName.ts  the name both save UIs offer in a blank name field
 │   ├── Preloader.tsx + preloaderMarkup.ts  loading overlay: markup + inline driver
 │   ├── login/ settings/ u/[username]/       auth, account settings, public profiles
 │   ├── api/share/route.ts     anonymous ?s=<slug> share endpoint
@@ -1335,8 +1336,17 @@ derived from the session itself: `<adjective> <noun>`, e.g. `basement squelch`,
   engine key + step mask -- deliberately NOT a hash of the whole blob, which
   carries base64 sample payloads and would rename a song for re-uploading the
   same drum hit.
+- **Offered in the field, not sprung at save.** Both save UIs prefill the name
+  box when they open (`app/songs/suggestName.ts`), so the generated name is
+  something you read and edit before pressing save. Once per opening, tracked by
+  a ref rather than by depending on the field's value -- re-offering the moment
+  it goes empty would make it unclearable. A name typed over the offer is the
+  user's own and upserts by title like any other; the offer left as it stood, or
+  an empty field, is what counts as generated.
 - **Only when nothing else names it.** A song already open keeps its name even if
   the field was cleared: clearing it means "save this again", not "rename it".
+  `new` (and the logo) clear the open song, and the top-bar field clears with it
+  -- otherwise the next save files a blank session under the old song's name.
 - **The server disambiguates, because only it knows the account.** Two different
   sessions can still land on the same two common words, and `saveNamedSong`
   upserts by title -- right for a name you typed, silent data loss for one the
