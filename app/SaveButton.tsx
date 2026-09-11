@@ -156,7 +156,7 @@ export default function SaveButton() {
           <input
             className={styles.saveInput}
             style={{ width: "100%", marginBottom: 8 }}
-            placeholder="session name"
+            placeholder="session name (or leave blank)"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             autoFocus

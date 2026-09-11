@@ -244,7 +244,7 @@ export default function SongsMenu() {
           <div className={styles.saveRow}>
             <input
               className={styles.saveInput}
-              placeholder="song title"
+              placeholder="song title (or leave blank)"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
             />
