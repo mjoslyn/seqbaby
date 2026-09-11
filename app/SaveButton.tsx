@@ -9,6 +9,7 @@ import {
 } from "react";
 import { saveNamedSong } from "@/app/songs/actions";
 import { generateSongName } from "@/app/songs/songName";
+import { suggestSongName } from "@/app/songs/suggestName";
 import {
   getOpenSong,
   setOpenSong,
@@ -33,17 +34,42 @@ export default function SaveButton() {
     text: "",
   });
   const wrapRef = useRef<HTMLDivElement>(null);
+  // The name this popup offered, so save can tell an offer left alone from a
+  // name the user typed -- only the first is the app's to disambiguate.
+  const suggestedRef = useRef("");
+  const offeredRef = useRef(false);
   const openSong = useSyncExternalStore(
     subscribeOpenSong,
     getOpenSong,
     getOpenSong,
   );
 
-  // Opening the popup offers the name of whatever is loaded, so the common case
-  // (save what I am working on) is one click and does not fork by typo.
+  // Opening the popup offers a name: the loaded song's, so the common case
+  // (save what I am working on) is one click and does not fork by typo, and for
+  // a session that has never been saved, one generated from what is in it --
+  // visible and editable before you press save rather than sprung on you after.
+  //
+  // Once per opening, tracked by a ref rather than by depending on `title`:
+  // re-offering the moment the field goes empty would make it unclearable.
   useEffect(() => {
-    if (open && !title && openSong.title) setTitle(openSong.title);
+    if (!open) {
+      offeredRef.current = false;
+      return;
+    }
+    if (offeredRef.current || title) return;
+    offeredRef.current = true;
+    if (openSong.title) return setTitle(openSong.title);
+    const name = suggestSongName();
+    suggestedRef.current = name;
+    if (name) setTitle(name);
   }, [open, title, openSong.title]);
+
+  // "new" (and a click on the logo) clear the open song. The field must not go
+  // on holding the name of the song that was open, or the next save files a
+  // blank session under it.
+  useEffect(() => {
+    if (!openSong.title) setTitle("");
+  }, [openSong.title]);
 
   useEffect(() => {
     if (window.seqbaby) return setReady(true);
@@ -72,8 +98,12 @@ export default function SaveButton() {
     // back to the open song's name first matters -- clearing the field on a
     // loaded song means "save this again", not "rename it to something else".
     const typed = title.trim();
-    const generated = !typed && !openSong.title.trim();
-    const t = typed || openSong.title.trim() || generateSongName(data);
+    const carried = openSong.title.trim();
+    // Generated covers both ways of not naming it: the offered name accepted as
+    // it stood, and an empty field. A name the user typed over the offer is
+    // theirs, and upserts by title like any other.
+    const generated = !carried && (!typed || typed === suggestedRef.current);
+    const t = typed || carried || generateSongName(data);
     const sameSong = t === openSong.title && openSong.versionId;
     const res = await saveNamedSong({
       title: t,
