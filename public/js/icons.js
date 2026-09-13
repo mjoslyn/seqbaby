@@ -26,6 +26,12 @@ export const HELP_TIPS = [
   "save patches and reload them from any track",
   "share a session: tap share to copy a link",
 ];
+// Undo / redo — an arrow curving back on itself, mirrored for redo. The two
+// read as a pair at 14px, which is the whole job: nobody looks at these icons,
+// they look for the direction.
+export const ICON_UNDO = `<svg class="sq-btn-icon" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3.2 4 3.2 7.6 6.8 7.6"/><path d="M3.9 7.1a5 5 0 1 1 .6 4.6"/></svg>`;
+export const ICON_REDO = `<svg class="sq-btn-icon" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="12.8 4 12.8 7.6 9.2 7.6"/><path d="M12.1 7.1a5 5 0 1 0-.6 4.6"/></svg>`;
+
 // Painter's palette with four colored dots — paints when "on", greys when "off"
 // (CSS handles the desaturation via aria-pressed).
 export const ICON_PALETTE = `<svg class="sq-btn-icon" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M8 1.5c-3.6 0-6.5 2.7-6.5 6S4.4 13.5 8 13.5c.9 0 1.5-.5 1.5-1.2 0-.5-.3-.9-.3-1.4 0-.7.6-1.2 1.3-1.2h1c2 0 3.5-1.4 3.5-3.3 0-2.7-3-4.9-7-4.9z" fill="none" stroke="currentColor" stroke-width="1.2"/><circle cx="5" cy="5.2" r="1.05" fill="hsl(0 72% 56%)"/><circle cx="9.5" cy="3.8" r="1.05" fill="hsl(60 72% 56%)"/><circle cx="11.9" cy="6.6" r="1.05" fill="hsl(180 72% 56%)"/><circle cx="4.6" cy="9.2" r="1.05" fill="hsl(270 72% 56%)"/></svg>`;

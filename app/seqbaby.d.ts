@@ -27,6 +27,12 @@ declare global {
       onShareSet: () => void;
       onExportSet: () => void;
       onImportSet: () => void;
+      /** Step the session's undo history (public/js/history.js). Both return
+       *  whether there was anything to step to. */
+      undo: () => boolean;
+      redo: () => boolean;
+      canUndo: () => boolean;
+      canRedo: () => boolean;
       loadPatches: () => Record<string, unknown>;
       storePatches: (obj: Record<string, unknown>) => void;
       savePatch: (name: string, config: unknown) => void;

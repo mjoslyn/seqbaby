@@ -15,7 +15,7 @@ env / fx / eq / comp / mod / automation per track.
   engine scripts in order: Tone.js 15 (CDN) → `public/woscillators.js` →
   `public/js/main.js` (ES module). `middleware.ts` refreshes the Supabase
   session on every request *except* static engine assets.
-- **Engine**: ~50 dependency-free vanilla ES modules in `public/js/`. No
+- **Engine**: ~52 dependency-free vanilla ES modules in `public/js/`. No
   bundler — edit, reload. `window.seqbaby` (from `appApi.js`) exposes `state`
   and serialize/apply hooks to the React shell (typed in `app/seqbaby.d.ts`).
 - **Accounts + data**: Supabase (Postgres + Auth + RLS). Tables: `profiles`,
@@ -120,6 +120,11 @@ env / fx / eq / comp / mod / automation per track.
   rename on the way in — same reasoning, same test file.
 - `patternSound.js` — p-lock: a track's sound stored per pattern, captured on
   the way out of a pattern and diff-applied on the way in.
+- `history.js` / `historyStore.js` — undo/redo over the whole session. The store
+  is the stack and the structural sharing that pays for it, and has **no
+  imports** for `chanceGen.js`'s reasons; `history.js` is the engine half — when
+  a snapshot is taken, and how one is put back onto a running sequencer. See the
+  undo/redo section below.
 - `track.js` — track lifecycle (create/resize/clone).
 - `bounce.js` — WAV render via MediaRecorder.
 - `buffers.js` — sample decode/normalize cache, `startSampleSource`.
@@ -685,7 +690,8 @@ on the box of every drum machine with this feature.
   off and the pattern you wrote is exactly as you left it.
 
 Modulating the *one-shot* was the alternative, and it would mean rewriting the
-pattern under the playhead sixty times a second in an app with no undo.
+pattern under the playhead sixty times a second — an edit, sixty times a second,
+with the undo stack to match.
 
 - **Only the step mask is generated.** Pitch, chords, arps, ratchets, nudges
   and the automation lanes all still come from the pattern, so a live euclid
@@ -1236,8 +1242,8 @@ bass   pattern 1  unlocked -> t.baseSound   \ these two move together
   running under the incoming one.
 - **The toggle round-trips.** Locking keeps the sound you can hear, or restores
   what this pattern had if it was locked before. Unlocking hands the pattern back
-  to `baseSound` but *keeps* its snapshot. There's no undo in this app, so
-  neither direction may destroy anything.
+  to `baseSound` but *keeps* its snapshot. Neither direction destroys anything,
+  so a lock flipped by accident costs nothing even without reaching for undo.
 - **The button state belongs to the pattern**, so it changes under you on a
   switch — `switchPattern` calls `refreshAllPatternLockUI()`.
 - `serializeSet` calls `flushAllPatternSounds()` first: a sound is only written
@@ -1307,7 +1313,7 @@ v1 ──▶ v2 ──▶ v3 ──▶ v5      (kept editing)
   is exactly the plausible-looking mistake.
 - **Deleting a version is refused for the tip and for any version with children**
   — `parent_id` cascades, so pruning a version with a branch under it would take
-  the branch too, and this app has no undo. Deleting the SONG still takes its
+  the branch too, and undo does not reach the server. Deleting the SONG still takes its
   whole history (`song_id` cascades).
 - **A fork starts a fresh tree** rooted at the copied state. The source's history
   belongs to the source's owner and isn't readable anyway; `songs.forked_from`
@@ -1320,6 +1326,88 @@ v1 ──▶ v2 ──▶ v3 ──▶ v5      (kept editing)
 - Migration `0009` backfills a root version for every existing song, so the
   first save after deploying branches off something rather than starting a second
   root.
+
+## Undo / redo (`history.js` + `historyStore.js`)
+
+A stack of whole-session snapshots, not a log of inverse commands, and nothing
+had to be instrumented to fill it.
+
+```
+edit ──▶ (420ms of quiet) ──▶ serializeSet() ──▶ fold onto the last snapshot
+                                                        │
+                            identical? ─ yes ─▶ no entry, nothing changed
+                                       └─ no ──▶ push it (sharing everything
+                                                  that did not move)
+```
+
+- **The stack is fed by watching, not by being told.** The alternative was a
+  `markEdit()` call at every mutation site — the step grid, the roll, both
+  generators, the dice, clear, every track button, the pattern bar, all 1063
+  parameter controls — and the first one anybody forgot would be an edit you
+  cannot undo. Instead one delegated capture-phase listener watches the events a
+  human interaction ends in (`pointerup` / `keyup` / `change` / `input` /
+  `drop`), waits for the gesture to settle, and asks the session whether it
+  changed. Whatever produced the change is undoable without knowing history.js
+  exists. Capture phase because the step grid and the roll stop their events
+  from bubbling.
+- **`serializeSet` is the snapshot**, which is what makes "cannot be forgotten"
+  true: a field it missed would already be a field a *save* loses. 4ms on a full
+  six-track, 32-pattern session (389KB), taken once per settled gesture.
+- **Structural sharing is what makes it affordable** (`shareStructure`). Each new
+  snapshot is walked against the previous one and every subtree that did not
+  change is replaced by the OLD one's object, so toggling a step costs one
+  pattern object and the other 191 in the session are shared with every earlier
+  entry. Memory is proportional to what changed, not to the depth of the stack.
+  The same pass answers three questions at once: what to store, **whether
+  anything changed at all** (`shareStructure(last, fresh) === last`), and — since
+  adjacent snapshots are then `===` everywhere they agree — what the restore has
+  to touch.
+- **Restoring is diffed, and falls back to `applySet` wholesale.** `applySet`
+  tears down every track and voice, which would stop the transport, so the
+  common cases go back in place: patterns (via `clonePattern` + `aliasPattern`),
+  the track's own fields, and the sound through `applyPatternSound` — already
+  the thing in this app that knows how to change a sound under a running
+  transport without re-registering 130 LFOs or rebuilding a reverb. Anything
+  needing a voice, the graph or the DOM rebuilt — `REBUILD_KEYS`: an engine
+  change, a new sample, a track added or removed, a send re-routed — falls back
+  to `applySet` on a copy of the snapshot, the same path a song load takes. One
+  loader, not two that drift.
+- **A parameter under an automation lane is pinned** (`pinAutomated`). While the
+  transport runs, an enabled lane rewrites the field it automates on every step
+  (`t.filter.cutoff`, and `t.params[k]` for a voice with no AudioParam behind
+  that key), and that is not a value anybody can hold — the lane overwrites it a
+  sixteenth later. Left alone it would fill the stack with entries nobody made
+  and hand an undo back whatever the lane happened to be at. So those fields are
+  pinned to the previous snapshot's, in `baseSound` and the locked pattern's
+  `sound` as well, because `serializeSet` flushes the live sound into those on
+  its way out. Only while playing: stopped, the snapshot is exact.
+- **Which pattern you are LOOKING at is not in the history.** Chain mode advances
+  it from inside the transport's scheduler and a queued switch commits a bar
+  after the click asking for it — neither is an edit, and both would otherwise
+  leave an entry whose undo, having nothing else to put back, did visibly
+  nothing. An undo changes the song, never the view.
+- **A drag is one entry.** `input` and `change` events coalesce by their control
+  element inside a 1.2s window, so a knob dragged in three goes steps back in
+  one. A step painted across eight cells is one gesture and therefore one entry
+  already. An edit made after an undo never coalesces — it is a new branch, and
+  the redo in front of it is dropped.
+- **A whole session arriving is one step, not an edit inside one.**
+  `applySet` and `newSet` announce themselves (`seqbaby:setapplied` /
+  `seqbaby:newset`) rather than calling in, so session.js knows nothing about the
+  stack. The first to land before anything has been edited *replaces* the
+  baseline — a `?s=` share link loads a beat after boot, and undoing back to the
+  starter tracks nobody asked for would be nonsense — and after that it is a step
+  like any other, which is what makes an accidental `new` recoverable.
+- Ctrl/⌘-Z and ⌘-shift-Z (and ctrl-Y), plus the two buttons in the transport.
+  Text fields keep the browser's own undo: retyping a track name is the field's
+  history, not the song's.
+- `historyStore.js` has **no imports**, for `chanceGen.js`'s reason: the stack
+  and the fold are pure functions over plain objects, so `node --test` exercises
+  them (`test/history.test.js`) — including the sharing claim, measured by
+  counting distinct pattern objects across a 200-entry stack.
+- The stack is **in memory and per page**, capped at 100 states. `new` still
+  confirms before it blanks a session with work in it: undo can bring it back,
+  but only until the tab goes.
 
 ## Naming a song nobody named (`app/songs/songName.js`)
 
@@ -1492,6 +1580,11 @@ patterns.
   one-source-at-a-time rule). The transport and the step grid learn nothing.
 - New cross-track routing → `t.out` + signal.js's routing block; anything that
   rebuilds a voice must call `refreshAllTrackOutputs()`.
+- Nothing has to be told about undo: it watches the session rather than the
+  call sites (see below). A new field is undoable the moment `serializeSet` /
+  `applySet` carry it — and if putting it back needs a voice or the DOM rebuilt,
+  add it to `REBUILD_KEYS` in history.js so an undo across it falls back to
+  `applySet` instead of half-restoring in place.
 - New macro-pad behaviour → `macro.js`; assignment targets come from
   `AUTOMATION_TARGETS` for free, so a new automation target is macro-assignable
   the moment it has a `CONTROL_TARGETS` entry.
@@ -1501,7 +1594,8 @@ patterns.
 
 ## Known limitations / TODO breadcrumbs
 
-- No undo/redo.
+- Undo is in memory and per page: a reload starts a fresh stack, and it is
+  capped at 100 states.
 - Voice-pool LFO only targets voice 0.
 - Bounce is real-time capture (offline rendering would need rebuilding voices
   under an OfflineAudioContext, which the Plaits WASM voice doesn't support).
@@ -1525,7 +1619,7 @@ Repo: https://github.com/mjoslyn/seqbaby.
   An inline marker (`window.__seqbabyServerBoot`) tells the paths apart, and
   `ScriptLoader.tsx` keeps its onload-chained injection for the soft-nav case
   (e.g. arriving from `/login`).
-- `app/EnginePreload.tsx` emits `modulepreload` for all 50 modules listed in
+- `app/EnginePreload.tsx` emits `modulepreload` for all 52 modules listed in
   `app/engineAssets.ts`. The graph is 8 levels deep, so without it the browser
   needs up to eight sequential round trips just to discover the code.
   **Adding or removing a module in `public/js/` means updating that list** —

@@ -655,6 +655,11 @@ export function applySet(s) {
   syncRepeatsUI();
   syncMeterUI();
   setStatus("set loaded");
+  // A whole session has just replaced the one that was open. Announced rather
+  // than called, so the undo stack (history.js) can treat that as the single
+  // step it is without this module having to know it exists — the same
+  // arrangement as `seqbaby:newset` below, and for the same reason.
+  try { window.dispatchEvent(new CustomEvent("seqbaby:setapplied")); } catch {}
   // Handed back so a caller can surface a warning (chiefly "saved by a newer
   // version"). Existing callers ignore it, which is why this stays a return
   // rather than a status message that their own would immediately overwrite.
@@ -707,15 +712,17 @@ export function newSet() {
 }
 
 /**
- * The UI flow around newSet: there is no undo in this app, so anything written
- * is confirmed before it goes. A session with no steps in it has nothing to
- * lose and skips the prompt — clicking the logo on a freshly-loaded page should
- * not ask.
+ * The UI flow around newSet: this throws away everything in the session, so it
+ * is confirmed before it goes. Undo (history.js) can bring it back, but only
+ * within this page — a reload, or a hundred edits later, and it is gone — which
+ * is not a thing to make somebody find out by trying. A session with no steps
+ * in it has nothing to lose and skips the prompt: clicking the logo on a
+ * freshly-loaded page should not ask.
  */
 export async function onNewSet() {
   if (sessionHasNotes() && !await showConfirmDialog({
     title: "start a new song?",
-    body: "This session goes back to empty tracks. Anything you have not saved or shared is lost — there is no undo.",
+    body: "This session goes back to empty tracks. Anything you have not saved or shared is gone once you leave the page — undo can bring it back until then.",
     confirmLabel: "new song",
   })) return;
   newSet();

@@ -59,6 +59,8 @@ export const ENGINE_MODULES = [
   "fxRack.js",
   "generate.js",
   "guitar.js",
+  "history.js",
+  "historyStore.js",
   "icons.js",
   "keyboard.js",
   "knob.js",

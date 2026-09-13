@@ -6,6 +6,7 @@
 // small, stable API to `window.seqbaby` and fire a `seqbaby:ready` event once it's
 // installed. Keep this surface intentional and additive.
 import { loadPatches, savePatch, storePatches } from "./catalog.js";
+import { canRedo, canUndo, redo, undo } from "./history.js";
 import {
   applySet,
   applyTrackPatch,
@@ -46,6 +47,13 @@ export function installAppApi() {
     onShareSet,
     onExportSet,
     onImportSet,
+    // undo / redo over the whole session (history.js). Exposed so the shell's
+    // own chrome can drive the same stack the engine's buttons do — there is
+    // one history, not one per surface.
+    undo,
+    redo,
+    canUndo,
+    canRedo,
     // saved Tone.js patches (localStorage)
     loadPatches,
     storePatches,

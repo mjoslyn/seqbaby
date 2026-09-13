@@ -1252,8 +1252,8 @@ export function wireFxPanel(t, panel) {
   { const w = q(".fx-crush-wet");  if (w) w.addEventListener("input", applyCrush); }
 
   // Double-click an effect's name to put that effect back to its defaults. The
-  // panel has a lot of knobs and no undo, so getting back to a known state
-  // otherwise means dragging each one to where you think it started.
+  // panel has a lot of knobs, and undo walks back one at a time — getting to a
+  // known state otherwise means dragging each one to where you think it started.
   const RESET = {
     amp: applyAmp, vinyl: applyVinyl, cassette: applyCassette, fuzz: applyFuzz,
     ringmod: applyRingMod, shaper: applyWaveShaper, crush: applyCrush,

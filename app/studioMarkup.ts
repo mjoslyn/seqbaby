@@ -252,6 +252,13 @@ export const STUDIO_BODY = String.raw`
     <div class="sq-field"><label for="bpm">bpm</label><input id="bpm" type="number" value="110" min="40" max="240" /></div>
     <div class="sq-field"><label for="swing">swing</label><input id="swing" type="range" min="0" max="0.5" step="0.01" value="0" /></div>
     <button id="macro-pads" class="sq-btn--ghost" type="button" title="xy macro pads — one gesture moving parameters across several tracks at once">macro</button>
+    <!-- Undo / redo. Wired and painted by history.js, which also owns the
+         ctrl/cmd-Z keys; they ship disabled because at boot there is nothing
+         behind them yet. -->
+    <span class="sq-history">
+      <button id="undo" class="sq-btn--ghost sq-icon-btn" type="button" aria-label="undo" title="nothing to undo — ctrl/⌘ Z" disabled></button>
+      <button id="redo" class="sq-btn--ghost sq-icon-btn" type="button" aria-label="redo" title="nothing to redo — ctrl/⌘ shift Z" disabled></button>
+    </span>
     </div><!-- /sq-transport__main -->
     <div class="sq-transport__right">
       <button id="metronome" class="sq-btn--ghost sq-icon-btn" aria-pressed="false" aria-label="metronome" title="metronome click on the downbeat"></button>
