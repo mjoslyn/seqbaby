@@ -11,8 +11,8 @@
  *     hands you back exactly the pattern you had.
  *
  * That split is the whole reason live mode exists. Modulating the one-shot
- * would mean rewriting the pattern under the playhead sixty times a second,
- * and this app has no undo.
+ * would mean rewriting the pattern under the playhead sixty times a second —
+ * an edit, sixty times a second, with the undo stack (history.js) to match.
  */
 
 import { setStatus } from "./dom.js";

@@ -5,6 +5,7 @@ import { loadBuffer, normalizeAudioBuffer } from "./buffers.js";
 import { BUNDLED_SAMPLES, GRANULAR_SAMPLES, GRANULAR_SAMPLE_BASE, GRANULAR_SAMPLE_CREDIT, SAMPLE_BASE, rebuildEngineCatalog } from "./catalog.js";
 import { LFO_KEYS, PATTERN_COUNT } from "./constants.js";
 import { isMobileDevice, setStatus } from "./dom.js";
+import { initHistory } from "./history.js";
 import { HELP_TIPS, ICON_BOUNCE, ICON_CAPTURE, ICON_CHAIN, ICON_FINISH, ICON_KEYBOARD, ICON_METRONOME, ICON_NOW, ICON_REC, ICON_REPEAT } from "./icons.js";
 import { upgradeKnobs } from "./knob.js";
 import { startModMotion } from "./modMotion.js";
@@ -757,6 +758,11 @@ export function init() {
   for (const t of STARTER_TRACKS) createTrack({ ...t });
 
   setStatus("ready");
+  // Undo/redo starts watching here, after the starter tracks exist: the floor
+  // of its stack has to be a session rather than an empty one, or the first
+  // undo of the day would hand back a studio with no tracks in it. It installs
+  // its own listeners and owns the two buttons (history.js).
+  initHistory();
   // Expose the engine API on window.seqbaby for the Next.js shell.
   installAppApi();
   // if the URL carries ?s=<id>, pull that shared session

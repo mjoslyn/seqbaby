@@ -516,6 +516,10 @@ button.sq-btn--danger { color: var(--danger); }
   justify-content: center;
 }
 .sq-icon-btn .sq-btn-icon { display: block; }
+/* Undo / redo sit as a pair — closer to each other than to anything else in the
+   transport, so the two read as one control with two directions. */
+.sq-history { display: inline-flex; align-items: center; gap: 2px; }
+#undo:disabled, #redo:disabled { opacity: 0.3; cursor: not-allowed; }
 /* The dice button doubles as the density control: it fills from the bottom to
    show how full the next roll will be, and drags up/down to set it. */
 .track-dice { position: relative; overflow: hidden; touch-action: none; }
@@ -2446,6 +2450,11 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not
   }
   .sq-transport .sq-scale__field select { padding: 4px 6px; min-width: 0; flex: 1 1 0; }
   .sq-transport #add-track { order: 99; padding: 6px 10px; }
+  /* Undo/redo are the only icon buttons left in the transport on a phone (the
+     keyboard cluster is hidden), and they are the two most likely to be aimed
+     at in a hurry — so they get a finger's worth of target, the same 44px floor
+     the knobs are given by --knob-hit. */
+  .sq-transport .sq-history button { min-width: 44px; height: 40px; }
   .sq-transport .sq-spacer { display: none; }
 
   .sq-transport .sq-status {

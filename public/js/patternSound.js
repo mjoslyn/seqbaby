@@ -201,9 +201,9 @@ export function recallPatternSound(t, idx) {
  *
  * Locking keeps the sound you can currently hear — or, if this pattern was
  * locked before, brings back the sound it had, since unlocking never threw it
- * away. Unlocking hands the pattern back to the track's shared sound. There's
- * no undo in this app, so neither direction may destroy anything: the toggle
- * round-trips.
+ * away. Unlocking hands the pattern back to the track's shared sound. Neither
+ * direction may destroy anything — the toggle round-trips — so that a lock
+ * flipped by accident costs nothing even without reaching for undo.
  * @param {Track} t @param {number} idx @param {boolean} on
  * @returns {boolean} whether the live sound changed as a result
  */
