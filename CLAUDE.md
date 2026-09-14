@@ -41,8 +41,9 @@ env / fx / eq / comp / mod / automation per track.
 │   ├── ScriptLoader.tsx       injects Tone → woscillators → js/main.js in order
 │   ├── AccountBar/SongsMenu/PatchesMenu/SaveButton/OpenSongOnLoad.tsx
 │   ├── NewSongButton.tsx      top-bar `new`: blanks the engine, clears the open song
+│   ├── DefaultTemplate.tsx    what a new song starts from, when the account named one
 │   ├── VersionTree.tsx        a song's version history, drawn as the tree it is
-│   ├── songs/openSong.ts      which song + version the studio holds (shared by the two save UIs)
+│   ├── songs/openSong.ts      which song + version the studio holds, and whether it is a template (shared by the two save UIs)
 │   ├── songs/songName.js     names a song nobody named, from what is in it
 │   ├── songs/suggestName.ts  the name both save UIs offer in a blank name field
 │   ├── Preloader.tsx + preloaderMarkup.ts  loading overlay: markup + inline driver
@@ -59,7 +60,7 @@ env / fx / eq / comp / mod / automation per track.
 │   └── api.js                 legacy Blobs share put/get (+ in-memory dev fallback)
 ├── middleware.ts              Supabase session refresh (skips engine assets)
 ├── supabase/
-│   ├── migrations/            profiles, songs, patches, delete_own_account RPC
+│   ├── migrations/            profiles, songs, patches, song versions, templates, delete_own_account RPC
 │   └── tests/                 negative RLS tests + the local auth stub they need
 ├── test/                      node --test suites (engine-side, no browser)
 ├── netlify/functions/share.mjs  legacy function wrapper
@@ -1266,7 +1267,7 @@ buffer, slices back to the last 1.5s silence gap and writes a clip).
 | surface | what |
 |---|---|
 | `POST/GET app/api/share/route.ts` | anonymous `?s=<slug>` share links (public `songs` rows) |
-| `app/songs/actions.ts` | `saveSong` / `saveNamedSong` (both append a version), `listSongs`, `loadSong`, `forkSong`, `listVersions`, `loadVersion`, `labelVersion`, `deleteVersion` |
+| `app/songs/actions.ts` | `saveSong` / `saveNamedSong` (both append a version), `listSongs`, `loadSong`, `forkSong`, `listVersions`, `loadVersion`, `labelVersion`, `deleteVersion`, `setSongTemplate`, `setDefaultTemplate`, `getDefaultTemplate` |
 | `app/patches/actions.ts` | `publishPatch`, `listMyPatches`, `listPublicPatches`, `getPatch`, `deletePatch` |
 | `app/profile/actions.ts` | `getMyProfile`, `updateProfile`, `getPublicProfile` (+ that user's public songs/patches) |
 | `app/auth/actions.ts` | `signIn`, `signUp`, `signInWithMagicLink`, `signOut` |
@@ -1326,6 +1327,59 @@ v1 ──▶ v2 ──▶ v3 ──▶ v5      (kept editing)
 - Migration `0009` backfills a root version for every existing song, so the
   first save after deploying branches off something rather than starting a second
   root.
+
+## Templates — a song you start from (`songs.is_template`)
+
+A template is an ordinary song with a flag on it. What the flag changes is one
+thing: **the first save while a template is open makes a NEW song** instead of
+another version of the template. So a starting point stays a starting point,
+and the twelve songs written from it are twelve songs.
+
+```
+techno starter  (template, default)
+      │  open it, write something, save
+      ▼
+cold squelch  v1 ──▶ v2 ──▶ v3     its own song, its own tree
+```
+
+- **Two booleans, no new table** (migration `0010`). `is_template`, and
+  `is_default_template` for the one a new session starts from. Templates are
+  listed apart in the songs menu, but everything else you can do to a song you
+  can still do to one — publish it, fork it, walk its version tree.
+- **Where a save goes is the writer's rule, not the database's.** The migration
+  does not stop a version being appended to a template; opening one, unmarking
+  it and saving is a perfectly reasonable way to *edit* the template. What
+  detaches the save is the studio saying it is holding one.
+- **`openSong.isTemplate` is that saying**, and it is cleared by the save that
+  used it, so only the FIRST save detaches and everything after it is an
+  ordinary new version of the song just made. It lives in the shared store
+  (`app/songs/openSong.ts`) for the reason `versionId` does — both save UIs have
+  to agree — and because the studio can hold a template nobody opened, since
+  `new` starts from the default one.
+- **`saveNamedSong` upserts BY TITLE, so dropping the id is not enough**: a save
+  under the template's own name would land on the template. On the template path
+  that lookup is skipped entirely, the title always goes through `freeTitle`
+  (two songs sharing a title would leave the *next* save upserting onto whichever
+  sorted first), and both save UIs offer a generated name rather than the
+  template's — "techno starter 2" is a poor name for a song and a confusing
+  neighbour for the template in the list.
+- **`forked_from` records where it came from**, the same column a fork uses, and
+  the new song's first version is labelled `from template`. A song made from a
+  template is never itself one.
+- **At most one default per account, enforced by a partial unique index**
+  (`songs_one_default_template`), because `setDefaultTemplate` clears then sets
+  and a second tab racing it would otherwise leave an account with two defaults
+  and no way to say which is meant. A CHECK keeps a default a template: the
+  toggle is only drawn on templates, and a default that was not one would be
+  invisible and still be what `new` loads.
+- **The engine learns nothing.** `newSet()` still means the six starter tracks;
+  `app/DefaultTemplate.tsx` applies a session over the top afterwards. So the
+  legacy static server, a signed-out visitor and an account with no default all
+  get the blank editor they always did. It answers to `seqbaby:newset` (the top
+  bar's `new` and the logo) and to a fresh load of `/` — skipped when the URL
+  carries `?s=` or `?open=`, which load asynchronously too and would otherwise
+  race it. The fetch is caught, not just awaited: with no Supabase env the
+  action throws, and the engine is meant to run without any.
 
 ## Undo / redo (`history.js` + `historyStore.js`)
 

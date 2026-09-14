@@ -17,9 +17,25 @@ export type OpenSong = {
   title: string;
   /** The version the studio's contents came from -- the next save's parent. */
   versionId: string | null;
+  /**
+   * What is open is a TEMPLATE, so the next save detaches: it makes a new song
+   * off this one rather than another version of it. Cleared by that save, so
+   * only the FIRST save off a template detaches and everything after it is an
+   * ordinary version of the new song.
+   *
+   * Lives here rather than being re-read from the row at save time because both
+   * save UIs have to agree, and because the studio can be holding a template
+   * nobody opened -- `new` starts from the account's default one.
+   */
+  isTemplate: boolean;
 };
 
-let current: OpenSong = { id: null, title: "", versionId: null };
+let current: OpenSong = {
+  id: null,
+  title: "",
+  versionId: null,
+  isTemplate: false,
+};
 const subscribers = new Set<() => void>();
 
 export function getOpenSong(): OpenSong {

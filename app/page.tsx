@@ -5,6 +5,7 @@ import ScriptLoader from "./ScriptLoader";
 import EnginePreload from "./EnginePreload";
 import EngineScripts from "./EngineScripts";
 import OpenSongOnLoad from "./OpenSongOnLoad";
+import DefaultTemplate from "./DefaultTemplate";
 import { AccountBar } from "./AccountBar";
 import styles from "./ui.module.css";
 import { createClient } from "@/lib/supabase/server";
@@ -82,6 +83,7 @@ export default function StudioPage() {
       <EngineScripts />
       <ScriptLoader />
       <OpenSongOnLoad />
+      <DefaultTemplate />
     </>
   );
 }
