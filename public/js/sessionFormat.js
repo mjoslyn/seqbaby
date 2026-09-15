@@ -142,11 +142,24 @@ function renameKeys(obj, rename) {
   }
 }
 
+// The bitcrusher's converter clock (crusher.js) arrived after the effect did,
+// so a song or patch written before it has a crush config with no `rate` in it.
+// Those were quantise-only, which is this knob at the top — and the default has
+// to be written HERE rather than where the value is read, because applyCrush
+// takes partial configs (the automation lane sends bits alone) and an absent
+// rate means "leave it", not "1". Without this a legacy patch loaded on top of
+// a crushed track would keep the previous patch's clock.
+function migrateCrushRate(o) {
+  const c = o?.fxConfig?.crush;
+  if (c && typeof c === "object" && c.rate == null) c.rate = 1;
+}
+
 /** A sound snapshot, or anything shaped like one (a track, a saved patch). */
 function migrateSoundNames(o) {
   if (!o || typeof o !== "object") return;
   renameKeys(o.params, (k) => LEGACY_PARAM_KEYS[k] || k);
   renameKeys(o.lfoConfig, migrateModKey);
+  migrateCrushRate(o);
 }
 
 /**

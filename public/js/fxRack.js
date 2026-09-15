@@ -1,4 +1,5 @@
 import { SHAPER_MODES, makeCassetteSatCurve, makeFuzzCurve, makeShaperCurve, makeTapeHissBuffer, makeVinylCrackleBuffer, shaperPreampGain } from "./curves.js";
+import { buildCrusherNode } from "./crusher.js";
 import { fxStageLevel } from "./constants.js";
 import { currentBpm } from "./lfo.js";
 import { setParam } from "./params.js";
@@ -12,7 +13,7 @@ export function defaultFxConfig() {
     fuzz:       { amount: 0, drive: 0.7, tone: 0.4, level: 0.5 },
     ringmod:    { wet: 0, freq: 0.35 },           // freq is 0..1, log-mapped to ~20..3000 Hz
     shaper:     { wet: 0, preamp: 0.5, amount: 0.5, mode: "fold" },  // wave shaper: wet/dry + input preamp + curve drive + mode
-    crush:      { bits: 8, wet: 0 },
+    crush:      { bits: 8, rate: 1, wet: 0 },   // rate is the converter clock, 0..1 log-mapped to 250Hz..48kHz; 1 = no decimation
     autowah:    { wet: 0, sens: 0.5, range: 0.5 },
     chorus:     { wet: 0, rate: 0.5, depth: 0.5 },
     phaser:     { wet: 0, rate: 0.3, depth: 0.5 },
@@ -32,7 +33,7 @@ export const FX_LFO_STAGE = {
   fuzz: "fuzz", fuzz_drive: "fuzz", fuzz_tone: "fuzz", fuzz_level: "fuzz",
   ringmod: "ringmod", ring_freq: "ringmod",
   shaper: "shaper", shaper_preamp: "shaper", shaper_amt: "shaper",
-  crush: "crush", crush_bits: "crush",
+  crush: "crush", crush_bits: "crush", crush_rate: "crush",
   autowah: "autowah", autowah_sens: "autowah", autowah_range: "autowah",
   chorus: "chorus", chorus_rate: "chorus", chorus_depth: "chorus",
   phaser: "phaser", phaser_rate: "phaser", phaser_depth: "phaser",
@@ -41,6 +42,9 @@ export const FX_LFO_STAGE = {
   delay: "delay", delay_time: "delay", delay_fbk: "delay",
   verb: "reverb", reverb_decay: "reverb",
 };
+
+// Tone wrappers don't accept a native connect() — unwrap to the node underneath.
+const nativeInputOf = (node) => node?.input?.input ?? node?.input ?? node;
 
 /**
  * Map a 0..1 amp knob to a gain multiplier: 0.5 is unity, the lower half fades
@@ -67,7 +71,10 @@ export class FXRack {
     if (!config.vinyl)      config.vinyl      = { amount: 0, warmth: 0.4, wow: 0.3 };
     if (!config.cassette)   config.cassette   = { amount: 0, flutter: 0.3, sat: 0.4 };
     if (!config.chorus)     config.chorus     = { wet: 0, rate: 0.5, depth: 0.5 };
-    if (!config.crush)      config.crush      = { bits: 8, wet: 0 };
+    if (!config.crush)      config.crush      = { bits: 8, rate: 1, wet: 0 };
+    // A song written before the converter clock existed was quantise-only, so it
+    // loads with the clock off — it sounds exactly as it did.
+    if (config.crush.rate == null) config.crush.rate = 1;
     if (!config.ringmod)    config.ringmod    = { wet: 0, freq: 0.35 };
     if (!config.autowah)    config.autowah    = { wet: 0, sens: 0.5, range: 0.5 };
     if (!config.phaser)     config.phaser     = { wet: 0, rate: 0.3, depth: 0.5 };
@@ -223,11 +230,40 @@ export class FXRack {
     this.shaperDryBus.gain.value = 1 - (config.shaper.wet ?? 0);
     this.shaperWetBus.gain.value = config.shaper.wet ?? 0;
 
-    // ── Tone stages: crusher → autowah → chorus → phaser → flanger → pitchshift → delay → reverb ──
-    this.crusher = new Tone.BitCrusher({
-      bits: Math.max(1, Math.min(16, config.crush?.bits ?? 8)),
-      wet: config.crush?.wet ?? 0,
-    });
+    // ── bitcrush (crusher.js): a lo-fi converter — a sample-and-hold clock and
+    //    a quantiser that clips at full scale. Parallel wet/dry like the rack's
+    //    other nonlinear stages, so the crossfade is ours rather than a Tone
+    //    effect's and the wet gain is a plain AudioParam an LFO can reach. ──
+    this.crushDryBus = ctx.createGain();
+    this.crushWetBus = ctx.createGain();
+    this.crushSum    = ctx.createGain();
+    this.crushIn     = ctx.createGain();
+    this.crushNode   = buildCrusherNode(ctx);
+    if (this.crushNode) {
+      this.crushBitsParam = this.crushNode.parameters.get("bits");
+      this.crushRateParam = this.crushNode.parameters.get("rate");
+      this.crushIn.connect(this.crushNode);
+      this.crushNode.connect(this.crushWetBus);
+    } else {
+      // Worklet registration failed (the whole engine's worklets would be down
+      // with it). Tone's crusher quantises and nothing else — no converter
+      // clock — which is exactly what this stage used to be, so the track keeps
+      // an effect instead of going quiet.
+      this.crusherFallback = new Tone.BitCrusher({
+        bits: Math.max(1, Math.min(16, config.crush?.bits ?? 8)),
+        wet: 1,
+      });
+      this.crushBitsParam = this.crusherFallback.bits;
+      this.crushRateParam = null;
+      this.crushIn.connect(nativeInputOf(this.crusherFallback));
+      this.crusherFallback.connect(this.crushWetBus);
+    }
+    this.crushDryBus.connect(this.crushSum);
+    this.crushWetBus.connect(this.crushSum);
+    // The knobs themselves are installed by applyCrush at the end of the
+    // constructor, with everything else.
+
+    // ── Tone stages: autowah → chorus → phaser → flanger → pitchshift → delay → reverb ──
     this.autowah = new Tone.AutoWah({
       baseFrequency: 100,
       octaves: 1 + (config.autowah.range ?? 0.5) * 4,
@@ -314,7 +350,7 @@ export class FXRack {
       { key: "fuzz",       ins: [this.dryBus, this.fuzzDrive],          out: this.postFuzz },
       { key: "ringmod",    ins: [this.ringDry, this.ringMult],          out: this.ringSum },
       { key: "shaper",     ins: [this.shaperDryBus, this.shaperPreamp], out: this.shaperSum },
-      { key: "crush",      ins: [toneIn(this.crusher)],                 out: this.crusher },
+      { key: "crush",      ins: [this.crushDryBus, this.crushIn],       out: this.crushSum },
       { key: "autowah",    ins: [toneIn(this.autowah)],                 out: this.autowah },
       { key: "chorus",     ins: [toneIn(this.chorus)],                  out: this.chorus },
       { key: "phaser",     ins: [toneIn(this.phaser)],                  out: this.phaser },
@@ -343,6 +379,7 @@ export class FXRack {
     this.applyPhaser(config.phaser);
     this.applyFlanger(config.flanger);
     this.applyPitchShift(config.pitchshift);
+    this.applyCrush(config.crush);
   }
 
   // The wet/amount level that decides whether a stage needs to be in the chain.
@@ -600,16 +637,24 @@ export class FXRack {
     }
     this._updateStage("fuzz");
   }
-  applyCrush({ bits, wet }) {
-    if (!this.config.crush) this.config.crush = { bits: 8, wet: 0 };
+  applyCrush({ bits, rate, wet }) {
+    if (!this.config.crush) this.config.crush = { bits: 8, rate: 1, wet: 0 };
     if (bits !== undefined) {
       const b = Math.max(1, Math.min(16, Math.round(bits)));
       this.config.crush.bits = b;
-      try { this.crusher.bits.value = b; } catch { try { this.crusher.set({ bits: b }); } catch {} }
+      try { this.crushBitsParam.value = b; } catch { try { this.crusherFallback?.set({ bits: b }); } catch {} }
     }
-    if (wet !== undefined) {
-      this.config.crush.wet = wet;
-      try { this.crusher.wet.value = wet; } catch {}
+    if (rate !== undefined && Number.isFinite(Number(rate))) {
+      const r = Math.max(0, Math.min(1, Number(rate)));
+      this.config.crush.rate = r;
+      // Null on the fallback, which has no converter clock to set.
+      try { if (this.crushRateParam) this.crushRateParam.value = r; } catch {}
+    }
+    if (wet !== undefined && Number.isFinite(Number(wet))) {
+      const w = Math.max(0, Math.min(1, Number(wet)));
+      this.config.crush.wet = w;
+      this.crushWetBus.gain.value = w;
+      this.crushDryBus.gain.value = 1 - w;
     }
     this._updateStage("crush");
   }
@@ -698,7 +743,13 @@ export class FXRack {
     try { this.pitchshift.dispose(); } catch {}
     try { this.delay.dispose(); } catch {}
     try { this.reverb.dispose(); } catch {}
-    try { this.crusher.dispose(); } catch {}
+    try { this.crushIn.disconnect(); } catch {}
+    try { this.crushNode?.port.postMessage({ type: "dispose" }); } catch {}
+    try { this.crushNode?.disconnect(); } catch {}
+    try { this.crushDryBus.disconnect(); } catch {}
+    try { this.crushWetBus.disconnect(); } catch {}
+    try { this.crushSum.disconnect(); } catch {}
+    try { this.crusherFallback?.dispose(); } catch {}
   }
 }
 

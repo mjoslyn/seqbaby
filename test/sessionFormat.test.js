@@ -244,3 +244,23 @@ test("migration is idempotent — running it twice changes nothing", () => {
   const twice = migrateLegacyNames(JSON.parse(JSON.stringify(once)));
   assert.deepEqual(twice, once);
 });
+
+test("a crush config written before the converter clock loads with the clock off", () => {
+  const td = migrateTrackNames({
+    fxConfig: { crush: { bits: 6, wet: 0.8 } },
+    baseSound: { fxConfig: { crush: { bits: 4, wet: 1 } } },
+    patterns: [null, { sound: { fxConfig: { crush: { bits: 12, wet: 0.3 } } } }],
+  });
+  // 1 is the top of the knob: no decimation, which is all the effect ever did
+  // before the clock existed. The rest of the config is untouched.
+  assert.deepEqual(td.fxConfig.crush, { bits: 6, wet: 0.8, rate: 1 });
+  assert.equal(td.baseSound.fxConfig.crush.rate, 1);
+  assert.equal(td.patterns[1].sound.fxConfig.crush.rate, 1);
+});
+
+test("a crush rate already in the song is left alone, including 0", () => {
+  const td = migrateTrackNames({ fxConfig: { crush: { bits: 6, wet: 1, rate: 0 } } });
+  assert.equal(td.fxConfig.crush.rate, 0);
+  const again = migrateTrackNames({ fxConfig: { crush: { bits: 6, wet: 1, rate: 0.42 } } });
+  assert.equal(again.fxConfig.crush.rate, 0.42);
+});
