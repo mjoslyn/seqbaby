@@ -2908,7 +2908,11 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not
   }
 
   /* synth-row: stack groups */
-  .sq-track__synth-row { gap: 4px; flex-direction: column; align-items: stretch; }
+  /* nowrap matters: a column that WRAPS sizes its line to the widest item's
+     content — with a hexop in the row that is the 500px operator grid — and
+     then stretches every panel to that line, off the edge of the phone. Unwrapped,
+     the panels take the row's width and the grid scrolls inside its own panel. */
+  .sq-track__synth-row { gap: 4px; flex-direction: column; flex-wrap: nowrap; align-items: stretch; }
   .sq-param-group { padding: 4px 6px; gap: 6px; flex-wrap: wrap; }
   .sq-param-group .sq-field .sq-knob { --knob-size: 44px; }
   .sq-param-group--ladder .sq-ladder__osc-row { flex-wrap: wrap; }
@@ -2959,6 +2963,17 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not
      themselves grow and the grid scrolls sideways — which .sq-hexop__ops was
      already set up to do. */
   .sq-hexop__ops .sq-hexop__f .sq-knob { --knob-size: 40px; --knob-thickness: 5px; }
+  /* The synth row is a flex item, and a flex item's automatic minimum width is
+     its content's — which with a hexop in it is the 500px grid below. Without
+     this the row grows to fit the grid, the track grows to fit the row, and the
+     whole page scrolls sideways. (`overflow: auto` on the grid changes its own
+     minimum, not what it contributes to its ancestors' — hence the rule sits up
+     here, beside the nowrap on the row itself.) */
+  .sq-track__head .sq-track__synth-row { min-width: 0; }
+  /* Same again one level down: the hexop panel is a wrapping column too (every
+     .sq-param-group wraps on a phone), so its line would size to the grid and
+     stretch the global rows to 500px with it. */
+  .sq-param-group--hexop { flex-wrap: nowrap; }
   .sq-hexop__ophead, .sq-hexop__oprow {
     grid-template-columns: 34px repeat(8, minmax(44px, 1fr)) 60px;
     min-width: 500px;
