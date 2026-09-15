@@ -413,6 +413,17 @@ export default function ManualPage() {
             second colour is struck more than once, which is how the triplets and the
             1/32s fit a grid of sixteenths.
           </p>
+          <div className={styles.note}>
+            Chance is modelled on Vermona&apos;s meloDICER, a eurorack module that
+            generates a part from probabilities rather than storing one. The panel
+            keeps its layout &mdash; a rhythm section of note value, variation, legato
+            and rest, twelve semitone probability faders for the melody, and a range
+            either side of them. Two things here are not on the module: each knob gets
+            its own stream of dice, so turning{" "}
+            <span className={styles.ui}>rest</span> up only drops notes instead of
+            reshuffling the whole part, and a throw is a held seed, so a saved song
+            replays the part it was written with.
+          </div>
         </section>
 
         <section className={styles.section} id="keyboard">
