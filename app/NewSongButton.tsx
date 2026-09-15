@@ -21,7 +21,8 @@ export default function NewSongButton() {
   // The engine announces its own resets (the logo goes through the same flow),
   // so the open-song slot is cleared from one place whichever route got here.
   useEffect(() => {
-    const onNew = () => setOpenSong({ id: null, title: "", versionId: null });
+    const onNew = () =>
+      setOpenSong({ id: null, title: "", versionId: null, isTemplate: false });
     window.addEventListener("seqbaby:newset", onNew);
     return () => window.removeEventListener("seqbaby:newset", onNew);
   }, []);

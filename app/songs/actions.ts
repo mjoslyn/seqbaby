@@ -11,6 +11,11 @@ export type SongListItem = {
   is_public: boolean;
   share_slug: string | null;
   current_version_id: string | null;
+  /** A starting point rather than a work in progress: saving while one is open
+   *  makes a new song instead of a new version of it. */
+  is_template: boolean;
+  /** The one template a new session starts from. At most one per account. */
+  is_default_template: boolean;
 };
 
 /** A node of a song's version tree. Never carries `data` -- the list is drawn
@@ -23,7 +28,8 @@ export type SongVersion = {
   created_at: string;
 };
 
-const SONG_LIST_COLS = "id,title,updated_at,is_public,share_slug,current_version_id";
+const SONG_LIST_COLS =
+  "id,title,updated_at,is_public,share_slug,current_version_id,is_template,is_default_template";
 
 function newSlug(): string {
   return (
@@ -141,6 +147,26 @@ async function freeTitle(
   return (free ?? `${base} ${Date.now().toString(36)}`).slice(0, 200);
 }
 
+// Confirm a song id the client says it started from is really a song of this
+// user's, so it can be recorded as the new song's `forked_from`. Purely about
+// the foreign key and about not writing someone else's id into an owned row --
+// whether the save DETACHES is decided by the client having sent an id at all,
+// because a template deleted in another tab must still not have the save land
+// on it.
+async function ownedSongId(
+  supabase: SupabaseClient,
+  ownerId: string,
+  id: string,
+): Promise<string | null> {
+  const { data } = await supabase
+    .from("songs")
+    .select("id")
+    .eq("id", id)
+    .eq("owner_id", ownerId)
+    .maybeSingle();
+  return (data?.id as string | undefined) ?? null;
+}
+
 // Save the current song. Insert when no id, update in place when id is owned.
 // Either way a version is appended: `parentVersionId` is the version being
 // edited (the client's idea of where it is in the tree), defaulting to the
@@ -152,6 +178,9 @@ export async function saveSong(input: {
   parentVersionId?: string | null;
   /** The title was generated for an unnamed song rather than typed. */
   titleGenerated?: boolean;
+  /** The studio is holding a TEMPLATE: this save starts a new song off it
+   *  rather than appending a version to it. The id is the template's. */
+  fromTemplateId?: string | null;
 }): Promise<{
   id?: string;
   title?: string;
@@ -166,12 +195,22 @@ export async function saveSong(input: {
   } = await supabase.auth.getUser();
   if (!user) return { error: "Not signed in" };
 
+  // A template is a starting point, so the first save off one is a new song --
+  // never a version of the template. The id and the parent version the client
+  // carried both name the template, so both are dropped here rather than being
+  // trusted not to have been sent.
+  const fromTemplate = !!input.fromTemplateId;
+  const songId = fromTemplate ? undefined : input.id;
+  const forkedFrom = fromTemplate
+    ? await ownedSongId(supabase, user.id, input.fromTemplateId!)
+    : null;
+
   let title = (input.title || "untitled").slice(0, 200);
   // Only the insert path: updating a song in place is not creating a name that
   // has to be free, it is keeping the one the song already has.
-  if (input.titleGenerated && !input.id) title = await freeTitle(supabase, user.id, title);
+  if (input.titleGenerated && !songId) title = await freeTitle(supabase, user.id, title);
 
-  if (input.id) {
+  if (songId) {
     // An update matching zero rows is not an error to PostgREST -- a wrong id,
     // someone else's id, or a row deleted in another tab all come back clean. So
     // every write here asks for the affected rows back and checks them; without
@@ -179,7 +218,7 @@ export async function saveSong(input: {
     const { data: rows, error } = await supabase
       .from("songs")
       .update({ title, data: input.data })
-      .eq("id", input.id)
+      .eq("id", songId)
       .eq("owner_id", user.id)
       .select("id,current_version_id");
     if (error) return { error: error.message };
@@ -190,15 +229,15 @@ export async function saveSong(input: {
         ? input.parentVersionId
         : (rows[0].current_version_id as string | null);
     const ver = await appendVersion(supabase, {
-      songId: input.id,
+      songId,
       ownerId: user.id,
       parentId,
       data: input.data,
     });
-    if (ver.error) return { id: input.id, error: ver.error };
-    await setCurrentVersion(supabase, input.id, user.id, ver.versionId!);
+    if (ver.error) return { id: songId, error: ver.error };
+    await setCurrentVersion(supabase, songId, user.id, ver.versionId!);
     return {
-      id: input.id,
+      id: songId,
       title,
       versionId: ver.versionId,
       versionSeq: ver.seq,
@@ -208,7 +247,14 @@ export async function saveSong(input: {
 
   const { data: row, error } = await supabase
     .from("songs")
-    .insert({ owner_id: user.id, title, data: input.data })
+    .insert({
+      owner_id: user.id,
+      title,
+      data: input.data,
+      // A song made from a template is not itself one, whatever it was made
+      // from. Its ancestry goes where a fork's does.
+      forked_from: forkedFrom,
+    })
     .select("id")
     .single();
   if (error) return { error: error.message };
@@ -217,7 +263,7 @@ export async function saveSong(input: {
     ownerId: user.id,
     parentId: null,
     data: input.data,
-    label: "first save",
+    label: fromTemplate ? "from template" : "first save",
   });
   if (ver.error) return { id: row.id, title, error: ver.error };
   await setCurrentVersion(supabase, row.id, user.id, ver.versionId!);
@@ -315,6 +361,9 @@ export async function saveNamedSong(input: {
   /** The title was generated for an unnamed song rather than typed, so it must
    *  not upsert onto an unrelated song that happens to share it. */
   titleGenerated?: boolean;
+  /** The studio is holding a TEMPLATE: this save starts a new song off it
+   *  rather than appending a version to it. The id is the template's. */
+  fromTemplateId?: string | null;
 }): Promise<{
   id?: string;
   title?: string;
@@ -329,16 +378,31 @@ export async function saveNamedSong(input: {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { error: "Not signed in" };
-  let title = (input.title || "untitled").slice(0, 200);
-  if (input.titleGenerated) title = await freeTitle(supabase, user.id, title);
 
-  const { data: existingRows } = await supabase
-    .from("songs")
-    .select("id,share_slug,current_version_id")
-    .eq("owner_id", user.id)
-    .eq("title", title)
-    .order("updated_at", { ascending: false })
-    .limit(1);
+  // A template is a starting point, so the first save off one is a new song.
+  // Here that means more than dropping the id: this action upserts BY TITLE, so
+  // a save under the template's own name would land on the template itself.
+  // Hence the lookup below is skipped entirely, and the title is disambiguated
+  // whether or not it was generated -- an insert that duplicates a title would
+  // leave the next save upserting onto whichever of the two sorted first.
+  const fromTemplate = !!input.fromTemplateId;
+  const forkedFrom = fromTemplate
+    ? await ownedSongId(supabase, user.id, input.fromTemplateId!)
+    : null;
+
+  let title = (input.title || "untitled").slice(0, 200);
+  if (input.titleGenerated || fromTemplate)
+    title = await freeTitle(supabase, user.id, title);
+
+  const { data: existingRows } = fromTemplate
+    ? { data: null }
+    : await supabase
+        .from("songs")
+        .select("id,share_slug,current_version_id")
+        .eq("owner_id", user.id)
+        .eq("title", title)
+        .order("updated_at", { ascending: false })
+        .limit(1);
   let id = existingRows?.[0]?.id as string | undefined;
   let slug = existingRows?.[0]?.share_slug as string | null | undefined;
   const head = existingRows?.[0]?.current_version_id as string | null | undefined;
@@ -374,7 +438,9 @@ export async function saveNamedSong(input: {
   } else {
     const { data: row, error } = await supabase
       .from("songs")
-      .insert({ owner_id: user.id, title, data: input.data })
+      // A song made from a template is not itself one, whatever it was made
+      // from. Its ancestry goes where a fork's does.
+      .insert({ owner_id: user.id, title, data: input.data, forked_from: forkedFrom })
       .select("id,share_slug")
       .single();
     if (error) return { error: error.message };
@@ -385,7 +451,7 @@ export async function saveNamedSong(input: {
       ownerId: user.id,
       parentId: null,
       data: input.data,
-      label: "first save",
+      label: fromTemplate ? "from template" : "first save",
     });
     if (ver.error) return { id, error: ver.error };
     versionId = ver.versionId;
@@ -447,6 +513,7 @@ export async function loadSong(
   data?: unknown;
   versionId?: string | null;
   owned?: boolean;
+  isTemplate?: boolean;
   error?: string;
 }> {
   const supabase = await createClient();
@@ -455,16 +522,125 @@ export async function loadSong(
   } = await supabase.auth.getUser();
   const { data, error } = await supabase
     .from("songs")
-    .select("title,data,owner_id,current_version_id")
+    .select("title,data,owner_id,current_version_id,is_template")
     .eq("id", id)
     .maybeSingle();
   if (error) return { error: error.message };
   if (!data) return { error: "Song not found" };
+  const owned = !!user && data.owner_id === user.id;
   return {
     title: data.title,
     data: data.data,
     versionId: data.current_version_id as string | null,
-    owned: !!user && data.owner_id === user.id,
+    owned,
+    // Only your own template detaches your save -- someone else's public song
+    // already leaves the slot empty, template or not.
+    isTemplate: owned && !!data.is_template,
+  };
+}
+
+// ---- templates ---------------------------------------------------------
+
+// Mark a song a template, or stop it being one. Clearing the flag clears the
+// default with it: a default that is not a template is unreachable from the UI
+// and would still be what `new` loads, and the database refuses it anyway.
+export async function setSongTemplate(
+  id: string,
+  isTemplate: boolean,
+): Promise<{ ok?: boolean; error?: string }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Not signed in" };
+  const { data: rows, error } = await supabase
+    .from("songs")
+    .update(
+      isTemplate
+        ? { is_template: true }
+        : { is_template: false, is_default_template: false },
+    )
+    .eq("id", id)
+    .eq("owner_id", user.id)
+    .select("id");
+  if (error) return { error: error.message };
+  if (!rows?.length) return { error: "Song not found" };
+  return { ok: true };
+}
+
+// Name the one template a new session starts from, or `null` to have none.
+//
+// Clear-then-set rather than one statement, because the account's current
+// default is whatever row happens to carry the flag and there is no second key
+// to update it by. The partial unique index is what makes that safe: a second
+// tab racing this can only ever fail its own write, never leave the account
+// with two defaults.
+export async function setDefaultTemplate(
+  id: string | null,
+): Promise<{ ok?: boolean; error?: string }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Not signed in" };
+
+  const { error: clearErr } = await supabase
+    .from("songs")
+    .update({ is_default_template: false })
+    .eq("owner_id", user.id)
+    .eq("is_default_template", true);
+  if (clearErr) return { error: clearErr.message };
+  if (!id) return { ok: true };
+
+  // A song made the default becomes a template in the same write: the toggle is
+  // only offered on templates, but nothing else guarantees the row still is one
+  // by the time this lands.
+  const { data: rows, error } = await supabase
+    .from("songs")
+    .update({ is_template: true, is_default_template: true })
+    .eq("id", id)
+    .eq("owner_id", user.id)
+    .select("id");
+  if (error) return { error: error.message };
+  if (!rows?.length) return { error: "Song not found" };
+  return { ok: true };
+}
+
+/** The default template's session blob, for a studio about to start a new song. */
+export type DefaultTemplate = {
+  id: string;
+  title: string;
+  data: unknown;
+  versionId: string | null;
+};
+
+// What a new session starts from, when the account has said. Returns null
+// rather than an error when there is none -- that is the ordinary case, and the
+// caller's answer to it (the engine's own starter tracks) is already correct.
+export async function getDefaultTemplate(): Promise<{
+  template?: DefaultTemplate | null;
+  error?: string;
+}> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { template: null };
+  const { data, error } = await supabase
+    .from("songs")
+    .select("id,title,data,current_version_id")
+    .eq("owner_id", user.id)
+    .eq("is_default_template", true)
+    .maybeSingle();
+  if (error) return { template: null, error: error.message };
+  if (!data) return { template: null };
+  return {
+    template: {
+      id: data.id as string,
+      title: data.title as string,
+      data: data.data,
+      versionId: (data.current_version_id as string | null) ?? null,
+    },
   };
 }
 

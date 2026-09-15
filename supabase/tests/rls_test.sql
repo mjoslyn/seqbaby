@@ -246,6 +246,76 @@ begin
 end $$;
 rollback;
 
+\echo ''
+\echo '== song templates =='
+
+begin;
+set local role authenticated;
+set local request.jwt.claims = '{"sub":"b0b00000-0000-4000-8000-000000000002","role":"authenticated"}';
+do $$
+declare a uuid; b uuid; n bigint;
+begin
+  insert into public.songs (owner_id, title, data, is_template)
+    values ('b0b00000-0000-4000-8000-000000000002', 'bob template a', '{}', true)
+    returning id into a;
+  insert into public.songs (owner_id, title, data, is_template)
+    values ('b0b00000-0000-4000-8000-000000000002', 'bob template b', '{}', true)
+    returning id into b;
+
+  -- A default that is not a template would be invisible to the UI (the toggle
+  -- is only drawn on templates) and would still be what `new` loads.
+  begin
+    insert into public.songs (owner_id, title, data, is_template, is_default_template)
+      values ('b0b00000-0000-4000-8000-000000000002', 'not a template', '{}',
+              false, true);
+    raise exception 'FAIL  a default that is not a template was accepted';
+  exception when check_violation then
+    raise notice 'PASS  the default template has to be a template';
+  end;
+
+  update public.songs set is_default_template = true where id = a;
+
+  -- Two defaults is the state with no right answer: `new` would start from
+  -- whichever row came back first. The writer clears before it sets, and this
+  -- index is what makes a second tab racing it fail its own write instead.
+  begin
+    update public.songs set is_default_template = true where id = b;
+    raise exception 'FAIL  an account was allowed two default templates';
+  exception when unique_violation then
+    raise notice 'PASS  an account has at most one default template';
+  end;
+
+  -- Clear-then-set, which is what setDefaultTemplate does.
+  update public.songs set is_default_template = false
+   where owner_id = 'b0b00000-0000-4000-8000-000000000002'
+     and is_default_template;
+  update public.songs set is_default_template = true where id = b;
+  select count(*) into n from public.songs
+   where owner_id = 'b0b00000-0000-4000-8000-000000000002'
+     and is_default_template;
+  if n <> 1 then raise exception 'FAIL  clear-then-set left % defaults', n; end if;
+  raise notice 'PASS  moving the default is one row at a time';
+end $$;
+rollback;
+
+-- The index is per owner, not global: one account's default must not stop
+-- another's. Alice is a separate user, so her own default has to be accepted
+-- while bob's exists.
+begin;
+set local role authenticated;
+set local request.jwt.claims = '{"sub":"a11ce000-0000-4000-8000-000000000001","role":"authenticated"}';
+do $$
+declare n bigint;
+begin
+  insert into public.songs (owner_id, title, data, is_template, is_default_template)
+    values ('a11ce000-0000-4000-8000-000000000001', 'alice default', '{}', true, true);
+  select count(*) into n from public.songs
+   where owner_id = 'a11ce000-0000-4000-8000-000000000001' and is_default_template;
+  if n <> 1 then raise exception 'FAIL  alice cannot hold her own default (n=%)', n; end if;
+  raise notice 'PASS  the one-default rule is per account';
+end $$;
+rollback;
+
 -- Structural, like the profile_cards column check: a public-read policy here
 -- would expose every draft behind every published song, and would look like a
 -- reasonable thing to add to match songs_public_read.

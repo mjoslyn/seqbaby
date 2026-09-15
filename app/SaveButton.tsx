@@ -24,6 +24,10 @@ import styles from "@/app/ui.module.css";
 // whichever version is loaded -- the same rule the songs menu follows. Saving
 // under a different name is a different song, so the parent is dropped and that
 // song starts its own tree.
+//
+// A TEMPLATE is the exception: the first save off one always starts a new song,
+// so the field offers a fresh name rather than the template's and the save
+// carries the template's id as its origin instead of as its destination.
 export default function SaveButton() {
   const [ready, setReady] = useState(false);
   const [open, setOpen] = useState(false);
@@ -58,7 +62,10 @@ export default function SaveButton() {
     }
     if (offeredRef.current || title) return;
     offeredRef.current = true;
-    if (openSong.title) return setTitle(openSong.title);
+    // A template's own name is the one name this save must not offer: the save
+    // is a new song, and "techno starter 2" is a poor name for a song and a
+    // confusing neighbour for the template in the list.
+    if (openSong.title && !openSong.isTemplate) return setTitle(openSong.title);
     const name = suggestSongName();
     suggestedRef.current = name;
     if (name) setTitle(name);
@@ -66,10 +73,11 @@ export default function SaveButton() {
 
   // "new" (and a click on the logo) clear the open song. The field must not go
   // on holding the name of the song that was open, or the next save files a
-  // blank session under it.
+  // blank session under it. A template arriving does the same: it is a starting
+  // point, and the song about to be made from it is not called what it is.
   useEffect(() => {
-    if (!openSong.title) setTitle("");
-  }, [openSong.title]);
+    if (!openSong.title || openSong.isTemplate) setTitle("");
+  }, [openSong.title, openSong.isTemplate]);
 
   useEffect(() => {
     if (window.seqbaby) return setReady(true);
@@ -98,19 +106,22 @@ export default function SaveButton() {
     // back to the open song's name first matters -- clearing the field on a
     // loaded song means "save this again", not "rename it to something else".
     const typed = title.trim();
-    const carried = openSong.title.trim();
+    // A template's name is never carried: this save is a new song off it.
+    const carried = openSong.isTemplate ? "" : openSong.title.trim();
     // Generated covers both ways of not naming it: the offered name accepted as
     // it stood, and an empty field. A name the user typed over the offer is
     // theirs, and upserts by title like any other.
     const generated = !carried && (!typed || typed === suggestedRef.current);
     const t = typed || carried || generateSongName(data);
-    const sameSong = t === openSong.title && openSong.versionId;
+    const sameSong =
+      !openSong.isTemplate && t === openSong.title && openSong.versionId;
     const res = await saveNamedSong({
       title: t,
       data,
       isPublic,
       parentVersionId: sameSong ? openSong.versionId : undefined,
       titleGenerated: generated,
+      fromTemplateId: openSong.isTemplate ? openSong.id : undefined,
     });
     setSaving(false);
     if (res.error) return setStatus({ text: res.error, err: true });
@@ -119,10 +130,14 @@ export default function SaveButton() {
     // your song for you has to say what it named it.
     const saved = res.title ?? t;
     setTitle(saved);
+    // What the studio holds now is the song that was just written, not the
+    // template it came from -- so the NEXT save is an ordinary new version of
+    // it. Only the first save off a template detaches.
     setOpenSong({
       id: res.id ?? null,
       title: saved,
       versionId: res.versionId ?? null,
+      isTemplate: false,
     });
     if (isPublic && res.slug) {
       const url = `${location.origin}/?s=${res.slug}`;
@@ -141,7 +156,14 @@ export default function SaveButton() {
             : `Saved as v${res.versionSeq}`,
       });
     }
-  }, [title, isPublic, openSong.title, openSong.versionId]);
+  }, [
+    title,
+    isPublic,
+    openSong.id,
+    openSong.title,
+    openSong.versionId,
+    openSong.isTemplate,
+  ]);
 
   if (!ready) return null;
 
@@ -172,10 +194,18 @@ export default function SaveButton() {
             />
             public — shareable + shown on your profile
           </label>
-          {openSong.title && title.trim() === openSong.title && (
+          {openSong.isTemplate ? (
             <div className={styles.treeHint}>
-              saves as a new version of &ldquo;{openSong.title}&rdquo;
+              starting from template &ldquo;{openSong.title}&rdquo; — this saves
+              as a new song
             </div>
+          ) : (
+            openSong.title &&
+            title.trim() === openSong.title && (
+              <div className={styles.treeHint}>
+                saves as a new version of &ldquo;{openSong.title}&rdquo;
+              </div>
+            )
           )}
           <button
             className={`${styles.smallBtn} ${styles.smallBtnPrimary}`}

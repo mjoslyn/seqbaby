@@ -28,6 +28,9 @@ export default function OpenSongOnLoad() {
         id: res.owned ? id : null,
         title: res.title ?? "",
         versionId: res.owned ? (res.versionId ?? null) : null,
+        // Deep-linking your own template is starting from it, same as opening
+        // one from the songs menu: the first save makes a song of its own.
+        isTemplate: !!res.isTemplate,
       });
       history.replaceState({}, "", location.origin + location.pathname);
     };
