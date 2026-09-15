@@ -519,9 +519,10 @@ export function init() {
   if (metroBtn) {
     metroBtn.innerHTML = ICON_METRONOME;
     // The button is also the click's volume, the way the dice is the density:
-    // drag up/down sets it, drawn as the fill behind the icon. A plain click
-    // still toggles. Remembered per browser, since it is a preference rather
-    // than part of a song.
+    // drag up/down sets it, drawn as the fill behind the icon. Only while the
+    // metronome is on — off, the button is a plain toggle and the fill is
+    // hidden (style.css). Remembered per browser, since it is a preference
+    // rather than part of a song.
     const METRO_LEVEL_KEY = "seqbaby.metronome.v1";
     try {
       const raw = localStorage.getItem(METRO_LEVEL_KEY);
@@ -531,11 +532,14 @@ export function init() {
     const paintMetroLevel = () => {
       const pct = Math.round(state.metronomeLevel * 100);
       metroBtn.style.setProperty("--metro-level", `${pct}%`);
-      metroBtn.title = `metronome click on the downbeat — ${pct}% (drag up/down to set volume)`;
+      metroBtn.title = state.metronome
+        ? `metronome on — ${pct}% (drag up/down to set volume)`
+        : "metronome click on the downbeat";
       metroBtn.setAttribute("aria-valuenow", String(pct));
     };
     paintMetroLevel();
     attachLevelDrag(metroBtn, {
+      enabled: () => state.metronome,
       get: () => state.metronomeLevel,
       set: (v) => {
         state.metronomeLevel = v;
@@ -547,6 +551,7 @@ export function init() {
       if (metroBtn._levelDragged) { metroBtn._levelDragged = false; return; }
       state.metronome = !state.metronome;
       metroBtn.setAttribute("aria-pressed", String(state.metronome));
+      paintMetroLevel();
     });
   }
   const runBounce = async (btnId, mode) => {
