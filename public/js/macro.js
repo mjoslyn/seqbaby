@@ -352,7 +352,7 @@ export function openMacroPads() {
           <div class="sq-macro__padfoot">
             <label class="sq-macro__latch"><input type="checkbox" class="sq-macro__latch-cb"${pad.latch ? " checked" : ""} /> latch</label>
             <span class="sq-macro__hint">${pad.latch
-              ? "the pad keeps what you play — it becomes the sound"
+              ? "the pad keeps what you play: it becomes the sound"
               : "parameters spring back when you let go"}</span>
             <button type="button" class="sq-macro__del sq-btn--ghost">delete pad</button>
           </div>
@@ -372,7 +372,7 @@ export function openMacroPads() {
                   <label class="sq-macro__range">to <input type="number" class="sq-macro__hi" min="0" max="1" step="0.01" value="${a.hi}" /></label>
                   <label class="sq-macro__inv"><input type="checkbox" class="sq-macro__inv-cb"${a.invert ? " checked" : ""} /> flip</label>
                   <button type="button" class="sq-macro__rm sq-btn--ghost" title="remove">×</button>
-                </div>`).join("") : `<div class="sq-macro__empty">nothing on this axis yet — press learn, then touch any knob</div>`}
+                </div>`).join("") : `<div class="sq-macro__empty">nothing on this axis yet. Press learn, then touch any knob</div>`}
             </div>`).join("")}
         </div>
       </div>

@@ -148,7 +148,7 @@ export function openWavetableEditor(t) {
     <div class="sq-wt__harm"></div>
     <div class="sq-wt__uni">
       <label class="sq-wt__uni-wrap">unison
-        <select class="sq-wt__uni-count" title="voices stacked per note — how far apart they are tuned is set by the track's detune slider">
+        <select class="sq-wt__uni-count" title="voices stacked per note. The track's detune slider sets how far apart they are tuned">
           <option value="1">off</option>
           <option value="2" selected>2 voices</option>
           <option value="3">3 voices</option>
@@ -170,7 +170,7 @@ export function openWavetableEditor(t) {
           </select>
         </label>
         <label class="sq-wt__scan-sync-wrap"><input type="checkbox" class="sq-wt__scan-sync" /> sync</label>
-        <label class="sq-wt__scan-retrig-wrap" title="restart the sweep from its start position on every note (off = one free-running sweep every note joins mid-flight)"><input type="checkbox" class="sq-wt__scan-retrig" /> retrig</label>
+        <label class="sq-wt__scan-retrig-wrap" title="restart the sweep from its start position on every note. Off leaves one free-running sweep that notes join mid-flight"><input type="checkbox" class="sq-wt__scan-retrig" /> retrig</label>
         <label class="sq-wt__scan-rate-wrap">speed
           <input type="range" class="sq-wt__scan-rate" min="0.01" max="8" step="0.01" value="0.5" />
         </label>

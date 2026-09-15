@@ -81,11 +81,11 @@ const clampNum = (v, lo, hi) => Math.max(lo, Math.min(hi, Number.isFinite(+v) ? 
  * silently rolling a number that changes nothing.
  */
 const DEAD_DICE = {
-  "no-variance": "nothing in the rhythm is random yet — turn variation, legato or rest up and the dice has something to throw",
-  "no-pitch": "no semitone is raised — the melody dice has nothing to choose from",
-  "one-pitch": "only one pitch is playable — raise another semitone, or widen the range",
-  "no-notes": "the part is all rests — there is no note for the melody dice to pitch",
-  same: "every throw comes out the same here — there are too few outcomes to choose between",
+  "no-variance": "nothing in the rhythm is random yet. Turn variation, legato or rest up and the dice has something to throw",
+  "no-pitch": "no semitone is raised, so the melody dice has nothing to choose from",
+  "one-pitch": "only one pitch is playable. Raise another semitone, or widen the range",
+  "no-notes": "the part is all rests, so there is no note for the melody dice to pitch",
+  same: "every throw comes out the same here. Too few outcomes to choose between",
 };
 
 // ---- the track's settings ------------------------------------------------
@@ -511,13 +511,13 @@ function drawChanceViz(t, panelEl) {
   const hint = panel.querySelector(".sq-chance__hint");
   if (hint) {
     let s = !cand.total
-      ? "no semitone is raised — nothing to choose from, so every note is the bottom of the range"
+      ? "no semitone is raised, so every note is the bottom of the range"
       : c.on
         ? `generating live${win < len ? `, the window tiling across the track's ${len} steps` : ""}`
-          + " — the grid is read-only until you switch it off"
+          + ". The grid is read-only until you switch it off"
         : `the window is ${win} of the track's ${len} steps`;
     const free = [c.rfree && "rhythm", c.mfree && "melody"].filter(Boolean);
-    if (free.length) s += ` · ${free.join(" + ")} realtime, so a new throw every pass — this is one of them`;
+    if (free.length) s += ` · ${free.join(" + ")} realtime, so a new throw every pass. This is one of them`;
     hint.textContent = s;
   }
 
@@ -642,7 +642,7 @@ export function wireChancePanel(t, panel) {
       changed();
       setStatus(`"${t.name}" — semitones set from ${state.scale.mode}`);
     } else {
-      setStatus("no scale is active — pick one in the top bar first");
+      setStatus("no scale is active. Pick one in the top bar first");
     }
   });
   panel.querySelector(".sq-chance__clear-pcs")?.addEventListener("click", () => {

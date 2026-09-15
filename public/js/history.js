@@ -436,7 +436,9 @@ function scheduleCheck(label, key) {
   settleTimer = setTimeout(checkForEdit, SETTLE_MS);
 }
 
-const firstClause = (s) => String(s || "").split(/[—.(]/)[0].trim().slice(0, 40);
+// Tooltips break their first clause with a colon or a full stop (they used to
+// use an em dash), so both end the name here.
+const firstClause = (s) => String(s || "").split(/[:.(]/)[0].trim().slice(0, 40);
 
 /** A short name for the control an event landed on, for the tooltip. Reads the
  *  same places the right-click parameter menu does, in the same order, so the
@@ -510,12 +512,12 @@ function refreshHistoryUI() {
   if (u) {
     u.disabled = !stack.canUndo();
     const what = stack.undoLabel();
-    u.title = (stack.canUndo() ? `undo ${what}`.trim() : "nothing to undo") + " — ctrl/⌘ Z";
+    u.title = (stack.canUndo() ? `undo ${what}`.trim() : "nothing to undo") + " (ctrl/⌘ Z)";
   }
   if (r) {
     r.disabled = !stack.canRedo();
     const what = stack.redoLabel();
-    r.title = (stack.canRedo() ? `redo ${what}`.trim() : "nothing to redo") + " — ctrl/⌘ shift Z";
+    r.title = (stack.canRedo() ? `redo ${what}`.trim() : "nothing to redo") + " (ctrl/⌘ shift Z)";
   }
 }
 

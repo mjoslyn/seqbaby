@@ -278,7 +278,7 @@ async function pressNote(k, midi) {
 export function captureSequence() {
   const t = targetTrack();
   if (!t) return { ok: false, msg: "no active track" };
-  if (!captureBuffer.length) return { ok: false, msg: "nothing to capture — play some keys first" };
+  if (!captureBuffer.length) return { ok: false, msg: "nothing to capture. Play some keys first" };
   // Isolate the last contiguous phrase (after any gap > CAPTURE_GAP_SEC).
   let start = 0;
   for (let i = captureBuffer.length - 1; i > 0; i--) {

@@ -101,12 +101,12 @@ export function renderRollPanel(t, panel) {
   const xform = document.createElement("span");
   xform.className = "sq-roll__transforms";
   xform.innerHTML = `
-    <button class="sq-btn--ghost sq-icon-btn" data-x="rand" title="random melody (replaces this pattern)" aria-label="random melody">${ICON_DICE}</button>
-    <button class="sq-btn--ghost" data-x="up" title="shift all notes up one (scale-aware)">+1</button>
-    <button class="sq-btn--ghost" data-x="x2" title="double pattern length (tile)">x2</button>
-    <button class="sq-btn--ghost" data-x="x4" title="quadruple pattern length (tile)">x4</button>
-    <button class="sq-btn--ghost" data-x="/2" title="halve pattern length (truncate)">/2</button>
-    <button class="sq-btn--ghost" data-x="/4" title="quarter pattern length (truncate)">/4</button>
+    <button class="sq-btn--ghost sq-icon-btn" data-x="rand" title="random melody, replacing this pattern" aria-label="random melody">${ICON_DICE}</button>
+    <button class="sq-btn--ghost" data-x="up" title="shift all notes up one, following the scale">+1</button>
+    <button class="sq-btn--ghost" data-x="x2" title="double the pattern length, tiling what is there">x2</button>
+    <button class="sq-btn--ghost" data-x="x4" title="quadruple the pattern length, tiling what is there">x4</button>
+    <button class="sq-btn--ghost" data-x="/2" title="halve the pattern length, keeping the first half">/2</button>
+    <button class="sq-btn--ghost" data-x="/4" title="quarter the pattern length, keeping the first quarter">/4</button>
   `;
   xform.querySelectorAll("button").forEach(b => b.addEventListener("click", () => {
     const x = b.dataset.x;

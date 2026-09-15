@@ -51,10 +51,10 @@ const STEP_CELLS = 16;
 // getting started, this one has a longer read and a wider brief — but they're
 // worth glancing at together when either is edited.
 const TIPS: Array<[scope: "any" | "touch" | "desktop", text: string]> = [
-  ["any", "each track keeps its own sound per pattern — hit p-lock to pin it"],
+  ["any", "each track can keep its own sound per pattern: hit p-lock to pin it"],
   ["any", "the ring button beside the dice builds euclidean rhythms"],
   ["any", "drag the dice up or down to set how full it rolls"],
-  ["any", "32 pattern slots per session — loop one or chain them"],
+  ["any", "32 pattern slots per session: loop one or chain them"],
   ["any", "add an fx bus and route several tracks through one reverb"],
   ["any", "macro pads drive parameters across tracks from one xy pad"],
   ["any", "swap engines mid-session from the track header dropdown"],

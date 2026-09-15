@@ -25,59 +25,59 @@ export function plaitsEntries() {
 // these on the fields as tooltips, and the right-click parameter menu reads them
 // from there.
 const PLAITS_LPG_DECAY =
-  "the internal low-pass gate: how long each trigger rings, and how far the tone closes down as it falls away";
+  "the internal low-pass gate: how long each trigger rings, and how far the tone closes as it falls away";
 const PLAITS_DRUM_DECAY =
-  "the low-pass gate's decay, on top of the model's own — pull it down for a tighter hit";
+  "the low-pass gate's decay, on top of the model's own. Pull it down for a tighter hit";
 export const PLAITS_MACRO_TIPS = [
   { // 0 virtual analog
-    harm: "detuning between the two oscillators — one fat tone at zero, a beating pair by the top",
-    timb: "pulse width of the square, from a thin nasal pulse out to a hollow square",
-    morph: "the second wave's shape, sweeping from triangle through saw with a widening notch",
+    harm: "detuning between the two oscillators. One fat tone at zero, a beating pair at the top",
+    timb: "pulse width of the square, from thin and nasal out to hollow",
+    morph: "the second wave's shape, sweeping triangle to saw with a widening notch",
     decay: PLAITS_LPG_DECAY },
   { // 1 waveshaping
     harm: "which waveshaping curve the oscillator is pushed through",
-    timb: "wavefolder amount — the further up, the more times the wave folds back on itself and the more harmonics come out of it",
-    morph: "asymmetry of the waveform, which is what brings the even harmonics in",
+    timb: "wavefolder amount. The further up, the more times the wave folds back on itself and the more harmonics come out",
+    morph: "asymmetry of the waveform, which brings the even harmonics in",
     decay: PLAITS_LPG_DECAY },
   { // 2 fm
-    harm: "frequency ratio between the two operators. Whole-number ratios stay harmonic; everything in between goes bell-like and clangorous",
-    timb: "modulation index — how hard operator 2 drives operator 1, so how bright and how wide the sidebands spread",
-    morph: "feedback: below centre operator 2 modulates operator 1 harder, above it feeds back into itself — both ends head toward noise",
+    harm: "frequency ratio between the two operators. Whole numbers stay harmonic, everything in between goes bell-like",
+    timb: "modulation index: how hard operator 2 drives operator 1, so how bright the tone is and how wide the sidebands spread",
+    morph: "feedback. Below centre operator 2 modulates operator 1 harder, above it feeds back into itself. Both ends head toward noise",
     decay: PLAITS_LPG_DECAY },
   { // 3 grain
     harm: "ratio between the two formant frequencies",
-    timb: "formant frequency — the resonant peak the grains are shaped around, which is what makes this one sound vocal",
+    timb: "formant frequency: the resonant peak the grains are shaped around, and what makes this one sound vocal",
     morph: "shape and width of the grain window",
     decay: PLAITS_LPG_DECAY },
   { // 4 additive
     harm: "how the energy is grouped across the harmonic series",
-    timb: "sweeps the emphasised peak up and down that series — the drawbar sweep",
-    morph: "how wide the peak spreads, from something close to a sine out to a full stack",
+    timb: "sweeps the emphasised peak up and down that series, like drawbars",
+    morph: "how wide the peak spreads, from close to a sine out to a full stack",
     decay: PLAITS_LPG_DECAY },
   { // 5 wavetable
     harm: "which bank of wavetables is read",
     timb: "position along the wavetable map",
-    morph: "position across the map's other axis. The two together pick the wave, and neither moves smoothly — that steppiness is the model",
+    morph: "position across the map's other axis. The two together pick the wave, and neither moves smoothly. The steppiness is the model",
     decay: PLAITS_LPG_DECAY },
   { // 6 chord
-    harm: "which chord is played — this model sounds four voices at once and this picks the intervals",
+    harm: "which chord is played. The model sounds four voices at once and this picks the intervals",
     timb: "the chord's inversion and how far it spreads",
-    morph: "the waveform those four voices use, from sine up through richer waves",
+    morph: "the waveform those four voices use, from sine up through richer ones",
     decay: PLAITS_LPG_DECAY },
   { // 7 speech
     harm: "the sound bank: formant filtering at the bottom, then the vintage speech-synth modes and their word lists",
-    timb: "species — shifts the formants, so the same phoneme reads as a different size of voice",
+    timb: "species: shifts the formants, so the same phoneme reads as a different size of voice",
     morph: "which phoneme or word comes out",
     decay: PLAITS_LPG_DECAY },
   { // 8 swarm
     harm: "how far the swarm's voices scatter in pitch",
-    timb: "density of the swarm — how many grains, how often",
+    timb: "density of the swarm: how many grains, how often",
     morph: "grain duration and envelope shape",
     decay: PLAITS_LPG_DECAY },
   { // 9 noise
     harm: "spacing between the two resonant peaks the noise is filtered through",
     timb: "where those peaks sit",
-    morph: "how narrow they are — wide is a wash, narrow is a pitched whistle",
+    morph: "how narrow they are. Wide is a wash, narrow is a pitched whistle",
     decay: PLAITS_LPG_DECAY },
   { // 10 particle
     harm: "how far each particle's pitch is randomised",
@@ -85,29 +85,29 @@ export const PLAITS_MACRO_TIPS = [
     morph: "resonance and ring of the filter each particle is fired through",
     decay: PLAITS_LPG_DECAY },
   { // 11 string
-    harm: "inharmonicity — how stiff the string is, from a clean harmonic series to a dull, bell-like one",
+    harm: "inharmonicity: how stiff the string is, from a clean harmonic series to a dull, bell-like one",
     timb: "brightness of the excitation that plucks it",
     morph: "how long it rings",
     decay: PLAITS_LPG_DECAY },
   { // 12 modal
-    harm: "the material's inharmonicity — the difference between a tube, a bar and a bell",
+    harm: "the material's inharmonicity: the difference between a tube, a bar and a bell",
     timb: "brightness and grit of the strike",
     morph: "how long the resonator rings",
     decay: PLAITS_LPG_DECAY },
   { // 13 bass drum
     harm: "attack sharpness, and how hard the drum is overdriven",
-    timb: "brightness — the balance of click against body",
+    timb: "brightness: the balance of click against body",
     morph: "the drum's own decay",
     decay: PLAITS_DRUM_DECAY },
   { // 14 snare drum
     harm: "balance between the drum's tone and its noise",
-    timb: "brightness — how much of the noise is filtered away",
+    timb: "brightness: how much of the noise is filtered away",
     morph: "the drum's own decay",
     decay: PLAITS_DRUM_DECAY },
   { // 15 hi hat
     harm: "balance between the metallic cluster and plain noise",
     timb: "brightness of the filter that cluster runs through",
-    morph: "decay — closed hat at the bottom, open at the top",
+    morph: "decay. Closed hat at the bottom, open at the top",
     decay: PLAITS_DRUM_DECAY },
 ];
 
@@ -120,34 +120,34 @@ export const PLAITS_MACRO_TIPS = [
 // they go with.)
 export const ENGINE_MACRO_TIPS = {
   "dm:snarl": {
-    harm: "speed of the LFO sweeping the pulse wave's width, and its depth, on one control — at zero the pulse holds still",
+    harm: "speed and depth of the LFO sweeping the pulse width, on one control. At zero the pulse holds still",
     timb: "the pulse wave's resting width, from a thin nasal 10% out to a hollow square. The pwm rate slider sweeps around wherever this sits",
     osc: {
-      osc1: "level of the sawtooth — the snarl's main voice",
+      osc1: "level of the sawtooth, the snarl's main voice",
       osc2: "level of the pulse wave, shaped by the two pw controls",
-      osc3: "level of the triangle, which is what the metalizer folds",
+      osc3: "level of the triangle, the one the metalizer folds",
       osc4: "level of the sub oscillator, an octave below",
     },
     oscMod: {
-      ultra: "ultrasaw: detuned copies stacked around the saw, for width out of a single oscillator",
-      fm: "audio-rate frequency modulation from the sub — clangorous and metallic as it climbs",
+      ultra: "ultrasaw: detuned copies stacked around the saw, for width out of one oscillator",
+      fm: "audio-rate frequency modulation from the sub. Clangorous and metallic as it climbs",
       metal: "metalizer: folds the triangle back on itself into hard upper harmonics",
     },
   },
   "dm:ladder": {
     harm: "how far oscillator 2 sits off oscillator 1, 5 to 30 cents. The slow beat between them is most of why the stack sounds thick",
-    decay: "one control doing two things: how long a note takes to fall away, and how much of the warming filter stage is mixed in as it does",
+    decay: "two things at once: how long a note takes to fall away, and how much of the warming filter stage is mixed in as it does",
     osc: {
       osc1: "level of oscillator 1 in the mixer",
-      osc2: "level of oscillator 2 — the detuned one",
+      osc2: "level of oscillator 2, the detuned one",
       osc3: "level of oscillator 3, usually dropped an octave for weight",
     },
   },
   "dm:drift": {
-    harm: "speed and depth of the LFO sweeping the DCO's pulse width — the drift's built-in movement",
+    harm: "speed and depth of the LFO sweeping the DCO's pulse width. The drift's built-in movement",
     timb: "the pulse's resting width, which that sweep moves around",
-    morph: "the chorus, wet and depth together. It is what a drift sounds like; almost nobody turns it off",
-    decay: "how long a note falls away — and the high-pass with it, so the sound thins as it shortens",
+    morph: "the chorus, wet and depth together. It is most of what a drift sounds like",
+    decay: "how long a note falls away, and the high-pass with it, so the sound thins as it shortens",
     osc: {
       osc1: "level of the main DCO",
       osc2: "level of the square sub, an octave below",
@@ -155,34 +155,34 @@ export const ENGINE_MACRO_TIPS = {
     },
   },
   "dm:tines": {
-    harm: "the ratio between the tine and the tone bar — low is deep and hollow, high goes bell-like",
-    timb: "how hard the hammer hits, so how much of that metallic attack comes through",
-    morph: "how much chorus is on the output — the stereo shimmer",
+    harm: "the ratio between the tine and the tone bar. Low is deep and hollow, high goes bell-like",
+    timb: "how hard the hammer hits, so how much metallic attack comes through",
+    morph: "how much chorus is on the output. The stereo shimmer",
     decay: "how long each note rings, and how long it takes to let go once released",
   },
   "dm:oracle": {
-    harm: "detunes VCO2 against VCO1 by up to 30 cents either way. Centre is unison; the ends beat",
+    harm: "detunes VCO2 against VCO1 by up to 30 cents either way. Centre is unison, the ends beat",
     timb: "crossfades VCO2 from saw to pulse, sweeping the pulse width as it goes",
     morph: "how much of the output runs through the overdrive stage",
     decay: "how long each note falls away, and its release with it",
     osc: {
       osc1: "level of VCO1",
-      osc2: "level of VCO2 — the detuned one the shape control sweeps",
+      osc2: "level of VCO2, the detuned one the shape control sweeps",
       osc3: "level of the sub oscillator",
       osc4: "level of the noise source",
     },
   },
   "wt:akwf": {
-    harm: "position across the table, morphing between the frames — the ones you drew in the editor, or the AKWF palette. Wave scan can sweep this on its own",
-    timb: "a lowpass on each voice, on top of the track filter: dark at the bottom, fully open at the top",
-    morph: "how far the stacked unison voices spread in pitch, up to ±30 cents. Zero is a single clean voice",
+    harm: "position across the table, morphing between the frames you drew in the editor or the AKWF palette. Wave scan can sweep this on its own",
+    timb: "a lowpass on each voice, on top of the track filter. Dark at the bottom, wide open at the top",
+    morph: "how far the stacked unison voices spread in pitch, up to ±30 cents. Zero is one clean voice",
     decay: "how long each note takes to fall away, and its release",
   },
   "dm:contagion": {
     osc: {
       osc1: "level of oscillator 1",
-      osc2: "level of oscillator 2 — the one semi, detune and sync act on",
-      osc3: "level of the sub oscillator, an octave under osc 1 (its shape is the sub select)",
+      osc2: "level of oscillator 2, the one semi, detune and sync act on",
+      osc3: "level of the sub oscillator, an octave under osc 1. Its shape is the sub select",
       osc4: "level of the noise source. Squared, so the bottom of the slider stays usable",
     },
   },

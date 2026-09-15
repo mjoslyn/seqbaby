@@ -44,7 +44,7 @@ export function renderPatternGrid() {
     if (i === state.activePattern) cell.classList.add("is-active");
     if (i === state.queuedPattern) cell.classList.add("is-queued");
     cell.textContent = String(i + 1);
-    cell.title = `pattern ${i + 1} — drag onto another slot to copy it there and go to it`;
+    cell.title = `pattern ${i + 1}. Drag onto another slot to copy it there and go to it`;
     cell.draggable = true;
     cell.dataset.patternIdx = String(i);
     cell.addEventListener("click", () => requestPatternSwitch(i));

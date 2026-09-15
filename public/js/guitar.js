@@ -709,7 +709,7 @@ export function guitarFromUnit(k, u) {
 // only useful thing to know at picking time.
 const TONES = {
   "surf twang": {
-    d: "bridge single coil, a clean blackface combo, deep amp tremolo and a tank full of spring — the reverb IS the sound",
+    d: "bridge single coil, a clean blackface combo, deep amp tremolo and a tank full of spring. The reverb is the sound",
     drive: 0.18, tone: 0.86, bloom: 0.1, sustain: 0.42,
     p: { pick: 0.1, pnoise: 0.85, stiff: 0.3, pkup: 0.06, mute: 0.1,
          bass: 0.5, mid: 0.35, treb: 0.78, pres: 0.55, mast: 0.4, sag: 0.25,
@@ -717,7 +717,7 @@ const TONES = {
          amp: "clean", cab: "2x12", pkupt: "single", tremw: "sine" },
   },
   "funk clean": {
-    d: "bridge single coil into a clean amp with the mids pulled out, picked hard and short — the sixteenth-note chank of every disco record",
+    d: "bridge single coil into a clean amp with the mids pulled out, picked hard and short. The sixteenth-note chank of every disco record",
     drive: 0.22, tone: 0.8, bloom: 0.05, sustain: 0.18,
     p: { pick: 0.08, pnoise: 0.9, stiff: 0.35, pkup: 0.05, mute: 0.3,
          bass: 0.35, mid: 0.3, treb: 0.75, pres: 0.6, mast: 0.45, sag: 0.2,
@@ -725,7 +725,7 @@ const TONES = {
          amp: "clean", cab: "1x12", pkupt: "single", tremw: "sine" },
   },
   "jangle": {
-    d: "neck and bridge together, barely breaking up, picked over the neck — chiming sixties pop and everything that borrowed from it",
+    d: "neck and bridge together, barely breaking up, picked over the neck. Chiming sixties pop and everything that borrowed from it",
     drive: 0.34, tone: 0.72, bloom: 0.12, sustain: 0.55,
     p: { pick: 0.32, pnoise: 0.55, stiff: 0.2, pkup: 0.2, mute: 0,
          bass: 0.45, mid: 0.55, treb: 0.68, pres: 0.5, mast: 0.5, sag: 0.35,
@@ -741,7 +741,7 @@ const TONES = {
          amp: "brit", cab: "2x12", pkupt: "single", tremw: "sine" },
   },
   "country twang": {
-    d: "bridge pickup, picked by the bridge, clean and compressed with a fast decay — the sound of a telecaster and a plectrum held too tight",
+    d: "bridge pickup, picked by the bridge, clean and compressed with a fast decay. A telecaster and a plectrum held too tight",
     drive: 0.26, tone: 0.9, bloom: 0.05, sustain: 0.3,
     p: { pick: 0.05, pnoise: 1, stiff: 0.4, pkup: 0.04, mute: 0.25,
          bass: 0.4, mid: 0.45, treb: 0.82, pres: 0.7, mast: 0.5, sag: 0.45,
@@ -757,7 +757,7 @@ const TONES = {
          amp: "tweed", cab: "2x12", pkupt: "single", tremw: "sine" },
   },
   "brit stack": {
-    d: "bridge humbucker into a cranked plexi and a 4x12 — the riff sound of the seventies, and mostly power amp rather than preamp",
+    d: "bridge humbucker into a cranked plexi and a 4x12. The riff sound of the seventies, and mostly power amp rather than preamp",
     drive: 0.68, tone: 0.68, bloom: 0.42, sustain: 0.66,
     p: { pick: 0.16, pnoise: 0.7, stiff: 0.3, pkup: 0.09, mute: 0.12,
          bass: 0.5, mid: 0.7, treb: 0.6, pres: 0.6, mast: 0.9, sag: 0.55,
@@ -765,7 +765,7 @@ const TONES = {
          amp: "brit", cab: "4x12", pkupt: "hum", tremw: "sine" },
   },
   "rolled off": {
-    d: "neck humbucker with the guitar's tone knob rolled all the way down, into a cranked amp — dark, vocal, no pick attack at all",
+    d: "neck humbucker with the guitar's tone knob rolled right down, into a cranked amp. Dark, vocal, no pick attack at all",
     drive: 0.74, tone: 0.12, bloom: 0.55, sustain: 0.8,
     p: { pick: 0.42, pnoise: 0.25, stiff: 0.18, pkup: 0.36, mute: 0,
          bass: 0.6, mid: 0.72, treb: 0.5, pres: 0.35, mast: 0.85, sag: 0.6,
@@ -789,7 +789,7 @@ const TONES = {
          amp: "brit", cab: "4x12", pkupt: "hum", tremw: "sine" },
   },
   "scooped metal": {
-    d: "hi-gain with the mids taken out and the low end cut tight, palm muted — the eighties bay-area rhythm sound",
+    d: "hi-gain with the mids taken out and the low end cut tight, palm muted. The eighties bay-area rhythm sound",
     drive: 0.88, tone: 0.72, bloom: 0.2, sustain: 0.5,
     p: { pick: 0.06, pnoise: 0.9, stiff: 0.4, pkup: 0.05, mute: 0.55,
          bass: 0.7, mid: 0.12, treb: 0.78, pres: 0.75, mast: 0.6, sag: 0.15,
@@ -805,7 +805,7 @@ const TONES = {
          amp: "hi", cab: "4x12", pkupt: "hum", tremw: "sine" },
   },
   "grunge": {
-    d: "a brit amp pushed into mush with the mids up and the strings picked hard — loose, honking, and not remotely tidy",
+    d: "a brit amp pushed into mush with the mids up and the strings picked hard. Loose, honking and not remotely tidy",
     drive: 0.8, tone: 0.55, bloom: 0.3, sustain: 0.45,
     p: { pick: 0.14, pnoise: 0.95, stiff: 0.45, pkup: 0.16, mute: 0.2,
          bass: 0.65, mid: 0.72, treb: 0.62, pres: 0.5, mast: 0.7, sag: 0.6,
@@ -813,7 +813,7 @@ const TONES = {
          amp: "brit", cab: "4x12", pkupt: "hum", tremw: "sine" },
   },
   "jazz box": {
-    d: "neck humbucker, thumb rather than pick, tone rolled back and an amp that never breaks up — round, dark, no top end at all",
+    d: "neck humbucker, thumb rather than pick, tone rolled back and an amp that never breaks up. Round, dark, no top end at all",
     drive: 0.12, tone: 0.24, bloom: 0.05, sustain: 0.5,
     p: { pick: 0.46, pnoise: 0.12, stiff: 0.12, pkup: 0.4, mute: 0,
          bass: 0.6, mid: 0.6, treb: 0.35, pres: 0.15, mast: 0.4, sag: 0.2,

@@ -192,27 +192,27 @@ export function openGranularWavModal(t) {
     <div class="sq-gwav__hint">drag the window\u2019s middle to move it, its edges to resize \u00b7 click elsewhere to jump there</div>
     <div class="sq-gwav__ctl">
       <div class="sq-gwav__ctl-row">
-        <label title="grain length. Short grains rattle and buzz; long ones overlap into a smooth wash">grain <input type="range" class="gw-harm" min="0" max="1" step="0.01" /></label>
-        <label title="grains per second, 8 to 90. Ignored while sync is on — rate takes over">dense <input type="range" class="gw-timb" min="0" max="1" step="0.01" /></label>
+        <label title="grain length. Short grains rattle and buzz, long ones overlap into a wash">grain <input type="range" class="gw-harm" min="0" max="1" step="0.01" /></label>
+        <label title="grains per second, 8 to 90. Ignored while sync is on, where rate takes over">dense <input type="range" class="gw-timb" min="0" max="1" step="0.01" /></label>
         <label title="play position in the sample. Dragging the window in the wave editor sets this too">pos <input type="range" class="gw-morph" min="0" max="1" step="0.01" /></label>
-        <label title="diffusion macro: widens the window, loosens the jitter and adds detune, all at once. Leave it at zero if you want a tight, in-tune cloud">spray <input type="range" class="gw-decay" min="0" max="1" step="0.01" /></label>
+        <label title="diffusion: widens the window, loosens the jitter and adds detune together. Leave it at zero for a tight, in-tune cloud">spray <input type="range" class="gw-decay" min="0" max="1" step="0.01" /></label>
       </div>
       <div class="sq-gwav__ctl-row">
-        <label title="fixed = every grain reads from one spot; moving = the play head scans through the sample">play <select class="gw-gplay"><option value="fixed">fixed</option><option value="moving">moving</option></select></label>
-        <label title="how fast the play head travels through the sample, when play is set to moving. 1 = the sample's own speed, 0 = frozen, negative = backwards, up to 2x either way. Pitch is unaffected">speed <input type="range" class="gw-gspeed" min="-2" max="2" step="0.01" /></label>
-        <label title="transposes every grain, in semitones, up or down two octaves. Independent of speed — the sample still plays through in the same time">pitch <input type="range" class="gw-gpitch" min="-24" max="24" step="1" /></label>
+        <label title="fixed reads every grain from one spot. Moving scans the play head through the sample">play <select class="gw-gplay"><option value="fixed">fixed</option><option value="moving">moving</option></select></label>
+        <label title="how fast the play head travels through the sample, when play is set to moving. 1 is the sample's own speed, 0 is frozen, negative runs backwards, up to 2x either way. Pitch is unaffected">speed <input type="range" class="gw-gspeed" min="-2" max="2" step="0.01" /></label>
+        <label title="transposes every grain, in semitones, up or down two octaves. Independent of speed, so the sample still plays through in the same time">pitch <input type="range" class="gw-gpitch" min="-24" max="24" step="1" /></label>
         <label title="what the moving play head does at the end of the sample: stop, wrap to the start, or bounce back">loop <select class="gw-gloop"><option value="none">none</option><option value="fwd">fwd</option><option value="bidir">bidir</option></select></label>
       </div>
       <div class="sq-gwav__ctl-row">
-        <label title="how far each grain may stray from the play head — the band drawn across the waveform. Narrow reads one instant over and over; at 100% the band is the whole sample, so grains come from anywhere in it">window <input type="range" class="gw-gwindow" min="0" max="1" step="0.01" /></label>
-        <label title="randomises when each grain fires. At zero the grain train is perfectly regular and hums a tone at the grain rate; raise it to break that up into texture">jitter <input type="range" class="gw-gjitter" min="0" max="1" step="0.01" /></label>
-        <label title="random pitch per grain, up to a semitone either way — thickens a cloud into a chorus">detune <input type="range" class="gw-gdetune" min="0" max="1" step="0.01" /></label>
-        <label title="random stereo placement per grain — widens the cloud without touching its tone">pan <input type="range" class="gw-gpan" min="0" max="1" step="0.01" /></label>
+        <label title="how far each grain may stray from the play head: the band drawn across the waveform. Narrow reads one instant over and over. At 100% grains come from anywhere in the sample">window <input type="range" class="gw-gwindow" min="0" max="1" step="0.01" /></label>
+        <label title="randomises when each grain fires. At zero the train is perfectly regular and hums a tone at the grain rate. Raise it to break that into texture">jitter <input type="range" class="gw-gjitter" min="0" max="1" step="0.01" /></label>
+        <label title="random pitch per grain, up to a semitone either way. Thickens a cloud into a chorus">detune <input type="range" class="gw-gdetune" min="0" max="1" step="0.01" /></label>
+        <label title="random stereo placement per grain. Widens the cloud without touching its tone">pan <input type="range" class="gw-gpan" min="0" max="1" step="0.01" /></label>
       </div>
       <div class="sq-gwav__ctl-row">
-        <label title="sprinkles octave or fifth jumps across the grains, for a harmonised cloud rather than a flat one">pattern <select class="gw-gpattern"><option value="none">none</option><option value="oct">octaves</option><option value="fifth">fifths</option></select></label>
-        <label class="gw-sync-wrap" title="lock the grain rate to the tempo instead of the dense slider — rhythmic granulation rather than a wash"><input type="checkbox" class="gw-gsync" /> sync</label>
-        <label title="grain rate as a division of the tempo, used while sync is on (dense does nothing then)">rate <select class="gw-grate">
+        <label title="sprinkles octave and fifth jumps across the grains, for a harmonised cloud rather than a flat one">pattern <select class="gw-gpattern"><option value="none">none</option><option value="oct">octaves</option><option value="fifth">fifths</option></select></label>
+        <label class="gw-sync-wrap" title="lock the grain rate to the tempo instead of the dense slider, for rhythmic granulation rather than a wash"><input type="checkbox" class="gw-gsync" /> sync</label>
+        <label title="grain rate as a division of the tempo, while sync is on. Dense does nothing then">rate <select class="gw-grate">
           <option value="1/64">1/64</option><option value="1/32t">1/32T</option><option value="1/32">1/32</option>
           <option value="1/16t">1/16T</option><option value="1/16">1/16</option><option value="1/8t">1/8T</option>
           <option value="1/8">1/8</option><option value="1/4t">1/4T</option><option value="1/4">1/4</option>
@@ -1031,7 +1031,7 @@ export function openStepEditor(t, idx, anchorEl) {
     <div class="sq-se__field sq-se__arp-row" hidden>
       <label>arp</label>
       <div class="sq-se__arp-selects">
-        <select class="se-arp-rate" title="arp rate (beats per note)">
+        <select class="se-arp-rate" title="arp rate, in beats per note">
           <option value="1">1/4</option>
           <option value="0.5">1/8</option>
           <option value="0.333">1/8t</option>
@@ -1094,11 +1094,11 @@ export function openStepEditor(t, idx, anchorEl) {
               <option value="pingpong">ping-pong</option>
             </select>
           </label>
-          <label class="sq-se__smp-pitchlock" title="Ignore the step note and play the sample at its fit/natural rate — keeps bpm-fitted loops on the grid. Uncheck to let notes transpose the sample.">
+          <label class="sq-se__smp-pitchlock" title="ignore the step note and play the sample at its fit or natural rate, which keeps bpm-fitted loops on the grid. Uncheck to let notes transpose it.">
             <input class="se-smp-pitchlock" type="checkbox" /> pitch lock
           </label>
           <button class="sq-se__preview" type="button">preview</button>
-          <button class="se-apply-all sq-btn--ghost" type="button" title="apply these sample settings to every step on this track and use as the default for new steps">apply to all</button>
+          <button class="se-apply-all sq-btn--ghost" type="button" title="apply these settings to every step on this track, and to new steps from now on">apply to all</button>
         </div>
         <div class="sq-se__sample-fade">
           <label>fade in <input class="se-smp-fade-in" type="range" min="0" max="2" step="0.01" value="0" /><span class="se-smp-fade-in-lbl">0 ms</span></label>

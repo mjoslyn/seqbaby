@@ -685,8 +685,8 @@ export function init() {
   const syncModeLabel = () => {
     modeBtn.innerHTML = state.patternMode === "chain" ? ICON_CHAIN : ICON_REPEAT;
     modeBtn.title = state.patternMode === "chain"
-      ? "chain: advance through non-empty patterns (click to switch to repeat)"
-      : "repeat: loop current pattern (click to switch to chain)";
+      ? "chain: play through the non-empty patterns. Click for repeat"
+      : "repeat: loop the current pattern. Click for chain";
     modeBtn.setAttribute("aria-pressed", String(state.patternMode === "chain"));
   };
   syncModeLabel();
@@ -699,8 +699,8 @@ export function init() {
     const syncSwitchLabel = () => {
       switchBtn.innerHTML = state.patternSwitchMode === "finish" ? ICON_FINISH : ICON_NOW;
       switchBtn.title = state.patternSwitchMode === "finish"
-        ? "switch: finish — wait for the current bar to end before switching"
-        : "switch: now — switch patterns immediately";
+        ? "switch: finish. Waits for the current bar to end"
+        : "switch: now. Changes pattern immediately";
       switchBtn.setAttribute("aria-pressed", String(state.patternSwitchMode === "finish"));
     };
     syncSwitchLabel();
