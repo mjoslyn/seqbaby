@@ -11,6 +11,7 @@ import {
 } from "@/app/songs/actions";
 import { layoutVersions } from "@/app/songs/versionTree";
 import styles from "@/app/ui.module.css";
+import { IconTag, IconFork, IconTrash } from "@/app/menuIcons";
 
 type Node = { v: SongVersion; depth: number; branch: boolean };
 
@@ -146,22 +147,25 @@ export default function VersionTree({
               className={styles.iconBtn}
               onClick={() => rename(v)}
               title="name this version"
+              aria-label="name this version"
             >
-              name
+              <IconTag />
             </button>
             <button
               className={styles.iconBtn}
               onClick={() => fork(v)}
               title="fork this version into a song of its own"
+              aria-label="fork"
             >
-              fork
+              <IconFork />
             </button>
             <button
               className={styles.iconBtn}
               onClick={() => prune(v)}
               title="delete this version (only if nothing branches off it)"
+              aria-label="delete"
             >
-              del
+              <IconTrash />
             </button>
           </div>
         );

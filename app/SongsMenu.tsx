@@ -26,6 +26,14 @@ import {
 import { generateSongName } from "@/app/songs/songName";
 import { suggestSongName } from "@/app/songs/suggestName";
 import VersionTree from "@/app/VersionTree";
+import {
+  IconDefault,
+  IconTemplate,
+  IconHistory,
+  IconFork,
+  IconLink,
+  IconTrash,
+} from "@/app/menuIcons";
 import styles from "@/app/ui.module.css";
 
 // Client island that bridges the React shell to the vanilla engine via
@@ -337,8 +345,9 @@ export default function SongsMenu() {
                 ? "new songs start from this — click to stop"
                 : "make this what a new song starts from"
             }
+            aria-label="default template"
           >
-            dflt
+            <IconDefault on={song.is_default_template} />
           </button>
         )}
         <button
@@ -352,8 +361,9 @@ export default function SongsMenu() {
               ? "stop being a template"
               : "make a template — saving from it makes a new song"
           }
+          aria-label="template"
         >
-          tmpl
+          <IconTemplate on={song.is_template} />
         </button>
         <button
           className={`${styles.iconBtn} ${
@@ -362,15 +372,17 @@ export default function SongsMenu() {
           onClick={() => setTreeFor((id) => (id === song.id ? null : song.id))}
           title="version history"
           aria-expanded={treeFor === song.id}
+          aria-label="version history"
         >
-          hist
+          <IconHistory />
         </button>
         <button
           className={styles.iconBtn}
           onClick={() => doFork(song)}
           title="fork into a new session"
+          aria-label="fork"
         >
-          fork
+          <IconFork />
         </button>
         <button
           className={styles.iconBtn}
@@ -378,15 +390,17 @@ export default function SongsMenu() {
           title={
             song.is_public ? "copy public link" : "publish + copy public link"
           }
+          aria-label="public link"
         >
-          link
+          <IconLink />
         </button>
         <button
           className={styles.iconBtn}
           onClick={() => doDelete(song)}
           title="delete"
+          aria-label="delete"
         >
-          del
+          <IconTrash />
         </button>
       </div>
       {treeFor === song.id && (
