@@ -82,8 +82,10 @@ export function paintDiceDensity(t) {
  * Same drag idiom as the BPM field — a press only becomes a drag past a few
  * pixels. The click that ends a drag is flagged on the button
  * (`btn._levelDragged`) so the click handler can swallow it.
+ * `enabled` (optional) says whether a press may start a drag at all; when it
+ * answers false the press is an ordinary click.
  * @param {HTMLElement} btn
- * @param {{ get: () => number, set: (v: number) => void }} level
+ * @param {{ get: () => number, set: (v: number) => void, enabled?: () => boolean }} level
  */
 export function attachLevelDrag(btn, level) {
   const PX_FULL_TRAVEL = 90;    // px from empty to full
@@ -94,6 +96,7 @@ export function attachLevelDrag(btn, level) {
   let drag = null;
   btn.addEventListener("pointerdown", (e) => {
     if (e.pointerType === "mouse" && e.button !== 0) return;
+    if (level.enabled && !level.enabled()) return;
     drag = { id: e.pointerId, startY: e.clientY, startVal: level.get(), moved: false };
     // Capture straight away: the button is only ~28px tall, so a drag leaves it
     // almost immediately and without capture the moves would go elsewhere.

@@ -15,18 +15,20 @@ export function fireMetronome(time, accent) {
   osc.type = "sine";
   osc.frequency.setValueAtTime(accent ? 1760 : 1320, time);
   const g = ctx.createGain();
-  // Full fill is a little louder than the old fixed click; the default level
-  // (0.7) lands exactly on what it used to be.
+  // Full fill is full scale. The click goes straight to the output, past the
+  // master limiter, and has to cut through a mix sitting at -2dB: the old fixed
+  // blip (0.28 peak, 60ms) was easily buried under a full session. Squared so
+  // the bottom of the fill is still a fine adjustment.
   const level = Math.max(0, Math.min(1, state.metronomeLevel ?? 0.7));
-  const peak = (accent ? 0.4 : 0.2) * level;
+  const peak = (accent ? 1 : 0.6) * level * level;
   if (peak <= 0) return;
   g.gain.setValueAtTime(0, time);
   g.gain.linearRampToValueAtTime(peak, time + 0.002);
-  g.gain.exponentialRampToValueAtTime(0.0001, time + 0.06);
+  g.gain.exponentialRampToValueAtTime(0.0001, time + 0.08);
   osc.connect(g).connect(_metroGain);
   _metroGain.gain.setValueAtTime(1, time);
   osc.start(time);
-  osc.stop(time + 0.08);
+  osc.stop(time + 0.1);
 }
 
 // Circular beat indicator — N dots around a ring (N = reference track's length
