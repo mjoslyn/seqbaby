@@ -2245,6 +2245,13 @@ body.kbd-recording .sq-track.is-kbd-active { border-color: #e5484d; box-shadow: 
   min-height: 48px;
 }
 .sq-audio__gate-btn:disabled { opacity: 0.6; cursor: progress; }
+.sq-audio__gate-note {
+  font-size: 11px;
+  color: var(--fg-dim);
+  line-height: 1.5;
+  padding-top: 4px;
+  border-top: 1px solid var(--border);
+}
 .sq-audio__gate-status {
   font-size: 11px;
   color: var(--fg-dim);
