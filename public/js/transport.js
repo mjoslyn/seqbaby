@@ -12,7 +12,7 @@ import { loadGuitarWorklet } from "./guitar.js";
 import { currentBpm, syncAllLFOs } from "./lfo.js";
 import { init, needsResume, primeAudioForIOS } from "./main.js";
 import { applyBusMute, updateMidiUI } from "./render.js";
-import { ensureFxRack, fireFilterEnv, refreshAllTrackOutputs, routeVoiceToRack, soloAudibleTracks } from "./signal.js";
+import { ensureFxRack, fireFilterEnv, refreshAllTrackOutputs, refreshNoiseBeds, routeVoiceToRack, soloAudibleTracks } from "./signal.js";
 import { findNextNonEmptyPattern, invertChord, state, switchPattern } from "./state.js";
 import { loadSilverboxWorklet } from "./silverbox.js";
 import { loadContagionWorklet } from "./contagion.js";
@@ -342,6 +342,7 @@ export async function togglePlay() {
     silenceAllVoices();
     state.playing = false;
     state._transportStartTime = null;
+    refreshNoiseBeds();                              // vinyl crackle follows the transport
     btn.textContent = "play";
     btn.classList.remove("is-playing");
     state.tick = 0;
@@ -624,6 +625,7 @@ export async function togglePlay() {
   state._transportStartTime = state.audioCtx.currentTime + lead;
   Tone.Transport.start(`+${lead}`, 0);
   state.playing = true;
+  refreshNoiseBeds();                                // vinyl crackle follows the transport
   btn.textContent = "stop";
   btn.classList.add("is-playing");
   setStatus("playing");

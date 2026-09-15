@@ -99,10 +99,19 @@ export class FXRack {
     this.vinylNoiseSrc.loop = true;
     this.vinylNoiseGain = ctx.createGain();
     this.vinylNoiseGain.gain.value = 0;
+    // The bed is a looping source, so left to itself it plays whether or not
+    // the track does: audible before the first play, after a keyboard note
+    // reopens the master bus, and on a muted track while the transport runs.
+    // This gate (see setNoiseBedActive) is what ties it to the track playing.
+    // A separate node from vinylNoiseGain because the automation lanes ramp
+    // that one's gain directly for the level.
+    this.vinylNoiseGate = ctx.createGain();
+    this.vinylNoiseGate.gain.value = 0;
     this.vinylLP.connect(this.vinylWowDelay);
     this.vinylWowDelay.connect(this.vinylWetBus);
     this.vinylNoiseSrc.connect(this.vinylNoiseGain);
-    this.vinylNoiseGain.connect(this.vinylSum);
+    this.vinylNoiseGain.connect(this.vinylNoiseGate);
+    this.vinylNoiseGate.connect(this.vinylSum);
     this.vinylDryBus.connect(this.vinylDryDelay);
     this.vinylDryDelay.connect(this.vinylSum);
     this.vinylWetBus.connect(this.vinylSum);
@@ -425,6 +434,26 @@ export class FXRack {
     this._updateStage("vinyl");
   }
 
+  /**
+   * Open or close the vinyl crackle bed. The level is applyVinyl's business
+   * (and the automation lane's); this only says whether the track is playing,
+   * which signal.js's refreshNoiseBeds decides from the transport and the
+   * track's mute / solo state. Short ramp so the bed fades rather than clicks.
+   * @param {boolean} on
+   */
+  setNoiseBedActive(on) {
+    const want = on ? 1 : 0;
+    if (this._noiseBedOn === want) return;
+    this._noiseBedOn = want;
+    const g = this.vinylNoiseGate.gain;
+    const now = this.ctx.currentTime;
+    try {
+      g.cancelScheduledValues(now);
+      g.setValueAtTime(g.value, now);
+      g.linearRampToValueAtTime(want, now + 0.02);
+    } catch { g.value = want; }
+  }
+
   applyCassette({ amount, flutter, sat }) {
     const c = this.config.cassette;
     if (amount  !== undefined) c.amount = amount;
@@ -627,6 +656,7 @@ export class FXRack {
     try { this.vinylNoiseSrc.stop(); } catch {}
     try { this.vinylNoiseSrc.disconnect(); } catch {}
     try { this.vinylNoiseGain.disconnect(); } catch {}
+    try { this.vinylNoiseGate.disconnect(); } catch {}
     try { this.vinylWowLFO.stop(); } catch {}
     try { this.vinylWowLFO.dispose(); } catch {}
     try { this.cassetteDryBus.disconnect(); } catch {}

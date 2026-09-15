@@ -205,6 +205,15 @@ voice → filterNode → eqNode → compressor → fxRack → masterGain → mas
   ring mod → wave shaper → crush → auto-wah → chorus → phaser → flanger →
   pitch shift → delay → reverb**. `defaultFxConfig()` keys match. Chain order
   matters for LFO/automation targets.
+- **The vinyl crackle bed only plays while the track plays.** It is a looping
+  noise source inside the rack, so left alone it sounded whenever the master bus
+  was open: before the first play, after a keyboard note reopened the bus, and
+  on a muted track. `vinylNoiseGate` (fxRack.js, `setNoiseBedActive`) sits after
+  the level gain the automation lane ramps, and `refreshNoiseBeds` (signal.js)
+  decides it from the transport plus mute / solo (`noiseBedActive`; a bus counts
+  as playing when something audible feeds it). Called from play / stop, the mute
+  and solo buttons, history restore, `applySet`, duplicate / remove track, and
+  once when a rack is built.
 - Master bus: `masterGain` → `masterLimiter` (DynamicsCompressor as brickwall
   safety, threshold −2dB ratio 20) → destination.
 - Where the rack's output goes is `t.out` — `"master"` or an fx bus track's id

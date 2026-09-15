@@ -28,6 +28,58 @@ export function ensureFxRack(t) {
   // track sends — the master, or an fx bus track. Also taps the post-fx signal
   // for the per-track level meter.
   routeTrackOutput(t);
+  // A new rack's crackle bed starts closed; open it only if the track is
+  // playing right now (a rack built mid-play, e.g. an added track).
+  t.fxRack.setNoiseBedActive(noiseBedActive(t, soloAudibleTracks()));
+}
+
+// ---- the vinyl crackle bed: only while the track plays -------------------
+//
+// The vinyl sim's crackle is a looping noise source inside the rack, so without
+// this it plays whenever the master bus is open — before the first play, after
+// a keyboard note has reopened the bus (wakeMasterBus), and on a muted or
+// solo-silenced track while the transport runs. "Playing" here is the transport
+// running AND the track being audible under the current mute / solo state. A
+// bus counts as audible when something audible feeds it, since that is when it
+// makes a sound.
+
+/**
+ * @param {Track} t
+ * @param {Set<Track>|null} soloAudible  soloAudibleTracks(), passed in so a
+ *   loop over every track computes it once.
+ * @returns {boolean}
+ */
+export function noiseBedActive(t, soloAudible) {
+  if (!state.playing) return false;
+  if (t.muted) return false;
+  if (!soloAudible) return true;
+  if (soloAudible.has(t)) return true;
+  if (t.engineKey !== "bus") return false;
+  // A bus fed by an audible track is audible itself.
+  for (const src of soloAudible) {
+    const seen = new Set();
+    let cur = src;
+    while (cur?.out && cur.out !== "master" && !seen.has(cur.id)) {
+      seen.add(cur.id);
+      cur = trackById(cur.out);
+      if (cur === t) return true;
+      if (cur?.muted) break;
+    }
+  }
+  return false;
+}
+
+/**
+ * Re-decide every track's crackle bed. Call after anything that changes the
+ * answer: play / stop, a mute or solo toggle, a session or history restore,
+ * a track duplicated or removed.
+ */
+export function refreshNoiseBeds() {
+  const soloAudible = soloAudibleTracks();
+  for (const t of state.tracks) {
+    if (!t.fxRack) continue;
+    try { t.fxRack.setNoiseBedActive(noiseBedActive(t, soloAudible)); } catch {}
+  }
 }
 
 // ---- output routing: master, or an fx bus track ------------------------

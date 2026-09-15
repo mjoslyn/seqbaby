@@ -15,7 +15,7 @@ import { refreshEuclidUI, renderEuclidPanel } from "./euclid.js";
 import { cloneChance, refreshChanceUI, renderChancePanel } from "./chance.js";
 import { paintDiceDensity, placeBusesLast, refreshFxPanelUI, renderModPanel, renderTrack } from "./render.js";
 import { applySet } from "./session.js";
-import { defaultCompConfig, ensureFxRack, refreshAllTrackOutputs, refreshCompSourceDropdowns, refreshOutputSelects, routeVoiceToRack } from "./signal.js";
+import { defaultCompConfig, ensureFxRack, refreshAllTrackOutputs, refreshCompSourceDropdowns, refreshNoiseBeds, refreshOutputSelects, routeVoiceToRack } from "./signal.js";
 import { aliasPattern, clonePattern, emptyPattern, state } from "./state.js";
 import { renderStepGrid } from "./stepGrid.js";
 import { SCALES, midiToScaleIndex, scaleIndexToMidi } from "./theory.js";
@@ -247,6 +247,7 @@ export function duplicateTrack(src) {
     dup.el.classList.toggle("is-muted", dup.muted);
     dup.el.classList.toggle("is-soloed", dup.soloed);
     q(".sq-track__solo")?.setAttribute("aria-pressed", String(dup.soloed));
+    refreshNoiseBeds();                  // a duplicated solo changes who is audible
     refreshFxPanelUI(dup);
     renderModPanel(dup, dup._modPanelEl || dup.el.querySelector(".sq-track__mod-panel"));
   }
@@ -327,6 +328,7 @@ export function removeTrack(t) {
   }
   refreshOutputSelects();
   if (state.ready) refreshAllTrackOutputs();
+  refreshNoiseBeds();                    // removing a soloed track un-solos the rest
   // Anything sidechained to the removed track resets to self — state, select
   // and compressor alike. That now lives in refreshCompSourceDropdowns (called
   // above), which rebuilds the options and so is the one place that knows a
