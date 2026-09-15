@@ -13,6 +13,7 @@ import { invertChord, state } from "./state.js";
 import { renderStepGrid } from "./stepGrid.js";
 import { applyKbdArpToStep, resizeTrack } from "./track.js";
 import { CHORD_TYPES, SCALES, chordNotes, chordTypeForTones, diatonicChordNotes, midiToScaleIndex, quantizeToScale, scaleIndexToMidi } from "./theory.js";
+import { holdNoiseBed, releaseNoiseBed } from "./signal.js";
 import { ensureAudio, wakeMasterBus } from "./transport.js";
 
 const KBD_REC_VEL = 0.85;
@@ -248,6 +249,9 @@ async function pressNote(k, midi) {
   const opts = hitOptsFor(t);
   const rec = held.get(k);
   rec.t = t; rec.midi = midi;
+  // The track is playing for as long as this key is down: its vinyl / cassette
+  // beds open with the note and close a moment after the release (signal.js).
+  holdNoiseBed(t); rec.bedHeld = true;
   const tones = tonesFor(midi);
   rec.tones = tones;
   // Arp mode plays the chord one note at a time instead of as a block. It always
@@ -351,6 +355,7 @@ function releaseNote(k) {
   const rec = held.get(k);
   held.delete(k);
   stopLiveArp(rec);
+  if (rec?.bedHeld) { rec.bedHeld = false; releaseNoiseBed(rec.t); }
   if (rec?.capture) {
     const now = captureNow();
     for (const e of rec.capture) e.dur = Math.max(0, now - e.time);

@@ -12,6 +12,7 @@ import { renderAutomationPanel } from "./render.js";
 import { invertChord, state } from "./state.js";
 import { renderStepGrid } from "./stepGrid.js";
 import { CHORD_TYPES, SCALES, applyScale, chordFitsScale, chordNotes, midiToName } from "./theory.js";
+import { holdNoiseBed } from "./signal.js";
 import { ensureAudio } from "./transport.js";
 import { GRAN_DEFAULTS, GRAN_NUM_KEYS, GRAN_SEL_KEYS } from "./voices.js";
 
@@ -717,6 +718,7 @@ export function openSampleEditorModal(t) {
     if (!t.voice?.buffer) { setStatus("no sample loaded yet", true); return; }
     await ensureAudio();
     const wasOn = t.sliceOn; t.sliceOn = true;   // force a slice hit regardless of the toggle
+    holdNoiseBed(t, 1);
     try { t.voice.hit((t.sliceBase ?? 60) + i, state.audioCtx.currentTime + 0.02, 1, 0.85, {}); }
     catch (e) { console.warn(e); }
     t.sliceOn = wasOn;
@@ -798,6 +800,7 @@ export function openSampleEditorModal(t) {
     if (!t.voice?.buffer) { setStatus("no sample loaded yet", true); return; }
     await ensureAudio();
     const wasSlice = t.sliceOn; t.sliceOn = false;   // audition the plain region
+    holdNoiseBed(t, t.voice.buffer.duration);
     try {
       t.voice.hit(t.isDrumKit ? 36 : 60, state.audioCtx.currentTime + 0.02, t.voice.buffer.duration, 0.85, {
         startOffset: sd.start, endOffset: sd.end, fadeIn: sd.fadeIn, fadeOut: sd.fadeOut, loopMode: sd.loopMode,
