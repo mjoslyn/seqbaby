@@ -1,4 +1,4 @@
-import { LFO_KEYS } from "./constants.js";
+import { FX_STAGE_LABELS, FX_STAGE_LEVEL_KEY, LFO_KEYS, LFO_LABELS, fxStageLevel } from "./constants.js";
 import { BASS_MOD_KEYS, BASS_MOD_LABELS } from "./bass.js";
 import { HEXOP_MOD_KEYS, HEXOP_MOD_LABELS } from "./hexop.js";
 import { SUB_MOD_KEYS, SUB_MOD_LABELS } from "./subbass.js";
@@ -412,6 +412,115 @@ export function refreshParamIndicators(t) {
     }
   }
   t._motionCtls = moving;
+  refreshPanelBadges(t);
+}
+
+// ── what is on behind a panel button, shown on the track ────────────────────
+// Every sound-shaping panel lives behind a button and opens as a modal, so a
+// track with a delay on it, an LFO on the cutoff and a sidechain ducking it
+// looked exactly like one with nothing on it until all seven were opened in
+// turn. Each entry says what, in the track's own state, counts as that panel
+// doing something. Two things follow from the answer:
+//
+// - the button gets `data-on` (a count) and a tooltip naming what is on;
+// - the panel is shown INLINE on the track, with only the rows that are on
+//   (`is-live` on the panel and on the rows; style.css hides the rest, scoped
+//   to `.sq-track` so the same panel opened as a modal is the whole panel
+//   again). Nothing is moved or copied: the panel stays where the markup put
+//   it, so every `panel.querySelector` in the app still finds its controls,
+//   and the modal goes on reparenting the same element.
+//
+// The rules are the panels' own: a stage is "on" by the same level the rack
+// wires it into the chain on; the filter is on when it has been closed at all
+// or given resonance; the compressor when its switch is; the mod matrix and
+// the lanes when an entry is enabled. A lane that exists but is switched off
+// does not count, matching the dimmed dot on its label. The lanes stay a badge
+// only — a per-step grid is not a row of knobs — so their entry has no panel.
+const PANEL_BADGES = [
+  { sel: ".sq-track__filter", panel: "_filterPanelEl", modal: "_filterModal", on: (t) => {
+      const f = t.filter || {};
+      const on = [];
+      if ((f.cutoff ?? 1) < 0.999) on.push("cutoff");
+      if ((f.reson ?? 0) > 0) on.push("resonance");
+      return on;
+    } },
+  { sel: ".sq-track__env", panel: "_envPanelEl", modal: "_envModal",
+    on: (t) => ((t.filter?.env ?? 0) > 0 ? ["envelope → cutoff"] : []) },
+  { sel: ".sq-track__fx", panel: "_fxPanelEl", modal: "_fxModal",
+    on: (t) => Object.keys(FX_STAGE_LEVEL_KEY).filter(k => fxStageLevel(t.fxConfig, k) > 0),
+    label: (k) => FX_STAGE_LABELS[k],
+    // Only the stages that are on; the glide and amp rows, and every bypassed
+    // stage, wait in the modal.
+    rows: (panel, on) => {
+      const live = new Set(on);
+      for (const row of panel.querySelectorAll(".sq-fx__row[data-fx]")) {
+        row.classList.toggle("is-live", live.has(row.dataset.fx));
+      }
+    } },
+  { sel: ".sq-track__eq", panel: "_eqPanelEl", modal: "_eqModal",
+    on: (t) => ["low", "mid", "high"].filter(b => Math.abs(t.eq?.[b] ?? 0) >= 0.5) },
+  { sel: ".sq-track__comp", panel: "_compPanelEl", modal: "_compModal", on: (t) => {
+      if (!t.comp?.enabled) return [];
+      const src = t.comp.source;
+      if (!src || src === "self") return ["self"];
+      const from = state.tracks.find(x => String(x.id) === String(src));
+      return [from ? `sidechain from ${from.name || "track"}` : "sidechain"];
+    } },
+  { sel: ".sq-track__mod", panel: "_modPanelEl", modal: "_modModal",
+    on: (t) => Object.keys(t.lfoConfig || {}).filter(k => t.lfoConfig[k]?.enabled),
+    label: (k) => LFO_LABELS[k] || k },
+  { sel: ".track-aut",
+    on: (t) => Object.keys(t.automation || {}).filter(k => t.automation[k]?.enabled),
+    label: (k) => LFO_LABELS[LFO_FOR_AUTO[k]] || k },
+];
+
+/**
+ * Stamp each panel button with what is switched on behind it, and show those
+ * controls inline on the track. Cheap (a handful of object walks, a class
+ * toggle per fx row), so it is called from `refreshParamIndicators` — which
+ * already runs after anything that touches the mod matrix or the lanes — and
+ * from the panels' own input events for the filter / env / fx / eq / comp
+ * values, which change through setters that know nothing about indicators.
+ *
+ * The buttons are looked up through `t._panelBtns` (stashed by renderTrack)
+ * rather than under `t.el`, because the mobile track menu reparents them into
+ * its modal, and a badge that went dark whenever that menu was open would be
+ * wrong exactly when it was being looked at. A panel currently open as a modal
+ * is left alone — the modal owns its `hidden` and shows the whole thing — and
+ * the modal's close calls back here to put the inline view back.
+ * @param {Track} t
+ */
+export function refreshPanelBadges(t) {
+  if (!t?.el) return;
+  let total = 0;
+  for (const b of PANEL_BADGES) {
+    let on;
+    try { on = b.on(t) || []; } catch { on = []; }
+    total += on.length;
+    const btn = t._panelBtns?.[b.sel] || t.el.querySelector(b.sel);
+    if (btn) {
+      if (btn.dataset.baseTitle == null) btn.dataset.baseTitle = btn.title || "";
+      if (on.length) {
+        btn.dataset.on = String(on.length);
+        const names = b.label ? on.map(b.label) : on;
+        btn.title = (btn.dataset.baseTitle ? btn.dataset.baseTitle + "\n" : "") + "on: " + names.join(", ");
+      } else {
+        delete btn.dataset.on;
+        btn.title = btn.dataset.baseTitle;
+      }
+    }
+    const panel = b.panel ? t[b.panel] : null;
+    if (!panel || (b.modal && t[b.modal])) continue;
+    panel.classList.toggle("is-live", on.length > 0);
+    panel.hidden = on.length === 0;
+    if (b.rows) b.rows(panel, on);
+  }
+  // The mobile "more" button hides all seven behind it, so it carries the sum.
+  const more = t._trackMoreBtn;
+  if (more) {
+    if (total) more.dataset.on = String(total);
+    else delete more.dataset.on;
+  }
 }
 
 // Sliders, selects and toggles only: text and number fields keep the browser's

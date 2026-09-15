@@ -924,6 +924,64 @@ main {
 }
 .sq-panel__btn-group > button:last-child { border-right: none; }
 
+/* The dot on a panel button: something is switched on behind it (a stage in
+   the rack, a closed filter, an enabled LFO or lane, the compressor's switch),
+   stamped as `data-on` by refreshPanelBadges (paramTargets.js). Each button
+   carries its panel's colour, the same one it turns when pressed, and on a
+   pressed button the dot goes dark so it stays visible on that background. */
+.sq-panel__btn-group > button,
+.sq-track__menu-panels > button,
+.sq-track__more { position: relative; }
+.sq-panel__btn-group > button[data-on]::after,
+.sq-track__menu-panels > button[data-on]::after,
+.sq-track__more[data-on]::after {
+  content: "";
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--badge, var(--accent));
+  box-shadow: 0 0 0 1.5px var(--bg-3);
+  pointer-events: none;
+}
+.sq-panel__btn-group > button[aria-pressed="true"][data-on]::after,
+.sq-track__menu-panels > button[aria-pressed="true"][data-on]::after,
+.sq-track__more[aria-pressed="true"][data-on]::after {
+  background: #0b0d10;
+  box-shadow: none;
+}
+.sq-track__filter { --badge: var(--accent-2); }
+
+/* A panel with something on in it is shown on the track (`is-live`, from the
+   same refreshPanelBadges), with only the rows that are on — the rack's
+   bypassed stages, its glide and amp rows, and the mod matrix's adder wait in
+   the modal. Scoped to .sq-track: opened as a modal the panel is reparented
+   out of the track, and there it is the whole panel again. The left edge is
+   the button's colour, so the block reads as "the fx rack" or "the mod
+   matrix" without a heading. */
+.sq-track .sq-track__fx-panel.is-live > .sq-fx__row:not(.is-live) { display: none; }
+.sq-track .sq-track__filter-panel.is-live,
+.sq-track .sq-track__env-panel.is-live,
+.sq-track .sq-track__fx-panel.is-live,
+.sq-track .sq-track__eq-panel.is-live,
+.sq-track .sq-track__comp-panel.is-live,
+.sq-track .sq-track__mod-panel.is-live { padding: 4px 10px; }
+.sq-track .sq-track__mod-panel.is-live .sq-mod__add-row { display: none; }
+.sq-track .sq-track__filter-panel.is-live { border-left: 3px solid var(--accent-2); }
+.sq-track .sq-track__env-panel.is-live    { border-left: 3px solid #d5a6ff; }
+.sq-track .sq-track__fx-panel.is-live     { border-left: 3px solid var(--accent); }
+.sq-track .sq-track__eq-panel.is-live     { border-left: 3px solid #ffa94d; }
+.sq-track .sq-track__comp-panel.is-live   { border-left: 3px solid #66d9b4; }
+.sq-track .sq-track__mod-panel.is-live    { border-left: 3px solid var(--accent); }
+.sq-track__env    { --badge: #d5a6ff; }
+.sq-track__fx     { --badge: var(--accent); }
+.sq-track__eq     { --badge: #ffa94d; }
+.sq-track__comp   { --badge: #66d9b4; }
+.sq-track__mod    { --badge: var(--accent); }
+.track-aut        { --badge: var(--accent-2); }
+
 .sq-track__mod[aria-pressed="true"] {
   background: var(--accent);
   color: #0b0d10;

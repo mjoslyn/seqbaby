@@ -260,3 +260,25 @@ export function lfoDivLabel(div) {
 // ---- note helpers ------------------------------------------------------
 
 export const NOTE_NAMES = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
+
+// Each stage's wet/amount control, in chain order: the one number that says
+// whether the stage is doing anything. The rack wires a stage into the serial
+// chain on it (fxRack.js, the chain rewiring), and the fx button on the track
+// lights up on it (`refreshPanelBadges`, paramTargets.js) — one table, so the
+// two can't disagree about what counts as "on".
+export const FX_STAGE_LEVEL_KEY = {
+  vinyl: "amount", cassette: "amount", fuzz: "amount",
+  ringmod: "wet", shaper: "wet", crush: "wet", autowah: "wet", chorus: "wet",
+  phaser: "wet", flanger: "wet", pitchshift: "wet", delay: "wet", reverb: "wet",
+};
+export const FX_STAGE_LABELS = {
+  vinyl: "vinyl", cassette: "cassette", fuzz: "fuzz", ringmod: "ring mod",
+  shaper: "shaper", crush: "crush", autowah: "auto-wah", chorus: "chorus",
+  phaser: "phaser", flanger: "flanger", pitchshift: "pitch shift", delay: "delay",
+  reverb: "reverb",
+};
+/** A stage's engagement level (0 = bypassed) read off a plain fx config. */
+export function fxStageLevel(config, key) {
+  const k = FX_STAGE_LEVEL_KEY[key];
+  return k ? (config?.[key]?.[k] ?? 0) : 0;
+}

@@ -14,7 +14,7 @@ import { GUITAR_DEFAULTS, GUITAR_NUM_KEYS, GUITAR_SEL_KEYS, GUITAR_TONE_NAMES, g
 import { ICON_CHANCE, ICON_CLEAR, ICON_DICE, ICON_EUCLID, ICON_LOAD, ICON_ROLL, ICON_SAVE, ICON_SLIDERS, ICON_WAV } from "./icons.js";
 import { refreshKnobRange, setKnobReadout, upgradeKnobs } from "./knob.js";
 import { canModulate, lfoBipolar, lfoEuclid, lfoPhase, lfoRateLabel, syncLFO } from "./lfo.js";
-import { autoOwns, modOwns, refreshParamIndicators } from "./paramTargets.js";
+import { autoOwns, modOwns, refreshPanelBadges, refreshParamIndicators } from "./paramTargets.js";
 import { patternLocked, refreshPatternLockUI, refreshPatternSoundUI, setPatternLock } from "./patternSound.js";
 import { openGranularSourceModal, openSamplerSourceModal, pickAudioFileForTrack } from "./main.js";
 import { defaultFxConfig } from "./fxRack.js";
@@ -196,6 +196,9 @@ export function syncTrackSoundUI(t) {
     if (srcSel && [...srcSel.options].some(o => o.value === want)) srcSel.value = want;
   }
   refreshHexopAlgorithm(t);
+  // The sound just changed under the buttons too (session load, patch load,
+  // p-lock recall all come through here), so the panel dots follow it.
+  refreshPanelBadges(t);
 }
 
 /**
@@ -798,6 +801,26 @@ export function renderTrack(t) {
   bindModalOpen(".sq-track__comp",   openCompAsModal,   "_compModal");
   bindModalOpen(".track-euclid",     openEuclidAsModal, "_euclidModal");
   bindModalOpen(".track-chance",     openChanceAsModal, "_chanceModal");
+
+  // The dot on each panel button, and the panel shown inline on the track
+  // while something in it is on (refreshPanelBadges). The refs are stashed
+  // because the mobile track menu reparents the buttons out of the track; the
+  // listeners are on the panels because the filter / env / fx / eq / comp
+  // values go through setters that never touch an indicator, while the mod
+  // matrix and the lanes already refresh through refreshParamIndicators.
+  t._panelBtns = {};
+  for (const sel of [".sq-track__filter", ".sq-track__env", ".sq-track__fx",
+                     ".sq-track__eq", ".sq-track__comp", ".sq-track__mod", ".track-aut"]) {
+    const btn = node.querySelector(sel);
+    if (btn) t._panelBtns[sel] = btn;
+  }
+  for (const panel of [t._filterPanelEl, t._envPanelEl, t._fxPanelEl, t._eqPanelEl, t._compPanelEl]) {
+    if (!panel) continue;
+    // After the setter has run — those are bubbling listeners on the inputs
+    // themselves, and this one sits on the panel above them.
+    panel.addEventListener("input", () => refreshPanelBadges(t));
+    panel.addEventListener("change", () => refreshPanelBadges(t));
+  }
   wireCompPanel(t, t._compPanelEl);
 
   node.querySelector(".sq-track__mute").addEventListener("click", () => {
