@@ -28,6 +28,104 @@ export function ensureFxRack(t) {
   // track sends — the master, or an fx bus track. Also taps the post-fx signal
   // for the per-track level meter.
   routeTrackOutput(t);
+  // A new rack's crackle bed starts closed; open it only if the track is
+  // playing right now (a rack built mid-play, e.g. an added track).
+  t.fxRack.setNoiseBedActive(noiseBedActive(t, soloAudibleTracks()));
+}
+
+// ---- the vinyl crackle bed: only while the track plays -------------------
+//
+// The vinyl sim's crackle is a looping noise source inside the rack, so without
+// this it plays whenever the master bus is open — before the first play, after
+// a keyboard note has reopened the bus (wakeMasterBus), and on a muted or
+// solo-silenced track while the transport runs. "Playing" here is the transport
+// running AND the track being audible under the current mute / solo state. A
+// bus counts as audible when something audible feeds it, since that is when it
+// makes a sound.
+
+/**
+ * @param {Track} t
+ * @param {Set<Track>|null} soloAudible  soloAudibleTracks(), passed in so a
+ *   loop over every track computes it once.
+ * @returns {boolean}
+ */
+export function noiseBedActive(t, soloAudible) {
+  const held = !!t._bedHolds || (t._bedHeldUntil ?? 0) > (state.audioCtx?.currentTime ?? 0);
+  if (!state.playing && !held) return false;
+  // A note played by hand goes through mute — mute withholds the transport's
+  // triggers, and this trigger was not the transport's — so the bed follows it.
+  if (held && t.engineKey !== "bus") return true;
+  if (t.muted) return false;
+  if (!soloAudible) return true;
+  if (soloAudible.has(t)) return true;
+  if (t.engineKey !== "bus") return false;
+  // A bus fed by an audible track is audible itself.
+  for (const src of soloAudible) {
+    const seen = new Set();
+    let cur = src;
+    while (cur?.out && cur.out !== "master" && !seen.has(cur.id)) {
+      seen.add(cur.id);
+      cur = trackById(cur.out);
+      if (cur === t) return true;
+      if (cur?.muted) break;
+    }
+  }
+  return false;
+}
+
+// How long the beds stay open after a hand-played note ends: the note's own
+// release is still sounding, and a bed that cut off before it did would read as
+// the record stopping mid-note.
+const BED_NOTE_TAIL = 1.5;
+
+/**
+ * A note played outside the transport — the computer keyboard, a sample
+ * audition — means the track is playing for as long as it sounds, so its beds
+ * open with it. With `seconds` they close that long (plus a tail) after the
+ * call; without, they stay open until `releaseNoiseBed`, one per hold, which is
+ * the held-key case where nothing knows the length in advance.
+ * @param {Track} t @param {number} [seconds]
+ */
+export function holdNoiseBed(t, seconds) {
+  if (!t || !state.audioCtx) return;
+  if (seconds == null) {
+    t._bedHolds = (t._bedHolds || 0) + 1;
+  } else {
+    armBedTail(t, Math.max(0, Number(seconds) || 0));
+  }
+  refreshNoiseBeds();
+}
+
+/** The end of a hold opened without a length: the beds close after the tail. */
+export function releaseNoiseBed(t) {
+  if (!t || !t._bedHolds) return;
+  t._bedHolds -= 1;
+  if (!t._bedHolds) armBedTail(t, 0);
+  refreshNoiseBeds();
+}
+
+function armBedTail(t, seconds) {
+  const until = state.audioCtx.currentTime + seconds + BED_NOTE_TAIL;
+  if (until <= (t._bedHeldUntil ?? 0)) return;      // an earlier hold already outlasts this one
+  t._bedHeldUntil = until;
+  if (t._bedHoldTimer) clearTimeout(t._bedHoldTimer);
+  t._bedHoldTimer = setTimeout(() => {
+    t._bedHoldTimer = null;
+    refreshNoiseBeds();
+  }, (seconds + BED_NOTE_TAIL) * 1000 + 30);
+}
+
+/**
+ * Re-decide every track's crackle bed. Call after anything that changes the
+ * answer: play / stop, a mute or solo toggle, a session or history restore,
+ * a track duplicated or removed.
+ */
+export function refreshNoiseBeds() {
+  const soloAudible = soloAudibleTracks();
+  for (const t of state.tracks) {
+    if (!t.fxRack) continue;
+    try { t.fxRack.setNoiseBedActive(noiseBedActive(t, soloAudible)); } catch {}
+  }
 }
 
 // ---- output routing: master, or an fx bus track ------------------------

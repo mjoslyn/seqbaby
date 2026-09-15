@@ -306,6 +306,111 @@ input[type="range"] { accent-color: var(--accent); }
 }
 .sq-knob__readout[hidden] { display: none; }
 
+/* ---------- KNOBS ON A PHONE: VERTICAL SLIDERS ------------------------------
+   The same wrapper, the same two custom properties, a different shape. On a
+   touch screen a dial is the wrong control: the finger hides the pointer it
+   is reading, and 270° of arc packed into 44px asks for a precision a thumb
+   does not have. A vertical bar reads from across the room — length is a far
+   stronger visual channel than angle — and its gesture is the one every phone
+   already teaches: drag up for more.
+
+   knob.js sees none of this. It measures the dial at the start of each drag
+   and, finding it taller than it is wide, maps the bar's own height to the
+   full range so the thumb tracks the finger 1:1 (see `travelFor`). The drag
+   is still relative — the value moves only when the finger does — because a
+   control you play must never jump to where you happened to land on it.
+
+   Keyed on the PRIMARY pointer being a finger (phones, tablets), or on the
+   layout having gone to its phone arrangement — not `any-pointer`, which the
+   hit-size rule above uses: a touchscreen laptop wants a bigger target, not a
+   different instrument.
+
+   Sizing: --knob-size is the bar's column width (the mobile rules already set
+   it to 40-44px per context, and that is the width the target needs anyway);
+   --knob-len is its height and --knob-bar the width of the drawn track. */
+@media (pointer: coarse), (max-width: 768px) {
+  .sq-knob {
+    --knob-len: 72px;
+    --knob-bar: 14px;
+    height: var(--knob-len);
+  }
+  /* The track. Inset 3px top and bottom so the thumb, centred ON the value,
+     has somewhere to sit at 0 and at 100 without leaving the wrapper. Its
+     height is therefore the whole travel, which is what knob.js measures. */
+  .sq-knob > .sq-knob__dial {
+    inset: 3px auto;
+    left: 50%;
+    width: var(--knob-bar);
+    /* The dial is a span, and a panel's `span { min-width }` rule for its
+       labels (the fx rack's) would widen the bar to whatever it asks. */
+    min-width: 0;
+    margin-left: calc(var(--knob-bar) / -2);
+    border-radius: calc(var(--knob-bar) / 2);
+    box-sizing: border-box;
+    border: 1px solid var(--border);
+    background:
+      linear-gradient(to top,
+        var(--knob-fill) 0%,
+        var(--knob-fill) calc(var(--knob-v, 0) * 100%),
+        var(--knob-track) calc(var(--knob-v, 0) * 100%),
+        var(--knob-track) 100%);
+    -webkit-mask: none;
+    mask: none;
+  }
+  /* No body: a bar has no mass to draw. */
+  .sq-knob__dial::before { content: none; }
+  /* The thumb — a bar across the track, wider than it, centred on the value.
+     `(1 - v) * 100%` because CSS measures from the top and the slider from
+     the bottom. */
+  .sq-knob__dial::after {
+    left: 50%;
+    top: calc((1 - var(--knob-v, 0)) * 100%);
+    width: calc(var(--knob-bar) + 10px);
+    height: 4px;
+    margin-left: calc((var(--knob-bar) + 10px) / -2);
+    border-radius: 2px;
+    background: var(--fg);
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.55);
+    transform-origin: 50% 50%;
+    transform: translateY(-50%);
+  }
+  /* Through-zero controls fill from the middle, as the dial does from twelve. */
+  .sq-knob[data-bipolar] .sq-knob__dial {
+    background:
+      linear-gradient(to top,
+        var(--knob-track) 0%,
+        var(--knob-track) min(50%, calc(var(--knob-v, 0.5) * 100%)),
+        var(--knob-fill) min(50%, calc(var(--knob-v, 0.5) * 100%)),
+        var(--knob-fill) max(50%, calc(var(--knob-v, 0.5) * 100%)),
+        var(--knob-track) max(50%, calc(var(--knob-v, 0.5) * 100%)),
+        var(--knob-track) 100%);
+  }
+  /* The target covers the whole column: the bar's height, and never less than
+     the 44px the hit rule asks for across. */
+  .sq-knob input[type="range"] {
+    width: max(var(--knob-size), var(--knob-hit));
+    height: max(var(--knob-len), var(--knob-hit));
+  }
+  /* The second needle, where an lfo or a lane has pushed the parameter: a
+     thinner, wider marker in the motion colour, on the same scale as the
+     thumb. It sits on the wrapper, so the 3px track inset is applied here. */
+  .sq-knob[data-moving]::after {
+    left: 50%;
+    top: calc(3px + (1 - var(--knob-m, 0)) * (100% - 6px));
+    width: calc(var(--knob-bar) + 18px);
+    height: 3px;
+    margin-left: calc((var(--knob-bar) + 18px) / -2);
+    border-radius: 2px;
+    transform-origin: 50% 50%;
+    transform: translateY(-50%);
+  }
+  .sq-knob:has(input:focus-visible) .sq-knob__dial { border-color: var(--accent-2); }
+  /* Denser contexts get a shorter bar. The hexop's 6x8 operator grid is six
+     rows of these; the transport bar has the play button beside its one. */
+  .sq-hexop__ops .sq-hexop__f .sq-knob { --knob-len: 56px; }
+  .sq-transport .sq-knob { --knob-len: 48px; }
+}
+
 /* Fields hold a wide slider beside their label; a knob is square, so the label
    goes under it. Flagged by knob.js per field so any slider left unupgraded
    keeps its original layout. */

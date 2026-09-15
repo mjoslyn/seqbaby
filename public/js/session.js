@@ -15,7 +15,7 @@ import { applyBusMute, paintDiceDensity, placeBusesLast, refreshFxPanelUI, rende
 import { flushAllPatternSounds, recallPatternSound, refreshPatternLockUI, refreshPatternSoundUI } from "./patternSound.js";
 import { syncScaleUI } from "./scaleUI.js";
 import { migrateLegacyNames, migrateTrackNames, SET_VERSION, validateSet } from "./sessionFormat.js";
-import { applyCompressorConfig, ensureFxRack, refreshAllTrackOutputs, refreshCompSourceDropdowns, refreshOutputSelects, routeVoiceToRack, wouldFeedback } from "./signal.js";
+import { applyCompressorConfig, ensureFxRack, refreshAllTrackOutputs, refreshCompSourceDropdowns, refreshNoiseBeds, refreshOutputSelects, routeVoiceToRack, wouldFeedback } from "./signal.js";
 import { applyMacroPads, serializeMacroPads } from "./macro.js";
 import { aliasPattern, state, syncMeterUI, syncRepeatsUI } from "./state.js";
 import { renderStepGrid } from "./stepGrid.js";
@@ -637,6 +637,7 @@ export function applySet(s) {
   if (state.ready) {
     refreshAllTrackOutputs();
     for (const t of state.tracks) applyBusMute(t);
+    refreshNoiseBeds();
   }
   // Re-populate comp-source dropdowns now that every track exists, so cross-
   // track sidechain selections from the saved set resolve to a real option.

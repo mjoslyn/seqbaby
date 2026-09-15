@@ -21,7 +21,7 @@ import { defaultFxConfig } from "./fxRack.js";
 import { patternMeter, redetectDrumKit, stepsPerBarForMeter } from "./meter.js";
 import { refreshHexopAlgorithm, setEngineKey, setParam, updateGranularSpeedEnabled, updatePlaitsControlsVisibility } from "./params.js";
 import { bestRollViewOct } from "./pianoRoll.js";
-import { applyCompressorConfig, refreshCompSourceDropdowns, refreshOutputSelects, setEQ, setFilter, setTrackOutput } from "./signal.js";
+import { applyCompressorConfig, refreshCompSourceDropdowns, refreshNoiseBeds, refreshOutputSelects, setEQ, setFilter, setTrackOutput } from "./signal.js";
 import { state } from "./state.js";
 import { openAutAsModal, openChanceAsModal, openCompAsModal, openEnvAsModal, openEqAsModal, openFilterAsModal, openFxAsModal, openGranularWavModal, openModAsModal, openEuclidAsModal, openRollAsModal, openSampleEditorModal, openTrackMenu } from "./stepEditor.js";
 import { openWavetableEditor } from "./wavetableEditor.js";
@@ -674,6 +674,7 @@ export function renderTrack(t) {
     t.soloed = !t.soloed;
     soloBtn.setAttribute("aria-pressed", String(t.soloed));
     node.classList.toggle("is-soloed", t.soloed);
+    refreshNoiseBeds();
   });
 
   // p-lock: this track's sound becomes part of THIS pattern (patternSound.js).
@@ -804,6 +805,7 @@ export function renderTrack(t) {
     t.muted = !t.muted;
     node.classList.toggle("is-muted", t.muted);
     applyBusMute(t);
+    refreshNoiseBeds();
   });
   // clear: icon + label — desktop shows the label, mobile the icon (same
   // flip as roll, see the mobile media block)

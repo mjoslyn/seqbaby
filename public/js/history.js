@@ -48,7 +48,7 @@ import { refreshAutIfOpen, refreshRollIfOpen } from "./pianoRoll.js";
 import { applyBusMute, paintDiceDensity } from "./render.js";
 import { syncScaleUI } from "./scaleUI.js";
 import { applySet, serializeSet } from "./session.js";
-import { refreshCompSourceDropdowns, refreshOutputSelects } from "./signal.js";
+import { refreshCompSourceDropdowns, refreshNoiseBeds, refreshOutputSelects } from "./signal.js";
 import { aliasPattern, clonePattern, state, syncMeterUI, syncRepeatsUI } from "./state.js";
 import { renderStepGrid } from "./stepGrid.js";
 
@@ -259,11 +259,13 @@ function restoreTrackInPlace(t, a, b) {
     t.muted = !!b.muted;
     t.el?.classList.toggle("is-muted", t.muted);
     applyBusMute(t);
+    refreshNoiseBeds();
   }
   if (a.soloed !== b.soloed) {
     t.soloed = !!b.soloed;
     t.el?.classList.toggle("is-soloed", t.soloed);
     t.el?.querySelector(".sq-track__solo")?.setAttribute("aria-pressed", String(t.soloed));
+    refreshNoiseBeds();
   }
   if (a.glide !== b.glide) {
     t.glide = b.glide;
