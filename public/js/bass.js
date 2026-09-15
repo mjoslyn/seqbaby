@@ -615,7 +615,7 @@ const TONES = {
          amp: "svt", cab: "8x10", pkupt: "p", strs: "round" },
   },
   "pick grind": {
-    d: "a plectrum by the bridge, roundwounds, and a solid-state amp with all the mids in. A bass played as a rhythm guitar",
+    d: "a plectrum by the bridge, roundwounds, and a solid-state amp with all the mids in",
     drive: 0.72, tone: 0.85, comp: 0.35, sustain: 0.45,
     p: { pick: 0.05, attack: 1, stiff: 0.6, pkup: 0.05, mute: 0.1, fret: 0.4,
          grind: 0.6, xover: 0.35, sub: 0,
@@ -639,7 +639,7 @@ const TONES = {
          amp: "flip", cab: "1x15", pkupt: "p", strs: "flat" },
   },
   "modern di": {
-    d: "straight into the desk, both pickups, compressed flat and even. Not a sound so much as the absence of one, which is exactly what most records want",
+    d: "straight into the desk, both pickups, compressed flat and even. Uncoloured",
     drive: 0.2, tone: 0.75, comp: 0.7, sustain: 0.55,
     p: { pick: 0.14, attack: 0.45, stiff: 0.4, pkup: 0.14, mute: 0, fret: 0.2,
          grind: 0.06, xover: 0.5, sub: 0,
@@ -647,7 +647,7 @@ const TONES = {
          amp: "di", cab: "di", pkupt: "j", strs: "round" },
   },
   "walking jazz": {
-    d: "flatwounds by the neck, tone well back, short notes and a woody thump. As near an upright as an electric gets",
+    d: "flatwounds by the neck, tone well back, short notes and a woody thump",
     drive: 0.6, tone: 0.22, comp: 0.5, sustain: 0.25,
     p: { pick: 0.36, attack: 0.18, stiff: 0.18, pkup: 0.4, mute: 0.25, fret: 0.15,
          grind: 0, xover: 0.4, sub: 0,
@@ -655,7 +655,7 @@ const TONES = {
          amp: "flip", cab: "1x15", pkupt: "p", strs: "flat" },
   },
   "growl": {
-    d: "a jazz bass on the bridge pickup with the mids up and just enough dirt to snarl. Nasal, forward, and it cuts through anything",
+    d: "a jazz bass on the bridge pickup with the mids up and just enough dirt to snarl. Nasal and forward",
     drive: 0.6, tone: 0.8, comp: 0.4, sustain: 0.6,
     p: { pick: 0.07, attack: 0.55, stiff: 0.55, pkup: 0.05, mute: 0, fret: 0.35,
          grind: 0.4, xover: 0.45, sub: 0,
@@ -663,7 +663,7 @@ const TONES = {
          amp: "svt", cab: "8x10", pkupt: "j", strs: "round" },
   },
   "octave sub": {
-    d: "an octaver under the note and the top filtered off it. Half bass, half synth, and it sits where nothing else does",
+    d: "an octaver under the note and the top filtered off it. Half bass, half synth",
     drive: 0.3, tone: 0.3, comp: 0.65, sustain: 0.5,
     p: { pick: 0.2, attack: 0.3, stiff: 0.3, pkup: 0.2, mute: 0.15, fret: 0.1,
          grind: 0.12, xover: 0.55, sub: 0.85,
@@ -671,7 +671,7 @@ const TONES = {
          amp: "di", cab: "1x15", pkupt: "mm", strs: "round" },
   },
   "pop punk": {
-    d: "plectrum, roundwounds, the mids pulled out and the top wound up until every note is an attack. Bright, fast and gone",
+    d: "plectrum, roundwounds, the mids pulled out and the top wound up until every note is an attack. Bright and fast",
     drive: 0.65, tone: 0.9, comp: 0.55, sustain: 0.3,
     p: { pick: 0.06, attack: 1, stiff: 0.6, pkup: 0.07, mute: 0.2, fret: 0.5,
          grind: 0.45, xover: 0.4, sub: 0,
