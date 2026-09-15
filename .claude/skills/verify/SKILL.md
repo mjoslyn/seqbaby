@@ -29,7 +29,9 @@ Open `http://localhost:3000/` in Chrome (claude-in-chrome tools work well).
   peaks ~0.2.
 - Every range input is wrapped in a `.sq-knob` by `knob.js` and driven by a
   relative pointer drag, so a synthetic pointer drag on the knob DOES work
-  (~140px of vertical travel covers the full range). Setting the native value
+  (~140px of vertical travel covers the full range on a dial; on a phone
+  viewport / `pointer: coarse` the knob is drawn as a vertical slider and its
+  own bar height, ~66px, is the full range). Setting the native value
   + `dispatchEvent(new Event("input", {bubbles:true}))` also still works and is
   quicker for setting an exact value. Note the input is `opacity:0` and sized
   to the knob, so drag at the `.sq-knob` wrapper's centre.

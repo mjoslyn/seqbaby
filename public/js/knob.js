@@ -36,6 +36,13 @@
  * further out you drag. None of that is round — the shape is CSS's business
  * (see `--knob-v` / `--knob-a` below), which is why a rack that reads badly as
  * dials can become bars without touching this file.
+ *
+ * And on a phone it does: style.css draws every knob as a vertical slider
+ * there (the KNOBS ON A PHONE block). The one thing this file does about it is
+ * measure the dial when a drag starts and, finding it taller than wide, take
+ * its height as the travel — so the thumb follows the finger 1:1 and the
+ * control feels like the slider it looks like, rather than a dial that
+ * happens to be drawn as a bar. The drag stays relative for the reason above.
  */
 
 /** Controls that stay as they are. The wavetable's harmonic bars are a drawing
@@ -46,7 +53,8 @@
 // profile — and a row of little dials would say nothing about either.
 const KNOB_EXCLUDE = ".sq-wt__harm-bar, .sq-chance__pc";
 
-/** Pixels of vertical drag for the full range at normal resolution. */
+/** Pixels of vertical drag for the full range at normal resolution, on a dial.
+ *  A slider (the phone skin) uses its own drawn height instead — `travelFor`. */
 const PX_FULL_TRAVEL = 140;
 /** Horizontal distance at which resolution has halved (see `fineFactor`). */
 const PX_FINE_FALLOFF = 90;
@@ -215,6 +223,21 @@ function writeValue(input, raw) {
   input.dispatchEvent(new Event("input", { bubbles: true }));
 }
 
+/**
+ * Pixels of vertical drag for the full range on THIS control, right now.
+ *
+ * A dial is a fixed 140px, whatever its size: the gesture is off the control
+ * as much as on it. A slider is the length of its own bar, so the thumb stays
+ * under the finger the whole way — the shape is CSS's decision, so the shape
+ * is what's measured rather than a media query being asked. One layout read
+ * per drag, beside the one the readout already does.
+ * @param {HTMLInputElement} input
+ */
+function travelFor(input) {
+  const r = input._knob.dial.getBoundingClientRect();
+  return r.height > r.width && r.height > 0 ? r.height : PX_FULL_TRAVEL;
+}
+
 /** Resolution multiplier: 1 at the knob, falling off with horizontal distance.
  *  Dragging away from the control to trim it needs no modifier key, which is
  *  the only way fine mode can exist on a touch screen. */
@@ -246,6 +269,7 @@ function attachDrag(input) {
       startY: e.clientY,
       lastY: e.clientY,
       val: Number(input.value),
+      travel: travelFor(input),
       moved: false,
       // A drag also produces a click, so double-tap-to-reset has to check that
       // neither tap moved rather than trusting the dblclick event.
@@ -277,7 +301,7 @@ function attachDrag(input) {
     const dy = drag.lastY - y;                    // up is more
     drag.lastY = y;
     drag.val = clamp(
-      drag.val + (dy * fineFactor(x - drag.startX, shift) * span) / PX_FULL_TRAVEL,
+      drag.val + (dy * fineFactor(x - drag.startX, shift) * span) / drag.travel,
       k.min, k.max,
     );
     writeValue(input, drag.val);
