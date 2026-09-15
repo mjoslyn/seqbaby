@@ -261,7 +261,7 @@ export const STUDIO_BODY = String.raw`
     </span>
     </div><!-- /sq-transport__main -->
     <div class="sq-transport__right">
-      <button id="metronome" class="sq-btn--ghost sq-icon-btn" aria-pressed="false" aria-label="metronome" title="metronome click on the downbeat"></button>
+      <button id="metronome" class="sq-btn--ghost sq-icon-btn" aria-pressed="false" aria-label="metronome" title="metronome click on the downbeat — drag up/down to set volume"></button>
       <svg id="beat-indicator" class="sq-beat-indicator" viewBox="-22 -22 44 44" width="40" height="40" aria-hidden="true"></svg>
       <div class="sq-meter sq-meter--master" title="master output level"><div class="sq-meter__bar"></div></div>
     </div><!-- /sq-transport__right -->

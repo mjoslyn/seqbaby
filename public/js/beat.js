@@ -15,7 +15,11 @@ export function fireMetronome(time, accent) {
   osc.type = "sine";
   osc.frequency.setValueAtTime(accent ? 1760 : 1320, time);
   const g = ctx.createGain();
-  const peak = accent ? 0.28 : 0.14;
+  // Full fill is a little louder than the old fixed click; the default level
+  // (0.7) lands exactly on what it used to be.
+  const level = Math.max(0, Math.min(1, state.metronomeLevel ?? 0.7));
+  const peak = (accent ? 0.4 : 0.2) * level;
+  if (peak <= 0) return;
   g.gain.setValueAtTime(0, time);
   g.gain.linearRampToValueAtTime(peak, time + 0.002);
   g.gain.exponentialRampToValueAtTime(0.0001, time + 0.06);

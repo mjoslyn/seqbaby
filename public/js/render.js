@@ -76,22 +76,25 @@ export function paintDiceDensity(t) {
   btn.setAttribute("aria-valuenow", String(Math.round(d * 100)));
 }
 
-// The dice is also the density control: click rolls a new pattern, dragging it
-// up/down sets how full that roll comes out (drawn as the fill behind the icon).
-// Same drag idiom as the BPM field — a press only becomes a drag past a few
-// pixels, so an ordinary click still rolls.
-function attachDiceDensity(t, btn) {
+/**
+ * Make a button double as a level control: dragging it up/down sets a 0..1
+ * value (the caller paints it in `set`), and a plain click still reaches the click handler.
+ * Same drag idiom as the BPM field — a press only becomes a drag past a few
+ * pixels. The click that ends a drag is flagged on the button
+ * (`btn._levelDragged`) so the click handler can swallow it.
+ * @param {HTMLElement} btn
+ * @param {{ get: () => number, set: (v: number) => void }} level
+ */
+export function attachLevelDrag(btn, level) {
   const PX_FULL_TRAVEL = 90;    // px from empty to full
   const PX_THRESH = 4;
   btn.style.touchAction = "none";
-  btn.setAttribute("role", "button");
   btn.setAttribute("aria-valuemin", "0");
   btn.setAttribute("aria-valuemax", "100");
-  paintDiceDensity(t);
   let drag = null;
   btn.addEventListener("pointerdown", (e) => {
     if (e.pointerType === "mouse" && e.button !== 0) return;
-    drag = { id: e.pointerId, startY: e.clientY, startVal: t.density ?? 0.5, moved: false };
+    drag = { id: e.pointerId, startY: e.clientY, startVal: level.get(), moved: false };
     // Capture straight away: the button is only ~28px tall, so a drag leaves it
     // almost immediately and without capture the moves would go elsewhere.
     try { btn.setPointerCapture(e.pointerId); } catch {}
@@ -107,23 +110,33 @@ function attachDiceDensity(t, btn) {
       if (Math.abs(dy) < PX_THRESH) return;
       drag.moved = true;
     }
-    t.density = Math.max(0, Math.min(1, drag.startVal - dy / PX_FULL_TRAVEL));
-    paintDiceDensity(t);
+    level.set(Math.max(0, Math.min(1, drag.startVal - dy / PX_FULL_TRAVEL)));
     e.preventDefault();
   });
   const end = (e) => {
     if (!drag || e.pointerId !== drag.id) return;
     try { btn.releasePointerCapture(e.pointerId); } catch {}
     // A drag ends with a click event we don't want to act on — swallow it.
-    btn._diceDragged = drag.moved;
+    btn._levelDragged = drag.moved;
     drag = null;
   };
   btn.addEventListener("pointerup", end);
   btn.addEventListener("pointercancel", end);
   btn.addEventListener("lostpointercapture", end);
+}
+
+// The dice is also the density control: click rolls a new pattern, dragging it
+// up/down sets how full that roll comes out (drawn as the fill behind the icon).
+function attachDiceDensity(t, btn) {
+  btn.setAttribute("role", "button");
+  paintDiceDensity(t);
+  attachLevelDrag(btn, {
+    get: () => t.density ?? 0.5,
+    set: (v) => { t.density = v; paintDiceDensity(t); },
+  });
   // Kept as a click handler so the keyboard (Enter / Space) still rolls.
   btn.addEventListener("click", () => {
-    if (btn._diceDragged) { btn._diceDragged = false; return; }
+    if (btn._levelDragged) { btn._levelDragged = false; return; }
     randomizeMelody(t);
   });
 }

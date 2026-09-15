@@ -42,6 +42,7 @@ export const state = {
   repeatId: null,
   nextId: 1,
   metronome: false,
+  metronomeLevel: 0.7,  // the metronome button's fill: click volume, 0..1 (drag the button up/down)
   noteColors: false,  // diatonic pitch-class coloring on the roll + step grid
   currentSetName: null,  // last loaded/saved session name — drives version-bump suggestions
   audioCtx: null,

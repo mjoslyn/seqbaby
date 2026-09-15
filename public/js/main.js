@@ -17,7 +17,7 @@ import { meterTick } from "./meters.js";
 import { setEngineKey } from "./params.js";
 import { installParamContextMenu } from "./paramMenu.js";
 import { copyPattern, openPatternMenu, renderPatternGrid } from "./patternBar.js";
-import { setActiveTrack } from "./render.js";
+import { attachLevelDrag, setActiveTrack } from "./render.js";
 import { initScaleUI } from "./scaleUI.js";
 import { loadShareFromUrl, onExportSet, onImportSet, onLoadSet, onNewSet, onSaveSet, onShareSet, STARTER_TRACKS } from "./session.js";
 import { state, switchPattern } from "./state.js";
@@ -517,7 +517,33 @@ export function init() {
   const metroBtn = document.getElementById("metronome");
   if (metroBtn) {
     metroBtn.innerHTML = ICON_METRONOME;
+    // The button is also the click's volume, the way the dice is the density:
+    // drag up/down sets it, drawn as the fill behind the icon. A plain click
+    // still toggles. Remembered per browser, since it is a preference rather
+    // than part of a song.
+    const METRO_LEVEL_KEY = "seqbaby.metronome.v1";
+    try {
+      const raw = localStorage.getItem(METRO_LEVEL_KEY);
+      const v = raw == null ? NaN : Number(raw);
+      if (Number.isFinite(v) && v >= 0 && v <= 1) state.metronomeLevel = v;
+    } catch {}
+    const paintMetroLevel = () => {
+      const pct = Math.round(state.metronomeLevel * 100);
+      metroBtn.style.setProperty("--metro-level", `${pct}%`);
+      metroBtn.title = `metronome click on the downbeat — ${pct}% (drag up/down to set volume)`;
+      metroBtn.setAttribute("aria-valuenow", String(pct));
+    };
+    paintMetroLevel();
+    attachLevelDrag(metroBtn, {
+      get: () => state.metronomeLevel,
+      set: (v) => {
+        state.metronomeLevel = v;
+        paintMetroLevel();
+        try { localStorage.setItem(METRO_LEVEL_KEY, String(v)); } catch {}
+      },
+    });
     metroBtn.addEventListener("click", () => {
+      if (metroBtn._levelDragged) { metroBtn._levelDragged = false; return; }
       state.metronome = !state.metronome;
       metroBtn.setAttribute("aria-pressed", String(state.metronome));
     });
