@@ -100,7 +100,7 @@ export function showSavedPatchPicker() {
           const suffix = eng ? ` <span class="sq-patch__eng">- ${esc(eng)}</span>` : "";
           return `<li class="sq-patch__row"><button class="sq-patch__load" data-name="${esc(n)}">${esc(n)}${suffix}</button><button class="sq-patch__del sq-btn--ghost" data-name="${esc(n)}" title="delete">×</button></li>`;
         }).join("")
-      : `<li class="sq-patch__empty">no saved patches yet — design a sound and click save.</li>`;
+      : `<li class="sq-patch__empty">no saved patches yet. Design a sound and click save.</li>`;
     overlay.innerHTML = `
       <div class="sq-modal" role="dialog" aria-modal="true">
         <div class="sq-modal__title">load saved patch</div>

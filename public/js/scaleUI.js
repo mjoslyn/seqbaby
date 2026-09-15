@@ -17,11 +17,11 @@ export function refreshChordTypeSelect() {
     const on = !!state.kbdChordType;
     sel.innerHTML = '<option value="">off</option><option value="on">on</option>';
     state.kbdChordType = on ? "on" : "";
-    sel.title = "chord mode — on plays diatonic chords quantized to the scale";
+    sel.title = "chord mode: on plays diatonic chords snapped to the scale";
   } else {
     sel.innerHTML = Object.keys(CHORD_TYPES).map(k => `<option value="${k}">${k || "off"}</option>`).join("");
     if (!CHORD_TYPES[state.kbdChordType]) state.kbdChordType = "";   // "on" isn't a real chord type
-    sel.title = "chord mode — play each key as a chord (off = single notes)";
+    sel.title = "chord mode: play each key as a chord. Off is single notes";
   }
   sel.value = state.kbdChordType;
   syncKbdArpUI();   // the arp group only shows while chord mode is on

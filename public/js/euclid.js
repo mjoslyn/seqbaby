@@ -501,7 +501,7 @@ function drawEuclidViz(t, panelEl) {
   const hint = panel.querySelector(".sq-euclid__hint");
   if (hint) {
     hint.textContent = c.on
-      ? `generating live across the track's ${len} steps — the grid is read-only until you switch it off`
+      ? `generating live across the track's ${len} steps. The grid is read-only until you switch it off`
       : `the cycle tiles across the track's ${len} steps`;
   }
 

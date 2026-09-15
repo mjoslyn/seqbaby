@@ -72,7 +72,7 @@ export function paintDiceDensity(t) {
   if (!btn) return;
   const d = Math.max(0, Math.min(1, t.density ?? 0.5));
   btn.style.setProperty("--dice-level", `${Math.round(d * 100)}%`);
-  btn.title = `random pattern — ${Math.round(d * 100)}% dense (drag up/down to set)`;
+  btn.title = `random pattern, ${Math.round(d * 100)}% dense. Drag up and down to set it`;
   btn.setAttribute("aria-valuenow", String(Math.round(d * 100)));
 }
 
