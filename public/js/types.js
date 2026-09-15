@@ -234,6 +234,7 @@
  * @property {number|null} repeatId
  * @property {number} nextId
  * @property {boolean} metronome
+ * @property {number} metronomeLevel  click volume 0..1 (the metronome button's fill)
  * @property {boolean} noteColors
  * @property {string|null} currentSetName
  * @property {AudioContext|null} audioCtx

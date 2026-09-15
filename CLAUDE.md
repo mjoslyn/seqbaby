@@ -886,7 +886,9 @@ sliceOn, sliceBase, slicePlayMode, pitchLock`, sound config
 
 ### Global `state`
 
-`tracks, playing, tick, repeatId, nextId, metronome, noteColors,
+`tracks, playing, tick, repeatId, nextId, metronome, metronomeLevel (the
+metronome button's fill: click volume, dragged like the dice, kept in
+localStorage rather than the song), noteColors,
 currentSetName, audioCtx, ready, masterGain, masterLimiter, masterAnalyser,
 midi, scale {active, root, mode}, activePattern, patternMode
 ("repeat"|"chain"), patternSwitchMode ("immediate"|"finish"), queuedPattern,
