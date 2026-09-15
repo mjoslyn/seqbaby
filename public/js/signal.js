@@ -50,7 +50,11 @@ export function ensureFxRack(t) {
  * @returns {boolean}
  */
 export function noiseBedActive(t, soloAudible) {
-  if (!state.playing) return false;
+  const held = !!t._bedHolds || (t._bedHeldUntil ?? 0) > (state.audioCtx?.currentTime ?? 0);
+  if (!state.playing && !held) return false;
+  // A note played by hand goes through mute — mute withholds the transport's
+  // triggers, and this trigger was not the transport's — so the bed follows it.
+  if (held && t.engineKey !== "bus") return true;
   if (t.muted) return false;
   if (!soloAudible) return true;
   if (soloAudible.has(t)) return true;
@@ -67,6 +71,48 @@ export function noiseBedActive(t, soloAudible) {
     }
   }
   return false;
+}
+
+// How long the beds stay open after a hand-played note ends: the note's own
+// release is still sounding, and a bed that cut off before it did would read as
+// the record stopping mid-note.
+const BED_NOTE_TAIL = 1.5;
+
+/**
+ * A note played outside the transport — the computer keyboard, a sample
+ * audition — means the track is playing for as long as it sounds, so its beds
+ * open with it. With `seconds` they close that long (plus a tail) after the
+ * call; without, they stay open until `releaseNoiseBed`, one per hold, which is
+ * the held-key case where nothing knows the length in advance.
+ * @param {Track} t @param {number} [seconds]
+ */
+export function holdNoiseBed(t, seconds) {
+  if (!t || !state.audioCtx) return;
+  if (seconds == null) {
+    t._bedHolds = (t._bedHolds || 0) + 1;
+  } else {
+    armBedTail(t, Math.max(0, Number(seconds) || 0));
+  }
+  refreshNoiseBeds();
+}
+
+/** The end of a hold opened without a length: the beds close after the tail. */
+export function releaseNoiseBed(t) {
+  if (!t || !t._bedHolds) return;
+  t._bedHolds -= 1;
+  if (!t._bedHolds) armBedTail(t, 0);
+  refreshNoiseBeds();
+}
+
+function armBedTail(t, seconds) {
+  const until = state.audioCtx.currentTime + seconds + BED_NOTE_TAIL;
+  if (until <= (t._bedHeldUntil ?? 0)) return;      // an earlier hold already outlasts this one
+  t._bedHeldUntil = until;
+  if (t._bedHoldTimer) clearTimeout(t._bedHoldTimer);
+  t._bedHoldTimer = setTimeout(() => {
+    t._bedHoldTimer = null;
+    refreshNoiseBeds();
+  }, (seconds + BED_NOTE_TAIL) * 1000 + 30);
 }
 
 /**

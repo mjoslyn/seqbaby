@@ -205,15 +205,20 @@ voice → filterNode → eqNode → compressor → fxRack → masterGain → mas
   ring mod → wave shaper → crush → auto-wah → chorus → phaser → flanger →
   pitch shift → delay → reverb**. `defaultFxConfig()` keys match. Chain order
   matters for LFO/automation targets.
-- **The vinyl crackle bed only plays while the track plays.** It is a looping
-  noise source inside the rack, so left alone it sounded whenever the master bus
-  was open: before the first play, after a keyboard note reopened the bus, and
-  on a muted track. `vinylNoiseGate` (fxRack.js, `setNoiseBedActive`) sits after
-  the level gain the automation lane ramps, and `refreshNoiseBeds` (signal.js)
-  decides it from the transport plus mute / solo (`noiseBedActive`; a bus counts
+- **The vinyl crackle and cassette hiss beds only play while the track plays.**
+  Each is a looping noise source inside the rack, so left alone they sounded
+  whenever the master bus was open: before the first play, after a keyboard
+  note reopened the bus, and on a muted track. `vinylNoiseGate` /
+  `cassetteHissGate` (fxRack.js, `setNoiseBedActive`) sit after the level gains
+  the automation lanes ramp, and `refreshNoiseBeds` (signal.js)
+  decides them from the transport plus mute / solo (`noiseBedActive`; a bus counts
   as playing when something audible feeds it). Called from play / stop, the mute
   and solo buttons, history restore, `applySet`, duplicate / remove track, and
-  once when a rack is built.
+  once when a rack is built. A note played by hand counts too: the computer
+  keyboard holds the beds open per key (`holdNoiseBed` / `releaseNoiseBed`) and
+  the sample auditions hold them for the sample's length, each closing a 1.5s
+  tail after the note so a release is not cut off. A hand-played note goes
+  through mute, so its hold does as well.
 - Master bus: `masterGain` → `masterLimiter` (DynamicsCompressor as brickwall
   safety, threshold −2dB ratio 20) → destination.
 - Where the rack's output goes is `t.out` — `"master"` or an fx bus track's id
