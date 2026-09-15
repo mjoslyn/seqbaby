@@ -1088,6 +1088,26 @@ moves the real knob already.
   `PARAM_CURVE` the three that aren't linear at all, cutoff above all: 3kHz is
   most of the dial at 200Hz and a nudge at 15k.
 
+**What is on shows on the track** (`refreshPanelBadges`, paramTargets.js).
+Every sound-shaping panel opens as a modal, so a track with a delay on it, an
+LFO on the cutoff and a sidechain ducking it used to look exactly like one with
+nothing on it until all seven buttons had been pressed in turn. Now each panel
+button carries a dot (`data-on`, a count, in the panel's own colour) and a
+tooltip naming what is on, and the panel itself is shown INLINE on the track
+with only the rows that are on: the rack's engaged stages (by the same level the
+rack wires a stage into the chain on, `FX_STAGE_LEVEL_KEY` in constants.js), the
+enabled LFO rows, the filter row once it has been closed at all or given
+resonance, the env row above zero, the eq when a band moved, the compressor when
+its switch is on. Nothing is moved or copied — the panel stays where the markup
+put it with `is-live` on it and on its rows, and style.css hides the rest scoped
+to `.sq-track`, so the same element opened as a modal is the whole panel again
+and every `panel.querySelector` in the app keeps finding its controls. The
+lanes stay a badge only: a per-step grid is not a row of knobs. Called from
+`refreshParamIndicators` (which already runs after anything that touches the
+matrix or the lanes), from `syncTrackSoundUI` (session load, patch load, p-lock
+recall), from the value panels' own `input`/`change` events, and from
+`openPanelAsModal`'s close, which is what puts the inline view back.
+
 **Right-click a parameter** opens `paramMenu.js`: what the control does, its
 LFO row, its automation lane and its macro assignment — the same widgets the panels use
 (`buildLfoRow` / `buildAutomationLane` in render.js), over the same track state

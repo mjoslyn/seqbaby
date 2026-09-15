@@ -7,7 +7,7 @@ import { upgradeKnobs } from "./knob.js";
 import { applySampleSpeed, currentBpm } from "./lfo.js";
 import { renderRollPanel } from "./pianoRoll.js";
 import { updateGranularSpeedEnabled } from "./params.js";
-import { refreshParamIndicators } from "./paramTargets.js";
+import { refreshPanelBadges, refreshParamIndicators } from "./paramTargets.js";
 import { renderAutomationPanel } from "./render.js";
 import { invertChord, state } from "./state.js";
 import { renderStepGrid } from "./stepGrid.js";
@@ -59,6 +59,8 @@ export function openPanelAsModal(t, opts) {
     if (btn) btn.setAttribute("aria-pressed", "false");
     document.removeEventListener("keydown", escHandler);
     t[modalKey] = null;
+    // Whatever was switched on in here goes back to being shown on the track.
+    refreshPanelBadges(t);
   };
   const escHandler = (e) => { if (e.key === "Escape") close(); };
   closeBtn.addEventListener("click", close);

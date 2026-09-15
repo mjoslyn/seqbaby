@@ -1,4 +1,5 @@
 import { SHAPER_MODES, makeCassetteSatCurve, makeFuzzCurve, makeShaperCurve, makeTapeHissBuffer, makeVinylCrackleBuffer, shaperPreampGain } from "./curves.js";
+import { fxStageLevel } from "./constants.js";
 import { currentBpm } from "./lfo.js";
 import { setParam } from "./params.js";
 
@@ -346,23 +347,7 @@ export class FXRack {
 
   // The wet/amount level that decides whether a stage needs to be in the chain.
   _stageLevel(key) {
-    const c = this.config;
-    switch (key) {
-      case "vinyl":      return c.vinyl?.amount ?? 0;
-      case "cassette":   return c.cassette?.amount ?? 0;
-      case "fuzz":       return c.fuzz?.amount ?? 0;
-      case "ringmod":    return c.ringmod?.wet ?? 0;
-      case "shaper":     return c.shaper?.wet ?? 0;
-      case "crush":      return c.crush?.wet ?? 0;
-      case "autowah":    return c.autowah?.wet ?? 0;
-      case "chorus":     return c.chorus?.wet ?? 0;
-      case "phaser":     return c.phaser?.wet ?? 0;
-      case "flanger":    return c.flanger?.wet ?? 0;
-      case "pitchshift": return c.pitchshift?.wet ?? 0;
-      case "delay":      return c.delay?.wet ?? 0;
-      case "reverb":     return c.reverb?.wet ?? 0;
-    }
-    return 0;
+    return fxStageLevel(this.config, key);
   }
 
   // Rebuild the serial chain from only the engaged stages. Chain edges are the
