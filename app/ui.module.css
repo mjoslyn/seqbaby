@@ -281,7 +281,7 @@
 .smallBtn:hover { border-color: #3a3d45; }
 .smallBtnPrimary { background: #6ee7b7; color: #0e0f12; border-color: #6ee7b7; font-weight: 700; }
 .divider { height: 1px; background: #2a2d35; margin: 10px 0; }
-.songRow { display: flex; align-items: center; gap: 6px; padding: 5px 0; }
+.songRow { display: flex; align-items: center; gap: 4px; padding: 5px 0; }
 .songRowTitle {
   flex: 1;
   min-width: 0;
@@ -299,14 +299,19 @@
 .songRowTitle:hover { color: #6ee7b7; }
 .songRowActive { color: #6ee7b7; }
 .iconBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
   border: 0;
   background: none;
   color: #6b7280;
   cursor: pointer;
   font-size: 12px;
-  padding: 3px 5px;
+  padding: 3px;
   border-radius: 4px;
 }
+.iconBtn svg { display: block; }
 .iconBtn:hover { color: #e8e8ea; background: #22252c; }
 .pubDot { color: #6ee7b7; font-size: 10px; }
 .empty { color: #6b7280; font-size: 12px; padding: 6px 0; }
