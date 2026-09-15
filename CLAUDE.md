@@ -959,6 +959,16 @@ it; the input is still the value, the focus target and the pointer target.
   layout has gone mobile** even when the dial is drawn smaller — keyed on
   `(any-pointer: coarse), (max-width: 768px)`, because a touchscreen laptop and
   a phone-width layout both need fingers' room.
+- **On a phone every knob is a vertical slider** (the KNOBS ON A PHONE block in
+  style.css, keyed on `(pointer: coarse), (max-width: 768px)` — the PRIMARY
+  pointer, so a touchscreen laptop keeps its dials). Same wrapper, same
+  `--knob-v`; `--knob-len` is the bar's height (72px, shorter in the hexop grid
+  and the transport) and `--knob-bar` the drawn track's width. knob.js's one
+  concession is `travelFor`: it measures the dial at the start of a drag and,
+  finding it taller than wide, takes its height as the full-range travel, so the
+  thumb follows the finger 1:1. The drag is still relative — a slider that
+  jumped to the touch would be the native range's fault all over again — and
+  the horizontal fine-trim, long-press and double-tap are unchanged.
 - `KNOB_EXCLUDE` keeps the wavetable's 16 harmonic bars as sliders: side by side
   they *are* the waveform, and a row of little dials would say nothing.
 - Called from `renderTrack`, from every modal that builds controls
