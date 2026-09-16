@@ -3,7 +3,7 @@ import { engineByKey, loadPatches, populateEngineSelect, savePatch } from "./cat
 import { applyTrackPatch, serializeTrackPatch } from "./session.js";
 import { LFO_DIVS, LFO_KEYS, lfoDivIndex, lfoLabel, rateToSlider, sliderToRate } from "./constants.js";
 import { showInputDialog, showSavedPatchPicker } from "./dialogs.js";
-import { setStatus } from "./dom.js";
+import { isMobileDevice, setStatus } from "./dom.js";
 import { HEXOP_ALG_LABELS, HEXOP_DEFAULTS, HEXOP_NUM_KEYS, HEXOP_PRESET_NAMES, HEXOP_SEL_KEYS, hexopPreset } from "./hexop.js";
 import { BASS_DEFAULTS, BASS_NUM_KEYS, BASS_SEL_KEYS, BASS_TONE_NAMES, bassTone, bassToneDescription } from "./bass.js";
 import { SUB_DEFAULTS, SUB_NUM_KEYS, SUB_SEL_KEYS, SUB_TONE_NAMES, subTone, subToneDescription } from "./subbass.js";
@@ -802,6 +802,15 @@ export function renderTrack(t) {
     btn.addEventListener("click", () => {
       if (t[modalKey]) { t[modalKey].close(); return; }
       closeOtherPanels(btnSel);
+      // On a phone these buttons are pressed from inside the track menu, which
+      // is itself a modal — so a panel opened from there landed on top of it,
+      // over a dimmed copy of the menu, with two `done` buttons on screen and
+      // only the nearer one doing anything. Closing the menu first makes it a
+      // drill-down: menu, then the panel, then back to the track. It also has
+      // to happen before openFn, because closing the menu moves this very
+      // button back into the track head — which is where the panel's own close
+      // looks for it to unpress it.
+      t._trackMenuModal?.close();
       if (beforeOpen) beforeOpen();
       openFn(t);
       btn.setAttribute("aria-pressed", "true");
@@ -885,6 +894,9 @@ export function renderTrack(t) {
   moreBtn.setAttribute("aria-pressed", "false");
   moreBtn.setAttribute("aria-label", "show more track controls");
   moreBtn.title = "more";
+  // Names itself on a phone, where its tooltip is unreachable — see the icon
+  // buttons block in the mobile section of style.css.
+  moreBtn.dataset.label = "more";
   moreBtn.innerHTML = ICON_SLIDERS;
   moreBtn.addEventListener("click", () => {
     if (t._trackMenuModal) { t._trackMenuModal.close(); return; }
@@ -1531,7 +1543,9 @@ export function renderModPanel(t, panel) {
   adder.innerHTML = `
     <button class="sq-mod__add-btn sq-btn--ghost" type="button">+ add modulation</button>
     <select class="sq-mod__add-select" hidden></select>
-    <span class="sq-mod__hint">one lfo or one automation lane per parameter · right-click a parameter to see what's on it</span>
+    <span class="sq-mod__hint">one lfo or one automation lane per parameter · ${
+      isMobileDevice() ? "long-press" : "right-click"
+    } a parameter to see what's on it</span>
   `;
   panel.appendChild(adder);
   const addBtn = adder.querySelector(".sq-mod__add-btn");

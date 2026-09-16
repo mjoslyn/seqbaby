@@ -1441,6 +1441,74 @@ twelve people posting twelve songs all got "seqbaby". A URL that names a song
   Supabase env at all. Every one of those falls back to the site card rather
   than failing the page: a link preview is not worth a 500.
 
+## The studio on a phone (the mobile block in `style.css`)
+
+Three media queries decide what "a phone" means here, and they are deliberately
+different tests:
+
+- **`(max-width: 768px)`** — the layout. The track head's rows, the track menu,
+  the session menu, the step grid's tall cells.
+- **`(pointer: coarse), (max-width: 768px)`** — the knobs drawn as vertical
+  sliders (see the Knobs section). The PRIMARY pointer, so a touchscreen laptop
+  keeps its dials.
+- **`(any-pointer: coarse), (max-width: 768px)`** — `--knob-hit`, the 44px
+  target under a knob drawn smaller. A touchscreen laptop wants the room even
+  though it kept the dial.
+- **`(pointer: coarse) and (min-width: 769px)`** — a touch device too wide for
+  the phone layout, which is what a phone in landscape is (844px). It keeps the
+  desktop arrangement, which is right — every pattern slot and every track
+  control on screen at once — but it was also keeping the desktop's 24-30px
+  buttons under a finger while the knobs beside them already had their 44px. A
+  34px floor only: 44 everywhere would wrap the transport onto four lines.
+
+**Icon buttons name themselves.** A `title` is a hover and a finger cannot
+hover, so the dice, the ring, the die, the sample editor, `clear`, `roll` and
+the "more" toggle were seven unlabelled glyphs in a row with no way to find out
+what any of them did — and the generators behind three of them are most of what
+the app can do. Each carries its name under its icon, from `data-label` on the
+button (studioMarkup.ts, plus render.js for the two it builds and main.js for
+the session menu's mode / switch pair, whose captions track their state). Under
+rather than beside: a caption beside the glyph doubles the button's width and
+six of those do not fit across a phone, where icon-over-caption is 44px wide —
+which is the target size they needed anyway. `clear` and `roll` already carried
+a `.sq-btn__label` span for their desktop text, so they use that instead of a
+second attribute. The `::after` that prints it is inside the 768px block, so
+desktop is untouched.
+
+**`.sq-track__head::before` is a line break.** A flex container's own
+pseudo-element IS a flex item, so a zero-height one with a 100% basis breaks the
+line — which is the only way to put a break at a chosen point in a wrapping row
+without adding a wrapper to the markup, and the track head's children are
+queried from a dozen places by their position in it. `order` places it, and the
+head's children carry explicit orders around it: name / engine / len, then vol
+beside solo / mute / p-lock, then the synth row, then the generator buttons.
+Vol used to hold a line of its own — one 44px control centred in 374px of
+nothing — with those three buttons pushed underneath it.
+
+**Panels drill down, they do not stack.** The sound-shaping buttons are
+physically moved into the track menu (`openTrackMenu`), which is itself a modal,
+so a panel opened from there landed on top of it with two `done` buttons on
+screen. `bindModalOpen` closes the track menu first — before `openFn`, because
+closing it moves that very button back into the track head, which is where the
+panel's own close looks for it to unpress it.
+
+**The fx rack is fifteen stages deep**, and each one was a name on a line of its
+own with its controls tucked under the left end: ~120px of height carrying
+~140px of controls across a 374px row, so reaching the reverb was a 1900px
+scroll that was mostly empty. The name sits on the stage's own line now, in a
+fixed column the eye runs down, with the controls in the space they were
+leaving. Measured, the panel went from ~2400px to ~1200px.
+
+**What the keyboard cluster leaves behind.** `#kbd-octave` is hidden with the
+rest of the computer-keyboard controls: it reads the base octave that `z` and
+`x` shift, and with the keys gone it was a bare "C4" in the middle of the
+transport that nothing on a phone could change or act on.
+
+**Copy that names a gesture has to name the right one.** The mod panel's hint
+goes through `isMobileDevice()` (`long-press` / `right-click`); the preloader's
+tips and `HELP_TIPS` are already scoped `any` / `touch` / `desktop` for the same
+reason, and a new one belongs in whichever of those three it is true for.
+
 ## The account bar on a phone (`AccountBar.tsx` + `ui.module.css`)
 
 The bar is one right-aligned row that does not wrap, so on a 390px phone the
