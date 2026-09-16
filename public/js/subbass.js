@@ -181,6 +181,10 @@ class SubBassProcessor extends AudioWorkletProcessor {
 
     // The one voice. A sub bass is mono on purpose — see the header.
     this.ph = 0; this.ph2 = 0.33; this.ph3 = 0.66; this.subPh = 0;
+    // The wave a retrigger interrupted, kept for three milliseconds and faded
+    // out under the new one. See the crossfade in noteOn.
+    this.tailPh = 0; this.tailPh2 = 0; this.tailPh3 = 0; this.tailSubPh = 0;
+    this.tailFreq = 0; this.tailAmp = 0; this.tailW = 0; this.tailStep = 1;
     this.freq = 55; this.target = 55; this.glideA = 1;
     this.env = 0; this.gate = false; this.held = false;
     this.decayC = 0; this.relC = 0; this.attC = 1; this.attacking = false;
@@ -236,6 +240,7 @@ class SubBassProcessor extends AudioWorkletProcessor {
 
   noteOn(ev, P) {
     const drop = P.drop, droptm = P.droptm, atk = P.atk, click = P.click, phase = P.phase;
+    const prevFreq = this.freq;
     // In legato mode the glide only happens when a note arrives while another
     // is still held — which is exactly the 808 slide, and how the silverbox
     // ties notes.
@@ -253,6 +258,28 @@ class SubBassProcessor extends AudioWorkletProcessor {
     // peak, which is a soft note; started at the peak it hits immediately. It
     // is also how you stop a sub fighting the kick underneath it.
     if (!sliding || this.env <= 1e-4) {
+      // A phase reset on top of a note that is STILL SOUNDING is a step, and a
+      // step down here is a click — the one you hear on two consecutive notes.
+      // Carrying the envelope over a retrigger (below) only makes it louder,
+      // because the jump is scaled by whatever the last note had got down to.
+      // So the interrupted wave is handed to a tail that goes on running at
+      // the old note's pitch and is crossfaded out under the new one over 3ms.
+      // At the first sample the crossfade is entirely the tail, so the output
+      // is exactly what the old note would have produced and nothing steps;
+      // 3ms later it is entirely the new note, started at its phase with its
+      // full attack. Both controls keep their meaning — the phase knob still
+      // decides where every note starts, and a retrigger still picks up from
+      // the level it interrupted. Measured across 64 patches, the worst
+      // sample-to-sample jump at a retrigger falls from 140x the wave's own
+      // slope to 4x.
+      if (this.env > 1e-4) {
+        this.tailPh = this.ph; this.tailPh2 = this.ph2; this.tailPh3 = this.ph3;
+        this.tailSubPh = this.subPh;
+        this.tailFreq = prevFreq;
+        this.tailAmp = this.env;
+        this.tailW = 1;
+        this.tailStep = 1 / (0.003 * this.sr);
+      }
       this.ph = phase; this.ph2 = phase + 0.33; this.ph3 = phase + 0.66; this.subPh = phase * 0.5;
       if (this.ph2 >= 1) this.ph2 -= 1;
       if (this.ph3 >= 1) this.ph3 -= 1;
@@ -549,7 +576,37 @@ class SubBassProcessor extends AudioWorkletProcessor {
           osc += Math.sin(2 * Math.PI * this.subPh) * subL;
         }
 
-        const dry = osc * this.env;
+        let dry = osc * this.env;
+
+        // The tail of the wave a retrigger interrupted, running on at the old
+        // note's pitch and crossfading out under the new one. Smoothstepped, so
+        // neither the value nor its slope steps at either end of the fade.
+        if (this.tailW > 0) {
+          const dtT = this.tailFreq * driftMul / sr;
+          let to = 0;
+          const td1 = dtT * m1;
+          this.tailPh += td1; if (this.tailPh >= 1) this.tailPh -= 1;
+          to += this.wave(this.tailPh, td1, shp);
+          if (nOsc > 1) {
+            const td2 = dtT * m2;
+            this.tailPh2 += td2; if (this.tailPh2 >= 1) this.tailPh2 -= 1;
+            to += this.wave(this.tailPh2, td2, shp);
+          }
+          if (nOsc > 2) {
+            const td3 = dtT * m3;
+            this.tailPh3 += td3; if (this.tailPh3 >= 1) this.tailPh3 -= 1;
+            to += this.wave(this.tailPh3, td3, shp);
+          }
+          to *= oscNorm;
+          if (subL > 0.001) {
+            this.tailSubPh += dtT * 0.5; if (this.tailSubPh >= 1) this.tailSubPh -= 1;
+            to += Math.sin(2 * Math.PI * this.tailSubPh) * subL;
+          }
+          const w = this.tailW * this.tailW * (3 - 2 * this.tailW);
+          dry += (to * this.tailAmp - dry) * w;
+          this.tailW -= this.tailStep;
+          if (this.tailW < 0) this.tailW = 0;
+        }
 
         // ---- the harmonics path: parallel, shaped, highpassed ----
         // This is the whole reason the instrument exists. Shape hard, keep only

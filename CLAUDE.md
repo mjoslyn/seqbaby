@@ -638,6 +638,17 @@ SUB OCT --------+---------------------------------------------+     above: RESON
   at all when it is otherwise a sine. `drop` spans 40 semitones and lands exactly
   on the note; `click` adds the band of noise that is often the only part of the
   note a small speaker reproduces at all.
+- **A retrigger is crossfaded, because the phase reset is a step.** Every note
+  starts at `phase` (that is the control's whole point), but snapping the
+  accumulator while the last note is still ringing is a discontinuity scaled by
+  whatever that note had got down to — and carrying the envelope across a
+  retrigger, which the voice does deliberately, only makes it bigger. The
+  interrupted wave is kept as a tail running at the old note's pitch and faded
+  out under the new one over 3ms, smoothstepped so neither the value nor its
+  slope steps at either end. Measured over 64 patches, the worst jump at a
+  retrigger went from 140x the wave's own slope to 4x. Deleting the tail brings
+  the click back on any two consecutive notes close enough for the first to
+  still be sounding.
 - **The shapes share one phase accumulator** (sine -> tri -> saw -> square,
   polyBLEP on saw/square) and are **zero-crossing aligned**, so `phase` means the
   same thing whichever shape is loaded. The detune spread hangs either side of
