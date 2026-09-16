@@ -249,6 +249,34 @@ export function getModTarget(t, key) {
   return null;
 }
 
+// Put a modulation source onto one of those params — SUMMED onto it, leaving
+// the param's own value alone. Both mod sources go through here (the Tone.LFO
+// and the scheduled gate the stepped shapes use).
+//
+// `source.connect(param)` cannot do that, and this is the one place it
+// matters. Tone routes every signal→param connection through `connectSignal`,
+// which first does `param.cancelScheduledValues(0)` and
+// `param.setValueAtTime(0, 0)`: a signal feeding a param is normally that
+// param's ONLY source, so Tone hands it the param outright. Here it is the
+// opposite — the slider is the base and the LFO swings around it (the whole
+// modulation model, and what modMotion draws its needle around). Left to
+// Tone, switching an LFO on dropped the parameter to ZERO: a cutoff to 0Hz,
+// a wet to dry, a hexop operator to silence. A native AudioParam came back the
+// next time the slider was moved; a Tone.Param never did, because
+// connectSignal also marks it `overridden`, and an overridden Param writes 0
+// whatever value it is given (Param._fromType) — so a delay's wet stayed dry
+// for the life of the rack, LFO removed or not.
+//
+// `Tone.connect` is the raw graph connect underneath, without that override
+// step, so the param keeps its value and its schedule (a filter envelope
+// mid-sweep included) and the source is simply summed on top. Teardown is
+// unchanged: disconnect/dispose still remove the edge, and now leave the base
+// behind rather than a zero.
+function connectMod(source, param) {
+  try { Tone.connect(source, param); }
+  catch (e) { console.warn("mod connect failed", e); }
+}
+
 export const TRACK_FX_LFO_KEYS = new Set([
   "fuzz","delay","verb","vinyl","cassette","ringmod","shaper","crush","autowah","chorus","phaser","flanger","pitch",
   "fuzz_drive","fuzz_tone","fuzz_level","vinyl_warmth","shaper_preamp","ring_freq","crush_bits",
@@ -570,7 +598,7 @@ const STEP_LOOKAHEAD = 0.25;
 
 function makeStepGate(param) {
   const signal = new Tone.Signal(0);
-  try { signal.connect(param); } catch {}
+  connectMod(signal, param);
   return {
     isStepped: true,
     signal,
@@ -880,7 +908,7 @@ export function syncLFO(t, key) {
   if (!lfo) {
     lfo = new Tone.LFO({ frequency: hz, min: lo, max: hi, type: cfg.type, phase: phaseDeg });
     lfo.start();
-    lfo.connect(param);
+    connectMod(lfo, param);
     t.lfos[key] = lfo;
   } else {
     lfo.frequency.value = hz;
