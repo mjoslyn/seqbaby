@@ -211,6 +211,29 @@
 /* Sits at the left of the bar (the rest of the row is right-aligned). */
 .manualLink { margin-right: auto; color: #9aa0aa; text-decoration: none; }
 .manualLink:hover { color: #e8e8ea; }
+
+/* Everything the bar carries apart from `manual`. One element, so the mobile
+   sheet can be the same DOM moved by CSS rather than a second copy of it. */
+.barItems { display: flex; align-items: center; gap: 8px; }
+
+/* The mobile trigger. Hidden until the row stops fitting -- see the block at
+   the bottom of this file. */
+.menuBtn {
+  display: none;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border: 1px solid #2a2d35;
+  border-radius: 6px;
+  background: #16181d;
+  color: #e8e8ea;
+  font: inherit;
+  cursor: pointer;
+}
+.menuBtn svg { display: block; }
+
+.sheetBackdrop { display: none; }
+
 .accountName { color: #9aa0aa; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-decoration: none; cursor: pointer; }
 .accountName:hover { color: #e8e8ea; }
 .accountBtn {
@@ -345,3 +368,110 @@
 .verMeta { color: #4b5563; font-size: 10px; white-space: nowrap; }
 .treeHint { color: #6b7280; font-size: 11px; margin: -2px 0 6px; }
 .iconBtnOn { color: #6ee7b7; }
+
+/* ============================================================ */
+/* mobile: the bar becomes one button and a sheet               */
+/* ------------------------------------------------------------ */
+/* The row is `justify-content: flex-end` and does not wrap, so  */
+/* on a phone the items past the viewport's left edge were not   */
+/* merely squeezed -- they were unreachable. Below 768px they    */
+/* collapse behind `menu` and open as a sheet under the bar, and */
+/* the dropdown panels (save, songs) stop being dropdowns: a     */
+/* 300px panel hung off a button near the right edge is cut off  */
+/* by the viewport whatever the bar does.                        */
+/* ============================================================ */
+
+@media (max-width: 768px) {
+  .topBar { padding: 6px 10px; gap: 6px; }
+
+  /* Raised only while the sheet is open, so an engine modal (z-index 200) is
+     never sat on by a bar nobody is using. */
+  .topBarMenuOpen { position: relative; z-index: 250; }
+
+  .menuBtn { display: inline-flex; }
+
+  .sheetBackdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    background: rgba(0, 0, 0, 0.5);
+  }
+  /* In-flow children paint under positioned ones, so the trigger needs a layer
+     of its own or the backdrop swallows the tap that closes the sheet. */
+  .topBarMenuOpen .manualLink,
+  .topBarMenuOpen .menuBtn { position: relative; z-index: 1; }
+
+  .barItems { display: none; }
+  .barItemsOpen {
+    display: flex;
+    position: absolute;
+    z-index: 2;
+    top: 100%;
+    left: 8px;
+    right: 8px;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+    margin-top: 6px;
+    padding: 8px;
+    max-height: calc(100dvh - 60px);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    background: #16181d;
+    border: 1px solid #2a2d35;
+    border-radius: 12px;
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6);
+  }
+  .barItemsOpen > *,
+  .barItemsOpen form { width: 100%; }
+  /* Every row reads the same and every row is a finger's worth of target. */
+  .barItemsOpen .accountBtn,
+  .barItemsOpen .shareBtn,
+  .barItemsOpen .accountName,
+  .barItemsOpen .songsWrap > button {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    min-height: 44px;
+    text-align: left;
+    padding: 10px 12px;
+    border-radius: 8px;
+    font-size: 13px;
+    max-width: none;
+  }
+  .barItemsOpen .accountName {
+    border: 1px solid #22252c;
+    background: #0e0f12;
+  }
+
+  /* The panels: a sheet at the bottom of the screen, not a dropdown hung off a
+     button that is itself at the edge. `fixed` is against the viewport (no
+     transformed ancestor), so this works the same whether the button is in the
+     bar or in the sheet above. */
+  .panel {
+    position: fixed;
+    z-index: 3;
+    top: auto;
+    left: 8px;
+    right: 8px;
+    bottom: 8px;
+    width: auto;
+    max-height: min(70dvh, 560px);
+    padding: 12px 12px calc(12px + env(safe-area-inset-bottom));
+    border-radius: 14px;
+  }
+  .saveInput, .smallBtn { font-size: 14px; padding: 10px 11px; }
+  .songRow { gap: 2px; padding: 3px 0; }
+  .songRowTitle { font-size: 13px; padding: 8px 0; }
+  .iconBtn { padding: 8px 5px; }
+  .verTitle { padding: 7px 0; }
+}
+
+/* A phone gets the full width; a small tablet does not: a 700px-wide row of
+   seven buttons reads as a mistake, so above phone width the sheet and the
+   panels hang off the right, under the button that opened them. */
+@media (min-width: 481px) and (max-width: 768px) {
+  .barItemsOpen { max-width: 340px; margin-left: auto; }
+  .panel { max-width: 420px; margin-left: auto; }
+}

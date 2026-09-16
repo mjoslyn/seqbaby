@@ -104,3 +104,16 @@ export function IconTag() {
     </svg>
   );
 }
+
+/** The mobile top-bar menu: three bars, an X once it is open. */
+export function IconMenu({ on }: IconProps) {
+  return on ? (
+    <svg {...base}>
+      <path d="M3.5 3.5l9 9M12.5 3.5l-9 9" />
+    </svg>
+  ) : (
+    <svg {...base}>
+      <path d="M2.5 4h11M2.5 8h11M2.5 12h11" />
+    </svg>
+  );
+}
