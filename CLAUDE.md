@@ -1709,6 +1709,19 @@ patterns.
   id in a saved song names nothing. (`comp.source` itself is still written, for
   older readers; load ignores it. A session saved before the index existed has
   no way back to the track it meant, so it falls back to `"self"`.)
+- **Never `signal.connect(param)` to modulate something.** Tone routes every
+  signal→param connection through `connectSignal`, which hands the signal the
+  param outright: it cancels the param's schedule and pins it at 0, and a
+  Tone.Param is also marked `overridden`, after which every write to it lands
+  as 0 for the life of the node (`Param._fromType`). Attaching an LFO
+  therefore zeroed what it was modulating — a cutoff slammed shut, a delay
+  gone dry — with a native AudioParam coming back only when the slider was next
+  moved and a Tone.Param (`delay.wet`, `crusher.bits`, …) never coming back at
+  all. Every LFO here is summed ON TOP of the slider, so both mod sources go
+  through `connectMod` (lfo.js) and `Tone.connect`, the raw graph connect with
+  no override step. The rack's own internal LFOs (vinyl wow, cassette flutter,
+  flanger) connect Tone's way on purpose: there the LFO's min/max ARE the
+  delay time and there is no base to keep.
 - **A track has one rhythm source.** The euclid ring and the chance generator
   both answer "what does this step play", so `stepSource.js` keeps them
   exclusive and both live checkboxes go through `setLiveGenerator`. It also owns
