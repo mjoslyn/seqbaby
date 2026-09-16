@@ -24,7 +24,10 @@ env / fx / eq / comp / mod / automation per track.
   existing song appends to its version tree — see the song versions section.
 - **Anonymous sharing**: `app/api/share/route.ts` (public songs rows);
   `lib/api.js` + `netlify/functions/share.mjs` are the legacy Netlify Blobs
-  path.
+  path. The link preview is `app/shareCard.ts` (one card, built in one place
+  because og/twitter metadata does not inherit field-by-field between
+  segments), titled with the song when the URL names one — see the share card
+  section below.
 - **Persistence (local)**: localStorage `seqbaby.patches.v1` (saved patches),
   `seqbaby.sets.v1` (saved sessions).
 - **Deploy**: Netlify via `@netlify/plugin-nextjs` (`netlify.toml`, Node 22).
@@ -1407,6 +1410,36 @@ buffer, slices back to the last 1.5s silence gap and writes a clip).
 `/u/<username>` is the public profile page with fork buttons. The engine side
 of save/share lives in `session.js` (`serializeSet`/`applySet`) and is bridged
 through `window.seqbaby`.
+
+## The share card (`app/shareCard.ts`)
+
+A share link points at the studio with the song in the query, so the link
+preview was the studio's own card however specific the thing being shared —
+twelve people posting twelve songs all got "seqbaby". A URL that names a song
+(`?s=<slug>` or `?open=<id>`) is now titled with the song.
+
+- **One card, built in one place.** og/twitter metadata does NOT inherit field
+  by field between segments: a page that sets `openGraph` replaces the layout's
+  whole object, so the image, the url and the type would have gone missing from
+  the song card if it were written out separately. `shareCard(title, desc)`
+  returns both blocks; layout.tsx passes the site's own title, page.tsx the
+  song's.
+- **The lookup only happens when the URL carries one.** Metadata is resolved
+  before the document flushes, so a Supabase round trip on every visit would
+  hold back the engine's preload hints for everyone — the same reason the
+  account bar sits behind `<Suspense>`. A plain `/` does no work in
+  `generateMetadata` at all; a `?s=` visit is already waiting on a fetch of the
+  session itself.
+- **`linkedSongTitle`** (`app/songs/linkedSongTitle.ts`) is the lookup, and it
+  is deliberately not a server action — nothing on the client should be able to
+  ask the server to resolve arbitrary slugs to titles. `?s=` filters
+  `is_public` exactly as the share route does; `?open=` leaves it to RLS, so a
+  crawler sees only published songs while the owner following their own link
+  gets the real title in the tab.
+- **`untitled` counts as no title**, along with an unreadable song, a legacy
+  Netlify Blobs share (a bare session blob, with no title in it) and no
+  Supabase env at all. Every one of those falls back to the site card rather
+  than failing the page: a link preview is not worth a 500.
 
 ## Song versions — a tree, not a blob (`song_versions`)
 
