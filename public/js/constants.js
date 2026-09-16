@@ -35,7 +35,7 @@ export const LFO_KEYS = [
   "vinyl_warmth",
   "shaper_preamp",
   "ring_freq",
-  "crush_bits",
+  "crush_bits", "crush_rate",
   "chorus_rate", "chorus_depth",
   "phaser_rate",
   "flanger_rate", "flanger_fbk",
@@ -100,7 +100,7 @@ export const LFO_LABELS = {
   shaper_preamp: "wave shaper preamp",
   cassette_flutter: "cassette flutter", cassette_sat: "cassette sat",
   ring_freq: "ring mod freq",
-  crush_bits: "bitcrush bits",
+  crush_bits: "bitcrush bits", crush_rate: "bitcrush rate",
   autowah_sens: "auto-wah sens", autowah_range: "auto-wah range",
   chorus_rate: "chorus rate", chorus_depth: "chorus depth",
   phaser_rate: "phaser rate", phaser_depth: "phaser depth",
@@ -140,6 +140,7 @@ export const LFO_AMP_SCALE = {
   shaper_preamp: 6,       // swing on shaperPreamp.gain (unit gain ~0.25..8)
   ring_freq: 1500,        // Hz
   crush_bits: 8,           // bits swing (1..16)
+  crush_rate: 1,           // converter clock, on its own 0..1 knob
   chorus_rate: 4,          // Hz
   phaser_rate: 3,          // Hz
   flanger_rate: 3,         // Hz

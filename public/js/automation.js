@@ -95,6 +95,7 @@ export const AUTOMATION_TARGETS = {
   "fx.shaper.amt":      { label: "wave shaper amt" },
   "fx.crush":           { label: "bitcrush wet" },
   "fx.crush.bits":      { label: "bitcrush bits" },
+  "fx.crush.rate":      { label: "bitcrush rate" },
   "fx.autowah":         { label: "auto-wah wet" },
   "fx.autowah.sens":    { label: "auto-wah sens" },
   "fx.autowah.range":   { label: "auto-wah range" },
@@ -348,7 +349,11 @@ export function applyAutomationAtStep(t, key, v, time, vNext, stepDur) {
       ramp(rack.flangerWet?.gain, vv, vn);
       ramp(rack.flangerDry?.gain, 1 - vv, 1 - vn);
       return;
-    case "fx.crush":      rack.config.crush.wet = vv;      ramp(rack.crusher?.wet, vv, vn); return;
+    case "fx.crush":
+      rack.config.crush.wet = vv;
+      ramp(rack.crushWetBus?.gain, vv, vn);
+      ramp(rack.crushDryBus?.gain, 1 - vv, 1 - vn);
+      return;
     case "fx.autowah":    rack.config.autowah.wet = vv;    ramp(rack.autowah?.wet, vv, vn); return;
     case "fx.chorus":     rack.config.chorus.wet = vv;     ramp(rack.chorus?.wet, vv, vn); return;
     case "fx.phaser":     rack.config.phaser.wet = vv;     ramp(rack.phaser?.wet, vv, vn); return;
@@ -374,6 +379,10 @@ export function applyAutomationAtStep(t, key, v, time, vNext, stepDur) {
     case "fx.vinyl.warmth":
       rack.config.vinyl.warmth = vv;
       ramp(rack.vinylLP?.frequency, 9000 - vv * 7200, 9000 - vn * 7200);
+      return;
+    case "fx.crush.rate":
+      rack.config.crush.rate = vv;
+      ramp(rack.crushRateParam, vv, vn);
       return;
     case "fx.ringmod.freq":
       rack.config.ringmod.freq = vv;

@@ -15,7 +15,7 @@ env / fx / eq / comp / mod / automation per track.
   engine scripts in order: Tone.js 15 (CDN) → `public/woscillators.js` →
   `public/js/main.js` (ES module). `middleware.ts` refreshes the Supabase
   session on every request *except* static engine assets.
-- **Engine**: ~52 dependency-free vanilla ES modules in `public/js/`. No
+- **Engine**: ~53 dependency-free vanilla ES modules in `public/js/`. No
   bundler — edit, reload. `window.seqbaby` (from `appApi.js`) exposes `state`
   and serialize/apply hooks to the React shell (typed in `app/seqbaby.d.ts`).
 - **Accounts + data**: Supabase (Postgres + Auth + RLS). Tables: `profiles`,
@@ -82,6 +82,9 @@ env / fx / eq / comp / mod / automation per track.
   output routing: `t.out` → master or an fx bus track (`routeTrackOutput`,
   `wouldFeedback`, `soloAudibleTracks`, `refreshOutputSelects`).
 - `fxRack.js` — `FXRack` chain + `defaultFxConfig`.
+- `crusher.js` — the bitcrusher: a converter model (sample-and-hold clock +
+  quantiser) as an AudioWorklet, same file shape as the engine worklets. See
+  the bitcrush section below.
 - `lfo.js` — LFO configs, `getModTarget`/`canModulate`, tempo sync, setter loop.
 - `automation.js` — per-step parameter automation (`AUTOMATION_TARGETS`).
 - `paramTargets.js` — control class → `{lfo, auto}` key map, the mod/automation
@@ -205,6 +208,8 @@ voice → filterNode → eqNode → compressor → fxRack → masterGain → mas
   ring mod → wave shaper → crush → auto-wah → chorus → phaser → flanger →
   pitch shift → delay → reverb**. `defaultFxConfig()` keys match. Chain order
   matters for LFO/automation targets.
+- **crush is a converter, not a rounding function** (`crusher.js`) — see the
+  bitcrush section below.
 - **The vinyl crackle and cassette hiss beds only play while the track plays.**
   Each is a looping noise source inside the rack, so left alone they sounded
   whenever the master bus was open: before the first play, after a keyboard
@@ -223,6 +228,72 @@ voice → filterNode → eqNode → compressor → fxRack → masterGain → mas
   safety, threshold −2dB ratio 20) → destination.
 - Where the rack's output goes is `t.out` — `"master"` or an fx bus track's id
   (`routeTrackOutput` in signal.js). See the fx bus section below.
+
+## Bitcrush (`crusher.js`) — a converter, not a rounding function
+
+The crush stage models the whole path through a converter that is too slow and
+too short, because that is what "crushed" means:
+
+```
+in ──▶ S/H clock (rate) ──▶ quantiser (bits, clips at full scale) ──▶ out
+           ▲                        no reconstruction filter
+           └── one clock for every channel, free of the host's rate
+```
+
+- **The sample rate is the bigger half of the effect**, and it is what the
+  stage was missing: it was `Tone.BitCrusher`, which quantises and nothing
+  else. Quantisation alone is a noise floor — measured, 8 bits puts its
+  harmonics 44dB under the signal and 4 bits 20dB under, ~6dB per bit, which is
+  correct and which on a drum loop is hiss. What everyone means by crushed is
+  the aliasing: decimate to 4kHz and a 3kHz tone folds down to 1kHz **louder
+  than what is left of the original** (measured +9.5dB), off the harmonic
+  series and out of tune with the track. With the clock at 8kHz a 1kHz tone
+  grows images at 7k / 9k / 15k (−17 / −19 / −22dB, the zero-order hold's own
+  sinc rolloff) and nothing at 5k, which is not an image of it.
+- **The clock is free-running and fractional.** The hold period is almost never
+  a whole number of host samples, so it is a phase accumulator and the input is
+  read by linear interpolation at the instant the clock actually fires.
+  Snapping ticks to host samples instead quantises the rate itself — at 48k you
+  could only have 48000/n, so 24k, 16k, 12k and nothing in between up top — and
+  puts jitter sidebands on everything. Measured: 8000Hz asked, 8000 delivered;
+  7300 asked, 7300 delivered.
+- **A converter clips at full scale**: past +FS there are no codes left. The
+  levels are laid out as two's complement — 2^bits codes, mid-tread, −1 to
+  1 − step — so negative full scale is one code further out than positive
+  (measured at 8 bits: −1 and +0.992188), zero is a code, and digital silence
+  stays silent. This is the one way an old song can sound different: a signal
+  the rack's drive pushed past ±1 used to sail through the crusher and now
+  clips, which is the accurate behaviour and the reason driving a crushed track
+  reads as a converter overloading.
+- **No anti-alias filter in, no reconstruction filter out**, deliberately. Both
+  are what a good converter has and what the machines this sounds like did not;
+  either one removes the effect.
+- **It is a worklet because a sample-and-hold has state.** A WaveShaper is
+  memoryless — it can quantise (that is all Tone's crusher is) but it can never
+  hold a value across samples. Registered from a Blob URL by `loadWorklet()`
+  with the engine worklets; if that fails the rack falls back to
+  `Tone.BitCrusher` (quantise-only, which is exactly what this stage used to
+  be) so the track is never silent — and `crushRateParam` is null on that path,
+  which every write already checks.
+- **Controls** — `wet` / `bits` / `rate` in `t.fxConfig.crush`. `rate` is a
+  0..1 knob mapped exponentially to 250Hz..48kHz, in **hertz rather than a
+  fraction of the host rate**, so a song does not change character between a
+  44.1k machine and a 48k one; the top of the knob is one hold per host sample,
+  which is no decimation at all, and reads `off` (`crushRateLabel`, through
+  `setKnobReadout` — the number under the knob is a clock, not a fraction).
+  Mod + automation as `crush_rate` / `fx.crush.rate`, both real AudioParams on
+  the worklet node, so a swept clock ramps rather than stepping.
+- **A song written before the clock has no `rate`, and gets 1** — no
+  decimation, which is all the stage ever did. That default is written by
+  `migrateCrushRate` in sessionFormat.js (with the emulator rename, and tested
+  beside it) rather than where the value is read, because `applyCrush` takes
+  partial configs — the automation lane sends bits alone — so an absent rate
+  there means "leave it", not "1".
+- **The wet/dry is the rack's own linear crossfade** now, not a Tone effect's
+  equal-power one, matching every other parallel stage in the file (vinyl,
+  cassette, fuzz, ring mod, shaper). For an effect whose output is correlated
+  with its input, linear is what keeps the level put; equal power lifts it by
+  up to 3dB in the middle of the knob.
 
 ## Audio start / unlock (hard-won — don't regress)
 
@@ -1263,7 +1334,7 @@ pad "sweep"   X -> bass · filter cutoff      Y -> lead · reverb wet
   rearranged itself at every pattern switch would be unplayable.
 - `CLASS_FOR_AUTO` (paramTargets.js) is the automation key → control class map
   the pad uses to find the slider behind a parameter, both to read the base it
-  returns to and to move the knob. All 162 automation keys resolve.
+  returns to and to move the knob. All 191 automation keys resolve.
 
 ## p-lock — a sound per pattern (`patternSound.js`)
 
@@ -1657,7 +1728,7 @@ patterns.
   do the same, or use `currentBpm()` (lfo.js) as the sync helpers do.
 - **Worklet processor sources are template literals** (`silverbox.js`, `contagion.js`,
   `subbass.js`,
-  `hexop.js`),
+  `hexop.js`, `crusher.js`),
   so a stray backtick or `${` inside one — including in a comment — truncates
   the string. The module still parses, `node --check` still passes, and the
   failure only shows up as a SyntaxError at engine boot. When editing inside a
@@ -1730,7 +1801,7 @@ Repo: https://github.com/mjoslyn/seqbaby.
   An inline marker (`window.__seqbabyServerBoot`) tells the paths apart, and
   `ScriptLoader.tsx` keeps its onload-chained injection for the soft-nav case
   (e.g. arriving from `/login`).
-- `app/EnginePreload.tsx` emits `modulepreload` for all 52 modules listed in
+- `app/EnginePreload.tsx` emits `modulepreload` for all 53 modules listed in
   `app/engineAssets.ts`. The graph is 8 levels deep, so without it the browser
   needs up to eight sequential round trips just to discover the code.
   **Adding or removing a module in `public/js/` means updating that list** —

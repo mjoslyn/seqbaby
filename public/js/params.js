@@ -351,7 +351,7 @@ export function resetFxDry(t) {
   cfg.pitchshift.wet    = 0;
   cfg.delay.wet         = 0;
   cfg.reverb.wet        = 0;
-  if (!cfg.crush) cfg.crush = { bits: 8, wet: 0 };
+  if (!cfg.crush) cfg.crush = { bits: 8, rate: 1, wet: 0 };
   cfg.crush.wet = 0;
   if (t.fxRack) {
     t.fxRack.applyVinyl(cfg.vinyl);

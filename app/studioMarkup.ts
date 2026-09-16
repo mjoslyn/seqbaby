@@ -863,6 +863,7 @@ ${SUB_PANEL}
           <span class="sq-fx__title">bitcrush</span>
           <label class="sq-fx__ctl"><span>wet</span><input class="fx-crush-wet" type="range" min="0" max="1" step="0.01" value="0" /></label>
           <label class="sq-fx__ctl"><span>bits</span><input class="fx-crush-bits" type="range" min="1" max="16" step="1" value="8" /></label>
+          <label class="sq-fx__ctl" title="the sample rate the crusher runs at, 48k down to 250Hz. Anything above half of it folds back down out of tune"><span>rate</span><input class="fx-crush-rate" type="range" min="0" max="1" step="0.005" value="1" /></label>
         </div>
         <div class="sq-fx__row" data-fx="autowah">
           <span class="sq-fx__title">auto-wah</span>

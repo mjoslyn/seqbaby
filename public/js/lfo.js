@@ -225,7 +225,7 @@ export function getModTarget(t, key) {
     case "ringmod":      return rack.ringWet?.gain ?? null;
     case "shaper":       return rack.shaperWetBus?.gain ?? null;
     case "shaper_preamp":return rack.shaperPreamp?.gain ?? null;
-    case "crush":        return rack.crusher?.wet ?? null;
+    case "crush":        return rack.crushWetBus?.gain ?? null;
     case "autowah":      return rack.autowah?.wet ?? null;
     case "chorus":       return rack.chorus?.wet ?? null;
     case "phaser":       return rack.phaser?.wet ?? null;
@@ -237,7 +237,8 @@ export function getModTarget(t, key) {
     case "fuzz_level":   return rack.fuzzLevel?.gain ?? null;
     case "vinyl_warmth": return rack.vinylLP?.frequency ?? null;
     case "ring_freq":    return rack.ringCarrier?.frequency ?? null;
-    case "crush_bits":   return rack.crusher?.bits ?? null;
+    case "crush_bits":   return rack.crushBitsParam ?? null;
+    case "crush_rate":   return rack.crushRateParam ?? null;
     case "chorus_rate":  return rack.chorus?.frequency ?? null;
     case "chorus_depth": return rack.chorus?.depth ?? null;  // may not be Signal — returns null if so
     case "phaser_rate":  return rack.phaser?.frequency ?? null;
@@ -251,7 +252,7 @@ export function getModTarget(t, key) {
 
 export const TRACK_FX_LFO_KEYS = new Set([
   "fuzz","delay","verb","vinyl","cassette","ringmod","shaper","crush","autowah","chorus","phaser","flanger","pitch",
-  "fuzz_drive","fuzz_tone","fuzz_level","vinyl_warmth","shaper_preamp","ring_freq","crush_bits",
+  "fuzz_drive","fuzz_tone","fuzz_level","vinyl_warmth","shaper_preamp","ring_freq","crush_bits","crush_rate",
   "chorus_rate","chorus_depth","phaser_rate","flanger_rate","flanger_fbk","delay_time","delay_fbk",
   // setter-driven (non-AudioParam) FX params
   "vinyl_wow","cassette_flutter","cassette_sat",

@@ -871,6 +871,13 @@ export default function ManualPage() {
             a muted or stopped track is silent.
           </p>
           <p>
+            The bit crusher has a <span className={styles.ui}>rate</span> as well as{" "}
+            <span className={styles.ui}>bits</span>: the sample rate it runs at, from
+            48k down to 250Hz. Bits alone is a noise floor under the sound; rate is
+            where the sampler grit comes from, because anything above half of it folds
+            back down out of tune with the track.
+          </p>
+          <p>
             <span className={styles.ui}>glide</span> lives here too. It slides the
             pitch between notes instead of jumping, for portamento leads and basses.
           </p>

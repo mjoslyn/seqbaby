@@ -51,6 +51,7 @@ export const ENGINE_MODULES = [
   "chance.js",
   "chanceGen.js",
   "constants.js",
+  "crusher.js",
   "curves.js",
   "dialogs.js",
   "dom.js",

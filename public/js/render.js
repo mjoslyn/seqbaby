@@ -18,6 +18,7 @@ import { autoOwns, modOwns, refreshPanelBadges, refreshParamIndicators } from ".
 import { patternLocked, refreshPatternLockUI, refreshPatternSoundUI, setPatternLock } from "./patternSound.js";
 import { openGranularSourceModal, openSamplerSourceModal, pickAudioFileForTrack } from "./main.js";
 import { defaultFxConfig } from "./fxRack.js";
+import { crushRateLabel } from "./crusher.js";
 import { patternMeter, redetectDrumKit, stepsPerBarForMeter } from "./meter.js";
 import { refreshHexopAlgorithm, setEngineKey, setParam, updateGranularSpeedEnabled, updatePlaitsControlsVisibility } from "./params.js";
 import { bestRollViewOct } from "./pianoRoll.js";
@@ -1030,9 +1031,12 @@ export function applyFxToTrack(t, fx) {
     const wet   = Number(fx.reverb.wet);   if (Number.isFinite(wet))   cfg.reverb.wet   = Math.max(0, Math.min(1, wet));
   }
   if (fx.crush && typeof fx.crush === "object") {
-    if (!cfg.crush) cfg.crush = { bits: 8, wet: 0 };
+    if (!cfg.crush) cfg.crush = { bits: 8, rate: 1, wet: 0 };
     const bits = Number(fx.crush.bits); if (Number.isFinite(bits)) cfg.crush.bits = Math.max(1, Math.min(16, Math.round(bits)));
     const wet  = Number(fx.crush.wet);  if (Number.isFinite(wet))  cfg.crush.wet  = Math.max(0, Math.min(1, wet));
+    // Absent on anything written before the converter clock: those songs were
+    // quantise-only, which is this knob at the top.
+    const rate = Number(fx.crush.rate); cfg.crush.rate = Number.isFinite(rate) ? Math.max(0, Math.min(1, rate)) : 1;
   }
   if (t.fxRack) {
     t.fxRack.applyAmp(cfg.amp);
@@ -1041,7 +1045,7 @@ export function applyFxToTrack(t, fx) {
     t.fxRack.applyFuzz(cfg.fuzz);
     t.fxRack.applyRingMod(cfg.ringmod);
     t.fxRack.applyWaveShaper(cfg.shaper || { wet: 0, amount: 0.5 });
-    t.fxRack.applyCrush(cfg.crush || { bits: 8, wet: 0 });
+    t.fxRack.applyCrush(cfg.crush || { bits: 8, rate: 1, wet: 0 });
     t.fxRack.applyAutoWah(cfg.autowah);
     t.fxRack.applyChorus(cfg.chorus);
     t.fxRack.applyPhaser(cfg.phaser);
@@ -1115,6 +1119,7 @@ export function refreshFxPanelUI(t) {
   if (cfg.crush) {
     const b = q(".fx-crush-bits"); if (b) b.value = cfg.crush.bits;
     const w = q(".fx-crush-wet");  if (w) w.value = cfg.crush.wet;
+    const r = q(".fx-crush-rate"); if (r) r.value = cfg.crush.rate ?? 1;
   }
 }
 
@@ -1122,7 +1127,8 @@ export function wireFxPanel(t, panel) {
   const q = (sel) => panel.querySelector(sel);
   const fc = t.fxConfig;
   if (!fc.amp)        fc.amp        = { preamp: 0.5, level: 0.5 };
-  if (!fc.crush)      fc.crush      = { bits: 8, wet: 0 };
+  if (!fc.crush)      fc.crush      = { bits: 8, rate: 1, wet: 0 };
+  if (fc.crush.rate == null) fc.crush.rate = 1;
   if (!fc.vinyl)      fc.vinyl      = { amount: 0, warmth: 0.4, wow: 0.3 };
   if (!fc.cassette)   fc.cassette   = { amount: 0, flutter: 0.3, sat: 0.4 };
   if (!fc.chorus)     fc.chorus     = { wet: 0, rate: 0.5, depth: 0.5 };
@@ -1184,6 +1190,14 @@ export function wireFxPanel(t, panel) {
   q(".fx-reverb-wet").value   = fc.reverb.wet;
   { const b = q(".fx-crush-bits"); if (b) b.value = fc.crush.bits; }
   { const w = q(".fx-crush-wet");  if (w) w.value = fc.crush.wet; }
+  { const r = q(".fx-crush-rate");
+    if (r) {
+      r.value = fc.crush.rate;
+      // The number under the knob is a converter clock, not a 0..1 fraction —
+      // the same job setKnobReadout does for the mod row's length knob.
+      setKnobReadout(r, (v) => crushRateLabel(v, state.audioCtx?.sampleRate));
+    }
+  }
 
   const applyAmp = () => {
     fc.amp.preamp = Number(q(".fx-amp-preamp").value);
@@ -1266,9 +1280,10 @@ export function wireFxPanel(t, panel) {
   };
 
   const applyCrush = () => {
-    const b = q(".fx-crush-bits"); const w = q(".fx-crush-wet");
+    const b = q(".fx-crush-bits"); const w = q(".fx-crush-wet"); const r = q(".fx-crush-rate");
     if (b) fc.crush.bits = Number(b.value);
     if (w) fc.crush.wet  = Number(w.value);
+    if (r) fc.crush.rate = Number(r.value);
     t.fxRack?.applyCrush(fc.crush);
   };
 
@@ -1291,6 +1306,7 @@ export function wireFxPanel(t, panel) {
   q(".fx-reverb-wet").addEventListener("input", applyReverb);
   { const b = q(".fx-crush-bits"); if (b) b.addEventListener("input", applyCrush); }
   { const w = q(".fx-crush-wet");  if (w) w.addEventListener("input", applyCrush); }
+  { const r = q(".fx-crush-rate"); if (r) r.addEventListener("input", applyCrush); }
 
   // Double-click an effect's name to put that effect back to its defaults. The
   // panel has a lot of knobs, and undo walks back one at a time — getting to a
