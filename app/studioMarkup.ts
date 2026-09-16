@@ -276,9 +276,16 @@ export const STUDIO_BODY = String.raw`
       <button id="note-colors" class="sq-btn--ghost sq-icon-btn" aria-pressed="false" aria-label="note colors" title="toggle diatonic note coloring on the piano roll + step grid"></button>
     </div>
     <span id="kbd-octave" class="sq-kbd-oct" title="keyboard base octave. z / x shift it down and up">C4</span>
+    <!-- Mobile only: the chord cluster is a row of tiny inline selects, which is
+         why it is hidden below 768px. Chord mode is not only a keyboard feature
+         (a tapped step takes the chord too, see startNote), so a phone needs a
+         way in: this button hosts the same panel in a modal (openChordMenu).
+         Its label is the current setting, so the row says something with the
+         panel shut. -->
+    <button id="chord-menu-btn" class="sq-mobile-only sq-btn--ghost" type="button" aria-pressed="false" title="chord settings: what a tapped step (and a played key) writes — chord type, voicing, arp">chord off</button>
     <div id="kbd-chord" class="sq-kbd-chord">
       <span class="sq-kbd-chord__lbl">chord</span>
-      <select id="kbd-chord-type" title="chord mode: play each key as a chord. Off is single notes">
+      <label class="sq-kbd-chord__f"><span class="sq-kbd-chord__sub">type</span><select id="kbd-chord-type" title="chord mode: play each key as a chord. Off is single notes">
         <option value="">off</option>
         <option value="maj">maj</option>
         <option value="min">min</option>
@@ -291,37 +298,37 @@ export const STUDIO_BODY = String.raw`
         <option value="dom7">dom7</option>
         <option value="m7b5">m7b5</option>
         <option value="add9">add9</option>
-      </select>
-      <select id="kbd-chord-cpx" title="voicing / inversion">
+      </select></label>
+      <label class="sq-kbd-chord__f"><span class="sq-kbd-chord__sub">voicing</span><select id="kbd-chord-cpx" title="voicing / inversion">
         <option value="0">root</option>
         <option value="1">1st inv</option>
         <option value="2">2nd inv</option>
         <option value="3">3rd inv</option>
         <option value="4">drop-oct</option>
-      </select>
+      </select></label>
       <span id="kbd-arp" class="sq-kbd-arp" hidden>
         <label class="sq-kbd-arp__toggle" title="arpeggiate chords played from the keyboard. The steps they land on are written as arps"><input id="kbd-arp-on" type="checkbox" /> arp</label>
         <span id="kbd-arp-opts" class="sq-kbd-arp__opts" hidden>
-          <select id="kbd-arp-rate" title="arp rate (beats per note)">
+          <label class="sq-kbd-chord__f"><span class="sq-kbd-chord__sub">rate</span><select id="kbd-arp-rate" title="arp rate (beats per note)">
             <option value="1">1/4</option>
             <option value="0.5">1/8</option>
             <option value="0.333">1/8t</option>
             <option value="0.25" selected>1/16</option>
             <option value="0.167">1/16t</option>
             <option value="0.125">1/32</option>
-          </select>
-          <select id="kbd-arp-range" title="octaves spanned">
+          </select></label>
+          <label class="sq-kbd-chord__f"><span class="sq-kbd-chord__sub">range</span><select id="kbd-arp-range" title="octaves spanned">
             <option value="1" selected>1 oct</option>
             <option value="2">2 oct</option>
             <option value="3">3 oct</option>
             <option value="4">4 oct</option>
-          </select>
-          <select id="kbd-arp-dir" title="arp direction">
+          </select></label>
+          <label class="sq-kbd-chord__f"><span class="sq-kbd-chord__sub">dir</span><select id="kbd-arp-dir" title="arp direction">
             <option value="up" selected>up</option>
             <option value="down">down</option>
             <option value="updown">up-down</option>
             <option value="random">random</option>
-          </select>
+          </select></label>
         </span>
       </span>
     </div>
