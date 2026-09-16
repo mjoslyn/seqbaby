@@ -36,7 +36,7 @@ const hexopOpRows = () => [1, 2, 3, 4, 5, 6].map(i => `
           <div class="sq-hexop__oprow" data-op="${i}">
             <span class="sq-hexop__opn">op ${i}</span>
 ${HEXOP_OP_COLS.map(c => `            <label class="sq-hexop__f"><input class="p-d${i}${c.k}" type="range" min="${c.min}" max="${c.max}" step="${c.step}" value="${HEXOP_OP_DEFAULTS[c.k](i)}" title="${c.title}" /></label>`).join("\n")}
-            <select class="p-d${i}fix" title="ratio mode tunes this operator to the note. Fixed mode pins it to a frequency between 1Hz and 10kHz, set by ratio and fine, whatever note you play, ignoring the pitch envelope and the lfo. Fixed operators give the hexop its knocks, breaths and cymbals">
+            <select class="p-d${i}fix" title="ratio mode tunes this operator to the note. Fixed mode pins it to a frequency between 1Hz and 10kHz, set by ratio and fine, whatever note you play, ignoring the pitch envelope and the lfo">
               <option value="ratio" selected>ratio</option><option value="fixed">fixed</option>
             </select>
           </div>`).join("");
@@ -45,29 +45,29 @@ const HEXOP_PANEL = `
         <div class="sq-param-group sq-param-group--hexop" hidden>
           <div class="sq-hexop__row">
             <span class="sq-hexop__lbl">alg</span>
-            <select class="p-dalg" title="which of the 32 fixed wirings the six operators run in. 1←2 means operator 2 modulates operator 1. Anything with no arrow into it is a carrier you hear"></select>
+            <select class="p-dalg" title="which of the 32 fixed wirings the six operators run in. 1←2 means operator 2 modulates operator 1. Anything with no arrow into it is a carrier"></select>
             <span class="sq-hexop__alg"></span>
             <span class="sq-hexop__lbl">voice</span>
-            <select class="sq-hexop__preset" title="load a complete voice: all six operators, the algorithm and the four sliders. Change one operator level at a time from here and you are programming a hexop"></select>
+            <select class="sq-hexop__preset" title="load a complete voice: all six operators, the algorithm and the four sliders"></select>
           </div>
           <div class="sq-hexop__row">
-            <label class="sq-hexop__f"><span>key scale</span><input class="p-dks" type="range" min="0" max="1" step="0.01" value="0.35" title="how much the modulators pull back as you play up the keyboard. A fixed modulation index is far brighter at 2kHz than at 100Hz, so without this the top octave screams" /></label>
-            <label class="sq-hexop__f"><span>vel</span><input class="p-dvs" type="range" min="0" max="1" step="0.01" value="0.5" title="how much playing harder raises the modulation index. Velocity changes the timbre here, so a hard note is brighter rather than just louder" /></label>
-            <label class="sq-hexop__f"><span>pitch env</span><input class="p-dpeg" type="range" min="-1" max="1" step="0.01" value="0" title="a pitch sweep at the start of every note, up to two octaves either way. A little is the wooden knock at the front of a mallet. A lot is the sound of 1985" /></label>
+            <label class="sq-hexop__f"><span>key scale</span><input class="p-dks" type="range" min="0" max="1" step="0.01" value="0.35" title="how much the modulators pull back as you play up the keyboard" /></label>
+            <label class="sq-hexop__f"><span>vel</span><input class="p-dvs" type="range" min="0" max="1" step="0.01" value="0.5" title="how much playing harder raises the modulation index, so a hard note is brighter rather than louder" /></label>
+            <label class="sq-hexop__f"><span>pitch env</span><input class="p-dpeg" type="range" min="-1" max="1" step="0.01" value="0" title="a pitch sweep at the start of every note, up to two octaves either way" /></label>
             <label class="sq-hexop__f"><span>rate</span><input class="p-dpegr" type="range" min="0" max="1" step="0.01" value="0.3" title="how fast that pitch sweep settles back to the note" /></label>
           </div>
           <div class="sq-hexop__row">
             <span class="sq-hexop__lbl">lfo</span>
-            <select class="p-dlfow" title="lfo waveform. One lfo for the whole instrument, as on the machine">
+            <select class="p-dlfow" title="lfo waveform. One lfo for the whole instrument">
               <option value="tri" selected>tri</option><option value="sine">sine</option>
               <option value="sawdn">saw dn</option><option value="sawup">saw up</option>
               <option value="square">square</option><option value="sh">s+h</option>
             </select>
-            <label class="sq-hexop__f"><span>speed</span><input class="p-dlfor" type="range" min="0" max="1" step="0.01" value="0.35" title="lfo speed, from a slow drift up to 24Hz, which is a wobble rather than a vibrato" /></label>
-            <label class="sq-hexop__f"><span>delay</span><input class="p-dlfod" type="range" min="0" max="1" step="0.01" value="0" title="how long the lfo takes to fade in after a note starts. Delayed vibrato makes a held note sound played" /></label>
-            <label class="sq-hexop__f"><span>pitch</span><input class="p-dpmd" type="range" min="0" max="1" step="0.01" value="0" title="how far the lfo moves the pitch. Vibrato, up to a semitone" /></label>
-            <label class="sq-hexop__f"><span>amp</span><input class="p-damd" type="range" min="0" max="1" step="0.01" value="0" title="how far the lfo moves the level. Tremolo" /></label>
-            <select class="p-dlfok" title="key sync restarts the lfo on every note, so vibrato arrives at the same point each time. Off leaves one free-running lfo that notes join wherever it is">
+            <label class="sq-hexop__f"><span>speed</span><input class="p-dlfor" type="range" min="0" max="1" step="0.01" value="0.35" title="lfo speed, from a slow drift up to 24Hz" /></label>
+            <label class="sq-hexop__f"><span>delay</span><input class="p-dlfod" type="range" min="0" max="1" step="0.01" value="0" title="how long the lfo takes to fade in after a note starts" /></label>
+            <label class="sq-hexop__f"><span>pitch</span><input class="p-dpmd" type="range" min="0" max="1" step="0.01" value="0" title="how far the lfo moves the pitch, up to a semitone" /></label>
+            <label class="sq-hexop__f"><span>amp</span><input class="p-damd" type="range" min="0" max="1" step="0.01" value="0" title="how far the lfo moves the level" /></label>
+            <select class="p-dlfok" title="key sync restarts the lfo on every note. Off leaves one free-running lfo that notes join wherever it is">
               <option value="on" selected>key sync</option><option value="off">free run</option>
             </select>
           </div>
@@ -89,18 +89,18 @@ const GUITAR_PANEL = `
         <div class="sq-param-group sq-param-group--guitar" hidden>
           <div class="sq-guitar__row">
             <span class="sq-guitar__lbl">tone</span>
-            <select class="sq-guitar__tone" title="load a famous rig: pickup, pick position, amp, drive, cab and the four track sliders. Everything in it is reachable by hand, so start on the nearest one and move a control"></select>
+            <select class="sq-guitar__tone" title="load a rig: pickup, pick position, amp, drive, cab and the four track sliders"></select>
           </div>
           <div class="sq-guitar__row">
             <span class="sq-guitar__lbl">string</span>
-            <label class="sq-guitar__f"><span>pick pos</span><input class="p-gtpick" type="range" min="0.02" max="0.5" step="0.01" value="0.28" title="where along the string you pick, from hard by the bridge to over the twelfth fret. A string cannot carry a harmonic with a node where it was struck, so this notches those out. Bridge is thin and cutting, neck is round" /></label>
-            <label class="sq-guitar__f"><span>pick</span><input class="p-gtpnoise" type="range" min="0" max="1" step="0.01" value="0.5" title="what is striking the string: thumb at the bottom, plectrum at the top. It sets how much high-frequency energy the pluck puts in" /></label>
-            <label class="sq-guitar__f"><span>stiff</span><input class="p-gtstiff" type="range" min="0" max="1" step="0.01" value="0.25" title="string stiffness. A real string's harmonics sit slightly sharp of the arithmetic, further out the thicker and more wound it is. A little is a wound low string, a lot goes piano-like" /></label>
-            <label class="sq-guitar__f"><span>pkup pos</span><input class="p-gtpkup" type="range" min="0.02" max="0.5" step="0.01" value="0.12" title="where along the string the pickup sits: bridge at the bottom, neck at the top. The same comb as pick position, on the way out" /></label>
-            <select class="p-gtpkupt" title="which pickup. You are choosing where its resonance sits, not the coil count: a single coil peaks around 6kHz, a humbucker around 3">
+            <label class="sq-guitar__f"><span>pick pos</span><input class="p-gtpick" type="range" min="0.02" max="0.5" step="0.01" value="0.28" title="where along the string you pick, from hard by the bridge to over the twelfth fret. Bridge is thin and cutting, neck is round" /></label>
+            <label class="sq-guitar__f"><span>pick</span><input class="p-gtpnoise" type="range" min="0" max="1" step="0.01" value="0.5" title="what is striking the string: thumb at the bottom, plectrum at the top, setting how much high-frequency energy the pluck puts in" /></label>
+            <label class="sq-guitar__f"><span>stiff</span><input class="p-gtstiff" type="range" min="0" max="1" step="0.01" value="0.25" title="string stiffness: how far the harmonics sit sharp of the arithmetic. A little is a wound low string, a lot goes piano-like" /></label>
+            <label class="sq-guitar__f"><span>pkup pos</span><input class="p-gtpkup" type="range" min="0.02" max="0.5" step="0.01" value="0.12" title="where along the string the pickup sits: bridge at the bottom, neck at the top" /></label>
+            <select class="p-gtpkupt" title="which pickup, and so where its resonance sits: a single coil peaks around 6kHz, a humbucker around 3">
               <option value="single">single coil</option><option value="hum" selected>humbucker</option><option value="p90">p90</option>
             </select>
-            <label class="sq-guitar__f"><span>palm</span><input class="p-gtmute" type="range" min="0" max="1" step="0.01" value="0" title="the heel of the picking hand resting on the strings at the bridge. Shorter, darker and tighter, and what makes a high-gain riff a riff rather than a wall" /></label>
+            <label class="sq-guitar__f"><span>palm</span><input class="p-gtmute" type="range" min="0" max="1" step="0.01" value="0" title="the heel of the picking hand resting on the strings at the bridge. Shorter, darker and tighter" /></label>
           </div>
           <div class="sq-guitar__row">
             <span class="sq-guitar__lbl">amp</span>
@@ -109,26 +109,26 @@ const GUITAR_PANEL = `
               <option value="brit" selected>brit</option><option value="hi">hi-gain</option>
               <option value="jazz">jazz</option>
             </select>
-            <label class="sq-guitar__f"><span>bass</span><input class="p-gtbass" type="range" min="0" max="1" step="0.01" value="0.5" title="the amp's bass control. It sits after the first gain stage, as it does in the chassis, so it shapes what is already distorted" /></label>
-            <label class="sq-guitar__f"><span>mid</span><input class="p-gtmid" type="range" min="0" max="1" step="0.01" value="0.5" title="the amp's mid control, at whichever frequency this amp puts it. Scooped is eighties metal rhythm. Left in is how a seventies riff cuts through a band" /></label>
+            <label class="sq-guitar__f"><span>bass</span><input class="p-gtbass" type="range" min="0" max="1" step="0.01" value="0.5" title="the amp's bass control. It sits after the first gain stage, so it shapes what is already distorted" /></label>
+            <label class="sq-guitar__f"><span>mid</span><input class="p-gtmid" type="range" min="0" max="1" step="0.01" value="0.5" title="the amp's mid control, at whichever frequency this amp puts it" /></label>
             <label class="sq-guitar__f"><span>treble</span><input class="p-gttreb" type="range" min="0" max="1" step="0.01" value="0.5" title="the amp's treble control" /></label>
             <label class="sq-guitar__f"><span>presence</span><input class="p-gtpres" type="range" min="0" max="1" step="0.01" value="0.4" title="presence: a treble control inside the power amp's feedback loop rather than the tone stack. It works on the distortion, so it bites where treble only brightens" /></label>
-            <label class="sq-guitar__f"><span>master</span><input class="p-gtmast" type="range" min="0" max="1" step="0.01" value="0.5" title="how hard the power amp is driven. On a small amp most of the distortion comes from here, and it is softer than preamp gain" /></label>
-            <label class="sq-guitar__f"><span>sag</span><input class="p-gtsag" type="range" min="0" max="1" step="0.01" value="0.3" title="how far the power supply droops under load. The note ducks as it is struck and swells back as it decays. The give of a small valve amp" /></label>
+            <label class="sq-guitar__f"><span>master</span><input class="p-gtmast" type="range" min="0" max="1" step="0.01" value="0.5" title="how hard the power amp is driven. Softer than preamp gain" /></label>
+            <label class="sq-guitar__f"><span>sag</span><input class="p-gtsag" type="range" min="0" max="1" step="0.01" value="0.3" title="how far the power supply droops under load. The note ducks as it is struck and swells back as it decays" /></label>
           </div>
           <div class="sq-guitar__row">
             <span class="sq-guitar__lbl">cab</span>
-            <select class="p-gtcab" title="the speaker, and the biggest filter in the chain: nothing below about 90Hz or above 5kHz survives it. That is why a distorted guitar is listenable at all">
+            <select class="p-gtcab" title="the speaker, and the biggest filter in the chain: nothing below about 90Hz or above 5kHz survives it">
               <option value="4x12" selected>4x12</option><option value="2x12">2x12</option>
               <option value="1x12">1x12</option><option value="1x8">1x8</option><option value="di">di (no cab)</option>
             </select>
-            <label class="sq-guitar__f"><span>mic</span><input class="p-gtmic" type="range" min="0" max="1" step="0.01" value="0.35" title="where the mic sits in front of the speaker: off-axis at the bottom, dead centre at the top. In a room it is an afternoon's work. Here it is mostly a lowpass" /></label>
-            <label class="sq-guitar__f"><span>trem</span><input class="p-gttrem" type="range" min="0" max="1" step="0.01" value="0" title="amp tremolo: the level wobble built into the back of an old combo, after the power tubes. Every surf record is made of it" /></label>
+            <label class="sq-guitar__f"><span>mic</span><input class="p-gtmic" type="range" min="0" max="1" step="0.01" value="0.35" title="where the mic sits in front of the speaker: off-axis at the bottom, dead centre at the top" /></label>
+            <label class="sq-guitar__f"><span>trem</span><input class="p-gttrem" type="range" min="0" max="1" step="0.01" value="0" title="amp tremolo: level wobble after the power tubes" /></label>
             <label class="sq-guitar__f"><span>rate</span><input class="p-gttremr" type="range" min="0" max="1" step="0.01" value="0.4" title="tremolo speed, 1.5Hz to about 13Hz" /></label>
             <select class="p-gttremw" title="tremolo shape. A sine wobbles, a square chops">
               <option value="sine" selected>sine</option><option value="square">square</option>
             </select>
-            <label class="sq-guitar__f"><span>spring</span><input class="p-gtsprg" type="range" min="0" max="1" step="0.01" value="0" title="the reverb tank bolted into the amp. Real springs with a transducer at each end, so it is clangy and dispersive where the rack's reverb is smooth. Turn it up and drip" /></label>
+            <label class="sq-guitar__f"><span>spring</span><input class="p-gtsprg" type="range" min="0" max="1" step="0.01" value="0" title="spring reverb in the amp: clangy and dispersive where the rack's reverb is smooth" /></label>
           </div>
         </div>`;
 
@@ -139,40 +139,40 @@ const BASS_PANEL = `
         <div class="sq-param-group sq-param-group--bass" hidden>
           <div class="sq-bass__row">
             <span class="sq-bass__lbl">tone</span>
-            <select class="sq-bass__tone" title="load a famous rig: the bass, its strings, how it is played, the amp and the compression. Every control is reachable by hand from here"></select>
+            <select class="sq-bass__tone" title="load a rig: the bass, its strings, how it is played, the amp and the compression"></select>
           </div>
           <div class="sq-bass__row">
             <span class="sq-bass__lbl">hand</span>
-            <label class="sq-bass__f"><span>pluck pos</span><input class="p-bspick" type="range" min="0.02" max="0.5" step="0.01" value="0.14" title="where along the string it is plucked, bridge to neck. It notches out the harmonics with a node there, so the bridge is nasal and the neck is round" /></label>
-            <label class="sq-bass__f"><span>hand</span><input class="p-bsattack" type="range" min="0" max="1" step="0.01" value="0.4" title="what is hitting the string: thumb at the bottom, fingers in the middle, plectrum at the top. Three different instruments before the amp hears anything" /></label>
-            <label class="sq-bass__f"><span>fret</span><input class="p-bsfret" type="range" min="0" max="1" step="0.01" value="0.25" title="how hard the string is allowed to clatter against the frets. A one-sided limit inside the string's own loop, since the fretboard is only on one side. Wound right up, with a thumb, it is slap" /></label>
-            <label class="sq-bass__f"><span>stiff</span><input class="p-bsstiff" type="range" min="0" max="1" step="0.01" value="0.45" title="string stiffness. A wound bass string's harmonics sit well sharp of the arithmetic, far more than a guitar's, and that gap between the pitch and the clank is most of the sound" /></label>
+            <label class="sq-bass__f"><span>pluck pos</span><input class="p-bspick" type="range" min="0.02" max="0.5" step="0.01" value="0.14" title="where along the string it is plucked, bridge to neck. Bridge is nasal, neck is round" /></label>
+            <label class="sq-bass__f"><span>hand</span><input class="p-bsattack" type="range" min="0" max="1" step="0.01" value="0.4" title="what is hitting the string: thumb at the bottom, fingers in the middle, plectrum at the top" /></label>
+            <label class="sq-bass__f"><span>fret</span><input class="p-bsfret" type="range" min="0" max="1" step="0.01" value="0.25" title="how hard the string is allowed to clatter against the frets. Wound right up, with a thumb, it is slap" /></label>
+            <label class="sq-bass__f"><span>stiff</span><input class="p-bsstiff" type="range" min="0" max="1" step="0.01" value="0.45" title="string stiffness: how far the harmonics sit sharp of the arithmetic, and so the gap between the pitch and the clank" /></label>
             <label class="sq-bass__f"><span>pkup pos</span><input class="p-bspkup" type="range" min="0.02" max="0.5" step="0.01" value="0.1" title="which pickup, as a position along the string: bridge at the bottom, neck at the top" /></label>
-            <select class="p-bspkupt" title="which pickup. You are choosing the resonance: a jazz single coil peaks high and growls, a precision's split humbucker sits low and thick, a musicman is the hi-fi one">
+            <select class="p-bspkupt" title="which pickup, and so where its resonance sits: a jazz single coil peaks high and growls, a precision's split humbucker sits low and thick, a musicman is the hi-fi one">
               <option value="j">jazz</option><option value="p" selected>precision</option><option value="mm">musicman</option>
             </select>
-            <select class="p-bsstrs" title="roundwound or flatwound. Flats lose their top almost as soon as they are struck and have far less clank, which is why pre-1970 records sound like that">
+            <select class="p-bsstrs" title="roundwound or flatwound. Flats lose their top almost as soon as they are struck and have far less clank">
               <option value="round" selected>roundwound</option><option value="flat">flatwound</option>
             </select>
-            <label class="sq-bass__f"><span>palm</span><input class="p-bsmute" type="range" min="0" max="1" step="0.01" value="0" title="the palm resting on the strings by the bridge. Shorter and darker. With flatwounds it is the foam mute under a sixties bridge cover" /></label>
+            <label class="sq-bass__f"><span>palm</span><input class="p-bsmute" type="range" min="0" max="1" step="0.01" value="0" title="the palm resting on the strings by the bridge. Shorter and darker" /></label>
           </div>
           <div class="sq-bass__row">
             <span class="sq-bass__lbl">dirt</span>
-            <label class="sq-bass__f"><span>grind</span><input class="p-bsgrind" type="range" min="0" max="1" step="0.01" value="0" title="how much distortion is mixed in. It only works above the crossover, and the clean lows go back underneath. Distort a bass whole and the bottom disappears" /></label>
+            <label class="sq-bass__f"><span>grind</span><input class="p-bsgrind" type="range" min="0" max="1" step="0.01" value="0" title="how much distortion is mixed in. It only works above the crossover, and the clean lows go back underneath" /></label>
             <label class="sq-bass__f"><span>xover</span><input class="p-bsxover" type="range" min="0" max="1" step="0.01" value="0.4" title="where the dirt starts, 120Hz to about 1.4kHz. Low is a fully dirty bass, high is a clean instrument with a snarl on top" /></label>
-            <label class="sq-bass__f"><span>sub</span><input class="p-bssub" type="range" min="0" max="1" step="0.01" value="0" title="an octave below the note, tracked and following the string's own level. Half bass, half synth" /></label>
+            <label class="sq-bass__f"><span>sub</span><input class="p-bssub" type="range" min="0" max="1" step="0.01" value="0" title="an octave below the note, tracked and following the string's own level" /></label>
           </div>
           <div class="sq-bass__row">
             <span class="sq-bass__lbl">amp</span>
-            <select class="p-bsamp" title="which amp: a clean preamp with no colour, the small valve flip-top under every sixties record, the big valve stack, or the solid-state one that grinds">
+            <select class="p-bsamp" title="which amp: a clean preamp with no colour, a small valve flip-top, a big valve stack, or a solid-state one that grinds">
               <option value="di">di</option><option value="flip">flip-top</option>
               <option value="svt" selected>svt</option><option value="gk">gk</option>
             </select>
             <label class="sq-bass__f"><span>bass</span><input class="p-bsbass" type="range" min="0" max="1" step="0.01" value="0.5" title="the amp's bass control" /></label>
-            <label class="sq-bass__f"><span>lo mid</span><input class="p-bslomid" type="range" min="0" max="1" step="0.01" value="0.5" title="low mids, around 250Hz. Where a bass gets its weight or its mud, and the first thing anyone reaches for" /></label>
-            <label class="sq-bass__f"><span>hi mid</span><input class="p-bshimid" type="range" min="0" max="1" step="0.01" value="0.5" title="high mids, around 800Hz, where the note becomes audible on a small speaker. Scoop it for slap, keep it to be heard in a band" /></label>
+            <label class="sq-bass__f"><span>lo mid</span><input class="p-bslomid" type="range" min="0" max="1" step="0.01" value="0.5" title="low mids, around 250Hz. Where a bass gets its weight or its mud" /></label>
+            <label class="sq-bass__f"><span>hi mid</span><input class="p-bshimid" type="range" min="0" max="1" step="0.01" value="0.5" title="high mids, around 800Hz, where the note becomes audible on a small speaker" /></label>
             <label class="sq-bass__f"><span>treble</span><input class="p-bstreb" type="range" min="0" max="1" step="0.01" value="0.5" title="the amp's treble, which on a bass is mostly the strings rather than the notes" /></label>
-            <label class="sq-bass__f"><span>low cut</span><input class="p-bshpf" type="range" min="0" max="1" step="0.01" value="0.15" title="high-pass filter, 28Hz to 150Hz. Below about 30Hz there is nothing but cone excursion. Every live engineer reaches for this first" /></label>
+            <label class="sq-bass__f"><span>low cut</span><input class="p-bshpf" type="range" min="0" max="1" step="0.01" value="0.15" title="high-pass filter, 28Hz to 150Hz" /></label>
             <span class="sq-bass__lbl">cab</span>
             <select class="p-bscab" title="the speaker cabinet. An 8x10 pushes air and rolls off early, a fifteen is all lows and no top, a DI is no cab at all">
               <option value="8x10" selected>8x10</option><option value="4x10">4x10</option>
@@ -191,51 +191,51 @@ const SUB_PANEL = `
         <div class="sq-param-group sq-param-group--sub" hidden>
           <div class="sq-sub__row">
             <span class="sq-sub__lbl">tone</span>
-            <select class="sq-sub__tone" title="load a complete patch: oscillator, pitch drop, drive and shaping. Every control is reachable by hand from here"></select>
+            <select class="sq-sub__tone" title="load a patch: oscillator, pitch drop, drive and shaping"></select>
           </div>
           <div class="sq-sub__row">
             <span class="sq-sub__lbl">osc</span>
-            <label class="sq-sub__f"><span>sub oct</span><input class="p-suboct" type="range" min="0" max="1" step="0.01" value="0" title="a sine an octave below the note. It is there to be felt rather than heard, so it stays a sine. Anything with harmonics of its own at 20Hz is mud" /></label>
-            <label class="sq-sub__f"><span>detune</span><input class="p-subdetune" type="range" min="0" max="1" step="0.01" value="0" title="how far apart the stacked oscillators sit, up to 25 cents. The spread narrows as the note falls: a lush reese at 80Hz is a wobble fighting the kick at 40. Needs a stack of more than one" /></label>
-            <select class="p-substack" title="how many oscillators. Two or three detuned against each other beat, and that beating is the reese. The spread hangs either side of the note, so changing this never retunes the track">
+            <label class="sq-sub__f"><span>sub oct</span><input class="p-suboct" type="range" min="0" max="1" step="0.01" value="0" title="a sine an octave below the note, there to be felt rather than heard" /></label>
+            <label class="sq-sub__f"><span>detune</span><input class="p-subdetune" type="range" min="0" max="1" step="0.01" value="0" title="how far apart the stacked oscillators sit, up to 25 cents. The spread narrows as the note falls. Needs a stack of more than one" /></label>
+            <select class="p-substack" title="how many oscillators. The spread hangs either side of the note, so changing this never retunes the track">
               <option value="1" selected>1 osc</option><option value="2">2 osc</option><option value="3">3 osc</option>
             </select>
-            <label class="sq-sub__f"><span>phase</span><input class="p-subphase" type="range" min="0" max="1" step="0.01" value="0" title="where in its cycle the oscillator starts each note. Down here it is audible: a sine started at zero spends 6ms at 40Hz climbing to its peak, so the note is soft, while one started at the peak hits at once. It is also how you stop a sub fighting the kick" /></label>
-            <label class="sq-sub__f"><span>drift</span><input class="p-subdrift" type="range" min="0" max="1" step="0.01" value="0.06" title="a slow random wander in the tuning, a few cents wide. A perfectly still sub sounds digital. A little drift sounds like hardware" /></label>
-            <select class="p-subglidem" title="when the glide applies. Always slides into every note. Legato slides only into a note arriving while another still sounds, which is the 808 slide behind a drill bassline. The glide TIME is the track's own glide control">
+            <label class="sq-sub__f"><span>phase</span><input class="p-subphase" type="range" min="0" max="1" step="0.01" value="0" title="where in its cycle the oscillator starts each note. A sine started at zero spends 6ms at 40Hz climbing to its peak, so the note is soft, while one started at the peak hits at once" /></label>
+            <label class="sq-sub__f"><span>drift</span><input class="p-subdrift" type="range" min="0" max="1" step="0.01" value="0.06" title="a slow random wander in the tuning, a few cents wide" /></label>
+            <select class="p-subglidem" title="when the glide applies. Always slides into every note. Legato slides only into a note arriving while another still sounds. The glide TIME is the track's own glide control">
               <option value="always" selected>glide always</option><option value="legato">glide legato</option>
             </select>
           </div>
           <div class="sq-sub__row">
             <span class="sq-sub__lbl">env</span>
-            <label class="sq-sub__f"><span>drop</span><input class="p-subdrop" type="range" min="0" max="1" step="0.01" value="0.15" title="how far above the note the pitch starts before falling onto it, up to 40 semitones. The fall is the attack transient, and it is why an 808 has a beater sound at all. Wound right up it is the trailer hit" /></label>
-            <label class="sq-sub__f"><span>drop time</span><input class="p-subdroptm" type="range" min="0" max="1" step="0.01" value="0.2" title="how long that fall takes, 4ms to half a second. Short is a click on the front of the note, long is a gesture you hear arriving" /></label>
-            <label class="sq-sub__f"><span>attack</span><input class="p-subatk" type="range" min="0" max="1" step="0.01" value="0.02" title="how fast the note comes in. Instant at the bottom, which is usually what a sub wants. Wound up it swells in with no transient at all" /></label>
+            <label class="sq-sub__f"><span>drop</span><input class="p-subdrop" type="range" min="0" max="1" step="0.01" value="0.15" title="how far above the note the pitch starts before falling onto it, up to 40 semitones. The fall is the attack transient" /></label>
+            <label class="sq-sub__f"><span>drop time</span><input class="p-subdroptm" type="range" min="0" max="1" step="0.01" value="0.2" title="how long that fall takes, 4ms to half a second. Short is a click on the front of the note, long is an audible fall" /></label>
+            <label class="sq-sub__f"><span>attack</span><input class="p-subatk" type="range" min="0" max="1" step="0.01" value="0.02" title="how fast the note comes in. Instant at the bottom, wound up it swells in with no transient at all" /></label>
             <label class="sq-sub__f"><span>release</span><input class="p-subrel" type="range" min="0" max="1" step="0.01" value="0.15" title="how fast the note stops when its step ends. It can only shorten the decay, never extend it. At the top the note keeps ringing as though the step were still held" /></label>
-            <label class="sq-sub__f"><span>click</span><input class="p-subclick" type="range" min="0" max="1" step="0.01" value="0.2" title="a short band of noise on the attack: the beater. On a small speaker it is often the only part of the note that arrives, which is why an 808 with no click disappears on a phone" /></label>
+            <label class="sq-sub__f"><span>click</span><input class="p-subclick" type="range" min="0" max="1" step="0.01" value="0.2" title="a short band of noise on the attack: the beater. Often the only part of the note a small speaker reproduces" /></label>
           </div>
           <div class="sq-sub__row">
             <span class="sq-sub__lbl">harm</span>
-            <select class="p-subsat" title="what makes the harmonics. Tube is an asymmetric soft clip, even and odd, octave-up strongest, which is what a small speaker reproduces best. Fold reflects instead of clipping, so it keeps making new harmonics as it is driven. Fuzz is a hard clip: odd harmonics, hollow and loud. Rect rectifies, doubling the frequency">
+            <select class="p-subsat" title="what makes the harmonics. Tube is an asymmetric soft clip, even and odd, octave-up strongest. Fold reflects instead of clipping, so it keeps making new harmonics as it is driven. Fuzz is a hard clip: odd harmonics, hollow and loud. Rect rectifies, doubling the frequency">
               <option value="tube" selected>tube</option><option value="fold">fold</option>
               <option value="fuzz">fuzz</option><option value="rect">rectify</option>
             </select>
-            <label class="sq-sub__f"><span>xover</span><input class="p-subxover" type="range" min="0" max="1" step="0.01" value="0.3" title="where the harmonics start, 60Hz to about 800Hz. Nothing below this is ever distorted, so the fundamental never intermodulates with what is above it and the bottom stays put" /></label>
-            <label class="sq-sub__f"><span>edge</span><input class="p-subedge" type="range" min="0" max="1" step="0.01" value="0.35" title="how asymmetric the shaping is. Symmetric gives odd harmonics, hollow and growling. Asymmetric gives even ones, an octave up, far more audible on something small. It biases the signal going in, so the clipper makes a pulse with an uneven duty cycle" /></label>
+            <label class="sq-sub__f"><span>xover</span><input class="p-subxover" type="range" min="0" max="1" step="0.01" value="0.3" title="where the harmonics start, 60Hz to about 800Hz. Nothing below this is ever distorted" /></label>
+            <label class="sq-sub__f"><span>edge</span><input class="p-subedge" type="range" min="0" max="1" step="0.01" value="0.35" title="how asymmetric the shaping is. Symmetric gives odd harmonics, hollow and growling. Asymmetric gives even ones, an octave up" /></label>
           </div>
           <div class="sq-sub__row">
             <span class="sq-sub__lbl">reso</span>
-            <label class="sq-sub__f"><span>reso</span><input class="p-subreso" type="range" min="0" max="1" step="0.01" value="0" title="the 303 filter: a 3-pole diode ladder, 18dB/oct, with the resonance feedback through a diode pair for the squelch. It sits above a split at the XOVER frequency, so only what is above the crossover reaches it and the fundamental goes past untouched. At zero the whole stage is bypassed" /></label>
-            <label class="sq-sub__f"><span>cutoff</span><input class="p-subrcut" type="range" min="0" max="1" step="0.01" value="0.5" title="where the filter sits before the envelope moves it, 100Hz to 8kHz. No key tracking, as on the machine, so high notes come out duller than low ones" /></label>
-            <label class="sq-sub__f"><span>env</span><input class="p-subrenv" type="range" min="0" max="1" step="0.01" value="0.55" title="how far the envelope throws the cutoff above the knob, up to about four octaves. This plus decay is the gesture: cutoff low and env high makes every note a swoop" /></label>
-            <label class="sq-sub__f"><span>decay</span><input class="p-subrdec" type="range" min="0" max="1" step="0.01" value="0.35" title="how long that sweep takes to fall back, 200ms to 2.5s. Its own envelope, no sustain, and it keeps decaying whether or not the step is held. Short is a blip on the front of each note. Long and the filter is still opening when the next one lands" /></label>
+            <label class="sq-sub__f"><span>reso</span><input class="p-subreso" type="range" min="0" max="1" step="0.01" value="0" title="a 3-pole diode ladder, 18dB/oct, with the resonance feedback through a diode pair. It sits above the split at the XOVER frequency, so only what is above the crossover reaches it. At zero the stage is bypassed" /></label>
+            <label class="sq-sub__f"><span>cutoff</span><input class="p-subrcut" type="range" min="0" max="1" step="0.01" value="0.5" title="where the filter sits before the envelope moves it, 100Hz to 8kHz. No key tracking, so high notes come out duller than low ones" /></label>
+            <label class="sq-sub__f"><span>env</span><input class="p-subrenv" type="range" min="0" max="1" step="0.01" value="0.55" title="how far the envelope throws the cutoff above the knob, up to about four octaves. Cutoff low and env high makes every note a swoop" /></label>
+            <label class="sq-sub__f"><span>decay</span><input class="p-subrdec" type="range" min="0" max="1" step="0.01" value="0.35" title="how long that sweep takes to fall back, 200ms to 2.5s. No sustain, and it keeps decaying whether or not the step is held" /></label>
             <label class="sq-sub__f"><span>accent</span><input class="p-subracc" type="range" min="0" max="1" step="0.01" value="0.35" title="how much a hard-hit step kicks the filter. Velocity above 0.6 charges a network whose time constant tracks reso, so at high resonance consecutive accents stack and a run of them climbs. Unaccented steps hear nothing from this" /></label>
           </div>
           <div class="sq-sub__row">
             <span class="sq-sub__lbl">out</span>
-            <label class="sq-sub__f"><span>low cut</span><input class="p-subhpf" type="range" min="0" max="1" step="0.01" value="0.1" title="high-pass filter, 16Hz to 70Hz. Below about 25Hz there is no pitch left, just cone excursion spending headroom on air the speaker cannot move" /></label>
-            <label class="sq-sub__f"><span>glue</span><input class="p-subglue" type="range" min="0" max="1" step="0.01" value="0.35" title="the compressor, threshold and makeup on one control. A sub that sits perfectly still under a mix is this" /></label>
-            <label class="sq-sub__f"><span>ceiling</span><input class="p-subceil" type="range" min="0" max="1" step="0.01" value="0.85" title="the limiter's ceiling. It stays linear until the signal is genuinely near it, so a patch meant to have no harmonics keeps none" /></label>
+            <label class="sq-sub__f"><span>low cut</span><input class="p-subhpf" type="range" min="0" max="1" step="0.01" value="0.1" title="high-pass filter, 16Hz to 70Hz" /></label>
+            <label class="sq-sub__f"><span>glue</span><input class="p-subglue" type="range" min="0" max="1" step="0.01" value="0.35" title="the compressor, threshold and makeup on one control" /></label>
+            <label class="sq-sub__f"><span>ceiling</span><input class="p-subceil" type="range" min="0" max="1" step="0.01" value="0.85" title="the limiter's ceiling. It stays linear until the signal is near it" /></label>
           </div>
         </div>`;
 
@@ -465,11 +465,11 @@ export const STUDIO_BODY = String.raw`
           <div class="sq-contagion__row">
             <span class="sq-contagion__lbl">osc</span>
             <label class="sq-contagion__f"><span>semi</span><input class="p-vosc2semi" type="range" min="-24" max="24" step="1" value="0" title="osc 2 pitch offset in semitones" /></label>
-            <label class="sq-contagion__f"><span>detune</span><input class="p-vosc2det" type="range" min="0" max="1" step="0.01" value="0.08" title="fine detune between the two oscillators. A little is what makes it wide rather than sterile" /></label>
+            <label class="sq-contagion__f"><span>detune</span><input class="p-vosc2det" type="range" min="0" max="1" step="0.01" value="0.08" title="fine detune between the two oscillators" /></label>
             <label class="sq-contagion__f"><span>pw</span><input class="p-vpw" type="range" min="0.02" max="0.98" step="0.01" value="0.5" title="pulse width. Only heard at the top of the shape morph, where the wave becomes a pulse" /></label>
             <label class="sq-contagion__f"><span>fm</span><input class="p-vfm" type="range" min="0" max="1" step="0.01" value="0" title="osc 2 phase-modulates osc 1" /></label>
             <label class="sq-contagion__f"><span>ring</span><input class="p-vring" type="range" min="0" max="1" step="0.01" value="0" title="ring modulation: osc 1 times osc 2, for clangorous metallic tones" /></label>
-            <select class="p-vsync" title="hard sync: osc 2 resets every time osc 1 completes a cycle, so it is forced to osc 1's pitch. Sweep semi with sync on for a tearing lead">
+            <select class="p-vsync" title="hard sync: osc 2 resets every time osc 1 completes a cycle, so it is forced to osc 1's pitch">
               <option value="off" selected>sync off</option><option value="on">sync on</option>
             </select>
             <select class="p-vsubwave" title="sub oscillator waveform, one octave below osc 1 (its level is the sub slider)">
@@ -478,7 +478,7 @@ export const STUDIO_BODY = String.raw`
           </div>
           <div class="sq-contagion__row">
             <span class="sq-contagion__lbl">unison</span>
-            <select class="p-vuni" title="how many detuned copies of the oscillator section each note plays. This is the hypersaw">
+            <select class="p-vuni" title="how many detuned copies of the oscillator section each note plays">
               <option value="1" selected>1</option><option value="2">2</option><option value="3">3</option>
               <option value="4">4</option><option value="6">6</option><option value="8">8</option>
             </select>
@@ -522,7 +522,7 @@ ${BASS_PANEL}
 ${SUB_PANEL}
         <div class="sq-param-group sq-param-group--silverbox" hidden>
           <div class="sq-field"><label>wave</label>
-            <select class="p-sbwave" title="the silverbox's two waveforms. Saw is the acid tone, square is hollower and sits lower">
+            <select class="p-sbwave" title="the two waveforms. Saw is brighter, square is hollower and sits lower">
               <option value="saw" selected>saw</option><option value="square">square</option>
             </select>
           </div>
@@ -545,15 +545,15 @@ ${SUB_PANEL}
           <div class="sq-gran__row">
             <div class="sq-field"><label>window</label><input class="p-gwindow" type="range" min="0" max="1" step="0.01" value="0.15" title="how far each grain may stray from the play head: the band drawn across the waveform. Narrow reads one instant over and over. At 100% grains come from anywhere in the sample" /></div>
             <div class="sq-field"><label>jitter</label><input class="p-gjitter" type="range" min="0" max="1" step="0.01" value="0.1" title="randomises when each grain fires. At zero the train is perfectly regular and hums a tone at the grain rate. Raise it to break that into texture" /></div>
-            <div class="sq-field"><label>detune</label><input class="p-gdetune" type="range" min="0" max="1" step="0.01" value="0" title="random pitch per grain, up to a semitone either way. Thickens a cloud into a chorus" /></div>
-            <div class="sq-field"><label>pan</label><input class="p-gpan" type="range" min="0" max="1" step="0.01" value="0.3" title="random stereo placement per grain. Widens the cloud without touching its tone" /></div>
+            <div class="sq-field"><label>detune</label><input class="p-gdetune" type="range" min="0" max="1" step="0.01" value="0" title="random pitch per grain, up to a semitone either way" /></div>
+            <div class="sq-field"><label>pan</label><input class="p-gpan" type="range" min="0" max="1" step="0.01" value="0.3" title="random stereo placement per grain. Widens the cloud without changing its tone" /></div>
           </div>
           <div class="sq-gran__row">
             <label class="sq-gran__lbl">pattern</label>
-            <select class="p-gpattern" title="sprinkles octave or fifth jumps across the grains, for a harmonised cloud rather than a flat one">
+            <select class="p-gpattern" title="sprinkles octave or fifth jumps across the grains">
               <option value="none" selected>none</option><option value="oct">octaves</option><option value="fifth">fifths</option>
             </select>
-            <label class="sq-gran__sync" title="lock the grain rate to the tempo instead of the dense slider, for rhythmic granulation rather than a wash"><input class="p-gsync" type="checkbox" title="lock the grain rate to the tempo instead of the dense slider, for rhythmic granulation rather than a wash" /> sync</label>
+            <label class="sq-gran__sync" title="lock the grain rate to the tempo instead of the dense slider"><input class="p-gsync" type="checkbox" title="lock the grain rate to the tempo instead of the dense slider" /> sync</label>
             <label class="sq-gran__lbl">rate</label>
             <select class="p-grate" title="grain rate as a division of the tempo, used while sync is on (dense does nothing then)">
               <option value="1/64">1/64</option><option value="1/32t">1/32T</option><option value="1/32">1/32</option>
@@ -633,7 +633,7 @@ ${SUB_PANEL}
             <option value="short">short</option>
             <option value="legato">legato</option>
           </select></label>
-          <label title="louder on the beat, quieter off it, so the pattern reads as a groove rather than a flat line"><input class="sq-euclid__accent" type="checkbox" checked /> accent the beat</label>
+          <label title="louder on the beat, quieter off it"><input class="sq-euclid__accent" type="checkbox" checked /> accent the beat</label>
         </div>
         <div class="sq-euclid__actions">
           <label class="sq-euclid__live" title="generate this track's rhythm live instead of playing the written steps. Nothing is written, so pulses, steps and rotate can take an LFO, an automation lane or a macro pad. Switch it off and the pattern is exactly as you left it. The step grid shows what is generated and goes read-only while this is on"><input class="sq-euclid__on" type="checkbox" /> live</label>
@@ -650,11 +650,11 @@ ${SUB_PANEL}
 
         <div class="sq-chance__sec">
           <span class="sq-chance__sec-t">rhythm</span>
-          <button class="sq-chance__dice-r sq-btn--ghost" type="button" title="throw the rhythm dice: new values for the note lengths, the rests and the ties. The throw is held, so the part repeats. Keep pressing until one sticks">roll</button>
+          <button class="sq-chance__dice-r sq-btn--ghost" type="button" title="throw the rhythm dice: new values for the note lengths, the rests and the ties. The throw is held, so the part repeats">roll</button>
           <label class="sq-chance__free" title="realtime: take a fresh throw every time the window comes round, so the rhythm never repeats"><input class="sq-chance__rfree" type="checkbox" /> realtime</label>
         </div>
         <div class="sq-chance__ctls">
-          <label class="sq-chance__f" title="the base rhythm, 1/1 down to 1/32 including the triplets. Nothing random about it: this is the grid the rest of the section varies">
+          <label class="sq-chance__f" title="the base rhythm, 1/1 down to 1/32 including the triplets. This is the grid the rest of the section varies">
             <span>note value</span>
             <input class="p-chnnote" type="range" min="0" max="7" step="1" value="4" />
             <output class="sq-chance__val sq-chance__val--note"></output>
@@ -736,7 +736,7 @@ ${SUB_PANEL}
           </label>
         </div>
         <div class="sq-chance__opts">
-          <button class="sq-chance__scale sq-btn--ghost" type="button" title="set the twelve probabilities from the session's active scale, root loudest. Generated notes are not snapped to the scale, since these faders are the scale, so this is where the two meet">from scale</button>
+          <button class="sq-chance__scale sq-btn--ghost" type="button" title="set the twelve probabilities from the session's active scale, root loudest">from scale</button>
           <button class="sq-chance__clear-pcs sq-btn--ghost" type="button" title="put every semitone probability back to zero">none</button>
         </div>
         <div class="sq-chance__ctls">
@@ -745,7 +745,7 @@ ${SUB_PANEL}
             <input class="p-chnlo" type="range" min="24" max="96" step="1" value="48" />
             <output class="sq-chance__val sq-chance__val--lo"></output>
           </label>
-          <label class="sq-chance__f" title="the highest note that can be played. Five octaves above the low note at most, as on the machine">
+          <label class="sq-chance__f" title="the highest note that can be played. Five octaves above the low note at most">
             <span>high note</span>
             <input class="p-chnhi" type="range" min="24" max="96" step="1" value="72" />
             <output class="sq-chance__val sq-chance__val--hi"></output>
@@ -863,7 +863,7 @@ ${SUB_PANEL}
           <span class="sq-fx__title">bitcrush</span>
           <label class="sq-fx__ctl"><span>wet</span><input class="fx-crush-wet" type="range" min="0" max="1" step="0.01" value="0" /></label>
           <label class="sq-fx__ctl"><span>bits</span><input class="fx-crush-bits" type="range" min="1" max="16" step="1" value="8" /></label>
-          <label class="sq-fx__ctl" title="the converter's sample rate, 48k down to 250Hz. Everything above half of it folds back down out of tune — the aliasing IS the crush"><span>rate</span><input class="fx-crush-rate" type="range" min="0" max="1" step="0.005" value="1" /></label>
+          <label class="sq-fx__ctl" title="the sample rate the crusher runs at, 48k down to 250Hz. Anything above half of it folds back down out of tune"><span>rate</span><input class="fx-crush-rate" type="range" min="0" max="1" step="0.005" value="1" /></label>
         </div>
         <div class="sq-fx__row" data-fx="autowah">
           <span class="sq-fx__title">auto-wah</span>

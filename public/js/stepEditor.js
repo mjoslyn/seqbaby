@@ -195,7 +195,7 @@ export function openGranularWavModal(t) {
         <label title="grain length. Short grains rattle and buzz, long ones overlap into a wash">grain <input type="range" class="gw-harm" min="0" max="1" step="0.01" /></label>
         <label title="grains per second, 8 to 90. Ignored while sync is on, where rate takes over">dense <input type="range" class="gw-timb" min="0" max="1" step="0.01" /></label>
         <label title="play position in the sample. Dragging the window in the wave editor sets this too">pos <input type="range" class="gw-morph" min="0" max="1" step="0.01" /></label>
-        <label title="diffusion: widens the window, loosens the jitter and adds detune together. Leave it at zero for a tight, in-tune cloud">spray <input type="range" class="gw-decay" min="0" max="1" step="0.01" /></label>
+        <label title="diffusion: widens the window, loosens the jitter and adds detune together">spray <input type="range" class="gw-decay" min="0" max="1" step="0.01" /></label>
       </div>
       <div class="sq-gwav__ctl-row">
         <label title="fixed reads every grain from one spot. Moving scans the play head through the sample">play <select class="gw-gplay"><option value="fixed">fixed</option><option value="moving">moving</option></select></label>
@@ -206,12 +206,12 @@ export function openGranularWavModal(t) {
       <div class="sq-gwav__ctl-row">
         <label title="how far each grain may stray from the play head: the band drawn across the waveform. Narrow reads one instant over and over. At 100% grains come from anywhere in the sample">window <input type="range" class="gw-gwindow" min="0" max="1" step="0.01" /></label>
         <label title="randomises when each grain fires. At zero the train is perfectly regular and hums a tone at the grain rate. Raise it to break that into texture">jitter <input type="range" class="gw-gjitter" min="0" max="1" step="0.01" /></label>
-        <label title="random pitch per grain, up to a semitone either way. Thickens a cloud into a chorus">detune <input type="range" class="gw-gdetune" min="0" max="1" step="0.01" /></label>
-        <label title="random stereo placement per grain. Widens the cloud without touching its tone">pan <input type="range" class="gw-gpan" min="0" max="1" step="0.01" /></label>
+        <label title="random pitch per grain, up to a semitone either way">detune <input type="range" class="gw-gdetune" min="0" max="1" step="0.01" /></label>
+        <label title="random stereo placement per grain. Widens the cloud without changing its tone">pan <input type="range" class="gw-gpan" min="0" max="1" step="0.01" /></label>
       </div>
       <div class="sq-gwav__ctl-row">
-        <label title="sprinkles octave and fifth jumps across the grains, for a harmonised cloud rather than a flat one">pattern <select class="gw-gpattern"><option value="none">none</option><option value="oct">octaves</option><option value="fifth">fifths</option></select></label>
-        <label class="gw-sync-wrap" title="lock the grain rate to the tempo instead of the dense slider, for rhythmic granulation rather than a wash"><input type="checkbox" class="gw-gsync" /> sync</label>
+        <label title="sprinkles octave and fifth jumps across the grains">pattern <select class="gw-gpattern"><option value="none">none</option><option value="oct">octaves</option><option value="fifth">fifths</option></select></label>
+        <label class="gw-sync-wrap" title="lock the grain rate to the tempo instead of the dense slider"><input type="checkbox" class="gw-gsync" /> sync</label>
         <label title="grain rate as a division of the tempo, while sync is on. Dense does nothing then">rate <select class="gw-grate">
           <option value="1/64">1/64</option><option value="1/32t">1/32T</option><option value="1/32">1/32</option>
           <option value="1/16t">1/16T</option><option value="1/16">1/16</option><option value="1/8t">1/8T</option>

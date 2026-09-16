@@ -15,7 +15,7 @@ const SECTIONS = [
   ["steps", "The step grid"],
   ["roll", "The piano roll"],
   ["step-editor", "The step editor"],
-  ["generators", "The two generators"],
+  ["generators", "The three generators"],
   ["keyboard", "Playing from your keyboard"],
   ["scale", "Scale and chords"],
   ["engines", "Sound engines"],
@@ -147,9 +147,7 @@ export default function ManualPage() {
           <p>
             On a phone the same controls draw as vertical sliders and the thumb
             follows your finger. Two rows stay sliders everywhere: the wavetable
-            editor&apos;s harmonic bars and the chance generator&apos;s pitch faders,
-            since side by side those are a picture of a shape rather than a set of
-            separate values.
+            editor&apos;s harmonic bars and the chance generator&apos;s pitch faders.
           </p>
         </section>
 
@@ -207,9 +205,9 @@ export default function ManualPage() {
                 <tr><td>solo / mute</td><td>Hear only this track, or silence it.</td></tr>
                 <tr><td>p-lock</td><td>Gives this track a sound of its own on the pattern you are on. See <a href="#lock">p-lock</a>.</td></tr>
                 <tr><td>clear</td><td>Empties this pattern on this track.</td></tr>
-                <tr><td>dice</td><td>Rolls a new pattern. Keep pressing until one sticks. The fill behind the icon is how busy the results come out; drag the dice up or down to set it.</td></tr>
-                <tr><td>ring</td><td>Euclidean rhythms. See <a href="#generators">the two generators</a>.</td></tr>
-                <tr><td>die</td><td>Chance: a whole part, rhythm and pitches, from probabilities. See <a href="#generators">the two generators</a>.</td></tr>
+                <tr><td>dice</td><td>Rolls a new pattern. Keep pressing until one sticks; drag it up or down to set how full the rolls come out. See <a href="#generators">the three generators</a>.</td></tr>
+                <tr><td>ring</td><td>Euclidean rhythms. See <a href="#generators">the three generators</a>.</td></tr>
+                <tr><td>die</td><td>Chance: a whole part, rhythm and pitches, from probabilities. See <a href="#generators">the three generators</a>.</td></tr>
                 <tr><td>dup / remove</td><td>Copy the whole track, sound and all, or delete it.</td></tr>
                 <tr><td>oct / semi</td><td>Transposes everything in the pattern up or down.</td></tr>
               </tbody>
@@ -314,16 +312,39 @@ export default function ManualPage() {
         </section>
 
         <section className={styles.section} id="generators">
-          <h2>The two generators</h2>
+          <h2>The three generators</h2>
           <p>
-            Two buttons on the track row fill the grid for you. Both work the same
-            two ways. <strong>Write to pattern</strong> prints one result into the
-            grid as ordinary steps you can then edit. <strong>Live</strong> has the
-            track generate as it plays without writing anything, so the controls can
-            take an LFO, an automation lane or a macro pad, and switching live off
-            hands back the pattern exactly as you left it. While live is on the grid
-            shows what is being generated and goes read-only. A track has one rhythm
-            at a time, so turning one generator on turns the other off.
+            Three buttons on the track row fill the grid for you: the dice rolls a
+            part, the ring divides the bar evenly, the die throws odds. All three can
+            print a result into the grid as ordinary steps you can then edit. The ring
+            and the die also run <strong>live</strong>, generating as the track plays
+            without writing anything, so their controls can take an LFO, an automation
+            lane or a macro pad; switch live off and the pattern is exactly as you left
+            it. While live is on the grid shows what is playing and goes read-only. A
+            track has one rhythm at a time, so turning one of those two on turns the
+            other off.
+          </p>
+
+          <h3>The dice: roll a part</h3>
+          <p>
+            One press replaces the pattern with a new one, rhythm and pitches both.
+            Keep pressing until something sticks; nothing is held, so each roll starts
+            from scratch. What lands in the grid is ordinary steps, yours to edit
+            afterwards.
+          </p>
+          <p>
+            Drag the dice up or down to set how full the rolls come out, drawn as the
+            fill behind the icon. All the way down is empty, all the way up is every
+            step, and downbeats stay likelier than the steps between them.
+          </p>
+          <p>
+            On a drum-kit track every hit sits on C2 and only the rhythm changes.
+            Anywhere else it walks a melody in the session&apos;s key, mostly a step or
+            two at a time with the occasional octave leap, starting from the last note
+            you used on that track. It follows the root and mode even when scale
+            quantize is off. It leaves the sound alone;{" "}
+            <span className={styles.ui}>rand</span> beside the four knobs is the one
+            that rolls that.
           </p>
 
           <h3>The ring: euclidean rhythms</h3>
@@ -392,6 +413,17 @@ export default function ManualPage() {
             second colour is struck more than once, which is how the triplets and the
             1/32s fit a grid of sixteenths.
           </p>
+          <div className={styles.note}>
+            Chance is modelled on Vermona&apos;s meloDICER, a eurorack module that
+            generates a part from probabilities rather than storing one. The panel
+            keeps its layout &mdash; a rhythm section of note value, variation, legato
+            and rest, twelve semitone probability faders for the melody, and a range
+            either side of them. Two things here are not on the module: each knob gets
+            its own stream of dice, so turning{" "}
+            <span className={styles.ui}>rest</span> up only drops notes instead of
+            reshuffling the whole part, and a throw is a held seed, so a saved song
+            replays the part it was written with.
+          </div>
         </section>
 
         <section className={styles.section} id="keyboard">
@@ -510,9 +542,9 @@ export default function ManualPage() {
         <section className={styles.section} id="silverbox">
           <h2>The silverbox</h2>
           <p>
-            An acid box modelled from its circuits rather than approximated with a
-            filter preset, so it answers a pattern the way the original does. Its four
-            knobs are the panel: <span className={styles.ui}>cutoff</span>,{" "}
+            An acid box modelled from its circuits, so it answers a pattern the way
+            the original does. Its four knobs are the panel:{" "}
+            <span className={styles.ui}>cutoff</span>,{" "}
             <span className={styles.ui}>reso</span>,{" "}
             <span className={styles.ui}>env mod</span> and{" "}
             <span className={styles.ui}>decay</span>. Next to them are the waveform
@@ -582,8 +614,8 @@ export default function ManualPage() {
             </li>
           </ul>
           <p>
-            Sync is the other one to know. Turn it on and osc 2 is forced to osc
-            1&apos;s pitch, so dragging or automating the{" "}
+            With sync on, osc 2 is forced to osc 1&apos;s pitch, so dragging or
+            automating the{" "}
             <span className={styles.ui}>semi</span> knob gives you the classic tearing
             sync lead.
           </p>
@@ -601,9 +633,9 @@ export default function ManualPage() {
           <ul>
             <li>
               <strong>The algorithm is the wiring.</strong> There are 32 of them and
-              you can&apos;t make your own, which was true of the machine too. The
-              dropdown draws each one, so <span className={styles.ui}>1&larr;2</span>{" "}
-              means operator 2 modulates operator 1. The panel marks the{" "}
+              you can&apos;t make your own. The dropdown draws each one, so{" "}
+              <span className={styles.ui}>1&larr;2</span> means operator 2 modulates
+              operator 1. The panel marks the{" "}
               <em>carriers</em>, the operators that reach your ears, whose level is
               volume. Everything else is a modulator, and its level is how hard it
               bends the operator below it.
@@ -639,11 +671,11 @@ export default function ManualPage() {
           <p>
             Start from the <span className={styles.ui}>voice</span> dropdown rather
             than from silence: an electric piano, a bass, a bell, brass, a marimba, an
-            organ and a pad. Load one and change a single operator level. Two more
-            controls matter. <span className={styles.ui}>vel</span> makes playing
-            harder raise the modulation index, so hard notes come out brighter and not
-            just louder, and <span className={styles.ui}>key scale</span> pulls the
-            modulators back as you play up the keyboard. Without it the top octave
+            organ and a pad. Load one and change a single operator level.{" "}
+            <span className={styles.ui}>vel</span> makes playing harder raise the
+            modulation index, so hard notes come out brighter and not just louder,
+            and <span className={styles.ui}>key scale</span> pulls the modulators back
+            as you play up the keyboard. Without it the top octave
             screams.
           </p>
         </section>
@@ -651,15 +683,14 @@ export default function ManualPage() {
         <section className={styles.section} id="guitar">
           <h2>The guitar and the bass</h2>
           <p>
-            Neither is a plucked-string preset. Each models the whole chain a real one
-            goes through: the string, the pickup reading it, the amp it runs into and
-            the speaker in front of the mic.
+            Each models the whole chain a real one goes through: the string, the
+            pickup reading it, the amp it runs into and the speaker in front of the
+            mic.
           </p>
           <p>
             Both start from a <span className={styles.ui}>tone</span> dropdown of
-            famous rigs, and that is the sane way in. Load the nearest one, move a
-            control, hear what that control is for. Loading a tone replaces everything
-            including the four track knobs.
+            famous rigs. Load the nearest one, move a control, hear what that control
+            is for. Loading a tone replaces everything including the four track knobs.
           </p>
           <h3>The guitar</h3>
           <p>
@@ -696,9 +727,9 @@ export default function ManualPage() {
             <span className={styles.ui}>roundwound / flatwound</span> select.
           </p>
           <p>
-            Two panel controls matter. <span className={styles.ui}>fret</span> is how
-            hard the string is allowed to clatter against the fretboard; wound up with
-            the hand control at the top, that clatter is slap.{" "}
+            <span className={styles.ui}>fret</span> is how hard the string is allowed
+            to clatter against the fretboard; wound up with the hand control at the
+            top, that clatter is slap.{" "}
             <span className={styles.ui}>grind</span> is distortion, but only above the{" "}
             <span className={styles.ui}>xover</span> frequency, with the clean low end
             put back underneath. Distort a bass whole and the bottom vanishes, which
@@ -708,18 +739,18 @@ export default function ManualPage() {
             The knobs are <span className={styles.ui}>drive</span>,{" "}
             <span className={styles.ui}>tone</span>,{" "}
             <span className={styles.ui}>comp</span> and{" "}
-            <span className={styles.ui}>sustain</span>. Compression gets a knob of its
-            own because a bass part sitting perfectly still under everything else is a
-            compressor doing that.
+            <span className={styles.ui}>sustain</span>. Wind{" "}
+            <span className={styles.ui}>comp</span> up and the part sits perfectly
+            still under everything else.
           </p>
         </section>
 
         <section className={styles.section} id="subby">
           <h2>Subby</h2>
           <p>
-            A monosynth for the bottom two octaves and nothing else. It is mono on
-            purpose: two notes a third apart at 40Hz beat at a rate you feel as
-            lumpiness rather than hear as harmony. Last note wins, and{" "}
+            A monosynth for the bottom two octaves and nothing else. Two notes a
+            third apart at 40Hz beat at a rate you feel as lumpiness rather than hear
+            as harmony. Last note wins, and{" "}
             <span className={styles.ui}>glide</span> slides into it, either always or
             only when a note arrives while another is still sounding, which is the 808
             slide.
@@ -728,10 +759,9 @@ export default function ManualPage() {
             Most people cannot hear a 35Hz sine. A phone speaker starts around 500Hz
             and a laptop around 180Hz. The fix is harmonics: generate them and the ear
             rebuilds the fundamental it cannot hear.{" "}
-            <span className={styles.ui}>drive</span> is that path, and it is why it
-            gets a knob of its own. At zero you get a genuinely pure sine, which is
-            the right choice when something else in the mix is already carrying the
-            note.
+            <span className={styles.ui}>drive</span> is that path. At zero you get a
+            genuinely pure sine, which is the right choice when something else in the
+            mix is already carrying the note.
           </p>
           <ul>
             <li>
@@ -841,6 +871,13 @@ export default function ManualPage() {
             a muted or stopped track is silent.
           </p>
           <p>
+            The bit crusher has a <span className={styles.ui}>rate</span> as well as{" "}
+            <span className={styles.ui}>bits</span>: the sample rate it runs at, from
+            48k down to 250Hz. Bits alone is a noise floor under the sound; rate is
+            where the sampler grit comes from, because anything above half of it folds
+            back down out of tune with the track.
+          </p>
+          <p>
             <span className={styles.ui}>glide</span> lives here too. It slides the
             pitch between notes instead of jumping, for portamento leads and basses.
           </p>
@@ -874,9 +911,8 @@ export default function ManualPage() {
           <p>
             A bus plays no notes, so its step grid and roll are gone.{" "}
             <span className={styles.ui}>mute</span> on a bus cuts the audio passing
-            through it, since everywhere else mute just withholds a track&apos;s notes
-            and a bus hasn&apos;t got any. <span className={styles.ui}>solo</span> on a
-            bus keeps whatever feeds it.
+            through it, and <span className={styles.ui}>solo</span> on a bus keeps
+            whatever feeds it.
           </p>
         </section>
 
@@ -910,7 +946,7 @@ export default function ManualPage() {
           <p>
             What stays put is the instrument: the engine, and any sample loaded into
             it. A locked pattern is one instrument played differently, not a different
-            instrument. Routing, macro pads and the two generators stay put too.
+            instrument. Routing, macro pads and the generator settings stay put too.
           </p>
           <div className={styles.note}>
             Editing on an unlocked pattern edits the shared track sound, so every
@@ -923,8 +959,7 @@ export default function ManualPage() {
         <section className={styles.section} id="motion">
           <h2>Modulation and automation</h2>
           <p>
-            Two ways to make a sound move. Both are per track, and both are worth
-            using on anything that repeats for long.
+            Two ways to make a sound move, both per track.
           </p>
           <h3>mod: continuous</h3>
           <p>
@@ -974,23 +1009,21 @@ export default function ManualPage() {
           </p>
           <h3>Right-click any parameter</h3>
           <p>
-            The two panels above list a whole track at once, which is the long way
-            round when all you want to know is what is moving <em>this</em> control.
-            Right-click a knob, a switch or its label instead. It works anywhere: the
-            instrument row, the filter, effects, eq and comp panels, the sample and
-            wavetable editors. You get a small window for that one parameter, holding
-            what it does, whatever LFO or automation is on it, its macro assignment,
-            and a button to add any of them.
+            To see what is moving one control, right-click the knob, the switch or
+            its label. It works anywhere: the instrument row, the filter, effects, eq
+            and comp panels, the sample and wavetable editors. You get a small window
+            for that one parameter, holding what it does, whatever LFO or automation is
+            on it, its macro assignment, and a button to add any of them.
           </p>
           <p>
-            You don&apos;t have to go looking. A parameter with something on it wears a
-            dot next to its label: green for an LFO, blue for an automation lane, grey
-            for a lane you have switched off.
+            A parameter with something on it wears a dot next to its label: green
+            for an LFO, blue for an automation lane, grey for a lane you have switched
+            off.
           </p>
           <p>
-            And you can watch it happen. A knob being driven grows a second needle in
-            that same colour, at wherever the LFO or the lane has pushed the parameter
-            right now, while the knob itself stays where you left it. The two needles
+            A knob being driven grows a second needle in that same colour, at
+            wherever the LFO or the lane has pushed the parameter right now, while the
+            knob itself stays where you left it. The two needles
             together tell you how far it is travelling and where it comes back to.
           </p>
           <div className={styles.note}>
@@ -1009,8 +1042,7 @@ export default function ManualPage() {
             <span className={styles.ui}>macro</span> in the transport opens a set of
             XY pads. Each axis drives a list of parameters, and that list can span
             tracks: one thumb opening the bass filter while ducking the lead&apos;s
-            reverb is a move neither the mod matrix nor the automation lanes can make,
-            since both of those belong to a single track.
+            reverb.
           </p>
           <p>Two ways to assign a parameter to an axis:</p>
           <ul>
@@ -1031,9 +1063,9 @@ export default function ManualPage() {
             <span className={styles.ui}>flip</span> reverses it.
           </p>
           <p>
-            The assigned knobs move as you play the pad, which is the point of
-            staring at it. By default the move is momentary: let go and everything
-            ramps back to where it was, so nothing is committed.{" "}
+            The assigned knobs move as you play the pad. By default the move is
+            momentary: let go and everything ramps back to where it was, so nothing is
+            committed.{" "}
             <span className={styles.ui}>latch</span> instead leaves the parameters
             where you put them, exactly as if you had moved the knobs yourself, so
             they go into the patch and into a save.

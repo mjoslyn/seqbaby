@@ -46,7 +46,7 @@ export const PLAITS_MACRO_TIPS = [
     decay: PLAITS_LPG_DECAY },
   { // 3 grain
     harm: "ratio between the two formant frequencies",
-    timb: "formant frequency: the resonant peak the grains are shaped around, and what makes this one sound vocal",
+    timb: "formant frequency: the resonant peak the grains are shaped around",
     morph: "shape and width of the grain window",
     decay: PLAITS_LPG_DECAY },
   { // 4 additive
@@ -57,7 +57,7 @@ export const PLAITS_MACRO_TIPS = [
   { // 5 wavetable
     harm: "which bank of wavetables is read",
     timb: "position along the wavetable map",
-    morph: "position across the map's other axis. The two together pick the wave, and neither moves smoothly. The steppiness is the model",
+    morph: "position across the map's other axis. The two together pick the wave, and neither moves smoothly",
     decay: PLAITS_LPG_DECAY },
   { // 6 chord
     harm: "which chord is played. The model sounds four voices at once and this picks the intervals",
@@ -123,30 +123,30 @@ export const ENGINE_MACRO_TIPS = {
     harm: "speed and depth of the LFO sweeping the pulse width, on one control. At zero the pulse holds still",
     timb: "the pulse wave's resting width, from a thin nasal 10% out to a hollow square. The pwm rate slider sweeps around wherever this sits",
     osc: {
-      osc1: "level of the sawtooth, the snarl's main voice",
+      osc1: "level of the sawtooth, the main voice",
       osc2: "level of the pulse wave, shaped by the two pw controls",
       osc3: "level of the triangle, the one the metalizer folds",
       osc4: "level of the sub oscillator, an octave below",
     },
     oscMod: {
-      ultra: "ultrasaw: detuned copies stacked around the saw, for width out of one oscillator",
+      ultra: "ultrasaw: detuned copies stacked around the saw",
       fm: "audio-rate frequency modulation from the sub. Clangorous and metallic as it climbs",
       metal: "metalizer: folds the triangle back on itself into hard upper harmonics",
     },
   },
   "dm:ladder": {
-    harm: "how far oscillator 2 sits off oscillator 1, 5 to 30 cents. The slow beat between them is most of why the stack sounds thick",
+    harm: "how far oscillator 2 sits off oscillator 1, 5 to 30 cents",
     decay: "two things at once: how long a note takes to fall away, and how much of the warming filter stage is mixed in as it does",
     osc: {
       osc1: "level of oscillator 1 in the mixer",
       osc2: "level of oscillator 2, the detuned one",
-      osc3: "level of oscillator 3, usually dropped an octave for weight",
+      osc3: "level of oscillator 3, usually dropped an octave",
     },
   },
   "dm:drift": {
-    harm: "speed and depth of the LFO sweeping the DCO's pulse width. The drift's built-in movement",
+    harm: "speed and depth of the LFO sweeping the DCO's pulse width",
     timb: "the pulse's resting width, which that sweep moves around",
-    morph: "the chorus, wet and depth together. It is most of what a drift sounds like",
+    morph: "the chorus, wet and depth together",
     decay: "how long a note falls away, and the high-pass with it, so the sound thins as it shortens",
     osc: {
       osc1: "level of the main DCO",
@@ -157,7 +157,7 @@ export const ENGINE_MACRO_TIPS = {
   "dm:tines": {
     harm: "the ratio between the tine and the tone bar. Low is deep and hollow, high goes bell-like",
     timb: "how hard the hammer hits, so how much metallic attack comes through",
-    morph: "how much chorus is on the output. The stereo shimmer",
+    morph: "how much chorus is on the output",
     decay: "how long each note rings, and how long it takes to let go once released",
   },
   "dm:oracle": {
@@ -173,7 +173,7 @@ export const ENGINE_MACRO_TIPS = {
     },
   },
   "wt:akwf": {
-    harm: "position across the table, morphing between the frames you drew in the editor or the AKWF palette. Wave scan can sweep this on its own",
+    harm: "position across the table, morphing between the frames in the editor or the AKWF palette. Wave scan can sweep this on its own",
     timb: "a lowpass on each voice, on top of the track filter. Dark at the bottom, wide open at the top",
     morph: "how far the stacked unison voices spread in pitch, up to ±30 cents. Zero is one clean voice",
     decay: "how long each note takes to fall away, and its release",
@@ -183,7 +183,7 @@ export const ENGINE_MACRO_TIPS = {
       osc1: "level of oscillator 1",
       osc2: "level of oscillator 2, the one semi, detune and sync act on",
       osc3: "level of the sub oscillator, an octave under osc 1. Its shape is the sub select",
-      osc4: "level of the noise source. Squared, so the bottom of the slider stays usable",
+      osc4: "level of the noise source",
     },
   },
 };

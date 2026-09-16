@@ -241,19 +241,19 @@ export const CONTROL_LABELS = {
 // better than anything generic could, so those controls have no entry here.
 /** @type {Record<string, string>} */
 export const PARAM_DESCRIPTIONS = {
-  vol:   "the track's output level, tapped for the meter and fed to the master bus",
+  vol:   "the track's output level",
   // Fallbacks only: every engine that shows these four sliders describes them
   // itself (PLAITS_MACRO_TIPS / ENGINE_MACRO_TIPS in catalog.js, and the tips
   // written inline in updatePlaitsControlsVisibility), and those win.
-  harm:  "the first of the four shared timbre sliders. What it does depends on the engine, and the label says which",
-  timb:  "the second of the four shared timbre sliders. Engine-dependent, like the rest",
-  morph: "the third of the four shared timbre sliders. Engine-dependent, like the rest",
+  harm:  "the first of the four timbre sliders. What it does depends on the engine, and the label says which",
+  timb:  "the second of the four timbre sliders. What it does depends on the engine",
+  morph: "the third of the four timbre sliders. What it does depends on the engine",
   decay: "how long a note takes to fall away once it is struck",
   osc1:  "level of the first oscillator in the mix",
   osc2:  "level of the second oscillator in the mix",
   osc3:  "level of the third oscillator, the sub on most engines",
   osc4:  "level of the fourth source: sub or noise, depending on the engine",
-  ultra: "ultrasaw: detuned copies of the saw, for a thicker single oscillator",
+  ultra: "ultrasaw: detuned copies of the saw, stacked around it",
   fm:    "oscillator FM depth. Metallic and inharmonic as it climbs",
   metal: "metalizer: folds the triangle back on itself into harsh upper harmonics",
   noise: "level of the noise source in the oscillator mix",
@@ -261,7 +261,7 @@ export const PARAM_DESCRIPTIONS = {
   reson:  "resonance of that lowpass: a peak at the cutoff, from a gentle emphasis to a whistle",
   "fx.vinyl":            "how much of the vinyl stage is in the signal: surface noise, tone loss and a slow warble together",
   "fx.vinyl.warmth":     "how far the vinyl stage rolls the top end off",
-  "fx.vinyl.wow":        "depth of the vinyl warble, as on an off-centre record",
+  "fx.vinyl.wow":        "depth of the vinyl warble",
   "fx.cassette":         "how much of the cassette stage is in the signal: hiss, saturation and flutter",
   "fx.cassette.flutter": "speed instability of the tape. Faster and finer than vinyl wow",
   "fx.cassette.sat":     "how hard the tape is driven, from a gentle thickening to audible compression",
@@ -275,8 +275,8 @@ export const PARAM_DESCRIPTIONS = {
   "fx.shaper.preamp":    "gain into the shaper: how far up its curve the signal reaches",
   "fx.shaper.amt":       "how extreme the shaping curve is (its shape is the mode select beside it)",
   "fx.crush":            "dry/wet for the bit crusher",
-  "fx.crush.bits":       "bit depth, 16 down to 1. Quantisation noise on the way down, and a hard clip at full scale",
-  "fx.crush.rate":       "the converter's sample rate, 48k down to 250Hz. Everything above half of it folds back down out of tune — the aliasing IS the crush",
+  "fx.crush.bits":       "bit depth, 16 down to 1",
+  "fx.crush.rate":       "the sample rate the crusher runs at, 48k down to 250Hz. Anything above half of it folds back down out of tune",
   "fx.autowah":          "dry/wet for the auto-wah",
   "fx.autowah.sens":     "how readily the envelope follower opens the wah",
   "fx.autowah.range":    "how far the wah sweeps once it opens",
@@ -295,11 +295,11 @@ export const PARAM_DESCRIPTIONS = {
   "fx.delay.time":       "delay time. Setting it here switches the delay out of tempo sync",
   "fx.delay.fbk":        "how much of the delay is fed back in, so how many repeats",
   "fx.reverb":           "how much reverb is mixed in",
-  "fx.reverb.decay":     "reverb tail length. Changing it rebuilds the impulse response, so it moves in steps rather than smoothly",
+  "fx.reverb.decay":     "reverb tail length",
 
   // Contagion envelope sliders (no tooltip in the markup — the four track sliders
   // carry the engine's own tips, these don't).
-  "contagion.atk": "how long each note takes to reach full level. Past a few percent it is a swell rather than a click",
+  "contagion.atk": "how long each note takes to reach full level",
   "contagion.sus": "the level the envelope holds at after the decay, for as long as the note is held",
   "contagion.rel": "how long the note takes to fade once it ends",
 
@@ -311,9 +311,9 @@ export const PARAM_DESCRIPTIONS = {
   "p-osc1wave":  "waveform for oscillator 1",
   "p-osc2wave":  "waveform for oscillator 2",
   "p-osc3wave":  "waveform for oscillator 3",
-  "p-osc2freq":  "oscillator 2's tuning against oscillator 1, ±7 semitones. A little off is what makes the stack move",
-  "p-osc3freq":  "oscillator 3's tuning against oscillator 1, ±7 semitones. On the real thing it is often pushed far enough to beat rather than harmonise",
-  "p-noisetype": "noise colour. White is flat across the spectrum, pink falls 3dB an octave and sits behind a mix more easily",
+  "p-osc2freq":  "oscillator 2's tuning against oscillator 1, ±7 semitones",
+  "p-osc3freq":  "oscillator 3's tuning against oscillator 1, ±7 semitones",
+  "p-noisetype": "noise colour. White is flat across the spectrum, pink falls 3dB an octave",
   // Contagion filter selects the markup only labels in passing.
   "p-vmode1": "what filter 1 does with the signal: low pass, high pass, band pass or band stop",
   "p-vmode2": "what filter 2 does with the signal: low pass, high pass, band pass or band stop",
@@ -325,24 +325,24 @@ export const PARAM_DESCRIPTIONS = {
   "p-envsus": "the cutoff level the sweep holds at while the note lasts",
   "p-envrel": "how long the cutoff takes to fall back once the note ends",
   // EQ.
-  "p-eq-low":  "low shelf at 250Hz, ±18dB. Everything below it moves together",
-  "p-eq-mid":  "peaking bell at 1.2kHz, ±18dB, where most instruments keep their body and honk",
-  "p-eq-high": "high shelf at 5kHz, ±18dB. Air and cymbal top",
+  "p-eq-low":  "low shelf at 250Hz, ±18dB",
+  "p-eq-mid":  "peaking bell at 1.2kHz, ±18dB",
+  "p-eq-high": "high shelf at 5kHz, ±18dB",
   // Compressor.
-  "comp-enabled":    "switches the track compressor in. Off is a straight wire, not a bypassed processor",
-  "sq-comp__source": "what the compressor listens to: itself, or another track. Pick a track here to duck this one under it, as in a kick-into-bass sidechain",
+  "comp-enabled":    "switches the track compressor in",
+  "sq-comp__source": "what the compressor listens to: itself, or another track. Pick a track here to duck this one under it",
   "comp-threshold":  "the level above which the compressor starts working, in dB",
   "comp-ratio":      "how hard it pulls back what crosses the threshold. 4:1 lets a quarter of the excess through, 20:1 is close to a limiter",
   "comp-attack":     "how quickly it clamps down once the signal crosses the threshold. Slow lets the transient through",
   "comp-release":    "how long it takes to let go afterwards. Too fast pumps, too slow stays ducked",
-  "comp-knee":       "how gradually the ratio comes in around the threshold. A wide knee is gentler and harder to hear working",
+  "comp-knee":       "how gradually the ratio comes in around the threshold. A wide knee is gentler",
   // FX panel controls with no target.
-  "sq-track__glide": "portamento: how long a note takes to slide to the next. It lives on the voice, not the fx rack",
+  "sq-track__glide": "portamento: how long a note takes to slide to the next",
   "fx-shaper-mode":  "the curve the wave shaper folds the signal through. Saturate and soft clip thicken. Fold, wrap and serge break the waveform into new harmonics",
   "fx-delay-sync":   "locks the delay time to the tempo. The division select beside it takes over from the time slider",
   "fx-delay-div":    "delay time as a division of the tempo, while sync is on",
   // Wavetable editor's wave scan.
-  "sq-wt__scan-en":     "cycles the wave knob through the table's frames, so the tone moves without using a mod slot",
+  "sq-wt__scan-en":     "cycles the wave knob through the table's frames",
   "sq-wt__scan-dir":    "which way the scan travels through the frames: up, down, back and forth, or jumping at random",
   "sq-wt__scan-sync":   "locks the scan to the tempo instead of the speed slider",
   "sq-wt__scan-rate":   "how fast the scan travels, in hz, when it isn't tempo-synced",
@@ -351,9 +351,9 @@ export const PARAM_DESCRIPTIONS = {
   // Sample editor.
   "sq-samp__snap":      "quantises the region handles to a musical division as you drag them",
   "sq-samp__fit":       "stretches the sample to fit a number of bars at the current tempo, or plays it at its native speed",
-  "sq-samp__pitchlock": "keeps a bpm-fitted sample at its natural pitch whatever note a step plays, so timing wins over pitch",
+  "sq-samp__pitchlock": "keeps a bpm-fitted sample at its natural pitch whatever note a step plays",
   "sq-samp__loop":      "what a step does when it reaches the end of the region: stop, loop, or bounce back and forth",
-  "sq-samp__fadein":    "fade at the start of every hit, in seconds. The cure for a click on an off-zero start point",
+  "sq-samp__fadein":    "fade at the start of every hit, in seconds. Removes a click on an off-zero start point",
   "sq-samp__fadeout":   "fade at the end of every hit, in seconds",
   "sq-slice__on-cb":    "plays one slice per step instead of the whole region. The pads below map to notes from the base note up",
   "sq-slice__n":        "how many equal slices `make` cuts the sample into",

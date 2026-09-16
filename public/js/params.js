@@ -45,7 +45,7 @@ export function refreshHexopAlgorithm(t) {
     tail.className = "sq-hexop__alg-fb";
     tail.textContent = ` · feedback ${fb}`;
     out.appendChild(tail);
-    out.title = `operators ${car.join(", ")} go straight to the output, so those are the ones you hear and their levels are volume. The rest are modulators: a level is how hard it bends the operator below. Feedback runs through operator ${fb.replace("→", " into ")}`;
+    out.title = `operators ${car.join(", ")} go straight to the output, so their levels are volume. The rest are modulators: a level is how hard it bends the operator below. Feedback runs through operator ${fb.replace("→", " into ")}`;
   }
   const carriers = new Set(car);
   const fbOp = Number(fb.split("→")[0]);
@@ -158,42 +158,42 @@ export function updatePlaitsControlsVisibility(t) {
           harm: "grain length. Short grains rattle and buzz, long ones overlap into a wash",
           timb: "grains per second, 8 to 90. Ignored while sync is on, where rate takes over",
           morph: "play position in the sample. Dragging the window in the wave editor sets this too",
-          decay: "diffusion: widens the window, loosens the jitter and adds detune together. Leave it at zero for a tight, in-tune cloud",
+          decay: "diffusion: widens the window, loosens the jitter and adds detune together",
         }
       : isSilverbox
       ? {
-          harm: "the silverbox's own filter: an 18dB/oct diode ladder, ahead of the track filter. It doesn't track the keyboard, so high notes really are duller than low ones",
-          timb: "resonance. The feedback costs the passband level as it climbs, so the line gets thinner and squelchier the further you push it. That thinning is why a silverbox wants a distortion after it",
+          harm: "an 18dB/oct diode ladder, ahead of the track filter. It doesn't track the keyboard, so high notes come out duller than low ones",
+          timb: "resonance. The feedback costs the passband level as it climbs, so the line gets thinner and squelchier the further it is pushed",
           morph: "how much of the filter envelope reaches the cutoff",
-          decay: "filter envelope decay, 200ms to 2.5s. Accented steps ignore it and use a fixed 200ms, as the accent circuit does on the machine",
+          decay: "filter envelope decay, 200ms to 2.5s. Accented steps ignore it and use a fixed 200ms",
         }
       : isHexop
       ? {
-          harm: "every modulator's output level at once: the master modulation index, and what takes an FM patch from a sine to a scream. The machine keeps this per operator, and so does the panel. This rides all six together",
-          timb: "how much the feedback operator's output goes back into its own input. The only thing here making harmonics that isn't another operator, and wound right up it turns to noise, which is where the breath and cymbals come from. Which operator carries it depends on the algorithm, and the panel says which",
-          morph: "scales every modulator's decay together: how fast the timbre falls away, apart from how fast the note does. A modulator decaying under a steady carrier is how an FM electric piano works",
-          decay: "scales every carrier's decay and release together, so how fast the note itself falls away. The operators keep their relative shapes and move as one",
+          harm: "every modulator's output level at once: the master modulation index. The panel keeps a level per operator; this rides all six together",
+          timb: "how much the feedback operator's output goes back into its own input. Wound right up it turns to noise. Which operator carries it depends on the algorithm, and the panel says which",
+          morph: "scales every modulator's decay together: how fast the timbre falls away, apart from how fast the note does",
+          decay: "scales every carrier's decay and release together, so how fast the note itself falls away. The operators keep their relative shapes",
         }
       : isGuitar
       ? {
-          harm: "how hard the pickup drives the amp. An exponential taper, like the pot on the front of the amp: halfway up a hundred-times preamp is ten times, not fifty, so the useful crunch settings sit in the middle rather than the first inch",
-          timb: "the tone knob on the guitar itself, not the amp: a passive lowpass between the pickup and the lead, 700Hz to wide open. Rolled right down with a neck humbucker into a cranked amp is the darkest sound the instrument has, and the amp's treble control cannot get there",
-          morph: "how much the speaker feeds back into the strings. Below a threshold it lifts a held note. Past it the injection beats the string's own losses and the note grows into a howl. It needs volume, so a clean amp barely blooms and a cranked one sings, and it stops when the note is released",
-          decay: "how long a string rings. It is the loss in the waveguide's loop, so low notes ring longer than high ones, as on the instrument. At the top a note lasts most of a bar, and the release when a step ends scales from it",
+          harm: "how hard the pickup drives the amp. An exponential taper, like the pot on the front of the amp: halfway up a hundred-times preamp is ten times, not fifty",
+          timb: "the tone knob on the guitar itself, not the amp: a passive lowpass between the pickup and the lead, 700Hz to wide open",
+          morph: "how much the speaker feeds back into the strings. Below a threshold it lifts a held note. Past it the injection beats the string's own losses and the note grows into a howl. It needs drive, and it stops when the note is released",
+          decay: "how long a string rings. It is the loss in the waveguide's loop, so low notes ring longer than high ones. At the top a note lasts most of a bar, and the release when a step ends scales from it",
         }
       : isBass
       ? {
           harm: "how hard the bass drives the amp. Which amp decides what that means: a clean preamp barely notices, a small valve amp is round and forgiving, the solid-state one grinds",
-          timb: "the tone knob on the bass itself: a lowpass between the pickup and the lead, 400Hz to wide open. Rolled down with flatwounds is every record made before about 1970",
-          morph: "the rig compressor, threshold and makeup on one control. A bass part sitting perfectly still under everything else is this, and it is as much the sound as the amp, which is why it gets a slider",
-          decay: "how long a string rings. Bass strings are heavy and lose very little per trip round the loop, so even the middle of this rings for seconds. The left hand, not the string, is what usually stops a bass note",
+          timb: "the tone knob on the bass itself: a lowpass between the pickup and the lead, 400Hz to wide open",
+          morph: "the rig compressor, threshold and makeup on one control",
+          decay: "how long a string rings. Bass strings lose very little per trip round the loop, so even the middle of this rings for seconds",
         }
       : isSub
       ? {
-          harm: "how much harmonic content is made from the note and mixed in above the crossover. A 40Hz sine is silent on a phone and most laptops, and what makes a sub audible there is harmonics rather than level: the ear rebuilds a fundamental it cannot hear from the ones it can. Wound up, they are louder than the note itself. The shaping is parallel and highpassed, so the clean low end is never intermodulated",
-          timb: "the lid on those harmonics, 300Hz to 9kHz. It filters only the shaped path, never the sub underneath. Low is a warm note that just about reads on a laptop, high cuts through a car stereo",
-          morph: "the oscillator, morphed from sine through triangle and saw to square. It matters more down here than anywhere: a sine brings no harmonics of its own and needs the drive to make any, while a square arrives with too many and turns to mud",
-          decay: "how long the note rings, 30ms to about eight seconds. It runs whether or not the step is held, which is what an 808 does and why an 808 line rings over the bar line. The release only shortens it",
+          harm: "how much harmonic content is made from the note and mixed in above the crossover, which is what makes a sub audible on a small speaker. Wound up, the harmonics are louder than the note itself. The shaping is parallel and highpassed, so the clean low end is never intermodulated",
+          timb: "the lid on those harmonics, 300Hz to 9kHz. It filters only the shaped path, never the sub underneath",
+          morph: "the oscillator, morphed from sine through triangle and saw to square. A sine brings no harmonics of its own and needs the drive to make any, a square arrives with plenty",
+          decay: "how long the note rings, 30ms to about eight seconds. It runs whether or not the step is held, so a note can ring over the bar line. The release only shortens it",
         }
       : isContagion
       ? {
@@ -204,9 +204,9 @@ export function updatePlaitsControlsVisibility(t) {
         }
       : (is808 || is909)
       ? {
-          harm: "tuning for this voice. The machines tune only their toms, so this stands in for the trimmer inside. Unlike the kick, these voices ignore the step's note",
+          harm: "tuning for this voice. Unlike the kick, these voices ignore the step's note",
           timb: t.engineKey === "dm:909-kick"
-            ? "level of the beater click on the attack, which is most of what makes a 909 kick cut through"
+            ? "level of the beater click on the attack"
             : t.engineKey.endsWith("-kick")
             ? "level of the attack click mixed in over the body"
             : t.engineKey.endsWith("-snare")
