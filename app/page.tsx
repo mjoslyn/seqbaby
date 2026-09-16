@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import type { Metadata } from "next";
 import { STUDIO_BODY } from "./studioMarkup";
 import Preloader from "./Preloader";
 import ScriptLoader from "./ScriptLoader";
@@ -9,6 +10,45 @@ import DefaultTemplate from "./DefaultTemplate";
 import { AccountBar } from "./AccountBar";
 import styles from "./ui.module.css";
 import { createClient } from "@/lib/supabase/server";
+import { SITE_DESCRIPTION, shareCard } from "./shareCard";
+import { linkedSongTitle } from "./songs/linkedSongTitle";
+
+type SearchParams = Promise<Record<string, string | string[] | undefined>>;
+
+function one(v: string | string[] | undefined): string | null {
+  const s = Array.isArray(v) ? v[0] : v;
+  return typeof s === "string" && s ? s : null;
+}
+
+// A share link points at the studio with the song in the query, so the link
+// preview was the studio's own card however specific the thing being shared —
+// twelve people posting twelve songs all got "seqbaby". A URL that names a
+// song now titles the card with it.
+//
+// The lookup only happens when the URL carries one. Metadata is resolved
+// before the document flushes, so a Supabase round trip on every visit would
+// hold back the engine's preload hints for everyone (the same reason the
+// account bar sits behind <Suspense> below); a plain `/` does no work here and
+// inherits the layout's card, while a `?s=` visit is already waiting on a
+// fetch of the session itself.
+export async function generateMetadata({
+  searchParams,
+}: {
+  searchParams: SearchParams;
+}): Promise<Metadata> {
+  const sp = await searchParams;
+  const slug = one(sp.s);
+  const openId = one(sp.open);
+  if (!slug && !openId) return {};
+
+  const title = await linkedSongTitle(slug, openId);
+  if (!title) return {};
+
+  return {
+    title: `${title} · seqbaby`,
+    ...shareCard(title, `A song made in seqbaby. ${SITE_DESCRIPTION}`),
+  };
+}
 
 // Resolving the account bar costs two *sequential* Supabase round trips
 // (validate the session, then read the profile). Awaiting them in the page

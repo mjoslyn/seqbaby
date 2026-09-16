@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { STYLE_SRC } from "./engineAssets";
+import { SITE_DESCRIPTION, shareCard } from "./shareCard";
 
 export const metadata: Metadata = {
   title: "seqbaby",
@@ -23,28 +24,9 @@ export const metadata: Metadata = {
     title: "seqbaby",
   },
   other: { "mobile-web-app-capable": "yes" },
-  openGraph: {
-    type: "website",
-    title: "seqbaby",
-    description:
-      "Prompt-driven step sequencer — Plaits, 808/909 kits, hand-built emulations, samples, MIDI.",
-    url: "https://seqbaby.netlify.app/",
-    images: [
-      {
-        url: "https://seqbaby.netlify.app/share.png",
-        width: 1200,
-        height: 630,
-        type: "image/png",
-      },
-    ],
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: "seqbaby",
-    description:
-      "Prompt-driven step sequencer — Plaits, 808/909 kits, hand-built emulations, samples, MIDI.",
-    images: ["https://seqbaby.netlify.app/share.png"],
-  },
+  // The default card. A link that names a song overrides this with the song's
+  // own title — see generateMetadata in page.tsx.
+  ...shareCard("seqbaby", SITE_DESCRIPTION),
 };
 
 export const viewport: Viewport = {
