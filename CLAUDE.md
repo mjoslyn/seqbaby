@@ -54,7 +54,10 @@ env / fx / eq / comp / mod / automation per track.
 │   ├── js/                    THE ENGINE — see module map below
 │   ├── woscillators.js        Plaits WASM port, exposes window.woscillators
 │   ├── wavetables/akwf/       bundled AKWF wavetables (CC0)
-│   └── style.css  favicon.svg  share.{svg,png}
+│   ├── style.css  favicon.svg  share.{svg,png}
+│   ├── icons/                 homescreen PNGs, baked from favicon.svg
+│   │                          by scripts/make-app-icons.mjs
+│   └── manifest.webmanifest   installed-app name / colours / icon sizes
 ├── lib/
 │   ├── supabase/{client,server,middleware}.ts   Supabase SSR helpers
 │   └── api.js                 legacy Blobs share put/get (+ in-memory dev fallback)

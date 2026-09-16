@@ -5,7 +5,18 @@ export const metadata: Metadata = {
   title: "seqbaby",
   description:
     "Prompt-driven step sequencer in the browser: Plaits, 808/909 kits, hand-built analog and FM emulations, samples, MIDI out.",
-  icons: { icon: "/favicon.svg" },
+  // The homescreen icon is the logo, rasterised from public/favicon.svg by
+  // scripts/make-app-icons.mjs — iOS ignores an SVG apple-touch-icon and
+  // Android wants real pixel sizes in the manifest, so both need PNGs. Added
+  // to the homescreen with nothing here, iOS used a screenshot of the page.
+  icons: {
+    icon: [
+      { url: "/favicon.svg", type: "image/svg+xml" },
+      { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
+    ],
+    apple: { url: "/icons/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
+  },
+  manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
