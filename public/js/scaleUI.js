@@ -24,7 +24,90 @@ export function refreshChordTypeSelect() {
     sel.title = "chord mode: play each key as a chord. Off is single notes";
   }
   sel.value = state.kbdChordType;
-  syncKbdArpUI();   // the arp group only shows while chord mode is on
+  syncChordUI();   // the arp group only shows while chord mode is on
+}
+
+// The whole chord cluster, synced from state: the arp group's visibility
+// (keyboard.js) plus the mobile button that opens the cluster as a modal. Every
+// path that changes chord or arp state calls this one function, so the button
+// and the panel cannot disagree about what is on.
+export function syncChordUI() {
+  syncKbdArpUI();
+  syncChordMenuBtn();
+}
+
+// The mobile button's label IS the setting — a phone shows this button and
+// nothing else of the cluster, so "chord" alone would say nothing about whether
+// a tapped step is about to become a chord.
+export function syncChordMenuBtn() {
+  const btn = document.getElementById("chord-menu-btn");
+  if (!btn) return;
+  const type = state.kbdChordType;
+  // "on" is the scale-mode picker's value (chords are diatonic there), not a
+  // chord quality, so it reads as plain "on" rather than being printed.
+  const label = !type ? "chord off" : (type === "on" ? "chord on" : `chord ${type}`);
+  btn.textContent = type && state.kbdArp ? `${label} · arp` : label;
+  btn.setAttribute("aria-pressed", String(!!type));
+}
+
+// Chord settings as a modal, for phones. Same shape as the pattern bar's mobile
+// menu (patternBar.js): the panel is MOVED rather than rebuilt, so main.js's
+// change listeners, scaleUI's option rebuilding and syncKbdArpUI all keep
+// working on the one set of controls, and it slots back where it came from on
+// close.
+let _chordMenuOpen = null;
+export function openChordMenu() {
+  if (_chordMenuOpen) return;
+  const panel = document.getElementById("kbd-chord");
+  if (!panel) return;
+  const parent = panel.parentNode;
+  const nextSibling = panel.nextSibling;
+  const wasHidden = panel.hidden;
+
+  const overlay = document.createElement("div");
+  overlay.className = "sq-modal-overlay";
+  const modal = document.createElement("div");
+  modal.className = "sq-modal sq-chord__menu-modal";
+  modal.setAttribute("role", "dialog");
+  modal.setAttribute("aria-modal", "true");
+
+  const title = document.createElement("div");
+  title.className = "sq-modal__title";
+  title.textContent = "chord";
+  modal.appendChild(title);
+
+  const note = document.createElement("div");
+  note.className = "sq-modal__body";
+  note.textContent = "while chord mode is on, tapping a step writes this chord on the note it would have taken. Drum kits sit it out.";
+  modal.appendChild(note);
+
+  panel.hidden = false;
+  modal.appendChild(panel);
+
+  const closeBtn = document.createElement("button");
+  closeBtn.type = "button";
+  closeBtn.className = "sq-chord__menu-close";
+  closeBtn.textContent = "done";
+  modal.appendChild(closeBtn);
+
+  const close = () => {
+    if (!_chordMenuOpen) return;
+    if (nextSibling && nextSibling.parentNode === parent) parent.insertBefore(panel, nextSibling);
+    else parent.appendChild(panel);
+    panel.hidden = wasHidden;
+    overlay.remove();
+    document.removeEventListener("keydown", escHandler);
+    _chordMenuOpen = null;
+    syncChordMenuBtn();
+  };
+  const escHandler = (e) => { if (e.key === "Escape") close(); };
+  closeBtn.addEventListener("click", close);
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
+  document.addEventListener("keydown", escHandler);
+
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
+  _chordMenuOpen = { overlay, close };
 }
 
 export function syncScaleUI() {

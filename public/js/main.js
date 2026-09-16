@@ -11,14 +11,14 @@ import { upgradeKnobs } from "./knob.js";
 import { startModMotion } from "./modMotion.js";
 import { openMacroPads } from "./macro.js";
 import { applySampleSpeed, attachBpmDrag, lfoRateLabel, retuneSyncedLFOs } from "./lfo.js";
-import { captureSequence, initComputerKeyboard, isDesktopKeyboard, resetKbdKeys, syncKbdArpUI } from "./keyboard.js";
+import { captureSequence, initComputerKeyboard, isDesktopKeyboard, resetKbdKeys } from "./keyboard.js";
 import { autoAccents, parseMeter, redetectDrumKit, stepsPerBarForMeter } from "./meter.js";
 import { meterTick } from "./meters.js";
 import { setEngineKey } from "./params.js";
 import { installParamContextMenu } from "./paramMenu.js";
 import { copyPattern, openPatternMenu, renderPatternGrid } from "./patternBar.js";
 import { attachLevelDrag, setActiveTrack } from "./render.js";
-import { initScaleUI } from "./scaleUI.js";
+import { initScaleUI, openChordMenu, syncChordUI } from "./scaleUI.js";
 import { loadShareFromUrl, onExportSet, onImportSet, onLoadSet, onNewSet, onSaveSet, onShareSet, STARTER_TRACKS } from "./session.js";
 import { state, switchPattern } from "./state.js";
 import { renderStepGrid } from "./stepGrid.js";
@@ -652,7 +652,7 @@ export function init() {
     setStatus(res.msg, !res.ok);
   });
   const chordTypeSel = document.getElementById("kbd-chord-type");
-  if (chordTypeSel) { chordTypeSel.value = state.kbdChordType; chordTypeSel.addEventListener("change", () => { state.kbdChordType = chordTypeSel.value; syncKbdArpUI(); }); }
+  if (chordTypeSel) { chordTypeSel.value = state.kbdChordType; chordTypeSel.addEventListener("change", () => { state.kbdChordType = chordTypeSel.value; syncChordUI(); }); }
   const chordCpxSel = document.getElementById("kbd-chord-cpx");
   if (chordCpxSel) { chordCpxSel.value = String(state.kbdChordCpx); chordCpxSel.addEventListener("change", () => { state.kbdChordCpx = Math.max(0, Math.min(4, Number(chordCpxSel.value) || 0)); }); }
   // Arp settings for keyboard chords — the group only appears in chord mode.
@@ -660,11 +660,15 @@ export function init() {
   const arpRateSel = document.getElementById("kbd-arp-rate");
   const arpRngSel  = document.getElementById("kbd-arp-range");
   const arpDirSel  = document.getElementById("kbd-arp-dir");
-  if (arpOnBox) { arpOnBox.checked = !!state.kbdArp; arpOnBox.addEventListener("change", () => { state.kbdArp = arpOnBox.checked; syncKbdArpUI(); }); }
+  if (arpOnBox) { arpOnBox.checked = !!state.kbdArp; arpOnBox.addEventListener("change", () => { state.kbdArp = arpOnBox.checked; syncChordUI(); }); }
   if (arpRateSel) { arpRateSel.value = String(state.kbdArpRate); arpRateSel.addEventListener("change", () => { state.kbdArpRate = Number(arpRateSel.value) || 0.25; }); }
   if (arpRngSel)  { arpRngSel.value  = String(state.kbdArpRange); arpRngSel.addEventListener("change", () => { state.kbdArpRange = Number(arpRngSel.value) || 1; }); }
   if (arpDirSel)  { arpDirSel.value  = String(state.kbdArpDir); arpDirSel.addEventListener("change", () => { state.kbdArpDir = arpDirSel.value || "up"; }); }
-  syncKbdArpUI();
+  // Mobile: the cluster above is hidden below 768px, so this button hosts it in
+  // a modal. Chord mode reaches a tapped step (startNote), not just the
+  // computer keyboard, so it is not gated on isDesktopKeyboard().
+  document.getElementById("chord-menu-btn")?.addEventListener("click", openChordMenu);
+  syncChordUI();
 
   // Record computer-keyboard notes into the active track (while the transport plays).
   const recBtn = document.getElementById("kbd-record");
