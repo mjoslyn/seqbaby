@@ -8,7 +8,9 @@ export async function middleware(request: NextRequest) {
 export const config = {
   // Run on everything EXCEPT Next internals and the static engine assets
   // (js/css/svg/png/wasm/... served from public/), so the engine loads untouched.
+  // `webmanifest` is in there for the same reason: the homescreen manifest is a
+  // static file and has no session to refresh.
   matcher: [
-    "/((?!_next/static|_next/image|favicon\\.svg|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|mjs|wasm|map|woff2?|mp3|wav|json)$).*)",
+    "/((?!_next/static|_next/image|favicon\\.svg|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|mjs|wasm|map|woff2?|mp3|wav|json|webmanifest)$).*)",
   ],
 };
