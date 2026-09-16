@@ -1441,6 +1441,37 @@ twelve people posting twelve songs all got "seqbaby". A URL that names a song
   Supabase env at all. Every one of those falls back to the site card rather
   than failing the page: a link preview is not worth a 500.
 
+## The account bar on a phone (`AccountBar.tsx` + `ui.module.css`)
+
+The bar is one right-aligned row that does not wrap, so on a 390px phone the
+items past the left edge were not squeezed — they were gone, with no way to
+scroll to them, `sign out` and `settings` first. Below 768px it collapses:
+`manual` stays in the bar, everything else moves behind one `menu` button and
+opens as a sheet under it.
+
+- **The items are rendered ONCE and moved by CSS**, not duplicated into a
+  separate mobile menu. `SaveButton` and `SongsMenu` each hold their own open
+  state, the name they have offered and a list fetched from the server; two
+  live copies of that are two answers to "what is this song called".
+- **A tap in the sheet closes it, except on `save` and `songs`**, whose whole
+  job is to open a panel of their own. Both are `songsWrap` wrappers, so one
+  `closest()` on the way up covers them and neither has to be told the sheet
+  exists.
+- **The dropdown panels stop being dropdowns.** A 300px panel hung off a button
+  near the right edge is cut off by the viewport whatever the bar does, so
+  under 768px `.panel` is a fixed sheet at the bottom of the screen — which is
+  also where a thumb is. `fixed` is against the viewport, so it lands in the
+  same place whether the button is in the bar or in the menu sheet.
+- **The bar is only raised above the page while the sheet is open**
+  (`topBarMenuOpen`, z-index 250): a permanent z-index would sit the bar on top
+  of every engine modal (z-index 200) for the sake of a menu nobody has opened.
+  Inside that stacking context the backdrop is a positioned child, so `manual`
+  and the `menu` button need a layer of their own or the backdrop swallows the
+  tap that closes the sheet.
+- Rows are 44px minimum, and above phone width (481px+) the sheet and the
+  panels cap at 340 / 420px and hang off the right — a 700px-wide row of seven
+  buttons reads as a mistake.
+
 ## Song versions — a tree, not a blob (`song_versions`)
 
 Saving an existing song used to overwrite `songs.data`, so the state before that
