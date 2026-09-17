@@ -1,4 +1,5 @@
 import { setStatus } from "./dom.js";
+import { holdParamAt } from "./paramHold.js";
 import { FXRack, FX_LFO_STAGE } from "./fxRack.js";
 import { state } from "./state.js";
 
@@ -179,11 +180,17 @@ export function outputTargetFor(t) {
 
 /** Point a track's fx-rack output at its send target (and its own meter). */
 export function routeTrackOutput(t) {
-  if (!t.fxRack) return;
-  try { t.fxRack.output.disconnect(); } catch {}
+  const rack = t.fxRack;
+  if (!rack) return;
   const dest = outputTargetFor(t);
-  if (dest) { try { t.fxRack.output.connect(dest); } catch {} }
-  if (t.meterAnalyser) { try { t.fxRack.output.connect(t.meterAnalyser); } catch {} }
+  // Under the rack's fade (FXRack.softSwitch): this is called on a running
+  // signal from track add / remove, an `out` change and a session load.
+  rack.softSwitch(() => {
+    if (t.fxRack !== rack) return;               // rebuilt in the meantime
+    try { rack.output.disconnect(); } catch {}
+    if (dest) { try { rack.output.connect(dest); } catch {} }
+    if (t.meterAnalyser) { try { rack.output.connect(t.meterAnalyser); } catch {} }
+  });
 }
 
 /**
@@ -343,7 +350,9 @@ export class TrackCompressor {
   }
   _tickSidechain = () => {
     if (!this._analyser || !this._duckGain) return;
-    const buf = new Float32Array(this._analyser.fftSize);
+    // One buffer for the life of the follower, not one per frame.
+    if (!this._scBuf || this._scBuf.length !== this._analyser.fftSize) this._scBuf = new Float32Array(this._analyser.fftSize);
+    const buf = this._scBuf;
     this._analyser.getFloatTimeDomainData(buf);
     let sum = 0;
     for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
@@ -442,11 +451,21 @@ export function fireFilterEnv(t, time, duration) {
   const f = t.filterNode;
   if (!f) return;
   const base = Math.max(40, cutoffToHz(t.filter.cutoff));   // user-set cutoff is the OPEN point
-  f.Q.value = resonToQ(t.filter.reson);
+  // Q belongs to setFilter / the reson lane / the reson LFO; it used to be
+  // written here on every hit as well, which is a coefficient step into a
+  // biquad at up to Q 20, and one that silently overrode the lane. Only put
+  // it right if something left it wrong, and never under a lane.
+  if (!t.automation?.reson?.enabled) {
+    const q = resonToQ(t.filter.reson);
+    if (Math.abs(f.Q.value - q) > 1e-3) f.Q.setTargetAtTime(q, time, 0.005);
+  }
   const env = t.filter.env;
   if (env <= 0.001) {
-    f.frequency.cancelScheduledValues(time);
-    f.frequency.setValueAtTime(base, time);
+    // No envelope: the cutoff lane, if there is one, owns the frequency and
+    // has just scheduled this step's ramp (runAutomationForStep runs first).
+    if (t.automation?.cutoff?.enabled) return;
+    holdParamAt(f.frequency, time);
+    f.frequency.exponentialRampToValueAtTime(base, time + 0.003);
     return;
   }
   // env closes the filter down from base; at env=1 that's -6 octaves below cutoff
@@ -458,12 +477,21 @@ export function fireFilterEnv(t, time, duration) {
   const atk = 0.001 + t.filter.attack * 0.5;     // 1ms – 500ms
   const dec = 0.005 + t.filter.decay   * 0.8;    // 5ms – 800ms
   const rel = 0.01  + t.filter.release * 2;      // 10ms – 2s
-  const atkEnd = time + atk;
+  // The filter is the TRACK's, shared by every note on it, so at the moment
+  // this note starts the previous one is usually still ringing through it —
+  // and the envelope used to begin by snapping the cutoff straight to `closed`
+  // (up to six octaves down) with `setValueAtTime`. Through a biquad at high Q
+  // that step is a thump on every gated step, the most audible click in the
+  // engine. Hold whatever the frequency is doing at `time` and glide into the
+  // closed point over 3ms instead: the sweep is still all but instant, but it
+  // is a sweep, and the attack starts from there.
+  const closeEnd = time + 0.003;
+  const atkEnd = closeEnd + atk;
   const decEnd = atkEnd + dec;
   const sustainEnd = Math.max(decEnd + 0.005, time + Math.max(0.05, duration));
   const relEnd = sustainEnd + rel;
-  f.frequency.cancelScheduledValues(time);
-  f.frequency.setValueAtTime(closed, time);
+  holdParamAt(f.frequency, time);
+  f.frequency.exponentialRampToValueAtTime(closed, closeEnd);
   f.frequency.exponentialRampToValueAtTime(base, atkEnd);
   f.frequency.exponentialRampToValueAtTime(susLevel, decEnd);
   f.frequency.setValueAtTime(susLevel, sustainEnd);

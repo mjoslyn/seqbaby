@@ -137,7 +137,11 @@ class SilverboxProcessor extends AudioWorkletProcessor {
       this.slideCoef = 1;
       this.logF = this.logTarget;
       this.megStage = 1;
-      this.amp = Math.min(this.amp, 0.0001);   // fresh gate: start from silence
+      // The VCA envelope retriggers from wherever it is, as an analog envelope
+      // does. It used to be reset to silence first, which on a note arriving
+      // while the last one still sounded (a ratchet, a gate longer than the
+      // step) was a full-scale step down and a click. After the machine's
+      // short gate the amp has released anyway, so a plain step is unchanged.
     }
     // ACCENT shorts the MEG's decay resistor — a fixed ~200 ms regardless of
     // where DECAY sits. Unaccented, DECAY spans roughly 200 ms to 2.5 s.

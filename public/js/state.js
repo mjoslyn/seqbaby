@@ -6,7 +6,7 @@ import { activeMeter, autoAccents } from "./meter.js";
 import { renderPatternGrid } from "./patternBar.js";
 import { refreshParamIndicators } from "./paramTargets.js";
 import { flushPatternSound, recallPatternSound, refreshAllPatternLockUI, refreshPatternSoundUI } from "./patternSound.js";
-import { refreshAutIfOpen, refreshRollIfOpen } from "./pianoRoll.js";
+import { refreshAutIfOpen } from "./pianoRoll.js";
 import { renderStepGrid } from "./stepGrid.js";
 import { SCALES, midiToScaleIndex, scaleIndexToMidi } from "./theory.js";
 
@@ -250,7 +250,7 @@ export function requestPatternSwitch(idx) {
  * Make pattern `idx` active: re-alias every track and re-render.
  * @param {PatternIndex} idx
  */
-export function switchPattern(idx) {
+export function switchPattern(idx, { deferUi = false } = {}) {
   if (idx < 0 || idx >= PATTERN_COUNT) return;
   // p-lock: the sound of the pattern being left goes back to whichever store
   // owns it, and the one being entered is recalled. Chain mode lands here on a
@@ -264,9 +264,34 @@ export function switchPattern(idx) {
   state.queuedPattern = null;
   for (const t of state.tracks) {
     aliasPattern(t, idx);
-    if (recallPatternSound(t, idx)) refreshPatternSoundUI(t);
-    renderStepGrid(t);
-    refreshRollIfOpen(t);
+    if (recallPatternSound(t, idx)) t._soundUiStale = true;
+  }
+  state.chainBarCount = 0;
+  // Everything the sequencer needs is done: the next step reads the new
+  // pattern's arrays and hears its sound. The rest is the picture of it.
+  // A click paints it now, as it always did. The TRANSPORT asks for
+  // `deferUi`: chain mode and a queued switch land here inside the scheduler
+  // callback on the bar line, and re-rendering six step grids, the roll, the
+  // lane panel, the mod panel and the pattern bar there measured 11ms on an
+  // empty session and 23ms on a full one (more with panels open), spent out
+  // of the same lookahead the notes are scheduled in. So that paint goes to
+  // its own task, straight after the callback returns — a timer rather than
+  // requestAnimationFrame, which stops in a background or occluded window
+  // while the transport keeps running (the reason scheduleAtAudible uses a
+  // timer too). Coalesced, so two switches in one task paint once.
+  if (deferUi) {
+    if (patternUiTimer === null) patternUiTimer = setTimeout(paintPatternUI, 0);
+  } else {
+    paintPatternUI();
+  }
+}
+
+let patternUiTimer = null;
+function paintPatternUI() {
+  if (patternUiTimer !== null) { clearTimeout(patternUiTimer); patternUiTimer = null; }
+  for (const t of state.tracks) {
+    if (t._soundUiStale) { t._soundUiStale = false; refreshPatternSoundUI(t); }
+    renderStepGrid(t);           // also refreshes the roll, if open
     refreshAutIfOpen(t);
     refreshParamIndicators(t);   // automation lanes belong to the pattern
   }
@@ -275,7 +300,6 @@ export function switchPattern(idx) {
   renderPatternGrid();
   syncRepeatsUI();
   syncMeterUI();
-  state.chainBarCount = 0;
 }
 
 /** Write the active pattern's repeat count back into the rep field. */
