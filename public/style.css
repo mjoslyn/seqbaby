@@ -2487,6 +2487,9 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not
 .sq-pmenu__none { font-size: 11px; color: var(--fg-dim); }
 .sq-pmenu__blocked { color: var(--fg-dim); opacity: 0.85; font-style: italic; }
 .sq-pmenu__add { font-size: 11px; padding: 4px 10px; justify-self: start; }
+/* Reset sits at the far end of the action row, away from `done`: it is the one
+   button in this modal that throws something away. */
+.sq-pmenu__reset { font-size: 11px; margin-right: auto; }
 .sq-pmenu__macro-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 11px; }
 .sq-pmenu__macro-on { color: #ff9ad5; }
 .sq-pmenu__macro-row input[type="number"] { width: 60px; padding: 3px 6px; font-size: 11px; }

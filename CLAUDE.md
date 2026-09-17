@@ -1042,6 +1042,28 @@ it; the input is still the value, the focus target and the pointer target.
   parameter menu**, re-raised as a `contextmenu` event so `paramMenu.js` does
   the work unchanged. That is the only route to LFO / automation / macro
   assignment on a phone.
+- **A finger is not a small mouse**, and three things are decided by which is
+  driving (`drag.touchLike`). All three are why a phone knob used to hand back
+  the value it had before you touched it:
+  - **The value stays still inside the long-press slop on touch.** A finger
+    resting on a control is never still, and the phone skin puts the whole
+    range in 72px, so two pixels of hold were already a couple of steps — a
+    press meant as a long press had retuned the parameter by the time the menu
+    opened. The drag re-anchors on the crossing, so nothing jumps when it comes
+    alive and the whole range is still reachable.
+  - **Double-tap-to-default is a mouse gesture only.** Two brief taps on a 44px
+    control in a dense panel are something that happens to you on a phone, and
+    what it did was discard whatever you had just dialled in. The reset lives in
+    the long-press parameter menu instead (`reset to default`, paramMenu.js),
+    written through the control's own `input` event so it is indistinguishable
+    from turning the knob back by hand — undo included. The mouse path also
+    checks whether the gesture WROTE anything (`drag.changed`), not just whether
+    it travelled: a sub-slop drag that moved the value is an adjustment, never
+    half a double-click.
+  - **One pointer drives a knob at a time.** A second finger landing mid-drag
+    used to replace the drag outright, after which the first finger's release
+    was ignored (wrong pointerId) and the second's, having moved nowhere, read
+    as the second of two taps.
 - **JS writes two custom properties and knows nothing about circles**:
   `--knob-v` (0..1) and `--knob-a` (the same as an angle). All the shape is in
   `style.css`, so a rack that reads badly as dials becomes bars by overriding
