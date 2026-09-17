@@ -137,7 +137,7 @@ export function openParamMenu(t, spec) {
     }
     macBody.appendChild(note("not on a macro pad"));
     const pads = macroPads();
-    if (!pads.length) pads.push(addMacroPad());
+    if (!pads.length) addMacroPad();
     for (const pad of pads) {
       for (const axis of ["x", "y"]) {
         macBody.appendChild(addButton(`+ ${pad.name} · ${axis}`, () => {
