@@ -1481,6 +1481,11 @@ main {
 #kbd-record:disabled, #kbd-capture:disabled, .sq-track__wav:disabled { opacity: 0.35; cursor: not-allowed; }
 .sq-kbd-chord[hidden] { display: none; }
 .sq-kbd-chord select { font-size: 11px; padding: 2px 4px; }
+/* Each control's own label. Hidden by default: on desktop the cluster is one
+   left-to-right row where "chord" covers the lot. They appear only inside the
+   mobile chord modal, which stacks the controls and needs each one named. */
+.sq-kbd-chord__f { display: inline-flex; align-items: center; gap: 4px; }
+.sq-kbd-chord__sub { display: none; }
 /* Arp settings for keyboard chords — only shown while chord mode is on, and the
    rate/range/direction only once arp itself is on (see syncKbdArpUI). */
 .sq-kbd-arp, .sq-kbd-arp__opts { display: inline-flex; align-items: center; gap: 5px; }
@@ -2312,6 +2317,62 @@ body.kbd-recording .sq-track.is-kbd-active { border-color: #e5484d; box-shadow: 
   font-weight: 600;
   min-height: 40px;
 }
+/* Chord settings as a modal (the mobile route in — see openChordMenu). The
+   panel is the transport's own element moved here, so everything below is a
+   restyle of the same controls: stacked, named, and at a finger's size. */
+.sq-chord__menu-modal {
+  width: min(94vw, 420px);
+  min-width: 0;
+  max-height: 88vh;
+  overflow-y: auto;
+  gap: 12px;
+}
+.sq-chord__menu-modal .sq-kbd-chord,
+.sq-chord__menu-modal .sq-kbd-arp,
+.sq-chord__menu-modal .sq-kbd-arp__opts {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
+  width: 100%;
+  font-size: 13px;
+}
+.sq-chord__menu-modal .sq-kbd-arp[hidden],
+.sq-chord__menu-modal .sq-kbd-arp__opts[hidden] { display: none !important; }
+.sq-chord__menu-modal .sq-kbd-chord__lbl { display: none; }   /* the modal has a title */
+.sq-chord__menu-modal .sq-kbd-chord__f {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+/* One width for every label so the selects line up down the sheet — six
+   controls each starting at a different x reads as six unrelated rows. */
+.sq-chord__menu-modal .sq-kbd-chord__sub { display: inline; color: var(--fg-dim); flex: 0 0 auto; min-width: 66px; }
+.sq-chord__menu-modal select {
+  flex: 1 1 0;
+  min-width: 0;
+  font-size: 14px;
+  padding: 8px 10px;
+  min-height: 40px;
+}
+.sq-chord__menu-modal .sq-kbd-arp {
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+.sq-chord__menu-modal .sq-kbd-arp__toggle { min-height: 40px; gap: 8px; }
+.sq-chord__menu-modal .sq-kbd-arp__toggle input { width: 20px; height: 20px; }
+.sq-chord__menu-close {
+  align-self: stretch;
+  margin-top: 4px;
+  padding: 10px;
+  background: var(--accent);
+  color: #0b0d10;
+  border-color: var(--accent);
+  font-weight: 600;
+  min-height: 44px;
+}
+
 .euclid-modal { width: min(94vw, 460px); }
 .chance-modal { width: min(94vw, 540px); }
 .sq-roll__modal .sq-roll__head { flex-wrap: wrap; }
@@ -2610,11 +2671,17 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not
      to the controls directly, as it did before the wrappers existed. */
   .sq-transport__main, .sq-transport__right, .sq-transport__kbd-row { display: contents; }
   /* No physical keyboard on mobile — hide the computer-keyboard controls.
-     #kbd-octave went with them: it reads the base octave that z and x shift,
-     and with the keys themselves gone it was a bare "C4" in the middle of the
-     transport that nothing on a phone could change or act on. */
-  #kbd-label, #kbd-record, #kbd-capture, #kbd-chord, #kbd-arp, #kbd-icon,
+     The chord cluster is scoped to the transport rather than hidden outright:
+     chord mode also decides what a TAPPED step writes, so #chord-menu-btn below
+     hosts the very same panel in a modal, where these rules must not reach it.
+     #kbd-octave needs no such escape and is hidden outright: it reads the base
+     octave that z and x shift, and with the keys themselves gone it was a bare
+     "C4" in the middle of the transport that nothing on a phone could change or
+     act on. It is a sibling of #kbd-chord rather than inside it, so the modal
+     does not carry it along. */
+  #kbd-label, #kbd-record, #kbd-capture, #kbd-icon,
   #kbd-octave { display: none !important; }
+  .sq-transport #kbd-chord, .sq-transport #kbd-arp { display: none !important; }
   .sq-transport .sq-logo { padding-right: 4px; gap: 6px; }
   .sq-transport .sq-logo img { width: 26px; height: 26px; }
   .sq-transport .sq-logo span { display: none; }
@@ -2655,6 +2722,20 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not
   }
   .sq-transport .sq-scale__toggle input { width: 20px; height: 20px; }
   .sq-transport #add-track { order: 99; padding: 6px 10px; }
+  /* Sits on its own line under the scale row: chord mode is the other thing
+     deciding what a tapped step plays, so it reads as that row's neighbour. */
+  .sq-transport #chord-menu-btn {
+    order: 101;
+    align-items: center;
+    padding: 0 12px;
+    min-height: 36px;
+    text-transform: none;
+  }
+  .sq-transport #chord-menu-btn[aria-pressed="true"] {
+    background: var(--accent-2);
+    color: #0b0d10;
+    border-color: var(--accent-2);
+  }
   /* Undo/redo are the only icon buttons left in the transport on a phone (the
      keyboard cluster is hidden), and they are the two most likely to be aimed
      at in a hurry — so they get a finger's worth of target, the same 44px floor
