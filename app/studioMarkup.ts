@@ -377,7 +377,7 @@ export const STUDIO_BODY = String.raw`
       <div class="sq-track__head">
         <input class="sq-track__name" type="text" placeholder="track" />
         <select class="sq-track__engine"></select>
-        <button class="sq-track__wav sq-icon-btn sq-btn--ghost" type="button" aria-label="sample / wave editor" title="sample / wave editor" disabled></button>
+        <button class="sq-track__wav sq-icon-btn sq-btn--ghost" data-label="sample" type="button" aria-label="sample / wave editor" title="sample / wave editor" disabled></button>
         <button class="sq-track__save sq-icon-btn sq-btn--ghost" aria-label="save patch" title="save the current custom patch"></button>
         <button class="sq-track__load-patch sq-icon-btn sq-btn--ghost" aria-label="load patch" title="load a saved patch into this track"></button>
         <div class="sq-field"><label>len</label><input class="sq-track__len" type="number" min="1" max="128" value="16" /></div>
@@ -576,9 +576,9 @@ ${SUB_PANEL}
         <button class="sq-track__mute sq-btn--ghost">mute</button>
         <button class="sq-track__plock sq-btn--ghost" aria-pressed="false" title="p-lock: give this track its own sound in THIS pattern. Normally one sound covers all 32 patterns, so moving the cutoff moves it everywhere. Locked, this pattern keeps its own params, filter, fx, eq, comp and mod settings while the unlocked ones go on sharing the track's. The button belongs to the pattern, so it changes as you move between them. Unlocking hands the sound back but keeps the snapshot, so locking again brings it straight in">p-lock</button>
         <button class="sq-track__clear sq-btn--ghost">clear</button>
-        <button class="track-dice sq-icon-btn sq-btn--ghost" type="button" aria-label="random pattern, drag up or down to set density" title="random pattern. Drag up and down to set the density"></button>
-        <button class="track-euclid sq-icon-btn sq-btn--ghost" type="button" aria-pressed="false" aria-label="euclidean rhythm generator" title="euclidean rhythm: N hits spread as evenly as possible over the pattern"></button>
-        <button class="track-chance sq-icon-btn sq-btn--ghost" type="button" aria-pressed="false" aria-label="chance melody generator" title="chance: a part from probabilities. Note lengths, rests, ties, and how likely each of the twelve semitones is"></button>
+        <button class="track-dice sq-icon-btn sq-btn--ghost" data-label="dice" type="button" aria-label="random pattern, drag up or down to set density" title="random pattern. Drag up and down to set the density"></button>
+        <button class="track-euclid sq-icon-btn sq-btn--ghost" data-label="euclid" type="button" aria-pressed="false" aria-label="euclidean rhythm generator" title="euclidean rhythm: N hits spread as evenly as possible over the pattern"></button>
+        <button class="track-chance sq-icon-btn sq-btn--ghost" data-label="chance" type="button" aria-pressed="false" aria-label="chance melody generator" title="chance: a part from probabilities. Note lengths, rests, ties, and how likely each of the twelve semitones is"></button>
         <button class="sq-track__dup sq-btn--ghost" type="button" title="duplicate this track">dup</button>
         <button class="sq-track__remove sq-btn--ghost sq-btn--danger">remove</button>
         <div class="sq-track__oct">

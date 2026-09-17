@@ -2673,15 +2673,22 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not
   /* No physical keyboard on mobile — hide the computer-keyboard controls.
      The chord cluster is scoped to the transport rather than hidden outright:
      chord mode also decides what a TAPPED step writes, so #chord-menu-btn below
-     hosts the very same panel in a modal, where these rules must not reach it. */
-  #kbd-label, #kbd-record, #kbd-capture, #kbd-icon { display: none !important; }
+     hosts the very same panel in a modal, where these rules must not reach it.
+     #kbd-octave needs no such escape and is hidden outright: it reads the base
+     octave that z and x shift, and with the keys themselves gone it was a bare
+     "C4" in the middle of the transport that nothing on a phone could change or
+     act on. It is a sibling of #kbd-chord rather than inside it, so the modal
+     does not carry it along. */
+  #kbd-label, #kbd-record, #kbd-capture, #kbd-icon,
+  #kbd-octave { display: none !important; }
   .sq-transport #kbd-chord, .sq-transport #kbd-arp { display: none !important; }
   .sq-transport .sq-logo { padding-right: 4px; gap: 6px; }
   .sq-transport .sq-logo img { width: 26px; height: 26px; }
   .sq-transport .sq-logo span { display: none; }
 
   .sq-transport button.sq-play {
-    min-width: 64px;
+    min-width: 76px;
+    min-height: 44px;
     padding: 9px 14px;
     font-weight: 700;
     font-size: 13px;
@@ -2689,8 +2696,12 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not
 
   .sq-transport .sq-field { gap: 4px; }
   .sq-transport .sq-field label { font-size: 10px; }
-  .sq-transport input[type="number"] { width: 48px; padding: 5px 6px; }
+  .sq-transport input[type="number"] { width: 56px; min-height: 40px; padding: 5px 6px; }
   .sq-transport .sq-knob { --knob-size: 42px; }
+  /* The transport's own icon buttons (metronome, note colours) to the same
+     floor everything else in reach of a thumb gets. */
+  .sq-transport .sq-icon-btn { min-width: 44px; height: 40px; }
+  .sq-transport #macro-pads { min-height: 40px; padding: 6px 12px; }
 
   .sq-transport .sq-scale__field {
     flex: 1 1 100%;
@@ -2698,7 +2709,18 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not
     gap: 4px;
     flex-wrap: wrap;
   }
-  .sq-transport .sq-scale__field select { padding: 4px 6px; min-width: 0; flex: 1 1 0; }
+  .sq-transport .sq-scale__field select { padding: 4px 6px; min-width: 0; min-height: 40px; flex: 1 1 0; }
+  /* The scale switch is a native checkbox at 13px — a quarter of a finger. The
+     box cannot be resized reliably across browsers, so the tappable thing is
+     its label: the whole "scale" word and the box together, at full height. */
+  .sq-transport .sq-scale__toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 40px;
+    padding: 0 4px;
+  }
+  .sq-transport .sq-scale__toggle input { width: 20px; height: 20px; }
   .sq-transport #add-track { order: 99; padding: 6px 10px; }
   /* Sits on its own line under the scale row: chord mode is the other thing
      deciding what a tapped step plays, so it reads as that row's neighbour. */
@@ -2745,7 +2767,7 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not
     justify-content: center;
     flex: 1 1 0;
     padding: 0 12px;
-    min-height: 36px;
+    min-height: 44px;
   }
   .sq-pattern-bar > #pattern-menu-btn {
     display: inline-flex;
@@ -2753,7 +2775,7 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not
     justify-content: center;
     flex: 1 1 0;
     padding: 0 12px;
-    min-height: 36px;
+    min-height: 44px;
     background: var(--bg-3);
     color: var(--fg);
     border: 1px solid var(--border);
@@ -2806,6 +2828,24 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not
     padding: 6px 8px;
     text-align: center;
   }
+  /* The mode and switch buttons are a glyph each — a curling arrow and a
+     lightning bolt — and in here that is all a phone gets, since their titles
+     are hovers. They name themselves the same way the track's icon buttons do;
+     main.js keeps the attribute in step with the state as it flips. */
+  .sq-pattern__menu-modal .sq-mode__row > button {
+    flex-direction: column;
+    gap: 2px;
+    height: auto;
+    min-height: 44px;
+    padding: 6px 4px;
+  }
+  .sq-pattern__menu-modal .sq-mode__row > button[data-label]::after {
+    content: attr(data-label);
+    font-size: 10px;
+    text-transform: lowercase;
+    letter-spacing: 0;
+  }
+
   /* mini-row that groups sig + rep + dup */
   .sq-pattern__menu-modal .sq-pattern__menu-row {
     display: flex;
@@ -2841,6 +2881,10 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not
 
   /* ---------- MAIN AREA ---------- */
   main { padding: 8px; gap: 8px; }
+  /* The two buttons under the track list are the only way to grow a session,
+     and they were 30px tall in a layout where everything else had been raised
+     to a finger's height. */
+  .sq-add-track-row button { min-height: 44px; padding: 8px 14px; }
   .sq-track { padding: 8px; gap: 8px; border-radius: 6px; }
 
   /* ---------- TRACK HEAD ---------- */
@@ -2853,20 +2897,54 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not
     min-width: 0;
     width: auto;
     font-size: 13px;
+    min-height: 40px;
     padding: 6px 8px;
   }
   .sq-track__head .sq-track__engine {
     flex: 2 1 0;
     min-width: 0;
     max-width: none;
+    min-height: 40px;
     padding: 6px 6px;
   }
-  .sq-track__head .sq-vol__field { flex: 1 1 100%; }
-  .sq-track__head .sq-vol-combo { width: 100%; }
+  /* The line break between name / engine / len and the vol row. A flex
+     container's own ::before IS a flex item, so a zero-height one with a
+     full-width basis is a line break — which is the only way to put a break at
+     a chosen point in a wrapping row without adding a wrapper element to the
+     markup, and the track head's children are queried from a dozen places by
+     their position in it. `order` is what places it: 9, between the two groups
+     below. */
+  .sq-track__head::before {
+    content: "";
+    order: 9;
+    flex: 0 0 100%;
+    height: 0;
+    margin: 0;
+  }
+  /* Vol used to take a line of its own — one 44px control centred in 374px of
+     nothing, with the three buttons that follow it pushed onto a line of their
+     own underneath. Given a fixed column it keeps its size and solo / mute /
+     p-lock come up beside it, which is one row per track less to scroll past.
+     The meter narrows to the knob's column; it reads a level, not a number. */
+  .sq-track__head .sq-vol__field { flex: 0 0 auto; order: 10; }
+  .sq-track__head .sq-vol-combo { width: 52px; }
+  .sq-track__head .sq-track__solo,
+  .sq-track__head .sq-track__mute,
+  .sq-track__head .sq-track__plock { order: 10; flex: 1 1 0; min-width: 0; }
+  /* The synth row and the generator buttons keep their places after it. Order
+     is stated rather than left to DOM order because the vol field sits BEFORE
+     the synth row in the markup and the buttons after it. */
+  .sq-track__head .sq-track__synth-row { order: 20; }
+  .sq-track__head .sq-track__clear,
+  .sq-track__head .track-dice,
+  .sq-track__head .track-euclid,
+  .sq-track__head .track-chance,
+  .sq-track__head .sq-track__more,
+  .sq-track__head .sq-panel__btn-group { order: 30; }
 
   /* len + spd group: keep inline but compact */
   .sq-track__head .sq-field:has(.sq-track__len) { gap: 3px; }
-  .sq-track__head .sq-track__len { width: 44px; padding: 4px 4px; }
+  .sq-track__head .sq-track__len { width: 48px; min-height: 40px; padding: 4px 4px; text-align: center; }
   .sq-track__head .sq-track__speed { padding: 4px 4px; }
   .sq-track__len-extend { gap: 2px; flex-wrap: nowrap; }
   .sq-track__len-extend button {
@@ -2913,21 +2991,46 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not
   }
   .sq-track__head .sq-param-group .sq-field .sq-knob { --knob-size: 44px; }
 
-  /* "more" toggle button injected by JS (sliders icon) */
-  .sq-track__head .sq-track__more {
-    padding: 6px 10px;
-    min-height: 32px;
-    height: auto;
-    min-width: 36px;
-  }
+  /* ---------- ICON BUTTONS NAME THEMSELVES ON A PHONE ----------------------
+     A title attribute is a hover, and a finger cannot hover — so the dice, the
+     ring, the die, the sample editor, clear, roll and the "more" toggle were
+     seven unlabelled glyphs in a row with no way to find out what any of them
+     did. Each one now carries its name under its icon.
 
-  /* roll + clear: icon-only on mobile */
+     Under, not beside: a caption beside the glyph doubles the button's width
+     and six of those do not fit across a phone, where a column of icon-over-
+     caption is 44px wide — which is the target size these buttons needed
+     anyway. The two shapes are the same rule because they are the same button:
+     `data-label` for the ones drawn from an icon alone (studioMarkup.ts, and
+     render.js for the ones it builds), and the `.sq-btn__label` span that
+     clear and roll already carry for their desktop text. */
+  .sq-track__head .sq-icon-btn,
   .sq-track__head .sq-track__roll,
-  .sq-track__head .sq-track__clear { display: inline-flex; align-items: center; justify-content: center; }
+  .sq-track__head .sq-track__clear {
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1px;
+    min-width: 44px;
+    width: auto;
+    height: auto;
+    min-height: 44px;
+    padding: 4px 3px;
+    line-height: 1.1;
+  }
+  /* display only on these two: `.sq-icon-btn` is already inline-flex, and
+     setting it here as well would resurrect save / load / dup / remove, which
+     the block above hides so the track menu can host them. */
+  .sq-track__head .sq-track__roll,
+  .sq-track__head .sq-track__clear { display: inline-flex; }
   .sq-track__head .sq-track__roll .sq-btn-icon,
   .sq-track__head .sq-track__clear .sq-btn-icon { display: block; }
   .sq-track__head .sq-track__roll .sq-btn__label,
-  .sq-track__head .sq-track__clear .sq-btn__label { display: none; }
+  .sq-track__head .sq-track__clear .sq-btn__label,
+  .sq-track__head [data-label]::after { font-size: 9px; letter-spacing: 0; text-transform: lowercase; }
+  .sq-track__head .sq-track__roll .sq-btn__label,
+  .sq-track__head .sq-track__clear .sq-btn__label { display: block; }
+  .sq-track__head [data-label]::after { content: attr(data-label); }
   .sq-track__head .sq-track__more[aria-pressed="true"] {
     background: var(--accent);
     color: #0b0d10;
@@ -3057,12 +3160,14 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not
     min-height: 40px;
   }
 
-  /* solo/mute/clear: pinned, finger-friendly */
+  /* solo / mute / p-lock: the same 44px floor the knobs get from --knob-hit.
+     They sit beside the vol knob now, so they are also what sets that row's
+     height. */
   .sq-track__head .sq-track__solo,
   .sq-track__head .sq-track__mute,
-  .sq-track__head .sq-track__clear {
-    padding: 6px 10px;
-    min-height: 32px;
+  .sq-track__head .sq-track__plock {
+    padding: 6px 8px;
+    min-height: 44px;
     font-size: 12px;
   }
 
@@ -3074,6 +3179,11 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not
   .sq-track__synth-row { gap: 4px; flex-direction: column; flex-wrap: nowrap; align-items: stretch; }
   .sq-param-group { padding: 4px 6px; gap: 6px; flex-wrap: wrap; }
   .sq-param-group .sq-field .sq-knob { --knob-size: 44px; }
+  /* The selects and the odd button sitting among the knobs (an engine's wave
+     or mode picker, `rand`) to the same floor as the knobs beside them — a
+     21px-tall select in a row of 44px targets is the one anybody misses. */
+  .sq-param-group select,
+  .sq-param-group button { min-height: 40px; padding: 4px 8px; }
   .sq-param-group--ladder .sq-ladder__osc-row { flex-wrap: wrap; }
   .sq-param-group--ladder .sq-ladder__freq .sq-knob { --knob-size: 42px; }
 
@@ -3084,10 +3194,10 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not
     border-radius: 6px;
   }
   .sq-track__head .sq-panel__btn-group > button {
-    padding: 6px 10px;
+    padding: 4px 3px;
     font-size: 12px;
-    min-width: 0;
-    min-height: 32px;
+    min-width: 44px;
+    min-height: 44px;
     border-right: 1px solid var(--border);
   }
   .sq-track__head .sq-panel__btn-group > .sq-track__roll { border-right: none; }
@@ -3103,19 +3213,43 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not
   .sq-track__roll-panel {
     padding: 6px 8px;
   }
+  /* The fx rack is fifteen stages deep, and on a phone each one was a name on
+     a line of its own with two or three controls tucked under its left end —
+     about 120px of height to carry 140px of controls across a 374px row. Read
+     end to end that was a 1900px scroll to reach the reverb, most of it empty.
+
+     The name goes back on the stage's own line, in a fixed column the eye can
+     run down, with the controls beside it in the space they were leaving
+     empty. A stage is one row again and the rack is half as tall. Stages with
+     more controls than fit (the delay, the reverb) wrap under that column,
+     which is the only thing the full-width title was buying. */
   .sq-fx__row {
-    gap: 6px;
-    padding: 4px 0;
+    gap: 6px 8px;
+    padding: 5px 0;
     row-gap: 4px;
+    flex-wrap: wrap;
+    align-items: center;
+    border-bottom: 1px solid var(--border);
   }
   .sq-fx__row .sq-fx__title {
-    flex: 1 1 100%;
+    flex: 0 0 78px;
     min-width: 0;
     font-size: 10px;
+    /* The names are what you scan for, so they wrap rather than ellipse —
+       "fuzz (dba-style)" says nothing cut off at "fuzz (db". */
+    overflow-wrap: anywhere;
+    line-height: 1.2;
   }
-  .sq-fx__ctl { gap: 4px; }
-  .sq-fx__ctl span { min-width: 28px; font-size: 10px; }
-  .sq-fx__ctl .sq-knob { --knob-size: 42px; }
+  .sq-fx__ctl { gap: 2px; }
+  .sq-fx__ctl span { min-width: 0; font-size: 10px; }
+  /* Shorter bars in the rack than elsewhere: fifteen of them stacked is the one
+     place the extra travel costs more than it buys, and the drag is relative,
+     so a shorter bar is a coarser sweep rather than a smaller range. */
+  .sq-fx__ctl .sq-knob { --knob-size: 40px; --knob-len: 48px; }
+  /* The rule separates stages, so the last one has nothing to separate from —
+     and these rows are the filter, env, eq and comp panels too, where there are
+     only one or two of them. */
+  .sq-fx__row:last-child { border-bottom: none; }
 
   /* Dense engine panels on a phone. The 44px target is non-negotiable, so
      rather than let neighbouring targets overlap in a tight grid, the knobs
@@ -3310,6 +3444,37 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not
   .sq-bounce__opts label { flex: 1 1 100%; }
 
   .sq-patch__list .sq-patch__row button { padding: 8px 10px; min-height: 36px; }
+}
+
+/* ---------- A TOUCH DEVICE TOO WIDE FOR THE PHONE LAYOUT -------------------
+   A phone turned sideways is 844px, past the 768px the layout rules key on, so
+   it gets the desktop arrangement — which is the right call: every pattern slot
+   and every track control is on screen at once. What it does not get is any of
+   the sizing, so it was the desktop's 24-30px buttons under a finger, while the
+   knobs beside them already had their 44px from --knob-hit.
+
+   `pointer: coarse` is the same test the knobs-as-sliders block uses: the
+   PRIMARY pointer is a finger, so a phone and a tablet match and a touchscreen
+   laptop does not. A floor only, and a modest one — the layout is dense by
+   design here and 44px everywhere would wrap the transport onto four lines. */
+@media (pointer: coarse) and (min-width: 769px) {
+  .sq-transport button,
+  .sq-transport select,
+  .sq-transport input[type="number"],
+  .sq-pattern-bar button,
+  .sq-pattern-bar select,
+  .sq-pattern-bar input[type="number"],
+  .sq-track__head button,
+  .sq-track__head select,
+  .sq-track__head input[type="text"],
+  .sq-track__head input[type="number"],
+  .sq-add-track-row button { min-height: 34px; }
+  .sq-pattern__cell { min-height: 34px; }
+  /* Icon buttons are square-ish, so the floor has to reach their width too or
+     they stay a 32px column however tall the row gets. */
+  .sq-transport .sq-icon-btn,
+  .sq-pattern-bar .sq-icon-btn,
+  .sq-track__head .sq-icon-btn { min-width: 36px; }
 }
 
 /* very small phones: a touch tighter */

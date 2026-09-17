@@ -697,6 +697,10 @@ export function init() {
       ? "chain: play through the non-empty patterns. Click for repeat"
       : "repeat: loop the current pattern. Click for chain";
     modeBtn.setAttribute("aria-pressed", String(state.patternMode === "chain"));
+    // The caption under the icon in the session menu on a phone, where the
+    // title above is a hover nobody can reach. It names the mode the button is
+    // IN, not the one it switches to, so it reads as a state and not a verb.
+    modeBtn.dataset.label = state.patternMode === "chain" ? "chain" : "repeat";
   };
   syncModeLabel();
   modeBtn.addEventListener("click", () => {
@@ -711,6 +715,7 @@ export function init() {
         ? "switch: finish. Waits for the current bar to end"
         : "switch: now. Changes pattern immediately";
       switchBtn.setAttribute("aria-pressed", String(state.patternSwitchMode === "finish"));
+      switchBtn.dataset.label = state.patternSwitchMode === "finish" ? "finish" : "now";
     };
     syncSwitchLabel();
     switchBtn.addEventListener("click", () => {
