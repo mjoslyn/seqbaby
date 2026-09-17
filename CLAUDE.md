@@ -1883,12 +1883,14 @@ through a 6ms fade on its gain).
   `setReverbDecayLive`, which leaves the stored knob alone. A decay lane is
   still the most expensive lane there is; the real fix is an algorithmic
   reverb whose decay is a coefficient.
-- **`switchPattern` does only the audio half synchronously.** Chain mode calls
-  it inside the scheduler callback on the bar line; re-aliasing and the p-lock
-  recall stay there (the next step must read the new pattern), and the whole
-  UI repaint (`paintPatternUI`: grids, roll, lanes, mod panel, pattern bar)
-  goes to one coalesced rAF while playing — it measured 11ms empty and 23ms on
-  a full session. Stopped, it paints synchronously as before.
+- **`switchPattern` does only the audio half inside the transport.** Chain
+  mode and a queued switch call it from the scheduler callback on the bar line
+  with `{ deferUi: true }`; re-aliasing and the p-lock recall stay synchronous
+  (the next step must read the new pattern), and the whole UI repaint
+  (`paintPatternUI`: grids, roll, lanes, mod panel, pattern bar) goes to its
+  own task straight after — a `setTimeout`, not rAF, which stops in an occluded
+  window while the transport runs on. It measured 11ms empty and 23ms on a
+  full session. A click paints synchronously, as it always did.
 - **The history snapshot waits for idle time while playing**
   (`history.js` `settle`, `requestIdleCallback` with a 1.5s deadline). And only
   the first event of a gesture resolves a label; the sixty `input` events a

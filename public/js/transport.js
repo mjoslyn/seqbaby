@@ -597,7 +597,7 @@ export async function togglePlay() {
     // the speakers, and the next callback (the new bar's first step) must read
     // the switched pattern's data or it plays the old pattern's opening steps.
     if (state.patternSwitchMode === "finish" && state.queuedPattern !== null && state.tick % BAR_TICKS === 0) {
-      switchPattern(state.queuedPattern);
+      switchPattern(state.queuedPattern, { deferUi: true });
     }
     // pattern chaining: advance at bar boundaries when chain mode is on, respecting per-pattern repeats
     if (state.patternMode === "chain" && state.tick % BAR_TICKS === 0) {
@@ -607,7 +607,7 @@ export async function togglePlay() {
         state.chainBarCount = 0;
         const next = findNextNonEmptyPattern(state.activePattern);
         if (next >= 0 && next !== state.activePattern) {
-          switchPattern(next); // synchronous — same reasoning as the manual queue above
+          switchPattern(next, { deferUi: true }); // synchronous — same reasoning as the manual queue above
         }
       }
     }
