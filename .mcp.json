@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "seqbaby": {
+      "command": "node",
+      "args": ["mcp/server.mjs"]
+    }
+  }
+}

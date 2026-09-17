@@ -366,11 +366,7 @@ export class TrackCompressor {
     try { this.output.disconnect(); } catch {}
   }
 }
-
-export function defaultCompConfig() {
-  return { enabled: false, source: "self", threshold: -20, ratio: 4, attack: 0.01, release: 0.2, knee: 6 };
-}
-
+export { defaultCompConfig } from "./soundDefaults.js";
 export function ensureCompressor(t) {
   if (!state.audioCtx || t.compNode) return;
   t.compNode = new TrackCompressor(state.audioCtx, t.comp);

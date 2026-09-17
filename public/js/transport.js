@@ -1,7 +1,7 @@
 import { runAutomationForStep } from "./automation.js";
 import { fireMetronome, paintBeatIndicator } from "./beat.js";
 import { engineByKey } from "./catalog.js";
-import { BAR_TICKS, wosc } from "./constants.js";
+import { BAR_TICKS } from "./constants.js";
 import { setStatus } from "./dom.js";
 import { euclidFallbackNote } from "./euclid.js";
 import { stepGateAt } from "./stepSource.js";
@@ -18,7 +18,7 @@ import { findNextNonEmptyPattern, invertChord, state, switchPattern } from "./st
 import { loadSilverboxWorklet } from "./silverbox.js";
 import { loadContagionWorklet } from "./contagion.js";
 import { applyScale, chordNotes, nameToMidi } from "./theory.js";
-import { buildVoiceForEngine } from "./voices.js";
+import { buildVoiceForEngine, wosc } from "./voices.js";
 
 
 /** @typedef {import("./types.js").Track} Track */

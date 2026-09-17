@@ -35,16 +35,10 @@ import { lastUsedNote } from "./track.js";
  * @property {"short"|"legato"} gate  One-step hits, or each hit held to the next.
  * @property {boolean} accent  Louder on the beat, quieter off it.
  */
-
-/** @type {EuclidConfig} */
-export const EUCLID_DEFAULTS = { on: false, pulses: 4, steps: 16, rotate: 0, gate: "short", accent: true };
-
-/** The three modulatable controls, in every namespace they answer to. */
-export const EUCLID_MOD_KEYS = ["pulses", "steps", "rotate"];
-export const EUCLID_MOD_LABELS = {
-  pulses: "euclid pulses", steps: "euclid cycle", rotate: "euclid rotate",
-};
-
+// The defaults and the three modulatable keys are data in soundDefaults.js
+// (no imports, readable from Node); re-exported so the imports elsewhere hold.
+import { EUCLID_DEFAULTS, EUCLID_MOD_KEYS } from "./soundDefaults.js";
+export { EUCLID_DEFAULTS, EUCLID_MOD_KEYS, EUCLID_MOD_LABELS } from "./soundDefaults.js";
 // The fields a written rhythm touches. Snapshot and the clear pass both walk
 // this list, so a new per-step array is added in one place.
 const EUCLID_FIELDS = [

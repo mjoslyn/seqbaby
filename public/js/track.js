@@ -1,10 +1,6 @@
 import { PATTERN_COUNT } from "./constants.js";
 import { setStatus } from "./dom.js";
-import { HEXOP_DEFAULTS } from "./hexop.js";
-import { BASS_DEFAULTS } from "./bass.js";
-import { SUB_DEFAULTS } from "./subbass.js";
 import { defaultFxConfig } from "./fxRack.js";
-import { GUITAR_DEFAULTS } from "./guitar.js";
 import { chordSelectionFor } from "./keyboard.js";
 import { applySampleSpeed, defaultLFOConfig, disposeLFOs, syncAllLFOs } from "./lfo.js";
 import { autoAccents, guessIsDrumKit, patternMeter, stepsPerBarForMeter, totalSteps } from "./meter.js";
@@ -20,7 +16,7 @@ import { aliasPattern, clonePattern, emptyPattern, state } from "./state.js";
 import { renderStepGrid } from "./stepGrid.js";
 import { SCALES, midiToScaleIndex, scaleIndexToMidi } from "./theory.js";
 import { requestMidiIfNeeded } from "./transport.js";
-import { CONTAGION_DEFAULTS } from "./contagion.js";
+import { defaultEq, defaultFilter, defaultTrackParams } from "./soundDefaults.js";
 import { buildVoiceForEngine } from "./voices.js";
 
 
@@ -88,35 +84,13 @@ export function createTrack({ name, engineKey, length = totalSteps() }) {
     sliceBase: 60,
     slicePlayMode: "region",
     sliceSensitivity: 0.5,
-    params: {
-      vol: 0.8, harm: 0.5, timb: 0.5, morph: 0.5, decay: 0.4,
-      osc1: 0.55, osc2: 0.45, osc3: 0.35, osc4: 0.4,
-      ultra: 0.35, fm: 0, metal: 0,
-      // Ladder osc-bank params
-      osc1wave: "sawtooth", osc2wave: "sawtooth", osc3wave: "triangle",
-      osc1range: 0, osc2range: 0, osc3range: -1,
-      osc2freq: 0, osc3freq: 0,
-      noise: 0, noisetype: "white",
-      // Silverbox panel controls that don't fit the four timbre sliders
-      sbwave: "saw", sbaccent: 0.6, sbtune: 0,
-      // Contagion panel (see contagion.js)
-      ...CONTAGION_DEFAULTS,
-      // Hexop operator matrix + globals (see hexop.js)
-      ...HEXOP_DEFAULTS,
-      // Electric guitar: string, pickup, amp, cab (see guitar.js)
-      ...GUITAR_DEFAULTS,
-      // Electric bass: the same chain again, wound differently (see bass.js)
-      ...BASS_DEFAULTS,
-      // Sub bass: the oscillator, the drop, and the harmonics that make a
-      // 40Hz note audible on something small (see subbass.js)
-      ...SUB_DEFAULTS,
-    },
+    params: defaultTrackParams(),
     // The sound every unlocked pattern shares; a p-locked pattern keeps its
     // own on the pattern instead (patternSound.js). Filled on the first flush.
     baseSound: null,
-    filter: { cutoff: 1, reson: 0, env: 0, attack: 0, decay: 0.25, sustain: 0.4, release: 0.3 },
+    filter: defaultFilter(),
     filterNode: null,
-    eq: { low: 0, mid: 0, high: 0 },
+    eq: defaultEq(),
     eqNode: null,
     comp: defaultCompConfig(),
     compNode: null,

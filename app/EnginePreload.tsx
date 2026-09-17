@@ -1,4 +1,4 @@
-import { ENGINE_MODULES, TONE_SRC, WOSC_SRC } from "./engineAssets";
+import { ENGINE_MODULES, TONE_SRC, WOSC_SRC, engineAsset } from "./engineAssets";
 
 // Emitted from the studio page so the browser starts downloading the whole
 // engine while the HTML is still streaming — i.e. in parallel with the React
@@ -20,7 +20,7 @@ export default function EnginePreload() {
       <link rel="preload" as="script" href={WOSC_SRC} />
       {/* MAIN_SRC is itself the root of this list. */}
       {ENGINE_MODULES.map((src) => (
-        <link key={src} rel="modulepreload" href={src} />
+        <link key={src} rel="modulepreload" href={engineAsset(`/js/${src}`)} />
       ))}
     </>
   );

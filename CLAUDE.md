@@ -69,6 +69,12 @@ env / fx / eq / comp / mod / automation per track.
 │   ├── migrations/            profiles, songs, patches, song versions, templates, delete_own_account RPC
 │   └── tests/                 negative RLS tests + the local auth stub they need
 ├── test/                      node --test suites (engine-side, no browser)
+├── mcp/                       the MCP server: an agent writes a song through songBuilder.js
+│   ├── server.mjs             tools + resources over stdio (.mcp.json names it for Claude Code)
+│   ├── audition.mjs           plays a song in a headless browser and reads the meters
+│   └── README.md              connecting a client, the tool list, env
+├── .claude/skills/compose/    the compose guide: which engine, step strings, order of work
+│                              (served by the server as seqbaby://guide)
 ├── netlify/functions/share.mjs  legacy function wrapper
 ├── server.js                  legacy static server (npm run legacy:dev)
 └── netlify.toml  next.config.mjs  tsconfig.json (excludes public/js from TS)
@@ -121,6 +127,26 @@ env / fx / eq / comp / mod / automation per track.
   `<a href="/">`, so opening it in a new tab gives a blank editor too. It
   fires `seqbaby:newset` for the shell, whose open-song slot has to clear
   with it (`app/NewSongButton.tsx`).
+- `engineData.js` / `soundDefaults.js` / `theoryData.js` — the engine as DATA,
+  with **no imports** (engineData none at all; the other two only each other
+  and constants.js): the engine catalog, the four sliders' labels per engine,
+  every emulator panel's control list / ranges / defaults / presets and the
+  granular controls (engineData); the fx rack, track params, filter, eq,
+  compressor and euclid defaults (soundDefaults); the scales, chord types and
+  note names (theoryData). The engine modules that owned these
+  (catalog.js, hexop.js, guitar.js, bass.js, subbass.js, contagion.js,
+  voices.js, fxRack.js, signal.js, track.js, euclid.js, theory.js) import
+  their own tables back and re-export them, so every existing
+  `import { GUITAR_DEFAULTS } from "./guitar.js"` still holds. `constants.js`
+  is pure for the same reason (it no longer reads `window.woscillators`;
+  `wosc` lives in voices.js) and holds the LFO keys, the automation targets
+  and the gates over an engine KEY (`canModulateKey`, `canAutomateKey`,
+  `voiceAutoKeysForEngineKey`), which lfo.js and automation.js hand a
+  track's engine to. See the song builder section below for why.
+- `songBuilder.js` — writing a song without a browser: builds the serialized
+  session from calls (add a track, spell its steps, set its sound, put an LFO
+  on it) validated against the tables above. Not imported by the engine; run
+  by `mcp/server.mjs` and `test/songBuilder.test.js`. See its section.
 - `sessionFormat.js` — the serialized-session format: `SET_VERSION` and
   `validateSet()`. No imports, deliberately: every other engine module
   touches the DOM or Tone at import time, and keeping this one pure is what
@@ -185,7 +211,8 @@ npm run build && npm run start   # production build + serve
 npm run netlify:dev    # full Netlify emulation on :8888
 npm run legacy:dev     # pre-Next static Node server on :5173 (engine assets only)
 npm test               # node --test: the pure modules (session format, chance gen,
-                       #   version tree, song names)
+                       #   version tree, song names, the song builder)
+npm run mcp            # the MCP server on stdio (mcp/server.mjs) — an agent writes songs
 npm run test:rls       # RLS policy tests — builds a throwaway Postgres in docker
 ```
 
@@ -1691,6 +1718,86 @@ cold squelch  v1 ──▶ v2 ──▶ v3     its own song, its own tree
   race it. The fetch is caught, not just awaited: with no Supabase env the
   action throws, and the engine is meant to run without any.
 
+## Writing a song without a browser (`songBuilder.js` + `mcp/`)
+
+Everything in the studio edits a live session, so an agent had no way to
+make a song short of driving the UI. What it can produce is the one thing the
+studio also reads: the serialized session. `songBuilder.js` builds that blob
+from calls, and `mcp/server.mjs` puts those calls on the wire as MCP tools.
+
+```
+agent ──▶ mcp/server.mjs ──▶ songBuilder.js ──▶ { _version, bpm, tracks: [...] }
+              │                    │                       │
+   resources: the engine     validates against     applySet (the studio), the import
+   catalog, the targets,     engineData.js,        button, POST /api/share → ?s=<id>,
+   the compose guide         constants.js ...      or audition.mjs (headless, meters)
+```
+
+- **The builder is pure, and that decided where the engine's tables live.**
+  It imports only engineData.js, soundDefaults.js, theoryData.js,
+  constants.js, chanceGen.js and sessionFormat.js, none of which touch the
+  DOM, Tone or a worklet, so `node --test` runs it. That is why the panel
+  tables moved out of hexop.js / guitar.js / bass.js / subbass.js /
+  contagion.js and the defaults out of track.js / fxRack.js / signal.js:
+  validating an agent's `gtpick: 0.9` against a COPY of the guitar's range
+  table would be right until the next control was added. Each engine module
+  re-exports its own tables, so the "one list, three namespaces" story in
+  each of them is unchanged; the list is one file over.
+- **The song it writes is sparse.** A track is an engine key, a name, a
+  length, and only the params / filter / fx / lfo entries that were set;
+  applySet fills the rest through createTrack, from the same defaults
+  (soundDefaults.js) the panels start from. Two things are written whole
+  because the loader takes them whole: an fx stage (`Object.assign` on
+  `t.fxConfig` is shallow, so `{ delay: { wet } }` alone would lose the
+  delay's time) and an LFO entry. Patterns are written with every per-step
+  array (`emptyPatternBlob`, checked against emptyPattern's field list by
+  the tests), and the cross-track references are indices, as in the format.
+- **It refuses what the studio would refuse, with the reason.** An engine
+  that does not exist (with near misses), a param outside its slider's
+  range, an LFO on a key the engine has no AudioParam for (`canModulateKey`,
+  the same gate the mod picker uses), a lane on a generator that is off, a
+  send that would feed back, a sidechain from itself. Every refusal is a
+  `SongError` whose message names the choices, because the reader is an
+  agent that will act on it.
+- **Step strings** are the way in for rhythm: `x` hit, `X` accent, `o` soft,
+  a digit 1..9 a velocity, `.` rest, `_` a tie extending the hit before it,
+  a shorter string tiling a longer pattern. `describePattern` reads one back
+  the same way, so `get_song` shows an agent what it wrote in the notation
+  it wrote it in.
+- **The MCP server holds one song** and keeps the tool list short (33 tools:
+  song / engines / tracks / steps / sound / modulation / generators / out).
+  What an agent needs to KNOW is served as resources rather than packed into
+  descriptions: `seqbaby://engines` (the catalog with what each slider does
+  per engine, every panel control with its range, the presets, the targets
+  each engine takes), `seqbaby://targets`, `seqbaby://samples`,
+  `seqbaby://format`, `seqbaby://song`, and `seqbaby://guide`.
+- **The guide is the compose skill** (`.claude/skills/compose/SKILL.md`),
+  read by the server at request time with its front matter stripped, so
+  there is one copy. The tools give an agent the ability to write a song;
+  the skill gives it taste: which engine for which role, that a silverbox
+  accent is a velocity above 0.6 and a slide is a tie, that subby needs
+  drive to be heard on a phone, that a reverb belongs on a bus, and the order
+  of work. Its front-matter description is short on purpose: the description
+  sits in every context, the body loads when someone asks for music.
+- **`audition_song` is the one way an agent can hear.** `mcp/audition.mjs`
+  opens the studio in a headless Chromium (playwright, optional), `applySet`s
+  the song, presses play and reads every track's `meterAnalyser` and the
+  master for a few seconds: rms and peak in dB, a `silent` flag, whether the
+  master is near the limiter. One buffer per analyser at its own fftSize: a
+  shared one kept the tail of a louder track's read and handed every quieter
+  track the same peak. `SEQBABY_URL` picks the studio (the live site by
+  default, a dev server for work on the engine); `SEQBABY_TONE_FILE` serves
+  Tone from disk where the CDN is out of reach.
+- **share_song is the anonymous share route**, `POST /api/share` with
+  `{ session }`, which is unauthenticated by design: an agent needs no
+  account to hand back a link. Saving into an account (`saveSong`) is a
+  server action behind Supabase auth and is deliberately not a tool.
+- Adding a tool: a function in songBuilder.js (validate, mutate the song,
+  return something an agent can read), a test, and a `registerTool` in
+  server.mjs with a zod shape. Adding an engine control: its table entry in
+  engineData.js is all the builder needs; the compose guide is where to say
+  what it is FOR.
+
 ## Undo / redo (`history.js` + `historyStore.js`)
 
 A stack of whole-session snapshots, not a log of inverse commands, and nothing
@@ -1909,6 +2016,11 @@ patterns.
   exclusive and both live checkboxes go through `setLiveGenerator`. It also owns
   `stepGateAt`, which used to live in euclid.js — a generator must not be the
   place the dispatch lives, or the second one has to import the first.
+- **`engineData.js`, `soundDefaults.js`, `theoryData.js`, `constants.js`,
+  `chanceGen.js`, `sessionFormat.js`, `historyStore.js` and `songBuilder.js`
+  must stay importable from Node** — no DOM, no Tone, no `window`. The tests
+  and the MCP server run them; an import of state.js or catalog.js in any of
+  them breaks `npm test` at load, which is the guard.
 - **`tsconfig.json` excludes `public/js/`** — the engine is plain JS with
   JSDoc types; don't rename it to TS or import it into the Next graph.
 - **Don't use `Tone.Time(...)` for the step duration.** `Tone.setContext()` at
@@ -1951,7 +2063,9 @@ patterns.
 - New per-track sound setting → if it should follow p-lock, add it to
   `capturePatternSound` / `applyPatternSound` (patternSound.js) too, or a locked
   pattern will leave it behind on a switch.
-- New engine → see Engines catalog above.
+- New engine → see Engines catalog above. Its catalog entry, panel table,
+  defaults and presets go in `engineData.js` (re-exported from its module),
+  or the song builder and the MCP resources will not know it.
 - New rhythm/melody generator → a module beside `euclid.js` / `chance.js`, a
   `<gen>GateAt` for it, and a branch in `stepSource.js` (which also owns the
   one-source-at-a-time rule). The transport and the step grid learn nothing.
@@ -1996,8 +2110,9 @@ Repo: https://github.com/mjoslyn/seqbaby.
   An inline marker (`window.__seqbabyServerBoot`) tells the paths apart, and
   `ScriptLoader.tsx` keeps its onload-chained injection for the soft-nav case
   (e.g. arriving from `/login`).
-- `app/EnginePreload.tsx` emits `modulepreload` for all 53 modules listed in
-  `app/engineAssets.ts`. The graph is 8 levels deep, so without it the browser
+- `app/EnginePreload.tsx` emits `modulepreload` for all 56 modules listed in
+  `app/engineAssets.ts` (at `engineAsset("/js/<name>")`; the hints used to
+  point at the site root and 404). The graph is 8 levels deep, so without it the browser
   needs up to eight sequential round trips just to discover the code.
   **Adding or removing a module in `public/js/` means updating that list** —
   there's a regeneration one-liner in the file's comment.
