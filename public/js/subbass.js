@@ -376,7 +376,7 @@ class SubBassProcessor extends AudioWorkletProcessor {
       // Note events land on control-block boundaries: at most 0.33ms late,
       // never early. Same bargain the contagion and the bass strike.
       if (this.allOff !== undefined && at >= this.allOff) { this.noteOff(); this.allOff = undefined; }
-      while (this.queue.length && this.queue[0].at <= at + blk) {
+      while (this.queue.length && this.queue[0].at <= at) {
         const ev = this.queue.shift();
         if (ev.off) this.noteOff(ev.id);
         else this.noteOn(ev, {

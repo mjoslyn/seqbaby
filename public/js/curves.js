@@ -116,28 +116,46 @@ export function shaperPreampGain(v) {
 // Build a 4096-sample waveshaper curve for the given mode. `amount` (0..1) is
 // the pre-curve drive (1..9x) so harder values push the signal further into
 // the mode's nonlinearity.
+//
+// Memoised on (mode, amount to 1/128th): an automation lane asks for this
+// every step and a setter LFO every frame, and building 4096 samples plus 16KB
+// of garbage sixty times a second per track was a measurable share of the
+// main thread. A 1/128 step in drive is well under what can be heard, and a
+// full sweep caches ~2MB per mode, once.
+const shaperCurveCache = new Map();
 export function makeShaperCurve(mode, amount) {
-  const n = 4096;
-  const c = new Float32Array(n);
-  const drive = 1 + Math.max(0, Math.min(1, amount)) * 8;
   const m = SHAPER_MODES.includes(mode) ? mode : "fold";
+  const q = Math.round(Math.max(0, Math.min(1, Number(amount) || 0)) * 128);
+  const key = m + ":" + q;
+  let c = shaperCurveCache.get(key);
+  if (c) return c;
+  const n = 4096;
+  c = new Float32Array(n);
+  const drive = 1 + (q / 128) * 8;
   for (let i = 0; i < n; i++) {
     const x = ((i * 2) / (n - 1) - 1) * drive;
     c[i] = shapeSample(m, x);
   }
+  shaperCurveCache.set(key, c);
   return c;
 }
 
 // Soft tape-style saturation curve (tanh with variable drive).
+// Memoised as makeShaperCurve is, for the same callers.
+const cassetteCurveCache = new Map();
 export function makeCassetteSatCurve(drive) {
+  const q = Math.round(Math.max(0, Math.min(1, Number(drive) || 0)) * 128);
+  let c = cassetteCurveCache.get(q);
+  if (c) return c;
   const n = 2048;
-  const c = new Float32Array(n);
-  const k = 1 + drive * 4;   // gentler than a fuzz — tape compresses, it doesn't clip
+  c = new Float32Array(n);
+  const k = 1 + (q / 128) * 4;   // gentler than a fuzz — tape compresses, it doesn't clip
   const norm = Math.tanh(k);
   for (let i = 0; i < n; i++) {
     const x = (i * 2) / n - 1;
     c[i] = Math.tanh(x * k) / norm;
   }
+  cassetteCurveCache.set(q, c);
   return c;
 }
 

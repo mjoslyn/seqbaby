@@ -31,12 +31,22 @@ import { buildVoiceForEngine } from "./voices.js";
  */
 export function paintTrackNow(t, idx) {
   const on = idx >= 0;
-  const cells = t.el.querySelectorAll(".sq-step");
-  cells.forEach(c => {
-    const start = Number(c.dataset.idx);
-    const span = Number(c.dataset.span) || 1;
-    c.classList.toggle("is-now", on && idx >= start && idx < start + span);
-  });
+  // The cells are cached on the track (renderStepGrid drops the cache when it
+  // rebuilds them) and only the cells that change are touched: this runs per
+  // track per step, and querying and toggling every cell each time was the
+  // biggest piece of DOM work the transport did.
+  let cells = t._stepCells;
+  if (!cells) {
+    cells = t._stepCells = Array.from(t.el.querySelectorAll(".sq-step"), c => ({
+      el: c, start: Number(c.dataset.idx), span: Number(c.dataset.span) || 1,
+    }));
+    t._nowCells = null;
+  }
+  const next = on ? cells.filter(c => idx >= c.start && idx < c.start + c.span) : [];
+  const prev = t._nowCells;
+  if (prev) for (const c of prev) if (!next.includes(c)) c.el.classList.remove("is-now");
+  for (const c of next) if (!prev || !prev.includes(c)) c.el.classList.add("is-now");
+  t._nowCells = next;
   // Piano roll: highlight the column for the current step, if the roll is open.
   const rollPanel = t._rollPanelEl || t.el.querySelector(".sq-track__roll-panel");
   if (rollPanel && !rollPanel.hidden) {

@@ -6,7 +6,7 @@ import { activeMeter, autoAccents } from "./meter.js";
 import { renderPatternGrid } from "./patternBar.js";
 import { refreshParamIndicators } from "./paramTargets.js";
 import { flushPatternSound, recallPatternSound, refreshAllPatternLockUI, refreshPatternSoundUI } from "./patternSound.js";
-import { refreshAutIfOpen, refreshRollIfOpen } from "./pianoRoll.js";
+import { refreshAutIfOpen } from "./pianoRoll.js";
 import { renderStepGrid } from "./stepGrid.js";
 import { SCALES, midiToScaleIndex, scaleIndexToMidi } from "./theory.js";
 
@@ -264,9 +264,31 @@ export function switchPattern(idx) {
   state.queuedPattern = null;
   for (const t of state.tracks) {
     aliasPattern(t, idx);
-    if (recallPatternSound(t, idx)) refreshPatternSoundUI(t);
-    renderStepGrid(t);
-    refreshRollIfOpen(t);
+    if (recallPatternSound(t, idx)) t._soundUiStale = true;
+  }
+  state.chainBarCount = 0;
+  // Everything the sequencer needs is done: the next step reads the new
+  // pattern's arrays and hears its sound. The rest is the picture of it, and
+  // that is deferred while the transport runs — chain mode lands here INSIDE
+  // the scheduler callback on the bar line, and re-rendering six step grids,
+  // the roll, the lane panel, the mod panel and the pattern bar there measured
+  // 11ms on an empty session and 23ms on a full one (more with panels open),
+  // spent out of the same lookahead the notes are scheduled in. One frame,
+  // coalesced, so two switches in a frame paint once. Stopped, it paints at
+  // once as it always did, so nothing that reads the DOM after a click waits.
+  if (state.playing) {
+    if (!patternUiRaf) patternUiRaf = requestAnimationFrame(paintPatternUI);
+  } else {
+    paintPatternUI();
+  }
+}
+
+let patternUiRaf = 0;
+function paintPatternUI() {
+  if (patternUiRaf) { cancelAnimationFrame(patternUiRaf); patternUiRaf = 0; }
+  for (const t of state.tracks) {
+    if (t._soundUiStale) { t._soundUiStale = false; refreshPatternSoundUI(t); }
+    renderStepGrid(t);           // also refreshes the roll, if open
     refreshAutIfOpen(t);
     refreshParamIndicators(t);   // automation lanes belong to the pattern
   }
@@ -275,7 +297,6 @@ export function switchPattern(idx) {
   renderPatternGrid();
   syncRepeatsUI();
   syncMeterUI();
-  state.chainBarCount = 0;
 }
 
 /** Write the active pattern's repeat count back into the rep field. */
