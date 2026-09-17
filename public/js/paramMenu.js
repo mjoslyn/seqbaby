@@ -54,7 +54,8 @@ const esc = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").
  * to add either. Both rows are the same widgets the mod / aut panels use and
  * write the same track state, so the panels agree with this view.
  * @param {Track} t
- * @param {{label: string, description?: string, lfo: string|null, auto: string|null}} spec
+ * @param {{label: string, description?: string, lfo: string|null, auto: string|null,
+ *          control?: Element|null}} spec
  */
 export function openParamMenu(t, spec) {
   if (state._paramMenu) state._paramMenu.close();
@@ -69,6 +70,13 @@ export function openParamMenu(t, spec) {
   // worth a right-click on its own. It just says so once instead of printing
   // two sections that both read "can't".
   const settingOnly = !spec.lfo && !spec.auto;
+  // Putting a knob back where it started. It was a double-click, and on a mouse
+  // it still is — but touch has no discoverable equivalent, and reading two
+  // brief taps as one cost a phone user whatever they had just dialled in
+  // (knob.js `end`). A long press already lands here, so here is where the
+  // gesture goes: a button with its name on it.
+  const ctl = /** @type {HTMLInputElement|null} */ (spec.control ?? null);
+  const resettable = !!ctl && ctl.type === "range" && ctl.defaultValue !== "";
   modal.innerHTML = `
     <div class="sq-modal__title">${esc(spec.label)} <span class="sq-pmenu__sub">— ${settingOnly ? "setting" : "modulation + automation"}</span></div>
     ${spec.description ? `<div class="sq-pmenu__desc">${esc(spec.description)}</div>` : ""}
@@ -85,7 +93,10 @@ export function openParamMenu(t, spec) {
       <div class="sq-pmenu__sec-head">macro pad</div>
       <div class="sq-pmenu__body sq-pmenu__body--macro"></div>
     </section>`}
-    <div class="sq-modal__actions"><button class="sq-modal__ok" type="button">done</button></div>
+    <div class="sq-modal__actions">
+      ${resettable ? `<button class="sq-pmenu__reset sq-btn--ghost" type="button">reset to default</button>` : ""}
+      <button class="sq-modal__ok" type="button">done</button>
+    </div>
   `;
   const modBody = modal.querySelector(".sq-pmenu__body--mod");
   const autBody = modal.querySelector(".sq-pmenu__body--aut");
@@ -200,6 +211,17 @@ export function openParamMenu(t, spec) {
     if (t._autPanelEl && t._autModal) renderAutomationPanel(t, t._autPanelEl);
   };
   const onKey = (e) => { if (e.key === "Escape") close(); };
+  modal.querySelector(".sq-pmenu__reset")?.addEventListener("click", () => {
+    // Through the input's own `input` event, which is the one every setter in
+    // the app listens on and the one knob.js's drag dispatches — so a reset is
+    // indistinguishable from having turned the knob back by hand, undo
+    // included. The shadowed `value` accessor repaints the dial.
+    if (ctl.value !== ctl.defaultValue) {
+      ctl.value = ctl.defaultValue;
+      ctl.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+    close();
+  });
   modal.querySelector(".sq-modal__ok").addEventListener("click", close);
   overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
   document.addEventListener("keydown", onKey);
@@ -233,6 +255,7 @@ export function installParamContextMenu() {
       description: describe(el, targets),
       lfo: targets.lfo,
       auto: targets.auto,
+      control: el,
     });
   });
 }

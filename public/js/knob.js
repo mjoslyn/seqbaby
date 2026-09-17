@@ -43,6 +43,20 @@
  * its height as the travel — so the thumb follows the finger 1:1 and the
  * control feels like the slider it looks like, rather than a dial that
  * happens to be drawn as a bar. The drag stays relative for the reason above.
+ *
+ * A finger is not a small mouse, and three things here are decided by which one
+ * is driving (`drag.touchLike`):
+ *
+ *   - the value does not move at all until the gesture has cleared the slop,
+ *     so a press that was meant as a long press cannot nudge the parameter on
+ *     its way to opening the menu — 72px of travel makes two pixels of hold
+ *     worth a couple of steps;
+ *   - double-tap-to-default is a mouse gesture only. Two brief taps on a 44px
+ *     control in a dense panel are something that happens to you on a phone,
+ *     and what it did was discard the value you had just set. The reset lives
+ *     in the long-press parameter menu instead, where it can be read;
+ *   - only one pointer drives a knob at a time, so a second finger landing on
+ *     it can neither hijack the drag nor be read as the second of two taps.
  */
 
 /** Controls that stay as they are. The wavetable's harmonic bars are a drawing
@@ -64,9 +78,14 @@ const FINE_MIN = 0.125;
 const FINE_SHIFT = 0.15;
 /** Hold this long without moving on a touch and you get the parameter menu. */
 const LONG_PRESS_MS = 500;
-/** Movement over this many px cancels a long press and counts as a drag. */
+/** Movement over this many px cancels a long press and counts as a drag — and,
+ *  on touch, is the dead zone the value stays still inside. A finger resting on
+ *  a control is never still, and the phone skin puts the whole range in 72px,
+ *  so without it a press meant as a long press had already retuned the
+ *  parameter by the time the menu opened. */
 const LONG_PRESS_SLOP = 8;
-/** Two taps inside this window reset the control to its markup default. */
+/** Two taps inside this window reset the control to its markup default. Mouse
+ *  only — see `end`. */
 const DBL_TAP_MS = 320;
 
 const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
@@ -210,7 +229,12 @@ function hideReadout() {
 
 /** Write a value through the input so every existing listener sees it, and
  *  quantise to the control's own step so a knob can't produce a value the
- *  slider couldn't. */
+ *  slider couldn't.
+ *
+ *  Returns whether anything actually moved. The drag needs that answer: a
+ *  gesture that changed the value can never also be half of a double-tap
+ *  reset, whatever distance it covered (see `end`).
+ *  @returns {boolean} */
 function writeValue(input, raw) {
   const k = input._knob;
   const { min, max, step } = k;
@@ -218,9 +242,10 @@ function writeValue(input, raw) {
   if (step > 0) v = min + Math.round((v - min) / step) * step;
   v = clamp(v, min, max);
   const next = k.decimals ? v.toFixed(k.decimals) : String(Math.round(v));
-  if (next === input.value) return;
+  if (next === input.value) return false;
   input.value = next;                                  // repaints via the shadow
   input.dispatchEvent(new Event("input", { bubbles: true }));
+  return true;
 }
 
 /**
@@ -258,6 +283,12 @@ function attachDrag(input) {
 
   const onDown = (e) => {
     if (e.pointerType === "mouse" && e.button !== 0) return;   // right-click → menu
+    // A second finger landing on a knob already being dragged used to replace
+    // the drag outright — and then the FIRST finger's release was ignored
+    // (wrong pointerId) while the second one's, having moved nowhere, was read
+    // as the second half of a double-tap and reset the control. One pointer at
+    // a time; a drag whose capture has gone has already been ended below.
+    if (drag && input.hasPointerCapture?.(drag.id)) return;
     // Kill the native range's click-to-jump. That also suppresses focus, so
     // take it explicitly — the arrow keys are the accessible path in.
     e.preventDefault();
@@ -271,6 +302,14 @@ function attachDrag(input) {
       val: Number(input.value),
       travel: travelFor(input),
       moved: false,
+      // Whether this gesture has written anything. Distance alone is not that
+      // question: the phone skin maps the whole range onto a 72px bar, so a
+      // two-pixel wobble is already a couple of steps of value.
+      changed: false,
+      // A finger rather than a mouse, which changes two things: the value is
+      // held still until the gesture has cleared the slop (see `onMove`), and
+      // there is no double-tap-to-default (see `end`).
+      touchLike: e.pointerType !== "mouse",
       // A drag also produces a click, so double-tap-to-reset has to check that
       // neither tap moved rather than trusting the dblclick event.
       isDouble: now - (k.lastTapAt || 0) < DBL_TAP_MS && !k.lastTapMoved,
@@ -304,7 +343,7 @@ function attachDrag(input) {
       drag.val + (dy * fineFactor(x - drag.startX, shift) * span) / drag.travel,
       k.min, k.max,
     );
-    writeValue(input, drag.val);
+    if (writeValue(input, drag.val)) drag.changed = true;
   };
 
   const onMove = (e) => {
@@ -317,10 +356,28 @@ function attachDrag(input) {
     // as a drag at all.
     if (!drag.moved) {
       const far = Math.abs(e.clientY - drag.startY) + Math.abs(e.clientX - drag.startX);
-      if (far > LONG_PRESS_SLOP) {
+      if (far <= LONG_PRESS_SLOP) {
+        // A finger resting on a control is never perfectly still, and the phone
+        // skin puts the whole range in 72px — so those few pixels of hold were
+        // already worth a step or two of value. Holding the value inside the
+        // slop is what makes the long press reachable at all (it is cancelled
+        // by `moved`, and a press that had silently retuned the parameter on
+        // its way to opening a menu would be a bug either way).
+        if (drag.touchLike) { e.preventDefault(); return; }
+      } else {
         drag.moved = true;
         if (k.longPressId) { clearTimeout(k.longPressId); k.longPressId = null; }
         openReadout(input);
+        if (drag.touchLike) {
+          // Re-anchor on the crossing rather than replaying the samples that
+          // got us here: the pixels spent proving this was a drag are not
+          // value, and without this the knob jumps by the whole slop the
+          // instant it comes alive.
+          drag.lastY = e.clientY;
+          updateReadout(input);
+          e.preventDefault();
+          return;
+        }
       }
     }
     // Coalesced events give the whole gesture rather than one sample per frame,
@@ -335,12 +392,23 @@ function attachDrag(input) {
     if (!drag || e.pointerId !== drag.id) return;
     if (k.longPressId) { clearTimeout(k.longPressId); k.longPressId = null; }
     try { input.releasePointerCapture(e.pointerId); } catch {}
-    if (!drag.moved && drag.isDouble) {
+    // `changed` as well as `moved`: a gesture under the slop that nonetheless
+    // wrote a value is an adjustment, and reading it as half a double-tap is
+    // how a deliberate nudge came back a moment later as the markup default.
+    const adjusted = drag.moved || drag.changed;
+    // And double-tap-to-default is a MOUSE gesture. On a phone two brief taps
+    // on a 44px control in a dense panel are something that happens to you
+    // rather than something you do — and the thing it did was throw away the
+    // value you had just set, which is how a knob came to "revert" a moment
+    // after being released. A finger has the two gestures it can discover:
+    // drag for the value, long press for the parameter menu, where the reset
+    // now lives as a button you can read.
+    if (!adjusted && drag.isDouble && !drag.touchLike) {
       writeValue(input, Number(input.defaultValue));
       k.lastTapAt = 0;
     } else {
       k.lastTapAt = e.timeStamp;
-      k.lastTapMoved = drag.moved;
+      k.lastTapMoved = adjusted;
     }
     drag = null;
     hideReadout();
@@ -351,6 +419,14 @@ function attachDrag(input) {
   input.addEventListener("pointerup", end);
   input.addEventListener("pointercancel", end);
   input.addEventListener("lostpointercapture", end);
+
+  // Belt and braces for the native range on touch. `preventDefault` on
+  // `pointerdown` is what suppresses its click-to-jump, but Safari derives its
+  // pointer events from touch ones and does not always honour it there — and a
+  // native slider that processed the gesture would commit its own value, read
+  // off wherever the finger landed, on release. The input carries
+  // `touch-action: none`, so there is no scrolling here to lose.
+  input.addEventListener("touchstart", (e) => { e.preventDefault(); }, { passive: false });
 
   // The wheel is free real estate — nothing else in the engine uses it.
   input.addEventListener("wheel", (e) => {
