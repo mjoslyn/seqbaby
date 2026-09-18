@@ -40,7 +40,6 @@ Env:
 |---|---|
 | `SEQBABY_URL` | where `share_song` posts and `audition_song` opens the studio. Default `https://seqbaby.netlify.app`; `http://localhost:3000` for a dev server |
 | `SEQBABY_CHROME` | a Chromium binary for `audition_song` when playwright's own is not installed |
-| `SEQBABY_TONE_FILE` | a local `tone@15.0.4/build/Tone.js` for audition when the CDN is unreachable |
 
 ## Tools
 

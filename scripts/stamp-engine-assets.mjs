@@ -24,7 +24,9 @@ const outRoot = join(root, "public", "e");
 // Kept in step with app/engineAssets.ts. Boot-critical assets only: the
 // wavetable WAVs are fetched by the engine at absolute paths it builds itself,
 // and they're lazy, so they stay unversioned.
-const ASSETS = ["js", "woscillators.js", "style.css"];
+// tone.js is here rather than on a CDN (see app/engineAssets.ts), so like
+// woscillators.js it needs a versioned copy to be cacheable as immutable.
+const ASSETS = ["js", "woscillators.js", "tone.js", "style.css"];
 
 const version = process.env.NEXT_PUBLIC_ENGINE_VERSION || "";
 
