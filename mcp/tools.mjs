@@ -16,12 +16,33 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import * as sb from "../public/js/songBuilder.js";
 
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+/** The compose skill's path within the repo, for whoever can locate the repo. */
+export const GUIDE_RELATIVE = path.join(".claude", "skills", "compose", "SKILL.md");
+
+/**
+ * Where this file sits, when that question has an answer.
+ *
+ * `import.meta.url` is only meaningful while this module is loaded AS A FILE:
+ * `node mcp/server.mjs`, `node --test`. Put through a bundler it is rewritten
+ * to whatever the build machine's path was (webpack) or dropped entirely
+ * (esbuild gives `{}`), so it is resolved lazily and never trusted -- computing
+ * it at import time meant a bundler that dropped it took the whole importing
+ * module down with it before any caller could fall back. app/compose/tools.ts
+ * is the caller that has to survive exactly that.
+ */
+function repoRoot() {
+  const here = import.meta.url;
+  if (typeof here !== "string" || !here.startsWith("file:")) return null;
+  return path.resolve(path.dirname(fileURLToPath(here)), "..");
+}
 
 /** The compose skill, front matter stripped -- what an agent needs to know
- *  before writing a song: which engine for which role, the order of work. */
+ *  before writing a song: which engine for which role, the order of work.
+ *  Throws where the module's own path is unknowable; see repoRoot(). */
 export function guideText() {
-  const raw = fs.readFileSync(path.join(ROOT, ".claude", "skills", "compose", "SKILL.md"), "utf8");
+  const root = repoRoot();
+  if (!root) throw new Error("compose guide: this module has no file path in this environment");
+  const raw = fs.readFileSync(path.join(root, GUIDE_RELATIVE), "utf8");
   return raw.replace(/^---[\s\S]*?---\s*/, "");
 }
 

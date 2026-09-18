@@ -11,10 +11,58 @@
 // two surfaces -- an engine control added to songBuilder.js's tables is a
 // control both the studio's chat and an external agent know about, still
 // from one place.
+import fs from "node:fs";
+import path from "node:path";
 import { z } from "zod";
 import type Anthropic from "@anthropic-ai/sdk";
 import * as sb from "@/public/js/songBuilder.js";
-import { TOOLS, FORMAT_NOTES, guideText } from "@/mcp/tools.mjs";
+import { TOOLS, FORMAT_NOTES, GUIDE_RELATIVE, guideText } from "@/mcp/tools.mjs";
+
+// Enough to work with if the guide file can't be found at all. Deliberately
+// NOT a second copy of the guide -- it's a degraded mode that points at the
+// tools that describe themselves, so a missing file costs taste, not the
+// whole feature.
+const GUIDE_FALLBACK = `The compose guide isn't available in this environment. Work from the tools themselves: list_engines and describe_engine say what every engine and its controls do, and each tool's refusal names the valid choices. Prefer a small number of tracks that play well together over a crowded arrangement.`;
+
+let cachedGuide: string | null = null;
+
+/**
+ * The compose guide, resolved the way a BUNDLED serverless function has to
+ * resolve it.
+ *
+ * mcp/tools.mjs's guideText() derives its path from import.meta.url, which is
+ * right for `node mcp/server.mjs` and wrong here: webpack replaces
+ * import.meta.url with the build machine's absolute path when it bundles the
+ * module into this route, so the deployed function went looking in
+ * /opt/build/repo (Netlify's build checkout, long gone by request time) and
+ * ENOENT'd. process.cwd() is what Next documents for reading a file that
+ * outputFileTracingIncludes shipped; the walk up from it covers a runtime
+ * whose cwd sits below the traced root, and guideText() itself is kept as the
+ * last resort for a plain `next dev` where import.meta.url is still real.
+ */
+export function composeGuide(): string {
+  if (cachedGuide != null) return cachedGuide;
+
+  let dir = process.cwd();
+  for (let up = 0; up < 5; up++) {
+    try {
+      const raw = fs.readFileSync(path.join(dir, GUIDE_RELATIVE), "utf8");
+      cachedGuide = raw.replace(/^---[\s\S]*?---\s*/, "");
+      return cachedGuide;
+    } catch {
+      const parent = path.dirname(dir);
+      if (parent === dir) break;
+      dir = parent;
+    }
+  }
+
+  try {
+    cachedGuide = guideText();
+  } catch {
+    cachedGuide = GUIDE_FALLBACK;
+  }
+  return cachedGuide;
+}
 
 export type ComposeSong = ReturnType<typeof sb.newSong>;
 export interface ComposeCtx {
@@ -78,4 +126,4 @@ export function runTool(ctx: ComposeCtx, name: string, args: unknown): ToolRunRe
   }
 }
 
-export { FORMAT_NOTES, guideText, sb };
+export { FORMAT_NOTES, sb };

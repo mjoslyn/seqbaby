@@ -3,8 +3,8 @@ import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@/lib/supabase/server";
 import {
   anthropicTools,
+  composeGuide,
   FORMAT_NOTES,
-  guideText,
   newCtx,
   runTool,
   serializeCtx,
@@ -27,7 +27,7 @@ type ChatTurn = { role: "user" | "assistant"; text: string };
 function systemPrompt() {
   return `You are the compose assistant inside seqbaby, a browser step sequencer. You write and edit the song the person has open by calling the tools -- never by describing changes in words instead of making them. Work in small, checkable steps and prefer editing what's there over starting over, unless they ask for something new.
 
-${guideText()}
+${composeGuide()}
 
 ---
 
