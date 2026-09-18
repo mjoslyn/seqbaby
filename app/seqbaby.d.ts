@@ -10,6 +10,24 @@ declare global {
         version: number;
         warnings: string[];
       } | void;
+      /**
+       * The same session, written onto the engine WITHOUT stopping it
+       * (public/js/liveSet.js): tracks that changed change, tracks that
+       * appeared join on the step everyone else is on, and everything already
+       * playing goes on playing. `applySet` is how a song ARRIVES, and it
+       * tears the session down to do it — right for opening one, fatal for
+       * auditioning a change to the one you are listening to.
+       *
+       * Deliberately does not take `activePattern` from the blob: which
+       * pattern you are looking at is the view, not the song.
+       */
+      mergeSet: (data: unknown) => {
+        version: number;
+        warnings: string[];
+        added: number;
+        removed: number;
+        rebuilt: number;
+      } | null;
       /** Format version of the blob serializeSet() writes (not `version`). */
       setVersion: number;
       validateSet: (data: unknown) => {

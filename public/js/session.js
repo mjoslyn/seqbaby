@@ -322,6 +322,250 @@ export async function onLoadSet() {
   applySet(all[choice.value]);
 }
 
+// ---- loading one track ---------------------------------------------------
+//
+// Lifted out of applySet's per-track loop so there is ONE reader of a
+// serialized track. liveSet.js's merge loads a track that has just appeared
+// through exactly this, and a track it has to rebuild (a new engine, a new
+// sample) is removed and re-made through it too: a second, subtly-different
+// hydrator beside this one is how the two would drift.
+
+/**
+ * A serialized track with its legacy sample engines folded onto the unified
+ * sampler (upload / eleven / smp:*). Returns `td` itself when nothing moved,
+ * and never mutates it.
+ * @param {Object} td @returns {Object}
+ */
+export function migrateTrackData(td) {
+  let ek = td.engineKey || "plaits:0";
+  let src = td.sampleSource || null;
+  let uploadAudio = td.uploadAudio || null;
+  let uploadMime  = td.uploadAudioMime || null;
+  if (ek === "upload") {
+    ek = "sampler"; src = src || { kind: "upload", name: td.uploadFileName || "sample" };
+  } else if (ek === "eleven") {
+    ek = "sampler"; src = src || { kind: "upload", name: td.uploadFileName || "sample" };
+    if (!uploadAudio && td.elevenAudio) { uploadAudio = td.elevenAudio; uploadMime = td.elevenAudioMime || uploadMime; }
+  } else if (ek.startsWith("smp:")) {
+    const id = ek.slice(4); ek = "sampler"; src = src || { kind: "bundled", id, name: id };
+  }
+  if (ek === td.engineKey && src === (td.sampleSource ?? null)
+      && uploadAudio === (td.uploadAudio ?? null) && uploadMime === (td.uploadAudioMime ?? null)) return td;
+  return { ...td, engineKey: ek, sampleSource: src, uploadAudio, uploadAudioMime: uploadMime };
+}
+
+/** What createTrack needs to make a shell for a serialized (migrated) track. */
+export function trackShellFor(td) {
+  return { name: td.name || "track", engineKey: td.engineKey || "plaits:0", length: td.length || 16 };
+}
+
+/**
+ * Fill a freshly created track from its serialized form: fields, sample
+ * payloads, patterns, DOM, voice and rack. `td` must have been through
+ * migrateTrackData. Cross-track references (`outIndex` / `compSourceIndex`)
+ * are deliberately NOT resolved here — the track they name may not exist yet,
+ * which is why both callers resolve them in a pass of their own afterwards.
+ * @param {Track} t @param {Object} td
+ */
+export function loadTrackFromData(t, td) {
+  migrateGranularParams(td.params);
+  Object.assign(t.params, td.params || {});
+  Object.assign(t.filter, td.filter || {});
+  if (td.eq)   Object.assign(t.eq,   td.eq);
+  if (td.comp) Object.assign(t.comp, td.comp);
+  Object.assign(t.fxConfig, td.fxConfig || {});
+  Object.assign(t.midi, td.midi || {});
+  t.customConfig = td.customConfig || null;
+  t.wavetable = (td.wavetable?.frames?.length || td.wavetable?.scan || td.wavetable?.unison != null) ? {
+    frames: td.wavetable.frames?.length ? td.wavetable.frames.map(f => Array.from(f)) : [],
+    scan: td.wavetable.scan || undefined,
+    unison: td.wavetable.unison ?? undefined,
+  } : null;
+  t.sampleSource = td.sampleSource || null;
+  t.uploadAudio = td.uploadAudio || null;
+  t.uploadAudioMime = td.uploadAudioMime || null;
+  t.uploadFileName = td.uploadFileName || null;
+  t.soundPromptText = td.soundPromptText || "";
+  t.promptText = td.promptText || "";
+  t.sampleDefaults = td.sampleDefaults
+    ? { start: 0, end: 1, fadeIn: 0, fadeOut: 0, loopMode: "off", ...td.sampleDefaults }
+    : { start: 0, end: 1, fadeIn: 0, fadeOut: 0, loopMode: "off" };
+  t.slices = Array.isArray(td.slices) ? td.slices.slice() : [];
+  t.sliceOn = !!td.sliceOn;
+  t.sliceBase = td.sliceBase ?? 60;
+  t.slicePlayMode = td.slicePlayMode === "toend" ? "toend" : "region";
+  t.sliceSensitivity = td.sliceSensitivity ?? 0.5;
+  t.granularSample = td.granularSample || null;
+  // decode any saved upload/eleven audio (async; the sampler picks it up).
+  // Bundled sources need no decode — the SamplerVoice fetches by id when built.
+  if (t.uploadAudio) {
+    (async () => {
+      try {
+        const bytes = Uint8Array.from(atob(t.uploadAudio), c => c.charCodeAt(0));
+        await ensureAudio();
+        const buffer = normalizeAudioBuffer(await state.audioCtx.decodeAudioData(bytes.buffer));
+        t.uploadBuffer = buffer;
+        if (t.voice?.type === "sampler" || t.voice?.type === "granular") { t.voice.setBuffer(buffer); applySampleSpeed(t); }
+      } catch (e) { console.warn("upload buffer decode failed", e); }
+    })();
+  } else if (t.granularSample?.id) {
+    // Library texture: re-fetch it by id (nothing of it is stored in the song).
+    (async () => {
+      try {
+        await ensureAudio();
+        const buffer = await loadBuffer(state.audioCtx, `${GRANULAR_SAMPLE_BASE}/${t.granularSample.id}.wav`);
+        t.uploadBuffer = buffer;
+        if (t.voice?.type === "granular") t.voice.setBuffer(buffer);
+      } catch (e) { console.warn("granular texture load failed", e); }
+    })();
+  }
+  t.baseSound = td.baseSound ? JSON.parse(JSON.stringify(td.baseSound)) : null;
+  t.muted  = !!td.muted;
+  t.soloed = !!td.soloed;
+  t.isDrumKit = typeof td.isDrumKit === "boolean"
+    ? td.isDrumKit
+    : guessIsDrumKit({ engineKey: t.engineKey, name: t.name });
+  t.glide  = td.glide ?? 0;
+  t.speed  = td.speed ?? 1;
+  t.sampleSpeedMode = td.sampleSpeedMode ?? "native";
+  t.pitchLock = td.pitchLock ?? true;
+  t.density = Math.max(0, Math.min(1, td.density ?? 0.5));
+  t.euclid = td.euclid ? { ...td.euclid } : null;
+  t._euclidMod = null;                // live overrides are never saved
+  t.chance = cloneChance(td.chance);
+  t._chanceMod = null;
+  t._chancePlan = null;               // built on demand; nothing to carry in
+  Object.assign(t.lfoConfig, td.lfoConfig || {});
+  if (Array.isArray(td.patterns)) {
+    const pad = (arr, fill, n) => { const out = (arr || []).slice(0, n); while (out.length < n) out.push(fill); return out; };
+    for (let i = 0; i < Math.min(PATTERN_COUNT, td.patterns.length); i++) {
+      const p = td.patterns[i];
+      if (!p) continue;
+      // Per-pattern length: prefer the saved pattern's own step array length;
+      // falls back to t.length for older saves that didn't vary per pattern.
+      const n = Math.max(1, Array.isArray(p.steps) ? p.steps.length : t.length);
+      const automation = {};
+      if (p.automation && typeof p.automation === "object") {
+        for (const [k, lane] of Object.entries(p.automation)) {
+          if (!AUTOMATION_TARGETS[k] || !lane) continue;
+          automation[k] = {
+            enabled: !!lane.enabled,
+            values: pad(Array.isArray(lane.values) ? lane.values : [], 0.5, n),
+          };
+        }
+      }
+      t.patterns[i] = {
+        steps: pad(p.steps, 0, n),
+        lengths: pad(p.lengths, 0, n),
+        notes: pad(p.notes, null, n),
+        velocities: pad(p.velocities, 0.5, n),
+        chords: pad(p.chords, "", n),
+        offsets:         pad(p.offsets,         0,      n),
+        arps:            pad(p.arps,            false,  n),
+        arpRates:        pad(p.arpRates,        0.25,   n),
+        arpRanges:       pad(p.arpRanges,       1,      n),
+        arpDirs:         pad(p.arpDirs,         "up",   n),
+        complexities:    pad(p.complexities,    0,      n),
+        ratchets:        pad(p.ratchets,        1,      n),
+        sampleStarts:    pad(p.sampleStarts,    0,      n),
+        sampleEnds:      pad(p.sampleEnds,      1,      n),
+        sampleFadeIns:   pad(p.sampleFadeIns,   0,      n),
+        sampleFadeOuts:  pad(p.sampleFadeOuts,  0,      n),
+        sampleLoopModes: pad(p.sampleLoopModes, "off",  n),
+        extraNotes:      pad(p.extraNotes,      null,   n),
+        extraLengths:    pad(p.extraLengths,    null,   n),
+        automation,
+        // p-lock (patternSound.js). Absent in every session saved before the
+        // lock existed, and in every unlocked pattern.
+        // `td.patternLock` is the short-lived per-TRACK form of this flag:
+        // any pattern that got a snapshot under it was, in effect, locked.
+        soundLocked: !!p.soundLocked || (!!td.patternLock && !!p.sound),
+        sound: p.sound && typeof p.sound === "object" ? JSON.parse(JSON.stringify(p.sound)) : null,
+      };
+    }
+  }
+  aliasPattern(t, state.activePattern);
+  if (t.el) {
+    const q = s => t.el.querySelector(s);
+    q(".sq-track__name").value = t.name;
+    q(".sq-track__len").value = t.length;
+    q(".sq-track__engine").value = t.engineKey;
+    q(".sq-track__glide").value = t.glide;
+    syncTrackSoundUI(t);
+    refreshPatternLockUI(t);
+    q(".sq-track__solo")?.setAttribute("aria-pressed", String(t.soloed));
+    t.el.classList.toggle("is-muted", t.muted);
+    t.el.classList.toggle("is-soloed", t.soloed);
+    paintDiceDensity(t);
+    // After the fields are filled, not from renderTrack: the track's DOM is
+    // built by createTrack before any of this is set, so live mode would
+    // load without its read-only grid.
+    renderEuclidPanel(t);
+    refreshEuclidUI(t);
+    renderChancePanel(t);
+    refreshChanceUI(t);
+    refreshFxPanelUI(t);
+    renderModPanel(t, t._modPanelEl || t.el.querySelector(".sq-track__mod-panel"));
+    const eqPanel = t._eqPanelEl || t.el.querySelector(".sq-track__eq-panel");
+    if (eqPanel) {
+      eqPanel.querySelector(".p-eq-low").value  = t.eq.low;
+      eqPanel.querySelector(".p-eq-mid").value  = t.eq.mid;
+      eqPanel.querySelector(".p-eq-high").value = t.eq.high;
+    }
+    const compPanel = t._compPanelEl || t.el.querySelector(".sq-track__comp-panel");
+    if (compPanel) {
+      compPanel.querySelector(".comp-enabled").checked = !!t.comp.enabled;
+      compPanel.querySelector(".comp-threshold").value = t.comp.threshold;
+      compPanel.querySelector(".comp-ratio").value     = t.comp.ratio;
+      compPanel.querySelector(".comp-attack").value    = t.comp.attack;
+      compPanel.querySelector(".comp-release").value   = t.comp.release;
+      compPanel.querySelector(".comp-knee").value      = t.comp.knee;
+    }
+  }
+  if (state.ready) {
+    disposeLFOs(t);
+    if (t.voice) t.voice.dispose();
+    ensureFxRack(t);
+    if (t.fxRack) {
+      if (t.fxConfig.vinyl)      t.fxRack.applyVinyl(t.fxConfig.vinyl);
+      if (t.fxConfig.cassette)   t.fxRack.applyCassette(t.fxConfig.cassette);
+      t.fxRack.applyFuzz(t.fxConfig.fuzz);
+      if (t.fxConfig.ringmod)    t.fxRack.applyRingMod(t.fxConfig.ringmod);
+      if (t.fxConfig.shaper)     t.fxRack.applyWaveShaper(t.fxConfig.shaper);
+      if (t.fxConfig.crush)      t.fxRack.applyCrush(t.fxConfig.crush);
+      if (t.fxConfig.autowah)    t.fxRack.applyAutoWah(t.fxConfig.autowah);
+      if (t.fxConfig.chorus)     t.fxRack.applyChorus(t.fxConfig.chorus);
+      if (t.fxConfig.phaser)     t.fxRack.applyPhaser(t.fxConfig.phaser);
+      if (t.fxConfig.flanger)    t.fxRack.applyFlanger(t.fxConfig.flanger);
+      if (t.fxConfig.pitchshift) t.fxRack.applyPitchShift(t.fxConfig.pitchshift);
+      t.fxRack.applyDelay(t.fxConfig.delay);
+      t.fxRack.applyReverb(t.fxConfig.reverb);
+    }
+    t.voice = buildVoiceForEngine(state.audioCtx, t.engineKey, t.params, t);
+    if (t.voice.type === "midi") {
+      t.voice.setChannel(t.midi.channel);
+      const out = state.midi?.outputs.get(t.midi.outputId);
+      if (out) t.voice.setOutput(out);
+    }
+    if (t.voice.setGlide) t.voice.setGlide(t.glide);
+    routeVoiceToRack(t);
+    if (t.eqNode) {
+      t.eqNode.setBand("low",  t.eq.low);
+      t.eqNode.setBand("mid",  t.eq.mid);
+      t.eqNode.setBand("high", t.eq.high);
+    }
+    applyCompressorConfig(t);
+    syncAllLFOs(t);
+  }
+  // The live sound is whatever owns the active pattern. Normally that is
+  // already what the track-level fields hold (serializeSet flushes before it
+  // writes), so this only bites for a blob assembled some other way — but it
+  // has to run after the voice and rack exist, not with the pattern data.
+  if (recallPatternSound(t, state.activePattern)) refreshPatternSoundUI(t);
+  updatePlaitsControlsVisibility(t);
+  renderStepGrid(t);
+}
+
 /**
  * Rebuild the entire app from a serialized session: tracks, voices,
  * patterns, and transport state.
@@ -396,219 +640,11 @@ export function applySet(s) {
   // along. `state.tracks` is not that order once the buses are moved to the
   // bottom, so the resolution passes below walk this instead.
   const made = [];
-  for (const td of s.tracks || []) {
-    // Migrate legacy sample engines (upload / smp:* / eleven) onto the unified
-    // sampler. eleven's separately-persisted audio folds into the upload buffer.
-    let ek = td.engineKey || "plaits:0";
-    let src = td.sampleSource || null;
-    let uploadAudio = td.uploadAudio || null;
-    let uploadMime  = td.uploadAudioMime || null;
-    if (ek === "upload") {
-      ek = "sampler"; src = src || { kind: "upload", name: td.uploadFileName || "sample" };
-    } else if (ek === "eleven") {
-      ek = "sampler"; src = src || { kind: "upload", name: td.uploadFileName || "sample" };
-      if (!uploadAudio && td.elevenAudio) { uploadAudio = td.elevenAudio; uploadMime = td.elevenAudioMime || uploadMime; }
-    } else if (ek.startsWith("smp:")) {
-      const id = ek.slice(4); ek = "sampler"; src = src || { kind: "bundled", id, name: id };
-    }
-    const t = createTrack({ name: td.name || "track", engineKey: ek, length: td.length || 16 });
+  for (const td0 of s.tracks || []) {
+    const td = migrateTrackData(td0);
+    const t = createTrack(trackShellFor(td));
     made.push(t);
-    migrateGranularParams(td.params);
-    Object.assign(t.params, td.params || {});
-    Object.assign(t.filter, td.filter || {});
-    if (td.eq)   Object.assign(t.eq,   td.eq);
-    if (td.comp) Object.assign(t.comp, td.comp);
-    Object.assign(t.fxConfig, td.fxConfig || {});
-    Object.assign(t.midi, td.midi || {});
-    t.customConfig = td.customConfig || null;
-    t.wavetable = (td.wavetable?.frames?.length || td.wavetable?.scan || td.wavetable?.unison != null) ? {
-      frames: td.wavetable.frames?.length ? td.wavetable.frames.map(f => Array.from(f)) : [],
-      scan: td.wavetable.scan || undefined,
-      unison: td.wavetable.unison ?? undefined,
-    } : null;
-    t.sampleSource = src;
-    t.uploadAudio = uploadAudio;
-    t.uploadAudioMime = uploadMime;
-    t.uploadFileName = td.uploadFileName || null;
-    t.soundPromptText = td.soundPromptText || "";
-    t.promptText = td.promptText || "";
-    t.sampleDefaults = td.sampleDefaults
-      ? { start: 0, end: 1, fadeIn: 0, fadeOut: 0, loopMode: "off", ...td.sampleDefaults }
-      : { start: 0, end: 1, fadeIn: 0, fadeOut: 0, loopMode: "off" };
-    t.slices = Array.isArray(td.slices) ? td.slices.slice() : [];
-    t.sliceOn = !!td.sliceOn;
-    t.sliceBase = td.sliceBase ?? 60;
-    t.slicePlayMode = td.slicePlayMode === "toend" ? "toend" : "region";
-    t.sliceSensitivity = td.sliceSensitivity ?? 0.5;
-    t.granularSample = td.granularSample || null;
-    // decode any saved upload/eleven audio (async; the sampler picks it up).
-    // Bundled sources need no decode — the SamplerVoice fetches by id when built.
-    if (t.uploadAudio) {
-      (async () => {
-        try {
-          const bytes = Uint8Array.from(atob(t.uploadAudio), c => c.charCodeAt(0));
-          await ensureAudio();
-          const buffer = normalizeAudioBuffer(await state.audioCtx.decodeAudioData(bytes.buffer));
-          t.uploadBuffer = buffer;
-          if (t.voice?.type === "sampler" || t.voice?.type === "granular") { t.voice.setBuffer(buffer); applySampleSpeed(t); }
-        } catch (e) { console.warn("upload buffer decode failed", e); }
-      })();
-    } else if (t.granularSample?.id) {
-      // Library texture: re-fetch it by id (nothing of it is stored in the song).
-      (async () => {
-        try {
-          await ensureAudio();
-          const buffer = await loadBuffer(state.audioCtx, `${GRANULAR_SAMPLE_BASE}/${t.granularSample.id}.wav`);
-          t.uploadBuffer = buffer;
-          if (t.voice?.type === "granular") t.voice.setBuffer(buffer);
-        } catch (e) { console.warn("granular texture load failed", e); }
-      })();
-    }
-    t.baseSound = td.baseSound ? JSON.parse(JSON.stringify(td.baseSound)) : null;
-    t.muted  = !!td.muted;
-    t.soloed = !!td.soloed;
-    t.isDrumKit = typeof td.isDrumKit === "boolean"
-      ? td.isDrumKit
-      : guessIsDrumKit({ engineKey: t.engineKey, name: t.name });
-    t.glide  = td.glide ?? 0;
-    t.speed  = td.speed ?? 1;
-    t.sampleSpeedMode = td.sampleSpeedMode ?? "native";
-    t.pitchLock = td.pitchLock ?? true;
-    t.density = Math.max(0, Math.min(1, td.density ?? 0.5));
-    t.euclid = td.euclid ? { ...td.euclid } : null;
-    t._euclidMod = null;                // live overrides are never saved
-    t.chance = cloneChance(td.chance);
-    t._chanceMod = null;
-    t._chancePlan = null;               // built on demand; nothing to carry in
-    Object.assign(t.lfoConfig, td.lfoConfig || {});
-    if (Array.isArray(td.patterns)) {
-      const pad = (arr, fill, n) => { const out = (arr || []).slice(0, n); while (out.length < n) out.push(fill); return out; };
-      for (let i = 0; i < Math.min(PATTERN_COUNT, td.patterns.length); i++) {
-        const p = td.patterns[i];
-        if (!p) continue;
-        // Per-pattern length: prefer the saved pattern's own step array length;
-        // falls back to t.length for older saves that didn't vary per pattern.
-        const n = Math.max(1, Array.isArray(p.steps) ? p.steps.length : t.length);
-        const automation = {};
-        if (p.automation && typeof p.automation === "object") {
-          for (const [k, lane] of Object.entries(p.automation)) {
-            if (!AUTOMATION_TARGETS[k] || !lane) continue;
-            automation[k] = {
-              enabled: !!lane.enabled,
-              values: pad(Array.isArray(lane.values) ? lane.values : [], 0.5, n),
-            };
-          }
-        }
-        t.patterns[i] = {
-          steps: pad(p.steps, 0, n),
-          lengths: pad(p.lengths, 0, n),
-          notes: pad(p.notes, null, n),
-          velocities: pad(p.velocities, 0.5, n),
-          chords: pad(p.chords, "", n),
-          offsets:         pad(p.offsets,         0,      n),
-          arps:            pad(p.arps,            false,  n),
-          arpRates:        pad(p.arpRates,        0.25,   n),
-          arpRanges:       pad(p.arpRanges,       1,      n),
-          arpDirs:         pad(p.arpDirs,         "up",   n),
-          complexities:    pad(p.complexities,    0,      n),
-          ratchets:        pad(p.ratchets,        1,      n),
-          sampleStarts:    pad(p.sampleStarts,    0,      n),
-          sampleEnds:      pad(p.sampleEnds,      1,      n),
-          sampleFadeIns:   pad(p.sampleFadeIns,   0,      n),
-          sampleFadeOuts:  pad(p.sampleFadeOuts,  0,      n),
-          sampleLoopModes: pad(p.sampleLoopModes, "off",  n),
-          extraNotes:      pad(p.extraNotes,      null,   n),
-          extraLengths:    pad(p.extraLengths,    null,   n),
-          automation,
-          // p-lock (patternSound.js). Absent in every session saved before the
-          // lock existed, and in every unlocked pattern.
-          // `td.patternLock` is the short-lived per-TRACK form of this flag:
-          // any pattern that got a snapshot under it was, in effect, locked.
-          soundLocked: !!p.soundLocked || (!!td.patternLock && !!p.sound),
-          sound: p.sound && typeof p.sound === "object" ? JSON.parse(JSON.stringify(p.sound)) : null,
-        };
-      }
-    }
-    aliasPattern(t, state.activePattern);
-    if (t.el) {
-      const q = s => t.el.querySelector(s);
-      q(".sq-track__name").value = t.name;
-      q(".sq-track__len").value = t.length;
-      q(".sq-track__engine").value = t.engineKey;
-      q(".sq-track__glide").value = t.glide;
-      syncTrackSoundUI(t);
-      refreshPatternLockUI(t);
-      q(".sq-track__solo")?.setAttribute("aria-pressed", String(t.soloed));
-      t.el.classList.toggle("is-muted", t.muted);
-      t.el.classList.toggle("is-soloed", t.soloed);
-      paintDiceDensity(t);
-      // After the fields are filled, not from renderTrack: the track's DOM is
-      // built by createTrack before any of this is set, so live mode would
-      // load without its read-only grid.
-      renderEuclidPanel(t);
-      refreshEuclidUI(t);
-      renderChancePanel(t);
-      refreshChanceUI(t);
-      refreshFxPanelUI(t);
-      renderModPanel(t, t._modPanelEl || t.el.querySelector(".sq-track__mod-panel"));
-      const eqPanel = t._eqPanelEl || t.el.querySelector(".sq-track__eq-panel");
-      if (eqPanel) {
-        eqPanel.querySelector(".p-eq-low").value  = t.eq.low;
-        eqPanel.querySelector(".p-eq-mid").value  = t.eq.mid;
-        eqPanel.querySelector(".p-eq-high").value = t.eq.high;
-      }
-      const compPanel = t._compPanelEl || t.el.querySelector(".sq-track__comp-panel");
-      if (compPanel) {
-        compPanel.querySelector(".comp-enabled").checked = !!t.comp.enabled;
-        compPanel.querySelector(".comp-threshold").value = t.comp.threshold;
-        compPanel.querySelector(".comp-ratio").value     = t.comp.ratio;
-        compPanel.querySelector(".comp-attack").value    = t.comp.attack;
-        compPanel.querySelector(".comp-release").value   = t.comp.release;
-        compPanel.querySelector(".comp-knee").value      = t.comp.knee;
-      }
-    }
-    if (state.ready) {
-      disposeLFOs(t);
-      if (t.voice) t.voice.dispose();
-      ensureFxRack(t);
-      if (t.fxRack) {
-        if (t.fxConfig.vinyl)      t.fxRack.applyVinyl(t.fxConfig.vinyl);
-        if (t.fxConfig.cassette)   t.fxRack.applyCassette(t.fxConfig.cassette);
-        t.fxRack.applyFuzz(t.fxConfig.fuzz);
-        if (t.fxConfig.ringmod)    t.fxRack.applyRingMod(t.fxConfig.ringmod);
-        if (t.fxConfig.shaper)     t.fxRack.applyWaveShaper(t.fxConfig.shaper);
-        if (t.fxConfig.crush)      t.fxRack.applyCrush(t.fxConfig.crush);
-        if (t.fxConfig.autowah)    t.fxRack.applyAutoWah(t.fxConfig.autowah);
-        if (t.fxConfig.chorus)     t.fxRack.applyChorus(t.fxConfig.chorus);
-        if (t.fxConfig.phaser)     t.fxRack.applyPhaser(t.fxConfig.phaser);
-        if (t.fxConfig.flanger)    t.fxRack.applyFlanger(t.fxConfig.flanger);
-        if (t.fxConfig.pitchshift) t.fxRack.applyPitchShift(t.fxConfig.pitchshift);
-        t.fxRack.applyDelay(t.fxConfig.delay);
-        t.fxRack.applyReverb(t.fxConfig.reverb);
-      }
-      t.voice = buildVoiceForEngine(state.audioCtx, t.engineKey, t.params, t);
-      if (t.voice.type === "midi") {
-        t.voice.setChannel(t.midi.channel);
-        const out = state.midi?.outputs.get(t.midi.outputId);
-        if (out) t.voice.setOutput(out);
-      }
-      if (t.voice.setGlide) t.voice.setGlide(t.glide);
-      routeVoiceToRack(t);
-      if (t.eqNode) {
-        t.eqNode.setBand("low",  t.eq.low);
-        t.eqNode.setBand("mid",  t.eq.mid);
-        t.eqNode.setBand("high", t.eq.high);
-      }
-      applyCompressorConfig(t);
-      syncAllLFOs(t);
-    }
-    // The live sound is whatever owns the active pattern. Normally that is
-    // already what the track-level fields hold (serializeSet flushes before it
-    // writes), so this only bites for a blob assembled some other way — but it
-    // has to run after the voice and rack exist, not with the pattern data.
-    if (recallPatternSound(t, state.activePattern)) refreshPatternSoundUI(t);
-    updatePlaitsControlsVisibility(t);
-    renderStepGrid(t);
+    loadTrackFromData(t, td);
   }
   // Cross-track references resolve now that every track exists — both are
   // stored as indices (see serializeSet), and the track pointed at has to be

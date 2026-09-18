@@ -78,6 +78,7 @@ export const ENGINE_MODULES = [
   "keyboard.js",
   "knob.js",
   "lfo.js",
+  "liveSet.js",
   "macro.js",
   "main.js",
   "meter.js",

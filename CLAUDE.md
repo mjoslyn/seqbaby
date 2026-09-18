@@ -16,7 +16,7 @@ env / fx / eq / comp / mod / automation per track.
   `public/woscillators.js` →
   `public/js/main.js` (ES module). `middleware.ts` refreshes the Supabase
   session on every request *except* static engine assets.
-- **Engine**: ~53 dependency-free vanilla ES modules in `public/js/`. No
+- **Engine**: ~54 dependency-free vanilla ES modules in `public/js/`. No
   bundler — edit, reload. `window.seqbaby` (from `appApi.js`) exposes `state`
   and serialize/apply hooks to the React shell (typed in `app/seqbaby.d.ts`).
 - **Accounts + data**: Supabase (Postgres + Auth + RLS). Tables: `profiles`,
@@ -47,12 +47,14 @@ env / fx / eq / comp / mod / automation per track.
 │   ├── NewSongButton.tsx      top-bar `new`: blanks the engine, clears the open song
 │   ├── DefaultTemplate.tsx    what a new song starts from, when the account named one
 │   ├── VersionTree.tsx        a song's version history, drawn as the tree it is
+│   ├── ComposeChat.tsx        ask for changes to the song: the turn's changes land in a review bar (audition / keep), never straight in
 │   ├── songs/openSong.ts      which song + version the studio holds, and whether it is a template (shared by the two save UIs)
 │   ├── songs/songName.js     names a song nobody named, from what is in it
 │   ├── songs/suggestName.ts  the name both save UIs offer in a blank name field
 │   ├── Preloader.tsx + preloaderMarkup.ts  loading overlay: markup + inline driver
 │   ├── login/ settings/ u/[username]/       auth, account settings, public profiles
 │   ├── api/share/route.ts     anonymous ?s=<slug> share endpoint
+│   ├── api/compose/          the compose turn: POST stakes out a job, status/ is what the panel polls
 │   └── {songs,patches,profile,auth,account}/actions.ts   Supabase server actions
 ├── public/
 │   ├── js/                    THE ENGINE — see module map below
@@ -129,7 +131,14 @@ env / fx / eq / comp / mod / automation per track.
   behind. Behind the top bar's `new` and a click on the logo — which is an
   `<a href="/">`, so opening it in a new tab gives a blank editor too. It
   fires `seqbaby:newset` for the shell, whose open-song slot has to clear
-  with it (`app/NewSongButton.tsx`).
+  with it (`app/NewSongButton.tsx`). Its per-track reader — `migrateTrackData`
+  / `trackShellFor` / `loadTrackFromData` — is exported, because liveSet.js
+  loads a track through exactly the same one.
+- `liveSet.js` — the same session format written onto a **running** engine:
+  `applyGlobalsInPlace`, `applyTrackInPlace` and `mergeSet`. history.js's
+  in-place restore was the first two, and the compose panel's audition needed
+  the same thing, so they live here and history.js owns only when. See the
+  live merge section below.
 - `engineData.js` / `soundDefaults.js` / `theoryData.js` — the engine as DATA,
   with **no imports** (engineData none at all; the other two only each other
   and constants.js): the engine catalog, the four sliders' labels per engine,
@@ -162,8 +171,8 @@ env / fx / eq / comp / mod / automation per track.
 - `history.js` / `historyStore.js` — undo/redo over the whole session. The store
   is the stack and the structural sharing that pays for it, and has **no
   imports** for `chanceGen.js`'s reasons; `history.js` is the engine half — when
-  a snapshot is taken, and how one is put back onto a running sequencer. See the
-  undo/redo section below.
+  a snapshot is taken, and (via liveSet.js) how one is put back onto a running
+  sequencer. See the undo/redo section below.
 - `track.js` — track lifecycle (create/resize/clone).
 - `bounce.js` — WAV render via MediaRecorder.
 - `buffers.js` — sample decode/normalize cache, `startSampleSource`.
@@ -1800,6 +1809,103 @@ agent ──▶ mcp/server.mjs ──▶ songBuilder.js ──▶ { _version, bp
   engineData.js is all the builder needs; the compose guide is where to say
   what it is FOR.
 
+## A session onto a RUNNING engine (`liveSet.js`) — and the audition
+
+`applySet` is how a song arrives: it stops the transport, tears down every
+track and voice, and builds the whole session again. That is right for opening
+a song and wrong for every case where the session you are holding is *nearly*
+the one that is playing — an undo, and the compose panel asking for a bassline
+while you are listening to the drums. Writing a turn straight in with
+`applySet` is what used to silence the track you were playing.
+
+```
+mergeSet(s)   validate  ->  globals  ->  tracks gone  ->  tracks made / kept
+              (first,       (each        (removeTrack)    (loadTrackFromData,
+               nothing       guarded                       or updated in place)
+               torn down     on having
+               on a throw)   moved)      ->  the sends and sidechains  ->  order
+```
+
+- **Three pieces, and two of them were already written.**
+  `applyGlobalsInPlace` and `applyTrackInPlace` are history.js's in-place
+  restore, moved here: an undo and an audition want the identical thing, and a
+  second copy is how the two would come to disagree about what putting a track
+  back means. history.js still owns *when* a session is written; this owns
+  *how*. `mergeSet` is the new part — the tracks that appeared, the ones that
+  went, and the ones whose engine changed under them.
+- **A track that needs its voice rebuilt is removed and re-made**, through
+  `loadTrackFromData` — session.js's own per-track reader, the one `applySet`
+  uses, exported for this. Rebuilding a voice in place would be a third loader.
+  `MERGE_REBUILD_KEYS` is `TRACK_REBUILD_KEYS` minus `outIndex` /
+  `compSourceIndex`: history falls back to `applySet` for a re-routed send
+  because the track it now points at may itself be being rebuilt, but a merge
+  resolves every send in a pass of its own, and `routeTrackOutput` re-points a
+  live output under a fade. Re-pointing is not rebuilding.
+- **Which live track an incoming track IS, is `alignTracks`.** Identity is
+  `engineKey` plus `name` — what the compose tools address a track by and what
+  a person reads down the left of the studio — matched in three passes: same
+  slot, then anywhere, then whatever is left in order. The first pass is the
+  case that matters: a session that went to the model and came back with a
+  track appended matches straight down the line, so **nothing that was already
+  playing is touched at all** (measured: the other six tracks keep the same
+  `voice` and `fxRack` objects). The third is what makes a rename or an engine
+  change an edit to a track rather than one track going and another arriving.
+- **Three passes over the tracks, and the order is forced.** Nothing can be
+  updated in place until every track exists, because a sidechain source is an
+  INDEX into the incoming session and may name a track made a moment ago; the
+  sends are resolved after that for the same reason; and only once every
+  cross-track reference is an id may the list be reordered (`setTrackOrder`,
+  then `placeBusesLast`). Exactly `applySet`'s rule.
+- **The transport is not in the format, and neither is the view.** `applySet`
+  stops the transport as a consequence of tearing down, never as a decision, so
+  a merge simply doesn't. `activePattern` is left alone too, the call history.js
+  already makes: moving the playhead to another pattern mid-bar is not a change
+  to the song.
+- A track that appears joins on the step everyone else is on — `createTrack`
+  has set `trackTick` from `state.tick` since long before this, for exactly
+  this case. Measured: merging a track into a playing session leaves `playing`
+  true and the tick monotonic throughout, and the new track's meter comes up at
+  the level its steps deserve.
+- Exposed as `window.seqbaby.mergeSet` (appApi.js), beside `applySet`.
+
+### The compose panel's audition (`app/ComposeChat.tsx`)
+
+A turn that changed the song no longer lands in the studio. It lands in a
+**review bar** between the log and the input, with three buttons:
+
+```
+audition   merge it into what is playing, keeping the session it replaced
+stop       write that session back — the changes are still on offer
+keep       they are the song now
+discard    throw them away (putting back the pre-audition session first)
+```
+
+- **Both directions are one call.** Auditioning merges the turn's session;
+  stopping merges the one captured on the way in. `before` on the proposal is
+  that session, and `null` means the changes are not in the engine at all yet.
+- **Keeping mid-audition writes nothing.** The engine is already playing them,
+  hand edits since included — which is the right answer to "keep what I am
+  hearing". Stopping takes those hand edits back with it; undo reaches them,
+  which is why it is a button and not a confirm dialog.
+- **Nothing had to be told about undo.** history.js watches the events an
+  interaction ends in, so the click on `audition` banks the merge as one
+  labelled step (the label comes off the button's own text) — and `keep`
+  mid-audition changes nothing, so it leaves no second entry. Undoing across it
+  does fall back to `applySet` and stops the transport, which is what the
+  `stop` button is for.
+- **Sending the next message settles the last proposal.** The session being
+  serialized is what the model is being asked about, so whatever is in the
+  engine — an audition included — is what that turn builds on, and there is
+  nothing left to put back to.
+- **A closed drawer hides the bar but not the audition**, so the `compose`
+  button carries a dot and says which state it is in. An extra track playing
+  with nothing on screen explaining it would be a bug report.
+- `new`, and opening a different song, drop the proposal: `before` describes a
+  session that is no longer there, and putting it back would undo the `new`.
+- `applySet` is still the fallback in `writeLive`, for an engine cached from
+  before `mergeSet` shipped. It costs the transport, which is the thing the
+  merge exists to avoid, but it is never silence.
+
 ## Undo / redo (`history.js` + `historyStore.js`)
 
 A stack of whole-session snapshots, not a log of inverse commands, and nothing
@@ -1840,11 +1946,16 @@ edit ──▶ (420ms of quiet) ──▶ serializeSet() ──▶ fold onto the
   common cases go back in place: patterns (via `clonePattern` + `aliasPattern`),
   the track's own fields, and the sound through `applyPatternSound` — already
   the thing in this app that knows how to change a sound under a running
-  transport without re-registering 130 LFOs or rebuilding a reverb. Anything
-  needing a voice, the graph or the DOM rebuilt — `REBUILD_KEYS`: an engine
-  change, a new sample, a track added or removed, a send re-routed — falls back
-  to `applySet` on a copy of the snapshot, the same path a song load takes. One
-  loader, not two that drift.
+  transport without re-registering 130 LFOs or rebuilding a reverb. That
+  writing now lives in **`liveSet.js`** (`applyGlobalsInPlace` /
+  `applyTrackInPlace`), shared with the compose panel's audition, which needed
+  exactly the same thing; this file decides only when one is written. Anything
+  needing a voice, the graph or the DOM rebuilt — `TRACK_REBUILD_KEYS`: an
+  engine change, a new sample, a track added or removed, a send re-routed —
+  falls back to `applySet` on a copy of the snapshot, the same path a song load
+  takes. One loader, not two that drift. (`mergeSet` could put those back
+  without stopping either, and deliberately isn't asked to: an undo has to be
+  exact, and `applySet` is the path a song load already proves every day.)
 - **A parameter under an automation lane is pinned** (`pinAutomated`). While the
   transport runs, an enabled lane rewrites the field it automates on every step
   (`t.filter.cutoff`, and `t.params[k]` for a voice with no AudioParam behind
@@ -2149,8 +2260,10 @@ through a 6ms fade on its gain).
 - Nothing has to be told about undo: it watches the session rather than the
   call sites (see below). A new field is undoable the moment `serializeSet` /
   `applySet` carry it — and if putting it back needs a voice or the DOM rebuilt,
-  add it to `REBUILD_KEYS` in history.js so an undo across it falls back to
-  `applySet` instead of half-restoring in place.
+  add it to `TRACK_REBUILD_KEYS` in liveSet.js so an undo across it falls back
+  to `applySet`, and a merge remakes the track, instead of half-restoring in
+  place. A field a track can hold without a rebuild wants a branch in
+  `applyTrackInPlace` beside the others, or an audition will leave it behind.
 - New macro-pad behaviour → `macro.js`; assignment targets come from
   `AUTOMATION_TARGETS` for free, so a new automation target is macro-assignable
   the moment it has a `CONTROL_TARGETS` entry.
@@ -2185,7 +2298,7 @@ Repo: https://github.com/mjoslyn/seqbaby.
   An inline marker (`window.__seqbabyServerBoot`) tells the paths apart, and
   `ScriptLoader.tsx` keeps its onload-chained injection for the soft-nav case
   (e.g. arriving from `/login`).
-- `app/EnginePreload.tsx` emits `modulepreload` for all 56 modules listed in
+- `app/EnginePreload.tsx` emits `modulepreload` for all 58 modules listed in
   `app/engineAssets.ts` (at `engineAsset("/js/<name>")`; the hints used to
   point at the site root and 404). The graph is 8 levels deep, so without it the browser
   needs up to eight sequential round trips just to discover the code.

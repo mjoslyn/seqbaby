@@ -7,6 +7,7 @@
 // installed. Keep this surface intentional and additive.
 import { loadPatches, savePatch, storePatches } from "./catalog.js";
 import { canRedo, canUndo, redo, undo } from "./history.js";
+import { mergeSet } from "./liveSet.js";
 import {
   applySet,
   applyTrackPatch,
@@ -30,6 +31,13 @@ export function installAppApi() {
     // session (song) snapshot <-> live engine
     serializeSet,
     applySet,
+    // The same session, written onto the engine WITHOUT stopping it: the tracks
+    // that changed are changed, the ones that appeared are added mid-bar, and
+    // everything already playing goes on playing (liveSet.js). `applySet` is
+    // how a song ARRIVES — it tears the session down and builds it again, which
+    // is right for opening one and fatal for auditioning a change to the one
+    // you are listening to.
+    mergeSet,
     // blank the session -- back to the starter tracks with nothing written.
     // `newSet` resets; `onNewSet` is the flow around it (confirms first when
     // there is something to lose), which is what a button should call.

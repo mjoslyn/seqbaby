@@ -21,35 +21,32 @@
 // **Restoring is diffed, and falls back to `applySet` wholesale.** Undoing a
 // step toggle must not stop the transport, and `applySet` tears down every
 // track and voice in the session, so the common cases are put back in place:
-// patterns, the track's own fields, and the sound (through `applyPatternSound`,
-// which already knows how to install a sound while the transport runs, and for
-// exactly the same reason). Anything that needs a voice or the graph rebuilt —
-// an engine change, a new sample, a track added or removed, a send re-routed —
-// falls back to `applySet` on the snapshot, which is the same path a song load
-// takes. One loader, not two that drift.
+// patterns, the track's own fields, and the sound. HOW that is written onto a
+// running engine is liveSet.js — shared with the compose panel's audition,
+// which needs the same thing for the same reason — and this file decides only
+// when. Anything that needs a voice or the graph rebuilt — an engine change, a
+// new sample, a track added or removed, a send re-routed — falls back to
+// `applySet` on the snapshot, which is the same path a song load takes. One
+// loader, not two that drift.
 //
 // **An automated parameter is pinned.** See `pinAutomated` below.
 
 import { VOICE_AUTO_KEYS } from "./automation.js";
-import { PATTERN_COUNT } from "./constants.js";
 import { setStatus } from "./dom.js";
-import { cloneChance, refreshChanceUI, renderChancePanel } from "./chance.js";
-import { refreshEuclidUI, renderEuclidPanel } from "./euclid.js";
 import { HistoryStack, sameTree, shareStructure } from "./historyStore.js";
-import { ICON_CHAIN, ICON_FINISH, ICON_NOW, ICON_REDO, ICON_REPEAT, ICON_UNDO } from "./icons.js";
-import { applySampleSpeed } from "./lfo.js";
-import { applyMacroPads } from "./macro.js";
-import { parseMeter } from "./meter.js";
+import { ICON_REDO, ICON_UNDO } from "./icons.js";
+// The in-place writers themselves: how a session is put onto a running engine
+// is liveSet.js's, shared with the compose panel's audition. This file owns
+// only WHEN one is put back.
+import { applyGlobalsInPlace, applyTrackInPlace, deepCopy, TRACK_REBUILD_KEYS } from "./liveSet.js";
 import { CONTROL_LABELS, controlFromEventTarget, refreshParamIndicators } from "./paramTargets.js";
 import { updateGranularSpeedEnabled } from "./params.js";
 import { renderPatternGrid } from "./patternBar.js";
-import { applyPatternSound, refreshAllPatternLockUI, refreshPatternSoundUI } from "./patternSound.js";
+import { refreshAllPatternLockUI, refreshPatternSoundUI } from "./patternSound.js";
 import { refreshAutIfOpen, refreshRollIfOpen } from "./pianoRoll.js";
-import { applyBusMute, paintDiceDensity } from "./render.js";
-import { syncScaleUI } from "./scaleUI.js";
 import { applySet, serializeSet } from "./session.js";
-import { refreshCompSourceDropdowns, refreshNoiseBeds, refreshOutputSelects } from "./signal.js";
-import { aliasPattern, clonePattern, state, syncMeterUI, syncRepeatsUI } from "./state.js";
+import { refreshCompSourceDropdowns, refreshOutputSelects } from "./signal.js";
+import { aliasPattern, state } from "./state.js";
 import { renderStepGrid } from "./stepGrid.js";
 
 /** @typedef {import("./types.js").Track} Track */
@@ -138,22 +135,19 @@ function snapshot(prev) {
 
 // ---- what changed, and what that costs to put back ----------------------
 
-// A track field whose restoration needs the voice rebuilt, the graph re-wired
-// or the track's DOM rebuilt. `applySet` is the only thing that does all three
-// correctly, so an undo that crosses one of these falls back to it rather than
-// growing a second, subtly-different loader beside it.
-const REBUILD_KEYS = [
-  "engineKey", "customConfig", "wavetable", "sampleSource",
-  "uploadAudio", "uploadAudioMime", "granularSample", "midi",
-  "outIndex", "compSourceIndex",
-];
-
+// A field `applyTrackInPlace` cannot put back needs the voice rebuilt, the
+// graph re-wired or the track's DOM rebuilt (`TRACK_REBUILD_KEYS`, liveSet.js),
+// and so does a track appearing or going. `applySet` is the only thing that
+// does all three correctly, so an undo that crosses one falls back to it rather
+// than growing a second, subtly-different loader beside it. (liveSet's merge
+// takes the other road, because it has to: an audition exists precisely to add
+// a track without stopping what is playing.)
 function needsFullApply(cur, target) {
   if (!cur || (cur.tracks?.length ?? 0) !== (target.tracks?.length ?? 0)) return true;
   for (let i = 0; i < target.tracks.length; i++) {
     const a = cur.tracks[i], b = target.tracks[i];
     if (a === b) continue;
-    for (const k of REBUILD_KEYS) if (!sameTree(a?.[k], b[k])) return true;
+    for (const k of TRACK_REBUILD_KEYS) if (!sameTree(a?.[k], b[k])) return true;
   }
   return false;
 }
@@ -161,196 +155,6 @@ function needsFullApply(cur, target) {
 // ---- putting one back ---------------------------------------------------
 
 const el = (id) => document.getElementById(id);
-const deepCopy = (v) => (v == null ? v
-  : typeof structuredClone === "function" ? structuredClone(v)
-  : JSON.parse(JSON.stringify(v)));
-
-function restoreGlobals(cur, target) {
-  if (cur.bpm !== target.bpm) {
-    const bpm = el("bpm");
-    if (bpm) {
-      bpm.value = target.bpm;
-      // Through the field's own listener: retuning the synced LFOs, the synced
-      // delays, the sample speeds and every open mod row's rate reading is what
-      // a tempo change means, and main.js is where that sentence is written.
-      bpm.dispatchEvent(new Event("input", { bubbles: true }));
-    }
-  }
-  // The transport reads the swing slider straight off the DOM each callback, so
-  // the value IS the state and there is nothing else to write.
-  if (cur.swing !== target.swing && el("swing")) el("swing").value = target.swing;
-
-  if (!sameTree(cur.scale, target.scale)) {
-    Object.assign(state.scale, target.scale);
-    syncScaleUI();
-  }
-  if (cur.patternMode !== target.patternMode) {
-    state.patternMode = target.patternMode === "chain" ? "chain" : "repeat";
-    const btn = el("pattern-mode");
-    if (btn) {
-      btn.innerHTML = state.patternMode === "chain" ? ICON_CHAIN : ICON_REPEAT;
-      btn.setAttribute("aria-pressed", String(state.patternMode === "chain"));
-    }
-  }
-  if (cur.patternSwitchMode !== target.patternSwitchMode) {
-    state.patternSwitchMode = target.patternSwitchMode === "finish" ? "finish" : "immediate";
-    const btn = el("pattern-switch");
-    if (btn) {
-      btn.innerHTML = state.patternSwitchMode === "finish" ? ICON_FINISH : ICON_NOW;
-      btn.setAttribute("aria-pressed", String(state.patternSwitchMode === "finish"));
-    }
-  }
-  if (!sameTree(cur.patternRepeats, target.patternRepeats)) {
-    for (let i = 0; i < PATTERN_COUNT; i++) {
-      state.patternRepeats[i] = Number(target.patternRepeats?.[i]) || 1;
-    }
-    syncRepeatsUI();
-  }
-  let metersMoved = false;
-  if (!sameTree(cur.patternMeters, target.patternMeters)) {
-    for (let i = 0; i < PATTERN_COUNT; i++) {
-      const src = target.patternMeters?.[i];
-      state.patternMeters[i] = (src && parseMeter(`${src.num}/${src.den}`)) || { num: 4, den: 4 };
-    }
-    // Derived, exactly as applySet derives it: any slot differing from pattern
-    // 1's counts as customized, so later edits to #1 don't clobber it.
-    const m0 = state.patternMeters[0];
-    for (let i = 0; i < PATTERN_COUNT; i++) {
-      const mi = state.patternMeters[i];
-      state.patternMeterCustomized[i] = i !== 0 && (mi.num !== m0.num || mi.den !== m0.den);
-    }
-    syncMeterUI();
-    metersMoved = true;
-  }
-  if (!sameTree(cur.macroPads, target.macroPads)) applyMacroPads(target.macroPads);
-  return metersMoved;
-}
-
-/**
- * Put one track back without rebuilding it. Every branch is guarded on the
- * field having actually moved — after `shareStructure` most of them are one
- * pointer comparison — because this runs on a sequencer that may be playing.
- * @param {Track} t
- */
-function restoreTrackInPlace(t, a, b) {
-  if (a === b) return { grid: false, sound: false, names: false };
-  let grid = false, sound = false, names = false;
-
-  if (!sameTree(a.patterns, b.patterns)) {
-    const n = Math.min(PATTERN_COUNT, b.patterns?.length ?? 0);
-    for (let i = 0; i < n; i++) {
-      if (sameTree(a.patterns?.[i], b.patterns[i])) continue;
-      // clonePattern is THE one place a pattern is copied (state.js): it fills
-      // in any lane the snapshot predates rather than leaving it undefined.
-      t.patterns[i] = clonePattern(b.patterns[i]);
-    }
-    // The live step arrays alias the pattern object that was just replaced, and
-    // t.length / t.accents come off it too.
-    aliasPattern(t, state.activePattern);
-    grid = true;
-  }
-
-  if (a.name !== b.name) {
-    t.name = b.name;
-    const nameEl = t.el?.querySelector(".sq-track__name");
-    if (nameEl) nameEl.value = b.name;
-    names = true;
-  }
-  if (a.muted !== b.muted) {
-    t.muted = !!b.muted;
-    t.el?.classList.toggle("is-muted", t.muted);
-    applyBusMute(t);
-    refreshNoiseBeds();
-  }
-  if (a.soloed !== b.soloed) {
-    t.soloed = !!b.soloed;
-    t.el?.classList.toggle("is-soloed", t.soloed);
-    t.el?.querySelector(".sq-track__solo")?.setAttribute("aria-pressed", String(t.soloed));
-    refreshNoiseBeds();
-  }
-  if (a.glide !== b.glide) {
-    t.glide = b.glide;
-    const g = t.el?.querySelector(".sq-track__glide");
-    if (g) g.value = b.glide;
-    t.voice?.setGlide?.(b.glide);
-  }
-  if (a.speed !== b.speed) {
-    t.speed = b.speed ?? 1;
-    t.speedAccum = 0;
-    const s = t.el?.querySelector(".sq-track__speed");
-    if (s) s.value = String(t.speed);
-  }
-  if (a.density !== b.density) {
-    t.density = b.density ?? 0.5;
-    paintDiceDensity(t);
-  }
-  if (a.isDrumKit !== b.isDrumKit) t.isDrumKit = !!b.isDrumKit;
-  if (a.pitchLock !== b.pitchLock) t.pitchLock = b.pitchLock !== false;
-  if (a.sampleSpeedMode !== b.sampleSpeedMode) {
-    t.sampleSpeedMode = b.sampleSpeedMode ?? "native";
-    applySampleSpeed(t);
-  }
-  if (a.sliceOn !== b.sliceOn || a.sliceBase !== b.sliceBase
-      || a.slicePlayMode !== b.slicePlayMode || a.sliceSensitivity !== b.sliceSensitivity
-      || !sameTree(a.slices, b.slices)) {
-    t.slices = Array.isArray(b.slices) ? b.slices.slice() : [];
-    t.sliceOn = !!b.sliceOn;
-    t.sliceBase = b.sliceBase ?? 60;
-    t.slicePlayMode = b.slicePlayMode === "toend" ? "toend" : "region";
-    t.sliceSensitivity = b.sliceSensitivity ?? 0.5;
-    grid = true;
-  }
-  if (!sameTree(a.sampleDefaults, b.sampleDefaults)) {
-    t.sampleDefaults = { start: 0, end: 1, fadeIn: 0, fadeOut: 0, loopMode: "off", ...(b.sampleDefaults || {}) };
-  }
-  if (a.uploadFileName !== b.uploadFileName) t.uploadFileName = b.uploadFileName || null;
-  if (a.promptText !== b.promptText) t.promptText = b.promptText || "";
-  if (a.soundPromptText !== b.soundPromptText) t.soundPromptText = b.soundPromptText || "";
-
-  if (!sameTree(a.euclid, b.euclid)) {
-    t.euclid = b.euclid ? { ...b.euclid } : null;
-    t._euclidMod = null;                  // live overrides are never in a snapshot
-    renderEuclidPanel(t);
-    refreshEuclidUI(t);
-    grid = true;
-  }
-  if (!sameTree(a.chance, b.chance)) {
-    t.chance = cloneChance(b.chance);
-    t._chanceMod = null;
-    t._chancePlan = null;                 // rebuilt on demand from the seed
-    renderChancePanel(t);
-    refreshChanceUI(t);
-    grid = true;
-  }
-  if (!sameTree(a.baseSound, b.baseSound)) t.baseSound = deepCopy(b.baseSound);
-
-  // The sidechain source is resolved from its INDEX, not from the raw id the
-  // snapshot's `comp` carries — `createTrack` hands out fresh ids every time
-  // applySet rebuilds the session, so that id names nothing once an undo has
-  // crossed one of those, and a dead id is worse than it looks: the compressor
-  // finds no source node and quietly self-compresses while the panel goes on
-  // claiming a sidechain. Same rule, and the same reason, as applySet's.
-  // (`compSourceIndex` itself is a REBUILD_KEY, so it cannot have moved here —
-  // this only rewrites the spelling of a source that is still the same track.)
-  const comp = b.comp ? { ...b.comp } : undefined;
-  if (comp) {
-    const k = Number.isInteger(b.compSourceIndex) ? b.compSourceIndex : -1;
-    const src = k >= 0 ? state.tracks[k] : null;
-    comp.source = src && src !== t ? String(src.id) : "self";
-  }
-
-  // The live sound, through the same diffed installer a p-lock recall uses —
-  // it is already the thing in this app that knows how to change a sound under
-  // a running transport without re-registering 130 LFOs or rebuilding a reverb.
-  // The snapshot carries the whole mod matrix, so its "a key that isn't here
-  // means not modulated" fallback lands on the same values either way.
-  if (applyPatternSound(t, {
-    params: b.params, filter: b.filter, eq: b.eq, comp,
-    fxConfig: b.fxConfig, lfoConfig: b.lfoConfig,
-  })) sound = true;
-
-  return { grid, sound, names };
-}
 
 /** Install a snapshot onto the live engine. */
 function restore(target) {
@@ -367,10 +171,10 @@ function restore(target) {
       blob.activePattern = state.activePattern;   // the view stays put (see snapshot)
       applySet(blob);
     } else {
-      const metersMoved = restoreGlobals(cur, target);
+      const metersMoved = applyGlobalsInPlace(cur, target);
       let grid = metersMoved, sound = false, names = false;
       state.tracks.forEach((t, i) => {
-        const r = restoreTrackInPlace(t, cur.tracks[i], target.tracks[i]);
+        const r = applyTrackInPlace(t, cur.tracks[i], target.tracks[i]);
         if (metersMoved && !r.grid) aliasPattern(t, state.activePattern);  // accents follow the meter
         if (r.grid || metersMoved) { renderStepGrid(t); refreshRollIfOpen(t); refreshAutIfOpen(t); }
         if (r.sound) refreshPatternSoundUI(t);
