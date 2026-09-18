@@ -894,3 +894,58 @@ export async function unpublishSong(
   if (!rows?.length) return { error: "Song not found" };
   return { ok: true };
 }
+
+/** A turn of the compose conversation, as the panel holds it. */
+export type ChatTurn = {
+  role: "user" | "assistant" | "error";
+  text: string;
+  activity?: string[];
+  warnings?: string[];
+};
+
+// The compose chat is attached to the SONG (see migration 0011), so opening a
+// song a week later brings back what was said to build it. Only the readable
+// turns are kept: the tool-call bookkeeping is scratch work for one turn, it is
+// large, and nothing replays it.
+
+export async function loadSongChat(
+  songId: string,
+): Promise<{ messages?: ChatTurn[]; error?: string }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Not signed in" };
+  const { data, error } = await supabase
+    .from("song_chats")
+    .select("messages")
+    .eq("song_id", songId)
+    .maybeSingle();
+  // A song with no conversation yet is the normal case, not a failure.
+  if (error) return { error: error.message };
+  return { messages: (data?.messages as ChatTurn[]) ?? [] };
+}
+
+export async function saveSongChat(
+  songId: string,
+  messages: ChatTurn[],
+): Promise<{ ok?: boolean; error?: string }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Not signed in" };
+  // Upsert on the primary key: one chat per song, so two tabs saving turns
+  // can't produce two rows. RLS still checks the song is this user's.
+  const { error } = await supabase.from("song_chats").upsert(
+    {
+      song_id: songId,
+      owner_id: user.id,
+      messages,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "song_id" },
+  );
+  if (error) return { error: error.message };
+  return { ok: true };
+}

@@ -1,6 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { getOpenSong, subscribeOpenSong } from "@/app/songs/openSong";
+import { loadSongChat, saveSongChat } from "@/app/songs/actions";
 import styles from "@/app/ui.module.css";
 
 type Msg =
@@ -47,23 +49,30 @@ function describeFailure(status: number, raw: string, data: ComposeResponse | nu
 // app/api/compose (the same songBuilder tools the MCP server exposes to an
 // external agent, run server-side against the account's Anthropic key).
 //
-// Session state is deliberately NOT kept here across page loads -- the
-// studio's own session is the source of truth (serializeSet/applySet), and
-// the chat is just a way of driving it. Each message resends the studio's
-// current session, so a change made by hand between messages is what the
-// next request edits, and a reload losing the chat transcript costs nothing
-// the session itself didn't already hold.
+// The SONG's state is not kept here -- the studio's own session is the source
+// of truth (serializeSet/applySet) and each message resends it, so a change
+// made by hand between messages is what the next one edits.
+//
+// The CONVERSATION is kept, attached to the song (song_chats, migration 0011):
+// it is the record of how a song came to sound the way it does, and coming
+// back to one a week later used to mean re-explaining it from scratch. It
+// follows whichever song is open, which is why this reads the same open-song
+// store the save and songs menus do.
 export default function ComposeChat() {
   const [ready, setReady] = useState(false);
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
-  // Tool activity for the turn in flight, streamed in as it happens. It
-  // moves onto the finished message when the turn lands.
+  // Tool activity for the turn in flight, filled in as it happens. It moves
+  // onto the finished message when the turn lands.
   const [live, setLive] = useState<string[]>([]);
   const wrapRef = useRef<HTMLDivElement>(null);
   const logRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const openSong = useSyncExternalStore(subscribeOpenSong, getOpenSong, getOpenSong);
+  const songId = openSong.id;
+  const isTemplate = openSong.isTemplate;
 
   useEffect(() => {
     if (window.seqbaby) {
@@ -88,6 +97,59 @@ export default function ComposeChat() {
     logRef.current?.scrollTo({ top: logRef.current.scrollHeight });
   }, [messages, sending, live]);
 
+  // The conversation follows the song. Opening one brings its chat back;
+  // opening a song that has none, or closing the last one, leaves a blank
+  // panel rather than the previous song's transcript.
+  //
+  // A TEMPLATE is the exception, the same one the save field makes for a
+  // template's name: what is open is a starting point, and the next save
+  // detaches into a song of its own. Loading the template's conversation here
+  // would put it in front of someone starting something new -- and then, on
+  // that first save, write it into the new song as if it had been about it.
+  // `new` goes through here whenever the account has a default template, so
+  // this is the ordinary path, not a corner.
+  useEffect(() => {
+    if (!songId || isTemplate) {
+      setMessages([]);
+      return;
+    }
+    let live = true;
+    loadSongChat(songId).then((res) => {
+      if (live && !res.error) setMessages(res.messages ?? []);
+    });
+    return () => {
+      live = false;
+    };
+  }, [songId, isTemplate]);
+
+  // `new` (and the logo, which is the same thing) blanks the session. The
+  // conversation about the song that was open is not about the blank one, so
+  // it goes too. Needed on top of the effect above because starting from a
+  // session with no song open leaves the id null either side of the `new`,
+  // so nothing there would fire.
+  useEffect(() => {
+    const onNew = () => {
+      setMessages([]);
+      setInput("");
+    };
+    window.addEventListener("seqbaby:newset", onNew);
+    return () => window.removeEventListener("seqbaby:newset", onNew);
+  }, []);
+
+  // Opening the drawer to type is the only reason to open it.
+  useEffect(() => {
+    if (open) inputRef.current?.focus();
+  }, [open]);
+
+  // Grow with what's typed, up to the cap in the stylesheet: it's a box you
+  // write a paragraph of brief into, not a one-line search field.
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [input, open]);
+
   const send = useCallback(async () => {
     const text = input.trim();
     if (!text || sending || !window.seqbaby) return;
@@ -99,10 +161,30 @@ export default function ComposeChat() {
       .filter((m): m is Extract<Msg, { role: "user" | "assistant" }> => m.role === "user" || m.role === "assistant")
       .map((m) => ({ role: m.role, text: m.text }));
 
-    setMessages((prev) => [...prev, { role: "user", text }]);
+    // The transcript is tracked as a value as well as in state, because the
+    // turn that ends this one has to be PERSISTED, and setMessages callbacks
+    // can't hand anything back to do that with.
+    const withUser: Msg[] = [...messages, { role: "user", text }];
+    setMessages(withUser);
     setInput("");
     setSending(true);
     setLive([]);
+
+    // Attached to whichever song is open WHEN THE TURN LANDS, not when it
+    // started: a turn takes minutes, and the first save of a new song happens
+    // somewhere in the middle of plenty of them.
+    //
+    // Never onto a template -- that conversation belongs to the song the next
+    // save makes, not to the starting point. Nothing is lost by waiting: the
+    // whole transcript is written on the first turn after that save, by which
+    // point the store names the new song.
+    const land = (msg: Msg) => {
+      const final = [...withUser, msg];
+      setMessages(final);
+      const now = getOpenSong();
+      if (now.id && !now.isTemplate) saveSongChat(now.id, final).catch(() => {});
+    };
+
     try {
       const res = await fetch("/api/compose", {
         method: "POST",
@@ -122,13 +204,13 @@ export default function ComposeChat() {
         } catch {
           data = null;
         }
-        setMessages((prev) => [...prev, { role: "error", text: describeFailure(res.status, raw, data) }]);
+        land({ role: "error", text: describeFailure(res.status, raw, data) });
         return;
       }
 
       const started = (await res.json()) as ComposeResponse;
       if (!started.jobId) {
-        setMessages((prev) => [...prev, { role: "error", text: started.error ?? "couldn't start that" }]);
+        land({ role: "error", text: started.error ?? "couldn't start that" });
         return;
       }
 
@@ -140,10 +222,7 @@ export default function ComposeChat() {
       for (;;) {
         await sleep(POLL_INTERVAL_MS);
         if (Date.now() > until) {
-          setMessages((prev) => [
-            ...prev,
-            { role: "error", text: "gave up waiting on that one — it may still be running." },
-          ]);
+          land({ role: "error", text: "gave up waiting on that one — it may still be running." });
           return;
         }
 
@@ -166,19 +245,21 @@ export default function ComposeChat() {
 
         if (job.status === "done") {
           if (job.session) window.seqbaby?.applySet(job.session);
-          setMessages((prev) => [
-            ...prev,
-            { role: "assistant", text: job.reply || "Done.", activity: [...activity], warnings: job.warnings },
-          ]);
+          land({
+            role: "assistant",
+            text: job.reply || "Done.",
+            activity: [...activity],
+            warnings: job.warnings,
+          });
           return;
         }
         if (job.status === "error") {
-          setMessages((prev) => [...prev, { role: "error", text: job.error ?? "that didn't work" }]);
+          land({ role: "error", text: job.error ?? "that didn't work" });
           return;
         }
       }
     } catch (e) {
-      setMessages((prev) => [...prev, { role: "error", text: `couldn't reach compose chat: ${(e as Error).message}` }]);
+      land({ role: "error", text: `couldn't reach compose chat: ${(e as Error).message}` });
     } finally {
       setSending(false);
       setLive([]);
@@ -245,9 +326,10 @@ export default function ComposeChat() {
           </div>
           <div className={styles.chatRow}>
             <textarea
+              ref={inputRef}
               className={styles.chatTextarea}
-              rows={1}
-              placeholder="make me a techno beat…"
+              rows={2}
+              placeholder="make me a techno beat…  (shift+enter for a new line)"
               value={input}
               disabled={sending}
               onChange={(e) => setInput(e.target.value)}

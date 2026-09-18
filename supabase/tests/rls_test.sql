@@ -52,6 +52,13 @@ insert into public.song_versions (id, song_id, owner_id, parent_id, data, seq, l
 update public.songs set current_version_id = 'd0000000-0000-4000-8000-00000000000b'
  where id = 'a0000000-0000-4000-8000-00000000000a';
 
+-- A compose conversation on the same public song. Of everything hanging off a
+-- song this is the likeliest to hold something its author would not choose to
+-- publish, so it gets the same treatment as the version history.
+insert into public.song_chats (song_id, owner_id, messages) values
+  ('a0000000-0000-4000-8000-00000000000a', 'a11ce000-0000-4000-8000-000000000001',
+   '[{"role":"user","text":"make the bass filthier"}]');
+
 insert into public.patches (id, owner_id, name, config, is_public) values
   ('c0000000-0000-4000-8000-00000000000a', 'a11ce000-0000-4000-8000-000000000001', 'alice public patch', '{}', true),
   ('c0000000-0000-4000-8000-00000000000b', 'a11ce000-0000-4000-8000-000000000001', 'alice private patch', '{}', false),
@@ -331,6 +338,60 @@ begin
     raise exception 'FAIL  song_versions grants reads with no owner check: %  (that publishes every draft)', bad;
   end if;
   raise notice 'PASS  every song_versions read policy checks the owner';
+end $$;
+
+\echo ''
+\echo '== song_chats: what you said to build a song is not part of publishing it =='
+
+begin;
+set local role authenticated;
+set local request.jwt.claims = '{"sub":"b0b00000-0000-4000-8000-000000000002","role":"authenticated"}';
+do $$
+declare n bigint;
+begin
+  -- Same asymmetry as song_versions: bob can read the public song, and not a
+  -- word of the conversation behind it.
+  select count(*) into n from public.song_chats
+   where song_id = 'a0000000-0000-4000-8000-00000000000a';
+  if n <> 0 then raise exception 'FAIL  bob read the chat on alice''s PUBLIC song'; end if;
+  raise notice 'PASS  bob cannot read the chat behind alice''s public song';
+
+  with u as (
+    update public.song_chats set messages = '[{"role":"user","text":"defaced"}]'
+     where song_id = 'a0000000-0000-4000-8000-00000000000a' returning 1)
+  select count(*) into n from u;
+  if n <> 0 then raise exception 'FAIL  bob rewrote alice''s chat'; end if;
+  raise notice 'PASS  bob cannot rewrite alice''s chat';
+
+  -- owner_id alone is not enough, exactly as on song_versions: without the
+  -- songs-ownership half of the WITH CHECK, bob could attach a chat to alice's
+  -- song. Her song, his words, and she would never see them.
+  begin
+    insert into public.song_chats (song_id, owner_id, messages)
+      values ('a0000000-0000-4000-8000-00000000000b',
+              'b0b00000-0000-4000-8000-000000000002', '[]');
+    raise exception 'FAIL  bob attached a chat to alice''s song';
+  exception when insufficient_privilege then
+    raise notice 'PASS  bob cannot attach a chat to alice''s song (WITH CHECK)';
+  end;
+end $$;
+rollback;
+
+-- Structural, for song_versions' reason: a public-read policy here would
+-- publish the conversation behind every published song, and would look like a
+-- reasonable thing to add to match songs_public_read.
+do $$
+declare bad text;
+begin
+  select string_agg(policyname, ', ') into bad
+    from pg_policies
+   where schemaname = 'public' and tablename = 'song_chats'
+     and cmd in ('SELECT', 'ALL')
+     and coalesce(qual, '') not like '%auth.uid()%';
+  if bad is not null then
+    raise exception 'FAIL  song_chats grants reads with no owner check: %  (that publishes the conversation)', bad;
+  end if;
+  raise notice 'PASS  every song_chats read policy checks the owner';
 end $$;
 
 \echo ''
