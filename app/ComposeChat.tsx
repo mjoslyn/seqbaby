@@ -17,6 +17,10 @@ type JobStatus = {
   events?: { type: string; summary?: string }[];
   reply?: string;
   session?: unknown;
+  /** Whether the turn actually altered the song. False for a question, or for
+   *  edits that cancelled out. Absent on a record written before this existed,
+   *  which is why the check below is `!== false` rather than truthiness. */
+  changed?: boolean;
   warnings?: string[];
   error?: string;
 };
@@ -70,6 +74,13 @@ export default function ComposeChat() {
   const wrapRef = useRef<HTMLDivElement>(null);
   const logRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  // Which song the transcript on screen belongs to. Null means it belongs to
+  // no song yet -- the conversation that built a session nobody has saved --
+  // which is what lets the first save adopt it instead of losing it.
+  const attachedRef = useRef<string | null>(null);
+  // The transcript, readable from an async callback without making every
+  // message a reason to re-run the effect that loads one.
+  const messagesRef = useRef<Msg[]>([]);
   const openSong = useSyncExternalStore(subscribeOpenSong, getOpenSong, getOpenSong);
   const songId = openSong.id;
   const isTemplate = openSong.isTemplate;
@@ -97,6 +108,10 @@ export default function ComposeChat() {
     logRef.current?.scrollTo({ top: logRef.current.scrollHeight });
   }, [messages, sending, live]);
 
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+
   // The conversation follows the song. Opening one brings its chat back;
   // opening a song that has none, or closing the last one, leaves a blank
   // panel rather than the previous song's transcript.
@@ -111,14 +126,32 @@ export default function ComposeChat() {
   useEffect(() => {
     if (!songId || isTemplate) {
       setMessages([]);
+      attachedRef.current = null;
       return;
     }
-    let live = true;
+    let alive = true;
     loadSongChat(songId).then((res) => {
-      if (live && !res.error) setMessages(res.messages ?? []);
+      if (!alive || res.error) return;
+      const stored = res.messages ?? [];
+      // A transcript belonging to no song yet moves to whichever song that
+      // session becomes -- which is exactly what the first save is, and
+      // equally the first save off a template. Without this the conversation
+      // that built the song was simply dropped at the moment it got something
+      // to be attached to.
+      //
+      // Only ever onto a song with no conversation of its own: opening an
+      // existing song while carrying one must not overwrite what is already
+      // there, so a song that has a chat wins and ours is let go.
+      const adopt = attachedRef.current === null && stored.length === 0 && messagesRef.current.length > 0;
+      attachedRef.current = songId;
+      if (adopt) {
+        saveSongChat(songId, messagesRef.current).catch(() => {});
+        return; // keep what is on screen; it is now this song's
+      }
+      setMessages(stored);
     });
     return () => {
-      live = false;
+      alive = false;
     };
   }, [songId, isTemplate]);
 
@@ -131,6 +164,7 @@ export default function ComposeChat() {
     const onNew = () => {
       setMessages([]);
       setInput("");
+      attachedRef.current = null;
     };
     window.addEventListener("seqbaby:newset", onNew);
     return () => window.removeEventListener("seqbaby:newset", onNew);
@@ -182,7 +216,10 @@ export default function ComposeChat() {
       const final = [...withUser, msg];
       setMessages(final);
       const now = getOpenSong();
-      if (now.id && !now.isTemplate) saveSongChat(now.id, final).catch(() => {});
+      if (now.id && !now.isTemplate) {
+        attachedRef.current = now.id;
+        saveSongChat(now.id, final).catch(() => {});
+      }
     };
 
     try {
@@ -244,7 +281,14 @@ export default function ComposeChat() {
         }
 
         if (job.status === "done") {
-          if (job.session) window.seqbaby?.applySet(job.session);
+          // Only when the turn actually changed the song. applySet is not a
+          // cheap write-back: it tears down every track and voice and stops
+          // the transport, so asking a question mid-playback used to silence
+          // it. And the session being applied was captured back when the
+          // message was sent, which on a turn that takes minutes means
+          // reapplying it would throw away anything done by hand since --
+          // for a turn that changed nothing, purely to no effect.
+          if (job.session && job.changed !== false) window.seqbaby?.applySet(job.session);
           land({
             role: "assistant",
             text: job.reply || "Done.",

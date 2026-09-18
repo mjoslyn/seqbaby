@@ -44,6 +44,7 @@ export default async (req) => {
       status: "done",
       reply: out.reply,
       session: out.session,
+      changed: out.changed,
       warnings: out.warnings,
       ms: out.ms,
     });

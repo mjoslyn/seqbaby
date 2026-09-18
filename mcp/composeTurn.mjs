@@ -17,7 +17,7 @@ import { z } from "zod";
 import * as sb from "../public/js/songBuilder.js";
 import { TOOLS, FORMAT_NOTES, GUIDE_RELATIVE, guideText } from "./tools.mjs";
 
-export const DEFAULT_MODEL = process.env.ANTHROPIC_MODEL || "claude-opus-5";
+export const DEFAULT_MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-5";
 // How hard the model works a turn, and so how many rounds it takes. Lower
 // effort consolidates tool calls instead of trickling one out per round.
 // Deliberately not "disable thinking": on this model that makes it write tool
@@ -163,6 +163,11 @@ export async function runComposeTurn({
   const anthropic = new Anthropic({ apiKey });
   const tools = anthropicTools();
   const startedAt = Date.now();
+  // What the song looked like before the turn. Loading a song back into the
+  // studio is not free -- applySet tears down every track and voice and stops
+  // the transport -- so a turn that answered a question, or edited and undid
+  // itself, must be able to say it changed nothing.
+  const before = JSON.stringify(ctx.song);
 
   const messages = [
     ...history
@@ -221,9 +226,14 @@ export async function runComposeTurn({
     }
   }
 
+  const after = JSON.stringify(ctx.song);
   return {
     reply: reply || "Done.",
     session: serializeCtx(ctx),
+    // Compared rather than inferred from which tools ran: a tool can be called
+    // and leave the song exactly as it was, and that is still nothing to
+    // reload for.
+    changed: after !== before,
     warnings: sb.validate(ctx.song).warnings,
     ms: Date.now() - startedAt,
   };

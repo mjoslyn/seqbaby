@@ -120,6 +120,7 @@ function runInline(jobId: string) {
         status: "done",
         reply: out.reply,
         session: out.session,
+        changed: out.changed,
         warnings: out.warnings,
         ms: out.ms,
       });

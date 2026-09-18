@@ -30,7 +30,9 @@ export async function GET(req: Request) {
     events: p.events ?? [],
     // Only once it is finished: a session runs to megabytes and this is polled
     // every couple of seconds.
-    ...(p.status === "done" ? { reply: p.reply, session: p.session, warnings: p.warnings } : {}),
+    ...(p.status === "done"
+      ? { reply: p.reply, session: p.session, changed: p.changed, warnings: p.warnings }
+      : {}),
     ...(p.status === "error" ? { error: p.error } : {}),
   });
 }
