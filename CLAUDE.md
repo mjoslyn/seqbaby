@@ -12,7 +12,8 @@ env / fx / eq / comp / mod / automation per track.
 
 - **Shell**: Next.js 15 (App Router) + React 19 in `app/`. SSRs the engine's
   static DOM (`app/studioMarkup.ts`), then `app/ScriptLoader.tsx` injects the
-  engine scripts in order: Tone.js 15 (CDN) → `public/woscillators.js` →
+  engine scripts in order: `public/tone.js` (Tone.js 15, vendored) →
+  `public/woscillators.js` →
   `public/js/main.js` (ES module). `middleware.ts` refreshes the Supabase
   session on every request *except* static engine assets.
 - **Engine**: ~53 dependency-free vanilla ES modules in `public/js/`. No
@@ -1788,8 +1789,7 @@ agent ──▶ mcp/server.mjs ──▶ songBuilder.js ──▶ { _version, bp
   master is near the limiter. One buffer per analyser at its own fftSize: a
   shared one kept the tail of a louder track's read and handed every quieter
   track the same peak. `SEQBABY_URL` picks the studio (the live site by
-  default, a dev server for work on the engine); `SEQBABY_TONE_FILE` serves
-  Tone from disk where the CDN is out of reach.
+  default, a dev server for work on the engine).
 - **share_song is the anonymous share route**, `POST /api/share` with
   `{ session }`, which is unauthenticated by design: an agent needs no
   account to hand back a link. Saving into an account (`saveSong`) is a

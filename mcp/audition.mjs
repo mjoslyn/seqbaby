@@ -9,10 +9,9 @@
 //
 // Optional: needs `playwright` (npm i playwright) and a Chromium. The package
 // downloads one on install; to use another, set SEQBABY_CHROME to its path.
-// SEQBABY_TONE_FILE serves Tone.js from a local copy when the CDN is out of
-// reach (tone@15.0.4's build/Tone.js).
+// Tone is served by the studio itself (public/tone.js), so this needs nothing
+// from a CDN.
 
-import fs from "node:fs";
 import { createRequire } from "node:module";
 
 async function loadPlaywright() {
@@ -41,10 +40,6 @@ export async function auditionSong(session, { url = "http://localhost:3000", sec
     page.on("pageerror", e => errors.push(String(e).slice(0, 200)));
     // Resource 404s and React's hydration notice are the shell's, not the song's.
     page.on("console", m => { if (m.type() === "error" && !/Failed to load resource|hydrat/.test(m.text())) errors.push(m.text().slice(0, 200)); });
-    if (process.env.SEQBABY_TONE_FILE) {
-      const tone = fs.readFileSync(process.env.SEQBABY_TONE_FILE, "utf8");
-      await page.route(/cdn\.jsdelivr\.net\/npm\/tone@/, r => r.fulfill({ status: 200, contentType: "application/javascript", body: tone }));
-    }
     await page.goto(url, { waitUntil: "load", timeout: 60000 });
     await page.waitForFunction(() => !!window.seqbaby?.state?.tracks, null, { timeout: 60000 });
     const loaded = await page.evaluate((s) => {

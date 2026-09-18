@@ -5,6 +5,7 @@ import { signOut } from "@/app/auth/actions";
 import SongsMenu from "@/app/SongsMenu";
 import SaveButton from "@/app/SaveButton";
 import NewSongButton from "@/app/NewSongButton";
+import ComposeChat from "@/app/ComposeChat";
 import { IconMenu } from "@/app/menuIcons";
 import styles from "@/app/ui.module.css";
 
@@ -89,6 +90,7 @@ export function AccountBar({
         </button>
         {name ? (
           <>
+            <ComposeChat />
             <SongsMenu />
             <a
               className={styles.accountName}

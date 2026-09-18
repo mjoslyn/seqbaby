@@ -11,8 +11,8 @@ import { ENGINE_MODULES, TONE_SRC, WOSC_SRC, engineAsset } from "./engineAssets"
 export default function EnginePreload() {
   return (
     <>
-      {/* Warm the TLS connection to the CDN before the Tone.js request. */}
-      <link rel="preconnect" href="https://cdn.jsdelivr.net" />
+      {/* Tone is served from public/ like the rest of the engine, so there is
+          no third-party origin left to warm a connection to. */}
       {/* No crossOrigin here or on the <script> tags: both fetch in "no-cors"
           mode, and a preload only matches the later request when the modes
           agree — a mismatch silently double-downloads. */}

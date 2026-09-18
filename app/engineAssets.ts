@@ -22,9 +22,19 @@ export const engineAsset = (path: string) => `${ENGINE_PREFIX}${path}`;
 // The engine's three boot scripts, in the order they must execute.
 // `Tone` and `window.woscillators` are ambient globals that main.js's module
 // graph reads at eval time, so ordering is load-bearing (see ScriptLoader).
-// Tone comes from jsdelivr, which already serves it immutable and versioned.
-export const TONE_SRC =
-  "https://cdn.jsdelivr.net/npm/tone@15.0.4/build/Tone.js";
+//
+// Tone is VENDORED (public/tone.js, tone@15.0.4's build/Tone.js verbatim, with
+// its license beside it) rather than fetched from jsdelivr, which is the same
+// arrangement woscillators.js has always had. A CDN is a third party that can
+// be slow, blocked or simply gone, and when it is, the engine does not boot at
+// all -- Tone is not an enhancement here, main.js's whole module graph reads it
+// at eval time. Served from public/ it rides the same per-deploy versioned path
+// as everything else, so it is immutable-cacheable too, and the studio works on
+// a restricted network and offline after one visit.
+//
+// Upgrading it is deliberate work, as it should be: put the new build/Tone.js
+// and its LICENSE.txt in public/ and change nothing here.
+export const TONE_SRC = engineAsset("/tone.js");
 export const WOSC_SRC = engineAsset("/woscillators.js");
 export const MAIN_SRC = engineAsset("/js/main.js");
 export const STYLE_SRC = engineAsset("/style.css");
