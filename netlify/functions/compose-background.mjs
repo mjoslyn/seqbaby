@@ -6,6 +6,10 @@
 // request path gets 26 seconds (measured: a turn died at 28s), and a song is
 // dozens of tool calls across dozens of model rounds.
 //
+// The key it runs on comes from the invocation body when the visitor brought
+// one, and from the environment otherwise. A brought key is never stored: the
+// route hands it straight here.
+//
 // It owns no logic of its own: the loop is mcp/composeTurn.mjs, the same one
 // `next dev` runs inline where there are no background functions and no
 // timeout to escape. This file is the wiring -- read the job, run the turn,
@@ -13,9 +17,11 @@
 
 import { runComposeTurn } from "../../mcp/composeTurn.mjs";
 import { getJobInput, appendJobEvent, finishJob } from "../../lib/composeJobs.js";
+import { describeTurnFailure } from "../../lib/composeKey.js";
 
 export default async (req) => {
   let jobId;
+  let brought = false;
   try {
     const body = await req.json();
     jobId = body?.jobId;
@@ -38,8 +44,20 @@ export default async (req) => {
       return new Response("forbidden", { status: 403 });
     }
 
+    // Whose key this turn runs on. A visitor composing on their own hands it
+    // to the route, which passes it here in this invocation's body -- it is
+    // deliberately NOT on the job record, so it exists only in the browser
+    // that typed it and for the life of this function. Anything else runs on
+    // the deploy's.
+    brought = typeof body?.apiKey === "string" && body.apiKey.length > 0;
+    const apiKey = brought ? body.apiKey : process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) {
+      await finishJob(jobId, { status: "error", error: "no Anthropic key to run that on." });
+      return new Response("no key", { status: 400 });
+    }
+
     const out = await runComposeTurn({
-      apiKey: process.env.ANTHROPIC_API_KEY,
+      apiKey,
       // The model the panel picked for this message, already checked against
       // the allowlist by the route. Undefined takes runComposeTurn's own
       // default, which is the deploy's.
@@ -69,7 +87,7 @@ export default async (req) => {
     // record the browser is polling. Failing to write it would leave the chat
     // spinning until it times itself out.
     if (jobId) {
-      await finishJob(jobId, { status: "error", error: `compose failed: ${e?.message ?? e}` }).catch(() => {});
+      await finishJob(jobId, { status: "error", error: describeTurnFailure(e, brought) }).catch(() => {});
     }
   }
   return new Response("ok");

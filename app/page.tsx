@@ -76,7 +76,10 @@ async function AccountBarSlot() {
     username = profile?.username ?? null;
   }
 
-  return <AccountBar name={name} username={username} />;
+  // Whether the deploy has a key of its own decides what the compose panel
+  // offers: read here, in a server component, because the browser must not be
+  // told anything about it beyond whether it exists.
+  return <AccountBar name={name} username={username} serverKey={!!process.env.ANTHROPIC_API_KEY} />;
 }
 
 // Holds the bar's exact height while it streams, so the studio below never
