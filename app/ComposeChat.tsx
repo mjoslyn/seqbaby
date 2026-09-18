@@ -158,15 +158,13 @@ export default function ComposeChat() {
           { role: "assistant", text: result.reply || "Done.", activity, warnings: result.warnings },
         ]);
       } else {
-        setMessages((prev) => [
-          ...prev,
-          {
-            role: "error",
-            text:
-              failure?.error ??
-              "the connection ended before the reply did — any changes above were still made.",
-          },
-        ]);
+        // Only claim the work survived when a song actually came back: the
+        // edits live on the server's copy until it sends one, so a stream cut
+        // before that took them with it.
+        const cutOff = edited
+          ? "the connection dropped before it finished, but the changes above were applied."
+          : "the connection dropped before anything came back — the song is unchanged. A big request can outlast the server's time limit; try one change at a time.";
+        setMessages((prev) => [...prev, { role: "error", text: failure?.error ?? cutOff }]);
       }
     } catch (e) {
       setMessages((prev) => [...prev, { role: "error", text: `couldn't reach compose chat: ${(e as Error).message}` }]);
