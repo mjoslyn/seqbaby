@@ -33,6 +33,7 @@ const SECTIONS = [
   ["macro", "Macro pads"],
   ["undo", "Undo"],
   ["saving", "Saving, sharing and export"],
+  ["agents", "Letting an AI agent write a song"],
   ["trouble", "If something sounds wrong"],
   ["credits", "Credits and licences"],
 ];
@@ -1135,6 +1136,70 @@ export default function ManualPage() {
             Without an account everything lives in the tab, which means a reload or a
             clearing of site data takes it with it. An account is the way to keep it.
           </p>
+        </section>
+
+        <section className={styles.section} id="agents">
+          <h2>Letting an AI agent write a song</h2>
+          <p>
+            seqbaby ships an MCP server, which is the plug that lets an AI agent
+            such as Claude use a tool. Connected, the agent can start a song, add
+            tracks, write their rhythms and notes, shape their sound, put movement
+            on them, and hand you a share link. It writes the same session the
+            studio saves, so whatever it makes opens here like any other song, and
+            you carry on by hand from there.
+          </p>
+          <p>
+            The agent works in the same vocabulary as this manual. A rhythm is a
+            step string, so <span className={styles.ui}>x..x..x.</span> is a hit on
+            steps 1, 4 and 7; <span className={styles.ui}>X</span> is an accent,
+            <span className={styles.ui}>_</span> a tie; a string shorter than the
+            pattern repeats across it. Notes are names like{" "}
+            <span className={styles.ui}>C2</span>. Every engine, every panel
+            control with its range, every preset and every modulation target is
+            served to the agent as reference, and each value it sends is checked
+            against the engine&apos;s own tables, so a wrong engine name or a
+            control outside its range comes back as a correction rather than a
+            silent track. A guide tells it which engine suits which job and how
+            each one likes to be played: that a silverbox accent is a hard hit and
+            a slide is a tie, that subby needs drive to be heard on a phone, that a
+            reverb belongs on a bus.
+          </p>
+          <h3>Connecting it</h3>
+          <p>
+            In Claude Code, register the server once. It runs straight from the
+            repository; the first start installs it, later starts are instant.
+          </p>
+          <div className={styles.pre}>{`claude mcp add -s user seqbaby -- npx -y github:mjoslyn/seqbaby`}</div>
+          <p>
+            Claude Desktop and other MCP clients take the same command in their
+            configuration file:
+          </p>
+          <div className={styles.pre}>{`{ "mcpServers": { "seqbaby": { "command": "npx", "args": ["-y", "github:mjoslyn/seqbaby"] } } }`}</div>
+          <p>
+            Working inside a checkout of the repository needs no registration at
+            all: Claude Code finds the server in the project and the composing
+            guide with it.
+          </p>
+          <h3>Asking for a song</h3>
+          <p>Say what you want in plain words, and ask for a link at the end:</p>
+          <div className={styles.pre}>{`Read seqbaby://guide, then make a 124 bpm techno loop: 909 drums, an acid
+bassline on the silverbox, a hexop e.piano stab on the off-beats, one reverb
+bus. Share it when it validates.`}</div>
+          <p>
+            The reply is a link that opens the song here. Keep talking to change
+            it: busier hats, a different bass preset, a filter sweep across four
+            bars. Each request edits the same song and each share is a fresh link.
+            If you would rather nothing was published, ask for the song as a file
+            instead and load it from the session menu&apos;s import.
+          </p>
+          <div className={styles.note}>
+            An agent can also listen. With a browser available to it, the{" "}
+            <span className={styles.ui}>audition</span> tool plays the song through
+            the real engine and reports how loud each track came out, which is how
+            it notices a track that made no sound or a mix that is too hot. The
+            server&apos;s own README in the repository has the full tool list and
+            the setup for that.
+          </div>
         </section>
 
         <section className={styles.section} id="trouble">
