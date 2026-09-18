@@ -25,9 +25,14 @@ import styles from "@/app/ui.module.css";
 export function AccountBar({
   name,
   username,
+  serverKey = false,
 }: {
   name: string | null;
   username?: string | null;
+  /** Whether this deploy has an Anthropic key of its own. The compose panel
+   *  needs it to know whether composing on the SITE's key is on offer at all
+   *  — a visitor's own key works either way. */
+  serverKey?: boolean;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -88,9 +93,13 @@ export function AccountBar({
         >
           share
         </button>
+        {/* Outside the signed-in branch on purpose: compose runs on the
+            visitor's own Anthropic key when they have one, and that needs no
+            account. Signed in with a key on the deploy, the panel offers the
+            choice. */}
+        <ComposeChat signedIn={!!name} serverKey={serverKey} />
         {name ? (
           <>
-            <ComposeChat />
             <SongsMenu />
             <a
               className={styles.accountName}

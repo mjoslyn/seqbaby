@@ -16,8 +16,12 @@ import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import * as sb from "../public/js/songBuilder.js";
 import { TOOLS, FORMAT_NOTES, GUIDE_RELATIVE, guideText } from "./tools.mjs";
+import { DEFAULT_COMPOSE_MODEL } from "../lib/composeModels.js";
 
-export const DEFAULT_MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-5";
+// What a turn runs on when its CALLER doesn't say -- the MCP server, a test,
+// an older panel. The compose chat names a model per message (the dropdown
+// beside the send button), and that wins over both of these.
+export const DEFAULT_MODEL = process.env.ANTHROPIC_MODEL || DEFAULT_COMPOSE_MODEL;
 // How hard the model works a turn, and so how many rounds it takes. Lower
 // effort consolidates tool calls instead of trickling one out per round.
 // Deliberately not "disable thinking": on this model that makes it write tool
@@ -239,6 +243,9 @@ export async function runComposeTurn({
   const after = JSON.stringify(ctx.song);
   return {
     reply: reply || "Done.",
+    // Which model actually ran it, so a caller that offers a choice can label
+    // the turn with what it got rather than with what it asked for.
+    model,
     session: serializeCtx(ctx),
     // Compared rather than inferred from which tools ran: a tool can be called
     // and leave the song exactly as it was, and that is still nothing to

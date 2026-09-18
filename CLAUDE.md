@@ -47,14 +47,14 @@ env / fx / eq / comp / mod / automation per track.
 │   ├── NewSongButton.tsx      top-bar `new`: blanks the engine, clears the open song
 │   ├── DefaultTemplate.tsx    what a new song starts from, when the account named one
 │   ├── VersionTree.tsx        a song's version history, drawn as the tree it is
-│   ├── ComposeChat.tsx        ask for changes to the song: the turn's changes land in a review bar (audition / keep), never straight in
 │   ├── songs/openSong.ts      which song + version the studio holds, and whether it is a template (shared by the two save UIs)
 │   ├── songs/songName.js     names a song nobody named, from what is in it
 │   ├── songs/suggestName.ts  the name both save UIs offer in a blank name field
 │   ├── Preloader.tsx + preloaderMarkup.ts  loading overlay: markup + inline driver
 │   ├── login/ settings/ u/[username]/       auth, account settings, public profiles
+│   ├── ComposeChat.tsx        the in-studio compose panel: ask for a song, in words; a turn's changes land in a review bar (audition / keep), never straight in
 │   ├── api/share/route.ts     anonymous ?s=<slug> share endpoint
-│   ├── api/compose/          the compose turn: POST stakes out a job, status/ is what the panel polls
+│   ├── api/compose/route.ts   starts a compose turn; api/compose/status polls one
 │   └── {songs,patches,profile,auth,account}/actions.ts   Supabase server actions
 ├── public/
 │   ├── js/                    THE ENGINE — see module map below
@@ -66,6 +66,9 @@ env / fx / eq / comp / mod / automation per track.
 │   └── manifest.webmanifest   installed-app name / colours / icon sizes
 ├── lib/
 │   ├── supabase/{client,server,middleware}.ts   Supabase SSR helpers
+│   ├── composeModels.js       which models a compose turn may run on (allowlist + dropdown)
+│   ├── composeKey.js          whose key it runs on: the shape check + the mask
+│   ├── composeJobs.js         a running turn's record, its two secrets, and the limits
 │   └── api.js                 legacy Blobs share put/get (+ in-memory dev fallback)
 ├── middleware.ts              Supabase session refresh (skips engine assets)
 ├── supabase/
@@ -1491,6 +1494,8 @@ can see.
 | surface | what |
 |---|---|
 | `POST/GET app/api/share/route.ts` | anonymous `?s=<slug>` share links (public `songs` rows) |
+| `POST app/api/compose/route.ts` | starts one compose turn → `{jobId, jobToken}`; the turn runs in `netlify/functions/compose-background.mjs` |
+| `GET app/api/compose/status/route.ts` | what the browser polls while one runs — activity, then the song |
 | `app/songs/actions.ts` | `saveSong` / `saveNamedSong` (both append a version), `listSongs`, `loadSong`, `forkSong`, `listVersions`, `loadVersion`, `labelVersion`, `deleteVersion`, `setSongTemplate`, `setDefaultTemplate`, `getDefaultTemplate` |
 | `app/patches/actions.ts` | `publishPatch`, `listMyPatches`, `listPublicPatches`, `getPatch`, `deletePatch` |
 | `app/profile/actions.ts` | `getMyProfile`, `updateProfile`, `getPublicProfile` (+ that user's public songs/patches) |
@@ -1818,6 +1823,76 @@ agent ──▶ mcp/server.mjs ──▶ songBuilder.js ──▶ { _version, bp
   server.mjs with a zod shape. Adding an engine control: its table entry in
   engineData.js is all the builder needs; the compose guide is where to say
   what it is FOR.
+
+## Compose chat — and whose key it runs on
+
+The same tools the MCP server hands an external agent, offered in the studio as
+a panel: say what you want, and the song open in front of you changes. The
+song's state is never kept here — the studio's session is the truth and each
+message resends it, so an edit made by hand between messages is what the next
+one edits. The reply is not written back on its own: a turn that changed the
+song lands in a review bar, to be auditioned into what is playing or kept (see
+the audition section below).
+
+```
+panel ──▶ POST /api/compose ──▶ createJob ──▶ POST the worker {jobId, token, apiKey?}
+   │                              (record)                    │
+   └── polls /api/compose/status?id=&t= ◀── progress ◀─────────┘ runComposeTurn
+```
+
+- **A turn is a job, not a request.** Writing a whole song is dozens of model
+  rounds over minutes, and a synchronous function gets 26 seconds (measured: a
+  turn died at 28s — streaming does not buy time, it only moves where the cut
+  lands). So the route starts a background function and answers immediately,
+  and the browser polls. `next dev` has no background functions and no ceiling
+  either, so there the same loop runs inline; one loop, two callers.
+- **Two ways a turn is paid for, and that decides what it needs.** The
+  deploy's key (`ANTHROPIC_API_KEY`) needs an account, because the spend is the
+  site's. A key the visitor brings needs **nothing at all** — no account, and
+  no key on the deploy — because the spend is theirs. That is the whole reason
+  the panel is rendered outside `AccountBar`'s signed-in branch: a key of your
+  own is the one way to compose here without an account, and a deploy with no
+  key of its own still has a working compose panel.
+- **A brought key is never stored.** It rides the message it pays for, and the
+  route hands it to the worker in the same fire-and-forget POST that starts
+  one. It is deliberately NOT on the job record — that record is a Netlify
+  Blob that outlives the turn, which is exactly what a key must not do. What
+  the record gets is `keyHash` (sha-256, truncated), because the limits have to
+  be counted against something and with no account that key is the only
+  something there is.
+- **Two secrets per job, because there are two readers.** The worker token says
+  an invocation came from the route that created the job (the worker endpoint
+  takes nothing but an id). The **view token** is how a browser proves a job is
+  its own to poll: a job holds somebody's song, and a signed-out visitor has no
+  account to check that against. An account still reaches its own jobs without
+  one, which is what keeps a job created before view tokens existed readable.
+  The status route tries the token first and only then resolves a session —
+  validating one costs a Supabase round trip, and this is polled every couple
+  of seconds for as long as a whole song takes.
+- **The limits ration the WORKER, not the bill.** `MAX_IN_FLIGHT` /
+  `MAX_PER_HOUR` apply to a brought key as they do to an account, counted in
+  its own bucket (`keys/<hash>` beside `users/<id>`), because a turn holds a
+  15-minute function whoever is paying for the tokens. A brought-key turn
+  counts against the key even when an account is signed in: one person with
+  their own key should not also be spending the account allowance they aren't
+  using.
+- **The model allowlist survives both paths** (`lib/composeModels.js`). On the
+  site's key because the site is billed; on a brought key because an id nobody
+  vetted is a request this app would be making on someone's behalf without
+  knowing what it costs.
+- **The key lives in the browser, and the panel says so.** `localStorage`
+  (`seqbaby.anthropicKey.v1`), which survives a reload — the thing that makes
+  the feature usable — and is readable by anything that gets script into this
+  origin, which is the honest cost and why `remember` is a checkbox: unticked,
+  the key lives in the tab and nowhere else. A stored value that no longer
+  *looks* like a key is dropped rather than sent, since it can only fail, and
+  it would fail a minute into a turn. It is shape-checked in the panel as well
+  as in the route because the field it was typed into is the only place a typo
+  can be fixed.
+- **The conversation follows the song** (`song_chats`), so a signed-out
+  visitor's turns keep no transcript beyond the tab: there is no song to attach
+  one to. Everything else about the panel — the model picker, the activity
+  line, the warnings — is the same on either key.
 
 ## A session onto a RUNNING engine (`liveSet.js`) — and the audition
 
