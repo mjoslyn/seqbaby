@@ -163,6 +163,20 @@
   color: #cdd2dc;
 }
 
+/* A block of config or a prompt, for the agents section. */
+.pre {
+  background: #1d2027;
+  border: 1px solid #2a2d35;
+  border-radius: 4px;
+  padding: 8px 12px;
+  margin: 10px 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  overflow-x: auto;
+  white-space: pre;
+  color: #e8e8ea;
+}
+
 .footer {
   margin-top: 48px;
   padding-top: 16px;

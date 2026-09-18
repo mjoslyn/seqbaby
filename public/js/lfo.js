@@ -3,7 +3,7 @@ import { engineByKey } from "./catalog.js";
 import { clearEuclidLive, euclidFromUnit, euclidToUnit, euclideanRhythm, setEuclidLive, trackEuclid } from "./euclid.js";
 import { clearChanceLive, setChanceLive, trackChance } from "./chance.js";
 import { CHANCE_MOD_KEYS, chanceFromUnit, chanceToUnit } from "./chanceGen.js";
-import { afterPrefix as after, LFO_AMP_SCALE, LFO_KEYS, lfoDivLabel } from "./constants.js";
+import { afterPrefix as after, LFO_AMP_SCALE, LFO_KEYS, canModulateKey, lfoDivLabel } from "./constants.js";
 import { makeCassetteSatCurve, makeShaperCurve } from "./curves.js";
 import { setParam } from "./params.js";
 import { aliasPattern, state } from "./state.js";
@@ -277,18 +277,7 @@ function connectMod(source, param) {
   try { Tone.connect(source, param); }
   catch (e) { console.warn("mod connect failed", e); }
 }
-
-export const TRACK_FX_LFO_KEYS = new Set([
-  "fuzz","delay","verb","vinyl","cassette","ringmod","shaper","crush","autowah","chorus","phaser","flanger","pitch",
-  "fuzz_drive","fuzz_tone","fuzz_level","vinyl_warmth","shaper_preamp","ring_freq","crush_bits","crush_rate",
-  "chorus_rate","chorus_depth","phaser_rate","flanger_rate","flanger_fbk","delay_time","delay_fbk",
-  // setter-driven (non-AudioParam) FX params
-  "vinyl_wow","cassette_flutter","cassette_sat",
-  "shaper_amt",
-  "autowah_sens","autowah_range",
-  "phaser_depth","pitch_semi","reverb_decay",
-]);
-
+export { TRACK_FX_LFO_KEYS } from "./constants.js";
 // FX params with no AudioParam / Signal handle — driven by a JS-side LFO that
 // polls in a RAF loop and applies values through the corresponding setter.
 export const SETTER_LFO_KEYS = new Set([
@@ -762,67 +751,9 @@ export function startSetterLfoLoopIfNeeded() {
 /**
  * Whether an LFO key applies to this track's engine (gates the mod picker).
  * @param {Track} t @param {string} key @returns {boolean}
- */
-export function canModulate(t, key) {
-  // Always-applicable: track-level fx + master vol + filter.
-  if (key === "vol" || key === "cutoff" || key === "reson") return true;
-  if (TRACK_FX_LFO_KEYS.has(key)) return true;
-  // Wave-scan window — wavetable engine only.
-  if (key === "wt_scan_start" || key === "wt_scan_range") return t.engineKey === "wt:akwf";
-  // Euclid's counts — any engine, but only while the generator is the thing
-  // making the rhythm. Modulating them with the pattern in charge would say
-  // nothing at all.
-  if (key.startsWith("euclid_")) return !!t.euclid?.on;
-  // The chance generator's six — likewise any engine, but only while the dice
-  // are the thing making the part (chance.js).
-  if (key.startsWith("chance_")) return !!t.chance?.on;
-  // Grain controls — granular engine only.
-  if (key.startsWith("gran_")) return t.engineKey === "dm:granular";
-  // Accent depth + tuning — silverbox only.
-  if (key === "silverbox_accent" || key === "silverbox_tune") return t.engineKey === "dm:silverbox";
-  // Contagion oscillator / filter-pair controls — contagion only.
-  if (key.startsWith("contagion_")) return t.engineKey === "dm:contagion";
-  // Hexop operator matrix + globals — hexop only.
-  if (key.startsWith("hexop_")) return t.engineKey === "dm:hexop";
-  // The guitar rig's string / pickup / amp / cab controls — guitar only.
-  if (key.startsWith("gtr_")) return t.engineKey === "dm:guitar";
-  // The bass rig's right hand, dirt and amp — bass only.
-  if (key.startsWith("bas_")) return t.engineKey === "dm:bass";
-  // Subby's oscillator, drop, harmonics and output stage — subby only.
-  if (key.startsWith("sub_")) return t.engineKey === "dm:sub";
-  const eng = engineByKey(t.engineKey);
-  if (!eng) return false;
-  // Plaits exposes harm/timb/morph/decay as voice params.
-  if (eng.type === "plaits") return ["harm", "timb", "morph", "decay"].includes(key);
-  // Emulator builders expose specific AudioParams via getAudioParam — only list
-  // the keys that are actually wired (see each builder above).
-  switch (t.engineKey) {
-    // The silverbox's four panel knobs are AudioParams on its worklet node.
-    case "dm:silverbox":        return ["harm", "timb", "morph", "decay"].includes(key);
-    // Real polyphony inside the worklet, so unlike the pooled emulators the
-    // whole instrument follows the LFO, not just voice 0.
-    case "dm:contagion":      return ["harm", "timb", "morph", "decay", "osc1", "osc2", "osc3", "osc4", "noise"].includes(key);
-    // Same: one node, one set of params, so the LFO moves the whole instrument.
-    // The oscillator-mix sliders aren't wired — a hexop's six operators have their
-    // own levels in the panel, which are reachable under their own keys.
-    case "dm:hexop":        return ["harm", "timb", "morph", "decay"].includes(key);
-    // Six strings and one amp in one worklet node, so the same holds here: drive
-    // and tone are AudioParams the whole instrument follows.
-    case "dm:guitar":     return ["harm", "timb", "morph", "decay"].includes(key);
-    case "dm:bass":       return ["harm", "timb", "morph", "decay"].includes(key);
-    // One node, one voice, so the LFO moves the whole instrument. Putting one
-    // on DRIVE is a wobble, because drive is what makes the note audible.
-    case "dm:sub":   return ["harm", "timb", "morph", "decay"].includes(key);
-    case "dm:snarl": return ["harm", "osc1", "osc2", "osc3", "osc4", "ultra", "fm"].includes(key);
-    case "dm:ladder":       return ["harm", "osc1", "osc2", "osc3", "noise"].includes(key);
-    case "dm:drift":       return ["harm", "osc1", "osc2", "osc3", "noise"].includes(key);
-    case "dm:oracle":   return ["harm", "osc1", "osc2", "osc3", "osc4", "noise"].includes(key);
-    // Tines has no per-voice AudioParam targets beyond vol+track fx; its
-    // timbre params are still automatable via setParam (see canAutomate).
-  }
-  return false;
+ */export function canModulate(t, key) {
+  return canModulateKey(t.engineKey, key, { euclid: !!t.euclid?.on, chance: !!t.chance?.on });
 }
-
 export function syncLFO(t, key) {
   const cfg = t.lfoConfig[key];
   let lfo = t.lfos[key];

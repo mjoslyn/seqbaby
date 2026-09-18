@@ -1,10 +1,15 @@
-import { BASS_MOD_KEYS, BASS_MOD_LABELS, BASS_MOD_RANGE } from "./bass.js";
-import { HEXOP_MOD_KEYS, HEXOP_MOD_LABELS, HEXOP_MOD_RANGE } from "./hexop.js";
-import { GUITAR_MOD_KEYS, GUITAR_MOD_LABELS, GUITAR_MOD_RANGE } from "./guitar.js";
-import { SUB_MOD_KEYS, SUB_MOD_LABELS, SUB_MOD_RANGE } from "./subbass.js";
+// No DOM, no Tone, no woscillators: this module is importable from Node, which
+// is what lets songBuilder.js and the tests under test/ read the target tables.
+// (`wosc` used to be read off window here; it lives in voices.js now.)
+import {
+  BASS_MOD_KEYS, BASS_MOD_LABELS, BASS_MOD_RANGE,
+  HEXOP_MOD_KEYS, HEXOP_MOD_LABELS, HEXOP_MOD_RANGE,
+  GUITAR_MOD_KEYS, GUITAR_MOD_LABELS, GUITAR_MOD_RANGE,
+  SUB_MOD_KEYS, SUB_MOD_LABELS, SUB_MOD_RANGE,
+} from "./engineData.js";
 import { CHANCE_MOD_KEYS, CHANCE_MOD_LABELS } from "./chanceGen.js";
-
-export const { wosc, oscillatorTypes } = window.woscillators;
+import { staticEngineByKey } from "./engineData.js";
+import { EUCLID_MOD_KEYS, EUCLID_MOD_LABELS } from "./soundDefaults.js";
 
 export const STEPS_PER_BAR = 16;
 
@@ -282,4 +287,245 @@ export const FX_STAGE_LABELS = {
 export function fxStageLevel(config, key) {
   const k = FX_STAGE_LEVEL_KEY[key];
   return k ? (config?.[key]?.[k] ?? 0) : 0;
+}
+
+// ---- automation targets -----------------------------------------------------
+// The per-step lanes' namespace (automation.js applies them; the macro pads
+// speak it too). Here rather than in automation.js because that module reaches
+// for the live graph at import time, and this table is what songBuilder.js
+// validates a lane against.
+export const AUTOMATION_TARGETS = {
+  // volume first
+  "vol":           { label: "volume" },
+  // voice / instrument params (per-engine availability via canAutomate)
+  "harm":          { label: "harm" },
+  "timb":          { label: "timbre" },
+  "morph":         { label: "morph" },
+  "decay":         { label: "decay" },
+  "osc1":          { label: "osc 1" },
+  "osc2":          { label: "osc 2" },
+  "osc3":          { label: "osc 3" },
+  "osc4":          { label: "osc 4" },
+  "ultra":         { label: "ultra" },
+  "fm":            { label: "fm" },
+  "metal":         { label: "metal" },
+  "noise":         { label: "noise" },
+  // filter
+  "cutoff":        { label: "filter cutoff" },
+  "reson":         { label: "filter reson" },
+  // fx wets / amounts
+  // wavetable wave-scan window (wavetable engine only — see canAutomate)
+  "wt.scan.start":      { label: "wave scan start" },
+  "wt.scan.range":      { label: "wave scan range" },
+  // euclid's three counts (only while live euclid is generating — see canAutomate)
+  ...Object.fromEntries(EUCLID_MOD_KEYS.map(k => [`euclid.${k}`, { label: EUCLID_MOD_LABELS[k] }])),
+  // the chance generator's six (only while the dice are generating — same gate)
+  ...Object.fromEntries(CHANCE_MOD_KEYS.map(k => [`chance.${k}`, { label: CHANCE_MOD_LABELS[k] }])),
+  // granular grain controls (granular engine only)
+  "gran.speed":         { label: "grain speed" },
+  "gran.pitch":         { label: "grain pitch" },
+  "gran.window":        { label: "grain window" },
+  "gran.jitter":        { label: "grain jitter" },
+  "gran.detune":        { label: "grain detune" },
+  "gran.pan":           { label: "grain pan" },
+  // Silverbox panel controls outside the four sliders (silverbox engine only)
+  "silverbox.accent":   { label: "silverbox accent" },
+  "silverbox.tune":     { label: "silverbox tune" },
+  "silverbox.wave":     { label: "silverbox wave" },
+  // Contagion panel controls (contagion engine only)
+  "contagion.pw":       { label: "contagion pulse width" },
+  "contagion.fm":       { label: "contagion fm" },
+  "contagion.ring":     { label: "contagion ring mod" },
+  "contagion.unidet":   { label: "contagion unison detune" },
+  "contagion.cut2":     { label: "contagion cutoff 2" },
+  "contagion.bal":      { label: "contagion filter balance" },
+  "contagion.sat":      { label: "contagion saturation" },
+  "contagion.envamt":   { label: "contagion env amount" },
+  "contagion.osc2semi": { label: "contagion osc2 semi" },
+  "contagion.osc2det":  { label: "contagion osc2 detune" },
+  "contagion.unispread": { label: "contagion unison spread" },
+  "contagion.atk":      { label: "contagion attack" },
+  "contagion.sus":      { label: "contagion sustain" },
+  "contagion.rel":      { label: "contagion release" },
+  // Hexop panel controls (hexop engine only) — globals, then all six operators.
+  // Generated from the same list the LFO keys come from (hexop.js).
+  ...Object.fromEntries(HEXOP_MOD_KEYS.map(k => [`hexop.${k}`, { label: HEXOP_MOD_LABELS[k] }])),
+  // Electric guitar rig (guitar engine only) — string, pickup, amp, cab.
+  ...Object.fromEntries(GUITAR_MOD_KEYS.map(k => [`gtr.${k}`, { label: GUITAR_MOD_LABELS[k] }])),
+  // Electric bass rig (bass engine only).
+  ...Object.fromEntries(BASS_MOD_KEYS.map(k => [`bas.${k}`, { label: BASS_MOD_LABELS[k] }])),
+  // Subby (sub engine only) — oscillator, drop, harmonics, output.
+  ...Object.fromEntries(SUB_MOD_KEYS.map(k => [`sub.${k}`, { label: SUB_MOD_LABELS[k] }])),
+  // fx
+  "fx.vinyl":           { label: "vinyl amt" },
+  "fx.vinyl.warmth":    { label: "vinyl warmth" },
+  "fx.vinyl.wow":       { label: "vinyl wow" },
+  "fx.cassette":        { label: "cassette amt" },
+  "fx.cassette.flutter":{ label: "cassette flutter" },
+  "fx.cassette.sat":    { label: "cassette sat" },
+  "fx.fuzz":            { label: "fuzz amt" },
+  "fx.fuzz.drive":      { label: "fuzz drive" },
+  "fx.fuzz.tone":       { label: "fuzz tone" },
+  "fx.fuzz.level":      { label: "fuzz level" },
+  "fx.ringmod":         { label: "ring mod wet" },
+  "fx.ringmod.freq":    { label: "ring mod freq" },
+  "fx.shaper":          { label: "wave shaper wet" },
+  "fx.shaper.preamp":   { label: "wave shaper preamp" },
+  "fx.shaper.amt":      { label: "wave shaper amt" },
+  "fx.crush":           { label: "bitcrush wet" },
+  "fx.crush.bits":      { label: "bitcrush bits" },
+  "fx.crush.rate":      { label: "bitcrush rate" },
+  "fx.autowah":         { label: "auto-wah wet" },
+  "fx.autowah.sens":    { label: "auto-wah sens" },
+  "fx.autowah.range":   { label: "auto-wah range" },
+  "fx.chorus":          { label: "chorus wet" },
+  "fx.chorus.rate":     { label: "chorus rate" },
+  "fx.chorus.depth":    { label: "chorus depth" },
+  "fx.phaser":          { label: "phaser wet" },
+  "fx.phaser.rate":     { label: "phaser rate" },
+  "fx.phaser.depth":    { label: "phaser depth" },
+  "fx.flanger":         { label: "flanger wet" },
+  "fx.flanger.rate":    { label: "flanger rate" },
+  "fx.flanger.fbk":     { label: "flanger fbk" },
+  "fx.pitchshift":      { label: "pitch shift wet" },
+  "fx.pitchshift.semi": { label: "pitch semi" },
+  "fx.delay":           { label: "delay wet" },
+  "fx.delay.time":      { label: "delay time" },
+  "fx.delay.fbk":       { label: "delay fbk" },
+  "fx.reverb":          { label: "reverb wet" },
+  "fx.reverb.decay":    { label: "reverb decay" },
+};
+export const AUTOMATION_KEYS = Object.keys(AUTOMATION_TARGETS);
+
+export const VOICE_AUTO_KEYS = ["vol","harm","timb","morph","decay","osc1","osc2","osc3","osc4","ultra","fm","metal","noise"];
+
+// ---- the gates, over an engine key ------------------------------------------
+// canModulate / canAutomate / voiceAutoKeysForEngine (lfo.js, automation.js)
+// take a track and hand its engine key and generator flags to these, so the
+// same answer is available without a track -- which a song being written
+// outside the browser does not have. `live` is { euclid, chance }: whether each
+// generator is the thing making the part, which is what gates its keys.
+
+export const TRACK_FX_LFO_KEYS = new Set([
+  "fuzz","delay","verb","vinyl","cassette","ringmod","shaper","crush","autowah","chorus","phaser","flanger","pitch",
+  "fuzz_drive","fuzz_tone","fuzz_level","vinyl_warmth","shaper_preamp","ring_freq","crush_bits","crush_rate",
+  "chorus_rate","chorus_depth","phaser_rate","flanger_rate","flanger_fbk","delay_time","delay_fbk",
+  // setter-driven (non-AudioParam) FX params
+  "vinyl_wow","cassette_flutter","cassette_sat",
+  "shaper_amt",
+  "autowah_sens","autowah_range",
+  "phaser_depth","pitch_semi","reverb_decay",
+]);
+
+// Engine-aware list of voice/instrument keys that can be automated. Broader
+// than canModulate because automation can drive params via setParam even when
+// there is no AudioParam behind them.
+export function voiceAutoKeysForEngineKey(engineKey) {
+  const t = { engineKey: String(engineKey || "") };
+  const eng = staticEngineByKey(t.engineKey);
+  if (!eng) return ["vol"];
+  if (eng.type === "plaits") return ["vol", "harm", "timb", "morph", "decay"];
+  switch (t.engineKey) {
+    case "dm:silverbox":        return ["vol", "harm", "timb", "morph", "decay"];
+    case "dm:snarl": return ["vol", "harm", "timb", "osc1", "osc2", "osc3", "osc4", "ultra", "fm", "metal"];
+    case "dm:ladder":       return ["vol", "harm", "decay", "osc1", "osc2", "osc3", "noise"];
+    case "dm:drift":       return ["vol", "harm", "timb", "morph", "decay", "osc1", "osc2", "osc3", "noise"];
+    case "dm:guitar":     return ["vol", "harm", "timb", "morph", "decay"];
+    case "dm:bass":       return ["vol", "harm", "timb", "morph", "decay"];
+    case "dm:sub":       return ["vol", "harm", "timb", "morph", "decay"];
+    case "dm:tines":     return ["vol", "harm", "timb", "morph", "decay"];
+    case "dm:oracle":   return ["vol", "harm", "timb", "morph", "decay", "osc1", "osc2", "osc3", "osc4", "noise"];
+    case "dm:granular":   return ["vol", "harm", "timb", "morph", "decay"];
+    case "dm:contagion":      return ["vol", "harm", "timb", "morph", "decay", "osc1", "osc2", "osc3", "osc4", "noise"];
+    case "dm:hexop":        return ["vol", "harm", "timb", "morph", "decay"];
+    case "wt:akwf":       return ["vol", "harm", "timb", "morph", "decay"];
+  }
+  // 808 / 909 voices: tune / tone / colour / decay all take effect on the next
+  // hit, so per-step automation drives them even with no AudioParam to ramp.
+  if (t.engineKey.startsWith("dm:808-") || t.engineKey.startsWith("dm:909-")) {
+    const noColour = ["dm:808-chat", "dm:808-ohat", "dm:808-cowbell", "dm:909-chat", "dm:909-ohat"];
+    return noColour.includes(t.engineKey)
+      ? ["vol", "harm", "timb", "decay"]
+      : ["vol", "harm", "timb", "morph", "decay"];
+  }
+  return ["vol"];
+}
+
+export function canAutomateKey(engineKey, key, live = {}) {
+  const t = { engineKey: String(engineKey || "") };
+  if (key === "cutoff" || key === "reson") return true;
+  if (key.startsWith("wt.scan.")) return t.engineKey === "wt:akwf";
+  if (key.startsWith("euclid.")) return !!live.euclid;
+  if (key.startsWith("chance.")) return !!live.chance;
+  if (key.startsWith("gran.")) return t.engineKey === "dm:granular";
+  if (key.startsWith("silverbox.")) return t.engineKey === "dm:silverbox";
+  if (key.startsWith("contagion.")) return t.engineKey === "dm:contagion";
+  if (key.startsWith("hexop.")) return t.engineKey === "dm:hexop";
+  if (key.startsWith("gtr.")) return t.engineKey === "dm:guitar";
+  if (key.startsWith("bas.")) return t.engineKey === "dm:bass";
+  if (key.startsWith("sub.")) return t.engineKey === "dm:sub";
+  if (key.startsWith("fx.")) return true;
+  if (VOICE_AUTO_KEYS.includes(key)) return voiceAutoKeysForEngineKey(t.engineKey).includes(key);
+  return false;
+}
+
+export function canModulateKey(engineKey, key, live = {}) {
+  const t = { engineKey: String(engineKey || "") };
+  // Always-applicable: track-level fx + master vol + filter.
+  if (key === "vol" || key === "cutoff" || key === "reson") return true;
+  if (TRACK_FX_LFO_KEYS.has(key)) return true;
+  // Wave-scan window — wavetable engine only.
+  if (key === "wt_scan_start" || key === "wt_scan_range") return t.engineKey === "wt:akwf";
+  // Euclid's counts — any engine, but only while the generator is the thing
+  // making the rhythm. Modulating them with the pattern in charge would say
+  // nothing at all.
+  if (key.startsWith("euclid_")) return !!live.euclid;
+  // The chance generator's six — likewise any engine, but only while the dice
+  // are the thing making the part (chance.js).
+  if (key.startsWith("chance_")) return !!live.chance;
+  // Grain controls — granular engine only.
+  if (key.startsWith("gran_")) return t.engineKey === "dm:granular";
+  // Accent depth + tuning — silverbox only.
+  if (key === "silverbox_accent" || key === "silverbox_tune") return t.engineKey === "dm:silverbox";
+  // Contagion oscillator / filter-pair controls — contagion only.
+  if (key.startsWith("contagion_")) return t.engineKey === "dm:contagion";
+  // Hexop operator matrix + globals — hexop only.
+  if (key.startsWith("hexop_")) return t.engineKey === "dm:hexop";
+  // The guitar rig's string / pickup / amp / cab controls — guitar only.
+  if (key.startsWith("gtr_")) return t.engineKey === "dm:guitar";
+  // The bass rig's right hand, dirt and amp — bass only.
+  if (key.startsWith("bas_")) return t.engineKey === "dm:bass";
+  // Subby's oscillator, drop, harmonics and output stage — subby only.
+  if (key.startsWith("sub_")) return t.engineKey === "dm:sub";
+  const eng = staticEngineByKey(t.engineKey);
+  if (!eng) return false;
+  // Plaits exposes harm/timb/morph/decay as voice params.
+  if (eng.type === "plaits") return ["harm", "timb", "morph", "decay"].includes(key);
+  // Emulator builders expose specific AudioParams via getAudioParam — only list
+  // the keys that are actually wired (see each builder above).
+  switch (t.engineKey) {
+    // The silverbox's four panel knobs are AudioParams on its worklet node.
+    case "dm:silverbox":        return ["harm", "timb", "morph", "decay"].includes(key);
+    // Real polyphony inside the worklet, so unlike the pooled emulators the
+    // whole instrument follows the LFO, not just voice 0.
+    case "dm:contagion":      return ["harm", "timb", "morph", "decay", "osc1", "osc2", "osc3", "osc4", "noise"].includes(key);
+    // Same: one node, one set of params, so the LFO moves the whole instrument.
+    // The oscillator-mix sliders aren't wired — a hexop's six operators have their
+    // own levels in the panel, which are reachable under their own keys.
+    case "dm:hexop":        return ["harm", "timb", "morph", "decay"].includes(key);
+    // Six strings and one amp in one worklet node, so the same holds here: drive
+    // and tone are AudioParams the whole instrument follows.
+    case "dm:guitar":     return ["harm", "timb", "morph", "decay"].includes(key);
+    case "dm:bass":       return ["harm", "timb", "morph", "decay"].includes(key);
+    // One node, one voice, so the LFO moves the whole instrument. Putting one
+    // on DRIVE is a wobble, because drive is what makes the note audible.
+    case "dm:sub":   return ["harm", "timb", "morph", "decay"].includes(key);
+    case "dm:snarl": return ["harm", "osc1", "osc2", "osc3", "osc4", "ultra", "fm"].includes(key);
+    case "dm:ladder":       return ["harm", "osc1", "osc2", "osc3", "noise"].includes(key);
+    case "dm:drift":       return ["harm", "osc1", "osc2", "osc3", "noise"].includes(key);
+    case "dm:oracle":   return ["harm", "osc1", "osc2", "osc3", "osc4", "noise"].includes(key);
+    // Tines has no per-voice AudioParam targets beyond vol+track fx; its
+    // timbre params are still automatable via setParam (see canAutomate).
+  }
+  return false;
 }

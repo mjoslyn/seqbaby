@@ -29,6 +29,16 @@ graph and plain ES modules go before a framework earns its place. That engine
 owns routing, authentication, and account/data features, while the sound
 generation stays pure Web Audio.
 
+## Let an agent write one
+
+The repo ships an [MCP server](mcp/README.md) (`npm run mcp`) that exposes the
+song format as tools: add a track, spell its rhythm as a step string
+(`x..x..x.`), set its sound, put an LFO on the filter, turn on a euclidean or
+chance generator, then export the JSON or post it for a share link. A
+`compose` skill (`.claude/skills/compose/SKILL.md`) tells the agent which
+engine to reach for and how the machine likes to be played. `.mcp.json` wires
+it up for Claude Code; Claude Desktop needs one line of config.
+
 ## Highlights for the curious
 
 - **Real synthesis, in the browser.** Integrates a WebAssembly port of Mutable

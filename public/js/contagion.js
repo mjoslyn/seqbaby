@@ -484,25 +484,9 @@ export function loadContagionWorklet(ctx) {
 
 /** Has the processor finished registering on this context? */
 export function contagionReady(ctx) { return !!ctx && _ready.has(ctx); }
-
-// Panel controls, in UI order. render.js / session.js walk these lists so the
-// wiring stays in one place (same convention as GRAN_NUM_KEYS).
-export const CONTAGION_NUM_KEYS = [
-  "vosc2semi", "vosc2det", "vpw", "vfm", "vring",
-  "vunidet", "vunispread",
-  "vcut2", "vbal", "vsatamt", "venvamt",
-  "vatk", "vsus", "vrel",
-];
-export const CONTAGION_SEL_KEYS = ["vmode1", "vpoles", "vmode2", "vroute", "vsat", "vsubwave", "vsync", "vuni"];
-
-export const CONTAGION_DEFAULTS = {
-  vosc2semi: 0, vosc2det: 0.08, vpw: 0.5, vfm: 0, vring: 0,
-  vunidet: 0.3, vunispread: 0.6,
-  vcut2: 0, vbal: 0, vsatamt: 0.3, venvamt: 0.5,
-  vatk: 0.02, vsus: 0.6, vrel: 0.25,
-  vmode1: "lp", vpoles: "4", vmode2: "lp", vroute: "ser", vsat: "soft",
-  vsubwave: "square", vsync: "off", vuni: "1",
-};
+// The panel's key lists and defaults are data, in engineData.js (readable from
+// Node); re-exported so the imports elsewhere in the engine are unchanged.
+export { CONTAGION_NUM_KEYS, CONTAGION_SEL_KEYS, CONTAGION_DEFAULTS } from "./engineData.js";
 
 const FILTER_MODES = { lp: 0, hp: 1, bp: 2, bs: 3 };
 const ROUTES = { ser: 0, par: 1, split: 2 };

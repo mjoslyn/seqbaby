@@ -1,4 +1,4 @@
-import { ENGINE_MACRO_TIPS, PLAITS_MACRO_TIPS, engineByKey } from "./catalog.js";
+import { ENGINE_MACRO_TIPS, PLAITS_MACRO_TIPS, engineByKey, engineSliderLabels } from "./catalog.js";
 import { HEXOP_ALG_FEEDBACK, HEXOP_ALG_LABELS, hexopCarriers } from "./hexop.js";
 import { applySampleSpeed, disposeLFOs, syncAllLFOs } from "./lfo.js";
 import { redetectDrumKit } from "./meter.js";
@@ -107,51 +107,7 @@ export function updatePlaitsControlsVisibility(t) {
   }
   // Relabel the timbre sliders for each analog engine so the control intent is
   // visible. null = hide the field (control isn't used by this engine).
-  if (group) {
-    const labels = isSnarl
-      ? { harm: "pwm rate", timb: "pw",     morph: null,        decay: null }
-      : isLadder
-      ? { harm: "detune",   timb: null,     morph: null,        decay: "warm" }
-      : isDrift
-      ? { harm: "pwm rate", timb: "pw",     morph: "chorus",    decay: "dec" }
-      : isGuitar
-      ? { harm: "drive",    timb: "tone",   morph: "bloom",     decay: "sustain" }
-      : isBass
-      ? { harm: "drive",    timb: "tone",   morph: "comp",      decay: "sustain" }
-      : isSub
-      ? { harm: "drive",    timb: "tone",   morph: "shape",     decay: "decay" }
-      : isTines
-      ? { harm: "tine",     timb: "bite",   morph: "chorus",    decay: "decay" }
-      : isOracle
-      ? { harm: "detune",   timb: "shape",  morph: "drive",     decay: "decay" }
-      : isGranular
-      ? { harm: "grain",    timb: "dense",  morph: "pos",       decay: "spray" }
-      : isWavetable
-      ? { harm: "wave",     timb: "warm",   morph: "detune",    decay: "decay" }
-      : isSilverbox
-      ? { harm: "cutoff",   timb: "reso",   morph: "env mod",   decay: "decay" }
-      : isContagion
-      ? { harm: "cutoff",   timb: "reso",   morph: "shape",     decay: "decay" }
-      : isHexop
-      ? { harm: "bright",   timb: "fbk",    morph: "mod dec",   decay: "decay" }
-      : t.engineKey === "dm:808-kick"
-      ? { harm: "tune",     timb: "tone",   morph: "drive",     decay: "decay" }
-      : t.engineKey === "dm:808-snare"
-      ? { harm: "tune",     timb: "tone",   morph: "snappy",    decay: "decay" }
-      : t.engineKey === "dm:808-clap"
-      ? { harm: "tune",     timb: "tone",   morph: "spread",    decay: "decay" }
-      : (t.engineKey === "dm:808-chat" || t.engineKey === "dm:808-ohat" || t.engineKey === "dm:808-cowbell")
-      ? { harm: "tune",     timb: "tone",   morph: null,        decay: "decay" }
-      : t.engineKey === "dm:909-kick"
-      ? { harm: "tune",     timb: "attack", morph: "drive",     decay: "decay" }
-      : t.engineKey === "dm:909-snare"
-      ? { harm: "tune",     timb: "tone",   morph: "snappy",    decay: "decay" }
-      : t.engineKey === "dm:909-clap"
-      ? { harm: "tune",     timb: "tone",   morph: "spread",    decay: "decay" }
-      : (t.engineKey === "dm:909-chat" || t.engineKey === "dm:909-ohat")
-      ? { harm: "tune",     timb: "tone",   morph: null,        decay: "decay" }
-      : { harm: "harm",     timb: "timb",    morph: "morph",    decay: "decay" };
-    // What the four sliders do varies enough per engine that the label alone
+  if (group) {    const labels = engineSliderLabels(t.engineKey);    // What the four sliders do varies enough per engine that the label alone
     // isn't much help — hang an explanation off the ones worth explaining.
     const tips = isGranular
       ? {

@@ -3,26 +3,9 @@ import { buildCrusherNode } from "./crusher.js";
 import { fxStageLevel } from "./constants.js";
 import { currentBpm } from "./lfo.js";
 import { setParam } from "./params.js";
-
-export function defaultFxConfig() {
-  return {
-    // Rack input drive + output level. 0.5 = unity on both.
-    amp:        { preamp: 0.5, level: 0.5 },
-    vinyl:      { amount: 0, warmth: 0.4, wow: 0.3 },
-    cassette:   { amount: 0, flutter: 0.3, sat: 0.4 },
-    fuzz:       { amount: 0, drive: 0.7, tone: 0.4, level: 0.5 },
-    ringmod:    { wet: 0, freq: 0.35 },           // freq is 0..1, log-mapped to ~20..3000 Hz
-    shaper:     { wet: 0, preamp: 0.5, amount: 0.5, mode: "fold" },  // wave shaper: wet/dry + input preamp + curve drive + mode
-    crush:      { bits: 8, rate: 1, wet: 0 },   // rate is the converter clock, 0..1 log-mapped to 250Hz..48kHz; 1 = no decimation
-    autowah:    { wet: 0, sens: 0.5, range: 0.5 },
-    chorus:     { wet: 0, rate: 0.5, depth: 0.5 },
-    phaser:     { wet: 0, rate: 0.3, depth: 0.5 },
-    flanger:    { wet: 0, rate: 0.3, fbk: 0.5 },
-    pitchshift: { wet: 0, semitones: 0 },
-    delay:      { time: 0.375, fbk: 0.35, wet: 0, sync: false, div: 0.5 },
-    reverb:     { decay: 2, wet: 0 },
-  };
-}
+// The rack's default config is data in soundDefaults.js (no imports, readable
+// from Node); re-exported so the imports elsewhere hold.
+export { defaultFxConfig } from "./soundDefaults.js";
 
 // Minimum gap between two impulse-response renders on one rack (see
 // FXRack._requestReverb). Four a second is far more often than a tail length

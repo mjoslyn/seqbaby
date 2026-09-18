@@ -1,6 +1,9 @@
 import { applySampleFadeEnvelope, loadBuffer, startSampleSource } from "./buffers.js";
 import { SAMPLE_BASE, engineByKey } from "./catalog.js";
-import { wosc } from "./constants.js";
+// The Plaits WASM port is an ambient global (public/woscillators.js, loaded
+// before the engine). Read here rather than in constants.js so that module
+// stays importable outside a browser.
+export const { wosc } = window.woscillators;
 import { makeMetalizerCurve } from "./curves.js";
 import { isMobileDevice } from "./dom.js";
 import { sampleHitRate } from "./lfo.js";
@@ -1698,45 +1701,10 @@ function envAt(dt, noteDur, attackT, releaseT) {
 // gplay, gspeed, gpitch, gloop, gwindow, gjitter, gdetune, gpan, gpattern,
 // gsync, grate.
 
-// Musical division → beats (quarter note = 1 beat) for beat-synced grain rate.
-export const GRAN_RATE_BEATS = {
-  "1/64": 1 / 16, "1/32t": 1 / 12, "1/32": 1 / 8, "1/16t": 1 / 6, "1/16": 1 / 4,
-  "1/8t": 1 / 3, "1/8": 1 / 2, "1/4t": 2 / 3, "1/4": 1, "1/2t": 4 / 3, "1/2": 2,
-  "1bar": 4, "2bar": 8, "4bar": 16, "8bar": 32,
-};
-
-// gspeed is the play-head rate as a plain multiplier (1 = the sample's own
-// speed). Sessions written before it went bipolar stored 0..1 for 0..2× —
-// migrateGranularParams() converts those on load.
-export const GRAN_DEFAULTS = {
-  gplay: "fixed", gspeed: 1, gpitch: 0, gloop: "fwd", gwindow: 0.15, gjitter: 0.1,
-  gdetune: 0, gpan: 0.3, gpattern: "none", gsync: false, grate: "1/16",
-};
-
-// Speed and pitch are signed, but automation lanes and the mod matrix both
-// speak 0..1, so they convert through here — a lane sweeping 0→1 covers exactly
-// the same ground as dragging the slider end to end.
-// The rest of the grain controls are 0..1 sliders already, but they go through
-// the same conversion so every mod/automation path is one code path.
-export const GRAN_MOD_RANGE = {
-  gspeed: [-2, 2], gpitch: [-24, 24],
-  gwindow: [0, 1], gjitter: [0, 1], gdetune: [0, 1], gpan: [0, 1],
-};
-/** 0..1 → the param's own units. @param {string} key @param {number} v */
-export function granFromUnit(key, v) {
-  const [lo, hi] = GRAN_MOD_RANGE[key];
-  return lo + Math.max(0, Math.min(1, Number(v) || 0)) * (hi - lo);
-}
-/** The param's own units → 0..1. @param {string} key @param {number} x */
-export function granToUnit(key, x) {
-  const [lo, hi] = GRAN_MOD_RANGE[key];
-  return Math.max(0, Math.min(1, ((Number(x) || 0) - lo) / (hi - lo)));
-}
-
-// Granular params the track group / WAV modal drive, in UI order. The lists in
-// render.js, session.js and stepEditor.js walk these.
-export const GRAN_NUM_KEYS = ["gspeed", "gpitch", "gwindow", "gjitter", "gdetune", "gpan"];
-export const GRAN_SEL_KEYS = ["gplay", "gloop", "gpattern", "grate"];
+// The grain controls' defaults, ranges and key lists are data in engineData.js
+// (readable from Node); re-exported so the imports elsewhere hold.
+import { GRAN_DEFAULTS, GRAN_MOD_RANGE, GRAN_NUM_KEYS, GRAN_RATE_BEATS, GRAN_SEL_KEYS, granFromUnit, granToUnit } from "./engineData.js";
+export { GRAN_RATE_BEATS, GRAN_DEFAULTS, GRAN_MOD_RANGE, granFromUnit, granToUnit, GRAN_NUM_KEYS, GRAN_SEL_KEYS } from "./engineData.js";
 
 /**
  * One-shot migration of a serialized params blob: legacy `gspeed` was a 0..1
