@@ -40,6 +40,10 @@ export default async (req) => {
 
     const out = await runComposeTurn({
       apiKey: process.env.ANTHROPIC_API_KEY,
+      // The model the panel picked for this message, already checked against
+      // the allowlist by the route. Undefined takes runComposeTurn's own
+      // default, which is the deploy's.
+      model: job.model,
       message: job.message,
       history: job.history,
       session: job.session,
@@ -53,6 +57,7 @@ export default async (req) => {
     await finishJob(jobId, {
       status: "done",
       reply: out.reply,
+      model: out.model,
       session: out.session,
       changed: out.changed,
       warnings: out.warnings,

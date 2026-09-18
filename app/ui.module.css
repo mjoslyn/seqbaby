@@ -397,6 +397,26 @@
 .chatMsgError { align-self: flex-start; background: #2a1416; border: 1px solid #4a2226; color: #f87171; }
 .chatActivity { align-self: flex-start; color: #9aa0aa; font-size: 10.5px; padding: 0 2px; }
 .chatWarn { align-self: flex-start; color: #e3c47c; font-size: 10.5px; padding: 0 2px; }
+/* The model picker sits on its own line above the box rather than in the row
+   with it: on a phone the send button and a two-line textarea already fill
+   that row, and a select squeezed in beside them is unreadable. */
+.chatTools { display: flex; gap: 6px; align-items: center; justify-content: flex-end; }
+.chatModelLabel { color: #9aa0aa; font-size: 10.5px; }
+.chatModel {
+  background: #0e0f12;
+  border: 1px solid #2a2d35;
+  border-radius: 6px;
+  color: #e8e8ea;
+  font: inherit;
+  font-size: 11px;
+  padding: 3px 6px;
+  min-height: 28px;
+}
+.chatModel:focus { outline: none; border-color: #6ee7b7; }
+/* Room for a finger on a control that is deliberately small on a desktop. */
+@media (pointer: coarse) {
+  .chatModel { min-height: 36px; font-size: 12px; }
+}
 .chatRow { display: flex; gap: 6px; align-items: flex-end; }
 .chatTextarea {
   flex: 1;
