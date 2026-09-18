@@ -417,6 +417,33 @@
 @media (pointer: coarse) {
   .chatModel { min-height: 36px; font-size: 12px; }
 }
+/* The visitor's own key. A row of its own under the pickers, shown only when
+   that is the key being composed on — which for a signed-out visitor, or on a
+   deploy with no key of its own, is always. */
+.chatKey { display: flex; flex-direction: column; gap: 5px; }
+.chatKeyRow { display: flex; gap: 6px; align-items: center; }
+.chatKeyInput {
+  flex: 1;
+  min-width: 0;
+  background: #0e0f12;
+  border: 1px solid #2a2d35;
+  border-radius: 6px;
+  padding: 6px 8px;
+  color: #e8e8ea;
+  font: inherit;
+  font-size: 11px;
+  min-height: 28px;
+}
+.chatKeyInput:focus { outline: none; border-color: #6ee7b7; }
+/* Monospace and roomy: it is an identifier being checked, not read. */
+.chatKeyName { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; color: #cdd3dc; }
+.chatKeyRemember { display: flex; align-items: center; gap: 5px; color: #9aa0aa; font-size: 10.5px; }
+.chatKeyNote { color: #9aa0aa; font-size: 10.5px; line-height: 1.45; }
+.chatKeyNote a { color: #6ee7b7; }
+.chatKeyError { color: #f87171; font-size: 10.5px; }
+@media (pointer: coarse) {
+  .chatKeyInput { min-height: 36px; font-size: 12px; }
+}
 .chatRow { display: flex; gap: 6px; align-items: flex-end; }
 .chatTextarea {
   flex: 1;

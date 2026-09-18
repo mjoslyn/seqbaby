@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "
 import { getOpenSong, subscribeOpenSong } from "@/app/songs/openSong";
 import { loadSongChat, saveSongChat } from "@/app/songs/actions";
 import { COMPOSE_MODELS, DEFAULT_COMPOSE_MODEL, composeModelLabel, isComposeModel } from "@/lib/composeModels.js";
+import { API_KEY_CONSOLE_URL, looksLikeApiKey, maskApiKey } from "@/lib/composeKey.js";
 import styles from "@/app/ui.module.css";
 
 type Msg =
@@ -11,7 +12,7 @@ type Msg =
   | { role: "assistant"; text: string; model?: string; activity?: string[]; warnings?: string[] }
   | { role: "error"; text: string };
 
-type ComposeResponse = { jobId?: string; error?: string };
+type ComposeResponse = { jobId?: string; jobToken?: string; error?: string };
 
 type JobStatus = {
   status?: "running" | "done" | "error";
@@ -45,6 +46,20 @@ const MAX_POLL_MISSES = 20;
 // turns on.
 const MODEL_KEY = "seqbaby.composeModel.v1";
 
+// The visitor's own Anthropic key, and which key they compose on. Both are
+// per browser for the model preference's reasons, and the key for a stronger
+// one: it is a secret, and the one place it is meant to live is the machine
+// its owner typed it into. The server never stores it (see lib/composeKey.js)
+// -- it rides each message, is spent, and is gone.
+//
+// localStorage is the honest trade here and worth naming: it survives a
+// reload, which is what makes the feature usable at all, and it is readable
+// by anything that gets script into this origin. Hence `remember`, which is
+// the visitor's to turn off -- unchecked, the key lives in this tab's memory
+// and nowhere else.
+const KEY_STORE = "seqbaby.anthropicKey.v1";
+const KEY_MODE = "seqbaby.composeKeyMode.v1";
+
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /** What to say when the response wasn't the route's own JSON. */
@@ -65,7 +80,12 @@ function describeFailure(status: number, raw: string, data: ComposeResponse | nu
 
 // A chat panel that edits the song open in the studio, backed by
 // app/api/compose (the same songBuilder tools the MCP server exposes to an
-// external agent, run server-side against the account's Anthropic key).
+// external agent, run server-side against an Anthropic key).
+//
+// WHOSE key is the panel's other choice, beside the model. The site's needs an
+// account and is rationed; the visitor's own needs nothing at all, which is
+// why this panel is shown to a signed-out visitor as well -- a key of your own
+// is the one way to compose here without one.
 //
 // The SONG's state is not kept here -- the studio's own session is the source
 // of truth (serializeSet/applySet) and each message resends it, so a change
@@ -76,7 +96,14 @@ function describeFailure(status: number, raw: string, data: ComposeResponse | nu
 // back to one a week later used to mean re-explaining it from scratch. It
 // follows whichever song is open, which is why this reads the same open-song
 // store the save and songs menus do.
-export default function ComposeChat() {
+/**
+ * @param signedIn whether there is an account behind this panel at all.
+ * @param serverKey whether this deploy has an Anthropic key of its own. The
+ *        two together decide whether composing on the SITE's key is offered;
+ *        a visitor's own key is offered always, which is what makes the panel
+ *        worth showing to someone signed out.
+ */
+export default function ComposeChat({ signedIn, serverKey }: { signedIn: boolean; serverKey: boolean }) {
   const [ready, setReady] = useState(false);
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<Msg[]>([]);
@@ -94,6 +121,18 @@ export default function ComposeChat() {
   // Tool activity for the turn in flight, filled in as it happens. It moves
   // onto the finished message when the turn lands.
   const [live, setLive] = useState<string[]>([]);
+  // Which key the next message runs on. "site" is only ever a choice when
+  // there is both an account and a key on the deploy, so what is offered is
+  // derived (`keyMode`) rather than trusted from storage.
+  const [keyPref, setKeyPref] = useState<"site" | "own">("site");
+  // The visitor's own key, live. Empty means they haven't given one; what is
+  // typed lives in `keyDraft` until it is accepted, so a half-typed key is
+  // never what a message goes out on.
+  const [apiKey, setApiKey] = useState("");
+  const [keyDraft, setKeyDraft] = useState("");
+  const [keyError, setKeyError] = useState("");
+  const [remember, setRemember] = useState(true);
+  const [editingKey, setEditingKey] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
   const logRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -104,6 +143,11 @@ export default function ComposeChat() {
   // The transcript, readable from an async callback without making every
   // message a reason to re-run the effect that loads one.
   const messagesRef = useRef<Msg[]>([]);
+  // Composing on the site's key takes an account AND a key on the deploy.
+  // Without both there is one way to compose and no choice to offer.
+  const siteKeyOffered = signedIn && serverKey;
+  const keyMode: "site" | "own" = siteKeyOffered ? keyPref : "own";
+  const needsKey = keyMode === "own" && !apiKey;
   const openSong = useSyncExternalStore(subscribeOpenSong, getOpenSong, getOpenSong);
   const songId = openSong.id;
   const isTemplate = openSong.isTemplate;
@@ -116,8 +160,19 @@ export default function ComposeChat() {
     try {
       const saved = window.localStorage.getItem(MODEL_KEY);
       if (saved && isComposeModel(saved)) setModel(saved);
+      const mode = window.localStorage.getItem(KEY_MODE);
+      if (mode === "own" || mode === "site") setKeyPref(mode);
+      // A stored key that no longer looks like one (a truncated write, a
+      // format that has moved on) is dropped rather than sent: it can only
+      // fail, and it would fail a minute into a turn.
+      const stored = window.localStorage.getItem(KEY_STORE);
+      if (stored && looksLikeApiKey(stored)) {
+        setApiKey(stored.trim());
+      } else if (stored) {
+        window.localStorage.removeItem(KEY_STORE);
+      }
     } catch {
-      /* private mode, blocked storage: the default is a fine answer */
+      /* private mode, blocked storage: the defaults are a fine answer */
     }
   }, []);
 
@@ -127,6 +182,49 @@ export default function ComposeChat() {
       window.localStorage.setItem(MODEL_KEY, id);
     } catch {
       /* not worth failing a message over */
+    }
+  }, []);
+
+  const pickKeyMode = useCallback((mode: "site" | "own") => {
+    setKeyPref(mode);
+    try {
+      window.localStorage.setItem(KEY_MODE, mode);
+    } catch {
+      /* not worth failing a message over */
+    }
+  }, []);
+
+  // Accept what has been typed. Shape-checked here as well as in the route,
+  // because the box the key was typed into is the only place a typo can be
+  // fixed -- reported from a job, it arrives minutes later with the message
+  // that prompted it already spent.
+  const saveKey = useCallback(() => {
+    const k = keyDraft.trim();
+    if (!looksLikeApiKey(k)) {
+      setKeyError("that doesn't look like an Anthropic API key — they start sk-ant-");
+      return;
+    }
+    setApiKey(k);
+    setKeyDraft("");
+    setKeyError("");
+    setEditingKey(false);
+    try {
+      if (remember) window.localStorage.setItem(KEY_STORE, k);
+      else window.localStorage.removeItem(KEY_STORE);
+    } catch {
+      /* blocked storage: the key still works for this tab */
+    }
+  }, [keyDraft, remember]);
+
+  const forgetKey = useCallback(() => {
+    setApiKey("");
+    setKeyDraft("");
+    setKeyError("");
+    setEditingKey(false);
+    try {
+      window.localStorage.removeItem(KEY_STORE);
+    } catch {
+      /* nothing stored is the state we wanted anyway */
     }
   }, []);
 
@@ -243,6 +341,14 @@ export default function ComposeChat() {
   const send = useCallback(async () => {
     const text = input.trim();
     if (!text || sending || !window.seqbaby) return;
+    // Nothing to run it on. Said here rather than by sending a message that
+    // can only come back refused -- and the key row is opened, since the
+    // answer is a field away.
+    if (keyMode === "own" && !apiKey) {
+      setEditingKey(true);
+      setKeyError("add your Anthropic key first");
+      return;
+    }
     const session = window.seqbaby.serializeSet();
     // Only plain text crosses the wire between turns -- what the model called
     // and why lives entirely inside one request/response, so the transcript
@@ -288,7 +394,17 @@ export default function ComposeChat() {
       const res = await fetch("/api/compose", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ message: text, history, session, model }),
+        // The key goes out with the message it pays for and is not kept
+        // anywhere on the way: the route hands it to the worker and forgets
+        // it. On the site's key nothing is sent, and the route decides from
+        // the account instead.
+        body: JSON.stringify({
+          message: text,
+          history,
+          session,
+          model,
+          ...(keyMode === "own" ? { apiKey } : {}),
+        }),
       });
       // Anything that failed before the route got to stream -- auth, a bad
       // request, a gateway page -- arrives as an ordinary body with a status
@@ -334,7 +450,13 @@ export default function ComposeChat() {
         // timeout that never happened.
         let pollRes: Response;
         try {
-          pollRes = await fetch(`/api/compose/status?id=${encodeURIComponent(started.jobId)}`);
+          // The job token is how this browser proves the job is its own to
+          // read. An account's session would do for a signed-in visitor, and
+          // still does server-side, but a turn on a brought key has no
+          // account behind it at all.
+          const q = new URLSearchParams({ id: started.jobId });
+          if (started.jobToken) q.set("t", started.jobToken);
+          pollRes = await fetch(`/api/compose/status?${q}`);
         } catch {
           if (++misses > MAX_POLL_MISSES) {
             land({ role: "error", text: "lost contact with the server while that was running." });
@@ -402,7 +524,7 @@ export default function ComposeChat() {
       setSending(false);
       setLive([]);
     }
-  }, [input, sending, messages, model]);
+  }, [input, sending, messages, model, keyMode, apiKey]);
 
   const onKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -433,6 +555,14 @@ export default function ComposeChat() {
                 Tell it what to make or change — “add a dubby bassline on the
                 silverbox”, “make the hats swing more”, “put a reverb on the
                 bus”. It edits the song that&apos;s open, live.
+                {needsKey && (
+                  <>
+                    {" "}
+                    {siteKeyOffered
+                      ? "You've chosen to run this on your own Anthropic key — add it below."
+                      : "Add your own Anthropic key below and it runs on that; no account needed."}
+                  </>
+                )}
               </div>
             )}
             {messages.map((m, i) => (
@@ -467,6 +597,27 @@ export default function ComposeChat() {
             )}
           </div>
           <div className={styles.chatTools}>
+            {siteKeyOffered && (
+              <>
+                <label className={styles.chatModelLabel} htmlFor="compose-key-mode">
+                  key
+                </label>
+                <select
+                  id="compose-key-mode"
+                  className={styles.chatModel}
+                  value={keyMode}
+                  onChange={(e) => pickKeyMode(e.target.value as "site" | "own")}
+                  title="whose Anthropic key this runs on"
+                >
+                  <option value="site" title="this site's key, shared between accounts and rate limited">
+                    this site
+                  </option>
+                  <option value="own" title="your own Anthropic key — your usage, your limits">
+                    your own
+                  </option>
+                </select>
+              </>
+            )}
             <label className={styles.chatModelLabel} htmlFor="compose-model">
               model
             </label>
@@ -484,12 +635,80 @@ export default function ComposeChat() {
               ))}
             </select>
           </div>
+          {keyMode === "own" && (
+            <div className={styles.chatKey}>
+              {apiKey && !editingKey ? (
+                <div className={styles.chatKeyRow}>
+                  <span className={styles.chatKeyName} title="your key, as far as this browser will show it">
+                    {maskApiKey(apiKey)}
+                  </span>
+                  <button
+                    className={styles.smallBtn}
+                    onClick={() => {
+                      setEditingKey(true);
+                      setKeyError("");
+                    }}
+                  >
+                    change
+                  </button>
+                  <button className={styles.smallBtn} onClick={forgetKey} title="remove it from this browser">
+                    forget
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <div className={styles.chatKeyRow}>
+                    <input
+                      className={styles.chatKeyInput}
+                      type="password"
+                      autoComplete="off"
+                      spellCheck={false}
+                      placeholder="sk-ant-…"
+                      aria-label="your Anthropic API key"
+                      value={keyDraft}
+                      onChange={(e) => {
+                        setKeyDraft(e.target.value);
+                        setKeyError("");
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          saveKey();
+                        }
+                      }}
+                    />
+                    <button
+                      className={`${styles.smallBtn} ${styles.smallBtnPrimary}`}
+                      onClick={saveKey}
+                      disabled={!keyDraft.trim()}
+                    >
+                      use key
+                    </button>
+                  </div>
+                  <label className={styles.chatKeyRemember}>
+                    <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
+                    remember it in this browser
+                  </label>
+                </>
+              )}
+              {keyError && <div className={styles.chatKeyError}>{keyError}</div>}
+              <div className={styles.chatKeyNote}>
+                Runs on your key and bills your Anthropic account. It is sent with each message to run
+                that turn and is never stored on the server.{" "}
+                <a href={API_KEY_CONSOLE_URL} target="_blank" rel="noreferrer noopener">
+                  get a key
+                </a>
+              </div>
+            </div>
+          )}
           <div className={styles.chatRow}>
             <textarea
               ref={inputRef}
               className={styles.chatTextarea}
               rows={2}
-              placeholder="make me a techno beat…  (shift+enter for a new line)"
+              placeholder={
+                needsKey ? "add your key above to compose…" : "make me a techno beat…  (shift+enter for a new line)"
+              }
               value={input}
               disabled={sending}
               onChange={(e) => setInput(e.target.value)}
@@ -498,7 +717,7 @@ export default function ComposeChat() {
             <button
               className={`${styles.smallBtn} ${styles.smallBtnPrimary}`}
               onClick={send}
-              disabled={sending || !input.trim()}
+              disabled={sending || !input.trim() || needsKey}
             >
               send
             </button>
