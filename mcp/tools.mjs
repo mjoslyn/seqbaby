@@ -1,7 +1,7 @@
 // The seqbaby tool table: name, description, zod input schema and a handler
 // per tool, shared by anything that wants an agent to write a song through
 // songBuilder.js. mcp/server.mjs wires these onto an McpServer for stdio
-// clients; app/compose/tools.ts wires the same table onto the Anthropic
+// clients; composeTurn.mjs beside it wires the same table onto the Anthropic
 // Messages API for the studio's own chat panel. One table, so a tool's
 // description or validation doesn't drift between the two.
 //
@@ -27,8 +27,8 @@ export const GUIDE_RELATIVE = path.join(".claude", "skills", "compose", "SKILL.m
  * to whatever the build machine's path was (webpack) or dropped entirely
  * (esbuild gives `{}`), so it is resolved lazily and never trusted -- computing
  * it at import time meant a bundler that dropped it took the whole importing
- * module down with it before any caller could fall back. app/compose/tools.ts
- * is the caller that has to survive exactly that.
+ * module down with it before any caller could fall back. composeTurn.mjs is
+ * the caller that has to survive exactly that.
  */
 function repoRoot() {
   const here = import.meta.url;

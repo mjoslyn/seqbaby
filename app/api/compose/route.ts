@@ -1,76 +1,25 @@
 import { NextResponse } from "next/server";
-import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@/lib/supabase/server";
-import {
-  anthropicTools,
-  composeGuide,
-  FORMAT_NOTES,
-  newCtx,
-  runTool,
-  serializeCtx,
-  sb,
-} from "@/app/compose/tools";
+import { createJob } from "@/lib/composeJobs.js";
+import { newCtx, runComposeTurn } from "@/mcp/composeTurn.mjs";
+import { appendJobEvent, finishJob } from "@/lib/composeJobs.js";
 
-// Node runtime: app/compose/tools.ts imports public/js/songBuilder.js
-// (dependency-free, no DOM/Tone/window -- the same guarantee that lets
-// mcp/server.mjs and the test suite run it under plain Node) and the
-// Anthropic SDK.
+// Node runtime: the loop imports public/js/songBuilder.js (dependency-free --
+// the same guarantee that lets mcp/server.mjs and the tests run it under
+// plain Node) and the Anthropic SDK.
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const MODEL = process.env.ANTHROPIC_MODEL || "claude-opus-5";
-// Effort decides how hard the model works a turn, and so how many rounds it
-// takes to get there -- which on an interactive route is latency. Lower effort
-// consolidates tool calls rather than trickling them out one per round.
-// Deliberately not "disable thinking": on this model that makes it write tool
-// calls into visible text instead of calling them.
-const EFFORT = (process.env.ANTHROPIC_EFFORT || "medium") as "low" | "medium" | "high";
-const MAX_TOOL_ROUNDS = 12;
-const MAX_HISTORY_TURNS = 16;
-
 type ChatTurn = { role: "user" | "assistant"; text: string };
 
-/** One newline-delimited JSON event on the response stream. `beat` carries
- *  nothing and exists only to keep bytes moving; the client ignores it. */
-export type StreamEvent =
-  | { type: "start" }
-  // `ms` is how long the turn has been running. It costs nothing to carry and
-  // it means a stream that gets cut off can still say how long it survived --
-  // the one number that tells a hosting timeout apart from anything else.
-  | { type: "beat"; ms: number }
-  | { type: "tool"; name: string; ok: boolean; summary: string }
-  | { type: "result"; reply: string; session: unknown; warnings: string[] }
-  | { type: "error"; error: string; session?: unknown };
-
-// Built once and reused byte for byte. Prompt caching is a PREFIX match, so a
-// system prompt that differed by even a character between rounds -- a
-// timestamp, a re-read file -- would miss the cache on every one of them.
-let cachedSystem: string | null = null;
-function systemPrompt() {
-  if (cachedSystem == null) cachedSystem = buildSystemPrompt();
-  return cachedSystem;
-}
-
-function buildSystemPrompt() {
-  return `You are the compose assistant inside seqbaby, a browser step sequencer. You write and edit the song the person has open by calling the tools -- never by describing changes in words instead of making them. Work in small, checkable steps and prefer editing what's there over starting over, unless they ask for something new.
-
-${composeGuide()}
-
----
-
-${FORMAT_NOTES}
-
-The tools operate on the song currently open in the studio (already loaded for you -- call get_song if you need to see it before editing). When you're done with a request, stop calling tools and reply in plain, friendly, non-technical language: a sentence or two on what you changed, not a list of tool calls. If a tool call fails, read the error, fix the call, and try again rather than giving up silently.`;
-}
-
-// A tool_use turn's error becomes tool_result content the model reads, same
-// as an MCP client sees a SongError -- so the agent can act on it instead of
-// silently stalling.
-function toolResultBlock(id: string, r: { ok: boolean; result?: unknown; error?: string }) {
-  const text = r.ok ? (typeof r.result === "string" ? r.result : JSON.stringify(r.result)) : r.error!;
-  return { type: "tool_result" as const, tool_use_id: id, content: text, is_error: !r.ok };
-}
-
+// POST /api/compose { message, history, session } -> { jobId }
+//
+// This route does NOT write the song. Writing a whole song is dozens of model
+// rounds and takes minutes; a synchronous function gets 26 seconds (measured:
+// a turn died at 28s, streaming included -- keeping the connection busy does
+// not buy time, it only changes where the cut lands). So the turn goes to a
+// background worker that nothing is waiting on, and the browser polls
+// /api/compose/status.
 export async function POST(req: Request) {
   const supabase = await createClient();
   const {
@@ -95,163 +44,88 @@ export async function POST(req: Request) {
   if (!message) return NextResponse.json({ error: "say something first" }, { status: 400 });
   if (message.length > 4000) return NextResponse.json({ error: "that message is too long" }, { status: 400 });
 
-  const history = Array.isArray(body.history) ? body.history.slice(-MAX_HISTORY_TURNS) : [];
-
-  // Adopting the studio's session validates it, so a blob the studio can't
-  // have produced is a bad request -- and it has to fail HERE, while a status
-  // code still means something. Once the stream opens, 200 is already sent.
-  let ctx;
+  // Adopting the session validates it, so a blob the studio couldn't have
+  // written is a bad request -- worth finding out now rather than inside a
+  // worker whose only way to report it is a record someone has to poll for.
   try {
-    ctx = newCtx(body.session);
+    newCtx(body.session);
   } catch (e) {
     const err = e as { message?: string };
     return NextResponse.json({ error: `couldn't read the open song: ${err?.message ?? e}` }, { status: 400 });
   }
 
-  const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-  const tools = anthropicTools();
-
-  const messages: Anthropic.MessageParam[] = [
-    ...history
-      .filter((h) => h && (h.role === "user" || h.role === "assistant") && typeof h.text === "string")
-      .map((h) => ({ role: h.role, content: h.text }) as Anthropic.MessageParam),
-    { role: "user", content: message },
-  ];
-
-  const encoder = new TextEncoder();
-  const stream = new ReadableStream<Uint8Array>({
-    async start(controller) {
-      let open = true;
-      const send = (event: StreamEvent) => {
-        if (!open) return;
-        try {
-          controller.enqueue(encoder.encode(JSON.stringify(event) + "\n"));
-        } catch {
-          open = false; // the client hung up
-        }
-      };
-
-      // A turn is several model calls end to end, which is far longer than a
-      // serverless request is allowed to sit silent -- the hosting layer cut
-      // the whole thing off and answered with its own HTML error page, which
-      // is what "Unexpected token '<'" was. So: a byte immediately, and never
-      // a long silence after it. The tool events carry real progress; the
-      // heartbeat covers the gaps while a model call is in flight.
-      const startedAt = Date.now();
-      send({ type: "start" });
-      const beat = setInterval(() => send({ type: "beat", ms: Date.now() - startedAt }), 2000);
-
-      let reply = "";
-      try {
-        for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-          // The stable prefix is big -- the compose guide plus 31 tool
-          // schemas -- and it was re-sent uncached on every round of every
-          // turn. One breakpoint on the system block covers the tools too
-          // (the prefix renders tools -> system -> messages), so every round
-          // after the first reads it back instead of paying for it, which is
-          // most of what a round was waiting on.
-          //
-          // Streamed rather than awaited whole: the SDK's own guidance for a
-          // call that may run long, and it keeps this end of the pipe moving
-          // as well as the one back to the browser.
-          const res = await anthropic.messages
-            .stream({
-              model: MODEL,
-              max_tokens: 8192,
-              output_config: { effort: EFFORT },
-              system: [
-                { type: "text", text: systemPrompt(), cache_control: { type: "ephemeral" } },
-              ],
-              tools,
-              messages,
-            })
-            .finalMessage();
-
-          // Whether the prefix cache is actually being hit is not something to
-          // assume: a read of 0 across rounds means something in the prefix is
-          // varying and every round is paying full freight. Netlify's function
-          // log is where to see it.
-          const u = res.usage;
-          console.log(
-            `[compose] round ${round} ${Date.now() - startedAt}ms in=${u.input_tokens} cache_read=${u.cache_read_input_tokens ?? 0} cache_write=${u.cache_creation_input_tokens ?? 0} out=${u.output_tokens}`,
-          );
-
-          messages.push({ role: "assistant", content: res.content });
-
-          const toolUses = res.content.filter((b): b is Anthropic.ToolUseBlock => b.type === "tool_use");
-          if (toolUses.length === 0) {
-            reply = res.content
-              .filter((b): b is Anthropic.TextBlock => b.type === "text")
-              .map((b) => b.text)
-              .join("\n")
-              .trim();
-            break;
-          }
-
-          const resultBlocks = toolUses.map((tu) => {
-            const r = runTool(ctx, tu.name, tu.input);
-            send({
-              type: "tool",
-              name: tu.name,
-              ok: r.ok,
-              summary: r.ok ? summarize(tu.name, r.result) : r.error!,
-            });
-            return toolResultBlock(tu.id, r);
-          });
-          messages.push({ role: "user", content: resultBlocks });
-
-          if (round === MAX_TOOL_ROUNDS - 1) {
-            reply = "I made a batch of changes but ran out of steps to finish and explain them -- have a listen, and tell me what to adjust.";
-          }
-        }
-
-        // The song goes out whatever happened above: the tools already ran,
-        // so the edits exist and the studio should get them.
-        send({
-          type: "result",
-          reply: reply || "Done.",
-          session: serializeCtx(ctx),
-          warnings: sb.validate(ctx.song).warnings,
-        });
-      } catch (e) {
-        const err = e as { message?: string };
-        // Past the first byte there is no status code left to fail with, so
-        // the error travels as an event -- with the song, since whatever the
-        // tools did before the failure is still real work.
-        send({
-          type: "error",
-          error: `compose failed: ${err?.message ?? e}`,
-          session: serializeCtx(ctx),
-        });
-      } finally {
-        clearInterval(beat);
-        open = false;
-        controller.close();
-      }
-    },
+  const history = Array.isArray(body.history) ? body.history : [];
+  const { id, token } = await createJob({
+    userId: user.id,
+    message,
+    history,
+    session: body.session,
   });
 
-  return new Response(stream, {
-    headers: {
-      "content-type": "application/x-ndjson; charset=utf-8",
-      "cache-control": "no-store, no-transform",
-      // Asks an intermediary not to sit on the body waiting for the end,
-      // which would undo the point of streaming it.
-      "x-accel-buffering": "no",
-    },
-  });
+  // Aim the worker at the deploy this request arrived on, rather than at
+  // whatever a site-wide env var names: a branch preview has to hand its job
+  // to its own worker, not to production's.
+  const origin = new URL(req.url).origin;
+  const workerUrl = `${origin}/.netlify/functions/compose-background`;
+
+  try {
+    const res = await fetch(workerUrl, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ jobId: id, token }),
+    });
+    // A background function answers 202 and runs on. Any 2xx means it took
+    // the job -- checking for 202 exactly would risk reading "accepted" as
+    // "missing" and running the turn a second time here, which is worse than
+    // not running it at all. A 404 is the honest miss, and what `next dev`
+    // gives, since it serves no /.netlify/ paths.
+    if (!res.ok) throw new Error(`worker answered ${res.status}`);
+  } catch (e) {
+    // No worker, so run it here. That is the local case: `next dev` has no
+    // background functions and no 26-second ceiling either, so the same loop
+    // runs to completion in-process while the browser polls.
+    //
+    // In production this is a poor substitute -- the runtime is free to
+    // freeze the container once this response goes out -- so it is worth
+    // seeing in the logs rather than silently limping.
+    console.warn(`[compose] no background worker (${(e as Error).message}); running inline`);
+    runInline(id);
+  }
+
+  return NextResponse.json({ jobId: id }, { status: 202 });
 }
 
-// A one-line status for the chat's activity log, so a person watching can
-// follow along without reading raw tool JSON.
-function summarize(name: string, result: unknown): string {
-  if (name === "add_track" && result && typeof result === "object") {
-    const r = result as { index?: number; engine?: string; name?: string };
-    return `added track ${r.index}: ${r.name ?? r.engine}`;
-  }
-  if (name === "set_steps" && result && typeof result === "object") {
-    const r = result as { pattern?: number; hits?: number };
-    return `wrote pattern ${r.pattern}: ${r.hits} hits`;
-  }
-  return name.replace(/_/g, " ");
+/**
+ * The `next dev` path: no background functions, and no 26-second ceiling
+ * either, so the turn runs right here. Deliberately NOT awaited -- the
+ * response has to go back now so the browser can start polling, exactly as it
+ * does against a real worker, which keeps one client path for both.
+ */
+function runInline(jobId: string) {
+  (async () => {
+    try {
+      const { getJobInput } = await import("@/lib/composeJobs.js");
+      const job = await getJobInput(jobId);
+      if (!job) return;
+      const out = await runComposeTurn({
+        apiKey: process.env.ANTHROPIC_API_KEY,
+        message: job.message,
+        history: job.history,
+        session: job.session,
+        onEvent: async (e: { type: string }) => {
+          if (e.type === "tool") await appendJobEvent(jobId, e);
+        },
+      });
+      await finishJob(jobId, {
+        status: "done",
+        reply: out.reply,
+        session: out.session,
+        warnings: out.warnings,
+        ms: out.ms,
+      });
+    } catch (e) {
+      const err = e as { message?: string };
+      await finishJob(jobId, { status: "error", error: `compose failed: ${err?.message ?? e}` }).catch(() => {});
+    }
+  })();
 }

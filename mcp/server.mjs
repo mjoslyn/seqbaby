@@ -13,7 +13,7 @@
 // Nothing here knows how a sound is made. The engine half is
 // public/js/songBuilder.js (pure, tested under node --test). The song-editing
 // tool TABLE (name, schema, handler) lives in tools.mjs, shared with the
-// studio's own compose chat (app/compose/tools.ts) so the two surfaces can't
+// studio's own compose chat (composeTurn.mjs) so the two surfaces can't
 // drift on what a tool does or accepts; this file adds the resources, the
 // two file/network tools that only make sense over stdio (export_song's
 // `path`, load_song's `path`, share_song, audition_song), and the wiring:

@@ -11,6 +11,15 @@
   # @netlify/plugin-nextjs requires Node 22+.
   NODE_VERSION = "22"
 
+# The compose worker (netlify/functions/compose-background.mjs) reads the
+# compose skill at runtime through a path it builds itself, which the function
+# bundler cannot see by following imports -- so it has to be named, exactly as
+# next.config.mjs names it for the Next route that runs the same loop under
+# `next dev`. Without this the worker falls back to composing without its
+# guide, which costs taste rather than failing outright.
+[functions]
+  included_files = [".claude/skills/compose/SKILL.md"]
+
 # Next.js runtime for Netlify: builds the App Router app, serves public/ static
 # assets (the engine: /js/*, /woscillators.js, /style.css, etc.) at web root, and
 # routes App Router route handlers (e.g. /api/share) to Netlify Functions.

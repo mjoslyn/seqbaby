@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { StreamEvent } from "@/app/api/compose/route";
 import styles from "@/app/ui.module.css";
 
 type Msg =
@@ -9,13 +8,24 @@ type Msg =
   | { role: "assistant"; text: string; activity?: string[]; warnings?: string[] }
   | { role: "error"; text: string };
 
-type ComposeResponse = {
+type ComposeResponse = { jobId?: string; error?: string };
+
+type JobStatus = {
+  status?: "running" | "done" | "error";
+  events?: { type: string; summary?: string }[];
   reply?: string;
   session?: unknown;
-  log?: { summary: string }[];
   warnings?: string[];
   error?: string;
 };
+
+// How long to keep polling before giving up on a worker that has gone quiet.
+// The worker's own ceiling is 15 minutes, so this sits just past it rather
+// than cutting off a song that is still being written.
+const POLL_INTERVAL_MS = 1500;
+const POLL_LIMIT_MS = 16 * 60 * 1000;
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /** What to say when the response wasn't the route's own JSON. */
 function describeFailure(status: number, raw: string, data: ComposeResponse | null): string {
@@ -116,58 +126,56 @@ export default function ComposeChat() {
         return;
       }
 
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      const activity: string[] = [];
-      let buf = "";
-      let result: Extract<StreamEvent, { type: "result" }> | null = null;
-      let failure: Extract<StreamEvent, { type: "error" }> | null = null;
-      let lastMs = 0;
-
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buf += decoder.decode(value, { stream: true });
-        // A chunk boundary lands anywhere, so the last piece is only a whole
-        // event once its newline has arrived.
-        const lines = buf.split("\n");
-        buf = lines.pop() ?? "";
-        for (const line of lines) {
-          if (!line.trim()) continue;
-          let ev: StreamEvent;
-          try {
-            ev = JSON.parse(line) as StreamEvent;
-          } catch {
-            continue;
-          }
-          if (ev.type === "tool") {
-            activity.push(ev.summary);
-            setLive([...activity]);
-          } else if (ev.type === "beat") lastMs = ev.ms;
-          else if (ev.type === "result") result = ev;
-          else if (ev.type === "error") failure = ev;
-        }
+      const started = (await res.json()) as ComposeResponse;
+      if (!started.jobId) {
+        setMessages((prev) => [...prev, { role: "error", text: started.error ?? "couldn't start that" }]);
+        return;
       }
 
-      // The tools ran server-side before anything came back, so a song that
-      // arrived with a failure is still real work: apply it either way.
-      const edited = result?.session ?? failure?.session;
-      if (edited) window.seqbaby?.applySet(edited);
+      // The turn is running somewhere nothing is waiting on, so from here it
+      // is polled rather than awaited -- which is what lets it take the
+      // minutes a whole song takes.
+      const activity: string[] = [];
+      const until = Date.now() + POLL_LIMIT_MS;
+      for (;;) {
+        await sleep(POLL_INTERVAL_MS);
+        if (Date.now() > until) {
+          setMessages((prev) => [
+            ...prev,
+            { role: "error", text: "gave up waiting on that one — it may still be running." },
+          ]);
+          return;
+        }
 
-      if (result) {
-        setMessages((prev) => [
-          ...prev,
-          { role: "assistant", text: result.reply || "Done.", activity, warnings: result.warnings },
-        ]);
-      } else {
-        // Only claim the work survived when a song actually came back: the
-        // edits live on the server's copy until it sends one, so a stream cut
-        // before that took them with it.
-        const ran = lastMs ? ` after ${Math.round(lastMs / 1000)}s` : "";
-        const cutOff = edited
-          ? `the connection dropped${ran} before it finished, but the changes above were applied.`
-          : `the connection dropped${ran} before anything came back — the song is unchanged. A big request can outlast the server's time limit; try one change at a time.`;
-        setMessages((prev) => [...prev, { role: "error", text: failure?.error ?? cutOff }]);
+        const pollRes = await fetch(`/api/compose/status?id=${encodeURIComponent(started.jobId)}`);
+        if (!pollRes.ok) {
+          // A poll that fails is not the job failing: a blip shouldn't throw
+          // away a song that is still being written, so keep asking.
+          continue;
+        }
+        const job = (await pollRes.json()) as JobStatus;
+
+        const summaries = (job.events ?? [])
+          .filter((e) => e.type === "tool" && e.summary)
+          .map((e) => e.summary!);
+        if (summaries.length !== activity.length) {
+          activity.length = 0;
+          activity.push(...summaries);
+          setLive([...activity]);
+        }
+
+        if (job.status === "done") {
+          if (job.session) window.seqbaby?.applySet(job.session);
+          setMessages((prev) => [
+            ...prev,
+            { role: "assistant", text: job.reply || "Done.", activity: [...activity], warnings: job.warnings },
+          ]);
+          return;
+        }
+        if (job.status === "error") {
+          setMessages((prev) => [...prev, { role: "error", text: job.error ?? "that didn't work" }]);
+          return;
+        }
       }
     } catch (e) {
       setMessages((prev) => [...prev, { role: "error", text: `couldn't reach compose chat: ${(e as Error).message}` }]);
