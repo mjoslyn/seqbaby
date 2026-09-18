@@ -8,6 +8,30 @@ type Msg =
   | { role: "assistant"; text: string; activity?: string[]; warnings?: string[] }
   | { role: "error"; text: string };
 
+type ComposeResponse = {
+  reply?: string;
+  session?: unknown;
+  log?: { summary: string }[];
+  warnings?: string[];
+  error?: string;
+};
+
+/** What to say when the response wasn't the route's own JSON. */
+function describeFailure(status: number, raw: string, data: ComposeResponse | null): string {
+  if (data?.error) return data.error;
+  // 502/504 with an HTML body is the hosting layer, not the route: nothing
+  // the route says ever gets this far, so the status is all there is to go on.
+  if (status === 504 || status === 408) {
+    return `that took too long and the server cut it off (${status}). A big request can run past the hosting timeout — try asking for one change at a time.`;
+  }
+  if (status === 502 || status === 503) {
+    return `the server couldn't complete the request (${status}) — it may have run too long or run out of memory.`;
+  }
+  const snippet = raw.trim().slice(0, 160);
+  if (snippet.startsWith("<")) return `the server returned a ${status} page instead of a reply.`;
+  return snippet || `the server returned ${status} with an empty reply.`;
+}
+
 // A chat panel that edits the song open in the studio, backed by
 // app/api/compose (the same songBuilder tools the MCP server exposes to an
 // external agent, run server-side against the account's Anthropic key).
@@ -70,9 +94,20 @@ export default function ComposeChat() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ message: text, history, session }),
       });
-      const data = await res.json();
-      if (!res.ok) {
-        setMessages((prev) => [...prev, { role: "error", text: data.error || "something went wrong" }]);
+      // Read as text and parse by hand. A failure that never reached the
+      // route -- a gateway timing the request out, a 502 -- answers with an
+      // HTML page, and res.json() on that throws a SyntaxError about an
+      // unexpected "<", which is a report about the parser rather than about
+      // what went wrong. The status is the useful part.
+      const raw = await res.text();
+      let data: ComposeResponse | null = null;
+      try {
+        data = raw ? (JSON.parse(raw) as ComposeResponse) : null;
+      } catch {
+        data = null;
+      }
+      if (!res.ok || !data) {
+        setMessages((prev) => [...prev, { role: "error", text: describeFailure(res.status, raw, data) }]);
         return;
       }
       if (data.session) window.seqbaby?.applySet(data.session);
