@@ -106,6 +106,9 @@ export default function ComposeChat() {
         compose
       </button>
       {open && (
+        <div className={styles.chatBackdrop} onClick={() => setOpen(false)} aria-hidden />
+      )}
+      {open && (
         <div className={`${styles.panel} ${styles.chatPanel}`}>
           <div className={styles.panelTitle}>ask for changes to this song</div>
           <div className={styles.chatLog} ref={logRef}>

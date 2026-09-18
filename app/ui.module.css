@@ -370,10 +370,15 @@
 .iconBtnOn { color: #6ee7b7; }
 
 /* --- compose chat (ComposeChat.tsx) --- */
-/* Wider and taller than the songs/save dropdowns: it holds a conversation,
-   not a list of rows. Same `.songsWrap`/`.panel` shell as SongsMenu, so it
-   inherits the mobile bottom-sheet treatment for free. */
-.chatPanel { width: 360px; max-height: 80vh; display: flex; flex-direction: column; }
+/* A conversation alongside the song, not a dropdown fighting a 300px panel
+   for space: on desktop it's a full-height drawer off the right edge, with
+   its own backdrop (SongsMenu's panel has none -- it's small enough that
+   clicking past it is rarely an accident; a drawer covering a third of the
+   screen needs one). Same `.songsWrap`/`.panel` shell as the other panels
+   otherwise, so on a phone the `max-width: 768px` block below leaves it as
+   the same bottom sheet every other panel uses -- the drawer treatment is
+   scoped to the `min-width: 769px` block further down. */
+.chatPanel { display: flex; flex-direction: column; }
 .chatLog {
   flex: 1;
   min-height: 120px;
@@ -409,6 +414,37 @@
 }
 .chatTextarea:focus { outline: none; border-color: #6ee7b7; }
 .chatTextarea:disabled { opacity: 0.6; }
+.chatBackdrop { display: none; }
+
+/* Above phone width: the drawer proper, pinned to the right edge, full
+   height. Higher than an engine modal (z-index 200) and the mobile bar's
+   raised state (250) -- composing should stay reachable over either. */
+@media (min-width: 769px) {
+  .chatBackdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 299;
+    background: rgba(0, 0, 0, 0.35);
+  }
+  .chatPanel {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 300;
+    width: 380px;
+    max-width: 90vw;
+    max-height: none;
+    margin: 0;
+    border-top: 0;
+    border-right: 0;
+    border-bottom: 0;
+    border-radius: 0;
+    box-shadow: -12px 0 40px rgba(0, 0, 0, 0.55);
+  }
+  .chatLog { max-height: none; }
+}
 
 /* ============================================================ */
 /* mobile: the bar becomes one button and a sheet               */
