@@ -30,6 +30,9 @@ type JobStatus = {
 // than cutting off a song that is still being written.
 const POLL_INTERVAL_MS = 1500;
 const POLL_LIMIT_MS = 16 * 60 * 1000;
+// Consecutive polls that couldn't get an answer at all before giving up: at
+// the interval above, roughly half a minute of no contact.
+const MAX_POLL_MISSES = 20;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -256,6 +259,7 @@ export default function ComposeChat() {
       // minutes a whole song takes.
       const activity: string[] = [];
       const until = Date.now() + POLL_LIMIT_MS;
+      let misses = 0;
       for (;;) {
         await sleep(POLL_INTERVAL_MS);
         if (Date.now() > until) {
@@ -263,12 +267,39 @@ export default function ComposeChat() {
           return;
         }
 
-        const pollRes = await fetch(`/api/compose/status?id=${encodeURIComponent(started.jobId)}`);
-        if (!pollRes.ok) {
-          // A poll that fails is not the job failing: a blip shouldn't throw
-          // away a song that is still being written, so keep asking.
+        // A failed poll is usually not the job failing -- a blip must not throw
+        // away a song still being written -- but "keep asking" is only right
+        // for something that might recover. A 404 (no such job, or not this
+        // account's) and a 401 (signed out) are answers, not blips: asking
+        // again gets the same reply until the 16-minute limit reports a
+        // timeout that never happened.
+        let pollRes: Response;
+        try {
+          pollRes = await fetch(`/api/compose/status?id=${encodeURIComponent(started.jobId)}`);
+        } catch {
+          if (++misses > MAX_POLL_MISSES) {
+            land({ role: "error", text: "lost contact with the server while that was running." });
+            return;
+          }
           continue;
         }
+        if (pollRes.status === 401) {
+          land({ role: "error", text: "signed out while that was running — sign in and the song may still be there." });
+          return;
+        }
+        if (pollRes.status === 404) {
+          land({ role: "error", text: "that job is no longer on the server." });
+          return;
+        }
+        if (!pollRes.ok) {
+          // Anything else (a 5xx, a rate limit) might pass, but not forever.
+          if (++misses > MAX_POLL_MISSES) {
+            land({ role: "error", text: `the server kept failing to report on that (${pollRes.status}).` });
+            return;
+          }
+          continue;
+        }
+        misses = 0;
         const job = (await pollRes.json()) as JobStatus;
 
         const summaries = (job.events ?? [])
