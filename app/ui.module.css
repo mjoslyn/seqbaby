@@ -369,6 +369,47 @@
 .treeHint { color: #6b7280; font-size: 11px; margin: -2px 0 6px; }
 .iconBtnOn { color: #6ee7b7; }
 
+/* --- compose chat (ComposeChat.tsx) --- */
+/* Wider and taller than the songs/save dropdowns: it holds a conversation,
+   not a list of rows. Same `.songsWrap`/`.panel` shell as SongsMenu, so it
+   inherits the mobile bottom-sheet treatment for free. */
+.chatPanel { width: 360px; max-height: 80vh; display: flex; flex-direction: column; }
+.chatLog {
+  flex: 1;
+  min-height: 120px;
+  max-height: 50vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding-right: 2px;
+}
+.chatEmpty { color: #6b7280; font-size: 12px; padding: 12px 2px; line-height: 1.5; }
+.chatMsg { max-width: 88%; padding: 7px 10px; border-radius: 10px; font-size: 12px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
+.chatMsgUser { align-self: flex-end; background: #22252c; color: #e8e8ea; border-bottom-right-radius: 2px; }
+.chatMsgAssistant { align-self: flex-start; background: #0e0f12; border: 1px solid #2a2d35; color: #cfd3da; border-bottom-left-radius: 2px; }
+.chatMsgError { align-self: flex-start; background: #2a1416; border: 1px solid #4a2226; color: #f87171; }
+.chatActivity { align-self: flex-start; color: #6b7280; font-size: 10.5px; padding: 0 2px; }
+.chatWarn { align-self: flex-start; color: #d3b26a; font-size: 10.5px; padding: 0 2px; }
+.chatRow { display: flex; gap: 6px; align-items: flex-end; }
+.chatTextarea {
+  flex: 1;
+  min-width: 0;
+  resize: none;
+  background: #0e0f12;
+  border: 1px solid #2a2d35;
+  border-radius: 8px;
+  padding: 8px 10px;
+  color: #e8e8ea;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.4;
+  max-height: 120px;
+}
+.chatTextarea:focus { outline: none; border-color: #6ee7b7; }
+.chatTextarea:disabled { opacity: 0.6; }
+
 /* ============================================================ */
 /* mobile: the bar becomes one button and a sheet               */
 /* ------------------------------------------------------------ */
