@@ -31,7 +31,7 @@ export async function GET(req: Request) {
     // Only once it is finished: a session runs to megabytes and this is polled
     // every couple of seconds.
     ...(p.status === "done"
-      ? { reply: p.reply, session: p.session, changed: p.changed, warnings: p.warnings }
+      ? { reply: p.reply, model: p.model, session: p.session, changed: p.changed, warnings: p.warnings }
       : {}),
     ...(p.status === "error" ? { error: p.error } : {}),
   });

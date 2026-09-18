@@ -899,6 +899,8 @@ export async function unpublishSong(
 export type ChatTurn = {
   role: "user" | "assistant" | "error";
   text: string;
+  /** Which model wrote the turn, when the panel offered a choice. */
+  model?: string;
   activity?: string[];
   warnings?: string[];
 };

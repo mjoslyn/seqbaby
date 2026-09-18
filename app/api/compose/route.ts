@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createJob } from "@/lib/composeJobs.js";
 import { newCtx, runComposeTurn } from "@/mcp/composeTurn.mjs";
 import { appendJobEvent, finishJob } from "@/lib/composeJobs.js";
+import { isComposeModel } from "@/lib/composeModels.js";
 
 // Node runtime: the loop imports public/js/songBuilder.js (dependency-free --
 // the same guarantee that lets mcp/server.mjs and the tests run it under
@@ -33,11 +34,20 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "compose chat isn't configured on this deploy" }, { status: 500 });
   }
 
-  let body: { message?: string; history?: ChatTurn[]; session?: unknown };
+  let body: { message?: string; history?: ChatTurn[]; session?: unknown; model?: string };
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: "bad request" }, { status: 400 });
+  }
+
+  // The model is the browser's to pick per message, but not to invent: the
+  // turn runs on the deploy's key, so an id that isn't on the allowlist is
+  // refused rather than quietly swapped. Absent is fine and means the deploy's
+  // own default (ANTHROPIC_MODEL, else the shared one).
+  const model = typeof body.model === "string" && body.model ? body.model : undefined;
+  if (model && !isComposeModel(model)) {
+    return NextResponse.json({ error: "that isn't a model this deploy will run" }, { status: 400 });
   }
 
   const message = typeof body.message === "string" ? body.message.trim() : "";
@@ -60,6 +70,7 @@ export async function POST(req: Request) {
     message,
     history,
     session: body.session,
+    model,
   });
   // Over this account's limits on the deploy's shared key. 429 so the panel
   // can say so plainly rather than treating it as a failure to start.
@@ -112,6 +123,10 @@ function runInline(jobId: string) {
       if (!job) return;
       const out = await runComposeTurn({
         apiKey: process.env.ANTHROPIC_API_KEY,
+        // Undefined here takes runComposeTurn's own default parameter, which
+        // is the deploy's -- so a job with no model on it behaves exactly as
+        // every job did before there was a choice.
+        model: job.model,
         message: job.message,
         history: job.history,
         session: job.session,
@@ -122,6 +137,7 @@ function runInline(jobId: string) {
       await finishJob(jobId, {
         status: "done",
         reply: out.reply,
+        model: out.model,
         session: out.session,
         changed: out.changed,
         warnings: out.warnings,

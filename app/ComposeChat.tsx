@@ -3,11 +3,12 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { getOpenSong, subscribeOpenSong } from "@/app/songs/openSong";
 import { loadSongChat, saveSongChat } from "@/app/songs/actions";
+import { COMPOSE_MODELS, DEFAULT_COMPOSE_MODEL, composeModelLabel, isComposeModel } from "@/lib/composeModels.js";
 import styles from "@/app/ui.module.css";
 
 type Msg =
   | { role: "user"; text: string }
-  | { role: "assistant"; text: string; activity?: string[]; warnings?: string[] }
+  | { role: "assistant"; text: string; model?: string; activity?: string[]; warnings?: string[] }
   | { role: "error"; text: string };
 
 type ComposeResponse = { jobId?: string; error?: string };
@@ -16,6 +17,10 @@ type JobStatus = {
   status?: "running" | "done" | "error";
   events?: { type: string; summary?: string }[];
   reply?: string;
+  /** Which model ran the turn. Absent on a record written before the panel
+   *  could ask for one, which is why the transcript prints it only when it
+   *  is there. */
+  model?: string;
   session?: unknown;
   /** Whether the turn actually altered the song. False for a question, or for
    *  edits that cancelled out. Absent on a record written before this existed,
@@ -33,6 +38,12 @@ const POLL_LIMIT_MS = 16 * 60 * 1000;
 // Consecutive polls that couldn't get an answer at all before giving up: at
 // the interval above, roughly half a minute of no contact.
 const MAX_POLL_MISSES = 20;
+
+// Where the picked model is remembered. Per browser, not per song and not on
+// the server: it is a preference about how you want to work, and a song opened
+// on another machine has no business changing which model that one spends its
+// turns on.
+const MODEL_KEY = "seqbaby.composeModel.v1";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -71,6 +82,15 @@ export default function ComposeChat() {
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
+  // Which model the NEXT message goes to. It sticks until changed, so a
+  // conversation can be worked through on the fast one and handed to the
+  // careful one for the arrangement, but nothing about it is retroactive:
+  // every message carries whichever was picked when it was sent.
+  const [model, setModel] = useState<string>(DEFAULT_COMPOSE_MODEL);
+  // What the turn IN FLIGHT went to. The dropdown stays live while one runs
+  // -- picking the next message's model is exactly the sort of thing you do
+  // while waiting -- so the running line can't read the current selection.
+  const [sendingModel, setSendingModel] = useState<string>("");
   // Tool activity for the turn in flight, filled in as it happens. It moves
   // onto the finished message when the turn lands.
   const [live, setLive] = useState<string[]>([]);
@@ -87,6 +107,28 @@ export default function ComposeChat() {
   const openSong = useSyncExternalStore(subscribeOpenSong, getOpenSong, getOpenSong);
   const songId = openSong.id;
   const isTemplate = openSong.isTemplate;
+
+  // Read in an effect rather than in useState's initializer: this component
+  // renders on the server too (it returns null until the engine says it is
+  // ready), and a localStorage read there is a hydration mismatch waiting to
+  // happen. A stored id that is no longer offered falls back to the default.
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem(MODEL_KEY);
+      if (saved && isComposeModel(saved)) setModel(saved);
+    } catch {
+      /* private mode, blocked storage: the default is a fine answer */
+    }
+  }, []);
+
+  const pickModel = useCallback((id: string) => {
+    setModel(id);
+    try {
+      window.localStorage.setItem(MODEL_KEY, id);
+    } catch {
+      /* not worth failing a message over */
+    }
+  }, []);
 
   useEffect(() => {
     if (window.seqbaby) {
@@ -216,6 +258,7 @@ export default function ComposeChat() {
     setMessages(withUser);
     setInput("");
     setSending(true);
+    setSendingModel(model);
     setLive([]);
 
     // Attached to whichever song is open WHEN THE TURN LANDS, not when it
@@ -245,7 +288,7 @@ export default function ComposeChat() {
       const res = await fetch("/api/compose", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ message: text, history, session }),
+        body: JSON.stringify({ message: text, history, session, model }),
       });
       // Anything that failed before the route got to stream -- auth, a bad
       // request, a gateway page -- arrives as an ordinary body with a status
@@ -339,6 +382,10 @@ export default function ComposeChat() {
           land({
             role: "assistant",
             text: job.reply || "Done.",
+            // What it actually ran on, as the worker reported it -- not the
+            // dropdown's current value, which may have been changed while
+            // this turn was running.
+            model: job.model,
             activity: [...activity],
             warnings: job.warnings,
           });
@@ -355,7 +402,7 @@ export default function ComposeChat() {
       setSending(false);
       setLive([]);
     }
-  }, [input, sending, messages]);
+  }, [input, sending, messages, model]);
 
   const onKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -401,8 +448,10 @@ export default function ComposeChat() {
                 >
                   {m.text}
                 </div>
-                {m.role === "assistant" && m.activity && m.activity.length > 0 && (
-                  <div className={styles.chatActivity}>{m.activity.join(" · ")}</div>
+                {m.role === "assistant" && (m.model || (m.activity && m.activity.length > 0)) && (
+                  <div className={styles.chatActivity}>
+                    {[...(m.model ? [composeModelLabel(m.model)] : []), ...(m.activity ?? [])].join(" · ")}
+                  </div>
                 )}
                 {m.role === "assistant" && m.warnings && m.warnings.length > 0 && (
                   <div className={styles.chatWarn}>{m.warnings.join(" · ")}</div>
@@ -411,9 +460,29 @@ export default function ComposeChat() {
             ))}
             {sending && (
               <div className={styles.chatActivity}>
-                {live.length > 0 ? `${live.join(" · ")} …` : "working…"}
+                {[composeModelLabel(sendingModel || model), live.length > 0 ? `${live.join(" · ")} …` : "working…"].join(
+                  " · ",
+                )}
               </div>
             )}
+          </div>
+          <div className={styles.chatTools}>
+            <label className={styles.chatModelLabel} htmlFor="compose-model">
+              model
+            </label>
+            <select
+              id="compose-model"
+              className={styles.chatModel}
+              value={model}
+              onChange={(e) => pickModel(e.target.value)}
+              title={COMPOSE_MODELS.find((m) => m.id === model)?.note}
+            >
+              {COMPOSE_MODELS.map((m) => (
+                <option key={m.id} value={m.id} title={m.note}>
+                  {m.label}
+                </option>
+              ))}
+            </select>
           </div>
           <div className={styles.chatRow}>
             <textarea
