@@ -390,13 +390,13 @@
   margin-bottom: 8px;
   padding-right: 2px;
 }
-.chatEmpty { color: #6b7280; font-size: 12px; padding: 12px 2px; line-height: 1.5; }
+.chatEmpty { color: #9aa0aa; font-size: 12px; padding: 12px 2px; line-height: 1.5; }
 .chatMsg { max-width: 88%; padding: 7px 10px; border-radius: 10px; font-size: 12px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
 .chatMsgUser { align-self: flex-end; background: #22252c; color: #e8e8ea; border-bottom-right-radius: 2px; }
-.chatMsgAssistant { align-self: flex-start; background: #0e0f12; border: 1px solid #2a2d35; color: #cfd3da; border-bottom-left-radius: 2px; }
+.chatMsgAssistant { align-self: flex-start; background: #0e0f12; border: 1px solid #2a2d35; color: #dfe3ea; border-bottom-left-radius: 2px; }
 .chatMsgError { align-self: flex-start; background: #2a1416; border: 1px solid #4a2226; color: #f87171; }
-.chatActivity { align-self: flex-start; color: #6b7280; font-size: 10.5px; padding: 0 2px; }
-.chatWarn { align-self: flex-start; color: #d3b26a; font-size: 10.5px; padding: 0 2px; }
+.chatActivity { align-self: flex-start; color: #9aa0aa; font-size: 10.5px; padding: 0 2px; }
+.chatWarn { align-self: flex-start; color: #e3c47c; font-size: 10.5px; padding: 0 2px; }
 .chatRow { display: flex; gap: 6px; align-items: flex-end; }
 .chatTextarea {
   flex: 1;
@@ -410,10 +410,19 @@
   font: inherit;
   font-size: 12px;
   line-height: 1.4;
-  max-height: 120px;
+  /* Two lines to start and room for about eight: a brief is a sentence or
+     three, and the box grows to what's typed (ComposeChat sets the height
+     from scrollHeight, which this caps). */
+  min-height: 46px;
+  max-height: 160px;
 }
 .chatTextarea:focus { outline: none; border-color: #6ee7b7; }
 .chatTextarea:disabled { opacity: 0.6; }
+/* #6b7280 on this background is about 4:1 -- under AA, and everything here is
+   10.5-12px, which is where that shows. The stylesheet's own secondary grey is
+   ~7.3:1. `.panelTitle` is shared with the songs and save panels, so the
+   chat's copy is raised on its own rather than changing theirs. */
+.chatPanel .panelTitle { color: #9aa0aa; }
 .chatBackdrop { display: none; }
 
 /* Above phone width: the drawer proper, pinned to the right edge, full
