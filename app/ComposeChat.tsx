@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { StreamEvent } from "@/app/api/compose/route";
 import styles from "@/app/ui.module.css";
 
 type Msg =
@@ -48,6 +49,9 @@ export default function ComposeChat() {
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
+  // Tool activity for the turn in flight, streamed in as it happens. It
+  // moves onto the finished message when the turn lands.
+  const [live, setLive] = useState<string[]>([]);
   const wrapRef = useRef<HTMLDivElement>(null);
   const logRef = useRef<HTMLDivElement>(null);
 
@@ -72,7 +76,7 @@ export default function ComposeChat() {
 
   useEffect(() => {
     logRef.current?.scrollTo({ top: logRef.current.scrollHeight });
-  }, [messages, sending]);
+  }, [messages, sending, live]);
 
   const send = useCallback(async () => {
     const text = input.trim();
@@ -88,38 +92,87 @@ export default function ComposeChat() {
     setMessages((prev) => [...prev, { role: "user", text }]);
     setInput("");
     setSending(true);
+    setLive([]);
     try {
       const res = await fetch("/api/compose", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ message: text, history, session }),
       });
-      // Read as text and parse by hand. A failure that never reached the
-      // route -- a gateway timing the request out, a 502 -- answers with an
-      // HTML page, and res.json() on that throws a SyntaxError about an
-      // unexpected "<", which is a report about the parser rather than about
-      // what went wrong. The status is the useful part.
-      const raw = await res.text();
-      let data: ComposeResponse | null = null;
-      try {
-        data = raw ? (JSON.parse(raw) as ComposeResponse) : null;
-      } catch {
-        data = null;
-      }
-      if (!res.ok || !data) {
+      // Anything that failed before the route got to stream -- auth, a bad
+      // request, a gateway page -- arrives as an ordinary body with a status
+      // worth reading. Parse it by hand: res.json() on an HTML error page
+      // throws about an unexpected "<", which reports on the parser rather
+      // than on what went wrong.
+      if (!res.ok || !res.body) {
+        const raw = await res.text();
+        let data: ComposeResponse | null = null;
+        try {
+          data = raw ? (JSON.parse(raw) as ComposeResponse) : null;
+        } catch {
+          data = null;
+        }
         setMessages((prev) => [...prev, { role: "error", text: describeFailure(res.status, raw, data) }]);
         return;
       }
-      if (data.session) window.seqbaby?.applySet(data.session);
-      const activity: string[] = Array.isArray(data.log) ? data.log.map((l: { summary: string }) => l.summary) : [];
-      setMessages((prev) => [
-        ...prev,
-        { role: "assistant", text: data.reply || "Done.", activity, warnings: data.warnings },
-      ]);
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      const activity: string[] = [];
+      let buf = "";
+      let result: Extract<StreamEvent, { type: "result" }> | null = null;
+      let failure: Extract<StreamEvent, { type: "error" }> | null = null;
+
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        // A chunk boundary lands anywhere, so the last piece is only a whole
+        // event once its newline has arrived.
+        const lines = buf.split("\n");
+        buf = lines.pop() ?? "";
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          let ev: StreamEvent;
+          try {
+            ev = JSON.parse(line) as StreamEvent;
+          } catch {
+            continue;
+          }
+          if (ev.type === "tool") {
+            activity.push(ev.summary);
+            setLive([...activity]);
+          } else if (ev.type === "result") result = ev;
+          else if (ev.type === "error") failure = ev;
+        }
+      }
+
+      // The tools ran server-side before anything came back, so a song that
+      // arrived with a failure is still real work: apply it either way.
+      const edited = result?.session ?? failure?.session;
+      if (edited) window.seqbaby?.applySet(edited);
+
+      if (result) {
+        setMessages((prev) => [
+          ...prev,
+          { role: "assistant", text: result.reply || "Done.", activity, warnings: result.warnings },
+        ]);
+      } else {
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: "error",
+            text:
+              failure?.error ??
+              "the connection ended before the reply did — any changes above were still made.",
+          },
+        ]);
+      }
     } catch (e) {
       setMessages((prev) => [...prev, { role: "error", text: `couldn't reach compose chat: ${(e as Error).message}` }]);
     } finally {
       setSending(false);
+      setLive([]);
     }
   }, [input, sending, messages]);
 
@@ -175,7 +228,11 @@ export default function ComposeChat() {
                 )}
               </div>
             ))}
-            {sending && <div className={styles.chatActivity}>working…</div>}
+            {sending && (
+              <div className={styles.chatActivity}>
+                {live.length > 0 ? `${live.join(" · ")} …` : "working…"}
+              </div>
+            )}
           </div>
           <div className={styles.chatRow}>
             <textarea

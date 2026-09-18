@@ -24,6 +24,15 @@ const MAX_HISTORY_TURNS = 16;
 
 type ChatTurn = { role: "user" | "assistant"; text: string };
 
+/** One newline-delimited JSON event on the response stream. `beat` carries
+ *  nothing and exists only to keep bytes moving; the client ignores it. */
+export type StreamEvent =
+  | { type: "start" }
+  | { type: "beat" }
+  | { type: "tool"; name: string; ok: boolean; summary: string }
+  | { type: "result"; reply: string; session: unknown; warnings: string[] }
+  | { type: "error"; error: string; session?: unknown };
+
 function systemPrompt() {
   return `You are the compose assistant inside seqbaby, a browser step sequencer. You write and edit the song the person has open by calling the tools -- never by describing changes in words instead of making them. Work in small, checkable steps and prefer editing what's there over starting over, unless they ask for something new.
 
@@ -70,7 +79,17 @@ export async function POST(req: Request) {
 
   const history = Array.isArray(body.history) ? body.history.slice(-MAX_HISTORY_TURNS) : [];
 
-  const ctx = newCtx(body.session);
+  // Adopting the studio's session validates it, so a blob the studio can't
+  // have produced is a bad request -- and it has to fail HERE, while a status
+  // code still means something. Once the stream opens, 200 is already sent.
+  let ctx;
+  try {
+    ctx = newCtx(body.session);
+  } catch (e) {
+    const err = e as { message?: string };
+    return NextResponse.json({ error: `couldn't read the open song: ${err?.message ?? e}` }, { status: 400 });
+  }
+
   const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
   const tools = anthropicTools();
 
@@ -81,58 +100,102 @@ export async function POST(req: Request) {
     { role: "user", content: message },
   ];
 
-  const log: { name: string; args: unknown; ok: boolean; summary: string }[] = [];
-  let reply = "";
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      let open = true;
+      const send = (event: StreamEvent) => {
+        if (!open) return;
+        try {
+          controller.enqueue(encoder.encode(JSON.stringify(event) + "\n"));
+        } catch {
+          open = false; // the client hung up
+        }
+      };
 
-  try {
-    for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-      const res = await anthropic.messages.create({
-        model: MODEL,
-        max_tokens: 4096,
-        system: systemPrompt(),
-        tools,
-        messages,
-      });
+      // A turn is several model calls end to end, which is far longer than a
+      // serverless request is allowed to sit silent -- the hosting layer cut
+      // the whole thing off and answered with its own HTML error page, which
+      // is what "Unexpected token '<'" was. So: a byte immediately, and never
+      // a long silence after it. The tool events carry real progress; the
+      // heartbeat covers the gaps while a model call is in flight.
+      send({ type: "start" });
+      const beat = setInterval(() => send({ type: "beat" }), 2000);
 
-      messages.push({ role: "assistant", content: res.content });
+      let reply = "";
+      try {
+        for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+          const res = await anthropic.messages.create({
+            model: MODEL,
+            max_tokens: 4096,
+            system: systemPrompt(),
+            tools,
+            messages,
+          });
 
-      const toolUses = res.content.filter((b): b is Anthropic.ToolUseBlock => b.type === "tool_use");
-      if (toolUses.length === 0) {
-        reply = res.content
-          .filter((b): b is Anthropic.TextBlock => b.type === "text")
-          .map((b) => b.text)
-          .join("\n")
-          .trim();
-        break;
-      }
+          messages.push({ role: "assistant", content: res.content });
 
-      const resultBlocks = toolUses.map((tu) => {
-        const r = runTool(ctx, tu.name, tu.input);
-        log.push({
-          name: tu.name,
-          args: tu.input,
-          ok: r.ok,
-          summary: r.ok ? summarize(tu.name, r.result) : r.error!,
+          const toolUses = res.content.filter((b): b is Anthropic.ToolUseBlock => b.type === "tool_use");
+          if (toolUses.length === 0) {
+            reply = res.content
+              .filter((b): b is Anthropic.TextBlock => b.type === "text")
+              .map((b) => b.text)
+              .join("\n")
+              .trim();
+            break;
+          }
+
+          const resultBlocks = toolUses.map((tu) => {
+            const r = runTool(ctx, tu.name, tu.input);
+            send({
+              type: "tool",
+              name: tu.name,
+              ok: r.ok,
+              summary: r.ok ? summarize(tu.name, r.result) : r.error!,
+            });
+            return toolResultBlock(tu.id, r);
+          });
+          messages.push({ role: "user", content: resultBlocks });
+
+          if (round === MAX_TOOL_ROUNDS - 1) {
+            reply = "I made a batch of changes but ran out of steps to finish and explain them -- have a listen, and tell me what to adjust.";
+          }
+        }
+
+        // The song goes out whatever happened above: the tools already ran,
+        // so the edits exist and the studio should get them.
+        send({
+          type: "result",
+          reply: reply || "Done.",
+          session: serializeCtx(ctx),
+          warnings: sb.validate(ctx.song).warnings,
         });
-        return toolResultBlock(tu.id, r);
-      });
-      messages.push({ role: "user", content: resultBlocks });
-
-      if (round === MAX_TOOL_ROUNDS - 1) {
-        reply = "I made a batch of changes but ran out of steps to finish and explain them -- have a listen, and tell me what to adjust.";
+      } catch (e) {
+        const err = e as { message?: string };
+        // Past the first byte there is no status code left to fail with, so
+        // the error travels as an event -- with the song, since whatever the
+        // tools did before the failure is still real work.
+        send({
+          type: "error",
+          error: `compose failed: ${err?.message ?? e}`,
+          session: serializeCtx(ctx),
+        });
+      } finally {
+        clearInterval(beat);
+        open = false;
+        controller.close();
       }
-    }
-  } catch (e) {
-    const err = e as { message?: string };
-    return NextResponse.json({ error: `compose failed: ${err?.message ?? e}` }, { status: 502 });
-  }
+    },
+  });
 
-  const validation = sb.validate(ctx.song);
-  return NextResponse.json({
-    reply: reply || "Done.",
-    session: serializeCtx(ctx),
-    log,
-    warnings: validation.warnings,
+  return new Response(stream, {
+    headers: {
+      "content-type": "application/x-ndjson; charset=utf-8",
+      "cache-control": "no-store, no-transform",
+      // Asks an intermediary not to sit on the body waiting for the end,
+      // which would undo the point of streaming it.
+      "x-accel-buffering": "no",
+    },
   });
 }
 
