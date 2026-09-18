@@ -7,6 +7,18 @@ result as the JSON the studio loads, or posts it to `/api/share` for a link.
 
 ## Run
 
+Straight from GitHub, no clone (`bin` in package.json names the server):
+
+```json
+{ "mcpServers": { "seqbaby": { "command": "npx", "args": ["-y", "github:mjoslyn/seqbaby"] } } }
+```
+
+The first run installs the repo into npx's cache, which brings the whole app's
+dependencies with it (a minute or so); after that it starts at once. Pin a
+branch or tag with `github:mjoslyn/seqbaby#<ref>`.
+
+From a checkout:
+
 ```
 npm install
 npm run mcp           # stdio; the client starts it
