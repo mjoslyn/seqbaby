@@ -472,6 +472,31 @@
 .chatPanel .panelTitle { color: #9aa0aa; }
 .chatBackdrop { display: none; }
 
+/* ---- the review bar: a turn's changes, before they are yours -------------
+   A turn that changed the song lands here rather than in the studio, because
+   `applySet` stops the transport and an audition exists precisely so it does
+   not have to. It sits between the log and the input, above the scroll, so it
+   cannot be scrolled away from while it is holding something undecided. */
+.chatReview {
+  border: 1px solid #2a2d35;
+  border-radius: 8px;
+  background: #101318;
+  padding: 8px 9px;
+  margin-bottom: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+/* Auditioning is a state the studio is IN, not a button that was pressed, so
+   it is said on the bar itself: what you are hearing is not saved yet. */
+.chatReviewLive { border-color: #6ee7b7; box-shadow: inset 0 0 0 1px rgba(110, 231, 183, 0.18); }
+.chatReviewText { color: #9aa0aa; font-size: 11px; line-height: 1.45; }
+.chatReviewLive .chatReviewText { color: #6ee7b7; }
+.chatReviewBtns { display: flex; gap: 6px; flex-wrap: wrap; }
+/* The bar is inside the drawer, so a closed drawer says nothing about an
+   audition that is still playing. The button does. */
+.composeBtnHolding { border-color: #6ee7b7; color: #6ee7b7; }
+
 /* Above phone width: the drawer proper, pinned to the right edge, full
    height. Higher than an engine modal (z-index 200) and the mobile bar's
    raised state (250) -- composing should stay reachable over either. */

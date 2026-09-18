@@ -14,6 +14,22 @@ type Msg =
 
 type ComposeResponse = { jobId?: string; jobToken?: string; error?: string };
 
+/**
+ * A turn's changes, sitting between the model and the studio.
+ *
+ * A turn used to be written straight into the session with `applySet`, which
+ * stops the transport and rebuilds every voice — so asking for a hi-hat while
+ * a track was playing stopped the track. `mergeSet` (public/js/liveSet.js)
+ * writes the same session onto the engine without stopping it, which is what
+ * makes an audition possible at all: the new track joins on the step everyone
+ * else is on, and everything already playing goes on playing.
+ *
+ * `before` is what was playing when the audition started, kept so stopping one
+ * is the same operation in reverse. Null means the changes are not in the
+ * session at all yet.
+ */
+type Proposal = { session: unknown; before: unknown | null };
+
 type JobStatus = {
   status?: "running" | "done" | "error";
   events?: { type: string; summary?: string }[];
@@ -88,8 +104,12 @@ function describeFailure(status: number, raw: string, data: ComposeResponse | nu
 // is the one way to compose here without one.
 //
 // The SONG's state is not kept here -- the studio's own session is the source
-// of truth (serializeSet/applySet) and each message resends it, so a change
-// made by hand between messages is what the next one edits.
+// of truth (serializeSet) and each message resends it, so a change made by hand
+// between messages is what the next one edits. The one thing held is a turn's
+// RESULT, until it is auditioned or kept (see `Proposal`): a session is what
+// the model hands back, and it is a snapshot of the one it was given, so a
+// change made by hand while a turn was in flight is not in it -- keeping the
+// turn drops that change, exactly as writing it straight in always did.
 //
 // The CONVERSATION is kept, attached to the song (song_chats, migration 0011):
 // it is the record of how a song came to sound the way it does, and coming
@@ -121,6 +141,9 @@ export default function ComposeChat({ signedIn, serverKey }: { signedIn: boolean
   // Tool activity for the turn in flight, filled in as it happens. It moves
   // onto the finished message when the turn lands.
   const [live, setLive] = useState<string[]>([]);
+  // The turn's changes, waiting to be auditioned or kept. Nothing is written to
+  // the studio until one of those is pressed.
+  const [review, setReview] = useState<Proposal | null>(null);
   // Which key the next message runs on. "site" is only ever a choice when
   // there is both an account and a key on the deploy, so what is offered is
   // derived (`keyMode`) rather than trusted from storage.
@@ -267,6 +290,10 @@ export default function ComposeChat({ signedIn, serverKey }: { signedIn: boolean
   // `new` goes through here whenever the account has a default template, so
   // this is the ordinary path, not a corner.
   useEffect(() => {
+    // A different song is open, so changes offered against the last one are
+    // not about what is loaded now -- and `before` describes a session that is
+    // no longer there.
+    setReview(null);
     if (!songId || isTemplate) {
       setMessages([]);
       attachedRef.current = null;
@@ -319,6 +346,9 @@ export default function ComposeChat({ signedIn, serverKey }: { signedIn: boolean
       setMessages([]);
       setInput("");
       attachedRef.current = null;
+      // The session it was about has just been blanked, and `before` describes
+      // one that no longer exists -- putting it back would undo the `new`.
+      setReview(null);
     };
     window.addEventListener("seqbaby:newset", onNew);
     return () => window.removeEventListener("seqbaby:newset", onNew);
@@ -366,6 +396,11 @@ export default function ComposeChat({ signedIn, serverKey }: { signedIn: boolean
     setSending(true);
     setSendingModel(model);
     setLive([]);
+    // Asking for the next thing settles the last one. The session just
+    // serialized is what the model is being asked about, so whatever is in the
+    // engine -- an audition included -- is what this turn builds on, and there
+    // is nothing left to put back to.
+    setReview(null);
 
     // Attached to whichever song is open WHEN THE TURN LANDS, not when it
     // started: a turn takes minutes, and the first save of a new song happens
@@ -493,14 +528,17 @@ export default function ComposeChat({ signedIn, serverKey }: { signedIn: boolean
         }
 
         if (job.status === "done") {
-          // Only when the turn actually changed the song. applySet is not a
-          // cheap write-back: it tears down every track and voice and stops
-          // the transport, so asking a question mid-playback used to silence
-          // it. And the session being applied was captured back when the
-          // message was sent, which on a turn that takes minutes means
-          // reapplying it would throw away anything done by hand since --
-          // for a turn that changed nothing, purely to no effect.
-          if (job.session && job.changed !== false) window.seqbaby?.applySet(job.session);
+          // Only when the turn actually changed the song: a question changes
+          // nothing, and the session it hands back was captured when the
+          // message was SENT, which on a turn that takes minutes means writing
+          // it would throw away anything done by hand since.
+          //
+          // And even then it is not written -- it is offered. The changes go
+          // into the review bar, where `audition` drops them into the playing
+          // session (mergeSet: no teardown, no stopped transport) and `keep`
+          // makes them the song. Writing a turn straight in is what used to
+          // silence a track that was playing while you asked for another one.
+          if (job.session && job.changed !== false) setReview({ session: job.session, before: null });
           land({
             role: "assistant",
             text: job.reply || "Done.",
@@ -526,6 +564,54 @@ export default function ComposeChat({ signedIn, serverKey }: { signedIn: boolean
     }
   }, [input, sending, messages, model, keyMode, apiKey]);
 
+  // ---- the review bar ------------------------------------------------------
+  //
+  // Both directions are the same call: a session, written onto the live engine
+  // in place. Auditioning writes the turn's; stopping writes back what was
+  // playing before it. Neither stops the transport, which is the whole point.
+  const writeLive = useCallback((session: unknown) => {
+    const api = window.seqbaby;
+    if (!api) return;
+    // applySet is the fallback for an engine older than mergeSet (a cached
+    // main.js from before this shipped). It costs the transport, which is
+    // exactly what the merge exists to avoid, but it is never silence.
+    if (api.mergeSet) api.mergeSet(session);
+    else api.applySet(session);
+  }, []);
+
+  // Audition: keep what is playing so it can be put back, then merge the
+  // turn's session over it. Nothing is saved and nothing is torn down.
+  const audition = useCallback(() => {
+    if (!review || review.before || !window.seqbaby) return;
+    const before = window.seqbaby.serializeSet();
+    writeLive(review.session);
+    setReview({ session: review.session, before });
+  }, [review, writeLive]);
+
+  // Stop: back to what was playing, with the changes still on offer. Anything
+  // changed BY HAND during the audition goes back with it -- undo reaches it
+  // (the merge lands on the stack like any other edit), which is why this is a
+  // button and not a confirm dialog.
+  const stopAudition = useCallback(() => {
+    if (!review?.before) return;
+    writeLive(review.before);
+    setReview({ session: review.session, before: null });
+  }, [review, writeLive]);
+
+  // Keep: the changes are the song now. Mid-audition there is nothing to write
+  // -- the engine is already playing them, hand edits and all.
+  const keepChanges = useCallback(() => {
+    if (!review) return;
+    if (!review.before) writeLive(review.session);
+    setReview(null);
+  }, [review, writeLive]);
+
+  const discardChanges = useCallback(() => {
+    if (!review) return;
+    if (review.before) writeLive(review.before);
+    setReview(null);
+  }, [review, writeLive]);
+
   const onKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
       if (e.key === "Enter" && !e.shiftKey) {
@@ -540,8 +626,20 @@ export default function ComposeChat({ signedIn, serverKey }: { signedIn: boolean
 
   return (
     <div className={styles.songsWrap} ref={wrapRef}>
-      <button className={styles.accountBtn} onClick={() => setOpen((v) => !v)} aria-expanded={open}>
-        compose
+      {/* A closed drawer hides the review bar but not the audition: the extra
+          track goes on playing, and with nothing said here there would be no
+          way to find out why it is there. */}
+      <button
+        className={`${styles.accountBtn} ${review ? styles.composeBtnHolding : ""}`}
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        title={review
+          ? (review.before
+              ? "auditioning changes — open to keep or stop them"
+              : "changes waiting — open to audition or keep them")
+          : "ask for changes to this song"}
+      >
+        compose{review ? " ·" : ""}
       </button>
       {open && (
         <div className={styles.chatBackdrop} onClick={() => setOpen(false)} aria-hidden />
@@ -596,6 +694,36 @@ export default function ComposeChat({ signedIn, serverKey }: { signedIn: boolean
               </div>
             )}
           </div>
+          {review && (
+            <div className={`${styles.chatReview} ${review.before ? styles.chatReviewLive : ""}`}>
+              <div className={styles.chatReviewText}>
+                {review.before
+                  ? "auditioning — you are hearing the changes, but the song does not have them yet."
+                  : "these changes aren't in the song yet. audition drops them into what's playing; keep makes them the song."}
+              </div>
+              <div className={styles.chatReviewBtns}>
+                <button
+                  className={styles.smallBtn}
+                  onClick={review.before ? stopAudition : audition}
+                  title={review.before
+                    ? "put back what was playing before the audition"
+                    : "hear them now, without stopping the transport"}
+                >
+                  {review.before ? "stop" : "audition"}
+                </button>
+                <button
+                  className={`${styles.smallBtn} ${styles.smallBtnPrimary}`}
+                  onClick={keepChanges}
+                  title="make them part of the song"
+                >
+                  keep
+                </button>
+                <button className={styles.smallBtn} onClick={discardChanges} title="throw them away">
+                  discard
+                </button>
+              </div>
+            </div>
+          )}
           <div className={styles.chatTools}>
             {siteKeyOffered && (
               <>
