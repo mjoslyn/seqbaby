@@ -1,7 +1,7 @@
 import { AUTOMATION_KEYS, AUTOMATION_TARGETS, canAutomate } from "./automation.js";
 import { engineByKey, loadPatches, populateEngineSelect, savePatch } from "./catalog.js";
 import { applyTrackPatch, serializeTrackPatch } from "./session.js";
-import { LFO_DIVS, LFO_KEYS, lfoDivIndex, lfoLabel, rateToSlider, sliderToRate } from "./constants.js";
+import { FX_STAGE_LABELS, FX_STAGE_LEVEL_KEY, LFO_DIVS, LFO_KEYS, lfoDivIndex, lfoLabel, rateToSlider, sliderToRate } from "./constants.js";
 import { showInputDialog, showSavedPatchPicker } from "./dialogs.js";
 import { isMobileDevice, setStatus } from "./dom.js";
 import { HEXOP_ALG_LABELS, HEXOP_DEFAULTS, HEXOP_NUM_KEYS, HEXOP_PRESET_NAMES, HEXOP_SEL_KEYS, hexopPreset } from "./hexop.js";
@@ -14,7 +14,7 @@ import { GUITAR_DEFAULTS, GUITAR_NUM_KEYS, GUITAR_SEL_KEYS, GUITAR_TONE_NAMES, g
 import { ICON_CHANCE, ICON_CLEAR, ICON_DICE, ICON_EUCLID, ICON_LOAD, ICON_ROLL, ICON_SAVE, ICON_SLIDERS, ICON_WAV } from "./icons.js";
 import { refreshKnobRange, setKnobReadout, upgradeKnobs } from "./knob.js";
 import { canModulate, lfoBipolar, lfoEuclid, lfoPhase, lfoRateLabel, syncLFO } from "./lfo.js";
-import { autoOwns, modOwns, refreshPanelBadges, refreshParamIndicators } from "./paramTargets.js";
+import { autoOwns, fxShown, modOwns, refreshPanelBadges, refreshParamIndicators } from "./paramTargets.js";
 import { patternLocked, refreshPatternLockUI, refreshPatternSoundUI, setPatternLock } from "./patternSound.js";
 import { openGranularSourceModal, openSamplerSourceModal, pickAudioFileForTrack } from "./main.js";
 import { defaultFxConfig } from "./fxRack.js";
@@ -214,7 +214,11 @@ export function syncTrackSoundUI(t) {
   }
   refreshHexopAlgorithm(t);
   // The sound just changed under the buttons too (session load, patch load,
-  // p-lock recall all come through here), so the panel dots follow it.
+  // p-lock recall all come through here), so the panel dots follow it — and
+  // the rack's inline rows are rebuilt from the sound that arrived rather than
+  // kept from the one that left, so a stage the last song showed at zero does
+  // not follow the new one in (fxShown).
+  t._fxShown = null;
   refreshPanelBadges(t);
 }
 
@@ -1337,6 +1341,38 @@ export function wireFxPanel(t, panel) {
     if (!title || !stage) return;
     title.title = "double-click to reset";
     title.classList.add("is-resettable");
+    // Taking a stage off the track is a thing you SAY, not something that
+    // happens to you: the row used to disappear the moment its wet knob
+    // reached 0, which on the way down is mid-drag and takes the knob with it.
+    // So the level no longer decides (fxShown) and this button does — it
+    // zeroes the level through the control's own `input` event, which is
+    // exactly "as if you had dragged it there" and is therefore what the
+    // rack, the p-lock snapshot, a save and undo all see. Built here rather
+    // than in the markup because it is one button repeated over thirteen
+    // stages and its handler is already in this loop. CSS shows it only on the
+    // inline view: in the modal every stage is listed whatever its level, so
+    // there is nothing there for it to remove.
+    const levelKey = FX_STAGE_LEVEL_KEY[stage];
+    if (levelKey) {
+      const off = document.createElement("button");
+      off.type = "button";
+      off.className = "sq-fx__off";
+      off.textContent = "\u00d7";
+      off.title = `turn ${FX_STAGE_LABELS[stage] || stage} off and take it off the track \u2014 it stays here in the rack`;
+      off.setAttribute("aria-label", `turn off ${FX_STAGE_LABELS[stage] || stage}`);
+      off.addEventListener("click", () => {
+        const ctl = row.querySelector(`.fx-${stage}-${levelKey}`);
+        if (ctl && Number(ctl.value) !== 0) {
+          ctl.value = "0";
+          ctl.dispatchEvent(new Event("input", { bubbles: true }));
+        }
+        // After the event: it bubbles to the panel's own refresh, which would
+        // put a row back that is still in the shown set.
+        fxShown(t).delete(stage);
+        refreshPanelBadges(t);
+      });
+      row.appendChild(off);
+    }
     title.addEventListener("dblclick", () => {
       if (stage === "glide") {                 // not an fx-rack stage; lives on the track
         t.glide = 0;

@@ -1359,6 +1359,39 @@ main {
 /* Effect names double-click to reset that effect (see wireFxPanel). */
 .sq-fx__title.is-resettable { cursor: pointer; }
 .sq-fx__title.is-resettable:hover { text-decoration: underline dotted; }
+
+/* The × that takes a stage off the track (wireFxPanel). Only on the inline
+   view: in the modal the rack is all thirteen stages whatever their level, so
+   there is nothing there to remove. `margin-left: auto` puts it at the far end
+   of the row rather than against the last knob, where it would read as part of
+   that control. */
+.sq-fx__off { display: none; }
+.sq-track .sq-track__fx-panel.is-live > .sq-fx__row.is-live > .sq-fx__off {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: auto;
+  min-width: 22px;
+  height: 22px;
+  padding: 0;
+  font-size: 14px;
+  line-height: 1;
+  color: var(--fg-dim);
+  background: none;
+  border-color: transparent;
+}
+.sq-track .sq-track__fx-panel.is-live > .sq-fx__row.is-live > .sq-fx__off:hover {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+/* A finger needs the room even where the row is drawn small. */
+@media (any-pointer: coarse), (max-width: 768px) {
+  .sq-track .sq-track__fx-panel.is-live > .sq-fx__row.is-live > .sq-fx__off {
+    min-width: 44px;
+    height: 44px;
+    font-size: 18px;
+  }
+}
 .sq-fx__row[data-fx="vinyl"] .sq-fx__title { color: #c79a74; }
 .sq-fx__row[data-fx="cassette"] .sq-fx__title { color: #d9c07a; }
 .sq-fx__row[data-fx="fuzz"] .sq-fx__title { color: #ff7a7a; }

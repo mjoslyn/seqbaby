@@ -1255,6 +1255,23 @@ matrix or the lanes), from `syncTrackSoundUI` (session load, patch load, p-lock
 recall), from the value panels' own `input`/`change` events, and from
 `openPanelAsModal`'s close, which is what puts the inline view back.
 
+**A rack stage is taken off the track by saying so, not by reaching zero**
+(`fxShown` in paramTargets.js, the `×` built in `wireFxPanel`). The stage's
+level decides whether it is ON — the badge count, the tooltip, and whether the
+rack wires it into the chain, all still `FX_STAGE_LEVEL_KEY` — but it no longer
+decides whether its row is SHOWN, because a wet knob passes through 0 in the
+middle of a gesture and the row vanishing there took the knob being dragged with
+it. So a stage stays on the track once it has been engaged, at whatever level,
+until the `×` at the end of its row says otherwise. That button zeroes the level
+through the control's own `input` event — indistinguishable from dragging it
+there, so the rack, the p-lock snapshot, a save and undo all see it — and drops
+the stage from the shown set in the same move. The set is live UI state and is
+never serialized: `syncTrackSoundUI` clears it, so a sound arriving from a
+session, a patch or a p-lock recall brings its own answer rather than inheriting
+the last one's. The `×` is inline-only (style.css): in the modal every stage is
+listed whatever its level, which is where a bypassed one is turned back on, so
+there is nothing there for it to remove.
+
 **Right-click a parameter** opens `paramMenu.js`: what the control does, its
 LFO row, its automation lane and its macro assignment — the same widgets the panels use
 (`buildLfoRow` / `buildAutomationLane` in render.js), over the same track state

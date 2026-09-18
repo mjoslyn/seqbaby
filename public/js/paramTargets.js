@@ -438,6 +438,24 @@ export function refreshParamIndicators(t) {
 // the lanes when an entry is enabled. A lane that exists but is switched off
 // does not count, matching the dimmed dot on its label. The lanes stay a badge
 // only — a per-step grid is not a row of knobs — so their entry has no panel.
+/**
+ * Which rack stages a track shows inline, which is deliberately NOT the same
+ * question as which are on. A wet knob passes through 0 in the middle of a
+ * gesture, and a row that vanished at that moment took the knob being dragged
+ * with it — so once a stage has been engaged it stays on the track, at
+ * whatever level, until the × on its row says otherwise (wireFxPanel, which
+ * zeroes the level and removes it from here in one move).
+ *
+ * Live UI state, never serialized: a song that comes back shows the stages
+ * that are doing something and the set is rebuilt from those, which is why
+ * `syncTrackSoundUI` clears it — a sound arriving from a session, a patch or a
+ * p-lock recall brings its own answer.
+ * @param {Track} t @returns {Set<string>}
+ */
+export function fxShown(t) {
+  return t._fxShown || (t._fxShown = new Set());
+}
+
 const PANEL_BADGES = [
   { sel: ".sq-track__filter", panel: "_filterPanelEl", modal: "_filterModal", on: (t) => {
       const f = t.filter || {};
@@ -451,13 +469,16 @@ const PANEL_BADGES = [
   { sel: ".sq-track__fx", panel: "_fxPanelEl", modal: "_fxModal",
     on: (t) => Object.keys(FX_STAGE_LEVEL_KEY).filter(k => fxStageLevel(t.fxConfig, k) > 0),
     label: (k) => FX_STAGE_LABELS[k],
-    // Only the stages that are on; the glide and amp rows, and every bypassed
-    // stage, wait in the modal.
-    rows: (panel, on) => {
-      const live = new Set(on);
+    // Only the stages this track SHOWS; the glide and amp rows, and every stage
+    // that has never been engaged, wait in the modal. Shown is not the same as
+    // on — see fxShown.
+    rows: (panel, on, t) => {
+      const shown = fxShown(t);
+      for (const k of on) shown.add(k);
       for (const row of panel.querySelectorAll(".sq-fx__row[data-fx]")) {
-        row.classList.toggle("is-live", live.has(row.dataset.fx));
+        row.classList.toggle("is-live", shown.has(row.dataset.fx));
       }
+      return shown.size > 0;
     } },
   { sel: ".sq-track__eq", panel: "_eqPanelEl", modal: "_eqModal",
     on: (t) => ["low", "mid", "high"].filter(b => Math.abs(t.eq?.[b] ?? 0) >= 0.5) },
@@ -513,9 +534,12 @@ export function refreshPanelBadges(t) {
     }
     const panel = b.panel ? t[b.panel] : null;
     if (!panel || (b.modal && t[b.modal])) continue;
-    panel.classList.toggle("is-live", on.length > 0);
-    panel.hidden = on.length === 0;
-    if (b.rows) b.rows(panel, on);
+    // `rows` picks which of the panel's rows are shown inline and answers
+    // whether any survived, because for the rack "on" and "shown" are two
+    // different questions (fxShown).
+    const live = b.rows ? b.rows(panel, on, t) : on.length > 0;
+    panel.classList.toggle("is-live", live);
+    panel.hidden = !live;
   }
   // The mobile "more" button hides all seven behind it, so it carries the sum.
   const more = t._trackMoreBtn;
