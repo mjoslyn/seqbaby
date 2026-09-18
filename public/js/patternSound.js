@@ -197,6 +197,42 @@ export function recallPatternSound(t, idx) {
 }
 
 /**
+ * The pattern-sound half of LOADING a track from a serialized blob — the one
+ * thing both loaders (`loadTrackFromData` and liveSet.js's merge) call, so the
+ * two cannot disagree about what a blob meant.
+ *
+ * Only a LOCKED pattern's own sound is recalled. An unlocked pattern shares the
+ * track's, and the track-level fields the blob just wrote ARE that sound:
+ * `serializeSet` flushes the live sound into `baseSound` on its way out, so the
+ * two agree in every session this app writes, and where they DON'T the blob was
+ * assembled some other way — the song builder writes `t.params` and has never
+ * heard of `baseSound` — and the fields are what was meant.
+ *
+ * This used to be `recallPatternSound`, which applies `baseSound` over the live
+ * sound in the unlocked case. On a switch that is the whole point; on a load it
+ * can only undo what the blob said, and it did: measured, a sound edit made the
+ * way the compose tools make one (write `t.params`, leave `baseSound`) was
+ * discarded on the active pattern, so asking the compose panel to open the
+ * filter changed nothing you could hear.
+ *
+ * @param {Track} t @param {number} idx
+ * @returns {boolean} whether the live sound changed
+ */
+export function recallLoadedPatternSound(t, idx) {
+  const p = t?.patterns?.[idx];
+  if (!p) return false;
+  if (p.soundLocked) {
+    // A locked pattern with no snapshot yet inherits what was just loaded and
+    // keeps it from then on, exactly as recallPatternSound has it.
+    if (!p.sound) { p.sound = capturePatternSound(t); return false; }
+    return applyPatternSound(t, p.sound);
+  }
+  // Unlocked: keep the cache in step with the sound, not the other way round.
+  t.baseSound = capturePatternSound(t);
+  return false;
+}
+
+/**
  * Lock or unlock this track's sound for one pattern.
  *
  * Locking keeps the sound you can currently hear — or, if this pattern was

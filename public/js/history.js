@@ -2,8 +2,8 @@
 //
 // The stack itself, and why it is a stack of session snapshots rather than a
 // log of inverse commands, is historyStore.js. This is the engine half: what a
-// snapshot is taken FROM, when one is taken, and how one is put back onto a
-// running sequencer.
+// snapshot is taken FROM, and when one is taken. Putting one back onto a
+// running sequencer is liveSet.js's `mergeSet`.
 //
 // Three things are load-bearing here.
 //
@@ -18,36 +18,33 @@
 // changed. If it did, that is an edit, whatever produced it — so a feature
 // added later is undoable without knowing this file exists.
 //
-// **Restoring is diffed, and falls back to `applySet` wholesale.** Undoing a
-// step toggle must not stop the transport, and `applySet` tears down every
-// track and voice in the session, so the common cases are put back in place:
-// patterns, the track's own fields, and the sound. HOW that is written onto a
-// running engine is liveSet.js — shared with the compose panel's audition,
-// which needs the same thing for the same reason — and this file decides only
-// when. Anything that needs a voice or the graph rebuilt — an engine change, a
-// new sample, a track added or removed, a send re-routed — falls back to
-// `applySet` on the snapshot, which is the same path a song load takes. One
-// loader, not two that drift.
+// **Restoring never stops the transport.** A snapshot goes back through
+// `mergeSet` (liveSet.js) — the session format written onto a RUNNING engine,
+// tracks appearing and going included — so stepping back across an added track,
+// an engine change or a re-routed send costs what stepping back across a step
+// toggle costs. This file decides WHEN a session is written; liveSet.js is the
+// whole of HOW, shared with the compose panel's audition, which needs the same
+// thing for the same reason.
+//
+// It used to split: an in-place diff for the cheap cases, `applySet` wholesale
+// for anything needing a voice or the graph rebuilt. The split was never about
+// undo — it was about not having a merge. `applySet` survives here as the
+// last resort if one ever throws partway (see `restore`), because an undo that
+// half lands is worse than one that costs a beat.
 //
 // **An automated parameter is pinned.** See `pinAutomated` below.
 
 import { VOICE_AUTO_KEYS } from "./automation.js";
 import { setStatus } from "./dom.js";
-import { HistoryStack, sameTree, shareStructure } from "./historyStore.js";
+import { HistoryStack, shareStructure } from "./historyStore.js";
 import { ICON_REDO, ICON_UNDO } from "./icons.js";
-// The in-place writers themselves: how a session is put onto a running engine
-// is liveSet.js's, shared with the compose panel's audition. This file owns
-// only WHEN one is put back.
-import { applyGlobalsInPlace, applyTrackInPlace, deepCopy, TRACK_REBUILD_KEYS } from "./liveSet.js";
-import { CONTROL_LABELS, controlFromEventTarget, refreshParamIndicators } from "./paramTargets.js";
-import { updateGranularSpeedEnabled } from "./params.js";
-import { renderPatternGrid } from "./patternBar.js";
-import { refreshAllPatternLockUI, refreshPatternSoundUI } from "./patternSound.js";
-import { refreshAutIfOpen, refreshRollIfOpen } from "./pianoRoll.js";
+// Putting a session onto a running engine is liveSet.js's whole job, shared
+// with the compose panel's audition. This file owns only WHEN one is put back —
+// which is why the list below is as short as it is.
+import { deepCopy, mergeSet } from "./liveSet.js";
+import { CONTROL_LABELS, controlFromEventTarget } from "./paramTargets.js";
 import { applySet, serializeSet } from "./session.js";
-import { refreshCompSourceDropdowns, refreshOutputSelects } from "./signal.js";
-import { aliasPattern, state } from "./state.js";
-import { renderStepGrid } from "./stepGrid.js";
+import { state } from "./state.js";
 
 /** @typedef {import("./types.js").Track} Track */
 
@@ -133,72 +130,49 @@ function snapshot(prev) {
   return shareStructure(prev, pinAutomated(prev, snap));
 }
 
-// ---- what changed, and what that costs to put back ----------------------
-
-// A field `applyTrackInPlace` cannot put back needs the voice rebuilt, the
-// graph re-wired or the track's DOM rebuilt (`TRACK_REBUILD_KEYS`, liveSet.js),
-// and so does a track appearing or going. `applySet` is the only thing that
-// does all three correctly, so an undo that crosses one falls back to it rather
-// than growing a second, subtly-different loader beside it. (liveSet's merge
-// takes the other road, because it has to: an audition exists precisely to add
-// a track without stopping what is playing.)
-function needsFullApply(cur, target) {
-  if (!cur || (cur.tracks?.length ?? 0) !== (target.tracks?.length ?? 0)) return true;
-  for (let i = 0; i < target.tracks.length; i++) {
-    const a = cur.tracks[i], b = target.tracks[i];
-    if (a === b) continue;
-    for (const k of TRACK_REBUILD_KEYS) if (!sameTree(a?.[k], b[k])) return true;
-  }
-  return false;
-}
-
 // ---- putting one back ---------------------------------------------------
 
-const el = (id) => document.getElementById(id);
-
-/** Install a snapshot onto the live engine. */
+/**
+ * Install a snapshot onto the live engine.
+ *
+ * `mergeSet` (liveSet.js) is the whole of it: the session format written onto
+ * a running engine, tracks appearing and going included. Undo used to split
+ * here — an in-place diff for the cheap cases and `applySet` wholesale for
+ * anything needing a voice or the graph rebuilt — and the split was never
+ * about undo, it was about not having a merge. Now that there is one, stepping
+ * back across an added track, an engine change or a re-routed send costs what
+ * stepping back across a step toggle costs, and costs the transport nothing.
+ *
+ * It takes the snapshot as it is. `mergeSet` copies before it writes, which is
+ * what lets a snapshot be restored more than once (exactly what redo asks of
+ * it), and it does not read `activePattern` — the view stays where it is, the
+ * call this file already made.
+ */
 function restore(target) {
-  const cur = live;
-  if (!target || cur === target) return;
+  if (!target || live === target) return;
   restoring = true;
   try {
-    if (needsFullApply(cur, target)) {
-      // applySet keeps a reference to a few of the blob's objects (the sample
-      // source, the custom-patch config) and rewrites legacy names in place, so
-      // it gets a copy — the snapshot has to survive being loaded more than
-      // once, which is exactly what redo asks of it.
-      const blob = deepCopy(target);
-      blob.activePattern = state.activePattern;   // the view stays put (see snapshot)
-      applySet(blob);
-    } else {
-      const metersMoved = applyGlobalsInPlace(cur, target);
-      let grid = metersMoved, sound = false, names = false;
-      state.tracks.forEach((t, i) => {
-        const r = applyTrackInPlace(t, cur.tracks[i], target.tracks[i]);
-        if (metersMoved && !r.grid) aliasPattern(t, state.activePattern);  // accents follow the meter
-        if (r.grid || metersMoved) { renderStepGrid(t); refreshRollIfOpen(t); refreshAutIfOpen(t); }
-        if (r.sound) refreshPatternSoundUI(t);
-        // Lanes belong to the pattern, so the dots beside the labels move with
-        // the pattern data whether or not the sound did.
-        if (r.grid || r.sound) refreshParamIndicators(t);
-        if (r.sound) updateGranularSpeedEnabled(t);
-        grid = grid || r.grid;
-        sound = sound || r.sound;
-        names = names || r.names;
-      });
-      // Track names are options in every other track's send and sidechain
-      // pickers, so a renamed track has to be re-offered there.
-      if (names) { refreshOutputSelects(); refreshCompSourceDropdowns(); }
-      if (grid) { refreshAllPatternLockUI(); renderPatternGrid(); }
-    }
+    mergeSet(target);
+  } catch (e) {
+    // The merge writes as it goes, so a throw partway through leaves a session
+    // that is half of each. `applySet` validates before it tears anything down
+    // and rebuilds from nothing, which is the only way back to a state anybody
+    // can name — at the cost of the transport, which by then is the lesser
+    // problem. A snapshot comes out of `serializeSet`, so this is not a case
+    // anything is expected to reach; it is here because an undo that half
+    // lands is worse than one that costs a beat.
+    console.error("[seqbaby] undo: merge failed, rebuilding the session", e);
+    const blob = deepCopy(target);
+    blob.activePattern = state.activePattern;
+    applySet(blob);
   } finally {
     restoring = false;
   }
-  // Not `live = target`: applySet normalizes (clamping, dropping a send that
-  // would feed back, moving the buses to the bottom), and the in-place path
-  // leaves anything it decided not to touch. Reading the engine back is the
-  // only honest answer to "what state is it in now", and it keeps the next
-  // fold comparing against something true.
+  // Not `live = target`: the merge normalizes (clamping, dropping a send that
+  // would feed back, moving the buses to the bottom) and leaves anything it
+  // decided not to touch. Reading the engine back is the only honest answer to
+  // "what state is it in now", and it keeps the next fold comparing against
+  // something true.
   live = snapshot(target);
   clearPending();
 }
@@ -335,6 +309,8 @@ function onKeyDown(e) {
 }
 
 // ---- the two buttons ----------------------------------------------------
+
+const el = (id) => document.getElementById(id);
 
 function refreshHistoryUI() {
   const u = el("undo"), r = el("redo");

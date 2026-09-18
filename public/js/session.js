@@ -12,7 +12,7 @@ import { renderPatternGrid } from "./patternBar.js";
 import { refreshEuclidUI, renderEuclidPanel } from "./euclid.js";
 import { cloneChance, refreshChanceUI, renderChancePanel } from "./chance.js";
 import { applyBusMute, paintDiceDensity, placeBusesLast, refreshFxPanelUI, renderModPanel, syncTrackSoundUI } from "./render.js";
-import { flushAllPatternSounds, recallPatternSound, refreshPatternLockUI, refreshPatternSoundUI } from "./patternSound.js";
+import { flushAllPatternSounds, recallLoadedPatternSound, refreshPatternLockUI, refreshPatternSoundUI } from "./patternSound.js";
 import { syncScaleUI } from "./scaleUI.js";
 import { migrateLegacyNames, migrateTrackNames, SET_VERSION, validateSet } from "./sessionFormat.js";
 import { applyCompressorConfig, ensureFxRack, refreshAllTrackOutputs, refreshCompSourceDropdowns, refreshNoiseBeds, refreshOutputSelects, routeVoiceToRack, wouldFeedback } from "./signal.js";
@@ -557,11 +557,13 @@ export function loadTrackFromData(t, td) {
     applyCompressorConfig(t);
     syncAllLFOs(t);
   }
-  // The live sound is whatever owns the active pattern. Normally that is
-  // already what the track-level fields hold (serializeSet flushes before it
-  // writes), so this only bites for a blob assembled some other way — but it
-  // has to run after the voice and rack exist, not with the pattern data.
-  if (recallPatternSound(t, state.activePattern)) refreshPatternSoundUI(t);
+  // A LOCKED pattern's own sound, which is the only one a load may recall: the
+  // track-level fields above are the unlocked sound already, and re-applying
+  // `baseSound` over them could only undo what the blob said
+  // (`recallLoadedPatternSound`, patternSound.js, says why at length). Runs
+  // here rather than with the pattern data because it needs the voice and the
+  // rack to exist.
+  if (recallLoadedPatternSound(t, state.activePattern)) refreshPatternSoundUI(t);
   updatePlaitsControlsVisibility(t);
   renderStepGrid(t);
 }

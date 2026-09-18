@@ -46,7 +46,7 @@ import { parseMeter } from "./meter.js";
 import { refreshParamIndicators } from "./paramTargets.js";
 import { updateGranularSpeedEnabled, updatePlaitsControlsVisibility } from "./params.js";
 import { renderPatternGrid } from "./patternBar.js";
-import { applyPatternSound, refreshAllPatternLockUI, refreshPatternSoundUI } from "./patternSound.js";
+import { applyPatternSound, recallLoadedPatternSound, refreshAllPatternLockUI, refreshPatternSoundUI } from "./patternSound.js";
 import { refreshAutIfOpen, refreshRollIfOpen } from "./pianoRoll.js";
 import { applyBusMute, paintDiceDensity, placeBusesLast } from "./render.js";
 import { syncScaleUI } from "./scaleUI.js";
@@ -434,6 +434,11 @@ export function mergeSet(s) {
     if (fresh[i]) return;
     const t = made[i];
     const r = applyTrackInPlace(t, curTracks[match[i]], td, (j) => made[j]);
+    // A locked pattern's own sound, the one thing a load may recall over the
+    // track-level fields — the same call `loadTrackFromData` makes for a track
+    // this merge built, so a track that stayed and a track that was remade read
+    // the blob the same way.
+    if (recallLoadedPatternSound(t, state.activePattern)) r.sound = true;
     if (metersMoved && !r.grid) aliasPattern(t, state.activePattern);   // accents follow the meter
     if (r.grid || metersMoved) { renderStepGrid(t); refreshRollIfOpen(t); refreshAutIfOpen(t); }
     if (r.sound) { refreshPatternSoundUI(t); updateGranularSpeedEnabled(t); }

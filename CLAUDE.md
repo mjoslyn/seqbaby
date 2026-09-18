@@ -170,9 +170,9 @@ env / fx / eq / comp / mod / automation per track.
   the way out of a pattern and diff-applied on the way in.
 - `history.js` / `historyStore.js` — undo/redo over the whole session. The store
   is the stack and the structural sharing that pays for it, and has **no
-  imports** for `chanceGen.js`'s reasons; `history.js` is the engine half — when
-  a snapshot is taken, and (via liveSet.js) how one is put back onto a running
-  sequencer. See the undo/redo section below.
+  imports** for `chanceGen.js`'s reasons; `history.js` is the engine half, and
+  only the *when*: what a snapshot is taken from and when one is taken. Putting
+  one back is `mergeSet` (liveSet.js). See the undo/redo section below.
 - `track.js` — track lifecycle (create/resize/clone).
 - `bounce.js` — WAV render via MediaRecorder.
 - `buffers.js` — sample decode/normalize cache, `startSampleSource`.
@@ -1445,6 +1445,16 @@ bass   pattern 1  unlocked -> t.baseSound   \ these two move together
 - `serializeSet` calls `flushAllPatternSounds()` first: a sound is only written
   back when you *leave* a pattern, so without the flush the sound you can
   currently hear is the one thing a save would miss.
+- **Loading recalls a LOCKED pattern's sound and nothing else**
+  (`recallLoadedPatternSound`, the one call `applySet` and `mergeSet` share).
+  The flush above is what makes that right: it leaves the track-level fields
+  and `baseSound` agreeing, so re-applying `baseSound` on the way back in is a
+  no-op for every session this app writes — and for a blob assembled some other
+  way it silently undoes what the blob said. It did: the song builder writes
+  `t.params` and has never heard of `baseSound`, so a sound edit from the
+  compose panel was discarded on the active pattern (measured: cutoff 700 asked
+  for, 1 loaded). On a pattern SWITCH the unlocked branch is still the whole
+  point, so `recallPatternSound` keeps it.
 - `clonePattern` copies `soundLocked` and deep-copies `sound`, so duplicating a
   locked pattern (button or drag) gives a locked duplicate that sounds the same
   and then diverges.
@@ -1833,6 +1843,9 @@ mergeSet(s)   validate  ->  globals  ->  tracks gone  ->  tracks made / kept
   back means. history.js still owns *when* a session is written; this owns
   *how*. `mergeSet` is the new part — the tracks that appeared, the ones that
   went, and the ones whose engine changed under them.
+- **Undo goes through it too.** Stepping back across an added track used to
+  fall back to `applySet` and stop the transport; it doesn't now. The old split
+  was never about undo, it was about not having a merge (see the undo section).
 - **A track that needs its voice rebuilt is removed and re-made**, through
   `loadTrackFromData` — session.js's own per-track reader, the one `applySet`
   uses, exported for this. Rebuilding a voice in place would be a third loader.
@@ -1861,6 +1874,16 @@ mergeSet(s)   validate  ->  globals  ->  tracks gone  ->  tracks made / kept
   a merge simply doesn't. `activePattern` is left alone too, the call history.js
   already makes: moving the playhead to another pattern mid-bar is not a change
   to the song.
+- **A blob's own fields win over its `baseSound`**, and both loaders now say so
+  — `recallLoadedPatternSound` (patternSound.js) is the one call they share.
+  Only a LOCKED pattern's sound is recalled on a load; an unlocked one shares
+  the track's, and the track-level fields the blob just wrote ARE that sound.
+  `applySet` used to re-apply `baseSound` over them, which for every session
+  this app writes is a no-op (`serializeSet` flushes, so the two agree) and for
+  a blob assembled another way silently undid it. The song builder writes
+  `t.params` and has never heard of `baseSound`, so that was every sound edit
+  the compose panel made: measured, asking it to open the filter moved
+  `t.filter.cutoff` to 700 and the load put it back to 1.
 - A track that appears joins on the step everyone else is on — `createTrack`
   has set `trackTick` from `state.tick` since long before this, for exactly
   this case. Measured: merging a track into a playing session leaves `playing`
@@ -1941,21 +1964,23 @@ edit ──▶ (420ms of quiet) ──▶ serializeSet() ──▶ fold onto the
   anything changed at all** (`shareStructure(last, fresh) === last`), and — since
   adjacent snapshots are then `===` everywhere they agree — what the restore has
   to touch.
-- **Restoring is diffed, and falls back to `applySet` wholesale.** `applySet`
-  tears down every track and voice, which would stop the transport, so the
-  common cases go back in place: patterns (via `clonePattern` + `aliasPattern`),
-  the track's own fields, and the sound through `applyPatternSound` — already
-  the thing in this app that knows how to change a sound under a running
-  transport without re-registering 130 LFOs or rebuilding a reverb. That
-  writing now lives in **`liveSet.js`** (`applyGlobalsInPlace` /
-  `applyTrackInPlace`), shared with the compose panel's audition, which needed
-  exactly the same thing; this file decides only when one is written. Anything
-  needing a voice, the graph or the DOM rebuilt — `TRACK_REBUILD_KEYS`: an
-  engine change, a new sample, a track added or removed, a send re-routed —
-  falls back to `applySet` on a copy of the snapshot, the same path a song load
-  takes. One loader, not two that drift. (`mergeSet` could put those back
-  without stopping either, and deliberately isn't asked to: an undo has to be
-  exact, and `applySet` is the path a song load already proves every day.)
+- **Restoring never stops the transport.** A snapshot goes back through
+  **`mergeSet`** (liveSet.js) — the session format written onto a running
+  engine, tracks appearing and going included — so stepping back across an
+  added track, an engine change or a re-routed send costs what stepping back
+  across a step toggle costs. history.js decides WHEN a session is written;
+  liveSet.js is the whole of HOW, shared with the compose panel's audition,
+  which needs the same thing for the same reason.
+  It used to split — an in-place diff for the cheap cases, `applySet` wholesale
+  for anything needing a voice or the graph rebuilt — and the split was never
+  about undo, it was about not having a merge. `applySet` survives as the last
+  resort if one ever throws partway: the merge writes as it goes, so a throw
+  leaves a session that is half of each, and a rebuild from nothing is the only
+  way back to a state anybody can name. An undo that half lands is worse than
+  one that costs a beat.
+  Measured: every field of the format mutated one at a time, written and then
+  stepped back, comes back byte for byte — with `playing` true and the tick
+  monotonic throughout, a track added and a track removed included.
 - **A parameter under an automation lane is pinned** (`pinAutomated`). While the
   transport runs, an enabled lane rewrites the field it automates on every step
   (`t.filter.cutoff`, and `t.params[k]` for a voice with no AudioParam behind
@@ -2259,11 +2284,11 @@ through a 6ms fade on its gain).
   rebuilds a voice must call `refreshAllTrackOutputs()`.
 - Nothing has to be told about undo: it watches the session rather than the
   call sites (see below). A new field is undoable the moment `serializeSet` /
-  `applySet` carry it — and if putting it back needs a voice or the DOM rebuilt,
-  add it to `TRACK_REBUILD_KEYS` in liveSet.js so an undo across it falls back
-  to `applySet`, and a merge remakes the track, instead of half-restoring in
-  place. A field a track can hold without a rebuild wants a branch in
-  `applyTrackInPlace` beside the others, or an audition will leave it behind.
+  `applySet` carry it — and putting it back is liveSet.js's: a field a track can
+  hold without a rebuild wants a branch in `applyTrackInPlace` beside the
+  others, and one that needs the voice, the graph or the DOM rebuilt goes in
+  `TRACK_REBUILD_KEYS` so the merge remakes the track instead of half-restoring
+  it. Miss both and an undo — and an audition — will leave that field behind.
 - New macro-pad behaviour → `macro.js`; assignment targets come from
   `AUTOMATION_TARGETS` for free, so a new automation target is macro-assignable
   the moment it has a `CONTROL_TARGETS` entry.
