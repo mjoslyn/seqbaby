@@ -122,6 +122,7 @@ export default function ComposeChat() {
       let buf = "";
       let result: Extract<StreamEvent, { type: "result" }> | null = null;
       let failure: Extract<StreamEvent, { type: "error" }> | null = null;
+      let lastMs = 0;
 
       for (;;) {
         const { done, value } = await reader.read();
@@ -142,7 +143,8 @@ export default function ComposeChat() {
           if (ev.type === "tool") {
             activity.push(ev.summary);
             setLive([...activity]);
-          } else if (ev.type === "result") result = ev;
+          } else if (ev.type === "beat") lastMs = ev.ms;
+          else if (ev.type === "result") result = ev;
           else if (ev.type === "error") failure = ev;
         }
       }
@@ -161,9 +163,10 @@ export default function ComposeChat() {
         // Only claim the work survived when a song actually came back: the
         // edits live on the server's copy until it sends one, so a stream cut
         // before that took them with it.
+        const ran = lastMs ? ` after ${Math.round(lastMs / 1000)}s` : "";
         const cutOff = edited
-          ? "the connection dropped before it finished, but the changes above were applied."
-          : "the connection dropped before anything came back — the song is unchanged. A big request can outlast the server's time limit; try one change at a time.";
+          ? `the connection dropped${ran} before it finished, but the changes above were applied.`
+          : `the connection dropped${ran} before anything came back — the song is unchanged. A big request can outlast the server's time limit; try one change at a time.`;
         setMessages((prev) => [...prev, { role: "error", text: failure?.error ?? cutOff }]);
       }
     } catch (e) {

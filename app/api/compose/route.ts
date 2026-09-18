@@ -18,7 +18,13 @@ import {
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-5";
+const MODEL = process.env.ANTHROPIC_MODEL || "claude-opus-5";
+// Effort decides how hard the model works a turn, and so how many rounds it
+// takes to get there -- which on an interactive route is latency. Lower effort
+// consolidates tool calls rather than trickling them out one per round.
+// Deliberately not "disable thinking": on this model that makes it write tool
+// calls into visible text instead of calling them.
+const EFFORT = (process.env.ANTHROPIC_EFFORT || "medium") as "low" | "medium" | "high";
 const MAX_TOOL_ROUNDS = 12;
 const MAX_HISTORY_TURNS = 16;
 
@@ -28,12 +34,24 @@ type ChatTurn = { role: "user" | "assistant"; text: string };
  *  nothing and exists only to keep bytes moving; the client ignores it. */
 export type StreamEvent =
   | { type: "start" }
-  | { type: "beat" }
+  // `ms` is how long the turn has been running. It costs nothing to carry and
+  // it means a stream that gets cut off can still say how long it survived --
+  // the one number that tells a hosting timeout apart from anything else.
+  | { type: "beat"; ms: number }
   | { type: "tool"; name: string; ok: boolean; summary: string }
   | { type: "result"; reply: string; session: unknown; warnings: string[] }
   | { type: "error"; error: string; session?: unknown };
 
+// Built once and reused byte for byte. Prompt caching is a PREFIX match, so a
+// system prompt that differed by even a character between rounds -- a
+// timestamp, a re-read file -- would miss the cache on every one of them.
+let cachedSystem: string | null = null;
 function systemPrompt() {
+  if (cachedSystem == null) cachedSystem = buildSystemPrompt();
+  return cachedSystem;
+}
+
+function buildSystemPrompt() {
   return `You are the compose assistant inside seqbaby, a browser step sequencer. You write and edit the song the person has open by calling the tools -- never by describing changes in words instead of making them. Work in small, checkable steps and prefer editing what's there over starting over, unless they ask for something new.
 
 ${composeGuide()}
@@ -119,19 +137,44 @@ export async function POST(req: Request) {
       // is what "Unexpected token '<'" was. So: a byte immediately, and never
       // a long silence after it. The tool events carry real progress; the
       // heartbeat covers the gaps while a model call is in flight.
+      const startedAt = Date.now();
       send({ type: "start" });
-      const beat = setInterval(() => send({ type: "beat" }), 2000);
+      const beat = setInterval(() => send({ type: "beat", ms: Date.now() - startedAt }), 2000);
 
       let reply = "";
       try {
         for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-          const res = await anthropic.messages.create({
-            model: MODEL,
-            max_tokens: 4096,
-            system: systemPrompt(),
-            tools,
-            messages,
-          });
+          // The stable prefix is big -- the compose guide plus 31 tool
+          // schemas -- and it was re-sent uncached on every round of every
+          // turn. One breakpoint on the system block covers the tools too
+          // (the prefix renders tools -> system -> messages), so every round
+          // after the first reads it back instead of paying for it, which is
+          // most of what a round was waiting on.
+          //
+          // Streamed rather than awaited whole: the SDK's own guidance for a
+          // call that may run long, and it keeps this end of the pipe moving
+          // as well as the one back to the browser.
+          const res = await anthropic.messages
+            .stream({
+              model: MODEL,
+              max_tokens: 8192,
+              output_config: { effort: EFFORT },
+              system: [
+                { type: "text", text: systemPrompt(), cache_control: { type: "ephemeral" } },
+              ],
+              tools,
+              messages,
+            })
+            .finalMessage();
+
+          // Whether the prefix cache is actually being hit is not something to
+          // assume: a read of 0 across rounds means something in the prefix is
+          // varying and every round is paying full freight. Netlify's function
+          // log is where to see it.
+          const u = res.usage;
+          console.log(
+            `[compose] round ${round} ${Date.now() - startedAt}ms in=${u.input_tokens} cache_read=${u.cache_read_input_tokens ?? 0} cache_write=${u.cache_creation_input_tokens ?? 0} out=${u.output_tokens}`,
+          );
 
           messages.push({ role: "assistant", content: res.content });
 
