@@ -21,6 +21,8 @@ export function renderStepGrid(t) {
   grid.style.setProperty("--count", String(cols));
   grid.style.gridTemplateColumns = `repeat(${cols}, minmax(0, 1fr))`;
   grid.replaceChildren();
+  t._stepCells = null;           // paintTrackNow's cache (transport.js)
+  t._nowCells = null;
   updatePatternCell(t._patternIdx);
   // A track with a generator running live plays a rhythm rather than its
   // written steps, so that is what the grid has to show — otherwise the one

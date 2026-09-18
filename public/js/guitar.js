@@ -311,7 +311,9 @@ class GuitarProcessor extends AudioWorkletProcessor {
       // nobody would miss, and on a guitar it is also the one a hand would mute.
       let worst = Infinity;
       for (const c of this.voices) { const s = c.gate ? c.env + 10 : c.env; if (s < worst) { worst = s; v = c; } }
-      v.buf.fill(0); v.lp = 0; v.apX = 0; v.apZ = 0;
+      // The string keeps ringing: pluck() mixes the new excitation over what is
+      // in the loop, which is what plucking a sounding string does. Zeroing
+      // the delay line here dropped a ringing string to silence in one sample.
     }
     if (!v.active) { v.buf.fill(0); v.lp = 0; v.apX = 0; v.apZ = 0; v.d1x = v.d1y = v.d2x = v.d2y = 0; }
     v.id = ev.id; v.note = ev.note; v.vel = ev.vel;

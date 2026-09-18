@@ -72,6 +72,7 @@ let live = null;
  *  entails), and those must not be read back as fresh edits. */
 let restoring = false;
 let settleTimer = null;
+let idleHandle = null;                  // the idle slot the settle moved to
 let pending = { label: "", key: null };
 let started = false;
 
@@ -416,6 +417,7 @@ function checkForEdit() {
   // has not settled yet, and the timer it was waiting on is still armed.
   clearTimeout(settleTimer);
   settleTimer = null;
+  cancelIdle();
   if (restoring) return;
   const { label, key } = pending;
   pending = { label: "", key: null };
@@ -433,7 +435,27 @@ function scheduleCheck(label, key) {
   if (!pending.label && label) pending.label = label;
   if (key != null) pending.key = key;
   clearTimeout(settleTimer);
-  settleTimer = setTimeout(checkForEdit, SETTLE_MS);
+  cancelIdle();
+  settleTimer = setTimeout(settle, SETTLE_MS);
+}
+
+// The snapshot is a few milliseconds of synchronous work (serializeSet plus
+// the structural fold), which matters only while the transport runs: there it
+// is taken out of the same lookahead the notes are scheduled in, 420ms after
+// every knob release. So while playing it waits for an idle slot, with a
+// deadline so a busy tab still gets its entry. Stopped, it runs at once.
+function settle() {
+  settleTimer = null;
+  if (state.playing && typeof requestIdleCallback === "function") {
+    idleHandle = requestIdleCallback(() => { idleHandle = null; checkForEdit(); }, { timeout: 1500 });
+  } else {
+    checkForEdit();
+  }
+}
+function cancelIdle() {
+  if (idleHandle == null) return;
+  try { cancelIdleCallback(idleHandle); } catch {}
+  idleHandle = null;
 }
 
 // Tooltips break their first clause with a colon or a full stop (they used to
@@ -481,7 +503,10 @@ function onInteraction(e) {
   // Only a settled control coalesces: a knob dragged in three goes is one
   // entry, while three clicks on the dice are three rolls to step back through.
   const key = (e.type === "input" || e.type === "change") ? e.target : null;
-  scheduleCheck(labelForEvent(e), key);
+  // Only the first event of a gesture names it (scheduleCheck keeps the first
+  // label), so the DOM walk that finds the name is skipped for the sixty
+  // `input` events a second a knob drag sends after it.
+  scheduleCheck(pending.label ? "" : labelForEvent(e), key);
 }
 
 /** Text fields keep the browser's own undo — retyping a track name is the

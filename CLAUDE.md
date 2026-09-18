@@ -99,6 +99,8 @@ env / fx / eq / comp / mod / automation per track.
   the bitcrush section below.
 - `lfo.js` — LFO configs, `getModTarget`/`canModulate`, tempo sync, setter loop.
 - `automation.js` — per-step parameter automation (`AUTOMATION_TARGETS`).
+- `paramHold.js` — `holdParamAt` / `fadeStop`, no imports (see the clicks and
+  timing section).
 - `paramTargets.js` — control class → `{lfo, auto}` key map, the mod/automation
   exclusivity helpers, the label indicators, and the per-parameter descriptions
   (generic fallbacks only — the engines describe their own sliders, see below).
@@ -1966,6 +1968,79 @@ Auto-detected at creation (`guessIsDrumKit`), per-track toggle. Blank steps
 default to C2 (MIDI 36); the sampler pitches from `pitchBase: 36` (C2
 natural) instead of 60; toggling on rewrites active steps to C2 across
 patterns.
+
+## Clicks and timing — the rules that keep the transport in time
+
+Measured headless (Chromium, 6 tracks, every step on, chords, contagion + hexop
+worklets, cutoff + delay lanes, a reson LFO per track) the `16n` callback runs
+at ~1.5ms p50. Everything below is what was found to break that, or to click,
+and the rule that now holds. `paramHold.js` (no imports) carries the two
+helpers: `holdParamAt` (cancel-and-hold, so a ramp starts from the value being
+HEARD, never from the previous ramp's target) and `fadeStop` (a source stopped
+through a 6ms fade on its gain).
+
+- **The reverb tail is an impulse response, and regenerating it is the single
+  most expensive thing a parameter can do** — an offline render of `decay`
+  seconds of noise plus the convolver's FFT partitioning. Reached from the
+  `fx.reverb.decay` lane every step and the `reverb_decay` setter LFO every
+  frame, it took the callback to 16ms and the main thread to 180ms frames. So
+  `FXRack._requestReverb` throttles it: the latest value wins, one render per
+  rack per 400ms, skipped below a 12% change, and **one render in flight for
+  the whole app** (`reverbRegenChain`, with a 120ms breath between renders). Modulation goes through
+  `setReverbDecayLive`, which leaves the stored knob alone. A decay lane is
+  still the most expensive lane there is; the real fix is an algorithmic
+  reverb whose decay is a coefficient.
+- **`switchPattern` does only the audio half inside the transport.** Chain
+  mode and a queued switch call it from the scheduler callback on the bar line
+  with `{ deferUi: true }`; re-aliasing and the p-lock recall stay synchronous
+  (the next step must read the new pattern), and the whole UI repaint
+  (`paintPatternUI`: grids, roll, lanes, mod panel, pattern bar) goes to its
+  own task straight after — a `setTimeout`, not rAF, which stops in an occluded
+  window while the transport runs on. It measured 11ms empty and 23ms on a
+  full session. A click paints synchronously, as it always did.
+- **The history snapshot waits for idle time while playing**
+  (`history.js` `settle`, `requestIdleCallback` with a 1.5s deadline). And only
+  the first event of a gesture resolves a label; the sixty `input` events a
+  knob drag sends after it do not walk the DOM.
+- **`fireFilterEnv` never steps the cutoff.** The filter is the track's, shared
+  by every note, so the previous note is usually still ringing through it when
+  the next one snapped the frequency to `closed` (six octaves down at env 1,
+  through a biquad at Q 20). It holds and ramps into `closed` over 3ms instead,
+  writes Q only if something left it wrong and never under a reson lane, and
+  leaves the frequency to the cutoff lane when there is no envelope.
+- **A stolen worklet voice keeps its state.** The contagion and the hexop
+  retrigger their envelopes from the current level (they integrate towards a
+  target, so that is free), keep their phases and — the contagion — its filter
+  state; the guitar and bass no longer zero a ringing delay line (`pluck` mixes
+  over it); the silverbox no longer resets its VCA to silence on a fresh gate.
+  Only a voice that has FINISHED starts from zero. Subby already did this with
+  its crossfaded tail, and it is the model.
+- **Graph edits go under a fade** (`FXRack.softSwitch`): engaging or bypassing a
+  stage, and `routeTrackOutput` re-pointing a live output, duck a dedicated
+  `switchGain` for 4ms, edit 8ms later, and come back over 6ms. Edits queued
+  during the fade join it.
+- **`silence()` fades**: the sampler, the granular grains and the wavetable
+  notes keep their gain on the source (`src._g`, `rec.amp`) and stop through
+  `fadeStop`. The stop button already hid the hard cut behind the master ramp; a
+  session load did not.
+- **Plaits `hit` cancels the slot's previous events** (`noteOn` always did): a
+  round-robin slot re-taken while its old gate-off was still pending had that
+  gate-off land on the new note. Glide, there and in the four analog pools,
+  holds and ramps rather than restarting from the old target.
+- **Nothing per hit allocates a curve or a buffer.** `makeShaperCurve` /
+  `makeCassetteSatCurve` / the 808 `saturator` memoise per 1/128th of their
+  amount; every `noiseBurst` reads one shared 2s noise buffer at a random
+  offset instead of filling its own (60,000 randoms for a 909 open hat).
+- **Granular grains are built ahead, not at trigger time** (`_enqueueGrains`):
+  a long dense note is hundreds of grains × three nodes, and building them all
+  inside the callback made the OTHER tracks' notes late. Slices of a quarter
+  second, off a timer the note owns; `silence()` drops what is left.
+- **`paintTrackNow` caches the cells** on the track (`t._stepCells`,
+  invalidated by `renderStepGrid`) and toggles only what changed — it runs per
+  track per step.
+- Still on the list: `soloAudibleTracks` allocates per 16th; the worklets sort
+  their event queue on every note; the keyboard arp and the granular sustain
+  run on 25/50ms timers with a 120ms lookahead.
 
 ## Gotchas + conventions
 

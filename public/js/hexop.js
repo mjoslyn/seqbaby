@@ -221,18 +221,28 @@ class HexopProcessor extends AudioWorkletProcessor {
       let worst = Infinity;
       for (const c of this.voices) { const s = c.gate ? c.amp + 10 : c.amp; if (s < worst) { worst = s; v = c; } }
     }
+    const stolen = v.active;
     v.id = ev.id; v.note = ev.note; v.vel = ev.vel;
-    v.active = true; v.gate = true; v.amp = 0;
+    v.active = true; v.gate = true;
     v.target = ev.freq;
     const gl = ev.glide > 0 ? ev.glide : this.glideSec;
     if (gl > 0) { v.freq = this.lastFreq; v.glide = 1 - Math.exp(-3 / (gl * this.sr / BLK)); }
     else { v.freq = ev.freq; v.glide = 1; }
     this.lastFreq = ev.freq;
     v.peg = 1;
-    v.fb1 = 0; v.fb2 = 0;
-    for (let i = 0; i < NOP; i++) { v.stage[i] = 1; v.env[i] = 0; v.ph[i] = 0; v.out[i] = 0; }
     // Operators start in phase on every note, as the machine does — it is why
     // a hexop attack is identical every time, and why it sounds so consistent.
+    // A STOLEN voice is the exception: it is still sounding, so its operators
+    // keep their phases and their envelopes retrigger from their current
+    // levels (the machine's envelopes do the same) rather than dropping to
+    // zero for a sample, which was a click on every chord past the polyphony.
+    if (!stolen) {
+      v.amp = 0;
+      v.fb1 = 0; v.fb2 = 0;
+      for (let i = 0; i < NOP; i++) { v.stage[i] = 1; v.env[i] = 0; v.ph[i] = 0; v.out[i] = 0; }
+    } else {
+      for (let i = 0; i < NOP; i++) v.stage[i] = 1;
+    }
     if (this.lfoKeySync) { this.lfoPh = 0; this.lfoDelay = 0; }
   }
 

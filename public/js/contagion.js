@@ -223,6 +223,7 @@ class ContagionProcessor extends AudioWorkletProcessor {
       let worst = Infinity;
       for (const c of this.voices) { const s = c.gate ? c.amp + 10 : c.amp; if (s < worst) { worst = s; v = c; } }
     }
+    const stolen = v.active;
     v.id = ev.id; v.note = ev.note; v.vel = ev.vel;
     v.active = true; v.gate = true; v.age = ++this.tick;
     v.target = ev.freq;
@@ -232,11 +233,19 @@ class ContagionProcessor extends AudioWorkletProcessor {
     else { v.freq = ev.freq; v.glide = 1; }
     this.lastFreq = ev.freq;
     v.aStage = 1; v.fStage = 1;
-    v.amp = 0; v.fenv = 0;
-    v.s.fill(0); v.sat.fill(0);
-    // Random start phases: eight unison copies launched together would comb.
-    for (let u = 0; u < MAXU; u++) {
-      v.ph1[u] = Math.random(); v.ph2[u] = Math.random(); v.phS[u] = Math.random();
+    // A stolen voice is still sounding, so it keeps its envelope levels, its
+    // filter state and its phases: the attack rises from where it is (the
+    // envelopes integrate towards their target, so that is free), and the
+    // filter and the oscillators stay continuous. Zeroing all of it was a step
+    // scaled by whatever the old note was at — a click on every chord past the
+    // polyphony. Only a voice that has finished starts from silence.
+    if (!stolen) {
+      v.amp = 0; v.fenv = 0;
+      v.s.fill(0); v.sat.fill(0);
+      // Random start phases: eight unison copies launched together would comb.
+      for (let u = 0; u < MAXU; u++) {
+        v.ph1[u] = Math.random(); v.ph2[u] = Math.random(); v.phS[u] = Math.random();
+      }
     }
   }
 

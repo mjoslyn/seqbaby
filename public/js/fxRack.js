@@ -6,6 +6,18 @@ import { setParam } from "./params.js";
 // The rack's default config is data in soundDefaults.js (no imports, readable
 // from Node); re-exported so the imports elsewhere hold.
 export { defaultFxConfig } from "./soundDefaults.js";
+
+// Minimum gap between two impulse-response renders on one rack (see
+// FXRack._requestReverb). Four a second is far more often than a tail length
+// can be heard to change, and far fewer than a lane or an LFO would ask for.
+const REVERB_REGEN_MS = 400;
+// ...and only one render in flight for the whole app: six racks each
+// rendering their own eight-second tail at once, throttled or not, still
+// measured as 180ms frames. Each rack's regeneration waits its turn.
+let reverbRegenChain = Promise.resolve();
+// ...with a breath between renders, so the main thread paints between them.
+const REVERB_GLOBAL_GAP_MS = 120;
+
 // LFO mod keys (see lfo.js getModTarget) → the FX stage they touch. Used to
 // keep a stage engaged (see FXRack chain rewiring) while an LFO targets it,
 // even when its stored wet is 0 — the LFO signal adds on top of that base.
@@ -309,9 +321,21 @@ export class FXRack {
       maxDelay: 2,
     });
     this.reverb = new Tone.Reverb({ decay: config.reverb.decay, wet: config.reverb.wet, preDelay: 0.02 });
+    // The impulse response the convolver holds, the one asked for since, and
+    // the regeneration in flight — see _requestReverb.
+    this._reverbHave = config.reverb.decay;
+    this._reverbWant = null;
+    this._reverbBusy = false;
+    this._reverbTimer = null;
+    this._reverbLast = 0;
     this.reverb.generate().catch(() => {});
 
     this.output = ctx.createGain();
+    // The end of the serial chain lands here, and this is what softSwitch
+    // ducks around a graph edit (see there). Its own node so the duck never
+    // touches the amp level on `output`, which is a knob and a mod target.
+    this.switchGain = ctx.createGain();
+    this.switchGain.connect(this.output);
     // Native GainNode.connect() in Tone.js 15 rejects Tone wrappers — unwrap to
     // the underlying native input node before connecting from a native source.
     const toneIn = (node) => node.input?.input ?? node.input ?? node;
@@ -382,21 +406,56 @@ export class FXRack {
       for (const dest of s.ins) { try { prev.connect(dest); } catch {} }
       prev = s.out;
     }
-    try { prev.connect(this.output); } catch {}
+    try { prev.connect(this.switchGain); } catch {}
+  }
+
+  /**
+   * Run a graph edit (a stage wired in or out, the output re-pointed) under a
+   * short fade instead of on a live signal. A disconnect takes effect at the
+   * next render quantum whatever the signal is doing, so engaging a stage by
+   * turning its wet knob off zero, or the bypass timer dropping one 2.5s later
+   * in the middle of a bar, was a step — small, but on every such edit.
+   * Two ramps and a timer: 4ms down, the edit once the fade has landed, 6ms
+   * back up. Edits asked for while one is pending join it.
+   * @param {() => void} fn
+   */
+  softSwitch(fn) {
+    if (this._disposed) return;
+    (this._softQueue || (this._softQueue = [])).push(fn);
+    if (this._softTimer) return;
+    const ctx = this.ctx, g = this.switchGain.gain;
+    const now = ctx.currentTime;
+    try {
+      g.cancelScheduledValues(now);
+      g.setValueAtTime(g.value, now);
+      g.linearRampToValueAtTime(0, now + 0.004);
+    } catch {}
+    this._softTimer = setTimeout(() => {
+      this._softTimer = null;
+      const q = this._softQueue || [];
+      this._softQueue = null;
+      for (const f of q) { try { f(); } catch (e) { console.warn("fx rack switch failed", e); } }
+      const t1 = ctx.currentTime + 0.003;
+      try {
+        g.cancelScheduledValues(t1);
+        g.setValueAtTime(0, t1);
+        g.linearRampToValueAtTime(1, t1 + 0.006);
+      } catch {}
+    }, 8);
   }
 
   _updateStage(key) {
     const want = this._stageLevel(key) > 0 || !!this._isStageHeld?.(key);
     if (want) {
       if (this._bypassTimers[key]) { clearTimeout(this._bypassTimers[key]); delete this._bypassTimers[key]; }
-      if (!this._active[key]) { this._active[key] = true; this._rewire(); }
+      if (!this._active[key]) { this._active[key] = true; this.softSwitch(() => this._rewire()); }
       return;
     }
     if (!this._active[key] || this._bypassTimers[key]) return;
     this._bypassTimers[key] = setTimeout(() => {
       delete this._bypassTimers[key];
       const still = this._stageLevel(key) > 0 || !!this._isStageHeld?.(key);
-      if (!still && this._active[key]) { this._active[key] = false; this._rewire(); }
+      if (!still && this._active[key]) { this._active[key] = false; this.softSwitch(() => this._rewire()); }
     }, 2500);
   }
 
@@ -657,13 +716,64 @@ export class FXRack {
   applyReverb({ decay, wet }) {
     if (decay !== undefined) {
       this.config.reverb.decay = decay;
-      this.reverb.decay = decay;
-      this.reverb.generate().catch(() => {});
+      this._requestReverb(decay);
     }
     if (wet !== undefined) { this.config.reverb.wet = wet; this.reverb.wet.value = wet; }
     this._updateStage("reverb");
   }
+
+  /**
+   * A modulated decay (LFO or automation lane) — changes the impulse response
+   * without touching the stored knob, so the slider stays the base.
+   */
+  setReverbDecayLive(decay) { this._requestReverb(decay); }
+
+  // A convolution reverb's decay IS its impulse response, and Tone.Reverb
+  // regenerates that by rendering `decay` seconds of noise through an
+  // OfflineAudioContext — a multi-megabyte buffer plus the convolver's FFT
+  // partitioning every time. Reached from a lane every step and from a setter
+  // LFO every frame, that was six racks each re-rendering an eight-second IR
+  // several times a second: measured, it took the transport callback from
+  // ~1ms to ~16ms and the main thread to 180ms frames. So it is throttled here:
+  // one regeneration in flight per rack, at most one every REVERB_REGEN_MS,
+  // always the LATEST value asked for, and skipped altogether when the change
+  // is below what a tail length can be heard to differ by. Never synchronous
+  // from the caller either — the transport callback is the caller.
+  _requestReverb(decay) {
+    if (this._disposed) return;
+    this._reverbWant = decay;
+    if (this._reverbTimer || this._reverbBusy) return;
+    const since = performance.now() - this._reverbLast;
+    const wait = Math.max(0, REVERB_REGEN_MS - since);
+    this._reverbTimer = setTimeout(() => { this._reverbTimer = null; this._regenReverb(); }, wait);
+  }
+  async _regenReverb() {
+    const want = this._reverbWant;
+    this._reverbWant = null;
+    if (want == null || this._disposed) return;
+    const have = this._reverbHave;
+    if (have != null && Math.abs(want - have) <= Math.max(0.1, have * 0.12)) return;
+    this._reverbBusy = true;
+    const turn = reverbRegenChain.then(async () => {
+      if (this._disposed) return;
+      this._reverbLast = performance.now();
+      try {
+        this.reverb.decay = want;
+        await this.reverb.generate();
+        this._reverbHave = want;
+      } catch {}
+    });
+    reverbRegenChain = turn.catch(() => {}).then(() => new Promise(r => setTimeout(r, REVERB_GLOBAL_GAP_MS)));
+    await turn;
+    this._reverbBusy = false;
+    // Something asked for a different tail while this one rendered.
+    if (this._reverbWant != null && !this._disposed) this._requestReverb(this._reverbWant);
+  }
   dispose() {
+    this._disposed = true;
+    if (this._reverbTimer) { try { clearTimeout(this._reverbTimer); } catch {} this._reverbTimer = null; }
+    if (this._softTimer) { try { clearTimeout(this._softTimer); } catch {} this._softTimer = null; this._softQueue = null; }
+    try { this.switchGain.disconnect(); } catch {}
     for (const k in this._bypassTimers) { try { clearTimeout(this._bypassTimers[k]); } catch {} }
     this._bypassTimers = {};
     try { this.input.disconnect(); } catch {}

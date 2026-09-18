@@ -8,6 +8,7 @@ import { makeMetalizerCurve } from "./curves.js";
 import { isMobileDevice } from "./dom.js";
 import { sampleHitRate } from "./lfo.js";
 import { setParam } from "./params.js";
+import { fadeStop, holdParamAt } from "./paramHold.js";
 import { buildSilverboxVoice } from "./silverbox.js";
 import { buildBassVoice, BASS_NUM_KEYS, BASS_SEL_KEYS } from "./bass.js";
 import { buildSubBassVoice, SUB_NUM_KEYS, SUB_SEL_KEYS } from "./subbass.js";
@@ -92,14 +93,23 @@ export class PlaitsVoice {
     const gateOff = Math.max(time + 0.002, time + duration - 0.004);
     const vel = Math.max(0, Math.min(1, velocity));
     const noteParam = v.node.noteAudioParameter;
+    // Glide from where the pitch IS at `time`, not from the last note asked
+    // for: with a ramp still in flight those differ, and snapping to the old
+    // target before ramping was a pitch tick on fast legato lines.
     if (this.glide > 0 && v.lastNote != null && v.lastNote !== midiNote) {
-      noteParam.cancelScheduledValues(time);
-      noteParam.setValueAtTime(v.lastNote, time);
+      holdParamAt(noteParam, time);
       noteParam.linearRampToValueAtTime(midiNote, time + this.glide);
     } else {
+      noteParam.cancelScheduledValues(time);
       noteParam.setValueAtTime(midiNote, time);
     }
     v.lastNote = midiNote;
+    // The slot is round-robin, so its previous note may still have a gate-off
+    // and a level decay scheduled in the future (chords, ratchets, the 2-voice
+    // mobile pool). Left in place they land on top of THIS note and cut it
+    // short — noteOn below always cancelled them; hit did not.
+    v.node.modLevelAudioParameter.cancelScheduledValues(time);
+    v.node.modTriggerAudioParameter.cancelScheduledValues(time);
     v.node.modLevelAudioParameter.setValueAtTime(vel, time);
     v.node.modTriggerAudioParameter.setValueAtTime(0, time);
     v.node.modTriggerAudioParameter.setValueAtTime(1, time + 0.001);
@@ -242,14 +252,33 @@ function ringSine(ctx, dest, { freq, bend = 1, bendTime = 0.03, peak, decay, t0 
   return osc;
 }
 
+// One two-second noise buffer per context, looped, for every burst. Each hit
+// used to fill a fresh buffer the length of its decay — up to 60,000 randoms
+// for a 909 open hat, four buffers for a clap — on the main thread, inside
+// the transport callback, and then leave it to the collector. The VCA is
+// what shapes the burst, so where the loop starts is immaterial.
+const noiseBufs = new WeakMap();
+function sharedNoise(ctx) {
+  let buf = noiseBufs.get(ctx);
+  if (!buf) {
+    const len = Math.ceil(2 * ctx.sampleRate);
+    buf = ctx.createBuffer(1, len, ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+    noiseBufs.set(ctx, buf);
+  }
+  return buf;
+}
+
 /** White-noise burst through `filters`, shaped by an exponential VCA. */
 function noiseBurst(ctx, dest, { peak, decay, t0, attack = 0.001, filters = [] }) {
-  const len = Math.max(1, Math.ceil((decay + 0.05) * ctx.sampleRate));
-  const buf = ctx.createBuffer(1, len, ctx.sampleRate);
-  const d = buf.getChannelData(0);
-  for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+  const buf = sharedNoise(ctx);
   const src = ctx.createBufferSource();
   src.buffer = buf;
+  src.loop = true;
+  // Start somewhere different each hit, or every snare has the same grain.
+  src.loopStart = 0;
+  src.loopEnd = buf.duration;
   const vca = ctx.createGain();
   vca.gain.setValueAtTime(0.0001, t0);
   vca.gain.exponentialRampToValueAtTime(Math.max(0.0002, peak), t0 + attack);
@@ -257,19 +286,27 @@ function noiseBurst(ctx, dest, { peak, decay, t0, attack = 0.001, filters = [] }
   let node = src;
   for (const f of filters) { node.connect(f); node = f; }
   node.connect(vca).connect(dest);
-  src.start(t0);
+  src.start(t0, Math.random() * (buf.duration - decay - 0.1));
   src.stop(t0 + decay + 0.05);
   return src;
 }
 
 /** Soft clipper standing in for the mixer saturation an 808 hits on the way out. */
+// The curve is memoised per amount (to 1/128th): it was 1024 tanh calls per
+// kick, on every kick.
+const satCurves = new Map();
 function saturator(ctx, amount) {
   const ws = ctx.createWaveShaper();
-  const n = 1024;
-  const c = new Float32Array(n);
-  const k = 1 + amount * 12;
-  const norm = Math.tanh(k);
-  for (let i = 0; i < n; i++) c[i] = Math.tanh(((i * 2) / n - 1) * k) / norm;
+  const q = Math.round(clamp01(amount) * 128);
+  let c = satCurves.get(q);
+  if (!c) {
+    const n = 1024;
+    c = new Float32Array(n);
+    const k = 1 + (q / 128) * 12;
+    const norm = Math.tanh(k);
+    for (let i = 0; i < n; i++) c[i] = Math.tanh(((i * 2) / n - 1) * k) / norm;
+    satCurves.set(q, c);
+  }
   ws.curve = c;
   ws.oversample = "2x";
   return ws;
@@ -753,7 +790,6 @@ export function buildSnarlVoice(output) {
   amp.connect(trim);
   trim.connect(output);
 
-  let lastFreq = 110;
   let glideSec = 0.015;
   const setMBParam = (key, val) => {
     const v = Math.max(0, Math.min(1, Number(val) || 0));
@@ -785,10 +821,10 @@ export function buildSnarlVoice(output) {
     },
     trigger: (note, time, dur, vel) => {
       const f = Tone.Frequency(note, "midi").toFrequency();
-      freqSig.cancelScheduledValues(time);
-      freqSig.setValueAtTime(lastFreq, time);
-      freqSig.linearRampToValueAtTime(f, time + glideSec);
-      lastFreq = f;
+      // Hold the pitch where it is at `time` and ramp from there (a ramp
+      // still in flight used to be restarted from its TARGET: a pitch tick).
+      if (glideSec > 0) { holdParamAt(freqSig, time); freqSig.linearRampToValueAtTime(f, time + glideSec); }
+      else { freqSig.cancelScheduledValues(time); freqSig.setValueAtTime(f, time); }
       amp.triggerAttackRelease(Math.max(0.02, dur), time, vel);
     },
     release: (time) => amp.triggerRelease(time),
@@ -845,7 +881,6 @@ export function buildLadderVoice(output) {
   };
   updateMul();
 
-  let lastFreq = 110;
   let glideSec = 0.02;
   const setLadderParam = (key, val) => {
     if (key === "osc1")         mix1.gain.value = Math.max(0, Math.min(1, Number(val) || 0));
@@ -891,10 +926,10 @@ export function buildLadderVoice(output) {
     },
     trigger: (note, time, dur, vel) => {
       const f = Tone.Frequency(note, "midi").toFrequency();
-      freqSig.cancelScheduledValues(time);
-      freqSig.setValueAtTime(lastFreq, time);
-      freqSig.linearRampToValueAtTime(f, time + glideSec);
-      lastFreq = f;
+      // Hold the pitch where it is at `time` and ramp from there (a ramp
+      // still in flight used to be restarted from its TARGET: a pitch tick).
+      if (glideSec > 0) { holdParamAt(freqSig, time); freqSig.linearRampToValueAtTime(f, time + glideSec); }
+      else { freqSig.cancelScheduledValues(time); freqSig.setValueAtTime(f, time); }
       amp.triggerAttackRelease(Math.max(0.02, dur), time, vel);
     },
     release: (time) => amp.triggerRelease(time),
@@ -946,7 +981,6 @@ export function buildDriftVoice(output) {
   chorus.connect(trim);
   trim.connect(output);
 
-  let lastFreq = 110;
   let glideSec = 0.015;
   const setDriftParam = (key, val) => {
     const v = Math.max(0, Math.min(1, Number(val) || 0));
@@ -986,10 +1020,10 @@ export function buildDriftVoice(output) {
     },
     trigger: (note, time, dur, vel) => {
       const f = Tone.Frequency(note, "midi").toFrequency();
-      freqSig.cancelScheduledValues(time);
-      freqSig.setValueAtTime(lastFreq, time);
-      freqSig.linearRampToValueAtTime(f, time + glideSec);
-      lastFreq = f;
+      // Hold the pitch where it is at `time` and ramp from there (a ramp
+      // still in flight used to be restarted from its TARGET: a pitch tick).
+      if (glideSec > 0) { holdParamAt(freqSig, time); freqSig.linearRampToValueAtTime(f, time + glideSec); }
+      else { freqSig.cancelScheduledValues(time); freqSig.setValueAtTime(f, time); }
       amp.triggerAttackRelease(Math.max(0.02, dur), time, vel);
     },
     release: (time) => amp.triggerRelease(time),
@@ -1225,7 +1259,6 @@ export function buildOracleVoice(output) {
   chorus.connect(trim);
   trim.connect(output);
 
-  let lastFreq = 220;
   let glideSec = 0.005;
   const setP6Param = (key, val) => {
     const v = Math.max(0, Math.min(1, Number(val) || 0));
@@ -1275,10 +1308,10 @@ export function buildOracleVoice(output) {
     },
     trigger: (note, time, dur, vel) => {
       const f = Tone.Frequency(note, "midi").toFrequency();
-      freqSig.cancelScheduledValues(time);
-      freqSig.setValueAtTime(lastFreq, time);
-      freqSig.linearRampToValueAtTime(f, time + glideSec);
-      lastFreq = f;
+      // Hold the pitch where it is at `time` and ramp from there (a ramp
+      // still in flight used to be restarted from its TARGET: a pitch tick).
+      if (glideSec > 0) { holdParamAt(freqSig, time); freqSig.linearRampToValueAtTime(f, time + glideSec); }
+      else { freqSig.cancelScheduledValues(time); freqSig.setValueAtTime(f, time); }
       amp.triggerAttackRelease(Math.max(0.05, dur), time, vel);
     },
     release: (time) => amp.triggerRelease(time),
@@ -1451,6 +1484,7 @@ export class SamplerVoice {
       const g = this.ctx.createGain();
       applySampleFadeEnvelope(g, time, stopTime, Math.max(0, Math.min(1, velocity)), sopts);
       src.connect(g).connect(this.boost);
+      src._g = g;                    // for silence(): fade, then stop
       src.stop(stopTime + 0.01);
       this.active.add(src);
       src.onended = () => this.active.delete(src);
@@ -1461,6 +1495,7 @@ export class SamplerVoice {
     const g = this.ctx.createGain();
     applySampleFadeEnvelope(g, time, stopTime, Math.max(0, Math.min(1, velocity)), opts);
     src.connect(g).connect(this.boost);
+    src._g = g;                    // for silence(): fade, then stop
     src.stop(stopTime + 0.01);
     this.active.add(src);
     src.onended = () => this.active.delete(src);
@@ -1491,6 +1526,7 @@ export class SamplerVoice {
     const g = this.ctx.createGain();
     applySampleFadeEnvelope(g, time, stopTime, Math.max(0, Math.min(1, velocity)), sopts);
     src.connect(g).connect(this.boost);
+    src._g = g;                    // for silence(): fade, then stop
     src.stop(stopTime + 0.01);
     this.active.add(src);
     src.onended = () => this.active.delete(src);
@@ -1514,7 +1550,9 @@ export class SamplerVoice {
   }
   silence(now) {
     this._held?.clear();
-    for (const s of this.active) { try { s.stop(now); } catch {} }
+    // A sample stopped mid-wave at full level is a click. The stop button hid
+    // that behind the master ramp; a session load did not.
+    for (const s of this.active) fadeStop(s, s._g || null, now);
     this.active.clear();
   }
   dispose() {
@@ -1868,6 +1906,9 @@ export class GranularVoice {
     const n = Math.min(200, Math.ceil(span / interval));
     // Stamp the play-head scan for the WAV modal (moving head sweeps over `span`).
     this.headViz = { t0, startPos: this.pos, speed, moving, loop: this.gloop, until: t0 + span };
+    // Decide every grain now (cheap: numbers), build them into the graph just
+    // ahead of when they play (see _enqueueGrains).
+    const plan = [];
     for (let i = 0; i < n; i++) {
       const dt = i * interval + (Math.random() - 0.5) * interval * jitterAmt * 2;
       if (dt < 0) continue;
@@ -1884,11 +1925,36 @@ export class GranularVoice {
       else if (this.gpattern === "fifth") semis = (Math.floor(Math.random() * 3) - 1) * 7;
       const rate = baseRate * pitchMul * Math.pow(2, semis / 12 + cents / 1200);
       const pan = (Math.random() * 2 - 1) * this.gpan;
-      this._scheduleGrain(t0 + dt, posFrac * bufDur, gs, rate, grainAmp * env, pan);
+      plan.push([t0 + dt, posFrac * bufDur, gs, rate, grainAmp * env, pan]);
       this.grainViz.push({ s: t0 + dt, e: t0 + dt + gs, p: posFrac });
     }
     // Bound the viz log so long held notes don't grow it without limit.
     if (this.grainViz.length > 600) this.grainViz.splice(0, this.grainViz.length - 600);
+    this._enqueueGrains(plan);
+  }
+  // A long note at high density is hundreds of grains, and each one is three
+  // nodes. Building them all at trigger time — synchronously, inside the
+  // transport callback — overran it, after which every other track's notes
+  // that tick were clamped to "now": one granular pad made the drums late.
+  // So a note's grains are built in slices, each a quarter second ahead of
+  // the clock, off a timer the note owns (silence() drops what is left).
+  _enqueueGrains(plan) {
+    if (!plan.length) return;
+    if (!this._grainQueues) this._grainQueues = new Set();
+    const q = { plan, i: 0, timer: null };
+    this._grainQueues.add(q);
+    const LOOK = 0.25, TICK_MS = 80;
+    const drain = () => {
+      q.timer = null;
+      const until = this.ctx.currentTime + LOOK;
+      while (q.i < q.plan.length && q.plan[q.i][0] <= until) {
+        const g = q.plan[q.i++];
+        this._scheduleGrain(g[0], g[1], g[2], g[3], g[4], g[5]);
+      }
+      if (q.i >= q.plan.length) { this._grainQueues.delete(q); return; }
+      q.timer = setTimeout(drain, TICK_MS);
+    };
+    drain();
   }
   // Keyboard gate: keep spraying grains while the key is held (a lookahead
   // scheduler tops up the cloud), stop scheduling on release so the last grains
@@ -1983,6 +2049,7 @@ export class GranularVoice {
       src._pan = p;
     }
     src.connect(g);
+    src._g = g;                    // for silence(): fade, then stop
     tail.connect(this.boost);
     src.onended = () => {
       try { src.disconnect(); } catch {}
@@ -1996,7 +2063,11 @@ export class GranularVoice {
   }
   silence(now) {
     const at = Math.max(this.ctx.currentTime, Number(now) || this.ctx.currentTime);
-    for (const s of this.active) { try { s.stop(at); } catch {} }
+    if (this._grainQueues) {
+      for (const q of this._grainQueues) if (q.timer != null) clearTimeout(q.timer);
+      this._grainQueues.clear();
+    }
+    for (const s of this.active) fadeStop(s, s._g || null, at);
     if (this._grainHeld) {
       for (const arr of this._grainHeld.values()) for (const rec of arr) { rec.released = true; if (rec.timer != null) clearInterval(rec.timer); }
       this._grainHeld.clear();
@@ -2393,7 +2464,7 @@ export class WavetableVoice {
       src.stop(stopAt);
       srcs.push(src);
     }
-    const rec = { srcs };
+    const rec = { srcs, amp };
     srcs[0].onended = () => {
       for (const s of srcs) { try { s.disconnect(); } catch {} }
       try { amp.disconnect(); } catch {}
@@ -2560,7 +2631,16 @@ export class WavetableVoice {
   }
   silence(now) {
     const at = Math.max(this.ctx.currentTime, Number(now) || this.ctx.currentTime);
-    for (const rec of this.active) { for (const s of rec.srcs) { try { s.stop(at); } catch {} } }
+    // These are looped oscillators, often at full sustain — the worst hard
+    // cut of the three voices that had one. Fade the note's own amp first.
+    for (const rec of this.active) {
+      // One fade on the note's amp, then every unison source stops behind it.
+      const g = rec.amp?.gain;
+      if (g) {
+        try { g.cancelScheduledValues(at); g.setValueAtTime(g.value, at); g.linearRampToValueAtTime(0.0001, at + 0.006); } catch {}
+      }
+      for (const s of rec.srcs) { try { s.stop(at + (g ? 0.007 : 0)); } catch {} }
+    }
     for (const rec of this._scanRecs) {
       rec.stopAt = Math.min(rec.stopAt, at);
       for (const [, slot] of rec.slots) for (const sc of slot.srcs) { try { sc.stop(at); } catch {} }

@@ -387,12 +387,18 @@ export function applySetterLfoValue(t, key, v) {
       return;
     }
     case "cassette_sat":
-      try { rack.cassetteSat.curve = makeCassetteSatCurve(v); } catch {}
+      try {
+        // Cached per amount (curves.js), so the same curve object comes back
+        // for the same value and the 8KB copy to the render thread is skipped.
+        const c = makeCassetteSatCurve(v);
+        if (rack._liveCassetteCurve !== c) { rack._liveCassetteCurve = c; rack.cassetteSat.curve = c; }
+      } catch {}
       return;
     case "shaper_amt":
       try {
         const mode = rack.config?.shaper?.mode ?? "fold";
-        rack.shaperNode.curve = makeShaperCurve(mode, v);
+        const c = makeShaperCurve(mode, v);
+        if (rack._liveShaperCurve !== c) { rack._liveShaperCurve = c; rack.shaperNode.curve = c; }
       } catch {}
       return;
     case "autowah_sens":
@@ -413,16 +419,11 @@ export function applySetterLfoValue(t, key, v) {
       // exactly the range a vibrato-style mod wants to live in).
       try { rack.pitchshift.pitch = v * 24 - 12; } catch {}
       return;
-    case "reverb_decay": {
-      // IR rebuild is heavy — only regenerate on perceptible change.
-      const decay = 0.2 + v * 7.8;
-      const cur = rack._lfoReverbDecay ?? rack.config?.reverb?.decay ?? decay;
-      if (Math.abs(decay - cur) > 0.3) {
-        rack._lfoReverbDecay = decay;
-        try { rack.reverb.decay = decay; rack.reverb.generate().catch(() => {}); } catch {}
-      }
+    case "reverb_decay":
+      // The rack throttles and coalesces the impulse-response rebuild this
+      // asks for (FXRack._requestReverb); the stored knob is left alone.
+      try { rack.setReverbDecayLive?.(0.2 + v * 7.8); } catch {}
       return;
-    }
   }
 }
 
