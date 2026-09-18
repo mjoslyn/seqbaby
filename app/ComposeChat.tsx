@@ -132,6 +132,17 @@ export default function ComposeChat() {
       attachedRef.current = null;
       return;
     }
+    // Whether what is on screen is a transcript with no song of its own --
+    // the conversation that built an unsaved session. If it belongs to some
+    // OTHER song, it goes now rather than when the load returns: until then it
+    // is the previous song's words sitting under this song's name, and a turn
+    // landing in that window would save them onto this one.
+    const carrying = attachedRef.current === null && messagesRef.current.length > 0;
+    if (!carrying) setMessages([]);
+    // Attached to nothing until a load says otherwise, which is what stops a
+    // turn landing mid-load from writing over a chat it has not read yet.
+    attachedRef.current = null;
+
     let alive = true;
     loadSongChat(songId).then((res) => {
       if (!alive || res.error) return;
@@ -145,7 +156,7 @@ export default function ComposeChat() {
       // Only ever onto a song with no conversation of its own: opening an
       // existing song while carrying one must not overwrite what is already
       // there, so a song that has a chat wins and ours is let go.
-      const adopt = attachedRef.current === null && stored.length === 0 && messagesRef.current.length > 0;
+      const adopt = carrying && stored.length === 0 && messagesRef.current.length > 0;
       attachedRef.current = songId;
       if (adopt) {
         saveSongChat(songId, messagesRef.current).catch(() => {});
@@ -219,8 +230,13 @@ export default function ComposeChat() {
       const final = [...withUser, msg];
       setMessages(final);
       const now = getOpenSong();
-      if (now.id && !now.isTemplate) {
-        attachedRef.current = now.id;
+      // Only onto a song this panel is actually attached to -- meaning its
+      // chat has been read, or this transcript was adopted into it. A turn
+      // landing while a load is still in flight, or after one failed, would
+      // otherwise upsert whatever is on screen over a conversation nobody has
+      // seen. That turn is not lost: `final` carries the whole transcript, so
+      // the next one writes it.
+      if (now.id && !now.isTemplate && attachedRef.current === now.id) {
         saveSongChat(now.id, final).catch(() => {});
       }
     };

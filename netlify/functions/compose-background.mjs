@@ -22,11 +22,21 @@ export default async (req) => {
     const token = body?.token;
     if (!jobId || !token) return new Response("bad request", { status: 400 });
 
+    // Refusing to run is still an outcome, and the browser is already polling
+    // for one. Returning a status to a caller that is a fire-and-forget POST
+    // told nobody, leaving the panel to sit on "running" until its own
+    // 16-minute limit gave up.
     const job = await getJobInput(jobId);
-    if (!job) return new Response("no such job", { status: 404 });
+    if (!job) {
+      await finishJob(jobId, { status: "error", error: "that job's details were no longer on the server." });
+      return new Response("no such job", { status: 404 });
+    }
     // The id is enough to find a job, so the token is what says this
     // invocation came from the route that created it.
-    if (job.token !== token) return new Response("forbidden", { status: 403 });
+    if (job.token !== token) {
+      await finishJob(jobId, { status: "error", error: "that job could not be verified." });
+      return new Response("forbidden", { status: 403 });
+    }
 
     const out = await runComposeTurn({
       apiKey: process.env.ANTHROPIC_API_KEY,

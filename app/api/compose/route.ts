@@ -55,12 +55,15 @@ export async function POST(req: Request) {
   }
 
   const history = Array.isArray(body.history) ? body.history : [];
-  const { id, token } = await createJob({
+  const { id, token, error } = await createJob({
     userId: user.id,
     message,
     history,
     session: body.session,
   });
+  // Over this account's limits on the deploy's shared key. 429 so the panel
+  // can say so plainly rather than treating it as a failure to start.
+  if (error || !id) return NextResponse.json({ error: error ?? "couldn't start that" }, { status: 429 });
 
   // Aim the worker at the deploy this request arrived on, rather than at
   // whatever a site-wide env var names: a branch preview has to hand its job

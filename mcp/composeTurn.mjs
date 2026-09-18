@@ -169,11 +169,21 @@ export async function runComposeTurn({
   // itself, must be able to say it changed nothing.
   const before = JSON.stringify(ctx.song);
 
+  // A conversation must begin with a user turn. The transcript this comes from
+  // does not reliably: a failed turn leaves a user message whose reply was an
+  // error, the panel drops error turns on the way here, and that orphaned user
+  // message shifts the parity -- so a window taken off the end can open on an
+  // assistant turn. The API rejects that, and since the error is kept in the
+  // song's stored chat, it would have rejected every later turn in that
+  // conversation too. (Consecutive same-role turns are fine; the API folds
+  // them into one, so only the leading edge needs cutting.)
+  const recent = history
+    .filter((h) => h && (h.role === "user" || h.role === "assistant") && typeof h.text === "string")
+    .slice(-MAX_HISTORY_TURNS);
+  while (recent.length && recent[0].role !== "user") recent.shift();
+
   const messages = [
-    ...history
-      .filter((h) => h && (h.role === "user" || h.role === "assistant") && typeof h.text === "string")
-      .slice(-MAX_HISTORY_TURNS)
-      .map((h) => ({ role: h.role, content: h.text })),
+    ...recent.map((h) => ({ role: h.role, content: h.text })),
     { role: "user", content: message },
   ];
 
