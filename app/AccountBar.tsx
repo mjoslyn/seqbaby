@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { signOut } from "@/app/auth/actions";
 import SongsMenu from "@/app/SongsMenu";
 import SaveButton from "@/app/SaveButton";
@@ -35,6 +35,36 @@ export function AccountBar({
   serverKey?: boolean;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const barRef = useRef<HTMLDivElement | null>(null);
+
+  // The bar is pinned to the top, and so is the transport directly under it —
+  // two sticky siblings both at `top: 0` would pile up on the same line the
+  // moment the page scrolled. The transport takes this bar's height as its
+  // own offset instead (`--sq-topbar-h`, read in public/style.css).
+  //
+  // Measured rather than written down: the height is whatever 12px monospace
+  // and a row of bordered buttons come out at, and a constant that was a pixel
+  // wrong would show as a seam or a clipped border for every visitor. A
+  // ResizeObserver rather than a one-off read, because the row is also what
+  // changes when the layout crosses 768px.
+  useEffect(() => {
+    const el = barRef.current;
+    if (!el) return;
+    const root = document.documentElement;
+    const write = () => {
+      root.style.setProperty(
+        "--sq-topbar-h",
+        `${Math.round(el.getBoundingClientRect().height)}px`,
+      );
+    };
+    write();
+    const ro = new ResizeObserver(write);
+    ro.observe(el);
+    return () => {
+      ro.disconnect();
+      root.style.removeProperty("--sq-topbar-h");
+    };
+  }, []);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -57,6 +87,7 @@ export function AccountBar({
 
   return (
     <div
+      ref={barRef}
       className={`${styles.topBar} ${menuOpen ? styles.topBarMenuOpen : ""}`}
     >
       <a className={styles.manualLink} href="/manual" title="how seqbaby works">
