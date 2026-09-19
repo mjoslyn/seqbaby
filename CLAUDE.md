@@ -2192,7 +2192,7 @@ A turn that changed the song no longer lands in the studio. It lands in a
 ```
 audition   merge it into what is playing, keeping the session it replaced
 stop       write that session back — the changes are still on offer
-keep       they are the song now
+keep       they are the song now — and a version of it is saved
 discard    throw them away (putting back the pre-audition session first)
 ```
 
@@ -2209,6 +2209,24 @@ discard    throw them away (putting back the pre-audition session first)
   mid-audition changes nothing, so it leaves no second entry. Undoing across it
   does fall back to `applySet` and stops the transport, which is what the
   `stop` button is for.
+- **Keeping autosaves a version**, because nobody presses the top bar's `save`
+  in the middle of a conversation — a kept turn used to live only in the tab it
+  was asked for in, one reload from being a transcript about a song that never
+  got the changes it describes. The rule is the top bar's exactly (`saveSong`,
+  the open song, branching off `openSong.versionId`), so a conversation started
+  from an older version still branches rather than burying it, and the store is
+  moved on to the version just written so the next save — from here or the top
+  bar — hangs off it. What is saved is the ENGINE's session, not the turn's:
+  mid-audition that is the changes plus anything moved by hand since, which is
+  the same thing `keep` means. The version is labelled with what was asked for
+  (`compose: give it a hi-hat` — `label` on `saveSong`, new), because a tree of
+  saves nobody pressed is unreadable without one.
+  **Nothing is saved when there is no song to save into** — signed out, a
+  session nobody has named, or a template, whose first save MAKES a song and is
+  therefore a decision with a name attached. Inventing one here would put a row
+  in somebody's list under a name they never saw, so the line where the review
+  bar was says `press save to keep it for good` instead. It says what happened
+  either way: a `keep` that kept nothing anywhere is the thing worth knowing.
 - **Sending the next message settles the last proposal.** The session being
   serialized is what the model is being asked about, so whatever is in the
   engine — an audition included — is what that turn builds on, and there is

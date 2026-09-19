@@ -167,6 +167,13 @@ async function ownedSongId(
   return (data?.id as string | undefined) ?? null;
 }
 
+// A version label from the caller, trimmed to what the column and the tree can
+// show. Same cap as `labelVersion`, which is the other way one gets written.
+function versionLabel(label?: string | null): string | null {
+  const trimmed = (label ?? "").trim().slice(0, 120);
+  return trimmed || null;
+}
+
 // Save the current song. Insert when no id, update in place when id is owned.
 // Either way a version is appended: `parentVersionId` is the version being
 // edited (the client's idea of where it is in the tree), defaulting to the
@@ -181,6 +188,11 @@ export async function saveSong(input: {
   /** The studio is holding a TEMPLATE: this save starts a new song off it
    *  rather than appending a version to it. The id is the template's. */
   fromTemplateId?: string | null;
+  /** What to call the version this save appends, for the version tree. The
+   *  top-bar save leaves it unset -- a save you pressed needs no explaining --
+   *  but a save nobody pressed does, which is what the compose panel's
+   *  autosave uses it for ("compose: give it a hi-hat"). */
+  label?: string | null;
 }): Promise<{
   id?: string;
   title?: string;
@@ -233,6 +245,7 @@ export async function saveSong(input: {
       ownerId: user.id,
       parentId,
       data: input.data,
+      label: versionLabel(input.label),
     });
     if (ver.error) return { id: songId, error: ver.error };
     await setCurrentVersion(supabase, songId, user.id, ver.versionId!);
@@ -263,7 +276,7 @@ export async function saveSong(input: {
     ownerId: user.id,
     parentId: null,
     data: input.data,
-    label: fromTemplate ? "from template" : "first save",
+    label: versionLabel(input.label) ?? (fromTemplate ? "from template" : "first save"),
   });
   if (ver.error) return { id: row.id, title, error: ver.error };
   await setCurrentVersion(supabase, row.id, user.id, ver.versionId!);
