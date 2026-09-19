@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { getOpenSong, subscribeOpenSong } from "@/app/songs/openSong";
-import { loadSongChat, saveSongChat } from "@/app/songs/actions";
+import { getOpenSong, setOpenSong, subscribeOpenSong } from "@/app/songs/openSong";
+import { loadSongChat, saveSong, saveSongChat } from "@/app/songs/actions";
 import { COMPOSE_MODELS, DEFAULT_COMPOSE_MODEL, composeModelLabel, isComposeModel } from "@/lib/composeModels.js";
 import { API_KEY_CONSOLE_URL, looksLikeApiKey, maskApiKey } from "@/lib/composeKey.js";
 import styles from "@/app/ui.module.css";
@@ -144,6 +144,10 @@ export default function ComposeChat({ signedIn, serverKey }: { signedIn: boolean
   // The turn's changes, waiting to be auditioned or kept. Nothing is written to
   // the studio until one of those is pressed.
   const [review, setReview] = useState<Proposal | null>(null);
+  // What the autosave did with the last thing kept, in the space the review bar
+  // has just left. Transient: it belongs to that click, so the next turn (and a
+  // song arriving, or `new`) clears it.
+  const [saveNote, setSaveNote] = useState("");
   // Which key the next message runs on. "site" is only ever a choice when
   // there is both an account and a key on the deploy, so what is offered is
   // derived (`keyMode`) rather than trusted from storage.
@@ -292,8 +296,9 @@ export default function ComposeChat({ signedIn, serverKey }: { signedIn: boolean
   useEffect(() => {
     // A different song is open, so changes offered against the last one are
     // not about what is loaded now -- and `before` describes a session that is
-    // no longer there.
+    // no longer there. What the last keep saved was said about another song.
     setReview(null);
+    setSaveNote("");
     if (!songId || isTemplate) {
       setMessages([]);
       attachedRef.current = null;
@@ -349,6 +354,7 @@ export default function ComposeChat({ signedIn, serverKey }: { signedIn: boolean
       // The session it was about has just been blanked, and `before` describes
       // one that no longer exists -- putting it back would undo the `new`.
       setReview(null);
+      setSaveNote("");
     };
     window.addEventListener("seqbaby:newset", onNew);
     return () => window.removeEventListener("seqbaby:newset", onNew);
@@ -401,6 +407,7 @@ export default function ComposeChat({ signedIn, serverKey }: { signedIn: boolean
     // engine -- an audition included -- is what this turn builds on, and there
     // is nothing left to put back to.
     setReview(null);
+    setSaveNote("");
 
     // Attached to whichever song is open WHEN THE TURN LANDS, not when it
     // started: a turn takes minutes, and the first save of a new song happens
@@ -598,18 +605,70 @@ export default function ComposeChat({ signedIn, serverKey }: { signedIn: boolean
     setReview({ session: review.session, before: null });
   }, [review, writeLive]);
 
+  // Keeping is a real edit to the song, so it is SAVED, as a version of its
+  // own. The top-bar save is a click away in another island and nobody presses
+  // it mid-conversation, so a kept turn used to live only in the tab it was
+  // asked for in -- one reload from being a transcript about a song that never
+  // got the changes it describes. The rule is exactly the top bar's: the open
+  // song, branching off whichever version is loaded, which is what keeps the
+  // tree right when the conversation was started from an older version.
+  //
+  // Nothing is saved when there is no song to save into -- signed out, or a
+  // session nobody has named yet, or a template, whose first save MAKES a song
+  // and so is a decision with a name attached. Inventing one here would put a
+  // row in somebody's list under a name they never saw. The note says so
+  // rather than saying nothing, since "keep" having kept nothing anywhere is
+  // the thing worth knowing.
+  const autosaveKept = useCallback(async () => {
+    const now = getOpenSong();
+    if (!signedIn) return setSaveNote("");
+    if (now.isTemplate) return setSaveNote("kept — press save to make this a song of its own");
+    if (!now.id) return setSaveNote("kept — press save to keep it for good");
+    if (!window.seqbaby) return;
+    setSaveNote("saving…");
+    // What is in the ENGINE, not the turn's session: mid-audition that is the
+    // changes plus anything moved by hand since, which is the right answer to
+    // "keep what I am hearing" and the same answer the review bar gives.
+    const data = window.seqbaby.serializeSet();
+    // The version is named after what was asked for, because a tree of saves
+    // nobody pressed is unreadable without one.
+    const asked = [...messagesRef.current].reverse().find((m) => m.role === "user")?.text ?? "";
+    const label = asked ? `compose: ${asked.replace(/\s+/g, " ").trim()}` : "compose";
+    const res = await saveSong({
+      id: now.id,
+      title: now.title,
+      data,
+      // Undefined, never null: null is "this is a root", and a song whose open
+      // version is unknown wants the tip it already has.
+      parentVersionId: now.versionId ?? undefined,
+      label,
+    });
+    if (res.error) return setSaveNote(`kept, but not saved: ${res.error}`);
+    // The studio is now holding the version just written, so the NEXT save --
+    // from here or from the top bar -- branches off it rather than off the one
+    // this conversation started from.
+    if (res.versionId) setOpenSong({ versionId: res.versionId });
+    setSaveNote(
+      res.unchanged
+        ? `kept — nothing to save, still v${res.versionSeq}`
+        : `kept · saved as v${res.versionSeq}`,
+    );
+  }, [signedIn]);
+
   // Keep: the changes are the song now. Mid-audition there is nothing to write
   // -- the engine is already playing them, hand edits and all.
   const keepChanges = useCallback(() => {
     if (!review) return;
     if (!review.before) writeLive(review.session);
     setReview(null);
-  }, [review, writeLive]);
+    void autosaveKept();
+  }, [review, writeLive, autosaveKept]);
 
   const discardChanges = useCallback(() => {
     if (!review) return;
     if (review.before) writeLive(review.before);
     setReview(null);
+    setSaveNote("");
   }, [review, writeLive]);
 
   const onKeyDown = useCallback(
@@ -694,6 +753,7 @@ export default function ComposeChat({ signedIn, serverKey }: { signedIn: boolean
               </div>
             )}
           </div>
+          {!review && saveNote && <div className={styles.chatActivity}>{saveNote}</div>}
           {review && (
             <div className={`${styles.chatReview} ${review.before ? styles.chatReviewLive : ""}`}>
               <div className={styles.chatReviewText}>
@@ -714,7 +774,11 @@ export default function ComposeChat({ signedIn, serverKey }: { signedIn: boolean
                 <button
                   className={`${styles.smallBtn} ${styles.smallBtnPrimary}`}
                   onClick={keepChanges}
-                  title="make them part of the song"
+                  title={
+                    signedIn && songId && !isTemplate
+                      ? "make them part of the song, and save it as a new version"
+                      : "make them part of the song"
+                  }
                 >
                   keep
                 </button>
