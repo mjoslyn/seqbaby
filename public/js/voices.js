@@ -225,7 +225,11 @@ const nativeIn = (node) => node?.input?.input ?? node?.input ?? node;
 // The 808's cymbal/hi-hat section runs six square oscillators at these fixed
 // frequencies. Their inharmonic beating *is* the 808 metal sound; a noise
 // source can't stand in for it.
-const TR808_METAL_HZ = [205.3, 254.3, 369.6, 304.4, 522.7, 800];
+// The list used to carry 254.3 Hz, which is on neither machine, in place of
+// 540 — and the cowbell below, which taps the 540 and 800 Hz pair out of this
+// same bank, had both of its hard-coded beside it. So 540 was missing from the
+// hats while being audibly present in the cowbell.
+const TR808_METAL_HZ = [205.3, 304.4, 369.6, 522.7, 540, 800];
 
 const clamp01 = (v) => Math.max(0, Math.min(1, Number(v) || 0));
 /** Map a 0..1 knob onto [lo, hi] exponentially (how a real pot feels on a rate). */
@@ -300,11 +304,17 @@ function saturator(ctx, amount) {
   const q = Math.round(clamp01(amount) * 128);
   let c = satCurves.get(q);
   if (!c) {
-    const n = 1024;
+    // ODD length, and the input mapped over n-1 rather than n. A WaveShaper
+    // reads its curve at index `(x + 1) / 2 * (n - 1)`, so a curve laid out
+    // over `i * 2 / n - 1` is half a cell out: an input of zero landed between
+    // c[511] and c[512] and came out at -0.004, which is DC the kick then
+    // carried for as long as the shaper stayed connected — and it is connected
+    // for the life of the voice. Odd length puts a sample exactly at zero.
+    const n = 1025;
     c = new Float32Array(n);
     const k = 1 + (q / 128) * 12;
     const norm = Math.tanh(k);
-    for (let i = 0; i < n; i++) c[i] = Math.tanh(((i * 2) / n - 1) * k) / norm;
+    for (let i = 0; i < n; i++) c[i] = Math.tanh(((i * 2) / (n - 1) - 1) * k) / norm;
     satCurves.set(q, c);
   }
   ws.curve = c;
