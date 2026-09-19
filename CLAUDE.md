@@ -2259,6 +2259,30 @@ through a 6ms fade on its gain).
   `makeCassetteSatCurve` / the 808 `saturator` memoise per 1/128th of their
   amount; every `noiseBurst` reads one shared 2s noise buffer at a random
   offset instead of filling its own (60,000 randoms for a 909 open hat).
+- **The worklets' event queues do not allocate** (`EventQueue` in contagion.js /
+  hexop.js / guitar.js / bass.js / subbass.js, `NoteQueue` in silverbox.js).
+  They were plain arrays, so every note cost two object literals, a `sort()`
+  with a fresh comparator closure, and — on a stop — a `filter()` building a
+  whole new array. That is garbage generated **on the audio thread**, where a
+  GC pause is not a slow frame but a dropout. They are parallel typed arrays
+  now, with one scratch event object reused by every `shift()` (the consumers
+  copy primitives straight out of it and keep no reference), and they stay in
+  order by **inserting from the back** rather than by re-sorting: the transport
+  schedules ahead in time order, so the common case moves nothing and an
+  out-of-order arrival walks past a handful of pending note-offs. The walk
+  stops on a tie, which is what preserves the stable sort's guarantee that a
+  note-on and the previous step's note-off land in the right order.
+  Two things are load-bearing and were found by measuring, not by reading:
+  **the fields are f64, not f32** — an f32 round trip moves a frequency by a
+  part in ten million, which is inaudible alone and still enough to
+  decorrelate an oscillator's phase inside a few hundred samples, so a song
+  would stop rendering the same; and **the callers' `> 128` cap is soft** —
+  it drops one event and then pushes two, so a burst grows by one event per
+  note. That quirk is preserved deliberately, with `QCAP` a hard backstop far
+  above it. Verified by rendering both versions against one message stream
+  (in-order notes, chords on the same instant, out-of-order arrivals, stops
+  with notes queued past them, notes posted after a stop, a 200-note
+  overflow): all six engines come back **bit-identical**.
 - **Granular grains are built ahead, not at trigger time** (`_enqueueGrains`):
   a long dense note is hundreds of grains × three nodes, and building them all
   inside the callback made the OTHER tracks' notes late. Slices of a quarter
@@ -2266,9 +2290,8 @@ through a 6ms fade on its gain).
 - **`paintTrackNow` caches the cells** on the track (`t._stepCells`,
   invalidated by `renderStepGrid`) and toggles only what changed — it runs per
   track per step.
-- Still on the list: `soloAudibleTracks` allocates per 16th; the worklets sort
-  their event queue on every note; the keyboard arp and the granular sustain
-  run on 25/50ms timers with a 120ms lookahead.
+- Still on the list: `soloAudibleTracks` allocates per 16th; the keyboard arp
+  and the granular sustain run on 25/50ms timers with a 120ms lookahead.
 
 ## Gotchas + conventions
 
@@ -2336,9 +2359,9 @@ through a 6ms fade on its gain).
   one at 180). `baseStepDur` in transport.js derives it arithmetically from
   `Tone.Transport.bpm.value` instead. Anything else needing musical time should
   do the same, or use `currentBpm()` (lfo.js) as the sync helpers do.
-- **Worklet processor sources are template literals** (`silverbox.js`, `contagion.js`,
-  `subbass.js`,
-  `hexop.js`, `crusher.js`),
+- **Worklet processor sources are template literals** (`silverbox.js`,
+  `contagion.js`, `hexop.js`, `guitar.js`, `bass.js`, `subbass.js`,
+  `crusher.js`),
   so a stray backtick or `${` inside one — including in a comment — truncates
   the string. The module still parses, `node --check` still passes, and the
   failure only shows up as a SyntaxError at engine boot. When editing inside a

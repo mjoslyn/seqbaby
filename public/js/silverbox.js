@@ -38,6 +38,106 @@
 // free of backticks and ${ so the template literal stays intact.
 const SILVERBOX_PROCESSOR_SOURCE = `
 // One Silverbox voice. Monophonic, like the machine.
+// ---------------------------------------------------------------------------
+// The note queue: parallel typed arrays, not an array of objects.
+//
+// It used to be a plain array, and every step cost an object literal plus a
+// sort() with a fresh comparator closure, with a filter() building a whole new
+// array on every stop. That is garbage generated ON THE AUDIO THREAD, and a
+// GC pause there is a dropout — the one failure a sequenced bassline cannot
+// afford. Nothing below allocates after construction.
+//
+// Ordered by inserting from the back rather than by sorting: the transport
+// schedules ahead in time order, so the common case moves nothing. The walk
+// stops on a tie, so equal frames keep their insertion order, as the stable
+// sort it replaces did. Same shape as the queue in the polyphonic worklets,
+// with this machine's own fields — it is monophonic and has no note-offs, so
+// a note carries its gate length and its accent instead of an id.
+// ---------------------------------------------------------------------------
+const QCAP = 128;   // the live queue is capped at 65 by its caller
+class NoteQueue {
+  constructor() {
+    // f64 frames: at 96k (the oversampled clock) an int32 runs out in six
+    // hours and an f32 stops naming every frame after a couple of minutes.
+    this.at    = new Float64Array(QCAP);
+    this.freq  = new Float64Array(QCAP);
+    this.gate  = new Float64Array(QCAP);
+    this.accent = new Float64Array(QCAP);
+    this.slideTime = new Float64Array(QCAP);
+    this.slide = new Uint8Array(QCAP);
+    this.head = 0;
+    this.len = 0;
+    // One scratch note, reused by every shift(). noteOn copies the primitives
+    // it wants straight out of it and keeps no reference.
+    this.ev = { at: 0, freq: 110, gate: 0.05, accent: 0, slide: false, slideTime: 0.058 };
+  }
+
+  _move(d, s) {
+    this.at[d] = this.at[s]; this.freq[d] = this.freq[s]; this.gate[d] = this.gate[s];
+    this.accent[d] = this.accent[s]; this.slideTime[d] = this.slideTime[s];
+    this.slide[d] = this.slide[s];
+  }
+
+  // copyWithin is a memmove on a typed array: no allocation, and it only runs
+  // once the live window has walked to the end of the buffer, which with a note
+  // or two live is one memmove of a note or two per hundred-odd pushed.
+  _compact() {
+    const h = this.head, e = h + this.len;
+    if (h === 0) return;
+    this.at.copyWithin(0, h, e); this.freq.copyWithin(0, h, e); this.gate.copyWithin(0, h, e);
+    this.accent.copyWithin(0, h, e); this.slideTime.copyWithin(0, h, e);
+    this.slide.copyWithin(0, h, e);
+    this.head = 0;
+  }
+
+  push(at, freq, gate, accent, slide, slideTime) {
+    if (this.len >= QCAP) this.dropOldest();          // the caller caps first
+    if (this.head + this.len >= QCAP) this._compact();
+    let j = this.head + this.len - 1;
+    while (j >= this.head && this.at[j] > at) { this._move(j + 1, j); j--; }
+    const i = j + 1;
+    this.at[i] = at; this.freq[i] = freq; this.gate[i] = gate;
+    this.accent[i] = accent; this.slide[i] = slide ? 1 : 0; this.slideTime[i] = slideTime;
+    this.len++;
+  }
+
+  headAt() { return this.at[this.head]; }
+
+  shift() {
+    const i = this.head, e = this.ev;
+    e.at = this.at[i]; e.freq = this.freq[i]; e.gate = this.gate[i];
+    e.accent = this.accent[i]; e.slide = this.slide[i] === 1; e.slideTime = this.slideTime[i];
+    this.head++; this.len--;
+    if (this.len === 0) this.head = 0;
+    return e;
+  }
+
+  // A stop drops every note queued past it and shortens the gate of anything
+  // queued before it — the transport schedules ~100ms ahead, so a stop lands
+  // in the middle of notes that have not been triggered yet. In place, so the
+  // filter() that used to build a fresh array is gone with it.
+  truncateAt(limit, sr) {
+    const h = this.head, end = h + this.len;
+    let w = h;
+    for (let r = h; r < end; r++) {
+      if (this.at[r] < limit) {
+        if (w !== r) this._move(w, r);
+        const cut = (limit - this.at[w]) / sr;
+        if (cut < this.gate[w]) this.gate[w] = cut;
+        w++;
+      }
+    }
+    this.len = w - h;
+    if (this.len === 0) this.head = 0;
+  }
+
+  dropOldest() {
+    if (this.len === 0) return;
+    this.head++; this.len--;
+    if (this.len === 0) this.head = 0;
+  }
+}
+
 class SilverboxProcessor extends AudioWorkletProcessor {
   static get parameterDescriptors() {
     return [
@@ -58,7 +158,7 @@ class SilverboxProcessor extends AudioWorkletProcessor {
     this.sr  = sampleRate;
     this.sr2 = sampleRate * 2;          // the VCO + VCF run 2x oversampled
     this.alive = true;
-    this.queue = [];                     // pending notes, sorted by frame
+    this.queue = new NoteQueue();        // pending notes, kept in frame order
     this.wave = 0;                       // 0 = saw, 1 = square
 
     // VCO
@@ -100,23 +200,21 @@ class SilverboxProcessor extends AudioWorkletProcessor {
   onMessage(m) {
     if (!m) return;
     if (m.type === "note") {
-      if (this.queue.length > 64) this.queue.shift();
-      this.queue.push({
-        at: Math.max(0, Math.round(m.when * this.sr)),
-        freq: Math.max(8, m.freq || 110),
-        gate: Math.max(0.005, m.gate || 0.05),
-        accent: Math.max(0, Math.min(1, m.accent || 0)),
-        slide: !!m.slide,
-        slideTime: Math.max(0.002, m.slideTime || 0.058),
-      });
-      this.queue.sort((a, b) => a.at - b.at);
+      if (this.queue.len > 64) this.queue.dropOldest();
+      this.queue.push(
+        Math.max(0, Math.round(m.when * this.sr)),
+        Math.max(8, m.freq || 110),
+        Math.max(0.005, m.gate || 0.05),
+        Math.max(0, Math.min(1, m.accent || 0)),
+        !!m.slide,
+        Math.max(0.002, m.slideTime || 0.058),
+      );
     } else if (m.type === "off") {
       // Drop anything queued past the stop, and shorten the gate of anything
       // queued before it — the transport schedules ~100 ms ahead, so a stop can
       // land in the middle of notes that haven't been triggered yet.
       const at = Math.max(0, Math.round(m.when * this.sr));
-      this.queue = this.queue.filter(ev => ev.at < at);
-      for (const ev of this.queue) ev.gate = Math.min(ev.gate, (at - ev.at) / this.sr);
+      this.queue.truncateAt(at, this.sr);
       if (this.gateOffFrame < 0 || at < this.gateOffFrame) this.gateOffFrame = at;
       this.offFrame = at;   // also truncates notes that arrive after this message
     } else if (m.type === "wave") {
@@ -180,7 +278,7 @@ class SilverboxProcessor extends AudioWorkletProcessor {
 
     for (let i = 0; i < out.length; i++) {
       const n = n0 + i;
-      while (this.queue.length && this.queue[0].at <= n) {
+      while (this.queue.len && this.queue.headAt() <= n) {
         this.noteOn(this.queue.shift(), decK, accK);
       }
       if (this.gateOpen && this.gateOffFrame >= 0 && n >= this.gateOffFrame) this.gateOpen = false;
