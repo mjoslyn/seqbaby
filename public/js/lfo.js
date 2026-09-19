@@ -219,7 +219,7 @@ export function getModTarget(t, key) {
   switch (key) {
     case "fuzz":         return rack.wetBus?.gain ?? null;
     case "delay":        return rack.delay?.wet ?? null;
-    case "verb":         return rack.reverb?.wet ?? null;
+    case "verb":         return rack.reverbCross?.fade ?? null;
     case "vinyl":        return rack.vinylWetBus?.gain ?? null;
     case "cassette":     return rack.cassetteWetBus?.gain ?? null;
     case "ringmod":      return rack.ringWet?.gain ?? null;
@@ -420,8 +420,9 @@ export function applySetterLfoValue(t, key, v) {
       try { rack.pitchshift.pitch = v * 24 - 12; } catch {}
       return;
     case "reverb_decay":
-      // The rack throttles and coalesces the impulse-response rebuild this
-      // asks for (FXRack._requestReverb); the stored knob is left alone.
+      // One write to one AudioParam on the reverb worklet — the tail length is
+      // a coefficient, not an impulse response, so this is as cheap as any
+      // other setter here. The stored knob is left alone.
       try { rack.setReverbDecayLive?.(0.2 + v * 7.8); } catch {}
       return;
   }
