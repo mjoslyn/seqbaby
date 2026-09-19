@@ -1452,7 +1452,11 @@ never serialized: `syncTrackSoundUI` clears it, so a sound arriving from a
 session, a patch or a p-lock recall brings its own answer rather than inheriting
 the last one's. The `×` is inline-only (style.css): in the modal every stage is
 listed whatever its level, which is where a bypassed one is turned back on, so
-there is nothing there for it to remove.
+there is nothing there for it to remove. On desktop the inline rack is a grid
+of stage cards (`auto-fill`, 250px minimum, name and `×` on the card's top line
+with the knobs wrapping under), not one stage per line: five stages stacked
+cost more height than the step grid. Below 768px the phone block's
+one-row-per-stage layout stands, and the modal is untouched.
 
 **Right-click a parameter** opens `paramMenu.js`: what the control does, its
 LFO row, its automation lane and its macro assignment — the same widgets the panels use
