@@ -92,6 +92,8 @@ env / fx / eq / comp / mod / automation per track.
   wires all UI, starter tracks, unlock listeners. Entry point.
 - `transport.js` — `ensureAudio()`, `togglePlay()`, the single
   `Tone.Transport.scheduleRepeat` loop, `loadWorklet()`, `requestMidiIfNeeded()`.
+- `wakeLock.js` — the Screen Wake Lock, held for as long as the transport runs
+  and dropped the moment it stops. No imports. See the screen timeout section.
 - `voices.js` — every voice class + `buildVoiceForEngine` dispatch + the
   emulator builder functions.
 - `state.js` — global `state`, `emptyPattern`, `aliasPattern`, `switchPattern`.
@@ -226,7 +228,7 @@ npm run build && npm run start   # production build + serve
 npm run netlify:dev    # full Netlify emulation on :8888
 npm run legacy:dev     # pre-Next static Node server on :5173 (engine assets only)
 npm test               # node --test: the pure modules (session format, chance gen,
-                       #   version tree, song names, the song builder)
+                       #   version tree, song names, the song builder, the wake lock)
 npm run mcp            # the MCP server on stdio (mcp/server.mjs) — an agent writes songs
 npm run test:rls       # RLS policy tests — builds a throwaway Postgres in docker
 ```
@@ -378,6 +380,20 @@ All of this lives in `main.js` `init()` and `transport.js`:
   osc primer, touch-only suspend/resume kick, up-front gate dialog on touch
   devices) is in `main.js` — the kick cycle must stay touch-only (on desktop
   Chrome it runs past the gesture and the resume gets rejected).
+- **The screen timing out stops the music, so the transport holds it open**
+  (`wakeLock.js`). On iOS the display locking parks the context in
+  "interrupted" and nothing is rendered until the next tap; on Android the
+  audio survives and the studio you were playing does not. It is tied to the
+  TRANSPORT, not the page — `holdScreenAwake()` from `togglePlay`'s start
+  branch, `releaseScreenAwake()` from its stop branch and from `applySet`,
+  which is the one other place `state.playing` goes false. The lock cannot be
+  requested while the document is hidden and does not survive the document
+  becoming hidden, so returning is a fresh request rather than a resume
+  (`visibilitychange`, plus `pageshow` for the bfcache restore). Every way it
+  can fail is allowed to fail — no API (older Safari, an insecure origin), a
+  refusal (low power mode), a hidden document — and none of them is worth a
+  status line: the music plays either way. Bounce gets it for free, since it
+  presses play.
 
 ## Voice types (`buildVoiceForEngine`, voices.js)
 
@@ -2415,7 +2431,7 @@ Repo: https://github.com/mjoslyn/seqbaby.
   An inline marker (`window.__seqbabyServerBoot`) tells the paths apart, and
   `ScriptLoader.tsx` keeps its onload-chained injection for the soft-nav case
   (e.g. arriving from `/login`).
-- `app/EnginePreload.tsx` emits `modulepreload` for all 58 modules listed in
+- `app/EnginePreload.tsx` emits `modulepreload` for all 59 modules listed in
   `app/engineAssets.ts` (at `engineAsset("/js/<name>")`; the hints used to
   point at the site root and 404). The graph is 8 levels deep, so without it the browser
   needs up to eight sequential round trips just to discover the code.

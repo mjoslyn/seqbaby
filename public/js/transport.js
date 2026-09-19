@@ -19,6 +19,7 @@ import { loadSilverboxWorklet } from "./silverbox.js";
 import { loadContagionWorklet } from "./contagion.js";
 import { applyScale, chordNotes, nameToMidi } from "./theory.js";
 import { buildVoiceForEngine, wosc } from "./voices.js";
+import { holdScreenAwake, releaseScreenAwake } from "./wakeLock.js";
 
 
 /** @typedef {import("./types.js").Track} Track */
@@ -356,6 +357,7 @@ export async function togglePlay() {
     silenceAllVoices();
     state.playing = false;
     state._transportStartTime = null;
+    releaseScreenAwake();                            // the screen may sleep again
     refreshNoiseBeds();                              // vinyl crackle follows the transport
     btn.textContent = "play";
     btn.classList.remove("is-playing");
@@ -639,6 +641,10 @@ export async function togglePlay() {
   state._transportStartTime = state.audioCtx.currentTime + lead;
   Tone.Transport.start(`+${lead}`, 0);
   state.playing = true;
+  // Ask the platform to keep the display on for as long as the transport
+  // runs. A phone screen timing out is not a pause anywhere else, but on iOS
+  // it interrupts the AudioContext, so the music stops with it (wakeLock.js).
+  holdScreenAwake();
   refreshNoiseBeds();                                // vinyl crackle follows the transport
   btn.textContent = "stop";
   btn.classList.add("is-playing");

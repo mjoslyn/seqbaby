@@ -108,5 +108,6 @@ export const ENGINE_MODULES = [
   "track.js",
   "transport.js",
   "voices.js",
+  "wakeLock.js",
   "wavetableEditor.js",
 ];

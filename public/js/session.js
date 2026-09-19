@@ -22,6 +22,7 @@ import { renderStepGrid } from "./stepGrid.js";
 import { createTrack, removeTrack } from "./track.js";
 import { ensureAudio, requestMidiIfNeeded, silenceAllVoices } from "./transport.js";
 import { buildVoiceForEngine, migrateGranularParams, stampGranularParams } from "./voices.js";
+import { releaseScreenAwake } from "./wakeLock.js";
 
 
 /** @typedef {import("./types.js").AppState} AppState */
@@ -590,6 +591,7 @@ export function applySet(s) {
     if (state.repeatId !== null) { try { Tone.Transport.clear(state.repeatId); } catch {} state.repeatId = null; }
     silenceAllVoices();
     state.playing = false;
+    releaseScreenAwake();
     const btn = document.getElementById("play");
     btn.textContent = "play";
     btn.classList.remove("is-playing");
