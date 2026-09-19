@@ -1823,15 +1823,41 @@ opens as a sheet under it.
   under 768px `.panel` is a fixed sheet at the bottom of the screen — which is
   also where a thumb is. `fixed` is against the viewport, so it lands in the
   same place whether the button is in the bar or in the menu sheet.
-- **The bar is only raised above the page while the sheet is open**
-  (`topBarMenuOpen`, z-index 250): a permanent z-index would sit the bar on top
-  of every engine modal (z-index 200) for the sake of a menu nobody has opened.
-  Inside that stacking context the backdrop is a positioned child, so `manual`
-  and the `menu` button need a layer of their own or the backdrop swallows the
-  tap that closes the sheet.
+- **The bar is raised to 250 while the sheet is open** (`topBarMenuOpen`), over
+  an engine modal (z-index 200) — the sheet is what the tap is aimed at, so for
+  as long as one is open it wins. It only raises the z-index: overriding
+  `position` here would unpin the bar (see the pinning section below) for
+  exactly as long as the menu was up. Inside that stacking context the backdrop
+  is a positioned child, so `manual` and the `menu` button need a layer of
+  their own or the backdrop swallows the tap that closes the sheet.
 - Rows are 44px minimum, and above phone width (481px+) the sheet and the
   panels cap at 340 / 420px and hang off the right — a 700px-wide row of seven
   buttons reads as a mistake.
+
+### The bar is pinned, and so is the transport under it
+
+Both are `position: sticky`, and they are siblings in the document — the bar is
+rendered by `page.tsx` ahead of the engine's markup, the transport is inside it
+— so there is no one element to pin. The bar takes `top: 0` and the transport
+takes the bar's height as its own offset, `--sq-topbar-h`. Without that they
+would both stick at 0 and pile onto the same line the moment the page scrolled.
+
+- **The height is measured, not written down.** A ResizeObserver in
+  `AccountBar.tsx` writes `--sq-topbar-h` onto `<html>`; the fallback in
+  `public/style.css` is `0px`, which is what the legacy static server and any
+  page with no bar want. A constant that was a pixel out would show as a seam
+  or a clipped border for every visitor, and the bar's height is whatever 12px
+  monospace and a row of bordered buttons come out at.
+- **The bar's permanent z-index is 50**: above the studio's ordinary content,
+  below an engine modal (200), which is where a pinned bar belongs. Under the
+  preloader the point is moot — `html.sq-preloading` sets `overflow: hidden`,
+  which suspends sticky along with the scrolling it exists for.
+- **A z-index makes the bar a stacking context**, and the compose drawer is a
+  child of it that is meant to sit OVER a modal (z-index 300). Clamped to the
+  bar's 50 it would have gone under one. So `.topBar:has(.chatPanel)` lifts the
+  bar to 300 for as long as the drawer is open — the same bargain
+  `topBarMenuOpen` strikes on a phone, with `:has()` meaning the drawer does
+  not have to tell the bar anything.
 
 ## Song versions — a tree, not a blob (`song_versions`)
 

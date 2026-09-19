@@ -197,7 +197,15 @@
 .dangerActions { display: flex; gap: 8px; align-items: center; margin-top: 12px; }
 
 /* --- account bar: its own strip above the transport --- */
+/* Pinned, like the transport under it. The two are siblings in the document
+   and both stick, so the bar takes top: 0 and the transport takes its height
+   as an offset (`--sq-topbar-h`, written by AccountBar.tsx because the bar's
+   height is whatever its font and its buttons come out at). They never
+   overlap, which is what lets the bar's z-index stay low. */
 .topBar {
+  position: sticky;
+  top: 0;
+  z-index: 50;
   display: flex;
   align-items: center;
   justify-content: flex-end;
@@ -208,6 +216,14 @@
   font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   font-size: 12px;
 }
+/* 50 is above the studio's ordinary content and below an engine modal (200),
+   which is where a pinned bar belongs -- but a z-index also makes the bar a
+   stacking context, and the compose drawer is a child of it that is meant to
+   sit OVER a modal (z-index 300, see the drawer block below). Clamped to the
+   bar's 50 it would have gone under one. So the bar rises for as long as the
+   drawer is open, the same bargain `.topBarMenuOpen` strikes on a phone, and
+   `:has()` means the drawer does not have to tell the bar anything. */
+.topBar:has(.chatPanel) { z-index: 300; }
 /* Sits at the left of the bar (the rest of the row is right-aligned). */
 .manualLink { margin-right: auto; color: #9aa0aa; text-decoration: none; }
 .manualLink:hover { color: #e8e8ea; }
@@ -543,8 +559,10 @@
   .topBar { padding: 6px 10px; gap: 6px; }
 
   /* Raised only while the sheet is open, so an engine modal (z-index 200) is
-     never sat on by a bar nobody is using. */
-  .topBarMenuOpen { position: relative; z-index: 250; }
+     never sat on by a bar nobody is using. Position stays `sticky` from the
+     rule above -- overriding it with `relative` here would unpin the bar for
+     as long as the menu was open. */
+  .topBarMenuOpen { z-index: 250; }
 
   .menuBtn { display: inline-flex; }
 

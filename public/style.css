@@ -44,7 +44,11 @@ html, body {
 
 .sq-transport {
   position: sticky;
-  top: 0;
+  /* The account bar above is pinned too (app/ui.module.css), so the transport
+     sticks UNDER it rather than on top of it. The offset is the bar's measured
+     height, written onto <html> by AccountBar.tsx; the fallback is 0, which is
+     what the legacy static server and a page with no bar want. */
+  top: var(--sq-topbar-h, 0px);
   display: flex;
   align-items: center;
   gap: 12px;
