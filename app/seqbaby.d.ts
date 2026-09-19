@@ -56,6 +56,27 @@ declare global {
       savePatch: (name: string, config: unknown) => void;
       serializeTrackPatch: (track: unknown) => unknown;
       applyTrackPatch: (track: unknown, patch: unknown) => void;
+      /**
+       * A jam: several studios holding one song (public/js/jam.js). The shell
+       * runs the room and hands the engine `send`; the engine watches for
+       * edits, diffs them against what the room last agreed on, and lays a
+       * peer's patch over this copy without stopping the transport.
+       */
+      jam: {
+        /** Start telling `send` about edits; the session as it is now is the base. */
+        start: (room: { send: (msg: { type: "patch"; patch: unknown }) => void }) => void;
+        stop: () => void;
+        active: () => boolean;
+        /** Send whatever is waiting to settle, now. */
+        flush: () => void;
+        /** The whole session, for a newcomer. */
+        state: () => unknown;
+        /** A peer's patch. `ok: false` means this copy is not the one it was
+         *  written against: ask the sender for the whole session. */
+        receivePatch: (patch: unknown, who?: { name?: string; id?: string }) => { ok: boolean; reason?: string };
+        /** The room's whole session, on joining or after a refused patch. */
+        receiveState: (session: unknown, who?: { name?: string; id?: string }) => { ok: boolean; reason?: string };
+      };
       state: unknown;
     };
     // Set by EngineScripts' inline marker, which only executes when the studio

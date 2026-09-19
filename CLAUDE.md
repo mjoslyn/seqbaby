@@ -53,6 +53,7 @@ env / fx / eq / comp / mod / automation per track.
 │   ├── Preloader.tsx + preloaderMarkup.ts  loading overlay: markup + inline driver
 │   ├── login/ settings/ u/[username]/       auth, account settings, public profiles
 │   ├── ComposeChat.tsx        the in-studio compose panel: ask for a song, in words; a turn's changes land in a review bar (audition / keep), never straight in
+│   ├── JamPanel.tsx           the jam room: who is in it, the connection (Supabase Realtime), the invite link. The engine half is public/js/jam.js
 │   ├── api/share/route.ts     anonymous ?s=<slug> share endpoint
 │   ├── api/compose/route.ts   starts a compose turn; api/compose/status polls one
 │   └── {songs,patches,profile,auth,account}/actions.ts   Supabase server actions
@@ -69,6 +70,7 @@ env / fx / eq / comp / mod / automation per track.
 │   ├── composeModels.js       which models a compose turn may run on (allowlist + dropdown)
 │   ├── composeKey.js          whose key it runs on: the shape check + the mask
 │   ├── composeJobs.js         a running turn's record, its two secrets, and the limits
+│   ├── jamWire.js             a jam message cut into parts the transport will carry, and put back together
 │   └── api.js                 legacy Blobs share put/get (+ in-memory dev fallback)
 ├── middleware.ts              Supabase session refresh (skips engine assets)
 ├── supabase/
@@ -180,6 +182,13 @@ env / fx / eq / comp / mod / automation per track.
   imports** for `chanceGen.js`'s reasons; `history.js` is the engine half, and
   only the *when*: what a snapshot is taken from and when one is taken. Putting
   one back is `mergeSet` (liveSet.js). See the undo/redo section below.
+- `jam.js` / `jamSync.js` — a jam: several studios holding one song. `jam.js`
+  is the engine half — WHEN this studio has something to tell the room
+  (history.js's event watch and settle, `serializeSet` as the thing compared)
+  and HOW a peer's change is written onto a running sequencer (`mergeSet`).
+  `jamSync.js` is the diff a peer is sent and the guard on applying one, with
+  **no DOM** (`historyStore.js` is its one import) so `node --test` runs it.
+  The room itself is the shell's (`app/JamPanel.tsx`). See the jam section.
 - `track.js` — track lifecycle (create/resize/clone).
 - `bounce.js` — WAV render via MediaRecorder.
 - `buffers.js` — sample decode/normalize cache, `startSampleSource`.
@@ -235,7 +244,7 @@ npm run build && npm run start   # production build + serve
 npm run netlify:dev    # full Netlify emulation on :8888
 npm run legacy:dev     # pre-Next static Node server on :5173 (engine assets only)
 npm test               # node --test: the pure modules (session format, chance gen,
-                       #   version tree, song names, the song builder)
+                       #   version tree, song names, the song builder, the jam diff)
 npm run mcp            # the MCP server on stdio (mcp/server.mjs) — an agent writes songs
 npm run test:rls       # RLS policy tests — builds a throwaway Postgres in docker
 ```
@@ -2195,6 +2204,65 @@ discard    throw them away (putting back the pre-audition session first)
 - `applySet` is still the fallback in `writeLive`, for an engine cached from
   before `mergeSet` shipped. It costs the transport, which is the thing the
   merge exists to avoid, but it is never silence.
+
+## Jam — several studios, one song (`jam.js` + `jamSync.js` + `app/JamPanel.tsx`)
+
+A jam is a room whose members all hold the same session and hear about each
+other's edits as they happen. Anyone with the link (`?jam=<id>`) can join, no
+account needed — the same trust model as a share link, because the point of
+the link is to send it to someone.
+
+```
+studio A ──edit──▶ jam.js ──diff──▶ JamPanel ──▶ Supabase Realtime broadcast
+                     ▲                                    │
+studio B ◀──mergeSet── jam.js ◀──patch── JamPanel ◀───────┘   (presence: who is here)
+```
+
+- **Nothing is instrumented, for history.js's reason.** The engine half
+  watches the same interaction events the undo stack does, waits the same
+  420ms, and asks `serializeSet` whether the session changed. Whatever changed
+  it is sent — the step grid, a knob, a generator, a compose turn kept, a song
+  opened from the menu, `new`, an undo. A feature added later reaches the room
+  without knowing jam.js exists.
+- **What goes on the wire is a diff** (`diffSession`, jamSync.js) against the
+  session the room last agreed on: per key for objects, per index for arrays
+  of objects, whole replacement for a step lane. A knob turn is a few hundred
+  bytes (measured: 363 for a step toggle on a 397KB session); a sample is sent
+  once, when it arrives, never on the knob turns after it. Concurrent edits to
+  different subtrees compose without a conflict to resolve; two people on one
+  knob is a race the later message wins.
+- **A peer's patch lands through `mergeSet`**, so nothing that was playing
+  stops (measured: the transport stays running under incoming edits). A
+  newcomer's first session is the one exception: `applySet`, because a song
+  arriving whole is what a teardown is for.
+- **Two guards, then a resync.** A patch carries the track count it was made
+  from and the identity (engine + name) of every track it touches. A receiver
+  whose copy disagrees — a track removed under it — refuses the patch
+  (`ok: false`) and the shell asks that peer for the whole session
+  (`need-state`). A refused patch costs one full sync; a misapplied one would
+  land on the wrong track. One outstanding ask at a time.
+- **A peer's edit is an undo step here**, in their name
+  (`markExternalEdit`, coalesced per peer), because left OUT of the stack the
+  next local edit's entry would carry it, and undoing that would take theirs
+  back silently. On the stack it is a step with a name on it; undoing it is an
+  edit like any other and goes back out. There is one song.
+- **Joining takes the room's session.** A newcomer asks the longest-present
+  member (`hello`, by presence `joinedAt`) and sends nothing until it arrives;
+  nobody answering within 8s leaves them with what they have, which then IS
+  the room's song. Whoever started the jam is only the first member: the room
+  outlives them. `DefaultTemplate` skips a `?jam=` load for `?s=`'s reason.
+- **Not shared, deliberately**: the transport (everyone hears their own copy
+  on their own clock — two browsers across a network cannot play in lockstep)
+  and the view (`activePattern` is stripped, as history.js strips it).
+  Automated fields are pinned as history pins them (`pinAutomated`, exported
+  for this), so a lane rewriting the cutoff every step is not traffic.
+- **The engine knows nothing about Supabase, the panel nothing about
+  sessions.** jam.js takes a `send` and is handed what comes back
+  (`window.seqbaby.jam`); JamPanel.tsx owns the channel, presence, the invite
+  link, and the message envelope. Cutting a message into parts the broadcast
+  cap will carry is `lib/jamWire.js` — the shell's, not the engine's, because
+  public/js is kept out of the Next graph. A connection error keeps the room
+  (the client retries on its own) and keeps `leave` on offer.
 
 ## Undo / redo (`history.js` + `historyStore.js`)
 

@@ -7,6 +7,7 @@
 // installed. Keep this surface intentional and additive.
 import { loadPatches, savePatch, storePatches } from "./catalog.js";
 import { canRedo, canUndo, redo, undo } from "./history.js";
+import { flushJam, inJam, jamState, receiveJamPatch, receiveJamState, startJam, stopJam } from "./jam.js";
 import { mergeSet } from "./liveSet.js";
 import {
   applySet,
@@ -70,6 +71,20 @@ export function installAppApi() {
     // a track's whole sound as a portable patch (engine + params + fx + audio)
     serializeTrackPatch,
     applyTrackPatch,
+    // A jam: several studios holding one song (jam.js). The shell owns the
+    // room -- who is in it, the connection, the invite link -- and hands the
+    // engine a `send`; the engine decides what an edit is and how a peer's
+    // change is written onto a running sequencer. Nothing here knows what the
+    // wire is.
+    jam: {
+      start: startJam,
+      stop: stopJam,
+      active: inJam,
+      flush: flushJam,
+      state: jamState,
+      receivePatch: receiveJamPatch,
+      receiveState: receiveJamState,
+    },
     // live engine state (read-only handle; mutate via the functions above)
     get state() {
       return state;

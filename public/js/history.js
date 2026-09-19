@@ -90,7 +90,7 @@ let started = false;
  * pattern's own `sound`) on its way out — the drift would otherwise arrive by
  * the back door.
  */
-function pinAutomated(prev, snap) {
+export function pinAutomated(prev, snap) {
   if (!prev || !state.playing) return snap;
   const ap = state.activePattern;
   state.tracks.forEach((t, i) => {
@@ -329,6 +329,18 @@ function refreshHistoryUI() {
 // ---- the public surface -------------------------------------------------
 
 export function canUndo() { return stack.canUndo(); }
+
+/**
+ * A change that arrived from somewhere other than this keyboard and mouse —
+ * a peer in a jam (jam.js). It goes on the stack like any other edit, labelled
+ * with who made it, because the alternative is worse: left out, the next local
+ * edit's entry would carry the peer's change with it and undoing that would
+ * take theirs back too. `key` coalesces, so a peer's knob drag arriving as
+ * several patches is one step.
+ */
+export function markExternalEdit(label, key = null) {
+  scheduleCheck(label, key);
+}
 export function canRedo() { return stack.canRedo(); }
 
 export function undo() {

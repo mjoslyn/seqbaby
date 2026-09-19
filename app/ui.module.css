@@ -633,3 +633,22 @@
   .barItemsOpen { max-width: 340px; margin-left: auto; }
   .panel { max-width: 420px; margin-left: auto; }
 }
+
+/* ---- the jam panel: several studios, one song ---------------------------
+   The room lives behind one button beside `compose`, which carries the
+   member count while a jam is on: a session that is changing under you with
+   nothing on screen saying why would be a bug report. */
+.jamBtnLive { border-color: #f0b35c; color: #f0b35c; }
+.jamPanel { width: 320px; display: flex; flex-direction: column; gap: 8px; }
+.jamPanel .panelTitle { color: #9aa0aa; margin-bottom: 0; }
+.jamIntro, .jamNote { color: #9aa0aa; font-size: 11px; line-height: 1.5; }
+.jamLinkRow { display: flex; gap: 6px; }
+.jamStatus { color: #f0b35c; font-size: 11px; }
+.jamPeers { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.jamPeer { display: flex; align-items: center; gap: 7px; font-size: 12px; color: #e8e8ea; min-height: 22px; }
+.jamDot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+.jamPeerName { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.jamYou { color: #6b7280; font-size: 10.5px; }
+.jamNameRow { display: flex; align-items: center; gap: 8px; }
+.jamNameRow .saveInput { flex: 1; }
+.jamActions { display: flex; gap: 6px; justify-content: flex-end; }

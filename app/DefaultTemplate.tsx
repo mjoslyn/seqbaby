@@ -24,7 +24,10 @@ import { setOpenSong } from "@/app/songs/openSong";
 //     a blank editor (the logo is a real link, so opening it in a new tab
 //     arrives here). Skipped when the URL already carries a session -- `?s=` is
 //     a share link and `?open=` a deep link, and both load asynchronously too,
-//     so racing them would be a coin toss over whose session wins.
+//     so racing them would be a coin toss over whose session wins. `?jam=` is
+//     the same case once more: a room's session arrives from a peer a moment
+//     after joining, and a template landing on top of it would be sent back
+//     out to the room as an edit.
 //
 // The studio is left HOLDING the template (`isTemplate`), so the first save
 // makes a song rather than another version of the template. That is the whole
@@ -72,7 +75,7 @@ export default function DefaultTemplate() {
     window.addEventListener("seqbaby:newset", onNew);
 
     const qs = new URLSearchParams(location.search);
-    const carriesSession = qs.has("s") || qs.has("open");
+    const carriesSession = qs.has("s") || qs.has("open") || qs.has("jam");
     let cancelled = false;
     const onReady = () => {
       if (!cancelled) void apply();

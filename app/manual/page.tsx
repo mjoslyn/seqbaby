@@ -32,6 +32,7 @@ const SECTIONS = [
   ["motion", "Modulation and automation"],
   ["macro", "Macro pads"],
   ["undo", "Undo"],
+  ["jam", "Jamming with other people"],
   ["saving", "Saving, sharing and export"],
   ["agents", "Letting an AI agent write a song"],
   ["trouble", "If something sounds wrong"],
@@ -1095,6 +1096,30 @@ export default function ManualPage() {
           <div className={styles.note}>
             The stack lives in memory and holds the last 100 states. Reloading the tab
             starts a fresh one.
+          </div>
+        </section>
+
+        <section className={styles.section} id="jam">
+          <h2>Jamming with other people</h2>
+          <p>
+            <span className={styles.ui}>jam</span> in the top bar starts a room from
+            the song that is open and gives you a link. Everyone who opens it edits
+            the same song with you, live: steps, knobs, tracks added and removed,
+            generators, a song opened from the menu. Nobody needs an account, only
+            the link.
+          </p>
+          <p>
+            Each of you plays it on your own machine, so press play wherever you
+            are; the transport is not shared, and neither is which pattern you are
+            looking at. Everything else is one song. Undo steps back over the
+            others&apos; edits as well as your own, and an undo goes out to the room
+            like any other edit.
+          </p>
+          <div className={styles.note}>
+            Two people on the same knob at once is a race the later one wins.
+            Leaving keeps the song as it is on your screen; the room carries on
+            without you, and whoever is left holds the song for the next person to
+            arrive.
           </div>
         </section>
 
