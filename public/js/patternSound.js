@@ -82,6 +82,7 @@ const FX_APPLY = {
   ringmod: "applyRingMod", shaper: "applyWaveShaper", crush: "applyCrush",
   autowah: "applyAutoWah", chorus: "applyChorus", phaser: "applyPhaser",
   flanger: "applyFlanger", pitchshift: "applyPitchShift", delay: "applyDelay",
+  reverb: "applyReverb",
 };
 
 /**
@@ -122,19 +123,9 @@ export function applyPatternSound(t, snap) {
   if (snap.fxConfig) {
     for (const [key, cfg] of Object.entries(snap.fxConfig)) {
       if (same(t.fxConfig[key], cfg)) continue;
-      const prev = t.fxConfig[key];
       t.fxConfig[key] = clone(cfg);
       touched = true;
       if (!t.fxRack) continue;
-      if (key === "reverb") {
-        // The tail length rebuilds the impulse response, which is far too
-        // expensive to do on every bar — only pass it when it really moved.
-        const decayMoved = Math.abs((cfg?.decay ?? 2) - (prev?.decay ?? 2)) > 0.05;
-        try {
-          t.fxRack.applyReverb(decayMoved ? { ...cfg } : { wet: cfg?.wet });
-        } catch (e) { console.warn("pattern sound: reverb", e); }
-        continue;
-      }
       const fn = FX_APPLY[key];
       if (fn && typeof t.fxRack[fn] === "function") {
         try { t.fxRack[fn]({ ...cfg }); } catch (e) { console.warn("pattern sound: " + key, e); }

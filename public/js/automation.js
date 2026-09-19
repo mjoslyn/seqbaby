@@ -217,7 +217,7 @@ export function applyAutomationAtStep(t, key, v, time, vNext, stepDur) {
     case "fx.phaser":     rack.config.phaser.wet = vv;     ramp(rack.phaser?.wet, vv, vn); return;
     case "fx.pitchshift": rack.config.pitchshift.wet = vv; ramp(rack.pitchshift?.wet, vv, vn); return;
     case "fx.delay":      rack.config.delay.wet = vv;      ramp(rack.delay?.wet, vv, vn); return;
-    case "fx.reverb":     rack.config.reverb.wet = vv;     ramp(rack.reverb?.wet, vv, vn); return;
+    case "fx.reverb":     rack.config.reverb.wet = vv;     ramp(rack.reverbCross?.fade, vv, vn); return;
 
     // ── sub-params with AudioParam/Signal targets — ramp directly ──
     case "fx.fuzz.drive":
@@ -283,12 +283,12 @@ export function applyAutomationAtStep(t, key, v, time, vNext, stepDur) {
     case "fx.chorus.depth":     try { rack.applyChorus({ depth: vv }); } catch {} return;
     case "fx.phaser.depth":     try { rack.applyPhaser({ depth: vv }); } catch {} return;
     case "fx.pitchshift.semi":  try { rack.applyPitchShift({ semitones: Math.round(vv * 24 - 12) }); } catch {} return;
-    case "fx.reverb.decay": {
-      const decay = 0.2 + vv * 7.8;
-      const cur = rack.config?.reverb?.decay ?? decay;
-      if (Math.abs(decay - cur) > 0.15) { try { rack.applyReverb({ decay }); } catch {} }
-      return;
-    }
+    // Used to be gated behind a 0.15s deadband, because every write rendered an
+    // impulse response — which meant the lane had a visible dead zone and
+    // stepped in 0.15s jumps. The worklet's decay is a coefficient, so the lane
+    // is now as smooth as any other. (The Tone.Reverb fallback keeps its own
+    // throttle inside the rack, so it is still protected.)
+    case "fx.reverb.decay":     try { rack.applyReverb({ decay: 0.2 + vv * 7.8 }); } catch {} return;
   }
 }
 

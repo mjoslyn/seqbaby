@@ -1,5 +1,6 @@
 import { SHAPER_MODES, makeCassetteSatCurve, makeFuzzCurve, makeShaperCurve, makeTapeHissBuffer, makeVinylCrackleBuffer, shaperPreampGain } from "./curves.js";
 import { buildCrusherNode } from "./crusher.js";
+import { buildReverbNode } from "./reverb.js";
 import { fxStageLevel } from "./constants.js";
 import { currentBpm } from "./lfo.js";
 import { setParam } from "./params.js";
@@ -7,9 +8,12 @@ import { setParam } from "./params.js";
 // from Node); re-exported so the imports elsewhere hold.
 export { defaultFxConfig } from "./soundDefaults.js";
 
-// Minimum gap between two impulse-response renders on one rack (see
-// FXRack._requestReverb). Four a second is far more often than a tail length
-// can be heard to change, and far fewer than a lane or an LFO would ask for.
+// All three of these are for the FALLBACK reverb only — the Tone.Reverb the
+// rack builds when the worklet is not registered (see reverb.js). The worklet's
+// decay is a coefficient, so it needs no throttle at all: nothing below runs on
+// the path anybody actually takes.
+//
+// Minimum gap between two impulse-response renders on one rack.
 const REVERB_REGEN_MS = 400;
 // ...and only one render in flight for the whole app: six racks each
 // rendering their own eight-second tail at once, throttled or not, still
@@ -320,15 +324,41 @@ export class FXRack {
       wet: config.delay.wet,
       maxDelay: 2,
     });
-    this.reverb = new Tone.Reverb({ decay: config.reverb.decay, wet: config.reverb.wet, preDelay: 0.02 });
-    // The impulse response the convolver holds, the one asked for since, and
-    // the regeneration in flight — see _requestReverb.
+    // ── reverb: a feedback delay network in a worklet (reverb.js) ──
+    // The wet/dry stays a Tone.CrossFade, deliberately: `wet` is then the same
+    // equal-power Tone.Param an LFO connected to and an automation lane ramped
+    // before, so every saved song's reverb balance is exactly what it was.
+    // Only the box between a and b changed.
+    this.reverbIn = ctx.createGain();
+    this.reverbCross = new Tone.CrossFade(config.reverb.wet ?? 0);
+    this.reverbNode = buildReverbNode(ctx);
+    if (this.reverbNode) {
+      this.reverbDecayParam = this.reverbNode.parameters.get("decay");
+      try { this.reverbDecayParam.value = config.reverb.decay; } catch {}
+      this.reverbIn.connect(this.reverbNode);
+      this.reverbNode.connect(nativeInputOf(this.reverbCross.b));
+    } else {
+      // Worklet registration failed (the whole engine's worklets would be down
+      // with it). Tone's convolution reverb is what this stage used to be, so
+      // the track keeps its tail — and with it the impulse-response throttle,
+      // which is the entire reason the worklet exists.
+      this.reverbFallback = new Tone.Reverb({
+        decay: config.reverb.decay, wet: 1, preDelay: 0.02,
+      });
+      this.reverbDecayParam = null;
+      this.reverbIn.connect(nativeInputOf(this.reverbFallback));
+      this.reverbFallback.connect(nativeInputOf(this.reverbCross.b));
+      this.reverbFallback.generate().catch(() => {});
+    }
+    this.reverbIn.connect(nativeInputOf(this.reverbCross.a));
+    // The impulse response the fallback convolver holds, the one asked for
+    // since, and the regeneration in flight — see _requestReverb.
     this._reverbHave = config.reverb.decay;
+    this._reverbDecaySet = config.reverb.decay;
     this._reverbWant = null;
     this._reverbBusy = false;
     this._reverbTimer = null;
     this._reverbLast = 0;
-    this.reverb.generate().catch(() => {});
 
     this.output = ctx.createGain();
     // The end of the serial chain lands here, and this is what softSwitch
@@ -363,7 +393,7 @@ export class FXRack {
       { key: "flanger",    ins: [this.flangerIn],                       out: this.flangerSum },
       { key: "pitchshift", ins: [toneIn(this.pitchshift)],              out: this.pitchshift },
       { key: "delay",      ins: [toneIn(this.delay)],                   out: this.delay },
-      { key: "reverb",     ins: [toneIn(this.reverb)],                  out: this.reverb },
+      { key: "reverb",     ins: [this.reverbIn],                        out: this.reverbCross },
     ];
     this._isStageHeld = opts?.isStageHeld ?? null;
     this._active = {};
@@ -716,21 +746,36 @@ export class FXRack {
   applyReverb({ decay, wet }) {
     if (decay !== undefined) {
       this.config.reverb.decay = decay;
-      this._requestReverb(decay);
+      this._setReverbDecay(decay);
     }
-    if (wet !== undefined) { this.config.reverb.wet = wet; this.reverb.wet.value = wet; }
+    if (wet !== undefined) { this.config.reverb.wet = wet; this.reverbCross.fade.value = wet; }
     this._updateStage("reverb");
   }
 
   /**
-   * A modulated decay (LFO or automation lane) — changes the impulse response
-   * without touching the stored knob, so the slider stays the base.
+   * A modulated decay (LFO or automation lane) — changes the tail without
+   * touching the stored knob, so the slider stays the base.
    */
-  setReverbDecayLive(decay) { this._requestReverb(decay); }
+  setReverbDecayLive(decay) { this._setReverbDecay(decay); }
 
-  // A convolution reverb's decay IS its impulse response, and Tone.Reverb
-  // regenerates that by rendering `decay` seconds of noise through an
-  // OfflineAudioContext — a multi-megabyte buffer plus the convolver's FFT
+  // Where the whole fix lands: on the worklet this is one write to one
+  // AudioParam, so a lane every step and a setter LFO every frame cost nothing
+  // and the knob answers immediately. Only the fallback has an impulse
+  // response to re-render, and only it takes the throttle below.
+  _setReverbDecay(decay) {
+    if (this._disposed) return;
+    const d = Math.max(0.1, Math.min(12, Number(decay) || 0.1));
+    // A setter LFO asks 60 times a second and a p-lock recall asks every bar,
+    // usually for the value already in place.
+    if (d === this._reverbDecaySet) return;
+    this._reverbDecaySet = d;
+    if (this.reverbDecayParam) { try { this.reverbDecayParam.value = d; } catch {} return; }
+    this._requestReverb(d);
+  }
+
+  // FALLBACK ONLY. A convolution reverb's decay IS its impulse response, and
+  // Tone.Reverb regenerates that by rendering `decay` seconds of noise through
+  // an OfflineAudioContext — a multi-megabyte buffer plus the convolver's FFT
   // partitioning every time. Reached from a lane every step and from a setter
   // LFO every frame, that was six racks each re-rendering an eight-second IR
   // several times a second: measured, it took the transport callback from
@@ -750,7 +795,7 @@ export class FXRack {
   async _regenReverb() {
     const want = this._reverbWant;
     this._reverbWant = null;
-    if (want == null || this._disposed) return;
+    if (want == null || this._disposed || !this.reverbFallback) return;
     const have = this._reverbHave;
     if (have != null && Math.abs(want - have) <= Math.max(0.1, have * 0.12)) return;
     this._reverbBusy = true;
@@ -758,8 +803,8 @@ export class FXRack {
       if (this._disposed) return;
       this._reverbLast = performance.now();
       try {
-        this.reverb.decay = want;
-        await this.reverb.generate();
+        this.reverbFallback.decay = want;
+        await this.reverbFallback.generate();
         this._reverbHave = want;
       } catch {}
     });
@@ -834,7 +879,11 @@ export class FXRack {
     try { this.phaser.dispose(); } catch {}
     try { this.pitchshift.dispose(); } catch {}
     try { this.delay.dispose(); } catch {}
-    try { this.reverb.dispose(); } catch {}
+    try { this.reverbIn.disconnect(); } catch {}
+    try { this.reverbNode?.port.postMessage({ type: "dispose" }); } catch {}
+    try { this.reverbNode?.disconnect(); } catch {}
+    try { this.reverbFallback?.dispose(); } catch {}
+    try { this.reverbCross.dispose(); } catch {}
     try { this.crushIn.disconnect(); } catch {}
     try { this.crushNode?.port.postMessage({ type: "dispose" }); } catch {}
     try { this.crushNode?.disconnect(); } catch {}

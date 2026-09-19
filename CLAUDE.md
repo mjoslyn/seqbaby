@@ -103,6 +103,10 @@ env / fx / eq / comp / mod / automation per track.
 - `crusher.js` — the bitcrusher: a converter model (sample-and-hold clock +
   quantiser) as an AudioWorklet, same file shape as the engine worklets. See
   the bitcrush section below.
+- `reverb.js` — the reverb: a feedback delay network as an AudioWorklet, same
+  file shape again. It is the rack's, not an engine's, and it exists because a
+  convolution reverb's decay cannot be changed without re-rendering it. See the
+  reverb section below.
 - `lfo.js` — LFO configs, `getModTarget`/`canModulate`, tempo sync, setter loop.
 - `automation.js` — per-step parameter automation (`AUTOMATION_TARGETS`).
 - `paramHold.js` — `holdParamAt` / `fadeStop`, no imports (see the clicks and
@@ -258,6 +262,9 @@ voice → filterNode → eqNode → compressor → fxRack → masterGain → mas
   matters for LFO/automation targets.
 - **crush is a converter, not a rounding function** (`crusher.js`) — see the
   bitcrush section below.
+- **reverb is a feedback delay network, not a convolver** (`reverb.js`) — see
+  the reverb section below. Its wet/dry is still a `Tone.CrossFade`, so `wet`
+  is the same Tone.Param an LFO connects to and a lane ramps.
 - **The vinyl crackle and cassette hiss beds only play while the track plays.**
   Each is a looping noise source inside the rack, so left alone they sounded
   whenever the master bus was open: before the first play, after a keyboard
@@ -342,6 +349,82 @@ in ──▶ S/H clock (rate) ──▶ quantiser (bits, clips at full scale) �
   cassette, fuzz, ring mod, shaper). For an effect whose output is correlated
   with its input, linear is what keeps the level put; equal power lifts it by
   up to 3dB in the middle of the knob.
+
+## Reverb (`reverb.js`) — a tank, not an impulse response
+
+A feedback delay network, and it replaced a convolution reverb for one reason:
+**a convolution reverb's decay IS its impulse response**, so the decay knob
+could not be turned without rendering `decay` seconds of noise through an
+OfflineAudioContext and re-partitioning the convolver's FFT.
+
+```
+in ─ dc ─ predelay ─ 4 allpass diffusers ─┬─▶ 8 delay lines ─┬─▶ L
+                                          │   damp · decay   │
+                                          │   Hadamard mix   ├─▶ R
+                                          └──────────────────┘
+```
+
+- **The decay is a coefficient.** A line of L samples keeps
+  `10^(-3L/(T·sr))` of itself each lap, so a tail length is eight `pow()`
+  calls when it moves and nothing at all when it does not. That is the whole
+  point: see the clicks-and-timing section for what it replaced and what the
+  numbers were.
+- **The gain is per line, and it has to be.** The short lines come round more
+  often, so one gain for all eight would give eight different decay times and a
+  tail that changes colour as the short ones drop out.
+- **The lengths are times, not sample counts**, rounded up to primes at
+  construction: the same room at 44.1k and at 48k, and no two lines sharing a
+  period, so the tank's modes spread instead of piling up. Measured: RT60 2.01s
+  at 44.1k, 2.01s at 48k, 1.98s at 96k, all for a 2s decay.
+- **The mixing matrix is an 8-point Hadamard**, applied as a butterfly — 24
+  adds and a scale where the matrix is 64 multiplies. Orthonormal, which is
+  what makes the energy the lines lose exactly the energy the coefficients
+  asked them to lose. With a matrix that is not, the gains mean nothing and the
+  tank either dies early or runs away.
+- **Damping is one pole per line, inside the loop.** Its DC gain is 1, so it
+  does not touch the decay the coefficients ask for — but it still takes the
+  top off a little further every lap, and the broadband tail comes out about
+  12% short. Flat across 0.35..8s, so the coefficients are computed for a
+  target `DECAY_COMP` longer and the knob then reads true: measured, RT60
+  tracks the knob within 1% from 0.35s to 8s. Below ~0.3s it stops holding (the
+  long lines are damped so hard the short ones carry the tail, which runs
+  long), so 0.2s asks for 0.25s. Pinned in the tests rather than fixed — the
+  alternative is line lengths that make every longer setting sound like a
+  smaller room.
+- **Sweeping the decay must not sweep the volume.** A tank holds more energy
+  the longer it holds it, worth a full 6dB across the knob, and the convolution
+  reverb this replaces was normalized per impulse response and did not do that
+  — every saved song's wet setting was chosen against that. So the output trim
+  moves with the decay (`LEVEL_EXP`, measured rather than derived: the
+  ideal-delay-line model says amplitude should go as `sqrt(decay)` and the
+  damping flattens it to nearly a fifth of that). Measured, the wet level now
+  varies under 1dB across the whole range. The trim is **ramped, not stepped** —
+  the coefficients may jump, since changing how fast a signal is decaying is
+  not a discontinuity in it, but a gain on the output may not.
+- **The read heads wander.** Without it the tank is a bank of fixed resonators
+  and a long tail rings on a chord of its own modes; half a millisecond at well
+  under a hertz smears them, on mutually prime-ish rates so the eight never
+  line up.
+- **The wet/dry stays a `Tone.CrossFade`**, deliberately. `wet` is then the
+  same equal-power Tone.Param an LFO connected to (`rack.reverbCross.fade`) and
+  an automation lane ramped, so every saved song's reverb balance is exactly
+  what it was. Only the box between `a` and `b` changed.
+- **The idle skip counts silent INPUT as well as silent output**, and that is
+  not an optimisation detail — keying it off the output alone swallowed the
+  tail of every sound arriving after a pause. A sample can be sitting in the
+  predelay or partway down a line with the output still silent, so the block
+  carrying a new sound was processed, the next had no input, the output had not
+  caught up, and the tank was skipped from there on. The threshold is well past
+  the longest path through it (predelay + longest line, ~90ms).
+- **`process()` never returns false.** A processor that does is finished for
+  good, and a reverb that retired itself during a quiet passage would be gone
+  for the rest of the session.
+- **Loading** — same Blob-URL registration as the engine worklets, from
+  `loadWorklet()` in transport.js. A failure falls back to `Tone.Reverb` with
+  the throttle that used to be the only thing standing between a decay lane and
+  a 180ms frame, so a track never loses its tail.
+- `reverb.js` is importable from Node (no DOM, no Tone), which is what lets
+  `test/reverb.test.js` render the tank and measure all of the above.
 
 ## Audio start / unlock (hard-won — don't regress)
 
@@ -2207,17 +2290,22 @@ helpers: `holdParamAt` (cancel-and-hold, so a ramp starts from the value being
 HEARD, never from the previous ramp's target) and `fadeStop` (a source stopped
 through a 6ms fade on its gain).
 
-- **The reverb tail is an impulse response, and regenerating it is the single
-  most expensive thing a parameter can do** — an offline render of `decay`
-  seconds of noise plus the convolver's FFT partitioning. Reached from the
-  `fx.reverb.decay` lane every step and the `reverb_decay` setter LFO every
-  frame, it took the callback to 16ms and the main thread to 180ms frames. So
-  `FXRack._requestReverb` throttles it: the latest value wins, one render per
-  rack per 400ms, skipped below a 12% change, and **one render in flight for
-  the whole app** (`reverbRegenChain`, with a 120ms breath between renders). Modulation goes through
-  `setReverbDecayLive`, which leaves the stored knob alone. A decay lane is
-  still the most expensive lane there is; the real fix is an algorithmic
-  reverb whose decay is a coefficient.
+- **The reverb decay is a coefficient now, and that was the whole fix**
+  (`reverb.js` — see its section below). It used to be an impulse response, and
+  regenerating one was the single most expensive thing a parameter could do: an
+  offline render of `decay` seconds of noise plus the convolver's FFT
+  partitioning, reached from the `fx.reverb.decay` lane every step and the
+  `reverb_decay` setter LFO every frame. That took the callback to 16ms and the
+  main thread to 180ms frames, and needed a throttle — one render per rack per
+  400ms, one in flight for the whole app, changes under 12% dropped — which
+  made the knob lag and step. All of it is gone: a tail length is one write to
+  one AudioParam. Measured in Chrome with six racks each running a
+  reverb-decay LFO **and** a per-step decay lane, the exact case the throttle
+  existed for: frames p50 16.7ms / p95 17.5ms / max 19.1ms, none over 50ms.
+  600 decay writes in a row take 1ms. Modulation still goes through
+  `setReverbDecayLive`, which leaves the stored knob alone. The throttle
+  survives in `FXRack._requestReverb` for the **fallback** path only — the
+  Tone.Reverb the rack builds if the worklet will not register.
 - **`switchPattern` does only the audio half inside the transport.** Chain
   mode and a queued switch call it from the scheduler callback on the bar line
   with `{ deferUi: true }`; re-aliasing and the p-lock recall stay synchronous
@@ -2259,6 +2347,30 @@ through a 6ms fade on its gain).
   `makeCassetteSatCurve` / the 808 `saturator` memoise per 1/128th of their
   amount; every `noiseBurst` reads one shared 2s noise buffer at a random
   offset instead of filling its own (60,000 randoms for a 909 open hat).
+- **The worklets' event queues do not allocate** (`EventQueue` in contagion.js /
+  hexop.js / guitar.js / bass.js / subbass.js, `NoteQueue` in silverbox.js).
+  They were plain arrays, so every note cost two object literals, a `sort()`
+  with a fresh comparator closure, and — on a stop — a `filter()` building a
+  whole new array. That is garbage generated **on the audio thread**, where a
+  GC pause is not a slow frame but a dropout. They are parallel typed arrays
+  now, with one scratch event object reused by every `shift()` (the consumers
+  copy primitives straight out of it and keep no reference), and they stay in
+  order by **inserting from the back** rather than by re-sorting: the transport
+  schedules ahead in time order, so the common case moves nothing and an
+  out-of-order arrival walks past a handful of pending note-offs. The walk
+  stops on a tie, which is what preserves the stable sort's guarantee that a
+  note-on and the previous step's note-off land in the right order.
+  Two things are load-bearing and were found by measuring, not by reading:
+  **the fields are f64, not f32** — an f32 round trip moves a frequency by a
+  part in ten million, which is inaudible alone and still enough to
+  decorrelate an oscillator's phase inside a few hundred samples, so a song
+  would stop rendering the same; and **the callers' `> 128` cap is soft** —
+  it drops one event and then pushes two, so a burst grows by one event per
+  note. That quirk is preserved deliberately, with `QCAP` a hard backstop far
+  above it. Verified by rendering both versions against one message stream
+  (in-order notes, chords on the same instant, out-of-order arrivals, stops
+  with notes queued past them, notes posted after a stop, a 200-note
+  overflow): all six engines come back **bit-identical**.
 - **Granular grains are built ahead, not at trigger time** (`_enqueueGrains`):
   a long dense note is hundreds of grains × three nodes, and building them all
   inside the callback made the OTHER tracks' notes late. Slices of a quarter
@@ -2266,9 +2378,8 @@ through a 6ms fade on its gain).
 - **`paintTrackNow` caches the cells** on the track (`t._stepCells`,
   invalidated by `renderStepGrid`) and toggles only what changed — it runs per
   track per step.
-- Still on the list: `soloAudibleTracks` allocates per 16th; the worklets sort
-  their event queue on every note; the keyboard arp and the granular sustain
-  run on 25/50ms timers with a 120ms lookahead.
+- Still on the list: `soloAudibleTracks` allocates per 16th; the keyboard arp
+  and the granular sustain run on 25/50ms timers with a 120ms lookahead.
 
 ## Gotchas + conventions
 
@@ -2336,9 +2447,9 @@ through a 6ms fade on its gain).
   one at 180). `baseStepDur` in transport.js derives it arithmetically from
   `Tone.Transport.bpm.value` instead. Anything else needing musical time should
   do the same, or use `currentBpm()` (lfo.js) as the sync helpers do.
-- **Worklet processor sources are template literals** (`silverbox.js`, `contagion.js`,
-  `subbass.js`,
-  `hexop.js`, `crusher.js`),
+- **Worklet processor sources are template literals** (`silverbox.js`,
+  `contagion.js`, `hexop.js`, `guitar.js`, `bass.js`, `subbass.js`,
+  `crusher.js`, `reverb.js`),
   so a stray backtick or `${` inside one — including in a comment — truncates
   the string. The module still parses, `node --check` still passes, and the
   failure only shows up as a SyntaxError at engine boot. When editing inside a
@@ -2415,7 +2526,7 @@ Repo: https://github.com/mjoslyn/seqbaby.
   An inline marker (`window.__seqbabyServerBoot`) tells the paths apart, and
   `ScriptLoader.tsx` keeps its onload-chained injection for the soft-nav case
   (e.g. arriving from `/login`).
-- `app/EnginePreload.tsx` emits `modulepreload` for all 58 modules listed in
+- `app/EnginePreload.tsx` emits `modulepreload` for all 59 modules listed in
   `app/engineAssets.ts` (at `engineAsset("/js/<name>")`; the hints used to
   point at the site root and 404). The graph is 8 levels deep, so without it the browser
   needs up to eight sequential round trips just to discover the code.

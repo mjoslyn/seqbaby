@@ -145,6 +145,116 @@ function makeVoice() {
   };
 }
 
+// ---------------------------------------------------------------------------
+// The event queue: parallel typed arrays, not an array of objects.
+//
+// It used to be a plain array, and every note cost two object literals, a
+// sort() with a fresh comparator closure, and — on a stop — a filter() building
+// a whole new array. All of that is garbage generated ON THE AUDIO THREAD, and
+// a GC pause there is a dropout, which is the one failure this file cannot
+// afford. Nothing below allocates after construction.
+//
+// It stays ordered by inserting from the back rather than by sorting the whole
+// queue: the transport schedules ahead in time order, so the common case moves
+// nothing at all and an out-of-order arrival walks past a handful of pending
+// note-offs. The walk stops on a tie, so equal timestamps keep their insertion
+// order — the same guarantee the stable sort it replaces gave, and what makes
+// a note-on and the note-off of the step before it land in the right order.
+// ---------------------------------------------------------------------------
+// The caller's own cap is soft: it drops ONE event when the queue is over 128
+// and then pushes two, so a burst posted faster than it is consumed grows by
+// one event per note. That is the behaviour this replaced and it is preserved
+// exactly, quirk included, so no song renders differently. QCAP is a hard
+// backstop far above it — reaching it needs ~900 notes queued on one track at
+// once, which nothing this transport can do — and it exists only so a fixed
+// buffer can never be overrun.
+const QCAP = 1024;
+class EventQueue {
+  constructor() {
+    // Frames are f64: at 48k an int32 runs out after about twelve hours, and a
+    // f32 stops being able to name every frame after about three minutes.
+    this.at    = new Float64Array(QCAP);
+    this.id    = new Float64Array(QCAP);
+    this.note  = new Float64Array(QCAP);
+    // freq, vel and glide are f64 as well, and deliberately. An f32 round trip
+    // moves a frequency by about a part in ten million, which is inaudible on
+    // its own and still enough to decorrelate an oscillator's phase within a
+    // few hundred samples — so a song would not render the same as it used to.
+    // Six arrays of 1024 f64 is 48KB a track; bit-exactness is worth more.
+    this.freq  = new Float64Array(QCAP);
+    this.vel   = new Float64Array(QCAP);
+    this.glide = new Float64Array(QCAP);
+    this.off   = new Uint8Array(QCAP);
+    this.head = 0;
+    this.len = 0;
+    // One scratch event, reused by every shift(). The consumers copy the
+    // primitives they want straight out of it and never keep a reference, so
+    // a second one could never be observed.
+    this.ev = { at: 0, off: false, id: 0, note: 0, freq: 0, vel: 0, glide: 0 };
+  }
+
+  _move(d, s) {
+    this.at[d] = this.at[s]; this.id[d] = this.id[s]; this.note[d] = this.note[s];
+    this.freq[d] = this.freq[s]; this.vel[d] = this.vel[s]; this.glide[d] = this.glide[s];
+    this.off[d] = this.off[s];
+  }
+
+  // Slide the live window back to the front. copyWithin is a memmove on a
+  // typed array — no allocation — and it only runs once the window has walked
+  // to the end of the buffer: with a couple of events live that is one memmove
+  // of a couple of events per thousand pushed, about once a minute of playing.
+  _compact() {
+    const h = this.head, e = h + this.len;
+    if (h === 0) return;
+    this.at.copyWithin(0, h, e); this.id.copyWithin(0, h, e);
+    this.note.copyWithin(0, h, e); this.freq.copyWithin(0, h, e);
+    this.vel.copyWithin(0, h, e); this.glide.copyWithin(0, h, e);
+    this.off.copyWithin(0, h, e);
+    this.head = 0;
+  }
+
+  push(at, off, id, note, freq, vel, glide) {
+    if (this.len >= QCAP) this.dropOldest();          // the callers cap first
+    if (this.head + this.len >= QCAP) this._compact();
+    let j = this.head + this.len - 1;
+    while (j >= this.head && this.at[j] > at) { this._move(j + 1, j); j--; }
+    const i = j + 1;
+    this.at[i] = at; this.off[i] = off ? 1 : 0; this.id[i] = id;
+    this.note[i] = note; this.freq[i] = freq; this.vel[i] = vel; this.glide[i] = glide;
+    this.len++;
+  }
+
+  headAt() { return this.at[this.head]; }
+
+  shift() {
+    const i = this.head, e = this.ev;
+    e.at = this.at[i]; e.off = this.off[i] === 1; e.id = this.id[i];
+    e.note = this.note[i]; e.freq = this.freq[i]; e.vel = this.vel[i]; e.glide = this.glide[i];
+    this.head++; this.len--;
+    if (this.len === 0) this.head = 0;
+    return e;
+  }
+
+  // A stop keeps only the note-offs that land before it: a note that has not
+  // started must not start, and a release past the stop has nothing left to
+  // release. Compacted in place, in order, so the filter() is gone as well.
+  keepOffsBefore(limit) {
+    const h = this.head, end = h + this.len;
+    let w = h;
+    for (let r = h; r < end; r++) {
+      if (this.off[r] === 1 && this.at[r] < limit) { if (w !== r) this._move(w, r); w++; }
+    }
+    this.len = w - h;
+    if (this.len === 0) this.head = 0;
+  }
+
+  dropOldest() {
+    if (this.len === 0) return;
+    this.head++; this.len--;
+    if (this.len === 0) this.head = 0;
+  }
+}
+
 class ContagionProcessor extends AudioWorkletProcessor {
   static get parameterDescriptors() {
     const a = (name, defaultValue, minValue, maxValue) =>
@@ -172,7 +282,7 @@ class ContagionProcessor extends AudioWorkletProcessor {
     super();
     this.sr = sampleRate;
     this.alive = true;
-    this.queue = [];
+    this.queue = new EventQueue();
     this.voices = []; for (let i = 0; i < MAXV; i++) this.voices.push(makeVoice());
     this.tick = 0;
     this.lastFreq = 440;      // portamento reference: the note played before
@@ -191,14 +301,13 @@ class ContagionProcessor extends AudioWorkletProcessor {
   onMessage(m) {
     if (!m) return;
     if (m.type === "note") {
-      if (this.queue.length > 128) this.queue.shift();
+      if (this.queue.len > 128) this.queue.dropOldest();
       const at = Math.max(0, Math.round(m.when * this.sr));
-      this.queue.push({ at, off: false, id: m.id, note: m.note, freq: m.freq, vel: m.vel, glide: m.glide });
-      this.queue.push({ at: at + Math.max(1, Math.round(m.dur * this.sr)), off: true, id: m.id });
-      this.queue.sort((x, y) => x.at - y.at);
+      this.queue.push(at, false, m.id, m.note, m.freq, m.vel, m.glide);
+      this.queue.push(at + Math.max(1, Math.round(m.dur * this.sr)), true, m.id, 0, 0, 0, 0);
     } else if (m.type === "off") {
       const at = Math.max(0, Math.round(m.when * this.sr));
-      this.queue = this.queue.filter(ev => ev.off && ev.at < at);
+      this.queue.keepOffsBefore(at);
       this.allOff = at;
     } else if (m.type === "set") {
       if (m.mode1 !== undefined) this.mode1 = m.mode1 | 0;
@@ -282,7 +391,7 @@ class ContagionProcessor extends AudioWorkletProcessor {
       const blk = Math.min(BLK, N - base);
       const frame = n0 + base;
 
-      while (this.queue.length && this.queue[0].at <= frame) {
+      while (this.queue.len && this.queue.headAt() <= frame) {
         const ev = this.queue.shift();
         if (ev.off) this.noteOff(ev.id); else this.noteOn(ev);
       }
