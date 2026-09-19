@@ -184,6 +184,11 @@ env / fx / eq / comp / mod / automation per track.
 - `bounce.js` — WAV render via MediaRecorder.
 - `buffers.js` — sample decode/normalize cache, `startSampleSource`.
 - `wavetableEditor.js` — in-app wavetable frame editor for `wt:akwf`.
+- `drumMachine.js` — the eleven TR-808 / TR-909 voices, built from native nodes.
+  Importable with **nothing but a raw AudioContext** (its one import is
+  paramHold.js, which has none), which is what lets `scripts/measure-drums.mjs`
+  render them and `test/drumMachine.test.js` check the arithmetic. See the
+  808 / 909 section below.
 - `silverbox.js` — the silverbox circuit model: AudioWorklet processor source +
   registration + voice builder. See the silverbox section below.
 - `contagion.js` — the contagion model, same shape: processor source string,
@@ -467,7 +472,7 @@ All of this lives in `main.js` `init()` and `transport.js`:
 | engine type   | class            | notes |
 |---|---|---|
 | `plaits`      | `PlaitsVoice`    | 4-voice round-robin pool of Plaits WASM oscillators. `modLevelPatched=1, modLevel=0` at init (without the zero, empty tracks emit a continuous tone). Glide via ramp on `noteAudioParameter`. The four sliders keep the hardware's generic names across all 16 models; what each does per model is `PLAITS_MACRO_TIPS` (catalog.js), hung on the fields by `updatePlaitsControlsVisibility`. |
-| `drum-synth`  | `DrumSynthVoice` | Recipes via `buildDrumSynthGraph(kind, output)`: 808/909 kit, poly-saw, fm-bell, pad, plus the emulators (below). All Tone.js except the silverbox and the contagion, which are AudioWorklet models (`silverbox.js`, `contagion.js`). |
+| `drum-synth`  | `DrumSynthVoice` | Recipes via `buildDrumSynthNode(kind, output)`: poly-saw, fm-bell, pad, plus the emulators (below). Tone.js, except the 808/909 kit, which is native nodes in `drumMachine.js` (that dispatch runs first), and the silverbox / contagion / hexop / guitar / bass / subby, which are AudioWorklet models. |
 | `sampler`     | `SamplerVoice`   | THE unified sample voice — plays a user upload or a bundled kit sample chosen via `track.sampleSource` ({kind:"upload"|"bundled", ...}). Absorbed the old `SampleVoice`/`UploadVoice`/`ElevenVoice`. Per-step region/fade/loop via `startSampleSource`; slicing via `t.slices`/`sliceOn`. Pitch from `pitchBase` (36 drum-kit, 60 otherwise); `t.pitchLock` keeps 1×bpm fits pitch-true. |
 | `custom` / `saved` | `CustomToneVoice` | Tone.js synth tree from a saved-patch JSON config (`saved:<name>` keys, localStorage). |
 | `granular`    | `GranularVoice`  | Granular sampler (`dm:granular`, "texture" group). See the granular section below. |
@@ -530,6 +535,93 @@ spellings rather than a consistent one.
 chord tones on other voices play the baseline; same limitation as
 `PlaitsVoice`). The stock harm/timb/morph/decay sliders are relabeled
 per-engine by `updatePlaitsControlsVisibility`.
+
+## The 808 and the 909 (`public/js/drumMachine.js`)
+
+Eleven voices — six 808, five 909 — modelled on the machines' own circuits.
+Native Web Audio nodes rather than a worklet, because every piece of them (a
+ringing sine, a square, a biquad, a soft clipper) is a node the browser already
+has; what the file is for is arranging them the way the schematics do. Three
+facts about the hardware decide the shape of the code:
+
+- **A voice is one circuit, so it is monophonic.** Retriggering recharges the
+  envelope generator's capacitor — it does not start a second copy of the
+  instrument beside the first. So each voice has a persistent VCA whose
+  re-attack IS the choke (hold whatever is left, ramp up from there, no step),
+  and the struck resonators register with `rig.ring()` so the next hit takes
+  them away over 4 ms. Two open hats ringing over each other is the one thing a
+  real 808 cannot do, and it used to be the default here. Measured: an open hat
+  50–100 ms into its decay reads the same level whether or not there was a hit
+  a quarter of a second earlier (excess 0.0 dB, was +0.3), and the retrigger's
+  own step is 0.4–0.8× the size of the steps the wave is already making.
+- **The metal oscillators and the noise source free-run.** The cymbal section's
+  six squares and the noise transistor are always going; a hit only opens a VCA
+  on them. Building them per hit — which is what this did — starts every one at
+  phase zero, so every hat off the track was **the same sample, bit for bit**:
+  measured, two hits of the 808 closed hat correlated 1.000, and now 0.04. It is
+  audible as more than variety: six squares in phase are mostly a DC block that
+  the 7 kHz high-pass throws away, while six at scattered phases put six times as
+  many edges through it, which is the density the machine actually has. (The
+  levels are trimmed back so the hats sit where they always did, within 0.5 dB.)
+  Free-running also takes the allocation off the transport callback: a 64-hit
+  bar builds **0** nodes for a hat or a clap where it used to build 576 and 768.
+- **The drums are struck resonators.** A bridged-T network rings when a pulse
+  hits it and is silent otherwise, so the kick's body and the snare's two shells
+  ARE built per hit, from rest — the free-running rule is about the parts that
+  free-run on the machine, not about avoiding allocation.
+
+Then four numbers and a bug:
+
+- **The oscillator bank is the machine's six**: 205.3, 304.4, 369.6, 522.7, 540
+  and 800 Hz. It had 254.3 in place of 540 — a frequency that is on neither
+  machine — while the cowbell, which taps 540 and 800 out of that same bank,
+  had 540 hard-coded beside it. `TR808_METAL_HZ` is now the one list and the
+  cowbell reads its pair out of it.
+- **The pitch envelope is an RC discharge.** An exponential VCO fed a
+  discharging capacitor moves linearly in SEMITONES at an exponentially decaying
+  rate: out fast, then settling onto the note. A single
+  `exponentialRampToValueAtTime` is linear in semitones at a CONSTANT rate and
+  then stops dead, and that corner is exactly where a 909 kick's punch lives.
+  The sweep is four ramps laid along `exp(-t/tau)` instead (`pitchSweep`,
+  exported and pinned by the test to within 90 cents of the curve), which costs
+  no allocation where `setValueCurveAtTime` would want a Float32Array a hit.
+  The depths went with it: the 808's drop is small and quick (×1.26, tau 12 ms —
+  measured 69 Hz at the trigger, 59 at 20 ms, 55.4 by 60) where the 909 dives
+  (×3.8, tau 9 ms — 190 Hz, 89 at 20 ms, 53 by 100).
+- **The saturation curve was half a cell out.** A WaveShaper reads its curve at
+  index `(x + 1) / 2 * (n - 1)`; this one was laid out over `i * 2 / n - 1`, so
+  an input of zero came out at −0.004 and both kicks put **DC on the bus for the
+  life of the voice** — and, since the shaper was built per hit and left
+  connected, one more copy of it per kick. Odd length now, mapped over `n - 1`,
+  and the shaper is persistent. Measured DC after three kicks: −1.2e-2 → 0.
+- **A VCA parked at the exponential's floor is not silent** when what it is
+  gating never stops. `strike` ends its decay with a step to a true zero,
+  because 1e-4 of six free-running squares is −64 dB of hum under a track that
+  is not playing (it was audible in the measurement as a 909 hat that never
+  stopped ringing).
+- **The clap is one noise source, one filter, one retriggered VCA**, which is
+  what the circuit is: the slaps are the same noise re-gated, not four unrelated
+  bursts, so they share a grain and a colour. Their spacing stretches ~8% a lap,
+  because the retrigger oscillator's RC slows as it goes and three evenly spaced
+  pulses read as a machine gun. The 909's tail hangs off a wider band than its
+  slaps and was 15 dB above them; it is now under.
+
+**A drum voice ignores note-off.** A trigger input has no gate, so `release` is
+a no-op and the hard stop is `silence` (which `DrumSynthVoice.silence` prefers
+when a voice has one). Without that split, lifting a computer-keyboard key cut
+off a hat that was still ringing.
+
+**Known departure**: on the machines a closed hat chokes the OPEN hat, because
+they share one circuit. Here they are separate engines on separate tracks, so
+each chokes only itself.
+
+**Measuring it** — `node scripts/measure-drums.mjs` (needs `npm i playwright`)
+renders all eleven in a headless OfflineAudioContext and prints the levels,
+decays, DC, pitch sweeps, monophony, hit-to-hit correlation and node counts
+above. Every number in this section came from it. What is left over is pure
+arithmetic — the oscillator list, the saturation curve's symmetry, the shape of
+the pitch envelope — and that is `test/drumMachine.test.js`, which runs under
+`npm test` with no browser.
 
 ## Silverbox (`dm:silverbox`, `public/js/silverbox.js`)
 
@@ -2258,7 +2350,7 @@ Bundled drum kits are no longer separate engines — they live in
 (legacy `smp:Kit/part` keys migrate on load).
 
 Adding a new engine: catalog entry + voice class dispatch in
-`buildVoiceForEngine` (or a `buildDrumSynthGraph` case + builder fn for
+`buildVoiceForEngine` (or a `buildDrumSynthNode` case + builder fn for
 analog-mono style) + `updatePlaitsControlsVisibility` labels + tips +
 `canModulate`/`voiceAutoKeysForEngine` entries + serialize/apply if it has
 unique state.
@@ -2526,7 +2618,7 @@ Repo: https://github.com/mjoslyn/seqbaby.
   An inline marker (`window.__seqbabyServerBoot`) tells the paths apart, and
   `ScriptLoader.tsx` keeps its onload-chained injection for the soft-nav case
   (e.g. arriving from `/login`).
-- `app/EnginePreload.tsx` emits `modulepreload` for all 59 modules listed in
+- `app/EnginePreload.tsx` emits `modulepreload` for all 60 modules listed in
   `app/engineAssets.ts` (at `engineAsset("/js/<name>")`; the hints used to
   point at the site root and 404). The graph is 8 levels deep, so without it the browser
   needs up to eight sequential round trips just to discover the code.
