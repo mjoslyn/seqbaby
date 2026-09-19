@@ -1401,8 +1401,9 @@ main {
    three knobs each at the left end and nothing across the rest — a delay and
    a reverb cost more height than the step grid. Each engaged stage is a card
    now: its name and the × on the top line, its knobs wrapping under them, and
-   as many cards across as the track is wide (`auto-fill`, so a single stage
-   still gets one column rather than stretching across the track). The rows
+   up to three cards across (`auto-fill` with a minimum of a third of the
+   panel, so a wide track never goes past three, a narrow one drops to two or
+   one, and a single stage gets one column rather than the whole track). The rows
    keep their flex layout — a stage's controls are still queried and wired the
    same — so this only decides where the title breaks and where the × sits.
    Scoped to the inline view (`.sq-track ... .is-live`), as the row filter
@@ -1410,7 +1411,7 @@ main {
    below 768px the phone block's one-row-per-stage layout stands. */
 @media (min-width: 769px) {
   .sq-track .sq-track__fx-panel.is-live {
-    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(max(250px, calc((100% - 12px) / 3)), 1fr));
     gap: 6px;
     align-items: start;
   }
