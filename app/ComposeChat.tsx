@@ -5,6 +5,7 @@ import { getOpenSong, subscribeOpenSong } from "@/app/songs/openSong";
 import { loadSongChat, saveSongChat } from "@/app/songs/actions";
 import { COMPOSE_MODELS, DEFAULT_COMPOSE_MODEL, composeModelLabel, isComposeModel } from "@/lib/composeModels.js";
 import { API_KEY_CONSOLE_URL, looksLikeApiKey, maskApiKey } from "@/lib/composeKey.js";
+import { formatInviteCode, looksLikeInviteCode, normalizeInviteCode } from "@/lib/composeInvite.js";
 import styles from "@/app/ui.module.css";
 
 type Msg =
@@ -12,7 +13,14 @@ type Msg =
   | { role: "assistant"; text: string; model?: string; activity?: string[]; warnings?: string[] }
   | { role: "error"; text: string };
 
-type ComposeResponse = { jobId?: string; jobToken?: string; error?: string };
+type ComposeResponse = {
+  jobId?: string;
+  jobToken?: string;
+  error?: string;
+  /** Turns left on the invite code this turn was let in on, once it has been
+   *  spent. Null means the code is uncapped, absent means no code was used. */
+  inviteRemaining?: number | null;
+};
 
 /**
  * A turn's changes, sitting between the model and the studio.
@@ -75,6 +83,17 @@ const MODEL_KEY = "seqbaby.composeModel.v1";
 // and nowhere else.
 const KEY_STORE = "seqbaby.anthropicKey.v1";
 const KEY_MODE = "seqbaby.composeKeyMode.v1";
+
+// An invite code, kept for the same reason and with less to weigh: unlike a
+// key it is worth a fixed number of turns on this site and nothing anywhere
+// else, so it is simply remembered rather than offered a choice about it --
+// the alternative is retyping it every visit, which is most of the way back
+// to the signup this exists to avoid. `forget` is the way out.
+const INVITE_STORE = "seqbaby.composeInvite.v1";
+
+/** Which ways of paying for a turn this visitor has. Ordered: whichever is
+ *  first is what a browser with nothing stored starts on. */
+type KeyMode = "site" | "invite" | "own";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -147,7 +166,7 @@ export default function ComposeChat({ signedIn, serverKey }: { signedIn: boolean
   // Which key the next message runs on. "site" is only ever a choice when
   // there is both an account and a key on the deploy, so what is offered is
   // derived (`keyMode`) rather than trusted from storage.
-  const [keyPref, setKeyPref] = useState<"site" | "own">("site");
+  const [keyPref, setKeyPref] = useState<KeyMode>("site");
   // The visitor's own key, live. Empty means they haven't given one; what is
   // typed lives in `keyDraft` until it is accepted, so a half-typed key is
   // never what a message goes out on.
@@ -156,6 +175,18 @@ export default function ComposeChat({ signedIn, serverKey }: { signedIn: boolean
   const [keyError, setKeyError] = useState("");
   const [remember, setRemember] = useState(true);
   const [editingKey, setEditingKey] = useState(false);
+  // The invite code, once the server has said it is one. What is being typed
+  // lives in `inviteDraft` until then, for the key field's reason: a
+  // half-typed code is never what a message goes out on.
+  const [invite, setInvite] = useState("");
+  const [inviteDraft, setInviteDraft] = useState("");
+  const [inviteError, setInviteError] = useState("");
+  // What the code has left, as last reported -- by the check that accepted it
+  // and by every turn it pays for. Null means uncapped; undefined means
+  // nobody has said.
+  const [inviteLeft, setInviteLeft] = useState<number | null | undefined>(undefined);
+  const [checkingInvite, setCheckingInvite] = useState(false);
+  const [editingInvite, setEditingInvite] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
   const logRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -166,11 +197,28 @@ export default function ComposeChat({ signedIn, serverKey }: { signedIn: boolean
   // The transcript, readable from an async callback without making every
   // message a reason to re-run the effect that loads one.
   const messagesRef = useRef<Msg[]>([]);
-  // Composing on the site's key takes an account AND a key on the deploy.
-  // Without both there is one way to compose and no choice to offer.
+  // What this visitor may pay a turn with, in the order the panel offers
+  // them. Composing on the site's key takes an account AND a key on the
+  // deploy; an INVITE CODE takes the deploy's key and the absence of an
+  // account, since someone signed in already has the thing a code buys and a
+  // third option that adds nothing is just a third option. A key of your own
+  // is offered always, which is what makes this panel worth showing to
+  // someone signed out of a deploy with no key at all.
   const siteKeyOffered = signedIn && serverKey;
-  const keyMode: "site" | "own" = siteKeyOffered ? keyPref : "own";
+  const inviteOffered = serverKey && !signedIn;
+  const modes: KeyMode[] = [
+    ...(siteKeyOffered ? (["site"] as const) : []),
+    ...(inviteOffered ? (["invite"] as const) : []),
+    "own",
+  ];
+  // Derived rather than trusted from storage: what was picked last time may
+  // not be on offer this time (signed out since, or the deploy's key went
+  // away), and the first mode offered is the easiest one to start on.
+  const keyMode: KeyMode = modes.includes(keyPref) ? keyPref : modes[0];
   const needsKey = keyMode === "own" && !apiKey;
+  const needsInvite = keyMode === "invite" && !invite;
+  // Nothing to run the next message on, whichever way it would be paid for.
+  const unpaid = needsKey || needsInvite;
   const openSong = useSyncExternalStore(subscribeOpenSong, getOpenSong, getOpenSong);
   const songId = openSong.id;
   const isTemplate = openSong.isTemplate;
@@ -184,7 +232,14 @@ export default function ComposeChat({ signedIn, serverKey }: { signedIn: boolean
       const saved = window.localStorage.getItem(MODEL_KEY);
       if (saved && isComposeModel(saved)) setModel(saved);
       const mode = window.localStorage.getItem(KEY_MODE);
-      if (mode === "own" || mode === "site") setKeyPref(mode);
+      if (mode === "own" || mode === "site" || mode === "invite") setKeyPref(mode);
+      // A stored code is taken at face value rather than re-checked on load:
+      // it was checked when it was accepted, and what would change the answer
+      // -- running out, being turned off -- is reported by the turn that finds
+      // out, which is the only moment it matters.
+      const code = window.localStorage.getItem(INVITE_STORE);
+      if (code && looksLikeInviteCode(code)) setInvite(normalizeInviteCode(code));
+      else if (code) window.localStorage.removeItem(INVITE_STORE);
       // A stored key that no longer looks like one (a truncated write, a
       // format that has moved on) is dropped rather than sent: it can only
       // fail, and it would fail a minute into a turn.
@@ -208,7 +263,7 @@ export default function ComposeChat({ signedIn, serverKey }: { signedIn: boolean
     }
   }, []);
 
-  const pickKeyMode = useCallback((mode: "site" | "own") => {
+  const pickKeyMode = useCallback((mode: KeyMode) => {
     setKeyPref(mode);
     try {
       window.localStorage.setItem(KEY_MODE, mode);
@@ -246,6 +301,60 @@ export default function ComposeChat({ signedIn, serverKey }: { signedIn: boolean
     setEditingKey(false);
     try {
       window.localStorage.removeItem(KEY_STORE);
+    } catch {
+      /* nothing stored is the state we wanted anyway */
+    }
+  }, []);
+
+  // Try a code where it was typed. Shape first, so an obvious typo costs no
+  // round trip; then the server, because only it knows whether this site
+  // minted the code and whether it has anything left. Nothing is spent by
+  // asking -- the turn is what spends one.
+  const saveInvite = useCallback(async () => {
+    const code = normalizeInviteCode(inviteDraft);
+    if (!looksLikeInviteCode(code)) {
+      setInviteError("that doesn't look like an invite code");
+      return;
+    }
+    setCheckingInvite(true);
+    setInviteError("");
+    try {
+      const res = await fetch("/api/compose/invite", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ code }),
+      });
+      const data = (await res.json().catch(() => null)) as
+        | { ok?: boolean; remaining?: number | null; reason?: string }
+        | null;
+      if (!data?.ok) {
+        setInviteError(data?.reason ?? "couldn't check that code just now");
+        return;
+      }
+      setInvite(code);
+      setInviteLeft(data.remaining ?? null);
+      setInviteDraft("");
+      setEditingInvite(false);
+      try {
+        window.localStorage.setItem(INVITE_STORE, code);
+      } catch {
+        /* blocked storage: the code still works for this tab */
+      }
+    } catch {
+      setInviteError("couldn't reach the server to check that code");
+    } finally {
+      setCheckingInvite(false);
+    }
+  }, [inviteDraft]);
+
+  const forgetInvite = useCallback(() => {
+    setInvite("");
+    setInviteDraft("");
+    setInviteError("");
+    setInviteLeft(undefined);
+    setEditingInvite(false);
+    try {
+      window.localStorage.removeItem(INVITE_STORE);
     } catch {
       /* nothing stored is the state we wanted anyway */
     }
@@ -379,6 +488,11 @@ export default function ComposeChat({ signedIn, serverKey }: { signedIn: boolean
       setKeyError("add your Anthropic key first");
       return;
     }
+    if (keyMode === "invite" && !invite) {
+      setEditingInvite(true);
+      setInviteError("add your invite code first");
+      return;
+    }
     const session = window.seqbaby.serializeSet();
     // Only plain text crosses the wire between turns -- what the model called
     // and why lives entirely inside one request/response, so the transcript
@@ -439,6 +553,10 @@ export default function ComposeChat({ signedIn, serverKey }: { signedIn: boolean
           session,
           model,
           ...(keyMode === "own" ? { apiKey } : {}),
+          // A code is not a key: it buys a turn on the SITE's key, bounded by
+          // what it was minted with. The route spends one of those per
+          // message and hands back what is left.
+          ...(keyMode === "invite" ? { inviteCode: invite } : {}),
         }),
       });
       // Anything that failed before the route got to stream -- auth, a bad
@@ -454,11 +572,20 @@ export default function ComposeChat({ signedIn, serverKey }: { signedIn: boolean
         } catch {
           data = null;
         }
+        // 403 on a code turn is the code itself: used up, turned off, or
+        // expired since it was accepted. What it has left is no longer
+        // something we know, and a stale "3 turns left" sitting under "that
+        // code has been used up" would be the panel arguing with itself.
+        if (res.status === 403 && keyMode === "invite") setInviteLeft(undefined);
         land({ role: "error", text: describeFailure(res.status, raw, data) });
         return;
       }
 
       const started = (await res.json()) as ComposeResponse;
+      // What the code has left after paying for this one -- the route spends a
+      // turn only once the job is under way, so this arrives with the jobId or
+      // not at all.
+      if (started.inviteRemaining !== undefined) setInviteLeft(started.inviteRemaining);
       if (!started.jobId) {
         land({ role: "error", text: started.error ?? "couldn't start that" });
         return;
@@ -562,7 +689,7 @@ export default function ComposeChat({ signedIn, serverKey }: { signedIn: boolean
       setSending(false);
       setLive([]);
     }
-  }, [input, sending, messages, model, keyMode, apiKey]);
+  }, [input, sending, messages, model, keyMode, apiKey, invite]);
 
   // ---- the review bar ------------------------------------------------------
   //
@@ -658,7 +785,16 @@ export default function ComposeChat({ signedIn, serverKey }: { signedIn: boolean
                     {" "}
                     {siteKeyOffered
                       ? "You've chosen to run this on your own Anthropic key — add it below."
-                      : "Add your own Anthropic key below and it runs on that; no account needed."}
+                      : inviteOffered
+                        ? "Add your own Anthropic key below and it runs on that — or switch to an invite code if someone gave you one."
+                        : "Add your own Anthropic key below and it runs on that; no account needed."}
+                  </>
+                )}
+                {needsInvite && (
+                  <>
+                    {" "}
+                    Type the invite code you were given below and it runs on this site&apos;s key — no
+                    account needed.
                   </>
                 )}
               </div>
@@ -725,7 +861,7 @@ export default function ComposeChat({ signedIn, serverKey }: { signedIn: boolean
             </div>
           )}
           <div className={styles.chatTools}>
-            {siteKeyOffered && (
+            {modes.length > 1 && (
               <>
                 <label className={styles.chatModelLabel} htmlFor="compose-key-mode">
                   key
@@ -734,12 +870,19 @@ export default function ComposeChat({ signedIn, serverKey }: { signedIn: boolean
                   id="compose-key-mode"
                   className={styles.chatModel}
                   value={keyMode}
-                  onChange={(e) => pickKeyMode(e.target.value as "site" | "own")}
+                  onChange={(e) => pickKeyMode(e.target.value as KeyMode)}
                   title="whose Anthropic key this runs on"
                 >
-                  <option value="site" title="this site's key, shared between accounts and rate limited">
-                    this site
-                  </option>
+                  {modes.includes("site") && (
+                    <option value="site" title="this site's key, shared between accounts and rate limited">
+                      this site
+                    </option>
+                  )}
+                  {modes.includes("invite") && (
+                    <option value="invite" title="a code someone gave you — this site's key, for a set number of turns">
+                      invite code
+                    </option>
+                  )}
                   <option value="own" title="your own Anthropic key — your usage, your limits">
                     your own
                   </option>
@@ -763,6 +906,66 @@ export default function ComposeChat({ signedIn, serverKey }: { signedIn: boolean
               ))}
             </select>
           </div>
+          {keyMode === "invite" && (
+            <div className={styles.chatKey}>
+              {invite && !editingInvite ? (
+                <div className={styles.chatKeyRow}>
+                  <span className={styles.chatKeyName} title="the code this browser is composing on">
+                    {formatInviteCode(invite)}
+                  </span>
+                  <button
+                    className={styles.smallBtn}
+                    onClick={() => {
+                      setEditingInvite(true);
+                      setInviteError("");
+                    }}
+                  >
+                    change
+                  </button>
+                  <button className={styles.smallBtn} onClick={forgetInvite} title="remove it from this browser">
+                    forget
+                  </button>
+                </div>
+              ) : (
+                <div className={styles.chatKeyRow}>
+                  <input
+                    className={styles.chatKeyInput}
+                    type="text"
+                    autoComplete="off"
+                    spellCheck={false}
+                    placeholder="xxxx-xxxx-xxxx"
+                    aria-label="your invite code"
+                    value={inviteDraft}
+                    onChange={(e) => {
+                      setInviteDraft(e.target.value);
+                      setInviteError("");
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        saveInvite();
+                      }
+                    }}
+                  />
+                  <button
+                    className={`${styles.smallBtn} ${styles.smallBtnPrimary}`}
+                    onClick={saveInvite}
+                    disabled={checkingInvite || !inviteDraft.trim()}
+                  >
+                    {checkingInvite ? "checking…" : "use code"}
+                  </button>
+                </div>
+              )}
+              {inviteError && <div className={styles.chatKeyError}>{inviteError}</div>}
+              <div className={styles.chatKeyNote}>
+                {invite && inviteLeft !== undefined
+                  ? inviteLeft === null
+                    ? "Runs on this site's key. This code has no turn limit."
+                    : `Runs on this site's key. ${inviteLeft} ${inviteLeft === 1 ? "turn" : "turns"} left on this code.`
+                  : "A code from whoever runs this site. It buys a set number of composing turns on the site's key — no account, nothing to install."}
+              </div>
+            </div>
+          )}
           {keyMode === "own" && (
             <div className={styles.chatKey}>
               {apiKey && !editingKey ? (
@@ -835,7 +1038,11 @@ export default function ComposeChat({ signedIn, serverKey }: { signedIn: boolean
               className={styles.chatTextarea}
               rows={2}
               placeholder={
-                needsKey ? "add your key above to compose…" : "make me a techno beat…  (shift+enter for a new line)"
+                needsKey
+                  ? "add your key above to compose…"
+                  : needsInvite
+                    ? "add your invite code above to compose…"
+                    : "make me a techno beat…  (shift+enter for a new line)"
               }
               value={input}
               disabled={sending}
@@ -845,7 +1052,7 @@ export default function ComposeChat({ signedIn, serverKey }: { signedIn: boolean
             <button
               className={`${styles.smallBtn} ${styles.smallBtnPrimary}`}
               onClick={send}
-              disabled={sending || !input.trim() || needsKey}
+              disabled={sending || !input.trim() || unpaid}
             >
               send
             </button>

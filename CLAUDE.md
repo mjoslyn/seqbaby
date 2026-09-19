@@ -55,6 +55,7 @@ env / fx / eq / comp / mod / automation per track.
 │   ├── ComposeChat.tsx        the in-studio compose panel: ask for a song, in words; a turn's changes land in a review bar (audition / keep), never straight in
 │   ├── api/share/route.ts     anonymous ?s=<slug> share endpoint
 │   ├── api/compose/route.ts   starts a compose turn; api/compose/status polls one
+│   ├── api/compose/invite/route.ts  is this invite code good? (spends nothing)
 │   └── {songs,patches,profile,auth,account}/actions.ts   Supabase server actions
 ├── public/
 │   ├── js/                    THE ENGINE — see module map below
@@ -68,11 +69,13 @@ env / fx / eq / comp / mod / automation per track.
 │   ├── supabase/{client,server,middleware}.ts   Supabase SSR helpers
 │   ├── composeModels.js       which models a compose turn may run on (allowlist + dropdown)
 │   ├── composeKey.js          whose key it runs on: the shape check + the mask
+│   ├── composeInvite.js       the shape of an invite code (pure: panel, routes, script)
+│   ├── composeInvites.ts      checking and spending one, through the RPC
 │   ├── composeJobs.js         a running turn's record, its two secrets, and the limits
 │   └── api.js                 legacy Blobs share put/get (+ in-memory dev fallback)
 ├── middleware.ts              Supabase session refresh (skips engine assets)
 ├── supabase/
-│   ├── migrations/            profiles, songs, patches, song versions, templates, delete_own_account RPC
+│   ├── migrations/            profiles, songs, patches, song versions, templates, compose invites, delete_own_account RPC
 │   └── tests/                 negative RLS tests + the local auth stub they need
 ├── test/                      node --test suites (engine-side, no browser)
 ├── mcp/                       the MCP server: an agent writes a song through songBuilder.js
@@ -229,6 +232,9 @@ npm test               # node --test: the pure modules (session format, chance g
                        #   version tree, song names, the song builder)
 npm run mcp            # the MCP server on stdio (mcp/server.mjs) — an agent writes songs
 npm run test:rls       # RLS policy tests — builds a throwaway Postgres in docker
+npm run invite         # mint a compose invite code (needs SUPABASE_SECRET_KEY)
+                       #   npm run invite -- --turns 5 --days 7 --label "for dan"
+                       #   npm run invite -- list   |   npm run invite -- revoke <code>
 ```
 
 Account features need `NEXT_PUBLIC_SUPABASE_URL` + `NEXT_PUBLIC_SUPABASE_ANON_KEY`
@@ -1512,6 +1518,7 @@ can see.
 |---|---|
 | `POST/GET app/api/share/route.ts` | anonymous `?s=<slug>` share links (public `songs` rows) |
 | `POST app/api/compose/route.ts` | starts one compose turn → `{jobId, jobToken}`; the turn runs in `netlify/functions/compose-background.mjs` |
+| `POST app/api/compose/invite/route.ts` | whether an invite code is good, spending nothing |
 | `GET app/api/compose/status/route.ts` | what the browser polls while one runs — activity, then the song |
 | `app/songs/actions.ts` | `saveSong` / `saveNamedSong` (both append a version), `listSongs`, `loadSong`, `forkSong`, `listVersions`, `loadVersion`, `labelVersion`, `deleteVersion`, `setSongTemplate`, `setDefaultTemplate`, `getDefaultTemplate` |
 | `app/patches/actions.ts` | `publishPatch`, `listMyPatches`, `listPublicPatches`, `getPatch`, `deletePatch` |
@@ -1863,13 +1870,14 @@ panel ──▶ POST /api/compose ──▶ createJob ──▶ POST the worker 
   lands). So the route starts a background function and answers immediately,
   and the browser polls. `next dev` has no background functions and no ceiling
   either, so there the same loop runs inline; one loop, two callers.
-- **Two ways a turn is paid for, and that decides what it needs.** The
+- **Three ways a turn is paid for, and that decides what it needs.** The
   deploy's key (`ANTHROPIC_API_KEY`) needs an account, because the spend is the
-  site's. A key the visitor brings needs **nothing at all** — no account, and
+  site's. An **invite code** needs the deploy's key and nothing else — see
+  below. A key the visitor brings needs **nothing at all** — no account, and
   no key on the deploy — because the spend is theirs. That is the whole reason
   the panel is rendered outside `AccountBar`'s signed-in branch: a key of your
-  own is the one way to compose here without an account, and a deploy with no
-  key of its own still has a working compose panel.
+  own, or a code somebody gave you, is how you compose here without an account,
+  and a deploy with no key of its own still has a working compose panel.
 - **A brought key is never stored.** It rides the message it pays for, and the
   route hands it to the worker in the same fire-and-forget POST that starts
   one. It is deliberately NOT on the job record — that record is a Netlify
@@ -1910,6 +1918,58 @@ panel ──▶ POST /api/compose ──▶ createJob ──▶ POST the worker 
   visitor's turns keep no transcript beyond the tab: there is no song to attach
   one to. Everything else about the panel — the model picker, the activity
   line, the warnings — is the same on either key.
+
+### Invite codes — the site's key, without an account (migration 0012)
+
+A code minted by whoever runs the site, typed into the panel by whoever was
+given it, good for a bounded number of turns on the deploy's key and nothing
+else. It is the third way in because the other two each ask for something a
+person you want to hand the thing to does not have: an account, or an Anthropic
+console and a card.
+
+```
+npm run invite -- --turns 5 --days 7 --label "for dan"   ->  4kdm-7tqw-9bnp
+```
+
+- **A code buys TURNS, because a turn is what costs money.** `max_turns` is the
+  budget it was minted with, and a code that leaks costs that and stops —
+  which is the only reason it is safe to hand one to somebody. Uncapped is
+  possible and has to be typed (`--turns none`), for the same reason.
+- **It is not an account and reaches nothing else.** No sign-in, no songs, no
+  patches; the one thing it can do is spend the deploy's key inside
+  `POST /api/compose`. Everything downstream — the worker, the status route —
+  learns nothing: to them it is a turn on the site's key like any other.
+- **Nobody reads the table through the API.** `compose_invites` has RLS on and
+  **no policies at all**, which denies everything, so the anon key cannot
+  enumerate codes and no signed-in account can mint one — minting spend against
+  the site's key is exactly what an admin flag would eventually get wrong. The
+  two ways in are `redeem_compose_invite` (SECURITY DEFINER, answers about the
+  ONE code it is handed) and the secret key, which `scripts/compose-invite.mjs`
+  uses from the owner's own machine. `supabase/tests/rls_test.sql` asserts both
+  halves, including the structural one: a policy added here to "make the table
+  work" is the mistake.
+- **Checked, then spent, in that order** (`p_consume`). A look-before means a
+  revoked or spent code is told so without a job record being written for it;
+  the spend happens only once the site's own rate limits have let the turn
+  through, so a 429 costs the code nothing. The second call is not trusted from
+  the first — `FOR UPDATE` in the function is where two browsers racing for a
+  code's last turn is settled, and a job that loses is ended rather than handed
+  to a worker.
+- **The limits ration the worker as they do for everyone**, in a bucket of the
+  code's own (`invites/<hash>` beside `keys/<hash>` and `users/<id>`, `bucketFor`
+  in lib/composeJobs.js). The turn budget is Postgres's; how hard one code may
+  drive this site's compute is still `MAX_IN_FLIGHT` / `MAX_PER_HOUR`.
+- **The code is hashed in the job record and nowhere else on the deploy**, for
+  the reason a brought key is not in one at all: a blob outlives the turn.
+- **The panel shows what is left.** `POST /api/compose` hands back
+  `inviteRemaining` after spending one, so the budget is visible where it is
+  being spent rather than only to whoever minted the code; a code is remembered
+  in `localStorage` (`seqbaby.composeInvite.v1`) with no `remember` checkbox,
+  since unlike a key it is worth a fixed number of turns here and nothing
+  anywhere else.
+- **Offered only to a visitor who is signed OUT** of a deploy that has a key:
+  someone signed in already has what a code buys, and a third option that adds
+  nothing is just a third option.
 
 ## A session onto a RUNNING engine (`liveSet.js`) — and the audition
 

@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { createJob, hashApiKey } from "@/lib/composeJobs.js";
+import { createJob, hashApiKey, hashInviteCode } from "@/lib/composeJobs.js";
 import { newCtx, runComposeTurn } from "@/mcp/composeTurn.mjs";
 import { appendJobEvent, finishJob } from "@/lib/composeJobs.js";
 import { isComposeModel } from "@/lib/composeModels.js";
 import { describeTurnFailure, looksLikeApiKey } from "@/lib/composeKey.js";
+import { looksLikeInviteCode, normalizeInviteCode } from "@/lib/composeInvite.js";
+import { tryInviteCode } from "@/lib/composeInvites";
 
 // Node runtime: the loop imports public/js/songBuilder.js (dependency-free --
 // the same guarantee that lets mcp/server.mjs and the tests run it under
@@ -32,7 +34,8 @@ async function currentUserId(): Promise<string | null> {
   }
 }
 
-// POST /api/compose { message, history, session, model?, apiKey? } -> { jobId, jobToken }
+// POST /api/compose { message, history, session, model?, apiKey?, inviteCode? }
+//   -> { jobId, jobToken }
 //
 // This route does NOT write the song. Writing a whole song is dozens of model
 // rounds and takes minutes; a synchronous function gets 26 seconds (measured:
@@ -41,10 +44,17 @@ async function currentUserId(): Promise<string | null> {
 // background worker that nothing is waiting on, and the browser polls
 // /api/compose/status.
 //
-// Two ways a turn gets paid for, and which one it is decides what it needs:
+// Three ways a turn gets paid for, and which one it is decides what it needs:
 //
 //   the deploy's key   an account, because the spend is the site's
+//   an invite code     nothing but the code, which the site's owner minted
+//                      with a budget in turns (migration 0012)
 //   a brought key      nothing at all, because the spend is the visitor's
+//
+// The middle one is the deploy's key too -- what the code buys is permission
+// to spend it, bounded, without an account. So it is checked here and spent
+// here, and everything downstream (the worker, the status route) is unchanged:
+// to them it is a turn on this site's key like any other.
 //
 // A brought key is never stored: it goes from this request into the POST that
 // starts the worker and nowhere else (see lib/composeJobs.js).
@@ -55,6 +65,7 @@ export async function POST(req: Request) {
     session?: unknown;
     model?: string;
     apiKey?: string;
+    inviteCode?: string;
   };
   try {
     body = await req.json();
@@ -74,22 +85,45 @@ export async function POST(req: Request) {
     );
   }
 
-  const userId = brought ? null : await currentUserId();
+  // A code is only consulted when no key was brought: a visitor who has their
+  // own key is not spending the site's, so there is nothing for a code to let
+  // them do. Shape-checked here as well, so a typo costs no round trip.
+  const invite = !brought && typeof body.inviteCode === "string" ? normalizeInviteCode(body.inviteCode) : "";
+  if (invite && !looksLikeInviteCode(invite)) {
+    return NextResponse.json({ error: "that doesn't look like an invite code" }, { status: 400 });
+  }
 
-  // No key of their own: the deploy's, which is the account holders'.
-  if (!brought) {
-    if (!userId) {
-      return NextResponse.json(
-        { error: "sign in to compose on this site's key, or add your own Anthropic key" },
-        { status: 401 },
-      );
-    }
-    if (!process.env.ANTHROPIC_API_KEY) {
-      return NextResponse.json(
-        { error: "this deploy has no Anthropic key of its own — add your own key to compose" },
-        { status: 400 },
-      );
-    }
+  // Whose allowance this counts against. A brought key and a code each stand
+  // on their own, so neither carries an account even when one is signed in --
+  // see `bucketFor` in lib/composeJobs.js.
+  const userId = brought || invite ? null : await currentUserId();
+
+  // Nothing that says who this is: no key, no code, no account.
+  if (!brought && !invite && !userId) {
+    return NextResponse.json(
+      { error: "sign in to compose on this site's key, or use an invite code or your own Anthropic key" },
+      { status: 401 },
+    );
+  }
+  // Anything but a brought key runs on the deploy's, so the deploy needs one.
+  // A code is permission to spend that key, not a key -- so a deploy without
+  // one cannot honour a code either, and says so rather than failing a minute
+  // into a turn.
+  if (!brought && !process.env.ANTHROPIC_API_KEY) {
+    return NextResponse.json(
+      { error: "this deploy has no Anthropic key of its own — add your own key to compose" },
+      { status: 400 },
+    );
+  }
+
+  // Look before starting a job: a code that is revoked, expired or spent
+  // should be told so plainly, and a guessed one should not leave a job
+  // record behind it. Nothing is spent yet -- that happens once the site's own
+  // limits have let the turn through, so a refusal here costs the code
+  // nothing.
+  if (invite) {
+    const check = await tryInviteCode(invite, { consume: false });
+    if (!check.ok) return NextResponse.json({ error: check.reason }, { status: 403 });
   }
 
   // The model is the browser's to pick per message, but not to invent. On the
@@ -124,6 +158,7 @@ export async function POST(req: Request) {
   const { id, token, viewToken, error } = await createJob({
     userId,
     keyHash: brought ? hashApiKey(brought) : null,
+    inviteHash: invite ? hashInviteCode(invite) : null,
     message,
     history,
     session: body.session,
@@ -132,6 +167,23 @@ export async function POST(req: Request) {
   // Over this bucket's limits. 429 so the panel can say so plainly rather than
   // treating it as a failure to start.
   if (error || !id) return NextResponse.json({ error: error ?? "couldn't start that" }, { status: 429 });
+
+  // The turn is going ahead, so the code pays for it. Checked a second time
+  // rather than trusted from the look above, because the two are not the same
+  // question: a code on its last turn can be spent by another browser in
+  // between, and the row lock in `redeem_compose_invite` is the only place
+  // that race is settled. A job that loses it is ended here rather than
+  // handed to a worker -- its record exists for a moment and is released with
+  // it.
+  let inviteRemaining: number | null | undefined;
+  if (invite) {
+    const spent = await tryInviteCode(invite, { consume: true });
+    if (!spent.ok) {
+      await finishJob(id, { status: "error", error: spent.reason ?? "that code is no longer good" }).catch(() => {});
+      return NextResponse.json({ error: spent.reason }, { status: 403 });
+    }
+    inviteRemaining = spent.remaining ?? null;
+  }
 
   // Aim the worker at the deploy this request arrived on, rather than at
   // whatever a site-wide env var names: a branch preview has to hand its job
@@ -169,7 +221,13 @@ export async function POST(req: Request) {
   // The view token is how the browser proves this job is its own to poll --
   // the only proof a signed-out visitor has. Handed back once, held in memory
   // for the life of the turn, and never stored anywhere.
-  return NextResponse.json({ jobId: id, jobToken: viewToken }, { status: 202 });
+  // `inviteRemaining` is what the code has left after paying for this turn --
+  // the panel prints it, so the budget is visible where it is being spent
+  // rather than only to whoever minted the code. Absent when no code was used.
+  return NextResponse.json(
+    { jobId: id, jobToken: viewToken, ...(inviteRemaining !== undefined ? { inviteRemaining } : {}) },
+    { status: 202 },
+  );
 }
 
 /**

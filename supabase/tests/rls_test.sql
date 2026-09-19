@@ -395,6 +395,93 @@ begin
 end $$;
 
 \echo ''
+\echo '== compose invites: a code is spendable, never readable =='
+
+-- A code is permission to spend the deploy's Anthropic key, so two things
+-- have to hold at once: anybody who was given one can use it, and nobody can
+-- read, mint or top up one through the API. The table has RLS on and no
+-- policies at all, which denies everything; the SECURITY DEFINER function is
+-- the only way in, and it only ever answers about a code the asker already
+-- knows.
+insert into public.compose_invites (code, label, max_turns) values
+  ('aaaabbbbcccc', 'two turns', 2),
+  ('ddddeeeeffff', 'revoked', 10),
+  ('gggghhhhjjjj', 'expired', 10);
+update public.compose_invites set revoked_at = now() where code = 'ddddeeeeffff';
+update public.compose_invites set expires_at = now() - interval '1 day' where code = 'gggghhhhjjjj';
+
+begin;
+set local role anon;
+do $$
+declare n bigint; r jsonb;
+begin
+  -- The table itself, from the key the browser holds. Not one row, not a
+  -- count, not a code to guess with.
+  select count(*) into n from public.compose_invites;
+  if n <> 0 then raise exception 'FAIL  anon read % invite codes', n; end if;
+  raise notice 'PASS  anon cannot read the invite codes';
+
+  begin
+    insert into public.compose_invites (code, max_turns) values ('mintedbyanon', 1000);
+    raise exception 'FAIL  anon minted an invite code (that is spend on the site''s key)';
+  exception when insufficient_privilege then
+    raise notice 'PASS  anon cannot mint an invite code';
+  end;
+
+  -- Topping one up is minting by another name.
+  with u as (
+    update public.compose_invites set turns_used = 0, max_turns = 1000
+     where code = 'aaaabbbbcccc' returning 1)
+  select count(*) into n from u;
+  if n <> 0 then raise exception 'FAIL  anon refilled an invite code'; end if;
+  raise notice 'PASS  anon cannot refill an invite code';
+
+  -- And the point of the whole thing: a visitor with no account spends one.
+  r := public.redeem_compose_invite('AAAA-BBBB-CCCC', false);
+  if (r->>'ok')::boolean is not true then raise exception 'FAIL  a good code was refused: %', r; end if;
+  if (r->>'remaining')::int <> 2 then raise exception 'FAIL  a look-before spent a turn: %', r; end if;
+  raise notice 'PASS  anon can check a code, however it was typed, without spending it';
+
+  r := public.redeem_compose_invite('aaaabbbbcccc');
+  if (r->>'remaining')::int <> 1 then raise exception 'FAIL  spending a turn did not cost one: %', r; end if;
+  r := public.redeem_compose_invite('aaaabbbbcccc');
+  if (r->>'remaining')::int <> 0 then raise exception 'FAIL  the budget did not run down: %', r; end if;
+  r := public.redeem_compose_invite('aaaabbbbcccc');
+  if (r->>'ok')::boolean is not false then raise exception 'FAIL  a spent code kept paying: %', r; end if;
+  raise notice 'PASS  a code stops at the turns it was minted with';
+
+  if (public.redeem_compose_invite('ddddeeeeffff')->>'ok')::boolean is not false then
+    raise exception 'FAIL  a revoked code still works';
+  end if;
+  if (public.redeem_compose_invite('gggghhhhjjjj')->>'ok')::boolean is not false then
+    raise exception 'FAIL  an expired code still works';
+  end if;
+  if (public.redeem_compose_invite('nosuchcode12')->>'ok')::boolean is not false then
+    raise exception 'FAIL  a code nobody minted works';
+  end if;
+  raise notice 'PASS  revoked, expired and unknown codes are all refused';
+end $$;
+rollback;
+
+-- Structural, for song_chats' reason: a policy added here to "make the table
+-- work" would be the mistake, since the table is meant not to work through
+-- the API at all. The function is the interface.
+do $$
+declare bad text;
+begin
+  select string_agg(policyname, ', ') into bad
+    from pg_policies
+   where schemaname = 'public' and tablename = 'compose_invites';
+  if bad is not null then
+    raise exception 'FAIL  compose_invites has policies (%) — codes are readable through the anon key', bad;
+  end if;
+  raise notice 'PASS  compose_invites is reachable only through redeem_compose_invite';
+end $$;
+
+delete from public.compose_invites
+ where code in ('aaaabbbbcccc', 'ddddeeeeffff', 'gggghhhhjjjj');
+
+\echo ''
 \echo '== patches =='
 
 begin;

@@ -14,7 +14,8 @@
     "test:rls": "bash scripts/test-rls.sh",
     "netlify:dev": "netlify dev",
     "legacy:dev": "node --watch --env-file=.env server.js",
-    "mcp": "node mcp/server.mjs"
+    "mcp": "node mcp/server.mjs",
+    "invite": "node scripts/compose-invite.mjs"
   },
   "engines": {
     "node": ">=20"
