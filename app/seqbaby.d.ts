@@ -64,7 +64,9 @@ declare global {
        */
       jam: {
         /** Start telling `send` about edits; the session as it is now is the base. */
-        start: (room: { send: (msg: { type: "patch"; patch: unknown }) => void }) => void;
+        start: (room: {
+          send: (msg: { type: "patch"; patch: unknown } | { type: "playhead"; originMs: number; bpm: number }) => void;
+        }) => void;
         stop: () => void;
         active: () => boolean;
         /** Send whatever is waiting to settle, now. */
@@ -76,6 +78,14 @@ declare global {
         receivePatch: (patch: unknown, who?: { name?: string; id?: string }) => { ok: boolean; reason?: string };
         /** The room's whole session, on joining or after a refused patch. */
         receiveState: (session: unknown, who?: { name?: string; id?: string }) => { ok: boolean; reason?: string };
+        /**
+         * The play button's own action while in a jam: play/stop stay this
+         * screen's own decision, but a start lands on the step the room's
+         * beat is on rather than always on step 0.
+         */
+        togglePlay: () => void;
+        /** A peer pressed play and is saying where the beat is. */
+        receivePhase: (originMs: number, bpm: number) => void;
       };
       state: unknown;
     };

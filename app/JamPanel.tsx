@@ -40,7 +40,8 @@ type Wire =
   | { type: "hello"; from: string; to: string }
   | { type: "need-state"; from: string; to: string }
   | { type: "state"; from: string; to: string; session: unknown }
-  | { type: "patch"; from: string; patch: unknown };
+  | { type: "patch"; from: string; patch: unknown }
+  | { type: "playhead"; from: string; originMs: number; bpm: number };
 
 /** A message as this studio sends it: `from` is stamped on the way out. A
  *  plain Omit over the union would keep only the keys every member shares. */
@@ -231,6 +232,13 @@ export default function JamPanel({
             askedRef.current = msg.from;
             send({ type: "need-state", to: msg.from });
           }
+          return;
+        }
+        case "playhead": {
+          // A newcomer isn't live yet — the room's own session (and its own
+          // sense of where the beat is) hasn't arrived to land this on.
+          if (waitingRef.current) return;
+          api.jam.receivePhase(msg.originMs, msg.bpm);
           return;
         }
       }
@@ -438,8 +446,9 @@ export default function JamPanel({
           {!inRoom && (
             <div className={styles.jamIntro}>
               Start a jam and send the link. Everyone who opens it edits this song
-              with you — steps, knobs, tracks, all of it, as it happens. Each of you
-              plays it on your own machine, so press play wherever you are.
+              with you — steps, knobs, tracks, all of it, as it happens. Press play
+              whenever you like; you'll land on the same step as everyone else who
+              has.
             </div>
           )}
           {error && <div className={styles.chatWarn}>{error}</div>}

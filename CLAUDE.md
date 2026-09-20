@@ -2233,11 +2233,38 @@ studio B ◀──mergeSet── jam.js ◀──patch── JamPanel ◀──�
   nobody answering within 8s leaves them with what they have, which then IS
   the room's song. Whoever started the jam is only the first member: the room
   outlives them. `DefaultTemplate` skips a `?jam=` load for `?s=`'s reason.
-- **Not shared, deliberately**: the transport (everyone hears their own copy
-  on their own clock — two browsers across a network cannot play in lockstep)
-  and the view (`activePattern` is stripped, as history.js strips it).
-  Automated fields are pinned as history pins them (`pinAutomated`, exported
-  for this), so a lane rewriting the cutoff every step is not traffic.
+- **Play and stop stay each person's own decision; where a start LANDS is
+  shared.** Pressing play while in a jam calls `jamTogglePlay()` (jam.js)
+  instead of `togglePlay()` — nobody else's screen is asked to do anything —
+  but a start no longer always begins at step 0. `phase` is a virtual beat
+  that keeps going whether or not anyone is actually playing: the wall-clock
+  instant (`originMs`) that would be its step 0, at the bpm it was set at.
+  Pressing play computes the step that beat is on right now
+  (`currentPhaseTick`), starts there, and re-broadcasts the same origin
+  unchanged (`{type:"playhead", originMs, bpm}`) so a later joiner still
+  lands on the beat rather than on whenever they last heard about it. The
+  first press in a room has no `phase` yet and starts at step 0 like solo
+  play always has, which is what seeds it for everyone after. `startPlayback`
+  / `stopPlayback` (transport.js) are the two idempotent halves `togglePlay`
+  used to do as one toggle, and `startPlayback` now takes an optional `tick`
+  to start counting from instead of 0 — a track's own `trackTick` lands at
+  `tick * speed`, so a 2x track still starts at its own equivalent position.
+  There is still no shared clock: each browser renders the sequence on its
+  own AudioContext from the moment IT presses play, at its own sample
+  rate — this lines up which STEP plays, never the audio samples, and two
+  browsers across a network sharing a sample clock is exactly as impossible
+  as it always was. A `phase` that's gone stale (the room went quiet an hour
+  ago) still answers "which step" — that's fine, the point is that two
+  presses land in the same place in the pattern, not that a press summons a
+  beat nobody asked for. Nothing here touches the euclid ring's or a synced
+  LFO's own phase (`_transportStartTime`, `euclidOrigin` in lfo.js) — those
+  still start fresh from whatever moment this screen pressed play, exactly as
+  solo play always has; only the pattern's own step count (`state.tick`,
+  `t.trackTick`) is aligned.
+- **Not shared**: the view (`activePattern` is stripped, as history.js strips
+  it). Automated fields are pinned as history pins them (`pinAutomated`,
+  exported for this), so a lane rewriting the cutoff every step is not
+  traffic.
 - **The engine knows nothing about Supabase, the panel nothing about
   sessions.** jam.js takes a `send` and is handed what comes back
   (`window.seqbaby.jam`); JamPanel.tsx owns the channel, presence, the invite

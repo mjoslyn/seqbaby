@@ -19,6 +19,7 @@ import { installParamContextMenu } from "./paramMenu.js";
 import { copyPattern, openPatternMenu, renderPatternGrid } from "./patternBar.js";
 import { attachLevelDrag, setActiveTrack } from "./render.js";
 import { initScaleUI, openChordMenu, syncChordUI } from "./scaleUI.js";
+import { inJam, jamTogglePlay } from "./jam.js";
 import { loadShareFromUrl, onExportSet, onImportSet, onLoadSet, onNewSet, onSaveSet, onShareSet, STARTER_TRACKS } from "./session.js";
 import { state, switchPattern } from "./state.js";
 import { renderStepGrid } from "./stepGrid.js";
@@ -512,7 +513,12 @@ export function init() {
   rebuildEngineCatalog();
   requestAnimationFrame(meterTick);
 
-  document.getElementById("play").addEventListener("click", togglePlay);
+  // In a jam, a start lands on the room's current step instead of always
+  // step 0; play/stop are still this screen's own decision either way (see
+  // the playhead-position section of jam.js).
+  document.getElementById("play").addEventListener("click", () => {
+    if (inJam()) jamTogglePlay(); else togglePlay();
+  });
   buildBeatIndicator();
   paintBeatIndicator(1);
   const metroBtn = document.getElementById("metronome");
