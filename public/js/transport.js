@@ -333,42 +333,59 @@ export function silenceAllVoices() {
 // Render the current pattern(s) by capturing live playback via a
 // MediaStreamDestinationNode + MediaRecorder. Optional post-decode to 16-bit
 // PCM WAV.
-export async function togglePlay() {
+/**
+ * Stop the transport. Idempotent — a no-op if already stopped, which is what
+ * lets a jam's remote "stop" land on a peer whose local state.playing already
+ * agrees without a toggle turning it back on.
+ */
+export async function stopPlayback() {
+  if (!state.playing) return;
   const btn = document.getElementById("play");
-  if (state.playing) {
-    Tone.Transport.stop();
-    Tone.Transport.cancel(0);
-    if (state.repeatId !== null) { Tone.Transport.clear(state.repeatId); state.repeatId = null; }
-    // Fast master-gain cut. Tone synth triggerAttackRelease calls issued by the
-    // last few scheduleRepeat callbacks live inside Tone's ~100 ms lookahead and
-    // are already queued as native Web Audio events — stopping the Transport
-    // doesn't unschedule them. Ramping master to 0 makes them inaudible so stop
-    // actually stops.
-    if (state.masterGain && state.audioCtx) {
-      const now = state.audioCtx.currentTime;
-      const g = state.masterGain.gain;
-      try {
-        g.cancelScheduledValues(now);
-        g.setValueAtTime(g.value, now);
-        g.linearRampToValueAtTime(0, now + 0.02);
-      } catch {}
-    }
-    // The gain stays down until something asks for the bus back (see
-    // wakeMasterBus). Restoring it on a timer instead sounds wrong: silencing a
-    // voice *releases* it, and a long-release patch would then fade back in
-    // over the top of the silence you just asked for.
-    silenceAllVoices();
-    state.playing = false;
-    state._transportStartTime = null;
-    refreshNoiseBeds();                              // vinyl crackle follows the transport
-    btn.textContent = "play";
-    btn.classList.remove("is-playing");
-    state.tick = 0;
-    for (const t of state.tracks) { t.trackTick = 0; t.speedAccum = 0; }
-    paintNowIndicator();
-    setStatus("stopped");
-    return;
+  Tone.Transport.stop();
+  Tone.Transport.cancel(0);
+  if (state.repeatId !== null) { Tone.Transport.clear(state.repeatId); state.repeatId = null; }
+  // Fast master-gain cut. Tone synth triggerAttackRelease calls issued by the
+  // last few scheduleRepeat callbacks live inside Tone's ~100 ms lookahead and
+  // are already queued as native Web Audio events — stopping the Transport
+  // doesn't unschedule them. Ramping master to 0 makes them inaudible so stop
+  // actually stops.
+  if (state.masterGain && state.audioCtx) {
+    const now = state.audioCtx.currentTime;
+    const g = state.masterGain.gain;
+    try {
+      g.cancelScheduledValues(now);
+      g.setValueAtTime(g.value, now);
+      g.linearRampToValueAtTime(0, now + 0.02);
+    } catch {}
   }
+  // The gain stays down until something asks for the bus back (see
+  // wakeMasterBus). Restoring it on a timer instead sounds wrong: silencing a
+  // voice *releases* it, and a long-release patch would then fade back in
+  // over the top of the silence you just asked for.
+  silenceAllVoices();
+  state.playing = false;
+  state._transportStartTime = null;
+  refreshNoiseBeds();                              // vinyl crackle follows the transport
+  btn.textContent = "play";
+  btn.classList.remove("is-playing");
+  state.tick = 0;
+  for (const t of state.tracks) { t.trackTick = 0; t.speedAccum = 0; }
+  paintNowIndicator();
+  setStatus("stopped");
+}
+
+/**
+ * Start the transport from the top. Idempotent — a no-op if already playing,
+ * for the same reason stopPlayback() is (see there).
+ *
+ * `opts.tick` starts the count somewhere other than the top — a global 16th-
+ * note index rather than 0, so this screen's step 0 doesn't always coincide
+ * with the moment this particular press landed. A jam uses it to land on the
+ * step the room's been on all along (jam.js); solo play never passes it.
+ */
+export async function startPlayback(opts = {}) {
+  if (state.playing) return;
+  const btn = document.getElementById("play");
   // iOS: synchronously prime audio inside the click's gesture task BEFORE
   // awaiting anything else. Without this the context resume that ensureAudio
   // attempts later won't be honored on Safari.
@@ -390,8 +407,12 @@ export async function togglePlay() {
   Tone.Transport.swingSubdivision = "16n";
 
   if (state.repeatId !== null) Tone.Transport.clear(state.repeatId);
-  state.tick = 0;
-  for (const t of state.tracks) { t.trackTick = 0; t.speedAccum = 0; }
+  const startTick = Math.max(0, Math.floor(opts.tick ?? 0));
+  state.tick = startTick;
+  // A track's own trackTick runs at `speed` steps per global tick (see the
+  // scheduler below); land it where it would be had it been counting from
+  // the same global tick this screen is starting at, not from 0.
+  for (const t of state.tracks) { t.trackTick = Math.round(startTick * Math.max(0.0001, t.speed ?? 1)); t.speedAccum = 0; }
   // Restore master gain — the stop branch ramps it to 0 to kill the lookahead-
   // queued tail of Tone synth events that Transport.stop() can't unschedule.
   if (state.masterGain && state.audioCtx) {
@@ -647,6 +668,12 @@ export async function togglePlay() {
   btn.textContent = "stop";
   btn.classList.add("is-playing");
   setStatus("playing");
+}
+
+/** The play button's own action: whichever of the two applies right now. */
+export async function togglePlay() {
+  if (state.playing) return stopPlayback();
+  return startPlayback();
 }
 
 /**

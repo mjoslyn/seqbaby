@@ -7,7 +7,7 @@
 // installed. Keep this surface intentional and additive.
 import { loadPatches, savePatch, storePatches } from "./catalog.js";
 import { canRedo, canUndo, redo, undo } from "./history.js";
-import { flushJam, inJam, jamState, receiveJamPatch, receiveJamState, startJam, stopJam } from "./jam.js";
+import { flushJam, inJam, jamState, jamTogglePlay, receiveJamPatch, receiveJamPhase, receiveJamState, startJam, stopJam } from "./jam.js";
 import { mergeSet } from "./liveSet.js";
 import {
   applySet,
@@ -84,6 +84,13 @@ export function installAppApi() {
       state: jamState,
       receivePatch: receiveJamPatch,
       receiveState: receiveJamState,
+      // Playhead position: the play button calls this instead of togglePlay
+      // while in a jam — play/stop stay this screen's own decision, but a
+      // start lands on the step the room's beat is on rather than always on
+      // step 0. A peer's own start tells this screen where that was. See the
+      // playhead-position section of jam.js.
+      togglePlay: jamTogglePlay,
+      receivePhase: receiveJamPhase,
     },
     // live engine state (read-only handle; mutate via the functions above)
     get state() {
