@@ -6,6 +6,7 @@ import SongsMenu from "@/app/SongsMenu";
 import SaveButton from "@/app/SaveButton";
 import NewSongButton from "@/app/NewSongButton";
 import ComposeChat from "@/app/ComposeChat";
+import JamPanel from "@/app/JamPanel";
 import { IconMenu } from "@/app/menuIcons";
 import styles from "@/app/ui.module.css";
 
@@ -129,6 +130,10 @@ export function AccountBar({
             account. Signed in with a key on the deploy, the panel offers the
             choice. */}
         <ComposeChat signedIn={!!name} serverKey={serverKey} />
+        {/* Outside the signed-in branch too: a jam needs nobody to have an
+            account, only the link. The account's name is what a signed-in
+            member is called in the room. */}
+        <JamPanel accountName={name} />
         {name ? (
           <>
             <SongsMenu />
