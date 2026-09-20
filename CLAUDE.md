@@ -1369,12 +1369,19 @@ never serialized: `syncTrackSoundUI` clears it, so a sound arriving from a
 session, a patch or a p-lock recall brings its own answer rather than inheriting
 the last one's. The `×` is inline-only (style.css): in the modal every stage is
 listed whatever its level, which is where a bypassed one is turned back on, so
-there is nothing there for it to remove. On desktop the inline rack is a grid
-of stage cards, three across at most (`auto-fill` with a minimum of a third
-of the panel, 250px at least; name and `×` on the card's top line with the
-knobs wrapping under), not one stage per line: five stages stacked
-cost more height than the step grid. Below 768px the phone block's
-one-row-per-stage layout stands, and the modal is untouched.
+there is nothing there for it to remove.
+
+**The inline panels share one wrapper** (`.sq-track__live`, studioMarkup.ts:
+filter, env, eq, comp, the rack, then the mod panel) and on desktop it is a
+grid of cards, three across at most (`auto-fill` with a minimum of a third of
+the wrapper, 250px at least). The rack's panel goes `display: contents` so each
+engaged STAGE is a card beside the filter's, name and `×` on the card's top
+line with the knobs wrapping under; the mod panel spans the row, since an LFO
+row is an eight-column grid too wide for a third of a track. The wrapper is
+invisible to everything else: `gap: inherit` keeps the track's own spacing, it
+hides itself when nothing in it is live, and the modals reparent a panel
+through an anchor at its own position. Below 768px the phone block's
+one-per-line layout stands, and the modal is untouched.
 
 **Right-click a parameter** opens `paramMenu.js`: what the control does, its
 LFO row, its automation lane and its macro assignment — the same widgets the panels use
