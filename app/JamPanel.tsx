@@ -57,6 +57,11 @@ type Status =
   | "error";
 
 const ROOM_PARAM = "jam";
+/** Who sent the invite, on the link: the card a pasted link gets is built by
+ *  page.tsx's generateMetadata, and a room has no record anywhere of who
+ *  started it -- so the link carries the host's handle, and the server checks
+ *  it against the profiles before naming anyone. See jamHostName. */
+const BY_PARAM = "by";
 const NAME_KEY = "seqbaby.jamName.v1";
 const EVENT = "msg";
 /** How long a newcomer waits for the room's session before keeping their own. */
@@ -89,14 +94,27 @@ function writeRoomToUrl(room: string | null) {
   try {
     const url = new URL(location.href);
     if (room) url.searchParams.set(ROOM_PARAM, room);
-    else url.searchParams.delete(ROOM_PARAM);
+    else {
+      url.searchParams.delete(ROOM_PARAM);
+      // The handle rode in on the invite; out of the room it names nobody.
+      url.searchParams.delete(BY_PARAM);
+    }
     history.replaceState({}, "", url.toString());
   } catch {
     /* a URL we cannot rewrite is still a room we can be in */
   }
 }
 
-export default function JamPanel({ accountName }: { accountName: string | null }) {
+export default function JamPanel({
+  accountName,
+  accountUsername = null,
+}: {
+  accountName: string | null;
+  /** The account's handle, for the invite link's `by=`. A guest's typed name
+   *  is not put on the link: it cannot be checked, and a card will only name
+   *  someone the profiles know. */
+  accountUsername?: string | null;
+}) {
   const [ready, setReady] = useState(false);
   const [open, setOpen] = useState(false);
   const [room, setRoom] = useState<string | null>(null);
@@ -373,7 +391,13 @@ export default function JamPanel({ accountName }: { accountName: string | null }
     if (ch) void ch.track({ name: displayName(), color: colorFor(meRef.current), joinedAt: peersRef.current.find((p) => p.id === meRef.current)?.joinedAt || Date.now() } satisfies Presence);
   }, [name, displayName]);
 
-  const link = room ? `${location.origin}${location.pathname}?${ROOM_PARAM}=${room}` : "";
+  // Whoever copies the link is the one sharing the jam, so it carries THIS
+  // member's handle, not the room starter's -- a joiner passing it on is the
+  // person the next reader knows.
+  const link = room
+    ? `${location.origin}${location.pathname}?${ROOM_PARAM}=${room}` +
+      (accountUsername ? `&${BY_PARAM}=${encodeURIComponent(accountUsername)}` : "")
+    : "";
 
   const copyLink = useCallback(async () => {
     if (!link) return;

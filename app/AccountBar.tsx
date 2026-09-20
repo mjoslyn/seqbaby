@@ -133,7 +133,7 @@ export function AccountBar({
         {/* Outside the signed-in branch too: a jam needs nobody to have an
             account, only the link. The account's name is what a signed-in
             member is called in the room. */}
-        <JamPanel accountName={name} />
+        <JamPanel accountName={name} accountUsername={username ?? null} />
         {name ? (
           <>
             <SongsMenu />
