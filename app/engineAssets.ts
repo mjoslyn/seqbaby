@@ -77,6 +77,7 @@ export const ENGINE_MODULES = [
   "historyStore.js",
   "icons.js",
   "jam.js",
+  "jamActivity.js",
   "jamSync.js",
   "keyboard.js",
   "knob.js",

@@ -53,6 +53,7 @@
 
 import { setStatus } from "./dom.js";
 import { markExternalEdit, pinAutomated } from "./history.js";
+import { highlightJamPatch } from "./jamActivity.js";
 import { applySessionPatch, diffSession } from "./jamSync.js";
 import { currentBpm } from "./lfo.js";
 import { deepCopy, mergeSet } from "./liveSet.js";
@@ -143,6 +144,10 @@ export function receiveJamPatch(patch, who = {}) {
   const r = applySessionPatch(base, patch);
   if (!r.ok) return { ok: false, reason: r.reason };
   writeFromPeer(r.session, who, false);
+  // Read from the patch itself, not the merged result: the diff already says
+  // exactly which fields moved, which is what a colour-coded border needs
+  // and a before/after session would mean re-deriving.
+  highlightJamPatch(patch, who);
   return { ok: true };
 }
 
