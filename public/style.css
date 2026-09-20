@@ -1396,39 +1396,76 @@ main {
     font-size: 18px;
   }
 }
-/* On desktop the inline rack is a grid of stage cards, not a stack. Stacked,
-   a track with four stages on it was four full-width lines carrying two or
-   three knobs each at the left end and nothing across the rest — a delay and
-   a reverb cost more height than the step grid. Each engaged stage is a card
-   now: its name and the × on the top line, its knobs wrapping under them, and
-   up to three cards across (`auto-fill` with a minimum of a third of the
-   panel, so a wide track never goes past three, a narrow one drops to two or
-   one, and a single stage gets one column rather than the whole track). The rows
-   keep their flex layout — a stage's controls are still queried and wired the
-   same — so this only decides where the title breaks and where the × sits.
-   Scoped to the inline view (`.sq-track ... .is-live`), as the row filter
-   above is: in the modal the rack is the fifteen-line list it always was, and
-   below 768px the phone block's one-row-per-stage layout stands. */
+/* The inline panels — filter, env, eq, comp, the rack's engaged stages and
+   the mod matrix — share one wrapper (`.sq-track__live`, studioMarkup.ts)
+   and on desktop it is a grid of cards, three across at most. Stacked, a
+   track with a filter, an envelope and two stages on it was four full-width
+   lines each carrying a few knobs at its left end and nothing across the
+   rest — more height than the step grid. The column minimum is a third of
+   the wrapper (`auto-fill`), so a wide track never goes past three, a narrow
+   one drops to two or one, and a single card gets one column rather than the
+   whole track.
+
+   The rack does not become one card: its panel goes `display: contents` so
+   each engaged STAGE is a card of its own beside the filter's. The rows keep
+   their flex layout — a stage's controls are still queried and wired the
+   same — and only where the title breaks and where the × sits changes: name
+   on the card's top line, knobs wrapping under. The mod matrix's rows are an
+   eight-column grid of their own, too wide for a third of a track, so that
+   panel spans the row. Scoped to the inline view (`.sq-track ... .is-live`),
+   as the row filter above is: in the modal each panel is the whole panel
+   again, and below 768px the phone block's one-per-line layout stands.
+
+   `gap: inherit` takes the track's own gap, so the wrapper is invisible in
+   the stack; with nothing live in it (or every panel away in a modal) it is
+   hidden outright, or its empty self would cost a gap. */
+.sq-track__live { display: grid; gap: inherit; }
+.sq-track__live:not(:has(> .is-live)) { display: none; }
 @media (min-width: 769px) {
-  .sq-track .sq-track__fx-panel.is-live {
-    grid-template-columns: repeat(auto-fill, minmax(max(250px, calc((100% - 12px) / 3)), 1fr));
-    gap: 6px;
+  .sq-track__live {
+    grid-template-columns: repeat(auto-fill, minmax(max(250px, calc((100% - 20px) / 3)), 1fr));
     align-items: start;
   }
-  .sq-track .sq-track__fx-panel.is-live > .sq-fx__row.is-live {
+  .sq-track .sq-track__live > .sq-track__fx-panel.is-live { display: contents; }
+  .sq-track .sq-track__live > .sq-track__mod-panel.is-live { grid-column: 1 / -1; }
+  /* A card: the fx panel's own stages, and the four one-panel cards. */
+  .sq-track .sq-track__live > .sq-track__filter-panel.is-live,
+  .sq-track .sq-track__live > .sq-track__env-panel.is-live,
+  .sq-track .sq-track__live > .sq-track__eq-panel.is-live,
+  .sq-track .sq-track__live > .sq-track__comp-panel.is-live,
+  .sq-track .sq-track__live > .sq-track__fx-panel.is-live > .sq-fx__row.is-live {
     position: relative;
-    gap: 6px 10px;
-    padding: 6px 30px 6px 8px;
-    border: 1px solid var(--border);
-    border-radius: 4px;
+    padding: 6px 8px;
+    background: var(--bg-3);
+    border-radius: 6px;
     min-height: 100%;
     box-sizing: border-box;
   }
-  .sq-track .sq-track__fx-panel.is-live > .sq-fx__row.is-live > .sq-fx__title {
+  /* The four panels keep the coloured left edge their own rules give them; a
+     stage card takes the rack's, since the panel that carried it is now
+     `contents`. The right padding is the ×'s room. */
+  .sq-track .sq-track__live > .sq-track__fx-panel.is-live > .sq-fx__row.is-live {
+    gap: 6px 10px;
+    padding-right: 30px;
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+  }
+  .sq-track .sq-track__live > .sq-track__filter-panel.is-live > .sq-fx__row,
+  .sq-track .sq-track__live > .sq-track__env-panel.is-live > .sq-fx__row,
+  .sq-track .sq-track__live > .sq-track__eq-panel.is-live > .sq-fx__row,
+  .sq-track .sq-track__live > .sq-track__comp-panel.is-live > .sq-fx__row { gap: 6px 10px; padding: 0; }
+  .sq-track .sq-track__live > .sq-track__filter-panel.is-live > .sq-fx__row > .sq-fx__title,
+  .sq-track .sq-track__live > .sq-track__env-panel.is-live > .sq-fx__row > .sq-fx__title,
+  .sq-track .sq-track__live > .sq-track__eq-panel.is-live > .sq-fx__row > .sq-fx__title,
+  .sq-track .sq-track__live > .sq-track__comp-panel.is-live > .sq-fx__row > .sq-fx__title,
+  .sq-track .sq-track__live > .sq-track__fx-panel.is-live > .sq-fx__row.is-live > .sq-fx__title {
     flex: 1 1 100%;
     min-width: 0;
   }
-  .sq-track .sq-track__fx-panel.is-live > .sq-fx__row.is-live > .sq-fx__off {
+  /* The compressor's second row has no name: an empty title would still hold
+     a line under the card's top. */
+  .sq-track .sq-track__live > .sq-track__comp-panel.is-live > .sq-fx__row > .sq-fx__title:empty { display: none; }
+  .sq-track .sq-track__live > .sq-track__fx-panel.is-live > .sq-fx__row.is-live > .sq-fx__off {
     position: absolute;
     top: 4px;
     right: 4px;
@@ -1437,7 +1474,7 @@ main {
   /* A touchscreen laptop keeps the grid and gets the 44px × from the rule
      above, which needs the room a 22px one did not. */
   @media (any-pointer: coarse) {
-    .sq-track .sq-track__fx-panel.is-live > .sq-fx__row.is-live { padding-right: 48px; }
+    .sq-track .sq-track__live > .sq-track__fx-panel.is-live > .sq-fx__row.is-live { padding-right: 48px; }
   }
 }
 .sq-fx__row[data-fx="vinyl"] .sq-fx__title { color: #c79a74; }

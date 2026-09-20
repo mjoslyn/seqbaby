@@ -604,7 +604,6 @@ ${SUB_PANEL}
         <label>ch</label>
         <input class="midi-ch" type="number" min="1" max="16" value="1" />
       </div>
-      <div class="sq-track__mod-panel" hidden></div>
       <div class="sq-track__aut-panel" hidden></div>
       <div class="sq-track__roll-panel" hidden></div>
       <div class="sq-track__euclid-panel" hidden>
@@ -778,6 +777,12 @@ ${SUB_PANEL}
           <button class="sq-chance__write sq-btn--ghost" type="button" title="print this throw into the pattern as ordinary steps, pitches and all, replacing what is there">write to pattern</button>
         </div>
       </div>
+      <!-- The panels shown inline on the track when something in them is on
+           (is-live, paramTargets.js). One wrapper so they lay out as a grid
+           of cards on desktop rather than one panel per line; the modals
+           reparent each panel through an anchor at its own position, so the
+           wrapper is invisible to them. -->
+      <div class="sq-track__live">
       <div class="sq-track__filter-panel" hidden>
         <div class="sq-fx__row" data-fx="filter">
           <span class="sq-fx__title">filter (resonant lp)</span>
@@ -921,6 +926,8 @@ ${SUB_PANEL}
           <label class="sq-fx__ctl"><span>wet</span><input class="fx-reverb-wet" type="range" min="0" max="1" step="0.01" value="0" /></label>
           <label class="sq-fx__ctl"><span>decay</span><input class="fx-reverb-decay" type="range" min="0.2" max="8" step="0.1" value="2" /></label>
         </div>
+      </div>
+      <div class="sq-track__mod-panel" hidden></div>
       </div>
       <div class="sq-steps"></div>
     </section>
