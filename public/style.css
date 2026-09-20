@@ -773,6 +773,22 @@ main {
 
 .sq-track.is-muted { opacity: 0.45; }
 
+/* ---------- Jam activity: whose edit is that? -----------------------------
+   jamActivity.js sets --jam-color (a peer's own colour, the same hash
+   JamPanel.tsx's presence dots use) and this class on the track, the
+   specific knob, and the pattern slot a peer's patch touched, then clears
+   both itself a couple of seconds later. This only says how it looks while
+   it's on — the transition is what turns that clear into a fade instead of
+   a flicker. */
+.is-jam-touched { transition: box-shadow 0.25s ease; }
+.sq-track.is-jam-touched { box-shadow: 0 0 0 2px var(--jam-color, var(--accent)) inset; }
+.sq-pattern__cell.is-jam-touched { box-shadow: 0 0 0 2px var(--jam-color, var(--accent)); }
+.sq-knob.is-jam-touched { box-shadow: 0 0 0 2px var(--jam-color, var(--accent)); border-radius: 50%; }
+.sq-field.is-jam-touched,
+.sq-fx__ctl.is-jam-touched,
+.sq-contagion__f.is-jam-touched,
+.sq-hexop__f.is-jam-touched { box-shadow: 0 0 0 2px var(--jam-color, var(--accent)); border-radius: 4px; }
+
 /* An fx bus (engine `bus`): a track other tracks are routed into, so one rack,
    one mod matrix and one set of automation lanes shape all of them at once.
    There is no instrument in it, so everything that writes or plays a note goes

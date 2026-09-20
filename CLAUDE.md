@@ -16,7 +16,7 @@ env / fx / eq / comp / mod / automation per track.
   `public/woscillators.js` →
   `public/js/main.js` (ES module). `middleware.ts` refreshes the Supabase
   session on every request *except* static engine assets.
-- **Engine**: ~62 dependency-free vanilla ES modules in `public/js/`. No
+- **Engine**: ~63 dependency-free vanilla ES modules in `public/js/`. No
   bundler — edit, reload. `window.seqbaby` (from `appApi.js`) exposes `state`
   and serialize/apply hooks to the React shell (typed in `app/seqbaby.d.ts`).
 - **Accounts + data**: Supabase (Postgres + Auth + RLS). Tables: `profiles`,
@@ -183,12 +183,16 @@ env / fx / eq / comp / mod / automation per track.
   imports** for `chanceGen.js`'s reasons; `history.js` is the engine half, and
   only the *when*: what a snapshot is taken from and when one is taken. Putting
   one back is `mergeSet` (liveSet.js). See the undo/redo section below.
-- `jam.js` / `jamSync.js` — a jam: several studios holding one song. `jam.js`
-  is the engine half — WHEN this studio has something to tell the room
-  (history.js's event watch and settle, `serializeSet` as the thing compared)
-  and HOW a peer's change is written onto a running sequencer (`mergeSet`).
-  `jamSync.js` is the diff a peer is sent and the guard on applying one, with
-  **no DOM** (`historyStore.js` is its one import) so `node --test` runs it.
+- `jam.js` / `jamSync.js` / `jamActivity.js` — a jam: several studios holding
+  one song. `jam.js` is the engine half — WHEN this studio has something to
+  tell the room (history.js's event watch and settle, `serializeSet` as the
+  thing compared) and HOW a peer's change is written onto a running sequencer
+  (`mergeSet`). `jamSync.js` is the diff a peer is sent and the guard on
+  applying one, with **no DOM** (`historyStore.js` is its one import) so
+  `node --test` runs it. `jamActivity.js` reads that same diff back into a
+  colour-coded border — which track, which knob, which pattern slot a peer's
+  patch touched — so a border here and a peer's dot in the jam panel are
+  always the same colour, from the same id, without the two agreeing on it.
   The room itself is the shell's (`app/JamPanel.tsx`). See the jam section.
 - `track.js` — track lifecycle (create/resize/clone).
 - `bounce.js` — WAV render via MediaRecorder.
@@ -2228,6 +2232,17 @@ studio B ◀──mergeSet── jam.js ◀──patch── JamPanel ◀──�
   next local edit's entry would carry it, and undoing that would take theirs
   back silently. On the stack it is a step with a name on it; undoing it is an
   edit like any other and goes back out. There is one song.
+- **A peer's edit also draws a colour-coded border** (`jamActivity.js`) — on
+  the track, the specific knob, and the pattern slot their patch reached
+  into — so player 2 turning up the fuzz wet is a purple ring around that
+  exact knob, not just a number that moved. The colour is player 2's own,
+  recomputed from their id with the identical hash JamPanel.tsx's presence
+  dots use (`peerColor`), so nothing has to be threaded through the wire to
+  agree on it. It reads the same diff `mergeSet` just applied — which track,
+  which field — rather than diffing before/after DOM, and clears itself a
+  couple of seconds later. A whole-tracks-array replace (a track added or
+  removed under a patch) has no fine-grained path to read a border from and
+  is left alone; the track list repainting is activity enough to see.
 - **Joining takes the room's session.** A newcomer asks the longest-present
   member (`hello`, by presence `joinedAt`) and sends nothing until it arrives;
   nobody answering within 8s leaves them with what they have, which then IS
@@ -2695,7 +2710,7 @@ Repo: https://github.com/mjoslyn/seqbaby.
   An inline marker (`window.__seqbabyServerBoot`) tells the paths apart, and
   `ScriptLoader.tsx` keeps its onload-chained injection for the soft-nav case
   (e.g. arriving from `/login`).
-- `app/EnginePreload.tsx` emits `modulepreload` for all 61 modules listed in
+- `app/EnginePreload.tsx` emits `modulepreload` for all 62 modules listed in
   `app/engineAssets.ts` (at `engineAsset("/js/<name>")`; the hints used to
   point at the site root and 404). The graph is 8 levels deep, so without it the browser
   needs up to eight sequential round trips just to discover the code.
