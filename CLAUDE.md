@@ -16,7 +16,7 @@ env / fx / eq / comp / mod / automation per track.
   `public/woscillators.js` →
   `public/js/main.js` (ES module). `middleware.ts` refreshes the Supabase
   session on every request *except* static engine assets.
-- **Engine**: ~54 dependency-free vanilla ES modules in `public/js/`. No
+- **Engine**: ~62 dependency-free vanilla ES modules in `public/js/`. No
   bundler — edit, reload. `window.seqbaby` (from `appApi.js`) exposes `state`
   and serialize/apply hooks to the React shell (typed in `app/seqbaby.d.ts`).
 - **Accounts + data**: Supabase (Postgres + Auth + RLS). Tables: `profiles`,
@@ -2643,19 +2643,21 @@ Repo: https://github.com/mjoslyn/seqbaby.
   An inline marker (`window.__seqbabyServerBoot`) tells the paths apart, and
   `ScriptLoader.tsx` keeps its onload-chained injection for the soft-nav case
   (e.g. arriving from `/login`).
-- `app/EnginePreload.tsx` emits `modulepreload` for all 59 modules listed in
+- `app/EnginePreload.tsx` emits `modulepreload` for all 61 modules listed in
   `app/engineAssets.ts` (at `engineAsset("/js/<name>")`; the hints used to
   point at the site root and 404). The graph is 8 levels deep, so without it the browser
   needs up to eight sequential round trips just to discover the code.
   **Adding or removing a module in `public/js/` means updating that list** —
-  there's a regeneration one-liner in the file's comment.
+  there's a regeneration one-liner in the file's comment, and it prints the
+  count the module tallies above quote. Recount with it rather than guessing:
+  every one of those tallies had drifted before.
 - The account bar is behind `<Suspense>` in `app/page.tsx`. Don't await
   Supabase in the page body again: it blocks the whole document, including the
   preload hints, on two sequential round trips.
 - **The preloader** (`app/Preloader.tsx` + `app/preloaderMarkup.ts`) covers the gap
   between first paint and a booted engine — the studio's DOM is server-rendered,
   so without it the visitor gets a complete-looking sequencer with empty engine
-  dropdowns and no tracks for as long as ~1.7MB of Tone + woscillators + 44
+  dropdowns and no tracks for as long as ~1.7MB of Tone + woscillators + 61
   modules takes to arrive. Load-bearing details:
   - **Raw markup plus an inline `<script>`, not a React component.** The engine's
     deferred scripts run before React hydrates, so a hydrated overlay would
@@ -2690,6 +2692,6 @@ Repo: https://github.com/mjoslyn/seqbaby.
   resolve against the importing module's URL. That's why the version is a path
   and not a `?query` — a query is dropped during that resolution and would
   reach only `main.js`. Per-deploy URLs are what make the `immutable`
-  cache-control in `netlify.toml` safe on an unbundled 47-module engine.
+  cache-control in `netlify.toml` safe on an unbundled 61-module engine.
   Unset locally, so `npm run dev` and a plain `next build` keep the bare paths
   and the edit-and-reload loop.
