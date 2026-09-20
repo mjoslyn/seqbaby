@@ -11,7 +11,8 @@ import { AccountBar } from "./AccountBar";
 import styles from "./ui.module.css";
 import { createClient } from "@/lib/supabase/server";
 import { SITE_DESCRIPTION, shareCard } from "./shareCard";
-import { linkedSongTitle } from "./songs/linkedSongTitle";
+import { linkedSong, jamHostName } from "./songs/linkedSongTitle";
+import { songShareTitle, jamShareTitle } from "./shareCopy";
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
@@ -23,7 +24,10 @@ function one(v: string | string[] | undefined): string | null {
 // A share link points at the studio with the song in the query, so the link
 // preview was the studio's own card however specific the thing being shared —
 // twelve people posting twelve songs all got "seqbaby". A URL that names a
-// song now titles the card with it.
+// song now gets a card that says who shared what: `mike has shared "cold
+// squelch" with you`. A jam invite (`?jam=`) gets the same shape — `mike has
+// shared a jam with you` — with the host's handle read off the link and
+// checked against the profiles before it is put on a card (see jamHostName).
 //
 // The lookup only happens when the URL carries one. Metadata is resolved
 // before the document flushes, so a Supabase round trip on every visit would
@@ -39,15 +43,35 @@ export async function generateMetadata({
   const sp = await searchParams;
   const slug = one(sp.s);
   const openId = one(sp.open);
-  if (!slug && !openId) return {};
+  const jam = one(sp.jam);
 
-  const title = await linkedSongTitle(slug, openId);
-  if (!title) return {};
+  if (slug || openId) {
+    const song = await linkedSong(slug, openId);
+    if (song) {
+      return {
+        // The tab still says what the song is called; the sentence is for
+        // the preview, where the reader has not opened anything yet.
+        title: `${song.title} · seqbaby`,
+        ...shareCard(
+          songShareTitle(song.owner, song.title),
+          `A song made in seqbaby. Open it to hear it, remix it or fork it. ${SITE_DESCRIPTION}`,
+        ),
+      };
+    }
+  }
 
-  return {
-    title: `${title} · seqbaby`,
-    ...shareCard(title, `A song made in seqbaby. ${SITE_DESCRIPTION}`),
-  };
+  if (jam) {
+    const host = await jamHostName(one(sp.by));
+    return {
+      title: "jam · seqbaby",
+      ...shareCard(
+        jamShareTitle(host),
+        `Open the link to join and edit the song together, live. No account needed. ${SITE_DESCRIPTION}`,
+      ),
+    };
+  }
+
+  return {};
 }
 
 // Resolving the account bar costs two *sequential* Supabase round trips

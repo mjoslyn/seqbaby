@@ -54,6 +54,7 @@ env / fx / eq / comp / mod / automation per track.
 │   ├── login/ settings/ u/[username]/       auth, account settings, public profiles
 │   ├── ComposeChat.tsx        the in-studio compose panel: ask for a song, in words; a turn's changes land in a review bar (audition / keep), never straight in
 │   ├── JamPanel.tsx           the jam room: who is in it, the connection (Supabase Realtime), the invite link. The engine half is public/js/jam.js
+│   ├── shareCard.ts + shareCopy.js  the link preview, and its sentences (who shared what)
 │   ├── api/share/route.ts     anonymous ?s=<slug> share endpoint
 │   ├── api/compose/route.ts   starts a compose turn; api/compose/status polls one
 │   └── {songs,patches,profile,auth,account}/actions.ts   Supabase server actions
@@ -239,7 +240,7 @@ npm run build && npm run start   # production build + serve
 npm run netlify:dev    # full Netlify emulation on :8888
 npm run legacy:dev     # pre-Next static Node server on :5173 (engine assets only)
 npm test               # node --test: the pure modules (session format, chance gen,
-                       #   version tree, song names, the song builder, the jam diff)
+                       #   version tree, song names, share card copy, the song builder, the jam diff)
 npm run mcp            # the MCP server on stdio (mcp/server.mjs) — an agent writes songs
 npm run test:rls       # RLS policy tests — builds a throwaway Postgres in docker
 ```
@@ -1627,31 +1628,48 @@ can see.
 of save/share lives in `session.js` (`serializeSet`/`applySet`) and is bridged
 through `window.seqbaby`.
 
-## The share card (`app/shareCard.ts`)
+## The share card (`app/shareCard.ts` + `app/shareCopy.js`)
 
 A share link points at the studio with the song in the query, so the link
 preview was the studio's own card however specific the thing being shared —
-twelve people posting twelve songs all got "seqbaby". A URL that names a song
-(`?s=<slug>` or `?open=<id>`) is now titled with the song.
+twelve people posting twelve songs all got "seqbaby". A URL that names a
+song (`?s=<slug>` or `?open=<id>`) now gets a card that says who shared
+what — `mike has shared "cold squelch" with you` — and a jam invite
+(`?jam=<room>`) gets the same shape: `mike has shared a jam with you`.
 
 - **One card, built in one place.** og/twitter metadata does NOT inherit field
-  by field between segments: a page that sets `openGraph` replaces the layout's
-  whole object, so the image, the url and the type would have gone missing from
-  the song card if it were written out separately. `shareCard(title, desc)`
-  returns both blocks; layout.tsx passes the site's own title, page.tsx the
-  song's.
+  by field between segments: a page that sets `openGraph` replaces the
+  layout's whole object, so the image, the url and the type would have gone
+  missing from the song card if it were written out separately.
+  `shareCard(title, desc)` returns both blocks; layout.tsx passes the site's
+  own title, page.tsx the sentence. The sentences themselves are
+  `songShareTitle` / `jamShareTitle` in `shareCopy.js` — pure, no imports,
+  for songName.js's reason: `node --test` pins them
+  (`test/shareCopy.test.js`), and they are on the metadata path, where a
+  throw is a page that fails to render. Nobody to name reads as `Someone`.
 - **The lookup only happens when the URL carries one.** Metadata is resolved
   before the document flushes, so a Supabase round trip on every visit would
   hold back the engine's preload hints for everyone — the same reason the
   account bar sits behind `<Suspense>`. A plain `/` does no work in
-  `generateMetadata` at all; a `?s=` visit is already waiting on a fetch of the
-  session itself.
-- **`linkedSongTitle`** (`app/songs/linkedSongTitle.ts`) is the lookup, and it
-  is deliberately not a server action — nothing on the client should be able to
-  ask the server to resolve arbitrary slugs to titles. `?s=` filters
+  `generateMetadata` at all; a `?s=` visit is already waiting on a fetch of
+  the session itself.
+- **`linkedSong`** (`app/songs/linkedSongTitle.ts`) is the song lookup, and it
+  is deliberately not a server action — nothing on the client should be able
+  to ask the server to resolve arbitrary slugs to titles. `?s=` filters
   `is_public` exactly as the share route does; `?open=` leaves it to RLS, so a
   crawler sees only published songs while the owner following their own link
-  gets the real title in the tab.
+  gets the real title in the tab. The owner's name is a second read, of
+  `profile_cards` (the attribution view, so a public song by someone whose
+  page is private is still theirs), and a failure there costs the name, not
+  the card: the title is enough for one.
+- **A jam has no owner anywhere to look up.** A room is a Realtime channel and
+  nothing else, so the invite link carries the sharer's handle
+  (`&by=<handle>`, written by `JamPanel.tsx` for a signed-in member — whoever
+  copies the link, not whoever started the room). Anyone can type a URL, so
+  `jamHostName` puts a handle on a card only once it has been found in
+  `profile_cards`; a made-up one names nobody and the card says `Someone`. A
+  guest's typed name is never put on the link for the same reason. `leave`
+  strips `by` with the room.
 - **`untitled` counts as no title**, along with an unreadable song, a legacy
   Netlify Blobs share (a bare session blob, with no title in it) and no
   Supabase env at all. Every one of those falls back to the site card rather
