@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { setOpenSong } from "@/app/songs/openSong";
+import { setOpenSong, syncSongUrl } from "@/app/songs/openSong";
 import styles from "@/app/ui.module.css";
 
 // Top-bar "new": blank the studio and forget which cloud song is open.
@@ -21,8 +21,10 @@ export default function NewSongButton() {
   // The engine announces its own resets (the logo goes through the same flow),
   // so the open-song slot is cleared from one place whichever route got here.
   useEffect(() => {
-    const onNew = () =>
+    const onNew = () => {
       setOpenSong({ id: null, title: "", versionId: null, isTemplate: false });
+      syncSongUrl(null);
+    };
     window.addEventListener("seqbaby:newset", onNew);
     return () => window.removeEventListener("seqbaby:newset", onNew);
   }, []);
