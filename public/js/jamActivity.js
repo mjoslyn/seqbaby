@@ -1,12 +1,19 @@
 // ---- jam activity: whose edit is that? -----------------------------------
 //
-// A jam's peers all edit one song; this says WHICH of them just touched
-// WHAT, on screen — a colour-coded border, for a couple of seconds, on the
-// track, the specific knob, and the pattern slot a peer's patch reached
-// into. jam.js knows WHEN a peer's edit arrives and hands this module the
-// same diff it applied (jamSync.js's patch, from `diffSession`), never the
-// merged session: the diff already says exactly what moved, and re-deriving
-// that from a before/after session would mean walking the whole tree twice.
+// A jam's peers all edit one song; this says WHICH of them last touched
+// WHAT, on screen — a colour-coded border on the track, the specific knob,
+// and the pattern slot a peer's patch reached into. jam.js knows WHEN a
+// peer's edit arrives and hands this module the same diff it applied
+// (jamSync.js's patch, from `diffSession`), never the merged session: the
+// diff already says exactly what moved, and re-deriving that from a
+// before/after session would mean walking the whole tree twice.
+//
+// **The colour stays**, deliberately: this is "who last changed this", not a
+// flash. A knob's ring only comes off when THIS screen changes the same knob
+// by hand — a peer's colour describing an edit you have just overwritten
+// would be a stale answer to the question the ring exists to answer. Track
+// and pattern borders have no single control to tie that to, so they hold
+// the last peer's colour until another peer's patch touches them again.
 //
 // **The colour is recomputed, not sent.** JamPanel.tsx already gives every
 // peer a colour purely from their id (`colorFor`, for the presence dots), so
@@ -42,10 +49,6 @@
 // is activity enough to see.
 
 import { state } from "./state.js";
-
-/** How long a touch stays lit. Long enough to read a name off a slow hover,
- *  short enough that a still track reads as still again quickly. */
-const TOUCH_MS = 1800;
 
 /** Filter fields whose DOM class doesn't spell out from the field name. */
 const FILTER_FIELD_CLASS = {
@@ -111,29 +114,27 @@ export function peerColor(id) {
   return `hsl(${h % 360} 70% 62%)`;
 }
 
-// el -> { timer, prevTitle }. A touch is retriggerable: a peer still leaning
-// on a knob (several settled patches in a row) just keeps the ring lit and
-// resets the clock, rather than flickering off and on between them.
+// el -> the title it carried before a peer's colour landed on it, so a local
+// edit that takes the colour back off can hand the element its own tooltip
+// back rather than leaving `last changed by …` behind.
 const touched = new WeakMap();
 
-function touch(el, color, label) {
+function touch(el, color, name) {
   if (!el) return;
-  let rec = touched.get(el);
-  if (!rec) {
-    rec = { timer: null, prevTitle: el.title || "" };
-    touched.set(el, rec);
-  } else {
-    clearTimeout(rec.timer);
-  }
+  if (!touched.has(el)) touched.set(el, el.title || "");
   el.style.setProperty("--jam-color", color);
   el.classList.add("is-jam-touched");
-  if (label) el.title = label;
-  rec.timer = setTimeout(() => {
-    el.classList.remove("is-jam-touched");
-    el.style.removeProperty("--jam-color");
-    el.title = rec.prevTitle;
-    touched.delete(el);
-  }, TOUCH_MS);
+  if (name) el.title = `last changed by ${name}`;
+}
+
+/** This screen just changed a control a peer's colour was sitting on: that
+ *  colour is answering a question that no longer holds, so it comes off. */
+function clearTouch(el) {
+  if (!el || !touched.has(el)) return;
+  el.classList.remove("is-jam-touched");
+  el.style.removeProperty("--jam-color");
+  el.title = touched.get(el);
+  touched.delete(el);
 }
 
 /** The element a control's own ring belongs on — the knob if it has one
@@ -142,14 +143,14 @@ function ringTarget(el) {
   return el.closest(".sq-knob") || el.closest(".sq-field, .sq-fx__ctl, .sq-contagion__f, .sq-hexop__f") || el;
 }
 
-function highlightControl(t, cls, color, label) {
+function highlightControl(t, cls, color, name) {
   const el = t.el?.querySelector(`.${cls}`);
-  if (el) touch(ringTarget(el), color, label);
+  if (el) touch(ringTarget(el), color, name);
 }
 
-function highlightPattern(idx, color, label) {
+function highlightPattern(idx, color, name) {
   const cell = document.getElementById("pattern-grid")?.children?.[idx];
-  if (cell) touch(cell, color, label);
+  if (cell) touch(cell, color, name);
 }
 
 /**
@@ -159,11 +160,11 @@ function highlightPattern(idx, color, label) {
  * @param {{name?: string, id?: string}} who
  */
 export function highlightJamPatch(patch, who = {}) {
+  installLocalClear();
   const tracksArr = patch?.d?.obj?.tracks?.arr;
   if (!tracksArr) return;
   const color = who.id ? peerColor(who.id) : "var(--accent)";
   const name = who.name || "someone";
-  const label = `${name} is editing this`;
   for (const [i, sub] of Object.entries(tracksArr)) {
     const key = patch.keys?.[i];
     if (!key) continue;
@@ -174,12 +175,38 @@ export function highlightJamPatch(patch, who = {}) {
       any = true;
       if (path[0] === "patterns" && path.length > 1) {
         const idx = Number(path[1]);
-        if (Number.isFinite(idx)) highlightPattern(idx, color, `${name} is editing pattern ${idx + 1}`);
+        if (Number.isFinite(idx)) highlightPattern(idx, color, name);
         return;
       }
       const cls = controlClassForPath(path);
-      if (cls) highlightControl(t, cls, color, label);
+      if (cls) highlightControl(t, cls, color, name);
     });
-    if (any) touch(t.el, color, label);
+    if (any) touch(t.el, color, name);
   }
+}
+
+// ---- taking the colour back off ------------------------------------------
+//
+// A peer's ring says "this is not what you last set it to" — so the moment
+// THIS screen changes the exact same control, that stops being true and the
+// ring has to go, whatever else is still peer-coloured around it. A patch
+// from `mergeSet` never dispatches `input`/`change` on the controls it
+// writes (`syncTrackSoundUI` and friends assign `.value` straight through
+// knob.js's shadowed accessor — see the Knobs section of CLAUDE.md), so a
+// delegated listener on those two events only ever fires from a real
+// gesture: no flag to check, no risk of a peer's own write clearing itself.
+//
+// Scoped to knobs and fields on purpose. A track's or a pattern's border has
+// no one control to tie an edit to, so those stay exactly as a peer left
+// them until another peer's patch reaches back in — see the module doc.
+let localClearInstalled = false;
+function onLocalEdit(e) {
+  if (!(e.target instanceof Element)) return;
+  clearTouch(ringTarget(e.target));
+}
+function installLocalClear() {
+  if (localClearInstalled) return;
+  localClearInstalled = true;
+  document.addEventListener("input", onLocalEdit, true);
+  document.addEventListener("change", onLocalEdit, true);
 }

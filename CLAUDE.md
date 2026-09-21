@@ -2239,10 +2239,18 @@ studio B ◀──mergeSet── jam.js ◀──patch── JamPanel ◀──�
   recomputed from their id with the identical hash JamPanel.tsx's presence
   dots use (`peerColor`), so nothing has to be threaded through the wire to
   agree on it. It reads the same diff `mergeSet` just applied — which track,
-  which field — rather than diffing before/after DOM, and clears itself a
-  couple of seconds later. A whole-tracks-array replace (a track added or
-  removed under a patch) has no fine-grained path to read a border from and
-  is left alone; the track list repainting is activity enough to see.
+  which field — rather than diffing before/after DOM. **The ring stays**: it
+  answers "who last changed this", not "something just changed", so it holds
+  the colour until either another peer's patch reaches the same control or
+  this screen changes that exact control by hand, which takes it back off —
+  a peer's write never dispatches `input`/`change` (it assigns `.value`
+  straight through knob.js's shadowed accessor), so the same listener that
+  clears a local edit never fires from one. Track and pattern borders have no
+  one control to tie an edit to, so those hold the last peer's colour until
+  another peer's patch touches them again. A whole-tracks-array replace (a
+  track added or removed under a patch) has no fine-grained path to read a
+  border from and is left alone; the track list repainting is activity
+  enough to see.
 - **Joining takes the room's session.** A newcomer asks the longest-present
   member (`hello`, by presence `joinedAt`) and sends nothing until it arrives;
   nobody answering within 8s leaves them with what they have, which then IS
