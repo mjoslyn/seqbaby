@@ -763,6 +763,7 @@ main {
 .sq-add-track-row #add-track { width: 100%; padding: 12px; border-style: dashed; }
 
 .sq-track {
+  position: relative;
   background: var(--bg-2);
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -770,6 +771,31 @@ main {
   display: grid;
   gap: 10px;
 }
+
+/* Track identity colour — a coloured edge running the full height of the
+   card, so a track stays identifiable by colour alone while its step grid
+   or roll scrolls the header out of view, and two long tracks stacked one
+   after another read as two tracks rather than one continuous block. Cyclic
+   by DOM position (nth-child) rather than track id or index in JS: `#tracks`
+   holds nothing but `.sq-track` cards and its child order always IS the
+   visual order (state.tracks and the DOM move together — see placeBusesLast
+   above), so the colouring needs no bookkeeping of its own and never goes
+   stale across a reorder, a duplicate or a remove. */
+.sq-track::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 4px;
+  border-radius: 8px 0 0 8px;
+}
+#tracks > .sq-track:nth-child(8n+1)::before { background: hsl(25 68% 58%); }
+#tracks > .sq-track:nth-child(8n+2)::before { background: hsl(50 68% 58%); }
+#tracks > .sq-track:nth-child(8n+3)::before { background: hsl(115 60% 55%); }
+#tracks > .sq-track:nth-child(8n+4)::before { background: hsl(145 55% 55%); }
+#tracks > .sq-track:nth-child(8n+5)::before { background: hsl(225 68% 65%); }
+#tracks > .sq-track:nth-child(8n+6)::before { background: hsl(255 68% 68%); }
+#tracks > .sq-track:nth-child(8n+7)::before { background: hsl(285 60% 68%); }
+#tracks > .sq-track:nth-child(8n+8)::before { background: hsl(315 65% 65%); }
 
 .sq-track.is-muted { opacity: 0.45; }
 
@@ -3024,6 +3050,7 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not
      to a finger's height. */
   .sq-add-track-row button { min-height: 44px; padding: 8px 14px; }
   .sq-track { padding: 8px; gap: 8px; border-radius: 6px; }
+  .sq-track::before { border-radius: 6px 0 0 6px; }
 
   /* ---------- TRACK HEAD ---------- */
   .sq-track__head { gap: 6px; row-gap: 4px; }
