@@ -91,11 +91,18 @@ function roomFromUrl(): string | null {
   }
 }
 
-function writeRoomToUrl(room: string | null) {
+// The address bar is a link too -- a signed-in member who copies it straight
+// from there (or a browser's own share sheet) instead of the panel's `copy
+// link` button should still hand the next reader a card that names them, so
+// this carries `by=` exactly as that button's own link does.
+function writeRoomToUrl(room: string | null, by: string | null) {
   try {
     const url = new URL(location.href);
-    if (room) url.searchParams.set(ROOM_PARAM, room);
-    else {
+    if (room) {
+      url.searchParams.set(ROOM_PARAM, room);
+      if (by) url.searchParams.set(BY_PARAM, by);
+      else url.searchParams.delete(BY_PARAM);
+    } else {
       url.searchParams.delete(ROOM_PARAM);
       // The handle rode in on the invite; out of the room it names nobody.
       url.searchParams.delete(BY_PARAM);
@@ -276,7 +283,7 @@ export default function JamPanel({
     peersRef.current = [];
     setStatus("idle");
     setError("");
-    writeRoomToUrl(null);
+    writeRoomToUrl(null, null);
   }, []);
 
   /**
@@ -295,7 +302,7 @@ export default function JamPanel({
       setRoom(roomId);
       setStatus("connecting");
       setError("");
-      writeRoomToUrl(roomId);
+      writeRoomToUrl(roomId, accountUsername);
 
       const supabase = clientRef.current ?? createClient();
       clientRef.current = supabase;
@@ -360,7 +367,7 @@ export default function JamPanel({
         }
       });
     },
-    [leave, onWire, readPeers, send, goLive, displayName],
+    [leave, onWire, readPeers, send, goLive, displayName, accountUsername],
   );
 
   // A link with a room in it: join on arrival, once the engine can take the
