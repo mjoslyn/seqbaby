@@ -998,6 +998,7 @@ main {
    the button's colour, so the block reads as "the fx rack" or "the mod
    matrix" without a heading. */
 .sq-track .sq-track__fx-panel.is-live > .sq-fx__row:not(.is-live) { display: none; }
+.sq-track .sq-track__mod-panel.is-live .sq-lfo__row:not(.is-live) { display: none; }
 .sq-track .sq-track__filter-panel.is-live,
 .sq-track .sq-track__env-panel.is-live,
 .sq-track .sq-track__fx-panel.is-live,
@@ -1414,24 +1415,26 @@ main {
   }
 }
 /* The inline panels — filter, env, eq, comp, the rack's engaged stages and
-   the mod matrix — share one wrapper (`.sq-track__live`, studioMarkup.ts)
-   and on desktop it is a grid of cards, three across at most. Stacked, a
-   track with a filter, an envelope and two stages on it was four full-width
-   lines each carrying a few knobs at its left end and nothing across the
-   rest — more height than the step grid. The column minimum is a third of
-   the wrapper (`auto-fill`), so a wide track never goes past three, a narrow
-   one drops to two or one, and a single card gets one column rather than the
-   whole track.
+   the mod matrix's enabled entries — share one wrapper (`.sq-track__live`,
+   studioMarkup.ts) and on desktop it is a grid of cards, three across at
+   most. Stacked, a track with a filter, an envelope and two stages on it was
+   four full-width lines each carrying a few knobs at its left end and
+   nothing across the rest — more height than the step grid. The column
+   minimum is a third of the wrapper (`auto-fill`), so a wide track never
+   goes past three, a narrow one drops to two or one, and a single card gets
+   one column rather than the whole track.
 
-   The rack does not become one card: its panel goes `display: contents` so
-   each engaged STAGE is a card of its own beside the filter's. The rows keep
-   their flex layout — a stage's controls are still queried and wired the
-   same — and only where the title breaks and where the × sits changes: name
-   on the card's top line, knobs wrapping under. The mod matrix's rows are an
-   eight-column grid of their own, too wide for a third of a track, so that
-   panel spans the row. Scoped to the inline view (`.sq-track ... .is-live`),
-   as the row filter above is: in the modal each panel is the whole panel
-   again, and below 768px the phone block's one-per-line layout stands.
+   Neither the rack nor the mod matrix becomes one card: each panel goes
+   `display: contents` so every engaged STAGE, and every enabled LFO ROW, is
+   a card of its own beside the filter's. An LFO row is a fixed eight-column
+   grid everywhere else it appears (the modal, the phone block) — here alone
+   it switches to the rack row's flex-wrap, since a 250px card has no room
+   for eight rigid columns. Both keep their controls queried and wired the
+   same; only where the title breaks and where the ×/remove sits changes:
+   name on the card's top line, controls wrapping under. Scoped to the
+   inline view (`.sq-track ... .is-live`), as the row filter above is: in the
+   modal each panel is the whole panel again, and below 768px the phone
+   block's one-per-line layout stands.
 
    `gap: inherit` takes the track's own gap, so the wrapper is invisible in
    the stack; with nothing live in it (or every panel away in a modal) it is
@@ -1444,13 +1447,16 @@ main {
     align-items: start;
   }
   .sq-track .sq-track__live > .sq-track__fx-panel.is-live { display: contents; }
-  .sq-track .sq-track__live > .sq-track__mod-panel.is-live { grid-column: 1 / -1; }
-  /* A card: the fx panel's own stages, and the four one-panel cards. */
+  .sq-track .sq-track__live > .sq-track__mod-panel.is-live { display: contents; }
+  .sq-track .sq-track__live > .sq-track__mod-panel.is-live > .sq-mod__rows { display: contents; }
+  /* A card: the fx panel's own stages, the mod matrix's own rows, and the
+     four one-panel cards. */
   .sq-track .sq-track__live > .sq-track__filter-panel.is-live,
   .sq-track .sq-track__live > .sq-track__env-panel.is-live,
   .sq-track .sq-track__live > .sq-track__eq-panel.is-live,
   .sq-track .sq-track__live > .sq-track__comp-panel.is-live,
-  .sq-track .sq-track__live > .sq-track__fx-panel.is-live > .sq-fx__row.is-live {
+  .sq-track .sq-track__live > .sq-track__fx-panel.is-live > .sq-fx__row.is-live,
+  .sq-track .sq-track__live > .sq-track__mod-panel.is-live .sq-lfo__row.is-live {
     position: relative;
     padding: 6px 8px;
     background: var(--bg-3);
@@ -1459,9 +1465,13 @@ main {
     box-sizing: border-box;
   }
   /* The four panels keep the coloured left edge their own rules give them; a
-     stage card takes the rack's, since the panel that carried it is now
-     `contents`. The right padding is the ×'s room. */
-  .sq-track .sq-track__live > .sq-track__fx-panel.is-live > .sq-fx__row.is-live {
+     stage or LFO card takes the rack's / mod matrix's, since the panel that
+     carried it is now `contents`. The right padding is the ×/remove's room. */
+  .sq-track .sq-track__live > .sq-track__fx-panel.is-live > .sq-fx__row.is-live,
+  .sq-track .sq-track__live > .sq-track__mod-panel.is-live .sq-lfo__row.is-live {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
     gap: 6px 10px;
     padding-right: 30px;
     border: 1px solid var(--border);
@@ -1475,7 +1485,8 @@ main {
   .sq-track .sq-track__live > .sq-track__env-panel.is-live > .sq-fx__row > .sq-fx__title,
   .sq-track .sq-track__live > .sq-track__eq-panel.is-live > .sq-fx__row > .sq-fx__title,
   .sq-track .sq-track__live > .sq-track__comp-panel.is-live > .sq-fx__row > .sq-fx__title,
-  .sq-track .sq-track__live > .sq-track__fx-panel.is-live > .sq-fx__row.is-live > .sq-fx__title {
+  .sq-track .sq-track__live > .sq-track__fx-panel.is-live > .sq-fx__row.is-live > .sq-fx__title,
+  .sq-track .sq-track__live > .sq-track__mod-panel.is-live .sq-lfo__row.is-live > .sq-lfo__target {
     flex: 1 1 100%;
     min-width: 0;
   }
@@ -1488,10 +1499,21 @@ main {
     right: 4px;
     margin-left: 0;
   }
-  /* A touchscreen laptop keeps the grid and gets the 44px × from the rule
-     above, which needs the room a 22px one did not. */
+  .sq-track .sq-track__live > .sq-track__mod-panel.is-live .sq-lfo__row.is-live > .sq-lfo__remove {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+  }
+  /* A touchscreen laptop keeps the grid and gets the 44px ×/remove from the
+     rule above, which needs the room a 22px one did not. */
   @media (any-pointer: coarse) {
-    .sq-track .sq-track__live > .sq-track__fx-panel.is-live > .sq-fx__row.is-live { padding-right: 48px; }
+    .sq-track .sq-track__live > .sq-track__fx-panel.is-live > .sq-fx__row.is-live,
+    .sq-track .sq-track__live > .sq-track__mod-panel.is-live .sq-lfo__row.is-live { padding-right: 48px; }
+    .sq-track .sq-track__live > .sq-track__mod-panel.is-live .sq-lfo__row.is-live > .sq-lfo__remove {
+      width: 44px;
+      height: 44px;
+      font-size: 18px;
+    }
   }
 }
 .sq-fx__row[data-fx="vinyl"] .sq-fx__title { color: #c79a74; }
