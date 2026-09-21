@@ -491,7 +491,18 @@ const PANEL_BADGES = [
     } },
   { sel: ".sq-track__mod", panel: "_modPanelEl", modal: "_modModal",
     on: (t) => Object.keys(t.lfoConfig || {}).filter(k => t.lfoConfig[k]?.enabled),
-    label: (k) => LFO_LABELS[k] || k },
+    label: (k) => LFO_LABELS[k] || k,
+    // Each enabled LFO gets its own row-turned-card, like a rack stage — a row
+    // left in the DOM after its "on" checkbox was flipped off (the checkbox
+    // toggles `enabled` without removing the row; only the × does that) is
+    // exactly the state a bypassed fx stage is in, so it drops out the same way.
+    rows: (panel, on, t) => {
+      const live = new Set(on);
+      for (const row of panel.querySelectorAll(".sq-lfo__row[data-key]")) {
+        row.classList.toggle("is-live", live.has(row.dataset.key));
+      }
+      return live.size > 0;
+    } },
   { sel: ".track-aut",
     on: (t) => Object.keys(t.automation || {}).filter(k => t.automation[k]?.enabled),
     label: (k) => LFO_LABELS[LFO_FOR_AUTO[k]] || k },
