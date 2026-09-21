@@ -1067,11 +1067,10 @@ main {
    (--track-hue, set per nth-child above) instead of a fixed accent, and no
    longer as a left-edge stripe: the whole border takes the colour, so a card
    reads as "this track's fx" or "this track's mod" rather than singling out
-   one side. Neither sits exactly on the track's own hue — each nudges a
-   little either way round the wheel, so both still read as that track's
-   colour family while staying tellable apart from one another. */
-.sq-track .sq-track__fx-panel.is-live  { border-color: hsl(calc(var(--track-hue, 200) - 16) 65% 60%); }
-.sq-track .sq-track__mod-panel.is-live { border-color: hsl(calc(var(--track-hue, 200) + 16) 65% 60%); }
+   one side. Mod is offset 40° round the wheel from fx so the two are never
+   the same colour on the one track that has both live at once. */
+.sq-track .sq-track__fx-panel.is-live  { border-color: hsl(var(--track-hue, 200) 65% 60%); }
+.sq-track .sq-track__mod-panel.is-live { border-color: hsl(calc(var(--track-hue, 200) + 40) 65% 60%); }
 .sq-track__env    { --badge: #d5a6ff; }
 .sq-track__fx     { --badge: var(--accent); }
 .sq-track__eq     { --badge: #ffa94d; }
@@ -1537,10 +1536,10 @@ main {
     border: 1px solid var(--border);
   }
   .sq-track .sq-track__live > .sq-track__fx-panel.is-live > .sq-fx__row.is-live {
-    border-color: hsl(calc(var(--track-hue, 200) - 16) 65% 60%);
+    border-color: hsl(var(--track-hue, 200) 65% 60%);
   }
   .sq-track .sq-track__live > .sq-track__mod-panel.is-live .sq-lfo__row.is-live {
-    border-color: hsl(calc(var(--track-hue, 200) + 16) 65% 60%);
+    border-color: hsl(calc(var(--track-hue, 200) + 40) 65% 60%);
   }
   .sq-track .sq-track__live > .sq-track__filter-panel.is-live > .sq-fx__row,
   .sq-track .sq-track__live > .sq-track__env-panel.is-live > .sq-fx__row,
