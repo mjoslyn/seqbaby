@@ -22,6 +22,7 @@ import {
   getOpenSong,
   setOpenSong,
   subscribeOpenSong,
+  syncSongUrl,
 } from "@/app/songs/openSong";
 import { generateSongName } from "@/app/songs/songName";
 import { suggestSongName } from "@/app/songs/suggestName";
@@ -203,6 +204,7 @@ export default function SongsMenu() {
         versionId: res.versionId ?? null,
         isTemplate: !!res.isTemplate,
       });
+      syncSongUrl(song.id);
       setStatus({
         text: res.isTemplate
           ? `Started from "${song.title}" — saving makes a new song`
@@ -218,8 +220,10 @@ export default function SongsMenu() {
     async (song: SongListItem) => {
       const res = await deleteSong(song.id);
       if (res.error) return setStatus({ text: res.error, err: true });
-      if (currentId === song.id)
+      if (currentId === song.id) {
         setOpenSong({ id: null, versionId: null, isTemplate: false });
+        syncSongUrl(null);
+      }
       if (treeFor === song.id) setTreeFor(null);
       setStatus({ text: "Deleted" });
       setOpen(false);
@@ -241,6 +245,7 @@ export default function SongsMenu() {
         versionId: res.versionId ?? null,
         isTemplate: false,
       });
+      syncSongUrl(res.id);
       setStatus({ text: `Forked "${song.title}"` });
       setOpen(false);
       refresh();
@@ -413,7 +418,7 @@ export default function SongsMenu() {
         <VersionTree
           songId={song.id}
           baseVersionId={currentId === song.id ? baseVersionId : null}
-          onOpen={(versionId, loadedTitle) =>
+          onOpen={(versionId, loadedTitle) => {
             setOpenSong({
               id: song.id,
               title: loadedTitle ?? song.title,
@@ -421,8 +426,9 @@ export default function SongsMenu() {
               // Every version of a template is a template: opening an older one
               // is still starting from it.
               isTemplate: song.is_template,
-            })
-          }
+            });
+            syncSongUrl(song.id);
+          }}
           onChanged={refresh}
           setStatus={setStatus}
         />

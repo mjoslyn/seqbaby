@@ -1542,6 +1542,13 @@ main {
   .sq-track .sq-track__live > .sq-track__mod-panel.is-live .sq-lfo__row.is-live {
     border-color: hsl(calc(var(--track-hue, 200) + 16) 65% 60%);
   }
+  /* `.sq-field { width: 100% }` fills a grid column everywhere else the LFO
+     row appears (the modal, the phone block) — inside this card's flex-wrap
+     it forced each field (rate, amount, phase) onto a line of its own,
+     stacking the knobs the fx cards next to it keep side by side. */
+  .sq-track .sq-track__live > .sq-track__mod-panel.is-live .sq-lfo__row.is-live .sq-field {
+    width: auto;
+  }
   .sq-track .sq-track__live > .sq-track__filter-panel.is-live > .sq-fx__row,
   .sq-track .sq-track__live > .sq-track__env-panel.is-live > .sq-fx__row,
   .sq-track .sq-track__live > .sq-track__eq-panel.is-live > .sq-fx__row,
