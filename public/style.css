@@ -788,14 +788,18 @@ main {
   width: 4px;
   border-radius: 8px 0 0 8px;
 }
-#tracks > .sq-track:nth-child(8n+1)::before { background: hsl(25 68% 58%); }
-#tracks > .sq-track:nth-child(8n+2)::before { background: hsl(50 68% 58%); }
-#tracks > .sq-track:nth-child(8n+3)::before { background: hsl(115 60% 55%); }
-#tracks > .sq-track:nth-child(8n+4)::before { background: hsl(145 55% 55%); }
-#tracks > .sq-track:nth-child(8n+5)::before { background: hsl(225 68% 65%); }
-#tracks > .sq-track:nth-child(8n+6)::before { background: hsl(255 68% 68%); }
-#tracks > .sq-track:nth-child(8n+7)::before { background: hsl(285 60% 68%); }
-#tracks > .sq-track:nth-child(8n+8)::before { background: hsl(315 65% 65%); }
+/* The 8 hues are picked ~135° apart around the wheel (not sequential steps
+   around it), so any two NEIGHBOURING cards — including the wrap from the
+   8th back to the 1st — land far apart in hue. Sequential 45°-apart hues put
+   two greens (or two blues) back to back, which is the bug this replaced. */
+#tracks > .sq-track:nth-child(8n+1)::before { background: hsl(35 85% 58%); }
+#tracks > .sq-track:nth-child(8n+2)::before { background: hsl(232 70% 68%); }
+#tracks > .sq-track:nth-child(8n+3)::before { background: hsl(297 55% 68%); }
+#tracks > .sq-track:nth-child(8n+4)::before { background: hsl(120 45% 52%); }
+#tracks > .sq-track:nth-child(8n+5)::before { background: hsl(253 70% 72%); }
+#tracks > .sq-track:nth-child(8n+6)::before { background: hsl(318 65% 68%); }
+#tracks > .sq-track:nth-child(8n+7)::before { background: hsl(155 45% 50%); }
+#tracks > .sq-track:nth-child(8n+8)::before { background: hsl(275 55% 70%); }
 
 .sq-track.is-muted { opacity: 0.45; }
 
