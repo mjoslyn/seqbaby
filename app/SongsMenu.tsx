@@ -179,6 +179,7 @@ export default function SongsMenu() {
             ? `Saved “${saved}” as v${res.versionSeq}`
             : `Saved as v${res.versionSeq}`,
       });
+      setOpen(false);
       refresh();
     },
     [
@@ -221,6 +222,7 @@ export default function SongsMenu() {
         setOpenSong({ id: null, versionId: null, isTemplate: false });
       if (treeFor === song.id) setTreeFor(null);
       setStatus({ text: "Deleted" });
+      setOpen(false);
       refresh();
     },
     [currentId, treeFor, refresh],
@@ -240,6 +242,7 @@ export default function SongsMenu() {
         isTemplate: false,
       });
       setStatus({ text: `Forked "${song.title}"` });
+      setOpen(false);
       refresh();
     },
     [refresh],
@@ -258,6 +261,7 @@ export default function SongsMenu() {
           ? `"${song.title}" is a song again`
           : `"${song.title}" is a template`,
       });
+      setOpen(false);
       refresh();
     },
     [currentId, refresh],
@@ -274,6 +278,7 @@ export default function SongsMenu() {
           ? "New songs start blank again"
           : `New songs start from "${song.title}"`,
       });
+      setOpen(false);
       refresh();
     },
     [refresh],
@@ -291,6 +296,7 @@ export default function SongsMenu() {
       } catch {
         setStatus({ text: url });
       }
+      setOpen(false);
       refresh();
     },
     [refresh],

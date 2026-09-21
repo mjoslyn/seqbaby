@@ -85,6 +85,7 @@ export default function PatchesMenu() {
       });
       if (res.error) return setStatus({ text: res.error, err: true });
       setStatus({ text: `Published "${p.name}"` });
+      setOpen(false);
       refreshPublic();
     },
     [refreshPublic],
@@ -98,6 +99,7 @@ export default function PatchesMenu() {
     const name = uniqueName(res.name || p.name, taken);
     window.seqbaby?.savePatch(name, res.config);
     setStatus({ text: `Imported as "${name}"` });
+    setOpen(false);
   }, []);
 
   const doDelete = useCallback(
