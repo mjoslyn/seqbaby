@@ -791,7 +791,18 @@ main {
 /* The 8 hues are picked ~135° apart around the wheel (not sequential steps
    around it), so any two NEIGHBOURING cards — including the wrap from the
    8th back to the 1st — land far apart in hue. Sequential 45°-apart hues put
-   two greens (or two blues) back to back, which is the bug this replaced. */
+   two greens (or two blues) back to back, which is the bug this replaced.
+   Each rule also stamps the raw hue onto --track-hue, so anything else that
+   wants to read as "this track's colour" (the inline fx/mod borders below)
+   can build its own hsl() off the same number instead of repeating it. */
+#tracks > .sq-track:nth-child(8n+1) { --track-hue: 35; }
+#tracks > .sq-track:nth-child(8n+2) { --track-hue: 232; }
+#tracks > .sq-track:nth-child(8n+3) { --track-hue: 297; }
+#tracks > .sq-track:nth-child(8n+4) { --track-hue: 120; }
+#tracks > .sq-track:nth-child(8n+5) { --track-hue: 253; }
+#tracks > .sq-track:nth-child(8n+6) { --track-hue: 318; }
+#tracks > .sq-track:nth-child(8n+7) { --track-hue: 155; }
+#tracks > .sq-track:nth-child(8n+8) { --track-hue: 275; }
 #tracks > .sq-track:nth-child(8n+1)::before { background: hsl(35 85% 58%); }
 #tracks > .sq-track:nth-child(8n+2)::before { background: hsl(232 70% 68%); }
 #tracks > .sq-track:nth-child(8n+3)::before { background: hsl(297 55% 68%); }
@@ -1036,9 +1047,9 @@ main {
    same refreshPanelBadges), with only the rows that are on — the rack's
    bypassed stages, its glide and amp rows, and the mod matrix's adder wait in
    the modal. Scoped to .sq-track: opened as a modal the panel is reparented
-   out of the track, and there it is the whole panel again. The left edge is
-   the button's colour, so the block reads as "the fx rack" or "the mod
-   matrix" without a heading. */
+   out of the track, and there it is the whole panel again. The border is the
+   button's colour (fx/mod: the track's own hue, see below), so the block
+   reads as "the fx rack" or "the mod matrix" without a heading. */
 .sq-track .sq-track__fx-panel.is-live > .sq-fx__row:not(.is-live) { display: none; }
 .sq-track .sq-track__mod-panel.is-live .sq-lfo__row:not(.is-live) { display: none; }
 .sq-track .sq-track__filter-panel.is-live,
@@ -1050,10 +1061,16 @@ main {
 .sq-track .sq-track__mod-panel.is-live .sq-mod__add-row { display: none; }
 .sq-track .sq-track__filter-panel.is-live { border-left: 3px solid var(--accent-2); }
 .sq-track .sq-track__env-panel.is-live    { border-left: 3px solid #d5a6ff; }
-.sq-track .sq-track__fx-panel.is-live     { border-left: 3px solid var(--accent); }
 .sq-track .sq-track__eq-panel.is-live     { border-left: 3px solid #ffa94d; }
 .sq-track .sq-track__comp-panel.is-live   { border-left: 3px solid #66d9b4; }
-.sq-track .sq-track__mod-panel.is-live    { border-left: 3px solid var(--accent); }
+/* The rack and the mod matrix read off the track's own identity colour
+   (--track-hue, set per nth-child above) instead of a fixed accent, and no
+   longer as a left-edge stripe: the whole border takes the colour, so a card
+   reads as "this track's fx" or "this track's mod" rather than singling out
+   one side. Mod is offset 40° round the wheel from fx so the two are never
+   the same colour on the one track that has both live at once. */
+.sq-track .sq-track__fx-panel.is-live  { border-color: hsl(var(--track-hue, 200) 65% 60%); }
+.sq-track .sq-track__mod-panel.is-live { border-color: hsl(calc(var(--track-hue, 200) + 40) 65% 60%); }
 .sq-track__env    { --badge: #d5a6ff; }
 .sq-track__fx     { --badge: var(--accent); }
 .sq-track__eq     { --badge: #ffa94d; }
@@ -1506,7 +1523,7 @@ main {
     min-height: 100%;
     box-sizing: border-box;
   }
-  /* The four panels keep the coloured left edge their own rules give them; a
+  /* The four panels keep the coloured border their own rules give them; a
      stage or LFO card takes the rack's / mod matrix's, since the panel that
      carried it is now `contents`. The right padding is the ×/remove's room. */
   .sq-track .sq-track__live > .sq-track__fx-panel.is-live > .sq-fx__row.is-live,
@@ -1517,7 +1534,12 @@ main {
     gap: 6px 10px;
     padding-right: 30px;
     border: 1px solid var(--border);
-    border-left: 3px solid var(--accent);
+  }
+  .sq-track .sq-track__live > .sq-track__fx-panel.is-live > .sq-fx__row.is-live {
+    border-color: hsl(var(--track-hue, 200) 65% 60%);
+  }
+  .sq-track .sq-track__live > .sq-track__mod-panel.is-live .sq-lfo__row.is-live {
+    border-color: hsl(calc(var(--track-hue, 200) + 40) 65% 60%);
   }
   /* `.sq-field { width: 100% }` fills a grid column everywhere else the LFO
      row appears (the modal, the phone block) — inside this card's flex-wrap
