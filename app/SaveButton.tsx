@@ -139,6 +139,7 @@ export default function SaveButton() {
       versionId: res.versionId ?? null,
       isTemplate: false,
     });
+    setOpen(false);
     if (isPublic && res.slug) {
       const url = `${location.origin}/?s=${res.slug}`;
       try {
