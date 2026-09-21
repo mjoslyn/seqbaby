@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { loadSong } from "@/app/songs/actions";
-import { setOpenSong } from "@/app/songs/openSong";
+import { setOpenSong, syncSongUrl } from "@/app/songs/openSong";
 
 // Studio deep-link: /?open=<songId> loads one of your (or a public) songs into
 // the engine once it's booted. Used by "fork" and "open from your songs".
@@ -32,7 +32,10 @@ export default function OpenSongOnLoad() {
         // one from the songs menu: the first save makes a song of its own.
         isTemplate: !!res.isTemplate,
       });
-      history.replaceState({}, "", location.origin + location.pathname);
+      // Owned: the deep link IS the song's URL, so it stays. Not owned: the
+      // slot is empty and nothing here would reload it, so a refresh must
+      // not silently re-apply someone else's song over hand edits.
+      syncSongUrl(res.owned ? id : null);
     };
 
     if (window.seqbaby) {
