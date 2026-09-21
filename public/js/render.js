@@ -337,6 +337,57 @@ export function placeBusesLast() {
   return true;
 }
 
+// A phone-only quick-access row: fx / filter / +1 / /2 / speed, pulled out of
+// their desktop homes (the panel button group, the len-extend cluster, and
+// the speed field) into one row of their own right after the head — visually
+// below the generator icons, since everything else in the head past that
+// point is hidden into the "more" menu on a phone. Built from the SAME
+// matchMedia breakpoint the head's own mobile CSS uses, not isMobileDevice()
+// (which also fires for a touchscreen laptop at full width, where there's no
+// need for it). Desktop keeps the original markup untouched — nothing here
+// runs unless the query matches.
+const QUICKROW_MQ = typeof window !== "undefined" && window.matchMedia
+  ? window.matchMedia("(max-width: 768px)")
+  : null;
+
+function applyQuickRow(t) {
+  const head = t.el?.querySelector(".sq-track__head");
+  if (!head) return;
+  const wantsRow = !!QUICKROW_MQ?.matches;
+  if (wantsRow) {
+    if (t._quickRowEl) return; // already applied
+    // A control mid-modal has already been reparented by openTrackMenu / one
+    // of the panel modals — leave it alone rather than fight that move; the
+    // next matchMedia change (or the next render) tries again.
+    if (t._trackMenuModal || t._filterModal || t._fxModal) return;
+    const els = [
+      head.querySelector(".sq-track__fx"),
+      head.querySelector(".sq-track__filter"),
+      head.querySelector(".track-len-plus1"),
+      head.querySelector(".track-len-half"),
+      head.querySelector(".sq-track__speed")?.closest(".sq-field"),
+    ];
+    if (els.some(el => !el)) return;
+    const restore = els.map(el => ({ el, parent: el.parentNode, nextSibling: el.nextSibling }));
+    const row = document.createElement("div");
+    row.className = "sq-track__quickrow";
+    for (const { el } of restore) row.appendChild(el);
+    head.insertAdjacentElement("afterend", row);
+    t._quickRowEl = row;
+    t._quickRowRestore = restore;
+  } else {
+    if (!t._quickRowEl) return;
+    for (const { el, parent, nextSibling } of t._quickRowRestore) {
+      if (nextSibling && nextSibling.parentNode === parent) parent.insertBefore(el, nextSibling);
+      else parent.appendChild(el);
+    }
+    t._quickRowEl.remove();
+    t._quickRowEl = null;
+    t._quickRowRestore = null;
+  }
+}
+QUICKROW_MQ?.addEventListener("change", () => { for (const t of state.tracks) applyQuickRow(t); });
+
 export function renderTrack(t) {
   const tpl = document.getElementById("track-template");
   const node = tpl.content.firstElementChild.cloneNode(true);
@@ -906,8 +957,11 @@ export function renderTrack(t) {
     if (t._trackMenuModal) { t._trackMenuModal.close(); return; }
     openTrackMenu(t);
   });
+  // Placed after the panel group, not before: on a phone only roll (the
+  // group's first child) stays visible, so this reads as "more" sitting
+  // right after roll, not ahead of it.
   const panelGrp = node.querySelector(".sq-panel__btn-group");
-  if (panelGrp) panelGrp.before(moreBtn);
+  if (panelGrp) panelGrp.after(moreBtn);
   t._trackMoreBtn = moreBtn;
   t._trackMenuModal = null;
 
@@ -949,6 +1003,7 @@ export function renderTrack(t) {
   renderChancePanel(t, t._chancePanelEl);
   refreshChanceUI(t);
   refreshParamIndicators(t);
+  applyQuickRow(t);
 }
 
 export function updateMidiUI(t) {
