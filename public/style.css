@@ -835,6 +835,8 @@ main {
 .sq-track.is-bus .track-euclid,
 .sq-track.is-bus .sq-track__oct,
 .sq-track.is-bus .sq-track__len-extend,
+.sq-track.is-bus .track-len-plus1,
+.sq-track.is-bus .track-len-half,
 .sq-track.is-bus .sq-track__save,
 .sq-track.is-bus .sq-track__load-patch,
 .sq-track.is-bus .sq-track__wav { display: none !important; }
@@ -867,6 +869,16 @@ main {
   align-items: stretch;
 }
 .sq-track__synth-row:empty { display: none; }
+/* Quick-access row: fx / filter / +1 / /2 / speed, always on their own line
+   below the rest of the head (same flex-basis: 100% trick as the synth row
+   above), for the controls worth reaching without a click into the fx/filter
+   modals or the len-extend / speed group. */
+.sq-track__quickrow {
+  flex-basis: 100%;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
 .sq-track__synth-row > .sq-param-group[hidden] + .sq-param-group[hidden] { /* no-op, just a placeholder */ }
 
 .sq-track__head .sq-field .sq-knob { --knob-size: 40px; }
@@ -3168,6 +3180,7 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not
   .sq-track__head .sq-track__remove,
   .sq-track__head .sq-track__oct,
   .sq-track__head .sq-track__len-extend,
+  .sq-track__head .sq-track__quickrow,
   .sq-track__head .sq-panel__btn-group > button:not(.sq-track__roll),
   .sq-track__head .sq-field:has(.sq-track__speed) {
     display: none;
