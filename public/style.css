@@ -3130,8 +3130,10 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not
   .sq-track__head .track-dice,
   .sq-track__head .track-euclid,
   .sq-track__head .track-chance,
-  .sq-track__head .sq-track__more,
   .sq-track__head .sq-panel__btn-group { order: 30; }
+  /* The "more" toggle (opens the track menu) reads as this row's own menu
+     button, so it sits last rather than ahead of roll. */
+  .sq-track__head .sq-track__more { order: 31; }
 
   /* len + spd group: keep inline but compact */
   .sq-track__head .sq-field:has(.sq-track__len) { gap: 3px; }
@@ -3201,14 +3203,20 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 1px;
-    min-width: 44px;
+    gap: 2px;
+    min-width: 56px;
     width: auto;
     height: auto;
-    min-height: 44px;
-    padding: 4px 3px;
+    min-height: 56px;
+    padding: 5px 4px;
     line-height: 1.1;
   }
+  /* Icons are drawn at a fixed width/height attribute (icons.js); a CSS
+     dimension beats a presentation attribute, so this scales them up to match
+     the bigger button rather than leaving them adrift in the middle of it. */
+  .sq-track__head .sq-icon-btn .sq-btn-icon,
+  .sq-track__head .sq-track__roll .sq-btn-icon,
+  .sq-track__head .sq-track__clear .sq-btn-icon { width: 18px; height: 18px; }
   /* display only on these two: `.sq-icon-btn` is already inline-flex, and
      setting it here as well would resurrect save / load / dup / remove, which
      the block above hides so the track menu can host them. */
@@ -3218,7 +3226,7 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not
   .sq-track__head .sq-track__clear .sq-btn-icon { display: block; }
   .sq-track__head .sq-track__roll .sq-btn__label,
   .sq-track__head .sq-track__clear .sq-btn__label,
-  .sq-track__head [data-label]::after { font-size: 9px; letter-spacing: 0; text-transform: lowercase; }
+  .sq-track__head [data-label]::after { font-size: 10px; letter-spacing: 0; text-transform: lowercase; }
   .sq-track__head .sq-track__roll .sq-btn__label,
   .sq-track__head .sq-track__clear .sq-btn__label { display: block; }
   .sq-track__head [data-label]::after { content: attr(data-label); }
@@ -3385,10 +3393,10 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not
     border-radius: 6px;
   }
   .sq-track__head .sq-panel__btn-group > button {
-    padding: 4px 3px;
+    padding: 5px 4px;
     font-size: 12px;
-    min-width: 44px;
-    min-height: 44px;
+    min-width: 56px;
+    min-height: 56px;
     border-right: 1px solid var(--border);
   }
   .sq-track__head .sq-panel__btn-group > .sq-track__roll { border-right: none; }
