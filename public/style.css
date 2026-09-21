@@ -3415,9 +3415,12 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not
   .sq-param-group--hexop .sq-hexop__row .sq-hexop__f .sq-knob { --knob-size: 42px; }
   .sq-fx__ctl select { padding: 3px 4px; font-size: 11px; }
 
-  /* lfo row: 2-column stacked layout */
+  /* lfo row: the on/shape/sync controls stack, but the three sliders (length,
+     amount, phase) sit in one row of three columns rather than one below the
+     other — three short vertical bars side by side read at a glance and cost
+     a third the scroll of stacking them. */
   .sq-lfo__row {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     grid-template-rows: auto auto auto;
     gap: 6px;
     row-gap: 4px;
@@ -3429,20 +3432,20 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not
     font-size: 11px;
   }
   .sq-lfo__row .sq-lfo__enable { grid-column: 1; }
-  .sq-lfo__row .sq-lfo__shape { grid-column: 2; }
+  .sq-lfo__row .sq-lfo__shape { grid-column: 2 / -1; }
   .sq-lfo__row .sq-lfo__sync-wrap { grid-column: 1; }
   .sq-lfo__row .sq-lfo__rate-field {
-    grid-column: 1 / -1;
+    grid-column: 1;
     display: flex;
     align-items: center;
     gap: 6px;
     flex-wrap: wrap;
   }
-  .sq-lfo__row .sq-lfo__amt-field,
-  .sq-lfo__row .sq-lfo__phase-field { grid-column: 1 / -1; }
+  .sq-lfo__row .sq-lfo__amt-field { grid-column: 2; }
+  .sq-lfo__row .sq-lfo__phase-field { grid-column: 3; }
   .sq-lfo__row .sq-lfo__remove {
     grid-row: 1;
-    grid-column: 2 / -1;
+    grid-column: 3 / -1;
     justify-self: end;
     align-self: start;
   }
