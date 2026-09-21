@@ -382,9 +382,25 @@ export const STUDIO_BODY = String.raw`
         <button class="sq-track__load-patch sq-icon-btn sq-btn--ghost" aria-label="load patch" title="load a saved patch into this track"></button>
         <div class="sq-field"><label>len</label><input class="sq-track__len" type="number" min="1" max="128" value="16" /></div>
         <div class="sq-track__len-extend">
+          <button class="track-len-plus1 sq-btn--ghost" type="button" title="add a bar to this track's pattern, duplicating what is there">+1</button>
           <button class="track-len-2x sq-btn--ghost" type="button" title="double this track's pattern length, duplicating what is there">x2</button>
           <button class="track-len-4x sq-btn--ghost" type="button" title="quadruple this track's pattern length, duplicating what is there">x4</button>
+          <button class="track-len-half sq-btn--ghost" type="button" title="halve this track's pattern length, keeping the first half">/2</button>
           <button class="track-len-quarter sq-btn--ghost" type="button" title="quarter this track's pattern length, keeping the first quarter">/4</button>
+        </div>
+        <div class="sq-field"><label>spd</label>
+          <select class="sq-track__speed">
+            <option value="0.0625">1/16</option>
+            <option value="0.125">1/8</option>
+            <option value="0.25">1/4</option>
+            <option value="0.5">1/2</option>
+            <option value="1" selected>1</option>
+            <option value="2">2</option>
+            <option value="4">4</option>
+            <option value="6">6</option>
+            <option value="8">8</option>
+            <option value="16">16</option>
+          </select>
         </div>
         <div class="sq-field sq-track__out-field" hidden><label>out</label>
           <select class="sq-track__out" title="where this track's output goes. Send several tracks into one fx bus and its filter, effects, mod matrix and automation lanes act on all of them at once"><option value="master">master</option></select>
@@ -573,31 +589,13 @@ ${SUB_PANEL}
         </div>
         <div class="sq-panel__btn-group">
           <button class="sq-track__roll sq-btn--ghost" aria-pressed="false" title="piano roll: click cells to place notes per step">roll</button>
+          <button class="sq-track__filter sq-btn--ghost" aria-pressed="false" title="filter">filter</button>
           <button class="sq-track__env sq-btn--ghost" aria-pressed="false" title="envelope → cutoff">env</button>
+          <button class="sq-track__fx sq-btn--ghost" aria-pressed="false" title="fx rack">fx</button>
           <button class="sq-track__eq sq-btn--ghost" aria-pressed="false" title="3-band eq">eq</button>
           <button class="sq-track__comp sq-btn--ghost" aria-pressed="false" title="compressor + sidechain">comp</button>
           <button class="sq-track__mod sq-btn--ghost" aria-pressed="false">mod</button>
           <button class="track-aut sq-btn--ghost" aria-pressed="false" title="per-step automation">aut</button>
-        </div>
-        <div class="sq-track__quickrow">
-          <button class="sq-track__fx sq-btn--ghost" aria-pressed="false" title="fx rack">fx</button>
-          <button class="sq-track__filter sq-btn--ghost" aria-pressed="false" title="filter">filter</button>
-          <button class="track-len-plus1 sq-btn--ghost" type="button" title="add a bar to this track's pattern, duplicating what is there">+1</button>
-          <button class="track-len-half sq-btn--ghost" type="button" title="halve this track's pattern length, keeping the first half">/2</button>
-          <div class="sq-field"><label>spd</label>
-            <select class="sq-track__speed">
-              <option value="0.0625">1/16</option>
-              <option value="0.125">1/8</option>
-              <option value="0.25">1/4</option>
-              <option value="0.5">1/2</option>
-              <option value="1" selected>1</option>
-              <option value="2">2</option>
-              <option value="4">4</option>
-              <option value="6">6</option>
-              <option value="8">8</option>
-              <option value="16">16</option>
-            </select>
-          </div>
         </div>
       </div>
       <div class="sq-track__midi sq-field" hidden>

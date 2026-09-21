@@ -553,6 +553,25 @@ button.sq-btn--danger { color: var(--danger); }
 .sq-track__oct button { padding: 3px 8px; font-size: 11px; min-width: 44px; }
 .sq-track__len-extend { display: inline-flex; gap: 2px; }
 .sq-track__len-extend button { padding: 3px 8px; font-size: 11px; min-width: 36px; }
+/* Phone-only quick row (render.js's applyQuickRow): fx / filter / +1 / /2 /
+   speed, pulled out of the head and dropped in right after it — a sibling,
+   not a head child, so none of the head's own mobile hiding rules (which
+   funnel these into the "more" menu on desktop-shaped markup) reach them
+   here. It only ever exists on a phone; there is nothing to style for
+   desktop, which never gets this element at all. */
+.sq-track__quickrow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+}
+.sq-track__quickrow .sq-btn--ghost {
+  padding: 4px 8px;
+  min-width: 36px;
+  font-size: 10px;
+  min-height: 32px;
+}
 .sq-meter--master { width: 80px; height: 12px; }
 .sq-track__meter  { width: 100%; height: 100%; }
 
@@ -835,6 +854,9 @@ main {
 .sq-track.is-bus .track-euclid,
 .sq-track.is-bus .sq-track__oct,
 .sq-track.is-bus .sq-track__len-extend,
+/* +1 / /2 leave .sq-track__len-extend for the phone-only quick row
+   (render.js's applyQuickRow) — hidden by their own class too, since the
+   container-level rule above no longer reaches them there. */
 .sq-track.is-bus .track-len-plus1,
 .sq-track.is-bus .track-len-half,
 .sq-track.is-bus .sq-track__save,
@@ -869,16 +891,6 @@ main {
   align-items: stretch;
 }
 .sq-track__synth-row:empty { display: none; }
-/* Quick-access row: fx / filter / +1 / /2 / speed, always on their own line
-   below the rest of the head (same flex-basis: 100% trick as the synth row
-   above), for the controls worth reaching without a click into the fx/filter
-   modals or the len-extend / speed group. */
-.sq-track__quickrow {
-  flex-basis: 100%;
-  display: flex;
-  gap: 10px;
-  align-items: center;
-}
 .sq-track__synth-row > .sq-param-group[hidden] + .sq-param-group[hidden] { /* no-op, just a placeholder */ }
 
 .sq-track__head .sq-field .sq-knob { --knob-size: 40px; }
@@ -3178,7 +3190,6 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not
   .sq-track__head .sq-track__remove,
   .sq-track__head .sq-track__oct,
   .sq-track__head .sq-track__len-extend,
-  .sq-track__head .sq-track__quickrow,
   .sq-track__head .sq-panel__btn-group > button:not(.sq-track__roll),
   .sq-track__head .sq-field:has(.sq-track__speed) {
     display: none;
