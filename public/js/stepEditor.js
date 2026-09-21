@@ -899,8 +899,19 @@ export function openTrackMenu(t) {
   }
   modal.appendChild(panelWrap);
 
+  // +1 / /2 live in the quick-access row now (studioMarkup.ts), not inside
+  // .sq-track__len-extend — captured separately and spliced back into it here
+  // so the menu still shows one "length" group of five. Each keeps its own
+  // capture record, so close() puts it back in the quick row, not here.
+  const lenPlus1 = capture(head, ".track-len-plus1");
+  const lenHalf  = capture(head, ".track-len-half");
   const lenExtend = capture(head, ".sq-track__len-extend");
-  if (lenExtend) { addLabel("length"); modal.appendChild(lenExtend); }
+  if (lenExtend) {
+    if (lenPlus1) lenExtend.insertBefore(lenPlus1, lenExtend.firstChild);
+    if (lenHalf) lenExtend.insertBefore(lenHalf, lenExtend.querySelector(".track-len-quarter"));
+    addLabel("length");
+    modal.appendChild(lenExtend);
+  }
 
   const oct = capture(head, ".sq-track__oct");
   if (oct) { addLabel("pitch"); modal.appendChild(oct); }
