@@ -181,7 +181,7 @@ test("LFOs: only the engine's real targets, generator keys only when the generat
   const s = song();
   const { index } = sb.addTrack(s, { engine: "silverbox" });
   const l = sb.addLfo(s, index, { target: "cutoff", length: "1 bar", amount: 0.3 });
-  assert.equal(l.div, 4); assert.equal(l.cycle, "16 steps"); assert.equal(l.sync, true);
+  assert.equal(l.div, 4); assert.equal(l.cycle, "4 beats"); assert.equal(l.sync, true);
   const h = sb.addLfo(s, index, { target: "reson", rate: 2.5 });
   assert.equal(h.sync, false);
   assert.throws(() => sb.addLfo(s, index, { target: "gtr_pick" }), /cannot be modulated on dm:silverbox/);

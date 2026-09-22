@@ -1284,10 +1284,11 @@ it; the input is still the value, the focus target and the pointer target.
     (Tone.LFO min/max, the scheduled euclid gate, the rAF setter loop):
     normalize the shape to a 0..1 lift, then `(u - 0.5) * amt` or `u * amt`.
   - **Length** is a knob indexing `LFO_DIVS` (constants.js) — the synced
-    `cfg.div` in beats, named in steps (½ step … 64 steps), shortest first so
-    a rightward turn lengthens the cycle. The knob rounds an off-list value
-    (a hand-edited song) to the nearest entry but nothing snaps `cfg.div`, so
-    `lfoDivLabel` prints the true step count rather than the nearest name.
+    `cfg.div` in beats, named directly in beats (1/8 beat … 64 beats),
+    shortest first so a rightward turn lengthens the cycle. The knob rounds
+    an off-list value (a hand-edited song) to the nearest entry but nothing
+    snaps `cfg.div`, so `lfoDivLabel` prints the true beat count rather than
+    the nearest name.
     `lfoRateLabel` is the one place the reading beside it is written — the bpm
     field repaints it too. Unsynced, the same slot shows the hz knob and the
     field's label says "rate"; `setKnobReadout` (knob.js) is what makes the

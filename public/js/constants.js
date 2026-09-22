@@ -210,25 +210,25 @@ export function rateToSlider(hz) {
 // and these are the values the length knob offers. Ordered shortest first, so a
 // rightward turn lengthens the cycle.
 //
-// Named in STEPS from a beat upward: this is a step sequencer, and "16 steps"
-// says what "1 bar" says with one conversion less in the reader's head — a
-// modulation you want to line up with a 16-step pattern shouldn't need arithmetic
-// to find. Below a beat a step count would be a fraction, so those keep their
-// note values. (For the euclid shape the rate is the RING STEP rate rather than
-// the cycle — see lfo.js — so "2 steps" there means each tap lasts two steps.)
+// Named directly in BEATS, which is the unit `div` already is — the label says
+// what the knob is turning rather than a sixteenth-note count the reader has to
+// convert back. (For the euclid shape the rate is the RING STEP rate rather than
+// the cycle — see lfo.js — so "2 beats" there means each tap lasts two beats.)
 //
 // The knob is an index into this list rather than a continuous control: a cycle
 // length is a menu of musical values, and quantising the drag to the list is
 // what keeps it playable.
 export const LFO_DIVS = [
-  { div: 0.125, label: "½ step" },
-  { div: 0.25,  label: "1 step" },
-  { div: 0.5,   label: "2 steps" },
-  { div: 1,     label: "4 steps" },
-  { div: 2,     label: "8 steps" },
-  { div: 4,     label: "16 steps" },
-  { div: 8,     label: "32 steps" },
-  { div: 16,    label: "64 steps" },
+  { div: 0.125, label: "1/8 beat" },
+  { div: 0.25,  label: "1/4 beat" },
+  { div: 0.5,   label: "1/2 beat" },
+  { div: 1,     label: "1 beat" },
+  { div: 2,     label: "2 beats" },
+  { div: 4,     label: "4 beats" },
+  { div: 8,     label: "8 beats" },
+  { div: 16,    label: "16 beats" },
+  { div: 32,    label: "32 beats" },
+  { div: 64,    label: "64 beats" },
 ];
 
 /** Nearest entry for a div in beats — a saved song (or an older one) can hold a
@@ -252,15 +252,14 @@ export function lfoDivIndex(div) {
  * that isn't on it — and it goes on running at exactly that rate, because
  * nothing snaps a loaded value. So the readout says what it really is rather
  * than the nearest entry's name: the knob has to round, the label doesn't, and
- * a row reading "16 steps · 0.61 hz" when it is neither would be worse than
+ * a row reading "16 beats · 0.61 hz" when it is neither would be worse than
  * either. Touching the knob lands on the list and the two agree again.
  */
 export function lfoDivLabel(div) {
   const near = LFO_DIVS[lfoDivIndex(div)];
   const d = Number(div) > 0 ? Number(div) : 1;
   if (Math.abs(near.div - d) < 1e-9) return near.label;
-  const steps = d * 4;                                   // a beat is four sixteenths
-  return `${Number.isInteger(steps) ? steps : +steps.toFixed(2)} step${steps === 1 ? "" : "s"}`;
+  return `${Number.isInteger(d) ? d : +d.toFixed(3)} beat${d === 1 ? "" : "s"}`;
 }
 
 // ---- note helpers ------------------------------------------------------
