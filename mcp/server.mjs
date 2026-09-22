@@ -23,7 +23,7 @@
 //   Claude Code   -- the repo's .mcp.json already names it (node mcp/server.mjs)
 //   Claude Desktop -- add { "command": "node", "args": ["<repo>/mcp/server.mjs"] }
 //                     under mcpServers in claude_desktop_config.json
-// Env: SEQBABY_URL (default https://seqbaby.netlify.app) is where share_song
+// Env: SEQBABY_URL (default https://www.playseqbaby.com) is where share_song
 // posts and audition_song opens the studio.
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -34,7 +34,7 @@ import path from "node:path";
 import * as sb from "../public/js/songBuilder.js";
 import { TOOLS, FORMAT_NOTES as BASE_FORMAT_NOTES, guideText } from "./tools.mjs";
 
-const SEQBABY_URL = (process.env.SEQBABY_URL || "https://seqbaby.netlify.app").replace(/\/$/, "");
+const SEQBABY_URL = (process.env.SEQBABY_URL || "https://www.playseqbaby.com").replace(/\/$/, "");
 
 // ---- the one song ------------------------------------------------------------
 const ctx = { song: sb.newSong(), songName: "untitled" };

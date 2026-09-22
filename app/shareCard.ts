@@ -7,7 +7,7 @@ import type { Metadata } from "next";
 // layout's whole object — so the parts that stay the same have to be written
 // from something shared or they quietly go missing on the song card.
 
-export const SITE_URL = "https://seqbaby.netlify.app/";
+export const SITE_URL = "https://www.playseqbaby.com/";
 export const SHARE_IMAGE = `${SITE_URL}share.png`;
 
 export const SITE_DESCRIPTION =
