@@ -716,6 +716,32 @@ export function renderTrack(t) {
   node.querySelector(".p-envatk").addEventListener("input", e => setFilter(t, "attack",  Number(e.target.value)));
   node.querySelector(".p-envrel").addEventListener("input", e => setFilter(t, "release", Number(e.target.value)));
 
+  // Taking the envelope off the track is a thing you SAY, not something that
+  // happens to you: the amount knob passes through 0 on the way down like any
+  // other knob, mid-drag, and the panel vanishing there would take the knob
+  // with it (see wireFxPanel's off button, which this matches). So the ×
+  // zeroes the amount through the control's own `input` event — exactly "as
+  // if you had dragged it there" — and only then drops it from the shown set.
+  const envRow = node.querySelector('.sq-track__env-panel .sq-fx__row[data-fx="env"]');
+  if (envRow) {
+    const envOff = document.createElement("button");
+    envOff.type = "button";
+    envOff.className = "sq-fx__off";
+    envOff.textContent = "×";
+    envOff.title = "turn the envelope off and take it off the track — the ADSR settings stay";
+    envOff.setAttribute("aria-label", "turn off envelope → cutoff");
+    envOff.addEventListener("click", () => {
+      const ctl = node.querySelector(".p-envamt");
+      if (ctl && Number(ctl.value) !== 0) {
+        ctl.value = "0";
+        ctl.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+      fxShown(t).delete("env");
+      refreshPanelBadges(t);
+    });
+    envRow.appendChild(envOff);
+  }
+
   node.querySelector(".track-rand").addEventListener("click", () => randomizeTimbre(t));
 
   const saveBtn = node.querySelector(".sq-track__save");

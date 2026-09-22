@@ -1479,7 +1479,8 @@ main {
    of the row rather than against the last knob, where it would read as part of
    that control. */
 .sq-fx__off { display: none; }
-.sq-track .sq-track__fx-panel.is-live > .sq-fx__row.is-live > .sq-fx__off {
+.sq-track .sq-track__fx-panel.is-live > .sq-fx__row.is-live > .sq-fx__off,
+.sq-track .sq-track__env-panel.is-live > .sq-fx__row > .sq-fx__off {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1493,13 +1494,15 @@ main {
   background: none;
   border-color: transparent;
 }
-.sq-track .sq-track__fx-panel.is-live > .sq-fx__row.is-live > .sq-fx__off:hover {
+.sq-track .sq-track__fx-panel.is-live > .sq-fx__row.is-live > .sq-fx__off:hover,
+.sq-track .sq-track__env-panel.is-live > .sq-fx__row > .sq-fx__off:hover {
   color: var(--danger);
   border-color: var(--danger);
 }
 /* A finger needs the room even where the row is drawn small. */
 @media (any-pointer: coarse), (max-width: 768px) {
-  .sq-track .sq-track__fx-panel.is-live > .sq-fx__row.is-live > .sq-fx__off {
+  .sq-track .sq-track__fx-panel.is-live > .sq-fx__row.is-live > .sq-fx__off,
+  .sq-track .sq-track__env-panel.is-live > .sq-fx__row > .sq-fx__off {
     min-width: 44px;
     height: 44px;
     font-size: 18px;
@@ -1600,6 +1603,11 @@ main {
   .sq-track .sq-track__live > .sq-track__env-panel.is-live > .sq-fx__row,
   .sq-track .sq-track__live > .sq-track__eq-panel.is-live > .sq-fx__row,
   .sq-track .sq-track__live > .sq-track__comp-panel.is-live > .sq-fx__row { gap: 6px 10px; padding: 0; }
+  /* The envelope keeps a live × like an fx stage — its row alone needs the
+     right-hand room that reserves. */
+  .sq-track .sq-track__live > .sq-track__env-panel.is-live > .sq-fx__row {
+    padding-right: 30px;
+  }
   .sq-track .sq-track__live > .sq-track__filter-panel.is-live > .sq-fx__row > .sq-fx__title,
   .sq-track .sq-track__live > .sq-track__env-panel.is-live > .sq-fx__row > .sq-fx__title,
   .sq-track .sq-track__live > .sq-track__eq-panel.is-live > .sq-fx__row > .sq-fx__title,
@@ -1612,7 +1620,8 @@ main {
   /* The compressor's second row has no name: an empty title would still hold
      a line under the card's top. */
   .sq-track .sq-track__live > .sq-track__comp-panel.is-live > .sq-fx__row > .sq-fx__title:empty { display: none; }
-  .sq-track .sq-track__live > .sq-track__fx-panel.is-live > .sq-fx__row.is-live > .sq-fx__off {
+  .sq-track .sq-track__live > .sq-track__fx-panel.is-live > .sq-fx__row.is-live > .sq-fx__off,
+  .sq-track .sq-track__live > .sq-track__env-panel.is-live > .sq-fx__row > .sq-fx__off {
     position: absolute;
     top: 4px;
     right: 4px;
@@ -1627,7 +1636,8 @@ main {
      rule above, which needs the room a 22px one did not. */
   @media (any-pointer: coarse) {
     .sq-track .sq-track__live > .sq-track__fx-panel.is-live > .sq-fx__row.is-live,
-    .sq-track .sq-track__live > .sq-track__mod-panel.is-live .sq-lfo__row.is-live { padding-right: 48px; }
+    .sq-track .sq-track__live > .sq-track__mod-panel.is-live .sq-lfo__row.is-live,
+    .sq-track .sq-track__live > .sq-track__env-panel.is-live > .sq-fx__row { padding-right: 48px; }
     .sq-track .sq-track__live > .sq-track__mod-panel.is-live .sq-lfo__row.is-live > .sq-lfo__remove {
       width: 44px;
       height: 44px;
