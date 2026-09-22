@@ -8,10 +8,28 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 // POST /api/share  { session } -> { id }
+//
+// This is the studio's own quick "share" button (public/js/session.js
+// onShareSet) -- no account needed, nothing typed, works signed out. A
+// signed-in sharer still gets tagged: their id rides along so the link
+// preview (linkedSong in app/songs/linkedSongTitle.ts) can put their name on
+// the card, the same as a published song's owner_id does. Resolving the
+// session is best-effort -- the engine is meant to work with no Supabase env
+// at all, and an anonymous share is still a share.
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { id } = await putShare({ session: body?.session });
+    let ownerId: string | null = null;
+    try {
+      const supabase = await createClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      ownerId = user?.id ?? null;
+    } catch {
+      /* no Supabase configured, or no session -- share anonymously */
+    }
+    const { id } = await putShare({ session: body?.session, ownerId });
     return NextResponse.json({ id });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "share failed";
@@ -41,8 +59,11 @@ export async function GET(req: Request) {
     }
   }
   try {
-    const body = await getShare({ id });
-    return NextResponse.json(body);
+    const { session, createdAt } = await getShare({ id });
+    // title/ownerId ride along on the stored blob for getShareMeta's sake
+    // (the link-preview path) -- not something this endpoint hands to
+    // whoever fetches the session, which was never asking for either.
+    return NextResponse.json({ session, createdAt });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "not found";
     return NextResponse.json({ error: msg }, { status: 404 });

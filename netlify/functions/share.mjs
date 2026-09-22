@@ -9,8 +9,14 @@ export const handler = async (event) => {
     }
     if (event.httpMethod === "GET") {
       const id = (event.queryStringParameters || {}).id;
-      const out = await getShare({ id });
-      return { statusCode: 200, headers: { "content-type": "application/json" }, body: JSON.stringify(out) };
+      const { session, createdAt } = await getShare({ id });
+      return {
+        statusCode: 200,
+        headers: { "content-type": "application/json" },
+        // title/ownerId ride along in the stored blob for getShareMeta's
+        // sake; this endpoint hands back only what a caller asked for.
+        body: JSON.stringify({ session, createdAt }),
+      };
     }
     return { statusCode: 405, body: "method not allowed" };
   } catch (err) {

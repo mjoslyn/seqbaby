@@ -1673,9 +1673,26 @@ what — `mike has shared "cold squelch" with you` — and a jam invite
   `jamHostName` puts a handle on a card only once it has been found in
   `profile_cards`; a made-up one names nobody and the card says `Someone`. A
   guest's typed name is never put on the link for the same reason. `leave`
-  strips `by` with the room.
-- **`untitled` counts as no title**, along with an unreadable song, a legacy
-  Netlify Blobs share (a bare session blob, with no title in it) and no
+  strips `by` with the room. Written to both the invite link's `copy link`
+  button and the address bar itself (`writeRoomToUrl`) — a room that only the
+  button attributed still lost the sharer's name the moment someone grabbed
+  the link from the address bar or a native share sheet instead.
+- **The studio's own quick `share` button is anonymous, and still gets a
+  title and (when signed in) an owner.** It's the top-bar `share`
+  (`onShareSet`, session.js), not the account-side publish flow
+  (SaveButton/SongsMenu) — no account needed, nothing typed, a bare session
+  blob in `lib/api.js`'s Blobs store (or its in-memory fallback), never a row
+  in `songs`. `putShare` tags it anyway: a title from `generateSongName`
+  (songName.js, already pure and deterministic for exactly this reuse) always,
+  and the signed-in sharer's id when `POST /api/share` resolved one — best
+  effort, since the engine has to keep working with no Supabase env at all.
+  `linkedSong` falls back to it (`getShareMeta`) only once the `songs` table
+  has no published row for the slug, and reads metadata only — a link preview
+  must not pull down a whole session, base64 samples included, to learn its
+  name. The owner id resolves to a name the same way a published song's does
+  (`ownerName` against `profile_cards`), so both paths can share one function.
+- **`untitled` counts as no title**, along with an unreadable song, a Blobs
+  share written before this existed (no title in its metadata) and no
   Supabase env at all. Every one of those falls back to the site card rather
   than failing the page: a link preview is not worth a 500.
 
