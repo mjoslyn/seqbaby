@@ -758,7 +758,26 @@ export function startSetterLfoLoopIfNeeded() {
         // from the same knob.
         const u = cfg.type === "euclid" ? shape : (shape + 1) * 0.5;
         const amt = cfg.depth ?? 0;
-        const v = base + (lfoBipolar(cfg) ? (u - 0.5) * amt : u * amt);
+        let v;
+        if (CURVED_LFO_KEYS.has(key)) {
+          // A fixed peak-to-peak hung around the base (the formula below)
+          // wastes half its swing whenever the base is already near an edge
+          // — cutoff at 0 with depth 100% would swing -0.5..+0.5 and only
+          // ever reach 0.5, the ceiling unreachable no matter how the depth
+          // knob is turned. These three are exactly the ones the whole
+          // point was to make reach the true ceiling/floor (see
+          // CURVED_LFO_KEYS in constants.js), so each half of the swing is
+          // scaled by the room actually available to that extreme instead —
+          // depth 100% then reaches exactly 0 and exactly 1 from ANY base,
+          // and at a centered base (0.5) this is identical to the fixed
+          // formula (base and 1-base are equal there).
+          v = lfoBipolar(cfg)
+            ? (u >= 0.5 ? base + (u - 0.5) * 2 * (1 - base) * amt
+                        : base - (0.5 - u) * 2 * base * amt)
+            : base + u * (1 - base) * amt;
+        } else {
+          v = base + (lfoBipolar(cfg) ? (u - 0.5) * amt : u * amt);
+        }
         // These targets are already in the slider's own 0..1, so the value the
         // setter writes is exactly where the knob's needle belongs. Recorded
         // rather than recomputed: modMotion.js would otherwise have to keep a
