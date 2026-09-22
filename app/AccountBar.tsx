@@ -76,15 +76,12 @@ export function AccountBar({
     return () => window.removeEventListener("keydown", onKey);
   }, [menuOpen]);
 
-  // A tap on anything in the sheet is a finished action, so the sheet gets out
-  // of the way — except on `save` and `songs`, whose whole job is to open a
-  // panel of their own. Those two are the `songsWrap` wrappers, so one test on
-  // the way up covers both and nothing has to be told about the sheet.
-  const onItemClick = useCallback((e: React.MouseEvent) => {
-    const el = e.target as HTMLElement | null;
-    if (el?.closest?.(`.${styles.songsWrap}`)) return;
-    setMenuOpen(false);
-  }, []);
+  // A tap on anything in the sheet closes it, `save`/`songs`/`compose`/`jam`
+  // included: those open a panel of their own (a `.songsWrap`), but that panel
+  // is `position: fixed` and outlives the accordion just fine once `.barItems`
+  // stops hiding the wrapper holding it (see `.barItems:has(.panel)` in
+  // ui.module.css) -- so nothing here has to know which button it was.
+  const onItemClick = useCallback(() => setMenuOpen(false), []);
 
   return (
     <div
@@ -104,13 +101,16 @@ export function AccountBar({
         <IconMenu on={menuOpen} />
         menu
       </button>
-      {menuOpen && (
-        <div
-          className={styles.sheetBackdrop}
-          onClick={() => setMenuOpen(false)}
-          aria-hidden
-        />
-      )}
+      {/* Always mounted (CSS decides visibility) so it can dim behind a panel
+          that outlived the sheet, not just behind the sheet itself. Its click
+          handler only ever needs to close the accordion -- a panel left open
+          under it already closes itself on the same outside click via its own
+          document listener. */}
+      <div
+        className={styles.sheetBackdrop}
+        onClick={() => setMenuOpen(false)}
+        aria-hidden
+      />
       <div
         id="topbar-items"
         className={`${styles.barItems} ${menuOpen ? styles.barItemsOpen : ""}`}

@@ -561,24 +561,47 @@
   /* Raised only while the sheet is open, so an engine modal (z-index 200) is
      never sat on by a bar nobody is using. Position stays `sticky` from the
      rule above -- overriding it with `relative` here would unpin the bar for
-     as long as the menu was open. */
-  .topBarMenuOpen { z-index: 250; }
+     as long as the menu was open. Every button in the sheet closes it now
+     (AccountBar's onItemClick), the save/songs/compose/jam toggles included,
+     so a panel those open can outlive the accordion -- it needs the same
+     headroom the accordion did. `.chatPanel` has its own reach to 300 (see the
+     non-mobile rule above) and is excluded here so the two don't fight over
+     which wins on a tie. */
+  .topBarMenuOpen,
+  .topBar:has(.panel):not(:has(.chatPanel)) { z-index: 250; }
 
   .menuBtn { display: inline-flex; }
 
+  /* Shown by state, not by mount: the backdrop is always in the DOM on mobile
+     so it can dim behind a panel that outlived the sheet exactly as it dims
+     behind the sheet itself. */
   .sheetBackdrop {
-    display: block;
+    display: none;
     position: fixed;
     inset: 0;
     z-index: 0;
     background: rgba(0, 0, 0, 0.5);
   }
+  .topBarMenuOpen .sheetBackdrop,
+  .topBar:has(.panel) .sheetBackdrop { display: block; }
   /* In-flow children paint under positioned ones, so the trigger needs a layer
      of its own or the backdrop swallows the tap that closes the sheet. */
   .topBarMenuOpen .manualLink,
-  .topBarMenuOpen .menuBtn { position: relative; z-index: 1; }
+  .topBarMenuOpen .menuBtn,
+  .topBar:has(.panel) .manualLink,
+  .topBar:has(.panel) .menuBtn { position: relative; z-index: 1; }
 
   .barItems { display: none; }
+  /* A tap on any button in the sheet closes the accordion, the save/songs/
+     compose/jam toggles included -- so the panel one of them just opened
+     would be swallowed by `.barItems` going back to `display: none` along
+     with the rest of the list. `.panel` is already `position: fixed` (below),
+     so keeping only the wrapper that holds one on show is enough for it to
+     float free as its own bottom sheet with the accordion gone. Specificity
+     (two `:has()`-weighted selectors) wins this over both rules below without
+     needing source order. */
+  .barItems:has(.panel) { display: block; }
+  .barItems:has(.panel) > *:not(:has(.panel)) { display: none; }
   .barItemsOpen {
     display: flex;
     position: absolute;
