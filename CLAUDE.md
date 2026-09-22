@@ -1247,7 +1247,24 @@ it; the input is still the value, the focus target and the pointer target.
   Tone Signals via `getModTarget(t, key)`. `LFO_KEYS` covers voice params,
   cutoff/reson, and every FX wet + sub-param; FX sub-params without an
   AudioParam handle are driven by a rAF setter loop (`SETTER_LFO_KEYS`).
-  `canModulate(t, key)` gates the picker per engine. Shapes are sine /
+  **Three of those setter keys still have a real AudioParam** —
+  `CURVED_LFO_KEYS` (constants.js): cutoff, ring_freq, shaper_preamp. Their
+  knob maps to the param through an exponential curve (`cutoffToHz` and
+  its two siblings, duplicated as `CURVED_LFO_CURVES` since constants.js
+  has to stay Node-importable), so a fixed native-unit swing summed onto the
+  param can't be made to reach the knob's ceiling from an arbitrary base —
+  the same 3kHz sweep is most of the dial at 200Hz and a nudge at 15k. The
+  setter loop computes a target KNOB position exactly like any other setter
+  key (base + depth-scaled shape, so depth 100% + base 50% reaches both 0
+  and 1), then `applySetterLfoValue` runs both that and the current base
+  through the curve and sums only the DIFFERENCE onto a persistent
+  `Tone.Signal` (built once in `syncLFO`'s curved branch, which has to run
+  and return before the generic `SETTER_LFO_KEYS` branch, since that one
+  unconditionally tears down whatever's sitting in `t.lfos[key]`). Same
+  `connectMod` summation every other AudioParam LFO uses — only the source
+  and the value computation differ — traded for frame-rate rather than
+  audio-rate resolution. `canModulate(t, key)` gates the picker per engine.
+  Shapes are sine /
   triangle / saw / square, **rnd square** and **euclid**. The last two aren't
   waveforms — they hold a value for a whole step and then jump, so neither is a
   Tone.LFO oscillator type and both take the scheduled-signal path
@@ -1339,10 +1356,11 @@ moves the real knob already.
   100% is peak-to-peak of the whole knob and its own min..max is the divisor.
   `PARAM_SPAN` in modMotion.js holds the two that still differ — a silverbox
   tune knob reading cents into a param in semitones, a vinyl warmth swing that
-  turns the top DOWN instead of up — and `PARAM_CURVE` the three that aren't
-  linear at all (cutoff, ring_freq, shaper_preamp): 3kHz is most of the dial
-  at 200Hz and a nudge at 15k, so a fixed Hz swing can't be made to hit the
-  slider's ceiling from an arbitrary base the way the linear ones now do.
+  turns the top DOWN instead of up. The three whose knob is exponential
+  (cutoff, ring_freq, shaper_preamp — `CURVED_LFO_KEYS`) don't reach this
+  needle code at all any more: they're setter-driven now (see the LFO
+  paragraph above), so `_modLive` already holds their knob-space value
+  exactly, the same way every other setter key's needle does.
 
 **What is on shows on the track** (`refreshPanelBadges`, paramTargets.js).
 Every sound-shaping panel opens as a modal, so a track with a delay on it, an
@@ -2689,10 +2707,14 @@ through a 6ms fade on its gain).
 - New FX → extend `FXRack` + `defaultFxConfig` + apply/refresh/wire fns in
   signal.js/render.js, and (optionally) `LFO_KEYS`/`AUTOMATION_TARGETS`.
 - New LFO target → see canModulate gotcha above, + a `CONTROL_TARGETS` entry
-  (paramTargets.js) so its control's right-click menu finds it. If its
-  `LFO_AMP_SCALE` isn't in the same units as the slider's own range, it needs a
-  `PARAM_SPAN` / `PARAM_CURVE` entry too (modMotion.js) or the live needle
-  swings by the wrong amount.
+  (paramTargets.js) so its control's right-click menu finds it. Set
+  `LFO_AMP_SCALE` to the control's own full native-unit span so depth 100%
+  reaches its ceiling; if the knob maps to that span through a curve rather
+  than linearly, it belongs in `CURVED_LFO_KEYS`/`CURVED_LFO_CURVES`
+  (constants.js) and the setter-LFO path instead of a plain `LFO_AMP_SCALE`
+  entry. Either way, if the needle's units still don't match the knob's (a
+  cents-vs-semitones knob, a slope that flips sign), it needs a `PARAM_SPAN`
+  entry too (modMotion.js) or the live needle swings by the wrong amount.
 - New automation target → `AUTOMATION_TARGETS` + a setter path in
   `applyAutomationAtStep`, + the same `CONTROL_TARGETS` entry.
 - New per-step control → array on `emptyPattern()` + `aliasPattern()` field +

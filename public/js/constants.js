@@ -10,6 +10,7 @@ import {
 import { CHANCE_MOD_KEYS, CHANCE_MOD_LABELS } from "./chanceGen.js";
 import { staticEngineByKey } from "./engineData.js";
 import { EUCLID_MOD_KEYS, EUCLID_MOD_LABELS } from "./soundDefaults.js";
+import { shaperPreampGain } from "./curves.js";
 
 export const STEPS_PER_BAR = 16;
 
@@ -204,6 +205,39 @@ export const LFO_AMP_SCALE = {
     const [lo, hi] = SUB_MOD_RANGE[k];
     return [`sub_${k}`, hi - lo];
   })),
+};
+
+// ---- the three LFO targets whose knob is exponential, not linear ---------
+//
+// cutoff, ring_freq and shaper_preamp modulate a real AudioParam via
+// cutoffToHz-style curves (signal.js / fxRack.js), so a fixed Hz/gain swing
+// summed onto the native param covers a different fraction of the knob
+// depending on where the base sits — see LFO_AMP_SCALE's comment on cutoff.
+// These three are driven through the setter-LFO path instead (lfo.js): each
+// frame, the target knob position is computed the same way every other
+// setter key's is (base + depth-scaled shape), then converted through its
+// own curve, and only the DIFFERENCE from the curve at the current base is
+// summed onto the real AudioParam — so depth 100% reaches the knob's true
+// ceiling/floor from wherever the base happens to sit, same as a linear
+// control, traded for frame-rate (not audio-rate) resolution.
+//
+// Duplicated here rather than imported from signal.js / fxRack.js: this
+// module has to stay importable from Node, and those two reach into Tone
+// and the DOM at load time.
+export const CURVED_LFO_KEYS = new Set(["cutoff", "ring_freq", "shaper_preamp"]);
+export const CURVED_LFO_CURVES = {
+  cutoff: {                // cutoffToHz (signal.js): 60..20000 Hz, log
+    to: (u) => 60 * Math.pow(20000 / 60, u),
+    from: (hz) => Math.log(Math.max(1e-6, hz) / 60) / Math.log(20000 / 60),
+  },
+  ring_freq: {              // applyRingMod (fxRack.js): 20..3000 Hz, log
+    to: (u) => 20 * Math.pow(150, u),
+    from: (hz) => Math.log(Math.max(1e-6, hz) / 20) / Math.log(150),
+  },
+  shaper_preamp: {          // shaperPreampGain (curves.js): ~0.25..8x gain
+    to: shaperPreampGain,
+    from: (g) => (g <= 1 ? (g - 0.25) / 1.5 : 0.5 + Math.log(Math.max(1e-6, g)) / Math.log(8) / 2),
+  },
 };
 
 // Non-blocking prompt dialog (browser prompt() halts the transport scheduler)

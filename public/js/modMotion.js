@@ -33,7 +33,6 @@
  */
 
 import { LFO_AMP_SCALE } from "./constants.js";
-import { shaperPreampGain } from "./curves.js";
 import { setKnobMotion } from "./knob.js";
 import { SETTER_LFO_KEYS, lfoBipolar, lfoLiftNow } from "./lfo.js";
 import { state } from "./state.js";
@@ -48,9 +47,12 @@ const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
 // For most targets those are the same thing (a 0..1 knob on a 0..1 param, and
 // every hexop / guitar / bass / contagion control, whose scale IS its knob's range,
 // and now every linear fx sub-param too — see LFO_AMP_SCALE's own comment),
-// so the knob's own min..max is the divisor and there is nothing to say.
+// so the knob's own min..max is the divisor and there is nothing to say. The
+// three whose knob is exponential (cutoff, ring_freq, shaper_preamp) are
+// setter-driven now (see CURVED_LFO_KEYS in constants.js) and never reach this
+// function at all — `_modLive` already holds their knob-space value exactly.
 //
-// These are the ones where they still differ.
+// These are the ones that still differ.
 const PARAM_SPAN = {
   silverbox_tune: 1,      // the knob reads in cents, the param in semitones
   // vinylLP.frequency's warmth slope is -7200 at amount 1 (see LFO_AMP_SCALE's
@@ -59,30 +61,8 @@ const PARAM_SPAN = {
   vinyl_warmth: -7200,
 };
 
-// And the three that aren't linear at all, so a fixed distance in the param's
-// units is a different distance along the knob depending on where the knob is.
-// A cutoff sweep of 3kHz is most of the dial down at 200Hz and barely a nudge
-// up at 15k, which is the whole reason the slider is exponential in the first
-// place.
-const PARAM_CURVE = {
-  cutoff: {
-    to: (u) => 60 * Math.pow(20000 / 60, u),
-    from: (hz) => Math.log(Math.max(1e-6, hz) / 60) / Math.log(20000 / 60),
-  },
-  ring_freq: {
-    to: (u) => 20 * Math.pow(150, u),
-    from: (hz) => Math.log(Math.max(1e-6, hz) / 20) / Math.log(150),
-  },
-  shaper_preamp: {
-    to: shaperPreampGain,
-    from: (g) => (g <= 1 ? (g - 0.25) / 1.5 : 0.5 + Math.log(Math.max(1e-6, g)) / Math.log(8) / 2),
-  },
-};
-
 /** Move `base` (0..1 of the knob) by `off`, which is in the target's units. */
 function offsetUnit(key, base, off, knobSpan) {
-  const curve = PARAM_CURVE[key];
-  if (curve) return curve.from(curve.to(base) + off);
   const span = PARAM_SPAN[key] ?? knobSpan;
   return span ? base + off / span : base;
 }
