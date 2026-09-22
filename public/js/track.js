@@ -11,7 +11,7 @@ import { refreshEuclidUI, renderEuclidPanel } from "./euclid.js";
 import { cloneChance, refreshChanceUI, renderChancePanel } from "./chance.js";
 import { paintDiceDensity, placeBusesLast, refreshFxPanelUI, refreshMuteSoloUI, renderModPanel, renderTrack } from "./render.js";
 import { applySet } from "./session.js";
-import { defaultCompConfig, ensureFxRack, refreshAllTrackOutputs, refreshCompSourceDropdowns, refreshNoiseBeds, refreshOutputSelects, routeVoiceToRack } from "./signal.js";
+import { defaultCompConfig, ensureFxRack, refreshAllTrackOutputs, refreshCompSourceDropdowns, refreshNoiseBeds, refreshOutputSelects, routeVoiceToRack, setFilter } from "./signal.js";
 import { aliasPattern, clonePattern, emptyPattern, state } from "./state.js";
 import { renderStepGrid } from "./stepGrid.js";
 import { SCALES, midiToScaleIndex, scaleIndexToMidi } from "./theory.js";
@@ -211,6 +211,7 @@ export function duplicateTrack(src) {
     q(".p-timb").value = dup.params.timb;
     q(".p-morph").value = dup.params.morph;
     q(".p-decay").value = dup.params.decay;
+    q(".p-filtertype").value = dup.filter.type;
     q(".p-cutoff").value = dup.filter.cutoff;
     q(".p-reson").value = dup.filter.reson;
     q(".p-envamt").value = dup.filter.env;
@@ -263,6 +264,15 @@ export function duplicateTrack(src) {
     }
     if (dup.voice.setGlide) dup.voice.setGlide(dup.glide);
     routeVoiceToRack(dup);
+    // createTrack (above) built the filter node before the source's filter was
+    // copied onto it, and ensureFilter only sets a node's fields at
+    // construction — push the real values on now, or a duplicate mid-session
+    // keeps the default filter until something else happens to touch it.
+    if (dup.filterNode) {
+      setFilter(dup, "type",   dup.filter.type);
+      setFilter(dup, "cutoff", dup.filter.cutoff);
+      setFilter(dup, "reson",  dup.filter.reson);
+    }
     applySampleSpeed(dup);
     syncAllLFOs(dup);
   }

@@ -257,8 +257,9 @@ export const PARAM_DESCRIPTIONS = {
   fm:    "oscillator FM depth. Metallic and inharmonic as it climbs",
   metal: "metalizer: folds the triangle back on itself into harsh upper harmonics",
   noise: "level of the noise source in the oscillator mix",
-  cutoff: "the track's lowpass, after the voice and before the eq. The env panel can sweep it per note",
-  reson:  "resonance of that lowpass: a peak at the cutoff, from a gentle emphasis to a whistle",
+  "p-filtertype": "the filter's shape: lowpass keeps what's below the cutoff, highpass what's above it, bandpass a narrow band around it, notch everything but that band",
+  cutoff: "the track's filter cutoff, after the voice and before the eq — its shape comes from the type control. The env panel can sweep it per note",
+  reson:  "resonance of that filter: a peak at the cutoff, from a gentle emphasis to a whistle",
   "fx.vinyl":            "how much of the vinyl stage is in the signal: surface noise, tone loss and a slow warble together",
   "fx.vinyl.warmth":     "how far the vinyl stage rolls the top end off",
   "fx.vinyl.wow":        "depth of the vinyl warble",
@@ -460,6 +461,7 @@ const PANEL_BADGES = [
   { sel: ".sq-track__filter", panel: "_filterPanelEl", modal: "_filterModal", on: (t) => {
       const f = t.filter || {};
       const on = [];
+      if ((f.type || "lowpass") !== "lowpass") on.push(f.type);
       if ((f.cutoff ?? 1) < 0.999) on.push("cutoff");
       if ((f.reson ?? 0) > 0) on.push("resonance");
       return on;

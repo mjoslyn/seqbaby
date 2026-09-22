@@ -83,8 +83,9 @@
  */
 
 /**
- * Per-track lowpass filter + ADSR envelope config.
+ * Per-track filter + ADSR envelope config.
  * @typedef {Object} FilterConfig
+ * @property {"lowpass"|"highpass"|"bandpass"|"notch"} type  The BiquadFilterNode type (FILTER_TYPES, soundDefaults.js).
  * @property {number} cutoff  0..1 (mapped to Hz via cutoffToHz).
  * @property {number} reson   0..1 (mapped to Q via resonToQ).
  * @property {number} env     Envelope depth in octaves.

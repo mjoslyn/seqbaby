@@ -52,7 +52,7 @@ import { state } from "./state.js";
 
 /** Filter fields whose DOM class doesn't spell out from the field name. */
 const FILTER_FIELD_CLASS = {
-  cutoff: "p-cutoff", reson: "p-reson", env: "p-envamt",
+  type: "p-filtertype", cutoff: "p-cutoff", reson: "p-reson", env: "p-envamt",
   attack: "p-envatk", decay: "p-envdec", sustain: "p-envsus", release: "p-envrel",
 };
 

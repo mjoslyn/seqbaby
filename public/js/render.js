@@ -204,6 +204,7 @@ export function syncTrackSoundUI(t) {
   }
   const gsync = q(".p-gsync");
   if (gsync) gsync.checked = !!t.params.gsync;
+  set(".p-filtertype", t.filter.type);
   set(".p-cutoff", t.filter.cutoff);
   set(".p-reson",  t.filter.reson);
   set(".p-envamt", t.filter.env);
@@ -540,6 +541,7 @@ export function renderTrack(t) {
   }
   const gsyncEl = node.querySelector(".p-gsync");
   if (gsyncEl) gsyncEl.checked = t.params.gsync ?? GRAN_DEFAULTS.gsync;
+  node.querySelector(".p-filtertype").value = t.filter.type;
   node.querySelector(".p-cutoff").value = t.filter.cutoff;
   node.querySelector(".p-reson").value  = t.filter.reson;
   node.querySelector(".p-envamt").value = t.filter.env;
@@ -710,6 +712,7 @@ export function renderTrack(t) {
       else if (t.engineKey === "wt:akwf") openWavetableEditor(t);
     });
   }
+  node.querySelector(".p-filtertype").addEventListener("change", e => setFilter(t, "type", e.target.value));
   node.querySelector(".p-cutoff").addEventListener("input", e => setFilter(t, "cutoff", Number(e.target.value)));
   node.querySelector(".p-reson").addEventListener("input",  e => setFilter(t, "reson",  Number(e.target.value)));
   node.querySelector(".p-envamt").addEventListener("input", e => setFilter(t, "env",     Number(e.target.value)));

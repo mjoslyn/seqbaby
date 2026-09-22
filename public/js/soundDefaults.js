@@ -62,8 +62,13 @@ export function defaultTrackParams() {
   };
 }
 
+// The filter's shapes: the BiquadFilterNode types this app exposes on the
+// control. A song written before `type` existed has none, and `createTrack`
+// fills it from this default, so it plays exactly as it did — lowpass only.
+export const FILTER_TYPES = ["lowpass", "highpass", "bandpass", "notch"];
+
 export function defaultFilter() {
-  return { cutoff: 1, reson: 0, env: 0, attack: 0, decay: 0.25, sustain: 0.4, release: 0.3 };
+  return { type: "lowpass", cutoff: 1, reson: 0, env: 0, attack: 0, decay: 0.25, sustain: 0.4, release: 0.3 };
 }
 
 export function defaultEq() { return { low: 0, mid: 0, high: 0 }; }

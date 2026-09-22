@@ -169,6 +169,8 @@ test("filter, eq and comp ranges; sidechain by index", () => {
   const b = sb.addTrack(s, { engine: "pad" });
   sb.setFilter(s, b.index, { cutoff: 0.4, env: 0.5 });
   assert.throws(() => sb.setFilter(s, b.index, { cutoff: 2 }), /between 0 and 1/);
+  assert.equal(sb.setFilter(s, b.index, { type: "highpass" }).type, "highpass");
+  assert.throws(() => sb.setFilter(s, b.index, { type: "bandstop" }), /filter.type must be one of/);
   sb.setEq(s, b.index, { low: -6 });
   assert.throws(() => sb.setEq(s, b.index, { low: 30 }), /between -18 and 18/);
   const c = sb.setComp(s, b.index, { source: a.index, threshold: -30 });

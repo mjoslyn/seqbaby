@@ -233,7 +233,7 @@ export function ensureFilter(t) {
   if (!state.audioCtx || t.filterNode) return;
   const ctx = state.audioCtx;
   const f = ctx.createBiquadFilter();
-  f.type = "lowpass";
+  f.type = t.filter.type || "lowpass";
   f.frequency.value = cutoffToHz(t.filter.cutoff);
   f.Q.value = resonToQ(t.filter.reson);
   t.filterNode = f;
@@ -496,11 +496,12 @@ export function fireFilterEnv(t, time, duration) {
 
 /**
  * Update one filter/env parameter and apply it live.
- * @param {Track} t @param {string} key @param {number} val
+ * @param {Track} t @param {string} key @param {number|string} val
  */
 export function setFilter(t, key, val) {
   t.filter[key] = val;
   if (!t.filterNode) return;
+  if (key === "type") t.filterNode.type = val;
   if (key === "cutoff") {
     // bump base between hits; active envelope automation will continue until next hit schedules new values
     t.filterNode.frequency.cancelScheduledValues(state.audioCtx.currentTime);
