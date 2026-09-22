@@ -1333,12 +1333,16 @@ moves the real knob already.
   param with a signal connected still reports only its intrinsic value. Rate,
   depth and shape are right; the phase is the display's own.
 - **A depth is in the TARGET's units, a needle is in the knob's.** For most
-  keys those are the same (`LFO_AMP_SCALE` for a hexop / guitar / bass / contagion
-  control IS its knob's range), so the knob's own min..max is the divisor.
-  `PARAM_SPAN` in modMotion.js holds the ones that differ — a fuzz drive in
-  gain, a silverbox tune knob reading cents into a param in semitones — and
-  `PARAM_CURVE` the three that aren't linear at all, cutoff above all: 3kHz is
-  most of the dial at 200Hz and a nudge at 15k.
+  keys those are the same — every hexop / guitar / bass / contagion control,
+  and every linear fx sub-param (fuzz tone, delay time, chorus/phaser/flanger
+  rate, ...), has `LFO_AMP_SCALE` set to its knob's own full range, so depth
+  100% is peak-to-peak of the whole knob and its own min..max is the divisor.
+  `PARAM_SPAN` in modMotion.js holds the two that still differ — a silverbox
+  tune knob reading cents into a param in semitones, a vinyl warmth swing that
+  turns the top DOWN instead of up — and `PARAM_CURVE` the three that aren't
+  linear at all (cutoff, ring_freq, shaper_preamp): 3kHz is most of the dial
+  at 200Hz and a nudge at 15k, so a fixed Hz swing can't be made to hit the
+  slider's ceiling from an arbitrary base the way the linear ones now do.
 
 **What is on shows on the track** (`refreshPanelBadges`, paramTargets.js).
 Every sound-shaping panel opens as a modal, so a track with a delay on it, an

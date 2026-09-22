@@ -46,22 +46,17 @@ const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
 // drives is in — Hz for a cutoff, seconds for a delay time, a gain for a fuzz
 // drive — while the needle has to be placed in the units the knob is drawn in.
 // For most targets those are the same thing (a 0..1 knob on a 0..1 param, and
-// every hexop / guitar / bass / contagion control, whose scale IS its knob's range),
+// every hexop / guitar / bass / contagion control, whose scale IS its knob's range,
+// and now every linear fx sub-param too — see LFO_AMP_SCALE's own comment),
 // so the knob's own min..max is the divisor and there is nothing to say.
 //
-// These are the ones where they differ: how much of the target's unit one full
-// sweep of the knob covers.
+// These are the ones where they still differ.
 const PARAM_SPAN = {
-  reson: 19.5,            // Q 0.5 → 20
-  silverbox_tune: 1,          // the knob reads in cents, the param in semitones
-  fuzz_drive: 30,         // gain 1 → 31
-  fuzz_tone: 7800,        // Hz 200 → 8000
-  fuzz_level: 0.9,        // gain 0 → 0.9
-  vinyl_warmth: -7200,    // Hz 9000 → 1800: warmth turns the top DOWN
-  chorus_rate: 4.9,       // Hz 0.1 → 5
-  phaser_rate: 3.95,      // Hz 0.05 → 4
-  flanger_rate: 3.95,
-  flanger_fbk: 0.9,
+  silverbox_tune: 1,      // the knob reads in cents, the param in semitones
+  // vinylLP.frequency's warmth slope is -7200 at amount 1 (see LFO_AMP_SCALE's
+  // comment) — negative because warmth turns the top DOWN, so the needle has
+  // to move the opposite way from a positive Hz offset.
+  vinyl_warmth: -7200,
 };
 
 // And the three that aren't linear at all, so a fixed distance in the param's

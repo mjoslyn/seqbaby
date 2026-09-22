@@ -133,25 +133,38 @@ export const LFO_LABELS = {
 export const lfoLabel = (k) => LFO_LABELS[k] ?? k;
 export const LFO_AMP_SCALE = {
   vol: 1, harm: 1, timb: 1, morph: 1, decay: 1,
+  // cutoff and ring_freq are exponential (see cutoffToHz / applyRingMod's log
+  // map): a fixed Hz swing summed onto the native AudioParam covers a
+  // different fraction of the knob depending on where the base sits, so
+  // depth 100% can't be made to hit the slider's ceiling from an arbitrary
+  // base this way — these two are a known exception to the "depth 100% is
+  // peak-to-peak of the full range" rule below.
   cutoff: 6000,   // Hz
-  reson: 15,
+  reson: 19.5,             // Q 0.5..20 (resonToQ) — full span, so depth 1 swings the whole knob
   fuzz: 1, delay: 1, verb: 1,
   vinyl: 1, cassette: 1, ringmod: 1, shaper: 1, crush: 1, autowah: 1, chorus: 1, phaser: 1, flanger: 1, pitch: 1,
-  // fx sub-params (audio-rate AudioParam targets)
-  fuzz_drive: 30,         // +/- 15 on the gain unit (drive path gain is 1+drive*30)
-  fuzz_tone: 4000,        // Hz around tone filter cutoff (200..8000)
-  fuzz_level: 1,
-  vinyl_warmth: 5000,     // Hz around lowpass freq
-  shaper_preamp: 6,       // swing on shaperPreamp.gain (unit gain ~0.25..8)
-  ring_freq: 1500,        // Hz
-  crush_bits: 8,           // bits swing (1..16)
+  // fx sub-params (audio-rate AudioParam targets). Each is the control's own
+  // full native-unit span (see applyFuzz / applyChorus / etc. in fxRack.js),
+  // so depth 1 is peak-to-peak of the whole knob — same convention as the
+  // 0..1 controls below, just in the AudioParam's own units.
+  fuzz_drive: 30,         // gain 1..31 (drive path gain is 1+drive*30)
+  fuzz_tone: 7800,        // Hz 200..8000 around the tone filter cutoff
+  fuzz_level: 0.9,        // gain 0..0.9
+  // vinylLP.frequency is 18000 - amount*(18000-(9000-warmth*7200)) — the
+  // warmth→Hz slope scales with the vinyl amount knob too, so 7200 (its
+  // slope at amount 1, full wet) only reaches the true floor/ceiling there;
+  // at a lower amount the same depth covers proportionally less.
+  vinyl_warmth: 7200,     // Hz, at amount 1 (see above)
+  shaper_preamp: 6,       // swing on shaperPreamp.gain (unit gain ~0.25..8; curved like cutoff, see above)
+  ring_freq: 1500,        // Hz (curved like cutoff, see above)
+  crush_bits: 15,          // bits 1..16, full span
   crush_rate: 1,           // converter clock, on its own 0..1 knob
-  chorus_rate: 4,          // Hz
-  phaser_rate: 3,          // Hz
-  flanger_rate: 3,         // Hz
-  flanger_fbk: 0.8,
-  delay_time: 0.3,         // seconds
-  delay_fbk: 0.8,
+  chorus_rate: 4.9,        // Hz 0.1..5, full span
+  phaser_rate: 3.95,       // Hz 0.05..4, full span
+  flanger_rate: 3.95,      // Hz 0.05..4, full span
+  flanger_fbk: 0.9,        // gain 0..0.9, full span
+  delay_time: 0.95,        // seconds 0.05..1, full span
+  delay_fbk: 0.95,         // gain 0..0.95, full span
   // fx sub-params modulated via setter LFO (0..1 swing around the user's base value)
   vinyl_wow: 1, cassette_flutter: 1, cassette_sat: 1,
   shaper_amt: 1,
