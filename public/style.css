@@ -1742,7 +1742,8 @@ main {
 }
 .sq-track.is-plocked { border-color: var(--accent-2); }
 
-.sq-track__solo[aria-pressed="true"] {
+.sq-track__solo[aria-pressed="true"],
+.sq-track__mute[aria-pressed="true"] {
   background: var(--accent);
   color: #0b0d10;
   border-color: var(--accent);
