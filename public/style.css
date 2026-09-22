@@ -1749,6 +1749,10 @@ main {
 }
 .sq-track.is-soloed { border-color: var(--accent); }
 
+/* Mute and solo say opposite things about the same track, so a track holding
+   one has the other's button disabled rather than letting them contradict. */
+.sq-track__solo:disabled, .sq-track__mute:disabled { opacity: 0.35; cursor: not-allowed; }
+
 /* The computer keyboard is always active; the targeted track is highlighted. */
 .sq-kbd-icon { display: inline-flex; align-items: center; color: var(--fg-dim); cursor: help; }
 .sq-kbd-oct { font-size: 11px; color: var(--fg-dim); font-variant-numeric: tabular-nums; min-width: 22px; text-align: center; }
