@@ -886,12 +886,16 @@ export function openTrackMenu(t) {
   title.append(nameEl, engEl);
   modal.appendChild(title);
 
-  // sound-shaping panels first — the most-used controls in here
+  // sound-shaping panels first — the most-used controls in here. fx and
+  // filter are left out on purpose: on a phone (the only place this menu
+  // opens) render.js's applyQuickRow has already pulled them, +1, /2 and the
+  // speed field out of the head into the quick-access row that sits below the
+  // generator icons — inline like roll, never funneled through this modal.
   addLabel("sound");
   const panelWrap = document.createElement("div");
   panelWrap.className = "sq-track__menu-panels";
   for (const sel of [
-    ".sq-track__filter", ".sq-track__env", ".sq-track__fx", ".sq-track__eq",
+    ".sq-track__env", ".sq-track__eq",
     ".sq-track__comp", ".sq-track__mod", ".track-aut",
   ]) {
     const n = capture(head, sel);
@@ -899,29 +903,12 @@ export function openTrackMenu(t) {
   }
   modal.appendChild(panelWrap);
 
-  // +1 / /2 live in the quick-access row now (studioMarkup.ts), not inside
-  // .sq-track__len-extend — captured separately and spliced back into it here
-  // so the menu still shows one "length" group of five. Each keeps its own
-  // capture record, so close() puts it back in the quick row, not here.
-  const lenPlus1 = capture(head, ".track-len-plus1");
-  const lenHalf  = capture(head, ".track-len-half");
+  // Only x2/x4/quarter are still in here — +1 and /2 left for the quick row.
   const lenExtend = capture(head, ".sq-track__len-extend");
-  if (lenExtend) {
-    if (lenPlus1) lenExtend.insertBefore(lenPlus1, lenExtend.firstChild);
-    if (lenHalf) lenExtend.insertBefore(lenHalf, lenExtend.querySelector(".track-len-quarter"));
-    addLabel("length");
-    modal.appendChild(lenExtend);
-  }
+  if (lenExtend) { addLabel("length"); modal.appendChild(lenExtend); }
 
   const oct = capture(head, ".sq-track__oct");
   if (oct) { addLabel("pitch"); modal.appendChild(oct); }
-
-  const speedField = head.querySelector(".sq-track__speed")?.closest(".sq-field");
-  if (speedField) {
-    captured.push({ node: speedField, parent: speedField.parentNode, nextSibling: speedField.nextSibling });
-    addLabel("speed");
-    modal.appendChild(speedField);
-  }
 
   // The send. Hidden in the head while there is no bus to send to, and the
   // menu keeps that — an empty "routing" section would say nothing.
