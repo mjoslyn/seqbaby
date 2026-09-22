@@ -239,25 +239,33 @@ export function ensureFilter(t) {
   t.filterNode = f;
 }
 
+// low/mid/high are the original three bands, unmoved — an old song with only
+// those three keys in t.eq still sounds exactly as it did. lomid and himid
+// are new peaking bands slotted either side of mid, default gain 0, so a
+// session that has never heard of them plays back unchanged.
+export const EQ_BANDS = [
+  { key: "low",   type: "lowshelf", freq: 250,  label: "low",    desc: "low shelf at 250Hz, ±18dB" },
+  { key: "lomid", type: "peaking",  freq: 600,  q: 1.0, label: "lo mid", desc: "peaking bell at 600Hz, ±18dB" },
+  { key: "mid",   type: "peaking",  freq: 1200, q: 0.8, label: "mid",    desc: "peaking bell at 1.2kHz, ±18dB" },
+  { key: "himid", type: "peaking",  freq: 3000, q: 1.0, label: "hi mid", desc: "peaking bell at 3kHz, ±18dB" },
+  { key: "high",  type: "highshelf", freq: 5000, label: "high",  desc: "high shelf at 5kHz, ±18dB" },
+];
+
 export class EQChain {
   constructor(ctx, cfg) {
-    this.low = ctx.createBiquadFilter();
-    this.low.type = "lowshelf";
-    this.low.frequency.value = 250;
-    this.low.gain.value = cfg.low ?? 0;
-    this.mid = ctx.createBiquadFilter();
-    this.mid.type = "peaking";
-    this.mid.frequency.value = 1200;
-    this.mid.Q.value = 0.8;
-    this.mid.gain.value = cfg.mid ?? 0;
-    this.high = ctx.createBiquadFilter();
-    this.high.type = "highshelf";
-    this.high.frequency.value = 5000;
-    this.high.gain.value = cfg.high ?? 0;
-    this.low.connect(this.mid);
-    this.mid.connect(this.high);
-    this.input = this.low;
-    this.output = this.high;
+    let prev = null;
+    for (const band of EQ_BANDS) {
+      const f = ctx.createBiquadFilter();
+      f.type = band.type;
+      f.frequency.value = band.freq;
+      if (band.q != null) f.Q.value = band.q;
+      f.gain.value = cfg[band.key] ?? 0;
+      this[band.key] = f;
+      if (prev) prev.connect(f);
+      else this.input = f;
+      prev = f;
+    }
+    this.output = prev;
   }
   setBand(name, db) {
     if (this[name]) this[name].gain.value = db;

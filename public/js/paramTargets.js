@@ -1,4 +1,5 @@
 import { FX_STAGE_LABELS, FX_STAGE_LEVEL_KEY, LFO_KEYS, LFO_LABELS, fxStageLevel } from "./constants.js";
+import { EQ_BANDS } from "./signal.js";
 import { BASS_MOD_KEYS, BASS_MOD_LABELS } from "./bass.js";
 import { HEXOP_MOD_KEYS, HEXOP_MOD_LABELS } from "./hexop.js";
 import { SUB_MOD_KEYS, SUB_MOD_LABELS } from "./subbass.js";
@@ -325,9 +326,11 @@ export const PARAM_DESCRIPTIONS = {
   "p-envsus": "the cutoff level the sweep holds at while the note lasts",
   "p-envrel": "how long the cutoff takes to fall back once the note ends",
   // EQ.
-  "p-eq-low":  "low shelf at 250Hz, ±18dB",
-  "p-eq-mid":  "peaking bell at 1.2kHz, ±18dB",
-  "p-eq-high": "high shelf at 5kHz, ±18dB",
+  "p-eq-low":   "low shelf at 250Hz, ±18dB",
+  "p-eq-lomid": "peaking bell at 600Hz, ±18dB",
+  "p-eq-mid":   "peaking bell at 1.2kHz, ±18dB",
+  "p-eq-himid": "peaking bell at 3kHz, ±18dB",
+  "p-eq-high":  "high shelf at 5kHz, ±18dB",
   // Compressor.
   "comp-enabled":    "switches the track compressor in",
   "sq-comp__source": "what the compressor listens to: itself, or another track. Pick a track here to duck this one under it",
@@ -494,7 +497,7 @@ const PANEL_BADGES = [
       return shown.size > 0;
     } },
   { sel: ".sq-track__eq", panel: "_eqPanelEl", modal: "_eqModal",
-    on: (t) => ["low", "mid", "high"].filter(b => Math.abs(t.eq?.[b] ?? 0) >= 0.5) },
+    on: (t) => EQ_BANDS.map(b => b.key).filter(b => Math.abs(t.eq?.[b] ?? 0) >= 0.5) },
   { sel: ".sq-track__comp", panel: "_compPanelEl", modal: "_compModal", on: (t) => {
       if (!t.comp?.enabled) return [];
       const src = t.comp.source;

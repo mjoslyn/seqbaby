@@ -28,7 +28,7 @@ import { defaultLFOConfig, syncLFO } from "./lfo.js";
 import { setParam, updateGranularSpeedEnabled } from "./params.js";
 import { refreshParamIndicators } from "./paramTargets.js";
 import { refreshFxPanelUI, renderModPanel, syncTrackSoundUI } from "./render.js";
-import { applyCompressorConfig, setEQ, setFilter } from "./signal.js";
+import { applyCompressorConfig, EQ_BANDS, setEQ, setFilter } from "./signal.js";
 import { state } from "./state.js";
 
 /** @typedef {import("./types.js").Track} Track */
@@ -109,7 +109,7 @@ export function applyPatternSound(t, snap) {
     }
   }
   if (snap.eq) {
-    for (const band of ["low", "mid", "high"]) {
+    for (const { key: band } of EQ_BANDS) {
       if (snap.eq[band] === undefined || same(t.eq[band], snap.eq[band])) continue;
       setEQ(t, band, snap.eq[band]);
       touched = true;

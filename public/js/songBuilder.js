@@ -637,12 +637,13 @@ export function setFilter(song, index, f = {}) {
   }
   return { ...d, ...t.filter };
 }
-/** Three-band eq in dB, -18..18: low (shelf 250Hz), mid (peak 1.2kHz), high (shelf 5kHz). */
+/** Five-band eq in dB, -18..18: low (shelf 250Hz), lomid (peak 600Hz),
+ *  mid (peak 1.2kHz), himid (peak 3kHz), high (shelf 5kHz). */
 export function setEq(song, index, eq = {}) {
   const t = trackAt(song, index);
   const d = defaultEq();
   for (const [k, v] of Object.entries(eq)) {
-    if (!(k in d)) fail(`unknown eq band ${JSON.stringify(k)}; one of low, mid, high`);
+    if (!(k in d)) fail(`unknown eq band ${JSON.stringify(k)}; one of ${Object.keys(d).join(", ")}`);
     t.eq[k] = num(v, `eq.${k}`, -18, 18);
   }
   return { ...d, ...t.eq };

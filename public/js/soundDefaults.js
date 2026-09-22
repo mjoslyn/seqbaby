@@ -66,7 +66,7 @@ export function defaultFilter() {
   return { cutoff: 1, reson: 0, env: 0, attack: 0, decay: 0.25, sustain: 0.4, release: 0.3 };
 }
 
-export function defaultEq() { return { low: 0, mid: 0, high: 0 }; }
+export function defaultEq() { return { low: 0, lomid: 0, mid: 0, himid: 0, high: 0 }; }
 
 export function defaultCompConfig() {
   return { enabled: false, source: "self", threshold: -20, ratio: 4, attack: 0.01, release: 0.2, knee: 6 };
