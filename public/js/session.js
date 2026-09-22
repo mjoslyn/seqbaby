@@ -15,7 +15,7 @@ import { applyBusMute, paintDiceDensity, placeBusesLast, refreshFxPanelUI, refre
 import { flushAllPatternSounds, recallLoadedPatternSound, refreshPatternLockUI, refreshPatternSoundUI } from "./patternSound.js";
 import { syncScaleUI } from "./scaleUI.js";
 import { migrateLegacyNames, migrateTrackNames, SET_VERSION, validateSet } from "./sessionFormat.js";
-import { applyCompressorConfig, ensureFxRack, EQ_BANDS, refreshAllTrackOutputs, refreshCompSourceDropdowns, refreshNoiseBeds, refreshOutputSelects, routeVoiceToRack, wouldFeedback } from "./signal.js";
+import { applyCompressorConfig, ensureFxRack, EQ_BANDS, refreshAllTrackOutputs, refreshCompSourceDropdowns, refreshNoiseBeds, refreshOutputSelects, routeVoiceToRack, setFilter, wouldFeedback } from "./signal.js";
 import { applyMacroPads, serializeMacroPads } from "./macro.js";
 import { aliasPattern, state, syncMeterUI, syncRepeatsUI } from "./state.js";
 import { renderStepGrid } from "./stepGrid.js";
@@ -555,6 +555,16 @@ export function loadTrackFromData(t, td) {
     }
     if (t.voice.setGlide) t.voice.setGlide(t.glide);
     routeVoiceToRack(t);
+    // The filter node, like the eq's bands just below, was built by createTrack's
+    // own eager ensureAudio pass (or a previous engine's routeVoiceToRack) before
+    // this track's real filter settings landed on `t.filter` — ensureFilter only
+    // sets a node's fields at CONSTRUCTION, so a node built early keeps its
+    // defaults forever unless pushed onto it explicitly, same as the eq bands.
+    if (t.filterNode) {
+      setFilter(t, "type",   t.filter.type);
+      setFilter(t, "cutoff", t.filter.cutoff);
+      setFilter(t, "reson",  t.filter.reson);
+    }
     if (t.eqNode) {
       for (const { key } of EQ_BANDS) t.eqNode.setBand(key, t.eq[key]);
     }
@@ -901,6 +911,16 @@ export function applyTrackPatch(t, patch) {
     }
     if (t.voice.setGlide) t.voice.setGlide(t.glide);
     routeVoiceToRack(t);
+    // The filter node, like the eq's bands just below, was built by createTrack's
+    // own eager ensureAudio pass (or a previous engine's routeVoiceToRack) before
+    // this track's real filter settings landed on `t.filter` — ensureFilter only
+    // sets a node's fields at CONSTRUCTION, so a node built early keeps its
+    // defaults forever unless pushed onto it explicitly, same as the eq bands.
+    if (t.filterNode) {
+      setFilter(t, "type",   t.filter.type);
+      setFilter(t, "cutoff", t.filter.cutoff);
+      setFilter(t, "reson",  t.filter.reson);
+    }
     if (t.eqNode) {
       for (const { key } of EQ_BANDS) t.eqNode.setBand(key, t.eq[key]);
     }

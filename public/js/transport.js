@@ -10,6 +10,7 @@ import { loadHexopWorklet } from "./hexop.js";
 import { loadSubBassWorklet } from "./subbass.js";
 import { loadCrusherWorklet } from "./crusher.js";
 import { loadReverbWorklet } from "./reverb.js";
+import { loadFilterModelsWorklet } from "./filterModels.js";
 import { loadGuitarWorklet } from "./guitar.js";
 import { currentBpm, syncAllLFOs } from "./lfo.js";
 import { init, needsResume, primeAudioForIOS } from "./main.js";
@@ -262,7 +263,10 @@ export function loadWorklet() {
   // The reverb is a feedback delay network, for the same reason: a tank has
   // state. It is also the rack's, so every track wants it registered.
   const reverb = loadReverbWorklet(state.audioCtx).catch(e => { console.warn("reverb worklet load failed", e); });
-  return Promise.all([state.woscLoad, silverbox, contagion, hexop, guitar, bass, sub, crusher, reverb]);
+  // The eight analog filter characters — every track's filter slot wants
+  // this registered, the same reason the rack's crusher/reverb are here.
+  const analogFilter = loadFilterModelsWorklet(state.audioCtx).catch(e => { console.warn("analog filter worklet load failed", e); });
+  return Promise.all([state.woscLoad, silverbox, contagion, hexop, guitar, bass, sub, crusher, reverb, analogFilter]);
 }
 
 /**

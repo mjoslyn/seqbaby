@@ -46,7 +46,7 @@ import {
   STATIC_ENGINES, staticEngineByKey, engineSliderLabels,
   SUB_NUM_CTLS, SUB_SEL_CTLS, SUB_TONE_NAMES, subTone, subToneDescription,
 } from "./engineData.js";
-import { EUCLID_DEFAULTS, defaultCompConfig, defaultEq, defaultFilter, defaultFxConfig, defaultTrackParams } from "./soundDefaults.js";
+import { EUCLID_DEFAULTS, FILTER_TYPES, defaultCompConfig, defaultEq, defaultFilter, defaultFxConfig, defaultTrackParams } from "./soundDefaults.js";
 import {
   AUTOMATION_TARGETS, FX_STAGE_LEVEL_KEY, LFO_DIVS, LFO_KEYS, LFO_LABELS, PATTERN_COUNT, STEPS_PER_BAR,
   canAutomateKey, canModulateKey, lfoDivLabel, voiceAutoKeysForEngineKey,
@@ -626,14 +626,16 @@ export function applyPreset(song, index, name) {
   return { preset: hit, description: p.describe?.(hit) || "" };
 }
 
-/** The track filter and its envelope, all 0..1: cutoff, reson, env (how far
- *  the envelope opens the filter), attack, decay, sustain, release. */
+/** The track filter: its shape (`type`, one of FILTER_TYPES — the four plain
+ *  BiquadFilterNode shapes plus eight analog-modeled characters, lowpass by
+ *  default) and its envelope, the rest 0..1: cutoff, reson, env (how far the
+ *  envelope opens the filter), attack, decay, sustain, release. */
 export function setFilter(song, index, f = {}) {
   const t = trackAt(song, index);
   const d = defaultFilter();
   for (const [k, v] of Object.entries(f)) {
     if (!(k in d)) fail(`unknown filter field ${JSON.stringify(k)}; one of ${Object.keys(d).join(", ")}`);
-    t.filter[k] = num(v, `filter.${k}`, 0, 1);
+    t.filter[k] = k === "type" ? oneOf(v, "filter.type", FILTER_TYPES) : num(v, `filter.${k}`, 0, 1);
   }
   return { ...d, ...t.filter };
 }

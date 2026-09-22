@@ -16,7 +16,7 @@ env / fx / eq / comp / mod / automation per track.
   `public/woscillators.js` →
   `public/js/main.js` (ES module). `middleware.ts` refreshes the Supabase
   session on every request *except* static engine assets.
-- **Engine**: ~63 dependency-free vanilla ES modules in `public/js/`. No
+- **Engine**: ~64 dependency-free vanilla ES modules in `public/js/`. No
   bundler — edit, reload. `window.seqbaby` (from `appApi.js`) exposes `state`
   and serialize/apply hooks to the React shell (typed in `app/seqbaby.d.ts`).
 - **Accounts + data**: Supabase (Postgres + Auth + RLS). Tables: `profiles`,
@@ -110,6 +110,13 @@ env / fx / eq / comp / mod / automation per track.
   file shape again. It is the rack's, not an engine's, and it exists because a
   convolution reverb's decay cannot be changed without re-rendering it. See the
   reverb section below.
+- `filterModels.js` — the filter control's eight analog-modeled characters
+  (fat/crisp/squelch/edge/poly/velvet/scream/growl), an AudioWorklet insert
+  effect standing in for the plain BiquadFilterNode when `t.filter.type`
+  names one of them. Same file shape as crusher.js/reverb.js. It is the
+  filter's, not an engine's or the rack's — `signal.js`'s `ensureFilter` /
+  `setFilter` build and switch it. See the analog filter models section
+  below.
 - `lfo.js` — LFO configs, `getModTarget`/`canModulate`, tempo sync, setter loop.
 - `automation.js` — per-step parameter automation (`AUTOMATION_TARGETS`).
 - `paramHold.js` — `holdParamAt` / `fadeStop`, no imports (see the clicks and
@@ -443,6 +450,78 @@ in ─ dc ─ predelay ─ 4 allpass diffusers ─┬─▶ 8 delay lines ─┬
   a 180ms frame, so a track never loses its tail.
 - `reverb.js` is importable from Node (no DOM, no Tone), which is what lets
   `test/reverb.test.js` render the tank and measure all of the above.
+
+## Analog filter models (`filterModels.js`) — eight characters on the filter control
+
+The filter control's `type` (`t.filter.type`) is one of the plain
+BiquadFilterNode shapes (lowpass/highpass/bandpass/notch — unchanged, native)
+or one of eight analog-modeled characters — `fat`, `crisp`, `squelch`,
+`edge`, `poly`, `velvet`, `scream`, `growl` — run through an AudioWorklet
+insert effect standing in for the biquad. Same two knobs (cut, reson) as
+every other filter type; only the shape of the response differs.
+
+```
+ladder family (fat, crisp, squelch, edge, poly):
+  in → [x − k·sat(feedback)] → N one-pole TPT stages (3 or 4) → out
+                     ▲                                    │
+                     └──────────── feedback tap ───────────┘
+svf family (velvet, scream, growl):
+  in → [pre-drive, growl/scream only] → 1 or 2 cascaded TPT SVF stages → out
+```
+
+- **Two DSP families, not eight separate ones**, because that is what the
+  circuits actually are: Moog, Roland's IR3109, the ARP 2600/4072 and the
+  CEM3320/SSM2040 chip ladders are all feedback ladders — a saturator INSIDE
+  the resonance feedback path, the same structure as `silverbox.js`'s VCF —
+  while the Oberheim SEM, Korg MS-20 and Steiner-Parker are state-variable
+  designs, the same topology-preserving SVF as `contagion.js`'s `svf()`,
+  reused here nearly verbatim (cascaded to 4-pole by running two stages in
+  series with `sqrt(Q)` split across them, exactly as contagion's own 4-pole
+  mode does, so the two stages' peaks don't multiply).
+- **That split is real circuit behavior, not a naming convenience.** A
+  feedback ladder's resonance costs passband level as it climbs — the
+  saturator inside the loop eats it, the same reasoning silverbox's own docs
+  give for "the passband loses level as resonance goes up." An SVF's
+  resonance does not cost bass that way; that's why the gentler, smoother
+  characters (`velvet`) sit in the SVF family and not the ladder one. A
+  BiquadFilterNode-plus-waveshaper approximation can match a slope but not
+  this — the saturator has to be inside the feedback path.
+- **`squelch` reuses silverbox's own filter**, not a fresh derivation: its
+  description (18dB/oct-ish diode ladder, the squelchy acid sound) IS
+  silverbox's documented VCF, so `squelch` is a 3-pole ladder with silverbox's
+  exact asymmetric diode clip (`f≥0 ? f/(1+0.6f) : f/(1-1.1f)`) and its
+  `k = 7.2·resonance` feedback scale. The other four ladder characters are
+  4-pole (24dB), differing in saturation curve and how much of the resonant
+  bass loss each claws back with makeup gain — `fat` claws back the least
+  (warmest, most loss), `poly` the most (cleanest, chip-precise, least loss).
+- **No shape control.** The SEM and Steiner-Parker are real multimode
+  circuits (lowpass/highpass/bandpass/notch on the same core), but the filter
+  panel wasn't given a fifth knob for it — every one of the eight is that
+  circuit's lowpass voicing. `scream` and `growl` get their aggression from a
+  pre-filter drive that grows with the resonance knob instead (`0.3 + 0.7 ×
+  resonance`), so "screamy at high resonance" is what the existing knob does,
+  not a fixed amount of grit sitting on top.
+- **These are reasoned stylistic differences — pole count, saturation curve,
+  how much bass loss is compensated — not measurements against real
+  hardware.** There is no physical unit under test here the way there is for
+  the reverb's RT60 or the crusher's alias frequencies; the per-model
+  constants in `filterModels.js` are honest character, not a claimed
+  reproduction.
+- **`.frequency` and `.Q` are glued onto the worklet node** under those exact
+  names once it's built (`buildAnalogFilterNode`), so `fireFilterEnv`, the
+  cutoff/reson branches of `setFilter`, the LFO and the automation lane treat
+  it exactly like the native biquad it stands in for — none of that code
+  knows or needs to know which kind of node `t.filterNode` is. Only `type`
+  itself is special: switching between two models of the same kind (two
+  ladder characters, or two SVF ones) is a `postMessage`, live, no rebuild —
+  the same contract as silverbox's `wave` switch and contagion's `mode1` /
+  `route` / `satCurve`. Crossing between a plain biquad shape and an analog
+  model needs an actual different node, so that one case disposes the old
+  node and calls `ensureFilter` + `routeVoiceToRack` again.
+- **Loading** — same Blob-URL registration as the other worklets, from
+  `loadWorklet()` in transport.js. A failure falls back to a plain native
+  lowpass, same fallback contract as every other worklet here, so a track is
+  never silent while it registers or if it never does.
 
 ## Audio start / unlock (hard-won — don't regress)
 
@@ -2748,7 +2827,7 @@ Repo: https://github.com/mjoslyn/seqbaby.
   An inline marker (`window.__seqbabyServerBoot`) tells the paths apart, and
   `ScriptLoader.tsx` keeps its onload-chained injection for the soft-nav case
   (e.g. arriving from `/login`).
-- `app/EnginePreload.tsx` emits `modulepreload` for all 62 modules listed in
+- `app/EnginePreload.tsx` emits `modulepreload` for all 63 modules listed in
   `app/engineAssets.ts` (at `engineAsset("/js/<name>")`; the hints used to
   point at the site root and 404). The graph is 8 levels deep, so without it the browser
   needs up to eight sequential round trips just to discover the code.
