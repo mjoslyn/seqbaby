@@ -18,7 +18,12 @@
 // those edits has to reach the room — and takes exactly that answer: the same
 // event list, the same settle, `serializeSet` as the thing compared. Whatever
 // changes the session gets broadcast, including things nobody thought of as
-// edits: a song opened from the menu, `new`, an undo, a compose turn kept.
+// edits: an undo, a compose turn kept.
+//
+// **A whole session arriving locally is a different song, not an edit to this
+// one**, and leaves the room instead of broadcasting it: opening another song
+// from the menu, or pressing `new`, would otherwise hand everyone else in the
+// jam a song they never asked to jam on. See onSessionArrived below.
 //
 // **What goes on the wire is a diff** (jamSync.js), against the session the
 // room last agreed on, and a peer's diff is laid over this studio's copy and
@@ -108,12 +113,16 @@ function onInteraction(e) {
   scheduleFlush();
 }
 
-// A whole session arriving — opened from the menu, `new`, a share link — is
-// something the room has to hear too. Unless it is the room's own session
-// arriving (`applying`), in which case it is what the room already knows.
+// A whole session arriving — opened from the menu, `new`, a share link — is a
+// different song, so this leaves the jam rather than broadcasting it over the
+// one the room is on: the song stays open here, exactly as `leave` promises.
+// Unless it is the room's own session arriving (`applying`), in which case it
+// is what the room already knows and there is nothing to leave over.
 function onSessionArrived() {
   if (!room || applying) return;
-  scheduleFlush();
+  const r = room;
+  stopJam();
+  r.leave?.();
 }
 
 function install() {
@@ -267,8 +276,10 @@ export function receiveJamPhase(originMs, bpm) {
  * Start telling `send` about edits. The session as it is now becomes the
  * base — what this studio believes the room holds — so the first patch
  * describes the first edit, not the whole song. A newcomer's base is replaced
- * the moment the room's session arrives (`receiveJamState`).
- * @param {{send: (msg: Object) => void}} r
+ * the moment the room's session arrives (`receiveJamState`). `leave`, if
+ * given, is called instead of a broadcast when a different song arrives
+ * locally (see onSessionArrived).
+ * @param {{send: (msg: Object) => void, leave?: () => void}} r
  */
 export function startJam(r) {
   install();

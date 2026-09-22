@@ -2207,9 +2207,18 @@ studio B ◀──mergeSet── jam.js ◀──patch── JamPanel ◀──�
 - **Nothing is instrumented, for history.js's reason.** The engine half
   watches the same interaction events the undo stack does, waits the same
   420ms, and asks `serializeSet` whether the session changed. Whatever changed
-  it is sent — the step grid, a knob, a generator, a compose turn kept, a song
-  opened from the menu, `new`, an undo. A feature added later reaches the room
-  without knowing jam.js exists.
+  it is sent — the step grid, a knob, a generator, a compose turn kept, an
+  undo. A feature added later reaches the room without knowing jam.js exists.
+- **Opening a different song, or pressing `new`, leaves the jam instead of
+  broadcasting it** (`onSessionArrived`, on `seqbaby:setapplied` /
+  `seqbaby:newset`): a whole session arriving locally is a different song, not
+  an edit to the one the room is on, and handing everyone else in the room a
+  song they never asked for is not what "open" means here. The song stays open
+  on this screen exactly as pressing `leave` promises — jam.js just calls the
+  `leave` it was handed by `startJam` instead of scheduling a flush. The one
+  exception is still the room's own session landing (`applying`, e.g. a
+  newcomer's first sync or a resync): that is what the room already knows, so
+  there is nothing to leave over.
 - **What goes on the wire is a diff** (`diffSession`, jamSync.js) against the
   session the room last agreed on: per key for objects, per index for arrays
   of objects, whole replacement for a step lane. A knob turn is a few hundred
