@@ -7,6 +7,7 @@ import SaveButton from "@/app/SaveButton";
 import NewSongButton from "@/app/NewSongButton";
 import ComposeChat from "@/app/ComposeChat";
 import JamPanel from "@/app/JamPanel";
+import { getOpenSong } from "@/app/songs/openSong";
 import { IconMenu } from "@/app/menuIcons";
 import styles from "@/app/ui.module.css";
 
@@ -120,7 +121,7 @@ export function AccountBar({
         {name && <SaveButton />}
         <button
           className={styles.shareBtn}
-          onClick={() => window.seqbaby?.onShareSet?.()}
+          onClick={() => window.seqbaby?.onShareSet?.(getOpenSong().title)}
           title="create a shareable link for this session"
         >
           share

@@ -7,15 +7,18 @@ import { createClient } from "@/lib/supabase/server";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// POST /api/share  { session } -> { id }
+// POST /api/share  { session, title? } -> { id }
 //
 // This is the studio's own quick "share" button (public/js/session.js
 // onShareSet) -- no account needed, nothing typed, works signed out. A
 // signed-in sharer still gets tagged: their id rides along so the link
 // preview (linkedSong in app/songs/linkedSongTitle.ts) can put their name on
-// the card, the same as a published song's owner_id does. Resolving the
-// session is best-effort -- the engine is meant to work with no Supabase env
-// at all, and an anonymous share is still a share.
+// the card, the same as a published song's owner_id does. `title`, when the
+// studio has a song open, is that song's own name -- so sharing an already
+// saved song doesn't hand it a freshly generated one (putShare falls back to
+// that only when no usable title rides along). Resolving the session is
+// best-effort -- the engine is meant to work with no Supabase env at all,
+// and an anonymous share is still a share.
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -29,7 +32,8 @@ export async function POST(req: Request) {
     } catch {
       /* no Supabase configured, or no session -- share anonymously */
     }
-    const { id } = await putShare({ session: body?.session, ownerId });
+    const title = typeof body?.title === "string" ? body.title : undefined;
+    const { id } = await putShare({ session: body?.session, ownerId, title });
     return NextResponse.json({ id });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "share failed";

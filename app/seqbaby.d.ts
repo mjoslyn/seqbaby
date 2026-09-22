@@ -42,7 +42,9 @@ declare global {
       onNewSet: () => Promise<void>;
       onSaveSet: () => void;
       onLoadSet: () => void;
-      onShareSet: () => void;
+      /** `title`: the currently open song's name, when there is one -- so the
+       *  share doesn't get a freshly generated title instead of its own. */
+      onShareSet: (title?: string) => void;
       onExportSet: () => void;
       onImportSet: () => void;
       /** Step the session's undo history (public/js/history.js). Both return

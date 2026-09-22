@@ -28,6 +28,24 @@ test("an anonymous share still gets a title, but no owner", async () => {
   assert.equal(meta.ownerId, null);
 });
 
+test("a given title is trusted, not regenerated from the session", async () => {
+  const session = { bpm: 128, tracks: [{ engineKey: "dm:silverbox", patterns: [] }] };
+  const { id } = await putShare({ session, title: "riot operator" });
+  const meta = await getShareMeta({ id });
+  assert.equal(meta.title, "riot operator");
+});
+
+test("an untitled or blank given title still falls back to a generated one", async () => {
+  const session = { bpm: 128, tracks: [] };
+  const { id: idUntitled } = await putShare({ session, title: "untitled" });
+  const { id: idBlank } = await putShare({ session, title: "  " });
+  const metaUntitled = await getShareMeta({ id: idUntitled });
+  const metaBlank = await getShareMeta({ id: idBlank });
+  assert.notEqual(metaUntitled.title.toLowerCase(), "untitled");
+  assert.ok(metaUntitled.title.length > 0);
+  assert.equal(metaUntitled.title, metaBlank.title);
+});
+
 test("the same session names itself the same thing twice", async () => {
   const session = { bpm: 140, tracks: [] };
   const a = await putShare({ session });

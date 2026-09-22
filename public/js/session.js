@@ -223,15 +223,22 @@ export function onExportSet() {
   }
 }
 
-export async function onShareSet() {
+// `title`, when the shell has a song open, is that song's own name -- passed
+// through untouched so the share doesn't get a freshly generated one instead
+// of the name it was actually saved under (see lib/api.js putShare). The
+// engine itself has no notion of a saved song's title, hence the parameter
+// rather than reading one from state.
+export async function onShareSet(title) {
   const btn = document.getElementById("set-share");
   if (btn) btn.disabled = true;
   setStatus("packing session…");
   try {
+    const body = { session: serializeSet() };
+    if (typeof title === "string" && title.trim()) body.title = title;
     const r = await fetch("/api/share", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ session: serializeSet() }),
+      body: JSON.stringify(body),
     });
     if (!r.ok) throw new Error(await r.text());
     const { id } = await r.json();
