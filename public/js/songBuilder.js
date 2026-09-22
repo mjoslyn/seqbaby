@@ -626,7 +626,8 @@ export function applyPreset(song, index, name) {
   return { preset: hit, description: p.describe?.(hit) || "" };
 }
 
-/** The track filter: its shape (`type`, one of FILTER_TYPES — lowpass by
+/** The track filter: its shape (`type`, one of FILTER_TYPES — the four plain
+ *  BiquadFilterNode shapes plus eight analog-modeled characters, lowpass by
  *  default) and its envelope, the rest 0..1: cutoff, reson, env (how far the
  *  envelope opens the filter), attack, decay, sustain, release. */
 export function setFilter(song, index, f = {}) {

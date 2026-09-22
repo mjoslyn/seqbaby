@@ -786,7 +786,7 @@ ${SUB_PANEL}
       <div class="sq-track__filter-panel" hidden>
         <div class="sq-fx__row" data-fx="filter">
           <span class="sq-fx__title">filter (resonant)</span>
-          <label class="sq-fx__ctl"><span>type</span><select class="p-filtertype" title="the filter's shape: lowpass keeps what's below the cutoff, highpass what's above it, bandpass a narrow band around it, notch everything but that band">
+          <label class="sq-fx__ctl"><span>type</span><select class="p-filtertype" title="the filter's shape: lowpass keeps what's below the cutoff, highpass what's above it, bandpass a narrow band around it, notch everything but that band — plus eight analog-modeled characters further down the list">
             <option value="lowpass">lowpass</option>
             <option value="highpass">highpass</option>
             <option value="bandpass">bandpass</option>

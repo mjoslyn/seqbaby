@@ -62,10 +62,38 @@ export function defaultTrackParams() {
   };
 }
 
-// The filter's shapes: the BiquadFilterNode types this app exposes on the
-// control. A song written before `type` existed has none, and `createTrack`
-// fills it from this default, so it plays exactly as it did — lowpass only.
-export const FILTER_TYPES = ["lowpass", "highpass", "bandpass", "notch"];
+// The filter's plain shapes: native BiquadFilterNode types, unchanged in
+// character since the control first grew beyond a fixed lowpass.
+export const GENERIC_FILTER_TYPES = ["lowpass", "highpass", "bandpass", "notch"];
+
+// The filter's eight circuit-modeled characters (filterModels.js — an
+// AudioWorklet, not a biquad). Two families: a feedback-saturated ladder
+// (fat/crisp/squelch/edge/poly), whose resonance costs passband level the
+// way a real ladder's does, and a state-variable filter (velvet/scream/
+// growl), which doesn't lose bass under resonance the way a ladder does —
+// that split is real circuit behavior, not a naming choice. `squelch` reuses
+// silverbox's own diode ladder. See filterModels.js for what differs between
+// them (pole count, saturation curve, how much of the resonant bass loss is
+// compensated) — these are reasoned stylistic differences, not measurements
+// against real hardware.
+export const ANALOG_FILTER_TYPES = ["fat", "crisp", "squelch", "edge", "poly", "velvet", "scream", "growl"];
+
+export const ANALOG_FILTER_INFO = {
+  fat:     { label: "fat",     description: "warm 24dB/oct ladder — the passband thins as resonance climbs, same as any feedback ladder" },
+  crisp:   { label: "crisp",   description: "clean, bright 24dB/oct ladder — loses less bass under resonance than the warmer ladders" },
+  squelch: { label: "squelch", description: "an 18dB/oct diode ladder (silverbox's own filter) — squelchy and thin at high resonance, the acid sound" },
+  edge:    { label: "edge",    description: "24dB/oct ladder close to fat, with a harder, brighter edge to the saturation" },
+  poly:    { label: "poly",    description: "clean, chip-precise 24dB/oct ladder — the classic polysynth sound, least bass loss of the ladder family" },
+  velvet:  { label: "velvet",  description: "smooth, gentle 12dB/oct state-variable filter — resonance doesn't cost bass the way a ladder's does" },
+  scream:  { label: "scream",  description: "12dB/oct state-variable filter driven hard on the way in — aggressive and screamy as resonance climbs" },
+  growl:   { label: "growl",   description: "24dB/oct state-variable filter (two cascaded stages) — gritty and aggressive" },
+};
+
+// The filter's shapes: the plain biquad shapes plus the eight modeled
+// characters. A song written before `type` existed has none, and
+// `createTrack` fills it from this default, so it plays exactly as it did —
+// lowpass only.
+export const FILTER_TYPES = [...GENERIC_FILTER_TYPES, ...ANALOG_FILTER_TYPES];
 
 export function defaultFilter() {
   return { type: "lowpass", cutoff: 1, reson: 0, env: 0, attack: 0, decay: 0.25, sustain: 0.4, release: 0.3 };

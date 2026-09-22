@@ -23,6 +23,7 @@ import { patternMeter, redetectDrumKit, stepsPerBarForMeter } from "./meter.js";
 import { refreshHexopAlgorithm, setEngineKey, setParam, updateGranularSpeedEnabled, updatePlaitsControlsVisibility } from "./params.js";
 import { bestRollViewOct } from "./pianoRoll.js";
 import { applyCompressorConfig, refreshCompSourceDropdowns, refreshNoiseBeds, refreshOutputSelects, setEQ, setFilter, setTrackOutput } from "./signal.js";
+import { ANALOG_FILTER_INFO, ANALOG_FILTER_TYPES } from "./soundDefaults.js";
 import { state } from "./state.js";
 import { openAutAsModal, openChanceAsModal, openCompAsModal, openEnvAsModal, openEqAsModal, openFilterAsModal, openFxAsModal, openGranularWavModal, openModAsModal, openEuclidAsModal, openRollAsModal, openSampleEditorModal, openTrackMenu } from "./stepEditor.js";
 import { openWavetableEditor } from "./wavetableEditor.js";
@@ -541,7 +542,25 @@ export function renderTrack(t) {
   }
   const gsyncEl = node.querySelector(".p-gsync");
   if (gsyncEl) gsyncEl.checked = t.params.gsync ?? GRAN_DEFAULTS.gsync;
-  node.querySelector(".p-filtertype").value = t.filter.type;
+  // The eight analog characters ship out of the static markup for the same
+  // reason the guitar/bass/sub tone dropdowns do: the descriptions live in
+  // filterModels.js/soundDefaults.js, and the markup should not be a second
+  // copy. Grouped under their own optgroup so the plain shapes above them
+  // read as a different kind of choice.
+  const filterTypeSel = node.querySelector(".p-filtertype");
+  if (filterTypeSel && !filterTypeSel.querySelector(`option[value="${ANALOG_FILTER_TYPES[0]}"]`)) {
+    const group = document.createElement("optgroup");
+    group.label = "analog character";
+    for (const model of ANALOG_FILTER_TYPES) {
+      const o = document.createElement("option");
+      o.value = model;
+      o.textContent = ANALOG_FILTER_INFO[model]?.label || model;
+      o.title = ANALOG_FILTER_INFO[model]?.description || "";
+      group.appendChild(o);
+    }
+    filterTypeSel.appendChild(group);
+  }
+  filterTypeSel.value = t.filter.type;
   node.querySelector(".p-cutoff").value = t.filter.cutoff;
   node.querySelector(".p-reson").value  = t.filter.reson;
   node.querySelector(".p-envamt").value = t.filter.env;

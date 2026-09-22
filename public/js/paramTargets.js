@@ -257,7 +257,7 @@ export const PARAM_DESCRIPTIONS = {
   fm:    "oscillator FM depth. Metallic and inharmonic as it climbs",
   metal: "metalizer: folds the triangle back on itself into harsh upper harmonics",
   noise: "level of the noise source in the oscillator mix",
-  "p-filtertype": "the filter's shape: lowpass keeps what's below the cutoff, highpass what's above it, bandpass a narrow band around it, notch everything but that band",
+  "p-filtertype": "the filter's shape: lowpass keeps what's below the cutoff, highpass what's above it, bandpass a narrow band around it, notch everything but that band — or one of eight analog-modeled characters (a resonant ladder or a state-variable filter, differing in slope and saturation), same two knobs either way",
   cutoff: "the track's filter cutoff, after the voice and before the eq — its shape comes from the type control. The env panel can sweep it per note",
   reson:  "resonance of that filter: a peak at the cutoff, from a gentle emphasis to a whistle",
   "fx.vinyl":            "how much of the vinyl stage is in the signal: surface noise, tone loss and a slow warble together",
