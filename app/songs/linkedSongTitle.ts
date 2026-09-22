@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { getShareMeta } from "@/lib/api.js";
 
 // Not a server action file on purpose: this is read by generateMetadata, which
 // runs on the server already, and nothing on the client should be able to ask
@@ -36,7 +37,7 @@ function cardName(card: { username?: unknown; display_name?: unknown } | null): 
  * theirs. Null when the view is missing (migration 0007 not applied yet) or
  * the profile has no name to show.
  */
-async function ownerName(
+export async function ownerName(
   supabase: Awaited<ReturnType<typeof createClient>>,
   ownerId: unknown,
 ): Promise<string | null> {
@@ -72,9 +73,7 @@ export async function linkedSong(
     const supabase = await createClient();
     let row: { title?: unknown; owner_id?: unknown } | null = null;
     if (slug) {
-      // Same lookup as app/api/share/route.ts. A slug that resolves to nothing
-      // is a legacy Netlify Blobs share — a bare session blob, with no title in
-      // it — so there is nothing to show and the default card stands.
+      // Same lookup as app/api/share/route.ts.
       const { data } = await supabase
         .from("songs")
         .select("title,owner_id")
@@ -96,15 +95,35 @@ export async function linkedSong(
       row = data;
     }
     const title = named(row?.title);
-    if (!title) return null;
-    let owner: string | null = null;
-    try {
-      owner = await ownerName(supabase, row?.owner_id);
-    } catch {
-      // The title is enough for a card; the name is the better half of it,
-      // not the whole of it.
+    if (title) {
+      let owner: string | null = null;
+      try {
+        owner = await ownerName(supabase, row?.owner_id);
+      } catch {
+        // The title is enough for a card; the name is the better half of it,
+        // not the whole of it.
+      }
+      return { title, owner };
     }
-    return { title, owner };
+    if (!slug) return null;
+    // A slug that names no published song may still be a quick, anonymous
+    // share (lib/api.js's Blobs store, behind the studio's own `share`
+    // button) rather than a legacy one with nothing worth showing — those
+    // carry a generated title and, for a signed-in sharer, an owner id
+    // (see putShare). Metadata only: never pull the whole session down just
+    // to learn its name.
+    const meta = await getShareMeta({ id: slug });
+    const shareTitle = named(meta?.title);
+    if (!shareTitle) return null;
+    let shareOwner: string | null = null;
+    if (meta?.ownerId) {
+      try {
+        shareOwner = await ownerName(supabase, meta.ownerId);
+      } catch {
+        /* same tradeoff as above */
+      }
+    }
+    return { title: shareTitle, owner: shareOwner };
   } catch {
     // The engine is meant to run with no Supabase env at all, where creating
     // the client throws. A link preview is never worth failing the page over.
