@@ -60,5 +60,21 @@ export const ICON_ROLL = `<svg class="sq-btn-icon" viewBox="0 0 16 16" width="14
 // eraser — clear all steps on the track
 export const ICON_CLEAR = `<svg class="sq-btn-icon" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8.6 2.9 2.9 8.6a1.3 1.3 0 0 0 0 1.8l2.7 2.7a1.3 1.3 0 0 0 1.8 0l5.7-5.7a1.3 1.3 0 0 0 0-1.8l-2.7-2.7a1.3 1.3 0 0 0-1.8 0z"/><line x1="5.7" y1="5.8" x2="10.2" y2="10.3"/><path d="M9.5 13.6h4"/></svg>`;
 
+// Three stacked modules with an LED each — the fx rack, pedal-by-pedal, not
+// generic sliders (that's ICON_SLIDERS, already the mobile "more" toggle).
+export const ICON_FX = `<svg class="sq-btn-icon" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="2.3" width="12" height="3" rx="1"/><rect x="2" y="6.5" width="12" height="3" rx="1"/><rect x="2" y="10.7" width="12" height="3" rx="1"/><circle cx="5" cy="3.8" r="0.6" fill="currentColor" stroke="none"/><circle cx="5" cy="8" r="0.6" fill="currentColor" stroke="none"/><circle cx="5" cy="12.2" r="0.6" fill="currentColor" stroke="none"/></svg>`;
+
+// A lowpass response: flat, then rolling off — the filter's own curve, not an
+// abstract funnel.
+export const ICON_FILTER = `<svg class="sq-btn-icon" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1.5 4h4c3 0 2 8 5 8h4"/></svg>`;
+
+// A bar plus a duplicate mark — track-len-plus1 adds a bar by repeating what
+// is there.
+export const ICON_LEN_PLUS1 = `<svg class="sq-btn-icon" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="1.8" y="3" width="4" height="10" rx="0.6"/><path d="M11 5v6M8 8h6"/></svg>`;
+
+// Two bars, the second one dashed away — track-len-half keeps the first half
+// and drops the rest.
+export const ICON_LEN_HALF = `<svg class="sq-btn-icon" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="1.5" y="4" width="6" height="8" rx="0.6" fill="currentColor" fill-opacity="0.3"/><rect x="8.5" y="4" width="6" height="8" rx="0.6" stroke-dasharray="2 1.6"/></svg>`;
+
 // ---- state --------------------------------------------------------------
 

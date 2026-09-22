@@ -566,11 +566,30 @@ button.sq-btn--danger { color: var(--danger); }
   gap: 4px;
   margin-top: 6px;
 }
-.sq-track__quickrow .sq-btn--ghost {
-  padding: 4px 8px;
-  min-width: 36px;
+/* fx / filter / +1 / /2 match the generator row's own square icon-button
+   style (dice / euclid / chance / roll / more) — same 56px icon-over-caption
+   button, same [data-label] naming trick (render.js's applyQuickRow swaps
+   each one's class and innerHTML on the way in and back out), so the two
+   rows read as one family. speed is the one non-button here and keeps its
+   own field styling. */
+.sq-track__quickrow .sq-icon-btn {
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-width: 56px;
+  width: auto;
+  height: auto;
+  min-height: 56px;
+  padding: 5px 4px;
+  line-height: 1.1;
+}
+.sq-track__quickrow .sq-icon-btn .sq-btn-icon { width: 18px; height: 18px; }
+.sq-track__quickrow [data-label]::after {
+  content: attr(data-label);
   font-size: 10px;
-  min-height: 32px;
+  letter-spacing: 0;
+  text-transform: lowercase;
 }
 .sq-meter--master { width: 80px; height: 12px; }
 .sq-track__meter  { width: 100%; height: 100%; }

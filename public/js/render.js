@@ -11,7 +11,7 @@ import { euclideanRhythm, refreshEuclidUI, renderEuclidPanel, wireEuclidPanel } 
 import { refreshChanceUI, renderChancePanel, wireChancePanel } from "./chance.js";
 import { randomizeMelody, randomizeTimbre } from "./generate.js";
 import { GUITAR_DEFAULTS, GUITAR_NUM_KEYS, GUITAR_SEL_KEYS, GUITAR_TONE_NAMES, guitarTone, guitarToneDescription } from "./guitar.js";
-import { ICON_CHANCE, ICON_CLEAR, ICON_DICE, ICON_EUCLID, ICON_LOAD, ICON_ROLL, ICON_SAVE, ICON_SLIDERS, ICON_WAV } from "./icons.js";
+import { ICON_CHANCE, ICON_CLEAR, ICON_DICE, ICON_EUCLID, ICON_FILTER, ICON_FX, ICON_LEN_HALF, ICON_LEN_PLUS1, ICON_LOAD, ICON_ROLL, ICON_SAVE, ICON_SLIDERS, ICON_WAV } from "./icons.js";
 import { refreshKnobRange, setKnobReadout, upgradeKnobs } from "./knob.js";
 import { canModulate, lfoBipolar, lfoEuclid, lfoPhase, lfoRateLabel, syncLFO } from "./lfo.js";
 import { autoOwns, fxShown, modOwns, refreshPanelBadges, refreshParamIndicators } from "./paramTargets.js";
@@ -350,6 +350,19 @@ const QUICKROW_MQ = typeof window !== "undefined" && window.matchMedia
   ? window.matchMedia("(max-width: 768px)")
   : null;
 
+// The four buttons in the row (not the speed field) get the same icon-plus-
+// caption treatment as the generator row above them on a phone — square,
+// icon-first, named underneath via [data-label] — instead of the desktop's
+// plain text ghost buttons. Swapped in place, both directions, so the same
+// node keeps its listeners and aria-pressed state; only its class and
+// innerHTML change.
+const QUICKROW_ICON_BTNS = [
+  { sel: ".sq-track__fx", icon: ICON_FX, label: "fx" },
+  { sel: ".sq-track__filter", icon: ICON_FILTER, label: "filter" },
+  { sel: ".track-len-plus1", icon: ICON_LEN_PLUS1, label: "+1" },
+  { sel: ".track-len-half", icon: ICON_LEN_HALF, label: "/2" },
+];
+
 function applyQuickRow(t) {
   const head = t.el?.querySelector(".sq-track__head");
   if (!head) return;
@@ -360,23 +373,32 @@ function applyQuickRow(t) {
     // of the panel modals — leave it alone rather than fight that move; the
     // next matchMedia change (or the next render) tries again.
     if (t._trackMenuModal || t._filterModal || t._fxModal) return;
-    const els = [
-      head.querySelector(".sq-track__fx"),
-      head.querySelector(".sq-track__filter"),
-      head.querySelector(".track-len-plus1"),
-      head.querySelector(".track-len-half"),
-      head.querySelector(".sq-track__speed")?.closest(".sq-field"),
-    ];
-    if (els.some(el => !el)) return;
-    const restore = els.map(el => ({ el, parent: el.parentNode, nextSibling: el.nextSibling }));
+    const iconEls = QUICKROW_ICON_BTNS.map(({ sel }) => head.querySelector(sel));
+    const speedField = head.querySelector(".sq-track__speed")?.closest(".sq-field");
+    if (iconEls.some(el => !el) || !speedField) return;
+    const restore = iconEls.map(el => ({ el, parent: el.parentNode, nextSibling: el.nextSibling }));
+    restore.push({ el: speedField, parent: speedField.parentNode, nextSibling: speedField.nextSibling });
     const row = document.createElement("div");
     row.className = "sq-track__quickrow";
     for (const { el } of restore) row.appendChild(el);
     head.insertAdjacentElement("afterend", row);
     t._quickRowEl = row;
     t._quickRowRestore = restore;
+    t._quickRowSwapped = iconEls.map((el, i) => {
+      const { icon, label } = QUICKROW_ICON_BTNS[i];
+      const original = { html: el.innerHTML, className: el.className };
+      el.classList.add("sq-icon-btn");
+      el.dataset.label = label;
+      el.innerHTML = icon;
+      return { el, original };
+    });
   } else {
     if (!t._quickRowEl) return;
+    for (const { el, original } of t._quickRowSwapped) {
+      el.innerHTML = original.html;
+      el.className = original.className;
+      delete el.dataset.label;
+    }
     for (const { el, parent, nextSibling } of t._quickRowRestore) {
       if (nextSibling && nextSibling.parentNode === parent) parent.insertBefore(el, nextSibling);
       else parent.appendChild(el);
@@ -384,6 +406,7 @@ function applyQuickRow(t) {
     t._quickRowEl.remove();
     t._quickRowEl = null;
     t._quickRowRestore = null;
+    t._quickRowSwapped = null;
   }
 }
 QUICKROW_MQ?.addEventListener("change", () => { for (const t of state.tracks) applyQuickRow(t); });
