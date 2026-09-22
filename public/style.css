@@ -1786,7 +1786,7 @@ main {
 #kbd-record .sq-btn-icon circle { fill: #e5484d; }
 #kbd-record[aria-pressed="true"] { background: #e5484d; border-color: #e5484d; }
 #kbd-record[aria-pressed="true"] .sq-btn-icon circle { fill: #fff; }
-body.kbd-notes-on .sq-track.is-kbd-active { border-color: var(--accent-2); box-shadow: 0 0 0 1px var(--accent-2) inset; }
+body.kbd-notes-on .sq-track.is-kbd-active { border-color: hsl(var(--track-hue, 200) 65% 60%); box-shadow: 0 0 0 1px hsl(var(--track-hue, 200) 65% 60%) inset; }
 body.kbd-recording .sq-track.is-kbd-active { border-color: #e5484d; box-shadow: 0 0 0 1px #e5484d inset; }
 
 .sq-track__glide { width: 70px; }
