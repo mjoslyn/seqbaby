@@ -1,6 +1,7 @@
 import { setStatus } from "./dom.js";
 import { holdParamAt } from "./paramHold.js";
 import { FXRack, FX_LFO_STAGE } from "./fxRack.js";
+import { ANALOG_FILTER_TYPES, buildAnalogFilterNode, disposeAnalogFilterNode, setAnalogFilterModel } from "./filterModels.js";
 import { state } from "./state.js";
 
 
@@ -229,14 +230,32 @@ export function cutoffToHz(v) { return 60 * Math.pow(20000 / 60, Math.max(0, Mat
 // reson slider [0,1] → Q 0.5-20
 export function resonToQ(v) { return 0.5 + Math.max(0, Math.min(1, v)) * 19.5; }
 
+const isAnalogFilterType = (type) => ANALOG_FILTER_TYPES.includes(type);
+
 export function ensureFilter(t) {
   if (!state.audioCtx || t.filterNode) return;
   const ctx = state.audioCtx;
+  if (isAnalogFilterType(t.filter.type)) {
+    const node = buildAnalogFilterNode(ctx, t.filter.type, cutoffToHz(t.filter.cutoff), resonToQ(t.filter.reson));
+    if (node) { t.filterNode = node; return; }
+    // Worklet not registered yet — fall through to the plain lowpass so the
+    // track is never silent, the same fallback every other worklet here
+    // makes; the next call (once it registers) builds the real thing.
+  }
   const f = ctx.createBiquadFilter();
-  f.type = "lowpass";
+  f.type = isAnalogFilterType(t.filter.type) ? "lowpass" : (t.filter.type || "lowpass");
   f.frequency.value = cutoffToHz(t.filter.cutoff);
   f.Q.value = resonToQ(t.filter.reson);
   t.filterNode = f;
+}
+
+/** Tear down whatever's in `t.filterNode`, native or worklet, and null the
+ *  slot so ensureFilter will build fresh. */
+function disposeFilterNode(t) {
+  if (!t.filterNode) return;
+  if (t.filterNode instanceof AudioWorkletNode) disposeAnalogFilterNode(t.filterNode);
+  else try { t.filterNode.disconnect(); } catch {}
+  t.filterNode = null;
 }
 
 export class EQChain {
@@ -496,11 +515,30 @@ export function fireFilterEnv(t, time, duration) {
 
 /**
  * Update one filter/env parameter and apply it live.
- * @param {Track} t @param {string} key @param {number} val
+ * @param {Track} t @param {string} key @param {number|string} val
  */
 export function setFilter(t, key, val) {
   t.filter[key] = val;
   if (!t.filterNode) return;
+  if (key === "type") {
+    const wantAnalog = isAnalogFilterType(val);
+    const isAnalog = t.filterNode instanceof AudioWorkletNode;
+    if (wantAnalog === isAnalog) {
+      // Same kind of node either way — a live switch, no rebuild, matching
+      // silverbox's `wave` and contagion's `mode1`/`route` switches.
+      if (wantAnalog) setAnalogFilterModel(t.filterNode, val);
+      else t.filterNode.type = val;
+    } else {
+      // Crossing between a native biquad and an analog-model worklet needs a
+      // different KIND of node — dispose the old one and route the new one
+      // into the chain the way ensureFilter did originally. cutoff/reson are
+      // reapplied below in the same call, same order signal.js already
+      // writes them in on a fresh build.
+      disposeFilterNode(t);
+      ensureFilter(t);
+      routeVoiceToRack(t);
+    }
+  }
   if (key === "cutoff") {
     // bump base between hits; active envelope automation will continue until next hit schedules new values
     t.filterNode.frequency.cancelScheduledValues(state.audioCtx.currentTime);

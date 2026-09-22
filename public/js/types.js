@@ -83,8 +83,9 @@
  */
 
 /**
- * Per-track lowpass filter + ADSR envelope config.
+ * Per-track filter + ADSR envelope config.
  * @typedef {Object} FilterConfig
+ * @property {string} type  One of FILTER_TYPES (soundDefaults.js): the four plain BiquadFilterNode shapes, or one of the eight analog-modeled characters (ANALOG_FILTER_TYPES, filterModels.js).
  * @property {number} cutoff  0..1 (mapped to Hz via cutoffToHz).
  * @property {number} reson   0..1 (mapped to Q via resonToQ).
  * @property {number} env     Envelope depth in octaves.
@@ -206,7 +207,7 @@
  * @property {SampleDefaults} sampleDefaults
  * @property {TrackParams} params
  * @property {FilterConfig} filter
- * @property {BiquadFilterNode} [filterNode]
+ * @property {BiquadFilterNode|AudioWorkletNode} [filterNode]  A native biquad for the four plain shapes, or an analog-model worklet node (filterModels.js) with `.frequency`/`.Q` glued on to match — see signal.js's ensureFilter/setFilter.
  * @property {EQConfig} eq
  * @property {CompConfig} comp
  * @property {Object<string, LFOConfig>} lfoConfig

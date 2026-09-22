@@ -15,6 +15,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import * as sb from "../public/js/songBuilder.js";
+import { ANALOG_FILTER_INFO, ANALOG_FILTER_TYPES, FILTER_TYPES } from "../public/js/soundDefaults.js";
 
 /** The compose skill's path within the repo, for whoever can locate the repo. */
 export const GUIDE_RELATIVE = path.join(".claude", "skills", "compose", "SKILL.md");
@@ -210,8 +211,10 @@ export const TOOLS = [
   },
   {
     name: "set_filter", title: "Set filter",
-    description: "The track's lowpass and its envelope, all 0..1: cutoff, reson, env (how far the envelope opens the filter per note), attack, decay, sustain, release.",
-    inputSchema: { track: trackArg, cutoff: z.number().optional(), reson: z.number().optional(), env: z.number().optional(), attack: z.number().optional(), decay: z.number().optional(), sustain: z.number().optional(), release: z.number().optional() },
+    description: "The track's filter and its envelope: type is lowpass (default), highpass, bandpass, notch, or one of eight analog-modeled characters — "
+      + ANALOG_FILTER_TYPES.map(k => `${k} (${ANALOG_FILTER_INFO[k].description})`).join("; ")
+      + ". Same two knobs (cutoff, reson) whichever type. The rest 0..1: cutoff, reson, env (how far the envelope opens the filter per note), attack, decay, sustain, release.",
+    inputSchema: { track: trackArg, type: z.enum(FILTER_TYPES).optional(), cutoff: z.number().optional(), reson: z.number().optional(), env: z.number().optional(), attack: z.number().optional(), decay: z.number().optional(), sustain: z.number().optional(), release: z.number().optional() },
     handler: (ctx, { track, ...f }) => sb.setFilter(ctx.song, track, f),
   },
   {

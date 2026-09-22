@@ -68,6 +68,7 @@ export const ENGINE_MODULES = [
   "dom.js",
   "engineData.js",
   "euclid.js",
+  "filterModels.js",
   "fxRack.js",
   "reverb.js",
   "generate.js",
