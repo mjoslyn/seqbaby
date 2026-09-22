@@ -9,7 +9,7 @@ plugins — open a tab and build a track from synthesis engines, drum machines,
 analog-mono emulations, wavetables, samples, and live Web MIDI, then save it to
 your account or share the whole session as a single link.
 
-**Live demo:** https://seqbaby.netlify.app · **Repo:** https://github.com/mjoslyn/seqbaby
+**Live demo:** https://www.playseqbaby.com · **Repo:** https://github.com/mjoslyn/seqbaby
 
 ---
 
