@@ -808,9 +808,11 @@ ${SUB_PANEL}
       </div>
       <div class="sq-track__eq-panel" hidden>
         <div class="sq-fx__row" data-fx="eq">
-          <span class="sq-fx__title">eq (3-band)</span>
+          <span class="sq-fx__title">eq (5-band)</span>
           <label class="sq-fx__ctl"><span>low</span><input class="p-eq-low" type="range" min="-18" max="18" step="0.5" value="0" /></label>
+          <label class="sq-fx__ctl"><span>lo mid</span><input class="p-eq-lomid" type="range" min="-18" max="18" step="0.5" value="0" /></label>
           <label class="sq-fx__ctl"><span>mid</span><input class="p-eq-mid" type="range" min="-18" max="18" step="0.5" value="0" /></label>
+          <label class="sq-fx__ctl"><span>hi mid</span><input class="p-eq-himid" type="range" min="-18" max="18" step="0.5" value="0" /></label>
           <label class="sq-fx__ctl"><span>high</span><input class="p-eq-high" type="range" min="-18" max="18" step="0.5" value="0" /></label>
         </div>
       </div>

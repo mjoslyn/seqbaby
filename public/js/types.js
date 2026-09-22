@@ -95,7 +95,7 @@
  * @property {number} release
  */
 
-/** @typedef {{ low:number, mid:number, high:number }} EQConfig */
+/** @typedef {{ low:number, lomid:number, mid:number, himid:number, high:number }} EQConfig */
 
 /**
  * Per-track compressor / sidechain config.

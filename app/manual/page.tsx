@@ -850,7 +850,7 @@ export default function ManualPage() {
                 <tr><td>filter</td><td>A low-pass filter with cutoff and resonance. The classic way to open and close a sound.</td></tr>
                 <tr><td>env</td><td>An envelope that sweeps the filter on every note: how far it moves, and how it attacks, decays, sustains and releases.</td></tr>
                 <tr><td>fx</td><td>The effects chain, below.</td></tr>
-                <tr><td>eq</td><td>Three bands, low, middle and high, for sitting a track in the mix.</td></tr>
+                <tr><td>eq</td><td>Five bands — low, lo mid, mid, hi mid and high — for sitting a track in the mix.</td></tr>
                 <tr><td>comp</td><td>Compression, either on the track itself or ducked by another track, which is how you get a bass pumping under a kick.</td></tr>
               </tbody>
             </table>

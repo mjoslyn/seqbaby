@@ -15,7 +15,7 @@ import { applyBusMute, paintDiceDensity, placeBusesLast, refreshFxPanelUI, refre
 import { flushAllPatternSounds, recallLoadedPatternSound, refreshPatternLockUI, refreshPatternSoundUI } from "./patternSound.js";
 import { syncScaleUI } from "./scaleUI.js";
 import { migrateLegacyNames, migrateTrackNames, SET_VERSION, validateSet } from "./sessionFormat.js";
-import { applyCompressorConfig, ensureFxRack, refreshAllTrackOutputs, refreshCompSourceDropdowns, refreshNoiseBeds, refreshOutputSelects, routeVoiceToRack, setFilter, wouldFeedback } from "./signal.js";
+import { applyCompressorConfig, ensureFxRack, EQ_BANDS, refreshAllTrackOutputs, refreshCompSourceDropdowns, refreshNoiseBeds, refreshOutputSelects, routeVoiceToRack, setFilter, wouldFeedback } from "./signal.js";
 import { applyMacroPads, serializeMacroPads } from "./macro.js";
 import { aliasPattern, state, syncMeterUI, syncRepeatsUI } from "./state.js";
 import { renderStepGrid } from "./stepGrid.js";
@@ -513,9 +513,10 @@ export function loadTrackFromData(t, td) {
     renderModPanel(t, t._modPanelEl || t.el.querySelector(".sq-track__mod-panel"));
     const eqPanel = t._eqPanelEl || t.el.querySelector(".sq-track__eq-panel");
     if (eqPanel) {
-      eqPanel.querySelector(".p-eq-low").value  = t.eq.low;
-      eqPanel.querySelector(".p-eq-mid").value  = t.eq.mid;
-      eqPanel.querySelector(".p-eq-high").value = t.eq.high;
+      for (const { key } of EQ_BANDS) {
+        const el = eqPanel.querySelector(`.p-eq-${key}`);
+        if (el) el.value = t.eq[key];
+      }
     }
     const compPanel = t._compPanelEl || t.el.querySelector(".sq-track__comp-panel");
     if (compPanel) {
@@ -565,9 +566,7 @@ export function loadTrackFromData(t, td) {
       setFilter(t, "reson",  t.filter.reson);
     }
     if (t.eqNode) {
-      t.eqNode.setBand("low",  t.eq.low);
-      t.eqNode.setBand("mid",  t.eq.mid);
-      t.eqNode.setBand("high", t.eq.high);
+      for (const { key } of EQ_BANDS) t.eqNode.setBand(key, t.eq[key]);
     }
     applyCompressorConfig(t);
     syncAllLFOs(t);
@@ -923,9 +922,7 @@ export function applyTrackPatch(t, patch) {
       setFilter(t, "reson",  t.filter.reson);
     }
     if (t.eqNode) {
-      t.eqNode.setBand("low",  t.eq.low);
-      t.eqNode.setBand("mid",  t.eq.mid);
-      t.eqNode.setBand("high", t.eq.high);
+      for (const { key } of EQ_BANDS) t.eqNode.setBand(key, t.eq[key]);
     }
     applyCompressorConfig(t);
     syncAllLFOs(t);

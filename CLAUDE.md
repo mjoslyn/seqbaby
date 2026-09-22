@@ -273,7 +273,11 @@ voice → filterNode → eqNode → compressor → fxRack → masterGain → mas
 - `filterNode` — native `BiquadFilterNode` (lowpass). `fireFilterEnv(t, time,
   duration)` schedules an ADSR sweep on `frequency`. For sampler voices the
   sustain extends to the buffer duration so the env shapes the whole sample.
-- `eqNode` — `EQChain`: lowshelf 250Hz / peaking 1.2kHz / highshelf 5kHz.
+- `eqNode` — `EQChain`: lowshelf 250Hz / peaking 600Hz / peaking 1.2kHz /
+  peaking 3kHz / highshelf 5kHz (`EQ_BANDS` in signal.js — low/mid/high are the
+  original three bands at their original frequencies; lomid/himid are new
+  peaking bands either side of mid, defaulting to 0dB, so an old song with
+  only the three original keys in `t.eq` sounds exactly as it did).
 - `compressor` — `TrackCompressor`: native `DynamicsCompressorNode` (self) or
   an analyser-driven envelope follower ducking a pre-output gain (sidechain
   from any track's `voice.getOutputNode()`).

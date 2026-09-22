@@ -22,7 +22,7 @@ import { crushRateLabel } from "./crusher.js";
 import { patternMeter, redetectDrumKit, stepsPerBarForMeter } from "./meter.js";
 import { refreshHexopAlgorithm, setEngineKey, setParam, updateGranularSpeedEnabled, updatePlaitsControlsVisibility } from "./params.js";
 import { bestRollViewOct } from "./pianoRoll.js";
-import { applyCompressorConfig, refreshCompSourceDropdowns, refreshNoiseBeds, refreshOutputSelects, setEQ, setFilter, setTrackOutput } from "./signal.js";
+import { applyCompressorConfig, EQ_BANDS, refreshCompSourceDropdowns, refreshNoiseBeds, refreshOutputSelects, setEQ, setFilter, setTrackOutput } from "./signal.js";
 import { ANALOG_FILTER_INFO, ANALOG_FILTER_TYPES } from "./soundDefaults.js";
 import { state } from "./state.js";
 import { openAutAsModal, openChanceAsModal, openCompAsModal, openEnvAsModal, openEqAsModal, openFilterAsModal, openFxAsModal, openGranularWavModal, openModAsModal, openEuclidAsModal, openRollAsModal, openSampleEditorModal, openTrackMenu } from "./stepEditor.js";
@@ -215,9 +215,10 @@ export function syncTrackSoundUI(t) {
   set(".p-envrel", t.filter.release);
   const eqPanel = t._eqPanelEl || q(".sq-track__eq-panel");
   if (eqPanel) {
-    eqPanel.querySelector(".p-eq-low").value  = t.eq.low;
-    eqPanel.querySelector(".p-eq-mid").value  = t.eq.mid;
-    eqPanel.querySelector(".p-eq-high").value = t.eq.high;
+    for (const { key } of EQ_BANDS) {
+      const el = eqPanel.querySelector(`.p-eq-${key}`);
+      if (el) el.value = t.eq[key];
+    }
   }
   const compPanel = t._compPanelEl || q(".sq-track__comp-panel");
   if (compPanel) {
@@ -938,12 +939,11 @@ export function renderTrack(t) {
   renderModPanel(t, t._modPanelEl);
   wireFxPanel(t, t._fxPanelEl);
   const eqPanel = t._eqPanelEl;
-  eqPanel.querySelector(".p-eq-low").value  = t.eq.low;
-  eqPanel.querySelector(".p-eq-mid").value  = t.eq.mid;
-  eqPanel.querySelector(".p-eq-high").value = t.eq.high;
-  eqPanel.querySelector(".p-eq-low").addEventListener("input",  e => setEQ(t, "low",  Number(e.target.value)));
-  eqPanel.querySelector(".p-eq-mid").addEventListener("input",  e => setEQ(t, "mid",  Number(e.target.value)));
-  eqPanel.querySelector(".p-eq-high").addEventListener("input", e => setEQ(t, "high", Number(e.target.value)));
+  for (const { key } of EQ_BANDS) {
+    const el = eqPanel.querySelector(`.p-eq-${key}`);
+    el.value = t.eq[key];
+    el.addEventListener("input", e => setEQ(t, key, Number(e.target.value)));
+  }
 
   const bindModalOpen = (btnSel, openFn, modalKey, beforeOpen) => {
     const btn = node.querySelector(btnSel);

@@ -6,7 +6,7 @@ description: Write a song for seqbaby through its MCP server (mcp/server.mjs). W
 # Composing in seqbaby
 
 seqbaby is a 32-pattern step sequencer with a deep per-track chain: any of
-~46 engines, then a filter with an envelope, a three-band eq, a compressor
+~46 engines, then a filter with an envelope, a five-band eq, a compressor
 with sidechain, a thirteen-stage fx rack, an LFO matrix and per-step
 automation lanes. The MCP tools write a song as the JSON the studio loads.
 The tools validate every value against the engine's own tables, so a refused

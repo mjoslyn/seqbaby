@@ -54,7 +54,7 @@ it up for Claude Code; Claude Desktop needs one line of config.
   that plays bundled drum kits or your own uploads (persisted with the session),
   with a per-step region / fade / loop / ping-pong editor.
 - **A full mixing channel per track.** Native `BiquadFilterNode` with an ADSR
-  filter envelope, 3-band EQ, a compressor that can self-compress *or* sidechain
+  filter envelope, 5-band EQ, a compressor that can self-compress *or* sidechain
   off any other track's output, and an ordered FX rack (asymmetric fuzz →
   bitcrusher → feedback delay → reverb).
 - **Modulation matrix.** Per-track LFOs route to engine-internal parameters

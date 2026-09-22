@@ -218,8 +218,8 @@ export const TOOLS = [
     handler: (ctx, { track, ...f }) => sb.setFilter(ctx.song, track, f),
   },
   {
-    name: "set_eq", title: "Set eq", description: "Three bands in dB, -18..18: low (shelf 250 Hz), mid (peak 1.2 kHz), high (shelf 5 kHz).",
-    inputSchema: { track: trackArg, low: z.number().optional(), mid: z.number().optional(), high: z.number().optional() },
+    name: "set_eq", title: "Set eq", description: "Five bands in dB, -18..18: low (shelf 250 Hz), lomid (peak 600 Hz), mid (peak 1.2 kHz), himid (peak 3 kHz), high (shelf 5 kHz).",
+    inputSchema: { track: trackArg, low: z.number().optional(), lomid: z.number().optional(), mid: z.number().optional(), himid: z.number().optional(), high: z.number().optional() },
     handler: (ctx, { track, ...e }) => sb.setEq(ctx.song, track, e),
   },
   {
