@@ -80,8 +80,13 @@ export function AccountBar({
   // of the way — except on `save` and `songs`, whose whole job is to open a
   // panel of their own. Those two are the `songsWrap` wrappers, so one test on
   // the way up covers both and nothing has to be told about the sheet.
+  //
+  // Loading a song is the exception to the exception: tapping a song's title
+  // in that panel finishes the interaction (SongsMenu closes its own panel too),
+  // so the sheet behind it should not be left open over an empty track list.
   const onItemClick = useCallback((e: React.MouseEvent) => {
     const el = e.target as HTMLElement | null;
+    if (el?.closest?.(`.${styles.songRowTitle}`)) return setMenuOpen(false);
     if (el?.closest?.(`.${styles.songsWrap}`)) return;
     setMenuOpen(false);
   }, []);
