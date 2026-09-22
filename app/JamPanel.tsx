@@ -192,7 +192,31 @@ export default function JamPanel({
 
   const peerName = useCallback((id: string) => peersRef.current.find((p) => p.id === id)?.name || "someone", []);
 
-  /** The room's session has arrived (or nobody had one): start sending edits. */
+  const leave = useCallback(() => {
+    const ch = channelRef.current;
+    channelRef.current = null;
+    if (waitTimerRef.current) clearTimeout(waitTimerRef.current);
+    waitTimerRef.current = null;
+    waitingRef.current = false;
+    askedRef.current = null;
+    window.seqbaby?.jam?.stop();
+    if (ch) {
+      const supabase = clientRef.current;
+      if (supabase) void supabase.removeChannel(ch);
+      else void ch.unsubscribe();
+    }
+    setRoom(null);
+    setPeers([]);
+    peersRef.current = [];
+    setStatus("idle");
+    setError("");
+    writeRoomToUrl(null, null);
+  }, []);
+
+  /** The room's session has arrived (or nobody had one): start sending edits.
+   *  `leave` rides along so the engine can hand the room back the moment a
+   *  different song arrives locally -- opening one is not an edit to this
+   *  song, see jam.js's onSessionArrived. */
   const goLive = useCallback(
     (session: unknown | null, from: string | null) => {
       if (waitTimerRef.current) clearTimeout(waitTimerRef.current);
@@ -200,11 +224,11 @@ export default function JamPanel({
       waitingRef.current = false;
       const api = window.seqbaby;
       if (!api?.jam) return;
-      api.jam.start({ send: (m) => send(m) });
+      api.jam.start({ send: (m) => send(m), leave });
       if (session && from) api.jam.receiveState(session, { name: peerName(from), id: from });
       setStatus("live");
     },
-    [send, peerName],
+    [send, peerName, leave],
   );
 
   const onWire = useCallback(
@@ -263,27 +287,6 @@ export default function JamPanel({
     }
     out.sort((a, b) => a.joinedAt - b.joinedAt);
     return out;
-  }, []);
-
-  const leave = useCallback(() => {
-    const ch = channelRef.current;
-    channelRef.current = null;
-    if (waitTimerRef.current) clearTimeout(waitTimerRef.current);
-    waitTimerRef.current = null;
-    waitingRef.current = false;
-    askedRef.current = null;
-    window.seqbaby?.jam?.stop();
-    if (ch) {
-      const supabase = clientRef.current;
-      if (supabase) void supabase.removeChannel(ch);
-      else void ch.unsubscribe();
-    }
-    setRoom(null);
-    setPeers([]);
-    peersRef.current = [];
-    setStatus("idle");
-    setError("");
-    writeRoomToUrl(null, null);
   }, []);
 
   /**

@@ -63,9 +63,12 @@ declare global {
        * peer's patch over this copy without stopping the transport.
        */
       jam: {
-        /** Start telling `send` about edits; the session as it is now is the base. */
+        /** Start telling `send` about edits; the session as it is now is the
+         *  base. `leave`, if given, is called instead of a broadcast when a
+         *  different song arrives locally (opened from the menu, `new`). */
         start: (room: {
           send: (msg: { type: "patch"; patch: unknown } | { type: "playhead"; originMs: number; bpm: number }) => void;
+          leave?: () => void;
         }) => void;
         stop: () => void;
         active: () => boolean;
