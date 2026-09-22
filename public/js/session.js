@@ -11,7 +11,7 @@ import { updatePlaitsControlsVisibility } from "./params.js";
 import { renderPatternGrid } from "./patternBar.js";
 import { refreshEuclidUI, renderEuclidPanel } from "./euclid.js";
 import { cloneChance, refreshChanceUI, renderChancePanel } from "./chance.js";
-import { applyBusMute, paintDiceDensity, placeBusesLast, refreshFxPanelUI, renderModPanel, syncTrackSoundUI } from "./render.js";
+import { applyBusMute, paintDiceDensity, placeBusesLast, refreshFxPanelUI, refreshMuteSoloUI, renderModPanel, syncTrackSoundUI } from "./render.js";
 import { flushAllPatternSounds, recallLoadedPatternSound, refreshPatternLockUI, refreshPatternSoundUI } from "./patternSound.js";
 import { syncScaleUI } from "./scaleUI.js";
 import { migrateLegacyNames, migrateTrackNames, SET_VERSION, validateSet } from "./sessionFormat.js";
@@ -493,9 +493,7 @@ export function loadTrackFromData(t, td) {
     q(".sq-track__glide").value = t.glide;
     syncTrackSoundUI(t);
     refreshPatternLockUI(t);
-    q(".sq-track__solo")?.setAttribute("aria-pressed", String(t.soloed));
-    t.el.classList.toggle("is-muted", t.muted);
-    t.el.classList.toggle("is-soloed", t.soloed);
+    refreshMuteSoloUI(t);
     paintDiceDensity(t);
     // After the fields are filled, not from renderTrack: the track's DOM is
     // built by createTrack before any of this is set, so live mode would

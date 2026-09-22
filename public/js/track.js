@@ -9,7 +9,7 @@ import { renderPatternGrid } from "./patternBar.js";
 import { refreshAutIfOpen, refreshRollIfOpen } from "./pianoRoll.js";
 import { refreshEuclidUI, renderEuclidPanel } from "./euclid.js";
 import { cloneChance, refreshChanceUI, renderChancePanel } from "./chance.js";
-import { paintDiceDensity, placeBusesLast, refreshFxPanelUI, renderModPanel, renderTrack } from "./render.js";
+import { paintDiceDensity, placeBusesLast, refreshFxPanelUI, refreshMuteSoloUI, renderModPanel, renderTrack } from "./render.js";
 import { applySet } from "./session.js";
 import { defaultCompConfig, ensureFxRack, refreshAllTrackOutputs, refreshCompSourceDropdowns, refreshNoiseBeds, refreshOutputSelects, routeVoiceToRack } from "./signal.js";
 import { aliasPattern, clonePattern, emptyPattern, state } from "./state.js";
@@ -218,9 +218,7 @@ export function duplicateTrack(src) {
     q(".p-envdec").value = dup.filter.decay;
     q(".p-envsus").value = dup.filter.sustain;
     q(".p-envrel").value = dup.filter.release;
-    dup.el.classList.toggle("is-muted", dup.muted);
-    dup.el.classList.toggle("is-soloed", dup.soloed);
-    q(".sq-track__solo")?.setAttribute("aria-pressed", String(dup.soloed));
+    refreshMuteSoloUI(dup);
     refreshNoiseBeds();                  // a duplicated solo changes who is audible
     refreshFxPanelUI(dup);
     renderModPanel(dup, dup._modPanelEl || dup.el.querySelector(".sq-track__mod-panel"));

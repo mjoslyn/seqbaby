@@ -48,7 +48,7 @@ import { updateGranularSpeedEnabled, updatePlaitsControlsVisibility } from "./pa
 import { renderPatternGrid } from "./patternBar.js";
 import { applyPatternSound, recallLoadedPatternSound, refreshAllPatternLockUI, refreshPatternSoundUI } from "./patternSound.js";
 import { refreshAutIfOpen, refreshRollIfOpen } from "./pianoRoll.js";
-import { applyBusMute, paintDiceDensity, placeBusesLast } from "./render.js";
+import { applyBusMute, paintDiceDensity, placeBusesLast, refreshMuteSoloUI } from "./render.js";
 import { syncScaleUI } from "./scaleUI.js";
 import { loadTrackFromData, migrateTrackData, serializeSet, trackShellFor } from "./session.js";
 import { migrateLegacyNames, validateSet } from "./sessionFormat.js";
@@ -188,14 +188,13 @@ export function applyTrackInPlace(t, a, b, resolveTrack = (i) => state.tracks[i]
   }
   if (a.muted !== b.muted) {
     t.muted = !!b.muted;
-    t.el?.classList.toggle("is-muted", t.muted);
+    refreshMuteSoloUI(t);
     applyBusMute(t);
     refreshNoiseBeds();
   }
   if (a.soloed !== b.soloed) {
     t.soloed = !!b.soloed;
-    t.el?.classList.toggle("is-soloed", t.soloed);
-    t.el?.querySelector(".sq-track__solo")?.setAttribute("aria-pressed", String(t.soloed));
+    refreshMuteSoloUI(t);
     refreshNoiseBeds();
   }
   if (a.glide !== b.glide) {

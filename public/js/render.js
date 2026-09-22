@@ -64,6 +64,29 @@ export function applyBusMute(t) {
 }
 
 /**
+ * A track is either muted or soloed, never mid-toggle to both — so each
+ * button disables the other rather than letting them fight over the same
+ * audible/silent question. Paints both buttons' pressed state too, since
+ * every caller that needs one needs the other.
+ * @param {Track} t
+ */
+export function refreshMuteSoloUI(t) {
+  if (!t.el) return;
+  const soloBtn = t.el.querySelector(".sq-track__solo");
+  const muteBtn = t.el.querySelector(".sq-track__mute");
+  if (soloBtn) {
+    soloBtn.setAttribute("aria-pressed", String(!!t.soloed));
+    soloBtn.disabled = !!t.muted;
+  }
+  if (muteBtn) {
+    muteBtn.setAttribute("aria-pressed", String(!!t.muted));
+    muteBtn.disabled = !!t.soloed;
+  }
+  t.el.classList.toggle("is-muted", !!t.muted);
+  t.el.classList.toggle("is-soloed", !!t.soloed);
+}
+
+/**
  * Paint the dice button's fill level from the track's density, so the icon
  * shows how full the next roll will be.
  * @param {Track} t
@@ -770,8 +793,7 @@ export function renderTrack(t) {
   const soloBtn = node.querySelector(".sq-track__solo");
   soloBtn.addEventListener("click", () => {
     t.soloed = !t.soloed;
-    soloBtn.setAttribute("aria-pressed", String(t.soloed));
-    node.classList.toggle("is-soloed", t.soloed);
+    refreshMuteSoloUI(t);
     refreshNoiseBeds();
   });
 
@@ -930,7 +952,7 @@ export function renderTrack(t) {
 
   node.querySelector(".sq-track__mute").addEventListener("click", () => {
     t.muted = !t.muted;
-    node.classList.toggle("is-muted", t.muted);
+    refreshMuteSoloUI(t);
     applyBusMute(t);
     refreshNoiseBeds();
   });
