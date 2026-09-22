@@ -438,6 +438,10 @@ export function refreshParamIndicators(t) {
 // the lanes when an entry is enabled. A lane that exists but is switched off
 // does not count, matching the dimmed dot on its label. The lanes stay a badge
 // only — a per-step grid is not a row of knobs — so their entry has no panel.
+// The envelope is the one non-toggle exception: its amount knob passes
+// through 0 mid-drag like an fx stage's wet knob does, so it is sticky the
+// same way (fxShown, keyed "env") and comes off only through its own × —
+// wired in renderTrack, beside the fx rack's.
 /**
  * Which rack stages a track shows inline, which is deliberately NOT the same
  * question as which are on. A wet knob passes through 0 in the middle of a
@@ -465,7 +469,16 @@ const PANEL_BADGES = [
       return on;
     } },
   { sel: ".sq-track__env", panel: "_envPanelEl", modal: "_envModal",
-    on: (t) => ((t.filter?.env ?? 0) > 0 ? ["envelope → cutoff"] : []) },
+    on: (t) => ((t.filter?.env ?? 0) > 0 ? ["envelope → cutoff"] : []),
+    // Sticky like an fx stage (fxShown, reused — "env" can't collide with a
+    // stage key): dragging the amount through 0 is mid-gesture, and the panel
+    // vanishing there would take the knob with it. Only the × row-button
+    // (wired in renderTrack) turns it off for real.
+    rows: (panel, on, t) => {
+      const shown = fxShown(t);
+      if (on.length) shown.add("env");
+      return shown.has("env");
+    } },
   { sel: ".sq-track__fx", panel: "_fxPanelEl", modal: "_fxModal",
     on: (t) => Object.keys(FX_STAGE_LEVEL_KEY).filter(k => fxStageLevel(t.fxConfig, k) > 0),
     label: (k) => FX_STAGE_LABELS[k],
