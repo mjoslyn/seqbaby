@@ -10,6 +10,7 @@ import {
 import { CHANCE_MOD_KEYS, CHANCE_MOD_LABELS } from "./chanceGen.js";
 import { staticEngineByKey } from "./engineData.js";
 import { EUCLID_MOD_KEYS, EUCLID_MOD_LABELS } from "./soundDefaults.js";
+import { shaperPreampGain } from "./curves.js";
 
 export const STEPS_PER_BAR = 16;
 
@@ -133,25 +134,38 @@ export const LFO_LABELS = {
 export const lfoLabel = (k) => LFO_LABELS[k] ?? k;
 export const LFO_AMP_SCALE = {
   vol: 1, harm: 1, timb: 1, morph: 1, decay: 1,
+  // cutoff and ring_freq are exponential (see cutoffToHz / applyRingMod's log
+  // map): a fixed Hz swing summed onto the native AudioParam covers a
+  // different fraction of the knob depending on where the base sits, so
+  // depth 100% can't be made to hit the slider's ceiling from an arbitrary
+  // base this way — these two are a known exception to the "depth 100% is
+  // peak-to-peak of the full range" rule below.
   cutoff: 6000,   // Hz
-  reson: 15,
+  reson: 19.5,             // Q 0.5..20 (resonToQ) — full span, so depth 1 swings the whole knob
   fuzz: 1, delay: 1, verb: 1,
   vinyl: 1, cassette: 1, ringmod: 1, shaper: 1, crush: 1, autowah: 1, chorus: 1, phaser: 1, flanger: 1, pitch: 1,
-  // fx sub-params (audio-rate AudioParam targets)
-  fuzz_drive: 30,         // +/- 15 on the gain unit (drive path gain is 1+drive*30)
-  fuzz_tone: 4000,        // Hz around tone filter cutoff (200..8000)
-  fuzz_level: 1,
-  vinyl_warmth: 5000,     // Hz around lowpass freq
-  shaper_preamp: 6,       // swing on shaperPreamp.gain (unit gain ~0.25..8)
-  ring_freq: 1500,        // Hz
-  crush_bits: 8,           // bits swing (1..16)
+  // fx sub-params (audio-rate AudioParam targets). Each is the control's own
+  // full native-unit span (see applyFuzz / applyChorus / etc. in fxRack.js),
+  // so depth 1 is peak-to-peak of the whole knob — same convention as the
+  // 0..1 controls below, just in the AudioParam's own units.
+  fuzz_drive: 30,         // gain 1..31 (drive path gain is 1+drive*30)
+  fuzz_tone: 7800,        // Hz 200..8000 around the tone filter cutoff
+  fuzz_level: 0.9,        // gain 0..0.9
+  // vinylLP.frequency is 18000 - amount*(18000-(9000-warmth*7200)) — the
+  // warmth→Hz slope scales with the vinyl amount knob too, so 7200 (its
+  // slope at amount 1, full wet) only reaches the true floor/ceiling there;
+  // at a lower amount the same depth covers proportionally less.
+  vinyl_warmth: 7200,     // Hz, at amount 1 (see above)
+  shaper_preamp: 6,       // swing on shaperPreamp.gain (unit gain ~0.25..8; curved like cutoff, see above)
+  ring_freq: 1500,        // Hz (curved like cutoff, see above)
+  crush_bits: 15,          // bits 1..16, full span
   crush_rate: 1,           // converter clock, on its own 0..1 knob
-  chorus_rate: 4,          // Hz
-  phaser_rate: 3,          // Hz
-  flanger_rate: 3,         // Hz
-  flanger_fbk: 0.8,
-  delay_time: 0.3,         // seconds
-  delay_fbk: 0.8,
+  chorus_rate: 4.9,        // Hz 0.1..5, full span
+  phaser_rate: 3.95,       // Hz 0.05..4, full span
+  flanger_rate: 3.95,      // Hz 0.05..4, full span
+  flanger_fbk: 0.9,        // gain 0..0.9, full span
+  delay_time: 0.95,        // seconds 0.05..1, full span
+  delay_fbk: 0.95,         // gain 0..0.95, full span
   // fx sub-params modulated via setter LFO (0..1 swing around the user's base value)
   vinyl_wow: 1, cassette_flutter: 1, cassette_sat: 1,
   shaper_amt: 1,
@@ -193,6 +207,39 @@ export const LFO_AMP_SCALE = {
   })),
 };
 
+// ---- the three LFO targets whose knob is exponential, not linear ---------
+//
+// cutoff, ring_freq and shaper_preamp modulate a real AudioParam via
+// cutoffToHz-style curves (signal.js / fxRack.js), so a fixed Hz/gain swing
+// summed onto the native param covers a different fraction of the knob
+// depending on where the base sits — see LFO_AMP_SCALE's comment on cutoff.
+// These three are driven through the setter-LFO path instead (lfo.js): each
+// frame, the target knob position is computed the same way every other
+// setter key's is (base + depth-scaled shape), then converted through its
+// own curve, and only the DIFFERENCE from the curve at the current base is
+// summed onto the real AudioParam — so depth 100% reaches the knob's true
+// ceiling/floor from wherever the base happens to sit, same as a linear
+// control, traded for frame-rate (not audio-rate) resolution.
+//
+// Duplicated here rather than imported from signal.js / fxRack.js: this
+// module has to stay importable from Node, and those two reach into Tone
+// and the DOM at load time.
+export const CURVED_LFO_KEYS = new Set(["cutoff", "ring_freq", "shaper_preamp"]);
+export const CURVED_LFO_CURVES = {
+  cutoff: {                // cutoffToHz (signal.js): 60..20000 Hz, log
+    to: (u) => 60 * Math.pow(20000 / 60, u),
+    from: (hz) => Math.log(Math.max(1e-6, hz) / 60) / Math.log(20000 / 60),
+  },
+  ring_freq: {              // applyRingMod (fxRack.js): 20..3000 Hz, log
+    to: (u) => 20 * Math.pow(150, u),
+    from: (hz) => Math.log(Math.max(1e-6, hz) / 20) / Math.log(150),
+  },
+  shaper_preamp: {          // shaperPreampGain (curves.js): ~0.25..8x gain
+    to: shaperPreampGain,
+    from: (g) => (g <= 1 ? (g - 0.25) / 1.5 : 0.5 + Math.log(Math.max(1e-6, g)) / Math.log(8) / 2),
+  },
+};
+
 // Non-blocking prompt dialog (browser prompt() halts the transport scheduler)
 export const PATTERN_COUNT = 32;
 export const BAR_TICKS = 16;  // chain advance resolution
@@ -210,25 +257,25 @@ export function rateToSlider(hz) {
 // and these are the values the length knob offers. Ordered shortest first, so a
 // rightward turn lengthens the cycle.
 //
-// Named in STEPS from a beat upward: this is a step sequencer, and "16 steps"
-// says what "1 bar" says with one conversion less in the reader's head — a
-// modulation you want to line up with a 16-step pattern shouldn't need arithmetic
-// to find. Below a beat a step count would be a fraction, so those keep their
-// note values. (For the euclid shape the rate is the RING STEP rate rather than
-// the cycle — see lfo.js — so "2 steps" there means each tap lasts two steps.)
+// Named directly in BEATS, which is the unit `div` already is — the label says
+// what the knob is turning rather than a sixteenth-note count the reader has to
+// convert back. (For the euclid shape the rate is the RING STEP rate rather than
+// the cycle — see lfo.js — so "2 beats" there means each tap lasts two beats.)
 //
 // The knob is an index into this list rather than a continuous control: a cycle
 // length is a menu of musical values, and quantising the drag to the list is
 // what keeps it playable.
 export const LFO_DIVS = [
-  { div: 0.125, label: "½ step" },
-  { div: 0.25,  label: "1 step" },
-  { div: 0.5,   label: "2 steps" },
-  { div: 1,     label: "4 steps" },
-  { div: 2,     label: "8 steps" },
-  { div: 4,     label: "16 steps" },
-  { div: 8,     label: "32 steps" },
-  { div: 16,    label: "64 steps" },
+  { div: 0.125, label: "1/8 beat" },
+  { div: 0.25,  label: "1/4 beat" },
+  { div: 0.5,   label: "1/2 beat" },
+  { div: 1,     label: "1 beat" },
+  { div: 2,     label: "2 beats" },
+  { div: 4,     label: "4 beats" },
+  { div: 8,     label: "8 beats" },
+  { div: 16,    label: "16 beats" },
+  { div: 32,    label: "32 beats" },
+  { div: 64,    label: "64 beats" },
 ];
 
 /** Nearest entry for a div in beats — a saved song (or an older one) can hold a
@@ -252,15 +299,14 @@ export function lfoDivIndex(div) {
  * that isn't on it — and it goes on running at exactly that rate, because
  * nothing snaps a loaded value. So the readout says what it really is rather
  * than the nearest entry's name: the knob has to round, the label doesn't, and
- * a row reading "16 steps · 0.61 hz" when it is neither would be worse than
+ * a row reading "16 beats · 0.61 hz" when it is neither would be worse than
  * either. Touching the knob lands on the list and the two agree again.
  */
 export function lfoDivLabel(div) {
   const near = LFO_DIVS[lfoDivIndex(div)];
   const d = Number(div) > 0 ? Number(div) : 1;
   if (Math.abs(near.div - d) < 1e-9) return near.label;
-  const steps = d * 4;                                   // a beat is four sixteenths
-  return `${Number.isInteger(steps) ? steps : +steps.toFixed(2)} step${steps === 1 ? "" : "s"}`;
+  return `${Number.isInteger(d) ? d : +d.toFixed(3)} beat${d === 1 ? "" : "s"}`;
 }
 
 // ---- note helpers ------------------------------------------------------

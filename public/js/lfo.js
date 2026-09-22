@@ -3,7 +3,7 @@ import { engineByKey } from "./catalog.js";
 import { clearEuclidLive, euclidFromUnit, euclidToUnit, euclideanRhythm, setEuclidLive, trackEuclid } from "./euclid.js";
 import { clearChanceLive, setChanceLive, trackChance } from "./chance.js";
 import { CHANCE_MOD_KEYS, chanceFromUnit, chanceToUnit } from "./chanceGen.js";
-import { afterPrefix as after, LFO_AMP_SCALE, LFO_KEYS, canModulateKey, lfoDivLabel } from "./constants.js";
+import { afterPrefix as after, CURVED_LFO_CURVES, CURVED_LFO_KEYS, LFO_AMP_SCALE, LFO_KEYS, canModulateKey, lfoDivLabel } from "./constants.js";
 import { makeCassetteSatCurve, makeShaperCurve } from "./curves.js";
 import { setParam } from "./params.js";
 import { aliasPattern, state } from "./state.js";
@@ -280,6 +280,11 @@ function connectMod(source, param) {
 export { TRACK_FX_LFO_KEYS } from "./constants.js";
 // FX params with no AudioParam / Signal handle — driven by a JS-side LFO that
 // polls in a RAF loop and applies values through the corresponding setter.
+// `CURVED_LFO_KEYS` (cutoff, ring_freq, shaper_preamp) rides the same loop for
+// a different reason: they DO have an AudioParam, but it's reached through an
+// exponential curve, so the loop has to compute a KNOB position (same as every
+// other setter key) before converting it — see syncLFO's curved branch, which
+// intercepts these three before they reach the rest of this Set's handling.
 export const SETTER_LFO_KEYS = new Set([
   "vinyl_wow","cassette_flutter","cassette_sat",
   "shaper_amt",
@@ -289,6 +294,7 @@ export const SETTER_LFO_KEYS = new Set([
   "gran_speed","gran_pitch","gran_window","gran_jitter","gran_detune","gran_pan",
   "euclid_pulses","euclid_steps","euclid_rotate",
   ...CHANCE_MOD_KEYS.map(k => `chance_${k}`),
+  ...CURVED_LFO_KEYS,
 ]);
 
 // Granular mod keys → the track param each drives. Grains read these when they
@@ -324,6 +330,9 @@ export function setterLfoBase(t, key) {
   // into the 0..1 the LFO swings around.
   const granParam = GRAN_LFO_PARAM[key];
   if (granParam) return granToUnit(granParam, t.params?.[granParam] ?? GRAN_DEFAULTS[granParam]);
+  // Cutoff lives on the track's own filter, not the fx rack — read before the
+  // rack gate below, since a track has a filter whether or not it has a rack.
+  if (key === "cutoff") return t.filter?.cutoff ?? 1;
   const c = t.fxRack?.config;
   if (!c) return 0.5;
   switch (key) {
@@ -331,6 +340,8 @@ export function setterLfoBase(t, key) {
     case "cassette_flutter": return c.cassette?.flutter ?? 0.3;
     case "cassette_sat":     return c.cassette?.sat ?? 0.4;
     case "shaper_amt":       return c.shaper?.amount ?? 0.5;
+    case "shaper_preamp":    return c.shaper?.preamp ?? 0.5;
+    case "ring_freq":        return c.ringmod?.freq ?? 0.35;
     case "autowah_sens":     return c.autowah?.sens ?? 0.5;
     case "autowah_range":    return c.autowah?.range ?? 0.5;
     case "phaser_depth":     return c.phaser?.depth ?? 0.5;
@@ -346,6 +357,20 @@ export function setterLfoBase(t, key) {
 // stored base, and the slider's onInput keeps writing config on user moves.
 export function applySetterLfoValue(t, key, v) {
   v = Math.max(0, Math.min(1, v));
+  // Curved AudioParam targets (cutoff, ring_freq, shaper_preamp): `v` is the
+  // shape's target KNOB position, same as any other setter key. Converting
+  // both it and the current base through the target's own curve and summing
+  // only the DIFFERENCE onto the persistent Signal (built in syncLFO) is what
+  // makes depth 100% reach the real ceiling/floor from wherever the base
+  // sits — a fixed native-unit swing can't do that on an exponential curve.
+  if (CURVED_LFO_KEYS.has(key)) {
+    const node = t.lfos?.[key];
+    if (!node?.signal) return;
+    const curve = CURVED_LFO_CURVES[key];
+    const base = setterLfoBase(t, key);
+    try { node.signal.value = curve.to(v) - curve.to(base); } catch {}
+    return;
+  }
   // Euclid: write the live override, never the stored setting, so the knob
   // stays the base the LFO swings around. The generator reads it at step time.
   if (key.startsWith("euclid_")) {
@@ -762,6 +787,52 @@ export function syncLFO(t, key) {
   // FX-target LFOs must keep their stage wired into the rack's chain even at
   // wet 0 (the LFO signal adds on top of the base) — re-evaluate stage bypass.
   try { t.fxRack?.refreshStageActivity?.(); } catch {}
+
+  // ── curved AudioParam LFO path (cutoff, ring_freq, shaper_preamp) ──
+  //
+  // These DO have a real AudioParam (getModTarget still resolves them), but a
+  // fixed native-unit swing summed straight onto it can't be made to reach the
+  // knob's ceiling from an arbitrary base on an exponential curve (see
+  // CURVED_LFO_KEYS's comment in constants.js). So instead of a Tone.LFO, a
+  // plain Signal sums the difference between the curve at the shape's target
+  // knob position and the curve at the current base — computed every frame by
+  // the same setter loop every other setter key uses (this key is also in
+  // SETTER_LFO_KEYS, for the RAF loop and the needle), which is why this
+  // branch has to run first and return: the generic setter-key branch below
+  // would otherwise tear the persistent Signal down on every call.
+  if (CURVED_LFO_KEYS.has(key)) {
+    if (!cfg.enabled) {
+      if (lfo) {
+        try { lfo.disconnect(); } catch {}
+        try { lfo.dispose(); } catch {}
+        t.lfos[key] = null;
+      }
+      if (t._setterLfoPhase && t._setterLfoPhase[key] != null) {
+        delete t._setterLfoPhase[key];
+        if (t._modLive) delete t._modLive[key];
+      }
+      return;
+    }
+    if (!state.ready) return;
+    const param = getModTarget(t, key);
+    if (!param) return;
+    if (!lfo?.isCurved) {
+      if (lfo) { try { lfo.disconnect(); } catch {} try { lfo.dispose(); } catch {} }
+      const signal = new Tone.Signal(0);
+      connectMod(signal, param);
+      lfo = t.lfos[key] = {
+        isCurved: true,
+        signal,
+        stop() {},
+        disconnect() { try { this.signal.disconnect(); } catch {} },
+        dispose() { try { this.signal.dispose(); } catch {} },
+      };
+    }
+    if (!t._setterLfoPhase) t._setterLfoPhase = {};
+    if (t._setterLfoPhase[key] == null) t._setterLfoPhase[key] = 0;
+    startSetterLfoLoopIfNeeded();
+    return;
+  }
 
   // ── setter-driven LFO path (FX params without an AudioParam target) ──
   if (SETTER_LFO_KEYS.has(key)) {

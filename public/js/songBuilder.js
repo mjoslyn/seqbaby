@@ -703,7 +703,7 @@ export function setFx(song, index, stage, settings = {}) {
 // ---- modulation ---------------------------------------------------------------------
 
 export const LFO_SHAPES = ["sine", "triangle", "sawtooth", "square", "randsq", "euclid"];
-const LFO_DIV_BY_LABEL = new Map(LFO_DIVS.map(d => [d.label.replace("½", "1/2"), d.div]));
+const LFO_DIV_BY_LABEL = new Map(LFO_DIVS.map(d => [d.label, d.div]));
 function lfoDiv(length) {
   if (isNum(length)) return num(length, "length (beats)", 0.0625, 64);
   const s = String(length).trim().toLowerCase().replace("½", "1/2");
