@@ -3293,10 +3293,10 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not
     align-items: center;
     justify-content: center;
     gap: 2px;
-    min-width: 56px;
+    min-width: 50px;
     width: auto;
     height: auto;
-    min-height: 56px;
+    min-height: 50px;
     padding: 5px 4px;
     line-height: 1.1;
   }
