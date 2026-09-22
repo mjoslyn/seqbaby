@@ -79,14 +79,14 @@ export const GENERIC_FILTER_TYPES = ["lowpass", "highpass", "bandpass", "notch"]
 export const ANALOG_FILTER_TYPES = ["fat", "crisp", "squelch", "edge", "poly", "velvet", "scream", "growl"];
 
 export const ANALOG_FILTER_INFO = {
-  fat:     { label: "fat",     description: "warm 24dB/oct ladder — the passband thins as resonance climbs, same as any feedback ladder" },
-  crisp:   { label: "crisp",   description: "clean, bright 24dB/oct ladder — loses less bass under resonance than the warmer ladders" },
-  squelch: { label: "squelch", description: "an 18dB/oct diode ladder (silverbox's own filter) — squelchy and thin at high resonance, the acid sound" },
-  edge:    { label: "edge",    description: "24dB/oct ladder close to fat, with a harder, brighter edge to the saturation" },
-  poly:    { label: "poly",    description: "clean, chip-precise 24dB/oct ladder — the classic polysynth sound, least bass loss of the ladder family" },
-  velvet:  { label: "velvet",  description: "smooth, gentle 12dB/oct state-variable filter — resonance doesn't cost bass the way a ladder's does" },
-  scream:  { label: "scream",  description: "12dB/oct state-variable filter driven hard on the way in — aggressive and screamy as resonance climbs" },
-  growl:   { label: "growl",   description: "24dB/oct state-variable filter (two cascaded stages) — gritty and aggressive" },
+  fat:     { label: "fat",     description: "warm 24dB/oct ladder that thins in the passband as resonance climbs" },
+  crisp:   { label: "crisp",   description: "clean, bright 24dB/oct ladder with less bass loss under resonance" },
+  squelch: { label: "squelch", description: "an 18dB/oct diode ladder (silverbox's own filter), the acid sound" },
+  edge:    { label: "edge",    description: "24dB/oct ladder close to fat, with a harder, brighter saturation" },
+  poly:    { label: "poly",    description: "clean, chip-precise 24dB/oct ladder, the classic polysynth sound" },
+  velvet:  { label: "velvet",  description: "smooth, gentle 12dB/oct state-variable filter that costs no bass to resonance" },
+  scream:  { label: "scream",  description: "12dB/oct state-variable filter driven hard on the way in" },
+  growl:   { label: "growl",   description: "24dB/oct state-variable filter, gritty and aggressive" },
 };
 
 // The filter's shapes: the plain biquad shapes plus the eight modeled

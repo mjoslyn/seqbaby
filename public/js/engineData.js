@@ -52,84 +52,84 @@ const PLAITS_DRUM_DECAY =
   "the low-pass gate's decay, on top of the model's own. Pull it down for a tighter hit";
 export const PLAITS_MACRO_TIPS = [
   { // 0 virtual analog
-    harm: "detuning between the two oscillators. One fat tone at zero, a beating pair at the top",
-    timb: "pulse width of the square, from thin and nasal out to hollow",
-    morph: "the second wave's shape, sweeping triangle to saw with a widening notch",
+    harm: "detuning between the two oscillators",
+    timb: "pulse width of the square",
+    morph: "the second wave's shape, sweeping triangle to saw",
     decay: PLAITS_LPG_DECAY },
   { // 1 waveshaping
     harm: "which waveshaping curve the oscillator is pushed through",
-    timb: "wavefolder amount. The further up, the more times the wave folds back on itself and the more harmonics come out",
-    morph: "asymmetry of the waveform, which brings the even harmonics in",
+    timb: "wavefolder amount",
+    morph: "asymmetry of the waveform",
     decay: PLAITS_LPG_DECAY },
   { // 2 fm
-    harm: "frequency ratio between the two operators. Whole numbers stay harmonic, everything in between goes bell-like",
-    timb: "modulation index: how hard operator 2 drives operator 1, so how bright the tone is and how wide the sidebands spread",
-    morph: "feedback. Below centre operator 2 modulates operator 1 harder, above it feeds back into itself. Both ends head toward noise",
+    harm: "frequency ratio between the two operators",
+    timb: "modulation index: how hard operator 2 drives operator 1",
+    morph: "feedback between the two operators",
     decay: PLAITS_LPG_DECAY },
   { // 3 grain
     harm: "ratio between the two formant frequencies",
-    timb: "formant frequency: the resonant peak the grains are shaped around",
+    timb: "formant frequency the grains are shaped around",
     morph: "shape and width of the grain window",
     decay: PLAITS_LPG_DECAY },
   { // 4 additive
     harm: "how the energy is grouped across the harmonic series",
-    timb: "sweeps the emphasised peak up and down that series, like drawbars",
-    morph: "how wide the peak spreads, from close to a sine out to a full stack",
+    timb: "sweeps the emphasised peak up and down that series",
+    morph: "how wide the peak spreads",
     decay: PLAITS_LPG_DECAY },
   { // 5 wavetable
     harm: "which bank of wavetables is read",
     timb: "position along the wavetable map",
-    morph: "position across the map's other axis. The two together pick the wave, and neither moves smoothly",
+    morph: "position across the map's other axis",
     decay: PLAITS_LPG_DECAY },
   { // 6 chord
-    harm: "which chord is played. The model sounds four voices at once and this picks the intervals",
-    timb: "the chord's inversion and how far it spreads",
-    morph: "the waveform those four voices use, from sine up through richer ones",
+    harm: "which chord is played",
+    timb: "the chord's inversion and spread",
+    morph: "the waveform the four voices use",
     decay: PLAITS_LPG_DECAY },
   { // 7 speech
-    harm: "the sound bank: formant filtering at the bottom, then the vintage speech-synth modes and their word lists",
-    timb: "species: shifts the formants, so the same phoneme reads as a different size of voice",
+    harm: "the sound bank: formant filtering or a speech-synth mode",
+    timb: "species: shifts the formants",
     morph: "which phoneme or word comes out",
     decay: PLAITS_LPG_DECAY },
   { // 8 swarm
     harm: "how far the swarm's voices scatter in pitch",
-    timb: "density of the swarm: how many grains, how often",
+    timb: "density of the swarm",
     morph: "grain duration and envelope shape",
     decay: PLAITS_LPG_DECAY },
   { // 9 noise
-    harm: "spacing between the two resonant peaks the noise is filtered through",
+    harm: "spacing between the two resonant peaks",
     timb: "where those peaks sit",
-    morph: "how narrow they are. Wide is a wash, narrow is a pitched whistle",
+    morph: "how narrow they are",
     decay: PLAITS_LPG_DECAY },
   { // 10 particle
     harm: "how far each particle's pitch is randomised",
-    timb: "particle density, from occasional ticks to a continuous shower",
+    timb: "particle density",
     morph: "resonance and ring of the filter each particle is fired through",
     decay: PLAITS_LPG_DECAY },
   { // 11 string
-    harm: "inharmonicity: how stiff the string is, from a clean harmonic series to a dull, bell-like one",
+    harm: "inharmonicity: how stiff the string is",
     timb: "brightness of the excitation that plucks it",
     morph: "how long it rings",
     decay: PLAITS_LPG_DECAY },
   { // 12 modal
-    harm: "the material's inharmonicity: the difference between a tube, a bar and a bell",
+    harm: "the material's inharmonicity",
     timb: "brightness and grit of the strike",
     morph: "how long the resonator rings",
     decay: PLAITS_LPG_DECAY },
   { // 13 bass drum
-    harm: "attack sharpness, and how hard the drum is overdriven",
-    timb: "brightness: the balance of click against body",
+    harm: "attack sharpness and overdrive",
+    timb: "brightness: click against body",
     morph: "the drum's own decay",
     decay: PLAITS_DRUM_DECAY },
   { // 14 snare drum
     harm: "balance between the drum's tone and its noise",
-    timb: "brightness: how much of the noise is filtered away",
+    timb: "brightness: how much noise is filtered away",
     morph: "the drum's own decay",
     decay: PLAITS_DRUM_DECAY },
   { // 15 hi hat
     harm: "balance between the metallic cluster and plain noise",
     timb: "brightness of the filter that cluster runs through",
-    morph: "decay. Closed hat at the bottom, open at the top",
+    morph: "decay, closed at the bottom and open at the top",
     decay: PLAITS_DRUM_DECAY },
 ];
 
@@ -142,23 +142,23 @@ export const PLAITS_MACRO_TIPS = [
 // they go with.)
 export const ENGINE_MACRO_TIPS = {
   "dm:snarl": {
-    harm: "speed and depth of the LFO sweeping the pulse width, on one control. At zero the pulse holds still",
-    timb: "the pulse wave's resting width, from a thin nasal 10% out to a hollow square. The pwm rate slider sweeps around wherever this sits",
+    harm: "speed and depth of the LFO sweeping the pulse width",
+    timb: "the pulse wave's resting width",
     osc: {
       osc1: "level of the sawtooth, the main voice",
-      osc2: "level of the pulse wave, shaped by the two pw controls",
+      osc2: "level of the pulse wave",
       osc3: "level of the triangle, the one the metalizer folds",
       osc4: "level of the sub oscillator, an octave below",
     },
     oscMod: {
       ultra: "ultrasaw: detuned copies stacked around the saw",
-      fm: "audio-rate frequency modulation from the sub. Clangorous and metallic as it climbs",
-      metal: "metalizer: folds the triangle back on itself into hard upper harmonics",
+      fm: "audio-rate frequency modulation from the sub",
+      metal: "metalizer: folds the triangle back into hard upper harmonics",
     },
   },
   "dm:ladder": {
-    harm: "how far oscillator 2 sits off oscillator 1, 5 to 30 cents",
-    decay: "two things at once: how long a note takes to fall away, and how much of the warming filter stage is mixed in as it does",
+    harm: "how far oscillator 2 sits off oscillator 1",
+    decay: "how long a note falls away, and how much of the warming filter stage rides along",
     osc: {
       osc1: "level of oscillator 1 in the mixer",
       osc2: "level of oscillator 2, the detuned one",
@@ -167,9 +167,9 @@ export const ENGINE_MACRO_TIPS = {
   },
   "dm:drift": {
     harm: "speed and depth of the LFO sweeping the DCO's pulse width",
-    timb: "the pulse's resting width, which that sweep moves around",
+    timb: "the pulse's resting width",
     morph: "the chorus, wet and depth together",
-    decay: "how long a note falls away, and the high-pass with it, so the sound thins as it shortens",
+    decay: "how long a note falls away, and the high-pass with it",
     osc: {
       osc1: "level of the main DCO",
       osc2: "level of the square sub, an octave below",
@@ -177,27 +177,27 @@ export const ENGINE_MACRO_TIPS = {
     },
   },
   "dm:tines": {
-    harm: "the ratio between the tine and the tone bar. Low is deep and hollow, high goes bell-like",
-    timb: "how hard the hammer hits, so how much metallic attack comes through",
+    harm: "the ratio between the tine and the tone bar",
+    timb: "how hard the hammer hits",
     morph: "how much chorus is on the output",
-    decay: "how long each note rings, and how long it takes to let go once released",
+    decay: "how long each note rings, and how long it takes to let go",
   },
   "dm:oracle": {
-    harm: "detunes VCO2 against VCO1 by up to 30 cents either way. Centre is unison, the ends beat",
-    timb: "crossfades VCO2 from saw to pulse, sweeping the pulse width as it goes",
+    harm: "detunes VCO2 against VCO1",
+    timb: "crossfades VCO2 from saw to pulse",
     morph: "how much of the output runs through the overdrive stage",
     decay: "how long each note falls away, and its release with it",
     osc: {
       osc1: "level of VCO1",
-      osc2: "level of VCO2, the detuned one the shape control sweeps",
+      osc2: "level of VCO2, the detuned one",
       osc3: "level of the sub oscillator",
       osc4: "level of the noise source",
     },
   },
   "wt:akwf": {
-    harm: "position across the table, morphing between the frames in the editor or the AKWF palette. Wave scan can sweep this on its own",
-    timb: "a lowpass on each voice, on top of the track filter. Dark at the bottom, wide open at the top",
-    morph: "how far the stacked unison voices spread in pitch, up to ±30 cents. Zero is one clean voice",
+    harm: "position across the table, morphing between frames",
+    timb: "a lowpass on each voice, on top of the track filter",
+    morph: "how far the stacked unison voices spread in pitch",
     decay: "how long each note takes to fall away, and its release",
   },
   "dm:contagion": {
@@ -715,7 +715,7 @@ const GUITAR_TONES = {
          amp: "clean", cab: "1x12", pkupt: "single", tremw: "sine" },
   },
   "jangle": {
-    d: "neck and bridge together, barely breaking up, picked over the neck. Chiming and clean",
+    d: "neck and bridge together, barely breaking up and chiming, picked over the neck",
     drive: 0.34, tone: 0.72, bloom: 0.12, sustain: 0.55,
     p: { pick: 0.32, pnoise: 0.55, stiff: 0.2, pkup: 0.2, mute: 0,
          bass: 0.45, mid: 0.55, treb: 0.68, pres: 0.5, mast: 0.5, sag: 0.35,
@@ -755,7 +755,7 @@ const GUITAR_TONES = {
          amp: "brit", cab: "4x12", pkupt: "hum", tremw: "sine" },
   },
   "rolled off": {
-    d: "neck humbucker with the guitar's tone knob rolled right down, into a cranked amp. Dark, vocal, no pick attack at all",
+    d: "neck humbucker with the guitar's tone knob rolled right down, into a cranked amp, dark and vocal",
     drive: 0.74, tone: 0.12, bloom: 0.55, sustain: 0.8,
     p: { pick: 0.42, pnoise: 0.25, stiff: 0.18, pkup: 0.36, mute: 0,
          bass: 0.6, mid: 0.72, treb: 0.5, pres: 0.35, mast: 0.85, sag: 0.6,
@@ -795,7 +795,7 @@ const GUITAR_TONES = {
          amp: "hi", cab: "4x12", pkupt: "hum", tremw: "sine" },
   },
   "grunge": {
-    d: "a brit amp pushed into mush with the mids up and the strings picked hard. Loose and honking",
+    d: "a brit amp pushed into mush with the mids up, strings picked hard, loose and honking",
     drive: 0.8, tone: 0.55, bloom: 0.3, sustain: 0.45,
     p: { pick: 0.14, pnoise: 0.95, stiff: 0.45, pkup: 0.16, mute: 0.2,
          bass: 0.65, mid: 0.72, treb: 0.62, pres: 0.5, mast: 0.7, sag: 0.6,
@@ -803,7 +803,7 @@ const GUITAR_TONES = {
          amp: "brit", cab: "4x12", pkupt: "hum", tremw: "sine" },
   },
   "jazz box": {
-    d: "neck humbucker, thumb rather than pick, tone rolled back and an amp that never breaks up. Round and dark",
+    d: "neck humbucker, thumb rather than pick, tone rolled back into an amp that never breaks up, round and dark",
     drive: 0.12, tone: 0.24, bloom: 0.05, sustain: 0.5,
     p: { pick: 0.46, pnoise: 0.12, stiff: 0.12, pkup: 0.4, mute: 0,
          bass: 0.6, mid: 0.6, treb: 0.35, pres: 0.15, mast: 0.4, sag: 0.2,
@@ -892,7 +892,7 @@ export function bassFromUnit(k, u) {
 // each says what it is reaching for.
 const BASS_TONES = {
   "motown": {
-    d: "flatwounds on a precision with a foam mute under the bridge, tone rolled off, into a small valve amp. All fundamental and nothing above it",
+    d: "flatwounds on a precision with a foam mute under the bridge, tone rolled off into a small valve amp, all fundamental",
     drive: 0.66, tone: 0.14, comp: 0.55, sustain: 0.5,
     p: { pick: 0.22, attack: 0.2, stiff: 0.2, pkup: 0.16, mute: 0.4, fret: 0.1,
          grind: 0, xover: 0.4, sub: 0,
@@ -916,7 +916,7 @@ const BASS_TONES = {
          amp: "gk", cab: "4x10", pkupt: "j", strs: "round" },
   },
   "slap funk": {
-    d: "thumb against the frets and fingers pulling the strings off them: fresh roundwounds, the mids scooped out, compressed hard, and all the clank left in",
+    d: "thumb against the frets, fresh roundwounds, mids scooped out and compressed hard, all the clank left in",
     drive: 0.3, tone: 0.95, comp: 0.75, sustain: 0.6,
     p: { pick: 0.04, attack: 0.85, stiff: 0.7, pkup: 0.06, mute: 0, fret: 0.85,
          grind: 0.1, xover: 0.5, sub: 0,
@@ -924,7 +924,7 @@ const BASS_TONES = {
          amp: "di", cab: "4x10", pkupt: "mm", strs: "round" },
   },
   "dub": {
-    d: "neck pickup, flatwounds, tone all the way down and the palm resting on the strings. A fifteen-inch speaker and almost nothing above 200Hz",
+    d: "neck pickup, flatwounds, tone down and the palm resting on the strings, through a fifteen-inch speaker",
     drive: 0.5, tone: 0.06, comp: 0.6, sustain: 0.35,
     p: { pick: 0.3, attack: 0.15, stiff: 0.15, pkup: 0.34, mute: 0.6, fret: 0.05,
          grind: 0, xover: 0.4, sub: 0.2,
@@ -932,7 +932,7 @@ const BASS_TONES = {
          amp: "flip", cab: "1x15", pkupt: "p", strs: "flat" },
   },
   "modern di": {
-    d: "straight into the desk, both pickups, compressed flat and even. Uncoloured",
+    d: "straight into the desk, both pickups, compressed flat and even and uncoloured",
     drive: 0.2, tone: 0.75, comp: 0.7, sustain: 0.55,
     p: { pick: 0.14, attack: 0.45, stiff: 0.4, pkup: 0.14, mute: 0, fret: 0.2,
          grind: 0.06, xover: 0.5, sub: 0,
@@ -948,7 +948,7 @@ const BASS_TONES = {
          amp: "flip", cab: "1x15", pkupt: "p", strs: "flat" },
   },
   "growl": {
-    d: "a jazz bass on the bridge pickup with the mids up and just enough dirt to snarl. Nasal and forward",
+    d: "a jazz bass on the bridge pickup with the mids up and just enough dirt to snarl, nasal and forward",
     drive: 0.6, tone: 0.8, comp: 0.4, sustain: 0.6,
     p: { pick: 0.07, attack: 0.55, stiff: 0.55, pkup: 0.05, mute: 0, fret: 0.35,
          grind: 0.4, xover: 0.45, sub: 0,
@@ -956,7 +956,7 @@ const BASS_TONES = {
          amp: "svt", cab: "8x10", pkupt: "j", strs: "round" },
   },
   "octave sub": {
-    d: "an octaver under the note and the top filtered off it. Half bass, half synth",
+    d: "an octaver under the note with the top filtered off, half bass and half synth",
     drive: 0.3, tone: 0.3, comp: 0.65, sustain: 0.5,
     p: { pick: 0.2, attack: 0.3, stiff: 0.3, pkup: 0.2, mute: 0.15, fret: 0.1,
          grind: 0.12, xover: 0.55, sub: 0.85,
@@ -964,7 +964,7 @@ const BASS_TONES = {
          amp: "di", cab: "1x15", pkupt: "mm", strs: "round" },
   },
   "pop punk": {
-    d: "plectrum, roundwounds, the mids pulled out and the top wound up until every note is an attack. Bright and fast",
+    d: "plectrum, roundwounds, the mids pulled out and the top wound up until every note is an attack, bright and fast",
     drive: 0.65, tone: 0.9, comp: 0.55, sustain: 0.3,
     p: { pick: 0.06, attack: 1, stiff: 0.6, pkup: 0.07, mute: 0.2, fret: 0.5,
          grind: 0.45, xover: 0.4, sub: 0,
@@ -1080,7 +1080,7 @@ const SUB_TONES = {
          hpf: 0.12, glue: 0.45, ceil: 0.82, stack: "3", sat: "fold", glidem: "always" },
   },
   "acid": {
-    d: "a saw through the 3-pole ladder, squelching on top of a fundamental the filter never reaches. High velocities stack the accents into a climb",
+    d: "a saw through the 3-pole ladder, squelching on top of a fundamental the filter never reaches",
     drive: 0.66, tone: 0.72, shape: 0.66, decay: 0.35,
     p: { oct: 0, detune: 0, phase: 0.25, drift: 0.05, drop: 0, droptm: 0.2,
          atk: 0.01, rel: 0.1, click: 0.06, xover: 0.22, edge: 0.3,
@@ -1102,7 +1102,7 @@ const SUB_TONES = {
          hpf: 0.1, glue: 0.38, ceil: 0.84, stack: "1", sat: "tube", glidem: "legato" },
   },
   "memphis": {
-    d: "driven hard through a fuzz, tone up, glue hard. Saturated and dirty",
+    d: "driven hard through a fuzz, tone up and glue hard, saturated and dirty",
     drive: 0.9, tone: 0.78, shape: 0.3, decay: 0.5,
     p: { oct: 0.15, detune: 0, phase: 0.25, drift: 0.2, drop: 0.18, droptm: 0.2,
          atk: 0.01, rel: 0.12, click: 0.35, xover: 0.3, edge: 0.7,
@@ -1123,7 +1123,7 @@ const SUB_TONES = {
          hpf: 0.14, glue: 0.55, ceil: 0.78, stack: "2", sat: "fold", glidem: "always" },
   },
   "cinematic drop": {
-    d: "a very deep, very slow pitch fall onto the note, rectified so the octave above carries it. Needs a long step",
+    d: "a very deep, very slow pitch fall onto the note, rectified so the octave above carries it",
     drive: 0.5, tone: 0.35, shape: 0.05, decay: 0.85,
     p: { oct: 0.5, detune: 0.12, phase: 0.25, drift: 0.08, drop: 0.75, droptm: 0.62,
          atk: 0.03, rel: 0.5, click: 0.1, xover: 0.24, edge: 0.3,

@@ -111,56 +111,56 @@ export function updatePlaitsControlsVisibility(t) {
     // isn't much help — hang an explanation off the ones worth explaining.
     const tips = isGranular
       ? {
-          harm: "grain length. Short grains rattle and buzz, long ones overlap into a wash",
-          timb: "grains per second, 8 to 90. Ignored while sync is on, where rate takes over",
-          morph: "play position in the sample. Dragging the window in the wave editor sets this too",
-          decay: "diffusion: widens the window, loosens the jitter and adds detune together",
+          harm: "grain length",
+          timb: "grains per second, ignored while sync is on",
+          morph: "play position in the sample",
+          decay: "diffusion: widens the window, loosens the jitter and adds detune",
         }
       : isSilverbox
       ? {
-          harm: "an 18dB/oct diode ladder, ahead of the track filter. It doesn't track the keyboard, so high notes come out duller than low ones",
-          timb: "resonance. The feedback costs the passband level as it climbs, so the line gets thinner and squelchier the further it is pushed",
+          harm: "an 18dB/oct diode ladder, ahead of the track filter",
+          timb: "resonance, which thins and squelches the line as it climbs",
           morph: "how much of the filter envelope reaches the cutoff",
-          decay: "filter envelope decay, 200ms to 2.5s. Accented steps ignore it and use a fixed 200ms",
+          decay: "filter envelope decay",
         }
       : isHexop
       ? {
-          harm: "every modulator's output level at once: the master modulation index. The panel keeps a level per operator; this rides all six together",
-          timb: "how much the feedback operator's output goes back into its own input. Wound right up it turns to noise. Which operator carries it depends on the algorithm, and the panel says which",
-          morph: "scales every modulator's decay together: how fast the timbre falls away, apart from how fast the note does",
-          decay: "scales every carrier's decay and release together, so how fast the note itself falls away. The operators keep their relative shapes",
+          harm: "every modulator's output level at once: the master modulation index",
+          timb: "how much the feedback operator's output goes back into its own input",
+          morph: "scales every modulator's decay together",
+          decay: "scales every carrier's decay and release together",
         }
       : isGuitar
       ? {
-          harm: "how hard the pickup drives the amp. An exponential taper, like the pot on the front of the amp: halfway up a hundred-times preamp is ten times, not fifty",
-          timb: "the tone knob on the guitar itself, not the amp: a passive lowpass between the pickup and the lead, 700Hz to wide open",
-          morph: "how much the speaker feeds back into the strings. Below a threshold it lifts a held note. Past it the injection beats the string's own losses and the note grows into a howl. It needs drive, and it stops when the note is released",
-          decay: "how long a string rings. It is the loss in the waveguide's loop, so low notes ring longer than high ones. At the top a note lasts most of a bar, and the release when a step ends scales from it",
+          harm: "how hard the pickup drives the amp",
+          timb: "the tone knob on the guitar itself, a passive lowpass",
+          morph: "how much the speaker feeds back into the strings",
+          decay: "how long a string rings",
         }
       : isBass
       ? {
-          harm: "how hard the bass drives the amp. Which amp decides what that means: a clean preamp barely notices, a small valve amp is round and forgiving, the solid-state one grinds",
-          timb: "the tone knob on the bass itself: a lowpass between the pickup and the lead, 400Hz to wide open",
+          harm: "how hard the bass drives the amp",
+          timb: "the tone knob on the bass itself, a lowpass",
           morph: "the rig compressor, threshold and makeup on one control",
-          decay: "how long a string rings. Bass strings lose very little per trip round the loop, so even the middle of this rings for seconds",
+          decay: "how long a string rings",
         }
       : isSub
       ? {
-          harm: "how much harmonic content is made from the note and mixed in above the crossover, which is what makes a sub audible on a small speaker. Wound up, the harmonics are louder than the note itself. The shaping is parallel and highpassed, so the clean low end is never intermodulated",
-          timb: "the lid on those harmonics, 300Hz to 9kHz. It filters only the shaped path, never the sub underneath",
-          morph: "the oscillator, morphed from sine through triangle and saw to square. A sine brings no harmonics of its own and needs the drive to make any, a square arrives with plenty",
-          decay: "how long the note rings, 30ms to about eight seconds. It runs whether or not the step is held, so a note can ring over the bar line. The release only shortens it",
+          harm: "how much harmonic content is mixed in above the crossover",
+          timb: "the lid on those harmonics",
+          morph: "the oscillator, morphed from sine through triangle and saw to square",
+          decay: "how long the note rings",
         }
       : isContagion
       ? {
-          harm: "cutoff for both filters. Filter 2 sits at whatever offset its own cut 2 slider sets. Tracks the keyboard at a third of an octave per octave",
+          harm: "cutoff for both filters",
           timb: "resonance, shared by both filters",
-          morph: "oscillator shape, morphing from sine through triangle and saw to pulse. Pulse width takes over at the very top",
-          decay: "decay for both envelopes: how fast each note falls from its peak to the sustain level",
+          morph: "oscillator shape, morphing sine through triangle and saw to pulse",
+          decay: "decay for both envelopes",
         }
       : (is808 || is909)
       ? {
-          harm: "tuning for this voice. Unlike the kick, these voices ignore the step's note",
+          harm: "tuning for this voice",
           timb: t.engineKey === "dm:909-kick"
             ? "level of the beater click on the attack"
             : t.engineKey.endsWith("-kick")
