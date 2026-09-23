@@ -119,6 +119,11 @@ export function AccountBar({
       >
         <NewSongButton />
         {name && <SaveButton />}
+        {/* Outside the signed-in branch on purpose: compose runs on the
+            visitor's own Anthropic key when they have one, and that needs no
+            account. Signed in with a key on the deploy, the panel offers the
+            choice. */}
+        <ComposeChat signedIn={!!name} serverKey={serverKey} />
         <button
           className={styles.shareBtn}
           onClick={() => window.seqbaby?.onShareSet?.(getOpenSong().title)}
@@ -126,11 +131,6 @@ export function AccountBar({
         >
           share
         </button>
-        {/* Outside the signed-in branch on purpose: compose runs on the
-            visitor's own Anthropic key when they have one, and that needs no
-            account. Signed in with a key on the deploy, the panel offers the
-            choice. */}
-        <ComposeChat signedIn={!!name} serverKey={serverKey} />
         {/* Outside the signed-in branch too: a jam needs nobody to have an
             account, only the link. The account's name is what a signed-in
             member is called in the room. */}

@@ -1725,6 +1725,14 @@ chance and like undo / redo / the metronome beside it (icon over a
 `data-label` caption, 50px),
 and its caption is the current setting (`C minor · min7 arp`, or `scale` with
 both off), because on a phone the button is all of either you can see.
+On a phone those buttons (undo, redo, scale, the metronome and the session
+menu's `#pattern-menu-btn`) break onto a line together: they sit in two
+different transport clusters on desktop, so rather than a wrapper that would
+drag the metronome along, `.sq-transport::before` is a line break ordered in
+front of them, the `.sq-track__head::before` trick. The session button lives in
+the transport's right cluster for that reason (`sq-mobile-only`, invisible on
+desktop), and the pattern bar it opens as a modal is hidden outright below
+768px, since everything in it was already only reachable through that modal.
 
 ## Server / data surface
 

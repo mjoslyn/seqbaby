@@ -3020,15 +3020,28 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not
      same element, once moved into the modal, is shown again. */
   .sq-transport .sq-scale__field { display: none !important; }
   .sq-transport #add-track { order: 99; padding: 6px 10px; }
-  /* Undo, redo, the scale & chord button and the metronome are the
-     transport's icon buttons on a phone (the keyboard cluster is hidden), and
+  /* Undo, redo, the scale & chord button, the metronome and the session menu
+     are the transport's icon buttons on a phone (the keyboard cluster is hidden), and
      they are drawn like the track's dice / euclid / chance: icon over caption,
      50px square, so a thumb has a target and each says what it is without a
      hover. */
   .sq-transport .sq-history { gap: 4px; }
+  /* Those five read as one group, so they break onto a line together rather
+     than leaving undo on the play row and redo under it. They live in two
+     different clusters on desktop (undo/redo in the main one, the metronome in
+     the right one), so no wrapper can hold them without moving the metronome
+     there too. Instead the transport's own ::before is a line break, the same
+     trick as .sq-track__head::before: a zero-height flex item with a 100%
+     basis, ordered in front of the group, which (with the clock and the meter
+     after it) then always starts a line of its own. */
+  .sq-transport::before { content: ""; flex: 0 0 100%; height: 0; order: 1; }
+  .sq-transport .sq-history,
+  .sq-transport #chord-menu-btn,
+  .sq-transport__right > * { order: 1; }
   .sq-transport .sq-history button,
   .sq-transport #chord-menu-btn,
-  .sq-transport #metronome {
+  .sq-transport #metronome,
+  .sq-transport #pattern-menu-btn {
     flex-direction: column;
     align-items: center;
     justify-content: center;
@@ -3043,10 +3056,12 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not
   }
   .sq-transport .sq-history .sq-btn-icon,
   .sq-transport #chord-menu-btn .sq-btn-icon,
-  .sq-transport #metronome .sq-btn-icon { width: 18px; height: 18px; }
+  .sq-transport #metronome .sq-btn-icon,
+  .sq-transport #pattern-menu-btn .sq-btn-icon { width: 18px; height: 18px; }
   .sq-transport .sq-history [data-label]::after,
   .sq-transport #chord-menu-btn[data-label]::after,
-  .sq-transport #metronome[data-label]::after {
+  .sq-transport #metronome[data-label]::after,
+  .sq-transport #pattern-menu-btn[data-label]::after {
     content: attr(data-label);
     font-size: 10px;
     letter-spacing: 0;
@@ -3074,35 +3089,12 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not
   .sq-meter--master { width: 50px; height: 8px; }
   .sq-beat-indicator { width: 30px; height: 30px; }
 
-  /* ---------- PATTERN BAR (mobile = Share + Menu only) ---------- */
-  .sq-pattern-bar {
-    padding: 6px 8px;
-    gap: 6px;
-    align-items: center;
-  }
-  /* Hide every pattern-bar child by default on mobile. Share + Menu opt in. */
-  .sq-pattern-bar > * { display: none; }
-  .sq-pattern-bar > #set-share {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    flex: 1 1 0;
-    padding: 0 12px;
-    min-height: 44px;
-  }
-  .sq-pattern-bar > #pattern-menu-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    flex: 1 1 0;
-    padding: 0 12px;
-    min-height: 44px;
-    background: var(--bg-3);
-    color: var(--fg);
-    border: 1px solid var(--border);
-    text-transform: none;
-    font-weight: 600;
-  }
+  /* ---------- PATTERN BAR ----------
+     Hidden on a phone: everything in it lives in the session menu modal
+     (openPatternMenu), opened from #pattern-menu-btn in the transport's icon
+     group. The modal moves the bar's children out and back, so the bar
+     itself only has to exist, not show. */
+  .sq-pattern-bar { display: none; }
 
   /* When the pattern menu modal is open, its children appear inside it.
      Layout matches what the bar used to look like, vertically stacked. */

@@ -6,7 +6,7 @@ import { BUNDLED_SAMPLES, GRANULAR_SAMPLES, GRANULAR_SAMPLE_BASE, GRANULAR_SAMPL
 import { LFO_KEYS, PATTERN_COUNT } from "./constants.js";
 import { isMobileDevice, setStatus } from "./dom.js";
 import { initHistory } from "./history.js";
-import { HELP_TIPS, ICON_BOUNCE, ICON_CAPTURE, ICON_CHAIN, ICON_FINISH, ICON_KEYBOARD, ICON_METRONOME, ICON_NOW, ICON_REC, ICON_REPEAT } from "./icons.js";
+import { HELP_TIPS, ICON_BOUNCE, ICON_CAPTURE, ICON_CHAIN, ICON_FINISH, ICON_KEYBOARD, ICON_METRONOME, ICON_NOW, ICON_REC, ICON_REPEAT, ICON_SESSION } from "./icons.js";
 import { upgradeKnobs } from "./knob.js";
 import { startModMotion } from "./modMotion.js";
 import { openMacroPads } from "./macro.js";
@@ -750,7 +750,11 @@ export function init() {
     e.preventDefault();
     onNewSet();
   });
-  document.getElementById("pattern-menu-btn")?.addEventListener("click", openPatternMenu);
+  const patternMenuBtn = document.getElementById("pattern-menu-btn");
+  if (patternMenuBtn) {
+    patternMenuBtn.innerHTML = ICON_SESSION;
+    patternMenuBtn.addEventListener("click", openPatternMenu);
+  }
   document.getElementById("pattern-dup").addEventListener("click", () => {
     const next = (state.activePattern + 1) % PATTERN_COUNT;
     copyPattern(state.activePattern, next);

@@ -50,6 +50,10 @@ export const ICON_CHANCE = `<svg class="sq-btn-icon" viewBox="0 0 16 16" width="
 
 export const ICON_DICE = `<svg class="sq-btn-icon" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="2.5" width="11" height="11" rx="2"/><circle cx="5.5" cy="5.5" r="0.9" fill="currentColor" stroke="none"/><circle cx="10.5" cy="5.5" r="0.9" fill="currentColor" stroke="none"/><circle cx="8"   cy="8"   r="0.9" fill="currentColor" stroke="none"/><circle cx="5.5" cy="10.5" r="0.9" fill="currentColor" stroke="none"/><circle cx="10.5" cy="10.5" r="0.9" fill="currentColor" stroke="none"/></svg>`;
 
+// a 2x2 bank of pattern slots, one lit — the mobile session menu (pattern
+// mode, switch, meter, repeats, dup, bounce)
+export const ICON_SESSION = `<svg class="sq-btn-icon" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="2" width="5" height="5" rx="1" fill="currentColor"/><rect x="9" y="2" width="5" height="5" rx="1"/><rect x="2" y="9" width="5" height="5" rx="1"/><rect x="9" y="9" width="5" height="5" rx="1"/></svg>`;
+
 // three horizontal fader tracks with staggered knobs — the mobile track menu
 // (hosts the sound-shaping panels: filter/env/fx/eq/comp/mod/aut)
 export const ICON_SLIDERS = `<svg class="sq-btn-icon" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><line x1="2" y1="3.5" x2="14" y2="3.5"/><line x1="2" y1="8" x2="14" y2="8"/><line x1="2" y1="12.5" x2="14" y2="12.5"/><circle cx="10.5" cy="3.5" r="1.8" fill="currentColor" stroke="none"/><circle cx="5" cy="8" r="1.8" fill="currentColor" stroke="none"/><circle cx="11.5" cy="12.5" r="1.8" fill="currentColor" stroke="none"/></svg>`;

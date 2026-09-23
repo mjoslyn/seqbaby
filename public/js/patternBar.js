@@ -103,7 +103,7 @@ export function openPatternMenu() {
   // Snapshot child order so we can restore on close.
   const captured = [];
   for (const child of Array.from(patternBar.children)) {
-    if (child.id === "set-share" || child.id === "pattern-menu-btn") continue;
+    if (child.id === "set-share") continue;
     captured.push({ node: child, nextSibling: child.nextSibling });
   }
 

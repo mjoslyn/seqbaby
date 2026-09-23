@@ -269,6 +269,10 @@ export const STUDIO_BODY = String.raw`
     </div><!-- /sq-transport__main -->
     <div class="sq-transport__right">
       <button id="metronome" class="sq-btn--ghost sq-icon-btn" data-label="metro" aria-pressed="false" aria-label="metronome" title="metronome click on the downbeat"></button>
+      <!-- Mobile only: opens the pattern bar as a modal (openPatternMenu). It
+           lives here, beside the metronome, so on a phone it joins the undo /
+           redo / scale / metronome group; the bar itself is hidden there. -->
+      <button id="pattern-menu-btn" class="sq-mobile-only sq-btn--ghost sq-icon-btn" data-label="session" type="button" aria-label="session menu" title="open session menu"></button>
       <svg id="beat-indicator" class="sq-beat-indicator" viewBox="-22 -22 44 44" width="40" height="40" aria-hidden="true"></svg>
       <div class="sq-meter sq-meter--master" title="master output level"><div class="sq-meter__bar"></div></div>
     </div><!-- /sq-transport__right -->
@@ -337,7 +341,6 @@ export const STUDIO_BODY = String.raw`
   </header>
 
   <div class="sq-pattern-bar">
-    <button id="pattern-menu-btn" class="sq-mobile-only" type="button" aria-label="session menu" title="open session menu">Session</button>
     <div class="sq-set__stack">
       <button id="bounce-audio" class="sq-btn--ghost sq-dl__btn" title="render the current pattern to audio and download it"><span class="sq-dl__icon"></span><span class="sq-dl__label">Pattern</span></button>
       <button id="bounce-track" class="sq-btn--ghost sq-dl__btn" title="chain through all non-empty patterns and render the whole arrangement"><span class="sq-dl__icon"></span><span class="sq-dl__label">Session</span></button>

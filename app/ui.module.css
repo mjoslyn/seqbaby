@@ -264,17 +264,19 @@
 }
 .accountBtn:hover { border-color: #3a3d45; }
 
+/* Drawn like every other button in the bar: it used to be a filled light-blue
+   pill, which made it the loudest thing on the screen for a control nobody
+   needs every minute. */
 .shareBtn {
-  padding: 5px 12px;
-  border: 1px solid #3aa6d8;
+  padding: 5px 10px;
+  border: 1px solid #2a2d35;
   border-radius: 6px;
-  background: #7fd6f2;
-  color: #06202b;
+  background: #16181d;
+  color: #e8e8ea;
   font: inherit;
-  font-weight: 700;
   cursor: pointer;
 }
-.shareBtn:hover { background: #97e0f8; }
+.shareBtn:hover { border-color: #3a3d45; }
 
 /* --- songs menu --- */
 .songsWrap { position: relative; }
