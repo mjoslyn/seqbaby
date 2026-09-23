@@ -84,6 +84,44 @@ export function AccountBar({
   // ui.module.css) -- so nothing here has to know which button it was.
   const onItemClick = useCallback(() => setMenuOpen(false), []);
 
+  // On a phone the transport's master level meter and beat dial sit here,
+  // beside `menu`: the bar is pinned, so both stay in view however far down
+  // the tracks you are. They are the engine's own elements MOVED (beat.js finds
+  // the dial by id and meters.js the meter by class, so each paints wherever it
+  // is), not copies to keep in step. They go home again when the layout widens
+  // past 768px and when this bar unmounts, before React takes the slot away
+  // with them.
+  const beatSlotRef = useRef<HTMLSpanElement | null>(null);
+  useEffect(() => {
+    const slot = beatSlotRef.current;
+    if (!slot) return;
+    const moved = [
+      document.querySelector<HTMLElement>(".sq-meter--master"),
+      document.getElementById("beat-indicator"),
+    ]
+      .filter((el): el is HTMLElement => !!el && !!el.parentNode)
+      .map((el) => ({ el, home: el.parentNode as Node, next: el.nextSibling }));
+    if (!moved.length) return;
+    const goHome = () => {
+      for (const { el, home, next } of moved) {
+        if (el.parentNode === home) continue;
+        if (next && next.parentNode === home) home.insertBefore(el, next);
+        else home.appendChild(el);
+      }
+    };
+    const mq = window.matchMedia("(max-width: 768px)");
+    const place = () => {
+      if (!mq.matches) return goHome();
+      for (const { el } of moved) slot.appendChild(el);
+    };
+    place();
+    mq.addEventListener("change", place);
+    return () => {
+      mq.removeEventListener("change", place);
+      goHome();
+    };
+  }, []);
+
   return (
     <div
       ref={barRef}
@@ -92,6 +130,7 @@ export function AccountBar({
       <a className={styles.manualLink} href="/manual" title="how seqbaby works">
         manual
       </a>
+      <span ref={beatSlotRef} className={styles.beatSlot} aria-hidden />
       <button
         className={styles.menuBtn}
         onClick={() => setMenuOpen((v) => !v)}
@@ -119,6 +158,11 @@ export function AccountBar({
       >
         <NewSongButton />
         {name && <SaveButton />}
+        {/* Outside the signed-in branch on purpose: compose runs on the
+            visitor's own Anthropic key when they have one, and that needs no
+            account. Signed in with a key on the deploy, the panel offers the
+            choice. */}
+        <ComposeChat signedIn={!!name} serverKey={serverKey} />
         <button
           className={styles.shareBtn}
           onClick={() => window.seqbaby?.onShareSet?.(getOpenSong().title)}
@@ -126,11 +170,6 @@ export function AccountBar({
         >
           share
         </button>
-        {/* Outside the signed-in branch on purpose: compose runs on the
-            visitor's own Anthropic key when they have one, and that needs no
-            account. Signed in with a key on the deploy, the panel offers the
-            choice. */}
-        <ComposeChat signedIn={!!name} serverKey={serverKey} />
         {/* Outside the signed-in branch too: a jam needs nobody to have an
             account, only the link. The account's name is what a signed-in
             member is called in the room. */}

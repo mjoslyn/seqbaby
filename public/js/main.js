@@ -6,7 +6,7 @@ import { BUNDLED_SAMPLES, GRANULAR_SAMPLES, GRANULAR_SAMPLE_BASE, GRANULAR_SAMPL
 import { LFO_KEYS, PATTERN_COUNT } from "./constants.js";
 import { isMobileDevice, setStatus } from "./dom.js";
 import { initHistory } from "./history.js";
-import { HELP_TIPS, ICON_BOUNCE, ICON_CAPTURE, ICON_CHAIN, ICON_FINISH, ICON_KEYBOARD, ICON_METRONOME, ICON_NOW, ICON_REC, ICON_REPEAT } from "./icons.js";
+import { HELP_TIPS, ICON_BOUNCE, ICON_CAPTURE, ICON_CHAIN, ICON_FINISH, ICON_KEYBOARD, ICON_METRONOME, ICON_NOW, ICON_MACRO, ICON_REC, ICON_REPEAT, ICON_SESSION } from "./icons.js";
 import { upgradeKnobs } from "./knob.js";
 import { startModMotion } from "./modMotion.js";
 import { openMacroPads } from "./macro.js";
@@ -649,7 +649,12 @@ export function init() {
   // it, so a swept parameter used to draw the same knob as a still one. This
   // puts a second needle on it at wherever the parameter actually is.
   startModMotion();
-  document.getElementById("macro-pads")?.addEventListener("click", openMacroPads);
+  const macroBtn = document.getElementById("macro-pads");
+  if (macroBtn) {
+    // Text on desktop, icon over caption on a phone (style.css flips them).
+    macroBtn.insertAdjacentHTML("afterbegin", ICON_MACRO);
+    macroBtn.addEventListener("click", openMacroPads);
+  }
   // The master swing slider has no listener on purpose: the transport loop reads
   // its value straight off the DOM each callback (~0.1 µs), so there's nothing to
   // mirror into state and nothing to do when it moves.
@@ -697,9 +702,10 @@ export function init() {
   if (arpRateSel) { arpRateSel.value = String(state.kbdArpRate); arpRateSel.addEventListener("change", () => { state.kbdArpRate = Number(arpRateSel.value) || 0.25; }); }
   if (arpRngSel)  { arpRngSel.value  = String(state.kbdArpRange); arpRngSel.addEventListener("change", () => { state.kbdArpRange = Number(arpRngSel.value) || 1; }); }
   if (arpDirSel)  { arpDirSel.value  = String(state.kbdArpDir); arpDirSel.addEventListener("change", () => { state.kbdArpDir = arpDirSel.value || "up"; }); }
-  // Mobile: the cluster above is hidden below 768px, so this button hosts it in
-  // a modal. Chord mode reaches a tapped step (startNote), not just the
-  // computer keyboard, so it is not gated on isDesktopKeyboard().
+  // Mobile: the scale row and the cluster above are hidden below 768px, so this
+  // button hosts both in one modal. Chord mode reaches a tapped step
+  // (startNote), not just the computer keyboard, so it is not gated on
+  // isDesktopKeyboard().
   document.getElementById("chord-menu-btn")?.addEventListener("click", openChordMenu);
   syncChordUI();
 
@@ -776,7 +782,11 @@ export function init() {
     e.preventDefault();
     onNewSet();
   });
-  document.getElementById("pattern-menu-btn")?.addEventListener("click", openPatternMenu);
+  const patternMenuBtn = document.getElementById("pattern-menu-btn");
+  if (patternMenuBtn) {
+    patternMenuBtn.innerHTML = ICON_SESSION;
+    patternMenuBtn.addEventListener("click", openPatternMenu);
+  }
   document.getElementById("pattern-dup").addEventListener("click", () => {
     const next = (state.activePattern + 1) % PATTERN_COUNT;
     copyPattern(state.activePattern, next);

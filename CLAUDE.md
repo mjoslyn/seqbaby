@@ -1708,18 +1708,37 @@ phone. `state.kbdChordType` / `kbdChordCpx` / `kbdArp*` also decide what a
 the step would have taken, and `applyKbdArpToStep` stamps the arp settings onto
 it) — so hiding the cluster below 768px, as the rest of the keyboard controls
 are hidden, took a sequencing feature away rather than a keyboard one.
-`#chord-menu-btn` (`sq-mobile-only`) hosts the same panel in a modal
-(`openChordMenu`, scaleUI.js), moved rather than rebuilt in the manner of the
-pattern bar's mobile menu, so main.js's listeners and `refreshChordTypeSelect`'s
-option rebuilding go on working on the one set of controls. Hence two things:
-the mobile hide rule is scoped `.sq-transport #kbd-chord`, or it would reach
-the panel inside the modal too; and the per-control labels
+`#chord-menu-btn` (`sq-mobile-only`, placed right after redo in the transport)
+hosts the same panel in a modal together with the scale row (`openChordMenu`,
+scaleUI.js, titled `scale & chord`), both moved rather than rebuilt in the
+manner of the pattern bar's mobile menu, so main.js's and scaleUI's listeners
+and `refreshChordTypeSelect`'s option rebuilding go on working on the one set
+of controls. Hence two things: the mobile hide rules are scoped
+`.sq-transport #kbd-chord` and `.sq-transport .sq-scale__field`, or they would
+reach the panels inside the modal too; and the per-control labels
 (`.sq-kbd-chord__sub`) ship in the markup hidden, appearing only in the sheet,
 where the row is stacked and "chord" alone no longer names six controls.
 `syncChordUI()` is the one function every chord/arp change calls — it syncs the
-arp group's visibility AND the button, whose label is the current setting
-(`chord min7 · arp`), because on a phone the button is all of the cluster you
-can see.
+arp group's visibility AND the button (`syncChordMenuBtn`, also called on a
+scale root/mode change). The button is drawn like the track's dice / euclid /
+chance and like undo / redo / the metronome beside it (icon over a
+`data-label` caption, 50px),
+and its caption is the current setting in one short line (`C min`, a `+` when a
+chord is on too, `min7` for a chord alone, `scale` with both off; the whole
+setting is in its title and accessible name), because on a phone the button is
+all of either you can see.
+On a phone those buttons (undo, redo, scale, the metronome, the session
+menu's `#pattern-menu-btn` and `#macro-pads`, ordered last) break onto a line
+together, on one line at any phone width (their width is
+`clamp(40px, (100vw - 44px) / 6, 50px)`, since a flex item wraps at its full
+size before it would shrink): they sit in two
+different transport clusters on desktop, so rather than a wrapper that would
+drag the metronome along, `.sq-transport::before` is a line break ordered in
+front of them, the `.sq-track__head::before` trick. The session button lives in
+the transport's right cluster for that reason (`sq-mobile-only`, invisible on
+desktop); macro stays in the main cluster, text on desktop and icon over its
+`.sq-btn__label` caption on a phone, as clear and roll are, and the pattern bar it opens as a modal is hidden outright below
+768px, since everything in it was already only reachable through that modal.
 
 ## Server / data surface
 
@@ -1904,6 +1923,14 @@ opens as a sheet under it.
   exactly as long as the menu was up. Inside that stacking context the backdrop
   is a positioned child, so `manual` and the `menu` button need a layer of
   their own or the backdrop swallows the tap that closes the sheet.
+- **The transport's master meter and beat dial sit beside `menu`**
+  (`beatSlot`), so both stay in view in the pinned bar however far down the
+  tracks you are. They are the engine's own `.sq-meter--master` and
+  `#beat-indicator` MOVED there by an effect in `AccountBar.tsx` (meters.js
+  finds the meter by class and beat.js the dial by id, so each paints wherever
+  it is), not copies, and they go back to the transport when the layout widens
+  past 768px and when the bar unmounts, before React removes the slot with
+  them.
 - Rows are 44px minimum, and above phone width (481px+) the sheet and the
   panels cap at 340 / 420px and hang off the right — a 700px-wide row of seven
   buttons reads as a mistake.

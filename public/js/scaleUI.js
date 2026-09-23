@@ -1,5 +1,5 @@
 import { NOTE_NAMES } from "./constants.js";
-import { ICON_PALETTE } from "./icons.js";
+import { ICON_KEYBOARD, ICON_PALETTE } from "./icons.js";
 import { syncKbdArpUI } from "./keyboard.js";
 import { init } from "./main.js";
 import { refreshRollIfOpen } from "./pianoRoll.js";
@@ -36,33 +36,51 @@ export function syncChordUI() {
   syncChordMenuBtn();
 }
 
-// The mobile button's label IS the setting — a phone shows this button and
-// nothing else of the cluster, so "chord" alone would say nothing about whether
-// a tapped step is about to become a chord.
+// The mobile button's caption IS the setting — a phone shows this button and
+// nothing else of the scale row or the chord cluster, so "scale" alone would
+// say nothing about whether a tapped step is about to snap or become a chord.
+// The button is one of a row of six fixed-width icon buttons, so the caption is
+// kept to one short line (`C min`, `C# dor+`, `min7`): the scale abbreviated,
+// and a `+` when a chord is on too. The whole setting goes in the title and the
+// accessible name. "scale" is what it reads when neither is on.
+function shortMode(mode) {
+  const m = String(mode);
+  if (/\d/.test(m)) return m;   // 12-tet, 24-tet: already short, and "12-" says nothing
+  const words = m.split(/\s+/).filter(Boolean);
+  return words.length > 1 ? words.map(w => w[0]).join("") : m.slice(0, 3);
+}
 export function syncChordMenuBtn() {
   const btn = document.getElementById("chord-menu-btn");
   if (!btn) return;
+  if (!btn.firstElementChild) btn.innerHTML = ICON_KEYBOARD;
   const type = state.kbdChordType;
+  const root = NOTE_NAMES[state.scale.root] ?? "";
+  const on = state.scale.active;
   // "on" is the scale-mode picker's value (chords are diatonic there), not a
-  // chord quality, so it reads as plain "on" rather than being printed.
-  const label = !type ? "chord off" : (type === "on" ? "chord on" : `chord ${type}`);
-  btn.textContent = type && state.kbdArp ? `${label} · arp` : label;
-  btn.setAttribute("aria-pressed", String(!!type));
+  // chord quality, so it reads as plain "chord" rather than being printed.
+  let chord = !type ? "" : (type === "on" ? "chord" : type);
+  if (chord && state.kbdArp) chord += " arp";
+  const full = [on ? `${root} ${state.scale.mode}` : "", chord].filter(Boolean).join(" · ");
+  btn.dataset.label = on
+    ? `${root} ${shortMode(state.scale.mode)}${chord ? "+" : ""}`
+    : (type ? (type === "on" ? "chord" : type) : "scale");
+  btn.title = full ? `scale & chord: ${full}` : "scale and chord: which notes a tapped step snaps to, and what chord it writes";
+  btn.setAttribute("aria-label", full ? `scale and chord settings: ${full}` : "scale and chord settings");
+  btn.setAttribute("aria-pressed", String(!!full));
 }
 
-// Chord settings as a modal, for phones. Same shape as the pattern bar's mobile
-// menu (patternBar.js): the panel is MOVED rather than rebuilt, so main.js's
-// change listeners, scaleUI's option rebuilding and syncKbdArpUI all keep
-// working on the one set of controls, and it slots back where it came from on
-// close.
+// Scale and chord settings as one modal, for phones. Same shape as the pattern
+// bar's mobile menu (patternBar.js): the two panels are MOVED rather than
+// rebuilt, so main.js's change listeners, scaleUI's option rebuilding and
+// syncKbdArpUI all keep working on the one set of controls, and each slots
+// back where it came from on close.
 let _chordMenuOpen = null;
 export function openChordMenu() {
   if (_chordMenuOpen) return;
-  const panel = document.getElementById("kbd-chord");
-  if (!panel) return;
-  const parent = panel.parentNode;
-  const nextSibling = panel.nextSibling;
-  const wasHidden = panel.hidden;
+  const panels = [document.querySelector(".sq-scale__field"), document.getElementById("kbd-chord")]
+    .filter(Boolean)
+    .map(el => ({ el, parent: el.parentNode, next: el.nextSibling, hidden: el.hidden }));
+  if (!panels.length) return;
 
   const overlay = document.createElement("div");
   overlay.className = "sq-modal-overlay";
@@ -73,16 +91,15 @@ export function openChordMenu() {
 
   const title = document.createElement("div");
   title.className = "sq-modal__title";
-  title.textContent = "chord";
+  title.textContent = "scale & chord";
   modal.appendChild(title);
 
   const note = document.createElement("div");
   note.className = "sq-modal__body";
-  note.textContent = "while chord mode is on, tapping a step writes this chord on the note it would have taken. Drum kits sit it out.";
+  note.textContent = "with a scale on, every note played snaps to it. While chord mode is on, tapping a step writes this chord on the note it would have taken. Drum kits sit both out.";
   modal.appendChild(note);
 
-  panel.hidden = false;
-  modal.appendChild(panel);
+  for (const p of panels) { p.el.hidden = false; modal.appendChild(p.el); }
 
   const closeBtn = document.createElement("button");
   closeBtn.type = "button";
@@ -92,9 +109,11 @@ export function openChordMenu() {
 
   const close = () => {
     if (!_chordMenuOpen) return;
-    if (nextSibling && nextSibling.parentNode === parent) parent.insertBefore(panel, nextSibling);
-    else parent.appendChild(panel);
-    panel.hidden = wasHidden;
+    for (const p of panels) {
+      if (p.next && p.next.parentNode === p.parent) p.parent.insertBefore(p.el, p.next);
+      else p.parent.appendChild(p.el);
+      p.el.hidden = p.hidden;
+    }
     overlay.remove();
     document.removeEventListener("keydown", escHandler);
     _chordMenuOpen = null;
@@ -148,8 +167,8 @@ export function initScaleUI() {
     }
   };
   on.addEventListener("change", () => { state.scale.active = on.checked; refreshChordTypeSelect(); refreshOnScaleChange(); });
-  root.addEventListener("change", () => { state.scale.root = Number(root.value); refreshOnScaleChange(); });
-  mode.addEventListener("change", () => { state.scale.mode = mode.value; refreshOnScaleChange(); });
+  root.addEventListener("change", () => { state.scale.root = Number(root.value); syncChordMenuBtn(); refreshOnScaleChange(); });
+  mode.addEventListener("change", () => { state.scale.mode = mode.value; syncChordMenuBtn(); refreshOnScaleChange(); });
 
   // Palette toggle — diatonic pitch-class coloring on/off.
   const palBtn = document.getElementById("note-colors");

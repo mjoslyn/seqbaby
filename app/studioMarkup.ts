@@ -251,17 +251,28 @@ export const STUDIO_BODY = String.raw`
     <button id="kbd-capture" class="sq-btn--ghost sq-icon-btn" type="button" aria-label="capture keyboard notes" title="write the notes you just played into the active track, after the fact"></button>
     <div class="sq-field"><label for="bpm">bpm</label><input id="bpm" type="number" value="110" min="40" max="240" /></div>
     <div class="sq-field"><label for="swing">swing</label><input id="swing" type="range" min="0" max="0.5" step="0.01" value="0" /></div>
-    <button id="macro-pads" class="sq-btn--ghost" type="button" title="xy macro pads: one gesture moving parameters across several tracks">macro</button>
+    <button id="macro-pads" class="sq-btn--ghost" type="button" title="xy macro pads: one gesture moving parameters across several tracks"><span class="sq-btn__label">macro</span></button>
     <!-- Undo / redo. Wired and painted by history.js, which also owns the
          ctrl/cmd-Z keys; they ship disabled because at boot there is nothing
          behind them yet. -->
     <span class="sq-history">
-      <button id="undo" class="sq-btn--ghost sq-icon-btn" type="button" aria-label="undo" title="nothing to undo (ctrl/⌘ Z)" disabled></button>
-      <button id="redo" class="sq-btn--ghost sq-icon-btn" type="button" aria-label="redo" title="nothing to redo (ctrl/⌘ shift Z)" disabled></button>
+      <button id="undo" class="sq-btn--ghost sq-icon-btn" data-label="undo" type="button" aria-label="undo" title="nothing to undo (ctrl/⌘ Z)" disabled></button>
+      <button id="redo" class="sq-btn--ghost sq-icon-btn" data-label="redo" type="button" aria-label="redo" title="nothing to redo (ctrl/⌘ shift Z)" disabled></button>
     </span>
+    <!-- Mobile only: the scale row and the chord cluster are hidden below 768px
+         and this button hosts both in one modal (openChordMenu). Chord mode is
+         not only a keyboard feature (a tapped step takes the chord too, see
+         startNote), so a phone needs a way in. Its caption is the current
+         setting (syncChordMenuBtn), so the transport says something with the
+         modal shut. -->
+    <button id="chord-menu-btn" class="sq-mobile-only sq-btn--ghost sq-icon-btn" data-label="scale" type="button" aria-pressed="false" aria-label="scale and chord settings" title="scale and chord: which notes a tapped step snaps to, and what chord it writes"></button>
     </div><!-- /sq-transport__main -->
     <div class="sq-transport__right">
-      <button id="metronome" class="sq-btn--ghost sq-icon-btn" aria-pressed="false" aria-label="metronome" title="metronome click on the downbeat"></button>
+      <button id="metronome" class="sq-btn--ghost sq-icon-btn" data-label="metro" aria-pressed="false" aria-label="metronome" title="metronome click on the downbeat"></button>
+      <!-- Mobile only: opens the pattern bar as a modal (openPatternMenu). It
+           lives here, beside the metronome, so on a phone it joins the undo /
+           redo / scale / metronome group; the bar itself is hidden there. -->
+      <button id="pattern-menu-btn" class="sq-mobile-only sq-btn--ghost sq-icon-btn" data-label="session" type="button" aria-label="session menu" title="open session menu"></button>
       <svg id="beat-indicator" class="sq-beat-indicator" viewBox="-22 -22 44 44" width="40" height="40" aria-hidden="true"></svg>
       <div class="sq-meter sq-meter--master" title="master output level"><div class="sq-meter__bar"></div></div>
     </div><!-- /sq-transport__right -->
@@ -276,13 +287,6 @@ export const STUDIO_BODY = String.raw`
       <button id="note-colors" class="sq-btn--ghost sq-icon-btn" aria-pressed="false" aria-label="note colors" title="toggle diatonic note coloring on the piano roll + step grid"></button>
     </div>
     <span id="kbd-octave" class="sq-kbd-oct" title="keyboard base octave. z / x shift it down and up">C4</span>
-    <!-- Mobile only: the chord cluster is a row of tiny inline selects, which is
-         why it is hidden below 768px. Chord mode is not only a keyboard feature
-         (a tapped step takes the chord too, see startNote), so a phone needs a
-         way in: this button hosts the same panel in a modal (openChordMenu).
-         Its label is the current setting, so the row says something with the
-         panel shut. -->
-    <button id="chord-menu-btn" class="sq-mobile-only sq-btn--ghost" type="button" aria-pressed="false" title="chord settings: what a tapped step (and a played key) writes — chord type, voicing, arp">chord off</button>
     <div id="kbd-chord" class="sq-kbd-chord">
       <span class="sq-kbd-chord__lbl">chord</span>
       <label class="sq-kbd-chord__f"><span class="sq-kbd-chord__sub">type</span><select id="kbd-chord-type" title="chord mode: play each key as a chord. Off is single notes">
@@ -337,7 +341,6 @@ export const STUDIO_BODY = String.raw`
   </header>
 
   <div class="sq-pattern-bar">
-    <button id="pattern-menu-btn" class="sq-mobile-only" type="button" aria-label="session menu" title="open session menu">Session</button>
     <div class="sq-set__stack">
       <button id="bounce-audio" class="sq-btn--ghost sq-dl__btn" title="render the current pattern to audio and download it"><span class="sq-dl__icon"></span><span class="sq-dl__label">Pattern</span></button>
       <button id="bounce-track" class="sq-btn--ghost sq-dl__btn" title="chain through all non-empty patterns and render the whole arrangement"><span class="sq-dl__icon"></span><span class="sq-dl__label">Session</span></button>
