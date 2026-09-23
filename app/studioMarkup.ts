@@ -268,7 +268,7 @@ export const STUDIO_BODY = String.raw`
     <button id="chord-menu-btn" class="sq-mobile-only sq-btn--ghost sq-icon-btn" data-label="scale" type="button" aria-pressed="false" aria-label="scale and chord settings" title="scale and chord: which notes a tapped step snaps to, and what chord it writes"></button>
     </div><!-- /sq-transport__main -->
     <div class="sq-transport__right">
-      <button id="metronome" class="sq-btn--ghost sq-icon-btn" aria-pressed="false" aria-label="metronome" title="metronome click on the downbeat"></button>
+      <button id="metronome" class="sq-btn--ghost sq-icon-btn" data-label="metro" aria-pressed="false" aria-label="metronome" title="metronome click on the downbeat"></button>
       <svg id="beat-indicator" class="sq-beat-indicator" viewBox="-22 -22 44 44" width="40" height="40" aria-hidden="true"></svg>
       <div class="sq-meter sq-meter--master" title="master output level"><div class="sq-meter__bar"></div></div>
     </div><!-- /sq-transport__right -->

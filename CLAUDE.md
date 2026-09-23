@@ -1721,7 +1721,8 @@ where the row is stacked and "chord" alone no longer names six controls.
 `syncChordUI()` is the one function every chord/arp change calls — it syncs the
 arp group's visibility AND the button (`syncChordMenuBtn`, also called on a
 scale root/mode change). The button is drawn like the track's dice / euclid /
-chance and like undo / redo beside it (icon over a `data-label` caption, 50px),
+chance and like undo / redo / the metronome beside it (icon over a
+`data-label` caption, 50px),
 and its caption is the current setting (`C minor · min7 arp`, or `scale` with
 both off), because on a phone the button is all of either you can see.
 
