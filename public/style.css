@@ -2630,7 +2630,25 @@ body.kbd-recording .sq-track.is-kbd-active { border-color: #e5484d; box-shadow: 
 }
 .sq-chord__menu-modal .sq-kbd-arp[hidden],
 .sq-chord__menu-modal .sq-kbd-arp__opts[hidden] { display: none !important; }
-.sq-chord__menu-modal .sq-kbd-chord__lbl { display: none; }   /* the modal has a title */
+/* The scale row, moved in beside the chord cluster: one line of the switch,
+   root, mode and the note-colour toggle, each at a finger's size. */
+.sq-chord__menu-modal .sq-scale__field {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  font-size: 13px;
+}
+.sq-chord__menu-modal .sq-scale__toggle { min-height: 40px; gap: 8px; padding-right: 4px; }
+.sq-chord__menu-modal .sq-scale__toggle input { width: 20px; height: 20px; }
+.sq-chord__menu-modal .sq-scale__field .sq-icon-btn { min-width: 44px; height: 40px; }
+/* The chord cluster's own label heads its half of the sheet. */
+.sq-chord__menu-modal .sq-kbd-chord__lbl {
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+  color: var(--fg);
+}
 .sq-chord__menu-modal .sq-kbd-chord__f {
   display: flex;
   align-items: center;
@@ -2997,44 +3015,47 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not
   .sq-transport .sq-icon-btn { min-width: 44px; height: 40px; }
   .sq-transport #macro-pads { min-height: 40px; padding: 6px 12px; }
 
-  .sq-transport .sq-scale__field {
-    flex: 1 1 100%;
-    order: 100;
-    gap: 4px;
-    flex-wrap: wrap;
-  }
-  .sq-transport .sq-scale__field select { padding: 4px 6px; min-width: 0; min-height: 40px; flex: 1 1 0; }
-  /* The scale switch is a native checkbox at 13px — a quarter of a finger. The
-     box cannot be resized reliably across browsers, so the tappable thing is
-     its label: the whole "scale" word and the box together, at full height. */
-  .sq-transport .sq-scale__toggle {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    min-height: 40px;
-    padding: 0 4px;
-  }
-  .sq-transport .sq-scale__toggle input { width: 20px; height: 20px; }
+  /* The scale row moves into the scale & chord modal on a phone (see
+     #chord-menu-btn below and openChordMenu). Scoped to the transport so the
+     same element, once moved into the modal, is shown again. */
+  .sq-transport .sq-scale__field { display: none !important; }
   .sq-transport #add-track { order: 99; padding: 6px 10px; }
-  /* Sits on its own line under the scale row: chord mode is the other thing
-     deciding what a tapped step plays, so it reads as that row's neighbour. */
+  /* Undo, redo and the scale & chord button are the transport's icon buttons
+     on a phone (the keyboard cluster is hidden), and they are drawn like the
+     track's dice / euclid / chance: icon over caption, 50px square, so a thumb
+     has a target and each says what it is without a hover. */
+  .sq-transport .sq-history { gap: 4px; }
+  .sq-transport .sq-history button,
   .sq-transport #chord-menu-btn {
-    order: 101;
+    flex-direction: column;
     align-items: center;
-    padding: 0 12px;
-    min-height: 36px;
+    justify-content: center;
+    gap: 2px;
+    min-width: 50px;
+    width: auto;
+    height: auto;
+    min-height: 50px;
+    padding: 5px 4px;
+    line-height: 1.1;
     text-transform: none;
   }
+  .sq-transport .sq-history .sq-btn-icon,
+  .sq-transport #chord-menu-btn .sq-btn-icon { width: 18px; height: 18px; }
+  .sq-transport .sq-history [data-label]::after,
+  .sq-transport #chord-menu-btn[data-label]::after {
+    content: attr(data-label);
+    font-size: 10px;
+    letter-spacing: 0;
+    text-transform: lowercase;
+    white-space: nowrap;
+  }
+  /* Its caption carries note names (C#, not c#). */
+  .sq-transport #chord-menu-btn[data-label]::after { text-transform: none; }
   .sq-transport #chord-menu-btn[aria-pressed="true"] {
     background: var(--accent-2);
     color: #0b0d10;
     border-color: var(--accent-2);
   }
-  /* Undo/redo are the only icon buttons left in the transport on a phone (the
-     keyboard cluster is hidden), and they are the two most likely to be aimed
-     at in a hurry — so they get a finger's worth of target, the same 44px floor
-     the knobs are given by --knob-hit. */
-  .sq-transport .sq-history button { min-width: 44px; height: 40px; }
   .sq-transport .sq-spacer { display: none; }
 
   .sq-transport .sq-status {

@@ -570,7 +570,17 @@
   .topBarMenuOpen,
   .topBar:has(.panel):not(:has(.chatPanel)) { z-index: 250; }
 
-  .menuBtn { display: inline-flex; }
+  /* A finger's target: the 44px floor everything else in thumb's reach gets.
+     At the desktop's 5px padding it was a 26px sliver at the edge of the
+     screen, and it is the only way to the rest of the bar. */
+  .menuBtn {
+    display: inline-flex;
+    justify-content: center;
+    min-height: 44px;
+    min-width: 72px;
+    padding: 0 14px;
+    gap: 8px;
+  }
 
   /* Shown by state, not by mount: the backdrop is always in the DOM on mobile
      so it can dim behind a panel that outlived the sheet exactly as it dims

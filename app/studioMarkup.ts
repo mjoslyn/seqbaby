@@ -256,9 +256,16 @@ export const STUDIO_BODY = String.raw`
          ctrl/cmd-Z keys; they ship disabled because at boot there is nothing
          behind them yet. -->
     <span class="sq-history">
-      <button id="undo" class="sq-btn--ghost sq-icon-btn" type="button" aria-label="undo" title="nothing to undo (ctrl/⌘ Z)" disabled></button>
-      <button id="redo" class="sq-btn--ghost sq-icon-btn" type="button" aria-label="redo" title="nothing to redo (ctrl/⌘ shift Z)" disabled></button>
+      <button id="undo" class="sq-btn--ghost sq-icon-btn" data-label="undo" type="button" aria-label="undo" title="nothing to undo (ctrl/⌘ Z)" disabled></button>
+      <button id="redo" class="sq-btn--ghost sq-icon-btn" data-label="redo" type="button" aria-label="redo" title="nothing to redo (ctrl/⌘ shift Z)" disabled></button>
     </span>
+    <!-- Mobile only: the scale row and the chord cluster are hidden below 768px
+         and this button hosts both in one modal (openChordMenu). Chord mode is
+         not only a keyboard feature (a tapped step takes the chord too, see
+         startNote), so a phone needs a way in. Its caption is the current
+         setting (syncChordMenuBtn), so the transport says something with the
+         modal shut. -->
+    <button id="chord-menu-btn" class="sq-mobile-only sq-btn--ghost sq-icon-btn" data-label="scale" type="button" aria-pressed="false" aria-label="scale and chord settings" title="scale and chord: which notes a tapped step snaps to, and what chord it writes"></button>
     </div><!-- /sq-transport__main -->
     <div class="sq-transport__right">
       <button id="metronome" class="sq-btn--ghost sq-icon-btn" aria-pressed="false" aria-label="metronome" title="metronome click on the downbeat"></button>
@@ -276,13 +283,6 @@ export const STUDIO_BODY = String.raw`
       <button id="note-colors" class="sq-btn--ghost sq-icon-btn" aria-pressed="false" aria-label="note colors" title="toggle diatonic note coloring on the piano roll + step grid"></button>
     </div>
     <span id="kbd-octave" class="sq-kbd-oct" title="keyboard base octave. z / x shift it down and up">C4</span>
-    <!-- Mobile only: the chord cluster is a row of tiny inline selects, which is
-         why it is hidden below 768px. Chord mode is not only a keyboard feature
-         (a tapped step takes the chord too, see startNote), so a phone needs a
-         way in: this button hosts the same panel in a modal (openChordMenu).
-         Its label is the current setting, so the row says something with the
-         panel shut. -->
-    <button id="chord-menu-btn" class="sq-mobile-only sq-btn--ghost" type="button" aria-pressed="false" title="chord settings: what a tapped step (and a played key) writes — chord type, voicing, arp">chord off</button>
     <div id="kbd-chord" class="sq-kbd-chord">
       <span class="sq-kbd-chord__lbl">chord</span>
       <label class="sq-kbd-chord__f"><span class="sq-kbd-chord__sub">type</span><select id="kbd-chord-type" title="chord mode: play each key as a chord. Off is single notes">

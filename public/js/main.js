@@ -670,9 +670,10 @@ export function init() {
   if (arpRateSel) { arpRateSel.value = String(state.kbdArpRate); arpRateSel.addEventListener("change", () => { state.kbdArpRate = Number(arpRateSel.value) || 0.25; }); }
   if (arpRngSel)  { arpRngSel.value  = String(state.kbdArpRange); arpRngSel.addEventListener("change", () => { state.kbdArpRange = Number(arpRngSel.value) || 1; }); }
   if (arpDirSel)  { arpDirSel.value  = String(state.kbdArpDir); arpDirSel.addEventListener("change", () => { state.kbdArpDir = arpDirSel.value || "up"; }); }
-  // Mobile: the cluster above is hidden below 768px, so this button hosts it in
-  // a modal. Chord mode reaches a tapped step (startNote), not just the
-  // computer keyboard, so it is not gated on isDesktopKeyboard().
+  // Mobile: the scale row and the cluster above are hidden below 768px, so this
+  // button hosts both in one modal. Chord mode reaches a tapped step
+  // (startNote), not just the computer keyboard, so it is not gated on
+  // isDesktopKeyboard().
   document.getElementById("chord-menu-btn")?.addEventListener("click", openChordMenu);
   syncChordUI();
 

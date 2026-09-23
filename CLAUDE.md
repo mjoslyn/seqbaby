@@ -1708,18 +1708,22 @@ phone. `state.kbdChordType` / `kbdChordCpx` / `kbdArp*` also decide what a
 the step would have taken, and `applyKbdArpToStep` stamps the arp settings onto
 it) — so hiding the cluster below 768px, as the rest of the keyboard controls
 are hidden, took a sequencing feature away rather than a keyboard one.
-`#chord-menu-btn` (`sq-mobile-only`) hosts the same panel in a modal
-(`openChordMenu`, scaleUI.js), moved rather than rebuilt in the manner of the
-pattern bar's mobile menu, so main.js's listeners and `refreshChordTypeSelect`'s
-option rebuilding go on working on the one set of controls. Hence two things:
-the mobile hide rule is scoped `.sq-transport #kbd-chord`, or it would reach
-the panel inside the modal too; and the per-control labels
+`#chord-menu-btn` (`sq-mobile-only`, placed right after redo in the transport)
+hosts the same panel in a modal together with the scale row (`openChordMenu`,
+scaleUI.js, titled `scale & chord`), both moved rather than rebuilt in the
+manner of the pattern bar's mobile menu, so main.js's and scaleUI's listeners
+and `refreshChordTypeSelect`'s option rebuilding go on working on the one set
+of controls. Hence two things: the mobile hide rules are scoped
+`.sq-transport #kbd-chord` and `.sq-transport .sq-scale__field`, or they would
+reach the panels inside the modal too; and the per-control labels
 (`.sq-kbd-chord__sub`) ship in the markup hidden, appearing only in the sheet,
 where the row is stacked and "chord" alone no longer names six controls.
 `syncChordUI()` is the one function every chord/arp change calls — it syncs the
-arp group's visibility AND the button, whose label is the current setting
-(`chord min7 · arp`), because on a phone the button is all of the cluster you
-can see.
+arp group's visibility AND the button (`syncChordMenuBtn`, also called on a
+scale root/mode change). The button is drawn like the track's dice / euclid /
+chance and like undo / redo beside it (icon over a `data-label` caption, 50px),
+and its caption is the current setting (`C minor · min7 arp`, or `scale` with
+both off), because on a phone the button is all of either you can see.
 
 ## Server / data surface
 
