@@ -1,10 +1,12 @@
 import 'package:app_links/app_links.dart';
+import 'package:audio_service/audio_service.dart';
 import 'package:audio_session/audio_session.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'config.dart';
 import 'studio_page.dart';
+import 'transport_handler.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -16,6 +18,16 @@ Future<void> main() async {
   final session = await AudioSession.instance;
   await session.configure(const AudioSessionConfiguration.music());
 
+  // Lock-screen controls, and on Android the foreground service that keeps
+  // the app alive while the transport runs in the background.
+  final transport = await AudioService.init(
+    builder: TransportHandler.new,
+    config: const AudioServiceConfig(
+      androidNotificationChannelId: 'com.playseqbaby.seqbaby.transport',
+      androidNotificationChannelName: 'Playback',
+    ),
+  );
+
   SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle.light.copyWith(
     systemNavigationBarColor: const Color(studioBackground),
   ));
@@ -26,12 +38,13 @@ Future<void> main() async {
     if (link != null && isStudioUrl(link)) initial = link;
   } catch (_) {}
 
-  runApp(SeqbabyApp(initialUri: initial));
+  runApp(SeqbabyApp(transport: transport, initialUri: initial));
 }
 
 class SeqbabyApp extends StatelessWidget {
-  const SeqbabyApp({super.key, this.initialUri});
+  const SeqbabyApp({super.key, required this.transport, this.initialUri});
 
+  final TransportHandler transport;
   final Uri? initialUri;
 
   @override
@@ -44,7 +57,7 @@ class SeqbabyApp extends StatelessWidget {
         scaffoldBackgroundColor: const Color(studioBackground),
         fontFamily: 'monospace',
       ),
-      home: StudioPage(initialUri: initialUri),
+      home: StudioPage(transport: transport, initialUri: initialUri),
     );
   }
 }

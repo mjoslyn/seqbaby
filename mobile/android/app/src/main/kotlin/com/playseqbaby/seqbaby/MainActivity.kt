@@ -1,5 +1,7 @@
 package com.playseqbaby.seqbaby
 
-import io.flutter.embedding.android.FlutterActivity
+import com.ryanheise.audioservice.AudioServiceActivity
 
-class MainActivity : FlutterActivity()
+// audio_service's activity shares one FlutterEngine with its background
+// service, so the lock-screen controls reach the running app.
+class MainActivity : AudioServiceActivity()

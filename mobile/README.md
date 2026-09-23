@@ -10,6 +10,7 @@ supplies the native parts a browser tab can't.
 | bounces and exports open the share sheet ("save to Files", AirDrop...) | `lib/bridge.dart` + `lib/native.dart` |
 | the `share` button opens the share sheet as well as copying | same |
 | screen stays awake while the transport runs | same (`playing` handler) |
+| keeps playing in the background, with lock-screen / notification play-stop | `lib/transport_handler.dart` (audio_service), `UIBackgroundModes`, bridge lookahead |
 | `?s=` / `?open=` / `?jam=` links open in the app | `app_links` + the manifest / entitlements |
 | links off the site open in the system browser | `studio_page.dart` `_route` |
 | Android back goes back in the page | `studio_page.dart` |
@@ -57,7 +58,13 @@ The entitlement is already in `ios/Runner/Runner.entitlements`.
 
 - Needs the network. The engine is loaded from the site, not bundled.
 - No Web MIDI: neither WKWebView nor Android WebView has it.
-- Audio stops when the app goes to the background.
+- Background playback is untested on devices. What to check: that it keeps
+  playing with the screen locked (iOS and Android), that lock-screen play/stop
+  work (also mid-jam), and that nothing drifts after a few minutes. If it
+  drifts, raise `BACKGROUND_LOOKAHEAD` in `lib/bridge.dart`.
+- Editing the song in the background isn't possible, so the wider background
+  lookahead costs nothing. It goes back to normal as soon as the app is on
+  screen again.
 - iOS 14.5+ for AudioWorklet in WKWebView.
 - Magic-link sign-in lands in the app only once the link files above are live.
   Until then, sign in with a password.

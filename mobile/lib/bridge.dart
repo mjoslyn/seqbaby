@@ -15,7 +15,10 @@
 /// - Audio session: WebKit's `navigator.audioSession` (iOS 16.4+) set to
 ///   playback, the in-page half of what main.dart does for the app's session.
 /// - Playing: polled from `window.seqbaby.state.playing` so Flutter can keep
-///   the screen awake while the transport runs.
+///   the screen awake and drive the lock-screen controls.
+/// - Background: Tone schedules notes `lookAhead` seconds ahead from a
+///   worker clock. A hidden page's timers can run late, so while hidden the
+///   window is widened to ride out a stall; see the comment on it below.
 const String bridgeScript = r'''
 (function () {
   if (window.__seqbabyApp) return;
@@ -118,7 +121,31 @@ const String bridgeScript = r'''
   setInterval(function () {
     var s = window.seqbaby && window.seqbaby.state;
     var now = !!(s && s.playing);
-    if (now !== playing) { playing = now; call("playing", now).catch(function () {}); }
+    if (now !== playing) { playing = now; call("playing", now, document.title).catch(function () {}); }
   }, 1000);
+
+  // --- background scheduling --------------------------------------------
+  // The transport is one Tone scheduleRepeat, run `lookAhead` seconds ahead
+  // of the audio clock. While hidden the window is widened so a late timer
+  // is absorbed instead of heard as a gap, and put back on return. Both
+  // directions are safe mid-play: raising it only schedules further ahead,
+  // and lowering it steps Tone's clock back over steps it has already
+  // queued, which scheduleRepeat does not fire twice (each step is a one-shot
+  // event that removes itself). Measured with the vendored Tone: steps stay
+  // exactly one 16th apart across both changes.
+  var BACKGROUND_LOOKAHEAD = 1.5;
+  var baseLookAhead = null;
+  document.addEventListener("visibilitychange", function () {
+    var c;
+    try { c = window.Tone && window.Tone.getContext(); } catch (e) {}
+    if (!c) return;
+    if (document.visibilityState === "hidden") {
+      if (baseLookAhead === null) baseLookAhead = c.lookAhead;
+      if (c.lookAhead < BACKGROUND_LOOKAHEAD) c.lookAhead = BACKGROUND_LOOKAHEAD;
+    } else if (baseLookAhead !== null) {
+      c.lookAhead = baseLookAhead;
+      baseLookAhead = null;
+    }
+  });
 })();
 ''';

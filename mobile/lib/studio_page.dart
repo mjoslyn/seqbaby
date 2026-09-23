@@ -12,11 +12,14 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import 'bridge.dart';
 import 'config.dart';
 import 'native.dart';
+import 'transport_handler.dart';
 
 /// The studio, in a WebView. Everything musical is the web engine's; this page
 /// only decides where navigation goes and answers the bridge's handlers.
 class StudioPage extends StatefulWidget {
-  const StudioPage({super.key, this.initialUri});
+  const StudioPage({super.key, required this.transport, this.initialUri});
+
+  final TransportHandler transport;
 
   /// A studio link the app was opened with (`?s=`, `?open=`, `?jam=`), or
   /// null for the bare studio.
@@ -34,6 +37,11 @@ class _StudioPageState extends State<StudioPage> {
   @override
   void initState() {
     super.initState();
+    // The studio's own play button, not the transport directly: in a jam it
+    // routes through jamTogglePlay so a start lands on the room's beat.
+    widget.transport.onToggle = () async {
+      await _web?.evaluateJavascript(source: 'document.getElementById("play")?.click();');
+    };
     // app_links replays the launch link on the stream as well; the page was
     // already started on it, so that one is skipped.
     _links = AppLinks().uriLinkStream.listen((uri) {
@@ -44,6 +52,7 @@ class _StudioPageState extends State<StudioPage> {
 
   @override
   void dispose() {
+    widget.transport.onToggle = null;
     _links?.cancel();
     WakelockPlus.disable();
     super.dispose();
@@ -64,7 +73,14 @@ class _StudioPageState extends State<StudioPage> {
     );
     c.addJavaScriptHandler(
       handlerName: 'playing',
-      callback: (args) => WakelockPlus.toggle(enable: args.first == true),
+      callback: (args) {
+        final playing = args.first == true;
+        final title = args.length > 1 && args[1] is String && (args[1] as String).isNotEmpty
+            ? args[1] as String
+            : 'seqbaby';
+        widget.transport.report(playing: playing, title: title);
+        return WakelockPlus.toggle(enable: playing);
+      },
     );
   }
 
@@ -124,6 +140,12 @@ class _StudioPageState extends State<StudioPage> {
                   // never "go back".
                   allowsBackForwardNavigationGestures: false,
                   isInspectable: kDebugMode,
+                  // Android: keep the renderer at full priority when the app
+                  // is not on screen, or the system reclaims it mid-song.
+                  rendererPriorityPolicy: RendererPriorityPolicy(
+                    rendererRequestedPriority: RendererPriority.RENDERER_PRIORITY_IMPORTANT,
+                    waivedWhenNotVisible: false,
+                  ),
                   transparentBackground: true,
                 ),
                 onWebViewCreated: (c) {
