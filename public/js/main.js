@@ -30,33 +30,6 @@ export function showAudioGateDialog() {
   if (!state.audioCtx) return;
   const isTouch = ("ontouchstart" in window) || (navigator.maxTouchPoints || 0) > 0;
   if (!isTouch) return;
-  // The mobile app (mobile/, user agent tagged SeqbabyApp) runs the studio in
-  // a WebView that lets audio start without a gesture, so there is nothing
-  // for a tap to unlock. Try without one first and show the gate only if the
-  // context would not come up — the permanent first-gesture listeners still
-  // cover that case either way.
-  if (/SeqbabyApp\//.test(navigator.userAgent)) {
-    unlockWithoutGesture().then((ok) => { if (!ok) openAudioGate(); });
-    return;
-  }
-  openAudioGate();
-}
-
-async function unlockWithoutGesture() {
-  const ctx = state.audioCtx;
-  try {
-    primeAudioForIOS();
-    await Promise.race([ctx.resume(), new Promise((r) => setTimeout(r, 1000))]);
-    if (ctx.state !== "running") return false;
-    await ensureAudio();
-    setStatus("audio ready");
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function openAudioGate() {
   const overlay = document.createElement("div");
   overlay.className = "sq-modal-overlay sq-audio__gate-overlay";
   const modal = document.createElement("div");
