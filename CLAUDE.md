@@ -84,6 +84,9 @@ env / fx / eq / comp / mod / automation per track.
 │   └── README.md              connecting a client, the tool list, env
 ├── .claude/skills/compose/    the compose guide: which engine, step strings, order of work
 │                              (served by the server as seqbaby://guide)
+├── mobile/                    the iOS/Android app (Flutter): the studio in a WebView, plus
+│                              native share sheet, downloads, audio session, app links.
+│                              lib/bridge.dart is the injected seam; see mobile/README.md
 ├── netlify/functions/share.mjs  legacy function wrapper
 ├── server.js                  legacy static server (npm run legacy:dev)
 └── netlify.toml  next.config.mjs  tsconfig.json (excludes public/js from TS)
