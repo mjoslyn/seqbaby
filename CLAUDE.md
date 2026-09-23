@@ -1917,6 +1917,12 @@ opens as a sheet under it.
   exactly as long as the menu was up. Inside that stacking context the backdrop
   is a positioned child, so `manual` and the `menu` button need a layer of
   their own or the backdrop swallows the tap that closes the sheet.
+- **The transport's beat dial sits beside `menu`** (`beatSlot`), so the count
+  stays in view in the pinned bar however far down the tracks you are. It is
+  the engine's own `#beat-indicator` MOVED there by an effect in
+  `AccountBar.tsx` (beat.js finds it by id, so it paints wherever it is), not a
+  copy, and it goes back to the transport when the layout widens past 768px
+  and when the bar unmounts, before React removes the slot with it.
 - Rows are 44px minimum, and above phone width (481px+) the sheet and the
   panels cap at 340 / 420px and hang off the right — a 700px-wide row of seven
   buttons reads as a mistake.

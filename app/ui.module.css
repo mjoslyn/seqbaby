@@ -250,6 +250,10 @@
 
 .sheetBackdrop { display: none; }
 
+/* Where the transport's beat dial lives on a phone (see AccountBar). Empty,
+   and so nothing, on desktop. */
+.beatSlot { display: none; }
+
 .accountName { color: #9aa0aa; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-decoration: none; cursor: pointer; }
 .accountName:hover { color: #e8e8ea; }
 .accountBtn {
@@ -575,6 +579,8 @@
   /* A finger's target: the 44px floor everything else in thumb's reach gets.
      At the desktop's 5px padding it was a 26px sliver at the edge of the
      screen, and it is the only way to the rest of the bar. */
+  .beatSlot { display: inline-flex; align-items: center; margin-right: 8px; }
+  .beatSlot svg { width: 36px; height: 36px; }
   .menuBtn {
     display: inline-flex;
     justify-content: center;

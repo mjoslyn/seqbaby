@@ -84,6 +84,34 @@ export function AccountBar({
   // ui.module.css) -- so nothing here has to know which button it was.
   const onItemClick = useCallback(() => setMenuOpen(false), []);
 
+  // On a phone the transport's beat dial sits here, beside `menu`: the bar is
+  // pinned, so the count stays in view however far down the tracks you are.
+  // It is the engine's own element MOVED (beat.js finds it by id, so it paints
+  // wherever it is), not a second copy to keep in step. It goes home again
+  // when the layout widens past 768px and when this bar unmounts, before React
+  // takes the slot away with it.
+  const beatSlotRef = useRef<HTMLSpanElement | null>(null);
+  useEffect(() => {
+    const slot = beatSlotRef.current;
+    const dial = document.getElementById("beat-indicator");
+    if (!slot || !dial || !dial.parentNode) return;
+    const home = dial.parentNode;
+    const next = dial.nextSibling;
+    const goHome = () => {
+      if (dial.parentNode === home) return;
+      if (next && next.parentNode === home) home.insertBefore(dial, next);
+      else home.appendChild(dial);
+    };
+    const mq = window.matchMedia("(max-width: 768px)");
+    const place = () => (mq.matches ? slot.appendChild(dial) : goHome());
+    place();
+    mq.addEventListener("change", place);
+    return () => {
+      mq.removeEventListener("change", place);
+      goHome();
+    };
+  }, []);
+
   return (
     <div
       ref={barRef}
@@ -92,6 +120,7 @@ export function AccountBar({
       <a className={styles.manualLink} href="/manual" title="how seqbaby works">
         manual
       </a>
+      <span ref={beatSlotRef} className={styles.beatSlot} aria-hidden />
       <button
         className={styles.menuBtn}
         onClick={() => setMenuOpen((v) => !v)}
