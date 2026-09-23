@@ -84,26 +84,36 @@ export function AccountBar({
   // ui.module.css) -- so nothing here has to know which button it was.
   const onItemClick = useCallback(() => setMenuOpen(false), []);
 
-  // On a phone the transport's beat dial sits here, beside `menu`: the bar is
-  // pinned, so the count stays in view however far down the tracks you are.
-  // It is the engine's own element MOVED (beat.js finds it by id, so it paints
-  // wherever it is), not a second copy to keep in step. It goes home again
-  // when the layout widens past 768px and when this bar unmounts, before React
-  // takes the slot away with it.
+  // On a phone the transport's master level meter and beat dial sit here,
+  // beside `menu`: the bar is pinned, so both stay in view however far down
+  // the tracks you are. They are the engine's own elements MOVED (beat.js finds
+  // the dial by id and meters.js the meter by class, so each paints wherever it
+  // is), not copies to keep in step. They go home again when the layout widens
+  // past 768px and when this bar unmounts, before React takes the slot away
+  // with them.
   const beatSlotRef = useRef<HTMLSpanElement | null>(null);
   useEffect(() => {
     const slot = beatSlotRef.current;
-    const dial = document.getElementById("beat-indicator");
-    if (!slot || !dial || !dial.parentNode) return;
-    const home = dial.parentNode;
-    const next = dial.nextSibling;
+    if (!slot) return;
+    const moved = [
+      document.querySelector<HTMLElement>(".sq-meter--master"),
+      document.getElementById("beat-indicator"),
+    ]
+      .filter((el): el is HTMLElement => !!el && !!el.parentNode)
+      .map((el) => ({ el, home: el.parentNode as Node, next: el.nextSibling }));
+    if (!moved.length) return;
     const goHome = () => {
-      if (dial.parentNode === home) return;
-      if (next && next.parentNode === home) home.insertBefore(dial, next);
-      else home.appendChild(dial);
+      for (const { el, home, next } of moved) {
+        if (el.parentNode === home) continue;
+        if (next && next.parentNode === home) home.insertBefore(el, next);
+        else home.appendChild(el);
+      }
     };
     const mq = window.matchMedia("(max-width: 768px)");
-    const place = () => (mq.matches ? slot.appendChild(dial) : goHome());
+    const place = () => {
+      if (!mq.matches) return goHome();
+      for (const { el } of moved) slot.appendChild(el);
+    };
     place();
     mq.addEventListener("change", place);
     return () => {

@@ -3039,10 +3039,8 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not
   .sq-transport #chord-menu-btn,
   .sq-transport__right > * { order: 1; }
   /* Macro sits in the main cluster, ahead of the others in the markup, so it
-     is ordered after them explicitly: last in the group, after session. The
-     meter follows it. */
+     is ordered after them explicitly: last in the group, after session. */
   .sq-transport #macro-pads { order: 2; }
-  .sq-transport .sq-meter--master { order: 3; }
   .sq-transport .sq-history button,
   .sq-transport #chord-menu-btn,
   .sq-transport #metronome,
@@ -3052,11 +3050,16 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not
     align-items: center;
     justify-content: center;
     gap: 2px;
-    min-width: 50px;
-    width: auto;
+    /* One line of six whatever the phone: 50px where it fits, narrower where
+       it does not (a 320px screen gets ~46px). 44px is the transport's side
+       padding (16) plus the five gaps between the six (28). A flex item
+       wraps at its full size rather than shrinking first, so the width has
+       to be worked out up front like this, not left to flex-shrink. */
+    width: clamp(40px, calc((100vw - 44px) / 6), 50px);
+    min-width: 0;
     height: auto;
     min-height: 50px;
-    padding: 5px 4px;
+    padding: 5px 2px;
     line-height: 1.1;
     text-transform: none;
   }

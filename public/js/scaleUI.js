@@ -39,19 +39,34 @@ export function syncChordUI() {
 // The mobile button's caption IS the setting — a phone shows this button and
 // nothing else of the scale row or the chord cluster, so "scale" alone would
 // say nothing about whether a tapped step is about to snap or become a chord.
-// "scale" is what it reads when neither is on, which names the button.
+// The button is one of a row of six fixed-width icon buttons, so the caption is
+// kept to one short line (`C min`, `C# dor+`, `min7`): the scale abbreviated,
+// and a `+` when a chord is on too. The whole setting goes in the title and the
+// accessible name. "scale" is what it reads when neither is on.
+function shortMode(mode) {
+  const m = String(mode);
+  if (/\d/.test(m)) return m;   // 12-tet, 24-tet: already short, and "12-" says nothing
+  const words = m.split(/\s+/).filter(Boolean);
+  return words.length > 1 ? words.map(w => w[0]).join("") : m.slice(0, 3);
+}
 export function syncChordMenuBtn() {
   const btn = document.getElementById("chord-menu-btn");
   if (!btn) return;
   if (!btn.firstElementChild) btn.innerHTML = ICON_KEYBOARD;
   const type = state.kbdChordType;
-  const scale = state.scale.active ? `${NOTE_NAMES[state.scale.root] ?? ""} ${state.scale.mode}`.trim() : "";
+  const root = NOTE_NAMES[state.scale.root] ?? "";
+  const on = state.scale.active;
   // "on" is the scale-mode picker's value (chords are diatonic there), not a
   // chord quality, so it reads as plain "chord" rather than being printed.
   let chord = !type ? "" : (type === "on" ? "chord" : type);
   if (chord && state.kbdArp) chord += " arp";
-  btn.dataset.label = [scale, chord].filter(Boolean).join(" · ") || "scale";
-  btn.setAttribute("aria-pressed", String(!!(scale || chord)));
+  const full = [on ? `${root} ${state.scale.mode}` : "", chord].filter(Boolean).join(" · ");
+  btn.dataset.label = on
+    ? `${root} ${shortMode(state.scale.mode)}${chord ? "+" : ""}`
+    : (type ? (type === "on" ? "chord" : type) : "scale");
+  btn.title = full ? `scale & chord: ${full}` : "scale and chord: which notes a tapped step snaps to, and what chord it writes";
+  btn.setAttribute("aria-label", full ? `scale and chord settings: ${full}` : "scale and chord settings");
+  btn.setAttribute("aria-pressed", String(!!full));
 }
 
 // Scale and chord settings as one modal, for phones. Same shape as the pattern
