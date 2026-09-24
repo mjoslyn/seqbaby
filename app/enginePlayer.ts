@@ -124,7 +124,7 @@ export const patchKey = (id: string) => `patch:${id}`;
 
 function fetchSession(key: string): Promise<unknown> {
   if (key.startsWith("patch:")) {
-    return fetch(`/api/patch?id=${encodeURIComponent(key.slice(6))}`)
+    return fetch(`/api/patch/${encodeURIComponent(key.slice(6))}`)
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`patch ${r.status}`))))
       .then((j: { name?: string; config?: unknown }) => {
         if (j.config == null) throw new Error("empty patch");

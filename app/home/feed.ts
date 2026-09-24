@@ -169,7 +169,7 @@ async function owners(
  * The newest patches in the public gallery. Never `config` itself -- a
  * sampler patch carries its sample as base64 -- only the few fields inside it
  * that decide what the card draws and plays (patchPreview.js); the card's
- * play button fetches the rest from /api/patch when pressed.
+ * play button fetches the rest from /api/patch/<id> when pressed.
  */
 async function loadPatches(supabase: SupabaseClient, limit: number): Promise<FeedPatch[]> {
   try {
