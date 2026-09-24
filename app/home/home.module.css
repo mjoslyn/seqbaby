@@ -214,11 +214,14 @@
 .cardMeta { display: flex; flex-wrap: wrap; gap: 4px 12px; color: var(--fg-dim); font-size: 11px; }
 .cardMeta a { color: var(--accent-2); text-decoration: none; }
 .cardMeta a:hover { text-decoration: underline; }
-.print { width: 100%; height: 48px; display: block; background: var(--bg); border-radius: 6px; padding: 4px; }
+.print { display: block; height: 56px; background: var(--bg); border-radius: 6px; padding: 5px; }
+.printSvg { display: block; width: 100%; height: 100%; }
+.cardOwner { display: inline-flex; align-items: center; gap: 5px; }
 .printOn { fill: var(--accent); }
 .printOff { fill: var(--step); }
 .card:nth-child(3n + 2) .printOn { fill: var(--accent-2); }
 .card:nth-child(3n) .printOn { fill: #ff9fd0; }
+.card:hover .print { background: #0a0b0d; }
 
 .empty {
   border: 1px dashed var(--border);
@@ -255,24 +258,8 @@
   transition: transform 0.15s ease, border-color 0.15s ease;
 }
 .person:hover { border-color: var(--accent-2); transform: translateY(-2px) rotate(0.4deg); }
-.avatar {
-  flex: none;
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  object-fit: cover;
-  background: var(--accent-2);
-  color: var(--bg);
-  font-weight: 700;
-  font-size: 12px;
-  text-transform: uppercase;
-}
-.people li:nth-child(3n + 2) .avatar { background: var(--accent); }
 .personText { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .personName { font-weight: 700; overflow-wrap: anywhere; }
-.personHandle { color: var(--fg-dim); font-weight: 400; }
 .personBio {
   color: var(--fg-dim);
   font-size: 12px;

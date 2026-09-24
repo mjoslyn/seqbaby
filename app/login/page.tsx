@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import Link from "next/link";
 import {
   signIn,
@@ -14,6 +14,13 @@ const initial = {} as { error?: string; message?: string };
 
 export default function LoginPage() {
   const [mode, setMode] = useState<Mode>("signin");
+  // `/login?mode=signup` opens on the create-account tab: the homepage's
+  // "make an account" goes there. Read after mount rather than through
+  // useSearchParams, which would need a Suspense boundary to keep this page
+  // static, for one flag.
+  useEffect(() => {
+    if (new URLSearchParams(location.search).get("mode") === "signup") setMode("signup");
+  }, []);
   const [signInState, signInAction, signInPending] = useActionState(
     signIn,
     initial,

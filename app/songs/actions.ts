@@ -16,6 +16,8 @@ export type SongListItem = {
   is_template: boolean;
   /** The one template a new session starts from. At most one per account. */
   is_default_template: boolean;
+  /** The step preview (migration 0012); absent before that has run. */
+  preview?: unknown;
 };
 
 /** A node of a song's version tree. Never carries `data` -- the list is drawn
@@ -504,13 +506,19 @@ export async function listSongs(): Promise<{
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { songs: [] };
-  const { data, error } = await supabase
-    .from("songs")
-    .select(SONG_LIST_COLS)
-    .eq("owner_id", user.id)
-    .order("updated_at", { ascending: false });
+  const query = (cols: string) =>
+    supabase
+      .from("songs")
+      .select(cols)
+      .eq("owner_id", user.id)
+      .order("updated_at", { ascending: false })
+      .returns<SongListItem[]>();
+  // `preview` is a computed field (migration 0012). A database without it
+  // fails the whole select, and the menu is worth more than its thumbnails.
+  let { data, error } = await query(`${SONG_LIST_COLS},preview`);
+  if (error) ({ data, error } = await query(SONG_LIST_COLS));
   if (error) return { songs: [], error: error.message };
-  return { songs: (data as SongListItem[]) ?? [] };
+  return { songs: data ?? [] };
 }
 
 // Load a song's data. RLS allows the owner, or anyone if the song is public.

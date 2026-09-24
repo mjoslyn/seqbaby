@@ -16,14 +16,16 @@ export type FeedSong = {
   slug: string;
   bpm: number | null;
   updatedAt: string;
-  owner: { handle: string | null; name: string } | null;
+  owner: { handle: string | null; name: string; avatarGrid: string | null } | null;
+  /** The step preview the database computes (migration 0012), or null before
+   *  that migration has run -- the card then falls back to `fingerprint`. */
+  preview: unknown;
 };
 
 export type FeedPerson = {
   handle: string;
-  name: string;
   bio: string | null;
-  avatarUrl: string | null;
+  avatarGrid: string | null;
   /** How many songs they have published. */
   songs: number;
 };
@@ -31,6 +33,27 @@ export type FeedPerson = {
 export type Feed = { songs: FeedSong[]; people: FeedPerson[] };
 
 const EMPTY: Feed = { songs: [], people: [] };
+
+type Row = Record<string, unknown>;
+
+/**
+ * A select that asks for columns a later migration added (`preview` from
+ * 0012, `avatar_grid` from 0014) and, if the database does not have them yet
+ * -- PostgREST fails the whole query then -- asks again without. A feed with
+ * fingerprints and generated avatars beats no feed at all.
+ */
+async function withOptional(
+  run: (cols: string) => PromiseLike<{ data: Row[] | null; error: unknown }>,
+  base: string,
+  optional: string,
+): Promise<Row[] | null> {
+  const first = await run(`${base},${optional}`);
+  if (!first.error) return first.data;
+  const second = await run(base);
+  return second.error ? null : second.data;
+}
+
+const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
 
 function named(title: unknown): string {
   const t = typeof title === "string" ? title.trim() : "";
@@ -47,28 +70,34 @@ export async function loadFeed(limit = 24): Promise<Feed> {
     const supabase = createClient(url, key, { auth: { persistSession: false } });
     // `data->bpm` rather than `data`: a song's data is the whole session,
     // base64 samples included, and a card needs one number out of it.
-    const [{ data: rows, error }, people] = await Promise.all([
+    const songsQuery = (cols: string) =>
       supabase
         .from("songs")
-        .select("id,title,share_slug,updated_at,owner_id,bpm:data->bpm")
+        .select(cols)
         .eq("is_public", true)
         .not("share_slug", "is", null)
         .order("updated_at", { ascending: false })
-        .limit(limit),
+        .limit(limit)
+        .returns<Row[]>();
+    const [rows, people] = await Promise.all([
+      withOptional(songsQuery, "id,title,share_slug,updated_at,owner_id,bpm:data->bpm", "preview"),
       loadPeople(supabase),
     ]);
-    if (error || !rows?.length) return { songs: [], people };
+    if (!rows?.length) return { songs: [], people };
 
     const ownerIds = [...new Set(rows.map((r) => r.owner_id as string))];
-    const { data: cards } = await supabase
-      .from("profile_cards")
-      .select("id,username,display_name")
-      .in("id", ownerIds);
-    const byId = new Map<string, { handle: string | null; name: string }>();
+    const cards = await withOptional(
+      (cols) => supabase.from("profile_cards").select(cols).in("id", ownerIds).returns<Row[]>(),
+      "id,username,display_name",
+      "avatar_grid",
+    );
+    const byId = new Map<string, NonNullable<FeedSong["owner"]>>();
     for (const c of cards ?? []) {
-      const handle = typeof c.username === "string" && c.username ? c.username : null;
-      const name = handle || (typeof c.display_name === "string" && c.display_name) || "";
-      if (name) byId.set(c.id as string, { handle, name });
+      // One name per person now (migration 0013); display_name is only the
+      // fallback for a profile that has not been through that yet.
+      const handle = str(c.username);
+      const name = handle || str(c.display_name) || "";
+      if (name) byId.set(c.id as string, { handle, name, avatarGrid: str(c.avatar_grid) });
     }
 
     const songs: FeedSong[] = rows.map((r) => ({
@@ -78,6 +107,7 @@ export async function loadFeed(limit = 24): Promise<Feed> {
       bpm: typeof r.bpm === "number" ? Math.round(r.bpm) : null,
       updatedAt: r.updated_at as string,
       owner: byId.get(r.owner_id as string) ?? null,
+      preview: r.preview ?? null,
     }));
 
     return { songs, people };
@@ -87,8 +117,9 @@ export async function loadFeed(limit = 24): Promise<Feed> {
 }
 
 /**
- * Every public profile with a handle, whether or not they have published
- * anything yet. Read from `profiles`, which anon may read only where
+ * Every public profile, whether or not they have published anything yet.
+ * Every profile has a handle since migration 0013; the filter is for a
+ * database that has not had it. Read from `profiles`, which anon may read only where
  * `is_public` (migration 0007) -- the filter is repeated here so the list
  * does not depend on that policy to stay public-only. `bio` is on the
  * profile page already, so it is fine here; it is NOT on profile_cards, which
@@ -102,14 +133,20 @@ async function loadPeople(
   limit = 48,
 ): Promise<FeedPerson[]> {
   try {
-    const { data: profiles, error } = await supabase
-      .from("profiles")
-      .select("id,username,display_name,bio,avatar_url,created_at")
-      .eq("is_public", true)
-      .not("username", "is", null)
-      .order("created_at", { ascending: false })
-      .limit(limit);
-    if (error || !profiles?.length) return [];
+    const profiles = await withOptional(
+      (cols) =>
+        supabase
+          .from("profiles")
+          .select(cols)
+          .eq("is_public", true)
+          .not("username", "is", null)
+          .order("created_at", { ascending: false })
+          .limit(limit)
+          .returns<Row[]>(),
+      "id,username,bio,created_at",
+      "avatar_grid",
+    );
+    if (!profiles?.length) return [];
 
     const ids = profiles.map((p) => p.id as string);
     const { data: owned } = await supabase
@@ -120,15 +157,13 @@ async function loadPeople(
     const counts = new Map<string, number>();
     for (const r of owned ?? []) counts.set(r.owner_id as string, (counts.get(r.owner_id as string) ?? 0) + 1);
 
-    const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
     return profiles
       .map((p, i) => ({
         order: i,
         person: {
           handle: p.username as string,
-          name: str(p.display_name) ?? (p.username as string),
           bio: str(p.bio),
-          avatarUrl: str(p.avatar_url),
+          avatarGrid: str(p.avatar_grid),
           songs: counts.get(p.id as string) ?? 0,
         },
       }))

@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import Toy from "./home/Toy";
 import Who from "./home/Who";
+import SongPreview from "./SongPreview";
+import Avatar from "./Avatar";
 import { loadFeed, fingerprint, type FeedSong } from "./home/feed";
 import styles from "./home/home.module.css";
 
@@ -24,7 +26,7 @@ const BOX = [
   ["subby", "bass for phones. it fakes the frequencies your speaker can't make, and your ears believe it."],
   ["plaits", "sixteen models from a very famous little module, running in wasm."],
   ["jam", "send a link. edit the same song together, live. nobody needs an account."],
-  ["compose", "describe what you want in plain words. it writes the parts, plays them over your song, and waits for you to say keep."],
+  ["compose", "describe what you want in plain words."],
   ["euclid + chance", "one button divides a rhythm evenly, the other throws dice at it."],
 ] as const;
 
@@ -47,7 +49,7 @@ function ago(iso: string): string {
 function Fingerprint({ id }: { id: string }) {
   const lanes = fingerprint(id);
   return (
-    <svg className={styles.print} viewBox="0 0 64 16" aria-hidden preserveAspectRatio="none">
+    <svg className={styles.printSvg} viewBox="0 0 64 16" aria-hidden preserveAspectRatio="none">
       {lanes.map((lane, y) =>
         lane.map((on, x) => (
           <rect
@@ -69,15 +71,22 @@ function SongCard({ song }: { song: FeedSong }) {
   return (
     <li className={styles.card}>
       <a className={styles.cardLink} href={`/studio?s=${encodeURIComponent(song.slug)}`}>
-        <Fingerprint id={song.id} />
+        <span className={styles.print}>
+          {song.preview ? <SongPreview preview={song.preview} height="100%" /> : <Fingerprint id={song.id} />}
+        </span>
         <span className={styles.cardTitle}>{song.title}</span>
       </a>
       <span className={styles.cardMeta}>
         {song.owner ? (
           song.owner.handle ? (
-            <a href={`/u/${song.owner.handle}`}>@{song.owner.handle}</a>
+            <a className={styles.cardOwner} href={`/u/${song.owner.handle}`}>
+              <Avatar grid={song.owner.avatarGrid} name={song.owner.handle} size={18} />@{song.owner.handle}
+            </a>
           ) : (
-            <span>{song.owner.name}</span>
+            <span className={styles.cardOwner}>
+              <Avatar grid={song.owner.avatarGrid} name={song.owner.name} size={18} />
+              {song.owner.name}
+            </span>
           )
         ) : (
           <span>someone</span>
@@ -120,7 +129,7 @@ export default async function HomePage() {
           </p>
           <div className={styles.ctaRow}>
             <a className={styles.cta} href="/studio">open the studio</a>
-            <a className={styles.ctaGhost} href="/login">make an account</a>
+            <a className={styles.ctaGhost} href="/login?mode=signup">make an account</a>
           </div>
           <p className={styles.small}>no account needed to make noise. you only need one to keep it.</p>
         </div>
@@ -170,19 +179,9 @@ export default async function HomePage() {
             {people.map((p) => (
               <li key={p.handle}>
                 <a className={styles.person} href={`/u/${p.handle}`}>
-                  {p.avatarUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img className={styles.avatar} src={p.avatarUrl} alt="" width={36} height={36} />
-                  ) : (
-                    <span className={styles.avatar} aria-hidden>
-                      {p.handle.slice(0, 2)}
-                    </span>
-                  )}
+                  <Avatar grid={p.avatarGrid} name={p.handle} size={44} />
                   <span className={styles.personText}>
-                    <span className={styles.personName}>
-                      {p.name}
-                      {p.name !== p.handle && <span className={styles.personHandle}> @{p.handle}</span>}
-                    </span>
+                    <span className={styles.personName}>@{p.handle}</span>
                     {p.bio && <span className={styles.personBio}>{p.bio}</span>}
                     <span className={styles.personCount}>
                       {p.songs ? `${p.songs} ${p.songs === 1 ? "song" : "songs"}` : "no songs yet"}
@@ -194,7 +193,7 @@ export default async function HomePage() {
           </ul>
         ) : (
           <p className={styles.emptyLine}>
-            a room with a sound system and no one in it. <a href="/login">be the first one through the door.</a>
+            a room with a sound system and no one in it. <a href="/login?mode=signup">be the first one through the door.</a>
           </p>
         )}
       </section>
@@ -217,7 +216,6 @@ export default async function HomePage() {
       <footer className={styles.footer}>
         <a href="/studio">studio</a>
         <a href="/manual">manual</a>
-        <a href="https://github.com/mjoslyn/seqbaby">source</a>
         <span className={styles.footNote}>made with too many oscillators.</span>
       </footer>
     </div>

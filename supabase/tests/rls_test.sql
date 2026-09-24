@@ -496,7 +496,7 @@ begin
   select string_agg(column_name, ', ' order by column_name) into cols
     from information_schema.columns
    where table_schema = 'public' and table_name = 'profile_cards';
-  if cols is distinct from 'avatar_url, display_name, id, username, username_lower' then
+  if cols is distinct from 'avatar_grid, avatar_url, display_name, id, username, username_lower' then
     raise exception 'FAIL  profile_cards columns changed: %  (adding one exposes it to anon)', cols;
   end if;
   raise notice 'PASS  profile_cards exposes only display fields, no bio';

@@ -253,7 +253,8 @@ npm run build && npm run start   # production build + serve
 npm run netlify:dev    # full Netlify emulation on :8888
 npm run legacy:dev     # pre-Next static Node server on :5173 (engine assets only)
 npm test               # node --test: the pure modules (session format, chance gen,
-                       #   version tree, song names, share card copy, the song builder, the jam diff)
+                       #   version tree, song names, share card copy, the song builder, the jam diff,
+                       #   song previews, grid avatars)
 npm run mcp            # the MCP server on stdio (mcp/server.mjs) — an agent writes songs
 npm run test:rls       # RLS policy tests — builds a throwaway Postgres in docker
 ```
@@ -1790,10 +1791,69 @@ to say hello), the songs people have published, and who made them.
   it (migration 0007).
 - **Who is looking is a client island** (`Who.tsx`): a local session read,
   then one `profile_cards` read for the handle. A cached page cannot know.
-- A card's step picture is hashed from the song's id (`fingerprint`), not
-  read from the song, for the same reason as `data->bpm`.
+- **A card's step picture is the song's own** (see "Song previews" below).
+  `fingerprint` (hashed from the id) is only the fallback for a database
+  without migration 0012.
 - `mcp/audition.mjs` points a bare site URL at `/studio` (`studioUrl`), so
   `SEQBABY_URL=http://localhost:3000` keeps working.
+
+## Song previews (`preview`, migration 0012)
+
+Every song card (homepage feed, a profile page, the studio's songs menu)
+draws the song's own steps: one row per track, one cell per step of the
+pattern it was saved on.
+
+- **Computed in Postgres, on read.** `song_preview(data)` walks the saved
+  session and returns a few hundred bytes; `preview(songs)` exposes it as a
+  PostgREST computed field, so `.select("id,title,preview")` just works and
+  runs under the songs policies. `data` is the whole session, base64 samples
+  included, so pulling it out to draw a thumbnail would move megabytes to
+  throw away. Nothing on the write path knows about it, and every song saved
+  before it has one.
+- **The shape**: `{p, t: [{s: "9..5-.."}, {n, g: {...}}, {n, c: {...}}]}`.
+  Written steps are a string (1-9 a hit's velocity, `-` held by the hit
+  before, `.` a rest); a live euclid track sends its settings and the client
+  expands them with Bjorklund (`app/songs/songPreview.js`, tested against
+  euclid.js's own function lifted out of its source); a live chance track
+  sends only its window, since its notes come from a generator the page does
+  not run. Buses are skipped, at most 8 tracks, the active pattern unless it
+  is empty.
+- **Drawn by `app/SongPreview.tsx`**, no hooks, so server pages and the
+  songs menu share it. Shorter tracks are tiled across the longest, because
+  that is what they play.
+- Every reader asks for `preview` and, if the database refuses it (0012 not
+  applied), asks again without: a list without thumbnails beats no list.
+
+## One name, and a step grid for a face (migrations 0013, 0014)
+
+- **The username is the name.** It used to be a display name (set at
+  signup from the email) plus a username (the `/u/` URL, set only in
+  settings), and most accounts never set the second, so they had no page and
+  never appeared in the homepage's people list. 0013 backfills a username for
+  every profile (`name_base`: lowercased, accents folded, `-2` on a clash),
+  makes one at signup (retrying on the unique violation, since a trigger that
+  throws fails the signup), and keeps `display_name` equal to it for any
+  reader still on that column. Settings has one `name` field.
+- **An avatar is a 16x16 step grid** in the studio's own colours
+  (`app/profile/avatarGrid.js`, `profiles.avatar_grid`): 256 characters, one
+  per cell, `0` unlit, `1`..`d` a `PALETTE` entry (every colour is one the
+  stylesheets already use; a test checks). A CHECK constraint holds the same
+  regex as `AVATAR_GRID_RE` (another test holds the two together).
+- **Nobody is without one**: null means "the one my name makes"
+  (`defaultGrid`, the generator seeded by the name), which follows a rename.
+  The generator is the arcade method: a mirrored 7x7 silhouette doubled to
+  14x14, an outline in a second colour half the time, eyes where they fit.
+- **The editor** (`app/settings/AvatarEditor.tsx`): draw / fill / erase,
+  the palette, twelve drawn shapes plus computed ones (wave, arp, ring),
+  shift / mirror / invert / clear, generate, and play: rows are pitches,
+  the playhead walks the columns.
+- `app/Avatar.tsx` draws one anywhere; under 40px the gaps between cells go.
+- **The songs menu's eye** (`IconEye`, SongsMenu.tsx) says and sets whether
+  a song is public: on your page, in the homepage feed, reachable by its
+  link. It replaced the dot before the title; the link button still
+  publishes AND copies.
+- `profile_cards` carries `avatar_grid` (a display field, like the others);
+  the RLS test's column list moved with it. `avatar_url` stays unused.
 
 ## The share card (`app/shareCard.ts` + `app/shareCopy.js`)
 

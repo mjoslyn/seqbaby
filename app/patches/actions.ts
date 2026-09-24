@@ -93,7 +93,7 @@ export async function listPublicPatches(
       .select("id,display_name,username")
       .in("id", ownerIds);
     for (const p of profs ?? [])
-      names.set(p.id, p.display_name || p.username || "anon");
+      names.set(p.id, p.username || p.display_name || "anon");
   }
 
   return {

@@ -96,7 +96,7 @@ async function AccountBarSlot() {
       .select("display_name, username")
       .eq("id", user.id)
       .maybeSingle();
-    name = profile?.display_name || profile?.username || user.email || null;
+    name = profile?.username || profile?.display_name || user.email || null;
     username = profile?.username ?? null;
   }
 

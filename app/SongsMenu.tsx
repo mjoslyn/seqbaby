@@ -13,6 +13,7 @@ import {
   loadSong,
   deleteSong,
   publishSong,
+  unpublishSong,
   forkSong,
   setSongTemplate,
   setDefaultTemplate,
@@ -34,7 +35,9 @@ import {
   IconFork,
   IconLink,
   IconTrash,
+  IconEye,
 } from "@/app/menuIcons";
+import SongPreview from "@/app/SongPreview";
 import styles from "@/app/ui.module.css";
 
 // Client island that bridges the React shell to the vanilla engine via
@@ -307,6 +310,23 @@ export default function SongsMenu() {
     [refresh],
   );
 
+  // The eye: public means the song is on your profile page, in the homepage
+  // feed and reachable by its share link; private takes it off all three.
+  // Unlike the link button, it copies nothing -- it only says and sets which.
+  const doToggleVisibility = useCallback(
+    async (song: SongListItem) => {
+      const res = song.is_public ? await unpublishSong(song.id) : await publishSong(song.id);
+      if (res.error) return setStatus({ text: res.error, err: true });
+      setStatus({
+        text: song.is_public
+          ? `"${song.title}" is private`
+          : `"${song.title}" is public: on your page and the homepage`,
+      });
+      refresh();
+    },
+    [refresh],
+  );
+
   if (!ready) return null;
 
   const currentSong = songs.find((s) => s.id === currentId);
@@ -341,8 +361,20 @@ export default function SongsMenu() {
               : "load the current version into the studio"
           }
         >
-          {song.is_public && <span className={styles.pubDot}>● </span>}
           {song.title}
+        </button>
+        <button
+          className={`${styles.iconBtn} ${song.is_public ? styles.iconBtnOn : ""}`}
+          onClick={() => doToggleVisibility(song)}
+          aria-pressed={song.is_public}
+          title={
+            song.is_public
+              ? "public: on your page and the homepage. click to make private"
+              : "private: only you can see it. click to make public"
+          }
+          aria-label={song.is_public ? "public" : "private"}
+        >
+          <IconEye on={song.is_public} />
         </button>
         {song.is_template && (
           <button
@@ -414,6 +446,17 @@ export default function SongsMenu() {
           <IconTrash />
         </button>
       </div>
+      {song.preview ? (
+        <button
+          type="button"
+          className={styles.songRowPreview}
+          onClick={() => doLoad(song)}
+          tabIndex={-1}
+          aria-hidden
+        >
+          <SongPreview preview={song.preview} height="100%" />
+        </button>
+      ) : null}
       {treeFor === song.id && (
         <VersionTree
           songId={song.id}
