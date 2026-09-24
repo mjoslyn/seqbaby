@@ -250,6 +250,10 @@
 
 .sheetBackdrop { display: none; }
 
+/* Where the transport's level meter and beat dial live on a phone (see
+   AccountBar). Empty, and so nothing, on desktop. */
+.beatSlot { display: none; }
+
 .accountName { color: #9aa0aa; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-decoration: none; cursor: pointer; }
 .accountName:hover { color: #e8e8ea; }
 .accountBtn {
@@ -264,17 +268,19 @@
 }
 .accountBtn:hover { border-color: #3a3d45; }
 
+/* Drawn like every other button in the bar: it used to be a filled light-blue
+   pill, which made it the loudest thing on the screen for a control nobody
+   needs every minute. */
 .shareBtn {
-  padding: 5px 12px;
-  border: 1px solid #3aa6d8;
+  padding: 5px 10px;
+  border: 1px solid #2a2d35;
   border-radius: 6px;
-  background: #7fd6f2;
-  color: #06202b;
+  background: #16181d;
+  color: #e8e8ea;
   font: inherit;
-  font-weight: 700;
   cursor: pointer;
 }
-.shareBtn:hover { background: #97e0f8; }
+.shareBtn:hover { border-color: #3a3d45; }
 
 /* --- songs menu --- */
 .songsWrap { position: relative; }
@@ -570,7 +576,19 @@
   .topBarMenuOpen,
   .topBar:has(.panel):not(:has(.chatPanel)) { z-index: 250; }
 
-  .menuBtn { display: inline-flex; }
+  /* A finger's target: the 44px floor everything else in thumb's reach gets.
+     At the desktop's 5px padding it was a 26px sliver at the edge of the
+     screen, and it is the only way to the rest of the bar. */
+  .beatSlot { display: inline-flex; align-items: center; gap: 8px; margin-right: 8px; }
+  .beatSlot svg { width: 36px; height: 36px; }
+  .menuBtn {
+    display: inline-flex;
+    justify-content: center;
+    min-height: 44px;
+    min-width: 72px;
+    padding: 0 14px;
+    gap: 8px;
+  }
 
   /* Shown by state, not by mount: the backdrop is always in the DOM on mobile
      so it can dim behind a panel that outlived the sheet exactly as it dims
