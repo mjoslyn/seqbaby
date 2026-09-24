@@ -6,6 +6,7 @@ import Avatar from "./Avatar";
 import PlayableAvatar from "./PlayableAvatar";
 import LikeButton from "./LikeButton";
 import PlayButton from "./PlayButton";
+import PatchCard from "./home/PatchCard";
 import { loadFeed, fingerprint, type FeedSong } from "./home/feed";
 import styles from "./home/home.module.css";
 import { SITE_URL, shareCard } from "./shareCard";
@@ -116,7 +117,7 @@ function SongCard({ song }: { song: FeedSong }) {
 }
 
 export default async function HomePage() {
-  const { songs, people } = await loadFeed();
+  const { songs, people, patches } = await loadFeed();
 
   return (
     <div className={styles.home}>
@@ -211,6 +212,28 @@ export default async function HomePage() {
         ) : (
           <p className={styles.emptyLine}>
             a room with a sound system and no one in it. <a href="/login?mode=signup">be the first one through the door.</a>
+          </p>
+        )}
+      </section>
+
+      <section className={styles.section}>
+        <div className={styles.sectionHead}>
+          <h2>fresh patches</h2>
+          <span className={styles.sectionSub}>
+            sounds people have put in the gallery. press play to hear one on a little phrase written for it. grab it
+            from the studio&apos;s patches menu.
+          </span>
+        </div>
+        {patches.length ? (
+          <ul className={styles.cards}>
+            {patches.map((p) => (
+              <PatchCard key={p.id} patch={p} age={ago(p.createdAt)} />
+            ))}
+          </ul>
+        ) : (
+          <p className={styles.emptyLine}>
+            the gallery is empty. <a href="/studio">make a sound</a>, save it as a patch, and publish it from the patches
+            menu.
           </p>
         )}
       </section>
