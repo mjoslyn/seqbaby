@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 // The link preview, in one place. The studio's default card (layout.tsx) and
-// the one a share link gets (page.tsx's generateMetadata) differ only in the
+// the one a share link gets (studio/page.tsx's generateMetadata) differ only in the
 // title and the line under it, and og/twitter metadata does NOT inherit field
 // by field between segments — a page that sets `openGraph` replaces the
 // layout's whole object — so the parts that stay the same have to be written

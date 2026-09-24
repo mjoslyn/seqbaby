@@ -74,7 +74,7 @@ const FORMAT_NOTES = `${BASE_FORMAT_NOTES}
 - the studio's session menu, **import** (a .json file)
 - \`window.seqbaby.applySet(obj)\` in the studio's console
 - \`POST ${SEQBABY_URL}/api/share\` with \`{ "session": obj }\`, which returns
-  \`{ "id" }\`; the studio opens it at \`${SEQBABY_URL}/?s=<id>\` (\`share_song\`
+  \`{ "id" }\`; the studio opens it at \`${SEQBABY_URL}/studio?s=<id>\` (\`share_song\`
   does this)
 `;
 
@@ -115,7 +115,7 @@ server.registerTool("share_song", { title: "Share song",
   const res = await fetch(`${SEQBABY_URL}/api/share`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ session: JSON.parse(json) }) });
   const body = await res.json().catch(() => ({}));
   if (!res.ok || !body.id) throw new sb.SongError(`share failed: ${res.status} ${body.error || ""}`.trim());
-  return { url: `${SEQBABY_URL}/?s=${body.id}`, id: body.id };
+  return { url: `${SEQBABY_URL}/studio?s=${body.id}`, id: body.id };
 }));
 
 server.registerTool("audition_song", { title: "Audition song",

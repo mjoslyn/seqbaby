@@ -11,7 +11,7 @@ description: How to launch and drive seqbaby to verify engine changes at runtime
 npm run dev        # Next.js on :3000; engine works with no env vars
 ```
 
-Open `http://localhost:3000/` in Chrome (claude-in-chrome tools work well).
+Open `http://localhost:3000/studio` in Chrome (`/` is the homepage) (claude-in-chrome tools work well).
 
 ## Drive
 

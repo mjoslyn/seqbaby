@@ -40,7 +40,9 @@ env / fx / eq / comp / mod / automation per track.
 ```
 .
 ├── app/                       Next.js shell — routing, auth, account UI, server actions
-│   ├── page.tsx               studio route: SSRs engine DOM, boots engine, AccountBar
+│   ├── page.tsx               the homepage at /: a toy sequencer, published songs, who made them (home/)
+│   ├── studio/page.tsx        the studio at /studio: SSRs engine DOM, boots engine, AccountBar
+│   ├── home/                  the homepage's parts: feed.ts (public songs, cookie-less), Toy.tsx, Who.tsx
 │   ├── studioMarkup.ts        engine's static DOM skeleton (raw HTML string)
 │   ├── ScriptLoader.tsx       injects Tone → woscillators → js/main.js in order
 │   ├── AccountBar/SongsMenu/PatchesMenu/SaveButton/OpenSongOnLoad.tsx
@@ -146,7 +148,7 @@ env / fx / eq / comp / mod / automation per track.
   (the same list main.js builds at boot) by running a blank blob through
   `applySet`, so every global a song can touch is written rather than left
   behind. Behind the top bar's `new` and a click on the logo — which is an
-  `<a href="/">`, so opening it in a new tab gives a blank editor too. It
+  `<a href="/studio">`, so opening it in a new tab gives a blank editor too. It
   fires `seqbaby:newset` for the shell, whose open-song slot has to clear
   with it (`app/NewSongButton.tsx`). Its per-track reader — `migrateTrackData`
   / `trackShellFor` / `loadTrackFromData` — is exported, because liveSet.js
@@ -1757,6 +1759,36 @@ desktop); macro stays in the main cluster, text on desktop and icon over its
 of save/share lives in `session.js` (`serializeSet`/`applySet`) and is bridged
 through `window.seqbaby`.
 
+## The homepage (`/`) and the studio (`/studio`)
+
+The studio used to be `/`. It is `/studio` now, and `/` is a homepage: a toy
+sequencer (raw Web Audio, not the engine: a front door should not boot 1.7MB
+to say hello), the songs people have published, and who made them.
+
+- **Every old link still works.** `next.config.mjs` redirects `/` carrying
+  `?s=`, `?open=` or `?jam=` to `/studio` with the query intact, so share
+  links, deep links and jam invites already sent out land on the song they
+  named. The homescreen app's WebView (`SeqbabyApp/` in the user agent) is
+  sent to the studio from a bare `/` too, and the manifest's `start_url` is
+  `/studio`.
+- **Everything that writes a studio URL names `/studio`**: the save UIs'
+  share links, the profile page's open and fork links, the MCP server's
+  `share_song`, sign in / sign up / sign out, the email confirm fallback.
+  The engine's own URLs (`onShareSet`, the jam invite, `syncSongUrl`) are
+  built from `location.pathname`, so they needed nothing.
+- **The homepage is cached** (`revalidate = 60`). `app/home/feed.ts` reads
+  published songs and their owners with a plain anon client, not the cookie
+  one, because reading cookies makes a page dynamic and everything it reads
+  is public anyway. It selects `data->bpm`, never `data`: a song's data is
+  the whole session, samples included. It never throws: no env, a missing
+  migration or a dead network is an empty feed with a joke in it.
+- **Who is looking is a client island** (`Who.tsx`): a local session read,
+  then one `profile_cards` read for the handle. A cached page cannot know.
+- A card's step picture is hashed from the song's id (`fingerprint`), not
+  read from the song, for the same reason as `data->bpm`.
+- `mcp/audition.mjs` points a bare site URL at `/studio` (`studioUrl`), so
+  `SEQBABY_URL=http://localhost:3000` keeps working.
+
 ## The share card (`app/shareCard.ts` + `app/shareCopy.js`)
 
 A share link points at the studio with the song in the query, so the link
@@ -1771,7 +1803,7 @@ what — `mike has shared "cold squelch" with you` — and a jam invite
   layout's whole object, so the image, the url and the type would have gone
   missing from the song card if it were written out separately.
   `shareCard(title, desc)` returns both blocks; layout.tsx passes the site's
-  own title, page.tsx the sentence. The sentences themselves are
+  own title, studio/page.tsx the sentence. The sentences themselves are
   `songShareTitle` / `jamShareTitle` in `shareCopy.js` — pure, no imports,
   for songName.js's reason: `node --test` pins them
   (`test/shareCopy.test.js`), and they are on the metadata path, where a
@@ -1779,7 +1811,7 @@ what — `mike has shared "cold squelch" with you` — and a jam invite
 - **The lookup only happens when the URL carries one.** Metadata is resolved
   before the document flushes, so a Supabase round trip on every visit would
   hold back the engine's preload hints for everyone — the same reason the
-  account bar sits behind `<Suspense>`. A plain `/` does no work in
+  account bar sits behind `<Suspense>`. A plain `/studio` does no work in
   `generateMetadata` at all; a `?s=` visit is already waiting on a fetch of
   the session itself.
 - **`linkedSong`** (`app/songs/linkedSongTitle.ts`) is the song lookup, and it
@@ -1938,7 +1970,7 @@ opens as a sheet under it.
 ### The bar is pinned, and so is the transport under it
 
 Both are `position: sticky`, and they are siblings in the document — the bar is
-rendered by `page.tsx` ahead of the engine's markup, the transport is inside it
+rendered by `studio/page.tsx` ahead of the engine's markup, the transport is inside it
 — so there is no one element to pin. The bar takes `top: 0` and the transport
 takes the bar's height as its own offset, `--sq-topbar-h`. Without that they
 would both stick at 0 and pile onto the same line the moment the page scrolled.
@@ -2059,7 +2091,7 @@ cold squelch  v1 ──▶ v2 ──▶ v3     its own song, its own tree
   `app/DefaultTemplate.tsx` applies a session over the top afterwards. So the
   legacy static server, a signed-out visitor and an account with no default all
   get the blank editor they always did. It answers to `seqbaby:newset` (the top
-  bar's `new` and the logo) and to a fresh load of `/` — skipped when the URL
+  bar's `new` and the logo) and to a fresh load of `/studio` — skipped when the URL
   carries `?s=` or `?open=`, which load asynchronously too and would otherwise
   race it. The fetch is caught, not just awaited: with no Supabase env the
   action throws, and the engine is meant to run without any.
@@ -2889,7 +2921,7 @@ Repo: https://github.com/mjoslyn/seqbaby.
   there's a regeneration one-liner in the file's comment, and it prints the
   count the module tallies above quote. Recount with it rather than guessing:
   every one of those tallies had drifted before.
-- The account bar is behind `<Suspense>` in `app/page.tsx`. Don't await
+- The account bar is behind `<Suspense>` in `app/studio/page.tsx`. Don't await
   Supabase in the page body again: it blocks the whole document, including the
   preload hints, on two sequential round trips.
 - **The preloader** (`app/Preloader.tsx` + `app/preloaderMarkup.ts`) covers the gap

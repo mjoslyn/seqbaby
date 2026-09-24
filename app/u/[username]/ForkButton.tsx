@@ -20,7 +20,7 @@ export default function ForkButton({ songId }: { songId: string }) {
       return;
     }
     // Full navigation into the studio, which opens the fork once booted.
-    window.location.href = `/?open=${res.id}`;
+    window.location.href = `/studio?open=${res.id}`;
   }
 
   return (

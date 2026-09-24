@@ -25,7 +25,7 @@ export const metadata: Metadata = {
   },
   other: { "mobile-web-app-capable": "yes" },
   // The default card. A link that names a song overrides this with the song's
-  // own title — see generateMetadata in page.tsx.
+  // own title — see generateMetadata in studio/page.tsx.
   ...shareCard("seqbaby", SITE_DESCRIPTION),
 };
 

@@ -131,7 +131,7 @@ export default function LoginPage() {
         )}
 
         <p className={styles.hint}>
-          <Link href="/">← back to the studio</Link>
+          <Link href="/studio">← back to the studio</Link>
         </p>
       </div>
     </div>

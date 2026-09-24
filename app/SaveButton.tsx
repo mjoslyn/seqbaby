@@ -141,7 +141,7 @@ export default function SaveButton() {
     });
     setOpen(false);
     if (isPublic && res.slug) {
-      const url = `${location.origin}/?s=${res.slug}`;
+      const url = `${location.origin}/studio?s=${res.slug}`;
       try {
         await navigator.clipboard.writeText(url);
         setStatus({ text: "Saved · public link copied" });

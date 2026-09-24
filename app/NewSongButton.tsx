@@ -32,7 +32,7 @@ export default function NewSongButton() {
   return (
     <a
       className={styles.accountBtn}
-      href="/"
+      href="/studio"
       title="start a new song — a blank editor"
       onClick={(e) => {
         if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;

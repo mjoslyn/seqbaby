@@ -294,7 +294,7 @@ export default function SongsMenu() {
       const res = await publishSong(song.id);
       if (res.error || !res.slug)
         return setStatus({ text: res.error ?? "Publish failed", err: true });
-      const url = `${location.origin}/?s=${res.slug}`;
+      const url = `${location.origin}/studio?s=${res.slug}`;
       try {
         await navigator.clipboard.writeText(url);
         setStatus({ text: "Public link copied" });

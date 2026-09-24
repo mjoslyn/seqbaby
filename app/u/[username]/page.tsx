@@ -39,7 +39,7 @@ export default async function ProfilePage({
       <div className={styles.page}>
         <div className={styles.pageInner}>
           <nav className={styles.pageNav}>
-            <Link href="/">← studio</Link>
+            <Link href="/studio">← studio</Link>
           </nav>
           <h1 className={styles.pageTitle}>@{res.username}</h1>
           <p className={styles.pageSub}>This profile is private.</p>
@@ -55,7 +55,7 @@ export default async function ProfilePage({
     <div className={styles.page}>
       <div className={styles.pageInner}>
         <nav className={styles.pageNav}>
-          <Link href="/">← studio</Link>
+          <Link href="/studio">← studio</Link>
           {isOwner && <Link href="/settings">edit profile</Link>}
         </nav>
 
@@ -91,7 +91,7 @@ export default async function ProfilePage({
             <div className={styles.repoRow} key={s.id}>
               <div className={styles.repoMain}>
                 {s.share_slug ? (
-                  <Link className={styles.repoName} href={`/?s=${s.share_slug}`}>
+                  <Link className={styles.repoName} href={`/studio?s=${s.share_slug}`}>
                     {s.title}
                   </Link>
                 ) : (
@@ -119,7 +119,7 @@ export default async function ProfilePage({
               </div>
               <ForkButton songId={s.id} />
               {s.share_slug && (
-                <Link className={styles.repoAction} href={`/?s=${s.share_slug}`}>
+                <Link className={styles.repoAction} href={`/studio?s=${s.share_slug}`}>
                   open
                 </Link>
               )}
