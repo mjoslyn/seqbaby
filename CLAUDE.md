@@ -1826,6 +1826,29 @@ pattern it was saved on.
 - Every reader asks for `preview` and, if the database refuses it (0012 not
   applied), asks again without: a list without thumbnails beats no list.
 
+## Likes, and the homepage's order (migration 0016)
+
+- **`song_likes`** is one row per (song, person), a table of its own because
+  every write to `songs` bumps `updated_at`, which is what freshness reads.
+  Rows are readable only by whoever wrote them; the count is the `likes`
+  computed field (SECURITY DEFINER, and it checks the song is readable from
+  the table, not from the row it was handed, since /rpc takes any row).
+  Only a public song can be liked. `supabase/tests/rls_test.sql` covers it.
+- **The heart** is `app/LikeButton.tsx`, on homepage cards, profile rows and
+  the studio byline. The count comes from the server; "did I" is one batched
+  browser read per page (the homepage is cached), writes go through
+  `setLike` (app/songs/actions.ts).
+- **The order** is `app/home/rank.js` (pure, tested): `(likes + 1) /
+  (days since updated_at + 1) ^ 1.5` over the newest 200 public songs, then
+  the cards are fetched for the winners only. Without 0016 it is freshness.
+- **The studio byline** (`app/SongByline.tsx`): a `?s=` / `?open=` link to
+  someone else's song shows "title by @owner" and a heart at the left of the
+  top bar, resolved server-side by `linkedSongCard` (the same cached lookup
+  as the tab title). It hides on `new`, when the open-song slot gets an id
+  (your own song opened or saved), or when a second session arrives
+  (`window.__seqbabySetsApplied`, counted in `applySet`, because the byline
+  streams in behind Suspense and may miss the first).
+
 ## One name, and a step grid for a face (migrations 0013, 0014)
 
 - **The username is the name.** It used to be a display name (set at
