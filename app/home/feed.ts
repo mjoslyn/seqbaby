@@ -1,9 +1,10 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { rankSongs } from "./rank";
+import { patchEngineKey } from "./patchPreview";
 
 // What the homepage shows of the people using the studio: the songs they have
-// published, ranked by likes and freshness together (rank.js), and who made
-// them.
+// published, ranked by likes and freshness together (rank.js), who made
+// them, and the patches they have put in the gallery. Twelve of each.
 //
 // A plain anon client, not the cookie one in lib/supabase/server.ts, on
 // purpose. Reading cookies makes a page dynamic, and the homepage is the one
@@ -34,9 +35,26 @@ export type FeedPerson = {
   songs: number;
 };
 
-export type Feed = { songs: FeedSong[]; people: FeedPerson[] };
+export type FeedPatch = {
+  id: string;
+  name: string;
+  /** The engine key it plays on (`custom` for a legacy Tone config). */
+  engine: string;
+  /** The patch's own `isDrumKit`, when it carries one. */
+  drum: boolean | null;
+  /** A sampler patch's sample id, which is often the only thing that says
+   *  which drum it is. */
+  sampleId: string | null;
+  createdAt: string;
+  owner: FeedSong["owner"];
+};
 
-const EMPTY: Feed = { songs: [], people: [] };
+export type Feed = { songs: FeedSong[]; people: FeedPerson[]; patches: FeedPatch[] };
+
+/** How many of each the homepage shows. */
+export const FEED_SIZE = 12;
+
+const EMPTY: Feed = { songs: [], people: [], patches: [] };
 
 type Row = Record<string, unknown>;
 
@@ -66,14 +84,18 @@ function named(title: unknown): string {
 
 /** Never throws: with no Supabase env, a table missing its migration or the
  *  network down, the homepage still renders, just with nothing in the feed. */
-export async function loadFeed(limit = 24): Promise<Feed> {
+export async function loadFeed(limit = FEED_SIZE): Promise<Feed> {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!url || !key) return EMPTY;
   try {
     const supabase = createClient(url, key, { auth: { persistSession: false } });
-    const [ranked, people] = await Promise.all([rankedIds(supabase, limit), loadPeople(supabase)]);
-    if (!ranked.length) return { songs: [], people };
+    const [ranked, people, patches] = await Promise.all([
+      rankedIds(supabase, limit),
+      loadPeople(supabase, limit),
+      loadPatches(supabase, limit),
+    ]);
+    if (!ranked.length) return { songs: [], people, patches };
 
     // `data->bpm` rather than `data`: a song's data is the whole session,
     // base64 samples included, and a card needs one number out of it.
@@ -95,22 +117,12 @@ export async function loadFeed(limit = 24): Promise<Feed> {
       const r = byRowId.get(c.id);
       return r ? [{ row: r, likes: c.likes }] : [];
     });
-    if (!rows.length) return { songs: [], people };
+    if (!rows.length) return { songs: [], people, patches };
 
-    const ownerIds = [...new Set(rows.map(({ row }) => row.owner_id as string))];
-    const cards = await withOptional(
-      (cols) => supabase.from("profile_cards").select(cols).in("id", ownerIds).returns<Row[]>(),
-      "id,username,display_name",
-      "avatar_grid",
+    const byId = await owners(
+      supabase,
+      rows.map(({ row }) => row.owner_id as string),
     );
-    const byId = new Map<string, NonNullable<FeedSong["owner"]>>();
-    for (const c of cards ?? []) {
-      // One name per person now (migration 0013); display_name is only the
-      // fallback for a profile that has not been through that yet.
-      const handle = str(c.username);
-      const name = handle || str(c.display_name) || "";
-      if (name) byId.set(c.id as string, { handle, name, avatarGrid: str(c.avatar_grid) });
-    }
 
     const songs: FeedSong[] = rows.map(({ row: r, likes }) => ({
       id: r.id as string,
@@ -123,9 +135,69 @@ export async function loadFeed(limit = 24): Promise<Feed> {
       preview: r.preview ?? null,
     }));
 
-    return { songs, people };
+    return { songs, people, patches };
   } catch {
     return EMPTY;
+  }
+}
+
+/** Who owns what, for the byline on a card: `profile_cards`, so a public song
+ *  or patch by someone whose page is private is still attributed. */
+async function owners(
+  supabase: SupabaseClient,
+  ids: string[],
+): Promise<Map<string, NonNullable<FeedSong["owner"]>>> {
+  const byId = new Map<string, NonNullable<FeedSong["owner"]>>();
+  const unique = [...new Set(ids)];
+  if (!unique.length) return byId;
+  const cards = await withOptional(
+    (cols) => supabase.from("profile_cards").select(cols).in("id", unique).returns<Row[]>(),
+    "id,username,display_name",
+    "avatar_grid",
+  );
+  for (const c of cards ?? []) {
+    // One name per person now (migration 0013); display_name is only the
+    // fallback for a profile that has not been through that yet.
+    const handle = str(c.username);
+    const name = handle || str(c.display_name) || "";
+    if (name) byId.set(c.id as string, { handle, name, avatarGrid: str(c.avatar_grid) });
+  }
+  return byId;
+}
+
+/**
+ * The newest patches in the public gallery. Never `config` itself -- a
+ * sampler patch carries its sample as base64 -- only the few fields inside it
+ * that decide what the card draws and plays (patchPreview.js); the card's
+ * play button fetches the rest from /api/patch when pressed.
+ */
+async function loadPatches(supabase: SupabaseClient, limit: number): Promise<FeedPatch[]> {
+  try {
+    const { data, error } = await supabase
+      .from("patches")
+      .select(
+        "id,name,created_at,owner_id,kind:config->>_kind,engine:config->>engineKey,drum:config->isDrumKit,sample:config->sampleSource->>id",
+      )
+      .eq("is_public", true)
+      .order("created_at", { ascending: false })
+      .limit(limit)
+      .returns<Row[]>();
+    if (error || !data?.length) return [];
+    const byId = await owners(
+      supabase,
+      data.map((r) => r.owner_id as string),
+    );
+    return data.map((r) => ({
+      id: r.id as string,
+      name: str(r.name) ?? "a patch with no name",
+      engine: patchEngineKey({ _kind: r.kind, engineKey: r.engine }),
+      drum: typeof r.drum === "boolean" ? r.drum : null,
+      sampleId: str(r.sample),
+      createdAt: r.created_at as string,
+      owner: byId.get(r.owner_id as string) ?? null,
+    }));
+  } catch {
+    return [];
   }
 }
 
@@ -181,8 +253,11 @@ async function rankedIds(
  */
 async function loadPeople(
   supabase: SupabaseClient,
-  limit = 48,
+  show: number,
 ): Promise<FeedPerson[]> {
+  // Read a wider window than is shown, then sort it: the busiest of the
+  // newest 48, not the busiest of the newest twelve.
+  const limit = Math.max(48, show);
   try {
     const profiles = await withOptional(
       (cols) =>
@@ -219,6 +294,7 @@ async function loadPeople(
         },
       }))
       .sort((a, b) => b.person.songs - a.person.songs || a.order - b.order)
+      .slice(0, show)
       .map((e) => e.person);
   } catch {
     return [];

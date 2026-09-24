@@ -42,7 +42,8 @@ env / fx / eq / comp / mod / automation per track.
 ├── app/                       Next.js shell — routing, auth, account UI, server actions
 │   ├── page.tsx               the homepage at /: a toy sequencer, published songs, who made them (home/)
 │   ├── studio/page.tsx        the studio at /studio: SSRs engine DOM, boots engine, AccountBar
-│   ├── home/                  the homepage's parts: feed.ts (public songs, cookie-less), Toy.tsx, Who.tsx
+│   ├── home/                  the homepage's parts: feed.ts (public songs, people, patches; cookie-less), Toy.tsx, Who.tsx,
+│   │                          PatchCard.tsx + patchPreview.js (what a patch card draws and plays)
 │   ├── studioMarkup.ts        engine's static DOM skeleton (raw HTML string)
 │   ├── ScriptLoader.tsx       injects Tone → woscillators → js/main.js in order
 │   ├── AccountBar/SongsMenu/PatchesMenu/SaveButton/OpenSongOnLoad.tsx
@@ -58,6 +59,7 @@ env / fx / eq / comp / mod / automation per track.
 │   ├── JamPanel.tsx           the jam room: who is in it, the connection (Supabase Realtime), the invite link. The engine half is public/js/jam.js
 │   ├── shareCard.ts + shareCopy.js  the link preview, and its sentences (who shared what)
 │   ├── api/share/route.ts     anonymous ?s=<slug> share endpoint
+│   ├── api/patch/route.ts     a public patch's config, for a homepage patch card to play
 │   ├── api/compose/route.ts   starts a compose turn; api/compose/status polls one
 │   └── {songs,patches,profile,auth,account}/actions.ts   Supabase server actions
 ├── public/
@@ -1793,6 +1795,23 @@ to say hello), the songs people have published, and who made them.
   it (migration 0007).
 - **Who is looking is a client island** (`Who.tsx`): a local session read,
   then one `profile_cards` read for the handle. A cached page cannot know.
+- **Twelve of each**: songs, people, patches (`FEED_SIZE` in feed.ts). The
+  people are still sorted over the newest 48 before the twelve are cut, so it
+  is the busiest of a wide window, not of the newest twelve.
+- **Patches are laid out like the songs** (`app/home/PatchCard.tsx`): the
+  newest twelve in the public gallery, each with a play button on the same
+  hidden engine the song cards use. A patch is a sound with no notes, so
+  `patchPreview.js` (pure, tested) writes it a phrase by what the engine is
+  for: a drum voice a rhythm that suits the drum (from the engine key, or a
+  sampler's sample id and the patch name), a bass engine a line with accents
+  and a slide, a pad held chords, anything else a melody. The card draws that
+  same phrase and walks a playhead over it while it plays (`playheadStep` in
+  enginePlayer.ts, read off the frame's Tone transport). The player's key for
+  a patch is `patch:<id>`; its session is fetched from `/api/patch` only when
+  pressed, because the feed never selects `config` (a sampler patch carries
+  its sample as base64), only the few fields inside it the picture needs. A
+  legacy custom-Tone patch is drawn without a play button (`canPreview`): the
+  studio plays one only as a `saved:` engine out of localStorage.
 - **A card's step picture is the song's own** (see "Song previews" below).
   `fingerprint` (hashed from the id) is only the fallback for a database
   without migration 0012.

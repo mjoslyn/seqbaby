@@ -240,6 +240,18 @@
 .card:nth-child(3n) .printOn { fill: #ff9fd0; }
 .card:hover .print { background: #0a0b0d; }
 
+/* A patch card's picture: the phrase its play button plays (PatchCard.tsx),
+   over dim step lanes, with a playhead while it sounds. */
+.rollLane { fill: var(--step); opacity: 0.35; }
+.rollHead { fill: var(--fg); opacity: 0.14; }
+.rollLit { fill: var(--fg); }
+.engineTag {
+  color: var(--accent);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0 5px;
+}
+
 .empty {
   border: 1px dashed var(--border);
   border-radius: 10px;

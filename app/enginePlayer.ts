@@ -1,6 +1,11 @@
 "use client";
 
-// Plays a published song on the homepage with the studio's own engine.
+import { patchSession } from "./home/patchPreview";
+
+// Plays a published song on the homepage with the studio's own engine -- or a
+// published patch, as a one-track session playing a short phrase written for
+// it (home/patchPreview.js). Both are a KEY here: a song's share slug, or
+// `patch:<id>`; everything past fetching the session is the same.
 //
 // Full fidelity means the real engine: every model, the rack, the worklets,
 // samples. That is ~1.7MB, which is why the homepage does not boot it with
@@ -25,6 +30,7 @@ type Api = NonNullable<Window["seqbaby"]>;
 type EngineState = { playing?: boolean; audioCtx?: AudioContext | null };
 
 export type PlayerStatus = "idle" | "loading" | "playing" | "tap" | "error";
+/** `slug` is the key being played: a share slug, or `patchKey(id)`. */
 export type PlayerState = { slug: string | null; status: PlayerStatus };
 
 let current: PlayerState = { slug: null, status: "idle" };
@@ -113,18 +119,33 @@ export function scheduleWarm(): void {
 
 const sessions = new Map<string, Promise<unknown>>();
 
-function loadSession(slug: string): Promise<unknown> {
-  let p = sessions.get(slug);
-  if (!p) {
-    // The same route the studio's own `?s=` load reads.
-    p = fetch(`/api/share?id=${encodeURIComponent(slug)}`)
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`share ${r.status}`))))
-      .then((j: { session?: unknown }) => {
-        if (!j.session) throw new Error("empty session");
-        return j.session;
+/** The key a patch card plays under. Share slugs never carry a colon. */
+export const patchKey = (id: string) => `patch:${id}`;
+
+function fetchSession(key: string): Promise<unknown> {
+  if (key.startsWith("patch:")) {
+    return fetch(`/api/patch?id=${encodeURIComponent(key.slice(6))}`)
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`patch ${r.status}`))))
+      .then((j: { name?: string; config?: unknown }) => {
+        if (j.config == null) throw new Error("empty patch");
+        return patchSession(j.config, j.name);
       });
-    p.catch(() => sessions.delete(slug));
-    sessions.set(slug, p);
+  }
+  // The same route the studio's own `?s=` load reads.
+  return fetch(`/api/share?id=${encodeURIComponent(key)}`)
+    .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`share ${r.status}`))))
+    .then((j: { session?: unknown }) => {
+      if (!j.session) throw new Error("empty session");
+      return j.session;
+    });
+}
+
+function loadSession(key: string): Promise<unknown> {
+  let p = sessions.get(key);
+  if (!p) {
+    p = fetchSession(key);
+    p.catch(() => sessions.delete(key));
+    sessions.set(key, p);
   }
   return p;
 }
@@ -149,6 +170,26 @@ function until(test: () => boolean, ms: number): Promise<boolean> {
     };
     tick();
   });
+}
+
+type FrameTone = { Transport?: { ticks?: number; PPQ?: number; state?: string } };
+
+/**
+ * The step the playing session is on NOW, for a card drawing a playhead, or
+ * null when nothing is playing. Read off the frame's Tone transport, which
+ * counts at the audio clock, rather than `state.tick`, which runs a
+ * scheduler lookahead ahead of what is heard.
+ */
+export function playheadStep(): number | null {
+  const win = frame?.contentWindow as (Window & { Tone?: FrameTone }) | null | undefined;
+  const api = win?.seqbaby;
+  if (!api || !engineState(api).playing) return null;
+  const tr = win?.Tone?.Transport;
+  if (tr && tr.state === "started" && Number.isFinite(tr.ticks) && tr.PPQ) {
+    return Math.floor((tr.ticks as number) / (tr.PPQ / 4));
+  }
+  const tick = (api.state as { tick?: number }).tick;
+  return Number.isFinite(tick) ? (tick as number) : null;
 }
 
 /** The card's button: play this song, stop it, or finish unlocking it. */
