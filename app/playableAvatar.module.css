@@ -1,0 +1,35 @@
+.wrap {
+  position: relative;
+  display: block;
+  flex: none;
+  overflow: hidden;
+  cursor: pointer;
+}
+.overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  background: rgba(10, 11, 14, 0.5);
+  opacity: 0;
+  transition: opacity 0.12s ease;
+  pointer-events: none;
+}
+.overlay svg { filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.6)); }
+.wrap:hover .overlay,
+.wrap:focus-visible .overlay { opacity: 1; }
+.wrap:focus-visible { outline: 2px solid var(--accent-2, #6ee7ff); outline-offset: 2px; }
+/* While it plays the grid is the show: the stop button only comes back on
+   hover, and fainter, so the playhead is not hidden behind a scrim. */
+.playing .overlay { background: rgba(10, 11, 14, 0.25); }
+/* A touch screen has no hover: keep a small play badge in the corner so there
+   is something to say the avatar is tappable. */
+@media (hover: none) {
+  .overlay { opacity: 1; background: transparent; align-items: flex-end; justify-content: flex-end; padding: 3px; }
+  .playing .overlay { opacity: 0; }
+}
+@media (hover: none) {
+  .overlay svg { width: 38%; height: 38%; }
+}

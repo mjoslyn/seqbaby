@@ -17,6 +17,7 @@ import {
   shiftGrid,
   type Grid,
 } from "@/app/profile/avatarGrid";
+import { playAvatar } from "@/app/profile/avatarPlayer";
 import styles from "./avatarEditor.module.css";
 
 // The avatar editor: a 16x16 step grid you paint like the studio's, in the
@@ -25,16 +26,12 @@ import styles from "./avatarEditor.module.css";
 // (paint bucket) and erase. Plus a generator, the precanned shapes and a few
 // sequencer moves. Since it IS a pattern it also plays: rows are notes of a
 // pentatonic scale, top highest, the playhead walks the columns, and each
-// colour has its own waveform.
+// colour has its own waveform (app/profile/avatarPlayer.ts).
 //
 // `value` null means "the one my name gives me" -- saved as null, so that
 // default follows a rename rather than freezing the old name's grid.
 
 type Tool = "draw" | "fill" | "erase";
-
-// Two and a bit octaves of minor pentatonic, highest first (row 0 is the top).
-const NOTES = [91, 88, 86, 84, 81, 79, 76, 74, 72, 69, 67, 64, 62, 60, 57, 55];
-const WAVES: OscillatorType[] = ["triangle", "square", "sawtooth", "sine"];
 
 export default function AvatarEditor({
   value,
@@ -50,7 +47,6 @@ export default function AvatarEditor({
   const [tool, setTool] = useState<Tool>("draw");
   const stroke = useRef<number | null>(null); // the value a drag is painting
   const [step, setStep] = useState(-1);
-  const audio = useRef<{ ctx: AudioContext; timer: number } | null>(null);
   const gridRef = useRef(grid);
   gridRef.current = grid;
 
@@ -74,45 +70,11 @@ export default function AvatarEditor({
     };
   }, []);
 
-  const stop = () => {
-    if (audio.current) {
-      clearInterval(audio.current.timer);
-      void audio.current.ctx.close();
-      audio.current = null;
-    }
-    setStep(-1);
-  };
-  useEffect(() => stop, []);
-
+  const stopRef = useRef<(() => void) | null>(null);
+  useEffect(() => () => stopRef.current?.(), []);
   const play = () => {
-    if (audio.current) return stop();
-    const ctx = new AudioContext();
-    const out = ctx.createGain();
-    out.gain.value = 0.12;
-    out.connect(ctx.destination);
-    let col = 0;
-    const tick = () => {
-      const t = ctx.currentTime + 0.02;
-      const g = gridRef.current;
-      for (let r = 0; r < SIZE; r++) {
-        const v = g.cells[r * SIZE + col];
-        if (!v) continue;
-        const o = ctx.createOscillator();
-        const env = ctx.createGain();
-        o.type = WAVES[v % WAVES.length];
-        o.frequency.value = 440 * 2 ** ((NOTES[r] - 69) / 12);
-        env.gain.setValueAtTime(0.5, t);
-        env.gain.exponentialRampToValueAtTime(0.001, t + 0.2);
-        o.connect(env).connect(out);
-        o.start(t);
-        o.stop(t + 0.22);
-      }
-      setStep(col);
-      col = (col + 1) % SIZE;
-    };
-    void ctx.resume();
-    tick();
-    audio.current = { ctx, timer: window.setInterval(tick, 125) };
+    if (step >= 0) return stopRef.current?.();
+    stopRef.current = playAvatar(() => gridRef.current, setStep);
   };
 
   const down = (i: number) => {
