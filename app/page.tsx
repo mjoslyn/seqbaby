@@ -111,7 +111,7 @@ export default async function HomePage() {
         <div className={styles.heroText}>
           <p className={styles.kicker}>a browser step sequencer · est. whenever you pressed play</p>
           <h1 className={styles.title}>
-            make a beat <span className={styles.wobble}>before</span> your tea goes cold.
+            turn the knobs. all of them. <span className={styles.wobble}>at once.</span>
           </h1>
           <p className={styles.lede}>
             seqbaby is a step sequencer that lives in a tab. hand-built analog and FM models, 808s and
