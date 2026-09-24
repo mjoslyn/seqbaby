@@ -187,6 +187,8 @@
   cursor: pointer; text-decoration: none;
 }
 .repoAction:hover { border-color: #3a3d45; }
+button.repoAction { display: inline-flex; align-items: center; gap: 5px; }
+.repoLiked { color: #ff9fd0; border-color: #5a2e45; }
 .emptyBig { color: #6b7280; font-size: 13px; padding: 16px 0; }
 
 /* danger zone */

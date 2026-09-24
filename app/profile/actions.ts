@@ -26,6 +26,8 @@ export type ProfileSong = {
   forkedFrom: { title: string; username: string | null } | null;
   /** The step preview (migration 0012), absent before that has run. */
   preview?: unknown;
+  /** Hearts (migration 0015), absent before that has run. */
+  likes?: number;
 };
 export type ProfilePatch = {
   id: string;
@@ -177,9 +179,9 @@ export async function getPublicProfile(
   if (!profile.is_public && !isOwner)
     return { private: true, username: profile.username ?? username };
 
-  // `preview` is a computed field (migration 0012); a database without it
-  // fails the whole select, so the page asks again without it rather than
-  // losing the song list over a thumbnail.
+  // `preview` and `likes` are computed fields (migrations 0012, 0015); a
+  // database without one fails the whole select, so the page asks again with
+  // less rather than losing the song list over a thumbnail or a heart.
   const songsQuery = (cols: string) =>
     supabase
       .from("songs")
@@ -190,7 +192,7 @@ export async function getPublicProfile(
       .returns<Omit<ProfileSong, "forkedFrom">[]>();
   const SONG_COLS = "id,title,share_slug,updated_at,forked_from";
   const [songsRes, { data: patches }] = await Promise.all([
-    songsQuery(`${SONG_COLS},preview`),
+    songsQuery(`${SONG_COLS},preview,likes`),
     supabase
       .from("patches")
       .select("id,name,engine_type,created_at")
@@ -201,7 +203,11 @@ export async function getPublicProfile(
 
   // Resolve fork lineage (source title + author handle) for any forked sessions,
   // limited to sources the viewer can read (public or owned).
-  const songs = songsRes.error ? (await songsQuery(SONG_COLS)).data : songsRes.data;
+  let songs = songsRes.data;
+  if (songsRes.error) {
+    const noLikes = await songsQuery(`${SONG_COLS},preview`);
+    songs = noLikes.error ? (await songsQuery(SONG_COLS)).data : noLikes.data;
+  }
   const songRows = songs ?? [];
   const forkIds = [
     ...new Set(songRows.map((s) => s.forked_from).filter(Boolean)),

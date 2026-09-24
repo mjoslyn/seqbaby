@@ -4,6 +4,7 @@ import Who from "./home/Who";
 import SongPreview from "./SongPreview";
 import Avatar from "./Avatar";
 import PlayableAvatar from "./PlayableAvatar";
+import LikeButton from "./LikeButton";
 import { loadFeed, fingerprint, type FeedSong } from "./home/feed";
 import styles from "./home/home.module.css";
 import { SITE_URL, shareCard } from "./shareCard";
@@ -104,6 +105,7 @@ function SongCard({ song }: { song: FeedSong }) {
         )}
         {song.bpm ? <span>{song.bpm} bpm</span> : null}
         <span>{ago(song.updatedAt)}</span>
+        <LikeButton songId={song.id} likes={song.likes} className={styles.like} likedClassName={styles.liked} />
       </span>
     </li>
   );
@@ -161,7 +163,7 @@ export default async function HomePage() {
       <section className={styles.section}>
         <div className={styles.sectionHead}>
           <h2>fresh off the sequencer</h2>
-          <span className={styles.sectionSub}>songs people have published. click one to open it, remix it, fork it.</span>
+          <span className={styles.sectionSub}>songs people have published, the loved and the new first. click one to open it, remix it, fork it.</span>
         </div>
         {songs.length ? (
           <ul className={styles.cards}>

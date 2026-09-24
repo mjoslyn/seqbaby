@@ -1,7 +1,9 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { rankSongs } from "./rank";
 
 // What the homepage shows of the people using the studio: the songs they have
-// published, newest first, and who made them.
+// published, ranked by likes and freshness together (rank.js), and who made
+// them.
 //
 // A plain anon client, not the cookie one in lib/supabase/server.ts, on
 // purpose. Reading cookies makes a page dynamic, and the homepage is the one
@@ -16,6 +18,8 @@ export type FeedSong = {
   slug: string;
   bpm: number | null;
   updatedAt: string;
+  /** Hearts (migration 0015); 0 before that has run. */
+  likes: number;
   owner: { handle: string | null; name: string; avatarGrid: string | null } | null;
   /** The step preview the database computes (migration 0012), or null before
    *  that migration has run -- the card then falls back to `fingerprint`. */
@@ -68,24 +72,32 @@ export async function loadFeed(limit = 24): Promise<Feed> {
   if (!url || !key) return EMPTY;
   try {
     const supabase = createClient(url, key, { auth: { persistSession: false } });
+    const [ranked, people] = await Promise.all([rankedIds(supabase, limit), loadPeople(supabase)]);
+    if (!ranked.length) return { songs: [], people };
+
     // `data->bpm` rather than `data`: a song's data is the whole session,
     // base64 samples included, and a card needs one number out of it.
-    const songsQuery = (cols: string) =>
-      supabase
-        .from("songs")
-        .select(cols)
-        .eq("is_public", true)
-        .not("share_slug", "is", null)
-        .order("updated_at", { ascending: false })
-        .limit(limit)
-        .returns<Row[]>();
-    const [rows, people] = await Promise.all([
-      withOptional(songsQuery, "id,title,share_slug,updated_at,owner_id,bpm:data->bpm", "preview"),
-      loadPeople(supabase),
-    ]);
-    if (!rows?.length) return { songs: [], people };
+    const found = await withOptional(
+      (cols) =>
+        supabase
+          .from("songs")
+          .select(cols)
+          .in(
+            "id",
+            ranked.map((r) => r.id),
+          )
+          .returns<Row[]>(),
+      "id,title,share_slug,updated_at,owner_id,bpm:data->bpm",
+      "preview",
+    );
+    const byRowId = new Map<string, Row>((found ?? []).map((r) => [r.id as string, r]));
+    const rows = ranked.flatMap((c) => {
+      const r = byRowId.get(c.id);
+      return r ? [{ row: r, likes: c.likes }] : [];
+    });
+    if (!rows.length) return { songs: [], people };
 
-    const ownerIds = [...new Set(rows.map((r) => r.owner_id as string))];
+    const ownerIds = [...new Set(rows.map(({ row }) => row.owner_id as string))];
     const cards = await withOptional(
       (cols) => supabase.from("profile_cards").select(cols).in("id", ownerIds).returns<Row[]>(),
       "id,username,display_name",
@@ -100,12 +112,13 @@ export async function loadFeed(limit = 24): Promise<Feed> {
       if (name) byId.set(c.id as string, { handle, name, avatarGrid: str(c.avatar_grid) });
     }
 
-    const songs: FeedSong[] = rows.map((r) => ({
+    const songs: FeedSong[] = rows.map(({ row: r, likes }) => ({
       id: r.id as string,
       title: named(r.title),
       slug: r.share_slug as string,
       bpm: typeof r.bpm === "number" ? Math.round(r.bpm) : null,
       updatedAt: r.updated_at as string,
+      likes,
       owner: byId.get(r.owner_id as string) ?? null,
       preview: r.preview ?? null,
     }));
@@ -114,6 +127,44 @@ export async function loadFeed(limit = 24): Promise<Feed> {
   } catch {
     return EMPTY;
   }
+}
+
+/** How far back the ranking looks. A song older than the newest this-many has
+ *  to have been liked a great deal to outscore them (see rank.js's numbers),
+ *  and ranking every public song ever would count every like ever. */
+const CANDIDATES = 200;
+
+/**
+ * The ids to show, best first. Asks only for what the ranking needs -- no
+ * preview, no bpm -- over a window of the newest published songs, then ranks
+ * them in rank.js. A database without the `likes` field (0015) ranks on
+ * freshness alone, which is what the homepage did before likes existed.
+ */
+async function rankedIds(
+  supabase: SupabaseClient,
+  limit: number,
+): Promise<{ id: string; likes: number }[]> {
+  const rows = await withOptional(
+    (cols) =>
+      supabase
+        .from("songs")
+        .select(cols)
+        .eq("is_public", true)
+        .not("share_slug", "is", null)
+        .order("updated_at", { ascending: false })
+        .limit(CANDIDATES)
+        .returns<Row[]>(),
+    "id,updated_at",
+    "likes",
+  );
+  const candidates = (rows ?? []).map((r) => ({
+    id: r.id as string,
+    updatedAt: r.updated_at as string,
+    likes: typeof r.likes === "number" ? r.likes : 0,
+  }));
+  return rankSongs(candidates)
+    .slice(0, limit)
+    .map(({ id, likes }) => ({ id, likes }));
 }
 
 /**

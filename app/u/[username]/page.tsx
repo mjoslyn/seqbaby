@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { getPublicProfile } from "@/app/profile/actions";
 import ForkButton from "./ForkButton";
+import LikeButton from "@/app/LikeButton";
 import PlayableAvatar from "@/app/PlayableAvatar";
 import SongPreview from "@/app/SongPreview";
 import styles from "@/app/ui.module.css";
@@ -115,6 +116,12 @@ export default async function ProfilePage({
                   updated {fmtDate(s.updated_at)}
                 </div>
               </div>
+              <LikeButton
+                songId={s.id}
+                likes={s.likes ?? 0}
+                className={styles.repoAction}
+                likedClassName={styles.repoLiked}
+              />
               <ForkButton songId={s.id} />
               {s.share_slug && (
                 <Link className={styles.repoAction} href={`/studio?s=${s.share_slug}`}>

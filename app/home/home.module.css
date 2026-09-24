@@ -217,6 +217,19 @@
 .print { display: block; height: 56px; background: var(--bg); border-radius: 6px; padding: 5px; }
 .printSvg { display: block; width: 100%; height: 100%; }
 .cardOwner { display: inline-flex; align-items: center; gap: 5px; }
+/* The heart sits at the end of the meta line. Its target is padded out to
+   32px so a thumb finds it, and pulled back with a negative margin so the
+   line does not grow. */
+.like {
+  margin: -8px -6px -8px auto;
+  padding: 8px 6px;
+  min-height: 32px;
+  display: inline-flex; align-items: center; gap: 4px;
+  background: none; border: 0; color: var(--fg-dim);
+  font: inherit; font-size: 11px; cursor: pointer;
+}
+.like:hover { color: #ff9fd0; }
+.liked { color: #ff9fd0; }
 .printOn { fill: var(--accent); }
 .printOff { fill: var(--step); }
 .card:nth-child(3n + 2) .printOn { fill: var(--accent-2); }
