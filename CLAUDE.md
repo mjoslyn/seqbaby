@@ -59,7 +59,7 @@ env / fx / eq / comp / mod / automation per track.
 │   ├── JamPanel.tsx           the jam room: who is in it, the connection (Supabase Realtime), the invite link. The engine half is public/js/jam.js
 │   ├── shareCard.ts + shareCopy.js  the link preview, and its sentences (who shared what)
 │   ├── api/share/route.ts     anonymous ?s=<slug> share endpoint
-│   ├── api/patch/route.ts     a public patch's config, for a homepage patch card to play
+│   ├── api/patch/[id]/route.ts  a public patch's config, for a homepage patch card to play
 │   ├── api/compose/route.ts   starts a compose turn; api/compose/status polls one
 │   └── {songs,patches,profile,auth,account}/actions.ts   Supabase server actions
 ├── public/
@@ -1807,8 +1807,10 @@ to say hello), the songs people have published, and who made them.
   and a slide, a pad held chords, anything else a melody. The card draws that
   same phrase and walks a playhead over it while it plays (`playheadStep` in
   enginePlayer.ts, read off the frame's Tone transport). The player's key for
-  a patch is `patch:<id>`; its session is fetched from `/api/patch` only when
-  pressed, because the feed never selects `config` (a sampler patch carries
+  a patch is `patch:<id>`; its session is fetched from `/api/patch/<id>` only when
+  pressed (the id in the path, never `?id=`: the response is CDN-cached and
+  Netlify's cache key drops the query string, which served one patch to every
+  card), because the feed never selects `config` (a sampler patch carries
   its sample as base64), only the few fields inside it the picture needs. A
   legacy custom-Tone patch is drawn without a play button (`canPreview`): the
   studio plays one only as a `saved:` engine out of localStorage.

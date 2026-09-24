@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-// GET /api/patch?id=<uuid> -> { name, config }
+// GET /api/patch/<uuid> -> { name, config }
 //
 // A published patch's whole config, for the homepage's patch cards to play
 // (app/home/patchPreview.js turns it into a one-track session). The feed
@@ -10,8 +10,13 @@ import { createClient } from "@supabase/supabase-js";
 //
 // A plain anon client and only public rows, for feed.ts's reason: nothing a
 // session could add to the answer, and no cookies means a cacheable response.
-export async function GET(req: Request) {
-  const id = new URL(req.url).searchParams.get("id") ?? "";
+//
+// The id is in the PATH, not the query, and that is load-bearing: the
+// response is CDN-cached, and Netlify's cache key leaves the query string out
+// unless told otherwise, so `?id=` served whichever patch was fetched first
+// for every id -- every card on the homepage played the same patch.
+export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   if (!/^[0-9a-f-]{36}$/i.test(id)) return NextResponse.json({ error: "bad id" }, { status: 400 });
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
