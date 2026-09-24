@@ -52,9 +52,17 @@ test("decode refuses anything the database would refuse", () => {
     assert.equal(decodeGrid(bad), null, String(bad).slice(0, 12));
 });
 
-test("the migration's CHECK is the same pattern", () => {
-  const sql = readFileSync(new URL("../supabase/migrations/0014_avatar_grid.sql", import.meta.url), "utf8");
-  assert.ok(sql.includes(`'${AVATAR_GRID_RE.source}'`), "CHECK and AVATAR_GRID_RE disagree");
+test("the migration's CHECK is the same rule", () => {
+  // 0015 split 0014's `^[0-9a-d]{256}$` into a length and an alphabet,
+  // because Postgres refuses a regex repetition count above 255.
+  const sql = readFileSync(new URL("../supabase/migrations/0015_avatar_grid_check.sql", import.meta.url), "utf8");
+  const [, alphabet, count] = AVATAR_GRID_RE.source.match(/^\^(\[[^\]]+\])\{(\d+)\}\$$/);
+  assert.equal(Number(count), N);
+  assert.ok(sql.includes(`char_length(avatar_grid) = ${count}`), "CHECK length and AVATAR_GRID_RE disagree");
+  assert.ok(sql.includes(`avatar_grid !~ '[^${alphabet.slice(1)}'`), "CHECK alphabet and AVATAR_GRID_RE disagree");
+  const code = sql.replace(/--.*$/gm, "");
+  for (const [, n] of code.matchAll(/\{(\d+)(?:,\d*)?\}/g))
+    assert.ok(Number(n) <= 255, `a Postgres regex cannot repeat ${n} times`);
 });
 
 test("every shape fills the grid, drawn halves mirror, and x takes the chosen colour", () => {
