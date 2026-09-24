@@ -1,0 +1,70 @@
+/* The play button (PlayButton.tsx). Always visible, since it is the
+   quickest way to find out whether a song is worth opening, but quiet: an
+   outline at rest, filled only on hover and while it plays. */
+
+.play {
+  display: grid;
+  place-items: center;
+  flex: none;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid rgba(194, 240, 74, 0.45);
+  background: rgba(10, 11, 13, 0.8);
+  color: var(--accent, #c2f04a);
+  cursor: pointer;
+  position: relative;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease, transform 0.12s ease;
+}
+.play svg { width: 45%; height: 45%; }
+.play:hover { background: var(--accent, #c2f04a); color: #0a0b0d; border-color: var(--accent, #c2f04a); }
+.play:active { transform: scale(0.95); }
+.play:focus-visible { outline: 2px solid var(--accent-2, #6ee7ff); outline-offset: 2px; }
+
+/* Playing: filled, with a slow soft pulse, so which song is sounding still
+   reads from across the page. */
+.play[data-status="playing"] {
+  background: var(--accent, #c2f04a);
+  color: #0a0b0d;
+  border-color: var(--accent, #c2f04a);
+  animation: ring 1.8s ease-out infinite;
+}
+@keyframes ring {
+  0% { box-shadow: 0 0 0 0 rgba(194, 240, 74, 0.35); }
+  100% { box-shadow: 0 0 0 6px rgba(194, 240, 74, 0); }
+}
+.play[data-status="tap"] { color: var(--accent-2, #6ee7ff); border-color: var(--accent-2, #6ee7ff); }
+.play[data-status="error"] { color: #ff6b6b; border-color: #ff6b6b; }
+@media (prefers-reduced-motion: reduce) {
+  .play[data-status="playing"] { animation: none; }
+}
+
+/* Drawn small, but a finger gets its 44px: an invisible ring around it. */
+@media (pointer: coarse) {
+  .play::before { content: ""; position: absolute; inset: -8px; border-radius: 50%; }
+}
+
+/* Over a homepage card's step picture, at its right-hand end. The card is the
+   positioned ancestor (home.module.css). */
+.card {
+  position: absolute;
+  top: 24px;
+  right: 22px;
+  z-index: 1;
+  width: 32px;
+  height: 32px;
+}
+
+/* Inline in a profile row, ahead of the preview. */
+.row { width: 28px; height: 28px; }
+
+.word { font: 700 9px/1 ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+.spin {
+  width: 40%;
+  height: 40%;
+  border-radius: 50%;
+  border: 2px solid rgba(194, 240, 74, 0.3);
+  border-top-color: var(--accent, #c2f04a);
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }

@@ -10,6 +10,8 @@ import JamPanel from "@/app/JamPanel";
 import { getOpenSong } from "@/app/songs/openSong";
 import { IconMenu } from "@/app/menuIcons";
 import Avatar from "@/app/Avatar";
+import SongByline from "@/app/SongByline";
+import type { LinkedSongCard } from "@/app/songs/linkedSongTitle";
 import styles from "@/app/ui.module.css";
 
 // A dedicated account bar that sits above the transport (rendered as the first
@@ -30,6 +32,7 @@ export function AccountBar({
   username,
   avatarGrid = null,
   serverKey = false,
+  viewing = null,
 }: {
   name: string | null;
   username?: string | null;
@@ -40,6 +43,8 @@ export function AccountBar({
    *  needs it to know whether composing on the SITE's key is on offer at all
    *  — a visitor's own key works either way. */
   serverKey?: boolean;
+  /** Someone else's song, named by the URL: drawn as "title by @owner". */
+  viewing?: LinkedSongCard | null;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const barRef = useRef<HTMLDivElement | null>(null);
@@ -135,6 +140,7 @@ export function AccountBar({
       <a className={styles.manualLink} href="/manual" title="how seqbaby works">
         manual
       </a>
+      {viewing && <SongByline song={viewing} />}
       <span ref={beatSlotRef} className={styles.beatSlot} aria-hidden />
       <button
         className={styles.menuBtn}

@@ -395,6 +395,99 @@ begin
 end $$;
 
 \echo ''
+\echo '== song_likes: a count is public, who liked is not =='
+
+-- Alice likes her own public song, as herself. Inserted as the table owner so
+-- the fixture does not depend on the policy under test.
+insert into public.song_likes (song_id, user_id) values
+  ('a0000000-0000-4000-8000-00000000000a', 'a11ce000-0000-4000-8000-000000000001');
+
+begin;
+set local role anon;
+do $$
+declare n bigint;
+begin
+  select count(*) into n from public.song_likes;
+  if n <> 0 then raise exception 'FAIL  anon read % like rows (who liked what is private)', n; end if;
+  raise notice 'PASS  anon cannot read like rows';
+
+  select s.likes into n from public.songs s where s.id = 'a0000000-0000-4000-8000-00000000000a';
+  if n <> 1 then raise exception 'FAIL  anon sees % likes on alice''s public song, expected 1', n; end if;
+  raise notice 'PASS  anon sees the like COUNT on a public song';
+
+  -- A row handed to the function by hand (what /rpc/likes allows), claiming a
+  -- private song is public: the count must come from the table, not the row.
+  select public.likes(row('a0000000-0000-4000-8000-00000000000b', 'a11ce000-0000-4000-8000-000000000001',
+         'x', '{}'::jsonb, true, null, null, now(), now(), null, false, false)::public.songs) into n;
+  if n <> 0 then raise exception 'FAIL  a forged row read a private song''s like count'; end if;
+  raise notice 'PASS  a forged row cannot read a private song''s count';
+end $$;
+rollback;
+
+begin;
+set local role authenticated;
+set local request.jwt.claims = '{"sub":"b0b00000-0000-4000-8000-000000000002","role":"authenticated"}';
+do $$
+declare n bigint;
+begin
+  select count(*) into n from public.song_likes;
+  if n <> 0 then raise exception 'FAIL  bob read alice''s like'; end if;
+  raise notice 'PASS  bob cannot see who else liked a song';
+
+  insert into public.song_likes (song_id, user_id)
+    values ('a0000000-0000-4000-8000-00000000000a', 'b0b00000-0000-4000-8000-000000000002');
+  select s.likes into n from public.songs s where s.id = 'a0000000-0000-4000-8000-00000000000a';
+  if n <> 2 then raise exception 'FAIL  bob''s like did not count (% likes)', n; end if;
+  raise notice 'PASS  bob can like a public song';
+
+  begin
+    insert into public.song_likes (song_id, user_id)
+      values ('a0000000-0000-4000-8000-00000000000a', 'a11ce000-0000-4000-8000-000000000001');
+    raise exception 'FAIL  bob liked a song in alice''s name';
+  exception when insufficient_privilege or unique_violation then
+    raise notice 'PASS  bob cannot like in alice''s name';
+  end;
+
+  begin
+    insert into public.song_likes (song_id, user_id)
+      values ('a0000000-0000-4000-8000-00000000000b', 'b0b00000-0000-4000-8000-000000000002');
+    raise exception 'FAIL  bob liked alice''s PRIVATE song';
+  exception when insufficient_privilege then
+    raise notice 'PASS  bob cannot like a private song';
+  end;
+
+  with d as (
+    delete from public.song_likes
+     where user_id = 'a11ce000-0000-4000-8000-000000000001' returning 1)
+  select count(*) into n from d;
+  if n <> 0 then raise exception 'FAIL  bob removed alice''s like'; end if;
+  raise notice 'PASS  bob cannot remove alice''s like';
+end $$;
+rollback;
+
+begin;
+set local role authenticated;
+set local request.jwt.claims = '{"sub":"a11ce000-0000-4000-8000-000000000001","role":"authenticated"}';
+do $$
+declare n bigint;
+begin
+  -- Alice's own like on her own public song is hers to see.
+  select count(*) into n from public.song_likes;
+  if n <> 1 then raise exception 'FAIL  alice sees % of her own likes, expected 1', n; end if;
+  raise notice 'PASS  alice sees her own like';
+
+  -- Her own private song: readable to her, and still not likeable.
+  begin
+    insert into public.song_likes (song_id, user_id)
+      values ('a0000000-0000-4000-8000-00000000000b', 'a11ce000-0000-4000-8000-000000000001');
+    raise exception 'FAIL  alice liked her own PRIVATE song';
+  exception when insufficient_privilege then
+    raise notice 'PASS  a private song cannot be liked, even by its owner';
+  end;
+end $$;
+rollback;
+
+\echo ''
 \echo '== patches =='
 
 begin;

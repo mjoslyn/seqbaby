@@ -209,6 +209,10 @@
   transition: transform 0.15s ease, border-color 0.15s ease;
 }
 .card:hover { transform: translateY(-3px) rotate(-0.4deg); border-color: var(--accent); }
+/* Positioned for the play button (app/playButton.module.css), which floats
+   over the step picture; a playing card keeps the accent border. */
+.card { position: relative; }
+.card:has([aria-pressed="true"]) { border-color: var(--accent); }
 .cardLink { display: flex; flex-direction: column; gap: 10px; color: var(--fg); text-decoration: none; }
 .cardTitle { font-weight: 700; font-size: 14px; overflow-wrap: anywhere; }
 .cardMeta { display: flex; flex-wrap: wrap; gap: 4px 12px; color: var(--fg-dim); font-size: 11px; }
@@ -217,6 +221,19 @@
 .print { display: block; height: 56px; background: var(--bg); border-radius: 6px; padding: 5px; }
 .printSvg { display: block; width: 100%; height: 100%; }
 .cardOwner { display: inline-flex; align-items: center; gap: 5px; }
+/* The heart sits at the end of the meta line. Its target is padded out to
+   32px so a thumb finds it, and pulled back with a negative margin so the
+   line does not grow. */
+.like {
+  margin: -8px -6px -8px auto;
+  padding: 8px 6px;
+  min-height: 32px;
+  display: inline-flex; align-items: center; gap: 4px;
+  background: none; border: 0; color: var(--fg-dim);
+  font: inherit; font-size: 11px; cursor: pointer;
+}
+.like:hover { color: #ff9fd0; }
+.liked { color: #ff9fd0; }
 .printOn { fill: var(--accent); }
 .printOff { fill: var(--step); }
 .card:nth-child(3n + 2) .printOn { fill: var(--accent-2); }

@@ -9,6 +9,8 @@ import { loadPatches, savePatch, storePatches } from "./catalog.js";
 import { canRedo, canUndo, redo, undo } from "./history.js";
 import { flushJam, inJam, jamState, jamTogglePlay, receiveJamPatch, receiveJamPhase, receiveJamState, startJam, stopJam } from "./jam.js";
 import { mergeSet } from "./liveSet.js";
+import { primeAudioForIOS } from "./main.js";
+import { startPlayback, stopPlayback } from "./transport.js";
 import {
   applySet,
   applyTrackPatch,
@@ -92,6 +94,16 @@ export function installAppApi() {
       togglePlay: jamTogglePlay,
       receivePhase: receiveJamPhase,
     },
+    // The transport, for a shell that plays a song without the studio's own
+    // buttons: the homepage's song cards run this engine in a hidden frame
+    // (app/home/enginePlayer.ts). `play` / `stop` are idempotent, unlike the
+    // play button's toggle. `unlock` is the iOS priming the first gesture
+    // does, for a caller whose gesture landed in another frame: call it
+    // synchronously inside a click and a `play` stuck on a suspended context
+    // goes through.
+    play: () => startPlayback(),
+    stop: () => stopPlayback(),
+    unlock: primeAudioForIOS,
     // live engine state (read-only handle; mutate via the functions above)
     get state() {
       return state;

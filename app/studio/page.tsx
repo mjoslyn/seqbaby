@@ -12,7 +12,7 @@ import { AccountBar } from "@/app/AccountBar";
 import styles from "@/app/ui.module.css";
 import { createClient } from "@/lib/supabase/server";
 import { SITE_DESCRIPTION, SITE_URL, shareCard } from "@/app/shareCard";
-import { linkedSong, jamHostName } from "@/app/songs/linkedSongTitle";
+import { linkedSong, linkedSongCard, jamHostName } from "@/app/songs/linkedSongTitle";
 import { songShareTitle, jamShareTitle } from "@/app/shareCopy";
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
@@ -101,11 +101,22 @@ export async function generateMetadata({
 // network twice before a single byte of the studio — or of the engine's
 // preload hints — reached the browser. Isolating it behind <Suspense> lets the
 // shell stream immediately and the bar fill in when it resolves.
-async function AccountBarSlot() {
+async function AccountBarSlot({ searchParams }: { searchParams: SearchParams }) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const sp = await searchParams;
+  const slug = one(sp.s);
+  const openId = one(sp.open);
+  // Side by side: the byline's lookup does not need the user, only the
+  // decision whether to show it does.
+  const [
+    {
+      data: { user },
+    },
+    linked,
+  ] = await Promise.all([supabase.auth.getUser(), linkedSongCard(slug, openId)]);
+  // Your own song needs no byline: the songs menu and the save button already
+  // say what it is.
+  const viewing = linked && linked.ownerId !== user?.id ? linked : null;
 
   // Resolve a display name + handle. Tolerates the profiles table not existing
   // yet (before the migration is applied) by falling back to the email.
@@ -138,6 +149,7 @@ async function AccountBarSlot() {
       username={username}
       avatarGrid={avatarGrid}
       serverKey={!!process.env.ANTHROPIC_API_KEY}
+      viewing={viewing}
     />
   );
 }
@@ -161,16 +173,24 @@ function AccountBarFallback() {
 // the wrapper removes its box so the sticky header/layout behave exactly as they
 // did when this markup lived directly in <body>. EngineScripts then boots the
 // engine straight from the document, in the required order.
-export default function StudioPage() {
+//
+// `?embed` is the studio as a player: the homepage's song cards load it in a
+// hidden frame (app/enginePlayer.ts) and drive `window.seqbaby` from
+// outside. No account bar (two Supabase round trips nobody sees), and no deep
+// link or default template, which would race the song the page hands it.
+export default async function StudioPage({ searchParams }: { searchParams: SearchParams }) {
+  const embed = (await searchParams).embed !== undefined;
   return (
     <>
       {/* First in the document: it covers the un-booted skeleton below, and it
           can only do that if the parser reaches it before everything else. */}
       <Preloader />
       <EnginePreload />
-      <Suspense fallback={<AccountBarFallback />}>
-        <AccountBarSlot />
-      </Suspense>
+      {!embed && (
+        <Suspense fallback={<AccountBarFallback />}>
+          <AccountBarSlot searchParams={searchParams} />
+        </Suspense>
+      )}
       {/* The engine's deferred scripts run before React hydrates and immediately
           rewrite this subtree (populating the scale/engine selects, the pattern
           grid, the starter tracks), so React always finds the DOM different from
@@ -185,8 +205,8 @@ export default function StudioPage() {
       />
       <EngineScripts />
       <ScriptLoader />
-      <OpenSongOnLoad />
-      <DefaultTemplate />
+      {!embed && <OpenSongOnLoad />}
+      {!embed && <DefaultTemplate />}
     </>
   );
 }

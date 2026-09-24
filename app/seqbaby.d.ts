@@ -6,6 +6,11 @@ declare global {
     seqbaby?: {
       version: number;
       serializeSet: () => unknown;
+      /** Start / stop the transport (idempotent, unlike the play button). */
+      play: () => Promise<void>;
+      stop: () => Promise<void>;
+      /** Prime a suspended AudioContext; call inside a user gesture. */
+      unlock: () => void;
       applySet: (data: unknown) => {
         version: number;
         warnings: string[];
@@ -98,5 +103,8 @@ declare global {
     // HTML is parsed from the document (i.e. not on a client-side navigation).
     // ScriptLoader reads it to decide whether to run its fallback boot.
     __seqbabyServerBoot?: number;
+    // How many whole sessions applySet has loaded since boot (session.js).
+    // SongByline reads it to tell the linked song from whatever came after.
+    __seqbabySetsApplied?: number;
   }
 }

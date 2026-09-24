@@ -1799,6 +1799,34 @@ to say hello), the songs people have published, and who made them.
 - `mcp/audition.mjs` points a bare site URL at `/studio` (`studioUrl`), so
   `SEQBABY_URL=http://localhost:3000` keeps working.
 
+## Playing a song where it is listed (`app/enginePlayer.ts` + `app/PlayButton.tsx`)
+
+Homepage cards and profile rows carry a play button that plays the song with
+the real engine. The engine is DEFERRED, not bundled: the pages ship none of
+it, and it loads on its own once they have.
+
+- **One hidden, same-origin frame** on `/studio?embed`, driven through
+  `window.seqbaby` (`applySet`, `play`, `stop`, `unlock`) the way
+  `mcp/audition.mjs` drives it. The next song is an `applySet` into the same
+  engine, not a second one. A frame rather than the engine in the page's own
+  document because the engine owns its document (keyboard, undo, ~1000
+  controls).
+- **`scheduleWarm`** loads the frame after the page's `load` event, in an idle
+  callback, so a press usually finds it ready (measured: 309ms from click to
+  sound with the session prefetched). Skipped on Save-Data and 2g, where the
+  first press loads it instead. The session is prefetched when the pointer
+  reaches a button or it gets focus.
+- **`?embed`** drops the account bar, `OpenSongOnLoad` and `DefaultTemplate`
+  (the template would race the song the page hands in), and main.js skips
+  the audio gate dialog.
+- **Audio unlock.** The click calls the warm engine's `unlock` synchronously,
+  inside the gesture, which is what Safari needs. If the press beat the
+  warm-up, Chrome still lets a same-origin frame start audio after the parent
+  was clicked; Safari does not, so if the context is not running 2.5s after
+  `play`, the button says `tap` and the next press unlocks inside that. `play`
+  is raced, never awaited: Tone.start's resume does not settle without a
+  gesture.
+
 ## Song previews (`preview`, migration 0012)
 
 Every song card (homepage feed, a profile page, the studio's songs menu)
@@ -1825,6 +1853,29 @@ pattern it was saved on.
   that is what they play.
 - Every reader asks for `preview` and, if the database refuses it (0012 not
   applied), asks again without: a list without thumbnails beats no list.
+
+## Likes, and the homepage's order (migration 0016)
+
+- **`song_likes`** is one row per (song, person), a table of its own because
+  every write to `songs` bumps `updated_at`, which is what freshness reads.
+  Rows are readable only by whoever wrote them; the count is the `likes`
+  computed field (SECURITY DEFINER, and it checks the song is readable from
+  the table, not from the row it was handed, since /rpc takes any row).
+  Only a public song can be liked. `supabase/tests/rls_test.sql` covers it.
+- **The heart** is `app/LikeButton.tsx`, on homepage cards, profile rows and
+  the studio byline. The count comes from the server; "did I" is one batched
+  browser read per page (the homepage is cached), writes go through
+  `setLike` (app/songs/actions.ts).
+- **The order** is `app/home/rank.js` (pure, tested): `(likes + 1) /
+  (days since updated_at + 1) ^ 1.5` over the newest 200 public songs, then
+  the cards are fetched for the winners only. Without 0016 it is freshness.
+- **The studio byline** (`app/SongByline.tsx`): a `?s=` / `?open=` link to
+  someone else's song shows "title by @owner" and a heart at the left of the
+  top bar, resolved server-side by `linkedSongCard` (the same cached lookup
+  as the tab title). It hides on `new`, when the open-song slot gets an id
+  (your own song opened or saved), or when a second session arrives
+  (`window.__seqbabySetsApplied`, counted in `applySet`, because the byline
+  streams in behind Suspense and may miss the first).
 
 ## One name, and a step grid for a face (migrations 0013, 0014)
 

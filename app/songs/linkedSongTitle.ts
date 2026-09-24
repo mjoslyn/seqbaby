@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { getShareMeta } from "@/lib/api.js";
 
@@ -41,13 +42,27 @@ export async function ownerName(
   supabase: Awaited<ReturnType<typeof createClient>>,
   ownerId: unknown,
 ): Promise<string | null> {
+  return (await ownerCard(supabase, ownerId))?.name ?? null;
+}
+
+type OwnerCard = { name: string; handle: string | null; avatarGrid: string | null };
+
+/** ownerName's lookup, with the handle and avatar the studio's byline draws. */
+async function ownerCard(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  ownerId: unknown,
+): Promise<OwnerCard | null> {
   if (typeof ownerId !== "string" || !UUID.test(ownerId)) return null;
-  const { data } = await supabase
-    .from("profile_cards")
-    .select("username,display_name")
-    .eq("id", ownerId)
-    .maybeSingle();
-  return cardName(data);
+  const q = (cols: string) =>
+    supabase.from("profile_cards").select(cols).eq("id", ownerId).maybeSingle<Record<string, unknown>>();
+  // avatar_grid is 0014's; without it the select fails whole, so ask again.
+  let res = await q("username,display_name,avatar_grid");
+  if (res.error) res = await q("username,display_name");
+  const name = cardName(res.data);
+  if (!name) return null;
+  const handle = typeof res.data?.username === "string" && res.data.username.trim() ? res.data.username.trim() : null;
+  const grid = typeof res.data?.avatar_grid === "string" ? res.data.avatar_grid : null;
+  return { name, handle, avatarGrid: grid };
 }
 
 export type LinkedSong = {
@@ -55,6 +70,17 @@ export type LinkedSong = {
   title: string;
   /** Whose it is, or null when that could not be resolved. */
   owner: string | null;
+};
+
+/** What the studio's byline needs (app/SongByline.tsx): linkedSong's answer
+ *  plus who, as a link and a face, and the song's row for the heart. */
+export type LinkedSongCard = LinkedSong & {
+  /** The songs row, or null for a quick anonymous share (no row, no heart). */
+  songId: string | null;
+  ownerId: string | null;
+  ownerHandle: string | null;
+  ownerAvatarGrid: string | null;
+  likes: number;
 };
 
 /**
@@ -68,42 +94,59 @@ export async function linkedSong(
   slug: string | null,
   songId: string | null,
 ): Promise<LinkedSong | null> {
+  const card = await linkedSongCard(slug, songId);
+  return card ? { title: card.title, owner: card.owner } : null;
+}
+
+/** linkedSong, with everything the studio's byline draws. One lookup for
+ *  both, so the tab's title and the byline under it cannot disagree. */
+// Cached per request: generateMetadata (the tab's title) and the account
+// bar (the byline) both ask, and should cost one lookup between them.
+export const linkedSongCard = cache(async function linkedSongCard(
+  slug: string | null,
+  songId: string | null,
+): Promise<LinkedSongCard | null> {
   if (!slug && !songId) return null;
   try {
     const supabase = await createClient();
-    let row: { title?: unknown; owner_id?: unknown } | null = null;
+    type SongRow = { id?: unknown; title?: unknown; owner_id?: unknown; likes?: unknown };
+    // `likes` is 0016's; a database without it fails the select whole.
+    const read = async (filter: (cols: string) => PromiseLike<{ data: SongRow | null; error: unknown }>) => {
+      const first = await filter("id,title,owner_id,likes");
+      return first.error ? (await filter("id,title,owner_id")).data : first.data;
+    };
+    let row: SongRow | null = null;
     if (slug) {
       // Same lookup as app/api/share/route.ts.
-      const { data } = await supabase
-        .from("songs")
-        .select("title,owner_id")
-        .eq("share_slug", slug)
-        .eq("is_public", true)
-        .maybeSingle();
-      row = data;
+      row = await read((cols) =>
+        supabase.from("songs").select(cols).eq("share_slug", slug).eq("is_public", true).maybeSingle<SongRow>(),
+      );
     } else {
       // A non-uuid would come back as a 400 from PostgREST; skip the round trip.
       if (!songId || !UUID.test(songId)) return null;
       // No is_public filter: RLS decides. A crawler is anonymous and sees only
       // published songs, while the owner following their own link gets the real
       // title in the tab.
-      const { data } = await supabase
-        .from("songs")
-        .select("title,owner_id")
-        .eq("id", songId)
-        .maybeSingle();
-      row = data;
+      row = await read((cols) => supabase.from("songs").select(cols).eq("id", songId).maybeSingle<SongRow>());
     }
     const title = named(row?.title);
     if (title) {
-      let owner: string | null = null;
+      let owner: OwnerCard | null = null;
       try {
-        owner = await ownerName(supabase, row?.owner_id);
+        owner = await ownerCard(supabase, row?.owner_id);
       } catch {
         // The title is enough for a card; the name is the better half of it,
         // not the whole of it.
       }
-      return { title, owner };
+      return {
+        title,
+        owner: owner?.name ?? null,
+        songId: typeof row?.id === "string" ? row.id : null,
+        ownerId: typeof row?.owner_id === "string" ? row.owner_id : null,
+        ownerHandle: owner?.handle ?? null,
+        ownerAvatarGrid: owner?.avatarGrid ?? null,
+        likes: typeof row?.likes === "number" ? row.likes : 0,
+      };
     }
     if (!slug) return null;
     // A slug that names no published song may still be a quick, anonymous
@@ -115,21 +158,29 @@ export async function linkedSong(
     const meta = await getShareMeta({ id: slug });
     const shareTitle = named(meta?.title);
     if (!shareTitle) return null;
-    let shareOwner: string | null = null;
+    let shareOwner: OwnerCard | null = null;
     if (meta?.ownerId) {
       try {
-        shareOwner = await ownerName(supabase, meta.ownerId);
+        shareOwner = await ownerCard(supabase, meta.ownerId);
       } catch {
         /* same tradeoff as above */
       }
     }
-    return { title: shareTitle, owner: shareOwner };
+    return {
+      title: shareTitle,
+      owner: shareOwner?.name ?? null,
+      songId: null,
+      ownerId: typeof meta?.ownerId === "string" ? meta.ownerId : null,
+      ownerHandle: shareOwner?.handle ?? null,
+      ownerAvatarGrid: shareOwner?.avatarGrid ?? null,
+      likes: 0,
+    };
   } catch {
     // The engine is meant to run with no Supabase env at all, where creating
     // the client throws. A link preview is never worth failing the page over.
     return null;
   }
-}
+});
 
 /**
  * The name on a jam invite's card. A jam room is a Realtime channel and

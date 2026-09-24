@@ -972,3 +972,41 @@ export async function saveSongChat(
   if (error) return { error: error.message };
   return { ok: true };
 }
+
+/**
+ * Heart a published song, or take the heart back. Idempotent both ways: a
+ * second like is the primary key refusing a duplicate, which is the answer
+ * wanted, and an unlike of nothing deletes nothing. RLS (migration 0016) is
+ * what keeps a like to your own name and to a song that is public.
+ *
+ * Returns the count as it stands after the write, so the heart can show the
+ * real number rather than its own guess -- the page it sits on is cached.
+ */
+export async function setLike(
+  songId: string,
+  liked: boolean,
+): Promise<{ liked?: boolean; likes?: number; error?: string }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Not signed in" };
+
+  if (liked) {
+    const { error } = await supabase
+      .from("song_likes")
+      .upsert({ song_id: songId, user_id: user.id }, { onConflict: "song_id,user_id", ignoreDuplicates: true });
+    if (error) return { error: error.message };
+  } else {
+    const { error } = await supabase
+      .from("song_likes")
+      .delete()
+      .eq("song_id", songId)
+      .eq("user_id", user.id);
+    if (error) return { error: error.message };
+  }
+
+  const { data } = await supabase.from("songs").select("likes").eq("id", songId).maybeSingle();
+  const likes = typeof data?.likes === "number" ? data.likes : undefined;
+  return { liked, likes };
+}
