@@ -650,7 +650,13 @@ ${SUB_PANEL}
         </div>
       </div>
       <div class="sq-track__chance-panel" hidden>
-        <div class="sq-chance__title">chance: a part from probabilities</div>
+        <div class="sq-chance__head">
+          <div class="sq-chance__title">chance: a part from probabilities</div>
+          <div class="sq-chance__actions">
+            <label class="sq-chance__live" title="generate this track's part live, rhythm and pitches both, instead of playing the written steps. Nothing is written, so note value, variation, legato, rest and the two range knobs can take an LFO, an automation lane or a macro pad. Switch it off and the pattern is exactly as you left it. The step grid shows what is generated and goes read-only. A track has one rhythm source, so this switches the euclid ring off"><input class="sq-chance__on" type="checkbox" /> live</label>
+            <button class="sq-chance__write sq-btn--ghost" type="button" title="print this throw into the pattern as ordinary steps, pitches and all, replacing what is there">write to pattern</button>
+          </div>
+        </div>
         <div class="sq-chance__roll" aria-hidden="true"></div>
         <div class="sq-chance__readout">
           <div class="sq-chance__summary"></div>
@@ -659,6 +665,10 @@ ${SUB_PANEL}
 
         <div class="sq-chance__sec">
           <span class="sq-chance__sec-t">rhythm</span>
+          <span class="sq-chance__opts">
+            <label title="let variation reach the triplet values (1/4T, 1/8T). The grid is sixteenths, so they play as a ratcheted step: three notes evenly across the space"><input class="sq-chance__trips" type="checkbox" /> triplets</label>
+            <label title="let variation reach 1/32 notes: one step, struck twice"><input class="sq-chance__x32" type="checkbox" /> 1/32s</label>
+          </span>
           <button class="sq-chance__dice-r sq-btn--ghost" type="button" title="throw the rhythm dice: new values for the note lengths, the rests and the ties. The throw is held, so the part repeats">roll</button>
           <label class="sq-chance__free" title="realtime: take a fresh throw every time the window comes round, so the rhythm never repeats"><input class="sq-chance__rfree" type="checkbox" /> realtime</label>
         </div>
@@ -684,13 +694,13 @@ ${SUB_PANEL}
             <output class="sq-chance__val sq-chance__val--rest"></output>
           </label>
         </div>
-        <div class="sq-chance__opts">
-          <label title="let variation reach the triplet values (1/4T, 1/8T). The grid is sixteenths, so they play as a ratcheted step: three notes evenly across the space"><input class="sq-chance__trips" type="checkbox" /> triplets</label>
-          <label title="let variation reach 1/32 notes: one step, struck twice"><input class="sq-chance__x32" type="checkbox" /> 1/32s</label>
-        </div>
 
         <div class="sq-chance__sec">
           <span class="sq-chance__sec-t">melody</span>
+          <span class="sq-chance__opts">
+            <button class="sq-chance__scale sq-btn--ghost" type="button" title="set the twelve probabilities from the session's active scale, root loudest">from scale</button>
+            <button class="sq-chance__clear-pcs sq-btn--ghost" type="button" title="put every semitone probability back to zero">none</button>
+          </span>
           <button class="sq-chance__dice-m sq-btn--ghost" type="button" title="throw the melody dice: new pitches, same rhythm. Separate from the rhythm throw, so a part can repeat its rhythm while the notes keep moving">roll</button>
           <label class="sq-chance__free" title="realtime: a new melody every time the window comes round, so the pitches never repeat"><input class="sq-chance__mfree" type="checkbox" /> realtime</label>
         </div>
@@ -744,40 +754,32 @@ ${SUB_PANEL}
             <span>B</span>
           </label>
         </div>
-        <div class="sq-chance__opts">
-          <button class="sq-chance__scale sq-btn--ghost" type="button" title="set the twelve probabilities from the session's active scale, root loudest">from scale</button>
-          <button class="sq-chance__clear-pcs sq-btn--ghost" type="button" title="put every semitone probability back to zero">none</button>
-        </div>
         <div class="sq-chance__ctls">
-          <label class="sq-chance__f" title="the lowest note that can be played. A semitone outside the range cannot turn up, and its fader greys out to say so">
-            <span>low note</span>
-            <input class="p-chnlo" type="range" min="24" max="96" step="1" value="48" />
-            <output class="sq-chance__val sq-chance__val--lo"></output>
-          </label>
-          <label class="sq-chance__f" title="the highest note that can be played. Five octaves above the low note at most">
-            <span>high note</span>
-            <input class="p-chnhi" type="range" min="24" max="96" step="1" value="72" />
-            <output class="sq-chance__val sq-chance__val--hi"></output>
-          </label>
-        </div>
-
-        <div class="sq-chance__sec"><span class="sq-chance__sec-t">window</span></div>
-        <div class="sq-chance__ctls">
-          <label class="sq-chance__f" title="where the generated window starts. Moving it slides the window without changing its length">
-            <span>first step</span>
-            <input class="p-chnfirst" type="range" min="0" max="31" step="1" value="0" />
-            <output class="sq-chance__val sq-chance__val--first"></output>
-          </label>
-          <label class="sq-chance__f" title="where the generated window ends. The window tiles across the track, so a short one repeats within a long track">
-            <span>last step</span>
-            <input class="p-chnlast" type="range" min="0" max="31" step="1" value="15" />
-            <output class="sq-chance__val sq-chance__val--last"></output>
-          </label>
-        </div>
-
-        <div class="sq-chance__actions">
-          <label class="sq-chance__live" title="generate this track's part live, rhythm and pitches both, instead of playing the written steps. Nothing is written, so note value, variation, legato, rest and the two range knobs can take an LFO, an automation lane or a macro pad. Switch it off and the pattern is exactly as you left it. The step grid shows what is generated and goes read-only. A track has one rhythm source, so this switches the euclid ring off"><input class="sq-chance__on" type="checkbox" /> live</label>
-          <button class="sq-chance__write sq-btn--ghost" type="button" title="print this throw into the pattern as ordinary steps, pitches and all, replacing what is there">write to pattern</button>
+          <div class="sq-chance__grp">
+            <label class="sq-chance__f" title="the lowest note that can be played. A semitone outside the range cannot turn up, and its fader greys out to say so">
+              <span>low note</span>
+              <input class="p-chnlo" type="range" min="24" max="96" step="1" value="48" />
+              <output class="sq-chance__val sq-chance__val--lo"></output>
+            </label>
+            <label class="sq-chance__f" title="the highest note that can be played. Five octaves above the low note at most">
+              <span>high note</span>
+              <input class="p-chnhi" type="range" min="24" max="96" step="1" value="72" />
+              <output class="sq-chance__val sq-chance__val--hi"></output>
+            </label>
+          </div>
+          <div class="sq-chance__grp sq-chance__grp--window">
+            <span class="sq-chance__sec-t">window</span>
+            <label class="sq-chance__f" title="where the generated window starts. Moving it slides the window without changing its length">
+              <span>first step</span>
+              <input class="p-chnfirst" type="range" min="0" max="31" step="1" value="0" />
+              <output class="sq-chance__val sq-chance__val--first"></output>
+            </label>
+            <label class="sq-chance__f" title="where the generated window ends. The window tiles across the track, so a short one repeats within a long track">
+              <span>last step</span>
+              <input class="p-chnlast" type="range" min="0" max="31" step="1" value="15" />
+              <output class="sq-chance__val sq-chance__val--last"></output>
+            </label>
+          </div>
         </div>
       </div>
       <!-- The panels shown inline on the track when something in them is on

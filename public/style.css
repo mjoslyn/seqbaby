@@ -2281,6 +2281,15 @@ body.kbd-recording .sq-track.is-kbd-active { border-color: #e5484d; box-shadow: 
 .track-chance.is-live { box-shadow: 0 0 0 1px var(--accent-2) inset; color: var(--accent-2); }
 
 .sq-chance__title { color: var(--fg); font-size: 12px; }
+/* The title shares its line with live and write: the two switches that decide
+   what the panel is FOR, up where they are seen before anything is scrolled. */
+.sq-chance__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 12px;
+}
 .sq-chance__readout { display: grid; gap: 4px; font-size: 11px; }
 .sq-chance__summary { color: var(--fg); font-size: 12px; font-variant-numeric: tabular-nums; }
 .sq-chance__hint { color: var(--fg-dim); font-size: 11px; line-height: 1.4; }
@@ -2344,11 +2353,15 @@ body.kbd-recording .sq-track.is-kbd-active { border-color: #e5484d; box-shadow: 
   gap: 10px;
   padding-top: 2px;
   border-top: 1px solid var(--border);
+  flex-wrap: wrap;
+  row-gap: 4px;
   font-size: 11px;
   color: var(--fg-dim);
 }
 .sq-chance__sec-t { color: var(--fg); letter-spacing: 0.06em; text-transform: uppercase; font-size: 10px; }
-.sq-chance__sec button { font-size: 11px; margin-left: auto; }
+.sq-chance__sec button { font-size: 11px; }
+/* The section's options sit beside its name; the dice and realtime go right. */
+.sq-chance__sec > button { margin-left: auto; }
 /* A dice with nothing to decide. Not `disabled`: the button is how you find out
    why, and on a touch screen its title is out of reach — pressing it puts the
    reason in the status bar. Same strike-through the unreachable semitones get. */
@@ -2361,6 +2374,16 @@ body.kbd-recording .sq-track.is-kbd-active { border-color: #e5484d; box-shadow: 
    ("1/8T", "shorter 40%") and a bubble you have to hold the knob to see would
    hide exactly the thing you are setting. */
 .sq-chance__ctls { display: flex; justify-content: center; gap: 18px; flex-wrap: wrap; padding: 2px 0; }
+/* The melody's range and the window share a row, the window marked off by a
+   rule and its name set sideways, so neither costs a line of its own. */
+.sq-chance__grp { display: flex; gap: 18px; align-items: flex-start; }
+.sq-chance__grp--window { padding-left: 14px; border-left: 1px solid var(--border); gap: 14px; }
+.sq-chance__grp--window > .sq-chance__sec-t {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  align-self: center;
+  color: var(--fg-dim);
+}
 .sq-chance__f {
   display: flex;
   flex-direction: column;
@@ -2426,7 +2449,7 @@ body.kbd-recording .sq-track.is-kbd-active { border-color: #e5484d; box-shadow: 
 }
 .sq-chance__opts label { display: inline-flex; align-items: center; gap: 5px; }
 .sq-chance__opts button { font-size: 11px; }
-.sq-chance__actions { display: flex; gap: 12px; align-items: center; justify-content: space-between; }
+.sq-chance__actions { display: flex; gap: 12px; align-items: center; margin-left: auto; }
 .sq-chance__live { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--fg-dim); }
 .sq-chance__live:has(:checked) { color: var(--accent-2); }
 .sq-chance__write { font-size: 12px; }
