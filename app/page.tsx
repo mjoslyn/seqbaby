@@ -24,7 +24,7 @@ const BOX = [
   ["subby", "bass for phones. it fakes the frequencies your speaker can't make, and your ears believe it."],
   ["plaits", "sixteen models from a very famous little module, running in wasm."],
   ["jam", "send a link. edit the same song together, live. nobody needs an account."],
-  ["compose", "ask for a bassline in words. audition it. keep it or don't."],
+  ["compose", "describe what you want in plain words. it writes the parts, plays them over your song, and waits for you to say keep."],
   ["euclid + chance", "one button divides a rhythm evenly, the other throws dice at it."],
 ] as const;
 
