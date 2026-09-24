@@ -2,13 +2,13 @@
 
 import { useState } from "react";
 import { updateProfile, type Profile } from "@/app/profile/actions";
+import AvatarEditor from "./AvatarEditor";
 import styles from "@/app/ui.module.css";
 
 export default function ProfileForm({ profile }: { profile: Profile }) {
-  const [username, setUsername] = useState(profile.username ?? "");
-  const [displayName, setDisplayName] = useState(profile.display_name ?? "");
+  const [username, setUsername] = useState(profile.username ?? profile.display_name ?? "");
   const [bio, setBio] = useState(profile.bio ?? "");
-  const [avatar, setAvatar] = useState(profile.avatar_url ?? "");
+  const [avatarGrid, setAvatarGrid] = useState<string | null>(profile.avatar_grid ?? null);
   const [isPublic, setIsPublic] = useState(profile.is_public);
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<{ text: string; err?: boolean }>({
@@ -20,9 +20,8 @@ export default function ProfileForm({ profile }: { profile: Profile }) {
     setStatus({ text: "Saving…" });
     const res = await updateProfile({
       username,
-      display_name: displayName,
       bio,
-      avatar_url: avatar,
+      avatar_grid: avatarGrid,
       is_public: isPublic,
     });
     setSaving(false);
@@ -34,8 +33,13 @@ export default function ProfileForm({ profile }: { profile: Profile }) {
   return (
     <div>
       <div className={styles.field}>
+        <span className={styles.label}>avatar: a 16-step pattern, drawn in the studio&apos;s colours</span>
+        <AvatarEditor value={avatarGrid} name={username || "?"} onChange={setAvatarGrid} />
+      </div>
+
+      <div className={styles.field}>
         <label className={styles.label} htmlFor="username">
-          username (your profile URL)
+          name
         </label>
         <input
           className={styles.input}
@@ -47,21 +51,9 @@ export default function ProfileForm({ profile }: { profile: Profile }) {
         />
         <div className={styles.hintText}>
           {username
-            ? `seqbaby.app/u/${username}`
+            ? `Shown on your songs, and your page is /u/${username}`
             : "2–30 chars: letters, numbers, - and _"}
         </div>
-      </div>
-
-      <div className={styles.field}>
-        <label className={styles.label} htmlFor="display">
-          display name
-        </label>
-        <input
-          className={styles.input}
-          id="display"
-          value={displayName}
-          onChange={(e) => setDisplayName(e.target.value)}
-        />
       </div>
 
       <div className={styles.field}>
@@ -74,19 +66,6 @@ export default function ProfileForm({ profile }: { profile: Profile }) {
           value={bio}
           onChange={(e) => setBio(e.target.value)}
           maxLength={500}
-        />
-      </div>
-
-      <div className={styles.field}>
-        <label className={styles.label} htmlFor="avatar">
-          avatar image url (optional)
-        </label>
-        <input
-          className={styles.input}
-          id="avatar"
-          value={avatar}
-          onChange={(e) => setAvatar(e.target.value)}
-          placeholder="https://…"
         />
       </div>
 

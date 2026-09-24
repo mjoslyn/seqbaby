@@ -25,6 +25,19 @@ async function loadPlaywright() {
   throw new Error("audition needs the playwright package: npm i playwright (and a Chromium; see mcp/README.md)");
 }
 
+// The studio lives at /studio; `/` is the homepage, which has no engine on it.
+// A bare site URL (SEQBABY_URL, or http://localhost:3000) is pointed there, and
+// anything with a path of its own is taken as the studio it names.
+function studioUrl(url) {
+  try {
+    const u = new URL(url);
+    if (u.pathname === "/" || u.pathname === "") u.pathname = "/studio";
+    return u.toString();
+  } catch {
+    return url;
+  }
+}
+
 /**
  * @param {object} session the serialized song
  * @param {{ url?: string, seconds?: number }} opts
@@ -40,7 +53,7 @@ export async function auditionSong(session, { url = "http://localhost:3000", sec
     page.on("pageerror", e => errors.push(String(e).slice(0, 200)));
     // Resource 404s and React's hydration notice are the shell's, not the song's.
     page.on("console", m => { if (m.type() === "error" && !/Failed to load resource|hydrat/.test(m.text())) errors.push(m.text().slice(0, 200)); });
-    await page.goto(url, { waitUntil: "load", timeout: 60000 });
+    await page.goto(studioUrl(url), { waitUntil: "load", timeout: 60000 });
     await page.waitForFunction(() => !!window.seqbaby?.state?.tracks, null, { timeout: 60000 });
     const loaded = await page.evaluate((s) => {
       const r = window.seqbaby.applySet(s);

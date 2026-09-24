@@ -242,7 +242,7 @@ const SUB_PANEL = `
 export const STUDIO_BODY = String.raw`
 <header class="sq-transport">
     <div class="sq-transport__main">
-    <a class="sq-logo" href="/" title="seqbaby: start a new song">
+    <a class="sq-logo" href="/" title="seqbaby: the homepage">
       <img src="/favicon.svg" alt="" />
       <span>seqbaby</span>
     </a>

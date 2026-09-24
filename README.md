@@ -172,7 +172,7 @@ same tools.
 
 ## Architecture
 
-**Boot.** The studio route server-renders the engine's static DOM
+**Boot.** The studio route (`/studio`) server-renders the engine's static DOM
 ([`app/studioMarkup.ts`](./app/studioMarkup.ts)) and the engine script tags
 ([`app/EngineScripts.tsx`](./app/EngineScripts.tsx)): Tone → `woscillators.js` →
 `js/main.js`. [`EnginePreload.tsx`](./app/EnginePreload.tsx) emits
@@ -213,7 +213,7 @@ behaviour.
 
 ```bash
 npm install
-npm run dev          # Next.js dev server → http://localhost:3000
+npm run dev          # Next.js dev server → http://localhost:3000 (studio at /studio)
 ```
 
 The studio and audio engine run with no env at all. Account features need
@@ -237,7 +237,8 @@ React shell hot-reloads via `next dev`.
 
 ```
 app/                         Next.js App Router: shell, auth, account UI, server actions
-  page.tsx                   studio route: SSRs engine DOM, boots engine, AccountBar
+  page.tsx                   the homepage at /: toy sequencer, published songs, people
+  studio/page.tsx            the studio at /studio: SSRs engine DOM, boots engine, AccountBar
   studioMarkup.ts            the engine's static DOM skeleton
   EngineScripts / EnginePreload / ScriptLoader / Preloader   engine boot
   AccountBar / SongsMenu / SaveButton / PatchesMenu / NewSongButton / VersionTree

@@ -22,7 +22,7 @@ export default async function SettingsPage() {
     <div className={styles.page}>
       <div className={styles.pageInner}>
         <nav className={styles.pageNav}>
-          <Link href="/">← studio</Link>
+          <Link href="/studio">← studio</Link>
           {profile.username && (
             <Link href={`/u/${profile.username}`}>view my profile</Link>
           )}

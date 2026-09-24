@@ -20,7 +20,7 @@ import { copyPattern, openPatternMenu, renderPatternGrid } from "./patternBar.js
 import { attachLevelDrag, setActiveTrack } from "./render.js";
 import { initScaleUI, openChordMenu, syncChordUI } from "./scaleUI.js";
 import { inJam, jamTogglePlay } from "./jam.js";
-import { loadShareFromUrl, onExportSet, onImportSet, onLoadSet, onNewSet, onSaveSet, onShareSet, STARTER_TRACKS } from "./session.js";
+import { loadShareFromUrl, onExportSet, onImportSet, onLeaveStudio, onLoadSet, onSaveSet, onShareSet, STARTER_TRACKS } from "./session.js";
 import { state, switchPattern } from "./state.js";
 import { renderStepGrid } from "./stepGrid.js";
 import { createTrack, resizePattern } from "./track.js";
@@ -773,14 +773,14 @@ export function init() {
   document.getElementById("set-export")?.addEventListener("click", onExportSet);
   document.getElementById("set-import")?.addEventListener("click", onImportSet);
   document.getElementById("set-share")?.addEventListener("click", onShareSet);
-  // The logo is a real link to the studio's own URL, so opening it in a new tab
-  // (or reaching it from /manual) gives a blank editor the ordinary way. On the
-  // page itself a plain click resets in place instead — a full reboot to show
-  // the same six empty tracks is 1.7MB of engine for nothing.
+  // The logo is a real link to the homepage, so a new tab or a middle click
+  // opens it the ordinary way. A plain click leaves THIS page, which is where
+  // the unsaved session lives, so it asks first when there is one to lose.
+  // (A blank editor is the top bar's `new`.)
   document.querySelector(".sq-logo")?.addEventListener("click", e => {
     if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
     e.preventDefault();
-    onNewSet();
+    onLeaveStudio(e.currentTarget.href);
   });
   const patternMenuBtn = document.getElementById("pattern-menu-btn");
   if (patternMenuBtn) {

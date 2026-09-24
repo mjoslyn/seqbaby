@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { getPublicProfile } from "@/app/profile/actions";
 import ForkButton from "./ForkButton";
+import Avatar from "@/app/Avatar";
+import SongPreview from "@/app/SongPreview";
 import styles from "@/app/ui.module.css";
 
 export const dynamic = "force-dynamic";
@@ -20,10 +22,6 @@ function fmtDate(iso: string) {
   return iso.slice(0, 10);
 }
 
-function initials(name: string) {
-  return name.slice(0, 2).toUpperCase();
-}
-
 export default async function ProfilePage({
   params,
 }: {
@@ -39,7 +37,7 @@ export default async function ProfilePage({
       <div className={styles.page}>
         <div className={styles.pageInner}>
           <nav className={styles.pageNav}>
-            <Link href="/">← studio</Link>
+            <Link href="/studio">← studio</Link>
           </nav>
           <h1 className={styles.pageTitle}>@{res.username}</h1>
           <p className={styles.pageSub}>This profile is private.</p>
@@ -49,23 +47,18 @@ export default async function ProfilePage({
   }
 
   const { profile, isOwner, songs, patches } = res;
-  const name = profile.display_name || profile.username || "anon";
+  const name = profile.username || profile.display_name || "anon";
 
   return (
     <div className={styles.page}>
       <div className={styles.pageInner}>
         <nav className={styles.pageNav}>
-          <Link href="/">← studio</Link>
+          <Link href="/studio">← studio</Link>
           {isOwner && <Link href="/settings">edit profile</Link>}
         </nav>
 
         <div className={styles.profileHead}>
-          {profile.avatar_url ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img className={styles.avatar} src={profile.avatar_url} alt="" />
-          ) : (
-            <div className={styles.avatar}>{initials(name)}</div>
-          )}
+          <Avatar grid={profile.avatar_grid} name={name} size={72} />
           <div>
             <div className={styles.profileName}>
               {name}
@@ -73,7 +66,7 @@ export default async function ProfilePage({
                 <span className={styles.privateBadge}>private</span>
               )}
             </div>
-            {profile.username && (
+            {profile.username && profile.username !== name && (
               <div className={styles.profileHandle}>@{profile.username}</div>
             )}
           </div>
@@ -89,9 +82,14 @@ export default async function ProfilePage({
         ) : (
           songs.map((s) => (
             <div className={styles.repoRow} key={s.id}>
+              {s.preview ? (
+                <div className={styles.repoPreview}>
+                  <SongPreview preview={s.preview} height="100%" />
+                </div>
+              ) : null}
               <div className={styles.repoMain}>
                 {s.share_slug ? (
-                  <Link className={styles.repoName} href={`/?s=${s.share_slug}`}>
+                  <Link className={styles.repoName} href={`/studio?s=${s.share_slug}`}>
                     {s.title}
                   </Link>
                 ) : (
@@ -119,7 +117,7 @@ export default async function ProfilePage({
               </div>
               <ForkButton songId={s.id} />
               {s.share_slug && (
-                <Link className={styles.repoAction} href={`/?s=${s.share_slug}`}>
+                <Link className={styles.repoAction} href={`/studio?s=${s.share_slug}`}>
                   open
                 </Link>
               )}

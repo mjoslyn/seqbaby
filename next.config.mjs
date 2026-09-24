@@ -16,6 +16,29 @@ const nextConfig = {
   // name the file explicitly so it rides along in the function's bundle,
   // rather than inlining the guide text and losing the one-copy guarantee
   // mcp/README.md describes.
+  // The studio moved from / to /studio, and / is the homepage now. Every link
+  // already sent out names the old place: a share link (`?s=`), a deep link to
+  // a song (`?open=`), a jam invite (`?jam=`). Each is sent on with its query
+  // intact (Next carries the query across a redirect), so it lands on the
+  // studio with the song it named. The homescreen app's WebView (user agent
+  // `SeqbabyApp/`) goes to the studio from a bare / as well: it is an
+  // instrument, not a visitor who wants to be told about one.
+  async redirects() {
+    return [
+      ...["s", "open", "jam"].map((key) => ({
+        source: "/",
+        has: [{ type: "query", key }],
+        destination: "/studio",
+        permanent: false,
+      })),
+      {
+        source: "/",
+        has: [{ type: "header", key: "user-agent", value: ".*SeqbabyApp/.*" }],
+        destination: "/studio",
+        permanent: false,
+      },
+    ];
+  },
   outputFileTracingIncludes: {
     "/api/compose": ["./.claude/skills/compose/SKILL.md"],
   },

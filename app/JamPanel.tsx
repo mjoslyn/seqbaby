@@ -59,7 +59,7 @@ type Status =
 
 const ROOM_PARAM = "jam";
 /** Who sent the invite, on the link: the card a pasted link gets is built by
- *  page.tsx's generateMetadata, and a room has no record anywhere of who
+ *  studio/page.tsx's generateMetadata, and a room has no record anywhere of who
  *  started it -- so the link carries the host's handle, and the server checks
  *  it against the profiles before naming anyone. See jamHostName. */
 const BY_PARAM = "by";

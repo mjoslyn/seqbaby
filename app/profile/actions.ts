@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { AVATAR_GRID_RE } from "@/app/profile/avatarGrid";
 
 export type Profile = {
   id: string;
@@ -9,6 +10,9 @@ export type Profile = {
   display_name: string | null;
   bio: string | null;
   avatar_url: string | null;
+  /** The step-grid avatar (app/profile/avatarGrid.js, migration 0014), or
+   *  null for the one the name generates. */
+  avatar_grid: string | null;
   is_public: boolean;
   created_at: string;
 };
@@ -20,6 +24,8 @@ export type ProfileSong = {
   updated_at: string;
   forked_from: string | null;
   forkedFrom: { title: string; username: string | null } | null;
+  /** The step preview (migration 0012), absent before that has run. */
+  preview?: unknown;
 };
 export type ProfilePatch = {
   id: string;
@@ -39,6 +45,7 @@ export type PublicProfile =
     };
 
 const USERNAME_RE = /^[a-z0-9_-]{2,30}$/i;
+const PROFILE_COLS = "id,username,display_name,bio,avatar_url,is_public,created_at";
 
 export async function getMyProfile(): Promise<Profile | null> {
   const supabase = await createClient();
@@ -46,19 +53,22 @@ export async function getMyProfile(): Promise<Profile | null> {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return null;
-  const { data } = await supabase
-    .from("profiles")
-    .select("id,username,display_name,bio,avatar_url,is_public,created_at")
-    .eq("id", user.id)
-    .maybeSingle();
-  return (data as Profile) ?? null;
+  const q = (cols: string) =>
+    supabase.from("profiles").select(cols).eq("id", user.id).maybeSingle<Profile>();
+  let res = await q(`${PROFILE_COLS},avatar_grid`);
+  if (res.error) res = await q(PROFILE_COLS); // before migration 0014
+  return res.data ? { ...res.data, avatar_grid: res.data.avatar_grid ?? null } : null;
 }
 
+// One name per person (migration 0013): the username is the name, and
+// display_name is written with it so an older reader of that column shows the
+// same thing. There is no separate display name to set.
 export async function updateProfile(input: {
   username?: string;
-  display_name?: string;
   bio?: string;
   avatar_url?: string;
+  /** A grid string, or null to go back to the name's generated one. */
+  avatar_grid?: string | null;
   is_public?: boolean;
 }): Promise<{ ok?: boolean; error?: string }> {
   const supabase = await createClient();
@@ -70,15 +80,26 @@ export async function updateProfile(input: {
   const patch: Record<string, unknown> = {};
   if (input.username !== undefined) {
     const u = input.username.trim();
-    if (u && !USERNAME_RE.test(u))
-      return { error: "Username: 2–30 chars, letters/numbers/-/_ only" };
-    patch.username = u || null;
+    if (!USERNAME_RE.test(u))
+      return { error: "Name: 2–30 chars, letters/numbers/-/_ only" };
+    patch.username = u;
+    patch.display_name = u;
   }
-  if (input.display_name !== undefined)
-    patch.display_name = input.display_name.trim().slice(0, 80) || null;
   if (input.bio !== undefined) patch.bio = input.bio.trim().slice(0, 500) || null;
-  if (input.avatar_url !== undefined)
-    patch.avatar_url = input.avatar_url.trim().slice(0, 500) || null;
+  if (input.avatar_url !== undefined) {
+    const a = input.avatar_url.trim().slice(0, 500);
+    // An https image or nothing. The picture is drawn on other people's
+    // screens, so a plain-http one would be mixed content on every page it
+    // appeared on, and anything that is not a URL is a broken image.
+    if (a && !/^https:\/\/[^\s]+$/i.test(a))
+      return { error: "Avatar: an https:// image URL, or upload one" };
+    patch.avatar_url = a || null;
+  }
+  if (input.avatar_grid !== undefined) {
+    if (input.avatar_grid !== null && !AVATAR_GRID_RE.test(input.avatar_grid))
+      return { error: "That avatar is not a grid this app can draw" };
+    patch.avatar_grid = input.avatar_grid;
+  }
   if (input.is_public !== undefined) patch.is_public = !!input.is_public;
 
   const { data: rows, error } = await supabase
@@ -88,7 +109,7 @@ export async function updateProfile(input: {
     .select("id");
   if (error) {
     if (/duplicate key|unique/i.test(error.message))
-      return { error: "That username is taken" };
+      return { error: "That name is taken" };
     return { error: error.message };
   }
   // The signup trigger creates this row, so a miss here means it is genuinely
@@ -112,11 +133,14 @@ export async function getPublicProfile(
   // every handle starting with "a". Equality on the generated column also means
   // the lookup uses profiles_username_lower_key instead of scanning the table.
   const handle = username.toLowerCase();
-  const { data: profile, error } = await supabase
-    .from("profiles")
-    .select("id,username,display_name,bio,avatar_url,is_public,created_at")
-    .eq("username_lower", handle)
-    .maybeSingle();
+  const byHandle = (cols: string) =>
+    supabase.from("profiles").select(cols).eq("username_lower", handle).maybeSingle<Profile>();
+  let found = await byHandle(`${PROFILE_COLS},avatar_grid`);
+  // `avatar_grid` is migration 0014's. Asked of a database without it the
+  // select fails outright, which below would read as a lookup failure.
+  if (found.error && /avatar_grid/.test(found.error.message)) found = await byHandle(PROFILE_COLS);
+  const { error } = found;
+  const profile = found.data ? { ...found.data, avatar_grid: found.data.avatar_grid ?? null } : null;
 
   // A lookup that failed is not the same answer as "no such user". Reporting one
   // as the other is what hid the duplicate-handle breakage in the first place.
@@ -153,13 +177,20 @@ export async function getPublicProfile(
   if (!profile.is_public && !isOwner)
     return { private: true, username: profile.username ?? username };
 
-  const [{ data: songs }, { data: patches }] = await Promise.all([
+  // `preview` is a computed field (migration 0012); a database without it
+  // fails the whole select, so the page asks again without it rather than
+  // losing the song list over a thumbnail.
+  const songsQuery = (cols: string) =>
     supabase
       .from("songs")
-      .select("id,title,share_slug,updated_at,forked_from")
+      .select(cols)
       .eq("owner_id", profile.id)
       .eq("is_public", true)
-      .order("updated_at", { ascending: false }),
+      .order("updated_at", { ascending: false })
+      .returns<Omit<ProfileSong, "forkedFrom">[]>();
+  const SONG_COLS = "id,title,share_slug,updated_at,forked_from";
+  const [songsRes, { data: patches }] = await Promise.all([
+    songsQuery(`${SONG_COLS},preview`),
     supabase
       .from("patches")
       .select("id,name,engine_type,created_at")
@@ -170,7 +201,8 @@ export async function getPublicProfile(
 
   // Resolve fork lineage (source title + author handle) for any forked sessions,
   // limited to sources the viewer can read (public or owned).
-  const songRows = (songs ?? []) as Omit<ProfileSong, "forkedFrom">[];
+  const songs = songsRes.error ? (await songsQuery(SONG_COLS)).data : songsRes.data;
+  const songRows = songs ?? [];
   const forkIds = [
     ...new Set(songRows.map((s) => s.forked_from).filter(Boolean)),
   ] as string[];

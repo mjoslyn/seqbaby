@@ -49,7 +49,7 @@ export default function ManualPage() {
             <img src="/favicon.svg" alt="" />
             seqbaby
           </a>
-          <a className={styles.backBtn} href="/">back to the studio</a>
+          <a className={styles.backBtn} href="/studio">back to the studio</a>
         </div>
 
         <h1>Manual</h1>
@@ -1326,7 +1326,7 @@ bus. Share it when it validates.`}</div>
         </section>
 
         <div className={styles.footer}>
-          <a href="/">Back to the studio</a>
+          <a href="/studio">Back to the studio</a>
         </div>
       </div>
     </div>

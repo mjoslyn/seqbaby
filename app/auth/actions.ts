@@ -17,7 +17,7 @@ export async function signIn(
   const { error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) return { error: error.message };
   revalidatePath("/", "layout");
-  redirect("/");
+  redirect("/studio");
 }
 
 export async function signUp(
@@ -38,7 +38,7 @@ export async function signUp(
   // user is already signed in; otherwise they must confirm via email first.
   if (data.session) {
     revalidatePath("/", "layout");
-    redirect("/");
+    redirect("/studio");
   }
   return { message: "Check your email to confirm your account, then sign in." };
 }
@@ -62,5 +62,5 @@ export async function signOut() {
   const supabase = await createClient();
   await supabase.auth.signOut();
   revalidatePath("/", "layout");
-  redirect("/");
+  redirect("/studio");
 }

@@ -2,7 +2,7 @@
   "name": "seqbaby",
   "short_name": "seqbaby",
   "description": "Prompt-driven step sequencer in the browser: Plaits, 808/909 kits, hand-built analog and FM emulations, samples, MIDI out.",
-  "start_url": "/",
+  "start_url": "/studio",
   "scope": "/",
   "display": "standalone",
   "orientation": "any",
