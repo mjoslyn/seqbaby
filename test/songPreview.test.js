@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { decodePreview, euclideanRhythm } from "../app/songs/songPreview.js";
+import { decodePreview, euclideanRhythm, previewFromSession } from "../app/songs/songPreview.js";
+import { recipes } from "./songPreviewRecipes.js";
 import { readFileSync } from "node:fs";
 
 // euclid.js touches the DOM at import, so its two functions are lifted out of
@@ -71,4 +72,24 @@ test("anything unreadable is no preview, never a throw", () => {
   const p = decodePreview({ t: [{ s: 42 }, { s: "9x" }] });
   assert.equal(p.rows.length, 1, "a row that is not a step string is dropped");
   assert.equal(mask(p.rows[0].cells), "x.");
+});
+
+// The JS port answers exactly what Postgres answers. The expected file is
+// song_preview's own output for each recipe, produced against a database with
+// the migrations applied:
+//
+//   node -e 'import("./test/songPreviewRecipes.js").then(({recipes}) =>
+//     console.log(JSON.stringify(Object.fromEntries(
+//       Object.entries(recipes).map(([k, f]) => [k, f()])))))' > /tmp/cases.json
+//   psql -At -v data="$(cat /tmp/cases.json)" <<< \
+//     "select jsonb_object_agg(key, public.song_preview(value)) from jsonb_each(:'data'::jsonb);"
+//
+// Change one side without the other and this fails.
+test("previewFromSession is song_preview, case for case", () => {
+  const expected = JSON.parse(
+    readFileSync(new URL("./fixtures/songPreview.expected.json", import.meta.url), "utf8"),
+  );
+  assert.deepEqual(Object.keys(expected).sort(), Object.keys(recipes).sort(), "a recipe without an expected output");
+  for (const [name, build] of Object.entries(recipes))
+    assert.deepEqual(previewFromSession(build()), expected[name], name);
 });

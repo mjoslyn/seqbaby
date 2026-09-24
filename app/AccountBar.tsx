@@ -9,6 +9,7 @@ import ComposeChat from "@/app/ComposeChat";
 import JamPanel from "@/app/JamPanel";
 import { getOpenSong } from "@/app/songs/openSong";
 import { IconMenu } from "@/app/menuIcons";
+import Avatar from "@/app/Avatar";
 import styles from "@/app/ui.module.css";
 
 // A dedicated account bar that sits above the transport (rendered as the first
@@ -27,10 +28,14 @@ import styles from "@/app/ui.module.css";
 export function AccountBar({
   name,
   username,
+  avatarGrid = null,
   serverKey = false,
 }: {
   name: string | null;
   username?: string | null;
+  /** The step-grid avatar (app/profile/avatarGrid.js); null draws the one
+   *  the name generates. */
+  avatarGrid?: string | null;
   /** Whether this deploy has an Anthropic key of its own. The compose panel
    *  needs it to know whether composing on the SITE's key is on offer at all
    *  — a visitor's own key works either way. */
@@ -177,15 +182,11 @@ export function AccountBar({
         {name ? (
           <>
             <SongsMenu />
-            <a
-              className={styles.accountName}
-              title="your profile"
-              href={username ? `/u/${username}` : "/settings"}
-            >
-              {name}
-            </a>
-            <a className={styles.accountBtn} href="/settings">
-              settings
+            {/* Your face and name ARE the way into your settings; the page
+                you show other people is one link further, from there. */}
+            <a className={styles.accountName} title="your settings" href="/settings">
+              <Avatar grid={avatarGrid} name={username || name} size={20} />
+              <span className={styles.accountNameText}>{name}</span>
             </a>
             <form action={signOut}>
               <button className={styles.accountBtn} type="submit">

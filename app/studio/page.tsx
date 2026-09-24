@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { STUDIO_BODY } from "@/app/studioMarkup";
 import Preloader from "@/app/Preloader";
 import ScriptLoader from "@/app/ScriptLoader";
@@ -10,7 +11,7 @@ import DefaultTemplate from "@/app/DefaultTemplate";
 import { AccountBar } from "@/app/AccountBar";
 import styles from "@/app/ui.module.css";
 import { createClient } from "@/lib/supabase/server";
-import { SITE_DESCRIPTION, shareCard } from "@/app/shareCard";
+import { SITE_DESCRIPTION, SITE_URL, shareCard } from "@/app/shareCard";
 import { linkedSong, jamHostName } from "@/app/songs/linkedSongTitle";
 import { songShareTitle, jamShareTitle } from "@/app/shareCopy";
 
@@ -35,6 +36,24 @@ function one(v: string | string[] | undefined): string | null {
 // account bar sits behind <Suspense> below); a plain `/` does no work here and
 // inherits the layout's card, while a `?s=` visit is already waiting on a
 // fetch of the session itself.
+// The card's picture: the song's steps, or a jam's, drawn by app/api/og for
+// exactly the params this URL carries. Absolute, as og:image has to be, and
+// on the host that served this page, so a deploy preview's card shows that
+// deploy's image rather than production's.
+async function cardImage(params: Record<string, string | null>): Promise<string> {
+  let origin = SITE_URL.replace(/\/$/, "");
+  try {
+    const h = await headers();
+    const host = h.get("x-forwarded-host") ?? h.get("host");
+    if (host) origin = `${h.get("x-forwarded-proto") ?? "https"}://${host}`;
+  } catch {
+    /* no request (a static render): the site's own address will do */
+  }
+  const q = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) if (v) q.set(k, v);
+  return `${origin}/api/og?${q}`;
+}
+
 export async function generateMetadata({
   searchParams,
 }: {
@@ -55,6 +74,7 @@ export async function generateMetadata({
         ...shareCard(
           songShareTitle(song.owner, song.title),
           `A song made in seqbaby. Open it to hear it, remix it or fork it. ${SITE_DESCRIPTION}`,
+          await cardImage({ s: slug, open: slug ? null : openId }),
         ),
       };
     }
@@ -67,6 +87,7 @@ export async function generateMetadata({
       ...shareCard(
         jamShareTitle(host),
         `Open the link to join and edit the song together, live. No account needed. ${SITE_DESCRIPTION}`,
+        await cardImage({ jam, by: one(sp.by) }),
       ),
     };
   }
@@ -90,12 +111,20 @@ async function AccountBarSlot() {
   // yet (before the migration is applied) by falling back to the email.
   let name: string | null = null;
   let username: string | null = null;
+  let avatarGrid: string | null = null;
   if (user) {
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("display_name, username")
-      .eq("id", user.id)
-      .maybeSingle();
+    // avatar_grid is migration 0014's; asked of a database without it, the
+    // select fails whole, so ask again without rather than lose the name.
+    const q = (cols: string) =>
+      supabase
+        .from("profiles")
+        .select(cols)
+        .eq("id", user.id)
+        .maybeSingle<{ display_name: string | null; username: string | null; avatar_grid?: string | null }>();
+    let res = await q("display_name, username, avatar_grid");
+    if (res.error) res = await q("display_name, username");
+    const profile = res.data;
+    avatarGrid = profile?.avatar_grid ?? null;
     name = profile?.username || profile?.display_name || user.email || null;
     username = profile?.username ?? null;
   }
@@ -103,7 +132,14 @@ async function AccountBarSlot() {
   // Whether the deploy has a key of its own decides what the compose panel
   // offers: read here, in a server component, because the browser must not be
   // told anything about it beyond whether it exists.
-  return <AccountBar name={name} username={username} serverKey={!!process.env.ANTHROPIC_API_KEY} />;
+  return (
+    <AccountBar
+      name={name}
+      username={username}
+      avatarGrid={avatarGrid}
+      serverKey={!!process.env.ANTHROPIC_API_KEY}
+    />
+  );
 }
 
 // Holds the bar's exact height while it streams, so the studio below never

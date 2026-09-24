@@ -147,8 +147,10 @@ env / fx / eq / comp / mod / automation per track.
   `newSet()` / `onNewSet()`: blanking the session back to `STARTER_TRACKS`
   (the same list main.js builds at boot) by running a blank blob through
   `applySet`, so every global a song can touch is written rather than left
-  behind. Behind the top bar's `new` and a click on the logo — which is an
-  `<a href="/studio">`, so opening it in a new tab gives a blank editor too. It
+  behind. Behind the top bar's `new`, an `<a href="/studio">`, so opening it
+  in a new tab gives a blank editor too. (The logo is `<a href="/">`, the
+  homepage; a plain click asks first when there is work to lose,
+  `onLeaveStudio`.) It
   fires `seqbaby:newset` for the shell, whose open-song slot has to clear
   with it (`app/NewSongButton.tsx`). Its per-track reader — `migrateTrackData`
   / `trackShellFor` / `loadTrackFromData` — is exported, because liveSet.js
@@ -1914,6 +1916,18 @@ what — `mike has shared "cold squelch" with you` — and a jam invite
   must not pull down a whole session, base64 samples included, to learn its
   name. The owner id resolves to a name the same way a published song's does
   (`ownerName` against `profile_cards`), so both paths can share one function.
+- **The card's picture is the song's own steps** (`app/api/og/route.tsx`,
+  a PNG through `next/og`'s ImageResponse, since link-preview crawlers do
+  not render SVG). `generateMetadata` points `og:image` at `/api/og` with the
+  same `s` / `open` / `jam` + `by` the page URL carries, on the host that
+  served the page (so a deploy preview's card is that deploy's). A published
+  song's steps are its `preview` column; a quick anonymous share never was
+  in the database, so its preview is computed from the Blobs session by
+  `previewFromSession` (songPreview.js), the SQL function ported line for
+  line and pinned to its output by `test/songPreview.test.js`. A jam has no
+  song to look up, so its card is the host's grid avatar over four euclid
+  rings seeded by the room. Middleware skips `/api/og`; responses are cached
+  an hour.
 - **`untitled` counts as no title**, along with an unreadable song, a Blobs
   share written before this existed (no title in its metadata) and no
   Supabase env at all. Every one of those falls back to the site card rather
@@ -2021,6 +2035,9 @@ opens as a sheet under it.
   exactly as long as the menu was up. Inside that stacking context the backdrop
   is a positioned child, so `manual` and the `menu` button need a layer of
   their own or the backdrop swallows the tap that closes the sheet.
+- **Your avatar and name are the way into settings** (the grid avatar at
+  20px, then the name, one link to `/settings`); there is no separate
+  `settings` button, and your public page is a link from settings.
 - **The transport's master meter and beat dial sit beside `menu`**
   (`beatSlot`), so both stay in view in the pinned bar however far down the
   tracks you are. They are the engine's own `.sq-meter--master` and
@@ -2157,7 +2174,7 @@ cold squelch  v1 ──▶ v2 ──▶ v3     its own song, its own tree
   `app/DefaultTemplate.tsx` applies a session over the top afterwards. So the
   legacy static server, a signed-out visitor and an account with no default all
   get the blank editor they always did. It answers to `seqbaby:newset` (the top
-  bar's `new` and the logo) and to a fresh load of `/studio` — skipped when the URL
+  bar's `new`) and to a fresh load of `/studio` — skipped when the URL
   carries `?s=` or `?open=`, which load asynchronously too and would otherwise
   race it. The fetch is caught, not just awaited: with no Supabase env the
   action throws, and the engine is meant to run without any.
@@ -2674,7 +2691,7 @@ derived from the session itself: `<adjective> <noun>`, e.g. `basement squelch`,
   an empty field, is what counts as generated.
 - **Only when nothing else names it.** A song already open keeps its name even if
   the field was cleared: clearing it means "save this again", not "rename it".
-  `new` (and the logo) clear the open song, and the top-bar field clears with it
+  `new` clears the open song, and the top-bar field clears with it
   -- otherwise the next save files a blank session under the old song's name.
 - **The server disambiguates, because only it knows the account.** Two different
   sessions can still land on the same two common words, and `saveNamedSong`

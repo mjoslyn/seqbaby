@@ -760,8 +760,23 @@ export function newSet() {
   setStatus("new session");
   // The React shell keeps its own answer to "which cloud song is open", and
   // after this nothing is. Announced from here rather than left to each caller
-  // so the engine's logo and the shell's button can't disagree about it.
+  // so every route into a reset lands the shell in the same place.
   try { window.dispatchEvent(new CustomEvent("seqbaby:newset")); } catch {}
+}
+
+/**
+ * Leave the studio for another page (the logo goes to the homepage). The
+ * session lives in this tab and nowhere else until it is saved or shared, so
+ * a plain navigation would drop it without a word; asked the way `new` asks.
+ * @param {string} href
+ */
+export async function onLeaveStudio(href) {
+  if (sessionHasNotes() && !await showConfirmDialog({
+    title: "leave the studio?",
+    body: "Anything you have not saved or shared is gone once you leave the page.",
+    confirmLabel: "leave",
+  })) return;
+  location.href = href;
 }
 
 /**
@@ -769,7 +784,7 @@ export function newSet() {
  * is confirmed before it goes. Undo (history.js) can bring it back, but only
  * within this page — a reload, or a hundred edits later, and it is gone — which
  * is not a thing to make somebody find out by trying. A session with no steps
- * in it has nothing to lose and skips the prompt: clicking the logo on a
+ * in it has nothing to lose and skips the prompt: pressing `new` on a
  * freshly-loaded page should not ask.
  */
 export async function onNewSet() {

@@ -270,7 +270,8 @@
    AccountBar). Empty, and so nothing, on desktop. */
 .beatSlot { display: none; }
 
-.accountName { color: #9aa0aa; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-decoration: none; cursor: pointer; }
+.accountName { display: inline-flex; align-items: center; gap: 7px; color: #9aa0aa; max-width: 180px; text-decoration: none; cursor: pointer; }
+.accountNameText { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .accountName:hover { color: #e8e8ea; }
 .accountBtn {
   padding: 5px 10px;

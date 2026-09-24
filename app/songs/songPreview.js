@@ -142,3 +142,85 @@ export function decodePreview(raw) {
     return null;
   }
 }
+
+/**
+ * The same preview, computed from a session in JS: supabase/migrations/
+ * 0012_song_preview.sql's `song_preview`, line for line. The database's copy
+ * is what every card reads, because it keeps the session in the database;
+ * this one is for a session that never was in it -- a quick anonymous share
+ * lives in the Blobs store (lib/api.js), and its link preview still wants a
+ * picture. test/songPreview.test.js holds the two to the same output.
+ * @param {unknown} d a serialized session
+ */
+export function previewFromSession(d) {
+  try {
+    const tracks = d && typeof d === "object" ? d.tracks : undefined;
+    if (!Array.isArray(tracks)) return null;
+    const num = (v) => typeof v === "number" && Number.isFinite(v);
+    // Postgres rounds numeric -> int half away from zero.
+    const pgInt = (v) => Math.sign(v) * Math.round(Math.abs(v));
+    let ap = 0;
+    if (num(d.activePattern)) ap = Math.max(0, Math.min(31, pgInt(d.activePattern)));
+    const nul = (v) => (v === undefined ? null : v);
+
+    let rows = [];
+    for (const cand of [ap, ...Array.from({ length: 32 }, (_, i) => i)]) {
+      rows = [];
+      let anyHit = false;
+      let n = 0;
+      for (const t of tracks) {
+        if (n >= 8) break;
+        if (!t || typeof t !== "object" || Array.isArray(t) || t.engineKey === "bus") continue;
+        n++;
+        const len = num(t.length) ? Math.max(1, Math.min(64, pgInt(t.length))) : 16;
+        const e = t.euclid;
+        if (e && typeof e === "object" && !Array.isArray(e) && e.on === true) {
+          rows.push({
+            n: len,
+            g: {
+              p: nul(e.pulses),
+              n: nul(e.steps),
+              r: nul(e.rotate),
+              l: "gate" in e ? e.gate === "legato" : null,
+              a: e.accent !== false,
+            },
+          });
+          anyHit = true;
+          continue;
+        }
+        const c = t.chance;
+        if (c && typeof c === "object" && !Array.isArray(c) && c.on === true) {
+          rows.push({ n: len, c: { f: nul(c.first), l: nul(c.last), s: nul(c.rseed) } });
+          anyHit = true;
+          continue;
+        }
+        const pat = Array.isArray(t.patterns) ? t.patterns[cand] : undefined;
+        const arr = (k) => (pat && typeof pat === "object" && Array.isArray(pat[k]) ? pat[k] : []);
+        const steps = arr("steps");
+        const vels = arr("velocities");
+        const lens = arr("lengths");
+        let line = "";
+        let hold = 0;
+        for (let i = 0; i < len; i++) {
+          const el = steps[i];
+          if (el === true || (num(el) && el > 0)) {
+            const v = num(vels[i]) ? vels[i] : 0.5;
+            line += String(Math.max(1, Math.min(9, pgInt(v * 9))));
+            hold = (num(lens[i]) ? Math.max(1, pgInt(lens[i])) : 1) - 1;
+            anyHit = true;
+          } else if (hold > 0) {
+            line += "-";
+            hold--;
+          } else {
+            line += ".";
+          }
+        }
+        rows.push({ s: line });
+      }
+      if (anyHit) return { p: cand, t: rows };
+    }
+    return { p: ap, t: rows };
+  } catch {
+    return null;
+  }
+}

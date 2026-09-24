@@ -13,8 +13,9 @@ export const SHARE_IMAGE = `${SITE_URL}share.png`;
 export const SITE_DESCRIPTION =
   "Prompt-driven step sequencer — Plaits, 808/909 kits, hand-built emulations, samples, MIDI.";
 
-/** og + twitter for one card. The image is the same either way. */
-export function shareCard(title: string, description: string) {
+/** og + twitter for one card. `image` is the song or jam's own picture
+ *  (app/api/og), absolute; the site's share.png when there is none. */
+export function shareCard(title: string, description: string, image: string = SHARE_IMAGE) {
   return {
     openGraph: {
       type: "website",
@@ -23,7 +24,7 @@ export function shareCard(title: string, description: string) {
       url: SITE_URL,
       images: [
         {
-          url: SHARE_IMAGE,
+          url: image,
           width: 1200,
           height: 630,
           type: "image/png",
@@ -34,7 +35,7 @@ export function shareCard(title: string, description: string) {
       card: "summary_large_image",
       title,
       description,
-      images: [SHARE_IMAGE],
+      images: [image],
     },
   } satisfies Metadata;
 }

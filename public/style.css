@@ -59,9 +59,8 @@ html, body {
   flex-wrap: wrap;
 }
 
-/* An anchor, not a heading: it points at the studio's own URL, so it is a blank
-   editor whichever way you open it (main.js intercepts the plain click and
-   resets in place instead of reloading the engine). */
+/* An anchor, not a heading: it goes to the homepage (main.js intercepts the
+   plain click to ask first when the session has work in it to lose). */
 .sq-logo {
   display: inline-flex;
   align-items: center;

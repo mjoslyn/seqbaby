@@ -16,12 +16,12 @@ import { setOpenSong } from "@/app/songs/openSong";
 // cannot disagree:
 //
 //   - `seqbaby:newset`, which the engine fires from `newSet()` -- the top bar's
-//     `new` and a click on the logo both land there. NewSongButton clears the
+//     `new` lands there. NewSongButton clears the
 //     open-song slot on the same event, synchronously; this then fills it with
 //     the template, which is the order that leaves the slot right if there is
 //     no template to load.
 //   - a fresh page load of the studio's own URL, which is the other way to get
-//     a blank editor (the logo is a real link, so opening it in a new tab
+//     a blank editor (`new` is a real link, so opening it in a new tab
 //     arrives here). Skipped when the URL already carries a session -- `?s=` is
 //     a share link and `?open=` a deep link, and both load asynchronously too,
 //     so racing them would be a coin toss over whose session wins. `?jam=` is
