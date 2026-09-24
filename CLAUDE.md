@@ -1782,6 +1782,12 @@ to say hello), the songs people have published, and who made them.
   is public anyway. It selects `data->bpm`, never `data`: a song's data is
   the whole session, samples included. It never throws: no env, a missing
   migration or a dead network is an empty feed with a joke in it.
+- **The people are every public profile with a handle**, not just whoever
+  made the songs above: read from `profiles` filtered on `is_public` (the
+  filter is repeated so the list does not lean on the RLS policy alone),
+  with a count of each one's published songs. Busiest first, then newest.
+  `bio` comes from `profiles`, never `profile_cards`, which must not carry
+  it (migration 0007).
 - **Who is looking is a client island** (`Who.tsx`): a local session read,
   then one `profile_cards` read for the handle. A cached page cannot know.
 - A card's step picture is hashed from the song's id (`fingerprint`), not

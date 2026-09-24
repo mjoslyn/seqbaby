@@ -1,4 +1,4 @@
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 // What the homepage shows of the people using the studio: the songs they have
 // published, newest first, and who made them.
@@ -19,7 +19,16 @@ export type FeedSong = {
   owner: { handle: string | null; name: string } | null;
 };
 
-export type Feed = { songs: FeedSong[]; people: { handle: string; name: string; songs: number }[] };
+export type FeedPerson = {
+  handle: string;
+  name: string;
+  bio: string | null;
+  avatarUrl: string | null;
+  /** How many songs they have published. */
+  songs: number;
+};
+
+export type Feed = { songs: FeedSong[]; people: FeedPerson[] };
 
 const EMPTY: Feed = { songs: [], people: [] };
 
@@ -30,7 +39,7 @@ function named(title: unknown): string {
 
 /** Never throws: with no Supabase env, a table missing its migration or the
  *  network down, the homepage still renders, just with nothing in the feed. */
-export async function loadFeed(limit = 12): Promise<Feed> {
+export async function loadFeed(limit = 24): Promise<Feed> {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!url || !key) return EMPTY;
@@ -38,14 +47,17 @@ export async function loadFeed(limit = 12): Promise<Feed> {
     const supabase = createClient(url, key, { auth: { persistSession: false } });
     // `data->bpm` rather than `data`: a song's data is the whole session,
     // base64 samples included, and a card needs one number out of it.
-    const { data: rows, error } = await supabase
-      .from("songs")
-      .select("id,title,share_slug,updated_at,owner_id,bpm:data->bpm")
-      .eq("is_public", true)
-      .not("share_slug", "is", null)
-      .order("updated_at", { ascending: false })
-      .limit(limit);
-    if (error || !rows?.length) return EMPTY;
+    const [{ data: rows, error }, people] = await Promise.all([
+      supabase
+        .from("songs")
+        .select("id,title,share_slug,updated_at,owner_id,bpm:data->bpm")
+        .eq("is_public", true)
+        .not("share_slug", "is", null)
+        .order("updated_at", { ascending: false })
+        .limit(limit),
+      loadPeople(supabase),
+    ]);
+    if (error || !rows?.length) return { songs: [], people };
 
     const ownerIds = [...new Set(rows.map((r) => r.owner_id as string))];
     const { data: cards } = await supabase
@@ -68,20 +80,62 @@ export async function loadFeed(limit = 12): Promise<Feed> {
       owner: byId.get(r.owner_id as string) ?? null,
     }));
 
-    // The people are whoever made the songs above, most prolific first. Only
-    // those with a handle: a profile page is addressed by one.
-    const counts = new Map<string, { handle: string; name: string; songs: number }>();
-    for (const s of songs) {
-      const h = s.owner?.handle;
-      if (!h) continue;
-      const e = counts.get(h) ?? { handle: h, name: s.owner!.name, songs: 0 };
-      e.songs++;
-      counts.set(h, e);
-    }
-    const people = [...counts.values()].sort((a, b) => b.songs - a.songs);
     return { songs, people };
   } catch {
     return EMPTY;
+  }
+}
+
+/**
+ * Every public profile with a handle, whether or not they have published
+ * anything yet. Read from `profiles`, which anon may read only where
+ * `is_public` (migration 0007) -- the filter is repeated here so the list
+ * does not depend on that policy to stay public-only. `bio` is on the
+ * profile page already, so it is fine here; it is NOT on profile_cards, which
+ * is why this is not that view.
+ *
+ * Ordered by how many songs they have published, then newest first, so the
+ * people with something to hear come before the ones who just signed up.
+ */
+async function loadPeople(
+  supabase: SupabaseClient,
+  limit = 48,
+): Promise<FeedPerson[]> {
+  try {
+    const { data: profiles, error } = await supabase
+      .from("profiles")
+      .select("id,username,display_name,bio,avatar_url,created_at")
+      .eq("is_public", true)
+      .not("username", "is", null)
+      .order("created_at", { ascending: false })
+      .limit(limit);
+    if (error || !profiles?.length) return [];
+
+    const ids = profiles.map((p) => p.id as string);
+    const { data: owned } = await supabase
+      .from("songs")
+      .select("owner_id")
+      .eq("is_public", true)
+      .in("owner_id", ids);
+    const counts = new Map<string, number>();
+    for (const r of owned ?? []) counts.set(r.owner_id as string, (counts.get(r.owner_id as string) ?? 0) + 1);
+
+    const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
+    return profiles
+      .map((p, i) => ({
+        order: i,
+        person: {
+          handle: p.username as string,
+          name: str(p.display_name) ?? (p.username as string),
+          bio: str(p.bio),
+          avatarUrl: str(p.avatar_url),
+          songs: counts.get(p.id as string) ?? 0,
+        },
+      }))
+      .sort((a, b) => b.person.songs - a.person.songs || a.order - b.order)
+      .map((e) => e.person);
+  } catch {
+    return [];
   }
 }
 

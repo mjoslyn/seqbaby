@@ -163,19 +163,30 @@ export default async function HomePage() {
       <section className={styles.section}>
         <div className={styles.sectionHead}>
           <h2>people making noise</h2>
-          <span className={styles.sectionSub}>everyone above has a page of their own.</span>
+          <span className={styles.sectionSub}>everyone with a public page. go see what they&apos;ve made.</span>
         </div>
         {people.length ? (
           <ul className={styles.people}>
             {people.map((p) => (
               <li key={p.handle}>
                 <a className={styles.person} href={`/u/${p.handle}`}>
-                  <span className={styles.avatar} aria-hidden>
-                    {p.handle.slice(0, 2)}
-                  </span>
-                  <span>@{p.handle}</span>
-                  <span className={styles.personCount}>
-                    {p.songs} {p.songs === 1 ? "song" : "songs"}
+                  {p.avatarUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img className={styles.avatar} src={p.avatarUrl} alt="" width={36} height={36} />
+                  ) : (
+                    <span className={styles.avatar} aria-hidden>
+                      {p.handle.slice(0, 2)}
+                    </span>
+                  )}
+                  <span className={styles.personText}>
+                    <span className={styles.personName}>
+                      {p.name}
+                      {p.name !== p.handle && <span className={styles.personHandle}> @{p.handle}</span>}
+                    </span>
+                    {p.bio && <span className={styles.personBio}>{p.bio}</span>}
+                    <span className={styles.personCount}>
+                      {p.songs ? `${p.songs} ${p.songs === 1 ? "song" : "songs"}` : "no songs yet"}
+                    </span>
                   </span>
                 </a>
               </li>
