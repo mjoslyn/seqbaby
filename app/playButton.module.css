@@ -1,0 +1,60 @@
+/* The play button (PlayButton.tsx). Solid accent, always visible: it is the
+   quickest way to find out whether a song is worth opening, so it should not
+   wait for a hover to be found. */
+
+.play {
+  display: grid;
+  place-items: center;
+  flex: none;
+  padding: 0;
+  border-radius: 50%;
+  border: 0;
+  background: var(--accent, #c2f04a);
+  color: #0a0b0d;
+  cursor: pointer;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.45);
+  transition: transform 0.12s ease, box-shadow 0.12s ease, background 0.12s ease;
+}
+.play svg { width: 45%; height: 45%; }
+.play:hover { transform: scale(1.08); box-shadow: 0 3px 16px rgba(194, 240, 74, 0.35); }
+.play:active { transform: scale(0.96); }
+.play:focus-visible { outline: 2px solid var(--accent-2, #6ee7ff); outline-offset: 2px; }
+
+/* Playing: the same button, ringing, so which card is sounding reads from
+   across the page. */
+.play[data-status="playing"] { animation: ring 1.2s ease-out infinite; }
+@keyframes ring {
+  0% { box-shadow: 0 0 0 0 rgba(194, 240, 74, 0.55); }
+  100% { box-shadow: 0 0 0 12px rgba(194, 240, 74, 0); }
+}
+.play[data-status="loading"] { background: #16181d; color: var(--accent, #c2f04a); }
+.play[data-status="tap"] { background: var(--accent-2, #6ee7ff); }
+.play[data-status="error"] { background: #ff6b6b; }
+@media (prefers-reduced-motion: reduce) {
+  .play[data-status="playing"] { animation: none; box-shadow: 0 0 0 3px rgba(194, 240, 74, 0.45); }
+}
+
+/* Over a homepage card's step picture, at its right-hand end. The card is the
+   positioned ancestor (home.module.css). */
+.card {
+  position: absolute;
+  top: 18px;
+  right: 20px;
+  z-index: 1;
+  width: 44px;
+  height: 44px;
+}
+
+/* Inline in a profile row, ahead of the preview. */
+.row { width: 36px; height: 36px; }
+
+.word { font: 700 10px/1 ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+.spin {
+  width: 40%;
+  height: 40%;
+  border-radius: 50%;
+  border: 2px solid rgba(194, 240, 74, 0.3);
+  border-top-color: var(--accent, #c2f04a);
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }

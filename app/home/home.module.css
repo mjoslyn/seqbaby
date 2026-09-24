@@ -209,44 +209,10 @@
   transition: transform 0.15s ease, border-color 0.15s ease;
 }
 .card:hover { transform: translateY(-3px) rotate(-0.4deg); border-color: var(--accent); }
-/* The play button sits on the card's step picture, top right. */
+/* Positioned for the play button (app/playButton.module.css), which floats
+   over the step picture; a playing card keeps the accent border. */
 .card { position: relative; }
-.play {
-  position: absolute;
-  top: 16px;
-  right: 16px;
-  z-index: 1;
-  width: 36px;
-  height: 36px;
-  display: grid;
-  place-items: center;
-  border-radius: 50%;
-  border: 1px solid var(--border);
-  background: rgba(10, 11, 13, 0.85);
-  color: var(--fg);
-  cursor: pointer;
-  opacity: 0;
-  transition: opacity 0.15s ease, transform 0.15s ease, border-color 0.15s ease;
-}
-.card:hover .play,
-.play:focus-visible,
-.playActive { opacity: 1; }
-/* No hover on a finger: always there. */
-@media (hover: none) { .play { opacity: 1; } }
-.play:hover { border-color: var(--accent); transform: scale(1.06); }
-.play[data-status="playing"] { background: var(--accent); color: #0a0b0d; border-color: var(--accent); }
-.play[data-status="error"] { border-color: #ff6b6b; color: #ff6b6b; }
-.playTap { font-size: 10px; font-weight: 700; }
-.playSpin {
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  border: 2px solid var(--fg-dim);
-  border-top-color: var(--accent);
-  animation: playSpin 0.8s linear infinite;
-}
-@keyframes playSpin { to { transform: rotate(360deg); } }
-.card:has(.play[data-status="playing"]) { border-color: var(--accent); }
+.card:has([aria-pressed="true"]) { border-color: var(--accent); }
 .cardLink { display: flex; flex-direction: column; gap: 10px; color: var(--fg); text-decoration: none; }
 .cardTitle { font-weight: 700; font-size: 14px; overflow-wrap: anywhere; }
 .cardMeta { display: flex; flex-wrap: wrap; gap: 4px 12px; color: var(--fg-dim); font-size: 11px; }

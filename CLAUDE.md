@@ -1799,28 +1799,33 @@ to say hello), the songs people have published, and who made them.
 - `mcp/audition.mjs` points a bare site URL at `/studio` (`studioUrl`), so
   `SEQBABY_URL=http://localhost:3000` keeps working.
 
-## Playing a song from its card (`app/home/enginePlayer.ts`)
+## Playing a song where it is listed (`app/enginePlayer.ts` + `app/PlayButton.tsx`)
 
-A homepage card's play button plays the song with the real engine, loaded
-only on the first press. The homepage still ships none of it.
+Homepage cards and profile rows carry a play button that plays the song with
+the real engine. The engine is DEFERRED, not bundled: the pages ship none of
+it, and it loads on its own once they have.
 
 - **One hidden, same-origin frame** on `/studio?embed`, driven through
   `window.seqbaby` (`applySet`, `play`, `stop`, `unlock`) the way
-  `mcp/audition.mjs` drives it. The next card is an `applySet` into the same
-  engine, not a second one. A frame rather than the engine in the homepage's
-  own document because the engine owns its document (keyboard, undo, ~1000
+  `mcp/audition.mjs` drives it. The next song is an `applySet` into the same
+  engine, not a second one. A frame rather than the engine in the page's own
+  document because the engine owns its document (keyboard, undo, ~1000
   controls).
+- **`scheduleWarm`** loads the frame after the page's `load` event, in an idle
+  callback, so a press usually finds it ready (measured: 309ms from click to
+  sound with the session prefetched). Skipped on Save-Data and 2g, where the
+  first press loads it instead. The session is prefetched when the pointer
+  reaches a button or it gets focus.
 - **`?embed`** drops the account bar, `OpenSongOnLoad` and `DefaultTemplate`
   (the template would race the song the page hands in), and main.js skips
   the audio gate dialog.
-- **Audio unlock.** Chrome lets a same-origin frame start audio once its
-  parent has had a click (measured headless: plays on one press). Safari wants
-  the gesture at the moment of the resume, so if the context is not running
-  2.5s after `play`, the card says `tap` and the next press calls `unlock`
-  synchronously inside it. `play` is raced, never awaited: Tone.start's
-  resume does not settle without a gesture.
-- **The session is prefetched** when the pointer reaches the play button (or
-  it gets focus). The engine never is.
+- **Audio unlock.** The click calls the warm engine's `unlock` synchronously,
+  inside the gesture, which is what Safari needs. If the press beat the
+  warm-up, Chrome still lets a same-origin frame start audio after the parent
+  was clicked; Safari does not, so if the context is not running 2.5s after
+  `play`, the button says `tap` and the next press unlocks inside that. `play`
+  is raced, never awaited: Tone.start's resume does not settle without a
+  gesture.
 
 ## Song previews (`preview`, migration 0012)
 

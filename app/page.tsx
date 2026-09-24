@@ -5,7 +5,7 @@ import SongPreview from "./SongPreview";
 import Avatar from "./Avatar";
 import PlayableAvatar from "./PlayableAvatar";
 import LikeButton from "./LikeButton";
-import PlayCard from "./home/PlayCard";
+import PlayButton from "./PlayButton";
 import { loadFeed, fingerprint, type FeedSong } from "./home/feed";
 import styles from "./home/home.module.css";
 import { SITE_URL, shareCard } from "./shareCard";
@@ -85,7 +85,7 @@ function SongCard({ song }: { song: FeedSong }) {
     <li className={styles.card}>
       {/* Beside the link rather than in it: a button inside an <a> is not
           allowed, and the card's own click still opens the song. */}
-      <PlayCard slug={song.slug} title={song.title} />
+      <PlayButton slug={song.slug} title={song.title} />
       <a className={styles.cardLink} href={`/studio?s=${encodeURIComponent(song.slug)}`}>
         <span className={styles.print}>
           {song.preview ? <SongPreview preview={song.preview} height="100%" /> : <Fingerprint id={song.id} />}

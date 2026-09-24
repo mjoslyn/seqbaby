@@ -175,7 +175,7 @@ function AccountBarFallback() {
 // engine straight from the document, in the required order.
 //
 // `?embed` is the studio as a player: the homepage's song cards load it in a
-// hidden frame (app/home/enginePlayer.ts) and drive `window.seqbaby` from
+// hidden frame (app/enginePlayer.ts) and drive `window.seqbaby` from
 // outside. No account bar (two Supabase round trips nobody sees), and no deep
 // link or default template, which would race the song the page hands it.
 export default async function StudioPage({ searchParams }: { searchParams: SearchParams }) {

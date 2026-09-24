@@ -4,6 +4,7 @@ import type { Metadata } from "next";
 import { getPublicProfile } from "@/app/profile/actions";
 import ForkButton from "./ForkButton";
 import LikeButton from "@/app/LikeButton";
+import PlayButton from "@/app/PlayButton";
 import PlayableAvatar from "@/app/PlayableAvatar";
 import SongPreview from "@/app/SongPreview";
 import styles from "@/app/ui.module.css";
@@ -83,6 +84,7 @@ export default async function ProfilePage({
         ) : (
           songs.map((s) => (
             <div className={styles.repoRow} key={s.id}>
+              {s.share_slug ? <PlayButton slug={s.share_slug} title={s.title} variant="row" /> : null}
               {s.preview ? (
                 <div className={styles.repoPreview}>
                   <SongPreview preview={s.preview} height="100%" />

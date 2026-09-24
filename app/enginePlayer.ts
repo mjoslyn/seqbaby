@@ -1,23 +1,25 @@
 "use client";
 
-// Plays a published song on the homepage with the studio's own engine, loaded
-// only when somebody presses play on a card.
+// Plays a published song on the homepage with the studio's own engine.
 //
 // Full fidelity means the real engine: every model, the rack, the worklets,
-// samples. That is ~1.7MB, which is exactly why the homepage does not boot it
-// (see page.tsx). So the first press loads the studio itself, in a hidden
-// same-origin frame (`/studio?embed`), and drives it through `window.seqbaby`
+// samples. That is ~1.7MB, which is why the homepage does not boot it with
+// the page (see page.tsx). It is DEFERRED instead (`scheduleWarm`): once the
+// page has loaded and the browser is idle, the studio itself loads in a
+// hidden same-origin frame (`/studio?embed`), so it is usually ready by the
+// time anyone presses play. The page drives it through `window.seqbaby`
 // like the MCP server's audition does. One frame for the whole page: the
 // next card is an `applySet` into the engine already running, not a second
 // engine. A frame rather than the engine in this document because the engine
 // owns its document: the keyboard, undo, the step grid and ~1000 controls
 // all assume they are the page.
 //
-// Audio has to be unlocked by a gesture, and the gesture landed here, before
-// the frame existed. Chrome lets a same-origin frame start audio once its
-// parent has been clicked. Safari wants the gesture at the moment of the
-// resume, which is long gone after a download, so there the card asks for
-// one more tap and calls the engine's `unlock` synchronously inside it.
+// Audio has to be unlocked by a gesture, and the gesture lands in this page,
+// not the frame. With the engine already warm, the click calls its `unlock`
+// synchronously, inside the gesture, which is what Safari needs. If the press
+// beat the warm-up (or it was skipped), Chrome still lets a same-origin frame
+// start audio once its parent has been clicked; Safari does not, so there the
+// card asks for one more tap and unlocks inside that.
 
 type Api = NonNullable<Window["seqbaby"]>;
 type EngineState = { playing?: boolean; audioCtx?: AudioContext | null };
@@ -85,6 +87,28 @@ function loadEngine(): Promise<Api> {
     frame = null;
   });
   return engine;
+}
+
+let warmScheduled = false;
+
+/**
+ * Load the engine ahead of the first press, once the page has loaded and the
+ * browser has a quiet moment. Called by every card; the first call counts.
+ * Skipped when the visitor has asked to save data or is on 2g, where 1.7MB
+ * nobody asked for is a real cost -- the first press then loads it instead.
+ */
+export function scheduleWarm(): void {
+  if (warmScheduled || typeof window === "undefined") return;
+  warmScheduled = true;
+  const conn = (navigator as Navigator & { connection?: { saveData?: boolean; effectiveType?: string } })
+    .connection;
+  if (conn?.saveData || /(^|-)2g$/.test(conn?.effectiveType ?? "")) return;
+  const idle =
+    window.requestIdleCallback ??
+    ((fn: () => void) => window.setTimeout(fn, 1));
+  const go = () => idle(() => void loadEngine().catch(() => {}), { timeout: 4000 });
+  if (document.readyState === "complete") go();
+  else window.addEventListener("load", go, { once: true });
 }
 
 const sessions = new Map<string, Promise<unknown>>();
