@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { getPublicProfile } from "@/app/profile/actions";
 import ForkButton from "./ForkButton";
-import Avatar from "@/app/Avatar";
+import PlayableAvatar from "@/app/PlayableAvatar";
 import SongPreview from "@/app/SongPreview";
 import styles from "@/app/ui.module.css";
 
@@ -58,7 +58,7 @@ export default async function ProfilePage({
         </nav>
 
         <div className={styles.profileHead}>
-          <Avatar grid={profile.avatar_grid} name={name} size={72} />
+          <PlayableAvatar grid={profile.avatar_grid} name={name} size={72} />
           <div>
             <div className={styles.profileName}>
               {name}

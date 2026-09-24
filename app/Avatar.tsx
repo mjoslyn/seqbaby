@@ -18,6 +18,7 @@ export default function Avatar({
   size = 32,
   className,
   title,
+  step = -1,
 }: {
   /** The stored `avatar_grid`, or null/undefined for the name's default. */
   grid: string | null | undefined;
@@ -25,6 +26,8 @@ export default function Avatar({
   size?: number;
   className?: string;
   title?: string;
+  /** The playhead's column while it plays (PlayableAvatar), -1 when still. */
+  step?: number;
 }) {
   const g = gridFor(grid, name);
   const gap = size >= 40 ? 1 : 0;
@@ -58,6 +61,16 @@ export default function Avatar({
           />
         );
       })}
+      {step >= 0 && (
+        <rect
+          x={step * (CELL + gap)}
+          y={0}
+          width={CELL + 2 * gap}
+          height={span}
+          fill="#ffffff"
+          opacity={0.28}
+        />
+      )}
     </svg>
   );
 }

@@ -3,6 +3,7 @@ import Toy from "./home/Toy";
 import Who from "./home/Who";
 import SongPreview from "./SongPreview";
 import Avatar from "./Avatar";
+import PlayableAvatar from "./PlayableAvatar";
 import { loadFeed, fingerprint, type FeedSong } from "./home/feed";
 import styles from "./home/home.module.css";
 
@@ -179,7 +180,7 @@ export default async function HomePage() {
             {people.map((p) => (
               <li key={p.handle}>
                 <a className={styles.person} href={`/u/${p.handle}`}>
-                  <Avatar grid={p.avatarGrid} name={p.handle} size={44} />
+                  <PlayableAvatar grid={p.avatarGrid} name={p.handle} size={44} />
                   <span className={styles.personText}>
                     <span className={styles.personName}>@{p.handle}</span>
                     {p.bio && <span className={styles.personBio}>{p.bio}</span>}
