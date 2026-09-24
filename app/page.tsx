@@ -6,6 +6,7 @@ import Avatar from "./Avatar";
 import PlayableAvatar from "./PlayableAvatar";
 import { loadFeed, fingerprint, type FeedSong } from "./home/feed";
 import styles from "./home/home.module.css";
+import { SITE_URL, shareCard } from "./shareCard";
 
 // The homepage. The studio itself is at /studio (app/studio/page.tsx); links
 // that still name the studio's old place at / (`?s=`, `?open=`, `?jam=`) are
@@ -16,8 +17,17 @@ import styles from "./home/home.module.css";
 // own name in the corner.
 export const revalidate = 60;
 
+const TITLE = "seqbaby · a step sequencer with opinions";
+const DESCRIPTION =
+  "Turn the knobs. All of them. At once. A step sequencer in a browser tab: analog and FM models, 808s, samples, and songs people just made.";
+
+// The homepage's own card: the hero line over the latest published songs
+// (app/api/og/home). Pinned to the site's origin, not the request's, because
+// reading the host would make this cached page dynamic.
 export const metadata: Metadata = {
-  title: "seqbaby · a step sequencer with opinions",
+  title: TITLE,
+  description: DESCRIPTION,
+  ...shareCard(TITLE, DESCRIPTION, `${SITE_URL}api/og/home`),
 };
 
 const BOX = [

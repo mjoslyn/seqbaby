@@ -1928,6 +1928,14 @@ what — `mike has shared "cold squelch" with you` — and a jam invite
   song to look up, so its card is the host's grid avatar over four euclid
   rings seeded by the room. Middleware skips `/api/og`; responses are cached
   an hour.
+- **The homepage has a card of its own** (`app/api/og/home/route.tsx`): the
+  hero line over the three latest published songs, each drawn from its
+  `preview` with its owner, read through the homepage's own `loadFeed`. An
+  empty feed (nothing published, no env) draws a beat of its own instead.
+  `app/page.tsx` pins `og:image` to `SITE_URL` rather than the request's host,
+  because reading headers would make the cached homepage dynamic. The drawing
+  parts both og routes share are `app/api/og/parts.tsx` (a route file may
+  export only its handlers).
 - **`untitled` counts as no title**, along with an unreadable song, a Blobs
   share written before this existed (no title in its metadata) and no
   Supabase env at all. Every one of those falls back to the site card rather
