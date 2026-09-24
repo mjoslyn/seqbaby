@@ -6,6 +6,11 @@ declare global {
     seqbaby?: {
       version: number;
       serializeSet: () => unknown;
+      /** Start / stop the transport (idempotent, unlike the play button). */
+      play: () => Promise<void>;
+      stop: () => Promise<void>;
+      /** Prime a suspended AudioContext; call inside a user gesture. */
+      unlock: () => void;
       applySet: (data: unknown) => {
         version: number;
         warnings: string[];

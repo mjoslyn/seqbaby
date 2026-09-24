@@ -1799,6 +1799,29 @@ to say hello), the songs people have published, and who made them.
 - `mcp/audition.mjs` points a bare site URL at `/studio` (`studioUrl`), so
   `SEQBABY_URL=http://localhost:3000` keeps working.
 
+## Playing a song from its card (`app/home/enginePlayer.ts`)
+
+A homepage card's play button plays the song with the real engine, loaded
+only on the first press. The homepage still ships none of it.
+
+- **One hidden, same-origin frame** on `/studio?embed`, driven through
+  `window.seqbaby` (`applySet`, `play`, `stop`, `unlock`) the way
+  `mcp/audition.mjs` drives it. The next card is an `applySet` into the same
+  engine, not a second one. A frame rather than the engine in the homepage's
+  own document because the engine owns its document (keyboard, undo, ~1000
+  controls).
+- **`?embed`** drops the account bar, `OpenSongOnLoad` and `DefaultTemplate`
+  (the template would race the song the page hands in), and main.js skips
+  the audio gate dialog.
+- **Audio unlock.** Chrome lets a same-origin frame start audio once its
+  parent has had a click (measured headless: plays on one press). Safari wants
+  the gesture at the moment of the resume, so if the context is not running
+  2.5s after `play`, the card says `tap` and the next press calls `unlock`
+  synchronously inside it. `play` is raced, never awaited: Tone.start's
+  resume does not settle without a gesture.
+- **The session is prefetched** when the pointer reaches the play button (or
+  it gets focus). The engine never is.
+
 ## Song previews (`preview`, migration 0012)
 
 Every song card (homepage feed, a profile page, the studio's songs menu)

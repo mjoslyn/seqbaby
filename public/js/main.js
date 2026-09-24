@@ -882,7 +882,10 @@ export function init() {
   // BufferSource + <audio>.play() to switch the iOS audio session to
   // "playback"). After the gate, the play button only has to start the
   // Transport — no late awaits, no chance of losing gesture authority.
-  showAudioGateDialog();
+  // Not when embedded (`?embed`, the homepage's hidden player): nobody can see
+  // a dialog in a frame nobody can see, and the page around it primes the
+  // audio from its own click instead (appApi's `unlock`).
+  if (!new URLSearchParams(location.search).has("embed")) showAudioGateDialog();
   // Re-render step grids when crossing the mobile/desktop breakpoint so the
   // visual column count (16 vs 8) tracks the viewport. Debounced + gated so
   // rotation triggers a single render.
