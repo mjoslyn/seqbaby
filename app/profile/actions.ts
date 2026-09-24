@@ -26,7 +26,7 @@ export type ProfileSong = {
   forkedFrom: { title: string; username: string | null } | null;
   /** The step preview (migration 0012), absent before that has run. */
   preview?: unknown;
-  /** Hearts (migration 0015), absent before that has run. */
+  /** Hearts (migration 0016), absent before that has run. */
   likes?: number;
 };
 export type ProfilePatch = {
@@ -179,7 +179,7 @@ export async function getPublicProfile(
   if (!profile.is_public && !isOwner)
     return { private: true, username: profile.username ?? username };
 
-  // `preview` and `likes` are computed fields (migrations 0012, 0015); a
+  // `preview` and `likes` are computed fields (migrations 0012, 0016); a
   // database without one fails the whole select, so the page asks again with
   // less rather than losing the song list over a thumbnail or a heart.
   const songsQuery = (cols: string) =>

@@ -18,7 +18,7 @@ export type FeedSong = {
   slug: string;
   bpm: number | null;
   updatedAt: string;
-  /** Hearts (migration 0015); 0 before that has run. */
+  /** Hearts (migration 0016); 0 before that has run. */
   likes: number;
   owner: { handle: string | null; name: string; avatarGrid: string | null } | null;
   /** The step preview the database computes (migration 0012), or null before
@@ -137,7 +137,7 @@ const CANDIDATES = 200;
 /**
  * The ids to show, best first. Asks only for what the ranking needs -- no
  * preview, no bpm -- over a window of the newest published songs, then ranks
- * them in rank.js. A database without the `likes` field (0015) ranks on
+ * them in rank.js. A database without the `likes` field (0016) ranks on
  * freshness alone, which is what the homepage did before likes existed.
  */
 async function rankedIds(

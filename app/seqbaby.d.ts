@@ -98,5 +98,8 @@ declare global {
     // HTML is parsed from the document (i.e. not on a client-side navigation).
     // ScriptLoader reads it to decide whether to run its fallback boot.
     __seqbabyServerBoot?: number;
+    // How many whole sessions applySet has loaded since boot (session.js).
+    // SongByline reads it to tell the linked song from whatever came after.
+    __seqbabySetsApplied?: number;
   }
 }

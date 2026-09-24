@@ -976,7 +976,7 @@ export async function saveSongChat(
 /**
  * Heart a published song, or take the heart back. Idempotent both ways: a
  * second like is the primary key refusing a duplicate, which is the answer
- * wanted, and an unlike of nothing deletes nothing. RLS (migration 0015) is
+ * wanted, and an unlike of nothing deletes nothing. RLS (migration 0016) is
  * what keeps a like to your own name and to a song that is public.
  *
  * Returns the count as it stands after the write, so the heart can show the

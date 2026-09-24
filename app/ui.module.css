@@ -246,6 +246,28 @@ button.repoAction { display: inline-flex; align-items: center; gap: 5px; }
 .manualLink { margin-right: auto; color: #9aa0aa; text-decoration: none; }
 .manualLink:hover { color: #e8e8ea; }
 
+/* Whose song this is (SongByline.tsx), beside `manual`. It takes the free
+   space `manual` otherwise pushes the row with, and gives way first: the
+   title ellipsizes before anything on the right is squeezed. */
+.manualLink:has(+ .byline) { margin-right: 12px; }
+.byline {
+  margin-right: auto;
+  min-width: 0;
+  display: inline-flex; align-items: center; gap: 6px;
+  color: #9aa0aa; white-space: nowrap;
+}
+.bylineTitle { color: #e8e8ea; font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.bylineOwner { display: inline-flex; align-items: center; gap: 5px; color: #7fd6f2; text-decoration: none; flex: none; }
+a.bylineOwner:hover .bylineOwnerName { text-decoration: underline; }
+.bylineLike {
+  flex: none;
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 6px; border: 1px solid #2a2d35; border-radius: 6px;
+  background: #16181d; color: #9aa0aa; font: inherit; cursor: pointer;
+}
+.bylineLike:hover { color: #ff9fd0; border-color: #3a3d45; }
+.bylineLiked { color: #ff9fd0; border-color: #5a2e45; }
+
 /* Everything the bar carries apart from `manual`. One element, so the mobile
    sheet can be the same DOM moved by CSS rather than a second copy of it. */
 .barItems { display: flex; align-items: center; gap: 8px; }
@@ -588,6 +610,11 @@ button.repoAction { display: inline-flex; align-items: center; gap: 5px; }
 
 @media (max-width: 768px) {
   .topBar { padding: 6px 10px; gap: 6px; }
+
+  /* A phone's bar has room for the title and a face, not the sentence: the
+     avatar still links to their page, and its title attribute names them. */
+  .bylineBy, .bylineOwnerName { display: none; }
+  .bylineLike { min-height: 32px; }
 
   /* Raised only while the sheet is open, so an engine modal (z-index 200) is
      never sat on by a bar nobody is using. Position stays `sticky` from the

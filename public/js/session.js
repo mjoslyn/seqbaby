@@ -712,6 +712,11 @@ export function applySet(s) {
   // than called, so the undo stack (history.js) can treat that as the single
   // step it is without this module having to know it exists — the same
   // arrangement as `seqbaby:newset` below, and for the same reason.
+  // Counted as well, for a listener that mounts late: the studio's byline
+  // (app/SongByline.tsx) streams in behind <Suspense> and may arrive after the
+  // linked song already has, so "the first event I hear" cannot tell it which
+  // session was the link's.
+  window.__seqbabySetsApplied = (window.__seqbabySetsApplied || 0) + 1;
   try { window.dispatchEvent(new CustomEvent("seqbaby:setapplied")); } catch {}
   // Handed back so a caller can surface a warning (chiefly "saved by a newer
   // version"). Existing callers ignore it, which is why this stays a return

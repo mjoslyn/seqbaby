@@ -32,7 +32,7 @@ function likedByMe(id: string): Promise<Set<string>> {
             .in("song_id", [...ids]);
           resolve(new Set((rows ?? []).map((r) => r.song_id as string)));
         } catch {
-          // No Supabase env, or no 0015 yet: nothing is liked.
+          // No Supabase env, or no 0016 yet: nothing is liked.
           resolve(new Set());
         }
       });
