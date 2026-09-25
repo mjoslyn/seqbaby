@@ -240,6 +240,10 @@ function attachPadSurface(pad, el, cursor, onMove) {
   paint();
   el.addEventListener("pointerdown", (e) => {
     if (e.pointerType === "mouse" && e.button !== 0) return;
+    // One pointer plays a pad at a time. A second finger landing mid-gesture
+    // would re-snapshot the swept values as the base, and the release would
+    // then spring back to where the first finger had pushed them.
+    if (drag != null) return;
     e.preventDefault();
     drag = e.pointerId;
     try { el.setPointerCapture(e.pointerId); } catch {}
@@ -251,7 +255,11 @@ function attachPadSurface(pad, el, cursor, onMove) {
   });
   el.addEventListener("pointermove", (e) => {
     if (drag !== e.pointerId) return;
-    if (e.pointerType === "mouse" && e.buttons === 0) { drag = null; return; }
+    // A button-less move means the release was missed (a trackpad, a mouse let
+    // go outside the window). It is still the end of the gesture: dropping the
+    // drag without releasing left a momentary pad holding everything where it
+    // was, exactly as if it had been latched.
+    if (e.pointerType === "mouse" && e.buttons === 0) { end(e); return; }
     for (const p of (e.getCoalescedEvents?.() || [e])) setFrom(p.clientX, p.clientY);
     paint();
     applyPad(pad, false);
