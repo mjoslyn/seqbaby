@@ -640,7 +640,10 @@ a.bylineOwner:hover .bylineOwnerName { text-decoration: underline; }
   /* A finger's target: the 44px floor everything else in thumb's reach gets.
      At the desktop's 5px padding it was a 26px sliver at the edge of the
      screen, and it is the only way to the rest of the bar. */
-  .manualLink { width: 44px; height: 44px; }
+  /* On a phone the manual goes back to the left edge, ahead of everything,
+     and takes the free space unless a byline is there to take it. */
+  .manualLink { width: 44px; height: 44px; order: -1; margin-right: auto; }
+  .topBar:has(.byline) .manualLink { margin-right: 0; }
   .beatSlot { display: inline-flex; align-items: center; gap: 8px; margin-right: 8px; }
   .beatSlot svg { width: 36px; height: 36px; }
   .menuBtn {
