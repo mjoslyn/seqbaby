@@ -185,6 +185,8 @@
 .repoName { font-size: 15px; color: #7fd6f2; text-decoration: none; font-weight: 600; }
 .repoName:hover { text-decoration: underline; }
 .repoMeta { color: #6b7280; font-size: 11px; margin-top: 2px; }
+.metaIcon { display: inline-flex; vertical-align: -2px; margin-right: 4px; }
+.metaIcon svg { width: 12px; height: 12px; }
 .repoAction {
   padding: 5px 10px; border: 1px solid #2a2d35; border-radius: 6px;
   background: #16181d; color: #e8e8ea; font: inherit; font-size: 12px;

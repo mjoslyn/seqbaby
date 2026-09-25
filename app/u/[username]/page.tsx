@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { getPublicProfile } from "@/app/profile/actions";
 import RemixButton from "@/app/RemixButton";
+import { IconRemix } from "@/app/menuIcons";
 import LikeButton from "@/app/LikeButton";
 import SavePatchButton from "@/app/SavePatchButton";
 import PlayButton from "@/app/PlayButton";
@@ -104,7 +105,7 @@ export default async function ProfilePage({
                 <div className={styles.repoMeta}>
                   {s.remixedFrom ? (
                     <>
-                      ⑂ remixed from {s.remixedFrom.title}
+                      <span className={styles.metaIcon}><IconRemix /></span>remixed from {s.remixedFrom.title}
                       {s.remixedFrom.username && (
                         <>
                           {" by "}
@@ -116,7 +117,7 @@ export default async function ProfilePage({
                       {" · "}
                     </>
                   ) : s.forked_from ? (
-                    "⑂ remix · "
+                    <><span className={styles.metaIcon}><IconRemix /></span>remix · </>
                   ) : null}
                   updated {fmtDate(s.updated_at)}
                 </div>
