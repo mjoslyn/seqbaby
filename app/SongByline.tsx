@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Avatar from "@/app/Avatar";
 import LikeButton from "@/app/LikeButton";
+import ForkButton from "@/app/ForkButton";
 import { subscribeOpenSong, getOpenSong } from "@/app/songs/openSong";
 import type { LinkedSongCard } from "@/app/songs/linkedSongTitle";
 import styles from "@/app/ui.module.css";
@@ -68,6 +69,9 @@ export default function SongByline({ song }: { song: LinkedSongCard }) {
           className={styles.bylineLike}
           likedClassName={styles.bylineLiked}
         />
+      )}
+      {song.songId && (
+        <ForkButton songId={song.songId} className={styles.bylineLike} forkedClassName={styles.bylineForked} />
       )}
     </span>
   );

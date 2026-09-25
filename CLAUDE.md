@@ -1815,6 +1815,14 @@ to say hello), the songs people have published, and who made them.
   its sample as base64), only the few fields inside it the picture needs. A
   legacy custom-Tone patch is drawn without a play button (`canPreview`): the
   studio plays one only as a `saved:` engine out of localStorage.
+- **The disk beside a patch's heart** (`app/SavePatchButton.tsx`, homepage
+  card and profile row) saves it into your patches: the studio's saved-patch
+  store (localStorage `seqbaby.patches.v1`), what a track's load button picks
+  from. Signed in only; the config is the cached `/api/patch/<id>` read, and a
+  config already in the store is not saved twice.
+- **The fork beside a song's heart** (`app/ForkButton.tsx`, the studio byline
+  and profile rows) is `forkSong`: a private copy in your songs, and nothing
+  else. Once made it turns into a link to open the fork.
 - **A card's step picture is the song's own** (see "Song previews" below).
   `fingerprint` (hashed from the id) is only the fallback for a database
   without migration 0012.

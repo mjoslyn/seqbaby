@@ -1,6 +1,7 @@
 import PlayButton from "../PlayButton";
 import Avatar from "../Avatar";
 import LikeButton from "../LikeButton";
+import SavePatchButton from "../SavePatchButton";
 import { canPreview, engineLabel, patchKey } from "./patchPreview";
 import PatchRoll from "./PatchRoll";
 import type { FeedPatch } from "./feed";
@@ -36,6 +37,7 @@ export default function PatchCard({ patch, age }: { patch: FeedPatch; age: strin
         )}
         <span>{age}</span>
         <LikeButton songId={patch.id} kind="patch" likes={patch.likes} className={styles.like} likedClassName={styles.liked} />
+        <SavePatchButton patchId={patch.id} name={patch.name} className={styles.savePatch} savedClassName={styles.saved} />
       </span>
     </li>
   );

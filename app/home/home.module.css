@@ -234,6 +234,16 @@
 }
 .like:hover { color: #ff9fd0; }
 .liked { color: #ff9fd0; }
+/* Save into your patches, beside the heart and padded out the same way. */
+.savePatch {
+  margin: -8px -6px -8px 0;
+  padding: 8px 6px;
+  min-height: 32px;
+  display: inline-flex; align-items: center;
+  background: none; border: 0; color: var(--fg-dim);
+  cursor: pointer;
+}
+.savePatch:hover, .saved { color: var(--accent); }
 .printOn { fill: var(--accent); }
 .printOff { fill: var(--step); }
 .card:nth-child(3n + 2) .printOn { fill: var(--accent-2); }
