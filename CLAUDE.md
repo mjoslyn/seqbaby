@@ -48,6 +48,7 @@ env / fx / eq / comp / mod / automation per track.
 │   ├── songs/page.tsx         the songs explorer at /songs: search, sort, filter by bpm and instrument
 │   │                          (Explorer.tsx, explore.js, exploreFeed.ts)
 │   ├── studioMarkup.ts        engine's static DOM skeleton (raw HTML string)
+│   ├── StudioBody.tsx         renders it, once: React must never rewrite the engine's DOM (see Gotchas)
 │   ├── ScriptLoader.tsx       injects Tone → woscillators → js/main.js in order
 │   ├── AccountBar/SongsMenu/SaveButton/OpenSongOnLoad.tsx
 │   ├── PatchBay.tsx + patches/bay.ts  the account's saved patches, handed to the engine
@@ -3079,6 +3080,14 @@ through a 6ms fade on its gain).
   must stay importable from Node** — no DOM, no Tone, no `window`. The tests
   and the MCP server run them; an import of state.js or catalog.js in any of
   them breaks `npm test` at load, which is the guard.
+- **React must never re-set the studio's `innerHTML`** (`app/StudioBody.tsx`).
+  React 19 rewrites `innerHTML` whenever `dangerouslySetInnerHTML` is a new
+  object, string unchanged or not, and a server action that writes a cookie
+  (Supabase refreshing a signed-in session) re-renders the page from a fresh
+  payload. Inline in the page, that put the bare skeleton back under a running
+  engine: tracks gone from the screen, `state.tracks` intact, first seen as
+  opening the songs menu wiping the song. StudioBody holds the first `{__html}`
+  in a ref. Don't inline it back into studio/page.tsx.
 - **`tsconfig.json` excludes `public/js/`** — the engine is plain JS with
   JSDoc types; don't rename it to TS or import it into the Next graph.
 - **Don't use `Tone.Time(...)` for the step duration.** `Tone.setContext()` at

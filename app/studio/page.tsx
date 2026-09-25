@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { STUDIO_BODY } from "@/app/studioMarkup";
 import Preloader from "@/app/Preloader";
+import StudioBody from "@/app/StudioBody";
 import ScriptLoader from "@/app/ScriptLoader";
 import EnginePreload from "@/app/EnginePreload";
 import EngineScripts from "@/app/EngineScripts";
@@ -191,18 +192,9 @@ export default async function StudioPage({ searchParams }: { searchParams: Searc
           <AccountBarSlot searchParams={searchParams} />
         </Suspense>
       )}
-      {/* The engine's deferred scripts run before React hydrates and immediately
-          rewrite this subtree (populating the scale/engine selects, the pattern
-          grid, the starter tracks), so React always finds the DOM different from
-          the HTML it served and logs a hydration mismatch. It can't "fix" it
-          either — the __html string is constant, so nothing gets re-rendered.
-          suppressHydrationWarning is React's escape hatch for exactly this
-          third-party-mutation case; it applies to this element only. */}
-      <div
-        suppressHydrationWarning
-        style={{ display: "contents" }}
-        dangerouslySetInnerHTML={{ __html: STUDIO_BODY }}
-      />
+      {/* The engine's DOM. A client component so it can keep React from ever
+          rewriting it on a re-render (StudioBody says why). */}
+      <StudioBody html={STUDIO_BODY} />
       <EngineScripts />
       <ScriptLoader />
       {!embed && <OpenSongOnLoad />}
