@@ -10,6 +10,7 @@ import {
   type SongVersion,
 } from "@/app/songs/actions";
 import { layoutVersions } from "@/app/songs/versionTree";
+import { adoptRemix } from "@/app/songs/adoptRemix";
 import styles from "@/app/ui.module.css";
 import { IconTag, IconRemix, IconTrash } from "@/app/menuIcons";
 
@@ -100,10 +101,19 @@ export default function VersionTree({
       const res = await remixSong(songId, v.id);
       if (res.error || !res.id)
         return setStatus({ text: res.error ?? "Remix failed", err: true });
+      try {
+        await adoptRemix(
+          { id: res.id, title: res.title, versionId: res.versionId },
+          v.id === baseVersionId,
+        );
+      } catch (e) {
+        setStatus({ text: `Remixed, but could not open it: ${(e as Error).message}`, err: true });
+        return onChanged();
+      }
       setStatus({ text: `v${v.seq} remixed into "${res.title}"` });
       onChanged();
     },
-    [songId, onChanged, setStatus],
+    [songId, baseVersionId, onChanged, setStatus],
   );
 
   const prune = useCallback(
