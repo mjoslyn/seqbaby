@@ -1,0 +1,6 @@
+/* The people explorer's cards (/people). The card itself is the homepage's
+   .person; this is only what the explorer adds under the name. */
+
+.card { padding: 14px; }
+.meta { color: var(--fg-dim); font-size: 11px; }
+.more { color: var(--fg-dim); font-size: 11px; align-self: center; }

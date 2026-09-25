@@ -1,41 +1,37 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import SongCard from "../home/SongCard";
-import Pager from "./Pager";
+import PersonCard from "./PersonCard";
+import Pager from "../songs/Pager";
 import homeStyles from "../home/home.module.css";
-import styles from "./explore.module.css";
+import styles from "../songs/explore.module.css";
 import {
   BPM_BANDS,
   EMPTY_QUERY,
+  MAKES,
   SORTS,
-  explore,
+  explorePeople,
   instrumentCounts,
   paginate,
   parseQuery,
   queryString,
+  type Makes,
+  type Person,
   type Query,
   type SortKey,
-} from "./explore";
-import type { ExploreSong } from "./exploreFeed";
+} from "./people";
 
-// The songs explorer's controls and list (/songs). Every song the page loaded
-// is here already, so a search, a sort or a filter is a re-render of what is
-// in memory (explore.js), never a request.
-//
-// The query lives in the URL (`?q=&sort=&bpm=&with=&page=`) so a filtered
-// view, and the page of it you are on, is a link. It is read after mount rather than on the server: the page is cached
-// for everyone (`revalidate` in page.tsx), and reading the query there would
-// make it render per request.
+// The people explorer's controls and list (/people), the songs explorer's
+// (app/songs/Explorer.tsx) with people in it: everyone is in memory already,
+// so a search, a sort or a filter is a re-render (people.js), and the query
+// lives in the URL, read after mount so the cached page stays cached.
 
-export default function Explorer({
-  songs,
+export default function PeopleExplorer({
+  people,
   hasInstruments,
-  now,
 }: {
-  songs: ExploreSong[];
+  people: Person[];
   hasInstruments: boolean;
-  now: number;
 }) {
   const [query, setQuery] = useState<Query>(EMPTY_QUERY);
   const read = useRef(false);
@@ -52,13 +48,12 @@ export default function Explorer({
     if (next !== `${window.location.pathname}${window.location.search}`) window.history.replaceState(null, "", next);
   }, [query]);
 
-  const results = useMemo(() => explore(songs, query, now), [songs, query, now]);
-  const chips = useMemo(() => (hasInstruments ? instrumentCounts(songs, query) : []), [songs, query, hasInstruments]);
+  const results = useMemo(() => explorePeople(people, query), [people, query]);
+  const chips = useMemo(() => (hasInstruments ? instrumentCounts(people, query) : []), [people, query, hasInstruments]);
 
   const { page, pages, start, end } = paginate(results.length, query.page);
 
-  // Any change but a page turn starts over at page 1: page 4 of a list that
-  // has just been narrowed to a dozen songs is not a place anybody asked for.
+  // Any change but a page turn starts over at page 1, as on /songs.
   const update = (patch: Partial<Query>) => setQuery((q) => ({ ...q, page: 1, ...patch }));
   const turn = (to: number) => {
     update({ page: to });
@@ -66,11 +61,15 @@ export default function Explorer({
   };
   const toggle = (name: string) =>
     update({ with: query.with.includes(name) ? query.with.filter((i) => i !== name) : [...query.with, name] });
+  const toggleMakes = (m: Makes) =>
+    update({ makes: query.makes.includes(m) ? query.makes.filter((x) => x !== m) : [...query.makes, m] });
   const bpmValue = (v: string) => {
     const n = Number.parseInt(v, 10);
     return Number.isFinite(n) && n > 0 ? n : null;
   };
-  const filtered = query.q.trim() !== "" || query.min != null || query.max != null || query.with.length > 0;
+  const filtered =
+    query.q.trim() !== "" || query.min != null || query.max != null || query.with.length > 0 || query.makes.length > 0;
+  const clear = () => update({ ...EMPTY_QUERY, sort: query.sort });
 
   return (
     <>
@@ -81,8 +80,8 @@ export default function Explorer({
             type="search"
             value={query.q}
             onChange={(e) => update({ q: e.target.value })}
-            placeholder="search titles, people, instruments"
-            aria-label="search songs"
+            placeholder="search names, bios, instruments"
+            aria-label="search people"
           />
           <label className={styles.sort}>
             <span>sort</span>
@@ -97,7 +96,26 @@ export default function Explorer({
         </div>
 
         <div className={styles.row}>
-          <span className={styles.label}>bpm</span>
+          <span className={styles.label}>makes</span>
+          <span className={styles.chips}>
+            {MAKES.map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                className={styles.chip}
+                aria-pressed={query.makes.includes(key)}
+                onClick={() => toggleMakes(key)}
+              >
+                {label}
+              </button>
+            ))}
+          </span>
+        </div>
+
+        <div className={styles.row}>
+          <span className={styles.label} title="the median tempo of their songs">
+            bpm
+          </span>
           <span className={styles.chips}>
             {BPM_BANDS.map(([name, lo, hi]) => {
               const on = query.min === lo && query.max === hi;
@@ -108,7 +126,13 @@ export default function Explorer({
                   className={styles.chip}
                   aria-pressed={on}
                   onClick={() => update(on ? { min: null, max: null } : { min: lo, max: hi })}
-                  title={lo == null ? `under ${hi! + 1} bpm` : hi == null ? `${lo} bpm and up` : `${lo} to ${hi} bpm`}
+                  title={
+                    lo == null
+                      ? `mostly under ${hi! + 1} bpm`
+                      : hi == null
+                        ? `mostly ${lo} bpm and up`
+                        : `mostly ${lo} to ${hi} bpm`
+                  }
                 >
                   {name}
                 </button>
@@ -142,7 +166,7 @@ export default function Explorer({
 
         {chips.length ? (
           <div className={styles.row}>
-            <span className={styles.label}>with</span>
+            <span className={styles.label}>uses</span>
             <span className={styles.chips}>
               {chips.map(({ name, count }) => {
                 const on = query.with.includes(name);
@@ -165,12 +189,12 @@ export default function Explorer({
       </div>
 
       <p className={styles.summary} aria-live="polite" ref={top}>
-        {results.length === songs.length
-          ? `${songs.length} ${songs.length === 1 ? "song" : "songs"}`
-          : `${results.length} of ${songs.length} songs`}
+        {results.length === people.length
+          ? `${people.length} ${people.length === 1 ? "person" : "people"}`
+          : `${results.length} of ${people.length} people`}
         {pages > 1 ? ` · page ${page} of ${pages}` : ""}
         {filtered ? (
-          <button type="button" className={styles.clear} onClick={() => update({ ...EMPTY_QUERY, sort: query.sort })}>
+          <button type="button" className={styles.clear} onClick={clear}>
             clear filters
           </button>
         ) : null}
@@ -178,30 +202,30 @@ export default function Explorer({
 
       {results.length ? (
         <>
-          <ul className={homeStyles.cards}>
-            {results.slice(start, end).map((s) => (
-              <SongCard key={s.id} song={s} instruments={s.instruments} />
+          <ul className={homeStyles.people}>
+            {results.slice(start, end).map((p) => (
+              <PersonCard key={p.handle} person={p} />
             ))}
           </ul>
           <Pager page={page} pages={pages} turn={turn} />
         </>
-      ) : songs.length ? (
+      ) : people.length ? (
         <div className={homeStyles.empty}>
-          <p className={homeStyles.emptyBig}>nothing matches</p>
+          <p className={homeStyles.emptyBig}>nobody matches</p>
           <p>
-            not a single song.{" "}
-            <button type="button" className={styles.clear} onClick={() => update({ ...EMPTY_QUERY, sort: query.sort })}>
+            not a soul.{" "}
+            <button type="button" className={styles.clear} onClick={clear}>
               clear the filters
             </button>{" "}
-            or <a href="/studio">make the one you were looking for</a>.
+            or <a href="/studio">be the person you were looking for</a>.
           </p>
         </div>
       ) : (
         <div className={homeStyles.empty}>
           <p className={homeStyles.emptyBig}>¯\_(ツ)_/¯</p>
           <p>
-            nothing published yet. <a href="/studio">make the first one</a>, publish it from the songs menu, and it
-            lands right here.
+            a room with a sound system and no one in it. <a href="/login?mode=signup">be the first one through the door</a>,
+            publish a song, and you land right here.
           </p>
         </div>
       )}
