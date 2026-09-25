@@ -167,7 +167,7 @@ export default async function HomePage() {
 
       <section className={styles.section}>
         <div className={styles.sectionHead}>
-          <h2>fresh off the sequencer</h2>
+          <h2>on repeat</h2>
         </div>
         {songs.length ? (
           <ul className={styles.cards}>
