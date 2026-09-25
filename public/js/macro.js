@@ -184,6 +184,7 @@ const axisValue = (a, pos) => {
 
 /** Remember where everything was, so a momentary gesture can put it back. */
 function snapshot(pad) {
+  pad._posBase = { ...pad.pos };
   for (const axis of ["x", "y"]) {
     for (const a of pad[axis]) {
       const t = trackById(a.trackId);
@@ -209,8 +210,12 @@ function releasePad(pad) {
     // patch, the p-lock snapshot and a save all see it.
     applyPad(pad, true);
     for (const axis of ["x", "y"]) for (const a of pad[axis]) a._base = null;
+    pad._posBase = null;
     return;
   }
+  // The crosshair springs back with the parameters, to where it sat before the
+  // gesture, so it never points at values the pad is no longer holding.
+  if (pad._posBase) { pad.pos = pad._posBase; pad._posBase = null; }
   for (const axis of ["x", "y"]) {
     for (const a of pad[axis]) {
       const t = trackById(a.trackId);
