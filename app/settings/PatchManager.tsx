@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { listMyPatches, deletePatch, setPatchPublic, type MyPatch } from "@/app/patches/actions";
-import { syncBay } from "@/app/patches/patchSync";
+import { migrateLocalPatches } from "@/app/patches/bay";
 import styles from "@/app/ui.module.css";
 
 // Your patch bay (migration 0018): every patch saved in the studio or from a
@@ -23,7 +23,7 @@ export default function PatchManager() {
 
   useEffect(() => {
     // Patches saved in this browser before the bay existed go up first.
-    syncBay()
+    migrateLocalPatches()
       .catch(() => {})
       .then(refresh);
   }, [refresh]);

@@ -1,4 +1,5 @@
-import { deletePatch, engineByKey, loadPatches } from "./catalog.js";
+import { canSavePatches, deletePatch, engineByKey, listPatches } from "./catalog.js";
+import { setStatus } from "./dom.js";
 
 export function showInputDialog({ title, defaultValue = "", placeholder = "", multiline = false }) {
   return new Promise((resolve) => {
@@ -81,25 +82,26 @@ export function showConfirmDialog({ title, body = "", confirmLabel = "ok" }) {
 // Modal: pick one of the user's saved patches. Returns patch name or null.
 export function showSavedPatchPicker() {
   return new Promise((resolve) => {
-    const all = loadPatches();
-    const names = Object.keys(all).sort();
+    const all = listPatches().sort((a, b) => a.name.localeCompare(b.name));
     const overlay = document.createElement("div");
     overlay.className = "sq-modal-overlay";
     const esc = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
     // Friendly engine label for a saved patch: track-patches carry engineKey,
     // legacy custom-Tone patches are the "custom" engine.
-    const engineLabelOf = (cfg) => {
-      const key = cfg?.engineKey || (cfg?.synth ? "custom" : null);
+    const engineLabelOf = (p) => {
+      const key = p.engineKey || (p.kind !== "track-patch" ? "custom" : null);
       if (!key) return null;
       return engineByKey(key)?.label || key;
     };
-    const rows = names.length
-      ? names.map(n => {
-          const eng = engineLabelOf(all[n]);
+    const rows = all.length
+      ? all.map(p => {
+          const eng = engineLabelOf(p);
           const suffix = eng ? ` <span class="sq-patch__eng">- ${esc(eng)}</span>` : "";
-          return `<li class="sq-patch__row"><button class="sq-patch__load" data-name="${esc(n)}">${esc(n)}${suffix}</button><button class="sq-patch__del sq-btn--ghost" data-name="${esc(n)}" title="delete">×</button></li>`;
+          return `<li class="sq-patch__row"><button class="sq-patch__load" data-name="${esc(p.name)}">${esc(p.name)}${suffix}</button><button class="sq-patch__del sq-btn--ghost" data-name="${esc(p.name)}" title="delete">×</button></li>`;
         }).join("")
-      : `<li class="sq-patch__empty">no saved patches yet. Design a sound and click save.</li>`;
+      : canSavePatches()
+        ? `<li class="sq-patch__empty">no saved patches yet. Design a sound and click save.</li>`
+        : `<li class="sq-patch__empty">sign in to save and load patches. They live in your account.</li>`;
     overlay.innerHTML = `
       <div class="sq-modal" role="dialog" aria-modal="true">
         <div class="sq-modal__title">load saved patch</div>
@@ -115,9 +117,16 @@ export function showSavedPatchPicker() {
       btn.addEventListener("click", () => close(btn.dataset.name));
     });
     overlay.querySelectorAll(".sq-patch__del").forEach(btn => {
-      btn.addEventListener("click", () => {
-        deletePatch(btn.dataset.name);
-        btn.closest(".sq-patch__row")?.remove();
+      btn.addEventListener("click", async () => {
+        const row = btn.closest(".sq-patch__row");
+        btn.disabled = true;
+        try {
+          await deletePatch(btn.dataset.name);
+          row?.remove();
+        } catch (e) {
+          btn.disabled = false;
+          setStatus(`could not delete patch: ${e?.message || e}`, true);
+        }
       });
     });
     overlay.querySelector(".modal-cancel").addEventListener("click", () => close(null));

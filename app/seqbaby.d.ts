@@ -2,6 +2,15 @@
 export {};
 
 declare global {
+  /** One saved patch in the list the engine is handed (app/patches/bay.ts). */
+  type PatchListEntry = { name: string; engineKey: string | null; kind: string | null; config?: unknown };
+  /** How the engine reaches the account's patch bay. */
+  type PatchBackend = {
+    fetch: (name: string) => Promise<unknown>;
+    save: (name: string, config: unknown) => Promise<void>;
+    remove: (name: string) => Promise<void>;
+  };
+
   interface Window {
     seqbaby?: {
       version: number;
@@ -58,10 +67,10 @@ declare global {
       redo: () => boolean;
       canUndo: () => boolean;
       canRedo: () => boolean;
-      loadPatches: () => Record<string, unknown>;
-      storePatches: (obj: Record<string, unknown>) => void;
-      savePatch: (name: string, config: unknown) => void;
-      refreshPatches: () => void;
+      /** Saved patches live in the account (catalog.js); the shell hands the
+       *  engine its way there and the list (app/PatchBay.tsx). */
+      setPatchBackend: (backend: PatchBackend, list: PatchListEntry[]) => void;
+      setPatchList: (list: PatchListEntry[]) => void;
       serializeTrackPatch: (track: unknown) => unknown;
       applyTrackPatch: (track: unknown, patch: unknown) => void;
       /**

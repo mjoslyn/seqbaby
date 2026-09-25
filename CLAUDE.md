@@ -29,9 +29,8 @@ env / fx / eq / comp / mod / automation per track.
   because og/twitter metadata does not inherit field-by-field between
   segments), titled with the song when the URL names one — see the share card
   section below.
-- **Persistence (local)**: localStorage `seqbaby.patches.v1` (saved patches,
-  kept in step with a signed-in account's patch bay; see that section),
-  `seqbaby.sets.v1` (saved sessions).
+- **Persistence (local)**: localStorage `seqbaby.sets.v1` (saved sessions).
+  Saved patches are the account's (see the patch bay section).
 - **Deploy**: Netlify via `@netlify/plugin-nextjs` (`netlify.toml`, Node 22).
   Push to `main` auto-deploys production; branch pushes get deploy previews
   (stable alias: `<branch-with-dashes>--seqbaby.netlify.app`).
@@ -47,7 +46,8 @@ env / fx / eq / comp / mod / automation per track.
 │   │                          PatchCard.tsx + patchPreview.js (what a patch card draws and plays)
 │   ├── studioMarkup.ts        engine's static DOM skeleton (raw HTML string)
 │   ├── ScriptLoader.tsx       injects Tone → woscillators → js/main.js in order
-│   ├── AccountBar/SongsMenu/PatchesMenu/SaveButton/OpenSongOnLoad.tsx
+│   ├── AccountBar/SongsMenu/SaveButton/OpenSongOnLoad.tsx
+│   ├── PatchBay.tsx + patches/bay.ts  the account's saved patches, handed to the engine
 │   ├── NewSongButton.tsx      top-bar `new`: blanks the engine, clears the open song
 │   ├── DefaultTemplate.tsx    what a new song starts from, when the account named one
 │   ├── VersionTree.tsx        a song's version history, drawn as the tree it is
@@ -103,7 +103,8 @@ env / fx / eq / comp / mod / automation per track.
 - `voices.js` — every voice class + `buildVoiceForEngine` dispatch + the
   emulator builder functions.
 - `state.js` — global `state`, `emptyPattern`, `aliasPattern`, `switchPattern`.
-- `catalog.js` — `buildEngineCatalog()`, saved-patch storage, engine dropdowns.
+- `catalog.js` — `buildEngineCatalog()`, the saved-patch list (the account's,
+  through a backend the shell hands it), engine dropdowns.
 - `signal.js` — per-track graph wiring (filter/eq/comp/fxRack), filter env, and
   output routing: `t.out` → master or an fx bus track (`routeTrackOutput`,
   `wouldFeedback`, `soloAudibleTracks`, `refreshOutputSelects`).
@@ -574,7 +575,7 @@ All of this lives in `main.js` `init()` and `transport.js`:
 | `plaits`      | `PlaitsVoice`    | 4-voice round-robin pool of Plaits WASM oscillators. `modLevelPatched=1, modLevel=0` at init (without the zero, empty tracks emit a continuous tone). Glide via ramp on `noteAudioParameter`. The four sliders keep the hardware's generic names across all 16 models; what each does per model is `PLAITS_MACRO_TIPS` (catalog.js), hung on the fields by `updatePlaitsControlsVisibility`. |
 | `drum-synth`  | `DrumSynthVoice` | Recipes via `buildDrumSynthGraph(kind, output)`: 808/909 kit, poly-saw, fm-bell, pad, plus the emulators (below). All Tone.js except the silverbox and the contagion, which are AudioWorklet models (`silverbox.js`, `contagion.js`). |
 | `sampler`     | `SamplerVoice`   | THE unified sample voice — plays a user upload or a bundled kit sample chosen via `track.sampleSource` ({kind:"upload"|"bundled", ...}). Absorbed the old `SampleVoice`/`UploadVoice`/`ElevenVoice`. Per-step region/fade/loop via `startSampleSource`; slicing via `t.slices`/`sliceOn`. Pitch from `pitchBase` (36 drum-kit, 60 otherwise); `t.pitchLock` keeps 1×bpm fits pitch-true. |
-| `custom` / `saved` | `CustomToneVoice` | Tone.js synth tree from a saved-patch JSON config (`saved:<name>` keys, localStorage). |
+| `custom` / `saved` | `CustomToneVoice` | Tone.js synth tree from a saved-patch JSON config (`saved:<name>` keys, from the account's patch bay). |
 | `granular`    | `GranularVoice`  | Granular sampler (`dm:granular`, "texture" group). See the granular section below. |
 | `wavetable`   | `WavetableVoice` | Multi-frame AKWF wavetable synth (`wt:akwf`), morphable, editable in `wavetableEditor.js`. |
 | `midi`        | `MidiVoice`      | Web MIDI out; converts audio time → DOMHighResTimeStamp for `output.send`. |
@@ -1756,7 +1757,7 @@ desktop); macro stays in the main cluster, text on desktop and icon over its
 | `POST app/api/compose/route.ts` | starts one compose turn → `{jobId, jobToken}`; the turn runs in `netlify/functions/compose-background.mjs` |
 | `GET app/api/compose/status/route.ts` | what the browser polls while one runs — activity, then the song |
 | `app/songs/actions.ts` | `saveSong` / `saveNamedSong` (both append a version), `listSongs`, `loadSong`, `forkSong`, `listVersions`, `loadVersion`, `labelVersion`, `deleteVersion`, `setSongTemplate`, `setDefaultTemplate`, `getDefaultTemplate` |
-| `app/patches/actions.ts` | `publishPatch`, `listMyPatches`, `listPublicPatches`, `getPatch`, `deletePatch` |
+| `app/patches/actions.ts` | `savePatchToBay`, `setPatchPublic`, `listMyPatches`, `deletePatch`, `setPatchLike` (the studio's own reads and writes are `app/patches/bay.ts`) |
 | `app/profile/actions.ts` | `getMyProfile`, `updateProfile`, `getPublicProfile` (+ that user's public songs/patches) |
 | `app/auth/actions.ts` | `signIn`, `signUp`, `signInWithMagicLink`, `signOut` |
 | `app/account/actions.ts` | `updateEmail`, `updatePassword`, `deleteAccount` (RPC `delete_own_account`) |
@@ -1887,26 +1888,30 @@ pattern it was saved on.
 
 ## The patch bay — saved patches in the account (migration 0018)
 
-Every saved patch is a row in `patches`, private until published. Publishing
-flips `is_public` on the row you have (`setPatchPublic`, or `publishPatch`,
-which upserts by name) rather than inserting a copy; unpublishing keeps it.
+Saved patches live in `patches`, one row each, private until published, and
+nowhere else: the browser keeps none. Publishing flips `is_public` on the row
+(`setPatchPublic`); unpublishing keeps it.
 
-- **The studio still reads localStorage** (`loadPatches`, catalog.js): the
-  load button, the `saved:` engines and the track's save button are
-  unchanged. `app/patches/patchSync.ts` keeps that store and the account in
-  step, mounted as `app/PatchSync.tsx` in the signed-in account bar.
-- **Pushes**: `savePatch` / `deletePatch` (catalog.js) fire
-  `seqbaby:patchsaved` / `seqbaby:patchdeleted`, and the sync writes them
-  through (`putBayPatch`, by name; `deletePatch`, by id).
-- **Pulls**: `syncBay()` on studio load, whenever the tab comes back into
-  view, and from the settings page. A three-way merge of the store, the
-  account's rows (`listBayPatches`, names and `updated_at`, no configs) and
-  what the last sync saw (`seqbaby.patchBay.v1:<userId>`): a patch missing on
-  one side is a deletion when the last sync saw it and new when it did not.
-  The account's copy wins a changed name. A patch only ever in this browser
-  goes up, which is how patches saved before the bay existed migrate.
-- **Per account**, the last-seen record, or a second account signing in on the
-  same browser would read the first's patches as deletions.
+- **The engine holds the list in memory** (catalog.js) and reaches the
+  account through a backend the shell hands it: `setPatchBackend(backend,
+  list)` from `app/PatchBay.tsx`, mounted in the signed-in account bar only.
+  No backend means signed out: the list is empty, the track's save button
+  says to sign in, and the load picker says why it is empty.
+- **The list carries no track-patch configs.** A sampler patch carries its
+  sample as base64, so `getPatchConfig(name)` fetches one when it is loaded
+  (`backend.fetch`) and caches it. A legacy custom-Tone patch is an ENGINE
+  (`saved:<name>`), built synchronously, so its (small) config comes with the
+  list.
+- **Writes go straight from the browser** (`app/patches/bay.ts`, under the
+  owner RLS policy), not through server actions, whose bodies stop at 1MB.
+  Saving is by name, as it always was: the patch of that name is replaced.
+- The list is re-read when the tab comes back into view (`setPatchList`), so
+  a patch saved from a card elsewhere shows up.
+- **Off localStorage**: `migrateLocalPatches()` (bay.ts), run by the studio
+  and the settings page for a signed-in account, moves `seqbaby.patches.v1`
+  into the account once and removes it. Same name and same patch is skipped;
+  same name and a different patch is saved beside it as `name 2`. Whatever
+  fails to upload stays for next time.
 - Settings (`app/settings/PatchManager.tsx`) lists the bay with publish /
   unpublish / delete.
 

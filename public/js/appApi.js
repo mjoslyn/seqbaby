@@ -5,7 +5,7 @@
 // patch browser) drive the engine without touching the audio/UI code, we attach a
 // small, stable API to `window.seqbaby` and fire a `seqbaby:ready` event once it's
 // installed. Keep this surface intentional and additive.
-import { loadPatches, refreshPatches, savePatch, storePatches } from "./catalog.js";
+import { setPatchBackend, setPatchList } from "./catalog.js";
 import { canRedo, canUndo, redo, undo } from "./history.js";
 import { flushJam, inJam, jamState, jamTogglePlay, receiveJamPatch, receiveJamPhase, receiveJamState, startJam, stopJam } from "./jam.js";
 import { mergeSet } from "./liveSet.js";
@@ -65,13 +65,10 @@ export function installAppApi() {
     redo,
     canUndo,
     canRedo,
-    // saved Tone.js patches (localStorage)
-    loadPatches,
-    storePatches,
-    // add/replace a single patch and refresh the catalog + engine selects
-    savePatch,
-    // redraw what reads the store after the shell wrote it (the bay sync)
-    refreshPatches,
+    // Saved patches live in the account; the shell hands the engine its way
+    // there and the list (app/PatchBay.tsx, catalog.js).
+    setPatchBackend,
+    setPatchList,
     // a track's whole sound as a portable patch (engine + params + fx + audio)
     serializeTrackPatch,
     applyTrackPatch,

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { signOut } from "@/app/auth/actions";
-import PatchSync from "@/app/PatchSync";
+import PatchBay from "@/app/PatchBay";
 import SongsMenu from "@/app/SongsMenu";
 import SaveButton from "@/app/SaveButton";
 import NewSongButton from "@/app/NewSongButton";
@@ -185,7 +185,7 @@ export function AccountBar({
         <JamPanel accountName={name} accountUsername={username ?? null} />
         {name ? (
           <>
-            <PatchSync />
+            <PatchBay />
             <SongsMenu />
             {/* Your face and name ARE the way into your settings; the page
                 you show other people is one link further, from there. */}

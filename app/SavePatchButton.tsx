@@ -6,8 +6,8 @@ import { savePatchToBay } from "@/app/patches/actions";
 import { IconSave } from "./menuIcons";
 
 // Save a published patch into your patch bay: a private copy in your account
-// (savePatchToBay, migration 0018), which the studio pulls into its saved
-// patches the next time it loads or comes back into view (patches/patchSync.ts).
+// (savePatchToBay, migration 0018), which the studio lists the next time it
+// loads or comes back into view (app/PatchBay.tsx).
 //
 // Whether a card's patch is already in your bay (a copy saved from it, or your
 // own) is one batched browser read per page, the way LikeButton asks what you

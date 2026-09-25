@@ -1,5 +1,5 @@
 import { AUTOMATION_KEYS, AUTOMATION_TARGETS, canAutomate } from "./automation.js";
-import { engineByKey, loadPatches, populateEngineSelect, savePatch } from "./catalog.js";
+import { canSavePatches, engineByKey, getPatchConfig, populateEngineSelect, savePatch } from "./catalog.js";
 import { applyTrackPatch, serializeTrackPatch } from "./session.js";
 import { FX_STAGE_LABELS, FX_STAGE_LEVEL_KEY, LFO_DIVS, LFO_KEYS, lfoDivIndex, lfoLabel, rateToSlider, sliderToRate } from "./constants.js";
 import { showInputDialog, showSavedPatchPicker } from "./dialogs.js";
@@ -773,6 +773,9 @@ export function renderTrack(t) {
   const refreshSaveEnabled = () => { saveBtn.disabled = false; };
   refreshSaveEnabled();
   saveBtn.addEventListener("click", async () => {
+    // Patches live in the account (catalog.js), so there is nowhere to put one
+    // signed out: say so before asking for a name nobody can keep.
+    if (!canSavePatches()) { setStatus("sign in to save patches: they live in your account"); return; }
     const suggested = t.soundPromptText ? t.soundPromptText.split(/[.,;]/)[0].slice(0, 40) : t.name;
     const name = await showInputDialog({
       title: "save patch as",
@@ -780,8 +783,13 @@ export function renderTrack(t) {
       placeholder: "my-patch-name",
     });
     if (!name || !name.trim()) return;
-    savePatch(name.trim(), serializeTrackPatch(t));
-    setStatus(`saved patch "${name.trim()}"`);
+    try {
+      setStatus(`saving patch "${name.trim()}"…`);
+      await savePatch(name.trim(), serializeTrackPatch(t));
+      setStatus(`saved patch "${name.trim()}" to your patches`);
+    } catch (e) {
+      setStatus(`could not save patch: ${e?.message || e}`, true);
+    }
   });
 
   const loadPatchBtn = node.querySelector(".sq-track__load-patch");
@@ -790,7 +798,9 @@ export function renderTrack(t) {
     loadPatchBtn.addEventListener("click", async () => {
       const name = await showSavedPatchPicker();
       if (!name) return;
-      const patch = loadPatches()[name];
+      let patch;
+      try { patch = await getPatchConfig(name); }
+      catch (e) { setStatus(`could not load patch: ${e?.message || e}`, true); return; }
       if (!patch) return;
       if (patch._kind === "track-patch") {
         applyTrackPatch(t, patch);
