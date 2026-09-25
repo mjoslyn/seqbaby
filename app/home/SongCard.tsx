@@ -92,8 +92,12 @@ export default function SongCard({
         ) : (
           <span>someone</span>
         )}
-        {song.bpm ? <span>{song.bpm} bpm</span> : null}
         {now !== undefined ? <span>{ago(song.updatedAt, now)}</span> : null}
+      </span>
+      {/* A line of its own: the bpm on the left, the heart and the remix
+          pushed right by the heart's auto margin, with or without a bpm. */}
+      <span className={`${styles.cardMeta} ${styles.cardActions}`}>
+        {song.bpm ? <span>{song.bpm} bpm</span> : null}
         <LikeButton songId={song.id} likes={song.likes} className={styles.like} likedClassName={styles.liked} />
         <RemixButton songId={song.id} className={styles.savePatch} remixedClassName={styles.saved} />
       </span>
