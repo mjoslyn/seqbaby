@@ -10,14 +10,14 @@
 
 grant select, insert, update, delete
   on public.profiles, public.songs, public.patches, public.song_versions,
-     public.song_chats, public.song_likes
+     public.song_chats, public.song_likes, public.patch_likes
   to authenticated;
 
 -- song_versions is granted to anon on purpose, even though no policy lets anon
 -- read a row: a missing grant would make the "anon cannot see history" tests
 -- pass without the policy doing any of the work.
 grant select on public.profiles, public.songs, public.patches, public.song_versions,
-                public.song_chats, public.song_likes
+                public.song_chats, public.song_likes, public.patch_likes
   to anon;
 
 -- 0007 grants profile_cards itself; repeated here so the file is self-contained

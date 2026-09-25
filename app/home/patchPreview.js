@@ -20,6 +20,10 @@ export const PREVIEW_BPM = 120;
 
 const DRUM_RE = /\b(kick|snare|hat|hi-?hat|chat|ohat|clap|tom|perc|drum|cowbell|rim|kit)\b/;
 
+/** The key a patch card plays under (enginePlayer.ts). Share slugs never
+ *  carry a colon. Here rather than there so a server component can call it. */
+export const patchKey = (id) => `patch:${id}`;
+
 /** The engine a patch plays on. A track patch names it; a legacy custom-Tone
  *  config IS the synth, which the engine knows as `custom`. */
 export function patchEngineKey(config) {

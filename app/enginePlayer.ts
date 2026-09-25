@@ -119,9 +119,6 @@ export function scheduleWarm(): void {
 
 const sessions = new Map<string, Promise<unknown>>();
 
-/** The key a patch card plays under. Share slugs never carry a colon. */
-export const patchKey = (id: string) => `patch:${id}`;
-
 function fetchSession(key: string): Promise<unknown> {
   if (key.startsWith("patch:")) {
     return fetch(`/api/patch/${encodeURIComponent(key.slice(6))}`)
@@ -170,26 +167,6 @@ function until(test: () => boolean, ms: number): Promise<boolean> {
     };
     tick();
   });
-}
-
-type FrameTone = { Transport?: { ticks?: number; PPQ?: number; state?: string } };
-
-/**
- * The step the playing session is on NOW, for a card drawing a playhead, or
- * null when nothing is playing. Read off the frame's Tone transport, which
- * counts at the audio clock, rather than `state.tick`, which runs a
- * scheduler lookahead ahead of what is heard.
- */
-export function playheadStep(): number | null {
-  const win = frame?.contentWindow as (Window & { Tone?: FrameTone }) | null | undefined;
-  const api = win?.seqbaby;
-  if (!api || !engineState(api).playing) return null;
-  const tr = win?.Tone?.Transport;
-  if (tr && tr.state === "started" && Number.isFinite(tr.ticks) && tr.PPQ) {
-    return Math.floor((tr.ticks as number) / (tr.PPQ / 4));
-  }
-  const tick = (api.state as { tick?: number }).tick;
-  return Number.isFinite(tick) ? (tick as number) : null;
 }
 
 /** The card's button: play this song, stop it, or finish unlocking it. */

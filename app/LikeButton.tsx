@@ -3,41 +3,48 @@
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { setLike } from "@/app/songs/actions";
+import { setPatchLike } from "@/app/patches/actions";
 
-// The heart on a song card: the homepage feed and a profile page.
+// The heart on a song or patch card: the homepage feed and a profile page.
 //
 // The count comes from the server, the "did I" from here. The homepage is
 // cached and shared by everyone (see home/feed.ts), so it cannot know who is
 // looking; this asks the browser, the way home/Who.tsx does. Twenty-four
 // hearts asking separately would be twenty-four reads, so every heart that
-// mounts in the same tick joins one query (`likedByMe`).
+// mounts in the same tick joins one query (`likedByMe`), one per kind.
 
-let pending: { ids: Set<string>; done: Promise<Set<string>> } | null = null;
+type Kind = "song" | "patch";
+const TABLE = { song: { table: "song_likes", col: "song_id" }, patch: { table: "patch_likes", col: "patch_id" } } as const;
+const SET_LIKE = { song: setLike, patch: setPatchLike } as const;
 
-function likedByMe(id: string): Promise<Set<string>> {
+const pendingBy: Record<Kind, { ids: Set<string>; done: Promise<Set<string>> } | null> = { song: null, patch: null };
+
+function likedByMe(kind: Kind, id: string): Promise<Set<string>> {
+  const { table, col } = TABLE[kind];
+  let pending = pendingBy[kind];
   if (!pending) {
     const ids = new Set<string>();
     const done = new Promise<Set<string>>((resolve) => {
       queueMicrotask(async () => {
-        pending = null;
+        pendingBy[kind] = null;
         try {
           const supabase = createClient();
           const { data } = await supabase.auth.getSession();
           const me = data.session?.user.id;
           if (!me) return resolve(new Set());
           const { data: rows } = await supabase
-            .from("song_likes")
-            .select("song_id")
+            .from(table)
+            .select(col)
             .eq("user_id", me)
-            .in("song_id", [...ids]);
-          resolve(new Set((rows ?? []).map((r) => r.song_id as string)));
+            .in(col, [...ids]);
+          resolve(new Set((rows ?? []).map((r) => (r as Record<string, unknown>)[col] as string)));
         } catch {
-          // No Supabase env, or no 0016 yet: nothing is liked.
+          // No Supabase env, or no 0016 / 0017 yet: nothing is liked.
           resolve(new Set());
         }
       });
     });
-    pending = { ids, done };
+    pending = pendingBy[kind] = { ids, done };
   }
   pending.ids.add(id);
   return pending.done;
@@ -59,11 +66,14 @@ function Heart({ filled }: { filled: boolean }) {
 
 export default function LikeButton({
   songId,
+  kind = "song",
   likes: initial,
   className,
   likedClassName,
 }: {
+  /** The song's id, or the patch's when `kind` is "patch". */
   songId: string;
+  kind?: Kind;
   likes: number;
   className?: string;
   likedClassName?: string;
@@ -74,13 +84,13 @@ export default function LikeButton({
 
   useEffect(() => {
     let cancelled = false;
-    likedByMe(songId).then((set) => {
+    likedByMe(kind, songId).then((set) => {
       if (!cancelled && set.has(songId)) setLiked(true);
     });
     return () => {
       cancelled = true;
     };
-  }, [songId]);
+  }, [kind, songId]);
 
   async function toggle() {
     if (busy) return;
@@ -90,7 +100,7 @@ export default function LikeButton({
     setLikes((n) => Math.max(0, n + (next ? 1 : -1)));
     setBusy(true);
     try {
-      const res = await setLike(songId, next);
+      const res = await SET_LIKE[kind](songId, next);
       if (res.error === "Not signed in") {
         window.location.href = "/login";
         return;

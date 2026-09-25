@@ -7,6 +7,8 @@ import LikeButton from "@/app/LikeButton";
 import PlayButton from "@/app/PlayButton";
 import PlayableAvatar from "@/app/PlayableAvatar";
 import SongPreview from "@/app/SongPreview";
+import PatchRoll from "@/app/home/PatchRoll";
+import { canPreview, engineLabel, patchEngineKey, patchKey } from "@/app/home/patchPreview";
 import styles from "@/app/ui.module.css";
 
 export const dynamic = "force-dynamic";
@@ -141,17 +143,42 @@ export default async function ProfilePage({
         {patches.length === 0 ? (
           <div className={styles.emptyBig}>no published patches yet</div>
         ) : (
-          patches.map((p) => (
-            <div className={styles.repoRow} key={p.id}>
-              <div className={styles.repoMain}>
-                <span className={styles.repoName}>{p.name}</span>
-                <div className={styles.repoMeta}>
-                  {p.engine_type ? `${p.engine_type} · ` : ""}
-                  {fmtDate(p.created_at)}
+          patches.map((p) => {
+            // The same picture and the same player as a homepage patch card.
+            const engine = patchEngineKey({ _kind: p.kind, engineKey: p.engine });
+            const roll = {
+              engine,
+              drum: typeof p.drum === "boolean" ? p.drum : null,
+              name: p.name,
+              sampleId: p.sample,
+            };
+            return (
+              <div className={styles.repoRow} key={p.id}>
+                {canPreview(engine) ? <PlayButton slug={patchKey(p.id)} title={p.name} variant="row" /> : null}
+                <div className={styles.repoPreview}>
+                  <PatchRoll
+                    patch={roll}
+                    svgClass={styles.rollSvg}
+                    laneClass={styles.rollLane}
+                    noteClass={styles.rollNote}
+                  />
                 </div>
+                <div className={styles.repoMain}>
+                  <span className={styles.repoName}>{p.name}</span>
+                  <div className={styles.repoMeta}>
+                    {engineLabel(engine)} · {fmtDate(p.created_at)}
+                  </div>
+                </div>
+                <LikeButton
+                  songId={p.id}
+                  kind="patch"
+                  likes={p.likes ?? 0}
+                  className={styles.repoAction}
+                  likedClassName={styles.repoLiked}
+                />
               </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
     </div>

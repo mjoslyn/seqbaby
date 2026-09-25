@@ -8,7 +8,7 @@ import NewSongButton from "@/app/NewSongButton";
 import ComposeChat from "@/app/ComposeChat";
 import JamPanel from "@/app/JamPanel";
 import { getOpenSong } from "@/app/songs/openSong";
-import { IconMenu } from "@/app/menuIcons";
+import { IconHelp, IconMenu } from "@/app/menuIcons";
 import Avatar from "@/app/Avatar";
 import SongByline from "@/app/SongByline";
 import type { LinkedSongCard } from "@/app/songs/linkedSongTitle";
@@ -137,9 +137,6 @@ export function AccountBar({
       ref={barRef}
       className={`${styles.topBar} ${menuOpen ? styles.topBarMenuOpen : ""}`}
     >
-      <a className={styles.manualLink} href="/manual" title="how seqbaby works">
-        manual
-      </a>
       {viewing && <SongByline song={viewing} />}
       <span ref={beatSlotRef} className={styles.beatSlot} aria-hidden />
       <button
@@ -206,6 +203,10 @@ export function AccountBar({
           </a>
         )}
       </div>
+      {/* Last in the row, so the far right: the manual, as a question mark. */}
+      <a className={styles.manualLink} href="/manual" title="how seqbaby works" aria-label="manual">
+        <IconHelp />
+      </a>
     </div>
   );
 }

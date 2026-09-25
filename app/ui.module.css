@@ -178,6 +178,10 @@
   background: #0e0f12; border: 1px solid #1f2229; border-radius: 6px;
 }
 @media (max-width: 480px) { .repoPreview { width: 72px; height: 32px; } }
+/* A patch row's picture (PatchRoll.tsx): the phrase its play button plays. */
+.rollSvg { display: block; width: 100%; height: 100%; }
+.rollLane { fill: #2a2d35; opacity: 0.35; }
+.rollNote { fill: #7fd6f2; }
 .repoName { font-size: 15px; color: #7fd6f2; text-decoration: none; font-weight: 600; }
 .repoName:hover { text-decoration: underline; }
 .repoMeta { color: #6b7280; font-size: 11px; margin-top: 2px; }
@@ -242,14 +246,19 @@ button.repoAction { display: inline-flex; align-items: center; gap: 5px; }
    drawer is open, the same bargain `.topBarMenuOpen` strikes on a phone, and
    `:has()` means the drawer does not have to tell the bar anything. */
 .topBar:has(.chatPanel) { z-index: 300; }
-/* Sits at the left of the bar (the rest of the row is right-aligned). */
-.manualLink { margin-right: auto; color: #9aa0aa; text-decoration: none; }
-.manualLink:hover { color: #e8e8ea; }
+/* The manual, as a question mark: last in the row, so the far right. */
+.manualLink {
+  flex: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; border-radius: 50%;
+  color: #9aa0aa; text-decoration: none;
+}
+.manualLink svg { display: block; }
+.manualLink:hover { color: #e8e8ea; background: #16181d; }
 
-/* Whose song this is (SongByline.tsx), beside `manual`. It takes the free
-   space `manual` otherwise pushes the row with, and gives way first: the
-   title ellipsizes before anything on the right is squeezed. */
-.manualLink:has(+ .byline) { margin-right: 12px; }
+/* Whose song this is (SongByline.tsx), at the left of the bar. It takes the
+   free space the right-aligned row leaves, and gives way first: the title
+   ellipsizes before anything on the right is squeezed. */
 .byline {
   margin-right: auto;
   min-width: 0;
@@ -268,7 +277,7 @@ a.bylineOwner:hover .bylineOwnerName { text-decoration: underline; }
 .bylineLike:hover { color: #ff9fd0; border-color: #3a3d45; }
 .bylineLiked { color: #ff9fd0; border-color: #5a2e45; }
 
-/* Everything the bar carries apart from `manual`. One element, so the mobile
+/* Everything the bar carries apart from the manual. One element, so the mobile
    sheet can be the same DOM moved by CSS rather than a second copy of it. */
 .barItems { display: flex; align-items: center; gap: 8px; }
 
@@ -631,6 +640,7 @@ a.bylineOwner:hover .bylineOwnerName { text-decoration: underline; }
   /* A finger's target: the 44px floor everything else in thumb's reach gets.
      At the desktop's 5px padding it was a 26px sliver at the edge of the
      screen, and it is the only way to the rest of the bar. */
+  .manualLink { width: 44px; height: 44px; }
   .beatSlot { display: inline-flex; align-items: center; gap: 8px; margin-right: 8px; }
   .beatSlot svg { width: 36px; height: 36px; }
   .menuBtn {

@@ -34,6 +34,14 @@ export type ProfilePatch = {
   name: string;
   engine_type: string | null;
   created_at: string;
+  /** The engine it plays on and the fields its picture needs, read out of
+   *  `config` without the rest of it (a sampler patch carries base64). */
+  kind: string | null;
+  engine: string | null;
+  drum: unknown;
+  sample: string | null;
+  /** Hearts (migration 0017), absent before that has run. */
+  likes?: number;
 };
 
 export type PublicProfile =
@@ -191,15 +199,22 @@ export async function getPublicProfile(
       .order("updated_at", { ascending: false })
       .returns<Omit<ProfileSong, "forkedFrom">[]>();
   const SONG_COLS = "id,title,share_slug,updated_at,forked_from";
-  const [songsRes, { data: patches }] = await Promise.all([
-    songsQuery(`${SONG_COLS},preview,likes`),
+  const patchesQuery = (cols: string) =>
     supabase
       .from("patches")
-      .select("id,name,engine_type,created_at")
+      .select(cols)
       .eq("owner_id", profile.id)
       .eq("is_public", true)
-      .order("created_at", { ascending: false }),
+      .order("created_at", { ascending: false })
+      .returns<ProfilePatch[]>();
+  const PATCH_COLS =
+    "id,name,engine_type,created_at,kind:config->>_kind,engine:config->>engineKey,drum:config->isDrumKit,sample:config->sampleSource->>id";
+  const [songsRes, patchesRes] = await Promise.all([
+    songsQuery(`${SONG_COLS},preview,likes`),
+    patchesQuery(`${PATCH_COLS},likes`),
   ]);
+  // `likes` on patches is 0017's; without it, ask again without.
+  const patches = patchesRes.error ? (await patchesQuery(PATCH_COLS)).data : patchesRes.data;
 
   // Resolve fork lineage (source title + author handle) for any forked sessions,
   // limited to sources the viewer can read (public or owned).
@@ -243,6 +258,6 @@ export async function getPublicProfile(
       ...s,
       forkedFrom: s.forked_from ? (lineage.get(s.forked_from) ?? null) : null,
     })),
-    patches: (patches as ProfilePatch[]) ?? [],
+    patches: patches ?? [],
   };
 }

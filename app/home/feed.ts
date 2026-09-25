@@ -3,8 +3,8 @@ import { rankSongs } from "./rank";
 import { patchEngineKey } from "./patchPreview";
 
 // What the homepage shows of the people using the studio: the songs they have
-// published, ranked by likes and freshness together (rank.js), who made
-// them, and the patches they have put in the gallery. Twelve of each.
+// published and the patches they have put in the gallery, each ranked by
+// likes and freshness together (rank.js), and who made them. Twelve of each.
 //
 // A plain anon client, not the cookie one in lib/supabase/server.ts, on
 // purpose. Reading cookies makes a page dynamic, and the homepage is the one
@@ -46,6 +46,8 @@ export type FeedPatch = {
    *  which drum it is. */
   sampleId: string | null;
   createdAt: string;
+  /** Hearts (migration 0017); 0 before that has run. */
+  likes: number;
   owner: FeedSong["owner"];
 };
 
@@ -166,34 +168,48 @@ async function owners(
 }
 
 /**
- * The newest patches in the public gallery. Never `config` itself -- a
- * sampler patch carries its sample as base64 -- only the few fields inside it
- * that decide what the card draws and plays (patchPreview.js); the card's
- * play button fetches the rest from /api/patch/<id> when pressed.
+ * The public gallery's patches, ranked like the songs (rank.js): likes and
+ * freshness together, over a window of the newest. Freshness is `created_at`,
+ * the clock the card's age reads. Never `config` itself -- a sampler patch
+ * carries its sample as base64 -- only the few fields inside it that decide
+ * what the card draws and plays (patchPreview.js); the card's play button
+ * fetches the rest from /api/patch/<id> when pressed. A database without the
+ * `likes` field (0017) ranks on freshness alone.
  */
 async function loadPatches(supabase: SupabaseClient, limit: number): Promise<FeedPatch[]> {
   try {
-    const { data, error } = await supabase
-      .from("patches")
-      .select(
-        "id,name,created_at,owner_id,kind:config->>_kind,engine:config->>engineKey,drum:config->isDrumKit,sample:config->sampleSource->>id",
-      )
-      .eq("is_public", true)
-      .order("created_at", { ascending: false })
-      .limit(limit)
-      .returns<Row[]>();
-    if (error || !data?.length) return [];
+    const data = await withOptional(
+      (cols) =>
+        supabase
+          .from("patches")
+          .select(cols)
+          .eq("is_public", true)
+          .order("created_at", { ascending: false })
+          .limit(CANDIDATES)
+          .returns<Row[]>(),
+      "id,name,created_at,owner_id,kind:config->>_kind,engine:config->>engineKey,drum:config->isDrumKit,sample:config->sampleSource->>id",
+      "likes",
+    );
+    if (!data?.length) return [];
+    const ranked = rankSongs(
+      data.map((r) => ({
+        r,
+        updatedAt: r.created_at as string,
+        likes: typeof r.likes === "number" ? r.likes : 0,
+      })),
+    ).slice(0, limit);
     const byId = await owners(
       supabase,
-      data.map((r) => r.owner_id as string),
+      ranked.map(({ r }) => r.owner_id as string),
     );
-    return data.map((r) => ({
+    return ranked.map(({ r, likes }) => ({
       id: r.id as string,
       name: str(r.name) ?? "a patch with no name",
       engine: patchEngineKey({ _kind: r.kind, engineKey: r.engine }),
       drum: typeof r.drum === "boolean" ? r.drum : null,
       sampleId: str(r.sample),
       createdAt: r.created_at as string,
+      likes,
       owner: byId.get(r.owner_id as string) ?? null,
     }));
   } catch {
