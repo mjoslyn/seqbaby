@@ -2,19 +2,24 @@
 
 import { useState } from "react";
 import { remixSong } from "@/app/songs/actions";
+import { adoptRemix } from "@/app/songs/adoptRemix";
 import { IconRemix } from "./menuIcons";
 
 // Remix someone's song into your own songs, beside its heart: the studio
-// byline and a profile page's rows. The remix is saved and that is all; the
-// page you are on stays put. Once made, the button becomes a link to it, so a
-// second press opens the remix rather than making another.
+// byline and a profile page's rows. On a profile the remix is saved and that
+// is all; the page stays put, and the button becomes a link to it, so a second
+// press opens the remix rather than making another. In the studio (`openHere`)
+// the studio moves onto the remix, so the next save is its v2.
 
 export default function RemixButton({
   songId,
   className,
   remixedClassName,
+  openHere,
 }: {
   songId: string;
+  /** The studio holds this song: switch the open song to the remix. */
+  openHere?: boolean;
   className?: string;
   remixedClassName?: string;
 }) {
@@ -35,6 +40,8 @@ export default function RemixButton({
       // An id with an error is a remix whose first version failed: the song
       // exists, so a retry would make a second one.
       if (!res.id) throw new Error(res.error);
+      if (openHere)
+        await adoptRemix({ id: res.id, title: res.title, versionId: res.versionId }, true);
       setRemix({ id: res.id, title: res.title ?? "remix" });
     } catch {
       setFailed(true);

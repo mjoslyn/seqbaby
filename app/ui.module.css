@@ -281,6 +281,7 @@ a.bylineOwner:hover .bylineOwnerName { text-decoration: underline; }
 .bylineLiked { color: #ff9fd0; border-color: #5a2e45; }
 .bylineRemixed { color: #7ee2b8; border-color: #2e5a47; }
 a.bylineLike { text-decoration: none; }
+.bylineVersion { flex: none; color: #7ee2b8; }
 
 /* Everything the bar carries apart from the manual. One element, so the mobile
    sheet can be the same DOM moved by CSS rather than a second copy of it. */

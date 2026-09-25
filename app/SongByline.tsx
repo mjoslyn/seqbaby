@@ -71,7 +71,7 @@ export default function SongByline({ song }: { song: LinkedSongCard }) {
         />
       )}
       {song.songId && (
-        <RemixButton songId={song.songId} className={styles.bylineLike} remixedClassName={styles.bylineRemixed} />
+        <RemixButton songId={song.songId} openHere className={styles.bylineLike} remixedClassName={styles.bylineRemixed} />
       )}
     </span>
   );

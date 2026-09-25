@@ -1826,8 +1826,12 @@ to say hello), the songs people have published, and who made them.
   second save finds the first. Whether a card's patch is already yours is one
   batched browser read per page, LikeButton's trick. See the patch bay section.
 - **The remix beside a song's heart** (`app/RemixButton.tsx`, the studio byline
-  and profile rows) is `remixSong`: a private copy in your songs, and nothing
-  else. Once made it turns into a link to open the remix.
+  and profile rows) is `remixSong`: a private copy in your songs. On a profile
+  that is all, and it turns into a link to open the remix. In the studio (the
+  byline, the songs menu, the version tree) the studio moves onto the remix
+  (`app/songs/adoptRemix.ts`): the open-song slot and `?open=` name it, so the
+  next save is its v2. The engine keeps what it holds when that is what was
+  remixed (hand edits included), and loads the remix otherwise.
 - **A card's step picture is the song's own** (see "Song previews" below).
   `fingerprint` (hashed from the id) is only the fallback for a database
   without migration 0012.
@@ -1984,6 +1988,12 @@ nowhere else: the browser keeps none. Publishing flips `is_public` on the row
   (your own song opened or saved), or when a second session arrives
   (`window.__seqbabySetsApplied`, counted in `applySet`, because the byline
   streams in behind Suspense and may miss the first).
+- **Your own open song is named in the same place** (`app/OpenSongLabel.tsx`):
+  its title and version (`cold squelch v4`), read from the open-song slot, so
+  it follows a load, a save, a remix and a version switch. The number is
+  looked up from the version id (`getVersionSeq`), since that is what most
+  writers of the slot hold. It shows only once the slot has an id, which is
+  exactly when the byline goes, so the two never share the bar.
 
 ## One name, and a step grid for a face (migrations 0013, 0014)
 

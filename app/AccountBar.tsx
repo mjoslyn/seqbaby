@@ -12,6 +12,7 @@ import { getOpenSong } from "@/app/songs/openSong";
 import { IconHelp, IconMenu } from "@/app/menuIcons";
 import Avatar from "@/app/Avatar";
 import SongByline from "@/app/SongByline";
+import OpenSongLabel from "@/app/OpenSongLabel";
 import type { LinkedSongCard } from "@/app/songs/linkedSongTitle";
 import styles from "@/app/ui.module.css";
 
@@ -139,6 +140,7 @@ export function AccountBar({
       className={`${styles.topBar} ${menuOpen ? styles.topBarMenuOpen : ""}`}
     >
       {viewing && <SongByline song={viewing} />}
+      {name && <OpenSongLabel />}
       <span ref={beatSlotRef} className={styles.beatSlot} aria-hidden />
       <button
         className={styles.menuBtn}
@@ -205,8 +207,16 @@ export function AccountBar({
           </a>
         )}
       </div>
-      {/* Last in the row, so the far right: the manual, as a question mark. */}
-      <a className={styles.manualLink} href="/manual" title="how seqbaby works" aria-label="manual">
+      {/* Last in the row, so the far right: the manual, as a question mark.
+          A new tab, so reading it never leaves (and stops) the song you are in. */}
+      <a
+        className={styles.manualLink}
+        href="/manual"
+        target="_blank"
+        rel="noopener"
+        title="how seqbaby works (opens in a new tab)"
+        aria-label="manual (opens in a new tab)"
+      >
         <IconHelp />
       </a>
     </div>

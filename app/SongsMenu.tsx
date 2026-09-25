@@ -28,6 +28,7 @@ import {
 import { generateSongName } from "@/app/songs/songName";
 import { suggestSongName } from "@/app/songs/suggestName";
 import VersionTree from "@/app/VersionTree";
+import { adoptRemix } from "@/app/songs/adoptRemix";
 import {
   IconDefault,
   IconTemplate,
@@ -241,19 +242,19 @@ export default function SongsMenu() {
       const res = await remixSong(song.id);
       if (res.error || !res.id)
         return setStatus({ text: res.error ?? "Remix failed", err: true });
-      // A remix is a song of your own, never a template -- even of a template.
-      setOpenSong({
-        id: res.id,
-        title: res.title ?? song.title,
-        versionId: res.versionId ?? null,
-        isTemplate: false,
-      });
-      syncSongUrl(res.id);
+      try {
+        await adoptRemix(
+          { id: res.id, title: res.title ?? song.title, versionId: res.versionId },
+          currentId === song.id,
+        );
+      } catch (e) {
+        return setStatus({ text: `Remixed, but could not open it: ${(e as Error).message}`, err: true });
+      }
       setStatus({ text: `Remixed "${song.title}"` });
       setOpen(false);
       refresh();
     },
-    [refresh],
+    [currentId, refresh],
   );
 
   const doToggleTemplate = useCallback(
