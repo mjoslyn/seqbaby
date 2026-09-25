@@ -18,7 +18,7 @@ import { gatherPeople, type Person } from "./people";
  *  the explorer counts over. Past it, the counts are of the recent ones. */
 export const PEOPLE_WINDOW = 1000;
 
-export type PeopleCatalog = { people: Person[]; hasInstruments: boolean; now: number };
+export type PeopleCatalog = { people: Person[]; hasInstruments: boolean };
 
 /** How many profile ids go in one `in` filter (owners() in feed.ts, same reason). */
 const ID_SLICE = 100;
@@ -26,10 +26,9 @@ const ID_SLICE = 100;
 /** Never throws, for loadFeed's reason: no env or no network is an empty
  *  explorer, not a failed page. */
 export async function loadPeopleCatalog(): Promise<PeopleCatalog> {
-  const now = Date.now();
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  const empty = { people: [], hasInstruments: false, now };
+  const empty = { people: [], hasInstruments: false };
   if (!url || !key) return empty;
   try {
     const supabase = createClient(url, key, { auth: { persistSession: false } });
@@ -83,7 +82,7 @@ export async function loadPeopleCatalog(): Promise<PeopleCatalog> {
     // chips: a filter that ignores most of the work is worse than none.
     const hasInstruments = (songs ?? []).some((r) => Array.isArray(r.engines));
     if (!hasInstruments) for (const p of people) p.instruments = [];
-    return { people, hasInstruments, now };
+    return { people, hasInstruments };
   } catch {
     return empty;
   }

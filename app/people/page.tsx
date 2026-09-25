@@ -23,7 +23,7 @@ export const metadata: Metadata = {
 };
 
 export default async function PeoplePage() {
-  const { people, hasInstruments, now } = await loadPeopleCatalog();
+  const { people, hasInstruments } = await loadPeopleCatalog();
   return (
     <div className={homeStyles.home}>
       <nav className={homeStyles.nav}>
@@ -43,7 +43,7 @@ export default async function PeoplePage() {
         <h1 className={styles.title}>people</h1>
         <p className={styles.lede}>everyone making noise in here. find your people, press their faces.</p>
       </header>
-      <PeopleExplorer people={people} hasInstruments={hasInstruments} now={now} />
+      <PeopleExplorer people={people} hasInstruments={hasInstruments} />
     </div>
   );
 }

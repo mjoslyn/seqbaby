@@ -29,11 +29,9 @@ import {
 export default function PeopleExplorer({
   people,
   hasInstruments,
-  now,
 }: {
   people: Person[];
   hasInstruments: boolean;
-  now: number;
 }) {
   const [query, setQuery] = useState<Query>(EMPTY_QUERY);
   const read = useRef(false);
@@ -206,7 +204,7 @@ export default function PeopleExplorer({
         <>
           <ul className={homeStyles.people}>
             {results.slice(start, end).map((p) => (
-              <PersonCard key={p.handle} person={p} now={now} />
+              <PersonCard key={p.handle} person={p} />
             ))}
           </ul>
           <Pager page={page} pages={pages} turn={turn} />
