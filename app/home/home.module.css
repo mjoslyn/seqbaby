@@ -242,7 +242,8 @@
 }
 .like:hover { color: #ff9fd0; }
 .liked { color: #ff9fd0; }
-/* Save into your patches, beside the heart and padded out the same way. */
+/* Save into your patches (a patch card) or remix into your songs (a song
+   card), beside the heart and padded out the same way. */
 .savePatch {
   margin: -8px -6px -8px 0;
   padding: 8px 6px;

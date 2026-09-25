@@ -2,6 +2,7 @@ import SongPreview from "../SongPreview";
 import Avatar from "../Avatar";
 import LikeButton from "../LikeButton";
 import PlayButton from "../PlayButton";
+import RemixButton from "../RemixButton";
 import { fingerprint } from "./fingerprint";
 import type { FeedSong } from "./feed";
 import styles from "./home.module.css";
@@ -50,6 +51,8 @@ export default function SongCard({
   instruments,
 }: {
   song: FeedSong;
+  /** The explorer's clock (see `ago`). The card's age is drawn only when
+   *  given: the homepage's cards carry none. */
   now?: number;
   /** Drawn as tags under the title when given (the explorer). */
   instruments?: string[];
@@ -90,8 +93,9 @@ export default function SongCard({
           <span>someone</span>
         )}
         {song.bpm ? <span>{song.bpm} bpm</span> : null}
-        <span>{ago(song.updatedAt, now)}</span>
+        {now !== undefined ? <span>{ago(song.updatedAt, now)}</span> : null}
         <LikeButton songId={song.id} likes={song.likes} className={styles.like} likedClassName={styles.liked} />
+        <RemixButton songId={song.id} className={styles.savePatch} remixedClassName={styles.saved} />
       </span>
     </li>
   );
