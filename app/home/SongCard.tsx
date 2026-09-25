@@ -11,19 +11,6 @@ import styles from "./home.module.css";
 // No hooks and no "use client", like SongPreview, so a server page and the
 // explorer's client list draw it the same way.
 
-/** How long ago, in the card's words. `now` is the explorer's: the list is
- *  rendered on the server and again in the browser, and two clocks a minute
- *  apart would draw two different cards. */
-export function ago(iso: string, now = Date.now()): string {
-  const s = Math.max(0, (now - Date.parse(iso)) / 1000);
-  if (s < 90) return "just now";
-  const m = s / 60;
-  if (m < 60) return `${Math.round(m)}m ago`;
-  const h = m / 60;
-  if (h < 36) return `${Math.round(h)}h ago`;
-  return `${Math.round(h / 24)}d ago`;
-}
-
 function Fingerprint({ id }: { id: string }) {
   const lanes = fingerprint(id);
   return (
@@ -47,13 +34,9 @@ function Fingerprint({ id }: { id: string }) {
 
 export default function SongCard({
   song,
-  now,
   instruments,
 }: {
   song: FeedSong;
-  /** The explorer's clock (see `ago`). The card's age is drawn only when
-   *  given: the homepage's cards carry none. */
-  now?: number;
   /** Drawn as tags under the title when given (the explorer). */
   instruments?: string[];
 }) {
@@ -92,7 +75,6 @@ export default function SongCard({
         ) : (
           <span>someone</span>
         )}
-        {now !== undefined ? <span>{ago(song.updatedAt, now)}</span> : null}
       </span>
       {/* A line of its own: the bpm on the left, the heart and the remix
           pushed right by the heart's auto margin, with or without a bpm. */}
