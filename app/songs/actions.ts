@@ -215,7 +215,7 @@ export async function saveSong(input: {
   // trusted not to have been sent.
   const fromTemplate = !!input.fromTemplateId;
   const songId = fromTemplate ? undefined : input.id;
-  const forkedFrom = fromTemplate
+  const remixedFrom = fromTemplate
     ? await ownedSongId(supabase, user.id, input.fromTemplateId!)
     : null;
 
@@ -267,8 +267,8 @@ export async function saveSong(input: {
       title,
       data: input.data,
       // A song made from a template is not itself one, whatever it was made
-      // from. Its ancestry goes where a fork's does.
-      forked_from: forkedFrom,
+      // from. Its ancestry goes where a remix's does.
+      forked_from: remixedFrom,
     })
     .select("id")
     .single();
@@ -301,11 +301,11 @@ async function setCurrentVersion(
     .eq("owner_id", ownerId);
 }
 
-// Fork a public (or owned) song into the current user's account. The copy starts
-// private and records its ancestry via forked_from. A fork starts a NEW tree
+// Remix a public (or owned) song into the current user's account. The copy starts
+// private and records its ancestry via forked_from. A remix starts a NEW tree
 // rooted at the copied state: the source's history is the source owner's, and
 // is not readable here anyway.
-export async function forkSong(
+export async function remixSong(
   sourceId: string,
   sourceVersionId?: string,
 ): Promise<{ id?: string; title?: string; versionId?: string; error?: string }> {
@@ -324,9 +324,9 @@ export async function forkSong(
   if (!src) return { error: "Source session not found" };
 
   let data = src.data;
-  let suffix = "fork";
+  let suffix = "remix";
   if (sourceVersionId) {
-    // Only your own versions are readable, so this branch is the owner forking
+    // Only your own versions are readable, so this branch is the owner remixing
     // a point in their own history into a separate song.
     const { data: ver, error: verErr } = await supabase
       .from("song_versions")
@@ -358,7 +358,7 @@ export async function forkSong(
     ownerId: user.id,
     parentId: null,
     data,
-    label: sourceVersionId ? `forked from ${suffix}` : "forked",
+    label: sourceVersionId ? `remixed from ${suffix}` : "remixed",
   });
   if (ver.error) return { id: row.id, title, error: ver.error };
   await setCurrentVersion(supabase, row.id, user.id, ver.versionId!);
@@ -401,7 +401,7 @@ export async function saveNamedSong(input: {
   // whether or not it was generated -- an insert that duplicates a title would
   // leave the next save upserting onto whichever of the two sorted first.
   const fromTemplate = !!input.fromTemplateId;
-  const forkedFrom = fromTemplate
+  const remixedFrom = fromTemplate
     ? await ownedSongId(supabase, user.id, input.fromTemplateId!)
     : null;
 
@@ -454,8 +454,8 @@ export async function saveNamedSong(input: {
     const { data: row, error } = await supabase
       .from("songs")
       // A song made from a template is not itself one, whatever it was made
-      // from. Its ancestry goes where a fork's does.
-      .insert({ owner_id: user.id, title, data: input.data, forked_from: forkedFrom })
+      // from. Its ancestry goes where a remix's does.
+      .insert({ owner_id: user.id, title, data: input.data, forked_from: remixedFrom })
       .select("id,share_slug")
       .single();
     if (error) return { error: error.message };

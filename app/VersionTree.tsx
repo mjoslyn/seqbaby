@@ -6,12 +6,12 @@ import {
   loadVersion,
   labelVersion,
   deleteVersion,
-  forkSong,
+  remixSong,
   type SongVersion,
 } from "@/app/songs/actions";
 import { layoutVersions } from "@/app/songs/versionTree";
 import styles from "@/app/ui.module.css";
-import { IconTag, IconFork, IconTrash } from "@/app/menuIcons";
+import { IconTag, IconRemix, IconTrash } from "@/app/menuIcons";
 
 type Node = { v: SongVersion; depth: number; branch: boolean };
 
@@ -41,7 +41,7 @@ export default function VersionTree({
   baseVersionId: string | null;
   /** Called with the version whose blob is now in the studio. */
   onOpen: (versionId: string, title?: string) => void;
-  /** Something outside this tree changed (a fork made a new song). */
+  /** Something outside this tree changed (a remix made a new song). */
   onChanged: () => void;
   setStatus: (s: { text: string; err?: boolean }) => void;
 }) {
@@ -94,13 +94,13 @@ export default function VersionTree({
     [refresh, setStatus],
   );
 
-  const fork = useCallback(
+  const remix = useCallback(
     async (v: SongVersion) => {
-      setStatus({ text: "Forking…" });
-      const res = await forkSong(songId, v.id);
+      setStatus({ text: "Remixing…" });
+      const res = await remixSong(songId, v.id);
       if (res.error || !res.id)
-        return setStatus({ text: res.error ?? "Fork failed", err: true });
-      setStatus({ text: `v${v.seq} forked into "${res.title}"` });
+        return setStatus({ text: res.error ?? "Remix failed", err: true });
+      setStatus({ text: `v${v.seq} remixed into "${res.title}"` });
       onChanged();
     },
     [songId, onChanged, setStatus],
@@ -153,11 +153,11 @@ export default function VersionTree({
             </button>
             <button
               className={styles.iconBtn}
-              onClick={() => fork(v)}
-              title="fork this version into a song of its own"
-              aria-label="fork"
+              onClick={() => remix(v)}
+              title="remix this version into a song of its own"
+              aria-label="remix"
             >
-              <IconFork />
+              <IconRemix />
             </button>
             <button
               className={styles.iconBtn}

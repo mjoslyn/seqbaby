@@ -49,7 +49,7 @@ export default function SaveButton() {
   );
 
   // Opening the popup offers a name: the loaded song's, so the common case
-  // (save what I am working on) is one click and does not fork by typo, and for
+  // (save what I am working on) is one click and does not start a new song by typo, and for
   // a session that has never been saved, one generated from what is in it --
   // visible and editable before you press save rather than sprung on you after.
   //

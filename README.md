@@ -132,7 +132,7 @@ voice → filter → eq → compressor → fx rack → master (or an fx bus) →
 - Auto-generated song names from what is in the session (`basement squelch`).
 - **Share links** (`?s=<slug>`) for published songs and anonymous quick shares,
   with link previews that name the song and who shared it.
-- **Patch gallery** and public profiles at `/u/<name>` with fork buttons.
+- **Patch gallery** and public profiles at `/u/<name>` with remix buttons.
 - **Jam rooms** (`?jam=<room>`): several studios holding one song over Supabase
   Realtime. Edits travel as small diffs and merge into the running engine
   without stopping playback; a peer's edit is an undo step in their name and

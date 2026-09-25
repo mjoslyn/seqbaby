@@ -63,8 +63,8 @@ export function IconHistory() {
   );
 }
 
-/** Fork: one line of history becoming two. */
-export function IconFork() {
+/** Remix: one line of history becoming two. */
+export function IconRemix() {
   return (
     <svg {...base}>
       <circle cx="4" cy="3.5" r="1.4" />

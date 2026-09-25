@@ -57,7 +57,7 @@ export function subscribeOpenSong(fn: () => void): () => void {
 /**
  * Point the address bar at this song (`?open=<id>`), so a refresh or a
  * copied link reopens it -- the studio's half of a song having a URL at
- * all. Called from the moments that OPEN a song (the songs menu, a fork, a
+ * all. Called from the moments that OPEN a song (the songs menu, a remix, a
  * version, the `?open=` deep link) and the ones that empty the slot again
  * (`new`, deleting the open song), not from every `setOpenSong` write --
  * the default template applied under a blank session is not something the

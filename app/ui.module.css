@@ -277,7 +277,7 @@ a.bylineOwner:hover .bylineOwnerName { text-decoration: underline; }
 }
 .bylineLike:hover { color: #ff9fd0; border-color: #3a3d45; }
 .bylineLiked { color: #ff9fd0; border-color: #5a2e45; }
-.bylineForked { color: #7ee2b8; border-color: #2e5a47; }
+.bylineRemixed { color: #7ee2b8; border-color: #2e5a47; }
 a.bylineLike { text-decoration: none; }
 
 /* Everything the bar carries apart from the manual. One element, so the mobile

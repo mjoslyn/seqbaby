@@ -1133,11 +1133,11 @@ export default function ManualPage() {
               <tbody>
                 <tr><td>new</td><td>Blanks the session. Undo brings it back, until the tab goes. If your account has a default template, a new session starts from that instead of from the starter tracks.</td></tr>
                 <tr><td>save</td><td>Stores the session to your account. Saving a song you already have keeps the older one: each save is a new version.</td></tr>
-                <tr><td>songs</td><td>Your library. Click a title to load it. The row icons are version history, fork, public link, delete, and the two template toggles.</td></tr>
-                <tr><td>history</td><td>A song&apos;s versions, drawn as the tree they are. Open any version to hear it again; save after that and the new version branches off the one you opened. <span className={styles.ui}>name</span> labels a version, <span className={styles.ui}>fork</span> copies one into a song of its own.</td></tr>
+                <tr><td>songs</td><td>Your library. Click a title to load it. The row icons are version history, remix, public link, delete, and the two template toggles.</td></tr>
+                <tr><td>history</td><td>A song&apos;s versions, drawn as the tree they are. Open any version to hear it again; save after that and the new version branches off the one you opened. <span className={styles.ui}>name</span> labels a version, <span className={styles.ui}>remix</span> copies one into a song of its own.</td></tr>
                 <tr><td>template</td><td>Marks a song as a starting point. The first save from an open template makes a new song instead of another version of the template. The second icon makes one the default, which is what <span className={styles.ui}>new</span> loads.</td></tr>
                 <tr><td>share</td><td>Makes a link anyone can open. They get a playable copy and your original is untouched.</td></tr>
-                <tr><td>public link</td><td>Publishes a song to your profile at <span className={styles.ui}>/u/yourname</span>, where anyone can fork it.</td></tr>
+                <tr><td>public link</td><td>Publishes a song to your profile at <span className={styles.ui}>/u/yourname</span>, where anyone can remix it.</td></tr>
                 <tr><td>patch</td><td>The save icon in a track header stores that instrument&apos;s sound, which then shows up under saved patches for any track. Signed in, you can publish patches to the gallery.</td></tr>
                 <tr><td>Pattern / Session</td><td>Renders audio and downloads a WAV, either the current pattern or the whole chained arrangement. Recording happens in real time, so a long session takes as long as it plays.</td></tr>
               </tbody>
@@ -1154,7 +1154,7 @@ export default function ManualPage() {
             A saved song is a tree, not a file that gets overwritten. Every save hangs
             off the version you are working from, so the history keeps a straight line
             while you go forward and branches the moment you open an older version and
-            carry on. Forking leaves the tree and starts a new song. Sharing a song
+            carry on. Remixing leaves the tree and starts a new song. Sharing a song
             shares the state you saved, never the versions behind it.
           </p>
           <p>

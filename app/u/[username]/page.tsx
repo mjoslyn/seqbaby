@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { getPublicProfile } from "@/app/profile/actions";
-import ForkButton from "@/app/ForkButton";
+import RemixButton from "@/app/RemixButton";
 import LikeButton from "@/app/LikeButton";
 import SavePatchButton from "@/app/SavePatchButton";
 import PlayButton from "@/app/PlayButton";
@@ -102,21 +102,21 @@ export default async function ProfilePage({
                   <span className={styles.repoName}>{s.title}</span>
                 )}
                 <div className={styles.repoMeta}>
-                  {s.forkedFrom ? (
+                  {s.remixedFrom ? (
                     <>
-                      ⑂ forked from {s.forkedFrom.title}
-                      {s.forkedFrom.username && (
+                      ⑂ remixed from {s.remixedFrom.title}
+                      {s.remixedFrom.username && (
                         <>
                           {" by "}
-                          <Link href={`/u/${s.forkedFrom.username}`}>
-                            @{s.forkedFrom.username}
+                          <Link href={`/u/${s.remixedFrom.username}`}>
+                            @{s.remixedFrom.username}
                           </Link>
                         </>
                       )}
                       {" · "}
                     </>
                   ) : s.forked_from ? (
-                    "⑂ fork · "
+                    "⑂ remix · "
                   ) : null}
                   updated {fmtDate(s.updated_at)}
                 </div>
@@ -127,7 +127,7 @@ export default async function ProfilePage({
                 className={styles.repoAction}
                 likedClassName={styles.repoLiked}
               />
-              <ForkButton songId={s.id} className={styles.repoAction} forkedClassName={styles.repoSaved} />
+              <RemixButton songId={s.id} className={styles.repoAction} remixedClassName={styles.repoSaved} />
               {s.share_slug && (
                 <Link className={styles.repoAction} href={`/studio?s=${s.share_slug}`}>
                   open

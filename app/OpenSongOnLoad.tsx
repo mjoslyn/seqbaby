@@ -5,7 +5,7 @@ import { loadSong } from "@/app/songs/actions";
 import { setOpenSong, syncSongUrl } from "@/app/songs/openSong";
 
 // Studio deep-link: /studio?open=<songId> loads one of your (or a public) songs into
-// the engine once it's booted. Used by "fork" and "open from your songs".
+// the engine once it's booted. Used by "remix" and "open from your songs".
 export default function OpenSongOnLoad() {
   useEffect(() => {
     const id = new URLSearchParams(location.search).get("open");
