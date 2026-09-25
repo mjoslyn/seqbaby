@@ -168,7 +168,6 @@ export default async function HomePage() {
       <section className={styles.section}>
         <div className={styles.sectionHead}>
           <h2>fresh off the sequencer</h2>
-          <span className={styles.sectionSub}>songs people have published, the loved and the new first. click one to open it, remix it, fork it.</span>
         </div>
         {songs.length ? (
           <ul className={styles.cards}>
@@ -190,7 +189,6 @@ export default async function HomePage() {
       <section className={styles.section}>
         <div className={styles.sectionHead}>
           <h2>people making noise</h2>
-          <span className={styles.sectionSub}>everyone who has published a song. go see what they&apos;ve made.</span>
         </div>
         {people.length ? (
           <ul className={styles.people}>
@@ -219,10 +217,6 @@ export default async function HomePage() {
       <section className={styles.section}>
         <div className={styles.sectionHead}>
           <h2>fresh patches</h2>
-          <span className={styles.sectionSub}>
-            sounds people have put in the gallery. press play to hear one on a little phrase written for it. grab it
-            from the studio&apos;s patches menu.
-          </span>
         </div>
         {patches.length ? (
           <ul className={styles.cards}>
