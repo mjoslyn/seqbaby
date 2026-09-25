@@ -668,6 +668,28 @@ export async function getDefaultTemplate(): Promise<{
 // The song's whole version tree, without the blobs. Parents are ids in this same
 // list (or null for a root), so the caller builds the tree; nothing here assumes
 // it has one shape.
+// The `seq` of one of your versions (its name, `v4`), for the studio's
+// open-song label: most of what sets the open song knows the version's id
+// and not its number.
+export async function getVersionSeq(
+  versionId: string,
+): Promise<{ seq?: number; error?: string }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Not signed in" };
+  const { data, error } = await supabase
+    .from("song_versions")
+    .select("seq")
+    .eq("id", versionId)
+    .eq("owner_id", user.id)
+    .maybeSingle();
+  if (error) return { error: error.message };
+  if (!data) return { error: "Version not found" };
+  return { seq: data.seq as number };
+}
+
 export async function listVersions(
   songId: string,
 ): Promise<{ versions: SongVersion[]; currentId?: string | null; error?: string }> {

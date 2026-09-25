@@ -12,6 +12,7 @@ import { getOpenSong } from "@/app/songs/openSong";
 import { IconHelp, IconMenu } from "@/app/menuIcons";
 import Avatar from "@/app/Avatar";
 import SongByline from "@/app/SongByline";
+import OpenSongLabel from "@/app/OpenSongLabel";
 import type { LinkedSongCard } from "@/app/songs/linkedSongTitle";
 import styles from "@/app/ui.module.css";
 
@@ -139,6 +140,7 @@ export function AccountBar({
       className={`${styles.topBar} ${menuOpen ? styles.topBarMenuOpen : ""}`}
     >
       {viewing && <SongByline song={viewing} />}
+      {name && <OpenSongLabel />}
       <span ref={beatSlotRef} className={styles.beatSlot} aria-hidden />
       <button
         className={styles.menuBtn}
