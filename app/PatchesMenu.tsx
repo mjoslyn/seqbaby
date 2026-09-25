@@ -5,7 +5,7 @@ import {
   publishPatch,
   listPublicPatches,
   getPatch,
-  deletePatch,
+  setPatchPublic,
   type PublicPatch,
 } from "@/app/patches/actions";
 import styles from "@/app/ui.module.css";
@@ -104,9 +104,9 @@ export default function PatchesMenu() {
 
   const doDelete = useCallback(
     async (p: PublicPatch) => {
-      const res = await deletePatch(p.id);
+      const res = await setPatchPublic(p.id, false);
       if (res.error) return setStatus({ text: res.error, err: true });
-      setStatus({ text: "Removed" });
+      setStatus({ text: "Unpublished" });
       refreshPublic();
     },
     [refreshPublic],

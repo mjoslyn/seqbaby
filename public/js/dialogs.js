@@ -1,5 +1,4 @@
-import { engineByKey, loadPatches, rebuildEngineCatalog, refreshEngineSelect, storePatches } from "./catalog.js";
-import { state } from "./state.js";
+import { deletePatch, engineByKey, loadPatches } from "./catalog.js";
 
 export function showInputDialog({ title, defaultValue = "", placeholder = "", multiline = false }) {
   return new Promise((resolve) => {
@@ -117,12 +116,7 @@ export function showSavedPatchPicker() {
     });
     overlay.querySelectorAll(".sq-patch__del").forEach(btn => {
       btn.addEventListener("click", () => {
-        const name = btn.dataset.name;
-        const map = loadPatches();
-        delete map[name];
-        storePatches(map);
-        rebuildEngineCatalog();
-        for (const t of state.tracks) refreshEngineSelect(t);
+        deletePatch(btn.dataset.name);
         btn.closest(".sq-patch__row")?.remove();
       });
     });

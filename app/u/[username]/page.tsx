@@ -179,7 +179,6 @@ export default async function ProfilePage({
                 />
                 <SavePatchButton
                   patchId={p.id}
-                  name={p.name}
                   className={styles.repoAction}
                   savedClassName={styles.repoSaved}
                 />

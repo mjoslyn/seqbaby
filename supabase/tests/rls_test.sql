@@ -569,8 +569,41 @@ begin
   select count(*) into n from d;
   if n <> 0 then raise exception 'FAIL  bob deleted alice''s patch'; end if;
   raise notice 'PASS  bob cannot delete alice''s public patch';
+
+  -- 0018: saving a patch into your bay is a private row of your own.
+  insert into public.patches (owner_id, name, config, saved_from)
+  values ('b0b00000-0000-4000-8000-000000000002', 'alice public patch', '{}',
+          'c0000000-0000-4000-8000-00000000000a');
+  raise notice 'PASS  bob can save alice''s public patch into his bay';
 end $$;
 rollback;
+
+begin;
+set local role authenticated;
+set local request.jwt.claims = '{"sub":"b0b00000-0000-4000-8000-000000000002","role":"authenticated"}';
+do $$
+begin
+  begin
+    insert into public.patches (owner_id, name, config)
+    values ('a11ce000-0000-4000-8000-000000000001', 'planted', '{}');
+    raise exception 'FAIL  bob saved a patch into alice''s bay';
+  exception when insufficient_privilege then
+    raise notice 'PASS  bob cannot save a patch into alice''s bay';
+  end;
+end $$;
+rollback;
+
+-- A patch saved without saying otherwise is private (0018's default).
+do $$
+declare pub boolean;
+begin
+  insert into public.patches (id, owner_id, name, config)
+  values ('c0000000-0000-4000-8000-00000000000d', 'b0b00000-0000-4000-8000-000000000002', 'bay default', '{}')
+  returning is_public into pub;
+  if pub then raise exception 'FAIL  a saved patch defaults to public'; end if;
+  delete from public.patches where id = 'c0000000-0000-4000-8000-00000000000d';
+  raise notice 'PASS  a saved patch defaults to private';
+end $$;
 
 \echo ''
 \echo '== profiles: the anon-key leak 0007 closed =='

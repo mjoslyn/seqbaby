@@ -45,6 +45,20 @@ export function savePatch(name, config) {
   const all = loadPatches();
   all[name] = config;
   storePatches(all);
+  refreshPatches();
+  // The shell keeps a signed-in account's patch bay in step with this store
+  // (app/patches/patchSync.ts); the engine only says that something changed.
+  window.dispatchEvent(new CustomEvent("seqbaby:patchsaved", { detail: { name } }));
+}
+export function deletePatch(name) {
+  const all = loadPatches();
+  delete all[name];
+  storePatches(all);
+  refreshPatches();
+  window.dispatchEvent(new CustomEvent("seqbaby:patchdeleted", { detail: { name } }));
+}
+/** The store was written from outside (the shell's sync): redraw what reads it. */
+export function refreshPatches() {
   rebuildEngineCatalog();
   for (const t of state.tracks) refreshEngineSelect(t);
 }

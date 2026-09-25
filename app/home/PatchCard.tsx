@@ -37,7 +37,7 @@ export default function PatchCard({ patch, age }: { patch: FeedPatch; age: strin
         )}
         <span>{age}</span>
         <LikeButton songId={patch.id} kind="patch" likes={patch.likes} className={styles.like} likedClassName={styles.liked} />
-        <SavePatchButton patchId={patch.id} name={patch.name} className={styles.savePatch} savedClassName={styles.saved} />
+        <SavePatchButton patchId={patch.id} className={styles.savePatch} savedClassName={styles.saved} />
       </span>
     </li>
   );

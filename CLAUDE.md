@@ -29,7 +29,8 @@ env / fx / eq / comp / mod / automation per track.
   because og/twitter metadata does not inherit field-by-field between
   segments), titled with the song when the URL names one — see the share card
   section below.
-- **Persistence (local)**: localStorage `seqbaby.patches.v1` (saved patches),
+- **Persistence (local)**: localStorage `seqbaby.patches.v1` (saved patches,
+  kept in step with a signed-in account's patch bay; see that section),
   `seqbaby.sets.v1` (saved sessions).
 - **Deploy**: Netlify via `@netlify/plugin-nextjs` (`netlify.toml`, Node 22).
   Push to `main` auto-deploys production; branch pushes get deploy previews
@@ -1816,10 +1817,10 @@ to say hello), the songs people have published, and who made them.
   legacy custom-Tone patch is drawn without a play button (`canPreview`): the
   studio plays one only as a `saved:` engine out of localStorage.
 - **The disk beside a patch's heart** (`app/SavePatchButton.tsx`, homepage
-  card and profile row) saves it into your patches: the studio's saved-patch
-  store (localStorage `seqbaby.patches.v1`), what a track's load button picks
-  from. Signed in only; the config is the cached `/api/patch/<id>` read, and a
-  config already in the store is not saved twice.
+  card and profile row) saves it into your patch bay: `savePatchToBay`, a
+  private copy in your account with `saved_from` naming the original, so a
+  second save finds the first. Whether a card's patch is already yours is one
+  batched browser read per page, LikeButton's trick. See the patch bay section.
 - **The fork beside a song's heart** (`app/ForkButton.tsx`, the studio byline
   and profile rows) is `forkSong`: a private copy in your songs, and nothing
   else. Once made it turns into a link to open the fork.
@@ -1883,6 +1884,31 @@ pattern it was saved on.
   that is what they play.
 - Every reader asks for `preview` and, if the database refuses it (0012 not
   applied), asks again without: a list without thumbnails beats no list.
+
+## The patch bay — saved patches in the account (migration 0018)
+
+Every saved patch is a row in `patches`, private until published. Publishing
+flips `is_public` on the row you have (`setPatchPublic`, or `publishPatch`,
+which upserts by name) rather than inserting a copy; unpublishing keeps it.
+
+- **The studio still reads localStorage** (`loadPatches`, catalog.js): the
+  load button, the `saved:` engines and the track's save button are
+  unchanged. `app/patches/patchSync.ts` keeps that store and the account in
+  step, mounted as `app/PatchSync.tsx` in the signed-in account bar.
+- **Pushes**: `savePatch` / `deletePatch` (catalog.js) fire
+  `seqbaby:patchsaved` / `seqbaby:patchdeleted`, and the sync writes them
+  through (`putBayPatch`, by name; `deletePatch`, by id).
+- **Pulls**: `syncBay()` on studio load, whenever the tab comes back into
+  view, and from the settings page. A three-way merge of the store, the
+  account's rows (`listBayPatches`, names and `updated_at`, no configs) and
+  what the last sync saw (`seqbaby.patchBay.v1:<userId>`): a patch missing on
+  one side is a deletion when the last sync saw it and new when it did not.
+  The account's copy wins a changed name. A patch only ever in this browser
+  goes up, which is how patches saved before the bay existed migrate.
+- **Per account**, the last-seen record, or a second account signing in on the
+  same browser would read the first's patches as deletions.
+- Settings (`app/settings/PatchManager.tsx`) lists the bay with publish /
+  unpublish / delete.
 
 ## Likes, and the homepage's order (migrations 0016, 0017)
 

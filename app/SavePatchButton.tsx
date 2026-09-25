@@ -1,72 +1,84 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { savePatchToBay } from "@/app/patches/actions";
 import { IconSave } from "./menuIcons";
 
-// Save a published patch into your own patches: the studio's saved-patch store
-// (localStorage seqbaby.patches.v1, catalog.js), which is what a track's load
-// button picks from. The homepage and a profile page run no engine, so this
-// writes the store directly, the way PatchManager reads it.
+// Save a published patch into your patch bay: a private copy in your account
+// (savePatchToBay, migration 0018), which the studio pulls into its saved
+// patches the next time it loads or comes back into view (patches/patchSync.ts).
 //
-// The config comes from /api/patch/<id>, the same cached read a card's play
-// button makes, so a patch already auditioned costs nothing more.
+// Whether a card's patch is already in your bay (a copy saved from it, or your
+// own) is one batched browser read per page, the way LikeButton asks what you
+// have liked: the homepage is cached and cannot know who is looking.
 
-const PATCHES_KEY = "seqbaby.patches.v1";
+let pending: { ids: Set<string>; done: Promise<Set<string>> } | null = null;
 
-function readStore(): Record<string, unknown> {
-  try {
-    return JSON.parse(localStorage.getItem(PATCHES_KEY) || "{}");
-  } catch {
-    return {};
+function inMyBay(id: string): Promise<Set<string>> {
+  if (!pending) {
+    const ids = new Set<string>();
+    const done = new Promise<Set<string>>((resolve) => {
+      queueMicrotask(async () => {
+        pending = null;
+        try {
+          const supabase = createClient();
+          const { data } = await supabase.auth.getSession();
+          const me = data.session?.user.id;
+          if (!me) return resolve(new Set());
+          const list = [...ids].join(",");
+          const { data: rows, error } = await supabase
+            .from("patches")
+            .select("id,saved_from")
+            .eq("owner_id", me)
+            .or(`id.in.(${list}),saved_from.in.(${list})`);
+          if (error) return resolve(new Set());
+          resolve(new Set((rows ?? []).flatMap((r) => [r.id as string, r.saved_from as string])));
+        } catch {
+          // No Supabase env, or no 0018 yet: nothing is saved.
+          resolve(new Set());
+        }
+      });
+    });
+    pending = { ids, done };
   }
-}
-
-function uniqueName(base: string, taken: Record<string, unknown>): string {
-  if (!(base in taken)) return base;
-  for (let i = 2; i < 999; i++) if (!(`${base} ${i}` in taken)) return `${base} ${i}`;
-  return `${base} ${Date.now()}`;
+  pending.ids.add(id);
+  return pending.done;
 }
 
 export default function SavePatchButton({
   patchId,
-  name,
   className,
   savedClassName,
 }: {
   patchId: string;
-  name: string;
   className?: string;
   savedClassName?: string;
 }) {
   const [state, setState] = useState<"idle" | "busy" | "saved" | "error">("idle");
   const [savedAs, setSavedAs] = useState("");
 
+  useEffect(() => {
+    let cancelled = false;
+    inMyBay(patchId).then((set) => {
+      if (!cancelled && set.has(patchId)) setState((s) => (s === "idle" ? "saved" : s));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [patchId]);
+
   async function save() {
-    if (state === "busy") return;
+    if (state === "busy" || state === "saved") return;
     setState("busy");
     try {
-      const supabase = createClient();
-      const { data } = await supabase.auth.getSession();
-      if (!data.session) {
+      const res = await savePatchToBay(patchId);
+      if (res.error === "Not signed in") {
         window.location.href = "/login";
         return;
       }
-      const res = await fetch(`/api/patch/${patchId}`);
-      if (!res.ok) throw new Error("not found");
-      const patch = (await res.json()) as { name?: string; config?: unknown };
-      if (patch.config === undefined) throw new Error("no config");
-
-      const all = readStore();
-      // Saving the same patch twice must not put a second copy in the list.
-      const json = JSON.stringify(patch.config);
-      const existing = Object.keys(all).find((k) => JSON.stringify(all[k]) === json);
-      const as = existing ?? uniqueName(patch.name || name, all);
-      if (!existing) {
-        all[as] = patch.config;
-        localStorage.setItem(PATCHES_KEY, JSON.stringify(all));
-      }
-      setSavedAs(as);
+      if (res.error || !res.name) throw new Error(res.error);
+      setSavedAs(res.name);
       setState("saved");
     } catch {
       setState("error");
@@ -75,7 +87,9 @@ export default function SavePatchButton({
 
   const saved = state === "saved";
   const label = saved
-    ? `saved to your patches as "${savedAs}"`
+    ? savedAs
+      ? `saved to your patches as "${savedAs}"`
+      : "in your patches"
     : state === "error"
       ? "could not save, try again"
       : "save to your patches";
