@@ -1816,7 +1816,7 @@ to say hello), the songs people have published, and who made them.
   card), because the feed never selects `config` (a sampler patch carries
   its sample as base64), only the few fields inside it the picture needs. A
   legacy custom-Tone patch is drawn without a play button (`canPreview`): the
-  studio plays one only as a `saved:` engine out of localStorage.
+  studio plays one only as a `saved:` engine from the patch bay.
 - **The disk beside a patch's heart** (`app/SavePatchButton.tsx`, homepage
   card and profile row) saves it into your patch bay: `savePatchToBay`, a
   private copy in your account with `saved_from` naming the original, so a
