@@ -60,6 +60,7 @@ export default async function HomePage() {
         </a>
         <span className={styles.navLinks}>
           <a className={styles.navLink} href="/songs">songs</a>
+          <a className={styles.navLink} href="/people">people</a>
           <a className={styles.navLink} href="/manual">manual</a>
           <Who />
           <a className={`${styles.navLink} ${styles.navCta}`} href="/studio">open the studio →</a>
@@ -123,7 +124,10 @@ export default async function HomePage() {
 
       <section className={styles.section}>
         <div className={styles.sectionHead}>
-          <h2>people making noise</h2>
+          <h2>
+            <a className={styles.sectionTitleLink} href="/people">people making noise</a>
+          </h2>
+          <a className={styles.sectionLink} href="/people">find everyone →</a>
         </div>
         {people.length ? (
           <ul className={styles.people}>
@@ -185,6 +189,7 @@ export default async function HomePage() {
       <footer className={styles.footer}>
         <a href="/studio">studio</a>
         <a href="/songs">songs</a>
+        <a href="/people">people</a>
         <a href="/manual">manual</a>
         <span className={styles.footNote}>made with too many oscillators.</span>
       </footer>

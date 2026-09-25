@@ -32,6 +32,7 @@ export default async function SongsPage() {
           seqbaby
         </a>
         <span className={homeStyles.navLinks}>
+          <a className={homeStyles.navLink} href="/people">people</a>
           <a className={homeStyles.navLink} href="/manual">manual</a>
           <Who />
           <a className={`${homeStyles.navLink} ${homeStyles.navCta}`} href="/studio">open the studio →</a>

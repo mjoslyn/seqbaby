@@ -46,7 +46,9 @@ env / fx / eq / comp / mod / automation per track.
 │   │                          SongCard.tsx (a song's card, shared with /songs),
 │   │                          PatchCard.tsx + patchPreview.js (what a patch card draws and plays)
 │   ├── songs/page.tsx         the songs explorer at /songs: search, sort, filter by bpm and instrument
-│   │                          (Explorer.tsx, explore.js, exploreFeed.ts)
+│   │                          (Explorer.tsx, explore.js, exploreFeed.ts, Pager.tsx shared with /people)
+│   ├── people/page.tsx        the people explorer at /people: search, sort, filter by tempo, instrument, what they make
+│   │                          (PeopleExplorer.tsx, people.js, peopleFeed.ts, PersonCard.tsx)
 │   ├── studioMarkup.ts        engine's static DOM skeleton (raw HTML string)
 │   ├── StudioBody.tsx         renders it, once: React must never rewrite the engine's DOM (see Gotchas)
 │   ├── ScriptLoader.tsx       injects Tone → woscillators → js/main.js in order
@@ -264,7 +266,7 @@ npm run netlify:dev    # full Netlify emulation on :8888
 npm run legacy:dev     # pre-Next static Node server on :5173 (engine assets only)
 npm test               # node --test: the pure modules (session format, chance gen,
                        #   version tree, song names, share card copy, the song builder, the jam diff,
-                       #   song previews, grid avatars, the songs explorer)
+                       #   song previews, grid avatars, the songs and people explorers)
 npm run mcp            # the MCP server on stdio (mcp/server.mjs) — an agent writes songs
 npm run test:rls       # RLS policy tests — builds a throwaway Postgres in docker
 ```
@@ -1876,6 +1878,37 @@ nav, footer and the `on repeat` heading.
   page.tsx), with the instruments as tags. `ago()` takes the server's `now`,
   because the list renders on the server and again in the browser and two
   clocks would draw two different cards.
+
+## The people explorer (`/people`)
+
+The songs explorer with people in it: everyone with a public page who has
+published a song or a patch, searchable by handle, bio and instrument,
+sorted (busiest / recently active / most liked / a to z), filtered by the
+tempo they work at, the instruments they use and what they make (songs,
+patches). Linked from the homepage's nav, footer and the `people making
+noise` heading, and from /songs.
+
+- **Built from the published work, not the profiles** (`peopleFeed.ts`), for
+  the homepage people list's reason: an account with nothing to hear never
+  appears. The newest `PEOPLE_WINDOW` (1000) public songs and public patches,
+  never `data` or `config` (only `data->bpm`, the `engines` / `likes`
+  computed fields, and a patch's `config->>engineKey`), then `profiles`
+  filtered on `is_public` in slices of 100 ids. Anon client, cached,
+  `revalidate = 60`, never throws, like every other feed.
+- **`people.js` is pure and tested** (`test/people.test.js`), explore.js's
+  twin: `gatherPeople` folds the rows into one record per person (counts,
+  hearts across songs and patches, last published, instruments through
+  explore.js's `instrumentOf`), `matches` / `explorePeople` /
+  `instrumentCounts` / `parseQuery` / `queryString` as on /songs. The tempo
+  bands and `paginate` are explore.js's own, re-exported.
+- **A person's tempo is the median bpm of their songs** (`medianBpm`), so one
+  174bpm experiment does not move a house producer. Nobody with no bpm'd song
+  passes a tempo filter.
+- **Before 0019 the instrument chips are hidden**, and so are the tags:
+  patches would be the only source, and a filter that ignores most of the
+  work is worse than none.
+- **The query is in the URL** (`?q=&sort=&bpm=&with=&makes=&page=`), read
+  after mount, as on /songs. The pager is `app/songs/Pager.tsx`, shared.
 
 ## Playing a song where it is listed (`app/enginePlayer.ts` + `app/PlayButton.tsx`)
 
