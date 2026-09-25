@@ -3,8 +3,8 @@ import { rankSongs } from "./rank";
 import { patchEngineKey } from "./patchPreview";
 
 // What the homepage shows of the people using the studio: the songs they have
-// published, ranked by likes and freshness together (rank.js), who made
-// them, and the patches they have put in the gallery. Twelve of each.
+// published and the patches they have put in the gallery, each ranked by
+// likes and freshness together (rank.js), and who made them. Twelve of each.
 //
 // A plain anon client, not the cookie one in lib/supabase/server.ts, on
 // purpose. Reading cookies makes a page dynamic, and the homepage is the one
@@ -46,6 +46,8 @@ export type FeedPatch = {
    *  which drum it is. */
   sampleId: string | null;
   createdAt: string;
+  /** Hearts (migration 0017); 0 before that has run. */
+  likes: number;
   owner: FeedSong["owner"];
 };
 
@@ -166,34 +168,48 @@ async function owners(
 }
 
 /**
- * The newest patches in the public gallery. Never `config` itself -- a
- * sampler patch carries its sample as base64 -- only the few fields inside it
- * that decide what the card draws and plays (patchPreview.js); the card's
- * play button fetches the rest from /api/patch/<id> when pressed.
+ * The public gallery's patches, ranked like the songs (rank.js): likes and
+ * freshness together, over a window of the newest. Freshness is `created_at`,
+ * the clock the card's age reads. Never `config` itself -- a sampler patch
+ * carries its sample as base64 -- only the few fields inside it that decide
+ * what the card draws and plays (patchPreview.js); the card's play button
+ * fetches the rest from /api/patch/<id> when pressed. A database without the
+ * `likes` field (0017) ranks on freshness alone.
  */
 async function loadPatches(supabase: SupabaseClient, limit: number): Promise<FeedPatch[]> {
   try {
-    const { data, error } = await supabase
-      .from("patches")
-      .select(
-        "id,name,created_at,owner_id,kind:config->>_kind,engine:config->>engineKey,drum:config->isDrumKit,sample:config->sampleSource->>id",
-      )
-      .eq("is_public", true)
-      .order("created_at", { ascending: false })
-      .limit(limit)
-      .returns<Row[]>();
-    if (error || !data?.length) return [];
+    const data = await withOptional(
+      (cols) =>
+        supabase
+          .from("patches")
+          .select(cols)
+          .eq("is_public", true)
+          .order("created_at", { ascending: false })
+          .limit(CANDIDATES)
+          .returns<Row[]>(),
+      "id,name,created_at,owner_id,kind:config->>_kind,engine:config->>engineKey,drum:config->isDrumKit,sample:config->sampleSource->>id",
+      "likes",
+    );
+    if (!data?.length) return [];
+    const ranked = rankSongs(
+      data.map((r) => ({
+        r,
+        updatedAt: r.created_at as string,
+        likes: typeof r.likes === "number" ? r.likes : 0,
+      })),
+    ).slice(0, limit);
     const byId = await owners(
       supabase,
-      data.map((r) => r.owner_id as string),
+      ranked.map(({ r }) => r.owner_id as string),
     );
-    return data.map((r) => ({
+    return ranked.map(({ r, likes }) => ({
       id: r.id as string,
       name: str(r.name) ?? "a patch with no name",
       engine: patchEngineKey({ _kind: r.kind, engineKey: r.engine }),
       drum: typeof r.drum === "boolean" ? r.drum : null,
       sampleId: str(r.sample),
       createdAt: r.created_at as string,
+      likes,
       owner: byId.get(r.owner_id as string) ?? null,
     }));
   } catch {
@@ -239,26 +255,42 @@ async function rankedIds(
     .map(({ id, likes }) => ({ id, likes }));
 }
 
+/** How many public songs the people list counts over. Enough to cover every
+ *  publisher for a long while; past it, the busiest of the recent ones. */
+const PEOPLE_SONGS = 1000;
+
 /**
- * Every public profile, whether or not they have published anything yet.
- * Every profile has a handle since migration 0013; the filter is for a
- * database that has not had it. Read from `profiles`, which anon may read only where
- * `is_public` (migration 0007) -- the filter is repeated here so the list
- * does not depend on that policy to stay public-only. `bio` is on the
- * profile page already, so it is fine here; it is NOT on profile_cards, which
- * is why this is not that view.
+ * The people who have published something: every public profile with at least
+ * one public song, busiest first, then whoever published most recently.
+ * Starts from the songs, not the profiles, so an account with nothing to hear
+ * never makes the list however new it is.
  *
- * Ordered by how many songs they have published, then newest first, so the
- * people with something to hear come before the ones who just signed up.
+ * Read from `profiles`, which anon may read only where `is_public` (migration
+ * 0007) -- the filter is repeated here so the list does not depend on that
+ * policy to stay public-only. `bio` is on the profile page already, so it is
+ * fine here; it is NOT on profile_cards, which is why this is not that view.
  */
 async function loadPeople(
   supabase: SupabaseClient,
   show: number,
 ): Promise<FeedPerson[]> {
-  // Read a wider window than is shown, then sort it: the busiest of the
-  // newest 48, not the busiest of the newest twelve.
-  const limit = Math.max(48, show);
   try {
+    const { data: owned } = await supabase
+      .from("songs")
+      .select("owner_id,updated_at")
+      .eq("is_public", true)
+      .order("updated_at", { ascending: false })
+      .limit(PEOPLE_SONGS)
+      .returns<Row[]>();
+    const counts = new Map<string, number>();
+    const latest = new Map<string, number>(); // first seen is newest: the query is ordered
+    for (const r of owned ?? []) {
+      const id = r.owner_id as string;
+      counts.set(id, (counts.get(id) ?? 0) + 1);
+      if (!latest.has(id)) latest.set(id, latest.size);
+    }
+    if (!counts.size) return [];
+
     const profiles = await withOptional(
       (cols) =>
         supabase
@@ -266,34 +298,26 @@ async function loadPeople(
           .select(cols)
           .eq("is_public", true)
           .not("username", "is", null)
-          .order("created_at", { ascending: false })
-          .limit(limit)
+          .in("id", [...counts.keys()])
           .returns<Row[]>(),
-      "id,username,bio,created_at",
+      "id,username,bio",
       "avatar_grid",
     );
-    if (!profiles?.length) return [];
 
-    const ids = profiles.map((p) => p.id as string);
-    const { data: owned } = await supabase
-      .from("songs")
-      .select("owner_id")
-      .eq("is_public", true)
-      .in("owner_id", ids);
-    const counts = new Map<string, number>();
-    for (const r of owned ?? []) counts.set(r.owner_id as string, (counts.get(r.owner_id as string) ?? 0) + 1);
-
-    return profiles
-      .map((p, i) => ({
-        order: i,
-        person: {
-          handle: p.username as string,
-          bio: str(p.bio),
-          avatarGrid: str(p.avatar_grid),
-          songs: counts.get(p.id as string) ?? 0,
-        },
-      }))
-      .sort((a, b) => b.person.songs - a.person.songs || a.order - b.order)
+    return (profiles ?? [])
+      .map((p) => {
+        const id = p.id as string;
+        return {
+          recent: latest.get(id) ?? Infinity,
+          person: {
+            handle: p.username as string,
+            bio: str(p.bio),
+            avatarGrid: str(p.avatar_grid),
+            songs: counts.get(id) ?? 0,
+          },
+        };
+      })
+      .sort((a, b) => b.person.songs - a.person.songs || a.recent - b.recent)
       .slice(0, show)
       .map((e) => e.person);
   } catch {

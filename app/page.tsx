@@ -167,8 +167,7 @@ export default async function HomePage() {
 
       <section className={styles.section}>
         <div className={styles.sectionHead}>
-          <h2>fresh off the sequencer</h2>
-          <span className={styles.sectionSub}>songs people have published, the loved and the new first. click one to open it, remix it, fork it.</span>
+          <h2>on repeat</h2>
         </div>
         {songs.length ? (
           <ul className={styles.cards}>
@@ -190,7 +189,6 @@ export default async function HomePage() {
       <section className={styles.section}>
         <div className={styles.sectionHead}>
           <h2>people making noise</h2>
-          <span className={styles.sectionSub}>everyone with a public page. go see what they&apos;ve made.</span>
         </div>
         {people.length ? (
           <ul className={styles.people}>
@@ -202,7 +200,7 @@ export default async function HomePage() {
                     <span className={styles.personName}>@{p.handle}</span>
                     {p.bio && <span className={styles.personBio}>{p.bio}</span>}
                     <span className={styles.personCount}>
-                      {p.songs ? `${p.songs} ${p.songs === 1 ? "song" : "songs"}` : "no songs yet"}
+                      {p.songs} {p.songs === 1 ? "song" : "songs"}
                     </span>
                   </span>
                 </a>
@@ -219,10 +217,6 @@ export default async function HomePage() {
       <section className={styles.section}>
         <div className={styles.sectionHead}>
           <h2>fresh patches</h2>
-          <span className={styles.sectionSub}>
-            sounds people have put in the gallery. press play to hear one on a little phrase written for it. grab it
-            from the studio&apos;s patches menu.
-          </span>
         </div>
         {patches.length ? (
           <ul className={styles.cards}>

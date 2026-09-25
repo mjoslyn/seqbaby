@@ -1787,17 +1787,16 @@ to say hello), the songs people have published, and who made them.
   is public anyway. It selects `data->bpm`, never `data`: a song's data is
   the whole session, samples included. It never throws: no env, a missing
   migration or a dead network is an empty feed with a joke in it.
-- **The people are every public profile with a handle**, not just whoever
-  made the songs above: read from `profiles` filtered on `is_public` (the
-  filter is repeated so the list does not lean on the RLS policy alone),
-  with a count of each one's published songs. Busiest first, then newest.
+- **The people are every public profile with at least one public song**:
+  the list starts from the owners of the newest 1000 public songs, so an
+  account with nothing to hear never appears, then reads their `profiles`
+  filtered on `is_public` (repeated so the list does not lean on the RLS
+  policy alone). Busiest first, then whoever published most recently.
   `bio` comes from `profiles`, never `profile_cards`, which must not carry
   it (migration 0007).
 - **Who is looking is a client island** (`Who.tsx`): a local session read,
   then one `profile_cards` read for the handle. A cached page cannot know.
-- **Twelve of each**: songs, people, patches (`FEED_SIZE` in feed.ts). The
-  people are still sorted over the newest 48 before the twelve are cut, so it
-  is the busiest of a wide window, not of the newest twelve.
+- **Twelve of each**: songs, people, patches (`FEED_SIZE` in feed.ts).
 - **Patches are laid out like the songs** (`app/home/PatchCard.tsx`): the
   newest twelve in the public gallery, each with a play button on the same
   hidden engine the song cards use. A patch is a sound with no notes, so
@@ -1805,9 +1804,11 @@ to say hello), the songs people have published, and who made them.
   for: a drum voice a rhythm that suits the drum (from the engine key, or a
   sampler's sample id and the patch name), a bass engine a line with accents
   and a slide, a pad held chords, anything else a melody. The card draws that
-  same phrase and walks a playhead over it while it plays (`playheadStep` in
-  enginePlayer.ts, read off the frame's Tone transport). The player's key for
-  a patch is `patch:<id>`; its session is fetched from `/api/patch/<id>` only when
+  same phrase (`app/home/PatchRoll.tsx`, no playhead), and so does a patch
+  row on a profile page, with the same play button and heart. Patches are
+  ranked like the songs (see "Likes" below). The player's key for
+  a patch is `patch:<id>` (`patchKey`, in patchPreview.js so a server
+  component can call it); its session is fetched from `/api/patch/<id>` only when
   pressed (the id in the path, never `?id=`: the response is CDN-cached and
   Netlify's cache key drops the query string, which served one patch to every
   card), because the feed never selects `config` (a sampler patch carries
@@ -1875,7 +1876,7 @@ pattern it was saved on.
 - Every reader asks for `preview` and, if the database refuses it (0012 not
   applied), asks again without: a list without thumbnails beats no list.
 
-## Likes, and the homepage's order (migration 0016)
+## Likes, and the homepage's order (migrations 0016, 0017)
 
 - **`song_likes`** is one row per (song, person), a table of its own because
   every write to `songs` bumps `updated_at`, which is what freshness reads.
@@ -1883,13 +1884,19 @@ pattern it was saved on.
   computed field (SECURITY DEFINER, and it checks the song is readable from
   the table, not from the row it was handed, since /rpc takes any row).
   Only a public song can be liked. `supabase/tests/rls_test.sql` covers it.
+- **`patch_likes`** (0017) is the same thing for patches, with the same
+  policies, and `likes(patches)` is an overload of `likes(songs)`: PostgREST
+  picks a computed field by the row type it takes.
 - **The heart** is `app/LikeButton.tsx`, on homepage cards, profile rows and
   the studio byline. The count comes from the server; "did I" is one batched
-  browser read per page (the homepage is cached), writes go through
-  `setLike` (app/songs/actions.ts).
+  browser read per page and per kind (the homepage is cached), writes go
+  through `setLike` (app/songs/actions.ts) or, with `kind="patch"`,
+  `setPatchLike` (app/patches/actions.ts).
 - **The order** is `app/home/rank.js` (pure, tested): `(likes + 1) /
   (days since updated_at + 1) ^ 1.5` over the newest 200 public songs, then
   the cards are fetched for the winners only. Without 0016 it is freshness.
+  Patches go through the same `rankSongs`, with `created_at` as their
+  freshness (the clock their card's age reads); without 0017, freshness.
 - **The studio byline** (`app/SongByline.tsx`): a `?s=` / `?open=` link to
   someone else's song shows "title by @owner" and a heart at the left of the
   top bar, resolved server-side by `linkedSongCard` (the same cached lookup
@@ -2092,8 +2099,9 @@ reason, and a new one belongs in whichever of those three it is true for.
 The bar is one right-aligned row that does not wrap, so on a 390px phone the
 items past the left edge were not squeezed — they were gone, with no way to
 scroll to them, `sign out` and `settings` first. Below 768px it collapses:
-`manual` stays in the bar, everything else moves behind one `menu` button and
-opens as a sheet under it.
+the manual (a `?` icon, `IconHelp`, last in the row so at the far right on
+desktop, moved to the left edge by `order` on a phone) stays in the bar, everything else moves behind one `menu` button and opens as a
+sheet under it.
 
 - **The items are rendered ONCE and moved by CSS**, not duplicated into a
   separate mobile menu. `SaveButton` and `SongsMenu` each hold their own open
@@ -2113,7 +2121,7 @@ opens as a sheet under it.
   as long as one is open it wins. It only raises the z-index: overriding
   `position` here would unpin the bar (see the pinning section below) for
   exactly as long as the menu was up. Inside that stacking context the backdrop
-  is a positioned child, so `manual` and the `menu` button need a layer of
+  is a positioned child, so the manual and the `menu` button need a layer of
   their own or the backdrop swallows the tap that closes the sheet.
 - **Your avatar and name are the way into settings** (the grid avatar at
   20px, then the name, one link to `/settings`); there is no separate

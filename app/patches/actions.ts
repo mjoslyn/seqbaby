@@ -143,3 +143,34 @@ export async function deletePatch(
   if (!rows?.length) return { error: "Patch not found" };
   return { ok: true };
 }
+
+/** Heart or un-heart a public patch (migration 0017), the patch twin of
+ *  setLike in app/songs/actions.ts. Returns the fresh count. */
+export async function setPatchLike(
+  patchId: string,
+  liked: boolean,
+): Promise<{ liked?: boolean; likes?: number; error?: string }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Not signed in" };
+
+  if (liked) {
+    const { error } = await supabase
+      .from("patch_likes")
+      .upsert({ patch_id: patchId, user_id: user.id }, { onConflict: "patch_id,user_id", ignoreDuplicates: true });
+    if (error) return { error: error.message };
+  } else {
+    const { error } = await supabase
+      .from("patch_likes")
+      .delete()
+      .eq("patch_id", patchId)
+      .eq("user_id", user.id);
+    if (error) return { error: error.message };
+  }
+
+  const { data } = await supabase.from("patches").select("likes").eq("id", patchId).maybeSingle();
+  const likes = typeof data?.likes === "number" ? data.likes : undefined;
+  return { liked, likes };
+}

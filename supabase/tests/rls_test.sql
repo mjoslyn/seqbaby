@@ -488,6 +488,68 @@ end $$;
 rollback;
 
 \echo ''
+\echo '== patch_likes: a count is public, who liked is not =='
+
+insert into public.patch_likes (patch_id, user_id) values
+  ('c0000000-0000-4000-8000-00000000000a', 'a11ce000-0000-4000-8000-000000000001');
+
+begin;
+set local role anon;
+do $$
+declare n bigint;
+begin
+  select count(*) into n from public.patch_likes;
+  if n <> 0 then raise exception 'FAIL  anon read % patch like rows', n; end if;
+  raise notice 'PASS  anon cannot read patch like rows';
+
+  select p.likes into n from public.patches p where p.id = 'c0000000-0000-4000-8000-00000000000a';
+  if n <> 1 then raise exception 'FAIL  anon sees % likes on alice''s public patch, expected 1', n; end if;
+  raise notice 'PASS  anon sees the like COUNT on a public patch';
+end $$;
+rollback;
+
+begin;
+set local role authenticated;
+set local request.jwt.claims = '{"sub":"b0b00000-0000-4000-8000-000000000002","role":"authenticated"}';
+do $$
+declare n bigint;
+begin
+  select count(*) into n from public.patch_likes;
+  if n <> 0 then raise exception 'FAIL  bob read alice''s patch like'; end if;
+  raise notice 'PASS  bob cannot see who else liked a patch';
+
+  insert into public.patch_likes (patch_id, user_id)
+    values ('c0000000-0000-4000-8000-00000000000a', 'b0b00000-0000-4000-8000-000000000002');
+  select p.likes into n from public.patches p where p.id = 'c0000000-0000-4000-8000-00000000000a';
+  if n <> 2 then raise exception 'FAIL  bob''s patch like did not count (% likes)', n; end if;
+  raise notice 'PASS  bob can like a public patch';
+
+  begin
+    insert into public.patch_likes (patch_id, user_id)
+      values ('c0000000-0000-4000-8000-00000000000a', 'a11ce000-0000-4000-8000-000000000001');
+    raise exception 'FAIL  bob liked a patch in alice''s name';
+  exception when insufficient_privilege or unique_violation then
+    raise notice 'PASS  bob cannot like a patch in alice''s name';
+  end;
+
+  begin
+    insert into public.patch_likes (patch_id, user_id)
+      values ('c0000000-0000-4000-8000-00000000000b', 'b0b00000-0000-4000-8000-000000000002');
+    raise exception 'FAIL  bob liked alice''s PRIVATE patch';
+  exception when insufficient_privilege then
+    raise notice 'PASS  bob cannot like a private patch';
+  end;
+
+  with d as (
+    delete from public.patch_likes
+     where user_id = 'a11ce000-0000-4000-8000-000000000001' returning 1)
+  select count(*) into n from d;
+  if n <> 0 then raise exception 'FAIL  bob removed alice''s patch like'; end if;
+  raise notice 'PASS  bob cannot remove alice''s patch like';
+end $$;
+rollback;
+
+\echo ''
 \echo '== patches =='
 
 begin;

@@ -1,5 +1,5 @@
-// The homepage's order: likes and freshness together, in the manner of a
-// news aggregator's front page. Pure, no imports, for songName.js's reason:
+// The homepage's order, for songs and patches alike: likes and freshness
+// together, in the manner of a news aggregator's front page. Pure, no imports, for songName.js's reason:
 // `node --test` pins it (test/rank.test.js).
 //
 //   score = (likes + 1) / (age in days + 1) ^ GRAVITY

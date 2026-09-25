@@ -129,3 +129,14 @@ export function IconEye({ on }: IconProps) {
     </svg>
   );
 }
+
+/** The manual: a question mark in a circle, at the far right of the top bar. */
+export function IconHelp() {
+  return (
+    <svg {...base} width={16} height={16}>
+      <circle cx="8" cy="8" r="6.5" />
+      <path d="M6.2 6.2a1.9 1.9 0 0 1 3.7.6c0 1.3-1.9 1.6-1.9 2.8" />
+      <circle cx="8" cy="11.6" r="0.5" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
