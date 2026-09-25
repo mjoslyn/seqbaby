@@ -2,6 +2,7 @@ import SongPreview from "../SongPreview";
 import Avatar from "../Avatar";
 import LikeButton from "../LikeButton";
 import PlayButton from "../PlayButton";
+import RemixButton from "../RemixButton";
 import { fingerprint } from "./fingerprint";
 import type { FeedSong } from "./feed";
 import styles from "./home.module.css";
@@ -9,19 +10,6 @@ import styles from "./home.module.css";
 // A published song's card: the homepage feed and the songs explorer (/songs).
 // No hooks and no "use client", like SongPreview, so a server page and the
 // explorer's client list draw it the same way.
-
-/** How long ago, in the card's words. `now` is the explorer's: the list is
- *  rendered on the server and again in the browser, and two clocks a minute
- *  apart would draw two different cards. */
-export function ago(iso: string, now = Date.now()): string {
-  const s = Math.max(0, (now - Date.parse(iso)) / 1000);
-  if (s < 90) return "just now";
-  const m = s / 60;
-  if (m < 60) return `${Math.round(m)}m ago`;
-  const h = m / 60;
-  if (h < 36) return `${Math.round(h)}h ago`;
-  return `${Math.round(h / 24)}d ago`;
-}
 
 function Fingerprint({ id }: { id: string }) {
   const lanes = fingerprint(id);
@@ -46,11 +34,9 @@ function Fingerprint({ id }: { id: string }) {
 
 export default function SongCard({
   song,
-  now,
   instruments,
 }: {
   song: FeedSong;
-  now?: number;
   /** Drawn as tags under the title when given (the explorer). */
   instruments?: string[];
 }) {
@@ -89,9 +75,13 @@ export default function SongCard({
         ) : (
           <span>someone</span>
         )}
+      </span>
+      {/* A line of its own: the bpm on the left, the heart and the remix
+          pushed right by the heart's auto margin, with or without a bpm. */}
+      <span className={`${styles.cardMeta} ${styles.cardActions}`}>
         {song.bpm ? <span>{song.bpm} bpm</span> : null}
-        <span>{ago(song.updatedAt, now)}</span>
         <LikeButton songId={song.id} likes={song.likes} className={styles.like} likedClassName={styles.liked} />
+        <RemixButton songId={song.id} className={styles.savePatch} remixedClassName={styles.saved} />
       </span>
     </li>
   );

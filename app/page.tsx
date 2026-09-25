@@ -3,7 +3,7 @@ import Toy from "./home/Toy";
 import Who from "./home/Who";
 import PlayableAvatar from "./PlayableAvatar";
 import PatchCard from "./home/PatchCard";
-import SongCard, { ago } from "./home/SongCard";
+import SongCard from "./home/SongCard";
 import { loadFeed } from "./home/feed";
 import styles from "./home/home.module.css";
 import { SITE_URL, shareCard } from "./shareCard";
@@ -160,7 +160,7 @@ export default async function HomePage() {
         {patches.length ? (
           <ul className={styles.cards}>
             {patches.map((p) => (
-              <PatchCard key={p.id} patch={p} age={ago(p.createdAt)} />
+              <PatchCard key={p.id} patch={p} />
             ))}
           </ul>
         ) : (

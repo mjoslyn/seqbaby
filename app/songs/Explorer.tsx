@@ -180,7 +180,7 @@ export default function Explorer({
         <>
           <ul className={homeStyles.cards}>
             {results.slice(start, end).map((s) => (
-              <SongCard key={s.id} song={s} now={now} instruments={s.instruments} />
+              <SongCard key={s.id} song={s} instruments={s.instruments} />
             ))}
           </ul>
           <Pager page={page} pages={pages} turn={turn} />

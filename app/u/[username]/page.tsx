@@ -24,10 +24,6 @@ export async function generateMetadata({
   return { title: `${username} · seqbaby` };
 }
 
-function fmtDate(iso: string) {
-  return iso.slice(0, 10);
-}
-
 export default async function ProfilePage({
   params,
 }: {
@@ -102,25 +98,25 @@ export default async function ProfilePage({
                 ) : (
                   <span className={styles.repoName}>{s.title}</span>
                 )}
-                <div className={styles.repoMeta}>
-                  {s.remixedFrom ? (
-                    <>
-                      <span className={styles.metaIcon}><IconRemix /></span>remixed from {s.remixedFrom.title}
-                      {s.remixedFrom.username && (
-                        <>
-                          {" by "}
-                          <Link href={`/u/${s.remixedFrom.username}`}>
-                            @{s.remixedFrom.username}
-                          </Link>
-                        </>
-                      )}
-                      {" · "}
-                    </>
-                  ) : s.forked_from ? (
-                    <><span className={styles.metaIcon}><IconRemix /></span>remix · </>
-                  ) : null}
-                  updated {fmtDate(s.updated_at)}
-                </div>
+                {s.remixedFrom || s.forked_from ? (
+                  <div className={styles.repoMeta}>
+                    {s.remixedFrom ? (
+                      <>
+                        <span className={styles.metaIcon}><IconRemix /></span>remixed from {s.remixedFrom.title}
+                        {s.remixedFrom.username && (
+                          <>
+                            {" by "}
+                            <Link href={`/u/${s.remixedFrom.username}`}>
+                              @{s.remixedFrom.username}
+                            </Link>
+                          </>
+                        )}
+                      </>
+                    ) : (
+                      <><span className={styles.metaIcon}><IconRemix /></span>remix</>
+                    )}
+                  </div>
+                ) : null}
               </div>
               <LikeButton
                 songId={s.id}
@@ -168,7 +164,7 @@ export default async function ProfilePage({
                 <div className={styles.repoMain}>
                   <span className={styles.repoName}>{p.name}</span>
                   <div className={styles.repoMeta}>
-                    {engineLabel(engine)} · {fmtDate(p.created_at)}
+                    {engineLabel(engine)}
                   </div>
                 </div>
                 <LikeButton
