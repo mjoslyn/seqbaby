@@ -691,6 +691,38 @@ begin
 end $$;
 
 \echo ''
+\echo '== engines: what a song is made of, for the explorer =='
+
+begin;
+-- As the table owner, so the fixture does not lean on the policies under test.
+update public.songs set data = '{"tracks":[
+    {"engineKey":"dm:808-kick"},{"engineKey":"dm:303"},{"engineKey":"dm:808-kick"},
+    {"engineKey":"bus"},{"engineKey":""},{"engineKey":7},"junk"]}'
+ where id in ('a0000000-0000-4000-8000-00000000000a', 'a0000000-0000-4000-8000-00000000000b');
+set local role anon;
+do $$
+declare e text[]; n bigint;
+begin
+  select s.engines into e from public.songs s where s.id = 'a0000000-0000-4000-8000-00000000000a';
+  if e is distinct from array['dm:303', 'dm:808-kick'] then
+    raise exception 'FAIL  engines on alice''s public song is %, expected {dm:303,dm:808-kick}', e;
+  end if;
+  raise notice 'PASS  engines: distinct, sorted, no bus, no junk';
+
+  select count(*) into n from public.songs s
+   where s.id = 'a0000000-0000-4000-8000-00000000000b' and s.engines is not null;
+  if n <> 0 then raise exception 'FAIL  anon read the engines of a private song'; end if;
+  raise notice 'PASS  anon cannot read a private song''s engines';
+
+  if public.song_engines('{}'::jsonb) <> '{}'::text[]
+     or public.song_engines('{"tracks":"nope"}'::jsonb) <> '{}'::text[] then
+    raise exception 'FAIL  song_engines on a session with no tracks is not empty';
+  end if;
+  raise notice 'PASS  a session with no tracks has no engines';
+end $$;
+rollback;
+
+\echo ''
 \echo '== migration properties that are easy to revert by accident =='
 
 -- Guards the 0008 rewrite. A bare auth.uid() is correct but is re-evaluated for

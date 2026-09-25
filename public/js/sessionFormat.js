@@ -103,7 +103,7 @@ export function validateSet(data) {
 // idempotent — a current name matches nothing — and mutates in place, which is
 // what applySet and applyTrackPatch already do with the granular params.
 
-const LEGACY_ENGINE_KEYS = {
+export const LEGACY_ENGINE_KEYS = {
   "dm:303":        "dm:silverbox",
   "dm:virus":      "dm:contagion",
   "dm:dx7":        "dm:hexop",

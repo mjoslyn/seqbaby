@@ -43,7 +43,10 @@ env / fx / eq / comp / mod / automation per track.
 │   ├── page.tsx               the homepage at /: a toy sequencer, published songs, who made them (home/)
 │   ├── studio/page.tsx        the studio at /studio: SSRs engine DOM, boots engine, AccountBar
 │   ├── home/                  the homepage's parts: feed.ts (public songs, people, patches; cookie-less), Toy.tsx, Who.tsx,
+│   │                          SongCard.tsx (a song's card, shared with /songs),
 │   │                          PatchCard.tsx + patchPreview.js (what a patch card draws and plays)
+│   ├── songs/page.tsx         the songs explorer at /songs: search, sort, filter by bpm and instrument
+│   │                          (Explorer.tsx, explore.js, exploreFeed.ts)
 │   ├── studioMarkup.ts        engine's static DOM skeleton (raw HTML string)
 │   ├── ScriptLoader.tsx       injects Tone → woscillators → js/main.js in order
 │   ├── AccountBar/SongsMenu/SaveButton/OpenSongOnLoad.tsx
@@ -260,7 +263,7 @@ npm run netlify:dev    # full Netlify emulation on :8888
 npm run legacy:dev     # pre-Next static Node server on :5173 (engine assets only)
 npm test               # node --test: the pure modules (session format, chance gen,
                        #   version tree, song names, share card copy, the song builder, the jam diff,
-                       #   song previews, grid avatars)
+                       #   song previews, grid avatars, the songs explorer)
 npm run mcp            # the MCP server on stdio (mcp/server.mjs) — an agent writes songs
 npm run test:rls       # RLS policy tests — builds a throwaway Postgres in docker
 ```
@@ -1830,6 +1833,44 @@ to say hello), the songs people have published, and who made them.
   without migration 0012.
 - `mcp/audition.mjs` points a bare site URL at `/studio` (`studioUrl`), so
   `SEQBABY_URL=http://localhost:3000` keeps working.
+
+## The songs explorer (`/songs`, migration 0019)
+
+Every published song, searchable by title, person and instrument, sortable
+(on repeat / newest / most liked / slowest / fastest / a to z) and filtered by
+a bpm range and by the instruments it is made of. Linked from the homepage's
+nav, footer and the `on repeat` heading.
+
+- **Loaded once, filtered in the browser.** `exploreFeed.ts` reads the newest
+  `EXPLORE_WINDOW` (600) public songs the homepage's way (anon client, cached,
+  `revalidate = 60`, never throws), each with `bpm:data->bpm`, `likes`,
+  `preview` and `engines`, never `data`. `explore.js` (pure, tested in
+  `test/explore.test.js`) does the rest: a search, a sort or a chip is a
+  re-render, not a request. `on repeat` is rank.js's order, the homepage's own.
+- **`engines(songs)` is a computed field** (0019), like `preview`: the
+  distinct engine keys in the session, buses left out, computed on read so no
+  write path knows about it. The raw keys, not names: `instrumentOf`
+  (explore.js) folds them into what a person would say (every 808 voice is
+  `808`, every Plaits model `plaits`, `dm:303` is `silverbox`). Its copy of
+  the emulator rename is held to `LEGACY_ENGINE_KEYS` (sessionFormat.js,
+  exported for this) by the test. Without 0019 the instrument chips are
+  hidden; without 0016 / 0012 those columns go, not the page
+  (`withOptional` in feed.ts takes a list of fallbacks now).
+- **Picked instruments must ALL be in a song**, and each chip's count is how
+  many songs picking it too would leave, so a chip at 0 is disabled (unless it
+  is already picked, so it can be unpicked). A bpm bound leaves out a song
+  with no bpm; the bpm sorts put those last either way.
+- **The query is in the URL** (`?q=&sort=&bpm=120-135&with=silverbox,808&page=2`),
+  read after mount and written with `replaceState`, so a filtered view is a
+  link. Not read on the server: that would make the cached page dynamic.
+- **Paged, 24 a page** (`PAGE_SIZE`, `paginate`, `pageNumbers` in
+  explore.js): first, last, and the current page with a neighbour either
+  side. Any change but a page turn goes back to page 1, and a page past the
+  end (an old link to a list that has since shrunk) shows the last one.
+- **The cards are the homepage's** (`app/home/SongCard.tsx`, pulled out of
+  page.tsx), with the instruments as tags. `ago()` takes the server's `now`,
+  because the list renders on the server and again in the browser and two
+  clocks would draw two different cards.
 
 ## Playing a song where it is listed (`app/enginePlayer.ts` + `app/PlayButton.tsx`)
 

@@ -1,13 +1,10 @@
 import type { Metadata } from "next";
 import Toy from "./home/Toy";
 import Who from "./home/Who";
-import SongPreview from "./SongPreview";
-import Avatar from "./Avatar";
 import PlayableAvatar from "./PlayableAvatar";
-import LikeButton from "./LikeButton";
-import PlayButton from "./PlayButton";
 import PatchCard from "./home/PatchCard";
-import { loadFeed, fingerprint, type FeedSong } from "./home/feed";
+import SongCard, { ago } from "./home/SongCard";
+import { loadFeed } from "./home/feed";
 import styles from "./home/home.module.css";
 import { SITE_URL, shareCard } from "./shareCard";
 
@@ -50,72 +47,6 @@ const BLURBS = [
   "undo goes back 100 steps. regret goes back further.",
 ];
 
-function ago(iso: string): string {
-  const s = Math.max(0, (Date.now() - Date.parse(iso)) / 1000);
-  if (s < 90) return "just now";
-  const m = s / 60;
-  if (m < 60) return `${Math.round(m)}m ago`;
-  const h = m / 60;
-  if (h < 36) return `${Math.round(h)}h ago`;
-  return `${Math.round(h / 24)}d ago`;
-}
-
-function Fingerprint({ id }: { id: string }) {
-  const lanes = fingerprint(id);
-  return (
-    <svg className={styles.printSvg} viewBox="0 0 64 16" aria-hidden preserveAspectRatio="none">
-      {lanes.map((lane, y) =>
-        lane.map((on, x) => (
-          <rect
-            key={`${y}-${x}`}
-            x={x * 4 + 0.5}
-            y={y * 4 + 0.5}
-            width={3}
-            height={3}
-            rx={0.6}
-            className={on ? styles.printOn : styles.printOff}
-          />
-        )),
-      )}
-    </svg>
-  );
-}
-
-function SongCard({ song }: { song: FeedSong }) {
-  return (
-    <li className={styles.card}>
-      {/* Beside the link rather than in it: a button inside an <a> is not
-          allowed, and the card's own click still opens the song. */}
-      <PlayButton slug={song.slug} title={song.title} />
-      <a className={styles.cardLink} href={`/studio?s=${encodeURIComponent(song.slug)}`}>
-        <span className={styles.print}>
-          {song.preview ? <SongPreview preview={song.preview} height="100%" /> : <Fingerprint id={song.id} />}
-        </span>
-        <span className={styles.cardTitle}>{song.title}</span>
-      </a>
-      <span className={styles.cardMeta}>
-        {song.owner ? (
-          song.owner.handle ? (
-            <a className={styles.cardOwner} href={`/u/${song.owner.handle}`}>
-              <Avatar grid={song.owner.avatarGrid} name={song.owner.handle} size={18} />@{song.owner.handle}
-            </a>
-          ) : (
-            <span className={styles.cardOwner}>
-              <Avatar grid={song.owner.avatarGrid} name={song.owner.name} size={18} />
-              {song.owner.name}
-            </span>
-          )
-        ) : (
-          <span>someone</span>
-        )}
-        {song.bpm ? <span>{song.bpm} bpm</span> : null}
-        <span>{ago(song.updatedAt)}</span>
-        <LikeButton songId={song.id} likes={song.likes} className={styles.like} likedClassName={styles.liked} />
-      </span>
-    </li>
-  );
-}
-
 export default async function HomePage() {
   const { songs, people, patches } = await loadFeed();
 
@@ -128,6 +59,7 @@ export default async function HomePage() {
           seqbaby
         </a>
         <span className={styles.navLinks}>
+          <a className={styles.navLink} href="/songs">songs</a>
           <a className={styles.navLink} href="/manual">manual</a>
           <Who />
           <a className={`${styles.navLink} ${styles.navCta}`} href="/studio">open the studio →</a>
@@ -167,7 +99,10 @@ export default async function HomePage() {
 
       <section className={styles.section}>
         <div className={styles.sectionHead}>
-          <h2>on repeat</h2>
+          <h2>
+            <a className={styles.sectionTitleLink} href="/songs">on repeat</a>
+          </h2>
+          <a className={styles.sectionLink} href="/songs">explore every song →</a>
         </div>
         {songs.length ? (
           <ul className={styles.cards}>
@@ -249,6 +184,7 @@ export default async function HomePage() {
 
       <footer className={styles.footer}>
         <a href="/studio">studio</a>
+        <a href="/songs">songs</a>
         <a href="/manual">manual</a>
         <span className={styles.footNote}>made with too many oscillators.</span>
       </footer>
