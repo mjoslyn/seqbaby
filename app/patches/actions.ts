@@ -10,40 +10,79 @@ export type MyPatch = {
   created_at: string;
 };
 
-export type PublicPatch = {
-  id: string;
-  name: string;
-  engine_type: string | null;
-  created_at: string;
-  author: string | null;
-  mine: boolean;
-};
-
-// Publish a local patch (name + Tone.js config JSON) to the public gallery.
-export async function publishPatch(input: {
-  name: string;
-  engine_type?: string | null;
-  config: unknown;
-}): Promise<{ id?: string; error?: string }> {
+// Save someone's published patch into your own bay: a private copy of it,
+// remembering where it came from (`saved_from`), so a second save finds the
+// first copy instead of making another. Your own patch is in your bay already.
+export async function savePatchToBay(
+  sourceId: string,
+): Promise<{ id?: string; name?: string; already?: boolean; error?: string }> {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { error: "Not signed in" };
-  const name = (input.name || "patch").slice(0, 120);
+
+  const { data: src, error: readErr } = await supabase
+    .from("patches")
+    .select("id,owner_id,name,engine_type,config")
+    .eq("id", sourceId)
+    .maybeSingle();
+  if (readErr) return { error: readErr.message };
+  if (!src) return { error: "Patch not found" };
+  if (src.owner_id === user.id) return { id: src.id, name: src.name, already: true };
+
+  const { data: prior } = await supabase
+    .from("patches")
+    .select("id,name")
+    .eq("owner_id", user.id)
+    .eq("saved_from", sourceId)
+    .limit(1)
+    .maybeSingle();
+  if (prior) return { id: prior.id, name: prior.name, already: true };
+
+  // A name of its own: the bay is keyed by name, so a copy must not land on
+  // a patch you already have that happens to share it.
+  const { data: mine } = await supabase.from("patches").select("name").eq("owner_id", user.id);
+  const taken = new Set((mine ?? []).map((r) => r.name as string));
+  let name = src.name as string;
+  for (let i = 2; taken.has(name); i++) name = `${src.name} ${i}`.slice(0, 120);
+
   const { data, error } = await supabase
     .from("patches")
     .insert({
       owner_id: user.id,
       name,
-      engine_type: input.engine_type ?? null,
-      config: input.config,
-      is_public: true,
+      engine_type: src.engine_type,
+      config: src.config,
+      is_public: false,
+      saved_from: sourceId,
     })
-    .select("id")
+    .select("id,name")
     .single();
   if (error) return { error: error.message };
-  return { id: data.id };
+  return { id: data.id, name: data.name };
+}
+
+// Publish or unpublish a patch in your bay. Unpublishing keeps it: it leaves
+// the gallery, not your patches.
+export async function setPatchPublic(
+  id: string,
+  isPublic: boolean,
+): Promise<{ ok?: boolean; error?: string }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Not signed in" };
+  const { data: rows, error } = await supabase
+    .from("patches")
+    .update({ is_public: isPublic })
+    .eq("id", id)
+    .eq("owner_id", user.id)
+    .select("id");
+  if (error) return { error: error.message };
+  if (!rows?.length) return { error: "Patch not found" };
+  return { ok: true };
 }
 
 export async function listMyPatches(): Promise<{
@@ -62,65 +101,6 @@ export async function listMyPatches(): Promise<{
     .order("created_at", { ascending: false });
   if (error) return { patches: [], error: error.message };
   return { patches: (data as MyPatch[]) ?? [] };
-}
-
-// Public gallery, newest first, annotated with the author's display name and
-// whether the current user owns each entry.
-export async function listPublicPatches(
-  limit = 60,
-): Promise<{ patches: PublicPatch[]; error?: string }> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  const { data, error } = await supabase
-    .from("patches")
-    .select("id,name,engine_type,created_at,owner_id")
-    .eq("is_public", true)
-    .order("created_at", { ascending: false })
-    .limit(limit);
-  if (error) return { patches: [], error: error.message };
-
-  const rows = data ?? [];
-  const ownerIds = [...new Set(rows.map((r) => r.owner_id))];
-  const names = new Map<string, string>();
-  if (ownerIds.length) {
-    // profile_cards, not profiles: the gallery is read by anonymous visitors,
-    // and a public patch by someone whose page is private still gets a byline.
-    const { data: profs } = await supabase
-      .from("profile_cards")
-      .select("id,display_name,username")
-      .in("id", ownerIds);
-    for (const p of profs ?? [])
-      names.set(p.id, p.username || p.display_name || "anon");
-  }
-
-  return {
-    patches: rows.map((r) => ({
-      id: r.id,
-      name: r.name,
-      engine_type: r.engine_type,
-      created_at: r.created_at,
-      author: names.get(r.owner_id) ?? null,
-      mine: !!user && r.owner_id === user.id,
-    })),
-  };
-}
-
-// Fetch a patch's config for import (RLS: owner or public).
-export async function getPatch(
-  id: string,
-): Promise<{ name?: string; config?: unknown; error?: string }> {
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("patches")
-    .select("name,config")
-    .eq("id", id)
-    .maybeSingle();
-  if (error) return { error: error.message };
-  if (!data) return { error: "Patch not found" };
-  return { name: data.name, config: data.config };
 }
 
 export async function deletePatch(

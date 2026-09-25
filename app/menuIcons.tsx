@@ -140,3 +140,15 @@ export function IconHelp() {
     </svg>
   );
 }
+
+/** Save into your patches: a disk, the studio's own save glyph. Filled once
+ *  saved. */
+export function IconSave({ on }: IconProps) {
+  return (
+    <svg {...base}>
+      <path d="M3 2h8l3 3v9a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z" fill={on ? "currentColor" : "none"} />
+      <path d="M5 2v4h6V2" stroke={on ? "var(--bg, #0d0e11)" : "currentColor"} />
+      {!on && <rect x="5" y="9" width="6" height="5" />}
+    </svg>
+  );
+}

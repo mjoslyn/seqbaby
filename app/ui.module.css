@@ -191,8 +191,9 @@
   cursor: pointer; text-decoration: none;
 }
 .repoAction:hover { border-color: #3a3d45; }
-button.repoAction { display: inline-flex; align-items: center; gap: 5px; }
+button.repoAction, a.repoAction:has(svg) { display: inline-flex; align-items: center; gap: 5px; }
 .repoLiked { color: #ff9fd0; border-color: #5a2e45; }
+.repoSaved { color: #7ee2b8; border-color: #2e5a47; }
 .emptyBig { color: #6b7280; font-size: 13px; padding: 16px 0; }
 
 /* danger zone */
@@ -276,6 +277,8 @@ a.bylineOwner:hover .bylineOwnerName { text-decoration: underline; }
 }
 .bylineLike:hover { color: #ff9fd0; border-color: #3a3d45; }
 .bylineLiked { color: #ff9fd0; border-color: #5a2e45; }
+.bylineForked { color: #7ee2b8; border-color: #2e5a47; }
+a.bylineLike { text-decoration: none; }
 
 /* Everything the bar carries apart from the manual. One element, so the mobile
    sheet can be the same DOM moved by CSS rather than a second copy of it. */

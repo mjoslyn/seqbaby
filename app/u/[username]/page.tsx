@@ -2,8 +2,9 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { getPublicProfile } from "@/app/profile/actions";
-import ForkButton from "./ForkButton";
+import ForkButton from "@/app/ForkButton";
 import LikeButton from "@/app/LikeButton";
+import SavePatchButton from "@/app/SavePatchButton";
 import PlayButton from "@/app/PlayButton";
 import PlayableAvatar from "@/app/PlayableAvatar";
 import SongPreview from "@/app/SongPreview";
@@ -126,7 +127,7 @@ export default async function ProfilePage({
                 className={styles.repoAction}
                 likedClassName={styles.repoLiked}
               />
-              <ForkButton songId={s.id} />
+              <ForkButton songId={s.id} className={styles.repoAction} forkedClassName={styles.repoSaved} />
               {s.share_slug && (
                 <Link className={styles.repoAction} href={`/studio?s=${s.share_slug}`}>
                   open
@@ -175,6 +176,11 @@ export default async function ProfilePage({
                   likes={p.likes ?? 0}
                   className={styles.repoAction}
                   likedClassName={styles.repoLiked}
+                />
+                <SavePatchButton
+                  patchId={p.id}
+                  className={styles.repoAction}
+                  savedClassName={styles.repoSaved}
                 />
               </div>
             );

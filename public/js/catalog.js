@@ -31,39 +31,85 @@ export const engineMap = new Map();
  */
 export function engineByKey(key) { return engineMap.get(key); }
 
-// ---- saved patch storage -----------------------------------------------
+// ---- saved patches: the account's patch bay ----------------------------
+//
+// Patches live in the signed-in account (`patches`, migration 0018), not in
+// this browser. The engine holds the list in memory and reaches the account
+// through a backend the shell hands it (`setPatchBackend`, from
+// app/PatchBay.tsx); with none -- signed out, or before the list arrives --
+// there are no saved patches and saving asks you to sign in.
+//
+// A track patch's config is fetched when it is loaded, never with the list: a
+// sampler patch carries its sample as base64. A legacy custom-Tone patch is
+// small and is an ENGINE (`saved:<name>`), built synchronously, so the list
+// carries its config.
 
-export const PATCHES_KEY = "seqbaby.patches.v1";
-export function loadPatches() {
-  try { return JSON.parse(localStorage.getItem(PATCHES_KEY) || "{}"); }
-  catch { return {}; }
+/** @type {Map<string, {engineKey: string|null, kind: string|null, config?: any}>} */
+const patches = new Map();
+/** @type {{fetch(name: string): Promise<any>, save(name: string, config: any): Promise<void>, remove(name: string): Promise<void>} | null} */
+let backend = null;
+
+/** The shell's handle on the account, and the account's patch list. */
+export function setPatchBackend(next, list) {
+  backend = next;
+  setPatchList(list ?? []);
 }
-export function storePatches(obj) {
-  try { localStorage.setItem(PATCHES_KEY, JSON.stringify(obj)); } catch {}
+/** Replace the list (the shell re-reads it when the tab comes back into view). */
+export function setPatchList(list) {
+  const known = new Map(patches);
+  patches.clear();
+  for (const p of list) {
+    // A config already fetched survives a re-read of the list.
+    const config = p.config ?? known.get(p.name)?.config;
+    patches.set(p.name, { engineKey: p.engineKey ?? null, kind: p.kind ?? null, config });
+  }
+  refreshPatches();
 }
-export function savePatch(name, config) {
-  const all = loadPatches();
-  all[name] = config;
-  storePatches(all);
+export function canSavePatches() { return !!backend; }
+/** name -> { engineKey, kind }, for the picker. */
+export function listPatches() {
+  return [...patches.entries()].map(([name, p]) => ({ name, engineKey: p.engineKey, kind: p.kind }));
+}
+/** A patch's whole config, from the account the first time it is asked for. */
+export async function getPatchConfig(name) {
+  const p = patches.get(name);
+  if (!p) return null;
+  if (p.config === undefined && backend) p.config = await backend.fetch(name);
+  return p.config ?? null;
+}
+/** Save into the account. Throws without a backend or when the save fails. */
+export async function savePatch(name, config) {
+  if (!backend) throw new Error("sign in to save patches");
+  await backend.save(name, config);
+  patches.set(name, { engineKey: config?.engineKey ?? null, kind: config?._kind ?? null, config });
+  refreshPatches();
+}
+export async function deletePatch(name) {
+  if (!backend) throw new Error("sign in to delete patches");
+  await backend.remove(name);
+  patches.delete(name);
+  refreshPatches();
+}
+/** Redraw what reads the list: the `saved:` engines in every dropdown. */
+export function refreshPatches() {
   rebuildEngineCatalog();
   for (const t of state.tracks) refreshEngineSelect(t);
 }
 export function savedPatchEntries() {
-  const all = loadPatches();
-  return Object.keys(all).sort()
+  return [...patches.keys()].sort()
     // Full "track patches" (engine + params + fx) are applied to a track via the
     // per-track load button, not selected as a dropdown engine. Only legacy
     // custom-Tone patches remain selectable engines here.
-    .filter(name => all[name]?._kind !== "track-patch")
+    .filter(name => patches.get(name).kind !== "track-patch" && patches.get(name).config)
     .map(name => ({
     key: `saved:${name}`,
     label: name,
     group: "saved patches",
     type: "saved",
     defaultNote: 60,
-    poly: !!all[name]?.poly,
+    poly: !!patches.get(name).config?.poly,
     melodic: true,
-    config: all[name],
+    config: patches.get(name).config,
   }));
 }
 export function rebuildEngineCatalog() {
