@@ -99,7 +99,9 @@ export default async function HomePage() {
 
       <section className={styles.section}>
         <div className={styles.sectionHead}>
-          <h2>on repeat</h2>
+          <h2>
+            <a className={styles.sectionTitleLink} href="/songs">on repeat</a>
+          </h2>
           <a className={styles.sectionLink} href="/songs">explore every song →</a>
         </div>
         {songs.length ? (
