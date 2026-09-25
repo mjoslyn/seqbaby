@@ -8,6 +8,8 @@ import {
   instrumentOf,
   instrumentsOf,
   matches,
+  pageNumbers,
+  paginate,
   parseQuery,
   queryString,
 } from "../app/songs/explore.js";
@@ -117,9 +119,29 @@ test("instrument counts are what picking one more would leave", () => {
 
 test("the query round-trips through the URL, defaults left out", () => {
   assert.equal(queryString(EMPTY_QUERY), "");
-  const full = { q: "acid line", sort: "new", min: 120, max: null, with: ["silverbox", "808"] };
+  const full = { q: "acid line", sort: "new", min: 120, max: null, with: ["silverbox", "808"], page: 3 };
   assert.deepEqual(parseQuery(queryString(full)), full);
   assert.deepEqual(parseQuery(""), EMPTY_QUERY);
   assert.deepEqual(parseQuery("?sort=nonsense&bpm=abc-&with=,,"), EMPTY_QUERY);
   assert.deepEqual(parseQuery("?bpm=-140"), { ...EMPTY_QUERY, max: 140 });
+});
+
+test("pages slice the results and clamp an out-of-range page", () => {
+  assert.deepEqual(paginate(0, 1, 24), { page: 1, pages: 1, start: 0, end: 0 });
+  assert.deepEqual(paginate(50, 2, 24), { page: 2, pages: 3, start: 24, end: 48 });
+  assert.deepEqual(paginate(50, 3, 24), { page: 3, pages: 3, start: 48, end: 50 });
+  assert.deepEqual(paginate(50, 9, 24).page, 3);
+  assert.deepEqual(paginate(50, 0, 24).page, 1);
+  assert.equal(parseQuery("?page=0").page, 1);
+  assert.equal(parseQuery("?page=x").page, 1);
+  assert.equal(queryString({ ...EMPTY_QUERY, page: 1 }), "");
+});
+
+test("page numbers: ends, neighbours, and gaps only where a page is skipped", () => {
+  assert.deepEqual(pageNumbers(1, 1), [1]);
+  assert.deepEqual(pageNumbers(3, 5), [1, 2, 3, 4, 5]);
+  assert.deepEqual(pageNumbers(1, 10), [1, 2, null, 10]);
+  assert.deepEqual(pageNumbers(4, 10), [1, 2, 3, 4, 5, null, 10]);
+  assert.deepEqual(pageNumbers(5, 10), [1, null, 4, 5, 6, null, 10]);
+  assert.deepEqual(pageNumbers(10, 10), [1, null, 9, 10]);
 });

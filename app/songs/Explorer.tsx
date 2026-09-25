@@ -10,6 +10,8 @@ import {
   SORTS,
   explore,
   instrumentCounts,
+  pageNumbers,
+  paginate,
   parseQuery,
   queryString,
   type Query,
@@ -21,12 +23,10 @@ import type { ExploreSong } from "./exploreFeed";
 // is here already, so a search, a sort or a filter is a re-render of what is
 // in memory (explore.js), never a request.
 //
-// The query lives in the URL (`?q=&sort=&bpm=&with=`) so a filtered view is a
-// link. It is read after mount rather than on the server: the page is cached
+// The query lives in the URL (`?q=&sort=&bpm=&with=&page=`) so a filtered
+// view, and the page of it you are on, is a link. It is read after mount rather than on the server: the page is cached
 // for everyone (`revalidate` in page.tsx), and reading the query there would
 // make it render per request.
-
-const PAGE = 24;
 
 export default function Explorer({
   songs,
@@ -38,8 +38,8 @@ export default function Explorer({
   now: number;
 }) {
   const [query, setQuery] = useState<Query>(EMPTY_QUERY);
-  const [shown, setShown] = useState(PAGE);
   const read = useRef(false);
+  const top = useRef<HTMLParagraphElement>(null);
 
   useEffect(() => {
     setQuery(parseQuery(window.location.search));
@@ -55,9 +55,14 @@ export default function Explorer({
   const results = useMemo(() => explore(songs, query, now), [songs, query, now]);
   const chips = useMemo(() => (hasInstruments ? instrumentCounts(songs, query) : []), [songs, query, hasInstruments]);
 
-  const update = (patch: Partial<Query>) => {
-    setQuery((q) => ({ ...q, ...patch }));
-    setShown(PAGE);
+  const { page, pages, start, end } = paginate(results.length, query.page);
+
+  // Any change but a page turn starts over at page 1: page 4 of a list that
+  // has just been narrowed to a dozen songs is not a place anybody asked for.
+  const update = (patch: Partial<Query>) => setQuery((q) => ({ ...q, page: 1, ...patch }));
+  const turn = (to: number) => {
+    update({ page: to });
+    top.current?.scrollIntoView({ block: "start", behavior: "smooth" });
   };
   const toggle = (name: string) =>
     update({ with: query.with.includes(name) ? query.with.filter((i) => i !== name) : [...query.with, name] });
@@ -159,10 +164,11 @@ export default function Explorer({
         ) : null}
       </div>
 
-      <p className={styles.summary} aria-live="polite">
+      <p className={styles.summary} aria-live="polite" ref={top}>
         {results.length === songs.length
           ? `${songs.length} ${songs.length === 1 ? "song" : "songs"}`
           : `${results.length} of ${songs.length} songs`}
+        {pages > 1 ? ` · page ${page} of ${pages}` : ""}
         {filtered ? (
           <button type="button" className={styles.clear} onClick={() => update({ ...EMPTY_QUERY, sort: query.sort })}>
             clear filters
@@ -173,16 +179,37 @@ export default function Explorer({
       {results.length ? (
         <>
           <ul className={homeStyles.cards}>
-            {results.slice(0, shown).map((s) => (
+            {results.slice(start, end).map((s) => (
               <SongCard key={s.id} song={s} now={now} instruments={s.instruments} />
             ))}
           </ul>
-          {results.length > shown ? (
-            <div className={styles.more}>
-              <button type="button" className={homeStyles.ctaGhost} onClick={() => setShown((n) => n + PAGE)}>
-                show {Math.min(PAGE, results.length - shown)} more
+          {pages > 1 ? (
+            <nav className={styles.pager} aria-label="pages">
+              <button type="button" className={styles.pageBtn} disabled={page === 1} onClick={() => turn(page - 1)}>
+                ← prev
               </button>
-            </div>
+              {pageNumbers(page, pages).map((n, i) =>
+                n == null ? (
+                  <span key={`gap${i}`} className={styles.gap} aria-hidden>
+                    …
+                  </span>
+                ) : (
+                  <button
+                    key={n}
+                    type="button"
+                    className={styles.pageBtn}
+                    aria-current={n === page ? "page" : undefined}
+                    aria-label={`page ${n}`}
+                    onClick={() => turn(n)}
+                  >
+                    {n}
+                  </button>
+                ),
+              )}
+              <button type="button" className={styles.pageBtn} disabled={page === pages} onClick={() => turn(page + 1)}>
+                next →
+              </button>
+            </nav>
           ) : null}
         </>
       ) : songs.length ? (

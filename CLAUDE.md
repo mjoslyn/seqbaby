@@ -1860,9 +1860,13 @@ nav, footer and the `on repeat` heading.
   many songs picking it too would leave, so a chip at 0 is disabled (unless it
   is already picked, so it can be unpicked). A bpm bound leaves out a song
   with no bpm; the bpm sorts put those last either way.
-- **The query is in the URL** (`?q=&sort=&bpm=120-135&with=silverbox,808`),
+- **The query is in the URL** (`?q=&sort=&bpm=120-135&with=silverbox,808&page=2`),
   read after mount and written with `replaceState`, so a filtered view is a
   link. Not read on the server: that would make the cached page dynamic.
+- **Paged, 24 a page** (`PAGE_SIZE`, `paginate`, `pageNumbers` in
+  explore.js): first, last, and the current page with a neighbour either
+  side. Any change but a page turn goes back to page 1, and a page past the
+  end (an old link to a list that has since shrunk) shows the last one.
 - **The cards are the homepage's** (`app/home/SongCard.tsx`, pulled out of
   page.tsx), with the instruments as tags. `ago()` takes the server's `now`,
   because the list renders on the server and again in the browser and two

@@ -73,8 +73,25 @@
   text-decoration: underline;
 }
 
-.more { display: flex; justify-content: center; margin-top: 24px; }
-.more button { background: none; cursor: pointer; font-family: inherit; }
+.summary { scroll-margin-top: 16px; }
+
+.pager { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 6px; margin-top: 28px; }
+.pageBtn {
+  min-width: 38px;
+  min-height: 38px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: none;
+  color: var(--fg);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.pageBtn:hover:not(:disabled) { border-color: var(--fg-dim); }
+.pageBtn[aria-current="page"] { background: var(--accent); border-color: var(--accent); color: var(--bg); }
+.pageBtn:disabled { opacity: 0.35; cursor: default; }
+.gap { color: var(--fg-dim); padding: 0 2px; }
 
 @media (max-width: 768px) {
   .label { width: 100%; }

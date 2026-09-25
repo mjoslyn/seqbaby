@@ -72,7 +72,7 @@ export function instrumentsOf(keys) {
 /** @typedef {{ handle?: string | null, name?: string | null } | string | null} Owner */
 /** @typedef {{ id: string, title: string, owner?: Owner, bpm: number | null, likes: number, updatedAt: string, instruments: string[] }} ExploreSong */
 /** @typedef {"hot" | "new" | "liked" | "bpm-up" | "bpm-down" | "title"} SortKey */
-/** @typedef {{ q: string, sort: SortKey, min: number | null, max: number | null, with: string[] }} Query */
+/** @typedef {{ q: string, sort: SortKey, min: number | null, max: number | null, with: string[], page: number }} Query */
 
 export const SORTS = /** @type {const} */ ([
   ["hot", "on repeat"],
@@ -93,7 +93,10 @@ export const BPM_BANDS = /** @type {const} */ ([
 ]);
 
 /** @type {Query} */
-export const EMPTY_QUERY = { q: "", sort: "hot", min: null, max: null, with: [] };
+export const EMPTY_QUERY = { q: "", sort: "hot", min: null, max: null, with: [], page: 1 };
+
+/** Songs per page. */
+export const PAGE_SIZE = 24;
 
 const SORT_KEYS = new Set(SORTS.map(([k]) => k));
 
@@ -194,6 +197,7 @@ export function parseQuery(search) {
     min: bound(lo),
     max: bound(hi),
     with: [...new Set(picked)],
+    page: bound(p.get("page")) ?? 1,
   };
 }
 
@@ -205,6 +209,38 @@ export function queryString(query) {
   if (query.sort !== "hot") p.set("sort", query.sort);
   if (query.min != null || query.max != null) p.set("bpm", `${query.min ?? ""}-${query.max ?? ""}`);
   if (query.with.length) p.set("with", query.with.join(","));
+  if (query.page > 1) p.set("page", String(query.page));
   const s = p.toString();
   return s ? `?${s}` : "";
+}
+
+/**
+ * Which slice of the results a page is. The page is clamped, so a link to
+ * page 9 of what is now a three-page list shows page 3 rather than nothing.
+ * @param {number} total @param {number} page @param {number} size
+ */
+export function paginate(total, page, size = PAGE_SIZE) {
+  const pages = Math.max(1, Math.ceil(total / size));
+  const at = Math.min(Math.max(1, Math.floor(page) || 1), pages);
+  return { page: at, pages, start: (at - 1) * size, end: Math.min(total, at * size) };
+}
+
+/**
+ * The page numbers to draw: the first, the last, and the current one with a
+ * neighbour either side. `null` is a gap. A gap of exactly one page is drawn
+ * as that page, since "…" would take the same room and say less.
+ * @param {number} page @param {number} pages @returns {(number | null)[]}
+ */
+export function pageNumbers(page, pages) {
+  const want = new Set([1, pages, page - 1, page, page + 1]);
+  const out = [];
+  let last = 0;
+  for (let n = 1; n <= pages; n++) {
+    if (!want.has(n)) continue;
+    if (n - last === 2) out.push(n - 1);
+    else if (n - last > 2) out.push(null);
+    out.push(n);
+    last = n;
+  }
+  return out;
 }
