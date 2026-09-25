@@ -58,28 +58,33 @@ export const FEED_SIZE = 12;
 
 const EMPTY: Feed = { songs: [], people: [], patches: [] };
 
-type Row = Record<string, unknown>;
+export type Row = Record<string, unknown>;
 
 /**
  * A select that asks for columns a later migration added (`preview` from
  * 0012, `avatar_grid` from 0014) and, if the database does not have them yet
  * -- PostgREST fails the whole query then -- asks again without. A feed with
  * fingerprints and generated avatars beats no feed at all.
+ *
+ * `optional` may be a list, tried in order: the most wanted set first, then
+ * smaller ones, then the base alone. The songs explorer asks for three
+ * migrations' columns and would rather lose one than all three.
  */
-async function withOptional(
+export async function withOptional(
   run: (cols: string) => PromiseLike<{ data: Row[] | null; error: unknown }>,
   base: string,
-  optional: string,
+  optional: string | string[],
 ): Promise<Row[] | null> {
-  const first = await run(`${base},${optional}`);
-  if (!first.error) return first.data;
-  const second = await run(base);
-  return second.error ? null : second.data;
+  for (const extra of [...(Array.isArray(optional) ? optional : [optional]), ""]) {
+    const res = await run(extra ? `${base},${extra}` : base);
+    if (!res.error) return res.data;
+  }
+  return null;
 }
 
-const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
+export const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
 
-function named(title: unknown): string {
+export function named(title: unknown): string {
   const t = typeof title === "string" ? title.trim() : "";
   return t && t.toLowerCase() !== "untitled" ? t : "a song with no name";
 }
@@ -143,21 +148,34 @@ export async function loadFeed(limit = FEED_SIZE): Promise<Feed> {
   }
 }
 
+/** How many owner ids go in one `in` filter. */
+const OWNER_SLICE = 100;
+
 /** Who owns what, for the byline on a card: `profile_cards`, so a public song
  *  or patch by someone whose page is private is still attributed. */
-async function owners(
+export async function owners(
   supabase: SupabaseClient,
   ids: string[],
 ): Promise<Map<string, NonNullable<FeedSong["owner"]>>> {
   const byId = new Map<string, NonNullable<FeedSong["owner"]>>();
   const unique = [...new Set(ids)];
   if (!unique.length) return byId;
-  const cards = await withOptional(
-    (cols) => supabase.from("profile_cards").select(cols).in("id", unique).returns<Row[]>(),
-    "id,username,display_name",
-    "avatar_grid",
-  );
-  for (const c of cards ?? []) {
+  // In slices: the ids ride in the URL, and the explorer can hand over a few
+  // hundred of them, which is past what a proxy will take in one request line.
+  const slices: string[][] = [];
+  for (let i = 0; i < unique.length; i += OWNER_SLICE) slices.push(unique.slice(i, i + OWNER_SLICE));
+  const cards = (
+    await Promise.all(
+      slices.map((slice) =>
+        withOptional(
+          (cols) => supabase.from("profile_cards").select(cols).in("id", slice).returns<Row[]>(),
+          "id,username,display_name",
+          "avatar_grid",
+        ),
+      ),
+    )
+  ).flatMap((rows) => rows ?? []);
+  for (const c of cards) {
     // One name per person now (migration 0013); display_name is only the
     // fallback for a profile that has not been through that yet.
     const handle = str(c.username);
@@ -323,24 +341,4 @@ async function loadPeople(
   } catch {
     return [];
   }
-}
-
-/** A song's fingerprint: four lanes of sixteen steps, hashed from its id. It
- *  is not the song's rhythm (that would mean reading the whole session) --
- *  just a face that stays the same every time the card is drawn. */
-export function fingerprint(id: string): boolean[][] {
-  let h = 2166136261;
-  for (let i = 0; i < id.length; i++) h = Math.imul(h ^ id.charCodeAt(i), 16777619);
-  const next = () => {
-    h = Math.imul(h ^ (h >>> 15), 2246822507);
-    h = Math.imul(h ^ (h >>> 13), 3266489909);
-    h ^= h >>> 16;
-    return (h >>> 0) / 4294967296;
-  };
-  // Denser at the bottom (hats), sparser at the top (the kick), the way a beat
-  // usually looks written down.
-  const density = [0.28, 0.2, 0.55, 0.35];
-  return density.map((d, lane) =>
-    Array.from({ length: 16 }, (_, i) => (lane === 0 && i % 4 === 0 ? next() < 0.8 : next() < d)),
-  );
 }
