@@ -11,7 +11,7 @@ import styles from "./home.module.css";
 // its own, so the picture is the phrase the play button plays on it
 // (patchPreview.js): the same list drawn and heard.
 
-export default function PatchCard({ patch, age }: { patch: FeedPatch; age: string }) {
+export default function PatchCard({ patch }: { patch: FeedPatch }) {
   return (
     <li className={styles.card}>
       {canPreview(patch.engine) && <PlayButton slug={patchKey(patch.id)} title={patch.name} />}
@@ -35,7 +35,6 @@ export default function PatchCard({ patch, age }: { patch: FeedPatch; age: strin
         ) : (
           <span>someone</span>
         )}
-        <span>{age}</span>
         <LikeButton songId={patch.id} kind="patch" likes={patch.likes} className={styles.like} likedClassName={styles.liked} />
         <SavePatchButton patchId={patch.id} className={styles.savePatch} savedClassName={styles.saved} />
       </span>

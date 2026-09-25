@@ -227,6 +227,8 @@
 .print { display: block; height: 56px; background: var(--bg); border-radius: 6px; padding: 5px; }
 .printSvg { display: block; width: 100%; height: 100%; }
 .cardOwner { display: inline-flex; align-items: center; gap: 5px; }
+/* A song card's bpm, heart and remix, one line that never wraps. */
+.cardActions { flex-wrap: nowrap; align-items: center; }
 /* The explorer's cards name their instruments (the .engineTag below). */
 .cardTags { display: flex; flex-wrap: wrap; gap: 4px; font-size: 11px; }
 /* The heart sits at the end of the meta line. Its target is padded out to
@@ -242,7 +244,8 @@
 }
 .like:hover { color: #ff9fd0; }
 .liked { color: #ff9fd0; }
-/* Save into your patches, beside the heart and padded out the same way. */
+/* Save into your patches (a patch card) or remix into your songs (a song
+   card), beside the heart and padded out the same way. */
 .savePatch {
   margin: -8px -6px -8px 0;
   padding: 8px 6px;
