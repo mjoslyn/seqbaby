@@ -1787,17 +1787,16 @@ to say hello), the songs people have published, and who made them.
   is public anyway. It selects `data->bpm`, never `data`: a song's data is
   the whole session, samples included. It never throws: no env, a missing
   migration or a dead network is an empty feed with a joke in it.
-- **The people are every public profile with a handle**, not just whoever
-  made the songs above: read from `profiles` filtered on `is_public` (the
-  filter is repeated so the list does not lean on the RLS policy alone),
-  with a count of each one's published songs. Busiest first, then newest.
+- **The people are every public profile with at least one public song**:
+  the list starts from the owners of the newest 1000 public songs, so an
+  account with nothing to hear never appears, then reads their `profiles`
+  filtered on `is_public` (repeated so the list does not lean on the RLS
+  policy alone). Busiest first, then whoever published most recently.
   `bio` comes from `profiles`, never `profile_cards`, which must not carry
   it (migration 0007).
 - **Who is looking is a client island** (`Who.tsx`): a local session read,
   then one `profile_cards` read for the handle. A cached page cannot know.
-- **Twelve of each**: songs, people, patches (`FEED_SIZE` in feed.ts). The
-  people are still sorted over the newest 48 before the twelve are cut, so it
-  is the busiest of a wide window, not of the newest twelve.
+- **Twelve of each**: songs, people, patches (`FEED_SIZE` in feed.ts).
 - **Patches are laid out like the songs** (`app/home/PatchCard.tsx`): the
   newest twelve in the public gallery, each with a play button on the same
   hidden engine the song cards use. A patch is a sound with no notes, so

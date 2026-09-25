@@ -190,7 +190,7 @@ export default async function HomePage() {
       <section className={styles.section}>
         <div className={styles.sectionHead}>
           <h2>people making noise</h2>
-          <span className={styles.sectionSub}>everyone with a public page. go see what they&apos;ve made.</span>
+          <span className={styles.sectionSub}>everyone who has published a song. go see what they&apos;ve made.</span>
         </div>
         {people.length ? (
           <ul className={styles.people}>
@@ -202,7 +202,7 @@ export default async function HomePage() {
                     <span className={styles.personName}>@{p.handle}</span>
                     {p.bio && <span className={styles.personBio}>{p.bio}</span>}
                     <span className={styles.personCount}>
-                      {p.songs ? `${p.songs} ${p.songs === 1 ? "song" : "songs"}` : "no songs yet"}
+                      {p.songs} {p.songs === 1 ? "song" : "songs"}
                     </span>
                   </span>
                 </a>

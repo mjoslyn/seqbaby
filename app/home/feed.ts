@@ -255,26 +255,42 @@ async function rankedIds(
     .map(({ id, likes }) => ({ id, likes }));
 }
 
+/** How many public songs the people list counts over. Enough to cover every
+ *  publisher for a long while; past it, the busiest of the recent ones. */
+const PEOPLE_SONGS = 1000;
+
 /**
- * Every public profile, whether or not they have published anything yet.
- * Every profile has a handle since migration 0013; the filter is for a
- * database that has not had it. Read from `profiles`, which anon may read only where
- * `is_public` (migration 0007) -- the filter is repeated here so the list
- * does not depend on that policy to stay public-only. `bio` is on the
- * profile page already, so it is fine here; it is NOT on profile_cards, which
- * is why this is not that view.
+ * The people who have published something: every public profile with at least
+ * one public song, busiest first, then whoever published most recently.
+ * Starts from the songs, not the profiles, so an account with nothing to hear
+ * never makes the list however new it is.
  *
- * Ordered by how many songs they have published, then newest first, so the
- * people with something to hear come before the ones who just signed up.
+ * Read from `profiles`, which anon may read only where `is_public` (migration
+ * 0007) -- the filter is repeated here so the list does not depend on that
+ * policy to stay public-only. `bio` is on the profile page already, so it is
+ * fine here; it is NOT on profile_cards, which is why this is not that view.
  */
 async function loadPeople(
   supabase: SupabaseClient,
   show: number,
 ): Promise<FeedPerson[]> {
-  // Read a wider window than is shown, then sort it: the busiest of the
-  // newest 48, not the busiest of the newest twelve.
-  const limit = Math.max(48, show);
   try {
+    const { data: owned } = await supabase
+      .from("songs")
+      .select("owner_id,updated_at")
+      .eq("is_public", true)
+      .order("updated_at", { ascending: false })
+      .limit(PEOPLE_SONGS)
+      .returns<Row[]>();
+    const counts = new Map<string, number>();
+    const latest = new Map<string, number>(); // first seen is newest: the query is ordered
+    for (const r of owned ?? []) {
+      const id = r.owner_id as string;
+      counts.set(id, (counts.get(id) ?? 0) + 1);
+      if (!latest.has(id)) latest.set(id, latest.size);
+    }
+    if (!counts.size) return [];
+
     const profiles = await withOptional(
       (cols) =>
         supabase
@@ -282,34 +298,26 @@ async function loadPeople(
           .select(cols)
           .eq("is_public", true)
           .not("username", "is", null)
-          .order("created_at", { ascending: false })
-          .limit(limit)
+          .in("id", [...counts.keys()])
           .returns<Row[]>(),
-      "id,username,bio,created_at",
+      "id,username,bio",
       "avatar_grid",
     );
-    if (!profiles?.length) return [];
 
-    const ids = profiles.map((p) => p.id as string);
-    const { data: owned } = await supabase
-      .from("songs")
-      .select("owner_id")
-      .eq("is_public", true)
-      .in("owner_id", ids);
-    const counts = new Map<string, number>();
-    for (const r of owned ?? []) counts.set(r.owner_id as string, (counts.get(r.owner_id as string) ?? 0) + 1);
-
-    return profiles
-      .map((p, i) => ({
-        order: i,
-        person: {
-          handle: p.username as string,
-          bio: str(p.bio),
-          avatarGrid: str(p.avatar_grid),
-          songs: counts.get(p.id as string) ?? 0,
-        },
-      }))
-      .sort((a, b) => b.person.songs - a.person.songs || a.order - b.order)
+    return (profiles ?? [])
+      .map((p) => {
+        const id = p.id as string;
+        return {
+          recent: latest.get(id) ?? Infinity,
+          person: {
+            handle: p.username as string,
+            bio: str(p.bio),
+            avatarGrid: str(p.avatar_grid),
+            songs: counts.get(id) ?? 0,
+          },
+        };
+      })
+      .sort((a, b) => b.person.songs - a.person.songs || a.recent - b.recent)
       .slice(0, show)
       .map((e) => e.person);
   } catch {
