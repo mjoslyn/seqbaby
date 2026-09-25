@@ -23,7 +23,7 @@ export type ProfileSong = {
   share_slug: string | null;
   updated_at: string;
   forked_from: string | null;
-  forkedFrom: { title: string; username: string | null } | null;
+  remixedFrom: { title: string; username: string | null } | null;
   /** The step preview (migration 0012), absent before that has run. */
   preview?: unknown;
   /** Hearts (migration 0016), absent before that has run. */
@@ -197,7 +197,7 @@ export async function getPublicProfile(
       .eq("owner_id", profile.id)
       .eq("is_public", true)
       .order("updated_at", { ascending: false })
-      .returns<Omit<ProfileSong, "forkedFrom">[]>();
+      .returns<Omit<ProfileSong, "remixedFrom">[]>();
   const SONG_COLS = "id,title,share_slug,updated_at,forked_from";
   const patchesQuery = (cols: string) =>
     supabase
@@ -216,7 +216,7 @@ export async function getPublicProfile(
   // `likes` on patches is 0017's; without it, ask again without.
   const patches = patchesRes.error ? (await patchesQuery(PATCH_COLS)).data : patchesRes.data;
 
-  // Resolve fork lineage (source title + author handle) for any forked sessions,
+  // Resolve remix lineage (source title + author handle) for any remixed sessions,
   // limited to sources the viewer can read (public or owned).
   let songs = songsRes.data;
   if (songsRes.error) {
@@ -224,19 +224,19 @@ export async function getPublicProfile(
     songs = noLikes.error ? (await songsQuery(SONG_COLS)).data : noLikes.data;
   }
   const songRows = songs ?? [];
-  const forkIds = [
+  const remixIds = [
     ...new Set(songRows.map((s) => s.forked_from).filter(Boolean)),
   ] as string[];
   const lineage = new Map<string, { title: string; username: string | null }>();
-  if (forkIds.length) {
+  if (remixIds.length) {
     const { data: sources } = await supabase
       .from("songs")
       .select("id,title,owner_id")
-      .in("id", forkIds);
+      .in("id", remixIds);
     const ownerIds = [...new Set((sources ?? []).map((s) => s.owner_id))];
     const handles = new Map<string, string | null>();
     if (ownerIds.length) {
-      // profile_cards, not profiles: a public song forked from someone whose
+      // profile_cards, not profiles: a public song remixed from someone whose
       // own page is private should still say who wrote it.
       const { data: profs } = await supabase
         .from("profile_cards")
@@ -256,7 +256,7 @@ export async function getPublicProfile(
     isOwner,
     songs: songRows.map((s) => ({
       ...s,
-      forkedFrom: s.forked_from ? (lineage.get(s.forked_from) ?? null) : null,
+      remixedFrom: s.forked_from ? (lineage.get(s.forked_from) ?? null) : null,
     })),
     patches: patches ?? [],
   };

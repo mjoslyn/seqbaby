@@ -63,14 +63,12 @@ export function IconHistory() {
   );
 }
 
-/** Fork: one line of history becoming two. */
-export function IconFork() {
+/** Remix: two lines crossing over, each heading off somewhere new. */
+export function IconRemix() {
   return (
     <svg {...base}>
-      <circle cx="4" cy="3.5" r="1.4" />
-      <circle cx="12" cy="3.5" r="1.4" />
-      <circle cx="8" cy="12.5" r="1.4" />
-      <path d="M4 4.9v1.3a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2V4.9M8 8.2v2.9" />
+      <path d="M2 4.5h2c3 0 3 7 6 7h3.5M2 11.5h2c3 0 3-7 6-7h3.5" />
+      <path d="M12 3l1.5 1.5L12 6M12 10l1.5 1.5L12 13" />
     </svg>
   );
 }

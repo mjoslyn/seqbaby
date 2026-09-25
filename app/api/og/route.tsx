@@ -92,7 +92,7 @@ export async function GET(req: Request) {
           {preview ? (
             <Steps preview={preview} width={W - 112} height={song?.owner ? 250 : 300} />
           ) : (
-            <div style={{ display: "flex", fontSize: 30, color: DIM }}>open it to hear it, remix it or fork it.</div>
+            <div style={{ display: "flex", fontSize: 30, color: DIM }}>open it to hear it or remix it.</div>
           )}
         </div>
       </div>

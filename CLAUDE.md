@@ -1756,13 +1756,13 @@ desktop); macro stays in the main cluster, text on desktop and icon over its
 | `POST/GET app/api/share/route.ts` | anonymous `?s=<slug>` share links (public `songs` rows) |
 | `POST app/api/compose/route.ts` | starts one compose turn → `{jobId, jobToken}`; the turn runs in `netlify/functions/compose-background.mjs` |
 | `GET app/api/compose/status/route.ts` | what the browser polls while one runs — activity, then the song |
-| `app/songs/actions.ts` | `saveSong` / `saveNamedSong` (both append a version), `listSongs`, `loadSong`, `forkSong`, `listVersions`, `loadVersion`, `labelVersion`, `deleteVersion`, `setSongTemplate`, `setDefaultTemplate`, `getDefaultTemplate` |
+| `app/songs/actions.ts` | `saveSong` / `saveNamedSong` (both append a version), `listSongs`, `loadSong`, `remixSong`, `listVersions`, `loadVersion`, `labelVersion`, `deleteVersion`, `setSongTemplate`, `setDefaultTemplate`, `getDefaultTemplate` |
 | `app/patches/actions.ts` | `savePatchToBay`, `setPatchPublic`, `listMyPatches`, `deletePatch`, `setPatchLike` (the studio's own reads and writes are `app/patches/bay.ts`) |
 | `app/profile/actions.ts` | `getMyProfile`, `updateProfile`, `getPublicProfile` (+ that user's public songs/patches) |
 | `app/auth/actions.ts` | `signIn`, `signUp`, `signInWithMagicLink`, `signOut` |
 | `app/account/actions.ts` | `updateEmail`, `updatePassword`, `deleteAccount` (RPC `delete_own_account`) |
 
-`/u/<username>` is the public profile page with fork buttons. The engine side
+`/u/<username>` is the public profile page with remix buttons. The engine side
 of save/share lives in `session.js` (`serializeSet`/`applySet`) and is bridged
 through `window.seqbaby`.
 
@@ -1779,7 +1779,7 @@ to say hello), the songs people have published, and who made them.
   sent to the studio from a bare `/` too, and the manifest's `start_url` is
   `/studio`.
 - **Everything that writes a studio URL names `/studio`**: the save UIs'
-  share links, the profile page's open and fork links, the MCP server's
+  share links, the profile page's open and remix links, the MCP server's
   `share_song`, sign in / sign up / sign out, the email confirm fallback.
   The engine's own URLs (`onShareSet`, the jam invite, `syncSongUrl`) are
   built from `location.pathname`, so they needed nothing.
@@ -1822,9 +1822,9 @@ to say hello), the songs people have published, and who made them.
   private copy in your account with `saved_from` naming the original, so a
   second save finds the first. Whether a card's patch is already yours is one
   batched browser read per page, LikeButton's trick. See the patch bay section.
-- **The fork beside a song's heart** (`app/ForkButton.tsx`, the studio byline
-  and profile rows) is `forkSong`: a private copy in your songs, and nothing
-  else. Once made it turns into a link to open the fork.
+- **The remix beside a song's heart** (`app/RemixButton.tsx`, the studio byline
+  and profile rows) is `remixSong`: a private copy in your songs, and nothing
+  else. Once made it turns into a link to open the remix.
 - **A card's step picture is the song's own** (see "Song previews" below).
   `fingerprint` (hashed from the id) is only the fallback for a database
   without migration 0012.
@@ -2241,13 +2241,13 @@ v1 ──▶ v2 ──▶ v3 ──▶ v5      (kept editing)
   — `parent_id` cascades, so pruning a version with a branch under it would take
   the branch too, and undo does not reach the server. Deleting the SONG still takes its
   whole history (`song_id` cascades).
-- **A fork starts a fresh tree** rooted at the copied state. The source's history
+- **A remix starts a fresh tree** rooted at the copied state. The source's history
   belongs to the source's owner and isn't readable anyway; `songs.forked_from`
-  still records the ancestry between songs. `fork` in the version tree is the
+  still records the ancestry between songs. `remix` in the version tree is the
   same thing from one version — a way to turn a branch into its own song, and it
   is deliberately spelled the same as the songs-menu and profile buttons because
   it is the same operation with a different starting point. `branch` stays the
-  word for the in-tree move (saving from an older version); `fork` always means
+  word for the in-tree move (saving from an older version); `remix` always means
   leaving the tree.
 - Migration `0009` backfills a root version for every existing song, so the
   first save after deploying branches off something rather than starting a second
@@ -2270,7 +2270,7 @@ cold squelch  v1 ──▶ v2 ──▶ v3     its own song, its own tree
 - **Two booleans, no new table** (migration `0010`). `is_template`, and
   `is_default_template` for the one a new session starts from. Templates are
   listed apart in the songs menu, but everything else you can do to a song you
-  can still do to one — publish it, fork it, walk its version tree.
+  can still do to one — publish it, remix it, walk its version tree.
 - **Where a save goes is the writer's rule, not the database's.** The migration
   does not stop a version being appended to a template; opening one, unmarking
   it and saving is a perfectly reasonable way to *edit* the template. What
@@ -2288,7 +2288,7 @@ cold squelch  v1 ──▶ v2 ──▶ v3     its own song, its own tree
   sorted first), and both save UIs offer a generated name rather than the
   template's — "techno starter 2" is a poor name for a song and a confusing
   neighbour for the template in the list.
-- **`forked_from` records where it came from**, the same column a fork uses, and
+- **`forked_from` records where it came from**, the same column a remix uses, and
   the new song's first version is labelled `from template`. A song made from a
   template is never itself one.
 - **At most one default per account, enforced by a partial unique index**

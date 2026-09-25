@@ -14,7 +14,7 @@ import {
   deleteSong,
   publishSong,
   unpublishSong,
-  forkSong,
+  remixSong,
   setSongTemplate,
   setDefaultTemplate,
   type SongListItem,
@@ -32,7 +32,7 @@ import {
   IconDefault,
   IconTemplate,
   IconHistory,
-  IconFork,
+  IconRemix,
   IconLink,
   IconTrash,
   IconEye,
@@ -235,13 +235,13 @@ export default function SongsMenu() {
     [currentId, treeFor, refresh],
   );
 
-  const doFork = useCallback(
+  const doRemix = useCallback(
     async (song: SongListItem) => {
-      setStatus({ text: "Forking…" });
-      const res = await forkSong(song.id);
+      setStatus({ text: "Remixing…" });
+      const res = await remixSong(song.id);
       if (res.error || !res.id)
-        return setStatus({ text: res.error ?? "Fork failed", err: true });
-      // A fork is a song of your own, never a template -- even of a template.
+        return setStatus({ text: res.error ?? "Remix failed", err: true });
+      // A remix is a song of your own, never a template -- even of a template.
       setOpenSong({
         id: res.id,
         title: res.title ?? song.title,
@@ -249,7 +249,7 @@ export default function SongsMenu() {
         isTemplate: false,
       });
       syncSongUrl(res.id);
-      setStatus({ text: `Forked "${song.title}"` });
+      setStatus({ text: `Remixed "${song.title}"` });
       setOpen(false);
       refresh();
     },
@@ -421,11 +421,11 @@ export default function SongsMenu() {
         </button>
         <button
           className={styles.iconBtn}
-          onClick={() => doFork(song)}
-          title="fork into a new session"
-          aria-label="fork"
+          onClick={() => doRemix(song)}
+          title="remix into a new session"
+          aria-label="remix"
         >
-          <IconFork />
+          <IconRemix />
         </button>
         <button
           className={styles.iconBtn}

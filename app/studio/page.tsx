@@ -73,7 +73,7 @@ export async function generateMetadata({
         title: `${song.title} · seqbaby`,
         ...shareCard(
           songShareTitle(song.owner, song.title),
-          `A song made in seqbaby. Open it to hear it, remix it or fork it. ${SITE_DESCRIPTION}`,
+          `A song made in seqbaby. Open it to hear it or remix it. ${SITE_DESCRIPTION}`,
           await cardImage({ s: slug, open: slug ? null : openId }),
         ),
       };
