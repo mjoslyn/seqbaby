@@ -252,6 +252,9 @@ export const STUDIO_BODY = String.raw`
     <div class="sq-field"><label for="bpm">bpm</label><input id="bpm" type="number" value="110" min="40" max="240" /></div>
     <div class="sq-field"><label for="swing">swing</label><input id="swing" type="range" min="0" max="0.5" step="0.01" value="0" /></div>
     <button id="macro-pads" class="sq-btn--ghost" type="button" title="xy macro pads: one gesture moving parameters across several tracks"><span class="sq-btn__label">macro</span></button>
+    <!-- The code drawer (codePanel.js): Strudel live coding, run into
+         the song without stopping the transport. -->
+    <button id="code-btn" class="sq-btn--ghost" type="button" aria-pressed="false" title="live code: write Strudel patterns, ctrl/⌘ enter runs them into the song"><span class="sq-btn__label">code</span></button>
     <!-- Undo / redo. Wired and painted by history.js, which also owns the
          ctrl/cmd-Z keys; they ship disabled because at boot there is nothing
          behind them yet. -->

@@ -10,6 +10,7 @@ import { HELP_TIPS, ICON_BOUNCE, ICON_CAPTURE, ICON_CHAIN, ICON_FINISH, ICON_KEY
 import { upgradeKnobs } from "./knob.js";
 import { startModMotion } from "./modMotion.js";
 import { openMacroPads } from "./macro.js";
+import { installCodePanel } from "./codePanel.js";
 import { applySampleSpeed, attachBpmDrag, lfoRateLabel, retuneSyncedLFOs } from "./lfo.js";
 import { captureSequence, initComputerKeyboard, isDesktopKeyboard, resetKbdKeys } from "./keyboard.js";
 import { autoAccents, parseMeter, redetectDrumKit, stepsPerBarForMeter } from "./meter.js";
@@ -655,6 +656,9 @@ export function init() {
     macroBtn.insertAdjacentHTML("afterbegin", ICON_MACRO);
     macroBtn.addEventListener("click", openMacroPads);
   }
+  // The code drawer: Strudel / Tidal, read into tracks (codePanel.js). Its
+  // reader is imported only when the drawer runs something.
+  installCodePanel();
   // The master swing slider has no listener on purpose: the transport loop reads
   // its value straight off the DOM each callback (~0.1 µs), so there's nothing to
   // mirror into state and nothing to do when it moves.

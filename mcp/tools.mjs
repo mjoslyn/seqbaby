@@ -15,6 +15,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import * as sb from "../public/js/songBuilder.js";
+import * as strudel from "../public/js/strudel.js";
 import { ANALOG_FILTER_INFO, ANALOG_FILTER_TYPES, FILTER_TYPES } from "../public/js/soundDefaults.js";
 
 /** The compose skill's path within the repo, for whoever can locate the repo. */
@@ -276,6 +277,27 @@ export const TOOLS = [
       first: z.number().int().optional(), last: z.number().int().optional(), triplets: z.boolean().optional(), thirtySeconds: z.boolean().optional(),
       rhythmSeed: z.number().int().optional(), melodySeed: z.number().int().optional() },
     handler: (ctx, { track, ...c }) => sb.setChance(ctx.song, track, c),
+  },
+
+  // ---- code ---------------------------------------------------------------------------
+  {
+    name: "write_code", title: "Write code",
+    description: "Write tracks from Strudel code (strudel.cc), the fastest way to spell rhythm and melody. Strudel: `setcpm(124/4)`, `$: s(\"bd*4, ~ cp, hh*8\").bank(\"RolandTR909\")`, `bass: note(\"<c2 eb2>*8\").s(\"sawtooth\").lpf(800)`, `n(\"0 2 4\").scale(\"C4:minor\")`, `chord(\"<Cm7 G7>\").voicing()`, `.lpf(sine.range(300,2000).slow(4))`. Full mini-notation (`[] <> , * / ! @ ? _ (k,n,r) {}%n ..`). Each SOUND becomes a track (named for its label, plus the sound when a label plays several); a track of the same name is rewritten, others are kept. One cycle is one bar; a pattern takes as many bars as it needs to repeat (up to 64 steps). Sounds map to engines (bd/sd/hh/cp/oh -> 808, 909 with bank RolandTR909; sawtooth -> poly saw; supersaw -> contagion; tb303 -> silverbox; piano/epiano -> tines; *bass* -> electric bass; sine under C3 -> subby). lpf/lpq/room/size/delay/crush/distort/shape/gain set the sound; per-note values become automation lanes; signals become LFOs. seqbaby's own instruments by name or key (s(\"silverbox\"), s(\"subby\"), s(\"electric_guitar\"), s(\"dm:contagion\")) and seqbaby-only controls: .knob(\"sbaccent\", 0.9) (any slider or panel control), .preset(\"surf twang\"), .fx(\"chorus.wet\", 0.4) (any fx rack control), .filter(\"type\", \"squelch\"), .eq(\"low\", -3), .comp(\"threshold\", -24) / .comp(\"source\", \"kick\"), .lfo(\"cutoff\", \"sine\", 0.4, 16) (target, shape, amount, length in beats or \"2hz\"), .aut(\"fx.delay\", \"0 0.5 1\") (a lane, 0..1 per step), .p(\"name\"). Returns what was made plus a warning per thing that does not translate (every, jux, sometimes ...).",
+    inputSchema: { code: z.string(), pattern: z.number().int().min(0).max(31).optional().describe("which pattern slot to write (default 0)") },
+    handler: (ctx, { code, pattern }) => {
+      const read = strudel.readCode(code);
+      const res = strudel.writeTracks(ctx.song, strudel.realize(read), { pattern: pattern ?? 0 });
+      return { made: res.made, changed: res.changed, bpm: res.bpm, warnings: res.warnings, tracks: sb.summarize(ctx.song).tracks };
+    },
+  },
+  {
+    name: "song_as_code", title: "Song as code",
+    description: "The song's active pattern of every track written as Strudel code. Portable by default: stock sounds and only the effects Strudel has, with a strudel.cc link that opens it and a warning per thing left out. native: true writes seqbaby's own form instead (instruments by name, every knob, fx, eq, compressor, LFO and lane), which write_code reads back into the same song.",
+    inputSchema: { native: z.boolean().optional() },
+    handler: (ctx, { native }) => {
+      const out = strudel.sessionToCode(ctx.song, { native: !!native });
+      return native ? out : { ...out, url: strudel.strudelUrl(out.code) };
+    },
   },
 
   // ---- out ---------------------------------------------------------------------------

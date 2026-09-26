@@ -190,6 +190,13 @@ env / fx / eq / comp / mod / automation per track.
   session from calls (add a track, spell its steps, set its sound, put an LFO
   on it) validated against the tables above. Not imported by the engine; run
   by `mcp/server.mjs` and `test/songBuilder.test.js`. See its section.
+- `miniNotation.js` / `strudel.js` / `codePanel.js` — Strudel.
+  `miniNotation.js` is the mini-notation and the pattern algebra under it (no
+  imports); `strudel.js` reads Strudel's JavaScript into
+  tracks, and writes a song back out as Strudel (pure, for songBuilder.js's
+  reason: it builds through songBuilder); `codePanel.js` is the studio's code
+  drawer, which imports `strudel.js` only when it runs something. See the live
+  code section.
 - `sessionFormat.js` — the serialized-session format: `SET_VERSION` and
   `validateSet()`. No imports, deliberately: every other engine module
   touches the DOM or Tone at import time, and keeping this one pure is what
@@ -266,7 +273,8 @@ npm run netlify:dev    # full Netlify emulation on :8888
 npm run legacy:dev     # pre-Next static Node server on :5173 (engine assets only)
 npm test               # node --test: the pure modules (session format, chance gen,
                        #   version tree, song names, share card copy, the song builder, the jam diff,
-                       #   song previews, grid avatars, the songs and people explorers)
+                       #   song previews, grid avatars, the songs and people explorers,
+                       #   the Strudel bridge)
 npm run mcp            # the MCP server on stdio (mcp/server.mjs) — an agent writes songs
 npm run test:rls       # RLS policy tests — builds a throwaway Postgres in docker
 ```
@@ -2437,8 +2445,11 @@ agent ──▶ mcp/server.mjs ──▶ songBuilder.js ──▶ { _version, bp
   a shorter string tiling a longer pattern. `describePattern` reads one back
   the same way, so `get_song` shows an agent what it wrote in the notation
   it wrote it in.
-- **The MCP server holds one song** and keeps the tool list short (33 tools:
-  song / engines / tracks / steps / sound / modulation / generators / out).
+- **The MCP server holds one song** and keeps the tool list short (35 tools:
+  song / engines / tracks / steps / sound / modulation / generators / code /
+  out). `write_code` takes Strudel code (strudel.js, the same reader as
+  the studio's code drawer), which is the tersest way an agent has to spell a
+  part; `song_as_code` writes the song back out as Strudel.
   What an agent needs to KNOW is served as resources rather than packed into
   descriptions: `seqbaby://engines` (the catalog with what each slider does
   per engine, every panel control with its range, the presets, the targets
@@ -2469,6 +2480,125 @@ agent ──▶ mcp/server.mjs ──▶ songBuilder.js ──▶ { _version, bp
   server.mjs with a zod shape. Adding an engine control: its table entry in
   engineData.js is all the builder needs; the compose guide is where to say
   what it is FOR.
+
+## Live code — Strudel (`codePanel.js` + `strudel.js` + `miniNotation.js`)
+
+The `code` button in the transport opens a drawer docked under the tracks: a
+Strudel-style editor, **opened on the song itself written as code**.
+ctrl/⌘-Enter runs the code INTO the song, ctrl/⌘-. stops. Strudel only,
+by choice: it read Tidal's Haskell too at first, and that was cut, since a
+second language doubled every surface (a second parser, a second export).
+
+```
+code ─▶ readCode (a JavaScript-subset parser, never eval) ─▶ Patterns ─▶ realize ─▶ track blueprints
+                                                                                 │
+running engine ◀── mergeSet ◀── writeTracks(fromBlob(serializeSet())) ◀──────────┘
+```
+
+- **A pattern is a query, as it is in Strudel and Tidal** (`miniNotation.js`): a function
+  from a span of cycles to the events that START in it. The notation is then a
+  few combinators (`timecat`, `slowcat`, `fast`, `stack`, `polymeter`,
+  `euclidPat` ...) and the whole of it works, `<a <b c>>` and `hh*<2 4>`
+  included, instead of a string expanded straight into steps (which is where
+  `<a b>` and `/3` get lost). Onsets only: seqbaby's unit is a note that
+  starts, so nothing ever carries a fragment of an event.
+- **No `eval`.** A pasted snippet, or a jam peer's, is data: a small parser
+  for the JavaScript Strudel is written in (labels, `const`, calls, method
+  chains, arrow functions, arithmetic, `true` / `false`) produces pattern
+  values, and only the functions strudel.js lists exist. What is not supported is not
+  silently dropped: every run lists what it left out or approximated (`every`,
+  `jux`, `sometimes`, `vowel`, a sound with no match ...).
+- **Each SOUND is a track**, because a seqbaby track is one instrument:
+  `$: s("bd*4, ~ cp, hh*8")` is three. A track is named for its label (`bass:`),
+  or `.p("name")`, plus the sound when one label plays several; an unlabelled `$:` is
+  named for its sound. Sounds pick engines (`voiceFor`): drum names by role and
+  `.bank()` (808 by default, `RolandTR909`, CR78 / R8 / techno kits on the
+  sampler), synth and GM names by rule (sawtooth → poly saw, supersaw →
+  contagion, tb303 → silverbox, piano → tines, *bass* → electric bass, a sine
+  under C3 → subby, `.fm()` → hexop). `EXPORT_SOUND` is the table both ways, so
+  a round trip keeps its instruments.
+- **A track is as long as its pattern takes to repeat**: the code is queried 32
+  cycles ahead and the shortest period found (up to 16 cycles). One cycle is
+  one bar. The grid is 16 steps a cycle, doubled (track `speed` 2, 4, 8) until
+  no two onsets share a step, or halved (speed ½, ¼) only when the pattern is
+  too long for 64 steps at 16 a cycle. An onset off the grid (a triplet) is a
+  step nudge (`offsets`), exact. Stacked notes at one onset are the step's
+  `extraNotes`; a chord symbol is a root plus the nearest `CHORD_TYPES` entry.
+- **Controls**: a value that is the same on every note sets the knob (`lpf` Hz
+  → cutoff through the knob's own curve, `lpq`, `room` / `size`, `delay` /
+  `delaytime` / `delayfeedback`, `crush`, `coarse`, `shape`, `distort`, a
+  constant `gain` → the fader); one that changes per note becomes an
+  automation lane (cutoff, reson, the fx wets), a varying `gain` step
+  velocities; a signal (`sine.range(a, b).slow(4)`) becomes a synced LFO, the knob parked mid-range.
+  LFOs made this way carry `fromCode`, so the next run replaces them and leaves
+  a hand-made LFO alone.
+- **Running is an upsert by name, onto the running engine.** `writeTracks`
+  rewrites a track the code names (its active pattern, its grid, and only the
+  settings the code gives, so a knob moved by hand and not mentioned stays), a
+  new name is a new track, and a name the LAST run made that this one no
+  longer mentions is removed: deleting a line stops it, as in Strudel. Tracks
+  the code never named are left alone, and a starter track that happens to
+  share a name (`bass:`) is taken over, which is the way to drive an existing
+  track from code. `mergeSet` writes it, so the transport keeps going and
+  untouched tracks keep their voices; one run is one undo step
+  (`markExternalEdit`), and a jam hears it like any other edit. A song
+  arriving (`seqbaby:setapplied` / `newset`) forgets which tracks the code
+  made, so a run can never remove another song's tracks.
+- **The tokens light up as they play**, as on strudel.cc: each mini-notation
+  atom keeps its source offsets, `realize` hands every step the atoms that
+  wrote it (`stepLocs`), and the drawer's rAF loop marks the atoms of each
+  track's sounding step, read from `t._nowIdx` (paintTrackNow writes it at the
+  audible time). Only while the code is exactly what was run.
+- **seqbaby's own instruments and controls have names of their own**, since
+  Strudel has no silverbox, no chorus and no automation lane. An engine by key,
+  old key or menu name with underscores (`s("silverbox")`, `s("dm:303")`,
+  `s("electric_guitar")`, `s("plaits:virtual_analog")`: `nativeEngine`, through
+  songBuilder's `resolveEngine`; a sampler, granular, midi or bus is not
+  makeable from code, its sample is picked in the studio). And eight methods:
+  `.knob(key, v)` (any slider or
+  panel control), `.preset(name)`, `.fx("stage.control", v)`, `.filter(field,
+  v)`, `.eq(band, dB)`, `.comp(field, v)` (`source` is a track NAME, resolved
+  after every track exists), `.lfo(target, shape, amount, length, phase,
+  bipolar)` (length in beats or `"2hz"`, shape `euclid(p,s,r,decay)` for the
+  ring) and `.aut(target, "values")` (a lane, read per step). They ride the
+  events as `_native` and `writeTracks` applies them through the song builder,
+  so every key and range is checked against the engine's own tables and a bad
+  one is a warning, not a failed run. A string argument is read as WRITTEN
+  (`plainArg`, via the `src` a literal's pattern keeps), because mini-notation
+  would split `"surf twang"` and `"euclid(3,8)"`. `.p("name")` names a track,
+  as Strudel's `.p` names a pattern.
+- **A run resets what the LAST run set and this one doesn't** (`touched`,
+  handed back to the next `writeTracks`): delete `.fx("chorus.wet", 0.3)` and
+  run, and the chorus goes back to off, the way deleting a line removes its
+  track. A knob no run ever mentioned is never touched.
+- **The code is the song's, written when the drawer opens** (`sessionToCode`
+  with `native: true`): seqbaby's instruments by name, and every panel knob, fx
+  control, filter field, eq band, compressor setting, LFO and automation lane
+  that differs from its default. Running it unchanged changes nothing (the
+  tests round-trip every field of it), and its tracks
+  become the code's, so deleting a track's line and running removes it. What
+  the code cannot hold without changing the sound (arps, chord inversions,
+  nudged steps, sample regions) and what it cannot make (sample, granular,
+  midi, bus, live-generator tracks) is written as a COMMENT and left out of the
+  code's names, so a run leaves those tracks exactly as they are. Reopened onto
+  the same song, the drawer shows what was in it when it closed (code with an
+  `every()` in it survives a close); onto a changed song, the song again.
+  Nothing is kept in localStorage: the code is the song's.
+- **Portable is the other form** (`sessionToCode` without `native`): stock
+  sounds (`EXPORT_SOUND`, gm_ names), only the effects Strudel names, lanes as
+  per-step value patterns (`.lpf("60!4 1095!4")`), and one warning per track
+  listing what was left out. `strudel.cc ↗` opens code as written when it is
+  plain Strudel and as its portable version when it uses seqbaby's names
+  (`realize(...).native`), because strudel.cc knows none of them. A track whose
+  name is not an identifier is written `$: ... .p('name')`, so the name comes
+  back.
+- **Speed below 1 starts on the beat now.** A slow track's accumulator used to
+  start at 0, so a half-speed track fired on every odd sixteenth, a tick late;
+  `startPlayback` starts it at `1 - speed`. Found because a long pattern
+  written at speed ½ came out a sixteenth behind.
+- MCP: `write_code` / `song_as_code` (mcp/tools.mjs, `native` for seqbaby's
+  own form), so an agent can spell a part in mini-notation. Tests:
+  `test/strudel.test.js`.
 
 ## Compose chat — and whose key it runs on
 
@@ -3109,8 +3239,8 @@ through a 6ms fade on its gain).
   `stepGateAt`, which used to live in euclid.js — a generator must not be the
   place the dispatch lives, or the second one has to import the first.
 - **`engineData.js`, `soundDefaults.js`, `theoryData.js`, `constants.js`,
-  `chanceGen.js`, `sessionFormat.js`, `historyStore.js` and `songBuilder.js`
-  must stay importable from Node** — no DOM, no Tone, no `window`. The tests
+  `chanceGen.js`, `sessionFormat.js`, `historyStore.js`, `songBuilder.js`,
+  `miniNotation.js` and `strudel.js` must stay importable from Node** — no DOM, no Tone, no `window`. The tests
   and the MCP server run them; an import of state.js or catalog.js in any of
   them breaks `npm test` at load, which is the guard.
 - **React must never re-set the studio's `innerHTML`** (`app/StudioBody.tsx`).
@@ -3216,7 +3346,7 @@ Repo: https://github.com/mjoslyn/seqbaby.
   An inline marker (`window.__seqbabyServerBoot`) tells the paths apart, and
   `ScriptLoader.tsx` keeps its onload-chained injection for the soft-nav case
   (e.g. arriving from `/login`).
-- `app/EnginePreload.tsx` emits `modulepreload` for all 63 modules listed in
+- `app/EnginePreload.tsx` emits `modulepreload` for all 64 modules listed in
   `app/engineAssets.ts` (at `engineAsset("/js/<name>")`; the hints used to
   point at the site root and 404). The graph is 8 levels deep, so without it the browser
   needs up to eight sequential round trips just to discover the code.

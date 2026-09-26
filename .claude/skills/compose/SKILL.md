@@ -46,6 +46,16 @@ hats    x.x. x.x. x.x. x.x.        closed; ..x. for the off-beat open hat
 bass    x.x_ x.X. x.x. X_..        ties are slides on the silverbox
 ```
 
+`write_code` is the other way in, and often the faster one: Strudel code, mini-notation and all. `$: s("bd*4, ~ cp, [~ hh]*4")` is three drum
+tracks in one line; `bass: note("<c2 eb2 g1 bb1>*8").s("tb303").lpf(900)` a
+silverbox line four bars long; `chord("<Cm7 Ab^7>").voicing().s("gm_epiano1")`
+chords on tines. seqbaby's own instruments and controls have names there too:
+`s("silverbox")`, `.knob("sbaccent", 0.9)`, `.preset("surf twang")`,
+`.fx("chorus.wet", 0.3)`, `.lfo("cutoff", "sine", 0.4, 16)`, `.aut("fx.delay",
+"0 0.5 1")`. Read its warnings: what Strudel does live (`every`, `jux`,
+`sometimes`) has no equivalent here and is left out. Then shape the tracks it
+made with the tools below as usual.
+
 Velocity is how drums breathe: `x.o.x.o.` for hats, `X...x...` for a kick
 that leans on the one. `set_step` adds ratchets (a roll: ratchet 2..4),
 micro-timing (offset 0.1 on the off-beat hats for swing feel), chords on a

@@ -3987,3 +3987,79 @@ html.sq-preloading, html.sq-preloading body { overflow: hidden; }
   .sq-preload__step.is-head { animation: none; opacity: 1; }
   .sq-preload__tip { transition: none; }
 }
+
+/* ---- the code drawer (codePanel.js) --------------------------------------
+   Strudel live coding, docked at the bottom so the tracks it writes
+   stay in view above it. The editor is a transparent textarea over a <pre>
+   that carries the colours and the marks on the sounding atoms; both share
+   one font and one padding, or the caret drifts off the text. */
+.sq-code {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  height: min(46vh, 420px);
+  display: flex;
+  flex-direction: column;
+  background: color-mix(in srgb, var(--bg) 94%, transparent);
+  border-top: 1px solid var(--accent);
+  z-index: 60;
+  backdrop-filter: blur(6px);
+}
+body.has-code-drawer { padding-bottom: min(46vh, 420px); }
+#code-btn[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); }
+.sq-code__bar {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-2);
+}
+.sq-code__title { color: var(--accent); font-weight: 600; margin-right: 4px; }
+.sq-code__spacer { flex: 1; }
+.sq-code__bar select { max-width: 130px; }
+.sq-code__out { text-decoration: none; padding: 4px 8px; border: 1px solid var(--border); border-radius: 4px; color: var(--fg); font-size: 12px; }
+.sq-code__out[hidden] { display: none !important; }
+.sq-code__editor { position: relative; flex: 1; min-height: 0; }
+.sq-code__hl, .sq-code__input {
+  position: absolute; inset: 0;
+  margin: 0; padding: 10px 14px;
+  font: 13px/1.55 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  letter-spacing: 0;
+  white-space: pre-wrap; overflow-wrap: anywhere;
+  overflow: auto;
+  tab-size: 2;
+  border: 0;
+}
+.sq-code__hl { color: var(--fg); pointer-events: none; }
+.sq-code__input {
+  background: transparent; color: transparent; caret-color: var(--accent);
+  resize: none; outline: none;
+}
+.sq-code__input::selection { background: color-mix(in srgb, var(--accent-2) 30%, transparent); color: transparent; }
+.sq-code__hl .t-c { color: var(--fg-dim); font-style: italic; }
+.sq-code__hl .t-s { color: var(--accent); }
+.sq-code__hl .t-n { color: #ffb86b; }
+.sq-code__hl .t-l { color: var(--accent-2); font-weight: 600; }
+.sq-code__hl .t-k { color: var(--accent-2); }
+.sq-code__hl .t-m { color: #d7a6ff; }
+.sq-code__hl .t-f { color: #d7a6ff; }
+.sq-code__hl mark {
+  background: transparent; color: inherit;
+  outline: 1px solid var(--step-now);
+  border-radius: 2px;
+  box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 60%, transparent);
+}
+.sq-code__msg {
+  max-height: 30%; overflow: auto;
+  padding: 6px 12px;
+  border-top: 1px solid var(--border);
+  color: var(--fg-dim); font-size: 12px;
+}
+.sq-code__msg:empty { display: none; }
+.sq-code__msg.is-ok { color: var(--accent); }
+.sq-code__msg.is-warn span { color: var(--accent); }
+.sq-code__msg.is-warn ul { margin: 4px 0 0; padding-left: 18px; color: var(--fg-dim); }
+.sq-code__msg.is-error { color: var(--danger); }
+@media (max-width: 768px) {
+  .sq-code { height: 60vh; }
+  body.has-code-drawer { padding-bottom: 60vh; }
+  .sq-code__hl, .sq-code__input { font-size: 14px; }
+}
