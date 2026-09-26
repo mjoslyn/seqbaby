@@ -2533,7 +2533,7 @@ running engine ◀── mergeSet ◀── writeTracks(fromBlob(serializeSet())
   LFOs made this way carry `fromCode`, so the next run replaces them and leaves
   a hand-made LFO alone.
 - **Running is an upsert by name, onto the running engine.** `writeTracks`
-  rewrites a track the code names (its active pattern, its grid, and only the
+  rewrites a track the code names (its pattern slots, its grid, and only the
   settings the code gives, so a knob moved by hand and not mentioned stays), a
   new name is a new track, and a name the LAST run made that this one no
   longer mentions is removed: deleting a line stops it, as in Strudel. Tracks
@@ -2571,6 +2571,37 @@ running engine ◀── mergeSet ◀── writeTracks(fromBlob(serializeSet())
   handed back to the next `writeTracks`): delete `.fx("chorus.wet", 0.3)` and
   run, and the chorus goes back to off, the way deleting a line removes its
   track. A knob no run ever mentioned is never touched.
+- **The pattern bank is in the code as SECTIONS.** `pattern(2).repeat(4)
+  .meter('7/8')` starts one: the parts after it write slot 2 (numbered from 1,
+  as the pattern bar is), `.repeat` is its bar count in chain mode, and
+  `chain()` is chain mode itself. Code with NO section writes one slot, the
+  drawer's PIN: the pattern it was written from, whatever is playing when it
+  runs (the bar shows `pattern 3`, or `writes pattern 1 (showing 3)` in red).
+  Unedited, the pin follows a switch in the pattern bar, the song written again
+  from the new pattern; never during chain playback, which switches on its own.
+  Before the pin, a run wrote whatever pattern was active at that moment, so
+  code written from pattern 1 could land on pattern 3, or on whichever pattern
+  chain mode had reached. A section taken out of the code is cleared for the
+  code's tracks (`slots`, handed back like `touched`), a track the code owns
+  but leaves out of a section is cleared there, and a slot the code never
+  names is left alone. The exporter writes sections whenever more than one
+  slot has notes, or the song chains.
+- **A track has ONE grid across its patterns** (`chooseGrid`, per name): its
+  length and speed are the track's, not the pattern's, so the cycles are the
+  lcm of every part's repeat and the resolution the finest any part needs.
+- **p-lock is `.lock()`.** Parts without it share the track's sound, as
+  unlocked patterns do in the studio (two that disagree are merged, the later
+  winning, and the run says so). A part with it gives its pattern a sound of
+  its own, built from the DEFAULTS up on a scratch track (`lockedSound`), so
+  it is exactly what the part says. Running never drops a lock it was not
+  told to: before, a run replaced the pattern and its lock with it, and the
+  code's sound became every unlocked pattern's too. With the active pattern
+  locked, a session's track-level fields ARE that pattern's sound, so the
+  writer starts from `baseSound`, and it writes `baseSound` back, whole.
+- **Strudel's `arrange([4, a], [8, b])` is the bank too**: consecutive slots
+  from the first, each playing its cycles as bars, chain mode on. The portable
+  export writes a chained song that way (`const p1 = stack(...)`), so
+  strudel.cc plays the whole arrangement.
 - **The code is the song's, written when the drawer opens** (`sessionToCode`
   with `native: true`): seqbaby's instruments by name, and every panel knob, fx
   control, filter field, eq band, compressor setting, LFO and automation lane

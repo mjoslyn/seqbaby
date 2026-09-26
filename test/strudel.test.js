@@ -340,3 +340,112 @@ test("native export leaves what code can't hold as a comment, and running it lea
   assert.deepEqual(out.names, []);
   assert.match(out.code, /\/\/ arp: uses arps/);
 });
+
+// ---- the pattern bank ---------------------------------------------------------------
+
+const BANK = `setcpm(120/4)
+chain()
+pattern(1).repeat(2)
+kick: s("bd*4")
+bass: note("c2*8").s("sawtooth").lpf(400)
+pattern(2).repeat(4).meter("7/8")
+kick: s("bd(3,8)")
+bass: note("<eb2 g2>*8").s("sawtooth").lpf(2000).room(0.5).lock()
+pattern(3)
+kick: s("bd*2")
+$: s("hh*8").p("open hats")`;
+
+test("sections write their own slots, with repeats, meters and chain mode", () => {
+  const { song, warnings, slots } = S.codeToSong(BANK);
+  assert.deepEqual(warnings, []);
+  assert.deepEqual(slots, [0, 1, 2]);
+  assert.equal(song.patternMode, "chain");
+  assert.deepEqual(song.patternRepeats.slice(0, 3), [2, 4, 1]);
+  assert.deepEqual(song.patternMeters[1], { num: 7, den: 8 });
+  const kick = track(song, "kick");
+  assert.deepEqual([0, 1, 2].map(k => steps(kick, k)), ["1000100010001000", "1000001000001000", "1000000010000000"]);
+  assert.equal(song.tracks.length, 3);
+});
+
+test(".lock() gives a pattern its own sound; the rest share the track's", () => {
+  const { song } = S.codeToSong(BANK);
+  const bass = track(song, "bass");
+  assert.equal(bass.patterns[0].soundLocked, false);
+  assert.equal(bass.patterns[1].soundLocked, true);
+  assert.ok(bass.filter.cutoff < 0.4);
+  assert.ok(bass.patterns[1].sound.filter.cutoff > 0.5);
+  assert.equal(bass.patterns[1].sound.fxConfig.reverb.wet, 0.5);
+  assert.equal(bass.fxConfig.reverb?.wet ?? 0, 0);
+});
+
+test("a track's patterns share one grid", () => {
+  const { song } = S.codeToSong(`pattern(1)\na: note("c3").s("piano")\npattern(2)\na: note("<c3 e3 g3 b3>").s("piano")`);
+  const a = track(song, "a");
+  assert.equal(a.length, 64);
+  assert.equal(a.patterns[0].steps.length, 64);
+  assert.deepEqual(a.patterns[1].notes.filter(n => n != null), [48, 52, 55, 59]);
+});
+
+test("the bank round-trips through native code, and plays as arrange() in portable code", () => {
+  const a = S.codeToSong(BANK).song;
+  const out = S.sessionToCode(a, { native: true });
+  assert.equal(out.sectioned, true);
+  assert.match(out.code, /^chain\(\)$/m);
+  assert.match(out.code, /^pattern\(2\)\.repeat\(4\)\.meter\('7\/8'\)$/m);
+  assert.match(out.code, /\.lock\(\)/);
+  const b = S.codeToSong(out.code).song;
+  assert.deepEqual(b.patternRepeats.slice(0, 3), a.patternRepeats.slice(0, 3));
+  assert.equal(b.patternMode, "chain");
+  for (const ta of a.tracks) {
+    const tb = track(b, ta.name);
+    ta.patterns.forEach((p, k) => {
+      if (!p?.steps.some(Boolean)) return;
+      assert.equal(steps(tb, k), steps(ta, k), `${ta.name} ${k}`);
+      assert.equal(!!tb.patterns[k].soundLocked, !!p.soundLocked);
+      if (p.soundLocked) assert.deepEqual(tb.patterns[k].sound.filter, p.sound.filter);
+    });
+    assert.deepEqual(tb.filter, ta.filter);
+  }
+  const port = S.sessionToCode(a).code;
+  assert.match(port, /\$: arrange\(\[2, p1\], \[4, p2\], \[1, p3\]\)/);
+  assert.doesNotMatch(port, /pattern\(|lock\(|chain\(/);
+});
+
+test("arrange() reads as consecutive slots in chain mode", () => {
+  const { song } = S.codeToSong(`const v = stack(s("bd*4"), note("c2*4").s("sawtooth"))\n$: arrange([4, v], [8, s("hh*8")], [2, v])`);
+  assert.equal(song.patternMode, "chain");
+  assert.deepEqual(song.patternRepeats.slice(0, 3), [4, 8, 2]);
+  assert.deepEqual(song.tracks.map(t => t.name), ["bd", "sawtooth", "hh"]);
+  assert.equal(steps(track(song, "bd"), 2), steps(track(song, "bd"), 0));
+});
+
+test("code with no sections writes the pinned slot and leaves the others alone", () => {
+  const song = S.codeToSong(BANK).song;
+  song.activePattern = 2;
+  S.writeTracks(song, S.realize(S.readCode(`kick: s("bd*8")`)), { pattern: 0 });
+  const kick = track(song, "kick");
+  assert.equal(steps(kick, 0), "1010101010101010");
+  assert.equal(steps(kick, 1), "1000001000001000");
+  assert.equal(steps(kick, 2), "1000000010000000");
+});
+
+test("a section taken out of the code clears it, for the code's tracks", () => {
+  const first = S.codeToSong(BANK);
+  const song = first.song;
+  const res = S.writeTracks(song, S.realize(S.readCode(BANK.replace(/pattern\(3\)[\s\S]*$/, ""))),
+    { previous: first.names, slots: first.slots, touched: first.touched });
+  assert.deepEqual(res.removed, ["open hats"]);
+  assert.equal(steps(track(song, "kick"), 2), "0".repeat(16));
+});
+
+test("running over a locked active pattern keeps the lock and the shared sound apart", () => {
+  const song = S.codeToSong(BANK).song;
+  // as a saved session holds it with pattern 2 active: the track's fields ARE pattern 2's sound
+  song.activePattern = 1;
+  const bass = track(song, "bass");
+  const shared = JSON.parse(JSON.stringify(bass.baseSound));
+  Object.assign(bass, JSON.parse(JSON.stringify({ params: bass.patterns[1].sound.params, filter: bass.patterns[1].sound.filter, fxConfig: bass.patterns[1].sound.fxConfig })));
+  S.writeTracks(song, S.realize(S.readCode(BANK)), {});
+  assert.equal(bass.patterns[1].soundLocked, true);
+  assert.deepEqual(bass.filter.cutoff, shared.filter.cutoff);
+});

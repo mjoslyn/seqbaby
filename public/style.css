@@ -4039,3 +4039,5 @@ body.has-code-drawer { padding-bottom: min(46vh, 420px); }
   body.has-code-drawer { padding-bottom: 60vh; }
   .sq-code__hl, .sq-code__input { font-size: 14px; }
 }
+.sq-code__pin { font-size: 11px; color: var(--fg-dim); border: 1px solid var(--border); border-radius: 4px; padding: 2px 6px; }
+.sq-code__pin.is-off { color: var(--danger); border-color: var(--danger); }

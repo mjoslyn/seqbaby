@@ -57,7 +57,10 @@ let _open = null;      // the drawer's handle while it exists
 let _lastNames = [];   // the tracks the code holds: a line deleted from it removes its track
 let _touched = {};     // what the last run set, per track: a setting deleted from the code goes back to its default
 let _draft = null;     // { code, song }: the editor as it was closed, reopened only onto the same song
-let _run = null;       // { code, locsByName: Map<name, number[][][]> } for the highlighter
+let _lastSlots = [];   // the pattern slots the code holds: a section deleted from it is cleared
+let _pin = null;       // the slot code with no pattern() sections writes: the one it was written from
+let _generated = null; // the text as the drawer last wrote it from the song, to tell an edit from none
+let _run = null;       // { code, pin, locs: Map<"slot|name", number[][][]> } for the highlighter
 let _raf = 0;
 
 export function installCodePanel() {
@@ -66,7 +69,7 @@ export function installCodePanel() {
   btn.addEventListener("click", () => toggleCodePanel());
   // A different song arriving is not the one the code wrote: forget which
   // tracks were the code's, so the next run cannot remove tracks of that song.
-  const forget = () => { _lastNames = []; _touched = {}; _run = null; _draft = null; paint(); };
+  const forget = () => { _lastNames = []; _touched = {}; _lastSlots = []; _pin = null; _generated = null; _run = null; _draft = null; paint(); };
   window.addEventListener("seqbaby:setapplied", forget);
   window.addEventListener("seqbaby:newset", forget);
 }
@@ -86,6 +89,7 @@ function openPanel() {
   el.innerHTML = `
     <div class="sq-code__bar">
       <span class="sq-code__title">code</span>
+      <span class="sq-code__pin" title="which pattern this code writes"></span>
       <button type="button" class="sq-code__run" title="run the code into the song (ctrl/⌘ enter)">▶ run</button>
       <button type="button" class="sq-code__stop sq-btn--ghost" title="stop (ctrl/⌘ .)">■ stop</button>
       <select class="sq-code__examples" title="start from an example">
@@ -149,7 +153,8 @@ function openPanel() {
       read = m.readCode(code);
       realized = m.realize(read);
       song = sb.fromBlob(serializeSet());
-      res = m.writeTracks(song, realized, { previous: _lastNames, touched: _touched });
+      if (_pin == null) _pin = state.activePattern;
+      res = m.writeTracks(song, realized, { previous: _lastNames, touched: _touched, slots: _lastSlots, pattern: _pin });
     } catch (e) {
       const at = Number.isFinite(e.pos) ? ` (line ${code.slice(0, e.pos).split("\n").length})` : "";
       say(`${esc(e.message)}${at}`, "error");
@@ -161,7 +166,8 @@ function openPanel() {
     markExternalEdit("run code");
     _lastNames = res.names;
     _touched = res.touched;
-    _run = { code, locsByName: new Map(realized.tracks.filter(t => !t.empty).map(t => [t.name, t.stepLocs])) };
+    _lastSlots = res.slots;
+    _run = { code, pin: _pin, locs: new Map(realized.tracks.filter(t => !t.empty).map(t => [`${t.slot ?? _pin}|${t.name}`, t.stepLocs])) };
     const parts = [];
     if (res.made.length) parts.push(`added ${res.made.map(esc).join(", ")}`);
     if (res.changed.length) parts.push(`updated ${res.changed.map(esc).join(", ")}`);
@@ -181,11 +187,15 @@ function openPanel() {
   // the code's: delete a track's line and run, and the track goes.
   const fromSong = async ({ opening = false } = {}) => {
     const m = await mod();
-    const { code, warnings, names, skipped } = m.sessionToCode(serializeSet(), { native: true });
+    const res = m.sessionToCode(serializeSet(), { native: true });
+    const { code, warnings, names, skipped } = res;
     const empty = !names.length;
     input.value = empty ? `${code}\n// nothing in the song has notes yet. Try:\n// $: s("bd*4, ~ cp, hh*8")\n` : code;
     _lastNames = names;
     _touched = {};
+    _lastSlots = res.slots;
+    _pin = state.activePattern;
+    _generated = input.value;
     _run = null;
     renderHl();
     refreshLink();
@@ -259,7 +269,28 @@ function openPanel() {
     fromSong({ opening: true }).catch(e => say(`could not read the song: ${esc(e.message)}`, "error"));
   }
   input.focus();
-  const loop = () => { paint(); _raf = requestAnimationFrame(loop); };
+  // The pin: code with no pattern() sections writes the pattern it was written
+  // from, whatever is playing when it runs. Unedited, it follows a switch in
+  // the pattern bar (the song is written again from the new pattern); edited,
+  // it stays put and the label says so.
+  const pinEl = q(".sq-code__pin");
+  let lastActive = state.activePattern, lastLabel = "";
+  const sectioned = () => /^\s*(pattern\s*\(|chain\s*\()|\barrange\s*\(/m.test(input.value);
+  const watchPin = () => {
+    if (state.activePattern !== lastActive) {
+      lastActive = state.activePattern;
+      if (!sectioned() && _generated != null && input.value === _generated && state.patternMode !== "chain") fromSong();
+    }
+    const label = sectioned() ? "whole song"
+      : _pin == null || _pin === state.activePattern ? `pattern ${(_pin ?? state.activePattern) + 1}`
+      : `writes pattern ${_pin + 1} (showing ${state.activePattern + 1})`;
+    if (label !== lastLabel) {
+      lastLabel = label;
+      pinEl.textContent = label;
+      pinEl.classList.toggle("is-off", label.startsWith("writes"));
+    }
+  };
+  const loop = () => { paint(); watchPin(); _raf = requestAnimationFrame(loop); };
   _raf = requestAnimationFrame(loop);
 }
 
@@ -280,7 +311,8 @@ function activeRanges(code) {
   if (!_run || !state.playing || _run.code !== code) return [];
   const out = [];
   for (const t of state.tracks) {
-    const locs = _run.locsByName.get(t.name);
+    // the part for the pattern that is playing: its section, or the pinned slot
+    const locs = _run.locs.get(`${state.activePattern}|${t.name}`);
     if (!locs || t.muted) continue;
     const idx = t._nowIdx;
     if (!(idx >= 0)) continue;
