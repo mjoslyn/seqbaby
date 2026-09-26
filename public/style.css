@@ -1715,6 +1715,119 @@ main {
 }
 
 .sq-track__engine { min-width: 160px; }
+/* The instrument picker's button (enginePicker.js), standing in for the hidden
+   engine select. Drawn like a select so it still reads as "choose one". */
+.sq-track__engine-btn {
+  min-width: 160px;
+  max-width: 240px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: var(--bg-3);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 6px 8px;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.sq-track__engine-btn:hover { border-color: var(--fg-dim); }
+.sq-track__engine-btn.is-jam-touched { box-shadow: 0 0 0 2px var(--jam-color, var(--accent)); }
+.sq-engine-btn__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.sq-engine-btn__caret { color: var(--fg-dim); font-size: 10px; flex: none; }
+
+/* The picker itself: search, group chips, then a grid of cards per group. */
+.sq-modal.sq-engine-picker {
+  width: min(780px, calc(100vw - 32px));
+  max-width: none;
+  max-height: min(86vh, 820px);
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  min-width: 0;
+}
+.sq-engine-picker__top { display: flex; align-items: center; gap: 12px; }
+.sq-engine-picker__top .sq-modal__title { flex: none; }
+.sq-engine-picker__search {
+  flex: 1 1 auto;
+  min-width: 0;
+  background: var(--bg-3);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 6px 8px;
+  font: inherit;
+  outline: none;
+}
+.sq-engine-picker__search:focus { border-color: var(--accent); }
+.sq-engine-picker__chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.sq-engine-picker__chip {
+  background: transparent;
+  color: var(--fg-dim);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 3px 10px;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.sq-engine-picker__chip:hover { color: var(--fg); }
+.sq-engine-picker__chip.is-on { color: #0b0d10; background: var(--accent); border-color: var(--accent); }
+.sq-engine-picker__body {
+  position: relative;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: grid;
+  gap: 14px;
+  align-content: start;
+  padding-right: 2px;
+}
+.sq-engine-picker__group[hidden],
+.sq-engine-picker__card[hidden],
+.sq-engine-picker__empty[hidden] { display: none !important; }
+.sq-engine-picker__heading {
+  margin: 0 0 6px;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--fg-dim);
+  text-transform: lowercase;
+  letter-spacing: 0.04em;
+}
+.sq-engine-picker__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 6px;
+}
+.sq-engine-picker__card {
+  display: grid;
+  gap: 3px;
+  align-content: start;
+  text-align: left;
+  padding: 8px 10px;
+  background: var(--bg-3);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font: inherit;
+  cursor: pointer;
+}
+.sq-engine-picker__card:hover,
+.sq-engine-picker__card:focus-visible { border-color: var(--accent-2); outline: none; }
+.sq-engine-picker__card.is-current { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.sq-engine-picker__card.is-current .sq-engine-picker__name { color: var(--accent); }
+.sq-engine-picker__name { font-size: 12px; font-weight: 600; }
+.sq-engine-picker__empty { color: var(--fg-dim); font-size: 12px; padding: 12px 0; }
+/* "14 tones ›" on an engine card: a jump to that engine's presets. */
+.sq-engine-picker__jump {
+  justify-self: start;
+  margin-top: 2px;
+  font-size: 10.5px;
+  color: var(--accent-2);
+  cursor: pointer;
+}
+.sq-engine-picker__jump:hover { text-decoration: underline; }
+.sq-engine-picker__card.is-preset { min-height: 0; background: var(--bg-2); }
+.sq-engine-picker__card.is-preset .sq-engine-picker__name { font-weight: 400; }
 .sq-track__len { width: 56px; }
 
 .sq-scale__field {
@@ -3275,13 +3388,23 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not
     min-height: 40px;
     padding: 6px 8px;
   }
-  .sq-track__head .sq-track__engine {
+  .sq-track__head .sq-track__engine,
+  .sq-track__head .sq-track__engine-btn {
     flex: 2 1 0;
     min-width: 0;
     max-width: none;
     min-height: 40px;
     padding: 6px 6px;
   }
+  /* The instrument picker fills the phone: two cards across, a tall scroll,
+     and chips that scroll sideways rather than eating half the sheet. */
+  .sq-modal.sq-engine-picker { width: calc(100vw - 16px); max-width: none; max-height: calc(100dvh - 24px); padding: 14px; }
+  .sq-engine-picker__top { flex-wrap: wrap; }
+  .sq-engine-picker__search { min-height: 40px; font-size: 16px; }
+  .sq-engine-picker__chips { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 2px; }
+  .sq-engine-picker__chip { flex: none; min-height: 34px; padding: 4px 12px; }
+  .sq-engine-picker__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .sq-engine-picker__card { min-height: 44px; }
   /* The line break between name / engine / len and the vol row. A flex
      container's own ::before IS a flex item, so a zero-height one with a
      full-width basis is a line break — which is the only way to put a break at

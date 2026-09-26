@@ -3,6 +3,7 @@ import { canSavePatches, engineByKey, getPatchConfig, populateEngineSelect, save
 import { applyTrackPatch, serializeTrackPatch } from "./session.js";
 import { FX_STAGE_LABELS, FX_STAGE_LEVEL_KEY, LFO_DIVS, LFO_KEYS, lfoDivIndex, lfoLabel, rateToSlider, sliderToRate } from "./constants.js";
 import { showInputDialog, showSavedPatchPicker } from "./dialogs.js";
+import { upgradeEngineSelect } from "./enginePicker.js";
 import { isMobileDevice, setStatus } from "./dom.js";
 import { HEXOP_ALG_LABELS, HEXOP_DEFAULTS, HEXOP_NUM_KEYS, HEXOP_PRESET_NAMES, HEXOP_SEL_KEYS, hexopPreset } from "./hexop.js";
 import { BASS_DEFAULTS, BASS_NUM_KEYS, BASS_SEL_KEYS, BASS_TONE_NAMES, bassTone, bassToneDescription } from "./bass.js";
@@ -450,6 +451,7 @@ export function renderTrack(t) {
   const engineSel = node.querySelector(".sq-track__engine");
   populateEngineSelect(engineSel);
   engineSel.value = t.engineKey;
+  upgradeEngineSelect(engineSel);
 
   node.querySelector(".sq-track__name").value = t.name;
   node.querySelector(".sq-track__len").value = t.length;
