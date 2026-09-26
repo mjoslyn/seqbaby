@@ -2722,6 +2722,30 @@ body.kbd-recording .sq-track.is-kbd-active { border-color: #e5484d; box-shadow: 
 .sq-fx__modal {
   width: min(96vw, 900px);
 }
+/* The rack in its modal is a grid of stage cards, three across at the modal's
+   width, rather than fifteen full-width lines with the knobs huddled at the
+   left of each. Name on the card's top line, knobs wrapping under it: the
+   inline view's cards, whole rack. Desktop only; the phone block's
+   name-beside-knobs rows are already the compact layout at that width. */
+@media (min-width: 769px) {
+  .sq-fx__modal > .sq-track__fx-panel {
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 8px;
+    align-items: stretch;
+  }
+  .sq-fx__modal > .sq-track__fx-panel > .sq-fx__row {
+    align-content: flex-start;
+    gap: 6px 10px;
+    padding: 6px 8px;
+    background: var(--bg-3);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+  }
+  .sq-fx__modal > .sq-track__fx-panel > .sq-fx__row > .sq-fx__title {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+}
 .sq-mod__modal > .sq-track__mod-panel,
 .sq-aut__modal > .sq-track__aut-panel,
 .sq-filter__modal > .sq-track__filter-panel,
