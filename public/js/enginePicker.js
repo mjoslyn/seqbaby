@@ -10,6 +10,37 @@
 // jamActivity still finds it by class. The button reads the select; picking a
 // card writes the select and dispatches its `change`, exactly as choosing an
 // option would.
+//
+// The engines with a preset table (hexop voices, guitar / bass / subby tones)
+// get a section of preset cards too. Picking one picks the engine the ordinary
+// way, then writes the track's own preset dropdown and dispatches ITS change,
+// so the preset is applied by the same listener the panel uses.
+
+import {
+  BASS_TONE_NAMES, GUITAR_TONE_NAMES, HEXOP_PRESET_NAMES, SUB_TONE_NAMES,
+  bassToneDescription, guitarToneDescription, subToneDescription,
+} from "./engineData.js";
+
+// The hexop's voices carry no descriptions in its table, so they are here.
+const HEXOP_PRESET_BLURBS = {
+  "init": "a blank two-operator start",
+  "e.piano": "tine bark over a sine body",
+  "bass": "punchy fm bass",
+  "bell": "inharmonic, ringing bell",
+  "brass": "swelling brass stab",
+  "marimba": "woody struck bar",
+  "organ": "drawbar organ",
+  "pad": "slow, evolving pad",
+};
+
+/** Engine key -> its presets, the track dropdown that applies them, and what
+ *  the engine calls them. */
+const PRESET_TABLES = {
+  "dm:hexop":  { noun: "voices", sel: ".sq-hexop__preset", names: HEXOP_PRESET_NAMES, blurb: n => HEXOP_PRESET_BLURBS[n] || "" },
+  "dm:guitar": { noun: "tones",  sel: ".sq-guitar__tone",  names: GUITAR_TONE_NAMES,  blurb: guitarToneDescription },
+  "dm:bass":   { noun: "tones",  sel: ".sq-bass__tone",    names: BASS_TONE_NAMES,    blurb: bassToneDescription },
+  "dm:sub":    { noun: "tones",  sel: ".sq-sub__tone",     names: SUB_TONE_NAMES,     blurb: subToneDescription },
+};
 
 const BLURBS = {
   "plaits:0": "two detuned analog oscillators",
@@ -119,17 +150,58 @@ export function enginePickerFor(sel) {
 
 const esc = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
 
-/** Read the select's optgroups into [{group, items: [{key, label}]}]. */
+/** Read the select's optgroups into [{group, chip, items: [{key, label}]}],
+ *  with a preset section after the group holding each engine that has them. */
 function readGroups(sel) {
   const groups = [];
+  const add = (label, items) => {
+    if (!items.length) return;
+    groups.push({ group: label, chip: label, items });
+    for (const it of items) {
+      const table = PRESET_TABLES[it.key];
+      if (!table) continue;
+      it.presets = table;
+      groups.push({
+        group: `${it.label} ${table.noun}`, chip: "presets", presetOf: it.key,
+        items: table.names.filter(Boolean).map(name => ({
+          key: it.key, label: name, preset: name, engineLabel: it.label, blurb: table.blurb(name),
+        })),
+      });
+    }
+  };
   for (const og of sel.querySelectorAll("optgroup")) {
-    const items = [...og.querySelectorAll("option")].map(o => ({ key: o.value, label: o.textContent }));
-    if (items.length) groups.push({ group: og.label, items });
+    add(og.label, [...og.querySelectorAll("option")].map(o => ({ key: o.value, label: o.textContent })));
   }
   // Options outside any optgroup (none today) still get a home.
-  const loose = [...sel.children].filter(c => c.tagName === "OPTION");
-  if (loose.length) groups.push({ group: "other", items: loose.map(o => ({ key: o.value, label: o.textContent })) });
-  return groups;
+  add("other", [...sel.children].filter(c => c.tagName === "OPTION").map(o => ({ key: o.value, label: o.textContent })));
+  // Engine groups first, then the preset sections, so "all" reads as the
+  // instruments and then what they come loaded with.
+  return [...groups.filter(g => !g.presetOf), ...groups.filter(g => g.presetOf)];
+}
+
+/** The track's own preset dropdown for an engine. The panel it lives in can
+ *  be reparented into a modal, so it is found by track id, not by ancestry. */
+function presetSelectFor(sel, cls) {
+  const root = sel.closest("[data-track-id]");
+  if (!root) return null;
+  return root.querySelector(cls)
+    || document.querySelector(`[data-track-id="${root.dataset.trackId}"] ${cls}`);
+}
+
+function cardHtml(it, g, current) {
+  const on = !it.preset && it.key === current;
+  const blurb = it.preset ? it.blurb : blurbFor(it.key);
+  const search = [it.label, blurb, g.group, it.engineLabel || ""].join(" ").toLowerCase();
+  const presetCount = it.presets
+    ? `<span class="sq-engine-picker__jump" data-jump="${esc(it.key)}">${it.presets.names.filter(Boolean).length} ${esc(it.presets.noun)} ›</span>`
+    : "";
+  return `<button type="button" class="sq-engine-picker__card${on ? " is-current" : ""}${it.preset ? " is-preset" : ""}"
+    data-key="${esc(it.key)}"${it.preset ? ` data-preset="${esc(it.preset)}"` : ""}
+    data-search="${esc(search)}"${on ? ` aria-current="true"` : ""}${it.preset && blurb ? ` title="${esc(blurb)}"` : ""}>
+    <span class="sq-engine-picker__name">${esc(it.label)}</span>
+    ${blurb ? `<span class="sq-engine-picker__blurb">${esc(blurb)}</span>` : ""}
+    ${presetCount}
+  </button>`;
 }
 
 /** Open the grid for one track's select. Picking commits through the select's
@@ -140,22 +212,15 @@ export function openEnginePicker(sel) {
   const overlay = document.createElement("div");
   overlay.className = "sq-modal-overlay sq-engine-picker__overlay";
 
+  const chipNames = [...new Set(groups.map(g => g.chip))];
   const chips = [`<button type="button" class="sq-engine-picker__chip is-on" data-group="">all</button>`]
-    .concat(groups.map(g => `<button type="button" class="sq-engine-picker__chip" data-group="${esc(g.group)}">${esc(g.group.toLowerCase())}</button>`))
+    .concat(chipNames.map(c => `<button type="button" class="sq-engine-picker__chip" data-group="${esc(c)}">${esc(c.toLowerCase())}</button>`))
     .join("");
   const sections = groups.map(g => `
-    <section class="sq-engine-picker__group" data-group="${esc(g.group)}">
+    <section class="sq-engine-picker__group" data-group="${esc(g.chip)}"${g.presetOf ? ` data-preset-of="${esc(g.presetOf)}"` : ""}>
       <h3 class="sq-engine-picker__heading">${esc(g.group.toLowerCase())}</h3>
       <div class="sq-engine-picker__grid">
-        ${g.items.map(it => {
-          const blurb = blurbFor(it.key);
-          const on = it.key === current;
-          return `<button type="button" class="sq-engine-picker__card${on ? " is-current" : ""}" data-key="${esc(it.key)}"
-            data-search="${esc(`${it.label} ${blurb} ${g.group}`.toLowerCase())}"${on ? ` aria-current="true"` : ""}>
-            <span class="sq-engine-picker__name">${esc(it.label)}</span>
-            ${blurb ? `<span class="sq-engine-picker__blurb">${esc(blurb)}</span>` : ""}
-          </button>`;
-        }).join("")}
+        ${g.items.map(it => cardHtml(it, g, current)).join("")}
       </div>
     </section>`).join("");
 
@@ -206,11 +271,18 @@ export function openEnginePicker(sel) {
     document.removeEventListener("keydown", onKey, true);
     sel._enginePicker?.focus();
   };
-  const pick = (key) => {
+  const pick = (key, preset) => {
     close();
-    if (key === sel.value) return; // a native select fires nothing here either
-    sel.value = key;
-    sel.dispatchEvent(new Event("change", { bubbles: true }));
+    // Same engine: a native select fires nothing here either.
+    if (key !== sel.value) {
+      sel.value = key;
+      sel.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+    if (!preset) return;
+    const ps = presetSelectFor(sel, PRESET_TABLES[key]?.sel);
+    if (!ps || sel.value !== key) return;
+    ps.value = preset;
+    ps.dispatchEvent(new Event("change", { bubbles: true }));
   };
 
   const onKey = (e) => {
@@ -220,7 +292,7 @@ export function openEnginePicker(sel) {
       if (e.key === "Enter") {
         e.preventDefault();
         const first = visibleCards()[0];
-        if (first) pick(first.dataset.key);
+        if (first) pick(first.dataset.key, first.dataset.preset);
       } else if (e.key === "ArrowDown") {
         e.preventDefault();
         visibleCards()[0]?.focus();
@@ -257,8 +329,22 @@ export function openEnginePicker(sel) {
     applyFilter();
   });
   body.addEventListener("click", (e) => {
+    // "14 tones ›" on an engine card jumps to that engine's presets rather
+    // than picking the engine.
+    const jump = e.target.closest("[data-jump]");
+    if (jump) {
+      const target = overlay.querySelector(`[data-preset-of="${CSS.escape(jump.dataset.jump)}"]`);
+      if (target?.hidden) {
+        groupFilter = "";
+        search.value = "";
+        for (const c of overlay.querySelectorAll(".sq-engine-picker__chip")) c.classList.toggle("is-on", !c.dataset.group);
+        applyFilter();
+      }
+      if (target) body.scrollTop = target.offsetTop;
+      return;
+    }
     const card = e.target.closest(".sq-engine-picker__card");
-    if (card) pick(card.dataset.key);
+    if (card) pick(card.dataset.key, card.dataset.preset);
   });
   overlay.querySelector(".modal-cancel").addEventListener("click", close);
   overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });

@@ -158,6 +158,11 @@ env / fx / eq / comp / mod / automation per track.
   listener (sampler / granular source modals included), undo and the jam ring
   (`ringTarget` redirects to the button) are unchanged. Options come from the
   select's own optgroups, so saved patches appear without the picker knowing.
+  Engines with a preset table (hexop voices, guitar / bass / subby tones, from
+  engineData.js) get a section of preset cards (the `presets` chip, and a
+  `N tones ›` jump on the engine card). A preset card picks the engine as above,
+  then writes the track's own preset dropdown (`PRESET_TABLES[key].sel`) and
+  dispatches its `change`, so the panel's listener applies it.
 - `modMotion.js` — the second needle: where an LFO or an automation lane has
   actually pushed a parameter, drawn on the knob while the slider stays the
   base. See the modulation section below.
