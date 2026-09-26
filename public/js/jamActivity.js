@@ -140,6 +140,7 @@ function clearTouch(el) {
 /** The element a control's own ring belongs on — the knob if it has one
  *  (drawn as a circle), otherwise the field it sits in. */
 function ringTarget(el) {
+  if (el._enginePicker) return el._enginePicker; // the engine select is hidden behind its picker button
   return el.closest(".sq-knob") || el.closest(".sq-field, .sq-fx__ctl, .sq-contagion__f, .sq-hexop__f") || el;
 }
 

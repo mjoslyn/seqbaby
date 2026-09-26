@@ -149,6 +149,15 @@ env / fx / eq / comp / mod / automation per track.
 - `keyboard.js` — computer-keyboard performance mode + capture.
 - `knob.js` — the rotary knob layer, drawn over the native range inputs without
   replacing them. See the Knobs section below.
+- `enginePicker.js` — the instrument picker: a button on the track head that
+  opens a searchable grid of every engine (group chips, a one-line blurb per
+  engine in `BLURBS`). A skin over the track's `.sq-track__engine` select, which
+  stays in the DOM hidden and stays the value, as knob.js does for the ranges:
+  its `value` accessor is shadowed so the button repaints on a plain `.value =`
+  write, and a pick writes the select and dispatches its `change`, so renderTrack's
+  listener (sampler / granular source modals included), undo and the jam ring
+  (`ringTarget` redirects to the button) are unchanged. Options come from the
+  select's own optgroups, so saved patches appear without the picker knowing.
 - `modMotion.js` — the second needle: where an LFO or an automation lane has
   actually pushed a parameter, drawn on the knob while the slider stays the
   base. See the modulation section below.
@@ -3216,7 +3225,7 @@ Repo: https://github.com/mjoslyn/seqbaby.
   An inline marker (`window.__seqbabyServerBoot`) tells the paths apart, and
   `ScriptLoader.tsx` keeps its onload-chained injection for the soft-nav case
   (e.g. arriving from `/login`).
-- `app/EnginePreload.tsx` emits `modulepreload` for all 63 modules listed in
+- `app/EnginePreload.tsx` emits `modulepreload` for all 64 modules listed in
   `app/engineAssets.ts` (at `engineAsset("/js/<name>")`; the hints used to
   point at the site root and 404). The graph is 8 levels deep, so without it the browser
   needs up to eight sequential round trips just to discover the code.
