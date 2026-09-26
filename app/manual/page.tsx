@@ -31,6 +31,7 @@ const SECTIONS = [
   ["lock", "p-lock"],
   ["motion", "Modulation and automation"],
   ["macro", "Macro pads"],
+  ["strudel", "Live coding with Strudel"],
   ["undo", "Undo"],
   ["jam", "Jamming with other people"],
   ["saving", "Saving, sharing and export"],
@@ -1078,6 +1079,380 @@ export default function ManualPage() {
           </p>
         </section>
 
+        <section className={styles.section} id="strudel">
+          <h2>Live coding with Strudel</h2>
+          <p>
+            <span className={styles.ui}>code</span> in the transport opens a drawer
+            under the tracks with your song written as{" "}
+            <a href="https://strudel.cc" target="_blank" rel="noopener">Strudel</a>{" "}
+            code. Change it and press <span className={styles.key}>Ctrl</span>/<span className={styles.key}>&#8984;</span>{" "}
+            <span className={styles.key}>Enter</span>: the song takes the change
+            while it plays, without the beat stopping. <span className={styles.key}>Ctrl</span>/<span className={styles.key}>&#8984;</span>{" "}
+            <span className={styles.key}>.</span> stops. While it plays, the words
+            in the code that wrote the sounding notes light up.
+          </p>
+          <div className={styles.pre}>{`setcpm(124/4)
+
+$: s("bd*4, ~ cp, [~ hh]*4").bank("RolandTR909")
+
+bass: note("<c2 c2 eb2 g1>*8").s("silverbox")
+  .lpf(sine.range(300, 2400).slow(4)).lpq(6)
+  .knob("sbaccent", 0.9)
+
+keys: chord("<Cm7 Ab^7 Fm7 G7>").voicing().s("tines").room(0.5)`}</div>
+          <p>
+            Whatever the code makes are ordinary tracks. The grid shows them, you
+            can turn their knobs by hand, and a save keeps them. The code isn&apos;t
+            a second copy of the song: reopen the drawer on a song you&apos;ve
+            changed and it is written again from the song. The bar also has{" "}
+            <span className={styles.ui}>examples</span>,{" "}
+            <span className={styles.ui}>from song</span> (write the song out again),{" "}
+            <span className={styles.ui}>copy</span>, and{" "}
+            <span className={styles.ui}>strudel.cc</span>, which opens the code on
+            the Strudel site.
+          </p>
+
+          <h3>How code becomes tracks</h3>
+          <ul>
+            <li>
+              <strong>Each sound is a track.</strong> A seqbaby track is one
+              instrument, so <span className={styles.ui}>$: s(&quot;bd*4, ~ cp, hh*8&quot;)</span>{" "}
+              is three tracks: bd, cp and hh.
+            </li>
+            <li>
+              <strong>A track is named by its label.</strong>{" "}
+              <span className={styles.ui}>bass:</span> is the track called bass; an
+              unlabelled <span className={styles.ui}>$:</span> takes the sound&apos;s
+              name, and <span className={styles.ui}>.p(&quot;my name&quot;)</span> names
+              it outright. A label playing several sounds makes several tracks
+              (<span className={styles.ui}>drums bd</span>,{" "}
+              <span className={styles.ui}>drums sd</span>). If a track of that name is
+              already in the song, the code takes it over.
+            </li>
+            <li>
+              <strong>One cycle is one bar.</strong> A track gets as many bars as its
+              pattern takes to come round again, so{" "}
+              <span className={styles.ui}>&lt;c2 eb2 g2&gt;</span> is three bars.
+            </li>
+            <li>
+              <strong>Sixteen steps a bar</strong>, doubled up to 128 when notes are
+              closer together than a sixteenth. A note between steps (a triplet) is
+              written as a nudge on the nearest step, so it lands exactly where the
+              code puts it.
+            </li>
+            <li>
+              <strong>Notes at the same moment are one step</strong> with the extras
+              stacked on it, and a chord symbol from{" "}
+              <span className={styles.ui}>chord()</span> becomes a root and a chord
+              type.
+            </li>
+            <li>
+              <strong>Running again updates, it doesn&apos;t start over.</strong>{" "}
+              Tracks you didn&apos;t touch keep playing. Delete a line and run, and
+              its track goes. Delete a setting and run, and it goes back to its
+              default. A knob you turned by hand that the code never mentions stays
+              where you left it. Each run is one undo step, and in a jam everyone
+              hears it.
+            </li>
+          </ul>
+
+          <h3>The notation</h3>
+          <p>All of Strudel&apos;s mini-notation works inside the quotes:</p>
+          <div className={styles.tableWrap}>
+            <table className={styles.table}>
+              <thead>
+                <tr><th>Write</th><th>Means</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>bd sd</td><td>a sequence: each word a step of the bar</td></tr>
+                <tr><td>~  or  -</td><td>a rest</td></tr>
+                <tr><td>[bd sd]</td><td>squeeze a group into one step</td></tr>
+                <tr><td>&lt;c e g&gt;</td><td>one per bar, taking turns</td></tr>
+                <tr><td>bd, hh*8</td><td>layers played together</td></tr>
+                <tr><td>bd*2  bd/2</td><td>faster, slower (the number can itself be a pattern: <span className={styles.ui}>hh*&lt;2 4&gt;</span>)</td></tr>
+                <tr><td>bd!3  bd@3  bd _ _</td><td>repeat, stretch, hold</td></tr>
+                <tr><td>bd(3,8,2)</td><td>euclidean: 3 hits over 8 steps, turned by 2</td></tr>
+                <tr><td>bd?  bd?0.3</td><td>drop at random</td></tr>
+                <tr><td>a | b</td><td>pick one at random each bar</td></tr>
+                <tr><td>{`{a b c}%4`}</td><td>polymeter: three steps read four to a bar</td></tr>
+                <tr><td>0 .. 7</td><td>a run of numbers</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            And these functions: <span className={styles.ui}>s</span>,{" "}
+            <span className={styles.ui}>sound</span>, <span className={styles.ui}>note</span>,{" "}
+            <span className={styles.ui}>n</span>, <span className={styles.ui}>chord</span>{" "}
+            with <span className={styles.ui}>.voicing()</span>,{" "}
+            <span className={styles.ui}>.scale(&quot;C4:minor&quot;)</span>,{" "}
+            <span className={styles.ui}>stack</span>, <span className={styles.ui}>cat</span>,{" "}
+            <span className={styles.ui}>seq</span>, <span className={styles.ui}>arrange</span>,{" "}
+            <span className={styles.ui}>fast</span>, <span className={styles.ui}>slow</span>,{" "}
+            <span className={styles.ui}>rev</span>, <span className={styles.ui}>ply</span>,{" "}
+            <span className={styles.ui}>euclid</span>, <span className={styles.ui}>degradeBy</span>,{" "}
+            <span className={styles.ui}>struct</span>, <span className={styles.ui}>mask</span>,{" "}
+            <span className={styles.ui}>off</span>, <span className={styles.ui}>superimpose</span>,{" "}
+            <span className={styles.ui}>add</span> / <span className={styles.ui}>transpose</span>,{" "}
+            <span className={styles.ui}>early</span> / <span className={styles.ui}>late</span>,{" "}
+            <span className={styles.ui}>segment</span>, the signals{" "}
+            <span className={styles.ui}>sine saw tri square cosine rand perlin</span> with{" "}
+            <span className={styles.ui}>.range()</span>, <span className={styles.ui}>const</span>{" "}
+            variables, and <span className={styles.ui}>setcpm</span> /{" "}
+            <span className={styles.ui}>setcps</span> for the tempo.
+          </p>
+
+          <h3>How sounds map</h3>
+          <p>
+            seqbaby has no sample library behind these names: each sound plays on
+            the nearest seqbaby instrument.
+          </p>
+          <div className={styles.tableWrap}>
+            <table className={styles.table}>
+              <thead>
+                <tr><th>Sound</th><th>Plays on</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>bd, sd, hh, oh, cp</td><td>the 808 kick, snare, closed hat, open hat, clap. With <span className={styles.ui}>.bank(&quot;RolandTR909&quot;)</span>, the 909&apos;s</td></tr>
+                <tr><td>cb, rim, perc</td><td>the 808 cowbell</td></tr>
+                <tr><td>lt, mt, ht</td><td>the techno kit&apos;s tom (sampler)</td></tr>
+                <tr><td>cr, rd</td><td>the open hat</td></tr>
+                <tr><td>bank CR78, R8, techno, breakbeat, acoustic</td><td>that bundled kit on the sampler (kick, snare, hat)</td></tr>
+                <tr><td>sawtooth</td><td>poly saw</td></tr>
+                <tr><td>supersaw</td><td>contagion</td></tr>
+                <tr><td>square, pulse</td><td>snarl</td></tr>
+                <tr><td>tb303, acid</td><td>silverbox</td></tr>
+                <tr><td>sine</td><td>subby under C3, Plaits virtual analog above</td></tr>
+                <tr><td>sine or triangle with .fm()</td><td>hexop</td></tr>
+                <tr><td>triangle (the default for note())</td><td>Plaits virtual analog</td></tr>
+                <tr><td>piano, epiano, rhodes, wurli</td><td>tines</td></tr>
+                <tr><td>synth_bass, moog</td><td>ladder</td></tr>
+                <tr><td>anything else with bass in it</td><td>electric bass</td></tr>
+                <tr><td>guitar, pluck</td><td>electric guitar</td></tr>
+                <tr><td>organ, strings, violin, choir</td><td>oracle</td></tr>
+                <tr><td>bell, glockenspiel, marimba, vibraphone, kalimba</td><td>fm bell</td></tr>
+                <tr><td>pad</td><td>pad</td></tr>
+                <tr><td>lead</td><td>drift</td></tr>
+                <tr><td>white, pink, noise</td><td>Plaits noise</td></tr>
+                <tr><td>any other name</td><td>Plaits virtual analog, and the run says so</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            General MIDI names (<span className={styles.ui}>gm_epiano1</span>,{" "}
+            <span className={styles.ui}>gm_electric_bass_finger</span> and so on) go
+            through the same rules. To pick a seqbaby instrument exactly, name it:{" "}
+            <span className={styles.ui}>s(&quot;silverbox&quot;)</span>,{" "}
+            <span className={styles.ui}>s(&quot;subby&quot;)</span>,{" "}
+            <span className={styles.ui}>s(&quot;electric_guitar&quot;)</span>,{" "}
+            <span className={styles.ui}>s(&quot;plaits:virtual_analog&quot;)</span>, or
+            its key, <span className={styles.ui}>s(&quot;dm:contagion&quot;)</span>. Its
+            name as the engine menu shows it, with underscores for spaces.
+          </p>
+
+          <h3>How controls and effects map</h3>
+          <p>
+            A value that is the same on every note sets the knob. One that changes
+            from note to note becomes an automation lane. A signal such as{" "}
+            <span className={styles.ui}>sine.range(300, 2000).slow(4)</span> becomes
+            an LFO, synced to the bar, with the knob parked in the middle of the
+            range.
+          </p>
+          <div className={styles.tableWrap}>
+            <table className={styles.table}>
+              <thead>
+                <tr><th>Strudel</th><th>seqbaby</th><th>Lane / LFO</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>lpf / cutoff</td><td>filter cutoff, in Hz</td><td>both</td></tr>
+                <tr><td>hpf, bpf</td><td>the filter as highpass or bandpass</td><td>both</td></tr>
+                <tr><td>lpq / resonance</td><td>filter resonance (Strudel&apos;s 0..20 onto the knob)</td><td>both</td></tr>
+                <tr><td>lpenv</td><td>filter envelope amount</td><td>no</td></tr>
+                <tr><td>room, size</td><td>reverb wet, reverb decay in seconds</td><td>room</td></tr>
+                <tr><td>delay, delaytime, delayfeedback</td><td>delay wet, time, feedback</td><td>delay</td></tr>
+                <tr><td>crush, coarse</td><td>the bitcrusher&apos;s bits and its clock</td><td>no</td></tr>
+                <tr><td>shape</td><td>the wave shaper</td><td>both</td></tr>
+                <tr><td>distort</td><td>fuzz</td><td>both</td></tr>
+                <tr><td>phaser</td><td>phaser, at that rate</td><td>no</td></tr>
+                <tr><td>gain</td><td>the same on every note: the track fader. Varying: note velocities</td><td>LFO</td></tr>
+                <tr><td>velocity</td><td>note velocities</td><td>-</td></tr>
+                <tr><td>legato, clip</td><td>how long each note holds</td><td>-</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>For everything Strudel has no name for, seqbaby adds its own methods:</p>
+          <div className={styles.tableWrap}>
+            <table className={styles.table}>
+              <thead>
+                <tr><th>Method</th><th>Sets</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>.knob(&quot;sbaccent&quot;, 0.9)</td><td>any slider or panel control of the instrument</td></tr>
+                <tr><td>.preset(&quot;surf twang&quot;)</td><td>a guitar, bass or subby tone, or a hexop voice</td></tr>
+                <tr><td>.fx(&quot;chorus.wet&quot;, 0.4)</td><td>any control in the effects rack, as stage.control</td></tr>
+                <tr><td>.filter(&quot;type&quot;, &quot;squelch&quot;)</td><td>any filter field: type (including the eight analog models), cutoff, reson, env, attack, decay, sustain, release</td></tr>
+                <tr><td>.eq(&quot;low&quot;, -3)</td><td>an eq band, in dB</td></tr>
+                <tr><td>.comp(&quot;threshold&quot;, -24)</td><td>the compressor. <span className={styles.ui}>.comp(&quot;source&quot;, &quot;kick&quot;)</span> sidechains it from the kick track</td></tr>
+                <tr><td>.lfo(&quot;cutoff&quot;, &quot;sine&quot;, 0.4, 16)</td><td>an LFO on any target: shape, amount, then length in beats or <span className={styles.ui}>&quot;2hz&quot;</span>. Shape <span className={styles.ui}>&quot;euclid(3,8)&quot;</span> for the ring</td></tr>
+                <tr><td>.aut(&quot;fx.delay&quot;, &quot;0 0.5 1&quot;)</td><td>an automation lane on any target, one value per step, 0 to 1</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            Every name and value is checked against the instrument&apos;s own
+            controls, so a typo comes back as a note under the code rather than a
+            broken track.
+          </p>
+
+          <h3>Patterns and the arrangement</h3>
+          <p>
+            A song that uses more than one pattern is written in sections.{" "}
+            <span className={styles.ui}>pattern(2)</span> starts one, and the lines
+            after it write pattern 2. <span className={styles.ui}>.repeat(4)</span>{" "}
+            is how many bars it plays in chain mode,{" "}
+            <span className={styles.ui}>.meter(&quot;7/8&quot;)</span> its time
+            signature, and <span className={styles.ui}>chain()</span> at the top turns
+            chain mode on.
+          </p>
+          <div className={styles.pre}>{`chain()
+pattern(1).repeat(2)
+kick: s("bd*4")
+bass: note("c2*8").s("sawtooth").lpf(400)
+
+pattern(2).repeat(4)
+kick: s("bd(3,8)")
+bass: note("<eb2 g2>*8").s("sawtooth").lpf(2000).lock()`}</div>
+          <ul>
+            <li>
+              A track shares one sound across its patterns, as it does in the
+              studio. <span className={styles.ui}>.lock()</span> gives that
+              pattern a sound of its own (p-lock).
+            </li>
+            <li>
+              Code with no <span className={styles.ui}>pattern()</span> writes the
+              pattern the drawer was opened on, shown in the bar as{" "}
+              <span className={styles.ui}>pattern 1</span>. If you are looking at
+              another one it says <span className={styles.ui}>writes pattern 1
+              (showing 3)</span>. Until you edit the code, it follows you from
+              pattern to pattern.
+            </li>
+            <li>
+              Strudel&apos;s own <span className={styles.ui}>arrange([4, a], [8, b])</span>{" "}
+              fills patterns 1, 2 and so on, each playing that many bars, in chain
+              mode.
+            </li>
+            <li>
+              Take a section out of the code and run, and that pattern is cleared
+              for the code&apos;s tracks. Patterns the code never mentions are left
+              alone.
+            </li>
+          </ul>
+
+          <h3>Opening it on strudel.cc</h3>
+          <p>
+            <span className={styles.ui}>strudel.cc</span> opens the code on the
+            Strudel site. When it uses seqbaby&apos;s own names, which strudel.cc
+            doesn&apos;t know, it opens a version Strudel can play instead:
+            seqbaby&apos;s instruments as the nearest stock sounds, only the effects
+            Strudel has, a chained song as <span className={styles.ui}>arrange()</span>,
+            and a list of what was left out.
+          </p>
+
+          <h3>What doesn&apos;t translate</h3>
+          <ul>
+            <li>
+              <strong>Things that change the pattern while it plays:</strong>{" "}
+              <span className={styles.ui}>every</span>,{" "}
+              <span className={styles.ui}>sometimes</span>,{" "}
+              <span className={styles.ui}>often</span>,{" "}
+              <span className={styles.ui}>rarely</span>,{" "}
+              <span className={styles.ui}>jux</span>,{" "}
+              <span className={styles.ui}>firstOf</span>,{" "}
+              <span className={styles.ui}>lastOf</span>. seqbaby plays a written
+              pattern, so the pattern plays unchanged and the run says it left them
+              out.
+            </li>
+            <li>
+              <strong>Randomness is frozen.</strong>{" "}
+              <span className={styles.ui}>?</span>,{" "}
+              <span className={styles.ui}>|</span>,{" "}
+              <span className={styles.ui}>degradeBy</span> and{" "}
+              <span className={styles.ui}>rand</span> are rolled once when you run,
+              and a pattern that never repeats is written as its first four bars,
+              looped. Run again for a new roll.
+            </li>
+            <li>
+              <strong>Samples.</strong> There is no sample library behind the
+              names, so <span className={styles.ui}>samples()</span> is ignored,{" "}
+              <span className={styles.ui}>bd:3</span> plays the same as{" "}
+              <span className={styles.ui}>bd</span>, and{" "}
+              <span className={styles.ui}>n</span> on a drum doesn&apos;t choose a
+              sample. Sampler and granular tracks need their sample picked in the
+              studio, so code can&apos;t make one.
+            </li>
+            <li>
+              <strong>Controls with no seqbaby equivalent:</strong>{" "}
+              <span className={styles.ui}>pan</span>,{" "}
+              <span className={styles.ui}>vowel</span>,{" "}
+              <span className={styles.ui}>speed</span>,{" "}
+              <span className={styles.ui}>begin</span> /{" "}
+              <span className={styles.ui}>end</span>,{" "}
+              <span className={styles.ui}>orbit</span>, the amplitude envelope (
+              <span className={styles.ui}>attack</span>,{" "}
+              <span className={styles.ui}>release</span> and friends; use{" "}
+              <span className={styles.ui}>.knob()</span> on the instrument&apos;s own
+              envelope instead) and <span className={styles.ui}>hpq</span> /{" "}
+              <span className={styles.ui}>bpq</span>.
+            </li>
+            <li>
+              <strong>Size.</strong> A track holds up to 64 steps. A pattern that
+              only comes round every 8 bars gets a coarser grid to fit, and one past
+              16 bars is cut short. A track&apos;s length and grid are shared by all
+              its patterns, so they are sized for the longest one.
+            </li>
+            <li>
+              <strong>One filter a track.</strong> Use{" "}
+              <span className={styles.ui}>lpf</span>,{" "}
+              <span className={styles.ui}>hpf</span> or{" "}
+              <span className={styles.ui}>bpf</span>, not two of them.
+            </li>
+            <li>
+              <strong>One instrument a track.</strong> A track that plays a
+              different sound in another pattern keeps the first.
+            </li>
+            <li>
+              <strong>Chord symbols</strong> fold to the chords a step can hold
+              (maj, min, sus2, sus4, dim, aug, maj7, min7, dom7, m7b5, add9): a
+              C9 plays as a C7.
+            </li>
+            <li>
+              <strong>A number that changes each bar</strong> in{" "}
+              <span className={styles.ui}>.fast(&quot;&lt;1 2&gt;&quot;)</span>,{" "}
+              <span className={styles.ui}>.ply()</span> and the like takes its first
+              value.
+            </li>
+            <li>
+              <strong>A sidechain</strong> belongs to the track, not to one pattern,
+              so a locked pattern can&apos;t have its own.
+            </li>
+            <li>
+              <strong>Tracks the code can&apos;t hold stay as they are.</strong> A
+              track with arps, chord inversions, nudged steps or sample regions,
+              and a sample, granular, MIDI, fx bus or live euclid / chance track,
+              appears as a comment. Running the code leaves it exactly as it was;
+              edit it in the studio.
+            </li>
+            <li>
+              <strong>Only Strudel.</strong> TidalCycles&apos; Haskell isn&apos;t
+              read.
+            </li>
+            <li>
+              <strong>The code runs here, not in Strudel.</strong> It is read
+              rather than executed, so only the functions above exist, and anything
+              else is left out with a note, never run.
+            </li>
+          </ul>
+        </section>
+
         <section className={styles.section} id="undo">
           <h2>Undo</h2>
           <p>
@@ -1310,6 +1685,11 @@ bus. Share it when it validates.`}</div>
                   <td><a href="https://github.com/Tonejs/audio" target="_blank" rel="noopener">Tone.js audio samples</a></td>
                   <td>The bundled drum kits in the sampler (techno, CR-78, breakbeat, acoustic, R8)</td>
                   <td>MIT</td>
+                </tr>
+                <tr>
+                  <td><a href="https://strudel.cc" target="_blank" rel="noopener">Strudel</a> and <a href="https://tidalcycles.org" target="_blank" rel="noopener">TidalCycles</a></td>
+                  <td>The mini-notation and the pattern ideas the code drawer reads. seqbaby has its own reader; no Strudel code ships with it</td>
+                  <td>-</td>
                 </tr>
                 <tr>
                   <td><a href="https://nextjs.org/" target="_blank" rel="noopener">Next.js</a> and <a href="https://supabase.com/" target="_blank" rel="noopener">Supabase</a></td>
