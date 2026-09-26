@@ -15,6 +15,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import * as sb from "../public/js/songBuilder.js";
+import * as strudel from "../public/js/strudel.js";
 import { ANALOG_FILTER_INFO, ANALOG_FILTER_TYPES, FILTER_TYPES } from "../public/js/soundDefaults.js";
 
 /** The compose skill's path within the repo, for whoever can locate the repo. */
@@ -276,6 +277,27 @@ export const TOOLS = [
       first: z.number().int().optional(), last: z.number().int().optional(), triplets: z.boolean().optional(), thirtySeconds: z.boolean().optional(),
       rhythmSeed: z.number().int().optional(), melodySeed: z.number().int().optional() },
     handler: (ctx, { track, ...c }) => sb.setChance(ctx.song, track, c),
+  },
+
+  // ---- code ---------------------------------------------------------------------------
+  {
+    name: "write_code", title: "Write code",
+    description: "Write tracks from Strudel or TidalCycles code, the fastest way to spell rhythm and melody. Strudel: `setcpm(124/4)`, `$: s(\"bd*4, ~ cp, hh*8\").bank(\"RolandTR909\")`, `bass: note(\"<c2 eb2>*8\").s(\"sawtooth\").lpf(800)`, `n(\"0 2 4\").scale(\"C4:minor\")`, `chord(\"<Cm7 G7>\").voicing()`, `.lpf(sine.range(300,2000).slow(4))`. Tidal: `d1 $ sound \"bd*2 sn\" # lpf 800`. Full mini-notation (`[] <> , * / ! @ ? _ (k,n,r) {}%n ..`). Each SOUND becomes a track (named for its label, plus the sound when a label plays several); a track of the same name is rewritten, others are kept. One cycle is one bar; a pattern takes as many bars as it needs to repeat (up to 64 steps). Sounds map to engines (bd/sd/hh/cp/oh -> 808, 909 with bank RolandTR909; sawtooth -> poly saw; supersaw -> contagion; tb303 -> silverbox; piano/epiano -> tines; *bass* -> electric bass; sine under C3 -> subby). lpf/lpq/room/size/delay/crush/distort/shape/gain set the sound; per-note values become automation lanes; signals become LFOs. Returns what was made plus a warning per thing that does not translate (every, jux, sometimes ...).",
+    inputSchema: { code: z.string(), dialect: z.enum(["strudel", "tidal"]).optional().describe("detected when left out"), pattern: z.number().int().min(0).max(31).optional().describe("which pattern slot to write (default 0)") },
+    handler: (ctx, { code, dialect, pattern }) => {
+      const read = strudel.readCode(code, { dialect });
+      const res = strudel.writeTracks(ctx.song, strudel.realize(read), { pattern: pattern ?? 0 });
+      return { dialect: read.dialect, made: res.made, changed: res.changed, bpm: res.bpm, warnings: res.warnings, tracks: sb.summarize(ctx.song).tracks };
+    },
+  },
+  {
+    name: "song_as_code", title: "Song as code",
+    description: "The song's active pattern of every track written as Strudel (default) or Tidal code, plus a strudel.cc link that opens it.",
+    inputSchema: { dialect: z.enum(["strudel", "tidal"]).optional() },
+    handler: (ctx, { dialect }) => {
+      const out = strudel.sessionToCode(ctx.song, { dialect: dialect || "strudel" });
+      return dialect === "tidal" ? out : { ...out, url: strudel.strudelUrl(out.code) };
+    },
   },
 
   // ---- out ---------------------------------------------------------------------------

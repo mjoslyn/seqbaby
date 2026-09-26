@@ -33,6 +33,9 @@ import { buildVoiceForEngine, wosc } from "./voices.js";
  */
 export function paintTrackNow(t, idx) {
   const on = idx >= 0;
+  // what is sounding, for anything else that follows the playhead (the code
+  // drawer lights up the tokens that wrote this step)
+  t._nowIdx = idx;
   // The cells are cached on the track (renderStepGrid drops the cache when it
   // rebuilds them) and only the cells that change are touched: this runs per
   // track per step, and querying and toggling every cell each time was the
@@ -416,7 +419,14 @@ export async function startPlayback(opts = {}) {
   // A track's own trackTick runs at `speed` steps per global tick (see the
   // scheduler below); land it where it would be had it been counting from
   // the same global tick this screen is starting at, not from 0.
-  for (const t of state.tracks) { t.trackTick = Math.round(startTick * Math.max(0.0001, t.speed ?? 1)); t.speedAccum = 0; }
+  // A track slower than the transport (speed < 1) starts its accumulator one
+  // tick's worth short of full, so its first step fires ON the downbeat rather
+  // than a tick after it: with 0 a half-speed track played every odd sixteenth.
+  for (const t of state.tracks) {
+    const sp = Math.max(0.0001, t.speed ?? 1);
+    t.trackTick = Math.round(startTick * sp);
+    t.speedAccum = sp < 1 ? 1 - sp : 0;
+  }
   // Restore master gain — the stop branch ramps it to 0 to kill the lookahead-
   // queued tail of Tone synth events that Transport.stop() can't unschedule.
   if (state.masterGain && state.audioCtx) {

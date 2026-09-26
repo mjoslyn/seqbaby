@@ -52,6 +52,7 @@ Env:
 | sound | `set_params`, `apply_preset`, `set_filter`, `set_eq`, `set_comp`, `set_fx` |
 | modulation | `add_lfo`, `remove_lfo`, `set_automation`, `remove_automation` |
 | generators | `set_euclid`, `set_chance` |
+| code | `write_code` (Strudel or Tidal code into tracks), `song_as_code` (the song back out as code, with a strudel.cc link) |
 | out | `validate_song`, `export_song`, `share_song`, `audition_song` |
 
 Resources: `seqbaby://guide`, `seqbaby://engines`, `seqbaby://targets`,
