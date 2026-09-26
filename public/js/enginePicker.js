@@ -16,86 +16,16 @@
 // way, then writes the track's own preset dropdown and dispatches ITS change,
 // so the preset is applied by the same listener the panel uses.
 
-import {
-  BASS_TONE_NAMES, GUITAR_TONE_NAMES, HEXOP_PRESET_NAMES, SUB_TONE_NAMES,
-  bassToneDescription, guitarToneDescription, subToneDescription,
-} from "./engineData.js";
-
-// The hexop's voices carry no descriptions in its table, so they are here.
-const HEXOP_PRESET_BLURBS = {
-  "init": "a blank two-operator start",
-  "e.piano": "tine bark over a sine body",
-  "bass": "punchy fm bass",
-  "bell": "inharmonic, ringing bell",
-  "brass": "swelling brass stab",
-  "marimba": "woody struck bar",
-  "organ": "drawbar organ",
-  "pad": "slow, evolving pad",
-};
+import { BASS_TONE_NAMES, GUITAR_TONE_NAMES, HEXOP_PRESET_NAMES, SUB_TONE_NAMES } from "./engineData.js";
 
 /** Engine key -> its presets, the track dropdown that applies them, and what
  *  the engine calls them. */
 const PRESET_TABLES = {
-  "dm:hexop":  { noun: "voices", sel: ".sq-hexop__preset", names: HEXOP_PRESET_NAMES, blurb: n => HEXOP_PRESET_BLURBS[n] || "" },
-  "dm:guitar": { noun: "tones",  sel: ".sq-guitar__tone",  names: GUITAR_TONE_NAMES,  blurb: guitarToneDescription },
-  "dm:bass":   { noun: "tones",  sel: ".sq-bass__tone",    names: BASS_TONE_NAMES,    blurb: bassToneDescription },
-  "dm:sub":    { noun: "tones",  sel: ".sq-sub__tone",     names: SUB_TONE_NAMES,     blurb: subToneDescription },
+  "dm:hexop":  { noun: "voices", sel: ".sq-hexop__preset", names: HEXOP_PRESET_NAMES },
+  "dm:guitar": { noun: "tones",  sel: ".sq-guitar__tone",  names: GUITAR_TONE_NAMES },
+  "dm:bass":   { noun: "tones",  sel: ".sq-bass__tone",    names: BASS_TONE_NAMES },
+  "dm:sub":    { noun: "tones",  sel: ".sq-sub__tone",     names: SUB_TONE_NAMES },
 };
-
-const BLURBS = {
-  "plaits:0": "two detuned analog oscillators",
-  "plaits:1": "a triangle pushed through folders",
-  "plaits:2": "two-operator fm with feedback",
-  "plaits:3": "formant grains, vocal and buzzy",
-  "plaits:4": "summed harmonics, a sweepable organ",
-  "plaits:5": "morphs across a map of wavetables",
-  "plaits:6": "four-voice chords from one note",
-  "plaits:7": "formants, vowels and robot words",
-  "plaits:8": "a cloud of detuned voices",
-  "plaits:9": "noise through two resonant peaks",
-  "plaits:10": "dust and droplets through a resonator",
-  "plaits:11": "a plucked string",
-  "plaits:12": "struck bars, bells and plates",
-  "plaits:13": "analog-style kick",
-  "plaits:14": "analog-style snare",
-  "plaits:15": "metallic hat, closed to open",
-  "dm:808-kick": "the long sine boom",
-  "dm:808-snare": "two tones and a hiss",
-  "dm:808-chat": "six squares of metal, short",
-  "dm:808-ohat": "six squares of metal, long",
-  "dm:808-clap": "flammed noise bursts",
-  "dm:808-cowbell": "two squares, bandpassed",
-  "dm:909-kick": "punchy kick with a click",
-  "dm:909-snare": "bright, noisy snare",
-  "dm:909-chat": "tight closed hat",
-  "dm:909-ohat": "sizzling open hat",
-  "dm:909-clap": "the house clap",
-  "dm:poly-saw": "detuned saw chords",
-  "dm:fm-bell": "glassy fm bell",
-  "dm:pad": "slow, wide pad",
-  "dm:silverbox": "acid box: diode ladder, accent, slide",
-  "dm:contagion": "hypersaw, two multimode filters",
-  "dm:hexop": "six operators, 32 algorithms",
-  "dm:snarl": "saws, pulse and a growl",
-  "dm:ladder": "three oscillators into a ladder",
-  "dm:drift": "dco, sub and chorus",
-  "dm:guitar": "string, pickup, amp, cab, feedback",
-  "dm:bass": "wound string, dirt, comp, octaver",
-  "dm:sub": "sub bass you can hear on a phone",
-  "dm:tines": "electric piano",
-  "dm:oracle": "big poly analog",
-  "dm:granular": "clouds of grains from a sample",
-  "wt:akwf": "morphable, editable wavetables",
-  "sampler": "your file or a bundled kit",
-  "midi": "notes out to a midi device",
-  "bus": "no instrument: other tracks run through it",
-};
-
-function blurbFor(key) {
-  if (BLURBS[key]) return BLURBS[key];
-  if (key.startsWith("saved:")) return "saved patch";
-  return "";
-}
 
 function currentLabel(sel) {
   const opt = sel.options[sel.selectedIndex];
@@ -164,7 +94,7 @@ function readGroups(sel) {
       groups.push({
         group: `${it.label} ${table.noun}`, chip: "presets", presetOf: it.key,
         items: table.names.filter(Boolean).map(name => ({
-          key: it.key, label: name, preset: name, engineLabel: it.label, blurb: table.blurb(name),
+          key: it.key, label: name, preset: name, engineLabel: it.label,
         })),
       });
     }
@@ -190,16 +120,14 @@ function presetSelectFor(sel, cls) {
 
 function cardHtml(it, g, current) {
   const on = !it.preset && it.key === current;
-  const blurb = it.preset ? it.blurb : blurbFor(it.key);
-  const search = [it.label, blurb, g.group, it.engineLabel || ""].join(" ").toLowerCase();
+  const search = [it.label, g.group, it.engineLabel || ""].join(" ").toLowerCase();
   const presetCount = it.presets
     ? `<span class="sq-engine-picker__jump" data-jump="${esc(it.key)}">${it.presets.names.filter(Boolean).length} ${esc(it.presets.noun)} ›</span>`
     : "";
   return `<button type="button" class="sq-engine-picker__card${on ? " is-current" : ""}${it.preset ? " is-preset" : ""}"
     data-key="${esc(it.key)}"${it.preset ? ` data-preset="${esc(it.preset)}"` : ""}
-    data-search="${esc(search)}"${on ? ` aria-current="true"` : ""}${it.preset && blurb ? ` title="${esc(blurb)}"` : ""}>
+    data-search="${esc(search)}"${on ? ` aria-current="true"` : ""}>
     <span class="sq-engine-picker__name">${esc(it.label)}</span>
-    ${blurb ? `<span class="sq-engine-picker__blurb">${esc(blurb)}</span>` : ""}
     ${presetCount}
   </button>`;
 }
@@ -291,6 +219,7 @@ export function openEnginePicker(sel) {
     if (active === search) {
       if (e.key === "Enter") {
         e.preventDefault();
+        if (!search.value.trim()) return; // nothing typed: nothing to pick
         const first = visibleCards()[0];
         if (first) pick(first.dataset.key, first.dataset.preset);
       } else if (e.key === "ArrowDown") {

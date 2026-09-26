@@ -150,8 +150,7 @@ env / fx / eq / comp / mod / automation per track.
 - `knob.js` — the rotary knob layer, drawn over the native range inputs without
   replacing them. See the Knobs section below.
 - `enginePicker.js` — the instrument picker: a button on the track head that
-  opens a searchable grid of every engine (group chips, a one-line blurb per
-  engine in `BLURBS`). A skin over the track's `.sq-track__engine` select, which
+  opens a searchable grid of every engine, with group chips. A skin over the track's `.sq-track__engine` select, which
   stays in the DOM hidden and stays the value, as knob.js does for the ranges:
   its `value` accessor is shadowed so the button repaints on a plain `.value =`
   write, and a pick writes the select and dispatches its `change`, so renderTrack's
