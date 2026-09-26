@@ -3965,7 +3965,7 @@ html.sq-preloading, html.sq-preloading body { overflow: hidden; }
 }
 
 /* ---- the code drawer (codePanel.js) --------------------------------------
-   Strudel / Tidal live coding, docked at the bottom so the tracks it writes
+   Strudel live coding, docked at the bottom so the tracks it writes
    stay in view above it. The editor is a transparent textarea over a <pre>
    that carries the colours and the marks on the sounding atoms; both share
    one font and one padding, or the caret drifts off the text. */

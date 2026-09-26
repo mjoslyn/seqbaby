@@ -1,4 +1,4 @@
-// The code drawer: Strudel / Tidal live coding onto the running studio.
+// The code drawer: Strudel live coding onto the running studio.
 //
 // A Strudel-like editor docked at the bottom of the studio. ctrl/⌘-Enter reads
 // the code (strudel.js), writes the tracks it describes into the session and
@@ -6,10 +6,13 @@
 // transport never stops and every track the code does not touch keeps
 // playing -- which is what re-evaluating means in Strudel. ctrl/⌘-. stops.
 //
-// The tracks are ordinary tracks afterwards: the grid shows them, a knob moves
-// them, a save keeps them. The code is how they got there, not a second copy
-// of the song, so what the drawer holds is a per-viewer draft (localStorage)
-// and `from song` writes the song back out as code whenever the two drift.
+// It opens on the song itself, written as code (strudel.js's sessionToCode in
+// its native form: seqbaby's instruments by name, and every knob, effect, LFO
+// and lane that has moved), so running it unchanged changes nothing and
+// editing it edits the song. The tracks are ordinary tracks afterwards: the
+// grid shows them, a knob moves them, a save keeps them. The code is not a
+// second copy of the song: reopened onto a song that has changed, it is
+// written again from the song.
 //
 // While it plays, the tokens that made the sounding steps light up, as they do
 // in strudel.cc: each step remembers the source offsets of the mini-notation
@@ -23,7 +26,6 @@ import { markExternalEdit } from "./history.js";
 import { stopPlayback } from "./transport.js";
 import { setStatus } from "./dom.js";
 
-const STORE = "seqbaby.code.v1";
 const esc = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
 const EXAMPLES = {
@@ -49,25 +51,14 @@ acid: note("c2 [c2 c3] eb2 [~ c2] g1 [c2 bb1] c3 c2")
 $: s("bd(3,8), sd(2,8,4), hh(7,16)")
 lead: n("<0 2 4 [6 7]>*4").scale("D4:dorian").s("supersaw").room(0.3)
 `,
-  "tidal": `setcps (128/60/4)
-
-d1 $ sound "bd*4 [~ cp] hh*2"
-d2 $ note "<c2 eb2 f2 g2>*4" # s "superbass" # lpf 900
-d3 $ n (scale "minor" "0 .. 7") # s "superpiano" # room 0.4
-`,
 };
 
 let _open = null;      // the drawer's handle while it exists
-let _lastNames = [];   // the tracks the last run made: a line deleted from the code removes its track
+let _lastNames = [];   // the tracks the code holds: a line deleted from it removes its track
+let _touched = {};     // what the last run set, per track: a setting deleted from the code goes back to its default
+let _draft = null;     // { code, song }: the editor as it was closed, reopened only onto the same song
 let _run = null;       // { code, locsByName: Map<name, number[][][]> } for the highlighter
 let _raf = 0;
-
-function load() {
-  try { return JSON.parse(localStorage.getItem(STORE) || "null") || {}; } catch { return {}; }
-}
-function save(v) {
-  try { localStorage.setItem(STORE, JSON.stringify(v)); } catch {}
-}
 
 export function installCodePanel() {
   const btn = document.getElementById("code-btn");
@@ -75,7 +66,7 @@ export function installCodePanel() {
   btn.addEventListener("click", () => toggleCodePanel());
   // A different song arriving is not the one the code wrote: forget which
   // tracks were the code's, so the next run cannot remove tracks of that song.
-  const forget = () => { _lastNames = []; _run = null; paint(); };
+  const forget = () => { _lastNames = []; _touched = {}; _run = null; _draft = null; paint(); };
   window.addEventListener("seqbaby:setapplied", forget);
   window.addEventListener("seqbaby:newset", forget);
 }
@@ -88,7 +79,6 @@ export function toggleCodePanel(force) {
 }
 
 function openPanel() {
-  const saved = load();
   const btn = document.getElementById("code-btn");
   const el = document.createElement("section");
   el.className = "sq-code";
@@ -98,9 +88,6 @@ function openPanel() {
       <span class="sq-code__title">code</span>
       <button type="button" class="sq-code__run" title="run the code into the song (ctrl/⌘ enter)">▶ run</button>
       <button type="button" class="sq-code__stop sq-btn--ghost" title="stop (ctrl/⌘ .)">■ stop</button>
-      <select class="sq-code__dialect" title="which language the code is in">
-        <option value="">auto</option><option value="strudel">strudel</option><option value="tidal">tidal</option>
-      </select>
       <select class="sq-code__examples" title="start from an example">
         <option value="">examples…</option>
         ${Object.keys(EXAMPLES).map(k => `<option value="${esc(k)}">${esc(k)}</option>`).join("")}
@@ -114,7 +101,7 @@ function openPanel() {
     <div class="sq-code__editor">
       <pre class="sq-code__hl" aria-hidden="true"></pre>
       <textarea class="sq-code__input" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off"
-        aria-label="Strudel or Tidal code"></textarea>
+        aria-label="Strudel code"></textarea>
     </div>
     <div class="sq-code__msg" role="status" aria-live="polite"></div>`;
   document.body.appendChild(el);
@@ -125,37 +112,44 @@ function openPanel() {
   const input = q(".sq-code__input");
   const hl = q(".sq-code__hl");
   const msg = q(".sq-code__msg");
-  const dialectSel = q(".sq-code__dialect");
   const outLink = q(".sq-code__out");
-  input.value = saved.code ?? EXAMPLES["four on the floor"];
-  dialectSel.value = saved.dialect || "";
 
   const say = (text, kind = "") => {
     msg.className = `sq-code__msg${kind ? ` is-${kind}` : ""}`;
     msg.innerHTML = text;
   };
-  const persist = () => save({ code: input.value, dialect: dialectSel.value });
   let strudelMod = null;
   const mod = async () => (strudelMod ||= await import("./strudel.js"));
   const refreshLink = async () => {
     const m = await mod();
-    const dialect = dialectSel.value || m.detectDialect(input.value);
-    outLink.hidden = dialect === "tidal";
     outLink.href = m.strudelUrl(input.value);
+  };
+  // strudel.cc knows none of seqbaby's own names (s("silverbox"), .knob, .fx ...),
+  // so code using them opens there as its portable version: the same notes, stock
+  // sounds, and only the effects Strudel has.
+  const portableHref = () => {
+    const m = strudelMod;
+    if (!m) return;
+    try {
+      const read = m.readCode(input.value);
+      if (!m.realize(read).native) return;
+      const { code, warnings } = m.sessionToCode(m.codeToSong(input.value).song);
+      outLink.href = m.strudelUrl(code);
+      say(`<span>opened a portable version in strudel.cc: seqbaby's instruments as their nearest stock sounds</span>${warnings.length ? `<ul>${warnings.map(w => `<li>${esc(w)}</li>`).join("")}</ul>` : ""}`, "warn");
+    } catch { /* unreadable code opens as written */ }
   };
 
   const run = async () => {
-    persist();
     let m, sb;
     try { [m, sb] = await Promise.all([mod(), import("./songBuilder.js")]); }
     catch (e) { say(`could not load the code reader: ${esc(e.message)}`, "error"); return; }
     const code = input.value;
     let read, realized, song, res;
     try {
-      read = m.readCode(code, { dialect: dialectSel.value || undefined });
+      read = m.readCode(code);
       realized = m.realize(read);
       song = sb.fromBlob(serializeSet());
-      res = m.writeTracks(song, realized, { previous: _lastNames });
+      res = m.writeTracks(song, realized, { previous: _lastNames, touched: _touched });
     } catch (e) {
       const at = Number.isFinite(e.pos) ? ` (line ${code.slice(0, e.pos).split("\n").length})` : "";
       say(`${esc(e.message)}${at}`, "error");
@@ -166,6 +160,7 @@ function openPanel() {
     catch (e) { say(`the song would not take it: ${esc(e.message)}`, "error"); return; }
     markExternalEdit("run code");
     _lastNames = res.names;
+    _touched = res.touched;
     _run = { code, locsByName: new Map(realized.tracks.filter(t => !t.empty).map(t => [t.name, t.stepLocs])) };
     const parts = [];
     if (res.made.length) parts.push(`added ${res.made.map(esc).join(", ")}`);
@@ -181,22 +176,30 @@ function openPanel() {
   };
   const stop = async () => { if (state.playing) document.getElementById("play")?.click(); };
 
-  const fromSong = async () => {
+  // The song as code, in seqbaby's own form: every instrument, knob, effect,
+  // LFO and lane, so running it back in changes nothing. Its tracks become
+  // the code's: delete a track's line and run, and the track goes.
+  const fromSong = async ({ opening = false } = {}) => {
     const m = await mod();
-    const dialect = dialectSel.value || m.detectDialect(input.value);
-    const { code, warnings } = m.sessionToCode(serializeSet(), { dialect });
-    input.value = code;
+    const { code, warnings, names, skipped } = m.sessionToCode(serializeSet(), { native: true });
+    const empty = !names.length;
+    input.value = empty ? `${code}\n// nothing in the song has notes yet. Try:\n// $: s("bd*4, ~ cp, hh*8")\n` : code;
+    _lastNames = names;
+    _touched = {};
     _run = null;
-    persist();
     renderHl();
     refreshLink();
-    say(warnings.length ? `<span>the song, as ${dialect}</span><ul>${warnings.map(w => `<li>${esc(w)}</li>`).join("")}</ul>` : `the song, as ${dialect}. ctrl+enter runs it`, warnings.length ? "warn" : "ok");
+    const lead = opening
+      ? "the song as code. <b>ctrl/⌘ enter</b> runs it back in without stopping, <b>ctrl/⌘ .</b> stops"
+      : "the song, as code. ctrl+enter runs it";
+    const notes = [...warnings, ...(skipped.length ? [`${skipped.join(", ")}: comments, and running leaves ${skipped.length > 1 ? "them" : "it"} as ${skipped.length > 1 ? "they are" : "it is"}`] : [])];
+    say(`<span>${lead}</span>${notes.length ? `<ul>${notes.map(w => `<li>${esc(w)}</li>`).join("")}</ul>` : ""}`, notes.length ? "warn" : "ok");
   };
 
   // ---- the editor ---------------------------------------------------------
   const renderHl = () => { hl.innerHTML = highlight(input.value, activeRanges(input.value)) + "\n"; };
   const syncScroll = () => { hl.scrollTop = input.scrollTop; hl.scrollLeft = input.scrollLeft; };
-  input.addEventListener("input", () => { renderHl(); persist(); refreshLink(); });
+  input.addEventListener("input", () => { renderHl(); refreshLink(); });
   input.addEventListener("scroll", syncScroll);
   // run / stop answer anywhere in the drawer, not only in the editor: after
   // pressing `from song` or picking an example the focus is on that control
@@ -217,24 +220,22 @@ function openPanel() {
   });
   q(".sq-code__run").addEventListener("click", run);
   q(".sq-code__stop").addEventListener("click", stop);
-  q(".sq-code__from").addEventListener("click", fromSong);
+  q(".sq-code__from").addEventListener("click", () => fromSong());
+  outLink.addEventListener("click", portableHref);
   q(".sq-code__copy").addEventListener("click", async () => {
     try { await navigator.clipboard.writeText(input.value); say("copied", "ok"); }
     catch { input.select(); say("select-all'd: copy it with ctrl/⌘ C", "warn"); }
   });
-  dialectSel.addEventListener("change", () => { persist(); refreshLink(); });
   q(".sq-code__examples").addEventListener("change", (e) => {
     const k = e.target.value;
     e.target.value = "";
     if (!EXAMPLES[k]) return;
     input.value = EXAMPLES[k];
-    dialectSel.value = "";
-    _run = null;
-    persist(); renderHl(); refreshLink();
+    _run = null; renderHl(); refreshLink();
     say("ctrl+enter runs it", "ok");
   });
   const close = () => {
-    persist();
+    _draft = { code: input.value, song: JSON.stringify(serializeSet()) };
     el.remove();
     document.body.classList.remove("has-code-drawer");
     btn?.setAttribute("aria-pressed", "false");
@@ -244,9 +245,19 @@ function openPanel() {
   q(".sq-code__close").addEventListener("click", close);
 
   _open = { close, renderHl, input };
-  renderHl();
-  refreshLink();
-  say("Strudel or Tidal. <b>ctrl/⌘ enter</b> runs it into the song without stopping, <b>ctrl/⌘ .</b> stops. Each sound becomes a track", "");
+  // Reopened onto the song it was closed on, the editor is as it was left
+  // (code that does not round-trip, like an every(), survives a close);
+  // otherwise it opens on the song as it is now.
+  if (_draft && _draft.song === JSON.stringify(serializeSet())) {
+    input.value = _draft.code;
+    renderHl();
+    refreshLink();
+    say("<b>ctrl/⌘ enter</b> runs it into the song without stopping, <b>ctrl/⌘ .</b> stops. <b>from song</b> rewrites it from the song", "");
+  } else {
+    input.value = "";
+    say("reading the song…", "");
+    fromSong({ opening: true }).catch(e => say(`could not read the song: ${esc(e.message)}`, "error"));
+  }
   input.focus();
   const loop = () => { paint(); _raf = requestAnimationFrame(loop); };
   _raf = requestAnimationFrame(loop);
@@ -285,11 +296,11 @@ function activeRanges(code) {
 }
 
 const SYNTAX = [
-  [/\/\/[^\n]*|--[^\n]*/y, "c"],
+  [/\/\/[^\n]*/y, "c"],
   [/"(?:[^"\\\n]|\\.)*"?|`[^`]*`?|'(?:[^'\\\n]|\\.)*'?/y, "s"],
   [/\b\d+(?:\.\d+)?\b/y, "n"],
   [/^[ \t]*_?[\w$]+(?=:)/my, "l"],
-  [/\bd\d+\b|\bsetc[pb]m\b|\bsetcps\b|\bhush\b/y, "k"],
+  [/\bsetc[pb]m\b|\bsetcps\b|\bhush\b/y, "k"],
   [/(?<=\.)[A-Za-z_]\w*/y, "m"],
   [/[A-Za-z_]\w*(?=\()/y, "f"],
 ];

@@ -1,20 +1,19 @@
-// Strudel and Tidal code, read into a seqbaby song -- and a song written back out.
+// Strudel code, read into a seqbaby song -- and a song written back out.
 //
-// Strudel (strudel.cc) and TidalCycles describe music as patterns in time;
+// Strudel (strudel.cc) describes music as patterns in time;
 // seqbaby holds it as steps on tracks. The two meet on the grid: a pattern
 // queried cycle by cycle (miniNotation.js) is a list of onsets, and a list of
 // onsets is a step sequence. So this module is three things:
 //
-//   1. two small front ends, one for Strudel's JavaScript and one for Tidal's
-//      Haskell, that turn code into the SAME pattern values -- never `eval`:
-//      a pasted snippet (or a jam peer's) is data, and only the functions
-//      listed below exist;
+//   1. a small reader for the JavaScript Strudel is written in that turns code
+//      into pattern values -- never `eval`: a pasted snippet (or a jam
+//      peer's) is data, and only the functions listed below exist;
 //   2. `realize`, which queries those patterns and writes tracks: one per
 //      sound (`s("bd sd")` is two drum voices here, because a seqbaby track
 //      is one instrument), as many bars as the pattern takes to repeat, a
 //      grid fine enough that nothing collides, off-grid onsets as step nudges;
 //   3. `sessionToCode`, the way back out, so a song made here opens in
-//      strudel.cc (`strudelUrl`) or in a Tidal editor.
+//      strudel.cc (`strudelUrl`).
 //
 // Pure, for songBuilder.js's reason: the code panel (codePanel.js) imports it
 // on demand in the studio, and mcp/server.mjs and test/strudel.test.js run it
@@ -24,10 +23,13 @@
 // `warnings`, one line per thing seqbaby had to approximate or ignore.
 
 import { Pattern, mini, MiniError, silence, stack, fastcat, slowcat, fast, late, rev, ply, degradeBy, euclidPat, signal, segment, sampleSignal, SIGNAL_NAMES } from "./miniNotation.js";
-import { addTrack, removeTrack, setTrack, setFilter, setFx, setParams, addLfo, setAutomation, patternOf, emptyPatternBlob, newSong, setTempo } from "./songBuilder.js";
-import { CURVED_LFO_CURVES, STEPS_PER_BAR } from "./constants.js";
+import { addTrack, removeTrack, setTrack, setFilter, setFx, setParams, setEq, setComp, addLfo, setAutomation, applyPreset, resolveEngine,
+  patternOf, emptyPatternBlob, newSong, setTempo, ENGINE_PANELS } from "./songBuilder.js";
+import { CURVED_LFO_CURVES, STEPS_PER_BAR, voiceAutoKeysForEngineKey } from "./constants.js";
 import { SCALES, CHORD_TYPES } from "./theoryData.js";
 import { staticEngineByKey } from "./engineData.js";
+import { defaultCompConfig, defaultEq, defaultFilter, defaultFxConfig, defaultTrackParams } from "./soundDefaults.js";
+import { LEGACY_ENGINE_KEYS } from "./sessionFormat.js";
 
 export class CodeError extends Error {
   constructor(msg, pos) { super(msg); this.name = "CodeError"; this.pos = pos; }
@@ -38,10 +40,9 @@ const PROBE_CYCLES = 32;       // how far ahead a pattern is asked, to find wher
 const MAX_PERIOD = 16;
 
 // ---- values ---------------------------------------------------------------------
-// A value in either language is one of: a number, a plain string, a Pattern
-// (of raw atoms, or of control objects {s, note, lpf ...}), a signal (sine ...),
-// a list (Tidal's [a, b]) or a function (Tidal's curried builtins, and the
-// arrow functions Strudel passes to every/sometimes).
+// A value is one of: a number, a plain string, a Pattern (of raw atoms, or of
+// control objects {s, note, lpf ...}), a signal (sine ...), a list, or a
+// function (the arrow functions Strudel passes to every / off / superimpose).
 
 const isPat = (v) => v instanceof Pattern;
 const isSig = (v) => v && v.kind === "signal";
@@ -79,11 +80,11 @@ function sampleAt(v, t) {
 }
 
 /** Wrap raw atoms as a control: `s("bd sd")` -> {s: "bd"}, {s: "sd"}. */
-function control(name, v, ctx, dialect) {
+function control(name, v, ctx) {
   const pat = asPattern(v, ctx);
-  return pat.withValue(x => (x && typeof x === "object") ? x : { [name]: coerce(name, x, dialect) });
+  return pat.withValue(x => (x && typeof x === "object") ? x : { [name]: coerce(name, x) });
 }
-function coerce(name, x, dialect) {
+function coerce(name, x) {
   if (typeof x !== "string") return x;
   if (NUMERIC_CONTROLS.has(name)) { const n = Number(x); return Number.isFinite(n) ? n : x; }
   if (name === "note" || name === "n") { const n = Number(x); return Number.isFinite(n) ? n : x; }
@@ -92,23 +93,79 @@ function coerce(name, x, dialect) {
 
 /**
  * `pat.lpf(arg)`: the structure is pat's, and the value comes from arg at each
- * event's onset -- Strudel's `set.in` / Tidal's `#`. A signal is kept whole on
+ * event's onset -- Strudel's `set.in`. A signal is kept whole on
  * the event (`_mods`), because an LFO is what it becomes.
  */
-function setControl(pat, name, arg, dialect) {
+function setControl(pat, name, arg) {
   const p = asPattern(pat);
   if (isSig(arg)) return p.withValue(v => ({ ...obj(v), _mods: { ...(obj(v)._mods || {}), [name]: arg } }));
   if (isPat(arg)) return p.withValue((v, h) => {
     const got = sampleAt(arg, h.begin);
     if (got === undefined) return obj(v);
-    const val = got && typeof got === "object" ? got[name] ?? Object.values(got)[0] : coerce(name, got, dialect);
+    const val = got && typeof got === "object" ? got[name] ?? Object.values(got)[0] : coerce(name, got);
     return { ...obj(v), [name]: val };
   });
-  return p.withValue(v => ({ ...obj(v), [name]: coerce(name, arg, dialect) }));
+  return p.withValue(v => ({ ...obj(v), [name]: coerce(name, arg) }));
 }
 const obj = (v) => (v && typeof v === "object") ? v : (v == null ? {} : { _raw: v });
 
-/** Tidal's `#` family and Strudel's `.set()`: every key of the right side lands on the left's events. */
+// ---- seqbaby's own controls -------------------------------------------------------
+// Strudel has no silverbox accent, no chorus, no automation lane, so the
+// things only seqbaby has are spelled as methods of their own. Each lands on the events as `_native`, one map
+// per kind, and writeTracks applies them through the song builder, which
+// checks every key and range against the engine's own tables.
+//
+//   .knob("sbaccent", 0.8)        a track slider or engine panel control (t.params)
+//   .preset("clean")              a guitar / bass / subby tone, a hexop voice
+//   .fx("chorus.wet", 0.4)        any fx rack control, "stage.control"
+//   .filter("type", "squelch")    any filter field: type, cutoff (0..1), reson, env, attack ...
+//   .eq("low", -3)  .comp("threshold", -24)  .comp("source", "kick")
+//   .lfo("cutoff", "sine", 0.4, 16)          target, shape, amount, length (beats, or "2hz"), phase, bipolar
+//   .aut("fx.delay", "0 0.2 0.5 1")          an automation lane, one value per step, 0..1
+//   .p("my track")                name the track (Strudel's own .p)
+export const NATIVE_METHODS = ["knob", "preset", "fx", "filter", "eq", "comp", "lfo", "aut"];
+function mergeNative(a, b) {
+  if (!a) return b;
+  if (!b) return a;
+  const out = { ...a };
+  for (const [k, m] of Object.entries(b)) out[k] = { ...(a[k] || {}), ...m };
+  return out;
+}
+const addNative = (v, kind, key, val) => { const o = obj(v); return { ...o, _native: mergeNative(o._native, { [kind]: { [key]: val } }) }; };
+/** A plain value from an argument: a string's first atom, a number, true / false. */
+function plainArg(v) {
+  // a string literal is read as written: "surf twang" and "euclid(3,8)" are names, not patterns
+  if (isPat(v)) v = v.src != null ? v.src.trim() : v.query(0, 1)[0]?.value;
+  if (typeof v === "string") {
+    if (v === "true") return true;
+    if (v === "false") return false;
+    if (/^-?\d+(\.\d+)?$/.test(v.trim())) return Number(v);
+  }
+  return v;
+}
+function nativeSetting(kind, args, ctx) {
+  ctx.native = true;
+  const key = String(plainArg(args[0]) ?? "");
+  if (kind === "preset") return ["name", key];
+  if (!key) throw new CodeError(`.${kind}() needs a name first, e.g. .${kind}(${JSON.stringify(NATIVE_EXAMPLE[kind])})`);
+  if (kind === "aut") {
+    if (args[1] == null) throw new CodeError(`.aut("${key}", ...) needs values, e.g. "0 0.5 1"`);
+    return [key, asPattern(args[1])];
+  }
+  if (kind === "lfo") {
+    return [key, { shape: String(plainArg(args[1]) ?? "sine"), amount: plainArg(args[2]) ?? 0.5, length: plainArg(args[3]) ?? 4,
+      phase: plainArg(args[4]), bipolar: plainArg(args[5]) }];
+  }
+  if (args[1] == null) throw new CodeError(`.${kind}("${key}", ...) needs a value`);
+  return [key, plainArg(args[1])];
+}
+const NATIVE_EXAMPLE = { knob: "sbaccent", fx: "chorus.wet", filter: "env", eq: "low", comp: "threshold", lfo: "cutoff", aut: "cutoff" };
+function withNative(pat, kind, args, ctx) {
+  const [key, val] = nativeSetting(kind, args, ctx);
+  return asPattern(pat).withValue(v => addNative(v, kind, key, val));
+}
+
+/** Strudel's `.set()`: every key of the right side lands on the left's events. */
 function mergePatterns(left, right, op = "set") {
   const L = asPattern(left);
   if (isSig(right)) return L;
@@ -117,7 +174,7 @@ function mergePatterns(left, right, op = "set") {
     const got = sampleAt(R, h.begin);
     if (got === undefined) return obj(v);
     const base = obj(v), add = obj(got);
-    if (op === "set") return { ...base, ...add, _mods: { ...(base._mods || {}), ...(add._mods || {}) } };
+    if (op === "set") return { ...base, ...add, _mods: { ...(base._mods || {}), ...(add._mods || {}) }, _native: mergeNative(base._native, add._native) };
     const out = { ...base };
     for (const [k, x] of Object.entries(add)) {
       if (k.startsWith("_")) continue;
@@ -140,7 +197,7 @@ function applyArith(pat, op, arg) {
     if (v && typeof v === "object") {
       const key = v.note != null ? "note" : v.n != null ? "n" : null;
       if (!key) return v;
-      const cur = typeof v[key] === "number" ? v[key] : noteNumber(v[key], v._dialect);
+      const cur = typeof v[key] === "number" ? v[key] : noteNumber(v[key]);
       return cur == null ? v : { ...v, [key]: arith(op, cur, Number(n)) };
     }
     const cur = Number(v);
@@ -172,26 +229,22 @@ const IGNORED_QUIETLY = new Set(["color", "colour", "pianoroll", "_pianoroll", "
 // ---- notes, scales, chords -------------------------------------------------------
 
 const PC = { c: 0, d: 2, e: 4, f: 5, g: 7, a: 9, b: 11 };
-/**
- * A note as MIDI. Strudel spells middle C `c4` (60) and a bare letter sits in
- * octave 3; Tidal counts from middle C, so `c5` / `c` / `0` are all 60.
- */
-export function noteNumber(x, dialect = "strudel") {
-  if (typeof x === "number") return dialect === "tidal" ? 60 + x : x;
+/** A note as MIDI. Strudel spells middle C `c4` (60), and a bare letter sits in octave 3. */
+export function noteNumber(x) {
+  if (typeof x === "number") return x;
   const s = String(x ?? "").trim();
-  if (/^-?\d+(\.\d+)?$/.test(s)) return noteNumber(Number(s), dialect);
+  if (/^-?\d+(\.\d+)?$/.test(s)) return noteNumber(Number(s));
   const m = /^([a-gA-G])((?:#|b|s|f)*)(-?\d+)?$/.exec(s);
   if (!m) return null;
   let v = PC[m[1].toLowerCase()];
   for (const a of m[2]) v += (a === "#" || a === "s") ? 1 : -1;
-  const oct = m[3] != null ? Number(m[3]) : (dialect === "tidal" ? 5 : 3);
-  return dialect === "tidal" ? v + oct * 12 : v + (oct + 1) * 12;
+  const oct = m[3] != null ? Number(m[3]) : 3;
+  return v + (oct + 1) * 12;
 }
-export function midiName(m, dialect = "strudel") {
+export function midiName(m) {
   const names = ["c", "c#", "d", "eb", "e", "f", "f#", "g", "ab", "a", "bb", "b"];
-  const tidal = ["c", "cs", "d", "ef", "e", "f", "fs", "g", "af", "a", "bf", "b"];
   const pc = ((m % 12) + 12) % 12;
-  return dialect === "tidal" ? `${tidal[pc]}${Math.floor(m / 12)}` : `${names[pc]}${Math.floor(m / 12) - 1}`;
+  return `${names[pc]}${Math.floor(m / 12) - 1}`;
 }
 
 const SCALE_ALIASES = {
@@ -200,7 +253,7 @@ const SCALE_ALIASES = {
   wholetone: "whole tone", "whole-tone": "whole tone", chromatic: "chromatic", majp: "pentatonic", "minor blues": "blues",
 };
 /** "C:minor" / "D4:dorian" / "minor pentatonic" -> { root (MIDI, or null), steps } */
-export function parseScale(spec, dialect = "strudel") {
+export function parseScale(spec) {
   const s = String(spec ?? "").trim();
   const m = /^(?:([A-Ga-g](?:#|b|s|f)?)(-?\d+)?[:\s_]+)?(.+)$/.exec(s);
   if (!m) return null;
@@ -209,7 +262,7 @@ export function parseScale(spec, dialect = "strudel") {
   const steps = name === "chromatic" ? [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11] : SCALES[name];
   if (!steps) return null;
   let root = null;
-  if (m[1]) root = noteNumber(m[1] + (m[2] ?? (dialect === "tidal" ? "5" : "3")), dialect);
+  if (m[1]) root = noteNumber(m[1] + (m[2] ?? "3"));
   return { root, steps, name };
 }
 function degreeToSemis(deg, steps) {
@@ -240,8 +293,7 @@ export function parseChord(sym) {
 
 // ---- sounds -> engines ---------------------------------------------------------
 
-// A drum sound's ROLE, from the names Strudel's default kits and Tidal's
-// Dirt-Samples use. `808bd` / `909sd` style names carry their machine.
+// A drum sound's ROLE, from the names Strudel's default kits use. `808bd` / `909sd` style names carry their machine.
 const DRUM_ROLES = [
   [/^(bd|kick|kd|bassdrum|bd\d*)$/, "kick"], [/^(sd|sn|snare|sd\d*)$/, "snare"], [/^(hh|ch|hc|hat|hihat|closedhat)$/, "chat"],
   [/^(oh|ho|openhat|ohh)$/, "ohat"], [/^(cp|clap|claps|realclaps)$/, "clap"], [/^(cb|cowbell)$/, "cowbell"],
@@ -309,6 +361,38 @@ const MELODIC_RULES = [
   [/^(triangle|tri|superchip|sine|sin|supergong|pure)$/, "plaits:0"],
 ];
 
+// Engines a sound name can't make: a sampler and a granular track need a
+// sample picked in the studio, and midi / bus are not instruments.
+const NOT_FROM_CODE = new Set(["sampler", "granular", "midi", "bus"]);
+const NATIVE_DRUM = /^(dm:(808|909)-|plaits:1[345]$)/;
+/**
+ * A seqbaby engine named directly: its key (`dm:silverbox`, `plaits:3`), a
+ * key from before the emulator rename (`dm:303`), or its name as the engine
+ * menu shows it, underscores for spaces (`silverbox`, `subby`,
+ * `electric_guitar`, `808_kick`, `plaits:virtual_analog`). Null otherwise.
+ */
+export function nativeEngine(sound) {
+  let s = String(sound ?? "").trim().toLowerCase();
+  if (!s) return null;
+  if (LEGACY_ENGINE_KEYS[s]) s = LEGACY_ENGINE_KEYS[s];
+  for (const cand of new Set([s, s.replace(/_+/g, " ")])) {
+    let e = null;
+    try { e = resolveEngine(cand); } catch { e = null; }
+    if (e && !NOT_FROM_CODE.has(e.type)) return e.key;
+  }
+  return null;
+}
+/** The name sessionToCode writes for an engine: its menu name when that
+ *  reads back to the same engine, its key otherwise. */
+export function nativeName(engineKey) {
+  const label = staticEngineByKey(engineKey)?.label;
+  if (label) {
+    const n = label.replace(/\s+/g, "_");
+    if (nativeEngine(n) === engineKey) return n;
+  }
+  return engineKey;
+}
+
 /**
  * What a sound name plays on here: `{engine, sample?, drum}`. `notes` is the
  * list of MIDI notes the voice plays (for the one rule that needs them: a sine
@@ -316,6 +400,8 @@ const MELODIC_RULES = [
  */
 export function voiceFor(sound, { bank, notes = [], fm = false } = {}) {
   const raw = String(sound ?? "").trim();
+  const native = nativeEngine(raw.toLowerCase());
+  if (native) return { engine: native, drum: NATIVE_DRUM.test(native), exact: true, native: true };
   let name = raw.toLowerCase().replace(/:\d+$/, "");
   let kit = bank ? kitOf(bank) : null;
   const machine = /^(808|909)([a-z]+)$/.exec(name);
@@ -478,114 +564,9 @@ function parseJs(src) {
   }
 }
 
-// ---- Tidal: a Haskell subset ------------------------------------------------------
-
-const TIDAL_OPS = ["|+|", "|-|", "|*|", "|/|", "|<|", "|>|", "|+", "|-", "|*", "|/", "|<", "|>", "+|", "-|", "*|", "/|", "<|", ">|", "<~", "~>", "#", "$", "+", "-", "*", "/", "."];
-function lexHs(src) {
-  const toks = [];
-  let i = 0;
-  while (i < src.length) {
-    const ch = src[i];
-    if (/\s/.test(ch)) { i++; continue; }
-    if (src.startsWith("--", i)) { while (i < src.length && src[i] !== "\n") i++; continue; }
-    if (src.startsWith("{-", i)) { const j = src.indexOf("-}", i + 2); i = j < 0 ? src.length : j + 2; continue; }
-    if (ch === '"') {
-      const j = src.indexOf('"', i + 1);
-      if (j < 0) throw new CodeError("a string is not closed", i);
-      toks.push({ t: "mini", v: src.slice(i + 1, j), s: i, e: j + 1, inner: i + 1 }); i = j + 1; continue;
-    }
-    const num = /^\d+(\.\d+)?(e[-+]?\d+)?/i.exec(src.slice(i));
-    if (num) { toks.push({ t: "num", v: Number(num[0]), s: i, e: i + num[0].length }); i += num[0].length; continue; }
-    const id = /^[A-Za-z_][\w']*/.exec(src.slice(i));
-    if (id) { toks.push({ t: "id", v: id[0], s: i, e: i + id[0].length }); i += id[0].length; continue; }
-    if ("()[],".includes(ch)) { toks.push({ t: ch, s: i, e: i + 1 }); i++; continue; }
-    const op = TIDAL_OPS.find(o => src.startsWith(o, i));
-    if (op) { toks.push({ t: "op", v: op, s: i, e: i + op.length }); i += op.length; continue; }
-    if (ch === "=") { toks.push({ t: "=", s: i, e: i + 1 }); i++; continue; }
-    throw new CodeError(`unexpected character ${JSON.stringify(ch)}`, i);
-  }
-  return toks;
-}
-// Precedence and associativity, as Tidal declares them.
-const HS_PREC = { "$": [0, "r"], "#": [1, "l"], ".": [9, "r"], "+": [6, "l"], "-": [6, "l"], "*": [7, "l"], "/": [7, "l"], "<~": [5, "l"], "~>": [5, "l"] };
-const hsPrec = (op) => HS_PREC[op] || (op.includes("|") ? [1, "l"] : [6, "l"]);
-
-function parseHsExpr(toks, src) {
-  let p = 0;
-  const peek = () => toks[p];
-  const next = () => toks[p++];
-  function parseOp(minPrec) {
-    let l = parseApp();
-    for (;;) {
-      const k = peek();
-      if (!k || k.t !== "op") break;
-      const [prec, assoc] = hsPrec(k.v);
-      if (prec < minPrec) break;
-      next();
-      const r = parseOp(assoc === "r" ? prec : prec + 1);
-      l = { k: "op", op: k.v, l, r, pos: k.s };
-    }
-    return l;
-  }
-  function parseApp() {
-    const parts = [];
-    while (peek() && (peek().t === "num" || peek().t === "mini" || peek().t === "id" || peek().t === "(" || peek().t === "[")) parts.push(parseAtom());
-    if (!parts.length) {
-      const k = peek();
-      // a section: (# speed 2), (+ n 12)
-      throw new CodeError(k ? `unexpected ${k.v ?? k.t}` : "unexpected end", k ? k.s : src.length);
-    }
-    return parts.slice(1).reduce((f, a) => ({ k: "app", f, a }), parts[0]);
-  }
-  function parseAtom() {
-    const k = next();
-    if (k.t === "num") return { k: "num", v: k.v };
-    if (k.t === "mini") return { k: "mini", v: k.v, offset: k.inner, pos: k.s };
-    if (k.t === "id") return { k: "id", name: k.v, pos: k.s };
-    if (k.t === "[") {
-      const items = [];
-      while (peek() && peek().t !== "]") { items.push(parseOp(0)); if (peek()?.t === ",") next(); }
-      if (next()?.t !== "]") throw new CodeError("a list is not closed", k.s);
-      return { k: "list", items };
-    }
-    // ( expr ), (op expr) and (expr op) sections, and (-1)
-    if (peek()?.t === "op" && toks[p + 1] && toks[p + 1].t !== ")") {
-      const op = next().v;
-      if (op === "-" ) { const e = parseOp(0); expectClose(k); return { k: "neg", e }; }
-      const r = parseOp(0); expectClose(k);
-      return { k: "section", op, r };
-    }
-    if (peek()?.t === "op" && toks[p + 1]?.t === ")") { const op = next().v; next(); return { k: "opfn", op }; }
-    const e = parseOp(0);
-    if (peek()?.t === "op" && toks[p + 1]?.t === ")") { const op = next().v; next(); return { k: "lsection", op, l: e }; }
-    expectClose(k);
-    return e;
-  }
-  function expectClose(open) { if (next()?.t !== ")") throw new CodeError("a bracket is not closed", open.s); }
-  const e = parseOp(0);
-  if (p < toks.length) throw new CodeError(`unexpected ${toks[p].v ?? toks[p].t}`, toks[p].s);
-  return e;
-}
-
-/** Tidal statements: a line starting in column 0 begins one; indented lines,
- *  and lines starting with an operator or a closing bracket, continue it. The
- *  text is sliced from the source whole, so offsets inside it stay true. */
-function splitHsStatements(src) {
-  const starts = [];
-  let pos = 0, inBlock = false;
-  for (const line of src.split("\n")) {
-    const bare = line.replace(/--.*$/, "");
-    if (/^\s*\{-/.test(line) && !/-\}/.test(line)) inBlock = true;
-    else if (inBlock && /-\}/.test(line)) inBlock = false;
-    else if (!inBlock && bare.trim() !== "" && /^\S/.test(line) && !/^(#|\||\+|\$|\.|,|\]|\)|<~|~>)/.test(line) && !/^\{-/.test(line)) starts.push(pos);
-    pos += line.length + 1;
-  }
-  return starts.map((s, i) => ({ text: src.slice(s, i + 1 < starts.length ? starts[i + 1] : src.length).replace(/\s+$/, ""), pos: s }));
-}
-
 // ---- the evaluator -----------------------------------------------------------------
 
-/** A function value. Tidal's are curried: applied one argument at a time. */
+/** A function value, applied one argument at a time. */
 function fn(name, arity, impl) { return { kind: "fn", name, arity, impl, args: [] }; }
 function applyFn(f, arg, ctx) {
   if (!isFn(f)) throw new CodeError(`${describe(f)} is not a function`);
@@ -597,8 +578,7 @@ function applyFn(f, arg, ctx) {
   }
   return g.args.length >= g.arity ? g.impl(...g.args) : g;
 }
-function unknownFn(name) { return { kind: "fn", name, arity: Infinity, args: [], unknown: true, impl: () => null }; }
-/** A value used as a function of a pattern (a Strudel arrow, a Tidal partial). */
+/** A value used as a function of a pattern (an arrow, or add(12) with no pattern). */
 function callWith(f, pat, ctx) {
   if (isFn(f)) return applyFn(f, pat, ctx);
   return pat;
@@ -618,9 +598,9 @@ function numberOf(v, what, ctx) {
   throw new CodeError(`${what} must be a number`);
 }
 
-/** The functions and methods both languages share. `d` is the dialect. */
-function library(ctx, d) {
-  const ctl = (name) => (v) => control(name, v, ctx, d);
+/** The functions Strudel code can call. */
+function library(ctx) {
+  const ctl = (name) => (v) => control(name, v, ctx);
   const pat = (v) => asPattern(v, ctx);
   const warnSkip = (name) => (p) => { ctx.warn(`\`${name}\` is not supported here and was left out`); return p; };
   const lib = {
@@ -638,7 +618,7 @@ function library(ctx, d) {
     early: (t, p) => late(pat(p), -numberOf(t, "early", ctx)), late: (t, p) => late(pat(p), numberOf(t, "late", ctx)),
     segment: (n, v) => isSig(v) ? segment(v, numberOf(n, "segment", ctx)) : fastBy(v, n),
     range: (lo, hi, v) => isSig(v) ? { ...v, lo: numberOf(lo, "range", ctx), hi: numberOf(hi, "range", ctx) } : v,
-    scale: (name, p) => scalePattern(pat(p), name, ctx, d),
+    scale: (name, p) => scalePattern(pat(p), name, ctx),
     silence,
   };
   for (const s of SIGNAL_NAMES) lib[s] = signal(s);
@@ -652,30 +632,29 @@ function library(ctx, d) {
   return lib;
 }
 
-/** Scale degrees -> notes. With a root the result is absolute (Strudel's
- *  `n("0 2").scale("C:minor")`), without one it is semitones (Tidal's `scale "minor" "0 2"`). */
-function scalePattern(p, name, ctx, d) {
+/** Scale degrees -> notes: `n("0 2").scale("C:minor")`. With no root given, C3. */
+function scalePattern(p, name, ctx) {
   // "C:minor pentatonic" as ONE name when it reads as one, before mini-notation splits it
-  const namePat = isPat(name) && !isPat(name.query(0, 1)[0]?.value) ? wholeName(name, d) : name;
+  const namePat = isPat(name) && !isPat(name.query(0, 1)[0]?.value) ? wholeName(name) : name;
   return p.withValue((v, h) => {
     const spec = isPat(namePat) ? sampleAt(namePat, h.begin) : namePat;
-    const sc = parseScale(typeof spec === "object" && spec ? spec._raw ?? spec.scale : spec, d);
+    const sc = parseScale(typeof spec === "object" && spec ? spec._raw ?? spec.scale : spec);
     if (!sc) { ctx.warn(`unknown scale ${JSON.stringify(spec)}`); return v; }
     const o = obj(v);
     const deg = o.n ?? o.note ?? o._raw;
     const dn = Number(deg);
     if (!Number.isFinite(dn)) return v;
     const semis = degreeToSemis(dn, sc.steps);
-    if (sc.root == null) return (v && typeof v === "object") ? { ...o, n: semis, _scaled: "rel" } : semis;
+    if (sc.root == null) sc.root = 48;
     const { n: _n, _raw, ...rest } = o;
     return { ...rest, note: sc.root + semis, _abs: true };
   });
 }
 
-function wholeName(pat, d) {
+function wholeName(pat) {
   const atoms = pat.query(0, 1).map(h => h.value);
   const joined = atoms.join(" ");
-  return atoms.length > 1 && parseScale(joined, d) && pat.query(1, 2).map(h => h.value).join(" ") === joined ? joined : pat;
+  return atoms.length > 1 && parseScale(joined) && pat.query(1, 2).map(h => h.value).join(" ") === joined ? joined : pat;
 }
 
 function evalJs(node, env, ctx) {
@@ -683,7 +662,7 @@ function evalJs(node, env, ctx) {
   switch (node.k) {
     case "num": return node.v;
     case "str": return node.v;
-    case "mini": try { return mini(node.v, node.offset); } catch (e) { throw wrapMini(e); }
+    case "mini": try { return Object.assign(mini(node.v, node.offset), { src: node.v }); } catch (e) { throw wrapMini(e); }
     case "neg": { const v = evalJs(node.e, env, ctx); if (typeof v === "number") return -v; return applyArith(v, "*", -1); }
     case "bin": {
       const l = evalJs(node.l, env, ctx), r = evalJs(node.r, env, ctx);
@@ -694,6 +673,8 @@ function evalJs(node, env, ctx) {
     case "arrow": return fn("(x => ...)", 1, (arg) => evalJs(node.body, { ...env, [node.param]: arg }, ctx));
     case "id": {
       if (node.name in env) return env[node.name];
+      if (node.name === "true" || node.name === "false") return node.name === "true";
+      if (node.name === "null" || node.name === "undefined") return undefined;
       if (node.name in lib) {
         const v = lib[node.name];
         return typeof v === "function" ? fn(node.name, Math.max(1, v.length), (...a) => v(...a)) : v;
@@ -756,7 +737,7 @@ const JS_METHODS = {
   early: (p, a, c) => c.lib.early(a[0], p), late: (p, a, c) => c.lib.late(a[0], p),
   segment: (p, a, c) => c.lib.segment(a[0], p), seg: (p, a, c) => c.lib.segment(a[0], p),
   range: (p, a, c) => c.lib.range(a[0], a[1], p), rangex: (p, a, c) => c.lib.range(a[0], a[1], p),
-  scale: (p, a, c) => scalePattern(asPattern(p, c), a[0], c, c.dialect),
+  scale: (p, a, c) => scalePattern(asPattern(p, c), a[0], c),
   add: (p, a) => applyArith(p, "+", a[0]), sub: (p, a) => applyArith(p, "-", a[0]), mul: (p, a) => applyArith(p, "*", a[0]),
   transpose: (p, a) => applyArith(p, "+", a[0]), trans: (p, a) => applyArith(p, "+", a[0]),
   set: (p, a) => mergePatterns(p, a[0]),
@@ -794,146 +775,47 @@ function callMethod(target, name, args, ctx, pos) {
   if (target === undefined) throw new CodeError(`.${name}() has nothing to act on`, pos);
   const key = canon(name);
   if (JS_METHODS[name]) return JS_METHODS[name](target, args, ctx);
+  if (NATIVE_METHODS.includes(name)) return withNative(target, name, args, ctx);
+  if (name === "p" && args.length === 1) {
+    const label = String(plainArg(args[0]) ?? "").trim();
+    return label ? asPattern(target).withValue(v => ({ ...obj(v), _label: label })) : target;
+  }
   if (IGNORED_QUIETLY.has(name)) return target;
   // s / note / n with no args convert raw atoms: "c e g".note()
-  if ((key === "s" || key === "note" || key === "n" || key === "chord") && !args.length) return control(key, target, ctx, ctx.dialect);
-  if (key === "bank") return setControl(target, "bank", args[0], ctx.dialect);
+  if ((key === "s" || key === "note" || key === "n" || key === "chord") && !args.length) return control(key, target, ctx);
+  if (key === "bank") return setControl(target, "bank", args[0]);
   if (isSig(target)) {
     if (name === "slow") return { ...target, speed: target.speed / numberOf(args[0], "slow", ctx) };
     if (name === "fast") return { ...target, speed: target.speed * numberOf(args[0], "fast", ctx) };
   }
   if (TRANSLATED.has(key) || NUMERIC_CONTROLS.has(key) || ["s", "note", "n"].includes(key)) {
     if (!TRANSLATED.has(key)) ctx.warnOnce(`.${name}()`, `\`${name}\` has no equivalent here and was left out`);
-    return setControl(target, key, args.length ? args[0] : 1, ctx.dialect);
+    return setControl(target, key, args.length ? args[0] : 1);
   }
   ctx.warnOnce(`.${name}()`, `\`.${name}()\` is not supported here and was left out`);
   return target;
 }
 
-function evalHs(node, env, ctx) {
-  const lib = ctx.lib;
-  switch (node.k) {
-    case "num": return node.v;
-    case "mini": try { return mini(node.v, node.offset); } catch (e) { throw wrapMini(e); }
-    case "neg": { const v = evalHs(node.e, env, ctx); return typeof v === "number" ? -v : applyArith(v, "*", -1); }
-    case "list": return node.items.map(i => evalHs(i, env, ctx));
-    case "id": return hsIdent(node.name, env, ctx, node.pos);
-    case "app": return applyFn(asFn(evalHs(node.f, env, ctx), ctx, node), evalHs(node.a, env, ctx), ctx);
-    case "section": { const r = evalHs(node.r, env, ctx); return fn(`(${node.op} ...)`, 1, (l) => hsOp(node.op, l, r, ctx)); }
-    case "lsection": { const l = evalHs(node.l, env, ctx); return fn(`(... ${node.op})`, 1, (r) => hsOp(node.op, l, r, ctx)); }
-    case "opfn": return fn(`(${node.op})`, 2, (l, r) => hsOp(node.op, l, r, ctx));
-    case "op": {
-      if (node.op === "$") return applyFn(asFn(evalHs(node.l, env, ctx), ctx, node), evalHs(node.r, env, ctx), ctx);
-      if (node.op === ".") {
-        const f = evalHs(node.l, env, ctx), g = evalHs(node.r, env, ctx);
-        return fn("(f . g)", 1, (x) => applyFn(asFn(f, ctx, node), applyFn(asFn(g, ctx, node), x, ctx), ctx));
-      }
-      return hsOp(node.op, evalHs(node.l, env, ctx), evalHs(node.r, env, ctx), ctx);
-    }
-  }
-  throw new CodeError(`cannot read ${node.k}`);
-}
-function asFn(v, ctx, node) {
-  if (isFn(v)) return v;
-  throw new CodeError(`${describe(v)} is applied to something, but it is not a function`, node?.pos);
-}
-function hsOp(op, l, r, ctx) {
-  if (typeof l === "number" && typeof r === "number") return arith(op, l, r);
-  if (op === "#" || op === "|>" || op === "|>|" || op === ">|" ) return mergePatterns(l, r, "set");
-  if (op === "|<" || op === "|<|" || op === "<|") return mergePatterns(r, l, "set");
-  if (op === "<~") return late(asPattern(r, ctx), -numberOf(l, "<~", ctx));
-  if (op === "~>") return late(asPattern(r, ctx), numberOf(l, "~>", ctx));
-  const bare = op.replace(/\|/g, "");
-  if (["+", "-", "*", "/"].includes(bare)) {
-    // pattern + number / pattern + pattern of raw numbers: arithmetic on the note;
-    // a control pattern on the right (# n 12 style) goes through the merge.
-    if (isPat(r) && r.query(0, 1).some(h => h.value && typeof h.value === "object")) return mergePatterns(l, r, bare);
-    return applyArith(l, bare, r);
-  }
-  throw new CodeError(`the operator ${op} is not supported`);
-}
-const HS_ARITY = {
-  s: 1, sound: 1, note: 1, n: 1, fast: 2, slow: 2, density: 2, hurry: 2, rev: 1, ply: 2, degrade: 1, degradeBy: 2,
-  euclid: 3, euclidRot: 4, segment: 2, range: 3, scale: 2, stack: 1, cat: 1, fastcat: 1, slowcat: 1, randcat: 1,
-  every: 3, sometimes: 2, often: 2, rarely: 2, almostNever: 2, almostAlways: 2, jux: 2, chop: 2, striate: 2, off: 3,
-  superimpose: 2, whenmod: 4, within: 3, iter: 2, palindrome: 1, brak: 1, swingBy: 3, shuffle: 2, scramble: 2, arp: 2,
-  toScale: 2, run: 1, irand: 1, struct: 2, mask: 2, sometimesBy: 3, someCyclesBy: 3, inside: 3, outside: 3, linger: 2,
-  trunc: 2, stut: 4, echo: 4, plyWith: 3, chunk: 3,
-};
-function hsIdent(name, env, ctx, pos) {
-  if (name in env) return env[name];
-  const lib = ctx.lib;
-  const key = canon(name);
-  if (SIGNAL_NAMES.includes(name)) return lib[name];
-  if (name === "silence") return silence;
-  if (["s", "sound", "note", "n"].includes(name)) return fn(name, 1, (v) => lib[name](v));
-  if (name === "stack" || name === "cat" || name === "fastcat" || name === "slowcat") return fn(name, 1, (xs) => lib[name](...[].concat(xs)));
-  if (name === "randcat") return fn(name, 1, (xs) => { ctx.warn("`randcat` is written as `cat`: seqbaby writes the same bars every time"); return lib.cat(...[].concat(xs)); });
-  if (name === "run") return fn(name, 1, (n) => fastcat(Array.from({ length: Math.max(1, Math.round(numberOf(n, "run", ctx))) }, (_, i) => asPattern(i))));
-  if (name === "toScale") return fn(name, 2, (list, p) => asPattern(p, ctx).withValue(v => {
-    const steps = [].concat(list).map(Number); const d = Number(obj(v)._raw ?? v);
-    return Number.isFinite(d) ? degreeToSemis(d, steps) : v;
-  }));
-  if (["fast", "slow", "density", "hurry", "rev", "ply", "degrade", "degradeBy", "euclid", "euclidRot", "segment", "range", "scale"].includes(name)) {
-    return fn(name, HS_ARITY[name], (...a) => lib[name](...a));
-  }
-  if (name === "off") return fn(name, 3, (t, f, p) => JS_METHODS.off(p, [t, f], ctx));
-  if (name === "superimpose") return fn(name, 2, (f, p) => JS_METHODS.superimpose(p, [f], ctx));
-  if (name === "struct") return fn(name, 2, (st, p) => JS_METHODS.struct(p, [st], ctx));
-  if (name === "mask") return fn(name, 2, (m, p) => JS_METHODS.mask(p, [m], ctx));
-  if (HS_ARITY[name]) {
-    const arity = HS_ARITY[name];
-    return fn(name, arity, (...a) => { ctx.warnOnce(name, `\`${name}\` is not supported here; the pattern plays unchanged`); return a[a.length - 1]; });
-  }
-  if (key === "bank") return fn(name, 1, (v) => control("bank", v, ctx, "tidal"));
-  if (TRANSLATED.has(key) || NUMERIC_CONTROLS.has(key) || name === "vowel" || name === "cut" || name === "begin" || name === "end" || name === "unit") {
-    if (!TRANSLATED.has(key)) ctx.warnOnce(name, `\`${name}\` has no equivalent here and was left out`);
-    return fn(name, 1, (v) => {
-      if (isSig(v)) return pureObj({ _mods: { [key]: v } });
-      return control(key, v, ctx, "tidal");
-    });
-  }
-  ctx.warnOnce(name, `\`${name}\` is not supported here and was left out`);
-  return unknownFn(name);
-}
-function pureObj(value) {
-  return new Pattern((b, e) => {
-    const out = [];
-    for (let c = Math.ceil(b - 1e-9); c < e - 1e-9; c++) out.push({ begin: c, end: c + 1, value, locs: [] });
-    return out;
-  });
-}
-
 // ---- reading a program ---------------------------------------------------------------
-
-/** Strudel or Tidal? Tidal's `d1 $` and `# lpf` are unmistakable. */
-export function detectDialect(code) {
-  const s = String(code);
-  if (/^\s*(d\d+|p\s+"[^"]*"|p\s+\d+)\s*(\$|silence)/m.test(s) || /^\s*setcps\s*\(/m.test(s) || /^\s*hush\s*$/m.test(s) && !/\$:/.test(s)) return "tidal";
-  if (/\s#\s*[a-z]+\s/.test(s) && !/[.(]/.test(s.replace(/"[^"]*"/g, ""))) return "tidal";
-  return "strudel";
-}
 
 /**
  * Read code into its playing patterns. Returns
- * `{ dialect, bpm, hush, outputs: [{label, muted, pat, pos}], warnings }`.
+ * `{ bpm, hush, native, outputs: [{label, muted, pat, pos}], warnings }`.
  * Throws a CodeError (with `pos`, an offset into the code) on a syntax error.
  */
-export function readCode(code, { dialect } = {}) {
+export function readCode(code) {
   const src = String(code ?? "");
-  const d = dialect || detectDialect(src);
   const warnings = [];
   const seen = new Set();
   const ctx = {
-    dialect: d, bpm: null, hush: false,
+    bpm: null, hush: false,
     warn: (m) => { if (!seen.has(m)) { seen.add(m); warnings.push(m); } },
     warnOnce: (key, m) => { if (!seen.has(key)) { seen.add(key); warnings.push(m); } },
   };
-  ctx.lib = library(ctx, d);
+  ctx.lib = library(ctx);
   const outputs = [];
-  if (d === "tidal") readTidal(src, ctx, outputs);
-  else readStrudel(src, ctx, outputs);
-  return { dialect: d, bpm: ctx.bpm, hush: ctx.hush, outputs, warnings };
+  readStrudel(src, ctx, outputs);
+  return { bpm: ctx.bpm, hush: ctx.hush, native: !!ctx.native, outputs, warnings };
 }
 
 function readStrudel(src, ctx, outputs) {
@@ -953,42 +835,10 @@ function readStrudel(src, ctx, outputs) {
   if (!outputs.length && lastBare) outputs.push(lastBare);
 }
 
-function readTidal(src, ctx, outputs) {
-  const env = {};
-  for (const { text, pos } of splitHsStatements(src)) {
-    const t = text.trim();
-    if (/^(import|:set|:\{|:\}|let\s+\w+\s*=\s*$)/.test(t)) continue;
-    if (/^hush\b/.test(t)) { ctx.hush = true; continue; }
-    const setcps = /^setcps\s+(.+)$/s.exec(t);
-    if (setcps) { ctx.bpm = numberOf(evalHs(parseHsExpr(lexHs(setcps[1]), setcps[1]), env, ctx), "setcps", ctx) * 240; continue; }
-    const setbpm = /^setbpm\s+(.+)$/s.exec(t);
-    if (setbpm) { ctx.bpm = numberOf(evalHs(parseHsExpr(lexHs(setbpm[1]), setbpm[1]), env, ctx), "setbpm", ctx); continue; }
-    const letm = /^let\s+([a-z]\w*)\s*=\s*(.+)$/s.exec(t);
-    const lead = text.length - text.trimStart().length;
-    if (letm) {
-      const off = pos + lead + t.indexOf(letm[2]);
-      env[letm[1]] = evalHs(parseHsExpr(shift(lexHs(letm[2]), off), letm[2]), env, ctx);
-      continue;
-    }
-    const dm = /^(d(\d+)|p\s+"([^"]+)"|p\s+(\d+))\s*(\$)?\s*/.exec(t);
-    if (!dm) { ctx.warn(`skipped a line Tidal would run but that makes no pattern: ${t.split("\n")[0].slice(0, 40)}`); continue; }
-    const label = dm[2] ? `d${dm[2]}` : (dm[3] || `p${dm[4]}`);
-    const body = t.slice(dm[0].length);
-    const off = pos + lead + dm[0].length;
-    if (/^silence\s*$/.test(body) || !body.trim()) { outputs.push({ label, index: outputs.length, muted: true, pat: silence, pos: pos + lead }); continue; }
-    let v;
-    try { v = evalHs(parseHsExpr(shift(lexHs(body), off), body), env, ctx); }
-    catch (e) { if (e instanceof CodeError && e.pos != null && e.pos < off) e.pos += off; throw e; }
-    if (!isPat(v)) { ctx.warn(`${label} is not a pattern`); continue; }
-    outputs.push({ label, index: outputs.length, muted: false, pat: v, pos: pos + lead });
-  }
-}
-function shift(toks, off) { return toks.map(k => ({ ...k, s: k.s + off, e: k.e + off, inner: k.inner != null ? k.inner + off : undefined })); }
-
 // ---- patterns -> tracks ---------------------------------------------------------------
 
 /** What an event plays: its voice, its notes, how loud. */
-function resolveHap(h, d) {
+function resolveHap(h) {
   const v = obj(h.value);
   const out = { begin: h.begin, end: h.end, locs: h.locs || [], v };
   let notes = [], chordType = "";
@@ -998,32 +848,17 @@ function resolveHap(h, d) {
   }
   const pitch = v.note ?? v.n;
   if (pitch != null && !notes.length) {
-    const tc = tidalChord(pitch, d);
-    if (tc) { notes = [tc.root]; chordType = tc.type; out.chordExact = true; }
-    else {
-      const m = v._abs ? Number(pitch) : noteNumber(pitch, d);
-      if (m != null && Number.isFinite(m)) notes = [Math.round(m)];
-    }
+    const m = v._abs ? Number(pitch) : noteNumber(pitch);
+    if (m != null && Number.isFinite(m)) notes = [Math.round(m)];
   }
   if (v._raw != null && !notes.length && v.s == null) {
-    const m = noteNumber(v._raw, d);
+    const m = noteNumber(v._raw);
     if (m != null) notes = [m];
   }
   out.notes = notes;
   out.chordType = chordType;
   out.sound = v.s != null ? String(v.s) : (notes.length ? (v.fm != null ? "sine" : "triangle") : (v._raw != null ? String(v._raw) : null));
   return out;
-}
-
-// Tidal's chord names: "c'maj e'min7"
-const TIDAL_CHORDS = { major: "maj", maj: "maj", minor: "min", min: "min", m: "min", dom7: "dom7", seven: "dom7", major7: "maj7", maj7: "maj7",
-  minor7: "min7", min7: "min7", m7: "min7", sus2: "sus2", sus4: "sus4", dim: "dim", diminished: "dim", aug: "aug", plus: "aug", add9: "add9", m7b5: "m7b5" };
-function tidalChord(x, d) {
-  const m = /^([a-gA-G](?:#|b|s|f)?-?\d*)'(\w+)/.exec(String(x));
-  if (!m) return null;
-  const root = noteNumber(m[1], d);
-  if (root == null) return null;
-  return { root, type: TIDAL_CHORDS[m[2]] || "maj" };
 }
 
 const trackNameOf = (s) => String(s).replace(/[^\w#: -]/g, "").slice(0, 32) || "track";
@@ -1034,14 +869,13 @@ const trackNameOf = (s) => String(s).replace(/[^\w#: -]/g, "").slice(0, 32) || "
  * gave it. Pure data; `writeTracks` puts them in a song.
  */
 export function realize(read) {
-  const d = read.dialect;
   const warnings = [...read.warnings];
   const warn = (m) => { if (!warnings.includes(m)) warnings.push(m); };
   const tracks = [];
   const usedNames = new Set();
-  for (const out of read.outputs) {
+  for (let out of read.outputs) {
     const haps = [];
-    for (let c = 0; c < PROBE_CYCLES; c++) for (const h of out.pat.cycle(c)) haps.push(resolveHap(h, d));
+    for (let c = 0; c < PROBE_CYCLES; c++) for (const h of out.pat.cycle(c)) haps.push(resolveHap(h));
     const sounding = haps.filter(h => h.sound != null && !h.v._muted);
     const groups = new Map();
     for (const h of sounding) {
@@ -1058,6 +892,9 @@ export function realize(read) {
       if (!g.voice.exact) warn(`"${[...g.sounds][0]}" has no match here; it plays on ${staticEngineByKey(g.voice.engine)?.label || g.voice.engine}`);
     }
     const muted = out.muted || (sounding.length && sounding.every(h => h.v._muted));
+    // .p("name") names the statement, as Strudel's .p does
+    const pLabel = sounding.find(h => h.v._label)?.v._label;
+    if (pLabel && !out.label) out = { ...out, label: pLabel };
     if (!groups.size) {
       if (out.label) tracks.push({ name: uniqueName(out.label, usedNames), label: out.label, empty: true, muted: true });
       continue;
@@ -1066,11 +903,13 @@ export function realize(read) {
     for (const g of groups.values()) {
       const soundName = [...g.sounds].join("+");
       const base = out.label ? (many ? `${out.label} ${soundName}` : out.label) : soundName;
-      const bp = blueprint(g, d, warn);
-      tracks.push({ ...bp, name: uniqueName(trackNameOf(base), usedNames), label: out.label, muted, engine: g.voice.engine, sample: g.voice.sample, drum: g.voice.drum });
+      const bp = blueprint(g, warn);
+      const nat = g.haps.reduce((acc, h) => mergeNative(acc, h.v._native), null) || {};
+      tracks.push({ ...bp, name: uniqueName(trackNameOf(base), usedNames), label: out.label, muted, engine: g.voice.engine, sample: g.voice.sample, drum: g.voice.drum,
+        native: nat, isNative: !!g.voice.native || Object.keys(nat).length > 0 });
     }
   }
-  return { bpm: read.bpm, tracks, warnings, dialect: d, hush: read.hush };
+  return { bpm: read.bpm, tracks, warnings, hush: read.hush, native: !!read.native || tracks.some(t => t.isNative) };
 }
 function uniqueName(name, used) {
   let n = name, i = 2;
@@ -1096,7 +935,7 @@ function periodOf(haps) {
 }
 
 const SPEEDS = [1, 2, 4, 8];
-function blueprint(g, d, warn) {
+function blueprint(g, warn) {
   let cycles = periodOf(g.haps);
   if (cycles == null) { cycles = 4; warn(`a pattern on ${[...g.sounds].join("+")} never repeats (randomness?); seqbaby writes its first 4 cycles and loops them`); }
   // the grid: 16 steps a cycle, doubled until no two onsets share a step,
@@ -1165,7 +1004,7 @@ function blueprint(g, d, warn) {
   if (g.voice.drum) for (let i = 0; i < length; i++) if (pat.steps[i] && pat.notes[i] != null && !g.haps.some(h => h.v.note != null)) pat.notes[i] = null;
 
   // sound: constants set the knob, per-event changes become a lane, signals an LFO
-  const sound = soundSettings(haps, S, length, d, warn, constantGain);
+  const sound = soundSettings(haps, S, length, warn, constantGain);
   return { stepsPerCycle: S, speed, cycles, length, pattern: pat, stepLocs, ...sound };
 }
 const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, Number.isFinite(x) ? x : lo));
@@ -1176,12 +1015,12 @@ const knobToHz = (u) => Math.round(CURVED_LFO_CURVES.cutoff.to(u));
 const CRUSH_RATE = { from: (hz) => clamp(Math.log(hz / 250) / Math.log(48000 / 250), 0, 1) };
 
 /** Each control, as seqbaby: where it goes and how its units map. */
-function controlTargets(d) {
+function controlTargets() {
   return {
     lpf: { lane: "cutoff", lfo: "cutoff", knob: hzToKnob },
     hpf: { lane: "cutoff", lfo: "cutoff", knob: hzToKnob },
     bpf: { lane: "cutoff", lfo: "cutoff", knob: hzToKnob },
-    lpq: { lane: "reson", lfo: "reson", knob: (q) => clamp(d === "tidal" ? Number(q) : Number(q) / 20, 0, 1) },
+    lpq: { lane: "reson", lfo: "reson", knob: (q) => clamp(Number(q) / 20, 0, 1) },
     room: { lane: "fx.reverb", lfo: "verb", knob: (x) => clamp(Number(x), 0, 1) },
     delay: { lane: "fx.delay", lfo: "delay", knob: (x) => clamp(Number(x), 0, 1) },
     shape: { lane: "fx.shaper", lfo: "shaper", knob: (x) => clamp(Number(x), 0, 1) },
@@ -1190,8 +1029,8 @@ function controlTargets(d) {
   };
 }
 
-function soundSettings(haps, S, length, d, warn, constantGain) {
-  const targets = controlTargets(d);
+function soundSettings(haps, S, length, warn, constantGain) {
+  const targets = controlTargets();
   const values = {};
   const mods = {};
   for (const h of haps) {
@@ -1248,7 +1087,7 @@ function soundSettings(haps, S, length, d, warn, constantGain) {
   const one = (k) => { const c = constant(k); if (varies(k)) warn(`\`${k}\` changes per note; seqbaby takes the first value`); return c !== undefined ? c : values[k]?.[0]?.x; };
   if (values.size) {
     const n = Number(one("size"));
-    if (Number.isFinite(n)) fx.reverb = { ...(fx.reverb || {}), decay: round3(clamp(d === "tidal" ? 0.5 + n * 6 : n, 0.2, 8)) };
+    if (Number.isFinite(n)) fx.reverb = { ...(fx.reverb || {}), decay: round3(clamp(n, 0.2, 8)) };
   }
   if (values.delaytime) { const n = Number(one("delaytime")); if (Number.isFinite(n)) fx.delay = { ...(fx.delay || {}), time: round3(clamp(n, 0.05, 1)) }; }
   if (values.delayfeedback) { const n = Number(one("delayfeedback")); if (Number.isFinite(n)) fx.delay = { ...(fx.delay || {}), fbk: round3(clamp(n, 0, 0.95)) }; }
@@ -1286,18 +1125,24 @@ function soundSettings(haps, S, length, d, warn, constantGain) {
 /**
  * Put the tracks read from code into `song` (a songBuilder song -- a studio
  * session through `fromBlob` works). A track is found by NAME: the one of that
- * name is rewritten (its active pattern, its grid, and only the settings the
- * code named -- a knob moved by hand afterwards and not mentioned in the code
- * stays where it was); a new name is a new track; a name the code made LAST
- * time and no longer mentions (`previous`) is removed. Tracks the code never
- * made are left alone.
- * @returns {{ names: string[], made: string[], changed: string[], removed: string[], warnings: string[], bpm: number|null }}
+ * name is rewritten (its active pattern, its grid, and the settings the code
+ * gives), a new name is a new track, and a name the code made LAST time and no
+ * longer mentions (`previous`) is removed. Tracks the code never made are left
+ * alone.
+ *
+ * A setting the code does not mention stays where it is, so a knob turned by
+ * hand survives a run -- unless the LAST run set it (`touched`, what this call
+ * returns and the next one is handed back), in which case deleting it from the
+ * code puts it back to its default, as deleting a line does to a track.
+ * @returns {{ names: string[], made: string[], changed: string[], removed: string[], warnings: string[], bpm: number|null, touched: Record<string, string[]> }}
  */
-export function writeTracks(song, realized, { previous = [], pattern } = {}) {
+export function writeTracks(song, realized, { previous = [], pattern, touched: prevTouched = {} } = {}) {
   const pIdx = pattern ?? song.activePattern ?? 0;
   const warnings = [...realized.warnings];
   if (realized.bpm != null) setTempo(song, { bpm: clamp(realized.bpm, 20, 300) });
   const made = [], changed = [], names = [];
+  const touched = {};
+  const sources = [];
   for (const bp of realized.tracks) {
     names.push(bp.name);
     let i = song.tracks.findIndex(t => t.name === bp.name);
@@ -1317,6 +1162,8 @@ export function writeTracks(song, realized, { previous = [], pattern } = {}) {
       } else { i = added.index; made.push(bp.name); }
     } else changed.push(bp.name);
     const t = song.tracks[i];
+    const say = (e) => warnings.push(`${bp.name}: ${e.message ?? e}`);
+    const tryDo = (f) => { try { f(); } catch (e) { say(e); } };
     if (t.euclid?.on) t.euclid.on = false;
     if (t.chance?.on) t.chance.on = false;
     setTrack(song, i, { length: bp.length, speed: bp.speed, mute: !!bp.muted });
@@ -1324,22 +1171,42 @@ export function writeTracks(song, realized, { previous = [], pattern } = {}) {
     if (!t.patterns[pIdx].automation) t.patterns[pIdx].automation = {};
     // the lanes and LFOs the code describes replace the ones it described before
     for (const k of Object.keys(t.patterns[pIdx].automation)) delete t.patterns[pIdx].automation[k];
-    try {
-      if (Object.keys(bp.filter).length) setFilter(song, i, bp.filter);
-      for (const [stage, cfg] of Object.entries(bp.fx)) setFx(song, i, stage, cfg);
-      if (Object.keys(bp.params).length) setParams(song, i, bp.params);
-      for (const k of Object.keys(t.lfoConfig || {})) if (t.lfoConfig[k]?.fromCode) delete t.lfoConfig[k];
-      for (const l of bp.lfos) {
-        try {
-          addLfo(song, i, { target: l.target, shape: l.shape, amount: l.amount, length: l.length, bipolar: true, phase: l.phase });
-          t.lfoConfig[l.target].fromCode = true;
-        } catch (e) { warnings.push(`${bp.name}: ${e.message}`); }
-      }
-      for (const [target, vals] of Object.entries(bp.lanes)) {
-        try { setAutomation(song, i, { pattern: pIdx, target, values: vals }); }
-        catch (e) { warnings.push(`${bp.name}: ${e.message}`); }
-      }
-    } catch (e) { warnings.push(`${bp.name}: ${e.message}`); }
+    const N = bp.native || {};
+    const set = new Set();
+    // a preset first: it is a whole panel, and everything after it adjusts it
+    if (N.preset?.name) tryDo(() => { applyPreset(song, i, N.preset.name); for (const k of Object.keys(t.params)) set.add(`params.${k}`); });
+    const filter = { ...bp.filter, ...(N.filter || {}) };
+    for (const [k, v] of Object.entries(filter)) tryDo(() => { setFilter(song, i, { [k]: v }); set.add(`filter.${k}`); });
+    const fx = JSON.parse(JSON.stringify(bp.fx));
+    for (const [path, v] of Object.entries(N.fx || {})) {
+      const [stage, key] = path.split(".");
+      if (!stage || !key) { say(`.fx("${path}") names a stage and a control, like "chorus.wet"`); continue; }
+      (fx[stage] ||= {})[key] = v;
+    }
+    for (const [stage, cfg] of Object.entries(fx)) tryDo(() => { setFx(song, i, stage, cfg); for (const k of Object.keys(cfg)) set.add(`fx.${stage}.${k}`); });
+    for (const [k, v] of Object.entries(N.eq || {})) tryDo(() => { setEq(song, i, { [k]: v }); set.add(`eq.${k}`); });
+    for (const [k, v] of Object.entries(N.comp || {})) {
+      if (k === "source") { sources.push([bp.name, String(v)]); set.add("comp.source"); continue; }
+      tryDo(() => { setComp(song, i, { [k]: k === "enabled" ? !!v && v !== 0 : v }); set.add(`comp.${k}`); });
+    }
+    for (const [k, v] of Object.entries({ ...bp.params, ...(N.knob || {}) })) tryDo(() => {
+      const r = setParams(song, i, { [k]: v });
+      r.warnings.forEach(say);
+      set.add(`params.${k}`);
+    });
+    // what the last run set and this one does not: back to its default
+    for (const path of prevTouched[bp.name] || []) if (!set.has(path)) resetSetting(song, i, path);
+    touched[bp.name] = [...set];
+    for (const k of Object.keys(t.lfoConfig || {})) if (t.lfoConfig[k]?.fromCode) delete t.lfoConfig[k];
+    const lfos = [...bp.lfos.map(l => ({ ...l, bipolar: true })), ...Object.entries(N.lfo || {}).map(([target, l]) => nativeLfo(target, l))];
+    for (const l of lfos) {
+      tryDo(() => {
+        addLfo(song, i, l);
+        t.lfoConfig[l.target].fromCode = true;
+      });
+    }
+    for (const [target, vals] of Object.entries(bp.lanes)) tryDo(() => setAutomation(song, i, { pattern: pIdx, target, values: vals }));
+    for (const [target, vpat] of Object.entries(N.aut || {})) tryDo(() => setAutomation(song, i, { pattern: pIdx, target, values: laneValues(vpat, bp.length, bp.stepsPerCycle) }));
     // make sure every other pattern has the track's length (setTrack resized those that exist)
     patternOf(t, pIdx);
   }
@@ -1349,7 +1216,49 @@ export function writeTracks(song, realized, { previous = [], pattern } = {}) {
     const i = song.tracks.findIndex(t => t.name === name);
     if (i >= 0) { removeTrack(song, i); removed.push(name); }
   }
-  return { names, made, changed, removed, warnings, bpm: realized.bpm };
+  // a sidechain names a track, which may have been made a moment ago
+  for (const [name, src] of sources) {
+    const i = song.tracks.findIndex(t => t.name === name);
+    const j = src === "self" ? -1 : song.tracks.findIndex(t => t.name === src);
+    if (i < 0) continue;
+    if (j < 0 && src !== "self") { warnings.push(`${name}: .comp("source", "${src}") names no track`); continue; }
+    try { setComp(song, i, { source: j < 0 ? "self" : j, enabled: true }); } catch (e) { warnings.push(`${name}: ${e.message}`); }
+  }
+  return { names, made, changed, removed, warnings, bpm: realized.bpm, touched };
+}
+
+/** `.lfo(target, shape, amount, length, phase, bipolar)` as addLfo's options. */
+function nativeLfo(target, l) {
+  const out = { target, amount: Number(l.amount), phase: l.phase != null ? Number(l.phase) : undefined, bipolar: l.bipolar == null ? undefined : !!l.bipolar && l.bipolar !== 0 };
+  const eu = /^euclid\((\d+),\s*(\d+)(?:,\s*(\d+))?(?:,\s*([\d.]+))?\)$/.exec(String(l.shape));
+  if (eu) { out.shape = "euclid"; out.euclid = { pulses: +eu[1], steps: +eu[2], rotate: +(eu[3] || 0), decay: eu[4] != null ? +eu[4] : undefined }; }
+  else out.shape = { tri: "triangle", saw: "sawtooth", rand: "randsq", "rnd": "randsq" }[l.shape] || l.shape;
+  const len = String(l.length).trim();
+  if (/hz$/i.test(len)) { out.rate = parseFloat(len); out.sync = false; }
+  else out.length = Number.isFinite(Number(len)) ? Number(len) : len;
+  return out;
+}
+/** An `.aut()` pattern read at every step: the value sounding there, held between. */
+function laneValues(pat, length, S) {
+  const out = [];
+  let prev = 0.5;
+  for (let i = 0; i < length; i++) {
+    const x = sampleAt(pat, i / S + 1e-7);
+    const n = Number(x && typeof x === "object" ? x._raw : x);
+    if (Number.isFinite(n)) prev = clamp(n, 0, 1);
+    out.push(round3(prev));
+  }
+  return out;
+}
+/** Put one setting the code no longer mentions back to its default. */
+function resetSetting(song, i, path) {
+  const t = song.tracks[i];
+  const [kind, a, b] = path.split(".");
+  if (kind === "params") { const d = defaultTrackParams(); if (a in d) t.params[a] = d[a]; else delete t.params[a]; }
+  else if (kind === "filter") t.filter[a] = defaultFilter()[a];
+  else if (kind === "eq") t.eq[a] = 0;
+  else if (kind === "comp") { if (a === "source") t.compSourceIndex = -1; else t.comp[a] = defaultCompConfig()[a]; }
+  else if (kind === "fx") { const d = defaultFxConfig()[a]; if (d) t.fxConfig[a] = { ...d, ...(t.fxConfig[a] || {}), [b]: d[b] }; }
 }
 
 /** Code straight to a fresh song (the MCP tool's and the tests' way in). */
@@ -1358,7 +1267,7 @@ export function codeToSong(code, opts = {}) {
   const r = realize(read);
   const song = newSong({ bpm: r.bpm ?? 120 });
   const res = writeTracks(song, r);
-  return { song, ...res, dialect: r.dialect, tracks: r.tracks };
+  return { song, ...res, tracks: r.tracks };
 }
 
 // ---- a song written out as code --------------------------------------------------------
@@ -1371,13 +1280,16 @@ const DRUM_EXPORT = {
   "plaits:13": ["bd", null], "plaits:14": ["sd", null], "plaits:15": ["hh", null],
 };
 const SAMPLE_BANK = { CR78: "RolandCompurhythm78", R8: "RolandR8" };
-function soundForTrack(t) {
+const NATIVE_KIT_BANK = { Techno: "techno", breakbeat13: "breakbeat", "acoustic-kit": "acoustic" };
+function soundForTrack(t, native = false) {
+  if (native && /^plaits:1[345]$/.test(t.engineKey)) return { s: t.engineKey, drum: true };
   if (DRUM_EXPORT[t.engineKey]) { const [s, bank] = DRUM_EXPORT[t.engineKey]; return { s, bank, drum: true }; }
   if (t.engineKey === "sampler" && t.sampleSource?.kind === "bundled") {
     const [kit, part] = String(t.sampleSource.id).split("/");
     const s = /kick/.test(part) ? "bd" : /snare/.test(part) ? "sd" : /tom/.test(part) ? "lt" : "hh";
-    return { s, bank: SAMPLE_BANK[kit] || null, drum: true };
+    return { s, bank: SAMPLE_BANK[kit] || (native ? NATIVE_KIT_BANK[kit] : null) || null, drum: true };
   }
+  if (native && staticEngineByKey(t.engineKey)) return { s: nativeName(t.engineKey), drum: false };
   if (EXPORT_SOUND[t.engineKey]) return { s: EXPORT_SOUND[t.engineKey], drum: false };
   if (t.engineKey === "plaits:9") return { s: "white", drum: false };
   if (String(t.engineKey).startsWith("plaits:")) return { s: "triangle", drum: false };
@@ -1385,39 +1297,63 @@ function soundForTrack(t) {
 }
 
 /**
- * The active pattern of every track, as Strudel (default) or Tidal code.
- * Buses, MIDI tracks and live generators say so in a comment rather than
- * vanishing. Returns `{ code, warnings }`.
+ * The active pattern of every track, as Strudel code.
+ *
+ * `native` is the code drawer's own form: seqbaby's instruments by name
+ * (`s("silverbox")`), and every panel knob, fx stage, eq band, compressor
+ * setting, LFO and automation lane that differs from its default, through the
+ * seqbaby-only methods (.knob .fx .filter .eq .comp .lfo .aut). Run back in,
+ * it rebuilds the same tracks. Without it the code is PORTABLE: only what
+ * Strudel has a name for, instruments as their nearest stock sound,
+ * and a warning for each thing left out -- the form strudel.cc can play.
+ *
+ * A track whose notes the code cannot hold (arps, chord inversions, nudged
+ * steps, sample regions) is left as a comment in native form, and named in
+ * `skipped`, so running the code leaves it exactly as it is. Buses, MIDI
+ * tracks, sample and granular tracks and live generators are comments too.
+ * Returns `{ code, warnings, names, skipped }`: `names` are the tracks the
+ * code writes.
  */
-export function sessionToCode(session, { dialect = "strudel" } = {}) {
-  const tidal = dialect === "tidal";
-  const s = session || {};
+export function sessionToCode(session, { native = false } = {}) {
+    const s = session || {};
   const warnings = [];
+  const names = [], skipped = [];
   const pIdx = s.activePattern ?? 0;
   const lines = [];
   const bpm = Number(s.bpm) || 120;
-  lines.push(tidal ? `setcps (${round3(bpm)}/60/4)` : `setcpm(${round3(bpm)}/4)`);
+  lines.push(`setcpm(${round3(bpm)}/4)`);
   lines.push("");
-  let dn = 1;
   const used = new Set();
-  for (const [ti, t] of (s.tracks || []).entries()) {
-    if (t.engineKey === "bus") { lines.push(`${tidal ? "--" : "//"} ${t.name}: an fx bus, which has no notes to write`); continue; }
-    if (t.engineKey === "midi") { lines.push(`${tidal ? "--" : "//"} ${t.name}: a midi out track, left out`); continue; }
+  const DP = defaultTrackParams(), DF = defaultFilter(), DFX = defaultFxConfig(), DC = defaultCompConfig();
+  // a pattern argument ({mini}) keeps double quotes, which Strudel reads as mini-notation
+  const q = (v) => v && typeof v === "object" && "mini" in v ? JSON.stringify(v.mini) : typeof v === "string" ? jsString(v) : typeof v === "boolean" ? (v ? 1 : 0) : round3(v);
+  const call = (name, args) => `.${name}(${args.map(q).join(", ")})`;
+  for (const t of s.tracks || []) {
+    const skip = (why) => { lines.push(`// ${t.name}: ${why}`); skipped.push(t.name); };
+    if (t.engineKey === "bus") { skip("an fx bus, which has no notes to write"); continue; }
+    if (t.engineKey === "midi") { skip("a midi out track, left as it is"); continue; }
     const pat = t.patterns?.[pIdx];
     if (!pat || !pat.steps?.some(Boolean)) {
-      if (t.euclid?.on || t.chance?.on) lines.push(`${tidal ? "--" : "//"} ${t.name}: its rhythm is a live ${t.euclid?.on ? "euclid ring" : "chance generator"}, which does not export`);
+      if (t.euclid?.on || t.chance?.on) skip(`its rhythm is a live ${t.euclid?.on ? "euclid ring" : "chance generator"}, left as it is`);
       continue;
     }
-    const snd = soundForTrack(t);
-    if (tidal && snd.drum) {
-      // Tidal has no banks; Dirt-Samples names its machines in the sound instead
-      const m = snd.bank === "RolandTR909" ? "909" : snd.bank === "RolandTR808" ? "808" : null;
-      if (m === "808") snd.s = { bd: "808bd", sd: "808sd", hh: "808hc", oh: "808oh" }[snd.s] || snd.s;
-      if (m === "909") { snd.s = `909${snd.s}`; if (!warnings.some(w => /909/.test(w))) warnings.push("909 voices are written 909bd, 909sd ...; Dirt-Samples has only a 909 kick, so load a 909 kit under those names to hear them in Tidal"); }
+    if (native && (t.engineKey === "dm:granular" || (t.engineKey === "sampler" && t.sampleSource?.kind !== "bundled"))) {
+      skip(`a ${t.engineKey === "sampler" ? "sample" : "granular"} track: its sample is picked in the studio, so it is left as it is`);
+      continue;
     }
-    if (snd.approx) warnings.push(`${t.name} (${t.engineKey}) has no Strudel sound; written as a triangle`);
+    const hits = pat.steps.map((on, i) => on ? i : -1).filter(i => i >= 0);
+    const lossy = [];
+    if (hits.some(i => pat.arps?.[i])) lossy.push("arps");
+    if (hits.some(i => pat.chords?.[i] && pat.complexities?.[i])) lossy.push("chord inversions");
+    if (hits.some(i => Math.abs(pat.offsets?.[i] || 0) > 0.01)) lossy.push("nudged steps");
+    if (t.engineKey === "sampler" && hits.some(i => (pat.sampleStarts?.[i] || 0) > 0 || (pat.sampleEnds?.[i] ?? 1) < 1 || (pat.sampleLoopModes?.[i] || "off") !== "off")) lossy.push("sample regions");
+    if (native && lossy.length) { skip(`uses ${lossy.join(", ")}, which code can't hold, so it is left as it is (edit it in the studio)`); continue; }
+    if (lossy.length) warnings.push(`${t.name}: ${lossy.join(", ")} are not in the code`);
+    const snd = soundForTrack(t, native);
+    if (snd.approx) warnings.push(`${t.name} (${t.engineKey}) has no Strudel sound; written as ${snd.s}`);
     const L = pat.steps.length || t.length || 16;
     const speed = Number(t.speed) || 1;
+    const S = STEPS_PER_BAR * speed;
     const melodic = !snd.drum;
     const noteAt = (i) => {
       const root = pat.notes?.[i];
@@ -1426,7 +1362,7 @@ export function sessionToCode(session, { dialect = "strudel" } = {}) {
       let notes = [r];
       const chord = pat.chords?.[i];
       if (chord && CHORD_TYPES[chord]) notes = CHORD_TYPES[chord].map(x => r + x);
-      if (pat.extraNotes?.[i]) notes = notes.concat(pat.extraNotes[i]);
+      if (pat.extraNotes?.[i]) notes = notes.concat(pat.extraNotes[i].filter(n => !notes.includes(n)));
       return notes;
     };
     const tokens = [];
@@ -1440,7 +1376,7 @@ export function sessionToCode(session, { dialect = "strudel" } = {}) {
       let tok;
       if (melodic) {
         const ns = noteAt(i);
-        tok = ns.length > 1 ? `[${ns.map(n => midiName(n, dialect)).join(",")}]` : midiName(ns[0], dialect);
+        tok = ns.length > 1 ? `[${ns.map(n => midiName(n)).join(",")}]` : midiName(ns[0]);
       } else tok = snd.s;
       const r = pat.ratchets?.[i] || 1;
       if (r > 1) tok = `${tok}*${r}`;
@@ -1452,74 +1388,167 @@ export function sessionToCode(session, { dialect = "strudel" } = {}) {
       for (let k = i + len; k < next; k++) { tokens.push("~"); vels.push("~"); }
       i = next;
     }
-    const cycles = L / (STEPS_PER_BAR * speed);
-    const grouped = groupTokens(tokens, STEPS_PER_BAR * speed);
-    let label = trackNameOf(t.name).replace(/[^\w]/g, "_").replace(/^(\d)/, "_$1") || `t${ti}`;
-    while (used.has(label)) label += "_";
-    used.add(label);
+    const cycles = L / S;
+    const grouped = groupTokens(tokens, S);
     const slow = Math.abs(cycles - 1) > 1e-6 ? round3(cycles) : null;
-    const nudged = (pat.offsets || []).some((o, i) => pat.steps[i] && Math.abs(o) > 0.01);
-    if (nudged) warnings.push(`${t.name} has nudged steps; the code puts them on the grid`);
-    const f = { ...{ type: "lowpass", cutoff: 1, reson: 0 }, ...(t.filter || {}) };
-    const fx = t.fxConfig || {};
-    const vol = t.params?.vol;
+
+    // ---- the sound, as a list of [method, args] -------------------------------
     const ctl = [];
-    if (f.cutoff < 0.999) {
-      const hz = knobToHz(f.cutoff);
-      ctl.push([f.type === "highpass" ? "hpf" : f.type === "bandpass" ? "bpf" : "lpf", hz]);
+    const dropped = [];
+    const f = { ...DF, ...(t.filter || {}) };
+    const fx = t.fxConfig || {};
+    const fxv = (stage, k) => fx[stage]?.[k] ?? DFX[stage]?.[k];
+    const generic = { lowpass: "lpf", highpass: "hpf", bandpass: "bpf" }[f.type];
+    if (generic && (f.cutoff < 0.999 || f.type !== "lowpass")) ctl.push([generic, [knobToHz(f.cutoff)]]);
+    else if (!generic) {
+      if (native) { ctl.push(["filter", ["type", f.type]]); if (f.cutoff < 0.999) ctl.push(["filter", ["cutoff", round3(f.cutoff)]]); }
+      else { dropped.push(`the ${f.type} filter (written as a lowpass)`); if (f.cutoff < 0.999) ctl.push(["lpf", [knobToHz(f.cutoff)]]); }
     }
-    if (f.reson > 0.001) ctl.push([tidal ? "resonance" : "lpq", round3(tidal ? f.reson : f.reson * 20)]);
-    if (vol != null && Math.abs(vol - 0.8) > 0.01) ctl.push(["gain", round3(vol / 0.8)]);
-    if (fx.reverb?.wet > 0) { ctl.push(["room", round3(fx.reverb.wet)]); if (fx.reverb.decay != null) ctl.push([tidal ? "size" : "size", round3(tidal ? clamp((fx.reverb.decay - 0.5) / 6, 0, 1) : fx.reverb.decay)]); }
-    if (fx.delay?.wet > 0) { ctl.push(["delay", round3(fx.delay.wet)]); if (fx.delay.time != null) ctl.push(["delaytime", round3(fx.delay.time)]); if (fx.delay.fbk != null) ctl.push(["delayfeedback", round3(fx.delay.fbk)]); }
-    if (fx.crush?.wet > 0) ctl.push(["crush", round3(fx.crush.bits ?? 8)]);
-    if (fx.shaper?.wet > 0) ctl.push(["shape", round3(fx.shaper.amount ?? 0.5)]);
-    if (fx.fuzz?.amount > 0) ctl.push(["distort", round3((fx.fuzz.amount ?? 0) * 2)]);
-    // LFOs on the controls that have a name in both languages come back out as signals
-    const lfoOut = [];
+    if (f.reson > 0.001) ctl.push(["lpq", [round3(f.reson * 20)]]);
+    const envKeys = ["env", "attack", "decay", "sustain", "release"].filter(k => Math.abs((f[k] ?? DF[k]) - DF[k]) > 1e-6);
+    if (envKeys.length) { if (native) for (const k of envKeys) ctl.push(["filter", [k, round3(f[k])]]); else dropped.push("the filter envelope"); }
+    const vol = t.params?.vol;
+    if (vol != null && Math.abs(vol - 0.8) > 0.01) ctl.push(["gain", [round3(vol / 0.8)]]);
+    // the fx both languages name
+    if (fxv("reverb", "wet") > 0) {
+      ctl.push(["room", [round3(fxv("reverb", "wet"))]]);
+      const dec = fxv("reverb", "decay");
+      ctl.push(["size", [round3(dec)]]);
+    }
+    if (fxv("delay", "wet") > 0) {
+      ctl.push(["delay", [round3(fxv("delay", "wet"))]]);
+      ctl.push(["delaytime", [round3(fxv("delay", "time"))]]);
+      ctl.push(["delayfeedback", [round3(fxv("delay", "fbk"))]]);
+    }
+    const namedFx = new Set(["reverb.wet", "reverb.decay", "delay.wet", "delay.time", "delay.fbk"]);
+    if (native) {
+      for (const [stage, d] of Object.entries(DFX)) for (const [k, dv] of Object.entries(d)) {
+        const v = fxv(stage, k);
+        if (namedFx.has(`${stage}.${k}`) && (stage !== "reverb" || fxv("reverb", "wet") > 0) && (stage !== "delay" || fxv("delay", "wet") > 0)) continue;
+        if (typeof dv === "number" ? Math.abs(v - dv) > 1e-6 : v !== dv) ctl.push(["fx", [`${stage}.${k}`, typeof v === "number" ? round3(v) : v]]);
+      }
+      for (const [k, v] of Object.entries(t.eq || {})) if (Math.abs(v) > 1e-6) ctl.push(["eq", [k, round3(v)]]);
+      if (t.comp?.enabled) {
+        ctl.push(["comp", ["enabled", true]]);
+        for (const k of ["threshold", "ratio", "attack", "release", "knee"]) if (t.comp[k] != null && Math.abs(t.comp[k] - DC[k]) > 1e-6) ctl.push(["comp", [k, round3(t.comp[k])]]);
+        const src = (t.compSourceIndex ?? -1) >= 0 ? s.tracks[t.compSourceIndex]?.name : null;
+        if (src) ctl.push(["comp", ["source", src]]);
+      }
+      // the instrument's own knobs: the sliders and its panel, where they moved
+      for (const k of engineKnobKeys(t.engineKey)) {
+        const v = t.params?.[k];
+        if (v == null || !(k in DP)) continue;
+        if (typeof v === "number" ? Math.abs(v - DP[k]) > 1e-6 : String(v) !== String(DP[k])) ctl.push(["knob", [k, typeof v === "number" ? round3(v) : v]]);
+      }
+    } else {
+      if (fxv("crush", "wet") > 0) ctl.push(["crush", [round3(fxv("crush", "bits"))]]);
+      if (fxv("shaper", "wet") > 0) ctl.push(["shape", [round3(fxv("shaper", "amount"))]]);
+      if (fxv("fuzz", "amount") > 0) ctl.push(["distort", [round3(fxv("fuzz", "amount") * 2)]]);
+      const other = Object.keys(DFX).filter(st => !["reverb", "delay", "crush", "shaper", "fuzz", "amp"].includes(st) && (fx[st]?.[FX_LEVEL[st]] ?? 0) > 0);
+      if (other.length) dropped.push(other.join(" / "));
+      if (Object.values(t.eq || {}).some(v => Math.abs(v) > 1e-6)) dropped.push("the eq");
+      if (t.comp?.enabled) dropped.push("the compressor");
+      if (engineKnobKeys(t.engineKey).some(k => t.params?.[k] != null && k in DP && String(t.params[k]) !== String(DP[k]))) dropped.push(`the ${staticEngineByKey(t.engineKey)?.label || t.engineKey} settings`);
+    }
+    // LFOs: a signal where both languages have the control, .lfo() for the rest
     for (const [key, l] of Object.entries(t.lfoConfig || {})) {
+      if (!l?.enabled) continue;
       const spec = LFO_EXPORT[key];
-      if (!l?.enabled || !spec || !l.sync) continue;
+      const shape = { sine: "sine", triangle: "tri", sawtooth: "saw", square: "square", randsq: "rand" }[l.type];
+      const bip = l.bipolar ?? l.type !== "euclid";
+      if (native) {
+        const sh = l.type === "euclid"
+          ? `euclid(${l.epulses ?? 4},${l.esteps ?? 8},${l.erotate ?? 0},${round3(l.edecay ?? 0.4)})`
+          : (shape || l.type);
+        const len = l.sync ? round3(Number(l.div) || 4) : `${round3(l.rate)}hz`;
+        const args = [key, sh, round3(Number(l.depth) || 0), len];
+        if (l.phase != null || l.bipolar != null) args.push(round3(l.phase ?? 0));
+        if (l.bipolar != null) args.push(!!l.bipolar);
+        ctl.push(["lfo", args]);
+        continue;
+      }
+      if (!spec || !l.sync || !shape || !bip) { dropped.push(`the LFO on ${key}`); continue; }
       const knob = spec.knobOf(t);
       const depth = Number(l.depth) || 0;
-      const bip = l.bipolar ?? l.type !== "euclid";
-      const lo = clamp(bip ? knob - depth / 2 : knob, 0, 1), hi = clamp(bip ? knob + depth / 2 : knob + depth, 0, 1);
-      const shape = { sine: "sine", triangle: "tri", sawtooth: "saw", square: "square", randsq: "rand" }[l.type];
-      if (!shape) continue;
-      const name = spec.name(t, tidal);
+      const lo = clamp(knob - depth / 2, 0, 1), hi = clamp(knob + depth / 2, 0, 1);
+      const name = spec.name(t);
       const cyc = round3((Number(l.div) || 4) / 4);
-      const a = round3(spec.units(lo, tidal)), b = round3(spec.units(hi, tidal));
-      const expr = tidal
-        ? `(${cyc !== 1 ? `slow ${cyc} $ ` : ""}range ${a} ${b} ${shape})`
-        : `${shape}.range(${a}, ${b})${cyc !== 1 ? `.slow(${cyc})` : ""}`;
+      const a = round3(spec.units(lo)), b = round3(spec.units(hi));
+      const expr = `${shape}.range(${a}, ${b})${cyc !== 1 ? `.slow(${cyc})` : ""}`;
       for (let k = ctl.length - 1; k >= 0; k--) if (ctl[k][0] === name) ctl.splice(k, 1);
-      lfoOut.push([name, expr]);
+      ctl.push([name, null, expr]);
     }
-    ctl.push(...lfoOut);
+    // automation lanes: .aut() for all of them, or the per-step value patterns Strudel reads
+    for (const [key, lane] of Object.entries(pat.automation || {})) {
+      if (!lane?.enabled || !Array.isArray(lane.values)) continue;
+      if (native) { ctl.push(["aut", [key, { mini: laneString(lane.values, cycles) }]]); continue; }
+      const port = LANE_EXPORT[key];
+      if (!port) { dropped.push(`the ${key} lane`); continue; }
+      const name = port.name(t);
+      for (let k = ctl.length - 1; k >= 0; k--) if (ctl[k][0] === name) ctl.splice(k, 1);
+      ctl.push([name, [{ mini: laneString(lane.values.map(v => port.units(v)), cycles) }]]);
+    }
+    if (dropped.length) warnings.push(`${t.name}: ${dropped.join(", ")} ${dropped.length > 1 ? "have" : "has"} no Strudel equivalent and ${dropped.length > 1 ? "were" : "was"} left out`);
+
+    // ---- the line ----------------------------------------------------------------
     const muted = !!t.muted;
-    if (tidal) {
-      const main = melodic ? `note "${grouped}" # s "${snd.s}"` : `s "${grouped}"`;
-      let line = `d${dn++} $ ${slow ? `slow ${slow} $ ` : ""}${main}`;
-      if (anyVel) line += ` # gain "${groupTokens(vels, STEPS_PER_BAR * speed)}"`;
-      for (const [k, v] of ctl) line += ` # ${k} ${v}`;
-      lines.push(`${muted ? "-- " : ""}-- ${t.name}`);
-      lines.push(muted ? `-- ${line}` : line);
-    } else {
-      let line = `${muted ? "_" : ""}${label}: ${melodic ? `note("${grouped}").s("${snd.s}")` : `s("${grouped}")`}`;
-      if (snd.bank) line += `.bank("${snd.bank}")`;
-      if (slow) line += `.slow(${slow})`;
-      if (anyVel) line += `\n  .velocity("${groupTokens(vels, STEPS_PER_BAR * speed)}")`;
-      for (const [k, v] of ctl) line += `.${k}(${v})`;
-      lines.push(line);
+    const ident = /^[A-Za-z][\w]*$/.test(t.name) && !RESERVED.has(t.name) ? t.name : null;
+    let label = ident;
+    if (label) { if (used.has(label)) label = null; else used.add(label); }
+    names.push(t.name);
+    const body = [];
+    const head = label ? `${muted ? "_" : ""}${label}: ` : `${muted ? "_" : ""}$: `;
+    body.push(`${head}${melodic ? `note("${grouped}").s("${snd.s}")` : `s("${grouped}")`}${snd.bank ? `.bank("${snd.bank}")` : ""}${slow ? `.slow(${slow})` : ""}${label ? "" : `.p(${jsString(t.name)})`}`);
+    if (anyVel) body.push(`  .velocity("${groupTokens(vels, S)}")`);
+    // the sound on lines of its own, a few calls each, so a long chain still reads
+    let cur = "";
+    for (const [k, args, raw] of ctl) {
+      const piece = raw ? `.${k}(${raw})` : call(k, args);
+      if (cur && (cur.length + piece.length > 72 || k === "lfo" || k === "aut")) { body.push(`  ${cur}`); cur = ""; }
+      cur += piece;
     }
+    if (cur) body.push(`  ${cur}`);
+    lines.push(body.join("\n"));
     lines.push("");
   }
-  return { code: lines.join("\n").replace(/\n+$/, "\n"), warnings };
+  return { code: lines.join("\n").replace(/\n+$/, "\n"), warnings, names, skipped };
 }
+/** A plain JavaScript string, which Strudel does not read as mini-notation. */
+const jsString = (v) => `'${String(v).replace(/\\/g, "\\\\").replace(/'/g, "\\'")}'`;
+const RESERVED = new Set(["let", "const", "var", "await", "new", "function", "return", "if", "else", "for", "while", "setcpm", "setcps", "setbpm", "hush", "samples"]);
+const FX_LEVEL = { vinyl: "amount", cassette: "amount", fuzz: "amount", ringmod: "wet", shaper: "wet", crush: "wet", autowah: "wet", chorus: "wet", phaser: "wet", flanger: "wet", pitchshift: "wet", delay: "wet", reverb: "wet" };
+/** The params an engine actually has: its sliders (as the automation gate
+ *  knows them) and its panel. */
+function engineKnobKeys(engineKey) {
+  const keys = new Set(voiceAutoKeysForEngineKey(engineKey).filter(k => k !== "vol"));
+  const p = ENGINE_PANELS[engineKey];
+  if (p) { for (const c of p.num) keys.add(p.prefix + c[0]); for (const c of p.sel) keys.add(p.prefix + c[0]); }
+  return [...keys];
+}
+/** A lane's values as mini-notation, runs folded (`0.5!4`), stretched over its cycles. */
+function laneString(values, cycles) {
+  const toks = [];
+  for (let i = 0; i < values.length;) {
+    let j = i + 1;
+    while (j < values.length && values[j] === values[i]) j++;
+    const v = round3(Number(values[i]) || 0);
+    toks.push(j - i > 1 ? `${v}!${j - i}` : `${v}`);
+    i = j;
+  }
+  const body = toks.join(" ");
+  return Math.abs(cycles - 1) > 1e-6 ? `[${body}]/${round3(cycles)}` : body;
+}
+const LANE_EXPORT = {
+  cutoff: { units: (u) => knobToHz(u), name: (t) => t.filter?.type === "highpass" ? "hpf" : t.filter?.type === "bandpass" ? "bpf" : "lpf" },
+  reson: { units: (u) => round3(u * 20), name: () => "lpq" },
+  "fx.reverb": { units: (u) => round3(u), name: () => "room" },
+  "fx.delay": { units: (u) => round3(u), name: () => "delay" },
+  vol: { units: (u) => round3(u / 0.8), name: () => "gain" },
+};
 const LFO_EXPORT = {
   cutoff: { knobOf: (t) => t.filter?.cutoff ?? 1, units: (u) => knobToHz(u),
     name: (t) => t.filter?.type === "highpass" ? "hpf" : t.filter?.type === "bandpass" ? "bpf" : "lpf" },
-  reson: { knobOf: (t) => t.filter?.reson ?? 0, units: (u, tidal) => tidal ? u : u * 20, name: (t, tidal) => tidal ? "resonance" : "lpq" },
+  reson: { knobOf: (t) => t.filter?.reson ?? 0, units: (u) => u * 20, name: () => "lpq" },
   verb: { knobOf: (t) => t.fxConfig?.reverb?.wet ?? 0, units: (u) => u, name: () => "room" },
   delay: { knobOf: (t) => t.fxConfig?.delay?.wet ?? 0, units: (u) => u, name: () => "delay" },
   vol: { knobOf: (t) => t.params?.vol ?? 0.8, units: (u) => u / 0.8, name: () => "gain" },
