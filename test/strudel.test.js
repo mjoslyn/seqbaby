@@ -13,6 +13,7 @@ import assert from "node:assert/strict";
 import { mini, bjorklund } from "../public/js/miniNotation.js";
 import { euclidRing, validate } from "../public/js/songBuilder.js";
 import * as S from "../public/js/strudel.js";
+import * as B from "../public/js/songBuilder.js";
 import { CHORD_TYPES } from "../public/js/theoryData.js";
 import { defaultTrackParams } from "../public/js/soundDefaults.js";
 import { guitarTone as sbGuitarTone } from "../public/js/engineData.js";
@@ -378,12 +379,38 @@ test(".lock() gives a pattern its own sound; the rest share the track's", () => 
   assert.equal(bass.fxConfig.reverb?.wet ?? 0, 0);
 });
 
-test("a track's patterns share one grid", () => {
-  const { song } = S.codeToSong(`pattern(1)\na: note("c3").s("piano")\npattern(2)\na: note("<c3 e3 g3 b3>").s("piano")`);
+test("each pattern is as long as its part; the speed is the track's", () => {
+  const { song } = S.codeToSong(`pattern(1)\na: note("c3").s("piano")\npattern(2)\na: note("<c3 e3 g3 b3>").s("piano")\npattern(3)\na: note("c3 e3").s("piano")`);
   const a = track(song, "a");
-  assert.equal(a.length, 64);
-  assert.equal(a.patterns[0].steps.length, 64);
+  assert.equal(a.patterns[0].steps.length, 16);
+  assert.equal(a.patterns[1].steps.length, 64);
+  assert.equal(a.patterns[2].steps.length, 16);
+  // one speed for the track: the finest any of its parts needs
+  const b = track(S.codeToSong(`pattern(1)\nb: note("c3").s("piano")\npattern(2)\nb: note("c3*32").s("piano")`).song, "b");
+  assert.equal(b.speed, 2);
+  assert.deepEqual([b.patterns[0].steps.length, b.patterns[1].steps.length], [32, 32]);
+  assert.equal(a.length, a.patterns[song.activePattern ?? 0].steps.length);
   assert.deepEqual(a.patterns[1].notes.filter(n => n != null), [48, 52, 55, 59]);
+  // a section with no .repeat plays its longest part
+  assert.deepEqual(song.patternRepeats.slice(0, 3), [1, 4, 1]);
+  assert.equal(S.codeToSong(`pattern(1).repeat(2)\na: note("<c3 e3 g3 b3>").s("piano")`).song.patternRepeats[0], 2);
+  // and it comes back from the song's own code with the same lengths and bars
+  const out = S.sessionToCode(song, { native: true });
+  assert.doesNotMatch(out.code, /\.repeat\(/);
+  const again = S.codeToSong(out.code).song;
+  assert.deepEqual(track(again, "a").patterns.slice(0, 3).map(p => p.steps.length), [16, 64, 16]);
+  assert.deepEqual(again.patternRepeats.slice(0, 3), [1, 4, 1]);
+});
+
+test("a run leaves the lengths of patterns it does not write alone", () => {
+  const song = B.newSong();
+  B.addTrack(song, { engine: "tines", name: "a", length: 16 });
+  B.setSteps(song, 0, { pattern: 4, steps: "x..." });
+  B.setTrack(song, 0, { length: 48, pattern: 4 });
+  const read = S.realize(S.readCode(`a: note("<c3 e3>").s("piano")`));
+  S.writeTracks(song, read, { pattern: 0 });
+  assert.equal(song.tracks[0].patterns[0].steps.length, 32);
+  assert.equal(song.tracks[0].patterns[4].steps.length, 48);
 });
 
 test("the bank round-trips through native code, and plays as arrange() in portable code", () => {

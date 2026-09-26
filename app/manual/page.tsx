@@ -198,7 +198,7 @@ export default function ManualPage() {
                 <tr><th>Control</th><th>What it does</th></tr>
               </thead>
               <tbody>
-                <tr><td>len</td><td>How many steps this track loops over. Lengths don&apos;t have to match: a 12-step track against a 16-step one drifts in and out of phase.</td></tr>
+                <tr><td>len</td><td>How many steps this track loops over in the pattern you&apos;re on. Each pattern keeps its own, so a bass can be 16 steps in the verse and 32 in the chorus. Lengths don&apos;t have to match across tracks either: a 12-step track against a 16-step one drifts in and out of phase. When chain mode or a queued switch moves to the next pattern on the bar line, every track starts it from step one.</td></tr>
                 <tr><td>+1 x2 x4 /2 /4</td><td>Grow or shrink the pattern. Growing copies what is already there.</td></tr>
                 <tr><td>spd</td><td>Runs this track faster or slower than the rest, from 1/16 up to 16 times.</td></tr>
                 <tr><td>out</td><td>Where the track goes: straight to the master, or into an fx bus. It only appears once a bus exists. See <a href="#bus">fx buses</a>.</td></tr>
@@ -1130,12 +1130,14 @@ keys: chord("<Cm7 Ab^7 Fm7 G7>").voicing().s("tines").room(0.5)`}</div>
               already in the song, the code takes it over.
             </li>
             <li>
-              <strong>One cycle is one bar.</strong> A track gets as many bars as its
-              pattern takes to come round again, so{" "}
-              <span className={styles.ui}>&lt;c2 eb2 g2&gt;</span> is three bars.
+              <strong>One cycle is one bar.</strong> A pattern gets as many bars as
+              its part takes to come round again, so{" "}
+              <span className={styles.ui}>&lt;c2 eb2 g2&gt;</span> is three bars. Each
+              pattern keeps its own length, so the same track can be one bar in one
+              section and four in the next.
             </li>
             <li>
-              <strong>Sixteen steps a bar</strong>, doubled up to 128 when notes are
+              <strong>Sixteen steps a bar</strong>, doubled up to 64 when notes are
               closer together than a sixteenth. A note between steps (a triplet) is
               written as a nudge on the nearest step, so it lands exactly where the
               code puts it.
@@ -1308,7 +1310,8 @@ keys: chord("<Cm7 Ab^7 Fm7 G7>").voicing().s("tines").room(0.5)`}</div>
             A song that uses more than one pattern is written in sections.{" "}
             <span className={styles.ui}>pattern(2)</span> starts one, and the lines
             after it write pattern 2. <span className={styles.ui}>.repeat(4)</span>{" "}
-            is how many bars it plays in chain mode,{" "}
+            is how many bars it plays in chain mode (leave it off and it plays as
+            long as its longest part),{" "}
             <span className={styles.ui}>.meter(&quot;7/8&quot;)</span> its time
             signature, and <span className={styles.ui}>chain()</span> at the top turns
             chain mode on.
@@ -1406,8 +1409,9 @@ bass: note("<eb2 g2>*8").s("sawtooth").lpf(2000).lock()`}</div>
             <li>
               <strong>Size.</strong> A track holds up to 64 steps. A pattern that
               only comes round every 8 bars gets a coarser grid to fit, and one past
-              16 bars is cut short. A track&apos;s length and grid are shared by all
-              its patterns, so they are sized for the longest one.
+              16 bars is cut short. Each pattern has its own length, but the grid
+              (steps per bar) is the track&apos;s, so a track that needs 32nds in
+              one section has them in all of them.
             </li>
             <li>
               <strong>One filter a track.</strong> Use{" "}

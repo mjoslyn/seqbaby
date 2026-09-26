@@ -381,6 +381,20 @@ export async function stopPlayback() {
   setStatus("stopped");
 }
 
+// A pattern switched in on a bar line starts every track from its first step.
+// Patterns have lengths of their own, so a track's count carried over from the
+// last one lands anywhere in the next: a two-bar pattern following a pattern
+// played three times came in on its second bar. Same starting point as a play
+// press (the speed < 1 accumulator included). An immediate switch from a click
+// keeps counting, since it lands mid-bar.
+function restartTrackCounts() {
+  for (const t of state.tracks) {
+    const sp = Math.max(0.0001, t.speed ?? 1);
+    t.trackTick = 0;
+    t.speedAccum = sp < 1 ? 1 - sp : 0;
+  }
+}
+
 /**
  * Start the transport from the top. Idempotent — a no-op if already playing,
  * for the same reason stopPlayback() is (see there).
@@ -637,6 +651,7 @@ export async function startPlayback(opts = {}) {
     // the switched pattern's data or it plays the old pattern's opening steps.
     if (state.patternSwitchMode === "finish" && state.queuedPattern !== null && state.tick % BAR_TICKS === 0) {
       switchPattern(state.queuedPattern, { deferUi: true });
+      restartTrackCounts();
     }
     // pattern chaining: advance at bar boundaries when chain mode is on, respecting per-pattern repeats
     if (state.patternMode === "chain" && state.tick % BAR_TICKS === 0) {
@@ -647,6 +662,7 @@ export async function startPlayback(opts = {}) {
         const next = findNextNonEmptyPattern(state.activePattern);
         if (next >= 0 && next !== state.activePattern) {
           switchPattern(next, { deferUi: true }); // synchronous — same reasoning as the manual queue above
+          restartTrackCounts();
         }
       }
     }

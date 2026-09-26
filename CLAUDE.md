@@ -1245,7 +1245,11 @@ Single `Tone.Transport.scheduleRepeat` at `"16n"`. Each callback, per track:
 4. Visuals: `Tone.Draw.schedule` at `time + visualOutputLatency()` (playhead +
    beat indicator). Metronome fires on quarters when enabled.
 5. Bar boundaries: manual-queue commit (`patternSwitchMode === "finish"`) and
-   chain-mode advance honoring `patternRepeats` / `patternMeters`.
+   chain-mode advance honoring `patternRepeats` / `patternMeters`. Either one
+   restarts every track's count (`restartTrackCounts`): patterns have lengths
+   of their own, so a count carried over landed the next pattern anywhere (a
+   32-step pattern after a 16-step one played three times came in on step 16).
+   An immediate switch from a click keeps counting, since it lands mid-bar.
 
 Stop cuts masterGain to 0 over 20ms (Tone's ~100ms lookahead keeps already-
 queued native events playing otherwise) and silences all voices. The gain then
@@ -2586,9 +2590,13 @@ running engine ◀── mergeSet ◀── writeTracks(fromBlob(serializeSet())
   but leaves out of a section is cleared there, and a slot the code never
   names is left alone. The exporter writes sections whenever more than one
   slot has notes, or the song chains.
-- **A track has ONE grid across its patterns** (`chooseGrid`, per name): its
-  length and speed are the track's, not the pattern's, so the cycles are the
-  lcm of every part's repeat and the resolution the finest any part needs.
+- **A pattern is as long as its part, the grid is the track's** (`chooseGrid`,
+  per name). Patterns have lengths of their own (the studio's `len` field
+  resizes only the active one; `t.length` mirrors it), so each part's length
+  is the cycles IT takes to repeat, and a run leaves the lengths of slots it
+  does not write alone. Speed is per track, so the resolution is the finest
+  any part needs. A section with no `.repeat` plays its longest part's bars,
+  and the exporter writes `.repeat` only when the song says otherwise.
 - **p-lock is `.lock()`.** Parts without it share the track's sound, as
   unlocked patterns do in the studio (two that disagree are merged, the later
   winning, and the run says so). A part with it gives its pattern a sound of

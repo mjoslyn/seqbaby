@@ -951,13 +951,16 @@ export function realize(read) {
         native: nat, lock: g.haps.some(h => h.v._lock), isNative: !!g.voice.native || Object.keys(nat).length > 0 });
     }
   }
-  // A track has one length and one grid across all its patterns, so the grid
-  // is chosen once per NAME, from every slot the track plays in.
+  // A track has one speed across all its patterns, so the grid is chosen once
+  // per NAME, from every slot the track plays in; each pattern keeps its own
+  // length (the cycles it takes to repeat).
   const grids = new Map();
   for (const name of new Set(parts.filter(p => !p.empty).map(p => p.name))) {
-    grids.set(name, chooseGrid(parts.filter(p => p.name === name && !p.empty).map(p => p.g), warn));
+    const mine = parts.filter(p => p.name === name && !p.empty);
+    const { speed, cycles } = chooseGrid(mine.map(p => p.g), warn);
+    mine.forEach((p, k) => grids.set(p, { speed, cycles: cycles[k] }));
   }
-  const tracks = parts.map(({ g, ...p }) => p.empty ? p : { ...p, ...blueprint(g, grids.get(p.name), warn) });
+  const tracks = parts.map((p) => { const { g, ...rest } = p; return p.empty ? rest : { ...rest, ...blueprint(g, grids.get(p), warn) }; });
   const sectioned = Object.keys(read.sections || {}).length > 0;
   return { bpm: read.bpm, tracks, warnings, hush: read.hush, native: !!read.native || tracks.some(t => t.isNative),
     mode: read.mode || (sectioned ? "repeat" : null), sections: read.sections || {} };
@@ -986,39 +989,42 @@ function periodOf(haps) {
 }
 
 const SPEEDS = [1, 2, 4, 8];
-const gcd = (a, b) => b ? gcd(b, a % b) : a;
 /**
- * The grid for a track: how many cycles it holds and how many steps a cycle
- * (16 x speed). The cycles are the longest repeat among its patterns (their
- * lcm), the grid 16 a cycle, doubled until no two onsets share a step in any
- * of them, halved only when the track would not fit 64 steps otherwise.
+ * The grid for a track: how many steps a cycle (16 x speed), and how many
+ * cycles each of its patterns holds. Speed is the track's, so it is one for
+ * every pattern: 16 a cycle, doubled until no two onsets share a step in any
+ * of them, halved only when a pattern would not fit 64 steps otherwise.
+ * Length is the pattern's own: as many cycles as that pattern takes to repeat.
+ * @returns {{ speed: number, cycles: number[] }} cycles in the order of `gs`
  */
 function chooseGrid(gs, warn) {
-  let cycles = 1;
-  for (const g of gs) {
+  const cycles = gs.map(g => {
     let n = periodOf(g.haps);
     if (n == null) { n = 4; warn(`a pattern on ${[...g.sounds].join("+")} never repeats (randomness?); seqbaby writes its first 4 cycles and loops them`); }
-    cycles = cycles * n / gcd(cycles, n);
-  }
-  if (cycles > MAX_PERIOD) { warn(`a track's patterns only line up every ${cycles} cycles; seqbaby writes the first ${MAX_PERIOD}`); cycles = MAX_PERIOD; }
-  const onsetsOf = (g) => [...new Set(g.haps.filter(h => h.begin < cycles - 1e-9).map(h => h.begin.toFixed(6)))].map(Number);
+    return n;
+  });
+  const longest = Math.max(...cycles);
+  const onsetsOf = (g, n) => [...new Set(g.haps.filter(h => h.begin < n - 1e-9).map(h => h.begin.toFixed(6)))].map(Number);
   let speed = null;
   for (const r of SPEEDS) {
     const S = STEPS_PER_BAR * r;
-    if (S * cycles > MAX_STEPS) break;
-    if (gs.every(g => { const o = onsetsOf(g); return new Set(o.map(t => Math.round(t * S))).size === o.length; })) { speed = r; break; }
+    if (S * longest > MAX_STEPS) break;
+    if (gs.every((g, k) => { const o = onsetsOf(g, cycles[k]); return new Set(o.map(t => Math.round(t * S))).size === o.length; })) { speed = r; break; }
   }
   if (speed == null) {
-    // too dense or too long: take the finest grid that fits
-    const fits = [8, 4, 2, 1, 0.5, 0.25].filter(r => STEPS_PER_BAR * r * cycles <= MAX_STEPS);
+    // too dense or too long: take the finest grid the longest pattern fits
+    const fits = [8, 4, 2, 1, 0.5, 0.25].filter(r => STEPS_PER_BAR * r * longest <= MAX_STEPS);
     speed = fits.length ? fits[0] : 0.25;
     if (!fits.length) {
       const maxCycles = Math.floor(MAX_STEPS / (STEPS_PER_BAR * 0.25));
-      warn(`a pattern on ${[...gs[0].sounds].join("+")} repeats every ${cycles} cycles; a track holds ${maxCycles}, so the rest is cut`);
-      cycles = maxCycles;
+      gs.forEach((g, k) => {
+        if (cycles[k] <= maxCycles) return;
+        warn(`a pattern on ${[...g.sounds].join("+")} repeats every ${cycles[k]} cycles; a track holds ${maxCycles}, so the rest is cut`);
+        cycles[k] = maxCycles;
+      });
     }
   }
-  return { cycles, speed };
+  return { speed, cycles };
 }
 function blueprint(g, { cycles, speed }, warn) {
   const S = STEPS_PER_BAR * speed;
@@ -1214,7 +1220,9 @@ export function writeTracks(song, realized, { previous = [], pattern, touched: p
   if (realized.mode) song.patternMode = realized.mode;
   for (const [k, meta] of Object.entries(sections)) {
     const slot = Number(k);
-    song.patternRepeats[slot] = clamp(Math.round(meta.repeat ?? 1), 1, 16);
+    // with no .repeat, a section plays as many bars as its longest part takes
+    const longest = Math.max(1, ...realized.tracks.filter(b => !b.empty && b.slot === slot).map(b => Math.ceil(b.cycles - 1e-9)));
+    song.patternRepeats[slot] = clamp(Math.round(meta.repeat ?? longest), 1, 16);
     try { setMeter(song, slot, meta.meter || "4/4"); } catch (e) { warnings.push(`pattern(${slot + 1}): ${e.message}`); }
   }
   const slotOf = (bp) => bp.slot ?? pin;
@@ -1255,7 +1263,7 @@ export function writeTracks(song, realized, { previous = [], pattern, touched: p
     // track-level fields of a saved session are that pattern's sound instead.
     const act = song.activePattern ?? 0;
     if (t.patterns?.[act]?.soundLocked && t.baseSound) restoreSound(t, t.baseSound);
-    setTrack(song, i, { length: first.length, speed: first.speed, mute: parts.every(b => b.muted) });
+    setTrack(song, i, { speed: first.speed, mute: parts.every(b => b.muted) });
     // the patterns: written where the code has a part, cleared where it owns the slot and has none
     for (const slot of new Set([...slotsNow, ...prevSlots])) {
       const bp = parts.find(b => slotOf(b) === slot);
@@ -1289,7 +1297,8 @@ export function writeTracks(song, realized, { previous = [], pattern, touched: p
       t.patterns[slot].soundLocked = true;
     }
     t.baseSound = fullSound(t);
-    patternOf(t, pin);
+    // each pattern is as long as its part; t.length is the active pattern's, as the studio keeps it
+    t.length = patternOf(t, act).steps.length;
   }
   const removed = [];
   for (const name of previous) {
@@ -1537,7 +1546,9 @@ export function sessionToCode(session, { native = false } = {}) {
     const shared = new Set();       // tracks whose shared sound has been written
     for (const k of used) {
       const rep = s.patternRepeats?.[k] ?? 1, m = s.patternMeters?.[k];
-      lines.push(`pattern(${k + 1})${rep !== 1 ? `.repeat(${rep})` : ""}${m && (m.num !== 4 || m.den !== 4) ? `.meter('${m.num}/${m.den}')` : ""}`);
+      // a section with no .repeat plays its longest part, so say it only when it differs
+      const bars = Math.max(1, ...writable.filter(t => hasSteps(t, k)).map(t => Math.ceil(t.patterns[k].steps.length / (STEPS_PER_BAR * (Number(t.speed) || 1)) - 1e-9)));
+      lines.push(`pattern(${k + 1})${rep !== bars ? `.repeat(${rep})` : ""}${m && (m.num !== 4 || m.den !== 4) ? `.meter('${m.num}/${m.den}')` : ""}`);
       for (const t of writable) {
         if (!hasSteps(t, k)) continue;
         const locked = !!t.patterns[k].soundLocked;

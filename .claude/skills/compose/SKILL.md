@@ -53,7 +53,9 @@ chords on tines. seqbaby's own instruments and controls have names there too:
 `s("silverbox")`, `.knob("sbaccent", 0.9)`, `.preset("surf twang")`,
 `.fx("chorus.wet", 0.3)`, `.lfo("cutoff", "sine", 0.4, 16)`, `.aut("fx.delay",
 "0 0.5 1")`. A song in parts is `pattern(1)` ... `pattern(2).repeat(4)` ...
-with `chain()`, and `.lock()` gives one part its own sound. Read its warnings: what Strudel does live (`every`, `jux`,
+with `chain()`, and `.lock()` gives one part its own sound. Each pattern is as
+long as its part (a one-bar verse, a four-bar chorus), and a section with no
+`.repeat` plays its longest part. Read its warnings: what Strudel does live (`every`, `jux`,
 `sometimes`) has no equivalent here and is left out. Then shape the tracks it
 made with the tools below as usual.
 
