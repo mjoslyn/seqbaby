@@ -39,6 +39,7 @@ const BOX = [
   ["jam", "send a link. edit the same song together, live. nobody needs an account."],
   ["compose", "describe what you want in plain words."],
   ["euclid + chance", "one button divides a rhythm evenly, the other throws dice at it."],
+  ["strudel", "your song opens as live code. type mini-notation, hit ctrl+enter, and it lands in the song without the beat stopping."],
 ] as const;
 
 const BLURBS = [

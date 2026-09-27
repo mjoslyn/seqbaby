@@ -33,6 +33,9 @@ import { buildVoiceForEngine, wosc } from "./voices.js";
  */
 export function paintTrackNow(t, idx) {
   const on = idx >= 0;
+  // what is sounding, for anything else that follows the playhead (the code
+  // drawer lights up the tokens that wrote this step)
+  t._nowIdx = idx;
   // The cells are cached on the track (renderStepGrid drops the cache when it
   // rebuilds them) and only the cells that change are touched: this runs per
   // track per step, and querying and toggling every cell each time was the
@@ -378,6 +381,20 @@ export async function stopPlayback() {
   setStatus("stopped");
 }
 
+// A pattern switched in on a bar line starts every track from its first step.
+// Patterns have lengths of their own, so a track's count carried over from the
+// last one lands anywhere in the next: a two-bar pattern following a pattern
+// played three times came in on its second bar. Same starting point as a play
+// press (the speed < 1 accumulator included). An immediate switch from a click
+// keeps counting, since it lands mid-bar.
+function restartTrackCounts() {
+  for (const t of state.tracks) {
+    const sp = Math.max(0.0001, t.speed ?? 1);
+    t.trackTick = 0;
+    t.speedAccum = sp < 1 ? 1 - sp : 0;
+  }
+}
+
 /**
  * Start the transport from the top. Idempotent — a no-op if already playing,
  * for the same reason stopPlayback() is (see there).
@@ -416,7 +433,14 @@ export async function startPlayback(opts = {}) {
   // A track's own trackTick runs at `speed` steps per global tick (see the
   // scheduler below); land it where it would be had it been counting from
   // the same global tick this screen is starting at, not from 0.
-  for (const t of state.tracks) { t.trackTick = Math.round(startTick * Math.max(0.0001, t.speed ?? 1)); t.speedAccum = 0; }
+  // A track slower than the transport (speed < 1) starts its accumulator one
+  // tick's worth short of full, so its first step fires ON the downbeat rather
+  // than a tick after it: with 0 a half-speed track played every odd sixteenth.
+  for (const t of state.tracks) {
+    const sp = Math.max(0.0001, t.speed ?? 1);
+    t.trackTick = Math.round(startTick * sp);
+    t.speedAccum = sp < 1 ? 1 - sp : 0;
+  }
   // Restore master gain — the stop branch ramps it to 0 to kill the lookahead-
   // queued tail of Tone synth events that Transport.stop() can't unschedule.
   if (state.masterGain && state.audioCtx) {
@@ -627,6 +651,7 @@ export async function startPlayback(opts = {}) {
     // the switched pattern's data or it plays the old pattern's opening steps.
     if (state.patternSwitchMode === "finish" && state.queuedPattern !== null && state.tick % BAR_TICKS === 0) {
       switchPattern(state.queuedPattern, { deferUi: true });
+      restartTrackCounts();
     }
     // pattern chaining: advance at bar boundaries when chain mode is on, respecting per-pattern repeats
     if (state.patternMode === "chain" && state.tick % BAR_TICKS === 0) {
@@ -637,6 +662,7 @@ export async function startPlayback(opts = {}) {
         const next = findNextNonEmptyPattern(state.activePattern);
         if (next >= 0 && next !== state.activePattern) {
           switchPattern(next, { deferUi: true }); // synchronous — same reasoning as the manual queue above
+          restartTrackCounts();
         }
       }
     }

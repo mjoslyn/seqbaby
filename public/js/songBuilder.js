@@ -416,15 +416,24 @@ export function removeTrack(song, index) {
 
 /**
  * Track-level settings. `out` is "master" or the index of an fx bus track;
- * `length` resizes every pattern; `speed` is the per-track tempo multiple.
+ * `length` resizes every pattern, or with `pattern` only that one (patterns
+ * have lengths of their own); `speed` is the per-track tempo multiple.
  */
 export function setTrack(song, index, opts = {}) {
   const t = trackAt(song, index);
   const i = int(index, "track");
   if (opts.name != null) t.name = String(opts.name).slice(0, 40);
   if (opts.length != null) {
-    t.length = int(opts.length, "length", 1, 64);
-    for (const p of t.patterns) if (p) resizePattern(p, t.length);
+    const n = int(opts.length, "length", 1, 64);
+    if (opts.pattern != null) {
+      const k = patternIndex(opts.pattern);
+      resizePattern(patternOf(t, k), n);
+      // t.length is the active pattern's, as the studio keeps it
+      if (k === (song.activePattern ?? 0)) t.length = n;
+    } else {
+      t.length = n;
+      for (const p of t.patterns) if (p) resizePattern(p, n);
+    }
   }
   if (opts.mute != null) t.muted = !!opts.mute;
   if (opts.solo != null) t.soloed = !!opts.solo;

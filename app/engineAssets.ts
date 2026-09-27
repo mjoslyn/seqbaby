@@ -60,6 +60,7 @@ export const ENGINE_MODULES = [
   "catalog.js",
   "chance.js",
   "chanceGen.js",
+  "codePanel.js",
   "constants.js",
   "contagion.js",
   "crusher.js",
