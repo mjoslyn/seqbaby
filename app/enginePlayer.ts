@@ -82,20 +82,106 @@ function loadEngine(): Promise<Api> {
     const poll = () => {
       const api = f.contentWindow?.seqbaby;
       if (api?.state && typeof api.play === "function") return resolve(api);
+      if (!f.isConnected) return reject(new Error("the player was taken down"));
       if (Date.now() - t0 > 60000) return reject(new Error("the engine did not load"));
       setTimeout(poll, 150);
     };
     poll();
   });
-  engine.catch(() => {
+  const mine = engine;
+  mine.catch(() => {
+    // Only if nothing has replaced it since (a teardown then a fresh warm).
+    if (engine !== mine) return;
     engine = null;
     frame?.remove();
     frame = null;
   });
-  return engine;
+  return mine;
 }
 
 let warmScheduled = false;
+
+/** Stop whatever is playing, now. The page is going away or the visitor is
+ *  leaving it; either way nothing should go on sounding from a frame nobody
+ *  can see. `hard` also suspends the context, for a page about to be frozen
+ *  in the back/forward cache, where the 20ms stop ramp may not get to run. */
+function stopNow(hard = false): void {
+  if (current.slug !== null) set({ slug: null, status: "idle" });
+  const api = frame?.contentWindow?.seqbaby;
+  if (!api) return;
+  try {
+    void api.stop();
+    if (hard) void engineState(api).audioCtx?.suspend();
+  } catch {
+    // A frame mid-teardown: there is nothing left to stop.
+  }
+}
+
+/** Take the frame down entirely: the page that wanted it is gone (a soft
+ *  navigation left no play button mounted). Removing the frame closes its
+ *  document and the AudioContext with it, and the next page with a button
+ *  warms a fresh one. */
+function teardown(): void {
+  stopNow();
+  frame?.remove();
+  frame = null;
+  engine = null;
+  warmScheduled = false;
+}
+
+let mounted = 0;
+let listening = false;
+
+function sameTabLink(e: MouseEvent): URL | null {
+  if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return null;
+  const a = (e.target as Element | null)?.closest?.("a[href]") as HTMLAnchorElement | null;
+  if (!a || (a.target && a.target !== "_self") || a.hasAttribute("download")) return null;
+  const url = new URL(a.href, location.href);
+  if (url.origin !== location.origin) return null;
+  return url;
+}
+
+function listen(): void {
+  if (listening) return;
+  listening = true;
+  // Opening a song in the studio (or any link off this page) stops it at the
+  // click, not whenever the next document commits: the studio resolves the
+  // song's title before it flushes, and a plain <a> leaves this page
+  // playing until then.
+  document.addEventListener(
+    "click",
+    (e) => {
+      const url = sameTabLink(e);
+      if (url && url.pathname !== location.pathname) stopNow();
+    },
+    true,
+  );
+  // Whatever the way out (a link, the address bar, back), nothing plays on
+  // from a page that is no longer on screen -- including one kept in the
+  // back/forward cache, which would otherwise come back mid-song.
+  window.addEventListener("pagehide", () => stopNow(true));
+}
+
+/**
+ * A play button is on the page. Returns its release; when the last one goes
+ * (a client-side navigation to a page without any, e.g. a profile row's
+ * `<Link>` into the studio) the frame goes with it -- it lives on
+ * document.body, which a soft navigation does not replace, so left alone it
+ * would play on under the next page.
+ */
+export function retainPlayer(): () => void {
+  if (typeof window === "undefined") return () => {};
+  listen();
+  mounted++;
+  return () => {
+    mounted--;
+    // A tick later: a re-render (or React's dev double effect) unmounts and
+    // remounts in one go, and that is not the page going away.
+    setTimeout(() => {
+      if (mounted === 0) teardown();
+    }, 0);
+  };
+}
 
 /**
  * Load the engine ahead of the first press, once the page has loaded and the

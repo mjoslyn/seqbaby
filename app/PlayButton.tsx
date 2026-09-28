@@ -1,7 +1,15 @@
 "use client";
 
 import { useEffect, useSyncExternalStore } from "react";
-import { getPlayer, prefetch, scheduleWarm, subscribePlayer, togglePlay, type PlayerState } from "./enginePlayer";
+import {
+  getPlayer,
+  prefetch,
+  retainPlayer,
+  scheduleWarm,
+  subscribePlayer,
+  togglePlay,
+  type PlayerState,
+} from "./enginePlayer";
 import styles from "./playButton.module.css";
 
 // Play a published song where it is listed: a homepage card, a profile row.
@@ -30,7 +38,10 @@ export default function PlayButton({
   variant?: "card" | "row";
 }) {
   const player = useSyncExternalStore(subscribePlayer, getPlayer, () => IDLE);
-  useEffect(scheduleWarm, []);
+  useEffect(() => {
+    scheduleWarm();
+    return retainPlayer();
+  }, []);
   const status = player.slug === slug ? player.status : "idle";
   return (
     <button
