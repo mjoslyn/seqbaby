@@ -4188,3 +4188,6 @@ body.has-code-drawer { padding-bottom: min(46vh, 420px); }
 }
 .sq-code__pin { font-size: 11px; color: var(--fg-dim); border: 1px solid var(--border); border-radius: 4px; padding: 2px 6px; }
 .sq-code__pin.is-off { color: var(--danger); border-color: var(--danger); }
+/* the song has moved under code that was typed in: a dot on `from song` */
+.sq-code__from.is-stale { color: var(--accent); border-color: var(--accent); }
+.sq-code__from.is-stale::after { content: ""; display: inline-block; width: 6px; height: 6px; margin-left: 6px; border-radius: 50%; background: var(--accent); vertical-align: middle; }

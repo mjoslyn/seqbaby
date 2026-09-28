@@ -2636,6 +2636,17 @@ running engine ◀── mergeSet ◀── writeTracks(fromBlob(serializeSet())
   the same song, the drawer shows what was in it when it closed (code with an
   `every()` in it survives a close); onto a changed song, the song again.
   Nothing is kept in localStorage: the code is the song's.
+- **Open, it follows the song.** history.js fires `seqbaby:songedited` from
+  the place it makes an undo entry (and after an undo / redo), so the drawer
+  hears every settled edit the stack does, a jam peer's and a compose
+  audition's included, and none of the noise it filters (a lane rewriting a
+  knob while playing). Code still exactly as the drawer wrote it
+  (`_generated`) is written again, caret and scroll kept; code that has been
+  typed in is never overwritten, and `from song` turns accent with a dot
+  (`is-stale`) instead. A run clears the dot, and its own edit (the
+  `run code` label) is not taken for the song moving. history.js ignores
+  interactions inside `.sq-code`, so typing in the drawer is never an edit and
+  a run is always labelled as one.
 - **Portable is the other form** (`sessionToCode` without `native`): stock
   sounds (`EXPORT_SOUND`, gm_ names), only the effects Strudel names, lanes as
   per-step value patterns (`.lpf("60!4 1095!4")`), and one warning per track

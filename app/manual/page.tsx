@@ -1103,8 +1103,12 @@ keys: chord("<Cm7 Ab^7 Fm7 G7>").voicing().s("tines").room(0.5)`}</div>
           <p>
             Whatever the code makes are ordinary tracks. The grid shows them, you
             can turn their knobs by hand, and a save keeps them. The code isn&apos;t
-            a second copy of the song: reopen the drawer on a song you&apos;ve
-            changed and it is written again from the song. The bar also has{" "}
+            a second copy of the song. While the drawer is open it follows the
+            song: change a step, a knob or anything else in the studio, and the
+            code is written again to match. Once you&apos;ve typed in it, your
+            code is left alone, and{" "}
+            <span className={styles.ui}>from song</span> lights up with a dot to
+            say the song has moved on. The bar also has{" "}
             <span className={styles.ui}>examples</span>,{" "}
             <span className={styles.ui}>from song</span> (write the song out again),{" "}
             <span className={styles.ui}>copy</span>, and{" "}
