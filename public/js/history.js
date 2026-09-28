@@ -203,7 +203,15 @@ function checkForEdit() {
   if (fresh === live) return;            // nothing moved — no entry, no cost
   const r = stack.record(fresh, { label, key });
   live = r.snap;
-  if (r.status !== "unchanged") refreshHistoryUI();
+  if (r.status !== "unchanged") { refreshHistoryUI(); announceEdit(label); }
+}
+
+// The song changed and has settled: what the code drawer listens for, to keep
+// the song-as-code in step with it (codePanel.js). Fired from the same place
+// an undo entry is made, so it hears every edit the stack does, and none of
+// the noise the stack filters out (an automation lane rewriting a knob).
+function announceEdit(label) {
+  window.dispatchEvent(new CustomEvent("seqbaby:songedited", { detail: { label: label || "" } }));
 }
 
 function scheduleCheck(label, key) {
@@ -278,6 +286,9 @@ function labelForEvent(e) {
 function onInteraction(e) {
   if (restoring) return;
   if (e.target instanceof Element && e.target.closest(".sq-history")) return;
+  // Typing in the code drawer is not an edit to the song; running it is, and
+  // the drawer says so itself (markExternalEdit), under its own label.
+  if (e.target instanceof Element && e.target.closest(".sq-code")) return;
   // Only a settled control coalesces: a knob dragged in three goes is one
   // entry, while three clicks on the dice are three rolls to step back through.
   const key = (e.type === "input" || e.type === "change") ? e.target : null;
@@ -353,6 +364,7 @@ export function undo() {
   restore(step.snap);
   setStatus(step.label ? `undo — ${step.label}` : "undo");
   refreshHistoryUI();
+  announceEdit("undo");
   return true;
 }
 
@@ -363,6 +375,7 @@ export function redo() {
   restore(step.snap);
   setStatus(step.label ? `redo — ${step.label}` : "redo");
   refreshHistoryUI();
+  announceEdit("redo");
   return true;
 }
 

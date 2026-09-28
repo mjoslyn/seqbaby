@@ -56,6 +56,7 @@ lead: n("<0 2 4 [6 7]>*4").scale("D4:dorian").s("supersaw").room(0.3)
 let _open = null;      // the drawer's handle while it exists
 let _lastNames = [];   // the tracks the code holds: a line deleted from it removes its track
 let _touched = {};     // what the last run set, per track: a setting deleted from the code goes back to its default
+const RUN_LABEL = "run code";  // the undo label a run goes under, so its own edit is not mistaken for the song moving
 let _draft = null;     // { code, song }: the editor as it was closed, reopened only onto the same song
 let _lastSlots = [];   // the pattern slots the code holds: a section deleted from it is cleared
 let _pin = null;       // the slot code with no pattern() sections writes: the one it was written from
@@ -69,9 +70,20 @@ export function installCodePanel() {
   btn.addEventListener("click", () => toggleCodePanel());
   // A different song arriving is not the one the code wrote: forget which
   // tracks were the code's, so the next run cannot remove tracks of that song.
-  const forget = () => { _lastNames = []; _touched = {}; _lastSlots = []; _pin = null; _generated = null; _run = null; _draft = null; paint(); };
+  const forget = () => {
+    // a song arriving under unedited code is written out again, like any edit
+    const unedited = !!_open && _generated != null && _open.input.value === _generated;
+    _lastNames = []; _touched = {}; _lastSlots = []; _pin = null; _generated = unedited ? _open.input.value : null; _run = null; _draft = null;
+    paint();
+    _open?.sync();
+  };
   window.addEventListener("seqbaby:setapplied", forget);
   window.addEventListener("seqbaby:newset", forget);
+  // an edit in the studio (or an undo, or a jam peer's) has settled
+  window.addEventListener("seqbaby:songedited", (e) => {
+    if (e.detail?.label === RUN_LABEL) return;    // the drawer's own run
+    _open?.sync();
+  });
 }
 
 export function toggleCodePanel(force) {
@@ -122,6 +134,15 @@ function openPanel() {
     msg.className = `sq-code__msg${kind ? ` is-${kind}` : ""}`;
     msg.innerHTML = text;
   };
+  // The song moved on while the editor held code of its own: say so on the
+  // button that rewrites it, rather than rewriting what was typed.
+  const fromBtn = q(".sq-code__from");
+  const markStale = (on) => {
+    fromBtn.classList.toggle("is-stale", on);
+    fromBtn.title = on
+      ? "the song has changed since this code was written. Rewrite the editor from the song as it is now"
+      : "write the song as it is now into the editor, as code";
+  };
   let strudelMod = null;
   const mod = async () => (strudelMod ||= await import("./strudel.js"));
   const refreshLink = async () => {
@@ -163,7 +184,8 @@ function openPanel() {
     }
     try { mergeSet(song); }
     catch (e) { say(`the song would not take it: ${esc(e.message)}`, "error"); return; }
-    markExternalEdit("run code");
+    markExternalEdit(RUN_LABEL);
+    markStale(false);
     _lastNames = res.names;
     _touched = res.touched;
     _lastSlots = res.slots;
@@ -185,12 +207,20 @@ function openPanel() {
   // The song as code, in seqbaby's own form: every instrument, knob, effect,
   // LFO and lane, so running it back in changes nothing. Its tracks become
   // the code's: delete a track's line and run, and the track goes.
-  const fromSong = async ({ opening = false } = {}) => {
+  const fromSong = async ({ opening = false, quiet = false } = {}) => {
+    const before = input.value;
     const m = await mod();
+    // a quiet rewrite (the song moved under unedited code) never lands on a
+    // keystroke typed while the module was loading
+    if (quiet && input.value !== before) { markStale(true); return; }
     const res = m.sessionToCode(serializeSet(), { native: true });
     const { code, warnings, names, skipped } = res;
     const empty = !names.length;
-    input.value = empty ? `${code}\n// nothing in the song has notes yet. Try:\n// $: s("bd*4, ~ cp, hh*8")\n` : code;
+    const next = empty ? `${code}\n// nothing in the song has notes yet. Try:\n// $: s("bd*4, ~ cp, hh*8")\n` : code;
+    const caret = input.selectionStart, top = input.scrollTop;
+    input.value = next;
+    if (quiet) { input.setSelectionRange(Math.min(caret, next.length), Math.min(caret, next.length)); input.scrollTop = top; syncScroll(); }
+    markStale(false);
     _lastNames = names;
     _touched = {};
     _lastSlots = res.slots;
@@ -199,6 +229,7 @@ function openPanel() {
     _run = null;
     renderHl();
     refreshLink();
+    if (quiet) return;
     const lead = opening
       ? "the song as code. <b>ctrl/⌘ enter</b> runs it back in without stopping, <b>ctrl/⌘ .</b> stops"
       : "the song, as code. ctrl+enter runs it";
@@ -254,7 +285,14 @@ function openPanel() {
   };
   q(".sq-code__close").addEventListener("click", close);
 
-  _open = { close, renderHl, input };
+  // Kept in step with the song: after an edit in the studio settles, unedited
+  // code is written again from the song. Code that has been typed in is never
+  // overwritten; the `from song` button says the song has moved instead.
+  const sync = () => {
+    if (_generated != null && input.value === _generated) fromSong({ quiet: true }).catch(() => {});
+    else markStale(true);
+  };
+  _open = { close, renderHl, input, sync };
   // Reopened onto the song it was closed on, the editor is as it was left
   // (code that does not round-trip, like an every(), survives a close);
   // otherwise it opens on the song as it is now.
