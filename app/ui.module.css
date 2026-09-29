@@ -132,6 +132,18 @@
 .textarea:focus { outline: none; border-color: #6ee7b7; }
 .checkRow { display: flex; align-items: center; gap: 8px; margin: 14px 0; font-size: 13px; color: #cfd3da; }
 .hintText { color: #6b7280; font-size: 11px; margin-top: 4px; }
+.textButton {
+  background: none;
+  border: 0;
+  padding: 0;
+  margin-top: 6px;
+  color: #9aa0aa;
+  font: inherit;
+  font-size: 11px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.textButton:hover { color: #e8e6df; }
 
 /* avatar upload (settings) */
 .avatarRow { display: flex; align-items: center; gap: 14px; margin-top: 6px; }

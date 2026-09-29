@@ -6,20 +6,27 @@ import {
   signIn,
   signUp,
   signInWithMagicLink,
+  requestPasswordReset,
 } from "@/app/auth/actions";
 import styles from "@/app/ui.module.css";
 
-type Mode = "signin" | "signup";
+type Mode = "signin" | "signup" | "reset";
 const initial = {} as { error?: string; message?: string };
 
 export default function LoginPage() {
   const [mode, setMode] = useState<Mode>("signin");
+  // Set when /auth/confirm could not use the link it was handed.
+  const [linkFailed, setLinkFailed] = useState(false);
   // `/login?mode=signup` opens on the create-account tab: the homepage's
-  // "make an account" goes there. Read after mount rather than through
+  // "make an account" goes there. `?mode=reset` opens on the reset form, from
+  // an expired reset link. Read after mount rather than through
   // useSearchParams, which would need a Suspense boundary to keep this page
-  // static, for one flag.
+  // static, for two flags.
   useEffect(() => {
-    if (new URLSearchParams(location.search).get("mode") === "signup") setMode("signup");
+    const q = new URLSearchParams(location.search);
+    const m = q.get("mode");
+    if (m === "signup" || m === "reset") setMode(m);
+    if (q.get("error") === "confirm") setLinkFailed(true);
   }, []);
   const [signInState, signInAction, signInPending] = useActionState(
     signIn,
@@ -33,9 +40,14 @@ export default function LoginPage() {
     signInWithMagicLink,
     initial,
   );
+  const [resetState, resetAction, resetPending] = useActionState(
+    requestPasswordReset,
+    initial,
+  );
 
   const isSignin = mode === "signin";
-  const state = isSignin ? signInState : signUpState;
+  const isReset = mode === "reset";
+  const state = isReset ? resetState : isSignin ? signInState : signUpState;
 
   return (
     <div className={styles.authWrap}>
@@ -56,14 +68,24 @@ export default function LoginPage() {
           </button>
           <button
             type="button"
-            className={`${styles.tab} ${!isSignin ? styles.tabActive : ""}`}
+            className={`${styles.tab} ${mode === "signup" ? styles.tabActive : ""}`}
             onClick={() => setMode("signup")}
           >
             Create account
           </button>
         </div>
 
-        <form action={isSignin ? signInAction : signUpAction}>
+        {isReset && (
+          <p className={styles.hintText}>
+            Enter your email and we&apos;ll send a link to set a new password.
+          </p>
+        )}
+
+        <form
+          action={
+            isReset ? resetAction : isSignin ? signInAction : signUpAction
+          }
+        >
           <div className={styles.field}>
             <label className={styles.label} htmlFor="email">
               email
@@ -77,32 +99,49 @@ export default function LoginPage() {
               required
             />
           </div>
-          <div className={styles.field}>
-            <label className={styles.label} htmlFor="password">
-              password
-            </label>
-            <input
-              className={styles.input}
-              id="password"
-              name="password"
-              type="password"
-              autoComplete={isSignin ? "current-password" : "new-password"}
-              minLength={6}
-              required
-            />
-          </div>
+          {!isReset && (
+            <div className={styles.field}>
+              <label className={styles.label} htmlFor="password">
+                password
+              </label>
+              <input
+                className={styles.input}
+                id="password"
+                name="password"
+                type="password"
+                autoComplete={isSignin ? "current-password" : "new-password"}
+                minLength={6}
+                required
+              />
+              {isSignin && (
+                <button
+                  type="button"
+                  className={styles.textButton}
+                  onClick={() => setMode("reset")}
+                >
+                  forgot password?
+                </button>
+              )}
+            </div>
+          )}
           <button
             className={styles.button}
             type="submit"
-            disabled={isSignin ? signInPending : signUpPending}
+            disabled={
+              isReset ? resetPending : isSignin ? signInPending : signUpPending
+            }
           >
-            {isSignin
-              ? signInPending
-                ? "Signing in…"
-                : "Sign in"
-              : signUpPending
-                ? "Creating…"
-                : "Create account"}
+            {isReset
+              ? resetPending
+                ? "Sending…"
+                : "Send reset link"
+              : isSignin
+                ? signInPending
+                  ? "Signing in…"
+                  : "Sign in"
+                : signUpPending
+                  ? "Creating…"
+                  : "Create account"}
           </button>
         </form>
 
@@ -128,6 +167,21 @@ export default function LoginPage() {
           </form>
         )}
 
+        {isReset && (
+          <button
+            type="button"
+            className={styles.ghost}
+            onClick={() => setMode("signin")}
+          >
+            ← back to sign in
+          </button>
+        )}
+
+        {linkFailed && !state?.error && !state?.message && (
+          <p className={styles.error}>
+            That link has expired or already been used. Ask for a new one.
+          </p>
+        )}
         {state?.error && <p className={styles.error}>{state.error}</p>}
         {state?.message && <p className={styles.message}>{state.message}</p>}
         {isSignin && magicState?.message && (
