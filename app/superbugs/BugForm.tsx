@@ -42,6 +42,9 @@ export default function BugForm() {
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<Result>(null);
   const [token, setToken] = useState("");
+  // Why the check can't give a token (blocked script, a hostname Cloudflare
+  // doesn't allow). Without it the button just sat disabled with no reason.
+  const [checkErr, setCheckErr] = useState("");
   const box = useRef<HTMLDivElement>(null);
   const widget = useRef<string | null>(null);
 
@@ -54,12 +57,20 @@ export default function BugForm() {
         widget.current = ts.render(box.current, {
           sitekey: SITE_KEY,
           theme: "auto",
-          callback: (t: string) => setToken(t),
+          callback: (t: string) => {
+            setToken(t);
+            setCheckErr("");
+          },
           "expired-callback": () => setToken(""),
-          "error-callback": () => setToken(""),
+          "error-callback": () => {
+            setToken("");
+            setCheckErr("the robot check failed");
+          },
         });
       })
-      .catch(() => {});
+      .catch(() => {
+        if (!gone) setCheckErr("the robot check did not load (an ad blocker?)");
+      });
     return () => {
       gone = true;
       if (widget.current) window.turnstile?.remove(widget.current);
@@ -140,6 +151,12 @@ export default function BugForm() {
       </label>
       <input name="website" tabIndex={-1} autoComplete="off" aria-hidden="true" className={styles.trap} />
       {SITE_KEY && <div ref={box} />}
+      {checkErr && !token && (
+        <p className={styles.err} role="alert">
+          {checkErr}.{" "}
+          <a href={`${ISSUES}/new`} target="_blank" rel="noopener noreferrer">file it on GitHub instead</a>
+        </p>
+      )}
       <button type="submit" disabled={busy || (!!SITE_KEY && !token)} className={styles.submit}>
         {busy ? "sending..." : "release the superbug"}
       </button>
