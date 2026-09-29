@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { STYLE_SRC } from "./engineAssets";
+import PostHogIdentify from "./PostHogIdentify";
 import { SITE_DESCRIPTION, shareCard } from "./shareCard";
 
 export const metadata: Metadata = {
@@ -54,7 +55,10 @@ export default function RootLayout({
             Version-prefixed so it can be cached immutably; see engineAssets. */}
         <link rel="stylesheet" href={STYLE_SRC} />
       </head>
-      <body suppressHydrationWarning>{children}</body>
+      <body suppressHydrationWarning>
+        <PostHogIdentify />
+        {children}
+      </body>
     </html>
   );
 }
