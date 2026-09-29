@@ -323,6 +323,7 @@ a.bylineLike { text-decoration: none; }
   text-decoration: none;
 }
 .accountBtn:hover { border-color: #3a3d45; }
+.accountBtn:disabled { opacity: 0.5; cursor: not-allowed; border-color: #2a2d35; }
 
 /* Drawn like every other button in the bar: it used to be a filled light-blue
    pill, which made it the loudest thing on the screen for a control nobody

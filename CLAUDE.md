@@ -79,7 +79,7 @@ env / fx / eq / comp / mod / automation per track.
 │   └── manifest.webmanifest   installed-app name / colours / icon sizes
 ├── lib/
 │   ├── supabase/{client,server,middleware}.ts   Supabase SSR helpers
-│   ├── composeModels.js       which models a compose turn may run on (allowlist + dropdown)
+│   ├── composeModels.js       the model a compose turn runs on (default + transcript labels)
 │   ├── composeKey.js          whose key it runs on: the shape check + the mask
 │   ├── composeJobs.js         a running turn's record, its two secrets, and the limits
 │   ├── jamWire.js             a jam message cut into parts the transport will carry, and put back together
@@ -2721,10 +2721,21 @@ panel ──▶ POST /api/compose ──▶ createJob ──▶ POST the worker 
   counts against the key even when an account is signed in: one person with
   their own key should not also be spending the account allowance they aren't
   using.
-- **The model allowlist survives both paths** (`lib/composeModels.js`). On the
-  site's key because the site is billed; on a brought key because an id nobody
-  vetted is a request this app would be making on someone's behalf without
-  knowing what it costs.
+- **The browser never names a model** (`lib/composeModels.js`). Every turn,
+  on either key, runs on the deploy's `ANTHROPIC_MODEL`, else
+  `DEFAULT_COMPOSE_MODEL`: the site's key because the site is billed, a brought
+  key because a model nobody vetted is a request this app would be making on
+  someone's behalf without knowing what it costs. There is no picker.
+- **The site's key running dry switches compose off.** A turn on the deploy's
+  key that fails for want of credit (or the console's spend limit) sets a flag
+  in the jobs store (`markSiteOutOfBudget`, lib/composeJobs.js); the studio
+  reads it when drawing the bar, and the route refuses site-key turns while it
+  holds. The compose button is disabled for anyone who would run on the site's
+  key and has no key of their own, titled `SITE_OUT_OF_BUDGET`
+  (lib/composeKey.js), which is also the error that turn reports. The flag
+  expires after 30 minutes (`COMPOSE_BUDGET_RETRY_MS`), because topping up
+  happens on Anthropic's console where nothing here can see it; the next turn
+  after that either succeeds and clears it or sets it again.
 - **The key lives in the browser, and the panel says so.** `localStorage`
   (`seqbaby.anthropicKey.v1`), which survives a reload — the thing that makes
   the feature usable — and is readable by anything that gets script into this
@@ -2736,7 +2747,7 @@ panel ──▶ POST /api/compose ──▶ createJob ──▶ POST the worker 
   can be fixed.
 - **The conversation follows the song** (`song_chats`), so a signed-out
   visitor's turns keep no transcript beyond the tab: there is no song to attach
-  one to. Everything else about the panel — the model picker, the activity
+  one to. Everything else about the panel — the activity
   line, the warnings — is the same on either key.
 
 ## A session onto a RUNNING engine (`liveSet.js`) — and the audition

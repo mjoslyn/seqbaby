@@ -256,7 +256,7 @@ public/
   style.css  icons/  manifest.webmanifest
 lib/
   supabase/                  Supabase SSR helpers
-  composeModels / composeKey / composeJobs   compose allowlist, key handling, jobs + limits
+  composeModels / composeKey / composeJobs   compose model, key handling, jobs + limits
   jamWire.js                 splits jam messages to fit the broadcast cap
   api.js                     legacy Netlify Blobs share store
 mcp/                         MCP server, headless audition, tool definitions

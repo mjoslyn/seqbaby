@@ -16,8 +16,14 @@
 // write the progress the browser is polling.
 
 import { runComposeTurn } from "../../mcp/composeTurn.mjs";
-import { getJobInput, appendJobEvent, finishJob } from "../../lib/composeJobs.js";
-import { describeTurnFailure } from "../../lib/composeKey.js";
+import {
+  getJobInput,
+  appendJobEvent,
+  finishJob,
+  markSiteOutOfBudget,
+  clearSiteOutOfBudget,
+} from "../../lib/composeJobs.js";
+import { describeTurnFailure, isOutOfCredit } from "../../lib/composeKey.js";
 
 export default async (req) => {
   let jobId;
@@ -58,10 +64,6 @@ export default async (req) => {
 
     const out = await runComposeTurn({
       apiKey,
-      // The model the panel picked for this message, already checked against
-      // the allowlist by the route. Undefined takes runComposeTurn's own
-      // default, which is the deploy's.
-      model: job.model,
       message: job.message,
       history: job.history,
       session: job.session,
@@ -72,6 +74,7 @@ export default async (req) => {
       },
     });
 
+    if (!brought) await clearSiteOutOfBudget().catch(() => {});
     await finishJob(jobId, {
       status: "done",
       reply: out.reply,
@@ -86,6 +89,9 @@ export default async (req) => {
     // A worker nobody is awaiting has exactly one way to report anything: the
     // record the browser is polling. Failing to write it would leave the chat
     // spinning until it times itself out.
+    // The site's key running dry switches compose off for everyone on it,
+    // rather than letting each of them find out a minute into a turn.
+    if (!brought && isOutOfCredit(e)) await markSiteOutOfBudget().catch(() => {});
     if (jobId) {
       await finishJob(jobId, { status: "error", error: describeTurnFailure(e, brought) }).catch(() => {});
     }

@@ -34,6 +34,7 @@ export function AccountBar({
   username,
   avatarGrid = null,
   serverKey = false,
+  budgetOut = false,
   viewing = null,
 }: {
   name: string | null;
@@ -45,6 +46,8 @@ export function AccountBar({
    *  needs it to know whether composing on the SITE's key is on offer at all
    *  — a visitor's own key works either way. */
   serverKey?: boolean;
+  /** Whether that key has run out of budget (lib/composeJobs.js). */
+  budgetOut?: boolean;
   /** Someone else's song, named by the URL: drawn as "title by @owner". */
   viewing?: LinkedSongCard | null;
 }) {
@@ -173,7 +176,7 @@ export function AccountBar({
             visitor's own Anthropic key when they have one, and that needs no
             account. Signed in with a key on the deploy, the panel offers the
             choice. */}
-        <ComposeChat signedIn={!!name} serverKey={serverKey} />
+        <ComposeChat signedIn={!!name} serverKey={serverKey} budgetOut={budgetOut} />
         <button
           className={styles.shareBtn}
           onClick={() => window.seqbaby?.onShareSet?.(getOpenSong().title)}

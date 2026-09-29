@@ -1,10 +1,9 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { createJob, hashApiKey } from "@/lib/composeJobs.js";
+import { createJob, hashApiKey, siteOutOfBudget } from "@/lib/composeJobs.js";
 import { newCtx, runComposeTurn } from "@/mcp/composeTurn.mjs";
-import { appendJobEvent, finishJob } from "@/lib/composeJobs.js";
-import { isComposeModel } from "@/lib/composeModels.js";
-import { describeTurnFailure, looksLikeApiKey } from "@/lib/composeKey.js";
+import { appendJobEvent, clearSiteOutOfBudget, finishJob, markSiteOutOfBudget } from "@/lib/composeJobs.js";
+import { SITE_OUT_OF_BUDGET, describeTurnFailure, isOutOfCredit, looksLikeApiKey } from "@/lib/composeKey.js";
 
 // Node runtime: the loop imports public/js/songBuilder.js (dependency-free --
 // the same guarantee that lets mcp/server.mjs and the tests run it under
@@ -32,7 +31,7 @@ async function currentUserId(): Promise<string | null> {
   }
 }
 
-// POST /api/compose { message, history, session, model?, apiKey? } -> { jobId, jobToken }
+// POST /api/compose { message, history, session, apiKey? } -> { jobId, jobToken }
 //
 // This route does NOT write the song. Writing a whole song is dozens of model
 // rounds and takes minutes; a synchronous function gets 26 seconds (measured:
@@ -53,7 +52,6 @@ export async function POST(req: Request) {
     message?: string;
     history?: ChatTurn[];
     session?: unknown;
-    model?: string;
     apiKey?: string;
   };
   try {
@@ -90,16 +88,11 @@ export async function POST(req: Request) {
         { status: 400 },
       );
     }
-  }
-
-  // The model is the browser's to pick per message, but not to invent. On the
-  // deploy's key that is because the turn is billed to the site; on a brought
-  // key it is because an id nobody has vetted is a request this app would be
-  // making on someone's behalf without knowing what it costs. Absent is fine
-  // and means the deploy's own default (ANTHROPIC_MODEL, else the shared one).
-  const model = typeof body.model === "string" && body.model ? body.model : undefined;
-  if (model && !isComposeModel(model)) {
-    return NextResponse.json({ error: "that isn't a model this deploy will run" }, { status: 400 });
+    // Known to be out of credit: refuse now rather than start a job that can
+    // only fail the same way a minute from now.
+    if (await siteOutOfBudget()) {
+      return NextResponse.json({ error: SITE_OUT_OF_BUDGET }, { status: 503 });
+    }
   }
 
   const message = typeof body.message === "string" ? body.message.trim() : "";
@@ -127,7 +120,6 @@ export async function POST(req: Request) {
     message,
     history,
     session: body.session,
-    model,
   });
   // Over this bucket's limits. 429 so the panel can say so plainly rather than
   // treating it as a failure to start.
@@ -194,10 +186,6 @@ function runInline(jobId: string, apiKey?: string) {
       }
       const out = await runComposeTurn({
         apiKey: key,
-        // Undefined here takes runComposeTurn's own default parameter, which
-        // is the deploy's -- so a job with no model on it behaves exactly as
-        // every job did before there was a choice.
-        model: job.model,
         message: job.message,
         history: job.history,
         session: job.session,
@@ -205,6 +193,7 @@ function runInline(jobId: string, apiKey?: string) {
           if (e.type === "tool") await appendJobEvent(jobId, e);
         },
       });
+      if (!apiKey) await clearSiteOutOfBudget().catch(() => {});
       await finishJob(jobId, {
         status: "done",
         reply: out.reply,
@@ -215,6 +204,7 @@ function runInline(jobId: string, apiKey?: string) {
         ms: out.ms,
       });
     } catch (e) {
+      if (!apiKey && isOutOfCredit(e)) await markSiteOutOfBudget().catch(() => {});
       await finishJob(jobId, { status: "error", error: describeTurnFailure(e, !!apiKey) }).catch(() => {});
     }
   })();
