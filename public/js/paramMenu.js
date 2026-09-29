@@ -80,6 +80,7 @@ export function openParamMenu(t, spec) {
   modal.innerHTML = `
     <div class="sq-modal__title">${esc(spec.label)} <span class="sq-pmenu__sub">— ${settingOnly ? "setting" : "modulation + automation"}</span></div>
     ${spec.description ? `<div class="sq-pmenu__desc">${esc(spec.description)}</div>` : ""}
+    <div class="sq-pmenu__code" hidden>in code <code class="sq-pmenu__code-call"></code></div>
     ${settingOnly ? `<div class="sq-pmenu__sec"><div class="sq-pmenu__none">no lfo or automation for this one — it's a fixed setting, not a value that can be swept</div></div>` : `
     <section class="sq-pmenu__sec">
       <div class="sq-pmenu__sec-head">lfo${spec.lfo ? ` <span class="sq-pmenu__key">${esc(lfoLabel(spec.lfo))}</span>` : ""}</div>
@@ -98,6 +99,22 @@ export function openParamMenu(t, spec) {
       <button class="sq-modal__ok" type="button">done</button>
     </div>
   `;
+  // How the code drawer spells this control, with its value in it. strudel.js
+  // is the one that knows (it reads and writes those names), and the studio
+  // otherwise loads it only when the drawer runs something, so it is fetched
+  // here rather than imported: the line fills in a moment after the menu opens.
+  if (ctl) {
+    import("./strudel.js").then(({ codeForControl }) => {
+      const sourceName = ctl.classList.contains("sq-comp__source") && ctl.value !== "self"
+        ? /** @type {HTMLSelectElement} */ (/** @type {unknown} */ (ctl)).selectedOptions?.[0]?.textContent?.trim() : undefined;
+      let code = null;
+      for (const cls of ctl.classList) if ((code = codeForControl(cls, t, { sourceName }))) break;
+      const line = modal.querySelector(".sq-pmenu__code");
+      if (!code || !line) return;
+      line.querySelector("code").textContent = code;
+      line.hidden = false;
+    }).catch(() => {});
+  }
   const modBody = modal.querySelector(".sq-pmenu__body--mod");
   const autBody = modal.querySelector(".sq-pmenu__body--aut");
   const macBody = modal.querySelector(".sq-pmenu__body--macro");

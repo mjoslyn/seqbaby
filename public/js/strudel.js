@@ -1802,6 +1802,61 @@ const LFO_EXPORT = {
   vol: { knobOf: (t) => t.params?.vol ?? 0.8, units: (u) => u / 0.8, name: () => "gain" },
 };
 
+// ---- one control, as code -------------------------------------------------------
+
+const ENV_CLASS = { "p-envamt": "env", "p-envatk": "attack", "p-envdec": "decay", "p-envsus": "sustain", "p-envrel": "release" };
+// fx classes whose last word is not the config key
+const FX_CLASS_KEY = { "shaper.amt": "amount", "pitchshift.semi": "semitones" };
+// the rack controls Strudel has a name of its own for, as sessionToCode writes them
+const STRUDEL_FX = { "reverb.wet": "room", "reverb.decay": "size", "delay.wet": "delay", "delay.time": "delaytime", "delay.fbk": "delayfeedback" };
+const GENERIC_FILTER = { lowpass: "lpf", highpass: "hpf", bandpass: "bpf" };
+
+/**
+ * How the code drawer spells one studio control, with the track's current value
+ * in it: the cutoff of a lowpass is `.lpf(1200)`, a hexop level
+ * `.knob('d3lvl', 0.9)`, the chorus rate `.fx('chorus.rate', 0.5)`. `cls` is the
+ * control's class (paramTargets.js's CONTROL_TARGETS key, or the panel class
+ * the markup gives it); `t` anything with a track's sound fields. The
+ * parameter menu shows it, so a knob found by ear can be written. Null for a
+ * control code cannot set (the generators, the sample editor), and for every
+ * control on a track code cannot make (sampler, granular, midi, bus).
+ * @param {string} cls
+ * @param {{engineKey: string, params?: object, filter?: object, fxConfig?: object, eq?: object, comp?: object}} t
+ * @param {{sourceName?: string}} [opts] the sidechain source's track name
+ * @returns {string|null}
+ */
+export function codeForControl(cls, t, { sourceName } = {}) {
+  if (NOT_FROM_CODE.has(staticEngineByKey(t.engineKey)?.type)) return null;
+  const q = (v) => typeof v === "string" ? jsString(v) : typeof v === "boolean" ? String(v) : round3(Number(v) || 0);
+  const call = (name, ...args) => `.${name}(${args.map(q).join(", ")})`;
+  const f = { ...defaultFilter(), ...(t.filter || {}) };
+  let m;
+  if (cls === "p-vol") return call("gain", (t.params?.vol ?? defaultTrackParams().vol) / 0.8);
+  if (cls === "p-cutoff") return GENERIC_FILTER[f.type] ? call(GENERIC_FILTER[f.type], knobToHz(f.cutoff)) : call("filter", "cutoff", f.cutoff);
+  if (cls === "p-reson") return call("lpq", f.reson * 20);
+  if (cls === "p-filtertype") return call("filter", "type", f.type);
+  if (ENV_CLASS[cls]) return call("filter", ENV_CLASS[cls], f[ENV_CLASS[cls]]);
+  if ((m = /^p-eq-(\w+)$/.exec(cls))) return m[1] in defaultEq() ? call("eq", m[1], t.eq?.[m[1]] ?? 0) : null;
+  if (cls === "sq-comp__source") return sourceName ? call("comp", "source", sourceName) : null;
+  if ((m = /^comp-(\w+)$/.exec(cls))) {
+    const c = { ...defaultCompConfig(), ...(t.comp || {}) };
+    return m[1] in c ? call("comp", m[1], c[m[1]]) : null;
+  }
+  if ((m = /^fx-(\w+)-(\w+)$/.exec(cls))) {
+    const DFX = defaultFxConfig();
+    const stage = m[1], key = FX_CLASS_KEY[`${stage}.${m[2]}`] || m[2];
+    if (!DFX[stage] || !(key in DFX[stage])) return null;
+    const v = t.fxConfig?.[stage]?.[key] ?? DFX[stage][key];
+    const named = STRUDEL_FX[`${stage}.${key}`];
+    return named ? call(named, v) : call("fx", `${stage}.${key}`, v);
+  }
+  if ((m = /^p-(\w+)$/.exec(cls)) && engineKnobKeys(t.engineKey).includes(m[1])) {
+    const v = t.params?.[m[1]] ?? defaultTrackParams()[m[1]];
+    return v == null ? null : call("knob", m[1], v);
+  }
+  return null;
+}
+
 /** Tokens into bars and beats: `[bd ~ ~ ~] [sd ~ ~ ~]`, bars as `<...>` would change meaning, so
  *  bars are just spaced wider. `@` weights count toward the beat they start in. */
 function groupTokens(tokens, perCycle) {
