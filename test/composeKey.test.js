@@ -75,7 +75,7 @@ test("a job started on a brought key records the hash and not the key", async ()
     message: "make me a techno beat",
     history: [],
     session: null,
-    model: "claude-sonnet-5",
+    model: "claude-sonnet-5-5",
   });
   assert.equal(error, undefined);
   assert.ok(id && token && viewToken);
