@@ -26,7 +26,10 @@ const parse = (rows: string[]) => rows.map((row) => [...row].map((c) => c === "x
 
 // The homepage uses the defaults; another page can hand it its own beat: four
 // rows of sixteen ("x" is a hit), a bpm, and the blip lane's semitones.
-export type ToyProps = { bpm?: number; blip?: number[]; start?: string[] };
+// Given `sections`, the shake button walks through them instead of rolling
+// dice: each is a beat, a blip lane and a name.
+export type ToySection = { name: string; start: string[]; blip: number[] };
+export type ToyProps = { bpm?: number; blip?: number[]; start?: string[]; sections?: ToySection[] };
 
 function noiseBuffer(ctx: AudioContext): AudioBuffer {
   const buf = ctx.createBuffer(1, ctx.sampleRate * 0.5, ctx.sampleRate);
@@ -77,8 +80,12 @@ function voice(ctx: AudioContext, out: AudioNode, noise: AudioBuffer, lane: numb
   src.stop(t + len + 0.01);
 }
 
-export default function Toy({ bpm = DEFAULT_BPM, blip = DEFAULT_BLIP, start = DEFAULT_START }: ToyProps = {}) {
-  const [grid, setGrid] = useState(() => parse(start));
+export default function Toy({ bpm = DEFAULT_BPM, blip: blip0 = DEFAULT_BLIP, start = DEFAULT_START, sections }: ToyProps = {}) {
+  const [section, setSection] = useState(0);
+  const first = sections?.[0];
+  const [grid, setGrid] = useState(() => parse(first ? first.start : start));
+  // Read at each note, so a section change lands under a running loop.
+  const blipRef = useRef(first ? first.blip : blip0);
   const [playing, setPlaying] = useState(false);
   const [now, setNow] = useState(-1);
   const gridRef = useRef(grid);
@@ -111,7 +118,7 @@ export default function Toy({ bpm = DEFAULT_BPM, blip = DEFAULT_BLIP, start = DE
     const tick = () => {
       while (at < ctx.currentTime + 0.12) {
         const s = step;
-        gridRef.current.forEach((lane, i) => lane[s] && voice(ctx, out, noise, i, s, at, blip));
+        gridRef.current.forEach((lane, i) => lane[s] && voice(ctx, out, noise, i, s, at, blipRef.current));
         const delay = Math.max(0, (at - ctx.currentTime) * 1000);
         setTimeout(() => setNow(s), delay);
         at += dur;
@@ -121,7 +128,7 @@ export default function Toy({ bpm = DEFAULT_BPM, blip = DEFAULT_BLIP, start = DE
     tick();
     timer.current = window.setInterval(tick, 25);
     setPlaying(true);
-  }, [bpm, blip]);
+  }, [bpm]);
 
   useEffect(() => () => {
     if (timer.current !== null) clearInterval(timer.current);
@@ -131,12 +138,20 @@ export default function Toy({ bpm = DEFAULT_BPM, blip = DEFAULT_BLIP, start = DE
   const toggle = (lane: number, step: number) =>
     setGrid((g) => g.map((row, i) => (i === lane ? row.map((v, j) => (j === step ? !v : v)) : row)));
 
-  const shake = () =>
+  const shake = () => {
+    if (sections?.length) {
+      const next = (section + 1) % sections.length;
+      blipRef.current = sections[next].blip;
+      setGrid(parse(sections[next].start));
+      setSection(next);
+      return;
+    }
     setGrid(LANES.map((_, lane) =>
       Array.from({ length: STEPS }, (_, i) =>
         lane === 0 ? i % 4 === 0 || Math.random() < 0.12 : Math.random() < [0, 0.18, 0.5, 0.3][lane],
       ),
     ));
+  };
 
   return (
     <div className={styles.toy}>
@@ -149,10 +164,10 @@ export default function Toy({ bpm = DEFAULT_BPM, blip = DEFAULT_BLIP, start = DE
         >
           {playing ? "■ stop" : "▶ play"}
         </button>
-        <button type="button" className={styles.toyBtn} onClick={shake} title="roll a new beat">
-          ⚄ shake it
+        <button type="button" className={styles.toyBtn} onClick={shake} title={sections ? "next section" : "roll a new beat"}>
+          {sections ? "⏭ next section" : "⚄ shake it"}
         </button>
-        <span className={styles.toyBpm}>{bpm} bpm</span>
+        <span className={styles.toyBpm}>{sections ? `${sections[section].name} · ` : ""}{bpm} bpm</span>
       </div>
       <div className={styles.toyGrid} role="grid" aria-label="toy step sequencer">
         {LANES.map((name, lane) => (

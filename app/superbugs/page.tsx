@@ -8,15 +8,31 @@ export const metadata: Metadata = {
   description: "Found a bug in seqbaby? Tell us. It goes straight to the repo's issues.",
 };
 
-// It loads playing the intro riff of King Gizzard's "Superbug", from the tab:
-// C# minor, the clean intro's sixteen eighths (F# D# C# D# F# D# C# D# F# G#
-// A# C# A# G# F# D#). The blip lane's numbers are semitones from A3 (220Hz),
-// so C#3 is -8. Drums are a plain rock beat of my own, and the tempo is
-// 90, as told.
+// Sections of King Gizzard's "Superbug", from the tab, in C# minor at 90. The
+// blip lane's numbers are semitones from A3 (220Hz), so C#3 is -8 and the low
+// C# string's D#2 is -18. The intro is the clean riff's sixteen eighths (F# D#
+// C# D# F# D# C# D# F# G# A# C# A# G# F# D#), the verse is the palm-muted chug
+// on D#2, the chorus the same string's D# D# D# E D# figure. Drums are plain
+// rock beats of my own.
 const SUPERBUG = {
   bpm: 90,
-  blip: [-3, -6, -8, -6, -3, -6, -8, -6, -3, -1, 1, 4, 1, -1, -3, -6],
-  start: ["x.......x.x.....", "....x.......x...", "x.x.x.x.x.x.x.x.", "xxxxxxxxxxxxxxxx"],
+  sections: [
+    {
+      name: "intro",
+      blip: [-3, -6, -8, -6, -3, -6, -8, -6, -3, -1, 1, 4, 1, -1, -3, -6],
+      start: ["x.......x.x.....", "....x.......x...", "x.x.x.x.x.x.x.x.", "xxxxxxxxxxxxxxxx"],
+    },
+    {
+      name: "verse",
+      blip: Array(16).fill(-18),
+      start: ["x.......x.......", "....x.......x...", "x.x.x.x.x.x.x.x.", "xxxxxxxxxxxxxxxx"],
+    },
+    {
+      name: "chorus",
+      blip: [...Array(3).fill([-18, -18, -18, -17, -18]).flat(), -18],
+      start: ["x...x...x...x...", "....x.......x...", "x.x.x.x.x.x.x.x.", "xxxxxxxxxxxxxxxx"],
+    },
+  ],
 };
 
 export default function SuperbugsPage() {
