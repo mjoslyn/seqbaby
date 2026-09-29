@@ -6,8 +6,24 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
-import { describeTurnFailure, looksLikeApiKey, maskApiKey, MAX_KEY_LEN } from "../lib/composeKey.js";
-import { canReadJob, createJob, getJobInput, getJobProgress, hashApiKey } from "../lib/composeJobs.js";
+import {
+  SITE_OUT_OF_BUDGET,
+  describeTurnFailure,
+  isOutOfCredit,
+  looksLikeApiKey,
+  maskApiKey,
+  MAX_KEY_LEN,
+} from "../lib/composeKey.js";
+import {
+  canReadJob,
+  clearSiteOutOfBudget,
+  createJob,
+  getJobInput,
+  getJobProgress,
+  hashApiKey,
+  markSiteOutOfBudget,
+  siteOutOfBudget,
+} from "../lib/composeJobs.js";
 
 const KEY = "sk-ant-api03-" + "a".repeat(80) + "_-AA";
 
@@ -75,7 +91,6 @@ test("a job started on a brought key records the hash and not the key", async ()
     message: "make me a techno beat",
     history: [],
     session: null,
-    model: "claude-sonnet-5-5",
   });
   assert.equal(error, undefined);
   assert.ok(id && token && viewToken);
@@ -114,4 +129,23 @@ test("a failed turn says which of the three things went wrong, and whose", () =>
   // Anything else keeps its own message: a real bug has to stay debuggable.
   assert.equal(describeTurnFailure(new Error("socket hang up"), true), "compose failed: socket hang up");
   assert.equal(describeTurnFailure("plain string", false), "compose failed: plain string");
+});
+
+test("the site's key running dry is one recognisable line, and a flag that clears", async () => {
+  const credit = new Error('400 {"error":{"message":"Your credit balance is too low to access the Anthropic API."}}');
+  const limit = new Error('400 {"error":{"message":"You have reached your specified API usage limits."}}');
+  assert.ok(isOutOfCredit(credit));
+  assert.ok(isOutOfCredit(limit));
+  assert.ok(!isOutOfCredit(new Error("429 rate_limit_error")), "a rate limit passes, a budget does not");
+
+  assert.equal(describeTurnFailure(credit, false), SITE_OUT_OF_BUDGET);
+  assert.equal(describeTurnFailure(limit, false), SITE_OUT_OF_BUDGET);
+  assert.match(describeTurnFailure(limit, true), /your Anthropic account/, "a brought key's budget is its owner's");
+  assert.ok(!SITE_OUT_OF_BUDGET.includes("\u2014"), "no em dashes");
+
+  assert.equal(await siteOutOfBudget(), false);
+  await markSiteOutOfBudget();
+  assert.equal(await siteOutOfBudget(), true);
+  await clearSiteOutOfBudget();
+  assert.equal(await siteOutOfBudget(), false);
 });

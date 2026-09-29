@@ -10,6 +10,7 @@ import EngineScripts from "@/app/EngineScripts";
 import OpenSongOnLoad from "@/app/OpenSongOnLoad";
 import DefaultTemplate from "@/app/DefaultTemplate";
 import { AccountBar } from "@/app/AccountBar";
+import { siteOutOfBudget } from "@/lib/composeJobs.js";
 import styles from "@/app/ui.module.css";
 import { createClient } from "@/lib/supabase/server";
 import { SITE_DESCRIPTION, SITE_URL, shareCard } from "@/app/shareCard";
@@ -114,7 +115,14 @@ async function AccountBarSlot({ searchParams }: { searchParams: SearchParams }) 
       data: { user },
     },
     linked,
-  ] = await Promise.all([supabase.auth.getUser(), linkedSongCard(slug, openId)]);
+    budgetOut,
+  ] = await Promise.all([
+    supabase.auth.getUser(),
+    linkedSongCard(slug, openId),
+    // Whether the site's key has run dry, so compose can say so before anyone
+    // types a word. Only worth asking when there is a site key at all.
+    process.env.ANTHROPIC_API_KEY ? siteOutOfBudget() : false,
+  ]);
   // Your own song needs no byline: the songs menu and the save button already
   // say what it is.
   const viewing = linked && linked.ownerId !== user?.id ? linked : null;
@@ -150,6 +158,7 @@ async function AccountBarSlot({ searchParams }: { searchParams: SearchParams }) 
       username={username}
       avatarGrid={avatarGrid}
       serverKey={!!process.env.ANTHROPIC_API_KEY}
+      budgetOut={budgetOut}
       viewing={viewing}
     />
   );

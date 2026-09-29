@@ -2726,6 +2726,16 @@ panel ──▶ POST /api/compose ──▶ createJob ──▶ POST the worker 
   `DEFAULT_COMPOSE_MODEL`: the site's key because the site is billed, a brought
   key because a model nobody vetted is a request this app would be making on
   someone's behalf without knowing what it costs. There is no picker.
+- **The site's key running dry switches compose off.** A turn on the deploy's
+  key that fails for want of credit (or the console's spend limit) sets a flag
+  in the jobs store (`markSiteOutOfBudget`, lib/composeJobs.js); the studio
+  reads it when drawing the bar, and the route refuses site-key turns while it
+  holds. The compose button is disabled for anyone who would run on the site's
+  key and has no key of their own, titled `SITE_OUT_OF_BUDGET`
+  (lib/composeKey.js), which is also the error that turn reports. The flag
+  expires after 30 minutes (`COMPOSE_BUDGET_RETRY_MS`), because topping up
+  happens on Anthropic's console where nothing here can see it; the next turn
+  after that either succeeds and clears it or sets it again.
 - **The key lives in the browser, and the panel says so.** `localStorage`
   (`seqbaby.anthropicKey.v1`), which survives a reload — the thing that makes
   the feature usable — and is readable by anything that gets script into this

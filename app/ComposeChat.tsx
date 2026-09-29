@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "
 import { getOpenSong, setOpenSong, subscribeOpenSong } from "@/app/songs/openSong";
 import { loadSongChat, saveSong, saveSongChat } from "@/app/songs/actions";
 import { composeModelLabel } from "@/lib/composeModels.js";
-import { API_KEY_CONSOLE_URL, looksLikeApiKey, maskApiKey } from "@/lib/composeKey.js";
+import { API_KEY_CONSOLE_URL, SITE_OUT_OF_BUDGET, looksLikeApiKey, maskApiKey } from "@/lib/composeKey.js";
 import styles from "@/app/ui.module.css";
 
 type Msg =
@@ -116,9 +116,22 @@ function describeFailure(status: number, raw: string, data: ComposeResponse | nu
  *        two together decide whether composing on the SITE's key is offered;
  *        a visitor's own key is offered always, which is what makes the panel
  *        worth showing to someone signed out.
+ * @param budgetOut whether that key has run out of budget, as the server
+ *        knew it when the page was drawn.
  */
-export default function ComposeChat({ signedIn, serverKey }: { signedIn: boolean; serverKey: boolean }) {
+export default function ComposeChat({
+  signedIn,
+  serverKey,
+  budgetOut,
+}: {
+  signedIn: boolean;
+  serverKey: boolean;
+  budgetOut: boolean;
+}) {
   const [ready, setReady] = useState(false);
+  // The site's key is out of budget: known from the page, or learned from a
+  // turn that failed for it since.
+  const [siteDry, setSiteDry] = useState(budgetOut);
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
@@ -157,7 +170,12 @@ export default function ComposeChat({ signedIn, serverKey }: { signedIn: boolean
   const messagesRef = useRef<Msg[]>([]);
   // Composing on the site's key takes an account AND a key on the deploy.
   // Without both there is one way to compose and no choice to offer.
-  const siteKeyOffered = signedIn && serverKey;
+  const siteKeyOffered = signedIn && serverKey && !siteDry;
+  // Out of budget, for someone who would have composed on the site's key and
+  // has no key of their own: compose is switched off, and says why. A visitor
+  // with their own key goes on composing on it; one without an account never
+  // used the site's key to begin with.
+  const composeOff = siteDry && signedIn && serverKey && !apiKey && !review;
   const keyMode: "site" | "own" = siteKeyOffered ? keyPref : "own";
   const needsKey = keyMode === "own" && !apiKey;
   const openSong = useSyncExternalStore(subscribeOpenSong, getOpenSong, getOpenSong);
@@ -391,6 +409,7 @@ export default function ComposeChat({ signedIn, serverKey }: { signedIn: boolean
     // whole transcript is written on the first turn after that save, by which
     // point the store names the new song.
     const land = (msg: Msg) => {
+      if (msg.role === "error" && msg.text === SITE_OUT_OF_BUDGET) setSiteDry(true);
       const final = [...withUser, msg];
       setMessages(final);
       const now = getOpenSong();
@@ -662,7 +681,10 @@ export default function ComposeChat({ signedIn, serverKey }: { signedIn: boolean
         className={`${styles.accountBtn} ${review ? styles.composeBtnHolding : ""}`}
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        title={review
+        disabled={composeOff && !open}
+        title={composeOff
+          ? SITE_OUT_OF_BUDGET
+          : review
           ? (review.before
               ? "auditioning changes — open to keep or stop them"
               : "changes waiting — open to audition or keep them")

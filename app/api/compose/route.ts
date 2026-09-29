@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { createJob, hashApiKey } from "@/lib/composeJobs.js";
+import { createJob, hashApiKey, siteOutOfBudget } from "@/lib/composeJobs.js";
 import { newCtx, runComposeTurn } from "@/mcp/composeTurn.mjs";
-import { appendJobEvent, finishJob } from "@/lib/composeJobs.js";
-import { describeTurnFailure, looksLikeApiKey } from "@/lib/composeKey.js";
+import { appendJobEvent, clearSiteOutOfBudget, finishJob, markSiteOutOfBudget } from "@/lib/composeJobs.js";
+import { SITE_OUT_OF_BUDGET, describeTurnFailure, isOutOfCredit, looksLikeApiKey } from "@/lib/composeKey.js";
 
 // Node runtime: the loop imports public/js/songBuilder.js (dependency-free --
 // the same guarantee that lets mcp/server.mjs and the tests run it under
@@ -87,6 +87,11 @@ export async function POST(req: Request) {
         { error: "this deploy has no Anthropic key of its own — add your own key to compose" },
         { status: 400 },
       );
+    }
+    // Known to be out of credit: refuse now rather than start a job that can
+    // only fail the same way a minute from now.
+    if (await siteOutOfBudget()) {
+      return NextResponse.json({ error: SITE_OUT_OF_BUDGET }, { status: 503 });
     }
   }
 
@@ -181,9 +186,6 @@ function runInline(jobId: string, apiKey?: string) {
       }
       const out = await runComposeTurn({
         apiKey: key,
-        // Undefined on every new job: runComposeTurn's default, the
-        // deploy's. A job queued by an older panel may still name one.
-        model: job.model,
         message: job.message,
         history: job.history,
         session: job.session,
@@ -191,6 +193,7 @@ function runInline(jobId: string, apiKey?: string) {
           if (e.type === "tool") await appendJobEvent(jobId, e);
         },
       });
+      if (!apiKey) await clearSiteOutOfBudget().catch(() => {});
       await finishJob(jobId, {
         status: "done",
         reply: out.reply,
@@ -201,6 +204,7 @@ function runInline(jobId: string, apiKey?: string) {
         ms: out.ms,
       });
     } catch (e) {
+      if (!apiKey && isOutOfCredit(e)) await markSiteOutOfBudget().catch(() => {});
       await finishJob(jobId, { status: "error", error: describeTurnFailure(e, !!apiKey) }).catch(() => {});
     }
   })();
