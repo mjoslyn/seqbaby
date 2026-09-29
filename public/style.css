@@ -1943,9 +1943,11 @@ body.kbd-recording .sq-track.is-kbd-active { border-color: #e5484d; box-shadow: 
 }
 .sq-step.is-beat { outline: 1px solid rgba(255,255,255,0.06); }
 .sq-step.is-now { border-color: var(--step-now); box-shadow: 0 0 0 1px var(--step-now) inset; }
-/* A nudged note's tick (stepGrid.js): where in the step it lands, 50% being on
-   the grid. Divided by the span so a held note's tick sits in its first step. */
-.sq-steps .sq-step.is-on.is-nudged {
+/* A nudged note's tick (stepGrid.js's markNudge, on the step grid and the piano
+   roll): where in the step it lands, 50% being on the grid. Divided by the span
+   so a held note's tick sits in its first step. */
+.sq-steps .sq-step.is-on.is-nudged,
+.sq-roll__cell.is-on.is-nudged {
   --nudge-x: calc((0.5 + var(--nudge, 0)) * 100% / var(--hspan, 1));
   background-image: linear-gradient(to right,
     transparent calc(var(--nudge-x) - 1px), rgba(255,255,255,0.9) calc(var(--nudge-x) - 1px),

@@ -61,6 +61,28 @@ export function renderStepGrid(t) {
 }
 
 /**
+ * A note played off the grid (the step editor's offset, vim's [ ], a Strudel
+ * triplet) gets a tick where it lands: the middle is on the beat, left early,
+ * right late. One helper for the step grid and the piano roll, so the two
+ * draw the same thing (style.css, `.is-nudged`).
+ * @param {HTMLElement} cell @param {number} [offset] fraction of a step, -0.5..0.5
+ */
+export function markNudge(cell, offset) {
+  const off = Number(offset) || 0;
+  const on = Math.abs(off) > 0.001;
+  cell.classList.toggle("is-nudged", on);
+  if (on) cell.style.setProperty("--nudge", String(off));
+  else cell.style.removeProperty("--nudge");
+}
+
+/** Redraw one note's tick after its offset changed (the step editor's slider), grid and roll. */
+export function repaintNudge(t, idx) {
+  const cell = t.el?.querySelector(`.sq-steps .sq-step[data-idx="${idx}"]`);
+  if (cell?.classList.contains("is-on")) markNudge(cell, t.offsets?.[idx]);
+  refreshRollIfOpen(t);
+}
+
+/**
  * Mark the step-input cursor (keyboard.js) on the active track's grid. Always
  * marked, shown only while step input is on (`body.kbd-recording` with the
  * transport stopped, style.css). A cursor inside a held note marks the note.
@@ -120,13 +142,7 @@ export function makeCell(t, idx, span, on, isContinuation = false, velOverride, 
   if (span > 1) cell.style.setProperty("--hspan", String(span));
   if (idx % 4 === 0 && !isContinuation) cell.classList.add("is-beat");
   if (t.accents.has(idx) && !isContinuation) cell.classList.add("is-accent");
-  // A note played off the grid (the step editor's offset, vim's [ ]) gets a
-  // tick where it lands: the middle is on the beat, left early, right late.
-  const nudge = on && !isContinuation ? (t.offsets?.[idx] || 0) : 0;
-  if (Math.abs(nudge) > 0.001) {
-    cell.classList.add("is-nudged");
-    cell.style.setProperty("--nudge", String(nudge));
-  }
+  markNudge(cell, on && !isContinuation ? t.offsets?.[idx] : 0);
   if (on && note != null && !isContinuation) {
     const label = document.createElement("span");
     label.className = "sq-step__note";

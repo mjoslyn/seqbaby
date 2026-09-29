@@ -1800,8 +1800,12 @@ the selection is `state.vimSel`, painted by `paintStepCursor` beside it.
 by a microstep, 1/24 of a step, the drum machines' unit and one on which
 triplets land exactly (8/24); `:nudge N` sets it outright, clamped to ±12,
 the step editor's own ±0.5. It writes the pattern's `offsets` lane, which the
-transport already plays, and a nudged note gets a tick in its cell
-(`is-nudged`, `--nudge`, stepGrid.js's `makeCell`): the middle is on the grid.
+transport already plays. Any note off the grid, however it got there (vim,
+the step editor's offset slider, a Strudel triplet), gets a tick where it
+lands: `markNudge` (stepGrid.js) puts `is-nudged` and `--nudge` on the note's
+first cell in the step grid AND the piano roll (both its full build and its
+per-column repaint), and the step editor's slider calls `repaintNudge` so the
+tick follows it live. The middle of a cell is on the grid.
 The command line completes (`completionsFor`): the commands on an empty line,
 the stages after `:fx`, and the track's own knobs after `:k` (`knobNames`,
 knobNav.js, the same candidates `:k` matches, named as drawn, with their
