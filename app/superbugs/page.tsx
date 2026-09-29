@@ -8,13 +8,15 @@ export const metadata: Metadata = {
   description: "Found a bug in seqbaby? Tell us. It goes straight to the repo's issues.",
 };
 
-// It loads playing a chugging riff in the spirit of King Gizzard's
-// "Superbug": four on the floor, a backbeat, busy hats and a minor-third stab.
-// Written by ear, not transcribed.
+// It loads playing the intro riff of King Gizzard's "Superbug", from the tab:
+// C# minor, the clean intro's sixteen eighths (F# D# C# D# F# D# C# D# F# G#
+// A# C# A# G# F# D#). The blip lane's numbers are semitones from A3 (220Hz),
+// so C#3 is -8. Drums are a plain rock beat of my own, and the tempo is a
+// guess: the tab gives none.
 const SUPERBUG = {
   bpm: 132,
-  blip: [0, 0, 3, 0, 0, 5, 3, 0, 0, 0, 3, 0, 7, 5, 3, 0],
-  start: ["x...x...x...x...", "....x.......x..x", "x.xxx.xxx.xxx.xx", "x.xx.xx.x.xx.xx."],
+  blip: [-3, -6, -8, -6, -3, -6, -8, -6, -3, -1, 1, 4, 1, -1, -3, -6],
+  start: ["x.......x.x.....", "....x.......x...", "x.x.x.x.x.x.x.x.", "xxxxxxxxxxxxxxxx"],
 };
 
 export default function SuperbugsPage() {
