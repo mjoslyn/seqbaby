@@ -301,15 +301,20 @@ export function applyAutomationAtStep(t, key, v, time, vNext, stepDur) {
 export function runAutomationForStep(t, stepIdx, time, stepDur) {
   const auto = t.automation;
   if (!auto) return;
+  const rec = t._autRec;
   for (const key in auto) {
     const lane = auto[key];
     if (!lane || !lane.enabled) continue;
     const values = lane.values;
     if (!values || values.length === 0) continue;
     const len = values.length;
+    // A knob held while recording (knobRecord.js): the lane records where it
+    // is instead of playing, so this step holds the knob's value, flat.
+    const held = rec ? rec[key] : undefined;
+    if (held != null) values[stepIdx % len] = held;
     const v = values[stepIdx % len];
     if (v == null) continue;
-    const next = values[(stepIdx + 1) % len];
+    const next = held != null ? held : values[(stepIdx + 1) % len];
     // Remember the segment this step just scheduled, so the knob behind the
     // lane can show where it is being moved to (modMotion.js). Recorded here
     // rather than inside applyAutomationAtStep because a macro pad calls that

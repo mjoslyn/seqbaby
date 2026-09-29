@@ -153,6 +153,8 @@ env / fx / eq / comp / mod / automation per track.
 - `knobNav.js` — vim's knob navigator: the picked knob (a panel's, or one
   named with `:k`), hjkl between knobs as drawn, the trackpad and `- / =`
   turning it.
+- `knobRecord.js` — recording knob moves into automation lanes while record
+  is armed and the transport plays. See the modulation section.
 - `knob.js` — the rotary knob layer, drawn over the native range inputs without
   replacing them. See the Knobs section below.
 - `enginePicker.js` — the instrument picker: a button on the track head that
@@ -1443,6 +1445,19 @@ it; the input is still the value, the focus target and the pointer target.
   the pattern (`automation` field), applied at step time via `setParam`-style
   setters. `canAutomate` is broader than `canModulate` since it doesn't need
   an AudioParam.
+- **Recording knob moves** (`knobRecord.js`): record armed (the transport's
+  record button or vim insert) with the transport playing, turning any knob
+  writes that track's lane for the parameter on the current pattern, creating
+  and enabling it (a new lane is filled with where the knob was at
+  pointerdown). "Touch" mode: while a knob is held, `t._autRec[key]` holds its
+  0..1 value and `runAutomationForStep` writes it into each step it passes
+  instead of playing the lane, so holding still overwrites too; letting go
+  (pointerup, or 300ms idle for the wheel / vim keys) hands the lane back.
+  It listens to the `input` event every control already sends, capture phase,
+  so nothing about the knobs changed. A parameter with an LFO or a havoc pad
+  on it is refused with a status line (one owner per parameter). The step
+  written is the one being scheduled, so a recording lands about one lookahead
+  early. Desktop only, like the record button.
 - **Macro pads** (`macro.js`): an XY surface you play, driving a list of
   parameters per axis that may span tracks. See the macro-pads section below.
 
