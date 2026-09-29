@@ -11,6 +11,11 @@ export const dynamic = "force-dynamic";
 // one repo), so nobody needs a GitHub account to report one. Without the
 // token it answers 503 and the page falls back to a prefilled github.com
 // new-issue link. `website` is a honeypot: a person never fills it.
+//
+// `turnstile` is a Cloudflare Turnstile token. With TURNSTILE_SECRET_KEY set it
+// is required and checked against siteverify before anything reaches GitHub;
+// unset (local dev), the check is skipped. The page renders the widget when
+// NEXT_PUBLIC_TURNSTILE_SITE_KEY is set at build time.
 const REPO = process.env.GITHUB_ISSUES_REPO || "mjoslyn/seqbaby";
 
 const clip = (v: unknown, max: number) => (typeof v === "string" ? v.trim().slice(0, max) : "");
@@ -24,6 +29,24 @@ function limited(ip: string) {
   recent.push(now);
   hits.set(ip, recent);
   return recent.length > 5;
+}
+
+async function humanEnough(token: string, ip: string) {
+  const secret = process.env.TURNSTILE_SECRET_KEY;
+  if (!secret) return true;
+  if (!token) return false;
+  const form = new URLSearchParams({ secret, response: token });
+  if (ip !== "unknown") form.set("remoteip", ip);
+  try {
+    const res = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
+      method: "POST",
+      body: form,
+    });
+    const data = (await res.json()) as { success?: boolean };
+    return data.success === true;
+  } catch {
+    return false;
+  }
 }
 
 export async function POST(req: Request) {
@@ -44,6 +67,9 @@ export async function POST(req: Request) {
 
   const ip = (req.headers.get("x-forwarded-for") ?? "unknown").split(",")[0].trim();
   if (limited(ip)) return NextResponse.json({ error: "slow down, that is a lot of bugs" }, { status: 429 });
+  if (!(await humanEnough(clip(body.turnstile, 2048), ip))) {
+    return NextResponse.json({ error: "the robot check did not pass, try it again" }, { status: 403 });
+  }
 
   const steps = clip(body.steps, 4000);
   const where = clip(body.where, 300);
