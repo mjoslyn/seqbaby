@@ -9,9 +9,9 @@ type EngineState = { tracks?: EngineTrack[]; activePattern?: number; playing?: b
 
 // Leaves a note in localStorage saying what the studio had open, so a bug
 // report filed from /superbugs can say where it came from without anyone
-// typing it (app/superbugs/bugContext.js). The superbugs page is usually
-// reached another way than straight from here (the manual opens in a new
-// tab), so the referrer alone would rarely name the studio.
+// typing it (app/superbugs/bugContext.js). The help menu's `report a bug`
+// opens it in a new tab, and it is often reached another way (the manual,
+// also a new tab), so the referrer alone would rarely name the studio.
 //
 // Written when the tab is hidden or left, which is exactly when someone goes
 // off to report something: the address bar by then carries whatever

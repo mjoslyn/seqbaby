@@ -2248,7 +2248,8 @@ reason, and a new one belongs in whichever of those three it is true for.
 The bar is one right-aligned row that does not wrap, so on a 390px phone the
 items past the left edge were not squeezed — they were gone, with no way to
 scroll to them, `sign out` and `settings` first. Below 768px it collapses:
-the manual (a `?` icon, `IconHelp`, last in the row so at the far right on
+the help menu (a `?` icon, `app/HelpMenu.tsx`: the manual and `report a bug`
+→ `/superbugs`, both in a new tab; last in the row so at the far right on
 desktop, moved to the left edge by `order` on a phone) stays in the bar, everything else moves behind one `menu` button and opens as a
 sheet under it.
 
