@@ -103,6 +103,7 @@ export const ENGINE_MODULES = [
   "session.js",
   "sessionFormat.js",
   "signal.js",
+  "shortcuts.js",
   "silverbox.js",
   "soundDefaults.js",
   "state.js",

@@ -62,6 +62,7 @@ const TIPS: Array<[scope: "any" | "touch" | "desktop", text: string]> = [
   ["desktop", "right-click any knob for what it does, plus its lfo and automation"],
   ["desktop", "play the computer keyboard: a-l are white keys, w-o black, z/x octave"],
   ["desktop", "drag a knob and move sideways for finer resolution"],
+  ["desktop", "press ? for keyboard shortcuts: tracks, step input, fx throws"],
   ["touch", "long-press a step to open the note editor"],
   ["touch", "long-press a knob for its lfo, automation and macro assignment"],
   ["touch", "drag a step up or down to change its pitch"],

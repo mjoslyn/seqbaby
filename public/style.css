@@ -1943,6 +1943,11 @@ body.kbd-recording .sq-track.is-kbd-active { border-color: #e5484d; box-shadow: 
 }
 .sq-step.is-beat { outline: 1px solid rgba(255,255,255,0.06); }
 .sq-step.is-now { border-color: var(--step-now); box-shadow: 0 0 0 1px var(--step-now) inset; }
+/* Step input's cursor (keyboard.js): record armed, transport stopped. Marked on
+   the active track's grid always, drawn only in that mode. */
+body.kbd-recording:not(.sq-playing) .sq-track.is-kbd-active .sq-step.is-cursor {
+  outline: 2px dashed #e5484d; outline-offset: -2px;
+}
 
 .sq-step.is-accent { background: #363b47; }
 .sq-step.is-accent.is-on { background: var(--note-color, color-mix(in oklab, var(--step-on) 85%, #fff 15%)); }
@@ -4194,3 +4199,16 @@ body.has-code-drawer { padding-bottom: min(46vh, 420px); }
 /* the song has moved under code that was typed in: a dot on `from song` */
 .sq-code__from.is-stale { color: var(--accent); border-color: var(--accent); }
 .sq-code__from.is-stale::after { content: ""; display: inline-block; width: 6px; height: 6px; margin-left: 6px; border-radius: 50%; background: var(--accent); vertical-align: middle; }
+
+/* The keyboard shortcuts list (`?`, shortcuts.js). */
+.sq-shortcuts { max-width: 560px; }
+.sq-shortcuts__list {
+  display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px;
+  margin: 0 0 12px; font-size: 12px; line-height: 1.4;
+}
+.sq-shortcuts__list dt { margin: 0; white-space: nowrap; }
+.sq-shortcuts__list dd { margin: 0; color: var(--fg-dim); }
+.sq-shortcuts__list kbd {
+  font: inherit; padding: 1px 5px; border: 1px solid rgba(255,255,255,0.18);
+  border-radius: 3px; background: var(--bg-3, rgba(255,255,255,0.05)); color: var(--fg);
+}

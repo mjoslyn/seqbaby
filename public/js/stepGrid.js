@@ -56,7 +56,27 @@ export function renderStepGrid(t) {
       i += 1;
     }
   }
+  paintStepCursor(t);
   refreshRollIfOpen(t);
+}
+
+/**
+ * Mark the step-input cursor (keyboard.js) on the active track's grid. Always
+ * marked, shown only while step input is on (`body.kbd-recording` with the
+ * transport stopped, style.css). A cursor inside a held note marks the note.
+ * @param {Track} t
+ */
+export function paintStepCursor(t) {
+  const grid = t?.el?.querySelector(".sq-steps");
+  if (!grid) return;
+  for (const c of grid.querySelectorAll(".sq-step.is-cursor")) c.classList.remove("is-cursor");
+  if (t.id !== state.activeTrackId) return;
+  const len = t.length || t.steps?.length || 0;
+  if (!len) return;
+  const idx = (((state.kbdCursor | 0) % len) + len) % len;
+  const covering = t.steps[idx] ? idx : anchorCovering(t, idx);
+  const at = covering >= 0 ? covering : idx;
+  grid.querySelector(`.sq-step[data-idx="${at}"]`)?.classList.add("is-cursor");
 }
 
 // Piano roll panel: a pitches × steps grid per track. Clicking a cell places
@@ -131,6 +151,9 @@ export function attachGridInteraction(t, grid) {
     if (e.button !== 0) return;
     closeStepEditor();
     const idx = idxFromPoint(e.clientX, e.clientY);
+    // A click puts the step-input cursor where it landed, so a keyboard entry
+    // can pick up from any step without arrowing there.
+    if (idx >= 0) { state.kbdCursor = idx; paintStepCursor(t); }
     const now = performance.now();
     if (now - lastClickTime < DBLCLICK_MS && idx === lastClickIdx) {
       // Double-click: ensure the step is on at `idx` and bump velocity to full.

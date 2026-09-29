@@ -16,7 +16,7 @@ env / fx / eq / comp / mod / automation per track.
   `public/woscillators.js` →
   `public/js/main.js` (ES module). `middleware.ts` refreshes the Supabase
   session on every request *except* static engine assets.
-- **Engine**: ~64 dependency-free vanilla ES modules in `public/js/`. No
+- **Engine**: ~66 dependency-free vanilla ES modules in `public/js/`. No
   bundler — edit, reload. `window.seqbaby` (from `appApi.js`) exposes `state`
   and serialize/apply hooks to the React shell (typed in `app/seqbaby.d.ts`).
 - **Accounts + data**: Supabase (Postgres + Auth + RLS). Tables: `profiles`,
@@ -147,6 +147,9 @@ env / fx / eq / comp / mod / automation per track.
 - `render.js` / `stepGrid.js` / `stepEditor.js` / `pianoRoll.js` /
   `patternBar.js` / `scaleUI.js` / `meters.js` / `beat.js` — UI.
 - `keyboard.js` — computer-keyboard performance mode + capture.
+- `shortcuts.js` — the keyboard shortcuts on the keys keyboard.js leaves free:
+  space, ↑/↓ track, m mute, r record / step input, ←/→/enter/backspace the
+  step cursor, 1..0 fx throws, `?` the list. See the keyboard section.
 - `knob.js` — the rotary knob layer, drawn over the native range inputs without
   replacing them. See the Knobs section below.
 - `enginePicker.js` — the instrument picker: a button on the track head that
@@ -1750,6 +1753,29 @@ Always live on desktop (≥769px; text inputs swallow keys). Ableton-style:
 Scale-aware mapping when a scale is active; chord mode (off/root). Live
 record onto the playing pattern, plus retroactive **Capture** (32s rolling
 buffer, slices back to the last 1.5s silence gap and writes a clip).
+
+**Step input.** Record armed (`r`, or the button) with the transport STOPPED:
+a note key writes at the step cursor (`state.kbdCursor`, one index wrapped to
+each track's length) instead of the playhead. Keys held together are one
+entry, a chord in chord mode or root + extras otherwise; → while they are down
+ties the note one step longer; letting go of every key moves the cursor past
+it. Enter toggles the cursor's step with the track's usual note (C2 on a kit),
+backspace / delete clear. A click on a step moves the cursor there. The cursor
+is `is-cursor` on the active track's cell (`paintStepCursor`, stepGrid.js),
+drawn only under `body.kbd-recording:not(.sq-playing)`; transport.js keeps
+`sq-playing` on the body.
+
+**The shortcuts** (`shortcuts.js`, `?` lists them) sit on keys the notes do not
+use: space play, ↑/↓ the keyboard's track (a range focused by Tab keeps its
+arrows, one left focused by a drag does not), m / shift-m mute / solo through
+the track's own buttons, 1..0 fx throws, shift + a number that fx on or off.
+**A throw is a performance, not an edit**, the macro pads' momentary bargain:
+the level ramps up through `applyAutomationAtStep` while the key is down and
+back on release, and the rack's stored config is put back straight after each
+write, so a save, undo and p-lock never see it. The stage is held wired into
+the rack meanwhile (`state._fxThrows`, one more term in signal.js's
+`isStageHeld`), and reverb / delay let go over a second so the tail survives.
+Shift + number is the opposite: the control's own `input` event, an edit.
 
 **Chord mode is not only a keyboard feature**, which is why it has a way in on a
 phone. `state.kbdChordType` / `kbdChordCpx` / `kbdArp*` also decide what a
@@ -3442,7 +3468,7 @@ Repo: https://github.com/mjoslyn/seqbaby.
   An inline marker (`window.__seqbabyServerBoot`) tells the paths apart, and
   `ScriptLoader.tsx` keeps its onload-chained injection for the soft-nav case
   (e.g. arriving from `/login`).
-- `app/EnginePreload.tsx` emits `modulepreload` for all 64 modules listed in
+- `app/EnginePreload.tsx` emits `modulepreload` for all 66 modules listed in
   `app/engineAssets.ts` (at `engineAsset("/js/<name>")`; the hints used to
   point at the site root and 404). The graph is 8 levels deep, so without it the browser
   needs up to eight sequential round trips just to discover the code.
