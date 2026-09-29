@@ -2164,6 +2164,12 @@ what — `mike has shared "cold squelch" with you` — and a jam invite
   because reading headers would make the cached homepage dynamic. The drawing
   parts both og routes share are `app/api/og/parts.tsx` (a route file may
   export only its handlers).
+- **`/superbugs` has a card of its own** (`app/api/og/superbugs/route.tsx`):
+  a pixel bug over the riff the page's toy plays (`app/superbugs/riff.ts`,
+  shared by both), the melody as a piano roll above the drum lanes. Static,
+  no reads. It passes its own `og:url` (`shareCard`'s fourth argument, the
+  site root by default), since a crawler that follows og:url would otherwise
+  draw the homepage's card.
 - **`untitled` counts as no title**, along with an unreadable song, a Blobs
   share written before this existed (no title in its metadata) and no
   Supabase env at all. Every one of those falls back to the site card rather

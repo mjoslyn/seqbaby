@@ -14,14 +14,16 @@ export const SITE_DESCRIPTION =
   "Prompt-driven step sequencer — Plaits, 808/909 kits, hand-built emulations, samples, MIDI.";
 
 /** og + twitter for one card. `image` is the song or jam's own picture
- *  (app/api/og), absolute; the site's share.png when there is none. */
-export function shareCard(title: string, description: string, image: string = SHARE_IMAGE) {
+ *  (app/api/og), absolute; the site's share.png when there is none. `url` is
+ *  the page the card is for: some crawlers (Facebook's) follow og:url and
+ *  draw that page's card instead, so a page with its own card names itself. */
+export function shareCard(title: string, description: string, image: string = SHARE_IMAGE, url: string = SITE_URL) {
   return {
     openGraph: {
       type: "website",
       title,
       description,
-      url: SITE_URL,
+      url,
       images: [
         {
           url: image,
