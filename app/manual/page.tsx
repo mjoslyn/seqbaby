@@ -17,6 +17,7 @@ const SECTIONS = [
   ["step-editor", "The step editor"],
   ["generators", "The three generators"],
   ["keyboard", "Playing from your keyboard"],
+  ["vim", "Vim mode"],
   ["scale", "Scale and chords"],
   ["engines", "Sound engines"],
   ["silverbox", "The silverbox"],
@@ -109,6 +110,7 @@ export default function ManualPage() {
                 <tr><td>swing</td><td>Pushes every second step later, from dead straight to a heavy shuffle.</td></tr>
                 <tr><td>macro</td><td>Opens the XY <a href="#macro">macro pads</a>.</td></tr>
                 <tr><td>undo / redo</td><td>Steps back and forward through your edits. See <a href="#undo">undo</a>.</td></tr>
+                <tr><td>vim</td><td>Switches <a href="#vim">vim mode</a> on and off, for driving the studio from the keyboard. Desktop only.</td></tr>
                 <tr><td>metronome</td><td>A click on each downbeat, for playing along. It never ends up in an export.</td></tr>
                 <tr><td>meter</td><td>Output level, over on the right. If it sits pinned at the top, turn some tracks down.</td></tr>
               </tbody>
@@ -471,6 +473,145 @@ export default function ManualPage() {
               sized to fit it.
             </li>
           </ul>
+          <p>
+            To move around, edit and turn knobs from the keyboard too, switch on{" "}
+            <a href="#vim">vim mode</a>.
+          </p>
+        </section>
+
+        <section className={styles.section} id="vim">
+          <h2>Vim mode</h2>
+          <p>
+            Vim mode turns the whole studio into something you can drive without
+            the mouse, in the manner of the vim text editor. Press <span className={styles.key}>`</span> (the
+            backquote key, top left) or <span className={styles.ui}>vim</span> in the
+            transport to switch it on, and the same again to switch it off. Your
+            browser remembers the choice. With it off, the keyboard is just the
+            piano described above.
+          </p>
+          <p>
+            In vim mode the letters stop playing notes and become commands, until
+            you ask to play. A box in the bottom corner says which mode you are
+            in, and a cursor on the active track&apos;s step grid shows where the
+            next edit lands.
+          </p>
+          <div className={styles.tableWrap}>
+            <table className={styles.table}>
+              <thead>
+                <tr><th>Mode</th><th>What the keys do</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>NORMAL</td><td>Letters are commands: move around, add and delete notes, pick knobs. <span className={styles.key}>Esc</span> always comes back here.</td></tr>
+                <tr><td>INSERT <span className={styles.key}>i</span></td><td>The piano keys write notes. Stopped, each note lands on the cursor and the cursor moves on; playing, notes land on the playhead, as with record.</td></tr>
+                <tr><td>PLAY <span className={styles.key}>a</span></td><td>The piano keys only sound. Nothing is written, so this is the one for jamming along.</td></tr>
+                <tr><td>VISUAL <span className={styles.key}>v</span></td><td>Select a run of steps, then copy, delete, paste over or transpose them.</td></tr>
+                <tr><td>COMMAND <span className={styles.key}>:</span></td><td>A line at the bottom for commands like <span className={styles.ui}>:bpm 128</span>. <span className={styles.key}>Enter</span> runs it.</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <h3>Moving around</h3>
+          <p>
+            Most moves take a count typed first: <span className={styles.key}>4</span><span className={styles.key}>l</span> moves four steps,
+            a beat.
+          </p>
+          <div className={styles.tableWrap}>
+            <table className={styles.table}>
+              <thead>
+                <tr><th>Keys</th><th>Moves</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><span className={styles.key}>h</span> <span className={styles.key}>l</span></td><td>The cursor one step left or right.</td></tr>
+                <tr><td><span className={styles.key}>j</span> <span className={styles.key}>k</span></td><td>Down or up a track. The piano keys follow, as if you had clicked it.</td></tr>
+                <tr><td><span className={styles.key}>w</span> <span className={styles.key}>b</span></td><td>To the next or previous note.</td></tr>
+                <tr><td><span className={styles.key}>0</span> <span className={styles.key}>$</span></td><td>To the first or last step.</td></tr>
+                <tr><td><span className={styles.ui}>5</span><span className={styles.key}>|</span></td><td>To step 5, or whichever number you type.</td></tr>
+                <tr><td><span className={styles.key}>g</span><span className={styles.key}>g</span> <span className={styles.key}>G</span></td><td>To the first or last track. A number before <span className={styles.key}>G</span> picks that track.</td></tr>
+                <tr><td><span className={styles.key}>Space</span></td><td>Play and stop, in every mode but the command line.</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <h3>Editing</h3>
+          <div className={styles.tableWrap}>
+            <table className={styles.table}>
+              <thead>
+                <tr><th>Keys</th><th>Does</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><span className={styles.key}>o</span> <span className={styles.key}>x</span></td><td>Adds a note on the cursor / deletes the note under it.</td></tr>
+                <tr><td><span className={styles.key}>r</span> then a piano key</td><td>Sets the note under the cursor to that pitch, or writes one there.</td></tr>
+                <tr><td><span className={styles.key}>&gt;</span> <span className={styles.key}>&lt;</span></td><td>Moves the note up or down a step of the scale (a semitone with no scale on).</td></tr>
+                <tr><td><span className={styles.key}>+</span> <span className={styles.key}>-</span></td><td>Velocity up or down.</td></tr>
+                <tr><td><span className={styles.key}>d</span><span className={styles.key}>d</span> <span className={styles.key}>y</span><span className={styles.key}>y</span> <span className={styles.key}>p</span></td><td>Clears the track&apos;s pattern / copies it / pastes what you copied at the cursor.</td></tr>
+                <tr><td><span className={styles.key}>.</span></td><td>Does the last edit again, here.</td></tr>
+                <tr><td><span className={styles.key}>u</span> <span className={styles.key}>U</span></td><td>Undo and redo. <span className={styles.key}>Ctrl</span> <span className={styles.key}>r</span> also redoes.</td></tr>
+                <tr><td><span className={styles.key}>m</span> <span className={styles.key}>s</span></td><td>Mutes or solos the track.</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            Every command is its own undo step, however fast you type. A whole
+            stretch in insert mode undoes as one, the way it does in vim.
+          </p>
+          <p>
+            In insert mode with the sequencer stopped, <span className={styles.key}>&larr;</span> and <span className={styles.key}>&rarr;</span> move
+            the cursor, <span className={styles.key}>&rarr;</span> while you hold a note makes that note a step
+            longer, <span className={styles.key}>Enter</span> switches the cursor&apos;s step on or off with the
+            track&apos;s usual note (C2 on a drum track) and <span className={styles.key}>Backspace</span> clears the
+            step behind the cursor.
+          </p>
+          <p>
+            Visual mode selects steps on one track: move with the same keys, then
+            press <span className={styles.key}>y</span> to copy, <span className={styles.key}>d</span> to delete (which copies too), <span className={styles.key}>p</span> to
+            paste over the selection, or <span className={styles.key}>&gt;</span> <span className={styles.key}>&lt;</span> to transpose it. A copy
+            carries everything on a step: chords, arps, ratchets, sample regions.
+          </p>
+          <h3>Knobs</h3>
+          <p>
+            One knob at a time can be <em>picked</em>, which draws a bright outline
+            round it. Scroll on the trackpad to turn it (hold shift for finer
+            steps), or press <span className={styles.key}>-</span> and <span className={styles.key}>=</span> to move it 1% at a time, with a
+            count for bigger jumps: <span className={styles.key}>1</span><span className={styles.key}>0</span><span className={styles.key}>=</span> is 10%. <span className={styles.key}>h</span><span className={styles.key}>j</span><span className={styles.key}>k</span><span className={styles.key}>l</span> move to
+            the knob next to it, as drawn on screen, and <span className={styles.key}>Esc</span> lets go.
+          </p>
+          <div className={styles.tableWrap}>
+            <table className={styles.table}>
+              <thead>
+                <tr><th>To pick</th><th>Type</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>The fx rack</td><td><span className={styles.key}>f</span>. It opens with its first knob picked. <span className={styles.key}>f</span> again closes it.</td></tr>
+                <tr><td>The filter</td><td><span className={styles.key}>c</span>. It opens on cutoff.</td></tr>
+                <tr><td>Any knob by name</td><td><span className={styles.ui}>:k</span> and its name: <span className={styles.ui}>:k morph</span>, <span className={styles.ui}>:k reverb decay</span>, <span className={styles.ui}>:k fx.delay.time</span>. Part of a name is enough. A knob in a closed panel opens that panel.</td></tr>
+                <tr><td>Set it at once</td><td>Add a value from 0 to 1: <span className={styles.ui}>:k cutoff .3</span>.</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div className={styles.note}>
+            <span className={styles.ui}>:k</span> takes the first knob with that name
+            on the track. On a silverbox, <span className={styles.ui}>cutoff</span> is the
+            synth&apos;s own; type <span className={styles.ui}>:k filter cut</span> or press <span className={styles.key}>c</span> for
+            the filter panel&apos;s.
+          </div>
+          <h3>Commands</h3>
+          <div className={styles.tableWrap}>
+            <table className={styles.table}>
+              <thead>
+                <tr><th>Command</th><th>Does</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><span className={styles.ui}>:bpm 128</span></td><td>Sets the tempo.</td></tr>
+                <tr><td><span className={styles.ui}>:p 3</span></td><td>Switches to pattern 3.</td></tr>
+                <tr><td><span className={styles.ui}>:len 32</span></td><td>Sets the track&apos;s length in steps.</td></tr>
+                <tr><td><span className={styles.ui}>:cut .4</span> <span className={styles.ui}>:res .6</span></td><td>Sets the track&apos;s filter cutoff and resonance, 0 to 1.</td></tr>
+                <tr><td><span className={styles.ui}>:fx reverb .5</span></td><td>Sets an effect&apos;s level on the track, 0 to 1.</td></tr>
+                <tr><td><span className={styles.ui}>:k name</span></td><td>Picks a knob, as above.</td></tr>
+                <tr><td><span className={styles.ui}>:12</span></td><td>Moves the cursor to step 12.</td></tr>
+                <tr><td><span className={styles.ui}>:w</span></td><td>Opens the save panel (you need to be signed in).</td></tr>
+                <tr><td><span className={styles.ui}>:h</span></td><td>Lists every vim key.</td></tr>
+                <tr><td><span className={styles.ui}>:q</span></td><td>Switches vim mode off.</td></tr>
+              </tbody>
+            </table>
+          </div>
         </section>
 
         <section className={styles.section} id="scale">

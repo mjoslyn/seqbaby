@@ -40,6 +40,7 @@ const BOX = [
   ["compose", "describe what you want in plain words."],
   ["euclid + chance", "one button divides a rhythm evenly, the other throws dice at it."],
   ["strudel", "your song opens as live code. type mini-notation, hit ctrl+enter, and it lands in the song without the beat stopping."],
+  ["vim mode", "hjkl round the grid, i to play notes in, :k cutoff and scroll the trackpad. the mouse can take the night off."],
 ] as const;
 
 const BLURBS = [
