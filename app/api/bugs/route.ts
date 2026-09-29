@@ -3,14 +3,14 @@ import { NextResponse } from "next/server";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// POST /api/bugs  { title, what, steps?, where?, contact?, website? }
+// POST /api/bugs  { title, what, steps?, where?, contact?, hp? }
 //   -> { url } the issue it opened
 //
 // The superbugs page's form. It opens an issue on the repo with a server-side
 // token (GITHUB_ISSUES_TOKEN, a fine-grained token with Issues: write on this
 // one repo), so nobody needs a GitHub account to report one. Without the
 // token it answers 503 and the page falls back to a prefilled github.com
-// new-issue link. `website` is a honeypot: a person never fills it.
+// new-issue link. `hp` is a honeypot: a person never fills it.
 // With TURNSTILE_SECRET_KEY set, a Cloudflare Turnstile token (`cf`) is required
 // and verified here; without it the check is skipped, so the form still works
 // on a deploy with no captcha configured.
@@ -52,7 +52,7 @@ export async function POST(req: Request) {
   } catch {
     return NextResponse.json({ error: "bad request" }, { status: 400 });
   }
-  if (clip(body.website, 200)) return NextResponse.json({ url: "https://github.com" }); // honeypot: pretend
+  if (clip(body.hp, 200)) return NextResponse.json({ url: "https://github.com" }); // honeypot: pretend
   const title = clip(body.title, 120);
   const what = clip(body.what, 4000);
   if (!title || !what) {

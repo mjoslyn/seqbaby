@@ -59,7 +59,8 @@ export default function BugForm() {
       steps: v("steps"),
       where: v("where") || location.href,
       contact: v("contact"),
-      website: v("website"),
+      hp: v("hp"),
+      cf: token,
     };
     setBusy(true);
     setResult(null);
@@ -113,7 +114,7 @@ export default function BugForm() {
         <input name="contact" type="email" maxLength={200} />
         <small>it goes on a public issue. leave it blank if that bothers you.</small>
       </label>
-      <input name="website" tabIndex={-1} autoComplete="off" aria-hidden="true" className={styles.trap} />
+      <input name="hp" tabIndex={-1} autoComplete="off" aria-hidden="true" className={styles.trap} />
       {SITE_KEY && <div ref={box} />}
       <button type="submit" disabled={busy || (!!SITE_KEY && !token)} className={styles.submit}>
         {busy ? "sending..." : "release the superbug"}
