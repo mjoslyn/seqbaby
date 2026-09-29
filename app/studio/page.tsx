@@ -9,6 +9,7 @@ import EnginePreload from "@/app/EnginePreload";
 import EngineScripts from "@/app/EngineScripts";
 import OpenSongOnLoad from "@/app/OpenSongOnLoad";
 import DefaultTemplate from "@/app/DefaultTemplate";
+import StudioBreadcrumb from "@/app/StudioBreadcrumb";
 import { AccountBar } from "@/app/AccountBar";
 import { siteOutOfBudget } from "@/lib/composeJobs.js";
 import styles from "@/app/ui.module.css";
@@ -208,6 +209,7 @@ export default async function StudioPage({ searchParams }: { searchParams: Searc
       <ScriptLoader />
       {!embed && <OpenSongOnLoad />}
       {!embed && <DefaultTemplate />}
+      {!embed && <StudioBreadcrumb />}
     </>
   );
 }
