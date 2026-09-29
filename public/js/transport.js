@@ -371,6 +371,7 @@ export async function stopPlayback() {
   // over the top of the silence you just asked for.
   silenceAllVoices();
   state.playing = false;
+  document.body.classList.remove("sq-playing");   // step input's cursor shows while stopped (style.css)
   state._transportStartTime = null;
   refreshNoiseBeds();                              // vinyl crackle follows the transport
   btn.textContent = "play";
@@ -694,6 +695,7 @@ export async function startPlayback(opts = {}) {
   state._transportStartTime = state.audioCtx.currentTime + lead;
   Tone.Transport.start(`+${lead}`, 0);
   state.playing = true;
+  document.body.classList.add("sq-playing");
   refreshNoiseBeds();                                // vinyl crackle follows the transport
   btn.textContent = "stop";
   btn.classList.add("is-playing");

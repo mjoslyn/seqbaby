@@ -7,11 +7,18 @@
 // When a scale is active the WHITE keys map to the scale's degrees (root anchored
 // near kbdBase) and the black keys go inert — everything you can play is in key.
 // With no scale it's a plain chromatic piano.
+//
+// Record armed with the transport STOPPED is step input: a key writes at the
+// step cursor instead of the playhead, and letting go of every key moves the
+// cursor on past what was written. Vim mode's insert (vim.js) is how it is
+// reached from the keyboard, and vim.js drives its cursor.
 
 import { currentBpm } from "./lfo.js";
 import { invertChord, state } from "./state.js";
-import { renderStepGrid } from "./stepGrid.js";
-import { applyKbdArpToStep, resizeTrack } from "./track.js";
+import { paintStepCursor, renderStepGrid } from "./stepGrid.js";
+import { liveGeneratorOf } from "./stepSource.js";
+import { anchorCovering, applyKbdArpToStep, applySampleDefaultsToStep, removeNote, resizeTrack, startNote } from "./track.js";
+import { setStatus } from "./dom.js";
 import { CHORD_TYPES, SCALES, chordNotes, chordTypeForTones, diatonicChordNotes, midiToScaleIndex, quantizeToScale, scaleIndexToMidi } from "./theory.js";
 import { holdNoiseBed, releaseNoiseBed } from "./signal.js";
 import { ensureAudio, wakeMasterBus } from "./transport.js";
@@ -72,7 +79,7 @@ const TEXT_INPUT_TYPES = new Set([
   "text", "number", "search", "email", "password", "tel", "url",
   "date", "time", "datetime-local", "month", "week",
 ]);
-function isTypingTarget(el) {
+export function isTypingTarget(el) {
   if (!el) return false;
   if (el.isContentEditable) return true;
   const tag = el.tagName;
@@ -87,7 +94,7 @@ function isTypingTarget(el) {
 // Resolve a key to a MIDI note for the current mode (chromatic or scale).
 // Returns null for a key that plays nothing — under a scale that's the black
 // row, which has no accidentals to play once every degree lives on a white key.
-function noteForKey(k) {
+export function noteForKey(k) {
   const semi = KEY_SEMITONES[k];
   if (semi == null) return null;
   const intervals = state.scale.active ? SCALES[state.scale.mode] : null;
@@ -385,7 +392,7 @@ function captureNote(pressedMidi) {
   if (state.kbdChordType) {
     // chord mode: store root + chord type + inversion (the transport expands it),
     // so the step reads as one chord rather than a stack of notes
-    const sel = chordPressSelection(pressedMidi);
+    const sel = chordSelectionFor(pressedMidi);
     if (Array.isArray(t.notes)) t.notes[idx] = sel.root;
     if (Array.isArray(t.chords)) t.chords[idx] = sel.chord;
     if (Array.isArray(t.complexities)) t.complexities[idx] = sel.cpx;
@@ -408,7 +415,129 @@ function captureNote(pressedMidi) {
   try { renderStepGrid(t); } catch {}
 }
 
+// ---- step input ------------------------------------------------------------
+// Record armed with the transport stopped. The keys held together are one
+// entry (a chord is several keys down at once), written at the cursor as they
+// land; the cursor moves on once they are all up. → while keys are down ties
+// the entry one step longer instead of moving the cursor.
+
+/** @type {{t: any, idx: number, len: number, keys: Set<string>} | null} */
+let stepEntry = null;
+
+export function stepInputActive() { return !!state.kbdRecord && !state.playing; }
+
+/** The cursor as a step index on `t` (it is one number for every track, wrapped to each one's length). */
+function cursorIdx(t) {
+  const len = t.length || t.steps?.length || 0;
+  if (!len) return 0;
+  return (((state.kbdCursor | 0) % len) + len) % len;
+}
+
+/** A track step input can write to: not a bus, not one a generator is playing. */
+function stepInputTrack() {
+  const t = targetTrack();
+  if (!t || !Array.isArray(t.steps)) return null;
+  if (liveGeneratorOf(t)) { setStatus(`"${t.name}" is playing a live generator. Switch it off to write steps`, true); return null; }
+  return t;
+}
+
+function writeEntry(t, idx, sel, len) {
+  let { root, chord, cpx, extras } = sel;
+  // As startNote does: a chord on a kit is one sample fired at three pitches.
+  if (t.isDrumKit && chord) { chord = ""; cpx = 0; extras = null; }
+  if (!t.steps[idx]) startNote(t, idx, root);
+  t.steps[idx] = 1;
+  t.lengths[idx] = len;
+  t.notes[idx] = root;
+  if (Array.isArray(t.velocities)) t.velocities[idx] = KBD_REC_VEL;
+  if (Array.isArray(t.chords)) t.chords[idx] = chord || "";
+  if (Array.isArray(t.complexities)) t.complexities[idx] = chord ? (cpx | 0) : 0;
+  if (Array.isArray(t.extraNotes)) t.extraNotes[idx] = extras && extras.length ? extras.slice() : null;
+  if (Array.isArray(t.extraLengths)) t.extraLengths[idx] = extras && extras.length ? extras.map(() => len) : null;
+  applyKbdArpToStep(t, idx, !!chord);
+  applySampleDefaultsToStep(t, idx);
+  if (!t.isDrumKit) t.lastEditedNote = root;
+}
+
+/** A note key went down in step input: write it (with whatever else is held) at the cursor. */
+function stepInputNote(k, midi) {
+  if (stepEntry && !state.tracks.includes(stepEntry.t)) stepEntry = null;
+  const t = stepEntry?.t || stepInputTrack();
+  if (!t) return;
+  if (!stepEntry) stepEntry = { t, idx: cursorIdx(t), len: 1, keys: new Set() };
+  stepEntry.keys.add(k);
+  writeEntry(t, stepEntry.idx, kbdSelection(midi), stepEntry.len);
+  try { renderStepGrid(t); } catch {}
+}
+
+function stepInputRelease(k) {
+  if (!stepEntry || !stepEntry.keys.delete(k) || stepEntry.keys.size) return;
+  const { t, idx, len } = stepEntry;
+  stepEntry = null;
+  state.kbdCursor = idx + len;
+  paintStepCursor(t);
+}
+
+/** → with keys down: tie the entry one step longer. False when there is no entry to tie. */
+export function extendStepEntry() {
+  if (!stepEntry) return false;
+  const { t, idx } = stepEntry;
+  const room = (t.length || t.steps.length) - idx;
+  if (stepEntry.len >= room) return true;
+  stepEntry.len += 1;
+  t.lengths[idx] = stepEntry.len;
+  if (Array.isArray(t.extraLengths) && t.extraLengths[idx]) t.extraLengths[idx] = t.extraLengths[idx].map(() => stepEntry.len);
+  try { renderStepGrid(t); } catch {}
+  return true;
+}
+
+/** Move the step cursor by `d` steps on the active track, wrapping. */
+export function moveStepCursor(d) {
+  const t = targetTrack();
+  if (!t) return;
+  const len = t.length || t.steps.length;
+  state.kbdCursor = (((cursorIdx(t) + d) % len) + len) % len;
+  paintStepCursor(t);
+}
+
+/** Clear whatever note covers the cursor. `back` steps the cursor back first (backspace). */
+export function clearStepAtCursor(back = false) {
+  const t = stepInputTrack();
+  if (!t) return;
+  if (back) moveStepCursor(-1);
+  const anchor = anchorCovering(t, cursorIdx(t));
+  if (anchor < 0) return;
+  removeNote(t, anchor);
+  try { renderStepGrid(t); } catch {}
+}
+
+/** Enter: toggle the cursor's step (the track's usual note: C2 on a kit) and move on. */
+export function toggleStepAtCursor() {
+  const t = stepInputTrack();
+  if (!t) return;
+  const idx = cursorIdx(t);
+  const anchor = anchorCovering(t, idx);
+  if (anchor >= 0) removeNote(t, anchor);
+  else { startNote(t, idx); if (Array.isArray(t.velocities)) t.velocities[idx] = KBD_REC_VEL; }
+  state.kbdCursor = idx + 1;
+  try { renderStepGrid(t); } catch {}
+}
+
+/** Arm / disarm recording: the record button's state, the body class, the cursor. */
+export function setKbdRecord(on) {
+  state.kbdRecord = !!on;
+  stepEntry = null;
+  document.getElementById("kbd-record")?.setAttribute("aria-pressed", String(!!on));
+  document.body.classList.toggle("kbd-recording", !!on);
+  const t = targetTrack();
+  if (t) paintStepCursor(t);
+}
+
 function onKeyDown(e) {
+  // A key vim mode already took (vim.js listens on window capture, first).
+  if (e.defaultPrevented) return;
+  // Vim mode (vim.js): the letters are commands except in insert and play.
+  if (state.vimMode && state.vimMode !== "insert" && state.vimMode !== "play") return;
   if (e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
   if (!isDesktopKeyboard()) return;
   if (isTypingTarget(e.target)) return;
@@ -440,11 +569,16 @@ function onKeyDown(e) {
       ? [bufferForCapture(sel.root, now, sel.chord, sel.cpx)]   // one chord, not one entry per tone
       : tonesFor(midi).map(n => bufferForCapture(n, now));
   }
-  captureNote(midi);
+  if (stepInputActive()) stepInputNote(k, midi);
+  else captureNote(midi);
   pressNote(k, midi);
 }
 
-function onKeyUp(e) { releaseNote((e.key || "").toLowerCase()); }
+function onKeyUp(e) {
+  const k = (e.key || "").toLowerCase();
+  releaseNote(k);
+  stepInputRelease(k);
+}
 
 const _OCT_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 /** Update the top-bar readout of the keyboard's current base octave (z/x shifts). */
@@ -475,5 +609,6 @@ export function initComputerKeyboard() {
 export function resetKbdKeys() {
   for (const k of [...held.keys()]) releaseNote(k);
   held.clear();
+  stepEntry = null;
   state.kbdLast = null;
 }

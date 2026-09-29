@@ -28,7 +28,7 @@ import { ANALOG_FILTER_INFO, ANALOG_FILTER_TYPES } from "./soundDefaults.js";
 import { state } from "./state.js";
 import { openAutAsModal, openChanceAsModal, openCompAsModal, openEnvAsModal, openEqAsModal, openFilterAsModal, openFxAsModal, openGranularWavModal, openModAsModal, openEuclidAsModal, openRollAsModal, openSampleEditorModal, openTrackMenu } from "./stepEditor.js";
 import { openWavetableEditor } from "./wavetableEditor.js";
-import { attachGridInteraction, renderStepGrid } from "./stepGrid.js";
+import { attachGridInteraction, paintStepCursor, renderStepGrid } from "./stepGrid.js";
 import { duplicateTrack, extendPatternByDuplicate, removeTrack, resizePattern, resizeTrack, shiftTrackOctave, truncatePattern } from "./track.js";
 import { CONTAGION_NUM_KEYS, CONTAGION_SEL_KEYS } from "./contagion.js";
 import { GRAN_DEFAULTS, GRAN_NUM_KEYS, GRAN_SEL_KEYS } from "./voices.js";
@@ -51,7 +51,10 @@ export function setActiveTrack(t) {
   // just swallow every key. Clicking one leaves the previous track selected.
   if (t.engineKey === "bus") return;
   state.activeTrackId = t.id;
-  for (const other of state.tracks) other.el?.classList.toggle("is-kbd-active", other.id === t.id);
+  for (const other of state.tracks) {
+    other.el?.classList.toggle("is-kbd-active", other.id === t.id);
+    paintStepCursor(other);    // the step-input cursor follows the keyboard's track
+  }
 }
 
 /**

@@ -10,7 +10,7 @@ import { updateGranularSpeedEnabled } from "./params.js";
 import { refreshPanelBadges, refreshParamIndicators } from "./paramTargets.js";
 import { renderAutomationPanel } from "./render.js";
 import { invertChord, state } from "./state.js";
-import { renderStepGrid } from "./stepGrid.js";
+import { renderStepGrid, repaintNudge } from "./stepGrid.js";
 import { CHORD_TYPES, SCALES, applyScale, chordFitsScale, chordNotes, midiToName } from "./theory.js";
 import { holdNoiseBed } from "./signal.js";
 import { ensureAudio } from "./transport.js";
@@ -1297,6 +1297,7 @@ export function openStepEditor(t, idx, anchorEl) {
     if (!t.offsets) t.offsets = new Array(t.length).fill(0);
     t.offsets[idx] = Number(offsetInput.value);
     refresh();
+    repaintNudge(t, idx);      // the tick on the grid and the roll follows the slider
   });
 
   // Sample region / fades / loop / slicing now live in the one track-level

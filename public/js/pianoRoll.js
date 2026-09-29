@@ -4,7 +4,7 @@ import { activeMeter, stepsPerBarForMeter, stepsPerBeatForMeter } from "./meter.
 import { renderAutomationPanel } from "./render.js";
 import { state } from "./state.js";
 import { openStepEditor } from "./stepEditor.js";
-import { renderStepGrid } from "./stepGrid.js";
+import { markNudge, renderStepGrid } from "./stepGrid.js";
 import { SCALES, midiToName, noteColor } from "./theory.js";
 import { anchorCovering, applyRollPitchUp, extendNote, extendPatternByDuplicate, removeNote, startNote, truncatePattern } from "./track.js";
 
@@ -255,6 +255,8 @@ export function renderRollPanel(t, panel) {
           }
           const col = noteColor(m);
           if (col) cell.style.setProperty("--note-color", col);
+          // The note's own start carries its nudge tick, as the step grid's does.
+          if (anchor === i) markNudge(cell, t.offsets?.[anchor]);
           // Label the anchor cell only.
           if (anchor === i) {
             if (isRoot) {
@@ -356,6 +358,7 @@ export function renderRollPanel(t, panel) {
       } else {
         c.style.removeProperty("--note-color");
       }
+      markNudge(c, on && anchor === step ? t.offsets?.[anchor] : 0);
       if (on && anchor === step) {
         if (isRoot) {
           const ch = t.chords[anchor] || "";

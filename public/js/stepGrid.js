@@ -56,7 +56,58 @@ export function renderStepGrid(t) {
       i += 1;
     }
   }
+  paintStepCursor(t);
   refreshRollIfOpen(t);
+}
+
+/**
+ * A note played off the grid (the step editor's offset, vim's [ ], a Strudel
+ * triplet) gets a tick where it lands: the middle is on the beat, left early,
+ * right late. One helper for the step grid and the piano roll, so the two
+ * draw the same thing (style.css, `.is-nudged`).
+ * @param {HTMLElement} cell @param {number} [offset] fraction of a step, -0.5..0.5
+ */
+export function markNudge(cell, offset) {
+  const off = Number(offset) || 0;
+  const on = Math.abs(off) > 0.001;
+  cell.classList.toggle("is-nudged", on);
+  if (on) cell.style.setProperty("--nudge", String(off));
+  else cell.style.removeProperty("--nudge");
+}
+
+/** Redraw one note's tick after its offset changed (the step editor's slider), grid and roll. */
+export function repaintNudge(t, idx) {
+  const cell = t.el?.querySelector(`.sq-steps .sq-step[data-idx="${idx}"]`);
+  if (cell?.classList.contains("is-on")) markNudge(cell, t.offsets?.[idx]);
+  refreshRollIfOpen(t);
+}
+
+/**
+ * Mark the step-input cursor (keyboard.js) on the active track's grid. Always
+ * marked, shown only while step input is on (`body.kbd-recording` with the
+ * transport stopped, style.css). A cursor inside a held note marks the note.
+ * @param {Track} t
+ */
+export function paintStepCursor(t) {
+  const grid = t?.el?.querySelector(".sq-steps");
+  if (!grid) return;
+  for (const c of grid.querySelectorAll(".sq-step.is-cursor")) c.classList.remove("is-cursor");
+  if (t.id !== state.activeTrackId) return;
+  const len = t.length || t.steps?.length || 0;
+  if (!len) return;
+  const idx = (((state.kbdCursor | 0) % len) + len) % len;
+  const covering = t.steps[idx] ? idx : anchorCovering(t, idx);
+  const at = covering >= 0 ? covering : idx;
+  grid.querySelector(`.sq-step[data-idx="${at}"]`)?.classList.add("is-cursor");
+  // Vim's visual selection (vim.js), on the same track as the cursor.
+  for (const c of grid.querySelectorAll(".sq-step.is-vsel")) c.classList.remove("is-vsel");
+  const sel = state.vimSel;
+  if (!sel) return;
+  const lo = Math.min(sel.from, sel.to), hi = Math.max(sel.from, sel.to);
+  for (const c of grid.children) {
+    const i = Number(c.dataset.idx), span = Number(c.dataset.span) || 1;
+    if (i <= hi && i + span - 1 >= lo) c.classList.add("is-vsel");
+  }
 }
 
 // Piano roll panel: a pitches × steps grid per track. Clicking a cell places
@@ -91,6 +142,7 @@ export function makeCell(t, idx, span, on, isContinuation = false, velOverride, 
   if (span > 1) cell.style.setProperty("--hspan", String(span));
   if (idx % 4 === 0 && !isContinuation) cell.classList.add("is-beat");
   if (t.accents.has(idx) && !isContinuation) cell.classList.add("is-accent");
+  markNudge(cell, on && !isContinuation ? t.offsets?.[idx] : 0);
   if (on && note != null && !isContinuation) {
     const label = document.createElement("span");
     label.className = "sq-step__note";
@@ -131,6 +183,9 @@ export function attachGridInteraction(t, grid) {
     if (e.button !== 0) return;
     closeStepEditor();
     const idx = idxFromPoint(e.clientX, e.clientY);
+    // A click puts the step-input cursor where it landed, so a keyboard entry
+    // can pick up from any step without arrowing there.
+    if (idx >= 0) { state.kbdCursor = idx; paintStepCursor(t); }
     const now = performance.now();
     if (now - lastClickTime < DBLCLICK_MS && idx === lastClickIdx) {
       // Double-click: ensure the step is on at `idx` and bump velocity to full.

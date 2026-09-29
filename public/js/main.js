@@ -12,7 +12,8 @@ import { startModMotion } from "./modMotion.js";
 import { openMacroPads } from "./macro.js";
 import { installCodePanel } from "./codePanel.js";
 import { applySampleSpeed, attachBpmDrag, lfoRateLabel, retuneSyncedLFOs } from "./lfo.js";
-import { captureSequence, initComputerKeyboard, isDesktopKeyboard, resetKbdKeys } from "./keyboard.js";
+import { captureSequence, initComputerKeyboard, isDesktopKeyboard, resetKbdKeys, setKbdRecord } from "./keyboard.js";
+import { initVim } from "./vim.js";
 import { autoAccents, parseMeter, redetectDrumKit, stepsPerBarForMeter } from "./meter.js";
 import { meterTick } from "./meters.js";
 import { setEngineKey } from "./params.js";
@@ -684,6 +685,7 @@ export function init() {
   if (kbdCaptureBtn) kbdCaptureBtn.innerHTML = ICON_CAPTURE;
   if (isDesktopKeyboard()) {
     initComputerKeyboard();
+    initVim();
     if (kbdChordPanel) kbdChordPanel.hidden = false;
     if (kbdCaptureBtn) kbdCaptureBtn.disabled = false;
     document.body.classList.add("kbd-notes-on");
@@ -716,11 +718,6 @@ export function init() {
   // Record computer-keyboard notes into the active track (while the transport plays).
   const recBtn = document.getElementById("kbd-record");
   if (recBtn) { recBtn.innerHTML = ICON_REC; recBtn.disabled = !isDesktopKeyboard(); }
-  const setKbdRecord = (on) => {
-    state.kbdRecord = on;
-    if (recBtn) recBtn.setAttribute("aria-pressed", String(on));
-    document.body.classList.toggle("kbd-recording", on);
-  };
   if (recBtn) recBtn.addEventListener("click", () => {
     if (!state.kbdRecord) {
       if (state.activeTrackId == null && state.tracks[0]) setActiveTrack(state.tracks[0]);
