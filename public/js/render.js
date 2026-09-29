@@ -1820,6 +1820,8 @@ export function buildAutomationLane(t, key, onRemove) {
   const row = document.createElement("div");
   row.className = "sq-aut__lane" + (lane.enabled ? " is-active" : "");
   row.dataset.key = key;
+  // Found by knobRecord.js to repaint a lane as a knob records into it.
+  row.dataset.autTrack = String(t.id);
   row.innerHTML = `
     <span class="sq-aut__label">${AUTOMATION_TARGETS[key]?.label ?? key}</span>
     <input type="checkbox" class="sq-aut__enable" ${lane.enabled ? "checked" : ""} title="enable lane" />

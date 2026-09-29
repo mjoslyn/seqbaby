@@ -14,6 +14,7 @@ import { installCodePanel } from "./codePanel.js";
 import { applySampleSpeed, attachBpmDrag, lfoRateLabel, retuneSyncedLFOs } from "./lfo.js";
 import { captureSequence, initComputerKeyboard, isDesktopKeyboard, resetKbdKeys, setKbdRecord } from "./keyboard.js";
 import { initVim } from "./vim.js";
+import { installKnobRecord } from "./knobRecord.js";
 import { autoAccents, parseMeter, redetectDrumKit, stepsPerBarForMeter } from "./meter.js";
 import { meterTick } from "./meters.js";
 import { setEngineKey } from "./params.js";
@@ -686,6 +687,7 @@ export function init() {
   if (isDesktopKeyboard()) {
     initComputerKeyboard();
     initVim();
+    installKnobRecord();
     if (kbdChordPanel) kbdChordPanel.hidden = false;
     if (kbdCaptureBtn) kbdCaptureBtn.disabled = false;
     document.body.classList.add("kbd-notes-on");
@@ -722,11 +724,11 @@ export function init() {
     if (!state.kbdRecord) {
       if (state.activeTrackId == null && state.tracks[0]) setActiveTrack(state.tracks[0]);
       setKbdRecord(true);
-      setStatus("recording keyboard → active track — notes land on the current step. click a track to target it.");
+      setStatus("recording: keyboard notes land on the active track's current step, and a knob turned while it plays writes its automation lane. click a track to target it.");
       if (!state.playing) togglePlay();   // roll the transport so notes get captured
     } else {
       setKbdRecord(false);
-      setStatus("keyboard recording off");
+      setStatus("recording off");
     }
   });
 
