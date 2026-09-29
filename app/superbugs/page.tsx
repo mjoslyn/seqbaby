@@ -11,10 +11,10 @@ export const metadata: Metadata = {
 // It loads playing the intro riff of King Gizzard's "Superbug", from the tab:
 // C# minor, the clean intro's sixteen eighths (F# D# C# D# F# D# C# D# F# G#
 // A# C# A# G# F# D#). The blip lane's numbers are semitones from A3 (220Hz),
-// so C#3 is -8. Drums are a plain rock beat of my own, and the tempo is a
-// guess: the tab gives none.
+// so C#3 is -8. Drums are a plain rock beat of my own, and the tempo is
+// 90, as told.
 const SUPERBUG = {
-  bpm: 132,
+  bpm: 90,
   blip: [-3, -6, -8, -6, -3, -6, -8, -6, -3, -1, 1, 4, 1, -1, -3, -6],
   start: ["x.......x.x.....", "....x.......x...", "x.x.x.x.x.x.x.x.", "xxxxxxxxxxxxxxxx"],
 };
