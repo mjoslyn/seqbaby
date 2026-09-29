@@ -2647,6 +2647,12 @@ running engine ◀── mergeSet ◀── writeTracks(fromBlob(serializeSet())
   `run code` label) is not taken for the song moving. history.js ignores
   interactions inside `.sq-code`, so typing in the drawer is never an edit and
   a run is always labelled as one.
+- **Right-click a knob and the menu says how code spells it** (`in code
+  .lpf(1200)`, `.knob('d3lvl', 0.9)`, `.fx('chorus.rate', 0.5)`), with the
+  track's current value. `codeForControl` (strudel.js) maps the control's
+  class to the drawer's own names, the ones `sessionToCode` writes, and a test
+  runs each line back through the reader. paramMenu.js imports strudel.js
+  dynamically, since the studio otherwise loads it only when the drawer runs.
 - **Portable is the other form** (`sessionToCode` without `native`): stock
   sounds (`EXPORT_SOUND`, gm_ names), only the effects Strudel names, lanes as
   per-step value patterns (`.lpf("60!4 1095!4")`), and one warning per track

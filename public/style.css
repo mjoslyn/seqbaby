@@ -2949,6 +2949,8 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not
 .sq-pmenu__modal { width: min(96vw, 900px); max-width: 96vw; gap: 10px; }
 .sq-pmenu__sub { color: var(--fg-dim); }
 .sq-pmenu__desc { font-size: 11px; color: var(--fg-dim); line-height: 1.5; max-width: 68ch; }
+.sq-pmenu__code { font-size: 11px; color: var(--fg-dim); }
+.sq-pmenu__code code { color: var(--accent); user-select: all; overflow-wrap: anywhere; }
 .sq-pmenu__sec { display: grid; gap: 6px; padding-top: 8px; border-top: 1px solid var(--border); }
 .sq-pmenu__sec-head { font-size: 11px; color: var(--fg-dim); text-transform: lowercase; }
 .sq-pmenu__key { color: var(--accent); }

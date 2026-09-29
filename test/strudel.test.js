@@ -476,3 +476,37 @@ test("running over a locked active pattern keeps the lock and the shared sound a
   assert.equal(bass.patterns[1].soundLocked, true);
   assert.deepEqual(bass.filter.cutoff, shared.filter.cutoff);
 });
+
+test("the parameter menu's code line sets what it names", () => {
+  // What paramMenu.js shows beside a control, run back through the drawer:
+  // every spelling lands on the value it was written from.
+  const sound = {
+    params: { vol: 0.6, d3lvl: 0.9, harm: 0.3, dalg: "5" },
+    filter: { type: "lowpass", cutoff: 0.5, reson: 0.3, env: 0.4, decay: 0.6 },
+    fxConfig: { chorus: { wet: 0.2, rate: 0.7 }, reverb: { wet: 0.3, decay: 4 }, delay: { wet: 0.25, time: 0.5, fbk: 0.4 }, shaper: { wet: 0.5, amount: 0.8 } },
+    eq: { low: -3 }, comp: { enabled: true, threshold: -30 },
+  };
+  const t = { engineKey: "dm:hexop", ...sound };
+  const classes = ["p-vol", "p-cutoff", "p-reson", "p-envamt", "p-envdec", "p-eq-low", "comp-enabled", "comp-threshold",
+    "fx-chorus-rate", "fx-reverb-wet", "fx-reverb-decay", "fx-delay-wet", "fx-delay-time", "fx-delay-fbk", "fx-shaper-amt", "p-d3lvl", "p-harm", "p-dalg"];
+  const calls = classes.map(c => S.codeForControl(c, t));
+  assert.ok(calls.every(Boolean), calls.join(" "));
+  const { song, warnings } = S.codeToSong(`$: note("c3").s("hexop")${calls.join("")}`);
+  assert.deepEqual(warnings, []);
+  const got = song.tracks[0];
+  const near = (a, b, tol = 0.01) => assert.ok(Math.abs(Number(a) - Number(b)) <= tol, `${a} vs ${b}`);
+  near(got.params.vol, 0.6); near(got.params.d3lvl, 0.9); near(got.params.harm, 0.3);
+  assert.equal(String(got.params.dalg), "5");
+  near(got.filter.cutoff, 0.5); near(got.filter.reson, 0.3); near(got.filter.env, 0.4); near(got.filter.decay, 0.6);
+  near(got.eq.low, -3); assert.equal(got.comp.enabled, true); near(got.comp.threshold, -30);
+  near(got.fxConfig.chorus.rate, 0.7); near(got.fxConfig.reverb.wet, 0.3); near(got.fxConfig.reverb.decay, 4);
+  near(got.fxConfig.delay.wet, 0.25); near(got.fxConfig.delay.time, 0.5); near(got.fxConfig.delay.fbk, 0.4);
+  near(got.fxConfig.shaper.amount, 0.8);
+
+  // an analog filter model keeps its type: .lpf would make it a lowpass
+  assert.equal(S.codeForControl("p-cutoff", { engineKey: "dm:silverbox", filter: { type: "squelch", cutoff: 0.4 } }), ".filter('cutoff', 0.4)");
+  // another engine's panel, a generator, and a track code cannot make say nothing
+  assert.equal(S.codeForControl("p-sbaccent", t), null);
+  assert.equal(S.codeForControl("p-eucpulses", t), null);
+  assert.equal(S.codeForControl("p-vol", { engineKey: "sampler" }), null);
+});
