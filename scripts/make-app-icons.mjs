@@ -43,6 +43,13 @@ const ICONS = [
   { file: "icon-192.png", size: 192, fill: 0.8 },
   { file: "icon-512.png", size: 512, fill: 0.8 },
   { file: "icon-maskable-512.png", size: 512, fill: 0.58 },
+  // The browser-tab and search-result favicon. Google's favicon crawler wants
+  // a square raster in a multiple of 48px and falls back to /favicon.ico, and
+  // with neither it drew a grey globe beside the site in search results. The
+  // three small sizes are also packed into public/favicon.ico below.
+  { file: "favicon-48.png", size: 48, fill: 0.9, ico: true },
+  { file: "favicon-32.png", size: 32, fill: 0.9, ico: true },
+  { file: "favicon-16.png", size: 16, fill: 0.9, ico: true },
 ];
 
 function findChrome() {
@@ -175,6 +182,7 @@ if (!report.startsWith("SQICONS:")) {
 }
 const results = JSON.parse(report.slice("SQICONS:".length));
 
+const icoParts = [];
 for (const spec of ICONS) {
   const got = results.find((r) => r.file === spec.file);
   if (!got) throw new Error(`no output for ${spec.file}`);
@@ -205,4 +213,28 @@ for (const spec of ICONS) {
   }
   writeFileSync(join(outDir, spec.file), png);
   console.log(`public/icons/${spec.file}  ${size}x${size}`);
+  if (spec.ico) icoParts.push({ size, png });
 }
+
+// An .ico is a directory of images, and since Vista each entry may simply be a
+// PNG: a 6-byte header, a 16-byte entry per image, then the PNGs back to back.
+icoParts.sort((a, b) => a.size - b.size);
+const head = Buffer.alloc(6 + 16 * icoParts.length);
+head.writeUInt16LE(0, 0); // reserved
+head.writeUInt16LE(1, 2); // type: icon
+head.writeUInt16LE(icoParts.length, 4);
+let offset = head.length;
+icoParts.forEach(({ size, png }, i) => {
+  const e = 6 + 16 * i;
+  head.writeUInt8(size % 256, e); // width (0 means 256)
+  head.writeUInt8(size % 256, e + 1); // height
+  head.writeUInt8(0, e + 2); // no palette
+  head.writeUInt8(0, e + 3); // reserved
+  head.writeUInt16LE(1, e + 4); // colour planes
+  head.writeUInt16LE(32, e + 6); // bits per pixel
+  head.writeUInt32LE(png.length, e + 8);
+  head.writeUInt32LE(offset, e + 12);
+  offset += png.length;
+});
+writeFileSync(join(root, "public", "favicon.ico"), Buffer.concat([head, ...icoParts.map((p) => p.png)]));
+console.log(`public/favicon.ico  ${icoParts.map((p) => p.size).join("/")}`);

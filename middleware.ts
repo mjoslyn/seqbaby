@@ -13,6 +13,6 @@ export const config = {
   // `api/og` too: the link-preview images are fetched by crawlers with no
   // session, and reading one must not wait on a Supabase round trip.
   matcher: [
-    "/((?!_next/static|_next/image|api/og|favicon\\.svg|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|mjs|wasm|map|woff2?|mp3|wav|json|webmanifest)$).*)",
+    "/((?!_next/static|_next/image|api/og|favicon\\.svg|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|mjs|wasm|map|woff2?|mp3|wav|json|webmanifest|txt|xml)$).*)",
   ],
 };

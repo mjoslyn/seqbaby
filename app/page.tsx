@@ -6,7 +6,7 @@ import PatchCard from "./home/PatchCard";
 import SongCard from "./home/SongCard";
 import { loadFeed } from "./home/feed";
 import styles from "./home/home.module.css";
-import { SITE_URL, shareCard } from "./shareCard";
+import { SHARE_IMAGE, SITE_URL, shareCard } from "./shareCard";
 
 // The homepage. The studio itself is at /studio (app/studio/page.tsx); links
 // that still name the studio's old place at / (`?s=`, `?open=`, `?jam=`) are
@@ -27,6 +27,7 @@ const DESCRIPTION =
 export const metadata: Metadata = {
   title: TITLE,
   description: DESCRIPTION,
+  alternates: { canonical: "/" },
   ...shareCard(TITLE, DESCRIPTION, `${SITE_URL}api/og/home`),
 };
 
@@ -48,11 +49,45 @@ const BLURBS = [
   "undo goes back 100 steps. regret goes back further.",
 ];
 
+// Structured data for search engines. The WebSite block is what Google reads
+// for the site name in a result (without it the result says
+// "playseqbaby.com"); the Organization's logo and the app's image are what it
+// can put beside one.
+const JSON_LD = JSON.stringify([
+  {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    name: "seqbaby",
+    alternateName: ["playseqbaby", "seqbaby step sequencer"],
+    url: SITE_URL,
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    name: "seqbaby",
+    url: SITE_URL,
+    logo: `${SITE_URL}icons/icon-512.png`,
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "WebApplication",
+    name: "seqbaby",
+    url: `${SITE_URL}studio`,
+    description: DESCRIPTION,
+    applicationCategory: "MultimediaApplication",
+    operatingSystem: "Any (web browser)",
+    browserRequirements: "Requires a browser with Web Audio",
+    image: SHARE_IMAGE,
+    offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+  },
+]).replace(/</g, "\\u003c");
+
 export default async function HomePage() {
   const { songs, people, patches } = await loadFeed();
 
   return (
     <div className={styles.home}>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON_LD }} />
       <nav className={styles.nav}>
         <a className={styles.brand} href="/">
           {/* eslint-disable-next-line @next/next/no-img-element */}

@@ -4,6 +4,7 @@ import styles from "./manual.module.css";
 export const metadata: Metadata = {
   title: "seqbaby manual",
   description: "How to use seqbaby: transport, patterns, tracks, engines, the piano roll, effects, saving and sharing.",
+  alternates: { canonical: "/manual" },
 };
 
 const SECTIONS = [
