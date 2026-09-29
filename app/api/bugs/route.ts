@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
+import { cleanStudio, cleanUrl, contextMarkdown } from "@/app/superbugs/bugContext";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// POST /api/bugs  { title, what, steps?, where?, contact?, website? }
+// POST /api/bugs  { title, what, steps?, where?, contact?, context?, website? }
 //   -> { url } the issue it opened
 //
 // The superbugs page's form. It opens an issue on the repo with a server-side
@@ -11,6 +12,10 @@ export const dynamic = "force-dynamic";
 // one repo), so nobody needs a GitHub account to report one. Without the
 // token it answers 503 and the page falls back to a prefilled github.com
 // new-issue link. `website` is a honeypot: a person never fills it.
+//
+// `context` is `{ referrer, studio }`: the page the reporter came from and the
+// last studio session the browser had open (app/superbugs/bugContext.js). It is
+// rebuilt here from the fields that module writes, never passed through.
 //
 // `turnstile` is a Cloudflare Turnstile token. With TURNSTILE_SECRET_KEY set it
 // is required and checked against siteverify before anything reaches GitHub;
@@ -75,12 +80,17 @@ export async function POST(req: Request) {
   const where = clip(body.where, 300);
   const contact = clip(body.contact, 200);
   const ua = clip(req.headers.get("user-agent"), 300);
+  const raw = body.context && typeof body.context === "object" ? (body.context as Record<string, unknown>) : null;
+  const context = raw
+    ? contextMarkdown({ referrer: cleanUrl(raw.referrer) || null, studio: cleanStudio(raw.studio) }, Date.now())
+    : "";
   const text = [
     "### What happened",
     what,
     steps && `### How to make it happen\n${steps}`,
     where && `### Where\n${where}`,
     contact && `### Contact\n${contact}`,
+    context,
     `<sub>Reported from the superbugs page. ${ua}</sub>`,
   ]
     .filter(Boolean)

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import styles from "./superbugs.module.css";
+import { STUDIO_KEY, contextMarkdown, contextRows, pickContext } from "./bugContext";
 
 const ISSUES = "https://github.com/mjoslyn/seqbaby/issues";
 
@@ -36,6 +37,21 @@ function loadTurnstile(): Promise<Turnstile> {
   });
 }
 
+type Context = ReturnType<typeof pickContext>;
+
+// Where the reporter came from and the last studio session this browser had
+// open (app/StudioBreadcrumb.tsx leaves it), read once on mount.
+function readContext(): Context {
+  let studio: unknown = null;
+  try {
+    const raw = localStorage.getItem(STUDIO_KEY);
+    studio = raw ? JSON.parse(raw) : null;
+  } catch {
+    /* no storage, or something else wrote the key */
+  }
+  return pickContext({ referrer: document.referrer, studio, origin: location.origin, now: Date.now() });
+}
+
 type Result = { kind: "ok"; url: string } | { kind: "err"; msg: string; fallback: string } | null;
 
 export default function BugForm() {
@@ -45,7 +61,13 @@ export default function BugForm() {
   // Why the check can't give a token (blocked script, a hostname Cloudflare
   // doesn't allow). Without it the button just sat disabled with no reason.
   const [checkErr, setCheckErr] = useState("");
+  // Read after mount: the server has no referrer or storage to render it from.
+  const [ctx, setCtx] = useState<Context>({ referrer: null, studio: null });
+  const [attach, setAttach] = useState(true);
   const box = useRef<HTMLDivElement>(null);
+
+  useEffect(() => setCtx(readContext()), []);
+  const rows = contextRows(ctx, Date.now());
   const widget = useRef<string | null>(null);
 
   useEffect(() => {
@@ -89,10 +111,11 @@ export default function BugForm() {
       title: v("title"),
       what: v("what"),
       steps: v("steps"),
-      where: v("where") || location.href,
+      where: v("where"),
       contact: v("contact"),
       website: v("website"),
       turnstile: token,
+      context: attach && rows.length ? ctx : null,
     };
     setBusy(true);
     setResult(null);
@@ -107,7 +130,8 @@ export default function BugForm() {
         setResult({ kind: "ok", url: data.url });
         form.reset();
       } else {
-        const body = `${payload.what}\n\n${payload.steps ? `Steps:\n${payload.steps}\n\n` : ""}${navigator.userAgent}`;
+        const extra = payload.context ? `${contextMarkdown(payload.context, Date.now())}\n\n` : "";
+        const body = `${payload.what}\n\n${payload.steps ? `Steps:\n${payload.steps}\n\n` : ""}${extra}${navigator.userAgent}`;
         setResult({
           kind: "err",
           msg: data.error || "that did not go through",
@@ -142,8 +166,28 @@ export default function BugForm() {
       </label>
       <label>
         <span>song link or page (optional)</span>
-        <input name="where" maxLength={300} placeholder="defaults to this page" />
+        <input
+          name="where"
+          maxLength={300}
+          placeholder={rows.length ? "if it is not the one below" : "where it happened"}
+        />
       </label>
+      {rows.length > 0 && (
+        <div className={styles.context}>
+          <label className={styles.check}>
+            <input type="checkbox" checked={attach} onChange={(e) => setAttach(e.target.checked)} />
+            <span>attach where you came from</span>
+          </label>
+          <ul className={attach ? undefined : styles.off}>
+            {rows.map((r) => (
+              <li key={r.label}>
+                <span>{r.label}</span> {r.value}
+              </li>
+            ))}
+          </ul>
+          <small>this goes on the public issue too. untick it if that bothers you.</small>
+        </div>
+      )}
       <label>
         <span>email, if you want a reply (optional)</span>
         <input name="contact" type="email" maxLength={200} />
