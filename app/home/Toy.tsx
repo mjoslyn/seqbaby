@@ -11,19 +11,22 @@ import styles from "./home.module.css";
 
 const LANES = ["kick", "snare", "hat", "blip"] as const;
 const STEPS = 16;
-const BPM = 132;
-// It loads playing a chugging riff in the spirit of King Gizzard's "Superbug":
-// four on the floor, a backbeat, busy hats and a minor-third stab. Written by
-// ear, not transcribed. Still A minor pentatonic, one note per step, so the
-// blip lane can never be wrong once the visitor starts moving steps around.
-const BLIP = [0, 0, 3, 0, 0, 5, 3, 0, 0, 0, 3, 0, 7, 5, 3, 0];
+const DEFAULT_BPM = 118;
+// A minor pentatonic, one note per step, so the blip lane can never be wrong.
+const DEFAULT_BLIP = [0, 3, 5, 7, 10, 12, 10, 7, 5, 3, 0, 7, 12, 15, 12, 7];
 
-const START: boolean[][] = [
-  "x...x...x...x...",
-  "....x.......x..x",
-  "x.xxx.xxx.xxx.xx",
-  "x.xx.xx.x.xx.xx.",
-].map((row) => [...row].map((c) => c === "x"));
+const DEFAULT_START = [
+  "x...x...x...x..x",
+  "....x.......x...",
+  "..x.x.x.x.x.xxx.",
+  "x..x..x...x.x...",
+];
+
+const parse = (rows: string[]) => rows.map((row) => [...row].map((c) => c === "x"));
+
+// The homepage uses the defaults; another page can hand it its own beat: four
+// rows of sixteen ("x" is a hit), a bpm, and the blip lane's semitones.
+export type ToyProps = { bpm?: number; blip?: number[]; start?: string[] };
 
 function noiseBuffer(ctx: AudioContext): AudioBuffer {
   const buf = ctx.createBuffer(1, ctx.sampleRate * 0.5, ctx.sampleRate);
@@ -32,7 +35,7 @@ function noiseBuffer(ctx: AudioContext): AudioBuffer {
   return buf;
 }
 
-function voice(ctx: AudioContext, out: AudioNode, noise: AudioBuffer, lane: number, step: number, t: number) {
+function voice(ctx: AudioContext, out: AudioNode, noise: AudioBuffer, lane: number, step: number, t: number, blip: number[]) {
   const g = ctx.createGain();
   g.connect(out);
   if (lane === 0) {
@@ -49,7 +52,7 @@ function voice(ctx: AudioContext, out: AudioNode, noise: AudioBuffer, lane: numb
   if (lane === 3) {
     const o = ctx.createOscillator();
     o.type = "square";
-    o.frequency.value = 220 * 2 ** (BLIP[step] / 12);
+    o.frequency.value = 220 * 2 ** (blip[step] / 12);
     const f = ctx.createBiquadFilter();
     f.frequency.setValueAtTime(3200, t);
     f.frequency.exponentialRampToValueAtTime(400, t + 0.15);
@@ -74,8 +77,8 @@ function voice(ctx: AudioContext, out: AudioNode, noise: AudioBuffer, lane: numb
   src.stop(t + len + 0.01);
 }
 
-export default function Toy() {
-  const [grid, setGrid] = useState(START);
+export default function Toy({ bpm = DEFAULT_BPM, blip = DEFAULT_BLIP, start = DEFAULT_START }: ToyProps = {}) {
+  const [grid, setGrid] = useState(() => parse(start));
   const [playing, setPlaying] = useState(false);
   const [now, setNow] = useState(-1);
   const gridRef = useRef(grid);
@@ -100,7 +103,7 @@ export default function Toy() {
     }
     const { ctx, out, noise } = audio.current;
     await ctx.resume();
-    const dur = 60 / BPM / 4;
+    const dur = 60 / bpm / 4;
     let step = 0;
     let at = ctx.currentTime + 0.06;
     // Schedule a little ahead of the clock, as the real transport does, so a
@@ -108,7 +111,7 @@ export default function Toy() {
     const tick = () => {
       while (at < ctx.currentTime + 0.12) {
         const s = step;
-        gridRef.current.forEach((lane, i) => lane[s] && voice(ctx, out, noise, i, s, at));
+        gridRef.current.forEach((lane, i) => lane[s] && voice(ctx, out, noise, i, s, at, blip));
         const delay = Math.max(0, (at - ctx.currentTime) * 1000);
         setTimeout(() => setNow(s), delay);
         at += dur;
@@ -118,7 +121,7 @@ export default function Toy() {
     tick();
     timer.current = window.setInterval(tick, 25);
     setPlaying(true);
-  }, []);
+  }, [bpm, blip]);
 
   useEffect(() => () => {
     if (timer.current !== null) clearInterval(timer.current);
@@ -149,7 +152,7 @@ export default function Toy() {
         <button type="button" className={styles.toyBtn} onClick={shake} title="roll a new beat">
           ⚄ shake it
         </button>
-        <span className={styles.toyBpm}>{BPM} bpm</span>
+        <span className={styles.toyBpm}>{bpm} bpm</span>
       </div>
       <div className={styles.toyGrid} role="grid" aria-label="toy step sequencer">
         {LANES.map((name, lane) => (

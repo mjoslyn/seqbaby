@@ -1,10 +1,20 @@
 import type { Metadata } from "next";
+import Toy from "../home/Toy";
 import BugForm from "./BugForm";
 import styles from "./superbugs.module.css";
 
 export const metadata: Metadata = {
   title: "superbugs · seqbaby",
   description: "Found a bug in seqbaby? Tell us. It goes straight to the repo's issues.",
+};
+
+// It loads playing a chugging riff in the spirit of King Gizzard's
+// "Superbug": four on the floor, a backbeat, busy hats and a minor-third stab.
+// Written by ear, not transcribed.
+const SUPERBUG = {
+  bpm: 132,
+  blip: [0, 0, 3, 0, 0, 5, 3, 0, 0, 0, 3, 0, 7, 5, 3, 0],
+  start: ["x...x...x...x...", "....x.......x..x", "x.xxx.xxx.xxx.xx", "x.xx.xx.x.xx.xx."],
 };
 
 export default function SuperbugsPage() {
@@ -24,6 +34,7 @@ export default function SuperbugsPage() {
         </a>
         .
       </p>
+      <Toy {...SUPERBUG} />
       <BugForm />
     </div>
   );
