@@ -26,7 +26,7 @@ import { setStatus } from "./dom.js";
 import { flushHistory, markExternalEdit, redo, undo } from "./history.js";
 import { isDesktopKeyboard, isTypingTarget, noteForKey, setKbdRecord } from "./keyboard.js";
 import { clearStepAtCursor, extendStepEntry, moveStepCursor, toggleStepAtCursor } from "./keyboard.js";
-import { PANELS, initKnobNav, knobActive, knobArrow, pickKnob, releaseKnob, togglePanel, turnKnob } from "./knobNav.js";
+import { PANELS, initKnobNav, knobActive, knobArrow, knobNames, pickKnob, releaseKnob, togglePanel, turnKnob } from "./knobNav.js";
 import { CLASS_FOR_AUTO } from "./paramTargets.js";
 import { setActiveTrack } from "./render.js";
 import { FX_STAGE_LABELS, FX_STAGE_LEVEL_KEY } from "./constants.js";
@@ -47,7 +47,7 @@ const STEP_FIELDS = (() => {
   return Object.keys(p).filter(k => Array.isArray(p[k]));
 })();
 
-let bar = null, modeEl = null, keysEl = null, cmdEl = null;
+let bar = null, modeEl = null, keysEl = null, cmdEl = null, menuEl = null;
 let count = "";           // a count being typed: 4 in 4l
 let pending = "";         // an operator waiting for its second key: g, d, y, r
 /** @type {{len: number, cells: Array<{i: number, data: Record<string, any>}>} | null} */
@@ -394,14 +394,139 @@ function runCommand(line) {
   return `E: not a command: ${cmd}. Try :k :bpm :p :len :cut :res :fx :w :q :h`;
 }
 
+// ---- completion -------------------------------------------------------------------
+//
+// The command line lists what could come next as you type: the commands on an
+// empty line, the stages after `:fx `, the track's own knobs after `:k `.
+// Tab (or ↓) takes the next match into the line and shift-Tab (↑) the one
+// before; typing starts the list again from what is there. A mouse click on a
+// match takes it too. What runs is always the line itself, so a match is only
+// ever a way of typing it.
+
+const COMMANDS = [
+  ["k", "pick a knob by name (add 0..1 to set it)", true],
+  ["bpm", "tempo", true],
+  ["p", "switch pattern (1..32)", true],
+  ["len", "track length in steps", true],
+  ["cut", "filter cutoff, 0..1", true],
+  ["res", "filter resonance, 0..1", true],
+  ["fx", "an effect's level: :fx reverb .5", true],
+  ["w", "open the save panel", false],
+  ["h", "every vim key", false],
+  ["q", "vim mode off", false],
+];
+const MENU_MAX = 8;
+
+const comp = { items: /** @type {Array<{value: string, label: string, hint: string}>} */ ([]), index: -1 };
+
+/** Rank matches: a name that starts with what was typed before one that only contains it. */
+function rankBy(query, list, nameOf) {
+  const q = query.toLowerCase();
+  if (!q) return list;
+  const starts = [], has = [];
+  for (const x of list) {
+    const n = nameOf(x).toLowerCase();
+    if (n.startsWith(q)) starts.push(x);
+    // One letter only matches a start: "r" is in half the names in the rack.
+    else if (q.length > 1 && (n.includes(q) || n.replace(/[^a-z0-9]/g, "").includes(q.replace(/[^a-z0-9]/g, "")))) has.push(x);
+  }
+  return [...starts, ...has];
+}
+
+/** What the line could become. @returns {Array<{value: string, label: string, hint: string}>} */
+function completionsFor(line) {
+  const text = line.replace(/^\s+/, "");
+  const space = text.indexOf(" ");
+  if (space < 0) {
+    return rankBy(text, COMMANDS, c => c[0]).map(([name, hint, takesArg]) => ({
+      value: takesArg ? `${name} ` : name, label: `:${name}`, hint,
+    }));
+  }
+  const cmd = text.slice(0, space);
+  const rest = text.slice(space + 1);
+  if (cmd === "fx") {
+    if (rest.includes(" ")) return [];
+    return rankBy(rest, Object.keys(FX_STAGE_LEVEL_KEY), s => s).map(s => ({
+      value: `fx ${s} `, label: s, hint: FX_STAGE_LABELS[s] !== s ? FX_STAGE_LABELS[s] : "",
+    }));
+  }
+  if (cmd === "k" || cmd === "knob") {
+    // A number typed after the name is the value: there is nothing left to complete.
+    if (/\s[-.\d]+$/.test(rest)) return [];
+    return rankBy(rest.trim(), knobNames(track()), k => k.name).map(k => ({
+      value: `${cmd} ${k.name}`, label: k.name, hint: k.hint,
+    }));
+  }
+  return [];
+}
+
+function refreshCompletions() {
+  comp.items = completionsFor(cmdEl.value);
+  comp.index = -1;
+  paintMenu();
+}
+
+function paintMenu() {
+  if (!menuEl) return;
+  const open = state.vimMode === "command" && comp.items.length > 0;
+  menuEl.hidden = !open;
+  if (!open) { menuEl.replaceChildren(); return; }
+  // Keep the picked match in view: show the window of MENU_MAX around it.
+  const first = comp.index < MENU_MAX ? 0 : comp.index - MENU_MAX + 1;
+  const shown = comp.items.slice(first, first + MENU_MAX);
+  const rows = shown.map((it, i) => {
+    const li = document.createElement("li");
+    li.className = "sq-vim__opt" + (first + i === comp.index ? " is-on" : "");
+    li.innerHTML = `<span class="sq-vim__opt-name"></span><span class="sq-vim__opt-hint"></span>`;
+    li.firstChild.textContent = it.label;
+    li.lastChild.textContent = it.hint;
+    // mousedown, and kept from blurring the line: a blur closes the command line.
+    li.addEventListener("mousedown", (e) => { e.preventDefault(); takeCompletion(first + i); });
+    return li;
+  });
+  const more = comp.items.length - (first + shown.length);
+  if (more > 0) {
+    const li = document.createElement("li");
+    li.className = "sq-vim__opt sq-vim__opt--more";
+    li.textContent = `+${more} more. Keep typing or tab on`;
+    rows.push(li);
+  }
+  menuEl.replaceChildren(...rows);
+}
+
+function takeCompletion(i) {
+  const it = comp.items[i];
+  if (!it) return;
+  comp.index = i;
+  cmdEl.value = it.value;
+  cmdEl.setSelectionRange(it.value.length, it.value.length);
+  // A command that takes an argument goes straight on to completing that.
+  if (it.value.endsWith(" ")) refreshCompletions();
+  else paintMenu();
+}
+
+function cycleCompletion(dir) {
+  if (!comp.items.length) return;
+  const n = comp.items.length;
+  const i = comp.index < 0 ? (dir > 0 ? 0 : n - 1) : (comp.index + dir + n) % n;
+  const it = comp.items[i];
+  comp.index = i;
+  cmdEl.value = it.value;
+  cmdEl.setSelectionRange(it.value.length, it.value.length);
+  paintMenu();
+}
+
 function openCommand() {
   setMode("command");
   cmdEl.value = "";
   cmdEl.focus();
+  refreshCompletions();
 }
 function closeCommand() {
   cmdEl.blur();
   setMode("normal");
+  comp.items = []; comp.index = -1;
+  paintMenu();
 }
 
 // ---- help ----------------------------------------------------------------------
@@ -425,6 +550,7 @@ const HELP_ROWS = [
   [":k cutoff", "pick any knob by name (:k reverb decay, :k fx.delay.time; add a 0..1 value to set it)"],
   ["scroll, - =", "turn the picked knob: trackpad (shift: finer), or 1% a key (10= is 10%)"],
   [":", ":bpm 128  :p 3  :len 32  :cut .4  :res .6  :fx reverb .5  :12  :w  :q  :h"],
+  ["tab / shift tab", "on the command line: take the next / previous match (commands, :fx stages, :k knobs)"],
 ];
 
 let helpOverlay = null;
@@ -648,14 +774,21 @@ function buildBar() {
   bar = document.createElement("div");
   bar.className = "sq-vim";
   bar.hidden = true;
-  bar.innerHTML = `<span class="sq-vim__mode"></span><input class="sq-vim__cmd" type="text" spellcheck="false" autocomplete="off" aria-label="vim command" hidden><span class="sq-vim__keys"></span>`;
+  bar.innerHTML = `<ul class="sq-vim__menu" role="listbox" hidden></ul><span class="sq-vim__mode"></span><input class="sq-vim__cmd" type="text" spellcheck="false" autocomplete="off" aria-label="vim command" hidden><span class="sq-vim__keys"></span>`;
   document.body.appendChild(bar);
   modeEl = bar.querySelector(".sq-vim__mode");
   keysEl = bar.querySelector(".sq-vim__keys");
   cmdEl = bar.querySelector(".sq-vim__cmd");
+  menuEl = bar.querySelector(".sq-vim__menu");
+  cmdEl.addEventListener("input", refreshCompletions);
   cmdEl.addEventListener("keydown", (e) => {
     e.stopPropagation();
     if (e.key === "Escape") { e.preventDefault(); closeCommand(); return; }
+    if (e.key === "Tab" || e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      cycleCompletion(e.key === "ArrowUp" || (e.key === "Tab" && e.shiftKey) ? -1 : 1);
+      return;
+    }
     if (e.key === "Enter") {
       e.preventDefault();
       const line = cmdEl.value;
@@ -664,7 +797,7 @@ function buildBar() {
       if (msg) setStatus(msg.replace(/^E: /, ""), msg.startsWith("E:"));
     }
   });
-  cmdEl.addEventListener("blur", () => { if (state.vimMode === "command") setMode("normal"); });
+  cmdEl.addEventListener("blur", () => { if (state.vimMode === "command") closeCommand(); });
 }
 
 let installed = false;

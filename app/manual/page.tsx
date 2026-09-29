@@ -593,6 +593,16 @@ export default function ManualPage() {
             the filter panel&apos;s.
           </div>
           <h3>Commands</h3>
+          <p>
+            The command line lists what could come next as you type: every command
+            on an empty line, the effects after <span className={styles.ui}>:fx</span>,
+            and the active track&apos;s knobs after <span className={styles.ui}>:k</span>,
+            each with where it is set now. <span className={styles.key}>Tab</span> takes
+            the next match into the line and <span className={styles.key}>shift</span>{" "}
+            <span className={styles.key}>Tab</span> the one before (the arrow keys do
+            the same), or click one. <span className={styles.key}>Enter</span> runs
+            whatever the line says.
+          </p>
           <div className={styles.tableWrap}>
             <table className={styles.table}>
               <thead>

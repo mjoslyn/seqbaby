@@ -243,8 +243,28 @@ function knobCandidates(t) {
         const key = classToAuto[cls];
         if (key) names.push(key, AUTOMATION_TARGETS[key]?.label);
       }
-      out.push({ el, names: [...new Set(names.filter(Boolean).map(norm))].filter(Boolean) });
+      // What the command line offers for this knob: stage and label, as drawn.
+      const display = (stage && label ? `${stage} ${label}` : label || stage).toLowerCase().replace(/\s+/g, " ").trim();
+      out.push({ el, display, names: [...new Set(names.filter(Boolean).map(norm))].filter(Boolean) });
     }
+  }
+  return out;
+}
+
+/**
+ * The names `:k` can be completed with on this track (vim.js's command line):
+ * each knob once, as drawn ("reverb decay", "morph"), with where it is now.
+ * @returns {Array<{name: string, hint: string}>}
+ */
+export function knobNames(t) {
+  if (!t) return [];
+  const seen = new Set(), out = [];
+  for (const c of knobCandidates(t)) {
+    if (!c.display || seen.has(c.display)) continue;
+    seen.add(c.display);
+    const el = c.el;
+    const hint = el.tagName === "SELECT" ? (el.selectedOptions[0]?.textContent ?? "") : (el._knob ? readoutText(el) : el.value);
+    out.push({ name: c.display, hint: String(hint) });
   }
   return out;
 }

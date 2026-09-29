@@ -1796,6 +1796,13 @@ record playing; PLAY (`a`) only sounds the keys; VISUAL (`v`) is a step range
 on the track for `y d p > <`; `:` is a command line (`:k :bpm :p :len :cut
 :res :fx :N :w :q :h`). The cursor IS the step-input cursor (`state.kbdCursor`), and
 the selection is `state.vimSel`, painted by `paintStepCursor` beside it.
+The command line completes (`completionsFor`): the commands on an empty line,
+the stages after `:fx`, and the track's own knobs after `:k` (`knobNames`,
+knobNav.js, the same candidates `:k` matches, named as drawn, with their
+current value). Prefix matches first, then substring, and one letter matches
+only a start. Tab / ↓ and shift-Tab / ↑ take a match into the line, a click
+too (on mousedown, kept from blurring the line, since a blur closes it); what
+runs is always the line, so a match is only ever a way of typing it.
 - **It is the only keyboard layer, and it goes first.** There were global
   shortcuts before it (space, arrows for tracks, fx throws on the numbers,
   opt + number steps, shift-F / C); they were removed so that with vim off the

@@ -4235,4 +4235,19 @@ body.vim-visual .sq-vim__mode { color: var(--accent-2); }
 .sq-vim__keys { color: var(--fg-dim); min-width: 2ch; }
 .sq-vim__cmd { width: 340px; font: inherit; color: var(--fg); background: transparent; border: 0; outline: none; padding: 0; }
 .sq-vim__cmd[hidden] { display: none; }
+/* The command line's completions (vim.js), stacked above the bar. */
+.sq-vim__menu {
+  position: absolute; left: -1px; bottom: calc(100% + 6px);
+  min-width: 360px; max-width: min(560px, calc(100vw - 24px));
+  margin: 0; padding: 4px; list-style: none;
+  border: 1px solid var(--border); border-radius: 6px;
+  background: var(--bg-2); box-shadow: 0 8px 24px rgba(0,0,0,0.45);
+}
+.sq-vim__menu[hidden] { display: none; }
+.sq-vim__opt { display: flex; gap: 14px; padding: 3px 8px; border-radius: 4px; cursor: pointer; white-space: nowrap; }
+.sq-vim__opt.is-on { background: var(--accent); color: var(--bg); }
+.sq-vim__opt-name { min-width: 11ch; }
+.sq-vim__opt-hint { color: var(--fg-dim); overflow: hidden; text-overflow: ellipsis; }
+.sq-vim__opt.is-on .sq-vim__opt-hint { color: inherit; opacity: 0.75; }
+.sq-vim__opt--more { color: var(--fg-dim); cursor: default; }
 
