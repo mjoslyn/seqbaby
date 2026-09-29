@@ -16,10 +16,25 @@ function stageHeldByLfo(t, stage) {
   return false;
 }
 
+// ...and while a macro pad holds one: a momentary pad writes the wet without
+// the control's own handler, so nothing else would wire a bypassed stage in,
+// and sweeping it would move the knob and nothing you can hear.
+function stageHeldByMacro(t, stage) {
+  const own = `fx.${stage}`;
+  for (const pad of state.macroPads || []) {
+    for (const axis of ["x", "y"]) {
+      for (const a of pad[axis] || []) {
+        if (a.trackId === t.id && (a.key === own || a.key.startsWith(own + "."))) return true;
+      }
+    }
+  }
+  return false;
+}
+
 export function ensureFxRack(t) {
   if (!state.audioCtx || t.fxRack) return;
   t.fxRack = new FXRack(state.audioCtx, t.fxConfig, {
-    isStageHeld: (stage) => stageHeldByLfo(t, stage),
+    isStageHeld: (stage) => stageHeldByLfo(t, stage) || stageHeldByMacro(t, stage),
   });
   if (!t.meterAnalyser) {
     t.meterAnalyser = state.audioCtx.createAnalyser();
