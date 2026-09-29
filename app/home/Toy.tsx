@@ -112,8 +112,8 @@ function voice(ctx: AudioContext, out: AudioNode, noise: AudioBuffer, lane: numb
   src.stop(t + len + 0.01);
 }
 
-export default function Toy({ bpm = DEFAULT_BPM, blip = DEFAULT_BLIP, start = DEFAULT_START }: ToyProps = {}) {
-  const [grid, setGrid] = useState(() => parse(start));
+export default function Toy({ bpm = DEFAULT_BPM, blip = DEFAULT_BLIP, start: start0 = DEFAULT_START }: ToyProps = {}) {
+  const [grid, setGrid] = useState(() => parse(start0));
   const [playing, setPlaying] = useState(false);
   const [now, setNow] = useState(-1);
   const gridRef = useRef(grid);
