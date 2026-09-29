@@ -4212,3 +4212,6 @@ body.has-code-drawer { padding-bottom: min(46vh, 420px); }
   font: inherit; padding: 1px 5px; border: 1px solid rgba(255,255,255,0.18);
   border-radius: 3px; background: var(--bg-3, rgba(255,255,255,0.05)); color: var(--fg);
 }
+
+/* The control the keyboard's panel navigator has picked (shortcuts.js). */
+.is-kbd-nav { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }

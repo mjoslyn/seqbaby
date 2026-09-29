@@ -149,7 +149,8 @@ env / fx / eq / comp / mod / automation per track.
 - `keyboard.js` — computer-keyboard performance mode + capture.
 - `shortcuts.js` — the keyboard shortcuts on the keys keyboard.js leaves free:
   space, ↑/↓ track, m mute, r record / step input, ←/→/enter/backspace the
-  step cursor, 1..0 fx throws, `?` the list. See the keyboard section.
+  step cursor, 1..0 fx throws, opt + number steps, shift-F / shift-C the
+  panel navigator, `?` the list. See the keyboard section.
 - `knob.js` — the rotary knob layer, drawn over the native range inputs without
   replacing them. See the Knobs section below.
 - `enginePicker.js` — the instrument picker: a button on the track head that
@@ -1776,6 +1777,23 @@ write, so a save, undo and p-lock never see it. The stage is held wired into
 the rack meanwhile (`state._fxThrows`, one more term in signal.js's
 `isStageHeld`), and reverb / delay let go over a second so the tail survives.
 Shift + number is the opposite: the control's own `input` event, an edit.
+Option/alt + 1..8 adds or deletes the note on steps 1..8 of the keyboard's
+track, with shift as well 9..16 (`toggleStepAt`, keyboard.js); ctrl / cmd +
+number is left alone because it is the browser's tab switching.
+
+**The panel navigator.** shift-F / shift-C open the keyboard track's fx /
+filter panel (the filter starting on cutoff); in any sound panel open as a
+modal, however it was opened, the arrows pick a control and trackpad scroll
+(or `-` / `=`) turns it. Arrows move SPATIALLY, to the nearest control in that
+direction as drawn, since the rack is a grid of cards on desktop and a column
+on a phone. A turn is `writeKnobValue` (knob.js), the knob's own write, so it
+is an edit and one swipe is one undo step. Scroll is read as distance (300px a
+full range, shift five times finer, capped per event so a mouse-wheel notch
+does not jump a third of it), with the unquantised value carried between
+events, or a trackpad's small deltas each round back to where they began.
+The wheel over a knob is left to that knob. The shortcuts' keydown listener is
+capture-phase and keyboard.js skips an event it finds `defaultPrevented`, which
+is what stops shift-F also playing an F.
 
 **Chord mode is not only a keyboard feature**, which is why it has a way in on a
 phone. `state.kbdChordType` / `kbdChordCpx` / `kbdArp*` also decide what a

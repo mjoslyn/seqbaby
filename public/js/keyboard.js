@@ -523,6 +523,25 @@ export function toggleStepAtCursor() {
   try { renderStepGrid(t); } catch {}
 }
 
+/**
+ * Option/alt + a number (shortcuts.js): add a note on step `idx` of the
+ * keyboard's track, or delete the one that starts there. A step inside a held
+ * note gets a note of its own, which cuts the held one short, as a click does.
+ * Works whether or not recording is armed.
+ * @returns {string|null} what happened, for the status line
+ */
+export function toggleStepAt(idx) {
+  const t = stepInputTrack();
+  if (!t) return null;
+  const len = t.length || t.steps.length;
+  if (idx >= len) return `"${t.name}" is only ${len} steps long`;
+  const on = !!t.steps[idx];
+  if (on) removeNote(t, idx);
+  else { startNote(t, idx); if (Array.isArray(t.velocities)) t.velocities[idx] = KBD_REC_VEL; }
+  try { renderStepGrid(t); } catch {}
+  return `${t.name}: step ${idx + 1} ${on ? "cleared" : "on"}`;
+}
+
 /** Arm / disarm recording: the record button's state, the body class, the cursor. */
 export function setKbdRecord(on) {
   state.kbdRecord = !!on;
@@ -534,6 +553,9 @@ export function setKbdRecord(on) {
 }
 
 function onKeyDown(e) {
+  // A key a shortcut already took (shortcuts.js listens in capture, first):
+  // shift-F opening the fx panel must not also play an F.
+  if (e.defaultPrevented) return;
   if (e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
   if (!isDesktopKeyboard()) return;
   if (isTypingTarget(e.target)) return;

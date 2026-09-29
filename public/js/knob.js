@@ -206,7 +206,7 @@ function updateReadout(input) {
 /** What the bubble says. A knob whose value is an INDEX into a list of musical
  *  values — the mod row's cycle length — reads out as "16 steps", not as "5";
  *  everything else is its own number at the control's own precision. */
-function readoutText(input) {
+export function readoutText(input) {
   const fmt = input._knobText;
   if (fmt) { try { return String(fmt(Number(input.value))); } catch { /* fall through */ } }
   return Number(input.value).toFixed(input._knob.decimals);
@@ -237,6 +237,7 @@ function hideReadout() {
  *  @returns {boolean} */
 function writeValue(input, raw) {
   const k = input._knob;
+  if (!k) return false;
   const { min, max, step } = k;
   let v = clamp(raw, min, max);
   if (step > 0) v = min + Math.round((v - min) / step) * step;
@@ -436,6 +437,10 @@ function attachDrag(input) {
     writeValue(input, Number(input.value) + dir * unit * (e.shiftKey ? 1 : 4));
   }, { passive: false });
 }
+
+/** A value written as if the knob had been turned there (the keyboard's panel
+ *  navigator, shortcuts.js). Same quantising, same `input` event. */
+export function writeKnobValue(input, raw) { return writeValue(input, raw); }
 
 // ---- upgrade -------------------------------------------------------------
 
