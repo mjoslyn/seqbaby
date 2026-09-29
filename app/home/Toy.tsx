@@ -26,7 +26,9 @@ const parse = (rows: string[]) => rows.map((row) => [...row].map((c) => c === "x
 
 // The homepage uses the defaults; another page can hand it its own beat: four
 // rows of sixteen ("x" is a hit), a bpm, and the blip lane's semitones.
-export type ToyProps = { bpm?: number; blip?: number[]; start?: string[] };
+// `steps` is the loop length and `perBeat` the steps to a beat: 16 and 4 is a
+// bar of sixteenths in 4/4; 18 and 2 is three bars of eighths in 3/4.
+export type ToyProps = { bpm?: number; blip?: number[]; start?: string[]; steps?: number; perBeat?: number };
 
 function noiseBuffer(ctx: AudioContext): AudioBuffer {
   const buf = ctx.createBuffer(1, ctx.sampleRate * 0.5, ctx.sampleRate);
@@ -112,7 +114,7 @@ function voice(ctx: AudioContext, out: AudioNode, noise: AudioBuffer, lane: numb
   src.stop(t + len + 0.01);
 }
 
-export default function Toy({ bpm = DEFAULT_BPM, blip = DEFAULT_BLIP, start: start0 = DEFAULT_START }: ToyProps = {}) {
+export default function Toy({ bpm = DEFAULT_BPM, blip = DEFAULT_BLIP, start: start0 = DEFAULT_START, steps = STEPS, perBeat = 4 }: ToyProps = {}) {
   const [grid, setGrid] = useState(() => parse(start0));
   const [playing, setPlaying] = useState(false);
   const [now, setNow] = useState(-1);
@@ -161,7 +163,7 @@ export default function Toy({ bpm = DEFAULT_BPM, blip = DEFAULT_BLIP, start: sta
     void a.hold?.play().catch(() => {});
 
     if (timer.current !== null) clearInterval(timer.current);
-    const dur = 60 / bpm / 4;
+    const dur = 60 / bpm / perBeat;
     let step = 0;
     let at = ctx.currentTime + 0.06;
     // Schedule a little ahead of the clock, as the real transport does, so a
@@ -179,13 +181,13 @@ export default function Toy({ bpm = DEFAULT_BPM, blip = DEFAULT_BLIP, start: sta
         const delay = Math.max(0, (at - ctx.currentTime) * 1000);
         setTimeout(() => setNow(s), delay);
         at += dur;
-        step = (step + 1) % STEPS;
+        step = (step + 1) % steps;
       }
     };
     tick();
     timer.current = window.setInterval(tick, 25);
     setPlaying(true);
-  }, [bpm]);
+  }, [bpm, steps, perBeat]);
 
   // Coming back to the tab (or a call ending) leaves the context suspended or
   // iOS's own "interrupted": try to resume, and again on the next touch.
@@ -241,7 +243,12 @@ export default function Toy({ bpm = DEFAULT_BPM, blip = DEFAULT_BLIP, start: sta
       </div>
       <div className={styles.toyGrid} role="grid" aria-label="toy step sequencer">
         {LANES.map((name, lane) => (
-          <div key={name} className={styles.toyRow} role="row">
+          <div
+            key={name}
+            className={styles.toyRow}
+            role="row"
+            style={steps === STEPS ? undefined : { gridTemplateColumns: `36px repeat(${steps}, minmax(0, 1fr))` }}
+          >
             <span className={styles.toyLabel}>{name}</span>
             {grid[lane].map((on, step) => (
               <button
@@ -254,7 +261,7 @@ export default function Toy({ bpm = DEFAULT_BPM, blip = DEFAULT_BLIP, start: sta
                   styles.toyStep,
                   on ? styles.isOn : "",
                   step === now ? styles.isNow : "",
-                  step % 4 === 0 ? styles.isBeat : "",
+                  step % perBeat === 0 ? styles.isBeat : "",
                 ].join(" ")}
                 onClick={() => toggle(lane, step)}
               />
