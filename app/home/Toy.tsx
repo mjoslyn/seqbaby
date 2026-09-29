@@ -11,15 +11,18 @@ import styles from "./home.module.css";
 
 const LANES = ["kick", "snare", "hat", "blip"] as const;
 const STEPS = 16;
-const BPM = 118;
-// A minor pentatonic, one note per step, so the blip lane can never be wrong.
-const BLIP = [0, 3, 5, 7, 10, 12, 10, 7, 5, 3, 0, 7, 12, 15, 12, 7];
+const BPM = 132;
+// It loads playing a chugging riff in the spirit of King Gizzard's "Superbug":
+// four on the floor, a backbeat, busy hats and a minor-third stab. Written by
+// ear, not transcribed. Still A minor pentatonic, one note per step, so the
+// blip lane can never be wrong once the visitor starts moving steps around.
+const BLIP = [0, 0, 3, 0, 0, 5, 3, 0, 0, 0, 3, 0, 7, 5, 3, 0];
 
 const START: boolean[][] = [
-  "x...x...x...x..x",
-  "....x.......x...",
-  "..x.x.x.x.x.xxx.",
-  "x..x..x...x.x...",
+  "x...x...x...x...",
+  "....x.......x..x",
+  "x.xxx.xxx.xxx.xx",
+  "x.xx.xx.x.xx.xx.",
 ].map((row) => [...row].map((c) => c === "x"));
 
 function noiseBuffer(ctx: AudioContext): AudioBuffer {

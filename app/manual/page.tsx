@@ -1716,13 +1716,7 @@ bus. Share it when it validates.`}</div>
         <div className={styles.footer}>
           <a href="/studio">Back to the studio</a>
           {" · "}
-          <a
-            href="https://github.com/mjoslyn/seqbaby/issues"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Report a superbug
-          </a>
+          <a href="/superbugs">Report a superbug</a>
         </div>
       </div>
     </div>

@@ -192,14 +192,7 @@ export default async function HomePage() {
         <a href="/songs">songs</a>
         <a href="/people">people</a>
         <a href="/manual">manual</a>
-        <a
-          href="https://github.com/mjoslyn/seqbaby/issues"
-          target="_blank"
-          rel="noopener noreferrer"
-          title="found a bug? tell us on GitHub"
-        >
-          superbugs
-        </a>
+        <a href="/superbugs" title="found a bug? tell us">superbugs</a>
         <span className={styles.footNote}>made with too many oscillators.</span>
       </footer>
     </div>
