@@ -3,7 +3,6 @@ import { createClient } from "@/lib/supabase/server";
 import { createJob, hashApiKey } from "@/lib/composeJobs.js";
 import { newCtx, runComposeTurn } from "@/mcp/composeTurn.mjs";
 import { appendJobEvent, finishJob } from "@/lib/composeJobs.js";
-import { isComposeModel } from "@/lib/composeModels.js";
 import { describeTurnFailure, looksLikeApiKey } from "@/lib/composeKey.js";
 
 // Node runtime: the loop imports public/js/songBuilder.js (dependency-free --
@@ -32,7 +31,7 @@ async function currentUserId(): Promise<string | null> {
   }
 }
 
-// POST /api/compose { message, history, session, model?, apiKey? } -> { jobId, jobToken }
+// POST /api/compose { message, history, session, apiKey? } -> { jobId, jobToken }
 //
 // This route does NOT write the song. Writing a whole song is dozens of model
 // rounds and takes minutes; a synchronous function gets 26 seconds (measured:
@@ -53,7 +52,6 @@ export async function POST(req: Request) {
     message?: string;
     history?: ChatTurn[];
     session?: unknown;
-    model?: string;
     apiKey?: string;
   };
   try {
@@ -92,16 +90,6 @@ export async function POST(req: Request) {
     }
   }
 
-  // The model is the browser's to pick per message, but not to invent. On the
-  // deploy's key that is because the turn is billed to the site; on a brought
-  // key it is because an id nobody has vetted is a request this app would be
-  // making on someone's behalf without knowing what it costs. Absent is fine
-  // and means the deploy's own default (ANTHROPIC_MODEL, else the shared one).
-  const model = typeof body.model === "string" && body.model ? body.model : undefined;
-  if (model && !isComposeModel(model)) {
-    return NextResponse.json({ error: "that isn't a model this deploy will run" }, { status: 400 });
-  }
-
   const message = typeof body.message === "string" ? body.message.trim() : "";
   if (!message) return NextResponse.json({ error: "say something first" }, { status: 400 });
   if (message.length > 4000) return NextResponse.json({ error: "that message is too long" }, { status: 400 });
@@ -127,7 +115,6 @@ export async function POST(req: Request) {
     message,
     history,
     session: body.session,
-    model,
   });
   // Over this bucket's limits. 429 so the panel can say so plainly rather than
   // treating it as a failure to start.
@@ -194,9 +181,8 @@ function runInline(jobId: string, apiKey?: string) {
       }
       const out = await runComposeTurn({
         apiKey: key,
-        // Undefined here takes runComposeTurn's own default parameter, which
-        // is the deploy's -- so a job with no model on it behaves exactly as
-        // every job did before there was a choice.
+        // Undefined on every new job: runComposeTurn's default, the
+        // deploy's. A job queued by an older panel may still name one.
         model: job.model,
         message: job.message,
         history: job.history,

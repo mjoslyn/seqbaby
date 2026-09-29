@@ -58,9 +58,8 @@ export default async (req) => {
 
     const out = await runComposeTurn({
       apiKey,
-      // The model the panel picked for this message, already checked against
-      // the allowlist by the route. Undefined takes runComposeTurn's own
-      // default, which is the deploy's.
+      // Undefined on every new job: runComposeTurn's own default, the
+      // deploy's.
       model: job.model,
       message: job.message,
       history: job.history,

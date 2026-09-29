@@ -18,9 +18,8 @@ import * as sb from "../public/js/songBuilder.js";
 import { TOOLS, FORMAT_NOTES, GUIDE_RELATIVE, guideText } from "./tools.mjs";
 import { DEFAULT_COMPOSE_MODEL } from "../lib/composeModels.js";
 
-// What a turn runs on when its CALLER doesn't say -- the MCP server, a test,
-// an older panel. The compose chat names a model per message (the dropdown
-// beside the send button), and that wins over both of these.
+// What a turn runs on when its caller doesn't say, which is every compose
+// chat turn: the deploy's ANTHROPIC_MODEL, else the shared default.
 export const DEFAULT_MODEL = process.env.ANTHROPIC_MODEL || DEFAULT_COMPOSE_MODEL;
 // How hard the model works a turn, and so how many rounds it takes. Lower
 // effort consolidates tool calls instead of trickling one out per round.
@@ -243,8 +242,7 @@ export async function runComposeTurn({
   const after = JSON.stringify(ctx.song);
   return {
     reply: reply || "Done.",
-    // Which model actually ran it, so a caller that offers a choice can label
-    // the turn with what it got rather than with what it asked for.
+    // Which model actually ran it, so the transcript can say so.
     model,
     session: serializeCtx(ctx),
     // Compared rather than inferred from which tools ran: a tool can be called

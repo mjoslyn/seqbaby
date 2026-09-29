@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { getOpenSong, setOpenSong, subscribeOpenSong } from "@/app/songs/openSong";
 import { loadSongChat, saveSong, saveSongChat } from "@/app/songs/actions";
-import { COMPOSE_MODELS, DEFAULT_COMPOSE_MODEL, composeModelLabel, isComposeModel } from "@/lib/composeModels.js";
+import { composeModelLabel } from "@/lib/composeModels.js";
 import { API_KEY_CONSOLE_URL, looksLikeApiKey, maskApiKey } from "@/lib/composeKey.js";
 import styles from "@/app/ui.module.css";
 
@@ -56,15 +56,9 @@ const POLL_LIMIT_MS = 16 * 60 * 1000;
 // the interval above, roughly half a minute of no contact.
 const MAX_POLL_MISSES = 20;
 
-// Where the picked model is remembered. Per browser, not per song and not on
-// the server: it is a preference about how you want to work, and a song opened
-// on another machine has no business changing which model that one spends its
-// turns on.
-const MODEL_KEY = "seqbaby.composeModel.v1";
-
 // The visitor's own Anthropic key, and which key they compose on. Both are
-// per browser for the model preference's reasons, and the key for a stronger
-// one: it is a secret, and the one place it is meant to live is the machine
+// per browser, not per song and not on the server, and the key for a stronger
+// reason: it is a secret, and the one place it is meant to live is the machine
 // its owner typed it into. The server never stores it (see lib/composeKey.js)
 // -- it rides each message, is spent, and is gone.
 //
@@ -98,7 +92,7 @@ function describeFailure(status: number, raw: string, data: ComposeResponse | nu
 // app/api/compose (the same songBuilder tools the MCP server exposes to an
 // external agent, run server-side against an Anthropic key).
 //
-// WHOSE key is the panel's other choice, beside the model. The site's needs an
+// WHOSE key is the panel's one choice. The site's needs an
 // account and is rationed; the visitor's own needs nothing at all, which is
 // why this panel is shown to a signed-out visitor as well -- a key of your own
 // is the one way to compose here without one.
@@ -129,15 +123,6 @@ export default function ComposeChat({ signedIn, serverKey }: { signedIn: boolean
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
-  // Which model the NEXT message goes to. It sticks until changed, so a
-  // conversation can be worked through on the fast one and handed to the
-  // careful one for the arrangement, but nothing about it is retroactive:
-  // every message carries whichever was picked when it was sent.
-  const [model, setModel] = useState<string>(DEFAULT_COMPOSE_MODEL);
-  // What the turn IN FLIGHT went to. The dropdown stays live while one runs
-  // -- picking the next message's model is exactly the sort of thing you do
-  // while waiting -- so the running line can't read the current selection.
-  const [sendingModel, setSendingModel] = useState<string>("");
   // Tool activity for the turn in flight, filled in as it happens. It moves
   // onto the finished message when the turn lands.
   const [live, setLive] = useState<string[]>([]);
@@ -182,11 +167,9 @@ export default function ComposeChat({ signedIn, serverKey }: { signedIn: boolean
   // Read in an effect rather than in useState's initializer: this component
   // renders on the server too (it returns null until the engine says it is
   // ready), and a localStorage read there is a hydration mismatch waiting to
-  // happen. A stored id that is no longer offered falls back to the default.
+  // happen.
   useEffect(() => {
     try {
-      const saved = window.localStorage.getItem(MODEL_KEY);
-      if (saved && isComposeModel(saved)) setModel(saved);
       const mode = window.localStorage.getItem(KEY_MODE);
       if (mode === "own" || mode === "site") setKeyPref(mode);
       // A stored key that no longer looks like one (a truncated write, a
@@ -200,15 +183,6 @@ export default function ComposeChat({ signedIn, serverKey }: { signedIn: boolean
       }
     } catch {
       /* private mode, blocked storage: the defaults are a fine answer */
-    }
-  }, []);
-
-  const pickModel = useCallback((id: string) => {
-    setModel(id);
-    try {
-      window.localStorage.setItem(MODEL_KEY, id);
-    } catch {
-      /* not worth failing a message over */
     }
   }, []);
 
@@ -400,7 +374,6 @@ export default function ComposeChat({ signedIn, serverKey }: { signedIn: boolean
     setMessages(withUser);
     setInput("");
     setSending(true);
-    setSendingModel(model);
     setLive([]);
     // Asking for the next thing settles the last one. The session just
     // serialized is what the model is being asked about, so whatever is in the
@@ -444,7 +417,6 @@ export default function ComposeChat({ signedIn, serverKey }: { signedIn: boolean
           message: text,
           history,
           session,
-          model,
           ...(keyMode === "own" ? { apiKey } : {}),
         }),
       });
@@ -549,9 +521,7 @@ export default function ComposeChat({ signedIn, serverKey }: { signedIn: boolean
           land({
             role: "assistant",
             text: job.reply || "Done.",
-            // What it actually ran on, as the worker reported it -- not the
-            // dropdown's current value, which may have been changed while
-            // this turn was running.
+            // What it actually ran on, as the worker reported it.
             model: job.model,
             activity: [...activity],
             warnings: job.warnings,
@@ -569,7 +539,7 @@ export default function ComposeChat({ signedIn, serverKey }: { signedIn: boolean
       setSending(false);
       setLive([]);
     }
-  }, [input, sending, messages, model, keyMode, apiKey]);
+  }, [input, sending, messages, keyMode, apiKey]);
 
   // ---- the review bar ------------------------------------------------------
   //
@@ -747,9 +717,7 @@ export default function ComposeChat({ signedIn, serverKey }: { signedIn: boolean
             ))}
             {sending && (
               <div className={styles.chatActivity}>
-                {[composeModelLabel(sendingModel || model), live.length > 0 ? `${live.join(" · ")} …` : "working…"].join(
-                  " · ",
-                )}
+                {live.length > 0 ? `${live.join(" · ")} …` : "working…"}
               </div>
             )}
           </div>
@@ -788,45 +756,27 @@ export default function ComposeChat({ signedIn, serverKey }: { signedIn: boolean
               </div>
             </div>
           )}
-          <div className={styles.chatTools}>
-            {siteKeyOffered && (
-              <>
-                <label className={styles.chatModelLabel} htmlFor="compose-key-mode">
-                  key
-                </label>
-                <select
-                  id="compose-key-mode"
-                  className={styles.chatModel}
-                  value={keyMode}
-                  onChange={(e) => pickKeyMode(e.target.value as "site" | "own")}
-                  title="whose Anthropic key this runs on"
-                >
-                  <option value="site" title="this site's key, shared between accounts and rate limited">
-                    this site
-                  </option>
-                  <option value="own" title="your own Anthropic key — your usage, your limits">
-                    your own
-                  </option>
-                </select>
-              </>
-            )}
-            <label className={styles.chatModelLabel} htmlFor="compose-model">
-              model
-            </label>
-            <select
-              id="compose-model"
-              className={styles.chatModel}
-              value={model}
-              onChange={(e) => pickModel(e.target.value)}
-              title={COMPOSE_MODELS.find((m) => m.id === model)?.note}
-            >
-              {COMPOSE_MODELS.map((m) => (
-                <option key={m.id} value={m.id} title={m.note}>
-                  {m.label}
+          {siteKeyOffered && (
+            <div className={styles.chatTools}>
+              <label className={styles.chatModelLabel} htmlFor="compose-key-mode">
+                key
+              </label>
+              <select
+                id="compose-key-mode"
+                className={styles.chatModel}
+                value={keyMode}
+                onChange={(e) => pickKeyMode(e.target.value as "site" | "own")}
+                title="whose Anthropic key this runs on"
+              >
+                <option value="site" title="this site's key, shared between accounts and rate limited">
+                  this site
                 </option>
-              ))}
-            </select>
-          </div>
+                <option value="own" title="your own Anthropic key — your usage, your limits">
+                  your own
+                </option>
+              </select>
+            </div>
+          )}
           {keyMode === "own" && (
             <div className={styles.chatKey}>
               {apiKey && !editingKey ? (
