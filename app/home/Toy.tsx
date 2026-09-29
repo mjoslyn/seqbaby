@@ -80,10 +80,10 @@ function voice(ctx: AudioContext, out: AudioNode, noise: AudioBuffer, lane: numb
   src.stop(t + len + 0.01);
 }
 
-export default function Toy({ bpm = DEFAULT_BPM, blip: blip0 = DEFAULT_BLIP, start = DEFAULT_START, sections }: ToyProps = {}) {
+export default function Toy({ bpm = DEFAULT_BPM, blip: blip0 = DEFAULT_BLIP, start: start0 = DEFAULT_START, sections }: ToyProps = {}) {
   const [section, setSection] = useState(0);
   const first = sections?.[0];
-  const [grid, setGrid] = useState(() => parse(first ? first.start : start));
+  const [grid, setGrid] = useState(() => parse(first ? first.start : start0));
   // Read at each note, so a section change lands under a running loop.
   const blipRef = useRef(first ? first.blip : blip0);
   const [playing, setPlaying] = useState(false);
