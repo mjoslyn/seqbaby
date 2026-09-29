@@ -122,6 +122,8 @@ export default function Toy({ bpm = DEFAULT_BPM, blip = DEFAULT_BLIP, start: sta
   gridRef.current = grid;
   const audio = useRef<{ ctx: AudioContext; out: GainNode; noise: AudioBuffer; hold: HTMLAudioElement | null } | null>(null);
   const timer = useRef<number | null>(null);
+  // Steps scheduled but not yet heard, for the playhead (see the effect below).
+  const pending = useRef<{ s: number; at: number }[]>([]);
   const blipNow = useRef(blip);
   blipNow.current = blip;
 
@@ -163,6 +165,7 @@ export default function Toy({ bpm = DEFAULT_BPM, blip = DEFAULT_BLIP, start: sta
     void a.hold?.play().catch(() => {});
 
     if (timer.current !== null) clearInterval(timer.current);
+    pending.current = [];
     const dur = 60 / bpm / perBeat;
     let step = 0;
     let at = ctx.currentTime + 0.06;
@@ -178,8 +181,7 @@ export default function Toy({ bpm = DEFAULT_BPM, blip = DEFAULT_BLIP, start: sta
       while (at < ctx.currentTime + 0.12) {
         const s = step;
         gridRef.current.forEach((lane, i) => lane[s] && voice(ctx, out, noise, i, s, at, blipNow.current));
-        const delay = Math.max(0, (at - ctx.currentTime) * 1000);
-        setTimeout(() => setNow(s), delay);
+        pending.current.push({ s, at });
         at += dur;
         step = (step + 1) % steps;
       }
@@ -188,6 +190,31 @@ export default function Toy({ bpm = DEFAULT_BPM, blip = DEFAULT_BLIP, start: sta
     timer.current = window.setInterval(tick, 25);
     setPlaying(true);
   }, [bpm, steps, perBeat]);
+
+  // The playhead follows the audio clock, not a timer: each scheduled step is
+  // painted once the context has played it AND the output has had time to
+  // deliver it (Bluetooth and phones lag by a couple of hundred ms; Safari
+  // reports no latency, so it gets an estimate). Timers set at schedule time
+  // ran on the wall clock, so a context that was slow to resume, or a busy
+  // phone, left the playhead ahead of what was heard.
+  useEffect(() => {
+    if (!playing) return;
+    let raf = 0;
+    const frame = () => {
+      const ctx = audio.current?.ctx;
+      if (ctx) {
+        const lag = ctx.outputLatency || 0.15;
+        const heard = ctx.currentTime - lag;
+        const q = pending.current;
+        let last = -1;
+        while (q.length && q[0].at <= heard) last = q.shift()!.s;
+        if (last >= 0) setNow(last);
+      }
+      raf = requestAnimationFrame(frame);
+    };
+    raf = requestAnimationFrame(frame);
+    return () => cancelAnimationFrame(raf);
+  }, [playing]);
 
   // Coming back to the tab (or a call ending) leaves the context suspended or
   // iOS's own "interrupted": try to resume, and again on the next touch.
