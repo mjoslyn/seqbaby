@@ -14,6 +14,7 @@ import { installCodePanel } from "./codePanel.js";
 import { applySampleSpeed, attachBpmDrag, lfoRateLabel, retuneSyncedLFOs } from "./lfo.js";
 import { captureSequence, initComputerKeyboard, isDesktopKeyboard, resetKbdKeys, setKbdRecord } from "./keyboard.js";
 import { initShortcuts } from "./shortcuts.js";
+import { initVim } from "./vim.js";
 import { autoAccents, parseMeter, redetectDrumKit, stepsPerBarForMeter } from "./meter.js";
 import { meterTick } from "./meters.js";
 import { setEngineKey } from "./params.js";
@@ -686,6 +687,7 @@ export function init() {
   if (isDesktopKeyboard()) {
     initComputerKeyboard();
     initShortcuts();
+    initVim();
     if (kbdChordPanel) kbdChordPanel.hidden = false;
     if (kbdCaptureBtn) kbdCaptureBtn.disabled = false;
     document.body.classList.add("kbd-notes-on");

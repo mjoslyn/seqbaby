@@ -67,7 +67,9 @@ export const state = {
   kbdArpRange: 1,       // octaves spanned
   kbdArpDir: "up",      // up | down | updown | random
   kbdLast: null,        // last note/chord played on the keyboard {root,chord,cpx,extras} — applied when a step is clicked
-  kbdCursor: 0,         // step input's cursor (record armed, transport stopped), wrapped to each track's length
+  kbdCursor: 0,
+  vimMode: null,        // vim.js: null (off) | "normal" | "insert" | "play" | "visual" | "command"
+  vimSel: null,         // vim.js's visual selection on the active track: {from, to} step indices         // step input's cursor (record armed, transport stopped), wrapped to each track's length
   _fxThrows: new Set(), // "<trackId>:<stage>" for every fx stage a number key is holding open (shortcuts.js)
   activeTrackId: null,
   scale: { active: false, root: 0, mode: "minor" },

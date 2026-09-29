@@ -115,6 +115,7 @@ export const ENGINE_MODULES = [
   "theoryData.js",
   "track.js",
   "transport.js",
+  "vim.js",
   "voices.js",
   "wavetableEditor.js",
 ];

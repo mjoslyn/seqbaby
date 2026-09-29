@@ -16,7 +16,7 @@ env / fx / eq / comp / mod / automation per track.
   `public/woscillators.js` →
   `public/js/main.js` (ES module). `middleware.ts` refreshes the Supabase
   session on every request *except* static engine assets.
-- **Engine**: ~66 dependency-free vanilla ES modules in `public/js/`. No
+- **Engine**: ~67 dependency-free vanilla ES modules in `public/js/`. No
   bundler — edit, reload. `window.seqbaby` (from `appApi.js`) exposes `state`
   and serialize/apply hooks to the React shell (typed in `app/seqbaby.d.ts`).
 - **Accounts + data**: Supabase (Postgres + Auth + RLS). Tables: `profiles`,
@@ -151,6 +151,9 @@ env / fx / eq / comp / mod / automation per track.
   space, ↑/↓ track, m mute, r record / step input, ←/→/enter/backspace the
   step cursor, 1..0 fx throws, opt + number steps, shift-F / shift-C the
   panel navigator, `?` the list. See the keyboard section.
+- `vim.js` — vim mode, a toggle (`` ` `` or the transport's `vim`): normal /
+  insert / play / visual / command over the step-input cursor. See the
+  keyboard section.
 - `knob.js` — the rotary knob layer, drawn over the native range inputs without
   replacing them. See the Knobs section below.
 - `enginePicker.js` — the instrument picker: a button on the track head that
@@ -1794,6 +1797,31 @@ events, or a trackpad's small deltas each round back to where they began.
 The wheel over a knob is left to that knob. The shortcuts' keydown listener is
 capture-phase and keyboard.js skips an event it finds `defaultPrevented`, which
 is what stops shift-F also playing an F.
+
+**Vim mode** (`vim.js`) is a toggle, off by default and remembered per
+browser (`seqbaby.vim.v1`). NORMAL makes the letters commands: `hjkl` (count
+first, `4l`), `w b 0 $ ^ gg G`, `x o r > < + - dd yy p .`, `u U ctrl-r`,
+`m s f c`. INSERT (`i`) is recording armed, so step input stopped and live
+record playing; PLAY (`a`) only sounds the keys; VISUAL (`v`) is a step range
+on the track for `y d p > <`; `:` is a command line (`:bpm :p :len :cut :res
+:fx :N :w :q :h`). The cursor IS the step-input cursor (`state.kbdCursor`), and
+the selection is `state.vimSel`, painted by `paintStepCursor` beside it.
+- **It is a layer, and the order of listeners is the design.** vim.js listens
+  on WINDOW capture, shortcuts.js on document capture, keyboard.js on document
+  bubble. A key vim takes is `preventDefault`ed and both others skip it; a key
+  it leaves falls through, which is how space, `?`, shift + a number and
+  a panel's `-` / `=` keep working. keyboard.js also refuses notes unless the
+  mode is insert or play, so a stray normal-mode letter can never play.
+- **Every command is one undo step.** history.js's 420ms settle would fold
+  `o o x` typed quickly into one entry, so each vim edit calls
+  `flushHistory()` (history.js, new) before it and `markExternalEdit` after.
+  An insert session is one step for the same reason vim's is: it settles as
+  one gesture.
+- A yank copies every per-step array of the pattern (`STEP_FIELDS`, read off
+  `emptyPattern`), so a paste carries chords, arps, ratchets and sample regions.
+  The register is in memory, per page.
+- Escape leaving insert / visual is stopped at the window, so it does not also
+  close the panel it was pressed over; in normal mode it passes through.
 
 **Chord mode is not only a keyboard feature**, which is why it has a way in on a
 phone. `state.kbdChordType` / `kbdChordCpx` / `kbdArp*` also decide what a
@@ -3486,7 +3514,7 @@ Repo: https://github.com/mjoslyn/seqbaby.
   An inline marker (`window.__seqbabyServerBoot`) tells the paths apart, and
   `ScriptLoader.tsx` keeps its onload-chained injection for the soft-nav case
   (e.g. arriving from `/login`).
-- `app/EnginePreload.tsx` emits `modulepreload` for all 66 modules listed in
+- `app/EnginePreload.tsx` emits `modulepreload` for all 67 modules listed in
   `app/engineAssets.ts` (at `engineAsset("/js/<name>")`; the hints used to
   point at the site root and 404). The graph is 8 levels deep, so without it the browser
   needs up to eight sequential round trips just to discover the code.

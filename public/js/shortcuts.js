@@ -68,14 +68,14 @@ const TAIL_RELEASE = { reverb: 1.2, delay: 0.8 };
 /** code → the throw that key is holding */
 const throws = new Map();
 
-function activeTrack() {
+export function activeTrack() {
   return state.tracks.find(t => t.id === state.activeTrackId) || state.tracks.find(t => t.engineKey !== "bus") || null;
 }
 
 // ---- tracks ----------------------------------------------------------------
 
 /** @param {number} d */
-function stepTrack(d) {
+export function stepTrack(d) {
   const list = state.tracks.filter(t => t.engineKey !== "bus");
   if (!list.length) return;
   const i = list.findIndex(t => t.id === state.activeTrackId);
@@ -86,7 +86,7 @@ function stepTrack(d) {
 }
 
 /** Mute or solo through the track's own button, so every rule the click runs still runs. */
-function pressTrackButton(which) {
+export function pressTrackButton(which) {
   const t = activeTrack();
   const btn = t?.el?.querySelector(`.sq-track__${which}`);
   if (!btn) return;
@@ -98,7 +98,7 @@ function pressTrackButton(which) {
 // ---- fx --------------------------------------------------------------------
 
 /** The level control of a track's fx stage, wherever its panel currently is. */
-function fxControl(t, stage) {
+export function fxControl(t, stage) {
   const cls = CLASS_FOR_AUTO[`fx.${stage}`];
   if (!cls || !t?.el) return null;
   return t.el.querySelector(`.${cls}`)
@@ -182,7 +182,7 @@ function toggleFx(stage) {
 // ---- the panel navigator ---------------------------------------------------
 
 /** shift + key → the track button that opens the panel, and the control to start on. */
-const PANEL_KEYS = {
+export const PANEL_KEYS = {
   KeyF: { btn: ".sq-track__fx", label: "fx", start: null },
   KeyC: { btn: ".sq-track__filter", label: "filter", start: ".p-cutoff" },
 };
@@ -288,6 +288,14 @@ function moveNav(key) {
 }
 
 /** Turn the picked control by `frac` of its range (a select / checkbox: towards a notch). */
+/** Vim's hjkl in an open panel (vim.js): an arrow, when there is a panel to move in. */
+export function navArrow(key) {
+  if (!navPanel()) return false;
+  moveNav(key);
+  return true;
+}
+export function panelOpen() { return !!navPanel(); }
+
 function turnNav(frac) {
   const el = /** @type {any} */ (nav.el);
   if (!el || !frac) return;
@@ -323,7 +331,7 @@ function turnNav(frac) {
 }
 
 /** shift + F / C: open that panel on the keyboard's track, or close it if it is the one open. */
-function togglePanel(spec) {
+export function togglePanel(spec) {
   const t = activeTrack();
   const btn = t?.el?.querySelector(spec.btn);
   if (!btn) return;
@@ -366,10 +374,21 @@ const HELP_ROWS = [
   ["trackpad scroll", "turn the picked knob (shift: finer). - / = also nudge it"],
   ["ctrl/⌘ z", "undo (shift: redo)"],
   ["?", "this list"],
+  ["`", "vim mode on / off. Then:"],
+  ["h l / j k", "cursor along the steps / between tracks (a count first: 4l)"],
+  ["w b 0 $ gg G", "next / previous note, first / last step, first / last track"],
+  ["i / a / v / esc", "insert (keys write) / play (keys only sound) / select steps / back to normal"],
+  ["x o r", "delete / add a note, r then a piano key: that note's pitch"],
+  ["> < + -", "pitch up / down, velocity up / down"],
+  ["dd yy p .", "clear the track, copy it, paste at the cursor, repeat the last edit"],
+  ["v … y d p > <", "copy / delete / paste over / shift the selected steps"],
+  ["u / U, ctrl r", "undo / redo"],
+  ["m s f c", "mute, solo, fx panel, filter panel (hjkl walk its knobs)"],
+  [":", ":bpm 128  :p 3  :len 32  :cut .4  :res .6  :fx reverb .5  :12 (step)  :w  :q  :h"],
 ];
 
 let helpOverlay = null;
-function toggleHelp() {
+export function toggleHelp() {
   if (helpOverlay) { helpOverlay.remove(); helpOverlay = null; return; }
   const overlay = document.createElement("div");
   overlay.className = "sq-modal-overlay";
@@ -403,6 +422,7 @@ function ownsArrows(el) {
 const STEP_KEYS = { Digit1: 0, Digit2: 1, Digit3: 2, Digit4: 3, Digit5: 4, Digit6: 5, Digit7: 6, Digit8: 7 };
 
 function onKeyDown(e) {
+  if (e.defaultPrevented) return;                       // vim.js took it
   if (!isDesktopKeyboard() || isTypingTarget(e.target)) return;
   if (e.altKey && !e.metaKey && !e.ctrlKey && STEP_KEYS[e.code] != null) {
     e.preventDefault();
@@ -482,7 +502,8 @@ function onKeyDown(e) {
   if (e.repeat) return;
   const k = e.key.toLowerCase();
   if (k === "m") { e.preventDefault(); pressTrackButton(e.shiftKey ? "solo" : "mute"); return; }
-  if (k === "r" && !e.shiftKey) {
+  // In vim's insert / play the mode decides recording (vim.js), not r.
+  if (k === "r" && !e.shiftKey && !state.vimMode) {
     e.preventDefault();
     // The cursor is drawn on the keyboard's track, so there has to be one.
     if (state.activeTrackId == null) { const t = activeTrack(); if (t) setActiveTrack(t); }

@@ -249,6 +249,7 @@ export const STUDIO_BODY = String.raw`
     <button id="play" class="sq-play">play</button>
     <button id="kbd-record" class="sq-btn--ghost sq-icon-btn" type="button" aria-pressed="false" aria-label="record keyboard notes" title="record computer-keyboard notes into the active track (r). Playing: onto the playhead. Stopped: step input at the cursor. ? lists every shortcut"></button>
     <button id="kbd-capture" class="sq-btn--ghost sq-icon-btn" type="button" aria-label="capture keyboard notes" title="write the notes you just played into the active track, after the fact"></button>
+    <button id="vim-toggle" class="sq-btn--ghost" type="button" aria-pressed="false" title="vim mode (\`): hjkl move, i insert, a play, v select, : commands">vim</button>
     <div class="sq-field"><label for="bpm">bpm</label><input id="bpm" type="number" value="110" min="40" max="240" /></div>
     <div class="sq-field"><label for="swing">swing</label><input id="swing" type="range" min="0" max="0.5" step="0.01" value="0" /></div>
     <button id="macro-pads" class="sq-btn--ghost" type="button" title="havoc: xy pads, one gesture moving parameters across several tracks"><span class="sq-btn__label">havoc</span></button>

@@ -354,6 +354,19 @@ export function markExternalEdit(label, key = null) {
 }
 export function canRedo() { return stack.canRedo(); }
 
+/**
+ * Take whatever edit is still settling as an entry of its own, now. vim.js
+ * calls it before each command: there every command is one undo step, and the
+ * settle window would otherwise fold `o o x`, typed quickly, into one.
+ */
+export function flushHistory() {
+  if (settleTimer == null && idleHandle == null) return;
+  clearTimeout(settleTimer);
+  settleTimer = null;
+  cancelIdle();
+  checkForEdit();
+}
+
 export function undo() {
   // A gesture that has not been checked yet is an edit that is not on the stack
   // — take it now, or pressing undo the moment you let go of a knob would step

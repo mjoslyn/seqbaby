@@ -77,6 +77,15 @@ export function paintStepCursor(t) {
   const covering = t.steps[idx] ? idx : anchorCovering(t, idx);
   const at = covering >= 0 ? covering : idx;
   grid.querySelector(`.sq-step[data-idx="${at}"]`)?.classList.add("is-cursor");
+  // Vim's visual selection (vim.js), on the same track as the cursor.
+  for (const c of grid.querySelectorAll(".sq-step.is-vsel")) c.classList.remove("is-vsel");
+  const sel = state.vimSel;
+  if (!sel) return;
+  const lo = Math.min(sel.from, sel.to), hi = Math.max(sel.from, sel.to);
+  for (const c of grid.children) {
+    const i = Number(c.dataset.idx), span = Number(c.dataset.span) || 1;
+    if (i <= hi && i + span - 1 >= lo) c.classList.add("is-vsel");
+  }
 }
 
 // Piano roll panel: a pitches × steps grid per track. Clicking a cell places

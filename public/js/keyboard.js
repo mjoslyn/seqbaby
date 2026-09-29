@@ -94,7 +94,7 @@ export function isTypingTarget(el) {
 // Resolve a key to a MIDI note for the current mode (chromatic or scale).
 // Returns null for a key that plays nothing — under a scale that's the black
 // row, which has no accidentals to play once every degree lives on a white key.
-function noteForKey(k) {
+export function noteForKey(k) {
   const semi = KEY_SEMITONES[k];
   if (semi == null) return null;
   const intervals = state.scale.active ? SCALES[state.scale.mode] : null;
@@ -556,6 +556,8 @@ function onKeyDown(e) {
   // A key a shortcut already took (shortcuts.js listens in capture, first):
   // shift-F opening the fx panel must not also play an F.
   if (e.defaultPrevented) return;
+  // Vim mode (vim.js): the letters are commands except in insert and play.
+  if (state.vimMode && state.vimMode !== "insert" && state.vimMode !== "play") return;
   if (e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
   if (!isDesktopKeyboard()) return;
   if (isTypingTarget(e.target)) return;
