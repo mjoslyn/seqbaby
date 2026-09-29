@@ -70,7 +70,6 @@ export const state = {
   kbdCursor: 0,
   vimMode: null,        // vim.js: null (off) | "normal" | "insert" | "play" | "visual" | "command"
   vimSel: null,         // vim.js's visual selection on the active track: {from, to} step indices         // step input's cursor (record armed, transport stopped), wrapped to each track's length
-  _fxThrows: new Set(), // "<trackId>:<stage>" for every fx stage a number key is holding open (shortcuts.js)
   activeTrackId: null,
   scale: { active: false, root: 0, mode: "minor" },
   activePattern: 0,

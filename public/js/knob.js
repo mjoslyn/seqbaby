@@ -439,7 +439,7 @@ function attachDrag(input) {
 }
 
 /** A value written as if the knob had been turned there (the keyboard's panel
- *  navigator, shortcuts.js). Same quantising, same `input` event. */
+ *  navigator, knobNav.js). Same quantising, same `input` event. */
 export function writeKnobValue(input, raw) { return writeValue(input, raw); }
 
 // ---- upgrade -------------------------------------------------------------

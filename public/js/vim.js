@@ -9,15 +9,14 @@
 //            (playing): it is recording armed, keyboard.js's step input.
 //   PLAY     a. The piano keys only sound. For jamming without writing.
 //   VISUAL   v. A range of steps on the track, for y / d / p / > / <.
-//   COMMAND  :. A line at the bottom: :bpm 128, :p 3, :fx reverb .4, :w ...
+//   COMMAND  :. A line at the bottom: :bpm 128, :p 3, :k cutoff, :w ...
 //
-// It is a layer, not a second keyboard: it listens on WINDOW capture, so it
-// sees every key before shortcuts.js (document capture) and keyboard.js
-// (document bubble), and a key it takes is `preventDefault`ed, which both of
-// those skip. A key it does not take falls through to them, which is how space
-// still plays, ? still lists, shift + a number still switches an fx, and - / =
-// still nudge a panel's knob. keyboard.js also refuses to play notes while the
-// mode is anything but insert or play.
+// It is the studio's only keyboard layer besides the piano keys themselves.
+// It listens on WINDOW capture, so it sees every key before keyboard.js
+// (document bubble), and a key it takes is `preventDefault`ed, which
+// keyboard.js skips. keyboard.js also refuses to play notes while the mode is
+// anything but insert or play. Knobs are turned through knobNav.js: f / c / :k
+// pick one, hjkl move between them, the trackpad and - / = turn it.
 //
 // Edits go through the same step helpers the grid and step input use
 // (startNote / removeNote), so undo, the jam and a save see them as edits, and
@@ -26,7 +25,10 @@
 import { setStatus } from "./dom.js";
 import { flushHistory, markExternalEdit, redo, undo } from "./history.js";
 import { isDesktopKeyboard, isTypingTarget, noteForKey, setKbdRecord } from "./keyboard.js";
-import { PANEL_KEYS, activeTrack, fxControl, navArrow, panelOpen, pressTrackButton, stepTrack, toggleHelp, togglePanel } from "./shortcuts.js";
+import { clearStepAtCursor, extendStepEntry, moveStepCursor, toggleStepAtCursor } from "./keyboard.js";
+import { PANELS, initKnobNav, knobActive, knobArrow, pickKnob, releaseKnob, togglePanel, turnKnob } from "./knobNav.js";
+import { CLASS_FOR_AUTO } from "./paramTargets.js";
+import { setActiveTrack } from "./render.js";
 import { FX_STAGE_LABELS, FX_STAGE_LEVEL_KEY } from "./constants.js";
 import { emptyPattern, requestPatternSwitch, state } from "./state.js";
 import { paintStepCursor, renderStepGrid } from "./stepGrid.js";
@@ -54,6 +56,42 @@ let register = null;
 let lastEdit = null;
 
 // ---- the track and the cursor ------------------------------------------------
+
+/** The keyboard's track: the active one, else the first that is not a bus. */
+function activeTrack() {
+  return state.tracks.find(t => t.id === state.activeTrackId) || state.tracks.find(t => t.engineKey !== "bus") || null;
+}
+
+/** j / k: `d` tracks down / up, stopping at the ends (buses are not the keyboard's). */
+function stepTrack(d) {
+  const list = state.tracks.filter(t => t.engineKey !== "bus");
+  if (!list.length) return;
+  const i = Math.max(0, list.findIndex(t => t.id === state.activeTrackId));
+  const next = list[Math.max(0, Math.min(list.length - 1, i + d))];
+  setActiveTrack(next);
+  next.el?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  setStatus(`track ${list.indexOf(next) + 1}/${list.length}: ${next.name}`);
+}
+
+/** m / s: through the track's own button, so every rule the click runs still runs. */
+function pressTrackButton(which) {
+  const t = activeTrack();
+  const btn = t?.el?.querySelector(`.sq-track__${which}`);
+  if (!btn) return;
+  if (btn.disabled) { setStatus(`${t.name} is ${which === "mute" ? "soloed" : "muted"}. Undo that first`, true); return; }
+  btn.click();
+  setStatus(`${t.name}: ${which} ${(which === "mute" ? t.muted : t.soloed) ? "on" : "off"}`);
+}
+
+/** The level control of a track's fx stage, wherever its panel currently is. */
+function fxControl(t, stage) {
+  const cls = CLASS_FOR_AUTO[`fx.${stage}`];
+  if (!cls || !t?.el) return null;
+  return t.el.querySelector(`.${cls}`)
+    || document.querySelector(`[data-track-id="${CSS.escape(String(t.id))}"] .${cls}`);
+}
+
+function playStop() { document.getElementById("play")?.click(); }
 
 function track() {
   const t = activeTrack();
@@ -295,6 +333,7 @@ function runCommand(line) {
   switch (cmd) {
     case "q": case "vim": setVim(false); return "vim mode off";
     case "h": case "help": toggleHelp(); return "";
+    case "k": case "knob": return pickKnob(t, args.filter(a => !/^[-.\d]+$/.test(a)).join(" "), args.find(a => /^[-.\d]+$/.test(a)));
     case "bpm": {
       const v = num(args[0]);
       if (!(v >= 40 && v <= 240)) return "E: bpm is 40 to 240";
@@ -340,7 +379,7 @@ function runCommand(line) {
       return "save: name it and press save";
     }
   }
-  return `E: not a command: ${cmd}. Try :bpm :p :len :cut :res :fx :w :q :h`;
+  return `E: not a command: ${cmd}. Try :k :bpm :p :len :cut :res :fx :w :q :h`;
 }
 
 function openCommand() {
@@ -351,6 +390,48 @@ function openCommand() {
 function closeCommand() {
   cmdEl.blur();
   setMode("normal");
+}
+
+// ---- help ----------------------------------------------------------------------
+
+const HELP_ROWS = [
+  ["`", "vim mode on / off"],
+  ["esc", "back to normal (in normal: let go of a knob)"],
+  ["h l / j k", "cursor along the steps / between tracks (a count first: 4l)"],
+  ["w b 0 $ N|", "next / previous note, first / last step, step N"],
+  ["gg G", "first / last track (NG: track N)"],
+  ["space", "play / stop"],
+  ["i / a / v", "insert (keys write) / play (keys only sound) / select steps"],
+  ["in insert", "← → move, → with notes held: longer, enter toggles, backspace clears"],
+  ["x o r", "delete / add a note, r then a piano key: that note's pitch"],
+  ["> < + -", "pitch up / down, velocity up / down"],
+  ["dd yy p .", "clear the track, copy it, paste at the cursor, repeat the last edit"],
+  ["v … y d p > <", "copy / delete / paste over / shift the selected steps"],
+  ["u / U, ctrl r", "undo / redo"],
+  ["m s", "mute / solo the track"],
+  ["f c", "fx / filter panel. hjkl walk its knobs"],
+  [":k cutoff", "pick any knob by name (:k reverb decay, :k fx.delay.time; add a 0..1 value to set it)"],
+  ["scroll, - =", "turn the picked knob: trackpad (shift: finer), or 1% a key (10= is 10%)"],
+  [":", ":bpm 128  :p 3  :len 32  :cut .4  :res .6  :fx reverb .5  :12  :w  :q  :h"],
+];
+
+let helpOverlay = null;
+function toggleHelp() {
+  if (helpOverlay) { helpOverlay.remove(); helpOverlay = null; return; }
+  const overlay = document.createElement("div");
+  overlay.className = "sq-modal-overlay";
+  const rows = HELP_ROWS.map(([k, v]) => `<dt><kbd>${k}</kbd></dt><dd>${v}</dd>`).join("");
+  overlay.innerHTML = `
+    <div class="sq-modal sq-shortcuts" role="dialog" aria-modal="true" aria-label="vim mode">
+      <div class="sq-modal__title">vim mode</div>
+      <dl class="sq-shortcuts__list">${rows}</dl>
+      <div class="sq-modal__actions"><button class="sq-modal__ok">done</button></div>
+    </div>`;
+  const close = () => { overlay.remove(); if (helpOverlay === overlay) helpOverlay = null; };
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
+  overlay.querySelector(".sq-modal__ok").addEventListener("click", close);
+  document.body.appendChild(overlay);
+  helpOverlay = overlay;
 }
 
 // ---- keys --------------------------------------------------------------------
@@ -380,10 +461,14 @@ function normalKey(e) {
 
   if (/^[1-9]$/.test(k) || (k === "0" && count)) { count += k; paintBar(); return true; }
 
-  // A sound panel open: hjkl walk its knobs, - / = fall through to turn them.
+  // A knob picked (an open panel, or :k): hjkl walk the knobs, - / = turn it.
   const arrow = { h: "ArrowLeft", j: "ArrowDown", k: "ArrowUp", l: "ArrowRight" }[k] || (k.startsWith("Arrow") ? k : null);
-  if (arrow && panelOpen()) { count = ""; paintBar(); return navArrow(arrow); }
-  if ((k === "-" || k === "=" || k === "+") && panelOpen()) return false;
+  if (arrow && knobActive()) { count = ""; paintBar(); return knobArrow(arrow); }
+  if ((k === "-" || k === "=" || k === "+") && knobActive()) {
+    const { n } = takeCount();
+    paintBar();
+    return turnKnob((k === "-" ? -1 : 1) * n * 0.01);
+  }
 
   const { n, had } = takeCount();
   const done = (v = true) => { paintBar(); return v; };
@@ -398,6 +483,8 @@ function normalKey(e) {
     case "b": setCursor(t, noteJump(t, cursor(t), -1, n)); return done();
     case "0": setCursor(t, 0); return done();
     case "$": setCursor(t, trackLen(t) - 1); return done();
+    case "|": setCursor(t, n - 1); return done();
+    case " ": if (!e.repeat) playStop(); return done();
     case "^": setCursor(t, t.steps[0] ? 0 : noteJump(t, 0, 1, 1)); return done();
     case "G": {
       const list = state.tracks.filter(x => x.engineKey !== "bus");
@@ -424,8 +511,8 @@ function normalKey(e) {
     case ":": openCommand(); return true;
     case "m": pressTrackButton("mute"); return done();
     case "s": pressTrackButton("solo"); return done();
-    case "f": togglePanel(PANEL_KEYS.KeyF); return done();
-    case "c": togglePanel(PANEL_KEYS.KeyC); return done();
+    case "f": togglePanel(t, PANELS.fx); return done();
+    case "c": togglePanel(t, PANELS.filter); return done();
   }
   // Any other letter is swallowed: in normal mode a stray key must not reach
   // the note keys or a one-letter shortcut. Everything else falls through.
@@ -481,6 +568,19 @@ function visualKey(e) {
   return /^[a-zA-Z]$/.test(k);
 }
 
+function insertKey(e, writing) {
+  const k = e.key;
+  if (k === " ") { if (!e.repeat) playStop(); return true; }
+  if (!writing || state.playing) return false;
+  switch (k) {
+    case "ArrowRight": if (!e.shiftKey && extendStepEntry()) return true; moveStepCursor(e.shiftKey ? 4 : 1); return true;
+    case "ArrowLeft": moveStepCursor(e.shiftKey ? -4 : -1); return true;
+    case "Enter": if (!e.repeat) toggleStepAtCursor(); return true;
+    case "Backspace": case "Delete": clearStepAtCursor(k === "Backspace"); return true;
+  }
+  return false;
+}
+
 function onKeyDown(e) {
   if (!isDesktopKeyboard()) return;
   if (e.target === cmdEl) return;                          // the command line has its own listener
@@ -493,17 +593,36 @@ function onKeyDown(e) {
   }
   const mode = state.vimMode;
   if (!mode) return;
+  // A modifier on its own is half of a key still coming (shift for | $ > G),
+  // not a key: it must not spend a count typed before it.
+  if (e.key === "Shift" || e.key === "Control" || e.key === "Alt" || e.key === "Meta" || e.key === "CapsLock") return;
 
+  if (e.key === "Escape" && helpOverlay) { toggleHelp(); e.preventDefault(); e.stopPropagation(); return; }
+  // A button or menu focused inside a dialog keeps space and enter for itself.
+  if ((e.key === " " || e.key === "Enter") && e.target !== document.body && e.target?.closest?.('[aria-modal="true"]')) return;
   if (e.key === "Escape") {
     // Leaving a mode is all this Escape does: stopped here, it does not also
     // close the panel it was pressed over. In normal mode it passes, so an
     // open panel or the help list still closes on it.
-    if (mode === "normal") { if (count || pending) { count = ""; pending = ""; paintBar(); e.preventDefault(); e.stopPropagation(); } return; }
+    if (mode === "normal") {
+      const took = !!(count || pending) | releaseKnob();
+      if (count || pending) { count = ""; pending = ""; paintBar(); }
+      if (took) { e.preventDefault(); e.stopPropagation(); }
+      return;
+    }
     e.preventDefault(); e.stopPropagation();
     if (mode === "visual" || mode === "insert" || mode === "play") { const t = track(); setMode("normal"); if (t) setCursor(t, cursor(t)); }
     return;
   }
-  if (mode === "insert" || mode === "play") return;       // the keyboard plays; shortcuts still apply
+  if (mode === "insert" || mode === "play") {
+    // The piano keys fall through to keyboard.js. What else these modes answer
+    // to is space, and in insert the step cursor: ← →, → with notes held ties
+    // the note longer, enter a step on / off, backspace / delete clear.
+    if (!bare) return;
+    const took = insertKey(e, mode === "insert");
+    if (took) { e.preventDefault(); e.stopPropagation(); }
+    return;
+  }
   if (e.ctrlKey && !e.metaKey && !e.altKey && e.key.toLowerCase() === "r" && mode === "normal") {
     e.preventDefault(); redo(); return;
   }
@@ -540,6 +659,7 @@ export function initVim() {
   if (installed || !isDesktopKeyboard()) return;
   installed = true;
   buildBar();
+  initKnobNav(() => !!state.vimMode);
   window.addEventListener("keydown", onKeyDown, true);
   const btn = document.getElementById("vim-toggle");
   btn?.addEventListener("click", () => { setVim(!state.vimMode); btn.blur(); });

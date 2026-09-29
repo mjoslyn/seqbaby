@@ -13,7 +13,6 @@ import { openMacroPads } from "./macro.js";
 import { installCodePanel } from "./codePanel.js";
 import { applySampleSpeed, attachBpmDrag, lfoRateLabel, retuneSyncedLFOs } from "./lfo.js";
 import { captureSequence, initComputerKeyboard, isDesktopKeyboard, resetKbdKeys, setKbdRecord } from "./keyboard.js";
-import { initShortcuts } from "./shortcuts.js";
 import { initVim } from "./vim.js";
 import { autoAccents, parseMeter, redetectDrumKit, stepsPerBarForMeter } from "./meter.js";
 import { meterTick } from "./meters.js";
@@ -686,7 +685,6 @@ export function init() {
   if (kbdCaptureBtn) kbdCaptureBtn.innerHTML = ICON_CAPTURE;
   if (isDesktopKeyboard()) {
     initComputerKeyboard();
-    initShortcuts();
     initVim();
     if (kbdChordPanel) kbdChordPanel.hidden = false;
     if (kbdCaptureBtn) kbdCaptureBtn.disabled = false;
