@@ -13,7 +13,9 @@ export default function BugForm() {
 
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    const f = new FormData(e.currentTarget);
+    // React clears e.currentTarget once the handler returns, so hold the form.
+    const form = e.currentTarget;
+    const f = new FormData(form);
     const v = (k: string) => String(f.get(k) ?? "");
     const payload = {
       title: v("title"),
@@ -34,7 +36,7 @@ export default function BugForm() {
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.url) {
         setResult({ kind: "ok", url: data.url });
-        e.currentTarget.reset();
+        form.reset();
       } else {
         const body = `${payload.what}\n\n${payload.steps ? `Steps:\n${payload.steps}\n\n` : ""}${navigator.userAgent}`;
         setResult({
