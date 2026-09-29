@@ -62,6 +62,19 @@ function activeTrack() {
   return state.tracks.find(t => t.id === state.activeTrackId) || state.tracks.find(t => t.engineKey !== "bus") || null;
 }
 
+/**
+ * Make the keyboard's track THE active one: its id in state AND the
+ * `is-kbd-active` mark, which is what draws the cursor. Setting the id alone
+ * (which vim mode used to do when nothing had been clicked yet) moved an
+ * invisible cursor until j or k happened to mark a track. Also covers a song
+ * arriving and taking the active track's element with it.
+ */
+function ensureActive() {
+  const t = activeTrack();
+  if (t && (state.activeTrackId !== t.id || !t.el?.classList.contains("is-kbd-active"))) setActiveTrack(t);
+  return t;
+}
+
 /** j / k: `d` tracks down / up, stopping at the ends (buses are not the keyboard's). */
 function stepTrack(d) {
   const list = state.tracks.filter(t => t.engineKey !== "bus");
@@ -296,8 +309,7 @@ function paintBar() {
 export function setVim(on) {
   if (on && !isDesktopKeyboard()) return;
   if (on) {
-    const t = track();
-    if (t && state.activeTrackId == null) state.activeTrackId = t.id;
+    ensureActive();
     setMode("normal");
     setStatus("vim mode: hjkl move, i insert, a play, v select, : commands, ` to leave");
   } else {
@@ -627,6 +639,7 @@ function onKeyDown(e) {
     e.preventDefault(); redo(); return;
   }
   if (!bare) return;
+  ensureActive();
   const took = mode === "visual" ? visualKey(e) : normalKey(e);
   if (took) { e.preventDefault(); e.stopPropagation(); }
 }
