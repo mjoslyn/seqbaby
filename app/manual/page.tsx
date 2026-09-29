@@ -1715,6 +1715,8 @@ bus. Share it when it validates.`}</div>
 
         <div className={styles.footer}>
           <a href="/studio">Back to the studio</a>
+          {" · "}
+          <a href="/superbugs">Report a superbug</a>
         </div>
       </div>
     </div>

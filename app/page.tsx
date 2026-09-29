@@ -192,6 +192,7 @@ export default async function HomePage() {
         <a href="/songs">songs</a>
         <a href="/people">people</a>
         <a href="/manual">manual</a>
+        <a href="/superbugs" title="found a bug? tell us">superbugs</a>
         <span className={styles.footNote}>made with too many oscillators.</span>
       </footer>
     </div>

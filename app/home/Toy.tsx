@@ -11,16 +11,24 @@ import styles from "./home.module.css";
 
 const LANES = ["kick", "snare", "hat", "blip"] as const;
 const STEPS = 16;
-const BPM = 118;
+const DEFAULT_BPM = 118;
 // A minor pentatonic, one note per step, so the blip lane can never be wrong.
-const BLIP = [0, 3, 5, 7, 10, 12, 10, 7, 5, 3, 0, 7, 12, 15, 12, 7];
+const DEFAULT_BLIP = [0, 3, 5, 7, 10, 12, 10, 7, 5, 3, 0, 7, 12, 15, 12, 7];
 
-const START: boolean[][] = [
+const DEFAULT_START = [
   "x...x...x...x..x",
   "....x.......x...",
   "..x.x.x.x.x.xxx.",
   "x..x..x...x.x...",
-].map((row) => [...row].map((c) => c === "x"));
+];
+
+const parse = (rows: string[]) => rows.map((row) => [...row].map((c) => c === "x"));
+
+// The homepage uses the defaults; another page can hand it its own beat: four
+// rows of sixteen ("x" is a hit), a bpm, and the blip lane's semitones.
+// `steps` is the loop length and `perBeat` the steps to a beat: 16 and 4 is a
+// bar of sixteenths in 4/4; 18 and 2 is three bars of eighths in 3/4.
+export type ToyProps = { bpm?: number; blip?: number[]; start?: string[]; steps?: number; perBeat?: number };
 
 function noiseBuffer(ctx: AudioContext): AudioBuffer {
   const buf = ctx.createBuffer(1, ctx.sampleRate * 0.5, ctx.sampleRate);
@@ -29,7 +37,42 @@ function noiseBuffer(ctx: AudioContext): AudioBuffer {
   return buf;
 }
 
-function voice(ctx: AudioContext, out: AudioNode, noise: AudioBuffer, lane: number, step: number, t: number) {
+// A second of silence as a WAV, for the <audio> element that keeps iOS's
+// session in playback mode (see start()).
+let silentUrl = "";
+function silentWavUrl(): string {
+  if (silentUrl) return silentUrl;
+  const rate = 8000;
+  const buf = new ArrayBuffer(44 + rate);
+  const v = new DataView(buf);
+  const str = (o: number, t: string) => [...t].forEach((c, i) => v.setUint8(o + i, c.charCodeAt(0)));
+  str(0, "RIFF"); v.setUint32(4, 36 + rate, true); str(8, "WAVE"); str(12, "fmt ");
+  v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+  v.setUint32(24, rate, true); v.setUint32(28, rate, true); v.setUint16(32, 1, true); v.setUint16(34, 8, true);
+  str(36, "data"); v.setUint32(40, rate, true);
+  new Uint8Array(buf, 44).fill(0x80); // unsigned 8-bit silence
+  silentUrl = URL.createObjectURL(new Blob([buf], { type: "audio/wav" }));
+  return silentUrl;
+}
+
+// iOS wants a real node to have run through the destination inside the tap
+// before it will pump the graph: a one-sample buffer, and an inaudible blip.
+function unlockIOS(ctx: AudioContext) {
+  try {
+    const src = ctx.createBufferSource();
+    src.buffer = ctx.createBuffer(1, 1, 22050);
+    src.connect(ctx.destination);
+    src.start(0);
+    const osc = ctx.createOscillator();
+    const g = ctx.createGain();
+    g.gain.value = 0.00001;
+    osc.connect(g).connect(ctx.destination);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.03);
+  } catch {}
+}
+
+function voice(ctx: AudioContext, out: AudioNode, noise: AudioBuffer, lane: number, step: number, t: number, blip: number[]) {
   const g = ctx.createGain();
   g.connect(out);
   if (lane === 0) {
@@ -46,7 +89,7 @@ function voice(ctx: AudioContext, out: AudioNode, noise: AudioBuffer, lane: numb
   if (lane === 3) {
     const o = ctx.createOscillator();
     o.type = "square";
-    o.frequency.value = 220 * 2 ** (BLIP[step] / 12);
+    o.frequency.value = 220 * 2 ** (blip[step] / 12);
     const f = ctx.createBiquadFilter();
     f.frequency.setValueAtTime(3200, t);
     f.frequency.exponentialRampToValueAtTime(400, t + 0.15);
@@ -71,54 +114,131 @@ function voice(ctx: AudioContext, out: AudioNode, noise: AudioBuffer, lane: numb
   src.stop(t + len + 0.01);
 }
 
-export default function Toy() {
-  const [grid, setGrid] = useState(START);
+export default function Toy({ bpm = DEFAULT_BPM, blip = DEFAULT_BLIP, start: start0 = DEFAULT_START, steps = STEPS, perBeat = 4 }: ToyProps = {}) {
+  const [grid, setGrid] = useState(() => parse(start0));
   const [playing, setPlaying] = useState(false);
   const [now, setNow] = useState(-1);
   const gridRef = useRef(grid);
   gridRef.current = grid;
-  const audio = useRef<{ ctx: AudioContext; out: GainNode; noise: AudioBuffer } | null>(null);
+  const audio = useRef<{ ctx: AudioContext; out: GainNode; noise: AudioBuffer; hold: HTMLAudioElement | null } | null>(null);
   const timer = useRef<number | null>(null);
+  // Steps scheduled but not yet heard, for the playhead (see the effect below).
+  const pending = useRef<{ s: number; at: number }[]>([]);
+  const blipNow = useRef(blip);
+  blipNow.current = blip;
 
   const stop = useCallback(() => {
     if (timer.current !== null) clearInterval(timer.current);
     timer.current = null;
+    audio.current?.hold?.pause();
     setPlaying(false);
     setNow(-1);
   }, []);
 
-  const start = useCallback(async () => {
-    if (!audio.current) {
+  const start = useCallback(() => {
+    // Everything that needs the tap's user activation happens here,
+    // synchronously, before any await: phones only let audio start inside the
+    // gesture, and iOS also wants something to have actually played.
+    let a = audio.current;
+    if (!a || a.ctx.state === "closed") {
       const ctx = new AudioContext();
       const out = ctx.createGain();
       out.gain.value = 0.6;
       out.connect(ctx.destination);
-      audio.current = { ctx, out, noise: noiseBuffer(ctx) };
+      a = { ctx, out, noise: noiseBuffer(ctx), hold: a?.hold ?? null };
+      audio.current = a;
     }
-    const { ctx, out, noise } = audio.current;
-    await ctx.resume();
-    const dur = 60 / BPM / 4;
+    const { ctx, out, noise } = a;
+    void ctx.resume().catch(() => {});
+    unlockIOS(ctx);
+    // iOS mutes Web Audio while the ringer switch is off, unless a media
+    // element is playing: a silent looping <audio> moves the session to
+    // playback, which is what the studio does too.
+    if (!a.hold) {
+      try {
+        const el = new Audio(silentWavUrl());
+        el.loop = true;
+        el.setAttribute("playsinline", "");
+        a.hold = el;
+      } catch {}
+    }
+    void a.hold?.play().catch(() => {});
+
+    if (timer.current !== null) clearInterval(timer.current);
+    pending.current = [];
+    const dur = 60 / bpm / perBeat;
     let step = 0;
     let at = ctx.currentTime + 0.06;
     // Schedule a little ahead of the clock, as the real transport does, so a
-    // busy main thread cannot make the beat stumble.
+    // busy main thread cannot make the beat stumble. The clock does not
+    // advance while the context is suspended, so a slow resume just delays
+    // the first note instead of blocking the start.
     const tick = () => {
+      if (ctx.state !== "running") void ctx.resume().catch(() => {});
+      // A stalled page (a phone under load, a backgrounded tab) leaves `at`
+      // in the past; skip what was missed rather than firing it in a burst.
+      if (at < ctx.currentTime) at = ctx.currentTime + 0.05;
       while (at < ctx.currentTime + 0.12) {
         const s = step;
-        gridRef.current.forEach((lane, i) => lane[s] && voice(ctx, out, noise, i, s, at));
-        const delay = Math.max(0, (at - ctx.currentTime) * 1000);
-        setTimeout(() => setNow(s), delay);
+        gridRef.current.forEach((lane, i) => lane[s] && voice(ctx, out, noise, i, s, at, blipNow.current));
+        pending.current.push({ s, at });
         at += dur;
-        step = (step + 1) % STEPS;
+        step = (step + 1) % steps;
       }
     };
     tick();
     timer.current = window.setInterval(tick, 25);
     setPlaying(true);
-  }, []);
+  }, [bpm, steps, perBeat]);
+
+  // The playhead follows the audio clock, not a timer: each scheduled step is
+  // painted once the context has played it AND the output has had time to
+  // deliver it (Bluetooth and phones lag by a couple of hundred ms; Safari
+  // reports no latency, so it gets an estimate). Timers set at schedule time
+  // ran on the wall clock, so a context that was slow to resume, or a busy
+  // phone, left the playhead ahead of what was heard.
+  useEffect(() => {
+    if (!playing) return;
+    let raf = 0;
+    const frame = () => {
+      const ctx = audio.current?.ctx;
+      if (ctx) {
+        const lag = ctx.outputLatency || 0.15;
+        const heard = ctx.currentTime - lag;
+        const q = pending.current;
+        let last = -1;
+        while (q.length && q[0].at <= heard) last = q.shift()!.s;
+        if (last >= 0) setNow(last);
+      }
+      raf = requestAnimationFrame(frame);
+    };
+    raf = requestAnimationFrame(frame);
+    return () => cancelAnimationFrame(raf);
+  }, [playing]);
+
+  // Coming back to the tab (or a call ending) leaves the context suspended or
+  // iOS's own "interrupted": try to resume, and again on the next touch.
+  useEffect(() => {
+    if (!playing) return;
+    const wake = () => {
+      const a = audio.current;
+      if (!a || a.ctx.state === "running") return;
+      void a.ctx.resume().catch(() => {});
+      void a.hold?.play().catch(() => {});
+    };
+    document.addEventListener("visibilitychange", wake);
+    window.addEventListener("pageshow", wake);
+    window.addEventListener("pointerdown", wake, true);
+    return () => {
+      document.removeEventListener("visibilitychange", wake);
+      window.removeEventListener("pageshow", wake);
+      window.removeEventListener("pointerdown", wake, true);
+    };
+  }, [playing]);
 
   useEffect(() => () => {
     if (timer.current !== null) clearInterval(timer.current);
+    audio.current?.hold?.pause();
     void audio.current?.ctx.close();
   }, []);
 
@@ -138,7 +258,7 @@ export default function Toy() {
         <button
           type="button"
           className={`${styles.toyPlay} ${playing ? styles.isOn : ""}`}
-          onClick={() => (playing ? stop() : void start())}
+          onClick={() => (playing ? stop() : start())}
           aria-pressed={playing}
         >
           {playing ? "■ stop" : "▶ play"}
@@ -146,11 +266,16 @@ export default function Toy() {
         <button type="button" className={styles.toyBtn} onClick={shake} title="roll a new beat">
           ⚄ shake it
         </button>
-        <span className={styles.toyBpm}>{BPM} bpm</span>
+        <span className={styles.toyBpm}>{bpm} bpm</span>
       </div>
       <div className={styles.toyGrid} role="grid" aria-label="toy step sequencer">
         {LANES.map((name, lane) => (
-          <div key={name} className={styles.toyRow} role="row">
+          <div
+            key={name}
+            className={styles.toyRow}
+            role="row"
+            style={steps === STEPS ? undefined : { gridTemplateColumns: `36px repeat(${steps}, minmax(0, 1fr))` }}
+          >
             <span className={styles.toyLabel}>{name}</span>
             {grid[lane].map((on, step) => (
               <button
@@ -163,7 +288,7 @@ export default function Toy() {
                   styles.toyStep,
                   on ? styles.isOn : "",
                   step === now ? styles.isNow : "",
-                  step % 4 === 0 ? styles.isBeat : "",
+                  step % perBeat === 0 ? styles.isBeat : "",
                 ].join(" ")}
                 onClick={() => toggle(lane, step)}
               />
