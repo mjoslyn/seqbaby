@@ -32,7 +32,9 @@
  */
 
 import { AUTOMATION_TARGETS, applyAutomationAtStep, canAutomate } from "./automation.js";
-import { CLASS_FOR_AUTO, controlFromEventTarget, hasMacroOn, refreshParamIndicators, targetsForControl, trackForControl } from "./paramTargets.js";
+import { FX_STAGE_LEVEL_KEY } from "./constants.js";
+import { ICON_DICE } from "./icons.js";
+import { CLASS_FOR_AUTO, controlFromEventTarget, hasAutomation, hasMacroOn, modOwns, refreshParamIndicators, targetsForControl, trackForControl } from "./paramTargets.js";
 import { state } from "./state.js";
 
 /** @typedef {import("./types.js").Track} Track */
@@ -95,6 +97,7 @@ export function assignToAxis(pad, axis, t, autoKey) {
   const a = { trackId: t.id, key: autoKey, lo: 0, hi: 1, invert: false };
   pad[axis].push(a);
   refreshParamIndicators(t);
+  try { t.fxRack?.refreshStageActivity?.(); } catch {}
   return { ok: true, a };
 }
 
@@ -107,6 +110,75 @@ export function unassign(pad, axis, a) {
   if (t && a._base != null) writeParam(t, a.key, a._base, RELEASE_RAMP, true);
   pad[axis].splice(i, 1);
   if (t) refreshParamIndicators(t);
+  try { t?.fxRack?.refreshStageActivity?.(); } catch {}
+}
+
+// ---- dice ----------------------------------------------------------------
+// Fill a pad with random parameters, across tracks, each with a random range.
+// Havoc for people who don't want to press learn eight times.
+
+/** Parameters the dice may pick on a track: automatable, a knob (a select or a
+ *  checkbox has no range to sweep), free of any other owner, and audible.
+ *  `vol` is left out, since a pad that can mute a track reads as broken, and an
+ *  fx stage's sub-controls only count once the stage is engaged — a delay time
+ *  swept on a bypassed delay moves a knob and nothing else. */
+function diceCandidates(t) {
+  const out = [];
+  for (const key of Object.keys(AUTOMATION_TARGETS)) {
+    if (key === "vol" || !canAutomate(t, key)) continue;
+    if (hasAutomation(t, key) || modOwns(t, key)) continue;
+    const el = controlFor(t, key);
+    if (!el || el.type !== "range") continue;
+    const m = /^fx\.([a-z]+)\./.exec(key);
+    if (m && FX_STAGE_LEVEL_KEY[m[1]] && !(t.fxConfig?.[m[1]]?.[FX_STAGE_LEVEL_KEY[m[1]]] > 0)) continue;
+    out.push(key);
+  }
+  return out;
+}
+
+const pick = (list) => list[Math.floor(Math.random() * list.length)];
+
+/** Clear the pad and roll new assignments onto both axes. Tracks are dealt
+ *  round-robin from a shuffle, so the picks spread across the session rather
+ *  than piling onto whichever engine has the most controls (a hexop has 56).
+ *  Returns how many parameters landed. */
+export function diceMacroPad(pad) {
+  if (!pad) return 0;
+  releasePad(pad);
+  for (const ax of ["x", "y"]) for (const a of [...pad[ax]]) unassign(pad, ax, a);
+  const pools = state.tracks
+    .filter(t => !t.muted)
+    .map(t => ({ t, keys: diceCandidates(t) }))
+    .filter(p => p.keys.length);
+  for (let i = pools.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pools[i], pools[j]] = [pools[j], pools[i]];
+  }
+  if (!pools.length) return 0;
+  let dealt = 0, turn = 0;
+  for (const ax of ["x", "y"]) {
+    const want = 2 + Math.floor(Math.random() * 2);
+    for (let n = 0, tries = 0; n < want && tries < want * pools.length * 2; tries++) {
+      const p = pools[turn++ % pools.length];
+      const free = p.keys.filter(k => !hasMacroOn(p.t, k));
+      if (!free.length) continue;
+      // Half the picks from the instrument and its filter, half from the rack:
+      // the rack has thirteen wets and would otherwise crowd out the sound.
+      const own = free.filter(k => !k.startsWith("fx."));
+      const rack = free.filter(k => k.startsWith("fx."));
+      const from = own.length && (!rack.length || Math.random() < 0.5) ? own : rack;
+      const res = assignToAxis(pad, ax, p.t, pick(from));
+      if (!res.ok) continue;
+      // A span of at least a third, so every pick is heard, placed anywhere.
+      const span = 0.35 + Math.random() * 0.65;
+      const lo = Math.random() * (1 - span);
+      res.a.lo = Math.round(lo * 100) / 100;
+      res.a.hi = Math.round((lo + span) * 100) / 100;
+      res.a.invert = Math.random() < 0.3;
+      n++; dealt++;
+    }
+  }
+  return dealt;
 }
 
 // ---- the control behind a parameter --------------------------------------
@@ -367,6 +439,7 @@ export function openMacroPads() {
             <span class="sq-macro__hint">${pad.latch
               ? "the pad keeps what you play: it becomes the sound"
               : "parameters spring back when you let go"}</span>
+            <button type="button" class="sq-macro__dice sq-btn--ghost" title="dice: replace this pad's parameters with random ones from across the session">${ICON_DICE}<span>dice</span></button>
             <button type="button" class="sq-macro__del sq-btn--ghost">delete pad</button>
           </div>
         </div>
@@ -385,7 +458,7 @@ export function openMacroPads() {
                   <label class="sq-macro__range">to <input type="number" class="sq-macro__hi" min="0" max="1" step="0.01" value="${a.hi}" /></label>
                   <label class="sq-macro__inv"><input type="checkbox" class="sq-macro__inv-cb"${a.invert ? " checked" : ""} /> flip</label>
                   <button type="button" class="sq-macro__rm sq-btn--ghost" title="remove">×</button>
-                </div>`).join("") : `<div class="sq-macro__empty">nothing on this axis yet. Press learn, then touch any knob</div>`}
+                </div>`).join("") : `<div class="sq-macro__empty">nothing on this axis yet. Press learn, then touch any knob, or roll the dice</div>`}
             </div>`).join("")}
         </div>
       </div>
@@ -405,6 +478,10 @@ export function openMacroPads() {
       for (const ax of ["x", "y"]) for (const a of [...pad[ax]]) unassign(pad, ax, a);
       removeMacroPad(pad.id);
       draw();
+    });
+    q(".sq-macro__dice").addEventListener("click", () => {
+      _learn = null;
+      draw(diceMacroPad(pad) ? "" : "nothing to roll: no unmuted track has a free knob");
     });
     q(".sq-macro__latch-cb").addEventListener("change", (e) => { pad.latch = e.target.checked; draw(); });
     modal.querySelectorAll(".sq-macro__learn").forEach(b => b.addEventListener("click", () => {
@@ -468,5 +545,8 @@ export function applyMacroPads(data, order = state.tracks) {
     id: _nextPadId++, name: p.name || `pad ${i + 1}`, latch: !!p.latch,
     pos: { x: 0.5, y: 0.5 }, x: conv(p.x), y: conv(p.y),
   }));
-  for (const t of state.tracks) refreshParamIndicators(t);
+  for (const t of state.tracks) {
+    refreshParamIndicators(t);
+    try { t.fxRack?.refreshStageActivity?.(); } catch {}
+  }
 }

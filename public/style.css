@@ -3038,6 +3038,7 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not
 .sq-macro__padfoot { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 11px; }
 .sq-macro__latch { display: inline-flex; align-items: center; gap: 5px; color: var(--fg); }
 .sq-macro__hint { color: var(--fg-dim); flex: 1 1 140px; min-width: 0; }
+.sq-macro__dice { font-size: 11px; padding: 3px 8px; display: inline-flex; align-items: center; gap: 5px; }
 .sq-macro__del { font-size: 11px; padding: 3px 8px; color: var(--danger); }
 
 .sq-macro__axes { display: grid; gap: 12px; }

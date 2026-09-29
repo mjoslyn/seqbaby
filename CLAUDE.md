@@ -1672,6 +1672,15 @@ pad "sweep"   X -> bass · filter cutoff      Y -> lead · reverb wet
   `patternMeters`. Assignments are stored **by track index**, not `t.id` —
   `createTrack` hands out fresh ids on every load, so ids don't survive. Live
   state keeps the id, so removing a track can't silently repoint an assignment.
+- **Dice** (`diceMacroPad`) replaces the open pad's assignments with 2-3
+  random parameters per axis and a random range each: tracks dealt
+  round-robin from a shuffle so picks spread across the session, half from the
+  instrument/filter and half from the rack (thirteen wets would crowd it
+  otherwise). Muted tracks, `vol`, knobs owned by an LFO or lane, and an fx
+  stage's sub-controls while the stage is bypassed are skipped.
+- **A pad holds an fx stage wired in** (`stageHeldByMacro`, signal.js), as an
+  LFO does: a momentary pad writes the wet without the control's handler, so a
+  bypassed stage would otherwise move its knob and nothing you can hear.
 - Pads are **global and not p-locked** on purpose: a performance macro that
   rearranged itself at every pattern switch would be unplayable.
 - `CLASS_FOR_AUTO` (paramTargets.js) is the automation key → control class map
