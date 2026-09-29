@@ -1,15 +1,51 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import styles from "./superbugs.module.css";
 
 const ISSUES = "https://github.com/mjoslyn/seqbaby/issues";
+
+type Turnstile = {
+  render: (el: HTMLElement, opts: Record<string, unknown>) => string;
+  reset: (id?: string) => void;
+};
+const SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
 
 type Result = { kind: "ok"; url: string } | { kind: "err"; msg: string; fallback: string } | null;
 
 export default function BugForm() {
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<Result>(null);
+  // Cloudflare Turnstile, when NEXT_PUBLIC_TURNSTILE_SITE_KEY is set.
+  const [token, setToken] = useState("");
+  const box = useRef<HTMLDivElement>(null);
+  const widget = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!SITE_KEY || !box.current) return;
+    const mount = () => {
+      const t = (window as unknown as { turnstile?: Turnstile }).turnstile;
+      if (!t || !box.current || widget.current) return;
+      widget.current = t.render(box.current, {
+        sitekey: SITE_KEY,
+        callback: (v: string) => setToken(v),
+        "expired-callback": () => setToken(""),
+        "error-callback": () => setToken(""),
+      });
+    };
+    if ((window as unknown as { turnstile?: Turnstile }).turnstile) return mount();
+    const s = document.createElement("script");
+    s.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+    s.async = true;
+    s.onload = mount;
+    document.head.appendChild(s);
+  }, []);
+
+  function resetCaptcha() {
+    setToken("");
+    const t = (window as unknown as { turnstile?: Turnstile }).turnstile;
+    if (t && widget.current) t.reset(widget.current);
+  }
 
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -37,7 +73,9 @@ export default function BugForm() {
       if (res.ok && data.url) {
         setResult({ kind: "ok", url: data.url });
         form.reset();
+        resetCaptcha();
       } else {
+        resetCaptcha(); // a token is single-use
         const body = `${payload.what}\n\n${payload.steps ? `Steps:\n${payload.steps}\n\n` : ""}${navigator.userAgent}`;
         setResult({
           kind: "err",
@@ -76,7 +114,8 @@ export default function BugForm() {
         <small>it goes on a public issue. leave it blank if that bothers you.</small>
       </label>
       <input name="website" tabIndex={-1} autoComplete="off" aria-hidden="true" className={styles.trap} />
-      <button type="submit" disabled={busy} className={styles.submit}>
+      {SITE_KEY && <div ref={box} />}
+      <button type="submit" disabled={busy || (!!SITE_KEY && !token)} className={styles.submit}>
         {busy ? "sending..." : "release the superbug"}
       </button>
       {result?.kind === "ok" && (

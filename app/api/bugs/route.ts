@@ -11,9 +11,28 @@ export const dynamic = "force-dynamic";
 // one repo), so nobody needs a GitHub account to report one. Without the
 // token it answers 503 and the page falls back to a prefilled github.com
 // new-issue link. `website` is a honeypot: a person never fills it.
+// With TURNSTILE_SECRET_KEY set, a Cloudflare Turnstile token (`cf`) is required
+// and verified here; without it the check is skipped, so the form still works
+// on a deploy with no captcha configured.
 const REPO = process.env.GITHUB_ISSUES_REPO || "mjoslyn/seqbaby";
 
 const clip = (v: unknown, max: number) => (typeof v === "string" ? v.trim().slice(0, max) : "");
+
+async function humanVerified(token: string, ip: string): Promise<boolean> {
+  const secret = process.env.TURNSTILE_SECRET_KEY;
+  if (!secret) return true;
+  if (!token) return false;
+  try {
+    const res = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
+      method: "POST",
+      body: new URLSearchParams({ secret, response: token, ...(ip !== "unknown" ? { remoteip: ip } : {}) }),
+    });
+    const data = (await res.json()) as { success?: boolean };
+    return data.success === true;
+  } catch {
+    return false;
+  }
+}
 
 // A crude per-instance limit. Serverless instances do not share it, so it is a
 // speed bump for a script hammering one, not a guarantee.
@@ -43,6 +62,9 @@ export async function POST(req: Request) {
   if (!token) return NextResponse.json({ error: "reporting is not set up here" }, { status: 503 });
 
   const ip = (req.headers.get("x-forwarded-for") ?? "unknown").split(",")[0].trim();
+  if (!(await humanVerified(clip(body.cf, 4096), ip))) {
+    return NextResponse.json({ error: "the captcha did not check out, try it again" }, { status: 400 });
+  }
   if (limited(ip)) return NextResponse.json({ error: "slow down, that is a lot of bugs" }, { status: 429 });
 
   const steps = clip(body.steps, 4000);
