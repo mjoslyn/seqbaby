@@ -120,6 +120,13 @@ export function makeCell(t, idx, span, on, isContinuation = false, velOverride, 
   if (span > 1) cell.style.setProperty("--hspan", String(span));
   if (idx % 4 === 0 && !isContinuation) cell.classList.add("is-beat");
   if (t.accents.has(idx) && !isContinuation) cell.classList.add("is-accent");
+  // A note played off the grid (the step editor's offset, vim's [ ]) gets a
+  // tick where it lands: the middle is on the beat, left early, right late.
+  const nudge = on && !isContinuation ? (t.offsets?.[idx] || 0) : 0;
+  if (Math.abs(nudge) > 0.001) {
+    cell.classList.add("is-nudged");
+    cell.style.setProperty("--nudge", String(nudge));
+  }
   if (on && note != null && !isContinuation) {
     const label = document.createElement("span");
     label.className = "sq-step__note";

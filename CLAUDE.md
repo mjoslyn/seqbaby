@@ -1796,6 +1796,12 @@ record playing; PLAY (`a`) only sounds the keys; VISUAL (`v`) is a step range
 on the track for `y d p > <`; `:` is a command line (`:k :bpm :p :len :cut
 :res :fx :N :w :q :h`). The cursor IS the step-input cursor (`state.kbdCursor`), and
 the selection is `state.vimSel`, painted by `paintStepCursor` beside it.
+`[` / `]` nudge the note under the cursor (or every note in a visual range)
+by a microstep, 1/24 of a step, the drum machines' unit and one on which
+triplets land exactly (8/24); `:nudge N` sets it outright, clamped to ±12,
+the step editor's own ±0.5. It writes the pattern's `offsets` lane, which the
+transport already plays, and a nudged note gets a tick in its cell
+(`is-nudged`, `--nudge`, stepGrid.js's `makeCell`): the middle is on the grid.
 The command line completes (`completionsFor`): the commands on an empty line,
 the stages after `:fx`, and the track's own knobs after `:k` (`knobNames`,
 knobNav.js, the same candidates `:k` matches, named as drawn, with their

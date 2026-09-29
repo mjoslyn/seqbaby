@@ -218,6 +218,32 @@ function shiftPitch(t, i, n) {
 function beginEdit() { flushHistory(); }
 function endEdit(label) { markExternalEdit(`vim ${label}`); }
 
+/** A microstep: 1/24 of a step, the drum machines' unit, on which triplets land exactly (8/24). */
+const MICRO = 1 / 24;
+const MICRO_MAX = 12;   // the step editor's own limit, half a step either way
+
+/** The pattern's offsets lane, made if a very old song has none. */
+function offsetsOf(t) {
+  if (!Array.isArray(t.offsets)) {
+    const lane = new Array(trackLen(t)).fill(0);
+    t.offsets = lane;
+    const p = t.patterns?.[t._patternIdx ?? state.activePattern];
+    if (p) p.offsets = lane;
+  }
+  return t.offsets;
+}
+
+/** Nudge the note starting at step i by `micro` microsteps, or to `to` of them. @returns the new count, or null */
+function nudgeNote(t, i, micro, to = null) {
+  if (!t.steps[i]) return null;
+  const lane = offsetsOf(t);
+  const cur = Math.round((lane[i] || 0) / MICRO);
+  const next = Math.max(-MICRO_MAX, Math.min(MICRO_MAX, to ?? cur + micro));
+  lane[i] = Math.round(next * MICRO * 10000) / 10000;
+  return next;
+}
+const microLabel = (n) => `${n > 0 ? "+" : ""}${n}/24 of a step${n === 0 ? " (on the grid)" : n < 0 ? " early" : " late"}`;
+
 /** Run an edit on the track and remember it for `.`. */
 function edit(fn, n, label = "edit") {
   const t = track();
@@ -253,6 +279,8 @@ const EDITS = {
   },
   ">": (t, n) => { const i = anchorCovering(t, cursor(t)); return i >= 0 && shiftPitch(t, i, n) ? null : "no note under the cursor"; },
   "<": (t, n) => { const i = anchorCovering(t, cursor(t)); return i >= 0 && shiftPitch(t, i, -n) ? null : "no note under the cursor"; },
+  "[": (t, n) => { const i = anchorCovering(t, cursor(t)); const m = i >= 0 ? nudgeNote(t, i, -n) : null; return m == null ? "no note under the cursor" : `${t.name}: step ${i + 1} ${microLabel(m)}`; },
+  "]": (t, n) => { const i = anchorCovering(t, cursor(t)); const m = i >= 0 ? nudgeNote(t, i, n) : null; return m == null ? "no note under the cursor" : `${t.name}: step ${i + 1} ${microLabel(m)}`; },
   "+": (t, n) => velocity(t, 0.1 * n),
   "-": (t, n) => velocity(t, -0.1 * n),
 };
@@ -345,6 +373,19 @@ function runCommand(line) {
   switch (cmd) {
     case "q": case "vim": setVim(false); return "vim mode off";
     case "h": case "help": toggleHelp(); return "";
+    case "nudge": {
+      const v = Number(args[0]);
+      if (!t) return "E: no track";
+      if (!Number.isInteger(v) || Math.abs(v) > MICRO_MAX) return `E: :nudge <-${MICRO_MAX}..${MICRO_MAX}>, in 24ths of a step. 0 puts it back on the grid`;
+      const i = anchorCovering(t, cursor(t));
+      if (i < 0) return "E: no note under the cursor";
+      if (!editable(t)) return "";
+      beginEdit();
+      nudgeNote(t, i, 0, v);
+      redraw(t);
+      endEdit("nudge");
+      return `${t.name}: step ${i + 1} ${microLabel(v)}`;
+    }
     case "k": case "knob": return pickKnob(t, args.filter(a => !/^[-.\d]+$/.test(a)).join(" "), args.find(a => /^[-.\d]+$/.test(a)));
     case "bpm": {
       const v = num(args[0]);
@@ -391,7 +432,7 @@ function runCommand(line) {
       return "save: name it and press save";
     }
   }
-  return `E: not a command: ${cmd}. Try :k :bpm :p :len :cut :res :fx :w :q :h`;
+  return `E: not a command: ${cmd}. Try :k :bpm :p :len :cut :res :fx :nudge :w :q :h`;
 }
 
 // ---- completion -------------------------------------------------------------------
@@ -411,6 +452,7 @@ const COMMANDS = [
   ["cut", "filter cutoff, 0..1", true],
   ["res", "filter resonance, 0..1", true],
   ["fx", "an effect's level: :fx reverb .5", true],
+  ["nudge", "the cursor's note off the grid, -12..12 24ths of a step", true],
   ["w", "open the save panel", false],
   ["h", "every vim key", false],
   ["q", "vim mode off", false],
@@ -542,14 +584,15 @@ const HELP_ROWS = [
   ["in insert", "← → move, → with notes held: longer, enter toggles, backspace clears"],
   ["x o r", "delete / add a note, r then a piano key: that note's pitch"],
   ["> < + -", "pitch up / down, velocity up / down"],
+  ["[ ]", "nudge the note a microstep (1/24 of a step) earlier / later. :nudge 0 puts it back"],
   ["dd yy p .", "clear the track, copy it, paste at the cursor, repeat the last edit"],
-  ["v … y d p > <", "copy / delete / paste over / shift the selected steps"],
+  ["v … y d p > < [ ]", "copy / delete / paste over / transpose / nudge the selected steps"],
   ["u / U, ctrl r", "undo / redo"],
   ["m s", "mute / solo the track"],
   ["f c", "fx / filter panel. hjkl walk its knobs"],
   [":k cutoff", "pick any knob by name (:k reverb decay, :k fx.delay.time; add a 0..1 value to set it)"],
   ["scroll, - =", "turn the picked knob: trackpad (shift: finer), or 1% a key (10= is 10%)"],
-  [":", ":bpm 128  :p 3  :len 32  :cut .4  :res .6  :fx reverb .5  :12  :w  :q  :h"],
+  [":", ":bpm 128  :p 3  :len 32  :cut .4  :res .6  :fx reverb .5  :nudge 3  :12  :w  :q  :h"],
   ["tab / shift tab", "on the command line: take the next / previous match (commands, :fx stages, :k knobs)"],
 ];
 
@@ -636,7 +679,7 @@ function normalKey(e) {
     case "x": edit(EDITS.x, n, "x"); return done();
     case "o": edit(EDITS.o, n, "o"); return done();
     case "p": edit(EDITS.p, n, "p"); return done();
-    case ">": case "<": case "+": case "-": edit(EDITS[k], n, k); return done();
+    case ">": case "<": case "+": case "-": case "[": case "]": edit(EDITS[k], n, k); return done();
     case "=": edit(EDITS["+"], n, "+"); return done();
     case ".":
       if (!lastEdit) { setStatus("nothing to repeat"); return done(); }
@@ -691,6 +734,15 @@ function visualKey(e) {
       redraw(t);
       endEdit("paste");
       return leave(`pasted over steps ${lo + 1}..${hi + 1}`);
+    }
+    case "[": case "]": {
+      if (!editable(t)) return leave();
+      beginEdit();
+      let moved = 0;
+      for (let i = lo; i <= hi; i++) if (nudgeNote(t, i, k === "]" ? n : -n) != null) moved++;
+      redraw(t);
+      endEdit(k);
+      return leave(`${moved} note${moved === 1 ? "" : "s"} nudged ${k === "]" ? "later" : "earlier"} by ${n}/24`);
     }
     case ">": case "<": {
       if (!editable(t)) return leave();

@@ -541,6 +541,7 @@ export default function ManualPage() {
                 <tr><td><span className={styles.key}>r</span> then a piano key</td><td>Sets the note under the cursor to that pitch, or writes one there.</td></tr>
                 <tr><td><span className={styles.key}>&gt;</span> <span className={styles.key}>&lt;</span></td><td>Moves the note up or down a step of the scale (a semitone with no scale on).</td></tr>
                 <tr><td><span className={styles.key}>+</span> <span className={styles.key}>-</span></td><td>Velocity up or down.</td></tr>
+                <tr><td><span className={styles.key}>[</span> <span className={styles.key}>]</span></td><td>Nudges the note a microstep (1/24 of a step) earlier or later, up to half a step either way. A count moves it further: <span className={styles.ui}>3</span><span className={styles.key}>]</span> is three. A nudged note shows a tick where it lands: the middle is on the grid.</td></tr>
                 <tr><td><span className={styles.key}>d</span><span className={styles.key}>d</span> <span className={styles.key}>y</span><span className={styles.key}>y</span> <span className={styles.key}>p</span></td><td>Clears the track&apos;s pattern / copies it / pastes what you copied at the cursor.</td></tr>
                 <tr><td><span className={styles.key}>.</span></td><td>Does the last edit again, here.</td></tr>
                 <tr><td><span className={styles.key}>u</span> <span className={styles.key}>U</span></td><td>Undo and redo. <span className={styles.key}>Ctrl</span> <span className={styles.key}>r</span> also redoes.</td></tr>
@@ -562,7 +563,7 @@ export default function ManualPage() {
           <p>
             Visual mode selects steps on one track: move with the same keys, then
             press <span className={styles.key}>y</span> to copy, <span className={styles.key}>d</span> to delete (which copies too), <span className={styles.key}>p</span> to
-            paste over the selection, or <span className={styles.key}>&gt;</span> <span className={styles.key}>&lt;</span> to transpose it. A copy
+            paste over the selection, <span className={styles.key}>&gt;</span> <span className={styles.key}>&lt;</span> to transpose it, or <span className={styles.key}>[</span> <span className={styles.key}>]</span> to nudge it. A copy
             carries everything on a step: chords, arps, ratchets, sample regions.
           </p>
           <h3>Knobs</h3>
@@ -615,6 +616,7 @@ export default function ManualPage() {
                 <tr><td><span className={styles.ui}>:cut .4</span> <span className={styles.ui}>:res .6</span></td><td>Sets the track&apos;s filter cutoff and resonance, 0 to 1.</td></tr>
                 <tr><td><span className={styles.ui}>:fx reverb .5</span></td><td>Sets an effect&apos;s level on the track, 0 to 1.</td></tr>
                 <tr><td><span className={styles.ui}>:k name</span></td><td>Picks a knob, as above.</td></tr>
+                <tr><td><span className={styles.ui}>:nudge 3</span></td><td>Puts the note under the cursor 3/24 of a step late (negative is early, <span className={styles.ui}>:nudge 0</span> back on the grid).</td></tr>
                 <tr><td><span className={styles.ui}>:12</span></td><td>Moves the cursor to step 12.</td></tr>
                 <tr><td><span className={styles.ui}>:w</span></td><td>Opens the save panel (you need to be signed in).</td></tr>
                 <tr><td><span className={styles.ui}>:h</span></td><td>Lists every vim key.</td></tr>
