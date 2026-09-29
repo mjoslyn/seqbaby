@@ -249,15 +249,18 @@ button.repoAction, a.repoAction:has(svg) { display: inline-flex; align-items: ce
    drawer is open, the same bargain `.topBarMenuOpen` strikes on a phone, and
    `:has()` means the drawer does not have to tell the bar anything. */
 .topBar:has(.chatPanel) { z-index: 300; }
-/* The manual, as a question mark: last in the row, so the far right. */
+/* Help, as a question mark: last in the row, so the far right. It opens a
+   small menu (HelpMenu.tsx): the manual and the bug report. */
+.helpWrap { flex: none; }
 .manualLink {
-  flex: none;
   display: inline-flex; align-items: center; justify-content: center;
   width: 26px; height: 26px; border-radius: 50%;
+  padding: 0; border: 0; background: none; cursor: pointer;
   color: #9aa0aa; text-decoration: none;
 }
 .manualLink svg { display: block; }
-.manualLink:hover { color: #e8e8ea; background: #16181d; }
+.manualLink:hover,
+.manualLink[aria-expanded="true"] { color: #e8e8ea; background: #16181d; }
 
 /* Whose song this is (SongByline.tsx), at the left of the bar. It takes the
    free space the right-aligned row leaves, and gives way first: the title
@@ -355,6 +358,17 @@ a.bylineLike { text-decoration: none; }
   padding: 12px;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
 }
+/* The help menu's panel (HelpMenu.tsx): after `.panel`, so it wins the
+   width, and before the mobile block, where `.panel` goes full width. */
+.helpPanel { width: 180px; padding: 6px; display: flex; flex-direction: column; gap: 2px; }
+.helpItem {
+  display: block;
+  padding: 7px 10px;
+  border-radius: 6px;
+  color: #e8e8ea;
+  text-decoration: none;
+}
+.helpItem:hover, .helpItem:focus-visible { background: #22252c; outline: none; }
 .panelTitle { font-size: 11px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.06em; margin: 4px 0 8px; }
 .saveRow { display: flex; gap: 6px; margin-bottom: 6px; }
 .saveInput {
@@ -649,8 +663,10 @@ a.bylineLike { text-decoration: none; }
      screen, and it is the only way to the rest of the bar. */
   /* On a phone the manual goes back to the left edge, ahead of everything,
      and takes the free space unless a byline is there to take it. */
-  .manualLink { width: 44px; height: 44px; order: -1; margin-right: auto; }
-  .topBar:has(.byline) .manualLink { margin-right: 0; }
+  .helpWrap { order: -1; margin-right: auto; }
+  .topBar:has(.byline) .helpWrap { margin-right: 0; }
+  .manualLink { width: 44px; height: 44px; }
+  .helpItem { padding: 12px; font-size: 14px; }
   .beatSlot { display: inline-flex; align-items: center; gap: 8px; margin-right: 8px; }
   .beatSlot svg { width: 36px; height: 36px; }
   .menuBtn {
