@@ -690,6 +690,20 @@ begin
   raise notice 'PASS  profile_cards exposes only display fields, no bio';
 end $$;
 
+-- 0020: the view runs as the caller; the definer rights live in a function in
+-- a schema PostgREST does not expose. Flipping it back would bring the
+-- linter's security_definer_view error with it.
+do $$
+declare opts text[];
+begin
+  select c.reloptions into opts from pg_class c
+   where c.oid = 'public.profile_cards'::regclass;
+  if not ('security_invoker=true' = any(coalesce(opts, '{}'))) then
+    raise exception 'FAIL  profile_cards is a definer view again (reloptions %)', opts;
+  end if;
+  raise notice 'PASS  profile_cards is security_invoker';
+end $$;
+
 \echo ''
 \echo '== engines: what a song is made of, for the explorer =='
 
