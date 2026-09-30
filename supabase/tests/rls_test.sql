@@ -690,6 +690,20 @@ begin
   raise notice 'PASS  profile_cards exposes only display fields, no bio';
 end $$;
 
+-- 0020: the view runs as the caller; the definer rights live in a function in
+-- a schema PostgREST does not expose. Flipping it back would bring the
+-- linter's security_definer_view error with it.
+do $$
+declare opts text[];
+begin
+  select c.reloptions into opts from pg_class c
+   where c.oid = 'public.profile_cards'::regclass;
+  if not ('security_invoker=true' = any(coalesce(opts, '{}'))) then
+    raise exception 'FAIL  profile_cards is a definer view again (reloptions %)', opts;
+  end if;
+  raise notice 'PASS  profile_cards is security_invoker';
+end $$;
+
 \echo ''
 \echo '== engines: what a song is made of, for the explorer =='
 
@@ -772,6 +786,24 @@ begin
     raise exception 'FAIL  patches_owner_idx does not sort by created_at, so listMyPatches sorts by hand: %', d;
   end if;
   raise notice 'PASS  patches_owner_idx sorts by the column the queries order by';
+end $$;
+
+-- 0021: definer functions in `public` are /rpc endpoints for whoever can
+-- execute them. Locally anon has no default grant, so this pins the revokes
+-- against a later `grant ... to anon` rather than against Supabase's defaults.
+do $$
+begin
+  if has_function_privilege('anon', 'public.delete_own_account()', 'execute') then
+    raise exception 'FAIL  anon can execute delete_own_account';
+  end if;
+  if not has_function_privilege('authenticated', 'public.delete_own_account()', 'execute') then
+    raise exception 'FAIL  a signed-in user can no longer delete their account';
+  end if;
+  if has_function_privilege('anon', 'public.handle_new_user()', 'execute')
+     or has_function_privilege('authenticated', 'public.handle_new_user()', 'execute') then
+    raise exception 'FAIL  handle_new_user is callable over /rpc again';
+  end if;
+  raise notice 'PASS  definer functions are executable only by who needs them';
 end $$;
 
 -- ---------------------------------------------------------------------------
