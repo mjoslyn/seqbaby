@@ -1767,7 +1767,9 @@ bass   pattern 1  unlocked -> t.baseSound   \ these two move together
 ## Keyboard performance mode (`keyboard.js`)
 
 Always live on desktop (≥769px; text inputs swallow keys). Ableton-style:
-`a s d f g h j k l` = white keys, `w e t y u o` = black keys, `z/x` octave.
+`q w e r t y u i o p [ ]` = white keys, `2 3 5 6 7 9 0 =` = black keys, `z/x` octave.
+The piano is on the top two rows so the home row stays free: vim insert
+moves with hjkl.
 Scale-aware mapping when a scale is active; chord mode (off/root). Live
 record onto the playing pattern, plus retroactive **Capture** (32s rolling
 buffer, slices back to the last 1.5s silence gap and writes a clip).

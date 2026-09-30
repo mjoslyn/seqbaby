@@ -1,8 +1,8 @@
 // Computer keyboard → notes. Letter keys always play the active track's voice
 // (except while a text field is focused), sustaining while held (note-on on
-// keydown, note-off on keyup). Layout is Ableton-style: bottom row = white keys
-// (a s d f g h j k l),
-// top row = black keys (w e t y u o), z / x shift the octave.
+// keydown, note-off on keyup). The piano sits on the top two rows, so the home
+// row is free for vim's hjkl: q row = white keys (q w e r t y u i o p [ ]),
+// number row = black keys (2 3 5 6 7 9 0 =), z / x shift the octave.
 //
 // When a scale is active the WHITE keys map to the scale's degrees (root anchored
 // near kbdBase) and the black keys go inert — everything you can play is in key.
@@ -44,14 +44,14 @@ function bufferForCapture(midi, time, chord = "", cpx = 0) {
 /** Same monotonic clock the buffer is stamped with (independent of the audio ctx). */
 const captureNow = () => performance.now() / 1000;
 
-// Chromatic offset from the base note (state.kbdBase = the "a" key).
+// Chromatic offset from the base note (state.kbdBase = the "q" key).
 const KEY_SEMITONES = {
-  a: 0, w: 1, s: 2, e: 3, d: 4, f: 5, t: 6, g: 7, y: 8, h: 9, u: 10, j: 11,
-  k: 12, o: 13, l: 14, p: 15,
+  q: 0, 2: 1, w: 2, 3: 3, e: 4, r: 5, 5: 6, t: 7, 6: 8, y: 9, 7: 10, u: 11,
+  i: 12, 9: 13, o: 14, 0: 15, p: 16, "[": 17, "=": 18, "]": 19,
 };
 // Scale layout: white keys → scale-degree offsets. Keys absent from this map
-// (the black row: w e t y u o) are silent while a scale is active.
-const WHITE_DEGREE = { a: 0, s: 1, d: 2, f: 3, g: 4, h: 5, j: 6, k: 7, l: 8, p: 9 };
+// (the black row: 2 3 5 6 7 9 0 =) are silent while a scale is active.
+const WHITE_DEGREE = { q: 0, w: 1, e: 2, r: 3, t: 4, y: 5, u: 6, i: 7, o: 8, p: 9, "[": 10, "]": 11 };
 
 // Desktop-only: mobile has no physical keyboard (and the kbd controls are hidden
 // by CSS below the 768px breakpoint), so note keys are gated to desktop widths.

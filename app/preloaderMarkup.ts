@@ -60,7 +60,7 @@ const TIPS: Array<[scope: "any" | "touch" | "desktop", text: string]> = [
   ["any", "swap engines mid-session from the track header dropdown"],
   ["any", "share a session: hit share to copy a link"],
   ["desktop", "right-click any knob for what it does, plus its lfo and automation"],
-  ["desktop", "play the computer keyboard: a-l are white keys, w-o black, z/x octave"],
+  ["desktop", "play the computer keyboard: q-] are white keys, the number row black, z/x octave"],
   ["desktop", "drag a knob and move sideways for finer resolution"],
   ["desktop", "press ` for vim mode: hjkl to move, i to play notes in, :k cutoff to turn a knob"],
   ["touch", "long-press a step to open the note editor"],

@@ -56,7 +56,7 @@ export const state = {
   // that receives them (last clicked; defaults to the first track).
   kbdNotesOn: true,     // keyboard is always active (only blocked while a text field is focused)
   kbdRecord: false,     // capture keyboard notes into the active track's steps while playing
-  kbdBase: 60,          // MIDI note of the "a" key (C4); shifted by z/x
+  kbdBase: 60,          // MIDI note of the "q" key (C4); shifted by z/x
   kbdChordType: "",     // chord mode: "" = single notes, else each key plays this chord type
   kbdChordCpx: 0,       // chord inversion / voicing level (0..4), same as a step's complexity
   // Arp settings for chords played from the keyboard — written onto the steps a
