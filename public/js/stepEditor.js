@@ -263,6 +263,7 @@ export function openGranularWavModal(t) {
       if (!t._gWavModal) return;                 // modal closed while it loaded
       t.uploadBuffer = buf;
       t.uploadAudio = null;                      // streamed, nothing to persist
+      t.uploadRef = null;
       t.uploadFileName = label;
       t.soundPromptText = label;
       t.granularSample = { id, label };
@@ -638,6 +639,7 @@ export function openSampleEditorModal(t) {
       t.sampleSource = { kind: "bundled", id, name: label };
       t.uploadBuffer = buf;
       t.uploadAudio = null;                         // bundled: fetched by id, not stored
+      t.uploadRef = null;
       t.uploadFileName = label;
       t.soundPromptText = label;
       if (t.voice?.type === "sampler") t.voice.setBuffer(buf);

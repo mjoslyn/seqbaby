@@ -9,6 +9,7 @@ import { setPatchBackend, setPatchList } from "./catalog.js";
 import { canRedo, canUndo, redo, undo } from "./history.js";
 import { flushJam, inJam, jamState, jamTogglePlay, receiveJamPatch, receiveJamPhase, receiveJamState, startJam, stopJam } from "./jam.js";
 import { mergeSet } from "./liveSet.js";
+import { storeSamples } from "./sampleStore.js";
 import { primeAudioForIOS } from "./main.js";
 import { startPlayback, stopPlayback } from "./transport.js";
 import {
@@ -31,8 +32,12 @@ export function installAppApi() {
   if (typeof window === "undefined") return;
   const api = {
     version: 1,
-    // session (song) snapshot <-> live engine
+    // session (song) snapshot <-> live engine. `serializeSet({ stored: true })`
+    // is the form a save or a share writes: uploaded samples that have been
+    // stored as their reference instead of their bytes. Call `storeSamples()`
+    // first so there is something stored to refer to (sampleStore.js).
     serializeSet,
+    storeSamples,
     applySet,
     // The same session, written onto the engine WITHOUT stopping it: the tracks
     // that changed are changed, the ones that appeared are added mid-bar, and

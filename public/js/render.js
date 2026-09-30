@@ -1,6 +1,7 @@
 import { AUTOMATION_KEYS, AUTOMATION_TARGETS, canAutomate } from "./automation.js";
 import { canSavePatches, engineByKey, getPatchConfig, populateEngineSelect, savePatch } from "./catalog.js";
 import { applyTrackPatch, serializeTrackPatch } from "./session.js";
+import { storeSamples } from "./sampleStore.js";
 import { FX_STAGE_LABELS, FX_STAGE_LEVEL_KEY, LFO_DIVS, LFO_KEYS, lfoDivIndex, lfoLabel, rateToSlider, sliderToRate } from "./constants.js";
 import { showInputDialog, showSavedPatchPicker } from "./dialogs.js";
 import { upgradeEngineSelect } from "./enginePicker.js";
@@ -789,8 +790,9 @@ export function renderTrack(t) {
     });
     if (!name || !name.trim()) return;
     try {
+      await storeSamples([t]);            // a saved patch carries its sample by reference
       setStatus(`saving patch "${name.trim()}"…`);
-      await savePatch(name.trim(), serializeTrackPatch(t));
+      await savePatch(name.trim(), serializeTrackPatch(t, { stored: true }));
       setStatus(`saved patch "${name.trim()}" to your patches`);
     } catch (e) {
       setStatus(`could not save patch: ${e?.message || e}`, true);

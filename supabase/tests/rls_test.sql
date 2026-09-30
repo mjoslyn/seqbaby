@@ -774,6 +774,129 @@ begin
   raise notice 'PASS  patches_owner_idx sorts by the column the queries order by';
 end $$;
 
+\echo ''
+\echo '== sample storage and shares (0020): server only =='
+
+-- Every write to these goes through the server with the secret key, which is
+-- what lets the server compute a sample's hash itself and count the quota.
+-- A client that could write any of them directly could put junk under a hash
+-- a song already names, spend or reset the quota, or read every share. Seeded
+-- as the owner (the server's position), then checked from both client roles.
+insert into public.samples (hash, mime, bytes)
+  values (repeat('a', 64), 'audio/wav', 100);
+insert into public.sample_uploads (ip_hash, user_id, bytes) values ('someip', null, 100);
+insert into public.shares (id, session, title) values ('abcd1234', '{"tracks":[]}', 't');
+
+do $$
+declare r text; t text; n bigint;
+begin
+  foreach r in array array['anon', 'authenticated'] loop
+    foreach t in array array['samples', 'sample_uploads', 'shares'] loop
+      execute format('set local role %I', r);
+      perform set_config('request.jwt.claims',
+        case when r = 'authenticated'
+             then '{"sub":"b0b00000-0000-4000-8000-000000000002","role":"authenticated"}' else '' end, true);
+      begin
+        execute format('select count(*) from public.%I', t) into n;
+        if n <> 0 then
+          raise exception 'FAIL  % reads % rows of %', r, n, t;
+        end if;
+      exception when insufficient_privilege then null;
+      end;
+      begin
+        if t = 'samples' then
+          execute 'insert into public.samples (hash, mime, bytes) values (repeat(''b'', 64), ''audio/wav'', 1)';
+        elsif t = 'sample_uploads' then
+          execute 'insert into public.sample_uploads (ip_hash, bytes) values (''x'', 1)';
+        else
+          execute 'insert into public.shares (id, session) values (''zzzz9999'', ''{}'')';
+        end if;
+        raise exception 'FAIL  % could write %', r, t;
+      exception when insufficient_privilege then null;
+      end;
+      reset role;
+    end loop;
+  end loop;
+  raise notice 'PASS  neither client role can read or write samples, sample_uploads or shares';
+end $$;
+
+-- The quota and the backfill are SECURITY DEFINER, so executable by a client
+-- they would bypass everything above.
+do $$
+declare r text; f text;
+begin
+  foreach r in array array['anon', 'authenticated'] loop
+    foreach f in array array[
+      'public.reserve_sample_bytes(text, uuid, integer, bigint, bigint, bigint)',
+      'public.sample_backfill_write(text, text, jsonb)',
+      'public.unreferenced_samples(interval)'
+    ] loop
+      if has_function_privilege(r, f, 'execute') then
+        raise exception 'FAIL  % can execute %', r, f;
+      end if;
+    end loop;
+  end loop;
+  raise notice 'PASS  the sample functions are not executable by a client role';
+end $$;
+
+-- The quota itself, as the owner: fits, then does not, then an account is
+-- counted apart from the address it shares.
+do $$
+declare g boolean; ra integer;
+begin
+  delete from public.sample_uploads;
+  select granted into g from public.reserve_sample_bytes('ip1', null, 150, 200, 400, 1000);
+  if not g then raise exception 'FAIL  a first upload under the limit was refused'; end if;
+  select granted, retry_after into g, ra from public.reserve_sample_bytes('ip1', null, 100, 200, 400, 1000);
+  if g then raise exception 'FAIL  an address went over its limit'; end if;
+  if ra < 60 then raise exception 'FAIL  retry_after % is under a minute', ra; end if;
+  select granted into g from public.reserve_sample_bytes('ip1', 'b0b00000-0000-4000-8000-000000000002', 100, 200, 400, 1000);
+  if not g then raise exception 'FAIL  an account was counted against its address'; end if;
+  select granted into g from public.reserve_sample_bytes('ip2', null, 800, 2000, 2000, 1000);
+  if g then raise exception 'FAIL  the global cap let an upload through'; end if;
+  raise notice 'PASS  reserve_sample_bytes: per address, per account, and in total';
+end $$;
+
+-- The backfill must not look like an edit: updated_at is what the homepage
+-- ranks freshness by.
+do $$
+declare before timestamptz; after timestamptz;
+begin
+  -- Backdated past the trigger (which would stamp now()), so an ordinary
+  -- update below has something to move it away from inside one transaction.
+  perform set_config('seqbaby.keep_updated_at', 'on', true);
+  update public.songs set updated_at = now() - interval '10 days'
+   where id = 'a0000000-0000-4000-8000-00000000000a';
+  perform set_config('seqbaby.keep_updated_at', '', true);
+  select updated_at into before from public.songs where id = 'a0000000-0000-4000-8000-00000000000a';
+  perform public.sample_backfill_write('song', 'a0000000-0000-4000-8000-00000000000a', '{"tracks":[]}');
+  select updated_at into after from public.songs where id = 'a0000000-0000-4000-8000-00000000000a';
+  if after <> before then raise exception 'FAIL  the backfill moved updated_at'; end if;
+  update public.songs set title = title where id = 'a0000000-0000-4000-8000-00000000000a';
+  select updated_at into after from public.songs where id = 'a0000000-0000-4000-8000-00000000000a';
+  if after = before then raise exception 'FAIL  an ordinary update no longer touches updated_at'; end if;
+  raise notice 'PASS  the backfill keeps updated_at; ordinary edits still move it';
+end $$;
+
+-- A stored sample nothing names is found; one a song names is not.
+do $$
+declare n bigint;
+begin
+  update public.samples set created_at = now() - interval '60 days';
+  select count(*) into n from public.unreferenced_samples('30 days');
+  if n <> 1 then raise exception 'FAIL  expected 1 unreferenced sample, found %', n; end if;
+  update public.songs set data = jsonb_build_object('tracks', jsonb_build_array(
+      jsonb_build_object('uploadRef', jsonb_build_object('hash', repeat('a', 64)))))
+   where id = 'a0000000-0000-4000-8000-00000000000a';
+  select count(*) into n from public.unreferenced_samples('30 days');
+  if n <> 0 then raise exception 'FAIL  a sample a song names was reported unreferenced'; end if;
+  raise notice 'PASS  unreferenced_samples sees song references';
+end $$;
+
+delete from public.samples;
+delete from public.sample_uploads;
+delete from public.shares;
+
 -- ---------------------------------------------------------------------------
 -- Teardown. Cascades to profiles, songs and patches.
 -- ---------------------------------------------------------------------------

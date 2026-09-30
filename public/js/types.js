@@ -220,6 +220,10 @@
  * @property {Pattern[]} patterns            32-slot bank.
  * @property {HTMLElement} [el]              DOM node.
  * @property {string} [uploadAudio]          base64-persisted user sample.
+ * @property {{hash: string, mime: string|null}|null} [uploadRef]  where the uploaded sample is stored
+ *   (sampleStore.js), when the track was loaded without its bytes.
+ * @property {{hash: string, mime: string|null, of: string}|null} [_storedRef]  live only: the ref the
+ *   inline sample was stored under by a save, `of` the payload it is for.
  * @property {string} [elevenAudio]          legacy base64 sample.
  */
 

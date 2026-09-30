@@ -14,7 +14,13 @@ declare global {
   interface Window {
     seqbaby?: {
       version: number;
-      serializeSet: () => unknown;
+      /** `stored: true` writes uploaded samples that have been stored as
+       *  references; the default writes what the tab holds. */
+      serializeSet: (opts?: { stored?: boolean }) => unknown;
+      /** Upload the session's inline samples (public/js/sampleStore.js) so a
+       *  `serializeSet({ stored: true })` after it can refer to them. Never
+       *  throws; resolves by a timeout at the latest. */
+      storeSamples?: () => Promise<{ stored: number; inline: number }>;
       /** Start / stop the transport (idempotent, unlike the play button). */
       play: () => Promise<void>;
       stop: () => Promise<void>;
@@ -59,7 +65,7 @@ declare global {
       /** `title`: the currently open song's name, when there is one -- so the
        *  share doesn't get a freshly generated title instead of its own. */
       onShareSet: (title?: string) => void;
-      onExportSet: () => void;
+      onExportSet: () => Promise<void>;
       onImportSet: () => void;
       /** Step the session's undo history (public/js/history.js). Both return
        *  whether there was anything to step to. */
@@ -71,7 +77,7 @@ declare global {
        *  engine its way there and the list (app/PatchBay.tsx). */
       setPatchBackend: (backend: PatchBackend, list: PatchListEntry[]) => void;
       setPatchList: (list: PatchListEntry[]) => void;
-      serializeTrackPatch: (track: unknown) => unknown;
+      serializeTrackPatch: (track: unknown, opts?: { stored?: boolean }) => unknown;
       applyTrackPatch: (track: unknown, patch: unknown) => void;
       /**
        * A jam: several studios holding one song (public/js/jam.js). The shell

@@ -18,6 +18,7 @@ import { migrateLegacyNames, migrateTrackNames, SET_VERSION, validateSet } from 
 import { applyCompressorConfig, ensureFxRack, EQ_BANDS, refreshAllTrackOutputs, refreshCompSourceDropdowns, refreshNoiseBeds, refreshOutputSelects, routeVoiceToRack, setFilter, wouldFeedback } from "./signal.js";
 import { applyMacroPads, serializeMacroPads } from "./macro.js";
 import { aliasPattern, state, syncMeterUI, syncRepeatsUI } from "./state.js";
+import { decodeStoredSample, inlineStoredSamples, readSampleFields, sampleFields, storeSamples } from "./sampleStore.js";
 import { renderStepGrid } from "./stepGrid.js";
 import { createTrack, removeTrack } from "./track.js";
 import { ensureAudio, requestMidiIfNeeded, silenceAllVoices } from "./transport.js";
@@ -35,7 +36,15 @@ export function storeSetsMap(m) { try { localStorage.setItem(SETS_KEY, JSON.stri
  * payloads) into a plain JSON-safe object for save / export / share.
  * @returns {Object}
  */
-export function serializeSet() {
+/**
+ * The session as a blob. `stored: true` is the form that LEAVES the tab (a
+ * save, a share): an uploaded sample that has been stored is written as its
+ * reference rather than its bytes. Everything else (undo, a jam, the local
+ * session list) takes the default, which carries what the tab holds -- so a
+ * sample being stored changes nothing they can see. See sampleStore.js.
+ * @param {{stored?: boolean}} [opts]
+ */
+export function serializeSet({ stored = false } = {}) {
   // A locked track's current pattern only gets its snapshot written when you
   // leave the pattern — flush first or the sound you can hear right now is the
   // one thing the save would miss.
@@ -76,8 +85,8 @@ export function serializeSet() {
       sliceBase: t.sliceBase ?? 60,
       slicePlayMode: t.slicePlayMode === "toend" ? "toend" : "region",
       sliceSensitivity: t.sliceSensitivity ?? 0.5,
-      uploadAudio: t.uploadAudio || null,
-      uploadAudioMime: t.uploadAudioMime || null,
+      // The uploaded sample: its bytes, or where it is stored (sampleStore.js).
+      ...sampleFields(t, stored),
       // Granular textures stream from the sample library, so only the id is
       // stored — no base64 payload, and the session stays small.
       granularSample: t.granularSample ? { ...t.granularSample } : null,
@@ -202,9 +211,10 @@ export function shortToken() {
   return Math.random().toString(36).slice(2, 5);
 }
 
-export function onExportSet() {
+export async function onExportSet() {
   try {
-    const data = serializeSet();   // carries _version from serializeSet
+    // A file that plays without this site: stored samples go back inline.
+    const data = await inlineStoredSamples(serializeSet());   // carries _version from serializeSet
     data._exportedAt = new Date().toISOString();
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -233,7 +243,8 @@ export async function onShareSet(title) {
   if (btn) btn.disabled = true;
   setStatus("packing session…");
   try {
-    const body = { session: serializeSet() };
+    await storeSamples();
+    const body = { session: serializeSet({ stored: true }) };
     if (typeof title === "string" && title.trim()) body.title = title;
     const r = await fetch("/api/share", {
       method: "POST",
@@ -361,6 +372,37 @@ export function migrateTrackData(td) {
   return { ...td, engineKey: ek, sampleSource: src, uploadAudio, uploadAudioMime: uploadMime };
 }
 
+/**
+ * Decode a track's uploaded sample, inline or stored, and hand it to the
+ * voice (async; the sampler picks it up when ready). The track may have been
+ * given another sample by the time this lands, so it checks it is still the
+ * one it was asked for.
+ * @param {Track} t
+ */
+function decodeUploadedSample(t) {
+  const inline = t.uploadAudio;
+  const ref = t.uploadRef;
+  (async () => {
+    try {
+      await ensureAudio();
+      let raw;
+      if (inline) {
+        const bytes = Uint8Array.from(atob(inline), c => c.charCodeAt(0));
+        raw = await state.audioCtx.decodeAudioData(bytes.buffer);
+      } else {
+        raw = await decodeStoredSample(state.audioCtx, ref);
+      }
+      if (t.uploadAudio !== inline || t.uploadRef !== ref) return;
+      const buffer = normalizeAudioBuffer(raw);
+      t.uploadBuffer = buffer;
+      if (t.voice?.type === "sampler" || t.voice?.type === "granular") { t.voice.setBuffer(buffer); applySampleSpeed(t); }
+    } catch (e) {
+      console.warn("upload buffer decode failed", e);
+      if (!inline) setStatus(`couldn't load the sample on "${t.name}"`, true);
+    }
+  })();
+}
+
 /** What createTrack needs to make a shell for a serialized (migrated) track. */
 export function trackShellFor(td) {
   return { name: td.name || "track", engineKey: td.engineKey || "plaits:0", length: td.length || 16 };
@@ -389,8 +431,7 @@ export function loadTrackFromData(t, td) {
     unison: td.wavetable.unison ?? undefined,
   } : null;
   t.sampleSource = td.sampleSource || null;
-  t.uploadAudio = td.uploadAudio || null;
-  t.uploadAudioMime = td.uploadAudioMime || null;
+  readSampleFields(t, td);
   t.uploadFileName = td.uploadFileName || null;
   t.soundPromptText = td.soundPromptText || "";
   t.promptText = td.promptText || "";
@@ -405,16 +446,8 @@ export function loadTrackFromData(t, td) {
   t.granularSample = td.granularSample || null;
   // decode any saved upload/eleven audio (async; the sampler picks it up).
   // Bundled sources need no decode — the SamplerVoice fetches by id when built.
-  if (t.uploadAudio) {
-    (async () => {
-      try {
-        const bytes = Uint8Array.from(atob(t.uploadAudio), c => c.charCodeAt(0));
-        await ensureAudio();
-        const buffer = normalizeAudioBuffer(await state.audioCtx.decodeAudioData(bytes.buffer));
-        t.uploadBuffer = buffer;
-        if (t.voice?.type === "sampler" || t.voice?.type === "granular") { t.voice.setBuffer(buffer); applySampleSpeed(t); }
-      } catch (e) { console.warn("upload buffer decode failed", e); }
-    })();
+  if (t.uploadAudio || t.uploadRef) {
+    decodeUploadedSample(t);
   } else if (t.granularSample?.id) {
     // Library texture: re-fetch it by id (nothing of it is stored in the song).
     (async () => {
@@ -808,7 +841,8 @@ export async function onNewSet() {
 // any existing track, reusing the same voice/UI rebuild path as session load.
 
 /** @param {Track} t */
-export function serializeTrackPatch(t) {
+/** @param {Track} t @param {{stored?: boolean}} [opts] as serializeSet */
+export function serializeTrackPatch(t, { stored = false } = {}) {
   return {
     _kind: "track-patch",
     // A saved custom-Tone patch is stored as engineKey "custom" + customConfig.
@@ -826,8 +860,7 @@ export function serializeTrackPatch(t) {
     sliceBase: t.sliceBase ?? 60,
     slicePlayMode: t.slicePlayMode === "toend" ? "toend" : "region",
     sliceSensitivity: t.sliceSensitivity ?? 0.5,
-    uploadAudio: t.uploadAudio || null,
-    uploadAudioMime: t.uploadAudioMime || null,
+    ...sampleFields(t, stored),
     uploadFileName: t.uploadFileName || null,
     soundPromptText: t.soundPromptText || "",
     sampleDefaults: t.sampleDefaults ? { ...t.sampleDefaults } : undefined,
@@ -865,8 +898,7 @@ export function applyTrackPatch(t, patch) {
   }
   t.customConfig     = patch.customConfig || null;
   t.sampleSource     = patch.sampleSource || null;
-  t.uploadAudio      = patch.uploadAudio || null;
-  t.uploadAudioMime  = patch.uploadAudioMime || null;
+  readSampleFields(t, patch);
   t.uploadFileName   = patch.uploadFileName || null;
   t.soundPromptText  = patch.soundPromptText || "";
   if (patch.sampleDefaults) {
@@ -884,17 +916,8 @@ export function applyTrackPatch(t, patch) {
   t.pitchLock        = patch.pitchLock ?? true;
 
   // Decode embedded sample audio (async; the sampler picks it up when ready).
-  if (t.uploadAudio) {
-    (async () => {
-      try {
-        const bytes = Uint8Array.from(atob(t.uploadAudio), c => c.charCodeAt(0));
-        await ensureAudio();
-        const buffer = normalizeAudioBuffer(await state.audioCtx.decodeAudioData(bytes.buffer));
-        t.uploadBuffer = buffer;
-        if (t.voice?.type === "sampler" || t.voice?.type === "granular") { t.voice.setBuffer(buffer); applySampleSpeed(t); }
-      } catch (e) { console.warn("upload buffer decode failed", e); }
-    })();
-  } else t.uploadBuffer = null;
+  if (t.uploadAudio || t.uploadRef) decodeUploadedSample(t);
+  else t.uploadBuffer = null;
 
   if (t.el) {
     const q = s => t.el.querySelector(s);

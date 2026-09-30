@@ -26,6 +26,7 @@ import {
   syncSongUrl,
 } from "@/app/songs/openSong";
 import { generateSongName } from "@/app/songs/songName";
+import { sessionForSave } from "@/app/songs/sessionForSave";
 import { suggestSongName } from "@/app/songs/suggestName";
 import VersionTree from "@/app/VersionTree";
 import { adoptRemix } from "@/app/songs/adoptRemix";
@@ -137,7 +138,8 @@ export default function SongsMenu() {
   const doSave = useCallback(
     async (asNew: boolean) => {
       if (!window.seqbaby) return;
-      const data = window.seqbaby.serializeSet();
+      setStatus({ text: "Saving…" });
+      const data = await sessionForSave();
       // An unnamed song names itself from what is in it rather than joining a
       // list of rows all called "untitled". A song already open keeps its name
       // even if the field was cleared: clearing it is not a rename.
@@ -150,7 +152,6 @@ export default function SongsMenu() {
       // user's own.
       const generated = !carried && (!typed || typed === suggestedRef.current);
       const t = typed || carried || generateSongName(data);
-      setStatus({ text: "Saving…" });
       const fromTemplate = openSong.isTemplate;
       const res = await saveSong({
         id: asNew || fromTemplate ? undefined : (currentId ?? undefined),

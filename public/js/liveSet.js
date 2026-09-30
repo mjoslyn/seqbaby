@@ -66,7 +66,7 @@ import { requestMidiIfNeeded } from "./transport.js";
 // while `mergeSet` below remakes the one track (see MERGE_REBUILD_KEYS).
 export const TRACK_REBUILD_KEYS = [
   "engineKey", "customConfig", "wavetable", "sampleSource",
-  "uploadAudio", "uploadAudioMime", "granularSample", "midi",
+  "uploadAudio", "uploadAudioMime", "uploadRef", "granularSample", "midi",
   "outIndex", "compSourceIndex",
 ];
 

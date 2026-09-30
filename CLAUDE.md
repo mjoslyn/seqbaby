@@ -16,19 +16,24 @@ env / fx / eq / comp / mod / automation per track.
   `public/woscillators.js` →
   `public/js/main.js` (ES module). `middleware.ts` refreshes the Supabase
   session on every request *except* static engine assets.
-- **Engine**: ~67 dependency-free vanilla ES modules in `public/js/`. No
+- **Engine**: ~69 dependency-free vanilla ES modules in `public/js/`. No
   bundler — edit, reload. `window.seqbaby` (from `appApi.js`) exposes `state`
   and serialize/apply hooks to the React shell (typed in `app/seqbaby.d.ts`).
 - **Accounts + data**: Supabase (Postgres + Auth + RLS). Tables: `profiles`,
-  `songs`, `song_versions`, `patches` (see `supabase/migrations/`). Server
+  `songs`, `song_versions`, `patches`, `shares`, `samples`, `sample_uploads`
+  (see `supabase/migrations/`), plus the `samples` Storage bucket. Server
   actions in `app/{songs,patches,profile,auth,account}/actions.ts`. Saving an
   existing song appends to its version tree — see the song versions section.
-- **Anonymous sharing**: `app/api/share/route.ts` (public songs rows);
-  `lib/api.js` + `netlify/functions/share.mjs` are the legacy Netlify Blobs
-  path. The link preview is `app/shareCard.ts` (one card, built in one place
+- **Anonymous sharing**: `app/api/share/route.ts` (public songs rows, then
+  the `shares` table through `lib/api.js`; Netlify Blobs is read only for
+  shares made before migration 0020, and written only when a deploy has no
+  secret key). `netlify/functions/share.mjs` is the legacy wrapper. The link preview is `app/shareCard.ts` (one card, built in one place
   because og/twitter metadata does not inherit field-by-field between
   segments), titled with the song when the URL names one — see the share card
   section below.
+- **Uploaded samples** are stored as files when a song is saved or shared
+  (Supabase Storage, named by content hash) and a saved song carries a
+  reference to them; see the stored samples section.
 - **Persistence (local)**: localStorage `seqbaby.sets.v1` (saved sessions).
   Saved patches are the account's (see the patch bay section).
 - **Deploy**: Netlify via `@netlify/plugin-nextjs` (`netlify.toml`, Node 22).
@@ -66,6 +71,8 @@ env / fx / eq / comp / mod / automation per track.
 │   ├── JamPanel.tsx           the jam room: who is in it, the connection (Supabase Realtime), the invite link. The engine half is public/js/jam.js
 │   ├── shareCard.ts + shareCopy.js  the link preview, and its sentences (who shared what)
 │   ├── api/share/route.ts     anonymous ?s=<slug> share endpoint
+│   ├── api/sample/route.ts    stores an uploaded sample (hash, audio check, daily quota); [hash]/ redirects to it
+│   ├── songs/sessionForSave.ts  the session as a save writes it: samples stored first, then referenced
 │   ├── api/patch/[id]/route.ts  a public patch's config, for a homepage patch card to play
 │   ├── api/compose/route.ts   starts a compose turn; api/compose/status polls one
 │   └── {songs,patches,profile,auth,account}/actions.ts   Supabase server actions
@@ -83,7 +90,9 @@ env / fx / eq / comp / mod / automation per track.
 │   ├── composeKey.js          whose key it runs on: the shape check + the mask
 │   ├── composeJobs.js         a running turn's record, its two secrets, and the limits
 │   ├── jamWire.js             a jam message cut into parts the transport will carry, and put back together
-│   └── api.js                 legacy Blobs share put/get (+ in-memory dev fallback)
+│   ├── sampleStore.js         a stored sample: the audio check, the hash, the quota, the write; the backfill's rewrite
+│   ├── supabase/admin.js      the secret-key client (server only), and where a stored sample is served from
+│   └── api.js                 anonymous share put/get: the `shares` table, Blobs for old ids (+ in-memory dev fallback)
 ├── middleware.ts              Supabase session refresh (skips engine assets)
 ├── supabase/
 │   ├── migrations/            profiles, songs, patches, song versions, templates, delete_own_account RPC
@@ -96,6 +105,8 @@ env / fx / eq / comp / mod / automation per track.
 ├── .claude/skills/compose/    the compose guide: which engine, step strings, order of work
 │                              (served by the server as seqbaby://guide)
 ├── netlify/functions/share.mjs  legacy function wrapper
+├── netlify/functions/sample-gc.mjs  daily: old quota rows, and (opt-in) samples nothing names
+├── scripts/migrate-{shares,samples}.mjs  one-off: Blobs shares into `shares`, inline samples into the bucket
 ├── server.js                  legacy static server (npm run legacy:dev)
 └── netlify.toml  next.config.mjs  tsconfig.json (excludes public/js from TS)
 ```
@@ -245,6 +256,10 @@ env / fx / eq / comp / mod / automation per track.
   The room itself is the shell's (`app/JamPanel.tsx`). See the jam section.
 - `track.js` — track lifecycle (create/resize/clone).
 - `bounce.js` — WAV render via MediaRecorder.
+- `sampleStore.js` — uploaded samples as stored files: `storeSamples` (the
+  upload, at save / share / patch save), `sampleFields` / `readSampleFields`
+  (how a track's sample is written and read), fetching a stored one by hash,
+  and inlining them again for an export. See the stored samples section.
 - `buffers.js` — sample decode/normalize cache, `startSampleSource`.
 - `wavetableEditor.js` — in-app wavetable frame editor for `wt:akwf`.
 - `silverbox.js` — the silverbox circuit model: AudioWorklet processor source +
@@ -1236,7 +1251,8 @@ sliceOn, sliceBase, slicePlayMode, pitchLock`, sound config
 `params/filter/eq/comp/lfoConfig/fxConfig` + live handles
 `filterNode/eqNode/compNode/fxRack/lfos/voice/meterAnalyser`,
 `midi {outputId, channel}`, `patterns[32]`, `el`, legacy
-`uploadAudio/elevenAudio` (base64-persisted sample payloads).
+`uploadAudio/elevenAudio` (base64 sample payloads, while the tab holds the
+bytes) or `uploadRef {hash, mime}` (a stored sample, loaded without them).
 
 ### Global `state`
 
@@ -1890,7 +1906,8 @@ desktop); macro stays in the main cluster, text on desktop and icon over its
 
 | surface | what |
 |---|---|
-| `POST/GET app/api/share/route.ts` | anonymous `?s=<slug>` share links (public `songs` rows) |
+| `POST/GET app/api/share/route.ts` | anonymous `?s=<slug>` share links (public `songs` rows, then the `shares` table) |
+| `POST app/api/sample/route.ts` | stores an uploaded sample (raw bytes) → `{hash, mime}`; `GET /api/sample/<hash>` redirects to it |
 | `POST app/api/compose/route.ts` | starts one compose turn → `{jobId, jobToken}`; the turn runs in `netlify/functions/compose-background.mjs` |
 | `GET app/api/compose/status/route.ts` | what the browser polls while one runs — activity, then the song |
 | `app/songs/actions.ts` | `saveSong` / `saveNamedSong` (both append a version), `listSongs`, `loadSong`, `remixSong`, `listVersions`, `loadVersion`, `labelVersion`, `deleteVersion`, `setSongTemplate`, `setDefaultTemplate`, `getDefaultTemplate` |
@@ -2240,8 +2257,8 @@ what — `mike has shared "cold squelch" with you` — and a jam invite
   title and (when signed in) an owner.** It's the top-bar `share`
   (`onShareSet`, session.js), not the account-side publish flow
   (SaveButton/SongsMenu) — no account needed, nothing typed, a bare session
-  blob in `lib/api.js`'s Blobs store (or its in-memory fallback), never a row
-  in `songs`. `putShare` tags it anyway: a title from `generateSongName`
+  in the `shares` table (lib/api.js; Blobs for shares made before migration
+  0020, or its in-memory fallback), never a row in `songs`. `putShare` tags it anyway: a title from `generateSongName`
   (songName.js, already pure and deterministic for exactly this reuse) always,
   and the signed-in sharer's id when `POST /api/share` resolved one — best
   effort, since the engine has to keep working with no Supabase env at all.
@@ -3239,6 +3256,76 @@ derived from the session itself: `<adjective> <noun>`, e.g. `basement squelch`,
   and never returns empty -- it is on the save path, and losing work to a name
   generator choking on a hand-edited blob would be absurd.
 
+## Stored samples (`sampleStore.js`, `lib/sampleStore.js`, migration 0020)
+
+An uploaded sample used to live in the song as base64: in `songs.data`, again
+in every `song_versions` row, again in a remix and a share. Now a save stores
+the file once in the `samples` Storage bucket, named by the SHA-256 of its
+bytes, and writes `uploadRef: {hash, mime}` where the payload was. Ten
+versions, a remix and a share of one song are one file.
+
+```
+pick a file ─▶ t.uploadAudio (base64, in the tab only)
+                     │ save / share / save patch
+                     ▼
+         storeSamples ─▶ POST /api/sample ─▶ sniff · hash · quota · bucket
+                     │
+serializeSet({ stored: true }) ─▶ uploadRef {hash, mime}      (what is saved)
+serializeSet()                 ─▶ uploadAudio, as ever          (undo, jam, local list)
+
+load a song ─▶ uploadRef ─▶ GET /api/sample/<hash> ─308─▶ the bucket's public URL
+```
+
+- **Uploaded on save or share, never on pick.** A sample picked and thrown
+  away is never uploaded. The tab keeps the inline copy, and the DEFAULT
+  `serializeSet()` still writes it, so storing a sample is not an edit: no
+  undo step, nothing sent to a jam, no voice rebuilt (measured: the default
+  blob is byte-identical before and after). Only `serializeSet({ stored: true })`,
+  which every save path asks for (`app/songs/sessionForSave.ts` in the
+  shell, `onShareSet`, the patch save in render.js), swaps a stored sample for
+  its reference. `t._storedRef` records the hash with the payload it is for
+  (`of`), so a file picked afterwards is never written as the old reference.
+- **The server computes the hash, never the client.** A client that named its
+  own hash could put junk under the hash a song already names. Computed on the
+  server, the same bytes always land on the same name and different bytes
+  never can, so a repeat upload is a no-op, costs no quota, and is not written.
+- **What keeps it from being a free file host**: 5MB per file, the format read
+  from the file's first bytes (WAV, AIFF, MP3, AAC, OGG, FLAC, WebM, MP4, not
+  the client's Content-Type), and a daily quota (`reserve_sample_bytes`):
+  50MB per address signed out, 200MB per account signed in (counted apart from
+  the address, so a shared network does not lock accounts out), 5GB across
+  everyone. Env-configurable (`SAMPLE_QUOTA_*_MB`). Addresses are stored
+  salted. One advisory lock serializes reservations, so two parallel uploads
+  cannot both slip under a limit. A failed write refunds its reservation.
+- **Refused is not lost.** No secret key on the deploy (503), the quota spent
+  (429, with when to retry), a slow connection (30s timeout): the sample is
+  saved inline, which is how every sample was saved before. The engine stops
+  asking for the rest of the page after a 503, and until the retry time after
+  a 429, keeping the quota message on screen.
+- **Every write is the server's.** The three tables have RLS on and no
+  policies; the functions are revoked from the client roles. The route writes
+  with `SUPABASE_SECRET_KEY` (`lib/supabase/admin.js`). The bucket is public
+  read: a content hash cannot be guessed, and a song must play from a plain URL.
+- **A song names `/api/sample/<hash>`, not the bucket.** The engine has no env
+  of its own, and a song saved today should still play if the samples move.
+  The route is a 308 cached for a year; middleware skips it.
+- **Export inlines them again** (`inlineStoredSamples`), so an exported file
+  plays without this site.
+- **Anonymous shares moved too**: rows in `shares` (lib/api.js), Blobs only for
+  reading ids made before, and for writing when a deploy has no secret key.
+- **Moving what is already stored**: `scripts/migrate-shares.mjs` (Blobs into
+  `shares`), then `scripts/migrate-samples.mjs` (inline payloads in songs,
+  versions, patches and shares into the bucket). Both dry-run by default and
+  are safe to rerun. The backfill writes through `sample_backfill_write`, which
+  keeps `songs.updated_at` (the homepage's freshness) where it was.
+- **Cleanup** (`netlify/functions/sample-gc.mjs`, daily) deletes quota rows
+  older than two days. Deleting samples nothing names is behind
+  `SAMPLE_GC_DELETE=1` with a 30-day grace, off by default, because a song in a
+  browser's local session list or an open tab can name a sample no row does.
+- Tests: `test/sampleStore.test.js` (the sniff, the hash, the quota and refund
+  paths against a fake client, the backfill rewrite) and the 0020 block in
+  `supabase/tests/rls_test.sql`.
+
 ## Bounce (`bounce.js`)
 
 Pattern or whole-session render: taps the post-limiter master into a
@@ -3394,8 +3481,11 @@ through a 6ms fade on its gain).
 - **`canModulate` gates the mod picker** — new mod targets need `LFO_KEYS` +
   `getModTarget` + `LFO_AMP_SCALE` + `canModulate`, and a `getAudioParam(key)`
   on the voice/builder for voice-internal params.
-- **Sample audio persists as base64** on the track; decoded on load with
-  `normalizeAudioBuffer` (RMS+peak normalize, optional silence trim).
+- **Sample audio is base64 on the track while the tab holds it**, and a
+  reference once a save has stored it (see the stored samples section);
+  decoded on load with `normalizeAudioBuffer` (RMS+peak normalize, optional
+  silence trim). Anything that clears `t.uploadAudio` because another source
+  was picked must clear `t.uploadRef` too.
 - **Chord key `"7"` renamed `"dom7"`** — integer-looking keys hoist to the
   top of JS object iteration; `canonicalChord()` aliases legacy `"7"`.
 - **Hidden attribute vs display** — panels/groups with `display: grid|flex`
@@ -3539,7 +3629,7 @@ Repo: https://github.com/mjoslyn/seqbaby.
   An inline marker (`window.__seqbabyServerBoot`) tells the paths apart, and
   `ScriptLoader.tsx` keeps its onload-chained injection for the soft-nav case
   (e.g. arriving from `/login`).
-- `app/EnginePreload.tsx` emits `modulepreload` for all 67 modules listed in
+- `app/EnginePreload.tsx` emits `modulepreload` for all 69 modules listed in
   `app/engineAssets.ts` (at `engineAsset("/js/<name>")`; the hints used to
   point at the site root and 404). The graph is 8 levels deep, so without it the browser
   needs up to eight sequential round trips just to discover the code.

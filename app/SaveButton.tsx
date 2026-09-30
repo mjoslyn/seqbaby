@@ -9,6 +9,7 @@ import {
 } from "react";
 import { saveNamedSong } from "@/app/songs/actions";
 import { generateSongName } from "@/app/songs/songName";
+import { sessionForSave } from "@/app/songs/sessionForSave";
 import { suggestSongName } from "@/app/songs/suggestName";
 import {
   getOpenSong,
@@ -100,7 +101,7 @@ export default function SaveButton() {
     if (!window.seqbaby) return;
     setSaving(true);
     setStatus({ text: "Saving…" });
-    const data = window.seqbaby.serializeSet();
+    const data = await sessionForSave();
     // Nothing typed and nothing open: the session names itself from what is in
     // it, rather than joining a list of rows all called "untitled". Falling
     // back to the open song's name first matters -- clearing the field on a

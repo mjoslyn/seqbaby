@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { getOpenSong, setOpenSong, subscribeOpenSong } from "@/app/songs/openSong";
 import { loadSongChat, saveSong, saveSongChat } from "@/app/songs/actions";
+import { sessionForSave } from "@/app/songs/sessionForSave";
 import { composeModelLabel } from "@/lib/composeModels.js";
 import { API_KEY_CONSOLE_URL, SITE_OUT_OF_BUDGET, looksLikeApiKey, maskApiKey } from "@/lib/composeKey.js";
 import styles from "@/app/ui.module.css";
@@ -618,7 +619,7 @@ export default function ComposeChat({
     // What is in the ENGINE, not the turn's session: mid-audition that is the
     // changes plus anything moved by hand since, which is the right answer to
     // "keep what I am hearing" and the same answer the review bar gives.
-    const data = window.seqbaby.serializeSet();
+    const data = await sessionForSave();
     // The version is named after what was asked for, because a tree of saves
     // nobody pressed is unreadable without one.
     const asked = [...messagesRef.current].reverse().find((m) => m.role === "user")?.text ?? "";

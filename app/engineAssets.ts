@@ -101,6 +101,7 @@ export const ENGINE_MODULES = [
   "patternSound.js",
   "pianoRoll.js",
   "render.js",
+  "sampleStore.js",
   "scaleUI.js",
   "session.js",
   "sessionFormat.js",

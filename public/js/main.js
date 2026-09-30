@@ -246,6 +246,7 @@ export async function pickAudioFileForTrack(t, targetEngine = "sampler") {
         const audioBuf = normalizeAudioBuffer(await state.audioCtx.decodeAudioData(arrayBuf));
         t.uploadBuffer = audioBuf;
         t.uploadAudio = persistBytes;
+        t.uploadRef = null;                  // a new file: not stored until a save
         t.uploadAudioMime = file.type || "audio/wav";
         t.uploadFileName = file.name;
         t.soundPromptText = file.name;
@@ -307,7 +308,7 @@ export function openSamplerSourceModal(t) {
 
     const chooseBundled = async (id, label) => {
       t.sampleSource = { kind: "bundled", id, name: label };
-      t.uploadBuffer = null; t.uploadAudio = null; t.uploadFileName = label;
+      t.uploadBuffer = null; t.uploadAudio = null; t.uploadRef = null; t.uploadFileName = label;
       const already = t.engineKey === "sampler";
       if (already) {
         if (t.voice?.type === "sampler") { t.voice.buffer = null; t.voice.loadBundled?.(id); }
@@ -375,6 +376,7 @@ export function openGranularSourceModal(t) {
     const chooseTexture = async (id, label) => {
       const already = t.engineKey === "dm:granular";
       t.uploadAudio = null;                 // streamed, not persisted as base64
+      t.uploadRef = null;
       t.uploadFileName = label;
       t.soundPromptText = label;
       t.granularSample = { id, label };     // remembered so a reload restores it

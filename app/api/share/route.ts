@@ -2,8 +2,9 @@ import { NextResponse } from "next/server";
 import { putShare, getShare } from "@/lib/api.js";
 import { createClient } from "@/lib/supabase/server";
 
-// Node runtime: lib/api.js uses node:crypto and @netlify/blobs (with an in-memory
-// fallback when no Netlify context is present, e.g. `next dev`).
+// Node runtime: lib/api.js uses node:crypto, Supabase's `shares` table with the
+// secret key, and @netlify/blobs for shares made before that (with an
+// in-memory fallback when neither is there, e.g. `next dev`).
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -43,7 +44,8 @@ export async function POST(req: Request) {
 
 // GET /api/share?id=... -> { session, createdAt }
 // Resolves published cloud songs by share_slug first (RLS allows anon to read
-// public songs), then falls back to legacy Blobs shares.
+// public songs), then anonymous shares (lib/api.js: the `shares` table, then
+// the Blobs store they lived in before migration 0020).
 export async function GET(req: Request) {
   const id = new URL(req.url).searchParams.get("id");
   if (id) {

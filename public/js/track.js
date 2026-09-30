@@ -158,6 +158,8 @@ export function duplicateTrack(src) {
   dup.sampleSource = src.sampleSource ? { ...src.sampleSource } : null;
   dup.uploadAudio = src.uploadAudio || null;
   dup.uploadAudioMime = src.uploadAudioMime || null;
+  dup.uploadRef = src.uploadRef ? { ...src.uploadRef } : null;
+  dup._storedRef = src._storedRef ? { ...src._storedRef } : null;
   dup.uploadFileName = src.uploadFileName || null;
   dup.uploadBuffer = src.uploadBuffer || null;
   dup.soundPromptText = src.soundPromptText || "";

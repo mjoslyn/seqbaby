@@ -23,3 +23,8 @@ grant select on public.profiles, public.songs, public.patches, public.song_versi
 -- 0007 grants profile_cards itself; repeated here so the file is self-contained
 -- if the view is ever recreated by hand.
 grant select on public.profile_cards to anon, authenticated;
+
+-- 0020's tables get Supabase's default grants too, so the tests that nothing
+-- reaches them are testing RLS and the function privileges, not a missing grant.
+grant select, insert, update, delete on public.samples, public.sample_uploads, public.shares
+  to anon, authenticated;
