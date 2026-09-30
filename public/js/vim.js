@@ -581,7 +581,7 @@ const HELP_ROWS = [
   ["gg G", "first / last track (NG: track N)"],
   ["space", "play / stop"],
   ["i / a / v", "insert (keys write) / play (keys only sound) / select steps"],
-  ["in insert", "← → move, → with notes held: longer, enter toggles, backspace clears"],
+  ["in insert", "h l move, l with notes held: longer, j k track, enter toggles, backspace clears"],
   ["x o r", "delete / add a note, r then a piano key: that note's pitch"],
   ["> < + -", "pitch up / down, velocity up / down"],
   ["[ ]", "nudge the note a microstep (1/24 of a step) earlier / later. :nudge 0 puts it back"],
@@ -761,8 +761,20 @@ function visualKey(e) {
 function insertKey(e, writing) {
   const k = e.key;
   if (k === " ") { if (!e.repeat) playStop(); return true; }
-  if (!writing || state.playing) return false;
-  switch (k) {
+  if (!writing) return false;
+  // hjkl are free here because the piano lives on the top two rows. j / k
+  // change track even while playing (record onto another part); h / l are
+  // the step cursor, which only means something stopped.
+  const nav = { h: "ArrowLeft", l: "ArrowRight", j: "ArrowDown", k: "ArrowUp" }[k.toLowerCase()];
+  const key = nav || k;
+  if (key === "ArrowDown" || key === "ArrowUp") {
+    if (!nav) return false;
+    stepTrack(key === "ArrowDown" ? 1 : -1);
+    if (track()) paintStepCursor(track());
+    return true;
+  }
+  if (state.playing) return !!nav;
+  switch (key) {
     case "ArrowRight": if (!e.shiftKey && extendStepEntry()) return true; moveStepCursor(e.shiftKey ? 4 : 1); return true;
     case "ArrowLeft": moveStepCursor(e.shiftKey ? -4 : -1); return true;
     case "Enter": if (!e.repeat) toggleStepAtCursor(); return true;
@@ -806,8 +818,9 @@ function onKeyDown(e) {
   }
   if (mode === "insert" || mode === "play") {
     // The piano keys fall through to keyboard.js. What else these modes answer
-    // to is space, and in insert the step cursor: ← →, → with notes held ties
-    // the note longer, enter a step on / off, backspace / delete clear.
+    // to is space, and in insert the step cursor: h l / ← →, l / → with notes
+    // held ties the note longer, j k change track, enter a step on / off,
+    // backspace / delete clear.
     if (!bare) return;
     const took = insertKey(e, mode === "insert");
     if (took) { e.preventDefault(); e.stopPropagation(); }

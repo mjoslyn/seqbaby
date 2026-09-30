@@ -283,9 +283,9 @@ export const STUDIO_BODY = String.raw`
     <!-- Keyboard-performance cluster: its own full-width line under the transport
          controls (see .sq-transport__kbd-row). -->
     <div class="sq-transport__kbd-row">
-    <span id="kbd-icon" class="sq-kbd-icon" title="computer keyboard plays the active track. a s d f g h j k l are the white keys, w e t y u o the black ones, z / x shift octave. With a scale on, the white keys play its degrees and the black keys go silent."></span>
+    <span id="kbd-icon" class="sq-kbd-icon" title="computer keyboard plays the active track. q w e r t y u i o p [ ] are the white keys, 2 3 5 6 7 9 0 = the black ones, z / x shift octave. With a scale on, the white keys play its degrees and the black keys go silent."></span>
     <div class="sq-scale__field">
-      <label class="sq-scale__toggle" title="lock to a scale. The keyboard's white keys (a s d f g h j k l) play its degrees and the black keys go silent"><input id="scale-on" type="checkbox" /> scale</label>
+      <label class="sq-scale__toggle" title="lock to a scale. The keyboard's white keys (q w e r t y u i o p [ ]) play its degrees and the black keys go silent"><input id="scale-on" type="checkbox" /> scale</label>
       <select id="scale-root"></select>
       <select id="scale-mode"></select>
       <button id="note-colors" class="sq-btn--ghost sq-icon-btn" aria-pressed="false" aria-label="note colors" title="toggle diatonic note coloring on the piano roll + step grid"></button>
