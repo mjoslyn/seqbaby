@@ -21,7 +21,11 @@ export async function generateMetadata({
   params: Promise<{ username: string }>;
 }): Promise<Metadata> {
   const { username } = await params;
-  return { title: `${username} · seqbaby` };
+  return {
+    title: `${username} · seqbaby`,
+    description: `Songs and patches by ${username}, made in seqbaby, a step sequencer in a browser tab. Play them here or remix them in the studio.`,
+    alternates: { canonical: `/u/${encodeURIComponent(username)}` },
+  };
 }
 
 export default async function ProfilePage({

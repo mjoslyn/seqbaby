@@ -18,6 +18,7 @@ const DESCRIPTION = "Every song people have published from the studio. Search th
 export const metadata: Metadata = {
   title: TITLE,
   description: DESCRIPTION,
+  alternates: { canonical: "/songs" },
   ...shareCard(TITLE, DESCRIPTION, `${SITE_URL}api/og/home`),
 };
 

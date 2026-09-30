@@ -74,6 +74,11 @@ export async function generateMetadata({
         // The tab still says what the song is called; the sentence is for
         // the preview, where the reader has not opened anything yet.
         title: `${song.title} · seqbaby`,
+        // A published song (`?s=`) is its own page to a search engine; a
+        // private `?open=` link is somebody's draft and stays out of the index.
+        ...(slug
+          ? { alternates: { canonical: `/studio?s=${encodeURIComponent(slug)}` } }
+          : { robots: { index: false, follow: true } }),
         ...shareCard(
           songShareTitle(song.owner, song.title),
           `A song made in seqbaby. Open it to hear it or remix it. ${SITE_DESCRIPTION}`,
@@ -87,6 +92,7 @@ export async function generateMetadata({
     const host = await jamHostName(one(sp.by));
     return {
       title: "jam · seqbaby",
+      robots: { index: false, follow: true },
       ...shareCard(
         jamShareTitle(host),
         `Open the link to join and edit the song together, live. No account needed. ${SITE_DESCRIPTION}`,
@@ -95,7 +101,13 @@ export async function generateMetadata({
     };
   }
 
-  return {};
+  // Anything else (a bare /studio, an unreadable link) is the studio itself.
+  return {
+    title: "studio · seqbaby",
+    description:
+      "The seqbaby studio: a step sequencer in a browser tab with analog and FM models, 808 and 909 kits, samples and MIDI. No install, no account needed.",
+    alternates: { canonical: "/studio" },
+  };
 }
 
 // Resolving the account bar costs two *sequential* Supabase round trips

@@ -11,6 +11,7 @@ const DESCRIPTION = "Found a bug in seqbaby? Tell us. It goes straight to the re
 export const metadata: Metadata = {
   title: TITLE,
   description: DESCRIPTION,
+  alternates: { canonical: "/superbugs" },
   ...shareCard(TITLE, DESCRIPTION, `${SITE_URL}api/og/superbugs`, `${SITE_URL}superbugs`),
 };
 
