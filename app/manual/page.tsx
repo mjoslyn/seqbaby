@@ -441,21 +441,16 @@ export default function ManualPage() {
             focus.
           </p>
           <p>
-            The layout is a piano. The home row is the white keys, the row above it
-            the black keys.
+            The layout is a piano on the top two rows: the letter row is the white
+            keys, the number row above it the black keys. That leaves the home row
+            free for moving around in vim mode.
           </p>
           <ul>
             <li>
-              White keys: <span className={styles.key}>a</span> <span className={styles.key}>s</span>{" "}
-              <span className={styles.key}>d</span> <span className={styles.key}>f</span>{" "}
-              <span className={styles.key}>g</span> <span className={styles.key}>h</span>{" "}
-              <span className={styles.key}>j</span> <span className={styles.key}>k</span>{" "}
-              <span className={styles.key}>l</span>
+              White keys: <span className={styles.key}>q</span> <span className={styles.key}>w</span> <span className={styles.key}>e</span> <span className={styles.key}>r</span> <span className={styles.key}>t</span> <span className={styles.key}>y</span> <span className={styles.key}>u</span> <span className={styles.key}>i</span> <span className={styles.key}>o</span> <span className={styles.key}>p</span> <span className={styles.key}>[</span> <span className={styles.key}>]</span>
             </li>
             <li>
-              Black keys: <span className={styles.key}>w</span> <span className={styles.key}>e</span>{" "}
-              <span className={styles.key}>t</span> <span className={styles.key}>y</span>{" "}
-              <span className={styles.key}>u</span> <span className={styles.key}>o</span>
+              Black keys: <span className={styles.key}>2</span> <span className={styles.key}>3</span> <span className={styles.key}>5</span> <span className={styles.key}>6</span> <span className={styles.key}>7</span> <span className={styles.key}>9</span> <span className={styles.key}>0</span> <span className={styles.key}>=</span>
             </li>
             <li>
               <span className={styles.key}>z</span> and <span className={styles.key}>x</span> drop and raise the octave.
@@ -555,11 +550,12 @@ export default function ManualPage() {
             stretch in insert mode undoes as one, the way it does in vim.
           </p>
           <p>
-            In insert mode with the sequencer stopped, <span className={styles.key}>&larr;</span> and <span className={styles.key}>&rarr;</span> move
-            the cursor, <span className={styles.key}>&rarr;</span> while you hold a note makes that note a step
+            In insert mode with the sequencer stopped, <span className={styles.key}>h</span> and <span className={styles.key}>l</span> (or <span className={styles.key}>&larr;</span> and <span className={styles.key}>&rarr;</span>) move
+            the cursor, <span className={styles.key}>l</span> while you hold a note makes that note a step
             longer, <span className={styles.key}>Enter</span> switches the cursor&apos;s step on or off with the
             track&apos;s usual note (C2 on a drum track) and <span className={styles.key}>Backspace</span> clears the
-            step behind the cursor.
+            step behind the cursor. <span className={styles.key}>j</span> and <span className={styles.key}>k</span> change track, playing or
+            stopped, so you can record one part and move straight on to the next.
           </p>
           <p>
             Visual mode selects steps on one track: move with the same keys, then
