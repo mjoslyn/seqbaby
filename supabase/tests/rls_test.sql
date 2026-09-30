@@ -788,6 +788,24 @@ begin
   raise notice 'PASS  patches_owner_idx sorts by the column the queries order by';
 end $$;
 
+-- 0021: definer functions in `public` are /rpc endpoints for whoever can
+-- execute them. Locally anon has no default grant, so this pins the revokes
+-- against a later `grant ... to anon` rather than against Supabase's defaults.
+do $$
+begin
+  if has_function_privilege('anon', 'public.delete_own_account()', 'execute') then
+    raise exception 'FAIL  anon can execute delete_own_account';
+  end if;
+  if not has_function_privilege('authenticated', 'public.delete_own_account()', 'execute') then
+    raise exception 'FAIL  a signed-in user can no longer delete their account';
+  end if;
+  if has_function_privilege('anon', 'public.handle_new_user()', 'execute')
+     or has_function_privilege('authenticated', 'public.handle_new_user()', 'execute') then
+    raise exception 'FAIL  handle_new_user is callable over /rpc again';
+  end if;
+  raise notice 'PASS  definer functions are executable only by who needs them';
+end $$;
+
 -- ---------------------------------------------------------------------------
 -- Teardown. Cascades to profiles, songs and patches.
 -- ---------------------------------------------------------------------------
