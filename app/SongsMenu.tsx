@@ -58,6 +58,9 @@ export default function SongsMenu() {
   const [ready, setReady] = useState(false);
   const [open, setOpen] = useState(false);
   const [songs, setSongs] = useState<SongListItem[]>([]);
+  // Whether the list has come back at least once, so an empty panel reads as
+  // "loading" rather than "no saved songs yet" while it is in flight.
+  const [loaded, setLoaded] = useState(false);
   const [treeFor, setTreeFor] = useState<string | null>(null);
   const [status, setStatus] = useState<{ text: string; err?: boolean }>({
     text: "",
@@ -119,7 +122,15 @@ export default function SongsMenu() {
     const res = await listSongs();
     if (res.error) setStatus({ text: res.error, err: true });
     else setSongs(res.songs);
+    setLoaded(true);
   }, []);
+
+  // Fetch the list as soon as the engine is up rather than on the first open,
+  // so the panel opens on the songs instead of an empty list that fills in a
+  // round trip later. Opening still refreshes it, behind what is shown.
+  useEffect(() => {
+    if (ready) refresh();
+  }, [ready, refresh]);
 
   // Close on outside click.
   useEffect(() => {
@@ -548,7 +559,9 @@ export default function SongsMenu() {
           <div className={styles.panelTitle}>my songs</div>
           {plain.length === 0 ? (
             <div className={styles.empty}>
-              {songs.length
+              {!loaded
+                ? "loading…"
+                : songs.length
                 ? "every song here is a template"
                 : "no saved songs yet"}
             </div>
