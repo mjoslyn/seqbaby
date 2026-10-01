@@ -1,7 +1,6 @@
 import { runAutomationForStep } from "./automation.js";
 import { fireMetronome, paintBeatIndicator } from "./beat.js";
 import { engineByKey } from "./catalog.js";
-import { BAR_TICKS } from "./constants.js";
 import { setStatus } from "./dom.js";
 import { euclidFallbackNote } from "./euclid.js";
 import { stepGateAt } from "./stepSource.js";
@@ -16,6 +15,7 @@ import { currentBpm, syncAllLFOs } from "./lfo.js";
 import { init, needsResume, primeAudioForIOS } from "./main.js";
 import { applyBusMute, updateMidiUI } from "./render.js";
 import { ensureFxRack, fireFilterEnv, refreshAllTrackOutputs, refreshNoiseBeds, routeVoiceToRack, soloAudibleTracks } from "./signal.js";
+import { activeMeter, stepsPerBarForMeter, stepsPerBeatForMeter } from "./meter.js";
 import { findNextNonEmptyPattern, invertChord, state, switchPattern } from "./state.js";
 import { loadSilverboxWorklet } from "./silverbox.js";
 import { loadContagionWorklet } from "./contagion.js";
@@ -377,6 +377,7 @@ export async function stopPlayback() {
   btn.textContent = "play";
   btn.classList.remove("is-playing");
   state.tick = 0;
+  state.barTick = 0;
   for (const t of state.tracks) { t.trackTick = 0; t.speedAccum = 0; }
   paintNowIndicator();
   setStatus("stopped");
@@ -431,6 +432,11 @@ export async function startPlayback(opts = {}) {
   if (state.repeatId !== null) Tone.Transport.clear(state.repeatId);
   const startTick = Math.max(0, Math.floor(opts.tick ?? 0));
   state.tick = startTick;
+  // Where in the bar that tick is. The bar is the active pattern's meter, not
+  // a fixed 16: a 7/4 bar is 28 sixteenths, and ending it at 16 cut every
+  // chained pattern off after four beats (see the bar line below).
+  state.barTick = startTick % stepsPerBarForMeter(activeMeter());
+  state.chainBarCount = 0;
   // A track's own trackTick runs at `speed` steps per global tick (see the
   // scheduler below); land it where it would be had it been counting from
   // the same global tick this screen is starting at, not from 0.
@@ -643,19 +649,27 @@ export async function startPlayback(opts = {}) {
     // Snapshot the tick now — it advances before the deferred paint fires.
     const globalTickSnap = state.tick;
     scheduleAtAudible(() => paintBeatIndicator(globalTickSnap), time, lat);
-    if (state.metronome && state.tick % 4 === 0) fireMetronome(time, state.tick % 16 === 0);
+    // The bar line comes from the pattern playing now: its meter's length in
+    // sixteenths (16 in 4/4, 28 in 7/4, 14 in 7/8). The metronome clicks on
+    // its beats and accents its downbeat.
+    const meter = activeMeter();
+    const barLen = stepsPerBarForMeter(meter);
+    const barTick = state.barTick ?? 0;
+    if (state.metronome && barTick % stepsPerBeatForMeter(meter) === 0) fireMetronome(time, barTick === 0);
     state.tick++;
+    state.barTick = barTick + 1 >= barLen ? 0 : barTick + 1;
+    const barLine = state.barTick === 0;
     // manual pattern queue: when switch-mode is "finish" and the user queued a
     // different pattern, commit at the next bar boundary. Synchronous, NOT
     // deferred to the audible moment: this callback runs ~lookAhead ahead of
     // the speakers, and the next callback (the new bar's first step) must read
     // the switched pattern's data or it plays the old pattern's opening steps.
-    if (state.patternSwitchMode === "finish" && state.queuedPattern !== null && state.tick % BAR_TICKS === 0) {
+    if (state.patternSwitchMode === "finish" && state.queuedPattern !== null && barLine) {
       switchPattern(state.queuedPattern, { deferUi: true });
       restartTrackCounts();
     }
     // pattern chaining: advance at bar boundaries when chain mode is on, respecting per-pattern repeats
-    if (state.patternMode === "chain" && state.tick % BAR_TICKS === 0) {
+    if (state.patternMode === "chain" && barLine) {
       state.chainBarCount++;
       const needed = Math.max(1, state.patternRepeats[state.activePattern] ?? 1);
       if (state.chainBarCount >= needed) {

@@ -242,7 +242,6 @@ export const CURVED_LFO_CURVES = {
 
 // Non-blocking prompt dialog (browser prompt() halts the transport scheduler)
 export const PATTERN_COUNT = 32;
-export const BAR_TICKS = 16;  // chain advance resolution
 
 // Simple sine-blip metronome — accent the downbeat (step 0 of every bar).
 export const RATE_MIN = 0.05, RATE_MAX = 20;
