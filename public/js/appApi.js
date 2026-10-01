@@ -103,6 +103,11 @@ export function installAppApi() {
     play: () => startPlayback(),
     stop: () => stopPlayback(),
     unlock: primeAudioForIOS,
+    // The open song's name as the shell shows it, so a bounce is named for
+    // it (bounce.js). The shell owns which song is open; null means none.
+    setSongName: (name) => {
+      state.songName = typeof name === "string" && name.trim() ? name.trim() : null;
+    },
     // live engine state (read-only handle; mutate via the functions above)
     get state() {
       return state;

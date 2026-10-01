@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { getVersionSeq } from "@/app/songs/actions";
+import { tellEngineSongName } from "@/app/songs/engineSongName";
 import { getOpenSong, subscribeOpenSong } from "@/app/songs/openSong";
 import styles from "@/app/ui.module.css";
 
@@ -38,9 +39,20 @@ export default function OpenSongLabel() {
     };
   }, [versionId]);
 
-  if (!song?.id) return null;
-  const title = song.title || "untitled";
+  const title = song?.title || "untitled";
   const n = seq && seq.id === versionId ? seq.n : null;
+  // The engine names a bounce with the same words this label shows. Only once
+  // this has named something does a cleared slot clear the engine's too, or
+  // mounting with nothing open would wipe the title SongByline handed over.
+  const engineName = song?.id ? `${title}${n !== null ? ` v${n}` : ""}` : null;
+  const told = useRef(false);
+  useEffect(() => {
+    if (!engineName && !told.current) return;
+    told.current = !!engineName;
+    tellEngineSongName(engineName);
+  }, [engineName]);
+
+  if (!song?.id) return null;
   const full = `${title}${n !== null ? ` v${n}` : ""}${song.isTemplate ? " (template)" : ""}`;
   return (
     <span className={styles.byline} title={full}>

@@ -215,9 +215,14 @@ export function showBounceDialog({ mode = "pattern" } = {}) {
   });
 }
 
-// Match the session-save button's suggested name exactly.
+// Named for the song that is open, as the top bar names it ("cold squelch
+// v4"), which the shell hands over (setSongName). Without one, the name of a
+// locally saved session as it stands. suggestSetName is only the last resort:
+// it bumps the version, which is right for the NEXT save and wrong for a
+// render of the one you are holding.
 export function suggestBounceFilename() {
-  return suggestSetName();
+  const name = (state.songName || state.currentSetName || "").trim();
+  return name || suggestSetName();
 }
 
 // iOS Safari only honors AudioContext.resume() and BufferSource.start() when
