@@ -56,7 +56,7 @@ const TIPS: Array<[scope: "any" | "touch" | "desktop", text: string]> = [
   ["any", "drag the dice up or down to set how full it rolls"],
   ["any", "32 pattern slots per session: loop one or chain them"],
   ["any", "add an fx bus and route several tracks through one reverb"],
-  ["any", "macro pads drive parameters across tracks from one xy pad"],
+  ["any", "havoc pads drive parameters across tracks from one xy pad"],
   ["any", "swap engines mid-session from the track header dropdown"],
   ["any", "share a session: hit share to copy a link"],
   ["desktop", "right-click any knob for what it does, plus its lfo and automation"],
@@ -64,7 +64,7 @@ const TIPS: Array<[scope: "any" | "touch" | "desktop", text: string]> = [
   ["desktop", "drag a knob and move sideways for finer resolution"],
   ["desktop", "press ` for vim mode: hjkl to move, i to play notes in, :k cutoff to turn a knob"],
   ["touch", "long-press a step to open the note editor"],
-  ["touch", "long-press a knob for its lfo, automation and macro assignment"],
+  ["touch", "long-press a knob for its lfo, automation and havoc assignment"],
   ["touch", "drag a step up or down to change its pitch"],
 ];
 

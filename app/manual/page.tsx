@@ -32,7 +32,7 @@ const SECTIONS = [
   ["bus", "Fx buses"],
   ["lock", "p-lock"],
   ["motion", "Modulation and automation"],
-  ["macro", "Macro pads"],
+  ["havoc", "Havoc pads"],
   ["strudel", "Live coding with Strudel"],
   ["undo", "Undo"],
   ["jam", "Jamming with other people"],
@@ -109,7 +109,7 @@ export default function ManualPage() {
                 <tr><td>capture</td><td>Writes the phrase you just played into the active track even though you weren&apos;t recording. It keeps the last 32 seconds, takes the run of notes since your last pause, and keeps the lengths you held.</td></tr>
                 <tr><td>bpm</td><td>Tempo. Type a number, or drag the field up and down.</td></tr>
                 <tr><td>swing</td><td>Pushes every second step later, from dead straight to a heavy shuffle.</td></tr>
-                <tr><td>macro</td><td>Opens the XY <a href="#macro">macro pads</a>.</td></tr>
+                <tr><td>havoc</td><td>Opens the XY <a href="#havoc">havoc pads</a>.</td></tr>
                 <tr><td>undo / redo</td><td>Steps back and forward through your edits. See <a href="#undo">undo</a>.</td></tr>
                 <tr><td>vim</td><td>Switches <a href="#vim">vim mode</a> on and off, for driving the studio from the keyboard. Desktop only.</td></tr>
                 <tr><td>metronome</td><td>A click on each downbeat, for playing along. It never ends up in an export.</td></tr>
@@ -325,7 +325,7 @@ export default function ManualPage() {
             print a result into the grid as ordinary steps you can then edit. The ring
             and the die also run <strong>live</strong>, generating as the track plays
             without writing anything, so their controls can take an LFO, an automation
-            lane or a macro pad; switch live off and the pattern is exactly as you left
+            lane or a havoc pad; switch live off and the pattern is exactly as you left
             it. While live is on the grid shows what is playing and goes read-only. A
             track has one rhythm at a time, so turning one of those two on turns the
             other off.
@@ -1099,7 +1099,7 @@ export default function ManualPage() {
           <p>
             What stays put is the instrument: the engine, and any sample loaded into
             it. A locked pattern is one instrument played differently, not a different
-            instrument. Routing, macro pads and the generator settings stay put too.
+            instrument. Routing, havoc pads and the generator settings stay put too.
           </p>
           <div className={styles.note}>
             Editing on an unlocked pattern edits the shared track sound, so every
@@ -1166,7 +1166,7 @@ export default function ManualPage() {
             its label. It works anywhere: the instrument row, the filter, effects, eq
             and comp panels, the sample and wavetable editors. You get a small window
             for that one parameter, holding what it does, whatever LFO or automation is
-            on it, its macro assignment, and a button to add any of them.
+            on it, its havoc assignment, and a button to add any of them.
           </p>
           <p>
             A parameter with something on it wears a dot next to its label: green
@@ -1180,7 +1180,7 @@ export default function ManualPage() {
             together tell you how far it is travelling and where it comes back to.
           </p>
           <div className={styles.note}>
-            A parameter takes an LFO, an automation lane or a macro axis, never two.
+            A parameter takes an LFO, an automation lane or a havoc axis, never two.
             Two things writing the same value fight each other, and what you hear is
             one of them dropping out at random. Whichever side is free offers to be
             added; the others tell you what is holding the parameter. Controls that
@@ -1189,10 +1189,10 @@ export default function ManualPage() {
           </div>
         </section>
 
-        <section className={styles.section} id="macro">
-          <h2>Macro pads</h2>
+        <section className={styles.section} id="havoc">
+          <h2>Havoc pads</h2>
           <p>
-            <span className={styles.ui}>macro</span> in the transport opens a set of
+            <span className={styles.ui}>havoc</span> in the transport opens a set of
             XY pads. Each axis drives a list of parameters, and that list can span
             tracks: one thumb opening the bass filter while ducking the lead&apos;s
             reverb.

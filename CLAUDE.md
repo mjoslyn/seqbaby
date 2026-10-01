@@ -1661,6 +1661,11 @@ drums ─┘   (fader, vol)      one filter, one rack, one mod matrix, one set o
 
 ## Macro pads (`macro.js`) — a Kaoss pad for the whole session
 
+Called **havoc** everywhere a person reads it (the transport button, the
+parameter menu, the manual, the tips). The code, the CSS classes and the
+saved `macroPads` key keep the old name, since renaming the key would break
+every saved song.
+
 Several XY pads, each axis driving a list of parameters that **may span
 tracks**. That crossing is the point: one thumb opening the bass filter while
 ducking the lead's reverb is a move neither the mod matrix nor the automation

@@ -103,13 +103,13 @@ voice → filter → eq → compressor → fx rack → master (or an fx bus) →
   random square, and a euclidean gate shape. Tempo sync, phase, unipolar or
   bipolar amount.
 - **Automation lanes**: per-step values for ~190 targets, stored in the pattern.
-- **Macro pads**: XY pads whose axes drive parameters across tracks, momentary
+- **Havoc pads**: XY pads whose axes drive parameters across tracks, momentary
   or latched, with a learn mode.
-- One owner per parameter (LFO, lane or macro), enforced in every picker. A
+- One owner per parameter (LFO, lane or havoc pad), enforced in every picker. A
   second needle on the knob shows where modulation has pushed the value right
   now.
 - Right-click (long-press on touch) any parameter for its description, LFO,
-  lane, macro assignment and reset.
+  lane, havoc assignment and reset.
 
 ### Playing and editing
 

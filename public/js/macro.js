@@ -93,7 +93,7 @@ export function assignmentsFor(t, autoKey) {
  *  new assignment, or null with a reason. */
 export function assignToAxis(pad, axis, t, autoKey) {
   if (!pad || !t || !canAutomate(t, autoKey)) return { ok: false, why: "this engine has no such parameter" };
-  if (hasMacroOn(t, autoKey)) return { ok: false, why: "already on a macro pad" };
+  if (hasMacroOn(t, autoKey)) return { ok: false, why: "already on a havoc pad" };
   const a = { trackId: t.id, key: autoKey, lo: 0, hi: 1, invert: false };
   pad[axis].push(a);
   refreshParamIndicators(t);

@@ -649,7 +649,7 @@ ${SUB_PANEL}
           <label title="louder on the beat, quieter off it"><input class="sq-euclid__accent" type="checkbox" checked /> accent the beat</label>
         </div>
         <div class="sq-euclid__actions">
-          <label class="sq-euclid__live" title="generate this track's rhythm live instead of playing the written steps. Nothing is written, so pulses, steps and rotate can take an LFO, an automation lane or a macro pad. Switch it off and the pattern is exactly as you left it. The step grid shows what is generated and goes read-only while this is on"><input class="sq-euclid__on" type="checkbox" /> live</label>
+          <label class="sq-euclid__live" title="generate this track's rhythm live instead of playing the written steps. Nothing is written, so pulses, steps and rotate can take an LFO, an automation lane or a havoc pad. Switch it off and the pattern is exactly as you left it. The step grid shows what is generated and goes read-only while this is on"><input class="sq-euclid__on" type="checkbox" /> live</label>
           <button class="sq-euclid__write sq-btn--ghost" type="button" title="print this rhythm into the pattern as ordinary steps, replacing what is there. Hits landing on an existing note keep its pitch">write to pattern</button>
         </div>
       </div>
@@ -657,7 +657,7 @@ ${SUB_PANEL}
         <div class="sq-chance__head">
           <div class="sq-chance__title">chance: a part from probabilities</div>
           <div class="sq-chance__actions">
-            <label class="sq-chance__live" title="generate this track's part live, rhythm and pitches both, instead of playing the written steps. Nothing is written, so note value, variation, legato, rest and the two range knobs can take an LFO, an automation lane or a macro pad. Switch it off and the pattern is exactly as you left it. The step grid shows what is generated and goes read-only. A track has one rhythm source, so this switches the euclid ring off"><input class="sq-chance__on" type="checkbox" /> live</label>
+            <label class="sq-chance__live" title="generate this track's part live, rhythm and pitches both, instead of playing the written steps. Nothing is written, so note value, variation, legato, rest and the two range knobs can take an LFO, an automation lane or a havoc pad. Switch it off and the pattern is exactly as you left it. The step grid shows what is generated and goes read-only. A track has one rhythm source, so this switches the euclid ring off"><input class="sq-chance__on" type="checkbox" /> live</label>
             <button class="sq-chance__write sq-btn--ghost" type="button" title="print this throw into the pattern as ordinary steps, pitches and all, replacing what is there">write to pattern</button>
           </div>
         </div>

@@ -91,7 +91,7 @@ export function openParamMenu(t, spec) {
       <div class="sq-pmenu__body sq-pmenu__body--aut"></div>
     </section>
     <section class="sq-pmenu__sec">
-      <div class="sq-pmenu__sec-head">macro pad</div>
+      <div class="sq-pmenu__sec-head">havoc pad</div>
       <div class="sq-pmenu__body sq-pmenu__body--macro"></div>
     </section>`}
     <div class="sq-modal__actions">
@@ -138,7 +138,7 @@ export function openParamMenu(t, spec) {
   // it on one. Same shape as the other two — a parameter takes one owner, so
   // attaching here is refused while an lfo or a lane has it.
   const drawMacro = () => {
-    if (!spec.auto) { macBody.appendChild(note("this control can't go on a macro pad")); return; }
+    if (!spec.auto) { macBody.appendChild(note("this control can't go on a havoc pad")); return; }
     if (!canAutomate(t, spec.auto)) { macBody.appendChild(note("not available on this engine")); return; }
     const held = assignmentsFor(t, spec.auto);
     if (held.length) {
@@ -156,14 +156,14 @@ export function openParamMenu(t, spec) {
       return;
     }
     if (hasMod(t, LFO_FOR_AUTO[spec.auto])) {
-      macBody.appendChild(note("an lfo has this parameter — remove it to use a macro", "sq-pmenu__blocked"));
+      macBody.appendChild(note("an lfo has this parameter — remove it to use havoc", "sq-pmenu__blocked"));
       return;
     }
     if (hasAutomation(t, spec.auto)) {
-      macBody.appendChild(note("automation has this parameter — remove its lane to use a macro", "sq-pmenu__blocked"));
+      macBody.appendChild(note("automation has this parameter — remove its lane to use havoc", "sq-pmenu__blocked"));
       return;
     }
-    macBody.appendChild(note("not on a macro pad"));
+    macBody.appendChild(note("not on a havoc pad"));
     const pads = macroPads();
     if (!pads.length) addMacroPad();
     for (const pad of pads) {
