@@ -20,6 +20,9 @@ declare global {
       stop: () => Promise<void>;
       /** Prime a suspended AudioContext; call inside a user gesture. */
       unlock: () => void;
+      /** The open song's name as the top bar shows it, for the bounce
+       *  dialog's file name. null: no song is open. */
+      setSongName: (name: string | null) => void;
       applySet: (data: unknown) => {
         version: number;
         warnings: string[];

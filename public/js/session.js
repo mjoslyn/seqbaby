@@ -286,6 +286,7 @@ export function onImportSet() {
       const text = await file.text();
       const data = JSON.parse(text);
       applySet(data);
+      state.songName = null;
       setStatus(`imported ${file.name}`);
     } catch (err) {
       console.error(err);
@@ -326,6 +327,7 @@ export async function onLoadSet() {
   // Stamp the basis BEFORE applySet so a throw in apply can't leave us with
   // a loaded session that doesn't bump its version on the next save.
   state.currentSetName = choice.value;
+  state.songName = null;
   applySet(all[choice.value]);
 }
 
@@ -762,6 +764,7 @@ export function newSet() {
     tracks: STARTER_TRACKS.map(t => ({ ...t })),
   });
   state.currentSetName = null;
+  state.songName = null;
   setStatus("new session");
   // The React shell keeps its own answer to "which cloud song is open", and
   // after this nothing is. Announced from here rather than left to each caller

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Avatar from "@/app/Avatar";
 import LikeButton from "@/app/LikeButton";
 import RemixButton from "@/app/RemixButton";
+import { tellEngineSongName } from "@/app/songs/engineSongName";
 import { subscribeOpenSong, getOpenSong } from "@/app/songs/openSong";
 import type { LinkedSongCard } from "@/app/songs/linkedSongTitle";
 import styles from "@/app/ui.module.css";
@@ -22,6 +23,8 @@ export default function SongByline({ song }: { song: LinkedSongCard }) {
   const [shown, setShown] = useState(true);
 
   useEffect(() => {
+    // A bounce of this song is named for it (public/js/bounce.js).
+    tellEngineSongName(song.title);
     const hide = () => setShown(false);
     const unsub = subscribeOpenSong(() => {
       if (getOpenSong().id) hide();
@@ -30,7 +33,10 @@ export default function SongByline({ song }: { song: LinkedSongCard }) {
     // it (an import, a jam's song) is something else. Counted by the engine
     // (session.js), since this may mount after the first one landed.
     const onApplied = () => {
-      if ((window.__seqbabySetsApplied ?? 0) > 1) hide();
+      if ((window.__seqbabySetsApplied ?? 0) <= 1) return;
+      hide();
+      // Some other song now, and not one of yours (OpenSongLabel names those).
+      if (!getOpenSong().id) tellEngineSongName(null);
     };
     window.addEventListener("seqbaby:newset", hide);
     window.addEventListener("seqbaby:setapplied", onApplied);
@@ -39,7 +45,7 @@ export default function SongByline({ song }: { song: LinkedSongCard }) {
       window.removeEventListener("seqbaby:newset", hide);
       window.removeEventListener("seqbaby:setapplied", onApplied);
     };
-  }, []);
+  }, [song.title]);
 
   if (!shown) return null;
   const who = song.ownerHandle ?? song.owner;

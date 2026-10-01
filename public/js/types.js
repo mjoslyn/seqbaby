@@ -238,6 +238,7 @@
  * @property {number} metronomeLevel  click volume 0..1 (the metronome button's fill)
  * @property {boolean} noteColors
  * @property {string|null} currentSetName
+ * @property {string|null} songName  the open song's name as the shell shows it
  * @property {AudioContext|null} audioCtx
  * @property {boolean} ready
  * @property {GainNode|null} masterGain

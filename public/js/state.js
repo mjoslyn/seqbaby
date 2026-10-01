@@ -45,6 +45,7 @@ export const state = {
   metronomeLevel: 0.7,  // the metronome button's fill: click volume, 0..1 (drag the button up/down)
   noteColors: false,  // diatonic pitch-class coloring on the roll + step grid
   currentSetName: null,  // last loaded/saved session name — drives version-bump suggestions
+  songName: null,  // the open song's name as the shell shows it ("cold squelch v4"), via setSongName
   audioCtx: null,
   ready: false,
   masterGain: null,
