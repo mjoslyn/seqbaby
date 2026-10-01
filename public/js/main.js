@@ -15,7 +15,7 @@ import { applySampleSpeed, attachBpmDrag, lfoRateLabel, retuneSyncedLFOs } from 
 import { captureSequence, initComputerKeyboard, isDesktopKeyboard, resetKbdKeys, setKbdRecord } from "./keyboard.js";
 import { initVim } from "./vim.js";
 import { installKnobRecord } from "./knobRecord.js";
-import { autoAccents, parseMeter, redetectDrumKit, stepsPerBarForMeter } from "./meter.js";
+import { activeMeter, autoAccents, parseMeter, redetectDrumKit, stepsPerBarForMeter } from "./meter.js";
 import { meterTick } from "./meters.js";
 import { setEngineKey } from "./params.js";
 import { installParamContextMenu } from "./paramMenu.js";
@@ -665,7 +665,10 @@ export function init() {
   // its value straight off the DOM each callback (~0.1 µs), so there's nothing to
   // mirror into state and nothing to do when it moves.
   document.getElementById("add-track").addEventListener("click", () => {
-    createTrack({ name: `track ${state.tracks.length + 1}`, engineKey: "plaits:0" });
+    // One bar of the pattern's meter, not a fixed 16: a new track in a 7/4
+    // song is 28 steps, so it doesn't wrap after four beats.
+    createTrack({ name: `track ${state.tracks.length + 1}`, engineKey: "plaits:0",
+      length: stepsPerBarForMeter(activeMeter()) });
   });
 
   // The fx bus is reachable from the engine dropdown like everything else, but

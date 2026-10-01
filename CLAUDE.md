@@ -1266,7 +1266,11 @@ Single `Tone.Transport.scheduleRepeat` at `"16n"`. Each callback, per track:
 4. Visuals: `Tone.Draw.schedule` at `time + visualOutputLatency()` (playhead +
    beat indicator). Metronome fires on quarters when enabled.
 5. Bar boundaries: manual-queue commit (`patternSwitchMode === "finish"`) and
-   chain-mode advance honoring `patternRepeats` / `patternMeters`. Either one
+   chain-mode advance honoring `patternRepeats` / `patternMeters`. A bar is
+   the ACTIVE pattern's meter in sixteenths (`state.barTick` counts into it,
+   wrapping at `stepsPerBarForMeter`), never a fixed 16: a fixed 16 cut a
+   chained 7/4 pattern off after four beats, so its last 12 steps never
+   played. The metronome clicks on the meter's beats from the same count. Either one
    restarts every track's count (`restartTrackCounts`): patterns have lengths
    of their own, so a count carried over landed the next pattern anywhere (a
    32-step pattern after a 16-step one played three times came in on step 16).

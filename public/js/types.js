@@ -252,6 +252,7 @@
  * @property {number[]} patternRepeats
  * @property {Array<{num:number, den:number}>} patternMeters
  * @property {number} chainBarCount
+ * @property {number} barTick
  * @property {MacroPad[]} macroPads
  */
 

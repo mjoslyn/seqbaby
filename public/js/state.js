@@ -83,6 +83,9 @@ export const state = {
   // is always the source. Any true flag means "user customized — do not inherit from #1".
   patternMeterCustomized: Array(32).fill(false),
   chainBarCount: 0,
+  // Sixteenths into the current bar, whose length is the active pattern's
+  // meter (transport.js). Chain mode and a queued switch act on its wrap.
+  barTick: 0,
   // XY macro pads (macro.js). Global and cross-track by design, and deliberately
   // outside the p-lock snapshot — a performance macro that rearranged itself at
   // every pattern switch would be unplayable.
