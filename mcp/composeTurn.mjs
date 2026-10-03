@@ -196,11 +196,16 @@ export async function runComposeTurn({
     // and the prefix renders tools -> system -> messages, so one breakpoint on
     // the system block covers the tools too. Over the dozens of rounds a whole
     // song takes, that is most of what each round would otherwise wait on.
+    // The top-level cache_control is the second breakpoint: it lands on the
+    // last block of `messages`, which only ever grows by appending within a
+    // turn, so each round reads every earlier round's tool calls and results
+    // back from the cache and pays full price only for the newest ones.
     const res = await anthropic.messages
       .stream({
         model,
         max_tokens: 8192,
         output_config: { effort },
+        cache_control: { type: "ephemeral" },
         system: [{ type: "text", text: systemPrompt(), cache_control: { type: "ephemeral" } }],
         tools,
         messages,
