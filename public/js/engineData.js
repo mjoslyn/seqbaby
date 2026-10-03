@@ -283,9 +283,59 @@ export const SAMPLE_ENGINES = [
   { key: "smp:R8/hihat",  label: "r8 hat" },
 ].map(e => ({ ...e, group: "sample", type: "sample", defaultNote: 60, poly: true }));
 
+// Acoustic kits, rendered from three open sample libraries by
+// scripts/make-drum-kits.mjs (which says which hit and which mics each file is)
+// and served from the site itself, public/samples/<kit>/<part>.mp3. The same
+// nine pieces in each, so a part can move between kits by changing the kit.
+// Each library asks for its credit, and the sampler's source picker gives it.
+export const KIT_SAMPLE_BASE = "/samples";
+export const KIT_PARTS = [
+  ["kick", "kick"], ["snare", "snare"], ["rim", "rim"], ["hihat", "hat"], ["openhat", "open hat"],
+  ["tom1", "high tom"], ["tom2", "floor tom"], ["ride", "ride"], ["crash", "crash"],
+];
+export const ACOUSTIC_KITS = [
+  {
+    id: "salamander", label: "salamander", title: "Salamander Drumkit", author: "Alexander Holm",
+    url: "https://archive.org/details/SalamanderDrumkit",
+    license: "CC BY-SA 3.0", licenseUrl: "https://creativecommons.org/licenses/by-sa/3.0/",
+  },
+  {
+    id: "virtuosity", label: "virtuosity", title: "Virtuosity Drums", author: "Versilian Studios",
+    url: "https://github.com/sfzinstruments/virtuosity_drums",
+    license: "CC0", licenseUrl: "https://creativecommons.org/publicdomain/zero/1.0/",
+  },
+  {
+    id: "drskit", label: "drs", title: "DRSKit", author: "DrumGizmo & DRSDrums",
+    url: "https://drumgizmo.org/wiki/doku.php?id=kits:drskit",
+    license: "CC BY 4.0", licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
+  },
+];
+
 // Bundled samples offered inside the sampler's source picker (id = key sans
-// "smp:", used to build the load URL and stored as t.sampleSource.id).
-export const BUNDLED_SAMPLES = SAMPLE_ENGINES.map(e => ({ id: e.key.replace(/^smp:/, ""), label: e.label }));
+// "smp:", used to build the load URL and stored as t.sampleSource.id). `kit`
+// groups them in the picker. The acoustic kits never had `smp:` engine keys,
+// so they are listed here and not in SAMPLE_ENGINES.
+const kitOfId = (id) => id.split("/")[0];
+export const BUNDLED_SAMPLES = [
+  ...SAMPLE_ENGINES.map(e => {
+    const id = e.key.replace(/^smp:/, "");
+    return { id, label: e.label, kit: kitOfId(id) };
+  }),
+  ...ACOUSTIC_KITS.flatMap(k => KIT_PARTS.map(([part, name]) => ({
+    id: `${k.id}/${part}`, label: `${k.label} ${name}`, kit: k.id,
+  }))),
+];
+// The picker's heading over each kit.
+export const SAMPLE_KIT_LABELS = {
+  Techno: "techno", CR78: "cr78", breakbeat13: "breakbeat", "acoustic-kit": "live",
+  R8: "r8", ...Object.fromEntries(ACOUSTIC_KITS.map(k => [k.id, k.title.toLowerCase()])),
+};
+const LOCAL_KITS = new Set(ACOUSTIC_KITS.map(k => k.id));
+/** Where a bundled sample (`t.sampleSource.id`) is fetched from. */
+export function bundledSampleUrl(id) {
+  const s = String(id);
+  return LOCAL_KITS.has(kitOfId(s)) ? `${KIT_SAMPLE_BASE}/${s}.mp3` : `${SAMPLE_BASE}/${s}.mp3`;
+}
 
 // Texture library for the granular engine. Sustained, evolving material — what
 // granular synthesis actually wants — from the Lemondrop Pack (GPL-3.0, by

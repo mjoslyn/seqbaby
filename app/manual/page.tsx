@@ -961,6 +961,13 @@ export default function ManualPage() {
             drum kits. After that the waveform button in the track header opens the
             sample editor.
           </p>
+          <p>
+            Three of the kits are real drums, recorded with real mics: Salamander (a
+            punchy garage rock kit), Virtuosity (a dry jazz club kit) and DRS (a big
+            multi-mic rock kit). Each has a kick, snare, rim, closed and open hat, a
+            high and a floor tom, a ride and a crash. Put each piece on its own track,
+            and keep the whole part on one kit so it sounds like one room.
+          </p>
           <ul>
             <li>Trim the start and end, and fade either edge.</li>
             <li>Slice a loop and play the slices from the grid, one per note.</li>
@@ -1373,6 +1380,7 @@ keys: chord("<Cm7 Ab^7 Fm7 G7>").voicing().s("tines").room(0.5)`}</div>
                 <tr><td>lt, mt, ht</td><td>the techno kit&apos;s tom (sampler)</td></tr>
                 <tr><td>cr, rd</td><td>the open hat</td></tr>
                 <tr><td>bank CR78, R8, techno, breakbeat, acoustic</td><td>that bundled kit on the sampler (kick, snare, hat)</td></tr>
+                <tr><td>bank salamander, virtuosity, drskit</td><td>that acoustic kit, every piece: bd, sd, rim, hh, oh, ht (high tom), lt (floor tom), rd, cr</td></tr>
                 <tr><td>sawtooth</td><td>poly saw</td></tr>
                 <tr><td>supersaw</td><td>contagion</td></tr>
                 <tr><td>square, pulse</td><td>snarl</td></tr>
@@ -1843,6 +1851,21 @@ bus. Share it when it validates.`}</div>
                   <td><a href="https://github.com/Tonejs/audio" target="_blank" rel="noopener">Tone.js audio samples</a></td>
                   <td>The bundled drum kits in the sampler (techno, CR-78, breakbeat, acoustic, R8)</td>
                   <td>MIT</td>
+                </tr>
+                <tr>
+                  <td><a href="https://archive.org/details/SalamanderDrumkit" target="_blank" rel="noopener">Salamander Drumkit</a> by Alexander Holm</td>
+                  <td>The salamander kit in the sampler (one hit per piece, trimmed)</td>
+                  <td>CC BY-SA 3.0</td>
+                </tr>
+                <tr>
+                  <td><a href="https://github.com/sfzinstruments/virtuosity_drums" target="_blank" rel="noopener">Virtuosity Drums</a> by Versilian Studios</td>
+                  <td>The virtuosity kit in the sampler (one hit per piece, mics mixed down)</td>
+                  <td>CC0</td>
+                </tr>
+                <tr>
+                  <td><a href="https://drumgizmo.org/wiki/doku.php?id=kits:drskit" target="_blank" rel="noopener">DRSKit</a> by DrumGizmo and DRSDrums</td>
+                  <td>The drs kit in the sampler (one hit per piece, mics mixed down)</td>
+                  <td>CC BY 4.0</td>
                 </tr>
                 <tr>
                   <td><a href="https://strudel.cc" target="_blank" rel="noopener">Strudel</a> and <a href="https://tidalcycles.org" target="_blank" rel="noopener">TidalCycles</a></td>

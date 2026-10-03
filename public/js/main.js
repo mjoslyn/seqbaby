@@ -2,7 +2,7 @@ import { installAppApi } from "./appApi.js";
 import { buildBeatIndicator, paintBeatIndicator } from "./beat.js";
 import { bounceAudio, showBounceDialog } from "./bounce.js";
 import { loadBuffer, normalizeAudioBuffer } from "./buffers.js";
-import { BUNDLED_SAMPLES, GRANULAR_SAMPLES, GRANULAR_SAMPLE_BASE, GRANULAR_SAMPLE_CREDIT, SAMPLE_BASE, rebuildEngineCatalog } from "./catalog.js";
+import { ACOUSTIC_KITS, BUNDLED_SAMPLES, GRANULAR_SAMPLES, GRANULAR_SAMPLE_BASE, GRANULAR_SAMPLE_CREDIT, SAMPLE_KIT_LABELS, bundledSampleUrl, rebuildEngineCatalog } from "./catalog.js";
 import { LFO_KEYS, PATTERN_COUNT } from "./constants.js";
 import { isMobileDevice, setStatus } from "./dom.js";
 import { initHistory } from "./history.js";
@@ -301,6 +301,8 @@ export function openSamplerSourceModal(t) {
       <button type="button" class="sq-sampler__src-file sq-btn">load file…</button>
       <div class="sq-sampler__src-sep">or a bundled sample</div>
       <div class="sq-sampler__src-list"></div>
+      <div class="sq-modal__credit">${ACOUSTIC_KITS.map(k =>
+        `<a href="${k.url}" target="_blank" rel="noopener">${k.title}</a> by ${k.author} (<a href="${k.licenseUrl}" target="_blank" rel="noopener">${k.license}</a>)`).join(" · ")}</div>
       <div class="sq-modal__actions"><button type="button" class="sq-sampler__src-cancel sq-btn--ghost">cancel</button></div>`;
     overlay.appendChild(modal);
     document.body.appendChild(overlay);
@@ -320,7 +322,7 @@ export function openSamplerSourceModal(t) {
       t.lastEditedNote = null;               // new grid notes anchor to that root
       try {
         await ensureAudio();
-        const buf = await loadBuffer(state.audioCtx, `${SAMPLE_BASE}/${id}.mp3`);
+        const buf = await loadBuffer(state.audioCtx, bundledSampleUrl(id));
         t.uploadBuffer = buf;
         if (t.voice?.type === "sampler") t.voice.setBuffer(buf);
         applySampleSpeed(t);
@@ -330,9 +332,16 @@ export function openSamplerSourceModal(t) {
     };
 
     const list = modal.querySelector(".sq-sampler__src-list");
+    let kit = null;
     for (const s of BUNDLED_SAMPLES) {
+      if (s.kit !== kit) {
+        kit = s.kit;
+        const h = document.createElement("div");
+        h.className = "sq-sampler__src-kit"; h.textContent = SAMPLE_KIT_LABELS[kit] || kit;
+        list.appendChild(h);
+      }
       const b = document.createElement("button");
-      b.type = "button"; b.className = "sq-sampler__src-item sq-btn--ghost"; b.textContent = s.label;
+      b.type = "button"; b.className = "sq-sampler__src-item sq-btn--ghost"; b.textContent = s.label.slice(s.label.indexOf(" ") + 1); b.title = s.label;   // the heading names the kit
       b.addEventListener("click", () => chooseBundled(s.id, s.label));
       list.appendChild(b);
     }

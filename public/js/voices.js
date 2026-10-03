@@ -1,5 +1,5 @@
 import { applySampleFadeEnvelope, loadBuffer, startSampleSource } from "./buffers.js";
-import { SAMPLE_BASE, engineByKey } from "./catalog.js";
+import { bundledSampleUrl, engineByKey } from "./catalog.js";
 // The Plaits WASM port is an ambient global (public/woscillators.js, loaded
 // before the engine). Read here rather than in constants.js so that module
 // stays importable outside a browser.
@@ -1458,7 +1458,7 @@ export class SamplerVoice {
     }
   }
   loadBundled(id) {
-    const url = `${SAMPLE_BASE}/${id}.mp3`;
+    const url = bundledSampleUrl(id);
     loadBuffer(this.ctx, url).then(buf => {
       if (this.track?.sampleSource?.id === id) { this.buffer = buf; if (this.track) this.track.uploadBuffer = buf; }
     }).catch(err => console.warn("sample load", err));

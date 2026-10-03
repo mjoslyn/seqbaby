@@ -1,4 +1,4 @@
-import { BUNDLED_SAMPLES, GRANULAR_SAMPLES, GRANULAR_SAMPLE_BASE, SAMPLE_BASE, engineByKey } from "./catalog.js";
+import { BUNDLED_SAMPLES, GRANULAR_SAMPLES, GRANULAR_SAMPLE_BASE, SAMPLE_KIT_LABELS, bundledSampleUrl, engineByKey } from "./catalog.js";
 import { loadBuffer } from "./buffers.js";
 import { setStatus } from "./dom.js";
 import { renderEuclidPanel } from "./euclid.js";
@@ -619,10 +619,16 @@ export function openSampleEditorModal(t) {
       own.textContent = t.uploadFileName || t.sampleSource?.name || "sample";
       fileSel.appendChild(own);
     }
+    let group = null;
     for (const b of BUNDLED_SAMPLES) {
+      if (group?.dataset.kit !== b.kit) {
+        group = document.createElement("optgroup");
+        group.dataset.kit = b.kit; group.label = SAMPLE_KIT_LABELS[b.kit] || b.kit;
+        fileSel.appendChild(group);
+      }
       const o = document.createElement("option");
       o.value = b.id; o.textContent = b.label;
-      fileSel.appendChild(o);
+      group.appendChild(o);
     }
     fileSel.value = t.sampleSource?.kind === "bundled" ? (t.sampleSource.id ?? "") : "";
   };
@@ -633,7 +639,7 @@ export function openSampleEditorModal(t) {
     const label = BUNDLED_SAMPLES.find(b => b.id === id)?.label || id;
     setStatus(`loading "${label}"…`);
     try {
-      const buf = await loadBuffer(state.audioCtx, `${SAMPLE_BASE}/${id}.mp3`);
+      const buf = await loadBuffer(state.audioCtx, bundledSampleUrl(id));
       if (!t._sampleModal) return;                  // modal closed while it loaded
       t.sampleSource = { kind: "bundled", id, name: label };
       t.uploadBuffer = buf;

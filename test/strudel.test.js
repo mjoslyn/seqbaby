@@ -86,6 +86,24 @@ test("sounds pick engines: kits by bank, synths by name", () => {
   assert.equal(S.voiceFor("mystery").exact, false);
 });
 
+test("the acoustic kits take every drum name, and write each piece back as one", () => {
+  const v = (name, bank) => S.voiceFor(name, { bank });
+  assert.deepEqual(v("bd", "salamander"), { engine: "sampler", sample: "salamander/kick", drum: true, exact: true });
+  assert.equal(v("oh", "virtuosity").sample, "virtuosity/openhat");
+  assert.equal(v("rim", "drskit").sample, "drskit/rim");
+  assert.equal(v("lt", "salamander").sample, "salamander/tom2");
+  assert.equal(v("ht", "salamander").sample, "salamander/tom1");
+  assert.equal(v("rd", "virtuosity").sample, "virtuosity/ride");
+  assert.equal(v("cr", "drumgizmo").sample, "drskit/crash");
+  assert.equal(v("cb", "salamander").exact, false);
+  const code = `$: s("bd sd rim hh, oh ht lt rd, cr").bank("salamander")`;
+  const a = S.codeToSong(code).song;
+  const parts = a.tracks.map(t => t.sampleSource.id).sort();
+  assert.deepEqual(parts, ["kick", "snare", "rim", "hihat", "openhat", "tom1", "tom2", "ride", "crash"].map(p => `salamander/${p}`).sort());
+  const b = S.codeToSong(S.sessionToCode(a, { native: true }).code).song;
+  assert.deepEqual(b.tracks.map(t => t.sampleSource.id).sort(), parts);
+});
+
 const track = (song, name) => song.tracks.find(t => t.name === name);
 const steps = (t, p = 0) => t.patterns[p].steps.join("");
 

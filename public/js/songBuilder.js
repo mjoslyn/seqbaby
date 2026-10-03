@@ -38,7 +38,7 @@
 
 import {
   BASS_NUM_CTLS, BASS_SEL_CTLS, BASS_TONE_NAMES, bassTone, bassToneDescription,
-  BUNDLED_SAMPLES, CONTAGION_NUM_KEYS, CONTAGION_SEL_KEYS,
+  ACOUSTIC_KITS, BUNDLED_SAMPLES, CONTAGION_NUM_KEYS, CONTAGION_SEL_KEYS,
   GRANULAR_SAMPLES, GRAN_MOD_RANGE, GRAN_NUM_KEYS, GRAN_RATE_BEATS, GRAN_SEL_KEYS,
   GUITAR_NUM_CTLS, GUITAR_SEL_CTLS, GUITAR_TONE_NAMES, guitarTone, guitarToneDescription,
   HEXOP_MOD_RANGE, HEXOP_NUM_KEYS, HEXOP_OPS, HEXOP_PRESET_NAMES, hexopPreset,
@@ -99,7 +99,7 @@ const NAMES_SHARP = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#",
 
 // The same regex guessIsDrumKit (meter.js) uses; that module reads the live
 // catalog, so it is spelled again here rather than imported.
-const DRUM_RE = /\b(kick|snare|hat|hi-?hat|clap|tom|perc|drum)\b/;
+const DRUM_RE = /\b(kick|snare|rim|(open)?hat|hi-?hat|clap|tom\d*|ride|crash|cymbal|perc|drum)\b/;
 
 // ---- engines ---------------------------------------------------------------
 
@@ -153,6 +153,14 @@ export function describeEngine(engineKey) {
     presets: panel?.tones ? panel.tones.map(n => ({ name: n, description: panel.describe?.(n) || "" })) : [],
     lfoTargets: LFO_KEYS.filter(k => canModulateKey(e.key, k, { euclid: true, chance: true })),
     automationTargets: Object.keys(AUTOMATION_TARGETS).filter(k => canAutomateKey(e.key, k, { euclid: true, chance: true })),
+    // What `add_track`'s `sample` / `texture` take. Here as well as in the
+    // seqbaby://samples resource, because the studio's compose panel has the
+    // tools and not the resources.
+    ...(e.type === "sampler" ? {
+      samples: BUNDLED_SAMPLES.map(({ id, label, kit }) => ({ id, label, kit })),
+      kits: ACOUSTIC_KITS.map(({ id, title, author, license }) => ({ id, title, author, license })),
+    } : {}),
+    ...(e.type === "granular" ? { textures: GRANULAR_SAMPLES.map(({ id, label }) => ({ id, label })) } : {}),
   };
 }
 

@@ -2632,6 +2632,8 @@ body.kbd-recording:not(.sq-playing) .sq-track.is-kbd-active .sq-step.is-cursor {
 .sq-sampler__src-sep { font-size: 11px; color: var(--fg-dim); text-align: center; }
 .sq-sampler__src-list { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; max-height: 44vh; overflow-y: auto; }
 .sq-sampler__src-item { font-size: 11px; padding: 6px 4px; }
+.sq-sampler__src-kit { grid-column: 1 / -1; font-size: 10px; color: var(--fg-dim); margin-top: 4px; }
+.sq-sampler__src-kit:first-child { margin-top: 0; }
 
 /* Granular WAV viewer modal: waveform canvas + live grain bars. */
 .sq-gwav__modal {
