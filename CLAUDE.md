@@ -3264,6 +3264,20 @@ Bundled drum kits are no longer separate engines — they live in
 `BUNDLED_SAMPLES` and are picked *inside* the sampler's source picker
 (legacy `smp:Kit/part` keys migrate on load).
 
+**The acoustic kits** (`ACOUSTIC_KITS` in engineData.js): Salamander (CC BY-SA
+3.0), Virtuosity (CC0) and DRSKit (CC BY 4.0), the same nine pieces each
+(`KIT_PARTS`: kick snare rim hihat openhat tom1 tom2 ride crash), ids
+`<kit>/<part>`. Unlike the Tone.js kits they are served from the site,
+`public/samples/<kit>/<part>.mp3`, so every loader goes through
+`bundledSampleUrl(id)`, never `SAMPLE_BASE` directly. The mp3s are rendered by
+`scripts/make-drum-kits.mjs` from the libraries' GitHub sources (one firm hit,
+the library's own mics summed into stereo, -2dBFS), and that script is the
+record of which file each one is. The picker groups by kit
+(`SAMPLE_KIT_LABELS`) and credits all three, as do the manual's credits;
+Strudel reaches them with `.bank("salamander" | "virtuosity" | "drskit")`;
+`describe_engine sampler` lists every bundled sample, because the compose
+panel has the MCP tools but not its resources.
+
 Adding a new engine: catalog entry + voice class dispatch in
 `buildVoiceForEngine` (or a `buildDrumSynthGraph` case + builder fn for
 analog-mono style) + `updatePlaitsControlsVisibility` labels + tips +

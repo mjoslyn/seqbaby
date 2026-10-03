@@ -137,7 +137,7 @@ export const TOOLS = [
   },
   {
     name: "describe_engine", title: "Describe engine",
-    description: "One engine in full: what each of its four sliders does, its panel controls with ranges and defaults, its presets, and which LFO / automation targets it takes.",
+    description: "One engine in full: what each of its four sliders does, its panel controls with ranges and defaults, its presets, and which LFO / automation targets it takes. For the sampler, every bundled sample (`samples`); for granular, every texture.",
     inputSchema: { engine: z.string().describe("engine key or name, e.g. dm:silverbox, silverbox, plaits:fm") },
     handler: (ctx, { engine }) => sb.describeEngine(sb.resolveEngine(engine).key),
   },
@@ -145,7 +145,7 @@ export const TOOLS = [
   // ---- tracks --------------------------------------------------------------------
   {
     name: "add_track", title: "Add track",
-    description: "Add a track. `engine` is a key or a name (808 kick, silverbox, subby, plaits:fm, fx bus ...). A sampler needs `sample` (a bundled sample id or label); a granular track needs `texture`. Returns the new track's index.",
+    description: "Add a track. `engine` is a key or a name (808 kick, silverbox, subby, plaits:fm, fx bus ...). A sampler needs `sample` (a bundled sample id or label, e.g. \"salamander/snare\" or \"virtuosity ride\"; describe_engine sampler lists them); a granular track needs `texture`. Returns the new track's index.",
     inputSchema: { engine: z.string(), name: z.string().optional(), length: z.number().int().min(1).max(64).optional().describe("steps per pattern (default 16)"),
       sample: z.string().optional(), texture: z.string().optional(), drumKit: z.boolean().optional().describe("blank steps play C2 and the sampler pitches from C2; guessed from the engine and name when omitted") },
     handler: (ctx, a) => sb.addTrack(ctx.song, a),

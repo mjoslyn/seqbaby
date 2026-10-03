@@ -78,10 +78,24 @@ Drums: `dm:808-kick` (long, tuned, drive for a distorted 808), `dm:909-kick`
 `sampler` with a bundled kit (`sample: "techno kick"`, `"break snare"`,
 `"cr78 hat"`, `"live snare"`, `"r8 kick"`). Snares: `dm:808-snare` (snappy
 is the noise balance), `dm:909-snare`, `plaits:14`. Hats: `dm:808-chat` /
-`dm:808-ohat` / `dm:909-chat`, `plaits:15` (morph is closed to open). Clap:
+`dm:808-ohat` / `dm:909-chat` / `dm:909-ohat`, `plaits:15` (morph is closed
+to open). Clap:
 `dm:808-clap`, `dm:909-clap`. Cowbell: `dm:808-cowbell`. The 808 / 909 voices
 ignore the step's note except the kick's tune. Every drum kit track plays C2
 on a blank note, and `drumKit` is guessed from the name.
+
+A real drummer's kit is a `sampler` per piece from one of the three acoustic
+kits: `salamander` (a garage rock kit, punchy and roomy), `virtuosity` (a
+jazz club kit, dry and detailed) and `drskit` (big, multi-mic, rock to
+pop). Each has the same nine pieces: `kick`, `snare`, `rim`, `hihat`,
+`openhat`, `tom1` (high), `tom2` (floor), `ride`, `crash`, so the sample is
+`"salamander/snare"`, `"virtuosity/ride"`, `"drskit/tom2"`. Use one kit for
+the whole drum part: mixing kits sounds like two rooms. Play them like a
+drummer: ghost notes on the snare (`o`), the hat or the ride carrying the
+time with a few accents, the open hat on an offbeat, a crash on the one
+after a fill, toms only in fills. In code, `.bank("salamander")` (or
+`virtuosity`, `drskit`) maps `bd sd rim hh oh ht lt rd cr` onto them.
+`describe_engine` `sampler` lists every bundled sample.
 
 Bass: `dm:silverbox` for acid and anything squelchy: harm is cutoff, timb
 resonance, morph the envelope depth, decay the envelope; an ACCENT comes from
@@ -102,8 +116,10 @@ drive), `wt:akwf` (wavetable), `plaits:6` (the chord model: one note plays a
 chord, harm picks which). `dm:poly-saw` for supersaw stabs. Put a chord on
 the step (`set_step` chord "min7") on any poly engine.
 
-Leads and hooks: `plaits:0` (virtual analog), `plaits:2` (fm), `plaits:4`
-(additive), `plaits:11` (string, plucked), `plaits:12` (modal, mallets),
+Leads and hooks: `plaits:0` (virtual analog), `plaits:1` (waveshaping:
+timb folds, morph skews), `plaits:2` (fm), `plaits:4` (additive),
+`plaits:5` (wavetable: timb and morph walk the map), `plaits:11` (string,
+plucked), `plaits:12` (modal, mallets),
 `dm:contagion` (the hypersaw: `vuni` 4..8 and `vunidet` 0.3 for the wide
 one), `dm:snarl` (aggressive mono), `dm:fm-bell`, `dm:guitar` with a tone
 ("surf twang", "funk clean", "jangle", "chime", "country twang", "blues
@@ -111,8 +127,19 @@ burn", "brit stack", "rolled off", "fuzz lead", "singing lead", "scooped
 metal", "djent chug", "grunge", "jazz box").
 
 Textures: `dm:granular` with a `texture` (choir, ambient pad, harmonic
-strings, sleepy tines ...): a held note (a long tie) over a whole bar, morph
-for the position in the sample, harm for grain size.
+strings, sleepy tines ...; `describe_engine` `dm:granular` lists them): a
+held note (a long tie) over a whole bar, morph for the position in the
+sample, harm for grain size. The odder Plaits models are textures too:
+`plaits:3` (grain, formant-shaped: vocal and buzzy), `plaits:8` (swarm, a
+cloud of detuned saws, for pads and drones), `plaits:10` (particle,
+dripping and crackling: timb is density), `plaits:9` (filtered noise: wind,
+risers, snare-ish hits with a short decay), `plaits:7` (speech: morph picks
+the phoneme, for vocal chops and robot words). All Plaits models have a
+low-pass gate on decay, so a long decay is what lets them ring.
+
+`midi`: sends the track's notes to a MIDI device instead of playing them.
+Only for a song that drives outboard gear; it is silent in the browser and in
+`audition_song`, so never use it unless asked.
 
 `bus`: an fx bus. It plays nothing; other tracks send to it (`set_track` out:
 its index) and its fx, filter and lanes shape all of them at once. One reverb

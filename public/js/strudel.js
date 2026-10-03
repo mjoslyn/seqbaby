@@ -312,11 +312,27 @@ function kitOf(bank) {
   if (/rolandr8|\br-?8\b/.test(b)) return "R8";
   if (/techno/.test(b)) return "Techno";
   if (/break|amen/.test(b)) return "breakbeat13";
+  if (/salamander/.test(b)) return "salamander";
+  if (/virtuosity/.test(b)) return "virtuosity";
+  if (/drs|drumgizmo/.test(b)) return "drskit";
   if (/acoustic|live/.test(b)) return "acoustic-kit";
   return "808";
 }
 const SAMPLER_KITS = new Set(["CR78", "R8", "Techno", "breakbeat13", "acoustic-kit"]);
-function drumVoice(role, kit) {
+// The acoustic kits (engineData.js ACOUSTIC_KITS) have a piece for every role
+// but the cowbell and perc, so `lt` is the floor tom and `rd` the ride.
+const FULL_KITS = new Set(["salamander", "virtuosity", "drskit"]);
+function fullKitPart(role, name) {
+  if (role === "kick") return "kick";
+  if (role === "snare" || role === "clap") return "snare";
+  if (role === "rim") return "rim";
+  if (role === "ohat") return "openhat";
+  if (role === "tom") return /^(lt|lo)$/.test(name) ? "tom2" : "tom1";
+  if (role === "cymbal") return /^(rd|ride)$/.test(name) ? "ride" : "crash";
+  return "hihat";
+}
+function drumVoice(role, kit, name) {
+  if (FULL_KITS.has(kit)) return { engine: "sampler", sample: `${kit}/${fullKitPart(role, name)}` };
   if (SAMPLER_KITS.has(kit)) {
     const part = role === "kick" ? "kick" : role === "snare" || role === "clap" || role === "rim" ? "snare"
       : role === "tom" && kit === "Techno" ? "tom1" : "hihat";
@@ -410,7 +426,11 @@ export function voiceFor(sound, { bank, notes = [], fm = false } = {}) {
   if (bankName) { kit = kit || bankName[3]; name = bankName[4]; }
   if (SOUND_EXACT[name]) return { engine: SOUND_EXACT[name], drum: false, exact: true };
   const role = drumRole(name);
-  if (role) return { ...drumVoice(role, kit || "808"), drum: true, exact: role !== "rim" && role !== "cymbal" && role !== "perc" && role !== "tom" };
+  if (role) {
+    const exact = FULL_KITS.has(kit) ? role !== "cowbell" && role !== "perc" && role !== "clap"
+      : role !== "rim" && role !== "cymbal" && role !== "perc" && role !== "tom";
+    return { ...drumVoice(role, kit || "808", name), drum: true, exact };
+  }
   if (fm && /^(sine|sin|triangle|tri|$)/.test(name)) return { engine: "dm:hexop", drum: false, exact: true };
   if (/^(sine|sin)$/.test(name)) {
     const low = notes.length && notes.reduce((a, b) => a + b, 0) / notes.length < 48;
@@ -1453,13 +1473,19 @@ const DRUM_EXPORT = {
   "plaits:13": ["bd", null], "plaits:14": ["sd", null], "plaits:15": ["hh", null],
 };
 const SAMPLE_BANK = { CR78: "RolandCompurhythm78", R8: "RolandR8" };
-const NATIVE_KIT_BANK = { Techno: "techno", breakbeat13: "breakbeat", "acoustic-kit": "acoustic" };
+const NATIVE_KIT_BANK = {
+  Techno: "techno", breakbeat13: "breakbeat", "acoustic-kit": "acoustic",
+  salamander: "salamander", virtuosity: "virtuosity", drskit: "drskit",
+};
+// A bundled sample's part, as the drum name that reads back to it.
+const PART_SOUND = { kick: "bd", snare: "sd", rim: "rim", hihat: "hh", openhat: "oh", tom2: "lt", ride: "rd", crash: "cr" };
 function soundForTrack(t, native = false) {
   if (native && /^plaits:1[345]$/.test(t.engineKey)) return { s: t.engineKey, drum: true };
   if (DRUM_EXPORT[t.engineKey]) { const [s, bank] = DRUM_EXPORT[t.engineKey]; return { s, bank, drum: true }; }
   if (t.engineKey === "sampler" && t.sampleSource?.kind === "bundled") {
     const [kit, part] = String(t.sampleSource.id).split("/");
-    const s = /kick/.test(part) ? "bd" : /snare/.test(part) ? "sd" : /tom/.test(part) ? "lt" : "hh";
+    const s = FULL_KITS.has(kit) ? PART_SOUND[part] || "ht"
+      : /kick/.test(part) ? "bd" : /snare/.test(part) ? "sd" : /tom/.test(part) ? "lt" : "hh";
     return { s, bank: SAMPLE_BANK[kit] || (native ? NATIVE_KIT_BANK[kit] : null) || null, drum: true };
   }
   if (native && staticEngineByKey(t.engineKey)) return { s: nativeName(t.engineKey), drum: false };

@@ -12,7 +12,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import * as sb from "../public/js/songBuilder.js";
-import { STATIC_ENGINES } from "../public/js/engineData.js";
+import { STATIC_ENGINES, ACOUSTIC_KITS, BUNDLED_SAMPLES, KIT_PARTS, bundledSampleUrl } from "../public/js/engineData.js";
 import { LFO_KEYS, AUTOMATION_TARGETS } from "../public/js/constants.js";
 
 const song = () => sb.newSong({ bpm: 120 });
@@ -319,4 +319,21 @@ test("validate names a silent track and a bus with nothing on it", () => {
   assert.equal(v.ok, true);
   assert.match(v.warnings[0], /will be silent/);
   assert.match(v.warnings[1], /nothing sent to it/);
+});
+
+test("the acoustic kits are bundled samples, served from the site and present on disk", () => {
+  for (const kit of ACOUSTIC_KITS) {
+    for (const [part] of KIT_PARTS) {
+      const id = `${kit.id}/${part}`;
+      assert.ok(BUNDLED_SAMPLES.some(s => s.id === id && s.kit === kit.id), id);
+      assert.equal(bundledSampleUrl(id), `/samples/${id}.mp3`);
+      assert.ok(fs.existsSync(new URL(`../public/samples/${id}.mp3`, import.meta.url)), `${id}.mp3`);
+    }
+    assert.ok(kit.author && kit.license && kit.licenseUrl && kit.url, `${kit.id} credit`);
+  }
+  assert.equal(bundledSampleUrl("CR78/kick"), "https://tonejs.github.io/audio/drum-samples/CR78/kick.mp3");
+  const song = sb.newSong();
+  sb.addTrack(song, { engine: "sampler", sample: "salamander ride" });
+  assert.equal(song.tracks[0].sampleSource.id, "salamander/ride");
+  assert.equal(song.tracks[0].isDrumKit, true, "a ride is a drum, so it sits at C2");
 });

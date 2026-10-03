@@ -55,7 +55,7 @@ const resources = {
   "seqbaby://targets": { name: "modulation targets", description: "The LFO target keys and the automation lane keys, with labels. Per-engine availability is in seqbaby://engines.", mime: "application/json",
     body: () => JSON.stringify({ lfo: sb.LFO_KEYS.map(k => ({ key: k, label: sb.LFO_LABELS[k] || k })), automation: Object.entries(sb.AUTOMATION_TARGETS).map(([k, v]) => ({ key: k, label: v.label })) }, null, 1) },
   "seqbaby://samples": { name: "bundled samples and textures", description: "The bundled drum samples a sampler track can load, and the textures a granular track can stream.", mime: "application/json",
-    body: () => JSON.stringify({ samples: sb.BUNDLED_SAMPLE_LIST, textures: sb.TEXTURE_LIST }, null, 1) },
+    body: () => JSON.stringify({ samples: sb.BUNDLED_SAMPLE_LIST, kits: sb.describeEngine("sampler").kits, textures: sb.TEXTURE_LIST }, null, 1) },
   "seqbaby://format": { name: "session format notes", description: "What the exported JSON is, how the studio loads it, and the conventions the tools use (indices, step strings, units).", mime: "text/markdown", body: () => FORMAT_NOTES },
   "seqbaby://song": { name: "the current song", description: "The song being written, summarised: tempo, scale, every track's engine, patterns as step strings, sound, modulation.", mime: "application/json", body: () => JSON.stringify({ name: ctx.songName, ...sb.summarize(ctx.song) }, null, 1) },
 };
