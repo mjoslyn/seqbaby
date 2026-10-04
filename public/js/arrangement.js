@@ -487,6 +487,9 @@ function gapAt(clientX) {
  *  bar's width before the first counts, so a drop right next to the end
  *  adds no rest. */
 function gapPast(edge, clientX) {
+  // With no sections there is no end to be past: the first thing dropped,
+  // wherever in the empty lane it lands, starts the song at bar 1.
+  if (!state.arrangement.length) return 0;
   const barPx = parseFloat(getComputedStyle(root).getPropertyValue("--arr-bar-w")) || 28;
   const gap = Math.floor((clientX - edge.getBoundingClientRect().left) / barPx);
   return Math.max(0, Math.min(ARRANGE_MAX_BARS, gap));
