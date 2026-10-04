@@ -487,7 +487,12 @@ export function init() {
   // visualOutputLatency() so the playhead stays aligned with the ear.
   state.audioCtx = new AudioContext({ latencyHint: isMobileDevice() ? "playback" : "interactive" });
   shimFirefoxListenerParams(state.audioCtx);
-  Tone.setContext(state.audioCtx);
+  // `true` disposes Tone's default context: closes its AudioContext (which
+  // the old Tone.Transport path used to resume on play, an idle second audio
+  // thread for the whole session) and stops its 20Hz worker ticker. Anything
+  // still reaching for Tone.Transport / Tone.Draw now fails loudly instead of
+  // quietly running on the wrong clock.
+  Tone.setContext(state.audioCtx, true);
   // Widen the transport's scheduler lookahead. Tone's clock ticks on the main
   // thread; when that thread stalls (layout, GC, a heavy pattern switch — all
   // worse on mobile), callbacks fire late and every note they schedule gets

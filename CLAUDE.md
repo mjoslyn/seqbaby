@@ -288,7 +288,7 @@ env / fx / eq / comp / mod / automation per track.
 ## Dev commands
 
 ```
-npm run dev            # Next.js dev server on :3000 (studio + engine work with no env)
+npm run dev            # Next.js dev server on :3000 (needs the Supabase env, below)
 npm run build && npm run start   # production build + serve
 npm run netlify:dev    # full Netlify emulation on :8888
 npm run legacy:dev     # pre-Next static Node server on :5173 (engine assets only)
@@ -300,8 +300,14 @@ npm run mcp            # the MCP server on stdio (mcp/server.mjs) — an agent w
 npm run test:rls       # RLS policy tests — builds a throwaway Postgres in docker
 ```
 
-Account features need `NEXT_PUBLIC_SUPABASE_URL` + `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-(see `.env.example`). The engine itself runs without any env.
+`NEXT_PUBLIC_SUPABASE_URL` + `NEXT_PUBLIC_SUPABASE_ANON_KEY` are required
+(see `.env.example`): without them `/studio` and the other pages 500 ("Your
+project's URL and Key are required to create a Supabase client"). The engine
+modules themselves (`public/js`, the tests, the MCP server) need no env. For
+engine work with no project, any syntactically valid pair gets the pages up
+(e.g. `NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:9
+NEXT_PUBLIC_SUPABASE_ANON_KEY=dummy`); account features then fail, the studio
+plays.
 
 ## Audio signal chain (per track)
 
