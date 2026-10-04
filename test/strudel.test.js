@@ -456,12 +456,24 @@ test("the bank round-trips through native code, and plays as arrange() in portab
   assert.doesNotMatch(port, /pattern\(|lock\(|chain\(/);
 });
 
-test("arrange() reads as consecutive slots in chain mode", () => {
-  const { song } = S.codeToSong(`const v = stack(s("bd*4"), note("c2*4").s("sawtooth"))\n$: arrange([4, v], [8, s("hh*8")], [2, v])`);
+test("arrange() reads as the arrangement: a slot per distinct pattern, the sections in the order written, chain mode", () => {
+  const { song, warnings } = S.codeToSong(`const v = stack(s("bd*4"), note("c2*4").s("sawtooth"))\n$: arrange([4, v], [8, s("hh*8")], [2, v])`);
+  assert.deepEqual(warnings, []);
   assert.equal(song.patternMode, "chain");
-  assert.deepEqual(song.patternRepeats.slice(0, 3), [4, 8, 2]);
+  assert.deepEqual(song.arrangement, [{ p: 0, bars: 4 }, { p: 1, bars: 8 }, { p: 0, bars: 2 }], "v twice is one slot played twice");
   assert.deepEqual(song.tracks.map(t => t.name), ["bd", "sawtooth", "hh"]);
-  assert.equal(steps(track(song, "bd"), 2), steps(track(song, "bd"), 0));
+  const has = (t, k) => !!t.patterns[k]?.steps.some(Boolean);
+  assert.equal(has(track(song, "bd"), 0), true);
+  assert.equal(has(track(song, "bd"), 2), false, "no third slot: the second v is the first slot again");
+  assert.equal(has(track(song, "hh"), 1), true);
+  // a section longer than the per-pattern repeat cap is fine: it is a section's bars
+  const long = S.codeToSong(`$: arrange([32, s("bd*4")], [1, silence], [32, s("hh*8")])`);
+  assert.deepEqual(long.song.arrangement, [{ p: 0, bars: 32 }, { p: 1, bars: 1 }, { p: 2, bars: 32 }], "silence is a slot with nothing in it: a break");
+  assert.deepEqual(long.warnings, []);
+  // code without arrange() leaves a song's arrangement alone
+  const before = JSON.parse(JSON.stringify(long.song.arrangement));
+  S.writeTracks(long.song, S.realize(S.readCode(`$: s("bd*4")`)), { pattern: 0 });
+  assert.deepEqual(long.song.arrangement, before);
 });
 
 test("code with no sections writes the pinned slot and leaves the others alone", () => {
@@ -538,6 +550,10 @@ test("an arrangement plays as arrange() in the song's order, and native code lea
   assert.match(port, /^const p6 = silence$/m, "an empty pattern in the arrangement is a rest");
   assert.doesNotMatch(port, /const p3 =/, "a slot the arrangement never plays is not written");
   assert.equal((port.match(/^const p1 = stack\(/gm) || []).length, 1, "a pattern is defined once however often it plays");
+  // and read back, it is the same song shape with the slots renumbered
+  const rt = S.codeToSong(port).song;
+  assert.deepEqual(rt.arrangement, [{ p: 0, bars: 2 }, { p: 1, bars: 4 }, { p: 0, bars: 2 }, { p: 2, bars: 1 }]);
+  assert.equal(rt.patternMode, "chain");
   // native code cannot carry a section; it says so and a run leaves the arrangement as it was
   const nat = S.sessionToCode(a, { native: true });
   assert.match(nat.code, /^\/\/ arrangement: 1x2 2x4 1x2 6x1/m);

@@ -1792,9 +1792,16 @@ state.arrangement = [ {p:0, bars:4}, {p:1, bars:8}, {p:2, bars:8}, {p:1, bars:8}
   however often it plays and an empty one as `silence`; native code cannot
   carry a section (it is not a pattern's own setting), so it writes the
   arrangement as a comment and a run leaves it alone. The Strudel reader's own
-  `arrange()` still fills consecutive slots, as it did.
-- **Not on a phone**: moving a section is drag-and-drop, which touch does not
-  give. Adding (`+`), removing (`×`) and the grip work with a finger.
+  `arrange([4, a], [8, b], [2, a])` IS an arrangement: a slot per distinct
+  pattern object (so `a` twice is one slot played twice), consecutive from the
+  first, and the sections in the order written; `silence` is a break. Code
+  without `arrange()` leaves the song's arrangement alone, as it leaves the
+  slots it never names. So the portable export reads back as the same shape,
+  slots renumbered.
+- **On a phone** a block cannot be dragged (HTML drag-and-drop), so each block
+  carries `‹ ›` move buttons beside its `×`, always shown under
+  `(any-pointer: coarse)` and hover-only on a mouse. The grip and the drop of a
+  pattern number onto the lane are pointer / drag events as on desktop.
 
 ## p-lock — a sound per pattern (`patternSound.js`)
 
@@ -2822,10 +2829,11 @@ running engine ◀── mergeSet ◀── writeTracks(fromBlob(serializeSet())
   code's sound became every unlocked pattern's too. With the active pattern
   locked, a session's track-level fields ARE that pattern's sound, so the
   writer starts from `baseSound`, and it writes `baseSound` back, whole.
-- **Strudel's `arrange([4, a], [8, b])` is the bank too**: consecutive slots
-  from the first, each playing its cycles as bars, chain mode on. The portable
-  export writes a chained song that way (`const p1 = stack(...)`), so
-  strudel.cc plays the whole arrangement.
+- **Strudel's `arrange([4, a], [8, b], [2, a])` is the arrangement**: a slot
+  per distinct pattern, consecutive from the first, and `state.arrangement`
+  playing them in the order written for those cycles as bars, chain mode on
+  (see the arrangement section). The portable export writes a chained song
+  that way (`const p1 = stack(...)`), so strudel.cc plays the whole song.
 - **The code is the song's, written when the drawer opens** (`sessionToCode`
   with `native: true`): seqbaby's instruments by name, and every panel knob, fx
   control, filter field, eq band, compressor setting, LFO and automation lane

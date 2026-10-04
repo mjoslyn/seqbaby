@@ -171,7 +171,7 @@ export default function ManualPage() {
               </thead>
               <tbody>
                 <tr><td>repeat / chain</td><td>Repeat loops the current pattern. Chain plays the song: the arrangement when you have written one, else your non-empty patterns in order.</td></tr>
-                <tr><td>arrange</td><td>Opens the arrangement view: the song as sections laid out across bars, each a pattern for so many bars, the same pattern as often as it comes back. Drag a pattern number onto it to add a section, drag a block to move it, drag its right edge to set the bars, click one to go there, × to take it out. On a focused block, + and − change the bars, shift and the arrows move it, delete removes it. Chain mode plays it from the section you are on; with none written, chain plays the patterns in order as before.</td></tr>
+                <tr><td>arrange</td><td>Opens the arrangement view: the song as sections laid out across bars, each a pattern for so many bars, the same pattern as often as it comes back. Drag a pattern number onto it to add a section, drag a block to move it (or its ‹ › buttons, which a finger can use), drag its right edge to set the bars, click one to go there, × to take it out. On a focused block, + and − change the bars, shift and the arrows move it, delete removes it. Chain mode plays it from the section you are on; with none written, chain plays the patterns in order as before.</td></tr>
                 <tr><td>immediate / finish</td><td>Whether clicking another pattern switches straight away or waits out the current bar.</td></tr>
                 <tr><td>dup</td><td>Copies this pattern into the next free slot. The usual way to start a variation.</td></tr>
                 <tr><td>drag a number</td><td>Drops a copy of that pattern onto any other slot and takes you there. In finish mode while playing it waits for the bar, like any other switch.</td></tr>
@@ -1502,9 +1502,12 @@ bass: note("<eb2 g2>*8").s("sawtooth").lpf(2000).lock()`}</div>
               pattern to pattern.
             </li>
             <li>
-              Strudel&apos;s own <span className={styles.ui}>arrange([4, a], [8, b])</span>{" "}
-              fills patterns 1, 2 and so on, each playing that many bars, in chain
-              mode.
+              Strudel&apos;s own <span className={styles.ui}>arrange([4, a], [8, b], [2, a])</span>{" "}
+              is the arrangement: each different pattern gets a slot, from pattern
+              1, and the arrangement view plays them in the order written for that
+              many bars each, in chain mode. <span className={styles.ui}>a</span> twice
+              is one pattern played twice, and <span className={styles.ui}>silence</span>{" "}
+              is a break.
             </li>
             <li>
               Take a section out of the code and run, and that pattern is cleared

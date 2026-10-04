@@ -213,11 +213,21 @@ function render() {
     meta.appendChild(el("span", "sq-arrange__num", String(e.p + 1)));
     meta.appendChild(el("span", "sq-arrange__bars", `${e.bars} bar${e.bars === 1 ? "" : "s"}`));
     b.appendChild(meta);
-    const x = el("button", "sq-arrange__x", "×");
-    x.type = "button";
-    x.title = "remove this section";
-    x.setAttribute("aria-label", `remove section ${i + 1}`);
-    b.appendChild(x);
+    // The small buttons: move left / right and remove. Hover-only on a mouse,
+    // where a block can be dragged instead; always on a touch screen, where
+    // it cannot (style.css).
+    const bar = el("span", "sq-arrange__btns");
+    const mk = (cls, text, title, label, dir) => {
+      const n = el("button", cls, text);
+      n.type = "button"; n.title = title; n.setAttribute("aria-label", label);
+      if (dir) n.dataset.dir = String(dir);
+      bar.appendChild(n);
+      return n;
+    };
+    mk("sq-arrange__mv", "‹", "move this section earlier", `move section ${i + 1} earlier`, -1).disabled = i === 0;
+    mk("sq-arrange__mv", "›", "move this section later", `move section ${i + 1} later`, 1).disabled = i === arr.length - 1;
+    mk("sq-arrange__x", "×", "remove this section", `remove section ${i + 1}`);
+    b.appendChild(bar);
     const grip = el("div", "sq-arrange__grip");
     grip.title = "drag to set how many bars it plays";
     b.appendChild(grip);
@@ -314,6 +324,8 @@ function wireLane() {
     if (!b) return;
     const i = Number(b.dataset.i);
     if (e.target.closest(".sq-arrange__x")) { removeSection(i); return; }
+    const mv = e.target.closest(".sq-arrange__mv");
+    if (mv) { if (!mv.disabled) moveSection(i, i + Number(mv.dataset.dir)); return; }
     if (e.target.closest(".sq-arrange__grip") || resizing || performance.now() - resizedAt < 250) return;
     goTo(i);
   });
