@@ -309,6 +309,7 @@ export function resetFxDry(t) {
   cfg.reverb.wet        = 0;
   if (!cfg.crush) cfg.crush = { bits: 8, rate: 1, wet: 0 };
   cfg.crush.wet = 0;
+  if (cfg.prism) cfg.prism.wet = 0;
   if (t.fxRack) {
     t.fxRack.applyVinyl(cfg.vinyl);
     t.fxRack.applyCassette(cfg.cassette);
@@ -323,6 +324,7 @@ export function resetFxDry(t) {
     t.fxRack.applyDelay(cfg.delay);
     t.fxRack.applyReverb(cfg.reverb);
     t.fxRack.applyCrush(cfg.crush);
+    if (cfg.prism) t.fxRack.applyPrism(cfg.prism);
   }
   refreshFxPanelUI(t);
 }

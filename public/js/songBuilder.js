@@ -46,7 +46,7 @@ import {
   STATIC_ENGINES, staticEngineByKey, engineSliderLabels,
   SUB_NUM_CTLS, SUB_SEL_CTLS, SUB_TONE_NAMES, subTone, subToneDescription,
 } from "./engineData.js";
-import { EUCLID_DEFAULTS, FILTER_TYPES, defaultCompConfig, defaultEq, defaultFilter, defaultFxConfig, defaultTrackParams } from "./soundDefaults.js";
+import { EUCLID_DEFAULTS, FILTER_TYPES, PRISM_MODES, defaultCompConfig, defaultEq, defaultFilter, defaultFxConfig, defaultTrackParams } from "./soundDefaults.js";
 import {
   AUTOMATION_TARGETS, FX_STAGE_LEVEL_KEY, LFO_DIVS, LFO_KEYS, LFO_LABELS, PATTERN_COUNT, STEPS_PER_BAR,
   canAutomateKey, canModulateKey, lfoDivLabel, voiceAutoKeysForEngineKey,
@@ -691,10 +691,13 @@ const FX_RANGE = {   // anything not listed is 0..1
   "crush.bits": [1, 16], "pitchshift.semitones": [-12, 12], "delay.time": [0.05, 1], "delay.fbk": [0, 0.95],
   "reverb.decay": [0.2, 8], "delay.div": [0, 2],
 };
-const FX_SELECT = { "shaper.mode": ["saturate", "softclip", "clip", "serge", "fold", "wrap"] };
+const FX_SELECT = {
+  "shaper.mode": ["saturate", "softclip", "clip", "serge", "fold", "wrap"],
+  ...Object.fromEntries(Object.entries(PRISM_MODES).map(([k, v]) => [`prism.${k}`, v])),
+};
 /**
  * An fx rack stage. `stage` is one of FX_STAGES (vinyl, cassette, fuzz,
- * ringmod, shaper, crush, autowah, chorus, phaser, flanger, pitchshift, delay,
+ * ringmod, shaper, crush, autowah, chorus, phaser, flanger, pitchshift, prism, delay,
  * reverb, or amp); `settings` its controls. A stage is on when its wet /
  * amount is above zero. The whole stage is written, defaults filled in, since
  * the engine takes a stage config whole.

@@ -8,6 +8,7 @@ import { loadBassWorklet } from "./bass.js";
 import { loadHexopWorklet } from "./hexop.js";
 import { loadSubBassWorklet } from "./subbass.js";
 import { loadCrusherWorklet } from "./crusher.js";
+import { loadPrismWorklet } from "./prism.js";
 import { loadReverbWorklet } from "./reverb.js";
 import { loadFilterModelsWorklet } from "./filterModels.js";
 import { loadGuitarWorklet } from "./guitar.js";
@@ -269,7 +270,9 @@ export function loadWorklet() {
   // The eight analog filter characters — every track's filter slot wants
   // this registered, the same reason the rack's crusher/reverb are here.
   const analogFilter = loadFilterModelsWorklet(state.audioCtx).catch(e => { console.warn("analog filter worklet load failed", e); });
-  return Promise.all([state.woscLoad, silverbox, contagion, hexop, guitar, bass, sub, crusher, reverb, analogFilter]);
+  // The prism console: delay lines, followers and grains, the rack's again.
+  const prism = loadPrismWorklet(state.audioCtx).catch(e => { console.warn("prism worklet load failed", e); });
+  return Promise.all([state.woscLoad, silverbox, contagion, hexop, guitar, bass, sub, crusher, reverb, analogFilter, prism]);
 }
 
 /**
