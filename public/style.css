@@ -792,6 +792,8 @@ body:not([data-view="arrangement"]) #arrangement { display: none; }
 .sq-arrange__cell.is-on .sq-arrange__pic { opacity: 0.9; }
 .sq-arrange__cell.is-rest { background: transparent; border-style: dashed; }
 .sq-arrange__cell.is-drop { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.sq-arrange__cell[draggable="true"] { cursor: grab; }
+.sq-arrange__cell.is-dragging { opacity: 0.4; }
 .sq-arrange__lanetail {
   flex: 1 0 140px;
   min-width: 140px;

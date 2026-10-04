@@ -1821,7 +1821,12 @@ state.arrangement = [ {p:0, bars:4, off:[bass, lead]}, {p:1, bars:8}, {p:null, b
   TAIL and it is a new section at the end with that instrument alone on it
   (a rest for everyone else, the gap past the end a rest before it), which is
   why the lanes show before the first section: a song can start from one
-  instrument. The pattern grid's cells were already draggable
+  instrument. A cell that plays something is a CLIP: drag it to another
+  cell, on its own lane or another's, or to a lane's tail, and it drops as a
+  pattern number would with the pattern it plays — a move, the cell it came
+  from falling silent, unless alt / ctrl / cmd is held, which copies
+  (`text/arrange-clip`, with `text/pattern-idx` beside it so the sections'
+  tail takes it too). The pattern grid's cells were already draggable
   (`text/pattern-idx`, patternBar.js), so dropping one onto the lane inserts a
   section without the grid knowing. **A drop past the end leaves its gap as a
   rest** (`gapAt`): drag a block, or a pattern number, a few bars to the right

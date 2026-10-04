@@ -42,6 +42,7 @@ const VIEW_KEY = "seqbaby.view.v1";
 const PIC_ROWS = 8;                 // tracks drawn in a block's picture, at most
 const MIME_SECTION = "text/arrange-idx";
 const MIME_PATTERN = "text/pattern-idx";   // what the pattern grid's cells put on a drag (patternBar.js)
+const MIME_CLIP = "text/arrange-clip";     // a lane's cell on a drag: {i, t, p}, the pattern that track plays there
 
 let root = null, lane = null, rows = null, head = null;
 let resizing = null;                // the grip drag in progress
@@ -380,6 +381,7 @@ function render() {
       const mode = held ? "off" : own != null ? "own" : "follow";
       const c = el("div", "sq-arrange__cell");
       c.tabIndex = 0;
+      c.draggable = !held;            // a cell that plays something is a clip: drag it to another section or lane
       c.setAttribute("role", "button");
       c.dataset.i = String(i); c.dataset.t = String(t.id); c.dataset.mode = mode;
       c.style.setProperty("--arr-bars", String(e.bars));
@@ -389,7 +391,7 @@ function render() {
       c.classList.toggle("is-now", i === state.arrangePos);
       c.setAttribute("aria-pressed", String(!held));
       c.setAttribute("aria-label", `${t.name} in section ${i + 1}: ${held ? "silent" : own != null ? `pattern ${own + 1}, its own` : `pattern ${e.p + 1}, the section's`}`);
-      c.title = `${t.name} in section ${i + 1}: ${held ? "silent" : own != null ? `pattern ${own + 1}, its own` : `pattern ${e.p + 1}, the section's`}. Click to ${held ? "let it in" : "hold it back"}; drop a pattern number here for one of its own${own != null ? "; × to go back to the section's" : ""}`;
+      c.title = `${t.name} in section ${i + 1}: ${held ? "silent" : own != null ? `pattern ${own + 1}, its own` : `pattern ${e.p + 1}, the section's`}. Click to ${held ? "let it in" : "hold it back"}; drop a pattern number here for one of its own${own != null ? "; × to go back to the section's" : ""}${held ? "" : "; drag it to another section or lane (alt to copy)"}`;
       const pic = el("canvas", "sq-arrange__pic");
       c.appendChild(pic);
       if (own != null) {
@@ -667,7 +669,23 @@ function wireRows() {
   // a pattern number dropped on a cell is that track's own pattern for the
   // section; dropped on a lane's tail it is a NEW section with that track
   // alone on it (a rest for everyone else), a gap past the end a rest first,
-  // as on the sections' own tail
+  // as on the sections' own tail. A CLIP (a cell that plays something,
+  // dragged) drops the same way with the pattern it plays, and is a move:
+  // the cell it came from falls silent, unless alt (or ctrl / cmd) is held,
+  // which copies.
+  rows.addEventListener("dragstart", e => {
+    const cell = e.target.closest?.(".sq-arrange__cell");
+    const t = trackOf(cell);
+    if (!cell || !t) { e.preventDefault(); return; }
+    const i = Number(cell.dataset.i);
+    const p = trackTargetPattern(state.arrangement[i], t);
+    if (p == null) { e.preventDefault(); return; }
+    e.dataTransfer.setData(MIME_CLIP, JSON.stringify({ i, t: t.id, p }));
+    e.dataTransfer.setData(MIME_PATTERN, String(p));     // so the sections' tail takes it as a pattern too
+    e.dataTransfer.effectAllowed = "copyMove";
+    cell.classList.add("is-dragging");
+  });
+  rows.addEventListener("dragend", e => { e.target.closest?.(".sq-arrange__cell")?.classList.remove("is-dragging"); clearMarks(); });
   const laneGap = (tail, clientX) => {
     const barPx = parseFloat(getComputedStyle(root).getPropertyValue("--arr-bar-w")) || 28;
     return Math.max(0, Math.min(ARRANGE_MAX_BARS, Math.round((clientX - tail.getBoundingClientRect().left) / barPx)));
@@ -678,9 +696,10 @@ function wireRows() {
   };
   rows.addEventListener("dragover", e => {
     const target = e.target.closest?.(".sq-arrange__cell, .sq-arrange__lanetail");
-    if (!target || !(e.dataTransfer?.types || []).includes(MIME_PATTERN)) return;
+    const types = e.dataTransfer?.types || [];
+    if (!target || !(types.includes(MIME_PATTERN) || types.includes(MIME_CLIP))) return;
     e.preventDefault();
-    e.dataTransfer.dropEffect = "copy";
+    e.dataTransfer.dropEffect = types.includes(MIME_CLIP) && !(e.altKey || e.ctrlKey || e.metaKey) ? "move" : "copy";
     for (const n of rows.querySelectorAll(".is-drop")) if (n !== target) n.classList.remove("is-drop");
     target.classList.add("is-drop");
     if (target.classList.contains("sq-arrange__lanetail")) {
@@ -695,25 +714,35 @@ function wireRows() {
   });
   rows.addEventListener("drop", e => {
     const target = e.target.closest?.(".sq-arrange__cell, .sq-arrange__lanetail");
-    const p = Number(e.dataTransfer.getData(MIME_PATTERN));
+    let clip = null;
+    try { clip = JSON.parse(e.dataTransfer.getData(MIME_CLIP) || "null"); } catch {}
+    const p = clip ? Number(clip.p) : Number(e.dataTransfer.getData(MIME_PATTERN));
     const gap = target?.classList.contains("sq-arrange__lanetail") ? laneGap(target, e.clientX) : 0;
     clearMarks();
     const t = trackOf(target);
     if (!target || !t || !Number.isFinite(p)) return;
     e.preventDefault();
+    const src = clip && state.tracks.find(x => x.id === Number(clip.t));
+    const move = !!clip && !(e.altKey || e.ctrlKey || e.metaKey);
+    const from = clip ? `${src?.name ?? "a clip"}, section ${Number(clip.i) + 1}` : null;
     if (target.classList.contains("sq-arrange__cell")) {
       const i = Number(target.dataset.i);
+      if (clip && src === t && Number(clip.i) === i) return;     // dropped where it was
+      // a move: the source falls silent; done before the destination is
+      // written, in case the two are the same section on another lane
+      if (move && src) { setHeld(Number(clip.i), src, true); setOwn(Number(clip.i), src, null); }
       setOwn(i, t, p);
       setHeld(i, t, false);
       render();
-      setStatus(`${t.name} plays pattern ${p + 1} in section ${i + 1}`);
+      setStatus(`${t.name} plays pattern ${p + 1} in section ${i + 1}${from ? ` (${move ? "moved" : "copied"} from ${from})` : ""}`);
       return;
     }
     const bars = Math.max(1, Math.min(ARRANGE_MAX_BARS, Number(state.patternRepeats[p]) || 1));
     edit(arr => {
+      if (move && src) { setHeld(Number(clip.i), src, true); setOwn(Number(clip.i), src, null); }
       if (gap >= 1) arr.push({ p: null, bars: gap, off: [], pat: {} });
       arr.push({ p: null, bars, off: [], pat: { [t.id]: p } });
-    }, `section ${state.arrangement.length + 1}: ${t.name} alone on pattern ${p + 1}${gap >= 1 ? `, after a ${plural(gap, "bar")} rest` : ""}`);
+    }, `section ${state.arrangement.length + 1}: ${t.name} alone on pattern ${p + 1}${gap >= 1 ? `, after a ${plural(gap, "bar")} rest` : ""}${from ? ` (${move ? "moved" : "copied"} from ${from})` : ""}`);
     focusBlock(state.arrangement.length - 1);
   });
 }
