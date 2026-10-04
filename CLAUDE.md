@@ -295,7 +295,7 @@ npm run legacy:dev     # pre-Next static Node server on :5173 (engine assets onl
 npm test               # node --test: the pure modules (session format, chance gen,
                        #   version tree, song names, share card copy, the song builder, the jam diff,
                        #   song previews, grid avatars, the songs and people explorers,
-                       #   the Strudel bridge)
+                       #   the Strudel bridge, the reverb, the filter models, the guitar)
 npm run mcp            # the MCP server on stdio (mcp/server.mjs) — an agent writes songs
 npm run test:rls       # RLS policy tests — builds a throwaway Postgres in docker
 ```
@@ -847,18 +847,59 @@ STRING ──▶ PICKUP ──▶ tone pot ──▶ AMP ──▶ CAB ──▶
 - **The string is a waveguide** — a delay line one period long with a damping
   filter (highs die first, which is why a guitar note gets duller as it rings),
   two allpasses for stiffness/inharmonicity, and a fractional-delay allpass so
-  it's actually in tune. Measured at ≤1.2 cents across four octaves; the
-  compensation for the loop filters' own phase delay in `retune()` is what buys
-  that, and removing it makes the whole instrument play flat.
-- **The pluck is a noise burst combed at the pick position**, which is the
-  difference between picking over the neck and by the bridge. The pickup combs
-  it again on the way out and adds its own LC resonance (single 6.2kHz /
-  humbucker 3.1kHz / p90 4.4kHz — that peak is what you hear when you flick the
-  selector, not the coil count).
+  it's actually in tune. Measured at ≤1 cent across four octaves; `retune()`
+  subtracts each loop filter's phase delay AT THE NOTE (the DC figure is most
+  of a sample out at the top of the neck), and removing that makes the whole
+  instrument play flat.
+- **The losses are times, not a per-lap gain** (`setLosses`). A Karplus-Strong
+  loop loses a fixed fraction per period, so one loop gain gave the low E a
+  1.6s ring and the E two octaves up 0.08s — the top of the neck plinked and
+  the bottom droned, and it was the single most unnatural thing about the
+  instrument. Now the sustain slider is a T60 in seconds (0.35s at 0, ~1.3s
+  at the 0.4 default, ~8s at 1, shortened by `(82Hz/f)^0.2` up the neck so a
+  high note rings a little less, not sixteen times less), and the damping
+  one-pole is solved in closed form so the partials around 4kHz die in a
+  quarter of that. Measured: E2 1.34s / E4 0.96s / E6 0.72s at the default.
+  Palm mute pulls both times down together.
+- **The pluck is the velocity wave a released string has**, not a noise burst.
+  A plucked string starts as a triangle; the delay line carries velocity
+  (a magnetic pickup reads velocity), and the velocity wave of a released
+  triangle is a bipolar rectangle with the pick-position comb already in it
+  and a 1/n spectrum. The noise burst it replaced had a FLAT spectrum, so every
+  attack was a zap the amp then clipped, and a fresh random harmonic balance
+  per note (measured: the same note twice differed by 3dB; E2's second
+  harmonic came out 11dB over its fundamental). Noise survives as the pick's
+  scrape, mixed under the pulse. The rectangle's corners are rounded by how
+  fast the pick lets go — a one-pole whose corner runs from 400Hz (a thumb)
+  to 5kHz (a hard plectrum) with the pick control, and higher the harder the
+  hit — which is what makes velocity brightness and not only level. A hard pluck also starts up to ~15 cents sharp and settles over 60ms
+  (tension modulation, the "boing" of a picked low string); it retunes per
+  block while it settles, and measured against the same note without it that
+  adds no clicks.
+- **The pickup combs the string again** at its own position (a tap `p` of a
+  PERIOD back in the line for a pickup `p` of the way along the string — it
+  was `2p`, which put a bridge humbucker's first notch on the 4th harmonic
+  instead of the 8th and hollowed every pickup out) and adds its own LC
+  resonance (single 6.2kHz / humbucker 3.1kHz / p90 4.4kHz — that peak is
+  what you hear when you flick the selector, not the coil count).
 - **Amp**: asymmetric first stage → tone stack → second stage → presence in the
   power-amp loop → soft clip into a sagging supply. Five models (clean / tweed /
   brit / hi-gain / jazz) differing in gain, bias, stack frequencies and voicing.
-  Drive is **exponential** (`0.7·g^drive²`) because a gain pot is.
+  Drive is **exponential** (`0.45·g^drive²`) because a gain pot is; the 0.45
+  puts a single note at drive 0 about 6dB under the first stage's knee, so
+  the bottom of the slider is clean on every amp (it was 2.2, which clipped
+  the attack of every note on the cleanest setting and made a hard pick come
+  out duller than a soft one). **The amp is 2x oversampled**, first stage to
+  power amp, three biquads up and three down: with a hundred times gain into
+  three clippers the fold-back was 27dB under the note on hi-gain, which is a
+  fizz no speaker made; it is 60dB under now. The strings and the cab stay at
+  the host rate. The output trim follows the gain the rig is actually applying
+  through the clippers' own knee, so a clean amp and a saturated one land at
+  about the same level.
+- **A chord is a strum.** Notes posted for the same instant land 4ms apart
+  in the order they arrived (root first, as the transport sends them), since a
+  pick cannot be on six strings at once; it also takes the top off a chord's
+  attack, which six coincident pulses made 10dB above a note's.
 - **Cab**: four biquads, five cabs. It's the biggest filter in the chain.
 - **BLOOM is real feedback**: a delayed, bandpassed copy of the cab output is
   injected back into each *gated* string, scaled by that string's own envelope.
