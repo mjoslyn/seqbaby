@@ -296,7 +296,8 @@ function render() {
   let at = 1;
   arr.forEach((e, i) => {
     const rest = e.p == null;
-    const what = rest ? "a rest" : `pattern ${e.p + 1}`;
+    const laned = rest && Object.keys(e.pat || {}).length > 0;   // no section pattern, but lanes playing
+    const what = laned ? "lanes only" : rest ? "a rest" : `pattern ${e.p + 1}`;
     const b = el("div", "sq-arrange__block");
     b.draggable = true;
     b.tabIndex = 0;
@@ -309,12 +310,12 @@ function render() {
     b.classList.toggle("is-active", !rest && e.p === state.activePattern);
     b.setAttribute("role", "button");
     b.setAttribute("aria-label", `section ${i + 1}: ${what}, ${plural(e.bars, "bar")}, from bar ${at}`);
-    b.title = `${what} for ${plural(e.bars, "bar")}, from bar ${at}. ${rest ? "Silence: every track is held back. " : "Click to go there, "}drag to move, drag the right edge for bars. Keys: + − bars, shift+arrows move, delete removes, r adds a rest after`;
+    b.title = `${what} for ${plural(e.bars, "bar")}, from bar ${at}. ${laned ? "No section pattern: only the lanes with one of their own play. " : rest ? "Silence: every track is held back. " : "Click to go there, "}drag to move, drag the right edge for bars. Keys: + − bars, shift+arrows move, delete removes, r adds a rest after`;
     const pic = el("canvas", "sq-arrange__pic");
     b.appendChild(pic);
     const meta = el("div", "sq-arrange__meta");
     meta.appendChild(el("span", "sq-arrange__at", String(at)));
-    meta.appendChild(el("span", "sq-arrange__num", rest ? "rest" : String(e.p + 1)));
+    meta.appendChild(el("span", "sq-arrange__num", laned ? "lanes" : rest ? "rest" : String(e.p + 1)));
     meta.appendChild(el("span", "sq-arrange__bars", plural(e.bars, "bar")));
     b.appendChild(meta);
     // The small buttons: move left / right and remove. Hover-only on a mouse,
@@ -345,10 +346,13 @@ function render() {
   lane.appendChild(tail);
 
   // the lanes: a row per instrument track, a cell per section: the section's
-  // pattern, one of the track's own, or nothing
+  // pattern, one of the track's own, or nothing. Shown from the start, since
+  // a lane's tail is a way to begin: a pattern dropped there is a section
+  // for that instrument alone.
   rows.replaceChildren();
-  rows.hidden = !arr.length;
-  for (const t of (arr.length ? lanes() : [])) {
+  const laneTracks = lanes();
+  rows.hidden = !laneTracks.length;
+  for (const t of laneTracks) {
     const row = el("div", "sq-arrange__row");
     row.dataset.t = String(t.id);
     const hue = t.el ? getComputedStyle(t.el).getPropertyValue("--track-hue").trim() : "";
@@ -399,6 +403,11 @@ function render() {
       row.appendChild(c);
       paintPic(pic, e, [t]);
     });
+    // the lane's tail: a pattern dropped here is a new section at the end
+    // with this instrument alone on it (and, past the end, a rest before it)
+    const lt = el("div", "sq-arrange__lanetail", arr.length ? `drop a pattern here for ${t.name} alone` : `drop a pattern here to start with ${t.name} alone`);
+    lt.dataset.t = String(t.id);
+    row.appendChild(lt);
     rows.appendChild(row);
   }
   if (focused != null) focusBlock(Number(focused));
@@ -655,28 +664,57 @@ function wireRows() {
       e.preventDefault();
     }
   });
-  // a pattern number dropped on a cell: that track's own pattern for the section
+  // a pattern number dropped on a cell is that track's own pattern for the
+  // section; dropped on a lane's tail it is a NEW section with that track
+  // alone on it (a rest for everyone else), a gap past the end a rest first,
+  // as on the sections' own tail
+  const laneGap = (tail, clientX) => {
+    const barPx = parseFloat(getComputedStyle(root).getPropertyValue("--arr-bar-w")) || 28;
+    return Math.max(0, Math.min(ARRANGE_MAX_BARS, Math.round((clientX - tail.getBoundingClientRect().left) / barPx)));
+  };
+  const clearMarks = () => {
+    for (const n of rows.querySelectorAll(".is-drop")) n.classList.remove("is-drop");
+    for (const n of rows.querySelectorAll(".sq-arrange__lanetail[data-gap]")) { delete n.dataset.gap; n.style.removeProperty("--arr-gap"); }
+  };
   rows.addEventListener("dragover", e => {
-    const cell = e.target.closest?.(".sq-arrange__cell");
-    if (!cell || !(e.dataTransfer?.types || []).includes(MIME_PATTERN)) return;
+    const target = e.target.closest?.(".sq-arrange__cell, .sq-arrange__lanetail");
+    if (!target || !(e.dataTransfer?.types || []).includes(MIME_PATTERN)) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = "copy";
-    for (const n of rows.querySelectorAll(".is-drop")) if (n !== cell) n.classList.remove("is-drop");
-    cell.classList.add("is-drop");
+    for (const n of rows.querySelectorAll(".is-drop")) if (n !== target) n.classList.remove("is-drop");
+    target.classList.add("is-drop");
+    if (target.classList.contains("sq-arrange__lanetail")) {
+      const gap = laneGap(target, e.clientX);
+      if (gap >= 1) { target.dataset.gap = `${plural(gap, "bar")} rest`; target.style.setProperty("--arr-gap", String(gap)); }
+      else { delete target.dataset.gap; target.style.removeProperty("--arr-gap"); }
+    }
   });
-  rows.addEventListener("dragleave", e => { e.target.closest?.(".sq-arrange__cell")?.classList.remove("is-drop"); });
+  rows.addEventListener("dragleave", e => {
+    const target = e.target.closest?.(".sq-arrange__cell, .sq-arrange__lanetail");
+    if (target && !target.contains(e.relatedTarget)) { target.classList.remove("is-drop"); delete target.dataset.gap; target.style.removeProperty("--arr-gap"); }
+  });
   rows.addEventListener("drop", e => {
-    const cell = e.target.closest?.(".sq-arrange__cell");
+    const target = e.target.closest?.(".sq-arrange__cell, .sq-arrange__lanetail");
     const p = Number(e.dataTransfer.getData(MIME_PATTERN));
-    for (const n of rows.querySelectorAll(".is-drop")) n.classList.remove("is-drop");
-    const t = trackOf(cell);
-    if (!cell || !t || !Number.isFinite(p)) return;
+    const gap = target?.classList.contains("sq-arrange__lanetail") ? laneGap(target, e.clientX) : 0;
+    clearMarks();
+    const t = trackOf(target);
+    if (!target || !t || !Number.isFinite(p)) return;
     e.preventDefault();
-    const i = Number(cell.dataset.i);
-    setOwn(i, t, p);
-    setHeld(i, t, false);
-    render();
-    setStatus(`${t.name} plays pattern ${p + 1} in section ${i + 1}`);
+    if (target.classList.contains("sq-arrange__cell")) {
+      const i = Number(target.dataset.i);
+      setOwn(i, t, p);
+      setHeld(i, t, false);
+      render();
+      setStatus(`${t.name} plays pattern ${p + 1} in section ${i + 1}`);
+      return;
+    }
+    const bars = Math.max(1, Math.min(ARRANGE_MAX_BARS, Number(state.patternRepeats[p]) || 1));
+    edit(arr => {
+      if (gap >= 1) arr.push({ p: null, bars: gap, off: [], pat: {} });
+      arr.push({ p: null, bars, off: [], pat: { [t.id]: p } });
+    }, `section ${state.arrangement.length + 1}: ${t.name} alone on pattern ${p + 1}${gap >= 1 ? `, after a ${plural(gap, "bar")} rest` : ""}`);
+    focusBlock(state.arrangement.length - 1);
   });
 }
 

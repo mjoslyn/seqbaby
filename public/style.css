@@ -792,6 +792,35 @@ body:not([data-view="arrangement"]) #arrangement { display: none; }
 .sq-arrange__cell.is-on .sq-arrange__pic { opacity: 0.9; }
 .sq-arrange__cell.is-rest { background: transparent; border-style: dashed; }
 .sq-arrange__cell.is-drop { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.sq-arrange__lanetail {
+  flex: 1 0 140px;
+  min-width: 140px;
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  font-size: 10px;
+  color: color-mix(in oklab, var(--fg-dim) 55%, transparent);
+  border: 1px dashed color-mix(in oklab, var(--border) 60%, transparent);
+  border-radius: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sq-arrange__row:hover .sq-arrange__lanetail { color: var(--fg-dim); border-color: var(--border); }
+.sq-arrange__lanetail.is-drop { border-color: var(--accent); color: var(--fg); }
+.sq-arrange__lanetail[data-gap] { gap: 3px; padding: 0; }
+.sq-arrange__lanetail[data-gap]::before {
+  content: attr(data-gap);
+  flex: 0 0 auto;
+  align-self: stretch;
+  width: calc(var(--arr-gap, 1) * var(--arr-bar-w));
+  display: grid;
+  place-items: center;
+  border: 1px dashed var(--fg-dim);
+  border-radius: 3px;
+  background: repeating-linear-gradient(135deg, transparent 0 6px, color-mix(in oklab, var(--fg) 5%, transparent) 6px 7px);
+  overflow: hidden;
+}
 .sq-arrange__own {
   position: absolute;
   left: 4px; top: 50%;

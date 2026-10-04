@@ -1817,7 +1817,11 @@ state.arrangement = [ {p:0, bars:4, off:[bass, lead]}, {p:1, bars:8}, {p:null, b
   the track back or let it in, drop a pattern number on it (or type a digit)
   for a pattern of the track's own, its `×` to go back to the section's,
   click the lane's name for every section at once, the lane's `×` (shown
-  once it says anything) to clear it. The pattern grid's cells were already draggable
+  once it says anything) to clear it; drop a pattern number on the lane's
+  TAIL and it is a new section at the end with that instrument alone on it
+  (a rest for everyone else, the gap past the end a rest before it), which is
+  why the lanes show before the first section: a song can start from one
+  instrument. The pattern grid's cells were already draggable
   (`text/pattern-idx`, patternBar.js), so dropping one onto the lane inserts a
   section without the grid knowing. **A drop past the end leaves its gap as a
   rest** (`gapAt`): drag a block, or a pattern number, a few bars to the right
