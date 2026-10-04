@@ -105,7 +105,7 @@ env / fx / eq / comp / mod / automation per track.
 - `main.js` — bootstrap `init()`: creates the AudioContext, binds Tone to it,
   wires all UI, starter tracks, unlock listeners. Entry point.
 - `transport.js` — `ensureAudio()`, `togglePlay()`, the single
-  `Tone.Transport.scheduleRepeat` loop, `loadWorklet()`, `requestMidiIfNeeded()`.
+  `Tone.getTransport().scheduleRepeat` loop, `loadWorklet()`, `requestMidiIfNeeded()`.
 - `voices.js` — every voice class + `buildVoiceForEngine` dispatch + the
   emulator builder functions.
 - `state.js` — global `state`, `emptyPattern`, `aliasPattern`, `switchPattern`.
@@ -571,8 +571,14 @@ svf family (velvet, scream, growl):
 
 All of this lives in `main.js` `init()` and `transport.js`:
 
+- **The transport is `Tone.getTransport()`, never `Tone.Transport`.** In Tone 15
+  `Tone.Transport` (and `Tone.Draw`) is a constant bound at import to Tone's
+  default context, a second AudioContext that only starts on the play click,
+  so its clock runs behind ours and every step landed in the transport loop's
+  `now + 0.002` clamp: no lookahead, swing and nudges lost, measured note gaps
+  off by p95 50-100ms. `getTransport()` is the studio context's.
 - The AudioContext is created at `init()` and `Tone.setContext(ctx)` runs
-  BEFORE anything reads `Tone.Transport` (its clock latches onto the context's
+  BEFORE anything reads the transport (its clock latches onto the context's
   time at first access).
 - **First-gesture unlock**: capture-phase `pointerdown/keydown/touchstart`
   listeners call `primeAudioForIOS()` whenever the context is suspended.
@@ -1324,7 +1330,7 @@ chainBarCount` — plus runtime slots added by the unlock architecture
 
 ## Transport
 
-Single `Tone.Transport.scheduleRepeat` at `"16n"`. Each callback, per track:
+Single `Tone.getTransport().scheduleRepeat` at `"16n"`. Each callback, per track:
 
 1. Accumulate `t.speedAccum += t.speed`; while `≥ 1`, fire a step (per-track
    tempo multiples / polymeter).
@@ -1356,7 +1362,7 @@ a voice *releases* it, so a long-release patch fades back in over the top of the
 silence you just asked for (measured: a pad still audible a second after stop).
 And it can't be left down until the next start either, which is what it used to
 do — the keyboard plays through the same bus, so every key was silent once you'd
-pressed stop. `Tone.Transport.start(lead, 0)` with the explicit 0 offset
+pressed stop. `Tone.getTransport().start(lead, 0)` with the explicit 0 offset
 is the canonical rewind (avoids Tone 15's stop/cancel/position bugs).
 
 ## Knobs (`knob.js`) — a skin over the range inputs
@@ -3545,15 +3551,15 @@ through a 6ms fade on its gain).
   in a ref. Don't inline it back into studio/page.tsx.
 - **`tsconfig.json` excludes `public/js/`** — the engine is plain JS with
   JSDoc types; don't rename it to TS or import it into the Next graph.
-- **Don't use `Tone.Time(...)` for the step duration.** `Tone.setContext()` at
-  init leaves Tone's time helpers resolving against a different transport than
-  the one the sequence is scheduled on, so `Tone.Time("16n").toSeconds()`
+- **Don't use `Tone.Time(...)` for the step duration.** Until the transport
+  moved to `Tone.getTransport()`, the sequence ran on the default context's
+  transport while Tone's time helpers read the studio context's, so `Tone.Time("16n").toSeconds()`
   answers 0.125s — the 120bpm value — at *every* tempo, while
-  `Tone.Transport.bpm` reads correctly. That silently scaled note lengths,
+  the sequence's transport read correctly. That silently scaled note lengths,
   swing, per-step micro-timing, automation ramps and arp spans to a fixed
   120bpm (notes half the length of their step at 60bpm, overlapping the next
   one at 180). `baseStepDur` in transport.js derives it arithmetically from
-  `Tone.Transport.bpm.value` instead. Anything else needing musical time should
+  `Tone.getTransport().bpm.value` instead. Anything else needing musical time should
   do the same, or use `currentBpm()` (lfo.js) as the sync helpers do.
 - **Worklet processor sources are template literals** (`silverbox.js`,
   `contagion.js`, `hexop.js`, `guitar.js`, `bass.js`, `subbass.js`,
