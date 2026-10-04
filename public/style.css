@@ -909,6 +909,37 @@ body.sq-playing .sq-arrange__block.is-now::after { display: block; }
   border-radius: 4px;
 }
 .sq-arrange__tail.is-drop-end { border-color: var(--accent); color: var(--fg); }
+/* The rest a drop past the end would make: a ghost as wide as the gap, in
+   front of the drop line, while the drag is over the tail (data-gap set by
+   markDrop). The tail becomes a row for it. */
+.sq-arrange__tail[data-gap] {
+  display: flex;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: 3px;
+  padding: 0;
+  color: var(--fg-dim);
+}
+.sq-arrange__tail[data-gap]::before {
+  content: attr(data-gap);
+  flex: 0 0 auto;
+  width: calc(var(--arr-gap, 1) * var(--arr-bar-w));
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  border: 1px dashed var(--fg-dim);
+  border-radius: 4px;
+  background: repeating-linear-gradient(135deg, transparent 0 6px, color-mix(in oklab, var(--fg) 5%, transparent) 6px 7px);
+  white-space: nowrap;
+  overflow: hidden;
+}
+.sq-arrange__tail[data-gap]::after {
+  content: "";
+  flex: 0 0 3px;
+  background: var(--accent);
+  border-radius: 1px;
+}
 #pattern-mode[aria-pressed="true"] { background: var(--accent-2); color: #0b0d10; border-color: var(--accent-2); }
 #pattern-switch[aria-pressed="true"] { background: var(--accent-2); color: #0b0d10; border-color: var(--accent-2); }
 #set-save, #set-load, #set-export, #set-import, #set-share { text-transform: none; }

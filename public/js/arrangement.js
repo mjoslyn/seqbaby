@@ -385,14 +385,35 @@ function dropIndexAt(clientX) {
   return blocks.length;
 }
 
-function clearDropMarks() {
-  for (const n of lane.querySelectorAll(".is-drop-before, .is-drop-end")) n.classList.remove("is-drop-before", "is-drop-end");
+/**
+ * How far past the end a drop at clientX lands, in bars: the gap it would
+ * leave between the last section and the dropped one, which becomes a REST.
+ * Measured in the tail, from its left edge, in the stylesheet's bar width.
+ * Dropping a bar or more past the end is how a rest is dragged into being.
+ */
+function gapAt(clientX) {
+  const tail = lane.querySelector(".sq-arrange__tail");
+  if (!tail) return 0;
+  const barPx = parseFloat(getComputedStyle(root).getPropertyValue("--arr-bar-w")) || 28;
+  const gap = Math.round((clientX - tail.getBoundingClientRect().left) / barPx);
+  return Math.max(0, Math.min(ARRANGE_MAX_BARS, gap));
 }
 
-function markDrop(i) {
+function clearDropMarks() {
+  for (const n of lane.querySelectorAll(".is-drop-before, .is-drop-end")) n.classList.remove("is-drop-before", "is-drop-end");
+  const tail = lane.querySelector(".sq-arrange__tail");
+  if (tail) { delete tail.dataset.gap; tail.style.removeProperty("--arr-gap"); }
+}
+
+function markDrop(i, gap = 0) {
   clearDropMarks();
   const b = lane.querySelector(`.sq-arrange__block[data-i="${i}"]`);
-  if (b) b.classList.add("is-drop-before"); else lane.querySelector(".sq-arrange__tail")?.classList.add("is-drop-end");
+  if (b) { b.classList.add("is-drop-before"); return; }
+  const tail = lane.querySelector(".sq-arrange__tail");
+  if (!tail) return;
+  tail.classList.add("is-drop-end");
+  // the ghost of the rest the gap would make, so the drop is not a surprise
+  if (gap >= 1) { tail.dataset.gap = `${plural(gap, "bar")} rest`; tail.style.setProperty("--arr-gap", String(gap)); }
 }
 
 function wireLane() {
@@ -402,7 +423,8 @@ function wireLane() {
     if (!section && !pattern) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = section ? "move" : "copy";
-    markDrop(dropIndexAt(e.clientX));
+    const to = dropIndexAt(e.clientX);
+    markDrop(to, to === state.arrangement.length ? gapAt(e.clientX) : 0);
   });
   lane.addEventListener("dragleave", e => { if (!lane.contains(e.relatedTarget)) clearDropMarks(); });
   lane.addEventListener("drop", e => {
@@ -412,15 +434,23 @@ function wireLane() {
     if (sec === "" && pat === "") return;
     e.preventDefault();
     let to = dropIndexAt(e.clientX);
+    // Past the end, the space left between the last section and the drop is
+    // a rest: drag a block a few bars to the right and the gap is silence.
+    const gap = to === state.arrangement.length ? gapAt(e.clientX) : 0;
+    const rest = gap >= 1 ? { p: null, bars: gap, off: [] } : null;
     if (sec !== "") {
       const from = Number(sec);
       if (!Number.isFinite(from)) return;
       if (to > from) to--;            // the gap closes behind the block being moved
-      moveSection(from, to);
+      if (rest) {
+        edit(arr => { const [m] = arr.splice(from, 1); arr.push(rest, m); }, `section moved to the end, after a ${plural(gap, "bar")} rest`);
+        focusBlock(state.arrangement.length - 1);
+      } else moveSection(from, to);
     } else {
       const p = Number(pat);
       if (!Number.isFinite(p)) return;
-      addSection(p, to);
+      if (rest) addSection(null, to, gap);
+      addSection(p, rest ? to + 1 : to);
     }
   });
 

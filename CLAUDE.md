@@ -1793,7 +1793,12 @@ state.arrangement = [ {p:0, bars:4, off:[bass, lead]}, {p:1, bars:8}, {p:null, b
   cell to hold the track back or let it in, click a row's label for every
   section at once. The pattern grid's cells were already draggable
   (`text/pattern-idx`, patternBar.js), so dropping one onto the lane inserts a
-  section without the grid knowing. `+ pattern N` appends the active pattern,
+  section without the grid knowing. **A drop past the end leaves its gap as a
+  rest** (`gapAt`): drag a block, or a pattern number, a few bars to the right
+  of the last section and the space between becomes a rest of that many bars,
+  the dropped section after it; the tail shows a ghost of the rest
+  (`data-gap`) while the drag is over it, so the drop is not a surprise. One
+  drop, one undo step. `+ pattern N` appends the active pattern,
   `+ rest` a bar of silence; `from patterns` writes what the slot-order chain
   would play; `clear` empties it. The playhead is the block's (and the
   cell's) `::after` from `--arr-head`, painted by `paintArrangementNow` off
