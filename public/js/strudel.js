@@ -1790,7 +1790,7 @@ function partCode(t, k, { native, sound, withSound = true, label = null, lock = 
 /** A plain JavaScript string, which Strudel does not read as mini-notation. */
 const jsString = (v) => `'${String(v).replace(/\\/g, "\\\\").replace(/'/g, "\\'")}'`;
 const RESERVED = new Set(["let", "const", "var", "await", "new", "function", "return", "if", "else", "for", "while", "setcpm", "setcps", "setbpm", "hush", "samples"]);
-const FX_LEVEL = { vinyl: "amount", cassette: "amount", fuzz: "amount", ringmod: "wet", shaper: "wet", crush: "wet", autowah: "wet", chorus: "wet", phaser: "wet", flanger: "wet", pitchshift: "wet", delay: "wet", reverb: "wet" };
+const FX_LEVEL = { vinyl: "amount", cassette: "amount", fuzz: "amount", ringmod: "wet", shaper: "wet", crush: "wet", autowah: "wet", chorus: "wet", phaser: "wet", flanger: "wet", pitchshift: "wet", prism: "wet", delay: "wet", reverb: "wet" };
 /** The params an engine actually has: its sliders (as the automation gate
  *  knows them) and its panel. */
 function engineKnobKeys(engineKey) {

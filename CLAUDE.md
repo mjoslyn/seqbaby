@@ -16,7 +16,7 @@ env / fx / eq / comp / mod / automation per track.
   `public/woscillators.js` →
   `public/js/main.js` (ES module). `middleware.ts` refreshes the Supabase
   session on every request *except* static engine assets.
-- **Engine**: ~67 dependency-free vanilla ES modules in `public/js/`. No
+- **Engine**: ~69 dependency-free vanilla ES modules in `public/js/`. No
   bundler — edit, reload. `window.seqbaby` (from `appApi.js`) exposes `state`
   and serialize/apply hooks to the React shell (typed in `app/seqbaby.d.ts`).
 - **Accounts + data**: Supabase (Postgres + Auth + RLS). Tables: `profiles`,
@@ -122,6 +122,9 @@ env / fx / eq / comp / mod / automation per track.
   file shape again. It is the rack's, not an engine's, and it exists because a
   convolution reverb's decay cannot be changed without re-rendering it. See the
   reverb section below.
+- `prism.js` — the prism: a four-module console (character → movement →
+  diffusion → texture → tilt) as one AudioWorklet rack stage. Same file
+  shape as crusher.js/reverb.js. See the prism section below.
 - `filterModels.js` — the filter control's eight analog-modeled characters
   (fat/crisp/squelch/edge/poly/velvet/scream/growl), an AudioWorklet insert
   effect standing in for the plain BiquadFilterNode when `t.filter.type`
@@ -333,10 +336,12 @@ voice → filterNode → eqNode → compressor → fxRack → masterGain → mas
   from any track's `voice.getOutputNode()`).
 - `fxRack` — `FXRack`, serial chain in this order: **vinyl → cassette → fuzz →
   ring mod → wave shaper → crush → auto-wah → chorus → phaser → flanger →
-  pitch shift → delay → reverb**. `defaultFxConfig()` keys match. Chain order
+  pitch shift → prism → delay → reverb**. `defaultFxConfig()` keys match. Chain order
   matters for LFO/automation targets.
 - **crush is a converter, not a rounding function** (`crusher.js`) — see the
   bitcrush section below.
+- **prism is four effects in one stage** (`prism.js`) — see the prism section
+  below.
 - **reverb is a feedback delay network, not a convolver** (`reverb.js`) — see
   the reverb section below. Its wet/dry is still a `Tone.CrossFade`, so `wet`
   is the same Tone.Param an LFO connects to and a lane ramps.
@@ -500,6 +505,52 @@ in ─ dc ─ predelay ─ 4 allpass diffusers ─┬─▶ 8 delay lines ─┬
   a 180ms frame, so a track never loses its tail.
 - `reverb.js` is importable from Node (no DOM, no Tone), which is what lets
   `test/reverb.test.js` render the tank and measure all of the above.
+
+## Prism (`prism.js`) — a four-module console in one rack stage
+
+Four effects in series, each module a choice of five characters and one
+amount knob, with five knobs shared between them. The modules are voiced to be
+stacked: a drive for a doubler after it, an echo a tape texture then wears
+down. Not a model of any particular pedal; the characters are reasoned
+versions of what their names say.
+
+```
+in ─▶ CHARACTER ─▶ MOVEMENT ─▶ DIFFUSION ─▶ TEXTURE ─▶ TILT ─▶ out
+      drive        doubler     cascade      filter
+      sweeten      vibrato     reels        squash
+      fuzz         phaser      space        cassette
+      howl         tremolo     collage      broken
+      swell        pitch       reverse      interference
+```
+
+- **Config** is `t.fxConfig.prism`: `wet` (the mix, the stage's level key),
+  `char` / `move` / `diff` / `tex` (the four amounts), `charmode` /
+  `movemode` / `diffmode` / `texmode` (the characters, by name, from
+  `PRISM_MODES` in soundDefaults.js), and `tilt` / `rate` / `time` / `sens` /
+  `drift`. Every knob is 0..1 and a k-rate AudioParam on the node, so one list
+  (`PRISM_KNOBS`) spells all three namespaces: `fx-prism-<k>`, `prism_<k>`,
+  `fx.prism.<k>`. The mix is the rack's linear crossfade around the node
+  (`prismWetBus`), like crush.
+- **A module at amount 0 is out of the circuit** and costs nothing; its state is
+  cleared when it comes back, so an old echo cannot replay. The first fifth of
+  an amount is a crossfade from clean. On `pitch` the amount picks the interval
+  (−12, −7, −5, +5, +7, +12), so that module is fully in almost at once.
+- **A character change fades the module out, swaps, fades back** (12ms each
+  way) and clears its buffers. The modes are a `postMessage`, never a rebuild.
+- **Every noise it makes follows its input**: the cassette hiss, the
+  interference static, the howl's feedback are scaled by an envelope of the
+  signal, so silence in is silence out (tested, all characters at full).
+- **The idle skip waits out the longest buffer** (3.4s) on silent input AND
+  needs silent output, so a 12s space tail is never cut. The diffusion buffers
+  are allocated the first time that module is switched on, not per track.
+- **space's tail reads true**: the in-loop damping shortens the tail, so the
+  coefficients use a measured `SPACE_COMP` by knob position (within ~10% from
+  0.5 to 12s, pinned in `test/prism.test.js`).
+- **Partial configs** (a sparse song, a session load assigning the stage whole)
+  are filled from the defaults by `applyPrism`, and the filled fields go to the
+  node too, so the panel and the node hold the same numbers.
+- Loading: Blob-URL registration from `loadWorklet()`; if it fails the stage
+  passes the signal through (`prismParams` empty, every write checks).
 
 ## Analog filter models (`filterModels.js`) — eight characters on the filter control
 
@@ -3650,7 +3701,7 @@ Repo: https://github.com/mjoslyn/seqbaby.
   An inline marker (`window.__seqbabyServerBoot`) tells the paths apart, and
   `ScriptLoader.tsx` keeps its onload-chained injection for the soft-nav case
   (e.g. arriving from `/login`).
-- `app/EnginePreload.tsx` emits `modulepreload` for all 67 modules listed in
+- `app/EnginePreload.tsx` emits `modulepreload` for all 69 modules listed in
   `app/engineAssets.ts` (at `engineAsset("/js/<name>")`; the hints used to
   point at the site root and 404). The graph is 8 levels deep, so without it the browser
   needs up to eight sequential round trips just to discover the code.
