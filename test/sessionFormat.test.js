@@ -320,3 +320,9 @@ test("normalizeArrangement keeps a section's held-back tracks as sorted, distinc
   assert.deepEqual(normalizeArrangement([{ p: 0, bars: 4 }, { p: 0, bars: 4, off: "all" }, { p: 0, bars: 4, off: [] }]), [{ p: 0, bars: 4 }, { p: 0, bars: 4 }, { p: 0, bars: 4 }], "absent, unreadable or empty is nobody held back, and is left unsaid");
   assert.deepEqual(normalizeArrangement([{ p: null, bars: 1, off: [3] }]), [{ p: null, bars: 1, off: [3] }], "a rest carries them too, harmlessly");
 });
+
+test("normalizeArrangement keeps a lane's own pattern per track, index to pattern", () => {
+  assert.deepEqual(normalizeArrangement([{ p: 0, bars: 4, pat: { 1: 3, "2": "5", 9: 40, x: 1, 3: -1 } }]), [{ p: 0, bars: 4, pat: { 1: 3, 2: 5 } }], "a pattern outside the bank, or a key that is not a track, is dropped");
+  assert.deepEqual(normalizeArrangement([{ p: 0, bars: 4, pat: {} }, { p: 0, bars: 4, pat: [3] }, { p: 0, bars: 4, pat: 3 }]), [{ p: 0, bars: 4 }, { p: 0, bars: 4 }, { p: 0, bars: 4 }], "empty or unreadable is left unsaid");
+  assert.deepEqual(normalizeArrangement([{ p: null, bars: 2, pat: { 0: 1 } }]), [{ p: null, bars: 2, pat: { 0: 1 } }], "a rest with a lane in it: that track plays, the others rest");
+});

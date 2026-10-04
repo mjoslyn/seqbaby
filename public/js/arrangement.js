@@ -7,9 +7,13 @@
 // A verse that comes back after the chorus is not that, so `state.arrangement`
 // is an ordered list of `{p, bars, off}`: pattern p for that many bars, the
 // same pattern as often as the song wants it; a REST (`p: null`) for bars of
-// silence without a slot spent on them; and `off`, the tracks held back for
-// that section (live ids here, indices in the format), which is how a song
-// brings instruments in and out without copying patterns. Chain mode follows
+// silence without a slot spent on them; `off`, the tracks held back for that
+// section; and `pat`, a track's OWN pattern for the section where the rest
+// play `p` (both live ids here, indices in the format). The last two are the
+// LANES: a track added to the arrangement gets a row where each section is
+// the default pattern, a pattern of its own, or nothing — so the drums can
+// play pattern 1 under a bass on pattern 3, and a song brings instruments in
+// and out without copying patterns. Chain mode follows
 // it whenever it is non-empty (transport.js) and falls back to slot order when
 // it is not, so a song written before this plays exactly as it did.
 //
@@ -32,7 +36,7 @@ import { ARRANGE_MAX_BARS, arrangementBars, normalizeArrangement } from "./sessi
 import { PATTERN_COUNT } from "./constants.js";
 import { setStatus } from "./dom.js";
 import { patternMeter, stepsPerBarForMeter } from "./meter.js";
-import { isPatternNonEmpty, requestPatternSwitch, state } from "./state.js";
+import { applySectionTracks, isPatternNonEmpty, requestPatternSwitch, state } from "./state.js";
 
 const VIEW_KEY = "seqbaby.view.v1";
 const PIC_ROWS = 8;                 // tracks drawn in a block's picture, at most
@@ -64,6 +68,23 @@ export function arrangementBeats(arr = state.arrangement) {
 
 /** Whether section `e` holds track `t` back. */
 export function sectionHolds(e, t) { return !!e?.off?.includes(t.id); }
+/** The pattern track `t` plays in section `e`: its own lane's, else the
+ *  section's, else null — held back (by `off`, or a rest with nothing of its own). */
+export function trackTargetPattern(e, t) {
+  if (!e || !t || sectionHolds(e, t)) return null;
+  const own = e.pat?.[t.id];
+  return own != null ? own : e.p;
+}
+
+// The lanes: tracks the arrangement says something about. A track is in the
+// arrangement once any section holds it back or gives it a pattern of its
+// own, and `laneIds` holds the ones added but not yet told anything, which is
+// view state (a lane with nothing in it changes nothing a save could carry).
+const laneIds = new Set();
+function hasLane(t) {
+  return laneIds.has(t.id) || state.arrangement.some(e => sectionHolds(e, t) || e.pat?.[t.id] != null);
+}
+function lanes() { return arrangeable().filter(hasLane); }
 
 /**
  * Write a serialized arrangement onto the live state. `order` is the track
@@ -72,10 +93,12 @@ export function sectionHolds(e, t) { return !!e?.off?.includes(t.id); }
  * applySet and the live merge, so both resolve the same way.
  */
 export function applyArrangementBlob(raw, order = state.tracks) {
-  state.arrangement = normalizeArrangement(raw, PATTERN_COUNT).map(e => ({
-    p: e.p, bars: e.bars,
-    off: (e.off || []).map(i => order[i]?.id).filter(id => id != null),
-  }));
+  state.arrangement = normalizeArrangement(raw, PATTERN_COUNT).map(e => {
+    const pat = {};
+    for (const [i, q] of Object.entries(e.pat || {})) { const id = order[Number(i)]?.id; if (id != null) pat[id] = q; }
+    return { p: e.p, bars: e.bars, off: (e.off || []).map(i => order[i]?.id).filter(id => id != null), pat };
+  });
+  laneIds.clear();
   if (state.arrangePos >= state.arrangement.length) state.arrangePos = Math.max(0, state.arrangement.length - 1);
   refreshArrangement();
 }
@@ -84,7 +107,9 @@ export function applyArrangementBlob(raw, order = state.tracks) {
 export function serializeArrangement(tracks = state.tracks) {
   return state.arrangement.map(e => {
     const off = (e.off || []).map(id => tracks.findIndex(t => t.id === id)).filter(i => i >= 0).sort((a, b) => a - b);
-    return off.length ? { p: e.p, bars: e.bars, off } : { p: e.p, bars: e.bars };
+    const pat = {};
+    for (const [id, q] of Object.entries(e.pat || {})) { const i = tracks.findIndex(t => t.id === Number(id)); if (i >= 0) pat[i] = q; }
+    return { p: e.p, bars: e.bars, ...(off.length ? { off } : {}), ...(Object.keys(pat).length ? { pat } : {}) };
   });
 }
 
@@ -141,9 +166,9 @@ function edit(fn, status) {
 
 /** Append a section: the active pattern, for as many bars as its repeat count
  *  says; or a rest (`p` null) of one bar. */
-export function addSection(p = state.activePattern, at = state.arrangement.length, bars = null, off = []) {
+export function addSection(p = state.activePattern, at = state.arrangement.length, bars = null, off = [], pat = {}) {
   const n = bars ?? (p == null ? 1 : Math.max(1, Math.min(ARRANGE_MAX_BARS, Number(state.patternRepeats[p]) || 1)));
-  edit(arr => arr.splice(Math.max(0, Math.min(arr.length, at)), 0, { p, bars: n, off: [...off] }), p == null ? "a rest added to the arrangement" : `pattern ${p + 1} added to the arrangement`);
+  edit(arr => arr.splice(Math.max(0, Math.min(arr.length, at)), 0, { p, bars: n, off: [...off], pat: { ...pat } }), p == null ? "a rest added to the arrangement" : `pattern ${p + 1} added to the arrangement`);
   focusBlock(Math.min(at, state.arrangement.length - 1));
 }
 
@@ -175,6 +200,20 @@ function setHeld(i, t, held) {
   if (!held && at >= 0) e.off.splice(at, 1);
 }
 
+/** Give track `t` a pattern of its own in section `i` (`null` takes it away: back to the section's). */
+function setOwn(i, t, p) {
+  const e = state.arrangement[i];
+  if (!e) return;
+  e.pat = e.pat || {};
+  if (p == null) delete e.pat[t.id]; else e.pat[t.id] = p;
+}
+
+/** Take a track's lane out: nothing of its own anywhere, nowhere held back. */
+function removeLane(t) {
+  laneIds.delete(t.id);
+  for (const e of state.arrangement) { setHeld(state.arrangement.indexOf(e), t, false); if (e.pat) delete e.pat[t.id]; }
+}
+
 /** What chain mode would play with no arrangement: the non-empty slots in order, each its repeats. */
 function fillFromPatterns() {
   const list = [];
@@ -193,6 +232,7 @@ function goTo(i) {
   // A rest has no pattern to switch to: the position is the whole move.
   state.arrangePos = i;
   if (e.p != null) requestPatternSwitch(e.p);
+  if (state.queuedPattern == null) applySectionTracks(e);     // the lanes too, unless the switch itself is waiting for the bar
   render();
 }
 
@@ -204,21 +244,23 @@ function focusBlock(i) {
 
 let stepColor = null;
 /** Draw section `e`'s steps: one pixel a sixteenth, one row a track, tiled
- *  across the bars as it plays. `tracks` defaults to the first few instruments. */
+ *  across the bars as it plays, each track from the pattern IT plays there.
+ *  `tracks` defaults to the first few instruments. */
 function paintPic(canvas, e, tracks = null) {
-  if (!canvas || e.p == null) return;
-  const list = tracks || arrangeable().slice(0, PIC_ROWS);
-  const perBar = stepsPerBarForMeter(patternMeter(e.p));
-  const w = Math.max(1, e.bars * perBar), h = Math.max(1, list.length);
+  if (!canvas) return;
+  const list = (tracks || arrangeable().slice(0, PIC_ROWS)).filter(t => trackTargetPattern(e, t) != null);
+  const meterOf = e.p ?? (list.length ? trackTargetPattern(e, list[0]) : 0) ?? 0;
+  const perBar = stepsPerBarForMeter(patternMeter(meterOf));
+  const w = Math.max(1, e.bars * perBar), h = Math.max(1, (tracks || list).length);
   if (canvas.width !== w) canvas.width = w;
   if (canvas.height !== h) canvas.height = h;
   const g = canvas.getContext("2d");
   g.clearRect(0, 0, w, h);
   if (!stepColor) stepColor = getComputedStyle(document.documentElement).getPropertyValue("--step-on").trim() || "#c2f04a";
   g.fillStyle = stepColor;
+  if (!list.length) return;
   list.forEach((t, row) => {
-    if (!tracks && sectionHolds(e, t)) return;     // a block shows what plays
-    const pat = t.patterns?.[e.p];
+    const pat = t.patterns?.[trackTargetPattern(e, t)];
     if (!pat || !pat.steps?.length) return;
     const len = pat.steps.length;
     for (let x = 0; x < w; x++) {
@@ -309,43 +351,71 @@ function render() {
     : "drag a pattern from the bar above, or press + to add the one you are on");
   lane.appendChild(tail);
 
-  // the tracks: a row each, a cell per section, lit where the track plays
+  // the lanes: a row per track added to the arrangement, a cell per section:
+  // the section's pattern, one of the track's own, or nothing
   rows.replaceChildren();
+  const laneTracks = lanes();
   rows.hidden = !arr.length;
-  if (arr.length) {
-    for (const t of arrangeable()) {
-      const row = el("div", "sq-arrange__row");
-      row.dataset.t = String(t.id);
-      const hue = t.el ? getComputedStyle(t.el).getPropertyValue("--track-hue").trim() : "";
-      if (hue) row.style.setProperty("--track-hue", hue);
-      const label = el("button", "sq-arrange__label sq-arrange__label--track", t.name || "track");
-      label.type = "button";
-      const heldEverywhere = arr.every(e => e.p == null || sectionHolds(e, t));
-      label.title = `${t.name}: ${heldEverywhere ? "let it play in every section" : "hold it back in every section"}`;
-      label.dataset.all = heldEverywhere ? "on" : "off";
-      row.appendChild(label);
-      arr.forEach((e, i) => {
-        const rest = e.p == null;
-        const held = rest || sectionHolds(e, t);
-        const c = el("button", "sq-arrange__cell");
-        c.type = "button";
-        c.dataset.i = String(i); c.dataset.t = String(t.id);
-        c.style.setProperty("--arr-bars", String(e.bars));
-        c.classList.toggle("is-on", !held);
-        c.classList.toggle("is-rest", rest);
-        c.classList.toggle("is-now", i === state.arrangePos);
-        c.disabled = rest;
-        c.setAttribute("aria-pressed", String(!held));
-        c.setAttribute("aria-label", `${t.name} in section ${i + 1}`);
-        c.title = rest ? `section ${i + 1} is a rest` : `${t.name} ${held ? "is held back" : "plays"} in section ${i + 1}. Click to ${held ? "let it in" : "hold it back"}`;
-        const pic = el("canvas", "sq-arrange__pic");
-        c.appendChild(pic);
-        row.appendChild(c);
-        if (!rest) paintPic(pic, e, [t]);
-      });
-      rows.appendChild(row);
-    }
+  for (const t of (arr.length ? laneTracks : [])) {
+    const row = el("div", "sq-arrange__row");
+    row.dataset.t = String(t.id);
+    const hue = t.el ? getComputedStyle(t.el).getPropertyValue("--track-hue").trim() : "";
+    if (hue) row.style.setProperty("--track-hue", hue);
+    const label = el("div", "sq-arrange__label sq-arrange__label--track");
+    const name = el("button", "sq-arrange__lanename", t.name || "track");
+    name.type = "button";
+    const heldEverywhere = arr.every(e => trackTargetPattern(e, t) == null);
+    name.title = `${t.name}: ${heldEverywhere ? "let it play in every section" : "hold it back in every section"}`;
+    name.dataset.all = heldEverywhere ? "on" : "off";
+    label.appendChild(name);
+    const rm = el("button", "sq-arrange__lanex", "×");
+    rm.type = "button";
+    rm.title = `take ${t.name}'s lane out: it follows the sections again, everywhere`;
+    rm.setAttribute("aria-label", `remove ${t.name}'s lane`);
+    label.appendChild(rm);
+    row.appendChild(label);
+    arr.forEach((e, i) => {
+      const rest = e.p == null;
+      const own = e.pat?.[t.id];
+      const target = trackTargetPattern(e, t);
+      const held = target == null;
+      const mode = held ? "off" : own != null ? "own" : "follow";
+      const c = el("div", "sq-arrange__cell");
+      c.tabIndex = 0;
+      c.setAttribute("role", "button");
+      c.dataset.i = String(i); c.dataset.t = String(t.id); c.dataset.mode = mode;
+      c.style.setProperty("--arr-bars", String(e.bars));
+      if (own != null) c.style.setProperty("--arr-hue", String(hueOf(own)));
+      c.classList.toggle("is-on", !held);
+      c.classList.toggle("is-rest", rest && own == null);
+      c.classList.toggle("is-now", i === state.arrangePos);
+      c.setAttribute("aria-pressed", String(!held));
+      c.setAttribute("aria-label", `${t.name} in section ${i + 1}: ${held ? "silent" : own != null ? `pattern ${own + 1}, its own` : `pattern ${e.p + 1}, the section's`}`);
+      c.title = `${t.name} in section ${i + 1}: ${held ? "silent" : own != null ? `pattern ${own + 1}, its own` : `pattern ${e.p + 1}, the section's`}. Click to ${held ? "let it in" : "hold it back"}; drop a pattern number here for one of its own${own != null ? "; × to go back to the section's" : ""}`;
+      const pic = el("canvas", "sq-arrange__pic");
+      c.appendChild(pic);
+      if (own != null) {
+        c.appendChild(el("span", "sq-arrange__own", String(own + 1)));
+        const x = el("button", "sq-arrange__cellx", "×");
+        x.type = "button"; x.tabIndex = -1;
+        x.title = "back to the section's pattern";
+        x.setAttribute("aria-label", `${t.name}: back to the section's pattern in section ${i + 1}`);
+        c.appendChild(x);
+      }
+      row.appendChild(c);
+      paintPic(pic, e, [t]);
+    });
+    rows.appendChild(row);
   }
+  // the picker for a new lane: the instrument tracks without one
+  const add = head.querySelector(".sq-arrange__addlane");
+  const without = arr.length ? arrangeable().filter(t => !hasLane(t)) : [];
+  add.replaceChildren();
+  const ph = el("option", null, "+ track"); ph.value = ""; ph.selected = true; ph.disabled = !without.length;
+  add.appendChild(ph);
+  for (const t of without) { const o = el("option", null, t.name || "track"); o.value = String(t.id); add.appendChild(o); }
+  add.disabled = !without.length;
+  add.title = arr.length ? (without.length ? "add a track to the arrangement: a lane of its own, where each section can play the section's pattern, a pattern of the track's own, or nothing" : "every track has a lane") : "add a section first";
   if (focused != null) focusBlock(Number(focused));
 }
 
@@ -358,7 +428,14 @@ function render() {
 export function paintArrangementNow({ pos, bar, barTick, barLen }) {
   const e = state.arrangement[pos];
   if (!e || state.patternMode !== "chain") return;
-  for (const t of state.tracks) t.el?.classList.toggle("is-held", e.p == null ? t.engineKey !== "bus" : sectionHolds(e, t));
+  for (const t of state.tracks) {
+    if (!t.el || t.engineKey === "bus") continue;
+    const target = trackTargetPattern(e, t);
+    t.el.classList.toggle("is-held", target == null);
+    // a lane on a pattern of its own: the track says which, since the pattern bar shows the section's
+    if (target != null && target !== state.activePattern) t.el.dataset.arrPattern = String(target + 1);
+    else delete t.el.dataset.arrPattern;
+  }
   if (!isArrangementShown() || !lane) return;
   const head = Math.max(0, Math.min(1, (bar + barTick / Math.max(1, barLen)) / Math.max(1, e.bars)));
   for (const n of root.querySelectorAll(".sq-arrange__block, .sq-arrange__cell")) {
@@ -370,7 +447,7 @@ export function paintArrangementNow({ pos, bar, barTick, barLen }) {
 
 /** The transport stopped, or left chain mode: no track is held by a section now. */
 export function clearArrangementHold() {
-  for (const t of state.tracks) t.el?.classList.remove("is-held");
+  for (const t of state.tracks) { t.el?.classList.remove("is-held"); if (t.el) delete t.el.dataset.arrPattern; }
 }
 
 // ---- hands -----------------------------------------------------------------
@@ -532,7 +609,7 @@ function wireLane() {
       case "ArrowLeft": if (e.shiftKey) moveSection(i, i - 1); else focusBlock(Math.max(0, i - 1)); break;
       case "ArrowRight": if (e.shiftKey) moveSection(i, i + 1); else focusBlock(Math.min(state.arrangement.length - 1, i + 1)); break;
       case "Enter": case " ": goTo(i); break;
-      case "d": addSection(cur.p, i + 1, cur.bars, cur.off); break;
+      case "d": addSection(cur.p, i + 1, cur.bars, cur.off, cur.pat); break;
       case "r": addSection(null, i + 1); break;
       default: handled = false;
     }
@@ -541,26 +618,80 @@ function wireLane() {
 }
 
 function wireRows() {
+  const trackOf = (n) => state.tracks.find(x => x.id === Number(n?.dataset.t));
   rows.addEventListener("click", e => {
     const cell = e.target.closest?.(".sq-arrange__cell");
-    const t = state.tracks.find(x => x.id === Number((cell || e.target.closest?.(".sq-arrange__row"))?.dataset.t));
+    const row = e.target.closest?.(".sq-arrange__row");
+    const t = trackOf(cell || row);
     if (!t) return;
     if (cell) {
-      if (cell.disabled) return;
       const i = Number(cell.dataset.i);
-      const held = sectionHolds(state.arrangement[i], t);
+      const sec = state.arrangement[i];
+      if (e.target.closest(".sq-arrange__cellx")) {
+        setOwn(i, t, null);
+        render();
+        setStatus(`${t.name} plays the section's pattern in section ${i + 1}`);
+        return;
+      }
+      // a click: in or out. In a rest a track with nothing of its own has
+      // nothing to be let in to, so the click says so.
+      const held = trackTargetPattern(sec, t) == null;
+      if (held && sec.p == null && sec.pat?.[t.id] == null) { setStatus(`section ${i + 1} is a rest: drop a pattern number on ${t.name}'s cell to give it one there`); return; }
       setHeld(i, t, !held);
       render();
       setStatus(`${t.name} ${held ? "plays" : "is held back"} in section ${i + 1}`);
       return;
     }
-    const label = e.target.closest?.(".sq-arrange__label--track");
-    if (!label) return;
+    if (e.target.closest(".sq-arrange__lanex")) {
+      removeLane(t);
+      render();
+      setStatus(`${t.name} follows the sections again`);
+      return;
+    }
+    const name = e.target.closest?.(".sq-arrange__lanename");
+    if (!name) return;
     // the whole row at once: everywhere out, or everywhere in
-    const letIn = label.dataset.all === "on";
-    state.arrangement.forEach((s, i) => { if (s.p != null) setHeld(i, t, !letIn); });
+    const letIn = name.dataset.all === "on";
+    state.arrangement.forEach((s, i) => { if (trackTargetPattern({ ...s, off: [] }, t) != null) setHeld(i, t, !letIn); });
     render();
     setStatus(`${t.name} ${letIn ? "plays in every section" : "is held back in every section"}`);
+  });
+  rows.addEventListener("keydown", e => {
+    const cell = e.target.closest?.(".sq-arrange__cell");
+    const t = trackOf(cell);
+    if (!cell || !t) return;
+    const i = Number(cell.dataset.i);
+    if (e.key === "Enter" || e.key === " ") { cell.click(); e.preventDefault(); }
+    else if (e.key === "Delete" || e.key === "Backspace") { setOwn(i, t, null); render(); e.preventDefault(); }
+    else if (/^[1-9]$/.test(e.key)) {
+      // a digit is a pattern of the track's own, 1..9; the grid's drag reaches the rest
+      setOwn(i, t, Number(e.key) - 1); setHeld(i, t, false); render();
+      rows.querySelector(`.sq-arrange__cell[data-i="${i}"][data-t="${t.id}"]`)?.focus();
+      e.preventDefault();
+    }
+  });
+  // a pattern number dropped on a cell: that track's own pattern for the section
+  rows.addEventListener("dragover", e => {
+    const cell = e.target.closest?.(".sq-arrange__cell");
+    if (!cell || !(e.dataTransfer?.types || []).includes(MIME_PATTERN)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+    for (const n of rows.querySelectorAll(".is-drop")) if (n !== cell) n.classList.remove("is-drop");
+    cell.classList.add("is-drop");
+  });
+  rows.addEventListener("dragleave", e => { e.target.closest?.(".sq-arrange__cell")?.classList.remove("is-drop"); });
+  rows.addEventListener("drop", e => {
+    const cell = e.target.closest?.(".sq-arrange__cell");
+    const p = Number(e.dataTransfer.getData(MIME_PATTERN));
+    for (const n of rows.querySelectorAll(".is-drop")) n.classList.remove("is-drop");
+    const t = trackOf(cell);
+    if (!cell || !t || !Number.isFinite(p)) return;
+    e.preventDefault();
+    const i = Number(cell.dataset.i);
+    setOwn(i, t, p);
+    setHeld(i, t, false);
+    render();
+    setStatus(`${t.name} plays pattern ${p + 1} in section ${i + 1}`);
   });
 }
 
@@ -583,6 +714,17 @@ export function initArrangement() {
   const mk = (act, text, title) => { const b = el("button", "sq-btn--ghost", text); b.type = "button"; b.dataset.act = act; b.title = title; tools.appendChild(b); return b; };
   mk("add", "+ pattern", "add the pattern you are on to the end of the arrangement");
   mk("rest", "+ rest", "add a bar of silence to the end of the arrangement: every track is held back for it, no pattern slot is spent on it");
+  const addLane = el("select", "sq-arrange__addlane sq-btn--ghost");
+  addLane.setAttribute("aria-label", "add a track to the arrangement");
+  addLane.addEventListener("change", () => {
+    const t = state.tracks.find(x => x.id === Number(addLane.value));
+    addLane.value = "";
+    if (!t) return;
+    laneIds.add(t.id);
+    render();
+    setStatus(`${t.name} has a lane: each section can play the section's pattern, one of its own, or nothing`);
+  });
+  tools.appendChild(addLane);
   mk("fill", "from patterns", "arrange every pattern with notes in slot order, each for its rep count — what chain mode plays without an arrangement");
   mk("clear", "clear", "remove every section; chain mode goes back to playing the patterns in order");
   tools.addEventListener("click", e => {

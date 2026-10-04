@@ -422,7 +422,14 @@ export function removeTrack(song, index) {
   for (const pad of song.macroPads || []) for (const axis of ["x", "y"]) {
     pad[axis] = (pad[axis] || []).filter(a => a.track !== i).map(a => ({ ...a, track: fix(a.track) }));
   }
-  for (const e of song.arrangement || []) if (Array.isArray(e.off)) { e.off = e.off.filter(j => j !== i).map(fix); if (!e.off.length) delete e.off; }
+  for (const e of song.arrangement || []) {
+    if (Array.isArray(e.off)) { e.off = e.off.filter(j => j !== i).map(fix); if (!e.off.length) delete e.off; }
+    if (e.pat && typeof e.pat === "object") {
+      const moved = {};
+      for (const [k, v] of Object.entries(e.pat)) { const j = fix(Number(k)); if (j >= 0) moved[j] = v; }
+      if (Object.keys(moved).length) e.pat = moved; else delete e.pat;
+    }
+  }
 }
 
 /**
@@ -924,8 +931,10 @@ export const CHANCE_NOTE_LABELS = CHANCE_NOTE_VALUES.map(v => v.label);
  *  otherwise the non-empty patterns in slot order for `repeats` bars each.
  *  A section with `pattern: null` (or `rest: true`) is a REST: bars of
  *  silence, no slot spent. A section's `off` lists the tracks (by index)
- *  held back for it, so a song brings instruments in and out without
- *  copying patterns. `sections: []` (or null) clears the arrangement. */
+ *  held back for it, and its `pat` gives a track a pattern of its own there
+ *  (`{ "1": 3 }`: track 1 plays pattern 3 while the others play the
+ *  section's), so a song brings instruments in and out, and layers parts,
+ *  without copying patterns. `sections: []` (or null) clears the arrangement. */
 export function setArrangement(song, { mode, repeats, switchMode, active, sections } = {}) {
   if (mode != null) song.patternMode = oneOf(mode, "mode", ["repeat", "chain"]);
   if (switchMode != null) song.patternSwitchMode = oneOf(switchMode, "switchMode", ["immediate", "finish"]);
@@ -949,9 +958,18 @@ export function setArrangement(song, { mode, repeats, switchMode, active, sectio
           if (song.tracks[k].engineKey === "bus") fail(`sections[${i}].off[${j}]: track ${k} is an fx bus, which plays no notes to hold back`);
           return k;
         }))].sort((x, y) => x - y);
-        if (p === null || s?.rest === true || p === "rest") return off.length ? { p: null, bars, off } : { p: null, bars };
-        const pat = int(p, `sections[${i}].pattern`, 0, PATTERN_COUNT - 1);
-        return off.length ? { p: pat, bars, off } : { p: pat, bars };
+        const own = {};
+        const patRaw = Array.isArray(s) ? {} : (s?.pat ?? {});
+        if (!patRaw || typeof patRaw !== "object" || Array.isArray(patRaw)) fail(`sections[${i}].pat must be an object of track index to pattern`);
+        for (const [tk, pv] of Object.entries(patRaw)) {
+          const k = int(tk, `sections[${i}].pat track`, 0, Math.max(0, song.tracks.length - 1));
+          if (!song.tracks[k]) fail(`sections[${i}].pat: there is no track ${k} (the song has ${song.tracks.length})`);
+          if (song.tracks[k].engineKey === "bus") fail(`sections[${i}].pat: track ${k} is an fx bus, which plays no pattern`);
+          own[k] = int(pv, `sections[${i}].pat[${k}]`, 0, PATTERN_COUNT - 1);
+        }
+        const extra = { ...(off.length ? { off } : {}), ...(Object.keys(own).length ? { pat: own } : {}) };
+        if (p === null || s?.rest === true || p === "rest") return { p: null, bars, ...extra };
+        return { p: int(p, `sections[${i}].pattern`, 0, PATTERN_COUNT - 1), bars, ...extra };
       });
     }
   }
@@ -959,7 +977,7 @@ export function setArrangement(song, { mode, repeats, switchMode, active, sectio
   return {
     mode: song.patternMode, switchMode: song.patternSwitchMode, active: song.activePattern,
     repeats: song.patternRepeats,
-    sections: song.arrangement.map(e => (e.off?.length ? { pattern: e.p, bars: e.bars, off: e.off } : { pattern: e.p, bars: e.bars })),
+    sections: song.arrangement.map(e => ({ pattern: e.p, bars: e.bars, ...(e.off?.length ? { off: e.off } : {}), ...(e.pat && Object.keys(e.pat).length ? { pat: e.pat } : {}) })),
     bars: song.arrangement.length ? arrangementBars(song.arrangement) : undefined,
   };
 }
@@ -1051,7 +1069,7 @@ export function summarize(song) {
     bpm: song.bpm, swing: song.swing,
     scale: song.scale?.active ? `${rootName} ${song.scale.mode}` : "off",
     arrangement: { mode: song.patternMode, switchMode: song.patternSwitchMode, active: song.activePattern,
-      sections: song.arrangement?.length ? song.arrangement.map(e => (e.off?.length ? { pattern: e.p, bars: e.bars, off: e.off } : { pattern: e.p, bars: e.bars })) : undefined,
+      sections: song.arrangement?.length ? song.arrangement.map(e => ({ pattern: e.p, bars: e.bars, ...(e.off?.length ? { off: e.off } : {}), ...(e.pat && Object.keys(e.pat).length ? { pat: e.pat } : {}) })) : undefined,
       repeats: song.patternMode === "chain" && !song.arrangement?.length ? song.patternRepeats : undefined,
       meters: song.patternMeters.map((m, i) => (m.num !== 4 || m.den !== 4) ? `${i}: ${m.num}/${m.den}` : null).filter(Boolean) },
     tracks: song.tracks.map((_, i) => summarizeTrack(song, i)),

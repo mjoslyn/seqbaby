@@ -587,9 +587,22 @@ test("a section that holds tracks back exports as its own definition, with those
   assert.ok(def("p1").includes("bd") && def("p1").includes("sawtooth") && def("p1").includes("hh"));
   assert.ok(def("p1a").includes("bd") && !def("p1a").includes("sawtooth") && !def("p1a").includes("hh"), "drums alone in the intro");
   assert.ok(def("p1b").includes("sawtooth") && !def("p1b").includes("hh"));
-  assert.match(S.sessionToCode(a, { native: true }).code, /^\/\/ arrangement: 1x4\(-bass,hats\) 1x8 1x4\(-bass,hats\) 1x4\(-hats\)/m);
+  assert.match(S.sessionToCode(a, { native: true }).code, /^\/\/ arrangement: 1x4\(-bass,-hats\) 1x8 1x4\(-bass,-hats\) 1x4\(-hats\)/m);
   // played back on strudel.cc the intro is the drums alone
   const back = S.codeToSong(port).song;
   assert.equal(back.arrangement.length, 4);
   assert.deepEqual(back.arrangement.map(e => e.bars), [4, 8, 4, 4]);
+});
+
+test("a lane's own pattern exports as a definition with that track's part from its pattern", () => {
+  const a = S.codeToSong(`setcpm(120/4)\nchain()\npattern(1)\nkick: s("bd*4")\nbass: note("c2*8").s("sawtooth")\npattern(2)\nbass: note("g2*4").s("sawtooth")`).song;
+  const bass = a.tracks.findIndex(t => t.name === "bass"), kick = a.tracks.findIndex(t => t.name === "kick");
+  B.setArrangement(a, { mode: "chain", sections: [{ pattern: 0, bars: 4 }, { pattern: 0, bars: 4, pat: { [bass]: 1 } }, { pattern: null, bars: 2, pat: { [kick]: 0 } }] });
+  const port = S.sessionToCode(a).code;
+  assert.match(port, /\$: arrange\(\[4, p1\], \[4, p1a\], \[2, q1\]\)/);
+  const def = (id) => port.match(new RegExp(`^const ${id} = ([\\s\\S]*?)\\n\\)$`, "m"))?.[1] || "";
+  assert.ok(def("p1").includes("c2") && !def("p1").includes("g2"), "the plain section: the bass on pattern 1");
+  assert.ok(def("p1a").includes("g2") && !def("p1a").includes("c2") && def("p1a").includes("bd"), "the lane: the bass from pattern 2 under the kick from pattern 1");
+  assert.ok(def("q1").includes("bd") && !def("q1").includes("sawtooth"), "a rest with a lane: that track alone");
+  assert.match(S.sessionToCode(a, { native: true }).code, /^\/\/ arrangement: 1x4 1x4\(bass:2\) restx2\(kick:1\)/m);
 });

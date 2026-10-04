@@ -32,7 +32,8 @@ export const SET_VERSION = 3;
 // slot spent on it. `off` is the tracks held back in that section, as
 // INDICES into the session's track list (ids are handed out fresh on every
 // load), which is how a song brings instruments in and out without copying
-// patterns.
+// patterns. `pat` is a track's OWN pattern for the section, `{index: pattern}`,
+// where the other tracks play the section's `p`: the arrangement view's lanes.
 export const ARRANGE_MAX_BARS = 64;
 
 /**
@@ -43,7 +44,7 @@ export const ARRANGE_MAX_BARS = 64;
  * goes through this one, so a hand-edited song cannot put a 33rd pattern or
  * a zero-bar section in front of the transport.
  * @param {any} raw @param {number} [patternCount]
- * @returns {Array<{p: number|null, bars: number, off?: number[]}>}
+ * @returns {Array<{p: number|null, bars: number, off?: number[], pat?: Record<string, number>}>}
  */
 export function normalizeArrangement(raw, patternCount = 32) {
   if (!Array.isArray(raw)) return [];
@@ -53,12 +54,20 @@ export function normalizeArrangement(raw, patternCount = 32) {
     const b = Math.round(Number(e.bars));
     const bars = Number.isFinite(b) ? Math.max(1, Math.min(ARRANGE_MAX_BARS, b)) : 1;
     const off = [...new Set((Array.isArray(e.off) ? e.off : []).map(i => Math.round(Number(i))).filter(i => Number.isInteger(i) && i >= 0))].sort((x, y) => x - y);
-    // `off` is written only when someone is held back, so a section with
-    // nobody is the two fields it always was
-    if (e.p === null || e.rest === true) { out.push(off.length ? { p: null, bars, off } : { p: null, bars }); continue; }
+    const pat = {};
+    if (e.pat && typeof e.pat === "object" && !Array.isArray(e.pat)) {
+      for (const [k, v] of Object.entries(e.pat)) {
+        const i = Math.round(Number(k)), q = Math.round(Number(v));
+        if (Number.isInteger(i) && i >= 0 && Number.isInteger(q) && q >= 0 && q < patternCount) pat[i] = q;
+      }
+    }
+    // `off` and `pat` are written only when they say something, so a section
+    // with nobody held back and no lane of its own is the two fields it was
+    const sec = (p) => ({ p, bars, ...(off.length ? { off } : {}), ...(Object.keys(pat).length ? { pat } : {}) });
+    if (e.p === null || e.rest === true) { out.push(sec(null)); continue; }
     const p = Math.round(Number(e.p));
     if (!Number.isFinite(p) || p < 0 || p >= patternCount) continue;
-    out.push(off.length ? { p, bars, off } : { p, bars });
+    out.push(sec(p));
   }
   return out;
 }

@@ -186,6 +186,10 @@ export function clonePattern(src) {
  */
 export function aliasPattern(t, idx) {
   const p = t.patterns[idx];
+  // Which pattern this track's arrays are bound to. Normally activePattern;
+  // a section of the arrangement may bind one track elsewhere
+  // (applySectionTracks), and the p-lock flush on the way out has to know.
+  t._arrPattern = idx;
   t.steps = p.steps;
   t.lengths = p.lengths;
   t.notes = p.notes;
@@ -295,9 +299,12 @@ export function switchPattern(idx, { deferUi = false, keepArrangePos = false } =
   // owns it, and the one being entered is recalled. Chain mode lands here on a
   // bar boundary mid-transport, which is why the recall diffs rather than
   // re-applying everything (see patternSound.js).
+  // Per track, since a lane in the arrangement may have bound a track to a
+  // pattern of its own: what is flushed is the pattern THAT track is leaving.
   const prev = state.activePattern;
-  if (prev !== idx) {
-    for (const t of state.tracks) flushPatternSound(t, prev);
+  for (const t of state.tracks) {
+    const tp = t._arrPattern ?? prev;
+    if (tp !== idx) flushPatternSound(t, tp);
   }
   state.activePattern = idx;
   state.queuedPattern = null;
@@ -323,6 +330,41 @@ export function switchPattern(idx, { deferUi = false, keepArrangePos = false } =
   } else {
     paintPatternUI();
   }
+}
+
+/**
+ * A section's per-track patterns (arrangement.js): a track with a lane may
+ * play a pattern of its own in a section (`sec.pat[t.id]`), where the rest
+ * follow the section's `p`. Re-binds only the tracks whose pattern differs
+ * from the one they are on (`t._arrPattern`), with the p-lock flush and
+ * recall a switch does, and leaves `activePattern` alone: the pattern bar
+ * still shows the section's default. A track with nothing of its own in a
+ * section with no default (a rest) stays where it is, held back by the
+ * transport. Returns whether any track moved.
+ * @param {{p: number|null, pat?: Record<string, number>}} sec
+ */
+export function applySectionTracks(sec, { deferUi = false } = {}) {
+  let moved = false;
+  for (const t of state.tracks) {
+    if (t.engineKey === "bus") continue;
+    const target = sec?.pat?.[t.id] ?? sec?.p ?? state.activePattern;
+    if (target == null || target === t._arrPattern || !t.patterns?.[target]) continue;
+    flushPatternSound(t, t._arrPattern ?? state.activePattern);
+    aliasPattern(t, target);
+    if (recallPatternSound(t, target)) t._soundUiStale = true;
+    moved = true;
+  }
+  if (moved) {
+    if (deferUi) { if (patternUiTimer === null) patternUiTimer = setTimeout(paintPatternUI, 0); }
+    else paintPatternUI();
+  }
+  return moved;
+}
+
+/** Every track back on the active pattern: what the stop button wants, so the
+ *  track list and the pattern bar agree again once nothing is playing. */
+export function realignTracksToActive() {
+  return applySectionTracks({ p: state.activePattern });
 }
 
 let patternUiTimer = null;

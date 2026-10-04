@@ -410,3 +410,20 @@ test("a section holds tracks back by index, and the indices follow a removed tra
   assert.deepEqual(sb.fromBlob(JSON.parse(sb.toJSON(s))).arrangement, s.arrangement, "and it survives the JSON");
   assert.equal(k, 0);
 });
+
+test("a section gives a track a pattern of its own (a lane), by index, and the indices follow a removed track", () => {
+  const s = song();
+  const k = sb.addTrack(s, { engine: "808 kick", name: "kick" }).index;
+  const b = sb.addTrack(s, { engine: "silverbox", name: "bass" }).index;
+  const bus = sb.addTrack(s, { engine: "bus", name: "verb" }).index;
+  const r = sb.setArrangement(s, { mode: "chain", sections: [{ pattern: 0, bars: 4, pat: { [b]: 2 } }, { pattern: null, bars: 2, pat: { [k]: 1 } }, { pattern: 0, bars: 4 }] });
+  assert.deepEqual(s.arrangement, [{ p: 0, bars: 4, pat: { [b]: 2 } }, { p: null, bars: 2, pat: { [k]: 1 } }, { p: 0, bars: 4 }]);
+  assert.deepEqual(r.sections[0], { pattern: 0, bars: 4, pat: { [b]: 2 } });
+  assert.throws(() => sb.setArrangement(s, { sections: [{ pattern: 0, bars: 1, pat: { 9: 1 } }] }), /no track 9|pat track/);
+  assert.throws(() => sb.setArrangement(s, { sections: [{ pattern: 0, bars: 1, pat: { [bus]: 1 } }] }), /fx bus/);
+  assert.throws(() => sb.setArrangement(s, { sections: [{ pattern: 0, bars: 1, pat: { [b]: 32 } }] }), /pat\[1\]/);
+  assert.throws(() => sb.setArrangement(s, { sections: [{ pattern: 0, bars: 1, pat: [1] }] }), /pat must be an object/);
+  sb.removeTrack(s, k);
+  assert.deepEqual(s.arrangement.map(e => e.pat), [{ [b - 1]: 2 }, undefined, undefined], "the bass's lane moved down; the kick's went with the kick");
+  assert.deepEqual(sb.fromBlob(JSON.parse(sb.toJSON(s))).arrangement, s.arrangement);
+});

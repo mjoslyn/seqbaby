@@ -16,8 +16,8 @@ import { init, needsResume, primeAudioForIOS } from "./main.js";
 import { applyBusMute, updateMidiUI } from "./render.js";
 import { ensureFxRack, fireFilterEnv, refreshAllTrackOutputs, refreshNoiseBeds, routeVoiceToRack, soloAudibleTracks } from "./signal.js";
 import { activeMeter, stepsPerBarForMeter, stepsPerBeatForMeter } from "./meter.js";
-import { findNextNonEmptyPattern, invertChord, state, switchPattern, syncArrangePos } from "./state.js";
-import { clearArrangementHold, paintArrangementNow, sectionHolds } from "./arrangement.js";
+import { applySectionTracks, findNextNonEmptyPattern, invertChord, realignTracksToActive, state, switchPattern, syncArrangePos } from "./state.js";
+import { clearArrangementHold, paintArrangementNow, trackTargetPattern } from "./arrangement.js";
 import { loadSilverboxWorklet } from "./silverbox.js";
 import { loadContagionWorklet } from "./contagion.js";
 import { applyScale, chordNotes, nameToMidi } from "./theory.js";
@@ -374,6 +374,7 @@ export async function stopPlayback() {
   state.playing = false;
   document.body.classList.remove("sq-playing");   // step input's cursor shows while stopped (style.css)
   clearArrangementHold();                          // no section holds a track back while stopped
+  realignTracksToActive();                         // and every lane's track is back on the pattern bar's pattern
   state._transportStartTime = null;
   refreshNoiseBeds();                              // vinyl crackle follows the transport
   btn.textContent = "play";
@@ -443,8 +444,9 @@ export async function startPlayback(opts = {}) {
   // does; else the pattern changes to the section's. See syncArrangePos.
   if (state.patternMode === "chain" && state.arrangement.length) {
     syncArrangePos(state.activePattern);
-    const p = state.arrangement[state.arrangePos].p;
-    if (p != null && p !== state.activePattern) switchPattern(p, { keepArrangePos: true });
+    const sec = state.arrangement[state.arrangePos];
+    if (sec.p != null && sec.p !== state.activePattern) switchPattern(sec.p, { keepArrangePos: true });
+    applySectionTracks(sec);               // the lanes: a track on a pattern of its own
   }
   state.barTick = startTick % stepsPerBarForMeter(activeMeter());
   state.chainBarCount = 0;
@@ -485,18 +487,22 @@ export async function startPlayback(opts = {}) {
     const soloAudible = soloAudibleTracks();
     const masterSwing = Number(document.getElementById("swing")?.value) || 0;
     const lat = visualOutputLatency();
-    // The section playing (arrangement.js) holds tracks back: all of them in
-    // a REST (a section with no pattern: bars of silence, the active pattern
-    // left where it was so the bar line keeps its meter), or the ones its
-    // `off` names. Held back means withheld triggers, lanes included, exactly
-    // as a mute, while the bar count below keeps walking.
+    // The section playing (arrangement.js) decides per track: the section's
+    // pattern, a pattern of the track's own (its lane), or nothing — held
+    // back, which is every track in a REST (a section with no pattern and no
+    // lanes: bars of silence, the active pattern left where it was so the
+    // bar line keeps its meter) and the ones its `off` names. Held back means
+    // withheld TRIGGERS while the bar count below keeps walking — unlike a
+    // mute, a held track's automation lanes keep running, so a filter sweep
+    // or an effect lane lands where it should when the track comes back in
+    // rather than jumping there. The pattern itself was bound to the track
+    // on the bar line (applySectionTracks), so the arrays read here are its.
     const section = state.patternMode === "chain" && state.arrangement.length > 0
       ? state.arrangement[state.arrangePos] : null;
-    const resting = !!section && section.p == null;
     for (const t of state.tracks) {
       if (!t.voice) continue;
       const isBus = t.voice.type === "bus";
-      if (section && !isBus && (resting || sectionHolds(section, t))) continue;
+      const held = !!section && !isBus && trackTargetPattern(section, t) == null;
       // Mute and solo here mean "withhold this track's triggers", which says
       // nothing about a bus — it has none. Its lanes and its mod are the only
       // thing it contributes, and they have to keep running for the tracks
@@ -538,7 +544,7 @@ export async function startPlayback(opts = {}) {
         // pattern; the dice replaces the pitch and the ratchet too, and says so
         // by handing them back on the gate.
         const gate = stepGateAt(t, idx);
-        if (isBus || !gate) { slot++; continue; }
+        if (isBus || held || !gate) { slot++; continue; }
         const span = gate.span;
         // A note lasts its written step length. Voices that honor `duration`
         // (Plaits, samples, melodic synths) follow it; drum-synth recipes with
@@ -709,17 +715,17 @@ export async function startPlayback(opts = {}) {
           state.chainBarCount = 0;
           const wasRest = arr[state.arrangePos].p == null;
           state.arrangePos = (state.arrangePos + 1) % arr.length;
-          const next = arr[state.arrangePos].p;
-          if (next == null) {
-            // into a rest: nothing switches, the tracks are held back above
-          } else if (next !== state.activePattern) {
-            switchPattern(next, { deferUi: true, keepArrangePos: true }); // synchronous — same reasoning as the manual queue above
-            restartTrackCounts();
-          } else if (wasRest) {
-            // the same pattern again after a rest starts from its first step,
-            // as it would after any other section, rather than where it paused
-            restartTrackCounts();
-          }
+          const sec = arr[state.arrangePos];
+          const before = state.activePattern;
+          // the section's default pattern, if it has one and it changed (into
+          // a rest nothing switches: the tracks are held back above) ...
+          if (sec.p != null && sec.p !== before) switchPattern(sec.p, { deferUi: true, keepArrangePos: true }); // synchronous — same reasoning as the manual queue above
+          // ... then each lane's own pattern, where a track has one
+          const moved = applySectionTracks(sec, { deferUi: true });
+          // A section that changed anything starts every track from its first
+          // step; so does the same pattern again after a rest, rather than
+          // where it paused.
+          if ((sec.p != null && sec.p !== before) || moved || wasRest) restartTrackCounts();
         }
       } else {
         const needed = Math.max(1, state.patternRepeats[state.activePattern] ?? 1);

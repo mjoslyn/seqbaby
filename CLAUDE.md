@@ -1732,12 +1732,12 @@ state.arrangement = [ {p:0, bars:4, off:[bass, lead]}, {p:1, bars:8}, {p:null, b
                        intro: drums alone              verse          a rest           verse again
 ```
 
-- **Two views, one at a time.** The studio has a tab strip under the pattern
-  bar (`.sq-tabs`, `body[data-view]`): `tracks` is the track list as it
-  always was, `arrangement` is this. The pattern bar and the transport stay
-  above both. A tab, not a strip above the tracks, because a row per track
-  wants the height; the tab is remembered per browser (`seqbaby.view.v1`),
-  and a song arriving never switches it, only the count on the label.
+- **Two views, one at a time.** Two buttons after `code` in the transport
+  (`.sq-tabs`, `body[data-view]`): `tracks` is the track list as it always
+  was, `arrangement` is this. The pattern bar and the transport stay above
+  both. A tab, not a strip above the tracks, because a lane per track wants
+  the height; the tab is remembered per browser (`seqbaby.view.v1`), and a
+  song arriving never switches it, only the count on the label.
 - **A rest is a section with no pattern** (`p: null`): bars of silence with
   no slot spent on them. The transport holds every instrument track back for
   it (buses run on, their lanes feed nothing) and does NOT switch patterns, so
@@ -1745,18 +1745,40 @@ state.arrangement = [ {p:0, bars:4, off:[bass, lead]}, {p:1, bars:8}, {p:null, b
   restarts the track counts, as any section change does. `syncArrangePos`
   keeps a position that sits on a rest, since no active pattern is a reason
   to leave it.
-- **A row per track, a cell per section: `off`.** The tracks a section holds
-  back, stored as live ids in `state.arrangement` and as INDICES into the
-  track list in the format (`serializeArrangement` / `applyArrangementBlob`,
-  the one pair every writer and reader goes through, since ids are handed
-  out fresh on every load — the macro pads' reason). So applySet and the
-  merge resolve it with the pads, after the tracks exist (`made`), and
-  `applyGlobalsInPlace` holds it back under the same `pads` flag. Written
-  only when someone is held back, so a section with nobody is the two fields
-  it was. The transport treats a held track exactly as a mute (triggers and
-  lanes withheld), and `paintArrangementNow` puts `is-held` on the track
-  while it lasts, so the track list says why its steps are quiet. Buses are
-  never in a row: they play no notes.
+- **Lanes: a track added to the arrangement gets a row, a cell per section,
+  and each cell is the section's pattern, a pattern of the track's OWN, or
+  nothing.** Two fields carry it: `off`, the tracks a section holds back, and
+  `pat`, `{track: pattern}` for the tracks on a pattern of their own there
+  (`trackTargetPattern(sec, t)` folds the three into one answer: a pattern
+  index, or null for held). Both are live ids in `state.arrangement` and
+  INDICES into the track list in the format (`serializeArrangement` /
+  `applyArrangementBlob`, the one pair every writer and reader goes through,
+  since ids are handed out fresh on every load — the macro pads' reason). So
+  applySet and the merge resolve them with the pads, after the tracks exist
+  (`made`), and `applyGlobalsInPlace` holds them back under the same `pads`
+  flag. Written only when they say something, so a section with nothing is
+  the two fields it was. Which tracks HAVE a lane is derived (any section
+  says something about it) plus `laneIds`, the ones added through the
+  `+ track` picker and not yet told anything, which is view state. Buses
+  never get a lane: they play no notes.
+- **A lane's own pattern is a per-track binding** (`applySectionTracks`,
+  state.js). `aliasPattern` records which pattern a track's arrays are bound
+  to (`t._arrPattern`); on a section line the transport switches the default
+  pattern as before and then re-binds only the tracks whose target differs,
+  with the p-lock flush of the pattern THAT track is leaving and the recall
+  of the one it enters — `switchPattern`'s flush is per track for the same
+  reason. `activePattern` stays the section's default, so the pattern bar
+  shows the section while a track's step grid shows the pattern it is really
+  on; the track carries `data-arr-pattern` while they differ. Stop realigns
+  every track to the active pattern (`realignTracksToActive`), so the tracks
+  tab and the pattern bar agree again when nothing plays; play binds them
+  again before the first step.
+- **A held track is not a mute.** Its triggers are withheld but its
+  automation lanes keep running (`held` in the transport loop, decided after
+  `runAutomationForStep`), so a filter sweep lands where it should when the
+  track comes back in instead of jumping there. `paintArrangementNow` puts
+  `is-held` on the track while it lasts, so the track list says why its steps
+  are quiet.
 
 - **Empty means what it always meant.** `[]` is no arrangement, and chain mode
   is the slot-order chain with `patternRepeats`, so every song written before
@@ -1782,16 +1804,20 @@ state.arrangement = [ {p:0, bars:4, off:[bass, lead]}, {p:1, bars:8}, {p:null, b
 - **The panel is `#arrangement`**, built once by `initArrangement`. One block
   per section, as wide as its bars (`--arr-bars` × `--arr-bar-w`, with a
   floor), coloured by pattern (`--arr-hue`, a rest grey and hatched), and
-  drawn with the pattern's own steps on a canvas one pixel a sixteenth and
-  one row a track, tiled across the bars as it plays; under the blocks a row
-  per track with a cell per section, the track's own steps in it, lit when it
-  plays there. Blocks and rows share one horizontal scroll with a sticky
-  label column, so the cells stay under their blocks (a grip drag resizes the
-  cells with the block). Click a block to go there, drag it to move, drag its
-  right edge for bars, × to remove, keys on a focused block (`+` `-` bars,
-  shift+arrows move, delete, enter, `d` duplicate, `r` a rest after); click a
-  cell to hold the track back or let it in, click a row's label for every
-  section at once. The pattern grid's cells were already draggable
+  drawn with the steps each track plays there on a canvas one pixel a
+  sixteenth and one row a track, tiled across the bars as it plays; under
+  the blocks the lanes, a cell per section drawn from the pattern the track
+  plays there, coloured by the track when it follows the section and by the
+  pattern (with its number) when it has one of its own. Blocks and lanes
+  share one horizontal scroll with a sticky label column, so the cells stay
+  under their blocks (a grip drag resizes the cells with the block). Click a
+  block to go there, drag it to move, drag its right edge for bars, × to
+  remove, keys on a focused block (`+` `-` bars, shift+arrows move, delete,
+  enter, `d` duplicate, `r` a rest after). On a lane: click a cell to hold
+  the track back or let it in, drop a pattern number on it (or type a digit)
+  for a pattern of the track's own, its `×` to go back to the section's,
+  click the lane's name for every section at once, the lane's `×` to take the
+  lane out. The pattern grid's cells were already draggable
   (`text/pattern-idx`, patternBar.js), so dropping one onto the lane inserts a
   section without the grid knowing. **A drop past the end leaves its gap as a
   rest** (`gapAt`): drag a block, or a pattern number, a few bars to the right
@@ -1824,16 +1850,18 @@ state.arrangement = [ {p:0, bars:4, off:[bass, lead]}, {p:1, bars:8}, {p:null, b
   arrangement's length meter by meter (`arrangementBeats`), where the
   slot-order chain keeps its 4/4 estimate.
 - **The builder and the code.** `setArrangement(song, { sections })` takes
-  `{pattern, bars, off}` objects (or `[pattern, bars]`; `pattern: null` or
-  `rest: true` a rest; `off` track indices, refused for a bus or a track that
-  is not there, and moved down by the builder's `removeTrack` as the pads'
-  are), `null` clears, and the MCP `set_arrangement` tool exposes the same.
-  Portable Strudel plays it as `arrange([4, p1a], [8, p1], [2, silence])`: a
-  pattern defined once per WAY it plays (`p1` whole, `p1a` / `p1b` with the
-  held-back parts left out), an empty slot as `silence` and a rest as
-  `silence` itself; native code cannot carry a section (it is not a pattern's
-  own setting), so it writes the arrangement as a comment
-  (`1x4(-bass,lead) 2x8 restx1`) and a run leaves it alone. The Strudel reader's own
+  `{pattern, bars, off, pat}` objects (or `[pattern, bars]`; `pattern: null`
+  or `rest: true` a rest; `off` track indices and `pat` `{index: pattern}`,
+  both refused for a bus or a track that is not there, and moved down by the
+  builder's `removeTrack` as the pads' are), `null` clears, and the MCP
+  `set_arrangement` tool exposes the same. Portable Strudel plays it as
+  `arrange([4, p1a], [8, p1], [2, q1], [2, silence])`: a section defined once
+  per WAY it plays (`p1` whole, `p1a` / `p1b` with held-back parts left out
+  or a lane's part taken from its own pattern, `q1` a rest with lanes in it),
+  an empty slot as `silence` and a bare rest as `silence` itself; native code
+  cannot carry a section (it is not a pattern's own setting), so it writes
+  the arrangement as a comment (`1x4(-bass,-lead) 2x8(bass:3) restx1`) and a
+  run leaves it alone. The Strudel reader's own
   `arrange([4, a], [8, b], [2, a])` IS an arrangement: a slot per distinct
   pattern object (so `a` twice is one slot played twice), consecutive from the
   first, and the sections in the order written; `silence` is a break. Code

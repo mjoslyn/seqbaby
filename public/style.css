@@ -664,29 +664,11 @@ button.sq-btn--danger { color: var(--danger); }
 .sq-repeat__wrap input { width: 48px; text-align: center; }
 .sq-repeat__wrap select { width: 64px; text-align: center; }
 /* ---------- THE TWO VIEWS (arrangement.js keeps body[data-view]) ----------
-   The track list and the arrangement view, one at a time, under one tab
-   strip. Both sit below the pattern bar and the transport, which stay. */
-.sq-tabs {
-  display: flex;
-  gap: 2px;
-  padding: 6px 16px 0;
-  background: var(--bg-2);
-  border-bottom: 1px solid var(--border);
-}
-.sq-tabs__tab {
-  padding: 6px 14px;
-  border: 1px solid var(--border);
-  border-bottom: 0;
-  border-radius: 4px 4px 0 0;
-  background: transparent;
-  color: var(--fg-dim);
-  font: inherit;
-  font-size: 12px;
-  cursor: pointer;
-  margin-bottom: -1px;
-}
-.sq-tabs__tab[aria-selected="true"] { background: var(--bg); color: var(--fg); border-color: var(--border); border-bottom: 1px solid var(--bg); }
-.sq-tabs__tab:hover { color: var(--fg); }
+   The track list and the arrangement view, one at a time, picked by the two
+   buttons after `code` in the transport. The pattern bar and the transport
+   stay above both. */
+.sq-tabs { display: inline-flex; gap: 4px; }
+.sq-tabs__tab[aria-selected="true"] { color: var(--accent); border-color: var(--accent); }
 .sq-tabs__n { color: var(--accent); font-size: 10px; }
 .sq-tabs__n:empty { display: none; }
 body[data-view="arrangement"] #tracks,
@@ -755,11 +737,47 @@ body:not([data-view="arrangement"]) #arrangement { display: none; }
   text-overflow: ellipsis;
 }
 .sq-arrange__label--track {
-  cursor: pointer;
   border-left: 3px solid hsl(var(--track-hue, 0) 60% 55%);
   padding-left: 6px;
+  gap: 4px;
 }
-.sq-arrange__label--track:hover { color: var(--fg); }
+.sq-arrange__lanename {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sq-arrange__lanename:hover { color: var(--fg); }
+.sq-arrange__lanex {
+  flex: 0 0 auto;
+  width: 16px; height: 16px;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--fg-dim);
+  font: inherit;
+  line-height: 16px;
+  cursor: pointer;
+  opacity: 0;
+}
+.sq-arrange__row:hover .sq-arrange__lanex, .sq-arrange__row:focus-within .sq-arrange__lanex { opacity: 1; }
+.sq-arrange__lanex:hover { color: var(--fg); background: color-mix(in oklab, var(--fg) 15%, transparent); }
+.sq-arrange__addlane {
+  appearance: auto;
+  max-width: 120px;
+  padding: 4px 6px;
+  font: inherit;
+  font-size: 11px;
+}
 .sq-arrange__row { height: 26px; }
 .sq-arrange__cell {
   position: relative;
@@ -772,10 +790,46 @@ body:not([data-view="arrangement"]) #arrangement { display: none; }
   cursor: pointer;
   overflow: hidden;
 }
+/* follow: the section's pattern, in the track's colour; own: a pattern of the
+   track's, in that pattern's colour with its number; off: empty */
 .sq-arrange__cell.is-on { background: color-mix(in oklab, hsl(var(--track-hue, 0) 60% 55%) 28%, var(--step)); border-color: color-mix(in oklab, hsl(var(--track-hue, 0) 60% 55%) 60%, var(--border)); }
+.sq-arrange__cell[data-mode="own"] { background: hsl(var(--arr-hue, 0) 45% 55% / 0.3); border-color: hsl(var(--arr-hue, 0) 45% 60% / 0.8); }
 .sq-arrange__cell:not(.is-on) .sq-arrange__pic { opacity: 0.12; }
 .sq-arrange__cell.is-on .sq-arrange__pic { opacity: 0.9; }
-.sq-arrange__cell.is-rest { background: transparent; border-style: dashed; cursor: default; }
+.sq-arrange__cell.is-rest { background: transparent; border-style: dashed; }
+.sq-arrange__cell.is-drop { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.sq-arrange__own {
+  position: absolute;
+  left: 4px; top: 50%;
+  transform: translateY(-50%);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--fg);
+  text-shadow: 0 0 3px var(--bg), 0 0 3px var(--bg);
+  pointer-events: none;
+}
+.sq-arrange__cellx {
+  position: absolute;
+  right: 1px; top: 50%;
+  transform: translateY(-50%);
+  width: 14px; height: 14px;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  background: color-mix(in oklab, var(--bg) 70%, transparent);
+  color: var(--fg-dim);
+  font: inherit;
+  font-size: 11px;
+  line-height: 14px;
+  cursor: pointer;
+  opacity: 0;
+}
+.sq-arrange__cell:hover .sq-arrange__cellx, .sq-arrange__cell:focus-within .sq-arrange__cellx { opacity: 1; }
+.sq-arrange__cellx:hover { color: var(--fg); }
+/* a track playing a lane's own pattern says so in the track list, since the
+   pattern bar shows the section's */
+.sq-track[data-arr-pattern] .sq-track__name { border-color: var(--accent-2); }
+.sq-track[data-arr-pattern] .sq-track__name::placeholder { color: var(--accent-2); }
 .sq-arrange__cell:focus-visible { box-shadow: 0 0 0 2px var(--accent) inset; outline: none; }
 .sq-arrange__cell.is-now { border-color: var(--step-now); }
 .sq-arrange__cell::after {
@@ -871,6 +925,7 @@ body.sq-playing .sq-arrange__cell.is-now::after { display: block; }
   .sq-arrange__block { height: 76px; }
   .sq-arrange__row { height: 40px; }
   .sq-arrange__btns { opacity: 1; top: auto; bottom: 3px; right: 6px; gap: 4px; }
+  .sq-arrange__lanex, .sq-arrange__cellx { opacity: 1; width: 22px; height: 22px; line-height: 22px; }
   .sq-arrange__x, .sq-arrange__mv { width: 28px; height: 28px; font-size: 15px; line-height: 28px; }
   .sq-arrange__meta { inset: 4px 14px 36px 7px; }
 }
@@ -3573,8 +3628,7 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not
      blocks, since reordering by drag is HTML drag-and-drop, which touch does
      not give. */
   .sq-arrange { padding: 6px 12px 8px; min-height: 0; }
-  .sq-tabs { padding: 6px 12px 0; }
-  .sq-tabs__tab { flex: 1; text-align: center; min-height: 40px; }
+  .sq-tabs { gap: 6px; }
   .sq-arrange__btns { opacity: 1; }
   .sq-arrange__grip { width: 18px; }
 
