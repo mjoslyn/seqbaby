@@ -794,6 +794,14 @@ body:not([data-view="arrangement"]) #arrangement { display: none; }
 .sq-arrange__cell.is-drop { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
 .sq-arrange__cell[draggable="true"] { cursor: grab; }
 .sq-arrange__cell.is-dragging { opacity: 0.4; }
+/* consecutive cells on the same pattern are one clip: the gap between them
+   is bridged and the inner corners squared */
+.sq-arrange__cell.is-join-next { margin-right: -3px; width: calc(max(var(--arr-min, 56px), calc(var(--arr-bars, 1) * var(--arr-bar-w))) + 3px); border-top-right-radius: 0; border-bottom-right-radius: 0; border-right-color: transparent; }
+.sq-arrange__cell.is-join-prev { border-top-left-radius: 0; border-bottom-left-radius: 0; border-left-color: transparent; }
+.sq-arrange__cgrip { position: absolute; top: 0; bottom: 0; right: 0; width: 8px; cursor: ew-resize; touch-action: none; }
+.sq-arrange__cgrip::after { content: ""; position: absolute; top: 25%; bottom: 25%; right: 2px; width: 2px; border-radius: 1px; background: color-mix(in oklab, var(--fg) 35%, transparent); }
+.sq-arrange__cell:hover .sq-arrange__cgrip::after { background: var(--fg); }
+.sq-arrange__cell .sq-arrange__cellx { right: 10px; }
 .sq-arrange__lanetail {
   flex: 1 0 140px;
   min-width: 140px;
@@ -950,6 +958,8 @@ body.sq-playing .sq-arrange__cell.is-now::after { display: block; }
   .sq-arrange__row { height: 40px; }
   .sq-arrange__btns { opacity: 1; top: auto; bottom: 3px; right: 6px; gap: 4px; }
   .sq-arrange__lanex, .sq-arrange__cellx { opacity: 1; width: 22px; height: 22px; line-height: 22px; }
+  .sq-arrange__cgrip { width: 18px; }
+  .sq-arrange__cell .sq-arrange__cellx { right: 20px; }
   .sq-arrange__x, .sq-arrange__mv { width: 28px; height: 28px; font-size: 15px; line-height: 28px; }
   .sq-arrange__meta { inset: 4px 14px 36px 7px; }
 }

@@ -379,6 +379,9 @@ function render() {
       const target = trackTargetPattern(e, t);
       const held = target == null;
       const mode = held ? "off" : own != null ? "own" : "follow";
+      // the same pattern in the section before or after: one clip, drawn joined
+      const joinPrev = !held && i > 0 && trackTargetPattern(arr[i - 1], t) === target;
+      const joinNext = !held && i + 1 < arr.length && trackTargetPattern(arr[i + 1], t) === target;
       const c = el("div", "sq-arrange__cell");
       c.tabIndex = 0;
       c.draggable = !held;            // a cell that plays something is a clip: drag it to another section or lane
@@ -388,19 +391,27 @@ function render() {
       if (own != null) c.style.setProperty("--arr-hue", String(hueOf(own)));
       c.classList.toggle("is-on", !held);
       c.classList.toggle("is-rest", rest && own == null);
+      c.classList.toggle("is-join-prev", joinPrev);
+      c.classList.toggle("is-join-next", joinNext);
       c.classList.toggle("is-now", i === state.arrangePos);
       c.setAttribute("aria-pressed", String(!held));
       c.setAttribute("aria-label", `${t.name} in section ${i + 1}: ${held ? "silent" : own != null ? `pattern ${own + 1}, its own` : `pattern ${e.p + 1}, the section's`}`);
       c.title = `${t.name} in section ${i + 1}: ${held ? "silent" : own != null ? `pattern ${own + 1}, its own` : `pattern ${e.p + 1}, the section's`}. Click to ${held ? "let it in" : "hold it back"}; drop a pattern number here for one of its own${own != null ? "; × to go back to the section's" : ""}${held ? "" : "; drag it to another section or lane (alt to copy)"}`;
       const pic = el("canvas", "sq-arrange__pic");
       c.appendChild(pic);
+      if (own != null && !joinPrev) c.appendChild(el("span", "sq-arrange__own", String(own + 1)));
       if (own != null) {
-        c.appendChild(el("span", "sq-arrange__own", String(own + 1)));
         const x = el("button", "sq-arrange__cellx", "×");
         x.type = "button"; x.tabIndex = -1;
         x.title = "back to the section's pattern";
         x.setAttribute("aria-label", `${t.name}: back to the section's pattern in section ${i + 1}`);
         c.appendChild(x);
+      }
+      if (!held && !joinNext) {
+        // the clip's end: drag it to make the run longer or shorter, a section at a time
+        const g = el("div", "sq-arrange__cgrip");
+        g.title = `drag to make ${t.name}'s run longer or shorter`;
+        c.appendChild(g);
       }
       row.appendChild(c);
       paintPic(pic, e, [t]);
@@ -469,10 +480,40 @@ function dropIndexAt(clientX) {
  */
 function gapAt(clientX) {
   const tail = lane.querySelector(".sq-arrange__tail");
-  if (!tail) return 0;
+  return tail ? gapPast(tail, clientX) : 0;
+}
+
+/** Bars of gap a drop at clientX leaves past `edge`'s left side: a WHOLE
+ *  bar's width before the first counts, so a drop right next to the end
+ *  adds no rest. */
+function gapPast(edge, clientX) {
   const barPx = parseFloat(getComputedStyle(root).getPropertyValue("--arr-bar-w")) || 28;
-  const gap = Math.round((clientX - tail.getBoundingClientRect().left) / barPx);
+  const gap = Math.floor((clientX - edge.getBoundingClientRect().left) / barPx);
   return Math.max(0, Math.min(ARRANGE_MAX_BARS, gap));
+}
+
+/** The run of sections from `i` in which track `t` plays the same pattern as
+ *  in section `i` — one clip, drawn joined. Returns its last index. */
+function runEnd(i, t) {
+  const p = trackTargetPattern(state.arrangement[i], t);
+  let j = i;
+  while (p != null && j + 1 < state.arrangement.length && trackTargetPattern(state.arrangement[j + 1], t) === p) j++;
+  return j;
+}
+function runStart(i, t) {
+  const p = trackTargetPattern(state.arrangement[i], t);
+  let j = i;
+  while (p != null && j > 0 && trackTargetPattern(state.arrangement[j - 1], t) === p) j--;
+  return j;
+}
+
+/** Make track `t` play pattern `p` in section `i`: as the section's when that is
+ *  what the section plays, else as its own. */
+function playIn(i, t, p) {
+  const e = state.arrangement[i];
+  if (!e) return;
+  setHeld(i, t, false);
+  setOwn(i, t, e.p === p ? null : p);
 }
 
 function clearDropMarks() {
@@ -676,23 +717,23 @@ function wireRows() {
   // dragged) drops the same way with the pattern it plays, and is a move:
   // the cell it came from falls silent, unless alt (or ctrl / cmd) is held,
   // which copies.
+  // A clip is the whole RUN: every consecutive section in which the track
+  // plays that pattern, dragged and dropped as one.
   rows.addEventListener("dragstart", e => {
     const cell = e.target.closest?.(".sq-arrange__cell");
     const t = trackOf(cell);
-    if (!cell || !t) { e.preventDefault(); return; }
+    if (!cell || !t || resizingClip) { e.preventDefault(); return; }
     const i = Number(cell.dataset.i);
     const p = trackTargetPattern(state.arrangement[i], t);
     if (p == null) { e.preventDefault(); return; }
-    e.dataTransfer.setData(MIME_CLIP, JSON.stringify({ i, t: t.id, p }));
+    const i0 = runStart(i, t), i1 = runEnd(i, t);
+    e.dataTransfer.setData(MIME_CLIP, JSON.stringify({ i: i0, n: i1 - i0 + 1, t: t.id, p }));
     e.dataTransfer.setData(MIME_PATTERN, String(p));     // so the sections' tail takes it as a pattern too
     e.dataTransfer.effectAllowed = "copyMove";
-    cell.classList.add("is-dragging");
+    for (let j = i0; j <= i1; j++) rows.querySelector(`.sq-arrange__cell[data-i="${j}"][data-t="${t.id}"]`)?.classList.add("is-dragging");
   });
-  rows.addEventListener("dragend", e => { e.target.closest?.(".sq-arrange__cell")?.classList.remove("is-dragging"); clearMarks(); });
-  const laneGap = (tail, clientX) => {
-    const barPx = parseFloat(getComputedStyle(root).getPropertyValue("--arr-bar-w")) || 28;
-    return Math.max(0, Math.min(ARRANGE_MAX_BARS, Math.round((clientX - tail.getBoundingClientRect().left) / barPx)));
-  };
+  rows.addEventListener("dragend", () => { for (const n of rows.querySelectorAll(".is-dragging")) n.classList.remove("is-dragging"); clearMarks(); });
+  const laneGap = (tail, clientX) => gapPast(tail, clientX);
   const clearMarks = () => {
     for (const n of rows.querySelectorAll(".is-drop")) n.classList.remove("is-drop");
     for (const n of rows.querySelectorAll(".sq-arrange__lanetail[data-gap]")) { delete n.dataset.gap; n.style.removeProperty("--arr-gap"); }
@@ -727,28 +768,96 @@ function wireRows() {
     e.preventDefault();
     const src = clip && state.tracks.find(x => x.id === Number(clip.t));
     const move = !!clip && !(e.altKey || e.ctrlKey || e.metaKey);
+    const n = clip ? Math.max(1, Number(clip.n) || 1) : 1;
     const from = clip ? `${src?.name ?? "a clip"}, section ${Number(clip.i) + 1}` : null;
+    // (held only where the section has a pattern to be held back from; in a
+    // lanes-only section taking the lane away is silence already)
+    const silenceSource = () => { if (move && src) for (let j = 0; j < n; j++) { const k = Number(clip.i) + j; setOwn(k, src, null); setHeld(k, src, state.arrangement[k]?.p != null); } };
     if (target.classList.contains("sq-arrange__cell")) {
       const i = Number(target.dataset.i);
       if (clip && src === t && Number(clip.i) === i) return;     // dropped where it was
       // a move: the source falls silent; done before the destination is
-      // written, in case the two are the same section on another lane
-      if (move && src) { setHeld(Number(clip.i), src, true); setOwn(Number(clip.i), src, null); }
-      setOwn(i, t, p);
-      setHeld(i, t, false);
+      // written, in case the two overlap, or sit on another lane
+      silenceSource();
+      for (let j = 0; j < n && i + j < state.arrangement.length; j++) playIn(i + j, t, p);
       render();
-      setStatus(`${t.name} plays pattern ${p + 1} in section ${i + 1}${from ? ` (${move ? "moved" : "copied"} from ${from})` : ""}`);
+      setStatus(`${t.name} plays pattern ${p + 1} in section ${i + 1}${n > 1 ? ` to ${Math.min(state.arrangement.length, i + n)}` : ""}${from ? ` (${move ? "moved" : "copied"} from ${from})` : ""}`);
       return;
     }
-    const bars = Math.max(1, Math.min(ARRANGE_MAX_BARS, Number(state.patternRepeats[p]) || 1));
+    // the lane's tail: a new section with the track alone on it, as long as
+    // the clip was (or the pattern's repeat count, for a pattern number)
+    const bars = clip
+      ? Math.max(1, Math.min(ARRANGE_MAX_BARS, state.arrangement.slice(Number(clip.i), Number(clip.i) + n).reduce((s, x) => s + x.bars, 0)))
+      : Math.max(1, Math.min(ARRANGE_MAX_BARS, Number(state.patternRepeats[p]) || 1));
     edit(arr => {
-      if (move && src) { setHeld(Number(clip.i), src, true); setOwn(Number(clip.i), src, null); }
+      silenceSource();
       if (gap >= 1) arr.push({ p: null, bars: gap, off: [], pat: {} });
       arr.push({ p: null, bars, off: [], pat: { [t.id]: p } });
     }, `section ${state.arrangement.length + 1}: ${t.name} alone on pattern ${p + 1}${gap >= 1 ? `, after a ${plural(gap, "bar")} rest` : ""}${from ? ` (${move ? "moved" : "copied"} from ${from})` : ""}`);
     focusBlock(state.arrangement.length - 1);
   });
+
+  // The clip's end grip: drag it right to let the track into the sections
+  // after (on the same pattern, its own where the section's differs), left
+  // to take it out of them, a section at a time; past the end of the
+  // arrangement, the bars beyond become a new lanes-only section with the
+  // track alone on it. The pointerup is what history.js hears, so a drag
+  // is one undo step.
+  rows.addEventListener("pointerdown", e => {
+    const g = e.target.closest?.(".sq-arrange__cgrip");
+    if (!g || e.button !== 0) return;
+    const cell = g.closest(".sq-arrange__cell");
+    const t = trackOf(cell);
+    if (!t) return;
+    const i = Number(cell.dataset.i);
+    const p = trackTargetPattern(state.arrangement[i], t);
+    if (p == null) return;
+    resizingClip = { t, p, start: runStart(i, t), end: i, pointerId: e.pointerId, extra: 0 };
+    try { g.setPointerCapture(e.pointerId); } catch {}
+    e.preventDefault();
+    e.stopPropagation();
+  }, true);
+  const sectionAt = (clientX) => {
+    // which section's span is under the pointer, by the blocks above; past
+    // the last one, how many bars past its end
+    const blocks = [...lane.querySelectorAll(".sq-arrange__block")];
+    for (const b of blocks) { const r = b.getBoundingClientRect(); if (clientX < r.right) return { i: Number(b.dataset.i), extra: 0 }; }
+    const last = blocks[blocks.length - 1];
+    if (!last) return { i: 0, extra: 0 };
+    const barPx = parseFloat(getComputedStyle(root).getPropertyValue("--arr-bar-w")) || 28;
+    return { i: blocks.length - 1, extra: Math.max(0, Math.min(ARRANGE_MAX_BARS, Math.floor((clientX - last.getBoundingClientRect().right) / barPx))) };
+  };
+  const onClipMove = e => {
+    if (!resizingClip || e.pointerId !== resizingClip.pointerId) return;
+    const { t, p, start } = resizingClip;
+    const at = sectionAt(e.clientX);
+    const end = Math.max(start, at.i);
+    if (end === resizingClip.end && at.extra === resizingClip.extra) return;
+    // the run now reaches `end`: in, on this pattern, up to there; out past it
+    for (let j = start; j < state.arrangement.length; j++) {
+      if (j <= end) playIn(j, t, p);
+      else if (j <= Math.max(resizingClip.end, end)) { setOwn(j, t, null); setHeld(j, t, state.arrangement[j].p != null); }
+    }
+    resizingClip.end = end;
+    resizingClip.extra = at.extra;
+    render();
+    const tail = rows.querySelector(`.sq-arrange__row[data-t="${t.id}"] .sq-arrange__lanetail`);
+    if (tail) { if (at.extra >= 1) { tail.dataset.gap = `+ ${plural(at.extra, "bar")}`; tail.style.setProperty("--arr-gap", String(at.extra)); } else { delete tail.dataset.gap; tail.style.removeProperty("--arr-gap"); } }
+  };
+  const onClipUp = e => {
+    if (!resizingClip || e.pointerId !== resizingClip.pointerId) return;
+    const { t, p, start, end, extra } = resizingClip;
+    resizingClip = null;
+    if (extra >= 1) edit(arr => arr.push({ p: null, bars: extra, off: [], pat: { [t.id]: p } }));
+    else render();
+    const last = extra >= 1 ? state.arrangement.length : end + 1;
+    setStatus(`${t.name} plays pattern ${p + 1} from section ${start + 1}${last > start + 1 ? ` to ${last}` : ""}`);
+  };
+  rows.addEventListener("pointermove", onClipMove);
+  rows.addEventListener("pointerup", onClipUp);
+  rows.addEventListener("pointercancel", onClipUp);
 }
+let resizingClip = null;
 
 // ---- init ------------------------------------------------------------------
 

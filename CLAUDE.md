@@ -1821,12 +1821,21 @@ state.arrangement = [ {p:0, bars:4, off:[bass, lead]}, {p:1, bars:8}, {p:null, b
   TAIL and it is a new section at the end with that instrument alone on it
   (a rest for everyone else, the gap past the end a rest before it), which is
   why the lanes show before the first section: a song can start from one
-  instrument. A cell that plays something is a CLIP: drag it to another
-  cell, on its own lane or another's, or to a lane's tail, and it drops as a
-  pattern number would with the pattern it plays — a move, the cell it came
-  from falling silent, unless alt / ctrl / cmd is held, which copies
+  instrument. A cell that plays something is a CLIP, and consecutive cells
+  on the same pattern are ONE clip (a run: `runStart` / `runEnd`, drawn
+  joined with `is-join-prev` / `is-join-next`): drag it to another cell, on
+  its own lane or another's, or to a lane's tail, and it drops as a pattern
+  number would with the pattern it plays, the whole run — a move, the cells
+  it came from falling silent, unless alt / ctrl / cmd is held, which copies
   (`text/arrange-clip`, with `text/pattern-idx` beside it so the sections'
-  tail takes it too). The pattern grid's cells were already draggable
+  tail takes it too). The grip at a clip's end makes the run longer or
+  shorter a section at a time (`playIn`: in on the same pattern, as the
+  section's where that is what it plays, else its own; out past the new
+  end), and dragged past the end of the arrangement adds a lanes-only
+  section of the bars beyond with the track alone on it. A drop past the end
+  makes a rest only once a WHOLE bar's width of gap is left (`gapPast`
+  floors), so a clip set down right beside the last section adds none.
+  The pattern grid's cells were already draggable
   (`text/pattern-idx`, patternBar.js), so dropping one onto the lane inserts a
   section without the grid knowing. **A drop past the end leaves its gap as a
   rest** (`gapAt`): drag a block, or a pattern number, a few bars to the right
