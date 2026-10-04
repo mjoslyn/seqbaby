@@ -10,7 +10,7 @@
 // silence without a slot spent on them; `off`, the tracks held back for that
 // section; and `pat`, a track's OWN pattern for the section where the rest
 // play `p` (both live ids here, indices in the format). The last two are the
-// LANES: a track added to the arrangement gets a row where each section is
+// LANES: every instrument track has a row where each section is
 // the default pattern, a pattern of its own, or nothing — so the drums can
 // play pattern 1 under a bass on pattern 3, and a song brings instruments in
 // and out without copying patterns. Chain mode follows
@@ -76,15 +76,10 @@ export function trackTargetPattern(e, t) {
   return own != null ? own : e.p;
 }
 
-// The lanes: tracks the arrangement says something about. A track is in the
-// arrangement once any section holds it back or gives it a pattern of its
-// own, and `laneIds` holds the ones added but not yet told anything, which is
-// view state (a lane with nothing in it changes nothing a save could carry).
-const laneIds = new Set();
-function hasLane(t) {
-  return laneIds.has(t.id) || state.arrangement.some(e => sectionHolds(e, t) || e.pat?.[t.id] != null);
-}
-function lanes() { return arrangeable().filter(hasLane); }
+// The lanes: every instrument track, in the track list's order, from the
+// first and as they are added (createTrack repaints). A lane with nothing in
+// it follows the sections, which is what a save carries: nothing.
+function lanes() { return arrangeable(); }
 
 /**
  * Write a serialized arrangement onto the live state. `order` is the track
@@ -98,7 +93,6 @@ export function applyArrangementBlob(raw, order = state.tracks) {
     for (const [i, q] of Object.entries(e.pat || {})) { const id = order[Number(i)]?.id; if (id != null) pat[id] = q; }
     return { p: e.p, bars: e.bars, off: (e.off || []).map(i => order[i]?.id).filter(id => id != null), pat };
   });
-  laneIds.clear();
   if (state.arrangePos >= state.arrangement.length) state.arrangePos = Math.max(0, state.arrangement.length - 1);
   refreshArrangement();
 }
@@ -208,9 +202,8 @@ function setOwn(i, t, p) {
   if (p == null) delete e.pat[t.id]; else e.pat[t.id] = p;
 }
 
-/** Take a track's lane out: nothing of its own anywhere, nowhere held back. */
-function removeLane(t) {
-  laneIds.delete(t.id);
+/** Clear a track's lane: nothing of its own anywhere, nowhere held back — it follows the sections. */
+function clearLane(t) {
   for (const e of state.arrangement) { setHeld(state.arrangement.indexOf(e), t, false); if (e.pat) delete e.pat[t.id]; }
 }
 
@@ -351,12 +344,11 @@ function render() {
     : "drag a pattern from the bar above, or press + to add the one you are on");
   lane.appendChild(tail);
 
-  // the lanes: a row per track added to the arrangement, a cell per section:
-  // the section's pattern, one of the track's own, or nothing
+  // the lanes: a row per instrument track, a cell per section: the section's
+  // pattern, one of the track's own, or nothing
   rows.replaceChildren();
-  const laneTracks = lanes();
   rows.hidden = !arr.length;
-  for (const t of (arr.length ? laneTracks : [])) {
+  for (const t of (arr.length ? lanes() : [])) {
     const row = el("div", "sq-arrange__row");
     row.dataset.t = String(t.id);
     const hue = t.el ? getComputedStyle(t.el).getPropertyValue("--track-hue").trim() : "";
@@ -368,10 +360,12 @@ function render() {
     name.title = `${t.name}: ${heldEverywhere ? "let it play in every section" : "hold it back in every section"}`;
     name.dataset.all = heldEverywhere ? "on" : "off";
     label.appendChild(name);
+    const says = arr.some(e => sectionHolds(e, t) || e.pat?.[t.id] != null);
     const rm = el("button", "sq-arrange__lanex", "×");
     rm.type = "button";
-    rm.title = `take ${t.name}'s lane out: it follows the sections again, everywhere`;
-    rm.setAttribute("aria-label", `remove ${t.name}'s lane`);
+    rm.title = `clear ${t.name}'s lane: it follows the sections again, everywhere`;
+    rm.setAttribute("aria-label", `clear ${t.name}'s lane`);
+    rm.hidden = !says;
     label.appendChild(rm);
     row.appendChild(label);
     arr.forEach((e, i) => {
@@ -407,15 +401,6 @@ function render() {
     });
     rows.appendChild(row);
   }
-  // the picker for a new lane: the instrument tracks without one
-  const add = head.querySelector(".sq-arrange__addlane");
-  const without = arr.length ? arrangeable().filter(t => !hasLane(t)) : [];
-  add.replaceChildren();
-  const ph = el("option", null, "+ track"); ph.value = ""; ph.selected = true; ph.disabled = !without.length;
-  add.appendChild(ph);
-  for (const t of without) { const o = el("option", null, t.name || "track"); o.value = String(t.id); add.appendChild(o); }
-  add.disabled = !without.length;
-  add.title = arr.length ? (without.length ? "add a track to the arrangement: a lane of its own, where each section can play the section's pattern, a pattern of the track's own, or nothing" : "every track has a lane") : "add a section first";
   if (focused != null) focusBlock(Number(focused));
 }
 
@@ -643,7 +628,7 @@ function wireRows() {
       return;
     }
     if (e.target.closest(".sq-arrange__lanex")) {
-      removeLane(t);
+      clearLane(t);
       render();
       setStatus(`${t.name} follows the sections again`);
       return;
@@ -714,17 +699,7 @@ export function initArrangement() {
   const mk = (act, text, title) => { const b = el("button", "sq-btn--ghost", text); b.type = "button"; b.dataset.act = act; b.title = title; tools.appendChild(b); return b; };
   mk("add", "+ pattern", "add the pattern you are on to the end of the arrangement");
   mk("rest", "+ rest", "add a bar of silence to the end of the arrangement: every track is held back for it, no pattern slot is spent on it");
-  const addLane = el("select", "sq-arrange__addlane sq-btn--ghost");
-  addLane.setAttribute("aria-label", "add a track to the arrangement");
-  addLane.addEventListener("change", () => {
-    const t = state.tracks.find(x => x.id === Number(addLane.value));
-    addLane.value = "";
-    if (!t) return;
-    laneIds.add(t.id);
-    render();
-    setStatus(`${t.name} has a lane: each section can play the section's pattern, one of its own, or nothing`);
-  });
-  tools.appendChild(addLane);
+
   mk("fill", "from patterns", "arrange every pattern with notes in slot order, each for its rep count — what chain mode plays without an arrangement");
   mk("clear", "clear", "remove every section; chain mode goes back to playing the patterns in order");
   tools.addEventListener("click", e => {

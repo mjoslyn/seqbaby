@@ -771,13 +771,7 @@ body:not([data-view="arrangement"]) #arrangement { display: none; }
 }
 .sq-arrange__row:hover .sq-arrange__lanex, .sq-arrange__row:focus-within .sq-arrange__lanex { opacity: 1; }
 .sq-arrange__lanex:hover { color: var(--fg); background: color-mix(in oklab, var(--fg) 15%, transparent); }
-.sq-arrange__addlane {
-  appearance: auto;
-  max-width: 120px;
-  padding: 4px 6px;
-  font: inherit;
-  font-size: 11px;
-}
+.sq-arrange__lanex[hidden] { display: none; }
 .sq-arrange__row { height: 26px; }
 .sq-arrange__cell {
   position: relative;

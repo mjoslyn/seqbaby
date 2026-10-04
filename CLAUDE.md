@@ -1745,8 +1745,8 @@ state.arrangement = [ {p:0, bars:4, off:[bass, lead]}, {p:1, bars:8}, {p:null, b
   restarts the track counts, as any section change does. `syncArrangePos`
   keeps a position that sits on a rest, since no active pattern is a reason
   to leave it.
-- **Lanes: a track added to the arrangement gets a row, a cell per section,
-  and each cell is the section's pattern, a pattern of the track's OWN, or
+- **Lanes: every instrument track has a row, a cell per section, and each
+  cell is the section's pattern, a pattern of the track's OWN, or
   nothing.** Two fields carry it: `off`, the tracks a section holds back, and
   `pat`, `{track: pattern}` for the tracks on a pattern of their own there
   (`trackTargetPattern(sec, t)` folds the three into one answer: a pattern
@@ -1757,10 +1757,10 @@ state.arrangement = [ {p:0, bars:4, off:[bass, lead]}, {p:1, bars:8}, {p:null, b
   applySet and the merge resolve them with the pads, after the tracks exist
   (`made`), and `applyGlobalsInPlace` holds them back under the same `pads`
   flag. Written only when they say something, so a section with nothing is
-  the two fields it was. Which tracks HAVE a lane is derived (any section
-  says something about it) plus `laneIds`, the ones added through the
-  `+ track` picker and not yet told anything, which is view state. Buses
-  never get a lane: they play no notes.
+  the two fields it was. A lane is every instrument track's from the start
+  and as it is added (`createTrack` repaints), in the track list's order; a
+  lane with nothing in it follows the sections and is nothing in a save.
+  Buses never get a lane: they play no notes.
 - **A lane's own pattern is a per-track binding** (`applySectionTracks`,
   state.js). `aliasPattern` records which pattern a track's arrays are bound
   to (`t._arrPattern`); on a section line the transport switches the default
@@ -1816,8 +1816,8 @@ state.arrangement = [ {p:0, bars:4, off:[bass, lead]}, {p:1, bars:8}, {p:null, b
   enter, `d` duplicate, `r` a rest after). On a lane: click a cell to hold
   the track back or let it in, drop a pattern number on it (or type a digit)
   for a pattern of the track's own, its `×` to go back to the section's,
-  click the lane's name for every section at once, the lane's `×` to take the
-  lane out. The pattern grid's cells were already draggable
+  click the lane's name for every section at once, the lane's `×` (shown
+  once it says anything) to clear it. The pattern grid's cells were already draggable
   (`text/pattern-idx`, patternBar.js), so dropping one onto the lane inserts a
   section without the grid knowing. **A drop past the end leaves its gap as a
   rest** (`gapAt`): drag a block, or a pattern number, a few bars to the right
