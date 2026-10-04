@@ -367,6 +367,30 @@ export const PARAM_DESCRIPTIONS = {
 };
 
 /**
+ * The elements that hold a track's controls: its own node, plus whatever a
+ * modal has carried off to the body (every overlay in the app is appended to
+ * `document.body`, and the panels it borrows keep their `data-track-id`).
+ *
+ * Not `document.querySelectorAll` on the id: an attribute-value selector has
+ * no index, so it walks every node in the studio, and with ~280 controls a
+ * track that measured ~10ms per call on a 4x-throttled CPU. A pattern switch
+ * refreshes every track, so in chain mode the bar line paid it once per track,
+ * on the main thread the transport's scheduler shares, and the first steps of
+ * the next bar came out late (see paintPatternUI in state.js).
+ * @param {Track} t @returns {Element[]}
+ */
+function trackRoots(t) {
+  const sel = `[data-track-id="${CSS.escape(String(t.id))}"]`;
+  const roots = t.el ? [t.el] : [];
+  for (const child of document.body.children) {
+    if (t.el && child.contains(t.el)) continue;   // the studio: t.el covers it
+    if (child.matches(sel)) roots.push(child);
+    for (const el of child.querySelectorAll(sel)) roots.push(el);
+  }
+  return roots;
+}
+
+/**
  * Mark every one of this track's parameter controls with what is currently
  * moving it, so a glance at the labels says where the movement is without
  * opening a panel: `data-motion="mod"` for an LFO, `"aut"` for a live
@@ -392,7 +416,7 @@ export function refreshParamIndicators(t) {
   // The track node and every panel inside it carry the id, so a control sits
   // under more than one root and would otherwise be walked several times.
   const seen = new Set();
-  for (const root of document.querySelectorAll(`[data-track-id="${t.id}"]`)) {
+  for (const root of trackRoots(t)) {
     for (const el of root.querySelectorAll("input[type=range], select, input[type=checkbox]")) {
       if (seen.has(el)) continue;
       seen.add(el);

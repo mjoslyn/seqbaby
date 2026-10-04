@@ -3406,7 +3406,14 @@ through a 6ms fade on its gain).
   (`paintPatternUI`: grids, roll, lanes, mod panel, pattern bar) goes to its
   own task straight after — a `setTimeout`, not rAF, which stops in an occluded
   window while the transport runs on. It measured 11ms empty and 23ms on a
-  full session. A click paints synchronously, as it always did.
+  full session. A click paints synchronously, as it always did. **One track
+  per task**: Tone's clock ticks off a worker message, which only runs between
+  tasks, so the whole paint in one task held the scheduler, and on a slow CPU
+  (4x throttle, eight tracks) it ran past the lookahead and the first steps of
+  the new bar played up to 200ms late, a stutter on the 1 in chain mode.
+  `refreshParamIndicators` was most of it: it found a track's roots with
+  `document.querySelectorAll('[data-track-id=…]')`, a walk of the whole
+  studio per track; `trackRoots` takes `t.el` plus the body-level overlays.
 - **The history snapshot waits for idle time while playing**
   (`history.js` `settle`, `requestIdleCallback` with a 1.5s deadline). And only
   the first event of a gesture resolves a label; the sixty `input` events a
