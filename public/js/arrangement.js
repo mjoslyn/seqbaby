@@ -407,8 +407,11 @@ function render() {
     });
     // the lane's tail: a pattern dropped here is a new section at the end
     // with this instrument alone on it (and, past the end, a rest before it)
-    const lt = el("div", "sq-arrange__lanetail", arr.length ? `drop a pattern here for ${t.name} alone` : `drop a pattern here to start with ${t.name} alone`);
+    // No caption: the sections' tail above says what a drop does, and six
+    // lines of it read as noise. The zone lights up when a drag is over it.
+    const lt = el("div", "sq-arrange__lanetail");
     lt.dataset.t = String(t.id);
+    lt.title = `drop a pattern number here for a new section with ${t.name} alone on it`;
     row.appendChild(lt);
     rows.appendChild(row);
   }

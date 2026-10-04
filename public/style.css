@@ -801,15 +801,14 @@ body:not([data-view="arrangement"]) #arrangement { display: none; }
   align-items: center;
   padding: 0 8px;
   font-size: 10px;
-  color: color-mix(in oklab, var(--fg-dim) 55%, transparent);
-  border: 1px dashed color-mix(in oklab, var(--border) 60%, transparent);
+  color: var(--fg-dim);
+  border: 1px dashed transparent;
   border-radius: 3px;
   white-space: nowrap;
   overflow: hidden;
-  text-overflow: ellipsis;
 }
-.sq-arrange__row:hover .sq-arrange__lanetail { color: var(--fg-dim); border-color: var(--border); }
-.sq-arrange__lanetail.is-drop { border-color: var(--accent); color: var(--fg); }
+.sq-arrange__row:hover .sq-arrange__lanetail { border-color: color-mix(in oklab, var(--border) 70%, transparent); }
+.sq-arrange__lanetail.is-drop { border-color: var(--accent); }
 .sq-arrange__lanetail[data-gap] { gap: 3px; padding: 0; }
 .sq-arrange__lanetail[data-gap]::before {
   content: attr(data-gap);
