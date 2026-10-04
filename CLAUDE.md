@@ -895,6 +895,32 @@ STRING ──▶ PICKUP ──▶ tone ──┬── clean (lows, kept clean) 
                              └── sub octave (tracked) ──────┘
 ```
 
+- **The pluck is a pulse, not a noise burst.** The loop is filled with the
+  velocity wave of a string pulled aside at the pick position and released (a
+  1/n spectrum under the pick comb, rounded by the hand's hardness and by
+  velocity, with a few ms of scrape noise on the edge), so the fundamental
+  leads and the note starts with a thump. The guitar's Karplus-Strong burst is
+  3ms of noise; on a low E it was 24ms, measured as 178 zero crossings in the
+  first period and a quarter of a second before a waveform appeared, with the
+  fundamental 13-17dB under the 2nd and 3rd harmonics. That was most of what
+  read as unnatural. A little jitter in position and hardness per note keeps a
+  run of equal notes from being one sample eight times.
+- **Losses are per second, not per trip** (`setLosses`): the loss filter's
+  coefficient scales as `sqrt(f/110)` and the fundamental's per-trip loss as
+  `sqrt(110/f)`, so a partial near 850Hz decays at about the same rate on E1 as
+  on A2. With one coefficient for every note, E1's 1st through 20th partials all
+  decayed at the same 10dB/s and the low strings rang like an organ.
+- **The stretch is a real inharmonicity coefficient**, `B ≈ 2.9e-4` for a
+  roundwound E at the default `stiff`, falling for higher strings: `dispCoef`
+  solves the coefficient of an 8-stage first-order allpass cascade per note so
+  the 10th partial sits exactly at `n·f0·sqrt(1 + B·n²)` (it is the loop's
+  PHASE delay that has to fit, a third of the group delay's quadratic term,
+  which is how a first attempt came out at a third of the stretch). The two
+  fixed allpasses it replaces measured dead harmonic on a bass.
+- **Two polarizations per string** (`makeString`: `a` and `b`), the second
+  sensed at 0.55, lost into the bridge faster (`g^2.6`) and tuned 0.28Hz up,
+  for the two-stage decay and slow swell of a real note. The fretboard is in
+  one plane only.
 - **The dirt is parallel and highpassed.** Distorting a bass whole makes the
   fundamental intermodulate with everything above it and the low end vanishes,
   so GRIND only works above XOVER and the clean lows go back underneath.
@@ -903,10 +929,15 @@ STRING ──▶ PICKUP ──▶ tone ──┬── clean (lows, kept clean) 
   "more compression" control.
 - **Fret buzz is a one-sided clip inside the string's own loop** (the fretboard
   is only on one side of the string). Wound up with the hand control at the top,
-  that *is* slap.
+  that *is* slap. Its threshold is set against the pulse's peak, so the default
+  `fret` 0.25 is clean and the top of the knob catches most of a hard note.
 - **Round vs flat** (`bsstrs`) scales the loop damping, the excitation
   brightness and the dispersion together — flats lose their highs at once and
   have far less clank.
+- `test/bass.test.js` pins all of the above by rendering the processor source
+  in Node, as `reverb.test.js` does: tuning, the fundamental's level, the
+  attack's zero crossings, the decay rates, the stretch (solved from the loop's
+  phase response), DC, and velocity.
 - The octaver is a tracked oscillator following the string's envelope, not a
   flip-flop divider, so it never glitches (a real one does).
 - **Controls** — DRIVE / TONE / COMP / SUSTAIN plus `sq-param-group--bass`
