@@ -422,6 +422,7 @@ export function removeTrack(song, index) {
   for (const pad of song.macroPads || []) for (const axis of ["x", "y"]) {
     pad[axis] = (pad[axis] || []).filter(a => a.track !== i).map(a => ({ ...a, track: fix(a.track) }));
   }
+  for (const e of song.arrangement || []) if (Array.isArray(e.off)) { e.off = e.off.filter(j => j !== i).map(fix); if (!e.off.length) delete e.off; }
 }
 
 /**
@@ -921,7 +922,10 @@ export const CHANCE_NOTE_LABELS = CHANCE_NOTE_VALUES.map(v => v.label);
  *  there are any — an ordered list of `{pattern, bars}`, the same pattern as
  *  often as wanted (verse, chorus, verse), an empty one as a break — and
  *  otherwise the non-empty patterns in slot order for `repeats` bars each.
- *  `sections: []` (or null) clears the arrangement. */
+ *  A section with `pattern: null` (or `rest: true`) is a REST: bars of
+ *  silence, no slot spent. A section's `off` lists the tracks (by index)
+ *  held back for it, so a song brings instruments in and out without
+ *  copying patterns. `sections: []` (or null) clears the arrangement. */
 export function setArrangement(song, { mode, repeats, switchMode, active, sections } = {}) {
   if (mode != null) song.patternMode = oneOf(mode, "mode", ["repeat", "chain"]);
   if (switchMode != null) song.patternSwitchMode = oneOf(switchMode, "switchMode", ["immediate", "finish"]);
@@ -935,8 +939,19 @@ export function setArrangement(song, { mode, repeats, switchMode, active, sectio
     else {
       if (!Array.isArray(sections)) fail("sections must be an array of { pattern, bars } (or [pattern, bars]) in the order they play");
       song.arrangement = sections.map((s, i) => {
-        const [p, b] = Array.isArray(s) ? s : [s?.pattern ?? s?.p, s?.bars];
-        return { p: int(p, `sections[${i}].pattern`, 0, PATTERN_COUNT - 1), bars: int(b ?? 1, `sections[${i}].bars`, 1, ARRANGE_MAX_BARS) };
+        const [p, b] = Array.isArray(s) ? s : [s && "pattern" in s ? s.pattern : s?.p, s?.bars];
+        const bars = int(b ?? 1, `sections[${i}].bars`, 1, ARRANGE_MAX_BARS);
+        const offRaw = Array.isArray(s) ? [] : (s?.off ?? []);
+        if (!Array.isArray(offRaw)) fail(`sections[${i}].off must be an array of track indices`);
+        const off = [...new Set(offRaw.map((x, j) => {
+          const k = int(x, `sections[${i}].off[${j}]`, 0, Math.max(0, song.tracks.length - 1));
+          if (!song.tracks[k]) fail(`sections[${i}].off[${j}]: there is no track ${k} (the song has ${song.tracks.length})`);
+          if (song.tracks[k].engineKey === "bus") fail(`sections[${i}].off[${j}]: track ${k} is an fx bus, which plays no notes to hold back`);
+          return k;
+        }))].sort((x, y) => x - y);
+        if (p === null || s?.rest === true || p === "rest") return off.length ? { p: null, bars, off } : { p: null, bars };
+        const pat = int(p, `sections[${i}].pattern`, 0, PATTERN_COUNT - 1);
+        return off.length ? { p: pat, bars, off } : { p: pat, bars };
       });
     }
   }
@@ -944,7 +959,7 @@ export function setArrangement(song, { mode, repeats, switchMode, active, sectio
   return {
     mode: song.patternMode, switchMode: song.patternSwitchMode, active: song.activePattern,
     repeats: song.patternRepeats,
-    sections: song.arrangement.map(e => ({ pattern: e.p, bars: e.bars })),
+    sections: song.arrangement.map(e => (e.off?.length ? { pattern: e.p, bars: e.bars, off: e.off } : { pattern: e.p, bars: e.bars })),
     bars: song.arrangement.length ? arrangementBars(song.arrangement) : undefined,
   };
 }
@@ -1036,7 +1051,7 @@ export function summarize(song) {
     bpm: song.bpm, swing: song.swing,
     scale: song.scale?.active ? `${rootName} ${song.scale.mode}` : "off",
     arrangement: { mode: song.patternMode, switchMode: song.patternSwitchMode, active: song.activePattern,
-      sections: song.arrangement?.length ? song.arrangement.map(e => ({ pattern: e.p, bars: e.bars })) : undefined,
+      sections: song.arrangement?.length ? song.arrangement.map(e => (e.off?.length ? { pattern: e.p, bars: e.bars, off: e.off } : { pattern: e.p, bars: e.bars })) : undefined,
       repeats: song.patternMode === "chain" && !song.arrangement?.length ? song.patternRepeats : undefined,
       meters: song.patternMeters.map((m, i) => (m.num !== 4 || m.den !== 4) ? `${i}: ${m.num}/${m.den}` : null).filter(Boolean) },
     tracks: song.tracks.map((_, i) => summarizeTrack(song, i)),

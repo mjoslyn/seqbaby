@@ -663,40 +663,133 @@ button.sq-btn--danger { color: var(--danger); }
 .sq-repeat__wrap { display: inline-flex; flex-direction: column; align-items: center; gap: 2px; color: var(--fg-dim); font-size: 11px; }
 .sq-repeat__wrap input { width: 48px; text-align: center; }
 .sq-repeat__wrap select { width: 64px; text-align: center; }
-#arrange-btn[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); }
-
-/* ---------- ARRANGEMENT VIEW (arrangement.js) ----------
-   The song as sections laid out across bars, under the pattern bar. A block is
-   as wide as the bars it plays (--arr-bars x --arr-bar-w), coloured by its
-   pattern (--arr-hue), and drawn with the pattern's own steps (the canvas: one
-   pixel a sixteenth, one row a track, stretched). The playhead is the block's
-   ::after, placed from --arr-head, and shown only while the transport runs. */
-.sq-arrange {
-  --arr-bar-w: 28px;
+/* ---------- THE TWO VIEWS (arrangement.js keeps body[data-view]) ----------
+   The track list and the arrangement view, one at a time, under one tab
+   strip. Both sit below the pattern bar and the transport, which stay. */
+.sq-tabs {
   display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 6px 16px 8px;
+  gap: 2px;
+  padding: 6px 16px 0;
   background: var(--bg-2);
   border-bottom: 1px solid var(--border);
 }
-.sq-arrange[hidden] { display: none; }
+.sq-tabs__tab {
+  padding: 6px 14px;
+  border: 1px solid var(--border);
+  border-bottom: 0;
+  border-radius: 4px 4px 0 0;
+  background: transparent;
+  color: var(--fg-dim);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  margin-bottom: -1px;
+}
+.sq-tabs__tab[aria-selected="true"] { background: var(--bg); color: var(--fg); border-color: var(--border); border-bottom: 1px solid var(--bg); }
+.sq-tabs__tab:hover { color: var(--fg); }
+.sq-tabs__n { color: var(--accent); font-size: 10px; }
+.sq-tabs__n:empty { display: none; }
+body[data-view="arrangement"] #tracks,
+body[data-view="arrangement"] .sq-add-track-row { display: none; }
+body:not([data-view="arrangement"]) #arrangement { display: none; }
+/* A track the playing section holds back (paintArrangementNow): its steps
+   are not being played, and the track list says so while it lasts. */
+.sq-track.is-held .sq-steps { opacity: 0.4; }
+
+/* ---------- ARRANGEMENT VIEW (arrangement.js) ----------
+   The song as sections laid out across bars, with a row per track under them.
+   A block is as wide as the bars it plays (--arr-bars x --arr-bar-w), coloured
+   by its pattern (--arr-hue), and drawn with the pattern's own steps (the
+   canvas: one pixel a sixteenth, one row a track, stretched). The playhead is
+   the block's ::after, placed from --arr-head, and shown only while the
+   transport runs. The blocks and the rows share one horizontal scroll, with a
+   label column held at the left. */
+.sq-arrange {
+  --arr-bar-w: 28px;
+  --arr-label: 120px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 16px 12px;
+  min-height: 40vh;
+}
 .sq-arrange__head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 11px; color: var(--fg-dim); }
 .sq-arrange__title { color: var(--fg); }
 .sq-arrange__sum { flex: 1; }
 .sq-arrange__hint { color: var(--accent-2); border-color: var(--accent-2); }
 .sq-arrange__hint[hidden] { display: none; }
 .sq-arrange__tools { display: flex; gap: 4px; }
-.sq-arrange__lane {
-  display: flex;
-  align-items: stretch;
-  gap: 3px;
+.sq-arrange__scroll {
   overflow-x: auto;
   overflow-y: hidden;
   padding: 2px 0 6px;
-  min-height: 58px;
   scrollbar-width: thin;
 }
+.sq-arrange__lane, .sq-arrange__row {
+  display: flex;
+  align-items: stretch;
+  gap: 3px;
+  width: max-content;
+  min-width: 100%;
+}
+.sq-arrange__lane { min-height: 58px; }
+.sq-arrange__rows { display: flex; flex-direction: column; gap: 3px; margin-top: 6px; }
+.sq-arrange__rows[hidden] { display: none; }
+.sq-arrange__label {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  flex: 0 0 var(--arr-label);
+  width: var(--arr-label);
+  display: flex;
+  align-items: center;
+  padding: 0 8px 0 0;
+  font: inherit;
+  font-size: 11px;
+  color: var(--fg-dim);
+  background: var(--bg);
+  border: 0;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sq-arrange__label--track {
+  cursor: pointer;
+  border-left: 3px solid hsl(var(--track-hue, 0) 60% 55%);
+  padding-left: 6px;
+}
+.sq-arrange__label--track:hover { color: var(--fg); }
+.sq-arrange__row { height: 26px; }
+.sq-arrange__cell {
+  position: relative;
+  flex: 0 0 auto;
+  width: max(var(--arr-min, 56px), calc(var(--arr-bars, 1) * var(--arr-bar-w)));
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--step);
+  cursor: pointer;
+  overflow: hidden;
+}
+.sq-arrange__cell.is-on { background: color-mix(in oklab, hsl(var(--track-hue, 0) 60% 55%) 28%, var(--step)); border-color: color-mix(in oklab, hsl(var(--track-hue, 0) 60% 55%) 60%, var(--border)); }
+.sq-arrange__cell:not(.is-on) .sq-arrange__pic { opacity: 0.12; }
+.sq-arrange__cell.is-on .sq-arrange__pic { opacity: 0.9; }
+.sq-arrange__cell.is-rest { background: transparent; border-style: dashed; cursor: default; }
+.sq-arrange__cell:focus-visible { box-shadow: 0 0 0 2px var(--accent) inset; outline: none; }
+.sq-arrange__cell.is-now { border-color: var(--step-now); }
+.sq-arrange__cell::after {
+  content: "";
+  position: absolute;
+  top: 0; bottom: 0;
+  width: 2px;
+  left: calc(var(--arr-head, 0) * 100%);
+  background: var(--step-now);
+  transition: left 0.12s linear;
+  display: none;
+  pointer-events: none;
+}
+body.sq-playing .sq-arrange__cell.is-now::after { display: block; }
 .sq-arrange__block {
   position: relative;
   flex: 0 0 auto;
@@ -714,6 +807,12 @@ button.sq-btn--danger { color: var(--danger); }
 .sq-arrange__block:focus-visible { box-shadow: 0 0 0 2px var(--accent) inset; }
 .sq-arrange__block.is-now { border-color: var(--step-now); box-shadow: 0 0 0 1px var(--step-now) inset; }
 .sq-arrange__block.is-empty { border-style: dashed; }
+.sq-arrange__block.is-rest {
+  border-style: dashed;
+  border-color: var(--border);
+  background: repeating-linear-gradient(135deg, transparent 0 6px, color-mix(in oklab, var(--fg) 5%, transparent) 6px 7px);
+}
+.sq-arrange__block.is-rest .sq-arrange__num { font-size: 11px; font-weight: 400; color: var(--fg-dim); letter-spacing: 0.08em; }
 .sq-arrange__block.is-dragging { opacity: 0.4; }
 .sq-arrange__block.is-drop-before { border-left: 3px solid var(--accent); }
 .sq-arrange__block.is-resizing { cursor: ew-resize; }
@@ -768,8 +867,9 @@ button.sq-btn--danger { color: var(--danger); }
 /* A finger cannot hover and cannot drag a block (that is HTML drag-and-drop),
    so on any touch screen the move and remove buttons are always there. */
 @media (any-pointer: coarse) {
-  .sq-arrange { --arr-bar-w: 40px; --arr-min: 104px; }
+  .sq-arrange { --arr-bar-w: 40px; --arr-min: 104px; --arr-label: 96px; }
   .sq-arrange__block { height: 76px; }
+  .sq-arrange__row { height: 40px; }
   .sq-arrange__btns { opacity: 1; top: auto; bottom: 3px; right: 6px; gap: 4px; }
   .sq-arrange__x, .sq-arrange__mv { width: 28px; height: 28px; font-size: 15px; line-height: 28px; }
   .sq-arrange__meta { inset: 4px 14px 36px 7px; }
@@ -3441,7 +3541,9 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not
      buttons always showing (the any-pointer rule above), a wider grip, taller
      blocks, since reordering by drag is HTML drag-and-drop, which touch does
      not give. */
-  .sq-arrange { padding: 6px 12px 8px; }
+  .sq-arrange { padding: 6px 12px 8px; min-height: 0; }
+  .sq-tabs { padding: 6px 12px 0; }
+  .sq-tabs__tab { flex: 1; text-align: center; min-height: 40px; }
   .sq-arrange__btns { opacity: 1; }
   .sq-arrange__grip { width: 18px; }
 

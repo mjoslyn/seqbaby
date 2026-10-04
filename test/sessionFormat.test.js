@@ -305,3 +305,18 @@ test("arrangementBars counts the bars one pass plays", () => {
   assert.equal(arrangementBars([{ p: 0, bars: 4 }, { p: 1, bars: 8 }, { p: 0, bars: 4 }]), 16);
   assert.equal(arrangementBars([{ p: 0 }, { p: 1, bars: 0 }]), 2, "a section is at least a bar");
 });
+
+test("normalizeArrangement keeps a rest: a section with no pattern", () => {
+  assert.deepEqual(normalizeArrangement([{ p: 0, bars: 4 }, { p: null, bars: 2 }, { p: 1, bars: 4 }]),
+    [{ p: 0, bars: 4 }, { p: null, bars: 2 }, { p: 1, bars: 4 }]);
+  assert.deepEqual(normalizeArrangement([{ rest: true, bars: 3 }, { rest: true }]), [{ p: null, bars: 3 }, { p: null, bars: 1 }], "the builder's spelling");
+  assert.deepEqual(normalizeArrangement([{ p: null, bars: 0 }, { p: null, bars: 1000 }]), [{ p: null, bars: 1 }, { p: null, bars: ARRANGE_MAX_BARS }], "clamped like any section");
+  assert.deepEqual(normalizeArrangement([{ p: undefined, bars: 2 }, { bars: 2 }]), [], "no pattern at all is not a rest: a rest is said (null), not left out");
+  assert.equal(arrangementBars([{ p: 0, bars: 4 }, { p: null, bars: 2 }]), 6, "a rest's bars count");
+});
+
+test("normalizeArrangement keeps a section's held-back tracks as sorted, distinct indices", () => {
+  assert.deepEqual(normalizeArrangement([{ p: 0, bars: 4, off: [2, 0, 2, "1", -1, 1.4, "x", null] }]), [{ p: 0, bars: 4, off: [0, 1, 2] }]);
+  assert.deepEqual(normalizeArrangement([{ p: 0, bars: 4 }, { p: 0, bars: 4, off: "all" }, { p: 0, bars: 4, off: [] }]), [{ p: 0, bars: 4 }, { p: 0, bars: 4 }, { p: 0, bars: 4 }], "absent, unreadable or empty is nobody held back, and is left unsaid");
+  assert.deepEqual(normalizeArrangement([{ p: null, bars: 1, off: [3] }]), [{ p: null, bars: 1, off: [3] }], "a rest carries them too, harmlessly");
+});

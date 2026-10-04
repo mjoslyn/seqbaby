@@ -227,10 +227,11 @@ env / fx / eq / comp / mod / automation per track.
   rename on the way in — same reasoning, same test file.
 - `patternSound.js` — p-lock: a track's sound stored per pattern, captured on
   the way out of a pattern and diff-applied on the way in.
-- `arrangement.js` — the arrangement view: the song as SECTIONS (a pattern and
-  how many bars of it, `state.arrangement`) laid out across bars under the
-  pattern bar, which chain mode follows when there are any. See the
-  arrangement section below.
+- `arrangement.js` — the arrangement view, a TAB beside the track list: the
+  song as SECTIONS (a pattern or a rest, how many bars of it, and which
+  tracks are held back for it: `state.arrangement`) laid out across bars,
+  with a row per track under them, which chain mode follows when there are
+  any. See the arrangement section below.
 - `history.js` / `historyStore.js` — undo/redo over the whole session. The store
   is the stack and the structural sharing that pays for it, and has **no
   imports** for `chanceGen.js`'s reasons; `history.js` is the engine half, and
@@ -1723,13 +1724,39 @@ pad "sweep"   X -> bass · filter cutoff      Y -> lead · reverb wet
 Chain mode plays the non-empty slots in order, each for its `patternRepeats`
 bars, which is a song only when the song happens to be its patterns in the
 order they were written, once each. A verse that comes back after the chorus
-is not that. `state.arrangement` is an ordered list of sections, `{p, bars}`,
-and chain mode follows it whenever it is non-empty:
+is not that. `state.arrangement` is an ordered list of sections,
+`{p, bars, off}`, and chain mode follows it whenever it is non-empty:
 
 ```
-state.arrangement = [ {p:0, bars:4}, {p:1, bars:8}, {p:2, bars:8}, {p:1, bars:8}, {p:7, bars:2} ]
-                       intro         verse          chorus         verse (again)  break (empty slot)
+state.arrangement = [ {p:0, bars:4, off:[bass, lead]}, {p:1, bars:8}, {p:null, bars:1}, {p:1, bars:8} ]
+                       intro: drums alone              verse          a rest           verse again
 ```
+
+- **Two views, one at a time.** The studio has a tab strip under the pattern
+  bar (`.sq-tabs`, `body[data-view]`): `tracks` is the track list as it
+  always was, `arrangement` is this. The pattern bar and the transport stay
+  above both. A tab, not a strip above the tracks, because a row per track
+  wants the height; the tab is remembered per browser (`seqbaby.view.v1`),
+  and a song arriving never switches it, only the count on the label.
+- **A rest is a section with no pattern** (`p: null`): bars of silence with
+  no slot spent on them. The transport holds every instrument track back for
+  it (buses run on, their lanes feed nothing) and does NOT switch patterns, so
+  the active pattern and its meter stay; leaving a rest for the same pattern
+  restarts the track counts, as any section change does. `syncArrangePos`
+  keeps a position that sits on a rest, since no active pattern is a reason
+  to leave it.
+- **A row per track, a cell per section: `off`.** The tracks a section holds
+  back, stored as live ids in `state.arrangement` and as INDICES into the
+  track list in the format (`serializeArrangement` / `applyArrangementBlob`,
+  the one pair every writer and reader goes through, since ids are handed
+  out fresh on every load — the macro pads' reason). So applySet and the
+  merge resolve it with the pads, after the tracks exist (`made`), and
+  `applyGlobalsInPlace` holds it back under the same `pads` flag. Written
+  only when someone is held back, so a section with nobody is the two fields
+  it was. The transport treats a held track exactly as a mute (triggers and
+  lanes withheld), and `paintArrangementNow` puts `is-held` on the track
+  while it lasts, so the track list says why its steps are quiet. Buses are
+  never in a row: they play no notes.
 
 - **Empty means what it always meant.** `[]` is no arrangement, and chain mode
   is the slot-order chain with `patternRepeats`, so every song written before
@@ -1752,23 +1779,29 @@ state.arrangement = [ {p:0, bars:4}, {p:1, bars:8}, {p:2, bars:8}, {p:1, bars:8}
   syncing there would collapse a repeated pattern onto its first appearance.
   `startPlayback` does the same resolution, and switches to the section's
   pattern when the active one is in no section at all.
-- **The panel is `#arrangement`**, a sibling of the pattern bar (so the phone's
-  session-menu modal, which carries the bar's children off, leaves it where it
-  is), built once by `initArrangement` and toggled by the bar's `arrange`
-  button (remembered per browser, `seqbaby.arrange.v1`; a song arriving with
-  sections shows it without writing that memory). One block per section, as
-  wide as its bars (`--arr-bars` × `--arr-bar-w`, with a floor), coloured by
-  pattern (`--arr-hue`), and drawn with the pattern's own steps on a canvas one
-  pixel a sixteenth and one row a track, tiled across the bars as it plays.
-  Click a block to go there, drag it to move, drag its right edge for bars, ×
-  to remove, keys on a focused block (`+` `-` bars, shift+arrows move, delete,
-  enter, `d` duplicate). The pattern grid's cells were already draggable
+- **The panel is `#arrangement`**, built once by `initArrangement`. One block
+  per section, as wide as its bars (`--arr-bars` × `--arr-bar-w`, with a
+  floor), coloured by pattern (`--arr-hue`, a rest grey and hatched), and
+  drawn with the pattern's own steps on a canvas one pixel a sixteenth and
+  one row a track, tiled across the bars as it plays; under the blocks a row
+  per track with a cell per section, the track's own steps in it, lit when it
+  plays there. Blocks and rows share one horizontal scroll with a sticky
+  label column, so the cells stay under their blocks (a grip drag resizes the
+  cells with the block). Click a block to go there, drag it to move, drag its
+  right edge for bars, × to remove, keys on a focused block (`+` `-` bars,
+  shift+arrows move, delete, enter, `d` duplicate, `r` a rest after); click a
+  cell to hold the track back or let it in, click a row's label for every
+  section at once. The pattern grid's cells were already draggable
   (`text/pattern-idx`, patternBar.js), so dropping one onto the lane inserts a
-  section without the grid knowing. `+ pattern N` appends the active pattern;
-  `from patterns` writes what the slot-order chain would play; `clear` empties
-  it. The playhead is the block's `::after` from `--arr-head`, painted by
-  `paintArrangementNow` off the transport's audible-time schedule, and shown
-  only under `body.sq-playing`, so a stop hides it with no stop hook.
+  section without the grid knowing. `+ pattern N` appends the active pattern,
+  `+ rest` a bar of silence; `from patterns` writes what the slot-order chain
+  would play; `clear` empties it. The playhead is the block's (and the
+  cell's) `::after` from `--arr-head`, painted by `paintArrangementNow` off
+  the transport's audible-time schedule, and shown only under
+  `body.sq-playing`, so a stop hides it with no stop hook. Rows follow a
+  rename live and a track added, removed or reordered through
+  `seqbaby:songedited`, the event the undo stack already fires per settled
+  edit.
 - **Nothing was told about undo, jam or the merge.** The list is in
   `serializeSet`, which all three watch; the panel's edits end in the events
   history.js listens for (pointerup, keyup, drop), so a grip drag is one undo
@@ -1786,18 +1819,23 @@ state.arrangement = [ {p:0, bars:4}, {p:1, bars:8}, {p:2, bars:8}, {p:1, bars:8}
   arrangement's length meter by meter (`arrangementBeats`), where the
   slot-order chain keeps its 4/4 estimate.
 - **The builder and the code.** `setArrangement(song, { sections })` takes
-  `{pattern, bars}` objects (or `[pattern, bars]`), `null` clears, and the MCP
-  `set_arrangement` tool exposes the same. Portable Strudel plays it as
-  `arrange([4, p1], [8, p2], [8, p3], [8, p2], [2, p8])`, a pattern defined once
-  however often it plays and an empty one as `silence`; native code cannot
-  carry a section (it is not a pattern's own setting), so it writes the
-  arrangement as a comment and a run leaves it alone. The Strudel reader's own
+  `{pattern, bars, off}` objects (or `[pattern, bars]`; `pattern: null` or
+  `rest: true` a rest; `off` track indices, refused for a bus or a track that
+  is not there, and moved down by the builder's `removeTrack` as the pads'
+  are), `null` clears, and the MCP `set_arrangement` tool exposes the same.
+  Portable Strudel plays it as `arrange([4, p1a], [8, p1], [2, silence])`: a
+  pattern defined once per WAY it plays (`p1` whole, `p1a` / `p1b` with the
+  held-back parts left out), an empty slot as `silence` and a rest as
+  `silence` itself; native code cannot carry a section (it is not a pattern's
+  own setting), so it writes the arrangement as a comment
+  (`1x4(-bass,lead) 2x8 restx1`) and a run leaves it alone. The Strudel reader's own
   `arrange([4, a], [8, b], [2, a])` IS an arrangement: a slot per distinct
   pattern object (so `a` twice is one slot played twice), consecutive from the
   first, and the sections in the order written; `silence` is a break. Code
   without `arrange()` leaves the song's arrangement alone, as it leaves the
   slots it never names. So the portable export reads back as the same shape,
-  slots renumbered.
+  slots renumbered (a held-back variant comes back as a slot of its own,
+  which is what strudel.cc heard).
 - **On a phone** a block cannot be dragged (HTML drag-and-drop), so each block
   carries `‹ ›` move buttons beside its `×`, always shown under
   `(any-pointer: coarse)` and hover-only on a mouse. The grip and the drop of a

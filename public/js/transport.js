@@ -17,7 +17,7 @@ import { applyBusMute, updateMidiUI } from "./render.js";
 import { ensureFxRack, fireFilterEnv, refreshAllTrackOutputs, refreshNoiseBeds, routeVoiceToRack, soloAudibleTracks } from "./signal.js";
 import { activeMeter, stepsPerBarForMeter, stepsPerBeatForMeter } from "./meter.js";
 import { findNextNonEmptyPattern, invertChord, state, switchPattern, syncArrangePos } from "./state.js";
-import { paintArrangementNow } from "./arrangement.js";
+import { clearArrangementHold, paintArrangementNow, sectionHolds } from "./arrangement.js";
 import { loadSilverboxWorklet } from "./silverbox.js";
 import { loadContagionWorklet } from "./contagion.js";
 import { applyScale, chordNotes, nameToMidi } from "./theory.js";
@@ -373,6 +373,7 @@ export async function stopPlayback() {
   silenceAllVoices();
   state.playing = false;
   document.body.classList.remove("sq-playing");   // step input's cursor shows while stopped (style.css)
+  clearArrangementHold();                          // no section holds a track back while stopped
   state._transportStartTime = null;
   refreshNoiseBeds();                              // vinyl crackle follows the transport
   btn.textContent = "play";
@@ -443,7 +444,7 @@ export async function startPlayback(opts = {}) {
   if (state.patternMode === "chain" && state.arrangement.length) {
     syncArrangePos(state.activePattern);
     const p = state.arrangement[state.arrangePos].p;
-    if (p !== state.activePattern) switchPattern(p, { keepArrangePos: true });
+    if (p != null && p !== state.activePattern) switchPattern(p, { keepArrangePos: true });
   }
   state.barTick = startTick % stepsPerBarForMeter(activeMeter());
   state.chainBarCount = 0;
@@ -484,9 +485,18 @@ export async function startPlayback(opts = {}) {
     const soloAudible = soloAudibleTracks();
     const masterSwing = Number(document.getElementById("swing")?.value) || 0;
     const lat = visualOutputLatency();
+    // The section playing (arrangement.js) holds tracks back: all of them in
+    // a REST (a section with no pattern: bars of silence, the active pattern
+    // left where it was so the bar line keeps its meter), or the ones its
+    // `off` names. Held back means withheld triggers, lanes included, exactly
+    // as a mute, while the bar count below keeps walking.
+    const section = state.patternMode === "chain" && state.arrangement.length > 0
+      ? state.arrangement[state.arrangePos] : null;
+    const resting = !!section && section.p == null;
     for (const t of state.tracks) {
       if (!t.voice) continue;
       const isBus = t.voice.type === "bus";
+      if (section && !isBus && (resting || sectionHolds(section, t))) continue;
       // Mute and solo here mean "withhold this track's triggers", which says
       // nothing about a bus — it has none. Its lanes and its mod are the only
       // thing it contributes, and they have to keep running for the tracks
@@ -697,10 +707,17 @@ export async function startPlayback(opts = {}) {
         const needed = Math.max(1, arr[state.arrangePos].bars);
         if (state.chainBarCount >= needed) {
           state.chainBarCount = 0;
+          const wasRest = arr[state.arrangePos].p == null;
           state.arrangePos = (state.arrangePos + 1) % arr.length;
           const next = arr[state.arrangePos].p;
-          if (next !== state.activePattern) {
+          if (next == null) {
+            // into a rest: nothing switches, the tracks are held back above
+          } else if (next !== state.activePattern) {
             switchPattern(next, { deferUi: true, keepArrangePos: true }); // synchronous — same reasoning as the manual queue above
+            restartTrackCounts();
+          } else if (wasRest) {
+            // the same pattern again after a rest starts from its first step,
+            // as it would after any other section, rather than where it paused
             restartTrackCounts();
           }
         }

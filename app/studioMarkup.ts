@@ -354,10 +354,7 @@ export const STUDIO_BODY = String.raw`
         <button id="pattern-mode" class="sq-btn--ghost sq-icon-btn" aria-pressed="false" aria-label="pattern mode"></button>
         <button id="pattern-switch" class="sq-btn--ghost sq-icon-btn" aria-pressed="false" aria-label="switch mode"></button>
       </div>
-      <div class="sq-mode__row">
-        <button id="pattern-dup" class="sq-btn--ghost" title="duplicate current pattern into the next slot">dup</button>
-        <button id="arrange-btn" class="sq-btn--ghost" aria-pressed="false" title="the arrangement view: the song as sections laid out across bars, which chain mode plays">arrange</button>
-      </div>
+      <button id="pattern-dup" class="sq-btn--ghost" title="duplicate current pattern into the next slot">dup</button>
     </div>
     <label class="sq-repeat__wrap" title="time signature for this pattern"><span>sig</span><select id="pattern-meter">
       <option value="4/4" selected>4/4</option>
@@ -374,9 +371,14 @@ export const STUDIO_BODY = String.raw`
     <label class="sq-repeat__wrap" title="bars this pattern plays for before chain advances"><span>rep</span><input id="pattern-repeats" type="number" min="1" max="16" value="1" /></label>
     <div id="pattern-grid" class="sq-pattern__grid"></div>
   </div>
-  <!-- The arrangement view (arrangement.js): built at init, shown by the
-       pattern bar's arrange button or by a song that arrives with sections. -->
-  <section id="arrangement" class="sq-arrange" hidden aria-label="arrangement"></section>
+  <!-- Two views of the song, one at a time (arrangement.js keeps
+       body[data-view]): the track list, and the arrangement view, built into
+       #arrangement at init. The pattern bar and the transport stay above both. -->
+  <div class="sq-tabs" role="tablist" aria-label="view">
+    <button class="sq-tabs__tab" role="tab" data-view="tracks" aria-selected="true" title="the tracks: steps, sounds, effects">tracks</button>
+    <button class="sq-tabs__tab" role="tab" data-view="arrangement" aria-selected="false" tabindex="-1" title="the arrangement: the song as sections laid out across bars, and which tracks play in each, which chain mode plays">arrangement <span class="sq-tabs__n"></span></button>
+  </div>
+  <section id="arrangement" class="sq-arrange" aria-label="arrangement"></section>
 
 
   <main id="tracks"></main>

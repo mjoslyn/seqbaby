@@ -380,3 +380,33 @@ test("fromBlob reads an arrangement through the format's normalizer", () => {
   const none = sb.fromBlob({ ...JSON.parse(sb.toJSON(s)), arrangement: undefined });
   assert.deepEqual(none.arrangement, [], "a song saved before the arrangement existed has none");
 });
+
+test("setArrangement takes a rest: pattern null, or rest true", () => {
+  const s = song();
+  const r = sb.setArrangement(s, { mode: "chain", sections: [{ pattern: 0, bars: 4 }, { pattern: null, bars: 2 }, { rest: true, bars: 1 }, ["rest", 1], [1, 4]] });
+  assert.deepEqual(s.arrangement, [{ p: 0, bars: 4 }, { p: null, bars: 2 }, { p: null, bars: 1 }, { p: null, bars: 1 }, { p: 1, bars: 4 }]);
+  assert.deepEqual(r.sections[1], { pattern: null, bars: 2 });
+  assert.equal(r.bars, 12, "rests count in the length");
+  assert.throws(() => sb.setArrangement(s, { sections: [{ rest: true, bars: 0 }] }), /sections\[0\]\.bars/);
+  assert.deepEqual(sb.fromBlob(JSON.parse(sb.toJSON(s))).arrangement, s.arrangement, "a rest survives the trip through the JSON");
+});
+
+test("a section holds tracks back by index, and the indices follow a removed track", () => {
+  const s = song();
+  const k = sb.addTrack(s, { engine: "808 kick", name: "kick" }).index;
+  const b = sb.addTrack(s, { engine: "silverbox", name: "bass" }).index;
+  const l = sb.addTrack(s, { engine: "tines", name: "lead" }).index;
+  const bus = sb.addTrack(s, { engine: "bus", name: "verb" }).index;
+  sb.setArrangement(s, { mode: "chain", sections: [{ pattern: 0, bars: 4, off: [b, l] }, { pattern: 0, bars: 4, off: [l, l] }, { pattern: 0, bars: 8 }] });
+  assert.deepEqual(s.arrangement.map(e => e.off || []), [[b, l], [l], []], "distinct, sorted");
+  assert.deepEqual(sb.summarize(s).arrangement.sections[0], { pattern: 0, bars: 4, off: [b, l] });
+  assert.equal("off" in sb.summarize(s).arrangement.sections[2], false, "nobody held back is left unsaid");
+  assert.throws(() => sb.setArrangement(s, { sections: [{ pattern: 0, bars: 1, off: [9] }] }), /no track 9|off\[0\]/);
+  assert.throws(() => sb.setArrangement(s, { sections: [{ pattern: 0, bars: 1, off: [bus] }] }), /fx bus/);
+  assert.throws(() => sb.setArrangement(s, { sections: [{ pattern: 0, bars: 1, off: "lead" }] }), /off must be an array/);
+  // removing the bass: the lead's index moves down, the bass is no longer named
+  sb.removeTrack(s, b);
+  assert.deepEqual(s.arrangement.map(e => e.off || []), [[l - 1], [l - 1], []]);
+  assert.deepEqual(sb.fromBlob(JSON.parse(sb.toJSON(s))).arrangement, s.arrangement, "and it survives the JSON");
+  assert.equal(k, 0);
+});

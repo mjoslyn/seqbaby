@@ -268,14 +268,15 @@ export function requestPatternSwitch(idx) {
  * it plays that pattern (the arrangement view sets the position first, then
  * switches, so clicking the second of two verses lands on the second), else
  * the first section that does. A pattern not in the arrangement at all
- * leaves the position where it was.
+ * leaves the position where it was, and so does a position on a REST: a rest
+ * plays no pattern, so whichever is active is no reason to leave it.
  * @param {PatternIndex} idx
  */
 export function syncArrangePos(idx) {
   const arr = state.arrangement;
   if (!arr.length) { state.arrangePos = 0; return; }
   if (state.arrangePos >= arr.length) state.arrangePos = 0;
-  if (arr[state.arrangePos].p === idx) return;
+  if (arr[state.arrangePos].p === idx || arr[state.arrangePos].p == null) return;
   const at = arr.findIndex(e => e.p === idx);
   if (at >= 0) state.arrangePos = at;
 }

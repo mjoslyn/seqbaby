@@ -881,6 +881,9 @@ function readStrudel(src, ctx, outputs) {
     const slotOf = new Map();
     ctx.arrangement = ctx.arrangement || [];
     for (const [cycles, pat] of v.entries) {
+      if (cycles > ARRANGE_MAX_BARS) ctx.warn(`arrange: a section plays at most ${ARRANGE_MAX_BARS} bars, so ${cycles} became ${ARRANGE_MAX_BARS}`);
+      // `silence` is a REST: bars with nothing playing, and no slot spent
+      if (pat === silence) { ctx.arrangement.push({ p: null, bars: Math.min(ARRANGE_MAX_BARS, cycles) }); continue; }
       let k = slotOf.get(pat);
       if (k == null) {
         k = slotOf.size;
@@ -889,7 +892,6 @@ function readStrudel(src, ctx, outputs) {
         ctx.sections[k] = { repeat: Math.min(16, cycles), meter: null };
         outputs.push({ label: null, index: n++, muted: false, pat, pos, slot: k });
       }
-      if (cycles > ARRANGE_MAX_BARS) ctx.warn(`arrange: a section plays at most ${ARRANGE_MAX_BARS} bars, so ${cycles} became ${ARRANGE_MAX_BARS}`);
       ctx.arrangement.push({ p: k, bars: Math.min(ARRANGE_MAX_BARS, cycles) });
     }
     ctx.mode = ctx.mode || "chain";
@@ -1589,7 +1591,7 @@ export function sessionToCode(session, { native = false } = {}) {
     }
   } else if (native) {
     if (chain) lines.push("chain()", "");
-    if (arr.length) lines.push(`// arrangement: ${arr.map(e => `${e.p + 1}x${e.bars}`).join(" ")} (sections are the arrangement view's, not the code's)`, "");
+    if (arr.length) lines.push(`// arrangement: ${arr.map(e => `${e.p == null ? "rest" : e.p + 1}x${e.bars}${e.off?.length ? `(-${e.off.map(i => s.tracks?.[i]?.name || i).join(",")})` : ""}`).join(" ")} (sections are the arrangement view's, not the code's)`, "");
     const shared = new Set();       // tracks whose shared sound has been written
     for (const k of used) {
       const rep = s.patternRepeats?.[k] ?? 1, m = s.patternMeters?.[k];
@@ -1609,16 +1611,37 @@ export function sessionToCode(session, { native = false } = {}) {
   } else {
     // strudel.cc: each pattern a stack, played in turn by arrange — in the
     // arrangement's order when the song has one (a pattern as often as it
-    // plays, an empty one as silence), else the used slots once each.
-    const order = arr.length ? arr.map(e => [e.bars, e.p]) : used.map(k => [s.patternRepeats?.[k] ?? 1, k]);
-    const defined = [...new Set(order.map(([, k]) => k))].sort((x, y) => x - y);
-    for (const k of defined) {
-      const parts = writable.filter(t => hasSteps(t, k)).map(t => partCode(t, k, { native: false, sound: soundAt(t, k), bare: true, tracks, warnings }));
-      const id = `p${k + 1}`;
+    // plays, an empty one as silence, a rest as `silence` itself), else the
+    // used slots once each.
+    // A section that holds tracks back (`off`) is the same pattern with fewer
+    // parts, so it gets a definition of its own (p2b, p2c ...) beside the
+    // full one; a pattern played the same way twice is defined once.
+    const order = arr.length
+      ? arr.map(e => [e.bars, e.p, (e.off || []).map(i => s.tracks?.[i]).filter(Boolean)])
+      : used.map(k => [s.patternRepeats?.[k] ?? 1, k, []]);
+    const defs = new Map();   // "k:held" -> id
+    const variants = new Map();   // k -> how many held-back forms of it have been named
+    const idFor = (k, held) => {
+      const key = `${k}:${held.map(t => s.tracks.indexOf(t)).sort((x, y) => x - y).join(",")}`;
+      if (!defs.has(key)) {
+        const base = `p${k + 1}`;
+        if (!held.length) defs.set(key, base);
+        else { const n = variants.get(k) || 0; variants.set(k, n + 1); defs.set(key, `${base}${String.fromCharCode(97 + n)}`); }
+      }
+      return defs.get(key);
+    };
+    const refs = order.map(([r, k, held]) => [r, k == null ? "silence" : idFor(k, held)]);
+    const written = new Set();
+    for (const [, k, held] of order) {
+      if (k == null) continue;
+      const id = idFor(k, held);
+      if (written.has(id)) continue;
+      written.add(id);
+      const parts = writable.filter(t => hasSteps(t, k) && !held.includes(t)).map(t => partCode(t, k, { native: false, sound: soundAt(t, k), bare: true, tracks, warnings }));
       lines.push(parts.length ? `const ${id} = stack(\n${parts.map(x => "  " + x.replace(/\n/g, "\n  ")).join(",\n")}\n)` : `const ${id} = silence`, "");
-      for (const t of writable) if (hasSteps(t, k) && !names.includes(t.name)) names.push(t.name);
+      for (const t of writable) if (hasSteps(t, k) && !held.includes(t) && !names.includes(t.name)) names.push(t.name);
     }
-    lines.push(`$: arrange(${order.map(([r, k]) => `[${r}, p${k + 1}]`).join(", ")})`, "");
+    lines.push(`$: arrange(${refs.map(([r, id]) => `[${r}, ${id}]`).join(", ")})`, "");
   }
   return { code: lines.join("\n").replace(/\n+$/, "\n"), warnings: [...new Set(warnings)], names, skipped, slots, sectioned };
 }

@@ -195,9 +195,13 @@ Pattern 0 is the loop. For a song: `copy_pattern` 0 to 1, 2, 3 and vary each
 (drop the kick on 2, add the lead on 3), then `set_arrangement` mode "chain"
 with `sections`: the song in order, a pattern as often as it comes back,
 `[{pattern: 0, bars: 4}, {pattern: 1, bars: 8}, {pattern: 2, bars: 8},
-{pattern: 1, bars: 8}]`. An empty pattern in the list is a break. The studio
-draws the sections as blocks across bars (the arrangement view) and chain
-mode plays them. Without `sections`, chain plays the non-empty patterns in
+{pattern: 1, bars: 8}]`. `{pattern: null, bars: 2}` is a rest: two bars of
+silence, no slot spent. A section's `off` holds tracks back by index
+(`{pattern: 0, bars: 4, off: [1, 2]}` is the first pattern with drums alone),
+which is how a song builds without copying patterns: intro with the drums,
+bass in, lead in, everything out for a bar, back in. The studio
+draws the sections as blocks across bars with a row per track (the
+arrangement tab) and chain mode plays them. Without `sections`, chain plays the non-empty patterns in
 slot order for `repeats` [4, 4, 2, 4] bars each. Every track shares the
 pattern number, so "pattern 2" is the same moment on every track. `set_meter`
 for 7/8 or 6/8.
