@@ -236,16 +236,31 @@ function focusBlock(i) {
 
 // ---- the picture -----------------------------------------------------------
 
-let stepColor = null;
-/** Draw section `e`'s steps: one pixel a sixteenth, one row a track, tiled
- *  across the bars as it plays, each track from the pattern IT plays there.
- *  `tracks` defaults to the first few instruments. */
+let stepColor = null, picScale = null;
+/** The stylesheet's bar width and the floor under a block's width, in CSS px. */
+function scaleOf() {
+  if (!picScale) {
+    const cs = getComputedStyle(root);
+    picScale = { barPx: parseFloat(cs.getPropertyValue("--arr-bar-w")) || 28, minPx: parseFloat(cs.getPropertyValue("--arr-min")) || 56 };
+  }
+  return picScale;
+}
+/** Draw section `e`'s steps, one row a track, each track from the pattern IT
+ *  plays there, tiled across the bars as it plays. The canvas is as wide as
+ *  the cell in CSS px and a sixteenth is the SAME width everywhere
+ *  (`--arr-bar-w` over the meter), so a pattern looks the same in a one-bar
+ *  section as in a six-bar one; a cell held at the minimum width is blank
+ *  past its bars. `tracks` defaults to the first few instruments. */
 function paintPic(canvas, e, tracks = null) {
   if (!canvas) return;
   const list = (tracks || arrangeable().slice(0, PIC_ROWS)).filter(t => trackTargetPattern(e, t) != null);
   const meterOf = e.p ?? (list.length ? trackTargetPattern(e, list[0]) : 0) ?? 0;
   const perBar = stepsPerBarForMeter(patternMeter(meterOf));
-  const w = Math.max(1, e.bars * perBar), h = Math.max(1, (tracks || list).length);
+  const { barPx, minPx } = scaleOf();
+  // a cell joined to the next is 3px wider, bridging the gap (style.css)
+  const bridge = canvas.parentElement?.classList.contains("is-join-next") ? 3 : 0;
+  const w = Math.max(1, Math.round(Math.max(minPx, e.bars * barPx)) + bridge), h = Math.max(1, (tracks || list).length);
+  const stepPx = barPx / perBar, steps = e.bars * perBar;
   if (canvas.width !== w) canvas.width = w;
   if (canvas.height !== h) canvas.height = h;
   const g = canvas.getContext("2d");
@@ -257,12 +272,12 @@ function paintPic(canvas, e, tracks = null) {
     const pat = t.patterns?.[trackTargetPattern(e, t)];
     if (!pat || !pat.steps?.length) return;
     const len = pat.steps.length;
-    for (let x = 0; x < w; x++) {
+    for (let x = 0; x < steps; x++) {
       const i = x % len;
       if (!pat.steps[i]) continue;
       const v = pat.velocities?.[i];
       g.globalAlpha = typeof v === "number" ? 0.35 + 0.65 * Math.max(0, Math.min(1, v)) : 1;
-      g.fillRect(x, row, 1, 1);
+      g.fillRect(Math.round(x * stepPx), row, Math.max(1, Math.floor(stepPx)), 1);
     }
   });
   g.globalAlpha = 1;
@@ -278,7 +293,7 @@ function fmtTime(sec) {
 function render() {
   if (!root || !lane || !isArrangementShown()) return;
   const arr = state.arrangement;
-  stepColor = null;
+  stepColor = null; picScale = null;
   // header
   const bars = arrangementBars(arr);
   const secs = arrangementBeats(arr) * 60 / bpm();

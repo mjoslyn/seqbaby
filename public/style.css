@@ -687,7 +687,7 @@ body:not([data-view="arrangement"]) #arrangement { display: none; }
    transport runs. The blocks and the rows share one horizontal scroll, with a
    label column held at the left. */
 .sq-arrange {
-  --arr-bar-w: 28px;
+  --arr-bar-w: 32px;        /* a multiple of 16: a sixteenth is a whole 2px in the pictures */
   --arr-label: 120px;
   display: flex;
   flex-direction: column;
@@ -907,7 +907,7 @@ body.sq-playing .sq-arrange__cell.is-now::after { display: block; }
   inset: 0;
   width: 100%;
   height: 100%;
-  image-rendering: pixelated;
+  image-rendering: pixelated;   /* rows are one canvas pixel tall; across, the canvas is already the cell's width */
   opacity: 0.55;
   pointer-events: none;
 }
@@ -953,7 +953,7 @@ body.sq-playing .sq-arrange__cell.is-now::after { display: block; }
 /* A finger cannot hover and cannot drag a block (that is HTML drag-and-drop),
    so on any touch screen the move and remove buttons are always there. */
 @media (any-pointer: coarse) {
-  .sq-arrange { --arr-bar-w: 40px; --arr-min: 104px; --arr-label: 96px; }
+  .sq-arrange { --arr-bar-w: 48px; --arr-min: 104px; --arr-label: 96px; }
   .sq-arrange__block { height: 76px; }
   .sq-arrange__row { height: 40px; }
   .sq-arrange__btns { opacity: 1; top: auto; bottom: 3px; right: 6px; gap: 4px; }
