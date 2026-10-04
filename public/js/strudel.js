@@ -355,6 +355,7 @@ const EXPORT_SOUND = {
   "dm:guitar": "gm_electric_guitar_clean", "dm:pad": "gm_pad_warm", "dm:oracle": "gm_pad_poly",
   "dm:fm-bell": "gm_tubular_bells", "dm:drift": "gm_lead_2_sawtooth", "dm:sub": "gm_synth_bass_sub",
   "dm:hexop": "gm_fx_crystal", "wt:akwf": "gm_lead_8_bass_lead", "dm:granular": "gm_pad_halo",
+  "dm:drone": "gm_pad_sweep",
 };
 const SOUND_EXACT = Object.fromEntries(Object.entries(EXPORT_SOUND).map(([k, v]) => [v, k]));
 const MELODIC_RULES = [
@@ -364,6 +365,7 @@ const MELODIC_RULES = [
   [/^(superfm|fm|dx7?|superfork)$/, "dm:hexop"],
   [/^(tb303|303|acid|superacid|superchip)$/, "dm:silverbox"],
   [/^(sub|subbass|super808|808bass)$/, "dm:sub"],
+  [/^(drone|grone|bytebeat)$/, "dm:drone"],
   [/(piano|epiano|rhodes|wurli|clavinet|harpsichord)/, "dm:tines"],
   [/(synth_bass|synthbass|moog)/, "dm:ladder"],
   [/(bass)/, "dm:bass"],

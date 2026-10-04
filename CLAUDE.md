@@ -16,7 +16,7 @@ env / fx / eq / comp / mod / automation per track.
   `public/woscillators.js` →
   `public/js/main.js` (ES module). `middleware.ts` refreshes the Supabase
   session on every request *except* static engine assets.
-- **Engine**: ~67 dependency-free vanilla ES modules in `public/js/`. No
+- **Engine**: ~69 dependency-free vanilla ES modules in `public/js/`. No
   bundler — edit, reload. `window.seqbaby` (from `appApi.js`) exposes `state`
   and serialize/apply hooks to the React shell (typed in `app/seqbaby.d.ts`).
 - **Accounts + data**: Supabase (Postgres + Auth + RLS). Tables: `profiles`,
@@ -261,6 +261,10 @@ env / fx / eq / comp / mod / automation per track.
   note audible on a speaker that cannot reproduce 40Hz, plus a 303 resonator
   band-split above the crossover so the acid never reaches the fundamental. See
   the subby section.
+- `drone.js` — **drone**, after Maneco Labs' Grone: an equation (bytebeat)
+  oscillator into an MS-20 style filter, an LFO, a delay that runs backwards
+  and a granular cloud, all in one AudioWorklet, with notes that latch. See
+  the drone section.
 - `hexop.js` — the hexop, same shape again, plus the 32-algorithm
   table, the panel's generated key lists and the preset voices. See the hexop
   section below.
@@ -625,7 +629,7 @@ Voice interface: `hit(midi, time, dur, vel, opts?)`, `setParam`,
 
 All engine type `drum-synth`. The five Tone.js analog-mono presets are each
 wrapped in `makePolyPool(size, buildOne)`; the silverbox, the contagion, the hexop, the
-guitar, the bass and subby are the odd ones out — AudioWorklet models that handle
+guitar, the bass, subby and the drone are the odd ones out — AudioWorklet models that handle
 their own voicing (the silverbox and subby are mono, deliberately; the rest
 polyphonic). See their
 sections below. The guitar and bass keep their old pluck builders in voices.js
@@ -642,6 +646,7 @@ sections below. The guitar and bass keep their old pluck builders in voices.js
 | `dm:guitar`    | `buildGuitarVoice`    | 6 (internal) | electric guitar rig, AudioWorklet (`guitar.js`) |
 | `dm:bass`      | `buildBassVoice`      | 4 (internal) | electric bass rig, AudioWorklet (`bass.js`) |
 | `dm:sub`       | `buildSubBassVoice`   | mono | subby, the sub bass, AudioWorklet (`subbass.js`) |
+| `dm:drone`     | `buildDroneVoice`     | 6 (internal) | equation-oscillator drone, filter, delay, cloud, AudioWorklet (`drone.js`) |
 | `dm:tines`     | `buildTinesVoice`     | 6 | electric piano |
 | `dm:oracle`    | `buildOracleVoice`    | 6 | poly analog |
 
@@ -1080,6 +1085,73 @@ SUB OCT --------+---------------------------------------------+     above: RESON
   guitar/bass from `loadWorklet()`; a failure falls back to a plain Tone
   `MonoSynth` sine (no harmonics path, so inaudible on a small speaker, but
   never silent).
+
+## Drone (`dm:drone`, `public/js/drone.js`)
+
+Modelled on Maneco Labs' Grone: a drone voice built around an oscillator that
+is a counter and a formula rather than a wave. Named for what it does, like
+the other emulators.
+
+```
+EQUATION OSC x6 ─┐   (16 equations, A0 / A1 / A2, rate)
+NOISE ───────────┼─▶ VCF (MS-20 style) ─▶ DELAY (fwd / rev) ─▶ CLOUD (grains, freeze) ─▶ L/R
+LFO (8 shapes) ──┴──────▲ MOD1 ──────────────▲ time
+```
+
+- **The oscillator is bytebeat.** A counter `t` advances, one of sixteen
+  integer formulas of `t`, A0, A1 and A2 is evaluated, and its low eight bits
+  are the output, held between ticks like an 8-bit DAC. Terms with a small
+  shift are the pitch, terms with a big one change a few times a second, and
+  the bitwise operators between them are rhythm and timbre at once.
+- **The note is the sample rate**, which is what the hardware's rate knob
+  is. The counter runs at `256 f / a`, so every equation's `t*a` term ramps
+  once per period of the note and A0 changes how fast the slow terms run
+  against the pitch rather than retuning the track. `rate` trims it by up to
+  two octaves either way.
+- **A0 / A1 / A2 are integers** (A0 1..16 the multiplier, A1 / A2 2..15 the
+  shifts), so a sweep steps and an LFO on one is a sequence. They are the
+  timb / morph / decay sliders; harm is the cutoff, as on the silverbox.
+- **Every note starts its counter at a fixed offset (`T0`), not at zero.**
+  From zero, the slow terms are all zeros for seconds and the `&`-masked
+  equations were silent until they filled in (measured 30dB down).
+- **A level trim per equation** (`EQ_TRIM`), measured across a grid of
+  settings and three octaves, so the select changes timbre and not level:
+  fifteen sit within 0.2dB, smear 4dB under (an OR holds most bits high, so
+  it is mostly DC, and more trim only clips).
+- **The filter is the MS-20's character, not a measurement**: a 12dB TPT
+  state-variable lowpass with the bandpass state clipped inside the loop, so
+  resonance screams and then holds its own level. Oscillator and filter are
+  2x oversampled.
+- **The LFO is the Grone's eight** (ramp up / down, square, triangle, sine,
+  sweep, random levels, random slopes), free-running, into the cutoff (MOD1)
+  and, as on the Grone 2, the delay time.
+- **The delay reverses** with two heads walking backwards through
+  delay-time-long chunks under crossfading triangular windows.
+- **The cloud is Clouds' granular mode, simplified**: a 4s buffer, position,
+  size, pitch (±2 octaves), density, texture (window shape), spread,
+  feedback, blend, and freeze, which stops recording so the grains keep
+  sounding with no notes playing. Clouds' other modes and its reverb are not
+  modelled (the rack has a reverb).
+- **HOLD latches by default.** The step's length is ignored and a note holds
+  until a note arrives at a later instant (notes on the same instant are a
+  chord and all hold), or the transport stops (`off` releases everything).
+  With the track's glide up, the k-th tone of a new chord takes over the k-th
+  voice of the old one and slides there; voices nobody claimed are released
+  once that instant's events are done (`releasePending`). `gate` is an
+  ordinary synth.
+- **An idle drone costs nothing**: once nothing is held and the output has
+  been under -100dB for longer than the cloud's buffer reaches back, the
+  block is skipped, unless frozen.
+- **Controls** — `drn` + short key → `drone_<short>` / `drone.<short>`, from
+  `DRONE_NUM_CTLS` / `DRONE_SEL_CTLS` in engineData.js. `drn`, not `d`: that
+  is the hexop's. The equation and LFO-shape selects store NAMES
+  (`drneq: "octaves"`). Patches via `droneTone(name)`; panel markup is
+  `DRONE_PANEL` in `app/studioMarkup.ts` with the dropdown filled at runtime.
+- `test/drone.test.js` renders the processor in Node: pitch at the note, the
+  rate knob's octave, every equation audible and bounded, latch / stop /
+  glide, freeze, and idle silence.
+- **Loading** — Blob-URL registration from `loadWorklet()`; a failure falls
+  back to a detuned saw `PolySynth` with a slow envelope.
 
 ## Granular (`dm:granular`, `GranularVoice` in voices.js)
 
@@ -3328,7 +3400,7 @@ fails. Real-time capture — see Known limitations.
 ## Engines catalog (`buildEngineCatalog`)
 
 Groups in order: `plaits` (16) · `drum / synth` (808/909 kit + poly-saw /
-fm-bell / pad) · `Emulators` (silverbox + contagion + hexop + guitar + bass + subby + 5 analog-mono) · `texture` (`dm:granular`) ·
+fm-bell / pad) · `Emulators` (silverbox + contagion + hexop + guitar + bass + subby + drone + 5 analog-mono) · `texture` (`dm:granular`) ·
 `wavetable` (`wt:akwf`) · `sampler` (single unified entry) · `saved patches`
 (`saved:<name>`) · `midi` · `bus` (the fx bus — not an instrument, see below).
 The engine key string is the source of truth.
@@ -3448,7 +3520,7 @@ through a 6ms fade on its gain).
   amount; every `noiseBurst` reads one shared 2s noise buffer at a random
   offset instead of filling its own (60,000 randoms for a 909 open hat).
 - **The worklets' event queues do not allocate** (`EventQueue` in contagion.js /
-  hexop.js / guitar.js / bass.js / subbass.js, `NoteQueue` in silverbox.js).
+  hexop.js / guitar.js / bass.js / subbass.js / drone.js, `NoteQueue` in silverbox.js).
   They were plain arrays, so every note cost two object literals, a `sort()`
   with a fresh comparator closure, and — on a stop — a `filter()` building a
   whole new array. That is garbage generated **on the audio thread**, where a
@@ -3557,7 +3629,7 @@ through a 6ms fade on its gain).
   do the same, or use `currentBpm()` (lfo.js) as the sync helpers do.
 - **Worklet processor sources are template literals** (`silverbox.js`,
   `contagion.js`, `hexop.js`, `guitar.js`, `bass.js`, `subbass.js`,
-  `crusher.js`, `reverb.js`),
+  `drone.js`, `crusher.js`, `reverb.js`),
   so a stray backtick or `${` inside one — including in a comment — truncates
   the string. The module still parses, `node --check` still passes, and the
   failure only shows up as a SyntaxError at engine boot. When editing inside a
@@ -3638,7 +3710,7 @@ Repo: https://github.com/mjoslyn/seqbaby.
   An inline marker (`window.__seqbabyServerBoot`) tells the paths apart, and
   `ScriptLoader.tsx` keeps its onload-chained injection for the soft-nav case
   (e.g. arriving from `/login`).
-- `app/EnginePreload.tsx` emits `modulepreload` for all 67 modules listed in
+- `app/EnginePreload.tsx` emits `modulepreload` for all 69 modules listed in
   `app/engineAssets.ts` (at `engineAsset("/js/<name>")`; the hints used to
   point at the site root and 404). The graph is 8 levels deep, so without it the browser
   needs up to eight sequential round trips just to discover the code.

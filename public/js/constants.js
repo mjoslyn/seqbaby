@@ -6,6 +6,7 @@ import {
   HEXOP_MOD_KEYS, HEXOP_MOD_LABELS, HEXOP_MOD_RANGE,
   GUITAR_MOD_KEYS, GUITAR_MOD_LABELS, GUITAR_MOD_RANGE,
   SUB_MOD_KEYS, SUB_MOD_LABELS, SUB_MOD_RANGE,
+  DRONE_MOD_KEYS, DRONE_MOD_LABELS, DRONE_MOD_RANGE,
 } from "./engineData.js";
 import { CHANCE_MOD_KEYS, CHANCE_MOD_LABELS } from "./chanceGen.js";
 import { staticEngineByKey } from "./engineData.js";
@@ -86,6 +87,9 @@ export const LFO_KEYS = [
   // Sub bass: the oscillator, the drop, the harmonics path and the output
   // stage. Sub only — see canModulate.
   ...SUB_MOD_KEYS.map(k => `sub_${k}`),
+  // Drone: the equation oscillator's trims, the filter, its LFO, the delay and
+  // the cloud. Drone only — see canModulate.
+  ...DRONE_MOD_KEYS.map(k => `drone_${k}`),
 ];
 // How much each target swings per unit of depth:
 //  - 0..1 unit params: amp = depth/2 (swings ±0.5)
@@ -130,6 +134,7 @@ export const LFO_LABELS = {
   ...Object.fromEntries(GUITAR_MOD_KEYS.map(k => [`gtr_${k}`, GUITAR_MOD_LABELS[k]])),
   ...Object.fromEntries(BASS_MOD_KEYS.map(k => [`bas_${k}`, BASS_MOD_LABELS[k]])),
   ...Object.fromEntries(SUB_MOD_KEYS.map(k => [`sub_${k}`, SUB_MOD_LABELS[k]])),
+  ...Object.fromEntries(DRONE_MOD_KEYS.map(k => [`drone_${k}`, DRONE_MOD_LABELS[k]])),
 };
 export const lfoLabel = (k) => LFO_LABELS[k] ?? k;
 export const LFO_AMP_SCALE = {
@@ -204,6 +209,10 @@ export const LFO_AMP_SCALE = {
   ...Object.fromEntries(SUB_MOD_KEYS.map(k => {
     const [lo, hi] = SUB_MOD_RANGE[k];
     return [`sub_${k}`, hi - lo];
+  })),
+  ...Object.fromEntries(DRONE_MOD_KEYS.map(k => {
+    const [lo, hi] = DRONE_MOD_RANGE[k];
+    return [`drone_${k}`, hi - lo];
   })),
 };
 
@@ -401,6 +410,8 @@ export const AUTOMATION_TARGETS = {
   ...Object.fromEntries(BASS_MOD_KEYS.map(k => [`bas.${k}`, { label: BASS_MOD_LABELS[k] }])),
   // Subby (sub engine only) — oscillator, drop, harmonics, output.
   ...Object.fromEntries(SUB_MOD_KEYS.map(k => [`sub.${k}`, { label: SUB_MOD_LABELS[k] }])),
+  // Drone (drone engine only) — oscillator, filter, LFO, delay, cloud.
+  ...Object.fromEntries(DRONE_MOD_KEYS.map(k => [`drone.${k}`, { label: DRONE_MOD_LABELS[k] }])),
   // fx
   "fx.vinyl":           { label: "vinyl amt" },
   "fx.vinyl.warmth":    { label: "vinyl warmth" },
@@ -478,6 +489,7 @@ export function voiceAutoKeysForEngineKey(engineKey) {
     case "dm:guitar":     return ["vol", "harm", "timb", "morph", "decay"];
     case "dm:bass":       return ["vol", "harm", "timb", "morph", "decay"];
     case "dm:sub":       return ["vol", "harm", "timb", "morph", "decay"];
+    case "dm:drone":     return ["vol", "harm", "timb", "morph", "decay"];
     case "dm:tines":     return ["vol", "harm", "timb", "morph", "decay"];
     case "dm:oracle":   return ["vol", "harm", "timb", "morph", "decay", "osc1", "osc2", "osc3", "osc4", "noise"];
     case "dm:granular":   return ["vol", "harm", "timb", "morph", "decay"];
@@ -509,6 +521,7 @@ export function canAutomateKey(engineKey, key, live = {}) {
   if (key.startsWith("gtr.")) return t.engineKey === "dm:guitar";
   if (key.startsWith("bas.")) return t.engineKey === "dm:bass";
   if (key.startsWith("sub.")) return t.engineKey === "dm:sub";
+  if (key.startsWith("drone.")) return t.engineKey === "dm:drone";
   if (key.startsWith("fx.")) return true;
   if (VOICE_AUTO_KEYS.includes(key)) return voiceAutoKeysForEngineKey(t.engineKey).includes(key);
   return false;
@@ -542,6 +555,8 @@ export function canModulateKey(engineKey, key, live = {}) {
   if (key.startsWith("bas_")) return t.engineKey === "dm:bass";
   // Subby's oscillator, drop, harmonics and output stage — subby only.
   if (key.startsWith("sub_")) return t.engineKey === "dm:sub";
+  // The drone's panel — drone only.
+  if (key.startsWith("drone_")) return t.engineKey === "dm:drone";
   const eng = staticEngineByKey(t.engineKey);
   if (!eng) return false;
   // Plaits exposes harm/timb/morph/decay as voice params.
@@ -565,6 +580,9 @@ export function canModulateKey(engineKey, key, live = {}) {
     // One node, one voice, so the LFO moves the whole instrument. Putting one
     // on DRIVE is a wobble, because drive is what makes the note audible.
     case "dm:sub":   return ["harm", "timb", "morph", "decay"].includes(key);
+    // Cutoff and A0 / A1 / A2. The three equation numbers are integers inside
+    // the worklet, so an LFO on one steps through values: a sequence.
+    case "dm:drone": return ["harm", "timb", "morph", "decay"].includes(key);
     case "dm:snarl": return ["harm", "osc1", "osc2", "osc3", "osc4", "ultra", "fm"].includes(key);
     case "dm:ladder":       return ["harm", "osc1", "osc2", "osc3", "noise"].includes(key);
     case "dm:drift":       return ["harm", "osc1", "osc2", "osc3", "noise"].includes(key);

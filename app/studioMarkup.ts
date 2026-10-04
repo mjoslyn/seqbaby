@@ -239,6 +239,68 @@ const SUB_PANEL = `
           </div>
         </div>`;
 
+// The drone's panel, laid out like the Grone it is modelled on: the equation
+// oscillator, the VCF, the LFO, the delay and the cloud, left to right on the
+// hardware and top to bottom here. Same arrangement as the panels above — the
+// patch dropdown ships empty and is filled at runtime from DRONE_TONE_NAMES,
+// and the ranges and defaults must match DRONE_NUM_CTLS in engineData.js.
+// The equation and LFO-shape option VALUES are the names in DRONE_EQUATIONS /
+// DRONE_LFO_SHAPES. Classes are `p-drn*`: `p-d*` is the hexop's.
+const DRONE_PANEL = `
+        <div class="sq-param-group sq-param-group--drone" hidden>
+          <div class="sq-drone__row">
+            <span class="sq-drone__lbl">patch</span>
+            <select class="sq-drone__tone" title="load a patch: equation, filter, LFO, delay and cloud"></select>
+          </div>
+          <div class="sq-drone__row">
+            <span class="sq-drone__lbl">osc</span>
+            <select class="p-drneq" title="which of the sixteen equations the oscillator runs. Each is a formula of a counter and the three numbers A0, A1 and A2 (the track sliders), and its low eight bits are the output"><option value="sierpinski">1 sierpinski</option><option value="or">2 or</option><option value="xor">3 xor</option><option value="fifths">4 fifths</option><option value="harmonics">5 harmonics</option><option value="smear">6 smear</option><option value="stairs">7 stairs</option><option value="octaves" selected>8 octaves</option><option value="sweep">9 sweep</option><option value="pulse bits">10 pulse bits</option><option value="gates">11 gates</option><option value="thirds">12 thirds</option><option value="arp">13 arp</option><option value="fold">14 fold</option><option value="split">15 split</option><option value="chaos">16 chaos</option></select>
+            <label class="sq-drone__f"><span>rate</span><input class="p-drnrate" type="range" min="0" max="1" step="0.01" value="0.5" title="the sample rate the counter runs at, around the note: two octaves down at the bottom, two up at the top, the note itself in the middle" /></label>
+            <label class="sq-drone__f"><span>osc</span><input class="p-drnosc" type="range" min="0" max="1" step="0.01" value="0.8" title="the oscillator's level into the filter" /></label>
+            <label class="sq-drone__f"><span>noise</span><input class="p-drnnoise" type="range" min="0" max="1" step="0.01" value="0" title="white noise into the filter beside the oscillator, following the loudest held note" /></label>
+            <label class="sq-drone__f"><span>attack</span><input class="p-drnatk" type="range" min="0" max="1" step="0.01" value="0.3" title="how long a note takes to swell in, 2ms to 12s" /></label>
+            <label class="sq-drone__f"><span>release</span><input class="p-drnrel" type="range" min="0" max="1" step="0.01" value="0.5" title="how long a note takes to fade once it lets go, 10ms to 20s" /></label>
+            <select class="p-drnhold" title="latch holds every note until a note arrives at a later step, ignoring the step's length, so one note a bar is a drone. Notes on the same step are a chord and are all held. With the track's glide up, a latched chord slides into the next. Gate plays each note for its step">
+              <option value="latch" selected>latch</option><option value="gate">gate</option>
+            </select>
+          </div>
+          <div class="sq-drone__row">
+            <span class="sq-drone__lbl">vcf</span>
+            <label class="sq-drone__f"><span>reso</span><input class="p-drnreso" type="range" min="0" max="1" step="0.01" value="0.35" title="resonance. The loop is clipped, so near the top the filter screams and then holds its own level instead of running away" /></label>
+            <label class="sq-drone__f"><span>drive</span><input class="p-drndrive" type="range" min="0" max="1" step="0.01" value="0.2" title="how hard the oscillator and noise hit the filter" /></label>
+            <label class="sq-drone__f"><span>lfo</span><input class="p-drnmod1" type="range" min="0" max="1" step="0.01" value="0.3" title="how far the LFO moves the cutoff, up to four octaves either way" /></label>
+          </div>
+          <div class="sq-drone__row">
+            <span class="sq-drone__lbl">lfo</span>
+            <select class="p-drnlshape" title="the LFO's shape. Sweep falls once a cycle. Random levels jumps to a new value each cycle, random slopes glides between them"><option value="up">ramp up</option><option value="down">ramp down</option><option value="square">square</option><option value="tri" selected>triangle</option><option value="sine">sine</option><option value="sweep">sweep</option><option value="random">random levels</option><option value="slopes">random slopes</option></select>
+            <label class="sq-drone__f"><span>rate</span><input class="p-drnlrate" type="range" min="0" max="1" step="0.01" value="0.25" title="LFO rate, 0.02Hz to 20Hz. It free-runs: a drone has no downbeat to reset on" /></label>
+            <label class="sq-drone__f"><span>to delay</span><input class="p-drnldly" type="range" min="0" max="1" step="0.01" value="0" title="how far the LFO moves the delay time, which bends the pitch of everything in the line" /></label>
+          </div>
+          <div class="sq-drone__row">
+            <span class="sq-drone__lbl">delay</span>
+            <label class="sq-drone__f"><span>time</span><input class="p-drndtime" type="range" min="0" max="1" step="0.01" value="0.45" title="delay time, 20ms to 1.5s. Moving it bends the pitch, as on tape" /></label>
+            <label class="sq-drone__f"><span>fbk</span><input class="p-drndfbk" type="range" min="0" max="1" step="0.01" value="0.45" title="how much of the delay goes back into it" /></label>
+            <label class="sq-drone__f"><span>mix</span><input class="p-drndmix" type="range" min="0" max="1" step="0.01" value="0.25" title="dry to wet" /></label>
+            <select class="p-drndir" title="reverse plays each delay-time-long chunk backwards, with two heads crossfading so the seams never show">
+              <option value="forward" selected>forward</option><option value="reverse">reverse</option>
+            </select>
+          </div>
+          <div class="sq-drone__row">
+            <span class="sq-drone__lbl">cloud</span>
+            <label class="sq-drone__f"><span>position</span><input class="p-drncpos" type="range" min="0" max="1" step="0.01" value="0.3" title="where in the last four seconds the grains are read from: just now at the bottom, the start of the buffer at the top" /></label>
+            <label class="sq-drone__f"><span>size</span><input class="p-drncsize" type="range" min="0" max="1" step="0.01" value="0.5" title="grain length, 20ms to 1s" /></label>
+            <label class="sq-drone__f"><span>pitch</span><input class="p-drncpitch" type="range" min="0" max="1" step="0.01" value="0.5" title="grain pitch, two octaves either way. Three quarters is an octave up" /></label>
+            <label class="sq-drone__f"><span>density</span><input class="p-drncdens" type="range" min="0" max="1" step="0.01" value="0.5" title="how many grains start a second, half a grain to sixty" /></label>
+            <label class="sq-drone__f"><span>texture</span><input class="p-drnctex" type="range" min="0" max="1" step="0.01" value="0.5" title="grain shape: hard-edged and buzzing at the bottom, a triangle in the middle, soft and sparse at the top" /></label>
+            <label class="sq-drone__f"><span>spread</span><input class="p-drncspread" type="range" min="0" max="1" step="0.01" value="0.5" title="how far the grains scatter across the stereo field and back through the buffer" /></label>
+            <label class="sq-drone__f"><span>fbk</span><input class="p-drncfbk" type="range" min="0" max="1" step="0.01" value="0.3" title="how much of the cloud is recorded back into its own buffer" /></label>
+            <label class="sq-drone__f"><span>blend</span><input class="p-drncmix" type="range" min="0" max="1" step="0.01" value="0.35" title="dry to cloud" /></label>
+            <select class="p-drnfreeze" title="stop recording: the grains keep reading whatever is in the buffer, notes or no notes, for as long as this is on">
+              <option value="off" selected>freeze off</option><option value="on">freeze on</option>
+            </select>
+          </div>
+        </div>`;
+
 export const STUDIO_BODY = String.raw`
 <header class="sq-transport">
     <div class="sq-transport__main">
@@ -534,6 +596,7 @@ ${HEXOP_PANEL}
 ${GUITAR_PANEL}
 ${BASS_PANEL}
 ${SUB_PANEL}
+${DRONE_PANEL}
         <div class="sq-param-group sq-param-group--silverbox" hidden>
           <div class="sq-field"><label>wave</label>
             <select class="p-sbwave" title="the two waveforms. Saw is brighter, square is hollower and sits lower">

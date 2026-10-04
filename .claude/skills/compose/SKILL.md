@@ -137,6 +137,20 @@ risers, snare-ish hits with a short decay), `plaits:7` (speech: morph picks
 the phoneme, for vocal chops and robot words). All Plaits models have a
 low-pass gate on decay, so a long decay is what lets them ring.
 
+Drones: `dm:drone`, after the Grone: an equation (bytebeat) oscillator into
+a screaming MS-20 style filter, a delay that can run backwards, and a
+granular cloud. It LATCHES by default (`drnhold` "latch"): one note a bar,
+or one every few bars, and it holds until the next; notes on the same step
+are a chord and all hold. Write a single `x` and leave the rest empty, not a
+tie. harm is the cutoff; timb / morph / decay are the equation's A0 / A1 /
+A2, which step (they are integers inside) and change the rhythm inside the
+note rather than its pitch. `drneq` picks the equation ("octaves", "xor",
+"arp", "chaos" ...). `apply_preset` "dark grone", "cathedral", "machine
+hum", "bit swarm", "reverse tide", "arp ghost", "subterranean",
+"screamer", "glacier". Put the track's glide up and a new latched note
+slides into the old one. Low notes (C1..C3) suit it; it brings its own
+delay and cloud, so it wants no reverb on top beyond a little.
+
 `midi`: sends the track's notes to a MIDI device instead of playing them.
 Only for a song that drives outboard gear; it is silent in the browser and in
 `audition_song`, so never use it unless asked.

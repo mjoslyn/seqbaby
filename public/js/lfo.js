@@ -211,6 +211,8 @@ export function getModTarget(t, key) {
   if (key.startsWith("bas_")) return t.voice?.getAudioParam?.("bs" + after(key, "bas_")) ?? null;
   // Subby: same again — sub_xover is the crossover, subxover on the voice.
   if (key.startsWith("sub_")) return t.voice?.getAudioParam?.("sub" + after(key, "sub_")) ?? null;
+  // Drone: drone_cfbk is the cloud feedback, drncfbk on the voice.
+  if (key.startsWith("drone_")) return t.voice?.getAudioParam?.("drn" + after(key, "drone_")) ?? null;
   if (key === "cutoff") return t.filterNode?.frequency ?? null;
   if (key === "reson")  return t.filterNode?.Q ?? null;
   const rack = t.fxRack;

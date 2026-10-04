@@ -7,6 +7,7 @@ import { stepGateAt } from "./stepSource.js";
 import { loadBassWorklet } from "./bass.js";
 import { loadHexopWorklet } from "./hexop.js";
 import { loadSubBassWorklet } from "./subbass.js";
+import { loadDroneWorklet } from "./drone.js";
 import { loadCrusherWorklet } from "./crusher.js";
 import { loadReverbWorklet } from "./reverb.js";
 import { loadFilterModelsWorklet } from "./filterModels.js";
@@ -260,6 +261,7 @@ export function loadWorklet() {
   const guitar = loadGuitarWorklet(state.audioCtx).catch(e => { console.warn("guitar worklet load failed", e); });
   const bass = loadBassWorklet(state.audioCtx).catch(e => { console.warn("bass worklet load failed", e); });
   const sub = loadSubBassWorklet(state.audioCtx).catch(e => { console.warn("subby worklet load failed", e); });
+  const drone = loadDroneWorklet(state.audioCtx).catch(e => { console.warn("drone worklet load failed", e); });
   // The bitcrusher's converter clock is a sample-and-hold, so it needs a
   // worklet too — and it belongs to the fx rack, which every track has.
   const crusher = loadCrusherWorklet(state.audioCtx).catch(e => { console.warn("crusher worklet load failed", e); });
@@ -269,7 +271,7 @@ export function loadWorklet() {
   // The eight analog filter characters — every track's filter slot wants
   // this registered, the same reason the rack's crusher/reverb are here.
   const analogFilter = loadFilterModelsWorklet(state.audioCtx).catch(e => { console.warn("analog filter worklet load failed", e); });
-  return Promise.all([state.woscLoad, silverbox, contagion, hexop, guitar, bass, sub, crusher, reverb, analogFilter]);
+  return Promise.all([state.woscLoad, silverbox, contagion, hexop, guitar, bass, sub, drone, crusher, reverb, analogFilter]);
 }
 
 /**
