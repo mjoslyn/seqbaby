@@ -1894,7 +1894,7 @@ export class GranularVoice {
     // Grain trigger interval: tempo-locked division when synced, else density.
     let interval;
     if (this.gsync) {
-      const bpm = (typeof Tone !== "undefined" && Tone.Transport?.bpm?.value) || 120;
+      const bpm = (typeof Tone !== "undefined" && Tone.getTransport?.()?.bpm?.value) || 120;
       const beats = GRAN_RATE_BEATS[this.grate] ?? 0.25;
       interval = Math.max(0.01, beats * (60 / bpm));
     } else {
@@ -2002,7 +2002,7 @@ export class GranularVoice {
     const gs = this.grainSize;
     let interval;
     if (this.gsync) {
-      const bpm = (typeof Tone !== "undefined" && Tone.Transport?.bpm?.value) || 120;
+      const bpm = (typeof Tone !== "undefined" && Tone.getTransport?.()?.bpm?.value) || 120;
       const beats = GRAN_RATE_BEATS[this.grate] ?? 0.25;
       interval = Math.max(0.01, beats * (60 / bpm));
     } else {

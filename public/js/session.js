@@ -602,8 +602,8 @@ export function applySet(s) {
   // hardware — undo that here so nothing below has to know either spelling.
   migrateLegacyNames(s);
   if (state.playing) {
-    Tone.Transport.stop();
-    if (state.repeatId !== null) { try { Tone.Transport.clear(state.repeatId); } catch {} state.repeatId = null; }
+    Tone.getTransport().stop();
+    if (state.repeatId !== null) { try { Tone.getTransport().clear(state.repeatId); } catch {} state.repeatId = null; }
     silenceAllVoices();
     state.playing = false;
     const btn = document.getElementById("play");

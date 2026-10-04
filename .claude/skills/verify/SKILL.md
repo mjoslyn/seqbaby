@@ -8,7 +8,8 @@ description: How to launch and drive seqbaby to verify engine changes at runtime
 ## Launch
 
 ```
-npm run dev        # Next.js on :3000; engine works with no env vars
+npm run dev        # Next.js on :3000; needs NEXT_PUBLIC_SUPABASE_URL + _ANON_KEY
+                   # (dummy values are enough for engine work, see CLAUDE.md)
 ```
 
 Open `http://localhost:3000/studio` in Chrome (`/` is the homepage) (claude-in-chrome tools work well).
