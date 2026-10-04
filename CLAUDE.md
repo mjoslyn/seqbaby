@@ -16,7 +16,7 @@ env / fx / eq / comp / mod / automation per track.
   `public/woscillators.js` →
   `public/js/main.js` (ES module). `middleware.ts` refreshes the Supabase
   session on every request *except* static engine assets.
-- **Engine**: ~67 dependency-free vanilla ES modules in `public/js/`. No
+- **Engine**: ~69 dependency-free vanilla ES modules in `public/js/`. No
   bundler — edit, reload. `window.seqbaby` (from `appApi.js`) exposes `state`
   and serialize/apply hooks to the React shell (typed in `app/seqbaby.d.ts`).
 - **Accounts + data**: Supabase (Postgres + Auth + RLS). Tables: `profiles`,
@@ -227,6 +227,10 @@ env / fx / eq / comp / mod / automation per track.
   rename on the way in — same reasoning, same test file.
 - `patternSound.js` — p-lock: a track's sound stored per pattern, captured on
   the way out of a pattern and diff-applied on the way in.
+- `arrangement.js` — the arrangement view: the song as SECTIONS (a pattern and
+  how many bars of it, `state.arrangement`) laid out across bars under the
+  pattern bar, which chain mode follows when there are any. See the
+  arrangement section below.
 - `history.js` / `historyStore.js` — undo/redo over the whole session. The store
   is the stack and the structural sharing that pays for it, and has **no
   imports** for `chanceGen.js`'s reasons; `history.js` is the engine half, and
@@ -295,7 +299,7 @@ npm run legacy:dev     # pre-Next static Node server on :5173 (engine assets onl
 npm test               # node --test: the pure modules (session format, chance gen,
                        #   version tree, song names, share card copy, the song builder, the jam diff,
                        #   song previews, grid avatars, the songs and people explorers,
-                       #   the Strudel bridge)
+                       #   the Strudel bridge, the arrangement's format and builder calls)
 npm run mcp            # the MCP server on stdio (mcp/server.mjs) — an agent writes songs
 npm run test:rls       # RLS policy tests — builds a throwaway Postgres in docker
 ```
@@ -1266,7 +1270,9 @@ Single `Tone.Transport.scheduleRepeat` at `"16n"`. Each callback, per track:
 4. Visuals: `Tone.Draw.schedule` at `time + visualOutputLatency()` (playhead +
    beat indicator). Metronome fires on quarters when enabled.
 5. Bar boundaries: manual-queue commit (`patternSwitchMode === "finish"`) and
-   chain-mode advance honoring `patternRepeats` / `patternMeters`. A bar is
+   chain-mode advance: through `state.arrangement` when it has sections (see
+   the arrangement section), else the non-empty slots in order honoring
+   `patternRepeats` / `patternMeters`. A bar is
    the ACTIVE pattern's meter in sixteenths (`state.barTick` counts into it,
    wrapping at `stepsPerBarForMeter`), never a fixed 16: a fixed 16 cut a
    chained 7/4 pattern off after four beats, so its last 12 steps never
@@ -1711,6 +1717,84 @@ pad "sweep"   X -> bass · filter cutoff      Y -> lead · reverb wet
 - `CLASS_FOR_AUTO` (paramTargets.js) is the automation key → control class map
   the pad uses to find the slider behind a parameter, both to read the base it
   returns to and to move the knob. All 191 automation keys resolve.
+
+## The arrangement view (`arrangement.js`) — the song as sections
+
+Chain mode plays the non-empty slots in order, each for its `patternRepeats`
+bars, which is a song only when the song happens to be its patterns in the
+order they were written, once each. A verse that comes back after the chorus
+is not that. `state.arrangement` is an ordered list of sections, `{p, bars}`,
+and chain mode follows it whenever it is non-empty:
+
+```
+state.arrangement = [ {p:0, bars:4}, {p:1, bars:8}, {p:2, bars:8}, {p:1, bars:8}, {p:7, bars:2} ]
+                       intro         verse          chorus         verse (again)  break (empty slot)
+```
+
+- **Empty means what it always meant.** `[]` is no arrangement, and chain mode
+  is the slot-order chain with `patternRepeats`, so every song written before
+  this plays exactly as it did. No third pattern mode: the mode button still
+  says `chain`, and the panel's header says `plays in chain mode: switch`
+  while the song is in repeat mode. `patternRepeats` is still what a section
+  is born with (`addSection` reads it), and what the slot-order chain plays.
+- **The transport walks it on bar lines** (transport.js, the chain branch):
+  `state.arrangePos` is the section playing, `chainBarCount` the bars into it;
+  at `bars` it moves to the next section (back to the first after the last)
+  and switches patterns only if the next section plays a different one, so two
+  consecutive sections of one pattern run on like a repeat count. `arrangePos`
+  is view / transport state like `activePattern` and is **not serialized**.
+- **A switch the arrangement did not make re-syncs the position**
+  (`syncArrangePos`, state.js, from `switchPattern` unless `keepArrangePos`):
+  the position is kept if its section already plays the pattern, else moved
+  to the first section that does, else left alone. The view sets the position
+  BEFORE it switches, which is how clicking the second of two verses lands on
+  the second. The transport's own advance passes `keepArrangePos`, since
+  syncing there would collapse a repeated pattern onto its first appearance.
+  `startPlayback` does the same resolution, and switches to the section's
+  pattern when the active one is in no section at all.
+- **The panel is `#arrangement`**, a sibling of the pattern bar (so the phone's
+  session-menu modal, which carries the bar's children off, leaves it where it
+  is), built once by `initArrangement` and toggled by the bar's `arrange`
+  button (remembered per browser, `seqbaby.arrange.v1`; a song arriving with
+  sections shows it without writing that memory). One block per section, as
+  wide as its bars (`--arr-bars` × `--arr-bar-w`, with a floor), coloured by
+  pattern (`--arr-hue`), and drawn with the pattern's own steps on a canvas one
+  pixel a sixteenth and one row a track, tiled across the bars as it plays.
+  Click a block to go there, drag it to move, drag its right edge for bars, ×
+  to remove, keys on a focused block (`+` `-` bars, shift+arrows move, delete,
+  enter, `d` duplicate). The pattern grid's cells were already draggable
+  (`text/pattern-idx`, patternBar.js), so dropping one onto the lane inserts a
+  section without the grid knowing. `+ pattern N` appends the active pattern;
+  `from patterns` writes what the slot-order chain would play; `clear` empties
+  it. The playhead is the block's `::after` from `--arr-head`, painted by
+  `paintArrangementNow` off the transport's audible-time schedule, and shown
+  only under `body.sq-playing`, so a stop hides it with no stop hook.
+- **Nothing was told about undo, jam or the merge.** The list is in
+  `serializeSet`, which all three watch; the panel's edits end in the events
+  history.js listens for (pointerup, keyup, drop), so a grip drag is one undo
+  step. `applyGlobalsInPlace` (liveSet.js) writes it like `patternRepeats` and
+  repaints. `normalizeArrangement` (sessionFormat.js) is every reader's one
+  door: applySet, the merge and the song builder's `fromBlob`, so a hand-edited
+  song can put neither a 33rd pattern nor a zero-bar section in front of the
+  transport, and `validateSet` refuses a non-array rather than reading it as
+  none. `ARRANGE_MAX_BARS` is 64, where `patternRepeats` stops at 16.
+- **Repaints ride `renderPatternGrid`** (`refreshArrangement`): a switch, a
+  copy and a session arriving all repaint the grid already. A step edit
+  reaches `updatePatternCell`, which repaints only the blocks of that pattern.
+- **The session bounce follows it** (`trackTotalBars`, `bounceAudio` with
+  `chainWhole`): the first section's pattern from the top, for the
+  arrangement's length meter by meter (`arrangementBeats`), where the
+  slot-order chain keeps its 4/4 estimate.
+- **The builder and the code.** `setArrangement(song, { sections })` takes
+  `{pattern, bars}` objects (or `[pattern, bars]`), `null` clears, and the MCP
+  `set_arrangement` tool exposes the same. Portable Strudel plays it as
+  `arrange([4, p1], [8, p2], [8, p3], [8, p2], [2, p8])`, a pattern defined once
+  however often it plays and an empty one as `silence`; native code cannot
+  carry a section (it is not a pattern's own setting), so it writes the
+  arrangement as a comment and a run leaves it alone. The Strudel reader's own
+  `arrange()` still fills consecutive slots, as it did.
+- **Not on a phone**: moving a section is drag-and-drop, which touch does not
+  give. Adding (`+`), removing (`×`) and the grip work with a finger.
 
 ## p-lock — a sound per pattern (`patternSound.js`)
 
@@ -3559,7 +3643,7 @@ Repo: https://github.com/mjoslyn/seqbaby.
   An inline marker (`window.__seqbabyServerBoot`) tells the paths apart, and
   `ScriptLoader.tsx` keeps its onload-chained injection for the soft-nav case
   (e.g. arriving from `/login`).
-- `app/EnginePreload.tsx` emits `modulepreload` for all 67 modules listed in
+- `app/EnginePreload.tsx` emits `modulepreload` for all 69 modules listed in
   `app/engineAssets.ts` (at `engineAsset("/js/<name>")`; the hints used to
   point at the site root and 404). The graph is 8 levels deep, so without it the browser
   needs up to eight sequential round trips just to discover the code.

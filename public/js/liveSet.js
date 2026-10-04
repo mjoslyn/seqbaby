@@ -46,12 +46,13 @@ import { parseMeter } from "./meter.js";
 import { refreshParamIndicators } from "./paramTargets.js";
 import { updateGranularSpeedEnabled, updatePlaitsControlsVisibility } from "./params.js";
 import { renderPatternGrid } from "./patternBar.js";
+import { refreshArrangement } from "./arrangement.js";
 import { applyPatternSound, recallLoadedPatternSound, refreshAllPatternLockUI, refreshPatternSoundUI } from "./patternSound.js";
 import { refreshAutIfOpen, refreshRollIfOpen } from "./pianoRoll.js";
 import { applyBusMute, paintDiceDensity, placeBusesLast, refreshMuteSoloUI } from "./render.js";
 import { syncScaleUI } from "./scaleUI.js";
 import { loadTrackFromData, migrateTrackData, serializeSet, trackShellFor } from "./session.js";
-import { migrateLegacyNames, validateSet } from "./sessionFormat.js";
+import { migrateLegacyNames, normalizeArrangement, validateSet } from "./sessionFormat.js";
 import { applyCompressorConfig, refreshAllTrackOutputs, refreshCompSourceDropdowns, refreshNoiseBeds, refreshOutputSelects, wouldFeedback } from "./signal.js";
 import { aliasPattern, clonePattern, state, syncMeterUI, syncRepeatsUI } from "./state.js";
 import { renderStepGrid } from "./stepGrid.js";
@@ -126,6 +127,13 @@ export function applyGlobalsInPlace(cur, target, { pads = true, order = state.tr
       state.patternRepeats[i] = Number(target.patternRepeats?.[i]) || 1;
     }
     syncRepeatsUI();
+  }
+  if (!sameTree(cur.arrangement, target.arrangement)) {
+    state.arrangement = normalizeArrangement(target.arrangement, PATTERN_COUNT);
+    // The position is not in the format; keep it on a section that still
+    // exists. An undo across "add a section" lands on the one before it.
+    if (state.arrangePos >= state.arrangement.length) state.arrangePos = Math.max(0, state.arrangement.length - 1);
+    refreshArrangement();
   }
   let metersMoved = false;
   if (!sameTree(cur.patternMeters, target.patternMeters)) {

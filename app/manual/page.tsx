@@ -170,12 +170,13 @@ export default function ManualPage() {
                 <tr><th>Control</th><th>What it does</th></tr>
               </thead>
               <tbody>
-                <tr><td>repeat / chain</td><td>Repeat loops the current pattern. Chain plays your non-empty patterns in order, like a song.</td></tr>
+                <tr><td>repeat / chain</td><td>Repeat loops the current pattern. Chain plays the song: the arrangement when you have written one, else your non-empty patterns in order.</td></tr>
+                <tr><td>arrange</td><td>Opens the arrangement view: the song as sections laid out across bars, each a pattern for so many bars, the same pattern as often as it comes back. Drag a pattern number onto it to add a section, drag a block to move it, drag its right edge to set the bars, click one to go there, × to take it out. On a focused block, + and − change the bars, shift and the arrows move it, delete removes it. Chain mode plays it from the section you are on; with none written, chain plays the patterns in order as before.</td></tr>
                 <tr><td>immediate / finish</td><td>Whether clicking another pattern switches straight away or waits out the current bar.</td></tr>
                 <tr><td>dup</td><td>Copies this pattern into the next free slot. The usual way to start a variation.</td></tr>
                 <tr><td>drag a number</td><td>Drops a copy of that pattern onto any other slot and takes you there. In finish mode while playing it waits for the bar, like any other switch.</td></tr>
                 <tr><td>sig</td><td>Time signature for this pattern, from 4/4 through 5/4, 7/8 and the compound meters.</td></tr>
-                <tr><td>rep</td><td>In chain mode, how many bars this pattern gets before the next one.</td></tr>
+                <tr><td>rep</td><td>In chain mode without an arrangement, how many bars this pattern gets before the next one. A section added to the arrangement starts out with this many bars.</td></tr>
                 <tr><td>Pattern / Session</td><td>Render audio and download a WAV. See <a href="#saving">export</a>.</td></tr>
               </tbody>
             </table>

@@ -354,7 +354,10 @@ export const STUDIO_BODY = String.raw`
         <button id="pattern-mode" class="sq-btn--ghost sq-icon-btn" aria-pressed="false" aria-label="pattern mode"></button>
         <button id="pattern-switch" class="sq-btn--ghost sq-icon-btn" aria-pressed="false" aria-label="switch mode"></button>
       </div>
-      <button id="pattern-dup" class="sq-btn--ghost" title="duplicate current pattern into the next slot">dup</button>
+      <div class="sq-mode__row">
+        <button id="pattern-dup" class="sq-btn--ghost" title="duplicate current pattern into the next slot">dup</button>
+        <button id="arrange-btn" class="sq-btn--ghost" aria-pressed="false" title="the arrangement view: the song as sections laid out across bars, which chain mode plays">arrange</button>
+      </div>
     </div>
     <label class="sq-repeat__wrap" title="time signature for this pattern"><span>sig</span><select id="pattern-meter">
       <option value="4/4" selected>4/4</option>
@@ -371,6 +374,9 @@ export const STUDIO_BODY = String.raw`
     <label class="sq-repeat__wrap" title="bars this pattern plays for before chain advances"><span>rep</span><input id="pattern-repeats" type="number" min="1" max="16" value="1" /></label>
     <div id="pattern-grid" class="sq-pattern__grid"></div>
   </div>
+  <!-- The arrangement view (arrangement.js): built at init, shown by the
+       pattern bar's arrange button or by a song that arrives with sections. -->
+  <section id="arrangement" class="sq-arrange" hidden aria-label="arrangement"></section>
 
 
   <main id="tracks"></main>

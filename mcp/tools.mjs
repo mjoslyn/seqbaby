@@ -118,8 +118,14 @@ export const TOOLS = [
   },
   {
     name: "set_arrangement", title: "Set arrangement",
-    description: "How the patterns play: mode \"repeat\" loops one pattern, \"chain\" plays them in order with `repeats` bars each (array from pattern 0). `active` is the pattern the studio opens on.",
-    inputSchema: { mode: z.enum(["repeat", "chain"]).optional(), repeats: z.array(z.number().int().min(1).max(16)).optional(), switchMode: z.enum(["immediate", "finish"]).optional(), active: z.number().int().min(0).max(31).optional() },
+    description: "How the patterns play: mode \"repeat\" loops one pattern, \"chain\" plays the song. The song is `sections` when given: an ordered list of { pattern, bars }, the same pattern as often as wanted (intro 0 x4, verse 1 x8, chorus 2 x8, verse 1 x8 ...), an empty pattern as a break; the studio shows it in the arrangement view. Without sections, chain plays the non-empty patterns in slot order with `repeats` bars each (array from pattern 0). `sections: []` clears the arrangement. `active` is the pattern the studio opens on.",
+    inputSchema: {
+      mode: z.enum(["repeat", "chain"]).optional(),
+      sections: z.array(z.object({ pattern: z.number().int().min(0).max(31), bars: z.number().int().min(1).max(64) })).nullable().optional(),
+      repeats: z.array(z.number().int().min(1).max(16)).optional(),
+      switchMode: z.enum(["immediate", "finish"]).optional(),
+      active: z.number().int().min(0).max(31).optional(),
+    },
     handler: (ctx, a) => sb.setArrangement(ctx.song, a),
   },
   {

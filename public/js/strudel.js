@@ -29,7 +29,7 @@ import { CURVED_LFO_CURVES, STEPS_PER_BAR, voiceAutoKeysForEngineKey } from "./c
 import { SCALES, CHORD_TYPES } from "./theoryData.js";
 import { staticEngineByKey } from "./engineData.js";
 import { defaultCompConfig, defaultEq, defaultFilter, defaultFxConfig, defaultTrackParams } from "./soundDefaults.js";
-import { LEGACY_ENGINE_KEYS } from "./sessionFormat.js";
+import { LEGACY_ENGINE_KEYS, normalizeArrangement } from "./sessionFormat.js";
 
 export class CodeError extends Error {
   constructor(msg, pos) { super(msg); this.name = "CodeError"; this.pos = pos; }
@@ -1547,7 +1547,12 @@ export function sessionToCode(session, { native = false } = {}) {
   const used = [];
   for (let k = 0; k < 32; k++) if (writable.some(t => hasSteps(t, k))) used.push(k);
   const chain = s.patternMode === "chain";
-  const sectioned = native ? used.some(k => k !== act) || (chain && used.length > 0) : chain && used.length > 1;
+  // The arrangement (arrangement.js): in chain mode the song is its sections,
+  // not the slots in order. Portable code plays it as arrange(); native code
+  // cannot carry it (a section is not a pattern's own setting), so it is
+  // said in a comment and left to the studio.
+  const arr = chain ? normalizeArrangement(s.arrangement) : [];
+  const sectioned = native ? used.some(k => k !== act) || (chain && used.length > 0) : chain && (used.length > 1 || arr.length > 0);
   const slots = sectioned ? used : [act];
 
   const lines = [`setcpm(${round3(Number(s.bpm) || 120)}/4)`, ""];
@@ -1569,6 +1574,7 @@ export function sessionToCode(session, { native = false } = {}) {
     }
   } else if (native) {
     if (chain) lines.push("chain()", "");
+    if (arr.length) lines.push(`// arrangement: ${arr.map(e => `${e.p + 1}x${e.bars}`).join(" ")} (sections are the arrangement view's, not the code's)`, "");
     const shared = new Set();       // tracks whose shared sound has been written
     for (const k of used) {
       const rep = s.patternRepeats?.[k] ?? 1, m = s.patternMeters?.[k];
@@ -1586,16 +1592,18 @@ export function sessionToCode(session, { native = false } = {}) {
       lines.push("");
     }
   } else {
-    // strudel.cc: each pattern a stack, played in turn by arrange
-    const ids = [];
-    for (const k of used) {
+    // strudel.cc: each pattern a stack, played in turn by arrange — in the
+    // arrangement's order when the song has one (a pattern as often as it
+    // plays, an empty one as silence), else the used slots once each.
+    const order = arr.length ? arr.map(e => [e.bars, e.p]) : used.map(k => [s.patternRepeats?.[k] ?? 1, k]);
+    const defined = [...new Set(order.map(([, k]) => k))].sort((x, y) => x - y);
+    for (const k of defined) {
       const parts = writable.filter(t => hasSteps(t, k)).map(t => partCode(t, k, { native: false, sound: soundAt(t, k), bare: true, tracks, warnings }));
       const id = `p${k + 1}`;
-      ids.push([s.patternRepeats?.[k] ?? 1, id]);
-      lines.push(`const ${id} = stack(\n${parts.map(x => "  " + x.replace(/\n/g, "\n  ")).join(",\n")}\n)`, "");
+      lines.push(parts.length ? `const ${id} = stack(\n${parts.map(x => "  " + x.replace(/\n/g, "\n  ")).join(",\n")}\n)` : `const ${id} = silence`, "");
       for (const t of writable) if (hasSteps(t, k) && !names.includes(t.name)) names.push(t.name);
     }
-    lines.push(`$: arrange(${ids.map(([r, id]) => `[${r}, ${id}]`).join(", ")})`, "");
+    lines.push(`$: arrange(${order.map(([r, k]) => `[${r}, p${k + 1}]`).join(", ")})`, "");
   }
   return { code: lines.join("\n").replace(/\n+$/, "\n"), warnings: [...new Set(warnings)], names, skipped, slots, sectioned };
 }

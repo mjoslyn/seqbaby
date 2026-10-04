@@ -16,7 +16,8 @@ import { init, needsResume, primeAudioForIOS } from "./main.js";
 import { applyBusMute, updateMidiUI } from "./render.js";
 import { ensureFxRack, fireFilterEnv, refreshAllTrackOutputs, refreshNoiseBeds, routeVoiceToRack, soloAudibleTracks } from "./signal.js";
 import { activeMeter, stepsPerBarForMeter, stepsPerBeatForMeter } from "./meter.js";
-import { findNextNonEmptyPattern, invertChord, state, switchPattern } from "./state.js";
+import { findNextNonEmptyPattern, invertChord, state, switchPattern, syncArrangePos } from "./state.js";
+import { paintArrangementNow } from "./arrangement.js";
 import { loadSilverboxWorklet } from "./silverbox.js";
 import { loadContagionWorklet } from "./contagion.js";
 import { applyScale, chordNotes, nameToMidi } from "./theory.js";
@@ -435,6 +436,15 @@ export async function startPlayback(opts = {}) {
   // Where in the bar that tick is. The bar is the active pattern's meter, not
   // a fixed 16: a 7/4 bar is 28 sixteenths, and ending it at 16 cut every
   // chained pattern off after four beats (see the bar line below).
+  // Chain mode with an arrangement starts on the section the position names
+  // (the one last clicked in the arrangement view, or where play stopped) —
+  // if that section plays the active pattern, that one; else the first that
+  // does; else the pattern changes to the section's. See syncArrangePos.
+  if (state.patternMode === "chain" && state.arrangement.length) {
+    syncArrangePos(state.activePattern);
+    const p = state.arrangement[state.arrangePos].p;
+    if (p !== state.activePattern) switchPattern(p, { keepArrangePos: true });
+  }
   state.barTick = startTick % stepsPerBarForMeter(activeMeter());
   state.chainBarCount = 0;
   // A track's own trackTick runs at `speed` steps per global tick (see the
@@ -649,6 +659,13 @@ export async function startPlayback(opts = {}) {
     // Snapshot the tick now — it advances before the deferred paint fires.
     const globalTickSnap = state.tick;
     scheduleAtAudible(() => paintBeatIndicator(globalTickSnap), time, lat);
+    // The arrangement view's playhead: which section, and how far into it,
+    // at the moment this step is heard. Snapshotted now, since the bar count
+    // below moves on before the paint fires.
+    if (state.arrangement.length) {
+      const arrSnap = { pos: state.arrangePos, bar: state.chainBarCount, barTick: state.barTick ?? 0, barLen: stepsPerBarForMeter(activeMeter()) };
+      scheduleAtAudible(() => paintArrangementNow(arrSnap), time, lat);
+    }
     // The bar line comes from the pattern playing now: its meter's length in
     // sixteenths (16 in 4/4, 28 in 7/4, 14 in 7/8). The metronome clicks on
     // its beats and accents its downbeat.
@@ -671,13 +688,31 @@ export async function startPlayback(opts = {}) {
     // pattern chaining: advance at bar boundaries when chain mode is on, respecting per-pattern repeats
     if (state.patternMode === "chain" && barLine) {
       state.chainBarCount++;
-      const needed = Math.max(1, state.patternRepeats[state.activePattern] ?? 1);
-      if (state.chainBarCount >= needed) {
-        state.chainBarCount = 0;
-        const next = findNextNonEmptyPattern(state.activePattern);
-        if (next >= 0 && next !== state.activePattern) {
-          switchPattern(next, { deferUi: true }); // synchronous — same reasoning as the manual queue above
-          restartTrackCounts();
+      const arr = state.arrangement;
+      if (arr.length) {
+        // The arrangement: each section its own bar count, back to the top
+        // after the last. Two sections of the same pattern in a row keep
+        // playing without a switch, as a repeat count would.
+        if (state.arrangePos >= arr.length) state.arrangePos = 0;
+        const needed = Math.max(1, arr[state.arrangePos].bars);
+        if (state.chainBarCount >= needed) {
+          state.chainBarCount = 0;
+          state.arrangePos = (state.arrangePos + 1) % arr.length;
+          const next = arr[state.arrangePos].p;
+          if (next !== state.activePattern) {
+            switchPattern(next, { deferUi: true, keepArrangePos: true }); // synchronous — same reasoning as the manual queue above
+            restartTrackCounts();
+          }
+        }
+      } else {
+        const needed = Math.max(1, state.patternRepeats[state.activePattern] ?? 1);
+        if (state.chainBarCount >= needed) {
+          state.chainBarCount = 0;
+          const next = findNextNonEmptyPattern(state.activePattern);
+          if (next >= 0 && next !== state.activePattern) {
+            switchPattern(next, { deferUi: true }); // synchronous — same reasoning as the manual queue above
+            restartTrackCounts();
+          }
         }
       }
     }

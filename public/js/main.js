@@ -20,6 +20,7 @@ import { meterTick } from "./meters.js";
 import { setEngineKey } from "./params.js";
 import { installParamContextMenu } from "./paramMenu.js";
 import { copyPattern, openPatternMenu, renderPatternGrid } from "./patternBar.js";
+import { initArrangement } from "./arrangement.js";
 import { attachLevelDrag, setActiveTrack } from "./render.js";
 import { initScaleUI, openChordMenu, syncChordUI } from "./scaleUI.js";
 import { inJam, jamTogglePlay } from "./jam.js";
@@ -797,6 +798,7 @@ export function init() {
     e.preventDefault();
     onLeaveStudio(e.currentTarget.href);
   });
+  initArrangement();
   const patternMenuBtn = document.getElementById("pattern-menu-btn");
   if (patternMenuBtn) {
     patternMenuBtn.innerHTML = ICON_SESSION;

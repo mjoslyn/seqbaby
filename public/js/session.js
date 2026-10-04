@@ -9,12 +9,13 @@ import { applySampleSpeed, defaultLFOConfig, disposeLFOs, syncAllLFOs } from "./
 import { guessIsDrumKit, parseMeter } from "./meter.js";
 import { updatePlaitsControlsVisibility } from "./params.js";
 import { renderPatternGrid } from "./patternBar.js";
+import { showArrangement } from "./arrangement.js";
 import { refreshEuclidUI, renderEuclidPanel } from "./euclid.js";
 import { cloneChance, refreshChanceUI, renderChancePanel } from "./chance.js";
 import { applyBusMute, paintDiceDensity, placeBusesLast, refreshFxPanelUI, refreshMuteSoloUI, renderModPanel, syncTrackSoundUI } from "./render.js";
 import { flushAllPatternSounds, recallLoadedPatternSound, refreshPatternLockUI, refreshPatternSoundUI } from "./patternSound.js";
 import { syncScaleUI } from "./scaleUI.js";
-import { migrateLegacyNames, migrateTrackNames, SET_VERSION, validateSet } from "./sessionFormat.js";
+import { migrateLegacyNames, migrateTrackNames, normalizeArrangement, SET_VERSION, validateSet } from "./sessionFormat.js";
 import { applyCompressorConfig, ensureFxRack, EQ_BANDS, refreshAllTrackOutputs, refreshCompSourceDropdowns, refreshNoiseBeds, refreshOutputSelects, routeVoiceToRack, setFilter, wouldFeedback } from "./signal.js";
 import { applyMacroPads, serializeMacroPads } from "./macro.js";
 import { aliasPattern, state, syncMeterUI, syncRepeatsUI } from "./state.js";
@@ -50,6 +51,8 @@ export function serializeSet() {
     patternSwitchMode: state.patternSwitchMode,
     patternMeters: state.patternMeters.map(m => ({ num: m.num, den: m.den })),
     patternRepeats: state.patternRepeats.map(r => Number(r) || 1),
+    // The song as sections (arrangement.js). `[]` is no arrangement.
+    arrangement: state.arrangement.map(e => ({ p: e.p, bars: e.bars })),
     // Pads are global and cross-track, so they sit up here beside the tempo
     // rather than inside a track. Assignments are stored by track index — ids
     // are handed out fresh by createTrack on load and would not survive.
@@ -643,6 +646,10 @@ export function applySet(s) {
     const r = Math.round(Number(s.patternRepeats?.[i]));
     state.patternRepeats[i] = Number.isFinite(r) ? Math.max(1, Math.min(16, r)) : 1;
   }
+  // The arrangement, written unconditionally for the same reason: a song
+  // without one must not inherit the last song's sections.
+  state.arrangement = normalizeArrangement(s.arrangement, PATTERN_COUNT);
+  state.arrangePos = 0;
   state.patternMode = s.patternMode === "chain" ? "chain" : "repeat";
   const modeBtn = document.getElementById("pattern-mode");
   modeBtn.innerHTML = state.patternMode === "chain" ? ICON_CHAIN : ICON_REPEAT;
@@ -707,6 +714,9 @@ export function applySet(s) {
   // fx buses to the bottom, once, rather than under the loop above.
   placeBusesLast();
   renderPatternGrid();
+  // A song that arrives with sections shows them: chain mode is about to do
+  // something the pattern grid alone cannot explain.
+  if (state.arrangement.length) showArrangement(true);
   syncRepeatsUI();
   syncMeterUI();
   setStatus("set loaded");

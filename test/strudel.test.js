@@ -528,3 +528,25 @@ test("the parameter menu's code line sets what it names", () => {
   assert.equal(S.codeForControl("p-eucpulses", t), null);
   assert.equal(S.codeForControl("p-vol", { engineKey: "sampler" }), null);
 });
+
+test("an arrangement plays as arrange() in the song's order, and native code leaves it to the studio", () => {
+  const a = S.codeToSong(BANK).song;
+  // verse, chorus, verse, then a break on an empty slot
+  B.setArrangement(a, { sections: [[0, 2], [1, 4], [0, 2], [5, 1]] });
+  const port = S.sessionToCode(a).code;
+  assert.match(port, /\$: arrange\(\[2, p1\], \[4, p2\], \[2, p1\], \[1, p6\]\)/, "the sections in order, a pattern as often as it plays");
+  assert.match(port, /^const p6 = silence$/m, "an empty pattern in the arrangement is a rest");
+  assert.doesNotMatch(port, /const p3 =/, "a slot the arrangement never plays is not written");
+  assert.equal((port.match(/^const p1 = stack\(/gm) || []).length, 1, "a pattern is defined once however often it plays");
+  // native code cannot carry a section; it says so and a run leaves the arrangement as it was
+  const nat = S.sessionToCode(a, { native: true });
+  assert.match(nat.code, /^\/\/ arrangement: 1x2 2x4 1x2 6x1/m);
+  const b = S.codeToSong(nat.code).song;
+  assert.deepEqual(b.arrangement, [], "code makes no arrangement of its own");
+  const again = JSON.parse(JSON.stringify(a));
+  S.writeTracks(again, S.realize(S.readCode(nat.code)), { pattern: 0 });
+  assert.deepEqual(again.arrangement, a.arrangement, "running the song's own code onto it does not touch its sections");
+  // out of chain mode the arrangement is not what plays, so portable code is the one pattern
+  a.patternMode = "repeat";
+  assert.doesNotMatch(S.sessionToCode(a).code, /arrange\(/);
+});

@@ -19,7 +19,7 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
-import { migrateLegacyNames, migrateModKey, migrateTrackNames, SET_VERSION, validateSet } from "../public/js/sessionFormat.js";
+import { ARRANGE_MAX_BARS, arrangementBars, migrateLegacyNames, migrateModKey, migrateTrackNames, normalizeArrangement, SET_VERSION, validateSet } from "../public/js/sessionFormat.js";
 
 const track = (over = {}) => ({ engineKey: "plaits:0", length: 16, ...over });
 const session = (over = {}) => ({ _version: SET_VERSION, bpm: 120, swing: 0, tracks: [track()], ...over });
@@ -48,6 +48,9 @@ test("accepts legacy sessions", async (t) => {
     "track with no length (applySet defaults to 16)": { tracks: [{ engineKey: "plaits:0" }] },
     "legacy sampler engine keys": { tracks: [{ engineKey: "smp:Kit/kick" }, { engineKey: "upload" }, { engineKey: "eleven" }] },
     "extra unknown keys (forward-compatible additions)": session({ somethingNew: { a: 1 } }),
+    "an arrangement (sessions written since the arrangement view)": session({ arrangement: [{ p: 0, bars: 4 }, { p: 2, bars: 8 }, { p: 0, bars: 4 }] }),
+    "an empty arrangement": session({ arrangement: [] }),
+    "arrangement explicitly null": session({ arrangement: null }),
   };
   for (const [label, blob] of Object.entries(cases)) {
     await t.test(label, () => {
@@ -69,6 +72,9 @@ test("rejects blobs applySet cannot survive", async (t) => {
     // A string IS iterable, so this one does not throw -- it silently builds a
     // junk track per character, having already deleted the real ones.
     "tracks is a string": [{ tracks: "abc" }, /tracks is not an array/],
+    // normalizeArrangement would read it as "none", which turns a song back
+    // into a slot-order chain without a word; applySet refuses instead.
+    "arrangement is an object": [{ arrangement: { p: 0, bars: 4 } }, /arrangement is not an array/],
     "a track is null": [{ tracks: [track(), null] }, /track 1 is not an object/],
     "a track is a number": [{ tracks: [3] }, /track 0 is not an object/],
     "a track is a string": [{ tracks: ["nope"] }, /track 0 is not an object/],
@@ -263,4 +269,39 @@ test("a crush rate already in the song is left alone, including 0", () => {
   assert.equal(td.fxConfig.crush.rate, 0);
   const again = migrateTrackNames({ fxConfig: { crush: { bits: 6, wet: 1, rate: 0.42 } } });
   assert.equal(again.fxConfig.crush.rate, 0.42);
+});
+
+// ---- the arrangement ------------------------------------------------------------
+//
+// Every reader of the format (applySet, the live merge, the song builder)
+// takes the arrangement through normalizeArrangement, so what it drops and
+// what it clamps is the whole of what a hand-edited song can put in front of
+// the transport.
+
+test("normalizeArrangement keeps sections, clamps bars and drops what is not a section", () => {
+  assert.deepEqual(normalizeArrangement(undefined), []);
+  assert.deepEqual(normalizeArrangement(null), []);
+  assert.deepEqual(normalizeArrangement("1x4"), []);
+  assert.deepEqual(normalizeArrangement({ p: 0, bars: 4 }), []);
+  assert.deepEqual(normalizeArrangement([{ p: 0, bars: 4 }, { p: 2, bars: 8 }, { p: 0, bars: 4 }]),
+    [{ p: 0, bars: 4 }, { p: 2, bars: 8 }, { p: 0, bars: 4 }], "the same pattern twice is the point");
+  assert.deepEqual(normalizeArrangement([{ p: 3 }]), [{ p: 3, bars: 1 }], "no bars is one bar");
+  assert.deepEqual(normalizeArrangement([{ p: 3, bars: 0 }, { p: 3, bars: -2 }, { p: 3, bars: 2.6 }]),
+    [{ p: 3, bars: 1 }, { p: 3, bars: 1 }, { p: 3, bars: 3 }]);
+  assert.deepEqual(normalizeArrangement([{ p: 1, bars: 1000 }]), [{ p: 1, bars: ARRANGE_MAX_BARS }]);
+  assert.deepEqual(normalizeArrangement([{ p: 32, bars: 4 }, { p: -1, bars: 4 }, { p: "x", bars: 4 }, null, 7, { bars: 4 }]), [],
+    "a pattern outside the bank, or none, is not a section");
+  assert.deepEqual(normalizeArrangement([{ p: "2", bars: "4" }]), [{ p: 2, bars: 4 }], "numeric strings read as numbers");
+  assert.deepEqual(normalizeArrangement([{ p: 40, bars: 1 }], 64), [{ p: 40, bars: 1 }], "the bank size is the caller's");
+  const raw = [{ p: 0, bars: 4, extra: true }];
+  const out = normalizeArrangement(raw);
+  assert.deepEqual(out, [{ p: 0, bars: 4 }]);
+  assert.notEqual(out[0], raw[0], "a fresh object, never the blob's own");
+});
+
+test("arrangementBars counts the bars one pass plays", () => {
+  assert.equal(arrangementBars([]), 0);
+  assert.equal(arrangementBars(undefined), 0);
+  assert.equal(arrangementBars([{ p: 0, bars: 4 }, { p: 1, bars: 8 }, { p: 0, bars: 4 }]), 16);
+  assert.equal(arrangementBars([{ p: 0 }, { p: 1, bars: 0 }]), 2, "a section is at least a bar");
 });

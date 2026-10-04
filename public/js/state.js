@@ -84,6 +84,15 @@ export const state = {
   // is always the source. Any true flag means "user customized — do not inherit from #1".
   patternMeterCustomized: Array(32).fill(false),
   chainBarCount: 0,
+  // The arrangement (arrangement.js): the song as an ordered list of sections,
+  // `{p, bars}` each. Empty means chain mode plays the non-empty slots in
+  // order with `patternRepeats`; non-empty is what chain mode follows instead.
+  // Serialized with the session (undo, jam and the live merge carry it).
+  /** @type {Array<{p: number, bars: number}>} */
+  arrangement: [],
+  // Which section is playing, or would play on the next press of play. View /
+  // transport state like activePattern, and deliberately NOT serialized.
+  arrangePos: 0,
   // Sixteenths into the current bar, whose length is the active pattern's
   // meter (transport.js). Chain mode and a queued switch act on its wrap.
   barTick: 0,
@@ -254,11 +263,33 @@ export function requestPatternSwitch(idx) {
 }
 
 /**
- * Make pattern `idx` active: re-alias every track and re-render.
+ * Point the arrangement's position at pattern `idx`, for a switch the
+ * arrangement did not make itself: the section already under the position if
+ * it plays that pattern (the arrangement view sets the position first, then
+ * switches, so clicking the second of two verses lands on the second), else
+ * the first section that does. A pattern not in the arrangement at all
+ * leaves the position where it was.
  * @param {PatternIndex} idx
  */
-export function switchPattern(idx, { deferUi = false } = {}) {
+export function syncArrangePos(idx) {
+  const arr = state.arrangement;
+  if (!arr.length) { state.arrangePos = 0; return; }
+  if (state.arrangePos >= arr.length) state.arrangePos = 0;
+  if (arr[state.arrangePos].p === idx) return;
+  const at = arr.findIndex(e => e.p === idx);
+  if (at >= 0) state.arrangePos = at;
+}
+
+/**
+ * Make pattern `idx` active: re-alias every track and re-render.
+ * `keepArrangePos` is the transport's, advancing through the arrangement: it
+ * has already set the position, and syncing it to the first section playing
+ * this pattern would be wrong when the same pattern appears twice.
+ * @param {PatternIndex} idx
+ */
+export function switchPattern(idx, { deferUi = false, keepArrangePos = false } = {}) {
   if (idx < 0 || idx >= PATTERN_COUNT) return;
+  if (!keepArrangePos) syncArrangePos(idx);
   // p-lock: the sound of the pattern being left goes back to whichever store
   // owns it, and the one being entered is recalled. Chain mode lands here on a
   // bar boundary mid-transport, which is why the recall diffs rather than

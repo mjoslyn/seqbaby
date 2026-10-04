@@ -53,7 +53,7 @@ import {
 } from "./constants.js";
 import { CHANCE_DEFAULTS, CHANCE_NOTE_MAX, CHANCE_NOTE_MIN, CHANCE_NOTE_VALUES, cloneChance } from "./chanceGen.js";
 import { CHORD_TYPES, SCALES, canonicalChord, midiToName, nameToMidi } from "./theoryData.js";
-import { SET_VERSION, validateSet } from "./sessionFormat.js";
+import { ARRANGE_MAX_BARS, arrangementBars, normalizeArrangement, SET_VERSION, validateSet } from "./sessionFormat.js";
 
 /** What every refusal in this module throws: a message an agent can act on. */
 export class SongError extends Error {
@@ -270,6 +270,7 @@ export function newSong({ bpm = 120, swing = 0, scale = null } = {}) {
     patternSwitchMode: "immediate",
     patternMeters: Array.from({ length: PATTERN_COUNT }, () => ({ num: 4, den: 4 })),
     patternRepeats: Array.from({ length: PATTERN_COUNT }, () => 1),
+    arrangement: [],
     macroPads: [],
     tracks: [],
   };
@@ -294,6 +295,7 @@ export function fromBlob(data) {
   });
   if (!Array.isArray(song.patternMeters)) song.patternMeters = Array.from({ length: PATTERN_COUNT }, () => ({ num: 4, den: 4 }));
   if (!Array.isArray(song.patternRepeats)) song.patternRepeats = Array.from({ length: PATTERN_COUNT }, () => 1);
+  song.arrangement = normalizeArrangement(song.arrangement, PATTERN_COUNT);
   if (!Array.isArray(song.macroPads)) song.macroPads = [];
   if (!song.scale) song.scale = { active: false, root: 0, mode: "minor" };
   return song;
@@ -913,10 +915,14 @@ export const CHANCE_NOTE_LABELS = CHANCE_NOTE_VALUES.map(v => v.label);
 
 // ---- patterns as a song ------------------------------------------------------------------
 
-/** How the 32 patterns play: `mode` repeat (loop one) or chain (play them in
- *  order); `repeats` bars per pattern in chain mode; `switchMode` immediate or
- *  finish (wait for the bar). `active` is the pattern the studio opens on. */
-export function setArrangement(song, { mode, repeats, switchMode, active } = {}) {
+/** How the 32 patterns play: `mode` repeat (loop one) or chain (play the
+ *  song); `switchMode` immediate or finish (wait for the bar); `active` is the
+ *  pattern the studio opens on. In chain mode the song is `sections` when
+ *  there are any — an ordered list of `{pattern, bars}`, the same pattern as
+ *  often as wanted (verse, chorus, verse), an empty one as a break — and
+ *  otherwise the non-empty patterns in slot order for `repeats` bars each.
+ *  `sections: []` (or null) clears the arrangement. */
+export function setArrangement(song, { mode, repeats, switchMode, active, sections } = {}) {
   if (mode != null) song.patternMode = oneOf(mode, "mode", ["repeat", "chain"]);
   if (switchMode != null) song.patternSwitchMode = oneOf(switchMode, "switchMode", ["immediate", "finish"]);
   if (active != null) song.activePattern = patternIndex(active);
@@ -924,7 +930,23 @@ export function setArrangement(song, { mode, repeats, switchMode, active } = {})
     if (!Array.isArray(repeats)) fail("repeats must be an array of bar counts, one per pattern from the first");
     repeats.forEach((r, i) => { if (i < PATTERN_COUNT) song.patternRepeats[i] = int(r, `repeats[${i}]`, 1, 16); });
   }
-  return { mode: song.patternMode, switchMode: song.patternSwitchMode, active: song.activePattern, repeats: song.patternRepeats };
+  if (sections !== undefined) {
+    if (sections === null) song.arrangement = [];
+    else {
+      if (!Array.isArray(sections)) fail("sections must be an array of { pattern, bars } (or [pattern, bars]) in the order they play");
+      song.arrangement = sections.map((s, i) => {
+        const [p, b] = Array.isArray(s) ? s : [s?.pattern ?? s?.p, s?.bars];
+        return { p: int(p, `sections[${i}].pattern`, 0, PATTERN_COUNT - 1), bars: int(b ?? 1, `sections[${i}].bars`, 1, ARRANGE_MAX_BARS) };
+      });
+    }
+  }
+  if (!Array.isArray(song.arrangement)) song.arrangement = [];
+  return {
+    mode: song.patternMode, switchMode: song.patternSwitchMode, active: song.activePattern,
+    repeats: song.patternRepeats,
+    sections: song.arrangement.map(e => ({ pattern: e.p, bars: e.bars })),
+    bars: song.arrangement.length ? arrangementBars(song.arrangement) : undefined,
+  };
 }
 /** A pattern's time signature, e.g. "7/8". Steps are sixteenths, so a bar of 7/8 is 14 steps. */
 export function setMeter(song, pattern, meter) {
@@ -1014,7 +1036,8 @@ export function summarize(song) {
     bpm: song.bpm, swing: song.swing,
     scale: song.scale?.active ? `${rootName} ${song.scale.mode}` : "off",
     arrangement: { mode: song.patternMode, switchMode: song.patternSwitchMode, active: song.activePattern,
-      repeats: song.patternMode === "chain" ? song.patternRepeats : undefined,
+      sections: song.arrangement?.length ? song.arrangement.map(e => ({ pattern: e.p, bars: e.bars })) : undefined,
+      repeats: song.patternMode === "chain" && !song.arrangement?.length ? song.patternRepeats : undefined,
       meters: song.patternMeters.map((m, i) => (m.num !== 4 || m.den !== 4) ? `${i}: ${m.num}/${m.den}` : null).filter(Boolean) },
     tracks: song.tracks.map((_, i) => summarizeTrack(song, i)),
   };

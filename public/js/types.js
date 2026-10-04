@@ -252,6 +252,8 @@
  * @property {PatternIndex|null} queuedPattern
  * @property {number[]} patternRepeats
  * @property {Array<{num:number, den:number}>} patternMeters
+ * @property {Array<{p: PatternIndex, bars: number}>} arrangement  the song as sections (arrangement.js); [] means chain mode plays the slots in order
+ * @property {number} arrangePos  which section is playing, or plays next; not serialized
  * @property {number} chainBarCount
  * @property {number} barTick
  * @property {MacroPad[]} macroPads
