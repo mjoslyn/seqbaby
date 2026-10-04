@@ -1,5 +1,5 @@
 // ---- drone: an equation oscillator into a screaming filter and a cloud ----
-// Modelled on Maneco Labs' Grone: a drone voice whose oscillator is not a wave
+// Modelled on the Grone: a drone voice whose oscillator is not a wave
 // table or an analogue core but sixteen integer EQUATIONS of a running counter
 // (bytebeat), three numbers fed into them (A0 / A1 / A2), and a sample-rate
 // control that decides how fast the counter runs. The rest of the box is what

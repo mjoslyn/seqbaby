@@ -261,7 +261,7 @@ env / fx / eq / comp / mod / automation per track.
   note audible on a speaker that cannot reproduce 40Hz, plus a 303 resonator
   band-split above the crossover so the acid never reaches the fundamental. See
   the subby section.
-- `drone.js` — **drone**, after Maneco Labs' Grone: an equation (bytebeat)
+- `drone.js` — **drone**, after the Grone: an equation (bytebeat)
   oscillator into an MS-20 style filter, an LFO, a delay that runs backwards
   and a granular cloud, all in one AudioWorklet, with notes that latch. See
   the drone section.
@@ -1088,7 +1088,7 @@ SUB OCT --------+---------------------------------------------+     above: RESON
 
 ## Drone (`dm:drone`, `public/js/drone.js`)
 
-Modelled on Maneco Labs' Grone: a drone voice built around an oscillator that
+Modelled on the Grone: a drone voice built around an oscillator that
 is a counter and a formula rather than a wave. Named for what it does, like
 the other emulators.
 

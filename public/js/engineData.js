@@ -244,7 +244,7 @@ export const ANALOG_ENGINES = [
   // voice (subbass.js).
   { key: "dm:sub",       label: "subby",           defaultNote: 28, poly: false, melodic: true },
   // An equation oscillator into an MS-20 style filter, a reverse-capable
-  // delay and a granular cloud, after Maneco Labs' Grone. Polyphony lives in
+  // delay and a granular cloud, after the Grone. Polyphony lives in
   // the worklet (drone.js), so a held chord can fade under the next one.
   { key: "dm:drone",     label: "drone",           defaultNote: 36, poly: true, melodic: true },
   { key: "dm:tines",     label: "tines",           defaultNote: 60, poly: true, melodic: true },
