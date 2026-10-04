@@ -285,23 +285,47 @@ export function switchPattern(idx, { deferUi = false } = {}) {
   // its own task, straight after the callback returns — a timer rather than
   // requestAnimationFrame, which stops in a background or occluded window
   // while the transport keeps running (the reason scheduleAtAudible uses a
-  // timer too). Coalesced, so two switches in one task paint once.
+  // timer too). And one TRACK per task, not the whole paint in one: Tone's
+  // clock ticks off a worker message, which can only run between tasks, so a
+  // single paint task held the scheduler for as long as it took. On a slow
+  // machine with a full session that was longer than the lookahead, and the
+  // first steps of the new bar played late: a stutter on the 1, in chain mode
+  // or after a queued switch. Coalesced, so two switches paint once.
   if (deferUi) {
-    if (patternUiTimer === null) patternUiTimer = setTimeout(paintPatternUI, 0);
+    patternUiQueue = state.tracks.slice();
+    if (patternUiTimer === null) patternUiTimer = setTimeout(paintPatternUIStep, 0);
   } else {
     paintPatternUI();
   }
 }
 
 let patternUiTimer = null;
+/** @type {Track[]|null} tracks still to repaint after a deferred switch */
+let patternUiQueue = null;
 function paintPatternUI() {
   if (patternUiTimer !== null) { clearTimeout(patternUiTimer); patternUiTimer = null; }
-  for (const t of state.tracks) {
-    if (t._soundUiStale) { t._soundUiStale = false; refreshPatternSoundUI(t); }
-    renderStepGrid(t);           // also refreshes the roll, if open
-    refreshAutIfOpen(t);
-    refreshParamIndicators(t);   // automation lanes belong to the pattern
+  patternUiQueue = null;
+  for (const t of state.tracks) paintTrackPatternUI(t);
+  paintPatternBarUI();
+}
+function paintPatternUIStep() {
+  patternUiTimer = null;
+  const t = patternUiQueue?.shift();
+  if (t) {
+    if (state.tracks.includes(t)) paintTrackPatternUI(t);   // not removed meanwhile
+    patternUiTimer = setTimeout(paintPatternUIStep, 0);
+    return;
   }
+  patternUiQueue = null;
+  paintPatternBarUI();
+}
+function paintTrackPatternUI(t) {
+  if (t._soundUiStale) { t._soundUiStale = false; refreshPatternSoundUI(t); }
+  renderStepGrid(t);           // also refreshes the roll, if open
+  refreshAutIfOpen(t);
+  refreshParamIndicators(t);   // automation lanes belong to the pattern
+}
+function paintPatternBarUI() {
   // The p-lock button's state belongs to the pattern, so it changes under you.
   refreshAllPatternLockUI();
   renderPatternGrid();
