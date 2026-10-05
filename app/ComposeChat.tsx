@@ -620,10 +620,11 @@ export default function ComposeChat({
     // changes plus anything moved by hand since, which is the right answer to
     // "keep what I am hearing" and the same answer the review bar gives.
     const data = window.seqbaby.serializeSet();
-    // The version is named after what was asked for, because a tree of saves
-    // nobody pressed is unreadable without one.
-    const asked = [...messagesRef.current].reverse().find((m) => m.role === "user")?.text ?? "";
-    const label = asked ? `compose: ${asked.replace(/\s+/g, " ").trim()}` : "compose";
+    // Labelled `compose` and nothing more, so the tree still says which saves
+    // nobody pressed. Not with what was asked for: that would copy the
+    // transcript into song_versions, a second table whose privacy it would
+    // then depend on, and one a cleared chat would leave behind.
+    const label = "compose";
     const res = await saveSong({
       id: now.id,
       title: now.title,

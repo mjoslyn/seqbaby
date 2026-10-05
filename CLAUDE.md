@@ -3664,9 +3664,10 @@ discard    throw them away (putting back the pre-audition session first)
   moved on to the version just written so the next save — from here or the top
   bar — hangs off it. What is saved is the ENGINE's session, not the turn's:
   mid-audition that is the changes plus anything moved by hand since, which is
-  the same thing `keep` means. The version is labelled with what was asked for
-  (`compose: give it a hi-hat` — `label` on `saveSong`, new), because a tree of
-  saves nobody pressed is unreadable without one.
+  the same thing `keep` means. The version is labelled `compose` (`label` on
+  `saveSong`), so the tree says which saves nobody pressed. Deliberately NOT
+  with what was asked for: that copied the transcript into `song_versions`,
+  a second table its privacy then depended on.
   **Nothing is saved when there is no song to save into** — signed out, a
   session nobody has named, or a template, whose first save MAKES a song and is
   therefore a decision with a name attached. Inventing one here would put a row
