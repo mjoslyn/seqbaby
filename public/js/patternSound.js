@@ -81,8 +81,8 @@ const FX_APPLY = {
   amp: "applyAmp", vinyl: "applyVinyl", cassette: "applyCassette", fuzz: "applyFuzz",
   ringmod: "applyRingMod", shaper: "applyWaveShaper", crush: "applyCrush",
   autowah: "applyAutoWah", chorus: "applyChorus", phaser: "applyPhaser",
-  flanger: "applyFlanger", pitchshift: "applyPitchShift", delay: "applyDelay",
-  reverb: "applyReverb",
+  flanger: "applyFlanger", pitchshift: "applyPitchShift", repeat: "applyRepeat", prism: "applyPrism",
+  delay: "applyDelay", reverb: "applyReverb",
 };
 
 /**

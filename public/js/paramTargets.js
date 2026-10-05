@@ -3,8 +3,10 @@ import { EQ_BANDS } from "./signal.js";
 import { BASS_MOD_KEYS, BASS_MOD_LABELS } from "./bass.js";
 import { HEXOP_MOD_KEYS, HEXOP_MOD_LABELS } from "./hexop.js";
 import { SUB_MOD_KEYS, SUB_MOD_LABELS } from "./subbass.js";
+import { DRONE_MOD_KEYS, DRONE_MOD_LABELS } from "./drone.js";
 import { GUITAR_MOD_KEYS, GUITAR_MOD_LABELS } from "./guitar.js";
 import { CHANCE_MOD_KEYS, CHANCE_MOD_LABELS } from "./chanceGen.js";
+import { PRISM_KNOBS, PRISM_KNOB_LABELS, REPEAT_KNOBS, REPEAT_KNOB_LABELS } from "./soundDefaults.js";
 import { state } from "./state.js";
 
 
@@ -58,6 +60,8 @@ for (const k of GUITAR_MOD_KEYS) def(`p-gt${k}`, `gtr_${k}`, `gtr.${k}`);
 for (const k of BASS_MOD_KEYS) def(`p-bs${k}`, `bas_${k}`, `bas.${k}`);
 // Subby — likewise. `p-sub*`, not `p-sb*`: that is the silverbox's.
 for (const k of SUB_MOD_KEYS) def(`p-sub${k}`, `sub_${k}`, `sub.${k}`);
+// The drone — likewise, `p-drn*`.
+for (const k of DRONE_MOD_KEYS) def(`p-drn${k}`, `drone_${k}`, `drone.${k}`);
 // Euclid's three counts — one list, three namespaces, as in hexop.js.
 for (const k of ["pulses", "steps", "rotate"]) def(`p-euc${k}`, `euclid_${k}`, `euclid.${k}`);
 // The chance generator's six, likewise. Its other controls (the twelve semitone
@@ -113,6 +117,10 @@ for (const [cls, lfo, auto] of [
   ["fx-delay-fbk",        "delay_fbk",        "fx.delay.fbk"],
   ["fx-reverb-wet",       "verb",             "fx.reverb"],
   ["fx-reverb-decay",     "reverb_decay",     "fx.reverb.decay"],
+  ["fx-repeat-wet",       "repeat",           "fx.repeat"],
+  ...REPEAT_KNOBS.map(k => [`fx-repeat-${k}`, `repeat_${k}`, `fx.repeat.${k}`]),
+  ["fx-prism-wet",        "prism",            "fx.prism"],
+  ...PRISM_KNOBS.map(k => [`fx-prism-${k}`, `prism_${k}`, `fx.prism.${k}`]),
 ]) def(cls, lfo, auto);
 
 // Where the right-click menu is offered at all. Controls listed above open it
@@ -203,6 +211,14 @@ export const CONTROL_LABELS = {
   "p-osc1range": "osc 1 range", "p-osc2range": "osc 2 range", "p-osc3range": "osc 3 range",
   "p-osc1wave": "osc 1 wave", "p-osc2wave": "osc 2 wave", "p-osc3wave": "osc 3 wave",
   "p-noisetype": "noise colour",
+  // The prism's four amount knobs are all drawn "amt" beside their module's
+  // select, so the menu and the undo label need the module named.
+  ...Object.fromEntries(PRISM_KNOBS.map(k => [`fx-prism-${k}`, PRISM_KNOB_LABELS[k]])),
+  "fx-prism-wet": "prism mix",
+  ...Object.fromEntries(REPEAT_KNOBS.map(k => [`fx-repeat-${k}`, REPEAT_KNOB_LABELS[k]])),
+  "fx-repeat-wet": "repeat mix", "fx-repeat-mode": "repeat mode",
+  "fx-prism-charmode": "prism character", "fx-prism-movemode": "prism movement",
+  "fx-prism-diffmode": "prism diffusion", "fx-prism-texmode": "prism texture",
   "p-gplay": "grain play mode", "p-gloop": "grain loop mode",
   "p-gpattern": "grain pattern", "p-grate": "grain rate", "p-gsync": "grain sync",
   "gw-gplay": "grain play mode", "gw-gloop": "grain loop mode",
@@ -221,6 +237,9 @@ export const CONTROL_LABELS = {
   ...Object.fromEntries(SUB_MOD_KEYS.map(k => [`p-sub${k}`, SUB_MOD_LABELS[k]])),
   "p-substack": "oscillator stack", "p-subsat": "shaper",
   "p-subglidem": "glide mode", "sq-sub__tone": "subby tone",
+  ...Object.fromEntries(DRONE_MOD_KEYS.map(k => [`p-drn${k}`, DRONE_MOD_LABELS[k]])),
+  "p-drneq": "drone equation", "p-drnhold": "hold mode", "p-drnlshape": "drone lfo shape",
+  "p-drndir": "delay direction", "p-drnfreeze": "cloud freeze", "sq-drone__tone": "drone patch",
   "p-bsamp": "bass amp", "p-bscab": "bass cabinet",
   "p-bspkupt": "bass pickup", "p-bsstrs": "string type",
   "sq-bass__tone": "bass tone",
@@ -298,6 +317,25 @@ export const PARAM_DESCRIPTIONS = {
   "fx.delay.fbk":        "how much of the delay feeds back",
   "fx.reverb":           "how much reverb is mixed in",
   "fx.reverb.decay":     "reverb tail length",
+  "fx.repeat":           "dry/wet around the repeat: all the way is an insert (a repeat replaces the beat), less mixes it over",
+  "fx.repeat.chance":    "how often a repeat fires on its step, or (slice) how often a slice is swapped",
+  "fx.repeat.interval":  "how often a repeat may fire, or (slice) how far back the swapped slices come from",
+  "fx.repeat.offset":    "where in the interval a repeat fires",
+  "fx.repeat.gate":      "how long a repeat, or a swapped run of slices, holds",
+  "fx.repeat.grid":      "the slice: how much is captured and repeated, or what the track is cut into",
+  "fx.repeat.vary":      "repeat: how far each trigger's grid wanders from the knob. slice: how many swapped slices play backwards",
+  "fx.repeat.pitch":     "repeat: how far each repeat drops in pitch. slice: how far swapped slices are transposed down",
+  "fx.repeat.decay":     "repeat: how much quieter each repeat gets. slice: how short each swapped slice is chopped",
+  "fx.prism":            "dry/wet around the whole prism console",
+  "fx.prism.char":       "how much of the character module: drive, sweeten, fuzz, howl or swell",
+  "fx.prism.move":       "how much of the movement module: doubler, vibrato, phaser or tremolo depth, or the pitch module's interval",
+  "fx.prism.diff":       "how much of the diffusion module: echo, tape, space, collage or reverse, level and feedback together",
+  "fx.prism.tex":        "how much of the texture module: filter, squash, cassette, broken or interference",
+  "fx.prism.tilt":       "a see-saw eq on the console's output, dark to bright",
+  "fx.prism.rate":       "the movement module's speed",
+  "fx.prism.time":       "the diffusion module's time: echo spacing, tail, grain or slice",
+  "fx.prism.sens":       "how readily swell, the fuzz gate, howl and the texture filter answer the playing",
+  "fx.prism.drift":      "slow random wander across everything in the console that moves",
 
   // Contagion envelope sliders (no tooltip in the markup — the four track sliders
   // carry the engine's own tips, these don't).
@@ -367,6 +405,30 @@ export const PARAM_DESCRIPTIONS = {
 };
 
 /**
+ * The elements that hold a track's controls: its own node, plus whatever a
+ * modal has carried off to the body (every overlay in the app is appended to
+ * `document.body`, and the panels it borrows keep their `data-track-id`).
+ *
+ * Not `document.querySelectorAll` on the id: an attribute-value selector has
+ * no index, so it walks every node in the studio, and with ~280 controls a
+ * track that measured ~10ms per call on a 4x-throttled CPU. A pattern switch
+ * refreshes every track, so in chain mode the bar line paid it once per track,
+ * on the main thread the transport's scheduler shares, and the first steps of
+ * the next bar came out late (see paintPatternUI in state.js).
+ * @param {Track} t @returns {Element[]}
+ */
+function trackRoots(t) {
+  const sel = `[data-track-id="${CSS.escape(String(t.id))}"]`;
+  const roots = t.el ? [t.el] : [];
+  for (const child of document.body.children) {
+    if (t.el && child.contains(t.el)) continue;   // the studio: t.el covers it
+    if (child.matches(sel)) roots.push(child);
+    for (const el of child.querySelectorAll(sel)) roots.push(el);
+  }
+  return roots;
+}
+
+/**
  * Mark every one of this track's parameter controls with what is currently
  * moving it, so a glance at the labels says where the movement is without
  * opening a panel: `data-motion="mod"` for an LFO, `"aut"` for a live
@@ -392,7 +454,7 @@ export function refreshParamIndicators(t) {
   // The track node and every panel inside it carry the id, so a control sits
   // under more than one root and would otherwise be walked several times.
   const seen = new Set();
-  for (const root of document.querySelectorAll(`[data-track-id="${t.id}"]`)) {
+  for (const root of trackRoots(t)) {
     for (const el of root.querySelectorAll("input[type=range], select, input[type=checkbox]")) {
       if (seen.has(el)) continue;
       seen.add(el);

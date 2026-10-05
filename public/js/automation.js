@@ -1,6 +1,6 @@
 import { AUTOMATION_TARGETS, VOICE_AUTO_KEYS, afterPrefix as after, canAutomateKey, voiceAutoKeysForEngineKey } from "./constants.js";
 import { makeFuzzCurve, shaperPreampGain } from "./curves.js";
-import { bassFromUnit, guitarFromUnit, hexopFromUnit, subFromUnit } from "./engineData.js";
+import { bassFromUnit, droneFromUnit, guitarFromUnit, hexopFromUnit, subFromUnit } from "./engineData.js";
 import { euclidFromUnit, setEuclidLive } from "./euclid.js";
 import { setChanceLive } from "./chance.js";
 import { chanceFromUnit } from "./chanceGen.js";
@@ -162,8 +162,29 @@ export function applyAutomationAtStep(t, key, v, time, vNext, stepDur) {
     ramp(t.voice?.getAudioParam?.("sub" + which), subFromUnit(which, vv), subFromUnit(which, vn));
     return;
   }
+  // The drone, same again: every numeric control is an AudioParam, all 0..1.
+  if (key.startsWith("drone.")) {
+    const which = after(key, "drone.");
+    ramp(t.voice?.getAudioParam?.("drn" + which), droneFromUnit(which, vv), droneFromUnit(which, vn));
+    return;
+  }
   const rack = t.fxRack;
   if (!rack || !key.startsWith("fx.")) return;
+  // The prism: every knob is a 0..1 AudioParam, so a lane ramps it as it is.
+  // The repeat stage the same: the discrete knobs pick from lists inside the
+  // node, so a ramp on one only moves the pick when it crosses an entry.
+  if (key.startsWith("fx.repeat.")) {
+    const which = after(key, "fx.repeat.");
+    if (rack.config.repeat) rack.config.repeat[which] = vv;
+    ramp(rack.repeatParams?.[which], vv, vn);
+    return;
+  }
+  if (key.startsWith("fx.prism.")) {
+    const which = after(key, "fx.prism.");
+    if (rack.config.prism) rack.config.prism[which] = vv;
+    ramp(rack.prismParams?.[which], vv, vn);
+    return;
+  }
 
   switch (key) {
     // ── top-level wet/amt targets (crossfade fx: ramp both dry+wet) ──
@@ -211,6 +232,16 @@ export function applyAutomationAtStep(t, key, v, time, vNext, stepDur) {
       rack.config.crush.wet = vv;
       ramp(rack.crushWetBus?.gain, vv, vn);
       ramp(rack.crushDryBus?.gain, 1 - vv, 1 - vn);
+      return;
+    case "fx.repeat":
+      if (rack.config.repeat) rack.config.repeat.wet = vv;
+      ramp(rack.repeatWetBus?.gain, vv, vn);
+      ramp(rack.repeatDryBus?.gain, 1 - vv, 1 - vn);
+      return;
+    case "fx.prism":
+      if (rack.config.prism) rack.config.prism.wet = vv;
+      ramp(rack.prismWetBus?.gain, vv, vn);
+      ramp(rack.prismDryBus?.gain, 1 - vv, 1 - vn);
       return;
     case "fx.autowah":    rack.config.autowah.wet = vv;    ramp(rack.autowah?.wet, vv, vn); return;
     case "fx.chorus":     rack.config.chorus.wet = vv;     ramp(rack.chorus?.wet, vv, vn); return;

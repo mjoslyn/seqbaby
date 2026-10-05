@@ -255,6 +255,8 @@ export function duplicateTrack(src) {
       if (dup.fxConfig.phaser)     dup.fxRack.applyPhaser(dup.fxConfig.phaser);
       if (dup.fxConfig.flanger)    dup.fxRack.applyFlanger(dup.fxConfig.flanger);
       if (dup.fxConfig.pitchshift) dup.fxRack.applyPitchShift(dup.fxConfig.pitchshift);
+      if (dup.fxConfig.repeat)     dup.fxRack.applyRepeat(dup.fxConfig.repeat);
+      if (dup.fxConfig.prism)      dup.fxRack.applyPrism(dup.fxConfig.prism);
       dup.fxRack.applyDelay(dup.fxConfig.delay);
       dup.fxRack.applyReverb(dup.fxConfig.reverb);
     }

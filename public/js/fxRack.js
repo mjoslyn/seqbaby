@@ -1,6 +1,9 @@
 import { SHAPER_MODES, makeCassetteSatCurve, makeFuzzCurve, makeShaperCurve, makeTapeHissBuffer, makeVinylCrackleBuffer, shaperPreampGain } from "./curves.js";
 import { buildCrusherNode } from "./crusher.js";
 import { buildReverbNode } from "./reverb.js";
+import { buildPrismNode, prismModeIndices } from "./prism.js";
+import { buildRepeatNode, repeatModeIndex } from "./repeat.js";
+import { PRISM_KNOBS, PRISM_MODES, REPEAT_KNOBS, REPEAT_MODES, defaultFxConfig as freshFxConfig } from "./soundDefaults.js";
 import { fxStageLevel } from "./constants.js";
 import { currentBpm } from "./lfo.js";
 import { setParam } from "./params.js";
@@ -37,6 +40,8 @@ export const FX_LFO_STAGE = {
   phaser: "phaser", phaser_rate: "phaser", phaser_depth: "phaser",
   flanger: "flanger", flanger_rate: "flanger", flanger_fbk: "flanger",
   pitch: "pitchshift", pitch_semi: "pitchshift",
+  repeat: "repeat", ...Object.fromEntries(REPEAT_KNOBS.map(k => [`repeat_${k}`, "repeat"])),
+  prism: "prism", ...Object.fromEntries(PRISM_KNOBS.map(k => [`prism_${k}`, "prism"])),
   delay: "delay", delay_time: "delay", delay_fbk: "delay",
   verb: "reverb", reverb_decay: "reverb",
 };
@@ -78,6 +83,10 @@ export class FXRack {
     if (!config.phaser)     config.phaser     = { wet: 0, rate: 0.3, depth: 0.5 };
     if (!config.flanger)    config.flanger    = { wet: 0, rate: 0.3, fbk: 0.5 };
     if (!config.pitchshift) config.pitchshift = { wet: 0, semitones: 0 };
+    // Filled field by field, not only when absent: a sparse song (the song
+    // builder writes only what was set) can carry a prism with just its mix.
+    config.prism = { ...freshFxConfig().prism, ...(config.prism || {}) };
+    config.repeat = { ...freshFxConfig().repeat, ...(config.repeat || {}) };
 
     this.input = ctx.createGain();
 
@@ -318,6 +327,49 @@ export class FXRack {
       wet: config.pitchshift.wet ?? 0,
     });
 
+    // ── repeat (repeat.js): a beat repeat / slicer on the transport's clock ──
+    // The rack's linear crossfade around the node, like crush and prism. The
+    // node's own output is the input except while a repeat holds, so wet 1 is
+    // an insert (the repeat replaces the beat) and less is a mix over it.
+    this.repeatDryBus = ctx.createGain();
+    this.repeatWetBus = ctx.createGain();
+    this.repeatSum    = ctx.createGain();
+    this.repeatIn     = ctx.createGain();
+    this.repeatNode   = buildRepeatNode(ctx, config.repeat);
+    this.repeatParams = {};
+    this._repeatMode = repeatModeIndex(config.repeat);
+    if (this.repeatNode) {
+      for (const k of REPEAT_KNOBS) this.repeatParams[k] = this.repeatNode.parameters.get(k);
+      this.repeatIn.connect(this.repeatNode);
+      this.repeatNode.connect(this.repeatWetBus);
+    } else {
+      this.repeatIn.connect(this.repeatWetBus);
+    }
+    this.repeatDryBus.connect(this.repeatSum);
+    this.repeatWetBus.connect(this.repeatSum);
+
+    // ── prism (prism.js): four modules and a tilt in one worklet ──
+    // Parallel wet/dry around the node, the rack's own linear crossfade, like
+    // crush: `prism` (the LFO) and `fx.prism` (the lane) drive prismWetBus.
+    this.prismDryBus = ctx.createGain();
+    this.prismWetBus = ctx.createGain();
+    this.prismSum    = ctx.createGain();
+    this.prismIn     = ctx.createGain();
+    this.prismNode   = buildPrismNode(ctx, config.prism);
+    this.prismParams = {};
+    this._prismModes = prismModeIndices(config.prism).join();
+    if (this.prismNode) {
+      for (const k of PRISM_KNOBS) this.prismParams[k] = this.prismNode.parameters.get(k);
+      this.prismIn.connect(this.prismNode);
+      this.prismNode.connect(this.prismWetBus);
+    } else {
+      // Worklet not registered: the stage passes the signal through rather
+      // than going silent, and the knobs have nothing to move.
+      this.prismIn.connect(this.prismWetBus);
+    }
+    this.prismDryBus.connect(this.prismSum);
+    this.prismWetBus.connect(this.prismSum);
+
     this.delay = new Tone.FeedbackDelay({
       delayTime: config.delay.time,
       feedback: config.delay.fbk,
@@ -392,6 +444,8 @@ export class FXRack {
       { key: "phaser",     ins: [toneIn(this.phaser)],                  out: this.phaser },
       { key: "flanger",    ins: [this.flangerIn],                       out: this.flangerSum },
       { key: "pitchshift", ins: [toneIn(this.pitchshift)],              out: this.pitchshift },
+      { key: "repeat",     ins: [this.repeatDryBus, this.repeatIn],     out: this.repeatSum },
+      { key: "prism",      ins: [this.prismDryBus, this.prismIn],       out: this.prismSum },
       { key: "delay",      ins: [toneIn(this.delay)],                   out: this.delay },
       { key: "reverb",     ins: [this.reverbIn],                        out: this.reverbCross },
     ];
@@ -416,6 +470,8 @@ export class FXRack {
     this.applyFlanger(config.flanger);
     this.applyPitchShift(config.pitchshift);
     this.applyCrush(config.crush);
+    this.applyRepeat(config.repeat);
+    this.applyPrism(config.prism);
   }
 
   // The wet/amount level that decides whether a stage needs to be in the chain.
@@ -729,6 +785,88 @@ export class FXRack {
     }
     this._updateStage("crush");
   }
+  /** Partial configs welcome, filled from the defaults as applyPrism does. */
+  applyRepeat(c = {}) {
+    const d = freshFxConfig().repeat;
+    const cfg = this.config.repeat || (this.config.repeat = {});
+    const fill = {};
+    for (const k of Object.keys(d)) if (cfg[k] === undefined) cfg[k] = fill[k] = d[k];
+    c = { ...fill, ...c };
+    for (const k of REPEAT_KNOBS) {
+      if (c[k] === undefined || !Number.isFinite(Number(c[k]))) continue;
+      const v = Math.max(0, Math.min(1, Number(c[k])));
+      cfg[k] = v;
+      try { if (this.repeatParams[k]) this.repeatParams[k].value = v; } catch {}
+    }
+    if (c.mode !== undefined && REPEAT_MODES.includes(c.mode)) cfg.mode = c.mode;
+    // Compared with what the node was last told, not with the config: the
+    // panel writes the config (this same object) before it calls in.
+    const mode = repeatModeIndex(cfg);
+    if (mode !== this._repeatMode) {
+      this._repeatMode = mode;
+      try { this.repeatNode?.port.postMessage({ type: "mode", mode }); } catch {}
+    }
+    if (c.wet !== undefined && Number.isFinite(Number(c.wet))) {
+      const w = Math.max(0, Math.min(1, Number(c.wet)));
+      cfg.wet = w;
+      this.repeatWetBus.gain.value = w;
+      this.repeatDryBus.gain.value = 1 - w;
+    }
+    this._updateStage("repeat");
+  }
+  /**
+   * The transport's step, for the repeat stage's clock: when it lands (audio
+   * time), which global tick it is, how long a step is. Posted every step
+   * whether or not the stage is in the chain, so it knows where the bar is the
+   * moment it is switched on.
+   */
+  clockStep(time, step, stepDur) {
+    try { this.repeatNode?.port.postMessage({ type: "clock", time, step, stepDur }); } catch {}
+  }
+  /** The transport stopped: the repeat stage lets go of whatever it holds. */
+  clockStop() {
+    try { this.repeatNode?.port.postMessage({ type: "stop" }); } catch {}
+  }
+  /** Partial configs welcome: the automation lanes send one knob at a time. */
+  applyPrism(c = {}) {
+    // A config written sparsely (the song builder writes only what was set,
+    // and a session load assigns a stage whole) is filled from the defaults
+    // here, and the filled fields go to the node too: what the panel shows and
+    // what the node plays have to be the same numbers.
+    const d = freshFxConfig().prism;
+    const cfg = this.config.prism || (this.config.prism = {});
+    const fill = {};
+    for (const k of Object.keys(d)) {
+      if (cfg[k] !== undefined) continue;
+      cfg[k] = fill[k] = d[k];
+    }
+    c = { ...fill, ...c };
+    for (const k of PRISM_KNOBS) {
+      if (c[k] === undefined || !Number.isFinite(Number(c[k]))) continue;
+      const v = Math.max(0, Math.min(1, Number(c[k])));
+      cfg[k] = v;
+      try { if (this.prismParams[k]) this.prismParams[k].value = v; } catch {}
+    }
+    for (const k of Object.keys(PRISM_MODES)) {
+      if (c[k] === undefined || !PRISM_MODES[k].includes(c[k])) continue;
+      cfg[k] = c[k];
+    }
+    // Compared with what the node was last told, not with the config: the
+    // panel writes the config (this same object) before it calls in, so a
+    // comparison against it never saw a character change.
+    const modes = prismModeIndices(cfg);
+    if (modes.join() !== this._prismModes) {
+      this._prismModes = modes.join();
+      try { this.prismNode?.port.postMessage({ type: "modes", modes }); } catch {}
+    }
+    if (c.wet !== undefined && Number.isFinite(Number(c.wet))) {
+      const w = Math.max(0, Math.min(1, Number(c.wet)));
+      cfg.wet = w;
+      this.prismWetBus.gain.value = w;
+      this.prismDryBus.gain.value = 1 - w;
+    }
+    this._updateStage("prism");
+  }
   applyDelay({ time, fbk, wet, sync, div }) {
     if (sync !== undefined) this.config.delay.sync = sync;
     if (div !== undefined) this.config.delay.div = div;
@@ -891,6 +1029,18 @@ export class FXRack {
     try { this.crushWetBus.disconnect(); } catch {}
     try { this.crushSum.disconnect(); } catch {}
     try { this.crusherFallback?.dispose(); } catch {}
+    try { this.repeatIn.disconnect(); } catch {}
+    try { this.repeatNode?.port.postMessage({ type: "dispose" }); } catch {}
+    try { this.repeatNode?.disconnect(); } catch {}
+    try { this.repeatDryBus.disconnect(); } catch {}
+    try { this.repeatWetBus.disconnect(); } catch {}
+    try { this.repeatSum.disconnect(); } catch {}
+    try { this.prismIn.disconnect(); } catch {}
+    try { this.prismNode?.port.postMessage({ type: "dispose" }); } catch {}
+    try { this.prismNode?.disconnect(); } catch {}
+    try { this.prismDryBus.disconnect(); } catch {}
+    try { this.prismWetBus.disconnect(); } catch {}
+    try { this.prismSum.disconnect(); } catch {}
   }
 }
 

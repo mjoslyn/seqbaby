@@ -211,10 +211,19 @@ export function getModTarget(t, key) {
   if (key.startsWith("bas_")) return t.voice?.getAudioParam?.("bs" + after(key, "bas_")) ?? null;
   // Subby: same again — sub_xover is the crossover, subxover on the voice.
   if (key.startsWith("sub_")) return t.voice?.getAudioParam?.("sub" + after(key, "sub_")) ?? null;
+  // Drone: drone_cfbk is the cloud feedback, drncfbk on the voice.
+  if (key.startsWith("drone_")) return t.voice?.getAudioParam?.("drn" + after(key, "drone_")) ?? null;
   if (key === "cutoff") return t.filterNode?.frequency ?? null;
   if (key === "reson")  return t.filterNode?.Q ?? null;
   const rack = t.fxRack;
   if (!rack) return null;
+  // The prism: its mix is the crossfade around the node, every knob on it an
+  // AudioParam on the node (null on the pass-through fallback).
+  if (key === "prism") return rack.prismWetBus?.gain ?? null;
+  // The repeat stage likewise: the mix around the node, the knobs on it.
+  if (key === "repeat") return rack.repeatWetBus?.gain ?? null;
+  if (key.startsWith("repeat_")) return rack.repeatParams?.[after(key, "repeat_")] ?? null;
+  if (key.startsWith("prism_")) return rack.prismParams?.[after(key, "prism_")] ?? null;
   // FX wet/amt targets (LFO adds on top of dry — crossfade fx still get movement).
   switch (key) {
     case "fuzz":         return rack.wetBus?.gain ?? null;

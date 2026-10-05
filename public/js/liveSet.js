@@ -53,7 +53,7 @@ import { applyBusMute, paintDiceDensity, placeBusesLast, refreshMuteSoloUI } fro
 import { syncScaleUI } from "./scaleUI.js";
 import { loadTrackFromData, migrateTrackData, serializeSet, trackShellFor } from "./session.js";
 import { migrateLegacyNames, validateSet } from "./sessionFormat.js";
-import { applyCompressorConfig, refreshAllTrackOutputs, refreshCompSourceDropdowns, refreshNoiseBeds, refreshOutputSelects, wouldFeedback } from "./signal.js";
+import { applyCompressorConfig, refreshAllTrackOutputs, refreshCompSourceDropdowns, refreshNoiseBeds, refreshOutputSelects, releaseSilencedTracks, wouldFeedback } from "./signal.js";
 import { aliasPattern, clonePattern, state, syncMeterUI, syncRepeatsUI } from "./state.js";
 import { renderStepGrid } from "./stepGrid.js";
 import { createTrack, removeTrack } from "./track.js";
@@ -195,11 +195,13 @@ export function applyTrackInPlace(t, a, b, resolveTrack = (i) => state.tracks[i]
     refreshMuteSoloUI(t);
     applyBusMute(t);
     refreshNoiseBeds();
+    releaseSilencedTracks();
   }
   if (a.soloed !== b.soloed) {
     t.soloed = !!b.soloed;
     refreshMuteSoloUI(t);
     refreshNoiseBeds();
+    releaseSilencedTracks();
   }
   if (a.glide !== b.glide) {
     t.glide = b.glide;

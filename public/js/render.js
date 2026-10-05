@@ -8,6 +8,7 @@ import { isMobileDevice, setStatus } from "./dom.js";
 import { HEXOP_ALG_LABELS, HEXOP_DEFAULTS, HEXOP_NUM_KEYS, HEXOP_PRESET_NAMES, HEXOP_SEL_KEYS, hexopPreset } from "./hexop.js";
 import { BASS_DEFAULTS, BASS_NUM_KEYS, BASS_SEL_KEYS, BASS_TONE_NAMES, bassTone, bassToneDescription } from "./bass.js";
 import { SUB_DEFAULTS, SUB_NUM_KEYS, SUB_SEL_KEYS, SUB_TONE_NAMES, subTone, subToneDescription } from "./subbass.js";
+import { DRONE_DEFAULTS, DRONE_NUM_KEYS, DRONE_SEL_KEYS, DRONE_TONE_NAMES, droneTone, droneToneDescription } from "./drone.js";
 import { euclideanRhythm, refreshEuclidUI, renderEuclidPanel, wireEuclidPanel } from "./euclid.js";
 import { refreshChanceUI, renderChancePanel, wireChancePanel } from "./chance.js";
 import { randomizeMelody, randomizeTimbre } from "./generate.js";
@@ -20,10 +21,15 @@ import { patternLocked, refreshPatternLockUI, refreshPatternSoundUI, setPatternL
 import { openGranularSourceModal, openSamplerSourceModal, pickAudioFileForTrack } from "./main.js";
 import { defaultFxConfig } from "./fxRack.js";
 import { crushRateLabel } from "./crusher.js";
+import { PRISM_KNOBS, PRISM_MODES, prismRateLabel, prismTimeLabel } from "./prism.js";
+import {
+  REPEAT_KNOBS, REPEAT_MODES, repeatGateLabel, repeatGridLabel, repeatIntervalLabel, repeatOffsetLabel,
+  repeatPercentLabel, repeatPitchLabel,
+} from "./repeat.js";
 import { patternMeter, redetectDrumKit, stepsPerBarForMeter } from "./meter.js";
 import { refreshHexopAlgorithm, setEngineKey, setParam, updateGranularSpeedEnabled, updatePlaitsControlsVisibility } from "./params.js";
 import { bestRollViewOct } from "./pianoRoll.js";
-import { applyCompressorConfig, EQ_BANDS, refreshCompSourceDropdowns, refreshNoiseBeds, refreshOutputSelects, setEQ, setFilter, setTrackOutput } from "./signal.js";
+import { applyCompressorConfig, EQ_BANDS, refreshCompSourceDropdowns, refreshNoiseBeds, refreshOutputSelects, releaseSilencedTracks, setEQ, setFilter, setTrackOutput } from "./signal.js";
 import { ANALOG_FILTER_INFO, ANALOG_FILTER_TYPES } from "./soundDefaults.js";
 import { state } from "./state.js";
 import { openAutAsModal, openChanceAsModal, openCompAsModal, openEnvAsModal, openEqAsModal, openFilterAsModal, openFxAsModal, openGranularWavModal, openModAsModal, openEuclidAsModal, openRollAsModal, openSampleEditorModal, openTrackMenu } from "./stepEditor.js";
@@ -203,7 +209,8 @@ export function syncTrackSoundUI(t) {
                    ...HEXOP_NUM_KEYS, ...HEXOP_SEL_KEYS,
                    ...GUITAR_NUM_KEYS, ...GUITAR_SEL_KEYS,
                    ...BASS_NUM_KEYS, ...BASS_SEL_KEYS,
-                   ...SUB_NUM_KEYS, ...SUB_SEL_KEYS]) {
+                   ...SUB_NUM_KEYS, ...SUB_SEL_KEYS,
+                   ...DRONE_NUM_KEYS, ...DRONE_SEL_KEYS]) {
     const el = q(`.p-${k}`);
     if (el && t.params[k] != null) el.value = t.params[k];
   }
@@ -326,6 +333,25 @@ export function syncSubPanel(t) {
   const root = t._subGroupEl || t.el?.querySelector(".sq-param-group--sub");
   if (root) {
     for (const k of [...SUB_NUM_KEYS, ...SUB_SEL_KEYS]) {
+      const el = root.querySelector(`.p-${k}`);
+      if (el && t.params[k] != null) el.value = t.params[k];
+    }
+  }
+  const timbre = t._timbreGroupEl || t.el;
+  for (const k of ["harm", "timb", "morph", "decay"]) {
+    const el = timbre?.querySelector(`.p-${k}`);
+    if (el && t.params[k] != null) el.value = t.params[k];
+  }
+}
+
+/**
+ * The same, for the drone's panel.
+ * @param {Track} t
+ */
+export function syncDronePanel(t) {
+  const root = t._droneGroupEl || t.el?.querySelector(".sq-param-group--drone");
+  if (root) {
+    for (const k of [...DRONE_NUM_KEYS, ...DRONE_SEL_KEYS]) {
       const el = root.querySelector(`.p-${k}`);
       if (el && t.params[k] != null) el.value = t.params[k];
     }
@@ -546,6 +572,20 @@ export function renderTrack(t) {
     const el = node.querySelector(`.p-${k}`);
     if (el) el.value = t.params[k] ?? SUB_DEFAULTS[k];
   }
+  const droneToneSel = node.querySelector(".sq-drone__tone");
+  if (droneToneSel && !droneToneSel.options.length) {
+    for (const name of ["", ...DRONE_TONE_NAMES]) {
+      const o = document.createElement("option");
+      o.value = name;
+      o.textContent = name || "—";
+      o.title = droneToneDescription(name);
+      droneToneSel.appendChild(o);
+    }
+  }
+  for (const k of [...DRONE_NUM_KEYS, ...DRONE_SEL_KEYS]) {
+    const el = node.querySelector(`.p-${k}`);
+    if (el) el.value = t.params[k] ?? DRONE_DEFAULTS[k];
+  }
   const gsyncEl = node.querySelector(".p-gsync");
   if (gsyncEl) gsyncEl.checked = t.params.gsync ?? GRAN_DEFAULTS.gsync;
   // The eight analog characters ship out of the static markup for the same
@@ -713,6 +753,26 @@ export function renderTrack(t) {
       setStatus(`subby "${name}" — ${subToneDescription(name)}`);
     });
   }
+  // The drone: the same three groups again.
+  for (const k of DRONE_NUM_KEYS) {
+    const el = node.querySelector(`.p-${k}`);
+    if (el) el.addEventListener("input", e => setParam(t, k, Number(e.target.value)));
+  }
+  for (const k of DRONE_SEL_KEYS) {
+    const el = node.querySelector(`.p-${k}`);
+    if (el) el.addEventListener("change", e => setParam(t, k, e.target.value));
+  }
+  if (droneToneSel) {
+    droneToneSel.addEventListener("change", e => {
+      const name = e.target.value;
+      const tone = droneTone(name);
+      if (!tone) return;
+      for (const [key, val] of Object.entries(tone)) setParam(t, key, val);
+      syncDronePanel(t);
+      refreshParamIndicators(t);
+      setStatus(`drone "${name}" — ${droneToneDescription(name)}`);
+    });
+  }
   // Loading a voice writes every panel control at once — the operators, the
   // algorithm, and the four track sliders, which are as much part of an FM
   // patch as the operators are.
@@ -859,6 +919,7 @@ export function renderTrack(t) {
     t.soloed = !t.soloed;
     refreshMuteSoloUI(t);
     refreshNoiseBeds();
+    releaseSilencedTracks();
   });
 
   // p-lock: this track's sound becomes part of THIS pattern (patternSound.js).
@@ -935,6 +996,7 @@ export function renderTrack(t) {
   t._guitarGroupEl  = node.querySelector(".sq-param-group--guitar");
   t._bassGroupEl    = node.querySelector(".sq-param-group--bass");
   t._subGroupEl     = node.querySelector(".sq-param-group--sub");
+  t._droneGroupEl   = node.querySelector(".sq-param-group--drone");
   t._granGroupEl    = node.querySelector(".sq-param-group--granular");
 
   // Everything above can be reparented out of the track (panels into their
@@ -947,7 +1009,7 @@ export function renderTrack(t) {
                     t._timbreGroupEl, t._oscMixGroupEl, t._oscModGroupEl,
                     t._ladderOscGroupEl, t._silverboxGroupEl, t._contagionGroupEl,
                     t._hexopGroupEl, t._guitarGroupEl, t._bassGroupEl, t._subGroupEl,
-                    t._granGroupEl]) {
+                    t._droneGroupEl, t._granGroupEl]) {
     if (el) el.dataset.trackId = String(t.id);
   }
 
@@ -1018,6 +1080,7 @@ export function renderTrack(t) {
     refreshMuteSoloUI(t);
     applyBusMute(t);
     refreshNoiseBeds();
+    releaseSilencedTracks();
   });
   // clear: icon + label — desktop shows the label, mobile the icon (same
   // flip as roll, see the mobile media block)
@@ -1209,6 +1272,16 @@ export function applyFxToTrack(t, fx) {
     const decay = Number(fx.reverb.decay); if (Number.isFinite(decay)) cfg.reverb.decay = Math.max(0.2, Math.min(10, decay));
     const wet   = Number(fx.reverb.wet);   if (Number.isFinite(wet))   cfg.reverb.wet   = Math.max(0, Math.min(1, wet));
   }
+  if (fx.repeat && typeof fx.repeat === "object") {
+    cfg.repeat = { ...defaultFxConfig().repeat, ...(cfg.repeat || {}) };
+    readUnit("repeat", ["wet", ...REPEAT_KNOBS]);
+    if (REPEAT_MODES.includes(fx.repeat.mode)) cfg.repeat.mode = fx.repeat.mode;
+  }
+  if (fx.prism && typeof fx.prism === "object") {
+    cfg.prism = { ...defaultFxConfig().prism, ...(cfg.prism || {}) };
+    readUnit("prism", ["wet", ...PRISM_KNOBS]);
+    for (const k of Object.keys(PRISM_MODES)) if (PRISM_MODES[k].includes(fx.prism[k])) cfg.prism[k] = fx.prism[k];
+  }
   if (fx.crush && typeof fx.crush === "object") {
     if (!cfg.crush) cfg.crush = { bits: 8, rate: 1, wet: 0 };
     const bits = Number(fx.crush.bits); if (Number.isFinite(bits)) cfg.crush.bits = Math.max(1, Math.min(16, Math.round(bits)));
@@ -1230,6 +1303,8 @@ export function applyFxToTrack(t, fx) {
     t.fxRack.applyPhaser(cfg.phaser);
     t.fxRack.applyFlanger(cfg.flanger);
     t.fxRack.applyPitchShift(cfg.pitchshift);
+    if (cfg.repeat) t.fxRack.applyRepeat(cfg.repeat);
+    if (cfg.prism) t.fxRack.applyPrism(cfg.prism);
     t.fxRack.applyDelay(cfg.delay);
     t.fxRack.applyReverb(cfg.reverb);
   }
@@ -1300,6 +1375,10 @@ export function refreshFxPanelUI(t) {
     const w = q(".fx-crush-wet");  if (w) w.value = cfg.crush.wet;
     const r = q(".fx-crush-rate"); if (r) r.value = cfg.crush.rate ?? 1;
   }
+  cfg.prism = { ...defaultFxConfig().prism, ...(cfg.prism || {}) };
+  for (const k of ["wet", ...PRISM_KNOBS, ...Object.keys(PRISM_MODES)]) set(`.fx-prism-${k}`, cfg.prism[k]);
+  cfg.repeat = { ...defaultFxConfig().repeat, ...(cfg.repeat || {}) };
+  for (const k of ["wet", "mode", ...REPEAT_KNOBS]) set(`.fx-repeat-${k}`, cfg.repeat[k]);
 }
 
 export function wireFxPanel(t, panel) {
@@ -1319,6 +1398,8 @@ export function wireFxPanel(t, panel) {
   if (!fc.shaper)     fc.shaper     = { wet: 0, preamp: 0.5, amount: 0.5, mode: "fold" };
   if (!fc.shaper.mode) fc.shaper.mode = "fold";
   if (fc.shaper.preamp == null) fc.shaper.preamp = 0.5;
+  fc.prism = { ...defaultFxConfig().prism, ...(fc.prism || {}) };
+  fc.repeat = { ...defaultFxConfig().repeat, ...(fc.repeat || {}) };
   const set = (sel, v) => { const el = q(sel); if (el != null && v != null) el.value = v; };
   // Portamento. Not an fx-rack effect (it lives on the voice, as t.glide), but it
   // belongs with the per-track sound controls rather than buried in the mod panel.
@@ -1376,6 +1457,26 @@ export function wireFxPanel(t, panel) {
       // the same job setKnobReadout does for the mod row's length knob.
       setKnobReadout(r, (v) => crushRateLabel(v, state.audioCtx?.sampleRate));
     }
+  }
+  for (const k of ["wet", ...PRISM_KNOBS, ...Object.keys(PRISM_MODES)]) set(`.fx-prism-${k}`, fc.prism[k]);
+  // Rate is a speed and time means something different per diffusion
+  // character (an echo, a tail, a grain, a slice), so both read out in units.
+  { const r = q(".fx-prism-rate"); if (r) setKnobReadout(r, prismRateLabel); }
+  { const tm = q(".fx-prism-time"); if (tm) setKnobReadout(tm, (v) => prismTimeLabel(v, t.fxConfig.prism?.diffmode)); }
+  for (const k of ["wet", "mode", ...REPEAT_KNOBS]) set(`.fx-repeat-${k}`, fc.repeat[k]);
+  // The discrete knobs read out what they pick, not where they sit; the offset
+  // is a step of the interval, and pitch means something a little different
+  // per mode.
+  {
+    const ro = (k, fn) => { const el = q(`.fx-repeat-${k}`); if (el) setKnobReadout(el, fn); };
+    ro("grid", repeatGridLabel);
+    ro("interval", repeatIntervalLabel);
+    ro("offset", (v) => repeatOffsetLabel(v, t.fxConfig.repeat?.interval));
+    ro("gate", repeatGateLabel);
+    ro("chance", repeatPercentLabel);
+    ro("vary", repeatPercentLabel);
+    ro("decay", repeatPercentLabel);
+    ro("pitch", (v) => repeatPitchLabel(v, t.fxConfig.repeat?.mode));
   }
 
   const applyAmp = () => {
@@ -1458,6 +1559,20 @@ export function wireFxPanel(t, panel) {
     t.fxRack?.applyReverb(fc.reverb);
   };
 
+  const applyPrism = () => {
+    if (!fc.prism) fc.prism = { ...defaultFxConfig().prism };
+    for (const k of ["wet", ...PRISM_KNOBS]) { const el = q(`.fx-prism-${k}`); if (el) fc.prism[k] = Number(el.value); }
+    for (const k of Object.keys(PRISM_MODES)) { const el = q(`.fx-prism-${k}`); if (el) fc.prism[k] = el.value; }
+    t.fxRack?.applyPrism(fc.prism);
+  };
+
+  const applyRepeat = () => {
+    if (!fc.repeat) fc.repeat = { ...defaultFxConfig().repeat };
+    for (const k of ["wet", ...REPEAT_KNOBS]) { const el = q(`.fx-repeat-${k}`); if (el) fc.repeat[k] = Number(el.value); }
+    { const el = q(".fx-repeat-mode"); if (el) fc.repeat.mode = el.value; }
+    t.fxRack?.applyRepeat(fc.repeat);
+  };
+
   const applyCrush = () => {
     const b = q(".fx-crush-bits"); const w = q(".fx-crush-wet"); const r = q(".fx-crush-rate");
     if (b) fc.crush.bits = Number(b.value);
@@ -1486,6 +1601,10 @@ export function wireFxPanel(t, panel) {
   { const b = q(".fx-crush-bits"); if (b) b.addEventListener("input", applyCrush); }
   { const w = q(".fx-crush-wet");  if (w) w.addEventListener("input", applyCrush); }
   { const r = q(".fx-crush-rate"); if (r) r.addEventListener("input", applyCrush); }
+  for (const k of ["wet", ...PRISM_KNOBS]) q(`.fx-prism-${k}`)?.addEventListener("input", applyPrism);
+  for (const k of Object.keys(PRISM_MODES)) q(`.fx-prism-${k}`)?.addEventListener("change", applyPrism);
+  for (const k of ["wet", ...REPEAT_KNOBS]) q(`.fx-repeat-${k}`)?.addEventListener("input", applyRepeat);
+  q(".fx-repeat-mode")?.addEventListener("change", applyRepeat);
 
   // Double-click an effect's name to put that effect back to its defaults. The
   // panel has a lot of knobs, and undo walks back one at a time — getting to a
@@ -1494,8 +1613,8 @@ export function wireFxPanel(t, panel) {
     amp: applyAmp, vinyl: applyVinyl, cassette: applyCassette, fuzz: applyFuzz,
     ringmod: applyRingMod, shaper: applyWaveShaper, crush: applyCrush,
     autowah: applyAutoWah, chorus: applyChorus, phaser: applyPhaser,
-    flanger: applyFlanger, pitchshift: applyPitchShift, delay: applyDelay,
-    reverb: applyReverb,
+    flanger: applyFlanger, pitchshift: applyPitchShift, repeat: applyRepeat, prism: applyPrism,
+    delay: applyDelay, reverb: applyReverb,
   };
   const defaults = defaultFxConfig();
   panel.querySelectorAll(".sq-fx__row").forEach(row => {

@@ -9,7 +9,7 @@
 // The engine modules that owned these (fxRack.js, signal.js, track.js,
 // euclid.js) import and re-export them, so nothing else in the engine changed.
 
-import { BASS_DEFAULTS, CONTAGION_DEFAULTS, GUITAR_DEFAULTS, HEXOP_DEFAULTS, SUB_DEFAULTS } from "./engineData.js";
+import { BASS_DEFAULTS, CONTAGION_DEFAULTS, DRONE_DEFAULTS, GUITAR_DEFAULTS, HEXOP_DEFAULTS, SUB_DEFAULTS } from "./engineData.js";
 
 /** The rack's stages, in chain order, and each one's controls at rest. */
 export function defaultFxConfig() {
@@ -27,10 +27,57 @@ export function defaultFxConfig() {
     phaser:     { wet: 0, rate: 0.3, depth: 0.5 },
     flanger:    { wet: 0, rate: 0.3, fbk: 0.5 },
     pitchshift: { wet: 0, semitones: 0 },
+    // Beat repeat / slicer (repeat.js), clocked by the transport. The discrete
+    // knobs (interval, offset, gate, grid) are 0..1 positions on the lists
+    // below, so an LFO or a lane can sweep them; `wet` is the mix and the
+    // switch. At rest: on the last beat of every bar, half the time, repeat a
+    // sixteenth for a beat.
+    repeat:     { wet: 0, mode: "repeat", chance: 0.5, interval: 0.5, offset: 0.75,
+                  gate: 0.33, grid: 0.33, vary: 0, pitch: 0, decay: 0 },
+    // A four-module console in one stage (prism.js): character, movement,
+    // diffusion, texture, each a choice of five and an amount, then a tilt eq.
+    // `wet` is the mix around the whole of it, and what switches it on.
+    prism:      { wet: 0, char: 0.25, charmode: "drive", move: 0.3, movemode: "doubler",
+                  diff: 0.35, diffmode: "space", tex: 0.25, texmode: "cassette",
+                  tilt: 0.5, rate: 0.35, time: 0.4, sens: 0.5, drift: 0.2 },
     delay:      { time: 0.375, fbk: 0.35, wet: 0, sync: false, div: 0.5 },
     reverb:     { decay: 2, wet: 0 },
   };
 }
+
+/** The repeat stage's two characters, in the order the processor indexes them:
+ *  `repeat` captures a slice where it triggers and repeats it, `slice` swaps
+ *  the playing slice for one from the window before. */
+export const REPEAT_MODES = ["repeat", "slice"];
+/** Its knobs, every one 0..1 and an AudioParam: `fx-repeat-<k>` the control,
+ *  `repeat_<k>` the LFO, `fx.repeat.<k>` the lane. */
+export const REPEAT_KNOBS = ["chance", "interval", "offset", "gate", "grid", "vary", "pitch", "decay"];
+export const REPEAT_KNOB_LABELS = {
+  chance: "repeat chance", interval: "repeat interval", offset: "repeat offset", gate: "repeat gate",
+  grid: "repeat grid", vary: "repeat vary", pitch: "repeat pitch", decay: "repeat decay",
+};
+/** What the discrete knobs pick from, in sixteenth-note steps. A knob at v
+ *  picks entry round(v * (length - 1)). */
+export const REPEAT_GRID = [0.25, 0.5, 2 / 3, 1, 4 / 3, 2, 8 / 3, 4, 8, 16];
+export const REPEAT_GRID_LABELS = ["1/64", "1/32", "1/16t", "1/16", "1/8t", "1/8", "1/4t", "1/4", "1/2", "1 bar"];
+export const REPEAT_INTERVAL = [4, 8, 16, 32, 64];
+export const REPEAT_GATE = [1, 2, 3, 4, 6, 8, 12, 16, 24, 32];
+
+/** The prism's four modules (prism.js): each one's characters, in the order
+ *  the processor indexes them. */
+export const PRISM_MODES = {
+  charmode: ["drive", "sweeten", "fuzz", "howl", "swell"],
+  movemode: ["doubler", "vibrato", "phaser", "tremolo", "pitch"],
+  diffmode: ["cascade", "reels", "space", "collage", "reverse"],
+  texmode:  ["filter", "squash", "cassette", "broken", "interference"],
+};
+/** Its knobs, every one 0..1 and an AudioParam: one list, three namespaces —
+ *  `fx-prism-<k>` the control, `prism_<k>` the LFO, `fx.prism.<k>` the lane. */
+export const PRISM_KNOBS = ["char", "move", "diff", "tex", "tilt", "rate", "time", "sens", "drift"];
+export const PRISM_KNOB_LABELS = {
+  char: "prism character", move: "prism movement", diff: "prism diffusion", tex: "prism texture",
+  tilt: "prism tilt", rate: "prism rate", time: "prism time", sens: "prism sens", drift: "prism drift",
+};
 
 /** A track's params: the four track sliders, the osc mix, the osc mods, the
  *  ladder's osc bank, the silverbox panel, and every emulator panel's defaults
@@ -59,6 +106,9 @@ export function defaultTrackParams() {
       // Sub bass: the oscillator, the drop, and the harmonics that make a
       // 40Hz note audible on something small (see subbass.js)
       ...SUB_DEFAULTS,
+      // Drone: the equation oscillator, its filter, LFO, delay and cloud
+      // (see drone.js)
+      ...DRONE_DEFAULTS,
   };
 }
 

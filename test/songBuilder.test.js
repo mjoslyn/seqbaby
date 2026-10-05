@@ -163,6 +163,30 @@ test("fx stages are written whole, with aliases for wet/amount", () => {
   assert.throws(() => sb.setFx(s, index, "shaper", { mode: "bend" }), /shaper.mode must be one of/);
 });
 
+test("the prism is a stage like any other: its characters by name, its knobs 0..1", () => {
+  const s = song();
+  const { index } = sb.addTrack(s, { engine: "pad" });
+  const p = sb.setFx(s, index, "prism", { wet: 0.6, diffmode: "reels", diff: 0.7, texmode: "broken" });
+  assert.deepEqual([p.wet, p.diffmode, p.diff, p.texmode], [0.6, "reels", 0.7, "broken"]);
+  assert.equal(p.charmode, "drive", "the rest of the stage is the default");
+  assert.throws(() => sb.setFx(s, index, "prism", { diffmode: "plate" }), /prism.diffmode must be one of/);
+  assert.throws(() => sb.setFx(s, index, "prism", { tilt: 2 }), /prism.tilt must be between 0 and 1/);
+  sb.addLfo(s, index, { target: "prism_rate", amount: 0.3 });
+  sb.addLfo(s, index, { target: "prism", amount: 0.2 });
+});
+
+test("the repeat stage: its mode by name, its knobs 0..1, all of them modulatable", () => {
+  const s = song();
+  const { index } = sb.addTrack(s, { engine: "808 kick" });
+  const r = sb.setFx(s, index, "repeat", { wet: 1, mode: "slice", grid: 0.5, chance: 0.3 });
+  assert.deepEqual([r.wet, r.mode, r.grid, r.chance], [1, "slice", 0.5, 0.3]);
+  assert.equal(r.offset, 0.75, "the rest of the stage is the default");
+  assert.throws(() => sb.setFx(s, index, "repeat", { mode: "stutter" }), /repeat.mode must be one of/);
+  assert.throws(() => sb.setFx(s, index, "repeat", { gate: 2 }), /repeat.gate must be between 0 and 1/);
+  sb.addLfo(s, index, { target: "repeat_grid", amount: 0.3 });
+  sb.addLfo(s, index, { target: "repeat", amount: 0.2 });
+});
+
 test("filter, eq and comp ranges; sidechain by index", () => {
   const s = song();
   const a = sb.addTrack(s, { engine: "808 kick" });

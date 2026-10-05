@@ -6,10 +6,11 @@ import {
   HEXOP_MOD_KEYS, HEXOP_MOD_LABELS, HEXOP_MOD_RANGE,
   GUITAR_MOD_KEYS, GUITAR_MOD_LABELS, GUITAR_MOD_RANGE,
   SUB_MOD_KEYS, SUB_MOD_LABELS, SUB_MOD_RANGE,
+  DRONE_MOD_KEYS, DRONE_MOD_LABELS, DRONE_MOD_RANGE,
 } from "./engineData.js";
 import { CHANCE_MOD_KEYS, CHANCE_MOD_LABELS } from "./chanceGen.js";
 import { staticEngineByKey } from "./engineData.js";
-import { EUCLID_MOD_KEYS, EUCLID_MOD_LABELS } from "./soundDefaults.js";
+import { EUCLID_MOD_KEYS, EUCLID_MOD_LABELS, PRISM_KNOBS, PRISM_KNOB_LABELS, REPEAT_KNOBS, REPEAT_KNOB_LABELS } from "./soundDefaults.js";
 import { shaperPreampGain } from "./curves.js";
 
 export const STEPS_PER_BAR = 16;
@@ -36,6 +37,7 @@ export const LFO_KEYS = [
   // FX wets/amts (short keys preserved for backward compat).
   "fuzz", "delay", "verb",
   "vinyl", "cassette", "ringmod", "shaper", "crush", "autowah", "chorus", "phaser", "flanger", "pitch",
+  "repeat", "prism",
   // FX sub-params with AudioParam / Signal targets (audio-rate modable).
   "fuzz_drive", "fuzz_tone", "fuzz_level",
   "vinyl_warmth",
@@ -46,6 +48,8 @@ export const LFO_KEYS = [
   "phaser_rate",
   "flanger_rate", "flanger_fbk",
   "delay_time", "delay_fbk",
+  ...REPEAT_KNOBS.map(k => `repeat_${k}`),
+  ...PRISM_KNOBS.map(k => `prism_${k}`),
   // FX sub-params modulated via setter-driven LFO (no AudioParam target).
   "vinyl_wow",
   "cassette_flutter", "cassette_sat",
@@ -86,6 +90,9 @@ export const LFO_KEYS = [
   // Sub bass: the oscillator, the drop, the harmonics path and the output
   // stage. Sub only — see canModulate.
   ...SUB_MOD_KEYS.map(k => `sub_${k}`),
+  // Drone: the equation oscillator's trims, the filter, its LFO, the delay and
+  // the cloud. Drone only — see canModulate.
+  ...DRONE_MOD_KEYS.map(k => `drone_${k}`),
 ];
 // How much each target swings per unit of depth:
 //  - 0..1 unit params: amp = depth/2 (swings ±0.5)
@@ -101,6 +108,10 @@ export const LFO_LABELS = {
   shaper: "wave folder wet", shaper_amt: "wave folder amt",
   crush: "bitcrush wet", autowah: "auto-wah wet", chorus: "chorus wet",
   phaser: "phaser wet", flanger: "flanger wet", pitch: "pitch shift wet",
+  repeat: "repeat mix",
+  ...Object.fromEntries(REPEAT_KNOBS.map(k => [`repeat_${k}`, REPEAT_KNOB_LABELS[k]])),
+  prism: "prism mix",
+  ...Object.fromEntries(PRISM_KNOBS.map(k => [`prism_${k}`, PRISM_KNOB_LABELS[k]])),
   fuzz_drive: "fuzz drive", fuzz_tone: "fuzz tone", fuzz_level: "fuzz level",
   vinyl_warmth: "vinyl warmth", vinyl_wow: "vinyl wow",
   shaper_preamp: "wave shaper preamp",
@@ -130,6 +141,7 @@ export const LFO_LABELS = {
   ...Object.fromEntries(GUITAR_MOD_KEYS.map(k => [`gtr_${k}`, GUITAR_MOD_LABELS[k]])),
   ...Object.fromEntries(BASS_MOD_KEYS.map(k => [`bas_${k}`, BASS_MOD_LABELS[k]])),
   ...Object.fromEntries(SUB_MOD_KEYS.map(k => [`sub_${k}`, SUB_MOD_LABELS[k]])),
+  ...Object.fromEntries(DRONE_MOD_KEYS.map(k => [`drone_${k}`, DRONE_MOD_LABELS[k]])),
 };
 export const lfoLabel = (k) => LFO_LABELS[k] ?? k;
 export const LFO_AMP_SCALE = {
@@ -144,6 +156,10 @@ export const LFO_AMP_SCALE = {
   reson: 19.5,             // Q 0.5..20 (resonToQ) — full span, so depth 1 swings the whole knob
   fuzz: 1, delay: 1, verb: 1,
   vinyl: 1, cassette: 1, ringmod: 1, shaper: 1, crush: 1, autowah: 1, chorus: 1, phaser: 1, flanger: 1, pitch: 1,
+  // The prism's mix and every knob on it are 0..1 AudioParams.
+  prism: 1, ...Object.fromEntries(PRISM_KNOBS.map(k => [`prism_${k}`, 1])),
+  // So are the repeat stage's, the discrete ones included (they pick from lists).
+  repeat: 1, ...Object.fromEntries(REPEAT_KNOBS.map(k => [`repeat_${k}`, 1])),
   // fx sub-params (audio-rate AudioParam targets). Each is the control's own
   // full native-unit span (see applyFuzz / applyChorus / etc. in fxRack.js),
   // so depth 1 is peak-to-peak of the whole knob — same convention as the
@@ -204,6 +220,10 @@ export const LFO_AMP_SCALE = {
   ...Object.fromEntries(SUB_MOD_KEYS.map(k => {
     const [lo, hi] = SUB_MOD_RANGE[k];
     return [`sub_${k}`, hi - lo];
+  })),
+  ...Object.fromEntries(DRONE_MOD_KEYS.map(k => {
+    const [lo, hi] = DRONE_MOD_RANGE[k];
+    return [`drone_${k}`, hi - lo];
   })),
 };
 
@@ -320,13 +340,13 @@ export const NOTE_NAMES = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"]
 export const FX_STAGE_LEVEL_KEY = {
   vinyl: "amount", cassette: "amount", fuzz: "amount",
   ringmod: "wet", shaper: "wet", crush: "wet", autowah: "wet", chorus: "wet",
-  phaser: "wet", flanger: "wet", pitchshift: "wet", delay: "wet", reverb: "wet",
+  phaser: "wet", flanger: "wet", pitchshift: "wet", repeat: "wet", prism: "wet", delay: "wet", reverb: "wet",
 };
 export const FX_STAGE_LABELS = {
   vinyl: "vinyl", cassette: "cassette", fuzz: "fuzz", ringmod: "ring mod",
   shaper: "shaper", crush: "crush", autowah: "auto-wah", chorus: "chorus",
-  phaser: "phaser", flanger: "flanger", pitchshift: "pitch shift", delay: "delay",
-  reverb: "reverb",
+  phaser: "phaser", flanger: "flanger", pitchshift: "pitch shift", repeat: "repeat", prism: "prism",
+  delay: "delay", reverb: "reverb",
 };
 /** A stage's engagement level (0 = bypassed) read off a plain fx config. */
 export function fxStageLevel(config, key) {
@@ -401,6 +421,8 @@ export const AUTOMATION_TARGETS = {
   ...Object.fromEntries(BASS_MOD_KEYS.map(k => [`bas.${k}`, { label: BASS_MOD_LABELS[k] }])),
   // Subby (sub engine only) — oscillator, drop, harmonics, output.
   ...Object.fromEntries(SUB_MOD_KEYS.map(k => [`sub.${k}`, { label: SUB_MOD_LABELS[k] }])),
+  // Drone (drone engine only) — oscillator, filter, LFO, delay, cloud.
+  ...Object.fromEntries(DRONE_MOD_KEYS.map(k => [`drone.${k}`, { label: DRONE_MOD_LABELS[k] }])),
   // fx
   "fx.vinyl":           { label: "vinyl amt" },
   "fx.vinyl.warmth":    { label: "vinyl warmth" },
@@ -434,6 +456,10 @@ export const AUTOMATION_TARGETS = {
   "fx.flanger.fbk":     { label: "flanger fbk" },
   "fx.pitchshift":      { label: "pitch shift wet" },
   "fx.pitchshift.semi": { label: "pitch semi" },
+  "fx.repeat":          { label: "repeat mix" },
+  ...Object.fromEntries(REPEAT_KNOBS.map(k => [`fx.repeat.${k}`, { label: REPEAT_KNOB_LABELS[k] }])),
+  "fx.prism":           { label: "prism mix" },
+  ...Object.fromEntries(PRISM_KNOBS.map(k => [`fx.prism.${k}`, { label: PRISM_KNOB_LABELS[k] }])),
   "fx.delay":           { label: "delay wet" },
   "fx.delay.time":      { label: "delay time" },
   "fx.delay.fbk":       { label: "delay fbk" },
@@ -460,6 +486,8 @@ export const TRACK_FX_LFO_KEYS = new Set([
   "shaper_amt",
   "autowah_sens","autowah_range",
   "phaser_depth","pitch_semi","reverb_decay",
+  "prism", ...PRISM_KNOBS.map(k => `prism_${k}`),
+  "repeat", ...REPEAT_KNOBS.map(k => `repeat_${k}`),
 ]);
 
 // Engine-aware list of voice/instrument keys that can be automated. Broader
@@ -478,6 +506,7 @@ export function voiceAutoKeysForEngineKey(engineKey) {
     case "dm:guitar":     return ["vol", "harm", "timb", "morph", "decay"];
     case "dm:bass":       return ["vol", "harm", "timb", "morph", "decay"];
     case "dm:sub":       return ["vol", "harm", "timb", "morph", "decay"];
+    case "dm:drone":     return ["vol", "harm", "timb", "morph", "decay"];
     case "dm:tines":     return ["vol", "harm", "timb", "morph", "decay"];
     case "dm:oracle":   return ["vol", "harm", "timb", "morph", "decay", "osc1", "osc2", "osc3", "osc4", "noise"];
     case "dm:granular":   return ["vol", "harm", "timb", "morph", "decay"];
@@ -509,6 +538,7 @@ export function canAutomateKey(engineKey, key, live = {}) {
   if (key.startsWith("gtr.")) return t.engineKey === "dm:guitar";
   if (key.startsWith("bas.")) return t.engineKey === "dm:bass";
   if (key.startsWith("sub.")) return t.engineKey === "dm:sub";
+  if (key.startsWith("drone.")) return t.engineKey === "dm:drone";
   if (key.startsWith("fx.")) return true;
   if (VOICE_AUTO_KEYS.includes(key)) return voiceAutoKeysForEngineKey(t.engineKey).includes(key);
   return false;
@@ -542,6 +572,8 @@ export function canModulateKey(engineKey, key, live = {}) {
   if (key.startsWith("bas_")) return t.engineKey === "dm:bass";
   // Subby's oscillator, drop, harmonics and output stage — subby only.
   if (key.startsWith("sub_")) return t.engineKey === "dm:sub";
+  // The drone's panel — drone only.
+  if (key.startsWith("drone_")) return t.engineKey === "dm:drone";
   const eng = staticEngineByKey(t.engineKey);
   if (!eng) return false;
   // Plaits exposes harm/timb/morph/decay as voice params.
@@ -565,6 +597,9 @@ export function canModulateKey(engineKey, key, live = {}) {
     // One node, one voice, so the LFO moves the whole instrument. Putting one
     // on DRIVE is a wobble, because drive is what makes the note audible.
     case "dm:sub":   return ["harm", "timb", "morph", "decay"].includes(key);
+    // Cutoff and A0 / A1 / A2. The three equation numbers are integers inside
+    // the worklet, so an LFO on one steps through values: a sequence.
+    case "dm:drone": return ["harm", "timb", "morph", "decay"].includes(key);
     case "dm:snarl": return ["harm", "osc1", "osc2", "osc3", "osc4", "ultra", "fm"].includes(key);
     case "dm:ladder":       return ["harm", "osc1", "osc2", "osc3", "noise"].includes(key);
     case "dm:drift":       return ["harm", "osc1", "osc2", "osc3", "noise"].includes(key);

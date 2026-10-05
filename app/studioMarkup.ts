@@ -239,6 +239,68 @@ const SUB_PANEL = `
           </div>
         </div>`;
 
+// The drone's panel, laid out like the Grone it is modelled on: the equation
+// oscillator, the VCF, the LFO, the delay and the cloud, left to right on the
+// hardware and top to bottom here. Same arrangement as the panels above — the
+// patch dropdown ships empty and is filled at runtime from DRONE_TONE_NAMES,
+// and the ranges and defaults must match DRONE_NUM_CTLS in engineData.js.
+// The equation and LFO-shape option VALUES are the names in DRONE_EQUATIONS /
+// DRONE_LFO_SHAPES. Classes are `p-drn*`: `p-d*` is the hexop's.
+const DRONE_PANEL = `
+        <div class="sq-param-group sq-param-group--drone" hidden>
+          <div class="sq-drone__row">
+            <span class="sq-drone__lbl">patch</span>
+            <select class="sq-drone__tone" title="load a patch: equation, filter, LFO, delay and cloud"></select>
+          </div>
+          <div class="sq-drone__row">
+            <span class="sq-drone__lbl">osc</span>
+            <select class="p-drneq" title="which of the sixteen equations the oscillator runs. Each is a formula of a counter and the three numbers A0, A1 and A2 (the track sliders), and its low eight bits are the output"><option value="sierpinski">1 sierpinski</option><option value="or">2 or</option><option value="xor">3 xor</option><option value="fifths">4 fifths</option><option value="harmonics">5 harmonics</option><option value="smear">6 smear</option><option value="stairs">7 stairs</option><option value="octaves" selected>8 octaves</option><option value="sweep">9 sweep</option><option value="pulse bits">10 pulse bits</option><option value="gates">11 gates</option><option value="thirds">12 thirds</option><option value="arp">13 arp</option><option value="fold">14 fold</option><option value="split">15 split</option><option value="chaos">16 chaos</option></select>
+            <label class="sq-drone__f"><span>rate</span><input class="p-drnrate" type="range" min="0" max="1" step="0.01" value="0.5" title="the sample rate the counter runs at, around the note: two octaves down at the bottom, two up at the top, the note itself in the middle" /></label>
+            <label class="sq-drone__f"><span>osc</span><input class="p-drnosc" type="range" min="0" max="1" step="0.01" value="0.8" title="the oscillator's level into the filter" /></label>
+            <label class="sq-drone__f"><span>noise</span><input class="p-drnnoise" type="range" min="0" max="1" step="0.01" value="0" title="white noise into the filter beside the oscillator, following the loudest held note" /></label>
+            <label class="sq-drone__f"><span>attack</span><input class="p-drnatk" type="range" min="0" max="1" step="0.01" value="0.3" title="how long a note takes to swell in, 2ms to 12s" /></label>
+            <label class="sq-drone__f"><span>release</span><input class="p-drnrel" type="range" min="0" max="1" step="0.01" value="0.5" title="how long a note takes to fade once it lets go, 10ms to 20s" /></label>
+            <select class="p-drnhold" title="latch holds every note until a note arrives at a later step, ignoring the step's length, so one note a bar is a drone. Notes on the same step are a chord and are all held. With the track's glide up, a latched chord slides into the next. Gate plays each note for its step">
+              <option value="latch" selected>latch</option><option value="gate">gate</option>
+            </select>
+          </div>
+          <div class="sq-drone__row">
+            <span class="sq-drone__lbl">vcf</span>
+            <label class="sq-drone__f"><span>reso</span><input class="p-drnreso" type="range" min="0" max="1" step="0.01" value="0.35" title="resonance. The loop is clipped, so near the top the filter screams and then holds its own level instead of running away" /></label>
+            <label class="sq-drone__f"><span>drive</span><input class="p-drndrive" type="range" min="0" max="1" step="0.01" value="0.2" title="how hard the oscillator and noise hit the filter" /></label>
+            <label class="sq-drone__f"><span>lfo</span><input class="p-drnmod1" type="range" min="0" max="1" step="0.01" value="0.3" title="how far the LFO moves the cutoff, up to four octaves either way" /></label>
+          </div>
+          <div class="sq-drone__row">
+            <span class="sq-drone__lbl">lfo</span>
+            <select class="p-drnlshape" title="the LFO's shape. Sweep falls once a cycle. Random levels jumps to a new value each cycle, random slopes glides between them"><option value="up">ramp up</option><option value="down">ramp down</option><option value="square">square</option><option value="tri" selected>triangle</option><option value="sine">sine</option><option value="sweep">sweep</option><option value="random">random levels</option><option value="slopes">random slopes</option></select>
+            <label class="sq-drone__f"><span>rate</span><input class="p-drnlrate" type="range" min="0" max="1" step="0.01" value="0.25" title="LFO rate, 0.02Hz to 20Hz. It free-runs: a drone has no downbeat to reset on" /></label>
+            <label class="sq-drone__f"><span>to delay</span><input class="p-drnldly" type="range" min="0" max="1" step="0.01" value="0" title="how far the LFO moves the delay time, which bends the pitch of everything in the line" /></label>
+          </div>
+          <div class="sq-drone__row">
+            <span class="sq-drone__lbl">delay</span>
+            <label class="sq-drone__f"><span>time</span><input class="p-drndtime" type="range" min="0" max="1" step="0.01" value="0.45" title="delay time, 20ms to 1.5s. Moving it bends the pitch, as on tape" /></label>
+            <label class="sq-drone__f"><span>fbk</span><input class="p-drndfbk" type="range" min="0" max="1" step="0.01" value="0.45" title="how much of the delay goes back into it" /></label>
+            <label class="sq-drone__f"><span>mix</span><input class="p-drndmix" type="range" min="0" max="1" step="0.01" value="0.25" title="dry to wet" /></label>
+            <select class="p-drndir" title="reverse plays each delay-time-long chunk backwards, with two heads crossfading so the seams never show">
+              <option value="forward" selected>forward</option><option value="reverse">reverse</option>
+            </select>
+          </div>
+          <div class="sq-drone__row">
+            <span class="sq-drone__lbl">cloud</span>
+            <label class="sq-drone__f"><span>position</span><input class="p-drncpos" type="range" min="0" max="1" step="0.01" value="0.3" title="where in the last four seconds the grains are read from: just now at the bottom, the start of the buffer at the top" /></label>
+            <label class="sq-drone__f"><span>size</span><input class="p-drncsize" type="range" min="0" max="1" step="0.01" value="0.5" title="grain length, 20ms to 1s" /></label>
+            <label class="sq-drone__f"><span>pitch</span><input class="p-drncpitch" type="range" min="0" max="1" step="0.01" value="0.5" title="grain pitch, two octaves either way. Three quarters is an octave up" /></label>
+            <label class="sq-drone__f"><span>density</span><input class="p-drncdens" type="range" min="0" max="1" step="0.01" value="0.5" title="how many grains start a second, half a grain to sixty" /></label>
+            <label class="sq-drone__f"><span>texture</span><input class="p-drnctex" type="range" min="0" max="1" step="0.01" value="0.5" title="grain shape: hard-edged and buzzing at the bottom, a triangle in the middle, soft and sparse at the top" /></label>
+            <label class="sq-drone__f"><span>spread</span><input class="p-drncspread" type="range" min="0" max="1" step="0.01" value="0.5" title="how far the grains scatter across the stereo field and back through the buffer" /></label>
+            <label class="sq-drone__f"><span>fbk</span><input class="p-drncfbk" type="range" min="0" max="1" step="0.01" value="0.3" title="how much of the cloud is recorded back into its own buffer" /></label>
+            <label class="sq-drone__f"><span>blend</span><input class="p-drncmix" type="range" min="0" max="1" step="0.01" value="0.35" title="dry to cloud" /></label>
+            <select class="p-drnfreeze" title="stop recording: the grains keep reading whatever is in the buffer, notes or no notes, for as long as this is on">
+              <option value="off" selected>freeze off</option><option value="on">freeze on</option>
+            </select>
+          </div>
+        </div>`;
+
 export const STUDIO_BODY = String.raw`
 <header class="sq-transport">
     <div class="sq-transport__main">
@@ -544,6 +606,7 @@ ${HEXOP_PANEL}
 ${GUITAR_PANEL}
 ${BASS_PANEL}
 ${SUB_PANEL}
+${DRONE_PANEL}
         <div class="sq-param-group sq-param-group--silverbox" hidden>
           <div class="sq-field"><label>wave</label>
             <select class="p-sbwave" title="the two waveforms. Saw is brighter, square is hollower and sits lower">
@@ -932,6 +995,63 @@ ${SUB_PANEL}
           <span class="sq-fx__title">pitch shift</span>
           <label class="sq-fx__ctl"><span>wet</span><input class="fx-pitchshift-wet" type="range" min="0" max="1" step="0.01" value="0" /></label>
           <label class="sq-fx__ctl"><span>semi</span><input class="fx-pitchshift-semi" type="range" min="-12" max="12" step="1" value="0" /></label>
+        </div>
+        <div class="sq-fx__row" data-fx="repeat">
+          <span class="sq-fx__title">repeat</span>
+          <label class="sq-fx__ctl" title="how much of the repeat is in the signal: all the way is an insert (a repeat replaces the beat), less mixes it over"><span>mix</span><input class="fx-repeat-wet" type="range" min="0" max="1" step="0.01" value="0" /></label>
+          <label class="sq-fx__ctl" title="repeat: capture a slice where it fires and repeat it (a beat repeat). slice: cut the track into slices as it plays and swap them for others from the window before (a live slicer)"><span>mode</span><select class="fx-repeat-mode">
+            <option value="repeat" selected>repeat</option>
+            <option value="slice">slice</option>
+          </select></label>
+          <label class="sq-fx__ctl" title="repeat: how often it fires on its step. slice: how often a slice is swapped. The same song makes the same choices every time"><span>chance</span><input class="fx-repeat-chance" type="range" min="0" max="1" step="0.01" value="0.5" /></label>
+          <label class="sq-fx__ctl" title="repeat: how often a repeat may fire, 4 to 64 steps. slice: the window the swapped slices come from"><span>every</span><input class="fx-repeat-interval" type="range" min="0" max="1" step="0.01" value="0.5" /></label>
+          <label class="sq-fx__ctl" title="where in the interval a repeat fires (repeat only)"><span>offset</span><input class="fx-repeat-offset" type="range" min="0" max="1" step="0.01" value="0.75" /></label>
+          <label class="sq-fx__ctl" title="how long a repeat, or a swapped run of slices, holds, 1 to 32 steps"><span>gate</span><input class="fx-repeat-gate" type="range" min="0" max="1" step="0.01" value="0.33" /></label>
+          <label class="sq-fx__ctl" title="the slice: what is captured and repeated, or what the track is cut into, 1/64 to a bar, triplets included"><span>grid</span><input class="fx-repeat-grid" type="range" min="0" max="1" step="0.01" value="0.33" /></label>
+          <label class="sq-fx__ctl" title="repeat: how far each trigger's grid wanders from the knob. slice: how many swapped slices play backwards"><span>vary</span><input class="fx-repeat-vary" type="range" min="0" max="1" step="0.01" value="0" /></label>
+          <label class="sq-fx__ctl" title="repeat: each repeat drops this far, so a roll falls like a tape stopping. slice: swapped slices are transposed down this far"><span>pitch</span><input class="fx-repeat-pitch" type="range" min="0" max="1" step="0.01" value="0" /></label>
+          <label class="sq-fx__ctl" title="repeat: each repeat this much quieter. slice: each swapped slice chopped this much shorter"><span>decay</span><input class="fx-repeat-decay" type="range" min="0" max="1" step="0.01" value="0" /></label>
+        </div>
+        <div class="sq-fx__row" data-fx="prism">
+          <span class="sq-fx__title">prism</span>
+          <label class="sq-fx__ctl" title="how much of the whole console is in the signal"><span>mix</span><input class="fx-prism-wet" type="range" min="0" max="1" step="0.01" value="0" /></label>
+          <label class="sq-fx__ctl" title="character: drive (a mid-humped overdrive), sweeten (a little compression and air), fuzz (gated, the gate set by sens), howl (a resonant band fed back, following the playing), swell (every note fades in)"><span>char</span><select class="fx-prism-charmode">
+            <option value="drive" selected>drive</option>
+            <option value="sweeten">sweeten</option>
+            <option value="fuzz">fuzz</option>
+            <option value="howl">howl</option>
+            <option value="swell">swell</option>
+          </select></label>
+          <label class="sq-fx__ctl" title="how much character: drive and fuzz gain, howl feedback, swell time. 0 takes the module out"><span>amt</span><input class="fx-prism-char" type="range" min="0" max="1" step="0.01" value="0.25" /></label>
+          <label class="sq-fx__ctl" title="movement: doubler (a second player just behind), vibrato, phaser, tremolo (sine to square as it deepens), pitch (a harmony voice)"><span>move</span><select class="fx-prism-movemode">
+            <option value="doubler" selected>doubler</option>
+            <option value="vibrato">vibrato</option>
+            <option value="phaser">phaser</option>
+            <option value="tremolo">tremolo</option>
+            <option value="pitch">pitch</option>
+          </select></label>
+          <label class="sq-fx__ctl" title="how much movement: its depth. On pitch, which interval: an octave down at the bottom through a fourth, a fifth, up to an octave up"><span>amt</span><input class="fx-prism-move" type="range" min="0" max="1" step="0.01" value="0.3" /></label>
+          <label class="sq-fx__ctl" title="diffusion: cascade (ping-pong echoes that smear into a wash), reels (a tape echo), space (a reverb), collage (fragments of the last few seconds, some backwards), reverse (each slice played backwards)"><span>diff</span><select class="fx-prism-diffmode">
+            <option value="cascade">cascade</option>
+            <option value="reels">reels</option>
+            <option value="space" selected>space</option>
+            <option value="collage">collage</option>
+            <option value="reverse">reverse</option>
+          </select></label>
+          <label class="sq-fx__ctl" title="how much diffusion: its level and its feedback together"><span>amt</span><input class="fx-prism-diff" type="range" min="0" max="1" step="0.01" value="0.35" /></label>
+          <label class="sq-fx__ctl" title="texture: filter (a resonant lowpass the playing opens), squash (a compressor), cassette (wow, flutter, saturation, hiss), broken (dropouts, stutters, lost bits), interference (a radio band with static)"><span>tex</span><select class="fx-prism-texmode">
+            <option value="filter">filter</option>
+            <option value="squash">squash</option>
+            <option value="cassette" selected>cassette</option>
+            <option value="broken">broken</option>
+            <option value="interference">interference</option>
+          </select></label>
+          <label class="sq-fx__ctl" title="how much texture. 0 takes the module out"><span>amt</span><input class="fx-prism-tex" type="range" min="0" max="1" step="0.01" value="0.25" /></label>
+          <label class="sq-fx__ctl" title="a see-saw eq on the way out: left darker, right brighter, flat in the middle"><span>tilt</span><input class="fx-prism-tilt" type="range" min="0" max="1" step="0.01" value="0.5" /></label>
+          <label class="sq-fx__ctl" title="the movement module's speed, 0.05 to 12Hz"><span>rate</span><input class="fx-prism-rate" type="range" min="0" max="1" step="0.01" value="0.35" /></label>
+          <label class="sq-fx__ctl" title="the diffusion module's time: echo spacing on cascade and reels, the tail on space, grain size on collage, slice length on reverse"><span>time</span><input class="fx-prism-time" type="range" min="0" max="1" step="0.01" value="0.4" /></label>
+          <label class="sq-fx__ctl" title="how readily the envelope-driven characters answer the playing: swell's trigger, the fuzz gate, howl, the texture filter"><span>sens</span><input class="fx-prism-sens" type="range" min="0" max="1" step="0.01" value="0.5" /></label>
+          <label class="sq-fx__ctl" title="slow random wander across everything that moves: the rate, echo times, the harmony's tuning, the tape"><span>drift</span><input class="fx-prism-drift" type="range" min="0" max="1" step="0.01" value="0.2" /></label>
         </div>
         <div class="sq-fx__row" data-fx="delay">
           <span class="sq-fx__title">delay</span>

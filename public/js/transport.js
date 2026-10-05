@@ -7,7 +7,10 @@ import { stepGateAt } from "./stepSource.js";
 import { loadBassWorklet } from "./bass.js";
 import { loadHexopWorklet } from "./hexop.js";
 import { loadSubBassWorklet } from "./subbass.js";
+import { loadDroneWorklet } from "./drone.js";
 import { loadCrusherWorklet } from "./crusher.js";
+import { loadPrismWorklet } from "./prism.js";
+import { loadRepeatWorklet } from "./repeat.js";
 import { loadReverbWorklet } from "./reverb.js";
 import { loadFilterModelsWorklet } from "./filterModels.js";
 import { loadGuitarWorklet } from "./guitar.js";
@@ -146,8 +149,9 @@ function scheduleAtAudible(cb, audioTime, extra = 0) {
  */
 export async function ensureAudio() {
   if (state.ready) return;
-  // state.audioCtx + Tone.setContext are wired up at init() time so Tone.Transport
-  // latches onto our context from first access.
+  // state.audioCtx + Tone.setContext are wired up at init() time; the
+  // transport is always Tone.getTransport() (see init() for why not
+  // Tone.Transport).
   await Tone.start();
   // Tone.start() resolves successfully even when our underlying raw AudioContext
   // (passed to Tone.setContext at init) stays "suspended" — Tone v15 sometimes
@@ -261,6 +265,7 @@ export function loadWorklet() {
   const guitar = loadGuitarWorklet(state.audioCtx).catch(e => { console.warn("guitar worklet load failed", e); });
   const bass = loadBassWorklet(state.audioCtx).catch(e => { console.warn("bass worklet load failed", e); });
   const sub = loadSubBassWorklet(state.audioCtx).catch(e => { console.warn("subby worklet load failed", e); });
+  const drone = loadDroneWorklet(state.audioCtx).catch(e => { console.warn("drone worklet load failed", e); });
   // The bitcrusher's converter clock is a sample-and-hold, so it needs a
   // worklet too — and it belongs to the fx rack, which every track has.
   const crusher = loadCrusherWorklet(state.audioCtx).catch(e => { console.warn("crusher worklet load failed", e); });
@@ -270,7 +275,11 @@ export function loadWorklet() {
   // The eight analog filter characters — every track's filter slot wants
   // this registered, the same reason the rack's crusher/reverb are here.
   const analogFilter = loadFilterModelsWorklet(state.audioCtx).catch(e => { console.warn("analog filter worklet load failed", e); });
-  return Promise.all([state.woscLoad, silverbox, contagion, hexop, guitar, bass, sub, crusher, reverb, analogFilter]);
+  // The prism console: delay lines, followers and grains, the rack's again.
+  const prism = loadPrismWorklet(state.audioCtx).catch(e => { console.warn("prism worklet load failed", e); });
+  // The beat repeat / slicer: a buffer and a read head on the transport's clock.
+  const repeat = loadRepeatWorklet(state.audioCtx).catch(e => { console.warn("repeat worklet load failed", e); });
+  return Promise.all([state.woscLoad, silverbox, contagion, hexop, guitar, bass, sub, drone, crusher, reverb, analogFilter, prism, repeat]);
 }
 
 /**
@@ -349,9 +358,9 @@ export function silenceAllVoices() {
 export async function stopPlayback() {
   if (!state.playing) return;
   const btn = document.getElementById("play");
-  Tone.Transport.stop();
-  Tone.Transport.cancel(0);
-  if (state.repeatId !== null) { Tone.Transport.clear(state.repeatId); state.repeatId = null; }
+  Tone.getTransport().stop();
+  Tone.getTransport().cancel(0);
+  if (state.repeatId !== null) { Tone.getTransport().clear(state.repeatId); state.repeatId = null; }
   // Fast master-gain cut. Tone synth triggerAttackRelease calls issued by the
   // last few scheduleRepeat callbacks live inside Tone's ~100 ms lookahead and
   // are already queued as native Web Audio events — stopping the Transport
@@ -371,6 +380,7 @@ export async function stopPlayback() {
   // voice *releases* it, and a long-release patch would then fade back in
   // over the top of the silence you just asked for.
   silenceAllVoices();
+  for (const t of state.tracks) t.fxRack?.clockStop();
   state.playing = false;
   document.body.classList.remove("sq-playing");   // step input's cursor shows while stopped (style.css)
   clearArrangementHold();                          // no section holds a track back while stopped
@@ -427,12 +437,12 @@ export async function startPlayback(opts = {}) {
   // Confirm post-unlock state on screen so a no-dev-console iPhone user can
   // tell us whether the context actually resumed.
   setStatus(`audio ready (ctx: ${state.audioCtx?.state || "?"})`);
-  Tone.Transport.bpm.value = Number(document.getElementById("bpm").value);
+  Tone.getTransport().bpm.value = Number(document.getElementById("bpm").value);
   // Per-track swing is applied manually in the transport loop; keep Tone's global swing disabled.
-  Tone.Transport.swing = 0;
-  Tone.Transport.swingSubdivision = "16n";
+  Tone.getTransport().swing = 0;
+  Tone.getTransport().swingSubdivision = "16n";
 
-  if (state.repeatId !== null) Tone.Transport.clear(state.repeatId);
+  if (state.repeatId !== null) Tone.getTransport().clear(state.repeatId);
   const startTick = Math.max(0, Math.floor(opts.tick ?? 0));
   state.tick = startTick;
   // Where in the bar that tick is. The bar is the active pattern's meter, not
@@ -472,7 +482,7 @@ export async function startPlayback(opts = {}) {
       g.linearRampToValueAtTime(1, now + 0.02);
     } catch {}
   }
-  state.repeatId = Tone.Transport.scheduleRepeat((time) => {
+  state.repeatId = Tone.getTransport().scheduleRepeat((time) => {
     // Derived from the transport that is actually running the sequence, not
     // from Tone.Time("16n"). `Tone.setContext` leaves Tone's time helpers
     // resolving against a different transport than the one we schedule on, so
@@ -481,12 +491,16 @@ export async function startPlayback(opts = {}) {
     // per-step micro-timing offsets, automation ramps and arp spans. At 60bpm
     // notes came out half the length of their step; at 180 they overlapped the
     // next one.
-    const baseStepDur = 60 / (Tone.Transport.bpm.value || currentBpm()) / 4;
+    const baseStepDur = 60 / (Tone.getTransport().bpm.value || currentBpm()) / 4;
     // null when nothing is soloed; otherwise the set that stays audible, which
     // includes whatever feeds a soloed bus (see soloAudibleTracks).
     const soloAudible = soloAudibleTracks();
     const masterSwing = Number(document.getElementById("swing")?.value) || 0;
     const lat = visualOutputLatency();
+    // The repeat stage's clock (repeat.js): this step's grid time and global
+    // tick, to every rack, muted or not, so a repeat lands on the same grid the
+    // notes do. Unswung: the grid is the bar, not the groove.
+    for (const t of state.tracks) t.fxRack?.clockStep(time, state.tick, baseStepDur);
     // The section playing (arrangement.js) decides per track: the section's
     // pattern, a pattern of the track's own (its lane), or nothing — held
     // back, which is every track in a REST (a section with no pattern and no
@@ -766,7 +780,7 @@ export async function startPlayback(opts = {}) {
   // (see euclidOrigin in lfo.js) — a sine drifting against the beat is a
   // texture, a gate pattern drifting against it is a mistake.
   state._transportStartTime = state.audioCtx.currentTime + lead;
-  Tone.Transport.start(`+${lead}`, 0);
+  Tone.getTransport().start(`+${lead}`, 0);
   state.playing = true;
   document.body.classList.add("sq-playing");
   refreshNoiseBeds();                                // vinyl crackle follows the transport

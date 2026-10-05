@@ -137,6 +137,20 @@ risers, snare-ish hits with a short decay), `plaits:7` (speech: morph picks
 the phoneme, for vocal chops and robot words). All Plaits models have a
 low-pass gate on decay, so a long decay is what lets them ring.
 
+Drones: `dm:drone`, after the Grone: an equation (bytebeat) oscillator into
+a screaming MS-20 style filter, a delay that can run backwards, and a
+granular cloud. It LATCHES by default (`drnhold` "latch"): one note a bar,
+or one every few bars, and it holds until the next; notes on the same step
+are a chord and all hold. Write a single `x` and leave the rest empty, not a
+tie. harm is the cutoff; timb / morph / decay are the equation's A0 / A1 /
+A2, which step (they are integers inside) and change the rhythm inside the
+note rather than its pitch. `drneq` picks the equation ("octaves", "xor",
+"arp", "chaos" ...). `apply_preset` "dark grone", "cathedral", "machine
+hum", "bit swarm", "reverse tide", "arp ghost", "subterranean",
+"screamer", "glacier". Put the track's glide up and a new latched note
+slides into the old one. Low notes (C1..C3) suit it; it brings its own
+delay and cloud, so it wants no reverb on top beyond a little.
+
 `midi`: sends the track's notes to a MIDI device instead of playing them.
 Only for a song that drives outboard gear; it is silent in the browser and in
 `audition_song`, so never use it unless asked.
@@ -154,12 +168,31 @@ one.
 - Filter: cutoff 1 is open. A bass closes to 0.3..0.5 with `env` 0.3..0.6 and
   a short decay for a plucked shape; a pad opens slowly with `attack`.
 - Fx go in chain order: vinyl, cassette, fuzz, ringmod, shaper, crush,
-  autowah, chorus, phaser, flanger, pitchshift, delay, reverb. A stage is on
+  autowah, chorus, phaser, flanger, pitchshift, repeat, prism, delay, reverb. A stage is on
   when its wet (or amount) is above 0. Delay: `sync: true` with `div` 0.75
   for a dotted eighth, 0.5 an eighth, 0.333 a triplet; `fbk` 0.3..0.5.
   Reverb: `decay` 1..2 s tight, 4..8 s a wash. Crush: `bits` 6..8 and
   `rate` 0.3..0.5 for lo-fi. Fuzz or shaper for weight; vinyl or cassette
   for a bed of noise that only plays while the track plays.
+- Prism is a whole pedalboard in one stage: four modules (character,
+  movement, diffusion, texture), each a mode and an amount, 0 takes one out.
+  Drive + doubler + reels + cassette at 0.3 each is warm and worn; swell +
+  space at a high `time` turns a pluck into a pad; fuzz + pitch (move 1,
+  octave up) + reverse is a lead that falls apart; `broken` or `interference`
+  on a texture for a part that should sound damaged. `wet` 1 puts the whole
+  track through it.
+- Repeat is a beat repeat and a slicer, on the sequencer's grid. `mode:
+  "repeat"` captures `grid` of the track at `offset` into every `interval`
+  and repeats it for `gate`, with `chance`: the defaults are a sixteenth
+  rolled over the last beat of the bar, half the time. `pitch` drops each
+  repeat (a roll that falls like a tape stopping), `decay` fades each one.
+  `mode: "slice"` cuts the track into `grid` slices and swaps them, with
+  `chance`, for others from the `interval` before: a drum loop reshuffled
+  live; `vary` plays some backwards, `decay` chops them short. The discrete
+  knobs are 0..1 picks from lists (grid 1/64 .. 1 bar, interval 4 .. 64
+  steps, gate 1 .. 32 steps). `wet` 1 is an insert, the repeat replacing the
+  beat; a lane on `fx.repeat.chance` at 0 then 1 on the last bar is a fill.
+  Put it on the drums or a bus, before the delay and reverb (it is).
 - Sidechain: `set_comp` on the bass with `source` the kick's index,
   threshold -30, ratio 6, release 0.15: the pumping.
 - Levels: kick 0.9, snare 0.8, hats 0.5..0.6, bass 0.8, everything else

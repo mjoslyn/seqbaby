@@ -469,13 +469,16 @@ export function init() {
   // and into building the studio. Guarded: nothing in the engine requires the
   // preloader to exist (the legacy static server serves no overlay at all).
   try { window.__sqPreload?.step("engine"); } catch {}
-  // Create the AudioContext and bind Tone to it BEFORE anything reads
-  // Tone.Transport. Tone.Transport's internal Clock latches onto the context's
-  // time at first access; if we defer this to the play-click handler, Tone's
-  // default context has already been ticking for several seconds and the clock
-  // stays anchored there, so Transport.start("+0.1") resolves to "default-ctx
-  // time + 0.1", which is several seconds in the future against our fresh
-  // AudioContext. Diagnostics confirmed: drift == time from page load to click.
+  // Create the AudioContext and bind Tone to it. The sequencer must always
+  // reach the transport through Tone.getTransport(), never Tone.Transport:
+  // in Tone 15, Tone.Transport (like Tone.Draw) is a constant bound at import
+  // to Tone's DEFAULT context, a second AudioContext that Tone.start() only
+  // resumes on the play click. Its clock then runs behind this one by however
+  // long the studio context has been running, so every step time it hands the
+  // loop is in the past here, and the Math.max(now + 0.002) clamp in the
+  // transport loop fired every note "now": no lookahead (its 0.1s also ignored
+  // the tuning below), swing and nudges flattened, timing at the mercy of the
+  // main thread (measured: note gaps off by p95 50-100ms, worst ~220ms).
   // Creating the context here is fine — it starts suspended and Tone.start()
   // resumes it inside the user gesture.
   // "interactive" asks for the smallest render buffer the device supports,
@@ -485,7 +488,12 @@ export function init() {
   // visualOutputLatency() so the playhead stays aligned with the ear.
   state.audioCtx = new AudioContext({ latencyHint: isMobileDevice() ? "playback" : "interactive" });
   shimFirefoxListenerParams(state.audioCtx);
-  Tone.setContext(state.audioCtx);
+  // `true` disposes Tone's default context: closes its AudioContext (which
+  // the old Tone.Transport path used to resume on play, an idle second audio
+  // thread for the whole session) and stops its 20Hz worker ticker. Anything
+  // still reaching for Tone.Transport / Tone.Draw now fails loudly instead of
+  // quietly running on the wrong clock.
+  Tone.setContext(state.audioCtx, true);
   // Widen the transport's scheduler lookahead. Tone's clock ticks on the main
   // thread; when that thread stalls (layout, GC, a heavy pattern switch — all
   // worse on mobile), callbacks fire late and every note they schedule gets
@@ -629,7 +637,7 @@ export function init() {
   document.getElementById("bounce-track")?.addEventListener("click", () => runBounce("bounce-track", "track"));
   for (const btn of document.querySelectorAll(".sq-dl__btn .sq-dl__icon")) btn.innerHTML = ICON_BOUNCE;
   document.getElementById("bpm").addEventListener("input", e => {
-    if (state.ready) Tone.Transport.bpm.value = Number(e.target.value);
+    if (state.ready) Tone.getTransport().bpm.value = Number(e.target.value);
     retuneSyncedLFOs();
     for (const t of state.tracks) {
       if (t.fxRack && t.fxConfig.delay.sync) t.fxRack.applyDelay({});
@@ -878,7 +886,7 @@ export function init() {
   // permanently-dead "closed" AudioContext that no resume() can revive, so the
   // app looks fine but never makes sound again until a manual reload.
   window.addEventListener("pagehide", (e) => {
-    try { Tone.Transport.stop(); } catch {}
+    try { Tone.getTransport().stop(); } catch {}
     if (!e.persisted) { try { state.audioCtx?.close(); } catch {} }
   });
   // Visibility resume: iOS often suspends or "interrupts" the audio context

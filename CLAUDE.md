@@ -16,7 +16,7 @@ env / fx / eq / comp / mod / automation per track.
   `public/woscillators.js` →
   `public/js/main.js` (ES module). `middleware.ts` refreshes the Supabase
   session on every request *except* static engine assets.
-- **Engine**: ~69 dependency-free vanilla ES modules in `public/js/`. No
+- **Engine**: ~72 dependency-free vanilla ES modules in `public/js/`. No
   bundler — edit, reload. `window.seqbaby` (from `appApi.js`) exposes `state`
   and serialize/apply hooks to the React shell (typed in `app/seqbaby.d.ts`).
 - **Accounts + data**: Supabase (Postgres + Auth + RLS). Tables: `profiles`,
@@ -105,7 +105,7 @@ env / fx / eq / comp / mod / automation per track.
 - `main.js` — bootstrap `init()`: creates the AudioContext, binds Tone to it,
   wires all UI, starter tracks, unlock listeners. Entry point.
 - `transport.js` — `ensureAudio()`, `togglePlay()`, the single
-  `Tone.Transport.scheduleRepeat` loop, `loadWorklet()`, `requestMidiIfNeeded()`.
+  `Tone.getTransport().scheduleRepeat` loop, `loadWorklet()`, `requestMidiIfNeeded()`.
 - `voices.js` — every voice class + `buildVoiceForEngine` dispatch + the
   emulator builder functions.
 - `state.js` — global `state`, `emptyPattern`, `aliasPattern`, `switchPattern`.
@@ -122,6 +122,12 @@ env / fx / eq / comp / mod / automation per track.
   file shape again. It is the rack's, not an engine's, and it exists because a
   convolution reverb's decay cannot be changed without re-rendering it. See the
   reverb section below.
+- `prism.js` — the prism: a four-module console (character → movement →
+  diffusion → texture → tilt) as one AudioWorklet rack stage. Same file
+  shape as crusher.js/reverb.js. See the prism section below.
+- `repeat.js` — the repeat: a beat repeat and a live slicer as one
+  AudioWorklet rack stage, clocked by the transport's steps. Same file shape
+  again. See the repeat section below.
 - `filterModels.js` — the filter control's eight analog-modeled characters
   (fat/crisp/squelch/edge/poly/velvet/scream/growl), an AudioWorklet insert
   effect standing in for the plain BiquadFilterNode when `t.filter.type`
@@ -266,6 +272,10 @@ env / fx / eq / comp / mod / automation per track.
   note audible on a speaker that cannot reproduce 40Hz, plus a 303 resonator
   band-split above the crossover so the acid never reaches the fundamental. See
   the subby section.
+- `drone.js` — **drone**, after the Grone: an equation (bytebeat)
+  oscillator into an MS-20 style filter, an LFO, a delay that runs backwards
+  and a granular cloud, all in one AudioWorklet, with notes that latch. See
+  the drone section.
 - `hexop.js` — the hexop, same shape again, plus the 32-algorithm
   table, the panel's generated key lists and the preset voices. See the hexop
   section below.
@@ -293,20 +303,28 @@ env / fx / eq / comp / mod / automation per track.
 ## Dev commands
 
 ```
-npm run dev            # Next.js dev server on :3000 (studio + engine work with no env)
+npm run dev            # Next.js dev server on :3000 (needs the Supabase env, below)
 npm run build && npm run start   # production build + serve
 npm run netlify:dev    # full Netlify emulation on :8888
 npm run legacy:dev     # pre-Next static Node server on :5173 (engine assets only)
 npm test               # node --test: the pure modules (session format, chance gen,
                        #   version tree, song names, share card copy, the song builder, the jam diff,
                        #   song previews, grid avatars, the songs and people explorers,
-                       #   the Strudel bridge, the arrangement's format and builder calls)
+                       #   the Strudel bridge, the reverb, the filter models, the guitar,
+                       #   the prism, the repeat, the arrangement's
+                       #   format and builder calls)
 npm run mcp            # the MCP server on stdio (mcp/server.mjs) — an agent writes songs
 npm run test:rls       # RLS policy tests — builds a throwaway Postgres in docker
 ```
 
-Account features need `NEXT_PUBLIC_SUPABASE_URL` + `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-(see `.env.example`). The engine itself runs without any env.
+`NEXT_PUBLIC_SUPABASE_URL` + `NEXT_PUBLIC_SUPABASE_ANON_KEY` are required
+(see `.env.example`): without them `/studio` and the other pages 500 ("Your
+project's URL and Key are required to create a Supabase client"). The engine
+modules themselves (`public/js`, the tests, the MCP server) need no env. For
+engine work with no project, any syntactically valid pair gets the pages up
+(e.g. `NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:9
+NEXT_PUBLIC_SUPABASE_ANON_KEY=dummy`); account features then fail, the studio
+plays.
 
 ## Audio signal chain (per track)
 
@@ -332,10 +350,14 @@ voice → filterNode → eqNode → compressor → fxRack → masterGain → mas
   from any track's `voice.getOutputNode()`).
 - `fxRack` — `FXRack`, serial chain in this order: **vinyl → cassette → fuzz →
   ring mod → wave shaper → crush → auto-wah → chorus → phaser → flanger →
-  pitch shift → delay → reverb**. `defaultFxConfig()` keys match. Chain order
+  pitch shift → repeat → prism → delay → reverb**. `defaultFxConfig()` keys match. Chain order
   matters for LFO/automation targets.
 - **crush is a converter, not a rounding function** (`crusher.js`) — see the
   bitcrush section below.
+- **prism is four effects in one stage** (`prism.js`) — see the prism section
+  below.
+- **repeat runs on the sequencer's clock** (`repeat.js`) — see the repeat
+  section below.
 - **reverb is a feedback delay network, not a convolver** (`reverb.js`) — see
   the reverb section below. Its wet/dry is still a `Tone.CrossFade`, so `wet`
   is the same Tone.Param an LFO connects to and a lane ramps.
@@ -500,6 +522,110 @@ in ─ dc ─ predelay ─ 4 allpass diffusers ─┬─▶ 8 delay lines ─┬
 - `reverb.js` is importable from Node (no DOM, no Tone), which is what lets
   `test/reverb.test.js` render the tank and measure all of the above.
 
+## Prism (`prism.js`) — a four-module console in one rack stage
+
+Four effects in series, each module a choice of five characters and one
+amount knob, with five knobs shared between them. The modules are voiced to be
+stacked: a drive for a doubler after it, an echo a tape texture then wears
+down. Not a model of any particular pedal; the characters are reasoned
+versions of what their names say.
+
+```
+in ─▶ CHARACTER ─▶ MOVEMENT ─▶ DIFFUSION ─▶ TEXTURE ─▶ TILT ─▶ out
+      drive        doubler     cascade      filter
+      sweeten      vibrato     reels        squash
+      fuzz         phaser      space        cassette
+      howl         tremolo     collage      broken
+      swell        pitch       reverse      interference
+```
+
+- **Config** is `t.fxConfig.prism`: `wet` (the mix, the stage's level key),
+  `char` / `move` / `diff` / `tex` (the four amounts), `charmode` /
+  `movemode` / `diffmode` / `texmode` (the characters, by name, from
+  `PRISM_MODES` in soundDefaults.js), and `tilt` / `rate` / `time` / `sens` /
+  `drift`. Every knob is 0..1 and a k-rate AudioParam on the node, so one list
+  (`PRISM_KNOBS`) spells all three namespaces: `fx-prism-<k>`, `prism_<k>`,
+  `fx.prism.<k>`. The mix is the rack's linear crossfade around the node
+  (`prismWetBus`), like crush.
+- **A module at amount 0 is out of the circuit** and costs nothing; its state is
+  cleared when it comes back, so an old echo cannot replay. The first fifth of
+  an amount is a crossfade from clean. On `pitch` the amount picks the interval
+  (−12, −7, −5, +5, +7, +12), so that module is fully in almost at once.
+- **A character change fades the module out, swaps, fades back** (12ms each
+  way) and clears its buffers. The modes are a `postMessage`, never a rebuild.
+- **Every noise it makes follows its input**: the cassette hiss, the
+  interference static, the howl's feedback are scaled by an envelope of the
+  signal, so silence in is silence out (tested, all characters at full).
+- **The idle skip waits out the longest buffer** (3.4s) on silent input AND
+  needs silent output, so a 12s space tail is never cut. The diffusion buffers
+  are allocated the first time that module is switched on, not per track.
+- **space's tail reads true**: the in-loop damping shortens the tail, so the
+  coefficients use a measured `SPACE_COMP` by knob position (within ~10% from
+  0.5 to 12s, pinned in `test/prism.test.js`).
+- **Partial configs** (a sparse song, a session load assigning the stage whole)
+  are filled from the defaults by `applyPrism`, and the filled fields go to the
+  node too, so the panel and the node hold the same numbers.
+- Loading: Blob-URL registration from `loadWorklet()`; if it fails the stage
+  passes the signal through (`prismParams` empty, every write checks).
+
+## Repeat (`repeat.js`) — a beat repeat and a slicer, on the transport's grid
+
+One rack stage, two characters (`mode`), both of which only mean anything on
+the beat:
+
+```
+repeat   every INTERVAL, at OFFSET into it, with CHANCE: capture GRID of the
+         track and repeat it for GATE. PITCH drops each repeat, DECAY fades
+         each one, VARY lets a trigger pick a grid either side of the knob.
+slice    cut the track into GRID slices as it plays; at each, with CHANCE,
+         swap it for a DIFFERENT slice of the INTERVAL before, held for GATE.
+         VARY plays some backwards, PITCH transposes them, DECAY chops them.
+```
+
+- **The clock is the transport's**, not the stage's own: the scheduler posts
+  every step it schedules to every rack (`FXRack.clockStep`: the step's grid
+  time, `state.tick`, the step length), ahead of time as it does notes, and
+  `stopPlayback` posts a stop (`clockStop`). The processor queues them, snaps
+  its step position to each at the exact frame it lands, and integrates
+  between. So the grid is the sequencer's sample for sample, a tempo change
+  lands on the next step, and a jam's shared start tick lines repeats up
+  across screens. Posted whether or not the stage is in the chain, so it
+  knows where the bar is the moment it is switched on. No clock for four
+  steps: the stage lets go and passes its input.
+- **Unswung, and 16 steps to a bar.** The interval and gate are counted in
+  steps of `state.tick`, so in 7/8 an interval of 16 steps is not a bar.
+- **Every decision is a hash of (step, which)**, the chance generator's and
+  the random square's bargain: the same song repeats the same way every time.
+  A slice swap never picks the slice that would have played anyway.
+- **Insert, not mix**: the node's output is the input except while a repeat
+  holds, so the rack's linear crossfade (`repeatWetBus`) makes `wet` 1 an
+  insert and less a mix over it.
+- **Every edge is faded (2ms)**: slice heads and tails, entering and leaving a
+  run, a mode switch (fade out, swap, carry on). A repeat is a loop point in
+  the middle of a waveform.
+- **The discrete knobs are 0..1 AudioParams that pick from lists**
+  (`REPEAT_GRID` / `REPEAT_INTERVAL` / `REPEAT_GATE` in soundDefaults.js,
+  joined into the processor source as a prelude so the readouts and the
+  processor share one table). Read when a decision is made, so an LFO on the
+  grid is a ratchet that speeds up and slows down, and a lane on the chance
+  is a fill. One list, three namespaces: `fx-repeat-<k>`, `repeat_<k>`,
+  `fx.repeat.<k>` (`REPEAT_KNOBS`).
+- **The buffer is 10s of stereo, made on the first audio**, not per track.
+  It bounds how far back a slice can reach (a swap that would need more, or
+  more than has been recorded since the stage came on, plays the input) and
+  how long a repeat can hold.
+- `test/repeat.test.js` renders the processor in Node with a simulated clock:
+  the wire when stopped, which steps sound like which, decay and pitch per
+  repeat, determinism, every slice swapped for a different one, reverse,
+  chop, letting go on stop, no clicks across a mode switch.
+- Loading: Blob-URL registration from `loadWorklet()`; a failure passes the
+  signal through (`repeatParams` empty, every write checks).
+- **A mode select is compared with what the node was last told**
+  (`_repeatMode`, and `_prismModes` for the prism), not with the config: the
+  panel writes `t.fxConfig`, which IS `rack.config`, before calling
+  `applyRepeat` / `applyPrism`, so comparing the two never saw a change. That
+  is how prism's character selects reached the node only at build time.
+
 ## Analog filter models (`filterModels.js`) — eight characters on the filter control
 
 The filter control's `type` (`t.filter.type`) is one of the plain
@@ -576,8 +702,14 @@ svf family (velvet, scream, growl):
 
 All of this lives in `main.js` `init()` and `transport.js`:
 
+- **The transport is `Tone.getTransport()`, never `Tone.Transport`.** In Tone 15
+  `Tone.Transport` (and `Tone.Draw`) is a constant bound at import to Tone's
+  default context, a second AudioContext that only starts on the play click,
+  so its clock runs behind ours and every step landed in the transport loop's
+  `now + 0.002` clamp: no lookahead, swing and nudges lost, measured note gaps
+  off by p95 50-100ms. `getTransport()` is the studio context's.
 - The AudioContext is created at `init()` and `Tone.setContext(ctx)` runs
-  BEFORE anything reads `Tone.Transport` (its clock latches onto the context's
+  BEFORE anything reads the transport (its clock latches onto the context's
   time at first access).
 - **First-gesture unlock**: capture-phase `pointerdown/keydown/touchstart`
   listeners call `primeAudioForIOS()` whenever the context is suspended.
@@ -630,7 +762,7 @@ Voice interface: `hit(midi, time, dur, vel, opts?)`, `setParam`,
 
 All engine type `drum-synth`. The five Tone.js analog-mono presets are each
 wrapped in `makePolyPool(size, buildOne)`; the silverbox, the contagion, the hexop, the
-guitar, the bass and subby are the odd ones out — AudioWorklet models that handle
+guitar, the bass, subby and the drone are the odd ones out — AudioWorklet models that handle
 their own voicing (the silverbox and subby are mono, deliberately; the rest
 polyphonic). See their
 sections below. The guitar and bass keep their old pluck builders in voices.js
@@ -647,6 +779,7 @@ sections below. The guitar and bass keep their old pluck builders in voices.js
 | `dm:guitar`    | `buildGuitarVoice`    | 6 (internal) | electric guitar rig, AudioWorklet (`guitar.js`) |
 | `dm:bass`      | `buildBassVoice`      | 4 (internal) | electric bass rig, AudioWorklet (`bass.js`) |
 | `dm:sub`       | `buildSubBassVoice`   | mono | subby, the sub bass, AudioWorklet (`subbass.js`) |
+| `dm:drone`     | `buildDroneVoice`     | 6 (internal) | equation-oscillator drone, filter, delay, cloud, AudioWorklet (`drone.js`) |
 | `dm:tines`     | `buildTinesVoice`     | 6 | electric piano |
 | `dm:oracle`    | `buildOracleVoice`    | 6 | poly analog |
 
@@ -852,18 +985,59 @@ STRING ──▶ PICKUP ──▶ tone pot ──▶ AMP ──▶ CAB ──▶
 - **The string is a waveguide** — a delay line one period long with a damping
   filter (highs die first, which is why a guitar note gets duller as it rings),
   two allpasses for stiffness/inharmonicity, and a fractional-delay allpass so
-  it's actually in tune. Measured at ≤1.2 cents across four octaves; the
-  compensation for the loop filters' own phase delay in `retune()` is what buys
-  that, and removing it makes the whole instrument play flat.
-- **The pluck is a noise burst combed at the pick position**, which is the
-  difference between picking over the neck and by the bridge. The pickup combs
-  it again on the way out and adds its own LC resonance (single 6.2kHz /
-  humbucker 3.1kHz / p90 4.4kHz — that peak is what you hear when you flick the
-  selector, not the coil count).
+  it's actually in tune. Measured at ≤1 cent across four octaves; `retune()`
+  subtracts each loop filter's phase delay AT THE NOTE (the DC figure is most
+  of a sample out at the top of the neck), and removing that makes the whole
+  instrument play flat.
+- **The losses are times, not a per-lap gain** (`setLosses`). A Karplus-Strong
+  loop loses a fixed fraction per period, so one loop gain gave the low E a
+  1.6s ring and the E two octaves up 0.08s — the top of the neck plinked and
+  the bottom droned, and it was the single most unnatural thing about the
+  instrument. Now the sustain slider is a T60 in seconds (0.35s at 0, ~1.3s
+  at the 0.4 default, ~8s at 1, shortened by `(82Hz/f)^0.2` up the neck so a
+  high note rings a little less, not sixteen times less), and the damping
+  one-pole is solved in closed form so the partials around 4kHz die in a
+  quarter of that. Measured: E2 1.34s / E4 0.96s / E6 0.72s at the default.
+  Palm mute pulls both times down together.
+- **The pluck is the velocity wave a released string has**, not a noise burst.
+  A plucked string starts as a triangle; the delay line carries velocity
+  (a magnetic pickup reads velocity), and the velocity wave of a released
+  triangle is a bipolar rectangle with the pick-position comb already in it
+  and a 1/n spectrum. The noise burst it replaced had a FLAT spectrum, so every
+  attack was a zap the amp then clipped, and a fresh random harmonic balance
+  per note (measured: the same note twice differed by 3dB; E2's second
+  harmonic came out 11dB over its fundamental). Noise survives as the pick's
+  scrape, mixed under the pulse. The rectangle's corners are rounded by how
+  fast the pick lets go — a one-pole whose corner runs from 400Hz (a thumb)
+  to 5kHz (a hard plectrum) with the pick control, and higher the harder the
+  hit — which is what makes velocity brightness and not only level. A hard pluck also starts up to ~15 cents sharp and settles over 60ms
+  (tension modulation, the "boing" of a picked low string); it retunes per
+  block while it settles, and measured against the same note without it that
+  adds no clicks.
+- **The pickup combs the string again** at its own position (a tap `p` of a
+  PERIOD back in the line for a pickup `p` of the way along the string — it
+  was `2p`, which put a bridge humbucker's first notch on the 4th harmonic
+  instead of the 8th and hollowed every pickup out) and adds its own LC
+  resonance (single 6.2kHz / humbucker 3.1kHz / p90 4.4kHz — that peak is
+  what you hear when you flick the selector, not the coil count).
 - **Amp**: asymmetric first stage → tone stack → second stage → presence in the
   power-amp loop → soft clip into a sagging supply. Five models (clean / tweed /
   brit / hi-gain / jazz) differing in gain, bias, stack frequencies and voicing.
-  Drive is **exponential** (`0.7·g^drive²`) because a gain pot is.
+  Drive is **exponential** (`0.45·g^drive²`) because a gain pot is; the 0.45
+  puts a single note at drive 0 about 6dB under the first stage's knee, so
+  the bottom of the slider is clean on every amp (it was 2.2, which clipped
+  the attack of every note on the cleanest setting and made a hard pick come
+  out duller than a soft one). **The amp is 2x oversampled**, first stage to
+  power amp, three biquads up and three down: with a hundred times gain into
+  three clippers the fold-back was 27dB under the note on hi-gain, which is a
+  fizz no speaker made; it is 60dB under now. The strings and the cab stay at
+  the host rate. The output trim follows the gain the rig is actually applying
+  through the clippers' own knee, so a clean amp and a saturated one land at
+  about the same level.
+- **A chord is a strum.** Notes posted for the same instant land 4ms apart
+  in the order they arrived (root first, as the transport sends them), since a
+  pick cannot be on six strings at once; it also takes the top off a chord's
+  attack, which six coincident pulses made 10dB above a note's.
 - **Cab**: four biquads, five cabs. It's the biggest filter in the chain.
 - **BLOOM is real feedback**: a delayed, bandpassed copy of the cab output is
   injected back into each *gated* string, scaled by that string's own envelope.
@@ -900,6 +1074,32 @@ STRING ──▶ PICKUP ──▶ tone ──┬── clean (lows, kept clean) 
                              └── sub octave (tracked) ──────┘
 ```
 
+- **The pluck is a pulse, not a noise burst.** The loop is filled with the
+  velocity wave of a string pulled aside at the pick position and released (a
+  1/n spectrum under the pick comb, rounded by the hand's hardness and by
+  velocity, with a few ms of scrape noise on the edge), so the fundamental
+  leads and the note starts with a thump. The guitar's Karplus-Strong burst is
+  3ms of noise; on a low E it was 24ms, measured as 178 zero crossings in the
+  first period and a quarter of a second before a waveform appeared, with the
+  fundamental 13-17dB under the 2nd and 3rd harmonics. That was most of what
+  read as unnatural. A little jitter in position and hardness per note keeps a
+  run of equal notes from being one sample eight times.
+- **Losses are per second, not per trip** (`setLosses`): the loss filter's
+  coefficient scales as `sqrt(f/110)` and the fundamental's per-trip loss as
+  `sqrt(110/f)`, so a partial near 850Hz decays at about the same rate on E1 as
+  on A2. With one coefficient for every note, E1's 1st through 20th partials all
+  decayed at the same 10dB/s and the low strings rang like an organ.
+- **The stretch is a real inharmonicity coefficient**, `B ≈ 2.9e-4` for a
+  roundwound E at the default `stiff`, falling for higher strings: `dispCoef`
+  solves the coefficient of an 8-stage first-order allpass cascade per note so
+  the 10th partial sits exactly at `n·f0·sqrt(1 + B·n²)` (it is the loop's
+  PHASE delay that has to fit, a third of the group delay's quadratic term,
+  which is how a first attempt came out at a third of the stretch). The two
+  fixed allpasses it replaces measured dead harmonic on a bass.
+- **Two polarizations per string** (`makeString`: `a` and `b`), the second
+  sensed at 0.55, lost into the bridge faster (`g^2.6`) and tuned 0.28Hz up,
+  for the two-stage decay and slow swell of a real note. The fretboard is in
+  one plane only.
 - **The dirt is parallel and highpassed.** Distorting a bass whole makes the
   fundamental intermodulate with everything above it and the low end vanishes,
   so GRIND only works above XOVER and the clean lows go back underneath.
@@ -908,10 +1108,15 @@ STRING ──▶ PICKUP ──▶ tone ──┬── clean (lows, kept clean) 
   "more compression" control.
 - **Fret buzz is a one-sided clip inside the string's own loop** (the fretboard
   is only on one side of the string). Wound up with the hand control at the top,
-  that *is* slap.
+  that *is* slap. Its threshold is set against the pulse's peak, so the default
+  `fret` 0.25 is clean and the top of the knob catches most of a hard note.
 - **Round vs flat** (`bsstrs`) scales the loop damping, the excitation
   brightness and the dispersion together — flats lose their highs at once and
   have far less clank.
+- `test/bass.test.js` pins all of the above by rendering the processor source
+  in Node, as `reverb.test.js` does: tuning, the fundamental's level, the
+  attack's zero crossings, the decay rates, the stretch (solved from the loop's
+  phase response), DC, and velocity.
 - The octaver is a tracked oscillator following the string's envelope, not a
   flip-flop divider, so it never glitches (a real one does).
 - **Controls** — DRIVE / TONE / COMP / SUSTAIN plus `sq-param-group--bass`
@@ -1013,6 +1218,77 @@ SUB OCT --------+---------------------------------------------+     above: RESON
   guitar/bass from `loadWorklet()`; a failure falls back to a plain Tone
   `MonoSynth` sine (no harmonics path, so inaudible on a small speaker, but
   never silent).
+
+## Drone (`dm:drone`, `public/js/drone.js`)
+
+Modelled on the Grone: a drone voice built around an oscillator that
+is a counter and a formula rather than a wave. Named for what it does, like
+the other emulators.
+
+```
+EQUATION OSC x6 ─┐   (16 equations, A0 / A1 / A2, rate)
+NOISE ───────────┼─▶ VCF (MS-20 style) ─▶ DELAY (fwd / rev) ─▶ CLOUD (grains, freeze) ─▶ L/R
+LFO (8 shapes) ──┴──────▲ MOD1 ──────────────▲ time
+```
+
+- **The oscillator is bytebeat.** A counter `t` advances, one of sixteen
+  integer formulas of `t`, A0, A1 and A2 is evaluated, and its low eight bits
+  are the output, held between ticks like an 8-bit DAC. Terms with a small
+  shift are the pitch, terms with a big one change a few times a second, and
+  the bitwise operators between them are rhythm and timbre at once.
+- **The note is the sample rate**, which is what the hardware's rate knob
+  is. The counter runs at `256 f / a`, so every equation's `t*a` term ramps
+  once per period of the note and A0 changes how fast the slow terms run
+  against the pitch rather than retuning the track. `rate` trims it by up to
+  two octaves either way.
+- **A0 / A1 / A2 are integers** (A0 1..16 the multiplier, A1 / A2 2..15 the
+  shifts), so a sweep steps and an LFO on one is a sequence. They are the
+  timb / morph / decay sliders; harm is the cutoff, as on the silverbox.
+- **Every note starts its counter at a fixed offset (`T0`), not at zero.**
+  From zero, the slow terms are all zeros for seconds and the `&`-masked
+  equations were silent until they filled in (measured 30dB down).
+- **A level trim per equation** (`EQ_TRIM`), measured across a grid of
+  settings and three octaves, so the select changes timbre and not level:
+  fifteen sit within 0.2dB, smear 4dB under (an OR holds most bits high, so
+  it is mostly DC, and more trim only clips).
+- **The filter is the MS-20's character, not a measurement**: a 12dB TPT
+  state-variable lowpass with the bandpass state clipped inside the loop, so
+  resonance screams and then holds its own level. Oscillator and filter are
+  2x oversampled.
+- **The LFO is the Grone's eight** (ramp up / down, square, triangle, sine,
+  sweep, random levels, random slopes), free-running, into the cutoff (MOD1)
+  and, as on the Grone 2, the delay time.
+- **The delay reverses** with two heads walking backwards through
+  delay-time-long chunks under crossfading triangular windows.
+- **The cloud is Clouds' granular mode, simplified**: a 4s buffer, position,
+  size, pitch (±2 octaves), density, texture (window shape), spread,
+  feedback, blend, and freeze, which stops recording so the grains keep
+  sounding with no notes playing. Clouds' other modes and its reverb are not
+  modelled (the rack has a reverb).
+- **HOLD latches by default.** The step's length is ignored and a note holds
+  until a note arrives at a later instant (notes on the same instant are a
+  chord and all hold), or the transport stops (`off` releases everything).
+  With the track's glide up, the k-th tone of a new chord takes over the k-th
+  voice of the old one and slides there; voices nobody claimed are released
+  once that instant's events are done (`releasePending`). `gate` is an
+  ordinary synth.
+- **Mute and solo let a latched note go** (`releaseSilencedTracks`,
+  signal.js, via the voice's `releaseHeld`). Mute withholds the transport's
+  next note, which is the only thing that releases a latch, so a muted drone
+  used to drone on. It fades on its own release, as any muted note does.
+- **An idle drone costs nothing**: once nothing is held and the output has
+  been under -100dB for longer than the cloud's buffer reaches back, the
+  block is skipped, unless frozen.
+- **Controls** — `drn` + short key → `drone_<short>` / `drone.<short>`, from
+  `DRONE_NUM_CTLS` / `DRONE_SEL_CTLS` in engineData.js. `drn`, not `d`: that
+  is the hexop's. The equation and LFO-shape selects store NAMES
+  (`drneq: "octaves"`). Patches via `droneTone(name)`; panel markup is
+  `DRONE_PANEL` in `app/studioMarkup.ts` with the dropdown filled at runtime.
+- `test/drone.test.js` renders the processor in Node: pitch at the note, the
+  rate knob's octave, every equation audible and bounded, latch / stop /
+  glide, freeze, and idle silence.
+- **Loading** — Blob-URL registration from `loadWorklet()`; a failure falls
+  back to a detuned saw `PolySynth` with a slow envelope.
 
 ## Granular (`dm:granular`, `GranularVoice` in voices.js)
 
@@ -1257,7 +1533,7 @@ chainBarCount` — plus runtime slots added by the unlock architecture
 
 ## Transport
 
-Single `Tone.Transport.scheduleRepeat` at `"16n"`. Each callback, per track:
+Single `Tone.getTransport().scheduleRepeat` at `"16n"`. Each callback, per track:
 
 1. Accumulate `t.speedAccum += t.speed`; while `≥ 1`, fire a step (per-track
    tempo multiples / polymeter).
@@ -1291,7 +1567,7 @@ a voice *releases* it, so a long-release patch fades back in over the top of the
 silence you just asked for (measured: a pad still audible a second after stop).
 And it can't be left down until the next start either, which is what it used to
 do — the keyboard plays through the same bus, so every key was silent once you'd
-pressed stop. `Tone.Transport.start(lead, 0)` with the explicit 0 offset
+pressed stop. `Tone.getTransport().start(lead, 0)` with the explicit 0 offset
 is the canonical rewind (avoids Tone 15's stop/cancel/position bugs).
 
 ## Knobs (`knob.js`) — a skin over the range inputs
@@ -3445,7 +3721,7 @@ fails. Real-time capture — see Known limitations.
 ## Engines catalog (`buildEngineCatalog`)
 
 Groups in order: `plaits` (16) · `drum / synth` (808/909 kit + poly-saw /
-fm-bell / pad) · `Emulators` (silverbox + contagion + hexop + guitar + bass + subby + 5 analog-mono) · `texture` (`dm:granular`) ·
+fm-bell / pad) · `Emulators` (silverbox + contagion + hexop + guitar + bass + subby + drone + 5 analog-mono) · `texture` (`dm:granular`) ·
 `wavetable` (`wt:akwf`) · `sampler` (single unified entry) · `saved patches`
 (`saved:<name>`) · `midi` · `bus` (the fx bus — not an instrument, see below).
 The engine key string is the source of truth.
@@ -3523,7 +3799,14 @@ through a 6ms fade on its gain).
   (`paintPatternUI`: grids, roll, lanes, mod panel, pattern bar) goes to its
   own task straight after — a `setTimeout`, not rAF, which stops in an occluded
   window while the transport runs on. It measured 11ms empty and 23ms on a
-  full session. A click paints synchronously, as it always did.
+  full session. A click paints synchronously, as it always did. **One track
+  per task**: Tone's clock ticks off a worker message, which only runs between
+  tasks, so the whole paint in one task held the scheduler, and on a slow CPU
+  (4x throttle, eight tracks) it ran past the lookahead and the first steps of
+  the new bar played up to 200ms late, a stutter on the 1 in chain mode.
+  `refreshParamIndicators` was most of it: it found a track's roots with
+  `document.querySelectorAll('[data-track-id=…]')`, a walk of the whole
+  studio per track; `trackRoots` takes `t.el` plus the body-level overlays.
 - **The history snapshot waits for idle time while playing**
   (`history.js` `settle`, `requestIdleCallback` with a 1.5s deadline). And only
   the first event of a gesture resolves a label; the sixty `input` events a
@@ -3558,7 +3841,7 @@ through a 6ms fade on its gain).
   amount; every `noiseBurst` reads one shared 2s noise buffer at a random
   offset instead of filling its own (60,000 randoms for a 909 open hat).
 - **The worklets' event queues do not allocate** (`EventQueue` in contagion.js /
-  hexop.js / guitar.js / bass.js / subbass.js, `NoteQueue` in silverbox.js).
+  hexop.js / guitar.js / bass.js / subbass.js / drone.js, `NoteQueue` in silverbox.js).
   They were plain arrays, so every note cost two object literals, a `sort()`
   with a fresh comparator closure, and — on a stop — a `filter()` building a
   whole new array. That is garbage generated **on the audio thread**, where a
@@ -3655,19 +3938,19 @@ through a 6ms fade on its gain).
   in a ref. Don't inline it back into studio/page.tsx.
 - **`tsconfig.json` excludes `public/js/`** — the engine is plain JS with
   JSDoc types; don't rename it to TS or import it into the Next graph.
-- **Don't use `Tone.Time(...)` for the step duration.** `Tone.setContext()` at
-  init leaves Tone's time helpers resolving against a different transport than
-  the one the sequence is scheduled on, so `Tone.Time("16n").toSeconds()`
+- **Don't use `Tone.Time(...)` for the step duration.** Until the transport
+  moved to `Tone.getTransport()`, the sequence ran on the default context's
+  transport while Tone's time helpers read the studio context's, so `Tone.Time("16n").toSeconds()`
   answers 0.125s — the 120bpm value — at *every* tempo, while
-  `Tone.Transport.bpm` reads correctly. That silently scaled note lengths,
+  the sequence's transport read correctly. That silently scaled note lengths,
   swing, per-step micro-timing, automation ramps and arp spans to a fixed
   120bpm (notes half the length of their step at 60bpm, overlapping the next
   one at 180). `baseStepDur` in transport.js derives it arithmetically from
-  `Tone.Transport.bpm.value` instead. Anything else needing musical time should
+  `Tone.getTransport().bpm.value` instead. Anything else needing musical time should
   do the same, or use `currentBpm()` (lfo.js) as the sync helpers do.
 - **Worklet processor sources are template literals** (`silverbox.js`,
   `contagion.js`, `hexop.js`, `guitar.js`, `bass.js`, `subbass.js`,
-  `crusher.js`, `reverb.js`),
+  `drone.js`, `crusher.js`, `reverb.js`, `prism.js`, `repeat.js`),
   so a stray backtick or `${` inside one — including in a comment — truncates
   the string. The module still parses, `node --check` still passes, and the
   failure only shows up as a SyntaxError at engine boot. When editing inside a
@@ -3748,7 +4031,7 @@ Repo: https://github.com/mjoslyn/seqbaby.
   An inline marker (`window.__seqbabyServerBoot`) tells the paths apart, and
   `ScriptLoader.tsx` keeps its onload-chained injection for the soft-nav case
   (e.g. arriving from `/login`).
-- `app/EnginePreload.tsx` emits `modulepreload` for all 69 modules listed in
+- `app/EnginePreload.tsx` emits `modulepreload` for all 72 modules listed in
   `app/engineAssets.ts` (at `engineAsset("/js/<name>")`; the hints used to
   point at the site root and 404). The graph is 8 levels deep, so without it the browser
   needs up to eight sequential round trips just to discover the code.
