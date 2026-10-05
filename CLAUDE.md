@@ -3026,6 +3026,11 @@ v1 ──▶ v2 ──▶ v3 ──▶ v5      (kept editing)
   `saveNamedSong` take `parentVersionId`, defaulting to the song's tip. Open v2
   and the next save names v2, so it branches instead of burying it. That is the
   entire mechanism.
+- **The top-bar `save` asks nothing once a song of your own is open**
+  (`app/SaveButton.tsx`): it saves the next version by id (`saveSong`, off
+  `openSong.versionId`) and says so on the button (`saved v5`). Its name +
+  public popup is only for a session with no song yet, or a template.
+  Renaming, a separate song and publishing are the songs menu's.
 - **Which version is open is shared module state** (`app/songs/openSong.ts`),
   because two islands need the same answer — the songs menu opens versions and
   the top-bar save is what people press afterwards. Both are mounted separately

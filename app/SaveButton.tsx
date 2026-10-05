@@ -7,7 +7,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import { saveNamedSong } from "@/app/songs/actions";
+import { saveNamedSong, saveSong } from "@/app/songs/actions";
 import { markSaved } from "@/app/songs/confirmDiscard";
 import { generateSongName } from "@/app/songs/songName";
 import { suggestSongName } from "@/app/songs/suggestName";
@@ -29,6 +29,12 @@ import styles from "@/app/ui.module.css";
 // A TEMPLATE is the exception: the first save off one always starts a new song,
 // so the field offers a fresh name rather than the template's and the save
 // carries the template's id as its origin instead of as its destination.
+//
+// With a song of your own open there is nothing to ask, so the button saves
+// straight away as its next version, branching off the version that is open,
+// and says how it went on the button itself. The popup is only for a session
+// that has no song yet (or a template, whose first save makes one). Renaming,
+// saving as a separate song and publishing are the songs menu's.
 export default function SaveButton() {
   const [ready, setReady] = useState(false);
   const [open, setOpen] = useState(false);
@@ -38,6 +44,9 @@ export default function SaveButton() {
   const [status, setStatus] = useState<{ text: string; err?: boolean }>({
     text: "",
   });
+  // What the button says after a quick save ("saved v5"), for a moment.
+  const [flash, setFlash] = useState<{ text: string; err?: string } | null>(null);
+  const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   // The name this popup offered, so save can tell an offer left alone from a
   // name the user typed -- only the first is the app's to disambiguate.
@@ -168,14 +177,67 @@ export default function SaveButton() {
     openSong.isTemplate,
   ]);
 
+  useEffect(() => () => {
+    if (flashTimer.current) clearTimeout(flashTimer.current);
+  }, []);
+
+  const showFlash = useCallback((next: { text: string; err?: string }, ms: number) => {
+    if (flashTimer.current) clearTimeout(flashTimer.current);
+    setFlash(next);
+    flashTimer.current = setTimeout(() => setFlash(null), ms);
+  }, []);
+
+  // A song of your own is open: its next version, no questions. By id rather
+  // than by title, so it lands on this song whatever the field last held.
+  const canQuickSave = !!openSong.id && !openSong.isTemplate;
+  const quickSave = useCallback(async () => {
+    if (!window.seqbaby || saving) return;
+    const now = getOpenSong();
+    if (!now.id || now.isTemplate) return;
+    setSaving(true);
+    if (flashTimer.current) clearTimeout(flashTimer.current);
+    setFlash({ text: "saving…" });
+    const data = window.seqbaby.serializeSet();
+    const res = await saveSong({
+      id: now.id,
+      title: now.title,
+      data,
+      // Undefined, never null: null is "this is a root", and a song whose open
+      // version is unknown wants the tip it already has.
+      parentVersionId: now.versionId ?? undefined,
+    });
+    setSaving(false);
+    if (res.error) return showFlash({ text: "not saved", err: res.error }, 4000);
+    markSaved(data);
+    // The next save hangs off the version just written.
+    setOpenSong({ versionId: res.versionId ?? now.versionId });
+    showFlash(
+      { text: res.unchanged ? `no changes · v${res.versionSeq}` : `saved v${res.versionSeq}` },
+      2000,
+    );
+  }, [saving, showFlash]);
+
   if (!ready) return null;
 
   return (
     <div className={styles.songsWrap} ref={wrapRef}>
-      <button className={styles.accountBtn} onClick={() => setOpen((v) => !v)}>
-        save
+      <button
+        className={styles.accountBtn}
+        onClick={canQuickSave ? quickSave : () => setOpen((v) => !v)}
+        disabled={canQuickSave && saving}
+        aria-live="polite"
+        style={flash?.err ? { color: "#f87171" } : undefined}
+        title={
+          flash?.err
+            ? `not saved: ${flash.err}. Press to try again`
+            : canQuickSave
+              ? `save as the next version of \u201c${openSong.title}\u201d`
+              : "save this session as a song"
+        }
+      >
+        {flash?.text ?? "save"}
       </button>
-      {open && (
+      {open && !canQuickSave && (
         <div className={styles.panel}>
           <div className={styles.panelTitle}>save session</div>
           <input
