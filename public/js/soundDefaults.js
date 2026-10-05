@@ -27,6 +27,13 @@ export function defaultFxConfig() {
     phaser:     { wet: 0, rate: 0.3, depth: 0.5 },
     flanger:    { wet: 0, rate: 0.3, fbk: 0.5 },
     pitchshift: { wet: 0, semitones: 0 },
+    // Beat repeat / slicer (repeat.js), clocked by the transport. The discrete
+    // knobs (interval, offset, gate, grid) are 0..1 positions on the lists
+    // below, so an LFO or a lane can sweep them; `wet` is the mix and the
+    // switch. At rest: on the last beat of every bar, half the time, repeat a
+    // sixteenth for a beat.
+    repeat:     { wet: 0, mode: "repeat", chance: 0.5, interval: 0.5, offset: 0.75,
+                  gate: 0.33, grid: 0.33, vary: 0, pitch: 0, decay: 0 },
     // A four-module console in one stage (prism.js): character, movement,
     // diffusion, texture, each a choice of five and an amount, then a tilt eq.
     // `wet` is the mix around the whole of it, and what switches it on.
@@ -37,6 +44,24 @@ export function defaultFxConfig() {
     reverb:     { decay: 2, wet: 0 },
   };
 }
+
+/** The repeat stage's two characters, in the order the processor indexes them:
+ *  `repeat` captures a slice where it triggers and repeats it, `slice` swaps
+ *  the playing slice for one from the window before. */
+export const REPEAT_MODES = ["repeat", "slice"];
+/** Its knobs, every one 0..1 and an AudioParam: `fx-repeat-<k>` the control,
+ *  `repeat_<k>` the LFO, `fx.repeat.<k>` the lane. */
+export const REPEAT_KNOBS = ["chance", "interval", "offset", "gate", "grid", "vary", "pitch", "decay"];
+export const REPEAT_KNOB_LABELS = {
+  chance: "repeat chance", interval: "repeat interval", offset: "repeat offset", gate: "repeat gate",
+  grid: "repeat grid", vary: "repeat vary", pitch: "repeat pitch", decay: "repeat decay",
+};
+/** What the discrete knobs pick from, in sixteenth-note steps. A knob at v
+ *  picks entry round(v * (length - 1)). */
+export const REPEAT_GRID = [0.25, 0.5, 2 / 3, 1, 4 / 3, 2, 8 / 3, 4, 8, 16];
+export const REPEAT_GRID_LABELS = ["1/64", "1/32", "1/16t", "1/16", "1/8t", "1/8", "1/4t", "1/4", "1/2", "1 bar"];
+export const REPEAT_INTERVAL = [4, 8, 16, 32, 64];
+export const REPEAT_GATE = [1, 2, 3, 4, 6, 8, 12, 16, 24, 32];
 
 /** The prism's four modules (prism.js): each one's characters, in the order
  *  the processor indexes them. */

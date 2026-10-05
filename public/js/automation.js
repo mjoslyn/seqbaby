@@ -171,6 +171,14 @@ export function applyAutomationAtStep(t, key, v, time, vNext, stepDur) {
   const rack = t.fxRack;
   if (!rack || !key.startsWith("fx.")) return;
   // The prism: every knob is a 0..1 AudioParam, so a lane ramps it as it is.
+  // The repeat stage the same: the discrete knobs pick from lists inside the
+  // node, so a ramp on one only moves the pick when it crosses an entry.
+  if (key.startsWith("fx.repeat.")) {
+    const which = after(key, "fx.repeat.");
+    if (rack.config.repeat) rack.config.repeat[which] = vv;
+    ramp(rack.repeatParams?.[which], vv, vn);
+    return;
+  }
   if (key.startsWith("fx.prism.")) {
     const which = after(key, "fx.prism.");
     if (rack.config.prism) rack.config.prism[which] = vv;
@@ -224,6 +232,11 @@ export function applyAutomationAtStep(t, key, v, time, vNext, stepDur) {
       rack.config.crush.wet = vv;
       ramp(rack.crushWetBus?.gain, vv, vn);
       ramp(rack.crushDryBus?.gain, 1 - vv, 1 - vn);
+      return;
+    case "fx.repeat":
+      if (rack.config.repeat) rack.config.repeat.wet = vv;
+      ramp(rack.repeatWetBus?.gain, vv, vn);
+      ramp(rack.repeatDryBus?.gain, 1 - vv, 1 - vn);
       return;
     case "fx.prism":
       if (rack.config.prism) rack.config.prism.wet = vv;

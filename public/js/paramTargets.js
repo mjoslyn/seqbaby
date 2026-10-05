@@ -6,7 +6,7 @@ import { SUB_MOD_KEYS, SUB_MOD_LABELS } from "./subbass.js";
 import { DRONE_MOD_KEYS, DRONE_MOD_LABELS } from "./drone.js";
 import { GUITAR_MOD_KEYS, GUITAR_MOD_LABELS } from "./guitar.js";
 import { CHANCE_MOD_KEYS, CHANCE_MOD_LABELS } from "./chanceGen.js";
-import { PRISM_KNOBS, PRISM_KNOB_LABELS } from "./soundDefaults.js";
+import { PRISM_KNOBS, PRISM_KNOB_LABELS, REPEAT_KNOBS, REPEAT_KNOB_LABELS } from "./soundDefaults.js";
 import { state } from "./state.js";
 
 
@@ -117,6 +117,8 @@ for (const [cls, lfo, auto] of [
   ["fx-delay-fbk",        "delay_fbk",        "fx.delay.fbk"],
   ["fx-reverb-wet",       "verb",             "fx.reverb"],
   ["fx-reverb-decay",     "reverb_decay",     "fx.reverb.decay"],
+  ["fx-repeat-wet",       "repeat",           "fx.repeat"],
+  ...REPEAT_KNOBS.map(k => [`fx-repeat-${k}`, `repeat_${k}`, `fx.repeat.${k}`]),
   ["fx-prism-wet",        "prism",            "fx.prism"],
   ...PRISM_KNOBS.map(k => [`fx-prism-${k}`, `prism_${k}`, `fx.prism.${k}`]),
 ]) def(cls, lfo, auto);
@@ -213,6 +215,8 @@ export const CONTROL_LABELS = {
   // select, so the menu and the undo label need the module named.
   ...Object.fromEntries(PRISM_KNOBS.map(k => [`fx-prism-${k}`, PRISM_KNOB_LABELS[k]])),
   "fx-prism-wet": "prism mix",
+  ...Object.fromEntries(REPEAT_KNOBS.map(k => [`fx-repeat-${k}`, REPEAT_KNOB_LABELS[k]])),
+  "fx-repeat-wet": "repeat mix", "fx-repeat-mode": "repeat mode",
   "fx-prism-charmode": "prism character", "fx-prism-movemode": "prism movement",
   "fx-prism-diffmode": "prism diffusion", "fx-prism-texmode": "prism texture",
   "p-gplay": "grain play mode", "p-gloop": "grain loop mode",
@@ -313,6 +317,15 @@ export const PARAM_DESCRIPTIONS = {
   "fx.delay.fbk":        "how much of the delay feeds back",
   "fx.reverb":           "how much reverb is mixed in",
   "fx.reverb.decay":     "reverb tail length",
+  "fx.repeat":           "dry/wet around the repeat: all the way is an insert (a repeat replaces the beat), less mixes it over",
+  "fx.repeat.chance":    "how often a repeat fires on its step, or (slice) how often a slice is swapped",
+  "fx.repeat.interval":  "how often a repeat may fire, or (slice) how far back the swapped slices come from",
+  "fx.repeat.offset":    "where in the interval a repeat fires",
+  "fx.repeat.gate":      "how long a repeat, or a swapped run of slices, holds",
+  "fx.repeat.grid":      "the slice: how much is captured and repeated, or what the track is cut into",
+  "fx.repeat.vary":      "repeat: how far each trigger's grid wanders from the knob. slice: how many swapped slices play backwards",
+  "fx.repeat.pitch":     "repeat: how far each repeat drops in pitch. slice: how far swapped slices are transposed down",
+  "fx.repeat.decay":     "repeat: how much quieter each repeat gets. slice: how short each swapped slice is chopped",
   "fx.prism":            "dry/wet around the whole prism console",
   "fx.prism.char":       "how much of the character module: drive, sweeten, fuzz, howl or swell",
   "fx.prism.move":       "how much of the movement module: doubler, vibrato, phaser or tremolo depth, or the pitch module's interval",

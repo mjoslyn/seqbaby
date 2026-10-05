@@ -986,6 +986,22 @@ ${DRONE_PANEL}
           <label class="sq-fx__ctl"><span>wet</span><input class="fx-pitchshift-wet" type="range" min="0" max="1" step="0.01" value="0" /></label>
           <label class="sq-fx__ctl"><span>semi</span><input class="fx-pitchshift-semi" type="range" min="-12" max="12" step="1" value="0" /></label>
         </div>
+        <div class="sq-fx__row" data-fx="repeat">
+          <span class="sq-fx__title">repeat</span>
+          <label class="sq-fx__ctl" title="how much of the repeat is in the signal: all the way is an insert (a repeat replaces the beat), less mixes it over"><span>mix</span><input class="fx-repeat-wet" type="range" min="0" max="1" step="0.01" value="0" /></label>
+          <label class="sq-fx__ctl" title="repeat: capture a slice where it fires and repeat it (a beat repeat). slice: cut the track into slices as it plays and swap them for others from the window before (a live slicer)"><span>mode</span><select class="fx-repeat-mode">
+            <option value="repeat" selected>repeat</option>
+            <option value="slice">slice</option>
+          </select></label>
+          <label class="sq-fx__ctl" title="repeat: how often it fires on its step. slice: how often a slice is swapped. The same song makes the same choices every time"><span>chance</span><input class="fx-repeat-chance" type="range" min="0" max="1" step="0.01" value="0.5" /></label>
+          <label class="sq-fx__ctl" title="repeat: how often a repeat may fire, 4 to 64 steps. slice: the window the swapped slices come from"><span>every</span><input class="fx-repeat-interval" type="range" min="0" max="1" step="0.01" value="0.5" /></label>
+          <label class="sq-fx__ctl" title="where in the interval a repeat fires (repeat only)"><span>offset</span><input class="fx-repeat-offset" type="range" min="0" max="1" step="0.01" value="0.75" /></label>
+          <label class="sq-fx__ctl" title="how long a repeat, or a swapped run of slices, holds, 1 to 32 steps"><span>gate</span><input class="fx-repeat-gate" type="range" min="0" max="1" step="0.01" value="0.33" /></label>
+          <label class="sq-fx__ctl" title="the slice: what is captured and repeated, or what the track is cut into, 1/64 to a bar, triplets included"><span>grid</span><input class="fx-repeat-grid" type="range" min="0" max="1" step="0.01" value="0.33" /></label>
+          <label class="sq-fx__ctl" title="repeat: how far each trigger's grid wanders from the knob. slice: how many swapped slices play backwards"><span>vary</span><input class="fx-repeat-vary" type="range" min="0" max="1" step="0.01" value="0" /></label>
+          <label class="sq-fx__ctl" title="repeat: each repeat drops this far, so a roll falls like a tape stopping. slice: swapped slices are transposed down this far"><span>pitch</span><input class="fx-repeat-pitch" type="range" min="0" max="1" step="0.01" value="0" /></label>
+          <label class="sq-fx__ctl" title="repeat: each repeat this much quieter. slice: each swapped slice chopped this much shorter"><span>decay</span><input class="fx-repeat-decay" type="range" min="0" max="1" step="0.01" value="0" /></label>
+        </div>
         <div class="sq-fx__row" data-fx="prism">
           <span class="sq-fx__title">prism</span>
           <label class="sq-fx__ctl" title="how much of the whole console is in the signal"><span>mix</span><input class="fx-prism-wet" type="range" min="0" max="1" step="0.01" value="0" /></label>

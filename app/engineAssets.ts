@@ -103,6 +103,7 @@ export const ENGINE_MODULES = [
   "pianoRoll.js",
   "prism.js",
   "render.js",
+  "repeat.js",
   "scaleUI.js",
   "session.js",
   "sessionFormat.js",

@@ -168,7 +168,7 @@ one.
 - Filter: cutoff 1 is open. A bass closes to 0.3..0.5 with `env` 0.3..0.6 and
   a short decay for a plucked shape; a pad opens slowly with `attack`.
 - Fx go in chain order: vinyl, cassette, fuzz, ringmod, shaper, crush,
-  autowah, chorus, phaser, flanger, pitchshift, prism, delay, reverb. A stage is on
+  autowah, chorus, phaser, flanger, pitchshift, repeat, prism, delay, reverb. A stage is on
   when its wet (or amount) is above 0. Delay: `sync: true` with `div` 0.75
   for a dotted eighth, 0.5 an eighth, 0.333 a triplet; `fbk` 0.3..0.5.
   Reverb: `decay` 1..2 s tight, 4..8 s a wash. Crush: `bits` 6..8 and
@@ -181,6 +181,18 @@ one.
   octave up) + reverse is a lead that falls apart; `broken` or `interference`
   on a texture for a part that should sound damaged. `wet` 1 puts the whole
   track through it.
+- Repeat is a beat repeat and a slicer, on the sequencer's grid. `mode:
+  "repeat"` captures `grid` of the track at `offset` into every `interval`
+  and repeats it for `gate`, with `chance`: the defaults are a sixteenth
+  rolled over the last beat of the bar, half the time. `pitch` drops each
+  repeat (a roll that falls like a tape stopping), `decay` fades each one.
+  `mode: "slice"` cuts the track into `grid` slices and swaps them, with
+  `chance`, for others from the `interval` before: a drum loop reshuffled
+  live; `vary` plays some backwards, `decay` chops them short. The discrete
+  knobs are 0..1 picks from lists (grid 1/64 .. 1 bar, interval 4 .. 64
+  steps, gate 1 .. 32 steps). `wet` 1 is an insert, the repeat replacing the
+  beat; a lane on `fx.repeat.chance` at 0 then 1 on the last bar is a fill.
+  Put it on the drums or a bus, before the delay and reverb (it is).
 - Sidechain: `set_comp` on the bass with `source` the kick's index,
   threshold -30, ratio 6, release 0.15: the pumping.
 - Levels: kick 0.9, snare 0.8, hats 0.5..0.6, bass 0.8, everything else

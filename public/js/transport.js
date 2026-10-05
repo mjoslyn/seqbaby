@@ -10,6 +10,7 @@ import { loadSubBassWorklet } from "./subbass.js";
 import { loadDroneWorklet } from "./drone.js";
 import { loadCrusherWorklet } from "./crusher.js";
 import { loadPrismWorklet } from "./prism.js";
+import { loadRepeatWorklet } from "./repeat.js";
 import { loadReverbWorklet } from "./reverb.js";
 import { loadFilterModelsWorklet } from "./filterModels.js";
 import { loadGuitarWorklet } from "./guitar.js";
@@ -275,7 +276,9 @@ export function loadWorklet() {
   const analogFilter = loadFilterModelsWorklet(state.audioCtx).catch(e => { console.warn("analog filter worklet load failed", e); });
   // The prism console: delay lines, followers and grains, the rack's again.
   const prism = loadPrismWorklet(state.audioCtx).catch(e => { console.warn("prism worklet load failed", e); });
-  return Promise.all([state.woscLoad, silverbox, contagion, hexop, guitar, bass, sub, drone, crusher, reverb, analogFilter, prism]);
+  // The beat repeat / slicer: a buffer and a read head on the transport's clock.
+  const repeat = loadRepeatWorklet(state.audioCtx).catch(e => { console.warn("repeat worklet load failed", e); });
+  return Promise.all([state.woscLoad, silverbox, contagion, hexop, guitar, bass, sub, drone, crusher, reverb, analogFilter, prism, repeat]);
 }
 
 /**
@@ -376,6 +379,7 @@ export async function stopPlayback() {
   // voice *releases* it, and a long-release patch would then fade back in
   // over the top of the silence you just asked for.
   silenceAllVoices();
+  for (const t of state.tracks) t.fxRack?.clockStop();
   state.playing = false;
   document.body.classList.remove("sq-playing");   // step input's cursor shows while stopped (style.css)
   state._transportStartTime = null;
@@ -480,6 +484,10 @@ export async function startPlayback(opts = {}) {
     const soloAudible = soloAudibleTracks();
     const masterSwing = Number(document.getElementById("swing")?.value) || 0;
     const lat = visualOutputLatency();
+    // The repeat stage's clock (repeat.js): this step's grid time and global
+    // tick, to every rack, muted or not, so a repeat lands on the same grid the
+    // notes do. Unswung: the grid is the bar, not the groove.
+    for (const t of state.tracks) t.fxRack?.clockStep(time, state.tick, baseStepDur);
     for (const t of state.tracks) {
       if (!t.voice) continue;
       const isBus = t.voice.type === "bus";

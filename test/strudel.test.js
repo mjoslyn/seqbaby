@@ -302,6 +302,18 @@ test("the prism console from code: characters by name, and back out as the same 
   assert.equal(S.codeForControl("fx-prism-diffmode", { engineKey: "pad", fxConfig: { prism: p } }), ".fx('prism.diffmode', 'reverse')");
 });
 
+test("the repeat stage from code, and back out as the same code", () => {
+  const src = `drums: s("bd*4").fx("repeat.wet", 1).fx("repeat.mode", "slice").fx("repeat.grid", 0.55).aut("fx.repeat.chance", "0 1")`;
+  const { song, warnings } = S.codeToSong(src);
+  assert.deepEqual(warnings, []);
+  const r = track(song, "drums").fxConfig.repeat;
+  assert.deepEqual([r.wet, r.mode, r.grid], [1, "slice", 0.55]);
+  const again = S.codeToSong(S.sessionToCode(song, { native: true }).code).song;
+  assert.deepEqual(track(again, "drums").fxConfig.repeat, r);
+  assert.ok(S.sessionToCode(song).warnings.some(w => /repeat/.test(w)));
+  assert.equal(S.codeForControl("fx-repeat-mode", { engineKey: "drum-synth", fxConfig: { repeat: r } }), ".fx('repeat.mode', 'slice')");
+});
+
 test("bad seqbaby controls are warnings, not failures", () => {
   const { song, warnings } = S.codeToSong(`a: note("c3").s("silverbox").knob("nope", 1).fx("chorus.nope", 1).preset("x").knob("sbaccent", 0.7)`);
   assert.equal(track(song, "a").params.sbaccent, 0.7);

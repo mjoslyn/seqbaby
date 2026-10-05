@@ -546,6 +546,7 @@ export function loadTrackFromData(t, td) {
       if (t.fxConfig.phaser)     t.fxRack.applyPhaser(t.fxConfig.phaser);
       if (t.fxConfig.flanger)    t.fxRack.applyFlanger(t.fxConfig.flanger);
       if (t.fxConfig.pitchshift) t.fxRack.applyPitchShift(t.fxConfig.pitchshift);
+      if (t.fxConfig.repeat)     t.fxRack.applyRepeat(t.fxConfig.repeat);
       if (t.fxConfig.prism)      t.fxRack.applyPrism(t.fxConfig.prism);
       t.fxRack.applyDelay(t.fxConfig.delay);
       t.fxRack.applyReverb(t.fxConfig.reverb);
@@ -924,6 +925,7 @@ export function applyTrackPatch(t, patch) {
       if (t.fxConfig.phaser)     t.fxRack.applyPhaser(t.fxConfig.phaser);
       if (t.fxConfig.flanger)    t.fxRack.applyFlanger(t.fxConfig.flanger);
       if (t.fxConfig.pitchshift) t.fxRack.applyPitchShift(t.fxConfig.pitchshift);
+      if (t.fxConfig.repeat)     t.fxRack.applyRepeat(t.fxConfig.repeat);
       if (t.fxConfig.prism)      t.fxRack.applyPrism(t.fxConfig.prism);
       t.fxRack.applyDelay(t.fxConfig.delay);
       t.fxRack.applyReverb(t.fxConfig.reverb);
