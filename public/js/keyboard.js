@@ -20,6 +20,7 @@ import { liveGeneratorOf } from "./stepSource.js";
 import { anchorCovering, applyKbdArpToStep, applySampleDefaultsToStep, removeNote, resizeTrack, startNote } from "./track.js";
 import { setStatus } from "./dom.js";
 import { CHORD_TYPES, SCALES, chordNotes, chordTypeForTones, diatonicChordNotes, midiToScaleIndex, quantizeToScale, scaleIndexToMidi } from "./theory.js";
+import { strumOffsets } from "./theoryData.js";
 import { holdNoiseBed, releaseNoiseBed } from "./signal.js";
 import { ensureAudio, wakeMasterBus } from "./transport.js";
 
@@ -133,6 +134,8 @@ export function syncKbdArpUI() {
   if (!group || !opts) return;
   group.toggleAttribute("hidden", !state.kbdChordType);
   opts.toggleAttribute("hidden", !state.kbdArp);
+  // An arp plays one note at a time, so a strum means nothing under one.
+  document.getElementById("kbd-strum")?.toggleAttribute("hidden", !state.kbdChordType || !!state.kbdArp);
   const on = document.getElementById("kbd-arp-on");
   if (on) on.checked = !!state.kbdArp;
 }
@@ -267,12 +270,15 @@ async function pressNote(k, midi) {
     rec.usedNoteOn = false;
     if (startLiveArp(rec, t, tones, now, opts)) return;
   }
+  // Strum: each tone of a chord a few ms after the one before (theoryData.js).
+  const strum = strumOffsets(tones, state.kbdChordType ? state.kbdStrum : 0, Infinity);
+  rec.toneAt = strum.map(s => now + s);
   if (typeof t.voice.noteOn === "function") {
     rec.usedNoteOn = true;
-    for (const n of tones) { try { t.voice.noteOn(n, now, 0.85, opts); } catch (e) { console.warn("kbd noteOn", e); } }
+    tones.forEach((n, i) => { try { t.voice.noteOn(n, rec.toneAt[i], 0.85, opts); } catch (e) { console.warn("kbd noteOn", e); } });
   } else {
     rec.usedNoteOn = false;
-    for (const n of tones) { try { t.voice.hit(n, now, HELD_HIT_DUR, 0.85, opts); } catch (e) { console.warn("kbd hit", e); } }
+    tones.forEach((n, i) => { try { t.voice.hit(n, rec.toneAt[i], HELD_HIT_DUR, 0.85, opts); } catch (e) { console.warn("kbd hit", e); } });
   }
 }
 
@@ -369,7 +375,11 @@ function releaseNote(k) {
   }
   if (!rec || !rec.usedNoteOn || !rec.t?.voice) return;
   const now = (state.audioCtx?.currentTime ?? 0) + 0.005;
-  for (const n of (rec.tones || [])) { try { rec.t.voice.noteOff?.(n, now); } catch (e) { console.warn("kbd noteOff", e); } }
+  // A key let go mid-strum still releases each tone after it has started.
+  (rec.tones || []).forEach((n, i) => {
+    const at = Math.max(now, (rec.toneAt?.[i] ?? 0) + 0.02);
+    try { rec.t.voice.noteOff?.(n, at); } catch (e) { console.warn("kbd noteOff", e); }
+  });
 }
 
 // Live-record onto the active track's currently-playing step (round-to-current-

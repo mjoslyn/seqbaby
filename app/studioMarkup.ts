@@ -400,6 +400,7 @@ export const STUDIO_BODY = String.raw`
       <label class="sq-scale__toggle" title="lock to a scale. The keyboard's white keys (q w e r t y u i o p [ ]) play its degrees and the black keys go silent"><input id="scale-on" type="checkbox" /> scale</label>
       <select id="scale-root"></select>
       <select id="scale-mode"></select>
+      <label id="scale-fit-wrap" class="sq-scale__toggle" title="only list the roots and scales that hold every note the song's instruments play (drum kits left out)"><input id="scale-fit" type="checkbox" /> <span id="scale-fit-lbl">fits song</span></label>
       <button id="note-colors" class="sq-btn--ghost sq-icon-btn" aria-pressed="false" aria-label="note colors" title="toggle diatonic note coloring on the piano roll + step grid"></button>
     </div>
     <span id="kbd-octave" class="sq-kbd-oct" title="keyboard base octave. z / x shift it down and up">C4</span>
@@ -426,6 +427,19 @@ export const STUDIO_BODY = String.raw`
         <option value="3">3rd inv</option>
         <option value="4">drop-oct</option>
       </select></label>
+      <span id="kbd-strum" class="sq-kbd-arp" hidden>
+        <label class="sq-kbd-chord__f"><span class="sq-kbd-chord__sub">strum</span><select id="kbd-strum-ms" title="strum: each note of the chord a little after the one before, low to high (up) or high to low (down). The steps they land on are written strummed">
+            <option value="0" selected>off</option>
+            <option value="12">up 12ms</option>
+            <option value="25">up 25ms</option>
+            <option value="40">up 40ms</option>
+            <option value="70">up 70ms</option>
+            <option value="-12">down 12ms</option>
+            <option value="-25">down 25ms</option>
+            <option value="-40">down 40ms</option>
+            <option value="-70">down 70ms</option>
+        </select></label>
+      </span>
       <span id="kbd-arp" class="sq-kbd-arp" hidden>
         <label class="sq-kbd-arp__toggle" title="arpeggiate chords played from the keyboard. The steps they land on are written as arps"><input id="kbd-arp-on" type="checkbox" /> arp</label>
         <span id="kbd-arp-opts" class="sq-kbd-arp__opts" hidden>

@@ -137,6 +137,7 @@
  * @property {number[]} arpRates       Beats per arp note.
  * @property {number[]} arpRanges      Octave range 1..4.
  * @property {("up"|"down"|"updown"|"random")[]} arpDirs
+ * @property {number[]} strums         ms between a chord's notes: + low to high, - high to low, 0 together.
  * @property {number[]} complexities   Chord inversion / voicing level 0..4.
  * @property {number[]} ratchets       Retrigger count 1..8.
  * @property {number[]} sampleStarts   0..1.

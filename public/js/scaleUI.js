@@ -6,6 +6,7 @@ import { refreshRollIfOpen } from "./pianoRoll.js";
 import { state } from "./state.js";
 import { renderStepGrid } from "./stepGrid.js";
 import { CHORD_TYPES, SCALES } from "./theory.js";
+import { chordNotes, scalesFitting } from "./theoryData.js";
 
 // The keyboard chord-type selector collapses to a simple off/on when a scale is
 // active (chords are built diatonically from the scale, so the fixed maj/min/…
@@ -60,6 +61,7 @@ export function syncChordMenuBtn() {
   // chord quality, so it reads as plain "chord" rather than being printed.
   let chord = !type ? "" : (type === "on" ? "chord" : type);
   if (chord && state.kbdArp) chord += " arp";
+  else if (chord && state.kbdStrum) chord += " strum";
   const full = [on ? `${root} ${state.scale.mode}` : "", chord].filter(Boolean).join(" · ");
   btn.dataset.label = on
     ? `${root} ${shortMode(state.scale.mode)}${chord ? "+" : ""}`
@@ -131,32 +133,87 @@ export function openChordMenu() {
 
 export function syncScaleUI() {
   const on = document.getElementById("scale-on");
+  on.checked = state.scale.active;
+  rebuildScaleOptions();
+  refreshChordTypeSelect();
+}
+
+// ---- "fits song": a scale for the notes already written ------------------
+// With the scale off, a checkbox narrows the root and mode pickers to the
+// scales that hold every note the instruments play, so turning the scale on
+// afterwards snaps nothing. It only narrows the LISTS: a refresh never moves
+// the song's root or mode, it keeps the current pick in its list marked
+// "(doesn't fit)". Only a person's own action (ticking the box, picking a root)
+// moves the pick to one that fits. UI state, not the song's.
+let _fitOn = false;
+
+/** Every pitch class written on a melodic track, in every pattern: roots,
+ *  chord tones and the roll's extras. Drum kits and buses play no key, and a
+ *  live chance part's pitches are not in the pattern. */
+export function songPitchClasses() {
+  const pcs = new Set();
+  const add = (n) => { if (Number.isFinite(Number(n))) pcs.add(((Number(n) % 12) + 12) % 12); };
+  for (const t of state.tracks) {
+    if (t.isDrumKit || t.engineKey === "bus" || t.chance?.on) continue;
+    for (const p of t.patterns || []) {
+      if (!p?.steps) continue;
+      p.steps.forEach((on, i) => {
+        if (!on || p.notes?.[i] == null) return;
+        const tones = p.chords?.[i] ? chordNotes(p.notes[i], p.chords[i]) : [p.notes[i]];
+        tones.forEach(add);
+        (p.extraNotes?.[i] || []).forEach(add);
+      });
+    }
+  }
+  return pcs;
+}
+
+/** Fill the root and mode selects: everything, or only what fits the song. */
+function rebuildScaleOptions() {
   const root = document.getElementById("scale-root");
   const mode = document.getElementById("scale-mode");
-  on.checked = state.scale.active;
-  root.value = String(state.scale.root);
-  mode.value = state.scale.mode;
-  refreshChordTypeSelect();
+  const wrap = document.getElementById("scale-fit-wrap");
+  if (!root || !mode) return;
+  const filtering = _fitOn && !state.scale.active;
+  if (wrap) wrap.hidden = state.scale.active;
+  const fits = filtering ? scalesFitting(songPitchClasses()) : null;
+  const curRoot = state.scale.root | 0, curMode = state.scale.mode;
+  const roots = fits ? Object.keys(fits).map(Number) : NOTE_NAMES.map((_, i) => i);
+  if (!roots.includes(curRoot)) roots.push(curRoot), roots.sort((a, b) => a - b);
+  const allModes = Object.keys(SCALES).filter(m => m !== "off");
+  const modes = fits ? allModes.filter(m => m === curMode || (fits[curRoot] || []).includes(m)) : allModes;
+  const unfit = (ok) => ok ? "" : " (doesn't fit)";
+  root.replaceChildren(...roots.map(i => new Option(NOTE_NAMES[i] + unfit(!fits || !!fits[i]), String(i))));
+  mode.replaceChildren(...modes.map(m => new Option(m + unfit(!fits || (fits[curRoot] || []).includes(m)), m)));
+  root.value = String(curRoot);
+  mode.value = curMode;
+  const lbl = document.getElementById("scale-fit-lbl");
+  if (lbl) {
+    const n = fits ? Object.values(fits).reduce((s, ms) => s + ms.length, 0) : 0;
+    lbl.textContent = fits ? `fits song (${n})` : "fits song";
+  }
+}
+
+/** A person picked: if the current root / mode does not fit, move to one that
+ *  does (the same root when it has any, else the first root that has one). */
+function settleOnFit() {
+  if (!_fitOn || state.scale.active) return false;
+  const fits = scalesFitting(songPitchClasses());
+  const r = state.scale.root | 0;
+  if (fits[r]?.includes(state.scale.mode)) return false;
+  const root = fits[r] ? r : Number(Object.keys(fits)[0]);
+  if (!Number.isFinite(root)) return false;
+  state.scale.root = root;
+  state.scale.mode = fits[root][0];
+  return true;
 }
 
 export function initScaleUI() {
   const on = document.getElementById("scale-on");
   const root = document.getElementById("scale-root");
   const mode = document.getElementById("scale-mode");
-  // populate roots
-  root.replaceChildren();
-  NOTE_NAMES.forEach((n, i) => {
-    const opt = document.createElement("option");
-    opt.value = String(i); opt.textContent = n;
-    root.appendChild(opt);
-  });
-  // populate modes
-  mode.replaceChildren();
-  Object.keys(SCALES).filter(m => m !== "off").forEach(m => {
-    const opt = document.createElement("option");
-    opt.value = m; opt.textContent = m;
-    mode.appendChild(opt);
-  });
+  // The root / mode options are rebuilt by rebuildScaleOptions (via
+  // syncScaleUI), which narrows them to the song's notes when "fits song" is on.
   syncScaleUI();
   // Scale changes affect both the open piano-roll panels (visible pitch rows)
   // and the step-grid note coloring on every track — re-render both.
@@ -166,9 +223,22 @@ export function initScaleUI() {
       renderStepGrid(t);
     }
   };
-  on.addEventListener("change", () => { state.scale.active = on.checked; refreshChordTypeSelect(); refreshOnScaleChange(); });
-  root.addEventListener("change", () => { state.scale.root = Number(root.value); syncChordMenuBtn(); refreshOnScaleChange(); });
-  mode.addEventListener("change", () => { state.scale.mode = mode.value; syncChordMenuBtn(); refreshOnScaleChange(); });
+  on.addEventListener("change", () => { state.scale.active = on.checked; rebuildScaleOptions(); refreshChordTypeSelect(); refreshOnScaleChange(); });
+  root.addEventListener("change", () => { state.scale.root = Number(root.value); settleOnFit(); rebuildScaleOptions(); syncChordMenuBtn(); refreshOnScaleChange(); });
+  mode.addEventListener("change", () => { state.scale.mode = mode.value; rebuildScaleOptions(); syncChordMenuBtn(); refreshOnScaleChange(); });
+  const fit = document.getElementById("scale-fit");
+  if (fit) fit.addEventListener("change", () => {
+    _fitOn = fit.checked;
+    if (settleOnFit()) { syncChordMenuBtn(); refreshOnScaleChange(); }
+    rebuildScaleOptions();
+  });
+  // The notes move under the lists: re-read them after every settled edit
+  // (history.js fires this for undo / redo and a jam peer's edit too) and when
+  // a song arrives.
+  const refit = () => { if (_fitOn && !state.scale.active) rebuildScaleOptions(); };
+  window.addEventListener("seqbaby:songedited", refit);
+  window.addEventListener("seqbaby:setapplied", refit);
+  window.addEventListener("seqbaby:newset", refit);
 
   // Palette toggle — diatonic pitch-class coloring on/off.
   const palBtn = document.getElementById("note-colors");

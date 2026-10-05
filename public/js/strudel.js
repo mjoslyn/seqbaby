@@ -1685,6 +1685,7 @@ function lossyOf(t, pat) {
   const hits = pat.steps.map((on, i) => on ? i : -1).filter(i => i >= 0);
   const out = [];
   if (hits.some(i => pat.arps?.[i])) out.push("arps");
+  if (hits.some(i => pat.strums?.[i] && (pat.chords?.[i] || pat.extraNotes?.[i]?.length))) out.push("strums");
   if (hits.some(i => pat.chords?.[i] && pat.complexities?.[i])) out.push("chord inversions");
   if (hits.some(i => Math.abs(pat.offsets?.[i] || 0) > 0.01)) out.push("nudged steps");
   if (t.engineKey === "sampler" && hits.some(i => (pat.sampleStarts?.[i] || 0) > 0 || (pat.sampleEnds?.[i] ?? 1) < 1 || (pat.sampleLoopModes?.[i] || "off") !== "off")) out.push("sample regions");

@@ -349,7 +349,7 @@ export function emptyPatternBlob(len) {
   const fill = (v) => Array.from({ length: n }, () => v);
   return {
     steps: fill(0), lengths: fill(0), notes: fill(null), velocities: fill(0.5), chords: fill(""),
-    offsets: fill(0), arps: fill(false), arpRates: fill(0.25), arpRanges: fill(1), arpDirs: fill("up"),
+    offsets: fill(0), arps: fill(false), arpRates: fill(0.25), arpRanges: fill(1), arpDirs: fill("up"), strums: fill(0),
     complexities: fill(0), ratchets: fill(1),
     sampleStarts: fill(0), sampleEnds: fill(1), sampleFadeIns: fill(0), sampleFadeOuts: fill(0), sampleLoopModes: fill("off"),
     extraNotes: fill(null), extraLengths: fill(null),
@@ -573,7 +573,9 @@ export function setNotes(song, index, { pattern = 0, notes } = {}) {
  * steps), `chord` (a chord type: maj, min, min7 ...), `complexity` (chord
  * inversion 0..4), `ratchet` (1..8 retriggers), `offset` (-0.5..0.5 of a step),
  * `arp` + `arpRate` (beats per arp note) + `arpRange` (octaves 1..4) +
- * `arpDir` (up/down/updown/random), `extraNotes` (more pitches stacked on it).
+ * `arpDir` (up/down/updown/random), `strum` (ms between the stack's notes,
+ * -80..80: positive low to high, negative high to low), `extraNotes` (more
+ * pitches stacked on it).
  */
 export function setStep(song, index, opts = {}) {
   const t = trackAt(song, index);
@@ -596,6 +598,10 @@ export function setStep(song, index, opts = {}) {
   if (opts.arpRate != null) pat.arpRates[i] = num(opts.arpRate, "arpRate", 0.0625, 4);
   if (opts.arpRange != null) pat.arpRanges[i] = int(opts.arpRange, "arpRange", 1, 4);
   if (opts.arpDir != null) pat.arpDirs[i] = oneOf(opts.arpDir, "arpDir", ["up", "down", "updown", "random"]);
+  if (opts.strum != null) {
+    if (!Array.isArray(pat.strums)) pat.strums = Array.from({ length: n }, () => 0);
+    pat.strums[i] = num(opts.strum, "strum", -80, 80);
+  }
   if (opts.extraNotes !== undefined) {
     pat.extraNotes[i] = opts.extraNotes == null ? null : [].concat(opts.extraNotes).map(v => toMidi(v, "extraNotes"));
     pat.extraLengths[i] = null;
@@ -1065,6 +1071,7 @@ function describeStep(pat, i) {
   if (pat.ratchets[i] > 1) out.ratchet = pat.ratchets[i];
   if (pat.offsets[i]) out.offset = pat.offsets[i];
   if (pat.arps[i]) out.arp = { rate: pat.arpRates[i], range: pat.arpRanges[i], dir: pat.arpDirs[i] };
+  if (pat.strums?.[i]) out.strum = pat.strums[i];
   if (pat.extraNotes[i]) out.extraNotes = pat.extraNotes[i].map(midiToName);
   return out;
 }
