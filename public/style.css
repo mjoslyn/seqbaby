@@ -489,6 +489,22 @@ button.sq-play.is-playing {
   border-color: var(--accent-2);
 }
 
+/* What play plays (arrangement.js paintPlayWhat): dim while stopped, as a
+   promise; lit while playing, in the play button's playing colour. The song
+   and a pattern loop are told apart by the border as well as the words. */
+.sq-play-what {
+  font-size: 11px;
+  color: var(--fg-dim);
+  border: 1px dashed var(--border);
+  border-radius: 4px;
+  padding: 3px 7px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.sq-play-what:empty { display: none; }
+.sq-play-what[data-what="song"] { border-style: solid; }
+.sq-play-what.is-playing { color: var(--accent-2); border-color: var(--accent-2); }
+
 button.sq-btn--ghost { background: transparent; }
 button.sq-btn--danger { color: var(--danger); }
 
@@ -675,6 +691,9 @@ button.sq-btn--danger { color: var(--danger); }
 .sq-tabs__tab[aria-selected="true"] { color: var(--accent); border-color: var(--accent); }
 .sq-tabs__n { color: var(--accent); font-size: 10px; }
 .sq-tabs__n:empty { display: none; }
+/* The tab whose content is what you hear: the arrangement while the song
+   plays, tracks while a pattern loops or chains. */
+.sq-tabs__tab.is-playing::before { content: "\25B6\FE0E"; color: var(--accent-2); font-size: 9px; margin-right: 4px; }
 body[data-view="arrangement"] #tracks,
 body[data-view="arrangement"] .sq-add-track-row { display: none; }
 body:not([data-view="arrangement"]) #arrangement { display: none; }

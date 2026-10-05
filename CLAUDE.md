@@ -2293,6 +2293,16 @@ state.arrangement = [ {p:0, bars:4, off:[bass, lead]}, {p:1, bars:8}, {p:null, b
   tracks tab repeat still loops the pattern you are on and chain plays the
   song. The panel's header says so (`plays here; in tracks, repeat loops the
   pattern: chain`) while the mode is repeat.
+- **What plays is decided when play is pressed, and held**
+  (`latchArrangement` / `releaseArrangement`, called by start / stop):
+  switching tabs mid-play no longer flips between the song and a pattern loop
+  at the next bar line. Only the mode button changes it while playing
+  (`relatchArrangement`). `#play-what` beside play says which
+  (`paintPlayWhat`): `song 2/5`, `pattern 3 loop` or `chain: pattern 3`, dim
+  while stopped (what play WILL do), lit while playing, and the tab whose
+  content is what you hear gets a ▶. In the arrangement tab with a pattern
+  looping, the header says so and its button switches to chain, which starts
+  the song.
 - **The transport walks it on bar lines** (transport.js, the chain branch):
   `state.arrangePos` is the section playing, `chainBarCount` the bars into it;
   at `bars` it moves to the next section (back to the first after the last)

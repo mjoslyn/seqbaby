@@ -21,7 +21,7 @@ import { applyBusMute, updateMidiUI } from "./render.js";
 import { ensureFxRack, fireFilterEnv, refreshAllTrackOutputs, refreshNoiseBeds, routeVoiceToRack, soloAudibleTracks } from "./signal.js";
 import { activeMeter, stepsPerBarForMeter, stepsPerBeatForMeter } from "./meter.js";
 import { applySectionTracks, findNextNonEmptyPattern, invertChord, realignTracksToActive, state, switchPattern, syncArrangePos } from "./state.js";
-import { arrangementDrives, clearArrangementHold, paintArrangementNow, trackTargetPattern } from "./arrangement.js";
+import { arrangementDrives, clearArrangementHold, latchArrangement, paintArrangementNow, paintPlayWhat, releaseArrangement, trackTargetPattern } from "./arrangement.js";
 import { loadSilverboxWorklet } from "./silverbox.js";
 import { loadContagionWorklet } from "./contagion.js";
 import { applyScale, chordNotes, nameToMidi } from "./theory.js";
@@ -388,6 +388,7 @@ export async function stopPlayback() {
   document.body.classList.remove("sq-playing");   // step input's cursor shows while stopped (style.css)
   clearArrangementHold();                          // no section holds a track back while stopped
   realignTracksToActive();                         // and every lane's track is back on the pattern bar's pattern
+  releaseArrangement();                            // the tab decides again what the next play plays
   state._transportStartTime = null;
   refreshNoiseBeds();                              // vinyl crackle follows the transport
   btn.textContent = "play";
@@ -455,6 +456,7 @@ export async function startPlayback(opts = {}) {
   // (the one last clicked in the arrangement view, or where play stopped) —
   // if that section plays the active pattern, that one; else the first that
   // does; else the pattern changes to the section's. See syncArrangePos.
+  latchArrangement();                      // what plays is decided here, and held (arrangementDrives)
   if (arrangementDrives()) {
     syncArrangePos(state.activePattern);
     const sec = state.arrangement[state.arrangePos];
@@ -789,6 +791,7 @@ export async function startPlayback(opts = {}) {
   Tone.getTransport().start(`+${lead}`, 0);
   state.playing = true;
   document.body.classList.add("sq-playing");
+  paintPlayWhat();                                   // the label beside play, as playing
   refreshNoiseBeds();                                // vinyl crackle follows the transport
   btn.textContent = "stop";
   btn.classList.add("is-playing");
