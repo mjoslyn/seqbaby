@@ -1492,21 +1492,22 @@ export function voxConsonantRow(name) {
 }
 
 // Syllable sequences: every note sings the next syllable, chords on one step
-// share one, and the phrase starts over when the transport stops. A syllable
-// is its consonant (any name above, longest first, so `sh` is not `s` + `h`)
-// and then a vowel letter.
+// share one, and the phrase starts over when the transport stops. Spelled as
+// a typed lyric is (voxSyllables): a consonant, a vowel or two, a consonant.
 export const VOX_WORDS = {
   "off":        "",
-  "doo wop":    "du du du wa",
+  "doo wop":    "doo doo doo wop",
   "la la":      "la la la li",
   "ooh aah":    "u u a a",
   "na na":      "na na na ne",
-  "shoo bee":   "shu bi du wa",
+  "shoo bee":   "shoo bee doo wop",
   "ba da":      "ba da ba di",
   "mama":       "ma ma mi a",
-  "hey yeah":   "he ye he ye",
+  "hey yeah":   "hey yea hey yea",
   "hallelujah": "ha le lu ya",
-  "oh no":      "o no o no",
+  "oh no":      "ow now ow now",
+  "amen":       "a men",
+  "hum":        "mmm",
 };
 export const VOX_WORD_NAMES = Object.keys(VOX_WORDS);
 
@@ -1519,32 +1520,66 @@ export const VOX_MAX_SYLLABLES = 128;
 // How long a typed lyric may be, in characters.
 export const VOX_TEXT_MAX = 400;
 
+/** How many numbers a syllable takes in the list the processor is sent. */
+export const VOX_SYL_STRIDE = 4;
+
 /**
- * Spell a phrase as syllables the processor can play: [{cons, vowel}], cons an
- * index into VOX_CONSONANT_NAMES and vowel a position on the vowel line.
- * Syllables are split by spaces, commas or hyphens (`la-di-da`). Each one is
- * its consonant (longest match first, so `sh` is not `s` + `h`, then the
- * aliases above) and the first vowel letter after it, `y` counting as an i
- * when there is no other; one with no vowel at all sings an a. Anything else
- * in a syllable (a final consonant, a second vowel) is not sung: one note,
- * one consonant and one vowel.
+ * Spell a phrase as syllables the processor can play:
+ * [{cons, vowel, vowel2, coda}]. cons and coda are indices into
+ * VOX_CONSONANT_NAMES (0 is none); vowel and vowel2 are positions on the vowel
+ * line, vowel2 -1 when the vowel holds still, and vowel -2 for a hum: a
+ * syllable with no vowel that is all its consonant (`mmm`, `nnn`).
+ *
+ * Syllables are split by spaces, commas or hyphens (`la-di-da`). Each one is:
+ * - the consonant before (longest match first, so `sh` is not `s` + `h`,
+ *   then the aliases above), only when something follows it;
+ * - the vowel: the first vowel letter, and a second one straight after it is
+ *   a glide to that vowel over the note (`ai` eye, `oi` boy, `au` now, `ei`
+ *   day, `ou` go). A `y` or `w` straight after the vowel glides to i or u
+ *   (`ay`, `ow`). `oo` is u and `ee` is i, as in English. No vowel letter at
+ *   all: a `y` is an i, and otherwise the syllable is a hum when its
+ *   consonant can be held (m, n, l, r, w, y) and an a when it can't;
+ * - the consonant after (`sun`, `night`, `home`): the first one after the
+ *   vowel, sung as the note ends. `h` there is silent (`ah`, `oh`). Anything
+ *   past it is not sung: one consonant each side.
  * @param {string} text
  */
 export function voxSyllables(text) {
   const names = VOX_CONSONANT_NAMES.filter(n => n !== "none");
   const heads = [...names, ...Object.keys(VOX_CONS_ALIASES)].sort((a, b) => b.length - a.length);
+  const consOf = (h) => VOX_CONSONANT_NAMES.indexOf(VOX_CONS_ALIASES[h] ?? h);
+  const pos = (i) => i / (VOX_VOWELS.length - 1);
+  const isV = (ch) => VOX_VOWELS.includes(ch);
+  const HELD = new Set(["m", "n", "l", "r", "w", "y"]);
   const out = [];
   const words = String(text || "").toLowerCase().replace(/[^a-z\s,-]/g, "").split(/[\s,-]+/);
   for (const word of words) {
     if (!word) continue;
     if (out.length >= VOX_MAX_SYLLABLES) break;
     const head = heads.find(n => word.startsWith(n) && word.length > n.length) ?? "";
-    const c = VOX_CONS_ALIASES[head] ?? (head || "none");
     const rest = word.slice(head.length);
-    let vi = -1;
-    for (const ch of rest) { vi = VOX_VOWELS.indexOf(ch); if (vi >= 0) break; }
-    if (vi < 0 && rest.includes("y")) vi = VOX_VOWELS.indexOf("i");
-    out.push({ cons: VOX_CONSONANT_NAMES.indexOf(c), vowel: vi < 0 ? 0.5 : vi / (VOX_VOWELS.length - 1) });
+    const cons = head ? consOf(head) : 0;
+    const iv = [...rest].findIndex(isV);
+    if (iv < 0) {
+      if (rest.includes("y")) { out.push({ cons, vowel: pos(4), vowel2: -1, coda: 0 }); continue; }
+      // `mmm`: the whole word is one consonant, held
+      const only = heads.find(n => word.startsWith(n)) ?? "";
+      const c = only ? VOX_CONS_ALIASES[only] ?? only : "";
+      if (HELD.has(c)) out.push({ cons: 0, vowel: -2, vowel2: -1, coda: VOX_CONSONANT_NAMES.indexOf(c) });
+      else out.push({ cons, vowel: pos(2), vowel2: -1, coda: 0 });
+      continue;
+    }
+    const v1 = rest[iv], n1 = rest[iv + 1] ?? "";
+    let vowel = VOX_VOWELS.indexOf(v1), vowel2 = -1, k = iv + 1;
+    if (n1 === v1) { if (v1 === "o") vowel = 0; else if (v1 === "e") vowel = 4; k++; }
+    else if (isV(n1)) { vowel2 = VOX_VOWELS.indexOf(n1); k++; }
+    else if (n1 === "y") { vowel2 = 4; k++; }
+    else if (n1 === "w") { vowel2 = 0; k++; }
+    while (k < rest.length && isV(rest[k])) k++;
+    const tail = rest.slice(k);
+    const ch = heads.find(n => tail.startsWith(n)) ?? "";
+    const coda = ch && ch !== "h" ? consOf(ch) : 0;
+    out.push({ cons, vowel: pos(vowel), vowel2: vowel2 < 0 ? -1 : pos(vowel2), coda });
   }
   return out;
 }

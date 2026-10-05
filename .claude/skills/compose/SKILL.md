@@ -158,9 +158,11 @@ harm is the VOWEL (0 u, 0.25 o, 0.5 a, 0.75 e, 1 i), timb the throat SIZE
 whispers), decay the release. A lane on harm sings a lyric of vowels.
 `sngwords` sings a phrase, one syllable a note ("doo wop", "la la", "ooh
 aah", "na na", "shoo bee", "ba da", "mama", "hey yeah", "hallelujah", "oh
-no"); `sngtext` is a typed lyric instead, one syllable a note, each a
-consonant and a vowel ("o sha la la", "ma ri a"; what follows the vowel is
-not sung), and wins over `sngwords`; with both off, `sngcons` starts every note with one consonant ("m",
+no"); `sngtext` is a typed lyric instead, one syllable a note, spelled as it
+sounds: a consonant, a vowel, a consonant ("twin kel twin kel lit tel
+star"; the last consonant is sung as the note ends, so give it a note at
+least an eighth long). Two vowels glide ("ai" eye, "ow" now, "ey" day),
+"oo" is u, "ee" is i, "mmm" hums. It wins over `sngwords`; with both off, `sngcons` starts every note with one consonant ("m",
 "l", "s", "t" ...). `sngvoices` 1..8 is a choir per note (with
 `sngdetune` / `sngspread`), `sngmode` "mono" is a lead that slides between
 notes. `apply_preset` "choir aah", "angel ooh", "basso", "soul lead", "doo

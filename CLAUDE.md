@@ -1401,13 +1401,32 @@ CONSONANT (hiss, burst, murmur, formant glide) ───┘
   syllables, read by the same `voxSyllables`, and wins over the words select
   while it has a syllable in it (`voxPhrase`). Ordinary spelling is bent onto
   the consonants there are (`VOX_CONS_ALIASES`: ch to sh, j to d, c to k ...);
-  what follows a syllable's vowel is not sung. It is the engine's one TEXT
+  see the syllable bullet below for what it reads. It is the engine's one TEXT
   control (`VOX_TEXT_CTLS`), so the song builder's `PANELS` entry carries a
   `text` list beside `num` / `sel`, and setParams, describeEngine and
   strudel's `engineKnobKeys` read it (`.knob('sngtext', 'la di da')`). Sung
   as it is typed, but the builder re-posts the phrase only when a keystroke
   changes a syllable, since a re-post starts it over. A voice preset leaves
   it alone (`voxTone` drops it): it is what the track sings, not its sound.
+- **A syllable is `[cons, vowel, vowel2, coda]`** (`VOX_SYL_STRIDE`; the
+  `syl` message is a flat list of them). `voxSyllables` reads: a consonant,
+  the first vowel, a second vowel letter (or `y` / `w`) straight after it as
+  a glide (`ai` eye, `ow` now; `oo` is u and `ee` i), and the first
+  consonant after the vowel as the coda (`h` there is silent, anything past
+  it dropped). No vowel: `y` is an i, a held consonant (m n l r w y) is a
+  HUM (`vowel` -2, the coda spanning the note), anything else an a. The
+  note message carries the note's length to the queue (`len`, lead
+  included), which is what the processor times both against: the glide runs
+  from 30% to 80% of the voiced part (between `consLead` and the coda), and
+  the coda starts `codaMs` before the note ends (a murmur, a hiss, or
+  `CLOSURE_MS` of closure and a release), never more than 45% of the voiced
+  part. The onset and the coda share one script (`consonant()`), which
+  writes the locus row and weight the formant code reads. **The level ducks
+  with the locus weight** (`duck`, 9dB at the locus): a locus F1 of 250-300Hz
+  sits on a middle-C fundamental, and without it every consonant was a bump
+  up to 7dB over its vowel. Tested: a coda s hisses at the end and the
+  voicing stops under it, a t's closure is silent, an m hums duller than the
+  vowel, an `ai` moves F2 from a's to i's, `mmm` has no vowel.
 - **Breath** is noise pulsed by the folds (0.35 + 0.65 x flow), through the
   same formants; above 0.75 the voicing fades out and it whispers.
 - **Vibrato after a delay**, faded in over 0.4s; **drift** is a per-copy

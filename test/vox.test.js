@@ -149,14 +149,15 @@ test("vox: every syllable of every phrase spells a known consonant and vowel", (
     if (name === "off") { assert.equal(syl.length, 0); continue; }
     assert.ok(syl.length > 0, name);
     for (const s of syl) {
-      assert.ok(s.cons >= 0 && s.cons < VOX_CONSONANT_NAMES.length, `${name}: ${JSON.stringify(s)}`);
-      assert.ok(s.vowel >= 0 && s.vowel <= 1);
+      for (const c of [s.cons, s.coda]) assert.ok(c >= 0 && c < VOX_CONSONANT_NAMES.length, `${name}: ${JSON.stringify(s)}`);
+      assert.ok((s.vowel >= 0 && s.vowel <= 1) || (s.vowel === -2 && s.coda > 0), `${name}: ${JSON.stringify(s)}`);
+      assert.ok(s.vowel2 === -1 || (s.vowel2 >= 0 && s.vowel2 <= 1));
     }
   }
   // sh is one consonant, not s then h; a bare vowel has none.
   assert.deepEqual(voxSyllables("shu a"), [
-    { cons: VOX_CONSONANT_NAMES.indexOf("sh"), vowel: 0 },
-    { cons: VOX_CONSONANT_NAMES.indexOf("none"), vowel: 0.5 },
+    { cons: VOX_CONSONANT_NAMES.indexOf("sh"), vowel: 0, vowel2: -1, coda: 0 },
+    { cons: VOX_CONSONANT_NAMES.indexOf("none"), vowel: 0.5, vowel2: -1, coda: 0 },
   ]);
   assert.deepEqual(voxSyllableList("off"), []);
 });
@@ -348,15 +349,21 @@ test("vox: the panel markup matches the tables", async () => {
 });
 
 test("vox: a typed lyric reads as syllables, ordinary spelling included", () => {
-  const spell = (text) => voxSyllables(text).map(s => `${VOX_CONSONANT_NAMES[s.cons]}:${"uoaei"[Math.round(s.vowel * 4)]}`).join(" ");
-  assert.equal(spell("shu bi du wa"), "sh:u b:i d:u w:a");
-  assert.equal(spell("la-di-da, la"), "l:a d:i d:a l:a");
+  const V = "uoaei", N = VOX_CONSONANT_NAMES;
+  const spell = (text) => voxSyllables(text).map(s =>
+    `${s.cons ? N[s.cons] : ""}:${s.vowel === -2 ? "hum" : V[Math.round(s.vowel * 4)]}${s.vowel2 >= 0 ? ">" + V[Math.round(s.vowel2 * 4)] : ""}:${s.coda ? N[s.coda] : ""}`).join(" ");
+  assert.equal(spell("shu bi du wa"), "sh:u: b:i: d:u: w:a:");
+  assert.equal(spell("la-di-da, la"), "l:a: d:i: d:a: l:a:");
   // letters with no consonant of their own lean on the nearest
-  assert.equal(spell("chu jo cat xa"), "sh:u d:o k:a s:a");
-  // what follows the vowel is not sung; y with no vowel is an i; no vowel is an a
-  assert.equal(spell("sun sky mmm"), "s:u s:i m:a");
-  // a bare vowel has no consonant, and punctuation is ignored
-  assert.equal(spell("Oh! ah?"), "none:o none:a");
+  assert.equal(spell("chu jo xa"), "sh:u: d:o: s:a:");
+  // a consonant after the vowel is sung; one past it is not; h there is silent
+  assert.equal(spell("sun cat home strong ah"), "s:u:n k:a:t h:o:m s:o:n :a:");
+  // two vowels glide, y / w after a vowel glide to i / u, oo is u, ee is i
+  assert.equal(spell("eye boy now day ai doo bee"), ":e>i: b:o>i: n:o>u: d:a>i: :a>i: d:u: b:i:");
+  // no vowel: y is an i, a held consonant is a hum, anything else an a
+  assert.equal(spell("sky mmm nn ss"), "s:i: :hum:m :hum:n s:a:");
+  // punctuation and capitals are ignored
+  assert.equal(spell("Oh! ah?"), ":o: :a:");
   assert.equal(voxSyllables("").length, 0);
   assert.equal(voxSyllables("la ".repeat(500)).length, 128);
 });
@@ -364,7 +371,7 @@ test("vox: a typed lyric reads as syllables, ordinary spelling included", () => 
 test("vox: the lyric wins over the words while it has a syllable", () => {
   assert.deepEqual(voxPhrase("la la", ""), voxSyllableList("la la"));
   assert.deepEqual(voxPhrase("la la", "   "), voxSyllableList("la la"));
-  assert.deepEqual(voxPhrase("la la", "shu bi"), voxSyllables("shu bi").flatMap(s => [s.cons, s.vowel]));
+  assert.deepEqual(voxPhrase("la la", "shu bi"), voxSyllables("shu bi").flatMap(s => [s.cons, s.vowel, s.vowel2, s.coda]));
   assert.deepEqual(voxPhrase("off", ""), []);
 });
 
@@ -393,4 +400,49 @@ test("vox: the lyric goes through the song builder and Strudel code", () => {
   const back = B.newSong();
   writeTracks(back, realize(readCode(src)));
   assert.equal(back.tracks[0].params.sngtext, "o sha la la");
+});
+
+// A syllable's own list for the processor (the `syl` message).
+const sylOf = (text) => voxPhrase("off", text);
+
+test("vox: a consonant after the vowel is sung as the note ends", () => {
+  const f0 = hz(60);
+  // "sas": the hiss is at the END of a long note, not only before it
+  const note = [[0.3, 60, 0.8]];
+  const ss = render({ secs: 1.6, set: { syl: sylOf("sas") }, notes: note, params: { ...STEADY, atk: 0 } }).L;
+  const sa = render({ secs: 1.6, set: { syl: sylOf("sa") }, notes: note, params: { ...STEADY, atk: 0 } }).L;
+  assert.ok(hiss(ss, 1.0, 1.08) > hiss(sa, 1.0, 1.08) * 3, `hiss at the end: ${db(hiss(ss, 1.0, 1.08)).toFixed(1)} vs ${db(hiss(sa, 1.0, 1.08)).toFixed(1)}dB`);
+  assert.ok(harmonicShare(ss, f0, 1.02, 1.09) < harmonicShare(sa, f0, 1.02, 1.09) * 0.5, "the voicing stops under the s");
+  // the vowel in the middle is untouched
+  assert.ok(Math.abs(db(rms(ss, 0.5, 0.8)) - db(rms(sa, 0.5, 0.8))) < 1);
+  // "at": the voicing stops for the closure before the note ends, then a click
+  const at = render({ secs: 1.6, set: { syl: sylOf("at") }, notes: note, params: { ...STEADY, atk: 0 } }).L;
+  const a = render({ secs: 1.6, set: { syl: sylOf("a") }, notes: note, params: { ...STEADY, atk: 0 } }).L;
+  assert.ok(db(rms(at, 1.045, 1.085)) < db(rms(a, 1.045, 1.085)) - 20, `closure: ${db(rms(at, 1.045, 1.085)).toFixed(1)} vs ${db(rms(a, 1.045, 1.085)).toFixed(1)}dB`);
+  // the formants move towards the t before it, and that is no louder
+  assert.ok(db(rms(at, 0.98, 1.03)) < db(rms(a, 0.98, 1.03)) + 2, `lead-in: ${db(rms(at, 0.98, 1.03)).toFixed(1)} vs ${db(rms(a, 0.98, 1.03)).toFixed(1)}dB`);
+  // "am": hums on into the release, quieter and duller than the vowel
+  const am = render({ secs: 1.6, set: { syl: sylOf("am") }, notes: note, params: { ...STEADY, atk: 0 } }).L;
+  assert.ok(db(rms(am, 1.03, 1.09)) > -40, "the m is voiced");
+  const bright = (x) => bandEnergy(x, f0, 1200, 4000, 1.03, 1.09) / bandEnergy(x, f0, 100, 1200, 1.03, 1.09);
+  assert.ok(bright(am) < bright(a) * 0.3, `m vs a above 1.2k: ${db(bright(am)).toFixed(1)} vs ${db(bright(a)).toFixed(1)}dB`);
+});
+
+test("vox: two vowels glide from one to the other over the note", () => {
+  // "ai" (eye): the second formant climbs from a's towards i's
+  const f0 = hz(48);
+  const { L } = render({ secs: 1.6, set: { syl: sylOf("ai") }, notes: [[0.2, 48, 1.2]], params: { ...STEADY, atk: 0, size: 2 / 3 } });
+  const early = peakHarmonic(L, f0, 900, 2400, 0.25, 0.45), late = peakHarmonic(L, f0, 900, 2400, 1.2, 1.38);
+  const a = voxFormantsAt(0.5, 2 / 3).f[1], i = voxFormantsAt(1, 2 / 3).f[1];
+  assert.ok(Math.abs(early - a) < 200, `F2 at the start ${early} vs a's ${a}`);
+  assert.ok(Math.abs(late - i) < 200, `F2 at the end ${late} vs i's ${i}`);
+});
+
+test("vox: a hum has no vowel in it", () => {
+  const f0 = hz(55);
+  const hum = render({ secs: 1.2, set: { syl: sylOf("mmm") }, notes: [[0.1, 55, 1]], params: { ...STEADY, atk: 0 } }).L;
+  const ah = render({ secs: 1.2, set: { syl: sylOf("a") }, notes: [[0.1, 55, 1]], params: { ...STEADY, atk: 0 } }).L;
+  const bright = (x) => bandEnergy(x, f0, 1200, 4000, 0.4, 1) / bandEnergy(x, f0, 100, 1200, 0.4, 1);
+  assert.ok(bright(hum) < bright(ah) * 0.3, `hum vs ah: ${db(bright(hum)).toFixed(1)} vs ${db(bright(ah)).toFixed(1)}dB`);
+  assert.ok(db(rms(hum, 0.4, 1)) > -35, `hum is ${db(rms(hum, 0.4, 1)).toFixed(1)}dB`);
 });

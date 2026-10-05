@@ -39,6 +39,13 @@
 //   y, r) is a murmur on its own formants. All of them start the formants
 //   somewhere else (the locus) and glide them to the vowel, which is most of
 //   what makes a consonant intelligible.
+// - **A syllable is a consonant, a vowel and a consonant**, and the vowel can
+//   glide to a second one (ai, oi, ow, ey). The processor is told each
+//   note's length, so the glide is timed across the middle of the voiced
+//   part and the final consonant ENDS where the note does: a closure and a
+//   release for t, a hiss for s, a hum carried into the release for m. A
+//   syllable with no vowel (mmm) is all hum. While the formants are pulled
+//   to a consonant's locus the level ducks, as a closing mouth's does.
 // - **The vowel lands on the step, the consonant before it.** A note message
 //   arrives ahead of its time (the transport's lookahead), so the onset is
 //   moved back by as much of the consonant as there is time for. A singer
@@ -71,7 +78,7 @@
 
 import {
   VOX_NUM_CTLS, VOX_MOD_KEYS, VOX_FORMANTS, VOX_VOWELS, VOX_CONSONANT_NAMES,
-  VOX_CONS_FIELDS, voxConsonantRow, VOX_WORDS, voxSyllables,
+  VOX_CONS_FIELDS, voxConsonantRow, VOX_WORDS, voxSyllables, VOX_SYL_STRIDE,
 } from "./engineData.js";
 
 // The tables, flattened into the processor's prelude so the worklet and the
@@ -95,6 +102,7 @@ const CF = ${VOX_CONS_FIELDS};
 const NCONS = ${VOX_CONSONANT_NAMES.length};
 const CONS = ${JSON.stringify(cons)};
 const CTLS = ${JSON.stringify(VOX_NUM_CTLS.map(([k, lo, hi, def]) => [k, lo, hi, def]))};
+const SYL = ${VOX_SYL_STRIDE};    // a syllable: [cons, vowel, vowel2, coda]
 `;
 }
 
@@ -125,59 +133,57 @@ function formantsAt(vowel, size, f, db, bw) {
 // ---- the event queue ------------------------------------------------------
 // The same allocation-free queue as drone.js / subbass.js: parallel typed
 // arrays, kept in order by inserting from the back, one scratch event reused
-// by every shift(). Two more fields: the consonant and the vowel a note sings.
+// by every shift(). Its fields are the syllable a note sings (the consonant
+// before, the vowel, the vowel it glides to, the consonant after) and the
+// note's length, which the glide and the final consonant are timed against.
 const QCAP = 1024;
+const QF = ["at", "id", "freq", "vel", "glide", "cons", "vowel", "v2", "coda", "len"];
 class EventQueue {
   constructor() {
-    this.at    = new Float64Array(QCAP);
-    this.id    = new Float64Array(QCAP);
-    this.freq  = new Float64Array(QCAP);
-    this.vel   = new Float64Array(QCAP);
-    this.glide = new Float64Array(QCAP);
-    this.cons  = new Float64Array(QCAP);
-    this.vowel = new Float64Array(QCAP);
-    this.off   = new Uint8Array(QCAP);
+    this.a = QF.map(() => new Float64Array(QCAP));
+    this.off = new Uint8Array(QCAP);
     this.head = 0;
     this.len = 0;
-    this.ev = { at: 0, off: false, id: 0, freq: 0, vel: 0, glide: 0, cons: 0, vowel: -1 };
+    this.ev = { off: false };
+    for (const k of QF) this.ev[k] = 0;
   }
   _move(d, s) {
-    this.at[d] = this.at[s]; this.id[d] = this.id[s]; this.freq[d] = this.freq[s];
-    this.vel[d] = this.vel[s]; this.glide[d] = this.glide[s]; this.cons[d] = this.cons[s];
-    this.vowel[d] = this.vowel[s]; this.off[d] = this.off[s];
+    for (let f = 0; f < QF.length; f++) this.a[f][d] = this.a[f][s];
+    this.off[d] = this.off[s];
   }
   _compact() {
     const h = this.head, e = h + this.len;
     if (h === 0) return;
-    this.at.copyWithin(0, h, e); this.id.copyWithin(0, h, e); this.freq.copyWithin(0, h, e);
-    this.vel.copyWithin(0, h, e); this.glide.copyWithin(0, h, e); this.cons.copyWithin(0, h, e);
-    this.vowel.copyWithin(0, h, e); this.off.copyWithin(0, h, e);
+    for (let f = 0; f < QF.length; f++) this.a[f].copyWithin(0, h, e);
+    this.off.copyWithin(0, h, e);
     this.head = 0;
   }
-  push(at, off, id, freq, vel, glide, cons, vowel) {
+  // vals: one number per QF field, in order.
+  push(off, vals) {
     if (this.len >= QCAP) this.dropOldest();
     if (this.head + this.len >= QCAP) this._compact();
+    const at = vals[0], A = this.a[0];
     let j = this.head + this.len - 1;
-    while (j >= this.head && this.at[j] > at) { this._move(j + 1, j); j--; }
+    while (j >= this.head && A[j] > at) { this._move(j + 1, j); j--; }
     const i = j + 1;
-    this.at[i] = at; this.off[i] = off ? 1 : 0; this.id[i] = id; this.freq[i] = freq;
-    this.vel[i] = vel; this.glide[i] = glide; this.cons[i] = cons; this.vowel[i] = vowel;
+    for (let f = 0; f < QF.length; f++) this.a[f][i] = vals[f];
+    this.off[i] = off ? 1 : 0;
     this.len++;
   }
-  headAt() { return this.at[this.head]; }
+  headAt() { return this.a[0][this.head]; }
   shift() {
     const i = this.head, e = this.ev;
-    e.at = this.at[i]; e.off = this.off[i] === 1; e.id = this.id[i]; e.freq = this.freq[i];
-    e.vel = this.vel[i]; e.glide = this.glide[i]; e.cons = this.cons[i]; e.vowel = this.vowel[i];
+    for (let f = 0; f < QF.length; f++) e[QF[f]] = this.a[f][i];
+    e.off = this.off[i] === 1;
     this.head++; this.len--;
     if (this.len === 0) this.head = 0;
     return e;
   }
   keepOffsBefore(limit) {
-    const h = this.head, end = h + this.len;
+    const h = this.head, end = h + this.len, A = this.a[0];
     let w = h;
     for (let r = h; r < end; r++) {
-      if (this.off[r] === 1 && this.at[r] < limit) { if (w !== r) this._move(w, r); w++; }
+      if (this.off[r] === 1 && A[r] < limit) { if (w !== r) this._move(w, r); w++; }
     }
     this.len = w - h;
     if (this.len === 0) this.head = 0;
@@ -190,12 +196,27 @@ class EventQueue {
 }
 
 // How far ahead of the vowel a consonant starts, in ms: the voicing delay, or
-// most of a murmur.
+// most of a murmur. Also where the vowel's voicing begins in a note.
 function consLead(c) {
   const r = c * CF;
   const mur = CONS[r + 15];
   return mur > 0 ? mur * 0.7 : CONS[r + 8];
 }
+
+// How long a consonant takes at the END of a syllable, in ms: a murmur held
+// a little longer than it is before a vowel, a fricative's hiss, or a
+// closure and then the release.
+const CLOSURE_MS = 55;
+function codaMs(c) {
+  const r = c * CF;
+  if (CONS[r + 15] > 0) return Math.max(80, CONS[r + 15] * 1.4);
+  if (CONS[r] > 0) return CONS[r];
+  if (CONS[r + 4] > 0) return CLOSURE_MS + CONS[r + 4];
+  return 0;
+}
+// The scratch row a note's values are pushed through, so a note costs no
+// allocation on the audio thread.
+const QV = new Float64Array(QF.length);
 
 class VoxProcessor extends AudioWorkletProcessor {
   static get parameterDescriptors() {
@@ -234,7 +255,10 @@ class VoxProcessor extends AudioWorkletProcessor {
     this.vT    = new Float64Array(NV);     // samples since the syllable began
     this.vVib  = new Float64Array(NV);     // samples since the vibrato clock began
     this.vCons = new Int32Array(NV);
-    this.vVow  = new Float64Array(NV);     // -1: follow the vowel slider
+    this.vVow  = new Float64Array(NV);     // -1: follow the vowel slider, -2: a hum
+    this.vV2   = new Float64Array(NV);     // the vowel it glides to, -1: none
+    this.vCoda = new Int32Array(NV);       // the consonant it ends on
+    this.vLen  = new Float64Array(NV);     // the note's length, samples from its onset
     this.vSnap = new Uint8Array(NV);       // formants jump, not glide, next block
     // smoothed formant targets and the coefficients built from them
     this.vF   = new Float64Array(NV * NF);
@@ -255,6 +279,9 @@ class VoxProcessor extends AudioWorkletProcessor {
     this.kVg = new Float64Array(NV); this.kAsp = new Float64Array(NV); this.kNz = new Float64Array(NV);
     this.kNa1 = new Float64Array(NV); this.kNa2 = new Float64Array(NV); this.kNa3 = new Float64Array(NV);
     this.kNk = new Float64Array(NV);
+    this.kLr = new Int32Array(NV); this.kLw = new Float64Array(NV); this.kDamp = new Float64Array(NV);
+    this.kG2 = new Float64Array(NV);   // how far into the second vowel
+    this.f2 = new Float64Array(NF); this.db2 = new Float64Array(NF); this.bw2 = new Float64Array(NF);
 
     // ---- choir copies, [voice][copy] ----
     this.uPh   = new Float64Array(NV * NU);
@@ -288,17 +315,22 @@ class VoxProcessor extends AudioWorkletProcessor {
       const at = Math.max(0, Math.round(m.when * this.sr));
       // What this note sings: the next syllable of the words (a chord on one
       // instant shares one), else the consonant select and the vowel slider.
-      let cons = this.cons, vowel = -1;
+      let cons = this.cons, vowel = -1, v2 = -1, coda = 0;
       if (this.syl.length) {
-        if (at !== this.lastMsgWhen) this.sylIdx = (this.sylIdx + 1) % (this.syl.length / 2);
-        cons = this.syl[this.sylIdx * 2]; vowel = this.syl[this.sylIdx * 2 + 1];
+        if (at !== this.lastMsgWhen) this.sylIdx = (this.sylIdx + 1) % (this.syl.length / SYL);
+        const b = this.sylIdx * SYL;
+        cons = this.syl[b]; vowel = this.syl[b + 1]; v2 = this.syl[b + 2]; coda = this.syl[b + 3];
       }
       this.lastMsgWhen = at;
       // The consonant goes before the step, as far as there is time for.
       const now = typeof currentFrame === "number" ? currentFrame : 0;
       const lead = Math.max(0, Math.min(Math.round(consLead(cons) * this.sr / 1000), at - now));
-      this.queue.push(at - lead, false, m.id, m.freq, m.vel, m.glide, cons, vowel);
-      this.queue.push(at + Math.max(1, Math.round(m.dur * this.sr)), true, m.id, 0, 0, 0, 0, 0);
+      const dur = Math.max(1, Math.round(m.dur * this.sr));
+      QV[0] = at - lead; QV[1] = m.id; QV[2] = m.freq; QV[3] = m.vel; QV[4] = m.glide;
+      QV[5] = cons; QV[6] = vowel; QV[7] = v2; QV[8] = coda; QV[9] = lead + dur;
+      this.queue.push(false, QV);
+      QV[0] = at + dur;
+      this.queue.push(true, QV);
     } else if (m.type === "off") {
       const at = Math.max(0, Math.round(m.when * this.sr));
       this.queue.keepOffsBefore(at);
@@ -307,7 +339,7 @@ class VoxProcessor extends AudioWorkletProcessor {
       this.sylIdx = -1; this.lastMsgWhen = -1;
     } else if (m.type === "set") {
       if (m.cons !== undefined) this.cons = Math.max(0, Math.min(NCONS - 1, m.cons | 0));
-      if (m.syl !== undefined) { this.syl = Array.isArray(m.syl) ? m.syl.slice(0, 256) : []; this.sylIdx = -1; this.lastMsgWhen = -1; }
+      if (m.syl !== undefined) { this.syl = Array.isArray(m.syl) && m.syl.length % SYL === 0 ? m.syl.slice(0, 128 * SYL) : []; this.sylIdx = -1; this.lastMsgWhen = -1; }
       if (m.mono !== undefined) {
         const mono = m.mono ? 1 : 0;
         if (mono !== this.mono) this.allNotesOff();
@@ -378,6 +410,9 @@ class VoxProcessor extends AudioWorkletProcessor {
     this.vT[v] = 0;
     this.vCons[v] = ev.cons | 0;
     this.vVow[v] = ev.vowel;
+    this.vV2[v] = ev.v2;
+    this.vCoda[v] = ev.coda | 0;
+    this.vLen[v] = ev.len;
   }
 
   noteOff(id) {
@@ -388,43 +423,99 @@ class VoxProcessor extends AudioWorkletProcessor {
     for (let v = 0; v < NV; v++) this.vOn[v] = 0;
   }
 
-  // The consonant script at this voice's time, into kVg (voicing), kAsp
-  // (breath through the formants), kNz (the consonant's own noise), the noise
-  // filter (kNa*, kNk), and returns the locus weight; the locus and the murmur
-  // damping are written into the formant targets by the caller.
+  // The syllable's script at this voice's time: the consonant before the
+  // vowel, the glide to a second vowel, the consonant after it. Writes kVg
+  // (voicing), kAsp (breath through the formants), kNz and the noise filter
+  // (kNa*, kNk), the locus the formants are pulled to (kLr, a CONS row, and
+  // kLw, how far), the damping of the upper formants (kDamp) and how far the
+  // vowel has moved to its second (kG2).
   consonant(v, bite) {
-    const c = this.vCons[v];
-    const ms = this.vT[v] * 1000 / this.sr;
-    if (c <= 0) { this.kVg[v] = 1; this.kAsp[v] = 0; this.kNz[v] = 0; return 0; }
-    const r = c * CF;
-    const fricMs = CONS[r], burMs = CONS[r + 4];
-    const vot = CONS[r + 8], pre = CONS[r + 9], asp = CONS[r + 10];
-    const trans = CONS[r + 14], murMs = CONS[r + 15], murL = CONS[r + 16];
-    // voicing
-    let vg;
-    if (murMs > 0) vg = ms < murMs ? murL : Math.min(1, murL + (ms - murMs) / 15 * (1 - murL));
-    else vg = ms < vot ? pre : Math.min(1, pre + (ms - vot) / 12 * (1 - pre));
-    this.kVg[v] = vg;
-    // breath until the voicing, faded out over 8ms
-    this.kAsp[v] = asp > 0 ? asp * bite * Math.max(0, Math.min(1, (vot + 8 - ms) / 8)) : 0;
-    // the consonant's own noise: a burst, or frication
-    let nz = 0, hz = 1000, q = 1;
-    if (burMs > 0 && ms < burMs) {
-      nz = CONS[r + 7] * (1 - ms / burMs); hz = CONS[r + 5]; q = CONS[r + 6];
-    } else if (fricMs > 0 && ms < fricMs) {
-      nz = CONS[r + 3] * Math.min(1, ms / 15) * Math.min(1, (fricMs - ms) / 20);
-      hz = CONS[r + 1]; q = CONS[r + 2];
+    const sr = this.sr;
+    const c = this.vCons[v], cd = this.vCoda[v];
+    const ms = this.vT[v] * 1000 / sr;
+    let vg = 1, asp = 0, nz = 0, hz = 1000, q = 1, lr = -1, lw = 0, damp = 1;
+    let voiceAt = 0;   // ms: where the vowel's voicing starts
+
+    // ---- the consonant before ----
+    if (c > 0) {
+      const r = c * CF;
+      const fricMs = CONS[r], burMs = CONS[r + 4];
+      const vot = CONS[r + 8], pre = CONS[r + 9], a = CONS[r + 10];
+      const trans = CONS[r + 14], murMs = CONS[r + 15], murL = CONS[r + 16];
+      voiceAt = murMs > 0 ? murMs : vot;
+      if (murMs > 0) vg = ms < murMs ? murL : Math.min(1, murL + (ms - murMs) / 15 * (1 - murL));
+      else vg = ms < vot ? pre : Math.min(1, pre + (ms - vot) / 12 * (1 - pre));
+      // breath until the voicing, faded out over 8ms
+      asp = a > 0 ? a * bite * Math.max(0, Math.min(1, (vot + 8 - ms) / 8)) : 0;
+      if (burMs > 0 && ms < burMs) {
+        nz = CONS[r + 7] * (1 - ms / burMs); hz = CONS[r + 5]; q = CONS[r + 6];
+      } else if (fricMs > 0 && ms < fricMs) {
+        nz = CONS[r + 3] * Math.min(1, ms / 15) * Math.min(1, (fricMs - ms) / 20);
+        hz = CONS[r + 1]; q = CONS[r + 2];
+      }
+      if (CONS[r + 11] > 0) {
+        const w = ms < voiceAt ? 1 : Math.max(0, 1 - (ms - voiceAt) / Math.max(1, trans));
+        if (w > 0) { lr = r; lw = w; if (murMs > 0) damp = 1 - (1 - CONS[r + 17]) * w; }
+      }
     }
+
+    // ---- the consonant after ----
+    // It ends where the note does: it starts its own length before the end
+    // (never more than 45% of the voiced part), and its formants are reached
+    // over its transition before that. A hum (no vowel) is all consonant.
+    const lenMs = this.vLen[v] * 1000 / sr;
+    let endMs = lenMs;
+    if (cd > 0) {
+      const r = cd * CF;
+      const hum = this.vVow[v] === -2;
+      const span = Math.min(codaMs(cd), 0.45 * Math.max(0, lenMs - voiceAt));
+      const start = hum ? -1000 : lenMs - span;
+      endMs = start;
+      const tc = ms - start, trans = Math.max(1, CONS[r + 14]);
+      const fricMs = CONS[r], burMs = CONS[r + 4], pre = CONS[r + 9];
+      const murMs = CONS[r + 15], murL = CONS[r + 16];
+      if (tc > -trans) {
+        const w = tc >= 0 ? 1 : 1 + tc / trans;
+        if (CONS[r + 11] > 0 && w >= lw) { lr = r; lw = w; damp = murMs > 0 ? 1 - (1 - CONS[r + 17]) * w : 1; }
+      }
+      if (tc >= 0) {
+        if (murMs > 0) vg *= 1 + (murL - 1) * Math.min(1, tc / 15);
+        else if (fricMs > 0) {
+          vg *= 1 + (pre - 1) * Math.min(1, tc / 15);
+          if (tc < fricMs && nz === 0) {
+            nz = CONS[r + 3] * Math.min(1, tc / 15) * Math.min(1, (fricMs - tc) / 20);
+            hz = CONS[r + 1]; q = CONS[r + 2];
+          }
+        } else if (burMs > 0) {
+          // the closure: the voicing stops (a voiced one keeps its voice bar),
+          // then the release, weaker than a burst into a vowel
+          vg *= tc < CLOSURE_MS ? Math.max(pre, 1 - tc / 8) : 0;
+          const tb = tc - CLOSURE_MS;
+          if (tb >= 0 && tb < burMs && nz === 0) {
+            nz = CONS[r + 7] * 0.6 * (1 - tb / burMs); hz = CONS[r + 5]; q = CONS[r + 6];
+          }
+        }
+      }
+    }
+
+    // ---- the glide to a second vowel ----
+    // Across the middle of the voiced part, from 30% to 80% of it.
+    let g2 = 0;
+    if (this.vV2[v] >= 0) {
+      const a = voiceAt + 0.3 * (endMs - voiceAt), b = voiceAt + 0.8 * (endMs - voiceAt);
+      const x = b > a + 1 ? (ms - a) / (b - a) : (ms >= a ? 1 : 0);
+      const y = Math.max(0, Math.min(1, x));
+      g2 = y * y * (3 - 2 * y);
+    }
+
+    this.kVg[v] = vg; this.kAsp[v] = asp;
     this.kNz[v] = nz * bite * (0.4 + 0.6 * this.vVel[v]);
     if (nz > 0) {
-      const g = Math.tan(Math.PI * Math.min(hz, this.sr * 0.45) / this.sr), k = 1 / q;
+      const g = Math.tan(Math.PI * Math.min(hz, sr * 0.45) / sr), k = 1 / q;
       const a1 = 1 / (1 + g * (g + k));
       this.kNa1[v] = a1; this.kNa2[v] = g * a1; this.kNa3[v] = g * g * a1; this.kNk[v] = k;
     }
-    // where the formants start, and how far along the glide away from it
-    if (CONS[r + 11] <= 0) return 0;
-    const t0 = murMs > 0 ? murMs : vot;
-    return ms < t0 ? 1 : Math.max(0, 1 - (ms - t0) / Math.max(1, trans));
+    this.kLr[v] = lr; this.kLw[v] = lw; this.kDamp[v] = damp; this.kG2[v] = g2;
   }
 
   process(inputs, outputs, params) {
@@ -489,18 +580,25 @@ class VoxProcessor extends AudioWorkletProcessor {
           if (Math.abs(this.vTgt[v] - this.vFreq[v]) < 0.001) { this.vFreq[v] = this.vTgt[v]; this.vGlA[v] = 1; }
         }
         const f0 = this.vFreq[v];
-        const lw = this.consonant(v, bite);
+        this.consonant(v, bite);
+        const lw = this.kLw[v], r = this.kLr[v], damp = this.kDamp[v], g2 = this.kG2[v];
+        const nasal = r >= 0 && CONS[r + 15] > 0;
 
-        // ---- formants: the vowel, smoothed, then the consonant's locus ----
+        // ---- formants: the vowel (and its glide), smoothed, then a locus ----
         formantsAt(this.vVow[v] >= 0 ? this.vVow[v] : vowelP, size, f, db, bw);
+        if (g2 > 0) {
+          const f2 = this.f2, db2 = this.db2, bw2 = this.bw2;
+          formantsAt(this.vV2[v], size, f2, db2, bw2);
+          for (let k = 0; k < NF; k++) {
+            f[k] += (f2[k] - f[k]) * g2; db[k] += (db2[k] - db[k]) * g2; bw[k] += (bw2[k] - bw[k]) * g2;
+          }
+        }
         const sm = this.vSnap[v] ? 1 : smooth;
         this.vSnap[v] = 0;
-        const c = this.vCons[v], r = c * CF;
-        const murMs = c > 0 ? CONS[r + 15] : 0;
-        const damp = murMs > 0 ? 1 - (1 - CONS[r + 17]) * lw : 1;
         // One closure a period, so a low note has fewer of them a second: about
         // 3dB an octave quieter, which this takes back out.
         const pitchG = Math.max(0.5, Math.min(2.5, Math.sqrt(262 / f0)));
+        const duck = 1 - 0.65 * lw;
         for (let k = 0; k < NF; k++) {
           const j = v * NF + k;
           this.vF[j] += (f[k] - this.vF[j]) * sm;
@@ -511,7 +609,7 @@ class VoxProcessor extends AudioWorkletProcessor {
           // F1 follows the pitch up rather than sitting under it.
           if (k === 0 && fk < f0 * 1.1) fk = f0 * 1.1;
           if (fk > sr * 0.45) fk = sr * 0.45;
-          const bwk = Math.max(20, this.vBw[j] * bwMul * (k === 0 && murMs > 0 && lw > 0 ? 1 + lw : 1));
+          const bwk = Math.max(20, this.vBw[j] * bwMul * (k === 0 && nasal && lw > 0 ? 1 + lw : 1));
           const g = Math.tan(Math.PI * fk / sr), kq = bwk / fk;
           const a1 = 1 / (1 + g * (g + kq));
           this.cA1[j] = a1; this.cA2[j] = g * a1; this.cA3[j] = g * g * a1;
@@ -519,7 +617,12 @@ class VoxProcessor extends AudioWorkletProcessor {
           // (against a fixed 500Hz, so an open a with its F1 at 800Hz is not
           // quieter than a closed i) so the table's dB are what comes out;
           // alternating sign (Klatt).
-          const lvl = Math.pow(10, this.vDb[j] / 20) * (fk / 500) * (k > 0 ? damp : 1) * pitchG;
+          // A consonant's locus is the mouth closing, and a closing mouth lets
+          // less out: the level ducks with the locus weight (9dB at the
+          // locus). Without it, a locus F1 at 250-300Hz sat on the
+          // fundamental of a middle-C note and every consonant was a bump
+          // up to 7dB over its vowel.
+          const lvl = Math.pow(10, this.vDb[j] / 20) * (fk / 500) * (k > 0 ? damp : 1) * pitchG * duck;
           this.cG[j] = kq * lvl * (k & 1 ? -1 : 1);
         }
 
@@ -704,16 +807,19 @@ export {
   VOX_TONE_NAMES, voxToneDescription, voxTone,
 } from "./engineData.js";
 
+/** One syllable as the processor's row: [cons, vowel, vowel2, coda]. */
+export function voxSyllableRow(s) { return [s.cons, s.vowel, s.vowel2 ?? -1, s.coda ?? 0]; }
+
 /** A words select value as the flat [cons, vowel, ...] list the processor takes. */
 export function voxSyllableList(name) {
-  return voxSyllables(VOX_WORDS[name] ?? "").flatMap(s => [s.cons, s.vowel]);
+  return voxSyllables(VOX_WORDS[name] ?? "").flatMap(voxSyllableRow);
 }
 
 /** What a track sings: its typed lyric when that has a syllable in it, else
  *  its words select. As the flat list the processor takes. */
 export function voxPhrase(words, text) {
   const typed = voxSyllables(text);
-  return typed.length ? typed.flatMap(s => [s.cons, s.vowel]) : voxSyllableList(words);
+  return typed.length ? typed.flatMap(voxSyllableRow) : voxSyllableList(words);
 }
 
 // Tone wrappers don't accept a native connect() — unwrap to the node underneath.

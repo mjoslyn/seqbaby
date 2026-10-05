@@ -1001,10 +1001,15 @@ export default function ManualPage() {
               step, so the vowel lands on the beat, the way a singer places a
               word. <span className={styles.ui}>bite</span> is how loud the
               consonants are. Or type your own lyric in the field beside it,
-              one syllable a note, a consonant and a vowel each:{" "}
-              <span className={styles.ui}>shu bi du wa</span>. Anything after the
-              vowel is not sung, so write <span className={styles.ui}>su</span>{" "}
-              for &quot;sun&quot;.
+              one syllable a note:{" "}
+              <span className={styles.ui}>twin kel twin kel lit tel star</span>. A
+              syllable is a consonant, a vowel and a consonant; the last one is sung
+              as the note ends. Two vowels glide from one to the other (
+              <span className={styles.ui}>ai</span> for &quot;eye&quot;,{" "}
+              <span className={styles.ui}>ow</span> for &quot;now&quot;),{" "}
+              <span className={styles.ui}>oo</span> is u, <span className={styles.ui}>ee</span>{" "}
+              is i, and <span className={styles.ui}>mmm</span> is a hum. Spell it as it
+              sounds: one consonant each side of the vowel.
             </li>
             <li>
               <strong>The vibrato comes in late</strong>, after{" "}
