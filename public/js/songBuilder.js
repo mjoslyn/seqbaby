@@ -49,8 +49,9 @@ import {
 } from "./engineData.js";
 import { EUCLID_DEFAULTS, FILTER_TYPES, PRISM_MODES, REPEAT_MODES, defaultCompConfig, defaultEq, defaultFilter, defaultFxConfig, defaultTrackParams } from "./soundDefaults.js";
 import {
-  AUTOMATION_TARGETS, FX_STAGE_LEVEL_KEY, LFO_DIVS, LFO_KEYS, LFO_LABELS, PATTERN_COUNT, STEPS_PER_BAR,
+  AUTOMATION_TARGETS, FX_STAGE_LEVEL_KEY, LFO_DIVS, LFO_KEYS, LFO_LABELS, PATTERN_COUNT, STEPS_PER_BAR, fxStageLevel,
   canAutomateKey, canModulateKey, lfoDivLabel, voiceAutoKeysForEngineKey,
+  FX_STAGE_KEYS, baseModKey, fxChainOrder, fxInstanceIds, fxStageOf, fxStageOfModKey, isFxInstanceId, splitFxInstanceKey,
 } from "./constants.js";
 import { CHANCE_DEFAULTS, CHANCE_NOTE_MAX, CHANCE_NOTE_MIN, CHANCE_NOTE_VALUES, cloneChance } from "./chanceGen.js";
 import { CHORD_TYPES, SCALES, canonicalChord, midiToName, nameToMidi } from "./theoryData.js";
@@ -710,18 +711,28 @@ const FX_SELECT = {
   "repeat.mode": REPEAT_MODES,
 };
 /**
- * An fx rack stage. `stage` is one of FX_STAGES (vinyl, cassette, fuzz,
- * ringmod, shaper, crush, autowah, chorus, phaser, flanger, pitchshift, repeat, prism, delay,
- * reverb, or amp); `settings` its controls. A stage is on when its wet /
- * amount is above zero. The whole stage is written, defaults filled in, since
- * the engine takes a stage config whole.
+ * An fx rack stage. `stage` is one of FX_STAGES (gain, vinyl, cassette, fuzz,
+ * ringmod, shaper, crush, autowah, chorus, phaser, flanger, pitchshift, repeat, prism, pan, delay,
+ * reverb, or amp), or a COPY of one, "<stage>#<n>" with n from 2 ("delay#2"),
+ * which is made if it is not there; `settings` its controls, or null to take a
+ * copy off (with its LFOs and lanes). A stage is on when its level is off its
+ * resting place (wet / amount above zero; gain and pan off centre). The whole
+ * stage is written, defaults filled in, since the engine takes a stage config
+ * whole.
  */
 export function setFx(song, index, stage, settings = {}) {
   const t = trackAt(song, index);
   const d = defaultFxConfig();
-  const s = String(stage);
-  if (!(s in d)) fail(`unknown fx stage ${JSON.stringify(stage)}; one of ${FX_STAGES.join(", ")}`);
-  const cur = { ...d[s], ...(t.fxConfig[s] || {}) };
+  const id = String(stage);
+  const copy = isFxInstanceId(id) && Number(id.split("#")[1]) >= 2;
+  const s = copy ? fxStageOf(id) : id;
+  if (!(s in d) || (id.includes("#") && !copy)) fail(`unknown fx stage ${JSON.stringify(stage)}; one of ${FX_STAGES.join(", ")}, or a copy of one as delay#2`);
+  if (settings === null) {
+    if (!copy) fail(`only a copy (delay#2) can be taken off; turn ${s}'s level down instead`);
+    removeFxCopy(t, id);
+    return null;
+  }
+  const cur = { ...d[s], ...(t.fxConfig[id] || {}) };
   for (const [k, v] of Object.entries(settings)) {
     const full = `${s}.${k}`;
     const alias = k === "amount" && !("amount" in d[s]) ? "wet" : k === "wet" && !("wet" in d[s]) ? "amount" : k;
@@ -730,8 +741,36 @@ export function setFx(song, index, stage, settings = {}) {
     else if (FX_SELECT[full]) cur[alias] = oneOf(v, full, FX_SELECT[full]);
     else { const [lo, hi] = FX_RANGE[`${s}.${alias}`] || [0, 1]; cur[alias] = num(v, full, lo, hi); }
   }
-  t.fxConfig[s] = cur;
+  t.fxConfig[id] = cur;
   return cur;
+}
+
+function removeFxCopy(t, id) {
+  delete t.fxConfig[id];
+  if (Array.isArray(t.fxConfig.order)) t.fxConfig.order = t.fxConfig.order.filter(x => x !== id);
+  for (const k of Object.keys(t.lfoConfig || {})) if (fxStageOfModKey(k) === id) delete t.lfoConfig[k];
+  for (const p of t.patterns || []) for (const k of Object.keys(p?.automation || {})) if (fxStageOfModKey(k) === id) delete p.automation[k];
+}
+
+/**
+ * The order a track's fx run in: stage names and copies ("delay#2"), first to
+ * last. A stage left out runs after the ones named, in the default order
+ * (gain, vinyl, ... reverb); null goes back to the default order.
+ */
+export function setFxChain(song, index, ids) {
+  const t = trackAt(song, index);
+  if (ids === null) { delete t.fxConfig.order; return fxChainOrder(t.fxConfig); }
+  const list = typeof ids === "string" ? ids.trim().split(/[\s,>]+/).filter(Boolean) : ids;
+  if (!Array.isArray(list)) fail("the chain is a list of stages, first to last");
+  const seen = new Set();
+  for (const id of list) {
+    const ok = FX_STAGE_KEYS.includes(id) || (isFxInstanceId(id) && t.fxConfig[id]);
+    if (!ok) fail(`${JSON.stringify(id)} is not a stage${isFxInstanceId(id) ? " this track has (setFx makes a copy first)" : ""}; one of ${[...FX_STAGE_KEYS, ...fxInstanceIds(t.fxConfig)].join(", ")}`);
+    if (seen.has(id)) fail(`${id} is in the chain twice; a second ${fxStageOf(id)} is a copy, ${fxStageOf(id)}#2`);
+    seen.add(id);
+  }
+  t.fxConfig.order = [...list];
+  return fxChainOrder(t.fxConfig);
 }
 
 // ---- modulation ---------------------------------------------------------------------
@@ -764,10 +803,11 @@ function lfoDiv(length) {
 export function addLfo(song, index, { target, shape = "sine", amount = 0.5, length = "4 steps", rate, sync, bipolar, phase, euclid } = {}) {
   const t = trackAt(song, index);
   const key = String(target || "");
-  if (!LFO_KEYS.includes(key)) {
+  if (!LFO_KEYS.includes(baseModKey(key))) {
     const near = LFO_KEYS.filter(k => k.includes(key) || (LFO_LABELS[k] || "").includes(key)).slice(0, 8);
     fail(`unknown LFO target ${JSON.stringify(target)}${near.length ? `; did you mean ${near.join(", ")}` : ""}`);
   }
+  if (splitFxInstanceKey(key) && !t.fxConfig[fxStageOfModKey(key) || ""]) fail(`${key} is a copy's target, and this track has no ${fxStageOfModKey(key) || "such copy"} (setFx makes one)`);
   const live = { euclid: !!t.euclid?.on, chance: !!t.chance?.on };
   if (!canModulateKey(t.engineKey, key, live)) {
     const why = key.startsWith("euclid_") ? " (turn the euclid generator on first)" : key.startsWith("chance_") ? " (turn the chance generator on first)" : "";
@@ -807,10 +847,11 @@ export function removeLfo(song, index, target) {
 export function setAutomation(song, index, { pattern = 0, target, values } = {}) {
   const t = trackAt(song, index);
   const key = String(target || "");
-  if (!AUTOMATION_TARGETS[key]) {
+  if (!AUTOMATION_TARGETS[baseModKey(key)]) {
     const near = Object.keys(AUTOMATION_TARGETS).filter(k => k.includes(key)).slice(0, 8);
     fail(`unknown automation target ${JSON.stringify(target)}${near.length ? `; did you mean ${near.join(", ")}` : ""}`);
   }
+  if (splitFxInstanceKey(key) && !t.fxConfig[fxStageOfModKey(key) || ""]) fail(`${key} is a copy's lane, and this track has no ${fxStageOfModKey(key) || "such copy"} (setFx makes one)`);
   const live = { euclid: !!t.euclid?.on, chance: !!t.chance?.on };
   if (!canAutomateKey(t.engineKey, key, live)) fail(`${key} cannot be automated on ${t.engineKey}; this engine's lanes: ${Object.keys(AUTOMATION_TARGETS).filter(k => canAutomateKey(t.engineKey, k, live)).join(", ")}`);
   const pat = patternOf(t, pattern);
@@ -1044,8 +1085,8 @@ export function summarizeTrack(song, index) {
   const t = trackAt(song, index);
   const i = int(index, "track");
   const d = defaultFxConfig();
-  const fxOn = Object.keys(d).filter(s => s !== "amp" && (t.fxConfig[s]?.[FX_STAGE_LEVEL_KEY[s]] ?? 0) > 0)
-    .map(s => `${s}=${t.fxConfig[s][FX_STAGE_LEVEL_KEY[s]]}`);
+  const fxOn = fxChainOrder(t.fxConfig).filter(s => fxStageLevel(t.fxConfig, s) > 0)
+    .map(s => `${s}=${t.fxConfig[s][FX_STAGE_LEVEL_KEY[fxStageOf(s)]]}`);
   const lfos = Object.entries(t.lfoConfig || {}).filter(([, c]) => c?.enabled).map(([k, c]) => `${k}:${c.type} ${c.depth} @ ${c.sync ? lfoDivLabel(c.div) : c.rate + "Hz"}`);
   const labels = engineSliderLabels(t.engineKey);
   const sliders = {};

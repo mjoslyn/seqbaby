@@ -217,12 +217,51 @@ function migrateCrushRate(o) {
   if (c && typeof c === "object" && c.rate == null) c.rate = 1;
 }
 
+// The beat repeat's pitch knob went from 0..12 semitones down (0 at the
+// bottom) to -24..+24 (0 in the middle). A repeat config written before has no
+// `pitchV`; its pitch p meant 12p down, which is 0.5 - p/4 now. Returns
+// whether it rewrote anything, so the lanes on that knob follow.
+function migrateRepeatPitch(o) {
+  const fc = o?.fxConfig;
+  if (!fc || typeof fc !== "object") return false;
+  let moved = false;
+  for (const k of Object.keys(fc)) {
+    if (k !== "repeat" && !/^repeat#[0-9]+$/.test(k)) continue;
+    const c = fc[k];
+    if (!c || typeof c !== "object" || c.pitchV === 2) continue;
+    const p = Number(c.pitch);
+    c.pitch = Number.isFinite(p) ? 0.5 - Math.min(1, Math.max(0, p)) / 4 : 0.5;
+    c.pitchV = 2;
+    if (k === "repeat") moved = true;
+  }
+  return moved;
+}
+
+// The amp's drive was an input gain in front of every stage. With the chain
+// reorderable it became a stage of its own, gain, placeable anywhere: a sound
+// that turned the old knob gets a gain stage holding that drive at the TOP of
+// its chain (where the drive was), and the amp's drive back at unity. With no
+// order the chain starts with gain anyway, so only a written order needs it.
+function migrateAmpDrive(o) {
+  const fc = o?.fxConfig;
+  const amp = fc?.amp;
+  if (!amp || typeof amp !== "object") return;
+  const p = Number(amp.preamp);
+  if (!Number.isFinite(p) || Math.abs(p - 0.5) < 1e-6) return;
+  amp.preamp = 0.5;
+  if (fc.gain && typeof fc.gain === "object" && Math.abs(Number(fc.gain.drive ?? 0.5) - 0.5) > 1e-6) return;
+  fc.gain = { drive: Math.min(1, Math.max(0, p)) };
+  if (Array.isArray(fc.order)) fc.order = ["gain", ...fc.order.filter(id => id !== "gain")];
+}
+
 /** A sound snapshot, or anything shaped like one (a track, a saved patch). */
 function migrateSoundNames(o) {
-  if (!o || typeof o !== "object") return;
+  if (!o || typeof o !== "object") return false;
   renameKeys(o.params, (k) => LEGACY_PARAM_KEYS[k] || k);
   renameKeys(o.lfoConfig, migrateModKey);
   migrateCrushRate(o);
+  migrateAmpDrive(o);
+  return migrateRepeatPitch(o);
 }
 
 /**
@@ -233,11 +272,16 @@ function migrateSoundNames(o) {
 export function migrateTrackNames(td) {
   if (!td || typeof td !== "object") return td;
   if (LEGACY_ENGINE_KEYS[td.engineKey]) td.engineKey = LEGACY_ENGINE_KEYS[td.engineKey];
-  migrateSoundNames(td);          // the live sound
+  const repeatMoved = migrateSoundNames(td);   // the live sound
   migrateSoundNames(td.baseSound); // the sound every unlocked pattern shares
   for (const p of Array.isArray(td.patterns) ? td.patterns : []) {
     if (!p || typeof p !== "object") continue;
     renameKeys(p.automation, migrateModKey);
+    // A lane on the repeat's pitch was written in the old knob's units too.
+    const lane = repeatMoved && p.automation?.["fx.repeat.pitch"];
+    if (lane && Array.isArray(lane.values)) {
+      lane.values = lane.values.map(v => (Number.isFinite(Number(v)) ? 0.5 - Math.min(1, Math.max(0, Number(v))) / 4 : v));
+    }
     migrateSoundNames(p.sound);   // a p-locked pattern's own sound
   }
   return td;

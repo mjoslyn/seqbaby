@@ -326,3 +326,32 @@ test("normalizeArrangement keeps a lane's own pattern per track, index to patter
   assert.deepEqual(normalizeArrangement([{ p: 0, bars: 4, pat: {} }, { p: 0, bars: 4, pat: [3] }, { p: 0, bars: 4, pat: 3 }]), [{ p: 0, bars: 4 }, { p: 0, bars: 4 }, { p: 0, bars: 4 }], "empty or unreadable is left unsaid");
   assert.deepEqual(normalizeArrangement([{ p: null, bars: 2, pat: { 0: 1 } }]), [{ p: null, bars: 2, pat: { 0: 1 } }], "a rest with a lane in it: that track plays, the others rest");
 });
+
+test("a beat repeat pitch from before the -24..+24 knob keeps its drop, lanes included", () => {
+  const td = migrateTrackNames({
+    fxConfig: { repeat: { wet: 1, pitch: 1 }, "repeat#2": { wet: 1, pitch: 0 } },
+    baseSound: { fxConfig: { repeat: { pitch: 0.5 } } },
+    patterns: [{ automation: { "fx.repeat.pitch": { enabled: true, values: [0, 1] } } }],
+  });
+  assert.equal(td.fxConfig.repeat.pitch, 0.25);          // 12 down
+  assert.equal(td.fxConfig["repeat#2"].pitch, 0.5);      // none
+  assert.equal(td.baseSound.fxConfig.repeat.pitch, 0.375); // 6 down
+  assert.deepEqual(td.patterns[0].automation["fx.repeat.pitch"].values, [0.5, 0.25]);
+  // and only once
+  migrateTrackNames(td);
+  assert.equal(td.fxConfig.repeat.pitch, 0.25);
+});
+
+test("the amp's old drive becomes a gain stage at the top of the chain", () => {
+  const td = migrateTrackNames({
+    fxConfig: { amp: { preamp: 0.8, level: 0.6 }, order: ["delay", "reverb"] },
+    patterns: [{ sound: { fxConfig: { amp: { preamp: 0.5, level: 0.5 } } } }],
+  });
+  assert.deepEqual(td.fxConfig.gain, { drive: 0.8 });
+  assert.equal(td.fxConfig.amp.preamp, 0.5);
+  assert.equal(td.fxConfig.amp.level, 0.6);
+  assert.deepEqual(td.fxConfig.order, ["gain", "delay", "reverb"]);
+  assert.equal(td.patterns[0].sound.fxConfig.gain, undefined);   // unity: nothing to move
+  migrateTrackNames(td);
+  assert.deepEqual(td.fxConfig.order, ["gain", "delay", "reverb"]);
+});

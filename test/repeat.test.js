@@ -141,10 +141,20 @@ test("repeat: decay lowers each repeat, pitch drops each one", () => {
     assert.ok(Math.abs(heard(L, 12 + k) - want) < 0.002, `repeat ${k}: ${heard(L, 12 + k).toFixed(4)} wanted ${want.toFixed(4)}`);
   }
   // 12 semitones down per repeat: the first repeat is at 500Hz, the second 250
-  const p = render(make(), 2.2, stepped, { chance: 1, pitch: 1 }).L;
+  const p = render(make(), 2.2, stepped, { chance: 1, pitch: 0.25 }).L;
   const from = 13 * SPS + 600, to = 14 * SPS - 600;
   assert.ok(tone(p, 500, from, to) > 5 * tone(p, 1000, from, to), "first repeat an octave down");
   assert.ok(tone(p, 250, 14 * SPS + 600, 15 * SPS - 600) > 5 * tone(p, 1000, 14 * SPS + 600, 15 * SPS - 600), "second two octaves down");
+});
+
+test("repeat: pitch above the middle rises each repeat, looping the slice rather than reading past it", () => {
+  // +12 per repeat: the first repeat at 2000Hz, the second 4000
+  const p = render(make(), 2.2, stepped, { chance: 1, pitch: 0.75 }).L;
+  const from = 13 * SPS + 600, to = 14 * SPS - 600;
+  assert.ok(tone(p, 2000, from, to) > 5 * tone(p, 1000, from, to), "first repeat an octave up");
+  assert.ok(tone(p, 4000, 14 * SPS + 600, 15 * SPS - 600) > 5 * tone(p, 1000, 14 * SPS + 600, 15 * SPS - 600), "second two octaves up");
+  // the slice was a quiet step; reading on past it would have played louder ones
+  assert.ok(heard(p, 13) < level(12) * 1.2, `first repeat ${heard(p, 13).toFixed(4)} stays the captured step's level`);
 });
 
 test("the chance is a hash of the step: the same song makes the same repeats, and about as many as asked", () => {

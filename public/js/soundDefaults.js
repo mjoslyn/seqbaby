@@ -16,6 +16,12 @@ export function defaultFxConfig() {
   return {
     // Rack input drive + output level. 0.5 = unity on both.
     amp:        { preamp: 0.5, level: 0.5 },
+    // A clean gain, placeable anywhere in the chain: 0.5 is unity, below fades
+    // down, above drives what comes after it, to +18dB. What amp's drive was
+    // when it sat in front of every stage (see migrateAmpDrive).
+    gain:       { drive: 0.5 },
+    // Stereo position: 0 hard left, 0.5 centre, 1 hard right.
+    pan:        { pos: 0.5 },
     vinyl:      { amount: 0, warmth: 0.4, wow: 0.3 },
     cassette:   { amount: 0, flutter: 0.3, sat: 0.4 },
     fuzz:       { amount: 0, drive: 0.7, tone: 0.4, level: 0.5 },
@@ -33,7 +39,7 @@ export function defaultFxConfig() {
     // switch. At rest: on the last beat of every bar, half the time, repeat a
     // sixteenth for a beat.
     repeat:     { wet: 0, mode: "repeat", chance: 0.5, interval: 0.5, offset: 0.75,
-                  gate: 0.33, grid: 0.33, vary: 0, pitch: 0, decay: 0 },
+                  gate: 0.33, grid: 0.33, vary: 0, pitch: 0.5, decay: 0, pitchV: 2 },
     // A four-module console in one stage (prism.js): character, movement,
     // diffusion, texture, each a choice of five and an amount, then a tilt eq.
     // `wet` is the mix around the whole of it, and what switches it on.

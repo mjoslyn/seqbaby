@@ -1887,8 +1887,32 @@ main {
   color: var(--danger);
   border-color: var(--danger);
 }
+/* ‹ › move a stage along the chain (addFxRowControls). Inline only, like the
+   ×, and just before it; the name is also a drag handle. */
+.sq-fx__move { display: none; }
+.sq-track .sq-track__fx-panel.is-live > .sq-fx__row.is-live > .sq-fx__move {
+  display: inline-flex;
+  margin-left: auto;
+}
+.sq-track .sq-track__fx-panel.is-live > .sq-fx__row.is-live > .sq-fx__move + .sq-fx__off { margin-left: 0; }
+.sq-fx__mv {
+  min-width: 22px;
+  height: 22px;
+  padding: 0;
+  font-size: 14px;
+  line-height: 1;
+  color: var(--fg-dim);
+  background: none;
+  border-color: transparent;
+}
+.sq-fx__mv:hover { color: var(--fg); border-color: var(--border); }
+.sq-track .sq-track__fx-panel.is-live > .sq-fx__row.is-live > .sq-fx__title[draggable="true"] { cursor: grab; }
+.sq-fx__row.is-dragging { opacity: 0.5; }
+.sq-fx__row[data-drop-at="before"] { box-shadow: inset 3px 0 0 var(--accent); }
+.sq-fx__row[data-drop-at="after"] { box-shadow: inset -3px 0 0 var(--accent); }
 /* A finger needs the room even where the row is drawn small. */
 @media (any-pointer: coarse), (max-width: 768px) {
+  .sq-fx__mv { min-width: 44px; height: 44px; font-size: 18px; }
   .sq-track .sq-track__fx-panel.is-live > .sq-fx__row.is-live > .sq-fx__off,
   .sq-track .sq-track__env-panel.is-live > .sq-fx__row > .sq-fx__off {
     min-width: 44px;
@@ -1954,6 +1978,7 @@ main {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
+    align-content: flex-start;
     gap: 6px 10px;
     padding-right: 30px;
     border: 1px solid var(--border);
@@ -2020,12 +2045,24 @@ main {
     top: 4px;
     right: 4px;
   }
+  .sq-track .sq-track__live > .sq-track__fx-panel.is-live > .sq-fx__row.is-live > .sq-fx__move {
+    position: absolute;
+    top: 4px;
+    right: 28px;
+    margin-left: 0;
+  }
+  .sq-track .sq-track__live > .sq-track__fx-panel.is-live > .sq-fx__row.is-live > .sq-fx__title { padding-right: 40px; }
+  .sq-fx__row[data-drop-at] { box-shadow: none; }
+  .sq-track .sq-track__live > .sq-track__fx-panel.is-live > .sq-fx__row[data-drop-at="before"] { box-shadow: -4px 0 0 var(--accent); }
+  .sq-track .sq-track__live > .sq-track__fx-panel.is-live > .sq-fx__row[data-drop-at="after"] { box-shadow: 4px 0 0 var(--accent); }
   /* A touchscreen laptop keeps the grid and gets the 44px ×/remove from the
      rule above, which needs the room a 22px one did not. */
   @media (any-pointer: coarse) {
     .sq-track .sq-track__live > .sq-track__fx-panel.is-live > .sq-fx__row.is-live,
     .sq-track .sq-track__live > .sq-track__mod-panel.is-live .sq-lfo__row.is-live,
     .sq-track .sq-track__live > .sq-track__env-panel.is-live > .sq-fx__row { padding-right: 48px; }
+    .sq-track .sq-track__live > .sq-track__fx-panel.is-live > .sq-fx__row.is-live > .sq-fx__move { right: 48px; }
+    .sq-track .sq-track__live > .sq-track__fx-panel.is-live > .sq-fx__row.is-live > .sq-fx__title { padding-right: 88px; }
     .sq-track .sq-track__live > .sq-track__mod-panel.is-live .sq-lfo__row.is-live > .sq-lfo__remove {
       width: 44px;
       height: 44px;
@@ -2033,6 +2070,8 @@ main {
     }
   }
 }
+.sq-fx__row[data-fx="gain"] .sq-fx__title { color: #f0e68c; }
+.sq-fx__row[data-fx="pan"] .sq-fx__title { color: #8fd3a8; }
 .sq-fx__row[data-fx="vinyl"] .sq-fx__title { color: #c79a74; }
 .sq-fx__row[data-fx="cassette"] .sq-fx__title { color: #d9c07a; }
 .sq-fx__row[data-fx="fuzz"] .sq-fx__title { color: #ff7a7a; }
@@ -2042,6 +2081,7 @@ main {
 .sq-fx__row[data-fx="phaser"] .sq-fx__title { color: #b69cff; }
 .sq-fx__row[data-fx="flanger"] .sq-fx__title { color: #7adfc8; }
 .sq-fx__row[data-fx="pitchshift"] .sq-fx__title { color: #ffaad5; }
+.sq-fx__row[data-fx="repeat"] .sq-fx__title { color: #ff9f6b; }
 .sq-fx__row[data-fx="delay"] .sq-fx__title { color: var(--accent-2); }
 .sq-fx__row[data-fx="reverb"] .sq-fx__title { color: var(--accent); }
 .sq-fx__ctl {
@@ -3260,6 +3300,8 @@ body.kbd-recording:not(.sq-playing) .sq-track.is-kbd-active .sq-step.is-cursor {
   text-align: left;
   cursor: pointer;
 }
+.sq-fxpick__btn { display: flex; justify-content: space-between; gap: 6px; align-items: center; }
+.sq-fxpick__n { font-size: 11px; opacity: 0.8; }
 .sq-fxpick__btn:hover { border-color: var(--fx-c); color: var(--fx-c); }
 .sq-fxpick__btn[aria-pressed="true"] {
   color: #0b0d10;

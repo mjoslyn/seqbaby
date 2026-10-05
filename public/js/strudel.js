@@ -23,9 +23,9 @@
 // `warnings`, one line per thing seqbaby had to approximate or ignore.
 
 import { Pattern, mini, MiniError, silence, stack, fastcat, slowcat, fast, late, rev, ply, degradeBy, euclidPat, signal, segment, sampleSignal, SIGNAL_NAMES } from "./miniNotation.js";
-import { addTrack, removeTrack, setTrack, setFilter, setFx, setParams, setEq, setComp, addLfo, setAutomation, applyPreset, resolveEngine,
+import { addTrack, removeTrack, setTrack, setFilter, setFx, setFxChain, setParams, setEq, setComp, addLfo, setAutomation, applyPreset, resolveEngine,
   patternOf, emptyPatternBlob, newSong, setTempo, setMeter, ENGINE_PANELS } from "./songBuilder.js";
-import { CURVED_LFO_CURVES, STEPS_PER_BAR, voiceAutoKeysForEngineKey } from "./constants.js";
+import { CURVED_LFO_CURVES, FX_STAGE_LEVEL_KEY, STEPS_PER_BAR, fxInstanceIds, fxStageLevel, fxStageOf, isFxInstanceId, voiceAutoKeysForEngineKey } from "./constants.js";
 import { SCALES, CHORD_TYPES } from "./theoryData.js";
 import { staticEngineByKey } from "./engineData.js";
 import { defaultCompConfig, defaultEq, defaultFilter, defaultFxConfig, defaultTrackParams } from "./soundDefaults.js";
@@ -117,13 +117,15 @@ const obj = (v) => (v && typeof v === "object") ? v : (v == null ? {} : { _raw: 
 //
 //   .knob("sbaccent", 0.8)        a track slider or engine panel control (t.params)
 //   .preset("clean")              a guitar / bass / subby tone, a hexop voice
-//   .fx("chorus.wet", 0.4)        any fx rack control, "stage.control"
+//   .fx("chorus.wet", 0.4)        any fx rack control, "stage.control"; a second
+//                                 chorus is "chorus#2.wet" (made by naming it)
+//   .fxchain("gain fuzz delay#2 reverb")   the order the fx run in
 //   .filter("type", "squelch")    any filter field: type, cutoff (0..1), reson, env, attack ...
 //   .eq("low", -3)  .comp("threshold", -24)  .comp("source", "kick")
 //   .lfo("cutoff", "sine", 0.4, 16)          target, shape, amount, length (beats, or "2hz"), phase, bipolar
 //   .aut("fx.delay", "0 0.2 0.5 1")          an automation lane, one value per step, 0..1
 //   .p("my track")                name the track (Strudel's own .p)
-export const NATIVE_METHODS = ["knob", "preset", "fx", "filter", "eq", "comp", "lfo", "aut"];
+export const NATIVE_METHODS = ["knob", "preset", "fx", "fxchain", "filter", "eq", "comp", "lfo", "aut"];
 function mergeNative(a, b) {
   if (!a) return b;
   if (!b) return a;
@@ -147,6 +149,7 @@ function nativeSetting(kind, args, ctx) {
   ctx.native = true;
   const key = String(plainArg(args[0]) ?? "");
   if (kind === "preset") return ["name", key];
+  if (kind === "fxchain") return ["order", key];
   if (!key) throw new CodeError(`.${kind}() needs a name first, e.g. .${kind}(${JSON.stringify(NATIVE_EXAMPLE[kind])})`);
   if (kind === "aut") {
     if (args[1] == null) throw new CodeError(`.aut("${key}", ...) needs values, e.g. "0 0.5 1"`);
@@ -159,7 +162,7 @@ function nativeSetting(kind, args, ctx) {
   if (args[1] == null) throw new CodeError(`.${kind}("${key}", ...) needs a value`);
   return [key, plainArg(args[1])];
 }
-const NATIVE_EXAMPLE = { knob: "sbaccent", fx: "chorus.wet", filter: "env", eq: "low", comp: "threshold", lfo: "cutoff", aut: "cutoff" };
+const NATIVE_EXAMPLE = { knob: "sbaccent", fx: "chorus.wet", fxchain: "gain delay reverb", filter: "env", eq: "low", comp: "threshold", lfo: "cutoff", aut: "cutoff" };
 function withNative(pat, kind, args, ctx) {
   const [key, val] = nativeSetting(kind, args, ctx);
   return asPattern(pat).withValue(v => addNative(v, kind, key, val));
@@ -221,7 +224,7 @@ const canon = (k) => ALIASES[k] || k;
 // Accepted and translated; everything else in NUMERIC_CONTROLS is accepted and
 // then reported as not translated.
 const TRANSLATED = new Set(["s", "note", "n", "gain", "velocity", "legato", "clip", "lpf", "hpf", "bpf", "lpq", "room", "size",
-  "delay", "delaytime", "delayfeedback", "crush", "coarse", "distort", "shape", "phaser", "fm", "lpenv", "bank", "scale", "chord", "voicing", "postgain"]);
+  "delay", "delaytime", "delayfeedback", "crush", "coarse", "distort", "shape", "phaser", "fm", "lpenv", "bank", "scale", "chord", "voicing", "postgain", "pan"]);
 // Visual / editor methods: nothing to say about them.
 const IGNORED_QUIETLY = new Set(["color", "colour", "pianoroll", "_pianoroll", "punchcard", "_punchcard", "scope", "_scope", "spiral", "_spiral",
   "analyze", "log", "fft", "orbit", "draw", "markcss", "spectrum", "_spectrum", "cpm", "p"]);
@@ -1131,6 +1134,7 @@ function controlTargets() {
     shape: { lane: "fx.shaper", lfo: "shaper", knob: (x) => clamp(Number(x), 0, 1) },
     distort: { lane: "fx.fuzz", lfo: "fuzz", knob: (x) => clamp(Number(x) / 2, 0, 1) },
     gain: { lane: "vol", lfo: "vol", knob: (x) => clamp(0.8 * Number(x), 0, 1) },
+    pan: { lane: "fx.pan", lfo: "pan", knob: (x) => clamp(Number(x), 0, 1) },
   };
 }
 
@@ -1170,7 +1174,7 @@ function soundSettings(haps, S, length, warn, constantGain) {
     }
     return out;
   };
-  for (const k of ["lpf", "hpf", "bpf", "lpq", "room", "delay", "shape", "distort"]) {
+  for (const k of ["lpf", "hpf", "bpf", "lpq", "room", "delay", "shape", "distort", "pan"]) {
     if (k === "lpf" || k === "hpf" || k === "bpf") { if (k !== fType) continue; }
     if (!values[k]) continue;
     const c = constant(k);
@@ -1185,6 +1189,7 @@ function soundSettings(haps, S, length, warn, constantGain) {
       case "lpq": filter.reson = round3(targets.lpq.knob(n)); break;
       case "room": fx.reverb = { ...(fx.reverb || {}), wet: round3(clamp(n, 0, 1)) }; break;
       case "delay": fx.delay = { ...(fx.delay || {}), wet: round3(clamp(n, 0, 1)) }; break;
+      case "pan": fx.pan = { pos: round3(clamp(n, 0, 1)) }; break;
       case "shape": fx.shaper = { wet: 1, amount: round3(clamp(n, 0, 1)), mode: "saturate" }; break;
       case "distort": fx.fuzz = { amount: round3(clamp(n / 2, 0, 1)), drive: round3(clamp(0.4 + n * 0.1, 0, 1)) }; break;
     }
@@ -1220,6 +1225,7 @@ function soundSettings(haps, S, length, warn, constantGain) {
     else if (k === "shape") fx.shaper = { wet: 1, amount: round3(base), mode: "saturate" };
     else if (k === "distort") fx.fuzz = { amount: round3(base) };
     else if (k === "gain") params.vol = round3(base);
+    else if (k === "pan") fx.pan = { pos: round3(base) };
     if (lanes[tgt.lane]) delete lanes[tgt.lane];
   }
   return { filter, fx, params, lanes, lfos };
@@ -1319,7 +1325,7 @@ export function writeTracks(song, realized, { previous = [], pattern, touched: p
     if (shared.length) {
       const snd = mergeSound(shared, say);
       applySound(song, i, snd, set, sources, say);
-      for (const path of prevTouched[name] || []) if (!set.has(path)) resetSetting(song, i, path);
+      for (const path of prevTouched[name] || []) if (!set.has(path)) resetSetting(song, i, path, set);
       touched[name] = [...set];
     } else touched[name] = prevTouched[name] || [];
     // lanes belong to the pattern
@@ -1393,6 +1399,8 @@ function applySound(song, i, snd, set, sources, say) {
     (fx[stage] ||= {})[key] = v;
   }
   for (const [stage, cfg] of Object.entries(fx)) tryDo(() => { setFx(song, i, stage, cfg); for (const k of Object.keys(cfg)) set.add(`fx.${stage}.${k}`); });
+  // the chain after the stages, since it can name a copy only once it exists
+  if (N.fxchain?.order != null) tryDo(() => { setFxChain(song, i, String(N.fxchain.order)); set.add("fxchain"); });
   for (const [k, v] of Object.entries(N.eq || {})) tryDo(() => { setEq(song, i, { [k]: v }); set.add(`eq.${k}`); });
   for (const [k, v] of Object.entries(N.comp || {})) {
     if (k === "source") { sources?.push([t.name, String(v)]); set.add("comp.source"); continue; }
@@ -1412,6 +1420,8 @@ function fullSound(t) {
   const DFX = defaultFxConfig();
   const fxConfig = {};
   for (const [st, d] of Object.entries(DFX)) fxConfig[st] = { ...d, ...(t.fxConfig?.[st] || {}) };
+  for (const id of fxInstanceIds(t.fxConfig)) fxConfig[id] = { ...DFX[fxStageOf(id)], ...t.fxConfig[id] };
+  if (Array.isArray(t.fxConfig?.order)) fxConfig.order = [...t.fxConfig.order];
   const lfoConfig = {};
   for (const [k, c] of Object.entries(t.lfoConfig || {})) if (c?.enabled) lfoConfig[k] = JSON.parse(JSON.stringify(c));
   return {
@@ -1463,14 +1473,26 @@ function laneValues(pat, length, S) {
   return out;
 }
 /** Put one setting the code no longer mentions back to its default. */
-function resetSetting(song, i, path) {
+function resetSetting(song, i, path, current = new Set()) {
   const t = song.tracks[i];
   const [kind, a, b] = path.split(".");
   if (kind === "params") { const d = defaultTrackParams(); if (a in d) t.params[a] = d[a]; else delete t.params[a]; }
   else if (kind === "filter") t.filter[a] = defaultFilter()[a];
   else if (kind === "eq") t.eq[a] = 0;
   else if (kind === "comp") { if (a === "source") t.compSourceIndex = -1; else t.comp[a] = defaultCompConfig()[a]; }
-  else if (kind === "fx") { const d = defaultFxConfig()[a]; if (d) t.fxConfig[a] = { ...d, ...(t.fxConfig[a] || {}), [b]: d[b] }; }
+  else if (kind === "fx") {
+    // A copy the code no longer mentions at all goes, as a deleted line's
+    // track does; one it still names has the dropped control put back.
+    if (isFxInstanceId(a)) {
+      if (!t.fxConfig[a]) return;
+      if (![...current].some(p => p.startsWith(`fx.${a}.`))) { setFx(song, i, a, null); return; }
+      const d = defaultFxConfig()[fxStageOf(a)];
+      if (d) t.fxConfig[a] = { ...d, ...t.fxConfig[a], [b]: d[b] };
+      return;
+    }
+    const d = defaultFxConfig()[a]; if (d) t.fxConfig[a] = { ...d, ...(t.fxConfig[a] || {}), [b]: d[b] };
+  }
+  else if (kind === "fxchain") delete t.fxConfig.order;
 }
 
 /** Code straight to a fresh song (the MCP tool's and the tests' way in). */
@@ -1756,13 +1778,23 @@ function partCode(t, k, { native, sound, withSound = true, label = null, lock = 
       ctl.push(["delaytime", [round3(fxv("delay", "time"))]]);
       ctl.push(["delayfeedback", [round3(fxv("delay", "fbk"))]]);
     }
-    const namedFx = new Set(["reverb.wet", "reverb.decay", "delay.wet", "delay.time", "delay.fbk"]);
+    if (Math.abs(fxv("pan", "pos") - 0.5) > 1e-6) ctl.push(["pan", [round3(fxv("pan", "pos"))]]);
+    const namedFx = new Set(["reverb.wet", "reverb.decay", "delay.wet", "delay.time", "delay.fbk", "pan.pos"]);
     if (native) {
       for (const [stage, d] of Object.entries(DFX)) for (const [key, dv] of Object.entries(d)) {
         const v = fxv(stage, key);
         if (namedFx.has(`${stage}.${key}`) && (stage !== "reverb" || fxv("reverb", "wet") > 0) && (stage !== "delay" || fxv("delay", "wet") > 0)) continue;
         if (typeof dv === "number" ? Math.abs(v - dv) > 1e-6 : v !== dv) ctl.push(["fx", [`${stage}.${key}`, typeof v === "number" ? round3(v) : v]]);
       }
+      // a copy of a stage: its level always (naming it is what makes it), then what moved
+      for (const id of fxInstanceIds(fx)) {
+        const st = fxStageOf(id), d = DFX[st], lk = FX_STAGE_LEVEL_KEY[st];
+        for (const [key, dv] of Object.entries(d)) {
+          const v = fx[id][key] ?? dv;
+          if (key === lk || (typeof dv === "number" ? Math.abs(v - dv) > 1e-6 : v !== dv)) ctl.push(["fx", [`${id}.${key}`, typeof v === "number" ? round3(v) : v]]);
+        }
+      }
+      if (Array.isArray(fx.order) && fx.order.length) ctl.push(["fxchain", [fx.order.join(" ")]]);
       for (const [key, v] of Object.entries(sound.eq || {})) if (Math.abs(v) > 1e-6) ctl.push(["eq", [key, round3(v)]]);
       const comp = sound.comp || {};
       if (comp.enabled) {
@@ -1781,8 +1813,11 @@ function partCode(t, k, { native, sound, withSound = true, label = null, lock = 
       if (fxv("crush", "wet") > 0) ctl.push(["crush", [round3(fxv("crush", "bits"))]]);
       if (fxv("shaper", "wet") > 0) ctl.push(["shape", [round3(fxv("shaper", "amount"))]]);
       if (fxv("fuzz", "amount") > 0) ctl.push(["distort", [round3(fxv("fuzz", "amount") * 2)]]);
-      const other = Object.keys(DFX).filter(st => !["reverb", "delay", "crush", "shaper", "fuzz", "amp"].includes(st) && (fx[st]?.[FX_LEVEL[st]] ?? 0) > 0);
+      const other = Object.keys(DFX).filter(st => !["reverb", "delay", "crush", "shaper", "fuzz", "amp", "pan"].includes(st) && fxStageLevel(fx, st) > 0);
       if (other.length) dropped.push(other.join(" / "));
+      const copies = fxInstanceIds(fx);
+      if (copies.length) dropped.push(`the extra ${copies.map(id => id.replace("#", " ")).join(" / ")}`);
+      if (Array.isArray(fx.order) && fx.order.length) dropped.push("the fx order");
       if (Object.values(sound.eq || {}).some(v => Math.abs(v) > 1e-6)) dropped.push("the eq");
       if (sound.comp?.enabled) dropped.push("the compressor");
       if (engineKnobKeys(t.engineKey).some(key => params[key] != null && key in DP && String(params[key]) !== String(DP[key]))) dropped.push(`the ${staticEngineByKey(t.engineKey)?.label || t.engineKey} settings`);
@@ -1847,7 +1882,6 @@ function partCode(t, k, { native, sound, withSound = true, label = null, lock = 
 /** A plain JavaScript string, which Strudel does not read as mini-notation. */
 const jsString = (v) => `'${String(v).replace(/\\/g, "\\\\").replace(/'/g, "\\'")}'`;
 const RESERVED = new Set(["let", "const", "var", "await", "new", "function", "return", "if", "else", "for", "while", "setcpm", "setcps", "setbpm", "hush", "samples"]);
-const FX_LEVEL = { vinyl: "amount", cassette: "amount", fuzz: "amount", ringmod: "wet", shaper: "wet", crush: "wet", autowah: "wet", chorus: "wet", phaser: "wet", flanger: "wet", pitchshift: "wet", repeat: "wet", prism: "wet", delay: "wet", reverb: "wet" };
 /** The params an engine actually has: its sliders (as the automation gate
  *  knows them) and its panel. */
 function engineKnobKeys(engineKey) {
@@ -1874,6 +1908,7 @@ const LANE_EXPORT = {
   reson: { units: (u) => round3(u * 20), name: () => "lpq" },
   "fx.reverb": { units: (u) => round3(u), name: () => "room" },
   "fx.delay": { units: (u) => round3(u), name: () => "delay" },
+  "fx.pan": { units: (u) => round3(u), name: () => "pan" },
   vol: { units: (u) => round3(u / 0.8), name: () => "gain" },
 };
 const LFO_EXPORT = {
@@ -1882,6 +1917,7 @@ const LFO_EXPORT = {
   reson: { knobOf: (t) => t.filter?.reson ?? 0, units: (u) => u * 20, name: () => "lpq" },
   verb: { knobOf: (t) => t.fxConfig?.reverb?.wet ?? 0, units: (u) => u, name: () => "room" },
   delay: { knobOf: (t) => t.fxConfig?.delay?.wet ?? 0, units: (u) => u, name: () => "delay" },
+  pan: { knobOf: (t) => t.fxConfig?.pan?.pos ?? 0.5, units: (u) => u, name: () => "pan" },
   vol: { knobOf: (t) => t.params?.vol ?? 0.8, units: (u) => u / 0.8, name: () => "gain" },
 };
 
@@ -1891,7 +1927,7 @@ const ENV_CLASS = { "p-envamt": "env", "p-envatk": "attack", "p-envdec": "decay"
 // fx classes whose last word is not the config key
 const FX_CLASS_KEY = { "shaper.amt": "amount", "pitchshift.semi": "semitones" };
 // the rack controls Strudel has a name of its own for, as sessionToCode writes them
-const STRUDEL_FX = { "reverb.wet": "room", "reverb.decay": "size", "delay.wet": "delay", "delay.time": "delaytime", "delay.fbk": "delayfeedback" };
+const STRUDEL_FX = { "reverb.wet": "room", "reverb.decay": "size", "delay.wet": "delay", "delay.time": "delaytime", "delay.fbk": "delayfeedback", "pan.pos": "pan" };
 const GENERIC_FILTER = { lowpass: "lpf", highpass: "hpf", bandpass: "bpf" };
 
 /**
@@ -1908,7 +1944,7 @@ const GENERIC_FILTER = { lowpass: "lpf", highpass: "hpf", bandpass: "bpf" };
  * @param {{sourceName?: string}} [opts] the sidechain source's track name
  * @returns {string|null}
  */
-export function codeForControl(cls, t, { sourceName } = {}) {
+export function codeForControl(cls, t, { sourceName, fxId } = {}) {
   if (NOT_FROM_CODE.has(staticEngineByKey(t.engineKey)?.type)) return null;
   const q = (v) => typeof v === "string" ? jsString(v) : typeof v === "boolean" ? String(v) : round3(Number(v) || 0);
   const call = (name, ...args) => `.${name}(${args.map(q).join(", ")})`;
@@ -1925,13 +1961,16 @@ export function codeForControl(cls, t, { sourceName } = {}) {
     const c = { ...defaultCompConfig(), ...(t.comp || {}) };
     return m[1] in c ? call("comp", m[1], c[m[1]]) : null;
   }
-  if ((m = /^fx-(\w+)-(\w+)$/.exec(cls))) {
+  if ((m = /^fx(i?)-(\w+)-(\w+)$/.exec(cls))) {
     const DFX = defaultFxConfig();
-    const stage = m[1], key = FX_CLASS_KEY[`${stage}.${m[2]}`] || m[2];
+    const stage = m[2], key = FX_CLASS_KEY[`${stage}.${m[3]}`] || m[3];
     if (!DFX[stage] || !(key in DFX[stage])) return null;
-    const v = t.fxConfig?.[stage]?.[key] ?? DFX[stage][key];
-    const named = STRUDEL_FX[`${stage}.${key}`];
-    return named ? call(named, v) : call("fx", `${stage}.${key}`, v);
+    // a copy's control (class fxi-): the copy's own value, under its own name
+    const id = m[1] ? fxId : stage;
+    if (!id || fxStageOf(id) !== stage) return null;
+    const v = t.fxConfig?.[id]?.[key] ?? DFX[stage][key];
+    const named = !m[1] && STRUDEL_FX[`${stage}.${key}`];
+    return named ? call(named, v) : call("fx", `${id}.${key}`, v);
   }
   if ((m = /^p-(\w+)$/.exec(cls)) && engineKnobKeys(t.engineKey).includes(m[1])) {
     const v = t.params?.[m[1]] ?? defaultTrackParams()[m[1]];

@@ -451,3 +451,28 @@ test("a section gives a track a pattern of its own (a lane), by index, and the i
   assert.deepEqual(s.arrangement.map(e => e.pat), [{ [b - 1]: 2 }, undefined, undefined], "the bass's lane moved down; the kick's went with the kick");
   assert.deepEqual(sb.fromBlob(JSON.parse(sb.toJSON(s))).arrangement, s.arrangement);
 });
+
+test("an fx stage more than once: a copy is made by naming it, ordered, modulated, and taken off with its mods", () => {
+  const s = sb.newSong();
+  sb.addTrack(s, { engine: "dm:silverbox", name: "acid" });
+  sb.setFx(s, 0, "delay", { wet: 0.3 });
+  sb.setFx(s, 0, "delay#2", { wet: 0.5, time: 0.2 });
+  assert.equal(s.tracks[0].fxConfig["delay#2"].wet, 0.5);
+  assert.equal(s.tracks[0].fxConfig["delay#2"].fbk, 0.35);   // filled from the defaults
+  assert.throws(() => sb.setFx(s, 0, "delay#1", { wet: 1 }), /unknown fx stage/);
+  assert.throws(() => sb.setFxChain(s, 0, ["delay#3"]), /not a stage/);
+  assert.throws(() => sb.setFxChain(s, 0, ["delay", "delay"]), /twice/);
+  const chain = sb.setFxChain(s, 0, "delay#2 gain delay");
+  assert.deepEqual(chain.slice(0, 3), ["delay#2", "gain", "delay"]);
+  sb.addLfo(s, 0, { target: "delay_time#2", amount: 0.4 });
+  sb.setAutomation(s, 0, { target: "fx.delay#2", values: [0, 1] });
+  assert.throws(() => sb.addLfo(s, 0, { target: "verb#2" }), /no reverb#2/);
+  assert.match(JSON.stringify(sb.summarizeTrack(s, 0).fx), /delay#2=0.5/);
+  sb.validate(s);
+  sb.setFx(s, 0, "delay#2", null);
+  assert.equal(s.tracks[0].fxConfig["delay#2"], undefined);
+  assert.equal(s.tracks[0].lfoConfig["delay_time#2"], undefined);
+  assert.equal(s.tracks[0].patterns[0].automation["fx.delay#2"], undefined);
+  assert.deepEqual(s.tracks[0].fxConfig.order, ["gain", "delay"]);
+  assert.throws(() => sb.setFx(s, 0, "delay", null), /only a copy/);
+});

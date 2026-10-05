@@ -1,4 +1,4 @@
-import { FX_STAGE_LABELS, FX_STAGE_LEVEL_KEY, LFO_KEYS, LFO_LABELS, fxStageLevel } from "./constants.js";
+import { LFO_KEYS, LFO_LABELS, autoLabel, fxChainOrder, fxIdLabel, fxStageLevel, fxStageOfModKey, isFxInstanceId, lfoLabel, splitFxInstanceKey } from "./constants.js";
 import { EQ_BANDS } from "./signal.js";
 import { BASS_MOD_KEYS, BASS_MOD_LABELS } from "./bass.js";
 import { HEXOP_MOD_KEYS, HEXOP_MOD_LABELS } from "./hexop.js";
@@ -80,6 +80,8 @@ def("sq-wt__scan-start", "wt_scan_start", "wt.scan.start");
 def("sq-wt__scan-range", "wt_scan_range", "wt.scan.range");
 // FX rack. LFO keys are the historic short names; automation keys are dotted.
 for (const [cls, lfo, auto] of [
+  ["fx-gain-drive",       null,               "fx.gain"],
+  ["fx-pan-pos",          "pan",              "fx.pan"],
   ["fx-vinyl-amount",     "vinyl",            "fx.vinyl"],
   ["fx-vinyl-warmth",     "vinyl_warmth",     "fx.vinyl.warmth"],
   ["fx-vinyl-wow",        "vinyl_wow",        "fx.vinyl.wow"],
@@ -172,6 +174,38 @@ for (const [cls, { auto }] of Object.entries(CONTROL_TARGETS)) {
   if (auto && !CLASS_FOR_AUTO[auto]) CLASS_FOR_AUTO[auto] = cls;
 }
 
+// A copy's keys ("delay_time#2", "fx.delay.time#2") pair and find their
+// control exactly as the stage's own do, with the copy's number carried along.
+const carry = (key, map) => {
+  const inst = splitFxInstanceKey(key);
+  if (!inst) return map[key];
+  const v = map[inst.base];
+  return v ? `${v}#${inst.n}` : undefined;
+};
+/** The automation key that pairs with an LFO key. */
+export const autoForLfo = (lfoKey) => carry(lfoKey, AUTO_FOR_LFO);
+/** The LFO key that pairs with an automation key. */
+export const lfoForAuto = (autoKey) => carry(autoKey, LFO_FOR_AUTO);
+
+/**
+ * The control behind an automation key on a track: by its class, or for a
+ * copy of a stage, by the copy's renamed class inside the copy's row. Looks
+ * in the track, then in anything reparented out of it (a panel open as a
+ * modal is stamped with its track id on the way out).
+ * @param {Track} t @param {string} autoKey @returns {HTMLElement|null}
+ */
+export function controlForKey(t, autoKey) {
+  if (!t?.el || !autoKey) return null;
+  const inst = splitFxInstanceKey(autoKey);
+  const cls = CLASS_FOR_AUTO[inst ? inst.base : autoKey];
+  if (!cls) return null;
+  const sel = inst
+    ? `.sq-fx__row[data-fx-id="${fxStageOfModKey(autoKey)}"] .fxi${cls.slice(2)}`
+    : `.${cls}`;
+  return t.el.querySelector(sel)
+    || document.querySelector(`[data-track-id="${CSS.escape(String(t.id))}"] ${sel}`);
+}
+
 /** Does this track have an LFO running on `lfoKey`? @param {Track} t */
 export function hasMod(t, lfoKey) { return !!(lfoKey && t.lfoConfig?.[lfoKey]?.enabled); }
 /** Does this track have an automation lane on `autoKey`? @param {Track} t */
@@ -191,13 +225,13 @@ export function hasMacroOn(t, autoKey) {
 /** An automation lane or a macro pad already owns the parameter this LFO key
  *  targets. @param {Track} t */
 export function autoOwns(t, lfoKey) {
-  const auto = AUTO_FOR_LFO[lfoKey];
+  const auto = autoForLfo(lfoKey);
   return hasAutomation(t, auto) || hasMacroOn(t, auto);
 }
 /** An LFO or a macro pad already owns the parameter this automation key
  *  targets. @param {Track} t */
 export function modOwns(t, autoKey) {
-  return hasMod(t, LFO_FOR_AUTO[autoKey]) || hasMacroOn(t, autoKey);
+  return hasMod(t, lfoForAuto(autoKey)) || hasMacroOn(t, autoKey);
 }
 
 // Names for the controls the markup labels only in passing — a bare <select>
@@ -317,6 +351,8 @@ export const PARAM_DESCRIPTIONS = {
   "fx.delay.fbk":        "how much of the delay feeds back",
   "fx.reverb":           "how much reverb is mixed in",
   "fx.reverb.decay":     "reverb tail length",
+  "fx.gain":             "a clean gain at this point in the chain: centre is unity",
+  "fx.pan":              "where in the stereo field, at this point in the chain: centre is the middle",
   "fx.repeat":           "dry/wet around the repeat: all the way is an insert (a repeat replaces the beat), less mixes it over",
   "fx.repeat.chance":    "how often a repeat fires on its step, or (slice) how often a slice is swapped",
   "fx.repeat.interval":  "how often a repeat may fire, or (slice) how far back the swapped slices come from",
@@ -549,8 +585,8 @@ const PANEL_BADGES = [
   // No `modal`: the fx button opens a picker of names, not this panel, so the
   // inline view stays live behind it and follows each pick.
   { sel: ".sq-track__fx", panel: "_fxPanelEl",
-    on: (t) => Object.keys(FX_STAGE_LEVEL_KEY).filter(k => fxStageLevel(t.fxConfig, k) > 0),
-    label: (k) => FX_STAGE_LABELS[k],
+    on: (t) => fxChainOrder(t.fxConfig).filter(k => fxStageLevel(t.fxConfig, k) > 0),
+    label: (k) => fxIdLabel(k),
     // Only the stages this track SHOWS. Shown is not the same as on — see
     // fxShown. glide and amp have no level, so they show once they are off
     // neutral (or picked), and stay, like a stage, until their ×.
@@ -560,10 +596,17 @@ const PANEL_BADGES = [
       if ((t.glide ?? 0) > 0) shown.add("glide");
       const amp = t.fxConfig?.amp;
       if (amp && (Math.abs((amp.preamp ?? 0.5) - 0.5) > 1e-3 || Math.abs((amp.level ?? 0.5) - 0.5) > 1e-3)) shown.add("amp");
+      // A stage in the chain's order was put on the track and stays until its
+      // ×; an instance is on the track for as long as it exists.
+      const order = Array.isArray(t.fxConfig?.order) ? t.fxConfig.order : [];
+      let any = false;
       for (const row of panel.querySelectorAll(".sq-fx__row[data-fx]")) {
-        row.classList.toggle("is-live", shown.has(row.dataset.fx));
+        const id = row.dataset.fxId;
+        const live = id ? isFxInstanceId(id) && !!t.fxConfig?.[id] : (shown.has(row.dataset.fx) || order.includes(row.dataset.fx));
+        row.classList.toggle("is-live", live);
+        any ||= live;
       }
-      return shown.size > 0;
+      return any;
     } },
   { sel: ".sq-track__eq", panel: "_eqPanelEl", modal: "_eqModal",
     on: (t) => EQ_BANDS.map(b => b.key).filter(b => Math.abs(t.eq?.[b] ?? 0) >= 0.5) },
@@ -576,7 +619,7 @@ const PANEL_BADGES = [
     } },
   { sel: ".sq-track__mod", panel: "_modPanelEl", modal: "_modModal",
     on: (t) => Object.keys(t.lfoConfig || {}).filter(k => t.lfoConfig[k]?.enabled),
-    label: (k) => LFO_LABELS[k] || k,
+    label: (k) => lfoLabel(k),
     // Each enabled LFO gets its own row-turned-card, like a rack stage — a row
     // left in the DOM after its "on" checkbox was flipped off (the checkbox
     // toggles `enabled` without removing the row; only the × does that) is
@@ -590,7 +633,7 @@ const PANEL_BADGES = [
     } },
   { sel: ".track-aut",
     on: (t) => Object.keys(t.automation || {}).filter(k => t.automation[k]?.enabled),
-    label: (k) => LFO_LABELS[LFO_FOR_AUTO[k]] || k },
+    label: (k) => { const l = lfoForAuto(k); return l ? lfoLabel(l) : autoLabel(k); } },
 ];
 
 /**
@@ -687,6 +730,13 @@ export function targetsForControl(el) {
   for (const cls of el.classList) {
     const hit = CONTROL_TARGETS[cls];
     if (hit) return hit;
+    // A copy's control: its stage's targets, with the copy's number.
+    if (cls.startsWith("fxi-")) {
+      const base = CONTROL_TARGETS["fx" + cls.slice(3)];
+      const id = el.closest(".sq-fx__row[data-fx-id]")?.dataset.fxId;
+      const n = id?.split("#")[1];
+      if (base && n) return { lfo: base.lfo ? `${base.lfo}#${n}` : null, auto: base.auto ? `${base.auto}#${n}` : null };
+    }
   }
   return null;
 }

@@ -3,7 +3,7 @@ import { engineByKey } from "./catalog.js";
 import { clearEuclidLive, euclidFromUnit, euclidToUnit, euclideanRhythm, setEuclidLive, trackEuclid } from "./euclid.js";
 import { clearChanceLive, setChanceLive, trackChance } from "./chance.js";
 import { CHANCE_MOD_KEYS, chanceFromUnit, chanceToUnit } from "./chanceGen.js";
-import { afterPrefix as after, CURVED_LFO_CURVES, CURVED_LFO_KEYS, LFO_AMP_SCALE, LFO_KEYS, canModulateKey, lfoDivLabel } from "./constants.js";
+import { afterPrefix as after, CURVED_LFO_CURVES, CURVED_LFO_KEYS, LFO_AMP_SCALE, LFO_KEYS, baseModKey, canModulateKey, fxInstanceLfoKeys, fxStageOfModKey, lfoDivLabel, splitFxInstanceKey } from "./constants.js";
 import { makeCassetteSatCurve, makeShaperCurve } from "./curves.js";
 import { setParam } from "./params.js";
 import { aliasPattern, state } from "./state.js";
@@ -11,11 +11,13 @@ import { GRAN_DEFAULTS, granFromUnit, granToUnit } from "./voices.js";
 
 
 /** @typedef {import("./types.js").Track} Track */
+/** One mod-matrix entry, switched off. */
+export function freshLfoEntry() {
+  return { enabled: false, type: "sine", rate: 1.0, depth: 0.5, sync: true, div: 1 };
+}
 export function defaultLFOConfig() {
   const cfg = {};
-  for (const k of LFO_KEYS) {
-    cfg[k] = { enabled: false, type: "sine", rate: 1.0, depth: 0.5, sync: true, div: 1 };
-  }
+  for (const k of LFO_KEYS) cfg[k] = freshLfoEntry();
   return cfg;
 }
 
@@ -183,11 +185,39 @@ export function lfoRateLabel(cfg) {
     : `${(cfg?.rate ?? 0).toFixed(2)} hz${per}`;
 }
 
+// ---- a copy of an fx stage --------------------------------------------------
+//
+// A copy's keys ("delay_time#2") are its stage's keys aimed at the copy's own
+// sub-rack (fxRack.js `_extra`). Rather than teach every lookup below about
+// copies, they are handed a VIEW of the track whose fxRack is that sub-rack:
+// everything else falls through to the track, and the stage's own key then
+// finds the copy's nodes and the copy's config (the sub-rack's config holds
+// the copy's under the stage's name).
+
+/** The track as a copy's own lookups see it, or null if the copy is not built. */
+export function fxCopyView(t, key) {
+  const id = fxStageOfModKey(key);
+  const sub = id ? t.fxRack?._extra?.[id] : null;
+  return sub ? Object.create(t, { fxRack: { value: sub } }) : null;
+}
+/** Every LFO key this track has: the global list, then its copies' keys. */
+export function trackLfoKeys(t) {
+  const copies = fxInstanceLfoKeys(t.fxConfig);
+  const stale = Object.keys(t.lfoConfig || {}).filter(k => splitFxInstanceKey(k) && !copies.includes(k));
+  return copies.length || stale.length ? [...LFO_KEYS, ...copies, ...stale] : LFO_KEYS;
+}
+const isSetterKey = (key) => SETTER_LFO_KEYS.has(baseModKey(key));
+const isCurvedKey = (key) => CURVED_LFO_KEYS.has(baseModKey(key));
+
 /**
  * Resolve the AudioParam / Tone.Signal an LFO key modulates for a track.
  * @param {Track} t @param {string} key @returns {(AudioParam|{value:number}|null)}
  */
 export function getModTarget(t, key) {
+  if (splitFxInstanceKey(key)) {
+    const view = fxCopyView(t, key);
+    return view ? getModTarget(view, baseModKey(key)) : null;
+  }
   if (["vol","harm","timb","morph","decay","osc1","osc2","osc3","osc4","ultra","fm","noise"].includes(key)) {
     return t.voice?.getAudioParam(key) ?? null;
   }
@@ -229,6 +259,7 @@ export function getModTarget(t, key) {
     case "fuzz":         return rack.wetBus?.gain ?? null;
     case "delay":        return rack.delay?.wet ?? null;
     case "verb":         return rack.reverbCross?.fade ?? null;
+    case "pan":          return rack.panStage?.pan ?? null;
     case "vinyl":        return rack.vinylWetBus?.gain ?? null;
     case "cassette":     return rack.cassetteWetBus?.gain ?? null;
     case "ringmod":      return rack.ringWet?.gain ?? null;
@@ -317,6 +348,10 @@ export const GRAN_LFO_PARAM = {
 // Read the user's current 0..1 base value for a setter LFO target so the LFO
 // swings AROUND that value instead of overwriting it.
 export function setterLfoBase(t, key) {
+  if (splitFxInstanceKey(key)) {
+    const view = fxCopyView(t, key);
+    return view ? setterLfoBase(view, baseModKey(key)) : 0.5;
+  }
   // Euclid's counts: the knobs on the panel are the base, as 0..1 across their
   // own (track-length-dependent) range.
   if (key.startsWith("euclid_")) {
@@ -372,12 +407,17 @@ export function applySetterLfoValue(t, key, v) {
   // only the DIFFERENCE onto the persistent Signal (built in syncLFO) is what
   // makes depth 100% reach the real ceiling/floor from wherever the base
   // sits — a fixed native-unit swing can't do that on an exponential curve.
-  if (CURVED_LFO_KEYS.has(key)) {
+  if (isCurvedKey(key)) {
     const node = t.lfos?.[key];
     if (!node?.signal) return;
-    const curve = CURVED_LFO_CURVES[key];
+    const curve = CURVED_LFO_CURVES[baseModKey(key)];
     const base = setterLfoBase(t, key);
     try { node.signal.value = curve.to(v) - curve.to(base); } catch {}
+    return;
+  }
+  if (splitFxInstanceKey(key)) {
+    const view = fxCopyView(t, key);
+    if (view) applySetterLfoValue(view, baseModKey(key), v);
     return;
   }
   // Euclid: write the live override, never the stored setting, so the knob
@@ -608,7 +648,7 @@ function steppedPhase(cfg, now) {
 /** A step's peak-to-peak: the whole amount knob. Where it hangs relative to the
  *  slider is the polarity switch's business (see lfoBipolar). */
 function steppedAmp(key, cfg) {
-  return (cfg.depth ?? 0) * (LFO_AMP_SCALE[key] ?? 1);
+  return (cfg.depth ?? 0) * (LFO_AMP_SCALE[baseModKey(key)] ?? 1);
 }
 
 // A stepped LFO on an AudioParam target is a constant source scheduled ahead,
@@ -744,7 +784,7 @@ export function startSetterLfoLoopIfNeeded() {
       // the sequencer's, and run whether or not audio has been built.
       if (!t._setterLfoPhase) continue;
       const hasRack = !!t.fxRack;
-      for (const key of SETTER_LFO_KEYS) {
+      for (const key of t._setterKeys || SETTER_LFO_KEYS) {
         const cfg = t.lfoConfig[key];
         if (!cfg?.enabled) continue;
         if (!hasRack && !key.startsWith("euclid_") && !key.startsWith("chance_")) continue;
@@ -768,7 +808,7 @@ export function startSetterLfoLoopIfNeeded() {
         const u = cfg.type === "euclid" ? shape : (shape + 1) * 0.5;
         const amt = cfg.depth ?? 0;
         let v;
-        if (CURVED_LFO_KEYS.has(key)) {
+        if (isCurvedKey(key)) {
           // A fixed peak-to-peak hung around the base (the formula below)
           // wastes half its swing whenever the base is already near an edge
           // — cutoff at 0 with depth 100% would swing -0.5..+0.5 and only
@@ -806,11 +846,19 @@ export function startSetterLfoLoopIfNeeded() {
  * Whether an LFO key applies to this track's engine (gates the mod picker).
  * @param {Track} t @param {string} key @returns {boolean}
  */export function canModulate(t, key) {
+  // A copy's target exists only while the copy is on the track.
+  const inst = splitFxInstanceKey(key);
+  if (inst && !t.fxConfig?.[fxStageOfModKey(key)]) return false;
   return canModulateKey(t.engineKey, key, { euclid: !!t.euclid?.on, chance: !!t.chance?.on });
 }
 export function syncLFO(t, key) {
-  const cfg = t.lfoConfig[key];
+  const cfg = t.lfoConfig[key] || { enabled: false };
   let lfo = t.lfos[key];
+  // The setter loop walks the global setter keys, plus any copy's.
+  if (splitFxInstanceKey(key) && isSetterKey(key)) {
+    const keys = t._setterKeys || (t._setterKeys = new Set(SETTER_LFO_KEYS));
+    if (cfg.enabled) keys.add(key);
+  }
 
   // FX-target LFOs must keep their stage wired into the rack's chain even at
   // wet 0 (the LFO signal adds on top of the base) — re-evaluate stage bypass.
@@ -828,7 +876,7 @@ export function syncLFO(t, key) {
   // SETTER_LFO_KEYS, for the RAF loop and the needle), which is why this
   // branch has to run first and return: the generic setter-key branch below
   // would otherwise tear the persistent Signal down on every call.
-  if (CURVED_LFO_KEYS.has(key)) {
+  if (isCurvedKey(key)) {
     if (!cfg.enabled) {
       if (lfo) {
         try { lfo.disconnect(); } catch {}
@@ -863,7 +911,7 @@ export function syncLFO(t, key) {
   }
 
   // ── setter-driven LFO path (FX params without an AudioParam target) ──
-  if (SETTER_LFO_KEYS.has(key)) {
+  if (isSetterKey(key)) {
     if (lfo) {
       try { lfo.stop(); } catch {}
       try { lfo.disconnect(); } catch {}
@@ -929,7 +977,7 @@ export function syncLFO(t, key) {
 
   // The amount knob is the peak-to-peak; the polarity switch decides where it
   // hangs — half either side of the slider, or all of it above.
-  const span = cfg.depth * (LFO_AMP_SCALE[key] ?? 1);
+  const span = cfg.depth * (LFO_AMP_SCALE[baseModKey(key)] ?? 1);
   const bipolar = lfoBipolar(cfg);
   const lo = bipolar ? -span / 2 : 0;
   const hi = bipolar ? span / 2 : span;
@@ -953,12 +1001,14 @@ export function syncLFO(t, key) {
 }
 
 export function syncAllLFOs(t) {
-  for (const k of LFO_KEYS) syncLFO(t, k);
+  // Anything still running that the matrix no longer names (a copy taken off,
+  // a patch without it) is synced too, which switches it off.
+  for (const k of new Set([...trackLfoKeys(t), ...Object.keys(t.lfos || {})])) syncLFO(t, k);
   try { applyWavetableScan(t); } catch (e) { console.warn("wavetable scan sync failed", e); }
 }
 
 export function disposeLFOs(t) {
-  for (const k of LFO_KEYS) {
+  for (const k of Object.keys(t.lfos || {})) {
     const lfo = t.lfos[k];
     if (!lfo) continue;
     try { lfo.stop(); } catch {}
@@ -973,8 +1023,8 @@ export function disposeLFOs(t) {
 
 export function retuneSyncedLFOs() {
   for (const t of state.tracks) {
-    for (const k of LFO_KEYS) {
-      if (t.lfoConfig[k].enabled && t.lfoConfig[k].sync) syncLFO(t, k);
+    for (const k of trackLfoKeys(t)) {
+      if (t.lfoConfig[k]?.enabled && t.lfoConfig[k].sync) syncLFO(t, k);
     }
     if (t.wavetable?.scan?.enabled && t.wavetable.scan.sync) applyWavetableScan(t);
   }

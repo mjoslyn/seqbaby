@@ -181,11 +181,18 @@ one.
   octave up) + reverse is a lead that falls apart; `broken` or `interference`
   on a texture for a part that should sound damaged. `wet` 1 puts the whole
   track through it.
+- The fx run in the order given by `set_fx_chain` (default: gain, vinyl, ...
+  pan, delay, reverb), and a stage can be on twice: `set_fx` on "delay#2"
+  makes a second delay, whose LFO and lane keys are the stage's with #2 after
+  them (delay_time#2, fx.delay.time#2). gain (drive 0.5 = unity, up to +18dB)
+  placed before a fuzz or shaper drives it; pan (pos 0.5 = centre) takes an
+  LFO for an auto-pan.
 - Repeat is a beat repeat and a slicer, on the sequencer's grid. `mode:
   "repeat"` captures `grid` of the track at `offset` into every `interval`
   and repeats it for `gate`, with `chance`: the defaults are a sixteenth
-  rolled over the last beat of the bar, half the time. `pitch` drops each
-  repeat (a roll that falls like a tape stopping), `decay` fades each one.
+  rolled over the last beat of the bar, half the time. `pitch` moves each
+  repeat, 24 semitones down at 0 to 24 up at 1 with 0.5 no change (below
+  0.5, a roll that falls like a tape stopping), `decay` fades each one.
   `mode: "slice"` cuts the track into `grid` slices and swaps them, with
   `chance`, for others from the `interval` before: a drum loop reshuffled
   live; `vary` plays some backwards, `decay` chops them short. The discrete

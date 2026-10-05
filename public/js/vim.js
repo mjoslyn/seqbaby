@@ -27,9 +27,9 @@ import { flushHistory, markExternalEdit, redo, undo } from "./history.js";
 import { isDesktopKeyboard, isTypingTarget, noteForKey, setKbdRecord } from "./keyboard.js";
 import { clearStepAtCursor, extendStepEntry, moveStepCursor, toggleStepAtCursor } from "./keyboard.js";
 import { PANELS, initKnobNav, knobActive, knobArrow, knobNames, pickKnob, releaseKnob, togglePanel, turnKnob } from "./knobNav.js";
-import { CLASS_FOR_AUTO } from "./paramTargets.js";
+import { controlForKey } from "./paramTargets.js";
 import { setActiveTrack } from "./render.js";
-import { FX_STAGE_LABELS, FX_STAGE_LEVEL_KEY } from "./constants.js";
+import { FX_STAGE_LABELS, FX_STAGE_LEVEL_KEY, fxIdLabel, fxInstanceIds } from "./constants.js";
 import { emptyPattern, requestPatternSwitch, state } from "./state.js";
 import { paintStepCursor, renderStepGrid } from "./stepGrid.js";
 import { liveGeneratorOf } from "./stepSource.js";
@@ -97,11 +97,20 @@ function pressTrackButton(which) {
 }
 
 /** The level control of a track's fx stage, wherever its panel currently is. */
-function fxControl(t, stage) {
-  const cls = CLASS_FOR_AUTO[`fx.${stage}`];
-  if (!cls || !t?.el) return null;
-  return t.el.querySelector(`.${cls}`)
-    || document.querySelector(`[data-track-id="${CSS.escape(String(t.id))}"] .${cls}`);
+function fxControl(t, id) {
+  const [stage, n] = String(id).split("#");
+  return controlForKey(t, n ? `fx.${stage}#${n}` : `fx.${stage}`);
+}
+
+/** A stage or a copy of one, as typed: "delay", "delay2", "delay#2", "ring mod 3". */
+function fxIdFromName(t, name) {
+  const s = String(name || "").toLowerCase().replace(/[\s-]/g, "");
+  const m = /^(.*?)#?([0-9]+)$/.exec(s);
+  const stage = STAGE_NAMES[m ? m[1] : s];
+  if (!stage || !FX_STAGE_LEVEL_KEY[stage]) return null;
+  if (!m || m[2] === "1") return stage;
+  const id = `${stage}#${m[2]}`;
+  return t?.fxConfig?.[id] ? id : null;
 }
 
 function playStop() { document.getElementById("play")?.click(); }
@@ -418,11 +427,11 @@ function runCommand(line) {
       return setUnit(el, v) ? `${t.name}: ${cmd.startsWith("cut") ? "cutoff" : "resonance"} ${v}` : "E: this track has no filter";
     }
     case "fx": {
-      const stage = STAGE_NAMES[(args[0] || "").toLowerCase().replace(/[\s-]/g, "")];
+      const id = fxIdFromName(t, args[0]);
       const v = num(args[1]);
-      if (!stage || !FX_STAGE_LEVEL_KEY[stage]) return `E: :fx <stage> <0..1>. Stages: ${Object.keys(FX_STAGE_LABELS).join(" ")}`;
+      if (!id) return `E: :fx <stage> <0..1>, a copy as delay2. Stages: ${Object.keys(FX_STAGE_LABELS).join(" ")}`;
       if (!(v >= 0 && v <= 1)) return "E: the level is 0 to 1";
-      return setUnit(fxControl(t, stage), v) ? `${t.name}: ${FX_STAGE_LABELS[stage]} ${v}` : "E: no such control on this track";
+      return setUnit(fxControl(t, id), v) ? `${t.name}: ${fxIdLabel(id)} ${v}` : "E: no such control on this track";
     }
     case "w": {
       // Saving is the shell's (the account bar), so this opens its save panel.
@@ -488,8 +497,9 @@ function completionsFor(line) {
   const rest = text.slice(space + 1);
   if (cmd === "fx") {
     if (rest.includes(" ")) return [];
-    return rankBy(rest, Object.keys(FX_STAGE_LEVEL_KEY), s => s).map(s => ({
-      value: `fx ${s} `, label: s, hint: FX_STAGE_LABELS[s] !== s ? FX_STAGE_LABELS[s] : "",
+    const names = [...Object.keys(FX_STAGE_LEVEL_KEY), ...fxInstanceIds(track()?.fxConfig).map(id => id.replace("#", ""))];
+    return rankBy(rest, names, s => s).map(s => ({
+      value: `fx ${s} `, label: s, hint: fxIdLabel(fxIdFromName(track(), s) || s) !== s ? fxIdLabel(fxIdFromName(track(), s) || s) : "",
     }));
   }
   if (cmd === "k" || cmd === "knob") {

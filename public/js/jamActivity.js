@@ -81,7 +81,9 @@ function controlClassForPath(path) {
     case "euclid": return key ? `p-euc${key}` : null;
     case "chance": return key ? `p-chn${key}` : null;
     case "fxConfig": {
-      if (!key || !sub) return null;
+      // A stage's own controls only: an instance ("delay#2") has no class of
+      // its own to find, and the chain order is not a control.
+      if (!key || !sub || key.includes("#") || key === "order") return null;
       const alias = FX_FIELD_ALIASES[key]?.[sub] || sub;
       return `fx-${key}-${alias}`;
     }

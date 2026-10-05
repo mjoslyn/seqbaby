@@ -172,7 +172,7 @@ class RepeatProcessor extends AudioWorkletProcessor {
     // The captured slice is overwritten once the write head comes round again.
     this.len = Math.min(Math.round(pick(GATE, P.gate) * spStep), this.N - this.gridLen - this.F);
     this.src = this.w;
-    this.semis = Math.round(clamp(P.pitch, 0, 1) * 24) / 2;
+    this.semis = Math.round((clamp(P.pitch, 0, 1) - 0.5) * 48);
     this.dec = 1 - 0.7 * clamp(P.decay, 0, 1);
     this.rate = 1; this.gain = 1;
     this.begin();
@@ -198,8 +198,8 @@ class RepeatProcessor extends AudioWorkletProcessor {
     this.len = slices * gridLen;
     this.src = (this.w - backSamples + this.N) % this.N;
     this.j0 = j;
-    this.semis = Math.round(clamp(P.pitch, 0, 1) * 24) / 2;
-    this.rate = Math.pow(2, -this.semis / 12);
+    this.semis = Math.round((clamp(P.pitch, 0, 1) - 0.5) * 48);
+    this.rate = Math.pow(2, this.semis / 12);
     this.gain = 1;
     this.chop = Math.max(2 * this.F, Math.round(gridLen * (1 - 0.9 * clamp(P.decay, 0, 1))));
     this.rev = hash(j, 5) < P.vary;
@@ -214,7 +214,7 @@ class RepeatProcessor extends AudioWorkletProcessor {
   nextSlice() {
     this.k++; this.local = 0;
     if (this.mode === 0) {
-      this.rate = Math.pow(2, -Math.min(48, this.semis * this.k) / 12);
+      this.rate = Math.pow(2, Math.max(-48, Math.min(48, this.semis * this.k)) / 12);
       this.gain = Math.pow(this.dec, this.k);
     } else {
       this.rev = hash(this.j0 + this.k, 5) < this.vary;
@@ -264,13 +264,18 @@ class RepeatProcessor extends AudioWorkletProcessor {
       let rl = 0, rr = 0;
       if (this.sounding) {
         const repeat = this.mode === 0;
-        let off;
-        if (repeat) off = this.local * this.rate;
-        else off = this.k * this.gridLen + (this.rev ? this.gridLen - 1 - this.local : this.local) * this.rate;
-        const end = repeat ? this.gridLen : this.chop;
+        // Read within the slice. Pitched up, a pass reads faster than the
+        // slice lasts, so it loops the slice (a pitched-up repeat is a faster,
+        // shorter one); reading on past it would run ahead of what was
+        // recorded. Each loop point is faded like a slice edge.
+        const G = this.gridLen;
+        const ph = ((this.rev && !repeat ? G - 1 - this.local : this.local) * this.rate) % G;
+        const off = repeat ? ph : this.k * G + ph;
+        const end = repeat ? G : this.chop;
         let env = 0;
         if (this.local < end) {
           env = 1;
+          if (this.rate > 1) { const d = Math.min(ph, G - ph) / this.rate; if (d < F && this.local >= F) env = d / F; }
           // The first pass of a repeat IS the input: no fade in.
           if (!(repeat && this.k === 0) && this.local < F) env = this.local / F;
           const tail = end - this.local;
@@ -327,12 +332,13 @@ export function repeatOffsetLabel(v, interval) {
   return s === 0 ? "on the 1" : `${STEP_NAMES(s)} in`;
 }
 export function repeatGateLabel(v) { return STEP_NAMES(REPEAT_GATE[pickIndex(REPEAT_GATE, v)]); }
-/** Semitones down: per repeat on `repeat`, for every swapped slice on `slice`. */
-export function repeatPitchSemis(v) { return Math.round(clamp01(v) * 24) / 2; }
+/** Semitones, -24..+24 with the middle of the knob 0: per repeat on `repeat`, for every swapped slice on `slice`. */
+export function repeatPitchSemis(v) { return Math.round((clamp01(v) - 0.5) * 48); }
 export function repeatPitchLabel(v, mode) {
   const s = repeatPitchSemis(v);
   if (s === 0) return "0 st";
-  return mode === "slice" ? `-${s} st` : `-${s} st each`;
+  const n = `${s > 0 ? "+" : "\u2212"}${Math.abs(s)} st`;
+  return mode === "slice" ? n : `${n} each`;
 }
 export function repeatPercentLabel(v) { return `${Math.round(clamp01(v) * 100)}%`; }
 

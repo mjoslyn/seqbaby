@@ -37,7 +37,7 @@ export const LFO_KEYS = [
   // FX wets/amts (short keys preserved for backward compat).
   "fuzz", "delay", "verb",
   "vinyl", "cassette", "ringmod", "shaper", "crush", "autowah", "chorus", "phaser", "flanger", "pitch",
-  "repeat", "prism",
+  "repeat", "prism", "pan",
   // FX sub-params with AudioParam / Signal targets (audio-rate modable).
   "fuzz_drive", "fuzz_tone", "fuzz_level",
   "vinyl_warmth",
@@ -103,7 +103,7 @@ export const LFO_LABELS = {
   euclid_pulses: "euclid pulses", euclid_steps: "euclid cycle", euclid_rotate: "euclid rotate",
   ...Object.fromEntries(CHANCE_MOD_KEYS.map(k => [`chance_${k}`, CHANCE_MOD_LABELS[k]])),
   vol: "volume", cutoff: "filter cutoff", reson: "filter reson",
-  fuzz: "fuzz amt", delay: "delay wet", verb: "reverb wet",
+  fuzz: "fuzz amt", delay: "delay wet", verb: "reverb wet", pan: "pan",
   vinyl: "vinyl amt", cassette: "cassette amt", ringmod: "ring mod wet",
   shaper: "wave folder wet", shaper_amt: "wave folder amt",
   crush: "bitcrush wet", autowah: "auto-wah wet", chorus: "chorus wet",
@@ -143,7 +143,11 @@ export const LFO_LABELS = {
   ...Object.fromEntries(SUB_MOD_KEYS.map(k => [`sub_${k}`, SUB_MOD_LABELS[k]])),
   ...Object.fromEntries(DRONE_MOD_KEYS.map(k => [`drone_${k}`, DRONE_MOD_LABELS[k]])),
 };
-export const lfoLabel = (k) => LFO_LABELS[k] ?? k;
+export const lfoLabel = (k) => {
+  const inst = splitFxInstanceKey(k);
+  if (inst) return `${LFO_LABELS[inst.base] ?? inst.base} (${inst.n})`;
+  return LFO_LABELS[k] ?? k;
+};
 export const LFO_AMP_SCALE = {
   vol: 1, harm: 1, timb: 1, morph: 1, decay: 1,
   // cutoff and ring_freq are exponential (see cutoffToHz / applyRingMod's log
@@ -155,6 +159,7 @@ export const LFO_AMP_SCALE = {
   cutoff: 6000,   // Hz
   reson: 19.5,             // Q 0.5..20 (resonToQ) — full span, so depth 1 swings the whole knob
   fuzz: 1, delay: 1, verb: 1,
+  pan: 2,   // the knob's 0..1 is the panner's -1..1
   vinyl: 1, cassette: 1, ringmod: 1, shaper: 1, crush: 1, autowah: 1, chorus: 1, phaser: 1, flanger: 1, pitch: 1,
   // The prism's mix and every knob on it are 0..1 AudioParams.
   prism: 1, ...Object.fromEntries(PRISM_KNOBS.map(k => [`prism_${k}`, 1])),
@@ -338,20 +343,153 @@ export const NOTE_NAMES = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"]
 // lights up on it (`refreshPanelBadges`, paramTargets.js) — one table, so the
 // two can't disagree about what counts as "on".
 export const FX_STAGE_LEVEL_KEY = {
+  gain: "drive",
   vinyl: "amount", cassette: "amount", fuzz: "amount",
   ringmod: "wet", shaper: "wet", crush: "wet", autowah: "wet", chorus: "wet",
-  phaser: "wet", flanger: "wet", pitchshift: "wet", repeat: "wet", prism: "wet", delay: "wet", reverb: "wet",
+  phaser: "wet", flanger: "wet", pitchshift: "wet", repeat: "wet", prism: "wet", pan: "pos", delay: "wet", reverb: "wet",
 };
 export const FX_STAGE_LABELS = {
+  gain: "gain",
   vinyl: "vinyl", cassette: "cassette", fuzz: "fuzz", ringmod: "ring mod",
   shaper: "shaper", crush: "crush", autowah: "auto-wah", chorus: "chorus",
-  phaser: "phaser", flanger: "flanger", pitchshift: "pitch shift", repeat: "repeat", prism: "prism",
+  phaser: "phaser", flanger: "flanger", pitchshift: "pitch shift", repeat: "beat repeat", prism: "prism", pan: "pan",
   delay: "delay", reverb: "reverb",
 };
-/** A stage's engagement level (0 = bypassed) read off a plain fx config. */
+export const FX_STAGE_KEYS = Object.keys(FX_STAGE_LEVEL_KEY);
+// Where a stage's level control sits when the stage does nothing. 0 for every
+// wet / amount; the gain's drive is unity in the middle of its knob.
+export const FX_STAGE_NEUTRAL = { gain: 0.5, pan: 0.5 };
+
+// A stage can be on a track more than once. The first is the stage's own key
+// ("delay") and everything that names an fx control by stage (the LFO and
+// automation targets, the macro pads, vim, code) means that one; each further
+// copy is an INSTANCE, "<stage>#<n>" (n from 2), with a config of the stage's
+// shape under that key in fxConfig. `fxConfig.order` is the chain: instance
+// ids and stage keys, in the order they were put on the track and arranged
+// since. Absent, the chain is FX_STAGE_KEYS order, which is what every song
+// written before it plays.
+
+/** The stage an fx id names ("delay#2" → "delay"), or null. */
+export function fxStageOf(id) {
+  const s = String(id ?? "").split("#")[0];
+  return FX_STAGE_LEVEL_KEY[s] ? s : null;
+}
+/** Whether an fxConfig key is an instance of a stage ("delay#2"). */
+export function isFxInstanceId(id) {
+  return typeof id === "string" && /^[a-z]+#[0-9]+$/.test(id) && !!fxStageOf(id);
+}
+/** The instance ids an fx config holds. */
+export function fxInstanceIds(config) {
+  if (!config || typeof config !== "object") return [];
+  return Object.keys(config).filter(k => isFxInstanceId(k) && config[k] && typeof config[k] === "object");
+}
+/**
+ * The whole chain, in the order it runs: config.order first (unknown and
+ * repeated ids dropped), then any stage it leaves out in FX_STAGE_KEYS order,
+ * then any instance it leaves out.
+ */
+export function fxChainOrder(config) {
+  const out = [], seen = new Set();
+  const order = Array.isArray(config?.order) ? config.order : [];
+  for (const id of order) {
+    if (seen.has(id)) continue;
+    if (FX_STAGE_LEVEL_KEY[id] || (isFxInstanceId(id) && config[id] && typeof config[id] === "object")) {
+      seen.add(id); out.push(id);
+    }
+  }
+  for (const k of FX_STAGE_KEYS) if (!seen.has(k)) { seen.add(k); out.push(k); }
+  for (const id of fxInstanceIds(config)) if (!seen.has(id)) { seen.add(id); out.push(id); }
+  return out;
+}
+/** A stage's (or instance's) engagement level (0 = bypassed) read off a plain fx config. */
 export function fxStageLevel(config, key) {
-  const k = FX_STAGE_LEVEL_KEY[key];
-  return k ? (config?.[key]?.[k] ?? 0) : 0;
+  const stage = fxStageOf(key);
+  const k = FX_STAGE_LEVEL_KEY[stage];
+  if (!k) return 0;
+  const n = FX_STAGE_NEUTRAL[stage] ?? 0;
+  return Math.abs((config?.[key]?.[k] ?? n) - n);
+}
+// LFO mod keys (see lfo.js getModTarget) → the FX stage they touch. Used to
+// keep a stage engaged (see FXRack chain rewiring) while an LFO targets it,
+// even when its stored wet is 0 — the LFO signal adds on top of that base.
+export const FX_LFO_STAGE = {
+  vinyl: "vinyl", vinyl_warmth: "vinyl", vinyl_wow: "vinyl",
+  cassette: "cassette", cassette_flutter: "cassette", cassette_sat: "cassette",
+  fuzz: "fuzz", fuzz_drive: "fuzz", fuzz_tone: "fuzz", fuzz_level: "fuzz",
+  ringmod: "ringmod", ring_freq: "ringmod",
+  shaper: "shaper", shaper_preamp: "shaper", shaper_amt: "shaper",
+  crush: "crush", crush_bits: "crush", crush_rate: "crush",
+  autowah: "autowah", autowah_sens: "autowah", autowah_range: "autowah",
+  chorus: "chorus", chorus_rate: "chorus", chorus_depth: "chorus",
+  phaser: "phaser", phaser_rate: "phaser", phaser_depth: "phaser",
+  flanger: "flanger", flanger_rate: "flanger", flanger_fbk: "flanger",
+  pitch: "pitchshift", pitch_semi: "pitchshift",
+  repeat: "repeat", ...Object.fromEntries(REPEAT_KNOBS.map(k => [`repeat_${k}`, "repeat"])),
+  prism: "prism", ...Object.fromEntries(PRISM_KNOBS.map(k => [`prism_${k}`, "prism"])),
+  pan: "pan",
+  delay: "delay", delay_time: "delay", delay_fbk: "delay",
+  verb: "reverb", reverb_decay: "reverb",
+};
+
+// ---- the copies' own modulation keys ------------------------------------------
+// A copy of a stage ("delay#2") takes every LFO target and automation lane its
+// stage does, spelled as the stage's own key with the copy's number after a
+// `#`: `delay_time#2`, `verb#2`, `fx.delay.time#2`, `fx.reverb#2`. One rule for
+// both namespaces, so a key splits back into the stage's key and the copy
+// without a table, and every gate, label and target lookup asks the stage's
+// key and then points at the copy's sub-rack.
+
+/** "delay_time#2" → { base: "delay_time", n: "2" }; null for a stage's own key. */
+export function splitFxInstanceKey(key) {
+  const m = /^(.+)#([0-9]+)$/.exec(String(key ?? ""));
+  return m ? { base: m[1], n: m[2] } : null;
+}
+/** The stage's own key under a copy's ("delay_time#2" → "delay_time"). */
+export function baseModKey(key) {
+  return splitFxInstanceKey(key)?.base ?? key;
+}
+/** The fx stage (or copy) an LFO or automation key reaches, or null. */
+export function fxStageOfModKey(key) {
+  const inst = splitFxInstanceKey(key);
+  const base = inst ? inst.base : key;
+  let stage = FX_LFO_STAGE[base] || null;
+  if (!stage) { const m = /^fx\.([a-z]+)/.exec(base); stage = m && FX_STAGE_LEVEL_KEY[m[1]] ? m[1] : null; }
+  if (!stage) return null;
+  return inst ? `${stage}#${inst.n}` : stage;
+}
+/** Every LFO key the copies in this fx config take. */
+export function fxInstanceLfoKeys(config) {
+  const out = [];
+  for (const id of fxInstanceIds(config)) {
+    const [stage, n] = id.split("#");
+    for (const k of LFO_KEYS) if (FX_LFO_STAGE[k] === stage) out.push(`${k}#${n}`);
+  }
+  return out;
+}
+/** Every automation key the copies in this fx config take. */
+export function fxInstanceAutoKeys(config) {
+  const out = [];
+  for (const id of fxInstanceIds(config)) {
+    const [stage, n] = id.split("#");
+    for (const k of Object.keys(AUTOMATION_TARGETS)) {
+      if (k === `fx.${stage}` || k.startsWith(`fx.${stage}.`)) out.push(`${k}#${n}`);
+    }
+  }
+  return out;
+}
+/** An automation key's label, a copy's with its number. */
+export function autoLabel(key) {
+  const inst = splitFxInstanceKey(key);
+  if (inst) return `${AUTOMATION_TARGETS[inst.base]?.label ?? inst.base} (${inst.n})`;
+  return AUTOMATION_TARGETS[key]?.label ?? key;
+}
+
+/** "delay#2" → "delay 2"; a stage key → its label. */
+export function fxIdLabel(id) {
+  const s = fxStageOf(id);
+  if (!s) return String(id);
+  const n = String(id).split("#")[1];
+  return n ? `${FX_STAGE_LABELS[s]} ${n}` : FX_STAGE_LABELS[s];
 }
 
 // ---- automation targets -----------------------------------------------------
@@ -424,6 +562,8 @@ export const AUTOMATION_TARGETS = {
   // Drone (drone engine only) — oscillator, filter, LFO, delay, cloud.
   ...Object.fromEntries(DRONE_MOD_KEYS.map(k => [`drone.${k}`, { label: DRONE_MOD_LABELS[k] }])),
   // fx
+  "fx.gain":            { label: "gain drive" },
+  "fx.pan":             { label: "pan" },
   "fx.vinyl":           { label: "vinyl amt" },
   "fx.vinyl.warmth":    { label: "vinyl warmth" },
   "fx.vinyl.wow":       { label: "vinyl wow" },
@@ -478,7 +618,7 @@ export const VOICE_AUTO_KEYS = ["vol","harm","timb","morph","decay","osc1","osc2
 // generator is the thing making the part, which is what gates its keys.
 
 export const TRACK_FX_LFO_KEYS = new Set([
-  "fuzz","delay","verb","vinyl","cassette","ringmod","shaper","crush","autowah","chorus","phaser","flanger","pitch",
+  "fuzz","delay","verb","vinyl","cassette","ringmod","shaper","crush","autowah","chorus","phaser","flanger","pitch","pan",
   "fuzz_drive","fuzz_tone","fuzz_level","vinyl_warmth","shaper_preamp","ring_freq","crush_bits","crush_rate",
   "chorus_rate","chorus_depth","phaser_rate","flanger_rate","flanger_fbk","delay_time","delay_fbk",
   // setter-driven (non-AudioParam) FX params
@@ -526,6 +666,10 @@ export function voiceAutoKeysForEngineKey(engineKey) {
 }
 
 export function canAutomateKey(engineKey, key, live = {}) {
+  // A copy's lane: whatever its stage's lane is (whether the copy is on the
+  // track is the caller's to check — this gate has only an engine).
+  const inst = splitFxInstanceKey(key);
+  if (inst) return inst.base.startsWith("fx.") && !!AUTOMATION_TARGETS[inst.base] && canAutomateKey(engineKey, inst.base, live);
   const t = { engineKey: String(engineKey || "") };
   if (key === "cutoff" || key === "reson") return true;
   if (key.startsWith("wt.scan.")) return t.engineKey === "wt:akwf";
@@ -545,6 +689,8 @@ export function canAutomateKey(engineKey, key, live = {}) {
 }
 
 export function canModulateKey(engineKey, key, live = {}) {
+  const inst = splitFxInstanceKey(key);
+  if (inst) return !!FX_LFO_STAGE[inst.base] && canModulateKey(engineKey, inst.base, live);
   const t = { engineKey: String(engineKey || "") };
   // Always-applicable: track-level fx + master vol + filter.
   if (key === "vol" || key === "cutoff" || key === "reson") return true;

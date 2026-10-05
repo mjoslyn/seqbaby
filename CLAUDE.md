@@ -348,10 +348,21 @@ voice → filterNode → eqNode → compressor → fxRack → masterGain → mas
 - `compressor` — `TrackCompressor`: native `DynamicsCompressorNode` (self) or
   an analyser-driven envelope follower ducking a pre-output gain (sidechain
   from any track's `voice.getOutputNode()`).
-- `fxRack` — `FXRack`, serial chain in this order: **vinyl → cassette → fuzz →
+- `fxRack` — `FXRack`, serial chain in this order: **gain → vinyl → cassette → fuzz →
   ring mod → wave shaper → crush → auto-wah → chorus → phaser → flanger →
-  pitch shift → repeat → prism → delay → reverb**. `defaultFxConfig()` keys match. Chain order
-  matters for LFO/automation targets.
+  pitch shift → repeat → prism → pan → delay → reverb**. `defaultFxConfig()` keys match. That is
+  the order of a song with no `fxConfig.order`; see the fx chain section below
+  for a track's own order and a stage added more than once.
+- **gain and pan are stages like any other** (one GainNode, one
+  StereoPannerNode), so they go wherever the chain puts them. Their level
+  control does nothing in the middle of its knob (`FX_STAGE_NEUTRAL`,
+  constants.js), and `fxStageLevel` measures from there, so a stage is "on"
+  only off centre. `gain` is what the amp's drive was: an input gain in front
+  of every stage, which a reorderable chain made meaningless, so the amp keeps
+  only `out` and `migrateAmpDrive` (sessionFormat.js) moves an old song's
+  drive into a gain stage at the top of its chain. `pan` takes an LFO
+  (auto-pan, `LFO_AMP_SCALE` 2: the knob's 0..1 is the panner's -1..1) and is
+  Strudel's own `.pan`.
 - **crush is a converter, not a rounding function** (`crusher.js`) — see the
   bitcrush section below.
 - **prism is four effects in one stage** (`prism.js`) — see the prism section
@@ -600,6 +611,12 @@ slice    cut the track into GRID slices as it plays; at each, with CHANCE,
 - **Insert, not mix**: the node's output is the input except while a repeat
   holds, so the rack's linear crossfade (`repeatWetBus`) makes `wet` 1 an
   insert and less a mix over it.
+- **Pitch is -24..+24 semitones, the middle of the knob 0**: per repeat
+  (cumulative, capped at ±48) on `repeat`, per swapped slice on `slice`.
+  Pitched up, a pass reads faster than the slice lasts, so it loops the slice
+  (faded at each loop point) rather than reading past what was recorded. A
+  song written when the knob was 0..12 down has no `pitchV`; `migrateRepeatPitch`
+  (sessionFormat.js) rewrites its pitch and the lanes on it.
 - **Every edge is faded (2ms)**: slice heads and tails, entering and leaving a
   run, a mode switch (fade out, swap, carry on). A repeat is a loop point in
   the middle of a waveform.
@@ -1831,12 +1848,52 @@ too: they have no level, so theirs puts them back to neutral (glide 0, amp
 unity), and they show on the track once they are off neutral.
 
 **The fx button opens a picker, not the rack** (`openFxAsModal`,
-stepEditor.js). Every stage by name (glide, amp, then chain order), the ones on
-the track lit in their own colour, read off the row title's colour. No controls
-in it: picking a stage puts its row on the track at whatever level it has
-(nothing is engaged; a stage at 0 stays bypassed until its wet is turned up
-there); picking a lit one is the `×`. Both are `fxStageAdd` / `fxStageOff`
-(render.js). The rack panel itself never leaves the track, so its badge entry
+stepEditor.js). Every stage by name, alphabetical, the ones on the track lit in
+their own colour (read off the row title's colour) with a `×N` when there is
+more than one. No controls in it: picking a stage puts its row on the track at
+the END of the chain, at whatever level it has (nothing is engaged; a stage at
+0 stays bypassed until its wet is turned up there); picking it again adds
+another copy. glide and amp are not in the chain and toggle. Both are
+`fxStageAdd` / `fxStageOff` (render.js).
+
+**The fx chain is the track's** (`fxConfig.order`, constants.js
+`fxChainOrder`). It runs in the order stages were put on the track, and a
+stage's ‹ › buttons or a drag of its name rearrange it (`fxStageMove` /
+`fxStageMoveTo`); the rows are drawn in that order. A stage added again is an
+INSTANCE, `"<stage>#<n>"` (n from 2), with a config of the stage's shape under
+that key in `fxConfig`, its own row (the stage's markup cloned from
+`#track-template` with its classes renamed `fxi-`, so nothing that finds a
+control by class finds it; `fxRowFields` reads and writes it off those
+classes) and its own sub-rack: a whole `FXRack` built with `{sub: true}` and
+spliced into the parent's chain (`_extra`, `syncChain`, `applyInstance`), of
+which only that stage is ever engaged. Both live in `fxConfig`, so a save,
+undo, p-lock, a patch and a jam carry them with no plumbing of their own;
+`applyPatternSound` is where a sound without them takes them away again. An
+`order` that is absent plays `FX_STAGE_KEYS` order, so every older song sounds
+as it did; it is written the first time something is added or moved.
+
+**A copy takes every target its stage does**, spelled as the stage's own key
+with the copy's number after a `#`: LFO `delay_time#2` / `verb#2`, lane and
+pad `fx.delay.time#2`. One rule for both namespaces (`splitFxInstanceKey`,
+`baseModKey`, `fxStageOfModKey`, constants.js), so no table grows per copy:
+every gate (`canModulate`, `canAutomate`, which also need the copy on the
+track), label (`lfoLabel`, `autoLabel`: "delay wet (2)") and pairing
+(`autoForLfo` / `lfoForAuto`) asks the stage's key, and every lookup that
+reaches the graph (`getModTarget`, `setterLfoBase`, `applySetterLfoValue`,
+`applyAutomationAtStep`) is handed a VIEW of the track whose `fxRack` is the
+copy's sub-rack (`fxCopyView`, lfo.js), so the stage's own code finds the
+copy's nodes. A copy's controls resolve through `targetsForControl` (an
+`fxi-` class plus its row's `data-fx-id`) and `controlForKey`, which is what
+the right-click menu, the dots, knob recording, the pads, the needle and vim
+use. `trackLfoKeys` / `fxInstanceAutoKeys` add a track's copies to the
+pickers. The sub-rack is held wired at a level of 0 by whatever holds the
+copy (its `isStageHeld` asks the parent's for the copy's id). Taking a copy
+off takes its LFOs, its lanes in every pattern and its pad assignments with
+it (`dropFxCopyMods`). vim names one `:fx delay2`; code writes
+`.fx('delay#2.wet', 0.6)` (naming a copy makes it; a run that stops naming
+it removes it) and `.fxchain('gain delay#2 reverb')`; the song builder's
+`setFx(song, i, "delay#2", {...})` / `setFx(..., null)` and `setFxChain`
+(MCP `set_fx`, `set_fx_chain`). The rack panel itself never leaves the track, so its badge entry
 has no `modal` and the inline view follows each pick behind the overlay. Vim's
 `:k` on a stage that is not shown adds it to the shown set (without engaging it)
 and picks the knob on the track; `f` opens the picker.
@@ -3056,7 +3113,7 @@ agent ──▶ mcp/server.mjs ──▶ songBuilder.js ──▶ { _version, bp
   a shorter string tiling a longer pattern. `describePattern` reads one back
   the same way, so `get_song` shows an agent what it wrote in the notation
   it wrote it in.
-- **The MCP server holds one song** and keeps the tool list short (35 tools:
+- **The MCP server holds one song** and keeps the tool list short (36 tools:
   song / engines / tracks / steps / sound / modulation / generators / code /
   out). `write_code` takes Strudel code (strudel.js, the same reader as
   the studio's code drawer), which is the tersest way an agent has to spell a
