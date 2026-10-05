@@ -4,8 +4,10 @@
 // trackpad turns it, as do `-` / `=` from vim.js. There are two ways to have
 // one picked:
 //
-//   a panel     a sound panel open as a modal (fx, filter, env, eq, comp),
-//               however it was opened. Its controls are what hjkl walk.
+//   a panel     a sound panel open as a modal (filter, env, eq, comp),
+//               however it was opened. Its controls are what hjkl walk. The
+//               fx button opens a picker of stage names instead, and a
+//               stage's knobs live on the track, where :k picks them.
 //   :k <name>   vim's knob command, which finds a control on the keyboard's
 //               track by what it is called (`:k cutoff`, `:k reverb decay`,
 //               `:k fx.delay.time`) and picks it, opening its panel first when
@@ -23,7 +25,7 @@
 import { AUTOMATION_TARGETS } from "./constants.js";
 import { setStatus } from "./dom.js";
 import { readoutText, writeKnobValue } from "./knob.js";
-import { CLASS_FOR_AUTO } from "./paramTargets.js";
+import { CLASS_FOR_AUTO, fxShown, refreshPanelBadges } from "./paramTargets.js";
 
 /** Vim's f / c: the button that opens the panel, and the control to start on. */
 export const PANELS = {
@@ -294,6 +296,15 @@ export function pickKnob(t, query, value) {
   if (modal && modal.contains(el)) {
     nav.free = false; nav.scope = modal; selectNav(el);
   } else if (navVisible(el)) {
+    dropPick();
+    nav.free = true; nav.scope = t.el; selectNav(el);
+  } else if (el.closest(".sq-track__fx-panel")) {
+    // The fx button opens a picker of names, not the rack: a stage's knobs
+    // only exist on the track. So show the stage there (without engaging it,
+    // which would change the sound) and pick the knob where it now is.
+    const stage = el.closest(".sq-fx__row")?.dataset.fx;
+    if (stage) { fxShown(t).add(stage); refreshPanelBadges(t); }
+    if (!navVisible(el)) return `E: ${navLabel(el)} is not showing on ${t.name}`;
     dropPick();
     nav.free = true; nav.scope = t.el; selectNav(el);
   } else {

@@ -8,7 +8,7 @@ import { applySampleSpeed, currentBpm } from "./lfo.js";
 import { renderRollPanel } from "./pianoRoll.js";
 import { updateGranularSpeedEnabled } from "./params.js";
 import { refreshPanelBadges, refreshParamIndicators } from "./paramTargets.js";
-import { renderAutomationPanel } from "./render.js";
+import { FX_PICK_LABELS, FX_PICK_ORDER, fxStageAdd, fxStageOff, fxStageOn, renderAutomationPanel } from "./render.js";
 import { invertChord, state } from "./state.js";
 import { renderStepGrid, repaintNudge } from "./stepGrid.js";
 import { CHORD_TYPES, SCALES, applyScale, chordFitsScale, chordNotes, midiToName } from "./theory.js";
@@ -121,13 +121,72 @@ export function openEnvAsModal(t) {
   });
 }
 
+// The fx button opens a picker, not the rack: every stage by name, the ones on
+// this track lit. A pick puts the stage on the track (engaged, if it was at 0)
+// and its controls appear inline there; picking a lit one takes it off. The
+// rack panel itself never leaves the track, so the knobs are only ever where
+// the sound is being shaped.
 export function openFxAsModal(t) {
-  openPanelAsModal(t, {
-    panel: t._fxPanelEl,
-    modalClass: "sq-fx__modal",
-    btnSel: ".sq-track__fx",
-    modalKey: "_fxModal",
-  });
+  if (t._fxModal) return;
+  const overlay = document.createElement("div");
+  overlay.className = "sq-modal-overlay";
+  const modal = document.createElement("div");
+  modal.className = "sq-modal sq-panel__modal sq-fx__modal";
+  modal.dataset.trackId = String(t.id);
+  modal.setAttribute("role", "dialog");
+  modal.setAttribute("aria-modal", "true");
+  modal.setAttribute("aria-label", `${t.name || "track"} fx`);
+
+  const grid = document.createElement("div");
+  grid.className = "sq-fxpick";
+  const btns = [];
+  for (const stage of FX_PICK_ORDER) {
+    const row = t._fxPanelEl?.querySelector(`.sq-fx__row[data-fx="${stage}"]`);
+    if (!row) continue;
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "sq-fxpick__btn";
+    b.dataset.fx = stage;
+    b.textContent = FX_PICK_LABELS[stage] || stage;
+    // The stage's own colour, read off its row's title so it lives in one place.
+    const title = row.querySelector(".sq-fx__title");
+    if (title) b.style.setProperty("--fx-c", getComputedStyle(title).color);
+    b.addEventListener("click", () => {
+      if (fxStageOn(t, stage)) fxStageOff(t, stage);
+      else fxStageAdd(t, stage);
+      paint();
+    });
+    grid.appendChild(b);
+    btns.push(b);
+  }
+  const paint = () => {
+    for (const b of btns) b.setAttribute("aria-pressed", String(fxStageOn(t, b.dataset.fx)));
+  };
+  refreshPanelBadges(t);   // settle the shown set (glide / amp off neutral) before painting
+  paint();
+  modal.appendChild(grid);
+
+  const closeBtn = document.createElement("button");
+  closeBtn.type = "button";
+  closeBtn.className = "sq-panel__modal-close";
+  closeBtn.textContent = "done";
+  modal.appendChild(closeBtn);
+
+  const close = () => {
+    if (!t._fxModal) return;
+    overlay.remove();
+    (t._panelBtns?.[".sq-track__fx"] || t.el?.querySelector(".sq-track__fx"))?.setAttribute("aria-pressed", "false");
+    document.removeEventListener("keydown", escHandler);
+    t._fxModal = null;
+  };
+  const escHandler = (e) => { if (e.key === "Escape") close(); };
+  closeBtn.addEventListener("click", close);
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
+  document.addEventListener("keydown", escHandler);
+
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
+  t._fxModal = { overlay, close };
 }
 
 export function openEqAsModal(t) {

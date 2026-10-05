@@ -1464,8 +1464,8 @@ main {
 
 /* A panel with something on in it is shown on the track (`is-live`, from the
    same refreshPanelBadges), with only the rows that are on — the rack's
-   bypassed stages, its glide and amp rows, and the mod matrix's adder wait in
-   the modal. Scoped to .sq-track: opened as a modal the panel is reparented
+   stages not on the track (picked from the fx button) and the mod matrix's
+   adder wait in the modal. Scoped to .sq-track: opened as a modal the panel is reparented
    out of the track, and there it is the whole panel again. The border is the
    button's colour (fx/mod: the track's own hue, see below), so the block
    reads as "the fx rack" or "the mod matrix" without a heading. */
@@ -3237,38 +3237,40 @@ body.kbd-recording:not(.sq-playing) .sq-track.is-kbd-active .sq-step.is-cursor {
 .sq-comp__modal {
   width: min(96vw, 680px);
 }
+/* The fx button's picker (openFxAsModal): every stage by name, the ones on
+   the track lit in their own colour. No controls here; a stage's knobs are
+   on the track. */
 .sq-fx__modal {
-  width: min(96vw, 900px);
+  width: min(96vw, 560px);
 }
-/* The rack in its modal is a grid of stage cards, three across at the modal's
-   width, rather than fifteen full-width lines with the knobs huddled at the
-   left of each. Name on the card's top line, knobs wrapping under it: the
-   inline view's cards, whole rack. Desktop only; the phone block's
-   name-beside-knobs rows are already the compact layout at that width. */
-@media (min-width: 769px) {
-  .sq-fx__modal > .sq-track__fx-panel {
-    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-    gap: 8px;
-    align-items: stretch;
-  }
-  .sq-fx__modal > .sq-track__fx-panel > .sq-fx__row {
-    align-content: flex-start;
-    gap: 6px 10px;
-    padding: 6px 8px;
-    background: var(--bg-3);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-  }
-  .sq-fx__modal > .sq-track__fx-panel > .sq-fx__row > .sq-fx__title {
-    flex: 1 1 100%;
-    min-width: 0;
-  }
+.sq-fxpick {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 8px;
+  overflow-y: auto;
+}
+.sq-fxpick__btn {
+  --fx-c: var(--fg-dim);
+  min-height: 44px;
+  padding: 8px 10px;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--fg-dim);
+  text-align: left;
+  cursor: pointer;
+}
+.sq-fxpick__btn:hover { border-color: var(--fx-c); color: var(--fx-c); }
+.sq-fxpick__btn[aria-pressed="true"] {
+  color: #0b0d10;
+  background: var(--fx-c);
+  border-color: var(--fx-c);
+  font-weight: 600;
 }
 .sq-mod__modal > .sq-track__mod-panel,
 .sq-aut__modal > .sq-track__aut-panel,
 .sq-filter__modal > .sq-track__filter-panel,
 .sq-env__modal > .sq-track__env-panel,
-.sq-fx__modal > .sq-track__fx-panel,
 .sq-eq__modal > .sq-track__eq-panel,
 .sq-comp__modal > .sq-track__comp-panel {
   max-height: calc(92vh - 80px);

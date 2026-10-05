@@ -1826,9 +1826,20 @@ there, so the rack, the p-lock snapshot, a save and undo all see it — and drop
 the stage from the shown set in the same move. The set is live UI state and is
 never serialized: `syncTrackSoundUI` clears it, so a sound arriving from a
 session, a patch or a p-lock recall brings its own answer rather than inheriting
-the last one's. The `×` is inline-only (style.css): in the modal every stage is
-listed whatever its level, which is where a bypassed one is turned back on, so
-there is nothing there for it to remove.
+the last one's. The `×` is inline-only (style.css). glide and amp rows get one
+too: they have no level, so theirs puts them back to neutral (glide 0, amp
+unity), and they show on the track once they are off neutral.
+
+**The fx button opens a picker, not the rack** (`openFxAsModal`,
+stepEditor.js). Every stage by name (glide, amp, then chain order), the ones on
+the track lit in their own colour, read off the row title's colour. No controls
+in it: picking a stage puts its row on the track at whatever level it has
+(nothing is engaged; a stage at 0 stays bypassed until its wet is turned up
+there); picking a lit one is the `×`. Both are `fxStageAdd` / `fxStageOff`
+(render.js). The rack panel itself never leaves the track, so its badge entry
+has no `modal` and the inline view follows each pick behind the overlay. Vim's
+`:k` on a stage that is not shown adds it to the shown set (without engaging it)
+and picks the knob on the track; `f` opens the picker.
 
 **The inline panels share one wrapper** (`.sq-track__live`, studioMarkup.ts:
 filter, env, eq, comp, the rack, then the mod panel) and on desktop it is a

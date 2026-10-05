@@ -546,15 +546,20 @@ const PANEL_BADGES = [
       if (on.length) shown.add("env");
       return shown.has("env");
     } },
-  { sel: ".sq-track__fx", panel: "_fxPanelEl", modal: "_fxModal",
+  // No `modal`: the fx button opens a picker of names, not this panel, so the
+  // inline view stays live behind it and follows each pick.
+  { sel: ".sq-track__fx", panel: "_fxPanelEl",
     on: (t) => Object.keys(FX_STAGE_LEVEL_KEY).filter(k => fxStageLevel(t.fxConfig, k) > 0),
     label: (k) => FX_STAGE_LABELS[k],
-    // Only the stages this track SHOWS; the glide and amp rows, and every stage
-    // that has never been engaged, wait in the modal. Shown is not the same as
-    // on — see fxShown.
+    // Only the stages this track SHOWS. Shown is not the same as on — see
+    // fxShown. glide and amp have no level, so they show once they are off
+    // neutral (or picked), and stay, like a stage, until their ×.
     rows: (panel, on, t) => {
       const shown = fxShown(t);
       for (const k of on) shown.add(k);
+      if ((t.glide ?? 0) > 0) shown.add("glide");
+      const amp = t.fxConfig?.amp;
+      if (amp && (Math.abs((amp.preamp ?? 0.5) - 0.5) > 1e-3 || Math.abs((amp.level ?? 0.5) - 0.5) > 1e-3)) shown.add("amp");
       for (const row of panel.querySelectorAll(".sq-fx__row[data-fx]")) {
         row.classList.toggle("is-live", shown.has(row.dataset.fx));
       }
