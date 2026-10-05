@@ -145,6 +145,24 @@ export function refreshNoiseBeds() {
   }
 }
 
+/**
+ * Let go of the notes a muted (or soloed-out) track is holding. Mute withholds
+ * the transport's triggers, which silences every engine whose notes end on
+ * their own; a latching one (the drone's HOLD) holds until the next note, and
+ * a muted track never gets one, so without this it droned on through mute and
+ * solo. Called wherever `muted` / `soloed` change. Releasing, not cutting: the
+ * note fades on the patch's own release, as any other note does when muted.
+ */
+export function releaseSilencedTracks() {
+  const soloAudible = soloAudibleTracks();
+  const now = state.audioCtx?.currentTime ?? 0;
+  for (const t of state.tracks) {
+    if (t.engineKey === "bus") continue;
+    if (!t.muted && (!soloAudible || soloAudible.has(t))) continue;
+    try { t.voice?.releaseHeld?.(now); } catch {}
+  }
+}
+
 // ---- output routing: master, or an fx bus track ------------------------
 //
 // `t.out` is "master" or the id of a track running the `bus` engine. Sending

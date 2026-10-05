@@ -1443,6 +1443,9 @@ export class DrumSynthVoice {
     this._heldNotes?.clear();
     try { this.built.release?.(now); } catch {}
   }
+  // Latched notes only (releaseSilencedTracks, signal.js): a builder whose
+  // notes end on their own has nothing to let go of.
+  releaseHeld(now) { try { this.built.releaseHeld?.(now); } catch {} }
   dispose() {
     for (const n of this.built.nodes) { try { n.dispose(); } catch {} }
     try { this.output.dispose(); } catch {}

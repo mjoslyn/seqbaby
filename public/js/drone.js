@@ -785,5 +785,8 @@ export function buildDroneVoice(output) {
       });
     },
     release: (time) => post({ type: "off", when: Math.max(Number(time) || 0, ctx.currentTime) }),
+    // HOLD latches, so a muted track's note would never end: mute withholds
+    // the next note, which is the only thing that lets a latched one go.
+    releaseHeld: (time) => post({ type: "off", when: Math.max(Number(time) || 0, ctx.currentTime) }),
   };
 }
