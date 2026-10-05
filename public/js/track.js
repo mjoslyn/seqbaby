@@ -337,6 +337,7 @@ export function resizePattern(t, patIdx, len) {
   p.arpRates    = pad(p.arpRates, 0.25);
   p.arpRanges   = pad(p.arpRanges, 1);
   p.arpDirs     = pad(p.arpDirs, "up");
+  p.strums      = pad(p.strums, 0);
   p.complexities= pad(p.complexities, 0);
   p.ratchets    = pad(p.ratchets, 1);
   p.sampleStarts    = pad(p.sampleStarts, 0);
@@ -389,7 +390,7 @@ export function truncatePattern(t, patIdx, newLen) {
   if (newLen >= oldLen) return;
   const KEYS = [
     "steps","lengths","notes","velocities","chords","offsets",
-    "arps","arpRates","arpRanges","arpDirs","complexities","ratchets",
+    "arps","arpRates","arpRanges","arpDirs","strums","complexities","ratchets",
     "sampleStarts","sampleEnds","sampleFadeIns","sampleFadeOuts","sampleLoopModes",
     "extraNotes","extraLengths",
   ];
@@ -432,7 +433,7 @@ export function extendPatternByDuplicate(t, patIdx, newLen, opts = {}) {
   if (newLen <= oldLen) return;
   const FILL = {
     steps: 0, lengths: 0, notes: null, velocities: 0.5, chords: "",
-    offsets: 0, arps: false, arpRates: 0.25, arpRanges: 1, arpDirs: "up",
+    offsets: 0, arps: false, arpRates: 0.25, arpRanges: 1, arpDirs: "up", strums: 0,
     complexities: 0, ratchets: 1,
     sampleStarts: 0, sampleEnds: 1, sampleFadeIns: 0, sampleFadeOuts: 0,
     sampleLoopModes: "off",
@@ -546,12 +547,15 @@ export function lastUsedNote(t) {
 }
 
 /**
- * Stamp the keyboard's arp settings onto a step that just received a chord from
- * the keyboard (record / capture / click-to-apply). `hasChord` gates it because
- * there's nothing to arpeggiate on a single note. Clears the flag otherwise, so
- * arp state doesn't ghost onto a step that's being rewritten without one.
+ * Stamp the keyboard's arp and strum settings onto a step that just received a
+ * chord from the keyboard (record / capture / click-to-apply). `hasChord` gates
+ * the arp because there's nothing to arpeggiate on a single note. Clears both
+ * otherwise, so they don't ghost onto a step that's being rewritten without one.
+ * The strum follows chord mode alone: a diatonic voicing with no chord type is
+ * root + extras, and those strum too.
  */
 export function applyKbdArpToStep(t, idx, hasChord) {
+  if (Array.isArray(t.strums)) t.strums[idx] = state.kbdChordType ? (Number(state.kbdStrum) || 0) : 0;
   if (!Array.isArray(t.arps)) return;
   const on = !!(hasChord && state.kbdChordType && state.kbdArp);
   t.arps[idx] = on;

@@ -88,3 +88,46 @@ export function nameToMidi(name) {
   const acc = m[2] === "#" ? 1 : m[2] === "b" ? -1 : 0;
   return base + acc + (Number(m[3]) + 1) * 12;
 }
+
+/**
+ * When each note of a step's stack starts, in seconds after the step: a strum
+ * of `ms` between notes, by pitch, low to high when positive and high to low
+ * when negative. The whole spread is held inside 3/4 of `span`, so a slow strum
+ * on a short step still lands every note before the step is over. Zeros for a
+ * single note or no strum, so the block chord is unchanged.
+ */
+export function strumOffsets(notes, ms, span) {
+  const out = new Array(notes.length).fill(0);
+  const v = Number(ms) || 0;
+  if (!v || notes.length < 2) return out;
+  const gap = Math.min(Math.abs(v) / 1000, (Math.max(0, span) * 0.75) / (notes.length - 1));
+  const order = notes.map((n, i) => i).sort((a, b) => v > 0 ? notes[a] - notes[b] : notes[b] - notes[a]);
+  order.forEach((i, rank) => { out[i] = rank * gap; });
+  return out;
+}
+
+/**
+ * Which scales hold every pitch class in `pcs` (numbers 0..12, a quarter tone
+ * allowed): `{ root: [modes...] }` for each root 0..11 with at least one, the
+ * modes in SCALES order. No pitch classes is a song with nothing in it yet,
+ * and every scale fits that. The chromatic fills (12-tet, 24-tet, chromatic)
+ * hold every note at every root, so they would put all twelve roots in the
+ * list whatever the song: they are offered only when nothing else fits.
+ */
+export function scalesFitting(pcs) {
+  const want = [...new Set([...pcs].map(p => ((Math.round(Number(p) * 2) / 2) % 12 + 12) % 12))];
+  const isFill = (iv) => Array.from({ length: 12 }, (_, i) => i).every(i => iv.includes(i));
+  const pick = (fills) => {
+    const out = {};
+    for (let root = 0; root < 12; root++) {
+      const modes = Object.keys(SCALES).filter(m => {
+        const iv = SCALES[m];
+        return iv && isFill(iv) === fills && want.every(pc => iv.includes(((pc - root) % 12 + 12) % 12));
+      });
+      if (modes.length) out[root] = modes;
+    }
+    return out;
+  };
+  const out = pick(false);
+  return Object.keys(out).length ? out : pick(true);
+}

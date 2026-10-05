@@ -398,7 +398,7 @@ export function renderRollPanel(t, panel) {
   //   two clicks in < 400 ms              → activate + velocity to full
   const PER_STEP_KEYS = [
     "lengths","notes","velocities","chords","offsets",
-    "arps","arpRates","arpRanges","arpDirs","complexities","ratchets",
+    "arps","arpRates","arpRanges","arpDirs","strums","complexities","ratchets",
     "sampleStarts","sampleEnds","sampleFadeIns","sampleFadeOuts","sampleLoopModes",
     "extraNotes","extraLengths",
   ];

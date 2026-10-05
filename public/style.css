@@ -2277,6 +2277,7 @@ main {
   color: var(--fg-dim);
 }
 .sq-scale__toggle { display: inline-flex; align-items: center; gap: 4px; }
+.sq-scale__toggle[hidden] { display: none !important; }
 #scale-root, #scale-mode { padding: 4px 6px; }
 
 .sq-track__midi {

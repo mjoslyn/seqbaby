@@ -1104,6 +1104,11 @@ export function openStepEditor(t, idx, anchorEl) {
         <option value="4">drop-oct</option>
       </select>
     </div>
+    <div class="sq-se__field sq-se__strum-row" hidden>
+      <label>strum</label>
+      <input class="se-strum" type="range" min="-80" max="80" step="1" value="${Number(t.strums?.[idx]) || 0}" title="strum: ms between the chord's notes. Right of centre low to high, left of it high to low" />
+      <span class="se-strum-label"></span>
+    </div>
     <div class="sq-se__field sq-se__arp-row" hidden>
       <label>arp</label>
       <div class="sq-se__arp-selects">
@@ -1249,7 +1254,26 @@ export function openStepEditor(t, idx, anchorEl) {
     t.ratchets[idx] = v;
     ratchetLbl.textContent = `×${v}`;
   });
-  const syncArpRowVisibility = () => { arpRow.hidden = !(chordSel.value && arpBox.checked); };
+  // A strum spreads whatever the step stacks (a chord, or the roll's extras);
+  // an arp already plays them one at a time, so it hides the strum.
+  const strumRow = el.querySelector(".sq-se__strum-row");
+  const strumInput = el.querySelector(".se-strum");
+  const strumLbl = el.querySelector(".se-strum-label");
+  const paintStrum = () => {
+    const v = Math.round(Number(strumInput.value) || 0);
+    strumLbl.textContent = v ? `${v > 0 ? "up" : "down"} ${Math.abs(v)}ms` : "off";
+  };
+  paintStrum();
+  strumInput.addEventListener("input", () => {
+    if (!t.strums) t.strums = new Array(t.length).fill(0);
+    t.strums[idx] = Math.max(-80, Math.min(80, Math.round(Number(strumInput.value) || 0)));
+    paintStrum();
+  });
+  const syncArpRowVisibility = () => {
+    arpRow.hidden = !(chordSel.value && arpBox.checked);
+    const stacked = !!chordSel.value || !!(t.extraNotes?.[idx]?.length);
+    strumRow.hidden = !stacked || (!!chordSel.value && arpBox.checked);
+  };
   syncChordOptsVisibility();
   syncArpRowVisibility();
 

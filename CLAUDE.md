@@ -1649,12 +1649,21 @@ WINDOW   first step · last step
 ### Pattern (per track, 32 slots — every field a per-step parallel array)
 
 `steps, lengths, notes, velocities, chords, offsets, arps, arpRates,
-arpRanges, arpDirs, complexities, ratchets, sampleStarts, sampleEnds,
+arpRanges, arpDirs, strums, complexities, ratchets, sampleStarts, sampleEnds,
 sampleFadeIns, sampleFadeOuts, sampleLoopModes, extraNotes, extraLengths,
 automation`
 
 - `extraNotes`/`extraLengths` — stacked polyphony per step (from the piano
   roll), on top of the chord/root.
+- `strums` — ms between a step's stacked notes (chord tones and extras), by
+  pitch: positive low to high, negative high to low, 0 a block chord.
+  `strumOffsets` (theoryData.js, pure, `test/strum.test.js`) is the one
+  answer, shared by the transport and the keyboard; the spread is held inside
+  3/4 of the note, and each note ends where the block chord would have. An arp
+  plays one note at a time, so it ignores the strum. Chord mode's `strum`
+  select (`state.kbdStrum`) plays it live and writes it onto the steps a chord
+  lands on (`applyKbdArpToStep`); the step editor (right-click a note, in the
+  grid or the roll) has a strum knob for any stacked step.
 - `automation` — `{ [targetKey]: {enabled, values: number[]} }` per-step
   parameter automation (see `AUTOMATION_TARGETS` in automation.js).
 - `soundLocked` / `sound` — p-lock: whether this track's sound is locked to this
@@ -2452,7 +2461,14 @@ Always live on desktop (≥769px; text inputs swallow keys). Ableton-style:
 `q w e r t y u i o p [ ]` = white keys, `2 3 5 6 7 9 0 =` = black keys, `z/x` octave.
 The piano is on the top two rows so the home row stays free: vim insert
 moves with hjkl.
-Scale-aware mapping when a scale is active; chord mode (off/root). Live
+Scale-aware mapping when a scale is active; chord mode (off/root).
+**fits song** (`#scale-fit`, scaleUI.js, shown only while the scale is off)
+narrows the root and mode pickers to the scales holding every pitch class the
+melodic tracks write (`songPitchClasses`, `scalesFitting` in theoryData.js;
+the chromatic fills only when nothing else fits). A refresh (after every
+`seqbaby:songedited`) only narrows the lists and keeps the current pick, marked
+`(doesn't fit)`; only ticking the box or picking a root moves the song's root /
+mode. UI state, not saved. Live
 record onto the playing pattern, plus retroactive **Capture** (32s rolling
 buffer, slices back to the last 1.5s silence gap and writes a clip).
 

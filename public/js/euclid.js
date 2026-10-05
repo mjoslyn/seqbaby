@@ -43,7 +43,7 @@ export { EUCLID_DEFAULTS, EUCLID_MOD_KEYS, EUCLID_MOD_LABELS } from "./soundDefa
 // this list, so a new per-step array is added in one place.
 const EUCLID_FIELDS = [
   "steps", "lengths", "notes", "velocities", "chords", "offsets",
-  "arps", "arpRates", "arpRanges", "arpDirs", "ratchets", "complexities",
+  "arps", "arpRates", "arpRanges", "arpDirs", "strums", "ratchets", "complexities",
   "extraNotes", "extraLengths",
 ];
 

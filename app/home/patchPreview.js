@@ -147,7 +147,7 @@ function patternFrom(phrase) {
   const fill = (v) => Array.from({ length: n }, () => v);
   const p = {
     steps: fill(0), lengths: fill(0), notes: fill(null), velocities: fill(0.5), chords: fill(""),
-    offsets: fill(0), arps: fill(false), arpRates: fill(0.25), arpRanges: fill(1), arpDirs: fill("up"),
+    offsets: fill(0), arps: fill(false), arpRates: fill(0.25), arpRanges: fill(1), arpDirs: fill("up"), strums: fill(0),
     complexities: fill(0), ratchets: fill(1),
     sampleStarts: fill(0), sampleEnds: fill(1), sampleFadeIns: fill(0), sampleFadeOuts: fill(0), sampleLoopModes: fill("off"),
     extraNotes: fill(null), extraLengths: fill(null),

@@ -185,11 +185,11 @@ export const TOOLS = [
   },
   {
     name: "set_step", title: "Set step",
-    description: "One step in detail: on, note, velocity 0..1, length in steps, chord (" + sb.CHORD_NAMES.join(" ") + "), complexity (inversion 0..4), ratchet (1..8 retriggers), offset (-0.5..0.5 of a step), arp + arpRate (beats per note) + arpRange (octaves) + arpDir, extraNotes (more pitches stacked on the step).",
+    description: "One step in detail: on, note, velocity 0..1, length in steps, chord (" + sb.CHORD_NAMES.join(" ") + "), complexity (inversion 0..4), ratchet (1..8 retriggers), offset (-0.5..0.5 of a step), arp + arpRate (beats per note) + arpRange (octaves) + arpDir, strum (ms between a chord's notes, -80..80: positive low to high, negative high to low), extraNotes (more pitches stacked on the step).",
     inputSchema: { track: trackArg, pattern: patternArg, step: z.number().int().min(0), on: z.boolean().optional(), note: z.union([z.string(), z.number(), z.null()]).optional(),
       velocity: z.number().optional(), length: z.number().int().optional(), chord: z.string().optional(), complexity: z.number().int().optional(), ratchet: z.number().int().optional(),
       offset: z.number().optional(), arp: z.boolean().optional(), arpRate: z.number().optional(), arpRange: z.number().int().optional(), arpDir: z.enum(["up", "down", "updown", "random"]).optional(),
-      extraNotes: z.array(z.union([z.string(), z.number()])).nullable().optional() },
+      strum: z.number().optional(), extraNotes: z.array(z.union([z.string(), z.number()])).nullable().optional() },
     handler: (ctx, { track, ...a }) => sb.setStep(ctx.song, track, a),
   },
   {

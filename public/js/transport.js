@@ -25,6 +25,7 @@ import { arrangementDrives, clearArrangementHold, paintArrangementNow, trackTarg
 import { loadSilverboxWorklet } from "./silverbox.js";
 import { loadContagionWorklet } from "./contagion.js";
 import { applyScale, chordNotes, nameToMidi } from "./theory.js";
+import { strumOffsets } from "./theoryData.js";
 import { buildVoiceForEngine, wosc } from "./voices.js";
 
 
@@ -662,6 +663,9 @@ export async function startPlayback(opts = {}) {
                 pitchLocked: t.pitchLock !== false,
               };
           const ratchet = Math.max(1, Math.min(8, Math.round(gate.ratchet ?? t.ratchets?.[idx] ?? 1)));
+          // A strum spreads the stack in time, each note starting later and
+          // all of them ending where the block chord would have.
+          const strum = strumOffsets(list, t.strums?.[idx], ratchet > 1 && !chord ? duration / ratchet : duration);
           if (ratchet > 1 && !chord) {
             // retrigger the single note N times evenly across the step
             const sub = duration / ratchet;
@@ -670,12 +674,12 @@ export async function startPlayback(opts = {}) {
             const ratchetOpts = (t.voice.type !== "sampler") ? { span: 1 } : sampleOpts;
             for (let r = 0; r < ratchet; r++) {
               for (let i = 0; i < list.length; i++) {
-                try { t.voice.hit(list[i], hitTime + r * sub, sub * 0.92, vel, ratchetOpts); } catch (e) { console.warn(e); }
+                try { t.voice.hit(list[i], hitTime + r * sub + strum[i], Math.max(0.01, sub * 0.92 - strum[i]), vel, ratchetOpts); } catch (e) { console.warn(e); }
               }
             }
           } else {
             for (let i = 0; i < list.length; i++) {
-              try { t.voice.hit(list[i], hitTime, durationFor(i), vel, sampleOpts); } catch (e) { console.warn(e); }
+              try { t.voice.hit(list[i], hitTime + strum[i], Math.max(0.01, durationFor(i) - strum[i]), vel, sampleOpts); } catch (e) { console.warn(e); }
             }
           }
         }

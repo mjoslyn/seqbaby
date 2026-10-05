@@ -67,6 +67,7 @@ export const state = {
   kbdArpRate: 0.25,     // beats per note
   kbdArpRange: 1,       // octaves spanned
   kbdArpDir: "up",      // up | down | updown | random
+  kbdStrum: 0,          // ms between a keyboard chord's notes: + low to high, - high to low, 0 a block chord
   kbdLast: null,        // last note/chord played on the keyboard {root,chord,cpx,extras} — applied when a step is clicked
   kbdCursor: 0,
   vimMode: null,        // vim.js: null (off) | "normal" | "insert" | "play" | "visual" | "command"
@@ -119,6 +120,7 @@ export function emptyPattern(len) {
     arpRates:  new Array(len).fill(0.25),       // beats per arp note
     arpRanges: new Array(len).fill(1),          // octave range
     arpDirs:   new Array(len).fill("up"),       // up / down / updown / random
+    strums:    new Array(len).fill(0),          // ms between a chord's notes: + low to high, - high to low, 0 together
     complexities: new Array(len).fill(0),       // chord inversion / voicing level
     ratchets: new Array(len).fill(1),           // retrigger the single note N times across the step
     sampleStarts: new Array(len).fill(0),       // sample-engine start offset (0..1 of buffer)
@@ -200,6 +202,7 @@ export function aliasPattern(t, idx) {
   t.arpRates     = p.arpRates     ?? (p.arpRates     = new Array(p.steps.length).fill(0.25));
   t.arpRanges    = p.arpRanges    ?? (p.arpRanges    = new Array(p.steps.length).fill(1));
   t.arpDirs      = p.arpDirs      ?? (p.arpDirs      = new Array(p.steps.length).fill("up"));
+  t.strums       = p.strums       ?? (p.strums       = new Array(p.steps.length).fill(0));
   t.complexities = p.complexities ?? (p.complexities = new Array(p.steps.length).fill(0));
   t.ratchets     = p.ratchets     ?? (p.ratchets     = new Array(p.steps.length).fill(1));
   t.sampleStarts = p.sampleStarts ?? (p.sampleStarts = new Array(p.steps.length).fill(0));
