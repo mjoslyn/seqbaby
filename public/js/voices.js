@@ -12,6 +12,7 @@ import { fadeStop, holdParamAt } from "./paramHold.js";
 import { buildSilverboxVoice } from "./silverbox.js";
 import { buildBassVoice, BASS_NUM_KEYS, BASS_SEL_KEYS } from "./bass.js";
 import { buildSubBassVoice, SUB_NUM_KEYS, SUB_SEL_KEYS } from "./subbass.js";
+import { buildDroneVoice, DRONE_NUM_KEYS, DRONE_SEL_KEYS } from "./drone.js";
 import { buildHexopVoice, HEXOP_NUM_KEYS, HEXOP_SEL_KEYS } from "./hexop.js";
 import { buildGuitarVoice, GUITAR_NUM_KEYS, GUITAR_SEL_KEYS } from "./guitar.js";
 import { buildContagionVoice, CONTAGION_NUM_KEYS, CONTAGION_SEL_KEYS } from "./contagion.js";
@@ -729,6 +730,24 @@ export function buildDrumSynthNode(kind, output) {
         setGlide: (g) => { s.portamento = Math.max(0, Number(g) || 0); },
       };
     }
+    // Drone: equation oscillators, a filter, a delay and a granular cloud in
+    // one AudioWorklet — see drone.js. The fallback is a detuned saw pad with
+    // a slow envelope: none of the character, but never a silent track.
+    case "drone": {
+      const v = buildDroneVoice(output);
+      if (v) return v;
+      const s = new Tone.PolySynth(Tone.Synth, {
+        oscillator: { type: "fatsawtooth", count: 3, spread: 20 },
+        envelope: { attack: 0.8, decay: 0.2, sustain: 0.9, release: 2.5 },
+      });
+      s.volume.value = -14;
+      s.connect(output);
+      return {
+        nodes: [s],
+        trigger: (note, time, dur, vel) => s.triggerAttackRelease(Tone.Frequency(note, "midi"), dur, time, vel),
+        release: (time) => s.releaseAll(time),
+      };
+    }
     case "tines":     return makePolyPool(6, () => buildTinesVoice(output));
     case "oracle":   return makePolyPool(6, () => buildOracleVoice(output));
   }
@@ -1355,7 +1374,8 @@ export class DrumSynthVoice {
                      ...HEXOP_NUM_KEYS, ...HEXOP_SEL_KEYS,
                      ...GUITAR_NUM_KEYS, ...GUITAR_SEL_KEYS,
                      ...BASS_NUM_KEYS, ...BASS_SEL_KEYS,
-                     ...SUB_NUM_KEYS, ...SUB_SEL_KEYS]) {
+                     ...SUB_NUM_KEYS, ...SUB_SEL_KEYS,
+                     ...DRONE_NUM_KEYS, ...DRONE_SEL_KEYS]) {
       if (this.params?.[k] != null) this.built.setParam(k, this.params[k]);
     }
   }

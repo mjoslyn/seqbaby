@@ -45,6 +45,7 @@ import {
   PLAITS_MACRO_TIPS, ENGINE_MACRO_TIPS,
   STATIC_ENGINES, staticEngineByKey, engineSliderLabels,
   SUB_NUM_CTLS, SUB_SEL_CTLS, SUB_TONE_NAMES, subTone, subToneDescription,
+  DRONE_NUM_CTLS, DRONE_SEL_CTLS, DRONE_TONE_NAMES, droneTone, droneToneDescription,
 } from "./engineData.js";
 import { EUCLID_DEFAULTS, FILTER_TYPES, PRISM_MODES, defaultCompConfig, defaultEq, defaultFilter, defaultFxConfig, defaultTrackParams } from "./soundDefaults.js";
 import {
@@ -174,6 +175,7 @@ const SLIDER_TIPS = {
   "dm:guitar": { harm: "amp drive (exponential, like a gain pot)", timb: "the tone knob on the guitar, a passive lowpass", morph: "bloom: speaker-to-string feedback, a threshold rather than a switch", decay: "sustain" },
   "dm:bass": { harm: "amp drive", timb: "tone", morph: "the rig compressor: threshold down and makeup up together", decay: "sustain" },
   "dm:sub": { harm: "drive into the parallel harmonics path: what makes a sub audible on a small speaker", timb: "lowpass on the harmonics path", morph: "oscillator shape, sine through triangle and saw to square", decay: "decay" },
+  "dm:drone": { harm: "cutoff of the MS-20 style lowpass", timb: "A0: the equation's multiplier, 1..16. Changes how fast its slow terms run against the pitch, not the pitch", morph: "A1: the equation's first shift, 2..15", decay: "A2: the equation's second shift, 2..15" },
   "dm:granular": { harm: "grain size", timb: "grain density", morph: "play position in the sample", decay: "spray: window, detune and jitter together" },
   "dm:808-kick": { harm: "tune", timb: "attack click", morph: "drive", decay: "decay" },
   "dm:909-kick": { harm: "tune", timb: "beater click", morph: "drive", decay: "decay" },
@@ -189,6 +191,7 @@ const PANELS = {
   "dm:guitar": { prefix: "gt", num: GUITAR_NUM_CTLS, sel: GUITAR_SEL_CTLS, tones: GUITAR_TONE_NAMES, tone: guitarTone, describe: guitarToneDescription },
   "dm:bass":   { prefix: "bs", num: BASS_NUM_CTLS, sel: BASS_SEL_CTLS, tones: BASS_TONE_NAMES, tone: bassTone, describe: bassToneDescription },
   "dm:sub":    { prefix: "sub", num: SUB_NUM_CTLS, sel: SUB_SEL_CTLS, tones: SUB_TONE_NAMES, tone: subTone, describe: subToneDescription },
+  "dm:drone":  { prefix: "drn", num: DRONE_NUM_CTLS, sel: DRONE_SEL_CTLS, tones: DRONE_TONE_NAMES, tone: droneTone, describe: droneToneDescription },
   "dm:hexop": {
     prefix: "d",
     num: HEXOP_NUM_KEYS.map(k => { const s = k.slice(1); const [lo, hi] = HEXOP_MOD_RANGE[s]; return [s, lo, hi, null, hexopLabel(s)]; }),

@@ -103,6 +103,7 @@ const PAD = [
 function rootFor(key) {
   const k = String(key || "");
   if (k === "dm:sub") return 33;
+  if (k === "dm:drone") return 48;
   if (k === "dm:silverbox" || k === "dm:bass") return 36;
   if (k === "dm:guitar") return 52;
   if (k === "dm:fm-bell") return 72;
@@ -112,7 +113,7 @@ function rootFor(key) {
 function kindFor(key) {
   const k = String(key || "");
   if (k === "dm:sub" || k === "dm:silverbox" || k === "dm:bass") return "bass";
-  if (k === "dm:pad" || k === "dm:granular") return "pad";
+  if (k === "dm:pad" || k === "dm:granular" || k === "dm:drone") return "pad";
   return "lead";
 }
 

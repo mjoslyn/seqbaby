@@ -243,6 +243,10 @@ export const ANALOG_ENGINES = [
   // you feel as lumpiness rather than hear as harmony. Worklet-internal, one
   // voice (subbass.js).
   { key: "dm:sub",       label: "subby",           defaultNote: 28, poly: false, melodic: true },
+  // An equation oscillator into an MS-20 style filter, a reverse-capable
+  // delay and a granular cloud, after the Grone. Polyphony lives in
+  // the worklet (drone.js), so a held chord can fade under the next one.
+  { key: "dm:drone",     label: "drone",           defaultNote: 36, poly: true, melodic: true },
   { key: "dm:tines",     label: "tines",           defaultNote: 60, poly: true, melodic: true },
   { key: "dm:oracle",    label: "oracle",          defaultNote: 60, poly: true, melodic: true },
 ].map(e => ({ ...e, group: "Emulators", type: "drum-synth", poly: e.poly ?? false, melodic: e.melodic ?? false }));
@@ -418,6 +422,7 @@ export function engineSliderLabels(engineKey) {
     case "dm:guitar":    return { harm: "drive",    timb: "tone",   morph: "bloom",     decay: "sustain" };
     case "dm:bass":      return { harm: "drive",    timb: "tone",   morph: "comp",      decay: "sustain" };
     case "dm:sub":       return { harm: "drive",    timb: "tone",   morph: "shape",     decay: "decay" };
+    case "dm:drone":     return { harm: "cutoff",   timb: "a0",     morph: "a1",        decay: "a2" };
     case "dm:tines":     return { harm: "tine",     timb: "bite",   morph: "chorus",    decay: "decay" };
     case "dm:oracle":    return { harm: "detune",   timb: "shape",  morph: "drive",     decay: "decay" };
     case "dm:granular":  return { harm: "grain",    timb: "dense",  morph: "pos",       decay: "spray" };
@@ -1198,6 +1203,168 @@ export function subTone(name) {
   const out = { ...SUB_DEFAULTS };
   for (const [k, val] of Object.entries(v.p)) out[`sub${k}`] = val;
   out.harm = v.drive; out.timb = v.tone; out.morph = v.shape; out.decay = v.decay;
+  return out;
+}
+
+// ---- drone (drone.js) -------------------------------------------------------
+// The equation oscillator's sixteen formulas and the LFO's eight shapes, by
+// name. The select stores the NAME, so a song reads `drneq: "octaves"` rather
+// than an index into a list that could be reordered.
+export const DRONE_EQUATIONS = [
+  "sierpinski", "or", "xor", "fifths", "harmonics", "smear", "stairs", "octaves",
+  "sweep", "pulse bits", "gates", "thirds", "arp", "fold", "split", "chaos",
+];
+export const DRONE_LFO_SHAPES = ["up", "down", "square", "tri", "sine", "sweep", "random", "slopes"];
+
+/** Numeric panel controls: [short key, min, max, default, label]. */
+export const DRONE_NUM_CTLS = [
+  ["rate",    0, 1, 0.5,  "rate"],
+  ["osc",     0, 1, 0.8,  "osc level"],
+  ["noise",   0, 1, 0,    "noise"],
+  ["atk",     0, 1, 0.3,  "attack"],
+  ["rel",     0, 1, 0.5,  "release"],
+  ["reso",    0, 1, 0.35, "reso"],
+  ["drive",   0, 1, 0.2,  "drive"],
+  ["mod1",    0, 1, 0.3,  "lfo to cutoff"],
+  ["lrate",   0, 1, 0.25, "lfo rate"],
+  ["ldly",    0, 1, 0,    "lfo to delay"],
+  ["dtime",   0, 1, 0.45, "delay time"],
+  ["dfbk",    0, 1, 0.45, "delay feedback"],
+  ["dmix",    0, 1, 0.25, "delay mix"],
+  ["cpos",    0, 1, 0.3,  "cloud position"],
+  ["csize",   0, 1, 0.5,  "cloud size"],
+  ["cpitch",  0, 1, 0.5,  "cloud pitch"],
+  ["cdens",   0, 1, 0.5,  "cloud density"],
+  ["ctex",    0, 1, 0.5,  "cloud texture"],
+  ["cspread", 0, 1, 0.5,  "cloud spread"],
+  ["cfbk",    0, 1, 0.3,  "cloud feedback"],
+  ["cmix",    0, 1, 0.35, "cloud blend"],
+];
+
+/** Select controls: [short key, default, [values]]. */
+export const DRONE_SEL_CTLS = [
+  ["eq",     "octaves", DRONE_EQUATIONS],
+  ["hold",   "latch",   ["latch", "gate"]],
+  ["lshape", "tri",     DRONE_LFO_SHAPES],
+  ["dir",    "forward", ["forward", "reverse"]],
+  ["freeze", "off",     ["off", "on"]],
+];
+
+export const DRONE_MOD_KEYS = DRONE_NUM_CTLS.map(c => c[0]);
+export const DRONE_NUM_KEYS = DRONE_MOD_KEYS.map(k => `drn${k}`);
+export const DRONE_SEL_KEYS = DRONE_SEL_CTLS.map(c => `drn${c[0]}`);
+
+export const DRONE_MOD_RANGE = Object.fromEntries(DRONE_NUM_CTLS.map(c => [c[0], [c[1], c[2]]]));
+
+export const DRONE_MOD_LABELS = Object.fromEntries(
+  DRONE_NUM_CTLS.map(([k, , , , label]) => [k, `drone ${label}`]));
+
+export const DRONE_DEFAULTS = {
+  ...Object.fromEntries(DRONE_NUM_CTLS.map(c => [`drn${c[0]}`, c[3]])),
+  ...Object.fromEntries(DRONE_SEL_CTLS.map(c => [`drn${c[0]}`, c[1]])),
+};
+
+/** A 0..1 lane value in this control's own units. @param {string} k short key */
+export function droneFromUnit(k, u) {
+  const [lo, hi] = DRONE_MOD_RANGE[k] ?? [0, 1];
+  return lo + Math.max(0, Math.min(1, u)) * (hi - lo);
+}
+
+// ---- the patches ----------------------------------------------------------
+// Complete patches: every panel control plus the four track sliders (cutoff and
+// the equation's A0 / A1 / A2), so nothing of the last one survives a load.
+const DRONE_TONES = {
+  "dark grone": {
+    d: "the box's own sound: an xor equation through a resonant filter breathing on a slow triangle, into a wide cloud",
+    cut: 0.42, a0: 0.3, a1: 0.55, a2: 0.7,
+    p: { eq: "xor", hold: "latch", rate: 0.5, osc: 0.8, noise: 0.08, atk: 0.5, rel: 0.6,
+         reso: 0.62, drive: 0.35, mod1: 0.35, lshape: "tri", lrate: 0.2, ldly: 0,
+         dtime: 0.55, dfbk: 0.5, dmix: 0.3, dir: "forward",
+         cpos: 0.35, csize: 0.62, cpitch: 0.5, cdens: 0.55, ctex: 0.62, cspread: 0.7, cfbk: 0.45, cmix: 0.45, freeze: "off" },
+  },
+  "cathedral": {
+    d: "octave-stepping ramps under long grains pitched an octave up and fed back: a shimmer that never settles",
+    cut: 0.58, a0: 0.1, a1: 0.9, a2: 0.8,
+    p: { eq: "octaves", hold: "latch", rate: 0.5, osc: 0.75, noise: 0, atk: 0.7, rel: 0.8,
+         reso: 0.2, drive: 0.1, mod1: 0.15, lshape: "sine", lrate: 0.1, ldly: 0,
+         dtime: 0.7, dfbk: 0.55, dmix: 0.25, dir: "forward",
+         cpos: 0.5, csize: 0.85, cpitch: 0.75, cdens: 0.7, ctex: 0.8, cspread: 0.9, cfbk: 0.6, cmix: 0.6, freeze: "off" },
+  },
+  "machine hum": {
+    d: "an OR equation through a tight, resonant filter gated by a square LFO: a transformer in the next room",
+    cut: 0.3, a0: 0.55, a1: 0.35, a2: 0.2,
+    p: { eq: "or", hold: "latch", rate: 0.5, osc: 0.8, noise: 0.04, atk: 0.2, rel: 0.4,
+         reso: 0.75, drive: 0.5, mod1: 0.2, lshape: "square", lrate: 0.45, ldly: 0,
+         dtime: 0.2, dfbk: 0.3, dmix: 0.2, dir: "forward",
+         cpos: 0.2, csize: 0.4, cpitch: 0.5, cdens: 0.5, ctex: 0.5, cspread: 0.4, cfbk: 0.2, cmix: 0.15, freeze: "off" },
+  },
+  "bit swarm": {
+    d: "the chaos equation scattered into dense, short, hard-edged grains across the whole stereo field",
+    cut: 0.7, a0: 0.7, a1: 0.3, a2: 0.45,
+    p: { eq: "chaos", hold: "latch", rate: 0.5, osc: 0.7, noise: 0, atk: 0.3, rel: 0.5,
+         reso: 0.3, drive: 0.2, mod1: 0.4, lshape: "random", lrate: 0.55, ldly: 0,
+         dtime: 0.35, dfbk: 0.35, dmix: 0.15, dir: "forward",
+         cpos: 0.25, csize: 0.2, cpitch: 0.5, cdens: 0.9, ctex: 0.2, cspread: 1, cfbk: 0.2, cmix: 0.6, freeze: "off" },
+  },
+  "reverse tide": {
+    d: "fifths through the delay played backwards and fed back, the LFO bending its time",
+    cut: 0.5, a0: 0.4, a1: 0.6, a2: 0.6,
+    p: { eq: "fifths", hold: "latch", rate: 0.5, osc: 0.8, noise: 0, atk: 0.6, rel: 0.7,
+         reso: 0.45, drive: 0.2, mod1: 0.25, lshape: "sine", lrate: 0.15, ldly: 0.2,
+         dtime: 0.75, dfbk: 0.6, dmix: 0.55, dir: "reverse",
+         cpos: 0.3, csize: 0.6, cpitch: 0.5, cdens: 0.5, ctex: 0.6, cspread: 0.6, cfbk: 0.3, cmix: 0.3, freeze: "off" },
+  },
+  "arp ghost": {
+    d: "the melody-table equation spelling out root, ninth, third and fifth, with the filter wandering on random slopes",
+    cut: 0.6, a0: 0.5, a1: 0.45, a2: 0.5,
+    p: { eq: "arp", hold: "latch", rate: 0.5, osc: 0.75, noise: 0, atk: 0.25, rel: 0.6,
+         reso: 0.5, drive: 0.25, mod1: 0.3, lshape: "slopes", lrate: 0.3, ldly: 0,
+         dtime: 0.4, dfbk: 0.5, dmix: 0.35, dir: "forward",
+         cpos: 0.4, csize: 0.55, cpitch: 0.5, cdens: 0.5, ctex: 0.55, cspread: 0.7, cfbk: 0.35, cmix: 0.4, freeze: "off" },
+  },
+  "subterranean": {
+    d: "stairs an octave down, driven, with noise, the filter falling on a slow sweep and the cloud an octave under that",
+    cut: 0.25, a0: 0.35, a1: 0.7, a2: 0.5,
+    p: { eq: "stairs", hold: "latch", rate: 0.25, osc: 0.85, noise: 0.2, atk: 0.5, rel: 0.7,
+         reso: 0.4, drive: 0.6, mod1: 0.45, lshape: "sweep", lrate: 0.15, ldly: 0,
+         dtime: 0.6, dfbk: 0.4, dmix: 0.2, dir: "forward",
+         cpos: 0.45, csize: 0.9, cpitch: 0.25, cdens: 0.45, ctex: 0.7, cspread: 0.5, cfbk: 0.3, cmix: 0.4, freeze: "off" },
+  },
+  "screamer": {
+    d: "the gates equation into the filter at the edge of self-oscillation, driven, the cutoff climbing on a ramp",
+    cut: 0.45, a0: 0.6, a1: 0.4, a2: 0.55,
+    p: { eq: "gates", hold: "latch", rate: 0.5, osc: 0.75, noise: 0.05, atk: 0.15, rel: 0.4,
+         reso: 0.95, drive: 0.8, mod1: 0.6, lshape: "up", lrate: 0.4, ldly: 0,
+         dtime: 0.3, dfbk: 0.4, dmix: 0.2, dir: "forward",
+         cpos: 0.2, csize: 0.45, cpitch: 0.5, cdens: 0.4, ctex: 0.5, cspread: 0.5, cfbk: 0.2, cmix: 0.2, freeze: "off" },
+  },
+  "glacier": {
+    d: "harmonics smeared into second-long soft grains from far back in the buffer, fed back until the notes blur into one",
+    cut: 0.5, a0: 0.2, a1: 0.8, a2: 0.75,
+    p: { eq: "harmonics", hold: "latch", rate: 0.5, osc: 0.95, noise: 0.03, atk: 0.8, rel: 0.9,
+         reso: 0.3, drive: 0.15, mod1: 0.2, lshape: "tri", lrate: 0.08, ldly: 0.1,
+         dtime: 0.8, dfbk: 0.5, dmix: 0.3, dir: "forward",
+         cpos: 0.9, csize: 1, cpitch: 0.5, cdens: 0.55, ctex: 0.9, cspread: 0.8, cfbk: 0.75, cmix: 0.7, freeze: "off" },
+  },
+};
+
+export const DRONE_TONE_NAMES = Object.keys(DRONE_TONES);
+
+/** One line saying what a patch is reaching for. @param {string} name */
+export function droneToneDescription(name) { return DRONE_TONES[name]?.d ?? ""; }
+
+/**
+ * A patch as a complete set of track params -- every panel control plus the
+ * four track sliders, so nothing of the last patch survives.
+ * @param {string} name
+ * @returns {Record<string, number|string>|null}
+ */
+export function droneTone(name) {
+  const v = DRONE_TONES[name];
+  if (!v) return null;
+  const out = { ...DRONE_DEFAULTS };
+  for (const [k, val] of Object.entries(v.p)) out[`drn${k}`] = val;
+  out.harm = v.cut; out.timb = v.a0; out.morph = v.a1; out.decay = v.a2;
   return out;
 }
 

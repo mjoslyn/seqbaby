@@ -67,6 +67,7 @@ export const ENGINE_MODULES = [
   "curves.js",
   "dialogs.js",
   "dom.js",
+  "drone.js",
   "engineData.js",
   "enginePicker.js",
   "euclid.js",

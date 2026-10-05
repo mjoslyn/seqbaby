@@ -8,6 +8,7 @@ import { isMobileDevice, setStatus } from "./dom.js";
 import { HEXOP_ALG_LABELS, HEXOP_DEFAULTS, HEXOP_NUM_KEYS, HEXOP_PRESET_NAMES, HEXOP_SEL_KEYS, hexopPreset } from "./hexop.js";
 import { BASS_DEFAULTS, BASS_NUM_KEYS, BASS_SEL_KEYS, BASS_TONE_NAMES, bassTone, bassToneDescription } from "./bass.js";
 import { SUB_DEFAULTS, SUB_NUM_KEYS, SUB_SEL_KEYS, SUB_TONE_NAMES, subTone, subToneDescription } from "./subbass.js";
+import { DRONE_DEFAULTS, DRONE_NUM_KEYS, DRONE_SEL_KEYS, DRONE_TONE_NAMES, droneTone, droneToneDescription } from "./drone.js";
 import { euclideanRhythm, refreshEuclidUI, renderEuclidPanel, wireEuclidPanel } from "./euclid.js";
 import { refreshChanceUI, renderChancePanel, wireChancePanel } from "./chance.js";
 import { randomizeMelody, randomizeTimbre } from "./generate.js";
@@ -204,7 +205,8 @@ export function syncTrackSoundUI(t) {
                    ...HEXOP_NUM_KEYS, ...HEXOP_SEL_KEYS,
                    ...GUITAR_NUM_KEYS, ...GUITAR_SEL_KEYS,
                    ...BASS_NUM_KEYS, ...BASS_SEL_KEYS,
-                   ...SUB_NUM_KEYS, ...SUB_SEL_KEYS]) {
+                   ...SUB_NUM_KEYS, ...SUB_SEL_KEYS,
+                   ...DRONE_NUM_KEYS, ...DRONE_SEL_KEYS]) {
     const el = q(`.p-${k}`);
     if (el && t.params[k] != null) el.value = t.params[k];
   }
@@ -327,6 +329,25 @@ export function syncSubPanel(t) {
   const root = t._subGroupEl || t.el?.querySelector(".sq-param-group--sub");
   if (root) {
     for (const k of [...SUB_NUM_KEYS, ...SUB_SEL_KEYS]) {
+      const el = root.querySelector(`.p-${k}`);
+      if (el && t.params[k] != null) el.value = t.params[k];
+    }
+  }
+  const timbre = t._timbreGroupEl || t.el;
+  for (const k of ["harm", "timb", "morph", "decay"]) {
+    const el = timbre?.querySelector(`.p-${k}`);
+    if (el && t.params[k] != null) el.value = t.params[k];
+  }
+}
+
+/**
+ * The same, for the drone's panel.
+ * @param {Track} t
+ */
+export function syncDronePanel(t) {
+  const root = t._droneGroupEl || t.el?.querySelector(".sq-param-group--drone");
+  if (root) {
+    for (const k of [...DRONE_NUM_KEYS, ...DRONE_SEL_KEYS]) {
       const el = root.querySelector(`.p-${k}`);
       if (el && t.params[k] != null) el.value = t.params[k];
     }
@@ -547,6 +568,20 @@ export function renderTrack(t) {
     const el = node.querySelector(`.p-${k}`);
     if (el) el.value = t.params[k] ?? SUB_DEFAULTS[k];
   }
+  const droneToneSel = node.querySelector(".sq-drone__tone");
+  if (droneToneSel && !droneToneSel.options.length) {
+    for (const name of ["", ...DRONE_TONE_NAMES]) {
+      const o = document.createElement("option");
+      o.value = name;
+      o.textContent = name || "—";
+      o.title = droneToneDescription(name);
+      droneToneSel.appendChild(o);
+    }
+  }
+  for (const k of [...DRONE_NUM_KEYS, ...DRONE_SEL_KEYS]) {
+    const el = node.querySelector(`.p-${k}`);
+    if (el) el.value = t.params[k] ?? DRONE_DEFAULTS[k];
+  }
   const gsyncEl = node.querySelector(".p-gsync");
   if (gsyncEl) gsyncEl.checked = t.params.gsync ?? GRAN_DEFAULTS.gsync;
   // The eight analog characters ship out of the static markup for the same
@@ -712,6 +747,26 @@ export function renderTrack(t) {
       syncSubPanel(t);
       refreshParamIndicators(t);
       setStatus(`subby "${name}" — ${subToneDescription(name)}`);
+    });
+  }
+  // The drone: the same three groups again.
+  for (const k of DRONE_NUM_KEYS) {
+    const el = node.querySelector(`.p-${k}`);
+    if (el) el.addEventListener("input", e => setParam(t, k, Number(e.target.value)));
+  }
+  for (const k of DRONE_SEL_KEYS) {
+    const el = node.querySelector(`.p-${k}`);
+    if (el) el.addEventListener("change", e => setParam(t, k, e.target.value));
+  }
+  if (droneToneSel) {
+    droneToneSel.addEventListener("change", e => {
+      const name = e.target.value;
+      const tone = droneTone(name);
+      if (!tone) return;
+      for (const [key, val] of Object.entries(tone)) setParam(t, key, val);
+      syncDronePanel(t);
+      refreshParamIndicators(t);
+      setStatus(`drone "${name}" — ${droneToneDescription(name)}`);
     });
   }
   // Loading a voice writes every panel control at once — the operators, the
@@ -936,6 +991,7 @@ export function renderTrack(t) {
   t._guitarGroupEl  = node.querySelector(".sq-param-group--guitar");
   t._bassGroupEl    = node.querySelector(".sq-param-group--bass");
   t._subGroupEl     = node.querySelector(".sq-param-group--sub");
+  t._droneGroupEl   = node.querySelector(".sq-param-group--drone");
   t._granGroupEl    = node.querySelector(".sq-param-group--granular");
 
   // Everything above can be reparented out of the track (panels into their
@@ -948,7 +1004,7 @@ export function renderTrack(t) {
                     t._timbreGroupEl, t._oscMixGroupEl, t._oscModGroupEl,
                     t._ladderOscGroupEl, t._silverboxGroupEl, t._contagionGroupEl,
                     t._hexopGroupEl, t._guitarGroupEl, t._bassGroupEl, t._subGroupEl,
-                    t._granGroupEl]) {
+                    t._droneGroupEl, t._granGroupEl]) {
     if (el) el.dataset.trackId = String(t.id);
   }
 

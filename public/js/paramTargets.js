@@ -3,6 +3,7 @@ import { EQ_BANDS } from "./signal.js";
 import { BASS_MOD_KEYS, BASS_MOD_LABELS } from "./bass.js";
 import { HEXOP_MOD_KEYS, HEXOP_MOD_LABELS } from "./hexop.js";
 import { SUB_MOD_KEYS, SUB_MOD_LABELS } from "./subbass.js";
+import { DRONE_MOD_KEYS, DRONE_MOD_LABELS } from "./drone.js";
 import { GUITAR_MOD_KEYS, GUITAR_MOD_LABELS } from "./guitar.js";
 import { CHANCE_MOD_KEYS, CHANCE_MOD_LABELS } from "./chanceGen.js";
 import { PRISM_KNOBS, PRISM_KNOB_LABELS } from "./soundDefaults.js";
@@ -59,6 +60,8 @@ for (const k of GUITAR_MOD_KEYS) def(`p-gt${k}`, `gtr_${k}`, `gtr.${k}`);
 for (const k of BASS_MOD_KEYS) def(`p-bs${k}`, `bas_${k}`, `bas.${k}`);
 // Subby — likewise. `p-sub*`, not `p-sb*`: that is the silverbox's.
 for (const k of SUB_MOD_KEYS) def(`p-sub${k}`, `sub_${k}`, `sub.${k}`);
+// The drone — likewise, `p-drn*`.
+for (const k of DRONE_MOD_KEYS) def(`p-drn${k}`, `drone_${k}`, `drone.${k}`);
 // Euclid's three counts — one list, three namespaces, as in hexop.js.
 for (const k of ["pulses", "steps", "rotate"]) def(`p-euc${k}`, `euclid_${k}`, `euclid.${k}`);
 // The chance generator's six, likewise. Its other controls (the twelve semitone
@@ -230,6 +233,9 @@ export const CONTROL_LABELS = {
   ...Object.fromEntries(SUB_MOD_KEYS.map(k => [`p-sub${k}`, SUB_MOD_LABELS[k]])),
   "p-substack": "oscillator stack", "p-subsat": "shaper",
   "p-subglidem": "glide mode", "sq-sub__tone": "subby tone",
+  ...Object.fromEntries(DRONE_MOD_KEYS.map(k => [`p-drn${k}`, DRONE_MOD_LABELS[k]])),
+  "p-drneq": "drone equation", "p-drnhold": "hold mode", "p-drnlshape": "drone lfo shape",
+  "p-drndir": "delay direction", "p-drnfreeze": "cloud freeze", "sq-drone__tone": "drone patch",
   "p-bsamp": "bass amp", "p-bscab": "bass cabinet",
   "p-bspkupt": "bass pickup", "p-bsstrs": "string type",
   "sq-bass__tone": "bass tone",

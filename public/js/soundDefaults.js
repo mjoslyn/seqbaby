@@ -9,7 +9,7 @@
 // The engine modules that owned these (fxRack.js, signal.js, track.js,
 // euclid.js) import and re-export them, so nothing else in the engine changed.
 
-import { BASS_DEFAULTS, CONTAGION_DEFAULTS, GUITAR_DEFAULTS, HEXOP_DEFAULTS, SUB_DEFAULTS } from "./engineData.js";
+import { BASS_DEFAULTS, CONTAGION_DEFAULTS, DRONE_DEFAULTS, GUITAR_DEFAULTS, HEXOP_DEFAULTS, SUB_DEFAULTS } from "./engineData.js";
 
 /** The rack's stages, in chain order, and each one's controls at rest. */
 export function defaultFxConfig() {
@@ -81,6 +81,9 @@ export function defaultTrackParams() {
       // Sub bass: the oscillator, the drop, and the harmonics that make a
       // 40Hz note audible on something small (see subbass.js)
       ...SUB_DEFAULTS,
+      // Drone: the equation oscillator, its filter, LFO, delay and cloud
+      // (see drone.js)
+      ...DRONE_DEFAULTS,
   };
 }
 
