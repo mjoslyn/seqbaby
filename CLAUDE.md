@@ -1825,9 +1825,9 @@ unity), and they show on the track once they are off neutral.
 **The fx button opens a picker, not the rack** (`openFxAsModal`,
 stepEditor.js). Every stage by name (glide, amp, then chain order), the ones on
 the track lit in their own colour, read off the row title's colour. No controls
-in it: picking a stage engages it (at 0.5, or 0.3 for delay / reverb, 1 for
-repeat, through the control's own `input` event) and its row appears on the
-track; picking a lit one is the `×`. Both are `fxStageAdd` / `fxStageOff`
+in it: picking a stage puts its row on the track at whatever level it has
+(nothing is engaged; a stage at 0 stays bypassed until its wet is turned up
+there); picking a lit one is the `×`. Both are `fxStageAdd` / `fxStageOff`
 (render.js). The rack panel itself never leaves the track, so its badge entry
 has no `modal` and the inline view follows each pick behind the overlay. Vim's
 `:k` on a stage that is not shown adds it to the shown set (without engaging it)

@@ -1663,15 +1663,13 @@ export function wireFxPanel(t, panel) {
 
 // ── putting a rack stage on the track, and taking it off ────────────────────
 // The fx button opens a picker of names (openFxAsModal), and the stage's
-// controls live on the track. Both directions write through the controls' own
+// controls live on the track. Taking one off writes through the controls' own
 // `input` events, exactly as if the knob had been dragged there, so the rack,
 // the p-lock snapshot, a save and undo all see it.
 
 /** Everything the picker lists, in chain order: glide and amp, then the stages. */
 export const FX_PICK_ORDER = ["glide", "amp", ...Object.keys(FX_STAGE_LEVEL_KEY)];
 export const FX_PICK_LABELS = { glide: "glide", amp: "amp", ...FX_STAGE_LABELS };
-/** The level a stage comes in at when picked from 0. repeat is an insert at 1. */
-const FX_ENGAGE_LEVEL = { repeat: 1, delay: 0.3, reverb: 0.3 };
 /** glide and amp have no level: off is their neutral setting. */
 const FX_NEUTRAL = { glide: { ".sq-track__glide": 0 }, amp: { ".fx-amp-preamp": 0.5, ".fx-amp-level": 0.5 } };
 
@@ -1687,12 +1685,12 @@ export function fxStageOn(t, stage) {
   return fxShown(t).has(stage) || fxStageLevel(t.fxConfig, stage) > 0;
 }
 
-/** Put a stage on the track, engaging it at a usable level if it was at 0. */
+/**
+ * Put a stage on the track, at whatever level it has: picking only shows its
+ * controls, and the wet is the player's to set (a stage at 0 stays bypassed
+ * until they turn it up).
+ */
 export function fxStageAdd(t, stage) {
-  const levelKey = FX_STAGE_LEVEL_KEY[stage];
-  if (levelKey && !(fxStageLevel(t.fxConfig, stage) > 0)) {
-    writeFxControl(t, `.fx-${stage}-${levelKey}`, FX_ENGAGE_LEVEL[stage] ?? 0.5);
-  }
   fxShown(t).add(stage);
   refreshPanelBadges(t);
 }
