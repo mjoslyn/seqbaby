@@ -1,4 +1,4 @@
-import { FX_STAGE_LABELS, FX_STAGE_LEVEL_KEY, LFO_KEYS, LFO_LABELS, fxStageLevel } from "./constants.js";
+import { LFO_KEYS, LFO_LABELS, fxChainOrder, fxIdLabel, fxStageLevel, isFxInstanceId } from "./constants.js";
 import { EQ_BANDS } from "./signal.js";
 import { BASS_MOD_KEYS, BASS_MOD_LABELS } from "./bass.js";
 import { HEXOP_MOD_KEYS, HEXOP_MOD_LABELS } from "./hexop.js";
@@ -549,8 +549,8 @@ const PANEL_BADGES = [
   // No `modal`: the fx button opens a picker of names, not this panel, so the
   // inline view stays live behind it and follows each pick.
   { sel: ".sq-track__fx", panel: "_fxPanelEl",
-    on: (t) => Object.keys(FX_STAGE_LEVEL_KEY).filter(k => fxStageLevel(t.fxConfig, k) > 0),
-    label: (k) => FX_STAGE_LABELS[k],
+    on: (t) => fxChainOrder(t.fxConfig).filter(k => fxStageLevel(t.fxConfig, k) > 0),
+    label: (k) => fxIdLabel(k),
     // Only the stages this track SHOWS. Shown is not the same as on — see
     // fxShown. glide and amp have no level, so they show once they are off
     // neutral (or picked), and stay, like a stage, until their ×.
@@ -560,10 +560,17 @@ const PANEL_BADGES = [
       if ((t.glide ?? 0) > 0) shown.add("glide");
       const amp = t.fxConfig?.amp;
       if (amp && (Math.abs((amp.preamp ?? 0.5) - 0.5) > 1e-3 || Math.abs((amp.level ?? 0.5) - 0.5) > 1e-3)) shown.add("amp");
+      // A stage in the chain's order was put on the track and stays until its
+      // ×; an instance is on the track for as long as it exists.
+      const order = Array.isArray(t.fxConfig?.order) ? t.fxConfig.order : [];
+      let any = false;
       for (const row of panel.querySelectorAll(".sq-fx__row[data-fx]")) {
-        row.classList.toggle("is-live", shown.has(row.dataset.fx));
+        const id = row.dataset.fxId;
+        const live = id ? isFxInstanceId(id) && !!t.fxConfig?.[id] : (shown.has(row.dataset.fx) || order.includes(row.dataset.fx));
+        row.classList.toggle("is-live", live);
+        any ||= live;
       }
-      return shown.size > 0;
+      return any;
     } },
   { sel: ".sq-track__eq", panel: "_eqPanelEl", modal: "_eqModal",
     on: (t) => EQ_BANDS.map(b => b.key).filter(b => Math.abs(t.eq?.[b] ?? 0) >= 0.5) },

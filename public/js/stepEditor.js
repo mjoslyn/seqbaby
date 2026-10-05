@@ -1,3 +1,4 @@
+import { FX_STAGE_LEVEL_KEY } from "./constants.js";
 import { BUNDLED_SAMPLES, GRANULAR_SAMPLES, GRANULAR_SAMPLE_BASE, SAMPLE_KIT_LABELS, bundledSampleUrl, engineByKey } from "./catalog.js";
 import { loadBuffer } from "./buffers.js";
 import { setStatus } from "./dom.js";
@@ -8,7 +9,7 @@ import { applySampleSpeed, currentBpm } from "./lfo.js";
 import { renderRollPanel } from "./pianoRoll.js";
 import { updateGranularSpeedEnabled } from "./params.js";
 import { refreshPanelBadges, refreshParamIndicators } from "./paramTargets.js";
-import { FX_PICK_LABELS, FX_PICK_ORDER, fxStageAdd, fxStageOff, fxStageOn, renderAutomationPanel } from "./render.js";
+import { FX_PICK_LABELS, FX_PICK_ORDER, fxStageAdd, fxStageCount, fxStageOff, renderAutomationPanel } from "./render.js";
 import { invertChord, state } from "./state.js";
 import { renderStepGrid, repaintNudge } from "./stepGrid.js";
 import { CHORD_TYPES, SCALES, applyScale, chordFitsScale, chordNotes, midiToName } from "./theory.js";
@@ -121,11 +122,13 @@ export function openEnvAsModal(t) {
   });
 }
 
-// The fx button opens a picker, not the rack: every stage by name, the ones on
-// this track lit. A pick puts the stage on the track (engaged, if it was at 0)
-// and its controls appear inline there; picking a lit one takes it off. The
-// rack panel itself never leaves the track, so the knobs are only ever where
-// the sound is being shaped.
+// The fx button opens a picker, not the rack: every stage by name, in
+// alphabetical order, the ones on this track lit with how many copies. A pick
+// puts the stage at the END of the track's chain (another copy if it is there
+// already) and its controls appear inline on the track, where they are moved
+// and taken off. glide and amp are not in the chain: they toggle. The rack
+// panel itself never leaves the track, so the knobs are only ever where the
+// sound is being shaped.
 export function openFxAsModal(t) {
   if (t._fxModal) return;
   const overlay = document.createElement("div");
@@ -147,12 +150,18 @@ export function openFxAsModal(t) {
     b.type = "button";
     b.className = "sq-fxpick__btn";
     b.dataset.fx = stage;
-    b.textContent = FX_PICK_LABELS[stage] || stage;
+    const name = document.createElement("span");
+    name.textContent = FX_PICK_LABELS[stage] || stage;
+    const count = document.createElement("span");
+    count.className = "sq-fxpick__n";
+    b.append(name, count);
     // The stage's own colour, read off its row's title so it lives in one place.
     const title = row.querySelector(".sq-fx__title");
     if (title) b.style.setProperty("--fx-c", getComputedStyle(title).color);
+    const chain = !!FX_STAGE_LEVEL_KEY[stage];
+    b.title = chain ? `add ${name.textContent} to the end of the chain` : `${name.textContent} on or off`;
     b.addEventListener("click", () => {
-      if (fxStageOn(t, stage)) fxStageOff(t, stage);
+      if (!chain && fxStageCount(t, stage)) fxStageOff(t, stage);
       else fxStageAdd(t, stage);
       paint();
     });
@@ -160,7 +169,11 @@ export function openFxAsModal(t) {
     btns.push(b);
   }
   const paint = () => {
-    for (const b of btns) b.setAttribute("aria-pressed", String(fxStageOn(t, b.dataset.fx)));
+    for (const b of btns) {
+      const n = fxStageCount(t, b.dataset.fx);
+      b.setAttribute("aria-pressed", String(n > 0));
+      b.querySelector(".sq-fxpick__n").textContent = n > 1 ? `\u00d7${n}` : "";
+    }
   };
   refreshPanelBadges(t);   // settle the shown set (glide / amp off neutral) before painting
   paint();

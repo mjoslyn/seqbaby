@@ -24,6 +24,7 @@
 // Only what actually differs is touched, so switching between two patterns that
 // share a sound costs almost nothing.
 
+import { fxInstanceIds, isFxInstanceId } from "./constants.js";
 import { defaultLFOConfig, syncLFO } from "./lfo.js";
 import { setParam, updateGranularSpeedEnabled } from "./params.js";
 import { refreshParamIndicators } from "./paramTargets.js";
@@ -121,16 +122,32 @@ export function applyPatternSound(t, snap) {
     touched = true;
   }
   if (snap.fxConfig) {
+    // The chain (order) and the extra copies of a stage (instances) belong to
+    // the sound too; one this sound does not have is not on it.
+    let chain = false;
+    for (const id of fxInstanceIds(t.fxConfig)) {
+      if (id in snap.fxConfig) continue;
+      delete t.fxConfig[id];
+      chain = touched = true;
+    }
+    if (!("order" in snap.fxConfig) && "order" in t.fxConfig) { delete t.fxConfig.order; chain = touched = true; }
     for (const [key, cfg] of Object.entries(snap.fxConfig)) {
       if (same(t.fxConfig[key], cfg)) continue;
       t.fxConfig[key] = clone(cfg);
       touched = true;
+      if (key === "order") { chain = true; continue; }
+      if (isFxInstanceId(key)) {
+        chain = true;
+        try { t.fxRack?.applyInstance(key, t.fxConfig[key]); } catch (e) { console.warn("pattern sound: " + key, e); }
+        continue;
+      }
       if (!t.fxRack) continue;
       const fn = FX_APPLY[key];
       if (fn && typeof t.fxRack[fn] === "function") {
         try { t.fxRack[fn]({ ...cfg }); } catch (e) { console.warn("pattern sound: " + key, e); }
       }
     }
+    if (chain) t.fxRack?.syncChain();
   }
   if (snap.lfoConfig) {
     // Walk the live matrix, not the snapshot: a key the snapshot leaves out is

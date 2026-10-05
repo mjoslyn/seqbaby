@@ -33,7 +33,7 @@ export function defaultFxConfig() {
     // switch. At rest: on the last beat of every bar, half the time, repeat a
     // sixteenth for a beat.
     repeat:     { wet: 0, mode: "repeat", chance: 0.5, interval: 0.5, offset: 0.75,
-                  gate: 0.33, grid: 0.33, vary: 0, pitch: 0, decay: 0 },
+                  gate: 0.33, grid: 0.33, vary: 0, pitch: 0.5, decay: 0, pitchV: 2 },
     // A four-module console in one stage (prism.js): character, movement,
     // diffusion, texture, each a choice of five and an amount, then a tilt eq.
     // `wet` is the mix around the whole of it, and what switches it on.

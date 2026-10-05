@@ -345,13 +345,63 @@ export const FX_STAGE_LEVEL_KEY = {
 export const FX_STAGE_LABELS = {
   vinyl: "vinyl", cassette: "cassette", fuzz: "fuzz", ringmod: "ring mod",
   shaper: "shaper", crush: "crush", autowah: "auto-wah", chorus: "chorus",
-  phaser: "phaser", flanger: "flanger", pitchshift: "pitch shift", repeat: "repeat", prism: "prism",
+  phaser: "phaser", flanger: "flanger", pitchshift: "pitch shift", repeat: "beat repeat", prism: "prism",
   delay: "delay", reverb: "reverb",
 };
-/** A stage's engagement level (0 = bypassed) read off a plain fx config. */
+export const FX_STAGE_KEYS = Object.keys(FX_STAGE_LEVEL_KEY);
+
+// A stage can be on a track more than once. The first is the stage's own key
+// ("delay") and everything that names an fx control by stage (the LFO and
+// automation targets, the macro pads, vim, code) means that one; each further
+// copy is an INSTANCE, "<stage>#<n>" (n from 2), with a config of the stage's
+// shape under that key in fxConfig. `fxConfig.order` is the chain: instance
+// ids and stage keys, in the order they were put on the track and arranged
+// since. Absent, the chain is FX_STAGE_KEYS order, which is what every song
+// written before it plays.
+
+/** The stage an fx id names ("delay#2" → "delay"), or null. */
+export function fxStageOf(id) {
+  const s = String(id ?? "").split("#")[0];
+  return FX_STAGE_LEVEL_KEY[s] ? s : null;
+}
+/** Whether an fxConfig key is an instance of a stage ("delay#2"). */
+export function isFxInstanceId(id) {
+  return typeof id === "string" && /^[a-z]+#[0-9]+$/.test(id) && !!fxStageOf(id);
+}
+/** The instance ids an fx config holds. */
+export function fxInstanceIds(config) {
+  if (!config || typeof config !== "object") return [];
+  return Object.keys(config).filter(k => isFxInstanceId(k) && config[k] && typeof config[k] === "object");
+}
+/**
+ * The whole chain, in the order it runs: config.order first (unknown and
+ * repeated ids dropped), then any stage it leaves out in FX_STAGE_KEYS order,
+ * then any instance it leaves out.
+ */
+export function fxChainOrder(config) {
+  const out = [], seen = new Set();
+  const order = Array.isArray(config?.order) ? config.order : [];
+  for (const id of order) {
+    if (seen.has(id)) continue;
+    if (FX_STAGE_LEVEL_KEY[id] || (isFxInstanceId(id) && config[id] && typeof config[id] === "object")) {
+      seen.add(id); out.push(id);
+    }
+  }
+  for (const k of FX_STAGE_KEYS) if (!seen.has(k)) { seen.add(k); out.push(k); }
+  for (const id of fxInstanceIds(config)) if (!seen.has(id)) { seen.add(id); out.push(id); }
+  return out;
+}
+/** A stage's (or instance's) engagement level (0 = bypassed) read off a plain fx config. */
 export function fxStageLevel(config, key) {
-  const k = FX_STAGE_LEVEL_KEY[key];
+  const k = FX_STAGE_LEVEL_KEY[fxStageOf(key)];
   return k ? (config?.[key]?.[k] ?? 0) : 0;
+}
+/** "delay#2" → "delay 2"; a stage key → its label. */
+export function fxIdLabel(id) {
+  const s = fxStageOf(id);
+  if (!s) return String(id);
+  const n = String(id).split("#")[1];
+  return n ? `${FX_STAGE_LABELS[s]} ${n}` : FX_STAGE_LABELS[s];
 }
 
 // ---- automation targets -----------------------------------------------------

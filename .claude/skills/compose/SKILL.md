@@ -184,8 +184,9 @@ one.
 - Repeat is a beat repeat and a slicer, on the sequencer's grid. `mode:
   "repeat"` captures `grid` of the track at `offset` into every `interval`
   and repeats it for `gate`, with `chance`: the defaults are a sixteenth
-  rolled over the last beat of the bar, half the time. `pitch` drops each
-  repeat (a roll that falls like a tape stopping), `decay` fades each one.
+  rolled over the last beat of the bar, half the time. `pitch` moves each
+  repeat, 24 semitones down at 0 to 24 up at 1 with 0.5 no change (below
+  0.5, a roll that falls like a tape stopping), `decay` fades each one.
   `mode: "slice"` cuts the track into `grid` slices and swaps them, with
   `chance`, for others from the `interval` before: a drum loop reshuffled
   live; `vary` plays some backwards, `decay` chops them short. The discrete

@@ -1,7 +1,7 @@
 import { AUTOMATION_TARGETS } from "./automation.js";
 import { loadBuffer, normalizeAudioBuffer } from "./buffers.js";
 import { GRANULAR_SAMPLE_BASE } from "./catalog.js";
-import { PATTERN_COUNT } from "./constants.js";
+import { PATTERN_COUNT, fxInstanceIds } from "./constants.js";
 import { showConfirmDialog, showInputDialog, showSelectDialog } from "./dialogs.js";
 import { setStatus } from "./dom.js";
 import { ICON_CHAIN, ICON_FINISH, ICON_NOW, ICON_REPEAT } from "./icons.js";
@@ -555,6 +555,7 @@ export function loadTrackFromData(t, td) {
       if (t.fxConfig.prism)      t.fxRack.applyPrism(t.fxConfig.prism);
       t.fxRack.applyDelay(t.fxConfig.delay);
       t.fxRack.applyReverb(t.fxConfig.reverb);
+      t.fxRack.syncChain();
     }
     t.voice = buildVoiceForEngine(state.audioCtx, t.engineKey, t.params, t);
     if (t.voice.type === "midi") {
@@ -870,7 +871,13 @@ export function applyTrackPatch(t, patch) {
   if (patch.filter)   Object.assign(t.filter, patch.filter);
   if (patch.eq)       Object.assign(t.eq, patch.eq);
   if (patch.comp)     Object.assign(t.comp, patch.comp);
-  if (patch.fxConfig) Object.assign(t.fxConfig, patch.fxConfig);
+  if (patch.fxConfig) {
+    // A patch's chain is the patch's: the order and the extra copies of the
+    // sound it replaces go with it.
+    delete t.fxConfig.order;
+    for (const id of fxInstanceIds(t.fxConfig)) delete t.fxConfig[id];
+    Object.assign(t.fxConfig, patch.fxConfig);
+  }
   if (patch.lfoConfig) {
     // The patch replaces the whole mod matrix, but layer it over the defaults so
     // keys added since the patch was saved still exist — syncAllLFOs walks every

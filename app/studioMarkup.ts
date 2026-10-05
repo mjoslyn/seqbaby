@@ -311,13 +311,13 @@ export const STUDIO_BODY = String.raw`
     <button id="play" class="sq-play">play</button>
     <button id="kbd-record" class="sq-btn--ghost sq-icon-btn" type="button" aria-pressed="false" aria-label="record notes and knob moves" title="record computer-keyboard notes into the active track, and knob moves into their automation lanes, while the transport plays"></button>
     <button id="kbd-capture" class="sq-btn--ghost sq-icon-btn" type="button" aria-label="capture keyboard notes" title="write the notes you just played into the active track, after the fact"></button>
-    <button id="vim-toggle" class="sq-btn--ghost" type="button" aria-pressed="false" title="vim mode (\`): hjkl move, i insert, a play, v select, : commands">vim</button>
     <div class="sq-field"><label for="bpm">bpm</label><input id="bpm" type="number" value="110" min="40" max="240" /></div>
     <div class="sq-field"><label for="swing">swing</label><input id="swing" type="range" min="0" max="0.5" step="0.01" value="0" /></div>
     <button id="macro-pads" class="sq-btn--ghost" type="button" title="havoc: xy pads, one gesture moving parameters across several tracks"><span class="sq-btn__label">havoc</span></button>
     <!-- The code drawer (codePanel.js): Strudel live coding, run into
          the song without stopping the transport. -->
     <button id="code-btn" class="sq-btn--ghost" type="button" aria-pressed="false" title="live code: write Strudel patterns, ctrl/⌘ enter runs them into the song"><span class="sq-btn__label">code</span></button>
+    <button id="vim-toggle" class="sq-btn--ghost" type="button" aria-pressed="false" title="vim mode (\`): hjkl move, i insert, a play, v select, : commands">vim</button>
     <!-- The two views of the song, one at a time (arrangement.js keeps
          body[data-view]): the track list, and the arrangement view built
          into #arrangement at init. -->
@@ -997,7 +997,7 @@ ${DRONE_PANEL}
           <label class="sq-fx__ctl"><span>semi</span><input class="fx-pitchshift-semi" type="range" min="-12" max="12" step="1" value="0" /></label>
         </div>
         <div class="sq-fx__row" data-fx="repeat">
-          <span class="sq-fx__title">repeat</span>
+          <span class="sq-fx__title">beat repeat</span>
           <label class="sq-fx__ctl" title="how much of the repeat is in the signal: all the way is an insert (a repeat replaces the beat), less mixes it over"><span>mix</span><input class="fx-repeat-wet" type="range" min="0" max="1" step="0.01" value="0" /></label>
           <label class="sq-fx__ctl" title="repeat: capture a slice where it fires and repeat it (a beat repeat). slice: cut the track into slices as it plays and swap them for others from the window before (a live slicer)"><span>mode</span><select class="fx-repeat-mode">
             <option value="repeat" selected>repeat</option>
@@ -1009,7 +1009,7 @@ ${DRONE_PANEL}
           <label class="sq-fx__ctl" title="how long a repeat, or a swapped run of slices, holds, 1 to 32 steps"><span>gate</span><input class="fx-repeat-gate" type="range" min="0" max="1" step="0.01" value="0.33" /></label>
           <label class="sq-fx__ctl" title="the slice: what is captured and repeated, or what the track is cut into, 1/64 to a bar, triplets included"><span>grid</span><input class="fx-repeat-grid" type="range" min="0" max="1" step="0.01" value="0.33" /></label>
           <label class="sq-fx__ctl" title="repeat: how far each trigger's grid wanders from the knob. slice: how many swapped slices play backwards"><span>vary</span><input class="fx-repeat-vary" type="range" min="0" max="1" step="0.01" value="0" /></label>
-          <label class="sq-fx__ctl" title="repeat: each repeat drops this far, so a roll falls like a tape stopping. slice: swapped slices are transposed down this far"><span>pitch</span><input class="fx-repeat-pitch" type="range" min="0" max="1" step="0.01" value="0" /></label>
+          <label class="sq-fx__ctl" title="repeat: each repeat moves this far, 24 semitones down to 24 up, so a roll falls like a tape stopping or climbs. slice: swapped slices are transposed this far. The middle is no change"><span>pitch</span><input class="fx-repeat-pitch" type="range" min="0" max="1" step="0.01" value="0.5" /></label>
           <label class="sq-fx__ctl" title="repeat: each repeat this much quieter. slice: each swapped slice chopped this much shorter"><span>decay</span><input class="fx-repeat-decay" type="range" min="0" max="1" step="0.01" value="0" /></label>
         </div>
         <div class="sq-fx__row" data-fx="prism">

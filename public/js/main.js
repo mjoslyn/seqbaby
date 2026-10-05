@@ -641,6 +641,7 @@ export function init() {
     retuneSyncedLFOs();
     for (const t of state.tracks) {
       if (t.fxRack && t.fxConfig.delay.sync) t.fxRack.applyDelay({});
+      for (const sub of Object.values(t.fxRack?._extra || {})) if (sub.config.delay?.sync) sub.applyDelay({});
       applySampleSpeed(t);
     }
     // A synced mod's length is quoted in hz off the tempo, so the reading beside

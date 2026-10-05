@@ -1,7 +1,7 @@
 import { AUTOMATION_KEYS, AUTOMATION_TARGETS, canAutomate } from "./automation.js";
 import { canSavePatches, engineByKey, getPatchConfig, populateEngineSelect, savePatch } from "./catalog.js";
 import { applyTrackPatch, serializeTrackPatch } from "./session.js";
-import { FX_STAGE_LABELS, FX_STAGE_LEVEL_KEY, LFO_DIVS, fxStageLevel, LFO_KEYS, lfoDivIndex, lfoLabel, rateToSlider, sliderToRate } from "./constants.js";
+import { FX_STAGE_LABELS, FX_STAGE_LEVEL_KEY, LFO_DIVS, fxChainOrder, fxInstanceIds, fxStageLevel, fxStageOf, isFxInstanceId, LFO_KEYS, lfoDivIndex, lfoLabel, rateToSlider, sliderToRate } from "./constants.js";
 import { showInputDialog, showSavedPatchPicker } from "./dialogs.js";
 import { upgradeEngineSelect } from "./enginePicker.js";
 import { isMobileDevice, setStatus } from "./dom.js";
@@ -1379,6 +1379,7 @@ export function refreshFxPanelUI(t) {
   for (const k of ["wet", ...PRISM_KNOBS, ...Object.keys(PRISM_MODES)]) set(`.fx-prism-${k}`, cfg.prism[k]);
   cfg.repeat = { ...defaultFxConfig().repeat, ...(cfg.repeat || {}) };
   for (const k of ["wet", "mode", ...REPEAT_KNOBS]) set(`.fx-repeat-${k}`, cfg.repeat[k]);
+  syncFxRows(t);
 }
 
 export function wireFxPanel(t, panel) {
@@ -1450,34 +1451,10 @@ export function wireFxPanel(t, panel) {
   q(".fx-reverb-wet").value   = fc.reverb.wet;
   { const b = q(".fx-crush-bits"); if (b) b.value = fc.crush.bits; }
   { const w = q(".fx-crush-wet");  if (w) w.value = fc.crush.wet; }
-  { const r = q(".fx-crush-rate");
-    if (r) {
-      r.value = fc.crush.rate;
-      // The number under the knob is a converter clock, not a 0..1 fraction —
-      // the same job setKnobReadout does for the mod row's length knob.
-      setKnobReadout(r, (v) => crushRateLabel(v, state.audioCtx?.sampleRate));
-    }
-  }
+  { const r = q(".fx-crush-rate"); if (r) r.value = fc.crush.rate; }
   for (const k of ["wet", ...PRISM_KNOBS, ...Object.keys(PRISM_MODES)]) set(`.fx-prism-${k}`, fc.prism[k]);
-  // Rate is a speed and time means something different per diffusion
-  // character (an echo, a tail, a grain, a slice), so both read out in units.
-  { const r = q(".fx-prism-rate"); if (r) setKnobReadout(r, prismRateLabel); }
-  { const tm = q(".fx-prism-time"); if (tm) setKnobReadout(tm, (v) => prismTimeLabel(v, t.fxConfig.prism?.diffmode)); }
   for (const k of ["wet", "mode", ...REPEAT_KNOBS]) set(`.fx-repeat-${k}`, fc.repeat[k]);
-  // The discrete knobs read out what they pick, not where they sit; the offset
-  // is a step of the interval, and pitch means something a little different
-  // per mode.
-  {
-    const ro = (k, fn) => { const el = q(`.fx-repeat-${k}`); if (el) setKnobReadout(el, fn); };
-    ro("grid", repeatGridLabel);
-    ro("interval", repeatIntervalLabel);
-    ro("offset", (v) => repeatOffsetLabel(v, t.fxConfig.repeat?.interval));
-    ro("gate", repeatGateLabel);
-    ro("chance", repeatPercentLabel);
-    ro("vary", repeatPercentLabel);
-    ro("decay", repeatPercentLabel);
-    ro("pitch", (v) => repeatPitchLabel(v, t.fxConfig.repeat?.mode));
-  }
+  wireFxReadouts(panel, "fx", (stage) => t.fxConfig[stage]);
 
   const applyAmp = () => {
     fc.amp.preamp = Number(q(".fx-amp-preamp").value);
@@ -1633,17 +1610,8 @@ export function wireFxPanel(t, panel) {
     // with the fx picker). Built here rather than in the markup because it is
     // one button repeated over every row and its handler is already in this
     // loop. glide and amp have no level, so theirs puts them back to neutral.
-    if (FX_STAGE_LEVEL_KEY[stage] || FX_NEUTRAL[stage]) {
-      const name = FX_PICK_LABELS[stage] || stage;
-      const off = document.createElement("button");
-      off.type = "button";
-      off.className = "sq-fx__off";
-      off.textContent = "\u00d7";
-      off.title = `turn ${name} off and take it off the track \u2014 pick it again from the fx button`;
-      off.setAttribute("aria-label", `turn off ${name}`);
-      off.addEventListener("click", () => fxStageOff(t, stage));
-      row.appendChild(off);
-    }
+    if (FX_STAGE_LEVEL_KEY[stage]) addFxRowControls(t, row, stage);
+    else if (FX_NEUTRAL[stage]) row.appendChild(fxOffButton(t, stage));
     title.addEventListener("dblclick", () => {
       if (stage === "glide") {                 // not an fx-rack stage; lives on the track
         t.glide = 0;
@@ -1659,19 +1627,29 @@ export function wireFxPanel(t, panel) {
       apply();                                 // …then re-read them into the rack
     });
   });
+  syncFxRows(t);
 }
 
 // ── putting a rack stage on the track, and taking it off ────────────────────
 // The fx button opens a picker of names (openFxAsModal), and the stage's
-// controls live on the track. Taking one off writes through the controls' own
+// controls live on the track. A pick appends the stage to the END of the
+// chain (fxConfig.order), so the chain runs in the order things were put on;
+// picking a stage that is already there adds another copy of it, an instance
+// ("delay#2", see constants.js) with its own row, its own config and its own
+// sub-rack. Rows are drawn in chain order and moved with their ‹ › buttons or
+// by dragging the name. Taking a stage off writes through the controls' own
 // `input` events, exactly as if the knob had been dragged there, so the rack,
-// the p-lock snapshot, a save and undo all see it.
+// the p-lock snapshot, a save and undo all see it; an instance is simply
+// deleted from the config.
 
-/** Everything the picker lists, in chain order: glide and amp, then the stages. */
-export const FX_PICK_ORDER = ["glide", "amp", ...Object.keys(FX_STAGE_LEVEL_KEY)];
+/** Everything the picker lists, alphabetical by what it is called. */
 export const FX_PICK_LABELS = { glide: "glide", amp: "amp", ...FX_STAGE_LABELS };
+export const FX_PICK_ORDER = ["glide", "amp", ...Object.keys(FX_STAGE_LEVEL_KEY)]
+  .sort((a, b) => FX_PICK_LABELS[a].localeCompare(FX_PICK_LABELS[b]));
 /** glide and amp have no level: off is their neutral setting. */
 const FX_NEUTRAL = { glide: { ".sq-track__glide": 0 }, amp: { ".fx-amp-preamp": 0.5, ".fx-amp-level": 0.5 } };
+/** A control's class suffix where it is not the config field's name. */
+const FX_FIELD_ALIAS = { shaper: { amt: "amount" }, pitchshift: { semi: "semitones" } };
 
 function writeFxControl(t, sel, v) {
   const ctl = t._fxPanelEl?.querySelector(sel);
@@ -1680,30 +1658,295 @@ function writeFxControl(t, sel, v) {
   ctl.dispatchEvent(new Event("input", { bubbles: true }));
 }
 
-/** Whether a stage (or glide / amp) is on the track. */
-export function fxStageOn(t, stage) {
-  return fxShown(t).has(stage) || fxStageLevel(t.fxConfig, stage) > 0;
+/**
+ * The knobs, selects and toggles in one stage's row, each with the config
+ * field it writes. Read off the classes (`fx-<stage>-<field>`, and `fxi-`
+ * on an instance's row), so an instance needs no code of its own per stage.
+ * @returns {[HTMLInputElement|HTMLSelectElement, string][]}
+ */
+function fxRowFields(row, stage) {
+  const re = new RegExp(`^fxi?-${stage}-([a-z]+)$`);
+  const out = [];
+  for (const el of row.querySelectorAll("input, select")) {
+    for (const c of el.classList) {
+      const m = c.match(re);
+      if (m) { out.push([el, FX_FIELD_ALIAS[stage]?.[m[1]] || m[1]]); break; }
+    }
+  }
+  return out;
+}
+function readFxRow(row, stage, cfg) {
+  for (const [el, f] of fxRowFields(row, stage)) {
+    if (el.type === "checkbox") cfg[f] = el.checked;
+    else if (el.tagName === "SELECT") cfg[f] = stage === "delay" && f === "div" ? Number(el.value) : el.value;
+    else cfg[f] = Number(el.value);
+  }
+}
+function writeFxRow(row, stage, cfg) {
+  for (const [el, f] of fxRowFields(row, stage)) {
+    const v = cfg?.[f];
+    if (v == null) continue;
+    if (el.type === "checkbox") el.checked = !!v;
+    else el.value = String(v);
+  }
 }
 
 /**
- * Put a stage on the track, at whatever level it has: picking only shows its
- * controls, and the wet is the player's to set (a stage at 0 stays bypassed
- * until they turn it up).
+ * The knobs whose number reads out in units rather than 0..1: the crusher's
+ * converter clock, prism's rate and time (time means something different per
+ * diffusion character), and the repeat's discrete knobs, which read out what
+ * they pick, not where they sit. `prefix` is "fx" for a stage's own row and
+ * "fxi" for an instance's; `cfgOf(stage)` hands back the config they read.
  */
-export function fxStageAdd(t, stage) {
-  fxShown(t).add(stage);
+function wireFxReadouts(root, prefix, cfgOf) {
+  const ro = (stage, k, fn) => {
+    const el = root.querySelector(`.${prefix}-${stage}-${k}`);
+    if (el) setKnobReadout(el, fn);
+  };
+  ro("crush", "rate", (v) => crushRateLabel(v, state.audioCtx?.sampleRate));
+  ro("prism", "rate", prismRateLabel);
+  ro("prism", "time", (v) => prismTimeLabel(v, cfgOf("prism")?.diffmode));
+  ro("repeat", "grid", repeatGridLabel);
+  ro("repeat", "interval", repeatIntervalLabel);
+  ro("repeat", "offset", (v) => repeatOffsetLabel(v, cfgOf("repeat")?.interval));
+  ro("repeat", "gate", repeatGateLabel);
+  ro("repeat", "chance", repeatPercentLabel);
+  ro("repeat", "vary", repeatPercentLabel);
+  ro("repeat", "decay", repeatPercentLabel);
+  ro("repeat", "pitch", (v) => repeatPitchLabel(v, cfgOf("repeat")?.mode));
+}
+
+/** Whether a stage's (or instance's) row is on the track. */
+function fxRowShown(t, id) {
+  const fc = t.fxConfig || {};
+  if (isFxInstanceId(id)) return !!fc[id];
+  return fxShown(t).has(id) || fxStageLevel(fc, id) > 0 || (Array.isArray(fc.order) && fc.order.includes(id));
+}
+
+/** Whether glide / amp / a stage is on the track. */
+export function fxStageOn(t, stage) {
+  return FX_STAGE_LEVEL_KEY[stage] ? fxRowShown(t, stage) : fxShown(t).has(stage);
+}
+
+/** How many copies of a stage are on the track (glide / amp: 0 or 1). */
+export function fxStageCount(t, stage) {
+  if (!FX_STAGE_LEVEL_KEY[stage]) return fxStageOn(t, stage) ? 1 : 0;
+  return (fxRowShown(t, stage) ? 1 : 0) + fxInstanceIds(t.fxConfig).filter(id => fxStageOf(id) === stage).length;
+}
+
+/**
+ * The chain as the track shows it: the ids of the rows on the track, in the
+ * order they run. A song with no order yet gets one written from this the
+ * first time something is added or moved, so what it plays does not change.
+ */
+function shownChain(t) {
+  return fxChainOrder(t.fxConfig).filter(id => fxRowShown(t, id));
+}
+function writeChain(t, ids) {
+  const fc = t.fxConfig;
+  fc.order = [...ids, ...fxChainOrder(fc).filter(id => !ids.includes(id) && isFxInstanceId(id))];
+  t.fxRack?.syncChain();
+  orderFxRows(t);
   refreshPanelBadges(t);
 }
 
-/** Take a stage off the track: its level to 0 (glide / amp: neutral), its row gone. */
-export function fxStageOff(t, stage) {
-  const levelKey = FX_STAGE_LEVEL_KEY[stage];
-  if (levelKey) writeFxControl(t, `.fx-${stage}-${levelKey}`, 0);
-  for (const [sel, v] of Object.entries(FX_NEUTRAL[stage] || {})) writeFxControl(t, sel, v);
+/**
+ * Put a stage on the track, at the end of the chain. The first time, it is
+ * the stage itself, at whatever level it has: picking only shows its
+ * controls, and the wet is the player's to set (a stage at 0 stays bypassed
+ * until they turn it up). Picked again, it is another copy, from the defaults.
+ * glide and amp are not in the chain and can only be on once.
+ */
+export function fxStageAdd(t, stage) {
+  if (!FX_STAGE_LEVEL_KEY[stage]) { fxShown(t).add(stage); refreshPanelBadges(t); return; }
+  const fc = t.fxConfig;
+  const ids = shownChain(t);
+  let id = stage;
+  if (ids.includes(stage)) {
+    let n = 2;
+    while (fc[`${stage}#${n}`]) n++;
+    id = `${stage}#${n}`;
+    fc[id] = JSON.parse(JSON.stringify(defaultFxConfig()[stage]));
+  } else {
+    fxShown(t).add(stage);
+  }
+  writeChain(t, [...ids.filter(x => x !== id), id]);
+  syncFxRows(t);
+}
+
+/** Take a stage off the track: its level to 0 (glide / amp: neutral), its row gone. An instance is deleted. */
+export function fxStageOff(t, id) {
+  const fc = t.fxConfig;
+  if (isFxInstanceId(id)) {
+    delete fc[id];
+    writeChain(t, shownChain(t).filter(x => x !== id));
+    syncFxRows(t);
+    return;
+  }
+  const levelKey = FX_STAGE_LEVEL_KEY[id];
+  if (levelKey) writeFxControl(t, `.fx-${id}-${levelKey}`, 0);
+  for (const [sel, v] of Object.entries(FX_NEUTRAL[id] || {})) writeFxControl(t, sel, v);
   // After the events: they bubble to the panel's own refresh, which would put
   // a row back that is still in the shown set.
-  fxShown(t).delete(stage);
+  fxShown(t).delete(id);
+  if (levelKey && Array.isArray(fc.order)) writeChain(t, shownChain(t).filter(x => x !== id));
   refreshPanelBadges(t);
+}
+
+/** Move a stage one place along the chain (−1 earlier, +1 later). */
+export function fxStageMove(t, id, delta) {
+  const ids = shownChain(t);
+  const i = ids.indexOf(id), j = i + delta;
+  if (i < 0 || j < 0 || j >= ids.length) return;
+  [ids[i], ids[j]] = [ids[j], ids[i]];
+  writeChain(t, ids);
+}
+
+/** Move a stage to just before (or after) another. */
+export function fxStageMoveTo(t, id, targetId, after) {
+  if (id === targetId) return;
+  const ids = shownChain(t).filter(x => x !== id);
+  const k = ids.indexOf(targetId);
+  if (k < 0) return;
+  ids.splice(after ? k + 1 : k, 0, id);
+  writeChain(t, ids);
+}
+
+function fxOffButton(t, id) {
+  const name = FX_PICK_LABELS[id] || id.replace("#", " ");
+  const off = document.createElement("button");
+  off.type = "button";
+  off.className = "sq-fx__off";
+  off.textContent = "×";
+  off.title = `turn ${name} off and take it off the track — pick it again from the fx button`;
+  off.setAttribute("aria-label", `turn off ${name}`);
+  off.addEventListener("click", () => fxStageOff(t, id));
+  return off;
+}
+
+/** The × and the ‹ › on a chain stage's row, and dragging it by its name. */
+function addFxRowControls(t, row, id) {
+  const id_ = () => row.dataset.fxId || row.dataset.fx;
+  const move = document.createElement("span");
+  move.className = "sq-fx__move";
+  for (const [txt, d, what] of [["‹", -1, "earlier"], ["›", 1, "later"]]) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "sq-fx__mv";
+    b.textContent = txt;
+    b.title = `move ${what} in the chain`;
+    b.setAttribute("aria-label", `move ${id_().replace("#", " ")} ${what} in the chain`);
+    b.addEventListener("click", () => fxStageMove(t, id_(), d));
+    move.appendChild(b);
+  }
+  row.appendChild(move);
+  row.appendChild(fxOffButton(t, id));
+  const title = row.querySelector(".sq-fx__title");
+  if (title) {
+    title.draggable = true;
+    title.addEventListener("dragstart", (e) => {
+      e.dataTransfer.setData("text/fx-id", id_());
+      e.dataTransfer.effectAllowed = "move";
+      row.classList.add("is-dragging");
+    });
+    title.addEventListener("dragend", () => row.classList.remove("is-dragging"));
+  }
+  const isFx = (e) => [...(e.dataTransfer?.types || [])].includes("text/fx-id");
+  // Side by side on desktop (the rack's rows are cards in a grid), stacked on
+  // a phone: before or after is which half of the row the pointer is over.
+  const after = (e) => {
+    const r = row.getBoundingClientRect();
+    const across = getComputedStyle(row.parentElement).display === "contents";
+    return across ? e.clientX > r.left + r.width / 2 : e.clientY > r.top + r.height / 2;
+  };
+  row.addEventListener("dragover", (e) => {
+    if (!isFx(e)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    row.dataset.dropAt = after(e) ? "after" : "before";
+  });
+  row.addEventListener("dragleave", () => { delete row.dataset.dropAt; });
+  row.addEventListener("drop", (e) => {
+    if (!isFx(e)) return;
+    e.preventDefault();
+    delete row.dataset.dropAt;
+    fxStageMoveTo(t, e.dataTransfer.getData("text/fx-id"), id_(), after(e));
+  });
+}
+
+/** An instance's row: the stage's own markup with its classes renamed `fxi-`, so nothing that finds a stage's control by class finds this one. */
+function buildFxInstanceRow(t, id) {
+  const stage = fxStageOf(id);
+  const src = document.getElementById("track-template")?.content
+    .querySelector(`.sq-track__fx-panel .sq-fx__row[data-fx="${stage}"]`);
+  if (!src) return null;
+  const row = src.cloneNode(true);
+  row.dataset.fxId = id;
+  for (const el of row.querySelectorAll("[class]")) {
+    for (const c of [...el.classList]) if (c.startsWith(`fx-${stage}-`)) el.classList.replace(c, "fxi" + c.slice(2));
+  }
+  const title = row.querySelector(".sq-fx__title");
+  if (title) title.textContent = `${title.textContent.trim()} ${id.split("#")[1]}`;
+  writeFxRow(row, stage, t.fxConfig[id]);
+  const apply = () => {
+    const cfg = t.fxConfig[id];
+    if (!cfg) return;
+    readFxRow(row, stage, cfg);
+    t.fxRack?.applyInstance(id, cfg);
+  };
+  for (const [el] of fxRowFields(row, stage)) {
+    el.addEventListener(el.tagName === "SELECT" || el.type === "checkbox" ? "change" : "input", apply);
+  }
+  wireFxReadouts(row, "fxi", () => t.fxConfig[id]);
+  if (title) {
+    title.title = "double-click to reset";
+    title.classList.add("is-resettable");
+    title.addEventListener("dblclick", () => {
+      if (!t.fxConfig[id]) return;
+      t.fxConfig[id] = JSON.parse(JSON.stringify(defaultFxConfig()[stage]));
+      writeFxRow(row, stage, t.fxConfig[id]);
+      t.fxRack?.applyInstance(id, t.fxConfig[id]);
+    });
+  }
+  addFxRowControls(t, row, id);
+  return row;
+}
+
+/** Draw the rows in chain order: glide and amp first (they are not in it), then the chain. */
+function orderFxRows(t) {
+  const panel = t._fxPanelEl;
+  if (!panel) return;
+  const rows = new Map();
+  for (const row of panel.querySelectorAll(":scope > .sq-fx__row")) rows.set(row.dataset.fxId || row.dataset.fx, row);
+  const want = ["glide", "amp", ...fxChainOrder(t.fxConfig)];
+  let prev = null;
+  for (const id of want) {
+    const row = rows.get(id);
+    if (!row) continue;
+    const next = prev ? prev.nextElementSibling : panel.firstElementChild;
+    if (next !== row) panel.insertBefore(row, next);
+    prev = row;
+  }
+}
+
+/** Instance rows to match the config (built, dropped, written), then everything into chain order. */
+export function syncFxRows(t) {
+  const panel = t._fxPanelEl;
+  if (!panel) return;
+  const fc = t.fxConfig;
+  const want = new Set(fxInstanceIds(fc));
+  for (const row of panel.querySelectorAll(":scope > .sq-fx__row[data-fx-id]")) {
+    const id = row.dataset.fxId;
+    if (want.delete(id)) writeFxRow(row, fxStageOf(id), fc[id]);
+    else row.remove();
+  }
+  for (const id of want) {
+    const row = buildFxInstanceRow(t, id);
+    if (!row) continue;
+    panel.appendChild(row);
+    upgradeKnobs(row);
+  }
+  orderFxRows(t);
 }
 
 /**

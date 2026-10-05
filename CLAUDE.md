@@ -350,8 +350,9 @@ voice → filterNode → eqNode → compressor → fxRack → masterGain → mas
   from any track's `voice.getOutputNode()`).
 - `fxRack` — `FXRack`, serial chain in this order: **vinyl → cassette → fuzz →
   ring mod → wave shaper → crush → auto-wah → chorus → phaser → flanger →
-  pitch shift → repeat → prism → delay → reverb**. `defaultFxConfig()` keys match. Chain order
-  matters for LFO/automation targets.
+  pitch shift → repeat → prism → delay → reverb**. `defaultFxConfig()` keys match. That is
+  the order of a song with no `fxConfig.order`; see the fx chain section below
+  for a track's own order and a stage added more than once.
 - **crush is a converter, not a rounding function** (`crusher.js`) — see the
   bitcrush section below.
 - **prism is four effects in one stage** (`prism.js`) — see the prism section
@@ -600,6 +601,12 @@ slice    cut the track into GRID slices as it plays; at each, with CHANCE,
 - **Insert, not mix**: the node's output is the input except while a repeat
   holds, so the rack's linear crossfade (`repeatWetBus`) makes `wet` 1 an
   insert and less a mix over it.
+- **Pitch is -24..+24 semitones, the middle of the knob 0**: per repeat
+  (cumulative, capped at ±48) on `repeat`, per swapped slice on `slice`.
+  Pitched up, a pass reads faster than the slice lasts, so it loops the slice
+  (faded at each loop point) rather than reading past what was recorded. A
+  song written when the knob was 0..12 down has no `pitchV`; `migrateRepeatPitch`
+  (sessionFormat.js) rewrites its pitch and the lanes on it.
 - **Every edge is faded (2ms)**: slice heads and tails, entering and leaving a
   run, a mode switch (fade out, swap, carry on). A repeat is a loop point in
   the middle of a waveform.
@@ -1831,12 +1838,31 @@ too: they have no level, so theirs puts them back to neutral (glide 0, amp
 unity), and they show on the track once they are off neutral.
 
 **The fx button opens a picker, not the rack** (`openFxAsModal`,
-stepEditor.js). Every stage by name (glide, amp, then chain order), the ones on
-the track lit in their own colour, read off the row title's colour. No controls
-in it: picking a stage puts its row on the track at whatever level it has
-(nothing is engaged; a stage at 0 stays bypassed until its wet is turned up
-there); picking a lit one is the `×`. Both are `fxStageAdd` / `fxStageOff`
-(render.js). The rack panel itself never leaves the track, so its badge entry
+stepEditor.js). Every stage by name, alphabetical, the ones on the track lit in
+their own colour (read off the row title's colour) with a `×N` when there is
+more than one. No controls in it: picking a stage puts its row on the track at
+the END of the chain, at whatever level it has (nothing is engaged; a stage at
+0 stays bypassed until its wet is turned up there); picking it again adds
+another copy. glide and amp are not in the chain and toggle. Both are
+`fxStageAdd` / `fxStageOff` (render.js).
+
+**The fx chain is the track's** (`fxConfig.order`, constants.js
+`fxChainOrder`). It runs in the order stages were put on the track, and a
+stage's ‹ › buttons or a drag of its name rearrange it (`fxStageMove` /
+`fxStageMoveTo`); the rows are drawn in that order. A stage added again is an
+INSTANCE, `"<stage>#<n>"` (n from 2), with a config of the stage's shape under
+that key in `fxConfig`, its own row (the stage's markup cloned from
+`#track-template` with its classes renamed `fxi-`, so nothing that finds a
+control by class finds it; `fxRowFields` reads and writes it off those
+classes) and its own sub-rack: a whole `FXRack` built with `{sub: true}` and
+spliced into the parent's chain (`_extra`, `syncChain`, `applyInstance`), of
+which only that stage is ever engaged. Both live in `fxConfig`, so a save,
+undo, p-lock, a patch and a jam carry them with no plumbing of their own;
+`applyPatternSound` is where a sound without them takes them away again. The
+LFO and automation targets, the macro pads, vim, code and the song builder all
+name a stage's FIRST copy; an instance is knobs only. An `order` that is
+absent plays `FX_STAGE_KEYS` order, so every older song sounds as it did; it
+is written the first time something is added or moved. The rack panel itself never leaves the track, so its badge entry
 has no `modal` and the inline view follows each pick behind the overlay. Vim's
 `:k` on a stage that is not shown adds it to the shown set (without engaging it)
 and picks the knob on the track; `f` opens the picker.

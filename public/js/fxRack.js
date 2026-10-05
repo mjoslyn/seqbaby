@@ -4,7 +4,7 @@ import { buildReverbNode } from "./reverb.js";
 import { buildPrismNode, prismModeIndices } from "./prism.js";
 import { buildRepeatNode, repeatModeIndex } from "./repeat.js";
 import { PRISM_KNOBS, PRISM_MODES, REPEAT_KNOBS, REPEAT_MODES, defaultFxConfig as freshFxConfig } from "./soundDefaults.js";
-import { fxStageLevel } from "./constants.js";
+import { fxChainOrder, fxInstanceIds, fxStageLevel, fxStageOf } from "./constants.js";
 import { currentBpm } from "./lfo.js";
 import { setParam } from "./params.js";
 // The rack's default config is data in soundDefaults.js (no imports, readable
@@ -44,6 +44,15 @@ export const FX_LFO_STAGE = {
   prism: "prism", ...Object.fromEntries(PRISM_KNOBS.map(k => [`prism_${k}`, "prism"])),
   delay: "delay", delay_time: "delay", delay_fbk: "delay",
   verb: "reverb", reverb_decay: "reverb",
+};
+
+// fx stage → the rack method that installs its config.
+export const FX_APPLY = {
+  amp: "applyAmp", vinyl: "applyVinyl", cassette: "applyCassette", fuzz: "applyFuzz",
+  ringmod: "applyRingMod", shaper: "applyWaveShaper", crush: "applyCrush",
+  autowah: "applyAutoWah", chorus: "applyChorus", phaser: "applyPhaser",
+  flanger: "applyFlanger", pitchshift: "applyPitchShift", repeat: "applyRepeat", prism: "applyPrism",
+  delay: "applyDelay", reverb: "applyReverb",
 };
 
 // Tone wrappers don't accept a native connect() — unwrap to the node underneath.
@@ -449,14 +458,23 @@ export class FXRack {
       { key: "delay",      ins: [toneIn(this.delay)],                   out: this.delay },
       { key: "reverb",     ins: [this.reverbIn],                        out: this.reverbCross },
     ];
+    this._stageById = Object.fromEntries(this._stages.map(s => [s.key, s]));
     this._isStageHeld = opts?.isStageHeld ?? null;
     this._active = {};
     this._bypassTimers = {};
     for (const s of this._stages) {
       this._active[s.key] = this._stageLevel(s.key) > 0 || !!this._isStageHeld?.(s.key);
     }
+    // A stage added a second (third...) time is a rack of its own, spliced
+    // into this one's chain where config.order puts it (see syncChain). Only
+    // its one stage is ever engaged, and a stage that is not engaged is
+    // unreachable from the destination, so the rest of it costs nothing but
+    // the memory. Keyed by instance id ("delay#2").
+    this._extra = {};
+    this._sub = !!opts?.sub;
+    this._buildExtras();
     this._rewire();
-    this.output.connect(ctx.destination);
+    if (!this._sub) this.output.connect(ctx.destination);
 
     this.applyAmp(config.amp);
     this.applyVinyl(config.vinyl);
@@ -483,16 +501,80 @@ export class FXRack {
   // ONLY outgoing connections of this.input and each stage's out node, so a
   // blanket disconnect() is safe — stage-internal wiring is untouched.
   // this.output is never disconnected here (master bus + meter tap live on it).
+  //
+  // The order is the track's (config.order, in the order the stages were put
+  // on it, rearranged by hand since); a song written before it has none and
+  // plays in the order the stages are listed above, as it always did.
   _rewire() {
     try { this.input.disconnect(); } catch {}
     for (const s of this._stages) { try { s.out.disconnect(); } catch {} }
+    for (const id in this._extra) { try { this._extra[id].output.disconnect(); } catch {} }
     let prev = this.input;
-    for (const s of this._stages) {
-      if (!this._active[s.key]) continue;
+    const ids = this._sub ? this._stages.map(s => s.key) : fxChainOrder(this.config);
+    for (const id of ids) {
+      if (!this._active[id]) continue;
+      const sub = this._extra[id];
+      const s = sub ? { ins: [sub.input], out: sub.output } : this._stageById[id];
+      if (!s) continue;
       for (const dest of s.ins) { try { prev.connect(dest); } catch {} }
       prev = s.out;
     }
     try { prev.connect(this.switchGain); } catch {}
+  }
+
+  /** Build the sub-racks config holds instances for, drop the ones it no longer does. */
+  _buildExtras() {
+    if (this._sub) return false;
+    let changed = false;
+    const want = new Set(fxInstanceIds(this.config));
+    for (const id of Object.keys(this._extra)) {
+      if (want.has(id)) continue;
+      const sub = this._extra[id];
+      delete this._extra[id];
+      delete this._active[id];
+      if (this._bypassTimers[id]) { clearTimeout(this._bypassTimers[id]); delete this._bypassTimers[id]; }
+      try { sub.output.disconnect(); } catch {}
+      try { sub.dispose(); } catch {}
+      changed = true;
+    }
+    for (const id of want) {
+      if (this._extra[id]) continue;
+      const stage = fxStageOf(id);
+      const own = freshFxConfig();
+      own[stage] = this.config[id];
+      const sub = new FXRack(this.ctx, own, { sub: true });
+      // The sub-rack filled any field the instance left out; from here on the
+      // two are one object, so the panel's writes and the rack's agree.
+      this.config[id] = sub.config[stage];
+      if (this._noiseBedOn) sub.setNoiseBedActive(true);
+      this._extra[id] = sub;
+      this._active[id] = this._stageLevel(id) > 0;
+      changed = true;
+    }
+    return changed;
+  }
+
+  /**
+   * Make the chain match the config: instances built or dropped, the stages
+   * re-wired in config.order. Called after anything that changes either (the
+   * fx picker, a stage moved or taken off, a sound recalled or merged in).
+   */
+  syncChain() {
+    if (this._sub) return;
+    this.softSwitch(() => { this._buildExtras(); this._rewire(); });
+  }
+
+  /** Apply an instance's config to its sub-rack (the panel already wrote it). */
+  applyInstance(id, cfg) {
+    let sub = this._extra[id];
+    if (!sub) { if (cfg) this.config[id] = cfg; this._buildExtras(); this._rewire(); sub = this._extra[id]; }
+    if (!sub) return;
+    const stage = fxStageOf(id);
+    if (cfg && cfg !== this.config[id]) Object.assign(this.config[id], cfg);
+    sub.config[stage] = this.config[id];
+    const fn = FX_APPLY[stage];
+    try { sub[fn]({ ...this.config[id] }); } catch (e) { console.warn("fx instance " + id, e); }
+    this._updateStage(id);
   }
 
   /**
@@ -549,6 +631,7 @@ export class FXRack {
   // (de)configured — a stage targeted by an LFO must stay wired at wet 0.
   refreshStageActivity() {
     for (const s of this._stages) this._updateStage(s.key);
+    for (const id in this._extra) this._updateStage(id);
   }
 
   /**
@@ -598,6 +681,7 @@ export class FXRack {
    */
   setNoiseBedActive(on) {
     const want = on ? 1 : 0;
+    for (const id in this._extra || {}) this._extra[id].setNoiseBedActive(on);
     if (this._noiseBedOn === want) return;
     this._noiseBedOn = want;
     const now = this.ctx.currentTime;
@@ -821,10 +905,12 @@ export class FXRack {
    * moment it is switched on.
    */
   clockStep(time, step, stepDur) {
+    for (const id in this._extra) this._extra[id].clockStep(time, step, stepDur);
     try { this.repeatNode?.port.postMessage({ type: "clock", time, step, stepDur }); } catch {}
   }
   /** The transport stopped: the repeat stage lets go of whatever it holds. */
   clockStop() {
+    for (const id in this._extra) this._extra[id].clockStop();
     try { this.repeatNode?.port.postMessage({ type: "stop" }); } catch {}
   }
   /** Partial configs welcome: the automation lanes send one knob at a time. */
@@ -954,6 +1040,8 @@ export class FXRack {
   }
   dispose() {
     this._disposed = true;
+    for (const id in this._extra) { try { this._extra[id].dispose(); } catch {} }
+    this._extra = {};
     if (this._reverbTimer) { try { clearTimeout(this._reverbTimer); } catch {} this._reverbTimer = null; }
     if (this._softTimer) { try { clearTimeout(this._softTimer); } catch {} this._softTimer = null; this._softQueue = null; }
     try { this.switchGain.disconnect(); } catch {}

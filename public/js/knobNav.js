@@ -302,7 +302,8 @@ export function pickKnob(t, query, value) {
     // The fx button opens a picker of names, not the rack: a stage's knobs
     // only exist on the track. So show the stage there (without engaging it,
     // which would change the sound) and pick the knob where it now is.
-    const stage = el.closest(".sq-fx__row")?.dataset.fx;
+    const navRow = el.closest(".sq-fx__row");
+    const stage = navRow && !navRow.dataset.fxId ? navRow.dataset.fx : null;
     if (stage) { fxShown(t).add(stage); refreshPanelBadges(t); }
     if (!navVisible(el)) return `E: ${navLabel(el)} is not showing on ${t.name}`;
     dropPick();
