@@ -1266,6 +1266,10 @@ LFO (8 shapes) ──┴──────▲ MOD1 ─────────�
   voice of the old one and slides there; voices nobody claimed are released
   once that instant's events are done (`releasePending`). `gate` is an
   ordinary synth.
+- **Mute and solo let a latched note go** (`releaseSilencedTracks`,
+  signal.js, via the voice's `releaseHeld`). Mute withholds the transport's
+  next note, which is the only thing that releases a latch, so a muted drone
+  used to drone on. It fades on its own release, as any muted note does.
 - **An idle drone costs nothing**: once nothing is held and the output has
   been under -100dB for longer than the cloud's buffer reaches back, the
   block is skipped, unless frozen.
