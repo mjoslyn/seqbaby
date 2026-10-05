@@ -19,7 +19,7 @@ import { hasMacroOn, modOwns, refreshParamIndicators, targetsForControl, trackFo
 import { refreshAutIfOpen } from "./pianoRoll.js";
 import { ensureAutomationLane } from "./render.js";
 import { state } from "./state.js";
-import { AUTOMATION_TARGETS } from "./constants.js";
+import { AUTOMATION_TARGETS, autoLabel, baseModKey } from "./constants.js";
 
 /** How long a hold outlives its last move when no pointer is down (the wheel,
  *  vim's keys): long enough that one notch after another is one gesture. */
@@ -49,7 +49,7 @@ export const knobRecordActive = () => !!state.kbdRecord && !!state.playing;
 function recordable(el) {
   if (!(el instanceof HTMLInputElement) || el.type !== "range") return null;
   const key = targetsForControl(el)?.auto;
-  if (!key || !AUTOMATION_TARGETS[key]) return null;
+  if (!key || !AUTOMATION_TARGETS[baseModKey(key)]) return null;
   const t = trackForControl(el);
   if (!t || !canAutomate(t, key)) return null;
   return { t, key };
@@ -60,7 +60,7 @@ function refuse(t, key, why) {
   const id = `${t.id}|${key}`;
   if (warned === id) return;
   warned = id;
-  setStatus(`${AUTOMATION_TARGETS[key]?.label ?? key} on "${t.name}" ${why}, so its moves aren't recorded`, true);
+  setStatus(`${autoLabel(key)} on "${t.name}" ${why}, so its moves aren't recorded`, true);
 }
 
 function onInput(e) {

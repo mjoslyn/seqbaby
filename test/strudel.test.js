@@ -645,3 +645,33 @@ lead: note("c4 e4").s("sawtooth").pan(sine.range(0, 1).slow(2))`).song;
     assert.equal(b.tracks[1].lfoConfig.pan?.enabled, true);
   }
 });
+
+test("copies of a stage and the chain round-trip through native code, and a deleted copy goes", () => {
+  const s = B.newSong();
+  B.addTrack(s, { engine: "dm:silverbox", name: "acid" });
+  B.setSteps(s, 0, { steps: "x.x." });
+  B.setFx(s, 0, "chorus#2", { wet: 0.4 });
+  B.setFx(s, 0, "delay", { wet: 0.2 });
+  B.setFx(s, 0, "pan#2", { pos: 0.5 });
+  B.setFxChain(s, 0, "pan#2 chorus#2 delay");
+  B.addLfo(s, 0, { target: "pan#2", amount: 0.6 });
+  B.setAutomation(s, 0, { target: "fx.chorus#2", values: [0, 1] });
+  const { code } = S.sessionToCode(s, { native: true });
+  assert.match(code, /\.fx\('chorus#2\.wet', 0\.4\)/);
+  assert.match(code, /\.fx\('pan#2\.pos', 0\.5\)/);
+  assert.match(code, /\.fxchain\('pan#2 chorus#2 delay'\)/);
+  const b = S.codeToSong(code).song;
+  const t = b.tracks[0];
+  assert.equal(t.fxConfig["chorus#2"].wet, 0.4);
+  assert.ok(t.fxConfig["pan#2"]);
+  assert.deepEqual(t.fxConfig.order, ["pan#2", "chorus#2", "delay"]);
+  assert.equal(t.lfoConfig["pan#2"]?.enabled, true);
+  assert.deepEqual(t.patterns[0].automation["fx.chorus#2"]?.values.slice(0, 2), [0, 1]);
+  // run again without the copy's lines: it goes, with the chain line
+  const first = S.writeTracks(b, S.realize(S.readCode(code)));
+  const cut = code.split("\n").map(l => l.replace(/\.fx\('chorus#2[^)]*\)/g, "").replace(/\.fxchain\([^)]*\)/g, "").replace(/\.aut\('fx\.chorus#2'[^)]*\)/g, "")).join("\n");
+  S.writeTracks(b, S.realize(S.readCode(cut)), { previous: first.names, touched: first.touched });
+  assert.equal(b.tracks[0].fxConfig["chorus#2"], undefined);
+  assert.equal(b.tracks[0].fxConfig.order, undefined);
+  assert.ok(b.tracks[0].fxConfig["pan#2"]);
+});

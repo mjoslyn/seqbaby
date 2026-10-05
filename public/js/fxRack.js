@@ -25,27 +25,9 @@ let reverbRegenChain = Promise.resolve();
 // ...with a breath between renders, so the main thread paints between them.
 const REVERB_GLOBAL_GAP_MS = 120;
 
-// LFO mod keys (see lfo.js getModTarget) → the FX stage they touch. Used to
-// keep a stage engaged (see FXRack chain rewiring) while an LFO targets it,
-// even when its stored wet is 0 — the LFO signal adds on top of that base.
-export const FX_LFO_STAGE = {
-  vinyl: "vinyl", vinyl_warmth: "vinyl", vinyl_wow: "vinyl",
-  cassette: "cassette", cassette_flutter: "cassette", cassette_sat: "cassette",
-  fuzz: "fuzz", fuzz_drive: "fuzz", fuzz_tone: "fuzz", fuzz_level: "fuzz",
-  ringmod: "ringmod", ring_freq: "ringmod",
-  shaper: "shaper", shaper_preamp: "shaper", shaper_amt: "shaper",
-  crush: "crush", crush_bits: "crush", crush_rate: "crush",
-  autowah: "autowah", autowah_sens: "autowah", autowah_range: "autowah",
-  chorus: "chorus", chorus_rate: "chorus", chorus_depth: "chorus",
-  phaser: "phaser", phaser_rate: "phaser", phaser_depth: "phaser",
-  flanger: "flanger", flanger_rate: "flanger", flanger_fbk: "flanger",
-  pitch: "pitchshift", pitch_semi: "pitchshift",
-  repeat: "repeat", ...Object.fromEntries(REPEAT_KNOBS.map(k => [`repeat_${k}`, "repeat"])),
-  prism: "prism", ...Object.fromEntries(PRISM_KNOBS.map(k => [`prism_${k}`, "prism"])),
-  pan: "pan",
-  delay: "delay", delay_time: "delay", delay_fbk: "delay",
-  verb: "reverb", reverb_decay: "reverb",
-};
+// LFO mod keys → the fx stage they touch (constants.js, where the song
+// builder can read it too). Re-exported for the imports that hold.
+export { FX_LFO_STAGE } from "./constants.js";
 
 // fx stage → the rack method that installs its config.
 export const FX_APPLY = {
@@ -549,13 +531,13 @@ export class FXRack {
     try { prev.connect(this.switchGain); } catch {}
   }
 
-  /** Build the sub-racks config holds instances for, drop the ones it no longer does. */
-  _buildExtras() {
+  /** Build the sub-racks config holds instances for, drop the ones it no longer does (unless `addOnly`). */
+  _buildExtras(addOnly = false) {
     if (this._sub) return false;
     let changed = false;
     const want = new Set(fxInstanceIds(this.config));
     for (const id of Object.keys(this._extra)) {
-      if (want.has(id)) continue;
+      if (want.has(id) || addOnly) continue;
       const sub = this._extra[id];
       delete this._extra[id];
       delete this._active[id];
@@ -569,7 +551,9 @@ export class FXRack {
       const stage = fxStageOf(id);
       const own = freshFxConfig();
       own[stage] = this.config[id];
-      const sub = new FXRack(this.ctx, own, { sub: true });
+      // Held by whatever holds the copy (an LFO or a pad on it), so its stage
+      // stays wired at a level of 0 just as a stage's own does.
+      const sub = new FXRack(this.ctx, own, { sub: true, isStageHeld: () => !!this._isStageHeld?.(id) });
       // The sub-rack filled any field the instance left out; from here on the
       // two are one object, so the panel's writes and the rack's agree.
       this.config[id] = sub.config[stage];
@@ -588,6 +572,10 @@ export class FXRack {
    */
   syncChain() {
     if (this._sub) return;
+    // A new copy is built now, out of the chain (so an LFO on it has its
+    // param to connect to straight away); wiring it in, and dropping one
+    // that went, happen under the fade.
+    this._buildExtras(true);
     this.softSwitch(() => { this._buildExtras(); this._rewire(); });
   }
 
@@ -658,7 +646,7 @@ export class FXRack {
   // (de)configured — a stage targeted by an LFO must stay wired at wet 0.
   refreshStageActivity() {
     for (const s of this._stages) this._updateStage(s.key);
-    for (const id in this._extra) this._updateStage(id);
+    for (const id in this._extra) { this._updateStage(id); this._extra[id].refreshStageActivity(); }
   }
 
   /** The gain stage. In the chain only when off unity (FX_STAGE_NEUTRAL). */

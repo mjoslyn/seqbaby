@@ -1,6 +1,7 @@
 import { setStatus } from "./dom.js";
 import { holdParamAt } from "./paramHold.js";
-import { FXRack, FX_LFO_STAGE } from "./fxRack.js";
+import { FXRack } from "./fxRack.js";
+import { fxStageOfModKey } from "./constants.js";
 import { ANALOG_FILTER_TYPES, buildAnalogFilterNode, disposeAnalogFilterNode, setAnalogFilterModel } from "./filterModels.js";
 import { state } from "./state.js";
 
@@ -10,8 +11,8 @@ import { state } from "./state.js";
 // A stage stays wired into the rack's chain while any enabled LFO targets one
 // of its params — the LFO adds on top of a stored wet of 0 (see FXRack bypass).
 function stageHeldByLfo(t, stage) {
-  for (const lfoKey in FX_LFO_STAGE) {
-    if (FX_LFO_STAGE[lfoKey] === stage && t.lfoConfig?.[lfoKey]?.enabled) return true;
+  for (const lfoKey in t.lfoConfig || {}) {
+    if (t.lfoConfig[lfoKey]?.enabled && fxStageOfModKey(lfoKey) === stage) return true;
   }
   return false;
 }
@@ -20,11 +21,10 @@ function stageHeldByLfo(t, stage) {
 // the control's own handler, so nothing else would wire a bypassed stage in,
 // and sweeping it would move the knob and nothing you can hear.
 function stageHeldByMacro(t, stage) {
-  const own = `fx.${stage}`;
   for (const pad of state.macroPads || []) {
     for (const axis of ["x", "y"]) {
       for (const a of pad[axis] || []) {
-        if (a.trackId === t.id && (a.key === own || a.key.startsWith(own + "."))) return true;
+        if (a.trackId === t.id && fxStageOfModKey(a.key) === stage) return true;
       }
     }
   }

@@ -1,8 +1,8 @@
 import { AUTOMATION_TARGETS, canAutomate } from "./automation.js";
-import { lfoLabel } from "./constants.js";
+import { autoLabel, lfoLabel } from "./constants.js";
 import { canModulate, syncLFO } from "./lfo.js";
 import { addMacroPad, assignToAxis, assignmentsFor, macroPads, unassign } from "./macro.js";
-import { CONTROL_LABELS, PARAM_DESCRIPTIONS, PARAM_SCOPE_SELECTOR, autoOwns, controlFromEventTarget, hasAutomation, hasMacroOn, hasMod, LFO_FOR_AUTO, modOwns, refreshParamIndicators, targetsForControl, trackForControl } from "./paramTargets.js";
+import { CONTROL_LABELS, PARAM_DESCRIPTIONS, PARAM_SCOPE_SELECTOR, autoOwns, controlFromEventTarget, hasAutomation, hasMacroOn, hasMod, lfoForAuto, modOwns, refreshParamIndicators, targetsForControl, trackForControl } from "./paramTargets.js";
 import { buildAutomationLane, buildLfoRow, renderAutomationPanel, renderModPanel } from "./render.js";
 import { state } from "./state.js";
 
@@ -87,7 +87,7 @@ export function openParamMenu(t, spec) {
       <div class="sq-pmenu__body sq-pmenu__body--mod"></div>
     </section>
     <section class="sq-pmenu__sec">
-      <div class="sq-pmenu__sec-head">per-step automation${spec.auto ? ` <span class="sq-pmenu__key">${esc(AUTOMATION_TARGETS[spec.auto]?.label ?? spec.auto)}</span>` : ""}</div>
+      <div class="sq-pmenu__sec-head">per-step automation${spec.auto ? ` <span class="sq-pmenu__key">${esc(autoLabel(spec.auto))}</span>` : ""}</div>
       <div class="sq-pmenu__body sq-pmenu__body--aut"></div>
     </section>
     <section class="sq-pmenu__sec">
@@ -108,7 +108,8 @@ export function openParamMenu(t, spec) {
       const sourceName = ctl.classList.contains("sq-comp__source") && ctl.value !== "self"
         ? /** @type {HTMLSelectElement} */ (/** @type {unknown} */ (ctl)).selectedOptions?.[0]?.textContent?.trim() : undefined;
       let code = null;
-      for (const cls of ctl.classList) if ((code = codeForControl(cls, t, { sourceName }))) break;
+      const fxId = ctl.closest(".sq-fx__row[data-fx-id]")?.dataset.fxId;
+      for (const cls of ctl.classList) if ((code = codeForControl(cls, t, { sourceName, fxId }))) break;
       const line = modal.querySelector(".sq-pmenu__code");
       if (!code || !line) return;
       line.querySelector("code").textContent = code;
@@ -155,7 +156,7 @@ export function openParamMenu(t, spec) {
       }
       return;
     }
-    if (hasMod(t, LFO_FOR_AUTO[spec.auto])) {
+    if (hasMod(t, lfoForAuto(spec.auto))) {
       macBody.appendChild(note("an lfo has this parameter — remove it to use a macro", "sq-pmenu__blocked"));
       return;
     }

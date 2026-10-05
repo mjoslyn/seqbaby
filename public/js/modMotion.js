@@ -32,7 +32,7 @@
  * there is nothing for a shadow to add.
  */
 
-import { LFO_AMP_SCALE } from "./constants.js";
+import { LFO_AMP_SCALE, baseModKey } from "./constants.js";
 import { setKnobMotion } from "./knob.js";
 import { SETTER_LFO_KEYS, lfoBipolar, lfoLiftNow } from "./lfo.js";
 import { state } from "./state.js";
@@ -64,7 +64,7 @@ const PARAM_SPAN = {
 
 /** Move `base` (0..1 of the knob) by `off`, which is in the target's units. */
 function offsetUnit(key, base, off, knobSpan) {
-  const span = PARAM_SPAN[key] ?? knobSpan;
+  const span = PARAM_SPAN[baseModKey(key)] ?? knobSpan;
   return span ? base + off / span : base;
 }
 
@@ -74,14 +74,14 @@ function offsetUnit(key, base, off, knobSpan) {
 function lfoUnit(t, key, base, knobSpan, now, dt) {
   // The setter loop writes these in the slider's own 0..1 and records what it
   // wrote, so there is nothing to convert and no second phase to keep.
-  if (SETTER_LFO_KEYS.has(key)) return t._modLive?.[key] ?? null;
+  if (SETTER_LFO_KEYS.has(baseModKey(key))) return t._modLive?.[key] ?? null;
   // Nothing is connected until the voice exists, so an LFO switched on before
   // the first play is enabled but not yet running.
   if (!t.lfos?.[key]) return null;
   const lift = lfoLiftNow(t, key, now, dt);
   if (lift == null) return null;
   const cfg = t.lfoConfig[key];
-  const amt = (cfg.depth ?? 0) * (LFO_AMP_SCALE[key] ?? 1);
+  const amt = (cfg.depth ?? 0) * (LFO_AMP_SCALE[baseModKey(key)] ?? 1);
   return offsetUnit(key, base, (lfoBipolar(cfg) ? lift - 0.5 : lift) * amt, knobSpan);
 }
 

@@ -1868,11 +1868,32 @@ classes) and its own sub-rack: a whole `FXRack` built with `{sub: true}` and
 spliced into the parent's chain (`_extra`, `syncChain`, `applyInstance`), of
 which only that stage is ever engaged. Both live in `fxConfig`, so a save,
 undo, p-lock, a patch and a jam carry them with no plumbing of their own;
-`applyPatternSound` is where a sound without them takes them away again. The
-LFO and automation targets, the macro pads, vim, code and the song builder all
-name a stage's FIRST copy; an instance is knobs only. An `order` that is
-absent plays `FX_STAGE_KEYS` order, so every older song sounds as it did; it
-is written the first time something is added or moved. The rack panel itself never leaves the track, so its badge entry
+`applyPatternSound` is where a sound without them takes them away again. An
+`order` that is absent plays `FX_STAGE_KEYS` order, so every older song sounds
+as it did; it is written the first time something is added or moved.
+
+**A copy takes every target its stage does**, spelled as the stage's own key
+with the copy's number after a `#`: LFO `delay_time#2` / `verb#2`, lane and
+pad `fx.delay.time#2`. One rule for both namespaces (`splitFxInstanceKey`,
+`baseModKey`, `fxStageOfModKey`, constants.js), so no table grows per copy:
+every gate (`canModulate`, `canAutomate`, which also need the copy on the
+track), label (`lfoLabel`, `autoLabel`: "delay wet (2)") and pairing
+(`autoForLfo` / `lfoForAuto`) asks the stage's key, and every lookup that
+reaches the graph (`getModTarget`, `setterLfoBase`, `applySetterLfoValue`,
+`applyAutomationAtStep`) is handed a VIEW of the track whose `fxRack` is the
+copy's sub-rack (`fxCopyView`, lfo.js), so the stage's own code finds the
+copy's nodes. A copy's controls resolve through `targetsForControl` (an
+`fxi-` class plus its row's `data-fx-id`) and `controlForKey`, which is what
+the right-click menu, the dots, knob recording, the pads, the needle and vim
+use. `trackLfoKeys` / `fxInstanceAutoKeys` add a track's copies to the
+pickers. The sub-rack is held wired at a level of 0 by whatever holds the
+copy (its `isStageHeld` asks the parent's for the copy's id). Taking a copy
+off takes its LFOs, its lanes in every pattern and its pad assignments with
+it (`dropFxCopyMods`). vim names one `:fx delay2`; code writes
+`.fx('delay#2.wet', 0.6)` (naming a copy makes it; a run that stops naming
+it removes it) and `.fxchain('gain delay#2 reverb')`; the song builder's
+`setFx(song, i, "delay#2", {...})` / `setFx(..., null)` and `setFxChain`
+(MCP `set_fx`, `set_fx_chain`). The rack panel itself never leaves the track, so its badge entry
 has no `modal` and the inline view follows each pick behind the overlay. Vim's
 `:k` on a stage that is not shown adds it to the shown set (without engaging it)
 and picks the knob on the track; `f` opens the picker.
@@ -3092,7 +3113,7 @@ agent ──▶ mcp/server.mjs ──▶ songBuilder.js ──▶ { _version, bp
   a shorter string tiling a longer pattern. `describePattern` reads one back
   the same way, so `get_song` shows an agent what it wrote in the notation
   it wrote it in.
-- **The MCP server holds one song** and keeps the tool list short (35 tools:
+- **The MCP server holds one song** and keeps the tool list short (36 tools:
   song / engines / tracks / steps / sound / modulation / generators / code /
   out). `write_code` takes Strudel code (strudel.js, the same reader as
   the studio's code drawer), which is the tersest way an agent has to spell a

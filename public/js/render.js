@@ -1,7 +1,7 @@
 import { AUTOMATION_KEYS, AUTOMATION_TARGETS, canAutomate } from "./automation.js";
 import { canSavePatches, engineByKey, getPatchConfig, populateEngineSelect, savePatch } from "./catalog.js";
 import { applyTrackPatch, serializeTrackPatch } from "./session.js";
-import { FX_STAGE_LABELS, FX_STAGE_LEVEL_KEY, FX_STAGE_NEUTRAL, LFO_DIVS, fxChainOrder, fxInstanceIds, fxStageLevel, fxStageOf, isFxInstanceId, LFO_KEYS, lfoDivIndex, lfoLabel, rateToSlider, sliderToRate } from "./constants.js";
+import { FX_STAGE_LABELS, FX_STAGE_LEVEL_KEY, FX_STAGE_NEUTRAL, LFO_DIVS, fxChainOrder, fxInstanceIds, autoLabel, baseModKey, fxInstanceAutoKeys, fxStageLevel, fxStageOf, fxStageOfModKey, isFxInstanceId, LFO_KEYS, lfoDivIndex, lfoLabel, rateToSlider, sliderToRate } from "./constants.js";
 import { showInputDialog, showSavedPatchPicker } from "./dialogs.js";
 import { upgradeEngineSelect } from "./enginePicker.js";
 import { isMobileDevice, setStatus } from "./dom.js";
@@ -15,7 +15,7 @@ import { randomizeMelody, randomizeTimbre } from "./generate.js";
 import { GUITAR_DEFAULTS, GUITAR_NUM_KEYS, GUITAR_SEL_KEYS, GUITAR_TONE_NAMES, guitarTone, guitarToneDescription } from "./guitar.js";
 import { ICON_CHANCE, ICON_CLEAR, ICON_DICE, ICON_EUCLID, ICON_FILTER, ICON_FX, ICON_LEN_HALF, ICON_LEN_PLUS1, ICON_LOAD, ICON_ROLL, ICON_SAVE, ICON_SLIDERS, ICON_WAV } from "./icons.js";
 import { refreshKnobRange, setKnobReadout, upgradeKnobs } from "./knob.js";
-import { canModulate, lfoBipolar, lfoEuclid, lfoPhase, lfoRateLabel, syncLFO } from "./lfo.js";
+import { canModulate, freshLfoEntry, lfoBipolar, lfoEuclid, lfoPhase, lfoRateLabel, syncLFO, trackLfoKeys } from "./lfo.js";
 import { autoOwns, fxShown, modOwns, refreshPanelBadges, refreshParamIndicators } from "./paramTargets.js";
 import { patternLocked, refreshPatternLockUI, refreshPatternSoundUI, setPatternLock } from "./patternSound.js";
 import { openGranularSourceModal, openSamplerSourceModal, pickAudioFileForTrack } from "./main.js";
@@ -1798,6 +1798,7 @@ export function fxStageOff(t, id) {
   const fc = t.fxConfig;
   if (isFxInstanceId(id)) {
     delete fc[id];
+    dropFxCopyMods(t, id);
     writeChain(t, shownChain(t).filter(x => x !== id));
     syncFxRows(t);
     return;
@@ -1810,6 +1811,30 @@ export function fxStageOff(t, id) {
   fxShown(t).delete(id);
   if (levelKey && Array.isArray(fc.order)) writeChain(t, shownChain(t).filter(x => x !== id));
   refreshPanelBadges(t);
+}
+
+/**
+ * A copy taken off takes its modulation with it: its LFOs, its lanes in every
+ * pattern and its havoc pad assignments. Left behind they would name nothing,
+ * and come back to life on whatever copy is next given that number.
+ */
+function dropFxCopyMods(t, id) {
+  for (const k of Object.keys(t.lfoConfig || {})) {
+    if (fxStageOfModKey(k) !== id) continue;
+    delete t.lfoConfig[k];
+    syncLFO(t, k);
+  }
+  for (const p of t.patterns || []) {
+    for (const k of Object.keys(p?.automation || {})) if (fxStageOfModKey(k) === id) delete p.automation[k];
+  }
+  for (const pad of state.macroPads || []) {
+    for (const axis of ["x", "y"]) {
+      if (Array.isArray(pad[axis])) pad[axis] = pad[axis].filter(a => !(a.trackId === t.id && fxStageOfModKey(a.key) === id));
+    }
+  }
+  if (t._modPanelEl) renderModPanel(t, t._modPanelEl);
+  if (t._autPanelEl) renderAutomationPanel(t, t._autPanelEl);
+  refreshParamIndicators(t);
 }
 
 /** Move a stage one place along the chain (−1 earlier, +1 later). */
@@ -1959,13 +1984,18 @@ export function syncFxRows(t) {
     if (want.delete(id)) writeFxRow(row, fxStageOf(id), fc[id]);
     else row.remove();
   }
+  let built = false;
   for (const id of want) {
     const row = buildFxInstanceRow(t, id);
     if (!row) continue;
     panel.appendChild(row);
     upgradeKnobs(row);
+    built = true;
   }
   orderFxRows(t);
+  // A new row is shown on the track by the badge pass; it was not there yet
+  // when whatever added the copy last ran it.
+  if (built) refreshPanelBadges(t);
 }
 
 /**
@@ -2167,7 +2197,7 @@ export function renderModPanel(t, panel) {
   const refreshAdderOptions = () => {
     // Only show mods that apply to the current engine, and only for parameters
     // an automation lane hasn't already claimed (see paramTargets.js).
-    const available = LFO_KEYS.filter(k => !t.lfoConfig[k]?.enabled && canModulate(t, k) && !autoOwns(t, k));
+    const available = trackLfoKeys(t).filter(k => !t.lfoConfig[k]?.enabled && canModulate(t, k) && !autoOwns(t, k));
     if (available.length === 0) {
       addBtn.disabled = true;
       addSel.hidden = true;
@@ -2187,6 +2217,7 @@ export function renderModPanel(t, panel) {
   });
   addSel.addEventListener("change", () => {
     const key = addSel.value;
+    if (key && !t.lfoConfig[key] && canModulate(t, key)) t.lfoConfig[key] = freshLfoEntry();   // a copy's key has no default entry
     if (!key || !t.lfoConfig[key]) { addSel.hidden = true; return; }
     t.lfoConfig[key].enabled = true;
     syncLFO(t, key);
@@ -2197,7 +2228,7 @@ export function renderModPanel(t, panel) {
   });
 
   // Pre-populate rows for any LFO that's already enabled on this track.
-  for (const key of LFO_KEYS) {
+  for (const key of trackLfoKeys(t)) {
     if (t.lfoConfig[key]?.enabled) addRow(key);
   }
   refreshAdderOptions();
@@ -2238,7 +2269,7 @@ export function buildAutomationLane(t, key, onRemove) {
   // Found by knobRecord.js to repaint a lane as a knob records into it.
   row.dataset.autTrack = String(t.id);
   row.innerHTML = `
-    <span class="sq-aut__label">${AUTOMATION_TARGETS[key]?.label ?? key}</span>
+    <span class="sq-aut__label">${autoLabel(key)}</span>
     <input type="checkbox" class="sq-aut__enable" ${lane.enabled ? "checked" : ""} title="enable lane" />
     <div class="sq-aut__grid"></div>
     <button class="sq-aut__clear sq-btn--ghost" type="button" title="reset to 0.5">clear</button>
@@ -2303,7 +2334,7 @@ export function buildAutomationLane(t, key, onRemove) {
 export function renderAutomationPanel(t, panel) {
   panel.replaceChildren();
   if (!t.automation) t.automation = {};
-  const enabledKeys = Object.keys(t.automation).filter(k => AUTOMATION_TARGETS[k]);
+  const enabledKeys = Object.keys(t.automation).filter(k => AUTOMATION_TARGETS[baseModKey(k)]);
 
   const rows = document.createElement("div");
   rows.className = "aut-rows";
@@ -2326,7 +2357,7 @@ export function renderAutomationPanel(t, panel) {
 
   const refreshAdder = () => {
     // Parameters an LFO is already driving are off the list — one owner each.
-    const avail = AUTOMATION_KEYS.filter(k => !t.automation[k] && canAutomate(t, k) && !modOwns(t, k));
+    const avail = [...AUTOMATION_KEYS, ...fxInstanceAutoKeys(t.fxConfig)].filter(k => !t.automation[k] && canAutomate(t, k) && !modOwns(t, k));
     if (avail.length === 0) {
       addBtn.disabled = true;
       addSel.hidden = true;
@@ -2335,7 +2366,7 @@ export function renderAutomationPanel(t, panel) {
       addBtn.disabled = false;
       addBtn.textContent = "+ add automation";
       addSel.innerHTML = `<option value="" disabled selected>pick a target…</option>`
-        + avail.map(k => `<option value="${k}">${AUTOMATION_TARGETS[k].label}</option>`).join("");
+        + avail.map(k => `<option value="${k}">${autoLabel(k)}</option>`).join("");
     }
     emptyMsg.hidden = Object.keys(t.automation).length > 0;
   };

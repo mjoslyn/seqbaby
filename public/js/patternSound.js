@@ -24,8 +24,8 @@
 // Only what actually differs is touched, so switching between two patterns that
 // share a sound costs almost nothing.
 
-import { fxInstanceIds, isFxInstanceId } from "./constants.js";
-import { defaultLFOConfig, syncLFO } from "./lfo.js";
+import { fxInstanceIds, isFxInstanceId, splitFxInstanceKey } from "./constants.js";
+import { defaultLFOConfig, freshLfoEntry, syncLFO } from "./lfo.js";
 import { setParam, updateGranularSpeedEnabled } from "./params.js";
 import { refreshParamIndicators } from "./paramTargets.js";
 import { refreshFxPanelUI, renderModPanel, syncTrackSoundUI } from "./render.js";
@@ -153,9 +153,10 @@ export function applyPatternSound(t, snap) {
     // Walk the live matrix, not the snapshot: a key the snapshot leaves out is
     // one this sound doesn't modulate, and if the outgoing one did, it has to
     // be torn back down to the default rather than left running.
+    // A copy's keys have no default entry: absent means off.
     const defaults = defaultLFOConfig();
-    for (const key of Object.keys(t.lfoConfig)) {
-      const want = snap.lfoConfig[key] ?? defaults[key];
+    for (const key of new Set([...Object.keys(t.lfoConfig), ...Object.keys(snap.lfoConfig)])) {
+      const want = snap.lfoConfig[key] ?? defaults[key] ?? (splitFxInstanceKey(key) ? { ...(t.lfoConfig[key] || freshLfoEntry()), enabled: false } : null);
       if (!want || same(t.lfoConfig[key], want)) continue;
       t.lfoConfig[key] = clone(want);
       touched = true;

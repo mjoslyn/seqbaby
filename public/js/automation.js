@@ -1,11 +1,11 @@
-import { AUTOMATION_TARGETS, VOICE_AUTO_KEYS, afterPrefix as after, canAutomateKey, voiceAutoKeysForEngineKey } from "./constants.js";
+import { AUTOMATION_TARGETS, VOICE_AUTO_KEYS, afterPrefix as after, baseModKey, canAutomateKey, fxStageOfModKey, splitFxInstanceKey, voiceAutoKeysForEngineKey } from "./constants.js";
 import { driveGain } from "./fxRack.js";
 import { makeFuzzCurve, shaperPreampGain } from "./curves.js";
 import { bassFromUnit, droneFromUnit, guitarFromUnit, hexopFromUnit, subFromUnit } from "./engineData.js";
 import { euclidFromUnit, setEuclidLive } from "./euclid.js";
 import { setChanceLive } from "./chance.js";
 import { chanceFromUnit } from "./chanceGen.js";
-import { canModulate } from "./lfo.js";
+import { canModulate, fxCopyView } from "./lfo.js";
 import { setParam } from "./params.js";
 import { cutoffToHz, resonToQ } from "./signal.js";
 import { granFromUnit } from "./voices.js";
@@ -25,6 +25,8 @@ export function voiceAutoKeysForEngine(t) {
   return voiceAutoKeysForEngineKey(t.engineKey);
 }
 export function canAutomate(t, key) {
+  // A copy's lane exists only while the copy is on the track.
+  if (splitFxInstanceKey(key) && !t.fxConfig?.[fxStageOfModKey(key)]) return false;
   return canAutomateKey(t.engineKey, key, { euclid: !!t.euclid?.on, chance: !!t.chance?.on });
 }
 
@@ -33,6 +35,12 @@ export function canAutomate(t, key) {
 // rebuild (waveshaper curve, IR, integer quantization) the change stays
 // stepwise at `time`.
 export function applyAutomationAtStep(t, key, v, time, vNext, stepDur) {
+  // A copy's lane is its stage's lane, played onto the copy's sub-rack.
+  if (splitFxInstanceKey(key)) {
+    const view = fxCopyView(t, key);
+    if (view) applyAutomationAtStep(view, baseModKey(key), v, time, vNext, stepDur);
+    return;
+  }
   const vv = Math.max(0, Math.min(1, Number(v) || 0));
   const vn = vNext == null ? vv : Math.max(0, Math.min(1, Number(vNext) || 0));
   const sdur = Math.max(0.005, Number(stepDur) || 0.02);

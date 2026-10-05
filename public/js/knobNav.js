@@ -22,10 +22,10 @@
 // that direction as drawn: the fx rack is a grid of cards on desktop and a
 // column on a phone, and neither matches the markup's order.
 
-import { AUTOMATION_TARGETS } from "./constants.js";
+import { autoLabel } from "./constants.js";
 import { setStatus } from "./dom.js";
 import { readoutText, writeKnobValue } from "./knob.js";
-import { CLASS_FOR_AUTO, fxShown, refreshPanelBadges } from "./paramTargets.js";
+import { CLASS_FOR_AUTO, fxShown, refreshPanelBadges, targetsForControl } from "./paramTargets.js";
 
 /** Vim's f / c: the button that opens the panel, and the control to start on. */
 export const PANELS = {
@@ -240,11 +240,13 @@ function knobCandidates(t) {
       const row = el.closest(".sq-fx__row");
       const stage = (row?.querySelector(".sq-fx__title")?.textContent || "").replace(/\(.*\)/, "").trim();
       const label = el.closest(".sq-fx__ctl, .sq-field, label")?.querySelector("span, label")?.textContent?.trim() || "";
-      const names = [label, stage && `${stage} ${label}`, row?.dataset.fx && `${row.dataset.fx} ${label}`];
-      for (const cls of el.classList) {
-        const key = classToAuto[cls];
-        if (key) names.push(key, AUTOMATION_TARGETS[key]?.label);
-      }
+      // A copy answers to "delay 2 wet", never to its stage's own names.
+      const rowName = row?.dataset.fxId ? row.dataset.fxId.replace("#", " ") : row?.dataset.fx;
+      const names = [label, stage && `${stage} ${label}`, rowName && `${rowName} ${label}`];
+      let key = null;
+      for (const cls of el.classList) if (classToAuto[cls]) { key = classToAuto[cls]; break; }
+      if (!key && row?.dataset.fxId) key = targetsForControl(el)?.auto;
+      if (key) names.push(key, autoLabel(key));
       // What the command line offers for this knob: stage and label, as drawn.
       const display = (stage && label ? `${stage} ${label}` : label || stage).toLowerCase().replace(/\s+/g, " ").trim();
       out.push({ el, display, names: [...new Set(names.filter(Boolean).map(norm))].filter(Boolean) });

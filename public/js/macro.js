@@ -32,9 +32,9 @@
  */
 
 import { AUTOMATION_TARGETS, applyAutomationAtStep, canAutomate } from "./automation.js";
-import { FX_STAGE_LEVEL_KEY, fxStageLevel } from "./constants.js";
+import { FX_STAGE_LEVEL_KEY, autoLabel, fxStageLevel } from "./constants.js";
 import { ICON_DICE } from "./icons.js";
-import { CLASS_FOR_AUTO, controlFromEventTarget, hasAutomation, hasMacroOn, modOwns, refreshParamIndicators, targetsForControl, trackForControl } from "./paramTargets.js";
+import { controlForKey, controlFromEventTarget, hasAutomation, hasMacroOn, modOwns, refreshParamIndicators, targetsForControl, trackForControl } from "./paramTargets.js";
 import { state } from "./state.js";
 
 /** @typedef {import("./types.js").Track} Track */
@@ -185,18 +185,11 @@ export function diceMacroPad(pad) {
 // Every one of the 162 automation keys maps to a control class (checked), so
 // this always resolves for a track whose engine has that parameter.
 
-function controlFor(t, key) {
-  const cls = CLASS_FOR_AUTO[key];
-  if (!cls || !t?.el) return null;
-  const own = t.el.querySelector(`.${cls}`);
-  if (own) return own;
-  // A panel open as a modal has been reparented out of the track and onto the
-  // body, so the query above misses it — and a pad played over an open panel
-  // would then read no base and leave the knob behind. Every panel that can
-  // move is stamped with its track id on the way out (renderTrack), which is
-  // exactly what makes it findable from here.
-  return document.querySelector(`[data-track-id="${CSS.escape(String(t.id))}"] .${cls}`);
-}
+// A panel open as a modal has been reparented out of the track and onto the
+// body, and a pad played over it would otherwise read no base and leave the
+// knob behind; controlForKey looks there too (every panel that can move is
+// stamped with its track id on the way out). It also finds a copy's control.
+const controlFor = (t, key) => controlForKey(t, key);
 
 /** A control's value as the 0..1 an automation lane speaks. The lane and the
  *  slider share a range by construction — that is what makes a lane sweeping
@@ -388,7 +381,7 @@ const esc = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").
 function paramLabel(a) {
   const t = trackById(a.trackId);
   const name = t?.name || `track ${a.trackId}`;
-  return `${name} · ${AUTOMATION_TARGETS[a.key]?.label || a.key}`;
+  return `${name} · ${autoLabel(a.key)}`;
 }
 
 export function openMacroPads() {

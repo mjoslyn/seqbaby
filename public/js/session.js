@@ -1,7 +1,7 @@
 import { AUTOMATION_TARGETS } from "./automation.js";
 import { loadBuffer, normalizeAudioBuffer } from "./buffers.js";
 import { GRANULAR_SAMPLE_BASE } from "./catalog.js";
-import { PATTERN_COUNT, fxInstanceIds } from "./constants.js";
+import { PATTERN_COUNT, baseModKey, fxInstanceIds } from "./constants.js";
 import { showConfirmDialog, showInputDialog, showSelectDialog } from "./dialogs.js";
 import { setStatus } from "./dom.js";
 import { ICON_CHAIN, ICON_FINISH, ICON_NOW, ICON_REPEAT } from "./icons.js";
@@ -139,7 +139,7 @@ export function serializeSet() {
         extraLengths: (p.extraLengths ?? []).map(slot => Array.isArray(slot) ? slot.slice() : null),
         automation: p.automation ? Object.fromEntries(
           Object.entries(p.automation)
-            .filter(([k]) => AUTOMATION_TARGETS[k])
+            .filter(([k]) => AUTOMATION_TARGETS[baseModKey(k)])
             .map(([k, lane]) => [k, { enabled: !!lane.enabled, values: (lane.values || []).slice() }])
         ) : {},
         // p-lock, per track per pattern (patternSound.js).
@@ -461,7 +461,7 @@ export function loadTrackFromData(t, td) {
       const automation = {};
       if (p.automation && typeof p.automation === "object") {
         for (const [k, lane] of Object.entries(p.automation)) {
-          if (!AUTOMATION_TARGETS[k] || !lane) continue;
+          if (!AUTOMATION_TARGETS[baseModKey(k)] || !lane) continue;
           automation[k] = {
             enabled: !!lane.enabled,
             values: pad(Array.isArray(lane.values) ? lane.values : [], 0.5, n),
