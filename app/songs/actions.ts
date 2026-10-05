@@ -965,6 +965,9 @@ export async function loadSongChat(
     .from("song_chats")
     .select("messages")
     .eq("song_id", songId)
+    // RLS already holds a chat to its owner (0011); said here too, so a
+    // policy loosened later cannot hand anyone else's conversation back.
+    .eq("owner_id", user.id)
     .maybeSingle();
   // A song with no conversation yet is the normal case, not a failure.
   if (error) return { error: error.message };
