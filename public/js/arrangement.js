@@ -36,7 +36,7 @@ import { ARRANGE_MAX_BARS, arrangementBars, normalizeArrangement } from "./sessi
 import { PATTERN_COUNT } from "./constants.js";
 import { setStatus } from "./dom.js";
 import { patternMeter, stepsPerBarForMeter } from "./meter.js";
-import { applySectionTracks, isPatternNonEmpty, requestPatternSwitch, state } from "./state.js";
+import { applySectionTracks, isPatternNonEmpty, realignTracksToActive, requestPatternSwitch, state, switchPattern, syncArrangePos } from "./state.js";
 
 const VIEW_KEY = "seqbaby.view.v1";
 const PIC_ROWS = 8;                 // tracks drawn in a block's picture, at most
@@ -73,10 +73,107 @@ export function arrangementBeats(arr = state.arrangement) {
  * arrangement in front of you plays the arrangement, whatever the pattern
  * mode says; in the tracks tab the mode button keeps its old meaning, repeat
  * looping the pattern and chain playing the song.
+ *
+ * Decided when play is pressed and held while it plays (`songLatch`): which
+ * tab is in front of you is where you are LOOKING, and flipping between them
+ * mid-play used to flip between the song and a pattern loop at the next bar
+ * line, with nothing on screen saying which one you were hearing. Only the
+ * mode button, an explicit choice about playback, changes it while playing
+ * (`relatchArrangement`).
  */
 export function arrangementDrives() {
-  return state.arrangement.length > 0 && (state.patternMode === "chain" || isArrangementShown());
+  if (!state.arrangement.length) return false;
+  if (state.playing && songLatch != null) return songLatch;
+  return state.patternMode === "chain" || isArrangementShown();
 }
+let songLatch = null;
+function drivesNow() { return state.arrangement.length > 0 && (state.patternMode === "chain" || isArrangementShown()); }
+
+/** Play pressed: decide what plays, from the mode and the tab in front of you. */
+export function latchArrangement() { songLatch = drivesNow(); paintPlayWhat(); }
+/** Stopped: nothing is latched, and the label goes back to what play WOULD do. */
+export function releaseArrangement() { songLatch = null; heardPos = null; paintPlayWhat(); }
+// The section the speakers are on (paintArrangementNow's), which the label
+// reads rather than arrangePos: that moves a lookahead before you hear it.
+let heardPos = null;
+
+/** The mode button, while playing: the song starts or stops driving now. */
+function relatchArrangement() {
+  if (!state.playing) { paintPlayWhat(); return; }
+  const was = arrangementDrives();
+  songLatch = drivesNow();
+  if (was && !songLatch) {
+    clearArrangementHold();
+    realignTracksToActive();
+    for (const n of root?.querySelectorAll(".is-now") || []) n.classList.remove("is-now");
+  } else if (!was && songLatch) {
+    syncArrangePos(state.activePattern);
+    const sec = state.arrangement[state.arrangePos];
+    state.chainBarCount = 0;
+    if (sec.p != null && sec.p !== state.activePattern) switchPattern(sec.p, { keepArrangePos: true });
+    applySectionTracks(sec);
+  }
+  paintPlayWhat();
+}
+
+/**
+ * The label beside play (#play-what) and the marker on the tab that is
+ * playing: `song 2/5`, `pattern 3 loop` or `chain: pattern 3`. Stopped, it says
+ * what play WILL do from here, dimmed. Written only when it changes, since
+ * paintArrangementNow calls it every step.
+ */
+export function paintPlayWhat() {
+  const out = document.getElementById("play-what");
+  const song = arrangementDrives();
+  const playing = !!state.playing;
+  const p = state.activePattern + 1;
+  let text, title;
+  if (song) {
+    const n = state.arrangement.length;
+    const pos = Math.min(playing && heardPos != null ? heardPos : state.arrangePos, n - 1) + 1;
+    text = playing ? `song ${pos}/${n}` : "song";
+    title = playing
+      ? `playing the arrangement, section ${pos} of ${n}`
+      : "play plays the arrangement, from the section you are on";
+  } else if (state.patternMode === "chain") {
+    text = `chain: pattern ${p}`;
+    title = `${playing ? "playing" : "play plays"} the patterns with notes in slot order (there is no arrangement)`;
+  } else {
+    text = `pattern ${p} loop`;
+    title = playing
+      ? `looping pattern ${p}, not the arrangement${state.arrangement.length ? ": chain mode, or play in the arrangement tab, plays the song" : ""}`
+      : `play loops pattern ${p}`;
+  }
+  if (out) {
+    if (out.textContent !== text) out.textContent = text;
+    if (out.title !== title) out.title = title;
+    out.classList.toggle("is-playing", playing);
+    out.dataset.what = song ? "song" : "pattern";
+  }
+  const tabView = song ? "arrangement" : "tracks";
+  for (const tab of document.querySelectorAll(".sq-tabs__tab")) {
+    const on = playing && tab.dataset.view === tabView;
+    if (tab.classList.contains("is-playing") !== on) tab.classList.toggle("is-playing", on);
+  }
+  paintHint();
+}
+
+/** The arrangement header's note: why the song is not what you hear. */
+function paintHint() {
+  const hint = head?.querySelector(".sq-arrange__hint");
+  if (!hint) return;
+  const arr = state.arrangement;
+  if (state.playing && arr.length && !arrangementDrives()) {
+    hint.hidden = false;
+    setText(hint, `playing pattern ${state.activePattern + 1} on loop, not this: play the song`);
+    hint.title = "play was pressed in the tracks tab in repeat mode, so a pattern loops. Click to switch to chain mode, which plays the arrangement from here";
+  } else {
+    hint.hidden = !(arr.length && state.patternMode !== "chain");
+    setText(hint, "plays here; in tracks, repeat loops the pattern: chain");
+    hint.title = "play in this tab plays the arrangement. In the tracks tab, repeat mode loops the pattern you are on; switch to chain mode to play the arrangement there too";
+  }
+}
+function setText(n, t) { if (n.textContent !== t) n.textContent = t; }
 
 /** Whether section `e` holds track `t` back. */
 export function sectionHolds(e, t) { return !!e?.off?.includes(t.id); }
@@ -136,6 +233,7 @@ export function showArrangement(on, { remember = false } = {}) {
   }
   if (remember) { try { localStorage.setItem(VIEW_KEY, on ? "arrangement" : "tracks"); } catch {} }
   if (on) render();
+  paintPlayWhat();   // stopped, the tab decides what play will do
 }
 
 /** Repaint if shown, and the tab's count either way. Called from
@@ -145,6 +243,7 @@ export function refreshArrangement() {
   const n = document.querySelector(".sq-tabs__n");
   if (n) n.textContent = state.arrangement.length ? String(state.arrangement.length) : "";
   if (isArrangementShown()) render();
+  paintPlayWhat();
 }
 
 /** Repaint the pictures of every block and cell playing pattern `p` — its steps moved. */
@@ -315,8 +414,7 @@ function render() {
   head.querySelector("[data-act=add]").textContent = `+ pattern ${state.activePattern + 1}`;
   // the view plays the arrangement whatever the mode; the note says so
   // when the mode button would say otherwise in the tracks tab
-  const hint = head.querySelector(".sq-arrange__hint");
-  hint.hidden = !(arr.length && state.patternMode !== "chain");
+  paintPlayWhat();   // a first section, or the last one gone, changes what play plays
   head.querySelector("[data-act=clear]").disabled = !arr.length;
 
   // blocks
@@ -468,6 +566,7 @@ function render() {
 export function paintArrangementNow({ pos, bar, barTick, barLen }) {
   const e = state.arrangement[pos];
   if (!e || !arrangementDrives()) return;
+  if (heardPos !== pos) { heardPos = pos; paintPlayWhat(); }
   for (const t of state.tracks) {
     if (!t.el || t.engineKey === "bus") continue;
     const target = trackTargetPattern(e, t);
@@ -902,9 +1001,8 @@ export function initArrangement() {
   head = el("div", "sq-arrange__head");
   head.appendChild(el("span", "sq-arrange__title", "arrangement"));
   head.appendChild(el("span", "sq-arrange__sum", ""));
-  const hint = el("button", "sq-arrange__hint sq-btn--ghost", "plays here; in tracks, repeat loops the pattern: chain");
+  const hint = el("button", "sq-arrange__hint sq-btn--ghost", "");
   hint.type = "button";
-  hint.title = "play in this tab plays the arrangement. In the tracks tab, repeat mode loops the pattern you are on; switch to chain mode to play the arrangement there too";
   hint.addEventListener("click", () => { if (state.patternMode !== "chain") document.getElementById("pattern-mode")?.click(); render(); });
   head.appendChild(hint);
   const tools = el("span", "sq-arrange__tools");
@@ -943,7 +1041,13 @@ export function initArrangement() {
     e.preventDefault();
   });
   // The mode button repaints the hint: an arrangement in repeat mode is not playing.
-  document.getElementById("pattern-mode")?.addEventListener("click", () => { clearArrangementHold(); refreshArrangement(); });
+  // While playing it also decides, there and then, whether the song drives.
+  document.getElementById("pattern-mode")?.addEventListener("click", () => {
+    const was = state.playing && arrangementDrives();
+    if (!was) clearArrangementHold();
+    relatchArrangement();
+    refreshArrangement();
+  });
   // A track renamed, added, removed or reordered is a row changed; the undo
   // stack already settles every such edit into one event, so listen to that.
   window.addEventListener("seqbaby:songedited", () => { if (isArrangementShown()) render(); });
