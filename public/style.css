@@ -687,7 +687,13 @@ body:not([data-view="arrangement"]) #arrangement { display: none; }
    transport runs. The blocks and the rows share one horizontal scroll, with a
    label column held at the left. */
 .sq-arrange {
-  --arr-bar-w: 32px;        /* a multiple of 16: a sixteenth is a whole 2px in the pictures */
+  /* A bar is exactly this wide everywhere, and nothing is held wider: a
+     one-bar section is one bar across, so the same pattern reads the same
+     in a one-bar cell as in a six-bar one. A multiple of 16, so a sixteenth
+     is a whole 3px in the pictures. Narrow blocks drop their labels and
+     move buttons (the container queries below) rather than growing. */
+  --arr-bar-w: 48px;
+  --arr-min: var(--arr-bar-w);
   --arr-label: 120px;
   display: flex;
   flex-direction: column;
@@ -878,6 +884,7 @@ body:not([data-view="arrangement"]) #arrangement { display: none; }
 body.sq-playing .sq-arrange__cell.is-now::after { display: block; }
 .sq-arrange__block {
   position: relative;
+  container-type: inline-size;
   flex: 0 0 auto;
   width: max(var(--arr-min, 56px), calc(var(--arr-bars, 1) * var(--arr-bar-w)));
   height: 56px;
@@ -899,6 +906,7 @@ body.sq-playing .sq-arrange__cell.is-now::after { display: block; }
   background: repeating-linear-gradient(135deg, transparent 0 6px, color-mix(in oklab, var(--fg) 5%, transparent) 6px 7px);
 }
 .sq-arrange__block.is-rest .sq-arrange__num { font-size: 11px; font-weight: 400; color: var(--fg-dim); letter-spacing: 0.08em; }
+.sq-arrange__block.is-lanes .sq-arrange__num { font-size: 10px; font-weight: 400; color: var(--fg-dim); letter-spacing: 0.04em; }
 .sq-arrange__block.is-dragging { opacity: 0.4; }
 .sq-arrange__block.is-drop-before { border-left: 3px solid var(--accent); }
 .sq-arrange__block.is-resizing { cursor: ew-resize; }
@@ -929,6 +937,11 @@ body.sq-playing .sq-arrange__cell.is-now::after { display: block; }
 .sq-arrange__at::before { content: "bar "; }
 .sq-arrange__num { grid-area: num; font-size: 17px; line-height: 1; font-weight: 600; color: var(--fg); }
 .sq-arrange__bars { grid-area: bars; justify-self: end; }
+/* a one- or two-bar block has room for its number and its × only */
+@container (max-width: 99px) {
+  .sq-arrange__at, .sq-arrange__bars, .sq-arrange__mv { display: none; }
+  .sq-arrange__meta { inset: 3px 14px 4px 5px; }
+}
 .sq-arrange__btns {
   position: absolute;
   top: 1px; right: 9px;
@@ -953,7 +966,7 @@ body.sq-playing .sq-arrange__cell.is-now::after { display: block; }
 /* A finger cannot hover and cannot drag a block (that is HTML drag-and-drop),
    so on any touch screen the move and remove buttons are always there. */
 @media (any-pointer: coarse) {
-  .sq-arrange { --arr-bar-w: 48px; --arr-min: 104px; --arr-label: 96px; }
+  .sq-arrange { --arr-bar-w: 80px; --arr-label: 96px; }
   .sq-arrange__block { height: 76px; }
   .sq-arrange__row { height: 40px; }
   .sq-arrange__btns { opacity: 1; top: auto; bottom: 3px; right: 6px; gap: 4px; }

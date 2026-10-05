@@ -241,7 +241,8 @@ let stepColor = null, picScale = null;
 function scaleOf() {
   if (!picScale) {
     const cs = getComputedStyle(root);
-    picScale = { barPx: parseFloat(cs.getPropertyValue("--arr-bar-w")) || 28, minPx: parseFloat(cs.getPropertyValue("--arr-min")) || 56 };
+    const barPx = parseFloat(cs.getPropertyValue("--arr-bar-w")) || 48;
+    picScale = { barPx, minPx: parseFloat(cs.getPropertyValue("--arr-min")) || barPx };
   }
   return picScale;
 }
@@ -321,6 +322,7 @@ function render() {
     b.style.setProperty("--arr-bars", String(e.bars));
     if (!rest) b.style.setProperty("--arr-hue", String(hueOf(e.p)));
     b.classList.toggle("is-rest", rest);
+    b.classList.toggle("is-lanes", laned);
     b.classList.toggle("is-empty", !rest && !isPatternNonEmpty(e.p));
     b.classList.toggle("is-now", i === state.arrangePos);
     b.classList.toggle("is-active", !rest && e.p === state.activePattern);
