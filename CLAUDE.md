@@ -16,7 +16,7 @@ env / fx / eq / comp / mod / automation per track.
   `public/woscillators.js` →
   `public/js/main.js` (ES module). `middleware.ts` refreshes the Supabase
   session on every request *except* static engine assets.
-- **Engine**: ~69 dependency-free vanilla ES modules in `public/js/`. No
+- **Engine**: ~70 dependency-free vanilla ES modules in `public/js/`. No
   bundler — edit, reload. `window.seqbaby` (from `appApi.js`) exposes `state`
   and serialize/apply hooks to the React shell (typed in `app/seqbaby.d.ts`).
 - **Accounts + data**: Supabase (Postgres + Auth + RLS). Tables: `profiles`,
@@ -105,7 +105,7 @@ env / fx / eq / comp / mod / automation per track.
 - `main.js` — bootstrap `init()`: creates the AudioContext, binds Tone to it,
   wires all UI, starter tracks, unlock listeners. Entry point.
 - `transport.js` — `ensureAudio()`, `togglePlay()`, the single
-  `Tone.Transport.scheduleRepeat` loop, `loadWorklet()`, `requestMidiIfNeeded()`.
+  `Tone.getTransport().scheduleRepeat` loop, `loadWorklet()`, `requestMidiIfNeeded()`.
 - `voices.js` — every voice class + `buildVoiceForEngine` dispatch + the
   emulator builder functions.
 - `state.js` — global `state`, `emptyPattern`, `aliasPattern`, `switchPattern`.
@@ -122,6 +122,9 @@ env / fx / eq / comp / mod / automation per track.
   file shape again. It is the rack's, not an engine's, and it exists because a
   convolution reverb's decay cannot be changed without re-rendering it. See the
   reverb section below.
+- `prism.js` — the prism: a four-module console (character → movement →
+  diffusion → texture → tilt) as one AudioWorklet rack stage. Same file
+  shape as crusher.js/reverb.js. See the prism section below.
 - `filterModels.js` — the filter control's eight analog-modeled characters
   (fat/crisp/squelch/edge/poly/velvet/scream/growl), an AudioWorklet insert
   effect standing in for the plain BiquadFilterNode when `t.filter.type`
@@ -292,7 +295,7 @@ env / fx / eq / comp / mod / automation per track.
 ## Dev commands
 
 ```
-npm run dev            # Next.js dev server on :3000 (studio + engine work with no env)
+npm run dev            # Next.js dev server on :3000 (needs the Supabase env, below)
 npm run build && npm run start   # production build + serve
 npm run netlify:dev    # full Netlify emulation on :8888
 npm run legacy:dev     # pre-Next static Node server on :5173 (engine assets only)
@@ -304,8 +307,14 @@ npm run mcp            # the MCP server on stdio (mcp/server.mjs) — an agent w
 npm run test:rls       # RLS policy tests — builds a throwaway Postgres in docker
 ```
 
-Account features need `NEXT_PUBLIC_SUPABASE_URL` + `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-(see `.env.example`). The engine itself runs without any env.
+`NEXT_PUBLIC_SUPABASE_URL` + `NEXT_PUBLIC_SUPABASE_ANON_KEY` are required
+(see `.env.example`): without them `/studio` and the other pages 500 ("Your
+project's URL and Key are required to create a Supabase client"). The engine
+modules themselves (`public/js`, the tests, the MCP server) need no env. For
+engine work with no project, any syntactically valid pair gets the pages up
+(e.g. `NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:9
+NEXT_PUBLIC_SUPABASE_ANON_KEY=dummy`); account features then fail, the studio
+plays.
 
 ## Audio signal chain (per track)
 
@@ -331,10 +340,12 @@ voice → filterNode → eqNode → compressor → fxRack → masterGain → mas
   from any track's `voice.getOutputNode()`).
 - `fxRack` — `FXRack`, serial chain in this order: **vinyl → cassette → fuzz →
   ring mod → wave shaper → crush → auto-wah → chorus → phaser → flanger →
-  pitch shift → delay → reverb**. `defaultFxConfig()` keys match. Chain order
+  pitch shift → prism → delay → reverb**. `defaultFxConfig()` keys match. Chain order
   matters for LFO/automation targets.
 - **crush is a converter, not a rounding function** (`crusher.js`) — see the
   bitcrush section below.
+- **prism is four effects in one stage** (`prism.js`) — see the prism section
+  below.
 - **reverb is a feedback delay network, not a convolver** (`reverb.js`) — see
   the reverb section below. Its wet/dry is still a `Tone.CrossFade`, so `wet`
   is the same Tone.Param an LFO connects to and a lane ramps.
@@ -499,6 +510,52 @@ in ─ dc ─ predelay ─ 4 allpass diffusers ─┬─▶ 8 delay lines ─┬
 - `reverb.js` is importable from Node (no DOM, no Tone), which is what lets
   `test/reverb.test.js` render the tank and measure all of the above.
 
+## Prism (`prism.js`) — a four-module console in one rack stage
+
+Four effects in series, each module a choice of five characters and one
+amount knob, with five knobs shared between them. The modules are voiced to be
+stacked: a drive for a doubler after it, an echo a tape texture then wears
+down. Not a model of any particular pedal; the characters are reasoned
+versions of what their names say.
+
+```
+in ─▶ CHARACTER ─▶ MOVEMENT ─▶ DIFFUSION ─▶ TEXTURE ─▶ TILT ─▶ out
+      drive        doubler     cascade      filter
+      sweeten      vibrato     reels        squash
+      fuzz         phaser      space        cassette
+      howl         tremolo     collage      broken
+      swell        pitch       reverse      interference
+```
+
+- **Config** is `t.fxConfig.prism`: `wet` (the mix, the stage's level key),
+  `char` / `move` / `diff` / `tex` (the four amounts), `charmode` /
+  `movemode` / `diffmode` / `texmode` (the characters, by name, from
+  `PRISM_MODES` in soundDefaults.js), and `tilt` / `rate` / `time` / `sens` /
+  `drift`. Every knob is 0..1 and a k-rate AudioParam on the node, so one list
+  (`PRISM_KNOBS`) spells all three namespaces: `fx-prism-<k>`, `prism_<k>`,
+  `fx.prism.<k>`. The mix is the rack's linear crossfade around the node
+  (`prismWetBus`), like crush.
+- **A module at amount 0 is out of the circuit** and costs nothing; its state is
+  cleared when it comes back, so an old echo cannot replay. The first fifth of
+  an amount is a crossfade from clean. On `pitch` the amount picks the interval
+  (−12, −7, −5, +5, +7, +12), so that module is fully in almost at once.
+- **A character change fades the module out, swaps, fades back** (12ms each
+  way) and clears its buffers. The modes are a `postMessage`, never a rebuild.
+- **Every noise it makes follows its input**: the cassette hiss, the
+  interference static, the howl's feedback are scaled by an envelope of the
+  signal, so silence in is silence out (tested, all characters at full).
+- **The idle skip waits out the longest buffer** (3.4s) on silent input AND
+  needs silent output, so a 12s space tail is never cut. The diffusion buffers
+  are allocated the first time that module is switched on, not per track.
+- **space's tail reads true**: the in-loop damping shortens the tail, so the
+  coefficients use a measured `SPACE_COMP` by knob position (within ~10% from
+  0.5 to 12s, pinned in `test/prism.test.js`).
+- **Partial configs** (a sparse song, a session load assigning the stage whole)
+  are filled from the defaults by `applyPrism`, and the filled fields go to the
+  node too, so the panel and the node hold the same numbers.
+- Loading: Blob-URL registration from `loadWorklet()`; if it fails the stage
+  passes the signal through (`prismParams` empty, every write checks).
+
 ## Analog filter models (`filterModels.js`) — eight characters on the filter control
 
 The filter control's `type` (`t.filter.type`) is one of the plain
@@ -575,8 +632,14 @@ svf family (velvet, scream, growl):
 
 All of this lives in `main.js` `init()` and `transport.js`:
 
+- **The transport is `Tone.getTransport()`, never `Tone.Transport`.** In Tone 15
+  `Tone.Transport` (and `Tone.Draw`) is a constant bound at import to Tone's
+  default context, a second AudioContext that only starts on the play click,
+  so its clock runs behind ours and every step landed in the transport loop's
+  `now + 0.002` clamp: no lookahead, swing and nudges lost, measured note gaps
+  off by p95 50-100ms. `getTransport()` is the studio context's.
 - The AudioContext is created at `init()` and `Tone.setContext(ctx)` runs
-  BEFORE anything reads `Tone.Transport` (its clock latches onto the context's
+  BEFORE anything reads the transport (its clock latches onto the context's
   time at first access).
 - **First-gesture unlock**: capture-phase `pointerdown/keydown/touchstart`
   listeners call `primeAudioForIOS()` whenever the context is suspended.
@@ -1396,7 +1459,7 @@ chainBarCount` — plus runtime slots added by the unlock architecture
 
 ## Transport
 
-Single `Tone.Transport.scheduleRepeat` at `"16n"`. Each callback, per track:
+Single `Tone.getTransport().scheduleRepeat` at `"16n"`. Each callback, per track:
 
 1. Accumulate `t.speedAccum += t.speed`; while `≥ 1`, fire a step (per-track
    tempo multiples / polymeter).
@@ -1428,7 +1491,7 @@ a voice *releases* it, so a long-release patch fades back in over the top of the
 silence you just asked for (measured: a pad still audible a second after stop).
 And it can't be left down until the next start either, which is what it used to
 do — the keyboard plays through the same bus, so every key was silent once you'd
-pressed stop. `Tone.Transport.start(lead, 0)` with the explicit 0 offset
+pressed stop. `Tone.getTransport().start(lead, 0)` with the explicit 0 offset
 is the canonical rewind (avoids Tone 15's stop/cancel/position bugs).
 
 ## Knobs (`knob.js`) — a skin over the range inputs
@@ -3617,15 +3680,15 @@ through a 6ms fade on its gain).
   in a ref. Don't inline it back into studio/page.tsx.
 - **`tsconfig.json` excludes `public/js/`** — the engine is plain JS with
   JSDoc types; don't rename it to TS or import it into the Next graph.
-- **Don't use `Tone.Time(...)` for the step duration.** `Tone.setContext()` at
-  init leaves Tone's time helpers resolving against a different transport than
-  the one the sequence is scheduled on, so `Tone.Time("16n").toSeconds()`
+- **Don't use `Tone.Time(...)` for the step duration.** Until the transport
+  moved to `Tone.getTransport()`, the sequence ran on the default context's
+  transport while Tone's time helpers read the studio context's, so `Tone.Time("16n").toSeconds()`
   answers 0.125s — the 120bpm value — at *every* tempo, while
-  `Tone.Transport.bpm` reads correctly. That silently scaled note lengths,
+  the sequence's transport read correctly. That silently scaled note lengths,
   swing, per-step micro-timing, automation ramps and arp spans to a fixed
   120bpm (notes half the length of their step at 60bpm, overlapping the next
   one at 180). `baseStepDur` in transport.js derives it arithmetically from
-  `Tone.Transport.bpm.value` instead. Anything else needing musical time should
+  `Tone.getTransport().bpm.value` instead. Anything else needing musical time should
   do the same, or use `currentBpm()` (lfo.js) as the sync helpers do.
 - **Worklet processor sources are template literals** (`silverbox.js`,
   `contagion.js`, `hexop.js`, `guitar.js`, `bass.js`, `subbass.js`,
@@ -3710,7 +3773,7 @@ Repo: https://github.com/mjoslyn/seqbaby.
   An inline marker (`window.__seqbabyServerBoot`) tells the paths apart, and
   `ScriptLoader.tsx` keeps its onload-chained injection for the soft-nav case
   (e.g. arriving from `/login`).
-- `app/EnginePreload.tsx` emits `modulepreload` for all 69 modules listed in
+- `app/EnginePreload.tsx` emits `modulepreload` for all 70 modules listed in
   `app/engineAssets.ts` (at `engineAsset("/js/<name>")`; the hints used to
   point at the site root and 404). The graph is 8 levels deep, so without it the browser
   needs up to eight sequential round trips just to discover the code.

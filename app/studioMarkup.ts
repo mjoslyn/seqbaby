@@ -986,6 +986,47 @@ ${DRONE_PANEL}
           <label class="sq-fx__ctl"><span>wet</span><input class="fx-pitchshift-wet" type="range" min="0" max="1" step="0.01" value="0" /></label>
           <label class="sq-fx__ctl"><span>semi</span><input class="fx-pitchshift-semi" type="range" min="-12" max="12" step="1" value="0" /></label>
         </div>
+        <div class="sq-fx__row" data-fx="prism">
+          <span class="sq-fx__title">prism</span>
+          <label class="sq-fx__ctl" title="how much of the whole console is in the signal"><span>mix</span><input class="fx-prism-wet" type="range" min="0" max="1" step="0.01" value="0" /></label>
+          <label class="sq-fx__ctl" title="character: drive (a mid-humped overdrive), sweeten (a little compression and air), fuzz (gated, the gate set by sens), howl (a resonant band fed back, following the playing), swell (every note fades in)"><span>char</span><select class="fx-prism-charmode">
+            <option value="drive" selected>drive</option>
+            <option value="sweeten">sweeten</option>
+            <option value="fuzz">fuzz</option>
+            <option value="howl">howl</option>
+            <option value="swell">swell</option>
+          </select></label>
+          <label class="sq-fx__ctl" title="how much character: drive and fuzz gain, howl feedback, swell time. 0 takes the module out"><span>amt</span><input class="fx-prism-char" type="range" min="0" max="1" step="0.01" value="0.25" /></label>
+          <label class="sq-fx__ctl" title="movement: doubler (a second player just behind), vibrato, phaser, tremolo (sine to square as it deepens), pitch (a harmony voice)"><span>move</span><select class="fx-prism-movemode">
+            <option value="doubler" selected>doubler</option>
+            <option value="vibrato">vibrato</option>
+            <option value="phaser">phaser</option>
+            <option value="tremolo">tremolo</option>
+            <option value="pitch">pitch</option>
+          </select></label>
+          <label class="sq-fx__ctl" title="how much movement: its depth. On pitch, which interval: an octave down at the bottom through a fourth, a fifth, up to an octave up"><span>amt</span><input class="fx-prism-move" type="range" min="0" max="1" step="0.01" value="0.3" /></label>
+          <label class="sq-fx__ctl" title="diffusion: cascade (ping-pong echoes that smear into a wash), reels (a tape echo), space (a reverb), collage (fragments of the last few seconds, some backwards), reverse (each slice played backwards)"><span>diff</span><select class="fx-prism-diffmode">
+            <option value="cascade">cascade</option>
+            <option value="reels">reels</option>
+            <option value="space" selected>space</option>
+            <option value="collage">collage</option>
+            <option value="reverse">reverse</option>
+          </select></label>
+          <label class="sq-fx__ctl" title="how much diffusion: its level and its feedback together"><span>amt</span><input class="fx-prism-diff" type="range" min="0" max="1" step="0.01" value="0.35" /></label>
+          <label class="sq-fx__ctl" title="texture: filter (a resonant lowpass the playing opens), squash (a compressor), cassette (wow, flutter, saturation, hiss), broken (dropouts, stutters, lost bits), interference (a radio band with static)"><span>tex</span><select class="fx-prism-texmode">
+            <option value="filter">filter</option>
+            <option value="squash">squash</option>
+            <option value="cassette" selected>cassette</option>
+            <option value="broken">broken</option>
+            <option value="interference">interference</option>
+          </select></label>
+          <label class="sq-fx__ctl" title="how much texture. 0 takes the module out"><span>amt</span><input class="fx-prism-tex" type="range" min="0" max="1" step="0.01" value="0.25" /></label>
+          <label class="sq-fx__ctl" title="a see-saw eq on the way out: left darker, right brighter, flat in the middle"><span>tilt</span><input class="fx-prism-tilt" type="range" min="0" max="1" step="0.01" value="0.5" /></label>
+          <label class="sq-fx__ctl" title="the movement module's speed, 0.05 to 12Hz"><span>rate</span><input class="fx-prism-rate" type="range" min="0" max="1" step="0.01" value="0.35" /></label>
+          <label class="sq-fx__ctl" title="the diffusion module's time: echo spacing on cascade and reels, the tail on space, grain size on collage, slice length on reverse"><span>time</span><input class="fx-prism-time" type="range" min="0" max="1" step="0.01" value="0.4" /></label>
+          <label class="sq-fx__ctl" title="how readily the envelope-driven characters answer the playing: swell's trigger, the fuzz gate, howl, the texture filter"><span>sens</span><input class="fx-prism-sens" type="range" min="0" max="1" step="0.01" value="0.5" /></label>
+          <label class="sq-fx__ctl" title="slow random wander across everything that moves: the rate, echo times, the harmony's tuning, the tape"><span>drift</span><input class="fx-prism-drift" type="range" min="0" max="1" step="0.01" value="0.2" /></label>
+        </div>
         <div class="sq-fx__row" data-fx="delay">
           <span class="sq-fx__title">delay</span>
           <label class="sq-fx__ctl"><span>wet</span><input class="fx-delay-wet" type="range" min="0" max="1" step="0.01" value="0" /></label>

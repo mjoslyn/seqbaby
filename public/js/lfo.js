@@ -217,6 +217,10 @@ export function getModTarget(t, key) {
   if (key === "reson")  return t.filterNode?.Q ?? null;
   const rack = t.fxRack;
   if (!rack) return null;
+  // The prism: its mix is the crossfade around the node, every knob on it an
+  // AudioParam on the node (null on the pass-through fallback).
+  if (key === "prism") return rack.prismWetBus?.gain ?? null;
+  if (key.startsWith("prism_")) return rack.prismParams?.[after(key, "prism_")] ?? null;
   // FX wet/amt targets (LFO adds on top of dry — crossfade fx still get movement).
   switch (key) {
     case "fuzz":         return rack.wetBus?.gain ?? null;

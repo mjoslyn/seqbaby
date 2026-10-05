@@ -6,6 +6,7 @@ import { SUB_MOD_KEYS, SUB_MOD_LABELS } from "./subbass.js";
 import { DRONE_MOD_KEYS, DRONE_MOD_LABELS } from "./drone.js";
 import { GUITAR_MOD_KEYS, GUITAR_MOD_LABELS } from "./guitar.js";
 import { CHANCE_MOD_KEYS, CHANCE_MOD_LABELS } from "./chanceGen.js";
+import { PRISM_KNOBS, PRISM_KNOB_LABELS } from "./soundDefaults.js";
 import { state } from "./state.js";
 
 
@@ -116,6 +117,8 @@ for (const [cls, lfo, auto] of [
   ["fx-delay-fbk",        "delay_fbk",        "fx.delay.fbk"],
   ["fx-reverb-wet",       "verb",             "fx.reverb"],
   ["fx-reverb-decay",     "reverb_decay",     "fx.reverb.decay"],
+  ["fx-prism-wet",        "prism",            "fx.prism"],
+  ...PRISM_KNOBS.map(k => [`fx-prism-${k}`, `prism_${k}`, `fx.prism.${k}`]),
 ]) def(cls, lfo, auto);
 
 // Where the right-click menu is offered at all. Controls listed above open it
@@ -206,6 +209,12 @@ export const CONTROL_LABELS = {
   "p-osc1range": "osc 1 range", "p-osc2range": "osc 2 range", "p-osc3range": "osc 3 range",
   "p-osc1wave": "osc 1 wave", "p-osc2wave": "osc 2 wave", "p-osc3wave": "osc 3 wave",
   "p-noisetype": "noise colour",
+  // The prism's four amount knobs are all drawn "amt" beside their module's
+  // select, so the menu and the undo label need the module named.
+  ...Object.fromEntries(PRISM_KNOBS.map(k => [`fx-prism-${k}`, PRISM_KNOB_LABELS[k]])),
+  "fx-prism-wet": "prism mix",
+  "fx-prism-charmode": "prism character", "fx-prism-movemode": "prism movement",
+  "fx-prism-diffmode": "prism diffusion", "fx-prism-texmode": "prism texture",
   "p-gplay": "grain play mode", "p-gloop": "grain loop mode",
   "p-gpattern": "grain pattern", "p-grate": "grain rate", "p-gsync": "grain sync",
   "gw-gplay": "grain play mode", "gw-gloop": "grain loop mode",
@@ -304,6 +313,16 @@ export const PARAM_DESCRIPTIONS = {
   "fx.delay.fbk":        "how much of the delay feeds back",
   "fx.reverb":           "how much reverb is mixed in",
   "fx.reverb.decay":     "reverb tail length",
+  "fx.prism":            "dry/wet around the whole prism console",
+  "fx.prism.char":       "how much of the character module: drive, sweeten, fuzz, howl or swell",
+  "fx.prism.move":       "how much of the movement module: doubler, vibrato, phaser or tremolo depth, or the pitch module's interval",
+  "fx.prism.diff":       "how much of the diffusion module: echo, tape, space, collage or reverse, level and feedback together",
+  "fx.prism.tex":        "how much of the texture module: filter, squash, cassette, broken or interference",
+  "fx.prism.tilt":       "a see-saw eq on the console's output, dark to bright",
+  "fx.prism.rate":       "the movement module's speed",
+  "fx.prism.time":       "the diffusion module's time: echo spacing, tail, grain or slice",
+  "fx.prism.sens":       "how readily swell, the fuzz gate, howl and the texture filter answer the playing",
+  "fx.prism.drift":      "slow random wander across everything in the console that moves",
 
   // Contagion envelope sliders (no tooltip in the markup — the four track sliders
   // carry the engine's own tips, these don't).

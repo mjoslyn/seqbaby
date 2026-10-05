@@ -168,12 +168,19 @@ one.
 - Filter: cutoff 1 is open. A bass closes to 0.3..0.5 with `env` 0.3..0.6 and
   a short decay for a plucked shape; a pad opens slowly with `attack`.
 - Fx go in chain order: vinyl, cassette, fuzz, ringmod, shaper, crush,
-  autowah, chorus, phaser, flanger, pitchshift, delay, reverb. A stage is on
+  autowah, chorus, phaser, flanger, pitchshift, prism, delay, reverb. A stage is on
   when its wet (or amount) is above 0. Delay: `sync: true` with `div` 0.75
   for a dotted eighth, 0.5 an eighth, 0.333 a triplet; `fbk` 0.3..0.5.
   Reverb: `decay` 1..2 s tight, 4..8 s a wash. Crush: `bits` 6..8 and
   `rate` 0.3..0.5 for lo-fi. Fuzz or shaper for weight; vinyl or cassette
   for a bed of noise that only plays while the track plays.
+- Prism is a whole pedalboard in one stage: four modules (character,
+  movement, diffusion, texture), each a mode and an amount, 0 takes one out.
+  Drive + doubler + reels + cassette at 0.3 each is warm and worn; swell +
+  space at a high `time` turns a pluck into a pad; fuzz + pitch (move 1,
+  octave up) + reverse is a lead that falls apart; `broken` or `interference`
+  on a texture for a part that should sound damaged. `wet` 1 puts the whole
+  track through it.
 - Sidechain: `set_comp` on the bass with `source` the kick's index,
   threshold -30, ratio 6, release 0.15: the pumping.
 - Levels: kick 0.9, snare 0.8, hats 0.5..0.6, bass 0.8, everything else

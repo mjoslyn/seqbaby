@@ -27,10 +27,32 @@ export function defaultFxConfig() {
     phaser:     { wet: 0, rate: 0.3, depth: 0.5 },
     flanger:    { wet: 0, rate: 0.3, fbk: 0.5 },
     pitchshift: { wet: 0, semitones: 0 },
+    // A four-module console in one stage (prism.js): character, movement,
+    // diffusion, texture, each a choice of five and an amount, then a tilt eq.
+    // `wet` is the mix around the whole of it, and what switches it on.
+    prism:      { wet: 0, char: 0.25, charmode: "drive", move: 0.3, movemode: "doubler",
+                  diff: 0.35, diffmode: "space", tex: 0.25, texmode: "cassette",
+                  tilt: 0.5, rate: 0.35, time: 0.4, sens: 0.5, drift: 0.2 },
     delay:      { time: 0.375, fbk: 0.35, wet: 0, sync: false, div: 0.5 },
     reverb:     { decay: 2, wet: 0 },
   };
 }
+
+/** The prism's four modules (prism.js): each one's characters, in the order
+ *  the processor indexes them. */
+export const PRISM_MODES = {
+  charmode: ["drive", "sweeten", "fuzz", "howl", "swell"],
+  movemode: ["doubler", "vibrato", "phaser", "tremolo", "pitch"],
+  diffmode: ["cascade", "reels", "space", "collage", "reverse"],
+  texmode:  ["filter", "squash", "cassette", "broken", "interference"],
+};
+/** Its knobs, every one 0..1 and an AudioParam: one list, three namespaces —
+ *  `fx-prism-<k>` the control, `prism_<k>` the LFO, `fx.prism.<k>` the lane. */
+export const PRISM_KNOBS = ["char", "move", "diff", "tex", "tilt", "rate", "time", "sens", "drift"];
+export const PRISM_KNOB_LABELS = {
+  char: "prism character", move: "prism movement", diff: "prism diffusion", tex: "prism texture",
+  tilt: "prism tilt", rate: "prism rate", time: "prism time", sens: "prism sens", drift: "prism drift",
+};
 
 /** A track's params: the four track sliders, the osc mix, the osc mods, the
  *  ladder's osc bank, the silverbox panel, and every emulator panel's defaults

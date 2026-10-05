@@ -10,7 +10,7 @@ import {
 } from "./engineData.js";
 import { CHANCE_MOD_KEYS, CHANCE_MOD_LABELS } from "./chanceGen.js";
 import { staticEngineByKey } from "./engineData.js";
-import { EUCLID_MOD_KEYS, EUCLID_MOD_LABELS } from "./soundDefaults.js";
+import { EUCLID_MOD_KEYS, EUCLID_MOD_LABELS, PRISM_KNOBS, PRISM_KNOB_LABELS } from "./soundDefaults.js";
 import { shaperPreampGain } from "./curves.js";
 
 export const STEPS_PER_BAR = 16;
@@ -37,6 +37,7 @@ export const LFO_KEYS = [
   // FX wets/amts (short keys preserved for backward compat).
   "fuzz", "delay", "verb",
   "vinyl", "cassette", "ringmod", "shaper", "crush", "autowah", "chorus", "phaser", "flanger", "pitch",
+  "prism",
   // FX sub-params with AudioParam / Signal targets (audio-rate modable).
   "fuzz_drive", "fuzz_tone", "fuzz_level",
   "vinyl_warmth",
@@ -47,6 +48,7 @@ export const LFO_KEYS = [
   "phaser_rate",
   "flanger_rate", "flanger_fbk",
   "delay_time", "delay_fbk",
+  ...PRISM_KNOBS.map(k => `prism_${k}`),
   // FX sub-params modulated via setter-driven LFO (no AudioParam target).
   "vinyl_wow",
   "cassette_flutter", "cassette_sat",
@@ -105,6 +107,8 @@ export const LFO_LABELS = {
   shaper: "wave folder wet", shaper_amt: "wave folder amt",
   crush: "bitcrush wet", autowah: "auto-wah wet", chorus: "chorus wet",
   phaser: "phaser wet", flanger: "flanger wet", pitch: "pitch shift wet",
+  prism: "prism mix",
+  ...Object.fromEntries(PRISM_KNOBS.map(k => [`prism_${k}`, PRISM_KNOB_LABELS[k]])),
   fuzz_drive: "fuzz drive", fuzz_tone: "fuzz tone", fuzz_level: "fuzz level",
   vinyl_warmth: "vinyl warmth", vinyl_wow: "vinyl wow",
   shaper_preamp: "wave shaper preamp",
@@ -149,6 +153,8 @@ export const LFO_AMP_SCALE = {
   reson: 19.5,             // Q 0.5..20 (resonToQ) — full span, so depth 1 swings the whole knob
   fuzz: 1, delay: 1, verb: 1,
   vinyl: 1, cassette: 1, ringmod: 1, shaper: 1, crush: 1, autowah: 1, chorus: 1, phaser: 1, flanger: 1, pitch: 1,
+  // The prism's mix and every knob on it are 0..1 AudioParams.
+  prism: 1, ...Object.fromEntries(PRISM_KNOBS.map(k => [`prism_${k}`, 1])),
   // fx sub-params (audio-rate AudioParam targets). Each is the control's own
   // full native-unit span (see applyFuzz / applyChorus / etc. in fxRack.js),
   // so depth 1 is peak-to-peak of the whole knob — same convention as the
@@ -329,13 +335,13 @@ export const NOTE_NAMES = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"]
 export const FX_STAGE_LEVEL_KEY = {
   vinyl: "amount", cassette: "amount", fuzz: "amount",
   ringmod: "wet", shaper: "wet", crush: "wet", autowah: "wet", chorus: "wet",
-  phaser: "wet", flanger: "wet", pitchshift: "wet", delay: "wet", reverb: "wet",
+  phaser: "wet", flanger: "wet", pitchshift: "wet", prism: "wet", delay: "wet", reverb: "wet",
 };
 export const FX_STAGE_LABELS = {
   vinyl: "vinyl", cassette: "cassette", fuzz: "fuzz", ringmod: "ring mod",
   shaper: "shaper", crush: "crush", autowah: "auto-wah", chorus: "chorus",
-  phaser: "phaser", flanger: "flanger", pitchshift: "pitch shift", delay: "delay",
-  reverb: "reverb",
+  phaser: "phaser", flanger: "flanger", pitchshift: "pitch shift", prism: "prism",
+  delay: "delay", reverb: "reverb",
 };
 /** A stage's engagement level (0 = bypassed) read off a plain fx config. */
 export function fxStageLevel(config, key) {
@@ -445,6 +451,8 @@ export const AUTOMATION_TARGETS = {
   "fx.flanger.fbk":     { label: "flanger fbk" },
   "fx.pitchshift":      { label: "pitch shift wet" },
   "fx.pitchshift.semi": { label: "pitch semi" },
+  "fx.prism":           { label: "prism mix" },
+  ...Object.fromEntries(PRISM_KNOBS.map(k => [`fx.prism.${k}`, { label: PRISM_KNOB_LABELS[k] }])),
   "fx.delay":           { label: "delay wet" },
   "fx.delay.time":      { label: "delay time" },
   "fx.delay.fbk":       { label: "delay fbk" },
@@ -471,6 +479,7 @@ export const TRACK_FX_LFO_KEYS = new Set([
   "shaper_amt",
   "autowah_sens","autowah_range",
   "phaser_depth","pitch_semi","reverb_decay",
+  "prism", ...PRISM_KNOBS.map(k => `prism_${k}`),
 ]);
 
 // Engine-aware list of voice/instrument keys that can be automated. Broader

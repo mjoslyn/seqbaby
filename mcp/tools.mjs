@@ -231,7 +231,7 @@ export const TOOLS = [
   },
   {
     name: "set_fx", title: "Set fx",
-    description: "One stage of the track's fx rack. Stages, in chain order: vinyl, cassette, fuzz, ringmod, shaper, crush, autowah, chorus, phaser, flanger, pitchshift, delay, reverb (plus amp: preamp / level). A stage is on when its wet (or amount) is above 0. Controls are 0..1 except crush.bits 1..16, pitchshift.semitones -12..12, delay.time 0.05..1 s (or sync + div), reverb.decay 0.2..8 s, shaper.mode (saturate softclip clip serge fold wrap).",
+    description: "One stage of the track's fx rack. Stages, in chain order: vinyl, cassette, fuzz, ringmod, shaper, crush, autowah, chorus, phaser, flanger, pitchshift, prism, delay, reverb (plus amp: preamp / level). A stage is on when its wet (or amount) is above 0. Controls are 0..1 except crush.bits 1..16, pitchshift.semitones -12..12, delay.time 0.05..1 s (or sync + div), reverb.decay 0.2..8 s, shaper.mode (saturate softclip clip serge fold wrap). prism is four modules in series, each a character and an amount: charmode (drive sweeten fuzz howl swell) + char, movemode (doubler vibrato phaser tremolo pitch) + move, diffmode (cascade reels space collage reverse) + diff, texmode (filter squash cassette broken interference) + tex; then tilt, rate (movement speed), time (diffusion time), sens, drift; wet is the mix.",
     inputSchema: { track: trackArg, stage: z.enum(sb.FX_STAGES), settings: z.record(z.string(), z.union([z.number(), z.string(), z.boolean()])) },
     handler: (ctx, { track, stage, settings }) => sb.setFx(ctx.song, track, stage, settings),
   },

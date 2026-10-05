@@ -170,6 +170,13 @@ export function applyAutomationAtStep(t, key, v, time, vNext, stepDur) {
   }
   const rack = t.fxRack;
   if (!rack || !key.startsWith("fx.")) return;
+  // The prism: every knob is a 0..1 AudioParam, so a lane ramps it as it is.
+  if (key.startsWith("fx.prism.")) {
+    const which = after(key, "fx.prism.");
+    if (rack.config.prism) rack.config.prism[which] = vv;
+    ramp(rack.prismParams?.[which], vv, vn);
+    return;
+  }
 
   switch (key) {
     // ── top-level wet/amt targets (crossfade fx: ramp both dry+wet) ──
@@ -217,6 +224,11 @@ export function applyAutomationAtStep(t, key, v, time, vNext, stepDur) {
       rack.config.crush.wet = vv;
       ramp(rack.crushWetBus?.gain, vv, vn);
       ramp(rack.crushDryBus?.gain, 1 - vv, 1 - vn);
+      return;
+    case "fx.prism":
+      if (rack.config.prism) rack.config.prism.wet = vv;
+      ramp(rack.prismWetBus?.gain, vv, vn);
+      ramp(rack.prismDryBus?.gain, 1 - vv, 1 - vn);
       return;
     case "fx.autowah":    rack.config.autowah.wet = vv;    ramp(rack.autowah?.wet, vv, vn); return;
     case "fx.chorus":     rack.config.chorus.wet = vv;     ramp(rack.chorus?.wet, vv, vn); return;
