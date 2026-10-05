@@ -4,6 +4,7 @@ import { GRANULAR_SAMPLE_BASE } from "./catalog.js";
 import { PATTERN_COUNT, baseModKey, fxInstanceIds } from "./constants.js";
 import { showConfirmDialog, showInputDialog, showSelectDialog } from "./dialogs.js";
 import { setStatus } from "./dom.js";
+import { hasUnsavedChanges, markSaved } from "./history.js";
 import { ICON_CHAIN, ICON_FINISH, ICON_NOW, ICON_REPEAT } from "./icons.js";
 import { applySampleSpeed, defaultLFOConfig, disposeLFOs, syncAllLFOs } from "./lfo.js";
 import { guessIsDrumKit, parseMeter } from "./meter.js";
@@ -160,6 +161,7 @@ export async function onSaveSet() {
   data._savedAt = new Date().toISOString();
   all[finalName] = data;
   storeSetsMap(all);
+  markSaved(data);
   state.currentSetName = finalName;  // bump the version basis for the next save
   setStatus(`saved set "${finalName}"`);
 }
@@ -221,6 +223,7 @@ export function onExportSet() {
     a.click();
     a.remove();
     URL.revokeObjectURL(url);
+    markSaved(data);
     setStatus("exported session");
   } catch (err) {
     console.error(err);
@@ -247,6 +250,8 @@ export async function onShareSet(title) {
     });
     if (!r.ok) throw new Error(await r.text());
     const { id } = await r.json();
+    // A share link holds the session as it was sent, so that is saved too.
+    markSaved(body.session);
     const url = `${location.origin}${location.pathname}?s=${encodeURIComponent(id)}`;
     try { await navigator.clipboard.writeText(url); setStatus(`link copied: ${url}`); }
     catch { setStatus(`share link: ${url}`); prompt("share link", url); }
@@ -753,9 +758,56 @@ export const STARTER_TRACKS = [
   { name: "lead",   engineKey: "plaits:0" },
 ];
 
-/** Is there anything written in this session? Drives the confirm below. */
+/** Is there anything written in this session? */
 function sessionHasNotes() {
   return state.tracks.some(t => (t.patterns || []).some(p => p?.steps?.some(Boolean)));
+}
+
+/**
+ * Would replacing or leaving this session lose work? It has changed since it
+ * was last saved, shared, exported or opened (history.js measures that against
+ * the stack, so an edit undone back counts as none), and there is something
+ * written in it. A session with no notes has nothing worth a prompt: pressing
+ * `new` on a freshly loaded page, or leaving one, should not ask.
+ */
+export function hasUnsavedWork() {
+  return sessionHasNotes() && hasUnsavedChanges();
+}
+
+/**
+ * Ask before something throws the session away, when there is work to lose.
+ * Resolves true when it may go ahead: nothing unsaved, or the person said so.
+ * The shell asks through this too (`window.seqbaby.confirmDiscard`), before it
+ * opens another song or version over this one.
+ * @param {{title?: string, body?: string, confirmLabel?: string}} [opts]
+ */
+export async function confirmDiscard(opts = {}) {
+  if (!hasUnsavedWork()) return true;
+  return showConfirmDialog({
+    title: opts.title || "discard unsaved changes?",
+    body: opts.body || "This song has changes that are not saved or shared yet.",
+    confirmLabel: opts.confirmLabel || "discard",
+  });
+}
+
+// Set once a leave has been confirmed in our own dialog, so the browser's
+// `beforeunload` prompt does not ask the same question a second time.
+let leaveConfirmed = false;
+
+/**
+ * The browser's own prompt, for every way of leaving the page this app does
+ * not see coming: reload, closing the tab, the back button, a typed address,
+ * an account-bar link. Browsers show their own wording; all a page can do is
+ * ask for it. Never in the homepage's hidden player (`?embed`), which nobody
+ * edits and whose frame goes away with the page around it.
+ */
+export function installLeaveGuard() {
+  if (new URLSearchParams(location.search).has("embed")) return;
+  window.addEventListener("beforeunload", (e) => {
+    if (leaveConfirmed || !hasUnsavedWork()) return;
+    e.preventDefault();
+    e.returnValue = "";              // older Chrome / Safari want it set
+  });
 }
 
 /**
@@ -792,11 +844,12 @@ export function newSet() {
  * @param {string} href
  */
 export async function onLeaveStudio(href) {
-  if (sessionHasNotes() && !await showConfirmDialog({
+  if (!await confirmDiscard({
     title: "leave the studio?",
-    body: "Anything you have not saved or shared is gone once you leave the page.",
+    body: "This song has changes that are not saved or shared yet. They are gone once you leave the page.",
     confirmLabel: "leave",
   })) return;
+  leaveConfirmed = true;
   location.href = href;
 }
 
@@ -804,14 +857,14 @@ export async function onLeaveStudio(href) {
  * The UI flow around newSet: this throws away everything in the session, so it
  * is confirmed before it goes. Undo (history.js) can bring it back, but only
  * within this page — a reload, or a hundred edits later, and it is gone — which
- * is not a thing to make somebody find out by trying. A session with no steps
- * in it has nothing to lose and skips the prompt: pressing `new` on a
- * freshly-loaded page should not ask.
+ * is not a thing to make somebody find out by trying. A session with nothing
+ * unsaved in it skips the prompt (`hasUnsavedWork`): pressing `new` on a song
+ * just opened or just saved should not ask.
  */
 export async function onNewSet() {
-  if (sessionHasNotes() && !await showConfirmDialog({
+  if (!await confirmDiscard({
     title: "start a new song?",
-    body: "This session goes back to empty tracks. Anything you have not saved or shared is gone once you leave the page — undo can bring it back until then.",
+    body: "This song has changes that are not saved or shared yet. The session goes back to empty tracks; undo can bring it back until you leave the page.",
     confirmLabel: "new song",
   })) return;
   newSet();

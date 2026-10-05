@@ -29,6 +29,7 @@ import { generateSongName } from "@/app/songs/songName";
 import { suggestSongName } from "@/app/songs/suggestName";
 import VersionTree from "@/app/VersionTree";
 import { adoptRemix } from "@/app/songs/adoptRemix";
+import { confirmOpen, markSaved } from "@/app/songs/confirmDiscard";
 import {
   IconDefault,
   IconTemplate,
@@ -176,6 +177,7 @@ export default function SongsMenu() {
         fromTemplateId: fromTemplate && !asNew ? currentId : undefined,
       });
       if (res.error) return setStatus({ text: res.error, err: true });
+      markSaved(data);
       // A generated name is disambiguated server-side against the account's
       // songs, so what came back is what the song is actually called.
       const saved = res.title ?? t;
@@ -209,6 +211,7 @@ export default function SongsMenu() {
   );
 
   const doLoad = useCallback(async (song: SongListItem) => {
+    if (!(await confirmOpen(`"${song.title}"`))) return;
     const res = await loadSong(song.id);
     if (res.error) return setStatus({ text: res.error, err: true });
     try {
@@ -249,6 +252,9 @@ export default function SongsMenu() {
 
   const doRemix = useCallback(
     async (song: SongListItem) => {
+      // A remix of another song is loaded over this one (adoptRemix), so ask
+      // before the remix is made rather than leave one made and not opened.
+      if (currentId !== song.id && !(await confirmOpen(`a remix of "${song.title}"`))) return;
       setStatus({ text: "Remixing…" });
       const res = await remixSong(song.id);
       if (res.error || !res.id)
