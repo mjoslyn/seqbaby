@@ -167,6 +167,7 @@ async function AccountBarSlot({ searchParams }: { searchParams: SearchParams }) 
   // told anything about it beyond whether it exists.
   return (
     <AccountBar
+      userId={user?.id ?? null}
       name={name}
       username={username}
       avatarGrid={avatarGrid}

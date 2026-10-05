@@ -31,6 +31,7 @@ import styles from "@/app/ui.module.css";
 // name they have offered and a list fetched from the server, and two live
 // copies of that would be two answers to "what is this song called".
 export function AccountBar({
+  userId = null,
   name,
   username,
   avatarGrid = null,
@@ -38,6 +39,9 @@ export function AccountBar({
   budgetOut = false,
   viewing = null,
 }: {
+  /** Who is signed in. The compose panel is keyed by it, so a transcript
+   *  never outlives the account that wrote it in this tab. */
+  userId?: string | null;
   name: string | null;
   username?: string | null;
   /** The step-grid avatar (app/profile/avatarGrid.js); null draws the one
@@ -176,8 +180,17 @@ export function AccountBar({
         {/* Outside the signed-in branch on purpose: compose runs on the
             visitor's own Anthropic key when they have one, and that needs no
             account. Signed in with a key on the deploy, the panel offers the
-            choice. */}
-        <ComposeChat signedIn={!!name} serverKey={serverKey} budgetOut={budgetOut} />
+            choice.
+            Keyed by the account: signing out is a soft navigation back to
+            /studio, which kept this mounted with the last person's
+            conversation on screen, and the next turn sent it to the model as
+            history. A new identity gets a new panel, transcript and all. */}
+        <ComposeChat
+          key={userId ?? "anon"}
+          signedIn={!!name}
+          serverKey={serverKey}
+          budgetOut={budgetOut}
+        />
         <button
           className={styles.shareBtn}
           onClick={() => window.seqbaby?.onShareSet?.(getOpenSong().title)}

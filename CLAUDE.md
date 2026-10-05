@@ -3580,7 +3580,12 @@ panel ──▶ POST /api/compose ──▶ createJob ──▶ POST the worker 
   can be fixed.
 - **The conversation follows the song** (`song_chats`), so a signed-out
   visitor's turns keep no transcript beyond the tab: there is no song to attach
-  one to. Everything else about the panel — the activity
+  one to. **A transcript is its author's alone.** `song_chats` is owner-only
+  both ways with no public read (0011, held by `rls_test.sql`), `loadSongChat`
+  filters on `owner_id` as well, and the panel is keyed by the signed-in
+  account in `AccountBar` (`key={userId}`): sign out is a soft navigation back
+  to `/studio`, which used to leave the last person's conversation on screen
+  and send it as history on the next person's turn. Everything else about the panel — the activity
   line, the warnings — is the same on either key.
 
 ## A session onto a RUNNING engine (`liveSet.js`) — and the audition
@@ -3689,9 +3694,10 @@ discard    throw them away (putting back the pre-audition session first)
   moved on to the version just written so the next save — from here or the top
   bar — hangs off it. What is saved is the ENGINE's session, not the turn's:
   mid-audition that is the changes plus anything moved by hand since, which is
-  the same thing `keep` means. The version is labelled with what was asked for
-  (`compose: give it a hi-hat` — `label` on `saveSong`, new), because a tree of
-  saves nobody pressed is unreadable without one.
+  the same thing `keep` means. The version is labelled `compose` (`label` on
+  `saveSong`), so the tree says which saves nobody pressed. Deliberately NOT
+  with what was asked for: that copied the transcript into `song_versions`,
+  a second table its privacy then depended on.
   **Nothing is saved when there is no song to save into** — signed out, a
   session nobody has named, or a template, whose first save MAKES a song and is
   therefore a decision with a name attached. Inventing one here would put a row
