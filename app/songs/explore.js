@@ -29,6 +29,7 @@ const NAMED = {
   "dm:bass": "bass",
   "dm:sub": "subby",
   "dm:drone": "drone",
+  "dm:vox": "vox",
   "dm:granular": "granular",
   "dm:poly-saw": "poly saw",
   "dm:fm-bell": "fm bell",

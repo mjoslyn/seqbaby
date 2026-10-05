@@ -358,7 +358,7 @@ const EXPORT_SOUND = {
   "dm:guitar": "gm_electric_guitar_clean", "dm:pad": "gm_pad_warm", "dm:oracle": "gm_pad_poly",
   "dm:fm-bell": "gm_tubular_bells", "dm:drift": "gm_lead_2_sawtooth", "dm:sub": "gm_synth_bass_sub",
   "dm:hexop": "gm_fx_crystal", "wt:akwf": "gm_lead_8_bass_lead", "dm:granular": "gm_pad_halo",
-  "dm:drone": "gm_pad_sweep",
+  "dm:drone": "gm_pad_sweep", "dm:vox": "gm_choir_aahs",
 };
 const SOUND_EXACT = Object.fromEntries(Object.entries(EXPORT_SOUND).map(([k, v]) => [v, k]));
 const MELODIC_RULES = [
@@ -369,11 +369,12 @@ const MELODIC_RULES = [
   [/^(tb303|303|acid|superacid|superchip)$/, "dm:silverbox"],
   [/^(sub|subbass|super808|808bass)$/, "dm:sub"],
   [/^(drone|grone|bytebeat)$/, "dm:drone"],
+  [/(choir|voice|vox|vocal|aahs|oohs|sing)/, "dm:vox"],
   [/(piano|epiano|rhodes|wurli|clavinet|harpsichord)/, "dm:tines"],
   [/(synth_bass|synthbass|moog)/, "dm:ladder"],
   [/(bass)/, "dm:bass"],
   [/(guitar|gtr|pluck)/, "dm:guitar"],
-  [/(organ|hammond|superhammond|string|violin|cello|choir|voice)/, "dm:oracle"],
+  [/(organ|hammond|superhammond|string|violin|cello)/, "dm:oracle"],
   [/(bell|glock|celesta|music_box|vibraphone|marimba|xylophone|kalimba|superfork)/, "dm:fm-bell"],
   [/(pad|superpad|warm|halo)/, "dm:pad"],
   [/(lead|supermandolin)/, "dm:drift"],
@@ -1887,7 +1888,7 @@ const RESERVED = new Set(["let", "const", "var", "await", "new", "function", "re
 function engineKnobKeys(engineKey) {
   const keys = new Set(voiceAutoKeysForEngineKey(engineKey).filter(k => k !== "vol"));
   const p = ENGINE_PANELS[engineKey];
-  if (p) { for (const c of p.num) keys.add(p.prefix + c[0]); for (const c of p.sel) keys.add(p.prefix + c[0]); }
+  if (p) { for (const c of [...p.num, ...p.sel, ...(p.text ?? [])]) keys.add(p.prefix + c[0]); }
   return [...keys];
 }
 /** A lane's values as mini-notation, runs folded (`0.5!4`), stretched over its cycles. */

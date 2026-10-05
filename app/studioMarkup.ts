@@ -239,6 +239,49 @@ const SUB_PANEL = `
           </div>
         </div>`;
 
+// The vox's panel: the voice (the glottis and its envelope), the vibrato and
+// drift that make it a person, the choir, and what it sings. Same arrangement
+// as the panels above: the voice dropdown ships empty and is filled at runtime
+// from VOX_TONE_NAMES, and the ranges and defaults must match VOX_NUM_CTLS in
+// engineData.js; the consonant and words option VALUES are the names in
+// VOX_CONSONANTS / VOX_WORDS (test/vox.test.js holds them together). Classes
+// are `p-sng*`: `p-v*` is the contagion's.
+const VOX_PANEL = `
+        <div class="sq-param-group sq-param-group--vox" hidden>
+          <div class="sq-vox__row">
+            <span class="sq-vox__lbl">voice</span>
+            <select class="sq-vox__tone" title="load a voice: the glottis, the vibrato, the choir and what it sings"></select>
+            <select class="p-sngmode" title="poly sings every note it is given. Mono is one singer: last note wins, and a note arriving while another sounds slides into it (the track's glide, or a short slur when that is zero)"><option value="poly" selected>poly</option><option value="mono">mono</option></select>
+          </div>
+          <div class="sq-vox__row">
+            <span class="sq-vox__lbl">glottis</span>
+            <label class="sq-vox__f"><span>attack</span><input class="p-sngatk" type="range" min="0" max="1" step="0.01" value="0.15" title="how long a note takes to swell in, 5ms to 2s" /></label>
+            <label class="sq-vox__f"><span>bright</span><input class="p-sngbright" type="range" min="0" max="1" step="0.01" value="0.5" title="how hard the folds close: a soft, lax voice at the bottom, a pressed, brassy one at the top. Velocity pushes it too" /></label>
+            <label class="sq-vox__f"><span>focus</span><input class="p-sngfocus" type="range" min="0" max="1" step="0.01" value="0.5" title="how sharp the formants are: wide and blurred at the bottom, narrow and ringing at the top" /></label>
+            <label class="sq-vox__f"><span>growl</span><input class="p-snggrowl" type="range" min="0" max="1" step="0.01" value="0" title="every other period longer and quieter: a subharmonic an octave down, the rasp of a pushed or a chanting voice" /></label>
+          </div>
+          <div class="sq-vox__row">
+            <span class="sq-vox__lbl">vibrato</span>
+            <label class="sq-vox__f"><span>depth</span><input class="p-sngvib" type="range" min="0" max="1" step="0.01" value="0.3" title="vibrato depth, up to 80 cents either way" /></label>
+            <label class="sq-vox__f"><span>rate</span><input class="p-sngvrate" type="range" min="0" max="1" step="0.01" value="0.45" title="vibrato rate, 3.5Hz to 8Hz. Each choir voice runs a little faster or slower" /></label>
+            <label class="sq-vox__f"><span>delay</span><input class="p-sngvdelay" type="range" min="0" max="1" step="0.01" value="0.3" title="how long a note is held before the vibrato comes in, up to 1.5s, then it fades in" /></label>
+            <label class="sq-vox__f"><span>drift</span><input class="p-sngdrift" type="range" min="0" max="1" step="0.01" value="0.25" title="a slow wander in pitch and level, and the scoop up into each note from just under it. At zero it sings like a machine" /></label>
+          </div>
+          <div class="sq-vox__row">
+            <span class="sq-vox__lbl">choir</span>
+            <label class="sq-vox__f"><span>voices</span><input class="p-sngvoices" type="range" min="1" max="8" step="1" value="1" title="how many voices sing each note, one to eight" /></label>
+            <label class="sq-vox__f"><span>detune</span><input class="p-sngdetune" type="range" min="0" max="1" step="0.01" value="0.3" title="how far apart the choir's voices are tuned, up to 25 cents either way" /></label>
+            <label class="sq-vox__f"><span>spread</span><input class="p-sngspread" type="range" min="0" max="1" step="0.01" value="0.5" title="how wide the choir stands across the stereo field" /></label>
+          </div>
+          <div class="sq-vox__row">
+            <span class="sq-vox__lbl">sings</span>
+            <input class="p-sngtext sq-vox__lyric" type="text" maxlength="400" spellcheck="false" autocomplete="off" placeholder="type a lyric: la di da" title="what to sing, one syllable a note, split by spaces or hyphens (shoo bee doo wop). A consonant, a vowel, a consonant: the one after is sung as the note ends. Two vowels glide (ai, oi, ow, ey), oo is u and ee is i, and mmm is a hum. While this has a syllable in it, it is sung instead of the phrase beside it" />
+            <select class="p-sngwords" title="one syllable a note from a phrase, a chord on one step sharing one, starting over when the transport stops. Off sings the consonant and the vowel slider"><option value="off" selected>off</option><option value="doo wop">doo wop</option><option value="la la">la la</option><option value="ooh aah">ooh aah</option><option value="na na">na na</option><option value="shoo bee">shoo bee</option><option value="ba da">ba da</option><option value="mama">mama</option><option value="hey yeah">hey yeah</option><option value="hallelujah">hallelujah</option><option value="oh no">oh no</option><option value="amen">amen</option><option value="hum">hum</option></select>
+            <select class="p-sngcons" title="the consonant every note starts with, when the words are off. It starts before the step so the vowel lands on it"><option value="none" selected>no consonant</option><option value="h">h-</option><option value="s">s-</option><option value="sh">sh-</option><option value="f">f-</option><option value="z">z-</option><option value="v">v-</option><option value="p">p-</option><option value="t">t-</option><option value="k">k-</option><option value="b">b-</option><option value="d">d-</option><option value="g">g-</option><option value="m">m-</option><option value="n">n-</option><option value="l">l-</option><option value="w">w-</option><option value="y">y-</option><option value="r">r-</option></select>
+            <label class="sq-vox__f"><span>bite</span><input class="p-sngbite" type="range" min="0" max="1" step="0.01" value="0.6" title="how loud the consonants are: the hiss of an s, the click of a t, the breath of an h" /></label>
+          </div>
+        </div>`;
+
 // The drone's panel, laid out like the Grone it is modelled on: the equation
 // oscillator, the VCF, the LFO, the delay and the cloud, left to right on the
 // hardware and top to bottom here. Same arrangement as the panels above — the
@@ -622,6 +665,7 @@ ${GUITAR_PANEL}
 ${BASS_PANEL}
 ${SUB_PANEL}
 ${DRONE_PANEL}
+${VOX_PANEL}
         <div class="sq-param-group sq-param-group--silverbox" hidden>
           <div class="sq-field"><label>wave</label>
             <select class="p-sbwave" title="the two waveforms. Saw is brighter, square is hollower and sits lower">

@@ -7,6 +7,7 @@ import {
   GUITAR_MOD_KEYS, GUITAR_MOD_LABELS, GUITAR_MOD_RANGE,
   SUB_MOD_KEYS, SUB_MOD_LABELS, SUB_MOD_RANGE,
   DRONE_MOD_KEYS, DRONE_MOD_LABELS, DRONE_MOD_RANGE,
+  VOX_MOD_KEYS, VOX_MOD_LABELS, VOX_MOD_RANGE,
 } from "./engineData.js";
 import { CHANCE_MOD_KEYS, CHANCE_MOD_LABELS } from "./chanceGen.js";
 import { staticEngineByKey } from "./engineData.js";
@@ -95,6 +96,8 @@ export const LFO_KEYS = [
   // Drone: the equation oscillator's trims, the filter, its LFO, the delay and
   // the cloud. Drone only — see canModulate.
   ...DRONE_MOD_KEYS.map(k => `drone_${k}`),
+  // Vox: the voice, the vibrato, the choir and the consonants. Vox only.
+  ...VOX_MOD_KEYS.map(k => `vox_${k}`),
 ];
 // How much each target swings per unit of depth:
 //  - 0..1 unit params: amp = depth/2 (swings ±0.5)
@@ -149,6 +152,7 @@ export const LFO_LABELS = {
   ...Object.fromEntries(BASS_MOD_KEYS.map(k => [`bas_${k}`, BASS_MOD_LABELS[k]])),
   ...Object.fromEntries(SUB_MOD_KEYS.map(k => [`sub_${k}`, SUB_MOD_LABELS[k]])),
   ...Object.fromEntries(DRONE_MOD_KEYS.map(k => [`drone_${k}`, DRONE_MOD_LABELS[k]])),
+  ...Object.fromEntries(VOX_MOD_KEYS.map(k => [`vox_${k}`, VOX_MOD_LABELS[k]])),
 };
 export const lfoLabel = (k) => {
   const inst = splitFxInstanceKey(k);
@@ -239,6 +243,10 @@ export const LFO_AMP_SCALE = {
   ...Object.fromEntries(DRONE_MOD_KEYS.map(k => {
     const [lo, hi] = DRONE_MOD_RANGE[k];
     return [`drone_${k}`, hi - lo];
+  })),
+  ...Object.fromEntries(VOX_MOD_KEYS.map(k => {
+    const [lo, hi] = VOX_MOD_RANGE[k];
+    return [`vox_${k}`, hi - lo];
   })),
 };
 
@@ -580,6 +588,8 @@ export const AUTOMATION_TARGETS = {
   ...Object.fromEntries(SUB_MOD_KEYS.map(k => [`sub.${k}`, { label: SUB_MOD_LABELS[k] }])),
   // Drone (drone engine only) — oscillator, filter, LFO, delay, cloud.
   ...Object.fromEntries(DRONE_MOD_KEYS.map(k => [`drone.${k}`, { label: DRONE_MOD_LABELS[k] }])),
+  // Vox (vox engine only) — voice, vibrato, choir, consonants.
+  ...Object.fromEntries(VOX_MOD_KEYS.map(k => [`vox.${k}`, { label: VOX_MOD_LABELS[k] }])),
   // fx
   "fx.gain":            { label: "gain drive" },
   "fx.pan":             { label: "pan" },
@@ -666,6 +676,7 @@ export function voiceAutoKeysForEngineKey(engineKey) {
     case "dm:bass":       return ["vol", "harm", "timb", "morph", "decay"];
     case "dm:sub":       return ["vol", "harm", "timb", "morph", "decay"];
     case "dm:drone":     return ["vol", "harm", "timb", "morph", "decay"];
+    case "dm:vox":       return ["vol", "harm", "timb", "morph", "decay"];
     case "dm:tines":     return ["vol", "harm", "timb", "morph", "decay"];
     case "dm:oracle":   return ["vol", "harm", "timb", "morph", "decay", "osc1", "osc2", "osc3", "osc4", "noise"];
     case "dm:granular":   return ["vol", "harm", "timb", "morph", "decay"];
@@ -702,6 +713,7 @@ export function canAutomateKey(engineKey, key, live = {}) {
   if (key.startsWith("bas.")) return t.engineKey === "dm:bass";
   if (key.startsWith("sub.")) return t.engineKey === "dm:sub";
   if (key.startsWith("drone.")) return t.engineKey === "dm:drone";
+  if (key.startsWith("vox.")) return t.engineKey === "dm:vox";
   if (key.startsWith("fx.")) return true;
   if (VOICE_AUTO_KEYS.includes(key)) return voiceAutoKeysForEngineKey(t.engineKey).includes(key);
   return false;
@@ -739,6 +751,8 @@ export function canModulateKey(engineKey, key, live = {}) {
   if (key.startsWith("sub_")) return t.engineKey === "dm:sub";
   // The drone's panel — drone only.
   if (key.startsWith("drone_")) return t.engineKey === "dm:drone";
+  // The vox panel — vox only.
+  if (key.startsWith("vox_")) return t.engineKey === "dm:vox";
   const eng = staticEngineByKey(t.engineKey);
   if (!eng) return false;
   // Plaits exposes harm/timb/morph/decay as voice params.
@@ -765,6 +779,9 @@ export function canModulateKey(engineKey, key, live = {}) {
     // Cutoff and A0 / A1 / A2. The three equation numbers are integers inside
     // the worklet, so an LFO on one steps through values: a sequence.
     case "dm:drone": return ["harm", "timb", "morph", "decay"].includes(key);
+    // Vowel, size, breath and release: one node, so the whole choir follows.
+    // An LFO on the vowel is a wah you can sing; a lane on it is a lyric.
+    case "dm:vox":   return ["harm", "timb", "morph", "decay"].includes(key);
     case "dm:snarl": return ["harm", "osc1", "osc2", "osc3", "osc4", "ultra", "fm"].includes(key);
     case "dm:ladder":       return ["harm", "osc1", "osc2", "osc3", "noise"].includes(key);
     case "dm:drift":       return ["harm", "osc1", "osc2", "osc3", "noise"].includes(key);

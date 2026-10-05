@@ -1,7 +1,7 @@
 import { AUTOMATION_TARGETS, VOICE_AUTO_KEYS, afterPrefix as after, baseModKey, canAutomateKey, fxStageOfModKey, splitFxInstanceKey, voiceAutoKeysForEngineKey } from "./constants.js";
 import { driveGain } from "./fxRack.js";
 import { makeFuzzCurve, shaperPreampGain } from "./curves.js";
-import { bassFromUnit, droneFromUnit, guitarFromUnit, hexopFromUnit, subFromUnit } from "./engineData.js";
+import { bassFromUnit, droneFromUnit, guitarFromUnit, hexopFromUnit, subFromUnit, voxFromUnit } from "./engineData.js";
 import { euclidFromUnit, setEuclidLive } from "./euclid.js";
 import { setChanceLive } from "./chance.js";
 import { chanceFromUnit } from "./chanceGen.js";
@@ -175,6 +175,12 @@ export function applyAutomationAtStep(t, key, v, time, vNext, stepDur) {
   if (key.startsWith("drone.")) {
     const which = after(key, "drone.");
     ramp(t.voice?.getAudioParam?.("drn" + which), droneFromUnit(which, vv), droneFromUnit(which, vn));
+    return;
+  }
+  // The vox, same again; `voices` is 1..8, so it maps through its range.
+  if (key.startsWith("vox.")) {
+    const which = after(key, "vox.");
+    ramp(t.voice?.getAudioParam?.("sng" + which), voxFromUnit(which, vv), voxFromUnit(which, vn));
     return;
   }
   const rack = t.fxRack;

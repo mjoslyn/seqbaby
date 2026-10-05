@@ -46,6 +46,7 @@ import {
   STATIC_ENGINES, staticEngineByKey, engineSliderLabels,
   SUB_NUM_CTLS, SUB_SEL_CTLS, SUB_TONE_NAMES, subTone, subToneDescription,
   DRONE_NUM_CTLS, DRONE_SEL_CTLS, DRONE_TONE_NAMES, droneTone, droneToneDescription,
+  VOX_NUM_CTLS, VOX_SEL_CTLS, VOX_TEXT_CTLS, VOX_TONE_NAMES, voxTone, voxToneDescription,
 } from "./engineData.js";
 import { EUCLID_DEFAULTS, FILTER_TYPES, PRISM_MODES, REPEAT_MODES, defaultCompConfig, defaultEq, defaultFilter, defaultFxConfig, defaultTrackParams } from "./soundDefaults.js";
 import {
@@ -151,6 +152,7 @@ export function describeEngine(engineKey) {
     panel: panel ? {
       numeric: panel.num.map(([k, lo, hi, d, label]) => ({ key: panel.prefix + k, label, min: lo, max: hi, default: d })),
       select: panel.sel.map(([k, d, vals]) => ({ key: panel.prefix + k, default: d, values: vals })),
+      ...(panel.text ? { text: panel.text.map(([k, d, max, label]) => ({ key: panel.prefix + k, label, default: d, maxLength: max })) } : {}),
     } : null,
     presets: panel?.tones ? panel.tones.map(n => ({ name: n, description: panel.describe?.(n) || "" })) : [],
     lfoTargets: LFO_KEYS.filter(k => canModulateKey(e.key, k, { euclid: true, chance: true })),
@@ -177,6 +179,7 @@ const SLIDER_TIPS = {
   "dm:bass": { harm: "amp drive", timb: "tone", morph: "the rig compressor: threshold down and makeup up together", decay: "sustain" },
   "dm:sub": { harm: "drive into the parallel harmonics path: what makes a sub audible on a small speaker", timb: "lowpass on the harmonics path", morph: "oscillator shape, sine through triangle and saw to square", decay: "decay" },
   "dm:drone": { harm: "cutoff of the MS-20 style lowpass", timb: "A0: the equation's multiplier, 1..16. Changes how fast its slow terms run against the pitch, not the pitch", morph: "A1: the equation's first shift, 2..15", decay: "A2: the equation's second shift, 2..15" },
+  "dm:vox": { harm: "the vowel: u, o, a, e, i across the slider (0, 0.25, 0.5, 0.75, 1). A lane on it sings a lyric", timb: "throat size: soprano (0), alto, tenor, bass (1)", morph: "breath: air in the voice; above 0.75 it fades to a whisper", decay: "release" },
   "dm:granular": { harm: "grain size", timb: "grain density", morph: "play position in the sample", decay: "spray: window, detune and jitter together" },
   "dm:808-kick": { harm: "tune", timb: "attack click", morph: "drive", decay: "decay" },
   "dm:909-kick": { harm: "tune", timb: "beater click", morph: "drive", decay: "decay" },
@@ -193,6 +196,7 @@ const PANELS = {
   "dm:bass":   { prefix: "bs", num: BASS_NUM_CTLS, sel: BASS_SEL_CTLS, tones: BASS_TONE_NAMES, tone: bassTone, describe: bassToneDescription },
   "dm:sub":    { prefix: "sub", num: SUB_NUM_CTLS, sel: SUB_SEL_CTLS, tones: SUB_TONE_NAMES, tone: subTone, describe: subToneDescription },
   "dm:drone":  { prefix: "drn", num: DRONE_NUM_CTLS, sel: DRONE_SEL_CTLS, tones: DRONE_TONE_NAMES, tone: droneTone, describe: droneToneDescription },
+  "dm:vox":    { prefix: "sng", num: VOX_NUM_CTLS, sel: VOX_SEL_CTLS, text: VOX_TEXT_CTLS, tones: VOX_TONE_NAMES, tone: voxTone, describe: voxToneDescription },
   "dm:hexop": {
     prefix: "d",
     num: HEXOP_NUM_KEYS.map(k => { const s = k.slice(1); const [lo, hi] = HEXOP_MOD_RANGE[s]; return [s, lo, hi, null, hexopLabel(s)]; }),
@@ -253,6 +257,7 @@ const PANEL_KEY_ENGINE = new Map();
 for (const [engine, p] of Object.entries(PANELS)) {
   for (const c of p.num) PANEL_KEY_ENGINE.set(p.prefix + c[0], engine);
   for (const c of p.sel) PANEL_KEY_ENGINE.set(p.prefix + c[0], engine);
+  for (const c of p.text ?? []) PANEL_KEY_ENGINE.set(p.prefix + c[0], engine);
 }
 // The four sliders, the mix and the mod rows: the base params every engine has.
 const BASE_PARAM_RANGE = {
@@ -635,15 +640,22 @@ export function setParams(song, index, params = {}) {
     const short = key.slice(p.prefix.length);
     const numCtl = p.num.find(c => c[0] === short);
     const selCtl = p.sel.find(c => c[0] === short);
+    const textCtl = p.text?.find(c => c[0] === short);
     if (numCtl) t.params[key] = num(raw, key, numCtl[1], numCtl[2]);
     else if (selCtl) t.params[key] = oneOf(raw, key, selCtl[2]);
+    else if (textCtl) {
+      if (raw != null && typeof raw !== "string") fail(`${key} is text, e.g. "la di da"`);
+      const s = String(raw ?? "");
+      if (s.length > textCtl[2]) fail(`${key} is ${s.length} characters; at most ${textCtl[2]}`);
+      t.params[key] = s;
+    }
     if (owner !== t.engineKey) warnings.push(`${key} belongs to ${owner}'s panel; this track is ${t.engineKey}, so it does nothing here`);
   }
   return { params: t.params, warnings };
 }
 function panelKeys(engineKey) {
   const p = PANELS[engineKey];
-  return p ? [...p.num.map(c => p.prefix + c[0]), ...p.sel.map(c => p.prefix + c[0])] : [];
+  return p ? [...p.num.map(c => p.prefix + c[0]), ...p.sel.map(c => p.prefix + c[0]), ...(p.text ?? []).map(c => p.prefix + c[0])] : [];
 }
 
 /** Load a preset: a hexop voice, or a guitar / bass / sub tone. It is a

@@ -122,5 +122,6 @@ export const ENGINE_MODULES = [
   "transport.js",
   "vim.js",
   "voices.js",
+  "vox.js",
   "wavetableEditor.js",
 ];

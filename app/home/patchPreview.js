@@ -113,7 +113,7 @@ function rootFor(key) {
 function kindFor(key) {
   const k = String(key || "");
   if (k === "dm:sub" || k === "dm:silverbox" || k === "dm:bass") return "bass";
-  if (k === "dm:pad" || k === "dm:granular" || k === "dm:drone") return "pad";
+  if (k === "dm:pad" || k === "dm:granular" || k === "dm:drone" || k === "dm:vox") return "pad";
   return "lead";
 }
 

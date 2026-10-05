@@ -152,6 +152,25 @@ hum", "bit swarm", "reverse tide", "arp ghost", "subterranean",
 slides into the old one. Low notes (C1..C3) suit it; it brings its own
 delay and cloud, so it wants no reverb on top beyond a little.
 
+Voices: `dm:vox`, a singing voice (a glottal pulse through five formants).
+harm is the VOWEL (0 u, 0.25 o, 0.5 a, 0.75 e, 1 i), timb the throat SIZE
+(0 soprano .. 1 bass), morph BREATH (keep it under 0.6; above 0.75 it
+whispers), decay the release. A lane on harm sings a lyric of vowels.
+`sngwords` sings a phrase, one syllable a note ("doo wop", "la la", "ooh
+aah", "na na", "shoo bee", "ba da", "mama", "hey yeah", "hallelujah", "oh
+no"); `sngtext` is a typed lyric instead, one syllable a note, spelled as it
+sounds: a consonant, a vowel, a consonant ("twin kel twin kel lit tel
+star"; the last consonant is sung as the note ends, so give it a note at
+least an eighth long). Two vowels glide ("ai" eye, "ow" now, "ey" day),
+"oo" is u, "ee" is i, "mmm" hums. It wins over `sngwords`; with both off, `sngcons` starts every note with one consonant ("m",
+"l", "s", "t" ...). `sngvoices` 1..8 is a choir per note (with
+`sngdetune` / `sngspread`), `sngmode` "mono" is a lead that slides between
+notes. `apply_preset` "choir aah", "angel ooh", "basso", "soul lead", "doo
+wop", "la la", "robot choir", "monk chant", "whisper", "hallelujah". Ties
+make held choir chords; a lead wants notes a step or two long. Keep a lead
+in its size's range (soprano C4..C6, bass E2..E4), and give a choir a bus
+reverb.
+
 `midi`: sends the track's notes to a MIDI device instead of playing them.
 Only for a song that drives outboard gear; it is silent in the browser and in
 `audition_song`, so never use it unless asked.
