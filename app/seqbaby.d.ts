@@ -70,6 +70,18 @@ declare global {
       redo: () => boolean;
       canUndo: () => boolean;
       canRedo: () => boolean;
+      /** Has the song changed since it was last saved, shared, exported or
+       *  opened? (history.js; an edit undone back counts as none.) */
+      hasUnsavedChanges: () => boolean;
+      /** The same, and there are notes in it: what the prompts ask about. */
+      hasUnsavedWork: () => boolean;
+      /** The session is saved somewhere now. Pass the blob that was written
+       *  (what serializeSet returned when the save began), so an edit made
+       *  while the save was in flight still counts as unsaved. */
+      markSaved: (data?: unknown) => void;
+      /** Ask before replacing the session, when there is unsaved work in it.
+       *  Resolves true when it may go ahead. */
+      confirmDiscard: (opts?: { title?: string; body?: string; confirmLabel?: string }) => Promise<boolean>;
       /** Saved patches live in the account (catalog.js); the shell hands the
        *  engine its way there and the list (app/PatchBay.tsx). */
       setPatchBackend: (backend: PatchBackend, list: PatchListEntry[]) => void;

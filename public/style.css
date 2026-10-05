@@ -3137,13 +3137,18 @@ body.kbd-recording:not(.sq-playing) .sq-track.is-kbd-active .sq-step.is-cursor {
   min-height: 48px;
 }
 .sq-audio__gate-btn:disabled { opacity: 0.6; cursor: progress; }
+/* The phone caveat: up top and in a box of its own, so it is read before the
+   button rather than found under it. */
 .sq-audio__gate-note {
-  font-size: 11px;
-  color: var(--fg-dim);
-  line-height: 1.5;
-  padding-top: 4px;
-  border-top: 1px solid var(--border);
+  font-size: 14px;
+  color: var(--fg);
+  line-height: 1.4;
+  padding: 10px 12px;
+  border: 1px solid var(--accent-2);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--accent-2) 10%, transparent);
 }
+.sq-audio__gate-note strong { color: var(--accent-2); }
 .sq-audio__gate-status {
   font-size: 11px;
   color: var(--fg-dim);

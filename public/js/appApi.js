@@ -6,7 +6,7 @@
 // small, stable API to `window.seqbaby` and fire a `seqbaby:ready` event once it's
 // installed. Keep this surface intentional and additive.
 import { setPatchBackend, setPatchList } from "./catalog.js";
-import { canRedo, canUndo, redo, undo } from "./history.js";
+import { canRedo, canUndo, hasUnsavedChanges, markSaved, redo, undo } from "./history.js";
 import { flushJam, inJam, jamState, jamTogglePlay, receiveJamPatch, receiveJamPhase, receiveJamState, startJam, stopJam } from "./jam.js";
 import { mergeSet } from "./liveSet.js";
 import { primeAudioForIOS } from "./main.js";
@@ -14,6 +14,8 @@ import { startPlayback, stopPlayback } from "./transport.js";
 import {
   applySet,
   applyTrackPatch,
+  confirmDiscard,
+  hasUnsavedWork,
   newSet,
   onExportSet,
   onImportSet,
@@ -65,6 +67,14 @@ export function installAppApi() {
     redo,
     canUndo,
     canRedo,
+    // Unsaved changes: whether the song has moved since it was last saved,
+    // shared, exported or opened (history.js), and the shell's half of that —
+    // a save into the account is a save point, and opening another song over
+    // this one asks first, the way `new` and leaving the page do.
+    hasUnsavedChanges,
+    hasUnsavedWork,
+    markSaved,
+    confirmDiscard,
     // Saved patches live in the account; the shell hands the engine its way
     // there and the list (app/PatchBay.tsx, catalog.js).
     setPatchBackend,
