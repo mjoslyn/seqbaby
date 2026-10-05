@@ -243,6 +243,8 @@ export function getModTarget(t, key) {
   if (key.startsWith("sub_")) return t.voice?.getAudioParam?.("sub" + after(key, "sub_")) ?? null;
   // Drone: drone_cfbk is the cloud feedback, drncfbk on the voice.
   if (key.startsWith("drone_")) return t.voice?.getAudioParam?.("drn" + after(key, "drone_")) ?? null;
+  // Vox: vox_vib is the vibrato depth, sngvib on the voice.
+  if (key.startsWith("vox_")) return t.voice?.getAudioParam?.("sng" + after(key, "vox_")) ?? null;
   if (key === "cutoff") return t.filterNode?.frequency ?? null;
   if (key === "reson")  return t.filterNode?.Q ?? null;
   const rack = t.fxRack;

@@ -26,6 +26,7 @@ const SECTIONS = [
   ["hexop", "The hexop"],
   ["guitar", "The guitar and the bass"],
   ["subby", "Subby"],
+  ["vox", "Vox"],
   ["sampler", "Samples"],
   ["wavetable", "The wavetable editor"],
   ["shaping", "Filter, effects and dynamics"],
@@ -673,7 +674,7 @@ export default function ManualPage() {
               <tbody>
                 <tr><td>plaits</td><td>Sixteen synthesis models from the Mutable Instruments Plaits oscillator: virtual analogue, FM, wavetable, granular, noise and physical models.</td></tr>
                 <tr><td>drum / synth</td><td>An 808 and 909 kit, a poly saw, an FM bell and a pad.</td></tr>
-                <tr><td>Emulators</td><td>The <a href="#silverbox">silverbox</a>, the <a href="#contagion">contagion</a>, the <a href="#hexop">hexop</a>, an <a href="#guitar">electric guitar and bass</a>, and <a href="#subby">subby</a>, all modelled rather than sampled. Then five monosynth voices in the spirit of classic hardware: snarl, ladder, drift, tines and oracle.</td></tr>
+                <tr><td>Emulators</td><td>The <a href="#silverbox">silverbox</a>, the <a href="#contagion">contagion</a>, the <a href="#hexop">hexop</a>, an <a href="#guitar">electric guitar and bass</a>, <a href="#subby">subby</a> and <a href="#vox">vox</a>, a singing voice, all modelled rather than sampled. Then five monosynth voices in the spirit of classic hardware: snarl, ladder, drift, tines and oracle.</td></tr>
                 <tr><td>texture</td><td>A granular engine that plays a sample as a cloud of tiny grains. Load your own, or pick from the bundled library of pads and drones.</td></tr>
                 <tr><td>wavetable</td><td>A wavetable synth with its own <a href="#wavetable">editor</a>.</td></tr>
                 <tr><td>sampler</td><td>Your own audio, or one of the bundled kits. See <a href="#sampler">samples</a>.</td></tr>
@@ -969,6 +970,58 @@ export default function ManualPage() {
             <span className={styles.ui}>tone</span> dropdown loads a complete patch:
             the trap 808, a distorted one, a pure sine, a reese, an acid sub and a dub
             sub.
+          </p>
+        </section>
+
+        <section className={styles.section} id="vox">
+          <h2>Vox</h2>
+          <p>
+            A singing voice, built the way a voice works: the vocal folds make a
+            train of pulses, and the throat and mouth are resonances (formants)
+            that the pulses ring. The pulses are the pitch and the effort; the
+            resonances are the vowel. A note can start with a consonant, and a
+            choir of up to eight sings each note.
+          </p>
+          <ul>
+            <li>
+              <strong>The four knobs</strong> are{" "}
+              <span className={styles.ui}>vowel</span> (u, o, a, e, i across the
+              knob), <span className={styles.ui}>size</span> (soprano at the
+              bottom, then alto, tenor, bass), <span className={styles.ui}>breath</span>{" "}
+              (air in the voice; the top quarter fades to a whisper) and{" "}
+              <span className={styles.ui}>release</span>. An automation lane on the
+              vowel sings a different vowel on each step.
+            </li>
+            <li>
+              <strong><span className={styles.ui}>sings</span></strong> picks a
+              phrase (doo wop, la la, shoo bee, hallelujah ...): every note sings
+              the next syllable, a chord on one step shares one, and the phrase
+              starts over when you press stop. With the phrase off, every note
+              starts with the consonant beside it. The consonant goes before the
+              step, so the vowel lands on the beat, the way a singer places a
+              word. <span className={styles.ui}>bite</span> is how loud the
+              consonants are.
+            </li>
+            <li>
+              <strong>The vibrato comes in late</strong>, after{" "}
+              <span className={styles.ui}>delay</span>, and fades in.{" "}
+              <span className={styles.ui}>drift</span> is the wander in pitch and the
+              scoop up into each note that make it a person; at zero it sings like
+              a machine. <span className={styles.ui}>growl</span> is the rasp of a
+              pushed or chanting voice.
+            </li>
+            <li>
+              <strong><span className={styles.ui}>voices</span></strong> is the
+              choir: copies of the voice per note, detuned and spread across the
+              stereo field.{" "}
+              <span className={styles.ui}>mono</span> is a lead singer instead: last
+              note wins, and a note arriving while another sounds slides into it.
+            </li>
+          </ul>
+          <p>
+            The <span className={styles.ui}>voice</span> dropdown loads a complete
+            setup: a choir on aah, angels on ooh, a basso, a soul lead, doo wop
+            backing, a robot choir, a monk chant, a whisper and a hallelujah.
           </p>
         </section>
 

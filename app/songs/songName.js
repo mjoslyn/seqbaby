@@ -64,6 +64,7 @@ const NOUNS = {
   rig: ["amp", "feedback", "pickup", "string", "fretwork"],
   sub: ["sub", "bottom", "tremor", "rumble", "subfloor"],
   drone: ["drone", "hum", "dirge", "monolith", "undertow"],
+  voice: ["choir", "chorus", "hymn", "chant", "refrain"],
   analog: ["filter", "sweep", "detune", "circuit", "voltage"],
   plaits: ["model", "particle", "swarm", "chord", "wavefold"],
   texture: ["grain", "cloud", "texture", "haze", "vapour"],
@@ -116,6 +117,7 @@ function familyFor(engineKey, isDrumKit) {
   if (key === "dm:guitar" || key === "dm:bass") return "rig";
   if (key === "dm:sub") return "sub";
   if (key === "dm:drone") return "drone";
+  if (key === "dm:vox") return "voice";
   if (key === "dm:granular" || key === "wt:akwf" || key === "dm:pad") return "texture";
   if (key.startsWith("plaits:")) return "plaits";
   if (key.startsWith("dm:808-") || key.startsWith("dm:909-")) return "drums";

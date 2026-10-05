@@ -16,7 +16,7 @@ env / fx / eq / comp / mod / automation per track.
   `public/woscillators.js` →
   `public/js/main.js` (ES module). `middleware.ts` refreshes the Supabase
   session on every request *except* static engine assets.
-- **Engine**: ~72 dependency-free vanilla ES modules in `public/js/`. No
+- **Engine**: ~73 dependency-free vanilla ES modules in `public/js/`. No
   bundler — edit, reload. `window.seqbaby` (from `appApi.js`) exposes `state`
   and serialize/apply hooks to the React shell (typed in `app/seqbaby.d.ts`).
 - **Accounts + data**: Supabase (Postgres + Auth + RLS). Tables: `profiles`,
@@ -276,6 +276,9 @@ env / fx / eq / comp / mod / automation per track.
   oscillator into an MS-20 style filter, an LFO, a delay that runs backwards
   and a granular cloud, all in one AudioWorklet, with notes that latch. See
   the drone section.
+- `vox.js` — **vox**, a singing voice: a glottal pulse through five
+  formants, consonants run before the vowel, phrases sung a syllable a note,
+  and a choir of copies per note, in one AudioWorklet. See the vox section.
 - `hexop.js` — the hexop, same shape again, plus the 32-algorithm
   table, the panel's generated key lists and the preset voices. See the hexop
   section below.
@@ -311,7 +314,7 @@ npm test               # node --test: the pure modules (session format, chance g
                        #   version tree, song names, share card copy, the song builder, the jam diff,
                        #   song previews, grid avatars, the songs and people explorers,
                        #   the Strudel bridge, the reverb, the filter models, the guitar, the contagion,
-                       #   the prism, the repeat, the arrangement's
+                       #   the vox, the prism, the repeat, the arrangement's
                        #   format and builder calls)
 npm run mcp            # the MCP server on stdio (mcp/server.mjs) — an agent writes songs
 npm run test:rls       # RLS policy tests — builds a throwaway Postgres in docker
@@ -779,7 +782,7 @@ Voice interface: `hit(midi, time, dur, vel, opts?)`, `setParam`,
 
 All engine type `drum-synth`. The five Tone.js analog-mono presets are each
 wrapped in `makePolyPool(size, buildOne)`; the silverbox, the contagion, the hexop, the
-guitar, the bass, subby and the drone are the odd ones out — AudioWorklet models that handle
+guitar, the bass, subby, the drone and the vox are the odd ones out — AudioWorklet models that handle
 their own voicing (the silverbox and subby are mono, deliberately; the rest
 polyphonic). See their
 sections below. The guitar and bass keep their old pluck builders in voices.js
@@ -797,6 +800,7 @@ sections below. The guitar and bass keep their old pluck builders in voices.js
 | `dm:bass`      | `buildBassVoice`      | 4 (internal) | electric bass rig, AudioWorklet (`bass.js`) |
 | `dm:sub`       | `buildSubBassVoice`   | mono | subby, the sub bass, AudioWorklet (`subbass.js`) |
 | `dm:drone`     | `buildDroneVoice`     | 6 (internal) | equation-oscillator drone, filter, delay, cloud, AudioWorklet (`drone.js`) |
+| `dm:vox`       | `buildVoxVoice`       | 8 (internal) | singing voice: glottis, formants, consonants, choir, AudioWorklet (`vox.js`) |
 | `dm:tines`     | `buildTinesVoice`     | 6 | electric piano |
 | `dm:oracle`    | `buildOracleVoice`    | 6 | poly analog |
 
@@ -1349,6 +1353,75 @@ LFO (8 shapes) ──┴──────▲ MOD1 ─────────�
   glide, freeze, and idle silence.
 - **Loading** — Blob-URL registration from `loadWorklet()`; a failure falls
   back to a detuned saw `PolySynth` with a slow envelope.
+
+## Vox (`dm:vox`, `public/js/vox.js`)
+
+A singing voice, built source-filter, which is how a voice works: the folds
+make pulses, the throat and mouth are resonances the pulses ring.
+
+```
+GLOTTIS x copies ─┐                    ┌─ F1 ─┐
+(pulse, vibrato,  ├─ tilt ─┬─ voicing ─┼─ F2 ─┤
+ drift, growl)    │        │           ├─ F3 ─┼─ + ─▶ L/R
+BREATH (noise, ───┘        │ ASPIRATION   F4 ─┤   ▲
+ pulsed by the folds) ─────┘           └─ F5 ─┘   │
+CONSONANT (hiss, burst, murmur, formant glide) ───┘
+```
+
+- **The source is a Rosenberg glottal pulse**, its derivative (what the mouth
+  radiates): one sharp event a period, the closure, band-limited with a
+  polyBLEP. `bright` shortens the open phase and quickens the closure;
+  velocity pushes it too. A tilt lowpass follows the same effort.
+- **Five formants in parallel**, TPT SVF bandpasses at unity peak gain,
+  alternating in sign (Klatt's parallel bank: in phase, neighbouring skirts
+  cancel into a notch). Frequencies, levels and bandwidths are the classic
+  singer tables (`VOX_FORMANTS` in engineData.js, flattened into the
+  processor's prelude), bilinear across five vowels (harm, `u o a e i`) and
+  four voice types (timb, soprano..bass). Each level is tilted back up by
+  `f/500` against the source's -6dB/oct, against a FIXED frequency: relative
+  to F1 it made an open a quieter than a closed i. A pitch gain
+  `sqrt(262/f0)` takes out the 3dB an octave a lower note loses for having
+  fewer closures a second. `focus` scales every bandwidth.
+- **F1 never sits under 1.1x the fundamental**: a resonance below the pitch
+  rings nothing, so a high note would thin out exactly where it should soar.
+  Trained singers tune F1 up the same way.
+- **Consonants are scripts** (`VOX_CONSONANTS`): frication through the
+  voice's own noise bandpass, a burst, a voice onset time with breath through
+  the formants until it (unvoiced plosives, h), a murmur on its own damped
+  formants (m n l w y r), and a locus the formants start at and glide from.
+  A note message arrives a lookahead early, so **the onset is moved back** by
+  as much of the consonant as there is time for (`consLead`): the vowel lands
+  on the step, the s before it. Tested.
+- **Words** (`VOX_WORDS`, spelled by `voxSyllables`): the voice builder
+  posts a phrase as a flat `[cons, vowel, ...]`; each note instant advances
+  it (a chord shares one), resolved when the message ARRIVES so the lead can
+  be computed, and an `off` (stop) starts it over. With words off, the
+  `cons` select and the vowel slider decide.
+- **Breath** is noise pulsed by the folds (0.35 + 0.65 x flow), through the
+  same formants; above 0.75 the voicing fades out and it whispers.
+- **Vibrato after a delay**, faded in over 0.4s; **drift** is a per-copy
+  random walk in pitch and level plus a scoop up into each note; **growl**
+  alternates each copy's period length and level, a subharmonic.
+- **The choir is copies of the source per note** (`voices` 1..8, `detune`,
+  `spread`), each with its own vibrato rate trim and drift, through one
+  formant bank per side (one bank when there is one copy or no spread).
+  Measured in Node, 8 copies on a 4-note chord is ~10% of realtime.
+- **`mode` mono** is a lead: one voice, last note wins, a note arriving while
+  another is held slides (the track's glide, else a 40ms slur) and keeps the
+  envelope and the vibrato going.
+- **Keys** are `sng` + short key -> `vox_<short>` / `vox.<short>`, from
+  `VOX_NUM_CTLS` / `VOX_SEL_CTLS`. `sng`, not `vox` or `vx`: the contagion's
+  prefix is `v`. `voices` is 1..8, so its lane maps through its range. The
+  panel is `VOX_PANEL` in studioMarkup.ts; the consonant and words option
+  values are spelled there by hand and `test/vox.test.js` holds them to the
+  tables. Voices via `voxTone(name)`, dropdown filled from `VOX_TONE_NAMES`.
+- `test/vox.test.js` renders the processor in Node: pitch and level across
+  the range, formant positions per vowel, brightness, size, the whisper, an s
+  before the step and voicing on it, every consonant bounded, words cycling
+  and restarting, choir width and level, the mono slide, release, presets,
+  and the markup against the tables.
+- **Loading** — Blob-URL registration from `loadWorklet()`; a failure falls
+  back to a fat-triangle PolySynth through a fixed "ah" bandpass.
 
 ## Granular (`dm:granular`, `GranularVoice` in voices.js)
 
@@ -3832,7 +3905,7 @@ fails. Real-time capture — see Known limitations.
 ## Engines catalog (`buildEngineCatalog`)
 
 Groups in order: `plaits` (16) · `drum / synth` (808/909 kit + poly-saw /
-fm-bell / pad) · `Emulators` (silverbox + contagion + hexop + guitar + bass + subby + drone + 5 analog-mono) · `texture` (`dm:granular`) ·
+fm-bell / pad) · `Emulators` (silverbox + contagion + hexop + guitar + bass + subby + drone + vox + 5 analog-mono) · `texture` (`dm:granular`) ·
 `wavetable` (`wt:akwf`) · `sampler` (single unified entry) · `saved patches`
 (`saved:<name>`) · `midi` · `bus` (the fx bus — not an instrument, see below).
 The engine key string is the source of truth.
@@ -4061,7 +4134,7 @@ through a 6ms fade on its gain).
   do the same, or use `currentBpm()` (lfo.js) as the sync helpers do.
 - **Worklet processor sources are template literals** (`silverbox.js`,
   `contagion.js`, `hexop.js`, `guitar.js`, `bass.js`, `subbass.js`,
-  `drone.js`, `crusher.js`, `reverb.js`, `prism.js`, `repeat.js`),
+  `drone.js`, `vox.js`, `crusher.js`, `reverb.js`, `prism.js`, `repeat.js`),
   so a stray backtick or `${` inside one — including in a comment — truncates
   the string. The module still parses, `node --check` still passes, and the
   failure only shows up as a SyntaxError at engine boot. When editing inside a
@@ -4142,7 +4215,7 @@ Repo: https://github.com/mjoslyn/seqbaby.
   An inline marker (`window.__seqbabyServerBoot`) tells the paths apart, and
   `ScriptLoader.tsx` keeps its onload-chained injection for the soft-nav case
   (e.g. arriving from `/login`).
-- `app/EnginePreload.tsx` emits `modulepreload` for all 72 modules listed in
+- `app/EnginePreload.tsx` emits `modulepreload` for all 73 modules listed in
   `app/engineAssets.ts` (at `engineAsset("/js/<name>")`; the hints used to
   point at the site root and 404). The graph is 8 levels deep, so without it the browser
   needs up to eight sequential round trips just to discover the code.

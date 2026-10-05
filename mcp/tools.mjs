@@ -151,7 +151,7 @@ export const TOOLS = [
   // ---- tracks --------------------------------------------------------------------
   {
     name: "add_track", title: "Add track",
-    description: "Add a track. `engine` is a key or a name (808 kick, silverbox, subby, drone, plaits:fm, fx bus ...). A sampler needs `sample` (a bundled sample id or label, e.g. \"salamander/snare\" or \"virtuosity ride\"; describe_engine sampler lists them); a granular track needs `texture`. Returns the new track's index.",
+    description: "Add a track. `engine` is a key or a name (808 kick, silverbox, subby, drone, vox, plaits:fm, fx bus ...). A sampler needs `sample` (a bundled sample id or label, e.g. \"salamander/snare\" or \"virtuosity ride\"; describe_engine sampler lists them); a granular track needs `texture`. Returns the new track's index.",
     inputSchema: { engine: z.string(), name: z.string().optional(), length: z.number().int().min(1).max(64).optional().describe("steps per pattern (default 16)"),
       sample: z.string().optional(), texture: z.string().optional(), drumKit: z.boolean().optional().describe("blank steps play C2 and the sampler pitches from C2; guessed from the engine and name when omitted") },
     handler: (ctx, a) => sb.addTrack(ctx.song, a),
@@ -212,7 +212,7 @@ export const TOOLS = [
   },
   {
     name: "apply_preset", title: "Apply preset",
-    description: "Load a preset onto a track: a hexop voice (e.piano, bass, bell, brass, marimba, organ, pad), a guitar tone (surf twang, brit stack, fuzz lead ...), a bass tone (motown, dub, slap funk ...) a subby patch (808, reese, acid, drill slide ...) or a drone patch (dark grone, cathedral, reverse tide, glacier ...). Complete: every panel control plus the four sliders. describe_engine lists them.",
+    description: "Load a preset onto a track: a hexop voice (e.piano, bass, bell, brass, marimba, organ, pad), a guitar tone (surf twang, brit stack, fuzz lead ...), a bass tone (motown, dub, slap funk ...) a subby patch (808, reese, acid, drill slide ...), a drone patch (dark grone, cathedral, reverse tide, glacier ...) or a vox voice (choir aah, soul lead, doo wop, hallelujah ...). Complete: every panel control plus the four sliders. describe_engine lists them.",
     inputSchema: { track: trackArg, preset: z.string() },
     handler: (ctx, { track, preset }) => sb.applyPreset(ctx.song, track, preset),
   },

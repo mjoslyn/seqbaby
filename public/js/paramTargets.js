@@ -4,6 +4,7 @@ import { BASS_MOD_KEYS, BASS_MOD_LABELS } from "./bass.js";
 import { HEXOP_MOD_KEYS, HEXOP_MOD_LABELS } from "./hexop.js";
 import { SUB_MOD_KEYS, SUB_MOD_LABELS } from "./subbass.js";
 import { DRONE_MOD_KEYS, DRONE_MOD_LABELS } from "./drone.js";
+import { VOX_MOD_KEYS, VOX_MOD_LABELS } from "./vox.js";
 import { GUITAR_MOD_KEYS, GUITAR_MOD_LABELS } from "./guitar.js";
 import { CHANCE_MOD_KEYS, CHANCE_MOD_LABELS } from "./chanceGen.js";
 import { PRISM_KNOBS, PRISM_KNOB_LABELS, REPEAT_KNOBS, REPEAT_KNOB_LABELS } from "./soundDefaults.js";
@@ -65,6 +66,8 @@ for (const k of BASS_MOD_KEYS) def(`p-bs${k}`, `bas_${k}`, `bas.${k}`);
 for (const k of SUB_MOD_KEYS) def(`p-sub${k}`, `sub_${k}`, `sub.${k}`);
 // The drone — likewise, `p-drn*`.
 for (const k of DRONE_MOD_KEYS) def(`p-drn${k}`, `drone_${k}`, `drone.${k}`);
+// The vox — likewise, `p-sng*`.
+for (const k of VOX_MOD_KEYS) def(`p-sng${k}`, `vox_${k}`, `vox.${k}`);
 // Euclid's three counts — one list, three namespaces, as in hexop.js.
 for (const k of ["pulses", "steps", "rotate"]) def(`p-euc${k}`, `euclid_${k}`, `euclid.${k}`);
 // The chance generator's six, likewise. Its other controls (the twelve semitone
@@ -277,6 +280,8 @@ export const CONTROL_LABELS = {
   ...Object.fromEntries(DRONE_MOD_KEYS.map(k => [`p-drn${k}`, DRONE_MOD_LABELS[k]])),
   "p-drneq": "drone equation", "p-drnhold": "hold mode", "p-drnlshape": "drone lfo shape",
   "p-drndir": "delay direction", "p-drnfreeze": "cloud freeze", "sq-drone__tone": "drone patch",
+  ...Object.fromEntries(VOX_MOD_KEYS.map(k => [`p-sng${k}`, VOX_MOD_LABELS[k]])),
+  "p-sngcons": "consonant", "p-sngwords": "words", "p-sngmode": "poly or mono", "sq-vox__tone": "vox voice",
   "p-bsamp": "bass amp", "p-bscab": "bass cabinet",
   "p-bspkupt": "bass pickup", "p-bsstrs": "string type",
   "sq-bass__tone": "bass tone",

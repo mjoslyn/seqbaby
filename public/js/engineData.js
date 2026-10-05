@@ -247,6 +247,9 @@ export const ANALOG_ENGINES = [
   // delay and a granular cloud, after the Grone. Polyphony lives in
   // the worklet (drone.js), so a held chord can fade under the next one.
   { key: "dm:drone",     label: "drone",           defaultNote: 36, poly: true, melodic: true },
+  // A singing voice: a glottal pulse through five formants, consonants in
+  // front of the vowel, a choir of up to eight per note (vox.js).
+  { key: "dm:vox",       label: "vox",             defaultNote: 60, poly: true, melodic: true },
   { key: "dm:tines",     label: "tines",           defaultNote: 60, poly: true, melodic: true },
   { key: "dm:oracle",    label: "oracle",          defaultNote: 60, poly: true, melodic: true },
 ].map(e => ({ ...e, group: "Emulators", type: "drum-synth", poly: e.poly ?? false, melodic: e.melodic ?? false }));
@@ -423,6 +426,7 @@ export function engineSliderLabels(engineKey) {
     case "dm:bass":      return { harm: "drive",    timb: "tone",   morph: "comp",      decay: "sustain" };
     case "dm:sub":       return { harm: "drive",    timb: "tone",   morph: "shape",     decay: "decay" };
     case "dm:drone":     return { harm: "cutoff",   timb: "a0",     morph: "a1",        decay: "a2" };
+    case "dm:vox":       return { harm: "vowel",    timb: "size",   morph: "breath",    decay: "release" };
     case "dm:tines":     return { harm: "tine",     timb: "bite",   morph: "chorus",    decay: "decay" };
     case "dm:oracle":    return { harm: "detune",   timb: "shape",  morph: "drive",     decay: "decay" };
     case "dm:granular":  return { harm: "grain",    timb: "dense",  morph: "pos",       decay: "spray" };
@@ -1369,6 +1373,287 @@ export function droneTone(name) {
   const out = { ...DRONE_DEFAULTS };
   for (const [k, val] of Object.entries(v.p)) out[`drn${k}`] = val;
   out.harm = v.cut; out.timb = v.a0; out.morph = v.a1; out.decay = v.a2;
+  return out;
+}
+
+// ---- vox (vox.js) -----------------------------------------------------------
+// A singing voice: a glottal pulse through a bank of five formants, with
+// consonants in front of the vowel. What follows is the voice as DATA, so the
+// song builder and the tests read the same tables the processor is built from.
+
+// The vowels, in the order the vowel slider walks them: back and rounded to
+// front and spread, so a sweep moves the tongue one way (u o a e i) instead of
+// jumping about. Every lookup is by position on this line, 0..1.
+export const VOX_VOWELS = ["u", "o", "a", "e", "i"];
+
+// Five formants per vowel per voice type: [Hz x5], [dB x5], [bandwidth Hz x5].
+// These are the classic singer tables (the ones Csound's FOF examples ship
+// with, after Peterson & Barney and Sundberg's singer measurements): the
+// soprano's and alto's formants sit higher than the tenor's and bass's, the
+// tenor's and bass's 3rd-5th crowd together into the singer's formant. Read
+// as character, not as a reproduction of anybody. The size slider walks
+// soprano -> alto -> tenor -> bass.
+export const VOX_FORMANTS = [
+  { name: "soprano", v: {
+    u: [[325, 700, 2700, 3800, 4950], [0, -16, -35, -40, -60], [50, 60, 170, 180, 200]],
+    o: [[450, 800, 2830, 3800, 4950], [0, -11, -22, -22, -50], [70, 80, 100, 130, 135]],
+    a: [[800, 1150, 2900, 3900, 4950], [0, -6, -32, -20, -50], [80, 90, 120, 130, 140]],
+    e: [[350, 2000, 2800, 3600, 4950], [0, -20, -15, -40, -56], [60, 100, 120, 150, 200]],
+    i: [[270, 2140, 2950, 3900, 4950], [0, -12, -26, -26, -44], [60, 90, 100, 120, 120]],
+  } },
+  { name: "alto", v: {
+    u: [[325, 700, 2530, 3500, 4950], [0, -12, -30, -40, -64], [50, 60, 170, 180, 200]],
+    o: [[450, 800, 2830, 3500, 4950], [0, -9, -16, -28, -55], [70, 80, 100, 130, 135]],
+    a: [[800, 1150, 2800, 3500, 4950], [0, -4, -20, -36, -60], [80, 90, 120, 130, 140]],
+    e: [[400, 1600, 2700, 3300, 4950], [0, -24, -30, -35, -60], [60, 80, 120, 150, 200]],
+    i: [[350, 1700, 2700, 3700, 4950], [0, -20, -30, -36, -60], [50, 100, 120, 150, 200]],
+  } },
+  { name: "tenor", v: {
+    u: [[350, 600, 2700, 2900, 3300], [0, -20, -17, -14, -26], [40, 60, 100, 120, 120]],
+    o: [[400, 800, 2600, 2800, 3000], [0, -10, -12, -12, -26], [40, 80, 100, 120, 120]],
+    a: [[650, 1080, 2650, 2900, 3250], [0, -6, -7, -8, -22], [80, 90, 120, 130, 140]],
+    e: [[400, 1700, 2600, 3200, 3580], [0, -14, -12, -14, -20], [70, 80, 100, 120, 120]],
+    i: [[290, 1870, 2800, 3250, 3540], [0, -15, -18, -20, -30], [40, 90, 100, 120, 120]],
+  } },
+  { name: "bass", v: {
+    u: [[350, 600, 2400, 2675, 2950], [0, -20, -32, -28, -36], [40, 80, 100, 120, 120]],
+    o: [[400, 750, 2400, 2600, 2900], [0, -11, -21, -20, -40], [40, 80, 100, 120, 120]],
+    a: [[600, 1040, 2250, 2450, 2750], [0, -7, -9, -9, -20], [60, 70, 110, 120, 130]],
+    e: [[400, 1620, 2400, 2800, 3100], [0, -12, -9, -12, -18], [40, 80, 100, 120, 120]],
+    i: [[250, 1750, 2600, 3050, 3340], [0, -30, -16, -22, -28], [60, 90, 100, 120, 120]],
+  } },
+];
+
+/**
+ * The formants at a vowel position and a size, both 0..1: bilinear across the
+ * vowel line and the four voice types. Pure, so the tests and the processor's
+ * flattened table can be checked against it.
+ * @returns {{f:number[], db:number[], bw:number[]}}
+ */
+export function voxFormantsAt(vowel, size) {
+  const vp = Math.max(0, Math.min(1, vowel)) * (VOX_VOWELS.length - 1);
+  const sp = Math.max(0, Math.min(1, size)) * (VOX_FORMANTS.length - 1);
+  const v0 = Math.min(VOX_VOWELS.length - 2, Math.floor(vp)), vf = vp - v0;
+  const s0 = Math.min(VOX_FORMANTS.length - 2, Math.floor(sp)), sf = sp - s0;
+  const at = (s, v, k, i) => VOX_FORMANTS[s].v[VOX_VOWELS[v]][k][i];
+  const mix = (k, i) =>
+    (at(s0, v0, k, i) * (1 - vf) + at(s0, v0 + 1, k, i) * vf) * (1 - sf) +
+    (at(s0 + 1, v0, k, i) * (1 - vf) + at(s0 + 1, v0 + 1, k, i) * vf) * sf;
+  const out = { f: [], db: [], bw: [] };
+  for (let i = 0; i < 5; i++) { out.f.push(mix(0, i)); out.db.push(mix(1, i)); out.bw.push(mix(2, i)); }
+  return out;
+}
+
+// The consonants a note can start with. Each is a short script run from the
+// moment the note begins, before the vowel:
+//   fric   [ms, Hz, Q, level]  noise through a bandpass: the hiss of s, sh, f
+//   burst  [ms, Hz, Q, level]  the release of a closure: the click of t, k, p
+//   vot    ms                  voice onset time: when the vowel's voicing starts
+//   pre    0..1                how much voicing there is before that (z, v, b)
+//   asp    0..1                breath through the vowel's own formants until then
+//                              (the h, and the puff after an unvoiced plosive)
+//   locus  [F1, F2, F3]        where the formants start before gliding to the vowel
+//   trans  ms                  how long that glide takes
+//   mur    [ms, level, damp]   a murmur first: m, n, l, w, y, r are voiced at
+//                              `level` on the locus formants, the upper ones
+//                              scaled by `damp`, for `ms`, then glide out
+// The voicing is pushed back by up to `vot`, so the vowel lands on the step
+// and the consonant before it, the way a singer places a word (vox.js).
+export const VOX_CONSONANTS = {
+  none: {},
+  h:  { vot: 70, asp: 0.9 },
+  s:  { fric: [110, 6500, 1.8, 0.7],  vot: 110, locus: [350, 1700, 2600], trans: 40 },
+  sh: { fric: [120, 3000, 2.2, 0.75], vot: 120, locus: [300, 1900, 2400], trans: 50 },
+  f:  { fric: [90, 5000, 0.5, 0.35],  vot: 90,  locus: [300, 1000, 2400], trans: 40 },
+  z:  { fric: [90, 6000, 1.8, 0.45],  vot: 90,  pre: 0.4,  locus: [300, 1700, 2600], trans: 40 },
+  v:  { fric: [80, 4000, 0.5, 0.25],  vot: 80,  pre: 0.45, locus: [300, 1000, 2400], trans: 40 },
+  p:  { burst: [10, 900, 0.8, 0.9],   vot: 45,  asp: 0.45, locus: [300, 800, 2200],  trans: 45 },
+  t:  { burst: [10, 4200, 1.4, 0.9],  vot: 50,  asp: 0.45, locus: [300, 1800, 2700], trans: 45 },
+  k:  { burst: [15, 2200, 2, 0.9],    vot: 55,  asp: 0.45, locus: [300, 1900, 2400], trans: 50 },
+  b:  { burst: [8, 900, 0.8, 0.5],    vot: 10,  pre: 0.3,  locus: [250, 800, 2200],  trans: 40 },
+  d:  { burst: [8, 4000, 1.4, 0.5],   vot: 10,  pre: 0.3,  locus: [250, 1800, 2700], trans: 40 },
+  g:  { burst: [12, 2200, 2, 0.5],    vot: 12,  pre: 0.3,  locus: [250, 1900, 2400], trans: 45 },
+  m:  { mur: [70, 0.55, 0.12], locus: [250, 1000, 2300], trans: 40, vot: 30 },
+  n:  { mur: [65, 0.55, 0.12], locus: [250, 1600, 2600], trans: 40, vot: 30 },
+  l:  { mur: [55, 0.8, 0.45],  locus: [360, 1050, 2800], trans: 45, vot: 25 },
+  w:  { mur: [50, 0.85, 0.5],  locus: [300, 650, 2300],  trans: 60, vot: 25 },
+  y:  { mur: [45, 0.85, 0.6],  locus: [280, 2200, 3000], trans: 60, vot: 25 },
+  r:  { mur: [50, 0.85, 0.6],  locus: [400, 1100, 1650], trans: 60, vot: 25 },
+};
+export const VOX_CONSONANT_NAMES = Object.keys(VOX_CONSONANTS);
+
+/** A consonant as the flat row the processor reads (vox.js: CONS_FIELDS). */
+export const VOX_CONS_FIELDS = 18;
+export function voxConsonantRow(name) {
+  const c = VOX_CONSONANTS[name] ?? {};
+  const fr = c.fric ?? [0, 1000, 1, 0], bu = c.burst ?? [0, 1000, 1, 0];
+  const lo = c.locus ?? [0, 0, 0], mu = c.mur ?? [0, 1, 1];
+  return [...fr, ...bu, c.vot ?? 0, c.pre ?? 0, c.asp ?? 0, ...lo, c.trans ?? 0, ...mu];
+}
+
+// Syllable sequences: every note sings the next syllable, chords on one step
+// share one, and the phrase starts over when the transport stops. A syllable
+// is its consonant (any name above, longest first, so `sh` is not `s` + `h`)
+// and then a vowel letter.
+export const VOX_WORDS = {
+  "off":        "",
+  "doo wop":    "du du du wa",
+  "la la":      "la la la li",
+  "ooh aah":    "u u a a",
+  "na na":      "na na na ne",
+  "shoo bee":   "shu bi du wa",
+  "ba da":      "ba da ba di",
+  "mama":       "ma ma mi a",
+  "hey yeah":   "he ye he ye",
+  "hallelujah": "ha le lu ya",
+  "oh no":      "o no o no",
+};
+export const VOX_WORD_NAMES = Object.keys(VOX_WORDS);
+
+/**
+ * Spell a phrase as syllables the processor can play: [{cons, vowel}], cons an
+ * index into VOX_CONSONANT_NAMES and vowel a position on the vowel line.
+ * @param {string} text
+ */
+export function voxSyllables(text) {
+  const byLen = VOX_CONSONANT_NAMES.filter(n => n !== "none").sort((a, b) => b.length - a.length);
+  const out = [];
+  for (const word of String(text || "").toLowerCase().split(/[\s,-]+/)) {
+    if (!word) continue;
+    const c = byLen.find(n => word.startsWith(n)) ?? "none";
+    const rest = c === "none" ? word : word.slice(c.length);
+    const vi = VOX_VOWELS.indexOf(rest[0]);
+    out.push({ cons: VOX_CONSONANT_NAMES.indexOf(c), vowel: vi < 0 ? 0.5 : vi / (VOX_VOWELS.length - 1) });
+  }
+  return out;
+}
+
+/** Numeric panel controls: [short key, min, max, default, label]. */
+export const VOX_NUM_CTLS = [
+  ["atk",    0, 1, 0.15, "attack"],
+  ["bright", 0, 1, 0.5,  "brightness"],
+  ["focus",  0, 1, 0.5,  "formant focus"],
+  ["vib",    0, 1, 0.3,  "vibrato depth"],
+  ["vrate",  0, 1, 0.45, "vibrato rate"],
+  ["vdelay", 0, 1, 0.3,  "vibrato delay"],
+  ["drift",  0, 1, 0.25, "drift"],
+  ["growl",  0, 1, 0,    "growl"],
+  ["voices", 1, 8, 1,    "choir voices"],
+  ["detune", 0, 1, 0.3,  "choir detune"],
+  ["spread", 0, 1, 0.5,  "choir spread"],
+  ["bite",   0, 1, 0.6,  "consonant level"],
+];
+
+/** Select controls: [short key, default, [values]]. */
+export const VOX_SEL_CTLS = [
+  ["cons",  "none", VOX_CONSONANT_NAMES],
+  ["words", "off",  VOX_WORD_NAMES],
+  ["mode",  "poly", ["poly", "mono"]],
+];
+
+export const VOX_MOD_KEYS = VOX_NUM_CTLS.map(c => c[0]);
+export const VOX_NUM_KEYS = VOX_MOD_KEYS.map(k => `sng${k}`);
+export const VOX_SEL_KEYS = VOX_SEL_CTLS.map(c => `sng${c[0]}`);
+
+export const VOX_MOD_RANGE = Object.fromEntries(VOX_NUM_CTLS.map(c => [c[0], [c[1], c[2]]]));
+
+export const VOX_MOD_LABELS = Object.fromEntries(
+  VOX_NUM_CTLS.map(([k, , , , label]) => [k, `vox ${label}`]));
+
+export const VOX_DEFAULTS = {
+  ...Object.fromEntries(VOX_NUM_CTLS.map(c => [`sng${c[0]}`, c[3]])),
+  ...Object.fromEntries(VOX_SEL_CTLS.map(c => [`sng${c[0]}`, c[1]])),
+};
+
+/** A 0..1 lane value in this control's own units. @param {string} k short key */
+export function voxFromUnit(k, u) {
+  const [lo, hi] = VOX_MOD_RANGE[k] ?? [0, 1];
+  return lo + Math.max(0, Math.min(1, u)) * (hi - lo);
+}
+
+// ---- the voices -------------------------------------------------------------
+// Complete patches: every panel control plus the four track sliders (vowel,
+// size, breath, release), so nothing of the last one survives a load.
+const VOX_TONES = {
+  "choir aah": {
+    d: "six voices on an open a, spread wide, a little air and a slow vibrato",
+    vowel: 0.5, size: 0.45, breath: 0.45, rel: 0.6,
+    p: { atk: 0.45, bright: 0.45, focus: 0.5, vib: 0.25, vrate: 0.4, vdelay: 0.4, drift: 0.35, growl: 0,
+         voices: 6, detune: 0.35, spread: 0.85, bite: 0.6, cons: "none", words: "off", mode: "poly" },
+  },
+  "angel ooh": {
+    d: "a high, small choir on oo, breathy and soft, for pads over a chord",
+    vowel: 0.05, size: 0.05, breath: 0.6, rel: 0.7,
+    p: { atk: 0.55, bright: 0.3, focus: 0.55, vib: 0.2, vrate: 0.4, vdelay: 0.5, drift: 0.3, growl: 0,
+         voices: 5, detune: 0.3, spread: 0.9, bite: 0.6, cons: "none", words: "off", mode: "poly" },
+  },
+  "basso": {
+    d: "one deep voice on o, mono, sliding between notes, a wide slow vibrato",
+    vowel: 0.25, size: 1, breath: 0.35, rel: 0.45,
+    p: { atk: 0.2, bright: 0.45, focus: 0.6, vib: 0.4, vrate: 0.35, vdelay: 0.35, drift: 0.25, growl: 0.05,
+         voices: 1, detune: 0.3, spread: 0.3, bite: 0.6, cons: "none", words: "off", mode: "mono" },
+  },
+  "soul lead": {
+    d: "a bright mono lead that sings hey yeah, the vibrato blooming late, a little grit",
+    vowel: 0.6, size: 0.55, breath: 0.4, rel: 0.35,
+    p: { atk: 0.1, bright: 0.7, focus: 0.5, vib: 0.45, vrate: 0.5, vdelay: 0.45, drift: 0.3, growl: 0.15,
+         voices: 1, detune: 0.3, spread: 0.3, bite: 0.65, cons: "none", words: "hey yeah", mode: "mono" },
+  },
+  "doo wop": {
+    d: "three close voices singing doo doo doo wah, for backing a lead",
+    vowel: 0.5, size: 0.6, breath: 0.4, rel: 0.3,
+    p: { atk: 0.1, bright: 0.5, focus: 0.5, vib: 0.25, vrate: 0.45, vdelay: 0.3, drift: 0.3, growl: 0,
+         voices: 3, detune: 0.25, spread: 0.6, bite: 0.7, cons: "none", words: "doo wop", mode: "poly" },
+  },
+  "la la": {
+    d: "a light high voice on la la la li, close to the mic",
+    vowel: 0.5, size: 0.15, breath: 0.45, rel: 0.25,
+    p: { atk: 0.05, bright: 0.55, focus: 0.5, vib: 0.2, vrate: 0.5, vdelay: 0.3, drift: 0.2, growl: 0,
+         voices: 1, detune: 0.3, spread: 0.3, bite: 0.7, cons: "none", words: "la la", mode: "mono" },
+  },
+  "robot choir": {
+    d: "four voices with no vibrato and no drift, bright and exact, singing na na",
+    vowel: 0.5, size: 0.5, breath: 0.15, rel: 0.25,
+    p: { atk: 0.05, bright: 0.85, focus: 0.8, vib: 0, vrate: 0.45, vdelay: 0, drift: 0, growl: 0,
+         voices: 4, detune: 0.1, spread: 0.6, bite: 0.8, cons: "none", words: "na na", mode: "poly" },
+  },
+  "monk chant": {
+    d: "a low unison on a dark o, held steady, with throat in it",
+    vowel: 0.22, size: 0.95, breath: 0.4, rel: 0.6,
+    p: { atk: 0.4, bright: 0.35, focus: 0.75, vib: 0.05, vrate: 0.3, vdelay: 0.5, drift: 0.35, growl: 0.3,
+         voices: 4, detune: 0.15, spread: 0.5, bite: 0.6, cons: "m", words: "off", mode: "poly" },
+  },
+  "whisper": {
+    d: "all breath and no voice: the formants on noise, starting with an h",
+    vowel: 0.5, size: 0.4, breath: 1, rel: 0.3,
+    p: { atk: 0.15, bright: 0.5, focus: 0.5, vib: 0, vrate: 0.45, vdelay: 0.3, drift: 0, growl: 0,
+         voices: 1, detune: 0.3, spread: 0.4, bite: 0.6, cons: "h", words: "off", mode: "poly" },
+  },
+  "hallelujah": {
+    d: "a full choir singing ha-le-lu-ya, one syllable a note",
+    vowel: 0.5, size: 0.5, breath: 0.4, rel: 0.5,
+    p: { atk: 0.2, bright: 0.5, focus: 0.5, vib: 0.3, vrate: 0.45, vdelay: 0.35, drift: 0.35, growl: 0,
+         voices: 6, detune: 0.3, spread: 0.85, bite: 0.65, cons: "none", words: "hallelujah", mode: "poly" },
+  },
+};
+
+export const VOX_TONE_NAMES = Object.keys(VOX_TONES);
+
+/** One line saying what a voice is reaching for. @param {string} name */
+export function voxToneDescription(name) { return VOX_TONES[name]?.d ?? ""; }
+
+/**
+ * A voice as a complete set of track params -- every panel control plus the
+ * four track sliders, so nothing of the last voice survives.
+ * @param {string} name
+ * @returns {Record<string, number|string>|null}
+ */
+export function voxTone(name) {
+  const v = VOX_TONES[name];
+  if (!v) return null;
+  const out = { ...VOX_DEFAULTS };
+  for (const [k, val] of Object.entries(v.p)) out[`sng${k}`] = val;
+  out.harm = v.vowel; out.timb = v.size; out.morph = v.breath; out.decay = v.rel;
   return out;
 }
 

@@ -13,6 +13,7 @@ import { buildSilverboxVoice } from "./silverbox.js";
 import { buildBassVoice, BASS_NUM_KEYS, BASS_SEL_KEYS } from "./bass.js";
 import { buildSubBassVoice, SUB_NUM_KEYS, SUB_SEL_KEYS } from "./subbass.js";
 import { buildDroneVoice, DRONE_NUM_KEYS, DRONE_SEL_KEYS } from "./drone.js";
+import { buildVoxVoice, VOX_NUM_KEYS, VOX_SEL_KEYS } from "./vox.js";
 import { buildHexopVoice, HEXOP_NUM_KEYS, HEXOP_SEL_KEYS } from "./hexop.js";
 import { buildGuitarVoice, GUITAR_NUM_KEYS, GUITAR_SEL_KEYS } from "./guitar.js";
 import { buildContagionVoice, CONTAGION_NUM_KEYS, CONTAGION_SEL_KEYS } from "./contagion.js";
@@ -748,6 +749,25 @@ export function buildDrumSynthNode(kind, output) {
         release: (time) => s.releaseAll(time),
       };
     }
+    // Vox: a glottal pulse through five formants, consonants and a choir, in
+    // one AudioWorklet — see vox.js. The fallback is a soft triangle pad
+    // through a fixed "ah" bandpass: no words, but never a silent track.
+    case "vox": {
+      const v = buildVoxVoice(output);
+      if (v) return v;
+      const f = new Tone.Filter({ type: "bandpass", frequency: 900, Q: 1.2 }).connect(output);
+      const s = new Tone.PolySynth(Tone.Synth, {
+        oscillator: { type: "fattriangle", count: 3, spread: 18 },
+        envelope: { attack: 0.08, decay: 0.1, sustain: 0.9, release: 0.4 },
+      });
+      s.volume.value = -6;
+      s.connect(f);
+      return {
+        nodes: [s, f],
+        trigger: (note, time, dur, vel) => s.triggerAttackRelease(Tone.Frequency(note, "midi"), dur, time, vel),
+        release: (time) => s.releaseAll(time),
+      };
+    }
     case "tines":     return makePolyPool(6, () => buildTinesVoice(output));
     case "oracle":   return makePolyPool(6, () => buildOracleVoice(output));
   }
@@ -1375,7 +1395,8 @@ export class DrumSynthVoice {
                      ...GUITAR_NUM_KEYS, ...GUITAR_SEL_KEYS,
                      ...BASS_NUM_KEYS, ...BASS_SEL_KEYS,
                      ...SUB_NUM_KEYS, ...SUB_SEL_KEYS,
-                     ...DRONE_NUM_KEYS, ...DRONE_SEL_KEYS]) {
+                     ...DRONE_NUM_KEYS, ...DRONE_SEL_KEYS,
+                     ...VOX_NUM_KEYS, ...VOX_SEL_KEYS]) {
       if (this.params?.[k] != null) this.built.setParam(k, this.params[k]);
     }
   }
