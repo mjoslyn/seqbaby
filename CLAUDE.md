@@ -3775,6 +3775,18 @@ edit ──▶ (420ms of quiet) ──▶ serializeSet() ──▶ fold onto the
 - The stack is **in memory and per page**, capped at 100 states. `new` still
   confirms before it blanks a session with work in it: undo can bring it back,
   but only until the tab goes.
+- **It also knows what is unsaved** (`hasUnsavedChanges`, `markSaved`). A save
+  point is a snapshot: the session as it arrived (boot, a song opened, a share
+  link, `new`) or as it was last saved, shared or exported, compared with the
+  stack's own `live` by `sameTree`, so an edit undone back counts as none and a
+  lane rewriting a knob counts as nothing. The shell marks its saves
+  (SaveButton, SongsMenu, the compose autosave) with the blob it sent, so an
+  edit made while a save was in flight is still unsaved. `hasUnsavedWork`
+  (session.js) adds "and there are notes in it", and that is what asks:
+  `new`, the logo (`onLeaveStudio`), opening a song, version or remix over
+  this one (`window.seqbaby.confirmDiscard`, via app/songs/confirmDiscard.ts),
+  and the browser's own `beforeunload` prompt for a reload, a closed tab or any
+  other link (`installLeaveGuard`, skipped under `?embed`).
 
 ## Naming a song nobody named (`app/songs/songName.js`)
 

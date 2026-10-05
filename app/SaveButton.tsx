@@ -8,6 +8,7 @@ import {
   useSyncExternalStore,
 } from "react";
 import { saveNamedSong } from "@/app/songs/actions";
+import { markSaved } from "@/app/songs/confirmDiscard";
 import { generateSongName } from "@/app/songs/songName";
 import { suggestSongName } from "@/app/songs/suggestName";
 import {
@@ -125,6 +126,7 @@ export default function SaveButton() {
     });
     setSaving(false);
     if (res.error) return setStatus({ text: res.error, err: true });
+    markSaved(data);
     // The server disambiguates a generated name against the account's songs, so
     // what came back is what it is actually called. Show it: a save that names
     // your song for you has to say what it named it.

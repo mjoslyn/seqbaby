@@ -11,6 +11,7 @@ import {
 } from "@/app/songs/actions";
 import { layoutVersions } from "@/app/songs/versionTree";
 import { adoptRemix } from "@/app/songs/adoptRemix";
+import { confirmOpen } from "@/app/songs/confirmDiscard";
 import styles from "@/app/ui.module.css";
 import { IconTag, IconRemix, IconTrash } from "@/app/menuIcons";
 
@@ -62,6 +63,7 @@ export default function VersionTree({
 
   const open = useCallback(
     async (v: SongVersion) => {
+      if (!(await confirmOpen(`v${v.seq}`))) return;
       const res = await loadVersion(v.id);
       if (res.error || res.data === undefined)
         return setStatus({ text: res.error ?? "Version not found", err: true });
@@ -97,6 +99,7 @@ export default function VersionTree({
 
   const remix = useCallback(
     async (v: SongVersion) => {
+      if (v.id !== baseVersionId && !(await confirmOpen(`a remix of v${v.seq}`))) return;
       setStatus({ text: "Remixing…" });
       const res = await remixSong(songId, v.id);
       if (res.error || !res.id)

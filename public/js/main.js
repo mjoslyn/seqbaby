@@ -24,7 +24,7 @@ import { initArrangement } from "./arrangement.js";
 import { attachLevelDrag, setActiveTrack } from "./render.js";
 import { initScaleUI, openChordMenu, syncChordUI } from "./scaleUI.js";
 import { inJam, jamTogglePlay } from "./jam.js";
-import { loadShareFromUrl, onExportSet, onImportSet, onLeaveStudio, onLoadSet, onSaveSet, onShareSet, STARTER_TRACKS } from "./session.js";
+import { installLeaveGuard, loadShareFromUrl, onExportSet, onImportSet, onLeaveStudio, onLoadSet, onSaveSet, onShareSet, STARTER_TRACKS } from "./session.js";
 import { state, switchPattern } from "./state.js";
 import { renderStepGrid } from "./stepGrid.js";
 import { createTrack, resizePattern } from "./track.js";
@@ -873,6 +873,8 @@ export function init() {
   // undo of the day would hand back a studio with no tracks in it. It installs
   // its own listeners and owns the two buttons (history.js).
   initHistory();
+  // Leaving the page with changes nobody saved asks first (session.js).
+  installLeaveGuard();
   // Expose the engine API on window.seqbaby for the Next.js shell.
   installAppApi();
   // if the URL carries ?s=<id>, pull that shared session

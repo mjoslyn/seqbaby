@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { getOpenSong, setOpenSong, subscribeOpenSong } from "@/app/songs/openSong";
 import { loadSongChat, saveSong, saveSongChat } from "@/app/songs/actions";
+import { markSaved } from "@/app/songs/confirmDiscard";
 import { composeModelLabel } from "@/lib/composeModels.js";
 import { API_KEY_CONSOLE_URL, SITE_OUT_OF_BUDGET, looksLikeApiKey, maskApiKey } from "@/lib/composeKey.js";
 import styles from "@/app/ui.module.css";
@@ -633,6 +634,7 @@ export default function ComposeChat({
       label,
     });
     if (res.error) return setSaveNote(`kept, but not saved: ${res.error}`);
+    markSaved(data);
     // The studio is now holding the version just written, so the NEXT save --
     // from here or from the top bar -- branches off it rather than off the one
     // this conversation started from.

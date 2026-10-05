@@ -36,7 +36,7 @@
 
 import { VOICE_AUTO_KEYS } from "./automation.js";
 import { setStatus } from "./dom.js";
-import { HistoryStack, shareStructure } from "./historyStore.js";
+import { HistoryStack, sameTree, shareStructure } from "./historyStore.js";
 import { ICON_REDO, ICON_UNDO } from "./icons.js";
 // Putting a session onto a running engine is liveSet.js's whole job, shared
 // with the compose panel's audition. This file owns only WHEN one is put back —
@@ -69,6 +69,15 @@ let settleTimer = null;
 let idleHandle = null;                  // the idle slot the settle moved to
 let pending = { label: "", key: null };
 let started = false;
+
+/** The snapshot of the session as it was last saved, shared, exported or
+ *  opened: what "unsaved changes" is measured against (`hasUnsavedChanges`).
+ *  A snapshot rather than a flag, so an edit undone back to it counts as no
+ *  change at all. */
+let saved = null;
+/** A whole session arrived and is waiting for its settle to become an entry;
+ *  that entry is the new save point (`onSessionArrived`). */
+let savedOnSettle = false;
 
 // ---- taking a snapshot --------------------------------------------------
 
@@ -200,10 +209,12 @@ function checkForEdit() {
   const { label, key } = pending;
   pending = { label: "", key: null };
   const fresh = snapshot(live);
-  if (fresh === live) return;            // nothing moved — no entry, no cost
-  const r = stack.record(fresh, { label, key });
-  live = r.snap;
-  if (r.status !== "unchanged") { refreshHistoryUI(); announceEdit(label); }
+  if (fresh !== live) {                  // nothing moved — no entry, no cost
+    const r = stack.record(fresh, { label, key });
+    live = r.snap;
+    if (r.status !== "unchanged") { refreshHistoryUI(); announceEdit(label); }
+  }
+  if (savedOnSettle) { saved = live; savedOnSettle = false; }
 }
 
 // The song changed and has settled: what the code drawer listens for, to keep
@@ -402,7 +413,44 @@ export function resetHistory() {
   clearPending();
   live = snapshot(null);
   stack.baseline(live, "");
+  saved = live;
+  savedOnSettle = false;
   refreshHistoryUI();
+}
+
+/**
+ * Has the song changed since it was last saved, shared, exported or opened?
+ * What the leave / new / open prompts ask before they warn (session.js).
+ *
+ * Measured off the stack rather than off a fresh `serializeSet`, so it sees
+ * exactly what undo sees: an edit a person (or a peer, or a compose turn)
+ * made, and none of the noise the stack filters out — an automation lane
+ * rewriting a knob, the pattern chain mode moved to. A gesture still settling
+ * is taken first, so a knob let go of a moment ago counts.
+ */
+export function hasUnsavedChanges() {
+  if (!started) return false;
+  flushHistory();
+  return !!saved && !sameTree(saved, live);
+}
+
+/**
+ * The session is somewhere other than this tab now: saved to the account,
+ * shared, exported, kept in the browser. `data` is the session that was
+ * written (what `serializeSet` returned when the save began), so an edit made
+ * while a save was in flight is still a change once it lands; without it, the
+ * session as it is now is the save point.
+ */
+export function markSaved(data) {
+  if (!started) return;
+  flushHistory();
+  if (!data || typeof data !== "object") { saved = live; return; }
+  const snap = deepCopy(data);
+  // The same normalisation a snapshot gets: the view is not the song, and the
+  // stamps a writer adds (`_savedAt`, `_exportedAt`) are not either.
+  delete snap.activePattern;
+  for (const k of Object.keys(snap)) if (k.startsWith("_") && k !== "_version") delete snap[k];
+  saved = shareStructure(live, pinAutomated(live, snap));
 }
 
 /**
@@ -436,10 +484,14 @@ export function initHistory() {
   // back to the starter tracks nobody asked for would be nonsense); after that
   // it is a step like any other, which is what makes an accidental `new`
   // recoverable.
+  // Either way the session that arrived is the new save point: it came from
+  // somewhere (a saved song, a share link, a file, the room in a jam), so
+  // leaving it untouched loses nothing.
   const onSessionArrived = (label) => {
     if (restoring) return;
     if (stack.size <= 1) { resetHistory(); return; }
     pending.label = label;              // this names the step, not whatever was clicked
+    savedOnSettle = true;
     scheduleCheck(label, null);
   };
   window.addEventListener("seqbaby:setapplied", () => onSessionArrived("open song"));
