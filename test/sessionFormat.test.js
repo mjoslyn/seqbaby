@@ -223,6 +223,29 @@ test("a track's sound is migrated everywhere it is stored", () => {
   assert.ok("contagion_sat" in td.patterns[1].sound.lfoConfig);
 });
 
+test("a contagion sound from before its split controls keeps what it played", () => {
+  // osc 2 played osc 1's shape and pulse width, filter 2 filter 1's resonance,
+  // and the filter envelope the amp envelope's times. Each gets that value.
+  const old = { morph: 0.8, vpw: 0.3, timb: 0.7, vatk: 0.1, decay: 0.2, vsus: 0.4, vrel: 0.5 };
+  const td = migrateTrackNames({
+    engineKey: "dm:virus",
+    params: { ...old },
+    baseSound: { params: { ...old, morph: 0.1 } },
+    patterns: [{ sound: { params: { timb: 0.9 } } }],
+  });
+  const want = { vshape2: 0.8, vpw2: 0.3, vreso2: 0.7, vfatk: 0.1, vfdec: 0.2, vfsus: 0.4, vfrel: 0.5 };
+  for (const [k, v] of Object.entries(want)) assert.equal(td.params[k], v, k);
+  assert.equal(td.baseSound.params.vshape2, 0.1);
+  assert.equal(td.patterns[0].sound.params.vreso2, 0.9);
+  assert.ok(!("vshape2" in td.patterns[0].sound.params), "a key the sound never had is not invented");
+  // A sound that already has the new controls keeps its own.
+  const now = migrateTrackNames({ engineKey: "dm:contagion", params: { morph: 0.8, vshape2: 0.2 } });
+  assert.equal(now.params.vshape2, 0.2);
+  // And only the contagion: the same keys on another engine mean nothing to it.
+  const other = migrateTrackNames({ engineKey: "dm:hexop", params: { morph: 0.8, timb: 0.3 } });
+  assert.deepEqual(other.params, { morph: 0.8, timb: 0.3 });
+});
+
 test("macro pad assignments speak the automation namespace, so they migrate too", () => {
   const s = migrateLegacyNames({
     tracks: [{ engineKey: "dm:dx7" }],

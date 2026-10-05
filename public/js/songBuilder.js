@@ -171,7 +171,7 @@ export function describeEngine(engineKey) {
 // so describeEngine has something to say for them.
 const SLIDER_TIPS = {
   "dm:silverbox": { harm: "filter cutoff", timb: "filter resonance", morph: "how far the envelope opens the filter", decay: "envelope decay" },
-  "dm:contagion": { harm: "cutoff for both filters", timb: "resonance, shared by both filters", morph: "oscillator shape, sine through triangle and saw to pulse", decay: "decay for both envelopes" },
+  "dm:contagion": { harm: "cutoff for both filters", timb: "filter 1's resonance (filter 2's is reso2); the last tenth self-oscillates", morph: "osc 1's shape, sine through triangle and saw to pulse (osc 2's is shape2)", decay: "the amp envelope's decay (the filter envelope's is fdec)" },
   "dm:hexop": { harm: "master modulation index: brightness", timb: "feedback", morph: "modulator decay and release", decay: "carrier decay" },
   "dm:guitar": { harm: "amp drive (exponential, like a gain pot)", timb: "the tone knob on the guitar, a passive lowpass", morph: "bloom: speaker-to-string feedback, a threshold rather than a switch", decay: "sustain" },
   "dm:bass": { harm: "amp drive", timb: "tone", morph: "the rig compressor: threshold down and makeup up together", decay: "sustain" },
@@ -208,13 +208,15 @@ const PANELS = {
     prefix: "v",
     num: CONTAGION_NUM_KEYS.map(k => {
       const s = k.slice(1);
-      const r = { osc2semi: [-24, 24], cut2: [-1, 1], envamt: [-1, 1], pw: [0.02, 0.98] }[s] || [0, 1];
+      const r = { osc2semi: [-24, 24], cut2: [-1, 1], envamt: [-1, 1], pw: [0.02, 0.98], pw2: [0.02, 0.98],
+                  slope: [-1, 1], fslope: [-1, 1] }[s] || [0, 1];
       return [s, r[0], r[1], null, `contagion ${s}`];
     }),
     sel: [
       ["mode1", "lp", ["lp", "hp", "bp", "bs"]], ["poles", "4", ["2", "4"]], ["mode2", "lp", ["lp", "hp", "bp", "bs"]],
       ["route", "ser", ["ser", "par", "split"]],
-      ["sat", "soft", ["off", "light", "soft", "hard", "digital", "shaper", "rectify", "bits", "rate"]],
+      ["sat", "soft", ["off", "light", "soft", "middle", "hard", "digital", "shaper", "rectify", "bits", "rate",
+                       "ratefollow", "lowpass", "lowfollow", "highpass", "highfollow"]],
       ["subwave", "square", ["square", "triangle"]], ["sync", "off", ["off", "on"]], ["uni", "1", ["1", "2", "3", "4", "6", "8"]],
     ],
   },

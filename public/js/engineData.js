@@ -428,7 +428,7 @@ export function engineSliderLabels(engineKey) {
     case "dm:granular":  return { harm: "grain",    timb: "dense",  morph: "pos",       decay: "spray" };
     case "wt:akwf":      return { harm: "wave",     timb: "warm",   morph: "detune",    decay: "decay" };
     case "dm:silverbox": return { harm: "cutoff",   timb: "reso",   morph: "env mod",   decay: "decay" };
-    case "dm:contagion": return { harm: "cutoff",   timb: "reso",   morph: "shape",     decay: "decay" };
+    case "dm:contagion": return { harm: "cutoff",   timb: "reso",   morph: "shape 1",   decay: "decay" };
     case "dm:hexop":     return { harm: "bright",   timb: "fbk",    morph: "mod dec",   decay: "decay" };
     case "dm:808-kick":  return { harm: "tune",     timb: "tone",   morph: "drive",     decay: "decay" };
     case "dm:808-snare": return { harm: "tune",     timb: "tone",   morph: "snappy",    decay: "decay" };
@@ -450,18 +450,22 @@ export function engineSliderLabels(engineKey) {
 // Panel controls, in UI order. render.js / session.js walk these lists so the
 // wiring stays in one place (same convention as GRAN_NUM_KEYS).
 export const CONTAGION_NUM_KEYS = [
-  "vosc2semi", "vosc2det", "vpw", "vfm", "vring",
+  "vosc2semi", "vosc2det", "vpw", "vshape2", "vpw2", "vfm", "vring",
   "vunidet", "vunispread",
-  "vcut2", "vbal", "vsatamt", "venvamt",
-  "vatk", "vsus", "vrel",
+  "vcut2", "vreso2", "vbal", "vsatamt", "venvamt",
+  "vatk", "vsus", "vrel", "vslope",
+  "vfatk", "vfdec", "vfsus", "vfrel", "vfslope",
 ];
 export const CONTAGION_SEL_KEYS = ["vmode1", "vpoles", "vmode2", "vroute", "vsat", "vsubwave", "vsync", "vuni"];
 
 export const CONTAGION_DEFAULTS = {
-  vosc2semi: 0, vosc2det: 0.08, vpw: 0.5, vfm: 0, vring: 0,
+  vosc2semi: 0, vosc2det: 0.08, vpw: 0.5, vshape2: 0.5, vpw2: 0.5, vfm: 0, vring: 0,
   vunidet: 0.3, vunispread: 0.6,
-  vcut2: 0, vbal: 0, vsatamt: 0.3, venvamt: 0.5,
-  vatk: 0.02, vsus: 0.6, vrel: 0.25,
+  vcut2: 0, vreso2: 0.5, vbal: 0, vsatamt: 0.3, venvamt: 0.5,
+  vatk: 0.02, vsus: 0.6, vrel: 0.25, vslope: 0,
+  // The filter envelope starts where the amp envelope does (decay at the
+  // track decay slider's default), which is how the two used to share one.
+  vfatk: 0.02, vfdec: 0.4, vfsus: 0.6, vfrel: 0.25, vfslope: 0,
   vmode1: "lp", vpoles: "4", vmode2: "lp", vroute: "ser", vsat: "soft",
   vsubwave: "square", vsync: "off", vuni: "1",
 };

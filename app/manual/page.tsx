@@ -741,16 +741,19 @@ export default function ManualPage() {
             <span className={styles.ui}>shape</span> and{" "}
             <span className={styles.ui}>decay</span>. The four beside them are the
             levels of osc 1, osc 2, the sub and the noise. Everything else lives in
-            the three rows underneath.
+            the rows underneath.
           </p>
           <ul>
             <li>
               <strong>Shape</strong> is one continuous morph from sine through
               triangle and saw to pulse, and at the top the pulse width knob takes
               over. Sweep it and the tone changes character, not just brightness.
+              It is osc 1&apos;s; osc 2 has its own,{" "}
+              <span className={styles.ui}>shape 2</span> and{" "}
+              <span className={styles.ui}>pw 2</span>.
             </li>
             <li>
-              <strong>Unison</strong> is the hypersaw. Each note plays up to eight
+              <strong>Unison</strong> is the supersaw. Each note plays up to eight
               detuned copies of the whole oscillator section, spread across the stereo
               field. Two or three thickens things up; eight with the detune wound on
               is the wide trance sound.
@@ -760,19 +763,33 @@ export default function ManualPage() {
               pass, band pass or notch, and you choose how they connect: in series, in
               parallel, or split so filter 1 plays the left ear and filter 2 the right.
               A low pass into a high pass gives you a band pass you can sweep from both
-              ends.
+              ends. Filter 1 takes the <span className={styles.ui}>reso</span> knob and
+              filter 2 has its own, <span className={styles.ui}>reso 2</span>; the
+              last tenth of either makes the filter whistle on its own.
             </li>
             <li>
               <strong>Saturation sits between them</strong>, so filter 2 gets to tidy
               up whatever the saturator did. It runs from a gentle warmth through hard
-              clipping to a bit reducer and a rate reducer.
+              clipping to a bit reducer and a rate reducer, plus a one-pole low pass
+              and high pass. The <em>follow</em> versions track the note you play.
             </li>
           </ul>
           <p>
             With sync on, osc 2 is forced to osc 1&apos;s pitch, so dragging or
             automating the{" "}
             <span className={styles.ui}>semi</span> knob gives you the classic tearing
-            sync lead.
+            sync lead. <span className={styles.ui}>fm</span> works the same way round:
+            osc 1 modulates osc 2.
+          </p>
+          <p>
+            The amp and the filter each have an envelope. The track&apos;s{" "}
+            <span className={styles.ui}>decay</span> knob is the amp&apos;s; the
+            filter&apos;s has its own attack, decay, sustain and release, so a short
+            filter decay over a long amp sustain is a pluck that keeps ringing.{" "}
+            <span className={styles.ui}>env amt</span> is how far it moves the
+            cutoff. Each envelope also has a <span className={styles.ui}>slope</span>:
+            in the middle the sustain holds, to the right it fades while you hold the
+            note, to the left it swells.
           </p>
         </section>
 

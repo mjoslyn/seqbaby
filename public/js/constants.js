@@ -76,6 +76,8 @@ export const LFO_KEYS = [
   "contagion_cut2", "contagion_bal", "contagion_sat", "contagion_envamt",
   "contagion_osc2semi", "contagion_osc2det", "contagion_unispread",
   "contagion_atk", "contagion_sus", "contagion_rel",
+  "contagion_shape2", "contagion_pw2", "contagion_reso2", "contagion_slope",
+  "contagion_fatk", "contagion_fdec", "contagion_fsus", "contagion_frel", "contagion_fslope",
   // Hexop: the globals, then every control of all six operators. Generated from
   // the one list in hexop.js — 56 keys is too many to keep in step by hand, and
   // the picker only ever shows them on a hexop track (see canModulate).
@@ -135,6 +137,11 @@ export const LFO_LABELS = {
   contagion_osc2semi: "contagion osc2 semi", contagion_osc2det: "contagion osc2 detune",
   contagion_unispread: "contagion unison spread",
   contagion_atk: "contagion attack", contagion_sus: "contagion sustain", contagion_rel: "contagion release",
+  contagion_shape2: "contagion osc2 shape", contagion_pw2: "contagion osc2 pulse width",
+  contagion_reso2: "contagion resonance 2", contagion_slope: "contagion sustain slope",
+  contagion_fatk: "contagion filter attack", contagion_fdec: "contagion filter decay",
+  contagion_fsus: "contagion filter sustain", contagion_frel: "contagion filter release",
+  contagion_fslope: "contagion filter sustain slope",
   delay_time: "delay time", delay_fbk: "delay fbk",
   reverb_decay: "reverb decay",
   ...Object.fromEntries(HEXOP_MOD_KEYS.map(k => [`hexop_${k}`, HEXOP_MOD_LABELS[k]])),
@@ -198,12 +205,15 @@ export const LFO_AMP_SCALE = {
   // silverbox accent is a 0..1 knob; silverbox tune is in semitones, so depth 1 is a
   // half-semitone vibrato either side of wherever the tune slider sits.
   silverbox_accent: 1, silverbox_tune: 1,
-  // All 0..1 knobs except cut2 and envamt, which are bipolar over the same span.
+  // All 0..1 knobs except cut2, envamt and the two sustain slopes, which are
+  // bipolar over the same span.
   contagion_pw: 1, contagion_fm: 1, contagion_ring: 1, contagion_unidet: 1,
   contagion_cut2: 2, contagion_bal: 1, contagion_sat: 1, contagion_envamt: 2,
   // osc2 semi is in semitones over ±24, so depth 1 swings an octave either way.
   contagion_osc2semi: 24,
   contagion_osc2det: 1, contagion_unispread: 1, contagion_atk: 1, contagion_sus: 1, contagion_rel: 1,
+  contagion_shape2: 1, contagion_pw2: 1, contagion_reso2: 1, contagion_slope: 2,
+  contagion_fatk: 1, contagion_fdec: 1, contagion_fsus: 1, contagion_frel: 1, contagion_fslope: 2,
   // Granular grain controls — 0..1 swing around wherever the slider sits.
   gran_window: 1, gran_jitter: 1, gran_detune: 1, gran_pan: 1,
   // Hexop: each key swings its own control's full span, so an operator's ratio
@@ -550,6 +560,15 @@ export const AUTOMATION_TARGETS = {
   "contagion.atk":      { label: "contagion attack" },
   "contagion.sus":      { label: "contagion sustain" },
   "contagion.rel":      { label: "contagion release" },
+  "contagion.shape2":   { label: "contagion osc2 shape" },
+  "contagion.pw2":      { label: "contagion osc2 pulse width" },
+  "contagion.reso2":    { label: "contagion resonance 2" },
+  "contagion.slope":    { label: "contagion sustain slope" },
+  "contagion.fatk":     { label: "contagion filter attack" },
+  "contagion.fdec":     { label: "contagion filter decay" },
+  "contagion.fsus":     { label: "contagion filter sustain" },
+  "contagion.frel":     { label: "contagion filter release" },
+  "contagion.fslope":   { label: "contagion filter sustain slope" },
   // Hexop panel controls (hexop engine only) — globals, then all six operators.
   // Generated from the same list the LFO keys come from (hexop.js).
   ...Object.fromEntries(HEXOP_MOD_KEYS.map(k => [`hexop.${k}`, { label: HEXOP_MOD_LABELS[k] }])),

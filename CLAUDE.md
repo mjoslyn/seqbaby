@@ -310,7 +310,7 @@ npm run legacy:dev     # pre-Next static Node server on :5173 (engine assets onl
 npm test               # node --test: the pure modules (session format, chance gen,
                        #   version tree, song names, share card copy, the song builder, the jam diff,
                        #   song previews, grid avatars, the songs and people explorers,
-                       #   the Strudel bridge, the reverb, the filter models, the guitar,
+                       #   the Strudel bridge, the reverb, the filter models, the guitar, the contagion,
                        #   the prism, the repeat, the arrangement's
                        #   format and builder calls)
 npm run mcp            # the MCP server on stdio (mcp/server.mjs) — an agent writes songs
@@ -893,11 +893,48 @@ ring ─┘                    └─ FILTER 2 (multimode, 2 pole) ────�
   state-variable filters — one structure, all four responses. Filter 1's 4-pole
   mode cascades two SVF stages; **each carries `sqrt(Q)`, not the full Q**, or
   the peaks multiply and the resonance doubles in dB.
-- **A saturation stage between them** (9 curves, off → rate reducer), which is
-  where the hardware puts it: filter 2 tidies up what the saturator did.
-- **A continuous shape morph**, sine → tri → saw → pulse, all four derived from
-  one phase accumulator so the crossfades stay coherent. polyBLEP on saw/pulse.
-- **Unison to 8** with detune and stereo spread — the hypersaw.
+  Each has its own resonance (`timb` is filter 1's, `vreso2` filter 2's), and
+  the last tenth of either knob runs the damping past zero so the filter
+  self-oscillates, the band-pass integrator soft-clipped to hold it steady
+  (`resoK`, `K_OSC`). Below 0.9 the curve is the one it always was.
+- **A saturation stage between them** (the hardware's curves: light, soft,
+  middle, hard, digital, shaper, rectifier, bit and rate reducers, and the
+  one-pole low / high pass, with `follow` versions keyed to the note), which is
+  where the hardware puts it: filter 2 tidies up what the saturator did. The
+  rectifier is full wave with its DC blocked: `2|x| - 1` put a thump the size of
+  the knob under every note. Stored by name, so the indices are free to move.
+- **A continuous shape morph per oscillator**, sine → tri → saw → pulse, all four
+  derived from one phase accumulator so the crossfades stay coherent. polyBLEP on
+  saw/pulse. **The pulse falls where the saw falls.** Drawn the other way up its
+  odd harmonics were the saw's negated, and a third of the way across that
+  crossfade the fundamental cancelled outright (measured 0.001 at shape 0.778):
+  the note jumped an octave. Osc 1's shape is the `morph` slider, osc 2's is
+  `vshape2` (with `vpw2`).
+- **Osc 1 is the master**, as on the hardware: osc 2 syncs to it AND is
+  frequency-modulated by it (it used to be the other way round). The sync restart
+  lands at the fractional instant osc 1 wrapped and is band-limited with a
+  polyBLEP over the step, which needs the sample before it, so both oscillators
+  sound one sample late (`d1` / `d2`). Measured at E5: aliasing -32.6dB, from
+  -20dB snapped and uncorrected.
+- **Two envelopes, ADSR plus sustain slope** (the hardware's ADSTR): the track's
+  `decay` slider is the amp's, `vfatk` / `vfdec` / `vfsus` / `vfrel` the
+  filter's, `vslope` / `vfslope` what each does while held (middle holds, right
+  falls, left rises). They used to be one envelope. The amp gain is ramped
+  across each control block: stepped, a fast attack was a staircase with a 3kHz
+  buzz on it.
+- **Unison to 8** with detune and stereo spread: the supersaw sound. Not the TI's
+  HyperSaw, which is an oscillator model of its own.
+- **A chord glides note to note**: the k-th note of a chord from the k-th of the
+  chord before (`prevF` / `curF`), not every note from whichever was posted last.
+- **The output ceiling is linear to 0.8** and then a knee that never passes 1.5
+  (`ceil`). It was a `tanh`, which put a third harmonic 31dB down on a single
+  note and squashed every chord.
+- **Songs from before the split controls** are migrated by
+  `migrateContagionSplit` (sessionFormat.js): `vshape2` from `morph`, `vpw2` from
+  `vpw`, `vreso2` from `timb`, the filter envelope from the amp's, each only when
+  the new key is absent. A sparse builder song that never sets them gets the same
+  answer, which is what it played before. A lane or LFO on `contagion.atk` still
+  only moves the amp's.
 
 - **Polyphony lives inside the processor** (8 voices, steal-quietest), not in
   `makePolyPool`. That's a real gain: a pool exposes only voice 0's params to
@@ -905,7 +942,7 @@ ring ─┘                    └─ FILTER 2 (multimode, 2 pole) ────�
 - **Control blocks** — envelopes, cutoff and filter coefficients update every 16
   samples, so `tan()` runs at 3 kHz rather than per sample. Note events are
   handled at block boundaries (≤0.33 ms late, never early).
-- **Controls** — the four timbre sliders are CUTOFF / RESONANCE / SHAPE / DECAY;
+- **Controls** — the four timbre sliders are CUTOFF / RESONANCE / SHAPE 1 / DECAY;
   the shared osc1..osc4 sliders are osc1 / osc2 / sub / noise; the rest live in
   `sq-param-group--contagion` as `CONTAGION_NUM_KEYS` / `CONTAGION_SEL_KEYS` (render.js and
   session.js walk those lists, as they do for granular).
@@ -913,19 +950,25 @@ ring ─┘                    └─ FILTER 2 (multimode, 2 pole) ────�
   `dm:contagion`, all real AudioParams: every numeric control on the panel is
   reachable, envelope and osc detail included (the k-rate ones take a connection
   and a ramp fine — the value is sampled once per control block). `contagion_cut2` /
-  `contagion_envamt` are bipolar and `contagion_osc2semi` spans ±24 semitones, so their
+  `contagion_envamt` / `contagion_slope` / `contagion_fslope` are bipolar and `contagion_osc2semi` spans ±24 semitones, so their
   automation lanes map through their own range, not 0..1. One key doesn't match
   its param: `contagion_sat` is the saturation *amount*, `vsatamt` on the voice
   (`vsat` is the curve select), aliased in `getModTarget` /
   `applyAutomationAtStep`.
-- **Resonance is cubed** (`0.7 + reso³·12`). `timb` defaults to 0.5 for every
+- **Resonance is cubed** (`0.7 + reso³·12`, filter 2 `·9`). `timb` defaults to 0.5 for every
   engine, and a squared curve put that default far too resonant.
 - **Noise is squared** for the same reason: `osc4` defaults to 0.4 everywhere,
   and linear noise at 0.4 hisses over the patch.
 - Simplifications, stated in the file too: unison copies share their note's
   filter pair; the morph crossfades four classic waves rather than walking the
-  contagion's 64 spectral wavetables; no oversampling, so the saturator aliases (as
-  the hardware's does); cutoff keyfollow is fixed at 33%.
+  contagion's 64 spectral wavetables; no osc 3; one envelope amount for both
+  filters; no oversampling, so the saturator aliases (as the hardware's does);
+  cutoff keyfollow is fixed at 33%; slope and routing are chosen separately (series
+  with a 4-pole filter 1 is the hardware's SER 6, 2-pole its SER 4).
+- `test/contagion.test.js` renders the processor in Node and pins each of the
+  above: the morph's fundamental, the rectifier's DC, which oscillator FMs
+  which, both envelopes, the slope, self-oscillation, the ramped gain, sync
+  aliasing, chord glide, the ceiling.
 
 ## Hexop (`dm:hexop`, `public/js/hexop.js`)
 

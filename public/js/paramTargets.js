@@ -48,7 +48,10 @@ for (const [cls, name] of [["vpw", "pw"], ["vfm", "fm"], ["vring", "ring"],
                            ["vsatamt", "sat"], ["venvamt", "envamt"],
                            ["vosc2semi", "osc2semi"], ["vosc2det", "osc2det"],
                            ["vunispread", "unispread"],
-                           ["vatk", "atk"], ["vsus", "sus"], ["vrel", "rel"]]) {
+                           ["vatk", "atk"], ["vsus", "sus"], ["vrel", "rel"],
+                           ["vshape2", "shape2"], ["vpw2", "pw2"], ["vreso2", "reso2"],
+                           ["vslope", "slope"], ["vfatk", "fatk"], ["vfdec", "fdec"],
+                           ["vfsus", "fsus"], ["vfrel", "frel"], ["vfslope", "fslope"]]) {
   def(`p-${cls}`, `contagion_${name}`, `contagion.${name}`);
 }
 // Hexop panel. Every control is `d` + a short key, and that short key spells both
@@ -376,7 +379,7 @@ export const PARAM_DESCRIPTIONS = {
   // Contagion envelope sliders (no tooltip in the markup — the four track sliders
   // carry the engine's own tips, these don't).
   "contagion.atk": "how long each note takes to reach full level",
-  "contagion.sus": "the level the envelope holds while the note is held",
+  "contagion.sus": "the level the amp envelope holds while the note is held",
   "contagion.rel": "how long the note takes to fade once it ends",
 
   // ── controls with no lfo or automation target: keyed by class ──
