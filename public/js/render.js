@@ -36,7 +36,7 @@ import { state } from "./state.js";
 import { openAutAsModal, openChanceAsModal, openCompAsModal, openEnvAsModal, openEqAsModal, openFilterAsModal, openFxAsModal, openGranularWavModal, openModAsModal, openEuclidAsModal, openRollAsModal, openSampleEditorModal, openTrackMenu } from "./stepEditor.js";
 import { openWavetableEditor } from "./wavetableEditor.js";
 import { attachGridInteraction, paintStepCursor, renderStepGrid } from "./stepGrid.js";
-import { duplicateTrack, extendPatternByDuplicate, removeTrack, resizePattern, resizeTrack, shiftTrackOctave, truncatePattern } from "./track.js";
+import { copyTrackPattern, duplicateTrack, hasTrackClip, pasteTrackPattern, extendPatternByDuplicate, removeTrack, resizePattern, resizeTrack, shiftTrackOctave, truncatePattern } from "./track.js";
 import { CONTAGION_NUM_KEYS, CONTAGION_SEL_KEYS } from "./contagion.js";
 import { GRAN_DEFAULTS, GRAN_NUM_KEYS, GRAN_SEL_KEYS } from "./voices.js";
 
@@ -1173,6 +1173,12 @@ export function renderTrack(t) {
   node.querySelector(".sq-track__remove").addEventListener("click", () => removeTrack(t));
   const dupBtn = node.querySelector(".sq-track__dup");
   if (dupBtn) dupBtn.addEventListener("click", () => duplicateTrack(t));
+  node.querySelector(".sq-track__copy")?.addEventListener("click", () => copyTrackPattern(t));
+  const pasteBtn = node.querySelector(".sq-track__paste");
+  if (pasteBtn) {
+    pasteBtn.addEventListener("click", () => pasteTrackPattern(t));
+    pasteBtn.disabled = !hasTrackClip();
+  }
 
   // mobile: "more" toggle button opens a modal hosting the hidden track-head
   // extras (save/load patch, len-extend, oct/semi, synth params, dup, remove).
