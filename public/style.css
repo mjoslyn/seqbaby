@@ -1282,6 +1282,8 @@ main {
 .sq-track.is-bus .sq-track__roll,
 .sq-track.is-bus .sq-track__env,
 .sq-track.is-bus .sq-track__clear,
+.sq-track.is-bus .sq-track__copy,
+.sq-track.is-bus .sq-track__paste,
 .sq-track.is-bus .track-dice,
 .sq-track.is-bus .track-euclid,
 .sq-track.is-bus .sq-track__oct,
@@ -3974,6 +3976,8 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not
      move to the modal instead. roll keeps its inline spot. */
   .sq-track__head .sq-track__save,
   .sq-track__head .sq-track__load-patch,
+  .sq-track__head .sq-track__copy,
+  .sq-track__head .sq-track__paste,
   .sq-track__head .sq-track__dup,
   .sq-track__head .sq-track__remove,
   .sq-track__head .sq-track__oct,
@@ -4096,6 +4100,8 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not
   }
   .sq-track__menu-modal .sq-track__save,
   .sq-track__menu-modal .sq-track__load-patch,
+  .sq-track__menu-modal .sq-track__copy,
+  .sq-track__menu-modal .sq-track__paste,
   .sq-track__menu-modal .sq-track__dup,
   .sq-track__menu-modal .sq-track__remove {
     display: inline-flex;

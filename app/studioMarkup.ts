@@ -735,6 +735,8 @@ ${VOX_PANEL}
         <button class="track-dice sq-icon-btn sq-btn--ghost" data-label="dice" type="button" aria-label="random pattern, drag up or down to set density" title="random pattern. Drag up and down to set the density"></button>
         <button class="track-euclid sq-icon-btn sq-btn--ghost" data-label="euclid" type="button" aria-pressed="false" aria-label="euclidean rhythm generator" title="euclidean rhythm: N hits spread as evenly as possible over the pattern"></button>
         <button class="track-chance sq-icon-btn sq-btn--ghost" data-label="chance" type="button" aria-pressed="false" aria-label="chance melody generator" title="chance: a part from probabilities. Note lengths, rests, ties, and how likely each of the twelve semitones is"></button>
+        <button class="sq-track__copy sq-btn--ghost" type="button" title="copy this track's current pattern, to paste on any track in any pattern">copy</button>
+        <button class="sq-track__paste sq-btn--ghost" type="button" title="paste a copied track pattern here (copy one first)" disabled>paste</button>
         <button class="sq-track__dup sq-btn--ghost" type="button" title="duplicate this track">dup</button>
         <button class="sq-track__remove sq-btn--ghost sq-btn--danger">remove</button>
         <div class="sq-track__oct">

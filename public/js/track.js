@@ -14,6 +14,8 @@ import { paintDiceDensity, placeBusesLast, refreshFxPanelUI, refreshMuteSoloUI, 
 import { applySet } from "./session.js";
 import { defaultCompConfig, ensureFxRack, refreshAllTrackOutputs, refreshCompSourceDropdowns, refreshNoiseBeds, refreshOutputSelects, routeVoiceToRack, setFilter } from "./signal.js";
 import { aliasPattern, clonePattern, emptyPattern, state } from "./state.js";
+import { canAutomate } from "./automation.js";
+import { refreshParamIndicators } from "./paramTargets.js";
 import { renderStepGrid } from "./stepGrid.js";
 import { SCALES, midiToScaleIndex, scaleIndexToMidi } from "./theory.js";
 import { requestMidiIfNeeded } from "./transport.js";
@@ -291,6 +293,70 @@ export function duplicateTrack(src) {
   refreshChanceUI(dup);
   renderStepGrid(dup);
   return dup;
+}
+
+// ---- copy / paste a track's pattern ------------------------------------------
+//
+// One clipboard for the page: the notes of one track's current pattern (every
+// per-step array and its automation lanes, through clonePattern), pasted over
+// whichever pattern another track (or the same one) is on. So "copy the bass
+// from pattern 1, go to pattern 3, paste on the lead" is three clicks. The
+// SOUND does not travel: a p-lock snapshot belongs to its track's engine, so
+// the target pattern keeps its own lock and sound, and lanes the target's
+// engine cannot play are left behind.
+
+/** @type {{ pattern: import("./types.js").Pattern, name: string, patIdx: number, isDrumKit: boolean } | null} */
+let trackClip = null;
+
+export function hasTrackClip() { return !!trackClip; }
+
+/** Copy the pattern `t` is on into the clipboard. */
+export function copyTrackPattern(t) {
+  const idx = t._arrPattern ?? t._patternIdx ?? state.activePattern;
+  const src = t.patterns?.[idx];
+  if (!src) return;
+  trackClip = { pattern: clonePattern(src), name: t.name?.trim() || "track", patIdx: idx, isDrumKit: !!t.isDrumKit };
+  refreshTrackPasteButtons();
+  const notes = src.steps.reduce((n, v) => n + (v ? 1 : 0), 0);
+  setStatus(`copied ${trackClip.name}, pattern ${idx + 1} (${notes} note${notes === 1 ? "" : "s"}). Paste it on any track, in any pattern`);
+}
+
+/** Paste the clipboard over the pattern `t` is on. */
+export function pasteTrackPattern(t) {
+  if (!trackClip) { setStatus("nothing copied yet: press copy on a track first", true); return false; }
+  const idx = t._arrPattern ?? t._patternIdx ?? state.activePattern;
+  const old = t.patterns[idx];
+  const p = clonePattern(trackClip.pattern);
+  p.soundLocked = !!old?.soundLocked;
+  p.sound = old?.sound ?? null;
+  for (const key of Object.keys(p.automation)) {
+    if (!canAutomate(t, key)) delete p.automation[key];
+  }
+  t.patterns[idx] = p;
+  aliasPattern(t, idx);
+  renderEuclidPanel(t);
+  renderChancePanel(t);
+  renderStepGrid(t);
+  refreshAutIfOpen(t);
+  refreshRollIfOpen(t);
+  refreshParamIndicators(t);
+  renderPatternGrid();
+  const kitNote = trackClip.isDrumKit !== !!t.isDrumKit
+    ? (t.isDrumKit ? " (melodic notes on a drum kit)" : " (drum notes on a melodic track)") : "";
+  setStatus(`pasted ${trackClip.name} pattern ${trackClip.patIdx + 1} → ${t.name?.trim() || "track"} pattern ${idx + 1}${kitNote}`);
+  return true;
+}
+
+/** Enable every track's paste button once there is something to paste. */
+export function refreshTrackPasteButtons() {
+  for (const t of state.tracks) {
+    const b = t.el?.querySelector(".sq-track__paste");
+    if (!b) continue;
+    b.disabled = !trackClip;
+    b.title = trackClip
+      ? `paste ${trackClip.name}'s pattern ${trackClip.patIdx + 1} over this track's current pattern (its sound stays)`
+      : "paste a copied track pattern here (copy one first)";
+  }
 }
 
 export function removeTrack(t) {

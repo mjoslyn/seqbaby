@@ -1004,8 +1004,14 @@ export function openTrackMenu(t) {
     addRow([withLabel(saveBtn, "save"), withLabel(loadBtn, "load")]);
   }
 
+  const copyBtn = capture(head, ".sq-track__copy");
+  const pasteBtn = capture(head, ".sq-track__paste");
   const dupBtn = capture(head, ".sq-track__dup");
   const removeBtn = capture(head, ".sq-track__remove");
+  if (copyBtn || pasteBtn) {
+    addLabel("pattern");
+    addRow([copyBtn, pasteBtn]);
+  }
   if (dupBtn || removeBtn) {
     addLabel("track");
     addRow([dupBtn, removeBtn]);
