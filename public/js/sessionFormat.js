@@ -22,6 +22,63 @@
 //     a 3 would silently drop those engines, so the warning it raises is true.
 export const SET_VERSION = 3;
 
+// The arrangement: the song as an ordered list of SECTIONS, each a pattern
+// and how many bars of it. `[]` means none, and chain mode then plays the
+// non-empty patterns in slot order with their own `patternRepeats`, as it
+// always did; a non-empty list is what chain mode follows instead. A section
+// may name a pattern more than once (verse, chorus, verse), which is the
+// whole reason it exists beside the per-pattern repeat count, and a section
+// with no pattern (`p: null`) is a REST: that many bars of silence, with no
+// slot spent on it. `off` is the tracks held back in that section, as
+// INDICES into the session's track list (ids are handed out fresh on every
+// load), which is how a song brings instruments in and out without copying
+// patterns. `pat` is a track's OWN pattern for the section, `{index: pattern}`,
+// where the other tracks play the section's `p`: the arrangement view's lanes.
+export const ARRANGE_MAX_BARS = 64;
+
+/**
+ * Read an arrangement off a blob: anything not a section is dropped, a bar
+ * count is clamped to 1..ARRANGE_MAX_BARS, a pattern index to the bank. A
+ * rest is `p: null` (or `rest: true`, which the builder also takes).
+ * Every reader of the format (applySet, the live merge, the song builder)
+ * goes through this one, so a hand-edited song cannot put a 33rd pattern or
+ * a zero-bar section in front of the transport.
+ * @param {any} raw @param {number} [patternCount]
+ * @returns {Array<{p: number|null, bars: number, off?: number[], pat?: Record<string, number>}>}
+ */
+export function normalizeArrangement(raw, patternCount = 32) {
+  if (!Array.isArray(raw)) return [];
+  const out = [];
+  for (const e of raw) {
+    if (!e || typeof e !== "object") continue;
+    const b = Math.round(Number(e.bars));
+    const bars = Number.isFinite(b) ? Math.max(1, Math.min(ARRANGE_MAX_BARS, b)) : 1;
+    const off = [...new Set((Array.isArray(e.off) ? e.off : []).map(i => Math.round(Number(i))).filter(i => Number.isInteger(i) && i >= 0))].sort((x, y) => x - y);
+    const pat = {};
+    if (e.pat && typeof e.pat === "object" && !Array.isArray(e.pat)) {
+      for (const [k, v] of Object.entries(e.pat)) {
+        const i = Math.round(Number(k)), q = Math.round(Number(v));
+        if (Number.isInteger(i) && i >= 0 && Number.isInteger(q) && q >= 0 && q < patternCount) pat[i] = q;
+      }
+    }
+    // `off` and `pat` are written only when they say something, so a section
+    // with nobody held back and no lane of its own is the two fields it was
+    const sec = (p) => ({ p, bars, ...(off.length ? { off } : {}), ...(Object.keys(pat).length ? { pat } : {}) });
+    if (e.p === null || e.rest === true) { out.push(sec(null)); continue; }
+    const p = Math.round(Number(e.p));
+    if (!Number.isFinite(p) || p < 0 || p >= patternCount) continue;
+    out.push(sec(p));
+  }
+  return out;
+}
+
+/** How many bars an arrangement plays through once. 0 for none. */
+export function arrangementBars(arr) {
+  let n = 0;
+  for (const e of Array.isArray(arr) ? arr : []) n += Math.max(1, Number(e?.bars) || 1);
+  return n;
+}
+
 /**
  * Check a serialized session before applySet() commits to it.
  *
@@ -55,6 +112,12 @@ export function validateSet(data) {
         warnings.push(`saved by a newer version of seqbaby (format ${version}, this build reads ${SET_VERSION}) — some settings may not load`);
     }
   }
+
+  // normalizeArrangement reads it with Array.isArray, so a wrong shape could
+  // only ever load as "no arrangement" — which silently turns a song back
+  // into a slot-order chain. Better to say so.
+  if (data.arrangement !== undefined && data.arrangement !== null && !Array.isArray(data.arrangement))
+    errors.push("arrangement is not an array");
 
   // `for (const td of s.tracks || [])` throws on a truthy non-iterable, and
   // quietly builds junk tracks from a string, which is iterable.

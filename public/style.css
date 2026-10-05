@@ -665,6 +665,385 @@ button.sq-btn--danger { color: var(--danger); }
 .sq-repeat__wrap { display: inline-flex; flex-direction: column; align-items: center; gap: 2px; color: var(--fg-dim); font-size: 11px; }
 .sq-repeat__wrap input { width: 48px; text-align: center; }
 .sq-repeat__wrap select { width: 64px; text-align: center; }
+/* ---------- THE TWO VIEWS (arrangement.js keeps body[data-view]) ----------
+   The track list and the arrangement view, one at a time, picked by the two
+   buttons after `code` in the transport. The pattern bar and the transport
+   stay above both. */
+.sq-tabs { display: inline-flex; gap: 4px; }
+.sq-tabs__tab[aria-selected="true"] { color: var(--accent); border-color: var(--accent); }
+.sq-tabs__n { color: var(--accent); font-size: 10px; }
+.sq-tabs__n:empty { display: none; }
+body[data-view="arrangement"] #tracks,
+body[data-view="arrangement"] .sq-add-track-row { display: none; }
+body:not([data-view="arrangement"]) #arrangement { display: none; }
+/* A track the playing section holds back (paintArrangementNow): its steps
+   are not being played, and the track list says so while it lasts. */
+.sq-track.is-held .sq-steps { opacity: 0.4; }
+
+/* ---------- ARRANGEMENT VIEW (arrangement.js) ----------
+   The song as sections laid out across bars, with a row per track under them.
+   A block is as wide as the bars it plays (--arr-bars x --arr-bar-w), coloured
+   by its pattern (--arr-hue), and drawn with the pattern's own steps (the
+   canvas: one pixel a sixteenth, one row a track, stretched). The playhead is
+   the block's ::after, placed from --arr-head, and shown only while the
+   transport runs. The blocks and the rows share one horizontal scroll, with a
+   label column held at the left. */
+.sq-arrange {
+  /* A bar is exactly this wide everywhere, and nothing is held wider: a
+     one-bar section is one bar across, so the same pattern reads the same
+     in a one-bar cell as in a six-bar one. A multiple of 16, so a sixteenth
+     is a whole 3px in the pictures. Narrow blocks drop their labels and
+     move buttons (the container queries below) rather than growing. */
+  --arr-bar-w: 48px;
+  --arr-min: var(--arr-bar-w);
+  --arr-label: 120px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 16px 12px;
+  min-height: 40vh;
+}
+.sq-arrange__head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 11px; color: var(--fg-dim); }
+.sq-arrange__title { color: var(--fg); }
+.sq-arrange__sum { flex: 1; }
+.sq-arrange__hint { color: var(--accent-2); border-color: var(--accent-2); }
+.sq-arrange__hint[hidden] { display: none; }
+.sq-arrange__tools { display: flex; gap: 4px; }
+.sq-arrange__scroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 2px 0 6px;
+  scrollbar-width: thin;
+}
+.sq-arrange__lane, .sq-arrange__row {
+  display: flex;
+  align-items: stretch;
+  gap: 3px;
+  width: max-content;
+  min-width: 100%;
+}
+.sq-arrange__lane { min-height: 58px; }
+.sq-arrange__rows { display: flex; flex-direction: column; gap: 3px; margin-top: 6px; }
+.sq-arrange__rows[hidden] { display: none; }
+.sq-arrange__label {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  flex: 0 0 var(--arr-label);
+  width: var(--arr-label);
+  display: flex;
+  align-items: center;
+  padding: 0 8px 0 0;
+  font: inherit;
+  font-size: 11px;
+  color: var(--fg-dim);
+  background: var(--bg);
+  border: 0;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sq-arrange__label--track {
+  border-left: 3px solid hsl(var(--track-hue, 0) 60% 55%);
+  padding-left: 6px;
+  gap: 4px;
+}
+.sq-arrange__lanename {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sq-arrange__lanename:hover { color: var(--fg); }
+.sq-arrange__lanex {
+  flex: 0 0 auto;
+  width: 16px; height: 16px;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--fg-dim);
+  font: inherit;
+  line-height: 16px;
+  cursor: pointer;
+  opacity: 0;
+}
+.sq-arrange__row:hover .sq-arrange__lanex, .sq-arrange__row:focus-within .sq-arrange__lanex { opacity: 1; }
+.sq-arrange__lanex:hover { color: var(--fg); background: color-mix(in oklab, var(--fg) 15%, transparent); }
+.sq-arrange__lanex[hidden] { display: none; }
+.sq-arrange__row { height: 26px; }
+.sq-arrange__cell {
+  position: relative;
+  flex: 0 0 auto;
+  width: max(var(--arr-min, 56px), calc(var(--arr-bars, 1) * var(--arr-bar-w)));
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--step);
+  cursor: pointer;
+  overflow: hidden;
+}
+/* follow: the section's pattern, in the track's colour; own: a pattern of the
+   track's, in that pattern's colour with its number; off: empty */
+.sq-arrange__cell.is-on { background: color-mix(in oklab, hsl(var(--track-hue, 0) 60% 55%) 28%, var(--step)); border-color: color-mix(in oklab, hsl(var(--track-hue, 0) 60% 55%) 60%, var(--border)); }
+.sq-arrange__cell[data-mode="own"] { background: hsl(var(--arr-hue, 0) 45% 55% / 0.3); border-color: hsl(var(--arr-hue, 0) 45% 60% / 0.8); }
+.sq-arrange__cell:not(.is-on) .sq-arrange__pic { opacity: 0.12; }
+.sq-arrange__cell.is-on .sq-arrange__pic { opacity: 0.9; }
+.sq-arrange__cell.is-rest { background: transparent; border-style: dashed; }
+.sq-arrange__cell.is-drop { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.sq-arrange__cell[draggable="true"] { cursor: grab; }
+.sq-arrange__cell.is-dragging { opacity: 0.4; }
+/* consecutive cells on the same pattern are one clip: the gap between them
+   is bridged and the inner corners squared */
+.sq-arrange__cell.is-join-next { margin-right: -3px; width: calc(max(var(--arr-min, 56px), calc(var(--arr-bars, 1) * var(--arr-bar-w))) + 3px); border-top-right-radius: 0; border-bottom-right-radius: 0; border-right-color: transparent; }
+.sq-arrange__cell.is-join-prev { border-top-left-radius: 0; border-bottom-left-radius: 0; border-left-color: transparent; }
+.sq-arrange__cgrip { position: absolute; top: 0; bottom: 0; right: 0; width: 8px; cursor: ew-resize; touch-action: none; }
+.sq-arrange__cgrip::after { content: ""; position: absolute; top: 25%; bottom: 25%; right: 2px; width: 2px; border-radius: 1px; background: color-mix(in oklab, var(--fg) 35%, transparent); }
+.sq-arrange__cell:hover .sq-arrange__cgrip::after { background: var(--fg); }
+.sq-arrange__cell .sq-arrange__cellx { right: 10px; }
+.sq-arrange__lanetail {
+  flex: 1 0 140px;
+  min-width: 140px;
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  font-size: 10px;
+  color: var(--fg-dim);
+  border: 1px dashed transparent;
+  border-radius: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.sq-arrange__row:hover .sq-arrange__lanetail { border-color: color-mix(in oklab, var(--border) 70%, transparent); }
+.sq-arrange__lanetail.is-drop { border-color: var(--accent); }
+.sq-arrange__lanetail[data-gap] { gap: 3px; padding: 0; }
+.sq-arrange__lanetail[data-gap]::before {
+  content: attr(data-gap);
+  flex: 0 0 auto;
+  align-self: stretch;
+  width: calc(var(--arr-gap, 1) * var(--arr-bar-w));
+  display: grid;
+  place-items: center;
+  border: 1px dashed var(--fg-dim);
+  border-radius: 3px;
+  background: repeating-linear-gradient(135deg, transparent 0 6px, color-mix(in oklab, var(--fg) 5%, transparent) 6px 7px);
+  overflow: hidden;
+}
+.sq-arrange__own {
+  position: absolute;
+  left: 4px; top: 50%;
+  transform: translateY(-50%);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--fg);
+  text-shadow: 0 0 3px var(--bg), 0 0 3px var(--bg);
+  pointer-events: none;
+}
+.sq-arrange__cellx {
+  position: absolute;
+  right: 1px; top: 50%;
+  transform: translateY(-50%);
+  width: 14px; height: 14px;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  background: color-mix(in oklab, var(--bg) 70%, transparent);
+  color: var(--fg-dim);
+  font: inherit;
+  font-size: 11px;
+  line-height: 14px;
+  cursor: pointer;
+  opacity: 0;
+}
+.sq-arrange__cell:hover .sq-arrange__cellx, .sq-arrange__cell:focus-within .sq-arrange__cellx { opacity: 1; }
+.sq-arrange__cellx:hover { color: var(--fg); }
+/* a track playing a lane's own pattern says so in the track list, since the
+   pattern bar shows the section's */
+.sq-track[data-arr-pattern] .sq-track__name { border-color: var(--accent-2); }
+.sq-track[data-arr-pattern] .sq-track__name::placeholder { color: var(--accent-2); }
+.sq-arrange__cell:focus-visible { box-shadow: 0 0 0 2px var(--accent) inset; outline: none; }
+.sq-arrange__cell.is-now { border-color: var(--step-now); }
+.sq-arrange__cell::after {
+  content: "";
+  position: absolute;
+  top: 0; bottom: 0;
+  width: 2px;
+  left: calc(var(--arr-head, 0) * 100%);
+  background: var(--step-now);
+  transition: left 0.12s linear;
+  display: none;
+  pointer-events: none;
+}
+body.sq-playing .sq-arrange__cell.is-now::after { display: block; }
+.sq-arrange__block {
+  position: relative;
+  container-type: inline-size;
+  flex: 0 0 auto;
+  width: max(var(--arr-min, 56px), calc(var(--arr-bars, 1) * var(--arr-bar-w)));
+  height: 56px;
+  border-radius: 4px;
+  border: 1px solid hsl(var(--arr-hue, 0) 45% 60% / 0.55);
+  background: hsl(var(--arr-hue, 0) 45% 55% / 0.16);
+  cursor: pointer;
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+  outline: none;
+}
+.sq-arrange__block:focus-visible { box-shadow: 0 0 0 2px var(--accent) inset; }
+.sq-arrange__block.is-now { border-color: var(--step-now); box-shadow: 0 0 0 1px var(--step-now) inset; }
+.sq-arrange__block.is-empty { border-style: dashed; }
+.sq-arrange__block.is-rest {
+  border-style: dashed;
+  border-color: var(--border);
+  background: repeating-linear-gradient(135deg, transparent 0 6px, color-mix(in oklab, var(--fg) 5%, transparent) 6px 7px);
+}
+.sq-arrange__block.is-rest .sq-arrange__num { font-size: 11px; font-weight: 400; color: var(--fg-dim); letter-spacing: 0.08em; }
+.sq-arrange__block.is-lanes .sq-arrange__num { font-size: 10px; font-weight: 400; color: var(--fg-dim); letter-spacing: 0.04em; }
+.sq-arrange__block.is-dragging { opacity: 0.4; }
+.sq-arrange__block.is-drop-before { border-left: 3px solid var(--accent); }
+.sq-arrange__block.is-resizing { cursor: ew-resize; }
+.sq-arrange__pic {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;   /* rows are one canvas pixel tall; across, the canvas is already the cell's width */
+  opacity: 0.55;
+  pointer-events: none;
+}
+.sq-arrange__meta {
+  position: absolute;
+  inset: 3px 14px 4px 6px;
+  display: grid;
+  grid-template: "at at" auto "num bars" 1fr / auto 1fr;
+  align-items: end;
+  column-gap: 6px;
+  font-size: 9px;
+  color: var(--fg-dim);
+  text-shadow: 0 0 3px var(--bg-2), 0 0 3px var(--bg-2);
+  pointer-events: none;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.sq-arrange__at { grid-area: at; align-self: start; }
+.sq-arrange__at::before { content: "bar "; }
+.sq-arrange__num { grid-area: num; font-size: 17px; line-height: 1; font-weight: 600; color: var(--fg); }
+.sq-arrange__bars { grid-area: bars; justify-self: end; }
+/* a one- or two-bar block has room for its number and its × only */
+@container (max-width: 99px) {
+  .sq-arrange__at, .sq-arrange__bars, .sq-arrange__mv { display: none; }
+  .sq-arrange__meta { inset: 3px 14px 4px 5px; }
+}
+.sq-arrange__btns {
+  position: absolute;
+  top: 1px; right: 9px;
+  display: flex;
+  gap: 1px;
+  opacity: 0;
+}
+.sq-arrange__block:hover .sq-arrange__btns, .sq-arrange__block:focus-within .sq-arrange__btns { opacity: 1; }
+.sq-arrange__x, .sq-arrange__mv {
+  width: 16px; height: 16px;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  background: color-mix(in oklab, var(--bg-2) 70%, transparent);
+  color: var(--fg-dim);
+  font-size: 12px;
+  line-height: 16px;
+  cursor: pointer;
+}
+.sq-arrange__x:hover, .sq-arrange__mv:hover { color: var(--fg); background: color-mix(in oklab, var(--fg) 15%, transparent); }
+.sq-arrange__mv:disabled { opacity: 0.3; cursor: default; }
+/* A finger cannot hover and cannot drag a block (that is HTML drag-and-drop),
+   so on any touch screen the move and remove buttons are always there. */
+@media (any-pointer: coarse) {
+  .sq-arrange { --arr-bar-w: 80px; --arr-label: 96px; }
+  .sq-arrange__block { height: 76px; }
+  .sq-arrange__row { height: 40px; }
+  .sq-arrange__btns { opacity: 1; top: auto; bottom: 3px; right: 6px; gap: 4px; }
+  .sq-arrange__lanex, .sq-arrange__cellx { opacity: 1; width: 22px; height: 22px; line-height: 22px; }
+  .sq-arrange__cgrip { width: 18px; }
+  .sq-arrange__cell .sq-arrange__cellx { right: 20px; }
+  .sq-arrange__x, .sq-arrange__mv { width: 28px; height: 28px; font-size: 15px; line-height: 28px; }
+  .sq-arrange__meta { inset: 4px 14px 36px 7px; }
+}
+.sq-arrange__grip { position: absolute; top: 0; bottom: 0; right: 0; width: 8px; cursor: ew-resize; touch-action: none; }
+.sq-arrange__grip::after {
+  content: "";
+  position: absolute;
+  top: 30%; bottom: 30%; right: 2px;
+  width: 2px;
+  border-radius: 1px;
+  background: hsl(var(--arr-hue, 0) 45% 60% / 0.7);
+}
+.sq-arrange__block:hover .sq-arrange__grip::after { background: var(--fg); }
+.sq-arrange__block::after {
+  content: "";
+  position: absolute;
+  top: 0; bottom: 0;
+  width: 2px;
+  left: calc(var(--arr-head, 0) * 100%);
+  background: var(--step-now);
+  transition: left 0.12s linear;
+  display: none;
+  pointer-events: none;
+}
+body.sq-playing .sq-arrange__block.is-now::after { display: block; }
+.sq-arrange__tail {
+  flex: 1 0 140px;
+  min-width: 140px;
+  display: grid;
+  place-items: center;
+  padding: 0 8px;
+  font-size: 11px;
+  color: var(--fg-dim);
+  text-align: center;
+  border: 1px dashed var(--border);
+  border-radius: 4px;
+}
+.sq-arrange__tail.is-drop-end { border-color: var(--accent); color: var(--fg); }
+/* The rest a drop past the end would make: a ghost as wide as the gap, in
+   front of the drop line, while the drag is over the tail (data-gap set by
+   markDrop). The tail becomes a row for it. */
+.sq-arrange__tail[data-gap] {
+  display: flex;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: 3px;
+  padding: 0;
+  color: var(--fg-dim);
+}
+.sq-arrange__tail[data-gap]::before {
+  content: attr(data-gap);
+  flex: 0 0 auto;
+  width: calc(var(--arr-gap, 1) * var(--arr-bar-w));
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  border: 1px dashed var(--fg-dim);
+  border-radius: 4px;
+  background: repeating-linear-gradient(135deg, transparent 0 6px, color-mix(in oklab, var(--fg) 5%, transparent) 6px 7px);
+  white-space: nowrap;
+  overflow: hidden;
+}
+.sq-arrange__tail[data-gap]::after {
+  content: "";
+  flex: 0 0 3px;
+  background: var(--accent);
+  border-radius: 1px;
+}
 #pattern-mode[aria-pressed="true"] { background: var(--accent-2); color: #0b0d10; border-color: var(--accent-2); }
 #pattern-switch[aria-pressed="true"] { background: var(--accent-2); color: #0b0d10; border-color: var(--accent-2); }
 #set-save, #set-load, #set-export, #set-import, #set-share { text-transform: none; }
@@ -3300,6 +3679,16 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not
      group. The modal moves the bar's children out and back, so the bar
      itself only has to exist, not show. */
   .sq-pattern-bar { display: none; }
+
+  /* The arrangement view stays: it is a sibling of the bar, not a child, so
+     the menu modal does not carry it off. Fingers: the move and remove
+     buttons always showing (the any-pointer rule above), a wider grip, taller
+     blocks, since reordering by drag is HTML drag-and-drop, which touch does
+     not give. */
+  .sq-arrange { padding: 6px 12px 8px; min-height: 0; }
+  .sq-tabs { gap: 6px; }
+  .sq-arrange__btns { opacity: 1; }
+  .sq-arrange__grip { width: 18px; }
 
   /* When the pattern menu modal is open, its children appear inside it.
      Layout matches what the bar used to look like, vertically stacked. */

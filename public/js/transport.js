@@ -19,7 +19,8 @@ import { init, needsResume, primeAudioForIOS } from "./main.js";
 import { applyBusMute, updateMidiUI } from "./render.js";
 import { ensureFxRack, fireFilterEnv, refreshAllTrackOutputs, refreshNoiseBeds, routeVoiceToRack, soloAudibleTracks } from "./signal.js";
 import { activeMeter, stepsPerBarForMeter, stepsPerBeatForMeter } from "./meter.js";
-import { findNextNonEmptyPattern, invertChord, state, switchPattern } from "./state.js";
+import { applySectionTracks, findNextNonEmptyPattern, invertChord, realignTracksToActive, state, switchPattern, syncArrangePos } from "./state.js";
+import { arrangementDrives, clearArrangementHold, paintArrangementNow, trackTargetPattern } from "./arrangement.js";
 import { loadSilverboxWorklet } from "./silverbox.js";
 import { loadContagionWorklet } from "./contagion.js";
 import { applyScale, chordNotes, nameToMidi } from "./theory.js";
@@ -382,6 +383,8 @@ export async function stopPlayback() {
   for (const t of state.tracks) t.fxRack?.clockStop();
   state.playing = false;
   document.body.classList.remove("sq-playing");   // step input's cursor shows while stopped (style.css)
+  clearArrangementHold();                          // no section holds a track back while stopped
+  realignTracksToActive();                         // and every lane's track is back on the pattern bar's pattern
   state._transportStartTime = null;
   refreshNoiseBeds();                              // vinyl crackle follows the transport
   btn.textContent = "play";
@@ -445,6 +448,16 @@ export async function startPlayback(opts = {}) {
   // Where in the bar that tick is. The bar is the active pattern's meter, not
   // a fixed 16: a 7/4 bar is 28 sixteenths, and ending it at 16 cut every
   // chained pattern off after four beats (see the bar line below).
+  // Chain mode with an arrangement starts on the section the position names
+  // (the one last clicked in the arrangement view, or where play stopped) —
+  // if that section plays the active pattern, that one; else the first that
+  // does; else the pattern changes to the section's. See syncArrangePos.
+  if (arrangementDrives()) {
+    syncArrangePos(state.activePattern);
+    const sec = state.arrangement[state.arrangePos];
+    if (sec.p != null && sec.p !== state.activePattern) switchPattern(sec.p, { keepArrangePos: true });
+    applySectionTracks(sec);               // the lanes: a track on a pattern of its own
+  }
   state.barTick = startTick % stepsPerBarForMeter(activeMeter());
   state.chainBarCount = 0;
   // A track's own trackTick runs at `speed` steps per global tick (see the
@@ -488,9 +501,21 @@ export async function startPlayback(opts = {}) {
     // tick, to every rack, muted or not, so a repeat lands on the same grid the
     // notes do. Unswung: the grid is the bar, not the groove.
     for (const t of state.tracks) t.fxRack?.clockStep(time, state.tick, baseStepDur);
+    // The section playing (arrangement.js) decides per track: the section's
+    // pattern, a pattern of the track's own (its lane), or nothing — held
+    // back, which is every track in a REST (a section with no pattern and no
+    // lanes: bars of silence, the active pattern left where it was so the
+    // bar line keeps its meter) and the ones its `off` names. Held back means
+    // withheld TRIGGERS while the bar count below keeps walking — unlike a
+    // mute, a held track's automation lanes keep running, so a filter sweep
+    // or an effect lane lands where it should when the track comes back in
+    // rather than jumping there. The pattern itself was bound to the track
+    // on the bar line (applySectionTracks), so the arrays read here are its.
+    const section = arrangementDrives() ? state.arrangement[state.arrangePos] : null;
     for (const t of state.tracks) {
       if (!t.voice) continue;
       const isBus = t.voice.type === "bus";
+      const held = !!section && !isBus && trackTargetPattern(section, t) == null;
       // Mute and solo here mean "withhold this track's triggers", which says
       // nothing about a bus — it has none. Its lanes and its mod are the only
       // thing it contributes, and they have to keep running for the tracks
@@ -532,7 +557,7 @@ export async function startPlayback(opts = {}) {
         // pattern; the dice replaces the pitch and the ratchet too, and says so
         // by handing them back on the gate.
         const gate = stepGateAt(t, idx);
-        if (isBus || !gate) { slot++; continue; }
+        if (isBus || held || !gate) { slot++; continue; }
         const span = gate.span;
         // A note lasts its written step length. Voices that honor `duration`
         // (Plaits, samples, melodic synths) follow it; drum-synth recipes with
@@ -663,6 +688,13 @@ export async function startPlayback(opts = {}) {
     // Snapshot the tick now — it advances before the deferred paint fires.
     const globalTickSnap = state.tick;
     scheduleAtAudible(() => paintBeatIndicator(globalTickSnap), time, lat);
+    // The arrangement view's playhead: which section, and how far into it,
+    // at the moment this step is heard. Snapshotted now, since the bar count
+    // below moves on before the paint fires.
+    if (state.arrangement.length) {
+      const arrSnap = { pos: state.arrangePos, bar: state.chainBarCount, barTick: state.barTick ?? 0, barLen: stepsPerBarForMeter(activeMeter()) };
+      scheduleAtAudible(() => paintArrangementNow(arrSnap), time, lat);
+    }
     // The bar line comes from the pattern playing now: its meter's length in
     // sixteenths (16 in 4/4, 28 in 7/4, 14 in 7/8). The metronome clicks on
     // its beats and accents its downbeat.
@@ -683,15 +715,42 @@ export async function startPlayback(opts = {}) {
       restartTrackCounts();
     }
     // pattern chaining: advance at bar boundaries when chain mode is on, respecting per-pattern repeats
-    if (state.patternMode === "chain" && barLine) {
+    // Chain mode, or the arrangement tab in front of you with sections in it
+    // (arrangementDrives): the song plays through.
+    if ((state.patternMode === "chain" || arrangementDrives()) && barLine) {
       state.chainBarCount++;
-      const needed = Math.max(1, state.patternRepeats[state.activePattern] ?? 1);
-      if (state.chainBarCount >= needed) {
-        state.chainBarCount = 0;
-        const next = findNextNonEmptyPattern(state.activePattern);
-        if (next >= 0 && next !== state.activePattern) {
-          switchPattern(next, { deferUi: true }); // synchronous — same reasoning as the manual queue above
-          restartTrackCounts();
+      const arr = state.arrangement;
+      if (arrangementDrives()) {
+        // The arrangement: each section its own bar count, back to the top
+        // after the last. Two sections of the same pattern in a row keep
+        // playing without a switch, as a repeat count would.
+        if (state.arrangePos >= arr.length) state.arrangePos = 0;
+        const needed = Math.max(1, arr[state.arrangePos].bars);
+        if (state.chainBarCount >= needed) {
+          state.chainBarCount = 0;
+          const wasRest = arr[state.arrangePos].p == null;
+          state.arrangePos = (state.arrangePos + 1) % arr.length;
+          const sec = arr[state.arrangePos];
+          const before = state.activePattern;
+          // the section's default pattern, if it has one and it changed (into
+          // a rest nothing switches: the tracks are held back above) ...
+          if (sec.p != null && sec.p !== before) switchPattern(sec.p, { deferUi: true, keepArrangePos: true }); // synchronous — same reasoning as the manual queue above
+          // ... then each lane's own pattern, where a track has one
+          const moved = applySectionTracks(sec, { deferUi: true });
+          // A section that changed anything starts every track from its first
+          // step; so does the same pattern again after a rest, rather than
+          // where it paused.
+          if ((sec.p != null && sec.p !== before) || moved || wasRest) restartTrackCounts();
+        }
+      } else {
+        const needed = Math.max(1, state.patternRepeats[state.activePattern] ?? 1);
+        if (state.chainBarCount >= needed) {
+          state.chainBarCount = 0;
+          const next = findNextNonEmptyPattern(state.activePattern);
+          if (next >= 0 && next !== state.activePattern) {
+            switchPattern(next, { deferUi: true }); // synchronous — same reasoning as the manual queue above
+            restartTrackCounts();
+          }
         }
       }
     }

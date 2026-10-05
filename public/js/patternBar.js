@@ -1,3 +1,4 @@
+import { refreshArrangement, refreshArrangementPattern } from "./arrangement.js";
 import { PATTERN_COUNT } from "./constants.js";
 import { setStatus } from "./dom.js";
 import { recallPatternSound, refreshPatternSoundUI } from "./patternSound.js";
@@ -72,6 +73,9 @@ export function renderPatternGrid() {
     });
     grid.appendChild(cell);
   }
+  // The arrangement view draws the same patterns, so it repaints whenever the
+  // grid does: a switch, a copy, a session arriving.
+  refreshArrangement();
 }
 
 // ---- rate helpers (LFO) ------------------------------------------------
@@ -81,6 +85,7 @@ export function updatePatternCell(idx) {
   if (!grid) return;
   const cell = grid.children[idx];
   if (cell) cell.classList.toggle("is-filled", isPatternNonEmpty(idx));
+  refreshArrangementPattern(idx);
 }
 
 // Visual columns per row in the step grid. The data model uses 16-step rows

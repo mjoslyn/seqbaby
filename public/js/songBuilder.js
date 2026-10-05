@@ -54,7 +54,7 @@ import {
 } from "./constants.js";
 import { CHANCE_DEFAULTS, CHANCE_NOTE_MAX, CHANCE_NOTE_MIN, CHANCE_NOTE_VALUES, cloneChance } from "./chanceGen.js";
 import { CHORD_TYPES, SCALES, canonicalChord, midiToName, nameToMidi } from "./theoryData.js";
-import { SET_VERSION, validateSet } from "./sessionFormat.js";
+import { ARRANGE_MAX_BARS, arrangementBars, normalizeArrangement, SET_VERSION, validateSet } from "./sessionFormat.js";
 
 /** What every refusal in this module throws: a message an agent can act on. */
 export class SongError extends Error {
@@ -273,6 +273,7 @@ export function newSong({ bpm = 120, swing = 0, scale = null } = {}) {
     patternSwitchMode: "immediate",
     patternMeters: Array.from({ length: PATTERN_COUNT }, () => ({ num: 4, den: 4 })),
     patternRepeats: Array.from({ length: PATTERN_COUNT }, () => 1),
+    arrangement: [],
     macroPads: [],
     tracks: [],
   };
@@ -297,6 +298,7 @@ export function fromBlob(data) {
   });
   if (!Array.isArray(song.patternMeters)) song.patternMeters = Array.from({ length: PATTERN_COUNT }, () => ({ num: 4, den: 4 }));
   if (!Array.isArray(song.patternRepeats)) song.patternRepeats = Array.from({ length: PATTERN_COUNT }, () => 1);
+  song.arrangement = normalizeArrangement(song.arrangement, PATTERN_COUNT);
   if (!Array.isArray(song.macroPads)) song.macroPads = [];
   if (!song.scale) song.scale = { active: false, root: 0, mode: "minor" };
   return song;
@@ -422,6 +424,14 @@ export function removeTrack(song, index) {
   for (const t of song.tracks) { t.outIndex = fix(t.outIndex ?? -1); t.compSourceIndex = fix(t.compSourceIndex ?? -1); }
   for (const pad of song.macroPads || []) for (const axis of ["x", "y"]) {
     pad[axis] = (pad[axis] || []).filter(a => a.track !== i).map(a => ({ ...a, track: fix(a.track) }));
+  }
+  for (const e of song.arrangement || []) {
+    if (Array.isArray(e.off)) { e.off = e.off.filter(j => j !== i).map(fix); if (!e.off.length) delete e.off; }
+    if (e.pat && typeof e.pat === "object") {
+      const moved = {};
+      for (const [k, v] of Object.entries(e.pat)) { const j = fix(Number(k)); if (j >= 0) moved[j] = v; }
+      if (Object.keys(moved).length) e.pat = moved; else delete e.pat;
+    }
   }
 }
 
@@ -920,10 +930,19 @@ export const CHANCE_NOTE_LABELS = CHANCE_NOTE_VALUES.map(v => v.label);
 
 // ---- patterns as a song ------------------------------------------------------------------
 
-/** How the 32 patterns play: `mode` repeat (loop one) or chain (play them in
- *  order); `repeats` bars per pattern in chain mode; `switchMode` immediate or
- *  finish (wait for the bar). `active` is the pattern the studio opens on. */
-export function setArrangement(song, { mode, repeats, switchMode, active } = {}) {
+/** How the 32 patterns play: `mode` repeat (loop one) or chain (play the
+ *  song); `switchMode` immediate or finish (wait for the bar); `active` is the
+ *  pattern the studio opens on. In chain mode the song is `sections` when
+ *  there are any — an ordered list of `{pattern, bars}`, the same pattern as
+ *  often as wanted (verse, chorus, verse), an empty one as a break — and
+ *  otherwise the non-empty patterns in slot order for `repeats` bars each.
+ *  A section with `pattern: null` (or `rest: true`) is a REST: bars of
+ *  silence, no slot spent. A section's `off` lists the tracks (by index)
+ *  held back for it, and its `pat` gives a track a pattern of its own there
+ *  (`{ "1": 3 }`: track 1 plays pattern 3 while the others play the
+ *  section's), so a song brings instruments in and out, and layers parts,
+ *  without copying patterns. `sections: []` (or null) clears the arrangement. */
+export function setArrangement(song, { mode, repeats, switchMode, active, sections } = {}) {
   if (mode != null) song.patternMode = oneOf(mode, "mode", ["repeat", "chain"]);
   if (switchMode != null) song.patternSwitchMode = oneOf(switchMode, "switchMode", ["immediate", "finish"]);
   if (active != null) song.activePattern = patternIndex(active);
@@ -931,7 +950,43 @@ export function setArrangement(song, { mode, repeats, switchMode, active } = {})
     if (!Array.isArray(repeats)) fail("repeats must be an array of bar counts, one per pattern from the first");
     repeats.forEach((r, i) => { if (i < PATTERN_COUNT) song.patternRepeats[i] = int(r, `repeats[${i}]`, 1, 16); });
   }
-  return { mode: song.patternMode, switchMode: song.patternSwitchMode, active: song.activePattern, repeats: song.patternRepeats };
+  if (sections !== undefined) {
+    if (sections === null) song.arrangement = [];
+    else {
+      if (!Array.isArray(sections)) fail("sections must be an array of { pattern, bars } (or [pattern, bars]) in the order they play");
+      song.arrangement = sections.map((s, i) => {
+        const [p, b] = Array.isArray(s) ? s : [s && "pattern" in s ? s.pattern : s?.p, s?.bars];
+        const bars = int(b ?? 1, `sections[${i}].bars`, 1, ARRANGE_MAX_BARS);
+        const offRaw = Array.isArray(s) ? [] : (s?.off ?? []);
+        if (!Array.isArray(offRaw)) fail(`sections[${i}].off must be an array of track indices`);
+        const off = [...new Set(offRaw.map((x, j) => {
+          const k = int(x, `sections[${i}].off[${j}]`, 0, Math.max(0, song.tracks.length - 1));
+          if (!song.tracks[k]) fail(`sections[${i}].off[${j}]: there is no track ${k} (the song has ${song.tracks.length})`);
+          if (song.tracks[k].engineKey === "bus") fail(`sections[${i}].off[${j}]: track ${k} is an fx bus, which plays no notes to hold back`);
+          return k;
+        }))].sort((x, y) => x - y);
+        const own = {};
+        const patRaw = Array.isArray(s) ? {} : (s?.pat ?? {});
+        if (!patRaw || typeof patRaw !== "object" || Array.isArray(patRaw)) fail(`sections[${i}].pat must be an object of track index to pattern`);
+        for (const [tk, pv] of Object.entries(patRaw)) {
+          const k = int(tk, `sections[${i}].pat track`, 0, Math.max(0, song.tracks.length - 1));
+          if (!song.tracks[k]) fail(`sections[${i}].pat: there is no track ${k} (the song has ${song.tracks.length})`);
+          if (song.tracks[k].engineKey === "bus") fail(`sections[${i}].pat: track ${k} is an fx bus, which plays no pattern`);
+          own[k] = int(pv, `sections[${i}].pat[${k}]`, 0, PATTERN_COUNT - 1);
+        }
+        const extra = { ...(off.length ? { off } : {}), ...(Object.keys(own).length ? { pat: own } : {}) };
+        if (p === null || s?.rest === true || p === "rest") return { p: null, bars, ...extra };
+        return { p: int(p, `sections[${i}].pattern`, 0, PATTERN_COUNT - 1), bars, ...extra };
+      });
+    }
+  }
+  if (!Array.isArray(song.arrangement)) song.arrangement = [];
+  return {
+    mode: song.patternMode, switchMode: song.patternSwitchMode, active: song.activePattern,
+    repeats: song.patternRepeats,
+    sections: song.arrangement.map(e => ({ pattern: e.p, bars: e.bars, ...(e.off?.length ? { off: e.off } : {}), ...(e.pat && Object.keys(e.pat).length ? { pat: e.pat } : {}) })),
+    bars: song.arrangement.length ? arrangementBars(song.arrangement) : undefined,
+  };
 }
 /** A pattern's time signature, e.g. "7/8". Steps are sixteenths, so a bar of 7/8 is 14 steps. */
 export function setMeter(song, pattern, meter) {
@@ -1021,7 +1076,8 @@ export function summarize(song) {
     bpm: song.bpm, swing: song.swing,
     scale: song.scale?.active ? `${rootName} ${song.scale.mode}` : "off",
     arrangement: { mode: song.patternMode, switchMode: song.patternSwitchMode, active: song.activePattern,
-      repeats: song.patternMode === "chain" ? song.patternRepeats : undefined,
+      sections: song.arrangement?.length ? song.arrangement.map(e => ({ pattern: e.p, bars: e.bars, ...(e.off?.length ? { off: e.off } : {}), ...(e.pat && Object.keys(e.pat).length ? { pat: e.pat } : {}) })) : undefined,
+      repeats: song.patternMode === "chain" && !song.arrangement?.length ? song.patternRepeats : undefined,
       meters: song.patternMeters.map((m, i) => (m.num !== 4 || m.den !== 4) ? `${i}: ${m.num}/${m.den}` : null).filter(Boolean) },
     tracks: song.tracks.map((_, i) => summarizeTrack(song, i)),
   };

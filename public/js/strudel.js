@@ -29,7 +29,7 @@ import { CURVED_LFO_CURVES, STEPS_PER_BAR, voiceAutoKeysForEngineKey } from "./c
 import { SCALES, CHORD_TYPES } from "./theoryData.js";
 import { staticEngineByKey } from "./engineData.js";
 import { defaultCompConfig, defaultEq, defaultFilter, defaultFxConfig, defaultTrackParams } from "./soundDefaults.js";
-import { LEGACY_ENGINE_KEYS } from "./sessionFormat.js";
+import { ARRANGE_MAX_BARS, LEGACY_ENGINE_KEYS, normalizeArrangement } from "./sessionFormat.js";
 
 export class CodeError extends Error {
   constructor(msg, pos) { super(msg); this.name = "CodeError"; this.pos = pos; }
@@ -734,8 +734,11 @@ const SIDE_EFFECTS = {
 // pattern bar, chain mode). In code, `pattern(n)` starts a SECTION: the lines
 // after it write slot n, `.repeat(4)` is how many bars it plays in chain mode
 // and `.meter("7/8")` its time signature. Code with no section writes the one
-// slot the drawer is pinned to. Strudel's own `arrange([4, a], [8, b])` reads
-// as consecutive slots in chain mode, each playing its cycles as bars.
+// slot the drawer is pinned to. Strudel's own `arrange([4, a], [8, b], [2, a])`
+// is the ARRANGEMENT (arrangement.js): each distinct pattern gets a slot, from
+// the first, and the song's sections play them in the order written for the
+// cycles given as bars, in chain mode — so `a` twice is one slot played twice,
+// not two copies.
 const isSection = (v) => v && v.kind === "section";
 const isArrange = (v) => v && v.kind === "arrange";
 function section(n, ctx) {
@@ -866,7 +869,7 @@ export function readCode(code) {
   ctx.lib = library(ctx);
   const outputs = [];
   readStrudel(src, ctx, outputs);
-  return { bpm: ctx.bpm, hush: ctx.hush, native: !!ctx.native, mode: ctx.mode, sections: ctx.sections, outputs, warnings };
+  return { bpm: ctx.bpm, hush: ctx.hush, native: !!ctx.native, mode: ctx.mode, sections: ctx.sections, arrangement: ctx.arrangement || null, outputs, warnings };
 }
 
 function readStrudel(src, ctx, outputs) {
@@ -875,13 +878,24 @@ function readStrudel(src, ctx, outputs) {
   let lastBare = null, n = 0;
   let slot = null;                          // the section being written, or null: the pinned slot
   const arrange = (v, pos) => {
-    // consecutive slots from the first, each its cycles as bars, in chain mode
-    v.entries.forEach(([cycles, pat], k) => {
-      if (k >= 32) return;
-      if (cycles > 16) ctx.warn(`arrange: a pattern plays at most 16 bars in chain mode, so ${cycles} became 16`);
-      ctx.sections[k] = { repeat: Math.min(16, cycles), meter: null };
-      outputs.push({ label: null, index: n++, muted: false, pat, pos, slot: k });
-    });
+    // one slot per distinct pattern (the same object twice is one slot), from
+    // the first; the sections play them in the order written, in chain mode
+    const slotOf = new Map();
+    ctx.arrangement = ctx.arrangement || [];
+    for (const [cycles, pat] of v.entries) {
+      if (cycles > ARRANGE_MAX_BARS) ctx.warn(`arrange: a section plays at most ${ARRANGE_MAX_BARS} bars, so ${cycles} became ${ARRANGE_MAX_BARS}`);
+      // `silence` is a REST: bars with nothing playing, and no slot spent
+      if (pat === silence) { ctx.arrangement.push({ p: null, bars: Math.min(ARRANGE_MAX_BARS, cycles) }); continue; }
+      let k = slotOf.get(pat);
+      if (k == null) {
+        k = slotOf.size;
+        if (k >= 32) { ctx.warn("arrange: more than 32 different patterns; the rest were left out"); continue; }
+        slotOf.set(pat, k);
+        ctx.sections[k] = { repeat: Math.min(16, cycles), meter: null };
+        outputs.push({ label: null, index: n++, muted: false, pat, pos, slot: k });
+      }
+      ctx.arrangement.push({ p: k, bars: Math.min(ARRANGE_MAX_BARS, cycles) });
+    }
     ctx.mode = ctx.mode || "chain";
   };
   for (const st of stmts) {
@@ -985,7 +999,7 @@ export function realize(read) {
   const tracks = parts.map((p) => { const { g, ...rest } = p; return p.empty ? rest : { ...rest, ...blueprint(g, grids.get(p), warn) }; });
   const sectioned = Object.keys(read.sections || {}).length > 0;
   return { bpm: read.bpm, tracks, warnings, hush: read.hush, native: !!read.native || tracks.some(t => t.isNative),
-    mode: read.mode || (sectioned ? "repeat" : null), sections: read.sections || {} };
+    mode: read.mode || (sectioned ? "repeat" : null), sections: read.sections || {}, arrangement: read.arrangement || null };
 }
 function uniqueName(name, used) {
   let n = name, i = 2;
@@ -1237,9 +1251,12 @@ export function writeTracks(song, realized, { previous = [], pattern, touched: p
   const pin = pattern ?? song.activePattern ?? 0;
   const warnings = [...realized.warnings];
   if (realized.bpm != null) setTempo(song, { bpm: clamp(realized.bpm, 20, 300) });
-  // the arrangement, when the code has one
+  // the sections, when the code has them; and the arrangement when it has
+  // arrange() — code without one leaves the song's arrangement alone, as it
+  // leaves alone the slots it never names
   const sections = realized.sections || {};
   if (realized.mode) song.patternMode = realized.mode;
+  if (realized.arrangement) song.arrangement = normalizeArrangement(realized.arrangement);
   for (const [k, meta] of Object.entries(sections)) {
     const slot = Number(k);
     // with no .repeat, a section plays as many bars as its longest part takes
@@ -1549,7 +1566,12 @@ export function sessionToCode(session, { native = false } = {}) {
   const used = [];
   for (let k = 0; k < 32; k++) if (writable.some(t => hasSteps(t, k))) used.push(k);
   const chain = s.patternMode === "chain";
-  const sectioned = native ? used.some(k => k !== act) || (chain && used.length > 0) : chain && used.length > 1;
+  // The arrangement (arrangement.js): in chain mode the song is its sections,
+  // not the slots in order. Portable code plays it as arrange(); native code
+  // cannot carry it (a section is not a pattern's own setting), so it is
+  // said in a comment and left to the studio.
+  const arr = chain ? normalizeArrangement(s.arrangement) : [];
+  const sectioned = native ? used.some(k => k !== act) || (chain && used.length > 0) : chain && (used.length > 1 || arr.length > 0);
   const slots = sectioned ? used : [act];
 
   const lines = [`setcpm(${round3(Number(s.bpm) || 120)}/4)`, ""];
@@ -1571,6 +1593,10 @@ export function sessionToCode(session, { native = false } = {}) {
     }
   } else if (native) {
     if (chain) lines.push("chain()", "");
+    if (arr.length) lines.push(`// arrangement: ${arr.map(e => {
+      const notes = [...Object.entries(e.pat || {}).map(([i, q]) => `${s.tracks?.[Number(i)]?.name || i}:${q + 1}`), ...(e.off || []).map(i => `-${s.tracks?.[i]?.name || i}`)];
+      return `${e.p == null ? "rest" : e.p + 1}x${e.bars}${notes.length ? `(${notes.join(",")})` : ""}`;
+    }).join(" ")} (sections are the arrangement view's, not the code's)`, "");
     const shared = new Set();       // tracks whose shared sound has been written
     for (const k of used) {
       const rep = s.patternRepeats?.[k] ?? 1, m = s.patternMeters?.[k];
@@ -1588,16 +1614,45 @@ export function sessionToCode(session, { native = false } = {}) {
       lines.push("");
     }
   } else {
-    // strudel.cc: each pattern a stack, played in turn by arrange
-    const ids = [];
-    for (const k of used) {
-      const parts = writable.filter(t => hasSteps(t, k)).map(t => partCode(t, k, { native: false, sound: soundAt(t, k), bare: true, tracks, warnings }));
-      const id = `p${k + 1}`;
-      ids.push([s.patternRepeats?.[k] ?? 1, id]);
-      lines.push(`const ${id} = stack(\n${parts.map(x => "  " + x.replace(/\n/g, "\n  ")).join(",\n")}\n)`, "");
-      for (const t of writable) if (hasSteps(t, k) && !names.includes(t.name)) names.push(t.name);
+    // strudel.cc: each pattern a stack, played in turn by arrange — in the
+    // arrangement's order when the song has one (a pattern as often as it
+    // plays, an empty one as silence, a rest as `silence` itself), else the
+    // used slots once each.
+    // A section that holds tracks back (`off`) or gives one a pattern of its
+    // own (`pat`, the lanes) is the pattern with different parts, so it gets a
+    // definition of its own (p2a, p2b ...) beside the plain one; a section
+    // played the same way twice is defined once. A rest with lanes in it is a
+    // definition too (q1, q2 ...): the lanes' parts and nothing else.
+    const order = arr.length
+      ? arr.map(e => [e.bars, e.p, (e.off || []).map(i => s.tracks?.[i]).filter(Boolean),
+        new Map(Object.entries(e.pat || {}).map(([i, q]) => [s.tracks?.[Number(i)], q]).filter(([t]) => t))])
+      : used.map(k => [s.patternRepeats?.[k] ?? 1, k, [], new Map()]);
+    const slotOf = (t, k, own) => own.has(t) ? own.get(t) : k;   // the pattern track t plays in a section of default k
+    const defs = new Map();   // key -> id
+    const variants = new Map();   // base -> how many forms of it have been named
+    const idFor = (k, held, own) => {
+      const idx = (t) => s.tracks.indexOf(t);
+      const key = `${k}:${held.map(idx).sort((x, y) => x - y).join(",")}:${[...own].map(([t, q]) => `${idx(t)}=${q}`).sort().join(",")}`;
+      if (!defs.has(key)) {
+        const base = k == null ? "q" : `p${k + 1}`;
+        if (k != null && !held.length && !own.size) defs.set(key, base);
+        else { const n = variants.get(base) || 0; variants.set(base, n + 1); defs.set(key, k == null ? `${base}${n + 1}` : `${base}${String.fromCharCode(97 + n)}`); }
+      }
+      return defs.get(key);
+    };
+    const refs = order.map(([r, k, held, own]) => [r, k == null && !own.size ? "silence" : idFor(k, held, own)]);
+    const written = new Set();
+    for (const [, k, held, own] of order) {
+      if (k == null && !own.size) continue;
+      const id = idFor(k, held, own);
+      if (written.has(id)) continue;
+      written.add(id);
+      const plays = (t) => !held.includes(t) && slotOf(t, k, own) != null && hasSteps(t, slotOf(t, k, own));
+      const parts = writable.filter(plays).map(t => partCode(t, slotOf(t, k, own), { native: false, sound: soundAt(t, slotOf(t, k, own)), bare: true, tracks, warnings }));
+      lines.push(parts.length ? `const ${id} = stack(\n${parts.map(x => "  " + x.replace(/\n/g, "\n  ")).join(",\n")}\n)` : `const ${id} = silence`, "");
+      for (const t of writable) if (plays(t) && !names.includes(t.name)) names.push(t.name);
     }
-    lines.push(`$: arrange(${ids.map(([r, id]) => `[${r}, ${id}]`).join(", ")})`, "");
+    lines.push(`$: arrange(${refs.map(([r, id]) => `[${r}, ${id}]`).join(", ")})`, "");
   }
   return { code: lines.join("\n").replace(/\n+$/, "\n"), warnings: [...new Set(warnings)], names, skipped, slots, sectioned };
 }

@@ -361,3 +361,93 @@ test("the acoustic kits are bundled samples, served from the site and present on
   assert.equal(song.tracks[0].sampleSource.id, "salamander/ride");
   assert.equal(song.tracks[0].isDrumKit, true, "a ride is a drum, so it sits at C2");
 });
+
+test("setArrangement writes the song's sections, which the studio's arrangement view plays", () => {
+  const s = song();
+  assert.deepEqual(s.arrangement, [], "a new song has no arrangement, so chain mode plays the slots in order");
+  const r = sb.setArrangement(s, { mode: "chain", sections: [{ pattern: 0, bars: 4 }, { pattern: 1, bars: 8 }, { pattern: 0, bars: 4 }] });
+  assert.deepEqual(s.arrangement, [{ p: 0, bars: 4 }, { p: 1, bars: 8 }, { p: 0, bars: 4 }], "a pattern as often as the song wants it");
+  assert.deepEqual(r.sections, [{ pattern: 0, bars: 4 }, { pattern: 1, bars: 8 }, { pattern: 0, bars: 4 }]);
+  assert.equal(r.bars, 16);
+  // tuples spell the same thing, and bars default to one
+  sb.setArrangement(s, { sections: [[2, 2], [3]] });
+  assert.deepEqual(s.arrangement, [{ p: 2, bars: 2 }, { p: 3, bars: 1 }]);
+  // the refusals name the reason, since an agent reads them
+  assert.throws(() => sb.setArrangement(s, { sections: [{ pattern: 32, bars: 1 }] }), /sections\[0\]\.pattern/);
+  assert.throws(() => sb.setArrangement(s, { sections: [{ pattern: 0, bars: 0 }] }), /sections\[0\]\.bars/);
+  assert.throws(() => sb.setArrangement(s, { sections: [{ pattern: 0, bars: 65 }] }), /sections\[0\]\.bars/);
+  assert.throws(() => sb.setArrangement(s, { sections: "0x4 1x8" }), /sections must be an array/);
+  assert.deepEqual(s.arrangement, [{ p: 2, bars: 2 }, { p: 3, bars: 1 }], "a refused call changes nothing");
+  // it is in the summary, where the repeats then are not: the sections decide
+  const sum = sb.summarize(s).arrangement;
+  assert.deepEqual(sum.sections, [{ pattern: 2, bars: 2 }, { pattern: 3, bars: 1 }]);
+  assert.equal(sum.repeats, undefined);
+  // and in the JSON the studio loads
+  assert.deepEqual(JSON.parse(sb.toJSON(s)).arrangement, [{ p: 2, bars: 2 }, { p: 3, bars: 1 }]);
+  // null (or []) clears it, and chain mode is the slot-order chain again
+  sb.setArrangement(s, { sections: null });
+  assert.deepEqual(s.arrangement, []);
+  assert.deepEqual(sb.summarize(s).arrangement.repeats, s.patternRepeats);
+  // omitting it leaves it alone
+  sb.setArrangement(s, { sections: [[0, 4]] });
+  sb.setArrangement(s, { mode: "repeat" });
+  assert.deepEqual(s.arrangement, [{ p: 0, bars: 4 }]);
+});
+
+test("fromBlob reads an arrangement through the format's normalizer", () => {
+  const s = song();
+  sb.setArrangement(s, { sections: [[0, 4], [1, 8]] });
+  const back = sb.fromBlob(JSON.parse(sb.toJSON(s)));
+  assert.deepEqual(back.arrangement, [{ p: 0, bars: 4 }, { p: 1, bars: 8 }]);
+  const loose = sb.fromBlob({ ...JSON.parse(sb.toJSON(s)), arrangement: [{ p: 0, bars: 999 }, { p: 99, bars: 1 }, "junk"] });
+  assert.deepEqual(loose.arrangement, [{ p: 0, bars: 64 }], "clamped and pruned, never thrown");
+  const none = sb.fromBlob({ ...JSON.parse(sb.toJSON(s)), arrangement: undefined });
+  assert.deepEqual(none.arrangement, [], "a song saved before the arrangement existed has none");
+});
+
+test("setArrangement takes a rest: pattern null, or rest true", () => {
+  const s = song();
+  const r = sb.setArrangement(s, { mode: "chain", sections: [{ pattern: 0, bars: 4 }, { pattern: null, bars: 2 }, { rest: true, bars: 1 }, ["rest", 1], [1, 4]] });
+  assert.deepEqual(s.arrangement, [{ p: 0, bars: 4 }, { p: null, bars: 2 }, { p: null, bars: 1 }, { p: null, bars: 1 }, { p: 1, bars: 4 }]);
+  assert.deepEqual(r.sections[1], { pattern: null, bars: 2 });
+  assert.equal(r.bars, 12, "rests count in the length");
+  assert.throws(() => sb.setArrangement(s, { sections: [{ rest: true, bars: 0 }] }), /sections\[0\]\.bars/);
+  assert.deepEqual(sb.fromBlob(JSON.parse(sb.toJSON(s))).arrangement, s.arrangement, "a rest survives the trip through the JSON");
+});
+
+test("a section holds tracks back by index, and the indices follow a removed track", () => {
+  const s = song();
+  const k = sb.addTrack(s, { engine: "808 kick", name: "kick" }).index;
+  const b = sb.addTrack(s, { engine: "silverbox", name: "bass" }).index;
+  const l = sb.addTrack(s, { engine: "tines", name: "lead" }).index;
+  const bus = sb.addTrack(s, { engine: "bus", name: "verb" }).index;
+  sb.setArrangement(s, { mode: "chain", sections: [{ pattern: 0, bars: 4, off: [b, l] }, { pattern: 0, bars: 4, off: [l, l] }, { pattern: 0, bars: 8 }] });
+  assert.deepEqual(s.arrangement.map(e => e.off || []), [[b, l], [l], []], "distinct, sorted");
+  assert.deepEqual(sb.summarize(s).arrangement.sections[0], { pattern: 0, bars: 4, off: [b, l] });
+  assert.equal("off" in sb.summarize(s).arrangement.sections[2], false, "nobody held back is left unsaid");
+  assert.throws(() => sb.setArrangement(s, { sections: [{ pattern: 0, bars: 1, off: [9] }] }), /no track 9|off\[0\]/);
+  assert.throws(() => sb.setArrangement(s, { sections: [{ pattern: 0, bars: 1, off: [bus] }] }), /fx bus/);
+  assert.throws(() => sb.setArrangement(s, { sections: [{ pattern: 0, bars: 1, off: "lead" }] }), /off must be an array/);
+  // removing the bass: the lead's index moves down, the bass is no longer named
+  sb.removeTrack(s, b);
+  assert.deepEqual(s.arrangement.map(e => e.off || []), [[l - 1], [l - 1], []]);
+  assert.deepEqual(sb.fromBlob(JSON.parse(sb.toJSON(s))).arrangement, s.arrangement, "and it survives the JSON");
+  assert.equal(k, 0);
+});
+
+test("a section gives a track a pattern of its own (a lane), by index, and the indices follow a removed track", () => {
+  const s = song();
+  const k = sb.addTrack(s, { engine: "808 kick", name: "kick" }).index;
+  const b = sb.addTrack(s, { engine: "silverbox", name: "bass" }).index;
+  const bus = sb.addTrack(s, { engine: "bus", name: "verb" }).index;
+  const r = sb.setArrangement(s, { mode: "chain", sections: [{ pattern: 0, bars: 4, pat: { [b]: 2 } }, { pattern: null, bars: 2, pat: { [k]: 1 } }, { pattern: 0, bars: 4 }] });
+  assert.deepEqual(s.arrangement, [{ p: 0, bars: 4, pat: { [b]: 2 } }, { p: null, bars: 2, pat: { [k]: 1 } }, { p: 0, bars: 4 }]);
+  assert.deepEqual(r.sections[0], { pattern: 0, bars: 4, pat: { [b]: 2 } });
+  assert.throws(() => sb.setArrangement(s, { sections: [{ pattern: 0, bars: 1, pat: { 9: 1 } }] }), /no track 9|pat track/);
+  assert.throws(() => sb.setArrangement(s, { sections: [{ pattern: 0, bars: 1, pat: { [bus]: 1 } }] }), /fx bus/);
+  assert.throws(() => sb.setArrangement(s, { sections: [{ pattern: 0, bars: 1, pat: { [b]: 32 } }] }), /pat\[1\]/);
+  assert.throws(() => sb.setArrangement(s, { sections: [{ pattern: 0, bars: 1, pat: [1] }] }), /pat must be an object/);
+  sb.removeTrack(s, k);
+  assert.deepEqual(s.arrangement.map(e => e.pat), [{ [b - 1]: 2 }, undefined, undefined], "the bass's lane moved down; the kick's went with the kick");
+  assert.deepEqual(sb.fromBlob(JSON.parse(sb.toJSON(s))).arrangement, s.arrangement);
+});

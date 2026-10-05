@@ -40,6 +40,7 @@ const BOX = [
   ["jam", "send a link. edit the same song together, live. nobody needs an account."],
   ["compose", "describe what you want in plain words."],
   ["euclid + chance", "one button divides a rhythm evenly, the other throws dice at it."],
+  ["arrangement", "lay the patterns out across bars, a lane per instrument. verse, chorus, verse, a bar of nothing, drums alone. no copying patterns to get there."],
   ["strudel", "your song opens as live code. type mini-notation, hit ctrl+enter, and it lands in the song without the beat stopping."],
   ["vim mode", "hjkl round the grid, i to play notes in, :k cutoff and scroll the trackpad. the mouse can take the night off."],
 ] as const;

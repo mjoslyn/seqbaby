@@ -318,6 +318,13 @@ export const STUDIO_BODY = String.raw`
     <!-- The code drawer (codePanel.js): Strudel live coding, run into
          the song without stopping the transport. -->
     <button id="code-btn" class="sq-btn--ghost" type="button" aria-pressed="false" title="live code: write Strudel patterns, ctrl/⌘ enter runs them into the song"><span class="sq-btn__label">code</span></button>
+    <!-- The two views of the song, one at a time (arrangement.js keeps
+         body[data-view]): the track list, and the arrangement view built
+         into #arrangement at init. -->
+    <span class="sq-tabs" role="tablist" aria-label="view">
+      <button class="sq-tabs__tab sq-btn--ghost" type="button" role="tab" data-view="tracks" aria-selected="true" title="the tracks: steps, sounds, effects"><span class="sq-btn__label">tracks</span></button>
+      <button class="sq-tabs__tab sq-btn--ghost" type="button" role="tab" data-view="arrangement" aria-selected="false" tabindex="-1" title="the arrangement: the song as sections laid out across bars, with a lane per track, which chain mode plays"><span class="sq-btn__label">arrangement</span> <span class="sq-tabs__n"></span></button>
+    </span>
     <!-- Undo / redo. Wired and painted by history.js, which also owns the
          ctrl/cmd-Z keys; they ship disabled because at boot there is nothing
          behind them yet. -->
@@ -433,6 +440,9 @@ export const STUDIO_BODY = String.raw`
     <label class="sq-repeat__wrap" title="bars this pattern plays for before chain advances"><span>rep</span><input id="pattern-repeats" type="number" min="1" max="16" value="1" /></label>
     <div id="pattern-grid" class="sq-pattern__grid"></div>
   </div>
+  <!-- The arrangement view (arrangement.js), shown in place of the track list
+       when the transport's arrangement tab is picked. -->
+  <section id="arrangement" class="sq-arrange" aria-label="arrangement"></section>
 
 
   <main id="tracks"></main>
