@@ -1783,9 +1783,17 @@ state.arrangement = [ {p:0, bars:4, off:[bass, lead]}, {p:1, bars:8}, {p:null, b
 - **Empty means what it always meant.** `[]` is no arrangement, and chain mode
   is the slot-order chain with `patternRepeats`, so every song written before
   this plays exactly as it did. No third pattern mode: the mode button still
-  says `chain`, and the panel's header says `plays in chain mode: switch`
-  while the song is in repeat mode. `patternRepeats` is still what a section
-  is born with (`addSection` reads it), and what the slot-order chain plays.
+  says `chain`. `patternRepeats` is still what a section is born with
+  (`addSection` reads it), and what the slot-order chain plays.
+- **Play in the arrangement tab plays the arrangement** (`arrangementDrives`,
+  arrangement.js: sections exist, and chain mode is on OR the arrangement tab
+  is the view). Every gate the transport has on "the arrangement is what
+  plays" (the start position, the section a track is held by, the bar-line
+  advance, the playhead paint) asks it, so pressing play with the arrangement
+  in front of you plays the song whatever the mode button says, while in the
+  tracks tab repeat still loops the pattern you are on and chain plays the
+  song. The panel's header says so (`plays here; in tracks, repeat loops the
+  pattern: chain`) while the mode is repeat.
 - **The transport walks it on bar lines** (transport.js, the chain branch):
   `state.arrangePos` is the section playing, `chainBarCount` the bars into it;
   at `bars` it moves to the next section (back to the first after the last)

@@ -17,7 +17,7 @@ import { applyBusMute, updateMidiUI } from "./render.js";
 import { ensureFxRack, fireFilterEnv, refreshAllTrackOutputs, refreshNoiseBeds, routeVoiceToRack, soloAudibleTracks } from "./signal.js";
 import { activeMeter, stepsPerBarForMeter, stepsPerBeatForMeter } from "./meter.js";
 import { applySectionTracks, findNextNonEmptyPattern, invertChord, realignTracksToActive, state, switchPattern, syncArrangePos } from "./state.js";
-import { clearArrangementHold, paintArrangementNow, trackTargetPattern } from "./arrangement.js";
+import { arrangementDrives, clearArrangementHold, paintArrangementNow, trackTargetPattern } from "./arrangement.js";
 import { loadSilverboxWorklet } from "./silverbox.js";
 import { loadContagionWorklet } from "./contagion.js";
 import { applyScale, chordNotes, nameToMidi } from "./theory.js";
@@ -442,7 +442,7 @@ export async function startPlayback(opts = {}) {
   // (the one last clicked in the arrangement view, or where play stopped) —
   // if that section plays the active pattern, that one; else the first that
   // does; else the pattern changes to the section's. See syncArrangePos.
-  if (state.patternMode === "chain" && state.arrangement.length) {
+  if (arrangementDrives()) {
     syncArrangePos(state.activePattern);
     const sec = state.arrangement[state.arrangePos];
     if (sec.p != null && sec.p !== state.activePattern) switchPattern(sec.p, { keepArrangePos: true });
@@ -497,8 +497,7 @@ export async function startPlayback(opts = {}) {
     // or an effect lane lands where it should when the track comes back in
     // rather than jumping there. The pattern itself was bound to the track
     // on the bar line (applySectionTracks), so the arrays read here are its.
-    const section = state.patternMode === "chain" && state.arrangement.length > 0
-      ? state.arrangement[state.arrangePos] : null;
+    const section = arrangementDrives() ? state.arrangement[state.arrangePos] : null;
     for (const t of state.tracks) {
       if (!t.voice) continue;
       const isBus = t.voice.type === "bus";
@@ -702,10 +701,12 @@ export async function startPlayback(opts = {}) {
       restartTrackCounts();
     }
     // pattern chaining: advance at bar boundaries when chain mode is on, respecting per-pattern repeats
-    if (state.patternMode === "chain" && barLine) {
+    // Chain mode, or the arrangement tab in front of you with sections in it
+    // (arrangementDrives): the song plays through.
+    if ((state.patternMode === "chain" || arrangementDrives()) && barLine) {
       state.chainBarCount++;
       const arr = state.arrangement;
-      if (arr.length) {
+      if (arrangementDrives()) {
         // The arrangement: each section its own bar count, back to the top
         // after the last. Two sections of the same pattern in a row keep
         // playing without a switch, as a repeat count would.

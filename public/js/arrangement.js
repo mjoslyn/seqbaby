@@ -67,6 +67,17 @@ export function arrangementBeats(arr = state.arrangement) {
   return beats;
 }
 
+/**
+ * Whether the arrangement is what plays: it has sections, and either chain
+ * mode is on or the arrangement tab is the view. Pressing play with the
+ * arrangement in front of you plays the arrangement, whatever the pattern
+ * mode says; in the tracks tab the mode button keeps its old meaning, repeat
+ * looping the pattern and chain playing the song.
+ */
+export function arrangementDrives() {
+  return state.arrangement.length > 0 && (state.patternMode === "chain" || isArrangementShown());
+}
+
 /** Whether section `e` holds track `t` back. */
 export function sectionHolds(e, t) { return !!e?.off?.includes(t.id); }
 /** The pattern track `t` plays in section `e`: its own lane's, else the
@@ -302,6 +313,8 @@ function render() {
     ? `${plural(arr.length, "section")} · ${plural(bars, "bar")} · ${fmtTime(secs)}`
     : "no sections yet";
   head.querySelector("[data-act=add]").textContent = `+ pattern ${state.activePattern + 1}`;
+  // the view plays the arrangement whatever the mode; the note says so
+  // when the mode button would say otherwise in the tracks tab
   const hint = head.querySelector(".sq-arrange__hint");
   hint.hidden = !(arr.length && state.patternMode !== "chain");
   head.querySelector("[data-act=clear]").disabled = !arr.length;
@@ -454,7 +467,7 @@ function render() {
  */
 export function paintArrangementNow({ pos, bar, barTick, barLen }) {
   const e = state.arrangement[pos];
-  if (!e || state.patternMode !== "chain") return;
+  if (!e || !arrangementDrives()) return;
   for (const t of state.tracks) {
     if (!t.el || t.engineKey === "bus") continue;
     const target = trackTargetPattern(e, t);
@@ -889,9 +902,9 @@ export function initArrangement() {
   head = el("div", "sq-arrange__head");
   head.appendChild(el("span", "sq-arrange__title", "arrangement"));
   head.appendChild(el("span", "sq-arrange__sum", ""));
-  const hint = el("button", "sq-arrange__hint sq-btn--ghost", "plays in chain mode: switch");
+  const hint = el("button", "sq-arrange__hint sq-btn--ghost", "plays here; in tracks, repeat loops the pattern: chain");
   hint.type = "button";
-  hint.title = "the arrangement plays in chain mode; repeat mode loops the pattern you are on";
+  hint.title = "play in this tab plays the arrangement. In the tracks tab, repeat mode loops the pattern you are on; switch to chain mode to play the arrangement there too";
   hint.addEventListener("click", () => { if (state.patternMode !== "chain") document.getElementById("pattern-mode")?.click(); render(); });
   head.appendChild(hint);
   const tools = el("span", "sq-arrange__tools");
