@@ -13,7 +13,7 @@ import { buildSilverboxVoice } from "./silverbox.js";
 import { buildBassVoice, BASS_NUM_KEYS, BASS_SEL_KEYS } from "./bass.js";
 import { buildSubBassVoice, SUB_NUM_KEYS, SUB_SEL_KEYS } from "./subbass.js";
 import { buildDroneVoice, DRONE_NUM_KEYS, DRONE_SEL_KEYS } from "./drone.js";
-import { buildVoxVoice, VOX_NUM_KEYS, VOX_SEL_KEYS } from "./vox.js";
+import { buildVoxVoice, VOX_NUM_KEYS, VOX_SEL_KEYS, VOX_TEXT_KEYS } from "./vox.js";
 import { buildHexopVoice, HEXOP_NUM_KEYS, HEXOP_SEL_KEYS } from "./hexop.js";
 import { buildGuitarVoice, GUITAR_NUM_KEYS, GUITAR_SEL_KEYS } from "./guitar.js";
 import { buildContagionVoice, CONTAGION_NUM_KEYS, CONTAGION_SEL_KEYS } from "./contagion.js";
@@ -1396,7 +1396,7 @@ export class DrumSynthVoice {
                      ...BASS_NUM_KEYS, ...BASS_SEL_KEYS,
                      ...SUB_NUM_KEYS, ...SUB_SEL_KEYS,
                      ...DRONE_NUM_KEYS, ...DRONE_SEL_KEYS,
-                     ...VOX_NUM_KEYS, ...VOX_SEL_KEYS]) {
+                     ...VOX_NUM_KEYS, ...VOX_SEL_KEYS, ...VOX_TEXT_KEYS]) {
       if (this.params?.[k] != null) this.built.setParam(k, this.params[k]);
     }
   }

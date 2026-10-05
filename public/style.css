@@ -1413,6 +1413,9 @@ main {
 .sq-param-group--vox .sq-vox__f { display: inline-flex; align-items: center; gap: 4px; color: var(--fg-dim); }
 .sq-param-group--vox .sq-vox__f .sq-knob { --knob-size: 34px; }
 .sq-param-group--vox select { padding: 2px 6px; font-size: 11px; }
+.sq-param-group--vox .sq-vox__lyric { flex: 1 1 160px; min-width: 120px; padding: 3px 6px; font: inherit; font-size: 11px; color: var(--fg); background: var(--bg); border: 1px solid var(--border); border-radius: 3px; }
+/* under 16px, iOS zooms the page onto a text field when it takes focus */
+@media (pointer: coarse) { .sq-param-group--vox .sq-vox__lyric { font-size: 16px; } }
 .sq-param-group--silverbox { border-color: color-mix(in oklab, #ff7a4d 45%, var(--border)); }
 .sq-param-group--silverbox[hidden] { display: none !important; }
 .sq-param-group--silverbox select { padding: 2px 6px; font-size: 11px; }

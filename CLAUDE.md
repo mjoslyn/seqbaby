@@ -1397,6 +1397,17 @@ CONSONANT (hiss, burst, murmur, formant glide) ───┘
   it (a chord shares one), resolved when the message ARRIVES so the lead can
   be computed, and an `off` (stop) starts it over. With words off, the
   `cons` select and the vowel slider decide.
+- **The lyric** (`sngtext`, a text field in the "sings" row) is typed
+  syllables, read by the same `voxSyllables`, and wins over the words select
+  while it has a syllable in it (`voxPhrase`). Ordinary spelling is bent onto
+  the consonants there are (`VOX_CONS_ALIASES`: ch to sh, j to d, c to k ...);
+  what follows a syllable's vowel is not sung. It is the engine's one TEXT
+  control (`VOX_TEXT_CTLS`), so the song builder's `PANELS` entry carries a
+  `text` list beside `num` / `sel`, and setParams, describeEngine and
+  strudel's `engineKnobKeys` read it (`.knob('sngtext', 'la di da')`). Sung
+  as it is typed, but the builder re-posts the phrase only when a keystroke
+  changes a syllable, since a re-post starts it over. A voice preset leaves
+  it alone (`voxTone` drops it): it is what the track sings, not its sound.
 - **Breath** is noise pulsed by the folds (0.35 + 0.65 x flow), through the
   same formants; above 0.75 the voicing fades out and it whispers.
 - **Vibrato after a delay**, faded in over 0.4s; **drift** is a per-copy

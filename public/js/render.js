@@ -9,7 +9,7 @@ import { HEXOP_ALG_LABELS, HEXOP_DEFAULTS, HEXOP_NUM_KEYS, HEXOP_PRESET_NAMES, H
 import { BASS_DEFAULTS, BASS_NUM_KEYS, BASS_SEL_KEYS, BASS_TONE_NAMES, bassTone, bassToneDescription } from "./bass.js";
 import { SUB_DEFAULTS, SUB_NUM_KEYS, SUB_SEL_KEYS, SUB_TONE_NAMES, subTone, subToneDescription } from "./subbass.js";
 import { DRONE_DEFAULTS, DRONE_NUM_KEYS, DRONE_SEL_KEYS, DRONE_TONE_NAMES, droneTone, droneToneDescription } from "./drone.js";
-import { VOX_DEFAULTS, VOX_NUM_KEYS, VOX_SEL_KEYS, VOX_TONE_NAMES, voxTone, voxToneDescription } from "./vox.js";
+import { VOX_DEFAULTS, VOX_NUM_KEYS, VOX_SEL_KEYS, VOX_TEXT_KEYS, VOX_TONE_NAMES, voxTone, voxToneDescription } from "./vox.js";
 import { euclideanRhythm, refreshEuclidUI, renderEuclidPanel, wireEuclidPanel } from "./euclid.js";
 import { refreshChanceUI, renderChancePanel, wireChancePanel } from "./chance.js";
 import { randomizeMelody, randomizeTimbre } from "./generate.js";
@@ -212,7 +212,7 @@ export function syncTrackSoundUI(t) {
                    ...BASS_NUM_KEYS, ...BASS_SEL_KEYS,
                    ...SUB_NUM_KEYS, ...SUB_SEL_KEYS,
                    ...DRONE_NUM_KEYS, ...DRONE_SEL_KEYS,
-                   ...VOX_NUM_KEYS, ...VOX_SEL_KEYS]) {
+                   ...VOX_NUM_KEYS, ...VOX_SEL_KEYS, ...VOX_TEXT_KEYS]) {
     const el = q(`.p-${k}`);
     if (el && t.params[k] != null) el.value = t.params[k];
   }
@@ -353,7 +353,7 @@ export function syncSubPanel(t) {
 export function syncVoxPanel(t) {
   const root = t._voxGroupEl || t.el?.querySelector(".sq-param-group--vox");
   if (root) {
-    for (const k of [...VOX_NUM_KEYS, ...VOX_SEL_KEYS]) {
+    for (const k of [...VOX_NUM_KEYS, ...VOX_SEL_KEYS, ...VOX_TEXT_KEYS]) {
       const el = root.querySelector(`.p-${k}`);
       if (el && t.params[k] != null) el.value = t.params[k];
     }
@@ -617,7 +617,7 @@ export function renderTrack(t) {
       voxToneSel.appendChild(o);
     }
   }
-  for (const k of [...VOX_NUM_KEYS, ...VOX_SEL_KEYS]) {
+  for (const k of [...VOX_NUM_KEYS, ...VOX_SEL_KEYS, ...VOX_TEXT_KEYS]) {
     const el = node.querySelector(`.p-${k}`);
     if (el) el.value = t.params[k] ?? VOX_DEFAULTS[k];
   }
@@ -816,6 +816,12 @@ export function renderTrack(t) {
   for (const k of VOX_SEL_KEYS) {
     const el = node.querySelector(`.p-${k}`);
     if (el) el.addEventListener("change", e => setParam(t, k, e.target.value));
+  }
+  // The lyric is sung as it is typed: every keystroke that changes a
+  // syllable re-posts the phrase (vox.js holds back the ones that don't).
+  for (const k of VOX_TEXT_KEYS) {
+    const el = node.querySelector(`.p-${k}`);
+    if (el) el.addEventListener("input", e => setParam(t, k, e.target.value));
   }
   if (voxToneSel) {
     voxToneSel.addEventListener("change", e => {

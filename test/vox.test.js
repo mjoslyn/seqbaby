@@ -3,9 +3,11 @@ import test from "node:test";
 
 import {
   VOX_DEFAULTS, VOX_NUM_CTLS, VOX_SEL_CTLS, VOX_TONE_NAMES, VOX_CONSONANT_NAMES, VOX_WORDS,
-  VOX_WORD_NAMES, voxTone, voxSyllables, voxFormantsAt,
+  VOX_WORD_NAMES, VOX_TEXT_CTLS, VOX_TEXT_KEYS, voxTone, voxSyllables, voxFormantsAt,
 } from "../public/js/engineData.js";
-import { voxProcessorSource, voxSyllableList } from "../public/js/vox.js";
+import { voxPhrase, voxProcessorSource, voxSyllableList } from "../public/js/vox.js";
+import * as B from "../public/js/songBuilder.js";
+import { readCode, realize, sessionToCode, writeTracks } from "../public/js/strudel.js";
 
 // The vox, rendered outside a browser, as drone.test.js renders the drone.
 //
@@ -131,7 +133,11 @@ test("vox: the tables agree with the processor", () => {
   assert.deepEqual([PARAM_DEFAULTS.vowel, PARAM_DEFAULTS.size, PARAM_DEFAULTS.breath, PARAM_DEFAULTS.rel], [0.5, 0.5, 0.5, 0.4]);
   for (const name of VOX_TONE_NAMES) {
     const t = voxTone(name);
-    for (const k of Object.keys(VOX_DEFAULTS)) assert.ok(k in t, `${name}: ${k} missing`);
+    for (const k of Object.keys(VOX_DEFAULTS)) {
+      // A voice is complete, except the lyric, which a voice must not erase.
+      if (VOX_TEXT_KEYS.includes(k)) assert.ok(!(k in t), `${name}: carries a lyric`);
+      else assert.ok(k in t, `${name}: ${k} missing`);
+    }
     for (const [k, , values] of VOX_SEL_CTLS) assert.ok(values.includes(t[`sng${k}`]), `${name}: ${k} = ${t[`sng${k}`]}`);
     for (const [k, lo, hi] of VOX_NUM_CTLS) assert.ok(t[`sng${k}`] >= lo && t[`sng${k}`] <= hi, `${name}: ${k} out of range`);
   }
@@ -326,6 +332,12 @@ test("vox: the panel markup matches the tables", async () => {
     assert.ok(m, `no knob for ${k}`);
     assert.deepEqual(m.slice(1).map(Number), [lo, hi, def], `${k}: markup range or default differs`);
   }
+  for (const [k, def, max] of VOX_TEXT_CTLS) {
+    const m = panel.match(new RegExp(`<input class="p-sng${k}[^"]*" type="text" maxlength="(\\d+)"`));
+    assert.ok(m, `no text field for ${k}`);
+    assert.equal(Number(m[1]), max, `${k}: maxlength differs`);
+    assert.equal(def, "");
+  }
   for (const [k, def, values] of VOX_SEL_CTLS) {
     const m = panel.match(new RegExp(`<select class="p-sng${k}"[^>]*>([\\s\\S]*?)</select>`));
     assert.ok(m, `no select for ${k}`);
@@ -333,4 +345,52 @@ test("vox: the panel markup matches the tables", async () => {
     assert.deepEqual(opts, values, `${k}: options differ`);
     assert.ok(m[1].includes(`value="${def}" selected`), `${k}: default ${def} not selected`);
   }
+});
+
+test("vox: a typed lyric reads as syllables, ordinary spelling included", () => {
+  const spell = (text) => voxSyllables(text).map(s => `${VOX_CONSONANT_NAMES[s.cons]}:${"uoaei"[Math.round(s.vowel * 4)]}`).join(" ");
+  assert.equal(spell("shu bi du wa"), "sh:u b:i d:u w:a");
+  assert.equal(spell("la-di-da, la"), "l:a d:i d:a l:a");
+  // letters with no consonant of their own lean on the nearest
+  assert.equal(spell("chu jo cat xa"), "sh:u d:o k:a s:a");
+  // what follows the vowel is not sung; y with no vowel is an i; no vowel is an a
+  assert.equal(spell("sun sky mmm"), "s:u s:i m:a");
+  // a bare vowel has no consonant, and punctuation is ignored
+  assert.equal(spell("Oh! ah?"), "none:o none:a");
+  assert.equal(voxSyllables("").length, 0);
+  assert.equal(voxSyllables("la ".repeat(500)).length, 128);
+});
+
+test("vox: the lyric wins over the words while it has a syllable", () => {
+  assert.deepEqual(voxPhrase("la la", ""), voxSyllableList("la la"));
+  assert.deepEqual(voxPhrase("la la", "   "), voxSyllableList("la la"));
+  assert.deepEqual(voxPhrase("la la", "shu bi"), voxSyllables("shu bi").flatMap(s => [s.cons, s.vowel]));
+  assert.deepEqual(voxPhrase("off", ""), []);
+});
+
+test("vox: a typed lyric is sung one syllable a note", () => {
+  // "sa ma sa ma": the s notes hiss before the step, the m notes don't
+  const notes = [0.3, 0.8, 1.3, 1.8].map(t => [t, 60, 0.3]);
+  const { L } = render({ secs: 2.2, set: { syl: voxPhrase("off", "sa ma sa ma") }, notes, params: { ...STEADY, atk: 0 } });
+  const pre = notes.map(([t]) => hiss(L, t - 0.08, t - 0.01));
+  assert.ok(pre[0] > pre[1] * 5 && pre[2] > pre[3] * 5, `s vs m: ${pre.map(x => db(x).toFixed(0))}`);
+});
+
+test("vox: the lyric goes through the song builder and Strudel code", () => {
+  const song = B.newSong();
+  B.addTrack(song, { engine: "vox", name: "lead" });
+  B.setParams(song, 0, { sngtext: "o sha la la" });
+  assert.equal(song.tracks[0].params.sngtext, "o sha la la");
+  assert.throws(() => B.setParams(song, 0, { sngtext: "a".repeat(VOX_TEXT_CTLS[0][2] + 1) }), /at most/);
+  assert.throws(() => B.setParams(song, 0, { sngtext: 3 }), /text/);
+  // a voice loaded over it leaves it alone
+  B.applyPreset(song, 0, "soul lead");
+  assert.equal(song.tracks[0].params.sngtext, "o sha la la");
+  B.setSteps(song, 0, { steps: "x...x...", notes: "C4" });
+  const code = sessionToCode(song, { native: true });
+  const src = typeof code === "string" ? code : code.code;
+  assert.match(src, /\.knob\('sngtext', 'o sha la la'\)/);
+  const back = B.newSong();
+  writeTracks(back, realize(readCode(src)));
+  assert.equal(back.tracks[0].params.sngtext, "o sha la la");
 });

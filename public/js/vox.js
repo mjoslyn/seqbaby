@@ -44,7 +44,9 @@
 //   moved back by as much of the consonant as there is time for. A singer
 //   does the same: the s of "sun" is before the beat, the u on it.
 // - **Words** play one syllable a note from a phrase (VOX_WORDS), a chord on
-//   one step sharing it, starting over when the transport stops.
+//   one step sharing it, starting over when the transport stops. A typed
+//   LYRIC (`sngtext`, read by voxSyllables) does the same and wins over the
+//   select while it has anything in it.
 // - **Breath** is noise through the same formants, pulsed by the folds (air
 //   flows when they are open), so a breathy voice is still a vowel. At the
 //   top of the knob the voicing goes and it whispers.
@@ -696,7 +698,7 @@ export function voxReady(ctx) { return !!ctx && _ready.has(ctx); }
 // Keys are `sng` + short key -> `vox_<short>` / `vox.<short>`. The list, the
 // ranges, the defaults and the voices are data in engineData.js; re-exported.
 export {
-  VOX_NUM_CTLS, VOX_SEL_CTLS, VOX_MOD_KEYS, VOX_NUM_KEYS, VOX_SEL_KEYS,
+  VOX_NUM_CTLS, VOX_SEL_CTLS, VOX_TEXT_CTLS, VOX_MOD_KEYS, VOX_NUM_KEYS, VOX_SEL_KEYS, VOX_TEXT_KEYS,
   VOX_MOD_RANGE, VOX_MOD_LABELS, VOX_DEFAULTS, voxFromUnit,
   VOX_VOWELS, VOX_CONSONANT_NAMES, VOX_WORD_NAMES, VOX_WORDS, voxSyllables,
   VOX_TONE_NAMES, voxToneDescription, voxTone,
@@ -705,6 +707,13 @@ export {
 /** A words select value as the flat [cons, vowel, ...] list the processor takes. */
 export function voxSyllableList(name) {
   return voxSyllables(VOX_WORDS[name] ?? "").flatMap(s => [s.cons, s.vowel]);
+}
+
+/** What a track sings: its typed lyric when that has a syllable in it, else
+ *  its words select. As the flat list the processor takes. */
+export function voxPhrase(words, text) {
+  const typed = voxSyllables(text);
+  return typed.length ? typed.flatMap(s => [s.cons, s.vowel]) : voxSyllableList(words);
 }
 
 // Tone wrappers don't accept a native connect() — unwrap to the node underneath.
@@ -738,6 +747,7 @@ export function buildVoxVoice(output) {
 
   let noteId = 0;
   let glide = 0;
+  let words = "off", text = "";
   const paramFor = (key) => P[PARAM_OF[key]] ?? null;
 
   return {
@@ -745,7 +755,15 @@ export function buildVoxVoice(output) {
     setGlide: (g) => { glide = Math.max(0, Number(g) || 0); post({ type: "set", glide }); },
     setParam: (key, val) => {
       if (key === "sngcons")  { post({ type: "set", cons: Math.max(0, VOX_CONSONANT_NAMES.indexOf(String(val))) }); return; }
-      if (key === "sngwords") { post({ type: "set", syl: voxSyllableList(String(val)) }); return; }
+      if (key === "sngwords") { words = String(val); post({ type: "set", syl: voxPhrase(words, text) }); return; }
+      if (key === "sngtext")  {
+        const next = String(val ?? "");
+        // Typing a letter that changes no syllable (a final consonant) must not
+        // start the phrase over under a playing part.
+        if (JSON.stringify(voxPhrase(words, next)) !== JSON.stringify(voxPhrase(words, text))) post({ type: "set", syl: voxPhrase(words, next) });
+        text = next;
+        return;
+      }
       if (key === "sngmode")  { post({ type: "set", mono: val === "mono" }); return; }
       const p = paramFor(key);
       if (!p) return;

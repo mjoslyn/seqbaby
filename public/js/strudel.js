@@ -1888,7 +1888,7 @@ const RESERVED = new Set(["let", "const", "var", "await", "new", "function", "re
 function engineKnobKeys(engineKey) {
   const keys = new Set(voiceAutoKeysForEngineKey(engineKey).filter(k => k !== "vol"));
   const p = ENGINE_PANELS[engineKey];
-  if (p) { for (const c of p.num) keys.add(p.prefix + c[0]); for (const c of p.sel) keys.add(p.prefix + c[0]); }
+  if (p) { for (const c of [...p.num, ...p.sel, ...(p.text ?? [])]) keys.add(p.prefix + c[0]); }
   return [...keys];
 }
 /** A lane's values as mini-notation, runs folded (`0.5!4`), stretched over its cycles. */

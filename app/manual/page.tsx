@@ -1000,7 +1000,11 @@ export default function ManualPage() {
               starts with the consonant beside it. The consonant goes before the
               step, so the vowel lands on the beat, the way a singer places a
               word. <span className={styles.ui}>bite</span> is how loud the
-              consonants are.
+              consonants are. Or type your own lyric in the field beside it,
+              one syllable a note, a consonant and a vowel each:{" "}
+              <span className={styles.ui}>shu bi du wa</span>. Anything after the
+              vowel is not sung, so write <span className={styles.ui}>su</span>{" "}
+              for &quot;sun&quot;.
             </li>
             <li>
               <strong>The vibrato comes in late</strong>, after{" "}

@@ -1510,19 +1510,40 @@ export const VOX_WORDS = {
 };
 export const VOX_WORD_NAMES = Object.keys(VOX_WORDS);
 
+// Letters with no consonant of their own, read as the nearest one there is,
+// so a lyric typed as ordinary spelling still comes out as something: `ch`
+// and `j` lean on sh and d, a hard `c` / `q` is k, `x` is s, `th` is d.
+const VOX_CONS_ALIASES = { ch: "sh", th: "d", ph: "f", wh: "w", c: "k", q: "k", j: "d", x: "s" };
+// The longest syllable a lyric may have; the processor keeps 128.
+export const VOX_MAX_SYLLABLES = 128;
+// How long a typed lyric may be, in characters.
+export const VOX_TEXT_MAX = 400;
+
 /**
  * Spell a phrase as syllables the processor can play: [{cons, vowel}], cons an
  * index into VOX_CONSONANT_NAMES and vowel a position on the vowel line.
+ * Syllables are split by spaces, commas or hyphens (`la-di-da`). Each one is
+ * its consonant (longest match first, so `sh` is not `s` + `h`, then the
+ * aliases above) and the first vowel letter after it, `y` counting as an i
+ * when there is no other; one with no vowel at all sings an a. Anything else
+ * in a syllable (a final consonant, a second vowel) is not sung: one note,
+ * one consonant and one vowel.
  * @param {string} text
  */
 export function voxSyllables(text) {
-  const byLen = VOX_CONSONANT_NAMES.filter(n => n !== "none").sort((a, b) => b.length - a.length);
+  const names = VOX_CONSONANT_NAMES.filter(n => n !== "none");
+  const heads = [...names, ...Object.keys(VOX_CONS_ALIASES)].sort((a, b) => b.length - a.length);
   const out = [];
-  for (const word of String(text || "").toLowerCase().split(/[\s,-]+/)) {
+  const words = String(text || "").toLowerCase().replace(/[^a-z\s,-]/g, "").split(/[\s,-]+/);
+  for (const word of words) {
     if (!word) continue;
-    const c = byLen.find(n => word.startsWith(n)) ?? "none";
-    const rest = c === "none" ? word : word.slice(c.length);
-    const vi = VOX_VOWELS.indexOf(rest[0]);
+    if (out.length >= VOX_MAX_SYLLABLES) break;
+    const head = heads.find(n => word.startsWith(n) && word.length > n.length) ?? "";
+    const c = VOX_CONS_ALIASES[head] ?? (head || "none");
+    const rest = word.slice(head.length);
+    let vi = -1;
+    for (const ch of rest) { vi = VOX_VOWELS.indexOf(ch); if (vi >= 0) break; }
+    if (vi < 0 && rest.includes("y")) vi = VOX_VOWELS.indexOf("i");
     out.push({ cons: VOX_CONSONANT_NAMES.indexOf(c), vowel: vi < 0 ? 0.5 : vi / (VOX_VOWELS.length - 1) });
   }
   return out;
@@ -1544,6 +1565,12 @@ export const VOX_NUM_CTLS = [
   ["bite",   0, 1, 0.6,  "consonant level"],
 ];
 
+/** Text controls: [short key, default, max length, label]. The lyric: typed
+ *  syllables that, when there are any, are sung instead of the words select. */
+export const VOX_TEXT_CTLS = [
+  ["text", "", VOX_TEXT_MAX, "lyric"],
+];
+
 /** Select controls: [short key, default, [values]]. */
 export const VOX_SEL_CTLS = [
   ["cons",  "none", VOX_CONSONANT_NAMES],
@@ -1554,6 +1581,7 @@ export const VOX_SEL_CTLS = [
 export const VOX_MOD_KEYS = VOX_NUM_CTLS.map(c => c[0]);
 export const VOX_NUM_KEYS = VOX_MOD_KEYS.map(k => `sng${k}`);
 export const VOX_SEL_KEYS = VOX_SEL_CTLS.map(c => `sng${c[0]}`);
+export const VOX_TEXT_KEYS = VOX_TEXT_CTLS.map(c => `sng${c[0]}`);
 
 export const VOX_MOD_RANGE = Object.fromEntries(VOX_NUM_CTLS.map(c => [c[0], [c[1], c[2]]]));
 
@@ -1563,6 +1591,7 @@ export const VOX_MOD_LABELS = Object.fromEntries(
 export const VOX_DEFAULTS = {
   ...Object.fromEntries(VOX_NUM_CTLS.map(c => [`sng${c[0]}`, c[3]])),
   ...Object.fromEntries(VOX_SEL_CTLS.map(c => [`sng${c[0]}`, c[1]])),
+  ...Object.fromEntries(VOX_TEXT_CTLS.map(c => [`sng${c[0]}`, c[1]])),
 };
 
 /** A 0..1 lane value in this control's own units. @param {string} k short key */
@@ -1644,7 +1673,9 @@ export function voxToneDescription(name) { return VOX_TONES[name]?.d ?? ""; }
 
 /**
  * A voice as a complete set of track params -- every panel control plus the
- * four track sliders, so nothing of the last voice survives.
+ * four track sliders, so nothing of the last voice survives. Except the
+ * lyric: that is what the track sings, not how it sounds, and trying voices
+ * on a line you have typed should not erase it.
  * @param {string} name
  * @returns {Record<string, number|string>|null}
  */
@@ -1653,6 +1684,7 @@ export function voxTone(name) {
   if (!v) return null;
   const out = { ...VOX_DEFAULTS };
   for (const [k, val] of Object.entries(v.p)) out[`sng${k}`] = val;
+  for (const k of VOX_TEXT_KEYS) delete out[k];
   out.harm = v.vowel; out.timb = v.size; out.morph = v.breath; out.decay = v.rel;
   return out;
 }

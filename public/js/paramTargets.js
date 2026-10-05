@@ -281,7 +281,7 @@ export const CONTROL_LABELS = {
   "p-drneq": "drone equation", "p-drnhold": "hold mode", "p-drnlshape": "drone lfo shape",
   "p-drndir": "delay direction", "p-drnfreeze": "cloud freeze", "sq-drone__tone": "drone patch",
   ...Object.fromEntries(VOX_MOD_KEYS.map(k => [`p-sng${k}`, VOX_MOD_LABELS[k]])),
-  "p-sngcons": "consonant", "p-sngwords": "words", "p-sngmode": "poly or mono", "sq-vox__tone": "vox voice",
+  "p-sngcons": "consonant", "p-sngwords": "words", "p-sngmode": "poly or mono", "p-sngtext": "lyric", "sq-vox__tone": "vox voice",
   "p-bsamp": "bass amp", "p-bscab": "bass cabinet",
   "p-bspkupt": "bass pickup", "p-bsstrs": "string type",
   "sq-bass__tone": "bass tone",
