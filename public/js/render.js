@@ -1,7 +1,7 @@
 import { AUTOMATION_KEYS, AUTOMATION_TARGETS, canAutomate } from "./automation.js";
 import { canSavePatches, engineByKey, getPatchConfig, populateEngineSelect, savePatch } from "./catalog.js";
 import { applyTrackPatch, serializeTrackPatch } from "./session.js";
-import { FX_STAGE_LABELS, FX_STAGE_LEVEL_KEY, LFO_DIVS, LFO_KEYS, lfoDivIndex, lfoLabel, rateToSlider, sliderToRate } from "./constants.js";
+import { FX_STAGE_LABELS, FX_STAGE_LEVEL_KEY, LFO_DIVS, fxStageLevel, LFO_KEYS, lfoDivIndex, lfoLabel, rateToSlider, sliderToRate } from "./constants.js";
 import { showInputDialog, showSavedPatchPicker } from "./dialogs.js";
 import { upgradeEngineSelect } from "./enginePicker.js";
 import { isMobileDevice, setStatus } from "./dom.js";
@@ -1629,30 +1629,19 @@ export function wireFxPanel(t, panel) {
     // So the level no longer decides (fxShown) and this button does — it
     // zeroes the level through the control's own `input` event, which is
     // exactly "as if you had dragged it there" and is therefore what the
-    // rack, the p-lock snapshot, a save and undo all see. Built here rather
-    // than in the markup because it is one button repeated over thirteen
-    // stages and its handler is already in this loop. CSS shows it only on the
-    // inline view: in the modal every stage is listed whatever its level, so
-    // there is nothing there for it to remove.
-    const levelKey = FX_STAGE_LEVEL_KEY[stage];
-    if (levelKey) {
+    // rack, the p-lock snapshot, a save and undo all see (fxStageOff, shared
+    // with the fx picker). Built here rather than in the markup because it is
+    // one button repeated over every row and its handler is already in this
+    // loop. glide and amp have no level, so theirs puts them back to neutral.
+    if (FX_STAGE_LEVEL_KEY[stage] || FX_NEUTRAL[stage]) {
+      const name = FX_PICK_LABELS[stage] || stage;
       const off = document.createElement("button");
       off.type = "button";
       off.className = "sq-fx__off";
       off.textContent = "\u00d7";
-      off.title = `turn ${FX_STAGE_LABELS[stage] || stage} off and take it off the track \u2014 it stays here in the rack`;
-      off.setAttribute("aria-label", `turn off ${FX_STAGE_LABELS[stage] || stage}`);
-      off.addEventListener("click", () => {
-        const ctl = row.querySelector(`.fx-${stage}-${levelKey}`);
-        if (ctl && Number(ctl.value) !== 0) {
-          ctl.value = "0";
-          ctl.dispatchEvent(new Event("input", { bubbles: true }));
-        }
-        // After the event: it bubbles to the panel's own refresh, which would
-        // put a row back that is still in the shown set.
-        fxShown(t).delete(stage);
-        refreshPanelBadges(t);
-      });
+      off.title = `turn ${name} off and take it off the track \u2014 pick it again from the fx button`;
+      off.setAttribute("aria-label", `turn off ${name}`);
+      off.addEventListener("click", () => fxStageOff(t, stage));
       row.appendChild(off);
     }
     title.addEventListener("dblclick", () => {
@@ -1670,6 +1659,53 @@ export function wireFxPanel(t, panel) {
       apply();                                 // …then re-read them into the rack
     });
   });
+}
+
+// ── putting a rack stage on the track, and taking it off ────────────────────
+// The fx button opens a picker of names (openFxAsModal), and the stage's
+// controls live on the track. Both directions write through the controls' own
+// `input` events, exactly as if the knob had been dragged there, so the rack,
+// the p-lock snapshot, a save and undo all see it.
+
+/** Everything the picker lists, in chain order: glide and amp, then the stages. */
+export const FX_PICK_ORDER = ["glide", "amp", ...Object.keys(FX_STAGE_LEVEL_KEY)];
+export const FX_PICK_LABELS = { glide: "glide", amp: "amp", ...FX_STAGE_LABELS };
+/** The level a stage comes in at when picked from 0. repeat is an insert at 1. */
+const FX_ENGAGE_LEVEL = { repeat: 1, delay: 0.3, reverb: 0.3 };
+/** glide and amp have no level: off is their neutral setting. */
+const FX_NEUTRAL = { glide: { ".sq-track__glide": 0 }, amp: { ".fx-amp-preamp": 0.5, ".fx-amp-level": 0.5 } };
+
+function writeFxControl(t, sel, v) {
+  const ctl = t._fxPanelEl?.querySelector(sel);
+  if (!ctl || Number(ctl.value) === v) return;
+  ctl.value = String(v);
+  ctl.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
+/** Whether a stage (or glide / amp) is on the track. */
+export function fxStageOn(t, stage) {
+  return fxShown(t).has(stage) || fxStageLevel(t.fxConfig, stage) > 0;
+}
+
+/** Put a stage on the track, engaging it at a usable level if it was at 0. */
+export function fxStageAdd(t, stage) {
+  const levelKey = FX_STAGE_LEVEL_KEY[stage];
+  if (levelKey && !(fxStageLevel(t.fxConfig, stage) > 0)) {
+    writeFxControl(t, `.fx-${stage}-${levelKey}`, FX_ENGAGE_LEVEL[stage] ?? 0.5);
+  }
+  fxShown(t).add(stage);
+  refreshPanelBadges(t);
+}
+
+/** Take a stage off the track: its level to 0 (glide / amp: neutral), its row gone. */
+export function fxStageOff(t, stage) {
+  const levelKey = FX_STAGE_LEVEL_KEY[stage];
+  if (levelKey) writeFxControl(t, `.fx-${stage}-${levelKey}`, 0);
+  for (const [sel, v] of Object.entries(FX_NEUTRAL[stage] || {})) writeFxControl(t, sel, v);
+  // After the events: they bubble to the panel's own refresh, which would put
+  // a row back that is still in the shown set.
+  fxShown(t).delete(stage);
+  refreshPanelBadges(t);
 }
 
 /**
