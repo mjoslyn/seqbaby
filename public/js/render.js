@@ -22,6 +22,10 @@ import { openGranularSourceModal, openSamplerSourceModal, pickAudioFileForTrack 
 import { defaultFxConfig } from "./fxRack.js";
 import { crushRateLabel } from "./crusher.js";
 import { PRISM_KNOBS, PRISM_MODES, prismRateLabel, prismTimeLabel } from "./prism.js";
+import {
+  REPEAT_KNOBS, REPEAT_MODES, repeatGateLabel, repeatGridLabel, repeatIntervalLabel, repeatOffsetLabel,
+  repeatPercentLabel, repeatPitchLabel,
+} from "./repeat.js";
 import { patternMeter, redetectDrumKit, stepsPerBarForMeter } from "./meter.js";
 import { refreshHexopAlgorithm, setEngineKey, setParam, updateGranularSpeedEnabled, updatePlaitsControlsVisibility } from "./params.js";
 import { bestRollViewOct } from "./pianoRoll.js";
@@ -1266,6 +1270,11 @@ export function applyFxToTrack(t, fx) {
     const decay = Number(fx.reverb.decay); if (Number.isFinite(decay)) cfg.reverb.decay = Math.max(0.2, Math.min(10, decay));
     const wet   = Number(fx.reverb.wet);   if (Number.isFinite(wet))   cfg.reverb.wet   = Math.max(0, Math.min(1, wet));
   }
+  if (fx.repeat && typeof fx.repeat === "object") {
+    cfg.repeat = { ...defaultFxConfig().repeat, ...(cfg.repeat || {}) };
+    readUnit("repeat", ["wet", ...REPEAT_KNOBS]);
+    if (REPEAT_MODES.includes(fx.repeat.mode)) cfg.repeat.mode = fx.repeat.mode;
+  }
   if (fx.prism && typeof fx.prism === "object") {
     cfg.prism = { ...defaultFxConfig().prism, ...(cfg.prism || {}) };
     readUnit("prism", ["wet", ...PRISM_KNOBS]);
@@ -1292,6 +1301,7 @@ export function applyFxToTrack(t, fx) {
     t.fxRack.applyPhaser(cfg.phaser);
     t.fxRack.applyFlanger(cfg.flanger);
     t.fxRack.applyPitchShift(cfg.pitchshift);
+    if (cfg.repeat) t.fxRack.applyRepeat(cfg.repeat);
     if (cfg.prism) t.fxRack.applyPrism(cfg.prism);
     t.fxRack.applyDelay(cfg.delay);
     t.fxRack.applyReverb(cfg.reverb);
@@ -1365,6 +1375,8 @@ export function refreshFxPanelUI(t) {
   }
   cfg.prism = { ...defaultFxConfig().prism, ...(cfg.prism || {}) };
   for (const k of ["wet", ...PRISM_KNOBS, ...Object.keys(PRISM_MODES)]) set(`.fx-prism-${k}`, cfg.prism[k]);
+  cfg.repeat = { ...defaultFxConfig().repeat, ...(cfg.repeat || {}) };
+  for (const k of ["wet", "mode", ...REPEAT_KNOBS]) set(`.fx-repeat-${k}`, cfg.repeat[k]);
 }
 
 export function wireFxPanel(t, panel) {
@@ -1385,6 +1397,7 @@ export function wireFxPanel(t, panel) {
   if (!fc.shaper.mode) fc.shaper.mode = "fold";
   if (fc.shaper.preamp == null) fc.shaper.preamp = 0.5;
   fc.prism = { ...defaultFxConfig().prism, ...(fc.prism || {}) };
+  fc.repeat = { ...defaultFxConfig().repeat, ...(fc.repeat || {}) };
   const set = (sel, v) => { const el = q(sel); if (el != null && v != null) el.value = v; };
   // Portamento. Not an fx-rack effect (it lives on the voice, as t.glide), but it
   // belongs with the per-track sound controls rather than buried in the mod panel.
@@ -1448,6 +1461,21 @@ export function wireFxPanel(t, panel) {
   // character (an echo, a tail, a grain, a slice), so both read out in units.
   { const r = q(".fx-prism-rate"); if (r) setKnobReadout(r, prismRateLabel); }
   { const tm = q(".fx-prism-time"); if (tm) setKnobReadout(tm, (v) => prismTimeLabel(v, t.fxConfig.prism?.diffmode)); }
+  for (const k of ["wet", "mode", ...REPEAT_KNOBS]) set(`.fx-repeat-${k}`, fc.repeat[k]);
+  // The discrete knobs read out what they pick, not where they sit; the offset
+  // is a step of the interval, and pitch means something a little different
+  // per mode.
+  {
+    const ro = (k, fn) => { const el = q(`.fx-repeat-${k}`); if (el) setKnobReadout(el, fn); };
+    ro("grid", repeatGridLabel);
+    ro("interval", repeatIntervalLabel);
+    ro("offset", (v) => repeatOffsetLabel(v, t.fxConfig.repeat?.interval));
+    ro("gate", repeatGateLabel);
+    ro("chance", repeatPercentLabel);
+    ro("vary", repeatPercentLabel);
+    ro("decay", repeatPercentLabel);
+    ro("pitch", (v) => repeatPitchLabel(v, t.fxConfig.repeat?.mode));
+  }
 
   const applyAmp = () => {
     fc.amp.preamp = Number(q(".fx-amp-preamp").value);
@@ -1536,6 +1564,13 @@ export function wireFxPanel(t, panel) {
     t.fxRack?.applyPrism(fc.prism);
   };
 
+  const applyRepeat = () => {
+    if (!fc.repeat) fc.repeat = { ...defaultFxConfig().repeat };
+    for (const k of ["wet", ...REPEAT_KNOBS]) { const el = q(`.fx-repeat-${k}`); if (el) fc.repeat[k] = Number(el.value); }
+    { const el = q(".fx-repeat-mode"); if (el) fc.repeat.mode = el.value; }
+    t.fxRack?.applyRepeat(fc.repeat);
+  };
+
   const applyCrush = () => {
     const b = q(".fx-crush-bits"); const w = q(".fx-crush-wet"); const r = q(".fx-crush-rate");
     if (b) fc.crush.bits = Number(b.value);
@@ -1566,6 +1601,8 @@ export function wireFxPanel(t, panel) {
   { const r = q(".fx-crush-rate"); if (r) r.addEventListener("input", applyCrush); }
   for (const k of ["wet", ...PRISM_KNOBS]) q(`.fx-prism-${k}`)?.addEventListener("input", applyPrism);
   for (const k of Object.keys(PRISM_MODES)) q(`.fx-prism-${k}`)?.addEventListener("change", applyPrism);
+  for (const k of ["wet", ...REPEAT_KNOBS]) q(`.fx-repeat-${k}`)?.addEventListener("input", applyRepeat);
+  q(".fx-repeat-mode")?.addEventListener("change", applyRepeat);
 
   // Double-click an effect's name to put that effect back to its defaults. The
   // panel has a lot of knobs, and undo walks back one at a time — getting to a
@@ -1574,7 +1611,7 @@ export function wireFxPanel(t, panel) {
     amp: applyAmp, vinyl: applyVinyl, cassette: applyCassette, fuzz: applyFuzz,
     ringmod: applyRingMod, shaper: applyWaveShaper, crush: applyCrush,
     autowah: applyAutoWah, chorus: applyChorus, phaser: applyPhaser,
-    flanger: applyFlanger, pitchshift: applyPitchShift, prism: applyPrism,
+    flanger: applyFlanger, pitchshift: applyPitchShift, repeat: applyRepeat, prism: applyPrism,
     delay: applyDelay, reverb: applyReverb,
   };
   const defaults = defaultFxConfig();

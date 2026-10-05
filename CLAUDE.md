@@ -125,6 +125,9 @@ env / fx / eq / comp / mod / automation per track.
 - `prism.js` — the prism: a four-module console (character → movement →
   diffusion → texture → tilt) as one AudioWorklet rack stage. Same file
   shape as crusher.js/reverb.js. See the prism section below.
+- `repeat.js` — the repeat: a beat repeat and a live slicer as one
+  AudioWorklet rack stage, clocked by the transport's steps. Same file shape
+  again. See the repeat section below.
 - `filterModels.js` — the filter control's eight analog-modeled characters
   (fat/crisp/squelch/edge/poly/velvet/scream/growl), an AudioWorklet insert
   effect standing in for the plain BiquadFilterNode when `t.filter.type`
@@ -302,7 +305,8 @@ npm run legacy:dev     # pre-Next static Node server on :5173 (engine assets onl
 npm test               # node --test: the pure modules (session format, chance gen,
                        #   version tree, song names, share card copy, the song builder, the jam diff,
                        #   song previews, grid avatars, the songs and people explorers,
-                       #   the Strudel bridge, the reverb, the filter models, the guitar)
+                       #   the Strudel bridge, the reverb, the filter models, the guitar,
+                       #   the prism, the repeat)
 npm run mcp            # the MCP server on stdio (mcp/server.mjs) — an agent writes songs
 npm run test:rls       # RLS policy tests — builds a throwaway Postgres in docker
 ```
@@ -340,12 +344,14 @@ voice → filterNode → eqNode → compressor → fxRack → masterGain → mas
   from any track's `voice.getOutputNode()`).
 - `fxRack` — `FXRack`, serial chain in this order: **vinyl → cassette → fuzz →
   ring mod → wave shaper → crush → auto-wah → chorus → phaser → flanger →
-  pitch shift → prism → delay → reverb**. `defaultFxConfig()` keys match. Chain order
+  pitch shift → repeat → prism → delay → reverb**. `defaultFxConfig()` keys match. Chain order
   matters for LFO/automation targets.
 - **crush is a converter, not a rounding function** (`crusher.js`) — see the
   bitcrush section below.
 - **prism is four effects in one stage** (`prism.js`) — see the prism section
   below.
+- **repeat runs on the sequencer's clock** (`repeat.js`) — see the repeat
+  section below.
 - **reverb is a feedback delay network, not a convolver** (`reverb.js`) — see
   the reverb section below. Its wet/dry is still a `Tone.CrossFade`, so `wet`
   is the same Tone.Param an LFO connects to and a lane ramps.
@@ -555,6 +561,64 @@ in ─▶ CHARACTER ─▶ MOVEMENT ─▶ DIFFUSION ─▶ TEXTURE ─▶ TILT 
   node too, so the panel and the node hold the same numbers.
 - Loading: Blob-URL registration from `loadWorklet()`; if it fails the stage
   passes the signal through (`prismParams` empty, every write checks).
+
+## Repeat (`repeat.js`) — a beat repeat and a slicer, on the transport's grid
+
+One rack stage, two characters (`mode`), both of which only mean anything on
+the beat:
+
+```
+repeat   every INTERVAL, at OFFSET into it, with CHANCE: capture GRID of the
+         track and repeat it for GATE. PITCH drops each repeat, DECAY fades
+         each one, VARY lets a trigger pick a grid either side of the knob.
+slice    cut the track into GRID slices as it plays; at each, with CHANCE,
+         swap it for a DIFFERENT slice of the INTERVAL before, held for GATE.
+         VARY plays some backwards, PITCH transposes them, DECAY chops them.
+```
+
+- **The clock is the transport's**, not the stage's own: the scheduler posts
+  every step it schedules to every rack (`FXRack.clockStep`: the step's grid
+  time, `state.tick`, the step length), ahead of time as it does notes, and
+  `stopPlayback` posts a stop (`clockStop`). The processor queues them, snaps
+  its step position to each at the exact frame it lands, and integrates
+  between. So the grid is the sequencer's sample for sample, a tempo change
+  lands on the next step, and a jam's shared start tick lines repeats up
+  across screens. Posted whether or not the stage is in the chain, so it
+  knows where the bar is the moment it is switched on. No clock for four
+  steps: the stage lets go and passes its input.
+- **Unswung, and 16 steps to a bar.** The interval and gate are counted in
+  steps of `state.tick`, so in 7/8 an interval of 16 steps is not a bar.
+- **Every decision is a hash of (step, which)**, the chance generator's and
+  the random square's bargain: the same song repeats the same way every time.
+  A slice swap never picks the slice that would have played anyway.
+- **Insert, not mix**: the node's output is the input except while a repeat
+  holds, so the rack's linear crossfade (`repeatWetBus`) makes `wet` 1 an
+  insert and less a mix over it.
+- **Every edge is faded (2ms)**: slice heads and tails, entering and leaving a
+  run, a mode switch (fade out, swap, carry on). A repeat is a loop point in
+  the middle of a waveform.
+- **The discrete knobs are 0..1 AudioParams that pick from lists**
+  (`REPEAT_GRID` / `REPEAT_INTERVAL` / `REPEAT_GATE` in soundDefaults.js,
+  joined into the processor source as a prelude so the readouts and the
+  processor share one table). Read when a decision is made, so an LFO on the
+  grid is a ratchet that speeds up and slows down, and a lane on the chance
+  is a fill. One list, three namespaces: `fx-repeat-<k>`, `repeat_<k>`,
+  `fx.repeat.<k>` (`REPEAT_KNOBS`).
+- **The buffer is 10s of stereo, made on the first audio**, not per track.
+  It bounds how far back a slice can reach (a swap that would need more, or
+  more than has been recorded since the stage came on, plays the input) and
+  how long a repeat can hold.
+- `test/repeat.test.js` renders the processor in Node with a simulated clock:
+  the wire when stopped, which steps sound like which, decay and pitch per
+  repeat, determinism, every slice swapped for a different one, reverse,
+  chop, letting go on stop, no clicks across a mode switch.
+- Loading: Blob-URL registration from `loadWorklet()`; a failure passes the
+  signal through (`repeatParams` empty, every write checks).
+- **A mode select is compared with what the node was last told**
+  (`_repeatMode`, and `_prismModes` for the prism), not with the config: the
+  panel writes `t.fxConfig`, which IS `rack.config`, before calling
+  `applyRepeat` / `applyPrism`, so comparing the two never saw a change. That
+  is how prism's character selects reached the node only at build time.
 
 ## Analog filter models (`filterModels.js`) — eight characters on the filter control
 
@@ -3692,7 +3756,7 @@ through a 6ms fade on its gain).
   do the same, or use `currentBpm()` (lfo.js) as the sync helpers do.
 - **Worklet processor sources are template literals** (`silverbox.js`,
   `contagion.js`, `hexop.js`, `guitar.js`, `bass.js`, `subbass.js`,
-  `drone.js`, `crusher.js`, `reverb.js`),
+  `drone.js`, `crusher.js`, `reverb.js`, `prism.js`, `repeat.js`),
   so a stray backtick or `${` inside one — including in a comment — truncates
   the string. The module still parses, `node --check` still passes, and the
   failure only shows up as a SyntaxError at engine boot. When editing inside a
@@ -3773,7 +3837,7 @@ Repo: https://github.com/mjoslyn/seqbaby.
   An inline marker (`window.__seqbabyServerBoot`) tells the paths apart, and
   `ScriptLoader.tsx` keeps its onload-chained injection for the soft-nav case
   (e.g. arriving from `/login`).
-- `app/EnginePreload.tsx` emits `modulepreload` for all 70 modules listed in
+- `app/EnginePreload.tsx` emits `modulepreload` for all 71 modules listed in
   `app/engineAssets.ts` (at `engineAsset("/js/<name>")`; the hints used to
   point at the site root and 404). The graph is 8 levels deep, so without it the browser
   needs up to eight sequential round trips just to discover the code.

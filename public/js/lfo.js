@@ -220,6 +220,9 @@ export function getModTarget(t, key) {
   // The prism: its mix is the crossfade around the node, every knob on it an
   // AudioParam on the node (null on the pass-through fallback).
   if (key === "prism") return rack.prismWetBus?.gain ?? null;
+  // The repeat stage likewise: the mix around the node, the knobs on it.
+  if (key === "repeat") return rack.repeatWetBus?.gain ?? null;
+  if (key.startsWith("repeat_")) return rack.repeatParams?.[after(key, "repeat_")] ?? null;
   if (key.startsWith("prism_")) return rack.prismParams?.[after(key, "prism_")] ?? null;
   // FX wet/amt targets (LFO adds on top of dry — crossfade fx still get movement).
   switch (key) {
