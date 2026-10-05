@@ -229,6 +229,7 @@ export function getModTarget(t, key) {
     case "fuzz":         return rack.wetBus?.gain ?? null;
     case "delay":        return rack.delay?.wet ?? null;
     case "verb":         return rack.reverbCross?.fade ?? null;
+    case "pan":          return rack.panStage?.pan ?? null;
     case "vinyl":        return rack.vinylWetBus?.gain ?? null;
     case "cassette":     return rack.cassetteWetBus?.gain ?? null;
     case "ringmod":      return rack.ringWet?.gain ?? null;

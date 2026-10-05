@@ -1,7 +1,7 @@
 import { AUTOMATION_KEYS, AUTOMATION_TARGETS, canAutomate } from "./automation.js";
 import { canSavePatches, engineByKey, getPatchConfig, populateEngineSelect, savePatch } from "./catalog.js";
 import { applyTrackPatch, serializeTrackPatch } from "./session.js";
-import { FX_STAGE_LABELS, FX_STAGE_LEVEL_KEY, LFO_DIVS, fxChainOrder, fxInstanceIds, fxStageLevel, fxStageOf, isFxInstanceId, LFO_KEYS, lfoDivIndex, lfoLabel, rateToSlider, sliderToRate } from "./constants.js";
+import { FX_STAGE_LABELS, FX_STAGE_LEVEL_KEY, FX_STAGE_NEUTRAL, LFO_DIVS, fxChainOrder, fxInstanceIds, fxStageLevel, fxStageOf, isFxInstanceId, LFO_KEYS, lfoDivIndex, lfoLabel, rateToSlider, sliderToRate } from "./constants.js";
 import { showInputDialog, showSavedPatchPicker } from "./dialogs.js";
 import { upgradeEngineSelect } from "./enginePicker.js";
 import { isMobileDevice, setStatus } from "./dom.js";
@@ -19,7 +19,7 @@ import { canModulate, lfoBipolar, lfoEuclid, lfoPhase, lfoRateLabel, syncLFO } f
 import { autoOwns, fxShown, modOwns, refreshPanelBadges, refreshParamIndicators } from "./paramTargets.js";
 import { patternLocked, refreshPatternLockUI, refreshPatternSoundUI, setPatternLock } from "./patternSound.js";
 import { openGranularSourceModal, openSamplerSourceModal, pickAudioFileForTrack } from "./main.js";
-import { defaultFxConfig } from "./fxRack.js";
+import { defaultFxConfig, driveGainLabel, panLabel } from "./fxRack.js";
 import { crushRateLabel } from "./crusher.js";
 import { PRISM_KNOBS, PRISM_MODES, prismRateLabel, prismTimeLabel } from "./prism.js";
 import {
@@ -1331,7 +1331,10 @@ export function refreshFxPanelUI(t) {
   const q = s => panel.querySelector(s);
   const set = (sel, v) => { const el = q(sel); if (el != null && v != null) el.value = v; };
   set(".sq-track__glide",    t.glide ?? 0);
-  set(".fx-amp-preamp",      cfg.amp.preamp);
+  cfg.gain = { ...defaultFxConfig().gain, ...(cfg.gain || {}) };
+  set(".fx-gain-drive",      cfg.gain.drive);
+  cfg.pan = { ...defaultFxConfig().pan, ...(cfg.pan || {}) };
+  set(".fx-pan-pos",         cfg.pan.pos);
   set(".fx-amp-level",       cfg.amp.level);
   set(".fx-vinyl-amount",    cfg.vinyl.amount);
   set(".fx-vinyl-warmth",    cfg.vinyl.warmth);
@@ -1410,7 +1413,10 @@ export function wireFxPanel(t, panel) {
       if (t.voice?.setGlide) t.voice.setGlide(t.glide);
     });
   }
-  set(".fx-amp-preamp",      fc.amp.preamp);
+  fc.gain = { ...defaultFxConfig().gain, ...(fc.gain || {}) };
+  set(".fx-gain-drive",      fc.gain.drive);
+  fc.pan = { ...defaultFxConfig().pan, ...(fc.pan || {}) };
+  set(".fx-pan-pos",         fc.pan.pos);
   set(".fx-amp-level",       fc.amp.level);
   set(".fx-vinyl-amount",    fc.vinyl.amount);
   set(".fx-vinyl-warmth",    fc.vinyl.warmth);
@@ -1457,7 +1463,6 @@ export function wireFxPanel(t, panel) {
   wireFxReadouts(panel, "fx", (stage) => t.fxConfig[stage]);
 
   const applyAmp = () => {
-    fc.amp.preamp = Number(q(".fx-amp-preamp").value);
     fc.amp.level  = Number(q(".fx-amp-level").value);
     t.fxRack?.applyAmp(fc.amp);
   };
@@ -1558,7 +1563,19 @@ export function wireFxPanel(t, panel) {
     t.fxRack?.applyCrush(fc.crush);
   };
 
-  ["preamp","level"].forEach(n => q(`.fx-amp-${n}`)?.addEventListener("input", applyAmp));
+  q(".fx-amp-level")?.addEventListener("input", applyAmp);
+  const applyGain = () => {
+    const d = q(".fx-gain-drive");
+    if (d) fc.gain.drive = Number(d.value);
+    t.fxRack?.applyGain(fc.gain);
+  };
+  q(".fx-gain-drive")?.addEventListener("input", applyGain);
+  const applyPan = () => {
+    const p = q(".fx-pan-pos");
+    if (p) fc.pan.pos = Number(p.value);
+    t.fxRack?.applyPan(fc.pan);
+  };
+  q(".fx-pan-pos")?.addEventListener("input", applyPan);
   ["amount","warmth","wow"].forEach(n => q(`.fx-vinyl-${n}`)?.addEventListener("input", applyVinyl));
   ["amount","flutter","sat"].forEach(n => q(`.fx-cassette-${n}`)?.addEventListener("input", applyCassette));
   ["amount","drive","tone","level"].forEach(n => q(`.fx-fuzz-${n}`).addEventListener("input", applyFuzz));
@@ -1587,7 +1604,7 @@ export function wireFxPanel(t, panel) {
   // panel has a lot of knobs, and undo walks back one at a time — getting to a
   // known state otherwise means dragging each one to where you think it started.
   const RESET = {
-    amp: applyAmp, vinyl: applyVinyl, cassette: applyCassette, fuzz: applyFuzz,
+    amp: applyAmp, gain: applyGain, pan: applyPan, vinyl: applyVinyl, cassette: applyCassette, fuzz: applyFuzz,
     ringmod: applyRingMod, shaper: applyWaveShaper, crush: applyCrush,
     autowah: applyAutoWah, chorus: applyChorus, phaser: applyPhaser,
     flanger: applyFlanger, pitchshift: applyPitchShift, repeat: applyRepeat, prism: applyPrism,
@@ -1647,7 +1664,7 @@ export const FX_PICK_LABELS = { glide: "glide", amp: "amp", ...FX_STAGE_LABELS }
 export const FX_PICK_ORDER = ["glide", "amp", ...Object.keys(FX_STAGE_LEVEL_KEY)]
   .sort((a, b) => FX_PICK_LABELS[a].localeCompare(FX_PICK_LABELS[b]));
 /** glide and amp have no level: off is their neutral setting. */
-const FX_NEUTRAL = { glide: { ".sq-track__glide": 0 }, amp: { ".fx-amp-preamp": 0.5, ".fx-amp-level": 0.5 } };
+const FX_NEUTRAL = { glide: { ".sq-track__glide": 0 }, amp: { ".fx-amp-level": 0.5 } };
 /** A control's class suffix where it is not the config field's name. */
 const FX_FIELD_ALIAS = { shaper: { amt: "amount" }, pitchshift: { semi: "semitones" } };
 
@@ -1703,6 +1720,8 @@ function wireFxReadouts(root, prefix, cfgOf) {
     const el = root.querySelector(`.${prefix}-${stage}-${k}`);
     if (el) setKnobReadout(el, fn);
   };
+  ro("gain", "drive", driveGainLabel);
+  ro("pan", "pos", panLabel);
   ro("crush", "rate", (v) => crushRateLabel(v, state.audioCtx?.sampleRate));
   ro("prism", "rate", prismRateLabel);
   ro("prism", "time", (v) => prismTimeLabel(v, cfgOf("prism")?.diffmode));
@@ -1784,7 +1803,7 @@ export function fxStageOff(t, id) {
     return;
   }
   const levelKey = FX_STAGE_LEVEL_KEY[id];
-  if (levelKey) writeFxControl(t, `.fx-${id}-${levelKey}`, 0);
+  if (levelKey) writeFxControl(t, `.fx-${id}-${levelKey}`, FX_STAGE_NEUTRAL[id] ?? 0);
   for (const [sel, v] of Object.entries(FX_NEUTRAL[id] || {})) writeFxControl(t, sel, v);
   // After the events: they bubble to the panel's own refresh, which would put
   // a row back that is still in the shown set.

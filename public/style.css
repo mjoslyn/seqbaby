@@ -2070,6 +2070,8 @@ main {
     }
   }
 }
+.sq-fx__row[data-fx="gain"] .sq-fx__title { color: #f0e68c; }
+.sq-fx__row[data-fx="pan"] .sq-fx__title { color: #8fd3a8; }
 .sq-fx__row[data-fx="vinyl"] .sq-fx__title { color: #c79a74; }
 .sq-fx__row[data-fx="cassette"] .sq-fx__title { color: #d9c07a; }
 .sq-fx__row[data-fx="fuzz"] .sq-fx__title { color: #ff7a7a; }

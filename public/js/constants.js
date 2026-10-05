@@ -37,7 +37,7 @@ export const LFO_KEYS = [
   // FX wets/amts (short keys preserved for backward compat).
   "fuzz", "delay", "verb",
   "vinyl", "cassette", "ringmod", "shaper", "crush", "autowah", "chorus", "phaser", "flanger", "pitch",
-  "repeat", "prism",
+  "repeat", "prism", "pan",
   // FX sub-params with AudioParam / Signal targets (audio-rate modable).
   "fuzz_drive", "fuzz_tone", "fuzz_level",
   "vinyl_warmth",
@@ -103,7 +103,7 @@ export const LFO_LABELS = {
   euclid_pulses: "euclid pulses", euclid_steps: "euclid cycle", euclid_rotate: "euclid rotate",
   ...Object.fromEntries(CHANCE_MOD_KEYS.map(k => [`chance_${k}`, CHANCE_MOD_LABELS[k]])),
   vol: "volume", cutoff: "filter cutoff", reson: "filter reson",
-  fuzz: "fuzz amt", delay: "delay wet", verb: "reverb wet",
+  fuzz: "fuzz amt", delay: "delay wet", verb: "reverb wet", pan: "pan",
   vinyl: "vinyl amt", cassette: "cassette amt", ringmod: "ring mod wet",
   shaper: "wave folder wet", shaper_amt: "wave folder amt",
   crush: "bitcrush wet", autowah: "auto-wah wet", chorus: "chorus wet",
@@ -155,6 +155,7 @@ export const LFO_AMP_SCALE = {
   cutoff: 6000,   // Hz
   reson: 19.5,             // Q 0.5..20 (resonToQ) — full span, so depth 1 swings the whole knob
   fuzz: 1, delay: 1, verb: 1,
+  pan: 2,   // the knob's 0..1 is the panner's -1..1
   vinyl: 1, cassette: 1, ringmod: 1, shaper: 1, crush: 1, autowah: 1, chorus: 1, phaser: 1, flanger: 1, pitch: 1,
   // The prism's mix and every knob on it are 0..1 AudioParams.
   prism: 1, ...Object.fromEntries(PRISM_KNOBS.map(k => [`prism_${k}`, 1])),
@@ -338,17 +339,22 @@ export const NOTE_NAMES = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"]
 // lights up on it (`refreshPanelBadges`, paramTargets.js) — one table, so the
 // two can't disagree about what counts as "on".
 export const FX_STAGE_LEVEL_KEY = {
+  gain: "drive",
   vinyl: "amount", cassette: "amount", fuzz: "amount",
   ringmod: "wet", shaper: "wet", crush: "wet", autowah: "wet", chorus: "wet",
-  phaser: "wet", flanger: "wet", pitchshift: "wet", repeat: "wet", prism: "wet", delay: "wet", reverb: "wet",
+  phaser: "wet", flanger: "wet", pitchshift: "wet", repeat: "wet", prism: "wet", pan: "pos", delay: "wet", reverb: "wet",
 };
 export const FX_STAGE_LABELS = {
+  gain: "gain",
   vinyl: "vinyl", cassette: "cassette", fuzz: "fuzz", ringmod: "ring mod",
   shaper: "shaper", crush: "crush", autowah: "auto-wah", chorus: "chorus",
-  phaser: "phaser", flanger: "flanger", pitchshift: "pitch shift", repeat: "beat repeat", prism: "prism",
+  phaser: "phaser", flanger: "flanger", pitchshift: "pitch shift", repeat: "beat repeat", prism: "prism", pan: "pan",
   delay: "delay", reverb: "reverb",
 };
 export const FX_STAGE_KEYS = Object.keys(FX_STAGE_LEVEL_KEY);
+// Where a stage's level control sits when the stage does nothing. 0 for every
+// wet / amount; the gain's drive is unity in the middle of its knob.
+export const FX_STAGE_NEUTRAL = { gain: 0.5, pan: 0.5 };
 
 // A stage can be on a track more than once. The first is the stage's own key
 // ("delay") and everything that names an fx control by stage (the LFO and
@@ -393,8 +399,11 @@ export function fxChainOrder(config) {
 }
 /** A stage's (or instance's) engagement level (0 = bypassed) read off a plain fx config. */
 export function fxStageLevel(config, key) {
-  const k = FX_STAGE_LEVEL_KEY[fxStageOf(key)];
-  return k ? (config?.[key]?.[k] ?? 0) : 0;
+  const stage = fxStageOf(key);
+  const k = FX_STAGE_LEVEL_KEY[stage];
+  if (!k) return 0;
+  const n = FX_STAGE_NEUTRAL[stage] ?? 0;
+  return Math.abs((config?.[key]?.[k] ?? n) - n);
 }
 /** "delay#2" → "delay 2"; a stage key → its label. */
 export function fxIdLabel(id) {
@@ -474,6 +483,8 @@ export const AUTOMATION_TARGETS = {
   // Drone (drone engine only) — oscillator, filter, LFO, delay, cloud.
   ...Object.fromEntries(DRONE_MOD_KEYS.map(k => [`drone.${k}`, { label: DRONE_MOD_LABELS[k] }])),
   // fx
+  "fx.gain":            { label: "gain drive" },
+  "fx.pan":             { label: "pan" },
   "fx.vinyl":           { label: "vinyl amt" },
   "fx.vinyl.warmth":    { label: "vinyl warmth" },
   "fx.vinyl.wow":       { label: "vinyl wow" },
@@ -528,7 +539,7 @@ export const VOICE_AUTO_KEYS = ["vol","harm","timb","morph","decay","osc1","osc2
 // generator is the thing making the part, which is what gates its keys.
 
 export const TRACK_FX_LFO_KEYS = new Set([
-  "fuzz","delay","verb","vinyl","cassette","ringmod","shaper","crush","autowah","chorus","phaser","flanger","pitch",
+  "fuzz","delay","verb","vinyl","cassette","ringmod","shaper","crush","autowah","chorus","phaser","flanger","pitch","pan",
   "fuzz_drive","fuzz_tone","fuzz_level","vinyl_warmth","shaper_preamp","ring_freq","crush_bits","crush_rate",
   "chorus_rate","chorus_depth","phaser_rate","flanger_rate","flanger_fbk","delay_time","delay_fbk",
   // setter-driven (non-AudioParam) FX params

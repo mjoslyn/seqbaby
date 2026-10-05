@@ -25,7 +25,7 @@
 import { Pattern, mini, MiniError, silence, stack, fastcat, slowcat, fast, late, rev, ply, degradeBy, euclidPat, signal, segment, sampleSignal, SIGNAL_NAMES } from "./miniNotation.js";
 import { addTrack, removeTrack, setTrack, setFilter, setFx, setParams, setEq, setComp, addLfo, setAutomation, applyPreset, resolveEngine,
   patternOf, emptyPatternBlob, newSong, setTempo, setMeter, ENGINE_PANELS } from "./songBuilder.js";
-import { CURVED_LFO_CURVES, STEPS_PER_BAR, voiceAutoKeysForEngineKey } from "./constants.js";
+import { CURVED_LFO_CURVES, STEPS_PER_BAR, fxStageLevel, voiceAutoKeysForEngineKey } from "./constants.js";
 import { SCALES, CHORD_TYPES } from "./theoryData.js";
 import { staticEngineByKey } from "./engineData.js";
 import { defaultCompConfig, defaultEq, defaultFilter, defaultFxConfig, defaultTrackParams } from "./soundDefaults.js";
@@ -221,7 +221,7 @@ const canon = (k) => ALIASES[k] || k;
 // Accepted and translated; everything else in NUMERIC_CONTROLS is accepted and
 // then reported as not translated.
 const TRANSLATED = new Set(["s", "note", "n", "gain", "velocity", "legato", "clip", "lpf", "hpf", "bpf", "lpq", "room", "size",
-  "delay", "delaytime", "delayfeedback", "crush", "coarse", "distort", "shape", "phaser", "fm", "lpenv", "bank", "scale", "chord", "voicing", "postgain"]);
+  "delay", "delaytime", "delayfeedback", "crush", "coarse", "distort", "shape", "phaser", "fm", "lpenv", "bank", "scale", "chord", "voicing", "postgain", "pan"]);
 // Visual / editor methods: nothing to say about them.
 const IGNORED_QUIETLY = new Set(["color", "colour", "pianoroll", "_pianoroll", "punchcard", "_punchcard", "scope", "_scope", "spiral", "_spiral",
   "analyze", "log", "fft", "orbit", "draw", "markcss", "spectrum", "_spectrum", "cpm", "p"]);
@@ -1131,6 +1131,7 @@ function controlTargets() {
     shape: { lane: "fx.shaper", lfo: "shaper", knob: (x) => clamp(Number(x), 0, 1) },
     distort: { lane: "fx.fuzz", lfo: "fuzz", knob: (x) => clamp(Number(x) / 2, 0, 1) },
     gain: { lane: "vol", lfo: "vol", knob: (x) => clamp(0.8 * Number(x), 0, 1) },
+    pan: { lane: "fx.pan", lfo: "pan", knob: (x) => clamp(Number(x), 0, 1) },
   };
 }
 
@@ -1170,7 +1171,7 @@ function soundSettings(haps, S, length, warn, constantGain) {
     }
     return out;
   };
-  for (const k of ["lpf", "hpf", "bpf", "lpq", "room", "delay", "shape", "distort"]) {
+  for (const k of ["lpf", "hpf", "bpf", "lpq", "room", "delay", "shape", "distort", "pan"]) {
     if (k === "lpf" || k === "hpf" || k === "bpf") { if (k !== fType) continue; }
     if (!values[k]) continue;
     const c = constant(k);
@@ -1185,6 +1186,7 @@ function soundSettings(haps, S, length, warn, constantGain) {
       case "lpq": filter.reson = round3(targets.lpq.knob(n)); break;
       case "room": fx.reverb = { ...(fx.reverb || {}), wet: round3(clamp(n, 0, 1)) }; break;
       case "delay": fx.delay = { ...(fx.delay || {}), wet: round3(clamp(n, 0, 1)) }; break;
+      case "pan": fx.pan = { pos: round3(clamp(n, 0, 1)) }; break;
       case "shape": fx.shaper = { wet: 1, amount: round3(clamp(n, 0, 1)), mode: "saturate" }; break;
       case "distort": fx.fuzz = { amount: round3(clamp(n / 2, 0, 1)), drive: round3(clamp(0.4 + n * 0.1, 0, 1)) }; break;
     }
@@ -1220,6 +1222,7 @@ function soundSettings(haps, S, length, warn, constantGain) {
     else if (k === "shape") fx.shaper = { wet: 1, amount: round3(base), mode: "saturate" };
     else if (k === "distort") fx.fuzz = { amount: round3(base) };
     else if (k === "gain") params.vol = round3(base);
+    else if (k === "pan") fx.pan = { pos: round3(base) };
     if (lanes[tgt.lane]) delete lanes[tgt.lane];
   }
   return { filter, fx, params, lanes, lfos };
@@ -1756,7 +1759,8 @@ function partCode(t, k, { native, sound, withSound = true, label = null, lock = 
       ctl.push(["delaytime", [round3(fxv("delay", "time"))]]);
       ctl.push(["delayfeedback", [round3(fxv("delay", "fbk"))]]);
     }
-    const namedFx = new Set(["reverb.wet", "reverb.decay", "delay.wet", "delay.time", "delay.fbk"]);
+    if (Math.abs(fxv("pan", "pos") - 0.5) > 1e-6) ctl.push(["pan", [round3(fxv("pan", "pos"))]]);
+    const namedFx = new Set(["reverb.wet", "reverb.decay", "delay.wet", "delay.time", "delay.fbk", "pan.pos"]);
     if (native) {
       for (const [stage, d] of Object.entries(DFX)) for (const [key, dv] of Object.entries(d)) {
         const v = fxv(stage, key);
@@ -1781,7 +1785,7 @@ function partCode(t, k, { native, sound, withSound = true, label = null, lock = 
       if (fxv("crush", "wet") > 0) ctl.push(["crush", [round3(fxv("crush", "bits"))]]);
       if (fxv("shaper", "wet") > 0) ctl.push(["shape", [round3(fxv("shaper", "amount"))]]);
       if (fxv("fuzz", "amount") > 0) ctl.push(["distort", [round3(fxv("fuzz", "amount") * 2)]]);
-      const other = Object.keys(DFX).filter(st => !["reverb", "delay", "crush", "shaper", "fuzz", "amp"].includes(st) && (fx[st]?.[FX_LEVEL[st]] ?? 0) > 0);
+      const other = Object.keys(DFX).filter(st => !["reverb", "delay", "crush", "shaper", "fuzz", "amp", "pan"].includes(st) && fxStageLevel(fx, st) > 0);
       if (other.length) dropped.push(other.join(" / "));
       if (Object.values(sound.eq || {}).some(v => Math.abs(v) > 1e-6)) dropped.push("the eq");
       if (sound.comp?.enabled) dropped.push("the compressor");
@@ -1847,7 +1851,6 @@ function partCode(t, k, { native, sound, withSound = true, label = null, lock = 
 /** A plain JavaScript string, which Strudel does not read as mini-notation. */
 const jsString = (v) => `'${String(v).replace(/\\/g, "\\\\").replace(/'/g, "\\'")}'`;
 const RESERVED = new Set(["let", "const", "var", "await", "new", "function", "return", "if", "else", "for", "while", "setcpm", "setcps", "setbpm", "hush", "samples"]);
-const FX_LEVEL = { vinyl: "amount", cassette: "amount", fuzz: "amount", ringmod: "wet", shaper: "wet", crush: "wet", autowah: "wet", chorus: "wet", phaser: "wet", flanger: "wet", pitchshift: "wet", repeat: "wet", prism: "wet", delay: "wet", reverb: "wet" };
 /** The params an engine actually has: its sliders (as the automation gate
  *  knows them) and its panel. */
 function engineKnobKeys(engineKey) {
@@ -1874,6 +1877,7 @@ const LANE_EXPORT = {
   reson: { units: (u) => round3(u * 20), name: () => "lpq" },
   "fx.reverb": { units: (u) => round3(u), name: () => "room" },
   "fx.delay": { units: (u) => round3(u), name: () => "delay" },
+  "fx.pan": { units: (u) => round3(u), name: () => "pan" },
   vol: { units: (u) => round3(u / 0.8), name: () => "gain" },
 };
 const LFO_EXPORT = {
@@ -1882,6 +1886,7 @@ const LFO_EXPORT = {
   reson: { knobOf: (t) => t.filter?.reson ?? 0, units: (u) => u * 20, name: () => "lpq" },
   verb: { knobOf: (t) => t.fxConfig?.reverb?.wet ?? 0, units: (u) => u, name: () => "room" },
   delay: { knobOf: (t) => t.fxConfig?.delay?.wet ?? 0, units: (u) => u, name: () => "delay" },
+  pan: { knobOf: (t) => t.fxConfig?.pan?.pos ?? 0.5, units: (u) => u, name: () => "pan" },
   vol: { knobOf: (t) => t.params?.vol ?? 0.8, units: (u) => u / 0.8, name: () => "gain" },
 };
 
@@ -1891,7 +1896,7 @@ const ENV_CLASS = { "p-envamt": "env", "p-envatk": "attack", "p-envdec": "decay"
 // fx classes whose last word is not the config key
 const FX_CLASS_KEY = { "shaper.amt": "amount", "pitchshift.semi": "semitones" };
 // the rack controls Strudel has a name of its own for, as sessionToCode writes them
-const STRUDEL_FX = { "reverb.wet": "room", "reverb.decay": "size", "delay.wet": "delay", "delay.time": "delaytime", "delay.fbk": "delayfeedback" };
+const STRUDEL_FX = { "reverb.wet": "room", "reverb.decay": "size", "delay.wet": "delay", "delay.time": "delaytime", "delay.fbk": "delayfeedback", "pan.pos": "pan" };
 const GENERIC_FILTER = { lowpass: "lpf", highpass: "hpf", bandpass: "bpf" };
 
 /**

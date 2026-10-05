@@ -1,4 +1,5 @@
 import { AUTOMATION_TARGETS, VOICE_AUTO_KEYS, afterPrefix as after, canAutomateKey, voiceAutoKeysForEngineKey } from "./constants.js";
+import { driveGain } from "./fxRack.js";
 import { makeFuzzCurve, shaperPreampGain } from "./curves.js";
 import { bassFromUnit, droneFromUnit, guitarFromUnit, hexopFromUnit, subFromUnit } from "./engineData.js";
 import { euclidFromUnit, setEuclidLive } from "./euclid.js";
@@ -187,6 +188,16 @@ export function applyAutomationAtStep(t, key, v, time, vNext, stepDur) {
   }
 
   switch (key) {
+    // The gain stage: its knob is a curve (unity in the middle), so the ramp
+    // runs between the two steps' multipliers.
+    case "fx.gain":
+      rack.applyGain({ drive: vv });
+      ramp(rack.gainStage?.gain, driveGain(vv), driveGain(vn));
+      return;
+    case "fx.pan":
+      rack.applyPan({ pos: vv });
+      ramp(rack.panStage?.pan, vv * 2 - 1, vn * 2 - 1);
+      return;
     // ── top-level wet/amt targets (crossfade fx: ramp both dry+wet) ──
     case "fx.vinyl":
       // applyVinyl also moves the tone/warble with the amount; the ramps then

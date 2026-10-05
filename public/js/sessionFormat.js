@@ -237,12 +237,30 @@ function migrateRepeatPitch(o) {
   return moved;
 }
 
+// The amp's drive was an input gain in front of every stage. With the chain
+// reorderable it became a stage of its own, gain, placeable anywhere: a sound
+// that turned the old knob gets a gain stage holding that drive at the TOP of
+// its chain (where the drive was), and the amp's drive back at unity. With no
+// order the chain starts with gain anyway, so only a written order needs it.
+function migrateAmpDrive(o) {
+  const fc = o?.fxConfig;
+  const amp = fc?.amp;
+  if (!amp || typeof amp !== "object") return;
+  const p = Number(amp.preamp);
+  if (!Number.isFinite(p) || Math.abs(p - 0.5) < 1e-6) return;
+  amp.preamp = 0.5;
+  if (fc.gain && typeof fc.gain === "object" && Math.abs(Number(fc.gain.drive ?? 0.5) - 0.5) > 1e-6) return;
+  fc.gain = { drive: Math.min(1, Math.max(0, p)) };
+  if (Array.isArray(fc.order)) fc.order = ["gain", ...fc.order.filter(id => id !== "gain")];
+}
+
 /** A sound snapshot, or anything shaped like one (a track, a saved patch). */
 function migrateSoundNames(o) {
   if (!o || typeof o !== "object") return false;
   renameKeys(o.params, (k) => LEGACY_PARAM_KEYS[k] || k);
   renameKeys(o.lfoConfig, migrateModKey);
   migrateCrushRate(o);
+  migrateAmpDrive(o);
   return migrateRepeatPitch(o);
 }
 

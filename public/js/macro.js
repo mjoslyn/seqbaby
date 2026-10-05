@@ -32,7 +32,7 @@
  */
 
 import { AUTOMATION_TARGETS, applyAutomationAtStep, canAutomate } from "./automation.js";
-import { FX_STAGE_LEVEL_KEY } from "./constants.js";
+import { FX_STAGE_LEVEL_KEY, fxStageLevel } from "./constants.js";
 import { ICON_DICE } from "./icons.js";
 import { CLASS_FOR_AUTO, controlFromEventTarget, hasAutomation, hasMacroOn, modOwns, refreshParamIndicators, targetsForControl, trackForControl } from "./paramTargets.js";
 import { state } from "./state.js";
@@ -130,7 +130,7 @@ function diceCandidates(t) {
     const el = controlFor(t, key);
     if (!el || el.type !== "range") continue;
     const m = /^fx\.([a-z]+)\./.exec(key);
-    if (m && FX_STAGE_LEVEL_KEY[m[1]] && !(t.fxConfig?.[m[1]]?.[FX_STAGE_LEVEL_KEY[m[1]]] > 0)) continue;
+    if (m && FX_STAGE_LEVEL_KEY[m[1]] && !(fxStageLevel(t.fxConfig, m[1]) > 0)) continue;
     out.push(key);
   }
   return out;

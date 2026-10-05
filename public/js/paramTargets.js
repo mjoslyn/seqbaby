@@ -80,6 +80,8 @@ def("sq-wt__scan-start", "wt_scan_start", "wt.scan.start");
 def("sq-wt__scan-range", "wt_scan_range", "wt.scan.range");
 // FX rack. LFO keys are the historic short names; automation keys are dotted.
 for (const [cls, lfo, auto] of [
+  ["fx-gain-drive",       null,               "fx.gain"],
+  ["fx-pan-pos",          "pan",              "fx.pan"],
   ["fx-vinyl-amount",     "vinyl",            "fx.vinyl"],
   ["fx-vinyl-warmth",     "vinyl_warmth",     "fx.vinyl.warmth"],
   ["fx-vinyl-wow",        "vinyl_wow",        "fx.vinyl.wow"],
@@ -317,6 +319,8 @@ export const PARAM_DESCRIPTIONS = {
   "fx.delay.fbk":        "how much of the delay feeds back",
   "fx.reverb":           "how much reverb is mixed in",
   "fx.reverb.decay":     "reverb tail length",
+  "fx.gain":             "a clean gain at this point in the chain: centre is unity",
+  "fx.pan":              "where in the stereo field, at this point in the chain: centre is the middle",
   "fx.repeat":           "dry/wet around the repeat: all the way is an insert (a repeat replaces the beat), less mixes it over",
   "fx.repeat.chance":    "how often a repeat fires on its step, or (slice) how often a slice is swapped",
   "fx.repeat.interval":  "how often a repeat may fire, or (slice) how far back the swapped slices come from",

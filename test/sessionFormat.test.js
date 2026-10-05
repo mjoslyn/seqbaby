@@ -341,3 +341,17 @@ test("a beat repeat pitch from before the -24..+24 knob keeps its drop, lanes in
   migrateTrackNames(td);
   assert.equal(td.fxConfig.repeat.pitch, 0.25);
 });
+
+test("the amp's old drive becomes a gain stage at the top of the chain", () => {
+  const td = migrateTrackNames({
+    fxConfig: { amp: { preamp: 0.8, level: 0.6 }, order: ["delay", "reverb"] },
+    patterns: [{ sound: { fxConfig: { amp: { preamp: 0.5, level: 0.5 } } } }],
+  });
+  assert.deepEqual(td.fxConfig.gain, { drive: 0.8 });
+  assert.equal(td.fxConfig.amp.preamp, 0.5);
+  assert.equal(td.fxConfig.amp.level, 0.6);
+  assert.deepEqual(td.fxConfig.order, ["gain", "delay", "reverb"]);
+  assert.equal(td.patterns[0].sound.fxConfig.gain, undefined);   // unity: nothing to move
+  migrateTrackNames(td);
+  assert.deepEqual(td.fxConfig.order, ["gain", "delay", "reverb"]);
+});

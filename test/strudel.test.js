@@ -631,3 +631,17 @@ test("a lane's own pattern exports as a definition with that track's part from i
   assert.ok(def("q1").includes("bd") && !def("q1").includes("sawtooth"), "a rest with a lane: that track alone");
   assert.match(S.sessionToCode(a, { native: true }).code, /^\/\/ arrangement: 1x4 1x4\(bass:2\) restx2\(kick:1\)/m);
 });
+
+test("pan is Strudel's pan: a constant is the pan stage, a signal an auto-pan LFO, and both come back out", () => {
+  const a = S.codeToSong(`hat: s("hh*8").pan(0.2)
+lead: note("c4 e4").s("sawtooth").pan(sine.range(0, 1).slow(2))`).song;
+  assert.equal(a.tracks[0].fxConfig.pan.pos, 0.2);
+  assert.equal(a.tracks[1].lfoConfig.pan?.enabled, true);
+  for (const native of [false, true]) {
+    const { code } = S.sessionToCode(a, { native });
+    assert.match(code, /\.pan\(0\.2\)/, native ? "native" : "portable");
+    const b = S.codeToSong(code).song;
+    assert.equal(b.tracks[0].fxConfig.pan.pos, 0.2);
+    assert.equal(b.tracks[1].lfoConfig.pan?.enabled, true);
+  }
+});

@@ -348,11 +348,21 @@ voice → filterNode → eqNode → compressor → fxRack → masterGain → mas
 - `compressor` — `TrackCompressor`: native `DynamicsCompressorNode` (self) or
   an analyser-driven envelope follower ducking a pre-output gain (sidechain
   from any track's `voice.getOutputNode()`).
-- `fxRack` — `FXRack`, serial chain in this order: **vinyl → cassette → fuzz →
+- `fxRack` — `FXRack`, serial chain in this order: **gain → vinyl → cassette → fuzz →
   ring mod → wave shaper → crush → auto-wah → chorus → phaser → flanger →
-  pitch shift → repeat → prism → delay → reverb**. `defaultFxConfig()` keys match. That is
+  pitch shift → repeat → prism → pan → delay → reverb**. `defaultFxConfig()` keys match. That is
   the order of a song with no `fxConfig.order`; see the fx chain section below
   for a track's own order and a stage added more than once.
+- **gain and pan are stages like any other** (one GainNode, one
+  StereoPannerNode), so they go wherever the chain puts them. Their level
+  control does nothing in the middle of its knob (`FX_STAGE_NEUTRAL`,
+  constants.js), and `fxStageLevel` measures from there, so a stage is "on"
+  only off centre. `gain` is what the amp's drive was: an input gain in front
+  of every stage, which a reorderable chain made meaningless, so the amp keeps
+  only `out` and `migrateAmpDrive` (sessionFormat.js) moves an old song's
+  drive into a gain stage at the top of its chain. `pan` takes an LFO
+  (auto-pan, `LFO_AMP_SCALE` 2: the knob's 0..1 is the panner's -1..1) and is
+  Strudel's own `.pan`.
 - **crush is a converter, not a rounding function** (`crusher.js`) — see the
   bitcrush section below.
 - **prism is four effects in one stage** (`prism.js`) — see the prism section

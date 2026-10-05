@@ -49,7 +49,7 @@ import {
 } from "./engineData.js";
 import { EUCLID_DEFAULTS, FILTER_TYPES, PRISM_MODES, REPEAT_MODES, defaultCompConfig, defaultEq, defaultFilter, defaultFxConfig, defaultTrackParams } from "./soundDefaults.js";
 import {
-  AUTOMATION_TARGETS, FX_STAGE_LEVEL_KEY, LFO_DIVS, LFO_KEYS, LFO_LABELS, PATTERN_COUNT, STEPS_PER_BAR,
+  AUTOMATION_TARGETS, FX_STAGE_LEVEL_KEY, LFO_DIVS, LFO_KEYS, LFO_LABELS, PATTERN_COUNT, STEPS_PER_BAR, fxStageLevel,
   canAutomateKey, canModulateKey, lfoDivLabel, voiceAutoKeysForEngineKey,
 } from "./constants.js";
 import { CHANCE_DEFAULTS, CHANCE_NOTE_MAX, CHANCE_NOTE_MIN, CHANCE_NOTE_VALUES, cloneChance } from "./chanceGen.js";
@@ -1044,7 +1044,7 @@ export function summarizeTrack(song, index) {
   const t = trackAt(song, index);
   const i = int(index, "track");
   const d = defaultFxConfig();
-  const fxOn = Object.keys(d).filter(s => s !== "amp" && (t.fxConfig[s]?.[FX_STAGE_LEVEL_KEY[s]] ?? 0) > 0)
+  const fxOn = Object.keys(d).filter(s => s !== "amp" && fxStageLevel(t.fxConfig, s) > 0)
     .map(s => `${s}=${t.fxConfig[s][FX_STAGE_LEVEL_KEY[s]]}`);
   const lfos = Object.entries(t.lfoConfig || {}).filter(([, c]) => c?.enabled).map(([k, c]) => `${k}:${c.type} ${c.depth} @ ${c.sync ? lfoDivLabel(c.div) : c.rate + "Hz"}`);
   const labels = engineSliderLabels(t.engineKey);

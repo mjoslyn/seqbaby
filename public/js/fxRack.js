@@ -42,13 +42,14 @@ export const FX_LFO_STAGE = {
   pitch: "pitchshift", pitch_semi: "pitchshift",
   repeat: "repeat", ...Object.fromEntries(REPEAT_KNOBS.map(k => [`repeat_${k}`, "repeat"])),
   prism: "prism", ...Object.fromEntries(PRISM_KNOBS.map(k => [`prism_${k}`, "prism"])),
+  pan: "pan",
   delay: "delay", delay_time: "delay", delay_fbk: "delay",
   verb: "reverb", reverb_decay: "reverb",
 };
 
 // fx stage → the rack method that installs its config.
 export const FX_APPLY = {
-  amp: "applyAmp", vinyl: "applyVinyl", cassette: "applyCassette", fuzz: "applyFuzz",
+  amp: "applyAmp", gain: "applyGain", pan: "applyPan", vinyl: "applyVinyl", cassette: "applyCassette", fuzz: "applyFuzz",
   ringmod: "applyRingMod", shaper: "applyWaveShaper", crush: "applyCrush",
   autowah: "applyAutoWah", chorus: "applyChorus", phaser: "applyPhaser",
   flanger: "applyFlanger", pitchshift: "applyPitchShift", repeat: "applyRepeat", prism: "applyPrism",
@@ -66,6 +67,20 @@ const nativeInputOf = (node) => node?.input?.input ?? node?.input ?? node;
 function ampGain(v, top) {
   const x = Math.max(0, Math.min(1, Number(v) || 0));
   return x <= 0.5 ? x * 2 : Math.pow(top, (x - 0.5) / 0.5);
+}
+/** The pan knob as the number under it: C, or how far left / right. */
+export function panLabel(v) {
+  const p = Math.round((Math.max(0, Math.min(1, Number(v) || 0)) * 2 - 1) * 100);
+  return p === 0 ? "C" : p < 0 ? `L ${-p}` : `R ${p}`;
+}
+/** The gain stage's drive knob as a multiplier: 0.5 unity, up to 8x (+18dB). */
+export function driveGain(v) { return ampGain(v, 8); }
+/** ...and as the number under the knob. */
+export function driveGainLabel(v) {
+  const g = driveGain(v);
+  if (g <= 0.0001) return "off";
+  const db = 20 * Math.log10(g);
+  return Math.abs(db) < 0.05 ? "0 dB" : `${db > 0 ? "+" : "\u2212"}${Math.abs(db).toFixed(1)} dB`;
 }
 
 // Base delay of the wow / flutter lines. The dry path is delayed to match (see
@@ -97,7 +112,15 @@ export class FXRack {
     config.prism = { ...freshFxConfig().prism, ...(config.prism || {}) };
     config.repeat = { ...freshFxConfig().repeat, ...(config.repeat || {}) };
 
+    config.gain = { ...freshFxConfig().gain, ...(config.gain || {}) };
+    config.pan = { ...freshFxConfig().pan, ...(config.pan || {}) };
+
     this.input = ctx.createGain();
+
+    // ── gain stage: one clean gain, wherever the chain puts it ──
+    this.gainStage = ctx.createGain();
+    // ── pan stage: where in the stereo field, wherever the chain puts it ──
+    this.panStage = ctx.createStereoPanner();
 
     // ── vinyl sim stage (parallel wet/dry + crackle bed) ──
     // wet path: lowpass (warmth) → wow (LFO-modulated delay)
@@ -442,6 +465,7 @@ export class FXRack {
     // (opts.isStageHeld); it disengages a few seconds after both stop being
     // true — the debounce rides out per-step automation flapping.
     this._stages = [
+      { key: "gain",       ins: [this.gainStage],                       out: this.gainStage },
       { key: "vinyl",      ins: [this.vinylDryBus, this.vinylLP],       out: this.vinylSum },
       { key: "cassette",   ins: [this.cassetteDryBus, this.cassetteHP], out: this.cassetteSum },
       { key: "fuzz",       ins: [this.dryBus, this.fuzzDrive],          out: this.postFuzz },
@@ -455,6 +479,7 @@ export class FXRack {
       { key: "pitchshift", ins: [toneIn(this.pitchshift)],              out: this.pitchshift },
       { key: "repeat",     ins: [this.repeatDryBus, this.repeatIn],     out: this.repeatSum },
       { key: "prism",      ins: [this.prismDryBus, this.prismIn],       out: this.prismSum },
+      { key: "pan",        ins: [this.panStage],                        out: this.panStage },
       { key: "delay",      ins: [toneIn(this.delay)],                   out: this.delay },
       { key: "reverb",     ins: [this.reverbIn],                        out: this.reverbCross },
     ];
@@ -477,6 +502,8 @@ export class FXRack {
     if (!this._sub) this.output.connect(ctx.destination);
 
     this.applyAmp(config.amp);
+    this.applyGain(config.gain);
+    this.applyPan(config.pan);
     this.applyVinyl(config.vinyl);
     this.applyCassette(config.cassette);
     this.applyFuzz(config.fuzz);
@@ -634,13 +661,27 @@ export class FXRack {
     for (const id in this._extra) this._updateStage(id);
   }
 
+  /** The gain stage. In the chain only when off unity (FX_STAGE_NEUTRAL). */
+  applyGain({ drive } = {}) {
+    const c = this.config.gain || (this.config.gain = { drive: 0.5 });
+    if (drive !== undefined && Number.isFinite(Number(drive))) c.drive = Math.max(0, Math.min(1, Number(drive)));
+    this.gainStage.gain.value = driveGain(c.drive);
+    this._updateStage("gain");
+  }
   /**
-   * Rack preamp + output level. The rack's own input/output gains double as the
-   * amp — no extra nodes and nothing to bypass, and because the preamp sits ahead
-   * of every stage it drives the whole chain (fuzz, shaper, cassette sat and the
-   * compressor all respond to it), while level trims what comes back out.
-   * Both knobs are 0..1 with 0.5 = unity.
+   * Rack output level: the rack's own output gain doubles as the amp's out
+   * knob, trimming what comes back from the whole chain. 0..1, 0.5 = unity.
+   * `preamp` is the rack's input gain; the panel no longer has a knob for it
+   * (the gain stage is that, placeable), and a song that used it has it moved
+   * there on load (migrateAmpDrive), so it sits at unity.
    */
+  /** The pan stage: 0..1 knob, 0.5 centre. In the chain only when off centre (or an LFO holds it). */
+  applyPan({ pos } = {}) {
+    const c = this.config.pan || (this.config.pan = { pos: 0.5 });
+    if (pos !== undefined && Number.isFinite(Number(pos))) c.pos = Math.max(0, Math.min(1, Number(pos)));
+    this.panStage.pan.value = c.pos * 2 - 1;
+    this._updateStage("pan");
+  }
   applyAmp({ preamp, level }) {
     const c = this.config.amp || (this.config.amp = { preamp: 0.5, level: 0.5 });
     if (preamp !== undefined) c.preamp = preamp;
@@ -1048,6 +1089,8 @@ export class FXRack {
     for (const k in this._bypassTimers) { try { clearTimeout(this._bypassTimers[k]); } catch {} }
     this._bypassTimers = {};
     try { this.input.disconnect(); } catch {}
+    try { this.gainStage.disconnect(); } catch {}
+    try { this.panStage.disconnect(); } catch {}
     try { this.vinylDryBus.disconnect(); } catch {}
     try { this.vinylWetBus.disconnect(); } catch {}
     try { this.vinylLP.disconnect(); } catch {}

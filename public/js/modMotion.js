@@ -55,6 +55,7 @@ const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
 // These are the ones that still differ.
 const PARAM_SPAN = {
   silverbox_tune: 1,      // the knob reads in cents, the param in semitones
+  pan: 2,                 // the knob's 0..1 is the panner's -1..1
   // vinylLP.frequency's warmth slope is -7200 at amount 1 (see LFO_AMP_SCALE's
   // comment) — negative because warmth turns the top DOWN, so the needle has
   // to move the opposite way from a positive Hz offset.

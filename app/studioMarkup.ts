@@ -920,8 +920,11 @@ ${DRONE_PANEL}
         </div>
         <div class="sq-fx__row" data-fx="amp">
           <span class="sq-fx__title">amp</span>
-          <label class="sq-fx__ctl" title="input drive: hits every effect below harder (fuzz, shaper, cassette sat, crush). Centre is unity, full is +18dB"><span>drive</span><input class="fx-amp-preamp" type="range" min="0" max="1" step="0.01" value="0.5" /></label>
           <label class="sq-fx__ctl" title="output level after the whole chain, to trim back what drive adds. Centre is unity, full is +6dB"><span>out</span><input class="fx-amp-level" type="range" min="0" max="1" step="0.01" value="0.5" /></label>
+        </div>
+        <div class="sq-fx__row" data-fx="gain">
+          <span class="sq-fx__title">gain</span>
+          <label class="sq-fx__ctl" title="a clean gain at this point in the chain: the stages after it are hit harder (fuzz, shaper, cassette sat, crush) or softer. Centre is unity, full is +18dB, left fades down"><span>drive</span><input class="fx-gain-drive" type="range" min="0" max="1" step="0.01" value="0.5" /></label>
         </div>
         <div class="sq-fx__row" data-fx="vinyl">
           <span class="sq-fx__title">vinyl sim</span>
@@ -1052,6 +1055,10 @@ ${DRONE_PANEL}
           <label class="sq-fx__ctl" title="the diffusion module's time: echo spacing on cascade and reels, the tail on space, grain size on collage, slice length on reverse"><span>time</span><input class="fx-prism-time" type="range" min="0" max="1" step="0.01" value="0.4" /></label>
           <label class="sq-fx__ctl" title="how readily the envelope-driven characters answer the playing: swell's trigger, the fuzz gate, howl, the texture filter"><span>sens</span><input class="fx-prism-sens" type="range" min="0" max="1" step="0.01" value="0.5" /></label>
           <label class="sq-fx__ctl" title="slow random wander across everything that moves: the rate, echo times, the harmony's tuning, the tape"><span>drift</span><input class="fx-prism-drift" type="range" min="0" max="1" step="0.01" value="0.2" /></label>
+        </div>
+        <div class="sq-fx__row" data-fx="pan">
+          <span class="sq-fx__title">pan</span>
+          <label class="sq-fx__ctl" title="where in the stereo field, at this point in the chain: left, centre, right. An LFO on it is an auto-pan"><span>pos</span><input class="fx-pan-pos" type="range" min="0" max="1" step="0.01" value="0.5" /></label>
         </div>
         <div class="sq-fx__row" data-fx="delay">
           <span class="sq-fx__title">delay</span>
