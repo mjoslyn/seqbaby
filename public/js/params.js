@@ -161,10 +161,10 @@ export function updatePlaitsControlsVisibility(t) {
         }
       : isContagion
       ? {
-          harm: "cutoff for both filters",
-          timb: "resonance, shared by both filters",
-          morph: "oscillator shape, morphing sine through triangle and saw to pulse",
-          decay: "decay for both envelopes",
+          harm: "cutoff for both filters (filter 2 follows it, offset by cut 2)",
+          timb: "filter 1's resonance. Filter 2 has its own, reso 2. The last tenth self-oscillates",
+          morph: "osc 1's shape, morphing sine through triangle and saw to pulse. Osc 2's is shape 2",
+          decay: "the amp envelope's decay. The filter envelope has its own",
         }
       : (is808 || is909)
       ? {

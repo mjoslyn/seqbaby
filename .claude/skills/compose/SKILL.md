@@ -120,8 +120,9 @@ Leads and hooks: `plaits:0` (virtual analog), `plaits:1` (waveshaping:
 timb folds, morph skews), `plaits:2` (fm), `plaits:4` (additive),
 `plaits:5` (wavetable: timb and morph walk the map), `plaits:11` (string,
 plucked), `plaits:12` (modal, mallets),
-`dm:contagion` (the hypersaw: `vuni` 4..8 and `vunidet` 0.3 for the wide
-one), `dm:snarl` (aggressive mono), `dm:fm-bell`, `dm:guitar` with a tone
+`dm:contagion` (the supersaw: `vuni` 4..8 and `vunidet` 0.3 for the wide
+one; its filter envelope is its own, so `vfdec` short with `vfsus` low and
+`venvamt` up is a pluck over whatever the amp sustains), `dm:snarl` (aggressive mono), `dm:fm-bell`, `dm:guitar` with a tone
 ("surf twang", "funk clean", "jangle", "chime", "country twang", "blues
 burn", "brit stack", "rolled off", "fuzz lead", "singing lead", "scooped
 metal", "djent chug", "grunge", "jazz box").

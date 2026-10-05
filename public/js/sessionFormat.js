@@ -254,9 +254,27 @@ function migrateAmpDrive(o) {
   if (Array.isArray(fc.order)) fc.order = ["gain", ...fc.order.filter(id => id !== "gain")];
 }
 
+// The contagion's osc 2 used to share osc 1's shape and pulse width, filter 2
+// filter 1's resonance, and the filter envelope the amp envelope's times. Each
+// has its own control now; a sound written before them gets the value it was
+// actually playing with, so it sounds as it did. Keyed on the new control being
+// ABSENT, which is also what a sparse song from the builder looks like: there,
+// a part that never set osc 2's shape gets osc 1's, as it always did.
+const CONTAGION_SPLIT = [
+  ["vshape2", "morph"], ["vpw2", "vpw"], ["vreso2", "timb"],
+  ["vfatk", "vatk"], ["vfdec", "decay"], ["vfsus", "vsus"], ["vfrel", "vrel"],
+];
+export function migrateContagionSplit(params) {
+  if (!params || typeof params !== "object") return;
+  for (const [to, from] of CONTAGION_SPLIT) {
+    if (!(to in params) && from in params) params[to] = params[from];
+  }
+}
+
 /** A sound snapshot, or anything shaped like one (a track, a saved patch). */
-function migrateSoundNames(o) {
+function migrateSoundNames(o, engineKey) {
   if (!o || typeof o !== "object") return false;
+  if (engineKey === "dm:contagion") migrateContagionSplit(o.params);
   renameKeys(o.params, (k) => LEGACY_PARAM_KEYS[k] || k);
   renameKeys(o.lfoConfig, migrateModKey);
   migrateCrushRate(o);
@@ -272,8 +290,9 @@ function migrateSoundNames(o) {
 export function migrateTrackNames(td) {
   if (!td || typeof td !== "object") return td;
   if (LEGACY_ENGINE_KEYS[td.engineKey]) td.engineKey = LEGACY_ENGINE_KEYS[td.engineKey];
-  const repeatMoved = migrateSoundNames(td);   // the live sound
-  migrateSoundNames(td.baseSound); // the sound every unlocked pattern shares
+  const ek = td.engineKey;
+  const repeatMoved = migrateSoundNames(td, ek);   // the live sound
+  migrateSoundNames(td.baseSound, ek); // the sound every unlocked pattern shares
   for (const p of Array.isArray(td.patterns) ? td.patterns : []) {
     if (!p || typeof p !== "object") continue;
     renameKeys(p.automation, migrateModKey);
@@ -282,7 +301,7 @@ export function migrateTrackNames(td) {
     if (lane && Array.isArray(lane.values)) {
       lane.values = lane.values.map(v => (Number.isFinite(Number(v)) ? 0.5 - Math.min(1, Math.max(0, Number(v))) / 4 : v));
     }
-    migrateSoundNames(p.sound);   // a p-locked pattern's own sound
+    migrateSoundNames(p.sound, ek);   // a p-locked pattern's own sound
   }
   return td;
 }

@@ -552,10 +552,12 @@ export const STUDIO_BODY = String.raw`
             <span class="sq-contagion__lbl">osc</span>
             <label class="sq-contagion__f"><span>semi</span><input class="p-vosc2semi" type="range" min="-24" max="24" step="1" value="0" title="osc 2 pitch offset in semitones" /></label>
             <label class="sq-contagion__f"><span>detune</span><input class="p-vosc2det" type="range" min="0" max="1" step="0.01" value="0.08" title="fine detune between the two oscillators" /></label>
-            <label class="sq-contagion__f"><span>pw</span><input class="p-vpw" type="range" min="0.02" max="0.98" step="0.01" value="0.5" title="pulse width. Only heard at the top of the shape morph, where the wave becomes a pulse" /></label>
-            <label class="sq-contagion__f"><span>fm</span><input class="p-vfm" type="range" min="0" max="1" step="0.01" value="0" title="osc 2 phase-modulates osc 1" /></label>
+            <label class="sq-contagion__f"><span>pw</span><input class="p-vpw" type="range" min="0.02" max="0.98" step="0.01" value="0.5" title="osc 1 pulse width. Only heard at the top of its shape morph, where the wave becomes a pulse" /></label>
+            <label class="sq-contagion__f"><span>shape 2</span><input class="p-vshape2" type="range" min="0" max="1" step="0.01" value="0.5" title="osc 2's wave: sine, triangle, saw, then pulse. Osc 1's is the shape slider" /></label>
+            <label class="sq-contagion__f"><span>pw 2</span><input class="p-vpw2" type="range" min="0.02" max="0.98" step="0.01" value="0.5" title="osc 2 pulse width. Only heard at the top of its shape morph" /></label>
+            <label class="sq-contagion__f"><span>fm</span><input class="p-vfm" type="range" min="0" max="1" step="0.01" value="0" title="osc 1 frequency-modulates osc 2" /></label>
             <label class="sq-contagion__f"><span>ring</span><input class="p-vring" type="range" min="0" max="1" step="0.01" value="0" title="ring modulation: osc 1 times osc 2, for clangorous metallic tones" /></label>
-            <select class="p-vsync" title="hard sync: osc 2 resets every time osc 1 completes a cycle, so it is forced to osc 1's pitch">
+            <select class="p-vsync" title="hard sync: osc 2 restarts every time osc 1 completes a cycle, so it is forced to osc 1's pitch">
               <option value="off" selected>sync off</option><option value="on">sync on</option>
             </select>
             <select class="p-vsubwave" title="sub oscillator waveform, one octave below osc 1 (its level is the sub slider)">
@@ -570,11 +572,20 @@ export const STUDIO_BODY = String.raw`
             </select>
             <label class="sq-contagion__f"><span>detune</span><input class="p-vunidet" type="range" min="0" max="1" step="0.01" value="0.3" title="how far the unison copies spread in pitch" /></label>
             <label class="sq-contagion__f"><span>spread</span><input class="p-vunispread" type="range" min="0" max="1" step="0.01" value="0.6" title="how far the unison copies spread across the stereo field" /></label>
-            <span class="sq-contagion__lbl">env</span>
+          </div>
+          <div class="sq-contagion__row">
+            <span class="sq-contagion__lbl">amp env</span>
             <label class="sq-contagion__f"><span>atk</span><input class="p-vatk" type="range" min="0" max="1" step="0.01" value="0.02" /></label>
             <label class="sq-contagion__f"><span>sus</span><input class="p-vsus" type="range" min="0" max="1" step="0.01" value="0.6" /></label>
+            <label class="sq-contagion__f"><span>slope</span><input class="p-vslope" type="range" min="-1" max="1" step="0.01" value="0" title="what the level does while the note is held: the middle holds it, right of the middle it falls away, left of it it climbs back up. Further from the middle is faster" /></label>
             <label class="sq-contagion__f"><span>rel</span><input class="p-vrel" type="range" min="0" max="1" step="0.01" value="0.25" /></label>
-            <label class="sq-contagion__f"><span>env amt</span><input class="p-venvamt" type="range" min="-1" max="1" step="0.01" value="0.5" title="how much the envelope moves the cutoff. Negative sweeps downward" /></label>
+            <span class="sq-contagion__lbl">filter env</span>
+            <label class="sq-contagion__f"><span>atk</span><input class="p-vfatk" type="range" min="0" max="1" step="0.01" value="0.02" title="how long the filter envelope takes to open" /></label>
+            <label class="sq-contagion__f"><span>dec</span><input class="p-vfdec" type="range" min="0" max="1" step="0.01" value="0.4" title="how long the filter envelope takes to fall to its sustain. Short with a low sustain is a pluck" /></label>
+            <label class="sq-contagion__f"><span>sus</span><input class="p-vfsus" type="range" min="0" max="1" step="0.01" value="0.6" title="where the filter envelope holds while the note is held" /></label>
+            <label class="sq-contagion__f"><span>slope</span><input class="p-vfslope" type="range" min="-1" max="1" step="0.01" value="0" title="what the filter envelope does while held: the middle holds, right falls, left climbs" /></label>
+            <label class="sq-contagion__f"><span>rel</span><input class="p-vfrel" type="range" min="0" max="1" step="0.01" value="0.25" title="how long the filter envelope takes to close once the note ends" /></label>
+            <label class="sq-contagion__f"><span>env amt</span><input class="p-venvamt" type="range" min="-1" max="1" step="0.01" value="0.5" title="how much the filter envelope moves both cutoffs. Negative sweeps downward" /></label>
           </div>
           <div class="sq-contagion__row">
             <span class="sq-contagion__lbl">filter 1</span>
@@ -589,6 +600,7 @@ export const STUDIO_BODY = String.raw`
               <option value="lp" selected>lp</option><option value="hp">hp</option><option value="bp">bp</option><option value="bs">bs</option>
             </select>
             <label class="sq-contagion__f"><span>cut 2</span><input class="p-vcut2" type="range" min="-1" max="1" step="0.01" value="0" title="filter 2's cutoff, offset from filter 1 by up to two octaves either way" /></label>
+            <label class="sq-contagion__f"><span>reso 2</span><input class="p-vreso2" type="range" min="0" max="1" step="0.01" value="0.5" title="filter 2's resonance. Filter 1's is the reso slider. The last tenth of either self-oscillates" /></label>
             <select class="p-vroute" title="how the two filters are wired: series (one into the other), parallel (both from the same source), or split (filter 1 left, filter 2 right)">
               <option value="ser" selected>series</option><option value="par">parallel</option><option value="split">split</option>
             </select>
@@ -596,10 +608,13 @@ export const STUDIO_BODY = String.raw`
             <span class="sq-contagion__lbl">sat</span>
             <select class="p-vsat" title="the saturation stage between the two filters. Filter 2 cleans up whatever it does to filter 1's output">
               <option value="off">off</option><option value="light">light</option><option value="soft" selected>soft</option>
-              <option value="hard">hard</option><option value="digital">digital</option><option value="shaper">shaper</option>
-              <option value="rectify">rectify</option><option value="bits">bit reduce</option><option value="rate">rate reduce</option>
+              <option value="middle">middle</option><option value="hard">hard</option><option value="digital">digital</option>
+              <option value="shaper">shaper</option><option value="rectify">rectify</option><option value="bits">bit reduce</option>
+              <option value="rate">rate reduce</option><option value="ratefollow">rate + follow</option>
+              <option value="lowpass">low pass</option><option value="lowfollow">low + follow</option>
+              <option value="highpass">high pass</option><option value="highfollow">high + follow</option>
             </select>
-            <label class="sq-contagion__f"><span>amt</span><input class="p-vsatamt" type="range" min="0" max="1" step="0.01" value="0.3" /></label>
+            <label class="sq-contagion__f"><span>amt</span><input class="p-vsatamt" type="range" min="0" max="1" step="0.01" value="0.3" title="how hard the saturation works. On the filter curves it is the cutoff, on the follow curves relative to the note" /></label>
           </div>
         </div>
 ${HEXOP_PANEL}

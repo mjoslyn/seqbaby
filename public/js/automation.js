@@ -132,10 +132,10 @@ export function applyAutomationAtStep(t, key, v, time, vNext, stepDur) {
   // like any other. cut2 and envamt are bipolar; the lane spans their full range.
   if (key.startsWith("contagion.")) {
     const which = after(key, "contagion.");
-    // Most are 0..1; cut2 / env amount are bipolar, and osc2 semi is in
-    // semitones — each lane spans the slider's own range.
+    // Most are 0..1; cut2 / env amount / the sustain slopes are bipolar, and
+    // osc2 semi is in semitones — each lane spans the slider's own range.
     const map = which === "osc2semi" ? (u) => u * 48 - 24
-              : (which === "cut2" || which === "envamt") ? (u) => u * 2 - 1
+              : (which === "cut2" || which === "envamt" || which === "slope" || which === "fslope") ? (u) => u * 2 - 1
               : (u) => u;
     // `sat` is the saturation amount, which the voice calls `vsatamt` (`vsat`
     // is the curve select beside it) — see getModTarget for the same aliasing.
