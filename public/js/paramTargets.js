@@ -464,6 +464,8 @@ export const PARAM_DESCRIPTIONS = {
 function trackRoots(t) {
   const sel = `[data-track-id="${CSS.escape(String(t.id))}"]`;
   const roots = t.el ? [t.el] : [];
+  // The perform view's strip holds controls moved out of the track (perform.js).
+  if (t._perfStrip?.el) roots.push(t._perfStrip.el);
   for (const child of document.body.children) {
     if (t.el && child.contains(t.el)) continue;   // the studio: t.el covers it
     if (child.matches(sel)) roots.push(child);

@@ -34,18 +34,13 @@
 import { AUTOMATION_TARGETS, applyAutomationAtStep, canAutomate } from "./automation.js";
 import { FX_STAGE_LEVEL_KEY, autoLabel, fxStageLevel } from "./constants.js";
 import { ICON_DICE } from "./icons.js";
+import { MOMENTARY_RAMP as MACRO_RAMP, RELEASE_RAMP, readUnit, writeParam } from "./momentary.js";
 import { controlForKey, controlFromEventTarget, hasAutomation, hasMacroOn, modOwns, refreshParamIndicators, targetsForControl, trackForControl } from "./paramTargets.js";
 import { state } from "./state.js";
 
 /** @typedef {import("./types.js").Track} Track */
 /** @typedef {import("./types.js").MacroAssign} MacroAssign */
 /** @typedef {import("./types.js").MacroPad} MacroPad */
-
-/** Ramp for a live pad move. Long enough not to zipper, short enough that the
- *  pad still feels connected to the finger. */
-const MACRO_RAMP = 0.03;
-/** Ramp back to base when a momentary gesture ends. */
-const RELEASE_RAMP = 0.05;
 
 let _nextPadId = 1;
 let _modal = null;
@@ -191,52 +186,9 @@ export function diceMacroPad(pad) {
 // stamped with its track id on the way out). It also finds a copy's control.
 const controlFor = (t, key) => controlForKey(t, key);
 
-/** A control's value as the 0..1 an automation lane speaks. The lane and the
- *  slider share a range by construction — that is what makes a lane sweeping
- *  0→1 cover the same ground as dragging the slider end to end — so this
- *  inverse is just the slider's own normalisation. */
-function readUnit(t, key) {
-  const el = controlFor(t, key);
-  if (!el) return null;
-  const min = Number(el.min === "" ? 0 : el.min);
-  const max = Number(el.max === "" ? 1 : el.max);
-  if (!(max > min)) return null;
-  return Math.max(0, Math.min(1, (Number(el.value) - min) / (max - min)));
-}
-
-/**
- * Drive one parameter to a 0..1 value: the audio graph through the automation
- * path, and the control itself so the knob follows the pad.
- * @param {boolean} commit dispatch the control's `input` event, making this the
- *   track's actual sound rather than a performance overlay.
- */
-function writeParam(t, key, unit, ramp, commit) {
-  const v = Math.max(0, Math.min(1, unit));
-  const el = controlFor(t, key);
-  if (el) {
-    const min = Number(el.min === "" ? 0 : el.min);
-    const max = Number(el.max === "" ? 1 : el.max);
-    const step = Number(el.step === "" || el.step === "any" ? 0 : el.step);
-    let phys = min + v * (max - min);
-    if (step > 0) phys = min + Math.round((phys - min) / step) * step;
-    // Assigning .value repaints the knob (knob.js shadows the accessor) without
-    // running the control's own handler — which is what keeps a momentary move
-    // out of the track's stored sound.
-    el.value = String(phys);
-  }
-  if (commit && el) {
-    el.dispatchEvent(new Event("input", { bubbles: true }));
-    return;
-  }
-  const ctx = state.audioCtx;
-  if (!ctx) {
-    // Before the first play there is no graph to write, so the control's own
-    // handler is the only path — and it is safe, because nothing is sounding.
-    el?.dispatchEvent(new Event("input", { bubbles: true }));
-    return;
-  }
-  try { applyAutomationAtStep(t, key, v, ctx.currentTime, v, ramp); } catch {}
-}
+// readUnit / writeParam live in momentary.js now: the same hold-and-spring-back
+// is under the perform view's fx throws, and one copy keeps the two agreeing
+// about what a momentary move is.
 
 // ---- playing a pad -------------------------------------------------------
 
@@ -268,7 +220,7 @@ function applyPad(pad, commit) {
   }
 }
 
-function releasePad(pad) {
+export function releasePad(pad) {
   if (pad.latch) {
     // Latch: the gesture becomes the sound. Committing through each control's
     // own handler is the same thing as having moved the knobs by hand, so the
@@ -292,7 +244,7 @@ function releasePad(pad) {
 
 /** Wire an element as pad `pad`'s playing surface. Same idiom as the wavetable
  *  canvas: rect + clamp + pointer capture, and `pointercancel` handled. */
-function attachPadSurface(pad, el, cursor, onMove) {
+export function attachPadSurface(pad, el, cursor, onMove) {
   el.style.touchAction = "none";
   let drag = null;
   const setFrom = (clientX, clientY) => {

@@ -78,6 +78,11 @@ export const state = {
   patternMode: "repeat",
   patternSwitchMode: "immediate", // "immediate" | "finish" — finish waits until bar boundary before switching
   queuedPattern: null,
+  // The perform view (perform.js): the parameters pinned to each strip and
+  // the scenes. Live state names tracks by id; the file by index
+  // (performStore.js). A scene waiting for the bar line is `queuedScene`.
+  perform: { pins: [], scenes: [] },
+  queuedScene: null,
   patternMeta: Array(32).fill(null).map(() => ({ regenPattern: true, regenInstrument: true })),
   patternRepeats: Array(32).fill(1),
   patternMeters: Array(32).fill(null).map(() => ({ num: 4, den: 4 })),
@@ -240,6 +245,20 @@ export function findNextNonEmptyPattern(fromIdx) {
     if (isPatternNonEmpty(idx)) return idx;
   }
   return -1;
+}
+
+/**
+ * Queue a switch for the next bar line whatever the session's switch mode —
+ * the perform view's launcher, where a pattern is launched and never
+ * dropped mid-bar. Stopped, it switches now, since there is no bar coming.
+ */
+export function queuePatternSwitch(idx) {
+  if (idx < 0 || idx >= PATTERN_COUNT) return;
+  if (idx === state.activePattern) { state.queuedPattern = null; renderPatternGrid(); return; }
+  if (!state.playing) { switchPattern(idx); return; }
+  state.queuedPattern = idx;
+  renderPatternGrid();
+  setStatus(`pattern ${idx + 1} queued`);
 }
 
 // When switch mode is "finish" and the transport is running, defer the switch

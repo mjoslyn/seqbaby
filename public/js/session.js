@@ -18,6 +18,7 @@ import { syncScaleUI } from "./scaleUI.js";
 import { migrateLegacyNames, migrateTrackNames, SET_VERSION, validateSet } from "./sessionFormat.js";
 import { applyCompressorConfig, ensureFxRack, EQ_BANDS, refreshAllTrackOutputs, refreshCompSourceDropdowns, refreshNoiseBeds, refreshOutputSelects, routeVoiceToRack, setFilter, wouldFeedback } from "./signal.js";
 import { applyMacroPads, serializeMacroPads } from "./macro.js";
+import { applyPerformState, serializePerformState } from "./perform.js";
 import { aliasPattern, state, syncMeterUI, syncRepeatsUI } from "./state.js";
 import { renderStepGrid } from "./stepGrid.js";
 import { createTrack, removeTrack } from "./track.js";
@@ -55,6 +56,9 @@ export function serializeSet() {
     // rather than inside a track. Assignments are stored by track index — ids
     // are handed out fresh by createTrack on load and would not survive.
     macroPads: serializeMacroPads(),
+    // The perform view's pins and scenes, by track index for the same reason
+    // (perform.js / performStore.js).
+    perform: serializePerformState(),
     tracks: state.tracks.map(t => ({
       name: t.name,
       engineKey: t.engineKey,
@@ -713,6 +717,7 @@ export function applySet(s) {
   // After the tracks exist, so the stored indices resolve to real tracks — in
   // the order the file wrote them, not the order they now sit in.
   applyMacroPads(s.macroPads, made);
+  applyPerformState(s.perform, made);
   // Every cross-track reference is an id by now, so the list can be reordered:
   // fx buses to the bottom, once, rather than under the loop above.
   placeBusesLast();

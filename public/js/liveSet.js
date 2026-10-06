@@ -42,6 +42,7 @@ import { sameTree } from "./historyStore.js";
 import { ICON_CHAIN, ICON_FINISH, ICON_NOW, ICON_REPEAT } from "./icons.js";
 import { applySampleSpeed } from "./lfo.js";
 import { applyMacroPads } from "./macro.js";
+import { applyPerformState } from "./perform.js";
 import { parseMeter } from "./meter.js";
 import { refreshParamIndicators } from "./paramTargets.js";
 import { updateGranularSpeedEnabled, updatePlaitsControlsVisibility } from "./params.js";
@@ -144,6 +145,7 @@ export function applyGlobalsInPlace(cur, target, { pads = true, order = state.tr
     metersMoved = true;
   }
   if (pads && !sameTree(cur.macroPads, target.macroPads)) applyMacroPads(target.macroPads, order);
+  if (pads && !sameTree(cur.perform, target.perform)) applyPerformState(target.perform, order);
   return metersMoved;
 }
 
@@ -488,6 +490,7 @@ export function mergeSet(s) {
   requestMidiIfNeeded();
   // The pads store their assignments by index into the incoming session too.
   if (!sameTree(cur.macroPads, target.macroPads)) applyMacroPads(target.macroPads, made);
+  if (!sameTree(cur.perform, target.perform)) applyPerformState(target.perform, made);
   if (names) { refreshOutputSelects(); refreshCompSourceDropdowns(); }
   if (grid || added || removed || rebuilt) { refreshAllPatternLockUI(); renderPatternGrid(); }
   setStatus(added || removed || rebuilt

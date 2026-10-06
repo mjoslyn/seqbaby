@@ -257,5 +257,14 @@ export function migrateLegacyNames(data) {
         if (a && typeof a === "object") a.key = migrateModKey(a.key);
     }
   }
+  // The perform view's pins and scene knobs name parameters the same way.
+  const perf = data.perform;
+  if (perf && typeof perf === "object") {
+    for (const p of Array.isArray(perf.pins) ? perf.pins : [])
+      if (p && typeof p === "object") p.key = migrateModKey(p.key);
+    for (const s of Array.isArray(perf.scenes) ? perf.scenes : [])
+      for (const k of Array.isArray(s?.knobs) ? s.knobs : [])
+        if (k && typeof k === "object") k.key = migrateModKey(k.key);
+  }
   return data;
 }

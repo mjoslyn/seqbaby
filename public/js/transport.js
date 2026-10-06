@@ -29,6 +29,15 @@ import { buildVoiceForEngine, wosc } from "./voices.js";
 
 
 /** @typedef {import("./types.js").Track} Track */
+
+/**
+ * Called on every bar line, inside the scheduler callback and before a queued
+ * pattern switch is consumed, with the bar's audio time. The perform view
+ * lands a queued scene here (perform.js). Keep a hook cheap: it runs out of
+ * the same lookahead the notes are scheduled in.
+ * @type {Set<(time: number) => void>}
+ */
+export const barLineHooks = new Set();
 /**
  * Paint ONE track's "now" highlight (step grid + piano roll column) on `idx`.
  * `idx < 0` clears it. Per-track because there's no single moment that's "now"
@@ -684,7 +693,11 @@ export async function startPlayback(opts = {}) {
     // deferred to the audible moment: this callback runs ~lookAhead ahead of
     // the speakers, and the next callback (the new bar's first step) must read
     // the switched pattern's data or it plays the old pattern's opening steps.
-    if (state.patternSwitchMode === "finish" && state.queuedPattern !== null && barLine) {
+    // The perform view queues too (queuePatternSwitch, a scene recall),
+    // whatever the switch mode, so the consume is keyed on the queue alone:
+    // in immediate mode nothing but those ever fills it.
+    if (barLine) for (const fn of barLineHooks) { try { fn(time); } catch (e) { console.warn("bar-line hook", e); } }
+    if (state.queuedPattern !== null && barLine) {
       switchPattern(state.queuedPattern, { deferUi: true });
       restartTrackCounts();
     }

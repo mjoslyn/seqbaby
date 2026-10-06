@@ -3,6 +3,7 @@ import { autoLabel, lfoLabel } from "./constants.js";
 import { canModulate, syncLFO } from "./lfo.js";
 import { addMacroPad, assignToAxis, assignmentsFor, macroPads, unassign } from "./macro.js";
 import { CONTROL_LABELS, PARAM_DESCRIPTIONS, PARAM_SCOPE_SELECTOR, autoOwns, controlFromEventTarget, hasAutomation, hasMacroOn, hasMod, lfoForAuto, modOwns, refreshParamIndicators, targetsForControl, trackForControl } from "./paramTargets.js";
+import { canPin, isPinned, setPinned } from "./perform.js";
 import { buildAutomationLane, buildLfoRow, renderAutomationPanel, renderModPanel } from "./render.js";
 import { state } from "./state.js";
 
@@ -93,6 +94,10 @@ export function openParamMenu(t, spec) {
     <section class="sq-pmenu__sec">
       <div class="sq-pmenu__sec-head">macro pad</div>
       <div class="sq-pmenu__body sq-pmenu__body--macro"></div>
+    </section>
+    <section class="sq-pmenu__sec">
+      <div class="sq-pmenu__sec-head">perform</div>
+      <div class="sq-pmenu__body sq-pmenu__body--perform"></div>
     </section>`}
     <div class="sq-modal__actions">
       ${resettable ? `<button class="sq-pmenu__reset sq-btn--ghost" type="button">reset to default</button>` : ""}
@@ -119,6 +124,7 @@ export function openParamMenu(t, spec) {
   const modBody = modal.querySelector(".sq-pmenu__body--mod");
   const autBody = modal.querySelector(".sq-pmenu__body--aut");
   const macBody = modal.querySelector(".sq-pmenu__body--macro");
+  const perfBody = modal.querySelector(".sq-pmenu__body--perform");
 
   const note = (text, cls) => {
     const d = document.createElement("div");
@@ -177,6 +183,18 @@ export function openParamMenu(t, spec) {
     }
   };
 
+  // The perform section: whether this knob sits on the track's strip in the
+  // perform view (perform.js). Not an owner — a pinned knob still takes an
+  // lfo, a lane or a pad — so it never blocks the other three.
+  const drawPerform = () => {
+    if (!perfBody) return;
+    perfBody.replaceChildren();
+    if (!spec.auto || !canPin(t, spec.auto)) { perfBody.appendChild(note("this control can't be pinned to a strip")); return; }
+    const on = isPinned(t, spec.auto);
+    perfBody.appendChild(note(on ? "pinned to this track's strip in the perform view" : "not on the perform strip"));
+    perfBody.appendChild(addButton(on ? "unpin" : "+ pin to the perform strip", () => { setPinned(t, spec.auto, !on); draw(); }));
+  };
+
   // All three sections redraw together: taking one off frees the parameter for
   // the others, so none can be refreshed alone.
   const draw = () => {
@@ -186,6 +204,7 @@ export function openParamMenu(t, spec) {
     autBody.replaceChildren();
     macBody.replaceChildren();
     drawMacro();
+    drawPerform();
 
     if (!spec.lfo) modBody.appendChild(note("this control can't be modulated"));
     else if (!canModulate(t, spec.lfo)) modBody.appendChild(note("not modulatable on this engine"));

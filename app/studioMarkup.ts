@@ -361,6 +361,10 @@ export const STUDIO_BODY = String.raw`
          the song without stopping the transport. -->
     <button id="code-btn" class="sq-btn--ghost" type="button" aria-pressed="false" title="live code: write Strudel patterns, ctrl/⌘ enter runs them into the song"><span class="sq-btn__label">code</span></button>
     <button id="vim-toggle" class="sq-btn--ghost" type="button" aria-pressed="false" title="vim mode (\`): hjkl move, i insert, a play, v select, : commands">vim</button>
+    <!-- The perform view (perform.js): a strip per track with its pinned
+         knobs and fx throws, a pattern launcher, scenes and the pads, over the
+         track list. A toggle; the tracks come back as they were. -->
+    <button id="perform-toggle" class="sq-btn--ghost" type="button" aria-pressed="false" title="perform: a rack for playing the song. Strips with pinned knobs and fx throws, a pattern launcher, scenes and the havoc pads"><span class="sq-btn__label">perform</span></button>
     <!-- Undo / redo. Wired and painted by history.js, which also owns the
          ctrl/cmd-Z keys; they ship disabled because at boot there is nothing
          behind them yet. -->

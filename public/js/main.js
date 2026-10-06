@@ -10,6 +10,7 @@ import { HELP_TIPS, ICON_BOUNCE, ICON_CAPTURE, ICON_CHAIN, ICON_FINISH, ICON_KEY
 import { upgradeKnobs } from "./knob.js";
 import { startModMotion } from "./modMotion.js";
 import { openMacroPads } from "./macro.js";
+import { initPerform } from "./perform.js";
 import { installCodePanel } from "./codePanel.js";
 import { applySampleSpeed, attachBpmDrag, lfoRateLabel, retuneSyncedLFOs } from "./lfo.js";
 import { captureSequence, initComputerKeyboard, isDesktopKeyboard, resetKbdKeys, setKbdRecord } from "./keyboard.js";
@@ -676,6 +677,8 @@ export function init() {
     macroBtn.insertAdjacentHTML("afterbegin", ICON_MACRO);
     macroBtn.addEventListener("click", openMacroPads);
   }
+  // The perform view: a rack over the track list (perform.js).
+  initPerform();
   // The code drawer: Strudel / Tidal, read into tracks (codePanel.js). Its
   // reader is imported only when the drawer runs something.
   installCodePanel();
