@@ -46,7 +46,6 @@ import { parseMeter } from "./meter.js";
 import { refreshParamIndicators } from "./paramTargets.js";
 import { updateGranularSpeedEnabled, updatePlaitsControlsVisibility } from "./params.js";
 import { renderPatternGrid } from "./patternBar.js";
-import { applyArrangementBlob } from "./arrangement.js";
 import { applyPatternSound, recallLoadedPatternSound, refreshAllPatternLockUI, refreshPatternSoundUI } from "./patternSound.js";
 import { refreshAutIfOpen, refreshRollIfOpen } from "./pianoRoll.js";
 import { applyBusMute, paintDiceDensity, placeBusesLast, refreshMuteSoloUI } from "./render.js";
@@ -128,9 +127,6 @@ export function applyGlobalsInPlace(cur, target, { pads = true, order = state.tr
     }
     syncRepeatsUI();
   }
-  // The arrangement's held-back tracks are indices like the pads' assignments,
-  // so it is held back with them until the merge has made the tracks.
-  if (pads && !sameTree(cur.arrangement, target.arrangement)) applyArrangementBlob(target.arrangement, order);
   let metersMoved = false;
   if (!sameTree(cur.patternMeters, target.patternMeters)) {
     for (let i = 0; i < PATTERN_COUNT; i++) {
@@ -492,7 +488,6 @@ export function mergeSet(s) {
   requestMidiIfNeeded();
   // The pads store their assignments by index into the incoming session too.
   if (!sameTree(cur.macroPads, target.macroPads)) applyMacroPads(target.macroPads, made);
-  if (!sameTree(cur.arrangement, target.arrangement)) applyArrangementBlob(target.arrangement, made);
   if (names) { refreshOutputSelects(); refreshCompSourceDropdowns(); }
   if (grid || added || removed || rebuilt) { refreshAllPatternLockUI(); renderPatternGrid(); }
   setStatus(added || removed || rebuilt

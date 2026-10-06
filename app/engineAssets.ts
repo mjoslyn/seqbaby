@@ -52,7 +52,6 @@ export const STYLE_SRC = engineAsset("/style.css");
 // from public/js/. (types.js is JSDoc-only and intentionally absent.)
 export const ENGINE_MODULES = [
   "appApi.js",
-  "arrangement.js",
   "automation.js",
   "bass.js",
   "beat.js",

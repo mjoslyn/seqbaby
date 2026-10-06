@@ -10,7 +10,6 @@ import { applySampleSpeed, defaultLFOConfig, disposeLFOs, syncAllLFOs } from "./
 import { guessIsDrumKit, parseMeter } from "./meter.js";
 import { updatePlaitsControlsVisibility } from "./params.js";
 import { renderPatternGrid } from "./patternBar.js";
-import { applyArrangementBlob, serializeArrangement } from "./arrangement.js";
 import { refreshEuclidUI, renderEuclidPanel } from "./euclid.js";
 import { cloneChance, refreshChanceUI, renderChancePanel } from "./chance.js";
 import { applyBusMute, paintDiceDensity, placeBusesLast, refreshFxPanelUI, refreshMuteSoloUI, renderModPanel, syncTrackSoundUI } from "./render.js";
@@ -52,10 +51,6 @@ export function serializeSet() {
     patternSwitchMode: state.patternSwitchMode,
     patternMeters: state.patternMeters.map(m => ({ num: m.num, den: m.den })),
     patternRepeats: state.patternRepeats.map(r => Number(r) || 1),
-    // The song as sections (arrangement.js). `[]` is no arrangement. A
-    // section's held-back tracks are indices into the list below, as the
-    // pads' are.
-    arrangement: serializeArrangement(state.tracks),
     // Pads are global and cross-track, so they sit up here beside the tempo
     // rather than inside a track. Assignments are stored by track index — ids
     // are handed out fresh by createTrack on load and would not survive.
@@ -718,11 +713,6 @@ export function applySet(s) {
   // After the tracks exist, so the stored indices resolve to real tracks — in
   // the order the file wrote them, not the order they now sit in.
   applyMacroPads(s.macroPads, made);
-  // The arrangement, for the same reason (its held-back tracks are indices),
-  // and written unconditionally: a song without one must not inherit the
-  // last song's sections.
-  state.arrangePos = 0;
-  applyArrangementBlob(s.arrangement, made);
   // Every cross-track reference is an id by now, so the list can be reordered:
   // fx buses to the bottom, once, rather than under the loop above.
   placeBusesLast();

@@ -19,7 +19,7 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
-import { ARRANGE_MAX_BARS, arrangementBars, migrateLegacyNames, migrateModKey, migrateTrackNames, normalizeArrangement, SET_VERSION, validateSet } from "../public/js/sessionFormat.js";
+import { migrateLegacyNames, migrateModKey, migrateTrackNames, SET_VERSION, validateSet } from "../public/js/sessionFormat.js";
 
 const track = (over = {}) => ({ engineKey: "plaits:0", length: 16, ...over });
 const session = (over = {}) => ({ _version: SET_VERSION, bpm: 120, swing: 0, tracks: [track()], ...over });
@@ -48,9 +48,6 @@ test("accepts legacy sessions", async (t) => {
     "track with no length (applySet defaults to 16)": { tracks: [{ engineKey: "plaits:0" }] },
     "legacy sampler engine keys": { tracks: [{ engineKey: "smp:Kit/kick" }, { engineKey: "upload" }, { engineKey: "eleven" }] },
     "extra unknown keys (forward-compatible additions)": session({ somethingNew: { a: 1 } }),
-    "an arrangement (sessions written since the arrangement view)": session({ arrangement: [{ p: 0, bars: 4 }, { p: 2, bars: 8 }, { p: 0, bars: 4 }] }),
-    "an empty arrangement": session({ arrangement: [] }),
-    "arrangement explicitly null": session({ arrangement: null }),
   };
   for (const [label, blob] of Object.entries(cases)) {
     await t.test(label, () => {
@@ -72,9 +69,6 @@ test("rejects blobs applySet cannot survive", async (t) => {
     // A string IS iterable, so this one does not throw -- it silently builds a
     // junk track per character, having already deleted the real ones.
     "tracks is a string": [{ tracks: "abc" }, /tracks is not an array/],
-    // normalizeArrangement would read it as "none", which turns a song back
-    // into a slot-order chain without a word; applySet refuses instead.
-    "arrangement is an object": [{ arrangement: { p: 0, bars: 4 } }, /arrangement is not an array/],
     "a track is null": [{ tracks: [track(), null] }, /track 1 is not an object/],
     "a track is a number": [{ tracks: [3] }, /track 0 is not an object/],
     "a track is a string": [{ tracks: ["nope"] }, /track 0 is not an object/],
@@ -293,63 +287,6 @@ test("a crush rate already in the song is left alone, including 0", () => {
   const again = migrateTrackNames({ fxConfig: { crush: { bits: 6, wet: 1, rate: 0.42 } } });
   assert.equal(again.fxConfig.crush.rate, 0.42);
 });
-
-// ---- the arrangement ------------------------------------------------------------
-//
-// Every reader of the format (applySet, the live merge, the song builder)
-// takes the arrangement through normalizeArrangement, so what it drops and
-// what it clamps is the whole of what a hand-edited song can put in front of
-// the transport.
-
-test("normalizeArrangement keeps sections, clamps bars and drops what is not a section", () => {
-  assert.deepEqual(normalizeArrangement(undefined), []);
-  assert.deepEqual(normalizeArrangement(null), []);
-  assert.deepEqual(normalizeArrangement("1x4"), []);
-  assert.deepEqual(normalizeArrangement({ p: 0, bars: 4 }), []);
-  assert.deepEqual(normalizeArrangement([{ p: 0, bars: 4 }, { p: 2, bars: 8 }, { p: 0, bars: 4 }]),
-    [{ p: 0, bars: 4 }, { p: 2, bars: 8 }, { p: 0, bars: 4 }], "the same pattern twice is the point");
-  assert.deepEqual(normalizeArrangement([{ p: 3 }]), [{ p: 3, bars: 1 }], "no bars is one bar");
-  assert.deepEqual(normalizeArrangement([{ p: 3, bars: 0 }, { p: 3, bars: -2 }, { p: 3, bars: 2.6 }]),
-    [{ p: 3, bars: 1 }, { p: 3, bars: 1 }, { p: 3, bars: 3 }]);
-  assert.deepEqual(normalizeArrangement([{ p: 1, bars: 1000 }]), [{ p: 1, bars: ARRANGE_MAX_BARS }]);
-  assert.deepEqual(normalizeArrangement([{ p: 32, bars: 4 }, { p: -1, bars: 4 }, { p: "x", bars: 4 }, null, 7, { bars: 4 }]), [],
-    "a pattern outside the bank, or none, is not a section");
-  assert.deepEqual(normalizeArrangement([{ p: "2", bars: "4" }]), [{ p: 2, bars: 4 }], "numeric strings read as numbers");
-  assert.deepEqual(normalizeArrangement([{ p: 40, bars: 1 }], 64), [{ p: 40, bars: 1 }], "the bank size is the caller's");
-  const raw = [{ p: 0, bars: 4, extra: true }];
-  const out = normalizeArrangement(raw);
-  assert.deepEqual(out, [{ p: 0, bars: 4 }]);
-  assert.notEqual(out[0], raw[0], "a fresh object, never the blob's own");
-});
-
-test("arrangementBars counts the bars one pass plays", () => {
-  assert.equal(arrangementBars([]), 0);
-  assert.equal(arrangementBars(undefined), 0);
-  assert.equal(arrangementBars([{ p: 0, bars: 4 }, { p: 1, bars: 8 }, { p: 0, bars: 4 }]), 16);
-  assert.equal(arrangementBars([{ p: 0 }, { p: 1, bars: 0 }]), 2, "a section is at least a bar");
-});
-
-test("normalizeArrangement keeps a rest: a section with no pattern", () => {
-  assert.deepEqual(normalizeArrangement([{ p: 0, bars: 4 }, { p: null, bars: 2 }, { p: 1, bars: 4 }]),
-    [{ p: 0, bars: 4 }, { p: null, bars: 2 }, { p: 1, bars: 4 }]);
-  assert.deepEqual(normalizeArrangement([{ rest: true, bars: 3 }, { rest: true }]), [{ p: null, bars: 3 }, { p: null, bars: 1 }], "the builder's spelling");
-  assert.deepEqual(normalizeArrangement([{ p: null, bars: 0 }, { p: null, bars: 1000 }]), [{ p: null, bars: 1 }, { p: null, bars: ARRANGE_MAX_BARS }], "clamped like any section");
-  assert.deepEqual(normalizeArrangement([{ p: undefined, bars: 2 }, { bars: 2 }]), [], "no pattern at all is not a rest: a rest is said (null), not left out");
-  assert.equal(arrangementBars([{ p: 0, bars: 4 }, { p: null, bars: 2 }]), 6, "a rest's bars count");
-});
-
-test("normalizeArrangement keeps a section's held-back tracks as sorted, distinct indices", () => {
-  assert.deepEqual(normalizeArrangement([{ p: 0, bars: 4, off: [2, 0, 2, "1", -1, 1.4, "x", null] }]), [{ p: 0, bars: 4, off: [0, 1, 2] }]);
-  assert.deepEqual(normalizeArrangement([{ p: 0, bars: 4 }, { p: 0, bars: 4, off: "all" }, { p: 0, bars: 4, off: [] }]), [{ p: 0, bars: 4 }, { p: 0, bars: 4 }, { p: 0, bars: 4 }], "absent, unreadable or empty is nobody held back, and is left unsaid");
-  assert.deepEqual(normalizeArrangement([{ p: null, bars: 1, off: [3] }]), [{ p: null, bars: 1, off: [3] }], "a rest carries them too, harmlessly");
-});
-
-test("normalizeArrangement keeps a lane's own pattern per track, index to pattern", () => {
-  assert.deepEqual(normalizeArrangement([{ p: 0, bars: 4, pat: { 1: 3, "2": "5", 9: 40, x: 1, 3: -1 } }]), [{ p: 0, bars: 4, pat: { 1: 3, 2: 5 } }], "a pattern outside the bank, or a key that is not a track, is dropped");
-  assert.deepEqual(normalizeArrangement([{ p: 0, bars: 4, pat: {} }, { p: 0, bars: 4, pat: [3] }, { p: 0, bars: 4, pat: 3 }]), [{ p: 0, bars: 4 }, { p: 0, bars: 4 }, { p: 0, bars: 4 }], "empty or unreadable is left unsaid");
-  assert.deepEqual(normalizeArrangement([{ p: null, bars: 2, pat: { 0: 1 } }]), [{ p: null, bars: 2, pat: { 0: 1 } }], "a rest with a lane in it: that track plays, the others rest");
-});
-
 test("a beat repeat pitch from before the -24..+24 knob keeps its drop, lanes included", () => {
   const td = migrateTrackNames({
     fxConfig: { repeat: { wet: 1, pitch: 1 }, "repeat#2": { wet: 1, pitch: 0 } },
