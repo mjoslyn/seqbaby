@@ -185,9 +185,9 @@ env / fx / eq / comp / mod / automation per track.
   knob following and nothing committed unless asked. Lifted out of macro.js
   so anything playing a control momentarily shares one definition of it.
 - `perform.js` / `performStore.js` — the perform view: an instruments grid,
-  the shared fx rack with the instruments as its inputs, a grid of the mods
-  and lanes, a drawer for an instrument's pattern and roll, a launcher and
-  scenes, over the track list. The store is the pure half (scenes by track
+  a rack of stage cards each with its own inputs (each live stage an fx bus),
+  a grid of the mods and lanes, a drawer for an instrument's pattern and
+  roll, a launcher and scenes, over the track list. The store is the pure half (scenes by track
   index, tested). See the perform view section below.
 - `session.js` — serialize/apply sets + track patches, legacy migration, and
   `newSet()` / `onNewSet()`: blanking the session back to `STARTER_TRACKS`
@@ -2233,7 +2233,8 @@ PATTERNS  1 2 3 … 32  [on the bar]          SCENES  intro  drop  [+ capture]
 INSTRUMENTS   kick ›  vol  harm timb morph decay  [filter card] [delay card]
               bass ›  vol  cutoff reso env …      mute solo
 DRAWER        bass: pattern 3   ░░█░░░█░  (the step grid, and the roll)
-FX RACK       in: [kick] [snare] [bass]   vol    gain vinyl … delay reverb (every stage)
+FX RACK       delay   in: [kick] [snare] [bass*]  wet time fbk  vol      (a card per stage)
+              reverb  in: [kick] [bass] [delay*]  wet decay     vol      (a stage can feed a stage)
 MODS          kick · filter cutoff (lfo row)   bass · fx.delay (lane)
 HAVOC         pad 1  pad 2                                        [edit pads]
 ```
@@ -2260,20 +2261,27 @@ HAVOC         pad 1  pad 2                                        [edit pads]
   `.sq-track`, so the inline card rules in style.css apply as they do on
   the track; the mod panel inside it is hidden, since the mods grid draws
   every row.
-- **The fx rack is an fx bus.** One shared rack with every stage in it, fed
-  by whichever instruments are switched into it, is what a bus track already
-  is: the input bar's chips are `setTrackOutput` under the existing fade
-  (and a scene writes the sends the same way), solo follows the chain, bus
-  mute cuts the audio, and a loop is refused, all as before. The rack is the
-  session's first bus; `make the fx rack` creates one (`createTrack`,
-  engine `bus`, named `fx`) when there is none. Every stage shows, in
-  chain order, because the bus's whole fx panel is moved and the
-  `.sq-track`-scoped rule that hides a row not `.is-live` does not reach
-  it; a stage at level 0 is drawn dim (`is-dim`, from `fxStageLevel`).
-  **A row cannot leave the panel**: the stage handlers (`applyReverb` and
-  the rest in `wireFxPanel`) read their values back through
-  `panel.querySelector`, which is how the first draft's reverb knob wrote
-  nothing. `+ stage` is the existing picker (`openFxAsModal`) on the bus.
+- **Every stage in the rack is its own fx bus, with its own inputs.** A
+  stage card carries a chip per instrument and per other live stage, lit
+  while that thing feeds this stage; a click is `setTrackOutput` under the
+  existing fade, so solo follows the chain, bus mute cuts the audio and a
+  loop is refused (`wouldFeedback`, checked before the write so the refusal
+  can be said on the card). Everything has one output, so lighting a chip
+  takes the source off whichever card had it, and a stage fed into a stage
+  is the rack's chain. The bus is made lazily, the first time something is
+  plugged in (`ensureStageBus`: `createTrack` with engine `bus`, named
+  `fx:<stage>`, which is how a bus is recognised as a stage's), and given a
+  wet of half through the control's own event so the plug is heard; until
+  then the card is a name and its chips, so an empty rack costs no tracks.
+  A live card shows that stage's row inside the bus's whole fx panel, moved
+  (**a row cannot leave the panel**: the stage handlers in `wireFxPanel`
+  read their values back through `panel.querySelector`, which is how an
+  earlier draft's reverb knob wrote nothing), with every other row given
+  `hidden` until the panel goes home (`hiddenRows`, cleared by
+  `restoreAll`), and the bus's vol as the return. A stage at level 0 is
+  drawn dashed (`is-dim`, from `fxStageLevel`). A bus someone made by
+  hand (not `fx:<stage>`) gets a card of its own after the stages, with its
+  whole inline wrapper and chips.
 - **The mods grid is drawn from state, not moved.** `renderModPanel`
   rebuilds the mod matrix's rows wholesale on every change, so a row moved
   out of it would be orphaned by the next edit. The grid builds its own
@@ -2281,8 +2289,8 @@ HAVOC         pad 1  pad 2                                        [edit pads]
   widgets, over the same track state), one card per enabled LFO and per
   enabled lane on the active pattern, captioned `track · control`, and
   rebuilds when the set of them changes or the pattern switches.
-- **A scene is the performance subset**: mute and solo per track, which
-  instruments feed the rack, and the pattern. Recall goes through
+- **A scene is the performance subset**: mute and solo per track, every
+  track's output (an instrument's stage, a stage's stage), and the pattern. Recall goes through
   `setMute` / `setSolo` (render.js, which the track head's buttons use too)
   and `setTrackOutput`, then `markExternalEdit`, so it is one undo step,
   reaches a jam and lands in the p-lock snapshot without any of those
@@ -2320,12 +2328,15 @@ HAVOC         pad 1  pad 2                                        [edit pads]
   `display: grid` landed on the body, which at phone width made the page
   704px wide.
 - The chips are painted by `paintInputs` from `draw` after the rack is in
-  the DOM, not from `buildFxRack`, which builds a detached subtree.
+  the DOM, not from the card builders, which build a detached subtree. A
+  chip's bus is its card's `data-bus-id`.
 - `test/performStore.test.js` holds the store; the view was driven headless
   (cards with moved controls, a moved knob writing its track, the drawer's
-  grid written by a tap and re-rendered on a switch, the rack made from
-  nothing with every stage, a chip routing an instrument and the rack's
-  reverb lighting, scenes with sends recalled stopped and on the bar, undo
+  grid written by a tap and re-rendered on a switch, seventeen dead
+  stage cards, a chip making a stage's bus and routing an instrument into
+  it, a stage chip chaining delay into reverb, the loop back refused, the
+  card's wet knob writing the bus, scenes with sends and the chain recalled
+  stopped and on the bar, undo
   across a recall, an lfo appearing as a mod card and removed from it, the
   round trip, leaving, and the phone layout).
 

@@ -113,7 +113,7 @@ export default function ManualPage() {
                 <tr><td>macro</td><td>Opens the XY <a href="#macro">macro pads</a>.</td></tr>
                 <tr><td>undo / redo</td><td>Steps back and forward through your edits. See <a href="#undo">undo</a>.</td></tr>
                 <tr><td>vim</td><td>Switches <a href="#vim">vim mode</a> on and off, for driving the studio from the keyboard. Desktop only.</td></tr>
-                <tr><td>perform</td><td>Swaps the track list for the <a href="#perform">perform view</a>: the instruments, one shared fx rack, the mods, a pattern launcher and scenes.</td></tr>
+                <tr><td>perform</td><td>Swaps the track list for the <a href="#perform">perform view</a>: the instruments, a rack of effects each with its own inputs, the mods, a pattern launcher and scenes.</td></tr>
                 <tr><td>metronome</td><td>A click on each downbeat, for playing along. It never ends up in an export.</td></tr>
                 <tr><td>meter</td><td>Output level, over on the right. If it sits pinned at the top, turn some tracks down.</td></tr>
               </tbody>
@@ -1335,14 +1335,17 @@ export default function ManualPage() {
               piano roll open in a drawer under the cards; click again to close it.
             </li>
             <li>
-              <strong>The fx rack.</strong> One rack for the song with every effect
-              in it, in chain order, each with its knobs; an effect at zero is drawn
-              dim and lights when its wet comes up. The chips along the top are the
-              inputs: a lit instrument plays through the rack, an unlit one goes
-              straight to the master. It is an fx bus underneath, so solo and mute
-              behave as they do for one, and its filter, eq and compressor show on
-              its card when they are on. <span className={styles.ui}>make the fx
-              rack</span> creates it the first time.
+              <strong>The fx rack.</strong> A card per effect, every effect the
+              studio has. Each card has its own inputs: a chip per instrument, and
+              one per effect that is already running. A lit chip feeds that card;
+              click to plug something in or pull it out. Everything has one
+              output, so plugging an instrument into the reverb takes it out of the
+              delay, and plugging the delay itself into the reverb is how two
+              effects run in series. A loop is refused. An effect comes alive the
+              first time something is plugged in, at half wet; its knobs and a
+              return level sit on the card, and an effect at zero is drawn dashed.
+              Underneath, every running effect is an fx bus, so solo and mute
+              behave as they do for one.
             </li>
             <li>
               <strong>Mods and lanes.</strong> Every LFO and every automation lane on
@@ -1359,8 +1362,8 @@ export default function ManualPage() {
             </li>
             <li>
               <strong>Scenes.</strong> <span className={styles.ui}>capture</span>{" "}
-              remembers every track&apos;s mute and solo, which instruments feed the
-              rack, and the pattern. Recalling one writes those back, on the bar
+              remembers every track&apos;s mute and solo, what is plugged into which
+              effect, and the pattern. Recalling one writes those back, on the bar
               while playing. It is an ordinary edit: undo takes it back, and a jam
               hears it. Shift and a number recalls scenes 1 to 10. A selected scene
               can be updated to how things are now, renamed, or deleted.

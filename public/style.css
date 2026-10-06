@@ -3377,14 +3377,38 @@ body.sq-perform-on #add-bus { display: none !important; }
 .sq-perform__steps > .sq-steps { margin: 0; }
 .sq-perform__roll > .sq-track__roll-panel { display: grid; }
 
-/* The fx rack: the bus card (inputs, vol, its filter / eq / comp), then every
-   stage as a card in chain order. */
-.sq-perform__inputs { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
-.sq-perform__inlabel { font-size: 11px; color: var(--accent-2); text-transform: uppercase; letter-spacing: 0.08em; margin-right: 4px; }
+/* The fx rack: a card per stage, each its own bus with its own inputs. A
+   dead stage (no bus yet) is a name and its chips; a live one adds the
+   stage's row (inside the bus's moved fx panel, the other rows hidden) and
+   the bus's vol as the return. */
+.sq-perform__hint { font-size: 11px; color: var(--fg-dim); }
+.sq-perform__stages {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 8px;
+  align-items: start;
+}
+.sq-perform__stagecard {
+  position: relative;
+  display: grid;
+  gap: 6px;
+  padding: 6px 8px 8px;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  min-width: 0;
+}
+.sq-perform__stagecard.is-dead { opacity: 0.6; }
+.sq-perform__stagecard.is-dead:hover { opacity: 0.9; }
+.sq-perform__stagecard.is-dim { border-style: dashed; }
+.sq-perform__stagecard.is-muted { opacity: 0.55; }
+.sq-perform__stagename { flex: 1 1 auto; font-size: 11px; color: var(--fg); text-transform: lowercase; }
+.sq-perform__inputs { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.sq-perform__inlabel { font-size: 10px; color: var(--accent-2); text-transform: uppercase; letter-spacing: 0.08em; margin-right: 2px; }
 .sq-perform__chip {
-  font-size: 11px;
-  padding: 5px 10px;
-  min-height: 28px;
+  font-size: 10px;
+  padding: 3px 7px;
+  min-height: 24px;
   background: var(--step);
   border: 1px solid var(--border);
   border-left: 3px solid hsl(var(--track-hue, 35) 80% 62%);
@@ -3392,43 +3416,39 @@ body.sq-perform-on #add-bus { display: none !important; }
   color: var(--fg-dim);
   cursor: pointer;
 }
+.sq-perform__chip--stage { border-left-color: var(--accent-2); font-style: italic; }
 .sq-perform__chip[aria-pressed="true"] {
   color: var(--fg);
   background: color-mix(in oklab, hsl(var(--track-hue, 35) 80% 62%) 28%, var(--step));
   border-color: hsl(var(--track-hue, 35) 80% 62%);
 }
-.sq-perform__stages > .sq-track__fx-panel {
-  display: grid !important;   /* refreshPanelBadges hides a panel with nothing on; here every stage shows */
-  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
-  gap: 8px;
-  align-items: start;
+.sq-perform__chip--stage[aria-pressed="true"] {
+  background: color-mix(in oklab, var(--accent-2) 28%, var(--step));
+  border-color: var(--accent-2);
+}
+.sq-perform__stagebody { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; align-items: start; }
+.sq-perform__stagebody > .sq-track__fx-panel {
+  display: grid !important;   /* refreshPanelBadges hides a panel with nothing on */
   padding: 0;
   border: 0;
   background: none;
+  min-width: 0;
 }
-.sq-perform__stages > .sq-track__fx-panel > :not(.sq-fx__row),
-.sq-perform__stages > .sq-track__fx-panel > .sq-fx__row[data-fx="glide"],
-.sq-perform__stages > .sq-track__fx-panel > .sq-fx__row[data-fx="amp"] { display: none; }
-.sq-perform__stages > .sq-track__fx-panel > .sq-fx__row {
-  position: relative;
+.sq-perform__stagebody > .sq-track__fx-panel > :not(.sq-fx__row),
+.sq-perform__stagebody > .sq-track__fx-panel > .sq-fx__row[hidden] { display: none !important; }
+.sq-perform__stagebody > .sq-track__fx-panel > .sq-fx__row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  align-content: flex-start;
   gap: 6px 10px;
-  padding: 6px 30px 8px 8px;
-  background: var(--bg-3);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  min-height: 100%;
-  box-sizing: border-box;
+  padding: 0;
 }
-.sq-perform__stages > .sq-track__fx-panel > .sq-fx__row > .sq-fx__title { flex: 1 1 100%; min-width: 0; }
-.sq-perform__stages > .sq-track__fx-panel > .sq-fx__row > .sq-fx__off { position: absolute; top: 4px; right: 4px; margin-left: 0; }
-/* A stage at level 0 is in the rack and out of the chain: drawn dim, lit the
-   moment its wet comes up. */
-.sq-perform__stages > .sq-track__fx-panel > .sq-fx__row.is-dim { opacity: 0.55; }
-.sq-perform__stages > .sq-track__fx-panel > .sq-fx__row.is-dim:hover { opacity: 0.85; }
+.sq-perform__stagebody > .sq-track__fx-panel > .sq-fx__row > .sq-fx__title,
+.sq-perform__stagebody > .sq-track__fx-panel > .sq-fx__row > .sq-fx__off,
+.sq-perform__stagebody > .sq-track__fx-panel > .sq-fx__row > .sq-fx__move { display: none; }
+.sq-perform__return .sq-vol-combo { width: 56px; }
+.sq-perform__return .sq-vol-combo .sq-knob { --knob-size: 36px; }
+.sq-perform__stagecard--bus .sq-perform__stagebody { grid-template-columns: minmax(0, 1fr); }
 
 /* The mods grid: one card per enabled lfo row or lane, captioned with its
    owner. The lfo row is the inline card's flex-wrap, not the modal's eight
@@ -3483,7 +3503,8 @@ body.sq-perform-on #add-bus { display: none !important; }
   .sq-perform__cards,
   .sq-perform__stages,
   .sq-perform__modgrid { grid-template-columns: minmax(0, 1fr); }
-  .sq-perform__mute, .sq-perform__solo, .sq-perform__chip, .sq-perform__scene { min-height: 44px; }
+  .sq-perform__mute, .sq-perform__solo, .sq-perform__scene { min-height: 44px; }
+  .sq-perform__chip { min-height: 36px; }
 }
 
 /* ============================================================ */

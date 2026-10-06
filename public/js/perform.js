@@ -23,12 +23,16 @@
  *     (`syncTrackSoundUI`, `refreshFxPanelUI`, the engine panel syncs,
  *     `renderStepGrid`) fall back to `t._perfStrip.q`.
  *
- *   - **The fx rack is an fx bus.** One shared rack with every stage in it,
- *     fed by whichever instruments are switched into it, is exactly what a
- *     bus track already is (signal.js, `BusVoice`): the input bar's chips are
- *     `setTrackOutput`, under the existing fade, and solo, mute and feedback
- *     refusal come with it. The rack is the session's first bus; `make the
- *     fx rack` creates one when there is none.
+ *   - **Every stage in the rack is its own fx bus.** A stage card has its own
+ *     inputs: chips for the instruments and for the other live stages, each
+ *     lit while that thing feeds this stage. A lit chip is `setTrackOutput`
+ *     under the existing fade, so solo follows the chain, bus mute cuts the
+ *     audio, and a loop is refused, all as for any bus. A stage's bus is made
+ *     the first time something is plugged into it (`fx:<stage>`, engine
+ *     `bus`), so an empty rack costs nothing; until then the card is a name
+ *     and its chips. Everything has one output, so lighting a chip here takes
+ *     it off whichever card had it, and a stage fed into another stage is
+ *     the rack's chain.
  *
  *   - **The mods grid is drawn from state, not moved.** `renderModPanel`
  *     rebuilds the mod matrix's rows wholesale on every change, so a row
@@ -47,7 +51,7 @@
  * beside the macro pads by track index — performStore.js).
  */
 
-import { PATTERN_COUNT, autoLabel, fxChainOrder, fxStageLevel, fxStageOf, lfoLabel } from "./constants.js";
+import { FX_STAGE_KEYS, FX_STAGE_LABELS, FX_STAGE_NEUTRAL, PATTERN_COUNT, autoLabel, fxStageLevel, lfoLabel } from "./constants.js";
 import { setStatus } from "./dom.js";
 import { flushHistory, markExternalEdit } from "./history.js";
 import { inJam, jamTogglePlay } from "./jam.js";
@@ -59,10 +63,10 @@ import { refreshParamIndicators } from "./paramTargets.js";
 import { updatePlaitsControlsVisibility } from "./params.js";
 import { emptyPerform, readPerform, serializePerform } from "./performStore.js";
 import { renderRollPanel } from "./pianoRoll.js";
+import { writeParam } from "./momentary.js";
 import { buildAutomationLane, buildLfoRow, setMute, setSolo } from "./render.js";
-import { setTrackOutput } from "./signal.js";
+import { setTrackOutput, wouldFeedback } from "./signal.js";
 import { isPatternNonEmpty, queuePatternSwitch, requestPatternSwitch, state } from "./state.js";
-import { openFxAsModal } from "./stepEditor.js";
 import { createTrack } from "./track.js";
 import { barLineHooks, togglePlay } from "./transport.js";
 
@@ -96,8 +100,13 @@ export function isPerformOpen() { return !!rack; }
 const trackById = (id) => state.tracks.find(t => t.id === id) || null;
 const isBus = (t) => t.engineKey === "bus";
 const instruments = () => state.tracks.filter(t => !isBus(t));
-/** The shared rack: the session's first fx bus. */
-const fxRackTrack = () => state.tracks.find(isBus) || null;
+/** A stage's bus is a bus track named for it. */
+const stageBusName = (stage) => `fx:${stage}`;
+const stageBus = (stage) => state.tracks.find(t => isBus(t) && t.name === stageBusName(stage)) || null;
+/** The stage a bus is, or null for a bus someone made by hand. */
+const busStage = (t) => { const m = /^fx:([a-z]+)$/.exec(t.name || ""); return m && FX_STAGE_KEYS.includes(m[1]) ? m[1] : null; };
+/** Where a track's output goes: a track, or null for the master. */
+const outOf = (t) => (t.out && t.out !== "master" ? state.tracks.find(x => String(x.id) === String(t.out)) || null : null);
 
 // ---- scenes --------------------------------------------------------------
 
@@ -107,8 +116,7 @@ function captureScene(name) {
     id: _nextSceneId++,
     name: name || `scene ${perf.scenes.length + 1}`,
     pattern: state.activePattern,
-    tracks: state.tracks.map(t => ({ trackId: t.id, muted: !!t.muted, soloed: !!t.soloed,
-      out: t.out && t.out !== "master" ? (trackById(Number(t.out)) || trackById(t.out))?.id ?? null : null })),
+    tracks: state.tracks.map(t => ({ trackId: t.id, muted: !!t.muted, soloed: !!t.soloed, out: outOf(t)?.id ?? null })),
   };
   perf.scenes.push(scene);
   return scene;
@@ -130,10 +138,8 @@ function applyScene(scene) {
     // track soloed in the scene is unmuted first, one muted is unsoloed first.
     if (x.soloed) { setMute(t, false); setSolo(t, true); }
     else { setSolo(t, false); setMute(t, !!x.muted); }
-    if (!isBus(t)) {
-      const want = x.out != null && trackById(x.out) ? String(x.out) : "master";
-      if (String(t.out || "master") !== want) setTrackOutput(t, want);
-    }
+    const want = x.out != null && trackById(x.out) ? String(x.out) : "master";
+    if (String(t.out || "master") !== want) setTrackOutput(t, want);
   }
 }
 
@@ -199,6 +205,8 @@ function restoreAll() {
     if (anchor.parentNode) anchor.replaceWith(node); else node.remove();
   }
   moved = [];
+  for (const row of hiddenRows) row.hidden = false;
+  hiddenRows = [];
   for (const t of state.tracks) {
     if (t._rollPanelEl && !t._rollModal) t._rollPanelEl.hidden = true;
     t._perfStrip = null;
@@ -327,101 +335,144 @@ function buildDrawer() {
   return box;
 }
 
-// ---- the fx rack ---------------------------------------------------------
+// ---- the fx rack: a card per stage, each its own bus ----------------------
 
-function makeFxRack() {
-  const bus = createTrack({ name: "fx", engineKey: "bus", length: stepsPerBarForMeter(activeMeter()) });
-  setStatus("the fx rack is an fx bus: switch instruments into it with the chips");
+/** @type {Element[]} rows hidden in a moved fx panel, shown again on restore */
+let hiddenRows = [];
+
+/** Make a stage's bus, and give the stage a level to be heard at: a wet of
+ *  half, through the control's own event so it is an edit like any other.
+ *  gain and pan sit at their neutral middle already. */
+function ensureStageBus(stage) {
+  let bus = stageBus(stage);
+  if (bus) return bus;
+  bus = createTrack({ name: stageBusName(stage), engineKey: "bus", length: stepsPerBarForMeter(activeMeter()) });
+  if (FX_STAGE_NEUTRAL[stage] == null) writeParam(bus, `fx.${stage}`, 0.5, 0, true);
   return bus;
 }
 
 function paintInputs() {
   if (!rack) return;
-  const bus = fxRackTrack();
   for (const chip of rack.querySelectorAll(".sq-perform__chip")) {
-    const t = trackById(Number(chip.dataset.trackId));
-    chip.setAttribute("aria-pressed", String(!!t && !!bus && String(t.out) === String(bus.id)));
+    const src = trackById(Number(chip.dataset.trackId));
+    const busId = chip.closest("[data-bus-id]")?.dataset.busId;
+    chip.setAttribute("aria-pressed", String(!!src && busId != null && busId !== "" && String(src.out) === busId));
   }
 }
 
 function paintStages() {
   if (!rack) return;
-  const bus = fxRackTrack();
-  if (!bus) return;
-  for (const row of rack.querySelectorAll(".sq-perform__stages .sq-fx__row[data-fx]")) {
-    const id = row.dataset.fxId || row.dataset.fx;
-    if (!fxStageOf(id)) continue;          // glide and amp are not stages
-    row.classList.toggle("is-dim", !(fxStageLevel(bus.fxConfig, id) > 0));
+  for (const card of rack.querySelectorAll(".sq-perform__stagecard[data-bus-id]")) {
+    const bus = trackById(Number(card.dataset.busId));
+    const stage = card.dataset.fx;
+    if (!bus || !stage) continue;
+    card.classList.toggle("is-dim", !(fxStageLevel(bus.fxConfig, stage) > 0));
   }
 }
 
-function buildFxRack() {
-  const box = el("div", "sq-perform__section sq-perform__fx");
-  const head = el("div", "sq-perform__sechead");
-  head.appendChild(el("span", "sq-perform__sectitle", "fx rack"));
-  box.appendChild(head);
-  const bus = fxRackTrack();
-  if (!bus) {
-    const make = el("button", "sq-btn--ghost sq-perform__make", "make the fx rack");
-    make.type = "button";
-    make.title = "an fx bus every stage lives on; the instruments are its inputs";
-    make.addEventListener("click", () => { makeFxRack(); scheduleRedraw(); });
-    head.appendChild(make);
-    box.appendChild(el("div", "sq-perform__empty", "no rack yet. One rack for the song, every effect in it, and the instruments switched in and out of it"));
-    return box;
-  }
-  const card = el("div", "sq-perform__card sq-perform__buscard");
-  card.dataset.trackId = String(bus.id);
-  const handle = stripHandle(bus, card);
-  const { mute, paint } = muteSoloButtons(bus, card);
-  handle.paintMuteSolo = paint;
-  const add = el("button", "sq-btn--ghost", "+ stage");
-  add.type = "button";
-  add.title = "another copy of a stage, at the end of the chain";
-  add.addEventListener("click", () => openFxAsModal(bus));
-  head.append(add, mute);
-
-  // The inputs: every instrument, lit while it feeds the rack.
+/** The chips for one card: lit while the source feeds this bus; a click
+ *  routes it here (making the bus if the stage has none yet) or back to the
+ *  master. */
+function buildChips(stage, bus, card) {
   const inputs = el("div", "sq-perform__inputs");
   inputs.appendChild(el("span", "sq-perform__inlabel", "in"));
-  for (const t of instruments()) {
-    const chip = el("button", "sq-perform__chip", t.name);
+  for (const src of state.tracks) {
+    if (src === bus) continue;
+    if (isBus(src) && !busStage(src) && src.name?.startsWith("fx:")) continue;
+    const chip = el("button", "sq-perform__chip", isBus(src) ? (busStage(src) ? FX_STAGE_LABELS[busStage(src)] : src.name) : src.name);
     chip.type = "button";
-    chip.dataset.trackId = String(t.id);
-    chip.style.setProperty("--track-hue", String(TRACK_HUES[state.tracks.indexOf(t) % TRACK_HUES.length]));
-    chip.title = `${t.name}: into the rack, or straight to the master`;
+    chip.dataset.trackId = String(src.id);
+    if (isBus(src)) chip.classList.add("sq-perform__chip--stage");
+    else chip.style.setProperty("--track-hue", String(TRACK_HUES[state.tracks.indexOf(src) % TRACK_HUES.length]));
+    chip.title = isBus(src) ? `${chip.textContent}'s output: into this stage, or to the master` : `${src.name}: into this stage, or straight to the master`;
     chip.addEventListener("click", () => {
-      const on = String(t.out) === String(bus.id);
-      setTrackOutput(t, on ? "master" : bus.id);
-      paintInputs();
+      const target = bus || ensureStageBus(stage);
+      const on = String(src.out) === String(target.id);
+      if (!on && wouldFeedback(src, target.id)) { setStatus(`${chip.textContent} into ${FX_STAGE_LABELS[stage] || target.name} would feed back on itself`, true); return; }
+      setTrackOutput(src, on ? "master" : target.id);
+      if (!bus) scheduleRedraw(); else paintInputs();
     });
     inputs.appendChild(chip);
   }
   card.appendChild(inputs);
+}
 
-  const volSlot = el("div", "sq-perform__vol");
+function buildStageCard(stage) {
+  const bus = stageBus(stage);
+  const card = el("div", "sq-perform__stagecard");
+  card.dataset.fx = stage;
+  if (bus) card.dataset.busId = String(bus.id);
+  else card.classList.add("is-dead");
+  const head = el("div", "sq-perform__head");
+  head.appendChild(el("span", "sq-perform__stagename", FX_STAGE_LABELS[stage]));
+  if (bus) {
+    const { mute, paint } = muteSoloButtons(bus, card);
+    stripHandle(bus, card).paintMuteSolo = paint;
+    head.appendChild(mute);
+  }
+  card.appendChild(head);
+  buildChips(stage, bus, card);
+  if (!bus) {
+    card.appendChild(el("div", "sq-perform__empty", "plug something in"));
+    return card;
+  }
+  // The stage's row, inside the bus's whole fx panel (its handlers read their
+  // values back through the panel, so a row cannot leave it); every other row
+  // is hidden until the panel goes home. The bus's own vol is the return.
+  const body = el("div", "sq-perform__stagebody");
+  const panel = bus._fxPanelEl;
+  if (panel) {
+    for (const row of panel.querySelectorAll(":scope > .sq-fx__row")) {
+      if (row.dataset.fx === stage && !row.dataset.fxId) continue;
+      if (!row.hidden) { row.hidden = true; hiddenRows.push(row); }
+    }
+    moveEl(panel, body);
+  }
+  const volSlot = el("div", "sq-perform__vol sq-perform__return");
   const vol = bus.el?.querySelector(".sq-vol__field");
   if (vol) {
     moveEl(vol, volSlot);
     const meter = volSlot.querySelector(".sq-track__meter");
     if (meter) bus._meterEl = meter;
   }
-  card.appendChild(volSlot);
-  // The bus's filter, eq and compressor, as inline cards when they are on.
-  card.appendChild(liveHolder(bus));
-  box.appendChild(card);
+  body.appendChild(volSlot);
+  body.addEventListener("input", paintStages);
+  body.addEventListener("change", paintStages);
+  card.appendChild(body);
+  return card;
+}
 
-  // Every stage: the bus's whole fx panel, moved (its rows are in chain
-  // order already, and the stage handlers read their values back through
-  // the panel, so a row cannot leave it). style.css lays the rows out as a
-  // grid here and shows the ones the inline view would hide; glide and amp
-  // are not stages and stay hidden.
-  const stages = el("div", "sq-perform__stages");
-  stages.dataset.trackId = String(bus.id);
-  moveEl(bus._fxPanelEl, stages);
-  stages.addEventListener("input", paintStages);
-  stages.addEventListener("change", paintStages);
-  box.appendChild(stages);
+/** A bus made by hand (not `fx:<stage>`): its whole rack, with chips. */
+function buildBusCard(bus) {
+  const card = el("div", "sq-perform__stagecard sq-perform__stagecard--bus");
+  card.dataset.busId = String(bus.id);
+  const head = el("div", "sq-perform__head");
+  head.appendChild(el("span", "sq-perform__stagename", bus.name || "bus"));
+  const { mute, paint } = muteSoloButtons(bus, card);
+  stripHandle(bus, card).paintMuteSolo = paint;
+  head.appendChild(mute);
+  card.appendChild(head);
+  buildChips(null, bus, card);
+  const body = el("div", "sq-perform__stagebody");
+  const volSlot = el("div", "sq-perform__vol sq-perform__return");
+  const vol = bus.el?.querySelector(".sq-vol__field");
+  if (vol) { moveEl(vol, volSlot); const meter = volSlot.querySelector(".sq-track__meter"); if (meter) bus._meterEl = meter; }
+  body.appendChild(volSlot);
+  body.appendChild(liveHolder(bus));
+  card.appendChild(body);
+  return card;
+}
+
+function buildFxRack() {
+  const box = el("div", "sq-perform__section sq-perform__fx");
+  const head = el("div", "sq-perform__sechead");
+  head.appendChild(el("span", "sq-perform__sectitle", "fx rack"));
+  head.appendChild(el("span", "sq-perform__hint", "each stage has its own inputs: instruments, or another stage"));
+  box.appendChild(head);
+  const grid = el("div", "sq-perform__stages");
+  for (const stage of FX_STAGE_KEYS) grid.appendChild(buildStageCard(stage));
+  for (const bus of state.tracks.filter(t => isBus(t) && !busStage(t))) grid.appendChild(buildBusCard(bus));
+  box.appendChild(grid);
   return box;
 }
 
@@ -617,10 +668,8 @@ function buildPads() {
 
 /** What the drawn rack depends on; a change means a rebuild. */
 function signature() {
-  const bus = fxRackTrack();
   return JSON.stringify([
     state.tracks.map(t => [t.id, t.engineKey, t.name, t._perfStrip ? 1 : 0, t.el ? 1 : 0]),
-    bus ? fxChainOrder(bus.fxConfig) : null,
     state.tracks.map(t => [
       Object.keys(t.lfoConfig || {}).filter(k => t.lfoConfig[k]?.enabled),
       Object.keys(t.automation || {}).filter(k => t.automation[k]?.enabled),
@@ -728,7 +777,7 @@ export function setPerform(on) {
     if (isDesktopKeyboard()) window.addEventListener("keydown", onKeyDown, true);
     barLineHooks.add(onBarLine);
     raf = requestAnimationFrame(tick);
-    setStatus("perform: instruments, the fx rack and its inputs, mods, scenes. Number keys launch patterns, shift + number recalls a scene");
+    setStatus("perform: instruments, a stage rack with inputs per stage, mods, scenes. Number keys launch patterns, shift + number recalls a scene");
   } else {
     cancelAnimationFrame(raf);
     window.removeEventListener("seqbaby:songedited", onSongEdited);
