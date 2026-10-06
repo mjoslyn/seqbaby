@@ -3209,12 +3209,18 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not
 .sq-step:not(.is-on) .sq-step__note { display: none; }
 
 /* ---------- PERFORM VIEW ---------------------------------------------------
-   A rack over the track list (perform.js): the launcher, the scene bank and
-   the throw level across the top, a strip per track, the havoc pads under
-   them. The strips hold the tracks' REAL controls, moved in (a `.sq-field`
-   each, with its knob), so the knob rules above apply unchanged; only the
-   size is set here. The track list is hidden, not removed: everything in it
-   keeps being painted and comes back as it was. */
+   A rack over the track list (perform.js): the launcher and the scene bank
+   across the top, a card per instrument, a drawer for the selected one's
+   pattern and roll, the shared fx rack with its inputs, the mods and lanes,
+   the havoc pads. The cards hold the tracks' REAL elements, moved in (the
+   vol field, the synth row, the inline-panel wrapper, the fx rows, the step
+   grid, the roll), so every rule above applies unchanged; only sizes and the
+   grid flow are set here. The track list is hidden, not removed: everything
+   in it keeps being painted and comes back as it was.
+
+   The body carries `sq-perform-on` and the rack is `.sq-perform`, and that
+   is not a nicety: one name for both put the rack's `display: grid` on the
+   body, which at phone width made the page 704px wide. */
 body.sq-perform-on #tracks,
 body.sq-perform-on #add-track,
 body.sq-perform-on #add-bus { display: none !important; }
@@ -3223,27 +3229,29 @@ body.sq-perform-on #add-bus { display: none !important; }
 .sq-perform { display: grid; gap: 12px; padding: 4px 0 12px; }
 .sq-perform__top {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
   gap: 12px;
   align-items: start;
 }
 .sq-perform__launcher,
 .sq-perform__scenes,
-.sq-perform__pads,
-.sq-perform__throwlevel {
+.sq-perform__section,
+.sq-perform__drawer {
   background: var(--bg-2);
   border: 1px solid var(--border);
   border-radius: 8px;
-  padding: 8px 10px;
+  padding: 8px 10px 10px;
   display: grid;
   gap: 8px;
   min-width: 0;
 }
-.sq-perform__sechead { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.sq-perform__sectitle { font-size: 11px; color: var(--accent-2); text-transform: uppercase; letter-spacing: 0.08em; }
+.sq-perform__sechead { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.sq-perform__sectitle { font-size: 11px; color: var(--accent-2); text-transform: uppercase; letter-spacing: 0.08em; margin-right: auto; }
 .sq-perform__sechead .sq-btn--ghost { font-size: 11px; padding: 3px 8px; }
 .sq-perform__quant { font-size: 11px; color: var(--fg-dim); display: inline-flex; align-items: center; gap: 5px; }
+.sq-perform__empty { font-size: 11px; color: var(--fg-dim); font-style: italic; }
 
+/* The launcher: the 32 slots as buttons. */
 .sq-perform__cells { display: grid; grid-template-columns: repeat(16, minmax(0, 1fr)); gap: 4px; }
 .sq-perform__cell {
   background: var(--step);
@@ -3262,6 +3270,7 @@ body.sq-perform-on #add-bus { display: none !important; }
 .sq-perform__cell.is-queued { border-color: var(--accent-2); animation: sq-perform-blink 0.6s steps(2) infinite; }
 @keyframes sq-perform-blink { to { box-shadow: 0 0 0 1px var(--accent-2) inset; } }
 
+/* The scene bank. */
 .sq-perform__scenelist { display: flex; flex-wrap: wrap; gap: 6px; }
 .sq-perform__scene {
   background: var(--step);
@@ -3278,28 +3287,27 @@ body.sq-perform-on #add-bus { display: none !important; }
 .sq-perform__scenetools { display: flex; gap: 6px; flex-wrap: wrap; }
 .sq-perform__scenetools .sq-btn--ghost { font-size: 11px; padding: 3px 8px; }
 .sq-perform__del { color: var(--danger); }
-.sq-perform__nopins { font-size: 11px; color: var(--fg-dim); font-style: italic; }
 
-.sq-perform__throwlevel .sq-knob { --knob-size: 44px; }
-
-.sq-perform__strips {
+/* Instrument cards. */
+.sq-perform__cards {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   gap: 10px;
   align-items: start;
 }
-.sq-perform__strip {
+.sq-perform__card {
   position: relative;
   display: grid;
   gap: 8px;
   padding: 8px 10px 10px 14px;
-  background: var(--bg-2);
+  background: var(--bg-3);
   border: 1px solid var(--border);
   border-radius: 8px;
   min-width: 0;
 }
 /* The track's colour down the left edge, the step grid's own hue. */
-.sq-perform__strip::before {
+.sq-perform__card::before,
+.sq-perform__drawer::before {
   content: "";
   position: absolute;
   left: 0; top: 8px; bottom: 8px;
@@ -3307,10 +3315,31 @@ body.sq-perform-on #add-bus { display: none !important; }
   border-radius: 2px;
   background: hsl(var(--track-hue, 35) 80% 62%);
 }
-.sq-perform__strip.is-muted { opacity: 0.55; }
-.sq-perform__strip.is-soloed { border-color: var(--accent); }
+.sq-perform__drawer { position: relative; padding-left: 14px; }
+.sq-perform__card.is-muted { opacity: 0.55; }
+.sq-perform__card.is-soloed { border-color: var(--accent); }
+.sq-perform__card.is-selected { border-color: hsl(var(--track-hue, 35) 80% 62%); }
 .sq-perform__head { display: flex; align-items: center; gap: 6px; min-width: 0; }
-.sq-perform__name { flex: 1 1 auto; min-width: 0; font-size: 12px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sq-perform__name {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: left;
+  font-size: 12px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  padding: 4px 6px;
+  color: var(--fg);
+  cursor: pointer;
+}
+.sq-perform__name:hover { border-color: var(--border); }
+.sq-perform__name::after { content: " ›"; color: var(--fg-dim); }
+.sq-perform__card.is-selected .sq-perform__name::after { content: " ‹"; }
+.sq-perform__buscard .sq-perform__head { display: none; }
 .sq-perform__mute,
 .sq-perform__solo {
   font-size: 10px;
@@ -3326,40 +3355,121 @@ body.sq-perform-on #add-bus { display: none !important; }
 .sq-perform__solo[aria-pressed="true"] { background: var(--accent); color: #0b0d10; border-color: var(--accent); }
 .sq-perform__mute:disabled, .sq-perform__solo:disabled { opacity: 0.4; cursor: not-allowed; }
 
-/* The track head's own vol field: the knob over its thin meter, as there,
-   only bigger and as wide as the strip. */
+/* The track head's own vol field: the knob over its thin meter, as there. */
 .sq-perform__vol .sq-field { display: grid; justify-items: center; }
 .sq-perform__vol .sq-vol-combo { width: 100%; }
-.sq-perform__vol .sq-vol-combo .sq-knob { --knob-size: 56px; align-self: center; }
+.sq-perform__vol .sq-vol-combo .sq-knob { --knob-size: 48px; align-self: center; }
 
-.sq-perform__knobs { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: start; }
-.sq-perform__pin { display: grid; justify-items: center; gap: 2px; }
-.sq-perform__pin .sq-knob { --knob-size: 44px; }
-/* The field's own label is a short name (`cut`, `wet`); the caption says
-   which stage it belongs to. The label stays in the DOM: it is what the
-   control is named by elsewhere (the undo label, knob navigation). */
-.sq-perform__pin .sq-field > label,
-.sq-perform__pin > label > span { display: none; }
-.sq-perform__pin > label { display: grid; justify-items: center; }
-.sq-perform__cap { font-size: 10px; color: var(--fg-dim); text-transform: lowercase; max-width: 90px; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The synth row, as it sits in the track head: the timbre group and the
+   engine's own panel, hidden groups staying hidden. */
+.sq-perform__synth > .sq-track__synth-row { display: grid; gap: 8px; }
+.sq-perform__synth .sq-param-group { flex-wrap: wrap; }
 
-.sq-perform__throws { display: flex; flex-wrap: wrap; gap: 6px; }
-.sq-perform__throw {
-  font-size: 10px;
-  padding: 5px 9px;
-  min-height: 30px;
+/* The inline-panel wrapper, in a holder that carries `.sq-track` so the
+   inline card rules apply (filter, env, eq, comp and the track's own fx rows
+   as cards). One column: a card is narrow. The mod matrix's rows are left
+   out — the mods grid below draws every one. */
+.sq-perform__live.sq-track { padding: 0; border: 0; background: none; border-radius: 0; gap: 8px; }
+.sq-perform__live > .sq-track__live { grid-template-columns: minmax(0, 1fr); }
+.sq-perform__live > .sq-track__live > .sq-track__mod-panel { display: none !important; }
+
+/* The drawer: the selected instrument's step grid and roll, at full width. */
+.sq-perform__steps > .sq-steps { margin: 0; }
+.sq-perform__roll > .sq-track__roll-panel { display: grid; }
+
+/* The fx rack: the bus card (inputs, vol, its filter / eq / comp), then every
+   stage as a card in chain order. */
+.sq-perform__inputs { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.sq-perform__inlabel { font-size: 11px; color: var(--accent-2); text-transform: uppercase; letter-spacing: 0.08em; margin-right: 4px; }
+.sq-perform__chip {
+  font-size: 11px;
+  padding: 5px 10px;
+  min-height: 28px;
   background: var(--step);
   border: 1px solid var(--border);
+  border-left: 3px solid hsl(var(--track-hue, 35) 80% 62%);
   border-radius: 4px;
   color: var(--fg-dim);
   cursor: pointer;
-  touch-action: none;
-  user-select: none;
-  -webkit-user-select: none;
-  -webkit-tap-highlight-color: transparent;
 }
-.sq-perform__throw.is-held { background: var(--accent-2); color: #0b0d10; border-color: var(--accent-2); }
+.sq-perform__chip[aria-pressed="true"] {
+  color: var(--fg);
+  background: color-mix(in oklab, hsl(var(--track-hue, 35) 80% 62%) 28%, var(--step));
+  border-color: hsl(var(--track-hue, 35) 80% 62%);
+}
+.sq-perform__stages > .sq-track__fx-panel {
+  display: grid !important;   /* refreshPanelBadges hides a panel with nothing on; here every stage shows */
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 8px;
+  align-items: start;
+  padding: 0;
+  border: 0;
+  background: none;
+}
+.sq-perform__stages > .sq-track__fx-panel > :not(.sq-fx__row),
+.sq-perform__stages > .sq-track__fx-panel > .sq-fx__row[data-fx="glide"],
+.sq-perform__stages > .sq-track__fx-panel > .sq-fx__row[data-fx="amp"] { display: none; }
+.sq-perform__stages > .sq-track__fx-panel > .sq-fx__row {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  align-content: flex-start;
+  gap: 6px 10px;
+  padding: 6px 30px 8px 8px;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  min-height: 100%;
+  box-sizing: border-box;
+}
+.sq-perform__stages > .sq-track__fx-panel > .sq-fx__row > .sq-fx__title { flex: 1 1 100%; min-width: 0; }
+.sq-perform__stages > .sq-track__fx-panel > .sq-fx__row > .sq-fx__off { position: absolute; top: 4px; right: 4px; margin-left: 0; }
+/* A stage at level 0 is in the rack and out of the chain: drawn dim, lit the
+   moment its wet comes up. */
+.sq-perform__stages > .sq-track__fx-panel > .sq-fx__row.is-dim { opacity: 0.55; }
+.sq-perform__stages > .sq-track__fx-panel > .sq-fx__row.is-dim:hover { opacity: 0.85; }
 
+/* The mods grid: one card per enabled lfo row or lane, captioned with its
+   owner. The lfo row is the inline card's flex-wrap, not the modal's eight
+   columns. */
+.sq-perform__modgrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 8px;
+  align-items: start;
+}
+.sq-perform__mod {
+  position: relative;
+  display: grid;
+  gap: 4px;
+  padding: 6px 8px 8px 12px;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  min-width: 0;
+}
+.sq-perform__mod::before {
+  content: "";
+  position: absolute;
+  left: 0; top: 6px; bottom: 6px;
+  width: 3px;
+  border-radius: 2px;
+  background: hsl(var(--track-hue, 35) 80% 62%);
+}
+.sq-perform__cap { font-size: 10px; color: var(--fg-dim); text-transform: lowercase; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sq-perform__mod > .sq-lfo__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  padding: 0;
+}
+.sq-perform__mod > .sq-lfo__row .sq-field { width: auto; }
+.sq-perform__mod > .sq-lfo__row > .sq-lfo__target { flex: 1 1 100%; min-width: 0; }
+.sq-perform__mod .sq-aut__grid { height: 110px; }
+
+/* The pads. */
 .sq-perform__padrow { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; }
 .sq-perform__padwrap { display: grid; gap: 4px; }
 .sq-perform__pad { max-width: 260px; }
@@ -3370,12 +3480,10 @@ body.sq-perform-on #add-bus { display: none !important; }
   .sq-perform__top { grid-template-columns: minmax(0, 1fr); }
   .sq-perform__cells { grid-template-columns: repeat(8, minmax(0, 1fr)); }
   .sq-perform__cell { min-height: 44px; }
-  .sq-perform__strips { grid-template-columns: minmax(0, 1fr); }
-  .sq-perform__mute, .sq-perform__solo, .sq-perform__throw { min-height: 44px; }
-  .sq-perform__scene { min-height: 44px; }
-  /* The phone block draws every knob as a vertical slider; the moved fields
-     follow that rule where they are, so only the row's flow is set here. */
-  .sq-perform__knobs { gap: 10px 14px; }
+  .sq-perform__cards,
+  .sq-perform__stages,
+  .sq-perform__modgrid { grid-template-columns: minmax(0, 1fr); }
+  .sq-perform__mute, .sq-perform__solo, .sq-perform__chip, .sq-perform__scene { min-height: 44px; }
 }
 
 /* ============================================================ */

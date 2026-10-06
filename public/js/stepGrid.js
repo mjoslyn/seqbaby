@@ -15,7 +15,9 @@ export function stepGridCols() { return window.innerWidth <= 768 ? 8 : 16; }
  * @param {Track} t
  */
 export function renderStepGrid(t) {
-  const grid = t.el.querySelector(".sq-steps");
+  // The perform view's drawer holds the grid while it shows this track.
+  const grid = t.el.querySelector(".sq-steps") || t._perfStrip?.q?.(".sq-steps");
+  if (!grid) return;
   const total = t.length;
   const cols = Math.min(stepGridCols(), total);
   grid.style.setProperty("--count", String(cols));

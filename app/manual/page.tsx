@@ -113,7 +113,7 @@ export default function ManualPage() {
                 <tr><td>macro</td><td>Opens the XY <a href="#macro">macro pads</a>.</td></tr>
                 <tr><td>undo / redo</td><td>Steps back and forward through your edits. See <a href="#undo">undo</a>.</td></tr>
                 <tr><td>vim</td><td>Switches <a href="#vim">vim mode</a> on and off, for driving the studio from the keyboard. Desktop only.</td></tr>
-                <tr><td>perform</td><td>Swaps the track list for the <a href="#perform">perform view</a>: a strip per track, a pattern launcher, scenes and fx throws.</td></tr>
+                <tr><td>perform</td><td>Swaps the track list for the <a href="#perform">perform view</a>: the instruments, one shared fx rack, the mods, a pattern launcher and scenes.</td></tr>
                 <tr><td>metronome</td><td>A click on each downbeat, for playing along. It never ends up in an export.</td></tr>
                 <tr><td>meter</td><td>Output level, over on the right. If it sits pinned at the top, turn some tracks down.</td></tr>
               </tbody>
@@ -1320,19 +1320,35 @@ export default function ManualPage() {
           <h2>Perform view</h2>
           <p>
             <span className={styles.ui}>perform</span> in the transport swaps the
-            track list for a rack built for playing the song: a strip per track, a
-            pattern launcher, a scene bank, fx throws and the macro pads, all on one
-            screen. Press it again and the tracks come back exactly as they were.
+            track list for the song laid out as a rack: every instrument with its
+            controls, one shared fx rack, every modulation, a pattern launcher and a
+            scene bank, all on one screen. Press it again and the tracks come back
+            exactly as they were.
           </p>
           <ul>
             <li>
-              <strong>Strips.</strong> Each track gets its volume and meter, mute and
-              solo, and the knobs pinned to it. The knobs are the track&apos;s real
-              ones, moved here, so an LFO, a lane, undo and a jam all treat them as
-              they always did. To start with, a strip shows the filter cutoff and the
-              level of every effect that is on. Right-click any knob in the studio
-              and <span className={styles.ui}>pin to the perform strip</span> adds
-              it; the same menu unpins.
+              <strong>Instruments.</strong> A card per track: its volume and meter,
+              mute and solo, the engine&apos;s own controls, and its filter, envelope
+              and effects as they are on the track. These are the track&apos;s real
+              knobs, moved here, so an LFO, a lane, undo and a jam all treat them as
+              they always did. Click the instrument&apos;s name and its pattern and
+              piano roll open in a drawer under the cards; click again to close it.
+            </li>
+            <li>
+              <strong>The fx rack.</strong> One rack for the song with every effect
+              in it, in chain order, each with its knobs; an effect at zero is drawn
+              dim and lights when its wet comes up. The chips along the top are the
+              inputs: a lit instrument plays through the rack, an unlit one goes
+              straight to the master. It is an fx bus underneath, so solo and mute
+              behave as they do for one, and its filter, eq and compressor show on
+              its card when they are on. <span className={styles.ui}>make the fx
+              rack</span> creates it the first time.
+            </li>
+            <li>
+              <strong>Mods and lanes.</strong> Every LFO and every automation lane on
+              the current pattern, each as a card naming the track and the control it
+              moves, with the same row the parameter menu shows. Remove one here and
+              it is gone from the track.
             </li>
             <li>
               <strong>Patterns.</strong> The 32 slots as buttons. With{" "}
@@ -1343,22 +1359,15 @@ export default function ManualPage() {
             </li>
             <li>
               <strong>Scenes.</strong> <span className={styles.ui}>capture</span>{" "}
-              remembers every track&apos;s mute and solo, the pattern, and where the
-              pinned knobs are. Recalling a scene writes those back, on the bar
+              remembers every track&apos;s mute and solo, which instruments feed the
+              rack, and the pattern. Recalling one writes those back, on the bar
               while playing. It is an ordinary edit: undo takes it back, and a jam
               hears it. Shift and a number recalls scenes 1 to 10. A selected scene
               can be updated to how things are now, renamed, or deleted.
             </li>
             <li>
-              <strong>Throws.</strong> Hold a stage&apos;s button and its wet jumps
-              to the <span className={styles.ui}>throw</span> level; let go and it
-              falls back. Delay and reverb are offered on every track, the rest
-              follow what is on it. A throw is never saved and never sent to a jam,
-              like play and stop.
-            </li>
-            <li>
-              <strong>Havoc.</strong> The macro pads sit under the strips, playable
-              as they are in their own window; <span className={styles.ui}>edit
+              <strong>Havoc.</strong> The macro pads sit at the bottom, playable as
+              they are in their own window; <span className={styles.ui}>edit
               pads</span> opens that window for the assignments.
             </li>
           </ul>

@@ -1,5 +1,4 @@
 import { setStatus } from "./dom.js";
-import { stageHeldByHold } from "./momentary.js";
 import { holdParamAt } from "./paramHold.js";
 import { FXRack } from "./fxRack.js";
 import { fxStageOfModKey } from "./constants.js";
@@ -35,7 +34,7 @@ function stageHeldByMacro(t, stage) {
 export function ensureFxRack(t) {
   if (!state.audioCtx || t.fxRack) return;
   t.fxRack = new FXRack(state.audioCtx, t.fxConfig, {
-    isStageHeld: (stage) => stageHeldByLfo(t, stage) || stageHeldByMacro(t, stage) || stageHeldByHold(t, stage),
+    isStageHeld: (stage) => stageHeldByLfo(t, stage) || stageHeldByMacro(t, stage),
   });
   if (!t.meterAnalyser) {
     t.meterAnalyser = state.audioCtx.createAnalyser();

@@ -257,6 +257,8 @@ test("migration survives the shapes validateSet lets through", () => {
     assert.doesNotThrow(() => migrateLegacyNames(/** @type {any} */ (bad)));
   assert.doesNotThrow(() => migrateLegacyNames({ tracks: [null, 5, { params: 7 }] }));
   assert.doesNotThrow(() => migrateLegacyNames({ macroPads: [null, { x: 5 }, {}] }));
+  // A perform block from the view's first draft carried pins and scene
+  // knobs; the reader drops them, but the migration still walks them.
   const p = migrateLegacyNames({ perform: { pins: [{ track: 0, key: "dx7.3lvl" }, null],
     scenes: [{ knobs: [{ track: 0, key: "tb303.accent", unit: 1 }] }, null, { knobs: "x" }] } });
   assert.equal(p.perform.pins[0].key, "hexop.3lvl");

@@ -118,7 +118,7 @@ export function refreshMuteSoloUI(t) {
   }
   t.el.classList.toggle("is-muted", !!t.muted);
   t.el.classList.toggle("is-soloed", !!t.soloed);
-  // The perform view's strip has its own pair (perform.js), painted here so
+  // The perform view's card has its own pair (perform.js), painted here so
   // the two can never disagree about which is pressed.
   t._perfStrip?.paintMuteSolo?.();
 }
@@ -218,9 +218,9 @@ function attachDiceDensity(t, btn) {
  */
 export function syncTrackSoundUI(t) {
   if (!t?.el) return;
-  // A control pinned to the perform view lives in the track's strip for as
-  // long as the view is up (perform.js), so the lookup reaches there too.
-  const q = (s) => (t.el.querySelector(s) || t._perfStrip?.el?.querySelector(s) || null);
+  // In the perform view the track's controls live on its card (perform.js),
+  // so the lookup reaches there too.
+  const q = (s) => (t.el.querySelector(s) || t._perfStrip?.q?.(s) || null);
   const set = (sel, val) => { const el = q(sel); if (el != null && val != null) el.value = val; };
   set(".p-vol",   t.params.vol);
   set(".p-harm",  t.params.harm);
@@ -299,13 +299,13 @@ export function syncHexopPanel(t) {
   const root = t._hexopGroupEl || t.el?.querySelector(".sq-param-group--hexop");
   if (root) {
     for (const k of [...HEXOP_NUM_KEYS, ...HEXOP_SEL_KEYS]) {
-      const el = root.querySelector(`.p-${k}`) || t._perfStrip?.el?.querySelector(`.p-${k}`);
+      const el = root.querySelector(`.p-${k}`) || t._perfStrip?.q?.(`.p-${k}`);
       if (el && t.params[k] != null) el.value = t.params[k];
     }
   }
   const timbre = t._timbreGroupEl || t.el;
   for (const k of ["harm", "timb", "morph", "decay"]) {
-    const el = timbre?.querySelector(`.p-${k}`) || t._perfStrip?.el?.querySelector(`.p-${k}`);
+    const el = timbre?.querySelector(`.p-${k}`) || t._perfStrip?.q?.(`.p-${k}`);
     if (el && t.params[k] != null) el.value = t.params[k];
   }
   refreshHexopAlgorithm(t);
@@ -322,13 +322,13 @@ export function syncGuitarPanel(t) {
   const root = t._guitarGroupEl || t.el?.querySelector(".sq-param-group--guitar");
   if (root) {
     for (const k of [...GUITAR_NUM_KEYS, ...GUITAR_SEL_KEYS]) {
-      const el = root.querySelector(`.p-${k}`) || t._perfStrip?.el?.querySelector(`.p-${k}`);
+      const el = root.querySelector(`.p-${k}`) || t._perfStrip?.q?.(`.p-${k}`);
       if (el && t.params[k] != null) el.value = t.params[k];
     }
   }
   const timbre = t._timbreGroupEl || t.el;
   for (const k of ["harm", "timb", "morph", "decay"]) {
-    const el = timbre?.querySelector(`.p-${k}`) || t._perfStrip?.el?.querySelector(`.p-${k}`);
+    const el = timbre?.querySelector(`.p-${k}`) || t._perfStrip?.q?.(`.p-${k}`);
     if (el && t.params[k] != null) el.value = t.params[k];
   }
 }
@@ -342,13 +342,13 @@ export function syncBassPanel(t) {
   const root = t._bassGroupEl || t.el?.querySelector(".sq-param-group--bass");
   if (root) {
     for (const k of [...BASS_NUM_KEYS, ...BASS_SEL_KEYS]) {
-      const el = root.querySelector(`.p-${k}`) || t._perfStrip?.el?.querySelector(`.p-${k}`);
+      const el = root.querySelector(`.p-${k}`) || t._perfStrip?.q?.(`.p-${k}`);
       if (el && t.params[k] != null) el.value = t.params[k];
     }
   }
   const timbre = t._timbreGroupEl || t.el;
   for (const k of ["harm", "timb", "morph", "decay"]) {
-    const el = timbre?.querySelector(`.p-${k}`) || t._perfStrip?.el?.querySelector(`.p-${k}`);
+    const el = timbre?.querySelector(`.p-${k}`) || t._perfStrip?.q?.(`.p-${k}`);
     if (el && t.params[k] != null) el.value = t.params[k];
   }
 }
@@ -362,13 +362,13 @@ export function syncSubPanel(t) {
   const root = t._subGroupEl || t.el?.querySelector(".sq-param-group--sub");
   if (root) {
     for (const k of [...SUB_NUM_KEYS, ...SUB_SEL_KEYS]) {
-      const el = root.querySelector(`.p-${k}`) || t._perfStrip?.el?.querySelector(`.p-${k}`);
+      const el = root.querySelector(`.p-${k}`) || t._perfStrip?.q?.(`.p-${k}`);
       if (el && t.params[k] != null) el.value = t.params[k];
     }
   }
   const timbre = t._timbreGroupEl || t.el;
   for (const k of ["harm", "timb", "morph", "decay"]) {
-    const el = timbre?.querySelector(`.p-${k}`) || t._perfStrip?.el?.querySelector(`.p-${k}`);
+    const el = timbre?.querySelector(`.p-${k}`) || t._perfStrip?.q?.(`.p-${k}`);
     if (el && t.params[k] != null) el.value = t.params[k];
   }
 }
@@ -381,13 +381,13 @@ export function syncVoxPanel(t) {
   const root = t._voxGroupEl || t.el?.querySelector(".sq-param-group--vox");
   if (root) {
     for (const k of [...VOX_NUM_KEYS, ...VOX_SEL_KEYS, ...VOX_TEXT_KEYS]) {
-      const el = root.querySelector(`.p-${k}`) || t._perfStrip?.el?.querySelector(`.p-${k}`);
+      const el = root.querySelector(`.p-${k}`) || t._perfStrip?.q?.(`.p-${k}`);
       if (el && t.params[k] != null) el.value = t.params[k];
     }
   }
   const timbre = t._timbreGroupEl || t.el;
   for (const k of ["harm", "timb", "morph", "decay"]) {
-    const el = timbre?.querySelector(`.p-${k}`) || t._perfStrip?.el?.querySelector(`.p-${k}`);
+    const el = timbre?.querySelector(`.p-${k}`) || t._perfStrip?.q?.(`.p-${k}`);
     if (el && t.params[k] != null) el.value = t.params[k];
   }
 }
@@ -400,13 +400,13 @@ export function syncDronePanel(t) {
   const root = t._droneGroupEl || t.el?.querySelector(".sq-param-group--drone");
   if (root) {
     for (const k of [...DRONE_NUM_KEYS, ...DRONE_SEL_KEYS]) {
-      const el = root.querySelector(`.p-${k}`) || t._perfStrip?.el?.querySelector(`.p-${k}`);
+      const el = root.querySelector(`.p-${k}`) || t._perfStrip?.q?.(`.p-${k}`);
       if (el && t.params[k] != null) el.value = t.params[k];
     }
   }
   const timbre = t._timbreGroupEl || t.el;
   for (const k of ["harm", "timb", "morph", "decay"]) {
-    const el = timbre?.querySelector(`.p-${k}`) || t._perfStrip?.el?.querySelector(`.p-${k}`);
+    const el = timbre?.querySelector(`.p-${k}`) || t._perfStrip?.q?.(`.p-${k}`);
     if (el && t.params[k] != null) el.value = t.params[k];
   }
 }
@@ -1412,7 +1412,7 @@ export function refreshFxPanelUI(t) {
   if (!cfg.shaper)     cfg.shaper     = { wet: 0, preamp: 0.5, amount: 0.5, mode: "fold" };
   if (!cfg.shaper.mode) cfg.shaper.mode = "fold";
   if (cfg.shaper.preamp == null) cfg.shaper.preamp = 0.5;
-  const q = s => panel.querySelector(s) || t._perfStrip?.el?.querySelector(s) || null;
+  const q = s => panel.querySelector(s) || t._perfStrip?.q?.(s) || null;
   const set = (sel, v) => { const el = q(sel); if (el != null && v != null) el.value = v; };
   set(".sq-track__glide",    t.glide ?? 0);
   cfg.gain = { ...defaultFxConfig().gain, ...(cfg.gain || {}) };

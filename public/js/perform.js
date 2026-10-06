@@ -1,11 +1,10 @@
 /**
- * The perform view — a rack for playing a song rather than writing it.
- *
- * A strip per track (name, meter, vol, mute, solo, the knobs pinned to it,
- * and a throw button per fx stage), a pattern launcher, a scene bank and the
- * macro pads docked beside them. The `perform` button in the transport is a
- * toggle; the track list is hidden while it is up and comes back exactly as
- * it was when it goes down.
+ * The perform view — the song laid out as a rack for playing it rather than
+ * writing it: an instruments grid, one shared fx rack with every stage in it
+ * and the instruments as its inputs, a grid of the modulations and lanes, and
+ * a drawer that opens an instrument's pattern and roll. The `perform` button
+ * in the transport is a toggle; the track list is hidden while it is up and
+ * comes back exactly as it was when it goes down.
  *
  * Three decisions carry the design:
  *
@@ -14,69 +13,72 @@
  *     `value` accessor (knob.js), and undo, the jam, p-lock, knob recording,
  *     the modulation needle, the owner dots and the right-click menu all hang
  *     off that element. A rack that drew its own knobs and forwarded values
- *     would have to re-plumb all of that. So the rack MOVES the element — the
- *     control's `.sq-field` wrapper — into the strip, leaving a comment anchor
- *     where it was, the way `openPanelAsModal` moves a whole panel, and puts
- *     it back on the way out. The strip is stamped `data-track-id`, so
- *     `controlForKey` and `trackRoots` (paramTargets.js) keep resolving the
- *     control wherever it sits, and the few repaints that look a control up
- *     under `t.el` fall back to `t._perfStrip.el`.
+ *     would have to re-plumb all of that. So the cards MOVE the track's own
+ *     elements — the vol field, the synth row, the inline-panel wrapper, the
+ *     fx rows, the step grid, the roll panel — leaving a comment anchor where
+ *     each was, the way `openPanelAsModal` moves a whole panel, and put them
+ *     back on the way out. The card is stamped `data-track-id`, so
+ *     `controlForKey` and `trackRoots` (paramTargets.js) keep resolving a
+ *     moved control, and the repaints that look one up under `t.el`
+ *     (`syncTrackSoundUI`, `refreshFxPanelUI`, the engine panel syncs,
+ *     `renderStepGrid`) fall back to `t._perfStrip.q`.
  *
- *   - **A scene is the performance subset, written through the controls.** It
- *     holds mute and solo per track, the pattern, and the pinned knobs' values
- *     — not the whole sound, which is p-lock's job. Recalling one writes each
- *     value through the control's own `input` event (momentary.js's
- *     `writeParam` with `commit`), so it is an undo step, it reaches a jam and
- *     it lands in the p-lock snapshot without any of those learning what a
- *     scene is. While the transport runs a recall waits for the bar line
- *     (`barLineHooks`, transport.js), like a launched pattern.
+ *   - **The fx rack is an fx bus.** One shared rack with every stage in it,
+ *     fed by whichever instruments are switched into it, is exactly what a
+ *     bus track already is (signal.js, `BusVoice`): the input bar's chips are
+ *     `setTrackOutput`, under the existing fade, and solo, mute and feedback
+ *     refusal come with it. The rack is the session's first bus; `make the
+ *     fx rack` creates one when there is none.
  *
- *   - **A throw is a momentary pad with one parameter.** Holding the button
- *     pushes a stage's wet to the throw level through momentary.js and lets
- *     it spring back, and signal.js keeps a held stage wired in, so a reverb
- *     throw on a dry track is heard. Nothing is committed, so a jam does not
- *     hear it — a throw is this screen's, as play and stop are.
+ *   - **The mods grid is drawn from state, not moved.** `renderModPanel`
+ *     rebuilds the mod matrix's rows wholesale on every change, so a row
+ *     moved out of it would be orphaned by the next edit. The grid builds
+ *     its own rows with `buildLfoRow` / `buildAutomationLane` — the same
+ *     widgets the right-click menu builds over the same track state — and
+ *     rebuilds when the set of them changes.
  *
- * Pins and scenes are the song's (`state.perform`, serialized beside the
- * macro pads by track index — performStore.js); which strip shows what is
- * part of how a set is played.
+ * A scene is the performance subset: mute and solo per track, which
+ * instruments feed the rack, and the pattern. Recalling one goes through
+ * `setMute` / `setSolo` / `setTrackOutput`, the setters the track head uses,
+ * so it is an undo step, reaches a jam and lands in the p-lock snapshot
+ * without any of those knowing what a scene is. While the transport runs a
+ * recall waits for the bar line (`barLineHooks`, transport.js), as a
+ * launched pattern does. Scenes are the song's (`state.perform`, serialized
+ * beside the macro pads by track index — performStore.js).
  */
 
-import { canAutomate } from "./automation.js";
-import { FX_STAGE_LABELS, PATTERN_COUNT, autoLabel, fxChainOrder, fxStageLevel, fxStageOf } from "./constants.js";
+import { PATTERN_COUNT, autoLabel, fxChainOrder, fxStageLevel, fxStageOf, lfoLabel } from "./constants.js";
 import { setStatus } from "./dom.js";
-import { flushHistory } from "./history.js";
+import { flushHistory, markExternalEdit } from "./history.js";
 import { inJam, jamTogglePlay } from "./jam.js";
 import { isDesktopKeyboard, isTypingTarget } from "./keyboard.js";
 import { upgradeKnobs } from "./knob.js";
 import { attachPadSurface, macroPads, openMacroPads, releasePad } from "./macro.js";
-import { holdParam, readUnit, releaseAllHolds, releaseParam, writeParam } from "./momentary.js";
-import { controlForKey, fxShown, hasAutomation, hasMacroOn, modOwns, refreshParamIndicators } from "./paramTargets.js";
+import { activeMeter, stepsPerBarForMeter } from "./meter.js";
+import { refreshParamIndicators } from "./paramTargets.js";
 import { updatePlaitsControlsVisibility } from "./params.js";
 import { emptyPerform, readPerform, serializePerform } from "./performStore.js";
-import { setMute, setSolo } from "./render.js";
-import { isPatternNonEmpty, queuePatternSwitch, requestPatternSwitch, state, switchPattern } from "./state.js";
+import { renderRollPanel } from "./pianoRoll.js";
+import { buildAutomationLane, buildLfoRow, setMute, setSolo } from "./render.js";
+import { setTrackOutput } from "./signal.js";
+import { isPatternNonEmpty, queuePatternSwitch, requestPatternSwitch, state } from "./state.js";
+import { openFxAsModal } from "./stepEditor.js";
+import { createTrack } from "./track.js";
 import { barLineHooks, togglePlay } from "./transport.js";
 
 /** @typedef {import("./types.js").Track} Track */
 
-const esc = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 /** The track colours the step grids use (style.css, `#tracks > .sq-track:nth-child(8n+k)`). */
 const TRACK_HUES = [35, 232, 297, 120, 253, 318, 155, 275];
-/** The two classic throws, offered on every strip whether or not the stage is on the track. */
-const ALWAYS_THROWS = ["delay", "reverb"];
-/** A control's wrapper: the track head's `.sq-field` (a div with a label and
- *  the input), or the panels' `<label class="sq-fx__ctl">` idiom (a label
- *  wrapping a span and the input). Either moves as one. */
-const FIELD_SEL = "label, .sq-field";
 
 let rack = null;                 // the #perform element while the view is up
-/** @type {{field: Element, anchor: Comment}[]} */
+/** @type {{el: Element, anchor: Comment}[]} */
 let moved = [];
 let drawnSig = "";
-let throwLevel = 0.8;
+let drawnPattern = -1;
 let quantize = true;
 let selectedScene = null;
+let selectedTrack = null;        // the instrument whose pattern the drawer shows
 let _nextSceneId = 1;
 let raf = 0;
 let lastPainted = "";
@@ -85,7 +87,6 @@ let lastPainted = "";
 
 export function perform() {
   if (!state.perform || typeof state.perform !== "object") state.perform = emptyPerform();
-  if (!Array.isArray(state.perform.pins)) state.perform.pins = [];
   if (!Array.isArray(state.perform.scenes)) state.perform.scenes = [];
   return state.perform;
 }
@@ -93,56 +94,10 @@ export function perform() {
 export function isPerformOpen() { return !!rack; }
 
 const trackById = (id) => state.tracks.find(t => t.id === id) || null;
-
-/** A key a strip can hold: automatable on this engine and behind a range
- *  input with a field wrapper of its own. A copy's control (`fx.delay#2`)
- *  is resolved through its row, which a moved field has left, so copies
- *  stay in the rack panel. */
-function pinnable(t, key) {
-  if (!canAutomate(t, key) || key.includes("#")) return false;
-  const el = controlForKey(t, key);
-  return !!el && el.type === "range" && !!el.closest(FIELD_SEL);
-}
-
-/** What a strip shows before anyone has pinned anything to it: the cutoff
- *  and every engaged stage's level. */
-function defaultPins(t) {
-  const out = [];
-  if (pinnable(t, "cutoff")) out.push("cutoff");
-  for (const id of fxChainOrder(t.fxConfig)) {
-    const st = fxStageOf(id);
-    if (!st || st === "gain" || st === "pan" || id.includes("#")) continue;
-    if (fxStageLevel(t.fxConfig, id) > 0 && pinnable(t, `fx.${id}`)) out.push(`fx.${id}`);
-  }
-  return out;
-}
-
-/** The keys pinned to a track's strip, explicit ones winning over the defaults. */
-export function pinsFor(t) {
-  const explicit = perform().pins.filter(p => p.trackId === t.id).map(p => p.key);
-  if (explicit.length) return explicit.filter(k => pinnable(t, k));
-  return defaultPins(t);
-}
-
-export function isPinned(t, key) { return pinsFor(t).includes(key); }
-
-/** Whether the right-click menu may offer to pin this control. */
-export function canPin(t, key) { return !!t && !!key && pinnable(t, key); }
-
-/** Pin or unpin. The first explicit change on a track starts from what the
- *  strip was showing, so unpinning a default leaves the rest of them. */
-export function setPinned(t, key, on) {
-  if (!canPin(t, key)) return false;
-  const perf = perform();
-  const cur = pinsFor(t);
-  const next = on ? (cur.includes(key) ? cur : [...cur, key]) : cur.filter(k => k !== key);
-  perf.pins = perf.pins.filter(p => p.trackId !== t.id).concat(next.map(k => ({ trackId: t.id, key: k })));
-  // An unpin that empties the list would fall back to the defaults, which
-  // include what was just unpinned: keep an explicit empty list as a marker.
-  if (!next.length) perf.pins.push({ trackId: t.id, key: "" });
-  scheduleRedraw();
-  return true;
-}
+const isBus = (t) => t.engineKey === "bus";
+const instruments = () => state.tracks.filter(t => !isBus(t));
+/** The shared rack: the session's first fx bus. */
+const fxRackTrack = () => state.tracks.find(isBus) || null;
 
 // ---- scenes --------------------------------------------------------------
 
@@ -152,15 +107,9 @@ function captureScene(name) {
     id: _nextSceneId++,
     name: name || `scene ${perf.scenes.length + 1}`,
     pattern: state.activePattern,
-    tracks: state.tracks.map(t => ({ trackId: t.id, muted: !!t.muted, soloed: !!t.soloed })),
-    knobs: [],
+    tracks: state.tracks.map(t => ({ trackId: t.id, muted: !!t.muted, soloed: !!t.soloed,
+      out: t.out && t.out !== "master" ? (trackById(Number(t.out)) || trackById(t.out))?.id ?? null : null })),
   };
-  for (const t of state.tracks) {
-    for (const key of pinsFor(t)) {
-      const unit = readUnit(t, key);
-      if (unit != null) scene.knobs.push({ trackId: t.id, key, unit });
-    }
-  }
   perf.scenes.push(scene);
   return scene;
 }
@@ -169,10 +118,10 @@ function captureScene(name) {
 function updateScene(scene) {
   const fresh = captureScene(scene.name);
   perform().scenes.pop();
-  Object.assign(scene, { pattern: fresh.pattern, tracks: fresh.tracks, knobs: fresh.knobs });
+  Object.assign(scene, { pattern: fresh.pattern, tracks: fresh.tracks });
 }
 
-/** Write a scene's mutes, solos and knobs. The pattern is the caller's. */
+/** Write a scene's mutes, solos and sends. The pattern is the caller's. */
 function applyScene(scene) {
   for (const x of scene.tracks) {
     const t = trackById(x.trackId);
@@ -181,12 +130,10 @@ function applyScene(scene) {
     // track soloed in the scene is unmuted first, one muted is unsoloed first.
     if (x.soloed) { setMute(t, false); setSolo(t, true); }
     else { setSolo(t, false); setMute(t, !!x.muted); }
-  }
-  for (const k of scene.knobs) {
-    const t = trackById(k.trackId);
-    if (!t || !canAutomate(t, k.key)) continue;
-    // Committed through the control, so this is an edit like any other.
-    writeParam(t, k.key, k.unit, 0.02, true);
+    if (!isBus(t)) {
+      const want = x.out != null && trackById(x.out) ? String(x.out) : "master";
+      if (String(t.out || "master") !== want) setTrackOutput(t, want);
+    }
   }
 }
 
@@ -205,9 +152,14 @@ export function recallScene(scene) {
     state.queuedScene = null;
     applyScene(scene);
     if (hasPattern) requestPatternSwitch(scene.pattern);
+    // Its own undo step. The click's pointerup scheduled a check before the
+    // scene was written (the flush above banked whatever was settling), so
+    // the change is announced here, after it, the way vim's commands are.
+    markExternalEdit(`scene ${scene.name}`);
     setStatus(`scene "${scene.name}"`);
   }
   paintScenes();
+  paintInputs();
 }
 
 /** The bar line: land the queued scene. The pattern it queued is consumed by
@@ -216,10 +168,10 @@ function onBarLine() {
   if (state.queuedScene == null) return;
   const scene = perform().scenes.find(s => s.id === state.queuedScene);
   state.queuedScene = null;
-  if (scene) applyScene(scene);
+  if (scene) { applyScene(scene); markExternalEdit(`scene ${scene.name}`); paintInputs(); }
 }
 
-// ---- the view ------------------------------------------------------------
+// ---- moving the track's own elements -------------------------------------
 
 function el(tag, cls, text) {
   const e = document.createElement(tag);
@@ -228,140 +180,290 @@ function el(tag, cls, text) {
   return e;
 }
 
-function moveField(control, slot) {
-  const field = control.closest(FIELD_SEL);
-  if (!field || field.closest("#perform")) return null;
+function moveEl(node, slot) {
+  if (!node || node.closest("#perform")) return null;
   const anchor = document.createComment("perform-anchor");
-  field.replaceWith(anchor);
-  slot.appendChild(field);
-  moved.push({ field, anchor });
-  return field;
+  node.replaceWith(anchor);
+  slot.appendChild(node);
+  moved.push({ el: node, anchor });
+  return node;
 }
 
-function restoreFields() {
-  for (const { field, anchor } of moved) {
+function restoreAll() {
+  // Last moved first, so an element moved out of another moved element lands
+  // inside it after that one is home.
+  for (let i = moved.length - 1; i >= 0; i--) {
+    const { el: node, anchor } = moved[i];
     // The anchor's track may have been torn down since (a session arrived);
-    // then the field goes with it.
-    if (anchor.parentNode) anchor.replaceWith(field); else field.remove();
+    // then the element goes with it.
+    if (anchor.parentNode) anchor.replaceWith(node); else node.remove();
   }
   moved = [];
-  for (const t of state.tracks) t._perfStrip = null;
-}
-
-/** A throw's key, or why it cannot be thrown right now. */
-function throwBlocked(t, key) {
-  if (modOwns(t, key)) return "has an LFO on it";
-  if (hasAutomation(t, key)) return "has an automation lane";
-  if (hasMacroOn(t, key)) return "is on a havoc pad";
-  return null;
-}
-
-function throwsFor(t) {
-  const out = [];
-  const seen = new Set();
-  const add = (id) => {
-    const st = fxStageOf(id);
-    if (!st || st === "gain" || st === "pan" || seen.has(id)) return;
-    const key = `fx.${id}`;
-    if (!canAutomate(t, key)) return;
-    seen.add(id);
-    const n = id.split("#")[1];
-    out.push({ id, key, label: FX_STAGE_LABELS[st] + (n ? ` ${n}` : "") });
-  };
-  for (const id of fxChainOrder(t.fxConfig)) {
-    if (fxStageLevel(t.fxConfig, id) > 0 || fxShown(t).has(id)) add(id);
+  for (const t of state.tracks) {
+    if (t._rollPanelEl && !t._rollModal) t._rollPanelEl.hidden = true;
+    t._perfStrip = null;
   }
-  for (const id of ALWAYS_THROWS) add(id);
-  return out;
 }
 
-function wireThrow(btn, t, key) {
-  let held = null;
-  const end = (e) => {
-    if (held == null || (e && e.pointerId !== held)) return;
-    held = null;
-    try { btn.releasePointerCapture(e.pointerId); } catch {}
-    btn.classList.remove("is-held");
-    releaseParam(t, key);
-  };
-  btn.addEventListener("pointerdown", (e) => {
-    if (e.pointerType === "mouse" && e.button !== 0) return;
-    if (held != null) return;
-    const why = throwBlocked(t, key);
-    if (why) { setStatus(`${autoLabel(key)} on "${t.name}" ${why}, so it can't be thrown`, true); return; }
-    e.preventDefault();
-    held = e.pointerId;
-    try { btn.setPointerCapture(e.pointerId); } catch {}
-    btn.classList.add("is-held");
-    // Never below where the knob already is: a throw adds, it does not duck.
-    holdParam(t, key, Math.max(throwLevel, readUnit(t, key) ?? 0));
-  });
-  btn.addEventListener("pointerup", end);
-  btn.addEventListener("pointercancel", end);
-  btn.addEventListener("lostpointercapture", end);
+function stripHandle(t, card, extra = []) {
+  const roots = () => [card, ...extra.filter(e => e && e.isConnected)];
+  const q = (sel) => { for (const r of roots()) { const hit = r.querySelector(sel); if (hit) return hit; } return null; };
+  t._perfStrip = { el: card, roots, q, paintMuteSolo: null };
+  return t._perfStrip;
 }
 
-function buildStrip(t, i) {
-  const strip = el("div", "sq-perform__strip");
-  strip.dataset.trackId = String(t.id);
-  strip.style.setProperty("--track-hue", String(TRACK_HUES[i % TRACK_HUES.length]));
-  if (t.voice?.type === "bus" || t.engineKey === "bus") strip.classList.add("is-bus");
-
-  const head = el("div", "sq-perform__head");
-  head.appendChild(el("span", "sq-perform__name", t.name || `track ${i + 1}`));
+function muteSoloButtons(t, card) {
   const mute = el("button", "sq-perform__mute", "mute");
   const solo = el("button", "sq-perform__solo", "solo");
   mute.type = solo.type = "button";
   mute.addEventListener("click", () => setMute(t, !t.muted));
   solo.addEventListener("click", () => setSolo(t, !t.soloed));
-  head.append(mute, solo);
-  strip.appendChild(head);
-
-  const paintMuteSolo = () => {
+  const paint = () => {
     mute.setAttribute("aria-pressed", String(!!t.muted));
     solo.setAttribute("aria-pressed", String(!!t.soloed));
     mute.disabled = !!t.soloed;
     solo.disabled = !!t.muted;
-    strip.classList.toggle("is-muted", !!t.muted);
-    strip.classList.toggle("is-soloed", !!t.soloed);
+    card.classList.toggle("is-muted", !!t.muted);
+    card.classList.toggle("is-soloed", !!t.soloed);
   };
-  t._perfStrip = { el: strip, paintMuteSolo };
-  paintMuteSolo();
+  paint();
+  return { mute, solo, paint };
+}
 
-  // vol + meter: the track head's own field, meter inside it.
+/** The track's inline-panel wrapper (filter, env, eq, comp, its own fx rows),
+ *  moved into a holder that carries `.sq-track` so the inline card rules in
+ *  style.css apply to it as they do on the track. */
+function liveHolder(t) {
+  const holder = el("div", "sq-track sq-perform__live");
+  const live = t.el?.querySelector(":scope > .sq-track__live");
+  if (live) moveEl(live, holder);
+  return holder;
+}
+
+// ---- instruments ---------------------------------------------------------
+
+function buildInstrumentCard(t, i) {
+  const card = el("div", "sq-perform__card");
+  card.dataset.trackId = String(t.id);
+  card.style.setProperty("--track-hue", String(TRACK_HUES[i % TRACK_HUES.length]));
+  if (selectedTrack === t.id) card.classList.add("is-selected");
+
+  const head = el("div", "sq-perform__head");
+  const name = el("button", "sq-perform__name", t.name || `track ${i + 1}`);
+  name.type = "button";
+  name.title = "open this instrument's pattern and roll";
+  name.addEventListener("click", () => selectInstrument(selectedTrack === t.id ? null : t.id));
+  head.appendChild(name);
+  const { mute, solo, paint } = muteSoloButtons(t, card);
+  head.append(mute, solo);
+  card.appendChild(head);
+
+  const handle = stripHandle(t, card);
+  handle.paintMuteSolo = paint;
+
   const volSlot = el("div", "sq-perform__vol");
-  const vol = t.el?.querySelector(".p-vol");
+  const vol = t.el?.querySelector(".sq-vol__field");
   if (vol) {
-    moveField(vol, volSlot);
+    moveEl(vol, volSlot);
     const meter = volSlot.querySelector(".sq-track__meter");
     if (meter) t._meterEl = meter;
   }
-  strip.appendChild(volSlot);
+  card.appendChild(volSlot);
 
-  const knobs = el("div", "sq-perform__knobs");
-  for (const key of pinsFor(t)) {
-    const ctl = controlForKey(t, key);
-    if (!ctl) continue;
-    const pin = el("div", "sq-perform__pin");
-    pin.dataset.key = key;
-    pin.title = `${autoLabel(key)}. Right-click (long-press) for its lfo, lane, pad, and to unpin it`;
-    pin.appendChild(el("span", "sq-perform__cap", autoLabel(key)));
-    if (moveField(ctl, pin)) knobs.appendChild(pin);
-  }
-  if (!knobs.children.length) knobs.appendChild(el("div", "sq-perform__nopins", "right-click a knob in the studio to pin it here"));
-  strip.appendChild(knobs);
-
-  const throws = el("div", "sq-perform__throws");
-  for (const th of throwsFor(t)) {
-    const b = el("button", "sq-perform__throw", th.label);
-    b.type = "button";
-    b.title = `hold: ${th.label} to ${Math.round(throwLevel * 100)}%, back when you let go`;
-    wireThrow(b, t, th.key);
-    throws.appendChild(b);
-  }
-  strip.appendChild(throws);
-  return strip;
+  const synth = el("div", "sq-perform__synth");
+  moveEl(t.el?.querySelector(".sq-track__synth-row"), synth);
+  card.appendChild(synth);
+  card.appendChild(liveHolder(t));
+  return card;
 }
+
+function buildInstruments() {
+  const box = el("div", "sq-perform__section sq-perform__instruments");
+  const head = el("div", "sq-perform__sechead");
+  head.appendChild(el("span", "sq-perform__sectitle", "instruments"));
+  box.appendChild(head);
+  const grid = el("div", "sq-perform__cards");
+  instruments().forEach((t, i) => grid.appendChild(buildInstrumentCard(t, state.tracks.indexOf(t))));
+  if (!grid.children.length) grid.appendChild(el("div", "sq-perform__empty", "no instruments in the song"));
+  box.appendChild(grid);
+  return box;
+}
+
+// ---- the drawer: an instrument's pattern and roll ------------------------
+
+export function selectInstrument(id) {
+  selectedTrack = id;
+  scheduleRedraw();
+}
+
+function buildDrawer() {
+  const t = selectedTrack != null ? trackById(selectedTrack) : null;
+  if (!t || !t.el) { selectedTrack = null; return null; }
+  const box = el("div", "sq-perform__drawer");
+  box.dataset.trackId = String(t.id);
+  box.style.setProperty("--track-hue", String(TRACK_HUES[state.tracks.indexOf(t) % TRACK_HUES.length]));
+  const head = el("div", "sq-perform__sechead");
+  head.appendChild(el("span", "sq-perform__sectitle", `${t.name}: pattern ${state.activePattern + 1}`));
+  const close = el("button", "sq-btn--ghost", "close");
+  close.type = "button";
+  close.addEventListener("click", () => selectInstrument(null));
+  head.appendChild(close);
+  box.appendChild(head);
+  const steps = el("div", "sq-perform__steps");
+  moveEl(t.el.querySelector(":scope > .sq-steps"), steps);
+  box.appendChild(steps);
+  if (t._rollPanelEl && !t._rollModal) {
+    const roll = el("div", "sq-perform__roll");
+    moveEl(t._rollPanelEl, roll);
+    t._rollPanelEl.hidden = false;
+    renderRollPanel(t, t._rollPanelEl);
+    box.appendChild(roll);
+  }
+  // The card's lookups reach the drawer too (renderStepGrid finds its grid).
+  if (t._perfStrip) {
+    const prev = t._perfStrip.roots;
+    t._perfStrip.roots = () => [...prev(), box];
+  }
+  return box;
+}
+
+// ---- the fx rack ---------------------------------------------------------
+
+function makeFxRack() {
+  const bus = createTrack({ name: "fx", engineKey: "bus", length: stepsPerBarForMeter(activeMeter()) });
+  setStatus("the fx rack is an fx bus: switch instruments into it with the chips");
+  return bus;
+}
+
+function paintInputs() {
+  if (!rack) return;
+  const bus = fxRackTrack();
+  for (const chip of rack.querySelectorAll(".sq-perform__chip")) {
+    const t = trackById(Number(chip.dataset.trackId));
+    chip.setAttribute("aria-pressed", String(!!t && !!bus && String(t.out) === String(bus.id)));
+  }
+}
+
+function paintStages() {
+  if (!rack) return;
+  const bus = fxRackTrack();
+  if (!bus) return;
+  for (const row of rack.querySelectorAll(".sq-perform__stages .sq-fx__row[data-fx]")) {
+    const id = row.dataset.fxId || row.dataset.fx;
+    if (!fxStageOf(id)) continue;          // glide and amp are not stages
+    row.classList.toggle("is-dim", !(fxStageLevel(bus.fxConfig, id) > 0));
+  }
+}
+
+function buildFxRack() {
+  const box = el("div", "sq-perform__section sq-perform__fx");
+  const head = el("div", "sq-perform__sechead");
+  head.appendChild(el("span", "sq-perform__sectitle", "fx rack"));
+  box.appendChild(head);
+  const bus = fxRackTrack();
+  if (!bus) {
+    const make = el("button", "sq-btn--ghost sq-perform__make", "make the fx rack");
+    make.type = "button";
+    make.title = "an fx bus every stage lives on; the instruments are its inputs";
+    make.addEventListener("click", () => { makeFxRack(); scheduleRedraw(); });
+    head.appendChild(make);
+    box.appendChild(el("div", "sq-perform__empty", "no rack yet. One rack for the song, every effect in it, and the instruments switched in and out of it"));
+    return box;
+  }
+  const card = el("div", "sq-perform__card sq-perform__buscard");
+  card.dataset.trackId = String(bus.id);
+  const handle = stripHandle(bus, card);
+  const { mute, paint } = muteSoloButtons(bus, card);
+  handle.paintMuteSolo = paint;
+  const add = el("button", "sq-btn--ghost", "+ stage");
+  add.type = "button";
+  add.title = "another copy of a stage, at the end of the chain";
+  add.addEventListener("click", () => openFxAsModal(bus));
+  head.append(add, mute);
+
+  // The inputs: every instrument, lit while it feeds the rack.
+  const inputs = el("div", "sq-perform__inputs");
+  inputs.appendChild(el("span", "sq-perform__inlabel", "in"));
+  for (const t of instruments()) {
+    const chip = el("button", "sq-perform__chip", t.name);
+    chip.type = "button";
+    chip.dataset.trackId = String(t.id);
+    chip.style.setProperty("--track-hue", String(TRACK_HUES[state.tracks.indexOf(t) % TRACK_HUES.length]));
+    chip.title = `${t.name}: into the rack, or straight to the master`;
+    chip.addEventListener("click", () => {
+      const on = String(t.out) === String(bus.id);
+      setTrackOutput(t, on ? "master" : bus.id);
+      paintInputs();
+    });
+    inputs.appendChild(chip);
+  }
+  card.appendChild(inputs);
+
+  const volSlot = el("div", "sq-perform__vol");
+  const vol = bus.el?.querySelector(".sq-vol__field");
+  if (vol) {
+    moveEl(vol, volSlot);
+    const meter = volSlot.querySelector(".sq-track__meter");
+    if (meter) bus._meterEl = meter;
+  }
+  card.appendChild(volSlot);
+  // The bus's filter, eq and compressor, as inline cards when they are on.
+  card.appendChild(liveHolder(bus));
+  box.appendChild(card);
+
+  // Every stage: the bus's whole fx panel, moved (its rows are in chain
+  // order already, and the stage handlers read their values back through
+  // the panel, so a row cannot leave it). style.css lays the rows out as a
+  // grid here and shows the ones the inline view would hide; glide and amp
+  // are not stages and stay hidden.
+  const stages = el("div", "sq-perform__stages");
+  stages.dataset.trackId = String(bus.id);
+  moveEl(bus._fxPanelEl, stages);
+  stages.addEventListener("input", paintStages);
+  stages.addEventListener("change", paintStages);
+  box.appendChild(stages);
+  return box;
+}
+
+// ---- the mods grid -------------------------------------------------------
+
+function modCards(t, onChange) {
+  const out = [];
+  const hue = String(TRACK_HUES[state.tracks.indexOf(t) % TRACK_HUES.length]);
+  for (const key of Object.keys(t.lfoConfig || {})) {
+    if (!t.lfoConfig[key]?.enabled) continue;
+    const card = el("div", "sq-perform__mod sq-perform__mod--lfo");
+    card.dataset.trackId = String(t.id);
+    card.style.setProperty("--track-hue", hue);
+    card.appendChild(el("div", "sq-perform__cap", `${t.name} · ${lfoLabel(key)}`));
+    try { card.appendChild(buildLfoRow(t, key, onChange)); } catch { continue; }
+    out.push(card);
+  }
+  for (const key of Object.keys(t.automation || {})) {
+    if (!t.automation[key]?.enabled) continue;
+    const card = el("div", "sq-perform__mod sq-perform__mod--aut");
+    card.dataset.trackId = String(t.id);
+    card.style.setProperty("--track-hue", hue);
+    card.appendChild(el("div", "sq-perform__cap", `${t.name} · ${autoLabel(key)} · lane`));
+    try { card.appendChild(buildAutomationLane(t, key, onChange)); } catch { continue; }
+    out.push(card);
+  }
+  return out;
+}
+
+function buildMods() {
+  const box = el("div", "sq-perform__section sq-perform__mods");
+  const head = el("div", "sq-perform__sechead");
+  head.appendChild(el("span", "sq-perform__sectitle", "mods and lanes"));
+  box.appendChild(head);
+  const grid = el("div", "sq-perform__modgrid");
+  for (const t of state.tracks) for (const c of modCards(t, scheduleRedraw)) grid.appendChild(c);
+  if (!grid.children.length) grid.appendChild(el("div", "sq-perform__empty", "nothing modulated yet. Right-click a knob to give it an lfo or a lane"));
+  box.appendChild(grid);
+  return box;
+}
+
+// ---- launcher, scenes, pads ----------------------------------------------
 
 function buildLauncher() {
   const box = el("div", "sq-perform__launcher");
@@ -432,7 +534,7 @@ function buildScenes() {
   head.appendChild(el("span", "sq-perform__sectitle", "scenes"));
   const cap = el("button", "sq-perform__capture sq-btn--ghost", "+ capture");
   cap.type = "button";
-  cap.title = "a scene: every track's mute and solo, the pattern, and the pinned knobs as they are now (shift + number recalls one)";
+  cap.title = "a scene: every track's mute and solo, which instruments feed the rack, and the pattern, as they are now (shift + number recalls one)";
   cap.addEventListener("click", () => { selectedScene = captureScene().id; draw(); });
   head.appendChild(cap);
   box.appendChild(head);
@@ -447,7 +549,7 @@ function buildScenes() {
     b.addEventListener("click", () => recallScene(s));
     list.appendChild(b);
   });
-  if (!scenes.length) list.appendChild(el("div", "sq-perform__nopins", "capture one to come back to this moment later"));
+  if (!scenes.length) list.appendChild(el("div", "sq-perform__empty", "capture one to come back to this moment later"));
   box.appendChild(list);
 
   const tools = el("div", "sq-perform__scenetools");
@@ -477,7 +579,7 @@ function buildScenes() {
 }
 
 function buildPads() {
-  const box = el("div", "sq-perform__pads");
+  const box = el("div", "sq-perform__section sq-perform__pads");
   const head = el("div", "sq-perform__sechead");
   head.appendChild(el("span", "sq-perform__sectitle", "havoc"));
   const edit = el("button", "sq-btn--ghost", "edit pads");
@@ -506,54 +608,56 @@ function buildPads() {
     wrap.append(surface, foot);
     row.appendChild(wrap);
   }
-  if (!macroPads().length) row.appendChild(el("div", "sq-perform__nopins", "no pads yet: edit pads makes one"));
+  if (!macroPads().length) row.appendChild(el("div", "sq-perform__empty", "no pads yet: edit pads makes one"));
   box.appendChild(row);
   return box;
 }
 
-function buildTop() {
-  const top = el("div", "sq-perform__top");
-  top.appendChild(buildLauncher());
-  top.appendChild(buildScenes());
-  const lvl = el("div", "sq-perform__throwlevel");
-  lvl.innerHTML = `<div class="sq-field"><label>throw</label><input class="sq-perform__throwlevel-in" type="range" min="0" max="1" step="0.01" value="${throwLevel}" title="how far a throw button pushes a stage's wet" /></div>`;
-  lvl.querySelector("input").addEventListener("input", (e) => { throwLevel = Number(e.target.value); });
-  top.appendChild(lvl);
-  return top;
-}
+// ---- drawing -------------------------------------------------------------
 
 /** What the drawn rack depends on; a change means a rebuild. */
 function signature() {
-  const perf = perform();
+  const bus = fxRackTrack();
   return JSON.stringify([
-    state.tracks.map(t => [t.id, t.engineKey, t.name, t._perfStrip?.el ? 1 : 0]),
-    perf.pins, perf.scenes.map(s => [s.id, s.name]),
+    state.tracks.map(t => [t.id, t.engineKey, t.name, t._perfStrip ? 1 : 0, t.el ? 1 : 0]),
+    bus ? fxChainOrder(bus.fxConfig) : null,
+    state.tracks.map(t => [
+      Object.keys(t.lfoConfig || {}).filter(k => t.lfoConfig[k]?.enabled),
+      Object.keys(t.automation || {}).filter(k => t.automation[k]?.enabled),
+    ]),
+    perform().scenes.map(s => [s.id, s.name]),
     macroPads().map(p => [p.id, p.name]),
-    state.tracks.map(t => throwsFor(t).map(x => x.id)),
+    selectedTrack,
   ]);
 }
 
 function draw() {
   if (!rack) return;
-  // Everything moved goes home first, and the labels the engine switch may
-  // have rewritten while a field was away are rewritten again now that it
-  // is back, before the strips take it out once more.
-  releaseAllHolds();
+  // Everything moved goes home first, and the labels an engine switch may
+  // have rewritten while a row was away are rewritten again now that it is
+  // back, before the cards take it out once more.
   for (const pad of macroPads()) releasePad(pad);
-  restoreFields();
+  restoreAll();
   for (const t of state.tracks) { try { updatePlaitsControlsVisibility(t); } catch {} }
   rack.replaceChildren();
-  rack.appendChild(buildTop());
-  const strips = el("div", "sq-perform__strips");
-  state.tracks.forEach((t, i) => strips.appendChild(buildStrip(t, i)));
-  rack.appendChild(strips);
+  const top = el("div", "sq-perform__top");
+  top.append(buildLauncher(), buildScenes());
+  rack.appendChild(top);
+  rack.appendChild(buildInstruments());
+  const drawer = buildDrawer();
+  if (drawer) rack.appendChild(drawer);
+  rack.appendChild(buildFxRack());
+  rack.appendChild(buildMods());
   rack.appendChild(buildPads());
   upgradeKnobs(rack);
   for (const t of state.tracks) refreshParamIndicators(t);
   drawnSig = signature();
+  drawnPattern = state.activePattern;
   lastPainted = "";
   paintFilled();
   paintScenes();
+  paintInputs();
+  paintStages();
 }
 
 let redrawTimer = null;
@@ -563,12 +667,13 @@ function scheduleRedraw() {
 }
 
 /** After a settled edit: rebuild only when the rack's shape changed (a
- *  track added, renamed, re-engined or rebuilt under a merge; a pin, a
- *  scene, a pad), never for a knob turn. */
+ *  track added, renamed, re-engined or rebuilt under a merge; a stage
+ *  added; an lfo or lane added or removed; a scene; a pad), never for a
+ *  knob turn. */
 function onSongEdited() {
   if (!rack) return;
   if (signature() !== drawnSig) scheduleRedraw();
-  else { paintFilled(); paintScenes(); }
+  else { paintFilled(); paintScenes(); paintInputs(); paintStages(); }
 }
 
 // ---- keys ----------------------------------------------------------------
@@ -600,6 +705,9 @@ function onKeyDown(e) {
 function tick() {
   if (!rack) return;
   paintLauncher();
+  // The lanes belong to the pattern, so a switch (chain mode, a launch)
+  // redraws the mods grid and the drawer's title.
+  if (state.activePattern !== drawnPattern) scheduleRedraw();
   raf = requestAnimationFrame(tick);
 }
 
@@ -620,7 +728,7 @@ export function setPerform(on) {
     if (isDesktopKeyboard()) window.addEventListener("keydown", onKeyDown, true);
     barLineHooks.add(onBarLine);
     raf = requestAnimationFrame(tick);
-    setStatus("perform: strips, patterns, scenes, throws. Number keys launch patterns, shift + number recalls a scene");
+    setStatus("perform: instruments, the fx rack and its inputs, mods, scenes. Number keys launch patterns, shift + number recalls a scene");
   } else {
     cancelAnimationFrame(raf);
     window.removeEventListener("seqbaby:songedited", onSongEdited);
@@ -629,9 +737,8 @@ export function setPerform(on) {
     window.removeEventListener("keydown", onKeyDown, true);
     barLineHooks.delete(onBarLine);
     state.queuedScene = null;
-    releaseAllHolds();
     for (const pad of macroPads()) releasePad(pad);
-    restoreFields();
+    restoreAll();
     rack.remove();
     rack = null;
     document.body.classList.remove("sq-perform-on");

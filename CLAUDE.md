@@ -180,16 +180,15 @@ env / fx / eq / comp / mod / automation per track.
   actually pushed a parameter, drawn on the knob while the slider stays the
   base. See the modulation section below.
 - `macro.js` — XY macro pads, cross-track. See the Macro pads section below.
-- `momentary.js` — a parameter pushed somewhere for as long as something holds
-  it, and let go: `holdParam` / `releaseParam` (keyed by track and key, so
-  two holders share one base), plus `readUnit` / `writeParam`, the
-  0..1-through-the-automation-path write the pads were built on. The pads'
-  momentary mode and the perform view's fx throws both run on it; signal.js
-  keeps a held stage wired in (`stageHeldByHold`).
-- `perform.js` / `performStore.js` — the perform view: a strip per track with
-  its pinned knobs and fx throws, a pattern launcher, scenes and the pads
-  docked, over the track list. The store is the pure half (pins and scenes
-  by track index, tested). See the perform view section below.
+- `momentary.js` — `readUnit` / `writeParam`: a parameter read and written as
+  the 0..1 an automation lane speaks, through the automation path, with the
+  knob following and nothing committed unless asked. Lifted out of macro.js
+  so anything playing a control momentarily shares one definition of it.
+- `perform.js` / `performStore.js` — the perform view: an instruments grid,
+  the shared fx rack with the instruments as its inputs, a grid of the mods
+  and lanes, a drawer for an instrument's pattern and roll, a launcher and
+  scenes, over the track list. The store is the pure half (scenes by track
+  index, tested). See the perform view section below.
 - `session.js` — serialize/apply sets + track patches, legacy migration, and
   `newSet()` / `onNewSet()`: blanking the session back to `STARTER_TRACKS`
   (the same list main.js builds at boot) by running a blank blob through
@@ -2224,89 +2223,110 @@ pad "sweep"   X -> bass · filter cutoff      Y -> lead · reverb wet
   the pad uses to find the slider behind a parameter, both to read the base it
   returns to and to move the knob. All 191 automation keys resolve.
 
-## The perform view (`perform.js` + `performStore.js` + `momentary.js`)
+## The perform view (`perform.js` + `performStore.js`)
 
-`perform` in the transport, a toggle: the track list goes away and a rack
-comes up for playing the song rather than writing it.
+`perform` in the transport, a toggle: the track list goes away and the song
+is laid out as a rack for playing it rather than writing it.
 
 ```
-PATTERNS  1 2 3 … 32  [on the bar]    SCENES  intro  drop  [+ capture]    throw ◔
-kick ──┐ vol  cutoff  delay wet       mute solo    [delay] [reverb]
-snare ─┤ vol  cutoff                  mute solo    [delay] [reverb]
-…      HAVOC  pad 1  pad 2                                         [edit pads]
+PATTERNS  1 2 3 … 32  [on the bar]          SCENES  intro  drop  [+ capture]
+INSTRUMENTS   kick ›  vol  harm timb morph decay  [filter card] [delay card]
+              bass ›  vol  cutoff reso env …      mute solo
+DRAWER        bass: pattern 3   ░░█░░░█░  (the step grid, and the roll)
+FX RACK       in: [kick] [snare] [bass]   vol    gain vinyl … delay reverb (every stage)
+MODS          kick · filter cutoff (lfo row)   bass · fx.delay (lane)
+HAVOC         pad 1  pad 2                                        [edit pads]
 ```
 
 - **It is a view over the real controls, not a second control surface.**
   Every parameter is one native range input with a shadowed `value`
   (knob.js), and undo, the jam, p-lock, knob recording, the modulation
   needle, the owner dot and the right-click menu all hang off that element.
-  So a strip MOVES the control's wrapper (the track head's `.sq-field`, or
-  a panel's `<label class="sq-fx__ctl">`) into itself, leaving a comment
-  anchor behind, exactly as `openPanelAsModal` moves a whole panel, and
-  puts everything back on the way out. The strip is stamped
-  `data-track-id`, so `controlForKey` finds a moved control, `trackRoots`
-  includes the strip (the dots and `_motionCtls` reach it), and the few
-  repaints that look a control up under `t.el` (`syncTrackSoundUI`,
-  `refreshFxPanelUI`, the engine panel syncs) fall back to
-  `t._perfStrip.el`. The vol field goes with its meter, and `t._meterEl`
-  is re-pointed so meters.js keeps painting it.
-- **What a strip shows** is `pinsFor(t)`: the explicit pins for that track
-  (`state.perform.pins`), else the defaults, the cutoff and every engaged
-  stage's level. The right-click menu's `perform` section pins and unpins; the
-  first explicit change starts from what the strip was showing, and an
-  unpin that empties the list leaves a `{trackId, key: ""}` marker so the
-  defaults do not come back. Only range inputs with a wrapper, never a
-  copy's control (`fx.delay#2` resolves through its row, which a moved field
-  has left).
-- **A scene is the performance subset, written through the controls**: mute
-  and solo per track, the pattern, and the pinned knobs' values. Not the whole
-  sound, which is p-lock's. Recall writes each value through the control's
-  own `input` event (`writeParam` with `commit`) and mute / solo through
-  `setMute` / `setSolo` (render.js, which the track head's buttons use
-  too), so it is an undo step, it reaches a jam and it lands in the p-lock
-  snapshot without any of those knowing what a scene is. Playing, a recall
-  waits for the bar line: `state.queuedScene` plus `queuePatternSwitch` for
-  its pattern, landed by `barLineHooks` (transport.js) in the scheduler
-  callback right before the queued pattern is consumed. The launcher queues
-  the same way with `on the bar` ticked, whatever the session's switch
-  mode; the transport consumes `queuedPattern` on the bar line regardless
-  of mode now, which changes nothing for the pattern bar since only finish
-  mode ever filled it.
-- **A throw is a momentary pad with one parameter.** Holding the button
-  pushes the stage's level to the `throw` knob (never below where it already
-  is) through `holdParam`, and lets it spring back. The stage is wired in
-  while held (`stageHeldByHold`, polled by `refreshStageActivity` on hold
-  and release, which keeps it a few seconds for the tail), so a reverb throw
-  on a dry track is heard. Every stage on the track gets a button, and delay
-  and reverb always. Nothing is committed, so a jam does not hear a throw: it
-  is this screen's, as play and stop are. One owner per parameter still
-  holds: a wet an LFO, a lane or a pad has is refused with a status line.
-- **The pads are docked**, each as its own surface (`attachPadSurface`,
-  exported from macro.js), with `edit pads` opening the havoc modal for
-  the assignments.
+  So the cards MOVE the track's own elements — the vol field, the synth row
+  (timbre group plus the engine's panel), the inline-panel wrapper
+  (`.sq-track__live`: filter, env, eq, comp and the track's own fx rows as
+  cards), the step grid and the roll panel into the drawer, the bus's whole
+  fx panel into the rack — leaving a comment anchor where each was, exactly
+  as `openPanelAsModal` moves a panel, and put everything back on the way
+  out (`restoreAll`, last moved first, since the fx panel is moved out of
+  the wrapper that was moved before it). The card is stamped
+  `data-track-id`, so `controlForKey` finds a moved control; `trackRoots`
+  takes the handle's roots (card and drawer), so the dots and
+  `_motionCtls` reach them; and the repaints that look a control up under
+  `t.el` (`syncTrackSoundUI`, `refreshFxPanelUI`, the engine panel
+  syncs, `renderStepGrid`) fall back to `t._perfStrip.q`. The vol field
+  goes with its meter and `t._meterEl` is re-pointed so meters.js keeps
+  painting it. The inline-panel wrapper sits in a holder carrying
+  `.sq-track`, so the inline card rules in style.css apply as they do on
+  the track; the mod panel inside it is hidden, since the mods grid draws
+  every row.
+- **The fx rack is an fx bus.** One shared rack with every stage in it, fed
+  by whichever instruments are switched into it, is what a bus track already
+  is: the input bar's chips are `setTrackOutput` under the existing fade
+  (and a scene writes the sends the same way), solo follows the chain, bus
+  mute cuts the audio, and a loop is refused, all as before. The rack is the
+  session's first bus; `make the fx rack` creates one (`createTrack`,
+  engine `bus`, named `fx`) when there is none. Every stage shows, in
+  chain order, because the bus's whole fx panel is moved and the
+  `.sq-track`-scoped rule that hides a row not `.is-live` does not reach
+  it; a stage at level 0 is drawn dim (`is-dim`, from `fxStageLevel`).
+  **A row cannot leave the panel**: the stage handlers (`applyReverb` and
+  the rest in `wireFxPanel`) read their values back through
+  `panel.querySelector`, which is how the first draft's reverb knob wrote
+  nothing. `+ stage` is the existing picker (`openFxAsModal`) on the bus.
+- **The mods grid is drawn from state, not moved.** `renderModPanel`
+  rebuilds the mod matrix's rows wholesale on every change, so a row moved
+  out of it would be orphaned by the next edit. The grid builds its own
+  rows with `buildLfoRow` / `buildAutomationLane` (the right-click menu's
+  widgets, over the same track state), one card per enabled LFO and per
+  enabled lane on the active pattern, captioned `track · control`, and
+  rebuilds when the set of them changes or the pattern switches.
+- **A scene is the performance subset**: mute and solo per track, which
+  instruments feed the rack, and the pattern. Recall goes through
+  `setMute` / `setSolo` (render.js, which the track head's buttons use too)
+  and `setTrackOutput`, then `markExternalEdit`, so it is one undo step,
+  reaches a jam and lands in the p-lock snapshot without any of those
+  knowing what a scene is. It is announced AFTER the write, as vim's commands
+  are: the click's pointerup schedules history's check before the handler
+  runs, and the first draft's `flushHistory` consumed it, so a recall was
+  never its own entry. Playing, a recall waits for the bar line:
+  `state.queuedScene` plus `queuePatternSwitch` for its pattern, landed by
+  `barLineHooks` (transport.js) in the scheduler callback right before the
+  queued pattern is consumed. The launcher queues the same way with `on the
+  bar` ticked, whatever the session's switch mode; the transport consumes
+  `queuedPattern` on the bar line regardless of mode now, which changes
+  nothing for the pattern bar since only finish mode ever filled it.
 - **The rack rebuilds only when its shape changes**: on `seqbaby:songedited`
-  a signature (tracks, engines, names, pins, scenes, pads, the throws) is
-  compared with the drawn one, so a knob turn repaints nothing and a track
-  added under a merge, a rename or an engine change redraws. A redraw puts
-  every field home first and runs `updatePlaitsControlsVisibility`, since an
-  engine switch relabels sliders under `t.el` and a field that was away
-  missed it. A session arriving (`setapplied` / `newset`) redraws too.
+  a signature (tracks, engines, names, the bus's chain, the enabled LFOs and
+  lanes, scenes, pads, the selected instrument) is compared with the drawn
+  one, so a knob turn repaints nothing and a track added under a merge, a
+  rename, an engine change or a stage added redraws. A redraw puts every
+  element home first and runs `updatePlaitsControlsVisibility`, since an
+  engine switch relabels sliders under `t.el` and a row that was away missed
+  it. A pattern switch redraws too (the lanes are the pattern's). A session
+  arriving (`setapplied` / `newset`) redraws.
 - **Keys, while the rack is up** (desktop, vim off): the digits launch
   patterns 1..10, shift + digit recalls scenes 1..10, space is play / stop.
   The digits are the piano's black keys in keyboard.js, which skips a key
   this layer took; the trade is deliberate.
-- **Pins and scenes are the song's** (`state.perform`, serialized beside
-  `macroPads` as `perform`, by track index: `serializePerform` /
-  `readPerform` in performStore.js, pure and tested). `migrateLegacyNames`
-  renames their keys with the pads'. Both loaders (`applySet`, `mergeSet`)
-  apply it after the pads with the same `made` order.
+- **Scenes are the song's** (`state.perform`, serialized beside `macroPads`
+  as `perform`, by track index: `serializePerform` / `readPerform` in
+  performStore.js, pure and tested; a send is `outTrack`, an index too).
+  Both loaders (`applySet`, `mergeSet`) apply it after the pads with the
+  same `made` order. `migrateLegacyNames` still walks the first draft's
+  pins and scene knobs, which the reader drops.
 - **Body class is `sq-perform-on`, the rack is `.sq-perform`**, and that
   is not a nicety: the first draft used one name for both and the rack's
   `display: grid` landed on the body, which at phone width made the page
   704px wide.
+- The chips are painted by `paintInputs` from `draw` after the rack is in
+  the DOM, not from `buildFxRack`, which builds a detached subtree.
 - `test/performStore.test.js` holds the store; the view was driven headless
-  (strips, a moved knob writing its track, a throw held and released, scenes
-  captured and recalled stopped and on the bar, undo across a recall, the
+  (cards with moved controls, a moved knob writing its track, the drawer's
+  grid written by a tap and re-rendered on a switch, the rack made from
+  nothing with every stage, a chip routing an instrument and the rack's
+  reverb lighting, scenes with sends recalled stopped and on the bar, undo
+  across a recall, an lfo appearing as a mod card and removed from it, the
   round trip, leaving, and the phone layout).
 
 ## p-lock — a sound per pattern (`patternSound.js`)
