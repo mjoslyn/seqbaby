@@ -481,25 +481,12 @@ test("the bank round-trips through native code, and plays as arrange() in portab
   assert.doesNotMatch(port, /pattern\(|lock\(|chain\(/);
 });
 
-test("arrange() reads as the arrangement: a slot per distinct pattern, the sections in the order written, chain mode", () => {
-  const { song, warnings } = S.codeToSong(`const v = stack(s("bd*4"), note("c2*4").s("sawtooth"))\n$: arrange([4, v], [8, s("hh*8")], [2, v])`);
-  assert.deepEqual(warnings, []);
+test("arrange() reads as consecutive slots in chain mode", () => {
+  const { song } = S.codeToSong(`const v = stack(s("bd*4"), note("c2*4").s("sawtooth"))\n$: arrange([4, v], [8, s("hh*8")], [2, v])`);
   assert.equal(song.patternMode, "chain");
-  assert.deepEqual(song.arrangement, [{ p: 0, bars: 4 }, { p: 1, bars: 8 }, { p: 0, bars: 2 }], "v twice is one slot played twice");
+  assert.deepEqual(song.patternRepeats.slice(0, 3), [4, 8, 2]);
   assert.deepEqual(song.tracks.map(t => t.name), ["bd", "sawtooth", "hh"]);
-  const has = (t, k) => !!t.patterns[k]?.steps.some(Boolean);
-  assert.equal(has(track(song, "bd"), 0), true);
-  assert.equal(has(track(song, "bd"), 2), false, "no third slot: the second v is the first slot again");
-  assert.equal(has(track(song, "hh"), 1), true);
-  // a section longer than the per-pattern repeat cap is fine: it is a section's bars
-  const long = S.codeToSong(`$: arrange([32, s("bd*4")], [1, silence], [32, s("hh*8")])`);
-  assert.deepEqual(long.song.arrangement, [{ p: 0, bars: 32 }, { p: null, bars: 1 }, { p: 1, bars: 32 }], "silence is a rest, and spends no slot");
-  assert.deepEqual(long.warnings, []);
-  assert.equal(has(track(long.song, "hh"), 1), true, "the slots after a rest are not skipped");
-  // code without arrange() leaves a song's arrangement alone
-  const before = JSON.parse(JSON.stringify(long.song.arrangement));
-  S.writeTracks(long.song, S.realize(S.readCode(`$: s("bd*4")`)), { pattern: 0 });
-  assert.deepEqual(long.song.arrangement, before);
+  assert.equal(steps(track(song, "bd"), 2), steps(track(song, "bd"), 0));
 });
 
 test("code with no sections writes the pinned slot and leaves the others alone", () => {
@@ -566,72 +553,6 @@ test("the parameter menu's code line sets what it names", () => {
   assert.equal(S.codeForControl("p-eucpulses", t), null);
   assert.equal(S.codeForControl("p-vol", { engineKey: "sampler" }), null);
 });
-
-test("an arrangement plays as arrange() in the song's order, and native code leaves it to the studio", () => {
-  const a = S.codeToSong(BANK).song;
-  // verse, chorus, verse, then a break on an empty slot
-  B.setArrangement(a, { sections: [[0, 2], [1, 4], [0, 2], [5, 1]] });
-  const port = S.sessionToCode(a).code;
-  assert.match(port, /\$: arrange\(\[2, p1\], \[4, p2\], \[2, p1\], \[1, p6\]\)/, "the sections in order, a pattern as often as it plays");
-  assert.match(port, /^const p6 = silence$/m, "an empty pattern in the arrangement is a rest");
-  assert.doesNotMatch(port, /const p3 =/, "a slot the arrangement never plays is not written");
-  assert.equal((port.match(/^const p1 = stack\(/gm) || []).length, 1, "a pattern is defined once however often it plays");
-  // and read back, it is the same song shape with the slots renumbered (an
-  // empty slot's section comes back as a rest, which is what it played as)
-  const rt = S.codeToSong(port).song;
-  assert.deepEqual(rt.arrangement, [{ p: 0, bars: 2 }, { p: 1, bars: 4 }, { p: 0, bars: 2 }, { p: null, bars: 1 }]);
-  assert.equal(rt.patternMode, "chain");
-  // a rest exports as silence itself, no definition spent on it
-  B.setArrangement(a, { sections: [[0, 2], { rest: true, bars: 2 }, [1, 4]] });
-  const withRest = S.sessionToCode(a).code;
-  assert.match(withRest, /\$: arrange\(\[2, p1\], \[2, silence\], \[4, p2\]\)/);
-  assert.doesNotMatch(withRest, /const p\d+ = silence/);
-  assert.match(S.sessionToCode(a, { native: true }).code, /^\/\/ arrangement: 1x2 restx2 2x4/m);
-  assert.deepEqual(S.codeToSong(withRest).song.arrangement, [{ p: 0, bars: 2 }, { p: null, bars: 2 }, { p: 1, bars: 4 }]);
-  B.setArrangement(a, { sections: [[0, 2], [1, 4], [0, 2], [5, 1]] });   // back to the song above for the native half
-  // native code cannot carry a section; it says so and a run leaves the arrangement as it was
-  const nat = S.sessionToCode(a, { native: true });
-  assert.match(nat.code, /^\/\/ arrangement: 1x2 2x4 1x2 6x1/m);
-  const b = S.codeToSong(nat.code).song;
-  assert.deepEqual(b.arrangement, [], "code makes no arrangement of its own");
-  const again = JSON.parse(JSON.stringify(a));
-  S.writeTracks(again, S.realize(S.readCode(nat.code)), { pattern: 0 });
-  assert.deepEqual(again.arrangement, a.arrangement, "running the song's own code onto it does not touch its sections");
-  // out of chain mode the arrangement is not what plays, so portable code is the one pattern
-  a.patternMode = "repeat";
-  assert.doesNotMatch(S.sessionToCode(a).code, /arrange\(/);
-});
-
-test("a section that holds tracks back exports as its own definition, with those parts left out", () => {
-  const a = S.codeToSong(`setcpm(120/4)\nkick: s("bd*4")\nbass: note("c2*8").s("sawtooth")\nhats: s("hh*8")`).song;
-  const bass = a.tracks.findIndex(t => t.name === "bass"), hats = a.tracks.findIndex(t => t.name === "hats");
-  B.setArrangement(a, { mode: "chain", sections: [{ pattern: 0, bars: 4, off: [bass, hats] }, { pattern: 0, bars: 8 }, { pattern: 0, bars: 4, off: [bass, hats] }, { pattern: 0, bars: 4, off: [hats] }] });
-  const port = S.sessionToCode(a).code;
-  assert.match(port, /\$: arrange\(\[4, p1a\], \[8, p1\], \[4, p1a\], \[4, p1b\]\)/, "one definition per way of playing the pattern, reused");
-  const def = (id) => port.match(new RegExp(`^const ${id} = ([\\s\\S]*?)\\n\\)$`, "m"))?.[1] || "";
-  assert.ok(def("p1").includes("bd") && def("p1").includes("sawtooth") && def("p1").includes("hh"));
-  assert.ok(def("p1a").includes("bd") && !def("p1a").includes("sawtooth") && !def("p1a").includes("hh"), "drums alone in the intro");
-  assert.ok(def("p1b").includes("sawtooth") && !def("p1b").includes("hh"));
-  assert.match(S.sessionToCode(a, { native: true }).code, /^\/\/ arrangement: 1x4\(-bass,-hats\) 1x8 1x4\(-bass,-hats\) 1x4\(-hats\)/m);
-  // played back on strudel.cc the intro is the drums alone
-  const back = S.codeToSong(port).song;
-  assert.equal(back.arrangement.length, 4);
-  assert.deepEqual(back.arrangement.map(e => e.bars), [4, 8, 4, 4]);
-});
-
-test("a lane's own pattern exports as a definition with that track's part from its pattern", () => {
-  const a = S.codeToSong(`setcpm(120/4)\nchain()\npattern(1)\nkick: s("bd*4")\nbass: note("c2*8").s("sawtooth")\npattern(2)\nbass: note("g2*4").s("sawtooth")`).song;
-  const bass = a.tracks.findIndex(t => t.name === "bass"), kick = a.tracks.findIndex(t => t.name === "kick");
-  B.setArrangement(a, { mode: "chain", sections: [{ pattern: 0, bars: 4 }, { pattern: 0, bars: 4, pat: { [bass]: 1 } }, { pattern: null, bars: 2, pat: { [kick]: 0 } }] });
-  const port = S.sessionToCode(a).code;
-  assert.match(port, /\$: arrange\(\[4, p1\], \[4, p1a\], \[2, q1\]\)/);
-  const def = (id) => port.match(new RegExp(`^const ${id} = ([\\s\\S]*?)\\n\\)$`, "m"))?.[1] || "";
-  assert.ok(def("p1").includes("c2") && !def("p1").includes("g2"), "the plain section: the bass on pattern 1");
-  assert.ok(def("p1a").includes("g2") && !def("p1a").includes("c2") && def("p1a").includes("bd"), "the lane: the bass from pattern 2 under the kick from pattern 1");
-  assert.ok(def("q1").includes("bd") && !def("q1").includes("sawtooth"), "a rest with a lane: that track alone");
-  assert.match(S.sessionToCode(a, { native: true }).code, /^\/\/ arrangement: 1x4 1x4\(bass:2\) restx2\(kick:1\)/m);
-});
-
 test("pan is Strudel's pan: a constant is the pan stage, a signal an auto-pan LFO, and both come back out", () => {
   const a = S.codeToSong(`hat: s("hh*8").pan(0.2)
 lead: note("c4 e4").s("sawtooth").pan(sine.range(0, 1).slow(2))`).song;

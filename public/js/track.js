@@ -6,7 +6,6 @@ import { applySampleSpeed, defaultLFOConfig, disposeLFOs, syncAllLFOs } from "./
 import { autoAccents, guessIsDrumKit, patternMeter, stepsPerBarForMeter, totalSteps } from "./meter.js";
 import { updatePlaitsControlsVisibility } from "./params.js";
 import { renderPatternGrid } from "./patternBar.js";
-import { refreshArrangement } from "./arrangement.js";
 import { refreshAutIfOpen, refreshRollIfOpen } from "./pianoRoll.js";
 import { refreshEuclidUI, renderEuclidPanel } from "./euclid.js";
 import { cloneChance, refreshChanceUI, renderChancePanel } from "./chance.js";
@@ -131,7 +130,6 @@ export function createTrack({ name, engineKey, length = totalSteps() }) {
     // to be re-connected to it (and this track needs its own send wired).
     refreshAllTrackOutputs();
   }
-  refreshArrangement();                  // a row per track in the arrangement view
   return t;
 }
 
@@ -312,7 +310,7 @@ export function hasTrackClip() { return !!trackClip; }
 
 /** Copy the pattern `t` is on into the clipboard. */
 export function copyTrackPattern(t) {
-  const idx = t._arrPattern ?? t._patternIdx ?? state.activePattern;
+  const idx = t._patternIdx ?? state.activePattern;
   const src = t.patterns?.[idx];
   if (!src) return;
   trackClip = { pattern: clonePattern(src), name: t.name?.trim() || "track", patIdx: idx, isDrumKit: !!t.isDrumKit };
@@ -324,7 +322,7 @@ export function copyTrackPattern(t) {
 /** Paste the clipboard over the pattern `t` is on. */
 export function pasteTrackPattern(t) {
   if (!trackClip) { setStatus("nothing copied yet: press copy on a track first", true); return false; }
-  const idx = t._arrPattern ?? t._patternIdx ?? state.activePattern;
+  const idx = t._patternIdx ?? state.activePattern;
   const old = t.patterns[idx];
   const p = clonePattern(trackClip.pattern);
   p.soundLocked = !!old?.soundLocked;
@@ -381,7 +379,6 @@ export function removeTrack(t) {
   refreshOutputSelects();
   if (state.ready) refreshAllTrackOutputs();
   refreshNoiseBeds();                    // removing a soloed track un-solos the rest
-  refreshArrangement();                  // its row in the arrangement view goes with it
   // Anything sidechained to the removed track resets to self — state, select
   // and compressor alike. That now lives in refreshCompSourceDropdowns (called
   // above), which rebuilds the options and so is the one place that knows a

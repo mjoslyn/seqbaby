@@ -3,7 +3,6 @@ import { setStatus } from "./dom.js";
 import { ICON_CHAIN, ICON_REPEAT } from "./icons.js";
 import { currentBpm } from "./lfo.js";
 import { suggestSetName } from "./session.js";
-import { arrangementBeats } from "./arrangement.js";
 import { isPatternNonEmpty, state, switchPattern } from "./state.js";
 import { ensureAudio, togglePlay } from "./transport.js";
 
@@ -25,19 +24,12 @@ export async function bounceAudio({ bars = 1, format = "wav", chainWhole = false
   rec.ondataavailable = (e) => { if (e.data?.size) chunks.push(e.data); };
   const stopped = new Promise((r) => { rec.onstop = r; });
 
-  // Reset transport to the top and start fresh: the first section of the
-  // arrangement when the whole song is wanted and there is one, else pattern 1.
+  // Reset transport to the top of pattern 1 and start fresh.
   if (state.playing) await togglePlay();
-  const arranged = chainWhole && state.arrangement.length > 0;
-  if (arranged) {
-    state.arrangePos = 0;
-    if (state.activePattern !== state.arrangement[0].p) switchPattern(state.arrangement[0].p, { keepArrangePos: true });
-  } else if (state.activePattern !== 0) switchPattern(0);
+  if (state.activePattern !== 0) switchPattern(0);
 
   const bpm = currentBpm();
-  // An arrangement's length is known meter by meter; the slot-order chain
-  // keeps its 4/4 estimate.
-  const durSec = arranged ? arrangementBeats() * (60 / bpm) : bars * 4 * (60 / bpm);
+  const durSec = bars * 4 * (60 / bpm);
 
   const prevMode = state.patternMode;
   if (chainWhole) {
@@ -129,10 +121,8 @@ export function openBounceProgressDialog({ totalSec, bars, format }) {
   };
 }
 
-// Total bars the whole song plays: the arrangement's sections when there is
-// one, else every non-empty pattern for its repeat count (what chain mode plays).
+// Total bars across every non-empty pattern (respecting per-pattern repeat counts).
 export function trackTotalBars() {
-  if (state.arrangement.length) return state.arrangement.reduce((n, e) => n + Math.max(1, e.bars), 0);
   let bars = 0;
   for (let i = 0; i < PATTERN_COUNT; i++) {
     if (!isPatternNonEmpty(i)) continue;
@@ -197,9 +187,7 @@ export function showBounceDialog({ mode = "pattern" } = {}) {
     const esc = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
     const suggested = suggestBounceFilename(mode);
     const note = isTrack
-      ? (state.arrangement.length
-        ? `plays the arrangement, ${state.arrangement.length} section${state.arrangement.length === 1 ? "" : "s"} (${bars} bar${bars === 1 ? "" : "s"}) at ${currentBpm()} bpm.`
-        : `chains through every non-empty pattern (${bars} bar${bars === 1 ? "" : "s"}) at ${currentBpm()} bpm.`)
+      ? `chains through every non-empty pattern (${bars} bar${bars === 1 ? "" : "s"}) at ${currentBpm()} bpm.`
       : `captures the current pattern (${bars} bar${bars === 1 ? "" : "s"}) at ${currentBpm()} bpm.`;
     overlay.innerHTML = `
       <div class="sq-modal" role="dialog" aria-modal="true">
