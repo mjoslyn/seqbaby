@@ -1043,6 +1043,8 @@ main {
 .sq-param-group--vox .sq-vox__lyric { flex: 1 1 160px; min-width: 120px; padding: 3px 6px; font: inherit; font-size: 11px; color: var(--fg); background: var(--bg); border: 1px solid var(--border); border-radius: 3px; }
 /* under 16px, iOS zooms the page onto a text field when it takes focus */
 @media (pointer: coarse) { .sq-param-group--vox .sq-vox__lyric { font-size: 16px; } }
+/* what the phonetic box makes of the lyric, under its row */
+.sq-param-group--vox .sq-vox__said { font-size: 11px; color: var(--fg-dim); padding-left: 52px; overflow-wrap: anywhere; }
 .sq-param-group--lancet { border-color: color-mix(in oklab, #e0b24a 45%, var(--border)); flex-direction: column; align-items: stretch; gap: 4px; }
 .sq-param-group--lancet[hidden] { display: none !important; }
 .sq-param-group--lancet .sq-lancet__row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 11px; }

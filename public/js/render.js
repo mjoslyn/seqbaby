@@ -30,7 +30,7 @@ import {
   repeatPercentLabel, repeatPitchLabel,
 } from "./repeat.js";
 import { patternMeter, redetectDrumKit, stepsPerBarForMeter } from "./meter.js";
-import { refreshHexopAlgorithm, setEngineKey, setParam, updateGranularSpeedEnabled, updatePlaitsControlsVisibility } from "./params.js";
+import { refreshHexopAlgorithm, setEngineKey, setParam, updateGranularSpeedEnabled, updatePlaitsControlsVisibility, refreshVoxLyric } from "./params.js";
 import { bestRollViewOct } from "./pianoRoll.js";
 import { applyCompressorConfig, EQ_BANDS, refreshCompSourceDropdowns, refreshNoiseBeds, refreshOutputSelects, releaseSilencedTracks, setEQ, setFilter, setTrackOutput } from "./signal.js";
 import { ANALOG_FILTER_INFO, ANALOG_FILTER_TYPES } from "./soundDefaults.js";
@@ -218,8 +218,12 @@ export function syncTrackSoundUI(t) {
                    ...SIEGE_NUM_KEYS, ...SIEGE_SEL_KEYS,
                    ...LANCET_NUM_KEYS, ...LANCET_SEL_KEYS]) {
     const el = q(`.p-${k}`);
-    if (el && t.params[k] != null) el.value = t.params[k];
+    if (el && t.params[k] != null) {
+      if (el.type === "checkbox") el.checked = t.params[k] === "on";
+      else el.value = t.params[k];
+    }
   }
+  refreshVoxLyric(t);
   const gsync = q(".p-gsync");
   if (gsync) gsync.checked = !!t.params.gsync;
   set(".p-filtertype", t.filter.type);
@@ -277,9 +281,13 @@ export function syncHexopPanel(t) {
   if (root) {
     for (const k of [...HEXOP_NUM_KEYS, ...HEXOP_SEL_KEYS]) {
       const el = root.querySelector(`.p-${k}`);
-      if (el && t.params[k] != null) el.value = t.params[k];
+      if (el && t.params[k] != null) {
+        if (el.type === "checkbox") el.checked = t.params[k] === "on";
+        else el.value = t.params[k];
+      }
     }
   }
+  refreshVoxLyric(t);
   const timbre = t._timbreGroupEl || t.el;
   for (const k of ["harm", "timb", "morph", "decay"]) {
     const el = timbre?.querySelector(`.p-${k}`);
@@ -661,7 +669,8 @@ export function renderTrack(t) {
   }
   for (const k of [...VOX_NUM_KEYS, ...VOX_SEL_KEYS, ...VOX_TEXT_KEYS]) {
     const el = node.querySelector(`.p-${k}`);
-    if (el) el.value = t.params[k] ?? VOX_DEFAULTS[k];
+    if (el?.type === "checkbox") el.checked = (t.params[k] ?? VOX_DEFAULTS[k]) === "on";
+    else if (el) el.value = t.params[k] ?? VOX_DEFAULTS[k];
   }
   const lancetToneSel = node.querySelector(".sq-lancet__tone");
   if (lancetToneSel && !lancetToneSel.options.length) {
@@ -885,13 +894,17 @@ export function renderTrack(t) {
   }
   for (const k of VOX_SEL_KEYS) {
     const el = node.querySelector(`.p-${k}`);
-    if (el) el.addEventListener("change", e => setParam(t, k, e.target.value));
+    // phonetic is a checkbox, stored as "on" / "off" like the selects
+    if (el) el.addEventListener("change", e => {
+      setParam(t, k, e.target.type === "checkbox" ? (e.target.checked ? "on" : "off") : e.target.value);
+      refreshVoxLyric(t);
+    });
   }
   // The lyric is sung as it is typed: every keystroke that changes a
   // syllable re-posts the phrase (vox.js holds back the ones that don't).
   for (const k of VOX_TEXT_KEYS) {
     const el = node.querySelector(`.p-${k}`);
-    if (el) el.addEventListener("input", e => setParam(t, k, e.target.value));
+    if (el) el.addEventListener("input", e => { setParam(t, k, e.target.value); refreshVoxLyric(t); });
   }
   if (voxToneSel) {
     voxToneSel.addEventListener("change", e => {

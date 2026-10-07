@@ -1621,6 +1621,8 @@ export const VOX_SEL_CTLS = [
   ["cons",  "none", VOX_CONSONANT_NAMES],
   ["words", "off",  VOX_WORD_NAMES],
   ["mode",  "poly", ["poly", "mono"]],
+  // the lyric respelled from English before it is sung (voxPhonetic.js)
+  ["phon",  "off",  ["off", "on"]],
 ];
 
 export const VOX_MOD_KEYS = VOX_NUM_CTLS.map(c => c[0]);
@@ -1719,8 +1721,8 @@ export function voxToneDescription(name) { return VOX_TONES[name]?.d ?? ""; }
 /**
  * A voice as a complete set of track params -- every panel control plus the
  * four track sliders, so nothing of the last voice survives. Except the
- * lyric: that is what the track sings, not how it sounds, and trying voices
- * on a line you have typed should not erase it.
+ * lyric and its phonetic box: that is what the track sings, not how it
+ * sounds, and trying voices on a line you have typed should not erase it.
  * @param {string} name
  * @returns {Record<string, number|string>|null}
  */
@@ -1730,6 +1732,7 @@ export function voxTone(name) {
   const out = { ...VOX_DEFAULTS };
   for (const [k, val] of Object.entries(v.p)) out[`sng${k}`] = val;
   for (const k of VOX_TEXT_KEYS) delete out[k];
+  delete out.sngphon;   // how the lyric is read is the lyric's, too
   out.harm = v.vowel; out.timb = v.size; out.morph = v.breath; out.decay = v.rel;
   return out;
 }

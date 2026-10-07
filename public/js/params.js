@@ -7,6 +7,8 @@ import { ensureFxRack, refreshAllTrackOutputs, refreshOutputSelects, routeVoiceT
 import { state } from "./state.js";
 import { requestMidiIfNeeded } from "./transport.js";
 import { buildVoiceForEngine, GRAN_DEFAULTS } from "./voices.js";
+import { voxPhrase, voxSungText } from "./vox.js";
+import { loadVoxDict, voxDictReady } from "./voxPhonetic.js";
 
 
 /** @typedef {import("./types.js").Track} Track */
@@ -22,6 +24,44 @@ export function updateGranularSpeedEnabled(t) {
   if (el) el.disabled = !moving;
   const modalEl = t._gWavModal?.overlay?.querySelector(".gw-gspeed");
   if (modalEl) modalEl.disabled = !moving;
+}
+/**
+ * The vox's lyric controls, drawn from the track's params.
+ *
+ * The consonant select only decides what a note starts with while the words
+ * are off and the lyric is empty: either of those carries its own consonants
+ * and wins. So it is greyed out then, and says why, rather than look broken.
+ *
+ * With `phonetic` ticked, the line under the row shows what the lyric will be
+ * sung as (one syllable a note), and the first tick fetches the dictionary;
+ * until it lands the line says so, then redraws.
+ *
+ * Call after anything that can change `sngwords` / `sngtext` / `sngphon`.
+ * @param {Track} t
+ */
+export function refreshVoxLyric(t) {
+  const el = t.el?.querySelector(".p-sngcons");
+  if (!el) return;
+  if (el.dataset.title == null) el.dataset.title = el.title;
+  const text = t.params.sngtext ?? "";
+  const phon = t.params.sngphon === "on";
+  const typed = voxPhrase("off", voxSungText(text, phon)).length > 0;
+  const words = (t.params.sngwords ?? "off") !== "off";
+  el.disabled = typed || words;
+  el.title = typed ? "off while the lyric is sung: its syllables carry their own consonants. Clear the lyric to use this"
+    : words ? "off while the words are on: each syllable carries its own consonant. Set the words to off to use this"
+    : el.dataset.title;
+
+  const said = t.el.querySelector(".sq-vox__said");
+  if (!said) return;
+  said.hidden = !phon || !text.trim();
+  if (said.hidden) return;
+  if (!voxDictReady()) {
+    said.textContent = "loading the dictionary…";
+    loadVoxDict().then(() => refreshVoxLyric(t));
+    return;
+  }
+  said.textContent = `sung as: ${voxSungText(text, true)}`;
 }
 /**
  * Redraw the hexop panel's algorithm readout: the chain diagram beside the
@@ -303,6 +343,7 @@ export function updatePlaitsControlsVisibility(t) {
   // The vox's glottis, vibrato, choir and consonants.
   const voxGroup = t._voxGroupEl || t.el.querySelector(".sq-param-group--vox");
   if (voxGroup) voxGroup.hidden = !isVox;
+  if (isVox) refreshVoxLyric(t);
   // The lancet's model, tune, velocity amount and randomizer.
   const lancetGroup = t._lancetGroupEl || t.el.querySelector(".sq-param-group--lancet");
   if (lancetGroup) lancetGroup.hidden = !isLancet;
