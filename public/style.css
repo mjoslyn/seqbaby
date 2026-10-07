@@ -426,6 +426,7 @@ input[type="range"] { accent-color: var(--accent); }
 .sq-sub__f[data-knob],
 .sq-drone__f[data-knob],
 .sq-vox__f[data-knob],
+.sq-lancet__f[data-knob],
 .sq-siege__f[data-knob],
 .sq-ladder__freq[data-knob],
 .sq-ladder__noise[data-knob] {
@@ -442,6 +443,7 @@ input[type="range"] { accent-color: var(--accent); }
 .sq-sub__f[data-knob] > span,
 .sq-drone__f[data-knob] > span,
 .sq-vox__f[data-knob] > span,
+.sq-lancet__f[data-knob] > span,
 .sq-siege__f[data-knob] > span,
 .sq-ladder__freq[data-knob] > span,
 .sq-ladder__noise[data-knob] > span {
@@ -1041,6 +1043,13 @@ main {
 .sq-param-group--vox .sq-vox__lyric { flex: 1 1 160px; min-width: 120px; padding: 3px 6px; font: inherit; font-size: 11px; color: var(--fg); background: var(--bg); border: 1px solid var(--border); border-radius: 3px; }
 /* under 16px, iOS zooms the page onto a text field when it takes focus */
 @media (pointer: coarse) { .sq-param-group--vox .sq-vox__lyric { font-size: 16px; } }
+.sq-param-group--lancet { border-color: color-mix(in oklab, #e0b24a 45%, var(--border)); flex-direction: column; align-items: stretch; gap: 4px; }
+.sq-param-group--lancet[hidden] { display: none !important; }
+.sq-param-group--lancet .sq-lancet__row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 11px; }
+.sq-param-group--lancet .sq-lancet__lbl { color: var(--fg-dim); min-width: 44px; }
+.sq-param-group--lancet .sq-lancet__f { display: inline-flex; align-items: center; gap: 4px; color: var(--fg-dim); }
+.sq-param-group--lancet .sq-lancet__f .sq-knob { --knob-size: 34px; }
+.sq-param-group--lancet select { padding: 2px 6px; font-size: 11px; }
 .sq-param-group--siege { border-color: color-mix(in oklab, #c9533a 45%, var(--border)); flex-direction: column; align-items: stretch; gap: 4px; }
 .sq-param-group--siege[hidden] { display: none !important; }
 .sq-param-group--siege .sq-siege__row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 11px; }
@@ -3025,9 +3034,10 @@ body.kbd-recording:not(.sq-playing) .sq-track.is-kbd-active .sq-step.is-cursor {
 .sq-sub__f[data-motion] > span:not(.sq-knob)::after,
 .sq-drone__f[data-motion] > span:not(.sq-knob)::after,
 .sq-vox__f[data-motion] > span:not(.sq-knob)::after,
+.sq-lancet__f[data-motion] > span:not(.sq-knob)::after,
 .sq-siege__f[data-motion] > span:not(.sq-knob)::after,
 .sq-hexop__f[data-motion]::after,
-label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not(.sq-bass__f):not(.sq-sub__f):not(.sq-drone__f):not(.sq-vox__f):not(.sq-siege__f):not(.sq-hexop__f)::before {
+label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not(.sq-bass__f):not(.sq-sub__f):not(.sq-drone__f):not(.sq-vox__f):not(.sq-lancet__f):not(.sq-siege__f):not(.sq-hexop__f)::before {
   content: "";
   display: inline-block;
   width: 5px; height: 5px;
@@ -3036,7 +3046,7 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not
   vertical-align: middle;
   margin: 0 0 1px 5px;
 }
-label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not(.sq-bass__f):not(.sq-sub__f):not(.sq-drone__f):not(.sq-vox__f):not(.sq-siege__f):not(.sq-hexop__f)::before { margin: 0 5px 1px 0; }
+label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not(.sq-bass__f):not(.sq-sub__f):not(.sq-drone__f):not(.sq-vox__f):not(.sq-lancet__f):not(.sq-siege__f):not(.sq-hexop__f)::before { margin: 0 5px 1px 0; }
 /* The hexop's operator cells have no label text of their own (the column heading
    names them), so the dot goes after the slider rather than beside a word. */
 .sq-hexop__f[data-motion]::after { flex: 0 0 auto; margin: 0 0 0 3px; }
@@ -3048,7 +3058,8 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not
 .sq-sub__f[data-motion="off"] > span:not(.sq-knob),
 .sq-drone__f[data-motion="off"] > span:not(.sq-knob),
 .sq-vox__f[data-motion="off"] > span:not(.sq-knob),
-.sq-siege__f[data-motion="off"] > span:not(.sq-knob) { opacity: 0.8; }
+.sq-siege__f[data-motion="off"] > span:not(.sq-knob),
+.sq-lancet__f[data-motion="off"] > span:not(.sq-knob) { opacity: 0.8; }
 
 /* Right-click a parameter → what is modulating / automating that one control. */
 .sq-pmenu__modal { width: min(96vw, 900px); max-width: 96vw; gap: 10px; }

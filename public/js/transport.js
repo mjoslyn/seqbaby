@@ -9,6 +9,7 @@ import { loadHexopWorklet } from "./hexop.js";
 import { loadSubBassWorklet } from "./subbass.js";
 import { loadDroneWorklet } from "./drone.js";
 import { loadVoxWorklet } from "./vox.js";
+import { loadLancetWorklet } from "./lancet.js";
 import { loadSiegeWorklet } from "./siege.js";
 import { loadCrusherWorklet } from "./crusher.js";
 import { loadPrismWorklet } from "./prism.js";
@@ -269,6 +270,7 @@ export function loadWorklet() {
   const sub = loadSubBassWorklet(state.audioCtx).catch(e => { console.warn("subby worklet load failed", e); });
   const drone = loadDroneWorklet(state.audioCtx).catch(e => { console.warn("drone worklet load failed", e); });
   const vox = loadVoxWorklet(state.audioCtx).catch(e => { console.warn("vox worklet load failed", e); });
+  const lancet = loadLancetWorklet(state.audioCtx).catch(e => { console.warn("lancet worklet load failed", e); });
   const siege = loadSiegeWorklet(state.audioCtx).catch(e => { console.warn("siege worklet load failed", e); });
   // The bitcrusher's converter clock is a sample-and-hold, so it needs a
   // worklet too — and it belongs to the fx rack, which every track has.
@@ -283,7 +285,7 @@ export function loadWorklet() {
   const prism = loadPrismWorklet(state.audioCtx).catch(e => { console.warn("prism worklet load failed", e); });
   // The beat repeat / slicer: a buffer and a read head on the transport's clock.
   const repeat = loadRepeatWorklet(state.audioCtx).catch(e => { console.warn("repeat worklet load failed", e); });
-  return Promise.all([state.woscLoad, silverbox, contagion, hexop, guitar, bass, sub, drone, vox, siege, crusher, reverb, analogFilter, prism, repeat]);
+  return Promise.all([state.woscLoad, silverbox, contagion, hexop, guitar, bass, sub, drone, vox, lancet, siege, crusher, reverb, analogFilter, prism, repeat]);
 }
 
 /**

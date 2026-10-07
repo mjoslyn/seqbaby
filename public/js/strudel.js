@@ -319,6 +319,7 @@ function kitOf(bank) {
   if (/virtuosity/.test(b)) return "virtuosity";
   if (/drs|drumgizmo/.test(b)) return "drskit";
   if (/acoustic|live/.test(b)) return "acoustic-kit";
+  if (/lancet/.test(b)) return "lancet";
   return "808";
 }
 const SAMPLER_KITS = new Set(["CR78", "R8", "Techno", "breakbeat13", "acoustic-kit"]);
@@ -335,6 +336,9 @@ function fullKitPart(role, name) {
   return "hihat";
 }
 function drumVoice(role, kit, name) {
+  // The lancet is a snare synthesizer and nothing else: `.bank("lancet")` puts the
+  // snares (and claps, rims) on it and the rest of the kit on the 808.
+  if (kit === "lancet") return role === "snare" || role === "clap" || role === "rim" ? { engine: "dm:lancet" } : drumVoice(role, "808", name);
   if (FULL_KITS.has(kit)) return { engine: "sampler", sample: `${kit}/${fullKitPart(role, name)}` };
   if (SAMPLER_KITS.has(kit)) {
     const part = role === "kick" ? "kick" : role === "snare" || role === "clap" || role === "rim" ? "snare"
@@ -387,7 +391,7 @@ const MELODIC_RULES = [
 // Engines a sound name can't make: a sampler and a granular track need a
 // sample picked in the studio, and midi / bus are not instruments.
 const NOT_FROM_CODE = new Set(["sampler", "granular", "midi", "bus"]);
-const NATIVE_DRUM = /^(dm:(808|909)-|dm:siege$|plaits:1[345]$)/;
+const NATIVE_DRUM = /^(dm:(808|909)-|dm:lancet$|dm:siege$|plaits:1[345]$)/;
 /**
  * A seqbaby engine named directly: its key (`dm:silverbox`, `plaits:3`), a
  * key from before the emulator rename (`dm:303`), or its name as the engine
@@ -1497,6 +1501,7 @@ const DRUM_EXPORT = {
   "dm:909-kick": ["bd", "RolandTR909"], "dm:909-snare": ["sd", "RolandTR909"], "dm:909-chat": ["hh", "RolandTR909"],
   "dm:909-ohat": ["oh", "RolandTR909"], "dm:909-clap": ["cp", "RolandTR909"],
   "plaits:13": ["bd", null], "plaits:14": ["sd", null], "plaits:15": ["hh", null],
+  "dm:lancet": ["sd", null],
 };
 const SAMPLE_BANK = { CR78: "RolandCompurhythm78", R8: "RolandR8" };
 const NATIVE_KIT_BANK = {
@@ -1507,6 +1512,7 @@ const NATIVE_KIT_BANK = {
 const PART_SOUND = { kick: "bd", snare: "sd", rim: "rim", hihat: "hh", openhat: "oh", tom2: "lt", ride: "rd", crash: "cr" };
 function soundForTrack(t, native = false) {
   if (native && /^plaits:1[345]$/.test(t.engineKey)) return { s: t.engineKey, drum: true };
+  if (native && t.engineKey === "dm:lancet") return { s: nativeName(t.engineKey), drum: true };
   if (DRUM_EXPORT[t.engineKey]) { const [s, bank] = DRUM_EXPORT[t.engineKey]; return { s, bank, drum: true }; }
   if (t.engineKey === "sampler" && t.sampleSource?.kind === "bundled") {
     const [kit, part] = String(t.sampleSource.id).split("/");

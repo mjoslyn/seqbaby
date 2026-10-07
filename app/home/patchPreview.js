@@ -18,7 +18,7 @@ export const PREVIEW_BPM = 120;
 /** @typedef {{ i: number, note: number | null, len: number, vel: number, chord?: string }} PhraseStep */
 /** @typedef {{ kind: "drum" | "bass" | "pad" | "lead", root: number, steps: PhraseStep[] }} Phrase */
 
-const DRUM_RE = /\b(kick|siege|snare|(open)?hat|hi-?hat|chat|ohat|clap|tom\d*|ride|crash|cymbal|perc|drum|cowbell|rim|kit)\b/;
+const DRUM_RE = /\b(kick|siege|snare|(open)?hat|hi-?hat|chat|ohat|clap|tom\d*|ride|crash|cymbal|perc|drum|cowbell|rim|kit|lancet)\b/;
 
 /** The key a patch card plays under (enginePlayer.ts). Share slugs never
  *  carry a colon. Here rather than there so a server component can call it. */
@@ -76,7 +76,7 @@ function drumPhrase(key, hint) {
   const v = { x: 0.8, X: 1, o: 0.4 };
   let pat = "x...x..ox.x.x..o"; // a generic hit: a broken beat
   if (/kick|siege/.test(k)) pat = "X...x...X...x..o";
-  else if (/snare|clap|rim/.test(k)) pat = "....X..o....X.o.";
+  else if (/snare|clap|rim|lancet/.test(k)) pat = "....X..o....X.o.";
   else if (/ohat|openhat/.test(k)) pat = "..x...x...x...X.";
   else if (/hat|chat/.test(k)) pat = "xoXoxoxoxoXoxoxx";
   else if (/ride/.test(k)) pat = "X.x.x.xoX.x.x.xo";

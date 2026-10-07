@@ -16,7 +16,7 @@ env / fx / eq / comp / mod / automation per track.
   `public/woscillators.js` →
   `public/js/main.js` (ES module). `middleware.ts` refreshes the Supabase
   session on every request *except* static engine assets.
-- **Engine**: ~73 dependency-free vanilla ES modules in `public/js/`. No
+- **Engine**: ~74 dependency-free vanilla ES modules in `public/js/`. No
   bundler — edit, reload. `window.seqbaby` (from `appApi.js`) exposes `state`
   and serialize/apply hooks to the React shell (typed in `app/seqbaby.d.ts`).
 - **Accounts + data**: Supabase (Postgres + Auth + RLS). Tables: `profiles`,
@@ -278,6 +278,10 @@ env / fx / eq / comp / mod / automation per track.
 - `vox.js` — **vox**, a singing voice: a glottal pulse through five
   formants, consonants run before the vowel, phrases sung a syllable a note,
   and a choir of copies per note, in one AudioWorklet. See the vox section.
+- `lancet.js` — **lancet**, a snare drum synthesizer: seven models (analog,
+  slap, modal, physical, fm, granular, blend) under four knobs and an fx
+  amount, a velocity amount and a per-hit randomizer, in one AudioWorklet.
+  See the lancet section.
 - `siege.js` — **siege**, the bass drum synth, a siege engine for the low end: a
   sine under a pitch envelope, with a drive (a two-stage wavefolder or a
   clipper) AFTER the amplitude envelope, a 3-pole 30Hz low cut, gate mode
@@ -317,7 +321,7 @@ npm test               # node --test: the pure modules (session format, chance g
                        #   version tree, song names, share card copy, the song builder, the jam diff,
                        #   song previews, grid avatars, the songs and people explorers,
                        #   the Strudel bridge, the reverb, the filter models, the guitar, the contagion,
-                       #   the vox, the prism, the repeat)
+                       #   the vox, the lancet, the prism, the repeat)
 npm run mcp            # the MCP server on stdio (mcp/server.mjs) — an agent writes songs
 npm run test:rls       # RLS policy tests — builds a throwaway Postgres in docker
 ```
@@ -784,7 +788,7 @@ Voice interface: `hit(midi, time, dur, vel, opts?)`, `setParam`,
 
 All engine type `drum-synth`. The five Tone.js analog-mono presets are each
 wrapped in `makePolyPool(size, buildOne)`; the silverbox, the contagion, the hexop, the
-guitar, the bass, subby, the drone, the vox and the siege are the odd ones out — AudioWorklet models that handle
+guitar, the bass, subby, the drone, the vox, the siege and the lancet are the odd ones out — AudioWorklet models that handle
 their own voicing (the silverbox, subby and the siege are mono, deliberately; the rest
 polyphonic). See their
 sections below. The guitar and bass keep their old pluck builders in voices.js
@@ -803,6 +807,7 @@ sections below. The guitar and bass keep their old pluck builders in voices.js
 | `dm:sub`       | `buildSubBassVoice`   | mono | subby, the sub bass, AudioWorklet (`subbass.js`) |
 | `dm:drone`     | `buildDroneVoice`     | 6 (internal) | equation-oscillator drone, filter, delay, cloud, AudioWorklet (`drone.js`) |
 | `dm:vox`       | `buildVoxVoice`       | 8 (internal) | singing voice: glottis, formants, consonants, choir, AudioWorklet (`vox.js`) |
+| `dm:lancet`    | `buildLancetVoice`    | 4 (internal) | snare synthesizer, seven models, per-hit randomizer, AudioWorklet (`lancet.js`) |
 | `dm:siege`       | `buildSiegeVoice`       | mono | the bass drum synth: sine, pitch envelope, fold / clip drive after the envelope, AudioWorklet (`siege.js`) |
 | `dm:tines`     | `buildTinesVoice`     | 6 | electric piano |
 | `dm:oracle`    | `buildOracleVoice`    | 6 | poly analog |
@@ -1455,6 +1460,93 @@ CONSONANT (hiss, burst, murmur, formant glide) ───┘
   and the markup against the tables.
 - **Loading** — Blob-URL registration from `loadWorklet()`; a failure falls
   back to a fat-triangle PolySynth through a fixed "ah" bandpass.
+
+## Lancet (`dm:lancet`, `public/js/lancet.js`)
+
+A snare drum synthesizer, seven ways: four knobs (DECAY, TIMBRE, COLOR,
+PITCH) and an FX amount whose meaning changes under each of seven models,
+a velocity amount, and a randomizer that throws the knobs per hit. Named for
+what it does, like the other emulators: a lancet is a small sharp cut.
+
+```
+TRIG ─▶ randomizer ─▶ MODEL (one of seven) ─▶ that model's FX ─▶ ceiling ─▶ out
+         (per hit)     analog · slap · modal · physical · fm · granular · blend
+```
+
+- **Each model is its own instrument, and the FX stage is the model's.** An
+  effect that suits one snare ruins another, so each carries its own: the
+  analog's a soft-to-hard clipper, the slap's a gentle soft clip, the modal's
+  a multiband distortion that leaves the lows alone, the physical's a rough
+  asymmetric drive, the fm's a fold, the granular's a compressor with
+  presence, the blend's an old sampler (a slower clock and fewer bits). The
+  first fifth of the fx knob brings the stage in from clean, so 0 is clean on
+  every model.
+- **The models, and what the two knobs do on each** (`LANCET_MODEL_TIPS`,
+  engineData.js, the status line when one is picked): *analog* is two sine
+  shells and a noise band (timbre the noise, color the pitch envelope and
+  shell balance); *slap* sines through a sine waveshaper over a bright
+  clipped noise (color the shaper, timbre body against noise); *modal* a
+  fundamental and seven partials at a drum head's own mode ratios plus
+  processed noise (color the partials' level and tilt, timbre the noise);
+  *physical* a noise exciter through three resonant delay lines with a
+  lowpass in each loop and wires riding an envelope of the head (timbre the
+  exciter's brightness and the damping, color the mode ratios from harmonic
+  to a membrane's and how much the lines couple); *fm* a sine carrier under
+  two sine modulators and a noise modulator (timbre the noise modulator's
+  level and tone, color the ratios); *granular* a plain snare under a cloud
+  of grains read from a source made per hit (timbre crossfades rattle, chain,
+  paper, coin and sand, color sets pitch, length and density together);
+  *blend* four synthesized high layers crossfaded by timbre over three bodies
+  blended by color, band-limited and warmed. The blend's "records" are
+  synthesized layers: there are no samples in here. **Reasoned, not
+  measured**: each model is what its name says, built honestly, with no
+  hardware under test.
+- **The knobs are latched per hit.** The model, the randomized knobs and the
+  velocity are read when the hit lands and held for its length, so a
+  randomizer landing on another model mid-roll does not retune a hit already
+  sounding. FX is the one knob read live (a lane on it sweeps the
+  distortion), with the hit's random offset added.
+- **The note is the pitch knob.** C2, the note every blank step on a drum
+  kit gets, is a 180Hz body; each semitone is a semitone; `lnctune` trims
+  ±12. `dm:lancet` is `melodic: false`, and `guessIsDrumKit` (meter.js), the
+  song builder's copy of that regex and `patchPreview.js`'s all match
+  `lancet`, since the name says no drum.
+- **Velocity is a level and a little more** (`lncdyn`): a hard hit is a touch
+  brighter and longer, a soft one duller and shorter, by as much as the knob
+  says. At 0 every hit is the same.
+- **The randomizer** is an amount per destination (`lncrdecay`, `lncrtimbre`,
+  `lncrcolor`, `lncrpitch`, `lncrfx`, `lncrlevel`, `lncrmodel`), thrown at
+  every trigger: a knob anywhere on its travel at full amount, the pitch
+  within an octave, the level down to a fifth, and `rmodel` the CHANCE a hit
+  picks any model. The stream is a seeded xorshift inside the processor, so a
+  render in the tests is a render.
+- **Four voices, a roll's worth.** A hit on a voice already sounding fades
+  the old one out over 2ms under the new one. One-shot: `release` is a no-op
+  (a keyboard key lifted early must not cut a snare), as for the 808 voices;
+  the processor's `off` fades everything, for the tests.
+- **A hit is not finished before it is 60ms old**: the physical model's lines
+  have not come round once inside a control block, and the exciter alone
+  read as finished, which silenced the model after its first block.
+- **Controls** — the four sliders are TIMBRE / COLOR / FX / DECAY (the pitch
+  is the note). The rest is `sq-param-group--lancet`: the strike dropdown
+  (filled at runtime from `LANCET_TONE_NAMES`), the model select
+  (`lncmodel`, a name from `LANCET_MODELS`), tune and velocity, and the
+  randomizer row. Keys are `lnc` + short key → `lancet_<short>` /
+  `lancet.<short>`, from `LANCET_NUM_CTLS` / `LANCET_SEL_CTLS`. Strikes via
+  `lancetTone(name)`, complete (model, panel, the four sliders); panel markup
+  is `LANCET_PANEL` in `app/studioMarkup.ts`.
+- **Strudel**: `s("lancet")` by name; `.bank("lancet")` puts `sd` / `cp` /
+  `rim` on it and the rest of the kit on the 808. The portable export is
+  `sd`.
+- `test/lancet.test.js` renders the processor in Node: every model at every
+  corner finite, under full scale and ending; the level spread across models;
+  pitch at the note and the tune; decay a length on every model; timbre and
+  color doing what each model says; fx clean at zero and dense above it;
+  velocity and dyn; the randomizer throwing only what it is told to; a roll;
+  the strikes; the markup against the tables; the builder; the Strudel round
+  trip.
+- **Loading** — Blob-URL registration from `loadWorklet()`; a failure falls
+  back to the 808 snare (`buildDrumSynthNode("808-snare")`).
 
 ## Siege (`dm:siege`, `public/js/siege.js`)
 
@@ -3868,7 +3960,7 @@ fails. Real-time capture — see Known limitations.
 ## Engines catalog (`buildEngineCatalog`)
 
 Groups in order: `plaits` (16) · `drum / synth` (808/909 kit + poly-saw /
-fm-bell / pad) · `Emulators` (silverbox + contagion + hexop + guitar + bass + subby + drone + vox + siege + 5 analog-mono) · `texture` (`dm:granular`) ·
+fm-bell / pad) · `Emulators` (silverbox + contagion + hexop + guitar + bass + subby + drone + vox + lancet + siege + 5 analog-mono) · `texture` (`dm:granular`) ·
 `wavetable` (`wt:akwf`) · `sampler` (single unified entry) · `saved patches`
 (`saved:<name>`) · `midi` · `bus` (the fx bus — not an instrument, see below).
 The engine key string is the source of truth.
@@ -4097,7 +4189,7 @@ through a 6ms fade on its gain).
   do the same, or use `currentBpm()` (lfo.js) as the sync helpers do.
 - **Worklet processor sources are template literals** (`silverbox.js`,
   `contagion.js`, `hexop.js`, `guitar.js`, `bass.js`, `subbass.js`,
-  `drone.js`, `vox.js`, `crusher.js`, `reverb.js`, `prism.js`, `repeat.js`),
+  `drone.js`, `vox.js`, `lancet.js`, `crusher.js`, `reverb.js`, `prism.js`, `repeat.js`),
   so a stray backtick or `${` inside one — including in a comment — truncates
   the string. The module still parses, `node --check` still passes, and the
   failure only shows up as a SyntaxError at engine boot. When editing inside a
@@ -4178,7 +4270,7 @@ Repo: https://github.com/mjoslyn/seqbaby.
   An inline marker (`window.__seqbabyServerBoot`) tells the paths apart, and
   `ScriptLoader.tsx` keeps its onload-chained injection for the soft-nav case
   (e.g. arriving from `/login`).
-- `app/EnginePreload.tsx` emits `modulepreload` for all 73 modules listed in
+- `app/EnginePreload.tsx` emits `modulepreload` for all 74 modules listed in
   `app/engineAssets.ts` (at `engineAsset("/js/<name>")`; the hints used to
   point at the site root and 404). The graph is 8 levels deep, so without it the browser
   needs up to eight sequential round trips just to discover the code.

@@ -43,7 +43,9 @@ export function guessIsDrumKit({ engineKey, name, sourceId }) {
   // A sampler track loading a bundled drum sample (e.g. "Techno/kick") reads as a
   // drum kit via its source id; plain synth engines fall through to the regex.
   const blob = `${engineKey || ""} ${eng?.label || ""} ${name || ""} ${sourceId || ""}`.toLowerCase();
-  return /\b(kick|siege|snare|rim|(open)?hat|hi-?hat|clap|tom\d*|ride|crash|cymbal|perc|drum)\b/.test(blob);
+  // `siege` is the bass drum synth and `lancet` the snare synthesizer: drums
+  // whose names say no drum.
+  return /\b(kick|siege|snare|rim|(open)?hat|hi-?hat|clap|tom\d*|ride|crash|cymbal|perc|drum|lancet)\b/.test(blob);
 }
 
 // Recompute t.isDrumKit from current engineKey + name. Existing step notes are

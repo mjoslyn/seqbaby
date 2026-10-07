@@ -14,6 +14,7 @@ import { buildBassVoice, BASS_NUM_KEYS, BASS_SEL_KEYS } from "./bass.js";
 import { buildSubBassVoice, SUB_NUM_KEYS, SUB_SEL_KEYS } from "./subbass.js";
 import { buildDroneVoice, DRONE_NUM_KEYS, DRONE_SEL_KEYS } from "./drone.js";
 import { buildVoxVoice, VOX_NUM_KEYS, VOX_SEL_KEYS, VOX_TEXT_KEYS } from "./vox.js";
+import { buildLancetVoice, LANCET_NUM_KEYS, LANCET_SEL_KEYS } from "./lancet.js";
 import { buildSiegeVoice, SIEGE_NUM_KEYS, SIEGE_SEL_KEYS } from "./siege.js";
 import { buildHexopVoice, HEXOP_NUM_KEYS, HEXOP_SEL_KEYS } from "./hexop.js";
 import { buildGuitarVoice, GUITAR_NUM_KEYS, GUITAR_SEL_KEYS } from "./guitar.js";
@@ -769,6 +770,13 @@ export function buildDrumSynthNode(kind, output) {
         release: (time) => s.releaseAll(time),
       };
     }
+    // Lancet: a snare synthesizer with seven models in one AudioWorklet — see
+    // lancet.js. The fallback is the 808 snare, so a track is never silent.
+    case "lancet": {
+      const v = buildLancetVoice(output);
+      if (v) return v;
+      return buildDrumSynthNode("808-snare", output);
+    }
     // Siege: the bass drum synth, one AudioWorklet — see siege.js. The fallback is
     // a sine with a pitch drop through a MembraneSynth: a kick, not the kick,
     // but never a silent track.
@@ -1415,7 +1423,8 @@ export class DrumSynthVoice {
                      ...SUB_NUM_KEYS, ...SUB_SEL_KEYS,
                      ...DRONE_NUM_KEYS, ...DRONE_SEL_KEYS,
                      ...VOX_NUM_KEYS, ...VOX_SEL_KEYS, ...VOX_TEXT_KEYS,
-                     ...SIEGE_NUM_KEYS, ...SIEGE_SEL_KEYS]) {
+                     ...SIEGE_NUM_KEYS, ...SIEGE_SEL_KEYS,
+                     ...LANCET_NUM_KEYS, ...LANCET_SEL_KEYS]) {
       if (this.params?.[k] != null) this.built.setParam(k, this.params[k]);
     }
   }

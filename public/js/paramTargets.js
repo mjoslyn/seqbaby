@@ -5,6 +5,7 @@ import { HEXOP_MOD_KEYS, HEXOP_MOD_LABELS } from "./hexop.js";
 import { SUB_MOD_KEYS, SUB_MOD_LABELS } from "./subbass.js";
 import { DRONE_MOD_KEYS, DRONE_MOD_LABELS } from "./drone.js";
 import { VOX_MOD_KEYS, VOX_MOD_LABELS } from "./vox.js";
+import { LANCET_MOD_KEYS, LANCET_MOD_LABELS } from "./lancet.js";
 import { SIEGE_MOD_KEYS, SIEGE_MOD_LABELS } from "./siege.js";
 import { GUITAR_MOD_KEYS, GUITAR_MOD_LABELS } from "./guitar.js";
 import { CHANCE_MOD_KEYS, CHANCE_MOD_LABELS } from "./chanceGen.js";
@@ -69,6 +70,8 @@ for (const k of SUB_MOD_KEYS) def(`p-sub${k}`, `sub_${k}`, `sub.${k}`);
 for (const k of DRONE_MOD_KEYS) def(`p-drn${k}`, `drone_${k}`, `drone.${k}`);
 // The vox — likewise, `p-sng*`.
 for (const k of VOX_MOD_KEYS) def(`p-sng${k}`, `vox_${k}`, `vox.${k}`);
+// The lancet — likewise, `p-lnc*`.
+for (const k of LANCET_MOD_KEYS) def(`p-lnc${k}`, `lancet_${k}`, `lancet.${k}`);
 // The siege — likewise, `p-sge*`.
 for (const k of SIEGE_MOD_KEYS) def(`p-sge${k}`, `siege_${k}`, `siege.${k}`);
 // Euclid's three counts — one list, three namespaces, as in hexop.js.
@@ -285,6 +288,8 @@ export const CONTROL_LABELS = {
   "p-drndir": "delay direction", "p-drnfreeze": "cloud freeze", "sq-drone__tone": "drone patch",
   ...Object.fromEntries(VOX_MOD_KEYS.map(k => [`p-sng${k}`, VOX_MOD_LABELS[k]])),
   "p-sngcons": "consonant", "p-sngwords": "words", "p-sngmode": "poly or mono", "p-sngtext": "lyric", "sq-vox__tone": "vox voice",
+  ...Object.fromEntries(LANCET_MOD_KEYS.map(k => [`p-lnc${k}`, LANCET_MOD_LABELS[k]])),
+  "p-lncmodel": "lancet model", "sq-lancet__tone": "lancet strike",
   ...Object.fromEntries(SIEGE_MOD_KEYS.map(k => [`p-sge${k}`, SIEGE_MOD_LABELS[k]])),
   "p-sgemode": "drive type", "p-sgegate": "trig or gate", "p-sgehpf": "low cut", "p-sgelock": "pitch lock", "sq-siege__tone": "siege kick",
   "p-bsamp": "bass amp", "p-bscab": "bass cabinet",

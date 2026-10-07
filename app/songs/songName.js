@@ -118,6 +118,7 @@ function familyFor(engineKey, isDrumKit) {
   if (key === "dm:sub") return "sub";
   if (key === "dm:drone") return "drone";
   if (key === "dm:vox") return "voice";
+  if (key === "dm:lancet") return "drums";
   if (key === "dm:siege") return "drums";
   if (key === "dm:granular" || key === "wt:akwf" || key === "dm:pad") return "texture";
   if (key.startsWith("plaits:")) return "plaits";

@@ -30,6 +30,7 @@ const NAMED = {
   "dm:sub": "subby",
   "dm:drone": "drone",
   "dm:vox": "vox",
+  "dm:lancet": "lancet",
   "dm:siege": "siege",
   "dm:granular": "granular",
   "dm:poly-saw": "poly saw",
