@@ -1974,8 +1974,8 @@ is the point of it: dicing the rhythm and reading the melody off the grid would
 be two unrelated parts stacked on each other.
 
 ```
-RHYTHM   note value · variation · legato · rest        [dice]  [realtime]
-MELODY   twelve semitone probabilities · low + high    [dice]  [realtime]
+RHYTHM   note value · variation · legato · rest        [dice]  [new throw: hold / every N passes]
+MELODY   twelve semitone probabilities · low + high    [dice]  [new throw: hold / every N passes]
 WINDOW   first step · last step
 ```
 
@@ -1989,9 +1989,19 @@ WINDOW   first step · last step
   decision) — never a draw from a running generator. Same bargain as the random
   square LFO (lfo.js), same three payoffs: the transport, the step grid and
   `write to pattern` agree without sharing state; a saved song replays note for
-  note with none of the notes in it; and realtime-mode is one number away (mix
-  the pass count into the seed). Two seeds, because the machine has two dice —
-  a rhythm that repeats under a melody that never does is what they are for.
+  note with none of the notes in it; and a throw that moves on by itself is one
+  number away (mix the throw's index into the seed). Two seeds, because the
+  machine has two dice — a rhythm that repeats under a melody that never does
+  is what they are for.
+- **How long a throw is held is a count of passes** (`rrep` / `mrep`, the `new
+  throw` dropdown beside each section's dice, `CHANCE_REPEATS` in
+  chanceGen.js): 0 holds it until the dice are rolled, 1 is a fresh throw every
+  time the window comes round (what the old `realtime` checkbox did; a song
+  carrying `rfree` / `mfree` reads as 1, in `normalizeChance`), and 2 / 4 / 8 /
+  16 let a phrase repeat that many times before moving on. The throw's index is
+  `chanceThrowIndex(rep, pass)`, the pass count divided by the hold, which the
+  panel's plan cache is keyed on so a plan only rebuilds when the throw moves.
+  The builder takes `rhythmRepeat` / `melodyRepeat` (and still the two flags).
 - **A throw is only accepted if it changes the part.** A seed only matters where
   a decision is left to make with it, so on a fresh track — variation, legato and
   rest all at zero, which is the panel's default — the rhythm dice rolled a new

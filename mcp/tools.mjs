@@ -277,11 +277,12 @@ export const TOOLS = [
   },
   {
     name: "set_chance", title: "Set chance",
-    description: "The chance generator: a whole part, rhythm and pitch, from probabilities (a meloDICER). note: base note value (" + sb.CHANCE_NOTE_LABELS.join(" ") + "); variation -1..1 reaches shorter / longer values; legato and rest 0..1; scale: pitch names to allow ([\"C\",\"Eb\",\"G\"]) or pitches: twelve weights C..B; lo / hi: the pitch range; first / last: the window in steps; rhythmSeed / melodySeed: the two dice (change one to re-throw). Same seeds replay the same part. Turning it on turns euclid off.",
+    description: "The chance generator: a whole part, rhythm and pitch, from probabilities (a meloDICER). note: base note value (" + sb.CHANCE_NOTE_LABELS.join(" ") + "); variation -1..1 reaches shorter / longer values; legato and rest 0..1; scale: pitch names to allow ([\"C\",\"Eb\",\"G\"]) or pitches: twelve weights C..B; lo / hi: the pitch range; first / last: the window in steps; rhythmSeed / melodySeed: the two dice (change one to re-throw); rhythmRepeat / melodyRepeat: how many passes of the window a throw is held for before a new one (0, the default, holds it until re-thrown; 1 is a fresh throw every pass; 4 lets a phrase repeat four times, then moves on). Same seeds replay the same part. Turning it on turns euclid off.",
     inputSchema: { track: trackArg, on: z.boolean().optional(), note: z.union([z.string(), z.number()]).optional(), variation: z.number().optional(), legato: z.number().optional(), rest: z.number().optional(),
       scale: z.array(z.string()).optional(), pitches: z.array(z.number()).optional(), lo: z.union([z.string(), z.number()]).optional(), hi: z.union([z.string(), z.number()]).optional(),
       first: z.number().int().optional(), last: z.number().int().optional(), triplets: z.boolean().optional(), thirtySeconds: z.boolean().optional(),
-      rhythmSeed: z.number().int().optional(), melodySeed: z.number().int().optional() },
+      rhythmSeed: z.number().int().optional(), melodySeed: z.number().int().optional(),
+      rhythmRepeat: z.number().int().min(0).max(64).optional(), melodyRepeat: z.number().int().min(0).max(64).optional() },
     handler: (ctx, { track, ...c }) => sb.setChance(ctx.song, track, c),
   },
 

@@ -2,9 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
-  CHANCE_DEFAULTS, CHANCE_MOD_KEYS, CHANCE_MOD_RANGE, CHANCE_NOTE_VALUES,
-  buildChancePlan, chanceCandidates, chanceDiceDead, chanceFromUnit, chancePlanSignature,
-  chanceToUnit, chanceWindow, cloneChance, normalizeChance, throwChanceDice,
+  CHANCE_DEFAULTS, CHANCE_MOD_KEYS, CHANCE_MOD_RANGE, CHANCE_NOTE_VALUES, CHANCE_REPEATS,
+  CHANCE_REPEAT_MAX, buildChancePlan, chanceCandidates, chanceDiceDead, chanceFromUnit,
+  chancePlanSignature, chanceThrowIndex, chanceToUnit, chanceWindow, cloneChance,
+  normalizeChance, throwChanceDice,
 } from "../public/js/chanceGen.js";
 
 // The chance generator is the one part of this app whose output is *random*, and
@@ -88,13 +89,42 @@ test("a new throw gives a different part", () => {
   assert.ok(differs > 24, `only ${differs} of 28 throws differed`);
 });
 
-test("realtime mode re-throws every pass; dice mode does not", () => {
+test("a throw held for one pass re-throws every pass; held for good it never does", () => {
   const held = cfg({ var: 0.6, rest: 0.3 });
   assert.deepEqual(buildChancePlan(held, { rpass: 0 }), buildChancePlan(held, { rpass: 7 }));
-  const free = cfg({ var: 0.6, rest: 0.3, rfree: true });
+  const free = cfg({ var: 0.6, rest: 0.3, rrep: 1 });
   const passes = new Set(
     Array.from({ length: 12 }, (_, p) => JSON.stringify(buildChancePlan(free, { rpass: p }))));
   assert.ok(passes.size > 8, `only ${passes.size} distinct parts over 12 passes`);
+});
+
+test("a throw held for N passes repeats N times, then moves on", () => {
+  const c = cfg({ var: 0.6, rest: 0.3, rrep: 4 });
+  const at = (p) => JSON.stringify(buildChancePlan(c, { rpass: p }));
+  for (let p = 1; p < 4; p++) assert.equal(at(p), at(0), `pass ${p} should repeat pass 0`);
+  for (let p = 5; p < 8; p++) assert.equal(at(p), at(4), `pass ${p} should repeat pass 4`);
+  const throws = new Set(Array.from({ length: 8 }, (_, i) => at(i * 4)));
+  assert.ok(throws.size > 5, `only ${throws.size} distinct throws over 8 holds of 4`);
+  // The first throw is the held one, so turning the hold on changes nothing
+  // until the window has come round that many times.
+  assert.equal(at(0), JSON.stringify(buildChancePlan(cfg({ var: 0.6, rest: 0.3, rrep: 1 }), { rpass: 0 })));
+  assert.equal(chanceThrowIndex(4, 7), 1);
+  assert.equal(chanceThrowIndex(4, 8), 2);
+  assert.equal(chanceThrowIndex(0, 99), 0);
+});
+
+test("the realtime flags a song was saved with read as a hold of one pass", () => {
+  assert.equal(normalizeChance({ rfree: true }, 16).rrep, 1);
+  assert.equal(normalizeChance({ mfree: true }, 16).mrep, 1);
+  assert.equal(normalizeChance({ rfree: false }, 16).rrep, 0);
+  assert.equal(normalizeChance({}, 16).mrep, 0);
+  // A count wins over the flag it replaced, and is clamped to what a song may hold.
+  assert.equal(normalizeChance({ rrep: 8, rfree: true }, 16).rrep, 8);
+  assert.equal(normalizeChance({ mrep: 0, mfree: true }, 16).mrep, 0);
+  assert.equal(normalizeChance({ rrep: 1000 }, 16).rrep, CHANCE_REPEAT_MAX);
+  assert.equal(normalizeChance({ rrep: -3 }, 16).rrep, 0);
+  assert.deepEqual(CHANCE_REPEATS, [0, 1, 2, 4, 8, 16]);
+  for (const r of CHANCE_REPEATS) assert.ok(r <= CHANCE_REPEAT_MAX);
 });
 
 test("the two sections' dice are independent", () => {
@@ -419,10 +449,10 @@ test("a dice with too few outcomes to differ is dead rather than silent", () => 
   }
 });
 
-test("realtime mode is where the throw moves on its own, so the dice still reports", () => {
+test("a throw that moves on its own still lets the dice report", () => {
   // The dice generates with the same pass the transport is on, so it compares
   // against the part being heard rather than pass zero's.
-  const c = cfg({ var: 0.6, rest: 0.3, rfree: true });
+  const c = cfg({ var: 0.6, rest: 0.3, rrep: 1 });
   const opts = { rpass: 5 };
   const before = chancePlanSignature(buildChancePlan(c, opts), "rhythm");
   const { seed } = throwChanceDice(c, "rhythm", opts);

@@ -33,8 +33,10 @@
  * @property {boolean} x32    Let variation reach 1/32 notes.
  * @property {number} rseed   The rhythm section's current throw.
  * @property {number} mseed   The melody section's current throw.
- * @property {boolean} rfree  Rhythm in realtime-mode: a new throw every pass.
- * @property {boolean} mfree  Melody in realtime-mode.
+ * @property {number} rrep    How many passes of the window the rhythm throw is held
+ *                            for before a new one: 0 holds it for good (the dice
+ *                            decide), 1 is a fresh throw every pass.
+ * @property {number} mrep    The same for the melody throw.
  */
 
 /**
@@ -79,8 +81,15 @@ export const CHANCE_DEFAULTS = {
   first: 0, last: 15,
   trips: false, x32: false,
   rseed: 1, mseed: 1,
-  rfree: false, mfree: false,
+  rrep: 0, mrep: 0,
 };
+
+/** The repeat counts a section's throw can be held for, as the panel offers
+ *  them: hold (0), then a new throw every 1, 2, 4, 8 or 16 passes. A song can
+ *  hold any count; the list is what the dropdown spells. */
+export const CHANCE_REPEATS = [0, 1, 2, 4, 8, 16];
+/** The longest hold a song may ask for. */
+export const CHANCE_REPEAT_MAX = 64;
 
 /**
  * The six modulatable controls, in every namespace they answer to:
@@ -138,9 +147,24 @@ export function newThrow() {
   return ((Math.random() * 0xffffffff) >>> 0) || 1;
 }
 
-/** How the two sections' throws move on in realtime-mode: one number per pass,
- *  mixed into the seed, so the pass count is the only state realtime-mode needs. */
-const passSeed = (seed, pass, salt) => ((seed | 0) ^ Math.imul((pass | 0) + 1, salt)) >>> 0;
+/** Which throw a section is on: the pass count divided by how many passes a
+ *  throw is held for. 0 holds for good, so every pass is throw 0. Exported
+ *  because the panel caches its plan on it: a plan only moves when this does. */
+export function chanceThrowIndex(rep, pass) {
+  const r = rep | 0;
+  return r > 0 ? Math.floor(Math.max(0, pass | 0) / r) : 0;
+}
+
+/** How a section's throw moves on when it is not held for good: the throw's
+ *  index mixed into the seed, so the pass count is the only state it needs. */
+const passSeed = (seed, idx, salt) => ((seed | 0) ^ Math.imul((idx | 0) + 1, salt)) >>> 0;
+
+/** A stored repeat count, with the flag it replaced (`rfree` / `mfree`: a new
+ *  throw every pass) read as 1 when the count is absent. */
+function repeatOf(rep, free) {
+  if (rep != null && Number.isFinite(Number(rep))) return clampInt(Number(rep), 0, CHANCE_REPEAT_MAX);
+  return free ? 1 : 0;
+}
 
 // ---- settings ------------------------------------------------------------
 
@@ -184,8 +208,8 @@ export function normalizeChance(src, len) {
     x32: !!s.x32,
     rseed: (s.rseed | 0) || 1,
     mseed: (s.mseed | 0) || 1,
-    rfree: !!s.rfree,
-    mfree: !!s.mfree,
+    rrep: repeatOf(s.rrep, s.rfree),
+    mrep: repeatOf(s.mrep, s.mfree),
   };
 }
 
@@ -311,8 +335,8 @@ function drawNote(cand, c, p, seed) {
  * @param {ChanceConfig} c
  * @param {Object} [opts]
  * @param {number} [opts.spb]   Steps per beat, for where the accents fall.
- * @param {number} [opts.rpass] Which pass of the window, for realtime rhythm.
- * @param {number} [opts.mpass] Which pass, for realtime melody.
+ * @param {number} [opts.rpass] Which pass of the window, for a rhythm throw held for a count of passes.
+ * @param {number} [opts.mpass] Which pass, for the melody throw.
  * @returns {({span: number, hits: number, vel: number, note: number}|null)[]}
  */
 export function buildChancePlan(c, opts = {}) {
@@ -320,10 +344,10 @@ export function buildChancePlan(c, opts = {}) {
   const win = chanceWindow(c);
   const lad = ladderFor(c);
   const cand = chanceCandidates(c);
-  // Realtime-mode moves the throw on every pass; dice-mode holds it, which is
-  // the whole point of the dice.
-  const rseed = c.rfree ? passSeed(c.rseed, opts.rpass || 0, 0x27d4eb2d) : c.rseed;
-  const mseed = c.mfree ? passSeed(c.mseed, opts.mpass || 0, 0x165667b1) : c.mseed;
+  // A repeat count moves the throw on every so many passes; held (0), the dice
+  // decide it, which is the whole point of the dice.
+  const rseed = c.rrep ? passSeed(c.rseed, chanceThrowIndex(c.rrep, opts.rpass), 0x27d4eb2d) : c.rseed;
+  const mseed = c.mrep ? passSeed(c.mseed, chanceThrowIndex(c.mrep, opts.mpass), 0x165667b1) : c.mseed;
 
   const plan = new Array(win).fill(null);
   let prev = -1;                       // window position of the last note placed

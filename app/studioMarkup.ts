@@ -961,7 +961,7 @@ ${ORACLE_PANEL}
             <label title="let variation reach 1/32 notes: one step, struck twice"><input class="sq-chance__x32" type="checkbox" /> 1/32s</label>
           </span>
           <button class="sq-chance__dice-r sq-btn--ghost" type="button" title="throw the rhythm dice: new values for the note lengths, the rests and the ties. The throw is held, so the part repeats">roll</button>
-          <label class="sq-chance__free" title="realtime: take a fresh throw every time the window comes round, so the rhythm never repeats"><input class="sq-chance__rfree" type="checkbox" /> realtime</label>
+          <label class="sq-chance__free" title="how long a rhythm throw is held: hold keeps it until you roll, every pass is a fresh throw each time the window comes round, so the rhythm never repeats, and the counts in between let a phrase repeat that many times before a new one"><span>new throw</span><select class="sq-chance__rrep" aria-label="rhythm: new throw"><option value="0">hold</option><option value="1">every pass</option><option value="2">every 2 passes</option><option value="4">every 4 passes</option><option value="8">every 8 passes</option><option value="16">every 16 passes</option></select></label>
         </div>
         <div class="sq-chance__ctls">
           <label class="sq-chance__f" title="the base rhythm, 1/1 down to 1/32 including the triplets. This is the grid the rest of the section varies">
@@ -993,7 +993,7 @@ ${ORACLE_PANEL}
             <button class="sq-chance__clear-pcs sq-btn--ghost" type="button" title="put every semitone probability back to zero">none</button>
           </span>
           <button class="sq-chance__dice-m sq-btn--ghost" type="button" title="throw the melody dice: new pitches, same rhythm. Separate from the rhythm throw, so a part can repeat its rhythm while the notes keep moving">roll</button>
-          <label class="sq-chance__free" title="realtime: a new melody every time the window comes round, so the pitches never repeat"><input class="sq-chance__mfree" type="checkbox" /> realtime</label>
+          <label class="sq-chance__free" title="how long a melody throw is held: hold keeps it until you roll, every pass is a new melody each time the window comes round, so the pitches never repeat, and the counts in between let a phrase repeat that many times before a new one"><span>new throw</span><select class="sq-chance__mrep" aria-label="melody: new throw"><option value="0">hold</option><option value="1">every pass</option><option value="2">every 2 passes</option><option value="4">every 4 passes</option><option value="8">every 8 passes</option><option value="16">every 16 passes</option></select></label>
         </div>
         <div class="sq-chance__keys">
           <label class="sq-chance__key" title="how likely C is to turn up. A probability, not a switch, so half height means half as often. One raised fader on its own is certain wherever it sits">

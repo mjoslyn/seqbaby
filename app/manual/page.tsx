@@ -400,9 +400,13 @@ export default function ManualPage() {
           <p>
             <strong>The dice.</strong> Each section&apos;s{" "}
             <span className={styles.ui}>roll</span> takes a new throw. A throw is
-            held, so the part repeats and you can play against it. Tick{" "}
-            <span className={styles.ui}>realtime</span> on a section and it stops
-            holding: a new throw every time round, so that section never repeats.
+            held, so the part repeats and you can play against it. The{" "}
+            <span className={styles.ui}>new throw</span> dropdown beside each roll
+            says how long for: <span className={styles.ui}>hold</span> keeps it
+            until you roll again, <span className={styles.ui}>every pass</span> takes
+            a fresh throw every time the window comes round, so that section never
+            repeats, and <span className={styles.ui}>every 4 passes</span> lets a
+            phrase play four times and then move on.
             Rolling a section twice always changes something; if a throw can&apos;t
             change anything, the button says which knob to turn instead.
           </p>

@@ -255,6 +255,10 @@ test("euclid is Bjorklund proper, and one generator at a time", () => {
   assert.equal(s.tracks[0].chance.note, 4);
   assert.deepEqual(s.tracks[0].chance.pcs, [1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0]);
   assert.throws(() => sb.setChance(s, index, { pitches: Array(12).fill(0) }), /every pitch weight is zero/);
+  sb.setChance(s, index, { rhythmRepeat: 4, melodyFree: true });
+  assert.equal(s.tracks[0].chance.rrep, 4);
+  assert.equal(s.tracks[0].chance.mrep, 1, "the old flag is a hold of one pass");
+  assert.throws(() => sb.setChance(s, index, { rhythmRepeat: 500 }), /rhythmRepeat/);
   assert.throws(() => sb.setEuclid(s, index, { pulses: 20, steps: 16 }), /pulses must be between 0 and 16/);
 });
 
