@@ -428,6 +428,7 @@ input[type="range"] { accent-color: var(--accent); }
 .sq-vox__f[data-knob],
 .sq-lancet__f[data-knob],
 .sq-siege__f[data-knob],
+.sq-oracle__f[data-knob],
 .sq-ladder__freq[data-knob],
 .sq-ladder__noise[data-knob] {
   flex-direction: column;
@@ -445,6 +446,7 @@ input[type="range"] { accent-color: var(--accent); }
 .sq-vox__f[data-knob] > span,
 .sq-lancet__f[data-knob] > span,
 .sq-siege__f[data-knob] > span,
+.sq-oracle__f[data-knob] > span,
 .sq-ladder__freq[data-knob] > span,
 .sq-ladder__noise[data-knob] > span {
   font-size: 10px;
@@ -1059,6 +1061,13 @@ main {
 .sq-param-group--siege .sq-siege__f { display: inline-flex; align-items: center; gap: 4px; color: var(--fg-dim); }
 .sq-param-group--siege .sq-siege__f .sq-knob { --knob-size: 34px; }
 .sq-param-group--siege select { padding: 2px 6px; font-size: 11px; }
+.sq-param-group--oracle { border-color: color-mix(in oklab, #6f7fd9 45%, var(--border)); flex-direction: column; align-items: stretch; gap: 4px; }
+.sq-param-group--oracle[hidden] { display: none !important; }
+.sq-param-group--oracle .sq-oracle__row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 11px; }
+.sq-param-group--oracle .sq-oracle__lbl { color: var(--fg-dim); min-width: 44px; }
+.sq-param-group--oracle .sq-oracle__f { display: inline-flex; align-items: center; gap: 4px; color: var(--fg-dim); }
+.sq-param-group--oracle .sq-oracle__f .sq-knob { --knob-size: 34px; }
+.sq-param-group--oracle select { padding: 2px 6px; font-size: 11px; }
 .sq-param-group--silverbox { border-color: color-mix(in oklab, #ff7a4d 45%, var(--border)); }
 .sq-param-group--silverbox[hidden] { display: none !important; }
 .sq-param-group--silverbox select { padding: 2px 6px; font-size: 11px; }
@@ -3038,8 +3047,9 @@ body.kbd-recording:not(.sq-playing) .sq-track.is-kbd-active .sq-step.is-cursor {
 .sq-vox__f[data-motion] > span:not(.sq-knob)::after,
 .sq-lancet__f[data-motion] > span:not(.sq-knob)::after,
 .sq-siege__f[data-motion] > span:not(.sq-knob)::after,
+.sq-oracle__f[data-motion] > span:not(.sq-knob)::after,
 .sq-hexop__f[data-motion]::after,
-label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not(.sq-bass__f):not(.sq-sub__f):not(.sq-drone__f):not(.sq-vox__f):not(.sq-lancet__f):not(.sq-siege__f):not(.sq-hexop__f)::before {
+label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not(.sq-bass__f):not(.sq-sub__f):not(.sq-drone__f):not(.sq-vox__f):not(.sq-lancet__f):not(.sq-siege__f):not(.sq-oracle__f):not(.sq-hexop__f)::before {
   content: "";
   display: inline-block;
   width: 5px; height: 5px;
@@ -3048,7 +3058,7 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not
   vertical-align: middle;
   margin: 0 0 1px 5px;
 }
-label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not(.sq-bass__f):not(.sq-sub__f):not(.sq-drone__f):not(.sq-vox__f):not(.sq-lancet__f):not(.sq-siege__f):not(.sq-hexop__f)::before { margin: 0 5px 1px 0; }
+label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not(.sq-bass__f):not(.sq-sub__f):not(.sq-drone__f):not(.sq-vox__f):not(.sq-lancet__f):not(.sq-siege__f):not(.sq-oracle__f):not(.sq-hexop__f)::before { margin: 0 5px 1px 0; }
 /* The hexop's operator cells have no label text of their own (the column heading
    names them), so the dot goes after the slider rather than beside a word. */
 .sq-hexop__f[data-motion]::after { flex: 0 0 auto; margin: 0 0 0 3px; }
@@ -3061,6 +3071,7 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not
 .sq-drone__f[data-motion="off"] > span:not(.sq-knob),
 .sq-vox__f[data-motion="off"] > span:not(.sq-knob),
 .sq-siege__f[data-motion="off"] > span:not(.sq-knob),
+.sq-oracle__f[data-motion="off"] > span:not(.sq-knob),
 .sq-lancet__f[data-motion="off"] > span:not(.sq-knob) { opacity: 0.8; }
 
 /* Right-click a parameter → what is modulating / automating that one control. */

@@ -8,6 +8,7 @@ import { VOX_MOD_KEYS, VOX_MOD_LABELS } from "./vox.js";
 import { LANCET_MOD_KEYS, LANCET_MOD_LABELS } from "./lancet.js";
 import { SIEGE_MOD_KEYS, SIEGE_MOD_LABELS } from "./siege.js";
 import { LADDER_MOD_KEYS, LADDER_MOD_LABELS } from "./ladder.js";
+import { ORACLE_MOD_KEYS, ORACLE_MOD_LABELS } from "./oracle.js";
 import { GUITAR_MOD_KEYS, GUITAR_MOD_LABELS } from "./guitar.js";
 import { CHANCE_MOD_KEYS, CHANCE_MOD_LABELS } from "./chanceGen.js";
 import { PRISM_KNOBS, PRISM_KNOB_LABELS, REPEAT_KNOBS, REPEAT_KNOB_LABELS } from "./soundDefaults.js";
@@ -77,6 +78,8 @@ for (const k of LANCET_MOD_KEYS) def(`p-lnc${k}`, `lancet_${k}`, `lancet.${k}`);
 for (const k of SIEGE_MOD_KEYS) def(`p-sge${k}`, `siege_${k}`, `siege.${k}`);
 // The ladder — likewise, `p-ldr*`.
 for (const k of LADDER_MOD_KEYS) def(`p-ldr${k}`, `ladder_${k}`, `ladder.${k}`);
+// The oracle — likewise, `p-orc*`.
+for (const k of ORACLE_MOD_KEYS) def(`p-orc${k}`, `oracle_${k}`, `oracle.${k}`);
 // Euclid's three counts — one list, three namespaces, as in hexop.js.
 for (const k of ["pulses", "steps", "rotate"]) def(`p-euc${k}`, `euclid_${k}`, `euclid.${k}`);
 // The chance generator's six, likewise. Its other controls (the twelve semitone
@@ -296,6 +299,8 @@ export const CONTROL_LABELS = {
   ...Object.fromEntries(SIEGE_MOD_KEYS.map(k => [`p-sge${k}`, SIEGE_MOD_LABELS[k]])),
   "p-sgemode": "drive type", "p-sgegate": "trig or gate", "p-sgehpf": "low cut", "p-sgelock": "pitch lock", "sq-siege__tone": "siege kick",
   ...Object.fromEntries(LADDER_MOD_KEYS.map(k => [`p-ldr${k}`, LADDER_MOD_LABELS[k]])),
+  ...Object.fromEntries(ORACLE_MOD_KEYS.map(k => [`p-orc${k}`, ORACLE_MOD_LABELS[k]])),
+  "sq-oracle__tone": "oracle patch",
   "p-ldrkbd": "keyboard tracking", "p-ldrosc3kbd": "osc 3 keyboard control", "p-ldroscmod": "oscillator modulation",
   "p-ldrfiltmod": "filter modulation", "p-ldrdecsw": "decay switch", "p-ldrmode": "poly or mono", "sq-ladder__tone": "ladder patch",
   "p-bsamp": "bass amp", "p-bscab": "bass cabinet",

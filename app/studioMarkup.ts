@@ -367,6 +367,33 @@ const SIEGE_PANEL = `
           </div>
         </div>`;
 
+// The oracle's panel: the poly analog's front plate minus the four sliders
+// (detune / VCO 2 shape / drive / decay) and the mixer row. The patch
+// dropdown ships empty and is filled at runtime from ORACLE_TONE_NAMES; the
+// ranges and defaults must match ORACLE_NUM_CTLS in engineData.js
+// (test/oracle.test.js holds them to it). Classes are `p-orc*`.
+const ORACLE_PANEL = `
+        <div class="sq-param-group sq-param-group--oracle" hidden>
+          <div class="sq-oracle__row">
+            <span class="sq-oracle__lbl">patch</span>
+            <select class="sq-oracle__tone" title="load a patch: the mixer, the four sliders and the whole panel"></select>
+          </div>
+          <div class="sq-oracle__row">
+            <span class="sq-oracle__lbl">vco</span>
+            <label class="sq-oracle__f"><span>shape 1</span><input class="p-orcshape1" type="range" min="0" max="1" step="0.01" value="0.5" title="VCO 1's shape: triangle at the bottom, saw in the middle, pulse at the top. VCO 2's is the shape slider" /></label>
+            <label class="sq-oracle__f"><span>width 1</span><input class="p-orcpw1" type="range" min="0" max="1" step="0.01" value="0" title="VCO 1's pulse width, a square at the bottom to a narrow pulse at the top. Only heard once the shape is past the saw" /></label>
+            <label class="sq-oracle__f"><span>width 2</span><input class="p-orcpw2" type="range" min="0" max="1" step="0.01" value="0" title="VCO 2's pulse width, a square at the bottom to a narrow pulse at the top" /></label>
+            <label class="sq-oracle__f"><span>slop</span><input class="p-orcslop" type="range" min="0" max="1" step="0.01" value="0.2" title="how far each voice card's two VCOs sit from true, up to 12 cents each, plus a slow wander. Zero is six identical voices in perfect tune; a little is what makes a poly analog sound like one" /></label>
+          </div>
+          <div class="sq-oracle__row">
+            <span class="sq-oracle__lbl">env</span>
+            <label class="sq-oracle__f"><span>attack</span><input class="p-orcatk" type="range" min="0" max="1" step="0.01" value="0.17" title="how long a note takes to reach full, 1ms to 10s" /></label>
+            <label class="sq-oracle__f"><span>sustain</span><input class="p-orcsus" type="range" min="0" max="1" step="0.01" value="0.7" title="the level a held note settles to after the decay" /></label>
+            <label class="sq-oracle__f"><span>release</span><input class="p-orcrel" type="range" min="0" max="1" step="0.01" value="0.68" title="how long a note takes to go once the step ends, 10ms to 10s" /></label>
+            <label class="sq-oracle__f"><span>chorus</span><input class="p-orcchorus" type="range" min="0" max="1" step="0.01" value="0.22" title="the stereo chorus on the way out: two taps under a slow sweep in antiphase. Zero is none" /></label>
+          </div>
+        </div>`;
+
 const VOX_PANEL = `
         <div class="sq-param-group sq-param-group--vox" hidden>
           <div class="sq-vox__row">
@@ -791,6 +818,7 @@ ${DRONE_PANEL}
 ${VOX_PANEL}
 ${LANCET_PANEL}
 ${SIEGE_PANEL}
+${ORACLE_PANEL}
         <div class="sq-param-group sq-param-group--silverbox" hidden>
           <div class="sq-field"><label>wave</label>
             <select class="p-sbwave" title="the two waveforms. Saw is brighter, square is hollower and sits lower">

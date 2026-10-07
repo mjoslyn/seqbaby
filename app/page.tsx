@@ -47,7 +47,7 @@ const EMULATORS = [
   ["lancet", "a snare drum, seven different ways, under four knobs. a randomizer can throw the knobs on every hit."],
   ["siege", "a bass drum. a sine under a pitch envelope, with a wavefolder after the amp envelope, so the attack gets crushed and the tail stays clean."],
   ["tines", "an electric piano. a hammer, a tine and a tone bar, with chorus on the way out."],
-  ["oracle", "a polyphonic analog synth. two oscillators, a sub, noise, and an overdrive stage on the output."],
+  ["oracle", "a polyphonic analog synth. two oscillators that morph from triangle to pulse, a little out of tune with each other the way six voice cards are, a sub, noise, a drive on the summed voices, and a chorus."],
 ] as const;
 
 // The other instruments, in the same list.

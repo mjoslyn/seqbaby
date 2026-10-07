@@ -133,8 +133,11 @@ note wins, a tie is legato), the osc levels up together for the overdrive.
 
 Chords and keys: `dm:tines` (electric piano), `dm:hexop` with a preset
 ("e.piano", "bell", "brass", "marimba", "organ", "pad", "bass"), `dm:pad`
-(slow), `dm:drift` (chorused analog), `dm:oracle` (poly analog, detune and
-drive), `wt:akwf` (wavetable), `plaits:6` (the chord model: one note plays a
+(slow), `dm:drift` (chorused analog), `dm:oracle` (the poly analog: harm
+detunes VCO 2, timb is its shape, morph the drive on the summed voices;
+`orcslop` is the analog in it, `orcchorus` the width, `orcatk` / `orcsus` /
+`orcrel` the envelope; presets "poly brass", "strings", "warm pad", "pulse
+keys", "unison bass", "glass", "dirty stab"), `wt:akwf` (wavetable), `plaits:6` (the chord model: one note plays a
 chord, harm picks which). `dm:poly-saw` for supersaw stabs. Put a chord on
 the step (`set_step` chord "min7") on any poly engine.
 

@@ -2,8 +2,8 @@
 
 Multi-engine browser step sequencer. A hand-written vanilla Web Audio engine
 (Mutable Instruments Plaits via `@vectorsize/woscillators`, Tone.js drum/synth
-recipes, worklet models of the silverbox / contagion / hexop plus eight
-analog-mono emulators, wavetable + granular + unified sampler
+recipes, worklet models of the silverbox / contagion / hexop plus nine
+analog emulators, wavetable + granular + unified sampler
 engines, Web MIDI) wrapped in a thin Next.js + Supabase shell for accounts,
 cloud songs, a patch gallery, and share links. 32-pattern bank with filter /
 env / fx / eq / comp / mod / automation per track.
@@ -16,7 +16,7 @@ env / fx / eq / comp / mod / automation per track.
   `public/woscillators.js` →
   `public/js/main.js` (ES module). `middleware.ts` refreshes the Supabase
   session on every request *except* static engine assets.
-- **Engine**: ~76 dependency-free vanilla ES modules in `public/js/`. No
+- **Engine**: ~77 dependency-free vanilla ES modules in `public/js/`. No
   bundler — edit, reload. `window.seqbaby` (from `appApi.js`) exposes `state`
   and serialize/apply hooks to the React shell (typed in `app/seqbaby.d.ts`).
 - **Accounts + data**: Supabase (Postgres + Auth + RLS). Tables: `profiles`,
@@ -293,6 +293,10 @@ env / fx / eq / comp / mod / automation per track.
   4-pole feedback ladder with the saturator in its loop, two contours, the
   mod wheel, mono low-note priority, in one AudioWorklet. See the ladder
   section.
+- `oracle.js` — **oracle**, the poly analog after the Prophet-6: two
+  morphing VCOs with slop, a sub, noise, an ADSR, a drive on the summed
+  voices and a stereo chorus, six voices in one AudioWorklet. See the oracle
+  section.
 - `hexop.js` — the hexop, same shape again, plus the 32-algorithm
   table, the panel's generated key lists and the preset voices. See the hexop
   section below.
@@ -329,7 +333,7 @@ npm test               # node --test: the pure modules (session format, chance g
                        #   song previews, grid avatars, the songs and people explorers,
                        #   the Strudel bridge, the reverb, the filter models, the guitar, the contagion,
                        #   the vox and its phonetic reader, the lancet, the prism, the repeat,
-                       #   the ladder)
+                       #   the ladder, the oracle)
 npm run mcp            # the MCP server on stdio (mcp/server.mjs) — an agent writes songs
 npm run test:rls       # RLS policy tests — builds a throwaway Postgres in docker
 ```
@@ -794,13 +798,13 @@ Voice interface: `hit(midi, time, dur, vel, opts?)`, `setParam`,
 
 ## Emulators (`"Emulators"` optgroup)
 
-All engine type `drum-synth`. The four Tone.js analog-mono presets are each
+All engine type `drum-synth`. The three Tone.js analog-mono presets are each
 wrapped in `makePolyPool(size, buildOne)`; the silverbox, the contagion, the hexop, the
-guitar, the bass, subby, the drone, the vox, the siege, the lancet and the ladder are the odd ones out — AudioWorklet models that handle
+guitar, the bass, subby, the drone, the vox, the siege, the lancet, the ladder and the oracle are the odd ones out — AudioWorklet models that handle
 their own voicing (the silverbox, subby and the siege are mono, deliberately; the rest
 polyphonic, the ladder by a switch). See their
-sections below. The guitar, bass and ladder keep their old Tone builders in voices.js
-(`buildPluckGuitarVoice` / `buildPluckBassVoice` / `buildLadderVoice`) purely as worklet fallbacks.
+sections below. The guitar, bass, ladder and oracle keep their old Tone builders in voices.js
+(`buildPluckGuitarVoice` / `buildPluckBassVoice` / `buildLadderVoice` / `buildOracleVoice`) purely as worklet fallbacks.
 
 | key             | builder               | pool | character |
 |---|---|---|---|
@@ -818,7 +822,7 @@ sections below. The guitar, bass and ladder keep their old Tone builders in voic
 | `dm:lancet`    | `buildLancetVoice`    | 4 (internal) | snare synthesizer, seven models, per-hit randomizer, AudioWorklet (`lancet.js`) |
 | `dm:siege`       | `buildSiegeVoice`       | mono | the bass drum synth: sine, pitch envelope, fold / clip drive after the envelope, AudioWorklet (`siege.js`) |
 | `dm:tines`     | `buildTinesVoice`     | 6 | electric piano |
-| `dm:oracle`    | `buildOracleVoice`    | 6 | poly analog |
+| `dm:oracle`    | `buildOracleWorkletVoice` | 6 (internal) | the poly analog: morphing VCOs with slop, drive on the sum, chorus, AudioWorklet (`oracle.js`) |
 
 ### The emulator names (`migrateLegacyNames`, sessionFormat.js)
 
@@ -945,6 +949,87 @@ NOISE ─┘  overload) │  ◀── FILTER CONTOUR × amount   │  ◀──
   back to `buildLadderVoice` (the Tone pool this engine used to be, with a
   24dB Tone lowpass reading the sliders the worklet's way), never a silent
   track.
+
+## Oracle (`dm:oracle`, `public/js/oracle.js`)
+
+The poly analog, modelled on the Prophet-6's signal path where a Tone.js pool
+could not go. What it was: two phase-locked Tone oscillators (VCO 2 a
+saw/pulse crossfade whose pulse was a thresholded saw, aliasing at -19dB at
+E5), a `Tone.Distortion` blended in parallel (measured: full "drive" cut the
+level 7dB and moved the spectrum 2dB) and six fixed choruses. The two VCOs at
+the default detune summed to exactly 2.00x one of them: one louder saw.
+
+```
+VCO 1 (shape, width) ─┐
+VCO 2 (shape, width,  ├─ MIXER ─▶ VCA (ADSR) ─┐
+       detune)        │                       │  x6 voices
+SUB (square, -1 oct)  ┤                       ▼
+NOISE ────────────────┘      Σ ─▶ DRIVE (gain, knee, 2x) ─▶ CHORUS (stereo) ─▶ L/R
+```
+
+- **Free-running oscillators, with slop.** A note starts each VCO at a random
+  phase, and each of the six voice cards carries a fixed tuning offset per VCO
+  (the calibration spread, drawn once) plus a slow random walk, both scaled by
+  `orcslop` (±12 cents and ±5 at the top). Two VCOs at unison therefore beat,
+  a chord is six different voices, and the same note is never sample-identical
+  twice. Measured: the sum of the two VCOs at unison averages the uncorrelated
+  1.41x, and moves note to note.
+- **The shape is a morph on both VCOs**: triangle, saw in the middle, pulse at
+  the top (`timb` for VCO 2, `orcshape1` for VCO 1), the pulse's width a knob
+  per VCO (`orcpw1` / `orcpw2`, a square to a narrow pulse). polyBLEP on every
+  edge: the pulse at E5 aliases under -40dB in the audible band. **The pulse
+  falls where the saw falls**, the contagion's rule: drawn the other way up,
+  the mix's fundamental half cancelled across the crossfade (measured as the
+  2nd harmonic sitting at the saw's own -6dB).
+- **The drive is after the VCAs, on the summed voices**: the machine's
+  distortion is one circuit post-VCA, so a chord intermodulates through it and
+  a release tail falls out of it. A gain (up to 28dB, `10^(1.4 d²)`) with a
+  small bias ahead of it for the even harmonics, into a knee that is a wire
+  to 0.75 and bends smoothly to 1, 2x oversampled (the driven alias floor is
+  under -45dB), normalised by the RMS of one default note so the level holds
+  within 3dB across the knob. The RMS, not the peak: driven hard a note is a
+  square, whose RMS is its peak, so holding the peak let it come out 6dB
+  louder (measured). At zero a note is under the knee and the stage is a
+  wire; at the default 0.5 a default note just reaches it.
+- **The chorus is a knob** (`orcchorus`, zero is none): one line, two taps
+  under a 0.45Hz sine in antiphase, equal-power against the dry, on the sum.
+  Two outputs, so the voice is stereo like the vox.
+- **The envelope is an ADSR**: the decay slider keeps its old 50ms..2s, and
+  `orcatk` (1ms..10s), `orcsus` and `orcrel` (10ms..10s) are the panel's.
+  Velocity is the level, linearly, as the pool had it.
+- **Six voices stolen quietest first**, each gliding from what it last played,
+  which is how the machine glides in poly mode. The noise level (`osc4`) is
+  squared, for the contagion's reason.
+- **Controls** — the four sliders are DETUNE (VCO 2, ±30 cents) / SHAPE (VCO
+  2) / DRIVE / DECAY, the osc-mix row the mixer (vco1 / vco2 / sub / noise).
+  The panel is `sq-param-group--oracle`; keys are `orc` + short key ->
+  `oracle_<short>` / `oracle.<short>`, from `ORACLE_NUM_CTLS` in
+  engineData.js (`orc`, not `o`: the osc-mix keys are unprefixed). Every
+  slider and mixer level is an AudioParam on the node, so all of them take an
+  LFO. Seven patches via `oracleTone(name)`, complete; the markup is
+  `ORACLE_PANEL` in `app/studioMarkup.ts`, the dropdown filled at runtime.
+- **A song from before the model is migrated** (`migrateOracleModel`,
+  sessionFormat.js, keyed on the `orcv` marker as the ladder's is): `timb`
+  folded onto the saw-to-pulse half of the shape knob (0 was a saw and is
+  0.5; 1 is still the pulse), `morph` mapped so the old default is no drive
+  (it did nothing audible) and full old drive is 0.5, `orcrel` set to the
+  release the old decay slider implied (`0.1 + 2.5 × decay` seconds), and
+  `orcslop` 0.
+- **Simplifications**: no filter inside the voice, so the track's filter
+  follows the drive rather than preceding it (its `poly` character is the
+  chip ladder the machine's filter is); no hard sync, no poly mod, no unison
+  mode; the LFO is the track's matrix. The slop, drive and chorus figures are
+  reasoned, not measured against a unit.
+- `test/oracle.test.js` renders the processor in Node: the tables against
+  the processor and the markup, pitch and detune, the three shapes and their
+  alias floors, the free-running phases and the calibration spread, the sub,
+  the noise, the drive's level, harmonics, oversampling and the chord, the
+  four envelope stages, a chord and voice stealing, a stop and the silence
+  after, the chorus, every patch's level, the builder, Strudel and the
+  migration.
+- **Loading** — Blob-URL registration from `loadWorklet()`; a failure falls
+  back to `buildOracleVoice` (the Tone pool this engine used to be, in
+  voices.js), never a silent track.
 
 ## Silverbox (`dm:silverbox`, `public/js/silverbox.js`)
 
@@ -4111,7 +4196,7 @@ fails. Real-time capture — see Known limitations.
 ## Engines catalog (`buildEngineCatalog`)
 
 Groups in order: `plaits` (16) · `drum / synth` (808/909 kit + poly-saw /
-fm-bell / pad) · `Emulators` (silverbox + contagion + hexop + guitar + bass + subby + drone + vox + lancet + siege + 5 analog-mono) · `texture` (`dm:granular`) ·
+fm-bell / pad) · `Emulators` (silverbox + contagion + hexop + guitar + bass + subby + drone + vox + lancet + siege + ladder + oracle + 3 analog-mono) · `texture` (`dm:granular`) ·
 `wavetable` (`wt:akwf`) · `sampler` (single unified entry) · `saved patches`
 (`saved:<name>`) · `midi` · `bus` (the fx bus — not an instrument, see below).
 The engine key string is the source of truth.
@@ -4340,7 +4425,7 @@ through a 6ms fade on its gain).
   do the same, or use `currentBpm()` (lfo.js) as the sync helpers do.
 - **Worklet processor sources are template literals** (`silverbox.js`,
   `contagion.js`, `hexop.js`, `guitar.js`, `bass.js`, `subbass.js`,
-  `drone.js`, `vox.js`, `lancet.js`, `siege.js`, `ladder.js`, `crusher.js`, `reverb.js`, `prism.js`, `repeat.js`),
+  `drone.js`, `vox.js`, `lancet.js`, `siege.js`, `ladder.js`, `oracle.js`, `crusher.js`, `reverb.js`, `prism.js`, `repeat.js`),
   so a stray backtick or `${` inside one — including in a comment — truncates
   the string. The module still parses, `node --check` still passes, and the
   failure only shows up as a SyntaxError at engine boot. When editing inside a
@@ -4421,7 +4506,7 @@ Repo: https://github.com/mjoslyn/seqbaby.
   An inline marker (`window.__seqbabyServerBoot`) tells the paths apart, and
   `ScriptLoader.tsx` keeps its onload-chained injection for the soft-nav case
   (e.g. arriving from `/login`).
-- `app/EnginePreload.tsx` emits `modulepreload` for all 76 modules listed in
+- `app/EnginePreload.tsx` emits `modulepreload` for all 77 modules listed in
   `app/engineAssets.ts` (at `engineAsset("/js/<name>")`; the hints used to
   point at the site root and 404). The graph is 8 levels deep, so without it the browser
   needs up to eight sequential round trips just to discover the code.

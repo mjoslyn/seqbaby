@@ -17,6 +17,7 @@ import { buildVoxVoice, VOX_NUM_KEYS, VOX_SEL_KEYS, VOX_TEXT_KEYS } from "./vox.
 import { buildLancetVoice, LANCET_NUM_KEYS, LANCET_SEL_KEYS } from "./lancet.js";
 import { buildSiegeVoice, SIEGE_NUM_KEYS, SIEGE_SEL_KEYS } from "./siege.js";
 import { buildLadderWorkletVoice, LADDER_NUM_KEYS, LADDER_SEL_KEYS } from "./ladder.js";
+import { buildOracleWorkletVoice, ORACLE_NUM_KEYS, ORACLE_SEL_KEYS } from "./oracle.js";
 import { buildHexopVoice, HEXOP_NUM_KEYS, HEXOP_SEL_KEYS } from "./hexop.js";
 import { buildGuitarVoice, GUITAR_NUM_KEYS, GUITAR_SEL_KEYS } from "./guitar.js";
 import { buildContagionVoice, CONTAGION_NUM_KEYS, CONTAGION_SEL_KEYS } from "./contagion.js";
@@ -804,7 +805,15 @@ export function buildDrumSynthNode(kind, output) {
       };
     }
     case "tines":     return makePolyPool(6, () => buildTinesVoice(output));
-    case "oracle":   return makePolyPool(6, () => buildOracleVoice(output));
+    // Oracle: the poly analog, six voices of morphing VCOs with slop, a drive
+    // on the sum and a chorus, in one AudioWorklet — see oracle.js. The
+    // fallback is the Tone oscillator pool this engine used to be, never a
+    // silent track.
+    case "oracle": {
+      const v = buildOracleWorkletVoice(output);
+      if (v) return v;
+      return makePolyPool(6, () => buildOracleVoice(output));
+    }
   }
   throw new Error("unknown drum-synth kind: " + kind);
 }
@@ -1275,11 +1284,12 @@ export function buildTinesVoice(output) {
   };
 }
 
-// ---- oracle 6 builder --------------------------------------------------
-// Two VCOs (saw + saw/pulse morph) with cent-level detune for the classic
-// "fat" unison, a square sub at -1 oct, noise, an analog-style drive stage,
-// amp envelope, and a touch of chorus — the baked-in character of the P6's
-// stereo effects block. Filter + filter-env come from the track's own chain.
+// ---- oracle, the Tone fallback --------------------------------------------
+// What the oracle was before oracle.js: two phase-locked Tone oscillators (VCO
+// 2 a saw/pulse crossfade), a square sub, noise, a Tone.Distortion blended in
+// parallel, an amp envelope and a fixed chorus. Kept only as the fallback when
+// the worklet will not register, so a track is never silent; it reads the
+// four sliders the old way and knows nothing of the panel.
 export function buildOracleVoice(output) {
   const freqSig = new Tone.Signal({ units: "frequency", value: 220 });
 
@@ -1435,6 +1445,7 @@ export class DrumSynthVoice {
                      ...VOX_NUM_KEYS, ...VOX_SEL_KEYS, ...VOX_TEXT_KEYS,
                      ...SIEGE_NUM_KEYS, ...SIEGE_SEL_KEYS,
                      ...LADDER_NUM_KEYS, ...LADDER_SEL_KEYS,
+                     ...ORACLE_NUM_KEYS, ...ORACLE_SEL_KEYS,
                      ...LANCET_NUM_KEYS, ...LANCET_SEL_KEYS]) {
       if (this.params?.[k] != null) this.built.setParam(k, this.params[k]);
     }
