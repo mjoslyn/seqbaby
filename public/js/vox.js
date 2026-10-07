@@ -112,6 +112,48 @@ const NV = 8;             // notes at once
 const NU = 8;             // choir copies per note
 const NF = 5;             // formants
 const OUT_GAIN = 1.6;     // a single default note at about -16dBFS rms
+const NH = 64;            // harmonics of the source the level cap looks at
+const SM = 128;           // points a period is sampled at to find them
+
+// The glottal pulse's harmonic amplitudes at an open quotient: one period of
+// the same derivative pulse the voices play, sampled and transformed. A
+// formant gliding across these is louder over a strong one than over a weak
+// one, which is what the level cap below has to know.
+const COS = new Float64Array(SM), SIN = new Float64Array(SM);
+for (let m = 0; m < SM; m++) { COS[m] = Math.cos(2 * Math.PI * m / SM); SIN[m] = Math.sin(2 * Math.PI * m / SM); }
+const PULSE = new Float64Array(SM);
+function sourceSpectrum(Oq, out, o) {
+  const Tp = Oq * 0.6, Tn = Oq - Tp;
+  const piTp = Math.PI / Tp, hpTn = 0.5 * Math.PI / Tn, nrm = Tn / (0.5 * Math.PI);
+  for (let m = 0; m < SM; m++) {
+    const ph = m / SM;
+    PULSE[m] = ph < Tp ? 0.5 * piTp * Math.sin(piTp * ph) * nrm
+      : ph < Oq ? -hpTn * Math.sin(hpTn * (ph - Tp)) * nrm : 0;
+  }
+  for (let h = 1; h <= NH; h++) {
+    let re = 0, im = 0;
+    for (let m = 0; m < SM; m++) { const i = (h * m) % SM; re += PULSE[m] * COS[i]; im -= PULSE[m] * SIN[i]; }
+    out[o + h - 1] = 2 * Math.sqrt(re * re + im * im) / SM;
+  }
+}
+
+// What one formant passes of the source: the sum over harmonics of each
+// one's amplitude, through the tilt, through a unity-peak bandpass at fc,
+// squared. Only the harmonics within reach of the formant are counted.
+function formantEnergy(S, o, f0, fc, q, tiltA, sr) {
+  const lo = Math.max(1, Math.floor(fc / (4 * f0))), hi = Math.min(NH, Math.ceil(fc * 4 / f0));
+  const b = 1 - tiltA;
+  let e = 0;
+  for (let h = lo; h <= hi; h++) {
+    const fh = h * f0;
+    if (fh > sr * 0.45) break;
+    const x = q * (fh / fc - fc / fh);
+    const t2 = tiltA * tiltA / (1 - 2 * b * Math.cos(2 * Math.PI * fh / sr) + b * b);
+    const a = S[o + h - 1];
+    e += a * a * t2 / (1 + x * x);
+  }
+  return e;
+}
 
 // The formant table at (vowel, size), bilinear, as voxFormantsAt in
 // engineData.js. out: f[5], db[5], bw[5].
@@ -313,6 +355,8 @@ class VoxProcessor extends AudioWorkletProcessor {
     this.lastOnAt = -1;
 
     this.f = new Float64Array(NF); this.db = new Float64Array(NF); this.bw = new Float64Array(NF);
+    // per voice: the source's harmonics, and the effort they were found at
+    this.vSrc = new Float64Array(NV * NH); this.vSrcEff = new Float64Array(NV).fill(-1);
 
     this.port.onmessage = (e) => this.onMessage(e.data);
   }
@@ -594,6 +638,11 @@ class VoxProcessor extends AudioWorkletProcessor {
         const lw = this.kLw[v], r = this.kLr[v], damp = this.kDamp[v], g2 = this.kG2[v];
         const nasal = r >= 0 && CONS[r + 15] > 0;
 
+        // effort: brighter with velocity, as singing louder is singing harder
+        const eff = Math.max(0, Math.min(1, bright + (this.vVel[v] - 0.75) * 0.3));
+        const Oq = 0.8 - 0.4 * eff, Tp = Oq * 0.6, Tn = Oq - Tp;
+        const piTp = Math.PI / Tp, hpTn = 0.5 * Math.PI / Tn, nrm = Tn / (0.5 * Math.PI);
+        const tiltA = 1 - Math.exp(-2 * Math.PI * Math.min(sr * 0.45, 800 * Math.pow(2, eff * 5)) / sr);
         // ---- formants: the vowel (and its glide), smoothed, then a locus ----
         formantsAt(this.vVow[v] >= 0 ? this.vVow[v] : vowelP, size, f, db, bw);
         if (g2 > 0) {
@@ -609,6 +658,7 @@ class VoxProcessor extends AudioWorkletProcessor {
         // 3dB an octave quieter, which this takes back out.
         const pitchG = Math.max(0.5, Math.min(2.5, Math.sqrt(262 / f0)));
         const duck = 1 - 0.65 * lw;
+        if (lw > 0 && Math.abs(eff - this.vSrcEff[v]) > 0.02) { sourceSpectrum(Oq, this.vSrc, v * NH); this.vSrcEff[v] = eff; }
         for (let k = 0; k < NF; k++) {
           const j = v * NF + k;
           this.vF[j] += (f[k] - this.vF[j]) * sm;
@@ -632,7 +682,26 @@ class VoxProcessor extends AudioWorkletProcessor {
           // locus). Without it, a locus F1 at 250-300Hz sat on the
           // fundamental of a middle-C note and every consonant was a bump
           // up to 7dB over its vowel.
-          const lvl = Math.pow(10, this.vDb[j] / 20) * (fk / 500) * (k > 0 ? damp : 1) * pitchG * duck;
+          // A formant gliding between a locus and its vowel passes over the
+          // harmonics in between, and over a strong low one (F1 crossing the
+          // 2nd harmonic of a middle C, an open vowel's F1 rising off the
+          // fundamental) it rang louder than the vowel it was landing on:
+          // every consonant came out as the same bump just after the step.
+          // So a moving formant is capped at what the vowel's own formant
+          // passes of this source, here, at this pitch: the glide colours the
+          // sound and never lifts it. The duck still comes off on top.
+          let cap = 1;
+          if (k < 3 && lw > 0) {
+            let fv = this.vF[j];
+            if (k === 0 && fv < f0 * 1.1) fv = f0 * 1.1;
+            if (fv > sr * 0.45) fv = sr * 0.45;
+            const bwv = Math.max(20, this.vBw[j] * bwMul);
+            const S = this.vSrc, o = v * NH;
+            const eNow = formantEnergy(S, o, f0, fk, fk / bwk, tiltA, sr) * fk * fk;
+            const eVow = formantEnergy(S, o, f0, fv, fv / bwv, tiltA, sr) * fv * fv;
+            if (eNow > eVow && eNow > 0) cap = Math.sqrt(eVow / eNow);
+          }
+          const lvl = Math.pow(10, this.vDb[j] / 20) * (fk / 500) * (k > 0 ? damp : 1) * pitchG * duck * cap;
           this.cG[j] = kq * lvl * (k & 1 ? -1 : 1);
         }
 
@@ -659,11 +728,6 @@ class VoxProcessor extends AudioWorkletProcessor {
         this.vVib[v] += blk;
         this.vT[v] += blk;
 
-        // effort: brighter with velocity, as singing louder is singing harder
-        const eff = Math.max(0, Math.min(1, bright + (this.vVel[v] - 0.75) * 0.3));
-        const Oq = 0.8 - 0.4 * eff, Tp = Oq * 0.6, Tn = Oq - Tp;
-        const piTp = Math.PI / Tp, hpTn = 0.5 * Math.PI / Tn, nrm = Tn / (0.5 * Math.PI);
-        const tiltA = 1 - Math.exp(-2 * Math.PI * Math.min(sr * 0.45, 800 * Math.pow(2, eff * 5)) / sr);
         const vg = this.kVg[v] * voiceAmt, asp = this.kAsp[v], nz = this.kNz[v];
         const na1 = this.kNa1[v], na2 = this.kNa2[v], na3 = this.kNa3[v], nk = this.kNk[v];
 

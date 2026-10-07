@@ -446,3 +446,25 @@ test("vox: a hum has no vowel in it", () => {
   assert.ok(bright(hum) < bright(ah) * 0.3, `hum vs ah: ${db(bright(hum)).toFixed(1)} vs ${db(bright(ah)).toFixed(1)}dB`);
   assert.ok(db(rms(hum, 0.4, 1)) > -35, `hum is ${db(rms(hum, 0.4, 1)).toFixed(1)}dB`);
 });
+
+test("vox: a consonant's formant glide never rings louder than the vowel it lands on", () => {
+  // A locus F1 gliding up to the vowel's crossed a strong low harmonic on the
+  // way and every consonant came out as the same bump just after the step
+  // (5dB on an a at middle C). The glide is capped at the vowel's own level,
+  // so a consonant's onset is no louder than a note with none.
+  const frame = (a, t) => db(rms(a, t, t + 0.01));
+  const bump = (cons, vowel, midi) => {
+    const { L } = render({ secs: 0.9, set: { cons }, notes: [[0.3, midi, 0.5]], params: { ...STEADY, vowel } });
+    const steady = db(rms(L, 0.6, 0.7));
+    let peak = -200;
+    for (let t = 0.3; t < 0.4; t += 0.005) peak = Math.max(peak, frame(L, t));
+    return peak - steady;
+  };
+  for (const vowel of [0, 0.5, 1]) for (const midi of [48, 60, 67]) {
+    const plain = bump(0, vowel, midi);
+    for (const name of ["b", "d", "m", "l", "w", "r", "p", "s"]) {
+      const b = bump(VOX_CONSONANT_NAMES.indexOf(name), vowel, midi);
+      assert.ok(b < plain + 1, `${name} on vowel ${vowel} at ${midi}: onset ${b.toFixed(1)}dB over the steady vowel, a plain note ${plain.toFixed(1)}dB`);
+    }
+  }
+});

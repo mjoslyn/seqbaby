@@ -1439,7 +1439,12 @@ CONSONANT (hiss, burst, murmur, formant glide) ───┘
   writes the locus row and weight the formant code reads. **The level ducks
   with the locus weight** (`duck`, 9dB at the locus): a locus F1 of 250-300Hz
   sits on a middle-C fundamental, and without it every consonant was a bump
-  up to 7dB over its vowel. Tested: a coda s hisses at the end and the
+  up to 7dB over its vowel. **And a gliding formant is capped at its
+  vowel's level** (`formantEnergy`, against the pulse's own harmonics from
+  `sourceSpectrum`): F1 rising from the locus crossed a strong low harmonic
+  on the way (the 2nd of a middle C under an a) and rang 5dB over the vowel
+  it was landing on, the same bump on every consonant. Only F1-F3 while a
+  locus is pulling, so it costs nothing on a held vowel. Tested: a coda s hisses at the end and the
   voicing stops under it, a t's closure is silent, an m hums duller than the
   vowel, an `ai` moves F2 from a's to i's, `mmm` has no vowel.
 - **Breath** is noise pulsed by the folds (0.35 + 0.65 x flow), through the
