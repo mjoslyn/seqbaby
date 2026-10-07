@@ -4,7 +4,9 @@ import { patchEngineKey } from "./patchPreview";
 
 // What the homepage shows of the people using the studio: the songs they have
 // published and the patches they have put in the gallery, each ranked by
-// likes and freshness together (rank.js), and who made them. Twelve of each.
+// likes and freshness together (rank.js), and who made them. Twelve songs and
+// twelve people; HOME_PATCHES patches, with /patches holding the rest
+// (loadPatchGallery).
 //
 // A plain anon client, not the cookie one in lib/supabase/server.ts, on
 // purpose. Reading cookies makes a page dynamic, and the homepage is the one
@@ -53,8 +55,12 @@ export type FeedPatch = {
 
 export type Feed = { songs: FeedSong[]; people: FeedPerson[]; patches: FeedPatch[] };
 
-/** How many of each the homepage shows. */
+/** How many songs and people the homepage shows. */
 export const FEED_SIZE = 12;
+/** How many patches it shows; the gallery page has every one. */
+export const HOME_PATCHES = 4;
+/** How many of the newest public patches the gallery page ranks and lists. */
+export const GALLERY_WINDOW = 600;
 
 const EMPTY: Feed = { songs: [], people: [], patches: [] };
 
@@ -100,7 +106,7 @@ export async function loadFeed(limit = FEED_SIZE): Promise<Feed> {
     const [ranked, people, patches] = await Promise.all([
       rankedIds(supabase, limit),
       loadPeople(supabase, limit),
-      loadPatches(supabase, limit),
+      loadPatches(supabase, HOME_PATCHES),
     ]);
     if (!ranked.length) return { songs: [], people, patches };
 
@@ -194,7 +200,7 @@ export async function owners(
  * fetches the rest from /api/patch/<id> when pressed. A database without the
  * `likes` field (0017) ranks on freshness alone.
  */
-async function loadPatches(supabase: SupabaseClient, limit: number): Promise<FeedPatch[]> {
+async function loadPatches(supabase: SupabaseClient, limit: number, window = CANDIDATES): Promise<FeedPatch[]> {
   try {
     const data = await withOptional(
       (cols) =>
@@ -203,7 +209,7 @@ async function loadPatches(supabase: SupabaseClient, limit: number): Promise<Fee
           .select(cols)
           .eq("is_public", true)
           .order("created_at", { ascending: false })
-          .limit(CANDIDATES)
+          .limit(window)
           .returns<Row[]>(),
       "id,name,created_at,owner_id,kind:config->>_kind,engine:config->>engineKey,drum:config->isDrumKit,sample:config->sampleSource->>id",
       "likes",
@@ -338,6 +344,23 @@ async function loadPeople(
       .sort((a, b) => b.person.songs - a.person.songs || a.recent - b.recent)
       .slice(0, show)
       .map((e) => e.person);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * The gallery page's patches (/patches): the newest GALLERY_WINDOW public
+ * patches, ranked as the homepage ranks its four. The same anon client and
+ * the same never-throw rule as loadFeed; the page is cached the same way.
+ */
+export async function loadPatchGallery(): Promise<FeedPatch[]> {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!url || !key) return [];
+  try {
+    const supabase = createClient(url, key, { auth: { persistSession: false } });
+    return await loadPatches(supabase, GALLERY_WINDOW, GALLERY_WINDOW);
   } catch {
     return [];
   }

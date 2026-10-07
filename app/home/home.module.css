@@ -343,6 +343,29 @@
 .boxItem strong { color: var(--accent); }
 .boxItem span { color: var(--fg-dim); }
 
+/* The emulators, one per line: a name in a column and what it is beside it.
+   Fifteen cards would be a wall; a list reads top to bottom. */
+.stack {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--border);
+}
+.stackItem {
+  display: grid;
+  grid-template-columns: 150px 1fr;
+  gap: 4px 18px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+  line-height: 1.5;
+}
+.stackItem strong { color: var(--accent); }
+.stackItem span { color: var(--fg-dim); }
+.stackNote { margin: 12px 0 0; color: var(--fg-dim); font-size: 12px; line-height: 1.5; }
+@media (max-width: 768px) {
+  .stackItem { grid-template-columns: 1fr; gap: 2px; }
+}
+
 /* ---- footer ------------------------------------------------------------- */
 
 .footer {
