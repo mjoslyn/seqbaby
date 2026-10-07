@@ -1399,7 +1399,14 @@ CONSONANT (hiss, burst, murmur, formant glide) ───┘
   formants (m n l w y r), and a locus the formants start at and glide from.
   A note message arrives a lookahead early, so **the onset is moved back** by
   as much of the consonant as there is time for (`consLead`): the vowel lands
-  on the step, the s before it. Tested.
+  on the step, the s before it. Tested. `bite` (consonant level) scales
+  the voiced ones too (`deep`): a murmur's level, a voiced plosive's voice
+  bar, a nasal's damping, written for its 0.6 default and left as they are
+  there, so the knob reaches m, l, b and not only the noisy consonants.
+  The `cons` select is greyed out, its title saying why, while the words
+  or a lyric are on (`updateVoxConsEnabled`, params.js): their syllables
+  carry their own consonants, and a select that silently did nothing read
+  as broken.
 - **Words** (`VOX_WORDS`, spelled by `voxSyllables`): the voice builder
   posts a phrase as a flat `[cons, vowel, ...]`; each note instant advances
   it (a chord shares one), resolved when the message ARRIVES so the lead can

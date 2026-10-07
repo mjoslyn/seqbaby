@@ -203,6 +203,15 @@ function consLead(c) {
   return mur > 0 ? mur * 0.7 : CONS[r + 8];
 }
 
+// How far a voiced consonant pulls the voice down (a murmur's level, a voiced
+// plosive's voice bar, a nasal's damping), by the consonant level knob. The
+// tables are written for its default, 0.6, which leaves them as they are;
+// above it the m, the l, the b sit further under the vowel, below it nearer,
+// so the knob reaches every consonant and not only the noisy ones.
+function deep(level, bite) {
+  return Math.max(0, Math.min(1, 1 - (1 - level) * bite / 0.6));
+}
+
 // How long a consonant takes at the END of a syllable, in ms: a murmur held
 // a little longer than it is before a vowel, a fricative's hiss, or a
 // closure and then the release.
@@ -440,8 +449,9 @@ class VoxProcessor extends AudioWorkletProcessor {
     if (c > 0) {
       const r = c * CF;
       const fricMs = CONS[r], burMs = CONS[r + 4];
-      const vot = CONS[r + 8], pre = CONS[r + 9], a = CONS[r + 10];
-      const trans = CONS[r + 14], murMs = CONS[r + 15], murL = CONS[r + 16];
+      const vot = CONS[r + 8], a = CONS[r + 10];
+      const trans = CONS[r + 14], murMs = CONS[r + 15];
+      const murL = deep(CONS[r + 16], bite), pre = deep(CONS[r + 9], bite);
       voiceAt = murMs > 0 ? murMs : vot;
       if (murMs > 0) vg = ms < murMs ? murL : Math.min(1, murL + (ms - murMs) / 15 * (1 - murL));
       else vg = ms < vot ? pre : Math.min(1, pre + (ms - vot) / 12 * (1 - pre));
@@ -455,7 +465,7 @@ class VoxProcessor extends AudioWorkletProcessor {
       }
       if (CONS[r + 11] > 0) {
         const w = ms < voiceAt ? 1 : Math.max(0, 1 - (ms - voiceAt) / Math.max(1, trans));
-        if (w > 0) { lr = r; lw = w; if (murMs > 0) damp = 1 - (1 - CONS[r + 17]) * w; }
+        if (w > 0) { lr = r; lw = w; if (murMs > 0) damp = 1 - (1 - deep(CONS[r + 17], bite)) * w; }
       }
     }
 
@@ -472,11 +482,11 @@ class VoxProcessor extends AudioWorkletProcessor {
       const start = hum ? -1000 : lenMs - span;
       endMs = start;
       const tc = ms - start, trans = Math.max(1, CONS[r + 14]);
-      const fricMs = CONS[r], burMs = CONS[r + 4], pre = CONS[r + 9];
-      const murMs = CONS[r + 15], murL = CONS[r + 16];
+      const fricMs = CONS[r], burMs = CONS[r + 4], pre = deep(CONS[r + 9], bite);
+      const murMs = CONS[r + 15], murL = deep(CONS[r + 16], bite);
       if (tc > -trans) {
         const w = tc >= 0 ? 1 : 1 + tc / trans;
-        if (CONS[r + 11] > 0 && w >= lw) { lr = r; lw = w; damp = murMs > 0 ? 1 - (1 - CONS[r + 17]) * w : 1; }
+        if (CONS[r + 11] > 0 && w >= lw) { lr = r; lw = w; damp = murMs > 0 ? 1 - (1 - deep(CONS[r + 17], bite)) * w : 1; }
       }
       if (tc >= 0) {
         if (murMs > 0) vg *= 1 + (murL - 1) * Math.min(1, tc / 15);
