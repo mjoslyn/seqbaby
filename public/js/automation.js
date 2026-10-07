@@ -1,7 +1,7 @@
 import { AUTOMATION_TARGETS, VOICE_AUTO_KEYS, afterPrefix as after, baseModKey, canAutomateKey, fxStageOfModKey, splitFxInstanceKey, voiceAutoKeysForEngineKey } from "./constants.js";
 import { driveGain } from "./fxRack.js";
 import { makeFuzzCurve, shaperPreampGain } from "./curves.js";
-import { bassFromUnit, droneFromUnit, guitarFromUnit, hexopFromUnit, siegeFromUnit, subFromUnit, voxFromUnit } from "./engineData.js";
+import { bassFromUnit, droneFromUnit, guitarFromUnit, hexopFromUnit, lancetFromUnit, siegeFromUnit, subFromUnit, voxFromUnit } from "./engineData.js";
 import { euclidFromUnit, setEuclidLive } from "./euclid.js";
 import { setChanceLive } from "./chance.js";
 import { chanceFromUnit } from "./chanceGen.js";
@@ -181,6 +181,12 @@ export function applyAutomationAtStep(t, key, v, time, vNext, stepDur) {
   if (key.startsWith("vox.")) {
     const which = after(key, "vox.");
     ramp(t.voice?.getAudioParam?.("sng" + which), voxFromUnit(which, vv), voxFromUnit(which, vn));
+    return;
+  }
+  // The lancet, same again; `tune` is -12..12, so it maps through its range.
+  if (key.startsWith("lancet.")) {
+    const which = after(key, "lancet.");
+    ramp(t.voice?.getAudioParam?.("lnc" + which), lancetFromUnit(which, vv), lancetFromUnit(which, vn));
     return;
   }
   // The siege, same again: tune and floor are k-rate AudioParams, read per hit.

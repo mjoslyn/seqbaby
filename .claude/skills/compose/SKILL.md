@@ -79,7 +79,22 @@ techno or house kick), `dm:808-kick` (long, tuned, drive for a distorted
 harm is the drive),
 `sampler` with a bundled kit (`sample: "techno kick"`, `"break snare"`,
 `"cr78 hat"`, `"live snare"`, `"r8 kick"`). Snares: `dm:808-snare` (snappy
-is the noise balance), `dm:909-snare`, `plaits:14`. Hats: `dm:808-chat` /
+is the noise balance), `dm:909-snare`, `plaits:14`, and `dm:lancet`, a
+snare synthesizer with seven models (`lncmodel`: "analog", "slap", "modal",
+"physical", "fm", "granular", "blend"): harm is TIMBRE (the noise, on most
+models), timb is COLOR (the pitch envelope and shell balance on analog, the
+partials on modal, the body on physical, the modulator ratios on fm, the
+grains on granular, the bodies on blend), morph the FX amount (each model's
+own stage, clean at 0), decay the length. The note is the pitch, C2 the
+middle of a two-octave travel. `lncdyn` is how much velocity does (level,
+and a little brightness and length), so write ghost notes as `o` and
+accents as `X`. The randomizer, `lncrdecay` / `lncrtimbre` / `lncrcolor` /
+`lncrpitch` / `lncrfx` / `lncrlevel` / `lncrmodel` (0..1 each), throws
+that knob on every hit: a little `lncrtimbre` and `lncrlevel` (0.1..0.3)
+is a drummer, `lncrmodel` 0.5 is a different snare every hit.
+`apply_preset` "tight analog", "fat analog", "slap crack", "wood modal",
+"piccolo", "tin head", "fm clap", "metal fm", "coins on the head", "boom
+bap", "dusty funk", "roll the dice". Hats: `dm:808-chat` /
 `dm:808-ohat` / `dm:909-chat` / `dm:909-ohat`, `plaits:15` (morph is closed
 to open). Clap:
 `dm:808-clap`, `dm:909-clap`. Cowbell: `dm:808-cowbell`. The 808 / 909 voices

@@ -313,6 +313,38 @@ const VOX_PANEL = `
           </div>
         </div>`;
 
+// The lancet's panel: the strike (a complete preset), the model, the hit
+// (tune, velocity amount) and the randomizer, one amount per destination.
+// Same arrangement as the panels above: the strike dropdown
+// ships empty and is filled at runtime from LANCET_TONE_NAMES, and the ranges
+// and defaults must match LANCET_NUM_CTLS in engineData.js; the model option
+// VALUES are LANCET_MODELS (test/lancet.test.js holds them together). Classes are
+// `p-lnc*`.
+const LANCET_PANEL = `
+        <div class="sq-param-group sq-param-group--lancet" hidden>
+          <div class="sq-lancet__row">
+            <span class="sq-lancet__lbl">strike</span>
+            <select class="sq-lancet__tone" title="load a strike: the model, every panel control and the four sliders"></select>
+            <span class="sq-lancet__lbl">model</span>
+            <select class="p-lncmodel" title="the synthesis model. What timbre, color and fx do depends on it: the status line says, when one is picked"><option value="analog" selected>analog</option><option value="slap">slap</option><option value="modal">modal</option><option value="physical">physical</option><option value="fm">fm</option><option value="granular">granular</option><option value="blend">blend</option></select>
+          </div>
+          <div class="sq-lancet__row">
+            <span class="sq-lancet__lbl">hit</span>
+            <label class="sq-lancet__f"><span>tune</span><input class="p-lnctune" type="range" min="-12" max="12" step="1" value="0" title="the pitch knob's trim, in semitones. C2 is the knob's middle, a 180Hz body; the note moves it a semitone a semitone" /></label>
+            <label class="sq-lancet__f"><span>velocity</span><input class="p-lncdyn" type="range" min="0" max="1" step="0.01" value="0.7" title="how much a step's velocity does: the level, and a little of the brightness and length with it. At zero every hit is the same" /></label>
+          </div>
+          <div class="sq-lancet__row">
+            <span class="sq-lancet__lbl">random</span>
+            <label class="sq-lancet__f"><span>decay</span><input class="p-lncrdecay" type="range" min="0" max="1" step="0.01" value="0" title="the randomizer: how far the decay is thrown on each hit, up to the whole knob" /></label>
+            <label class="sq-lancet__f"><span>timbre</span><input class="p-lncrtimbre" type="range" min="0" max="1" step="0.01" value="0" title="how far the timbre is thrown on each hit" /></label>
+            <label class="sq-lancet__f"><span>color</span><input class="p-lncrcolor" type="range" min="0" max="1" step="0.01" value="0" title="how far the color is thrown on each hit" /></label>
+            <label class="sq-lancet__f"><span>pitch</span><input class="p-lncrpitch" type="range" min="0" max="1" step="0.01" value="0" title="how far the pitch is thrown on each hit, up to an octave either way" /></label>
+            <label class="sq-lancet__f"><span>fx</span><input class="p-lncrfx" type="range" min="0" max="1" step="0.01" value="0" title="how far the fx amount is thrown on each hit" /></label>
+            <label class="sq-lancet__f"><span>level</span><input class="p-lncrlevel" type="range" min="0" max="1" step="0.01" value="0" title="how much quieter a hit may land, up to a fifth of its level" /></label>
+            <label class="sq-lancet__f"><span>model</span><input class="p-lncrmodel" type="range" min="0" max="1" step="0.01" value="0" title="the chance a hit is played on any of the seven models instead of the one picked" /></label>
+          </div>
+        </div>`;
+
 // The drone's panel, laid out like the Grone it is modelled on: the equation
 // oscillator, the VCF, the LFO, the delay and the cloud, left to right on the
 // hardware and top to bottom here. Same arrangement as the panels above — the
@@ -701,6 +733,7 @@ ${BASS_PANEL}
 ${SUB_PANEL}
 ${DRONE_PANEL}
 ${VOX_PANEL}
+${LANCET_PANEL}
 ${SIEGE_PANEL}
         <div class="sq-param-group sq-param-group--silverbox" hidden>
           <div class="sq-field"><label>wave</label>

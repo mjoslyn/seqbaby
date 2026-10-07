@@ -250,6 +250,10 @@ export const ANALOG_ENGINES = [
   // A singing voice: a glottal pulse through five formants, consonants in
   // front of the vowel, a choir of up to eight per note (vox.js).
   { key: "dm:vox",       label: "vox",             defaultNote: 60, poly: true, melodic: true },
+  // A snare synthesizer with seven models (lancet.js). One-shot percussion:
+  // four hits sounding at once inside the worklet. C2, the note a drum kit's
+  // blank steps get, is the pitch knob's middle.
+  { key: "dm:lancet",      label: "lancet",            defaultNote: 36, poly: false, melodic: false },
   // The bass drum synth: a sine under a pitch envelope, a drive that folds
   // or clips after the amplitude envelope. One voice, a kick (siege.js). Not
   // melodic: its blank steps are C2, though it plays V/oct.
@@ -432,6 +436,7 @@ export function engineSliderLabels(engineKey) {
     case "dm:siege":       return { harm: "drive",    timb: "click",  morph: "depth",     decay: "decay" };
     case "dm:drone":     return { harm: "cutoff",   timb: "a0",     morph: "a1",        decay: "a2" };
     case "dm:vox":       return { harm: "vowel",    timb: "size",   morph: "breath",    decay: "release" };
+    case "dm:lancet":      return { harm: "timbre",   timb: "color",  morph: "fx",        decay: "decay" };
     case "dm:tines":     return { harm: "tine",     timb: "bite",   morph: "chorus",    decay: "decay" };
     case "dm:oracle":    return { harm: "detune",   timb: "shape",  morph: "drive",     decay: "decay" };
     case "dm:granular":  return { harm: "grain",    timb: "dense",  morph: "pos",       decay: "spray" };
@@ -1726,6 +1731,153 @@ export function voxTone(name) {
   for (const [k, val] of Object.entries(v.p)) out[`sng${k}`] = val;
   for (const k of VOX_TEXT_KEYS) delete out[k];
   out.harm = v.vowel; out.timb = v.size; out.morph = v.breath; out.decay = v.rel;
+  return out;
+}
+
+// ---- lancet (lancet.js) ---------------------------------------------------------
+// A snare drum synthesizer with seven models: four knobs (DECAY, TIMBRE,
+// COLOR, PITCH) and an FX amount whose meaning changes with the model, a
+// velocity amount, and a randomizer that throws the knobs per hit. The sound
+// as DATA, so the song builder and the tests read the same tables the panel is
+// built from.
+
+/** The seven models. The select stores the name. */
+export const LANCET_MODELS = ["analog", "slap", "modal", "physical", "fm", "granular", "blend"];
+
+/** What each model is, and what TIMBRE, COLOR and the FX amount do on it. */
+export const LANCET_MODEL_TIPS = {
+  analog:   "sine waves and noise, the early drum machines. timbre is the noise (level, brightness, length), color the pitch envelope and the balance of the two shells. fx: soft clipping into hard clipping",
+  slap:     "sines through a waveshaper, with the emphasis on a bright, clipped noise. color is how much of the body is the shaped version, timbre the mix of body and noise. fx: a gentle soft clip",
+  modal:    "additive: a fundamental and seven inharmonic partials at a drum head's own modes, plus processed noise. color is the partials' level against the fundamental, timbre the noise. fx: multiband distortion that leaves the lows alone",
+  physical: "a noise exciter through resonant delay lines. timbre is the exciter's brightness and the lines' damping, color the body: from harmonic modes to a membrane's, and how much the lines blend. fx: a distortion that roughens it",
+  fm:       "a sine carrier modulated by two oscillators and a noise source. timbre is the noise modulator's level and tone, a macro; color moves the modulator ratios through the inharmonic. fx: fold and clip, metallic",
+  granular: "a plain snare under a cloud of grains from a source made per hit. timbre picks the material (rattle, chain, paper, coin, sand), color the grains' pitch, length and density together. fx: a compressor and presence",
+  blend:    "layered records, synthesized. timbre crossfades four high layers (paper, splash, crack, brush), color blends three bodies (deep, wood, ring). fx: an old sampler, a slower clock and fewer bits",
+};
+export function lancetModelTip(name) { return LANCET_MODEL_TIPS[name] ?? ""; }
+
+/** Numeric panel controls: [short key, min, max, default, label]. */
+export const LANCET_NUM_CTLS = [
+  ["tune",    -12, 12, 0,   "tune"],
+  ["dyn",     0, 1, 0.7,    "velocity amount"],
+  ["rdecay",  0, 1, 0,      "random decay"],
+  ["rtimbre", 0, 1, 0,      "random timbre"],
+  ["rcolor",  0, 1, 0,      "random color"],
+  ["rpitch",  0, 1, 0,      "random pitch"],
+  ["rfx",     0, 1, 0,      "random fx"],
+  ["rlevel",  0, 1, 0,      "random level"],
+  ["rmodel",  0, 1, 0,      "random model"],
+];
+
+/** Select controls: [short key, default, [values]]. */
+export const LANCET_SEL_CTLS = [
+  ["model", "analog", LANCET_MODELS],
+];
+
+export const LANCET_MOD_KEYS = LANCET_NUM_CTLS.map(c => c[0]);
+export const LANCET_NUM_KEYS = LANCET_MOD_KEYS.map(k => `lnc${k}`);
+export const LANCET_SEL_KEYS = LANCET_SEL_CTLS.map(c => `lnc${c[0]}`);
+
+export const LANCET_MOD_RANGE = Object.fromEntries(LANCET_NUM_CTLS.map(c => [c[0], [c[1], c[2]]]));
+
+export const LANCET_MOD_LABELS = Object.fromEntries(
+  LANCET_NUM_CTLS.map(([k, , , , label]) => [k, `lancet ${label}`]));
+
+export const LANCET_DEFAULTS = {
+  ...Object.fromEntries(LANCET_NUM_CTLS.map(c => [`lnc${c[0]}`, c[3]])),
+  ...Object.fromEntries(LANCET_SEL_CTLS.map(c => [`lnc${c[0]}`, c[1]])),
+};
+
+/** A 0..1 lane value in this control's own units. @param {string} k short key */
+export function lancetFromUnit(k, u) {
+  const [lo, hi] = LANCET_MOD_RANGE[k] ?? [0, 1];
+  return lo + Math.max(0, Math.min(1, u)) * (hi - lo);
+}
+
+// ---- the strikes --------------------------------------------------------------
+// Complete patches: the model, every panel control and the four track sliders
+// (timbre, color, fx, decay), so nothing of the last one survives a load.
+const LANCET_TONES = {
+  "tight analog": {
+    d: "a short, dry analog snare: two shells, a little noise, no fx",
+    model: "analog", timbre: 0.4, color: 0.45, fx: 0, decay: 0.3,
+    p: { tune: 0, dyn: 0.7 },
+  },
+  "fat analog": {
+    d: "an analog snare with the noise up, a long drop in and a soft-clipped body",
+    model: "analog", timbre: 0.7, color: 0.7, fx: 0.4, decay: 0.5,
+    p: { tune: -2, dyn: 0.6 },
+  },
+  "slap crack": {
+    d: "the slap model with the noise forward and the shaper half in: punch and presence",
+    model: "slap", timbre: 0.65, color: 0.5, fx: 0.3, decay: 0.35,
+    p: { tune: 0, dyn: 0.8 },
+  },
+  "wood modal": {
+    d: "a modal snare with the partials up, a bright noise band and the top driven a little",
+    model: "modal", timbre: 0.6, color: 0.65, fx: 0.35, decay: 0.45,
+    p: { tune: 0, dyn: 0.7 },
+  },
+  "piccolo": {
+    d: "a small, high, tight modal snare, the fundamental on its own",
+    model: "modal", timbre: 0.75, color: 0.25, fx: 0.2, decay: 0.2,
+    p: { tune: 7, dyn: 0.8 },
+  },
+  "tin head": {
+    d: "the physical model dark and damped, a membrane body, the wires rattling",
+    model: "physical", timbre: 0.35, color: 0.8, fx: 0.25, decay: 0.45,
+    p: { tune: 0, dyn: 0.7 },
+  },
+  "fm clap": {
+    d: "the fm model with the noise modulator up: a sharp digital clap",
+    model: "fm", timbre: 0.85, color: 0.4, fx: 0.4, decay: 0.3,
+    p: { tune: 3, dyn: 0.6 },
+  },
+  "metal fm": {
+    d: "an fm snare on inharmonic ratios, folded: a struck pan",
+    model: "fm", timbre: 0.4, color: 0.85, fx: 0.6, decay: 0.5,
+    p: { tune: -3, dyn: 0.7 },
+  },
+  "coins on the head": {
+    d: "the granular model reading a coin source, high short dense grains, compressed",
+    model: "granular", timbre: 0.75, color: 0.75, fx: 0.5, decay: 0.45,
+    p: { tune: 0, dyn: 0.7 },
+  },
+  "boom bap": {
+    d: "the blend model: a paper crack over a deep body, through an old sampler",
+    model: "blend", timbre: 0.2, color: 0.1, fx: 0.55, decay: 0.4,
+    p: { tune: -2, dyn: 0.75 },
+  },
+  "dusty funk": {
+    d: "the blend model with a brush layer over a ringing body, lightly crushed",
+    model: "blend", timbre: 0.9, color: 0.85, fx: 0.35, decay: 0.5,
+    p: { tune: 0, dyn: 0.75 },
+  },
+  "roll the dice": {
+    d: "the analog model with the randomizer on everything, a different snare every hit",
+    model: "analog", timbre: 0.5, color: 0.5, fx: 0.3, decay: 0.4,
+    p: { tune: 0, dyn: 0.7, rdecay: 0.4, rtimbre: 0.5, rcolor: 0.5, rpitch: 0.3, rfx: 0.4, rlevel: 0.3, rmodel: 0.5 },
+  },
+};
+
+export const LANCET_TONE_NAMES = Object.keys(LANCET_TONES);
+
+/** One line saying what a strike is reaching for. @param {string} name */
+export function lancetToneDescription(name) { return LANCET_TONES[name]?.d ?? ""; }
+
+/**
+ * A strike as a complete set of track params: the model, every panel control
+ * and the four track sliders, so nothing of the last one survives.
+ * @param {string} name
+ * @returns {Record<string, number|string>|null}
+ */
+export function lancetTone(name) {
+  const v = LANCET_TONES[name];
+  if (!v) return null;
+  const out = { ...LANCET_DEFAULTS };
+  for (const [k, val] of Object.entries(v.p)) out[`lnc${k}`] = val;
+  out.lncmodel = v.model;
+  out.harm = v.timbre; out.timb = v.color; out.morph = v.fx; out.decay = v.decay;
   return out;
 }
 

@@ -27,6 +27,7 @@ const SECTIONS = [
   ["guitar", "The guitar and the bass"],
   ["subby", "Subby"],
   ["vox", "Vox"],
+  ["lancet", "Lancet"],
   ["siege", "Siege"],
   ["sampler", "Samples"],
   ["wavetable", "The wavetable editor"],
@@ -673,7 +674,7 @@ export default function ManualPage() {
               <tbody>
                 <tr><td>plaits</td><td>Sixteen synthesis models from the Mutable Instruments Plaits oscillator: virtual analogue, FM, wavetable, granular, noise and physical models.</td></tr>
                 <tr><td>drum / synth</td><td>An 808 and 909 kit, a poly saw, an FM bell and a pad.</td></tr>
-                <tr><td>Emulators</td><td>The <a href="#silverbox">silverbox</a>, the <a href="#contagion">contagion</a>, the <a href="#hexop">hexop</a>, an <a href="#guitar">electric guitar and bass</a>, <a href="#subby">subby</a>, <a href="#vox">vox</a>, a singing voice, and <a href="#siege">siege</a>, a bass drum synth, all modelled rather than sampled. Then five monosynth voices in the spirit of classic hardware: snarl, ladder, drift, tines and oracle.</td></tr>
+                <tr><td>Emulators</td><td>The <a href="#silverbox">silverbox</a>, the <a href="#contagion">contagion</a>, the <a href="#hexop">hexop</a>, an <a href="#guitar">electric guitar and bass</a>, <a href="#subby">subby</a>, <a href="#vox">vox</a>, a singing voice, <a href="#siege">siege</a>, a bass drum synth, and <a href="#lancet">lancet</a>, a snare synthesizer, all modelled rather than sampled. Then five monosynth voices in the spirit of classic hardware: snarl, ladder, drift, tines and oracle.</td></tr>
                 <tr><td>texture</td><td>A granular engine that plays a sample as a cloud of tiny grains. Load your own, or pick from the bundled library of pads and drones.</td></tr>
                 <tr><td>wavetable</td><td>A wavetable synth with its own <a href="#wavetable">editor</a>.</td></tr>
                 <tr><td>sampler</td><td>Your own audio, or one of the bundled kits. See <a href="#sampler">samples</a>.</td></tr>
@@ -1030,6 +1031,53 @@ export default function ManualPage() {
             The <span className={styles.ui}>voice</span> dropdown loads a complete
             setup: a choir on aah, angels on ooh, a basso, a soul lead, doo wop
             backing, a robot choir, a monk chant, a whisper and a hallelujah.
+          </p>
+        </section>
+
+        <section className={styles.section} id="lancet">
+          <h2>Lancet</h2>
+          <p>
+            A snare drum synthesizer with seven ways of making a snare, picked
+            with the <span className={styles.ui}>model</span> dropdown: analog
+            (sine shells and noise, the early drum machines), slap (sines through
+            a waveshaper under a bright clipped noise), modal (a drum head&apos;s
+            own partials plus noise), physical (an exciter through resonant delay
+            lines, with wires), fm (a carrier under two modulators and noise),
+            granular (a snare under a cloud of grains from a rattle, a chain,
+            paper, a coin or sand) and blend (layered high and body layers, through
+            an old sampler).
+          </p>
+          <ul>
+            <li>
+              <strong>The four knobs</strong> are{" "}
+              <span className={styles.ui}>timbre</span>,{" "}
+              <span className={styles.ui}>color</span>,{" "}
+              <span className={styles.ui}>fx</span> and{" "}
+              <span className={styles.ui}>decay</span>. What timbre and color do
+              changes with the model (the status line says, when you pick one):
+              on most, timbre is the noise and color the body. fx is each
+              model&apos;s own effect, clean at the bottom: a clipper, a
+              multiband drive, a fold, a compressor, a lo-fi sampler. The step&apos;s
+              note is the pitch, C2 the middle of a two-octave range, and{" "}
+              <span className={styles.ui}>tune</span> trims it.
+            </li>
+            <li>
+              <strong><span className={styles.ui}>velocity</span></strong> is how
+              much a step&apos;s velocity does: the level, and a little of the
+              brightness and the length with it, so a ghost note is a ghost note.
+            </li>
+            <li>
+              <strong>The random row</strong> throws a knob on every hit: decay,
+              timbre, color, pitch, fx, level, and the chance of a different model.
+              A little on timbre and level is a drummer; model at half is a
+              different snare every hit.
+            </li>
+          </ul>
+          <p>
+            The <span className={styles.ui}>strike</span> dropdown loads a complete
+            setup: a tight or fat analog snare, a slap crack, a wood or piccolo
+            modal, a tin head, an fm clap, a metal fm, coins on the head, boom bap,
+            dusty funk, and one that rolls the dice.
           </p>
         </section>
 

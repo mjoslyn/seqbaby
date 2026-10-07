@@ -47,6 +47,7 @@ import {
   SUB_NUM_CTLS, SUB_SEL_CTLS, SUB_TONE_NAMES, subTone, subToneDescription,
   DRONE_NUM_CTLS, DRONE_SEL_CTLS, DRONE_TONE_NAMES, droneTone, droneToneDescription,
   VOX_NUM_CTLS, VOX_SEL_CTLS, VOX_TEXT_CTLS, VOX_TONE_NAMES, voxTone, voxToneDescription,
+  LANCET_NUM_CTLS, LANCET_SEL_CTLS, LANCET_TONE_NAMES, lancetTone, lancetToneDescription,
   SIEGE_NUM_CTLS, SIEGE_SEL_CTLS, SIEGE_TONE_NAMES, siegeTone, siegeToneDescription,
 } from "./engineData.js";
 import { EUCLID_DEFAULTS, FILTER_TYPES, PRISM_MODES, REPEAT_MODES, defaultCompConfig, defaultEq, defaultFilter, defaultFxConfig, defaultTrackParams } from "./soundDefaults.js";
@@ -103,7 +104,7 @@ const NAMES_SHARP = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#",
 
 // The same regex guessIsDrumKit (meter.js) uses; that module reads the live
 // catalog, so it is spelled again here rather than imported.
-const DRUM_RE = /\b(kick|siege|snare|rim|(open)?hat|hi-?hat|clap|tom\d*|ride|crash|cymbal|perc|drum)\b/;
+const DRUM_RE = /\b(kick|siege|snare|rim|(open)?hat|hi-?hat|clap|tom\d*|ride|crash|cymbal|perc|drum|lancet)\b/;
 
 // ---- engines ---------------------------------------------------------------
 
@@ -181,6 +182,7 @@ const SLIDER_TIPS = {
   "dm:sub": { harm: "drive into the parallel harmonics path: what makes a sub audible on a small speaker", timb: "lowpass on the harmonics path", morph: "oscillator shape, sine through triangle and saw to square", decay: "decay" },
   "dm:drone": { harm: "cutoff of the MS-20 style lowpass", timb: "A0: the equation's multiplier, 1..16. Changes how fast its slow terms run against the pitch, not the pitch", morph: "A1: the equation's first shift, 2..15", decay: "A2: the equation's second shift, 2..15" },
   "dm:vox": { harm: "the vowel: u, o, a, e, i across the slider (0, 0.25, 0.5, 0.75, 1). A lane on it sings a lyric", timb: "throat size: soprano (0), alto, tenor, bass (1)", morph: "breath: air in the voice; above 0.75 it fades to a whisper", decay: "release" },
+  "dm:lancet": { harm: "timbre: on most models the noise (level, brightness, length); what it does per model is in lncmodel's tips", timb: "color: the pitch envelope and shell balance (analog), the shaper (slap), the partials (modal), the body (physical), the modulator ratios (fm), the grains (granular), the bodies (blend)", morph: "fx amount: each model's own stage, clean at 0 (clipping, multiband drive, a fold, a compressor, an old sampler)", decay: "how long the hit lasts, 60ms to 2.4s" },
   "dm:siege": { harm: "drive, after the envelope: crushes the attack, lifts the tail. fold or clip is `sgemode`", timb: "click: how far above the note the pitch starts, up to six octaves", morph: "depth: how long the pitch takes to fall onto the note, 1ms to 250ms", decay: "how long the body rings, 50ms to 4s" },
   "dm:granular": { harm: "grain size", timb: "grain density", morph: "play position in the sample", decay: "spray: window, detune and jitter together" },
   "dm:808-kick": { harm: "tune", timb: "attack click", morph: "drive", decay: "decay" },
@@ -199,6 +201,7 @@ const PANELS = {
   "dm:sub":    { prefix: "sub", num: SUB_NUM_CTLS, sel: SUB_SEL_CTLS, tones: SUB_TONE_NAMES, tone: subTone, describe: subToneDescription },
   "dm:drone":  { prefix: "drn", num: DRONE_NUM_CTLS, sel: DRONE_SEL_CTLS, tones: DRONE_TONE_NAMES, tone: droneTone, describe: droneToneDescription },
   "dm:vox":    { prefix: "sng", num: VOX_NUM_CTLS, sel: VOX_SEL_CTLS, text: VOX_TEXT_CTLS, tones: VOX_TONE_NAMES, tone: voxTone, describe: voxToneDescription },
+  "dm:lancet":   { prefix: "lnc", num: LANCET_NUM_CTLS, sel: LANCET_SEL_CTLS, tones: LANCET_TONE_NAMES, tone: lancetTone, describe: lancetToneDescription },
   "dm:siege":    { prefix: "sge", num: SIEGE_NUM_CTLS, sel: SIEGE_SEL_CTLS, tones: SIEGE_TONE_NAMES, tone: siegeTone, describe: siegeToneDescription },
   "dm:hexop": {
     prefix: "d",
