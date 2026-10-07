@@ -742,8 +742,8 @@ export function applySet(s) {
 // agree on what "blank" means: main.js builds them at boot, and newSet() below
 // rebuilds them when you ask for a new song.
 export const STARTER_TRACKS = [
-  { name: "kick",   engineKey: "dm:808-kick" },
-  { name: "snare",  engineKey: "dm:808-snare" },
+  { name: "kick",   engineKey: "dm:siege" },
+  { name: "snare",  engineKey: "dm:lancet" },
   { name: "hat",    engineKey: "dm:909-chat" },
   { name: "accent", engineKey: "plaits:12" },
   { name: "bass",   engineKey: "dm:silverbox" },
