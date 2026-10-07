@@ -16,6 +16,7 @@ import { buildDroneVoice, DRONE_NUM_KEYS, DRONE_SEL_KEYS } from "./drone.js";
 import { buildVoxVoice, VOX_NUM_KEYS, VOX_SEL_KEYS, VOX_TEXT_KEYS } from "./vox.js";
 import { buildLancetVoice, LANCET_NUM_KEYS, LANCET_SEL_KEYS } from "./lancet.js";
 import { buildSiegeVoice, SIEGE_NUM_KEYS, SIEGE_SEL_KEYS } from "./siege.js";
+import { buildLadderWorkletVoice, LADDER_NUM_KEYS, LADDER_SEL_KEYS } from "./ladder.js";
 import { buildHexopVoice, HEXOP_NUM_KEYS, HEXOP_SEL_KEYS } from "./hexop.js";
 import { buildGuitarVoice, GUITAR_NUM_KEYS, GUITAR_SEL_KEYS } from "./guitar.js";
 import { buildContagionVoice, CONTAGION_NUM_KEYS, CONTAGION_SEL_KEYS } from "./contagion.js";
@@ -704,7 +705,15 @@ export function buildDrumSynthNode(kind, output) {
       return makePolyPool(6, () => buildPluckGuitarVoice(output));
     }
     case "snarl": return makePolyPool(4, () => buildSnarlVoice(output));
-    case "ladder":       return makePolyPool(4, () => buildLadderVoice(output));
+    // Ladder: the transistor-ladder monosynth, oscillators, mixer overload,
+    // filter and contours in one AudioWorklet that voices itself — see
+    // ladder.js. The fallback is the Tone oscillator pool this engine used to
+    // be, with a 24dB lowpass standing in for the ladder, never a silent track.
+    case "ladder": {
+      const v = buildLadderWorkletVoice(output);
+      if (v) return v;
+      return makePolyPool(4, () => buildLadderVoice(output));
+    }
     case "drift":       return makePolyPool(6, () => buildDriftVoice(output));
     // Electric bass: four strings, a parallel dirt path, a compressor and an
     // amp, all inside an AudioWorklet — see bass.js. Same fallback story as the
@@ -906,10 +915,13 @@ export function buildSnarlVoice(output) {
   };
 }
 
-// ---- ladder builder -------------------------------------------------------
-// Ladder voice: three oscillators each with independent waveform,
-// range, and fine frequency; plus a white/pink noise source. Summed through
-// a Chebyshev warmth + EQ3 shelf + amp envelope.
+// ---- ladder builder (the worklet's fallback) --------------------------------
+// What the ladder engine was before ladder.js: three Tone oscillators with a
+// waveform, a range and a tuning each, plus noise, through an amp envelope.
+// Kept only for a context whose worklet failed to register. A 24dB Tone
+// lowpass stands in for the ladder so the four sliders mean what they mean
+// on the worklet (cutoff / emphasis / contour / decay); the machine's waves it
+// does not have fall back to the nearest Tone one.
 export function buildLadderVoice(output) {
   const freqSig = new Tone.Signal({ units: "frequency", value: 110 });
   const osc1 = new Tone.Oscillator({ type: "sawtooth", detune: 0 }).start();
@@ -933,18 +945,17 @@ export function buildLadderVoice(output) {
   const mixNoise = new Tone.Gain(0);
   noise.connect(mixNoise);
 
-  const warm = new Tone.Chebyshev({ order: 3, wet: 0.35 });
-  const shelf = new Tone.EQ3({ low: 1, mid: 0.5, high: -3 });
+  const vcf = new Tone.Filter({ type: "lowpass", rolloff: -24, frequency: 780, Q: 1 });
   const amp = new Tone.AmplitudeEnvelope({ attack: 0.006, decay: 0.22, sustain: 0.75, release: 0.45 });
   const trim = new Tone.Gain(0.34);
-  mix1.connect(warm);
-  mix2.connect(warm);
-  mix3.connect(warm);
-  mixNoise.connect(warm);
-  warm.connect(shelf);
-  shelf.connect(amp);
+  mix1.connect(vcf);
+  mix2.connect(vcf);
+  mix3.connect(vcf);
+  mixNoise.connect(vcf);
+  vcf.connect(amp);
   amp.connect(trim);
   trim.connect(output);
+  const TONE_WAVE = { triangle: "triangle", shark: "sawtooth", sawtooth: "sawtooth", square: "square", pulse: "square", narrow: "square", sine: "sine" };
 
   const osc2SemiBase = { range: 0, freq: 0 };
   const osc3SemiBase = { range: -1, freq: 0 };
@@ -961,14 +972,14 @@ export function buildLadderVoice(output) {
     if (key === "osc1")         mix1.gain.value = Math.max(0, Math.min(1, Number(val) || 0));
     else if (key === "osc2")    mix2.gain.value = Math.max(0, Math.min(1, Number(val) || 0));
     else if (key === "osc3")    mix3.gain.value = Math.max(0, Math.min(1, Number(val) || 0));
-    else if (key === "harm")    osc2.detune.value = 5 + (Number(val) || 0) * 25;
-    else if (key === "decay") {
-      amp.decay = 0.05 + (Number(val) || 0) * 1.5;
-      warm.wet.value = 0.15 + (Number(val) || 0) * 0.55;
-    }
-    else if (key === "osc1wave") { if (["sine","triangle","sawtooth","square"].includes(val)) osc1.type = val; }
-    else if (key === "osc2wave") { if (["sine","triangle","sawtooth","square"].includes(val)) osc2.type = val; }
-    else if (key === "osc3wave") { if (["sine","triangle","sawtooth","square"].includes(val)) osc3.type = val; }
+    else if (key === "harm")    vcf.frequency.value = 30 * Math.pow(2, Math.max(0, Math.min(1, Number(val) || 0)) * 9.4);
+    else if (key === "timb")    vcf.Q.value = 0.5 + Math.max(0, Math.min(1, Number(val) || 0)) * 12;
+    else if (key === "decay")   amp.decay = 0.006 * Math.pow(10, 3.3 * Math.max(0, Math.min(1, Number(val) || 0)));
+    else if (key === "ldratk")  amp.attack = 0.001 * Math.pow(10, 4 * Math.max(0, Math.min(1, Number(val) || 0)));
+    else if (key === "ldrsus")  amp.sustain = Math.max(0, Math.min(1, Number(val) || 0));
+    else if (key === "osc1wave") { if (TONE_WAVE[val]) osc1.type = TONE_WAVE[val]; }
+    else if (key === "osc2wave") { if (TONE_WAVE[val]) osc2.type = TONE_WAVE[val]; }
+    else if (key === "osc3wave") { if (TONE_WAVE[val]) osc3.type = TONE_WAVE[val]; }
     else if (key === "osc1range") { osc1Range.n = Number(val) * 12; updateMul(); }
     else if (key === "osc2range") { osc2SemiBase.range = Number(val) || 0; updateMul(); }
     else if (key === "osc3range") { osc3SemiBase.range = Number(val) || 0; updateMul(); }
@@ -986,7 +997,7 @@ export function buildLadderVoice(output) {
     }
   };
   return {
-    nodes: [osc1, osc2, osc3, mul1, mul2, mul3, freqSig, mix1, mix2, mix3, mixNoise, warm, shelf, amp, trim],
+    nodes: [osc1, osc2, osc3, mul1, mul2, mul3, freqSig, mix1, mix2, mix3, mixNoise, vcf, amp, trim],
     setGlide: (g) => { glideSec = Math.max(0.002, Number(g) || 0); },
     setParam: setLadderParam,
     getAudioParam: (key) => {
@@ -995,7 +1006,6 @@ export function buildLadderVoice(output) {
         case "osc2":  return mix2.gain;
         case "osc3":  return mix3.gain;
         case "noise": return mixNoise.gain;
-        case "harm":  return osc2.detune;
       }
       return null;
     },
@@ -1424,6 +1434,7 @@ export class DrumSynthVoice {
                      ...DRONE_NUM_KEYS, ...DRONE_SEL_KEYS,
                      ...VOX_NUM_KEYS, ...VOX_SEL_KEYS, ...VOX_TEXT_KEYS,
                      ...SIEGE_NUM_KEYS, ...SIEGE_SEL_KEYS,
+                     ...LADDER_NUM_KEYS, ...LADDER_SEL_KEYS,
                      ...LANCET_NUM_KEYS, ...LANCET_SEL_KEYS]) {
       if (this.params?.[k] != null) this.built.setParam(k, this.params[k]);
     }

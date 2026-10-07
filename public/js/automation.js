@@ -1,7 +1,7 @@
 import { AUTOMATION_TARGETS, VOICE_AUTO_KEYS, afterPrefix as after, baseModKey, canAutomateKey, fxStageOfModKey, splitFxInstanceKey, voiceAutoKeysForEngineKey } from "./constants.js";
 import { driveGain } from "./fxRack.js";
 import { makeFuzzCurve, shaperPreampGain } from "./curves.js";
-import { bassFromUnit, droneFromUnit, guitarFromUnit, hexopFromUnit, lancetFromUnit, siegeFromUnit, subFromUnit, voxFromUnit } from "./engineData.js";
+import { bassFromUnit, droneFromUnit, guitarFromUnit, hexopFromUnit, ladderFromUnit, lancetFromUnit, siegeFromUnit, subFromUnit, voxFromUnit } from "./engineData.js";
 import { euclidFromUnit, setEuclidLive } from "./euclid.js";
 import { setChanceLive } from "./chance.js";
 import { chanceFromUnit } from "./chanceGen.js";
@@ -193,6 +193,12 @@ export function applyAutomationAtStep(t, key, v, time, vNext, stepDur) {
   if (key.startsWith("siege.")) {
     const which = after(key, "siege.");
     ramp(t.voice?.getAudioParam?.("sge" + which), siegeFromUnit(which, vv), siegeFromUnit(which, vn));
+    return;
+  }
+  // The ladder, same again; `tune` is -1..1 semitones, so it maps through its range.
+  if (key.startsWith("ladder.")) {
+    const which = after(key, "ladder.");
+    ramp(t.voice?.getAudioParam?.("ldr" + which), ladderFromUnit(which, vv), ladderFromUnit(which, vn));
     return;
   }
   const rack = t.fxRack;

@@ -674,7 +674,7 @@ export default function ManualPage() {
               <tbody>
                 <tr><td>plaits</td><td>Sixteen synthesis models from the Mutable Instruments Plaits oscillator: virtual analogue, FM, wavetable, granular, noise and physical models.</td></tr>
                 <tr><td>drum / synth</td><td>An 808 and 909 kit, a poly saw, an FM bell and a pad.</td></tr>
-                <tr><td>Emulators</td><td>The <a href="#silverbox">silverbox</a>, the <a href="#contagion">contagion</a>, the <a href="#hexop">hexop</a>, an <a href="#guitar">electric guitar and bass</a>, <a href="#subby">subby</a>, <a href="#vox">vox</a>, a singing voice, <a href="#siege">siege</a>, a bass drum synth, and <a href="#lancet">lancet</a>, a snare synthesizer, all modelled rather than sampled. Then five monosynth voices in the spirit of classic hardware: snarl, ladder, drift, tines and oracle.</td></tr>
+                <tr><td>Emulators</td><td>The <a href="#silverbox">silverbox</a>, the <a href="#contagion">contagion</a>, the <a href="#hexop">hexop</a>, an <a href="#guitar">electric guitar and bass</a>, <a href="#subby">subby</a>, <a href="#vox">vox</a>, a singing voice, <a href="#siege">siege</a>, a bass drum synth, and <a href="#lancet">lancet</a>, a snare synthesizer, and the <a href="#ladder">ladder</a>, the transistor-ladder monosynth, all modelled rather than sampled. Then four voices in the spirit of classic hardware: snarl, drift, tines and oracle.</td></tr>
                 <tr><td>texture</td><td>A granular engine that plays a sample as a cloud of tiny grains. Load your own, or pick from the bundled library of pads and drones.</td></tr>
                 <tr><td>wavetable</td><td>A wavetable synth with its own <a href="#wavetable">editor</a>.</td></tr>
                 <tr><td>sampler</td><td>Your own audio, or one of the bundled kits. See <a href="#sampler">samples</a>.</td></tr>
@@ -1147,6 +1147,69 @@ export default function ManualPage() {
             a techno kick, a rumble, a tick, a gabber kick, a sub drum, a hard
             trance kick and a bassline.
           </p>
+        </section>
+        <section className={styles.section} id="ladder">
+          <h2>Ladder</h2>
+          <p>
+            The transistor-ladder monosynth, after the Minimoog: three
+            oscillators and noise into a mixer, the mixer into the four-pole
+            ladder filter, the filter into the amplifier, with a contour on each.
+            The things that make it sound like itself are all in the details:
+            the mixer overloads the filter&apos;s input stage when the levels are
+            up, the filter thins out as the emphasis climbs and whistles on its
+            own past three quarters of the knob, and the oscillators drift a
+            little against each other.
+          </p>
+          <ul>
+            <li>
+              <strong>The four knobs</strong> are the filter&apos;s:{" "}
+              <span className={styles.ui}>cutoff</span>,{" "}
+              <span className={styles.ui}>emph</span> (the emphasis, or
+              resonance), <span className={styles.ui}>contour</span> (how far the
+              filter contour opens the filter, up to five octaves) and{" "}
+              <span className={styles.ui}>decay</span> (the loudness contour&apos;s
+              decay). The rest of the front plate is in the panel.
+            </li>
+            <li>
+              <strong>The oscillator bank.</strong> Each oscillator has a range
+              (<span className={styles.ui}>lo</span>, the LFO range, then 32&apos;
+              to 2&apos;) and one of the machine&apos;s six waves: triangle, shark
+              (the triangle-saw), saw, square, wide and narrow pulse. Osc 2 and
+              osc 3 tune seven semitones either way, continuously; a few
+              hundredths of a semitone is the detune. Osc 3 can be taken off the
+              keyboard, which is how it becomes a fixed-rate LFO.
+            </li>
+            <li>
+              <strong>The mixer is the overdrive.</strong> One oscillator at its
+              usual level arrives clean; push all three up and the filter&apos;s
+              input saturates. That is most of what fat means on this machine.
+            </li>
+            <li>
+              <strong>Two contours</strong>, attack, decay and sustain each, and
+              the <span className={styles.ui}>decay switch</span>: on, a note
+              releases at its decay time; off, it stops as soon as the step
+              ends. <span className={styles.ui}>kbd</span> is how much of the
+              keyboard the cutoff follows; at full, a whistling filter plays in
+              tune.
+            </li>
+            <li>
+              <strong>The mod wheel</strong> carries osc 3 or noise (
+              <span className={styles.ui}>mix</span> between them) to the
+              oscillators, for vibrato, or to the filter, each behind its own
+              switch. Drop osc 3 to lo, take it out of the mix, and turn the
+              wheel up.
+            </li>
+            <li>
+              <strong>Mono is the machine</strong>: the lowest held note wins, a
+              note arriving while one is held changes the pitch without
+              restarting the contours, and the track&apos;s glide is the glide
+              knob. Poly plays six at once, for chords.
+            </li>
+            <li>
+              <strong>Eight patches</strong> in the panel&apos;s dropdown, from a
+              bass and a funk lead to the filter whistling by itself.
+            </li>
+          </ul>
         </section>
 
         <section className={styles.section} id="sampler">

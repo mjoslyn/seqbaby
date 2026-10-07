@@ -16,7 +16,7 @@ env / fx / eq / comp / mod / automation per track.
   `public/woscillators.js` →
   `public/js/main.js` (ES module). `middleware.ts` refreshes the Supabase
   session on every request *except* static engine assets.
-- **Engine**: ~75 dependency-free vanilla ES modules in `public/js/`. No
+- **Engine**: ~76 dependency-free vanilla ES modules in `public/js/`. No
   bundler — edit, reload. `window.seqbaby` (from `appApi.js`) exposes `state`
   and serialize/apply hooks to the React shell (typed in `app/seqbaby.d.ts`).
 - **Accounts + data**: Supabase (Postgres + Auth + RLS). Tables: `profiles`,
@@ -288,6 +288,11 @@ env / fx / eq / comp / mod / automation per track.
   sine under a pitch envelope, with a drive (a two-stage wavefolder or a
   clipper) AFTER the amplitude envelope, a 3-pole 30Hz low cut, gate mode
   and pitch lock, in one AudioWorklet. See the siege section.
+- `ladder.js` — **ladder**, the transistor-ladder monosynth after the
+  Minimoog: six-wave oscillators, a mixer that overloads the filter, the
+  4-pole feedback ladder with the saturator in its loop, two contours, the
+  mod wheel, mono low-note priority, in one AudioWorklet. See the ladder
+  section.
 - `hexop.js` — the hexop, same shape again, plus the 32-algorithm
   table, the panel's generated key lists and the preset voices. See the hexop
   section below.
@@ -323,7 +328,8 @@ npm test               # node --test: the pure modules (session format, chance g
                        #   version tree, song names, share card copy, the song builder, the jam diff,
                        #   song previews, grid avatars, the songs and people explorers,
                        #   the Strudel bridge, the reverb, the filter models, the guitar, the contagion,
-                       #   the vox and its phonetic reader, the lancet, the prism, the repeat)
+                       #   the vox and its phonetic reader, the lancet, the prism, the repeat,
+                       #   the ladder)
 npm run mcp            # the MCP server on stdio (mcp/server.mjs) — an agent writes songs
 npm run test:rls       # RLS policy tests — builds a throwaway Postgres in docker
 ```
@@ -788,13 +794,13 @@ Voice interface: `hit(midi, time, dur, vel, opts?)`, `setParam`,
 
 ## Emulators (`"Emulators"` optgroup)
 
-All engine type `drum-synth`. The five Tone.js analog-mono presets are each
+All engine type `drum-synth`. The four Tone.js analog-mono presets are each
 wrapped in `makePolyPool(size, buildOne)`; the silverbox, the contagion, the hexop, the
-guitar, the bass, subby, the drone, the vox, the siege and the lancet are the odd ones out — AudioWorklet models that handle
+guitar, the bass, subby, the drone, the vox, the siege, the lancet and the ladder are the odd ones out — AudioWorklet models that handle
 their own voicing (the silverbox, subby and the siege are mono, deliberately; the rest
-polyphonic). See their
-sections below. The guitar and bass keep their old pluck builders in voices.js
-(`buildPluckGuitarVoice` / `buildPluckBassVoice`) purely as worklet fallbacks.
+polyphonic, the ladder by a switch). See their
+sections below. The guitar, bass and ladder keep their old Tone builders in voices.js
+(`buildPluckGuitarVoice` / `buildPluckBassVoice` / `buildLadderVoice`) purely as worklet fallbacks.
 
 | key             | builder               | pool | character |
 |---|---|---|---|
@@ -802,7 +808,7 @@ sections below. The guitar and bass keep their old pluck builders in voices.js
 | `dm:contagion` | `buildContagionVoice` | 8 (internal) | digital multi-filter architecture, AudioWorklet (`contagion.js`) |
 | `dm:hexop`     | `buildHexopVoice`     | 16 (internal) | 6-op FM, AudioWorklet (`hexop.js`) |
 | `dm:snarl`     | `buildSnarlVoice`     | 4 | saw + ultrasaw + PWM pulse + metalized tri + sub, growl soft-clip |
-| `dm:ladder`    | `buildLadderVoice`    | 4 | 3 osc w/ wave + range selects, ±7-semi osc2/3, noise |
+| `dm:ladder`    | `buildLadderWorkletVoice` | 6 (internal), or mono | transistor-ladder monosynth after the Minimoog, AudioWorklet (`ladder.js`) |
 | `dm:drift`     | `buildDriftVoice`     | 6 | DCO + sub + noise → HPF → baked-in chorus |
 | `dm:guitar`    | `buildGuitarVoice`    | 6 (internal) | electric guitar rig, AudioWorklet (`guitar.js`) |
 | `dm:bass`      | `buildBassVoice`      | 4 (internal) | electric bass rig, AudioWorklet (`bass.js`) |
@@ -840,6 +846,105 @@ spellings rather than a consistent one.
 chord tones on other voices play the baseline; same limitation as
 `PlaitsVoice`). The stock harm/timb/morph/decay sliders are relabeled
 per-engine by `updatePlaitsControlsVisibility`.
+
+## Ladder (`dm:ladder`, `public/js/ladder.js`)
+
+The transistor-ladder monosynth, modelled on the Minimoog's signal path. It
+used to be three Tone oscillators into a Chebyshev waveshaper with no ladder
+in it at all, which is why it is a worklet now: the ladder is the instrument.
+
+```
+OSC 1 ─┐
+OSC 2 ─┼─ MIXER ─▶ LADDER VCF (4-pole, 24 dB/oct) ─▶ VCA ─▶ out
+OSC 3 ─┤  (the     ▲  cutoff · emphasis · kbd       ▲
+NOISE ─┘  overload) │  ◀── FILTER CONTOUR × amount   │  ◀── LOUDNESS CONTOUR
+   │                └── mod wheel (osc 3 / noise) ───┘      (decay switch)
+   └── osc 3 in LO is the LFO
+```
+
+- **The filter is a feedback ladder with the saturator inside the loop**:
+  four one-pole TPT stages, the resonance fed back through a tanh at the
+  input pair, 2x oversampled, the same structure as `filterModels.js`'s
+  ladder family. That topology costs passband as the emphasis climbs
+  (1/(1+k) at DC) and the machine never compensated; a quarter of the loss
+  is clawed back (`fat`'s own figure) so the default emphasis does not read
+  as a fault. Measured: half emphasis thins the fundamental 8dB, full 13dB.
+  The loop gain is `5.3 × emphasis`, so the whistle starts between 0.7 and
+  0.75 of the knob (the machine's ~7.5 of 10), bounded by the loop's tanh,
+  at the cutoff, tracking the keyboard at full tracking (an octave of keys is
+  an octave of whistle, measured within 25 cents). It needs a kick to start:
+  a -80dB noise floor rides under the mix at the input pair, as a circuit's
+  does, which is what lets every oscillator be switched off.
+- **Keyboard tracking is a switch pair** (`ldrkbd`: off, 1/3, 2/3, full),
+  around middle C.
+- **The mixer overloads the filter's input stage.** One oscillator at its
+  default level is 33dB clean; three up full sit a dozen dB dirtier. Warm,
+  never a square: the machine's overload is a saturation, not a fuzz. The
+  levels are the osc1 / osc2 / osc3 / noise sliders and nothing else.
+- **The oscillators are the machine's six waves** (`LADDER_WAVES`: triangle,
+  shark, saw, square, wide and narrow pulse, polyBLEP on every edge; `sine`
+  is kept for songs written when the bank was Tone oscillators) and six
+  ranges (`LADDER_RANGES`: `-7` is LO, seven octaves under 8', then 32' to
+  2'). `osc2freq` / `osc3freq` are ±7 semitones, **continuous** now (the
+  markup's step went from 1 to 0.01): a few hundredths is the detune. Osc 3
+  off the keyboard (`ldrosc3kbd`) sits at A440 times its range and knob,
+  which in LO is a 3.4Hz LFO.
+- **Two contours**, attack / decay / sustain each (`ldrfatk` / `ldrfdec` /
+  `ldrfsus`, `ldratk` / `ldrsus`; the loudness decay is the track's decay
+  slider), 1ms..10s attacks and 6ms..12s decays, exponential in the knob. The
+  attack charges toward 1.25 and clamps, as a cap into a comparator does.
+  **The decay switch** (`ldrdecsw`): on, a note releases at its decay time;
+  off, it stops 8ms after the gate. The filter contour's amount is the morph
+  slider: up to five octaves.
+- **The mod wheel** (`ldrmod`) carries `ldrmodmix` of osc 3 and noise (the
+  noise slowed to a 12Hz wobble, as the machine's pink noise reads) to the
+  oscillators (`ldroscmod`, ±5 semitones at full, per sub-sample so osc 3 in
+  an audio range is FM) and to the filter (`ldrfiltmod`, ±3 octaves, per
+  control block). Osc 3 is read before the mixer, so it modulates with its
+  mixer level at zero.
+- **Drift** (`ldrdrift`): each oscillator walks a few cents on its own and
+  the three sit a little apart; ±5 cents at the top of the knob, measured,
+  and dead on at zero.
+- **Mono mode is the machine** (`ldrmode`): low-note priority, single
+  trigger (a note arriving while one is held changes the pitch and leaves the
+  contours alone; letting a key go returns the pitch to the lowest still
+  held), the track's glide as the glide knob. Poly is six voices stolen
+  quietest first, for the chords a step can already carry, and the default,
+  since the catalog says `poly: true` and songs have chords on it.
+- **Velocity is a level** (0.45 + 0.55 × vel). The keyboard had none; a
+  sequencer step does.
+- **Controls** — the four sliders are CUTOFF / EMPH / CONTOUR / DECAY. The
+  panel keeps the oscillator bank's old unprefixed keys (`osc1wave`,
+  `osc1range`, `osc2freq`, `noise`, `noisetype`...) and adds `ldr` + short
+  key -> `ladder_<short>` / `ladder.<short>` from `LADDER_NUM_CTLS` /
+  `LADDER_SEL_CTLS` in engineData.js. `ldr`, not `l`: there is no other
+  `l`-prefixed panel, but the lancet's is `lnc`. Eight patches via
+  `ladderTone(name)`, complete (bank, mixer, panel, sliders); the markup is
+  `LADDER_PANEL` in `app/studioMarkup.ts` with the dropdown filled at runtime
+  from `LADDER_TONE_NAMES`. The song builder's `PANELS` entry joins the two
+  lists under an empty prefix.
+- **A song from before the model is migrated** (`migrateLadderFilter`,
+  sessionFormat.js). The four sliders used to mean osc 2's detune (harm,
+  5..30 cents) and a waveshaper amount (decay); a sound without the `ldrv`
+  marker (defaultTrackParams stamps 2 on every new track, the builder's
+  `addTrack` on every ladder track it makes) gets the detune folded into
+  `osc2freq`, the filter open, no emphasis, no contour and no drift, so it
+  plays as it did. Keyed on the marker, not on a panel key being absent as
+  the contagion's is, because a sparse builder song written after the change
+  leaves the same keys unset and means the new thing. An LFO a song had on
+  `harm` now sweeps the cutoff rather than the detune; nothing is done about
+  that.
+- `test/ladder.test.js` renders the processor in Node: the tables against
+  the processor and the markup, pitch through every range and knob, the six
+  waves' spectra, the 24dB slope and the tracking switch, the passband loss
+  and the whistle's onset, pitch and tracking, the overload, both contours
+  and the switch, mono priority and legato, the chord, the wheel to both
+  destinations and from both sources, drift, a stop, silence, every patch's
+  level, the builder, Strudel and the migration.
+- **Loading** — Blob-URL registration from `loadWorklet()`; a failure falls
+  back to `buildLadderVoice` (the Tone pool this engine used to be, with a
+  24dB Tone lowpass reading the sliders the worklet's way), never a silent
+  track.
 
 ## Silverbox (`dm:silverbox`, `public/js/silverbox.js`)
 
@@ -4235,7 +4340,7 @@ through a 6ms fade on its gain).
   do the same, or use `currentBpm()` (lfo.js) as the sync helpers do.
 - **Worklet processor sources are template literals** (`silverbox.js`,
   `contagion.js`, `hexop.js`, `guitar.js`, `bass.js`, `subbass.js`,
-  `drone.js`, `vox.js`, `lancet.js`, `crusher.js`, `reverb.js`, `prism.js`, `repeat.js`),
+  `drone.js`, `vox.js`, `lancet.js`, `siege.js`, `ladder.js`, `crusher.js`, `reverb.js`, `prism.js`, `repeat.js`),
   so a stray backtick or `${` inside one — including in a comment — truncates
   the string. The module still parses, `node --check` still passes, and the
   failure only shows up as a SyntaxError at engine boot. When editing inside a
@@ -4316,7 +4421,7 @@ Repo: https://github.com/mjoslyn/seqbaby.
   An inline marker (`window.__seqbabyServerBoot`) tells the paths apart, and
   `ScriptLoader.tsx` keeps its onload-chained injection for the soft-nav case
   (e.g. arriving from `/login`).
-- `app/EnginePreload.tsx` emits `modulepreload` for all 75 modules listed in
+- `app/EnginePreload.tsx` emits `modulepreload` for all 76 modules listed in
   `app/engineAssets.ts` (at `engineAsset("/js/<name>")`; the hints used to
   point at the site root and 404). The graph is 8 levels deep, so without it the browser
   needs up to eight sequential round trips just to discover the code.

@@ -87,6 +87,7 @@ export const ENGINE_MODULES = [
   "knob.js",
   "knobNav.js",
   "knobRecord.js",
+  "ladder.js",
   "lancet.js",
   "lfo.js",
   "liveSet.js",

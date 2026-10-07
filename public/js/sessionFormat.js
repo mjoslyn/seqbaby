@@ -208,10 +208,34 @@ export function migrateContagionSplit(params) {
   }
 }
 
+// The ladder's four sliders changed meaning when the engine became a model
+// of the machine (ladder.js): harm was osc 2's detune, 5..30 cents, and decay
+// also scaled a waveshaper; now they are the filter's cutoff, emphasis and
+// contour amount, and the loudness decay. A sound from before carries no
+// `ldrv` (defaultTrackParams stamps 2 on every new one, the builder on every
+// track it makes), and is rewritten to play as it did: the detune folded into
+// osc 2's own tuning knob, which is continuous now, the filter wide open with
+// no emphasis and no contour, no drift. Keyed on the marker rather than on a
+// key being absent, as the contagion's is, because a sparse song written
+// AFTER the change leaves the same panel keys unset and means the new thing.
+export function migrateLadderFilter(params) {
+  if (!params || typeof params !== "object") return;
+  if (params.ldrv != null) return;
+  params.ldrv = 2;
+  const h = Math.max(0, Math.min(1, Number(params.harm ?? 0.5) || 0));
+  const semis = (5 + 25 * h) / 100;
+  params.osc2freq = Math.max(-7, Math.min(7, (Number(params.osc2freq) || 0) + semis));
+  params.harm = 1;
+  params.timb = 0;
+  params.morph = 0;
+  params.ldrdrift = 0;
+}
+
 /** A sound snapshot, or anything shaped like one (a track, a saved patch). */
 function migrateSoundNames(o, engineKey) {
   if (!o || typeof o !== "object") return false;
   if (engineKey === "dm:contagion") migrateContagionSplit(o.params);
+  if (engineKey === "dm:ladder") migrateLadderFilter(o.params);
   renameKeys(o.params, (k) => LEGACY_PARAM_KEYS[k] || k);
   renameKeys(o.lfoConfig, migrateModKey);
   migrateCrushRate(o);

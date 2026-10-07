@@ -37,7 +37,7 @@ const EMULATORS = [
   ["contagion", "a digital polysynth. two filters with a saturator between them, oscillators that morph from sine to pulse, and unison up to eight voices wide."],
   ["hexop", "six sine operators and thirty-two algorithms, with an envelope on every operator. the sound is the routing and the levels, so there is a lot to program."],
   ["snarl", "a monosynth with a saw, an ultrasaw, a pulse with pwm, a triangle you can fold into metal, and a sub. it gets rough when you push it."],
-  ["ladder", "three oscillators into a warm filter. the fat mono lead and bass sound, with the second and third oscillators detuned or dropped an octave."],
+  ["ladder", "the transistor-ladder monosynth: three oscillators with the machine's six waves, a mixer that overloads the filter, the 24dB ladder that whistles when the emphasis is up, two contours and a mod wheel. the fat mono lead and bass sound."],
   ["drift", "a dco with a square sub and noise, a high-pass, and the chorus built in. it does pads and it does them well."],
   ["electric guitar", "the whole rig in one model: strings, pickup, tone pot, amp, cab. turn bloom up and the speaker feeds back into the strings until the note howls."],
   ["electric bass", "the same strings, wound and stiffer, with a dirt path that leaves the lows alone, a compressor that is always on, and an octaver."],
