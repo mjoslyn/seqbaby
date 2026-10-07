@@ -18,39 +18,66 @@ function hash32(str) {
   return h >>> 0;
 }
 
+/** Murmur3's finalizer: the low bits of an FNV hash are a function of the low
+ *  bits of its input alone (a multiply never carries downwards), so every
+ *  `% list.length` taken straight off hash32 shared the parity of the seed's
+ *  digits -- the adjective, the noun and the family pick all moved together
+ *  and half the names were unreachable. Measured: 504 of 1008 before this,
+ *  all 1008 after. */
+function mix32(h) {
+  h ^= h >>> 16;
+  h = Math.imul(h, 0x85ebca6b);
+  h ^= h >>> 13;
+  h = Math.imul(h, 0xc2b2ae35);
+  h ^= h >>> 16;
+  return h >>> 0;
+}
+
+/** A draw from the seed under its own salt, so every choice a name makes is
+ *  independent of the others. */
+function draw(seed, salt) {
+  return mix32(hash32(`${salt}:${seed}`));
+}
+
 /** One word out of `list`, chosen by the seed under its own salt so the two
  *  halves of a name vary independently. */
 function pick(list, seed, salt) {
-  return list[hash32(`${salt}:${seed}`) % list.length];
+  return list[draw(seed, salt) % list.length];
 }
 
 // Tempo bands, dark to bright within each. A band is a feel, not a genre: what
 // changes between them is how hurried the adjective is allowed to sound.
+//
+// The pools are wide on purpose. With six words a side and five nouns a family,
+// every scale-less house-tempo acid song drew from ninety names, and an account
+// with a few dozen songs in it was already handing the server duplicates to
+// number. Fourteen a side and twelve a family is over five hundred per band and
+// family before the second-family nouns below widen it again.
 const ADJECTIVES = {
   drift: {
-    dark: ["midnight", "sunken", "dim", "hollow", "tarpit", "undertow"],
-    bright: ["dawn", "floating", "open", "pale", "daylit", "soft"],
-    neutral: ["idle", "still", "drowsy", "wide", "patient", "low"],
+    dark: ["midnight", "sunken", "dim", "hollow", "tarpit", "undertow", "buried", "fogbound", "abyssal", "leaden", "sleepless", "nocturnal", "tidal", "moth"],
+    bright: ["dawn", "floating", "open", "pale", "daylit", "soft", "milky", "airy", "weightless", "lucid", "tender", "hazy", "lunar", "gentle"],
+    neutral: ["idle", "still", "drowsy", "wide", "patient", "low", "slow", "lazy", "adrift", "lingering", "lowtide", "glacial", "halfasleep", "becalmed"],
   },
   walk: {
-    dark: ["dusk", "smoky", "grey", "murk", "backroom", "late"],
-    bright: ["amber", "warm", "easy", "sunlit", "glass", "clear"],
-    neutral: ["steady", "plain", "loose", "even", "quiet", "halfway"],
+    dark: ["dusk", "smoky", "grey", "murk", "backroom", "late", "rainy", "sullen", "moody", "ashen", "sodden", "tarnished", "bruised", "dusty"],
+    bright: ["amber", "warm", "easy", "sunlit", "glass", "clear", "honey", "breezy", "mellow", "golden", "velvet", "sunday", "rosy", "candid"],
+    neutral: ["steady", "plain", "loose", "even", "quiet", "halfway", "casual", "sidewalk", "modest", "wandering", "rolling", "humble", "offbeat", "lowkey"],
   },
   house: {
-    dark: ["basement", "concrete", "shadow", "unlit", "cold", "afterhours"],
-    bright: ["neon", "chrome", "polished", "gold", "electric", "bright"],
-    neutral: ["running", "looping", "tight", "upright", "mechanic", "level"],
+    dark: ["basement", "concrete", "shadow", "unlit", "cold", "afterhours", "tunnel", "subway", "asphalt", "cellar", "dank", "blacklit", "stale", "bunker"],
+    bright: ["neon", "chrome", "polished", "gold", "electric", "bright", "disco", "mirror", "glossy", "vivid", "plastic", "lacquer", "prism", "candy"],
+    neutral: ["running", "looping", "tight", "upright", "mechanic", "level", "locked", "cyclic", "modular", "square", "factory", "clockwork", "motor", "deadpan"],
   },
   drive: {
-    dark: ["iron", "blackout", "grim", "heavy", "thunder", "hard"],
-    bright: ["flash", "sharp", "silver", "fastlane", "high", "lit"],
-    neutral: ["driving", "forward", "strict", "tension", "pressure", "charge"],
+    dark: ["iron", "blackout", "grim", "heavy", "thunder", "hard", "steel", "brutal", "militant", "ominous", "serrated", "granite", "tar", "savage"],
+    bright: ["flash", "sharp", "silver", "fastlane", "high", "lit", "radiant", "blazing", "laser", "crystal", "kinetic", "jet", "turbo", "lightning"],
+    neutral: ["driving", "forward", "strict", "tension", "pressure", "charge", "relentless", "marching", "pounding", "piston", "urgent", "surging", "engine", "torque"],
   },
   rush: {
-    dark: ["riot", "frantic", "meltdown", "panic", "feral", "scorched"],
-    bright: ["hyper", "flare", "strobe", "whitehot", "rocket", "dazzle"],
-    neutral: ["breakneck", "runaway", "overdrive", "fulltilt", "blur", "sprint"],
+    dark: ["riot", "frantic", "meltdown", "panic", "feral", "scorched", "rabid", "manic", "molten", "berserk", "havoc", "volcanic", "screaming", "wrecked"],
+    bright: ["hyper", "flare", "strobe", "whitehot", "rocket", "dazzle", "supersonic", "sparkle", "glitter", "fizz", "comet", "giddy", "zippy", "sugar"],
+    neutral: ["breakneck", "runaway", "overdrive", "fulltilt", "blur", "sprint", "hurtling", "racing", "jittery", "rapid", "stampede", "frenzied", "turbulent", "quickfire"],
   },
 };
 
@@ -59,24 +86,28 @@ const ADJECTIVES = {
 // not as a settings dump -- but it is still derived from the engines, so two
 // songs with different names are different songs.
 const NOUNS = {
-  acid: ["acid", "squelch", "slide", "resonance", "ladder"],
-  fm: ["bell", "tine", "operator", "carrier", "sideband"],
-  rig: ["amp", "feedback", "pickup", "string", "fretwork"],
-  sub: ["sub", "bottom", "tremor", "rumble", "subfloor"],
-  drone: ["drone", "hum", "dirge", "monolith", "undertow"],
-  voice: ["choir", "chorus", "hymn", "chant", "refrain"],
-  analog: ["filter", "sweep", "detune", "circuit", "voltage"],
-  plaits: ["model", "particle", "swarm", "chord", "wavefold"],
-  texture: ["grain", "cloud", "texture", "haze", "vapour"],
-  sampler: ["sample", "loop", "chop", "slice", "take"],
-  drums: ["machine", "kit", "breaks", "groove", "pattern"],
-  midi: ["signal", "channel", "link", "patch"],
-  none: ["session", "sketch", "take", "idea", "draft"],
+  acid: ["acid", "squelch", "slide", "resonance", "ladder", "diode", "accent", "bubble", "worm", "zap", "cutoff", "sequence"],
+  fm: ["bell", "tine", "operator", "carrier", "sideband", "chime", "algorithm", "index", "ratio", "keys", "lattice", "gong"],
+  rig: ["amp", "feedback", "pickup", "string", "fretwork", "strum", "riff", "tube", "cabinet", "twang", "lick", "fret"],
+  sub: ["sub", "bottom", "tremor", "rumble", "subfloor", "lowend", "quake", "woofer", "depth", "boom", "trench", "fathom"],
+  drone: ["drone", "hum", "dirge", "monolith", "undertow", "equation", "bytebeat", "ritual", "mantra", "ohm", "swell", "tide"],
+  voice: ["choir", "chorus", "hymn", "chant", "refrain", "vowel", "lyric", "syllable", "canticle", "harmony", "breath", "lullaby"],
+  analog: ["filter", "sweep", "detune", "circuit", "voltage", "oscillator", "envelope", "saw", "pulse", "unison", "transistor", "capacitor"],
+  plaits: ["model", "particle", "swarm", "chord", "wavefold", "macro", "braid", "harmonic", "formant", "waveguide", "plait", "lattice"],
+  texture: ["grain", "cloud", "texture", "haze", "vapour", "mist", "dust", "smear", "shimmer", "nebula", "fog", "static"],
+  sampler: ["sample", "loop", "chop", "slice", "take", "cut", "splice", "crate", "reel", "tape", "flip", "dig"],
+  drums: ["machine", "kit", "breaks", "groove", "pattern", "beat", "snare", "kick", "hat", "cymbal", "rhythm", "shuffle"],
+  midi: ["signal", "channel", "link", "patch", "cable", "port", "clock", "message", "controller", "din"],
+  none: ["session", "sketch", "take", "idea", "draft", "jam", "demo", "study", "etude", "fragment", "experiment", "number"],
 };
 
 // A session with nothing written in it gets told so. There is nothing else true
 // to say about it, and "empty" is more use in a list than a flattering lie.
-const EMPTY_NOUNS = ["sketch", "blank", "outline", "stub"];
+const EMPTY_NOUNS = ["sketch", "blank", "outline", "stub", "canvas", "silence", "placeholder", "nothing"];
+
+/** The word tables, for the tests: what a band, a mood or a family can be
+ *  called is pinned against these rather than against a copy of them. */
+export const SONG_NAME_WORDS = { ADJECTIVES, NOUNS, EMPTY_NOUNS };
 
 const BRIGHT_MODES = new Set([
   "major",
@@ -150,6 +181,13 @@ function trackWeight(track) {
  * payloads, so hashing it would be megabytes of work and would rename a song
  * for re-uploading the same drum hit. Arrangement, engines and tempo are what
  * the name claims to describe, so they are what seeds it.
+ *
+ * The arrangement is the notes, lengths and velocities as well as the step
+ * mask. It used to be the mask alone, so two songs with the same rhythm and
+ * different melodies -- every song written over one template's drums -- seeded
+ * the same name and the server numbered them. The track names ride along for
+ * the same reason: they are the one thing a person already typed to tell two
+ * sessions apart.
  */
 function digest(set) {
   const parts = [
@@ -159,10 +197,19 @@ function digest(set) {
   ];
   const tracks = Array.isArray(set?.tracks) ? set.tracks : [];
   for (const t of tracks) {
-    const mask = (Array.isArray(t?.patterns) ? t.patterns : [])
-      .map((p) => (Array.isArray(p?.steps) ? p.steps : []).map((s) => (s ? 1 : 0)).join(""))
-      .join(".");
-    parts.push(`${t?.engineKey ?? "?"}|${mask}`);
+    const lanes = (Array.isArray(t?.patterns) ? t.patterns : []).map((p) => {
+      const steps = Array.isArray(p?.steps) ? p.steps : [];
+      const notes = Array.isArray(p?.notes) ? p.notes : [];
+      const lengths = Array.isArray(p?.lengths) ? p.lengths : [];
+      const vels = Array.isArray(p?.velocities) ? p.velocities : [];
+      let out = "";
+      for (let i = 0; i < steps.length; i++) {
+        if (!steps[i]) { out += "."; continue; }
+        out += `${notes[i] ?? ""}:${lengths[i] ?? ""}:${vels[i] ?? ""},`;
+      }
+      return out;
+    });
+    parts.push(`${t?.engineKey ?? "?"}|${t?.name ?? ""}|${t?.length ?? ""}|${lanes.join("/")}`);
   }
   return parts.join("~");
 }
@@ -191,11 +238,11 @@ function mood(set, seed) {
 }
 
 /**
- * The family the song is most made of. Drums lose ties on purpose: nearly every
- * session has a kit in it, so the kit is the least distinguishing thing about
- * any of them -- it names the song only when it is all there is.
+ * The families the song is made of, most first. Drums lose ties on purpose:
+ * nearly every session has a kit in it, so the kit is the least distinguishing
+ * thing about any of them -- it names the song only when it is all there is.
  */
-function dominantFamily(set) {
+function familyRanking(set) {
   const tracks = Array.isArray(set?.tracks) ? set.tracks : [];
   /** @type {Map<string, number>} */
   const score = new Map();
@@ -209,11 +256,32 @@ function dominantFamily(set) {
     // more quietly than one carrying the part.
     score.set(fam, (score.get(fam) || 0) + w * 4 + 1);
   }
-  if (!written) return { family: null, empty: true };
-  const ranked = [...score.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
-  const notDrums = ranked.find(([fam]) => fam !== "drums");
-  const top = ranked[0]?.[0] === "drums" && notDrums ? notDrums[0] : ranked[0]?.[0];
-  return { family: top ?? null, empty: false };
+  if (!written) return { families: [], empty: true };
+  const ranked = [...score.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .map(([fam]) => fam);
+  const notDrums = ranked.filter((fam) => fam !== "drums");
+  // Drums go last whatever their score: they only name a song that is nothing
+  // but drums.
+  const families = notDrums.length ? [...notDrums, ...ranked.filter((f) => f === "drums")] : ranked;
+  return { families, empty: false };
+}
+
+/**
+ * Which family the noun is drawn from. The song's main instrument, mostly --
+ * but a song is made of more than one thing, and a third of the time the noun
+ * says what ELSE is in it, so an account full of silverbox songs over hexop
+ * chords is not an account full of "squelch", "acid" and "ladder". Only a
+ * family that plays a part: drums are never the runner-up, because the kit is
+ * what every session has.
+ */
+function nounFamily(families, seed) {
+  if (!families.length) return null;
+  const runnersUp = families.slice(1).filter((f) => f !== "drums");
+  if (runnersUp.length && draw(seed, "fam") % 3 === 0) {
+    return runnersUp[draw(seed, "fam2") % runnersUp.length];
+  }
+  return families[0];
 }
 
 /**
@@ -235,7 +303,8 @@ function dominantFamily(set) {
 export function generateSongName(set) {
   try {
     const seed = hash32(digest(set));
-    const { family, empty } = dominantFamily(set);
+    const { families, empty } = familyRanking(set);
+    const family = nounFamily(families, seed);
     const nouns = empty ? EMPTY_NOUNS : NOUNS[family] || NOUNS.none;
     const adjectives = ADJECTIVES[tempoBand(set?.bpm)][mood(set, seed)];
     const adjective = pick(adjectives, seed, "adj");
