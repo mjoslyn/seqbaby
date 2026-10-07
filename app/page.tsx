@@ -50,9 +50,14 @@ const EMULATORS = [
   ["oracle", "a polyphonic analog synth. two oscillators, a sub, noise, and an overdrive stage on the output."],
 ] as const;
 
-// What else is in the studio, besides the instruments.
-const OTHER_INSTRUMENTS =
-  "plus the sixteen plaits models, 808 and 909 kits, three acoustic kits, a sampler, a granular sampler and a wavetable synth.";
+// The other instruments, after the emulators in the same list.
+const INSTRUMENTS = [
+  ["plaits", "a port of the mutable instruments plaits oscillator, all sixteen models, running in wasm."],
+  ["drum kits", "808 and 909 voices built as synth recipes, and three acoustic kits recorded one hit at a time."],
+  ["sampler", "plays your own files, or a bundled kit sample. regions, fades, loops and slices per step."],
+  ["granular", "a sample as a cloud of grains. size, density, position and spray on the four sliders, with speed and pitch kept separate."],
+  ["wavetable", "a multi-frame wavetable synth over the akwf tables, morphable between frames, with an editor for drawing your own."],
+] as const;
 
 // The fx rack, in the order a track with no order of its own runs it.
 const FX = [
@@ -255,18 +260,17 @@ export default async function HomePage() {
 
       <section className={styles.section}>
         <div className={styles.sectionHead}>
-          <h2>the emulators</h2>
-          <span className={styles.sectionSub}>fifteen instruments, each one a working model of the thing that makes the sound: a circuit, a string, a drum head, a voice.</span>
+          <h2>the instruments</h2>
+          <span className={styles.sectionSub}>fifteen emulators, each one a working model of the thing that makes the sound: a circuit, a string, a drum head, a voice. then the rest of the catalog.</span>
         </div>
         <ul className={styles.stack}>
-          {EMULATORS.map(([name, line]) => (
+          {[...EMULATORS, ...INSTRUMENTS].map(([name, line]) => (
             <li key={name} className={styles.stackItem}>
               <strong>{name}</strong>
               <span>{line}</span>
             </li>
           ))}
         </ul>
-        <p className={styles.stackNote}>{OTHER_INSTRUMENTS}</p>
       </section>
 
       <section className={styles.section}>

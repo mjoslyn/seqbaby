@@ -361,7 +361,6 @@
 }
 .stackItem strong { color: var(--accent); }
 .stackItem span { color: var(--fg-dim); }
-.stackNote { margin: 12px 0 0; color: var(--fg-dim); font-size: 12px; line-height: 1.5; }
 @media (max-width: 768px) {
   .stackItem { grid-template-columns: 1fr; gap: 2px; }
 }
