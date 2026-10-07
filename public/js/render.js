@@ -10,6 +10,7 @@ import { BASS_DEFAULTS, BASS_NUM_KEYS, BASS_SEL_KEYS, BASS_TONE_NAMES, bassTone,
 import { SUB_DEFAULTS, SUB_NUM_KEYS, SUB_SEL_KEYS, SUB_TONE_NAMES, subTone, subToneDescription } from "./subbass.js";
 import { DRONE_DEFAULTS, DRONE_NUM_KEYS, DRONE_SEL_KEYS, DRONE_TONE_NAMES, droneTone, droneToneDescription } from "./drone.js";
 import { VOX_DEFAULTS, VOX_NUM_KEYS, VOX_SEL_KEYS, VOX_TEXT_KEYS, VOX_TONE_NAMES, voxTone, voxToneDescription } from "./vox.js";
+import { SIEGE_DEFAULTS, SIEGE_NUM_KEYS, SIEGE_SEL_KEYS, SIEGE_TONE_NAMES, siegeTone, siegeToneDescription } from "./siege.js";
 import { euclideanRhythm, refreshEuclidUI, renderEuclidPanel, wireEuclidPanel } from "./euclid.js";
 import { refreshChanceUI, renderChancePanel, wireChancePanel } from "./chance.js";
 import { randomizeMelody, randomizeTimbre } from "./generate.js";
@@ -212,7 +213,8 @@ export function syncTrackSoundUI(t) {
                    ...BASS_NUM_KEYS, ...BASS_SEL_KEYS,
                    ...SUB_NUM_KEYS, ...SUB_SEL_KEYS,
                    ...DRONE_NUM_KEYS, ...DRONE_SEL_KEYS,
-                   ...VOX_NUM_KEYS, ...VOX_SEL_KEYS, ...VOX_TEXT_KEYS]) {
+                   ...VOX_NUM_KEYS, ...VOX_SEL_KEYS, ...VOX_TEXT_KEYS,
+                   ...SIEGE_NUM_KEYS, ...SIEGE_SEL_KEYS]) {
     const el = q(`.p-${k}`);
     if (el && t.params[k] != null) el.value = t.params[k];
   }
@@ -354,6 +356,25 @@ export function syncVoxPanel(t) {
   const root = t._voxGroupEl || t.el?.querySelector(".sq-param-group--vox");
   if (root) {
     for (const k of [...VOX_NUM_KEYS, ...VOX_SEL_KEYS, ...VOX_TEXT_KEYS]) {
+      const el = root.querySelector(`.p-${k}`);
+      if (el && t.params[k] != null) el.value = t.params[k];
+    }
+  }
+  const timbre = t._timbreGroupEl || t.el;
+  for (const k of ["harm", "timb", "morph", "decay"]) {
+    const el = timbre?.querySelector(`.p-${k}`);
+    if (el && t.params[k] != null) el.value = t.params[k];
+  }
+}
+
+/**
+ * The same, for the siege's panel.
+ * @param {Track} t
+ */
+export function syncSiegePanel(t) {
+  const root = t._siegeGroupEl || t.el?.querySelector(".sq-param-group--siege");
+  if (root) {
+    for (const k of [...SIEGE_NUM_KEYS, ...SIEGE_SEL_KEYS]) {
       const el = root.querySelector(`.p-${k}`);
       if (el && t.params[k] != null) el.value = t.params[k];
     }
@@ -621,6 +642,20 @@ export function renderTrack(t) {
     const el = node.querySelector(`.p-${k}`);
     if (el) el.value = t.params[k] ?? VOX_DEFAULTS[k];
   }
+  const siegeToneSel = node.querySelector(".sq-siege__tone");
+  if (siegeToneSel && !siegeToneSel.options.length) {
+    for (const name of ["", ...SIEGE_TONE_NAMES]) {
+      const o = document.createElement("option");
+      o.value = name;
+      o.textContent = name || "—";
+      o.title = siegeToneDescription(name);
+      siegeToneSel.appendChild(o);
+    }
+  }
+  for (const k of [...SIEGE_NUM_KEYS, ...SIEGE_SEL_KEYS]) {
+    const el = node.querySelector(`.p-${k}`);
+    if (el) el.value = t.params[k] ?? SIEGE_DEFAULTS[k];
+  }
   const gsyncEl = node.querySelector(".p-gsync");
   if (gsyncEl) gsyncEl.checked = t.params.gsync ?? GRAN_DEFAULTS.gsync;
   // The eight analog characters ship out of the static markup for the same
@@ -832,6 +867,26 @@ export function renderTrack(t) {
       syncVoxPanel(t);
       refreshParamIndicators(t);
       setStatus(`vox "${name}" — ${voxToneDescription(name)}`);
+    });
+  }
+  // The siege: its two knobs, its four buttons, and the kicks.
+  for (const k of SIEGE_NUM_KEYS) {
+    const el = node.querySelector(`.p-${k}`);
+    if (el) el.addEventListener("input", e => setParam(t, k, Number(e.target.value)));
+  }
+  for (const k of SIEGE_SEL_KEYS) {
+    const el = node.querySelector(`.p-${k}`);
+    if (el) el.addEventListener("change", e => setParam(t, k, e.target.value));
+  }
+  if (siegeToneSel) {
+    siegeToneSel.addEventListener("change", e => {
+      const name = e.target.value;
+      const tone = siegeTone(name);
+      if (!tone) return;
+      for (const [key, val] of Object.entries(tone)) setParam(t, key, val);
+      syncSiegePanel(t);
+      refreshParamIndicators(t);
+      setStatus(`siege "${name}" — ${siegeToneDescription(name)}`);
     });
   }
   // Loading a voice writes every panel control at once — the operators, the
@@ -1059,6 +1114,7 @@ export function renderTrack(t) {
   t._subGroupEl     = node.querySelector(".sq-param-group--sub");
   t._droneGroupEl   = node.querySelector(".sq-param-group--drone");
   t._voxGroupEl     = node.querySelector(".sq-param-group--vox");
+  t._siegeGroupEl     = node.querySelector(".sq-param-group--siege");
   t._granGroupEl    = node.querySelector(".sq-param-group--granular");
 
   // Everything above can be reparented out of the track (panels into their
@@ -1071,7 +1127,7 @@ export function renderTrack(t) {
                     t._timbreGroupEl, t._oscMixGroupEl, t._oscModGroupEl,
                     t._ladderOscGroupEl, t._silverboxGroupEl, t._contagionGroupEl,
                     t._hexopGroupEl, t._guitarGroupEl, t._bassGroupEl, t._subGroupEl,
-                    t._droneGroupEl, t._voxGroupEl, t._granGroupEl]) {
+                    t._droneGroupEl, t._voxGroupEl, t._siegeGroupEl, t._granGroupEl]) {
     if (el) el.dataset.trackId = String(t.id);
   }
 

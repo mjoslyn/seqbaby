@@ -73,8 +73,10 @@ order, which is how a bassline is usually written: `notes: ["C2","C2","Eb2","G1"
 
 ## Which engine
 
-Drums: `dm:808-kick` (long, tuned, drive for a distorted 808), `dm:909-kick`
-(punch, attack click), `plaits:13` (bass drum model, harm is the drive),
+Drums: `dm:siege` (the bass drum synth: see below, the first choice for a
+techno or house kick), `dm:808-kick` (long, tuned, drive for a distorted
+808), `dm:909-kick` (punch, attack click), `plaits:13` (bass drum model,
+harm is the drive),
 `sampler` with a bundled kit (`sample: "techno kick"`, `"break snare"`,
 `"cr78 hat"`, `"live snare"`, `"r8 kick"`). Snares: `dm:808-snare` (snappy
 is the noise balance), `dm:909-snare`, `plaits:14`. Hats: `dm:808-chat` /
@@ -151,6 +153,24 @@ hum", "bit swarm", "reverse tide", "arp ghost", "subterranean",
 "screamer", "glacier". Put the track's glide up and a new latched note
 slides into the old one. Low notes (C1..C3) suit it; it brings its own
 delay and cloud, so it wants no reverb on top beyond a little.
+
+Kicks: `dm:siege`, the bass drum synth, a siege engine for the low end: a sine
+under a pitch envelope, a drive after the amplitude envelope. harm is DRIVE
+(it crushes the attack, keeps the tail a clean sub, and lifts that tail up
+to twelve times, so a driven kick reads longer), timb is CLICK (how far
+above the note the pitch starts, up to six octaves), morph is DEPTH (how
+long the pitch takes to fall onto the note, 1ms a tick, 250ms the 909's
+sweep), decay the body (50ms to 4s). `sgemode` "fold" is a wavefolder that
+compresses more than it distorts, "clip" is a clipper, harsher and louder.
+`sgehpf` "on" is a 30Hz low cut, worth switching on under a driven kick.
+`sgegate` "gate" holds the body for the step: with notes, ties and the
+track's glide it is a bassline. `sgelock` "on" pins the tuning and lets a
+note only move the kick by octaves. `sgetune` is an octave either way,
+`sgefloor` the level a velocity-0 step plays at. Write it `X...x...` so the
+accents land; a C2 note at the default is the kick, C1 is a sub drum.
+`apply_preset` "808", "909", "techno", "rumble", "tick", "gabber", "sub
+drum", "hard trance", "bassline". It brings its own drive, so it wants no
+distortion in the rack; a sidechain from it onto the bass is the usual move.
 
 Voices: `dm:vox`, a singing voice (a glottal pulse through five formants).
 harm is the VOWEL (0 u, 0.25 o, 0.5 a, 0.75 e, 1 i), timb the throat SIZE

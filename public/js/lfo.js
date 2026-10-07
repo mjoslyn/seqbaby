@@ -245,6 +245,8 @@ export function getModTarget(t, key) {
   if (key.startsWith("drone_")) return t.voice?.getAudioParam?.("drn" + after(key, "drone_")) ?? null;
   // Vox: vox_vib is the vibrato depth, sngvib on the voice.
   if (key.startsWith("vox_")) return t.voice?.getAudioParam?.("sng" + after(key, "vox_")) ?? null;
+  // Siege: siege_tune is the kick's tuning, sgetune on the voice.
+  if (key.startsWith("siege_")) return t.voice?.getAudioParam?.("sge" + after(key, "siege_")) ?? null;
   if (key === "cutoff") return t.filterNode?.frequency ?? null;
   if (key === "reson")  return t.filterNode?.Q ?? null;
   const rack = t.fxRack;

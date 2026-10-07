@@ -102,6 +102,7 @@ export const ENGINE_MODULES = [
   "patternSound.js",
   "pianoRoll.js",
   "prism.js",
+  "siege.js",
   "render.js",
   "repeat.js",
   "scaleUI.js",

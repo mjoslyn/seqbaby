@@ -2,7 +2,7 @@
 
 Multi-engine browser step sequencer. A hand-written vanilla Web Audio engine
 (Mutable Instruments Plaits via `@vectorsize/woscillators`, Tone.js drum/synth
-recipes, worklet models of the silverbox / contagion / hexop plus seven
+recipes, worklet models of the silverbox / contagion / hexop plus eight
 analog-mono emulators, wavetable + granular + unified sampler
 engines, Web MIDI) wrapped in a thin Next.js + Supabase shell for accounts,
 cloud songs, a patch gallery, and share links. 32-pattern bank with filter /
@@ -16,7 +16,7 @@ env / fx / eq / comp / mod / automation per track.
   `public/woscillators.js` →
   `public/js/main.js` (ES module). `middleware.ts` refreshes the Supabase
   session on every request *except* static engine assets.
-- **Engine**: ~72 dependency-free vanilla ES modules in `public/js/`. No
+- **Engine**: ~73 dependency-free vanilla ES modules in `public/js/`. No
   bundler — edit, reload. `window.seqbaby` (from `appApi.js`) exposes `state`
   and serialize/apply hooks to the React shell (typed in `app/seqbaby.d.ts`).
 - **Accounts + data**: Supabase (Postgres + Auth + RLS). Tables: `profiles`,
@@ -278,6 +278,10 @@ env / fx / eq / comp / mod / automation per track.
 - `vox.js` — **vox**, a singing voice: a glottal pulse through five
   formants, consonants run before the vowel, phrases sung a syllable a note,
   and a choir of copies per note, in one AudioWorklet. See the vox section.
+- `siege.js` — **siege**, the bass drum synth, a siege engine for the low end: a
+  sine under a pitch envelope, with a drive (a two-stage wavefolder or a
+  clipper) AFTER the amplitude envelope, a 3-pole 30Hz low cut, gate mode
+  and pitch lock, in one AudioWorklet. See the siege section.
 - `hexop.js` — the hexop, same shape again, plus the 32-algorithm
   table, the panel's generated key lists and the preset voices. See the hexop
   section below.
@@ -780,8 +784,8 @@ Voice interface: `hit(midi, time, dur, vel, opts?)`, `setParam`,
 
 All engine type `drum-synth`. The five Tone.js analog-mono presets are each
 wrapped in `makePolyPool(size, buildOne)`; the silverbox, the contagion, the hexop, the
-guitar, the bass, subby, the drone and the vox are the odd ones out — AudioWorklet models that handle
-their own voicing (the silverbox and subby are mono, deliberately; the rest
+guitar, the bass, subby, the drone, the vox and the siege are the odd ones out — AudioWorklet models that handle
+their own voicing (the silverbox, subby and the siege are mono, deliberately; the rest
 polyphonic). See their
 sections below. The guitar and bass keep their old pluck builders in voices.js
 (`buildPluckGuitarVoice` / `buildPluckBassVoice`) purely as worklet fallbacks.
@@ -799,6 +803,7 @@ sections below. The guitar and bass keep their old pluck builders in voices.js
 | `dm:sub`       | `buildSubBassVoice`   | mono | subby, the sub bass, AudioWorklet (`subbass.js`) |
 | `dm:drone`     | `buildDroneVoice`     | 6 (internal) | equation-oscillator drone, filter, delay, cloud, AudioWorklet (`drone.js`) |
 | `dm:vox`       | `buildVoxVoice`       | 8 (internal) | singing voice: glottis, formants, consonants, choir, AudioWorklet (`vox.js`) |
+| `dm:siege`       | `buildSiegeVoice`       | mono | the bass drum synth: sine, pitch envelope, fold / clip drive after the envelope, AudioWorklet (`siege.js`) |
 | `dm:tines`     | `buildTinesVoice`     | 6 | electric piano |
 | `dm:oracle`    | `buildOracleVoice`    | 6 | poly analog |
 
@@ -1450,6 +1455,81 @@ CONSONANT (hiss, burst, murmur, formant glide) ───┘
   and the markup against the tables.
 - **Loading** — Blob-URL registration from `loadWorklet()`; a failure falls
   back to a fat-triangle PolySynth through a fixed "ah" bandpass.
+
+## Siege (`dm:siege`, `public/js/siege.js`)
+
+The bass drum synth, named for what a kick does to a wall: the techno kick as an
+instrument of its own rather than an 808 (a filter rung by a pulse) or a 909
+(a triangle into a clipper). Five controls and a drive section that is the
+point of it.
+
+```
+TRIG ─▶ PITCH ENV ──▶ OSC (sine, V/oct) ─▶ AMP ENV ─▶ DRIVE ─▶ HPF ─▶ out
+        (click, depth)   (tune, lock)       (decay,     (fold /    (3-pole
+                                             gate)       clip)      30Hz)
+```
+
+- **The drive comes after the envelope**, and that decides the sound. In
+  front of it, a drive distorts the whole note by the same amount; behind
+  it, it crushes the loud start and leaves the quiet tail alone, so a driven
+  kick is a crushed attack over a clean sub and the harmonics die with the
+  envelope. The gain also lifts the tail (12x at the top of the knob), which
+  is why a kick module calls it compression: measured with the default decay,
+  the body 100-300ms in sits 21dB higher at full drive than clean, while
+  the attack rises 6-8dB. A long decay through it is a rumble.
+- **Two drives** (`sgemode`). `fold` is a two-stage wavefolder: a reflecting
+  fold (it keeps making new harmonics as it is driven instead of settling
+  into a square) into a soft knee whose strength rises with the drive, so
+  the stage is a wire at drive 0 and squashes the peaks at the top. `clip`
+  is a gain into a clipper with a small knee (`|y|^8` under the root):
+  odd harmonics, a square almost at once. Neither ever passes full scale.
+- **The click is a pitch envelope.** `click` (timb) is how far above the
+  note the pitch starts, up to six octaves, squared so half the knob is an
+  octave and a half; `depth` (morph) is how long it takes to fall, 1ms to
+  250ms, exponential in pitch. At 1ms and six octaves it is a single fast
+  cycle: a tick. At 100ms and two octaves it is the 909's sweep.
+- **The pitch is the note, V/oct**, with `sgetune` an octave either way.
+  `sgelock` is a pitch lock: the tuning stays and a note only
+  moves the kick by whole octaves (the nearest octave of C), so a sequence
+  that wanders never detunes the drum. Tested across D2, F2, G2, C3, F#1.
+- **A trigger ignores the step's length**; `sgegate` "gate" holds the body
+  for the step and lets it decay when the step ends, which with notes, ties
+  and the track's glide is a bassline. The pitch envelope never holds: it is
+  the attack.
+- **Velocity is the level**, from `sgefloor` to full, as a drum module's
+  velocity input sets it. Floor 1 ignores velocity.
+- **The low cut is third-order Butterworth at 30Hz** (`sgehpf`): a one-pole
+  and a biquad at Q 1. Off by default. Measured: a C0
+  (16Hz) loses 14dB, a C1 under 3dB, a C2 nothing.
+- **A retrigger is crossfaded**, subby's way: one sine, so a phase reset on
+  top of a sounding one is a step. The interrupted wave runs on 3ms and
+  fades under the new hit. Measured: the worst jump at a retrigger is under
+  six times the sine's own slope, and the second hit is as loud as the first.
+- **A stop lets the drum go** under a 30ms release whichever mode it is in:
+  a 4s decay left ringing under the master's cut would still be ringing
+  when play came back.
+- **2x oversampled** from the oscillator through the drive, decimated by the
+  pair of biquads drone.js uses. The decimator rings on a folded corner (a
+  lowpassed square overshoots, Gibbs), so the last stage is subby's knee
+  ceiling: linear to 0.75, a smooth bend to 1, which a clean kick never
+  reaches.
+- **Controls** — the four sliders are DRIVE / CLICK / DEPTH / DECAY. The panel (`sq-param-group--siege`) is the rest of the
+  front plate: `sgemode`, `sgegate`, `sgehpf`, `sgelock`, `sgetune`,
+  `sgefloor`. Keys are `sge` + short key -> `siege_<short>` / `siege.<short>`,
+  from `SIEGE_NUM_CTLS` / `SIEGE_SEL_CTLS` in engineData.js. Nine kicks via
+  `siegeTone(name)` (808, 909, techno, rumble, tick, gabber, sub drum, hard
+  trance, bassline); panel markup is `SIEGE_PANEL` in `app/studioMarkup.ts`
+  with the dropdown filled at runtime from `SIEGE_TONE_NAMES`.
+- **It is a drum kit by default**: `guessIsDrumKit` (meter.js) and the
+  patch preview's `DRUM_RE` both know the word `siege`, so blank steps are C2
+  and a patch card plays it a kick pattern. Strudel reaches it as
+  `s("siege")`, and `NATIVE_DRUM` counts it as a drum.
+- `test/siege.test.js` renders the processor in Node and pins all of the
+  above, plus the markup against the tables and the song builder / Strudel
+  round trip.
+- **Loading** — Blob-URL registration from `loadWorklet()`; a failure falls
+  back to a Tone `MembraneSynth` (a sine with a pitch drop: a kick, not the
+  kick, never a silent track).
 
 ## Granular (`dm:granular`, `GranularVoice` in voices.js)
 
@@ -3788,7 +3868,7 @@ fails. Real-time capture — see Known limitations.
 ## Engines catalog (`buildEngineCatalog`)
 
 Groups in order: `plaits` (16) · `drum / synth` (808/909 kit + poly-saw /
-fm-bell / pad) · `Emulators` (silverbox + contagion + hexop + guitar + bass + subby + drone + vox + 5 analog-mono) · `texture` (`dm:granular`) ·
+fm-bell / pad) · `Emulators` (silverbox + contagion + hexop + guitar + bass + subby + drone + vox + siege + 5 analog-mono) · `texture` (`dm:granular`) ·
 `wavetable` (`wt:akwf`) · `sampler` (single unified entry) · `saved patches`
 (`saved:<name>`) · `midi` · `bus` (the fx bus — not an instrument, see below).
 The engine key string is the source of truth.
@@ -4098,7 +4178,7 @@ Repo: https://github.com/mjoslyn/seqbaby.
   An inline marker (`window.__seqbabyServerBoot`) tells the paths apart, and
   `ScriptLoader.tsx` keeps its onload-chained injection for the soft-nav case
   (e.g. arriving from `/login`).
-- `app/EnginePreload.tsx` emits `modulepreload` for all 72 modules listed in
+- `app/EnginePreload.tsx` emits `modulepreload` for all 73 modules listed in
   `app/engineAssets.ts` (at `engineAsset("/js/<name>")`; the hints used to
   point at the site root and 404). The graph is 8 levels deep, so without it the browser
   needs up to eight sequential round trips just to discover the code.

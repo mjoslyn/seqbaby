@@ -27,6 +27,7 @@ const SECTIONS = [
   ["guitar", "The guitar and the bass"],
   ["subby", "Subby"],
   ["vox", "Vox"],
+  ["siege", "Siege"],
   ["sampler", "Samples"],
   ["wavetable", "The wavetable editor"],
   ["shaping", "Filter, effects and dynamics"],
@@ -672,7 +673,7 @@ export default function ManualPage() {
               <tbody>
                 <tr><td>plaits</td><td>Sixteen synthesis models from the Mutable Instruments Plaits oscillator: virtual analogue, FM, wavetable, granular, noise and physical models.</td></tr>
                 <tr><td>drum / synth</td><td>An 808 and 909 kit, a poly saw, an FM bell and a pad.</td></tr>
-                <tr><td>Emulators</td><td>The <a href="#silverbox">silverbox</a>, the <a href="#contagion">contagion</a>, the <a href="#hexop">hexop</a>, an <a href="#guitar">electric guitar and bass</a>, <a href="#subby">subby</a> and <a href="#vox">vox</a>, a singing voice, all modelled rather than sampled. Then five monosynth voices in the spirit of classic hardware: snarl, ladder, drift, tines and oracle.</td></tr>
+                <tr><td>Emulators</td><td>The <a href="#silverbox">silverbox</a>, the <a href="#contagion">contagion</a>, the <a href="#hexop">hexop</a>, an <a href="#guitar">electric guitar and bass</a>, <a href="#subby">subby</a>, <a href="#vox">vox</a>, a singing voice, and <a href="#siege">siege</a>, a bass drum synth, all modelled rather than sampled. Then five monosynth voices in the spirit of classic hardware: snarl, ladder, drift, tines and oracle.</td></tr>
                 <tr><td>texture</td><td>A granular engine that plays a sample as a cloud of tiny grains. Load your own, or pick from the bundled library of pads and drones.</td></tr>
                 <tr><td>wavetable</td><td>A wavetable synth with its own <a href="#wavetable">editor</a>.</td></tr>
                 <tr><td>sampler</td><td>Your own audio, or one of the bundled kits. See <a href="#sampler">samples</a>.</td></tr>
@@ -1029,6 +1030,67 @@ export default function ManualPage() {
             The <span className={styles.ui}>voice</span> dropdown loads a complete
             setup: a choir on aah, angels on ooh, a basso, a soul lead, doo wop
             backing, a robot choir, a monk chant, a whisper and a hallelujah.
+          </p>
+        </section>
+
+        <section className={styles.section} id="siege">
+          <h2>Siege</h2>
+          <p>
+            A bass drum synth, a siege engine for the low end: a sine under a pitch
+            envelope, an amplitude envelope, and a drive that comes after the
+            envelope. That order is the sound. A drive in front of an envelope
+            distorts the whole note the same amount; behind it, it crushes the
+            loud start, leaves the quiet tail a clean sub, and lifts that tail up
+            to twelve times, so a driven kick reads longer and a long one turns
+            into a rumble.
+          </p>
+          <ul>
+            <li>
+              <strong>The four knobs</strong> are{" "}
+              <span className={styles.ui}>drive</span>,{" "}
+              <span className={styles.ui}>click</span> (how far above the note the
+              pitch starts, up to six octaves),{" "}
+              <span className={styles.ui}>depth</span> (how long it takes to fall
+              onto the note: a millisecond is a tick, a quarter second is the
+              909&apos;s sweep) and <span className={styles.ui}>decay</span> (the
+              body, 50ms to four seconds).
+            </li>
+            <li>
+              <strong>Two drives.</strong>{" "}
+              <span className={styles.ui}>fold</span> is a two-stage wavefolder:
+              it reflects the wave instead of flattening it, so it keeps making new
+              harmonics as it is driven, then a soft knee squashes the peaks. More
+              compression than distortion.{" "}
+              <span className={styles.ui}>clip</span> is a clipper: odd harmonics,
+              a square almost at once, the harshest and the loudest.
+            </li>
+            <li>
+              <strong>The note is the pitch</strong>, an octave either way with{" "}
+              <span className={styles.ui}>tune</span>.{" "}
+              <span className={styles.ui}>lock</span> keeps the tuning you set and
+              lets a note only move the kick by whole octaves, so a sequence that
+              wanders never detunes the drum.
+            </li>
+            <li>
+              <strong><span className={styles.ui}>trig</span> ignores the
+              step&apos;s length</strong>, as a drum does.{" "}
+              <span className={styles.ui}>gate</span> holds the body for as long as
+              the step is held and lets it decay when the step ends: write notes,
+              ties and a little glide and it is a bassline.
+            </li>
+            <li>
+              <strong><span className={styles.ui}>low cut</span></strong> is a
+              third-order 30Hz filter that takes the infrasound a driven sub makes
+              and leaves a C1 alone. <span className={styles.ui}>floor</span> is the
+              level a step at velocity 0 plays at; a full-velocity step always plays
+              at full.
+            </li>
+          </ul>
+          <p>
+            The <span className={styles.ui}>kick</span> dropdown loads a complete
+            setup: an 808, a 909,
+            a techno kick, a rumble, a tick, a gabber kick, a sub drum, a hard
+            trance kick and a bassline.
           </p>
         </section>
 
@@ -1465,6 +1527,7 @@ keys: chord("<Cm7 Ab^7 Fm7 G7>").voicing().s("tines").room(0.5)`}</div>
                 <tr><td>square, pulse</td><td>snarl</td></tr>
                 <tr><td>tb303, acid</td><td>silverbox</td></tr>
                 <tr><td>sine</td><td>subby under C3, Plaits virtual analog above</td></tr>
+                <tr><td>siege</td><td>siege, the bass drum synth</td></tr>
                 <tr><td>sine or triangle with .fm()</td><td>hexop</td></tr>
                 <tr><td>triangle (the default for note())</td><td>Plaits virtual analog</td></tr>
                 <tr><td>piano, epiano, rhodes, wurli</td><td>tines</td></tr>
@@ -1530,7 +1593,7 @@ keys: chord("<Cm7 Ab^7 Fm7 G7>").voicing().s("tines").room(0.5)`}</div>
               </thead>
               <tbody>
                 <tr><td>.knob(&quot;sbaccent&quot;, 0.9)</td><td>any slider or panel control of the instrument</td></tr>
-                <tr><td>.preset(&quot;surf twang&quot;)</td><td>a guitar, bass or subby tone, or a hexop voice</td></tr>
+                <tr><td>.preset(&quot;surf twang&quot;)</td><td>a guitar, bass or subby tone, a hexop voice, a drone patch, a vox voice or a siege kick</td></tr>
                 <tr><td>.fx(&quot;chorus.wet&quot;, 0.4)</td><td>any control in the effects rack, as stage.control</td></tr>
                 <tr><td>.filter(&quot;type&quot;, &quot;squelch&quot;)</td><td>any filter field: type (including the eight analog models), cutoff, reson, env, attack, decay, sustain, release</td></tr>
                 <tr><td>.eq(&quot;low&quot;, -3)</td><td>an eq band, in dB</td></tr>

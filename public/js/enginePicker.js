@@ -16,7 +16,7 @@
 // way, then writes the track's own preset dropdown and dispatches ITS change,
 // so the preset is applied by the same listener the panel uses.
 
-import { BASS_TONE_NAMES, DRONE_TONE_NAMES, GUITAR_TONE_NAMES, HEXOP_PRESET_NAMES, SUB_TONE_NAMES, VOX_TONE_NAMES } from "./engineData.js";
+import { BASS_TONE_NAMES, DRONE_TONE_NAMES, GUITAR_TONE_NAMES, HEXOP_PRESET_NAMES, SIEGE_TONE_NAMES, SUB_TONE_NAMES, VOX_TONE_NAMES } from "./engineData.js";
 
 /** Engine key -> its presets, the track dropdown that applies them, and what
  *  the engine calls them. */
@@ -27,6 +27,7 @@ const PRESET_TABLES = {
   "dm:sub":    { noun: "tones",  sel: ".sq-sub__tone",     names: SUB_TONE_NAMES },
   "dm:drone":  { noun: "patches", sel: ".sq-drone__tone",  names: DRONE_TONE_NAMES },
   "dm:vox":    { noun: "voices",  sel: ".sq-vox__tone",    names: VOX_TONE_NAMES },
+  "dm:siege":    { noun: "kicks",   sel: ".sq-siege__tone",    names: SIEGE_TONE_NAMES },
 };
 
 function currentLabel(sel) {

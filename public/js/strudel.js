@@ -369,6 +369,7 @@ const MELODIC_RULES = [
   [/^(tb303|303|acid|superacid|superchip)$/, "dm:silverbox"],
   [/^(sub|subbass|super808|808bass)$/, "dm:sub"],
   [/^(drone|grone|bytebeat)$/, "dm:drone"],
+  [/^(siege|kickdrum|kicksynth)$/, "dm:siege"],
   [/(choir|voice|vox|vocal|aahs|oohs|sing)/, "dm:vox"],
   [/(piano|epiano|rhodes|wurli|clavinet|harpsichord)/, "dm:tines"],
   [/(synth_bass|synthbass|moog)/, "dm:ladder"],
@@ -386,7 +387,7 @@ const MELODIC_RULES = [
 // Engines a sound name can't make: a sampler and a granular track need a
 // sample picked in the studio, and midi / bus are not instruments.
 const NOT_FROM_CODE = new Set(["sampler", "granular", "midi", "bus"]);
-const NATIVE_DRUM = /^(dm:(808|909)-|plaits:1[345]$)/;
+const NATIVE_DRUM = /^(dm:(808|909)-|dm:siege$|plaits:1[345]$)/;
 /**
  * A seqbaby engine named directly: its key (`dm:silverbox`, `plaits:3`), a
  * key from before the emulator rename (`dm:303`), or its name as the engine

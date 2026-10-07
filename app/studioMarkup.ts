@@ -246,6 +246,37 @@ const SUB_PANEL = `
 // engineData.js; the consonant and words option VALUES are the names in
 // VOX_CONSONANTS / VOX_WORDS (test/vox.test.js holds them together). Classes
 // are `p-sng*`: `p-v*` is the contagion's.
+// The siege's panel: the bass drum synth's front plate minus the four knobs
+// that are the track sliders (drive / click / depth / decay). The kick
+// dropdown ships empty and is filled at runtime from SIEGE_TONE_NAMES; the
+// ranges and defaults must match SIEGE_NUM_CTLS in engineData.js, and the
+// select option VALUES are SIEGE_SEL_CTLS' (test/siege.test.js holds them to it).
+// Classes are `p-sge*`.
+const SIEGE_PANEL = `
+        <div class="sq-param-group sq-param-group--siege" hidden>
+          <div class="sq-siege__row">
+            <span class="sq-siege__lbl">kick</span>
+            <select class="sq-siege__tone" title="load a kick: the four knobs and the whole panel"></select>
+            <select class="p-sgemode" title="which drive. Fold is a two-stage wavefolder: it reflects the wave instead of flattening it, so it keeps making new harmonics as it is driven, then a soft knee squashes the peaks. Compression more than distortion. Clip is a gain into a clipper: odd harmonics, a square almost at once, the harshest and the loudest">
+              <option value="fold" selected>fold</option><option value="clip">clip</option>
+            </select>
+            <select class="p-sgegate" title="trig ignores the step's length, as a drum does. Gate holds the body for as long as the step is held and lets it decay when the step ends: with notes and ties this is a bassline">
+              <option value="trig" selected>trig</option><option value="gate">gate</option>
+            </select>
+          </div>
+          <div class="sq-siege__row">
+            <span class="sq-siege__lbl">pitch</span>
+            <label class="sq-siege__f"><span>tune</span><input class="p-sgetune" type="range" min="0" max="1" step="0.01" value="0.5" title="the tuning, an octave either way of the note" /></label>
+            <select class="p-sgelock" title="pitch lock. On, the tuning you set stays and a step's note only moves the kick by whole octaves (the nearest octave of C), so a sequence that wanders never detunes the drum">
+              <option value="off" selected>lock off</option><option value="on">lock on</option>
+            </select>
+            <select class="p-sgehpf" title="a third-order 30Hz low cut: takes the infrasound a driven sub makes and leaves a C1 alone">
+              <option value="off" selected>low cut off</option><option value="on">low cut on</option>
+            </select>
+            <label class="sq-siege__f"><span>floor</span><input class="p-sgefloor" type="range" min="0" max="1" step="0.01" value="0.5" title="velocity to level: the level a step at velocity 0 plays at. A full-velocity step always plays at full; at 1 every step does" /></label>
+          </div>
+        </div>`;
+
 const VOX_PANEL = `
         <div class="sq-param-group sq-param-group--vox" hidden>
           <div class="sq-vox__row">
@@ -670,6 +701,7 @@ ${BASS_PANEL}
 ${SUB_PANEL}
 ${DRONE_PANEL}
 ${VOX_PANEL}
+${SIEGE_PANEL}
         <div class="sq-param-group sq-param-group--silverbox" hidden>
           <div class="sq-field"><label>wave</label>
             <select class="p-sbwave" title="the two waveforms. Saw is brighter, square is hollower and sits lower">
