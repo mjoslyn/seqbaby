@@ -296,7 +296,7 @@ export default async function HomePage() {
           <span className={styles.sectionSub}>the rest of the studio, in short. the manual has the long version.</span>
         </div>
         <ul className={styles.box}>
-          {FEATURES.map(([name, line], i) => (
+          {byName([...FEATURES]).map(([name, line], i) => (
             <li key={name} className={styles.boxItem} style={{ ["--tilt" as string]: `${(i % 3) - 1}deg` }}>
               <strong>{name}</strong>
               <span>{line}</span>
