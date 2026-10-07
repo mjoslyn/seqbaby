@@ -123,8 +123,13 @@ sub, reese, drill: `apply_preset` "808", "distorted 808", "reese", "acid",
 is monophonic and its drive is what makes it audible on a small speaker, so
 never leave harm at 0 unless the preset did. `dm:bass` for a played bass:
 presets "motown", "svt fingers", "pick grind", "slap funk", "dub", "modern
-di", "walking jazz", "growl", "octave sub", "pop punk". `dm:ladder` or
-`plaits:0` for analog synth bass with the filter closed to 0.3..0.5.
+di", "walking jazz", "growl", "octave sub", "pop punk". `dm:ladder` for the
+Minimoog bass and lead: `apply_preset` "model d bass", "funk lead", "brass",
+"whistle", "pedal bass", "vibrato lead", "percussive", "noise pad"; harm is
+the cutoff (0.3..0.5 for bass), timb the emphasis (it whistles past 0.75),
+morph the contour amount, decay the decay; `ldrmode` "mono" for a line (low
+note wins, a tie is legato), the osc levels up together for the overdrive.
+`plaits:0` for a plainer analog synth bass with the filter closed to 0.3..0.5.
 
 Chords and keys: `dm:tines` (electric piano), `dm:hexop` with a preset
 ("e.piano", "bell", "brass", "marimba", "organ", "pad", "bass"), `dm:pad`

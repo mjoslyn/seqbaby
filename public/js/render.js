@@ -12,6 +12,7 @@ import { DRONE_DEFAULTS, DRONE_NUM_KEYS, DRONE_SEL_KEYS, DRONE_TONE_NAMES, drone
 import { VOX_DEFAULTS, VOX_NUM_KEYS, VOX_SEL_KEYS, VOX_TEXT_KEYS, VOX_TONE_NAMES, voxTone, voxToneDescription } from "./vox.js";
 import { LANCET_DEFAULTS, LANCET_NUM_KEYS, LANCET_SEL_KEYS, LANCET_TONE_NAMES, lancetModelTip, lancetTone, lancetToneDescription } from "./lancet.js";
 import { SIEGE_DEFAULTS, SIEGE_NUM_KEYS, SIEGE_SEL_KEYS, SIEGE_TONE_NAMES, siegeTone, siegeToneDescription } from "./siege.js";
+import { LADDER_DEFAULTS, LADDER_NUM_KEYS, LADDER_SEL_KEYS, LADDER_TONE_NAMES, ladderTone, ladderToneDescription } from "./ladder.js";
 import { euclideanRhythm, refreshEuclidUI, renderEuclidPanel, wireEuclidPanel } from "./euclid.js";
 import { refreshChanceUI, renderChancePanel, wireChancePanel } from "./chance.js";
 import { randomizeMelody, randomizeTimbre } from "./generate.js";
@@ -216,6 +217,7 @@ export function syncTrackSoundUI(t) {
                    ...DRONE_NUM_KEYS, ...DRONE_SEL_KEYS,
                    ...VOX_NUM_KEYS, ...VOX_SEL_KEYS, ...VOX_TEXT_KEYS,
                    ...SIEGE_NUM_KEYS, ...SIEGE_SEL_KEYS,
+                   ...LADDER_NUM_KEYS, ...LADDER_SEL_KEYS,
                    ...LANCET_NUM_KEYS, ...LANCET_SEL_KEYS]) {
     const el = q(`.p-${k}`);
     if (el && t.params[k] != null) {
@@ -407,6 +409,32 @@ export function syncSiegePanel(t) {
       const el = root.querySelector(`.p-${k}`);
       if (el && t.params[k] != null) el.value = t.params[k];
     }
+  }
+  const timbre = t._timbreGroupEl || t.el;
+  for (const k of ["harm", "timb", "morph", "decay"]) {
+    const el = timbre?.querySelector(`.p-${k}`);
+    if (el && t.params[k] != null) el.value = t.params[k];
+  }
+}
+
+/**
+ * The same, for the ladder's panel: the oscillator bank, the mixer, the
+ * contours and the switches, plus the four track sliders.
+ * @param {Track} t
+ */
+export function syncLadderPanel(t) {
+  const root = t._ladderOscGroupEl || t.el?.querySelector(".sq-param-group--ladder");
+  if (root) {
+    for (const k of ["osc1range", "osc2range", "osc3range", "osc1wave", "osc2wave", "osc3wave",
+                     "osc2freq", "osc3freq", "noise", "noisetype", ...LADDER_NUM_KEYS, ...LADDER_SEL_KEYS]) {
+      const el = root.querySelector(`.p-${k}`);
+      if (el && t.params[k] != null) el.value = t.params[k];
+    }
+  }
+  const mix = t._oscMixGroupEl || t.el;
+  for (const k of ["osc1", "osc2", "osc3"]) {
+    const el = mix?.querySelector(`.p-${k}`);
+    if (el && t.params[k] != null) el.value = t.params[k];
   }
   const timbre = t._timbreGroupEl || t.el;
   for (const k of ["harm", "timb", "morph", "decay"]) {
@@ -700,6 +728,20 @@ export function renderTrack(t) {
     const el = node.querySelector(`.p-${k}`);
     if (el) el.value = t.params[k] ?? SIEGE_DEFAULTS[k];
   }
+  const ladderToneSel = node.querySelector(".sq-ladder__tone");
+  if (ladderToneSel && !ladderToneSel.options.length) {
+    for (const name of ["", ...LADDER_TONE_NAMES]) {
+      const o = document.createElement("option");
+      o.value = name;
+      o.textContent = name || "—";
+      o.title = ladderToneDescription(name);
+      ladderToneSel.appendChild(o);
+    }
+  }
+  for (const k of [...LADDER_NUM_KEYS, ...LADDER_SEL_KEYS]) {
+    const el = node.querySelector(`.p-${k}`);
+    if (el) el.value = t.params[k] ?? LADDER_DEFAULTS[k];
+  }
   const gsyncEl = node.querySelector(".p-gsync");
   if (gsyncEl) gsyncEl.checked = t.params.gsync ?? GRAN_DEFAULTS.gsync;
   // The eight analog characters ship out of the static markup for the same
@@ -959,6 +1001,28 @@ export function renderTrack(t) {
       syncSiegePanel(t);
       refreshParamIndicators(t);
       setStatus(`siege "${name}" — ${siegeToneDescription(name)}`);
+    });
+  }
+  // The ladder: the contours, the wheel, drift and tune, the switches, and
+  // the patches. (The oscillator bank's own controls are wired above with
+  // the osc1range / osc1wave / osc2freq / noise keys.)
+  for (const k of LADDER_NUM_KEYS) {
+    const el = node.querySelector(`.p-${k}`);
+    if (el) el.addEventListener("input", e => setParam(t, k, Number(e.target.value)));
+  }
+  for (const k of LADDER_SEL_KEYS) {
+    const el = node.querySelector(`.p-${k}`);
+    if (el) el.addEventListener("change", e => setParam(t, k, e.target.value));
+  }
+  if (ladderToneSel) {
+    ladderToneSel.addEventListener("change", e => {
+      const name = e.target.value;
+      const tone = ladderTone(name);
+      if (!tone) return;
+      for (const [key, val] of Object.entries(tone)) setParam(t, key, val);
+      syncLadderPanel(t);
+      refreshParamIndicators(t);
+      setStatus(`ladder "${name}" — ${ladderToneDescription(name)}`);
     });
   }
   // Loading a voice writes every panel control at once — the operators, the

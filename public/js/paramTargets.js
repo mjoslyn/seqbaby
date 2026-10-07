@@ -7,6 +7,7 @@ import { DRONE_MOD_KEYS, DRONE_MOD_LABELS } from "./drone.js";
 import { VOX_MOD_KEYS, VOX_MOD_LABELS } from "./vox.js";
 import { LANCET_MOD_KEYS, LANCET_MOD_LABELS } from "./lancet.js";
 import { SIEGE_MOD_KEYS, SIEGE_MOD_LABELS } from "./siege.js";
+import { LADDER_MOD_KEYS, LADDER_MOD_LABELS } from "./ladder.js";
 import { GUITAR_MOD_KEYS, GUITAR_MOD_LABELS } from "./guitar.js";
 import { CHANCE_MOD_KEYS, CHANCE_MOD_LABELS } from "./chanceGen.js";
 import { PRISM_KNOBS, PRISM_KNOB_LABELS, REPEAT_KNOBS, REPEAT_KNOB_LABELS } from "./soundDefaults.js";
@@ -74,6 +75,8 @@ for (const k of VOX_MOD_KEYS) def(`p-sng${k}`, `vox_${k}`, `vox.${k}`);
 for (const k of LANCET_MOD_KEYS) def(`p-lnc${k}`, `lancet_${k}`, `lancet.${k}`);
 // The siege — likewise, `p-sge*`.
 for (const k of SIEGE_MOD_KEYS) def(`p-sge${k}`, `siege_${k}`, `siege.${k}`);
+// The ladder — likewise, `p-ldr*`.
+for (const k of LADDER_MOD_KEYS) def(`p-ldr${k}`, `ladder_${k}`, `ladder.${k}`);
 // Euclid's three counts — one list, three namespaces, as in hexop.js.
 for (const k of ["pulses", "steps", "rotate"]) def(`p-euc${k}`, `euclid_${k}`, `euclid.${k}`);
 // The chance generator's six, likewise. Its other controls (the twelve semitone
@@ -292,6 +295,9 @@ export const CONTROL_LABELS = {
   "p-lncmodel": "lancet model", "sq-lancet__tone": "lancet strike",
   ...Object.fromEntries(SIEGE_MOD_KEYS.map(k => [`p-sge${k}`, SIEGE_MOD_LABELS[k]])),
   "p-sgemode": "drive type", "p-sgegate": "trig or gate", "p-sgehpf": "low cut", "p-sgelock": "pitch lock", "sq-siege__tone": "siege kick",
+  ...Object.fromEntries(LADDER_MOD_KEYS.map(k => [`p-ldr${k}`, LADDER_MOD_LABELS[k]])),
+  "p-ldrkbd": "keyboard tracking", "p-ldrosc3kbd": "osc 3 keyboard control", "p-ldroscmod": "oscillator modulation",
+  "p-ldrfiltmod": "filter modulation", "p-ldrdecsw": "decay switch", "p-ldrmode": "poly or mono", "sq-ladder__tone": "ladder patch",
   "p-bsamp": "bass amp", "p-bscab": "bass cabinet",
   "p-bspkupt": "bass pickup", "p-bsstrs": "string type",
   "sq-bass__tone": "bass tone",
@@ -399,15 +405,21 @@ export const PARAM_DESCRIPTIONS = {
 
   // ── controls with no lfo or automation target: keyed by class ──
   // Ladder oscillator bank.
-  "p-osc1range": "octave for oscillator 1, in organ footages",
-  "p-osc2range": "octave for oscillator 2, in organ footages",
-  "p-osc3range": "octave for oscillator 3, in organ footages",
-  "p-osc1wave":  "waveform for oscillator 1",
+  "p-osc1range": "octave for oscillator 1, in organ footages. lo is the LFO range, seven octaves under 8'",
+  "p-osc2range": "octave for oscillator 2, in organ footages. lo is the LFO range",
+  "p-osc3range": "octave for oscillator 3, in organ footages. lo makes it the mod wheel's LFO",
+  "p-osc1wave":  "waveform for oscillator 1: the machine's six, triangle to narrow pulse",
   "p-osc2wave":  "waveform for oscillator 2",
-  "p-osc3wave":  "waveform for oscillator 3",
-  "p-osc2freq":  "oscillator 2's tuning against oscillator 1",
-  "p-osc3freq":  "oscillator 3's tuning against oscillator 1",
+  "p-osc3wave":  "waveform for oscillator 3, which is also the mod wheel's source",
+  "p-osc2freq":  "oscillator 2's tuning against oscillator 1, seven semitones either way, continuous",
+  "p-osc3freq":  "oscillator 3's tuning against oscillator 1 (or against A440 with its keyboard control off)",
   "p-noisetype": "noise colour: white or pink",
+  "p-ldrkbd":    "how much of the keyboard the cutoff follows: off, a third, two thirds, all. At full, a whistling filter plays in tune",
+  "p-ldrosc3kbd": "whether oscillator 3 follows the keyboard. Off, it sits at a fixed pitch: the LFO",
+  "p-ldroscmod": "sends the mod wheel's source to oscillators 1 and 2: vibrato, or FM once osc 3 is in an audio range",
+  "p-ldrfiltmod": "sends the mod wheel's source to the filter's cutoff",
+  "p-ldrdecsw":  "the decay switch. On, a note releases at its decay time; off, it stops a few milliseconds after the step",
+  "p-ldrmode":   "poly plays every note it is given, six at once. Mono is the machine: low note priority, single trigger, the track's glide",
   // Contagion filter selects the markup only labels in passing.
   "p-vmode1": "what filter 1 does with the signal",
   "p-vmode2": "what filter 2 does with the signal",

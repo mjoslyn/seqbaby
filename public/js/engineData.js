@@ -157,12 +157,14 @@ export const ENGINE_MACRO_TIPS = {
     },
   },
   "dm:ladder": {
-    harm: "how far oscillator 2 sits off oscillator 1",
-    decay: "how long a note falls away, and how much of the warming filter stage rides along",
+    harm: "the ladder's cutoff, 30Hz to 20kHz. Keyboard tracking moves it with the note",
+    timb: "emphasis: the resonance. The passband thins as it climbs, and past about 0.75 the filter whistles on its own",
+    morph: "amount of contour: how far the filter envelope opens the filter, up to five octaves",
+    decay: "the loudness contour's decay, and its release while the decay switch is on",
     osc: {
-      osc1: "level of oscillator 1 in the mixer",
-      osc2: "level of oscillator 2, the detuned one",
-      osc3: "level of oscillator 3, usually dropped an octave",
+      osc1: "oscillator 1's level in the mixer. Everything up drives the filter's input stage",
+      osc2: "oscillator 2's level, the one you detune",
+      osc3: "oscillator 3's level, usually an octave under, or in LO as the mod source",
     },
   },
   "dm:drift": {
@@ -428,7 +430,7 @@ export function engineSliderLabels(engineKey) {
   const k = String(engineKey || "");
   switch (k) {
     case "dm:snarl":     return { harm: "pwm rate", timb: "pw",     morph: null,        decay: null };
-    case "dm:ladder":    return { harm: "detune",   timb: null,     morph: null,        decay: "warm" };
+    case "dm:ladder":    return { harm: "cutoff",   timb: "emph",   morph: "contour",   decay: "decay" };
     case "dm:drift":     return { harm: "pwm rate", timb: "pw",     morph: "chorus",    decay: "dec" };
     case "dm:guitar":    return { harm: "drive",    timb: "tone",   morph: "bloom",     decay: "sustain" };
     case "dm:bass":      return { harm: "drive",    timb: "tone",   morph: "comp",      decay: "sustain" };
@@ -1992,6 +1994,165 @@ export function siegeTone(name) {
   const out = { ...SIEGE_DEFAULTS };
   for (const [k, val] of Object.entries(v.p)) out[`sge${k}`] = val;
   out.harm = v.drive; out.timb = v.click; out.morph = v.depth; out.decay = v.decay;
+  return out;
+}
+
+// ---- ladder (ladder.js) ----------------------------------------------------
+// The Minimoog-style monosynth's panel. The four track sliders are the
+// filter's own knobs (cutoff / emphasis / contour amount) and the loudness
+// contour's decay; the oscillator bank keeps its old, unprefixed keys
+// (`osc1wave` / `osc1range` / `osc2freq` / `noise` / `noisetype` ...), and
+// the rest of the front plate is `ldr` + short key -> `ladder_<short>` /
+// `ladder.<short>`: the two contours' attack and sustain, the filter contour's
+// decay, the mod wheel and what it carries, the drift, and the switches.
+
+/** Numeric panel controls: [short key, min, max, default, label]. */
+export const LADDER_NUM_CTLS = [
+  ["fatk",   0, 1, 0,    "filter attack"],
+  ["fdec",   0, 1, 0.45, "filter decay"],
+  ["fsus",   0, 1, 0.3,  "filter sustain"],
+  ["atk",    0, 1, 0.05, "attack"],
+  ["sus",    0, 1, 0.75, "sustain"],
+  ["mod",    0, 1, 0,    "mod wheel"],
+  ["modmix", 0, 1, 0,    "mod source"],
+  ["drift",  0, 1, 0.25, "drift"],
+  ["tune",  -1, 1, 0,    "tune"],
+];
+
+/** Select controls: [short key, default, [values]]. */
+export const LADDER_SEL_CTLS = [
+  ["kbd",     "1/3",  ["off", "1/3", "2/3", "full"]],
+  ["osc3kbd", "on",   ["on", "off"]],
+  ["oscmod",  "off",  ["off", "on"]],
+  ["filtmod", "off",  ["off", "on"]],
+  ["decsw",   "on",   ["off", "on"]],
+  ["mode",    "poly", ["poly", "mono"]],
+];
+
+export const LADDER_MOD_KEYS = LADDER_NUM_CTLS.map(c => c[0]);
+export const LADDER_NUM_KEYS = LADDER_MOD_KEYS.map(k => `ldr${k}`);
+export const LADDER_SEL_KEYS = LADDER_SEL_CTLS.map(c => `ldr${c[0]}`);
+
+export const LADDER_MOD_RANGE = Object.fromEntries(LADDER_NUM_CTLS.map(c => [c[0], [c[1], c[2]]]));
+
+export const LADDER_MOD_LABELS = Object.fromEntries(
+  LADDER_NUM_CTLS.map(([k, , , , label]) => [k, `ladder ${label}`]));
+
+export const LADDER_DEFAULTS = {
+  ...Object.fromEntries(LADDER_NUM_CTLS.map(c => [`ldr${c[0]}`, c[3]])),
+  ...Object.fromEntries(LADDER_SEL_CTLS.map(c => [`ldr${c[0]}`, c[1]])),
+};
+
+/** A 0..1 lane value in this control's own units. @param {string} k short key */
+export function ladderFromUnit(k, u) {
+  const [lo, hi] = LADDER_MOD_RANGE[k] ?? [0, 1];
+  return lo + Math.max(0, Math.min(1, u)) * (hi - lo);
+}
+
+/** The oscillator bank's own keys, which predate the prefix and keep their
+ *  spelling: the machine's six waves (plus `sine`, which it never had, kept
+ *  for songs written when the bank was Tone oscillators), six ranges (`-7`
+ *  is LO, seven octaves under 8', the LFO range), and the two tuning knobs
+ *  in semitones, continuous. */
+export const LADDER_WAVES = ["triangle", "shark", "sawtooth", "square", "pulse", "narrow", "sine"];
+export const LADDER_RANGES = [-7, -2, -1, 0, 1, 2];
+export const LADDER_OSC_NUM_CTLS = [
+  ["osc1range", -7, 2, 0, "osc 1 range"], ["osc2range", -7, 2, 0, "osc 2 range"], ["osc3range", -7, 2, -1, "osc 3 range"],
+  ["osc2freq", -7, 7, 0, "osc 2 semitones"], ["osc3freq", -7, 7, 0, "osc 3 semitones"],
+];
+export const LADDER_OSC_SEL_CTLS = [
+  ["osc1wave", "sawtooth", LADDER_WAVES], ["osc2wave", "sawtooth", LADDER_WAVES],
+  ["osc3wave", "triangle", LADDER_WAVES], ["noisetype", "white", ["white", "pink"]],
+];
+
+// ---- the patches ------------------------------------------------------------
+// Complete patches: the oscillator bank, the mixer, every panel control and
+// the four track sliders, so nothing of the last one survives a load. Each
+// is a front-plate setting in the spirit of the machine's own patch book.
+const LADDER_TONES = {
+  "model d bass": {
+    d: "two saws at 16' a hair apart over a square an octave under, the filter half shut with a quick contour: the bass",
+    osc: { osc1wave: "sawtooth", osc1range: -1, osc2wave: "sawtooth", osc2range: -1, osc2freq: 0.08, osc3wave: "square", osc3range: -2, osc3freq: 0,
+           osc1: 0.7, osc2: 0.6, osc3: 0.45, noise: 0, noisetype: "white" },
+    cutoff: 0.42, emph: 0.35, amt: 0.55, decay: 0.5,
+    p: { fatk: 0, fdec: 0.4, fsus: 0.1, atk: 0.02, sus: 0.6, mod: 0, modmix: 0, drift: 0.3, tune: 0,
+         kbd: "1/3", osc3kbd: "on", oscmod: "off", filtmod: "off", decsw: "on", mode: "mono" },
+  },
+  "funk lead": {
+    d: "three saws, the third an octave up, the emphasis up and the contour biting: the lead that talks",
+    osc: { osc1wave: "sawtooth", osc1range: 0, osc2wave: "sawtooth", osc2range: 0, osc2freq: 0.12, osc3wave: "sawtooth", osc3range: 1, osc3freq: -0.1,
+           osc1: 0.7, osc2: 0.6, osc3: 0.3, noise: 0, noisetype: "white" },
+    cutoff: 0.5, emph: 0.6, amt: 0.6, decay: 0.6,
+    p: { fatk: 0, fdec: 0.35, fsus: 0.2, atk: 0.02, sus: 0.8, mod: 0, modmix: 0, drift: 0.3, tune: 0,
+         kbd: "2/3", osc3kbd: "on", oscmod: "off", filtmod: "off", decsw: "on", mode: "mono" },
+  },
+  "brass": {
+    d: "saws at 8' and 16' with a slow filter attack: the swell is the brass",
+    osc: { osc1wave: "sawtooth", osc1range: 0, osc2wave: "sawtooth", osc2range: 0, osc2freq: -0.08, osc3wave: "sawtooth", osc3range: -1, osc3freq: 0.05,
+           osc1: 0.65, osc2: 0.6, osc3: 0.5, noise: 0, noisetype: "white" },
+    cutoff: 0.4, emph: 0.2, amt: 0.5, decay: 0.55,
+    p: { fatk: 0.3, fdec: 0.5, fsus: 0.6, atk: 0.15, sus: 0.9, mod: 0, modmix: 0, drift: 0.3, tune: 0,
+         kbd: "2/3", osc3kbd: "on", oscmod: "off", filtmod: "off", decsw: "on", mode: "poly" },
+  },
+  "whistle": {
+    d: "every oscillator off and the emphasis past the edge: the filter whistles on its own, tracking the keyboard",
+    osc: { osc1wave: "sawtooth", osc1range: 0, osc2wave: "sawtooth", osc2range: 0, osc2freq: 0, osc3wave: "triangle", osc3range: -1, osc3freq: 0,
+           osc1: 0, osc2: 0, osc3: 0, noise: 0.03, noisetype: "pink" },
+    cutoff: 0.5, emph: 0.95, amt: 0.25, decay: 0.55,
+    p: { fatk: 0.05, fdec: 0.35, fsus: 0, atk: 0.08, sus: 0.9, mod: 0, modmix: 0, drift: 0.4, tune: 0,
+         kbd: "full", osc3kbd: "on", oscmod: "off", filtmod: "off", decsw: "on", mode: "mono" },
+  },
+  "pedal bass": {
+    d: "a square and a saw at 32', contour wide open onto a shut filter, no sustain: the pedal synth's thump",
+    osc: { osc1wave: "square", osc1range: -2, osc2wave: "sawtooth", osc2range: -2, osc2freq: 0.05, osc3wave: "triangle", osc3range: -2, osc3freq: 0,
+           osc1: 0.7, osc2: 0.6, osc3: 0, noise: 0, noisetype: "white" },
+    cutoff: 0.3, emph: 0.3, amt: 0.7, decay: 0.7,
+    p: { fatk: 0, fdec: 0.55, fsus: 0, atk: 0.02, sus: 1, mod: 0, modmix: 0, drift: 0.3, tune: 0,
+         kbd: "off", osc3kbd: "on", oscmod: "off", filtmod: "off", decsw: "off", mode: "mono" },
+  },
+  "vibrato lead": {
+    d: "osc 3 taken out of the mix and dropped to LO, the wheel half up onto the oscillators: the singing lead",
+    osc: { osc1wave: "sawtooth", osc1range: 0, osc2wave: "sawtooth", osc2range: 0, osc2freq: 0.1, osc3wave: "triangle", osc3range: -7, osc3freq: 3,
+           osc1: 0.7, osc2: 0.55, osc3: 0, noise: 0, noisetype: "white" },
+    cutoff: 0.55, emph: 0.5, amt: 0.5, decay: 0.65,
+    p: { fatk: 0, fdec: 0.6, fsus: 0.35, atk: 0.03, sus: 0.85, mod: 0.4, modmix: 0, drift: 0.3, tune: 0,
+         kbd: "2/3", osc3kbd: "off", oscmod: "on", filtmod: "off", decsw: "on", mode: "mono" },
+  },
+  "percussive": {
+    d: "squares an octave apart, the contour all the way with no sustain on either: a struck, plucked thing",
+    osc: { osc1wave: "square", osc1range: 0, osc2wave: "square", osc2range: 1, osc2freq: 0.03, osc3wave: "triangle", osc3range: 0, osc3freq: 0,
+           osc1: 0.6, osc2: 0.4, osc3: 0, noise: 0, noisetype: "white" },
+    cutoff: 0.3, emph: 0.5, amt: 0.8, decay: 0.55,
+    p: { fatk: 0, fdec: 0.25, fsus: 0, atk: 0, sus: 0, mod: 0, modmix: 0, drift: 0.3, tune: 0,
+         kbd: "1/3", osc3kbd: "on", oscmod: "off", filtmod: "off", decsw: "on", mode: "poly" },
+  },
+  "noise pad": {
+    d: "triangles with a saw underneath and a little pink noise, slow on both contours, the wheel carrying the noise onto the filter",
+    osc: { osc1wave: "triangle", osc1range: 0, osc2wave: "triangle", osc2range: 0, osc2freq: 0.07, osc3wave: "sawtooth", osc3range: -1, osc3freq: -0.04,
+           osc1: 0.6, osc2: 0.6, osc3: 0.4, noise: 0.1, noisetype: "pink" },
+    cutoff: 0.38, emph: 0.25, amt: 0.4, decay: 0.72,
+    p: { fatk: 0.45, fdec: 0.6, fsus: 0.5, atk: 0.5, sus: 0.9, mod: 0.25, modmix: 1, drift: 0.4, tune: 0,
+         kbd: "1/3", osc3kbd: "on", oscmod: "off", filtmod: "on", decsw: "on", mode: "poly" },
+  },
+};
+
+export const LADDER_TONE_NAMES = Object.keys(LADDER_TONES);
+
+/** One line saying what a patch is reaching for. @param {string} name */
+export function ladderToneDescription(name) { return LADDER_TONES[name]?.d ?? ""; }
+
+/**
+ * A patch as a complete set of track params: the oscillator bank, the mixer,
+ * every panel control and the four track sliders.
+ * @param {string} name
+ * @returns {Record<string, number|string>|null}
+ */
+export function ladderTone(name) {
+  const v = LADDER_TONES[name];
+  if (!v) return null;
+  const out = { ...LADDER_DEFAULTS, ...v.osc };
+  for (const [k, val] of Object.entries(v.p)) out[`ldr${k}`] = val;
+  out.harm = v.cutoff; out.timb = v.emph; out.morph = v.amt; out.decay = v.decay;
   return out;
 }
 

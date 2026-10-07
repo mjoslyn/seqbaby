@@ -49,6 +49,7 @@ import {
   VOX_NUM_CTLS, VOX_SEL_CTLS, VOX_TEXT_CTLS, VOX_TONE_NAMES, voxTone, voxToneDescription,
   LANCET_NUM_CTLS, LANCET_SEL_CTLS, LANCET_TONE_NAMES, lancetTone, lancetToneDescription,
   SIEGE_NUM_CTLS, SIEGE_SEL_CTLS, SIEGE_TONE_NAMES, siegeTone, siegeToneDescription,
+  LADDER_NUM_CTLS, LADDER_SEL_CTLS, LADDER_OSC_NUM_CTLS, LADDER_OSC_SEL_CTLS, LADDER_TONE_NAMES, ladderTone, ladderToneDescription,
 } from "./engineData.js";
 import { EUCLID_DEFAULTS, FILTER_TYPES, PRISM_MODES, REPEAT_MODES, defaultCompConfig, defaultEq, defaultFilter, defaultFxConfig, defaultTrackParams } from "./soundDefaults.js";
 import {
@@ -184,6 +185,7 @@ const SLIDER_TIPS = {
   "dm:vox": { harm: "the vowel: u, o, a, e, i across the slider (0, 0.25, 0.5, 0.75, 1). A lane on it sings a lyric", timb: "throat size: soprano (0), alto, tenor, bass (1)", morph: "breath: air in the voice; above 0.75 it fades to a whisper", decay: "release" },
   "dm:lancet": { harm: "timbre: on most models the noise (level, brightness, length); what it does per model is in lncmodel's tips", timb: "color: the pitch envelope and shell balance (analog), the shaper (slap), the partials (modal), the body (physical), the modulator ratios (fm), the grains (granular), the bodies (blend)", morph: "fx amount: each model's own stage, clean at 0 (clipping, multiband drive, a fold, a compressor, an old sampler)", decay: "how long the hit lasts, 60ms to 2.4s" },
   "dm:siege": { harm: "drive, after the envelope: crushes the attack, lifts the tail. fold or clip is `sgemode`", timb: "click: how far above the note the pitch starts, up to six octaves", morph: "depth: how long the pitch takes to fall onto the note, 1ms to 250ms", decay: "how long the body rings, 50ms to 4s" },
+  "dm:ladder": { harm: "the ladder filter's cutoff, 30Hz..20kHz; `ldrkbd` is how much it follows the keyboard", timb: "emphasis (resonance): the passband thins as it climbs, past ~0.75 the filter whistles on its own", morph: "amount of contour: how far the filter envelope (`ldrfatk` / `ldrfdec` / `ldrfsus`) opens the filter, up to five octaves", decay: "the loudness contour's decay, and the release while `ldrdecsw` is on" },
   "dm:granular": { harm: "grain size", timb: "grain density", morph: "play position in the sample", decay: "spray: window, detune and jitter together" },
   "dm:808-kick": { harm: "tune", timb: "attack click", morph: "drive", decay: "decay" },
   "dm:909-kick": { harm: "tune", timb: "beater click", morph: "drive", decay: "decay" },
@@ -193,8 +195,10 @@ const SLIDER_TIPS = {
 // max, default, label] for the numeric controls and [short key, default,
 // values] for the selects, plus the presets. The guitar, bass, sub and hexop
 // tables come straight from engineData.js; the contagion, granular, silverbox
-// and ladder panels have no such table in the engine (their ranges live in the
-// markup), so those are spelled here from app/studioMarkup.ts.
+// panels have no such table in the engine (their ranges live in the markup),
+// so those are spelled here from app/studioMarkup.ts. The ladder's oscillator
+// bank keeps its unprefixed keys, so its panel is the two lists joined under
+// an empty prefix.
 const PANELS = {
   "dm:guitar": { prefix: "gt", num: GUITAR_NUM_CTLS, sel: GUITAR_SEL_CTLS, tones: GUITAR_TONE_NAMES, tone: guitarTone, describe: guitarToneDescription },
   "dm:bass":   { prefix: "bs", num: BASS_NUM_CTLS, sel: BASS_SEL_CTLS, tones: BASS_TONE_NAMES, tone: bassTone, describe: bassToneDescription },
@@ -245,10 +249,9 @@ const PANELS = {
   },
   "dm:ladder": {
     prefix: "",
-    num: [["osc1range", -2, 2, 0, "osc 1 octave"], ["osc2range", -2, 2, 0, "osc 2 octave"], ["osc3range", -2, 2, -1, "osc 3 octave"],
-          ["osc2freq", -7, 7, 0, "osc 2 semitones"], ["osc3freq", -7, 7, 0, "osc 3 semitones"]],
-    sel: [["osc1wave", "sawtooth", ["triangle", "sawtooth", "square", "sine"]], ["osc2wave", "sawtooth", ["triangle", "sawtooth", "square", "sine"]],
-          ["osc3wave", "triangle", ["triangle", "sawtooth", "square", "sine"]], ["noisetype", "white", ["white", "pink"]]],
+    num: [...LADDER_OSC_NUM_CTLS, ...LADDER_NUM_CTLS.map(([k, lo, hi, d, label]) => [`ldr${k}`, lo, hi, d, label])],
+    sel: [...LADDER_OSC_SEL_CTLS, ...LADDER_SEL_CTLS.map(([k, d, vals]) => [`ldr${k}`, d, vals])],
+    tones: LADDER_TONE_NAMES, tone: ladderTone, describe: ladderToneDescription,
   },
 };
 function hexopLabel(short) {
@@ -417,6 +420,9 @@ export function addTrack(song, { engine, name, length = STEPS_PER_BAR, sample, t
   } else if (texture != null) fail(`\`texture\` only applies to the granular engine (this track is ${e.key})`);
   t.isDrumKit = drumKit != null ? !!drumKit
     : DRUM_RE.test(`${e.key} ${e.label} ${t.name} ${t.sampleSource?.id || ""}`.toLowerCase());
+  // The ladder's format marker: without it the loader reads the four sliders
+  // as the old engine's (see migrateLadderFilter, sessionFormat.js).
+  if (e.key === "dm:ladder") t.params.ldrv = 2;
   song.tracks.push(t);
   return { index: song.tracks.length - 1, engine: e.key, name: t.name };
 }

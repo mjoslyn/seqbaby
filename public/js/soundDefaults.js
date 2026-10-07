@@ -9,7 +9,7 @@
 // The engine modules that owned these (fxRack.js, signal.js, track.js,
 // euclid.js) import and re-export them, so nothing else in the engine changed.
 
-import { BASS_DEFAULTS, CONTAGION_DEFAULTS, DRONE_DEFAULTS, GUITAR_DEFAULTS, HEXOP_DEFAULTS, LANCET_DEFAULTS, SIEGE_DEFAULTS, SUB_DEFAULTS, VOX_DEFAULTS } from "./engineData.js";
+import { BASS_DEFAULTS, CONTAGION_DEFAULTS, DRONE_DEFAULTS, GUITAR_DEFAULTS, HEXOP_DEFAULTS, LADDER_DEFAULTS, LANCET_DEFAULTS, SIEGE_DEFAULTS, SUB_DEFAULTS, VOX_DEFAULTS } from "./engineData.js";
 
 /** The rack's stages, in chain order, and each one's controls at rest. */
 export function defaultFxConfig() {
@@ -94,11 +94,16 @@ export function defaultTrackParams() {
       vol: 0.8, harm: 0.5, timb: 0.5, morph: 0.5, decay: 0.4,
       osc1: 0.55, osc2: 0.45, osc3: 0.35, osc4: 0.4,
       ultra: 0.35, fm: 0, metal: 0,
-      // Ladder osc-bank params
+      // Ladder osc-bank params (the machine's waves and ranges, ladder.js)
       osc1wave: "sawtooth", osc2wave: "sawtooth", osc3wave: "triangle",
       osc1range: 0, osc2range: 0, osc3range: -1,
       osc2freq: 0, osc3freq: 0,
       noise: 0, noisetype: "white",
+      // The rest of the ladder's panel, and `ldrv`: the ladder's format
+      // marker. A sound without it was written when the four sliders meant
+      // detune / warmth, and migrateLadderFilter (sessionFormat.js) rewrites
+      // it on the way in. gspeedV's trick, for the same reason.
+      ...LADDER_DEFAULTS, ldrv: 2,
       // Silverbox panel controls that don't fit the four timbre sliders
       sbwave: "saw", sbaccent: 0.6, sbtune: 0,
       // Contagion panel (see contagion.js)

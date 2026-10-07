@@ -246,6 +246,96 @@ const SUB_PANEL = `
 // engineData.js; the consonant and words option VALUES are the names in
 // VOX_CONSONANTS / VOX_WORDS (test/vox.test.js holds them together). Classes
 // are `p-sng*`: `p-v*` is the contagion's.
+// The ladder's panel: the transistor-ladder monosynth's front plate minus the
+// four knobs that are the track sliders (cutoff / emphasis / contour / decay).
+// The oscillator bank keeps its old unprefixed classes (`p-osc1wave`,
+// `p-osc2freq`, `p-noise`...); the rest is `p-ldr*`. The patch dropdown ships
+// empty and is filled at runtime from LADDER_TONE_NAMES; the ranges and
+// defaults must match LADDER_NUM_CTLS in engineData.js, the wave and range
+// option VALUES are LADDER_WAVES / LADDER_RANGES, and the switch option values
+// LADDER_SEL_CTLS' (test/ladder.test.js holds them to it).
+const LADDER_PANEL = `
+        <div class="sq-param-group sq-param-group--ladder" hidden>
+          <div class="sq-ladder__osc-row">
+            <span class="sq-ladder__osc-lbl">patch</span>
+            <select class="sq-ladder__tone" title="load a patch: the oscillator bank, the mixer, the panel and the four knobs"></select>
+            <select class="p-ldrmode" title="poly plays every note it is given, six at once. Mono is the machine: low note priority, single trigger (a note arriving while one is held changes the pitch and leaves the contours alone), the track's glide between them">
+              <option value="poly" selected>poly</option><option value="mono">mono</option>
+            </select>
+            <select class="p-ldrkbd" title="keyboard tracking: how much of the keyboard the cutoff follows. At full, a whistling filter plays in tune with the notes">
+              <option value="off">kbd off</option><option value="1/3" selected>kbd 1/3</option><option value="2/3">kbd 2/3</option><option value="full">kbd full</option>
+            </select>
+            <select class="p-ldrdecsw" title="the decay switch. On, a note releases at its decay time (both contours). Off, it stops a few milliseconds after the step ends">
+              <option value="off">decay sw off</option><option value="on" selected>decay sw on</option>
+            </select>
+          </div>
+          <div class="sq-ladder__osc-row">
+            <span class="sq-ladder__osc-lbl">osc1</span>
+            <select class="p-osc1range" title="range, in organ footages. lo is the LFO range, seven octaves under 8'">
+              <option value="-7">lo</option><option value="-2">32'</option><option value="-1">16'</option><option value="0" selected>8'</option><option value="1">4'</option><option value="2">2'</option>
+            </select>
+            <select class="p-osc1wave" title="waveform: the machine's six, triangle to narrow pulse (sine is not one of them, kept for old songs)">
+              <option value="triangle">tri</option><option value="shark">shark</option><option value="sawtooth" selected>saw</option><option value="square">sqr</option><option value="pulse">pulse</option><option value="narrow">narrow</option><option value="sine">sin</option>
+            </select>
+          </div>
+          <div class="sq-ladder__osc-row">
+            <span class="sq-ladder__osc-lbl">osc2</span>
+            <label class="sq-ladder__freq"><span>freq</span><input class="p-osc2freq" type="range" min="-7" max="7" step="0.01" value="0" title="osc 2's tuning against osc 1, seven semitones either way, continuous: a few hundredths is the detune" /></label>
+            <select class="p-osc2range" title="range, in organ footages">
+              <option value="-7">lo</option><option value="-2">32'</option><option value="-1">16'</option><option value="0" selected>8'</option><option value="1">4'</option><option value="2">2'</option>
+            </select>
+            <select class="p-osc2wave" title="waveform">
+              <option value="triangle">tri</option><option value="shark">shark</option><option value="sawtooth" selected>saw</option><option value="square">sqr</option><option value="pulse">pulse</option><option value="narrow">narrow</option><option value="sine">sin</option>
+            </select>
+          </div>
+          <div class="sq-ladder__osc-row">
+            <span class="sq-ladder__osc-lbl">osc3</span>
+            <label class="sq-ladder__freq"><span>freq</span><input class="p-osc3freq" type="range" min="-7" max="7" step="0.01" value="0" title="osc 3's tuning against osc 1 (against A440 with its keyboard control off), seven semitones either way" /></label>
+            <select class="p-osc3range" title="range, in organ footages. lo makes osc 3 the mod wheel's LFO">
+              <option value="-7">lo</option><option value="-2">32'</option><option value="-1" selected>16'</option><option value="0">8'</option><option value="1">4'</option><option value="2">2'</option>
+            </select>
+            <select class="p-osc3wave" title="waveform. Osc 3 is also the mod wheel's source, read before the mixer">
+              <option value="triangle" selected>tri</option><option value="shark">shark</option><option value="sawtooth">saw</option><option value="square">sqr</option><option value="pulse">pulse</option><option value="narrow">narrow</option><option value="sine">sin</option>
+            </select>
+            <select class="p-ldrosc3kbd" title="osc 3 keyboard control. Off, osc 3 sits at a fixed pitch whatever the note: the LFO, or a drone under the keyboard">
+              <option value="on" selected>kbd on</option><option value="off">kbd off</option>
+            </select>
+          </div>
+          <div class="sq-field sq-ladder__noise">
+            <label>noise</label><input class="p-noise" type="range" min="0" max="1" step="0.01" value="0" title="the noise generator's mixer level" />
+            <select class="p-noisetype" title="noise color">
+              <option value="white" selected>white</option><option value="pink">pink</option>
+            </select>
+          </div>
+          <div class="sq-ladder__osc-row">
+            <span class="sq-ladder__osc-lbl">filter</span>
+            <label class="sq-ladder__freq"><span>attack</span><input class="p-ldrfatk" type="range" min="0" max="1" step="0.01" value="0" title="the filter contour's attack, 1ms to 10s" /></label>
+            <label class="sq-ladder__freq"><span>decay</span><input class="p-ldrfdec" type="range" min="0" max="1" step="0.01" value="0.45" title="the filter contour's decay, 6ms to 12s. Its release too, while the decay switch is on" /></label>
+            <label class="sq-ladder__freq"><span>sustain</span><input class="p-ldrfsus" type="range" min="0" max="1" step="0.01" value="0.3" title="where the filter contour settles while the note is held" /></label>
+          </div>
+          <div class="sq-ladder__osc-row">
+            <span class="sq-ladder__osc-lbl">loud</span>
+            <label class="sq-ladder__freq"><span>attack</span><input class="p-ldratk" type="range" min="0" max="1" step="0.01" value="0.05" title="the loudness contour's attack, 1ms to 10s" /></label>
+            <label class="sq-ladder__freq"><span>sustain</span><input class="p-ldrsus" type="range" min="0" max="1" step="0.01" value="0.75" title="the level the loudness contour holds while the note is held. Its decay is the track's decay slider" /></label>
+          </div>
+          <div class="sq-ladder__osc-row">
+            <span class="sq-ladder__osc-lbl">wheel</span>
+            <label class="sq-ladder__freq"><span>mod</span><input class="p-ldrmod" type="range" min="0" max="1" step="0.01" value="0" title="the mod wheel: how much of the source reaches whatever the two switches send it to. Up to five semitones on the oscillators, three octaves on the filter" /></label>
+            <label class="sq-ladder__freq"><span>mix</span><input class="p-ldrmodmix" type="range" min="0" max="1" step="0.01" value="0" title="the modulation source: osc 3 at the left, noise (slowed to a wobble) at the right, a mix between" /></label>
+            <select class="p-ldroscmod" title="send the wheel to oscillators 1 and 2: a vibrato with osc 3 in lo, FM once it is in an audio range">
+              <option value="off" selected>osc mod off</option><option value="on">osc mod on</option>
+            </select>
+            <select class="p-ldrfiltmod" title="send the wheel to the filter's cutoff">
+              <option value="off" selected>filter mod off</option><option value="on">filter mod on</option>
+            </select>
+          </div>
+          <div class="sq-ladder__osc-row">
+            <span class="sq-ladder__osc-lbl">tune</span>
+            <label class="sq-ladder__freq"><span>drift</span><input class="p-ldrdrift" type="range" min="0" max="1" step="0.01" value="0.25" title="how far each oscillator wanders on its own, a few cents at the top, and how far apart the three sit. Zero is a calibrated reissue" /></label>
+            <label class="sq-ladder__freq"><span>tune</span><input class="p-ldrtune" type="range" min="-1" max="1" step="0.01" value="0" title="the whole instrument's tuning, a semitone either way" /></label>
+          </div>
+        </div>`;
+
 // The siege's panel: the bass drum synth's front plate minus the four knobs
 // that are the track sliders (drive / click / depth / decay). The kick
 // dropdown ships empty and is filled at runtime from SIEGE_TONE_NAMES; the
@@ -622,43 +712,7 @@ export const STUDIO_BODY = String.raw`
           <div class="sq-field"><label>fm</label><input class="p-fm" type="range" min="0" max="1" step="0.01" value="0" /></div>
           <div class="sq-field"><label>metal</label><input class="p-metal" type="range" min="0" max="1" step="0.01" value="0" /></div>
         </div>
-        <div class="sq-param-group sq-param-group--ladder" hidden>
-          <div class="sq-ladder__osc-row">
-            <span class="sq-ladder__osc-lbl">osc1</span>
-            <select class="p-osc1range" title="range / octave">
-              <option value="-2">32'</option><option value="-1">16'</option><option value="0" selected>8'</option><option value="1">4'</option><option value="2">2'</option>
-            </select>
-            <select class="p-osc1wave" title="waveform">
-              <option value="triangle">tri</option><option value="sawtooth" selected>saw</option><option value="square">sqr</option><option value="sine">sin</option>
-            </select>
-          </div>
-          <div class="sq-ladder__osc-row">
-            <span class="sq-ladder__osc-lbl">osc2</span>
-            <label class="sq-ladder__freq"><span>freq</span><input class="p-osc2freq" type="range" min="-7" max="7" step="1" value="0" /></label>
-            <select class="p-osc2range" title="range / octave">
-              <option value="-2">32'</option><option value="-1">16'</option><option value="0" selected>8'</option><option value="1">4'</option><option value="2">2'</option>
-            </select>
-            <select class="p-osc2wave" title="waveform">
-              <option value="triangle">tri</option><option value="sawtooth" selected>saw</option><option value="square">sqr</option><option value="sine">sin</option>
-            </select>
-          </div>
-          <div class="sq-ladder__osc-row">
-            <span class="sq-ladder__osc-lbl">osc3</span>
-            <label class="sq-ladder__freq"><span>freq</span><input class="p-osc3freq" type="range" min="-7" max="7" step="1" value="0" /></label>
-            <select class="p-osc3range" title="range / octave">
-              <option value="-2">32'</option><option value="-1" selected>16'</option><option value="0">8'</option><option value="1">4'</option><option value="2">2'</option>
-            </select>
-            <select class="p-osc3wave" title="waveform">
-              <option value="triangle" selected>tri</option><option value="sawtooth">saw</option><option value="square">sqr</option><option value="sine">sin</option>
-            </select>
-          </div>
-          <div class="sq-field sq-ladder__noise">
-            <label>noise</label><input class="p-noise" type="range" min="0" max="1" step="0.01" value="0" />
-            <select class="p-noisetype" title="noise color">
-              <option value="white" selected>white</option><option value="pink">pink</option>
-            </select>
-          </div>
-        </div>
+${LADDER_PANEL}
         <div class="sq-param-group sq-param-group--contagion" hidden>
           <div class="sq-contagion__row">
             <span class="sq-contagion__lbl">osc</span>

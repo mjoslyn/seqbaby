@@ -52,8 +52,13 @@ compose panel and the jam room. The two meet only through `window.seqbaby`.
   - **subby**: a mono sub bass whose parallel harmonics path makes a 40Hz note
     audible on a phone speaker, with an 808 pitch drop and a band-split 303
     resonator above the crossover.
-- **Analog-mono pools** in Tone.js: *snarl*, *ladder*, *drift*, *tines*,
-  *oracle*.
+  - **ladder**: the transistor-ladder monosynth after the Minimoog: the six
+    waves and six ranges, a mixer that overloads the filter, the 4-pole
+    feedback ladder with the saturator in its loop (it whistles past three
+    quarters of the emphasis knob), two contours with the decay switch, the
+    mod wheel from osc 3 or noise, drift, and a mono mode with low-note
+    priority and single trigger.
+- **Analog-mono pools** in Tone.js: *snarl*, *drift*, *tines*, *oracle*.
 - **Wavetable** (bundled AKWF tables, in-app frame editor), **granular**
   (independent speed and pitch, modulatable grain controls) and a **unified
   sampler** (bundled kits or uploads, per-step region / fade / loop, slicing,
