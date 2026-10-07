@@ -58,7 +58,7 @@ import {
   canAutomateKey, canModulateKey, lfoDivLabel, voiceAutoKeysForEngineKey,
   FX_STAGE_KEYS, baseModKey, fxChainOrder, fxInstanceIds, fxStageOf, fxStageOfModKey, isFxInstanceId, splitFxInstanceKey,
 } from "./constants.js";
-import { CHANCE_DEFAULTS, CHANCE_NOTE_MAX, CHANCE_NOTE_MIN, CHANCE_NOTE_VALUES, cloneChance } from "./chanceGen.js";
+import { CHANCE_DEFAULTS, CHANCE_NOTE_MAX, CHANCE_NOTE_MIN, CHANCE_NOTE_VALUES, CHANCE_REPEAT_MAX, cloneChance } from "./chanceGen.js";
 import { CHORD_TYPES, SCALES, canonicalChord, midiToName, nameToMidi } from "./theoryData.js";
 import { SET_VERSION, validateSet } from "./sessionFormat.js";
 
@@ -988,8 +988,13 @@ export function setChance(song, index, c = {}) {
   if (c.thirtySeconds != null) cfg.x32 = !!c.thirtySeconds;
   if (c.rhythmSeed != null) cfg.rseed = int(c.rhythmSeed, "rhythmSeed", 1, 2 ** 31);
   if (c.melodySeed != null) cfg.mseed = int(c.melodySeed, "melodySeed", 1, 2 ** 31);
-  if (c.rhythmFree != null) cfg.rfree = !!c.rhythmFree;
-  if (c.melodyFree != null) cfg.mfree = !!c.melodyFree;
+  // rhythmRepeat / melodyRepeat: how many passes of the window a throw is held
+  // for before a new one (0 holds it for good). rhythmFree / melodyFree are the
+  // flags they replaced: a new throw every pass, so true is 1.
+  if (c.rhythmFree != null) cfg.rrep = c.rhythmFree ? 1 : 0;
+  if (c.melodyFree != null) cfg.mrep = c.melodyFree ? 1 : 0;
+  if (c.rhythmRepeat != null) cfg.rrep = int(c.rhythmRepeat, "rhythmRepeat", 0, CHANCE_REPEAT_MAX);
+  if (c.melodyRepeat != null) cfg.mrep = int(c.melodyRepeat, "melodyRepeat", 0, CHANCE_REPEAT_MAX);
   t.chance = cfg;
   if (cfg.on && t.euclid?.on) t.euclid.on = false;
   return { ...cfg, noteValue: CHANCE_NOTE_VALUES[cfg.note].label };

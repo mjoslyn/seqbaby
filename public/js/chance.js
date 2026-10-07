@@ -46,15 +46,18 @@
  *   machine, and `first` is also how the window moves (the hardware's sub-range
  *   move) without changing its length.
  * - **the dice**, one per section, are the point of the thing: a throw is held,
- *   so the part repeats and you can play against it. Switch a section to
- *   realtime and it re-throws every pass instead — a repeating rhythm under a
- *   melody that never repeats is why there are two of them.
+ *   so the part repeats and you can play against it. The dropdown beside each
+ *   says how long for: hold (until you roll), or a new throw every pass, or
+ *   every 2 / 4 / 8 / 16 passes, so a phrase repeats a few times and then moves
+ *   on — a repeating rhythm under a melody that never repeats is why there are
+ *   two of them.
  */
 
 import {
   CHANCE_DEFAULTS, CHANCE_MOD_INT, CHANCE_MOD_KEYS, CHANCE_MOD_RANGE, CHANCE_NOTE_MAX,
-  CHANCE_NOTE_MIN, CHANCE_NOTE_VALUES, CHANCE_SPAN_MAX, buildChancePlan, chanceCandidates,
-  chanceDiceDead, chanceWindow, cloneChance, normalizeChance, throwChanceDice,
+  CHANCE_NOTE_MIN, CHANCE_NOTE_VALUES, CHANCE_REPEAT_MAX, CHANCE_SPAN_MAX, buildChancePlan,
+  chanceCandidates, chanceDiceDead, chanceThrowIndex, chanceWindow, cloneChance,
+  normalizeChance, throwChanceDice,
 } from "./chanceGen.js";
 import { setStatus } from "./dom.js";
 import { refreshKnobRange, setKnobReadout, upgradeKnobs } from "./knob.js";
@@ -145,10 +148,35 @@ export function clearChanceLive(t, key) {
   refreshChanceLive(t);
 }
 
+/** How a repeat count reads in the hint: "a new throw every pass", "every 4 passes". */
+function repeatLabel(rep) {
+  const r = rep | 0;
+  return r === 1 ? "a new throw every pass" : `a new throw every ${r} passes`;
+}
+
+/**
+ * Write a repeat count into its dropdown. The list is CHANCE_REPEATS, spelled
+ * in the markup; a count a song carries that is not on it (a hand-edited blob,
+ * the builder) gets an option of its own rather than being shown as the
+ * nearest one.
+ * @param {HTMLSelectElement|null} sel @param {number} rep
+ */
+function setRepeat(sel, rep) {
+  if (!sel) return;
+  const v = String(rep | 0);
+  if (![...sel.options].some(o => o.value === v)) {
+    const o = document.createElement("option");
+    o.value = v; o.textContent = `every ${v} passes`;
+    sel.append(o);
+  }
+  if (sel.value !== v) sel.value = v;
+}
+
 // ---- the generated part --------------------------------------------------
 
 /**
- * Which pass of the window the track is on — the only state realtime-mode needs.
+ * Which pass of the window the track is on — the only state a throw held for a
+ * count of passes needs.
  * `trackTick` is the track's own step counter and has already moved past the step
  * being scheduled by the time the transport asks (see its step loop), so it runs
  * one ahead.
@@ -165,13 +193,13 @@ function planKey(t, c) {
   return [
     t.length, t._patternIdx, c.first, c.last, c.note, c.var.toFixed(4), c.leg.toFixed(4),
     c.rest.toFixed(4), c.lo, c.hi, c.trips, c.x32, c.pcs.join(","), c.rseed, c.mseed,
-    c.rfree ? passOf(t, win) : 0, c.mfree ? passOf(t, win) : 0,
+    c.rrep, c.mrep, chanceThrowIndex(c.rrep, passOf(t, win)), chanceThrowIndex(c.mrep, passOf(t, win)),
   ].join("|");
 }
 
 /**
  * The build options a plan is generated with — the meter's beat, for where the
- * accents fall, and which pass of the window realtime-mode is on. Named because
+ * accents fall, and which pass of the window the track is on. Named because
  * the dice has to generate with exactly the same ones as the transport, or it
  * would be comparing its candidate throws against a part nobody is playing.
  * @param {Track} t @param {ChanceConfig} c
@@ -195,9 +223,9 @@ export function chancePlan(t) {
   const key = planKey(t, c);
   if (t._chancePlan?.key === key) return t._chancePlan.plan;
   // A plan replaced while live is a part the grid is now drawing wrongly. Mostly
-  // whatever moved the control has already asked for a repaint; a realtime pass
-  // rolling over is the one case where nothing else knows, and a grid showing the
-  // throw before last is a lie about what you are hearing.
+  // whatever moved the control has already asked for a repaint; a throw rolling
+  // over on its pass count is the one case where nothing else knows, and a grid
+  // showing the throw before last is a lie about what you are hearing.
   const staleGrid = !!t._chancePlan && !!t.chance?.on;
 
   const plan = buildChancePlan(c, planOpts(t, c));
@@ -441,8 +469,8 @@ function syncChanceControls(t, panelEl) {
   const set = (sel, prop, v) => { const el = panel.querySelector(sel); if (el) el[prop] = v; };
   set(".sq-chance__trips", "checked", c.trips);
   set(".sq-chance__x32", "checked", c.x32);
-  set(".sq-chance__rfree", "checked", c.rfree);
-  set(".sq-chance__mfree", "checked", c.mfree);
+  setRepeat(panel.querySelector(".sq-chance__rrep"), c.rrep);
+  setRepeat(panel.querySelector(".sq-chance__mrep"), c.mrep);
   set(".sq-chance__on", "checked", c.on);
 }
 
@@ -516,8 +544,8 @@ function drawChanceViz(t, panelEl) {
         ? `generating live${win < len ? `, the window tiling across the track's ${len} steps` : ""}`
           + ". The grid is read-only until you switch it off"
         : `the window is ${win} of the track's ${len} steps`;
-    const free = [c.rfree && "rhythm", c.mfree && "melody"].filter(Boolean);
-    if (free.length) s += ` · ${free.join(" + ")} realtime, so a new throw every pass. This is one of them`;
+    const moving = [c.rrep && `rhythm: ${repeatLabel(c.rrep)}`, c.mrep && `melody: ${repeatLabel(c.mrep)}`].filter(Boolean);
+    if (moving.length) s += ` · ${moving.join(" · ")}`;
     hint.textContent = s;
   }
 
@@ -616,8 +644,13 @@ export function wireChancePanel(t, panel) {
   });
   flag(".sq-chance__trips", "trips");
   flag(".sq-chance__x32", "x32");
-  flag(".sq-chance__rfree", "rfree");
-  flag(".sq-chance__mfree", "mfree");
+
+  const repeat = (sel, key) => panel.querySelector(sel)?.addEventListener("change", (e) => {
+    ensureChance(t)[key] = clampInt(e.target.value, 0, CHANCE_REPEAT_MAX);
+    changed();
+  });
+  repeat(".sq-chance__rrep", "rrep");
+  repeat(".sq-chance__mrep", "mrep");
 
   const dice = (sel, key, which) => panel.querySelector(sel)?.addEventListener("click", () => {
     const c = ensureChance(t);
