@@ -11,6 +11,7 @@ import {
   LANCET_MOD_KEYS, LANCET_MOD_LABELS, LANCET_MOD_RANGE,
   SIEGE_MOD_KEYS, SIEGE_MOD_LABELS, SIEGE_MOD_RANGE,
   LADDER_MOD_KEYS, LADDER_MOD_LABELS, LADDER_MOD_RANGE,
+  ORACLE_MOD_KEYS, ORACLE_MOD_LABELS, ORACLE_MOD_RANGE,
 } from "./engineData.js";
 import { CHANCE_MOD_KEYS, CHANCE_MOD_LABELS } from "./chanceGen.js";
 import { staticEngineByKey } from "./engineData.js";
@@ -107,6 +108,8 @@ export const LFO_KEYS = [
   ...SIEGE_MOD_KEYS.map(k => `siege_${k}`),
   // Ladder: the two contours, the mod wheel, the drift and the tune. Ladder only.
   ...LADDER_MOD_KEYS.map(k => `ladder_${k}`),
+  // Oracle: VCO 1's shape, the widths, the slop, the chorus, the envelope. Oracle only.
+  ...ORACLE_MOD_KEYS.map(k => `oracle_${k}`),
 ];
 // How much each target swings per unit of depth:
 //  - 0..1 unit params: amp = depth/2 (swings ±0.5)
@@ -165,6 +168,7 @@ export const LFO_LABELS = {
   ...Object.fromEntries(LANCET_MOD_KEYS.map(k => [`lancet_${k}`, LANCET_MOD_LABELS[k]])),
   ...Object.fromEntries(SIEGE_MOD_KEYS.map(k => [`siege_${k}`, SIEGE_MOD_LABELS[k]])),
   ...Object.fromEntries(LADDER_MOD_KEYS.map(k => [`ladder_${k}`, LADDER_MOD_LABELS[k]])),
+  ...Object.fromEntries(ORACLE_MOD_KEYS.map(k => [`oracle_${k}`, ORACLE_MOD_LABELS[k]])),
 };
 export const lfoLabel = (k) => {
   const inst = splitFxInstanceKey(k);
@@ -271,6 +275,10 @@ export const LFO_AMP_SCALE = {
   ...Object.fromEntries(LADDER_MOD_KEYS.map(k => {
     const [lo, hi] = LADDER_MOD_RANGE[k];
     return [`ladder_${k}`, hi - lo];
+  })),
+  ...Object.fromEntries(ORACLE_MOD_KEYS.map(k => {
+    const [lo, hi] = ORACLE_MOD_RANGE[k];
+    return [`oracle_${k}`, hi - lo];
   })),
 };
 
@@ -620,6 +628,8 @@ export const AUTOMATION_TARGETS = {
   ...Object.fromEntries(SIEGE_MOD_KEYS.map(k => [`siege.${k}`, { label: SIEGE_MOD_LABELS[k] }])),
   // Ladder (ladder engine only) — the contours, the mod wheel, drift, tune.
   ...Object.fromEntries(LADDER_MOD_KEYS.map(k => [`ladder.${k}`, { label: LADDER_MOD_LABELS[k] }])),
+  // Oracle (oracle engine only) — VCO 1's shape, the widths, slop, chorus, the envelope.
+  ...Object.fromEntries(ORACLE_MOD_KEYS.map(k => [`oracle.${k}`, { label: ORACLE_MOD_LABELS[k] }])),
   // fx
   "fx.gain":            { label: "gain drive" },
   "fx.pan":             { label: "pan" },
@@ -710,7 +720,7 @@ export function voiceAutoKeysForEngineKey(engineKey) {
     case "dm:lancet":      return ["vol", "harm", "timb", "morph", "decay"];
     case "dm:siege":       return ["vol", "harm", "timb", "morph", "decay"];
     case "dm:tines":     return ["vol", "harm", "timb", "morph", "decay"];
-    case "dm:oracle":   return ["vol", "harm", "timb", "morph", "decay", "osc1", "osc2", "osc3", "osc4", "noise"];
+    case "dm:oracle":   return ["vol", "harm", "timb", "morph", "decay", "osc1", "osc2", "osc3", "osc4"];
     case "dm:granular":   return ["vol", "harm", "timb", "morph", "decay"];
     case "dm:contagion":      return ["vol", "harm", "timb", "morph", "decay", "osc1", "osc2", "osc3", "osc4", "noise"];
     case "dm:hexop":        return ["vol", "harm", "timb", "morph", "decay"];
@@ -749,6 +759,7 @@ export function canAutomateKey(engineKey, key, live = {}) {
   if (key.startsWith("lancet.")) return t.engineKey === "dm:lancet";
   if (key.startsWith("siege.")) return t.engineKey === "dm:siege";
   if (key.startsWith("ladder.")) return t.engineKey === "dm:ladder";
+  if (key.startsWith("oracle.")) return t.engineKey === "dm:oracle";
   if (key.startsWith("fx.")) return true;
   if (VOICE_AUTO_KEYS.includes(key)) return voiceAutoKeysForEngineKey(t.engineKey).includes(key);
   return false;
@@ -794,6 +805,8 @@ export function canModulateKey(engineKey, key, live = {}) {
   if (key.startsWith("siege_")) return t.engineKey === "dm:siege";
   // The ladder panel — ladder only.
   if (key.startsWith("ladder_")) return t.engineKey === "dm:ladder";
+  // The oracle panel — oracle only.
+  if (key.startsWith("oracle_")) return t.engineKey === "dm:oracle";
   const eng = staticEngineByKey(t.engineKey);
   if (!eng) return false;
   // Plaits exposes harm/timb/morph/decay as voice params.
@@ -835,7 +848,9 @@ export function canModulateKey(engineKey, key, live = {}) {
     // knobs and the decay, and the four mixer levels, all AudioParams on it.
     case "dm:ladder":       return ["harm", "timb", "morph", "decay", "osc1", "osc2", "osc3", "noise"].includes(key);
     case "dm:drift":       return ["harm", "osc1", "osc2", "osc3", "noise"].includes(key);
-    case "dm:oracle":   return ["harm", "osc1", "osc2", "osc3", "osc4", "noise"].includes(key);
+    // One worklet node: the detune, VCO 2's shape and the drive are a-rate
+    // AudioParams on it, the decay and the four mixer levels k-rate ones.
+    case "dm:oracle":   return ["harm", "timb", "morph", "decay", "osc1", "osc2", "osc3", "osc4"].includes(key);
     // Tines has no per-voice AudioParam targets beyond vol+track fx; its
     // timbre params are still automatable via setParam (see canAutomate).
   }

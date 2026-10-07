@@ -231,11 +231,38 @@ export function migrateLadderFilter(params) {
   params.ldrdrift = 0;
 }
 
+// The oracle became a model (oracle.js) and three of its four sliders moved
+// under it: timb was a saw/pulse crossfade and is VCO 2's triangle/saw/pulse
+// shape (the saw now in the middle), morph was a parallel blend of a Tone
+// distortion that did nothing audible below about 0.7 and is a drive that
+// starts biting at once, and the release used to follow the decay slider
+// and is the panel's own knob. The two VCOs were also phase-locked and the
+// voices identical, which `orcslop` now undoes by default. A sound from
+// before carries no `orcv` (defaultTrackParams stamps 2 on every new one,
+// the builder on every track it makes) and is rewritten to play as it did:
+// the shape folded onto the saw-to-pulse half of the knob, the drive mapped
+// so the old default is none, the release the old decay implied, and no
+// slop. Keyed on the marker for migrateLadderFilter's reason.
+export function migrateOracleModel(params) {
+  if (!params || typeof params !== "object") return;
+  if (params.orcv != null) return;
+  params.orcv = 2;
+  const c = (v, d) => Math.max(0, Math.min(1, Number(v ?? d) || 0));
+  params.timb = 0.5 + 0.5 * c(params.timb, 0.5);
+  const m = c(params.morph, 0.5);
+  params.morph = m <= 0.5 ? 0 : (m - 0.5);
+  const d = c(params.decay, 0.4);
+  // The old release was 0.1 + 2.5 × decay seconds; the knob is 10ms × 1000^u.
+  params.orcrel = Math.max(0, Math.min(1, Math.log((0.1 + 2.5 * d) / 0.01) / Math.log(1000)));
+  params.orcslop = 0;
+}
+
 /** A sound snapshot, or anything shaped like one (a track, a saved patch). */
 function migrateSoundNames(o, engineKey) {
   if (!o || typeof o !== "object") return false;
   if (engineKey === "dm:contagion") migrateContagionSplit(o.params);
   if (engineKey === "dm:ladder") migrateLadderFilter(o.params);
+  if (engineKey === "dm:oracle") migrateOracleModel(o.params);
   renameKeys(o.params, (k) => LEGACY_PARAM_KEYS[k] || k);
   renameKeys(o.lfoConfig, migrateModKey);
   migrateCrushRate(o);

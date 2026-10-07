@@ -9,7 +9,7 @@
 // The engine modules that owned these (fxRack.js, signal.js, track.js,
 // euclid.js) import and re-export them, so nothing else in the engine changed.
 
-import { BASS_DEFAULTS, CONTAGION_DEFAULTS, DRONE_DEFAULTS, GUITAR_DEFAULTS, HEXOP_DEFAULTS, LADDER_DEFAULTS, LANCET_DEFAULTS, SIEGE_DEFAULTS, SUB_DEFAULTS, VOX_DEFAULTS } from "./engineData.js";
+import { BASS_DEFAULTS, CONTAGION_DEFAULTS, DRONE_DEFAULTS, GUITAR_DEFAULTS, HEXOP_DEFAULTS, LADDER_DEFAULTS, LANCET_DEFAULTS, ORACLE_DEFAULTS, SIEGE_DEFAULTS, SUB_DEFAULTS, VOX_DEFAULTS } from "./engineData.js";
 
 /** The rack's stages, in chain order, and each one's controls at rest. */
 export function defaultFxConfig() {
@@ -126,6 +126,11 @@ export function defaultTrackParams() {
       ...LANCET_DEFAULTS,
       // Siege: the bass drum synth's tune, floor and four buttons (see siege.js)
       ...SIEGE_DEFAULTS,
+      // Oracle: VCO 1's shape, the widths, slop, chorus and the envelope, and
+      // `orcv`, its format marker: a sound without it was written when the
+      // engine was a Tone pool, and migrateOracleModel (sessionFormat.js)
+      // rewrites it on the way in. ldrv's trick.
+      ...ORACLE_DEFAULTS, orcv: 2,
   };
 }
 

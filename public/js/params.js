@@ -350,6 +350,9 @@ export function updatePlaitsControlsVisibility(t) {
   // The siege's drive type, tune, lock, low cut and velocity floor.
   const siegeGroup = t._siegeGroupEl || t.el.querySelector(".sq-param-group--siege");
   if (siegeGroup) siegeGroup.hidden = !isSiege;
+  // The oracle's VCO 1 shape, the pulse widths, slop, chorus and envelope.
+  const oracleGroup = t._oracleGroupEl || t.el.querySelector(".sq-param-group--oracle");
+  if (oracleGroup) oracleGroup.hidden = !isOracle;
   // Granular grain-engine group (play mode / window / jitter / detune / pan / …).
   const granGroup = t._granGroupEl || t.el.querySelector(".sq-param-group--granular");
   if (granGroup) granGroup.hidden = !isGranular;

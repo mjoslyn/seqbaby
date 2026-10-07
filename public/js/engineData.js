@@ -185,14 +185,14 @@ export const ENGINE_MACRO_TIPS = {
     decay: "how long each note rings, and how long it takes to let go",
   },
   "dm:oracle": {
-    harm: "detunes VCO2 against VCO1",
-    timb: "crossfades VCO2 from saw to pulse",
-    morph: "how much of the output runs through the overdrive stage",
-    decay: "how long each note falls away, and its release with it",
+    harm: "detunes VCO2 against VCO1, 30 cents either way. The middle is unison, which still beats a little: the two never sit exactly together",
+    timb: "VCO2's shape: triangle, saw in the middle, pulse at the top (its width is the panel's)",
+    morph: "the drive, after the voices: a gain into a knee, so a chord compresses and a release tail falls out of it. Zero is a wire",
+    decay: "how long each note falls to its sustain, 50ms to 2s. The attack, sustain and release are the panel's",
     osc: {
       osc1: "level of VCO1",
       osc2: "level of VCO2, the detuned one",
-      osc3: "level of the sub oscillator",
+      osc3: "level of the sub oscillator, a square an octave under VCO1",
       osc4: "level of the noise source",
     },
   },
@@ -261,6 +261,9 @@ export const ANALOG_ENGINES = [
   // melodic: its blank steps are C2, though it plays V/oct.
   { key: "dm:siege",       label: "siege",             defaultNote: 36, poly: false, melodic: false },
   { key: "dm:tines",     label: "tines",           defaultNote: 60, poly: true, melodic: true },
+  // The poly analog: two morphing VCOs with slop, a sub, noise, an ADSR, a
+  // drive on the summed voices and a chorus, six voices in one AudioWorklet
+  // (oracle.js).
   { key: "dm:oracle",    label: "oracle",          defaultNote: 60, poly: true, melodic: true },
 ].map(e => ({ ...e, group: "Emulators", type: "drum-synth", poly: e.poly ?? false, melodic: e.melodic ?? false }));
 
@@ -2153,6 +2156,113 @@ export function ladderTone(name) {
   const out = { ...LADDER_DEFAULTS, ...v.osc };
   for (const [k, val] of Object.entries(v.p)) out[`ldr${k}`] = val;
   out.harm = v.cutoff; out.timb = v.emph; out.morph = v.amt; out.decay = v.decay;
+  return out;
+}
+
+// ---- oracle (oracle.js) ----------------------------------------------------
+// The poly analog's panel. The four track sliders are VCO 2's detune, VCO 2's
+// shape, the drive and the decay; the osc-mix row is the mixer (VCO 1, VCO 2,
+// the sub, the noise); the panel is the rest of the front plate: VCO 1's
+// shape, the two pulse widths, the slop, the chorus, and the attack, sustain
+// and release of the envelope. Keys are `orc` + short key ->
+// `oracle_<short>` / `oracle.<short>`. `orc`, not `o`: the osc-mix keys are
+// unprefixed and `osc` would be read as one.
+
+/** Numeric panel controls: [short key, min, max, default, label]. */
+export const ORACLE_NUM_CTLS = [
+  ["shape1", 0, 1, 0.5,  "vco1 shape"],
+  ["pw1",    0, 1, 0,    "vco1 width"],
+  ["pw2",    0, 1, 0,    "vco2 width"],
+  ["slop",   0, 1, 0.2,  "slop"],
+  ["chorus", 0, 1, 0.22, "chorus"],
+  ["atk",    0, 1, 0.17, "attack"],
+  ["sus",    0, 1, 0.7,  "sustain"],
+  ["rel",    0, 1, 0.68, "release"],
+];
+
+/** Select controls: [short key, default, [values]]. None yet: every control
+ *  on the plate is a knob. Kept so the panel walks like the others'. */
+export const ORACLE_SEL_CTLS = [];
+
+export const ORACLE_MOD_KEYS = ORACLE_NUM_CTLS.map(c => c[0]);
+export const ORACLE_NUM_KEYS = ORACLE_MOD_KEYS.map(k => `orc${k}`);
+export const ORACLE_SEL_KEYS = ORACLE_SEL_CTLS.map(c => `orc${c[0]}`);
+
+export const ORACLE_MOD_RANGE = Object.fromEntries(ORACLE_NUM_CTLS.map(c => [c[0], [c[1], c[2]]]));
+
+export const ORACLE_MOD_LABELS = Object.fromEntries(
+  ORACLE_NUM_CTLS.map(([k, , , , label]) => [k, `oracle ${label}`]));
+
+export const ORACLE_DEFAULTS = {
+  ...Object.fromEntries(ORACLE_NUM_CTLS.map(c => [`orc${c[0]}`, c[3]])),
+  ...Object.fromEntries(ORACLE_SEL_CTLS.map(c => [`orc${c[0]}`, c[1]])),
+};
+
+/** A 0..1 lane value in this control's own units. @param {string} k short key */
+export function oracleFromUnit(k, u) {
+  const [lo, hi] = ORACLE_MOD_RANGE[k] ?? [0, 1];
+  return lo + Math.max(0, Math.min(1, u)) * (hi - lo);
+}
+
+// ---- the patches ------------------------------------------------------------
+// Complete patches: the mixer, every panel control and the four track
+// sliders, so nothing of the last one survives a load. Front-plate settings
+// in the spirit of the machine's own bank, named for what they sound like.
+const ORACLE_TONES = {
+  "poly brass": {
+    d: "two saws a few cents apart with a little sub, a quick attack and the drive just warming: the stab",
+    mix: { osc1: 0.6, osc2: 0.55, osc3: 0.2, osc4: 0 }, detune: 0.58, shape: 0.55, drive: 0.45, decay: 0.3,
+    p: { shape1: 0.5, pw1: 0, pw2: 0, slop: 0.3, chorus: 0.15, atk: 0.22, sus: 0.8, rel: 0.5 },
+  },
+  "strings": {
+    d: "two saws wide apart under a slow attack, full sustain, a long release and the chorus up: the ensemble",
+    mix: { osc1: 0.5, osc2: 0.5, osc3: 0, osc4: 0 }, detune: 0.65, shape: 0.5, drive: 0.2, decay: 0.5,
+    p: { shape1: 0.5, pw1: 0, pw2: 0, slop: 0.4, chorus: 0.6, atk: 0.55, sus: 1, rel: 0.75 },
+  },
+  "warm pad": {
+    d: "both shapes back toward the triangle, a sub underneath, slow in and slow out, half chorused",
+    mix: { osc1: 0.55, osc2: 0.5, osc3: 0.3, osc4: 0.05 }, detune: 0.6, shape: 0.3, drive: 0.25, decay: 0.6,
+    p: { shape1: 0.35, pw1: 0, pw2: 0, slop: 0.35, chorus: 0.5, atk: 0.6, sus: 1, rel: 0.85 },
+  },
+  "pulse keys": {
+    d: "two pulses at different widths, a short decay to a low sustain: the hollow electric piano a poly makes",
+    mix: { osc1: 0.5, osc2: 0.45, osc3: 0.15, osc4: 0 }, detune: 0.55, shape: 1, drive: 0.3, decay: 0.35,
+    p: { shape1: 1, pw1: 0.4, pw2: 0.15, slop: 0.2, chorus: 0.3, atk: 0.1, sus: 0.4, rel: 0.45 },
+  },
+  "unison bass": {
+    d: "two saws eleven cents apart over a loud sub, no chorus, the drive up: the bass",
+    mix: { osc1: 0.6, osc2: 0.6, osc3: 0.5, osc4: 0 }, detune: 0.68, shape: 0.5, drive: 0.6, decay: 0.3,
+    p: { shape1: 0.5, pw1: 0, pw2: 0, slop: 0.25, chorus: 0, atk: 0.05, sus: 0.6, rel: 0.4 },
+  },
+  "glass": {
+    d: "a triangle and a near-triangle a hair apart, no sub, no drive, a soft attack: bells without the strike",
+    mix: { osc1: 0.6, osc2: 0.4, osc3: 0, osc4: 0 }, detune: 0.53, shape: 0.1, drive: 0, decay: 0.45,
+    p: { shape1: 0, pw1: 0, pw2: 0, slop: 0.15, chorus: 0.35, atk: 0.15, sus: 0.5, rel: 0.7 },
+  },
+  "dirty stab": {
+    d: "a saw against a narrow pulse, sub and a little noise, the slop wide and the drive most of the way up",
+    mix: { osc1: 0.6, osc2: 0.5, osc3: 0.3, osc4: 0.1 }, detune: 0.62, shape: 0.9, drive: 0.85, decay: 0.25,
+    p: { shape1: 0.6, pw1: 0, pw2: 0.3, slop: 0.4, chorus: 0.1, atk: 0.05, sus: 0.3, rel: 0.35 },
+  },
+};
+
+export const ORACLE_TONE_NAMES = Object.keys(ORACLE_TONES);
+
+/** One line saying what a patch is reaching for. @param {string} name */
+export function oracleToneDescription(name) { return ORACLE_TONES[name]?.d ?? ""; }
+
+/**
+ * A patch as a complete set of track params: the mixer, every panel control
+ * and the four track sliders.
+ * @param {string} name
+ * @returns {Record<string, number|string>|null}
+ */
+export function oracleTone(name) {
+  const v = ORACLE_TONES[name];
+  if (!v) return null;
+  const out = { ...ORACLE_DEFAULTS, ...v.mix };
+  for (const [k, val] of Object.entries(v.p)) out[`orc${k}`] = val;
+  out.harm = v.detune; out.timb = v.shape; out.morph = v.drive; out.decay = v.decay;
   return out;
 }
 

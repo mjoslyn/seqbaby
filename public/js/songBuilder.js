@@ -50,6 +50,7 @@ import {
   LANCET_NUM_CTLS, LANCET_SEL_CTLS, LANCET_TONE_NAMES, lancetTone, lancetToneDescription,
   SIEGE_NUM_CTLS, SIEGE_SEL_CTLS, SIEGE_TONE_NAMES, siegeTone, siegeToneDescription,
   LADDER_NUM_CTLS, LADDER_SEL_CTLS, LADDER_OSC_NUM_CTLS, LADDER_OSC_SEL_CTLS, LADDER_TONE_NAMES, ladderTone, ladderToneDescription,
+  ORACLE_NUM_CTLS, ORACLE_SEL_CTLS, ORACLE_TONE_NAMES, oracleTone, oracleToneDescription,
 } from "./engineData.js";
 import { EUCLID_DEFAULTS, FILTER_TYPES, PRISM_MODES, REPEAT_MODES, defaultCompConfig, defaultEq, defaultFilter, defaultFxConfig, defaultTrackParams } from "./soundDefaults.js";
 import {
@@ -186,6 +187,7 @@ const SLIDER_TIPS = {
   "dm:lancet": { harm: "timbre: on most models the noise (level, brightness, length); what it does per model is in lncmodel's tips", timb: "color: the pitch envelope and shell balance (analog), the shaper (slap), the partials (modal), the body (physical), the modulator ratios (fm), the grains (granular), the bodies (blend)", morph: "fx amount: each model's own stage, clean at 0 (clipping, multiband drive, a fold, a compressor, an old sampler)", decay: "how long the hit lasts, 60ms to 2.4s" },
   "dm:siege": { harm: "drive, after the envelope: crushes the attack, lifts the tail. fold or clip is `sgemode`", timb: "click: how far above the note the pitch starts, up to six octaves", morph: "depth: how long the pitch takes to fall onto the note, 1ms to 250ms", decay: "how long the body rings, 50ms to 4s" },
   "dm:ladder": { harm: "the ladder filter's cutoff, 30Hz..20kHz; `ldrkbd` is how much it follows the keyboard", timb: "emphasis (resonance): the passband thins as it climbs, past ~0.75 the filter whistles on its own", morph: "amount of contour: how far the filter envelope (`ldrfatk` / `ldrfdec` / `ldrfsus`) opens the filter, up to five octaves", decay: "the loudness contour's decay, and the release while `ldrdecsw` is on" },
+  "dm:oracle": { harm: "VCO 2's detune against VCO 1, 30 cents either way, 0.5 unison (the slop keeps even unison beating)", timb: "VCO 2's shape: 0 triangle, 0.5 saw, 1 pulse (its width is `orcpw2`; VCO 1's shape is `orcshape1`)", morph: "drive on the summed voices: a gain into a knee, so chords compress and tails clean up. 0 is a wire, 0.5 warm, 1 crushed", decay: "the envelope's decay to its sustain, 50ms to 2s; `orcatk` / `orcsus` / `orcrel` are the rest of it" },
   "dm:granular": { harm: "grain size", timb: "grain density", morph: "play position in the sample", decay: "spray: window, detune and jitter together" },
   "dm:808-kick": { harm: "tune", timb: "attack click", morph: "drive", decay: "decay" },
   "dm:909-kick": { harm: "tune", timb: "beater click", morph: "drive", decay: "decay" },
@@ -207,6 +209,7 @@ const PANELS = {
   "dm:vox":    { prefix: "sng", num: VOX_NUM_CTLS, sel: VOX_SEL_CTLS, text: VOX_TEXT_CTLS, tones: VOX_TONE_NAMES, tone: voxTone, describe: voxToneDescription },
   "dm:lancet":   { prefix: "lnc", num: LANCET_NUM_CTLS, sel: LANCET_SEL_CTLS, tones: LANCET_TONE_NAMES, tone: lancetTone, describe: lancetToneDescription },
   "dm:siege":    { prefix: "sge", num: SIEGE_NUM_CTLS, sel: SIEGE_SEL_CTLS, tones: SIEGE_TONE_NAMES, tone: siegeTone, describe: siegeToneDescription },
+  "dm:oracle":   { prefix: "orc", num: ORACLE_NUM_CTLS, sel: ORACLE_SEL_CTLS, tones: ORACLE_TONE_NAMES, tone: oracleTone, describe: oracleToneDescription },
   "dm:hexop": {
     prefix: "d",
     num: HEXOP_NUM_KEYS.map(k => { const s = k.slice(1); const [lo, hi] = HEXOP_MOD_RANGE[s]; return [s, lo, hi, null, hexopLabel(s)]; }),
@@ -423,6 +426,8 @@ export function addTrack(song, { engine, name, length = STEPS_PER_BAR, sample, t
   // The ladder's format marker: without it the loader reads the four sliders
   // as the old engine's (see migrateLadderFilter, sessionFormat.js).
   if (e.key === "dm:ladder") t.params.ldrv = 2;
+  // The oracle's, likewise (migrateOracleModel).
+  if (e.key === "dm:oracle") t.params.orcv = 2;
   song.tracks.push(t);
   return { index: song.tracks.length - 1, engine: e.key, name: t.name };
 }

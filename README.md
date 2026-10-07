@@ -58,7 +58,11 @@ compose panel and the jam room. The two meet only through `window.seqbaby`.
     quarters of the emphasis knob), two contours with the decay switch, the
     mod wheel from osc 3 or noise, drift, and a mono mode with low-note
     priority and single trigger.
-- **Analog-mono pools** in Tone.js: *snarl*, *drift*, *tines*, *oracle*.
+  - **oracle**: the poly analog after the Prophet-6: two VCOs morphing
+    triangle to saw to pulse with their own widths, free-running with slop
+    (each voice card a few cents off, drifting), a sub, noise, an ADSR, a
+    drive on the summed voices with a knee, and a stereo chorus on a knob.
+- **Analog-mono pools** in Tone.js: *snarl*, *drift*, *tines*.
 - **Wavetable** (bundled AKWF tables, in-app frame editor), **granular**
   (independent speed and pitch, modulatable grain controls) and a **unified
   sampler** (bundled kits or uploads, per-step region / fade / loop, slicing,

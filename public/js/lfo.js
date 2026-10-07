@@ -251,6 +251,8 @@ export function getModTarget(t, key) {
   if (key.startsWith("siege_")) return t.voice?.getAudioParam?.("sge" + after(key, "siege_")) ?? null;
   // Ladder: ladder_fdec is the filter contour's decay, ldrfdec on the voice.
   if (key.startsWith("ladder_")) return t.voice?.getAudioParam?.("ldr" + after(key, "ladder_")) ?? null;
+  // Oracle: oracle_slop is the voice cards' tuning spread, orcslop on the voice.
+  if (key.startsWith("oracle_")) return t.voice?.getAudioParam?.("orc" + after(key, "oracle_")) ?? null;
   if (key === "cutoff") return t.filterNode?.frequency ?? null;
   if (key === "reson")  return t.filterNode?.Q ?? null;
   const rack = t.fxRack;

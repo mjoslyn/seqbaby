@@ -13,6 +13,7 @@ import { VOX_DEFAULTS, VOX_NUM_KEYS, VOX_SEL_KEYS, VOX_TEXT_KEYS, VOX_TONE_NAMES
 import { LANCET_DEFAULTS, LANCET_NUM_KEYS, LANCET_SEL_KEYS, LANCET_TONE_NAMES, lancetModelTip, lancetTone, lancetToneDescription } from "./lancet.js";
 import { SIEGE_DEFAULTS, SIEGE_NUM_KEYS, SIEGE_SEL_KEYS, SIEGE_TONE_NAMES, siegeTone, siegeToneDescription } from "./siege.js";
 import { LADDER_DEFAULTS, LADDER_NUM_KEYS, LADDER_SEL_KEYS, LADDER_TONE_NAMES, ladderTone, ladderToneDescription } from "./ladder.js";
+import { ORACLE_DEFAULTS, ORACLE_NUM_KEYS, ORACLE_SEL_KEYS, ORACLE_TONE_NAMES, oracleTone, oracleToneDescription } from "./oracle.js";
 import { euclideanRhythm, refreshEuclidUI, renderEuclidPanel, wireEuclidPanel } from "./euclid.js";
 import { refreshChanceUI, renderChancePanel, wireChancePanel } from "./chance.js";
 import { randomizeMelody, randomizeTimbre } from "./generate.js";
@@ -218,6 +219,7 @@ export function syncTrackSoundUI(t) {
                    ...VOX_NUM_KEYS, ...VOX_SEL_KEYS, ...VOX_TEXT_KEYS,
                    ...SIEGE_NUM_KEYS, ...SIEGE_SEL_KEYS,
                    ...LADDER_NUM_KEYS, ...LADDER_SEL_KEYS,
+                   ...ORACLE_NUM_KEYS, ...ORACLE_SEL_KEYS,
                    ...LANCET_NUM_KEYS, ...LANCET_SEL_KEYS]) {
     const el = q(`.p-${k}`);
     if (el && t.params[k] != null) {
@@ -394,6 +396,30 @@ export function syncLancetPanel(t) {
   const timbre = t._timbreGroupEl || t.el;
   for (const k of ["harm", "timb", "morph", "decay"]) {
     const el = timbre?.querySelector(`.p-${k}`);
+    if (el && t.params[k] != null) el.value = t.params[k];
+  }
+}
+
+/**
+ * The same, for the oracle's panel.
+ * @param {Track} t
+ */
+export function syncOraclePanel(t) {
+  const root = t._oracleGroupEl || t.el?.querySelector(".sq-param-group--oracle");
+  if (root) {
+    for (const k of [...ORACLE_NUM_KEYS, ...ORACLE_SEL_KEYS]) {
+      const el = root.querySelector(`.p-${k}`);
+      if (el && t.params[k] != null) el.value = t.params[k];
+    }
+  }
+  const timbre = t._timbreGroupEl || t.el;
+  for (const k of ["harm", "timb", "morph", "decay"]) {
+    const el = timbre?.querySelector(`.p-${k}`);
+    if (el && t.params[k] != null) el.value = t.params[k];
+  }
+  const mix = t._oscMixGroupEl || t.el;
+  for (const k of ["osc1", "osc2", "osc3", "osc4"]) {
+    const el = mix?.querySelector(`.p-${k}`);
     if (el && t.params[k] != null) el.value = t.params[k];
   }
 }
@@ -728,6 +754,20 @@ export function renderTrack(t) {
     const el = node.querySelector(`.p-${k}`);
     if (el) el.value = t.params[k] ?? SIEGE_DEFAULTS[k];
   }
+  const oracleToneSel = node.querySelector(".sq-oracle__tone");
+  if (oracleToneSel && !oracleToneSel.options.length) {
+    for (const name of ["", ...ORACLE_TONE_NAMES]) {
+      const o = document.createElement("option");
+      o.value = name;
+      o.textContent = name || "—";
+      o.title = oracleToneDescription(name);
+      oracleToneSel.appendChild(o);
+    }
+  }
+  for (const k of [...ORACLE_NUM_KEYS, ...ORACLE_SEL_KEYS]) {
+    const el = node.querySelector(`.p-${k}`);
+    if (el) el.value = t.params[k] ?? ORACLE_DEFAULTS[k];
+  }
   const ladderToneSel = node.querySelector(".sq-ladder__tone");
   if (ladderToneSel && !ladderToneSel.options.length) {
     for (const name of ["", ...LADDER_TONE_NAMES]) {
@@ -1003,6 +1043,27 @@ export function renderTrack(t) {
       setStatus(`siege "${name}" — ${siegeToneDescription(name)}`);
     });
   }
+  // The oracle: VCO 1's shape, the widths, slop, chorus, the envelope, and
+  // the patches.
+  for (const k of ORACLE_NUM_KEYS) {
+    const el = node.querySelector(`.p-${k}`);
+    if (el) el.addEventListener("input", e => setParam(t, k, Number(e.target.value)));
+  }
+  for (const k of ORACLE_SEL_KEYS) {
+    const el = node.querySelector(`.p-${k}`);
+    if (el) el.addEventListener("change", e => setParam(t, k, e.target.value));
+  }
+  if (oracleToneSel) {
+    oracleToneSel.addEventListener("change", e => {
+      const name = e.target.value;
+      const tone = oracleTone(name);
+      if (!tone) return;
+      for (const [key, val] of Object.entries(tone)) setParam(t, key, val);
+      syncOraclePanel(t);
+      refreshParamIndicators(t);
+      setStatus(`oracle "${name}" — ${oracleToneDescription(name)}`);
+    });
+  }
   // The ladder: the contours, the wheel, drift and tune, the switches, and
   // the patches. (The oscillator bank's own controls are wired above with
   // the osc1range / osc1wave / osc2freq / noise keys.)
@@ -1252,6 +1313,7 @@ export function renderTrack(t) {
   t._voxGroupEl     = node.querySelector(".sq-param-group--vox");
   t._lancetGroupEl    = node.querySelector(".sq-param-group--lancet");
   t._siegeGroupEl     = node.querySelector(".sq-param-group--siege");
+  t._oracleGroupEl    = node.querySelector(".sq-param-group--oracle");
   t._granGroupEl    = node.querySelector(".sq-param-group--granular");
 
   // Everything above can be reparented out of the track (panels into their
@@ -1264,7 +1326,7 @@ export function renderTrack(t) {
                     t._timbreGroupEl, t._oscMixGroupEl, t._oscModGroupEl,
                     t._ladderOscGroupEl, t._silverboxGroupEl, t._contagionGroupEl,
                     t._hexopGroupEl, t._guitarGroupEl, t._bassGroupEl, t._subGroupEl,
-                    t._droneGroupEl, t._voxGroupEl, t._lancetGroupEl, t._siegeGroupEl, t._granGroupEl]) {
+                    t._droneGroupEl, t._voxGroupEl, t._lancetGroupEl, t._siegeGroupEl, t._oracleGroupEl, t._granGroupEl]) {
     if (el) el.dataset.trackId = String(t.id);
   }
 
