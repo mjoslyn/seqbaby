@@ -1,30 +1,30 @@
 import type { Metadata } from "next";
 import Who from "../home/Who";
-import PeopleExplorer from "./PeopleExplorer";
-import { loadPeopleCatalog } from "./peopleFeed";
+import Gallery from "./Gallery";
+import { loadPatchGallery } from "../home/feed";
 import homeStyles from "../home/home.module.css";
 import styles from "../songs/explore.module.css";
 import { SITE_URL, shareCard } from "../shareCard";
 
-// The people explorer: everyone with a public page who has published a song
-// or a patch, searchable by name, bio and instrument, sortable, and filtered
-// by the tempo they work at and what they use. Cached like the songs
-// explorer, for feed.ts's reasons; the filtering is the browser's
-// (PeopleExplorer.tsx).
+// The patch gallery: every patch people have published (the newest
+// GALLERY_WINDOW of them), ranked as the homepage ranks its four, searchable
+// by name, engine and person, and paged. Cached like the homepage, for
+// feed.ts's reasons; the search and the paging are the browser's
+// (Gallery.tsx).
 export const revalidate = 60;
 
-const TITLE = "people · seqbaby";
-const DESCRIPTION = "Everyone publishing songs and patches from the studio. Find people by name, tempo and instrument.";
+const TITLE = "patches · seqbaby";
+const DESCRIPTION = "Every sound people have published from the studio. Press play to hear one, or save it into your own patch bay.";
 
 export const metadata: Metadata = {
   title: TITLE,
   description: DESCRIPTION,
-  alternates: { canonical: "/people" },
+  alternates: { canonical: "/patches" },
   ...shareCard(TITLE, DESCRIPTION, `${SITE_URL}api/og/home`),
 };
 
-export default async function PeoplePage() {
-  const { people, hasInstruments } = await loadPeopleCatalog();
+export default async function PatchesPage() {
+  const patches = await loadPatchGallery();
   return (
     <div className={homeStyles.home}>
       <nav className={homeStyles.nav}>
@@ -35,17 +35,17 @@ export default async function PeoplePage() {
         </a>
         <span className={homeStyles.navLinks}>
           <a className={homeStyles.navLink} href="/songs">songs</a>
-          <a className={homeStyles.navLink} href="/patches">patches</a>
+          <a className={homeStyles.navLink} href="/people">people</a>
           <a className={homeStyles.navLink} href="/manual">manual</a>
           <Who />
           <a className={`${homeStyles.navLink} ${homeStyles.navCta}`} href="/studio">open the studio →</a>
         </span>
       </nav>
       <header className={styles.head}>
-        <h1 className={styles.title}>people</h1>
-        <p className={styles.lede}>everyone making noise in here. find your people, press their faces.</p>
+        <h1 className={styles.title}>patches</h1>
+        <p className={styles.lede}>every sound people have published. press play to hear one, or save it into your own bay.</p>
       </header>
-      <PeopleExplorer people={people} hasInstruments={hasInstruments} />
+      <Gallery patches={patches} />
     </div>
   );
 }
