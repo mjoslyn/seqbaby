@@ -250,6 +250,10 @@ export const ANALOG_ENGINES = [
   // A singing voice: a glottal pulse through five formants, consonants in
   // front of the vowel, a choir of up to eight per note (vox.js).
   { key: "dm:vox",       label: "vox",             defaultNote: 60, poly: true, melodic: true },
+  // The bass drum synth: a sine under a pitch envelope, a drive that folds
+  // or clips after the amplitude envelope. One voice, a kick (siege.js). Not
+  // melodic: its blank steps are C2, though it plays V/oct.
+  { key: "dm:siege",       label: "siege",             defaultNote: 36, poly: false, melodic: false },
   { key: "dm:tines",     label: "tines",           defaultNote: 60, poly: true, melodic: true },
   { key: "dm:oracle",    label: "oracle",          defaultNote: 60, poly: true, melodic: true },
 ].map(e => ({ ...e, group: "Emulators", type: "drum-synth", poly: e.poly ?? false, melodic: e.melodic ?? false }));
@@ -425,6 +429,7 @@ export function engineSliderLabels(engineKey) {
     case "dm:guitar":    return { harm: "drive",    timb: "tone",   morph: "bloom",     decay: "sustain" };
     case "dm:bass":      return { harm: "drive",    timb: "tone",   morph: "comp",      decay: "sustain" };
     case "dm:sub":       return { harm: "drive",    timb: "tone",   morph: "shape",     decay: "decay" };
+    case "dm:siege":       return { harm: "drive",    timb: "click",  morph: "depth",     decay: "decay" };
     case "dm:drone":     return { harm: "cutoff",   timb: "a0",     morph: "a1",        decay: "a2" };
     case "dm:vox":       return { harm: "vowel",    timb: "size",   morph: "breath",    decay: "release" };
     case "dm:tines":     return { harm: "tine",     timb: "bite",   morph: "chorus",    decay: "decay" };
@@ -1721,6 +1726,117 @@ export function voxTone(name) {
   for (const [k, val] of Object.entries(v.p)) out[`sng${k}`] = val;
   for (const k of VOX_TEXT_KEYS) delete out[k];
   out.harm = v.vowel; out.timb = v.size; out.morph = v.breath; out.decay = v.rel;
+  return out;
+}
+
+// ---- siege (siege.js) -------------------------------------------------------------
+// The bass drum synth's panel. The four track sliders are its four knobs
+// (drive / click / depth / decay); the panel is the rest of the front plate:
+// the tune, the velocity floor, and the four buttons. Keys are `siege` + short
+// key -> `siege_<short>` / `siege.<short>`.
+
+/** Numeric panel controls: [short key, min, max, default, label]. */
+export const SIEGE_NUM_CTLS = [
+  ["tune",  0, 1, 0.5, "tune"],
+  ["floor", 0, 1, 0.5, "velocity floor"],
+];
+
+/** Select controls: [short key, default, [values]]. */
+export const SIEGE_SEL_CTLS = [
+  ["mode", "fold", ["fold", "clip"]],
+  ["gate", "trig", ["trig", "gate"]],
+  ["hpf",  "off",  ["off", "on"]],
+  ["lock", "off",  ["off", "on"]],
+];
+
+export const SIEGE_MOD_KEYS = SIEGE_NUM_CTLS.map(c => c[0]);
+export const SIEGE_NUM_KEYS = SIEGE_MOD_KEYS.map(k => `sge${k}`);
+export const SIEGE_SEL_KEYS = SIEGE_SEL_CTLS.map(c => `sge${c[0]}`);
+
+export const SIEGE_MOD_RANGE = Object.fromEntries(SIEGE_NUM_CTLS.map(c => [c[0], [c[1], c[2]]]));
+
+export const SIEGE_MOD_LABELS = Object.fromEntries(
+  SIEGE_NUM_CTLS.map(([k, , , , label]) => [k, `siege ${label}`]));
+
+export const SIEGE_DEFAULTS = {
+  ...Object.fromEntries(SIEGE_NUM_CTLS.map(c => [`sge${c[0]}`, c[3]])),
+  ...Object.fromEntries(SIEGE_SEL_CTLS.map(c => [`sge${c[0]}`, c[1]])),
+};
+
+/** A 0..1 lane value in this control's own units. @param {string} k short key */
+export function siegeFromUnit(k, u) {
+  const [lo, hi] = SIEGE_MOD_RANGE[k] ?? [0, 1];
+  return lo + Math.max(0, Math.min(1, u)) * (hi - lo);
+}
+
+// ---- the kicks ------------------------------------------------------------
+// Complete kicks: every panel control plus the four track sliders, so nothing
+// of the last one survives a load.
+const SIEGE_TONES = {
+  "808": {
+    d: "a long, soft sub drum: a small sweep, a slow fall, no drive. The one to leave room for a bassline",
+    drive: 0.08, click: 0.22, depth: 0.35, decay: 0.72,
+    p: { mode: "fold", gate: "trig", hpf: "off", lock: "off", tune: 0.5, floor: 0.5 },
+  },
+  "909": {
+    d: "the dance kick: a two-octave sweep over sixty milliseconds, a medium body, the fold just engaged",
+    drive: 0.38, click: 0.55, depth: 0.68, decay: 0.42,
+    p: { mode: "fold", gate: "trig", hpf: "on", lock: "off", tune: 0.5, floor: 0.5 },
+  },
+  "techno": {
+    d: "the clipper wound up over a mid-length body, low cut on: the attack is a square and the tail a sub",
+    drive: 0.75, click: 0.5, depth: 0.45, decay: 0.38,
+    p: { mode: "clip", gate: "trig", hpf: "on", lock: "off", tune: 0.5, floor: 0.6 },
+  },
+  "rumble": {
+    d: "a long decay through the folder at the top of its range: the tail is lifted into a rumble that fills the bar",
+    drive: 0.9, click: 0.4, depth: 0.5, decay: 0.8,
+    p: { mode: "fold", gate: "trig", hpf: "on", lock: "off", tune: 0.45, floor: 0.5 },
+  },
+  "tick": {
+    d: "the pitch envelope at its fastest with the click wide open: a tick on the front of a short thump",
+    drive: 0.2, click: 0.9, depth: 0.04, decay: 0.18,
+    p: { mode: "fold", gate: "trig", hpf: "off", lock: "off", tune: 0.5, floor: 0.4 },
+  },
+  "gabber": {
+    d: "everything up: the clipper at full, a fast deep sweep, tuned high. A square with a kick's shape",
+    drive: 1, click: 0.7, depth: 0.58, decay: 0.3,
+    p: { mode: "clip", gate: "trig", hpf: "on", lock: "off", tune: 0.6, floor: 0.7 },
+  },
+  "sub drum": {
+    d: "no click at all, a long clean decay, tuned down: a sine you feel more than hear",
+    drive: 0, click: 0, depth: 0.5, decay: 0.9,
+    p: { mode: "fold", gate: "trig", hpf: "off", lock: "off", tune: 0.38, floor: 0.6 },
+  },
+  "hard trance": {
+    d: "a tight body with a big sweep and the folder half in, low cut on and tuned a little up: punch over weight",
+    drive: 0.58, click: 0.62, depth: 0.55, decay: 0.3,
+    p: { mode: "fold", gate: "trig", hpf: "on", lock: "off", tune: 0.58, floor: 0.5 },
+  },
+  "bassline": {
+    d: "gate mode: the body holds for the step and falls when it ends, a small click, the fold warm. Write notes and ties",
+    drive: 0.42, click: 0.15, depth: 0.25, decay: 0.45,
+    p: { mode: "fold", gate: "gate", hpf: "off", lock: "off", tune: 0.5, floor: 0.75 },
+  },
+};
+
+export const SIEGE_TONE_NAMES = Object.keys(SIEGE_TONES);
+
+/** One line saying what a kick is reaching for. @param {string} name */
+export function siegeToneDescription(name) { return SIEGE_TONES[name]?.d ?? ""; }
+
+/**
+ * A kick as a complete set of track params -- every panel control plus the
+ * four track sliders, so nothing of the last kick survives.
+ * @param {string} name
+ * @returns {Record<string, number|string>|null}
+ */
+export function siegeTone(name) {
+  const v = SIEGE_TONES[name];
+  if (!v) return null;
+  const out = { ...SIEGE_DEFAULTS };
+  for (const [k, val] of Object.entries(v.p)) out[`sge${k}`] = val;
+  out.harm = v.drive; out.timb = v.click; out.morph = v.depth; out.decay = v.decay;
   return out;
 }
 

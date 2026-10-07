@@ -32,10 +32,10 @@ function queueClassOf(module, name) {
   return new Function(`${prelude}${m[1]}\n return ${name};`)();
 }
 
-// The six polyphonic engines carry the identical queue; the silverbox's is the
+// The seven worklet engines below carry the identical queue; the silverbox's is the
 // same shape with its own fields (it is monophonic and has no note-offs, so a
 // note carries its gate length and its accent instead of an id).
-const POLY = ["contagion", "hexop", "guitar", "bass", "subbass", "drone"];
+const POLY = ["contagion", "hexop", "guitar", "bass", "subbass", "drone", "siege"];
 
 /** Drain a queue into plain objects, so an assertion can read what came out. */
 const drain = (q, upTo = Infinity) => {

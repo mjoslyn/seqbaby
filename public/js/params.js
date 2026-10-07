@@ -80,6 +80,7 @@ export function updatePlaitsControlsVisibility(t) {
   const isSub       = t.engineKey === "dm:sub";
   const isDrone     = t.engineKey === "dm:drone";
   const isVox       = t.engineKey === "dm:vox";
+  const isSiege       = t.engineKey === "dm:siege";
   const isTines    = t.engineKey === "dm:tines";
   const isOracle  = t.engineKey === "dm:oracle";
   const isGranular  = t.engineKey === "dm:granular";
@@ -91,7 +92,7 @@ export function updatePlaitsControlsVisibility(t) {
   // its panel knobs (see buildDrumSynthNode).
   const is808 = t.engineKey.startsWith("dm:808-");
   const is909 = t.engineKey.startsWith("dm:909-");
-  const showTimbre = isPlaits || isSnarl || isLadder || isDrift || isGuitar || isBass || isSub || isDrone || isVox || isTines || isOracle || isGranular || isWavetable || isSilverbox || isContagion || isHexop || is808 || is909;
+  const showTimbre = isPlaits || isSnarl || isLadder || isDrift || isGuitar || isBass || isSub || isDrone || isVox || isSiege || isTines || isOracle || isGranular || isWavetable || isSilverbox || isContagion || isHexop || is808 || is909;
   const group = t._timbreGroupEl || t.el.querySelector(".sq-param-group--timbre");
   if (group) {
     group.hidden = !showTimbre;
@@ -167,6 +168,13 @@ export function updatePlaitsControlsVisibility(t) {
           morph: "air in the voice. A little is a real voice, the top quarter goes to a whisper",
           decay: "how long a note takes to fade once it lets go",
         }
+      : isSiege
+      ? {
+          harm: "the drive, after the envelope: it crushes the attack, leaves the tail a clean sub, and lifts that tail up to twelve times. Fold or clip is the panel's choice",
+          timb: "the click: how far above the note the pitch starts, up to six octaves. The fall is the attack",
+          morph: "how long the pitch takes to fall onto the note, 1ms to a quarter second. Short is a tick, long is the 909's sweep",
+          decay: "how long the body rings, 50ms to four seconds",
+        }
       : isContagion
       ? {
           harm: "cutoff for both filters (filter 2 follows it, offset by cut 2)",
@@ -216,7 +224,7 @@ export function updatePlaitsControlsVisibility(t) {
     // Randomize button only makes sense for Plaits' generic harm/timb/morph/decay —
     // hide it for the analog engines where those sliders do engine-specific things.
     const randBtn = group.querySelector(".track-rand");
-    if (randBtn) randBtn.hidden = isSnarl || isLadder || isDrift || isGuitar || isBass || isSub || isDrone || isVox || isTines || isOracle || isGranular || isWavetable || isSilverbox || isContagion || isHexop || is808 || is909;
+    if (randBtn) randBtn.hidden = isSnarl || isLadder || isDrift || isGuitar || isBass || isSub || isDrone || isVox || isSiege || isTines || isOracle || isGranular || isWavetable || isSilverbox || isContagion || isHexop || is808 || is909;
   }
   // Per-oscillator volume sliders: only shown for the analog mono engines.
   const oscGroup = t._oscMixGroupEl || t.el.querySelector(".sq-param-group--osc-mix");
@@ -287,6 +295,9 @@ export function updatePlaitsControlsVisibility(t) {
   // The vox's glottis, vibrato, choir and consonants.
   const voxGroup = t._voxGroupEl || t.el.querySelector(".sq-param-group--vox");
   if (voxGroup) voxGroup.hidden = !isVox;
+  // The siege's drive type, tune, lock, low cut and velocity floor.
+  const siegeGroup = t._siegeGroupEl || t.el.querySelector(".sq-param-group--siege");
+  if (siegeGroup) siegeGroup.hidden = !isSiege;
   // Granular grain-engine group (play mode / window / jitter / detune / pan / …).
   const granGroup = t._granGroupEl || t.el.querySelector(".sq-param-group--granular");
   if (granGroup) granGroup.hidden = !isGranular;

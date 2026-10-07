@@ -14,6 +14,7 @@ import { buildBassVoice, BASS_NUM_KEYS, BASS_SEL_KEYS } from "./bass.js";
 import { buildSubBassVoice, SUB_NUM_KEYS, SUB_SEL_KEYS } from "./subbass.js";
 import { buildDroneVoice, DRONE_NUM_KEYS, DRONE_SEL_KEYS } from "./drone.js";
 import { buildVoxVoice, VOX_NUM_KEYS, VOX_SEL_KEYS, VOX_TEXT_KEYS } from "./vox.js";
+import { buildSiegeVoice, SIEGE_NUM_KEYS, SIEGE_SEL_KEYS } from "./siege.js";
 import { buildHexopVoice, HEXOP_NUM_KEYS, HEXOP_SEL_KEYS } from "./hexop.js";
 import { buildGuitarVoice, GUITAR_NUM_KEYS, GUITAR_SEL_KEYS } from "./guitar.js";
 import { buildContagionVoice, CONTAGION_NUM_KEYS, CONTAGION_SEL_KEYS } from "./contagion.js";
@@ -768,6 +769,23 @@ export function buildDrumSynthNode(kind, output) {
         release: (time) => s.releaseAll(time),
       };
     }
+    // Siege: the bass drum synth, one AudioWorklet — see siege.js. The fallback is
+    // a sine with a pitch drop through a MembraneSynth: a kick, not the kick,
+    // but never a silent track.
+    case "siege": {
+      const v = buildSiegeVoice(output);
+      if (v) return v;
+      const s = new Tone.MembraneSynth({
+        pitchDecay: 0.04, octaves: 3,
+        oscillator: { type: "sine" },
+        envelope: { attack: 0.001, decay: 0.4, sustain: 0, release: 0.2 },
+      }).connect(output);
+      return {
+        nodes: [s],
+        trigger: (note, time, dur, vel) => s.triggerAttackRelease(Tone.Frequency(note, "midi"), dur, time, vel),
+        release: (time) => s.triggerRelease(time),
+      };
+    }
     case "tines":     return makePolyPool(6, () => buildTinesVoice(output));
     case "oracle":   return makePolyPool(6, () => buildOracleVoice(output));
   }
@@ -1396,7 +1414,8 @@ export class DrumSynthVoice {
                      ...BASS_NUM_KEYS, ...BASS_SEL_KEYS,
                      ...SUB_NUM_KEYS, ...SUB_SEL_KEYS,
                      ...DRONE_NUM_KEYS, ...DRONE_SEL_KEYS,
-                     ...VOX_NUM_KEYS, ...VOX_SEL_KEYS, ...VOX_TEXT_KEYS]) {
+                     ...VOX_NUM_KEYS, ...VOX_SEL_KEYS, ...VOX_TEXT_KEYS,
+                     ...SIEGE_NUM_KEYS, ...SIEGE_SEL_KEYS]) {
       if (this.params?.[k] != null) this.built.setParam(k, this.params[k]);
     }
   }
