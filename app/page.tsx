@@ -31,7 +31,7 @@ export const metadata: Metadata = {
   ...shareCard(TITLE, DESCRIPTION, `${SITE_URL}api/og/home`),
 };
 
-// The emulators, in the order the instrument picker lists them.
+// The emulators. Drawn alphabetically with INSTRUMENTS, below.
 const EMULATORS = [
   ["silverbox", "an acid box, modelled from its circuit. three filter poles, accents that pile up when the resonance is high, and a slide when you tie one step into the next."],
   ["contagion", "a digital polysynth. two filters with a saturator between them, oscillators that morph from sine to pulse, and unison up to eight voices wide."],
@@ -50,7 +50,7 @@ const EMULATORS = [
   ["oracle", "a polyphonic analog synth. two oscillators, a sub, noise, and an overdrive stage on the output."],
 ] as const;
 
-// The other instruments, after the emulators in the same list.
+// The other instruments, in the same list.
 const INSTRUMENTS = [
   ["plaits", "a port of the mutable instruments plaits oscillator, all sixteen models, running in wasm."],
   ["drum kits", "808 and 909 voices built as synth recipes, and three acoustic kits recorded one hit at a time."],
@@ -59,9 +59,9 @@ const INSTRUMENTS = [
   ["wavetable", "a multi-frame wavetable synth over the akwf tables, morphable between frames, with an editor for drawing your own."],
 ] as const;
 
-// The fx rack, in the order a track with no order of its own runs it.
+// The fx rack, drawn alphabetically. The gain stage is left out: a gain is
+// not something to advertise.
 const FX = [
-  ["gain", "a clean gain you can put anywhere in the chain. above the middle it drives whatever comes after it."],
   ["vinyl", "wow, crackle and a warmth filter. the crackle only runs while the track is playing."],
   ["cassette", "flutter, hiss and tape saturation."],
   ["fuzz", "a fuzz with drive, tone and level."],
@@ -79,6 +79,9 @@ const FX = [
   ["delay", "a delay with feedback, free or synced to the tempo."],
   ["reverb", "a reverb built as a delay network rather than an impulse, so the decay knob turns while it plays."],
 ] as const;
+
+/** Alphabetical, by the first field. */
+const byName = <T extends readonly [string, string]>(rows: T[]) => rows.sort((a, b) => a[0].localeCompare(b[0]));
 
 const FEATURES = [
   ["jam", "send someone a link and you are both editing the same song at the same time. they do not need an account."],
@@ -263,7 +266,7 @@ export default async function HomePage() {
           <span className={styles.sectionSub}>fifteen emulators, each one a working model of the thing that makes the sound: a circuit, a string, a drum head, a voice. then the rest of the catalog.</span>
         </div>
         <ul className={styles.stack}>
-          {[...EMULATORS, ...INSTRUMENTS].map(([name, line]) => (
+          {byName([...EMULATORS, ...INSTRUMENTS]).map(([name, line]) => (
             <li key={name} className={styles.stackItem}>
               <strong>{name}</strong>
               <span>{line}</span>
@@ -278,7 +281,7 @@ export default async function HomePage() {
           <span className={styles.sectionSub}>seventeen stages on every track, in whatever order you put them. any of them can be on a track more than once.</span>
         </div>
         <ul className={styles.box}>
-          {FX.map(([name, line], i) => (
+          {byName([...FX]).map(([name, line], i) => (
             <li key={name} className={styles.boxItem} style={{ ["--tilt" as string]: `${(i % 3) - 1}deg` }}>
               <strong>{name}</strong>
               <span>{line}</span>
