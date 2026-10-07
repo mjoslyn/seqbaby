@@ -3948,17 +3948,31 @@ derived from the session itself: `<adjective> <noun>`, e.g. `basement squelch`,
   `drift` .. `rush`) crossed with the scale's mood (bright / dark, or -- with no
   scale switched on, which is most sessions -- a seeded pick, since there is
   nothing to read). The noun comes from the engine the song is mostly made of:
-  engine key -> family -> a small word pool. Two songs with different names
-  really are different songs.
+  engine key -> family -> a word pool -- or, a third of the time, from the
+  song's second family (`nounFamily`), so an account of silverbox songs over
+  hexop chords is not an account of "squelch", "acid" and "ladder". Drums are
+  never that runner-up. Two songs with different names really are different
+  songs.
+- **The pools are wide, and every word in them is reachable.** Fourteen
+  adjectives a mood and twelve nouns a family, about a thousand names per tempo
+  band and pair of families; with six and five, forty songs on one account were
+  already numbering themselves. The picks go through Murmur3's finalizer
+  (`mix32`): the low bits of an FNV hash are a function of the low bits of its
+  input alone, so `% list.length` straight off it moved the adjective, the noun
+  and the family pick together and stranded half the names (measured: 504 of
+  1008 reachable before, all 1008 after). `SONG_NAME_WORDS` exports the tables
+  for the tests.
 - **Drums lose ties.** Nearly every session has a kit in it, so the kit is the
   least distinguishing thing about any of them; it names the song only when it is
   all there is. A bus is never what a song is named for, and a session with
   nothing written in it gets told so (`shadow blank`).
 - **Deterministic on the session's content**, so saving one session twice cannot
   invent two songs. The seed is a digest of tempo, swing, scale and each track's
-  engine key + step mask -- deliberately NOT a hash of the whole blob, which
-  carries base64 sample payloads and would rename a song for re-uploading the
-  same drum hit.
+  engine key, name, length and written steps (note, length and velocity per
+  hit, not the mask alone: every song written over one template's drums seeded
+  the same name) -- deliberately NOT a hash of the whole blob, which carries
+  base64 sample payloads and would rename a song for re-uploading the same
+  drum hit.
 - **Offered in the field, not sprung at save.** Both save UIs prefill the name
   box when they open (`app/songs/suggestName.ts`), so the generated name is
   something you read and edit before pressing save. Once per opening, tracked by

@@ -10,7 +10,7 @@ import { generateSongName } from "@/app/songs/songName";
 //
 // Serializing the session just to name it is cheaper than it looks: the blob
 // references the base64 sample payloads, it does not copy them, and the
-// generator only reads tempo, scale, engine keys and step masks. It is the same
+// generator only reads tempo, scale, engine keys and the steps. It is the same
 // call the save itself makes a moment later. Failing is never worth breaking a
 // popup over -- an empty string just leaves the field blank, and the save path
 // generates a name again anyway.
