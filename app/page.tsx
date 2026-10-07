@@ -90,10 +90,9 @@ const FEATURES = [
 ] as const;
 
 const BLURBS = [
-  "nothing to install. it runs in the tab.",
-  "32 patterns per song, chained or switched by hand.",
-  "undo goes back a hundred steps.",
-  "there is a manual, if you want one.",
+  "no install. no plugin. no manual (there is a manual).",
+  "32 patterns per song, which is at least 29 more than you'll finish.",
+  "undo goes back 100 steps. regret goes back further.",
 ];
 
 // Structured data for search engines. The WebSite block is what Google reads
