@@ -80,6 +80,7 @@ import {
   VOX_NUM_CTLS, VOX_MOD_KEYS, VOX_FORMANTS, VOX_VOWELS, VOX_CONSONANT_NAMES,
   VOX_CONS_FIELDS, voxConsonantRow, VOX_WORDS, voxSyllables, VOX_SYL_STRIDE,
 } from "./engineData.js";
+import { loadVoxDict, voxDictReady, voxRespell } from "./voxPhonetic.js";
 
 // The tables, flattened into the processor's prelude so the worklet and the
 // panel read one copy.
@@ -896,6 +897,11 @@ export function voxPhrase(words, text) {
   return typed.length ? typed.flatMap(voxSyllableRow) : voxSyllableList(words);
 }
 
+/** What a lyric is sung as: respelled from English when `phonetic` is on. */
+export function voxSungText(text, phon) {
+  return phon ? voxRespell(text) : String(text ?? "");
+}
+
 // Tone wrappers don't accept a native connect() — unwrap to the node underneath.
 const nativeIn = (node) => node?.input?.input ?? node?.input ?? node;
 
@@ -927,7 +933,14 @@ export function buildVoxVoice(output) {
 
   let noteId = 0;
   let glide = 0;
-  let words = "off", text = "";
+  let words = "off", text = "", phon = false;
+  const phrase = () => voxPhrase(words, voxSungText(text, phon));
+  // The dictionary comes the first time it is asked for; until then the
+  // letter-to-sound rules sing, and the phrase is re-posted once it lands.
+  const needDict = () => {
+    if (!phon || voxDictReady()) return;
+    loadVoxDict().then(d => { if (d && phon && text) post({ type: "set", syl: phrase() }); });
+  };
   const paramFor = (key) => P[PARAM_OF[key]] ?? null;
 
   return {
@@ -935,13 +948,23 @@ export function buildVoxVoice(output) {
     setGlide: (g) => { glide = Math.max(0, Number(g) || 0); post({ type: "set", glide }); },
     setParam: (key, val) => {
       if (key === "sngcons")  { post({ type: "set", cons: Math.max(0, VOX_CONSONANT_NAMES.indexOf(String(val))) }); return; }
-      if (key === "sngwords") { words = String(val); post({ type: "set", syl: voxPhrase(words, text) }); return; }
+      if (key === "sngwords") { words = String(val); post({ type: "set", syl: phrase() }); return; }
+      if (key === "sngphon")  {
+        const next = val === "on" || val === true;
+        if (next === phon) return;
+        phon = next;
+        if (text) post({ type: "set", syl: phrase() });
+        needDict();
+        return;
+      }
       if (key === "sngtext")  {
-        const next = String(val ?? "");
+        const before = phrase();
+        text = String(val ?? "");
         // Typing a letter that changes no syllable (a final consonant) must not
         // start the phrase over under a playing part.
-        if (JSON.stringify(voxPhrase(words, next)) !== JSON.stringify(voxPhrase(words, text))) post({ type: "set", syl: voxPhrase(words, next) });
-        text = next;
+        const after = phrase();
+        if (JSON.stringify(after) !== JSON.stringify(before)) post({ type: "set", syl: after });
+        needDict();
         return;
       }
       if (key === "sngmode")  { post({ type: "set", mono: val === "mono" }); return; }

@@ -134,11 +134,12 @@ test("vox: the tables agree with the processor", () => {
   for (const name of VOX_TONE_NAMES) {
     const t = voxTone(name);
     for (const k of Object.keys(VOX_DEFAULTS)) {
-      // A voice is complete, except the lyric, which a voice must not erase.
-      if (VOX_TEXT_KEYS.includes(k)) assert.ok(!(k in t), `${name}: carries a lyric`);
+      // A voice is complete, except the lyric and how it is read, which a
+      // voice must not erase.
+      if (VOX_TEXT_KEYS.includes(k) || k === "sngphon") assert.ok(!(k in t), `${name}: carries ${k}`);
       else assert.ok(k in t, `${name}: ${k} missing`);
     }
-    for (const [k, , values] of VOX_SEL_CTLS) assert.ok(values.includes(t[`sng${k}`]), `${name}: ${k} = ${t[`sng${k}`]}`);
+    for (const [k, , values] of VOX_SEL_CTLS) if (k !== "phon") assert.ok(values.includes(t[`sng${k}`]), `${name}: ${k} = ${t[`sng${k}`]}`);
     for (const [k, lo, hi] of VOX_NUM_CTLS) assert.ok(t[`sng${k}`] >= lo && t[`sng${k}`] <= hi, `${name}: ${k} out of range`);
   }
 });
@@ -340,6 +341,14 @@ test("vox: the panel markup matches the tables", async () => {
     assert.equal(def, "");
   }
   for (const [k, def, values] of VOX_SEL_CTLS) {
+    // an on / off control is a checkbox, unticked by default
+    const box = panel.match(new RegExp(`<input class="p-sng${k}" type="checkbox"([^>]*)/>`));
+    if (box) {
+      assert.deepEqual(values, ["off", "on"], `${k}: a checkbox stores off / on`);
+      assert.equal(def, "off");
+      assert.ok(!box[1].includes("checked"), `${k}: ticked by default`);
+      continue;
+    }
     const m = panel.match(new RegExp(`<select class="p-sng${k}"[^>]*>([\\s\\S]*?)</select>`));
     assert.ok(m, `no select for ${k}`);
     const opts = [...m[1].matchAll(/value="([^"]*)"/g)].map(x => x[1]);

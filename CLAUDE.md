@@ -16,7 +16,7 @@ env / fx / eq / comp / mod / automation per track.
   `public/woscillators.js` →
   `public/js/main.js` (ES module). `middleware.ts` refreshes the Supabase
   session on every request *except* static engine assets.
-- **Engine**: ~74 dependency-free vanilla ES modules in `public/js/`. No
+- **Engine**: ~75 dependency-free vanilla ES modules in `public/js/`. No
   bundler — edit, reload. `window.seqbaby` (from `appApi.js`) exposes `state`
   and serialize/apply hooks to the React shell (typed in `app/seqbaby.d.ts`).
 - **Accounts + data**: Supabase (Postgres + Auth + RLS). Tables: `profiles`,
@@ -278,6 +278,8 @@ env / fx / eq / comp / mod / automation per track.
 - `vox.js` — **vox**, a singing voice: a glottal pulse through five
   formants, consonants run before the vowel, phrases sung a syllable a note,
   and a choir of copies per note, in one AudioWorklet. See the vox section.
+  `voxPhonetic.js` is its lyric's English reader (CMUdict + letter-to-sound),
+  pure, its dictionary fetched only when the phonetic box is ticked.
 - `lancet.js` — **lancet**, a snare drum synthesizer: seven models (analog,
   slap, modal, physical, fm, granular, blend) under four knobs and an fx
   amount, a velocity amount and a per-hit randomizer, in one AudioWorklet.
@@ -321,7 +323,7 @@ npm test               # node --test: the pure modules (session format, chance g
                        #   version tree, song names, share card copy, the song builder, the jam diff,
                        #   song previews, grid avatars, the songs and people explorers,
                        #   the Strudel bridge, the reverb, the filter models, the guitar, the contagion,
-                       #   the vox, the lancet, the prism, the repeat)
+                       #   the vox and its phonetic reader, the lancet, the prism, the repeat)
 npm run mcp            # the MCP server on stdio (mcp/server.mjs) — an agent writes songs
 npm run test:rls       # RLS policy tests — builds a throwaway Postgres in docker
 ```
@@ -1404,7 +1406,7 @@ CONSONANT (hiss, burst, murmur, formant glide) ───┘
   bar, a nasal's damping, written for its 0.6 default and left as they are
   there, so the knob reaches m, l, b and not only the noisy consonants.
   The `cons` select is greyed out, its title saying why, while the words
-  or a lyric are on (`updateVoxConsEnabled`, params.js): their syllables
+  or a lyric are on (`refreshVoxLyric`, params.js): their syllables
   carry their own consonants, and a select that silently did nothing read
   as broken.
 - **Words** (`VOX_WORDS`, spelled by `voxSyllables`): the voice builder
@@ -1423,6 +1425,24 @@ CONSONANT (hiss, burst, murmur, formant glide) ───┘
   as it is typed, but the builder re-posts the phrase only when a keystroke
   changes a syllable, since a re-post starts it over. A voice preset leaves
   it alone (`voxTone` drops it): it is what the track sings, not its sound.
+- **The `phonetic` box reads the lyric as English** (`sngphon`, `"on"` /
+  `"off"` like a select, drawn as a checkbox; `voxPhonetic.js`). Each word
+  is looked up in CMUdict (`public/js/data/cmudict.txt`, 117k words, one
+  character a phone, built by `scripts/make-vox-dict.mjs`, its BSD notice at
+  the top) and sung as its syllables, hyphen-joined, one a note:
+  `the night is young` is `da nait iz yan`. The phones fold onto what the
+  voice has: five vowels plus the glides (AY `ai`, EY `ei`, OW `ou`, AW
+  `au`, OY `oi`), ER an e with its r, th as f / d, a cluster keeps its first
+  sound (`str` is s), a syllable one consonant after its vowel. Words it
+  lacks go through a small letter-to-sound rule set (`letterToSound`), which
+  also sings everything until the dictionary arrives. **The dictionary is
+  fetched only once the box is ticked** (`loadVoxDict`, ~680KB compressed),
+  by the voice builder (which re-posts the phrase when it lands) and by the
+  panel's `sung as:` line under the row (`.sq-vox__said`, `refreshVoxLyric`).
+  A word with no vowel letter passes through, so `mmm` still hums. A voice
+  preset leaves the box alone, as it does the lyric.
+  `test/voxPhonetic.test.js` pins the folding, the rules, the file, and that
+  every respelling reads back through `voxSyllables` as exactly its syllables.
 - **A syllable is `[cons, vowel, vowel2, coda]`** (`VOX_SYL_STRIDE`; the
   `syl` message is a flat list of them). `voxSyllables` reads: a consonant,
   the first vowel, a second vowel letter (or `y` / `w`) straight after it as
@@ -4176,7 +4196,7 @@ through a 6ms fade on its gain).
   place the dispatch lives, or the second one has to import the first.
 - **`engineData.js`, `soundDefaults.js`, `theoryData.js`, `constants.js`,
   `chanceGen.js`, `sessionFormat.js`, `historyStore.js`, `songBuilder.js`,
-  `miniNotation.js` and `strudel.js` must stay importable from Node** — no DOM, no Tone, no `window`. The tests
+  `miniNotation.js`, `strudel.js` and `voxPhonetic.js` must stay importable from Node** — no DOM, no Tone, no `window`. The tests
   and the MCP server run them; an import of state.js or catalog.js in any of
   them breaks `npm test` at load, which is the guard.
 - **React must never re-set the studio's `innerHTML`** (`app/StudioBody.tsx`).
@@ -4282,7 +4302,7 @@ Repo: https://github.com/mjoslyn/seqbaby.
   An inline marker (`window.__seqbabyServerBoot`) tells the paths apart, and
   `ScriptLoader.tsx` keeps its onload-chained injection for the soft-nav case
   (e.g. arriving from `/login`).
-- `app/EnginePreload.tsx` emits `modulepreload` for all 74 modules listed in
+- `app/EnginePreload.tsx` emits `modulepreload` for all 75 modules listed in
   `app/engineAssets.ts` (at `engineAsset("/js/<name>")`; the hints used to
   point at the site root and 404). The graph is 8 levels deep, so without it the browser
   needs up to eight sequential round trips just to discover the code.

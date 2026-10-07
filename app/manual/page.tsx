@@ -1009,7 +1009,14 @@ export default function ManualPage() {
               <span className={styles.ui}>ow</span> for &quot;now&quot;),{" "}
               <span className={styles.ui}>oo</span> is u, <span className={styles.ui}>ee</span>{" "}
               is i, and <span className={styles.ui}>mmm</span> is a hum. Spell it as it
-              sounds: one consonant each side of the vowel.
+              sounds: one consonant each side of the vowel. Or tick{" "}
+              <span className={styles.ui}>phonetic</span> and type plain English:
+              each word is looked up in a pronouncing dictionary and split into its
+              syllables, one a note, and the line under the row shows what it will
+              sing (<span className={styles.ui}>the night is young</span> is sung{" "}
+              <span className={styles.ui}>da nait iz yan</span>). The dictionary is
+              fetched the first time you tick the box, and a word it does not know is
+              guessed from its letters.
             </li>
             <li>
               <strong>The vibrato comes in late</strong>, after{" "}
@@ -2036,6 +2043,11 @@ bus. Share it when it validates.`}</div>
                   <td><a href="https://github.com/callimero/Lemondrop_Pack" target="_blank" rel="noopener">Lemondrop Pack</a> by callimero</td>
                   <td>The texture library offered to the granular engine</td>
                   <td>GPL-3.0</td>
+                </tr>
+                <tr>
+                  <td><a href="https://github.com/cmusphinx/cmudict" target="_blank" rel="noopener">CMU Pronouncing Dictionary</a> by Carnegie Mellon University</td>
+                  <td>How the vox&apos;s phonetic box pronounces a typed lyric</td>
+                  <td>BSD 2-clause</td>
                 </tr>
                 <tr>
                   <td><a href="https://github.com/Tonejs/audio" target="_blank" rel="noopener">Tone.js audio samples</a></td>
