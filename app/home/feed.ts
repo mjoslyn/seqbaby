@@ -4,9 +4,8 @@ import { patchEngineKey } from "./patchPreview";
 
 // What the homepage shows of the people using the studio: the songs they have
 // published and the patches they have put in the gallery, each ranked by
-// likes and freshness together (rank.js), and who made them. Twelve songs and
-// twelve people; HOME_PATCHES patches, with /patches holding the rest
-// (loadPatchGallery).
+// likes and freshness together (rank.js), and who made them. Four of each
+// (FEED_SIZE, HOME_PATCHES); /songs, /people and /patches hold the rest.
 //
 // A plain anon client, not the cookie one in lib/supabase/server.ts, on
 // purpose. Reading cookies makes a page dynamic, and the homepage is the one
@@ -55,8 +54,9 @@ export type FeedPatch = {
 
 export type Feed = { songs: FeedSong[]; people: FeedPerson[]; patches: FeedPatch[] };
 
-/** How many songs and people the homepage shows. */
-export const FEED_SIZE = 12;
+/** How many songs and people the homepage shows. The share card asks for
+ *  its own count (app/api/og/home). */
+export const FEED_SIZE = 4;
 /** How many patches it shows; the gallery page has every one. */
 export const HOME_PATCHES = 4;
 /** How many of the newest public patches the gallery page ranks and lists. */
