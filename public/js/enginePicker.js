@@ -159,7 +159,11 @@ export function openEnginePicker(sel) {
   const chips = [`<button type="button" class="sq-engine-picker__chip is-on" data-group="">all</button>`]
     .concat(chipNames.map(c => `<button type="button" class="sq-engine-picker__chip" data-group="${esc(c)}">${esc(c.toLowerCase())}</button>`))
     .join("");
-  const sections = groups.map(g => `
+  // One heading over all the preset sections, so where the instruments end
+  // and what they come loaded with begins reads at a glance.
+  const firstPreset = groups.find(g => g.presetOf);
+  const sections = groups.map(g => `${g === firstPreset ? `
+    <h2 class="sq-engine-picker__divider">presets</h2>` : ""}
     <section class="sq-engine-picker__group" data-group="${esc(g.chip)}"${g.presetOf ? ` data-preset-of="${esc(g.presetOf)}"` : ""}>
       <h3 class="sq-engine-picker__heading">${esc(g.group.toLowerCase())}</h3>
       <div class="sq-engine-picker__grid">
@@ -188,6 +192,7 @@ export function openEnginePicker(sel) {
   const empty = overlay.querySelector(".sq-engine-picker__empty");
   const cards = [...overlay.querySelectorAll(".sq-engine-picker__card")];
   const sectionEls = [...overlay.querySelectorAll(".sq-engine-picker__group")];
+  const presetDivider = overlay.querySelector(".sq-engine-picker__divider");
   let groupFilter = "";
 
   const visibleCards = () => cards.filter(c => !c.hidden && !c.closest(".sq-engine-picker__group").hidden);
@@ -206,6 +211,7 @@ export function openEnginePicker(sel) {
       }
       sec.hidden = !any;
     }
+    if (presetDivider) presetDivider.hidden = !sectionEls.some(sec => sec.dataset.presetOf && !sec.hidden);
     empty.hidden = shown > 0;
   };
 

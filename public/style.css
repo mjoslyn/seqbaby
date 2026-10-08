@@ -1886,6 +1886,7 @@ main {
   padding-right: 2px;
 }
 .sq-engine-picker__group[hidden],
+.sq-engine-picker__divider[hidden],
 .sq-engine-picker__card[hidden],
 .sq-engine-picker__empty[hidden] { display: none !important; }
 .sq-engine-picker__heading {
@@ -1893,6 +1894,16 @@ main {
   font-size: 11px;
   font-weight: 400;
   color: var(--fg-dim);
+  text-transform: lowercase;
+  letter-spacing: 0.04em;
+}
+.sq-engine-picker__divider {
+  margin: 6px 0 -4px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg);
   text-transform: lowercase;
   letter-spacing: 0.04em;
 }
