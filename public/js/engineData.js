@@ -265,7 +265,9 @@ export const ANALOG_ENGINES = [
   // drive on the summed voices and a chorus, six voices in one AudioWorklet
   // (oracle.js).
   { key: "dm:oracle",    label: "oracle",          defaultNote: 60, poly: true, melodic: true },
-].map(e => ({ ...e, group: "Emulators", type: "drum-synth", poly: e.poly ?? false, melodic: e.melodic ?? false }));
+].map(e => ({ ...e, group: "Emulators", type: "drum-synth", poly: e.poly ?? false, melodic: e.melodic ?? false }))
+  // Alphabetical by name, wherever an engine is added in the list above.
+  .sort((a, b) => a.label.localeCompare(b.label));
 
 export const TEXTURE_ENGINES = [
   { key: "dm:granular", label: "granular sampler", defaultNote: 60, poly: true, melodic: true },
