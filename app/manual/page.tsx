@@ -388,9 +388,12 @@ export default function ManualPage() {
             <strong>Melody.</strong> The twelve faders are the probability of each
             semitone, not a switch on each: one at half height turns up half as often
             as one at full, and a single raised fader is certain wherever it sits.
-            That is how you write a scale here, or a scale with a bias.{" "}
-            <span className={styles.ui}>from scale</span> loads the session&apos;s
-            active scale into them. Generated notes are not snapped to the session
+            That is how you write a scale here, or a scale with a bias. Until you
+            move a fader they are the session&apos;s scale, when one is switched on
+            (and follow it when you change key), and a minor pentatonic when not.{" "}
+            <span className={styles.ui}>from scale</span> writes the active scale into
+            them as faders of the track&apos;s own, so a later key change leaves the
+            part where it is. Generated notes are not snapped to the session
             scale, because these faders <em>are</em> the scale.{" "}
             <span className={styles.ui}>low note</span> and{" "}
             <span className={styles.ui}>high note</span> set the range, up to five
@@ -412,7 +415,9 @@ export default function ManualPage() {
           </p>
           <p>
             <strong>The window</strong> is the first and last step it generates over,
-            and it tiles across the track like the ring&apos;s cycle. Moving{" "}
+            and it tiles across the track like the ring&apos;s cycle. Until you turn{" "}
+            <span className={styles.ui}>last step</span> it is the whole track, so a
+            32-step track gets a 32-step window. Moving{" "}
             <span className={styles.ui}>first step</span> slides the window without
             changing its length.
           </p>

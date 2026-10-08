@@ -1379,7 +1379,8 @@ export function renderTrack(t) {
   // matrix and the lanes already refresh through refreshParamIndicators.
   t._panelBtns = {};
   for (const sel of [".sq-track__filter", ".sq-track__env", ".sq-track__fx",
-                     ".sq-track__eq", ".sq-track__comp", ".sq-track__mod", ".track-aut"]) {
+                     ".sq-track__eq", ".sq-track__comp", ".sq-track__mod", ".track-aut",
+                     ".track-euclid", ".track-chance"]) {
     const btn = node.querySelector(sel);
     if (btn) t._panelBtns[sel] = btn;
   }

@@ -11,7 +11,7 @@ import { guessIsDrumKit, parseMeter } from "./meter.js";
 import { updatePlaitsControlsVisibility } from "./params.js";
 import { renderPatternGrid } from "./patternBar.js";
 import { refreshEuclidUI, renderEuclidPanel } from "./euclid.js";
-import { cloneChance, refreshChanceUI, renderChancePanel } from "./chance.js";
+import { cloneChance, refreshChanceScale, refreshChanceUI, renderChancePanel } from "./chance.js";
 import { applyBusMute, paintDiceDensity, placeBusesLast, refreshFxPanelUI, refreshMuteSoloUI, renderModPanel, syncTrackSoundUI } from "./render.js";
 import { flushAllPatternSounds, recallLoadedPatternSound, refreshPatternLockUI, refreshPatternSoundUI } from "./patternSound.js";
 import { syncScaleUI } from "./scaleUI.js";
@@ -624,7 +624,7 @@ export function applySet(s) {
   for (const t of [...state.tracks]) removeTrack(t);
   if (Number.isFinite(s.bpm))   document.getElementById("bpm").value = s.bpm;
   if (Number.isFinite(s.swing)) document.getElementById("swing").value = s.swing;
-  if (s.scale) { Object.assign(state.scale, s.scale); syncScaleUI(); }
+  if (s.scale) { Object.assign(state.scale, s.scale); syncScaleUI(); refreshChanceScale(); }
   state.activePattern = Math.max(0, Math.min(PATTERN_COUNT - 1, s.activePattern ?? 0));
   // Hoist pattern meters: prefer the new global array; otherwise salvage the
   // first track's per-pattern meter from legacy saves.

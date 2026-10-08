@@ -58,7 +58,7 @@ import {
   canAutomateKey, canModulateKey, lfoDivLabel, voiceAutoKeysForEngineKey,
   FX_STAGE_KEYS, baseModKey, fxChainOrder, fxInstanceIds, fxStageOf, fxStageOfModKey, isFxInstanceId, splitFxInstanceKey,
 } from "./constants.js";
-import { CHANCE_DEFAULTS, CHANCE_NOTE_MAX, CHANCE_NOTE_MIN, CHANCE_NOTE_VALUES, CHANCE_REPEAT_MAX, cloneChance } from "./chanceGen.js";
+import { CHANCE_DEFAULT_PCS, CHANCE_DEFAULTS, CHANCE_NOTE_MAX, CHANCE_NOTE_MIN, CHANCE_NOTE_VALUES, CHANCE_REPEAT_MAX, cloneChance } from "./chanceGen.js";
 import { CHORD_TYPES, SCALES, canonicalChord, midiToName, nameToMidi } from "./theoryData.js";
 import { SET_VERSION, validateSet } from "./sessionFormat.js";
 
@@ -955,7 +955,10 @@ export function euclidRing(pulses, steps, rotate = 0) {
  */
 export function setChance(song, index, c = {}) {
   const t = trackAt(song, index);
-  const cur = cloneChance(t.chance) || { ...CHANCE_DEFAULTS, pcs: CHANCE_DEFAULTS.pcs.slice(), last: Math.min(15, t.length - 1) };
+  const cur = cloneChance(t.chance) || { ...CHANCE_DEFAULTS };
+  // A song written here has no session scale to follow, so a track that was never
+  // given pitches plays the default pentatonic, written out.
+  if (!cur.pcs) cur.pcs = CHANCE_DEFAULT_PCS.slice();
   const cfg = { ...cur };
   cfg.on = c.on != null ? !!c.on : true;
   if (c.note != null) {
@@ -983,7 +986,9 @@ export function setChance(song, index, c = {}) {
   if (cfg.hi < cfg.lo) [cfg.lo, cfg.hi] = [cfg.hi, cfg.lo];
   if (c.first != null) cfg.first = int(c.first, "first", 0, t.length - 1);
   if (c.last != null) cfg.last = int(c.last, "last", 0, t.length - 1);
-  if (cfg.last < cfg.first) [cfg.first, cfg.last] = [cfg.last, cfg.first];
+  // An unset last is the whole track (chanceGen.js); only a written one can sit
+  // before the first.
+  if (cfg.last != null && cfg.last < cfg.first) [cfg.first, cfg.last] = [cfg.last, cfg.first];
   if (c.triplets != null) cfg.trips = !!c.triplets;
   if (c.thirtySeconds != null) cfg.x32 = !!c.thirtySeconds;
   if (c.rhythmSeed != null) cfg.rseed = int(c.rhythmSeed, "rhythmSeed", 1, 2 ** 31);

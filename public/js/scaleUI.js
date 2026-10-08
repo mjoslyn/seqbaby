@@ -2,6 +2,7 @@ import { NOTE_NAMES } from "./constants.js";
 import { ICON_KEYBOARD, ICON_PALETTE } from "./icons.js";
 import { syncKbdArpUI } from "./keyboard.js";
 import { init } from "./main.js";
+import { refreshChanceScale } from "./chance.js";
 import { refreshRollIfOpen } from "./pianoRoll.js";
 import { state } from "./state.js";
 import { renderStepGrid } from "./stepGrid.js";
@@ -218,6 +219,7 @@ export function initScaleUI() {
   // Scale changes affect both the open piano-roll panels (visible pitch rows)
   // and the step-grid note coloring on every track — re-render both.
   const refreshOnScaleChange = () => {
+    refreshChanceScale();   // a chance track on the default semitones follows the scale
     for (const t of state.tracks) {
       refreshRollIfOpen(t);
       renderStepGrid(t);

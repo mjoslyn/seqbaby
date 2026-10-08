@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
-  CHANCE_DEFAULTS, CHANCE_MOD_KEYS, CHANCE_MOD_RANGE, CHANCE_NOTE_VALUES, CHANCE_REPEATS,
+  CHANCE_DEFAULT_PCS, CHANCE_DEFAULTS, CHANCE_MOD_KEYS, CHANCE_MOD_RANGE, CHANCE_NOTE_VALUES, CHANCE_REPEATS,
   CHANCE_REPEAT_MAX, buildChancePlan, chanceCandidates, chanceDiceDead, chanceFromUnit,
   chancePlanSignature, chanceThrowIndex, chanceToUnit, chanceWindow, cloneChance,
   normalizeChance, throwChanceDice,
@@ -328,11 +328,35 @@ test("normalize fills in everything and survives rubbish", () => {
   assert.ok(Number.isFinite(junk.var) && Number.isFinite(junk.rest));
 });
 
+test("the default window is the whole track, whatever its length", () => {
+  for (const len of [8, 16, 32, 64]) {
+    const c = normalizeChance({ ...CHANCE_DEFAULTS }, len);
+    assert.equal(c.first, 0);
+    assert.equal(c.last, len - 1);
+    assert.equal(chanceWindow(c), len);
+  }
+  // Once written, a window is fixed.
+  assert.equal(normalizeChance({ ...CHANCE_DEFAULTS, last: 15 }, 32).last, 15);
+});
+
+test("unset semitones are the scale when one is passed, the pentatonic otherwise", () => {
+  const major = [1, 0, 0.7, 0, 0.7, 0.7, 0, 0.7, 0, 0.7, 0, 0.7];
+  assert.deepEqual(normalizeChance({ ...CHANCE_DEFAULTS }, 16).pcs, CHANCE_DEFAULT_PCS);
+  assert.deepEqual(normalizeChance({ ...CHANCE_DEFAULTS }, 16, major).pcs, major);
+  assert.deepEqual(normalizeChance(null, 16, major).pcs, major);
+  // A track's own faders win over the scale.
+  const own = [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+  assert.deepEqual(normalizeChance({ ...CHANCE_DEFAULTS, pcs: own }, 16, major).pcs, own);
+  // A malformed scale is ignored rather than trusted.
+  assert.deepEqual(normalizeChance(null, 16, [1, 2]).pcs, CHANCE_DEFAULT_PCS);
+});
+
 test("cloneChance copies the semitone array rather than sharing it", () => {
-  const a = cloneChance(CHANCE_DEFAULTS);
+  const a = cloneChance({ ...CHANCE_DEFAULTS, pcs: CHANCE_DEFAULT_PCS.slice() });
   const b = cloneChance(a);
   b.pcs[0] = 0;
   assert.equal(a.pcs[0], 1);
+  assert.equal(cloneChance(CHANCE_DEFAULTS).pcs, null, "unset stays unset, so it keeps following the scale");
   assert.equal(cloneChance(null), null);
 });
 

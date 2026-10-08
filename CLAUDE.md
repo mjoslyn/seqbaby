@@ -2032,7 +2032,17 @@ WINDOW   first step · last step
   would quietly delete whichever faders the session scale disagreed with while
   the panel went on claiming them. `from scale` is where the two meet instead.
 - **The window tiles across the track** from `first`, exactly as euclid's cycle
-  does, and no note crosses its seam.
+  does, and no note crosses its seam. **An unset `last` (the default, null) is
+  the whole track**: `normalizeChance` reads it as the track's last step, so a
+  32-step track gets a 32-step window and it follows the length buttons. Turning
+  the last-step knob fixes it.
+- **Unset `pcs` (null, the default) is the session's scale** when one is on, else
+  the pentatonic (`CHANCE_DEFAULT_PCS`). `trackChance` passes `scalePcs()` to
+  `normalizeChance` as the fallback, so the faders and the part follow a key
+  change (`refreshChanceScale`, from scaleUI.js, `applySet` and `mergeSet`); the
+  first touch of a fader, `from scale` or `none` makes them the track's own and
+  they stop following. `cloneChance` keeps null as null. The song builder has no
+  session scale, so a track it never gave pitches writes the pentatonic out.
 - **`chanceGen.js` has no imports** — `constants.js` needs the mod-key tables at
   the top of the module graph, and (the better reason) the generator is then a
   pure function that `node --test` can exercise: `test/chanceGen.test.js` pins

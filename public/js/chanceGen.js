@@ -24,7 +24,9 @@
  * @property {number} var     −1..1. Below zero brings in longer values, above it shorter; 0 is off.
  * @property {number} leg     0..1 probability a note ties to the one before instead of gating.
  * @property {number} rest    0..1 probability a note becomes a rest.
- * @property {number[]} pcs   Twelve 0..1 probabilities, C first.
+ * @property {number[]|null} pcs   Twelve 0..1 probabilities, C first. Null is the
+ *   default: follow the session's scale while one is on (the caller passes it to
+ *   `normalizeChance`), else `CHANCE_DEFAULT_PCS`. Any edit makes it explicit.
  * @property {number} lo      Lowest playable note, MIDI.
  * @property {number} hi      Highest playable note, MIDI.
  * @property {number} first   First step of the generated window.
@@ -69,16 +71,22 @@ const X32_IDX = new Set([7]);
  *  between them — five octaves, as on the machine. */
 export const CHANCE_NOTE_MIN = 24, CHANCE_NOTE_MAX = 96, CHANCE_SPAN_MAX = 60;
 
+// A minor pentatonic on C, so the first throw is already music rather than a
+// chromatic scramble — and so the panel never arrives in the all-zero state,
+// which has nothing it can play. What a track plays when no scale is on and
+// nobody has touched a fader.
+export const CHANCE_DEFAULT_PCS = [1, 0, 0, 0.7, 0, 0.6, 0, 0.9, 0, 0, 0.5, 0];
+
 /** @type {ChanceConfig} */
 export const CHANCE_DEFAULTS = {
   on: false,
   note: 4, var: 0, leg: 0, rest: 0,
-  // A minor pentatonic on C, so the first throw is already music rather than a
-  // chromatic scramble — and so the panel never arrives in the all-zero state,
-  // which has nothing it can play.
-  pcs: [1, 0, 0, 0.7, 0, 0.6, 0, 0.9, 0, 0, 0.5, 0],
+  // Null: the session's scale when one is on, else CHANCE_DEFAULT_PCS.
+  pcs: null,
   lo: 48, hi: 72,
-  first: 0, last: 15,
+  // Null `last`: the whole track, whatever its length. A window is only fixed
+  // once the last-step knob has been turned.
+  first: 0, last: null,
   trips: false, x32: false,
   rseed: 1, mseed: 1,
   rrep: 0, mrep: 0,
@@ -175,7 +183,7 @@ function repeatOf(rep, free) {
  */
 export function cloneChance(c) {
   if (!c) return null;
-  return { ...c, pcs: Array.isArray(c.pcs) ? c.pcs.slice() : CHANCE_DEFAULTS.pcs.slice() };
+  return { ...c, pcs: Array.isArray(c.pcs) ? c.pcs.slice() : null };
 }
 
 /**
@@ -183,15 +191,20 @@ export function cloneChance(c) {
  * and the two one-sided bounds the machine has: the range cannot run backwards
  * or span more than five octaves, and the last step cannot precede the first.
  * The track's length is the only thing from outside, and it can shrink
- * underneath a window (the length buttons).
+ * underneath a window (the length buttons). A `last` that was never set is the
+ * track's last step, so the default window is the whole track. `defaultPcs` is
+ * what an unset `pcs` becomes (the session's scale, from the caller, which
+ * knows it); without one it is the pentatonic.
  * @param {Partial<ChanceConfig>|null|undefined} src @param {number} len
+ * @param {number[]} [defaultPcs]
  * @returns {ChanceConfig}
  */
-export function normalizeChance(src, len) {
+export function normalizeChance(src, len, defaultPcs) {
   const n = Math.max(1, len | 0);
   const s = src || {};
   const first = clampInt(s.first ?? 0, 0, n - 1);
   const lo = clampInt(s.lo ?? CHANCE_DEFAULTS.lo, CHANCE_NOTE_MIN, CHANCE_NOTE_MAX);
+  const basePcs = Array.isArray(defaultPcs) && defaultPcs.length === 12 ? defaultPcs : CHANCE_DEFAULT_PCS;
   return {
     on: !!s.on,
     note: clampInt(s.note ?? CHANCE_DEFAULTS.note, 0, CHANCE_NOTE_VALUES.length - 1),
@@ -199,7 +212,7 @@ export function normalizeChance(src, len) {
     leg: clampNum(s.leg ?? 0, 0, 1),
     rest: clampNum(s.rest ?? 0, 0, 1),
     pcs: Array.from({ length: 12 }, (_, i) =>
-      clampNum(Array.isArray(s.pcs) ? s.pcs[i] : CHANCE_DEFAULTS.pcs[i], 0, 1)),
+      clampNum(Array.isArray(s.pcs) ? s.pcs[i] : basePcs[i], 0, 1)),
     lo,
     hi: clampInt(s.hi ?? CHANCE_DEFAULTS.hi, lo, Math.min(CHANCE_NOTE_MAX, lo + CHANCE_SPAN_MAX)),
     first,

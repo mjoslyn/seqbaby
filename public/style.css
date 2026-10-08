@@ -1146,6 +1146,10 @@ main {
 .sq-track .sq-track__env-panel.is-live    { border-left: 3px solid #d5a6ff; }
 .sq-track .sq-track__eq-panel.is-live     { border-left: 3px solid #ffa94d; }
 .sq-track .sq-track__comp-panel.is-live   { border-left: 3px solid #66d9b4; }
+/* The generators are cards while live. Their own panel rules cap the width for
+   the modal (460 / 520px); in the grid the column decides. */
+.sq-track .sq-track__euclid-panel.is-live { border-left: 3px solid #8ab4ff; max-width: none; }
+.sq-track .sq-track__chance-panel.is-live { border-left: 3px solid #ff8fb1; max-width: none; }
 /* The rack and the mod matrix read off the track's own identity colour
    (--track-hue, set per nth-child above) instead of a fixed accent, and no
    longer as a left-edge stripe: the whole border takes the colour, so a card
@@ -1625,6 +1629,8 @@ main {
   .sq-track .sq-track__live > .sq-track__env-panel.is-live,
   .sq-track .sq-track__live > .sq-track__eq-panel.is-live,
   .sq-track .sq-track__live > .sq-track__comp-panel.is-live,
+  .sq-track .sq-track__live > .sq-track__euclid-panel.is-live,
+  .sq-track .sq-track__live > .sq-track__chance-panel.is-live,
   .sq-track .sq-track__live > .sq-track__fx-panel.is-live > .sq-fx__row.is-live,
   .sq-track .sq-track__live > .sq-track__mod-panel.is-live .sq-lfo__row.is-live {
     position: relative;
@@ -1634,6 +1640,9 @@ main {
     min-height: 100%;
     box-sizing: border-box;
   }
+  /* The chance card carries twelve faders and the part drawn out, which is
+     more than a third of the track can hold; the ring fits in one column. */
+  .sq-track .sq-track__live > .sq-track__chance-panel.is-live { grid-column: span 2; }
   /* The four panels keep the coloured border their own rules give them; a
      stage or LFO card takes the rack's / mod matrix's, since the panel that
      carried it is now `contents`. The right padding is the ×/remove's room. */
