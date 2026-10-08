@@ -45,7 +45,7 @@ const oops = (e) => ({ isError: true, content: [{ type: "text", text: e instance
 const run = (fn) => async (args, extra) => { try { return text(await fn(args, extra)); } catch (e) { return oops(e); } };
 
 const server = new McpServer({ name: "seqbaby", version: "1.0.0" }, {
-  instructions: `Write songs for seqbaby, a browser step sequencer. Read the resource seqbaby://guide before composing: it says which engine to reach for, how the step strings are spelled, and the order of work. Tracks are addressed by index, patterns by 0..31. Finish with validate_song, then export_song or share_song.`,
+  instructions: `Write songs for seqbaby, a browser step sequencer. Read the resource seqbaby://guide before composing: it says which engine to reach for, how the step strings are spelled, how a song is laid out in sections (patterns played in chain mode), and the order of work. Tracks are addressed by index, patterns by 0..31. Finish with validate_song, then export_song or share_song.`,
 });
 
 // ---- resources -------------------------------------------------------------------
@@ -131,6 +131,6 @@ server.registerPrompt("compose", {
   title: "Compose a song",
   description: "Write a song in seqbaby from a brief, with the compose guide in context.",
   argsSchema: { brief: z.string().describe("what the song should be: genre, tempo, mood, length") },
-}, ({ brief }) => ({ messages: [{ role: "user", content: { type: "text", text: `${guideText()}\n\n---\n\nUsing the seqbaby tools, write this: ${brief}\n\nWork in the order the guide gives, validate_song when done, then share_song and give me the link.` } }] }));
+}, ({ brief }) => ({ messages: [{ role: "user", content: { type: "text", text: `${guideText()}\n\n---\n\nUsing the seqbaby tools, write this: ${brief}\n\nWork in the order the guide gives (for a song, sections in chain mode, per its Song structure), validate_song when done, then share_song and give me the link.` } }] }));
 
 await server.connect(new StdioServerTransport());

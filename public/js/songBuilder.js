@@ -626,6 +626,19 @@ export function copyPattern(song, index, { from = 0, to } = {}) {
   t.patterns[patternIndex(to)] = JSON.parse(JSON.stringify(src));
 }
 
+/**
+ * Copy pattern `from` onto pattern `to` on every track (or only `tracks`): a
+ * whole section, since a pattern number is the same moment on every track.
+ * This is how a song is built from its loop: copy, then vary each copy.
+ */
+export function copySection(song, { from = 0, to, tracks } = {}) {
+  const src = patternIndex(from), dst = patternIndex(to);
+  if (src === dst) fail("from and to are the same pattern");
+  const which = tracks == null ? song.tracks.map((_, i) => i) : tracks.map(i => int(i, "track", 0, song.tracks.length - 1));
+  for (const i of which) copyPattern(song, i, { from: src, to: dst });
+  return { from: src, to: dst, tracks: which.length };
+}
+
 // ---- sound --------------------------------------------------------------------------
 
 /**
@@ -1103,6 +1116,32 @@ export function summarizeTrack(song, index) {
   };
   return out;
 }
+function slotHasSteps(song, p) {
+  return song.tracks.some(t => t.engineKey !== "bus" && t.patterns?.[p]?.steps?.some(Boolean));
+}
+function stepsPerBar(song, p) {
+  const m = song.patternMeters?.[p] || { num: 4, den: 4 };
+  return Math.max(1, Math.round(m.num * (16 / m.den)));
+}
+/** How long slot `p` takes to play through once, in bars of its meter. */
+function slotBars(song, p) {
+  // a track at speed 0.5 takes twice as long to get through its steps
+  const playing = song.tracks.filter(t => t.engineKey !== "bus" && t.patterns?.[p]?.steps?.some(Boolean));
+  const longest = Math.max(0, ...playing.map(t => t.patterns[p].steps.length / (t.speed > 0 ? t.speed : 1)));
+  return longest / stepsPerBar(song, p);
+}
+/**
+ * What chain mode actually plays: the slots with a step on some track, in
+ * order, each for its repeat count in bars. Empty slots are skipped and the
+ * chain loops back to the first. In repeat mode, the active slot alone.
+ */
+export function songSections(song) {
+  const slots = [];
+  for (let p = 0; p < PATTERN_COUNT; p++) if (slotHasSteps(song, p)) slots.push(p);
+  if (song.patternMode !== "chain") return slots.includes(song.activePattern) ? [{ pattern: song.activePattern, bars: "loop" }] : [];
+  return slots.map(p => ({ pattern: p, bars: Math.max(1, song.patternRepeats?.[p] ?? 1) }));
+}
+
 /** The whole song, compactly: what an agent reads back to see what it made. */
 export function summarize(song) {
   const rootName = NAMES_SHARP[song.scale?.root ?? 0];
@@ -1111,7 +1150,8 @@ export function summarize(song) {
     scale: song.scale?.active ? `${rootName} ${song.scale.mode}` : "off",
     arrangement: { mode: song.patternMode, switchMode: song.patternSwitchMode, active: song.activePattern,
       repeats: song.patternMode === "chain" ? song.patternRepeats : undefined,
-      meters: song.patternMeters.map((m, i) => (m.num !== 4 || m.den !== 4) ? `${i}: ${m.num}/${m.den}` : null).filter(Boolean) },
+      meters: song.patternMeters.map((m, i) => (m.num !== 4 || m.den !== 4) ? `${i}: ${m.num}/${m.den}` : null).filter(Boolean),
+      sections: songSections(song) },
     tracks: song.tracks.map((_, i) => summarizeTrack(song, i)),
   };
 }
@@ -1128,6 +1168,18 @@ export function validate(song) {
       warnings.push(`track ${i} (${t.name}) has no steps, no euclid and no chance: it will be silent`);
     if (t.engineKey === "bus" && !song.tracks.some(o => o.outIndex === i)) warnings.push(`bus ${i} (${t.name}) has nothing sent to it`);
   });
+  if (song.patternMode === "chain" && song.tracks?.length) {
+    const played = songSections(song);
+    if (played.length < 2) warnings.push("chain mode with only one pattern holding steps: it plays as a loop (empty patterns are skipped)");
+    for (const { pattern: p, bars } of played) {
+      const need = slotBars(song, p);
+      if (need > bars + 1e-9) warnings.push(`pattern ${p} is ${need} bars long but plays for ${bars}: the chain moves on before it finishes (repeats[${p}] = ${Math.ceil(need)} at least)`);
+    }
+  } else if (song.tracks?.length) {
+    const used = [];
+    for (let p = 0; p < PATTERN_COUNT; p++) if (slotHasSteps(song, p)) used.push(p);
+    if (used.length > 1) warnings.push(`patterns ${used.join(", ")} hold steps but the arrangement is "repeat", so only pattern ${song.activePattern} plays: set_arrangement mode "chain" to play them in order`);
+  }
   return { ok: check.ok && errors.length === 0, version: check.version, errors, warnings };
 }
 

@@ -3509,7 +3509,7 @@ agent ──▶ mcp/server.mjs ──▶ songBuilder.js ──▶ { _version, bp
   a shorter string tiling a longer pattern. `describePattern` reads one back
   the same way, so `get_song` shows an agent what it wrote in the notation
   it wrote it in.
-- **The MCP server holds one song** and keeps the tool list short (36 tools:
+- **The MCP server holds one song** and keeps the tool list short (39 tools:
   song / engines / tracks / steps / sound / modulation / generators / code /
   out). `write_code` takes Strudel code (strudel.js, the same reader as
   the studio's code drawer), which is the tersest way an agent has to spell a

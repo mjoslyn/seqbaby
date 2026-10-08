@@ -118,7 +118,7 @@ export const TOOLS = [
   },
   {
     name: "set_arrangement", title: "Set arrangement",
-    description: "How the patterns play: mode \"repeat\" loops one pattern, \"chain\" plays them in order with `repeats` bars each (array from pattern 0). `active` is the pattern the studio opens on.",
+    description: "How the patterns play: mode \"repeat\" loops one pattern, \"chain\" plays them in order with `repeats` bars each (array from pattern 0, 1..16 bars) and loops back to the first. Chain skips any pattern with no steps on any track, so a section is a pattern number holding at least one step. `repeats` counts BARS of the pattern's meter, not plays: a 32-step pattern needs 2 or the chain moves on halfway. A section longer than 16 bars takes two consecutive patterns. `active` is the pattern the studio opens on (and the one repeat mode loops). get_song's arrangement.sections lists what will play.",
     inputSchema: { mode: z.enum(["repeat", "chain"]).optional(), repeats: z.array(z.number().int().min(1).max(16)).optional(), switchMode: z.enum(["immediate", "finish"]).optional(), active: z.number().int().min(0).max(31).optional() },
     handler: (ctx, a) => sb.setArrangement(ctx.song, a),
   },
@@ -195,6 +195,13 @@ export const TOOLS = [
     name: "copy_pattern", title: "Copy pattern", description: "Copy one of a track's patterns onto another (steps, notes, lanes, everything), to vary from.",
     inputSchema: { track: trackArg, from: z.number().int().min(0).max(31), to: z.number().int().min(0).max(31) },
     handler: (ctx, { track, from, to }) => { sb.copyPattern(ctx.song, track, { from, to }); return sb.describePattern(ctx.song.tracks[track], to); },
+  },
+
+  {
+    name: "copy_section", title: "Copy section",
+    description: "Copy pattern `from` onto pattern `to` on every track at once (or only `tracks`): a whole section, to vary from. The way a song is built from its loop: write pattern 0, copy_section it to 1, 2, 3, then thin, fill or rewrite each copy (clear_pattern drops a part from one section).",
+    inputSchema: { from: z.number().int().min(0).max(31), to: z.number().int().min(0).max(31), tracks: z.array(z.number().int().min(0)).optional().describe("only these track indices (default every track)") },
+    handler: (ctx, { from, to, tracks }) => sb.copySection(ctx.song, { from, to, tracks }),
   },
 
   // ---- sound ----------------------------------------------------------------------

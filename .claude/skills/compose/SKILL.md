@@ -1,6 +1,6 @@
 ---
 name: compose
-description: Write a song for seqbaby through its MCP server (mcp/server.mjs). Which engine to reach for, how step strings are spelled, the idioms each engine rewards, and the order of work. Load when asked to make, sketch, arrange or remix a track, beat, bassline or song in seqbaby.
+description: Write a song for seqbaby through its MCP server (mcp/server.mjs). Which engine to reach for, how step strings are spelled, the idioms each engine rewards, song structures (sections, forms, chain mode), and the order of work. Load when asked to make, sketch, arrange or remix a track, beat, bassline or song in seqbaby.
 ---
 
 # Composing in seqbaby
@@ -16,7 +16,9 @@ the call, do not guess around it.
 ## Order of work
 
 1. `new_song` with the tempo and, for melodic music, a scale. Notes snap to
-   the scale, so a wrong note is impossible on a scale track.
+   the scale, so a wrong note is impossible on a scale track. Decide now
+   whether this is a LOOP or a SONG (see Song structure): a song needs its
+   section plan before the first note, because sections are pattern numbers.
 2. Drums first: kick, then snare or clap, then hats. One track per drum.
 3. Bass. Then chords or a pad, then a lead or a hook. Fewer tracks played
    with intent beat many tracks with something on each.
@@ -24,9 +26,12 @@ the call, do not guess around it.
    fx per track. A reverb or a delay shared on an fx bus, not on every track.
 5. Movement: one LFO or lane per track at most, on the thing that matters
    (cutoff, a send, the euclid rotate).
-6. `validate_song`, read the warnings. `audition_song` if a browser is
+6. For a song: `copy_section` the full section into the others' slots and
+   carve each into what it is (Song structure below), then
+   `set_arrangement` chain with the bar counts.
+7. `validate_song`, read the warnings. `audition_song` if a browser is
    available: a track whose peak is under -40 dB is not being heard.
-7. `export_song` or `share_song`.
+8. `export_song` or `share_song`.
 
 Use `get_song` to read back what exists before changing it. Keep track names
 short and about their role (kick, bass, keys), not their engine.
@@ -292,12 +297,112 @@ one.
   seeds replay the same part every time; change one to re-throw. A track has
   one rhythm source, so euclid and chance switch each other off.
 
-## Arrangement
+## Song structure
 
-Pattern 0 is the loop. For a song: `copy_pattern` 0 to 1, 2, 3 and vary each
-(drop the kick on 2, add the lead on 3), then `set_arrangement` mode "chain"
-with `repeats` [4, 4, 2, 4] bars. Every track shares the pattern number, so
-"pattern 2" is the same moment on every track. `set_meter` for 7/8 or 6/8.
+**A loop or a song.** "A beat", "a loop", "a groove", "a bassline" is one
+pattern in repeat mode: pattern 0, done. "A song", "a track", "a tune", a
+length ("three minutes"), or a form ("with a drop", "verse and chorus") is
+sections in chain mode. When unsure, write the song: a song contains the loop.
+
+**How chain mode plays**, which decides how a song is laid out:
+
+- A section is a **pattern number**, the same slot on every track. Chain plays
+  the slots in numeric order, each for `repeats[slot]` bars, then loops back
+  to the first. There is no jumping back: a second chorus is its own slot (a
+  copy of the first, which is the chance to make it bigger).
+- A slot with no steps on any track is **skipped**, so a silent bar or a
+  breakdown with nothing written is not a section. Keep at least one step.
+- `repeats` counts **bars**, 1..16, not plays of the pattern. A 32-step
+  pattern needs at least 2 or the chain moves on halfway through it; a
+  section longer than 16 bars takes two consecutive slots.
+- A pattern loops within its section, so an 8-bar section on a 1-bar pattern
+  is the same bar eight times. That is fine for a groove; for a section that
+  moves, give the parts longer patterns (32 or 64 steps: a 2 or 4 bar phrase)
+  or follow the section with a one-bar fill slot (`repeats` 1).
+- Every track restarts its pattern at a section change, so a 12-step
+  polymeter lines up again at each section.
+- `get_song` shows `arrangement.sections`, the slots chain will actually play
+  with their bars; `validate_song` warns about a section cut short, a chain
+  with one section, and sections written under repeat mode (which plays only
+  the active one).
+
+**The plan.** Pick a form, map its sections onto slots 0, 1, 2 ... in playing
+order, and give each a bar count. Length is `bars x 4 x 60 / bpm` seconds:
+64 bars at 128 is two minutes, at 90 nearly three. Six to nine sections is
+plenty. Forms that work (bars per section):
+
+```
+house / techno 122-132   intro 16 | groove 16 | build 8 | drop 16 | break 16 | build 8 | drop 16 | outro 16
+drum & bass 170-176      intro 16 | build 8 | drop 16 | break 8 | build 4 | drop 16 | outro 8
+pop / indie 100-128      intro 4 | verse 8 | pre 4 | chorus 8 | verse 8 | pre 4 | chorus 8 | bridge 8 | chorus 8 | outro 4
+hip hop / lo-fi 75-95    intro 4 | A 8 | B 8 | A 8 | B 8 | outro 4      (A verse beat, B the hook)
+trap 130-150 (half time) intro 8 | hook 16 | verse 16 | hook 16 | outro 8
+ambient / drone 60-90    A 16 | B 16 | A' 16 | coda 8                    (64-step patterns, slow lanes)
+```
+
+Phrases come in 4, 8 and 16 bars; a section of 6 or 7 sounds like a mistake
+unless the brief is odd on purpose.
+
+**Building it: write the fullest section, then subtract.** Taking parts out
+of a finished section is quicker and more coherent than building each from
+nothing, and every section then shares the song's material.
+
+1. Write the main section (drop, chorus, hook) complete in its slot, every
+   part playing, sound designed. Leave the other slots empty.
+2. `copy_section` it into every other slot.
+3. Carve each copy with `clear_pattern` (a part out of one section),
+   `set_steps` / `set_notes` on the copy (a thinner beat, different chords),
+   `set_step` (fills, ratchets) and `set_automation` (lanes are per pattern,
+   so each section moves its own way).
+4. `set_arrangement` mode "chain", `repeats` per slot, `active` the first.
+
+What each section is, carved from the full one:
+
+- **intro**: drums thinned (kick and hats, or hats alone), bass out or under
+  a low cutoff lane that opens across the section; no lead. Sets the tempo
+  and the key and holds the best things back.
+- **verse / A / groove**: drums, bass, chords; the lead out or sparse. Room
+  for a vocal line or a vox track.
+- **build / pre-chorus**: the snare or clap in quarters, then eighths, then
+  sixteenths (ratchet 2..4 on the last bar's steps), a cutoff lane rising
+  across it, a reverb or delay send rising, and the kick dropped from the
+  last bar or the last beat so the next downbeat lands. A noise or drone
+  track with a rising lane is the riser.
+- **drop / chorus / hook**: everything, and the hook at its fullest. The
+  second one is a copy, so add something the first did not have: a
+  counter-melody, an octave on the lead, an extra percussion track.
+- **break / breakdown**: kick and bass out (one sub note held is fine), the
+  pad and the lead carry it, more reverb. Keep a step somewhere or chain
+  skips it.
+- **bridge**: different chords (`set_notes` on the chord track's copy, a
+  bass line that follows them), often thinner drums. The point is contrast
+  before the last chorus.
+- **outro**: the intro in reverse, parts dropping out, cutoff closing. The
+  chain loops back to slot 0 after it, so an outro that thins to the intro's
+  parts loops cleanly.
+
+**A fill** is the last bar of a section doing something else: a one-bar slot
+after the section (`repeats` 1) holding a snare roll, a drum drop or a
+reverse cymbal, or a longer pattern whose last bar differs. Fills at the end
+of every 8 bars are what make a song sound played rather than looped.
+
+**Sound per section.** Track settings (`set_params`, `set_fx` ...) are the
+whole song's. A section that sounds different gets it from a lane on its own
+pattern, or from `write_code` with `.lock()` on that part (its pattern keeps a
+sound of its own). A lane's value **stays where it left off** when the next
+section has no lane on that control, so a cutoff that opens across the intro
+is still open in the verse: give the control a lane in every section that
+follows (a flat one is fine), or none at all.
+
+**In code** the same song is sections: `pattern(1).repeat(16)` ... the parts
+of the intro ..., `pattern(2).repeat(8)` ... the build ..., then `chain()`.
+Each part is as long as it takes to repeat; a section with no `.repeat` plays
+its longest part once. `arrange([16, intro], [8, build], [16, drop])` fills
+consecutive slots in chain mode, Strudel's way. Writing the drop in code and
+carving the rest with the tools works well.
+
+`set_meter` for 7/8 or 6/8 is per slot, so a song can change meter at a
+section.
 
 ## What to check
 

@@ -322,6 +322,39 @@ test("scale, tempo, arrangement and meters", () => {
   assert.throws(() => sb.setMeter(s, 0, "4/3"), /denominator/);
 });
 
+test("copy_section, the sections chain mode plays, and arrangement warnings", () => {
+  const s = song();
+  const kick = sb.addTrack(s, { engine: "808 kick", name: "kick" }).index;
+  const pad = sb.addTrack(s, { engine: "pad", name: "pad", length: 32 }).index;
+  sb.setSteps(s, kick, { steps: "x..." });
+  sb.setSteps(s, pad, { steps: "x_______________", notes: ["C3"] });
+  assert.deepEqual(sb.summarize(s).arrangement.sections, [{ pattern: 0, bars: "loop" }]);
+  assert.deepEqual(sb.copySection(s, { from: 0, to: 1 }), { from: 0, to: 1, tracks: 2 });
+  sb.copySection(s, { from: 0, to: 2, tracks: [pad] });
+  assert.equal(!!s.tracks[kick].patterns[2]?.steps?.some(Boolean), false);
+  assert.equal(s.tracks[pad].patterns[2].steps.length, 32);
+  assert.throws(() => sb.copySection(s, { from: 1, to: 1 }), /same pattern/);
+  // repeat mode with several sections written plays only one of them
+  assert.ok(sb.validate(s).warnings.some(w => /arrangement is "repeat"/.test(w)));
+  sb.setArrangement(s, { mode: "chain", repeats: [2, 1, 2] });
+  // empty slots are skipped; pattern 1 is two bars long (the pad) but plays for one
+  assert.deepEqual(sb.summarize(s).arrangement.sections, [{ pattern: 0, bars: 2 }, { pattern: 1, bars: 1 }, { pattern: 2, bars: 2 }]);
+  const w = sb.validate(s).warnings;
+  assert.ok(w.some(x => /pattern 1 is 2 bars long but plays for 1/.test(x)), w.join("; "));
+  assert.ok(!w.some(x => /pattern 0 is/.test(x)));
+  sb.setArrangement(s, { repeats: [2, 2, 2] });
+  assert.ok(!sb.validate(s).warnings.some(x => /bars long/.test(x)));
+  // a half-speed track takes twice as long to get through its steps
+  sb.setTrack(s, kick, { speed: 0.5 });
+  sb.setTrack(s, kick, { length: 32, pattern: 0 });
+  assert.ok(sb.validate(s).warnings.some(x => /pattern 0 is 4 bars long but plays for 2/.test(x)));
+  // chain with one section is a loop
+  const one = song();
+  sb.setSteps(one, sb.addTrack(one, { engine: "808 kick" }).index, { steps: "x..." });
+  sb.setArrangement(one, { mode: "chain" });
+  assert.ok(sb.validate(one).warnings.some(x => /only one pattern/.test(x)));
+});
+
 test("fromBlob adopts a saved song and summarize reads it back", () => {
   const s = song();
   const { index } = sb.addTrack(s, { engine: "tines", name: "keys" });
