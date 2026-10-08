@@ -900,6 +900,13 @@ ${ORACLE_PANEL}
       </div>
       <div class="sq-track__aut-panel" hidden></div>
       <div class="sq-track__roll-panel" hidden></div>
+      <!-- The panels shown inline on the track when something in them is on
+           (is-live, paramTargets.js). The euclid and chance panels are here too: a
+           generator is a card while it is live. One wrapper so they lay out as a grid
+           of cards on desktop rather than one panel per line; the modals
+           reparent each panel through an anchor at its own position, so the
+           wrapper is invisible to them. -->
+      <div class="sq-track__live">
       <div class="sq-track__euclid-panel" hidden>
         <div class="sq-euclid__title">euclidean rhythm</div>
         <div class="sq-euclid__viz">
@@ -1073,12 +1080,6 @@ ${ORACLE_PANEL}
           </div>
         </div>
       </div>
-      <!-- The panels shown inline on the track when something in them is on
-           (is-live, paramTargets.js). One wrapper so they lay out as a grid
-           of cards on desktop rather than one panel per line; the modals
-           reparent each panel through an anchor at its own position, so the
-           wrapper is invisible to them. -->
-      <div class="sq-track__live">
       <div class="sq-track__filter-panel" hidden>
         <div class="sq-fx__row" data-fx="filter">
           <span class="sq-fx__title">filter (resonant)</span>

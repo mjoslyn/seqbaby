@@ -16,6 +16,7 @@
  */
 
 import { setStatus } from "./dom.js";
+import { refreshPanelBadges } from "./paramTargets.js";
 import { refreshKnobRange, upgradeKnobs } from "./knob.js";
 import { patternMeter, stepsPerBeatForMeter } from "./meter.js";
 import { state } from "./state.js";
@@ -422,6 +423,10 @@ export function refreshEuclidUI(t) {
   if (live) live.checked = on;
   t._euclidPaintedKey = null;
   renderStepGrid(t);
+  // Live is what makes the panel a card on the track (paramTargets.js), and a
+  // card on screen has to say what is true now.
+  renderEuclidPanel(t);
+  refreshPanelBadges(t);
 }
 
 /**

@@ -666,6 +666,16 @@ const PANEL_BADGES = [
       }
       return live.size > 0;
     } },
+  // The two generators are cards while they are LIVE, which is the whole of
+  // "on" for them: a ring that is not generating is a picture of nothing, and
+  // its knobs have nothing to drive. The panel is the card (one panel, one
+  // card, like the filter's), shown by `.sq-track__live` beside the rest. Not
+  // counted in the "more" button's sum: these buttons sit in the head, not in
+  // the track menu that button opens.
+  { sel: ".track-euclid", panel: "_euclidPanelEl", modal: "_euclidModal", noTotal: true,
+    on: (t) => (t.euclid?.on ? ["live"] : []) },
+  { sel: ".track-chance", panel: "_chancePanelEl", modal: "_chanceModal", noTotal: true,
+    on: (t) => (t.chance?.on ? ["live"] : []) },
   { sel: ".track-aut",
     on: (t) => Object.keys(t.automation || {}).filter(k => t.automation[k]?.enabled),
     label: (k) => { const l = lfoForAuto(k); return l ? lfoLabel(l) : autoLabel(k); } },
@@ -693,7 +703,7 @@ export function refreshPanelBadges(t) {
   for (const b of PANEL_BADGES) {
     let on;
     try { on = b.on(t) || []; } catch { on = []; }
-    total += on.length;
+    if (!b.noTotal) total += on.length;
     const btn = t._panelBtns?.[b.sel] || t.el.querySelector(b.sel);
     if (btn) {
       if (btn.dataset.baseTitle == null) btn.dataset.baseTitle = btn.title || "";
