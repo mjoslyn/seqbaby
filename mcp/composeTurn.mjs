@@ -84,7 +84,7 @@ ${composeGuide()}
 
 ${FORMAT_NOTES}
 
-The tools operate on the song currently open in the studio (already loaded for you -- call get_song if you need to see it before editing). Asked for a whole song, work in the order the guide gives and build it track by track rather than trying to describe it all at once.
+The tools operate on the song currently open in the studio (already loaded for you -- call get_song if you need to see it before editing). Asked for a whole song, work in the order the guide gives: plan its sections first (the guide's Song structure), write the fullest section track by track, then copy_section it into the other slots and carve each one, and chain them. Asked for a beat or a loop, one pattern is the answer.
 
 When you're done, stop calling tools and reply in plain, friendly, non-technical language: a sentence or two on what you made or changed, not a list of tool calls. If a tool call fails, read the error, fix the call and try again rather than giving up silently.`;
   }
