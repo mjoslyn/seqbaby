@@ -86,6 +86,8 @@ export function enginePickerFor(sel) {
 
 const esc = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
 
+const SINGLE_GROUPS = new Set(["texture", "wavetable", "sampler", "midi", "bus"]);
+
 /** Read the select's optgroups into [{group, chip, items: [{key, label}]}],
  *  with a preset section after the group holding each engine that has them. */
 function readGroups(sel) {
@@ -110,9 +112,16 @@ function readGroups(sel) {
   }
   // Options outside any optgroup (none today) still get a home.
   add("other", [...sel.children].filter(c => c.tagName === "OPTION").map(o => ({ key: o.value, label: o.textContent })));
+  // Groups that hold one engine each share a "more" heading instead of five
+  // headings over one card apiece.
+  const engines = groups.filter(g => !g.presetOf);
+  const loner = (g) => SINGLE_GROUPS.has(g.group.toLowerCase());
+  const more = engines.filter(loner);
+  const rest = engines.filter(g => !loner(g));
+  if (more.length) rest.push({ group: "more", chip: "more", items: more.flatMap(g => g.items) });
   // Engine groups first, then the preset sections, so "all" reads as the
   // instruments and then what they come loaded with.
-  return [...groups.filter(g => !g.presetOf), ...groups.filter(g => g.presetOf)];
+  return [...rest, ...groups.filter(g => g.presetOf)];
 }
 
 /** The track's own preset dropdown for an engine. The panel it lives in can
