@@ -670,6 +670,8 @@ button.sq-btn--danger { color: var(--danger); }
 .sq-pattern__cell.is-active { border-color: var(--step-now); box-shadow: 0 0 0 1px var(--step-now) inset; }
 .sq-pattern__cell.is-queued { border-color: var(--accent-2); }
 .sq-pattern__cell.is-drag-over { border-color: var(--accent); background: color-mix(in oklab, var(--accent) 20%, var(--step)); }
+.sq-pattern__cell.is-drop-before { box-shadow: -3px 0 0 0 var(--accent); }
+.sq-pattern__cell.is-drop-after { box-shadow: 3px 0 0 0 var(--accent); }
 .sq-repeat__wrap { display: inline-flex; flex-direction: column; align-items: center; gap: 2px; color: var(--fg-dim); font-size: 11px; }
 .sq-repeat__wrap input { width: 48px; text-align: center; }
 .sq-repeat__wrap select { width: 64px; text-align: center; }

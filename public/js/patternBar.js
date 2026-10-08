@@ -1,7 +1,7 @@
 import { PATTERN_COUNT } from "./constants.js";
 import { setStatus } from "./dom.js";
-import { recallPatternSound, refreshPatternSoundUI } from "./patternSound.js";
-import { aliasPattern, clonePattern, isPatternNonEmpty, requestPatternSwitch, state } from "./state.js";
+import { flushPatternSound, recallPatternSound, refreshPatternSoundUI } from "./patternSound.js";
+import { aliasPattern, clonePattern, isPatternNonEmpty, requestPatternSwitch, state, switchPattern } from "./state.js";
 import { renderStepGrid } from "./stepGrid.js";
 import { maxLengthAt } from "./track.js";
 
@@ -33,6 +33,34 @@ export function copyPattern(from, to) {
   setStatus(`copied pattern ${from + 1} → ${to + 1}`);
 }
 
+// Move pattern `from` so it sits before slot `at` (0..PATTERN_COUNT; `at` is an
+// insertion point in the OLD numbering, so dropping after slot 5 is at = 6).
+// Everything a slot owns travels with it: every track's pattern (p-lock sound
+// included), its meter and its repeat count. The slots in between shift by one.
+export function movePattern(from, at) {
+  const dest = at > from ? at - 1 : at;
+  if (from === dest) return;
+  const order = Array.from({ length: PATTERN_COUNT }, (_, i) => i);
+  order.splice(from, 1);
+  order.splice(dest, 0, from);
+  // A locked pattern's sound is only written back when it is left; do it now so
+  // the permuted copy holds what is audible.
+  for (const t of state.tracks) flushPatternSound(t, state.activePattern);
+  const pick = (arr, fn = (v) => v) => order.map((i) => fn(arr[i]));
+  for (const t of state.tracks) if (t.patterns) t.patterns = pick(t.patterns);
+  state.patternMeters = pick(state.patternMeters, (m) => ({ num: m.num, den: m.den }));
+  state.patternRepeats = pick(state.patternRepeats);
+  state.patternMeterCustomized = pick(state.patternMeterCustomized);
+  const active = order.indexOf(state.activePattern);
+  const queued = state.queuedPattern == null ? null : order.indexOf(state.queuedPattern);
+  state.activePattern = active;
+  // Same pattern, new slot: re-alias and repaint without a sound change.
+  switchPattern(active);
+  state.queuedPattern = queued;
+  renderPatternGrid();
+  setStatus(`moved pattern ${from + 1} → ${dest + 1}`);
+}
+
 export function renderPatternGrid() {
   const grid = document.getElementById("pattern-grid");
   if (!grid) return;
@@ -44,25 +72,37 @@ export function renderPatternGrid() {
     if (i === state.activePattern) cell.classList.add("is-active");
     if (i === state.queuedPattern) cell.classList.add("is-queued");
     cell.textContent = String(i + 1);
-    cell.title = `pattern ${i + 1}. Drag onto another slot to copy it there and go to it`;
+    cell.title = `pattern ${i + 1}. Drag onto the middle of another slot to copy it there, or onto its left or right edge to move it before or after`;
     cell.draggable = true;
     cell.dataset.patternIdx = String(i);
     cell.addEventListener("click", () => requestPatternSwitch(i));
     cell.addEventListener("dragstart", (e) => {
       e.dataTransfer.setData("text/pattern-idx", String(i));
-      e.dataTransfer.effectAllowed = "copy";
+      e.dataTransfer.effectAllowed = "copyMove";
     });
+    // The outer quarters of a cell insert (move), the middle copies over it.
+    const zoneOf = (e) => {
+      const r = cell.getBoundingClientRect();
+      const x = (e.clientX - r.left) / (r.width || 1);
+      return x < 0.25 ? "before" : x > 0.75 ? "after" : "over";
+    };
+    const clearOver = () => cell.classList.remove("is-drag-over", "is-drop-before", "is-drop-after");
     cell.addEventListener("dragover", (e) => {
       e.preventDefault();
-      e.dataTransfer.dropEffect = "copy";
-      cell.classList.add("is-drag-over");
+      const z = zoneOf(e);
+      e.dataTransfer.dropEffect = z === "over" ? "copy" : "move";
+      clearOver();
+      cell.classList.add(z === "before" ? "is-drop-before" : z === "after" ? "is-drop-after" : "is-drag-over");
     });
-    cell.addEventListener("dragleave", () => cell.classList.remove("is-drag-over"));
+    cell.addEventListener("dragleave", clearOver);
     cell.addEventListener("drop", (e) => {
       e.preventDefault();
-      cell.classList.remove("is-drag-over");
+      const z = zoneOf(e);
+      clearOver();
       const from = Number(e.dataTransfer.getData("text/pattern-idx"));
-      if (!Number.isFinite(from) || from === i) return;
+      if (!Number.isFinite(from)) return;
+      if (z !== "over") { movePattern(from, z === "before" ? i : i + 1); return; }
+      if (from === i) return;
       copyPattern(from, i);
       // Land on the copy, the way the dup button does — you dragged it here to
       // work on it. Routed through requestPatternSwitch rather than switching
