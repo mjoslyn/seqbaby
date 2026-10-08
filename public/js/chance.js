@@ -100,7 +100,38 @@ const DEAD_DICE = {
  * @param {Track} t @returns {ChanceConfig}
  */
 export function trackChance(t) {
-  return normalizeChance(t.chance, t.length);
+  // The scale only matters while the semitones are unset (the default), so it
+  // is not built for a track that has its own.
+  return normalizeChance(t.chance, t.length, Array.isArray(t.chance?.pcs) ? undefined : scalePcs());
+}
+
+/**
+ * The twelve semitone probabilities the session's active scale spells, or null
+ * with no scale on. The root above the rest: a scale with every degree equally
+ * likely wanders, and it costs nothing to say where home is.
+ * @returns {number[]|null}
+ */
+function scalePcs() {
+  const degrees = SCALES[state.scale?.mode];
+  if (!state.scale?.active || !Array.isArray(degrees)) return null;
+  const root = (((state.scale.root | 0) % 12) + 12) % 12;
+  const pcs = new Array(12).fill(0);
+  for (const d of degrees) pcs[(root + d) % 12] = d === 0 ? 1 : 0.7;
+  return pcs;
+}
+
+/**
+ * The scale (or its being switched on or off) moved. A track whose semitones
+ * are the default follows it, so its panel and, when live, its grid repaint.
+ * Tracks with faders of their own are unaffected.
+ */
+export function refreshChanceScale() {
+  for (const t of state.tracks) {
+    if (Array.isArray(t.chance?.pcs)) continue;
+    t._chancePaintedKey = null;
+    renderChancePanel(t);
+    if (t.chance?.on) renderStepGrid(t);
+  }
 }
 
 /**
@@ -330,8 +361,9 @@ export function applyChance(t, pat) {
 }
 
 /**
- * Load the session's active scale into the semitone probabilities — the one place
- * the global scale and this generator meet.
+ * Load the session's active scale into the semitone probabilities, as faders of
+ * the track's own: the default already follows the scale, and this freezes it so
+ * a later key change leaves the part where it is.
  *
  * They cannot meet in the transport. Every other note in the app is snapped by
  * `applyScale` on its way out, but here the twelve faders ARE the scale, and
@@ -342,13 +374,8 @@ export function applyChance(t, pat) {
  * @param {Track} t @returns {boolean} whether there was a scale to load
  */
 export function loadScaleIntoChance(t) {
-  const degrees = SCALES[state.scale?.mode];
-  if (!state.scale?.active || !Array.isArray(degrees)) return false;
-  const root = (((state.scale.root | 0) % 12) + 12) % 12;
-  const pcs = new Array(12).fill(0);
-  // The root above the rest: a scale with every degree equally likely wanders,
-  // and it costs nothing to say where home is.
-  for (const d of degrees) pcs[(root + d) % 12] = d === 0 ? 1 : 0.7;
+  const pcs = scalePcs();
+  if (!pcs) return false;
   ensureChance(t).pcs = pcs;
   return true;
 }
@@ -366,8 +393,10 @@ const chancePanelOf = (t) =>
 /** @param {Track} t */
 function ensureChance(t) {
   if (!t.chance) t.chance = cloneChance(CHANCE_DEFAULTS);
-  if (!Array.isArray(t.chance.pcs) || t.chance.pcs.length !== 12) {
-    t.chance.pcs = CHANCE_DEFAULTS.pcs.slice();
+  // Null is the default (the scale, else the pentatonic); anything else that is
+  // not twelve numbers is mended to it.
+  if (t.chance.pcs != null && (!Array.isArray(t.chance.pcs) || t.chance.pcs.length !== 12)) {
+    t.chance.pcs = null;
   }
   return t.chance;
 }
@@ -631,14 +660,18 @@ export function wireChancePanel(t, panel) {
       // (The machine simply will not let you set last before first; here these
       // are knobs, and a knob that stops has no way to say why.)
       if (key === "lo") c.hi = clampInt(c.hi, c.lo, Math.min(CHANCE_NOTE_MAX, c.lo + CHANCE_SPAN_MAX));
-      if (key === "first") c.last = clampInt(c.last, c.first, Math.max(0, (t.length | 0) - 1));
+      if (key === "first" && c.last != null) c.last = clampInt(c.last, c.first, Math.max(0, (t.length | 0) - 1));
       changed();
     });
   }
 
   for (const el of panel.querySelectorAll(".sq-chance__pc")) {
     el.addEventListener("input", () => {
-      ensureChance(t).pcs[Number(el.dataset.pc) | 0] = clampNum(el.value, 0, 1);
+      const c = ensureChance(t);
+      // The first touch of a fader makes the semitones the track's own, starting
+      // from what it was playing (the scale, or the pentatonic).
+      if (!c.pcs) c.pcs = trackChance(t).pcs.slice();
+      c.pcs[Number(el.dataset.pc) | 0] = clampNum(el.value, 0, 1);
       changed();
     });
   }

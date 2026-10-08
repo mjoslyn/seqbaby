@@ -996,7 +996,7 @@ ${ORACLE_PANEL}
         <div class="sq-chance__sec">
           <span class="sq-chance__sec-t">melody</span>
           <span class="sq-chance__opts">
-            <button class="sq-chance__scale sq-btn--ghost" type="button" title="set the twelve probabilities from the session's active scale, root loudest">from scale</button>
+            <button class="sq-chance__scale sq-btn--ghost" type="button" title="write the session's active scale into the twelve probabilities, root loudest. Until a fader is touched they already follow the active scale; this freezes them so a later key change leaves the part alone">from scale</button>
             <button class="sq-chance__clear-pcs sq-btn--ghost" type="button" title="put every semitone probability back to zero">none</button>
           </span>
           <button class="sq-chance__dice-m sq-btn--ghost" type="button" title="throw the melody dice: new pitches, same rhythm. Separate from the rhythm throw, so a part can repeat its rhythm while the notes keep moving">roll</button>

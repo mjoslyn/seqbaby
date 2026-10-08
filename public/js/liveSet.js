@@ -35,7 +35,7 @@
 // every other track playing.
 
 import { PATTERN_COUNT } from "./constants.js";
-import { cloneChance, refreshChanceUI, renderChancePanel } from "./chance.js";
+import { cloneChance, refreshChanceScale, refreshChanceUI, renderChancePanel } from "./chance.js";
 import { setStatus } from "./dom.js";
 import { refreshEuclidUI, renderEuclidPanel } from "./euclid.js";
 import { sameTree } from "./historyStore.js";
@@ -103,6 +103,7 @@ export function applyGlobalsInPlace(cur, target, { pads = true, order = state.tr
 
   if (!sameTree(cur.scale, target.scale)) {
     Object.assign(state.scale, target.scale);
+    refreshChanceScale();
     syncScaleUI();
   }
   if (cur.patternMode !== target.patternMode) {
