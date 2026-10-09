@@ -824,6 +824,48 @@ begin
   raise notice 'PASS  song titles and patch names are length-limited';
 end $$;
 
+-- 0023: a song's samples are readable exactly when the song is, and only its
+-- owner can add one.
+insert into public.song_samples (song_id, hash, payload) values
+  ('a0000000-0000-4000-8000-00000000000a', repeat('a', 64), 'AAAA'),
+  ('a0000000-0000-4000-8000-00000000000b', repeat('b', 64), 'BBBB');
+
+\echo ''
+\echo '== song samples: what Bob and a visitor can reach =='
+
+begin;
+set local role authenticated;
+set local request.jwt.claims = '{"sub":"b0b00000-0000-4000-8000-000000000002","role":"authenticated"}';
+do $$
+declare n bigint;
+begin
+  select count(*) into n from public.song_samples;
+  if n <> 1 then
+    raise exception 'FAIL  bob sees % samples, expected only the public song''s 1', n;
+  end if;
+  raise notice 'PASS  bob reads a public song''s samples and not a private song''s';
+
+  begin
+    insert into public.song_samples (song_id, hash, payload)
+    values ('a0000000-0000-4000-8000-00000000000a', repeat('c', 64), 'CCCC');
+    raise exception 'FAIL  bob added a sample to alice''s song';
+  exception when insufficient_privilege then null;
+  end;
+  raise notice 'PASS  bob cannot add a sample to alice''s song';
+end $$;
+rollback;
+
+begin;
+set local role anon;
+do $$
+declare n bigint;
+begin
+  select count(*) into n from public.song_samples;
+  if n <> 1 then raise exception 'FAIL  a visitor sees % samples, expected 1', n; end if;
+  raise notice 'PASS  a visitor reads only a public song''s samples';
+end $$;
+rollback;
+
 -- ---------------------------------------------------------------------------
 -- Teardown. Cascades to profiles, songs and patches.
 -- ---------------------------------------------------------------------------

@@ -3,6 +3,8 @@
 import { createHash, randomBytes } from "node:crypto";
 import { createClient } from "@/lib/supabase/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { extractSamples } from "@/app/songs/sampleStore";
+import { putSamples, withSamples } from "@/app/songs/sampleDb";
 
 export type SongListItem = {
   id: string;
@@ -169,6 +171,19 @@ async function ownedSongId(
   return (data?.id as string | undefined) ?? null;
 }
 
+// Store a NEW song's samples. The row had to exist first (the samples hang off
+// it), so a failure here takes it back out: a song whose tracks point at
+// samples that never arrived is worse than a save that says it failed.
+async function putNewSongSamples(
+  supabase: SupabaseClient,
+  songId: string,
+  samples: Map<string, string>,
+): Promise<string | null> {
+  const err = await putSamples(supabase, songId, samples);
+  if (err) await supabase.from("songs").delete().eq("id", songId);
+  return err;
+}
+
 // A version label from the caller, trimmed to what the column and the tree can
 // show. Same cap as `labelVersion`, which is the other way one gets written.
 function versionLabel(label?: string | null): string | null {
@@ -215,6 +230,9 @@ export async function saveSong(input: {
   // trusted not to have been sent.
   const fromTemplate = !!input.fromTemplateId;
   const songId = fromTemplate ? undefined : input.id;
+  // What is stored has its samples lifted out (migration 0023); `input.data`
+  // is not written anywhere below.
+  const { data: stored, samples } = extractSamples(input.data);
   const remixedFrom = fromTemplate
     ? await ownedSongId(supabase, user.id, input.fromTemplateId!)
     : null;
@@ -233,6 +251,8 @@ export async function saveSong(input: {
       .maybeSingle();
     if (readErr) return { error: readErr.message };
     if (!song) return { error: "Song not found" };
+    const sampleErr = await putSamples(supabase, songId, samples);
+    if (sampleErr) return { id: songId, error: sampleErr };
 
     // The version first, then the song in ONE write. The other way round, a
     // version that failed to insert left `data` changed with no version for
@@ -245,7 +265,7 @@ export async function saveSong(input: {
       songId,
       ownerId: user.id,
       parentId,
-      data: input.data,
+      data: stored,
       label: versionLabel(input.label),
     });
     if (ver.error) return { id: songId, error: ver.error };
@@ -255,7 +275,7 @@ export async function saveSong(input: {
     // was written.
     const { data: rows, error } = await supabase
       .from("songs")
-      .update({ title, data: input.data, current_version_id: ver.versionId })
+      .update({ title, data: stored, current_version_id: ver.versionId })
       .eq("id", songId)
       .eq("owner_id", user.id)
       .select("id");
@@ -275,7 +295,7 @@ export async function saveSong(input: {
     .insert({
       owner_id: user.id,
       title,
-      data: input.data,
+      data: stored,
       // A song made from a template is not itself one, whatever it was made
       // from. Its ancestry goes where a remix's does.
       forked_from: remixedFrom,
@@ -283,11 +303,13 @@ export async function saveSong(input: {
     .select("id")
     .single();
   if (error) return { error: error.message };
+  const sampleErr = await putNewSongSamples(supabase, row.id, samples);
+  if (sampleErr) return { error: sampleErr };
   const ver = await appendVersion(supabase, {
     songId: row.id,
     ownerId: user.id,
     parentId: null,
-    data: input.data,
+    data: stored,
     label: versionLabel(input.label) ?? (fromTemplate ? "from template" : "first save"),
   });
   if (ver.error) return { id: row.id, title, error: ver.error };
@@ -350,24 +372,31 @@ export async function remixSong(
     suffix = `v${ver.seq}`;
   }
 
+  // The source's samples hang off the SOURCE song, so they are put back and
+  // lifted out again: the remix gets rows of its own, and a source saved
+  // before 0023 (payloads inline) comes out stored the new way.
+  const { data: stored, samples } = extractSamples(await withSamples(supabase, sourceId, data));
+
   const title = `${src.title} (${suffix})`.slice(0, 200);
   const { data: row, error } = await supabase
     .from("songs")
     .insert({
       owner_id: user.id,
       title,
-      data,
+      data: stored,
       forked_from: sourceId,
       is_public: false,
     })
     .select("id")
     .single();
   if (error) return { error: error.message };
+  const sampleErr = await putNewSongSamples(supabase, row.id, samples);
+  if (sampleErr) return { error: sampleErr };
   const ver = await appendVersion(supabase, {
     songId: row.id,
     ownerId: user.id,
     parentId: null,
-    data,
+    data: stored,
     label: sourceVersionId ? `remixed from ${suffix}` : "remixed",
   });
   if (ver.error) return { id: row.id, title, error: ver.error };
@@ -432,10 +461,13 @@ export async function saveNamedSong(input: {
   let slug = existingRows?.[0]?.share_slug as string | null | undefined;
   const head = existingRows?.[0]?.current_version_id as string | null | undefined;
 
+  const { data: stored, samples } = extractSamples(input.data);
   let versionId: string | undefined;
   let versionSeq: number | undefined;
   let unchanged: boolean | undefined;
   if (id) {
+    const sampleErr = await putSamples(supabase, id, samples);
+    if (sampleErr) return { id, error: sampleErr };
     // This save is a step forward from wherever the caller was in the tree,
     // defaulting to the song's tip. The version first, then the song in one
     // write, for saveSong's reason.
@@ -444,7 +476,7 @@ export async function saveNamedSong(input: {
       ownerId: user.id,
       parentId:
         input.parentVersionId !== undefined ? input.parentVersionId : (head ?? null),
-      data: input.data,
+      data: stored,
     });
     if (ver.error) return { id, error: ver.error };
     versionId = ver.versionId;
@@ -452,7 +484,7 @@ export async function saveNamedSong(input: {
     unchanged = ver.unchanged;
     const { data: rows, error } = await supabase
       .from("songs")
-      .update({ data: input.data, current_version_id: versionId })
+      .update({ data: stored, current_version_id: versionId })
       .eq("id", id)
       .eq("owner_id", user.id)
       .select("id");
@@ -465,17 +497,19 @@ export async function saveNamedSong(input: {
       .from("songs")
       // A song made from a template is not itself one, whatever it was made
       // from. Its ancestry goes where a remix's does.
-      .insert({ owner_id: user.id, title, data: input.data, forked_from: remixedFrom })
+      .insert({ owner_id: user.id, title, data: stored, forked_from: remixedFrom })
       .select("id,share_slug")
       .single();
     if (error) return { error: error.message };
+    const sampleErr = await putNewSongSamples(supabase, row.id, samples);
+    if (sampleErr) return { error: sampleErr };
     id = row.id;
     slug = row.share_slug;
     const ver = await appendVersion(supabase, {
       songId: id!,
       ownerId: user.id,
       parentId: null,
-      data: input.data,
+      data: stored,
       label: fromTemplate ? "from template" : "first save",
     });
     if (ver.error) return { id, error: ver.error };
@@ -561,7 +595,7 @@ export async function loadSong(
   const owned = !!user && data.owner_id === user.id;
   return {
     title: data.title,
-    data: data.data,
+    data: await withSamples(supabase, id, data.data),
     versionId: data.current_version_id as string | null,
     owned,
     // Only your own template detaches your save -- someone else's public song
@@ -669,7 +703,7 @@ export async function getDefaultTemplate(): Promise<{
     template: {
       id: data.id as string,
       title: data.title as string,
-      data: data.data,
+      data: await withSamples(supabase, data.id as string, data.data),
       versionId: (data.current_version_id as string | null) ?? null,
     },
   };
@@ -760,7 +794,7 @@ export async function loadVersion(
     songId: data.song_id as string,
     title: song?.title as string | undefined,
     seq: data.seq as number,
-    data: data.data,
+    data: await withSamples(supabase, data.song_id as string, data.data),
   };
 }
 

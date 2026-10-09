@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { putShare, getShare } from "@/lib/api.js";
 import { createClient, currentUserId } from "@/lib/supabase/server";
+import { withSamples } from "@/app/songs/sampleDb";
 
 // Node runtime: lib/api.js uses node:crypto and @netlify/blobs (with an in-memory
 // fallback when no Netlify context is present, e.g. `next dev`).
@@ -43,12 +44,14 @@ export async function GET(req: Request) {
       const supabase = await createClient();
       const { data } = await supabase
         .from("songs")
-        .select("data,updated_at")
+        .select("id,data,updated_at")
         .eq("share_slug", id)
         .eq("is_public", true)
         .maybeSingle();
       if (data) {
-        return NextResponse.json({ session: data.data, createdAt: data.updated_at });
+        // A song's samples are stored beside it (migration 0023), not in it.
+        const session = await withSamples(supabase, data.id, data.data);
+        return NextResponse.json({ session, createdAt: data.updated_at });
       }
     } catch {
       // songs table may not exist yet; fall through to Blobs.

@@ -3404,6 +3404,20 @@ v1 ──▶ v2 ──▶ v3 ──▶ v5      (kept editing)
   it is the same operation with a different starting point. `branch` stays the
   word for the in-tree move (saving from an older version); `remix` always means
   leaving the tree.
+- **Uploaded samples are stored once per song, not once per version**
+  (`song_samples`, migration `0023`). A session carries a sample as base64 on
+  its track, and every save writes the session twice (`songs.data` and a new
+  version), so thirty saves of a song with a 3MB sample was 90MB of it. The
+  save actions lift each payload out (`extractSamples`,
+  `app/songs/sampleStore.js`, pure and tested) and leave `@sample:<sha-256>`
+  in its place; every read of stored song data puts it back (`withSamples`,
+  `app/songs/sampleDb.ts`): `loadSong`, `loadVersion`, `getDefaultTemplate`,
+  `remixSong` and the share route's GET. **A new reader of `songs.data` or
+  `song_versions.data` has to call it too**, or its sampler tracks load
+  empty. The engine and the session format know nothing about it, and rows
+  written before `0023` keep their payloads inline and load as they did.
+  Keyed by song, so samples go with their song and are readable exactly when
+  it is; a remix gets copies.
 - Migration `0009` backfills a root version for every existing song, so the
   first save after deploying branches off something rather than starting a second
   root.
