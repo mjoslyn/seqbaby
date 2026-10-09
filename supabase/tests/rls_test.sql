@@ -806,6 +806,24 @@ begin
   raise notice 'PASS  definer functions are executable only by who needs them';
 end $$;
 
+-- 0022: the length limits hold in the database, not only in the server actions.
+do $$
+begin
+  begin
+    insert into public.songs (owner_id, title, data)
+    values ('a11ce000-0000-4000-8000-000000000001', repeat('x', 201), '{}');
+    raise exception 'FAIL  a 201-character song title was accepted';
+  exception when check_violation then null;
+  end;
+  begin
+    insert into public.patches (owner_id, name, config)
+    values ('a11ce000-0000-4000-8000-000000000001', repeat('x', 121), '{}');
+    raise exception 'FAIL  a 121-character patch name was accepted';
+  exception when check_violation then null;
+  end;
+  raise notice 'PASS  song titles and patch names are length-limited';
+end $$;
+
 -- ---------------------------------------------------------------------------
 -- Teardown. Cascades to profiles, songs and patches.
 -- ---------------------------------------------------------------------------

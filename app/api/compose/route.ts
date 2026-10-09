@@ -109,7 +109,12 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: `couldn't read the open song: ${err?.message ?? e}` }, { status: 400 });
   }
 
-  const history = Array.isArray(body.history) ? body.history : [];
+  // Only what the turn will read (mcp/composeTurn.mjs keeps 16 turns), and
+  // each clipped: the history is sent to the model on the key paying for it.
+  const history = (Array.isArray(body.history) ? body.history : [])
+    .filter((h) => h && typeof h.text === "string")
+    .slice(-16)
+    .map((h) => ({ role: h.role, text: h.text.slice(0, 20000) }));
   // A brought-key turn counts against the KEY even when an account is signed
   // in: the limits ration this site's worker, and one person with a key of
   // their own should not also be spending the account allowance they aren't

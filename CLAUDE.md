@@ -24,8 +24,7 @@ env / fx / eq / comp / mod / automation per track.
   actions in `app/{songs,patches,profile,auth,account}/actions.ts`. Saving an
   existing song appends to its version tree — see the song versions section.
 - **Anonymous sharing**: `app/api/share/route.ts` (public songs rows);
-  `lib/api.js` + `netlify/functions/share.mjs` are the legacy Netlify Blobs
-  path. The link preview is `app/shareCard.ts` (one card, built in one place
+  `lib/api.js` is the Netlify Blobs store behind it. The link preview is `app/shareCard.ts` (one card, built in one place
   because og/twitter metadata does not inherit field-by-field between
   segments), titled with the song when the URL names one — see the share card
   section below.
@@ -95,7 +94,6 @@ env / fx / eq / comp / mod / automation per track.
 │   └── README.md              connecting a client, the tool list, env
 ├── .claude/skills/compose/    the compose guide: which engine, step strings, order of work
 │                              (served by the server as seqbaby://guide)
-├── netlify/functions/share.mjs  legacy function wrapper
 ├── server.js                  legacy static server (npm run legacy:dev)
 └── netlify.toml  next.config.mjs  tsconfig.json (excludes public/js from TS)
 ```

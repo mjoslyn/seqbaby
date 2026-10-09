@@ -39,6 +39,12 @@ const nextConfig = {
       },
     ];
   },
+  // A save is a server action carrying the whole session, uploaded samples
+  // included as base64, and the default body limit is 1MB: a song with one
+  // real sample in it could not be saved. 6mb is Netlify's own request
+  // ceiling, so there is nothing to gain past it (app/songs/trySave.ts refuses
+  // a bigger song before it is sent).
+  experimental: { serverActions: { bodySizeLimit: "6mb" } },
   outputFileTracingIncludes: {
     "/api/compose": ["./.claude/skills/compose/SKILL.md"],
   },

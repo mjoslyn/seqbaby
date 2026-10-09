@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "
 import { getOpenSong, setOpenSong, subscribeOpenSong } from "@/app/songs/openSong";
 import { loadSongChat, saveSong, saveSongChat } from "@/app/songs/actions";
 import { markSaved } from "@/app/songs/confirmDiscard";
+import { trySave } from "@/app/songs/trySave";
 import { composeModelLabel } from "@/lib/composeModels.js";
 import { API_KEY_CONSOLE_URL, SITE_OUT_OF_BUDGET, looksLikeApiKey, maskApiKey } from "@/lib/composeKey.js";
 import styles from "@/app/ui.module.css";
@@ -625,15 +626,15 @@ export default function ComposeChat({
     // transcript into song_versions, a second table whose privacy it would
     // then depend on, and one a cleared chat would leave behind.
     const label = "compose";
-    const res = await saveSong({
-      id: now.id,
+    const res = await trySave(data, () => saveSong({
+      id: now.id ?? undefined,
       title: now.title,
       data,
       // Undefined, never null: null is "this is a root", and a song whose open
       // version is unknown wants the tip it already has.
       parentVersionId: now.versionId ?? undefined,
       label,
-    });
+    }));
     if (res.error) return setSaveNote(`kept, but not saved: ${res.error}`);
     markSaved(data);
     // The studio is now holding the version just written, so the NEXT save --

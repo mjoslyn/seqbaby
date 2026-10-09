@@ -9,6 +9,7 @@ import {
 } from "react";
 import { saveNamedSong, saveSong } from "@/app/songs/actions";
 import { markSaved } from "@/app/songs/confirmDiscard";
+import { trySave } from "@/app/songs/trySave";
 import { generateSongName } from "@/app/songs/songName";
 import { suggestSongName } from "@/app/songs/suggestName";
 import {
@@ -125,14 +126,14 @@ export default function SaveButton() {
     const t = typed || carried || generateSongName(data);
     const sameSong =
       !openSong.isTemplate && t === openSong.title && openSong.versionId;
-    const res = await saveNamedSong({
+    const res = await trySave(data, () => saveNamedSong({
       title: t,
       data,
       isPublic,
       parentVersionId: sameSong ? openSong.versionId : undefined,
       titleGenerated: generated,
       fromTemplateId: openSong.isTemplate ? openSong.id : undefined,
-    });
+    }));
     setSaving(false);
     if (res.error) return setStatus({ text: res.error, err: true });
     markSaved(data);
@@ -198,14 +199,14 @@ export default function SaveButton() {
     if (flashTimer.current) clearTimeout(flashTimer.current);
     setFlash({ text: "saving…" });
     const data = window.seqbaby.serializeSet();
-    const res = await saveSong({
-      id: now.id,
+    const res = await trySave(data, () => saveSong({
+      id: now.id ?? undefined,
       title: now.title,
       data,
       // Undefined, never null: null is "this is a root", and a song whose open
       // version is unknown wants the tip it already has.
       parentVersionId: now.versionId ?? undefined,
-    });
+    }));
     setSaving(false);
     if (res.error) return showFlash({ text: "not saved", err: res.error }, 4000);
     markSaved(data);

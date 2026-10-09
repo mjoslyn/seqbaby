@@ -29,6 +29,7 @@ import { generateSongName } from "@/app/songs/songName";
 import { suggestSongName } from "@/app/songs/suggestName";
 import VersionTree from "@/app/VersionTree";
 import { adoptRemix } from "@/app/songs/adoptRemix";
+import { trySave } from "@/app/songs/trySave";
 import { confirmOpen, markSaved } from "@/app/songs/confirmDiscard";
 import {
   IconDefault,
@@ -164,7 +165,7 @@ export default function SongsMenu() {
       const t = typed || carried || generateSongName(data);
       setStatus({ text: "Saving…" });
       const fromTemplate = openSong.isTemplate;
-      const res = await saveSong({
+      const res = await trySave(data, () => saveSong({
         id: asNew || fromTemplate ? undefined : (currentId ?? undefined),
         title: t,
         data,
@@ -175,7 +176,7 @@ export default function SongsMenu() {
         // Detaches the save AND records where the song came from. Not sent for
         // `new`, which is a copy of a song, not a use of a template.
         fromTemplateId: fromTemplate && !asNew ? currentId : undefined,
-      });
+      }));
       if (res.error) return setStatus({ text: res.error, err: true });
       markSaved(data);
       // A generated name is disambiguated server-side against the account's
