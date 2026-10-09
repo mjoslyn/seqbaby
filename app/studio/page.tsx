@@ -117,7 +117,12 @@ export async function generateMetadata({
 // preload hints — reached the browser. Isolating it behind <Suspense> lets the
 // shell stream immediately and the bar fill in when it resolves.
 async function AccountBarSlot({ searchParams }: { searchParams: SearchParams }) {
-  const supabase = await createClient();
+  // No Supabase env: a signed-out bar, not a throw from the client
+  // constructor that takes the page's error boundary with it.
+  const supabase =
+    process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+      ? await createClient()
+      : null;
   const sp = await searchParams;
   const slug = one(sp.s);
   const openId = one(sp.open);
@@ -130,7 +135,7 @@ async function AccountBarSlot({ searchParams }: { searchParams: SearchParams }) 
     linked,
     budgetOut,
   ] = await Promise.all([
-    supabase.auth.getUser(),
+    supabase ? supabase.auth.getUser() : { data: { user: null } },
     linkedSongCard(slug, openId),
     // Whether the site's key has run dry, so compose can say so before anyone
     // types a word. Only worth asking when there is a site key at all.
@@ -145,7 +150,7 @@ async function AccountBarSlot({ searchParams }: { searchParams: SearchParams }) 
   let name: string | null = null;
   let username: string | null = null;
   let avatarGrid: string | null = null;
-  if (user) {
+  if (user && supabase) {
     // avatar_grid is migration 0014's; asked of a database without it, the
     // select fails whole, so ask again without rather than lose the name.
     const q = (cols: string) =>

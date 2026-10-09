@@ -1,23 +1,9 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { currentUserId } from "@/lib/supabase/server";
 import { canReadJob, getJobProgress } from "@/lib/composeJobs.js";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-/** Who is asking, if anyone. Never throws, for app/api/compose's reasons: a
- *  turn run on a brought key belongs to a visitor with no account. */
-async function currentUserId(): Promise<string | null> {
-  try {
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    return user?.id ?? null;
-  } catch {
-    return null;
-  }
-}
 
 // GET /api/compose/status?id=<jobId>&t=<jobToken>
 //

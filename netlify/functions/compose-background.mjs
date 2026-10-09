@@ -22,6 +22,7 @@ import {
   finishJob,
   markSiteOutOfBudget,
   clearSiteOutOfBudget,
+  sameToken,
 } from "../../lib/composeJobs.js";
 import { describeTurnFailure, isOutOfCredit } from "../../lib/composeKey.js";
 
@@ -45,7 +46,7 @@ export default async (req) => {
     }
     // The id is enough to find a job, so the token is what says this
     // invocation came from the route that created it.
-    if (job.token !== token) {
+    if (!sameToken(job.token, token)) {
       await finishJob(jobId, { status: "error", error: "that job could not be verified." });
       return new Response("forbidden", { status: 403 });
     }

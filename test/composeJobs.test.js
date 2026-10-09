@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createJob, finishJob, getJobProgress, canReadJob } from "../lib/composeJobs.js";
+import { createJob, finishJob, getJobInput, getJobProgress, canReadJob } from "../lib/composeJobs.js";
 
 // No Netlify context here, so this is the in-memory path -- the limits and the
 // read check are the same code either way; only the store differs.
@@ -28,4 +28,14 @@ test("a job is read with its view token or by its account, and by nobody else", 
   assert.equal(canReadJob(p, { token: "wrong" }), false);
   assert.equal(canReadJob(p, { userId: "someone-else" }), false);
   assert.equal(canReadJob(p, {}), false);
+});
+
+test("a finished job's input is dropped, its result still readable", async () => {
+  const { id, viewToken } = await job("u3");
+  assert.ok(await getJobInput(id));
+  await finishJob(id, { status: "done", reply: "ok" });
+  assert.equal(await getJobInput(id), null);
+  const p = await getJobProgress(id);
+  assert.equal(p.status, "done");
+  assert.equal(canReadJob(p, { token: viewToken }), true);
 });

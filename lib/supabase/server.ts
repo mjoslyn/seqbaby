@@ -3,6 +3,23 @@ import { cookies } from "next/headers";
 
 // Server (Server Component / Route Handler / Server Action) Supabase client.
 // Reads and writes the auth session cookies via next/headers.
+/**
+ * Who is asking, if anyone. Never throws: the routes that call it also serve
+ * visitors with no account, and a deploy with no Supabase env at all fails
+ * inside the client constructor.
+ */
+export async function currentUserId(): Promise<string | null> {
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    return user?.id ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export async function createClient() {
   const cookieStore = await cookies();
   return createServerClient(

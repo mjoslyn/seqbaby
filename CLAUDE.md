@@ -3761,7 +3761,7 @@ panel ──▶ POST /api/compose ──▶ createJob ──▶ POST the worker 
   of seconds for as long as a whole song takes.
 - **The limits ration the WORKER, not the bill.** `MAX_IN_FLIGHT` /
   `MAX_PER_HOUR` apply to a brought key as they do to an account, counted in
-  its own bucket (`keys/<hash>` beside `users/<id>`), because a turn holds a
+  its own bucket (`keys/<hash>` beside `users/<id>`; the hash is of the caller's address when Netlify names one, since a key is only shape-checked), because a turn holds a
   15-minute function whoever is paying for the tokens. A brought-key turn
   counts against the key even when an account is signed in: one person with
   their own key should not also be spending the account allowance they aren't

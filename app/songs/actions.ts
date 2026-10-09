@@ -225,23 +225,22 @@ export async function saveSong(input: {
   if (input.titleGenerated && !songId) title = await freeTitle(supabase, user.id, title);
 
   if (songId) {
-    // An update matching zero rows is not an error to PostgREST -- a wrong id,
-    // someone else's id, or a row deleted in another tab all come back clean. So
-    // every write here asks for the affected rows back and checks them; without
-    // that the caller is told the save succeeded when nothing was written.
-    const { data: rows, error } = await supabase
+    const { data: song, error: readErr } = await supabase
       .from("songs")
-      .update({ title, data: input.data })
+      .select("current_version_id")
       .eq("id", songId)
       .eq("owner_id", user.id)
-      .select("id,current_version_id");
-    if (error) return { error: error.message };
-    if (!rows?.length) return { error: "Song not found" };
+      .maybeSingle();
+    if (readErr) return { error: readErr.message };
+    if (!song) return { error: "Song not found" };
 
+    // The version first, then the song in ONE write. The other way round, a
+    // version that failed to insert left `data` changed with no version for
+    // it, behind a save reported as failed.
     const parentId =
       input.parentVersionId !== undefined
         ? input.parentVersionId
-        : (rows[0].current_version_id as string | null);
+        : (song.current_version_id as string | null);
     const ver = await appendVersion(supabase, {
       songId,
       ownerId: user.id,
@@ -250,7 +249,18 @@ export async function saveSong(input: {
       label: versionLabel(input.label),
     });
     if (ver.error) return { id: songId, error: ver.error };
-    await setCurrentVersion(supabase, songId, user.id, ver.versionId!);
+    // An update matching zero rows is not an error to PostgREST -- a row
+    // deleted in another tab comes back clean -- so ask for the affected rows
+    // back; without that the caller is told the save succeeded when nothing
+    // was written.
+    const { data: rows, error } = await supabase
+      .from("songs")
+      .update({ title, data: input.data, current_version_id: ver.versionId })
+      .eq("id", songId)
+      .eq("owner_id", user.id)
+      .select("id");
+    if (error) return { error: error.message };
+    if (!rows?.length) return { error: "Song not found" };
     return {
       id: songId,
       title,
@@ -426,18 +436,9 @@ export async function saveNamedSong(input: {
   let versionSeq: number | undefined;
   let unchanged: boolean | undefined;
   if (id) {
-    const { data: rows, error } = await supabase
-      .from("songs")
-      .update({ data: input.data })
-      .eq("id", id)
-      .eq("owner_id", user.id)
-      .select("id");
-    if (error) return { error: error.message };
-    // The SELECT above and this UPDATE are not atomic: the row can go away in
-    // between.
-    if (!rows?.length) return { error: "Song not found" };
     // This save is a step forward from wherever the caller was in the tree,
-    // defaulting to the song's tip.
+    // defaulting to the song's tip. The version first, then the song in one
+    // write, for saveSong's reason.
     const ver = await appendVersion(supabase, {
       songId: id,
       ownerId: user.id,
@@ -449,7 +450,16 @@ export async function saveNamedSong(input: {
     versionId = ver.versionId;
     versionSeq = ver.seq;
     unchanged = ver.unchanged;
-    await setCurrentVersion(supabase, id, user.id, versionId!);
+    const { data: rows, error } = await supabase
+      .from("songs")
+      .update({ data: input.data, current_version_id: versionId })
+      .eq("id", id)
+      .eq("owner_id", user.id)
+      .select("id");
+    if (error) return { error: error.message };
+    // The SELECT above and this UPDATE are not atomic: the row can go away in
+    // between.
+    if (!rows?.length) return { error: "Song not found" };
   } else {
     const { data: row, error } = await supabase
       .from("songs")

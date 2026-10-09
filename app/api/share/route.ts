@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { putShare, getShare } from "@/lib/api.js";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, currentUserId } from "@/lib/supabase/server";
 
 // Node runtime: lib/api.js uses node:crypto and @netlify/blobs (with an in-memory
 // fallback when no Netlify context is present, e.g. `next dev`).
@@ -22,16 +22,8 @@ export const dynamic = "force-dynamic";
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    let ownerId: string | null = null;
-    try {
-      const supabase = await createClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      ownerId = user?.id ?? null;
-    } catch {
-      /* no Supabase configured, or no session -- share anonymously */
-    }
+    // No Supabase configured, or no session: null, and the share is anonymous.
+    const ownerId = await currentUserId();
     const title = typeof body?.title === "string" ? body.title : undefined;
     const { id } = await putShare({ session: body?.session, ownerId, title });
     return NextResponse.json({ id });

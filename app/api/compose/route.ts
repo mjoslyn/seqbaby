@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { currentUserId } from "@/lib/supabase/server";
 import { createJob, hashApiKey, siteOutOfBudget } from "@/lib/composeJobs.js";
 import { newCtx, runComposeTurn } from "@/mcp/composeTurn.mjs";
 import { appendJobEvent, clearSiteOutOfBudget, finishJob, markSiteOutOfBudget } from "@/lib/composeJobs.js";
@@ -12,24 +12,6 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 type ChatTurn = { role: "user" | "assistant"; text: string };
-
-/**
- * Who is asking, if anyone. Never throws: composing on a brought key needs no
- * account, and a deploy running with no Supabase env at all (which the engine
- * is meant to do) would otherwise fail every request here inside the client
- * constructor rather than answering one.
- */
-async function currentUserId(): Promise<string | null> {
-  try {
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    return user?.id ?? null;
-  } catch {
-    return null;
-  }
-}
 
 // POST /api/compose { message, history, session, apiKey? } -> { jobId, jobToken }
 //
@@ -119,9 +101,16 @@ export async function POST(req: Request) {
   // in: the limits ration this site's worker, and one person with a key of
   // their own should not also be spending the account allowance they aren't
   // using. What is stored is the hash; the key itself stops here.
+  //
+  // The bucket is the caller's ADDRESS when Netlify names one, not the key: a
+  // key is only shape-checked here, so counted per key a script sending a
+  // fresh made-up one each time had no limit at all.
+  // shortcut: people behind one NAT share a bucket; count per key AND per
+  // address if that ever refuses someone real.
+  const ip = req.headers.get("x-nf-client-connection-ip");
   const { id, token, viewToken, error } = await createJob({
     userId,
-    keyHash: brought ? hashApiKey(brought) : null,
+    keyHash: brought ? hashApiKey(ip || brought) : null,
     message,
     history,
     session: body.session,
