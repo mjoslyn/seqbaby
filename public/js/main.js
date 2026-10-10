@@ -282,6 +282,57 @@ export async function pickAudioFileForTrack(t, targetEngine = "sampler") {
   });
 }
 
+// Put a bundled sample on a track, switching it to the sampler if it is not
+// one already. Shared by the sampler's source picker and the instrument
+// picker's samples tab.
+export async function loadBundledSample(t, id, label) {
+  t.sampleSource = { kind: "bundled", id, name: label };
+  t.uploadBuffer = null; t.uploadAudio = null; t.uploadFileName = label;
+  const already = t.engineKey === "sampler";
+  if (already) {
+    if (t.voice?.type === "sampler") { t.voice.buffer = null; t.voice.loadBundled?.(id); }
+  } else {
+    setEngineKey(t, "sampler");
+    if (t.el) t.el.querySelector(".sq-track__engine").value = "sampler";
+  }
+  redetectDrumKit(t);
+  t.sliceBase = t.isDrumKit ? 36 : 60;   // root note matches the sample octave
+  t.lastEditedNote = null;               // new grid notes anchor to that root
+  try {
+    await ensureAudio();
+    const buf = await loadBuffer(state.audioCtx, bundledSampleUrl(id));
+    t.uploadBuffer = buf;
+    if (t.voice?.type === "sampler") t.voice.setBuffer(buf);
+    applySampleSpeed(t);
+  } catch (e) { console.warn("bundled sample load", e); }
+  setStatus(`"${t.name}" ← ${label}`);
+}
+
+// Put a granular texture on a track, switching it to the granular engine.
+// Shared by the granular source picker and the instrument picker.
+export async function loadGranularTexture(t, id, label) {
+  const already = t.engineKey === "dm:granular";
+  t.uploadAudio = null;                 // streamed, not persisted as base64
+  t.uploadFileName = label;
+  t.soundPromptText = label;
+  t.granularSample = { id, label };     // remembered so a reload restores it
+  if (!already) {
+    setEngineKey(t, "dm:granular");
+    if (t.el) t.el.querySelector(".sq-track__engine").value = "dm:granular";
+  }
+  setStatus(`loading "${label}"…`);
+  try {
+    await ensureAudio();
+    const buf = await loadBuffer(state.audioCtx, `${GRANULAR_SAMPLE_BASE}/${id}.wav`);
+    t.uploadBuffer = buf;
+    if (t.voice?.type === "granular") t.voice.setBuffer(buf);
+    setStatus(`"${t.name}" ← ${label} (${Math.round(buf.duration * 1000)}ms)`);
+  } catch (e) {
+    console.warn("granular texture load", e);
+    setStatus(`failed to load "${label}"`, true);
+  }
+}
+
 // Sampler source picker: choose "load file…" or one of the bundled samples.
 // Resolves true if a source was chosen (and the track switched to the sampler),
 // false if the user dismissed it. Mirrors pickAudioFileForTrack's commit/cancel
@@ -308,26 +359,7 @@ export function openSamplerSourceModal(t) {
     document.body.appendChild(overlay);
 
     const chooseBundled = async (id, label) => {
-      t.sampleSource = { kind: "bundled", id, name: label };
-      t.uploadBuffer = null; t.uploadAudio = null; t.uploadFileName = label;
-      const already = t.engineKey === "sampler";
-      if (already) {
-        if (t.voice?.type === "sampler") { t.voice.buffer = null; t.voice.loadBundled?.(id); }
-      } else {
-        setEngineKey(t, "sampler");
-        if (t.el) t.el.querySelector(".sq-track__engine").value = "sampler";
-      }
-      redetectDrumKit(t);
-      t.sliceBase = t.isDrumKit ? 36 : 60;   // root note matches the sample octave
-      t.lastEditedNote = null;               // new grid notes anchor to that root
-      try {
-        await ensureAudio();
-        const buf = await loadBuffer(state.audioCtx, bundledSampleUrl(id));
-        t.uploadBuffer = buf;
-        if (t.voice?.type === "sampler") t.voice.setBuffer(buf);
-        applySampleSpeed(t);
-      } catch (e) { console.warn("bundled sample load", e); }
-      setStatus(`"${t.name}" ← ${label}`);
+      await loadBundledSample(t, id, label);
       finish(true);
     };
 
@@ -382,26 +414,7 @@ export function openGranularSourceModal(t) {
     document.body.appendChild(overlay);
 
     const chooseTexture = async (id, label) => {
-      const already = t.engineKey === "dm:granular";
-      t.uploadAudio = null;                 // streamed, not persisted as base64
-      t.uploadFileName = label;
-      t.soundPromptText = label;
-      t.granularSample = { id, label };     // remembered so a reload restores it
-      if (!already) {
-        setEngineKey(t, "dm:granular");
-        if (t.el) t.el.querySelector(".sq-track__engine").value = "dm:granular";
-      }
-      setStatus(`loading "${label}"…`);
-      try {
-        await ensureAudio();
-        const buf = await loadBuffer(state.audioCtx, `${GRANULAR_SAMPLE_BASE}/${id}.wav`);
-        t.uploadBuffer = buf;
-        if (t.voice?.type === "granular") t.voice.setBuffer(buf);
-        setStatus(`"${t.name}" ← ${label} (${Math.round(buf.duration * 1000)}ms)`);
-      } catch (e) {
-        console.warn("granular texture load", e);
-        setStatus(`failed to load "${label}"`, true);
-      }
+      await loadGranularTexture(t, id, label);
       finish(true);
     };
 

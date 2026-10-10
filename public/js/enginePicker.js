@@ -15,8 +15,14 @@
 // get a section of preset cards too. Picking one picks the engine the ordinary
 // way, then writes the track's own preset dropdown and dispatches ITS change,
 // so the preset is applied by the same listener the panel uses.
+//
+// The samples tab lists the bundled kit samples and the granular textures.
+// A sample is not an option of the select, so picking one goes through a hook
+// the track hands in (`pickSample`), which loads it straight onto the track
+// and switches the engine to the sampler (or granular) on the way, without the
+// source modal a plain engine pick opens.
 
-import { BASS_TONE_NAMES, DRONE_TONE_NAMES, GUITAR_TONE_NAMES, HEXOP_PRESET_NAMES, LADDER_TONE_NAMES, LANCET_TONE_NAMES, ORACLE_TONE_NAMES, SIEGE_TONE_NAMES, SUB_TONE_NAMES, VOX_TONE_NAMES } from "./engineData.js";
+import { BUNDLED_SAMPLES, GRANULAR_SAMPLES, SAMPLE_KIT_LABELS, BASS_TONE_NAMES, DRONE_TONE_NAMES, GUITAR_TONE_NAMES, HEXOP_PRESET_NAMES, LADDER_TONE_NAMES, LANCET_TONE_NAMES, ORACLE_TONE_NAMES, SIEGE_TONE_NAMES, SUB_TONE_NAMES, VOX_TONE_NAMES } from "./engineData.js";
 
 /** Engine key -> its presets, the track dropdown that applies them, and what
  *  the engine calls them. */
@@ -61,9 +67,13 @@ function shadowValue(sel) {
 }
 
 /** Put the picker button beside a track's engine select and hide the select.
- *  Idempotent. @param {HTMLSelectElement} sel */
-export function upgradeEngineSelect(sel) {
+ *  Idempotent. `hooks.pickSample(kind, id, label)` and `hooks.currentSample()`
+ *  (`"bundled:<id>"` / `"texture:<id>"` / `""`) turn on the samples tab.
+ *  @param {HTMLSelectElement} sel
+ *  @param {{pickSample?: Function, currentSample?: Function}} [hooks] */
+export function upgradeEngineSelect(sel, hooks = {}) {
   if (!sel || sel._enginePicker) return;
+  sel._samplePicker = hooks.pickSample ? hooks : null;
   const btn = document.createElement("button");
   btn.type = "button";
   btn.className = "sq-track__engine-btn";
@@ -98,9 +108,9 @@ function readGroups(sel) {
     for (const it of items) {
       const table = PRESET_TABLES[it.key];
       if (!table) continue;
-      it.presets = table;
+      it.jump = { count: table.names.filter(Boolean).length, noun: table.noun };
       groups.push({
-        group: `${it.label} ${table.noun}`, chip: "presets", presetOf: it.key,
+        group: `${it.label} ${table.noun}`, chip: "presets", presetOf: it.key, jumpOf: it.key,
         items: table.names.filter(Boolean).map(name => ({
           key: it.key, label: name, preset: name, engineLabel: it.label,
         })),
@@ -120,8 +130,44 @@ function readGroups(sel) {
   const rest = engines.filter(g => !loner(g));
   if (more.length) rest.push({ group: "more", chip: "more", items: more.flatMap(g => g.items) });
   // Engine groups first, then the preset sections, so "all" reads as the
-  // instruments and then what they come loaded with.
-  return [...rest, ...groups.filter(g => g.presetOf)];
+  // instruments and then what they come loaded with, then the samples.
+  return [...rest, ...groups.filter(g => g.presetOf), ...(sel._samplePicker ? sampleGroups(rest) : [])];
+}
+
+/** The samples tab: one section per bundled kit, then the textures. The
+ *  sampler and granular cards get a jump to their first section. */
+function sampleGroups(engineGroups) {
+  const out = [];
+  let cur = null;
+  for (const s of BUNDLED_SAMPLES) {
+    if (!cur || cur.kit !== s.kit) {
+      const kitName = SAMPLE_KIT_LABELS[s.kit] || s.kit;
+      cur = { group: kitName, chip: "samples", sampleKind: "bundled", kit: s.kit, items: [] };
+      out.push(cur);
+    }
+    // The heading names the kit, so the card drops it, as the source modal does.
+    const sp = s.label.indexOf(" ");
+    cur.items.push({
+      key: "sampler", sample: "bundled", id: s.id, fullLabel: s.label,
+      label: sp > 0 ? s.label.slice(sp + 1) : s.label, engineLabel: `sample ${cur.group}`,
+    });
+  }
+  out.push({
+    group: "textures", chip: "samples", sampleKind: "texture",
+    items: GRANULAR_SAMPLES.map(s => ({
+      key: "dm:granular", sample: "texture", id: s.id, fullLabel: s.label, label: s.label, engineLabel: "sample texture granular",
+    })),
+  });
+  // "N samples ›" on the sampler card, "N textures ›" on granular.
+  const jumps = { sampler: { count: BUNDLED_SAMPLES.length, noun: "samples", to: out[0] },
+                  "dm:granular": { count: GRANULAR_SAMPLES.length, noun: "textures", to: out[out.length - 1] } };
+  for (const g of engineGroups) for (const it of g.items) {
+    const j = jumps[it.key];
+    if (!j || !j.count) continue;
+    it.jump = { count: j.count, noun: j.noun };
+    j.to.jumpOf = it.key;
+  }
+  return out.filter(g => g.items.length);
 }
 
 /** The track's own preset dropdown for an engine. The panel it lives in can
@@ -133,17 +179,19 @@ function presetSelectFor(sel, cls) {
     || document.querySelector(`[data-track-id="${root.dataset.trackId}"] ${cls}`);
 }
 
-function cardHtml(it, g, current) {
-  const on = !it.preset && it.key === current;
-  const search = [it.label, g.group, it.engineLabel || ""].join(" ").toLowerCase();
-  const presetCount = it.presets
-    ? `<span class="sq-engine-picker__jump" data-jump="${esc(it.key)}">${it.presets.names.filter(Boolean).length} ${esc(it.presets.noun)} ›</span>`
+function cardHtml(it, g, current, currentSample) {
+  const on = it.sample ? `${it.sample}:${it.id}` === currentSample : !it.preset && it.key === current;
+  const search = [it.fullLabel || it.label, g.group, it.engineLabel || ""].join(" ").toLowerCase();
+  const jump = it.jump
+    ? `<span class="sq-engine-picker__jump" data-jump="${esc(it.key)}">${it.jump.count} ${esc(it.jump.noun)} ›</span>`
     : "";
-  return `<button type="button" class="sq-engine-picker__card${on ? " is-current" : ""}${it.preset ? " is-preset" : ""}"
-    data-key="${esc(it.key)}"${it.preset ? ` data-preset="${esc(it.preset)}"` : ""}
+  const extra = it.preset ? ` data-preset="${esc(it.preset)}"`
+    : it.sample ? ` data-sample="${esc(it.sample)}" data-id="${esc(it.id)}" data-label="${esc(it.fullLabel)}" title="${esc(it.fullLabel)}"` : "";
+  return `<button type="button" class="sq-engine-picker__card${on ? " is-current" : ""}${it.preset || it.sample ? " is-preset" : ""}"
+    data-key="${esc(it.key)}"${extra}
     data-search="${esc(search)}"${on ? ` aria-current="true"` : ""}>
     <span class="sq-engine-picker__name">${esc(it.label)}</span>
-    ${presetCount}
+    ${jump}
   </button>`;
 }
 
@@ -152,6 +200,7 @@ function cardHtml(it, g, current) {
 export function openEnginePicker(sel) {
   const groups = readGroups(sel);
   const current = sel.value;
+  const currentSample = sel._samplePicker?.currentSample?.() || "";
   const overlay = document.createElement("div");
   overlay.className = "sq-modal-overlay sq-engine-picker__overlay";
 
@@ -159,15 +208,20 @@ export function openEnginePicker(sel) {
   const chips = [`<button type="button" class="sq-engine-picker__chip is-on" data-group="">all</button>`]
     .concat(chipNames.map(c => `<button type="button" class="sq-engine-picker__chip" data-group="${esc(c)}">${esc(c.toLowerCase())}</button>`))
     .join("");
-  // One heading over all the preset sections, so where the instruments end
-  // and what they come loaded with begins reads at a glance.
+  // One heading over all the preset sections, and one over the samples, so
+  // where the instruments end and what they come loaded with begins reads at
+  // a glance.
   const firstPreset = groups.find(g => g.presetOf);
-  const sections = groups.map(g => `${g === firstPreset ? `
-    <h2 class="sq-engine-picker__divider">presets</h2>` : ""}
-    <section class="sq-engine-picker__group" data-group="${esc(g.chip)}"${g.presetOf ? ` data-preset-of="${esc(g.presetOf)}"` : ""}>
+  const firstSample = groups.find(g => g.sampleKind);
+  const divider = (g) => g === firstPreset ? `
+    <h2 class="sq-engine-picker__divider" data-divider="presets">presets</h2>`
+    : g === firstSample ? `
+    <h2 class="sq-engine-picker__divider" data-divider="samples">samples</h2>` : "";
+  const sections = groups.map(g => `${divider(g)}
+    <section class="sq-engine-picker__group" data-group="${esc(g.chip)}"${g.jumpOf ? ` data-jump-target="${esc(g.jumpOf)}"` : ""}>
       <h3 class="sq-engine-picker__heading">${esc(g.group.toLowerCase())}</h3>
       <div class="sq-engine-picker__grid">
-        ${g.items.map(it => cardHtml(it, g, current)).join("")}
+        ${g.items.map(it => cardHtml(it, g, current, currentSample)).join("")}
       </div>
     </section>`).join("");
 
@@ -192,7 +246,7 @@ export function openEnginePicker(sel) {
   const empty = overlay.querySelector(".sq-engine-picker__empty");
   const cards = [...overlay.querySelectorAll(".sq-engine-picker__card")];
   const sectionEls = [...overlay.querySelectorAll(".sq-engine-picker__group")];
-  const presetDivider = overlay.querySelector(".sq-engine-picker__divider");
+  const dividers = [...overlay.querySelectorAll(".sq-engine-picker__divider")];
   let groupFilter = "";
 
   const visibleCards = () => cards.filter(c => !c.hidden && !c.closest(".sq-engine-picker__group").hidden);
@@ -211,7 +265,8 @@ export function openEnginePicker(sel) {
       }
       sec.hidden = !any;
     }
-    if (presetDivider) presetDivider.hidden = !sectionEls.some(sec => sec.dataset.presetOf && !sec.hidden);
+    // A divider shows while any section of its chip does.
+    for (const d of dividers) d.hidden = !sectionEls.some(sec => sec.dataset.group === d.dataset.divider && !sec.hidden);
     empty.hidden = shown > 0;
   };
 
@@ -220,8 +275,14 @@ export function openEnginePicker(sel) {
     document.removeEventListener("keydown", onKey, true);
     sel._enginePicker?.focus();
   };
-  const pick = (key, preset) => {
+  const pick = (card) => {
+    const { key, preset, sample } = card.dataset;
     close();
+    if (sample) {
+      // Already on this sample: nothing to do, as for the same engine.
+      if (`${sample}:${card.dataset.id}` !== currentSample) sel._samplePicker.pickSample(sample, card.dataset.id, card.dataset.label);
+      return;
+    }
     // Same engine: a native select fires nothing here either.
     if (key !== sel.value) {
       sel.value = key;
@@ -242,7 +303,7 @@ export function openEnginePicker(sel) {
         e.preventDefault();
         if (!search.value.trim()) return; // nothing typed: nothing to pick
         const first = visibleCards()[0];
-        if (first) pick(first.dataset.key, first.dataset.preset);
+        if (first) pick(first);
       } else if (e.key === "ArrowDown") {
         e.preventDefault();
         visibleCards()[0]?.focus();
@@ -279,11 +340,11 @@ export function openEnginePicker(sel) {
     applyFilter();
   });
   body.addEventListener("click", (e) => {
-    // "14 tones ›" on an engine card jumps to that engine's presets rather
-    // than picking the engine.
+    // "14 tones ›" on an engine card jumps to that engine's presets (or
+    // "48 samples ›" to the samples) rather than picking the engine.
     const jump = e.target.closest("[data-jump]");
     if (jump) {
-      const target = overlay.querySelector(`[data-preset-of="${CSS.escape(jump.dataset.jump)}"]`);
+      const target = overlay.querySelector(`[data-jump-target="${CSS.escape(jump.dataset.jump)}"]`);
       if (target?.hidden) {
         groupFilter = "";
         search.value = "";
@@ -294,7 +355,7 @@ export function openEnginePicker(sel) {
       return;
     }
     const card = e.target.closest(".sq-engine-picker__card");
-    if (card) pick(card.dataset.key, card.dataset.preset);
+    if (card) pick(card);
   });
   overlay.querySelector(".modal-cancel").addEventListener("click", close);
   overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
