@@ -174,6 +174,12 @@ env / fx / eq / comp / mod / automation per track.
   `N tones ›` jump on the engine card). A preset card picks the engine as above,
   then writes the track's own preset dropdown (`PRESET_TABLES[key].sel`) and
   dispatches its `change`, so the panel's listener applies it.
+  The `samples` chip lists every bundled kit sample (by kit) and the granular
+  textures; a sample is not an option of the select, so picking one goes
+  through the `pickSample` hook renderTrack hands in (`loadBundledSample` /
+  `loadGranularTexture`, main.js, the same code the source modals run),
+  loaded straight onto the track with no source modal. The sampler and
+  granular cards get a `N samples ›` / `N textures ›` jump.
 - `modMotion.js` — the second needle: where an LFO or an automation lane has
   actually pushed a parameter, drawn on the knob while the slider stays the
   base. See the modulation section below.

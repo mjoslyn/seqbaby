@@ -23,7 +23,7 @@ import { refreshKnobRange, setKnobReadout, upgradeKnobs } from "./knob.js";
 import { canModulate, freshLfoEntry, lfoBipolar, lfoEuclid, lfoPhase, lfoRateLabel, syncLFO, trackLfoKeys } from "./lfo.js";
 import { autoOwns, fxShown, modOwns, refreshPanelBadges, refreshParamIndicators } from "./paramTargets.js";
 import { patternLocked, refreshPatternLockUI, refreshPatternSoundUI, setPatternLock } from "./patternSound.js";
-import { openGranularSourceModal, openSamplerSourceModal, pickAudioFileForTrack } from "./main.js";
+import { loadBundledSample, loadGranularTexture, openGranularSourceModal, openSamplerSourceModal, pickAudioFileForTrack } from "./main.js";
 import { defaultFxConfig, driveGainLabel, panLabel } from "./fxRack.js";
 import { crushRateLabel } from "./crusher.js";
 import { PRISM_KNOBS, PRISM_MODES, prismRateLabel, prismTimeLabel } from "./prism.js";
@@ -605,7 +605,16 @@ export function renderTrack(t) {
   const engineSel = node.querySelector(".sq-track__engine");
   populateEngineSelect(engineSel);
   engineSel.value = t.engineKey;
-  upgradeEngineSelect(engineSel);
+  upgradeEngineSelect(engineSel, {
+    // The samples tab: a bundled sample or a texture, loaded straight onto
+    // the track, with no source modal in between.
+    pickSample: (kind, id, label) => kind === "texture"
+      ? loadGranularTexture(t, id, label)
+      : loadBundledSample(t, id, label),
+    currentSample: () => t.engineKey === "sampler" && t.sampleSource?.kind === "bundled"
+      ? `bundled:${t.sampleSource.id}`
+      : t.engineKey === "dm:granular" && t.granularSample?.id ? `texture:${t.granularSample.id}` : "",
+  });
 
   node.querySelector(".sq-track__name").value = t.name;
   node.querySelector(".sq-track__len").value = t.length;
