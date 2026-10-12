@@ -98,6 +98,17 @@ const SHADES = [
   [8, 30, 40], [-8, 90, 76], [28, 50, 50], [-28, 80, 60],
 ];
 
+/**
+ * The colour a track's distinct clip wears, as a CSS value off `--track-hue`,
+ * or "" for shade 0 (the track's own colour) and an empty slot. The
+ * arrangement's blocks wear the same, so a pattern reads the same in both.
+ * @param {number} n a clipShades entry
+ */
+export function clipShadeColor(n) {
+  const shade = n > 0 ? SHADES[n % SHADES.length] : null;
+  return shade ? `hsl(calc(var(--track-hue) + ${shade[0]}) ${shade[1]}% ${shade[2]}%)` : "";
+}
+
 const SIG_FIELDS = ["steps", "lengths", "notes", "velocities", "chords", "extraNotes", "extraLengths", "ratchets", "arps", "offsets", "strums"];
 
 /** A number per slot: which distinct clip it is on this track, in order of first appearance. Empty slots get -1. */
@@ -135,8 +146,8 @@ function render() {
     for (let i = 0; i < PATTERN_COUNT; i++) {
       const p = t.patterns?.[i];
       const cls = ["sq-clip"];
-      const shade = SHADES[shades[i] % SHADES.length];
-      const style = shades[i] > 0 && shade ? ` style="--clip-c:hsl(calc(var(--track-hue) + ${shade[0]}) ${shade[1]}% ${shade[2]}%)"` : "";
+      const shade = clipShadeColor(shades[i]);
+      const style = shade ? ` style="--clip-c:${shade}"` : "";
       const bars = p ? Math.max(1, Math.ceil(p.steps.length / stepsPerBarForMeter(patternMeter(i)))) : 1;
       if (bars > 1) cls.push("is-long");
       if (p?.steps?.some(Boolean)) cls.push("is-filled");

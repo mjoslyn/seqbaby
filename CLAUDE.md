@@ -2290,6 +2290,24 @@ block   t.arrangement[i]    ─── { slot, start, bars }: a clip at a bar, fo
   `play` is the transport's own button, as the clip view's is; there is no
   mode toggle in either. The mode is the song's, so a jam hears the
   change as any edit.
+- **A loop section** (`state.arrLoop` `{start, end}`, end exclusive, and
+  `state.arrLoopOn`; neither saved, like the start marker): dragged across
+  the ruler (a click without travel is still the start marker), or the
+  `loop` button over a selected block. With it on, `nextArrangeBar`
+  (arrangement.js) keeps the ruler bar inside it, a bar outside it (drawn
+  mid-play) going to its start at the next bar line, and `seedArrangement`
+  starts a play press inside it. The origin a wrap or a jump moves is kept
+  with the one before (`_arrPrevOrigin`, `_arrOriginAt`), so the playhead
+  reads the tick being heard against the origin that tick belongs to rather
+  than a modulo of the arrangement's length.
+- **The view keeps its scroll and can follow.** It is rebuilt whole on every
+  bar line while playing, so `render` carries `scrollLeft` across the
+  rebuild (rebuilding the scroller used to put it back at bar 1). `follow`
+  (remembered per browser) turns the page when the head nears the right
+  edge; a scroll the view did not make switches it off. The strip column is
+  sticky. Each block draws its pattern, one pass of its notes as an SVG mask
+  repeated per pass (`patternPicture`), in the shade the clip view gives that
+  pattern (`clipShadeColor`).
 - **Recording is a bar-line write into a TAKE** (`recordArrangementBar`):
   with `rec` armed (clip view or arrangement view), every bar line in a
   non-arrange mode writes what each track just played — its slot, or nothing
