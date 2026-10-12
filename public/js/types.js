@@ -169,15 +169,21 @@
 
 /**
  * A sequencer track. Its `steps`/`notes`/etc. are aliased to
- * `patterns[activePattern]` by aliasPattern so UI mutations flow into the
- * active pattern. See the full data model in CLAUDE.md.
+ * `patterns[_patternIdx]` by aliasPattern so UI mutations flow into the
+ * pattern the track is on, which is the scene (`state.activePattern`) until
+ * a clip is launched on it (clips.js). See the full data model in CLAUDE.md.
  * @typedef {Object} Track
  * @property {number} id
  * @property {string} name
  * @property {string} engineKey
  * @property {number} length
+ * @property {PatternIndex} _patternIdx    The slot the track is on: trackSlot(t). Not saved.
+ * @property {PatternIndex|null} _queuedSlot  A clip waiting for the bar line (finish mode). Not saved.
+ * @property {boolean} _clipOff             No clip playing: stopped, or a gap in the arrangement. Not saved.
+ * @property {import("./arrangement.js").Block[]} arrangement  The track's timeline
+ *   of pattern blocks, played in arrange mode (arrangement.js). Saved.
  * @property {Set<number>} accents          0-indexed accented steps.
- * @property {number[]} steps               Aliased from patterns[activePattern].
+ * @property {number[]} steps               Aliased from patterns[_patternIdx].
  * @property {number[]} lengths
  * @property {MidiNote[]} notes
  * @property {number[]} velocities
@@ -247,8 +253,14 @@
  * @property {AnalyserNode|null} masterAnalyser
  * @property {MIDIAccess|null} midi
  * @property {ScaleState} scale
- * @property {PatternIndex} activePattern
- * @property {"repeat"|"chain"} patternMode
+ * @property {PatternIndex} activePattern   The scene: the slot the pattern bar is on and every track joins.
+ * @property {"repeat"|"chain"|"arrange"} patternMode  loop the scene, chain the slots, or play the arrangement
+ * @property {number} arrBar       Arrange mode: the ruler bar the transport is on (clips.js).
+ * @property {boolean} arrRecord   Clip launches are being written into the arrangement.
+ * @property {number} arrRecBar    The bar the recorder writes next.
+ * @property {number} _arrOrigin   The global tick that was ruler bar 0 (for the view's playhead).
+ * @property {number} _nowTick     The global tick being heard (written at the audible time).
+ * @property {"groove"|"clips"|"arrange"} view  Which view is open (views.js). Not saved.
  * @property {"immediate"|"finish"} patternSwitchMode
  * @property {PatternIndex|null} queuedPattern
  * @property {number[]} patternRepeats

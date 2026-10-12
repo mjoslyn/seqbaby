@@ -54,13 +54,14 @@ import {
 } from "./engineData.js";
 import { EUCLID_DEFAULTS, FILTER_TYPES, PRISM_MODES, REPEAT_MODES, defaultCompConfig, defaultEq, defaultFilter, defaultFxConfig, defaultTrackParams } from "./soundDefaults.js";
 import {
-  AUTOMATION_TARGETS, FX_STAGE_LEVEL_KEY, LFO_DIVS, LFO_KEYS, LFO_LABELS, PATTERN_COUNT, STEPS_PER_BAR, fxStageLevel,
+  AUTOMATION_TARGETS, FX_STAGE_LEVEL_KEY, LFO_DIVS, LFO_KEYS, LFO_LABELS, PATTERN_COUNT, PATTERN_MODES, STEPS_PER_BAR, fxStageLevel,
   canAutomateKey, canModulateKey, lfoDivLabel, voiceAutoKeysForEngineKey,
   FX_STAGE_KEYS, baseModKey, fxChainOrder, fxInstanceIds, fxStageOf, fxStageOfModKey, isFxInstanceId, splitFxInstanceKey,
 } from "./constants.js";
 import { CHANCE_DEFAULT_PCS, CHANCE_DEFAULTS, CHANCE_NOTE_MAX, CHANCE_NOTE_MIN, CHANCE_NOTE_VALUES, CHANCE_REPEAT_MAX, cloneChance } from "./chanceGen.js";
 import { CHORD_TYPES, SCALES, canonicalChord, midiToName, nameToMidi } from "./theoryData.js";
 import { SET_VERSION, validateSet } from "./sessionFormat.js";
+import { arrangementBars, blocksEnd, checkBlock, describeBlocks, normalizeBlocks } from "./arrangement.js";
 
 /** What every refusal in this module throws: a message an agent can act on. */
 export class SongError extends Error {
@@ -314,7 +315,9 @@ export function fromBlob(data) {
     if (!isNum(t.length)) t.length = STEPS_PER_BAR;
     if (!Array.isArray(t.patterns)) t.patterns = [];
     for (const k of ["params", "filter", "eq", "comp", "fxConfig", "lfoConfig"]) if (!t[k] || typeof t[k] !== "object") t[k] = {};
+    t.arrangement = normalizeBlocks(t.arrangement);
   });
+  song.patternMode = PATTERN_MODES.includes(song.patternMode) ? song.patternMode : "repeat";
   if (!Array.isArray(song.patternMeters)) song.patternMeters = Array.from({ length: PATTERN_COUNT }, () => ({ num: 4, den: 4 }));
   if (!Array.isArray(song.patternRepeats)) song.patternRepeats = Array.from({ length: PATTERN_COUNT }, () => 1);
   if (!Array.isArray(song.macroPads)) song.macroPads = [];
@@ -410,6 +413,7 @@ export function addTrack(song, { engine, name, length = STEPS_PER_BAR, sample, t
     glide: 0, speed: 1, sampleSpeedMode: "native", pitchLock: true, density: 0.5,
     euclid: null, chance: null,
     patterns: [],
+    arrangement: [],
   };
   if (e.key === "sampler") {
     if (sample == null) fail(`a sampler track needs \`sample\`: one of ${BUNDLED_SAMPLES.map(s => s.id).join(", ")}`);
@@ -1021,11 +1025,12 @@ export const CHANCE_NOTE_LABELS = CHANCE_NOTE_VALUES.map(v => v.label);
 
 // ---- patterns as a song ------------------------------------------------------------------
 
-/** How the 32 patterns play: `mode` repeat (loop one) or chain (play them in
- *  order); `repeats` bars per pattern in chain mode; `switchMode` immediate or
- *  finish (wait for the bar). `active` is the pattern the studio opens on. */
+/** How the 32 patterns play: `mode` repeat (loop one), chain (play them in
+ *  order) or arrange (each track its own timeline of blocks, `setBlocks`);
+ *  `repeats` bars per pattern in chain mode; `switchMode` immediate or finish
+ *  (wait for the bar). `active` is the pattern the studio opens on. */
 export function setArrangement(song, { mode, repeats, switchMode, active } = {}) {
-  if (mode != null) song.patternMode = oneOf(mode, "mode", ["repeat", "chain"]);
+  if (mode != null) song.patternMode = oneOf(mode, "mode", PATTERN_MODES);
   if (switchMode != null) song.patternSwitchMode = oneOf(switchMode, "switchMode", ["immediate", "finish"]);
   if (active != null) song.activePattern = patternIndex(active);
   if (repeats != null) {
@@ -1033,6 +1038,24 @@ export function setArrangement(song, { mode, repeats, switchMode, active } = {})
     repeats.forEach((r, i) => { if (i < PATTERN_COUNT) song.patternRepeats[i] = int(r, `repeats[${i}]`, 1, 16); });
   }
   return { mode: song.patternMode, switchMode: song.patternSwitchMode, active: song.activePattern, repeats: song.patternRepeats };
+}
+/**
+ * A track's arrangement: the timeline arrange mode plays for it, as blocks
+ * `{ slot, start, bars }` — which pattern, the bar it starts on (0-based) and
+ * how long it holds. Bars are the ruler's (pattern 0's meter). Blocks that
+ * overlap resolve later-wins, as the studio's editor does; the result is
+ * sorted. `[]` clears it. Replaces the track's whole arrangement.
+ */
+export function setBlocks(song, track, blocks) {
+  const t = trackAt(song, track);
+  if (!Array.isArray(blocks)) fail("blocks must be an array of { slot, start, bars }");
+  blocks.forEach((b, i) => {
+    const why = checkBlock(b);
+    if (why) fail(`blocks[${i}]: ${why}`);
+    if (b.slot >= PATTERN_COUNT) fail(`blocks[${i}]: slot must be 0..${PATTERN_COUNT - 1}`);
+  });
+  t.arrangement = normalizeBlocks(blocks);
+  return { track: song.tracks.indexOf(t), blocks: t.arrangement, bars: blocksEnd(t.arrangement), plays: describeBlocks(t.arrangement) };
 }
 /** A pattern's time signature, e.g. "7/8". Steps are sixteenths, so a bar of 7/8 is 14 steps. */
 export function setMeter(song, pattern, meter) {
@@ -1138,6 +1161,11 @@ function slotBars(song, p) {
 export function songSections(song) {
   const slots = [];
   for (let p = 0; p < PATTERN_COUNT; p++) if (slotHasSteps(song, p)) slots.push(p);
+  if (song.patternMode === "arrange") {
+    // the longest track's timeline, as the song's sections
+    const longest = (song.tracks || []).reduce((best, t) => (blocksEnd(t.arrangement || []) > blocksEnd(best?.arrangement || []) ? t : best), null);
+    return (longest?.arrangement || []).map(b => ({ pattern: b.slot, bars: b.bars, start: b.start }));
+  }
   if (song.patternMode !== "chain") return slots.includes(song.activePattern) ? [{ pattern: song.activePattern, bars: "loop" }] : [];
   return slots.map(p => ({ pattern: p, bars: Math.max(1, song.patternRepeats?.[p] ?? 1) }));
 }
@@ -1150,6 +1178,10 @@ export function summarize(song) {
     scale: song.scale?.active ? `${rootName} ${song.scale.mode}` : "off",
     arrangement: { mode: song.patternMode, switchMode: song.patternSwitchMode, active: song.activePattern,
       repeats: song.patternMode === "chain" ? song.patternRepeats : undefined,
+      bars: song.patternMode === "arrange" ? arrangementBars(song.tracks) : undefined,
+      blocks: song.patternMode === "arrange"
+        ? song.tracks.map((t, i) => ({ track: i, name: t.name, plays: describeBlocks(t.arrangement || []), blocks: t.arrangement || [] }))
+        : undefined,
       meters: song.patternMeters.map((m, i) => (m.num !== 4 || m.den !== 4) ? `${i}: ${m.num}/${m.den}` : null).filter(Boolean),
       sections: songSections(song) },
     tracks: song.tracks.map((_, i) => summarizeTrack(song, i)),
@@ -1175,10 +1207,18 @@ export function validate(song) {
       const need = slotBars(song, p);
       if (need > bars + 1e-9) warnings.push(`pattern ${p} is ${need} bars long but plays for ${bars}: the chain moves on before it finishes (repeats[${p}] = ${Math.ceil(need)} at least)`);
     }
+  } else if (song.patternMode === "arrange" && song.tracks?.length) {
+    if (!song.tracks.some(t => t.arrangement?.length)) warnings.push(`arrange mode with no blocks on any track: nothing plays (set_blocks)`);
+    song.tracks.forEach((t, i) => {
+      for (const b of t.arrangement || []) {
+        if (t.engineKey !== "bus" && !t.patterns?.[b.slot]?.steps?.some(Boolean) && !t.euclid?.on && !t.chance?.on)
+          warnings.push(`track ${i} (${t.name}) plays pattern ${b.slot} from bar ${b.start + 1}, which has no steps on it`);
+      }
+    });
   } else if (song.tracks?.length) {
     const used = [];
     for (let p = 0; p < PATTERN_COUNT; p++) if (slotHasSteps(song, p)) used.push(p);
-    if (used.length > 1) warnings.push(`patterns ${used.join(", ")} hold steps but the arrangement is "repeat", so only pattern ${song.activePattern} plays: set_arrangement mode "chain" to play them in order`);
+    if (used.length > 1) warnings.push(`patterns ${used.join(", ")} hold steps but the arrangement is "repeat", so only pattern ${song.activePattern} plays: set_arrangement mode "chain" to play them in order, or "arrange" with set_blocks for a timeline per track`);
   }
   return { ok: check.ok && errors.length === 0, version: check.version, errors, warnings };
 }

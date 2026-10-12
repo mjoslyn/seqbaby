@@ -2,14 +2,15 @@ import { AUTOMATION_TARGETS } from "./automation.js";
 import { loadBuffer, normalizeAudioBuffer } from "./buffers.js";
 import { GRANULAR_SAMPLE_BASE } from "./catalog.js";
 import { PATTERN_COUNT, baseModKey, fxInstanceIds } from "./constants.js";
+import { normalizeBlocks } from "./arrangement.js";
 import { showConfirmDialog, showInputDialog, showSelectDialog } from "./dialogs.js";
 import { setStatus } from "./dom.js";
 import { hasUnsavedChanges, markSaved } from "./history.js";
-import { ICON_CHAIN, ICON_FINISH, ICON_NOW, ICON_REPEAT } from "./icons.js";
+import { ICON_FINISH, ICON_NOW } from "./icons.js";
 import { applySampleSpeed, defaultLFOConfig, disposeLFOs, syncAllLFOs } from "./lfo.js";
 import { guessIsDrumKit, parseMeter } from "./meter.js";
 import { updatePlaitsControlsVisibility } from "./params.js";
-import { renderPatternGrid } from "./patternBar.js";
+import { renderPatternGrid, setPatternMode } from "./patternBar.js";
 import { refreshEuclidUI, renderEuclidPanel } from "./euclid.js";
 import { cloneChance, refreshChanceScale, refreshChanceUI, renderChancePanel } from "./chance.js";
 import { applyBusMute, paintDiceDensity, placeBusesLast, refreshFxPanelUI, refreshMuteSoloUI, renderModPanel, syncTrackSoundUI } from "./render.js";
@@ -58,7 +59,14 @@ export function serializeSet() {
     tracks: state.tracks.map(t => ({
       name: t.name,
       engineKey: t.engineKey,
-      length: t.length,
+      // The SCENE's pattern length, not t.length: a clip launched on this track
+      // (clips.js) can have it on a slot of another length, and that is
+      // performance state, which must not read as an edit to history, a jam or
+      // the unsaved check. Its only reader is trackShellFor's default for slots
+      // the blob lacks, so a load is unchanged either way.
+      length: t.patterns?.[state.activePattern]?.steps.length ?? t.length,
+      // the track's timeline of pattern blocks (arrangement.js), when it has one
+      arrangement: t.arrangement?.length ? t.arrangement.map(b => ({ slot: b.slot, start: b.start, bars: b.bars })) : undefined,
       params: stampGranularParams({ ...t.params }),
       filter: { ...t.filter },
       eq: { ...t.eq },
@@ -450,6 +458,7 @@ export function loadTrackFromData(t, td) {
   t.chance = cloneChance(td.chance);
   t._chanceMod = null;
   t._chancePlan = null;               // built on demand; nothing to carry in
+  t.arrangement = normalizeBlocks(td.arrangement);   // none, or sorted and non-overlapping
   Object.assign(t.lfoConfig, td.lfoConfig || {});
   if (Array.isArray(td.patterns)) {
     const pad = (arr, fill, n) => { const out = (arr || []).slice(0, n); while (out.length < n) out.push(fill); return out; };
@@ -621,6 +630,8 @@ export function applySet(s) {
     btn.classList.remove("is-playing");
     state.tick = 0;
   }
+  state.arrRecord = false;                        // a recording into the song being replaced
+  state.arrBar = 0;
   for (const t of [...state.tracks]) removeTrack(t);
   if (Number.isFinite(s.bpm))   document.getElementById("bpm").value = s.bpm;
   if (Number.isFinite(s.swing)) document.getElementById("swing").value = s.swing;
@@ -653,10 +664,7 @@ export function applySet(s) {
     const r = Math.round(Number(s.patternRepeats?.[i]));
     state.patternRepeats[i] = Number.isFinite(r) ? Math.max(1, Math.min(16, r)) : 1;
   }
-  state.patternMode = s.patternMode === "chain" ? "chain" : "repeat";
-  const modeBtn = document.getElementById("pattern-mode");
-  modeBtn.innerHTML = state.patternMode === "chain" ? ICON_CHAIN : ICON_REPEAT;
-  modeBtn.setAttribute("aria-pressed", String(state.patternMode === "chain"));
+  setPatternMode(s.patternMode);                 // repeat for anything it does not know
   state.patternSwitchMode = s.patternSwitchMode === "finish" ? "finish" : "immediate";
   const switchBtn = document.getElementById("pattern-switch");
   if (switchBtn) {

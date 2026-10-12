@@ -48,6 +48,7 @@ test("accepts legacy sessions", async (t) => {
     "track with no length (applySet defaults to 16)": { tracks: [{ engineKey: "plaits:0" }] },
     "legacy sampler engine keys": { tracks: [{ engineKey: "smp:Kit/kick" }, { engineKey: "upload" }, { engineKey: "eleven" }] },
     "extra unknown keys (forward-compatible additions)": session({ somethingNew: { a: 1 } }),
+    "arrange mode with blocks on a track": session({ patternMode: "arrange", tracks: [track({ arrangement: [{ slot: 0, start: 0, bars: 4 }, { slot: 2, start: 8, bars: 4 }] })] }),
   };
   for (const [label, blob] of Object.entries(cases)) {
     await t.test(label, () => {

@@ -30,7 +30,7 @@ import { setParam, updateGranularSpeedEnabled } from "./params.js";
 import { refreshParamIndicators } from "./paramTargets.js";
 import { refreshFxPanelUI, renderModPanel, syncTrackSoundUI } from "./render.js";
 import { applyCompressorConfig, EQ_BANDS, setEQ, setFilter } from "./signal.js";
-import { state } from "./state.js";
+import { state, trackSlot } from "./state.js";
 
 /** @typedef {import("./types.js").Track} Track */
 
@@ -180,9 +180,10 @@ export function flushPatternSound(t, idx) {
   else t.baseSound = capturePatternSound(t);
 }
 
-/** Flush every track's current pattern. */
+/** Flush every track's current pattern — each at ITS slot, which is the scene
+ *  until a clip is launched on it (clips.js). */
 export function flushAllPatternSounds() {
-  for (const t of state.tracks) flushPatternSound(t, state.activePattern);
+  for (const t of state.tracks) flushPatternSound(t, trackSlot(t));
 }
 
 /**
@@ -272,9 +273,9 @@ export function setPatternLock(t, idx, on) {
   return changed;
 }
 
-/** Paint the p-lock button and the track's border for the active pattern. */
+/** Paint the p-lock button and the track's border for the pattern it is on. */
 export function refreshPatternLockUI(t) {
-  const on = patternLocked(t, state.activePattern);
+  const on = patternLocked(t, trackSlot(t));
   const btn = t?.el?.querySelector(".sq-track__plock");
   if (btn) btn.setAttribute("aria-pressed", String(on));
   t?.el?.classList.toggle("is-plocked", on);

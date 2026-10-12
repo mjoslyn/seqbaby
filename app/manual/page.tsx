@@ -12,6 +12,7 @@ const SECTIONS = [
   ["transport", "Transport"],
   ["knobs", "Knobs"],
   ["patterns", "Patterns"],
+  ["views", "Clips and the arrangement"],
   ["tracks", "Tracks"],
   ["steps", "The step grid"],
   ["roll", "The piano roll"],
@@ -173,7 +174,7 @@ export default function ManualPage() {
                 <tr><th>Control</th><th>What it does</th></tr>
               </thead>
               <tbody>
-                <tr><td>repeat / chain</td><td>Repeat loops the current pattern. Chain plays your non-empty patterns in order, like a song.</td></tr>
+                <tr><td>repeat / chain / arrange</td><td>Repeat loops the current pattern. Chain plays your non-empty patterns in order, like a song. Arrange plays each track&apos;s own timeline of pattern blocks, drawn in the <a href="#views">arrangement view</a>.</td></tr>
                 <tr><td>immediate / finish</td><td>Whether clicking another pattern switches straight away or waits out the current bar.</td></tr>
                 <tr><td>dup</td><td>Copies this pattern into the next free slot. The usual way to start a variation.</td></tr>
                 <tr><td>drag a number</td><td>Drops a copy of that pattern onto any other slot and takes you there. In finish mode while playing it waits for the bar, like any other switch.</td></tr>
@@ -189,6 +190,60 @@ export default function ManualPage() {
             track. If you want the opposite, a track&apos;s{" "}
             <span className={styles.ui}>p-lock</span> button gives it a sound of its
             own in <em>this</em> pattern. See <a href="#lock">p-lock</a>.
+          </div>
+        </section>
+
+        <section className={styles.section} id="views">
+          <h2>Clips and the arrangement</h2>
+          <p>
+            One song, three pictures of it. The switcher in the transport (or{" "}
+            <span className={styles.key}>tab</span>, with nothing focused) moves
+            between the <span className={styles.ui}>groove</span> view, the step
+            grids you know; the <span className={styles.ui}>clips</span> view, every
+            track&apos;s 32 patterns laid out as clips to launch one track at a
+            time; and the <span className={styles.ui}>arrange</span> view, a
+            timeline of pattern blocks per track. Switching views changes nothing
+            about what plays. Desktop only for now.
+          </p>
+          <h3>Clips</h3>
+          <div className={styles.tableWrap}>
+            <table className={styles.table}>
+              <thead>
+                <tr><th>Control</th><th>What it does</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>a cell</td><td>Launches that pattern on that track alone, now, or on the bar line in <em>finish</em> mode (the pattern bar&apos;s switch setting). The other tracks keep playing what they were. The lit cell is the pattern the track is on; a dot marks a p-locked one. Double-click to edit it in the groove view.</td></tr>
+                <tr><td>the scene row</td><td>The numbers along the top launch a whole column: every track to that pattern, which is exactly what the pattern bar does. A track launched off the scene shows a <span className={styles.ui}>p5</span> badge beside its length in the groove view; click it to bring the track back.</td></tr>
+                <tr><td>■</td><td>Stops that track&apos;s clip: it plays nothing until a clip is launched on it or a scene is. The one at the head stops every track.</td></tr>
+                <tr><td>drag a cell</td><td>Copies the pattern onto another cell, on the same track or another (lanes the other engine cannot play are dropped, as paste does).</td></tr>
+                <tr><td>● rec</td><td>Records what you launch into the arrangement, bar by bar: play, launch clips for a while, stop, and the arrangement view holds the performance. Recording over an arrangement rewrites the bars it passes.</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <h3>The arrangement</h3>
+          <div className={styles.tableWrap}>
+            <table className={styles.table}>
+              <thead>
+                <tr><th>Control</th><th>What it does</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>play arrangement</td><td>Switches to arrange mode (the pattern bar&apos;s mode button cycles to it too): every track follows its blocks, bar by bar, and the song loops at the last block on any track. A gap is silence for that track.</td></tr>
+                <tr><td>drag on empty lane</td><td>Draws a block of the pattern the track is on, as many bars as you drag.</td></tr>
+                <tr><td>drag a block</td><td>Moves it, snapped to the bar. Drag its right edge to resize; hold <span className={styles.key}>alt</span> to drag out a copy. A block dropped on another cuts it.</td></tr>
+                <tr><td>the number on a block</td><td>Picks which pattern it plays.</td></tr>
+                <tr><td>delete / backspace</td><td>Removes the selected block. Every edit is one undo step.</td></tr>
+                <tr><td>from chain</td><td>Lays the chain out as blocks on every track: the non-empty patterns in order, each for its <span className={styles.ui}>rep</span> count. A starting point to pull apart.</td></tr>
+                <tr><td>− / +</td><td>Zoom.</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div className={styles.note}>
+            The ruler counts bars of pattern 1&apos;s meter. A pattern with a
+            time signature of its own still loops its own length inside a block;
+            only the block&apos;s edges fall on the ruler. In code the arrangement
+            is <span className={styles.ui}>arrangement()</span> and{" "}
+            <span className={styles.ui}>.blocks([[pattern, fromBar, bars], ...])</span>{" "}
+            on a track&apos;s part.
           </div>
         </section>
 
@@ -626,6 +681,7 @@ export default function ManualPage() {
                 <tr><td><span className={styles.ui}>:fx reverb .5</span></td><td>Sets an effect&apos;s level on the track, 0 to 1.</td></tr>
                 <tr><td><span className={styles.ui}>:k name</span></td><td>Picks a knob, as above.</td></tr>
                 <tr><td><span className={styles.ui}>:nudge 3</span></td><td>Puts the note under the cursor 3/24 of a step late (negative is early, <span className={styles.ui}>:nudge 0</span> back on the grid).</td></tr>
+                <tr><td><span className={styles.ui}>:view clips</span></td><td>Opens the clips, arrange or groove view (<span className={styles.key}>tab</span> cycles them).</td></tr>
                 <tr><td><span className={styles.ui}>:12</span></td><td>Moves the cursor to step 12.</td></tr>
                 <tr><td><span className={styles.ui}>:w</span></td><td>Opens the save panel (you need to be signed in).</td></tr>
                 <tr><td><span className={styles.ui}>:h</span></td><td>Lists every vim key.</td></tr>

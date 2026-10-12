@@ -23,8 +23,9 @@ import { currentBpm, syncAllLFOs } from "./lfo.js";
 import { init, needsResume, primeAudioForIOS } from "./main.js";
 import { applyBusMute, updateMidiUI } from "./render.js";
 import { ensureFxRack, fireFilterEnv, refreshAllTrackOutputs, refreshNoiseBeds, routeVoiceToRack, soloAudibleTracks } from "./signal.js";
-import { activeMeter, stepsPerBarForMeter, stepsPerBeatForMeter } from "./meter.js";
+import { stepsPerBarForMeter, stepsPerBeatForMeter, transportMeter } from "./meter.js";
 import { findNextNonEmptyPattern, invertChord, state, switchPattern } from "./state.js";
+import { advanceArrangement, clearQueuedClips, commitQueuedClips, recordArrangementBar, restartTrackCount, seedArrangement, seedTrackCount } from "./clips.js";
 import { loadSilverboxWorklet } from "./silverbox.js";
 import { loadContagionWorklet } from "./contagion.js";
 import { applyScale, chordNotes, nameToMidi } from "./theory.js";
@@ -400,6 +401,8 @@ export async function stopPlayback() {
   state.tick = 0;
   state.barTick = 0;
   for (const t of state.tracks) { t.trackTick = 0; t.speedAccum = 0; }
+  clearQueuedClips();                              // a clip waiting for a bar that will not come
+  state.arrRecord = false;                         // recording stops with the transport
   paintNowIndicator();
   setStatus("stopped");
 }
@@ -411,11 +414,7 @@ export async function stopPlayback() {
 // press (the speed < 1 accumulator included). An immediate switch from a click
 // keeps counting, since it lands mid-bar.
 function restartTrackCounts() {
-  for (const t of state.tracks) {
-    const sp = Math.max(0.0001, t.speed ?? 1);
-    t.trackTick = 0;
-    t.speedAccum = sp < 1 ? 1 - sp : 0;
-  }
+  for (const t of state.tracks) restartTrackCount(t);
 }
 
 /**
@@ -456,7 +455,7 @@ export async function startPlayback(opts = {}) {
   // Where in the bar that tick is. The bar is the active pattern's meter, not
   // a fixed 16: a 7/4 bar is 28 sixteenths, and ending it at 16 cut every
   // chained pattern off after four beats (see the bar line below).
-  state.barTick = startTick % stepsPerBarForMeter(activeMeter());
+  state.barTick = startTick % stepsPerBarForMeter(transportMeter());
   state.chainBarCount = 0;
   // A track's own trackTick runs at `speed` steps per global tick (see the
   // scheduler below); land it where it would be had it been counting from
@@ -464,11 +463,11 @@ export async function startPlayback(opts = {}) {
   // A track slower than the transport (speed < 1) starts its accumulator one
   // tick's worth short of full, so its first step fires ON the downbeat rather
   // than a tick after it: with 0 a half-speed track played every odd sixteenth.
-  for (const t of state.tracks) {
-    const sp = Math.max(0.0001, t.speed ?? 1);
-    t.trackTick = Math.round(startTick * sp);
-    t.speedAccum = sp < 1 ? 1 - sp : 0;
-  }
+  for (const t of state.tracks) seedTrackCount(t, startTick);
+  // Arrange mode lands in the arrangement where the tick says (clips.js);
+  // otherwise a recording armed before play writes from bar 0.
+  if (state.patternMode === "arrange") seedArrangement(startTick);
+  else if (state.arrRecord) state.arrRecBar = 0;
   // Restore master gain — the stop branch ramps it to 0 to kill the lookahead-
   // queued tail of Tone synth events that Transport.stop() can't unschedule.
   if (state.masterGain && state.audioCtx) {
@@ -507,7 +506,9 @@ export async function startPlayback(opts = {}) {
       // thing it contributes, and they have to keep running for the tracks
       // feeding it, so a soloed lead still arrives through its reverb. Muting a
       // bus cuts its audio instead (BusVoice.setMuted, via applyBusMute).
-      if (!isBus && (soloAudible ? !soloAudible.has(t) : t.muted)) continue;
+      // A stopped clip (clips.js: the clip view's stop, or a gap in the
+      // arrangement) withholds the track exactly as mute does.
+      if (!isBus && (t._clipOff || (soloAudible ? !soloAudible.has(t) : t.muted))) continue;
       const speed = Math.max(0.0001, t.speed ?? 1);
       const effDur = baseStepDur / speed;
       t.speedAccum = (t.speedAccum ?? 0) + speed;
@@ -676,25 +677,38 @@ export async function startPlayback(opts = {}) {
     // it marks quarters, which land on even 16ths and never swing.
     // Snapshot the tick now — it advances before the deferred paint fires.
     const globalTickSnap = state.tick;
-    scheduleAtAudible(() => paintBeatIndicator(globalTickSnap), time, lat);
-    // The bar line comes from the pattern playing now: its meter's length in
-    // sixteenths (16 in 4/4, 28 in 7/4, 14 in 7/8). The metronome clicks on
-    // its beats and accents its downbeat.
-    const meter = activeMeter();
+    // `_nowTick` is the tick being HEARD, for anything that draws a position
+    // against the song (the arrangement view's playhead) rather than a step.
+    scheduleAtAudible(() => { state._nowTick = globalTickSnap; paintBeatIndicator(globalTickSnap); }, time, lat);
+    // The bar line comes from the scene's meter: its length in sixteenths (16
+    // in 4/4, 28 in 7/4, 14 in 7/8), or the ruler's (slot 0) in arrange mode.
+    // The metronome clicks on its beats and accents its downbeat.
+    const meter = transportMeter();
     const barLen = stepsPerBarForMeter(meter);
     const barTick = state.barTick ?? 0;
     if (state.metronome && barTick % stepsPerBeatForMeter(meter) === 0) fireMetronome(time, barTick === 0);
     state.tick++;
     state.barTick = barTick + 1 >= barLen ? 0 : barTick + 1;
     const barLine = state.barTick === 0;
-    // manual pattern queue: when switch-mode is "finish" and the user queued a
-    // different pattern, commit at the next bar boundary. Synchronous, NOT
-    // deferred to the audible moment: this callback runs ~lookAhead ahead of
-    // the speakers, and the next callback (the new bar's first step) must read
-    // the switched pattern's data or it plays the old pattern's opening steps.
-    if (state.patternSwitchMode === "finish" && state.queuedPattern !== null && barLine) {
+    // Recording the arrangement (clips.js): what each track played this bar,
+    // written before any switch below so the slot written is the one heard.
+    if (barLine && state.arrRecord) recordArrangementBar();
+    if (state.patternMode === "arrange" && barLine) {
+      // The arrangement decides every track's pattern at every bar line
+      // (clips.js); the scene queue and the chain have no say in this mode.
+      advanceArrangement();
+    } else if (state.patternSwitchMode === "finish" && state.queuedPattern !== null && barLine) {
+      // manual pattern queue: when switch-mode is "finish" and the user queued a
+      // different pattern, commit at the next bar boundary. Synchronous, NOT
+      // deferred to the audible moment: this callback runs ~lookAhead ahead of
+      // the speakers, and the next callback (the new bar's first step) must read
+      // the switched pattern's data or it plays the old pattern's opening steps.
       switchPattern(state.queuedPattern, { deferUi: true });
       restartTrackCounts();
+    } else if (state.patternSwitchMode === "finish" && barLine) {
+      // Clips waiting on single tracks (clips.js). The scene queue above wins
+      // when both are set: switchPattern clears the per-track queue.
+      commitQueuedClips();
     }
     // pattern chaining: advance at bar boundaries when chain mode is on, respecting per-pattern repeats
     if (state.patternMode === "chain" && barLine) {

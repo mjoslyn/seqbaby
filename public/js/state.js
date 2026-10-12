@@ -88,6 +88,19 @@ export const state = {
   // Sixteenths into the current bar, whose length is the active pattern's
   // meter (transport.js). Chain mode and a queued switch act on its wrap.
   barTick: 0,
+  // The arrangement (arrangement.js, clips.js): the ruler bar the transport is
+  // on in arrange mode, wrapped at the arrangement's end; whether clip launches
+  // are being recorded into the tracks' timelines, and the bar they write.
+  // `_arrOrigin` is the global tick that was ruler bar 0, so a view can map the
+  // tick being heard (`_nowTick`, written by the transport at the audible time)
+  // to a position on the ruler. `view` is which of the three views is open
+  // (views.js); none of these are saved.
+  arrBar: 0,
+  arrRecord: false,
+  arrRecBar: 0,
+  _arrOrigin: 0,
+  _nowTick: 0,
+  view: "groove",
   // XY macro pads (macro.js). Global and cross-track by design, and deliberately
   // outside the p-lock snapshot — a performance macro that rearranged itself at
   // every pattern switch would be unplayable.
@@ -173,6 +186,18 @@ export function clonePattern(src) {
 }
 
 /**
+ * The slot a track is on: what it plays AND what its step grid edits (one
+ * thing, the alias below). `state.activePattern` is the SCENE — the slot the
+ * pattern bar highlights and `switchPattern` puts every track on — and the two
+ * agree until a clip is launched on one track (clips.js). Every reader that
+ * means "this track's pattern" asks this, never `state.activePattern`.
+ * @param {Track} t @returns {PatternIndex}
+ */
+export function trackSlot(t) {
+  return t?._patternIdx ?? state.activePattern;
+}
+
+/**
  * Rebind a track's step arrays to reference patterns[idx] directly so UI
  * mutations flow straight into that pattern.
  * @param {Track} t @param {PatternIndex} idx
@@ -246,7 +271,11 @@ export function findNextNonEmptyPattern(fromIdx) {
 // until the end of the current bar; otherwise swap immediately.
 export function requestPatternSwitch(idx) {
   if (idx < 0 || idx >= PATTERN_COUNT) return;
-  if (idx === state.activePattern) { state.queuedPattern = null; renderPatternGrid(); return; }
+  // Already the scene, and every track on it: nothing to switch. A track a
+  // clip put on another slot is brought back by the switch below.
+  if (idx === state.activePattern && state.tracks.every(t => trackSlot(t) === idx && !t._clipOff)) {
+    state.queuedPattern = null; renderPatternGrid(); return;
+  }
   if (state.patternSwitchMode === "finish" && state.playing) {
     state.queuedPattern = idx;
     renderPatternGrid();
@@ -266,13 +295,20 @@ export function switchPattern(idx, { deferUi = false } = {}) {
   // owns it, and the one being entered is recalled. Chain mode lands here on a
   // bar boundary mid-transport, which is why the recall diffs rather than
   // re-applying everything (see patternSound.js).
-  const prev = state.activePattern;
-  if (prev !== idx) {
-    for (const t of state.tracks) flushPatternSound(t, prev);
+  // Each track is flushed at ITS slot: a launched clip (clips.js) can have put
+  // one off the scene, and flushing it at the scene's index would write its
+  // live sound into a pattern it never played.
+  for (const t of state.tracks) {
+    const was = trackSlot(t);
+    if (was !== idx) flushPatternSound(t, was);
   }
   state.activePattern = idx;
   state.queuedPattern = null;
   for (const t of state.tracks) {
+    // A scene launch is every track together: a clip waiting for the bar is
+    // overridden, a stopped track plays again.
+    t._queuedSlot = null;
+    t._clipOff = false;
     aliasPattern(t, idx);
     if (recallPatternSound(t, idx)) t._soundUiStale = true;
   }
@@ -305,6 +341,25 @@ export function switchPattern(idx, { deferUi = false } = {}) {
 let patternUiTimer = null;
 /** @type {Track[]|null} tracks still to repaint after a deferred switch */
 let patternUiQueue = null;
+/**
+ * One track's pattern repaint, on the same one-track-per-task queue a
+ * deferred switch uses: a clip launched on a bar line (clips.js) or an
+ * arrangement block switching in paints the way a chain switch does, and a
+ * whole-session switch landing meanwhile simply replaces the queue.
+ * @param {Track} t
+ */
+export function queueTrackPaint(t) {
+  patternUiQueue ??= [];
+  if (!patternUiQueue.includes(t)) patternUiQueue.push(t);
+  if (patternUiTimer === null) patternUiTimer = setTimeout(paintPatternUIStep, 0);
+}
+/** One track's pattern repaint, now (a click), the bar included. */
+export function paintTrackPatternUINow(t) {
+  paintTrackPatternUI(t);
+  paintPatternBarUI();
+}
+/** Everything a pattern switch repaints, now. patternBar.js's move needs it. */
+export function repaintPatternUI() { paintPatternUI(); }
 function paintPatternUI() {
   if (patternUiTimer !== null) { clearTimeout(patternUiTimer); patternUiTimer = null; }
   patternUiQueue = null;
@@ -327,13 +382,40 @@ function paintTrackPatternUI(t) {
   renderStepGrid(t);           // also refreshes the roll, if open
   refreshAutIfOpen(t);
   refreshParamIndicators(t);   // automation lanes belong to the pattern
+  paintTrackSlotBadge(t);      // off the scene, or stopped (clips.js)
 }
+
+/**
+ * The slot badge on a track's head in the groove view: shown only while the
+ * track is off the scene or stopped, since with no clip launched it would say
+ * what the pattern bar already says on every track. A click puts the track
+ * back on the scene.
+ * @param {Track} t
+ */
+export function paintTrackSlotBadge(t) {
+  const el = t?.el?.querySelector(".sq-track__slot");
+  if (!el) return;
+  const slot = trackSlot(t);
+  const off = !!t._clipOff;
+  const show = off || slot !== state.activePattern;
+  el.hidden = !show;
+  if (!show) return;
+  el.textContent = off ? "off" : `p${slot + 1}`;
+  el.classList.toggle("is-off", off);
+  el.title = off
+    ? `no clip playing on this track. Click to play pattern ${state.activePattern + 1} with the others`
+    : `this track is on pattern ${slot + 1} while the others are on ${state.activePattern + 1}. Click to bring it back`;
+}
+
 function paintPatternBarUI() {
   // The p-lock button's state belongs to the pattern, so it changes under you.
   refreshAllPatternLockUI();
   renderPatternGrid();
   syncRepeatsUI();
   syncMeterUI();
+  // The clip and arrangement views draw which slot each track is on
+  // (clipView.js, arrangeView.js); a switch is what moves it.
+  window.dispatchEvent(new CustomEvent("seqbaby:clips"));
 }
 
 /** Write the active pattern's repeat count back into the rep field. */

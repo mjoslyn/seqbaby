@@ -35,17 +35,19 @@
 // every other track playing.
 
 import { PATTERN_COUNT } from "./constants.js";
+import { normalizeBlocks } from "./arrangement.js";
+import { announceClips } from "./clips.js";
 import { cloneChance, refreshChanceScale, refreshChanceUI, renderChancePanel } from "./chance.js";
 import { setStatus } from "./dom.js";
 import { refreshEuclidUI, renderEuclidPanel } from "./euclid.js";
 import { sameTree } from "./historyStore.js";
-import { ICON_CHAIN, ICON_FINISH, ICON_NOW, ICON_REPEAT } from "./icons.js";
+import { ICON_FINISH, ICON_NOW } from "./icons.js";
 import { applySampleSpeed } from "./lfo.js";
 import { applyMacroPads } from "./macro.js";
 import { parseMeter } from "./meter.js";
 import { refreshParamIndicators } from "./paramTargets.js";
 import { updateGranularSpeedEnabled, updatePlaitsControlsVisibility } from "./params.js";
-import { renderPatternGrid } from "./patternBar.js";
+import { renderPatternGrid, setPatternMode } from "./patternBar.js";
 import { applyPatternSound, recallLoadedPatternSound, refreshAllPatternLockUI, refreshPatternSoundUI } from "./patternSound.js";
 import { refreshAutIfOpen, refreshRollIfOpen } from "./pianoRoll.js";
 import { applyBusMute, paintDiceDensity, placeBusesLast, refreshMuteSoloUI } from "./render.js";
@@ -53,7 +55,7 @@ import { syncScaleUI } from "./scaleUI.js";
 import { loadTrackFromData, migrateTrackData, serializeSet, trackShellFor } from "./session.js";
 import { migrateLegacyNames, validateSet } from "./sessionFormat.js";
 import { applyCompressorConfig, refreshAllTrackOutputs, refreshCompSourceDropdowns, refreshNoiseBeds, refreshOutputSelects, releaseSilencedTracks, wouldFeedback } from "./signal.js";
-import { aliasPattern, clonePattern, state, syncMeterUI, syncRepeatsUI } from "./state.js";
+import { aliasPattern, clonePattern, state, syncMeterUI, syncRepeatsUI, trackSlot } from "./state.js";
 import { renderStepGrid } from "./stepGrid.js";
 import { createTrack, removeTrack } from "./track.js";
 import { requestMidiIfNeeded } from "./transport.js";
@@ -106,14 +108,7 @@ export function applyGlobalsInPlace(cur, target, { pads = true, order = state.tr
     refreshChanceScale();
     syncScaleUI();
   }
-  if (cur.patternMode !== target.patternMode) {
-    state.patternMode = target.patternMode === "chain" ? "chain" : "repeat";
-    const btn = el("pattern-mode");
-    if (btn) {
-      btn.innerHTML = state.patternMode === "chain" ? ICON_CHAIN : ICON_REPEAT;
-      btn.setAttribute("aria-pressed", String(state.patternMode === "chain"));
-    }
-  }
+  if (cur.patternMode !== target.patternMode) setPatternMode(target.patternMode);
   if (cur.patternSwitchMode !== target.patternSwitchMode) {
     state.patternSwitchMode = target.patternSwitchMode === "finish" ? "finish" : "immediate";
     const btn = el("pattern-switch");
@@ -177,7 +172,7 @@ export function applyTrackInPlace(t, a, b, resolveTrack = (i) => state.tracks[i]
     }
     // The live step arrays alias the pattern object that was just replaced, and
     // t.length / t.accents come off it too.
-    aliasPattern(t, state.activePattern);
+    aliasPattern(t, trackSlot(t));
     grid = true;
   }
 
@@ -255,6 +250,12 @@ export function applyTrackInPlace(t, a, b, resolveTrack = (i) => state.tracks[i]
     grid = true;
   }
   if (!sameTree(a.baseSound, b.baseSound)) t.baseSound = deepCopy(b.baseSound);
+  // The arrangement is plain data: no voice, graph or DOM hangs off it. In
+  // arrange mode the next bar line reads the new blocks; the views repaint now.
+  if (!sameTree(a.arrangement, b.arrangement)) {
+    t.arrangement = normalizeBlocks(b.arrangement);
+    announceClips();
+  }
 
   // The sidechain source is resolved from its INDEX, not from the raw id the
   // snapshot's `comp` carries — `createTrack` hands out fresh ids every time
@@ -440,8 +441,8 @@ export function mergeSet(s) {
     // track-level fields — the same call `loadTrackFromData` makes for a track
     // this merge built, so a track that stayed and a track that was remade read
     // the blob the same way.
-    if (recallLoadedPatternSound(t, state.activePattern)) r.sound = true;
-    if (metersMoved && !r.grid) aliasPattern(t, state.activePattern);   // accents follow the meter
+    if (recallLoadedPatternSound(t, trackSlot(t))) r.sound = true;
+    if (metersMoved && !r.grid) aliasPattern(t, trackSlot(t));   // accents follow the meter
     if (r.grid || metersMoved) { renderStepGrid(t); refreshRollIfOpen(t); refreshAutIfOpen(t); }
     if (r.sound) { refreshPatternSoundUI(t); updateGranularSpeedEnabled(t); }
     if (r.grid || r.sound) refreshParamIndicators(t);

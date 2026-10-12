@@ -36,7 +36,8 @@ import { refreshHexopAlgorithm, setEngineKey, setParam, updateGranularSpeedEnabl
 import { bestRollViewOct } from "./pianoRoll.js";
 import { applyCompressorConfig, EQ_BANDS, refreshCompSourceDropdowns, refreshNoiseBeds, refreshOutputSelects, releaseSilencedTracks, setEQ, setFilter, setTrackOutput } from "./signal.js";
 import { ANALOG_FILTER_INFO, ANALOG_FILTER_TYPES } from "./soundDefaults.js";
-import { state } from "./state.js";
+import { state, trackSlot } from "./state.js";
+import { launchClip } from "./clips.js";
 import { openAutAsModal, openChanceAsModal, openCompAsModal, openEnvAsModal, openEqAsModal, openFilterAsModal, openFxAsModal, openGranularWavModal, openModAsModal, openEuclidAsModal, openRollAsModal, openSampleEditorModal, openTrackMenu } from "./stepEditor.js";
 import { openWavetableEditor } from "./wavetableEditor.js";
 import { attachGridInteraction, paintStepCursor, renderStepGrid } from "./stepGrid.js";
@@ -1219,21 +1220,24 @@ export function renderTrack(t) {
   if (semiDownBtn) semiDownBtn.addEventListener("click", () => shiftTrackOctave(t, -1));
   if (semiUpBtn)   semiUpBtn.addEventListener("click",   () => shiftTrackOctave(t, +1));
 
+  // The length buttons work the pattern this TRACK is on (trackSlot), which
+  // t.length mirrors; a launched clip can put it off the scene.
   node.querySelector(".track-len-plus1")?.addEventListener("click", () => {
-    const spb = stepsPerBarForMeter(patternMeter(state.activePattern));
-    resizePattern(t, state.activePattern, t.length + spb);
+    const slot = trackSlot(t);
+    const spb = stepsPerBarForMeter(patternMeter(slot));
+    resizePattern(t, slot, t.length + spb);
   });
   node.querySelector(".track-len-2x")?.addEventListener("click", () => {
-    extendPatternByDuplicate(t, state.activePattern, t.length * 2);
+    extendPatternByDuplicate(t, trackSlot(t), t.length * 2);
   });
   node.querySelector(".track-len-4x")?.addEventListener("click", () => {
-    extendPatternByDuplicate(t, state.activePattern, t.length * 4);
+    extendPatternByDuplicate(t, trackSlot(t), t.length * 4);
   });
   node.querySelector(".track-len-half")?.addEventListener("click", () => {
-    truncatePattern(t, state.activePattern, Math.max(1, Math.floor(t.length / 2)));
+    truncatePattern(t, trackSlot(t), Math.max(1, Math.floor(t.length / 2)));
   });
   node.querySelector(".track-len-quarter")?.addEventListener("click", () => {
-    truncatePattern(t, state.activePattern, Math.max(1, Math.floor(t.length / 4)));
+    truncatePattern(t, trackSlot(t), Math.max(1, Math.floor(t.length / 4)));
   });
 
   const soloBtn = node.querySelector(".sq-track__solo");
@@ -1244,6 +1248,10 @@ export function renderTrack(t) {
     releaseSilencedTracks();
   });
 
+  // The slot badge: shown while a launched clip has this track off the scene
+  // (clips.js); a click brings it back onto the scene's pattern.
+  node.querySelector(".sq-track__slot")?.addEventListener("click", () => launchClip(t, state.activePattern));
+
   // p-lock: this track's sound becomes part of THIS pattern (patternSound.js).
   // The state belongs to the pattern, so the button is repainted on every
   // pattern switch as well as here.
@@ -1251,7 +1259,7 @@ export function renderTrack(t) {
   if (plockBtn) {
     refreshPatternLockUI(t);
     plockBtn.addEventListener("click", () => {
-      const idx = state.activePattern;
+      const idx = trackSlot(t);
       const on = !patternLocked(t, idx);
       if (setPatternLock(t, idx, on)) refreshPatternSoundUI(t);
       setStatus(on

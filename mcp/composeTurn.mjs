@@ -192,7 +192,7 @@ export async function runComposeTurn({
 
   let reply = "";
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-    // The stable prefix is big -- the compose guide plus 31 tool schemas --
+    // The stable prefix is big -- the compose guide plus the tool schemas --
     // and the prefix renders tools -> system -> messages, so one breakpoint on
     // the system block covers the tools too. Over the dozens of rounds a whole
     // song takes, that is most of what each round would otherwise wait on.

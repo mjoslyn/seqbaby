@@ -542,6 +542,14 @@ export const STUDIO_BODY = String.raw`
     <!-- The code drawer (codePanel.js): Strudel live coding, run into
          the song without stopping the transport. -->
     <button id="code-btn" class="sq-btn--ghost" type="button" aria-pressed="false" title="live code: write Strudel patterns, ctrl/⌘ enter runs them into the song"><span class="sq-btn__label">code</span></button>
+    <!-- The view switcher (views.js): the groove view (the step grids), the
+         clip view (tracks x slots, launched per track) and the arrangement
+         (a timeline of pattern blocks). Tab cycles them. Desktop only. -->
+    <div id="view-switch" class="sq-view-switch" role="group" aria-label="view">
+      <button type="button" data-view="groove" aria-pressed="true" title="groove: every track's step grid (tab cycles the views)">groove</button>
+      <button type="button" data-view="clips" aria-pressed="false" title="clips: the 32 patterns of every track as clips, launched one track at a time">clips</button>
+      <button type="button" data-view="arrange" aria-pressed="false" title="arrange: a timeline of pattern blocks per track">arrange</button>
+    </div>
     <button id="vim-toggle" class="sq-btn--ghost" type="button" aria-pressed="false" title="vim mode (\`): hjkl move, i insert, a play, v select, : commands">vim</button>
     <!-- Undo / redo. Wired and painted by history.js, which also owns the
          ctrl/cmd-Z keys; they ship disabled because at boot there is nothing
@@ -675,6 +683,10 @@ export const STUDIO_BODY = String.raw`
 
 
   <main id="tracks"></main>
+  <!-- The other two views of the same tracks (clipView.js, arrangeView.js),
+       drawn into when open; views.js shows one of the three. -->
+  <section id="clips" class="sq-clips" hidden aria-label="clips"></section>
+  <section id="arrange" class="sq-arrange" hidden aria-label="arrangement"></section>
   <div class="sq-add-track-row">
     <button id="add-track" class="sq-btn--ghost">+ add track</button>
     <button id="add-bus" class="sq-btn--ghost" title="add an fx bus: a track with no instrument that others are sent into, so one filter, one fx rack, one mod matrix and one set of automation lanes shape all of them">+ add fx bus</button>
@@ -689,6 +701,7 @@ export const STUDIO_BODY = String.raw`
         <button class="sq-track__save sq-icon-btn sq-btn--ghost" aria-label="save patch" title="save the current custom patch"></button>
         <button class="sq-track__load-patch sq-icon-btn sq-btn--ghost" aria-label="load patch" title="load a saved patch into this track"></button>
         <div class="sq-field"><label>len</label><input class="sq-track__len" type="number" min="1" max="128" value="16" /></div>
+        <button class="sq-track__slot" type="button" hidden aria-label="this track's pattern"></button>
         <div class="sq-track__len-extend">
           <button class="track-len-plus1 sq-btn--ghost" type="button" title="add a bar to this track's pattern, duplicating what is there">+1</button>
           <button class="track-len-2x sq-btn--ghost" type="button" title="double this track's pattern length, duplicating what is there">x2</button>

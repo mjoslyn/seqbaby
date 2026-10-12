@@ -52,6 +52,8 @@ export const STYLE_SRC = engineAsset("/style.css");
 // from public/js/. (types.js is JSDoc-only and intentionally absent.)
 export const ENGINE_MODULES = [
   "appApi.js",
+  "arrangeView.js",
+  "arrangement.js",
   "automation.js",
   "bass.js",
   "beat.js",
@@ -60,6 +62,8 @@ export const ENGINE_MODULES = [
   "catalog.js",
   "chance.js",
   "chanceGen.js",
+  "clipView.js",
+  "clips.js",
   "codePanel.js",
   "constants.js",
   "contagion.js",
@@ -123,6 +127,7 @@ export const ENGINE_MODULES = [
   "theoryData.js",
   "track.js",
   "transport.js",
+  "views.js",
   "vim.js",
   "voices.js",
   "vox.js",

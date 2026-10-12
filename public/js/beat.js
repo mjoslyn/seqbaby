@@ -1,4 +1,4 @@
-import { activeMeter, stepsPerBeatForMeter } from "./meter.js";
+import { stepsPerBeatForMeter, transportMeter } from "./meter.js";
 import { state } from "./state.js";
 
 export let _metroOsc = null;
@@ -39,7 +39,7 @@ export function currentIndicatorSteps() {
   return Math.max(2, Math.min(64, Number.isFinite(n) ? n : 16));
 }
 export function currentIndicatorMeter() {
-  return activeMeter();
+  return transportMeter();
 }
 export function buildBeatIndicator() {
   const svg = document.getElementById("beat-indicator");

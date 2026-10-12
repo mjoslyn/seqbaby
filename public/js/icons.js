@@ -2,6 +2,7 @@ import { state } from "./state.js";
 
 export const ICON_REPEAT = `<svg class="sq-btn-icon" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10a4 4 0 0 1 4-4h4"/><polyline points="10 4 12 6 10 8"/><path d="M12 6a4 4 0 0 1-4 4H4"/><polyline points="6 12 4 10 6 8"/></svg>`;
 export const ICON_CHAIN  = `<svg class="sq-btn-icon" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 8h10"/><polyline points="9 4 13 8 9 12"/></svg>`;
+export const ICON_ARRANGE = `<svg class="sq-btn-icon" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" aria-hidden="true"><rect x="1.5" y="2.5" width="6" height="3" rx="0.8" fill="currentColor"/><rect x="8.5" y="2.5" width="6" height="3" rx="0.8"/><rect x="4" y="6.5" width="8" height="3" rx="0.8"/><rect x="1.5" y="10.5" width="4" height="3" rx="0.8"/><rect x="9" y="10.5" width="5.5" height="3" rx="0.8" fill="currentColor"/></svg>`;
 export const ICON_NOW    = `<svg class="sq-btn-icon" viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M9 1.5 3.5 9h3.5l-1 5.5L13.5 7H10l1-5.5z"/></svg>`;
 export const ICON_FINISH = `<svg class="sq-btn-icon" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="2" width="8" height="2" rx="0.5"/><rect x="4" y="12" width="8" height="2" rx="0.5"/><path d="M5 4c0 2.5 3 3.2 3 4s-3 1.5-3 4"/><path d="M11 4c0 2.5-3 3.2-3 4s3 1.5 3 4"/></svg>`;
 export const ICON_SAVE     = `<svg class="sq-btn-icon" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 2h8l3 3v9a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z"/><path d="M5 2v4h6V2"/><rect x="5" y="9" width="6" height="5"/></svg>`;
@@ -21,7 +22,7 @@ export const HELP_TIPS = [
   "long-press a sample step to open the sample editor",
   "drag a step up or down to change pitch",
   "tap filter / env / fx / eq / comp / mod on a track to open it",
-  "32 pattern slots per session: loop one or chain them",
+  "32 pattern slots per session: loop one, chain them, or arrange them",
   "swap engines mid-session from the track header dropdown",
   "save patches and reload them from any track",
   "share a session: tap share to copy a link",

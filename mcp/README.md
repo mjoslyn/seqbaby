@@ -45,11 +45,11 @@ Env:
 
 | group | tools |
 |---|---|
-| song | `new_song`, `get_song`, `set_tempo`, `set_scale`, `set_arrangement`, `set_meter`, `load_song` |
+| song | `new_song`, `get_song`, `set_tempo`, `set_scale`, `set_arrangement` (repeat / chain / arrange), `set_blocks` (a track's timeline for arrange mode), `set_meter`, `load_song` |
 | engines | `list_engines`, `describe_engine` |
 | tracks | `add_track`, `remove_track`, `set_track` (name, length (every pattern, or one with `pattern`), mute, solo, glide, speed, out) |
 | steps | `set_steps` (a step string), `set_notes`, `set_step` (one step in full), `clear_pattern`, `copy_pattern`, `copy_section` (a pattern on every track) |
-| sound | `set_params`, `apply_preset`, `set_filter`, `set_eq`, `set_comp`, `set_fx` |
+| sound | `set_params`, `apply_preset`, `set_filter`, `set_eq`, `set_comp`, `set_fx`, `set_fx_chain` |
 | modulation | `add_lfo`, `remove_lfo`, `set_automation`, `remove_automation` |
 | generators | `set_euclid`, `set_chance` |
 | code | `write_code` (Strudel code into tracks), `song_as_code` (the song back out as code, with a strudel.cc link) |
