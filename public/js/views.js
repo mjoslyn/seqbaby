@@ -35,6 +35,12 @@ export function isMobileLayout() {
 export function setView(view) {
   if (!VIEWS.includes(view)) return;
   if (isMobileLayout()) view = "groove";
+  // Opened while playing, the view takes the transport with it at the next
+  // bar line (the mode a play press would have picked: transport.js reads
+  // the flag there). A flag rather than a mode write here, so that a jam
+  // peer's mode is never fought over: only a switch of THIS screen's view
+  // asks, once.
+  if (state.playing && view !== state.view) state._viewSwitched = true;
   state.view = view;
   for (const v of VIEWS) document.body.classList.toggle(`view-${v}`, v === view);
   document.querySelectorAll("#view-switch [data-view]").forEach((b) => {

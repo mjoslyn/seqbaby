@@ -4496,7 +4496,7 @@ body.sq-playing .sq-clip.is-now::after { content: ""; position: absolute; left: 
 /* arrange: a ruler, a lane per track, blocks on it */
 .sq-arr__bar-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 12px; }
 .sq-arr__bar-row .sq-arr__len { color: var(--fg-dim); margin-left: auto; }
-.sq-arr__play[aria-pressed="true"] { background: var(--accent-2); color: #0b0d10; border-color: var(--accent-2); }
+.sq-arr__play.is-playing { background: var(--accent-2); color: #0b0d10; border-color: var(--accent-2); }
 .sq-arr__zoom { display: inline-flex; gap: 2px; }
 .sq-arr__scroll { overflow-x: auto; padding-bottom: 6px; }
 .sq-arr__grid { position: relative; min-width: max-content; --arr-bar-w: 48px; }

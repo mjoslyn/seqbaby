@@ -2,9 +2,11 @@
  * The arrangement view: a ruler of bars across the top, a row per track, and
  * on each row the track's blocks (arrangement.js) — which pattern plays from
  * which bar, for how long — drawn to a bar width you can zoom. Arrange mode
- * (`patternMode === "arrange"`, the `play arrangement` toggle here or the
- * pattern bar's mode button) is what plays it; `rec` arms the recorder so clip
- * launches in the other views write blocks here.
+ * (`patternMode === "arrange"`) is what plays it, and the transport's play
+ * goes there on its own in this view (and comes to it at the next bar line
+ * when the view is opened while playing: transport.js); `play` here is the
+ * transport's own button. `rec` arms the recorder so clip launches in the
+ * other views write blocks here.
  *
  * Editing is pointer events on the lanes: drag a block to move it (snapped to
  * the bar), drag its right edge to resize, alt-drag to duplicate, click to
@@ -35,7 +37,6 @@ import { arrangementBars, blockAt, blocksEnd, chainToBlocks, moveBlock, placeBlo
 import { announceClips, arrangeLength, setArrangeRecord, setArrangeStart } from "./clips.js";
 import { showConfirmDialog } from "./dialogs.js";
 import { patternMeter, stepsPerBarForMeter, transportMeter } from "./meter.js";
-import { setPatternMode } from "./patternBar.js";
 import { patternLocked } from "./patternSound.js";
 import { isPatternNonEmpty, state, trackSlot } from "./state.js";
 import { makeTrackDetail } from "./trackDetail.js";
@@ -123,12 +124,12 @@ function render() {
   }).join("");
   grid.innerHTML = `
     <div class="sq-arr__bar-row">
-      <button type="button" class="sq-arr__play" data-act="play" aria-pressed="${arrange}" title="play the arrangement: each track follows its blocks (the pattern bar's mode button says the same)">${arrange ? "playing arrangement" : "play arrangement"}</button>
+      <button type="button" class="sq-arr__play${state.playing ? " is-playing" : ""}" data-act="play" title="${state.playing ? "stop the transport" : "play the arrangement: each track follows its blocks"}">${state.playing ? "stop" : "play"}</button>
       <button type="button" class="sq-arr__rec" data-act="rec" aria-pressed="${!!state.arrRecord}" title="record: play plays the clips while this is armed, and each bar is written here as it plays; over an existing arrangement you are asked whether the recording replaces it or goes after it">● rec</button>
       <button type="button" class="sq-btn--ghost" data-act="fromchain" title="lay out the chain as blocks on every track: the non-empty patterns in order, each for its repeat count">from chain</button>
       <button type="button" class="sq-btn--ghost" data-act="clear" title="remove every block">clear</button>
       <span class="sq-arr__zoom"><button type="button" class="sq-btn--ghost" data-act="zoom-" title="zoom out">−</button><button type="button" class="sq-btn--ghost" data-act="zoom+" title="zoom in">+</button></span>
-      <span class="sq-arr__len">${len} bar${len === 1 ? "" : "s"}${state.arrStartBar ? ` · starts at bar ${state.arrStartBar + 1}` : ""}${arrange ? "" : " · not playing: press play arrangement"}</span>
+      <span class="sq-arr__len">${len} bar${len === 1 ? "" : "s"}${state.arrStartBar ? ` · starts at bar ${state.arrStartBar + 1}` : ""}${state.playing && !arrange ? " · playing the clips: the arrangement takes over at the bar line" : ""}</span>
     </div>
     <div class="sq-arr__scroll">
       <div class="sq-arr__grid" style="--arr-bar-w:${w}px">
@@ -188,7 +189,7 @@ function onClick(e) {
     return;
   }
   const act = e.target.closest("[data-act]")?.dataset.act;
-  if (act === "play") { setPatternMode(state.patternMode === "arrange" ? "repeat" : "arrange"); scheduleArrangePaint(); announceClips(); return; }
+  if (act === "play") { document.getElementById("play")?.click(); return; }
   if (act === "rec") { setArrangeRecord(!state.arrRecord); scheduleArrangePaint(); return; }
   if (act === "zoom+" || act === "zoom-") { zoom = Math.max(0, Math.min(ZOOMS.length - 1, zoom + (act === "zoom+" ? 1 : -1))); render(); return; }
   if (act === "fromchain") { fromChain(); return; }

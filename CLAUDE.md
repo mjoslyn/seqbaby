@@ -2282,7 +2282,13 @@ block   t.arrangement[i]    ─── { slot, start, bars }: a clip at a bar, fo
   shows**: `startPlayback` switches to arrange mode in the arrangement view
   and back to the last repeat / chain mode (`_loopMode`) in the clip view;
   the groove view keeps whatever the pattern bar says, since that is where
-  the mode button is in sight. The mode is the song's, so a jam hears the
+  the mode button is in sight (`followView`, transport.js). A view opened
+  WHILE playing raises `state._viewSwitched` (views.js) and the same rule
+  runs at the next bar line, seeding the arrangement from the start marker
+  when it lands in arrange mode: a flag rather than a mode write at the
+  switch, so a jam peer's mode is never fought over. The arrangement view's
+  `play` is the transport's own button, as the clip view's is; there is no
+  mode toggle in either. The mode is the song's, so a jam hears the
   change as any edit.
 - **Recording is a bar-line write into a TAKE** (`recordArrangementBar`):
   with `rec` armed (clip view or arrangement view), every bar line in a

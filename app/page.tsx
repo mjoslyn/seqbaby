@@ -90,6 +90,8 @@ const FEATURES = [
   ["strudel", "your song opens as live code. edit the mini-notation, press ctrl+enter, and it lands in the song while it keeps playing."],
   ["vim mode", "hjkl around the grid, i to play notes in, a command line for the knobs. you can leave the mouse alone for a while."],
   ["fx bus", "a track with no instrument that other tracks run through, so several can share one filter, one rack and one set of lanes."],
+  ["clips", "every track's 32 patterns as a grid of clips. launch one on a track while the others keep playing, or a whole scene at once."],
+  ["arrangement", "a timeline of pattern blocks per track. drag them about, or record one by launching clips, and play the song from any bar."],
 ] as const;
 
 const BLURBS = [

@@ -228,15 +228,18 @@ export function setArrangeStart(bar) {
  * @param {number} startTick
  * @param {{startBar?: number}} [opts]
  */
-export function seedArrangement(startTick, { startBar = 0 } = {}) {
+export function seedArrangement(startTick, { startBar = 0, deferUi = false, fromHere = false } = {}) {
   const barLen = stepsPerBarForMeter(transportMeter());
   const loop = arrangeLength() * barLen;
-  const at = startTick + Math.max(0, startBar) * barLen;
+  // `fromHere`: the arrangement starts at `startBar` AT this tick (a view
+  // switch at a bar line), rather than where the tick count since play maps
+  // (a play press, where a jam's shared start has to land inside the right block)
+  const at = (fromHere ? 0 : startTick) + Math.max(0, startBar) * barLen;
   const inLoop = ((at % loop) + loop) % loop;
   state.arrBar = Math.floor(inLoop / barLen);
   state._arrOrigin = startTick - inLoop;
   state._arrJump = null;
-  applyArrangementBar({ deferUi: false, tickInBar: inLoop % barLen });
+  applyArrangementBar({ deferUi, tickInBar: inLoop % barLen });
 }
 
 // ---- recording ----------------------------------------------------------

@@ -99,6 +99,7 @@ export const state = {
   arrStartBar: 0,       // the ruler bar a play press starts the arrangement from (the view's marker)
   _loopMode: "repeat",  // the last repeat / chain mode, which the clip view's play returns to
   _arrJump: null,       // a bar to jump to at the next bar line while the arrangement plays
+  _viewSwitched: false, // a view opened while playing: the mode follows it at the next bar line (transport.js)
   arrRecord: false,
   arrRecBar: 0,
   arrRecStart: null,    // the first bar the take holds, or null before anything is written

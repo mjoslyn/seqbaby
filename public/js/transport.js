@@ -421,6 +421,21 @@ function restartTrackCounts() {
 }
 
 /**
+ * The mode the open view wants (the play-follows-the-view rule), written when
+ * it differs: the arrangement view arrange mode, the clip view the last loop
+ * mode, the groove view nothing. With the recorder armed, a loop mode
+ * whichever view is open. Returns true when the mode moved. Called by
+ * startPlayback and, after a view switch while playing, at the next bar line.
+ */
+function followView() {
+  const before = state.patternMode;
+  if (state.arrRecord) { if (state.patternMode === "arrange") setPatternMode(state._loopMode || "repeat"); }
+  else if (state.view === "arrange" && state.patternMode !== "arrange") setPatternMode("arrange");
+  else if (state.view === "clips" && state.patternMode === "arrange") setPatternMode(state._loopMode || "repeat");
+  return state.patternMode !== before;
+}
+
+/**
  * Start the transport from the top. Idempotent — a no-op if already playing,
  * for the same reason stopPlayback() is (see there).
  *
@@ -460,9 +475,8 @@ export async function startPlayback(opts = {}) {
   // whichever view is open: a recording is of the clips playing, and the
   // recorder is off in arrange mode. The mode is the song's, so a jam hears
   // the change as any edit.
-  if (state.arrRecord) { if (state.patternMode === "arrange") setPatternMode(state._loopMode || "repeat"); }
-  else if (state.view === "arrange" && state.patternMode !== "arrange") setPatternMode("arrange");
-  else if (state.view === "clips" && state.patternMode === "arrange") setPatternMode(state._loopMode || "repeat");
+  followView();
+  state._viewSwitched = false;
   const startTick = Math.max(0, Math.floor(opts.tick ?? 0));
   state.tick = startTick;
   // Where in the bar that tick is. The bar is the active pattern's meter, not
@@ -708,6 +722,13 @@ export async function startPlayback(opts = {}) {
     // Recording the arrangement (clips.js): what each track played this bar,
     // written before any switch below so the slot written is the one heard.
     if (barLine && state.arrRecord) recordArrangementBar();
+    // A view opened while playing takes the transport with it here (views.js
+    // raised the flag): into arrange mode, the arrangement is seeded from the
+    // start marker at this bar line, as a play press would seed it.
+    if (barLine && state._viewSwitched) {
+      state._viewSwitched = false;
+      if (followView() && state.patternMode === "arrange") seedArrangement(state.tick, { startBar: state.arrStartBar, deferUi: true, fromHere: true });
+    }
     if (state.patternMode === "arrange" && barLine) {
       // The arrangement decides every track's pattern at every bar line
       // (clips.js); the scene queue and the chain have no say in this mode.
