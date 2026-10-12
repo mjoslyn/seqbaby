@@ -4453,7 +4453,15 @@ body.view-clips .sq-pattern-bar, body.view-arrange .sq-pattern-bar { display: no
 .sq-clips__mode[aria-pressed="true"], .sq-clips__switch[aria-pressed="true"] { background: var(--accent-2); color: #0b0d10; border-color: var(--accent-2); }
 .sq-clips__head, .sq-clips__row { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
 .sq-clips__head { margin-bottom: 8px; }
-.sq-clips__cells { flex: 1 1 0; display: grid; grid-template-columns: repeat(32, minmax(0, 1fr)); gap: 3px; }
+.sq-clips__cells { --clip-gap: 3px; flex: 1 1 0; display: grid; grid-template-columns: repeat(32, minmax(0, 1fr)); gap: var(--clip-gap); }
+/* the length drag: a handle on a cell's right edge; the cell grows over its
+   neighbours while it is dragged (an explicit width on a grid item overflows
+   its column), and a multi-bar pattern wears its bar count */
+.sq-clip__grow { position: absolute; right: -2px; top: 0; bottom: 0; width: 7px; cursor: ew-resize; border-radius: 0 3px 3px 0; }
+.sq-clip:hover .sq-clip__grow { background: color-mix(in oklab, var(--fg) 18%, transparent); }
+.sq-clip__bars { position: absolute; right: 3px; bottom: 1px; font-style: normal; font-size: 8px; line-height: 1; color: var(--fg); opacity: 0.8; }
+.sq-clip.is-long { border-right-color: color-mix(in oklab, var(--fg) 30%, transparent); }
+.sq-clip.is-growing { z-index: 2; border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
 .sq-clip, .sq-clips__scene {
   position: relative; height: 28px; padding: 0; border-radius: 3px; border: 1px solid transparent;
   background: var(--step); color: var(--fg-dim); font-size: 10px; cursor: pointer; display: grid; place-items: center;
