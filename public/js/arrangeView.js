@@ -55,6 +55,7 @@ import { activeArrangeLoop, announceClips, arrangeLength, setArrangeLoop, setArr
 import { clipShadeColor, clipShades } from "./clipView.js";
 import { showConfirmDialog } from "./dialogs.js";
 import { patternMeter, stepsPerBarForMeter, transportMeter } from "./meter.js";
+import { patternSvg, svgUrl } from "./patternPicture.js";
 import { patternLocked } from "./patternSound.js";
 import { isPatternNonEmpty, state, trackSlot } from "./state.js";
 import { makeTrackDetail } from "./trackDetail.js";
@@ -123,41 +124,17 @@ const scroller = () => root?.querySelector(".sq-arr__scroll");
 function setScroll(el, x) { el.scrollLeft = x; autoScroll = el.scrollLeft; }
 
 /**
- * One pass of a track's pattern as a picture: its notes, pitch against time
- * (the pattern's own pitch range, so a bassline and a hat both fill the
- * block), as an SVG the block wears as a mask repeated every `--rep` px,
- * which is how long a pass lasts on the ruler at this zoom (its steps over the
- * track's speed, in sixteenths, over the ruler's bar).
+ * A block's pattern (patternPicture.js), worn as a mask repeated every
+ * `--rep` px, which is how long a pass lasts on the ruler at this zoom (its
+ * steps over the track's speed, in sixteenths, over the ruler's bar).
  * @param {Track} t @param {number} slot @param {number} barLen @param {number} w
  */
 function patternPicture(t, slot, barLen, w) {
   const p = t.patterns?.[slot];
-  const n = p?.steps?.length || 0;
-  if (!n || !p.steps.some(Boolean)) return "";
-  const fallback = t.isDrumKit ? 36 : 60;
-  const hits = [];
-  let lo = Infinity, hi = -Infinity;
-  for (let i = 0; i < n; i++) {
-    if (!p.steps[i]) continue;
-    const pitches = [p.notes?.[i] ?? fallback, ...(p.extraNotes?.[i] || [])].filter(Number.isFinite);
-    for (const m of pitches) { lo = Math.min(lo, m); hi = Math.max(hi, m); }
-    hits.push({ i, pitches, len: Math.max(1, p.lengths?.[i] || 1), off: p.offsets?.[i] || 0, vel: p.velocities?.[i] ?? 0.5 });
-  }
-  if (!hits.length || !Number.isFinite(lo)) return "";
-  const range = hi - lo + 1;
-  const H = Math.max(range, 6);
-  const y0 = (H - range) / 2;
-  let rects = "";
-  for (const h of hits) {
-    const x = Math.max(0, h.i + h.off);
-    const width = Math.max(0.35, Math.min(h.len, n - x) - 0.2);
-    for (const m of h.pitches) {
-      rects += `<rect x="${x.toFixed(2)}" y="${(y0 + hi - m + 0.1).toFixed(2)}" width="${width.toFixed(2)}" height="0.8" fill-opacity="${(0.45 + 0.55 * Math.min(1, h.vel)).toFixed(2)}"/>`;
-    }
-  }
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${n} ${H}" preserveAspectRatio="none">${rects}</svg>`;
-  const repPx = (n / Math.max(0.0001, t.speed ?? 1)) / barLen * w;
-  return `<i class="sq-arr__notes" style="--rep:${repPx.toFixed(2)}px;--notes:url('data:image/svg+xml,${encodeURIComponent(svg)}')"></i>`;
+  const svg = patternSvg(p, t.isDrumKit ? 36 : 60);
+  if (!svg) return "";
+  const repPx = (p.steps.length / Math.max(0.0001, t.speed ?? 1)) / barLen * w;
+  return `<i class="sq-arr__notes" style="--rep:${repPx.toFixed(2)}px;--notes:${svgUrl(svg)}"></i>`;
 }
 
 function render({ scrollX } = {}) {

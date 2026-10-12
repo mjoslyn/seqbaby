@@ -4472,6 +4472,13 @@ body.view-clips .sq-pattern-bar, body.view-arrange .sq-pattern-bar { display: no
 }
 .sq-clips__scene { height: 22px; background: color-mix(in oklab, var(--bg-3) 70%, var(--step)); }
 .sq-clips__scene.is-filled { color: var(--fg); }
+/* the repeat row: a column's bars in chain mode (state.patternRepeats) */
+.sq-clips__reps { margin-top: -4px; }
+.sq-clips__reps .sq-clips__strip { justify-content: flex-end; color: var(--fg-dim); font-size: 10px; }
+.sq-clips__rep { min-width: 0; width: 100%; height: 18px; padding: 0 2px; font-size: 9px; text-align: center; text-align-last: center;
+  appearance: none; -webkit-appearance: none; background: transparent; border: 1px solid transparent; border-radius: 3px; color: var(--fg-dim); cursor: pointer; }
+.sq-clips__rep:hover, .sq-clips__rep:focus { border-color: var(--border); background: var(--bg-2); }
+.sq-clips__rep.is-set { color: var(--accent-2); }
 /* the + at a scene number's edges: a new empty column there (insertEmptyPattern) */
 .sq-clips__ins { position: absolute; top: -1px; bottom: -1px; width: 11px; display: none; place-items: center; z-index: 2;
   font-size: 10px; line-height: 1; border-radius: 3px; background: var(--accent); color: #0b0d10; cursor: copy; }
@@ -4486,6 +4493,16 @@ body.view-clips .sq-pattern-bar, body.view-arrange .sq-pattern-bar { display: no
 .sq-clip.is-now { border-color: var(--step-now); color: var(--fg); background: color-mix(in oklab, var(--clip-c, var(--track-color, var(--step-on))) 75%, var(--step)); }
 body.sq-playing .sq-clip.is-now::after { content: ""; position: absolute; left: 4px; bottom: 3px; width: 5px; height: 5px; border-radius: 50%; background: var(--step-now); animation: sq-clip-pulse 0.5s ease-in-out infinite alternate; }
 @keyframes sq-clip-pulse { from { opacity: 0.35; } to { opacity: 1; } }
+/* a clip's notes, one pass squeezed into the cell (patternPicture.js); the
+   number moves to the corner so the picture has the middle */
+.sq-clips__rows .sq-clip { height: 34px; }
+.sq-clip.has-notes { place-items: start; }
+.sq-clip__n { position: relative; z-index: 1; line-height: 1; }
+.sq-clip.has-notes .sq-clip__n { padding: 2px 0 0 3px; font-size: 8px; opacity: 0.75; }
+.sq-clip__notes { position: absolute; left: 2px; right: 2px; top: 10px; bottom: 4px; pointer-events: none;
+  background: color-mix(in oklab, var(--fg) 85%, transparent);
+  -webkit-mask-image: var(--notes); mask-image: var(--notes);
+  -webkit-mask-size: 100% 100%; mask-size: 100% 100%; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; }
 .sq-clip.is-locked::before { content: ""; position: absolute; right: 3px; top: 3px; width: 5px; height: 5px; border-radius: 50%; background: var(--accent); }
 .sq-clip.is-drag-over { border-color: var(--accent); background: color-mix(in oklab, var(--accent) 25%, var(--step)); }
 .sq-clips__stop { font-size: 10px; }

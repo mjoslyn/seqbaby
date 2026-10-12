@@ -16,7 +16,7 @@ env / fx / eq / comp / mod / automation per track.
   `public/woscillators.js` →
   `public/js/main.js` (ES module). `middleware.ts` refreshes the Supabase
   session on every request *except* static engine assets.
-- **Engine**: ~83 dependency-free vanilla ES modules in `public/js/`. No
+- **Engine**: ~84 dependency-free vanilla ES modules in `public/js/`. No
   bundler — edit, reload. `window.seqbaby` (from `appApi.js`) exposes `state`
   and serialize/apply hooks to the React shell (typed in `app/seqbaby.d.ts`).
 - **Accounts + data**: Supabase (Postgres + Auth + RLS). Tables: `profiles`,
@@ -211,6 +211,10 @@ env / fx / eq / comp / mod / automation per track.
   (cuts what it lands on), `writeBar` (the recorder), `remapSlots`,
   `chainToBlocks`. Tested in `test/arrangement.test.js`; songBuilder.js
   validates an agent's blocks through it.
+- `patternPicture.js` — a pattern as a picture (`patternSvg`): one pass of
+  its notes, pitch against time, as an SVG the clip cells and the
+  arrangement's blocks wear as a CSS mask. **No imports**; tested in
+  `test/patternPicture.test.js`.
 - `views.js` / `clipView.js` / `arrangeView.js` / `trackDetail.js` — the
   view switcher and the two views that are not the track list: the clip grid
   (tracks x slots) and the arrangement timeline, each with the selected
@@ -2306,8 +2310,14 @@ block   t.arrangement[i]    ─── { slot, start, bars }: a clip at a bar, fo
   (remembered per browser) turns the page when the head nears the right
   edge; a scroll the view did not make switches it off. The strip column is
   sticky. Each block draws its pattern, one pass of its notes as an SVG mask
-  repeated per pass (`patternPicture`), in the shade the clip view gives that
-  pattern (`clipShadeColor`).
+  repeated per pass (`patternSvg`, patternPicture.js), in the shade the clip
+  view gives that pattern (`clipShadeColor`). A clip cell draws the same
+  picture, one pass squeezed into the cell with fatter notes (`fat`), the
+  slot number moved to its corner. Under the scene numbers is a row of
+  repeat pickers, one per column: `state.patternRepeats`, the bars chain
+  mode plays that column for (the pattern bar's `rep`, which only reaches
+  the active pattern). The view skips a repaint while one is held open, or
+  a chain advance would close it under the pointer.
 - **Recording is a bar-line write into a TAKE** (`recordArrangementBar`):
   with `rec` armed (clip view or arrangement view), every bar line in a
   non-arrange mode writes what each track just played — its slot, or nothing
@@ -4690,7 +4700,7 @@ through a 6ms fade on its gain).
   place the dispatch lives, or the second one has to import the first.
 - **`engineData.js`, `soundDefaults.js`, `theoryData.js`, `constants.js`,
   `chanceGen.js`, `sessionFormat.js`, `historyStore.js`, `songBuilder.js`,
-  `miniNotation.js`, `strudel.js`, `arrangement.js` and `voxPhonetic.js` must stay importable from Node** — no DOM, no Tone, no `window`. The tests
+  `miniNotation.js`, `strudel.js`, `arrangement.js`, `patternPicture.js` and `voxPhonetic.js` must stay importable from Node** — no DOM, no Tone, no `window`. The tests
   and the MCP server run them; an import of state.js or catalog.js in any of
   them breaks `npm test` at load, which is the guard.
 - **React must never re-set the studio's `innerHTML`** (`app/StudioBody.tsx`).
@@ -4801,7 +4811,7 @@ Repo: https://github.com/mjoslyn/seqbaby.
   An inline marker (`window.__seqbabyServerBoot`) tells the paths apart, and
   `ScriptLoader.tsx` keeps its onload-chained injection for the soft-nav case
   (e.g. arriving from `/login`).
-- `app/EnginePreload.tsx` emits `modulepreload` for all 83 modules listed in
+- `app/EnginePreload.tsx` emits `modulepreload` for all 84 modules listed in
   `app/engineAssets.ts` (at `engineAsset("/js/<name>")`; the hints used to
   point at the site root and 404). The graph is 8 levels deep, so without it the browser
   needs up to eight sequential round trips just to discover the code.
