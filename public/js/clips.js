@@ -17,7 +17,7 @@
  */
 
 import { PATTERN_COUNT } from "./constants.js";
-import { arrangementBars, blockAt, blocksEnd, placeBlock, writeBar } from "./arrangement.js";
+import { arrangementBars, blockAt, blocksEnd, nextArrangeBar, normalizeLoop, placeBlock, writeBar } from "./arrangement.js";
 import { showChoiceDialog } from "./dialogs.js";
 import { markExternalEdit } from "./history.js";
 import { stepsPerBarForMeter, transportMeter } from "./meter.js";
@@ -154,6 +154,42 @@ export function clearQueuedClips() {
 /** How long the arrangement is, in bars of the ruler. Never under one. */
 export function arrangeLength() { return arrangementBars(state.tracks); }
 
+/** The loop section arrange mode is held in, or null when the loop is off. */
+export function activeArrangeLoop() {
+  return state.arrLoopOn ? normalizeLoop(state.arrLoop) : null;
+}
+
+/**
+ * Move the playhead's origin (the global tick that was ruler bar 0). The one
+ * before is kept for the ticks still to be heard from before this one: the
+ * transport writes this a lookahead ahead of the speakers, and the view's
+ * playhead reads the tick being heard against the origin that tick belongs to.
+ * @param {number} origin @param {number} fromTick
+ */
+function setArrangeOrigin(origin, fromTick, { fresh = false } = {}) {
+  state._arrPrevOrigin = fresh ? origin : state._arrOrigin;
+  state._arrOrigin = origin;
+  state._arrOriginAt = fromTick;
+}
+
+/**
+ * Draw the loop section (bars, end exclusive), or clear it with null. Drawing
+ * one switches the loop on. Not saved: like the start marker, it is how this
+ * screen is listening, not the song.
+ * @param {{start: number, end: number}|null} range
+ */
+export function setArrangeLoop(range) {
+  state.arrLoop = normalizeLoop(range);
+  state.arrLoopOn = !!state.arrLoop;
+  announceClips();
+}
+
+/** Switch the loop on or off; on with no section drawn does nothing. */
+export function setArrangeLoopOn(on) {
+  state.arrLoopOn = !!on && !!normalizeLoop(state.arrLoop);
+  announceClips();
+}
+
 /**
  * Put every track where the arrangement says it is on ruler bar
  * `state.arrBar`. A block's first bar (or a block other than the one the
@@ -191,17 +227,20 @@ export function applyArrangementBar({ deferUi = true, tickInBar = 0 } = {}) {
  */
 export function advanceArrangement() {
   const len = arrangeLength();
+  const loop = activeArrangeLoop();
   if (state._arrJump != null) {
     // a jump asked for mid-bar (the ruler clicked while playing) lands here,
     // on the bar line, as a queued clip does
-    state.arrBar = Math.min(len - 1, Math.max(0, state._arrJump));
+    state.arrBar = Math.min(Math.max(len, loop?.end ?? 0) - 1, Math.max(0, state._arrJump));
     state._arrJump = null;
   } else {
-    state.arrBar += 1;
-    if (state.arrBar >= len) state.arrBar = 0;
+    // the end of the arrangement wraps to its start; with a loop on, the end
+    // of the loop wraps to the loop's start (arrangement.js)
+    state.arrBar = nextArrangeBar(state.arrBar, len, loop);
   }
   // the origin follows, so the view maps the tick being heard to this bar
-  state._arrOrigin = state.tick - state.arrBar * stepsPerBarForMeter(transportMeter());
+  const origin = state.tick - state.arrBar * stepsPerBarForMeter(transportMeter());
+  if (origin !== state._arrOrigin) setArrangeOrigin(origin, state.tick);
   applyArrangementBar({ deferUi: true });
 }
 
@@ -230,16 +269,25 @@ export function setArrangeStart(bar) {
  */
 export function seedArrangement(startTick, { startBar = 0, deferUi = false, fromHere = false } = {}) {
   const barLen = stepsPerBarForMeter(transportMeter());
-  const loop = arrangeLength() * barLen;
+  // the span played round: the whole arrangement, or the loop section, which
+  // a start marker outside it does not get out of (play starts at its start)
+  const loop = activeArrangeLoop();
+  const from = loop ? loop.start : 0;
+  const span = (loop ? loop.end - loop.start : arrangeLength()) * barLen;
+  const marker = Math.max(0, startBar);
+  const into = loop ? (marker >= loop.start && marker < loop.end ? marker - loop.start : 0) : marker;
   // `fromHere`: the arrangement starts at `startBar` AT this tick (a view
   // switch at a bar line), rather than where the tick count since play maps
   // (a play press, where a jam's shared start has to land inside the right block)
-  const at = (fromHere ? 0 : startTick) + Math.max(0, startBar) * barLen;
-  const inLoop = ((at % loop) + loop) % loop;
-  state.arrBar = Math.floor(inLoop / barLen);
-  state._arrOrigin = startTick - inLoop;
+  const at = (fromHere ? 0 : startTick) + into * barLen;
+  const pos = from * barLen + ((at % span) + span) % span;
+  state.arrBar = Math.floor(pos / barLen);
+  // a play press starts the view's clock afresh (the tick heard is still the
+  // last play's until the first step sounds)
+  if (!fromHere) state._nowTick = startTick;
+  setArrangeOrigin(startTick - pos, startTick, { fresh: !fromHere });
   state._arrJump = null;
-  applyArrangementBar({ deferUi, tickInBar: inLoop % barLen });
+  applyArrangementBar({ deferUi, tickInBar: pos % barLen });
 }
 
 // ---- recording ----------------------------------------------------------

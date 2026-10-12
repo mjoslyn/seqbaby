@@ -4472,6 +4472,19 @@ body.view-clips .sq-pattern-bar, body.view-arrange .sq-pattern-bar { display: no
 }
 .sq-clips__scene { height: 22px; background: color-mix(in oklab, var(--bg-3) 70%, var(--step)); }
 .sq-clips__scene.is-filled { color: var(--fg); }
+/* the repeat row: a column's bars in chain mode (state.patternRepeats) */
+.sq-clips__reps { margin-top: -4px; }
+.sq-clips__reps .sq-clips__strip { justify-content: flex-end; color: var(--fg-dim); font-size: 10px; }
+.sq-clips__rep { min-width: 0; width: 100%; height: 18px; padding: 0 2px; font-size: 9px; text-align: center; text-align-last: center;
+  appearance: none; -webkit-appearance: none; background: transparent; border: 1px solid transparent; border-radius: 3px; color: var(--fg-dim); cursor: pointer; }
+.sq-clips__rep:hover, .sq-clips__rep:focus { border-color: var(--border); background: var(--bg-2); }
+.sq-clips__rep.is-set { color: var(--accent-2); }
+/* the + at a scene number's edges: a new empty column there (insertEmptyPattern) */
+.sq-clips__ins { position: absolute; top: -1px; bottom: -1px; width: 11px; display: none; place-items: center; z-index: 2;
+  font-size: 10px; line-height: 1; border-radius: 3px; background: var(--accent); color: #0b0d10; cursor: copy; }
+.sq-clips__ins.is-left { left: -7px; }
+.sq-clips__ins.is-right { right: -7px; }
+.sq-clips__scene:hover .sq-clips__ins { display: grid; }
 .sq-clips__scene.is-active { border-color: var(--step-now); box-shadow: 0 0 0 1px var(--step-now) inset; }
 .sq-clips__scene.is-queued, .sq-clip.is-queued { border-color: var(--accent-2); }
 /* --clip-c is the shade this distinct clip wears (clipView.js), the track colour by default */
@@ -4480,6 +4493,16 @@ body.view-clips .sq-pattern-bar, body.view-arrange .sq-pattern-bar { display: no
 .sq-clip.is-now { border-color: var(--step-now); color: var(--fg); background: color-mix(in oklab, var(--clip-c, var(--track-color, var(--step-on))) 75%, var(--step)); }
 body.sq-playing .sq-clip.is-now::after { content: ""; position: absolute; left: 4px; bottom: 3px; width: 5px; height: 5px; border-radius: 50%; background: var(--step-now); animation: sq-clip-pulse 0.5s ease-in-out infinite alternate; }
 @keyframes sq-clip-pulse { from { opacity: 0.35; } to { opacity: 1; } }
+/* a clip's notes, one pass squeezed into the cell (patternPicture.js); the
+   number moves to the corner so the picture has the middle */
+.sq-clips__rows .sq-clip { height: 34px; }
+.sq-clip.has-notes { place-items: start; }
+.sq-clip__n { position: relative; z-index: 1; line-height: 1; }
+.sq-clip.has-notes .sq-clip__n { padding: 2px 0 0 3px; font-size: 8px; opacity: 0.75; }
+.sq-clip__notes { position: absolute; left: 2px; right: 2px; top: 10px; bottom: 4px; pointer-events: none;
+  background: color-mix(in oklab, var(--fg) 85%, transparent);
+  -webkit-mask-image: var(--notes); mask-image: var(--notes);
+  -webkit-mask-size: 100% 100%; mask-size: 100% 100%; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; }
 .sq-clip.is-locked::before { content: ""; position: absolute; right: 3px; top: 3px; width: 5px; height: 5px; border-radius: 50%; background: var(--accent); }
 .sq-clip.is-drag-over { border-color: var(--accent); background: color-mix(in oklab, var(--accent) 25%, var(--step)); }
 .sq-clips__stop { font-size: 10px; }
@@ -4504,7 +4527,10 @@ body.sq-playing .sq-clip.is-now::after { content: ""; position: absolute; left: 
 .sq-arr__ruler, .sq-arr__row { display: flex; align-items: stretch; }
 .sq-arr__ruler { height: 22px; margin-bottom: 4px; }
 .sq-arr__ruler .sq-arr__strip { border-left-color: transparent; }
-.sq-arr__row { height: 40px; margin-bottom: 4px; }
+.sq-arr__row { height: 46px; margin-bottom: 4px; }
+/* the strip stays put while the lanes scroll under it, so a row keeps its name */
+.sq-arr__ruler .sq-arr__strip, .sq-arr__row .sq-arr__strip { position: sticky; left: 0; z-index: 3; background: var(--bg); align-self: stretch; }
+.sq-arr__row.is-selected .sq-arr__strip { background: color-mix(in oklab, var(--track-color, var(--accent)) 18%, var(--bg)); }
 .sq-arr__lane { position: relative; flex: 0 0 auto; height: 100%; background: var(--step); border-radius: 3px;
   background-image: linear-gradient(to right, var(--border) 1px, transparent 1px); background-size: var(--arr-bar-w) 100%; }
 .sq-arr__lane--ruler { background: transparent; }
@@ -4514,9 +4540,20 @@ body.sq-playing .sq-clip.is-now::after { content: ""; position: absolute; left: 
 .sq-arr__bar i { position: absolute; bottom: 0; height: 5px; border-left: 1px solid var(--border); }
 .sq-arr__block {
   position: absolute; top: 3px; bottom: 3px; border-radius: 4px; box-sizing: border-box; cursor: grab; user-select: none;
-  background: color-mix(in oklab, var(--track-color, var(--step-on)) 55%, var(--bg-3));
-  border: 1px solid color-mix(in oklab, var(--track-color, var(--step-on)) 80%, transparent);
-  display: flex; align-items: center; gap: 4px; padding: 0 6px; overflow: hidden; font-size: 11px; color: var(--fg);
+  background: color-mix(in oklab, var(--clip-c, var(--track-color, var(--step-on))) 40%, var(--bg-3));
+  border: 1px solid color-mix(in oklab, var(--clip-c, var(--track-color, var(--step-on))) 80%, transparent);
+  display: flex; align-items: flex-start; gap: 4px; padding: 3px 6px 0; overflow: hidden; font-size: 11px; color: var(--fg);
+  isolation: isolate;
+}
+/* the block's pattern: one pass of its notes (arrangeView.js patternPicture),
+   a mask repeated every pass as the block loops it */
+.sq-arr__notes {
+  position: absolute; left: 0; right: 0; top: 4px; bottom: 4px; pointer-events: none; z-index: -1;
+  background: color-mix(in oklab, var(--fg) 80%, transparent);
+  -webkit-mask-image: var(--notes); mask-image: var(--notes);
+  -webkit-mask-size: var(--rep) 100%; mask-size: var(--rep) 100%;
+  -webkit-mask-repeat: repeat-x; mask-repeat: repeat-x;
+  -webkit-mask-position: 0 0; mask-position: 0 0;
 }
 .sq-arr__block.is-empty { background: repeating-linear-gradient(135deg, color-mix(in oklab, var(--track-color, var(--step-on)) 30%, var(--bg-3)) 0 6px, var(--bg-3) 6px 12px); color: var(--fg-dim); }
 .sq-arr__block.is-selected { outline: 2px solid var(--accent); outline-offset: -1px; }
@@ -4524,7 +4561,7 @@ body.sq-playing .sq-clip.is-now::after { content: ""; position: absolute; left: 
 .sq-arr__block.is-ghost { opacity: 0.6; pointer-events: none; }
 /* a recording in progress, not yet in the arrangement (clips.js finishTake) */
 .sq-arr__block.is-take { pointer-events: none; opacity: 0.75; border-style: dashed; border-color: var(--danger); background: color-mix(in oklab, var(--danger) 25%, var(--bg-3)); }
-.sq-arr__slot { padding: 1px 5px; font-size: 11px; border-radius: 3px; background: color-mix(in oklab, var(--bg) 55%, transparent); border: 1px solid transparent; color: inherit; cursor: pointer; }
+.sq-arr__slot { padding: 0 4px; font-size: 10px; line-height: 14px; border-radius: 3px; background: color-mix(in oklab, var(--bg) 70%, transparent); border: 1px solid transparent; color: inherit; cursor: pointer; }
 .sq-arr__block.is-selected .sq-arr__slot { border-color: var(--accent); }
 .sq-arr__lock { color: var(--accent); font-size: 8px; }
 .sq-arr__handle { position: absolute; right: 0; top: 0; bottom: 0; width: 8px; cursor: ew-resize; }
@@ -4536,6 +4573,13 @@ body.sq-playing .sq-clip.is-now::after { content: ""; position: absolute; left: 
 /* the start marker: a flag on the ruler and a faint line down the lanes */
 .sq-arr__start { position: absolute; top: 0; bottom: 0; width: 0; border-left: 1px solid color-mix(in oklab, var(--accent) 55%, transparent); pointer-events: none; z-index: 1; }
 .sq-arr__start::before { content: ""; position: absolute; top: 0; left: -5px; border: 5px solid transparent; border-top: 8px solid var(--accent); }
+/* the loop section: a band on the ruler (dim while the loop is off) and a tint down the lanes */
+.sq-arr__loop { position: absolute; top: 0; height: 100%; pointer-events: none; opacity: 0.45;
+  background: color-mix(in oklab, var(--accent-2) 30%, transparent); border-left: 2px solid var(--accent-2); border-right: 2px solid var(--accent-2); box-sizing: border-box; }
+.sq-arr__loop.is-on { opacity: 1; }
+.sq-arr__loop-shade { position: absolute; top: 26px; bottom: 6px; pointer-events: none; z-index: 1;
+  background: color-mix(in oklab, var(--accent-2) 7%, transparent); border-left: 1px dashed var(--accent-2); border-right: 1px dashed var(--accent-2); }
+.sq-arr__follow[aria-pressed="true"], .sq-arr__loopbtn[aria-pressed="true"] { background: var(--accent-2); color: #0b0d10; border-color: var(--accent-2); }
 .sq-arr__picker { position: fixed; z-index: 210; display: grid; grid-template-columns: repeat(8, 32px); gap: 3px; padding: 6px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 8px 24px rgb(0 0 0 / 0.4); }
 .sq-arr__picker .sq-pattern__cell { min-height: 24px; }
 

@@ -106,6 +106,7 @@ export const ENGINE_MODULES = [
   "paramTargets.js",
   "params.js",
   "patternBar.js",
+  "patternPicture.js",
   "patternSound.js",
   "pianoRoll.js",
   "prism.js",

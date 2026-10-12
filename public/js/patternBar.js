@@ -2,7 +2,7 @@ import { PATTERN_COUNT, PATTERN_MODES, patternModeOf } from "./constants.js";
 import { setStatus } from "./dom.js";
 import { ICON_ARRANGE, ICON_CHAIN, ICON_FINISH, ICON_NOW, ICON_REPEAT } from "./icons.js";
 import { flushPatternSound, recallPatternSound, refreshPatternSoundUI } from "./patternSound.js";
-import { aliasPattern, clonePattern, isPatternNonEmpty, repaintPatternUI, requestPatternSwitch, state, trackSlot } from "./state.js";
+import { aliasPattern, clonePattern, emptyPattern, isPatternNonEmpty, repaintPatternUI, requestPatternSwitch, state, trackSlot } from "./state.js";
 import { remapSlots } from "./arrangement.js";
 import { renderStepGrid } from "./stepGrid.js";
 import { maxLengthAt } from "./track.js";
@@ -114,6 +114,40 @@ export function movePattern(from, at) {
   for (const t of state.tracks) aliasPattern(t, trackSlot(t));
   repaintPatternUI();
   setStatus(`moved pattern ${from + 1} → ${dest + 1}`);
+}
+
+/**
+ * Open an empty column at insertion point `at` (0..PATTERN_COUNT, in the
+ * current numbering: `at` = 3 puts it between slots 3 and 4 as the bar
+ * numbers them). The bank is a fixed 32, so a column comes from a FREE slot
+ * (no steps on any track, no arrangement block on it), moved there with
+ * movePattern so everything that names a slot follows: the farthest free slot
+ * to the right, so everything from `at` on shifts right by one, or failing
+ * that the nearest to the left, the slots in between shifting left. The slot
+ * arrives fresh: no lanes, no p-lock, the song's meter, one repeat.
+ * @param {number} at
+ * @returns {number} the new empty slot, or -1 when every slot is in use
+ */
+export function insertEmptyPattern(at) {
+  const free = (i) => !isPatternNonEmpty(i) && !state.tracks.some((t) => t.arrangement?.some((b) => b.slot === i));
+  let from = -1;
+  for (let i = PATTERN_COUNT - 1; i > at - 1 && i >= 0; i--) if (i !== at && free(i)) { from = i; break; }
+  if (from < 0) for (let i = Math.min(at, PATTERN_COUNT) - 1; i >= 0; i--) if (free(i)) { from = i; break; }
+  if (from < 0) { setStatus("no room for a new column: all 32 patterns are in use", true); return -1; }
+  movePattern(from, at);
+  const dest = at > from ? at - 1 : at;
+  for (const t of state.tracks) {
+    const p = t.patterns?.[dest];
+    if (p) t.patterns[dest] = emptyPattern(p.steps.length);
+  }
+  const m0 = state.patternMeters[0];
+  state.patternMeters[dest] = { num: m0.num, den: m0.den };
+  if (dest !== 0) state.patternMeterCustomized[dest] = false;
+  state.patternRepeats[dest] = 1;
+  for (const t of state.tracks) if (trackSlot(t) === dest) aliasPattern(t, dest);
+  repaintPatternUI();
+  setStatus(`new empty pattern ${dest + 1}`);
+  return dest;
 }
 
 export function renderPatternGrid() {

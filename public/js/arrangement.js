@@ -147,6 +147,32 @@ export function arrangementBars(tracks) {
 }
 
 /**
+ * A loop section on the ruler, `{start, end}` in bars with `end` exclusive,
+ * tidied: whole bars, `start` at least 0, at least one bar long. Anything that
+ * is not a range is null (no loop).
+ * @param {any} raw
+ * @returns {{start: number, end: number}|null}
+ */
+export function normalizeLoop(raw) {
+  if (!raw || !Number.isFinite(raw.start) || !Number.isFinite(raw.end)) return null;
+  const a = Math.max(0, Math.round(Math.min(raw.start, raw.end)));
+  const b = Math.max(0, Math.round(Math.max(raw.start, raw.end)));
+  return { start: a, end: Math.max(a + 1, b) };
+}
+
+/**
+ * The ruler bar after `bar`: the arrangement wraps at its end (`len` bars);
+ * with a loop on, the playhead lives inside it, so a bar outside the loop
+ * (the loop was drawn or switched on mid-play) goes to the loop's start.
+ * @param {number} bar @param {number} len @param {{start: number, end: number}|null} [loop]
+ */
+export function nextArrangeBar(bar, len, loop = null) {
+  const next = bar + 1;
+  if (loop) return next >= loop.start && next < loop.end ? next : loop.start;
+  return next >= Math.max(1, len) ? 0 : next;
+}
+
+/**
  * Recording: what track played on `bar`. A slot extends the block before it
  * when that block ends on this bar and plays the same slot — a clip left
  * running for eight bars is one eight-bar block, not eight — and otherwise

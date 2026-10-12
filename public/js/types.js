@@ -258,7 +258,12 @@
  * @property {number} arrBar       Arrange mode: the ruler bar the transport is on (clips.js).
  * @property {boolean} arrRecord   Clip launches are being written into the arrangement.
  * @property {number} arrRecBar    The bar the recorder writes next.
+ * @property {number} arrStartBar  Where a play press starts the arrangement (the ruler's marker). Not saved.
+ * @property {{start: number, end: number}|null} arrLoop  A ruler section in bars, end exclusive. Not saved.
+ * @property {boolean} arrLoopOn   Arrange mode loops `arrLoop` instead of the whole arrangement. Not saved.
  * @property {number} _arrOrigin   The global tick that was ruler bar 0 (for the view's playhead).
+ * @property {number} _arrPrevOrigin  The origin before the last wrap or jump.
+ * @property {number} _arrOriginAt The global tick from which `_arrOrigin` holds (earlier ticks use the previous one).
  * @property {number} _nowTick     The global tick being heard (written at the audible time).
  * @property {"groove"|"clips"|"arrange"} view  Which view is open (views.js). Not saved.
  * @property {"immediate"|"finish"} patternSwitchMode

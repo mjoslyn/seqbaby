@@ -97,6 +97,8 @@ export const state = {
   // (views.js); none of these are saved.
   arrBar: 0,
   arrStartBar: 0,       // the ruler bar a play press starts the arrangement from (the view's marker)
+  arrLoop: null,        // a section of the ruler, {start, end} in bars (end exclusive), drawn on the ruler
+  arrLoopOn: false,     // whether arrange mode loops that section instead of the whole arrangement
   _loopMode: "repeat",  // the last repeat / chain mode, which the clip view's play returns to
   _arrJump: null,       // a bar to jump to at the next bar line while the arrangement plays
   _viewSwitched: false, // a view opened while playing: the mode follows it at the next bar line (transport.js)
@@ -104,6 +106,8 @@ export const state = {
   arrRecBar: 0,
   arrRecStart: null,    // the first bar the take holds, or null before anything is written
   _arrOrigin: 0,
+  _arrPrevOrigin: 0,    // the origin before the last jump or wrap, for ticks heard before it (`_arrOriginAt`)
+  _arrOriginAt: 0,
   _nowTick: 0,
   view: "groove",
   // XY macro pads (macro.js). Global and cross-track by design, and deliberately

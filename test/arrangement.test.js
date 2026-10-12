@@ -10,7 +10,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   arrangementBars, blockAt, blocksEnd, chainToBlocks, checkBlock, cutRange, describeBlocks,
-  moveBlock, normalizeBlocks, placeBlock, remapSlots, removeBlock, resizeBlock, setBlockSlot, writeBar,
+  moveBlock, nextArrangeBar, normalizeBlocks, normalizeLoop, placeBlock, remapSlots, removeBlock, resizeBlock, setBlockSlot, writeBar,
 } from "../public/js/arrangement.js";
 
 const b = (slot, start, bars) => ({ slot, start, bars });
@@ -145,4 +145,27 @@ test("chainToBlocks lays the chain end to end, a repeat count each", () => {
 test("describeBlocks reads back in bars and patterns numbered from 1", () => {
   assert.equal(describeBlocks([]), "empty");
   assert.equal(describeBlocks([b(0, 0, 4), b(2, 8, 8)]), "1-4 p1, 5-8 rest, 9-16 p3");
+});
+
+test("normalizeLoop tidies a section and refuses a non-range", () => {
+  assert.deepEqual(normalizeLoop({ start: 4, end: 8 }), { start: 4, end: 8 });
+  assert.deepEqual(normalizeLoop({ start: 8, end: 4 }), { start: 4, end: 8 });
+  assert.deepEqual(normalizeLoop({ start: 3, end: 3 }), { start: 3, end: 4 });
+  assert.deepEqual(normalizeLoop({ start: -2, end: 1.4 }), { start: 0, end: 1 });
+  assert.equal(normalizeLoop(null), null);
+  assert.equal(normalizeLoop({ start: 1 }), null);
+});
+
+test("nextArrangeBar wraps at the end, or stays inside a loop", () => {
+  assert.equal(nextArrangeBar(0, 4), 1);
+  assert.equal(nextArrangeBar(3, 4), 0);
+  assert.equal(nextArrangeBar(0, 0), 0);
+  const loop = { start: 2, end: 5 };
+  assert.equal(nextArrangeBar(2, 8, loop), 3);
+  assert.equal(nextArrangeBar(4, 8, loop), 2);
+  // outside the loop (drawn mid-play): back into it at the next bar line
+  assert.equal(nextArrangeBar(6, 8, loop), 2);
+  assert.equal(nextArrangeBar(0, 8, loop), 2);
+  // a loop past the arrangement's end still loops: the gap plays silence
+  assert.equal(nextArrangeBar(9, 4, { start: 8, end: 12 }), 10);
 });

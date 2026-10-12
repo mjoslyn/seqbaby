@@ -46,7 +46,8 @@
 import { PATTERN_COUNT } from "./constants.js";
 import { setStatus } from "./dom.js";
 import { announceClips, requestClipLaunch, setArrangeRecord, stopClip } from "./clips.js";
-import { MODE_UI, SWITCH_UI, setPatternMode } from "./patternBar.js";
+import { MODE_UI, SWITCH_UI, insertEmptyPattern, setPatternMode } from "./patternBar.js";
+import { patternSvg, svgUrl } from "./patternPicture.js";
 import { patternLocked } from "./patternSound.js";
 import { isPatternNonEmpty, requestPatternSwitch, state, switchPattern, trackSlot } from "./state.js";
 import { extendPatternByDuplicate, truncatePattern, writePatternOnto } from "./track.js";
@@ -58,6 +59,21 @@ let root = null;
 let grid = null;      // the rebuilt half: scenes and cells
 let detail = null;    // the persistent half: the selected track's card (trackDetail.js)
 let raf = 0;
+
+/** A column's repeat count changed: the song's, so undo, save and a jam see it. */
+function onRepChange(e) {
+  const sel = e.target.closest?.("[data-rep]");
+  if (!sel) return;
+  const i = Number(sel.dataset.rep);
+  const v = Math.max(1, Math.min(16, Number(sel.value) || 1));
+  state.patternRepeats[i] = v;
+  if (i === state.activePattern) {
+    const input = document.getElementById("pattern-repeats");
+    if (input) input.value = String(v);
+  }
+  setStatus(`column ${i + 1} repeats ${v} bar${v === 1 ? "" : "s"}${state.patternMode === "chain" ? "" : " (in chain mode)"}`);
+  scheduleClipPaint();
+}
 
 export function installClipView() {
   root = document.getElementById("clips");
@@ -73,6 +89,7 @@ export function installClipView() {
   root.addEventListener("dragover", onDragOver);
   root.addEventListener("dragleave", onDragLeave);
   root.addEventListener("drop", onDrop);
+  root.addEventListener("change", onRepChange);
   onViewChange((v) => { if (v === "clips") render(); else detail.release(); });
   for (const ev of ["seqbaby:clips", "seqbaby:songedited", "seqbaby:setapplied", "seqbaby:newset", "seqbaby:transport"]) {
     window.addEventListener(ev, scheduleClipPaint);
@@ -98,6 +115,17 @@ const SHADES = [
   [8, 30, 40], [-8, 90, 76], [28, 50, 50], [-28, 80, 60],
 ];
 
+/**
+ * The colour a track's distinct clip wears, as a CSS value off `--track-hue`,
+ * or "" for shade 0 (the track's own colour) and an empty slot. The
+ * arrangement's blocks wear the same, so a pattern reads the same in both.
+ * @param {number} n a clipShades entry
+ */
+export function clipShadeColor(n) {
+  const shade = n > 0 ? SHADES[n % SHADES.length] : null;
+  return shade ? `hsl(calc(var(--track-hue) + ${shade[0]}) ${shade[1]}% ${shade[2]}%)` : "";
+}
+
 const SIG_FIELDS = ["steps", "lengths", "notes", "velocities", "chords", "extraNotes", "extraLengths", "ratchets", "arps", "offsets", "strums"];
 
 /** A number per slot: which distinct clip it is on this track, in order of first appearance. Empty slots get -1. */
@@ -119,6 +147,10 @@ export function clipShades(t) {
 
 function render() {
   if (!root) return;
+  // a repeat picker held open: a repaint (every chain advance while playing)
+  // would close it under the pointer, so wait until it lets go
+  const held = document.activeElement?.closest?.("#clips [data-rep]");
+  if (held) { held.addEventListener("blur", () => scheduleClipPaint(), { once: true }); return; }
   const ap = state.activePattern;
   const scenes = [];
   for (let i = 0; i < PATTERN_COUNT; i++) {
@@ -126,7 +158,15 @@ function render() {
     if (isPatternNonEmpty(i)) cls.push("is-filled");
     if (i === ap) cls.push("is-active");
     if (i === state.queuedPattern) cls.push("is-queued");
-    scenes.push(`<button type="button" class="${cls.join(" ")}" data-scene="${i}" title="scene ${i + 1}: every track to pattern ${i + 1}. Double-click to play it now">${i + 1}</button>`);
+    scenes.push(`<button type="button" class="${cls.join(" ")}" data-scene="${i}" title="scene ${i + 1}: every track to pattern ${i + 1}. Double-click to play it now. The + at either edge opens an empty column there">${i + 1}<span class="sq-clips__ins is-left" data-ins="${i}" title="new empty column left of ${i + 1}: the columns from here on move right">+</span><span class="sq-clips__ins is-right" data-ins="${i + 1}" title="new empty column right of ${i + 1}: the columns after it move right">+</span></button>`);
+  }
+  // each column's repeat count (state.patternRepeats, the pattern bar's `rep`):
+  // the bars chain mode plays it for before moving on
+  const repeats = [];
+  for (let i = 0; i < PATTERN_COUNT; i++) {
+    const r = Math.max(1, Math.min(16, state.patternRepeats[i] ?? 1));
+    const opts = Array.from({ length: 16 }, (_, k) => `<option value="${k + 1}"${k + 1 === r ? " selected" : ""}>×${k + 1}</option>`).join("");
+    repeats.push(`<select class="sq-clips__rep${r > 1 ? " is-set" : ""}" data-rep="${i}" title="column ${i + 1}: chain mode plays it for ${r} bar${r === 1 ? "" : "s"} before the next column" aria-label="column ${i + 1} repeat">${opts}</select>`);
   }
   const trackRows = rows().map((t) => {
     const slot = trackSlot(t);
@@ -135,16 +175,20 @@ function render() {
     for (let i = 0; i < PATTERN_COUNT; i++) {
       const p = t.patterns?.[i];
       const cls = ["sq-clip"];
-      const shade = SHADES[shades[i] % SHADES.length];
-      const style = shades[i] > 0 && shade ? ` style="--clip-c:hsl(calc(var(--track-hue) + ${shade[0]}) ${shade[1]}% ${shade[2]}%)"` : "";
+      const shade = clipShadeColor(shades[i]);
+      // the clip's notes, squeezed into the cell (patternPicture.js)
+      const svg = shades[i] >= 0 ? patternSvg(p, t.isDrumKit ? 36 : 60, { fat: 2.4 }) : "";
+      const vars = [shade && `--clip-c:${shade}`, svg && `--notes:${svgUrl(svg)}`].filter(Boolean);
+      const style = vars.length ? ` style="${vars.join(";")}"` : "";
       const bars = p ? Math.max(1, Math.ceil(p.steps.length / stepsPerBarForMeter(patternMeter(i)))) : 1;
       if (bars > 1) cls.push("is-long");
       if (p?.steps?.some(Boolean)) cls.push("is-filled");
+      if (svg) cls.push("has-notes");
       if (i === slot && !t._clipOff) cls.push("is-now");
       if (i === t._queuedSlot) cls.push("is-queued");
       if (patternLocked(t, i)) cls.push("is-locked");
       if (i === ap) cls.push("is-scene");
-      cells.push(`<button type="button" class="${cls.join(" ")}" data-slot="${i}"${style} draggable="true" title="${esc(t.name)}: pattern ${i + 1}, ${bars} bar${bars === 1 ? "" : "s"}. Click to launch it on this track, double-click to mute it; drag onto another cell to copy it there; drag its right edge across the cells beside it to copy it into those scenes, or shift-drag it to make it longer or shorter">${i + 1}${bars > 1 ? `<i class="sq-clip__bars">${bars}</i>` : ""}<span class="sq-clip__fill"></span></button>`);
+      cells.push(`<button type="button" class="${cls.join(" ")}" data-slot="${i}"${style} draggable="true" title="${esc(t.name)}: pattern ${i + 1}, ${bars} bar${bars === 1 ? "" : "s"}. Click to launch it on this track, double-click to mute it; drag onto another cell to copy it there; drag its right edge across the cells beside it to copy it into those scenes, or shift-drag it to make it longer or shorter">${svg ? '<i class="sq-clip__notes"></i>' : ""}<span class="sq-clip__n">${i + 1}</span>${bars > 1 ? `<i class="sq-clip__bars">${bars}</i>` : ""}<span class="sq-clip__fill"></span></button>`);
     }
     return `<div class="sq-clips__row${t.muted ? " is-muted" : ""}" data-track-id="${t.id}">
       <div class="sq-clips__strip">
@@ -168,6 +212,10 @@ function render() {
       <div class="sq-clips__strip"></div>
       <div class="sq-clips__cells sq-clips__scenes">${scenes.join("")}</div>
     </div>
+    <div class="sq-clips__head sq-clips__reps">
+      <div class="sq-clips__strip" title="how many bars chain mode plays each column for before moving on">repeat</div>
+      <div class="sq-clips__cells">${repeats.join("")}</div>
+    </div>
     <div class="sq-clips__rows">${trackRows}</div>`;
   const shown = detail.sync();
   if (shown) grid.querySelector(`.sq-clips__row[data-track-id="${shown.id}"]`)?.classList.add("is-selected");
@@ -177,6 +225,8 @@ function onClick(e) {
   // the click that follows a handle drag (the pointer was captured, so it
   // lands on the source cell) is not a launch
   if (e.target.closest(".sq-clip__fill") || dragged) { dragged = false; return; }
+  const ins = e.target.closest("[data-ins]");
+  if (ins) { insertEmptyPattern(Number(ins.dataset.ins)); return; }
   const scene = e.target.closest("[data-scene]");
   if (scene) { requestPatternSwitch(Number(scene.dataset.scene)); return; }
   const act = e.target.closest("[data-act]")?.dataset.act;
@@ -204,6 +254,7 @@ function onClick(e) {
 }
 
 function onDblClick(e) {
+  if (e.target.closest("[data-ins]")) return;     // two quick inserts are two columns, not a play
   // a scene number: play that scene now, whatever the switch setting, and
   // start the transport if it is stopped
   const scene = e.target.closest("[data-scene]");
