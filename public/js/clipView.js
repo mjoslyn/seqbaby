@@ -46,7 +46,7 @@
 import { PATTERN_COUNT } from "./constants.js";
 import { setStatus } from "./dom.js";
 import { announceClips, requestClipLaunch, setArrangeRecord, stopClip } from "./clips.js";
-import { MODE_UI, SWITCH_UI, setPatternMode } from "./patternBar.js";
+import { MODE_UI, SWITCH_UI, insertEmptyPattern, setPatternMode } from "./patternBar.js";
 import { patternLocked } from "./patternSound.js";
 import { isPatternNonEmpty, requestPatternSwitch, state, switchPattern, trackSlot } from "./state.js";
 import { extendPatternByDuplicate, truncatePattern, writePatternOnto } from "./track.js";
@@ -137,7 +137,7 @@ function render() {
     if (isPatternNonEmpty(i)) cls.push("is-filled");
     if (i === ap) cls.push("is-active");
     if (i === state.queuedPattern) cls.push("is-queued");
-    scenes.push(`<button type="button" class="${cls.join(" ")}" data-scene="${i}" title="scene ${i + 1}: every track to pattern ${i + 1}. Double-click to play it now">${i + 1}</button>`);
+    scenes.push(`<button type="button" class="${cls.join(" ")}" data-scene="${i}" title="scene ${i + 1}: every track to pattern ${i + 1}. Double-click to play it now. The + at either edge opens an empty column there">${i + 1}<span class="sq-clips__ins is-left" data-ins="${i}" title="new empty column left of ${i + 1}: the columns from here on move right">+</span><span class="sq-clips__ins is-right" data-ins="${i + 1}" title="new empty column right of ${i + 1}: the columns after it move right">+</span></button>`);
   }
   const trackRows = rows().map((t) => {
     const slot = trackSlot(t);
@@ -188,6 +188,8 @@ function onClick(e) {
   // the click that follows a handle drag (the pointer was captured, so it
   // lands on the source cell) is not a launch
   if (e.target.closest(".sq-clip__fill") || dragged) { dragged = false; return; }
+  const ins = e.target.closest("[data-ins]");
+  if (ins) { insertEmptyPattern(Number(ins.dataset.ins)); return; }
   const scene = e.target.closest("[data-scene]");
   if (scene) { requestPatternSwitch(Number(scene.dataset.scene)); return; }
   const act = e.target.closest("[data-act]")?.dataset.act;
@@ -215,6 +217,7 @@ function onClick(e) {
 }
 
 function onDblClick(e) {
+  if (e.target.closest("[data-ins]")) return;     // two quick inserts are two columns, not a play
   // a scene number: play that scene now, whatever the switch setting, and
   // start the transport if it is stopped
   const scene = e.target.closest("[data-scene]");

@@ -725,14 +725,20 @@ export async function startPlayback(opts = {}) {
     // A view opened while playing takes the transport with it here (views.js
     // raised the flag): into arrange mode, the arrangement is seeded from the
     // start marker at this bar line, as a play press would seed it.
+    // Seeded here, the arrangement is already on the bar it starts from, so
+    // this bar line does not also advance it (that started it a bar late).
+    let arrSeeded = false;
     if (barLine && state._viewSwitched) {
       state._viewSwitched = false;
-      if (followView() && state.patternMode === "arrange") seedArrangement(state.tick, { startBar: state.arrStartBar, deferUi: true, fromHere: true });
+      if (followView() && state.patternMode === "arrange") {
+        seedArrangement(state.tick, { startBar: state.arrStartBar, deferUi: true, fromHere: true });
+        arrSeeded = true;
+      }
     }
     if (state.patternMode === "arrange" && barLine) {
       // The arrangement decides every track's pattern at every bar line
       // (clips.js); the scene queue and the chain have no say in this mode.
-      advanceArrangement();
+      if (!arrSeeded) advanceArrangement();
     } else if (state.patternSwitchMode === "finish" && state.queuedPattern !== null && barLine) {
       // manual pattern queue: when switch-mode is "finish" and the user queued a
       // different pattern, commit at the next bar boundary. Synchronous, NOT

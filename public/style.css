@@ -4472,6 +4472,12 @@ body.view-clips .sq-pattern-bar, body.view-arrange .sq-pattern-bar { display: no
 }
 .sq-clips__scene { height: 22px; background: color-mix(in oklab, var(--bg-3) 70%, var(--step)); }
 .sq-clips__scene.is-filled { color: var(--fg); }
+/* the + at a scene number's edges: a new empty column there (insertEmptyPattern) */
+.sq-clips__ins { position: absolute; top: -1px; bottom: -1px; width: 11px; display: none; place-items: center; z-index: 2;
+  font-size: 10px; line-height: 1; border-radius: 3px; background: var(--accent); color: #0b0d10; cursor: copy; }
+.sq-clips__ins.is-left { left: -7px; }
+.sq-clips__ins.is-right { right: -7px; }
+.sq-clips__scene:hover .sq-clips__ins { display: grid; }
 .sq-clips__scene.is-active { border-color: var(--step-now); box-shadow: 0 0 0 1px var(--step-now) inset; }
 .sq-clips__scene.is-queued, .sq-clip.is-queued { border-color: var(--accent-2); }
 /* --clip-c is the shade this distinct clip wears (clipView.js), the track colour by default */

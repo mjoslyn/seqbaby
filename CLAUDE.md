@@ -2383,7 +2383,14 @@ block   t.arrangement[i]    ─── { slot, start, bars }: a clip at a bar, fo
   arrangement.js, so a drag that comes back where it started changes
   nothing; a pointerup / keyup is what history watches, so every edit is one
   undo step without the view knowing. `from chain` is `chainToBlocks` on
-  every track.
+  every track. A scene number's edges carry a `+` on hover: a new empty
+  column there (`insertEmptyPattern`, patternBar.js). The bank is a fixed
+  32, so the column is a FREE slot (no steps, no arrangement block) moved in
+  with `movePattern`, so slots, queues and blocks renumber: the farthest free
+  slot to the right (everything from the column on shifts right), else the
+  nearest to the left. It arrives fresh (no lanes or p-lock, the song's
+  meter, one repeat). A view opened while playing seeds the arrangement at
+  the bar line, and that bar line does not also advance it.
 - **Code**: `arrangement()` is the mode (as `chain()` is) and `.blocks([[pattern,
   fromBar, bars], ...])` on a part is a track's timeline, numbered from 1 as
   the pattern bar and the ruler number them; the native export writes both,
