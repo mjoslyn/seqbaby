@@ -2284,6 +2284,20 @@ block   t.arrangement[i]    ─── { slot, start, bars }: a clip at a bar, fo
   one block rather than two, and the writes happen inside the scheduler, not
   on a DOM event, so history and a jam pick them up on the next interaction
   (the disarm click), as one entry.
+- **The clip view's detail is the selected track's own card.** Under the
+  grid sits the track's real `.sq-track` element — instrument row, inline
+  fx / mod / filter panels, the step grid of the pattern it is on — MOVED out
+  of `#tracks` (hidden in this view, as the pattern bar is in both views) and
+  put back in order when another track is selected or the view closes, the
+  way a panel is reparented into a modal. Nothing is copied, so every
+  listener, knob and `data-track-id` lookup keeps working, and the grid shows
+  the clip the track is on because the alias is the track's: the selected
+  clip IS the one its track is on (a cell click launches and selects; the
+  name selects alone, and makes the track the keyboard's). The grid repaints
+  by `innerHTML` on a sibling of the detail, never on the detail, which
+  would take the card out of the document; `syncDetail` re-seats the card
+  after every paint because a merge's `setTrackOrder` appends every card
+  back into `#tracks`.
 - **The views are pictures, rebuilt whole.** `clipView.js` and
   `arrangeView.js` draw from engine state (`trackSlot`, `_queuedSlot`,
   `_clipOff`, `patternLocked`, `isPatternNonEmpty`, `t.arrangement`) and are

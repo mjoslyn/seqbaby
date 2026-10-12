@@ -4419,6 +4419,9 @@ body.vim-visual .sq-vim__mode { color: var(--accent-2); }
 .sq-view-switch button + button { border-left: 1px solid var(--border); }
 .sq-view-switch button[aria-pressed="true"] { background: var(--accent); color: #0b0d10; }
 body.view-clips #tracks, body.view-arrange #tracks { display: none; }
+/* the pattern bar is the groove view's: the clip view's scene row and the
+   arrangement's own toggle do its jobs there */
+body.view-clips .sq-pattern-bar, body.view-arrange .sq-pattern-bar { display: none; }
 .sq-clips, .sq-arrange { max-width: 1400px; margin: 0 auto; padding: 12px 16px; }
 
 /* The eight track hues, as #tracks has them, for the two views' rows (buses
@@ -4466,6 +4469,13 @@ body.sq-playing .sq-clip.is-now::after { content: ""; position: absolute; left: 
 .sq-clips__stop.is-on { color: var(--danger); border-color: var(--danger); }
 .sq-clips__rec[aria-pressed="true"], .sq-arr__rec[aria-pressed="true"] { background: var(--danger); color: #0b0d10; border-color: var(--danger); }
 .sq-clips__head .sq-clips__strip { justify-content: flex-end; border-left-color: transparent; }
+.sq-clips__row.is-selected .sq-clips__strip { background: color-mix(in oklab, var(--track-color, var(--accent)) 18%, transparent); border-radius: 0 4px 4px 0; }
+.sq-clips__name { text-align: left; background: transparent; border: 0; padding: 2px 4px; cursor: pointer; }
+.sq-clips__name:hover { color: var(--accent); }
+/* the selected track's own card, moved in from #tracks (clipView.js) */
+.sq-clips__detail { margin-top: 14px; display: grid; gap: 8px; }
+.sq-clips__detail-title { font-size: 12px; color: var(--fg-dim); padding-left: 4px; }
+.sq-clips__detail > .sq-track::before { background: var(--track-color, var(--accent)); }
 
 /* arrange: a ruler, a lane per track, blocks on it */
 .sq-arr__bar-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 12px; }
