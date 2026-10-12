@@ -539,9 +539,6 @@ export const STUDIO_BODY = String.raw`
     <div class="sq-field"><label for="bpm">bpm</label><input id="bpm" type="number" value="110" min="40" max="240" /></div>
     <div class="sq-field"><label for="swing">swing</label><input id="swing" type="range" min="0" max="0.5" step="0.01" value="0" /></div>
     <button id="macro-pads" class="sq-btn--ghost" type="button" title="havoc: xy pads, one gesture moving parameters across several tracks"><span class="sq-btn__label">havoc</span></button>
-    <!-- The code drawer (codePanel.js): Strudel live coding, run into
-         the song without stopping the transport. -->
-    <button id="code-btn" class="sq-btn--ghost" type="button" aria-pressed="false" title="live code: write Strudel patterns, ctrl/⌘ enter runs them into the song"><span class="sq-btn__label">code</span></button>
     <!-- The view switcher (views.js): the groove view (the step grids), the
          clip view (tracks x slots, launched per track) and the arrangement
          (a timeline of pattern blocks). Tab cycles them. Desktop only. -->
@@ -550,6 +547,9 @@ export const STUDIO_BODY = String.raw`
       <button type="button" data-view="clips" aria-pressed="false" title="clips: the 32 patterns of every track as clips, launched one track at a time">clips</button>
       <button type="button" data-view="arrange" aria-pressed="false" title="arrange: a timeline of pattern blocks per track">arrange</button>
     </div>
+    <!-- The code drawer (codePanel.js): Strudel live coding, run into
+         the song without stopping the transport. -->
+    <button id="code-btn" class="sq-btn--ghost" type="button" aria-pressed="false" title="live code: write Strudel patterns, ctrl/⌘ enter runs them into the song"><span class="sq-btn__label">code</span></button>
     <button id="vim-toggle" class="sq-btn--ghost" type="button" aria-pressed="false" title="vim mode (\`): hjkl move, i insert, a play, v select, : commands">vim</button>
     <!-- Undo / redo. Wired and painted by history.js, which also owns the
          ctrl/cmd-Z keys; they ship disabled because at boot there is nothing

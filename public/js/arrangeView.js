@@ -15,6 +15,9 @@
  * so undo, save, a jam and the code drawer all see it without being told) and
  * repaints. The drag previews by moving the element and commits on release.
  *
+ * Under the timeline sits the selected track's card (trackDetail.js):
+ * clicking a block, or a track's name, selects that track.
+ *
  * The playhead is a line placed by a rAF loop from the tick being heard
  * (`state._nowTick`, the transport's) against `state._arrOrigin`, so it moves
  * at the audible time as the step playhead does; while recording it shows
@@ -30,6 +33,7 @@ import { patternMeter, stepsPerBarForMeter, transportMeter } from "./meter.js";
 import { setPatternMode } from "./patternBar.js";
 import { patternLocked } from "./patternSound.js";
 import { isPatternNonEmpty, state, trackSlot } from "./state.js";
+import { makeTrackDetail } from "./trackDetail.js";
 import { onViewChange } from "./views.js";
 
 const ZOOMS = [24, 48, 96, 160];
@@ -37,6 +41,8 @@ const STRIP_W = 150;            // the strip column, in px (style.css agrees)
 const MIN_BARS = 16;            // the ruler never shows fewer bars than this
 
 let root = null;
+let grid = null;      // the rebuilt half: ruler, lanes, blocks
+let detail = null;    // the persistent half: the selected track's card (trackDetail.js)
 let raf = 0;
 let headRaf = 0;
 let zoom = 1;
@@ -47,11 +53,15 @@ let drag = null;
 export function installArrangeView() {
   root = document.getElementById("arrange");
   if (!root) return;
+  grid = document.createElement("div");
+  grid.className = "sq-arr__view";
+  root.appendChild(grid);
+  detail = makeTrackDetail(root, scheduleArrangePaint);
   root.addEventListener("click", onClick);
   root.addEventListener("pointerdown", onPointerDown);
   window.addEventListener("keydown", onKey);
-  onViewChange((v) => { if (v === "arrange") { render(); headLoop(); } else stopHead(); });
-  for (const ev of ["seqbaby:clips", "seqbaby:songedited", "seqbaby:setapplied", "seqbaby:newset"]) {
+  onViewChange((v) => { if (v === "arrange") { render(); headLoop(); } else { stopHead(); detail.release(); } });
+  for (const ev of ["seqbaby:clips", "seqbaby:songedited", "seqbaby:setapplied", "seqbaby:newset", "seqbaby:transport"]) {
     window.addEventListener(ev, scheduleArrangePaint);
   }
   window.addEventListener("seqbaby:setapplied", () => { sel = null; });
@@ -96,7 +106,7 @@ function render() {
     }).join("");
     return `<div class="sq-arr__row${t.muted ? " is-muted" : ""}" data-track-id="${t.id}">
       <div class="sq-arr__strip">
-        <span class="sq-arr__name" title="${esc(t.name)}">${esc(t.name)}</span>
+        <button type="button" class="sq-arr__name" data-act="select" title="${esc(t.name)}: show this track's instrument, effects and pattern below">${esc(t.name)}</button>
         <button type="button" class="sq-arr__mute" data-act="mute" aria-pressed="${!!t.muted}" title="mute">m</button>
         <button type="button" class="sq-arr__solo" data-act="solo" aria-pressed="${!!t.soloed}" title="solo">s</button>
         <span class="sq-arr__on" title="the pattern this track is on">p${trackSlot(t) + 1}</span>
@@ -104,7 +114,7 @@ function render() {
       <div class="sq-arr__lane" style="width:${bars * w}px" title="drag across empty space to add a block of pattern ${trackSlot(t) + 1}">${blocks}</div>
     </div>`;
   }).join("");
-  root.innerHTML = `
+  grid.innerHTML = `
     <div class="sq-arr__bar-row">
       <button type="button" class="sq-arr__play" data-act="play" aria-pressed="${arrange}" title="play the arrangement: each track follows its blocks (the pattern bar's mode button says the same)">${arrange ? "playing arrangement" : "play arrangement"}</button>
       <button type="button" class="sq-arr__rec" data-act="rec" aria-pressed="${!!state.arrRecord}" title="record: write the clips you launch (clip view, pattern bar) into the arrangement, bar by bar">● rec</button>
@@ -121,6 +131,8 @@ function render() {
         <div class="sq-arr__head" hidden></div>
       </div>
     </div>`;
+  const shown = detail.sync();
+  if (shown) grid.querySelector(`.sq-arr__row[data-track-id="${shown.id}"]`)?.classList.add("is-selected");
   paintHead();
 }
 
@@ -172,6 +184,7 @@ function onClick(e) {
     scheduleArrangePaint();
     return;
   }
+  if (act === "select") { detail.select(t); return; }
   if (act === "slot") {
     const block = e.target.closest(".sq-arr__block");
     if (block) openSlotPicker(t, Number(block.dataset.i), e.target);
@@ -273,6 +286,7 @@ function onPointerDown(e) {
     const onHandle = e.target.classList.contains("sq-arr__handle");
     drag = { kind: onHandle ? "resize" : "move", t, i, b, el: block, x0: e.clientX, copy: e.altKey && !onHandle, moved: false, w };
     sel = { trackId: t.id, i };
+    if (detail.selectedId !== t.id) detail.select(t);     // its card below (repaints after the drag)
     root.querySelectorAll(".sq-arr__block.is-selected").forEach((el) => el.classList.remove("is-selected"));
     block.classList.add("is-selected");
   } else {
@@ -283,6 +297,7 @@ function onPointerDown(e) {
     ghost.innerHTML = `<span class="sq-arr__slot">p${trackSlot(t) + 1}</span>`;
     lane.appendChild(ghost);
     drag = { kind: "draw", t, bar, el: ghost, x0: e.clientX, moved: false, w };
+    if (detail.selectedId !== t.id) detail.select(t);
   }
   e.preventDefault();
   const target = e.target;

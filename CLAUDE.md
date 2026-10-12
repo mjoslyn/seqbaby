@@ -16,7 +16,7 @@ env / fx / eq / comp / mod / automation per track.
   `public/woscillators.js` →
   `public/js/main.js` (ES module). `middleware.ts` refreshes the Supabase
   session on every request *except* static engine assets.
-- **Engine**: ~82 dependency-free vanilla ES modules in `public/js/`. No
+- **Engine**: ~83 dependency-free vanilla ES modules in `public/js/`. No
   bundler — edit, reload. `window.seqbaby` (from `appApi.js`) exposes `state`
   and serialize/apply hooks to the React shell (typed in `app/seqbaby.d.ts`).
 - **Accounts + data**: Supabase (Postgres + Auth + RLS). Tables: `profiles`,
@@ -211,10 +211,12 @@ env / fx / eq / comp / mod / automation per track.
   (cuts what it lands on), `writeBar` (the recorder), `remapSlots`,
   `chainToBlocks`. Tested in `test/arrangement.test.js`; songBuilder.js
   validates an agent's blocks through it.
-- `views.js` / `clipView.js` / `arrangeView.js` — the view switcher and the
-  two views that are not the track list: the clip grid (tracks x slots) and
-  the arrangement timeline. Both are rebuilt whole from engine state on
-  `seqbaby:clips` and the session events, only while open.
+- `views.js` / `clipView.js` / `arrangeView.js` / `trackDetail.js` — the
+  view switcher and the two views that are not the track list: the clip grid
+  (tracks x slots) and the arrangement timeline, each with the selected
+  track's own card under it (trackDetail.js, the card moved out of `#tracks`
+  and back). Both are rebuilt whole from engine state on `seqbaby:clips` and
+  the session events, only while open.
 - `engineData.js` / `soundDefaults.js` / `theoryData.js` — the engine as DATA,
   with **no imports** (engineData none at all; the other two only each other
   and constants.js): the engine catalog, the four sliders' labels per engine,
@@ -2284,20 +2286,25 @@ block   t.arrangement[i]    ─── { slot, start, bars }: a clip at a bar, fo
   one block rather than two, and the writes happen inside the scheduler, not
   on a DOM event, so history and a jam pick them up on the next interaction
   (the disarm click), as one entry.
-- **The clip view's detail is the selected track's own card.** Under the
-  grid sits the track's real `.sq-track` element — instrument row, inline
-  fx / mod / filter panels, the step grid of the pattern it is on — MOVED out
-  of `#tracks` (hidden in this view, as the pattern bar is in both views) and
-  put back in order when another track is selected or the view closes, the
-  way a panel is reparented into a modal. Nothing is copied, so every
-  listener, knob and `data-track-id` lookup keeps working, and the grid shows
-  the clip the track is on because the alias is the track's: the selected
-  clip IS the one its track is on (a cell click launches and selects; the
-  name selects alone, and makes the track the keyboard's). The grid repaints
-  by `innerHTML` on a sibling of the detail, never on the detail, which
-  would take the card out of the document; `syncDetail` re-seats the card
-  after every paint because a merge's `setTrackOrder` appends every card
-  back into `#tracks`.
+- **Both views' detail is the selected track's own card** (`trackDetail.js`,
+  one per view). Under the grid or the timeline sits the track's real
+  `.sq-track` element — instrument row, inline fx / mod / filter panels, the
+  step grid of the pattern it is on — MOVED out of `#tracks` (hidden under
+  these views, as the pattern bar is) and put back in order when another
+  track is selected or the view closes, the way a panel is reparented into a
+  modal. Nothing is copied, so every listener, knob and `data-track-id`
+  lookup keeps working, and the grid shows the clip the track is on because
+  the alias is the track's: the selected clip IS the one its track is on. In
+  the clip view a cell click launches and selects, a name selects alone; in
+  the arrangement a block or a name selects. The clip view's toolbar carries
+  `play` (it `.click()`s the transport's own button, so a jam's shared start
+  goes the same way), the repeat / chain toggle, `rec` and `stop all`, since
+  the pattern bar is hidden there; the transport announces `seqbaby:transport`
+  on start and stop so the views' play buttons follow. The selected track is the
+  keyboard's (`setActiveTrack`). A view repaints by `innerHTML` on a SIBLING
+  of the detail, never on the detail or their parent, which would take the
+  card out of the document; `sync` re-seats the card after every paint
+  because a merge's `setTrackOrder` appends every card back into `#tracks`.
 - **The views are pictures, rebuilt whole.** `clipView.js` and
   `arrangeView.js` draw from engine state (`trackSlot`, `_queuedSlot`,
   `_clipOff`, `patternLocked`, `isPatternNonEmpty`, `t.arrangement`) and are
@@ -4726,7 +4733,7 @@ Repo: https://github.com/mjoslyn/seqbaby.
   An inline marker (`window.__seqbabyServerBoot`) tells the paths apart, and
   `ScriptLoader.tsx` keeps its onload-chained injection for the soft-nav case
   (e.g. arriving from `/login`).
-- `app/EnginePreload.tsx` emits `modulepreload` for all 82 modules listed in
+- `app/EnginePreload.tsx` emits `modulepreload` for all 83 modules listed in
   `app/engineAssets.ts` (at `engineAsset("/js/<name>")`; the hints used to
   point at the site root and 404). The graph is 8 levels deep, so without it the browser
   needs up to eight sequential round trips just to discover the code.

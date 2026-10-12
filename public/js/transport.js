@@ -401,6 +401,7 @@ export async function stopPlayback() {
   state.tick = 0;
   state.barTick = 0;
   for (const t of state.tracks) { t.trackTick = 0; t.speedAccum = 0; }
+  window.dispatchEvent(new CustomEvent("seqbaby:transport"));   // the views' play buttons follow
   clearQueuedClips();                              // a clip waiting for a bar that will not come
   state.arrRecord = false;                         // recording stops with the transport
   paintNowIndicator();
@@ -755,6 +756,7 @@ export async function startPlayback(opts = {}) {
   refreshNoiseBeds();                                // vinyl crackle follows the transport
   btn.textContent = "stop";
   btn.classList.add("is-playing");
+  window.dispatchEvent(new CustomEvent("seqbaby:transport"));   // the views' play buttons follow
   setStatus("playing");
 }
 

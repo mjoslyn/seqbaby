@@ -126,6 +126,7 @@ export const ENGINE_MODULES = [
   "theory.js",
   "theoryData.js",
   "track.js",
+  "trackDetail.js",
   "transport.js",
   "views.js",
   "vim.js",

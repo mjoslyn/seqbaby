@@ -4446,7 +4446,11 @@ body.view-clips .sq-pattern-bar, body.view-arrange .sq-pattern-bar { display: no
 .sq-clips__solo[aria-pressed="true"], .sq-arr__solo[aria-pressed="true"] { background: var(--accent); color: #0b0d10; border-color: var(--accent); }
 .sq-clips__row.is-muted .sq-clips__cells, .sq-arr__row.is-muted .sq-arr__lane { opacity: 0.45; }
 
-/* clips: a row of 32 cells per track, scenes above */
+/* clips: a toolbar, then a row of 32 cells per track, scenes above */
+.sq-clips__bar { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; font-size: 12px; }
+.sq-clips__play { min-width: 64px; }
+.sq-clips__play.is-playing { background: var(--accent-2); color: #0b0d10; border-color: var(--accent-2); }
+.sq-clips__mode[aria-pressed="true"] { color: var(--accent-2); border-color: var(--accent-2); }
 .sq-clips__head, .sq-clips__row { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
 .sq-clips__head { margin-bottom: 8px; }
 .sq-clips__cells { flex: 1 1 0; display: grid; grid-template-columns: repeat(32, minmax(0, 1fr)); gap: 3px; }
@@ -4469,13 +4473,13 @@ body.sq-playing .sq-clip.is-now::after { content: ""; position: absolute; left: 
 .sq-clips__stop.is-on { color: var(--danger); border-color: var(--danger); }
 .sq-clips__rec[aria-pressed="true"], .sq-arr__rec[aria-pressed="true"] { background: var(--danger); color: #0b0d10; border-color: var(--danger); }
 .sq-clips__head .sq-clips__strip { justify-content: flex-end; border-left-color: transparent; }
-.sq-clips__row.is-selected .sq-clips__strip { background: color-mix(in oklab, var(--track-color, var(--accent)) 18%, transparent); border-radius: 0 4px 4px 0; }
-.sq-clips__name { text-align: left; background: transparent; border: 0; padding: 2px 4px; cursor: pointer; }
-.sq-clips__name:hover { color: var(--accent); }
-/* the selected track's own card, moved in from #tracks (clipView.js) */
-.sq-clips__detail { margin-top: 14px; display: grid; gap: 8px; }
-.sq-clips__detail-title { font-size: 12px; color: var(--fg-dim); padding-left: 4px; }
-.sq-clips__detail > .sq-track::before { background: var(--track-color, var(--accent)); }
+.sq-clips__row.is-selected .sq-clips__strip, .sq-arr__row.is-selected .sq-arr__strip { background: color-mix(in oklab, var(--track-color, var(--accent)) 18%, transparent); border-radius: 0 4px 4px 0; }
+.sq-clips__name, .sq-arr__name { text-align: left; background: transparent; border: 0; padding: 2px 4px; cursor: pointer; }
+.sq-clips__name:hover, .sq-arr__name:hover { color: var(--accent); }
+/* the selected track's own card, moved in from #tracks (trackDetail.js) */
+.sq-track-detail { margin-top: 14px; display: grid; gap: 8px; }
+.sq-track-detail__title { font-size: 12px; color: var(--fg-dim); padding-left: 4px; }
+.sq-track-detail > .sq-track::before { background: var(--track-color, var(--accent)); }
 
 /* arrange: a ruler, a lane per track, blocks on it */
 .sq-arr__bar-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 12px; }

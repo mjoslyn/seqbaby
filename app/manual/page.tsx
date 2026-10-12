@@ -217,6 +217,7 @@ export default function ManualPage() {
                 <tr><td>the scene row</td><td>The numbers along the top launch a whole column: every track to that pattern, which is exactly what the pattern bar does. A track launched off the scene shows a <span className={styles.ui}>p5</span> badge beside its length in the groove view; click it to bring the track back.</td></tr>
                 <tr><td>■</td><td>Stops that track&apos;s clip: it plays nothing until a clip is launched on it or a scene is. The one at the head stops every track.</td></tr>
                 <tr><td>drag a cell</td><td>Copies the pattern onto another cell, on the same track or another (lanes the other engine cannot play are dropped, as paste does).</td></tr>
+                <tr><td>play, repeat / chain</td><td>The transport&apos;s play button and the pattern mode, here too since the pattern bar is hidden in this view: <em>repeat</em> loops the scene, <em>chain</em> walks the non-empty patterns in order with every track together.</td></tr>
                 <tr><td>● rec</td><td>Records what you launch into the arrangement, bar by bar: play, launch clips for a while, stop, and the arrangement view holds the performance. Recording over an arrangement rewrites the bars it passes.</td></tr>
               </tbody>
             </table>
@@ -235,6 +236,7 @@ export default function ManualPage() {
                 <tr><td>delete / backspace</td><td>Removes the selected block. Every edit is one undo step.</td></tr>
                 <tr><td>from chain</td><td>Lays the chain out as blocks on every track: the non-empty patterns in order, each for its <span className={styles.ui}>rep</span> count. A starting point to pull apart.</td></tr>
                 <tr><td>− / +</td><td>Zoom.</td></tr>
+                <tr><td>the detail</td><td>Under the timeline, as in the clip view: the selected track&apos;s instrument, effects, modulation and the step grid of the clip it is on. Clicking a block or a track&apos;s name selects the track.</td></tr>
               </tbody>
             </table>
           </div>
