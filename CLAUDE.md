@@ -2340,13 +2340,16 @@ block   t.arrangement[i]    ─── { slot, start, bars }: a clip at a bar, fo
   and sit last, so the counts line up). A clip dragged onto another cell is
   `writePatternOnto` (track.js), the routine the track head's paste uses, so
   lanes the target engine cannot play are dropped the same way. A cell's
-  right edge (`.sq-clip__grow`) drags the clip's LENGTH a bar at a time,
-  relative to the grab as a knob's drag is (the cell is drawn one column
-  wide whatever its length, so an absolute read would snap a 3-bar clip to 1
-  the moment the handle moved): the cell previews the width over its
-  neighbours and the release is `extendPatternByDuplicate` /
-  `truncatePattern` (track.js, the `x2` / `/2` buttons' own routines), in
-  bars of the slot's meter, capped at 128 steps. The
+  right edge (`.sq-clip__fill`) is a fill handle: dragged across the cells
+  beside it, either way, the clip is copied into each of those slots on
+  release through the same `writePatternOnto` (so a target's own p-lock
+  stays), the targets marked `is-fill-target` while it lasts; SHIFT-dragged
+  it changes the clip's LENGTH a bar at a time instead (`is-growing`, the
+  cell previewing its width over its neighbours; the release is
+  `extendPatternByDuplicate` / `truncatePattern`, the `x2` / `/2` buttons'
+  own routines, capped at 128 steps). Both are relative to the grab as a
+  knob's drag is: a cell is drawn one column wide whatever its length, so an
+  absolute read would snap a 3-bar clip to 1 the moment the handle moved. The
   arrangement's drags preview on the element and write on release through
   arrangement.js, so a drag that comes back where it started changes
   nothing; a pointerup / keyup is what history watches, so every edit is one

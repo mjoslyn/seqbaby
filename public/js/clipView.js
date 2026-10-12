@@ -26,11 +26,14 @@
  * clip (the track stops, as its ■ does).
  *
  * A clip's length in bars is written on its cell, and the cell's right edge
- * is a handle: drag it across the cells to the right to make the pattern that
- * many bars long (grown by duplicating what is there, as the track head's +1
- * does; shrunk by truncating), snapped to whole bars of the pattern's meter.
- * The cell previews the width while the drag lasts; the pattern changes on
- * release, through the same functions the length buttons use.
+ * is a FILL handle: drag it across the cells beside it and the clip is copied
+ * into each of those scenes on release (a spreadsheet's fill handle), through
+ * `writePatternOnto` again, so a p-lock a target already holds stays its own.
+ * Either direction; the cells it will fill are marked while the drag lasts.
+ * SHIFT-drag the same handle to change the clip's LENGTH instead, a bar at a
+ * time (grown by duplicating what is there, as the track head's x2 does;
+ * shrunk by truncating): the cell previews its width over its neighbours.
+ * Both are relative to the grab, as a knob's drag is.
  */
 
 import { PATTERN_COUNT } from "./constants.js";
@@ -58,7 +61,7 @@ export function installClipView() {
   detail = makeTrackDetail(root, scheduleClipPaint);
   root.addEventListener("click", onClick);
   root.addEventListener("dblclick", onDblClick);
-  root.addEventListener("pointerdown", onGrowStart);
+  root.addEventListener("pointerdown", onFillStart);
   root.addEventListener("dragstart", onDragStart);
   root.addEventListener("dragover", onDragOver);
   root.addEventListener("dragleave", onDragLeave);
@@ -103,7 +106,7 @@ function render() {
       if (i === t._queuedSlot) cls.push("is-queued");
       if (patternLocked(t, i)) cls.push("is-locked");
       if (i === ap) cls.push("is-scene");
-      cells.push(`<button type="button" class="${cls.join(" ")}" data-slot="${i}" draggable="true" title="${esc(t.name)}: pattern ${i + 1}, ${bars} bar${bars === 1 ? "" : "s"}. Click to launch it on this track, double-click to mute it; drag onto another cell to copy it there; drag its right edge to make it longer or shorter">${i + 1}${bars > 1 ? `<i class="sq-clip__bars">${bars}</i>` : ""}<span class="sq-clip__grow"></span></button>`);
+      cells.push(`<button type="button" class="${cls.join(" ")}" data-slot="${i}" draggable="true" title="${esc(t.name)}: pattern ${i + 1}, ${bars} bar${bars === 1 ? "" : "s"}. Click to launch it on this track, double-click to mute it; drag onto another cell to copy it there; drag its right edge across the cells beside it to copy it into those scenes, or shift-drag it to make it longer or shorter">${i + 1}${bars > 1 ? `<i class="sq-clip__bars">${bars}</i>` : ""}<span class="sq-clip__fill"></span></button>`);
     }
     return `<div class="sq-clips__row${t.muted ? " is-muted" : ""}" data-track-id="${t.id}">
       <div class="sq-clips__strip">
@@ -178,10 +181,10 @@ function onDblClick(e) {
 
 // ---- the length drag ---------------------------------------------------------
 
-let grow = null;   // { t, slot, cell, spb, pitch, x0, bars0, bars, maxBars }
+let fill = null;   // { mode: "fill" | "grow", t, slot, cell, row, x0, pitch, from, to, spb, bars0, bars, maxBars }
 
-function onGrowStart(e) {
-  if (e.button !== 0 || !e.target.classList.contains("sq-clip__grow")) return;
+function onFillStart(e) {
+  if (e.button !== 0 || !e.target.classList.contains("sq-clip__fill")) return;
   const cell = e.target.closest(".sq-clip");
   const row = e.target.closest(".sq-clips__row");
   const t = row && trackById(row.dataset.trackId);
@@ -189,54 +192,82 @@ function onGrowStart(e) {
   const slot = Number(cell.dataset.slot);
   const p = t.patterns?.[slot];
   if (!p) return;
-  const spb = stepsPerBarForMeter(patternMeter(slot));
   const r = cell.getBoundingClientRect();
-  const next = cell.nextElementSibling?.getBoundingClientRect();
-  const pitch = next ? next.left - r.left : r.width;      // a cell plus its gap
+  const next = cell.nextElementSibling?.getBoundingClientRect() || cell.previousElementSibling?.getBoundingClientRect();
+  const pitch = next ? Math.abs(next.left - r.left) : r.width;      // a cell plus its gap
+  // relative to the grab, as a knob's drag is: nothing happens until the
+  // pointer has crossed into the next cell (a cell is drawn one column wide
+  // whatever its length, so an absolute read would snap a long clip to one
+  // bar the moment the handle moved)
+  const spb = stepsPerBarForMeter(patternMeter(slot));
   const bars0 = Math.max(1, Math.ceil(p.steps.length / spb));
-  // relative to the grab, as a knob's drag is: a cell is drawn one column
-  // wide whatever its length, so an absolute read would snap a 3-bar clip to
-  // 1 the moment the handle moved
-  grow = { t, slot, cell, spb, pitch, x0: e.clientX, bars0, bars: bars0, maxBars: Math.max(1, Math.floor(128 / spb)) };
+  fill = { mode: e.shiftKey ? "grow" : "fill", t, slot, cell, row, x0: e.clientX, pitch, from: slot, to: slot,
+           spb, bars0, bars: bars0, maxBars: Math.max(1, Math.floor(128 / spb)) };
   cell.draggable = false;                                   // not a copy drag
-  cell.classList.add("is-growing");
-  cell.style.width = `${bars0 * pitch - (pitch - r.width)}px`;
+  cell.classList.add(fill.mode === "grow" ? "is-growing" : "is-filling");
+  if (fill.mode === "grow") cell.style.width = `calc(${bars0 * pitch}px - var(--clip-gap, 3px))`;
   e.preventDefault();
   try { e.target.setPointerCapture(e.pointerId); } catch {}
-  const move = (ev) => onGrowMove(ev);
-  const up = (ev) => { e.target.removeEventListener("pointermove", move); e.target.removeEventListener("pointerup", up); e.target.removeEventListener("pointercancel", up); onGrowEnd(ev); };
+  const move = (ev) => onFillMove(ev);
+  const up = (ev) => { e.target.removeEventListener("pointermove", move); e.target.removeEventListener("pointerup", up); e.target.removeEventListener("pointercancel", up); onFillEnd(ev); };
   e.target.addEventListener("pointermove", move);
   e.target.addEventListener("pointerup", up);
   e.target.addEventListener("pointercancel", up);
 }
 
-function onGrowMove(e) {
-  if (!grow) return;
-  const bars = Math.max(1, Math.min(grow.maxBars, grow.bars0 + Math.round((e.clientX - grow.x0) / grow.pitch)));
-  if (bars === grow.bars) return;
-  grow.bars = bars;
-  grow.cell.style.width = `calc(${bars * grow.pitch}px - var(--clip-gap, 3px))`;
-  grow.cell.querySelector(".sq-clip__bars")?.remove();
-  if (bars > 1) grow.cell.insertAdjacentHTML("beforeend", `<i class="sq-clip__bars">${bars}</i>`);
+function fillRange(f, clientX) {
+  const n = Math.round((clientX - f.x0) / f.pitch);
+  if (n > 0) return [f.slot + 1, Math.min(PATTERN_COUNT - 1, f.slot + n)];
+  if (n < 0) return [Math.max(0, f.slot + n), f.slot - 1];
+  return [f.slot, f.slot];
 }
 
-function onGrowEnd() {
-  const g = grow;
-  grow = null;
-  if (!g) return;
-  g.cell.classList.remove("is-growing");
-  g.cell.style.width = "";
-  g.cell.draggable = true;
-  const { t, slot, spb, bars, bars0 } = g;
-  if (bars === bars0) { scheduleClipPaint(); return; }
-  if (bars > bars0) extendPatternByDuplicate(t, slot, bars * spb);
-  else truncatePattern(t, slot, bars * spb);
+function onFillMove(e) {
+  if (!fill) return;
+  if (fill.mode === "grow") {
+    const bars = Math.max(1, Math.min(fill.maxBars, fill.bars0 + Math.round((e.clientX - fill.x0) / fill.pitch)));
+    if (bars === fill.bars) return;
+    fill.bars = bars;
+    fill.cell.style.width = `calc(${bars * fill.pitch}px - var(--clip-gap, 3px))`;
+    fill.cell.querySelector(".sq-clip__bars")?.remove();
+    if (bars > 1) fill.cell.insertAdjacentHTML("beforeend", `<i class="sq-clip__bars">${bars}</i>`);
+    return;
+  }
+  const [from, to] = fillRange(fill, e.clientX);
+  if (from === fill.from && to === fill.to) return;
+  fill.from = from; fill.to = to;
+  for (const c of fill.row.querySelectorAll(".sq-clip")) {
+    const i = Number(c.dataset.slot);
+    c.classList.toggle("is-fill-target", i !== fill.slot && i >= from && i <= to);
+  }
+}
+
+function onFillEnd() {
+  const f = fill;
+  fill = null;
+  if (!f) return;
+  for (const c of f.row.querySelectorAll(".sq-clip")) { c.classList.remove("is-fill-target", "is-filling", "is-growing"); c.style.width = ""; c.draggable = true; }
+  const { t, slot } = f;
+  if (f.mode === "grow") {
+    const { spb, bars, bars0 } = f;
+    if (bars === bars0) { scheduleClipPaint(); return; }
+    if (bars > bars0) extendPatternByDuplicate(t, slot, bars * spb);
+    else truncatePattern(t, slot, bars * spb);
+    announceClips();
+    setStatus(`${t.name}: pattern ${slot + 1} is ${bars} bar${bars === 1 ? "" : "s"} long`);
+    return;
+  }
+  const targets = [];
+  for (let i = f.from; i <= f.to; i++) if (i !== slot) targets.push(i);
+  if (!targets.length) { scheduleClipPaint(); return; }
+  const pattern = t.patterns[slot];
+  for (const i of targets) writePatternOnto(t, i, pattern);
   announceClips();
-  setStatus(`${t.name}: pattern ${slot + 1} is ${bars} bar${bars === 1 ? "" : "s"} long`);
+  setStatus(`${t.name}: pattern ${slot + 1} copied to ${targets.length === 1 ? `pattern ${targets[0] + 1}` : `patterns ${targets[0] + 1} to ${targets[targets.length - 1] + 1}`}`);
 }
 
 function onDragStart(e) {
-  if (grow) { e.preventDefault(); return; }
+  if (fill) { e.preventDefault(); return; }
   const cell = e.target.closest(".sq-clip");
   const row = e.target.closest(".sq-clips__row");
   if (!cell || !row) return;
