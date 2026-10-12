@@ -189,23 +189,51 @@ export function applyArrangementBar({ deferUi = true, tickInBar = 0 } = {}) {
  */
 export function advanceArrangement() {
   const len = arrangeLength();
-  state.arrBar += 1;
-  if (state.arrBar >= len) { state.arrBar = 0; state._arrOrigin = state.tick; }
+  if (state._arrJump != null) {
+    // a jump asked for mid-bar (the ruler clicked while playing) lands here,
+    // on the bar line, as a queued clip does
+    state.arrBar = Math.min(len - 1, Math.max(0, state._arrJump));
+    state._arrJump = null;
+  } else {
+    state.arrBar += 1;
+    if (state.arrBar >= len) state.arrBar = 0;
+  }
+  // the origin follows, so the view maps the tick being heard to this bar
+  state._arrOrigin = state.tick - state.arrBar * stepsPerBarForMeter(transportMeter());
   applyArrangementBar({ deferUi: true });
 }
 
 /**
- * Where a play press lands in the arrangement: `startTick` (0, or a jam's
- * shared beat) modulo the arrangement's length, as a ruler bar and the ticks
- * into it. Every track is put on its block from there.
- * @param {number} startTick
+ * Start the arrangement from a bar: the marker a play press starts from, and
+ * while it plays, a jump at the next bar line. Not saved: where you start
+ * from is a view's state, like the scene.
+ * @param {number} bar
  */
-export function seedArrangement(startTick) {
+export function setArrangeStart(bar) {
+  const b = Math.max(0, Math.round(bar));
+  state.arrStartBar = b;
+  if (state.playing && state.patternMode === "arrange") state._arrJump = b;
+  announceClips();
+}
+
+/**
+ * Where a play press lands in the arrangement: `startTick` (0, or a jam's
+ * shared beat) plus the start marker's bars, modulo the arrangement's
+ * length, as a ruler bar and the ticks into it. Every track is put on its
+ * block from there. `_arrOrigin` is the global tick that would have been
+ * ruler bar 0, which a marker puts before the start (negative, fine: it is
+ * only ever subtracted from a tick).
+ * @param {number} startTick
+ * @param {{startBar?: number}} [opts]
+ */
+export function seedArrangement(startTick, { startBar = 0 } = {}) {
   const barLen = stepsPerBarForMeter(transportMeter());
   const loop = arrangeLength() * barLen;
-  const inLoop = ((startTick % loop) + loop) % loop;
+  const at = startTick + Math.max(0, startBar) * barLen;
+  const inLoop = ((at % loop) + loop) % loop;
   state.arrBar = Math.floor(inLoop / barLen);
   state._arrOrigin = startTick - inLoop;
+  state._arrJump = null;
   applyArrangementBar({ deferUi: false, tickInBar: inLoop % barLen });
 }
 

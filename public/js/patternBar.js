@@ -35,6 +35,7 @@ export function syncPatternModeUI() {
 export function setPatternMode(mode) {
   state.patternMode = patternModeOf(mode);
   if (state.patternMode === "arrange") state.arrBar = 0;
+  else state._loopMode = state.patternMode;     // what the clip view's play comes back to
   syncPatternModeUI();
 }
 

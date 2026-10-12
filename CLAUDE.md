@@ -2272,7 +2272,18 @@ block   t.arrangement[i]    ─── { slot, start, bars }: a clip at a bar, fo
   audition. `state._arrOrigin` is the global tick that was ruler bar 0, and
   the transport writes `state._nowTick` at the audible time, so the view's
   playhead is a line placed from the tick being HEARD, as the step playhead
-  is.
+  is. **The ruler's start marker** (`state.arrStartBar`, the view's, never
+  saved) is where a play press starts the arrangement from: `seedArrangement`
+  adds its bars to the start tick (so `_arrOrigin` goes negative, which is
+  fine, it is only ever subtracted from a tick), and a jam's shared beat
+  ignores it since the marker is this screen's. Clicked while the arrangement
+  plays it is a jump (`_arrJump`), landed at the next bar line by
+  `advanceArrangement`, as a queued clip is. **Play plays what the open view
+  shows**: `startPlayback` switches to arrange mode in the arrangement view
+  and back to the last repeat / chain mode (`_loopMode`) in the clip view;
+  the groove view keeps whatever the pattern bar says, since that is where
+  the mode button is in sight. The mode is the song's, so a jam hears the
+  change as any edit.
 - **Recording is a bar-line write** (`recordArrangementBar`): with `rec`
   armed (clip view or arrangement view), every bar line in a non-arrange
   mode writes what each track just played — its slot, or nothing if stopped

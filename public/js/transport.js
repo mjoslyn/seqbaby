@@ -26,6 +26,7 @@ import { ensureFxRack, fireFilterEnv, refreshAllTrackOutputs, refreshNoiseBeds, 
 import { stepsPerBarForMeter, stepsPerBeatForMeter, transportMeter } from "./meter.js";
 import { findNextNonEmptyPattern, invertChord, state, switchPattern } from "./state.js";
 import { advanceArrangement, clearQueuedClips, commitQueuedClips, recordArrangementBar, restartTrackCount, seedArrangement, seedTrackCount } from "./clips.js";
+import { setPatternMode } from "./patternBar.js";
 import { loadSilverboxWorklet } from "./silverbox.js";
 import { loadContagionWorklet } from "./contagion.js";
 import { applyScale, chordNotes, nameToMidi } from "./theory.js";
@@ -402,7 +403,8 @@ export async function stopPlayback() {
   state.barTick = 0;
   for (const t of state.tracks) { t.trackTick = 0; t.speedAccum = 0; }
   window.dispatchEvent(new CustomEvent("seqbaby:transport"));   // the views' play buttons follow
-  clearQueuedClips();                              // a clip waiting for a bar that will not come
+  clearQueuedClips();
+  state._arrJump = null;                              // a clip waiting for a bar that will not come
   state.arrRecord = false;                         // recording stops with the transport
   paintNowIndicator();
   setStatus("stopped");
@@ -451,6 +453,13 @@ export async function startPlayback(opts = {}) {
   Tone.getTransport().swingSubdivision = "16n";
 
   if (state.repeatId !== null) Tone.getTransport().clear(state.repeatId);
+  // Play plays what the open view shows (views.js): the arrangement view its
+  // arrangement, the clip view its clips (the last repeat / chain mode). The
+  // groove view keeps whatever the pattern bar says, since that is where the
+  // mode button is in sight. The mode is the song's, so a jam hears the change
+  // as any edit.
+  if (state.view === "arrange" && state.patternMode !== "arrange") setPatternMode("arrange");
+  else if (state.view === "clips" && state.patternMode === "arrange") setPatternMode(state._loopMode || "repeat");
   const startTick = Math.max(0, Math.floor(opts.tick ?? 0));
   state.tick = startTick;
   // Where in the bar that tick is. The bar is the active pattern's meter, not
@@ -465,9 +474,11 @@ export async function startPlayback(opts = {}) {
   // tick's worth short of full, so its first step fires ON the downbeat rather
   // than a tick after it: with 0 a half-speed track played every odd sixteenth.
   for (const t of state.tracks) seedTrackCount(t, startTick);
-  // Arrange mode lands in the arrangement where the tick says (clips.js);
+  // Arrange mode lands in the arrangement where the tick says (clips.js),
+  // from the view's start marker when this screen pressed play on its own (a
+  // jam's shared beat is everyone's, and the marker is this screen's);
   // otherwise a recording armed before play writes from bar 0.
-  if (state.patternMode === "arrange") seedArrangement(startTick);
+  if (state.patternMode === "arrange") seedArrangement(startTick, { startBar: opts.tick == null ? state.arrStartBar : 0 });
   else if (state.arrRecord) state.arrRecBar = 0;
   // Restore master gain — the stop branch ramps it to 0 to kill the lookahead-
   // queued tail of Tone synth events that Transport.stop() can't unschedule.

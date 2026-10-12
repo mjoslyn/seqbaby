@@ -4517,6 +4517,10 @@ body.sq-playing .sq-clip.is-now::after { content: ""; position: absolute; left: 
 .sq-arr__on { color: var(--fg-dim); font-size: 10px; }
 .sq-arr__head { position: absolute; top: 0; bottom: 0; width: 0; border-left: 2px solid var(--step-now); pointer-events: none; z-index: 2; }
 .sq-arr__end { position: absolute; top: 0; bottom: 0; width: 0; border-left: 1px dashed var(--accent-2); pointer-events: none; opacity: 0.7; }
+.sq-arr__lane--ruler { cursor: pointer; }
+/* the start marker: a flag on the ruler and a faint line down the lanes */
+.sq-arr__start { position: absolute; top: 0; bottom: 0; width: 0; border-left: 1px solid color-mix(in oklab, var(--accent) 55%, transparent); pointer-events: none; z-index: 1; }
+.sq-arr__start::before { content: ""; position: absolute; top: 0; left: -5px; border: 5px solid transparent; border-top: 8px solid var(--accent); }
 .sq-arr__picker { position: fixed; z-index: 210; display: grid; grid-template-columns: repeat(8, 32px); gap: 3px; padding: 6px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 8px 24px rgb(0 0 0 / 0.4); }
 .sq-arr__picker .sq-pattern__cell { min-height: 24px; }
 

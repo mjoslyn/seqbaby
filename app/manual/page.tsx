@@ -229,7 +229,8 @@ export default function ManualPage() {
                 <tr><th>Control</th><th>What it does</th></tr>
               </thead>
               <tbody>
-                <tr><td>play arrangement</td><td>Switches to arrange mode (the pattern bar&apos;s mode button cycles to it too): every track follows its blocks, bar by bar, and the song loops at the last block on any track. A gap is silence for that track.</td></tr>
+                <tr><td>play</td><td>The transport&apos;s play plays what the open view shows: in the arrangement view it plays the arrangement (switching to arrange mode), in the clip view the clips (back to repeat or chain). The groove view plays whatever the pattern bar&apos;s mode says. Every track follows its blocks bar by bar, the song loops at the last block on any track, and a gap is silence for that track.</td></tr>
+                <tr><td>the ruler</td><td>Click a bar to put the start marker there: play starts the arrangement from it. While the arrangement plays, the click is a jump, landed at the next bar line.</td></tr>
                 <tr><td>drag on empty lane</td><td>Draws a block of the pattern the track is on, as many bars as you drag.</td></tr>
                 <tr><td>drag a block</td><td>Moves it, snapped to the bar. Drag its right edge to resize; hold <span className={styles.key}>alt</span> to drag out a copy. A block dropped on another cuts it.</td></tr>
                 <tr><td>the number on a block</td><td>Picks which pattern it plays.</td></tr>

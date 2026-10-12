@@ -18,6 +18,11 @@
  * Under the timeline sits the selected track's card (trackDetail.js):
  * clicking a block, or a track's name, selects that track.
  *
+ * The start marker on the ruler is where a play press starts the arrangement
+ * from (`state.arrStartBar`): click a bar to put it there, and while the
+ * arrangement plays the click is a jump, landed at the next bar line. The
+ * marker is drawn as the playhead's resting place when nothing plays.
+ *
  * The playhead is a line placed by a rAF loop from the tick being heard
  * (`state._nowTick`, the transport's) against `state._arrOrigin`, so it moves
  * at the audible time as the step playhead does; while recording it shows
@@ -27,7 +32,7 @@
 import { PATTERN_COUNT } from "./constants.js";
 import { setStatus } from "./dom.js";
 import { arrangementBars, blockAt, chainToBlocks, moveBlock, placeBlock, removeBlock, resizeBlock, setBlockSlot } from "./arrangement.js";
-import { announceClips, arrangeLength, setArrangeRecord } from "./clips.js";
+import { announceClips, arrangeLength, setArrangeRecord, setArrangeStart } from "./clips.js";
 import { showConfirmDialog } from "./dialogs.js";
 import { patternMeter, stepsPerBarForMeter, transportMeter } from "./meter.js";
 import { setPatternMode } from "./patternBar.js";
@@ -121,13 +126,14 @@ function render() {
       <button type="button" class="sq-btn--ghost" data-act="fromchain" title="lay out the chain as blocks on every track: the non-empty patterns in order, each for its repeat count">from chain</button>
       <button type="button" class="sq-btn--ghost" data-act="clear" title="remove every block">clear</button>
       <span class="sq-arr__zoom"><button type="button" class="sq-btn--ghost" data-act="zoom-" title="zoom out">−</button><button type="button" class="sq-btn--ghost" data-act="zoom+" title="zoom in">+</button></span>
-      <span class="sq-arr__len">${len} bar${len === 1 ? "" : "s"}${arrange ? "" : " · not playing: press play arrangement"}</span>
+      <span class="sq-arr__len">${len} bar${len === 1 ? "" : "s"}${state.arrStartBar ? ` · starts at bar ${state.arrStartBar + 1}` : ""}${arrange ? "" : " · not playing: press play arrangement"}</span>
     </div>
     <div class="sq-arr__scroll">
       <div class="sq-arr__grid" style="--arr-bar-w:${w}px">
         <div class="sq-arr__ruler"><div class="sq-arr__strip"></div><div class="sq-arr__lane sq-arr__lane--ruler" style="width:${bars * w}px">${ruler}</div></div>
         <div class="sq-arr__rows">${trackRows}</div>
         <div class="sq-arr__end" style="left:${STRIP_W + len * w}px" title="the arrangement loops here"></div>
+        <div class="sq-arr__start" style="left:${STRIP_W + state.arrStartBar * w}px" title="play starts here (click the ruler to move it)"></div>
         <div class="sq-arr__head" hidden></div>
       </div>
     </div>`;
@@ -170,6 +176,15 @@ function paintHead() {
 // ---- clicks ----------------------------------------------------------------
 
 function onClick(e) {
+  // the ruler: where play starts from, or a jump while it plays
+  const ruler = e.target.closest(".sq-arr__lane--ruler");
+  if (ruler) {
+    const bar = Math.max(0, Math.floor((e.clientX - ruler.getBoundingClientRect().left) / barW()));
+    setArrangeStart(bar);
+    setStatus(state.playing && state.patternMode === "arrange" ? `jumping to bar ${bar + 1} at the bar line` : `the arrangement starts at bar ${bar + 1}`);
+    render();
+    return;
+  }
   const act = e.target.closest("[data-act]")?.dataset.act;
   if (act === "play") { setPatternMode(state.patternMode === "arrange" ? "repeat" : "arrange"); scheduleArrangePaint(); announceClips(); return; }
   if (act === "rec") { setArrangeRecord(!state.arrRecord); scheduleArrangePaint(); return; }
