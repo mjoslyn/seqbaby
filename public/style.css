@@ -4450,7 +4450,7 @@ body.view-clips .sq-pattern-bar, body.view-arrange .sq-pattern-bar { display: no
 .sq-clips__bar { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; font-size: 12px; }
 .sq-clips__play { min-width: 64px; }
 .sq-clips__play.is-playing { background: var(--accent-2); color: #0b0d10; border-color: var(--accent-2); }
-.sq-clips__mode[aria-pressed="true"] { color: var(--accent-2); border-color: var(--accent-2); }
+.sq-clips__mode[aria-pressed="true"], .sq-clips__switch[aria-pressed="true"] { background: var(--accent-2); color: #0b0d10; border-color: var(--accent-2); }
 .sq-clips__head, .sq-clips__row { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
 .sq-clips__head { margin-bottom: 8px; }
 .sq-clips__cells { flex: 1 1 0; display: grid; grid-template-columns: repeat(32, minmax(0, 1fr)); gap: 3px; }
@@ -4509,6 +4509,8 @@ body.sq-playing .sq-clip.is-now::after { content: ""; position: absolute; left: 
 .sq-arr__block.is-selected { outline: 2px solid var(--accent); outline-offset: -1px; }
 .sq-arr__block.is-now { border-color: var(--step-now); box-shadow: 0 0 0 1px var(--step-now) inset; }
 .sq-arr__block.is-ghost { opacity: 0.6; pointer-events: none; }
+/* a recording in progress, not yet in the arrangement (clips.js finishTake) */
+.sq-arr__block.is-take { pointer-events: none; opacity: 0.75; border-style: dashed; border-color: var(--danger); background: color-mix(in oklab, var(--danger) 25%, var(--bg-3)); }
 .sq-arr__slot { padding: 1px 5px; font-size: 11px; border-radius: 3px; background: color-mix(in oklab, var(--bg) 55%, transparent); border: 1px solid transparent; color: inherit; cursor: pointer; }
 .sq-arr__block.is-selected .sq-arr__slot { border-color: var(--accent); }
 .sq-arr__lock { color: var(--accent); font-size: 8px; }

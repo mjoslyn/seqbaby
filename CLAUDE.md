@@ -2284,19 +2284,23 @@ block   t.arrangement[i]    ─── { slot, start, bars }: a clip at a bar, fo
   the groove view keeps whatever the pattern bar says, since that is where
   the mode button is in sight. The mode is the song's, so a jam hears the
   change as any edit.
-- **Recording is a bar-line write** (`recordArrangementBar`): with `rec`
-  armed (clip view or arrangement view), every bar line in a non-arrange
-  mode writes what each track just played — its slot, or nothing if stopped
-  or muted — onto its timeline at `state.arrRecBar` through `writeBar`,
-  which extends a block when the same clip is still running and starts one
-  otherwise, and records over whatever those bars held. BEFORE any switch
-  at that bar line, so the slot written is the one that sounded. Armed
-  before play it writes from bar 0; armed while playing, from the bar the
-  transport is in. It stops with the transport (and `applySet` disarms it).
-  Two things to know: a re-launch of the same clip on a bar line records as
-  one block rather than two, and the writes happen inside the scheduler, not
-  on a DOM event, so history and a jam pick them up on the next interaction
-  (the disarm click), as one entry.
+- **Recording is a bar-line write into a TAKE** (`recordArrangementBar`):
+  with `rec` armed (clip view or arrangement view), every bar line in a
+  non-arrange mode writes what each track just played — its slot, or nothing
+  if stopped or muted — into `t._take` at `state.arrRecBar` through
+  `writeBar`, which extends a block when the same clip is still running and
+  starts one otherwise. BEFORE any switch at that bar line, so the slot
+  written is the one that sounded. With the recorder armed, play plays the
+  CLIPS whichever view is open (the recorder is off in arrange mode), from
+  bar 0 when armed before play, else from the bar the transport is in. The
+  take lands when the recording ends (`finishTake`: the transport stops, or
+  rec is pressed again): straight into an empty arrangement, otherwise after
+  a `showChoiceDialog` asking whether it replaces what is there, goes on
+  after it (`placeBlock` from `arrangementBars()`), or is discarded. Until
+  then it is in no song: the arrangement view draws it as a ghost
+  (`is-take`), `applySet` drops it, and the landing is one
+  `markExternalEdit` so undo and a jam see one step. A re-launch of the
+  same clip on a bar line records as one block rather than two.
 - **Both views' detail is the selected track's own card** (`trackDetail.js`,
   one per view). Under the grid or the timeline sits the track's real
   `.sq-track` element — instrument row, inline fx / mod / filter panels, the
@@ -2312,8 +2316,12 @@ block   t.arrangement[i]    ─── { slot, start, bars }: a clip at a bar, fo
   for the bar), a name selects alone; in the arrangement a block or a name
   selects. The clip view's toolbar carries
   `play` (it `.click()`s the transport's own button, so a jam's shared start
-  goes the same way), the repeat / chain toggle, `rec` and `stop all`, since
-  the pattern bar is hidden there; the transport announces `seqbaby:transport`
+  goes the same way), the repeat / chain toggle and the now / finish switch
+  (drawn with the pattern bar's own icons, `MODE_UI` / `SWITCH_UI` in
+  patternBar.js; the switch `.click()`s the bar's button so a queued switch
+  commits there too) and `rec`, since the pattern bar is hidden there; a
+  double-click on a scene number plays that scene now and starts the
+  transport if it is stopped. The transport announces `seqbaby:transport`
   on start and stop so the views' play buttons follow. The selected track is the
   keyboard's (`setActiveTrack`). A view repaints by `innerHTML` on a SIBLING
   of the detail, never on the detail or their parent, which would take the

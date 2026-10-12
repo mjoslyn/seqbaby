@@ -1,13 +1,14 @@
 import { PATTERN_COUNT, PATTERN_MODES, patternModeOf } from "./constants.js";
 import { setStatus } from "./dom.js";
-import { ICON_ARRANGE, ICON_CHAIN, ICON_REPEAT } from "./icons.js";
+import { ICON_ARRANGE, ICON_CHAIN, ICON_FINISH, ICON_NOW, ICON_REPEAT } from "./icons.js";
 import { flushPatternSound, recallPatternSound, refreshPatternSoundUI } from "./patternSound.js";
 import { aliasPattern, clonePattern, isPatternNonEmpty, repaintPatternUI, requestPatternSwitch, state, trackSlot } from "./state.js";
 import { remapSlots } from "./arrangement.js";
 import { renderStepGrid } from "./stepGrid.js";
 import { maxLengthAt } from "./track.js";
 
-const MODE_UI = {
+/** The pattern-mode button's icon and title per mode; the clip view's toolbar draws the same. */
+export const MODE_UI = {
   repeat:  { icon: ICON_REPEAT,  title: "repeat: loop the current pattern. Click for chain" },
   chain:   { icon: ICON_CHAIN,   title: "chain: play through the non-empty patterns in order. Click for arrange" },
   arrange: { icon: ICON_ARRANGE, title: "arrange: each track plays its arrangement of pattern blocks. Click for repeat" },
@@ -30,6 +31,12 @@ export function syncPatternModeUI() {
   // the one it switches to, so it reads as a state and not a verb.
   btn.dataset.label = mode;
 }
+
+/** The switch button's icon and title per setting (main.js and the clip view's toolbar). */
+export const SWITCH_UI = {
+  finish:    { icon: ICON_FINISH, title: "switch: finish. Waits for the current bar to end" },
+  immediate: { icon: ICON_NOW,    title: "switch: now. Changes pattern immediately" },
+};
 
 /** Set the pattern mode and paint it. Arrange mode starts its bar count over. */
 export function setPatternMode(mode) {

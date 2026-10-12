@@ -25,7 +25,7 @@ import { applyBusMute, updateMidiUI } from "./render.js";
 import { ensureFxRack, fireFilterEnv, refreshAllTrackOutputs, refreshNoiseBeds, routeVoiceToRack, soloAudibleTracks } from "./signal.js";
 import { stepsPerBarForMeter, stepsPerBeatForMeter, transportMeter } from "./meter.js";
 import { findNextNonEmptyPattern, invertChord, state, switchPattern } from "./state.js";
-import { advanceArrangement, clearQueuedClips, commitQueuedClips, recordArrangementBar, restartTrackCount, seedArrangement, seedTrackCount } from "./clips.js";
+import { advanceArrangement, clearQueuedClips, commitQueuedClips, recordArrangementBar, restartTrackCount, seedArrangement, seedTrackCount, setArrangeRecord } from "./clips.js";
 import { setPatternMode } from "./patternBar.js";
 import { loadSilverboxWorklet } from "./silverbox.js";
 import { loadContagionWorklet } from "./contagion.js";
@@ -405,7 +405,7 @@ export async function stopPlayback() {
   window.dispatchEvent(new CustomEvent("seqbaby:transport"));   // the views' play buttons follow
   clearQueuedClips();
   state._arrJump = null;                              // a clip waiting for a bar that will not come
-  state.arrRecord = false;                         // recording stops with the transport
+  setArrangeRecord(false);                         // recording stops with the transport, and the take lands
   paintNowIndicator();
   setStatus("stopped");
 }
@@ -456,9 +456,12 @@ export async function startPlayback(opts = {}) {
   // Play plays what the open view shows (views.js): the arrangement view its
   // arrangement, the clip view its clips (the last repeat / chain mode). The
   // groove view keeps whatever the pattern bar says, since that is where the
-  // mode button is in sight. The mode is the song's, so a jam hears the change
-  // as any edit.
-  if (state.view === "arrange" && state.patternMode !== "arrange") setPatternMode("arrange");
+  // mode button is in sight. With the recorder armed, play plays the CLIPS
+  // whichever view is open: a recording is of the clips playing, and the
+  // recorder is off in arrange mode. The mode is the song's, so a jam hears
+  // the change as any edit.
+  if (state.arrRecord) { if (state.patternMode === "arrange") setPatternMode(state._loopMode || "repeat"); }
+  else if (state.view === "arrange" && state.patternMode !== "arrange") setPatternMode("arrange");
   else if (state.view === "clips" && state.patternMode === "arrange") setPatternMode(state._loopMode || "repeat");
   const startTick = Math.max(0, Math.floor(opts.tick ?? 0));
   state.tick = startTick;

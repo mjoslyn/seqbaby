@@ -31,7 +31,7 @@
 
 import { PATTERN_COUNT } from "./constants.js";
 import { setStatus } from "./dom.js";
-import { arrangementBars, blockAt, chainToBlocks, moveBlock, placeBlock, removeBlock, resizeBlock, setBlockSlot } from "./arrangement.js";
+import { arrangementBars, blockAt, blocksEnd, chainToBlocks, moveBlock, placeBlock, removeBlock, resizeBlock, setBlockSlot } from "./arrangement.js";
 import { announceClips, arrangeLength, setArrangeRecord, setArrangeStart } from "./clips.js";
 import { showConfirmDialog } from "./dialogs.js";
 import { patternMeter, stepsPerBarForMeter, transportMeter } from "./meter.js";
@@ -83,7 +83,7 @@ const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "
 const trackById = (id) => state.tracks.find((t) => String(t.id) === String(id));
 const rows = () => state.tracks.filter((t) => t.engineKey !== "bus");
 const barW = () => ZOOMS[zoom];
-const rulerBars = () => Math.max(MIN_BARS, arrangementBars(state.tracks) + 4);
+const rulerBars = () => Math.max(MIN_BARS, arrangementBars(state.tracks) + 4, ...state.tracks.map((t) => blocksEnd(t._take || []) + 4));
 
 function render() {
   if (!root || drag) return;                 // never under a drag: the preview is on the elements
@@ -99,6 +99,8 @@ function render() {
   }
   const trackRows = rows().map((t) => {
     const now = arrange && state.playing ? blockAt(t.arrangement || [], state.arrBar) : null;
+    const ghosts = (t._take || []).map((b) =>
+      `<div class="sq-arr__block is-take" style="left:${b.start * w}px;width:${b.bars * w}px" title="being recorded: pattern ${b.slot + 1}"><span class="sq-arr__slot">p${b.slot + 1}</span></div>`).join("");
     const blocks = (t.arrangement || []).map((b, i) => {
       const cls = ["sq-arr__block"];
       if (sel && sel.trackId === t.id && sel.i === i) cls.push("is-selected");
@@ -116,13 +118,13 @@ function render() {
         <button type="button" class="sq-arr__solo" data-act="solo" aria-pressed="${!!t.soloed}" title="solo">s</button>
         <span class="sq-arr__on" title="the pattern this track is on">p${trackSlot(t) + 1}</span>
       </div>
-      <div class="sq-arr__lane" style="width:${bars * w}px" title="drag across empty space to add a block of pattern ${trackSlot(t) + 1}">${blocks}</div>
+      <div class="sq-arr__lane" style="width:${bars * w}px" title="drag across empty space to add a block of pattern ${trackSlot(t) + 1}">${blocks}${ghosts}</div>
     </div>`;
   }).join("");
   grid.innerHTML = `
     <div class="sq-arr__bar-row">
       <button type="button" class="sq-arr__play" data-act="play" aria-pressed="${arrange}" title="play the arrangement: each track follows its blocks (the pattern bar's mode button says the same)">${arrange ? "playing arrangement" : "play arrangement"}</button>
-      <button type="button" class="sq-arr__rec" data-act="rec" aria-pressed="${!!state.arrRecord}" title="record: write the clips you launch (clip view, pattern bar) into the arrangement, bar by bar">● rec</button>
+      <button type="button" class="sq-arr__rec" data-act="rec" aria-pressed="${!!state.arrRecord}" title="record: play plays the clips while this is armed, and each bar is written here as it plays; over an existing arrangement you are asked whether the recording replaces it or goes after it">● rec</button>
       <button type="button" class="sq-btn--ghost" data-act="fromchain" title="lay out the chain as blocks on every track: the non-empty patterns in order, each for its repeat count">from chain</button>
       <button type="button" class="sq-btn--ghost" data-act="clear" title="remove every block">clear</button>
       <span class="sq-arr__zoom"><button type="button" class="sq-btn--ghost" data-act="zoom-" title="zoom out">−</button><button type="button" class="sq-btn--ghost" data-act="zoom+" title="zoom in">+</button></span>

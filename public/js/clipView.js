@@ -28,10 +28,10 @@
 
 import { PATTERN_COUNT } from "./constants.js";
 import { setStatus } from "./dom.js";
-import { announceClips, requestClipLaunch, setArrangeRecord, stopAllClips, stopClip } from "./clips.js";
-import { setPatternMode } from "./patternBar.js";
+import { announceClips, requestClipLaunch, setArrangeRecord, stopClip } from "./clips.js";
+import { MODE_UI, SWITCH_UI, setPatternMode } from "./patternBar.js";
 import { patternLocked } from "./patternSound.js";
-import { isPatternNonEmpty, requestPatternSwitch, state, trackSlot } from "./state.js";
+import { isPatternNonEmpty, requestPatternSwitch, state, switchPattern, trackSlot } from "./state.js";
 import { writePatternOnto } from "./track.js";
 import { makeTrackDetail } from "./trackDetail.js";
 import { onViewChange } from "./views.js";
@@ -79,7 +79,7 @@ function render() {
     if (isPatternNonEmpty(i)) cls.push("is-filled");
     if (i === ap) cls.push("is-active");
     if (i === state.queuedPattern) cls.push("is-queued");
-    scenes.push(`<button type="button" class="${cls.join(" ")}" data-scene="${i}" title="scene ${i + 1}: every track to pattern ${i + 1}">${i + 1}</button>`);
+    scenes.push(`<button type="button" class="${cls.join(" ")}" data-scene="${i}" title="scene ${i + 1}: every track to pattern ${i + 1}. Double-click to play it now">${i + 1}</button>`);
   }
   const trackRows = rows().map((t) => {
     const slot = trackSlot(t);
@@ -108,9 +108,9 @@ function render() {
   grid.innerHTML = `
     <div class="sq-clips__bar">
       <button type="button" class="sq-clips__play${state.playing ? " is-playing" : ""}" data-act="play" title="${state.playing ? "stop the transport" : "play"}">${state.playing ? "stop" : "play"}</button>
-      <button type="button" class="sq-clips__mode sq-btn--ghost" data-act="mode" aria-pressed="${mode !== "repeat"}" title="${mode === "chain" ? "chain: the non-empty patterns play in order, every track together. Click for repeat" : mode === "arrange" ? "arrange: each track follows its arrangement. Click for repeat" : "repeat: the scene loops. Click for chain"}">${mode}</button>
-      <button type="button" class="sq-clips__rec" data-act="rec" aria-pressed="${!!state.arrRecord}" title="record: write the clips you launch into the arrangement, bar by bar">● rec</button>
-      <button type="button" class="sq-clips__stop sq-clips__stopall sq-btn--ghost" data-act="stopall" title="stop every clip">■ stop all</button>
+      <button type="button" class="sq-clips__mode sq-btn--ghost sq-icon-btn" data-act="mode" aria-pressed="${mode !== "repeat"}" title="${MODE_UI[mode].title}">${MODE_UI[mode].icon}</button>
+      <button type="button" class="sq-clips__switch sq-btn--ghost sq-icon-btn" data-act="switch" aria-pressed="${state.patternSwitchMode === "finish"}" title="${SWITCH_UI[state.patternSwitchMode === "finish" ? "finish" : "immediate"].title}">${SWITCH_UI[state.patternSwitchMode === "finish" ? "finish" : "immediate"].icon}</button>
+      <button type="button" class="sq-clips__rec" data-act="rec" aria-pressed="${!!state.arrRecord}" title="record: write the clips you launch into the arrangement, bar by bar; over an existing arrangement you are asked whether the recording replaces it or goes after it">● rec</button>
     </div>
     <div class="sq-clips__head">
       <div class="sq-clips__strip"></div>
@@ -126,10 +126,11 @@ function onClick(e) {
   if (scene) { requestPatternSwitch(Number(scene.dataset.scene)); return; }
   const act = e.target.closest("[data-act]")?.dataset.act;
   if (act === "rec") { setArrangeRecord(!state.arrRecord); setStatus(state.arrRecord ? "recording the arrangement: launch clips, each bar is written as it plays" : "arrangement record off"); return; }
-  if (act === "stopall") { stopAllClips(); return; }
   // the transport's own button, so a jam's shared start goes the same way
   if (act === "play") { document.getElementById("play")?.click(); return; }
   if (act === "mode") { setPatternMode(state.patternMode === "repeat" ? "chain" : "repeat"); announceClips(); return; }
+  // the pattern bar's own switch button, so flipping to "now" commits a queued switch there too
+  if (act === "switch") { document.getElementById("pattern-switch")?.click(); announceClips(); return; }
   const row = e.target.closest(".sq-clips__row");
   const t = row && trackById(row.dataset.trackId);
   if (!t) return;
@@ -148,6 +149,14 @@ function onClick(e) {
 }
 
 function onDblClick(e) {
+  // a scene number: play that scene now, whatever the switch setting, and
+  // start the transport if it is stopped
+  const scene = e.target.closest("[data-scene]");
+  if (scene) {
+    switchPattern(Number(scene.dataset.scene));
+    if (!state.playing) document.getElementById("play")?.click();
+    return;
+  }
   // mute the clip: the track stops (its ■ lights); a single click plays it again
   const cell = e.target.closest(".sq-clip");
   const row = e.target.closest(".sq-clips__row");

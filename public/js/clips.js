@@ -17,7 +17,9 @@
  */
 
 import { PATTERN_COUNT } from "./constants.js";
-import { arrangementBars, blockAt, writeBar } from "./arrangement.js";
+import { arrangementBars, blockAt, blocksEnd, placeBlock, writeBar } from "./arrangement.js";
+import { showChoiceDialog } from "./dialogs.js";
+import { markExternalEdit } from "./history.js";
 import { stepsPerBarForMeter, transportMeter } from "./meter.js";
 import { setStatus } from "./dom.js";
 import { flushPatternSound, recallPatternSound } from "./patternSound.js";
@@ -241,30 +243,84 @@ export function seedArrangement(startTick, { startBar = 0 } = {}) {
 //
 // With `state.arrRecord` armed, every bar line in a non-arrange mode writes
 // what each track just played — its slot, or nothing if stopped or muted —
-// onto its timeline at `state.arrRecBar`: launching clips over eight bars
-// leaves eight bars of arrangement. It records over whatever those bars held.
+// into a TAKE (`t._take`, bars counted from play as `state.arrRecBar`
+// counts them): launching clips over eight bars leaves eight bars of take.
+// The take lands in the arrangement when the recording ends (the transport
+// stops, or rec is pressed again): straight in when there was no arrangement,
+// otherwise after asking whether it replaces what is there or goes on the end
+// of it. A take is never in the song until then, so the arrangement view
+// draws it as a ghost and undo sees one edit, at the landing.
 
 /**
- * Arm or disarm recording. Armed before play, it writes from bar 0; armed
- * while playing, from the bar the transport is in (bars since play began),
- * so the recording lands where in the song you are.
+ * Arm or disarm recording. Armed before play, it counts from bar 0; armed
+ * while playing, from the bar the transport is in (bars since play began).
+ * Disarming lands the take (`finishTake`).
  */
 export function setArrangeRecord(on) {
+  if (!!on === !!state.arrRecord) return;
   state.arrRecord = !!on;
-  if (on) state.arrRecBar = state.playing ? Math.floor(state.tick / stepsPerBarForMeter(transportMeter())) : 0;
-  announceClips();
+  if (on) {
+    state.arrRecBar = state.playing ? Math.floor(state.tick / stepsPerBarForMeter(transportMeter())) : 0;
+    state.arrRecStart = null;
+    for (const t of state.tracks) t._take = null;
+    announceClips();
+  } else {
+    finishTake();
+  }
 }
 
 /** The bar line's write, BEFORE any switch, so the slot written is the one that sounded. */
 export function recordArrangementBar() {
   if (!state.arrRecord || state.patternMode === "arrange") return;
+  state.arrRecStart ??= state.arrRecBar;
   for (const t of state.tracks) {
     if (t.engineKey === "bus") continue;
     const slot = (t._clipOff || t.muted) ? null : trackSlot(t);
-    t.arrangement = writeBar(t.arrangement || [], state.arrRecBar, slot);
+    t._take = writeBar(t._take || [], state.arrRecBar, slot);
   }
   state.arrRecBar += 1;
   announceClips();
+}
+
+/** The bars a take holds, from its first recorded bar. */
+function takeBars() {
+  const from = state.arrRecStart ?? 0;
+  return Math.max(0, ...state.tracks.map((t) => blocksEnd(t._take || []) - from));
+}
+
+/**
+ * Land the take: into an empty arrangement as it is; over or after an
+ * existing one, as the person decides (replace / append), or not at all.
+ */
+async function finishTake() {
+  const from = state.arrRecStart ?? 0;
+  const bars = takeBars();
+  const takes = state.tracks.map((t) => (t._take || []).map((b) => ({ slot: b.slot, start: b.start - from, bars: b.bars })).filter((b) => b.start >= 0));
+  for (const t of state.tracks) t._take = null;
+  state.arrRecStart = null;
+  announceClips();
+  if (!bars || !takes.some((tk) => tk.length)) { setStatus("arrangement record off: nothing recorded"); return; }
+  const existing = arrangementBars(state.tracks);
+  const hasSome = state.tracks.some((t) => t.arrangement?.length);
+  let how = "replace";
+  if (hasSome) {
+    how = await showChoiceDialog({
+      title: `a ${bars}-bar recording is ready`,
+      body: `The arrangement already holds ${existing} bar${existing === 1 ? "" : "s"}. Replace it with the recording, or add the recording after it?`,
+      choices: [{ label: "discard", value: "discard", danger: true }, { label: "replace", value: "replace" }, { label: "append", value: "append" }],
+    });
+    if (!how || how === "discard") { setStatus("recording discarded"); return; }
+  }
+  const offset = how === "append" ? existing : 0;
+  state.tracks.forEach((t, i) => {
+    if (t.engineKey === "bus") return;
+    const take = takes[i];
+    if (how === "replace") t.arrangement = take;
+    else t.arrangement = take.reduce((acc, b) => placeBlock(acc, { slot: b.slot, start: b.start + offset, bars: b.bars }), t.arrangement || []);
+  });
+  markExternalEdit(how === "append" ? "append recording" : "record arrangement");
+  announceClips();
+  setStatus(how === "append" ? `recording added after bar ${existing}: ${bars} bars` : `arrangement recorded: ${bars} bars`);
 }
 
 export { paintTrackSlotBadge };

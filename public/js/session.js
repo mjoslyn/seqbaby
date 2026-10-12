@@ -630,7 +630,8 @@ export function applySet(s) {
     btn.classList.remove("is-playing");
     state.tick = 0;
   }
-  state.arrRecord = false;                        // a recording into the song being replaced
+  state.arrRecord = false;                        // a recording into the song being replaced: dropped with it
+  state.arrRecStart = null;
   state.arrBar = 0;
   for (const t of [...state.tracks]) removeTrack(t);
   if (Number.isFinite(s.bpm))   document.getElementById("bpm").value = s.bpm;

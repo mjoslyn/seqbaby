@@ -101,6 +101,7 @@ export const state = {
   _arrJump: null,       // a bar to jump to at the next bar line while the arrangement plays
   arrRecord: false,
   arrRecBar: 0,
+  arrRecStart: null,    // the first bar the take holds, or null before anything is written
   _arrOrigin: 0,
   _nowTick: 0,
   view: "groove",
