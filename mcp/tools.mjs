@@ -64,8 +64,9 @@ string is a complete track.
 
 - **Tracks** are addressed by index into the track list, in the order added.
   **Patterns** are 0..31 per track; a track plays pattern 0 unless the
-  arrangement says otherwise. All tracks share the pattern number: pattern 3
-  is pattern 3 on every track.
+  arrangement says otherwise. In repeat and chain mode all tracks share the
+  pattern number (pattern 3 is pattern 3 on every track); in arrange mode each
+  track plays its own timeline of blocks (\`set_blocks\`).
 - **Step strings**: \`x\` hit, \`X\` accent (velocity 1), \`o\` soft (0.5), a digit
   1..9 a hit at that velocity in tenths, \`.\` or \`-\` rest, \`_\` extends the hit
   before it by one step. Spaces and \`|\` are ignored, so \`x... x... | x... x...\`
@@ -118,9 +119,15 @@ export const TOOLS = [
   },
   {
     name: "set_arrangement", title: "Set arrangement",
-    description: "How the patterns play: mode \"repeat\" loops one pattern, \"chain\" plays them in order with `repeats` bars each (array from pattern 0, 1..16 bars) and loops back to the first. Chain skips any pattern with no steps on any track, so a section is a pattern number holding at least one step. `repeats` counts BARS of the pattern's meter, not plays: a 32-step pattern needs 2 or the chain moves on halfway. A section longer than 16 bars takes two consecutive patterns. `active` is the pattern the studio opens on (and the one repeat mode loops). get_song's arrangement.sections lists what will play.",
-    inputSchema: { mode: z.enum(["repeat", "chain"]).optional(), repeats: z.array(z.number().int().min(1).max(16)).optional(), switchMode: z.enum(["immediate", "finish"]).optional(), active: z.number().int().min(0).max(31).optional() },
+    description: "How the patterns play: mode \"repeat\" loops one pattern, \"chain\" plays them in order with `repeats` bars each (array from pattern 0, 1..16 bars) and loops back to the first, \"arrange\" plays each track's own timeline of blocks (set_blocks). Chain skips any pattern with no steps on any track, so a section is a pattern number holding at least one step. `repeats` counts BARS of the pattern's meter, not plays: a 32-step pattern needs 2 or the chain moves on halfway. A section longer than 16 bars takes two consecutive patterns. `active` is the pattern the studio opens on (and the one repeat mode loops). get_song's arrangement.sections lists what will play.",
+    inputSchema: { mode: z.enum(["repeat", "chain", "arrange"]).optional(), repeats: z.array(z.number().int().min(1).max(16)).optional(), switchMode: z.enum(["immediate", "finish"]).optional(), active: z.number().int().min(0).max(31).optional() },
     handler: (ctx, a) => sb.setArrangement(ctx.song, a),
+  },
+  {
+    name: "set_blocks", title: "Set a track's blocks",
+    description: "A track's arrangement, played in arrange mode (set_arrangement mode \"arrange\"): blocks of { slot, start, bars }, which pattern plays from which bar (0-based, in bars of pattern 0's meter) for how long. Blocks are per TRACK, so the drums can hold pattern 0 for 16 bars while the bass moves through 0, 1, 2 and rests for 4: a gap is silence. Overlaps resolve later-wins; the result is sorted. Replaces the track's whole arrangement; [] clears it. The arrangement is as long as the last block on any track and loops. get_song shows every track's blocks in arrange mode.",
+    inputSchema: { track: trackArg, blocks: z.array(z.object({ slot: z.number().int().min(0).max(31), start: z.number().int().min(0), bars: z.number().int().min(1) })) },
+    handler: (ctx, { track, blocks }) => sb.setBlocks(ctx.song, track, blocks),
   },
   {
     name: "set_meter", title: "Set meter", description: "A pattern's time signature, e.g. \"7/8\". Steps are sixteenths, so 7/8 is a 14-step bar.",

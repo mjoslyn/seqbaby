@@ -19,7 +19,7 @@
 // atoms that wrote it (realize, in strudel.js), and the track's playhead
 // (`t._nowIdx`, written by paintTrackNow) picks which.
 
-import { state } from "./state.js";
+import { state, trackSlot } from "./state.js";
 import { serializeSet } from "./session.js";
 import { mergeSet } from "./liveSet.js";
 import { markExternalEdit } from "./history.js";
@@ -313,11 +313,11 @@ function openPanel() {
   // it stays put and the label says so.
   const pinEl = q(".sq-code__pin");
   let lastActive = state.activePattern, lastLabel = "";
-  const sectioned = () => /^\s*(pattern\s*\(|chain\s*\()|\barrange\s*\(/m.test(input.value);
+  const sectioned = () => /^\s*(pattern\s*\(|chain\s*\(|arrangement\s*\()|\barrange\s*\(/m.test(input.value);
   const watchPin = () => {
     if (state.activePattern !== lastActive) {
       lastActive = state.activePattern;
-      if (!sectioned() && _generated != null && input.value === _generated && state.patternMode !== "chain") fromSong();
+      if (!sectioned() && _generated != null && input.value === _generated && state.patternMode === "repeat") fromSong();
     }
     const label = sectioned() ? "whole song"
       : _pin == null || _pin === state.activePattern ? `pattern ${(_pin ?? state.activePattern) + 1}`
@@ -350,7 +350,7 @@ function activeRanges(code) {
   const out = [];
   for (const t of state.tracks) {
     // the part for the pattern that is playing: its section, or the pinned slot
-    const locs = _run.locs.get(`${state.activePattern}|${t.name}`);
+    const locs = _run.locs.get(`${trackSlot(t)}|${t.name}`);
     if (!locs || t.muted) continue;
     const idx = t._nowIdx;
     if (!(idx >= 0)) continue;

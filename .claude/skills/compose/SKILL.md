@@ -326,6 +326,21 @@ sections in chain mode. When unsure, write the song: a song contains the loop.
   with one section, and sections written under repeat mode (which plays only
   the active one).
 
+**Arrange mode**, when the parts should not move together. Chain puts every
+track on the same slot at once; `set_arrangement` mode "arrange" gives each
+track its own timeline, `set_blocks(track, [{ slot, start, bars }, ...])`:
+which pattern it plays from which bar (0-based, bars of pattern 0's meter),
+for how long, with gaps where it rests. The drums can hold pattern 0 for 32
+bars while the bass walks 0, 1, 2 and drops out for a breakdown; a part comes
+in on bar 9 by starting its first block there. The song is as long as the
+last block on any track and loops. Blocks are per track, so write the parts
+first (one pattern per part, by `set_steps` with `pattern`), then lay each
+track out; `get_song` shows every track's blocks and `validate_song` warns
+about a block on a pattern that track has nothing in. Chain is simpler and
+usually enough; reach for arrange when a track's entrances and exits are the
+arrangement (a build that adds a layer every eight bars, a breakdown that
+drops all but the pad).
+
 **The plan.** Pick a form, map its sections onto slots 0, 1, 2 ... in playing
 order, and give each a bar count. Length is `bars x 4 x 60 / bpm` seconds:
 64 bars at 128 is two minutes, at 90 nearly three. Six to nine sections is
@@ -354,7 +369,8 @@ nothing, and every section then shares the song's material.
    `set_steps` / `set_notes` on the copy (a thinner beat, different chords),
    `set_step` (fills, ratchets) and `set_automation` (lanes are per pattern,
    so each section moves its own way).
-4. `set_arrangement` mode "chain", `repeats` per slot, `active` the first.
+4. `set_arrangement` mode "chain", `repeats` per slot, `active` the first
+   (or mode "arrange" and `set_blocks` per track, when the layers move apart).
 
 What each section is, carved from the full one:
 

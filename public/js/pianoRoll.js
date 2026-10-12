@@ -1,8 +1,8 @@
 import { randomizeMelody } from "./generate.js";
 import { ICON_DICE } from "./icons.js";
-import { activeMeter, stepsPerBarForMeter, stepsPerBeatForMeter } from "./meter.js";
+import { patternMeter, stepsPerBarForMeter, stepsPerBeatForMeter } from "./meter.js";
 import { renderAutomationPanel } from "./render.js";
-import { state } from "./state.js";
+import { state, trackSlot } from "./state.js";
 import { openStepEditor } from "./stepEditor.js";
 import { markNudge, renderStepGrid } from "./stepGrid.js";
 import { SCALES, midiToName, noteColor } from "./theory.js";
@@ -140,7 +140,7 @@ export function renderRollPanel(t, panel) {
   // roll-grid scrolls horizontally (`.roll-cells { min-width: max-content }`).
   const _isMobile = window.innerWidth <= 768;
   const _maxBars = _isMobile ? 1 : 2;
-  const _spb = stepsPerBarForMeter(activeMeter());
+  const _spb = stepsPerBarForMeter(patternMeter(trackSlot(t)));
   const _visibleCells = Math.max(1, Math.min(steps, _maxBars * _spb));
   const _labelCol = _isMobile ? 36 : 42;
   const _modalW = Math.min(window.innerWidth * 0.96, 1100);
@@ -166,8 +166,8 @@ export function renderRollPanel(t, panel) {
   grid.className = "sq-roll__grid";
 
   // Beat ruler row: one cell per step, beat number printed on each downbeat.
-  // Steps-per-beat comes from the active pattern's meter (4/4 → 4 steps/beat).
-  const _stepsPerBeat = stepsPerBeatForMeter(activeMeter());
+  // Steps-per-beat comes from the meter of the pattern this track is on (4/4 → 4 steps/beat).
+  const _stepsPerBeat = stepsPerBeatForMeter(patternMeter(trackSlot(t)));
   const beatLabel = document.createElement("div");
   beatLabel.className = "sq-roll__label sq-roll__beat-label";
   grid.appendChild(beatLabel);

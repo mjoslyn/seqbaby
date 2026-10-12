@@ -1,0 +1,329 @@
+/**
+ * Clips: a pattern slot launched on ONE track.
+ *
+ * The pattern bar switches every track together (`switchPattern`, state.js):
+ * that is a scene. A clip is the same move on one track — the bass onto slot
+ * 5 while the drums stay on slot 2 — which is what the clip view's grid
+ * launches and what the arrangement plays per track. The slot a track is on is
+ * `trackSlot(t)` (`t._patternIdx`); the scene stays `state.activePattern`, and
+ * a scene launch puts every track back on it.
+ *
+ * Nothing here is saved: like `activePattern`, where each track is and whether
+ * it is stopped is performance state. A load puts every track on the scene.
+ *
+ * The transport imports this (its bar-line commits and the arrangement's block
+ * switches), state.js does not, so there is no cycle: this module leans on
+ * state.js's alias, paint queue and patternSound.js's two stores.
+ */
+
+import { PATTERN_COUNT } from "./constants.js";
+import { arrangementBars, blockAt, blocksEnd, placeBlock, writeBar } from "./arrangement.js";
+import { showChoiceDialog } from "./dialogs.js";
+import { markExternalEdit } from "./history.js";
+import { stepsPerBarForMeter, transportMeter } from "./meter.js";
+import { setStatus } from "./dom.js";
+import { flushPatternSound, recallPatternSound } from "./patternSound.js";
+import { releaseSilencedTracks } from "./signal.js";
+import { renderPatternGrid } from "./patternBar.js";
+import { aliasPattern, paintTrackPatternUINow, paintTrackSlotBadge, queueTrackPaint, state, trackSlot } from "./state.js";
+
+/**
+ * Land a track's step counter where it would be had it counted from global
+ * tick 0 to `ticks`: `trackTick` runs at `speed` steps per global tick, and a
+ * track slower than the transport starts its accumulator one tick short of
+ * full so its first step fires ON the downbeat rather than a tick after it.
+ * The one place this arithmetic lives — a play press seeds every track from
+ * the start tick, a bar-line switch from 0, an arrangement block from where in
+ * the block the transport is.
+ * @param {Track} t @param {number} ticks
+ */
+export function seedTrackCount(t, ticks) {
+  const sp = Math.max(0.0001, t.speed ?? 1);
+  t.trackTick = Math.round(Math.max(0, ticks) * sp);
+  t.speedAccum = sp < 1 ? 1 - sp : 0;
+}
+
+/** A pattern switched in on a bar line starts the track from its first step. */
+export function restartTrackCount(t) { seedTrackCount(t, 0); }
+
+/** Something about which clips are playing or queued changed: the views repaint. */
+export function announceClips() {
+  window.dispatchEvent(new CustomEvent("seqbaby:clips"));
+}
+
+/**
+ * Put track `t` on pattern `slot`, now. The p-lock stores are kept honest
+ * exactly as a scene switch keeps them (flush the slot being left, recall the
+ * one entered), the stopped flag clears, and the track repaints — on the
+ * deferred one-track-per-task queue when the transport asks (`deferUi`), since
+ * this runs inside the scheduler callback on a bar line. `restart` begins the
+ * pattern from its first step, which a bar-line launch wants and a mid-bar
+ * click does not (a click keeps counting, as the pattern bar's does).
+ * @param {Track} t @param {number} slot
+ * @param {{restart?: boolean, deferUi?: boolean}} [opts]
+ * @returns {boolean} whether the track moved to another slot
+ */
+export function launchClip(t, slot, { restart = false, deferUi = false } = {}) {
+  if (!t || !Number.isInteger(slot) || slot < 0 || slot >= PATTERN_COUNT) return false;
+  const was = trackSlot(t);
+  const moved = was !== slot;
+  if (moved) flushPatternSound(t, was);
+  t._queuedSlot = null;
+  t._clipOff = false;
+  if (moved) {
+    aliasPattern(t, slot);
+    if (recallPatternSound(t, slot)) t._soundUiStale = true;
+  }
+  if (restart) restartTrackCount(t);
+  if (deferUi) queueTrackPaint(t); else paintTrackPatternUINow(t);
+  announceClips();
+  return moved;
+}
+
+/**
+ * The clip view's click: honour the switch mode the pattern bar honours. In
+ * "finish" mode while playing the clip waits for the bar line (the transport
+ * commits `t._queuedSlot`); otherwise it lands now.
+ * @param {Track} t @param {number} slot
+ */
+export function requestClipLaunch(t, slot) {
+  if (!t || slot < 0 || slot >= PATTERN_COUNT) return;
+  if (state.patternSwitchMode === "finish" && state.playing) {
+    t._queuedSlot = slot;
+    renderPatternGrid();
+    announceClips();
+    setStatus(`${t.name?.trim() || "track"}: pattern ${slot + 1} queued`);
+    return;
+  }
+  launchClip(t, slot);
+  setStatus(`${t.name?.trim() || "track"}: pattern ${slot + 1}`);
+}
+
+/**
+ * Stop a track's clip: it plays nothing until a clip is launched on it or the
+ * scene is switched. Its notes are withheld as mute withholds them (the
+ * transport checks `_clipOff` where it checks `muted`), so a drone's latched
+ * note is let go the same way.
+ * @param {Track} t
+ */
+export function stopClip(t) {
+  if (!t || t.engineKey === "bus") return;
+  t._clipOff = true;
+  t._queuedSlot = null;
+  releaseSilencedTracks();
+  paintTrackPatternUINow(t);
+  announceClips();
+  setStatus(`${t.name?.trim() || "track"}: stopped`);
+}
+
+/** Stop every track's clip. */
+export function stopAllClips() {
+  for (const t of state.tracks) if (t.engineKey !== "bus") { t._clipOff = true; t._queuedSlot = null; }
+  releaseSilencedTracks();
+  for (const t of state.tracks) paintTrackPatternUINow(t);
+  announceClips();
+  setStatus("all clips stopped");
+}
+
+/**
+ * The bar-line commit of every clip waiting in finish mode. The scene queue
+ * wins when both are set: a scene launch is every track together, and
+ * `switchPattern` clears the per-track queue on its way.
+ */
+export function commitQueuedClips() {
+  for (const t of state.tracks) {
+    const slot = t._queuedSlot;
+    if (slot == null) continue;
+    launchClip(t, slot, { restart: true, deferUi: true });
+  }
+}
+
+/** Forget every queued clip (a stop). */
+export function clearQueuedClips() {
+  for (const t of state.tracks) t._queuedSlot = null;
+}
+
+// ---- arrange mode ----------------------------------------------------------
+//
+// `patternMode === "arrange"`: every track plays its own timeline of blocks
+// (arrangement.js). The transport keeps one ruler position, `state.arrBar`,
+// in bars of slot 0's meter (transportMeter), advanced on every bar line and
+// wrapped at the arrangement's end; at each bar every track is put on the
+// block covering it, or stopped in a gap.
+
+/** How long the arrangement is, in bars of the ruler. Never under one. */
+export function arrangeLength() { return arrangementBars(state.tracks); }
+
+/**
+ * Put every track where the arrangement says it is on ruler bar
+ * `state.arrBar`. A block's first bar (or a block other than the one the
+ * track is on) launches its pattern from step 0, as a chain section does; a
+ * bar inside a block the track is already on leaves it looping. A gap stops
+ * the track. `tickInBlock`, when given, is where in the block the transport
+ * is starting (a jam joining mid-song), so the pattern lands mid-way too.
+ * @param {{deferUi?: boolean, tickInBar?: number}} [opts]
+ */
+export function applyArrangementBar({ deferUi = true, tickInBar = 0 } = {}) {
+  const bar = state.arrBar;
+  for (const t of state.tracks) {
+    if (t.engineKey === "bus") continue;
+    const b = blockAt(t.arrangement || [], bar);
+    if (!b) {
+      if (!t._clipOff) { t._clipOff = true; t._queuedSlot = null; if (deferUi) queueTrackPaint(t); else paintTrackPatternUINow(t); }
+      continue;
+    }
+    if (b.start === bar || b.slot !== trackSlot(t) || t._clipOff) {
+      launchClip(t, b.slot, { restart: true, deferUi });
+      // a start inside the block (a jam's shared beat): count from where the
+      // block began, not from its first step
+      const barLen = stepsPerBarForMeter(transportMeter());
+      const into = (bar - b.start) * barLen + tickInBar;
+      if (into > 0) seedTrackCount(t, into);
+    }
+  }
+  announceClips();
+}
+
+/**
+ * The bar line in arrange mode: the next bar, wrapping at the end, and every
+ * track onto its block. `_arrOrigin` is moved on the wrap so the view's
+ * playhead keeps reading the ruler position off the global tick.
+ */
+export function advanceArrangement() {
+  const len = arrangeLength();
+  if (state._arrJump != null) {
+    // a jump asked for mid-bar (the ruler clicked while playing) lands here,
+    // on the bar line, as a queued clip does
+    state.arrBar = Math.min(len - 1, Math.max(0, state._arrJump));
+    state._arrJump = null;
+  } else {
+    state.arrBar += 1;
+    if (state.arrBar >= len) state.arrBar = 0;
+  }
+  // the origin follows, so the view maps the tick being heard to this bar
+  state._arrOrigin = state.tick - state.arrBar * stepsPerBarForMeter(transportMeter());
+  applyArrangementBar({ deferUi: true });
+}
+
+/**
+ * Start the arrangement from a bar: the marker a play press starts from, and
+ * while it plays, a jump at the next bar line. Not saved: where you start
+ * from is a view's state, like the scene.
+ * @param {number} bar
+ */
+export function setArrangeStart(bar) {
+  const b = Math.max(0, Math.round(bar));
+  state.arrStartBar = b;
+  if (state.playing && state.patternMode === "arrange") state._arrJump = b;
+  announceClips();
+}
+
+/**
+ * Where a play press lands in the arrangement: `startTick` (0, or a jam's
+ * shared beat) plus the start marker's bars, modulo the arrangement's
+ * length, as a ruler bar and the ticks into it. Every track is put on its
+ * block from there. `_arrOrigin` is the global tick that would have been
+ * ruler bar 0, which a marker puts before the start (negative, fine: it is
+ * only ever subtracted from a tick).
+ * @param {number} startTick
+ * @param {{startBar?: number}} [opts]
+ */
+export function seedArrangement(startTick, { startBar = 0, deferUi = false, fromHere = false } = {}) {
+  const barLen = stepsPerBarForMeter(transportMeter());
+  const loop = arrangeLength() * barLen;
+  // `fromHere`: the arrangement starts at `startBar` AT this tick (a view
+  // switch at a bar line), rather than where the tick count since play maps
+  // (a play press, where a jam's shared start has to land inside the right block)
+  const at = (fromHere ? 0 : startTick) + Math.max(0, startBar) * barLen;
+  const inLoop = ((at % loop) + loop) % loop;
+  state.arrBar = Math.floor(inLoop / barLen);
+  state._arrOrigin = startTick - inLoop;
+  state._arrJump = null;
+  applyArrangementBar({ deferUi, tickInBar: inLoop % barLen });
+}
+
+// ---- recording ----------------------------------------------------------
+//
+// With `state.arrRecord` armed, every bar line in a non-arrange mode writes
+// what each track just played — its slot, or nothing if stopped or muted —
+// into a TAKE (`t._take`, bars counted from play as `state.arrRecBar`
+// counts them): launching clips over eight bars leaves eight bars of take.
+// The take lands in the arrangement when the recording ends (the transport
+// stops, or rec is pressed again): straight in when there was no arrangement,
+// otherwise after asking whether it replaces what is there or goes on the end
+// of it. A take is never in the song until then, so the arrangement view
+// draws it as a ghost and undo sees one edit, at the landing.
+
+/**
+ * Arm or disarm recording. Armed before play, it counts from bar 0; armed
+ * while playing, from the bar the transport is in (bars since play began).
+ * Disarming lands the take (`finishTake`).
+ */
+export function setArrangeRecord(on) {
+  if (!!on === !!state.arrRecord) return;
+  state.arrRecord = !!on;
+  if (on) {
+    state.arrRecBar = state.playing ? Math.floor(state.tick / stepsPerBarForMeter(transportMeter())) : 0;
+    state.arrRecStart = null;
+    for (const t of state.tracks) t._take = null;
+    announceClips();
+  } else {
+    finishTake();
+  }
+}
+
+/** The bar line's write, BEFORE any switch, so the slot written is the one that sounded. */
+export function recordArrangementBar() {
+  if (!state.arrRecord || state.patternMode === "arrange") return;
+  state.arrRecStart ??= state.arrRecBar;
+  for (const t of state.tracks) {
+    if (t.engineKey === "bus") continue;
+    const slot = (t._clipOff || t.muted) ? null : trackSlot(t);
+    t._take = writeBar(t._take || [], state.arrRecBar, slot);
+  }
+  state.arrRecBar += 1;
+  announceClips();
+}
+
+/** The bars a take holds, from its first recorded bar. */
+function takeBars() {
+  const from = state.arrRecStart ?? 0;
+  return Math.max(0, ...state.tracks.map((t) => blocksEnd(t._take || []) - from));
+}
+
+/**
+ * Land the take: into an empty arrangement as it is; over or after an
+ * existing one, as the person decides (replace / append), or not at all.
+ */
+async function finishTake() {
+  const from = state.arrRecStart ?? 0;
+  const bars = takeBars();
+  const takes = state.tracks.map((t) => (t._take || []).map((b) => ({ slot: b.slot, start: b.start - from, bars: b.bars })).filter((b) => b.start >= 0));
+  for (const t of state.tracks) t._take = null;
+  state.arrRecStart = null;
+  announceClips();
+  if (!bars || !takes.some((tk) => tk.length)) { setStatus("arrangement record off: nothing recorded"); return; }
+  const existing = arrangementBars(state.tracks);
+  const hasSome = state.tracks.some((t) => t.arrangement?.length);
+  let how = "replace";
+  if (hasSome) {
+    how = await showChoiceDialog({
+      title: `a ${bars}-bar recording is ready`,
+      body: `The arrangement already holds ${existing} bar${existing === 1 ? "" : "s"}. Replace it with the recording, or add the recording after it?`,
+      choices: [{ label: "discard", value: "discard", danger: true }, { label: "replace", value: "replace" }, { label: "append", value: "append" }],
+    });
+    if (!how || how === "discard") { setStatus("recording discarded"); return; }
+  }
+  const offset = how === "append" ? existing : 0;
+  state.tracks.forEach((t, i) => {
+    if (t.engineKey === "bus") return;
+    const take = takes[i];
+    if (how === "replace") t.arrangement = take;
+    else t.arrangement = take.reduce((acc, b) => placeBlock(acc, { slot: b.slot, start: b.start + offset, bars: b.bars }), t.arrangement || []);
+  });
+  markExternalEdit(how === "append" ? "append recording" : "record arrangement");
+  announceClips();
+  setStatus(how === "append" ? `recording added after bar ${existing}: ${bars} bars` : `arrangement recorded: ${bars} bars`);
+}
+
+export { paintTrackSlotBadge };

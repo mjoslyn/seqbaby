@@ -44,7 +44,7 @@ import { ICON_REDO, ICON_UNDO } from "./icons.js";
 import { deepCopy, mergeSet } from "./liveSet.js";
 import { CONTROL_LABELS, controlFromEventTarget } from "./paramTargets.js";
 import { applySet, serializeSet } from "./session.js";
-import { state } from "./state.js";
+import { state, trackSlot } from "./state.js";
 
 /** @typedef {import("./types.js").Track} Track */
 
@@ -101,10 +101,10 @@ let savedOnSettle = false;
  */
 export function pinAutomated(prev, snap) {
   if (!prev || !state.playing) return snap;
-  const ap = state.activePattern;
   state.tracks.forEach((t, i) => {
     const a = prev.tracks?.[i], b = snap.tracks?.[i];
     if (!a || !b) return;
+    const ap = trackSlot(t);                       // the pattern THIS track is on
     for (const [key, lane] of Object.entries(t.automation || {})) {
       if (!lane?.enabled) continue;
       const group = (key === "cutoff" || key === "reson") ? "filter"

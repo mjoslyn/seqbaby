@@ -6,11 +6,14 @@ import { ACOUSTIC_KITS, BUNDLED_SAMPLES, GRANULAR_SAMPLES, GRANULAR_SAMPLE_BASE,
 import { LFO_KEYS, PATTERN_COUNT } from "./constants.js";
 import { isMobileDevice, setStatus } from "./dom.js";
 import { initHistory } from "./history.js";
-import { HELP_TIPS, ICON_BOUNCE, ICON_CAPTURE, ICON_CHAIN, ICON_FINISH, ICON_KEYBOARD, ICON_METRONOME, ICON_NOW, ICON_MACRO, ICON_REC, ICON_REPEAT, ICON_SESSION } from "./icons.js";
+import { HELP_TIPS, ICON_BOUNCE, ICON_CAPTURE, ICON_FINISH, ICON_KEYBOARD, ICON_METRONOME, ICON_NOW, ICON_MACRO, ICON_REC, ICON_SESSION } from "./icons.js";
 import { upgradeKnobs } from "./knob.js";
 import { startModMotion } from "./modMotion.js";
 import { openMacroPads } from "./macro.js";
 import { installCodePanel } from "./codePanel.js";
+import { installViews } from "./views.js";
+import { installClipView } from "./clipView.js";
+import { installArrangeView } from "./arrangeView.js";
 import { applySampleSpeed, attachBpmDrag, lfoRateLabel, retuneSyncedLFOs } from "./lfo.js";
 import { captureSequence, initComputerKeyboard, isDesktopKeyboard, resetKbdKeys, setKbdRecord } from "./keyboard.js";
 import { initVim } from "./vim.js";
@@ -19,12 +22,12 @@ import { activeMeter, autoAccents, parseMeter, redetectDrumKit, stepsPerBarForMe
 import { meterTick } from "./meters.js";
 import { setEngineKey } from "./params.js";
 import { installParamContextMenu } from "./paramMenu.js";
-import { copyPattern, openPatternMenu, renderPatternGrid } from "./patternBar.js";
+import { copyPattern, nextPatternMode, openPatternMenu, renderPatternGrid, setPatternMode, syncPatternModeUI } from "./patternBar.js";
 import { attachLevelDrag, setActiveTrack } from "./render.js";
 import { initScaleUI, openChordMenu, syncChordUI } from "./scaleUI.js";
 import { inJam, jamTogglePlay } from "./jam.js";
 import { installLeaveGuard, loadShareFromUrl, onExportSet, onImportSet, onLeaveStudio, onLoadSet, onSaveSet, onShareSet, STARTER_TRACKS } from "./session.js";
-import { state, switchPattern } from "./state.js";
+import { state, switchPattern, trackSlot } from "./state.js";
 import { renderStepGrid } from "./stepGrid.js";
 import { createTrack, resizePattern } from "./track.js";
 import { ensureAudio, loadWorklet, togglePlay } from "./transport.js";
@@ -692,6 +695,11 @@ export function init() {
   // The code drawer: Strudel / Tidal, read into tracks (codePanel.js). Its
   // reader is imported only when the drawer runs something.
   installCodePanel();
+  // The three views of the song (views.js): the switcher, the clip grid and
+  // the arrangement, the last two drawn only while open.
+  installClipView();
+  installArrangeView();
+  installViews();
   // The master swing slider has no listener on purpose: the transport loop reads
   // its value straight off the DOM each callback (~0.1 µs), so there's nothing to
   // mirror into state and nothing to do when it moves.
@@ -769,22 +777,9 @@ export function init() {
   });
 
   const modeBtn = document.getElementById("pattern-mode");
-  const syncModeLabel = () => {
-    modeBtn.innerHTML = state.patternMode === "chain" ? ICON_CHAIN : ICON_REPEAT;
-    modeBtn.title = state.patternMode === "chain"
-      ? "chain: play through the non-empty patterns. Click for repeat"
-      : "repeat: loop the current pattern. Click for chain";
-    modeBtn.setAttribute("aria-pressed", String(state.patternMode === "chain"));
-    // The caption under the icon in the session menu on a phone, where the
-    // title above is a hover nobody can reach. It names the mode the button is
-    // IN, not the one it switches to, so it reads as a state and not a verb.
-    modeBtn.dataset.label = state.patternMode === "chain" ? "chain" : "repeat";
-  };
-  syncModeLabel();
-  modeBtn.addEventListener("click", () => {
-    state.patternMode = state.patternMode === "chain" ? "repeat" : "chain";
-    syncModeLabel();
-  });
+  syncPatternModeUI();
+  // repeat → chain → arrange → repeat (patternBar.js draws it)
+  modeBtn.addEventListener("click", () => setPatternMode(nextPatternMode(state.patternMode)));
   const switchBtn = document.getElementById("pattern-switch");
   if (switchBtn) {
     const syncSwitchLabel = () => {
@@ -854,17 +849,20 @@ export function init() {
         // User set a non-#1 pattern's meter explicitly — lock it off from #1.
         state.patternMeterCustomized[patIdx] = true;
       }
-      // Resize every track on the active pattern to preserve its bar count under
-      // the new meter (e.g. 1 bar of 4/4 = 16 steps → 1 bar of 7/8 = 14). Tracks
-      // that already match just get their accents + step grid refreshed.
+      // Resize every track's copy of this pattern to preserve its bar count
+      // under the new meter (e.g. 1 bar of 4/4 = 16 steps → 1 bar of 7/8 = 14).
+      // The pattern's OWN length, not t.length: a track with a clip launched is
+      // on another slot, and t.length mirrors that one. A track that already
+      // matches and is on this pattern just gets its accents + grid refreshed.
       const oldSpb = stepsPerBarForMeter(prev);
       const newSpb = stepsPerBarForMeter(m);
       for (const t of state.tracks) {
-        const bars = Math.max(1, Math.round((t.length || newSpb) / oldSpb));
+        const curLen = t.patterns?.[patIdx]?.steps.length || newSpb;
+        const bars = Math.max(1, Math.round(curLen / oldSpb));
         const newLen = Math.max(1, Math.min(128, bars * newSpb));
-        if (newLen !== t.length) {
+        if (newLen !== curLen) {
           resizePattern(t, patIdx, newLen);
-        } else {
+        } else if (trackSlot(t) === patIdx) {
           t.accents = autoAccents(t.length, m);
           renderStepGrid(t);
         }

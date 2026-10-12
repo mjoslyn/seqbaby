@@ -31,6 +31,7 @@ import { controlForKey } from "./paramTargets.js";
 import { setActiveTrack } from "./render.js";
 import { FX_STAGE_LABELS, FX_STAGE_LEVEL_KEY, fxIdLabel, fxInstanceIds } from "./constants.js";
 import { emptyPattern, requestPatternSwitch, state } from "./state.js";
+import { VIEWS, setView } from "./views.js";
 import { paintStepCursor, renderStepGrid } from "./stepGrid.js";
 import { liveGeneratorOf } from "./stepSource.js";
 import { SCALES, midiToScaleIndex, scaleIndexToMidi } from "./theory.js";
@@ -411,6 +412,12 @@ function runCommand(line) {
       requestPatternSwitch(v - 1);
       return `pattern ${v}`;
     }
+    case "view": {
+      const want = VIEWS.find(v => v.startsWith(String(args[0] || "").toLowerCase()));
+      if (!args[0] || !want) return `E: :view ${VIEWS.join(" | ")}`;
+      setView(want);
+      return `${want} view`;
+    }
     case "len": {
       const v = num(args[0]);
       const el = /** @type {HTMLInputElement} */ (t?.el?.querySelector(".sq-track__len"));
@@ -441,7 +448,7 @@ function runCommand(line) {
       return "save: name it and press save";
     }
   }
-  return `E: not a command: ${cmd}. Try :k :bpm :p :len :cut :res :fx :nudge :w :q :h`;
+  return `E: not a command: ${cmd}. Try :k :bpm :p :len :cut :res :fx :nudge :view :w :q :h`;
 }
 
 // ---- completion -------------------------------------------------------------------
@@ -462,6 +469,7 @@ const COMMANDS = [
   ["res", "filter resonance, 0..1", true],
   ["fx", "an effect's level: :fx reverb .5", true],
   ["nudge", "the cursor's note off the grid, -12..12 24ths of a step", true],
+  ["view", "groove, clips or arrange (tab cycles them)", true],
   ["w", "open the save panel", false],
   ["h", "every vim key", false],
   ["q", "vim mode off", false],

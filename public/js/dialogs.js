@@ -139,6 +139,35 @@ export function showSavedPatchPicker() {
 
 // ---- engine catalog ----------------------------------------------------
 
+/**
+ * A question with a few answers: `choices` are `{ label, value, danger? }`,
+ * resolved to the chosen value, or null for cancel / escape / the backdrop.
+ */
+export function showChoiceDialog({ title, body = "", choices = [] }) {
+  return new Promise((resolve) => {
+    const overlay = document.createElement("div");
+    overlay.className = "sq-modal-overlay";
+    const esc = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+    overlay.innerHTML = `
+      <div class="sq-modal" role="dialog" aria-modal="true">
+        <div class="sq-modal__title">${esc(title)}</div>
+        ${body ? `<div class="sq-modal__body">${esc(body)}</div>` : ""}
+        <div class="sq-modal__actions">
+          <button class="modal-cancel sq-btn--ghost">cancel</button>
+          ${choices.map((c, i) => `<button class="${i === choices.length - 1 ? "sq-modal__ok" : "sq-btn--ghost"}${c.danger ? " sq-btn--danger" : ""}" data-choice="${esc(c.value)}">${esc(c.label)}</button>`).join("")}
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+    const close = (v) => { overlay.remove(); document.removeEventListener("keydown", onKey); resolve(v); };
+    const onKey = (e) => { if (e.key === "Escape") close(null); };
+    document.addEventListener("keydown", onKey);
+    overlay.querySelector(".modal-cancel").addEventListener("click", () => close(null));
+    overlay.querySelectorAll("[data-choice]").forEach((b) => b.addEventListener("click", () => close(b.dataset.choice)));
+    overlay.addEventListener("click", (e) => { if (e.target === overlay) close(null); });
+    setTimeout(() => overlay.querySelector(".sq-modal__ok")?.focus(), 0);
+  });
+}
+
 export function showSelectDialog({ title, options }) {
   return new Promise(resolve => {
     const overlay = document.createElement("div");

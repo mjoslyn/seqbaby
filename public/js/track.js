@@ -12,7 +12,7 @@ import { cloneChance, refreshChanceUI, renderChancePanel } from "./chance.js";
 import { paintDiceDensity, placeBusesLast, refreshFxPanelUI, refreshMuteSoloUI, renderModPanel, renderTrack } from "./render.js";
 import { applySet } from "./session.js";
 import { defaultCompConfig, ensureFxRack, refreshAllTrackOutputs, refreshCompSourceDropdowns, refreshNoiseBeds, refreshOutputSelects, routeVoiceToRack, setFilter } from "./signal.js";
-import { aliasPattern, clonePattern, emptyPattern, state } from "./state.js";
+import { aliasPattern, clonePattern, emptyPattern, state, trackSlot } from "./state.js";
 import { canAutomate } from "./automation.js";
 import { refreshParamIndicators } from "./paramTargets.js";
 import { renderStepGrid } from "./stepGrid.js";
@@ -97,7 +97,10 @@ export function createTrack({ name, engineKey, length = totalSteps() }) {
     comp: defaultCompConfig(),
     compNode: null,
     patterns: null,   // set below
-    _patternIdx: 0,
+    _patternIdx: 0,   // the slot this track is on: trackSlot(t), state.js
+    _queuedSlot: null, // a clip waiting for the bar line (clips.js)
+    _clipOff: false,  // no clip playing: stopped, or an arrangement gap
+    arrangement: [],  // the track's timeline of pattern blocks (arrangement.js)
     lfoConfig: defaultLFOConfig(),
     lfos: { vol: null, harm: null, timb: null, morph: null, decay: null },
     voice: null,
@@ -200,7 +203,11 @@ export function duplicateTrack(src) {
     if (!sp) continue;
     dup.patterns[i] = clonePattern(sp);
   }
-  aliasPattern(dup, state.activePattern);
+  // On the pattern its source is on, which a launched clip may have put off the
+  // scene; its stopped state and its arrangement travel too.
+  dup._clipOff = !!src._clipOff;
+  dup.arrangement = (src.arrangement || []).map(b => ({ ...b }));
+  aliasPattern(dup, trackSlot(src));
 
   if (dup.el) {
     const q = sel => dup.el.querySelector(sel);
@@ -319,26 +326,39 @@ export function copyTrackPattern(t) {
   setStatus(`copied ${trackClip.name}, pattern ${idx + 1} (${notes} note${notes === 1 ? "" : "s"}). Paste it on any track, in any pattern`);
 }
 
-/** Paste the clipboard over the pattern `t` is on. */
-export function pasteTrackPattern(t) {
-  if (!trackClip) { setStatus("nothing copied yet: press copy on a track first", true); return false; }
-  const idx = t._patternIdx ?? state.activePattern;
+/**
+ * Write a copy of `pattern` over slot `idx` of track `t`. The notes and lanes
+ * travel; the sound (p-lock) stays the target slot's, and lanes `t`'s engine
+ * cannot play are dropped. The one copy routine: the track head's paste and the
+ * clip view's drag both come through here.
+ * @param {Track} t @param {number} idx @param {import("./types.js").Pattern} pattern
+ */
+export function writePatternOnto(t, idx, pattern) {
   const old = t.patterns[idx];
-  const p = clonePattern(trackClip.pattern);
+  const p = clonePattern(pattern);
   p.soundLocked = !!old?.soundLocked;
   p.sound = old?.sound ?? null;
   for (const key of Object.keys(p.automation)) {
     if (!canAutomate(t, key)) delete p.automation[key];
   }
   t.patterns[idx] = p;
-  aliasPattern(t, idx);
-  renderEuclidPanel(t);
-  renderChancePanel(t);
-  renderStepGrid(t);
-  refreshAutIfOpen(t);
-  refreshRollIfOpen(t);
-  refreshParamIndicators(t);
+  if (trackSlot(t) === idx) {
+    aliasPattern(t, idx);
+    renderEuclidPanel(t);
+    renderChancePanel(t);
+    renderStepGrid(t);
+    refreshAutIfOpen(t);
+    refreshRollIfOpen(t);
+    refreshParamIndicators(t);
+  }
   renderPatternGrid();
+}
+
+/** Paste the clipboard over the pattern `t` is on. */
+export function pasteTrackPattern(t) {
+  if (!trackClip) { setStatus("nothing copied yet: press copy on a track first", true); return false; }
+  const idx = t._patternIdx ?? state.activePattern;
+  writePatternOnto(t, idx, trackClip.pattern);
   const kitNote = trackClip.isDrumKit !== !!t.isDrumKit
     ? (t.isDrumKit ? " (melodic notes on a drum kit)" : " (drum notes on a melodic track)") : "";
   setStatus(`pasted ${trackClip.name} pattern ${trackClip.patIdx + 1} → ${t.name?.trim() || "track"} pattern ${idx + 1}${kitNote}`);

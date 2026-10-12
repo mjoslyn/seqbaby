@@ -355,6 +355,52 @@ test("copy_section, the sections chain mode plays, and arrangement warnings", ()
   assert.ok(sb.validate(one).warnings.some(x => /only one pattern/.test(x)));
 });
 
+test("set_blocks: a timeline per track, arrange mode, and its warnings", () => {
+  const s = song();
+  const kick = sb.addTrack(s, { engine: "808 kick", name: "kick" }).index;
+  const pad = sb.addTrack(s, { engine: "pad", name: "pad" }).index;
+  assert.deepEqual(s.tracks[kick].arrangement, []);
+  sb.setSteps(s, kick, { steps: "x..." });
+  sb.setSteps(s, pad, { steps: "x_______________", notes: ["C3"], pattern: 1 });
+  // blocks are sorted and the later of two overlapping ones wins, as in the studio
+  const r = sb.setBlocks(s, kick, [{ slot: 0, start: 4, bars: 8 }, { slot: 0, start: 0, bars: 2 }, { slot: 1, start: 8, bars: 2 }]);
+  assert.deepEqual(r.blocks, [{ slot: 0, start: 0, bars: 2 }, { slot: 0, start: 4, bars: 4 }, { slot: 1, start: 8, bars: 2 }, { slot: 0, start: 10, bars: 2 }]);
+  assert.equal(r.bars, 12);
+  assert.equal(r.plays, "1-2 p1, 3-4 rest, 5-8 p1, 9-10 p2, 11-12 p1");
+  assert.throws(() => sb.setBlocks(s, kick, [{ slot: 32, start: 0, bars: 1 }]), /blocks\[0\]: slot/);
+  assert.throws(() => sb.setBlocks(s, kick, [{ slot: 0, start: 0, bars: 0 }]), /bars must be at least 1/);
+  assert.throws(() => sb.setBlocks(s, kick, "x"), /array/);
+  // arrange mode: the summary carries every track's blocks and the song's length
+  sb.setArrangement(s, { mode: "arrange" });
+  assert.equal(s.patternMode, "arrange");
+  const sum = sb.summarize(s).arrangement;
+  assert.equal(sum.bars, 12);
+  assert.equal(sum.blocks[kick].plays, r.plays);
+  assert.deepEqual(sum.sections, r.blocks.map(b => ({ pattern: b.slot, bars: b.bars, start: b.start })));
+  // the kick plays pattern 1 from bar 9, which has nothing on it for the kick
+  let w = sb.validate(s).warnings;
+  assert.ok(w.some(x => /track 0 \(kick\) plays pattern 1 from bar 9/.test(x)), w.join("; "));
+  assert.ok(!w.some(x => /arrangement is "repeat"/.test(x)));
+  sb.setBlocks(s, pad, [{ slot: 1, start: 8, bars: 4 }]);
+  sb.setBlocks(s, kick, [{ slot: 0, start: 0, bars: 8 }]);
+  w = sb.validate(s).warnings;
+  assert.ok(!w.some(x => /plays pattern/.test(x)), w.join("; "));
+  // no blocks anywhere: nothing plays
+  sb.setBlocks(s, pad, []); sb.setBlocks(s, kick, []);
+  assert.ok(sb.validate(s).warnings.some(x => /no blocks on any track/.test(x)));
+  // the format round-trips, and a junk arrangement is dropped on the way in
+  const blob = JSON.parse(sb.toJSON(s));
+  assert.equal(blob.patternMode, "arrange");
+  blob.tracks[kick].arrangement = [{ slot: 1, start: 2, bars: 2 }, { slot: 99, start: 0, bars: 1 }, "junk"];
+  blob.tracks[pad].arrangement = "nope";
+  const back = sb.fromBlob(blob);
+  assert.deepEqual(back.tracks[kick].arrangement, [{ slot: 1, start: 2, bars: 2 }]);
+  assert.deepEqual(back.tracks[pad].arrangement, []);
+  assert.equal(back.patternMode, "arrange");
+  blob.patternMode = "sideways";
+  assert.equal(sb.fromBlob(blob).patternMode, "repeat");
+});
+
 test("fromBlob adopts a saved song and summarize reads it back", () => {
   const s = song();
   const { index } = sb.addTrack(s, { engine: "tines", name: "keys" });

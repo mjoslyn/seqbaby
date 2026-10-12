@@ -1,9 +1,55 @@
-import { PATTERN_COUNT } from "./constants.js";
+import { PATTERN_COUNT, PATTERN_MODES, patternModeOf } from "./constants.js";
 import { setStatus } from "./dom.js";
+import { ICON_ARRANGE, ICON_CHAIN, ICON_FINISH, ICON_NOW, ICON_REPEAT } from "./icons.js";
 import { flushPatternSound, recallPatternSound, refreshPatternSoundUI } from "./patternSound.js";
-import { aliasPattern, clonePattern, isPatternNonEmpty, requestPatternSwitch, state, switchPattern } from "./state.js";
+import { aliasPattern, clonePattern, isPatternNonEmpty, repaintPatternUI, requestPatternSwitch, state, trackSlot } from "./state.js";
+import { remapSlots } from "./arrangement.js";
 import { renderStepGrid } from "./stepGrid.js";
 import { maxLengthAt } from "./track.js";
+
+/** The pattern-mode button's icon and title per mode; the clip view's toolbar draws the same. */
+export const MODE_UI = {
+  repeat:  { icon: ICON_REPEAT,  title: "repeat: loop the current pattern. Click for chain" },
+  chain:   { icon: ICON_CHAIN,   title: "chain: play through the non-empty patterns in order. Click for arrange" },
+  arrange: { icon: ICON_ARRANGE, title: "arrange: each track plays its arrangement of pattern blocks. Click for repeat" },
+};
+
+/**
+ * Paint the pattern-mode button from `state.patternMode`. The one place it is
+ * drawn: main.js's click, a session load, a merge and the arrangement view's
+ * own toggle all call this rather than each spelling the three icons.
+ */
+export function syncPatternModeUI() {
+  const btn = document.getElementById("pattern-mode");
+  if (!btn) return;
+  const mode = patternModeOf(state.patternMode);
+  btn.innerHTML = MODE_UI[mode].icon;
+  btn.title = MODE_UI[mode].title;
+  btn.setAttribute("aria-pressed", String(mode !== "repeat"));
+  // The caption under the icon in the session menu on a phone, where the title
+  // above is a hover nobody can reach. It names the mode the button is IN, not
+  // the one it switches to, so it reads as a state and not a verb.
+  btn.dataset.label = mode;
+}
+
+/** The switch button's icon and title per setting (main.js and the clip view's toolbar). */
+export const SWITCH_UI = {
+  finish:    { icon: ICON_FINISH, title: "switch: finish. Waits for the current bar to end" },
+  immediate: { icon: ICON_NOW,    title: "switch: now. Changes pattern immediately" },
+};
+
+/** Set the pattern mode and paint it. Arrange mode starts its bar count over. */
+export function setPatternMode(mode) {
+  state.patternMode = patternModeOf(mode);
+  if (state.patternMode === "arrange") state.arrBar = 0;
+  else state._loopMode = state.patternMode;     // what the clip view's play comes back to
+  syncPatternModeUI();
+}
+
+/** The mode after this one, the button's cycle. */
+export function nextPatternMode(mode) {
+  return PATTERN_MODES[(PATTERN_MODES.indexOf(patternModeOf(mode)) + 1) % PATTERN_MODES.length];
+}
 
 export function copyPattern(from, to) {
   if (from === to) return;
@@ -18,16 +64,16 @@ export function copyPattern(from, to) {
   if (srcMeter) state.patternMeters[to] = { num: srcMeter.num, den: srcMeter.den };
   if (to !== 0) state.patternMeterCustomized[to] = !!state.patternMeterCustomized[from]
     || (srcMeter && (srcMeter.num !== state.patternMeters[0].num || srcMeter.den !== state.patternMeters[0].den));
-  if (state.activePattern === to) {
-    // Copying over the pattern you're standing on: nothing switches, so re-bind
-    // and repaint here. A locked track's sound came with the copy, so it has to
-    // be recalled too or the pattern would sound like the one it replaced until
-    // you next left it and came back.
-    for (const t of state.tracks) {
-      aliasPattern(t, to);
-      if (recallPatternSound(t, to)) refreshPatternSoundUI(t);
-      renderStepGrid(t);
-    }
+  // Copying over the pattern a track is standing on: nothing switches, so
+  // re-bind and repaint it here. A locked track's sound came with the copy, so
+  // it has to be recalled too or the pattern would sound like the one it
+  // replaced until you next left it and came back. Per track, not "is the scene
+  // `to`": a launched clip can have a track on another slot (trackSlot).
+  for (const t of state.tracks) {
+    if (trackSlot(t) !== to) continue;
+    aliasPattern(t, to);
+    if (recallPatternSound(t, to)) refreshPatternSoundUI(t);
+    renderStepGrid(t);
   }
   renderPatternGrid();
   setStatus(`copied pattern ${from + 1} → ${to + 1}`);
@@ -44,20 +90,29 @@ export function movePattern(from, at) {
   order.splice(from, 1);
   order.splice(dest, 0, from);
   // A locked pattern's sound is only written back when it is left; do it now so
-  // the permuted copy holds what is audible.
-  for (const t of state.tracks) flushPatternSound(t, state.activePattern);
+  // the permuted copy holds what is audible. Each track at ITS slot (trackSlot).
+  for (const t of state.tracks) flushPatternSound(t, trackSlot(t));
   const pick = (arr, fn = (v) => v) => order.map((i) => fn(arr[i]));
-  for (const t of state.tracks) if (t.patterns) t.patterns = pick(t.patterns);
+  const renumber = (i) => (i == null ? i : order.indexOf(i));
+  for (const t of state.tracks) {
+    if (t.patterns) t.patterns = pick(t.patterns);
+    // Everything that names a slot by number follows it: where each track is,
+    // what it has queued, and its arrangement's blocks.
+    t._patternIdx = renumber(trackSlot(t));
+    t._queuedSlot = renumber(t._queuedSlot);
+    if (t.arrangement?.length) t.arrangement = remapSlots(t.arrangement, order);
+  }
   state.patternMeters = pick(state.patternMeters, (m) => ({ num: m.num, den: m.den }));
   state.patternRepeats = pick(state.patternRepeats);
   state.patternMeterCustomized = pick(state.patternMeterCustomized);
-  const active = order.indexOf(state.activePattern);
-  const queued = state.queuedPattern == null ? null : order.indexOf(state.queuedPattern);
-  state.activePattern = active;
-  // Same pattern, new slot: re-alias and repaint without a sound change.
-  switchPattern(active);
-  state.queuedPattern = queued;
-  renderPatternGrid();
+  state.activePattern = renumber(state.activePattern);
+  state.queuedPattern = renumber(state.queuedPattern);
+  // Same pattern objects, new numbers: re-alias each track where it already is
+  // (no sound change, so no recall) and repaint everything a switch would. Not
+  // switchPattern: that would put every track on the scene, and a launched clip
+  // off it has to stay where it was.
+  for (const t of state.tracks) aliasPattern(t, trackSlot(t));
+  repaintPatternUI();
   setStatus(`moved pattern ${from + 1} → ${dest + 1}`);
 }
 

@@ -16,7 +16,7 @@ env / fx / eq / comp / mod / automation per track.
   `public/woscillators.js` →
   `public/js/main.js` (ES module). `middleware.ts` refreshes the Supabase
   session on every request *except* static engine assets.
-- **Engine**: ~77 dependency-free vanilla ES modules in `public/js/`. No
+- **Engine**: ~83 dependency-free vanilla ES modules in `public/js/`. No
   bundler — edit, reload. `window.seqbaby` (from `appApi.js`) exposes `state`
   and serialize/apply hooks to the React shell (typed in `app/seqbaby.d.ts`).
 - **Accounts + data**: Supabase (Postgres + Auth + RLS). Tables: `profiles`,
@@ -201,6 +201,22 @@ env / fx / eq / comp / mod / automation per track.
   in-place restore was the first two, and the compose panel's audition needed
   the same thing, so they live here and history.js owns only when. See the
   live merge section below.
+- `clips.js` — a pattern slot launched on ONE track (`launchClip`,
+  `requestClipLaunch`, `stopClip`), the per-track step-count seeding the
+  transport shares (`seedTrackCount`), arrange mode's bar-line work
+  (`applyArrangementBar`, `advanceArrangement`, `seedArrangement`) and the
+  arrangement recorder (`recordArrangementBar`). See the clips section.
+- `arrangement.js` — a track's timeline of pattern blocks as arithmetic over
+  plain arrays, **no imports**: `normalizeBlocks`, `blockAt`, `placeBlock`
+  (cuts what it lands on), `writeBar` (the recorder), `remapSlots`,
+  `chainToBlocks`. Tested in `test/arrangement.test.js`; songBuilder.js
+  validates an agent's blocks through it.
+- `views.js` / `clipView.js` / `arrangeView.js` / `trackDetail.js` — the
+  view switcher and the two views that are not the track list: the clip grid
+  (tracks x slots) and the arrangement timeline, each with the selected
+  track's own card under it (trackDetail.js, the card moved out of `#tracks`
+  and back). Both are rebuilt whole from engine state on `seqbaby:clips` and
+  the session events, only while open.
 - `engineData.js` / `soundDefaults.js` / `theoryData.js` — the engine as DATA,
   with **no imports** (engineData none at all; the other two only each other
   and constants.js): the engine catalog, the four sliders' labels per engine,
@@ -337,7 +353,7 @@ npm test               # node --test: the pure modules (session format, chance g
                        #   song previews, grid avatars, the songs and people explorers,
                        #   the Strudel bridge, the reverb, the filter models, the guitar, the contagion,
                        #   the vox and its phonetic reader, the lancet, the prism, the repeat,
-                       #   the ladder, the oracle)
+                       #   the ladder, the oracle, the arrangement)
 npm run mcp            # the MCP server on stdio (mcp/server.mjs) — an agent writes songs
 npm run test:rls       # RLS policy tests — builds a throwaway Postgres in docker
 ```
@@ -2113,11 +2129,14 @@ sliceOn, sliceBase, slicePlayMode, pitchLock`, sound config
 metronome button's fill: click volume, dragged like the dice, kept in
 localStorage rather than the song), noteColors,
 currentSetName, audioCtx, ready, masterGain, masterLimiter, masterAnalyser,
-midi, scale {active, root, mode}, activePattern, patternMode
-("repeat"|"chain"), patternSwitchMode ("immediate"|"finish"), queuedPattern,
-patternRepeats[32], patternMeters[32] ({num,den} time signatures),
-chainBarCount` — plus runtime slots added by the unlock architecture
-(`woscLoad, _keepAlive, _outputRunningSince`).
+midi, scale {active, root, mode}, activePattern (the SCENE, see the clips
+section), patternMode ("repeat"|"chain"|"arrange"), patternSwitchMode
+("immediate"|"finish"), queuedPattern, patternRepeats[32], patternMeters[32]
+({num,den} time signatures), chainBarCount, arrBar / arrRecord / arrRecBar
+(arrange mode's bar and the recorder), view ("groove"|"clips"|"arrange", not
+saved)` — plus runtime slots added by the unlock architecture
+(`woscLoad, _keepAlive, _outputRunningSince`) and `_arrOrigin` / `_nowTick`
+(the arrangement view's playhead).
 
 ## Transport
 
@@ -2144,6 +2163,15 @@ Single `Tone.getTransport().scheduleRepeat` at `"16n"`. Each callback, per track
    of their own, so a count carried over landed the next pattern anywhere (a
    32-step pattern after a 16-step one played three times came in on step 16).
    An immediate switch from a click keeps counting, since it lands mid-bar.
+   In **arrange mode** the bar line is clips.js's instead: `advanceArrangement`
+   moves `state.arrBar` on (wrapping at the arrangement's end) and puts every
+   track on the block covering it, or stops it in a gap; the queue commits
+   and the chain have no say. Before any switch, an armed recorder writes
+   what each track just played (`recordArrangementBar`). Per-track clips
+   queued in finish mode commit at the same bar line (`commitQueuedClips`),
+   the scene queue winning when both are set. The bar's length is
+   `transportMeter()` (meter.js): the scene's meter, or slot 0's in arrange
+   mode.
 
 Stop cuts masterGain to 0 over 20ms (Tone's ~100ms lookahead keeps already-
 queued native events playing otherwise) and silences all voices. The gain then
@@ -2155,6 +2183,205 @@ And it can't be left down until the next start either, which is what it used to
 do — the keyboard plays through the same bus, so every key was silent once you'd
 pressed stop. `Tone.getTransport().start(lead, 0)` with the explicit 0 offset
 is the canonical rewind (avoids Tone 15's stop/cancel/position bugs).
+
+## Clips and the arrangement (`clips.js`, `arrangement.js`, `views.js`, `clipView.js`, `arrangeView.js`)
+
+The studio used to have one picture of a song: the track list, every track on
+the pattern slot the pattern bar is on. It has three now, of the same tracks —
+**groove** (the track list), **clips** (tracks as rows, the 32 slots as
+columns, every cell a clip launched on that track alone, a scene row on top)
+and **arrange** (a timeline of pattern blocks per track) — switched by the
+transport's `groove | clips | arrange` control, Tab (with nothing focused) or
+vim's `:view`, and remembered per browser (`seqbaby.view.v1`). Desktop only in
+this cut: below 768px the switcher is hidden and the groove view stands.
+
+```
+scene   state.activePattern ─── the slot the pattern bar is on, every track joins it
+clip    trackSlot(t)        ─── the slot THIS track is on (t._patternIdx), launched alone
+block   t.arrangement[i]    ─── { slot, start, bars }: a clip at a bar, for a while
+```
+
+- **One architectural move made the clips possible: a track's slot is its
+  own.** `t._patternIdx` was always equal to `state.activePattern` — nothing
+  ever aliased a track anywhere else — and the alias (`aliasPattern`) meant
+  "the slot playing" and "the slot being edited" at once. It still means both,
+  per track: `trackSlot(t)` (state.js) is what a track plays AND what its
+  step grid edits, and `state.activePattern` is the **scene**: what the pattern
+  bar highlights, what `switchPattern` puts every track on, the meter the bar
+  line counts in, the slot a new track joins. Every reader that means "this
+  track's pattern" asks `trackSlot(t)` and never `state.activePattern` — the
+  p-lock flush (`flushAllPatternSounds`, which `serializeSet` calls first, so
+  getting it wrong writes the live sound into a pattern the track never
+  played), the lock button, the length buttons, the meter resize, the roll's
+  beat ruler, `pinAutomated`, the code drawer's highlight, `copyPattern` /
+  `movePattern` (which also renumbers every track's slot, its queued clip
+  and its blocks through `remapSlots`), the merge's re-alias. With no clip
+  ever launched the two never differ and the groove view is exactly what it
+  was. `grep activePattern public/js` and every survivor should be scene
+  semantics.
+- **Where each track is, and whether it is stopped, is performance state**,
+  like `activePattern`: `_patternIdx`, `_queuedSlot` and `_clipOff` are never
+  serialized, so a load puts every track on the scene and a launch is
+  invisible to history, a jam and the unsaved check. `serializeSet` writes a
+  track's `length` as the SCENE's pattern length for the same reason: a clip
+  on a slot of another length must not read as an edit.
+- **`launchClip(t, slot)` is `switchPattern` for one track**: flush the slot
+  being left into its p-lock store, alias, recall the one entered, clear the
+  stopped flag, repaint — on the deferred one-track-per-task queue
+  (`queueTrackPaint`, state.js, the one a chain switch uses) when the
+  transport asks, since a bar-line launch runs inside the scheduler
+  callback. `requestClipLaunch` honours the pattern bar's switch mode: finish
+  queues it (`t._queuedSlot`, committed at the bar line with the count
+  restarted, as a scene commit restarts every track), immediate lands it now
+  and keeps counting, as a click on the bar does. `requestPatternSwitch`'s
+  early return is "the scene AND every track on it", so a scene click brings
+  a diverged track back; `switchPattern` flushes each track at ITS slot and
+  clears every queue and stop.
+- **A stopped clip is mute's rule** (`t._clipOff`, the clip view's ■ or a gap
+  in the arrangement): the transport withholds the track where it withholds a
+  muted one, before its lanes run, and `releaseSilencedTracks` lets a drone's
+  latch go. The groove view shows a `p5` / `off` badge on a track off the
+  scene (`paintTrackSlotBadge`, painted with the track's pattern UI); a
+  click brings it back.
+- **The arrangement is blocks on the track**, `t.arrangement = [{slot, start,
+  bars}]`, sorted and never overlapping (the later of two overlapping blocks
+  wins, which is what an editor's drag means), serialized per track so they
+  travel with duplicate / reorder / remove with no index remapping, applied
+  live by an `applyTrackInPlace` branch (plain data: no rebuild key), and so
+  undoable, saveable and jam-shared without being told. `arrangement.js` is
+  pure for `chanceGen.js`'s reasons and the song builder validates an
+  agent's blocks through it (`setBlocks`, MCP `set_blocks`).
+- **Arrange mode is the third pattern mode.** `patternMode === "arrange"`
+  (the pattern bar's button cycles repeat → chain → arrange, `setPatternMode`
+  in patternBar.js is the one place the button is drawn, and the three
+  places that used to coerce the mode to two values — `applySet`,
+  `applyGlobalsInPlace`, the builder — pass it through, since any one of
+  them left behind would flatten it to repeat on a save, an undo or a merge).
+  The transport keeps one ruler position, `state.arrBar`, in bars of slot 0's
+  meter (`transportMeter`: pattern 1 is the song's default meter, which every
+  slot not customized follows; a block on a customized slot still loops its
+  own length, only its edges fall on the ruler), advanced on every bar line
+  and wrapped at the arrangement's end (`arrangementBars`, never under one
+  bar). At every bar line each track is put on the block covering it — a
+  block's first bar, or a different slot, launches its pattern from step 0 as
+  a chain section does; a bar inside a block the track is already on leaves
+  it looping — or stopped in a gap. A play press seeds the position from the
+  start tick (`seedArrangement`), so a jam's shared beat lands inside the
+  right block, mid-way. A pattern-bar click in arrange mode re-aliases every
+  track to the scene until the next bar line puts the blocks back: an
+  audition. `state._arrOrigin` is the global tick that was ruler bar 0, and
+  the transport writes `state._nowTick` at the audible time, so the view's
+  playhead is a line placed from the tick being HEARD, as the step playhead
+  is. **The ruler's start marker** (`state.arrStartBar`, the view's, never
+  saved) is where a play press starts the arrangement from: `seedArrangement`
+  adds its bars to the start tick (so `_arrOrigin` goes negative, which is
+  fine, it is only ever subtracted from a tick), and a jam's shared beat
+  ignores it since the marker is this screen's. Clicked while the arrangement
+  plays it is a jump (`_arrJump`), landed at the next bar line by
+  `advanceArrangement`, as a queued clip is. **Play plays what the open view
+  shows**: `startPlayback` switches to arrange mode in the arrangement view
+  and back to the last repeat / chain mode (`_loopMode`) in the clip view;
+  the groove view keeps whatever the pattern bar says, since that is where
+  the mode button is in sight (`followView`, transport.js). A view opened
+  WHILE playing raises `state._viewSwitched` (views.js) and the same rule
+  runs at the next bar line, seeding the arrangement from the start marker
+  when it lands in arrange mode: a flag rather than a mode write at the
+  switch, so a jam peer's mode is never fought over. The arrangement view's
+  `play` is the transport's own button, as the clip view's is; there is no
+  mode toggle in either. The mode is the song's, so a jam hears the
+  change as any edit.
+- **Recording is a bar-line write into a TAKE** (`recordArrangementBar`):
+  with `rec` armed (clip view or arrangement view), every bar line in a
+  non-arrange mode writes what each track just played — its slot, or nothing
+  if stopped or muted — into `t._take` at `state.arrRecBar` through
+  `writeBar`, which extends a block when the same clip is still running and
+  starts one otherwise. BEFORE any switch at that bar line, so the slot
+  written is the one that sounded. With the recorder armed, play plays the
+  CLIPS whichever view is open (the recorder is off in arrange mode), from
+  bar 0 when armed before play, else from the bar the transport is in. The
+  take lands when the recording ends (`finishTake`: the transport stops, or
+  rec is pressed again): straight into an empty arrangement, otherwise after
+  a `showChoiceDialog` asking whether it replaces what is there, goes on
+  after it (`placeBlock` from `arrangementBars()`), or is discarded. Until
+  then it is in no song: the arrangement view draws it as a ghost
+  (`is-take`), `applySet` drops it, and the landing is one
+  `markExternalEdit` so undo and a jam see one step. A re-launch of the
+  same clip on a bar line records as one block rather than two.
+- **Both views' detail is the selected track's own card** (`trackDetail.js`,
+  one per view). Under the grid or the timeline sits the track's real
+  `.sq-track` element — instrument row, inline fx / mod / filter panels, the
+  step grid of the pattern it is on — MOVED out of `#tracks` (hidden under
+  these views, as the pattern bar is) and put back in order when another
+  track is selected or the view closes, the way a panel is reparented into a
+  modal. Nothing is copied, so every listener, knob and `data-track-id`
+  lookup keeps working, and the grid shows the clip the track is on because
+  the alias is the track's: the selected clip IS the one its track is on. In
+  the clip view a cell click launches and selects, a double-click mutes the
+  clip (the track stops, as its ■ does; stopped, that square is a ▶ that
+  plays the clip again through `requestClipLaunch`, so finish mode waits
+  for the bar), a name selects alone; in the arrangement a block or a name
+  selects. The clip view's toolbar carries
+  `play` (it `.click()`s the transport's own button, so a jam's shared start
+  goes the same way), the repeat / chain toggle and the now / finish switch
+  (drawn with the pattern bar's own icons, `MODE_UI` / `SWITCH_UI` in
+  patternBar.js; the switch `.click()`s the bar's button so a queued switch
+  commits there too) and `rec`, since the pattern bar is hidden there; a
+  double-click on a scene number plays that scene now and starts the
+  transport if it is stopped. The transport announces `seqbaby:transport`
+  on start and stop so the views' play buttons follow. The selected track is the
+  keyboard's (`setActiveTrack`). A view repaints by `innerHTML` on a SIBLING
+  of the detail, never on the detail or their parent, which would take the
+  card out of the document; `sync` re-seats the card after every paint
+  because a merge's `setTrackOrder` appends every card back into `#tracks`.
+- **The views are pictures, rebuilt whole.** `clipView.js` and
+  `arrangeView.js` draw from engine state (`trackSlot`, `_queuedSlot`,
+  `_clipOff`, `patternLocked`, `isPatternNonEmpty`, `t.arrangement`) and are
+  rebuilt entire, coalesced on one frame and only while open, on
+  `seqbaby:clips` (dispatched by `announceClips` in clips.js after any
+  launch, stop, record or arrangement edit, and by state.js's pattern
+  repaint, so a switch of any kind reaches them) and the three session
+  events the code drawer listens to. Their mute / solo buttons `.click()`
+  the track's own, so one piece of code owns what mute means; their hues are
+  the track list's eight, on `:nth-child` of the rows (buses are never rows
+  and sit last, so the counts line up). In the clip view every DISTINCT clip
+  on a track wears a shade of that hue (`clipShades`: a signature of the
+  pattern's per-step arrays, numbered by first appearance; `SHADES` is a hue
+  nudge within a third of a turn plus a lightness step, written as `--clip-c`
+  on the cell), so two copies look the same and a one-note difference does
+  not. A clip dragged onto another cell is
+  `writePatternOnto` (track.js), the routine the track head's paste uses, so
+  lanes the target engine cannot play are dropped the same way. A cell's
+  right edge (`.sq-clip__fill`) is a fill handle: dragged across the cells
+  beside it, either way, the clip is copied into each of those slots on
+  release through the same `writePatternOnto` (so a target's own p-lock
+  stays), the targets marked `is-fill-target` while it lasts; SHIFT-dragged
+  it changes the clip's LENGTH a bar at a time instead (`is-growing`, the
+  cell previewing its width over its neighbours; the release is
+  `extendPatternByDuplicate` / `truncatePattern`, the `x2` / `/2` buttons'
+  own routines, capped at 128 steps). Both are relative to the grab as a
+  knob's drag is: a cell is drawn one column wide whatever its length, so an
+  absolute read would snap a 3-bar clip to 1 the moment the handle moved. The
+  arrangement's drags preview on the element and write on release through
+  arrangement.js, so a drag that comes back where it started changes
+  nothing; a pointerup / keyup is what history watches, so every edit is one
+  undo step without the view knowing. `from chain` is `chainToBlocks` on
+  every track.
+- **Code**: `arrangement()` is the mode (as `chain()` is) and `.blocks([[pattern,
+  fromBar, bars], ...])` on a part is a track's timeline, numbered from 1 as
+  the pattern bar and the ruler number them; the native export writes both,
+  on each track's first part. Portable code writes one `name: arrange([bars,
+  part], [bars, silence], ...)` per track, and a LABELLED `arrange` reads back
+  as that track's timeline (its distinct parts taking the track's slots from
+  the first); the unlabelled `$: arrange(...)` keeps its bank meaning.
+- **The song builder and MCP**: `setArrangement` mode `arrange`, `setBlocks(song,
+  track, blocks)` (`set_blocks`), `summarize().arrangement.blocks` per track
+  and `.bars` in arrange mode, `validate` warning on arrange mode with no
+  blocks and on a block whose pattern that track has nothing in. The compose
+  skill says when to reach for it over chain.
+- **A whole-song bounce** in arrange mode renders `arrangementBars()` bars of
+  the ruler's meter and leaves the mode alone.
+- Not shared in a jam: which clip each peer has launched, like play / stop and
+  the scene. The blocks are the song's and travel.
 
 ## Knobs (`knob.js`) — a skin over the range inputs
 
@@ -4438,7 +4665,7 @@ through a 6ms fade on its gain).
   place the dispatch lives, or the second one has to import the first.
 - **`engineData.js`, `soundDefaults.js`, `theoryData.js`, `constants.js`,
   `chanceGen.js`, `sessionFormat.js`, `historyStore.js`, `songBuilder.js`,
-  `miniNotation.js`, `strudel.js` and `voxPhonetic.js` must stay importable from Node** — no DOM, no Tone, no `window`. The tests
+  `miniNotation.js`, `strudel.js`, `arrangement.js` and `voxPhonetic.js` must stay importable from Node** — no DOM, no Tone, no `window`. The tests
   and the MCP server run them; an import of state.js or catalog.js in any of
   them breaks `npm test` at load, which is the guard.
 - **React must never re-set the studio's `innerHTML`** (`app/StudioBody.tsx`).
@@ -4503,6 +4730,11 @@ through a 6ms fade on its gain).
   one-source-at-a-time rule). The transport and the step grid learn nothing.
 - New cross-track routing → `t.out` + signal.js's routing block; anything that
   rebuilds a voice must call `refreshAllTrackOutputs()`.
+- New view of the tracks → a section after `#tracks` in studioMarkup.ts, a
+  name in `views.js`'s `VIEWS`, a module that rebuilds it from engine state on
+  `seqbaby:clips` + the session events while open (clipView.js is the model).
+  Anything that names a pattern slot by number in the session (as blocks do)
+  needs renumbering in `movePattern` (patternBar.js).
 - Nothing has to be told about undo: it watches the session rather than the
   call sites (see below). A new field is undoable the moment `serializeSet` /
   `applySet` carry it — and putting it back is liveSet.js's: a field a track can
@@ -4544,7 +4776,7 @@ Repo: https://github.com/mjoslyn/seqbaby.
   An inline marker (`window.__seqbabyServerBoot`) tells the paths apart, and
   `ScriptLoader.tsx` keeps its onload-chained injection for the soft-nav case
   (e.g. arriving from `/login`).
-- `app/EnginePreload.tsx` emits `modulepreload` for all 77 modules listed in
+- `app/EnginePreload.tsx` emits `modulepreload` for all 83 modules listed in
   `app/engineAssets.ts` (at `engineAsset("/js/<name>")`; the hints used to
   point at the site root and 404). The graph is 8 levels deep, so without it the browser
   needs up to eight sequential round trips just to discover the code.

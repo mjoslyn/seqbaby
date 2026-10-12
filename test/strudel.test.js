@@ -596,3 +596,63 @@ test("copies of a stage and the chain round-trip through native code, and a dele
   assert.equal(b.tracks[0].fxConfig.order, undefined);
   assert.ok(b.tracks[0].fxConfig["pan#2"]);
 });
+
+// ---- the arrangement: arrangement() and .blocks() ------------------------------
+
+const ARRANGED = `setcpm(30)
+arrangement()
+
+pattern(1)
+kick: s("bd*4")
+bass: note("c2*8").s("tb303").blocks([[1, 1, 4], [2, 9, 4]])
+
+pattern(2)
+kick: s("bd ~ bd bd").blocks([[1, 1, 8], [2, 9, 8]])
+bass: note("g2*4").s("tb303")
+`;
+
+test("arrangement() and .blocks() write arrange mode and a timeline per track", () => {
+  const { song, warnings } = S.codeToSong(ARRANGED);
+  assert.equal(song.patternMode, "arrange");
+  assert.deepEqual(track(song, "kick").arrangement, [{ slot: 0, start: 0, bars: 8 }, { slot: 1, start: 8, bars: 8 }]);
+  assert.deepEqual(track(song, "bass").arrangement, [{ slot: 0, start: 0, bars: 4 }, { slot: 1, start: 8, bars: 4 }]);
+  assert.equal(steps(track(song, "kick"), 1), "1000000010001000");
+  assert.ok(!warnings.some(w => /blocks/.test(w)), warnings.join("; "));
+  // a bad entry is a warning, the rest stand
+  const bad = S.codeToSong(`arrangement()\nkick: s("bd*4").blocks([[1, 1, 2], [40, 1, 2], "x"])`);
+  assert.deepEqual(track(bad.song, "kick").arrangement, [{ slot: 0, start: 0, bars: 2 }]);
+  assert.equal(bad.warnings.filter(w => /\.blocks\(\): entry/.test(w)).length, 2);
+  // in arrange mode a track with no .blocks() has no blocks; outside it, an existing arrangement is left alone
+  const { song: s2 } = S.codeToSong(`arrangement()\nkick: s("bd*4")`);
+  assert.deepEqual(track(s2, "kick").arrangement, []);
+  const s3 = S.codeToSong(ARRANGED).song;
+  S.writeTracks(s3, S.realize(S.readCode(`kick: s("bd*8")`)), { pattern: 0 });
+  assert.equal(track(s3, "kick").arrangement.length, 2);
+});
+
+test("an arranged song round-trips through native code and plays as one arrange() per track in portable code", () => {
+  const a = S.codeToSong(ARRANGED).song;
+  const out = S.sessionToCode(a, { native: true });
+  assert.equal(out.sectioned, true);
+  assert.match(out.code, /^arrangement\(\)$/m);
+  assert.match(out.code, /\.blocks\(\[\[1, 1, 8\], \[2, 9, 8\]\]\)/);
+  assert.equal((out.code.match(/\.blocks\(/g) || []).length, 2, "one .blocks() per track");
+  const b = S.codeToSong(out.code).song;
+  assert.equal(b.patternMode, "arrange");
+  for (const ta of a.tracks) {
+    const tb = track(b, ta.name);
+    assert.deepEqual(tb.arrangement, ta.arrangement, ta.name);
+    ta.patterns.forEach((p, k) => { if (p?.steps.some(Boolean)) assert.equal(steps(tb, k), steps(ta, k), `${ta.name} ${k}`); });
+  }
+  // portable: a line per track, gaps as silence, in the ruler's bars
+  const port = S.sessionToCode(a).code;
+  assert.match(port, /^const kick_p1 = /m);
+  assert.match(port, /^kick: arrange\(\[8, kick_p1\], \[8, kick_p2\]\)$/m);
+  assert.match(port, /^bass: arrange\(\[4, bass_p1\], \[4, silence\], \[4, bass_p2\]\)$/m);
+  assert.doesNotMatch(port, /blocks\(|arrangement\(/);
+  // and that reads back as the same timeline (its slots renumbered per track from the first)
+  const c = S.codeToSong(port).song;
+  assert.equal(c.patternMode, "arrange");
+  assert.deepEqual(track(c, "bass").arrangement, [{ slot: 0, start: 0, bars: 4 }, { slot: 1, start: 8, bars: 4 }]);
+  assert.equal(steps(track(c, "kick"), 1), steps(track(a, "kick"), 1));
+});

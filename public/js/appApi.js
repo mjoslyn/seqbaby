@@ -11,6 +11,7 @@ import { flushJam, inJam, jamState, jamTogglePlay, receiveJamPatch, receiveJamPh
 import { mergeSet } from "./liveSet.js";
 import { primeAudioForIOS } from "./main.js";
 import { startPlayback, stopPlayback } from "./transport.js";
+import { launchClip, stopClip } from "./clips.js";
 import {
   applySet,
   applyTrackPatch,
@@ -113,6 +114,10 @@ export function installAppApi() {
     play: () => startPlayback(),
     stop: () => stopPlayback(),
     unlock: primeAudioForIOS,
+    // Clips (clips.js), by track index: a slot on one track, now; and a
+    // track's clip stopped. For the headless audition and the verify skill.
+    launchClip: (i, slot) => launchClip(state.tracks[i], slot),
+    stopClip: (i) => stopClip(state.tracks[i]),
     // The open song's name as the shell shows it, so a bounce is named for
     // it (bounce.js). The shell owns which song is open; null means none.
     setSongName: (name) => {

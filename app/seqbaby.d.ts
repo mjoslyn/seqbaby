@@ -20,6 +20,10 @@ declare global {
       stop: () => Promise<void>;
       /** Prime a suspended AudioContext; call inside a user gesture. */
       unlock: () => void;
+      /** Launch pattern `slot` on track `i` alone, now (clips.js). */
+      launchClip: (i: number, slot: number) => boolean;
+      /** Stop track `i`'s clip: it plays nothing until one is launched. */
+      stopClip: (i: number) => void;
       /** The open song's name as the top bar shows it, for the bounce
        *  dialog's file name. null: no song is open. */
       setSongName: (name: string | null) => void;

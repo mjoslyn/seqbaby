@@ -74,6 +74,8 @@ export function validateSet(data) {
         warnings.push(`track ${i}: patterns is not an array, its patterns will be skipped`);
       if (td.length != null && !Number.isFinite(td.length))
         warnings.push(`track ${i}: length is not a number, defaulting to 16`);
+      if (td.arrangement != null && !Array.isArray(td.arrangement))
+        warnings.push(`track ${i}: arrangement is not an array, its blocks will be skipped`);
     });
   }
 

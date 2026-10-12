@@ -24,7 +24,7 @@
 
 import { Pattern, mini, MiniError, silence, stack, fastcat, slowcat, fast, late, rev, ply, degradeBy, euclidPat, signal, segment, sampleSignal, SIGNAL_NAMES } from "./miniNotation.js";
 import { addTrack, removeTrack, setTrack, setFilter, setFx, setFxChain, setParams, setEq, setComp, addLfo, setAutomation, applyPreset, resolveEngine,
-  patternOf, emptyPatternBlob, newSong, setTempo, setMeter, ENGINE_PANELS } from "./songBuilder.js";
+  patternOf, emptyPatternBlob, newSong, setTempo, setMeter, setBlocks, ENGINE_PANELS } from "./songBuilder.js";
 import { CURVED_LFO_CURVES, FX_STAGE_LEVEL_KEY, STEPS_PER_BAR, fxInstanceIds, fxStageLevel, fxStageOf, isFxInstanceId, voiceAutoKeysForEngineKey } from "./constants.js";
 import { SCALES, CHORD_TYPES } from "./theoryData.js";
 import { staticEngineByKey } from "./engineData.js";
@@ -736,7 +736,24 @@ const SIDE_EFFECTS = {
   setVoicingRange: () => {}, soundAlias: () => {}, aliasBank: () => {}, loadOrc: () => {},
   // seqbaby: play the patterns in turn, each for its repeat count (the pattern bar's chain mode)
   chain: (args, ctx) => { ctx.mode = args.length && (args[0] === false || args[0] === 0) ? "repeat" : "chain"; },
+  // seqbaby: each track plays its own timeline of blocks (`.blocks()` on a part; the pattern bar's arrange mode)
+  arrangement: (args, ctx) => { ctx.mode = args.length && (args[0] === false || args[0] === 0) ? "repeat" : "arrange"; },
 };
+
+// `.blocks([[pattern, fromBar, bars], ...])`: a track's arrangement, with the
+// pattern and the bar numbered from 1 as the pattern bar and the ruler number
+// them. Read into arrangement.js's 0-based blocks; a bad entry is a warning
+// and is left out, as a bad knob is.
+function readBlocks(list, ctx, pos) {
+  if (!Array.isArray(list)) throw new CodeError(".blocks() takes a list of [pattern, fromBar, bars]", pos);
+  const out = [];
+  list.forEach((e, i) => {
+    const [p, from, bars] = Array.isArray(e) ? e.map(x => numberOf(x, "blocks", ctx)) : [];
+    if (!(p >= 1 && p <= 32) || !(from >= 1) || !(bars >= 1)) { ctx.warn(`.blocks(): entry ${i + 1} is not [pattern 1..32, fromBar from 1, bars from 1]; left out`); return; }
+    out.push({ slot: Math.round(p) - 1, start: Math.round(from) - 1, bars: Math.round(bars) });
+  });
+  return out;
+}
 
 // ---- the pattern bank -----------------------------------------------------------
 // A seqbaby track has 32 pattern slots, and a song moves between them (the
@@ -834,6 +851,8 @@ function callMethod(target, name, args, ctx, pos) {
   if (isArrange(target)) return { ...target, entries: target.entries.map(([c, p]) => [c, callMethod(p, name, args, ctx, pos)]) };
   // .lock(): this pattern keeps a sound of its own (p-lock)
   if (name === "lock") return asPattern(target).withValue(v => ({ ...obj(v), _lock: args[0] !== false }));
+  // .blocks(): the track's arrangement, played in arrange mode (arrangement())
+  if (name === "blocks") { const blocks = readBlocks(args[0], ctx, pos); return asPattern(target).withValue(v => ({ ...obj(v), _blocks: blocks })); }
   if (JS_METHODS[name]) return JS_METHODS[name](target, args, ctx);
   if (NATIVE_METHODS.includes(name)) return withNative(target, name, args, ctx);
   if (name === "p" && args.length === 1) {
@@ -893,11 +912,43 @@ function readStrudel(src, ctx, outputs) {
     });
     ctx.mode = ctx.mode || "chain";
   };
+  // `name: arrange([4, a], [4, silence], [8, b])` is ONE track's timeline: its
+  // distinct parts take that track's slots from the first, each entry a block
+  // of its cycles as bars, `silence` a gap. The portable export of an
+  // arranged song writes this, one line per track.
+  // `$: arrange(...)` is the bank form above, unless `.p("name")` names the
+  // track (the portable export's spelling for a name that is not an identifier).
+  const pLabelOf = (v) => {
+    for (const [, pat] of v.entries) for (const h of pat.cycle(0)) { const l = h.value?._label; if (l) return l; }
+    return null;
+  };
+  const arrangeTrack = (v, st) => {
+    const bare = st.label.replace(/^_/, "");
+    const name = bare === "$" ? pLabelOf(v) : bare;
+    if (!name) { arrange(v, st.pos); return; }
+    const muted = st.label.startsWith("_");
+    const slots = new Map();          // pattern -> this track's slot
+    const blocks = [];
+    let bar = 0;
+    for (const [cycles, pat] of v.entries) {
+      const gap = pat === silence || ![...pat.cycle(0), ...pat.cycle(1)].length;
+      if (!gap) {
+        if (!slots.has(pat)) {
+          if (slots.size >= 32) { ctx.warn(`${name}: arrange() has more than 32 different parts; the rest were left out`); bar += cycles; continue; }
+          slots.set(pat, slots.size);
+          outputs.push({ label: name, index: n++, muted, pat, pos: st.pos, slot: slots.get(pat), blocks });
+        }
+        blocks.push({ slot: slots.get(pat), start: bar, bars: cycles });
+      }
+      bar += cycles;
+    }
+    ctx.mode = ctx.mode || "arrange";
+  };
   for (const st of stmts) {
     if (st.kind === "assign") { env[st.name] = evalJs(st.expr, env, ctx); continue; }
     const v = evalJs(st.expr, env, ctx);
     if (isSection(v)) { slot = v.slot; ctx.sections[slot] = { repeat: v.repeat, meter: v.meter }; continue; }
-    if (isArrange(v)) { arrange(v, st.pos); continue; }
+    if (isArrange(v)) { if (st.kind === "label") arrangeTrack(v, st); else arrange(v, st.pos); continue; }
     if (st.kind === "label") {
       const muted = st.label.startsWith("_");
       const name = st.label.replace(/^_/, "");
@@ -979,7 +1030,8 @@ export function realize(read) {
       const base = out.label ? (many ? `${out.label} ${soundName}` : out.label) : soundName;
       const nat = g.haps.reduce((acc, h) => mergeNative(acc, h.v._native), null) || {};
       parts.push({ g, name: uniqueName(trackNameOf(base), used), slot, label: out.label, muted, engine: g.voice.engine, sample: g.voice.sample, drum: g.voice.drum,
-        native: nat, lock: g.haps.some(h => h.v._lock), isNative: !!g.voice.native || Object.keys(nat).length > 0 });
+        native: nat, lock: g.haps.some(h => h.v._lock), isNative: !!g.voice.native || Object.keys(nat).length > 0,
+        blocks: out.blocks ?? g.haps.find(h => h.v._blocks)?.v._blocks ?? null });
     }
   }
   // A track has one speed across all its patterns, so the grid is chosen once
@@ -1298,6 +1350,11 @@ export function writeTracks(song, realized, { previous = [], pattern, touched: p
     const act = song.activePattern ?? 0;
     if (t.patterns?.[act]?.soundLocked && t.baseSound) restoreSound(t, t.baseSound);
     setTrack(song, i, { speed: first.speed, mute: parts.every(b => b.muted) });
+    // the arrangement: what .blocks() says, or none in arrange mode, where a
+    // track with no blocks plays nothing (a run outside arrange mode that names
+    // no blocks leaves the track's arrangement alone, as it leaves a knob)
+    const blocks = parts.find(b => b.blocks)?.blocks;
+    if (blocks || realized.mode === "arrange") tryDo(() => setBlocks(song, i, blocks || []));
     // the patterns: written where the code has a part, cleared where it owns the slot and has none
     for (const slot of new Set([...slotsNow, ...prevSlots])) {
       const bp = parts.find(b => slotOf(b) === slot);
@@ -1579,7 +1636,8 @@ export function sessionToCode(session, { native = false } = {}) {
   const used = [];
   for (let k = 0; k < 32; k++) if (writable.some(t => hasSteps(t, k))) used.push(k);
   const chain = s.patternMode === "chain";
-  const sectioned = native ? used.some(k => k !== act) || (chain && used.length > 0) : chain && used.length > 1;
+  const arranged = s.patternMode === "arrange";
+  const sectioned = native ? used.some(k => k !== act) || ((chain || arranged) && used.length > 0) : (chain && used.length > 1) || (arranged && used.length > 0);
   const slots = sectioned ? used : [act];
 
   const lines = [`setcpm(${round3(Number(s.bpm) || 120)}/4)`, ""];
@@ -1601,7 +1659,9 @@ export function sessionToCode(session, { native = false } = {}) {
     }
   } else if (native) {
     if (chain) lines.push("chain()", "");
+    if (arranged) lines.push("arrangement()", "");
     const shared = new Set();       // tracks whose shared sound has been written
+    const blocksWritten = new Set();   // a track's .blocks() goes on its first part
     for (const k of used) {
       const rep = s.patternRepeats?.[k] ?? 1, m = s.patternMeters?.[k];
       // a section with no .repeat plays its longest part, so say it only when it differs
@@ -1612,10 +1672,33 @@ export function sessionToCode(session, { native = false } = {}) {
         const locked = !!t.patterns[k].soundLocked;
         const withSound = locked || !shared.has(t);
         if (!locked) shared.add(t);
-        lines.push(partCode(t, k, { native, sound: locked ? soundAt(t, k) : baseOf(t), withSound, label: labels.get(t), lock: locked, tracks, warnings }));
+        const blocks = arranged && !blocksWritten.has(t) && t.arrangement?.length ? t.arrangement : null;
+        if (blocks) blocksWritten.add(t);
+        lines.push(partCode(t, k, { native, sound: locked ? soundAt(t, k) : baseOf(t), withSound, label: labels.get(t), lock: locked, blocks, tracks, warnings }));
         if (!names.includes(t.name)) names.push(t.name);
       }
       lines.push("");
+    }
+  } else if (arranged) {
+    // strudel.cc: one arrange() per track, its blocks as [bars, part] with
+    // silence for the gaps, in bars of the ruler (pattern 1's meter)
+    for (const t of writable) {
+      const blocks = (t.arrangement || []).filter(b => hasSteps(t, b.slot));
+      if (!blocks.length) continue;
+      const id = (k) => `${(labels.get(t) || `t${tracks.indexOf(t) + 1}`).replace(/\W/g, "_")}_p${k + 1}`;
+      for (const k of [...new Set(blocks.map(b => b.slot))].sort((x, y) => x - y)) {
+        lines.push(`const ${id(k)} = ${partCode(t, k, { native: false, sound: soundAt(t, k), bare: true, tracks, warnings })}`, "");
+      }
+      const entries = [];
+      let bar = 0;
+      for (const b of blocks) {
+        if (b.start > bar) entries.push(`[${b.start - bar}, silence]`);
+        entries.push(`[${b.bars}, ${id(b.slot)}]`);
+        bar = b.start + b.bars;
+      }
+      const label = labels.get(t);
+      lines.push(`${label ? `${label}: ` : "$: "}arrange(${entries.join(", ")})${label ? "" : `.p(${jsString(t.name)})`}`, "");
+      names.push(t.name);
     }
   } else {
     // strudel.cc: each pattern a stack, played in turn by arrange
@@ -1660,7 +1743,7 @@ const trackSound = (t) => ({ params: t.params, filter: t.filter, eq: t.eq, comp:
  * One track's part in one pattern: the notes, then the sound (`withSound`),
  * then the pattern's lanes. `bare` leaves off the label, for a stack.
  */
-function partCode(t, k, { native, sound, withSound = true, label = null, lock = false, bare = false, tracks, warnings }) {
+function partCode(t, k, { native, sound, withSound = true, label = null, lock = false, blocks = null, bare = false, tracks, warnings }) {
   const pat = t.patterns[k];
   const DP = defaultTrackParams(), DF = defaultFilter(), DFX = defaultFxConfig(), DC = defaultCompConfig();
   const q = (v) => v && typeof v === "object" && "mini" in v ? JSON.stringify(v.mini) : typeof v === "string" ? jsString(v) : typeof v === "boolean" ? (v ? 1 : 0) : round3(v);
@@ -1815,6 +1898,7 @@ function partCode(t, k, { native, sound, withSound = true, label = null, lock = 
     ctl.push([name, [{ mini: laneString(lane.values.map(v => port.units(v)), cycles) }]]);
   }
   if (lock) ctl.push(["lock", []]);
+  if (blocks) ctl.push(["blocks", [], `[${blocks.map(b => `[${b.slot + 1}, ${b.start + 1}, ${b.bars}]`).join(", ")}]`]);
   if (dropped.length) warnings.push(`${t.name}: ${dropped.join(", ")} ${dropped.length > 1 ? "have" : "has"} no Strudel equivalent and ${dropped.length > 1 ? "were" : "was"} left out`);
 
   // ---- the line ----------------------------------------------------------------

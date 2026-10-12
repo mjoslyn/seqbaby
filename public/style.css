@@ -561,6 +561,10 @@ button.sq-btn--danger { color: var(--danger); }
 .sq-track__oct { display: inline-flex; gap: 2px; }
 .sq-track__oct button { padding: 3px 8px; font-size: 11px; min-width: 44px; }
 .sq-track__len-extend { display: inline-flex; gap: 2px; }
+/* The slot badge (clips.js): only drawn while a clip has the track off the
+   scene's pattern, or stopped. */
+.sq-track__slot { padding: 2px 7px; font-size: 11px; border-radius: 10px; border: 1px solid var(--accent-2); color: var(--accent-2); background: color-mix(in oklab, var(--accent-2) 14%, transparent); }
+.sq-track__slot.is-off { border-color: var(--fg-dim); color: var(--fg-dim); background: transparent; text-decoration: line-through; }
 .sq-track__len-extend button { padding: 3px 8px; font-size: 11px; min-width: 36px; }
 /* Phone-only quick row (render.js's applyQuickRow): fx / filter / +1 / /2 /
    speed, pulled out of the head and dropped in right after it — a sibling,
@@ -4404,3 +4408,139 @@ body.vim-visual .sq-vim__mode { color: var(--accent-2); }
 .sq-vim__opt.is-on .sq-vim__opt-hint { color: inherit; opacity: 0.75; }
 .sq-vim__opt--more { color: var(--fg-dim); cursor: default; }
 
+
+/* ---- THE VIEWS: groove / clips / arrange (views.js) ---------------------
+   One song, three pictures. `body.view-<name>` says which is open; the groove
+   view is `#tracks` as it always was, the other two are sections after it,
+   drawn into only while open (clipView.js, arrangeView.js). Desktop only:
+   below 768px the switcher goes and the groove view stands. */
+.sq-view-switch { display: inline-flex; gap: 0; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.sq-view-switch button { border: 0; border-radius: 0; padding: 4px 10px; font-size: 12px; background: transparent; color: var(--fg-dim); cursor: pointer; }
+.sq-view-switch button + button { border-left: 1px solid var(--border); }
+.sq-view-switch button[aria-pressed="true"] { background: var(--accent); color: #0b0d10; }
+body.view-clips #tracks, body.view-arrange #tracks { display: none; }
+/* the pattern bar is the groove view's: the clip view's scene row and the
+   arrangement's own toggle do its jobs there */
+body.view-clips .sq-pattern-bar, body.view-arrange .sq-pattern-bar { display: none; }
+.sq-clips, .sq-arrange { max-width: 1400px; margin: 0 auto; padding: 12px 16px; }
+
+/* The eight track hues, as #tracks has them, for the two views' rows (buses
+   are never rows here and sit last in state.tracks, so the counts line up). */
+.sq-clips__rows > :nth-child(8n+1), .sq-arr__rows > :nth-child(8n+1) { --track-hue: 35;  --track-color: hsl(35 85% 58%); }
+.sq-clips__rows > :nth-child(8n+2), .sq-arr__rows > :nth-child(8n+2) { --track-hue: 232; --track-color: hsl(232 70% 68%); }
+.sq-clips__rows > :nth-child(8n+3), .sq-arr__rows > :nth-child(8n+3) { --track-hue: 297; --track-color: hsl(297 55% 68%); }
+.sq-clips__rows > :nth-child(8n+4), .sq-arr__rows > :nth-child(8n+4) { --track-hue: 120; --track-color: hsl(120 45% 52%); }
+.sq-clips__rows > :nth-child(8n+5), .sq-arr__rows > :nth-child(8n+5) { --track-hue: 253; --track-color: hsl(253 70% 72%); }
+.sq-clips__rows > :nth-child(8n+6), .sq-arr__rows > :nth-child(8n+6) { --track-hue: 318; --track-color: hsl(318 65% 68%); }
+.sq-clips__rows > :nth-child(8n+7), .sq-arr__rows > :nth-child(8n+7) { --track-hue: 155; --track-color: hsl(155 45% 50%); }
+.sq-clips__rows > :nth-child(8n+8), .sq-arr__rows > :nth-child(8n+8) { --track-hue: 275; --track-color: hsl(275 55% 70%); }
+
+/* the strip at the left of a row: name, mute, solo, and the row's own button */
+.sq-clips__strip, .sq-arr__strip {
+  width: 150px; flex: 0 0 150px; display: flex; align-items: center; gap: 4px; padding: 0 6px 0 10px;
+  border-left: 3px solid var(--track-color, var(--border)); font-size: 12px; min-width: 0;
+}
+.sq-clips__name, .sq-arr__name { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg); }
+.sq-clips__strip button, .sq-arr__strip button { padding: 2px 6px; font-size: 11px; min-width: 22px; }
+.sq-clips__mute[aria-pressed="true"], .sq-arr__mute[aria-pressed="true"] { background: var(--danger); color: #0b0d10; border-color: var(--danger); }
+.sq-clips__solo[aria-pressed="true"], .sq-arr__solo[aria-pressed="true"] { background: var(--accent); color: #0b0d10; border-color: var(--accent); }
+.sq-clips__row.is-muted .sq-clips__cells, .sq-arr__row.is-muted .sq-arr__lane { opacity: 0.45; }
+
+/* clips: a toolbar, then a row of 32 cells per track, scenes above */
+.sq-clips__bar { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; font-size: 12px; }
+.sq-clips__play { min-width: 64px; }
+.sq-clips__play.is-playing { background: var(--accent-2); color: #0b0d10; border-color: var(--accent-2); }
+.sq-clips__mode[aria-pressed="true"], .sq-clips__switch[aria-pressed="true"] { background: var(--accent-2); color: #0b0d10; border-color: var(--accent-2); }
+.sq-clips__head, .sq-clips__row { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.sq-clips__head { margin-bottom: 8px; }
+.sq-clips__cells { --clip-gap: 3px; flex: 1 1 0; display: grid; grid-template-columns: repeat(32, minmax(0, 1fr)); gap: var(--clip-gap); }
+/* the fill handle: a cell's right edge, dragged across the cells beside it
+   to copy the clip into those scenes (shift: its length instead, the cell
+   growing over its neighbours, an explicit width on a grid item overflowing
+   its column); the targets light up while it lasts, and a multi-bar pattern
+   wears its bar count */
+.sq-clip__fill { position: absolute; right: -2px; top: 0; bottom: 0; width: 7px; cursor: ew-resize; border-radius: 0 3px 3px 0; }
+.sq-clip:hover .sq-clip__fill { background: color-mix(in oklab, var(--fg) 18%, transparent); }
+.sq-clip__bars { position: absolute; right: 3px; bottom: 1px; font-style: normal; font-size: 8px; line-height: 1; color: var(--fg); opacity: 0.8; }
+.sq-clip.is-long { border-right-color: color-mix(in oklab, var(--fg) 30%, transparent); }
+.sq-clip.is-filling { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.sq-clip.is-growing { z-index: 2; border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.sq-clip.is-fill-target { border-color: var(--accent); border-style: dashed; background: color-mix(in oklab, var(--accent) 25%, var(--step)); }
+.sq-clip, .sq-clips__scene {
+  position: relative; height: 28px; padding: 0; border-radius: 3px; border: 1px solid transparent;
+  background: var(--step); color: var(--fg-dim); font-size: 10px; cursor: pointer; display: grid; place-items: center;
+}
+.sq-clips__scene { height: 22px; background: color-mix(in oklab, var(--bg-3) 70%, var(--step)); }
+.sq-clips__scene.is-filled { color: var(--fg); }
+.sq-clips__scene.is-active { border-color: var(--step-now); box-shadow: 0 0 0 1px var(--step-now) inset; }
+.sq-clips__scene.is-queued, .sq-clip.is-queued { border-color: var(--accent-2); }
+/* --clip-c is the shade this distinct clip wears (clipView.js), the track colour by default */
+.sq-clip.is-filled { background: color-mix(in oklab, var(--clip-c, var(--track-color, var(--step-on))) 45%, var(--step)); color: var(--fg); }
+.sq-clip.is-scene { box-shadow: 0 0 0 1px color-mix(in oklab, var(--step-now) 35%, transparent) inset; }
+.sq-clip.is-now { border-color: var(--step-now); color: var(--fg); background: color-mix(in oklab, var(--clip-c, var(--track-color, var(--step-on))) 75%, var(--step)); }
+body.sq-playing .sq-clip.is-now::after { content: ""; position: absolute; left: 4px; bottom: 3px; width: 5px; height: 5px; border-radius: 50%; background: var(--step-now); animation: sq-clip-pulse 0.5s ease-in-out infinite alternate; }
+@keyframes sq-clip-pulse { from { opacity: 0.35; } to { opacity: 1; } }
+.sq-clip.is-locked::before { content: ""; position: absolute; right: 3px; top: 3px; width: 5px; height: 5px; border-radius: 50%; background: var(--accent); }
+.sq-clip.is-drag-over { border-color: var(--accent); background: color-mix(in oklab, var(--accent) 25%, var(--step)); }
+.sq-clips__stop { font-size: 10px; }
+.sq-clips__stop.is-on { color: var(--danger); border-color: var(--danger); }
+.sq-clips__rec[aria-pressed="true"], .sq-arr__rec[aria-pressed="true"] { background: var(--danger); color: #0b0d10; border-color: var(--danger); }
+.sq-clips__head .sq-clips__strip { justify-content: flex-end; border-left-color: transparent; }
+.sq-clips__row.is-selected .sq-clips__strip, .sq-arr__row.is-selected .sq-arr__strip { background: color-mix(in oklab, var(--track-color, var(--accent)) 18%, transparent); border-radius: 0 4px 4px 0; }
+.sq-clips__name, .sq-arr__name { text-align: left; background: transparent; border: 0; padding: 2px 4px; cursor: pointer; }
+.sq-clips__name:hover, .sq-arr__name:hover { color: var(--accent); }
+/* the selected track's own card, moved in from #tracks (trackDetail.js) */
+.sq-track-detail { margin-top: 14px; display: grid; gap: 8px; }
+.sq-track-detail__title { font-size: 12px; color: var(--fg-dim); padding-left: 4px; }
+.sq-track-detail > .sq-track::before { background: var(--track-color, var(--accent)); }
+
+/* arrange: a ruler, a lane per track, blocks on it */
+.sq-arr__bar-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 12px; }
+.sq-arr__bar-row .sq-arr__len { color: var(--fg-dim); margin-left: auto; }
+.sq-arr__play.is-playing { background: var(--accent-2); color: #0b0d10; border-color: var(--accent-2); }
+.sq-arr__zoom { display: inline-flex; gap: 2px; }
+.sq-arr__scroll { overflow-x: auto; padding-bottom: 6px; }
+.sq-arr__grid { position: relative; min-width: max-content; --arr-bar-w: 48px; }
+.sq-arr__ruler, .sq-arr__row { display: flex; align-items: stretch; }
+.sq-arr__ruler { height: 22px; margin-bottom: 4px; }
+.sq-arr__ruler .sq-arr__strip { border-left-color: transparent; }
+.sq-arr__row { height: 40px; margin-bottom: 4px; }
+.sq-arr__lane { position: relative; flex: 0 0 auto; height: 100%; background: var(--step); border-radius: 3px;
+  background-image: linear-gradient(to right, var(--border) 1px, transparent 1px); background-size: var(--arr-bar-w) 100%; }
+.sq-arr__lane--ruler { background: transparent; }
+.sq-arr__bar { position: absolute; top: 0; height: 100%; font-size: 10px; color: var(--fg-dim); border-left: 1px solid var(--border); }
+.sq-arr__bar.is-four { border-left-color: var(--fg-dim); }
+.sq-arr__bar span { position: absolute; left: 4px; top: 3px; }
+.sq-arr__bar i { position: absolute; bottom: 0; height: 5px; border-left: 1px solid var(--border); }
+.sq-arr__block {
+  position: absolute; top: 3px; bottom: 3px; border-radius: 4px; box-sizing: border-box; cursor: grab; user-select: none;
+  background: color-mix(in oklab, var(--track-color, var(--step-on)) 55%, var(--bg-3));
+  border: 1px solid color-mix(in oklab, var(--track-color, var(--step-on)) 80%, transparent);
+  display: flex; align-items: center; gap: 4px; padding: 0 6px; overflow: hidden; font-size: 11px; color: var(--fg);
+}
+.sq-arr__block.is-empty { background: repeating-linear-gradient(135deg, color-mix(in oklab, var(--track-color, var(--step-on)) 30%, var(--bg-3)) 0 6px, var(--bg-3) 6px 12px); color: var(--fg-dim); }
+.sq-arr__block.is-selected { outline: 2px solid var(--accent); outline-offset: -1px; }
+.sq-arr__block.is-now { border-color: var(--step-now); box-shadow: 0 0 0 1px var(--step-now) inset; }
+.sq-arr__block.is-ghost { opacity: 0.6; pointer-events: none; }
+/* a recording in progress, not yet in the arrangement (clips.js finishTake) */
+.sq-arr__block.is-take { pointer-events: none; opacity: 0.75; border-style: dashed; border-color: var(--danger); background: color-mix(in oklab, var(--danger) 25%, var(--bg-3)); }
+.sq-arr__slot { padding: 1px 5px; font-size: 11px; border-radius: 3px; background: color-mix(in oklab, var(--bg) 55%, transparent); border: 1px solid transparent; color: inherit; cursor: pointer; }
+.sq-arr__block.is-selected .sq-arr__slot { border-color: var(--accent); }
+.sq-arr__lock { color: var(--accent); font-size: 8px; }
+.sq-arr__handle { position: absolute; right: 0; top: 0; bottom: 0; width: 8px; cursor: ew-resize; }
+.sq-arr__handle::after { content: ""; position: absolute; right: 2px; top: 30%; bottom: 30%; border-right: 2px solid color-mix(in oklab, var(--fg) 50%, transparent); }
+.sq-arr__on { color: var(--fg-dim); font-size: 10px; }
+.sq-arr__head { position: absolute; top: 0; bottom: 0; width: 0; border-left: 2px solid var(--step-now); pointer-events: none; z-index: 2; }
+.sq-arr__end { position: absolute; top: 0; bottom: 0; width: 0; border-left: 1px dashed var(--accent-2); pointer-events: none; opacity: 0.7; }
+.sq-arr__lane--ruler { cursor: pointer; }
+/* the start marker: a flag on the ruler and a faint line down the lanes */
+.sq-arr__start { position: absolute; top: 0; bottom: 0; width: 0; border-left: 1px solid color-mix(in oklab, var(--accent) 55%, transparent); pointer-events: none; z-index: 1; }
+.sq-arr__start::before { content: ""; position: absolute; top: 0; left: -5px; border: 5px solid transparent; border-top: 8px solid var(--accent); }
+.sq-arr__picker { position: fixed; z-index: 210; display: grid; grid-template-columns: repeat(8, 32px); gap: 3px; padding: 6px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 8px 24px rgb(0 0 0 / 0.4); }
+.sq-arr__picker .sq-pattern__cell { min-height: 24px; }
+
+@media (max-width: 768px) {
+  /* desktop only in this cut: the groove view stands whatever was remembered */
+  #view-switch, .sq-clips, .sq-arrange { display: none !important; }
+  body.view-clips #tracks, body.view-arrange #tracks { display: grid; }
+}

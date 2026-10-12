@@ -1,9 +1,11 @@
 import { PATTERN_COUNT } from "./constants.js";
+import { arrangementBars } from "./arrangement.js";
+import { stepsPerBarForMeter, transportMeter } from "./meter.js";
 import { setStatus } from "./dom.js";
-import { ICON_CHAIN, ICON_REPEAT } from "./icons.js";
 import { currentBpm } from "./lfo.js";
 import { suggestSetName } from "./session.js";
 import { isPatternNonEmpty, state, switchPattern } from "./state.js";
+import { setPatternMode } from "./patternBar.js";
 import { ensureAudio, togglePlay } from "./transport.js";
 
 export async function bounceAudio({ bars = 1, format = "wav", chainWhole = false, filename = null, fileStem = "bounce" } = {}) {
@@ -29,17 +31,15 @@ export async function bounceAudio({ bars = 1, format = "wav", chainWhole = false
   if (state.activePattern !== 0) switchPattern(0);
 
   const bpm = currentBpm();
-  const durSec = bars * 4 * (60 / bpm);
+  // A whole-song render of an arrangement plays the arrangement, in bars of
+  // its ruler; otherwise the chain, in 4/4 bars as it always was.
+  const arranged = chainWhole && state.patternMode === "arrange";
+  const durSec = arranged
+    ? bars * stepsPerBarForMeter(transportMeter()) * (60 / bpm / 4)
+    : bars * 4 * (60 / bpm);
 
   const prevMode = state.patternMode;
-  if (chainWhole) {
-    state.patternMode = "chain";
-    const modeBtn = document.getElementById("pattern-mode");
-    if (modeBtn) {
-      modeBtn.setAttribute("aria-pressed", "true");
-      try { modeBtn.innerHTML = ICON_CHAIN; } catch {}
-    }
-  }
+  if (chainWhole && !arranged) setPatternMode("chain");
 
   // Progress dialog — ticks once per animation frame until total elapsed matches
   // the render duration + tail. Auto-closes when the render completes.
@@ -56,14 +56,7 @@ export async function bounceAudio({ bars = 1, format = "wav", chainWhole = false
   try { masterOut.disconnect(recDest); } catch {}
   try { masterOut.connect(ctx.destination); } catch {}
 
-  if (chainWhole) {
-    state.patternMode = prevMode;
-    const modeBtn = document.getElementById("pattern-mode");
-    if (modeBtn) {
-      modeBtn.setAttribute("aria-pressed", String(prevMode === "chain"));
-      try { modeBtn.innerHTML = prevMode === "chain" ? ICON_CHAIN : ICON_REPEAT; } catch {}
-    }
-  }
+  if (chainWhole && !arranged) setPatternMode(prevMode);
 
   progress.setStatus("encoding…");
   const raw = new Blob(chunks, { type: mime || "audio/webm" });
@@ -121,8 +114,10 @@ export function openBounceProgressDialog({ totalSec, bars, format }) {
   };
 }
 
-// Total bars across every non-empty pattern (respecting per-pattern repeat counts).
+// Total bars across every non-empty pattern (respecting per-pattern repeat
+// counts), or the arrangement's length in arrange mode.
 export function trackTotalBars() {
+  if (state.patternMode === "arrange") return arrangementBars(state.tracks);
   let bars = 0;
   for (let i = 0; i < PATTERN_COUNT; i++) {
     if (!isPatternNonEmpty(i)) continue;

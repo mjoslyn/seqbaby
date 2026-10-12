@@ -20,8 +20,17 @@ export function stepsPerBarForMeter(meter) {
   const num = Math.max(1, Math.round(Number(meter?.num) || 4));
   return num * stepsPerBeatForMeter(meter);
 }
+/** The scene's meter: the pattern the pattern bar is on. */
 export function activeMeter() {
   return state.patternMeters[state.activePattern] || { num: 4, den: 4 };
+}
+/**
+ * The meter the TRANSPORT counts bars in: the scene's, except in arrange mode,
+ * where the ruler is slot 0's (the song's default meter, which every slot not
+ * customized follows). Bar lines, the metronome and the beat ring all read this.
+ */
+export function transportMeter() {
+  return state.patternMode === "arrange" ? patternMeter(0) : activeMeter();
 }
 export function patternMeter(idx) {
   return state.patternMeters[idx] || { num: 4, den: 4 };
