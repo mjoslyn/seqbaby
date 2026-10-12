@@ -22,18 +22,19 @@
  * (trackDetail.js): its instrument row, inline fx / mod / filter panels and
  * the step grid of the pattern it is on. So the selected CLIP is the one its
  * track is on: clicking a cell launches it and selects the track; clicking a
- * track's name selects without launching.
+ * track's name selects without launching; double-clicking a cell mutes the
+ * clip (the track stops, as its ■ does).
  */
 
 import { PATTERN_COUNT } from "./constants.js";
 import { setStatus } from "./dom.js";
-import { announceClips, launchClip, requestClipLaunch, setArrangeRecord, stopAllClips, stopClip } from "./clips.js";
+import { announceClips, requestClipLaunch, setArrangeRecord, stopAllClips, stopClip } from "./clips.js";
 import { setPatternMode } from "./patternBar.js";
 import { patternLocked } from "./patternSound.js";
 import { isPatternNonEmpty, requestPatternSwitch, state, trackSlot } from "./state.js";
 import { writePatternOnto } from "./track.js";
 import { makeTrackDetail } from "./trackDetail.js";
-import { onViewChange, setView } from "./views.js";
+import { onViewChange } from "./views.js";
 
 let root = null;
 let grid = null;      // the rebuilt half: scenes and cells
@@ -91,14 +92,14 @@ function render() {
       if (i === t._queuedSlot) cls.push("is-queued");
       if (patternLocked(t, i)) cls.push("is-locked");
       if (i === ap) cls.push("is-scene");
-      cells.push(`<button type="button" class="${cls.join(" ")}" data-slot="${i}" draggable="true" title="${esc(t.name)}: pattern ${i + 1}. Click to launch it on this track; drag onto another cell to copy it there">${i + 1}</button>`);
+      cells.push(`<button type="button" class="${cls.join(" ")}" data-slot="${i}" draggable="true" title="${esc(t.name)}: pattern ${i + 1}. Click to launch it on this track, double-click to mute it; drag onto another cell to copy it there">${i + 1}</button>`);
     }
     return `<div class="sq-clips__row${t.muted ? " is-muted" : ""}" data-track-id="${t.id}">
       <div class="sq-clips__strip">
         <button type="button" class="sq-clips__name" data-act="select" title="${esc(t.name)}: show this track's instrument, effects and pattern below">${esc(t.name)}</button>
         <button type="button" class="sq-clips__mute" data-act="mute" aria-pressed="${!!t.muted}" title="mute">m</button>
         <button type="button" class="sq-clips__solo" data-act="solo" aria-pressed="${!!t.soloed}" title="solo">s</button>
-        <button type="button" class="sq-clips__stop${t._clipOff ? " is-on" : ""}" data-act="stop" title="stop this track's clip">■</button>
+        <button type="button" class="sq-clips__stop${t._clipOff ? " is-on" : ""}" data-act="stop" title="${t._clipOff ? `play this track's clip again (pattern ${slot + 1})` : "stop this track's clip"}">${t._clipOff ? "▶" : "■"}</button>
       </div>
       <div class="sq-clips__cells">${cells.join("")}</div>
     </div>`;
@@ -138,21 +139,21 @@ function onClick(e) {
     scheduleClipPaint();
     return;
   }
-  if (act === "stop") { stopClip(t); return; }
+  // the row's square is a toggle: stopped, it plays the track's clip again,
+  // the way a cell click would (so in finish mode it waits for the bar)
+  if (act === "stop") { if (t._clipOff) requestClipLaunch(t, trackSlot(t)); else stopClip(t); return; }
   if (act === "select") { detail.select(t); return; }
   const cell = e.target.closest(".sq-clip");
   if (cell) { requestClipLaunch(t, Number(cell.dataset.slot)); detail.select(t); }
 }
 
 function onDblClick(e) {
-  // edit it: the groove view, with this track on that pattern
+  // mute the clip: the track stops (its ■ lights); a single click plays it again
   const cell = e.target.closest(".sq-clip");
   const row = e.target.closest(".sq-clips__row");
   const t = row && trackById(row.dataset.trackId);
   if (!cell || !t) return;
-  launchClip(t, Number(cell.dataset.slot));
-  setView("groove");
-  t.el?.scrollIntoView({ block: "center", behavior: "smooth" });
+  stopClip(t);
 }
 
 function onDragStart(e) {

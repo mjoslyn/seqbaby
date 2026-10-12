@@ -2306,8 +2306,11 @@ block   t.arrangement[i]    ─── { slot, start, bars }: a clip at a bar, fo
   modal. Nothing is copied, so every listener, knob and `data-track-id`
   lookup keeps working, and the grid shows the clip the track is on because
   the alias is the track's: the selected clip IS the one its track is on. In
-  the clip view a cell click launches and selects, a name selects alone; in
-  the arrangement a block or a name selects. The clip view's toolbar carries
+  the clip view a cell click launches and selects, a double-click mutes the
+  clip (the track stops, as its ■ does; stopped, that square is a ▶ that
+  plays the clip again through `requestClipLaunch`, so finish mode waits
+  for the bar), a name selects alone; in the arrangement a block or a name
+  selects. The clip view's toolbar carries
   `play` (it `.click()`s the transport's own button, so a jam's shared start
   goes the same way), the repeat / chain toggle, `rec` and `stop all`, since
   the pattern bar is hidden there; the transport announces `seqbaby:transport`
