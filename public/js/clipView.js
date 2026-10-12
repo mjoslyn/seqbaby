@@ -25,6 +25,13 @@
  * track's name selects without launching; double-clicking a cell mutes the
  * clip (the track stops, as its ■ does).
  *
+ * Every DISTINCT clip on a track gets its own shade of the track's colour
+ * (`clipShades`: a signature of the pattern's per-step arrays, numbered in
+ * order of first appearance across the 32 slots, so two copies of one pattern
+ * look the same and a pattern that differs by one note does not). The shade
+ * is a hue nudge plus a lightness step off `--track-hue` (`SHADES`), written
+ * on the cell as `--clip-c`; the first distinct clip is the track's own colour.
+ *
  * A clip's length in bars is written on its cell, and the cell's right edge
  * is a FILL handle: drag it across the cells beside it and the clip is copied
  * into each of those scenes on release (a spreadsheet's fill handle), through
@@ -82,6 +89,34 @@ const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "
 const trackById = (id) => state.tracks.find((t) => String(t.id) === String(id));
 const rows = () => state.tracks.filter((t) => t.engineKey !== "bus");
 
+// The shades a track's distinct clips wear, as [hue nudge (deg), saturation
+// %, lightness %] off the row's `--track-hue`. Shade 0 is the track's own
+// colour (no override); the rest stay within a third of a turn of it, so a
+// clip never reads as another track's.
+const SHADES = [
+  null, [22, 65, 55], [-22, 65, 66], [0, 40, 46], [12, 85, 72], [-12, 45, 58], [36, 70, 62], [-36, 55, 68],
+  [8, 30, 40], [-8, 90, 76], [28, 50, 50], [-28, 80, 60],
+];
+
+const SIG_FIELDS = ["steps", "lengths", "notes", "velocities", "chords", "extraNotes", "extraLengths", "ratchets", "arps", "offsets", "strums"];
+
+/** A number per slot: which distinct clip it is on this track, in order of first appearance. Empty slots get -1. */
+export function clipShades(t) {
+  const seen = new Map();
+  const out = [];
+  for (let i = 0; i < PATTERN_COUNT; i++) {
+    const p = t.patterns?.[i];
+    if (!p?.steps?.some(Boolean)) { out.push(-1); continue; }
+    let sig = "";
+    for (const k of SIG_FIELDS) sig += JSON.stringify(p[k] ?? null) + "|";
+    sig += JSON.stringify(p.automation ?? null);
+    let n = seen.get(sig);
+    if (n == null) { n = seen.size; seen.set(sig, n); }
+    out.push(n);
+  }
+  return out;
+}
+
 function render() {
   if (!root) return;
   const ap = state.activePattern;
@@ -96,9 +131,12 @@ function render() {
   const trackRows = rows().map((t) => {
     const slot = trackSlot(t);
     const cells = [];
+    const shades = clipShades(t);
     for (let i = 0; i < PATTERN_COUNT; i++) {
       const p = t.patterns?.[i];
       const cls = ["sq-clip"];
+      const shade = SHADES[shades[i] % SHADES.length];
+      const style = shades[i] > 0 && shade ? ` style="--clip-c:hsl(calc(var(--track-hue) + ${shade[0]}) ${shade[1]}% ${shade[2]}%)"` : "";
       const bars = p ? Math.max(1, Math.ceil(p.steps.length / stepsPerBarForMeter(patternMeter(i)))) : 1;
       if (bars > 1) cls.push("is-long");
       if (p?.steps?.some(Boolean)) cls.push("is-filled");
@@ -106,7 +144,7 @@ function render() {
       if (i === t._queuedSlot) cls.push("is-queued");
       if (patternLocked(t, i)) cls.push("is-locked");
       if (i === ap) cls.push("is-scene");
-      cells.push(`<button type="button" class="${cls.join(" ")}" data-slot="${i}" draggable="true" title="${esc(t.name)}: pattern ${i + 1}, ${bars} bar${bars === 1 ? "" : "s"}. Click to launch it on this track, double-click to mute it; drag onto another cell to copy it there; drag its right edge across the cells beside it to copy it into those scenes, or shift-drag it to make it longer or shorter">${i + 1}${bars > 1 ? `<i class="sq-clip__bars">${bars}</i>` : ""}<span class="sq-clip__fill"></span></button>`);
+      cells.push(`<button type="button" class="${cls.join(" ")}" data-slot="${i}"${style} draggable="true" title="${esc(t.name)}: pattern ${i + 1}, ${bars} bar${bars === 1 ? "" : "s"}. Click to launch it on this track, double-click to mute it; drag onto another cell to copy it there; drag its right edge across the cells beside it to copy it into those scenes, or shift-drag it to make it longer or shorter">${i + 1}${bars > 1 ? `<i class="sq-clip__bars">${bars}</i>` : ""}<span class="sq-clip__fill"></span></button>`);
     }
     return `<div class="sq-clips__row${t.muted ? " is-muted" : ""}" data-track-id="${t.id}">
       <div class="sq-clips__strip">
@@ -136,6 +174,9 @@ function render() {
 }
 
 function onClick(e) {
+  // the click that follows a handle drag (the pointer was captured, so it
+  // lands on the source cell) is not a launch
+  if (e.target.closest(".sq-clip__fill") || dragged) { dragged = false; return; }
   const scene = e.target.closest("[data-scene]");
   if (scene) { requestPatternSwitch(Number(scene.dataset.scene)); return; }
   const act = e.target.closest("[data-act]")?.dataset.act;
@@ -181,6 +222,7 @@ function onDblClick(e) {
 
 // ---- the length drag ---------------------------------------------------------
 
+let dragged = false;   // a handle drag just ended: swallow the click it leaves behind
 let fill = null;   // { mode: "fill" | "grow", t, slot, cell, row, x0, pitch, from, to, spb, bars0, bars, maxBars }
 
 function onFillStart(e) {
@@ -246,6 +288,8 @@ function onFillEnd() {
   const f = fill;
   fill = null;
   if (!f) return;
+  dragged = true;
+  setTimeout(() => { dragged = false; }, 0);   // only the click of this gesture
   for (const c of f.row.querySelectorAll(".sq-clip")) { c.classList.remove("is-fill-target", "is-filling", "is-growing"); c.style.width = ""; c.draggable = true; }
   const { t, slot } = f;
   if (f.mode === "grow") {

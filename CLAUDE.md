@@ -2343,7 +2343,12 @@ block   t.arrangement[i]    ─── { slot, start, bars }: a clip at a bar, fo
   events the code drawer listens to. Their mute / solo buttons `.click()`
   the track's own, so one piece of code owns what mute means; their hues are
   the track list's eight, on `:nth-child` of the rows (buses are never rows
-  and sit last, so the counts line up). A clip dragged onto another cell is
+  and sit last, so the counts line up). In the clip view every DISTINCT clip
+  on a track wears a shade of that hue (`clipShades`: a signature of the
+  pattern's per-step arrays, numbered by first appearance; `SHADES` is a hue
+  nudge within a third of a turn plus a lightness step, written as `--clip-c`
+  on the cell), so two copies look the same and a one-note difference does
+  not. A clip dragged onto another cell is
   `writePatternOnto` (track.js), the routine the track head's paste uses, so
   lanes the target engine cannot play are dropped the same way. A cell's
   right edge (`.sq-clip__fill`) is a fill handle: dragged across the cells

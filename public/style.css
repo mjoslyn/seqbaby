@@ -4474,9 +4474,10 @@ body.view-clips .sq-pattern-bar, body.view-arrange .sq-pattern-bar { display: no
 .sq-clips__scene.is-filled { color: var(--fg); }
 .sq-clips__scene.is-active { border-color: var(--step-now); box-shadow: 0 0 0 1px var(--step-now) inset; }
 .sq-clips__scene.is-queued, .sq-clip.is-queued { border-color: var(--accent-2); }
-.sq-clip.is-filled { background: color-mix(in oklab, var(--track-color, var(--step-on)) 45%, var(--step)); color: var(--fg); }
+/* --clip-c is the shade this distinct clip wears (clipView.js), the track colour by default */
+.sq-clip.is-filled { background: color-mix(in oklab, var(--clip-c, var(--track-color, var(--step-on))) 45%, var(--step)); color: var(--fg); }
 .sq-clip.is-scene { box-shadow: 0 0 0 1px color-mix(in oklab, var(--step-now) 35%, transparent) inset; }
-.sq-clip.is-now { border-color: var(--step-now); color: var(--fg); background: color-mix(in oklab, var(--track-color, var(--step-on)) 75%, var(--step)); }
+.sq-clip.is-now { border-color: var(--step-now); color: var(--fg); background: color-mix(in oklab, var(--clip-c, var(--track-color, var(--step-on))) 75%, var(--step)); }
 body.sq-playing .sq-clip.is-now::after { content: ""; position: absolute; left: 4px; bottom: 3px; width: 5px; height: 5px; border-radius: 50%; background: var(--step-now); animation: sq-clip-pulse 0.5s ease-in-out infinite alternate; }
 @keyframes sq-clip-pulse { from { opacity: 0.35; } to { opacity: 1; } }
 .sq-clip.is-locked::before { content: ""; position: absolute; right: 3px; top: 3px; width: 5px; height: 5px; border-radius: 50%; background: var(--accent); }
