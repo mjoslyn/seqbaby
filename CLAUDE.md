@@ -2385,7 +2385,12 @@ block   t.arrangement[i]    ─── { slot, start, bars }: a clip at a bar, fo
   than a modulo of the arrangement's length.
 - **The view keeps its scroll and can follow.** It is rebuilt whole on every
   bar line while playing, so `render` carries `scrollLeft` across the
-  rebuild (rebuilding the scroller used to put it back at bar 1). `follow`
+  rebuild (rebuilding the scroller used to put it back at bar 1). The clip
+  view zooms too (its toolbar's − / +, or ctrl/⌘-wheel and a pinch over the
+  grid, `ZOOMS` in clipView.js, remembered per browser as
+  `seqbaby.clipZoom.v1`): the first level fits all 32 columns to the width,
+  the others are fixed column widths with taller rows, scrolling sideways
+  under a sticky strip, the column under the pointer held in place. `follow`
   (remembered per browser) turns the page when the head nears the right
   edge; a scroll the view did not make switches it off. The strip column is
   sticky. Each block draws its pattern, one pass of its notes as an SVG mask

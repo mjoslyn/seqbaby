@@ -4465,6 +4465,17 @@ body.view-clips .sq-pattern-bar, body.view-arrange .sq-pattern-bar { display: no
 .sq-clips__head, .sq-clips__row { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
 .sq-clips__head { margin-bottom: 8px; }
 .sq-clips__cells { --clip-gap: 3px; flex: 1 1 0; display: grid; grid-template-columns: repeat(32, minmax(0, 1fr)); gap: var(--clip-gap); }
+/* zoom (clipView.js): fit is the 32 columns across the width; zoomed, each
+   column is --clip-w wide and the grid scrolls sideways under a sticky strip */
+.sq-clips__zoom { display: inline-flex; gap: 2px; margin-left: auto; }
+/* only zoomed: an overflow box would clip the scene +'s and a growing cell in fit */
+.sq-clips__grid.is-zoomed .sq-clips__scroll { overflow-x: auto; padding: 2px 10px 6px 0; }
+.sq-clips__grid.is-zoomed .sq-clips__table { width: max-content; }
+.sq-clips__grid.is-zoomed .sq-clips__cells { flex: 0 0 auto; grid-template-columns: repeat(32, var(--clip-w)); }
+.sq-clips__grid.is-zoomed .sq-clips__strip { position: sticky; left: 0; z-index: 3; background: var(--bg); align-self: stretch; }
+.sq-clips__grid.is-zoomed .sq-clips__row.is-selected .sq-clips__strip { background: color-mix(in oklab, var(--track-color, var(--accent)) 18%, var(--bg)); }
+.sq-clips__grid.is-zoomed .sq-clip.has-notes .sq-clip__n { font-size: 10px; }
+.sq-clips__grid.is-zoomed .sq-clip__notes { top: 14px; bottom: 6px; left: 4px; right: 4px; }
 /* the fill handle: a cell's right edge, dragged across the cells beside it
    to copy the clip into those scenes (shift: its length instead, the cell
    growing over its neighbours, an explicit width on a grid item overflowing
@@ -4506,7 +4517,7 @@ body.sq-playing .sq-clip.is-now::after { content: ""; position: absolute; left: 
 @keyframes sq-clip-pulse { from { opacity: 0.35; } to { opacity: 1; } }
 /* a clip's notes, one pass squeezed into the cell (patternPicture.js); the
    number moves to the corner so the picture has the middle */
-.sq-clips__rows .sq-clip { height: 34px; }
+.sq-clips__rows .sq-clip { height: var(--clip-h, 34px); }
 .sq-clip.has-notes { place-items: start; }
 .sq-clip__n { position: relative; z-index: 1; line-height: 1; }
 .sq-clip.has-notes .sq-clip__n { padding: 2px 0 0 3px; font-size: 8px; opacity: 0.75; }

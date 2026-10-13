@@ -41,6 +41,13 @@
  * time (grown by duplicating what is there, as the track head's x2 does;
  * shrunk by truncating): the cell previews its width over its neighbours.
  * Both are relative to the grab, as a knob's drag is.
+ *
+ * **Zoom** (the toolbar's − / +, or ctrl/⌘-wheel and a trackpad pinch over
+ * the grid): the first level fits all 32 columns to the width, as the view
+ * always did; the others are fixed column widths with taller rows, the grid
+ * scrolling sideways under a sticky strip. A zoom keeps the column under the
+ * pointer (or the middle of the view, for the buttons) where it was, and the
+ * scroll survives the whole-grid rebuild. Remembered per browser.
  */
 
 import { PATTERN_COUNT } from "./constants.js";
@@ -59,6 +66,55 @@ let root = null;
 let grid = null;      // the rebuilt half: scenes and cells
 let detail = null;    // the persistent half: the selected track's card (trackDetail.js)
 let raf = 0;
+
+// zoom levels: [column width px (0 fits the width), row height px, note thickness]
+const ZOOMS = [[0, 34, 2.4], [64, 46, 2], [96, 60, 1.7], [144, 78, 1.5]];
+const ZOOM_KEY = "seqbaby.clipZoom.v1";
+let zoom = readZoom();
+let wheelAcc = 0;
+
+function readZoom() {
+  try { const z = Number(localStorage.getItem(ZOOM_KEY)); return Number.isInteger(z) && z >= 0 && z < ZOOMS.length ? z : 0; } catch { return 0; }
+}
+const scroller = () => grid?.querySelector(".sq-clips__scroll");
+const firstCells = () => grid?.querySelector(".sq-clips__scenes");
+
+/**
+ * Change the zoom level, keeping the column under `clientX` (the middle of the
+ * view when absent) where it is on screen.
+ */
+function setZoom(z, clientX) {
+  z = Math.max(0, Math.min(ZOOMS.length - 1, z));
+  if (z === zoom) return;
+  const sc = scroller(), cells = firstCells();
+  let x = clientX, f = null;
+  if (sc && cells) {
+    const sr = sc.getBoundingClientRect();
+    if (x == null) x = sr.left + sr.width / 2;
+    const cr = cells.getBoundingClientRect();
+    if (cr.width > 0) f = (x - cr.left) / cr.width;
+  }
+  zoom = z;
+  try { localStorage.setItem(ZOOM_KEY, String(zoom)); } catch {}
+  render();
+  const sc2 = scroller(), cells2 = firstCells();
+  if (f != null && sc2 && cells2) {
+    const cr = cells2.getBoundingClientRect();
+    sc2.scrollLeft += cr.left + Math.max(0, Math.min(1, f)) * cr.width - x;
+  }
+  setStatus(zoom ? `clip zoom ${zoom + 1} of ${ZOOMS.length}` : "clip zoom: fit to width");
+}
+
+/** ctrl/⌘-wheel (a trackpad pinch arrives as one) over the grid zooms it. */
+function onWheel(e) {
+  if (!(e.ctrlKey || e.metaKey) || !e.target.closest?.(".sq-clips__scroll")) return;
+  e.preventDefault();          // not the page's own zoom
+  wheelAcc += e.deltaY;
+  if (Math.abs(wheelAcc) < 40) return;
+  const dir = wheelAcc < 0 ? 1 : -1;
+  wheelAcc = 0;
+  setZoom(zoom + dir, e.clientX);
+}
 
 /** A column's repeat count changed: the song's, so undo, save and a jam see it. */
 function onRepChange(e) {
@@ -90,6 +146,7 @@ export function installClipView() {
   root.addEventListener("dragleave", onDragLeave);
   root.addEventListener("drop", onDrop);
   root.addEventListener("change", onRepChange);
+  root.addEventListener("wheel", onWheel, { passive: false });
   onViewChange((v) => { if (v === "clips") render(); else detail.release(); });
   for (const ev of ["seqbaby:clips", "seqbaby:songedited", "seqbaby:setapplied", "seqbaby:newset", "seqbaby:transport"]) {
     window.addEventListener(ev, scheduleClipPaint);
@@ -177,7 +234,7 @@ function render() {
       const cls = ["sq-clip"];
       const shade = clipShadeColor(shades[i]);
       // the clip's notes, squeezed into the cell (patternPicture.js)
-      const svg = shades[i] >= 0 ? patternSvg(p, t.isDrumKit ? 36 : 60, { fat: 2.4 }) : "";
+      const svg = shades[i] >= 0 ? patternSvg(p, t.isDrumKit ? 36 : 60, { fat: ZOOMS[zoom][2] }) : "";
       const vars = [shade && `--clip-c:${shade}`, svg && `--notes:${svgUrl(svg)}`].filter(Boolean);
       const style = vars.length ? ` style="${vars.join(";")}"` : "";
       const bars = p ? Math.max(1, Math.ceil(p.steps.length / stepsPerBarForMeter(patternMeter(i)))) : 1;
@@ -201,13 +258,21 @@ function render() {
     </div>`;
   }).join("");
   const mode = state.patternMode;
+  // the grid is rebuilt whole, scroller included: carry its scroll across
+  const scrollX = scroller()?.scrollLeft ?? 0;
+  const [colW, rowH] = ZOOMS[zoom];
+  grid.classList.toggle("is-zoomed", zoom > 0);
+  grid.style.setProperty("--clip-w", colW ? `${colW}px` : "");
+  grid.style.setProperty("--clip-h", `${rowH}px`);
   grid.innerHTML = `
     <div class="sq-clips__bar">
       <button type="button" class="sq-clips__play${state.playing ? " is-playing" : ""}" data-act="play" title="${state.playing ? "stop the transport" : "play"}">${state.playing ? "stop" : "play"}</button>
       <button type="button" class="sq-clips__mode sq-btn--ghost sq-icon-btn" data-act="mode" aria-pressed="${mode !== "repeat"}" title="${MODE_UI[mode].title}">${MODE_UI[mode].icon}</button>
       <button type="button" class="sq-clips__switch sq-btn--ghost sq-icon-btn" data-act="switch" aria-pressed="${state.patternSwitchMode === "finish"}" title="${SWITCH_UI[state.patternSwitchMode === "finish" ? "finish" : "immediate"].title}">${SWITCH_UI[state.patternSwitchMode === "finish" ? "finish" : "immediate"].icon}</button>
       <button type="button" class="sq-clips__rec" data-act="rec" aria-pressed="${!!state.arrRecord}" title="record: write the clips you launch into the arrangement, bar by bar; over an existing arrangement you are asked whether the recording replaces it or goes after it">● rec</button>
+      <span class="sq-clips__zoom"><button type="button" class="sq-btn--ghost" data-act="zoom-" title="zoom out${zoom ? "" : " (all 32 columns already fit)"}"${zoom ? "" : " disabled"}>−</button><button type="button" class="sq-btn--ghost" data-act="zoom+" title="zoom in (or ctrl/⌘-scroll, or pinch, over the grid)"${zoom < ZOOMS.length - 1 ? "" : " disabled"}>+</button></span>
     </div>
+    <div class="sq-clips__scroll"><div class="sq-clips__table">
     <div class="sq-clips__head">
       <div class="sq-clips__strip"></div>
       <div class="sq-clips__cells sq-clips__scenes">${scenes.join("")}</div>
@@ -216,7 +281,10 @@ function render() {
       <div class="sq-clips__strip" title="how many bars chain mode plays each column for before moving on">repeat</div>
       <div class="sq-clips__cells">${repeats.join("")}</div>
     </div>
-    <div class="sq-clips__rows">${trackRows}</div>`;
+    <div class="sq-clips__rows">${trackRows}</div>
+    </div></div>`;
+  const sc = scroller();
+  if (sc && scrollX) sc.scrollLeft = scrollX;
   const shown = detail.sync();
   if (shown) grid.querySelector(`.sq-clips__row[data-track-id="${shown.id}"]`)?.classList.add("is-selected");
 }
@@ -230,6 +298,7 @@ function onClick(e) {
   const scene = e.target.closest("[data-scene]");
   if (scene) { requestPatternSwitch(Number(scene.dataset.scene)); return; }
   const act = e.target.closest("[data-act]")?.dataset.act;
+  if (act === "zoom+" || act === "zoom-") { setZoom(zoom + (act === "zoom+" ? 1 : -1)); return; }
   if (act === "rec") { setArrangeRecord(!state.arrRecord); setStatus(state.arrRecord ? "recording the arrangement: launch clips, each bar is written as it plays" : "arrangement record off"); return; }
   // the transport's own button, so a jam's shared start goes the same way
   if (act === "play") { document.getElementById("play")?.click(); return; }
