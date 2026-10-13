@@ -1,11 +1,12 @@
 /**
  * The view switcher: groove (the track list of step grids, the studio as it
- * always was), clips (tracks x the 32 slots as launchable clips, clipView.js)
- * and arrange (a timeline of pattern blocks per track, arrangeView.js).
+ * always was), clips (tracks x the 32 slots as launchable clips, clipView.js),
+ * arrange (a timeline of pattern blocks per track, arrangeView.js) and piano
+ * (one track's pattern as a full piano roll, pianoView.js).
  *
  * One song, three pictures of it: switching views changes nothing about what
  * plays. The open view is `state.view`, a body class `view-<name>` (style.css
- * hides `#tracks` under the other two and the two sections under groove),
+ * hides `#tracks` under the others and their sections under groove),
  * remembered per browser rather than in the song — which view you were in is
  * not part of the music. Desktop only in this cut: below 768px the switcher is
  * hidden and the groove view stands.
@@ -17,7 +18,7 @@
 
 import { state } from "./state.js";
 
-export const VIEWS = ["groove", "clips", "arrange"];
+export const VIEWS = ["groove", "clips", "arrange", "piano"];
 const KEY = "seqbaby.view.v1";
 const MOBILE = "(max-width: 768px)";
 
@@ -48,8 +49,10 @@ export function setView(view) {
   });
   const clips = document.getElementById("clips");
   const arr = document.getElementById("arrange");
+  const piano = document.getElementById("piano");
   if (clips) clips.hidden = view !== "clips";
   if (arr) arr.hidden = view !== "arrange";
+  if (piano) piano.hidden = view !== "piano";
   try { localStorage.setItem(KEY, view); } catch {}
   for (const fn of listeners) fn(view);          // a repaint on the way in, even to the same view
 }

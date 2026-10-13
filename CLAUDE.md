@@ -16,7 +16,7 @@ env / fx / eq / comp / mod / automation per track.
   `public/woscillators.js` →
   `public/js/main.js` (ES module). `middleware.ts` refreshes the Supabase
   session on every request *except* static engine assets.
-- **Engine**: ~85 dependency-free vanilla ES modules in `public/js/`. No
+- **Engine**: ~87 dependency-free vanilla ES modules in `public/js/`. No
   bundler — edit, reload. `window.seqbaby` (from `appApi.js`) exposes `state`
   and serialize/apply hooks to the React shell (typed in `app/seqbaby.d.ts`).
 - **Accounts + data**: Supabase (Postgres + Auth + RLS). Tables: `profiles`,
@@ -211,6 +211,11 @@ env / fx / eq / comp / mod / automation per track.
   (cuts what it lands on), `writeBar` (the recorder), `remapSlots`,
   `chainToBlocks`. Tested in `test/arrangement.test.js`; songBuilder.js
   validates an agent's blocks through it.
+- `pianoView.js` / `rollNotes.js` — the piano view: one track's pattern as a
+  full-height, FL Studio style piano roll (the fourth view). `rollNotes.js`
+  reads a pattern's step arrays as a free list of notes and folds a list
+  back, **no imports**, tested in `test/rollNotes.test.js`. See the piano
+  view section.
 - `patternPicture.js` — a pattern as a picture (`patternSvg`): one pass of
   its notes, pitch against time, as an SVG the clip cells and the
   arrangement's blocks wear as a CSS mask. **No imports**; tested in
@@ -361,7 +366,7 @@ npm test               # node --test: the pure modules (session format, chance g
                        #   song previews, grid avatars, the songs and people explorers,
                        #   the Strudel bridge, the reverb, the filter models, the guitar, the contagion,
                        #   the vox and its phonetic reader, the lancet, the halo, the prism, the repeat,
-                       #   the ladder, the oracle, the arrangement)
+                       #   the ladder, the oracle, the arrangement, the piano view's notes)
 npm run mcp            # the MCP server on stdio (mcp/server.mjs) — an agent writes songs
 npm run test:rls       # RLS policy tests — builds a throwaway Postgres in docker
 ```
@@ -2501,6 +2506,47 @@ block   t.arrangement[i]    ─── { slot, start, bars }: a clip at a bar, fo
   the ruler's meter and leaves the mode alone.
 - Not shared in a jam: which clip each peer has launched, like play / stop and
   the scene. The blocks are the song's and travel.
+
+## The piano view (`pianoView.js` + `rollNotes.js`)
+
+The fourth view (`groove | clips | arrange | piano`, Tab cycles all four,
+desktop only like the other two): the keyboard track's pattern as a piano
+roll in the manner of FL Studio's. A sticky keyboard down the left (click or
+drag down it to hear the track), a bar ruler across the top, the notes as
+bars, the other melodic tracks' notes faint behind them (ghosts, tiled as each
+loops, scaled by speed), a root's chord tones dashed under it, and velocity
+stalks underneath. No track card under it, unlike clips and arrange: the
+roll takes the height.
+
+- **What it edits is the track's own slot** (`trackSlot`), and the track is
+  `state.activeTrackId`, so the computer keys play what is shown. The slot
+  select launches another pattern on the track (`launchClip`, now).
+- **Every edit is read, change, fold.** `readNotes` flattens the steps
+  (roots and extras) into `{start, len, pitch, vel, root, src, chord}`; the
+  view changes the list; `writeNotes` folds it back in place (a track's arrays
+  are its pattern's), under the step model's rules: notes starting on one step
+  stack (root = the chord carrier, else the longest), extras clamp to the
+  root, a root is cut at the next anchor, velocity is per step, and a step's
+  per-step fields travel with its root from `src`, so a moved note keeps its
+  chord, arp, ratchet and nudge. The cut is the one thing that differs from
+  FL: a long note under a later one ends where it starts.
+- **Committed on release**: a drag previews on the elements and writes once,
+  so it is one undo step (history.js hears the pointerup) and the view is
+  rebuilt from the pattern afterwards. Repaints never land mid-drag. Every
+  drag holds pointer capture on the view, so a double-click is timed in
+  pointerdown (a dblclick would be retargeted).
+- **Tools are toolbar buttons, not letters**: FL's P / E / B are the computer
+  keyboard's piano keys here. draw (click places a note of the last length
+  used and drags it into place; drag moves, the right edge resizes, shift
+  copies), paint, erase (right-click / right-drag in any tool), select
+  (box, shift adds; ctrl/⌘-drag boxes in any tool). Double-click a note: the
+  step editor. With a selection: delete, ↑ ↓ (shift an octave), ← → (by the
+  snap, shift a bar), ctrl/⌘-B duplicate after itself; ctrl/⌘-A all,
+  escape lets go. Skipped while vim is in insert or command mode.
+- **A note past the end grows the pattern** to the next bar line
+  (`resizePattern`, capped at 128). The snap (step / ½ beat / beat / bar),
+  zoom, ghosts and tool are per browser (`seqbaby.piano.v1`), the scroll per
+  track per page.
 
 ## Knobs (`knob.js`) — a skin over the range inputs
 
@@ -4784,7 +4830,7 @@ through a 6ms fade on its gain).
   place the dispatch lives, or the second one has to import the first.
 - **`engineData.js`, `soundDefaults.js`, `theoryData.js`, `constants.js`,
   `chanceGen.js`, `sessionFormat.js`, `historyStore.js`, `songBuilder.js`,
-  `miniNotation.js`, `strudel.js`, `arrangement.js`, `patternPicture.js` and `voxPhonetic.js` must stay importable from Node** — no DOM, no Tone, no `window`. The tests
+  `miniNotation.js`, `strudel.js`, `arrangement.js`, `patternPicture.js`, `rollNotes.js` and `voxPhonetic.js` must stay importable from Node** — no DOM, no Tone, no `window`. The tests
   and the MCP server run them; an import of state.js or catalog.js in any of
   them breaks `npm test` at load, which is the guard.
 - **React must never re-set the studio's `innerHTML`** (`app/StudioBody.tsx`).
@@ -4895,7 +4941,7 @@ Repo: https://github.com/mjoslyn/seqbaby.
   An inline marker (`window.__seqbabyServerBoot`) tells the paths apart, and
   `ScriptLoader.tsx` keeps its onload-chained injection for the soft-nav case
   (e.g. arriving from `/login`).
-- `app/EnginePreload.tsx` emits `modulepreload` for all 85 modules listed in
+- `app/EnginePreload.tsx` emits `modulepreload` for all 87 modules listed in
   `app/engineAssets.ts` (at `engineAsset("/js/<name>")`; the hints used to
   point at the site root and 404). The graph is 8 levels deep, so without it the browser
   needs up to eight sequential round trips just to discover the code.

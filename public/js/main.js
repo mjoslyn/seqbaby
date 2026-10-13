@@ -14,6 +14,7 @@ import { installCodePanel } from "./codePanel.js";
 import { installViews } from "./views.js";
 import { installClipView } from "./clipView.js";
 import { installArrangeView } from "./arrangeView.js";
+import { installPianoView } from "./pianoView.js";
 import { applySampleSpeed, attachBpmDrag, lfoRateLabel, retuneSyncedLFOs } from "./lfo.js";
 import { captureSequence, initComputerKeyboard, isDesktopKeyboard, resetKbdKeys, setKbdRecord } from "./keyboard.js";
 import { initVim } from "./vim.js";
@@ -699,6 +700,7 @@ export function init() {
   // the arrangement, the last two drawn only while open.
   installClipView();
   installArrangeView();
+  installPianoView();
   installViews();
   // The master swing slider has no listener on purpose: the transport loop reads
   // its value straight off the DOM each callback (~0.1 µs), so there's nothing to

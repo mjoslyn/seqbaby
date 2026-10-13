@@ -110,7 +110,7 @@ const clampNote = n => Math.max(0, Math.min(127, Math.round(n)));
 
 // Mirror the transport's per-hit sample options so a sampler/granular voice plays
 // its region / fades / slices; harmless (ignored) for the synth voices.
-function hitOptsFor(t) {
+export function hitOptsFor(t) {
   const sd = t.sampleDefaults || {};
   return {
     startOffset: sd.start ?? 0, endOffset: sd.end ?? 1,
