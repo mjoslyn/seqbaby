@@ -2537,9 +2537,10 @@ playhead runs in the section of the pattern the track is on.
   headers, or the `loop` button (which loops the scene alone when no range
   is drawn). Chain mode plays it: `nextChainPattern` (state.js) is the slot
   after the scene inside the range, wrapping, every slot in it empty or not,
-  and a scene outside it goes in at the next bar line. Switching it on puts
-  the transport in chain mode and off puts back the mode it changed
-  (`_patLoopPrevMode`). Chain mode counts a pattern's repeat in BARS, so a
+  and a scene outside it goes in at the next bar line. The button switches
+  between loop and chain: lit while the transport goes round (a loop range,
+  or repeat mode's one pattern), and pressing it lit leaves chain playing
+  through every pattern; both ways it puts the transport in chain mode. Chain mode counts a pattern's repeat in BARS, so a
   header's − / + / x2 moves `patternRepeats[slot]` with the length when the
   two agreed, or a two-bar pattern would play its first bar only.
 - **`follow`** (per browser, on by default) turns the page when the playhead
