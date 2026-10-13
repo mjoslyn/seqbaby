@@ -21,7 +21,8 @@ Open `http://localhost:3000/studio` in Chrome (`/` is the homepage) (claude-in-c
   count for step cells — the step grid listens on pointer events, so use the
   computer tool with real coordinates (`.sq-step` cells, get coords via
   `getBoundingClientRect` after `scrollIntoView`).
-- The starter session has 6 tracks (kick/snare/hat/accent/bass/lead); all
+- The starter session has 5 tracks (kick/snare/hat/bass/lead; the hat is a
+  halo pedal hat, choked: a one-step hit is closed, a tied step opens); all
   patterns start EMPTY — toggle steps before expecting sound.
 - `window.seqbaby.state` exposes everything: `tracks[i].fxRack`, `.voice`,
   `.meterAnalyser` (taps fxRack.output), `state.masterAnalyser`.

@@ -6,7 +6,7 @@ import { setOpenSong } from "@/app/songs/openSong";
 
 // What a new song starts from, when the account has named a default template.
 //
-// The engine's own idea of "new" is the six starter tracks (`STARTER_TRACKS` in
+// The engine's own idea of "new" is the five starter tracks (`STARTER_TRACKS` in
 // session.js), and that stays exactly what it was: this island applies a
 // session over the top afterwards rather than teaching the engine about
 // accounts. So the legacy static server, a signed-out visitor and anyone with

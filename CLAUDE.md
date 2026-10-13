@@ -3813,7 +3813,7 @@ cold squelch  v1 ──▶ v2 ──▶ v3     its own song, its own tree
   and no way to say which is meant. A CHECK keeps a default a template: the
   toggle is only drawn on templates, and a default that was not one would be
   invisible and still be what `new` loads.
-- **The engine learns nothing.** `newSet()` still means the six starter tracks;
+- **The engine learns nothing.** `newSet()` still means the five starter tracks;
   `app/DefaultTemplate.tsx` applies a session over the top afterwards. So the
   legacy static server, a signed-out visitor and an account with no default all
   get the blank editor they always did. It answers to `seqbaby:newset` (the top

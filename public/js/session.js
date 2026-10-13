@@ -24,6 +24,7 @@ import { renderStepGrid } from "./stepGrid.js";
 import { createTrack, removeTrack } from "./track.js";
 import { ensureAudio, requestMidiIfNeeded, silenceAllVoices } from "./transport.js";
 import { buildVoiceForEngine, migrateGranularParams, stampGranularParams } from "./voices.js";
+import { haloTone } from "./engineData.js";
 
 
 /** @typedef {import("./types.js").AppState} AppState */
@@ -747,14 +748,15 @@ export function applySet(s) {
 
 // ---- a new session -----------------------------------------------------
 
-// The six tracks a first-time visitor gets. Exported because two places have to
+// The five tracks a first-time visitor gets. Exported because two places have to
 // agree on what "blank" means: main.js builds them at boot, and newSet() below
 // rebuilds them when you ask for a new song.
 export const STARTER_TRACKS = [
   { name: "kick",   engineKey: "dm:siege" },
   { name: "snare",  engineKey: "dm:lancet" },
-  { name: "hat",    engineKey: "dm:909-chat" },
-  { name: "accent", engineKey: "plaits:12" },
+  // The halo on its pedal hat: choked, so a one-step hit is a closed hat and
+  // a tied step opens it.
+  { name: "hat",    engineKey: "dm:halo", params: haloTone("pedal hat") },
   { name: "bass",   engineKey: "dm:silverbox" },
   { name: "lead",   engineKey: "plaits:0" },
 ];

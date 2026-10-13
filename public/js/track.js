@@ -24,11 +24,12 @@ import { buildVoiceForEngine } from "./voices.js";
 
 /** @typedef {import("./types.js").Track} Track */
 /**
- * Create a track with a fresh 32-pattern bank and default params.
- * @param {{ name:string, engineKey:string, length?:number }} opts
+ * Create a track with a fresh 32-pattern bank and default params, or the
+ * defaults with `params` over them (the starter hat's preset, session.js).
+ * @param {{ name:string, engineKey:string, length?:number, params?:Record<string, number|string> }} opts
  * @returns {Track}
  */
-export function createTrack({ name, engineKey, length = totalSteps() }) {
+export function createTrack({ name, engineKey, length = totalSteps(), params = null }) {
   const len = Math.max(1, length);
   const t = {
     id: state.nextId++,
@@ -86,7 +87,7 @@ export function createTrack({ name, engineKey, length = totalSteps() }) {
     sliceBase: 60,
     slicePlayMode: "region",
     sliceSensitivity: 0.5,
-    params: defaultTrackParams(),
+    params: { ...defaultTrackParams(), ...(params || {}) },
     // The sound every unlocked pattern shares; a p-locked pattern keeps its
     // own on the pattern instead (patternSound.js). Filled on the first flush.
     baseSound: null,
