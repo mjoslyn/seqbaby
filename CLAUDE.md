@@ -2526,10 +2526,11 @@ roll takes the height.
   view changes the list; `writeNotes` folds it back in place (a track's arrays
   are its pattern's), under the step model's rules: notes starting on one step
   stack (root = the chord carrier, else the longest), extras clamp to the
-  root, a root is cut at the next anchor, velocity is per step, and a step's
-  per-step fields travel with its root from `src`, so a moved note keeps its
-  chord, arp, ratchet and nudge. The cut is the one thing that differs from
-  FL: a long note under a later one ends where it starts.
+  root, notes may overlap (a long note keeps its length under a later one:
+  the transport plays each step's own length, and the step grid only DRAWS
+  it to the next note, no longer writing the clamp back into `lengths`),
+  velocity is per step, and a step's per-step fields travel with its root
+  from `src`, so a moved note keeps its chord, arp, ratchet and nudge.
 - **Committed on release**: a drag previews on the elements and writes once,
   so it is one undo step (history.js hears the pointerup) and the view is
   rebuilt from the pattern afterwards. Repaints never land mid-drag. Every
@@ -2548,18 +2549,19 @@ roll takes the height.
   every y and every vertical move goes through `rowOf` / `shiftRows`, and a
   drag or ↑ ↓ moves a scale degree (shift is still an octave). A note
   already off the scale sits on the row below it, outlined.
-- **The chord stamp** (`pref.chord`, `pref.inv`): a click or a paint stroke
-  draws a chord. A chord type is the root's `chord` and inversion (`cpx`,
-  which `writeNotes` writes for a root that carries it), drawn as dashed
-  tones that ride along with the root; `in key` / `in key 7th` stack the
-  scale's thirds (`diatonicChordNotes`), stored as a chord type when the
-  tones are one, else as root plus extras. Picked with notes selected, the
-  stamp goes on their roots; `note` takes chords off. An inverted root's bar
-  is drawn faint, since it sounds an octave up. Independent of the
-  keyboard's chord mode.
+- **Chords come from the top bar's chord mode** (`state.kbdChordType` /
+  `kbdChordCpx`, through `chordSelectionFor`, keyboard.js), the one the
+  computer keyboard and a step click use: with it on, a click or a paint
+  stroke draws the chord, diatonic when the scale is on. A chord type is the
+  root's `chord` and voicing (`cpx`, which `writeNotes` writes for a root
+  that carries it), drawn as dashed tones that ride along with the root; an
+  in-key voicing that is no chord type is root plus extras. `apply chord`
+  puts it on the selected roots (chord mode off takes chords away). An
+  inverted root's bar is drawn faint, since it sounds an octave up. Drum
+  kits sit it out.
 - **A note past the end grows the pattern** to the next bar line
   (`resizePattern`, capped at 128). The snap (step / ½ beat / beat / bar),
-  zoom, ghosts, tool, fold and chord stamp are per browser (`seqbaby.piano.v1`), the scroll per
+  zoom, ghosts, tool and fold are per browser (`seqbaby.piano.v1`), the scroll per
   track per page.
 
 ## Knobs (`knob.js`) — a skin over the range inputs

@@ -7,7 +7,7 @@
  * The pattern stores notes per STEP: a step that is on is an anchor with a
  * root (`notes`, `lengths`, `velocities`, the chord and every other per-step
  * field) and stacked extras (`extraNotes` / `extraLengths`, never longer than
- * the root). An anchor's length runs at most to the next anchor. A piano roll
+ * the root). A piano roll
  * wants a list of notes, each with a start, a length and a pitch, moved
  * about freely; `readNotes` flattens the steps into one and `writeNotes`
  * folds a list back into the steps, under the step model's rules:
@@ -21,8 +21,9 @@
  *   a note moves everything written on it. A note made fresh gets the
  *   pattern's blank values.
  * - The velocity is per step, so a stack takes its root's.
- * - An anchor is cut at the next anchor: a long note under a later one ends
- *   where the later one starts, as it does in the step grid.
+ * - Notes may overlap: a long note keeps its length under a later one (the
+ *   transport plays each step's own length; the step grid draws it to the
+ *   next note). Only the pattern's end cuts a note.
  */
 
 /** Every per-step array a note's step carries (the pattern's own list). */
@@ -115,13 +116,12 @@ export function writeNotes(p, notes, len = p.steps.length) {
     if (!had || nt.len > had.len || (nt.len === had.len && nt.root && !had.root)) g.set(key, nt);
   }
   const starts = [...groups.keys()].sort((a, b) => a - b);
-  starts.forEach((start, gi) => {
+  starts.forEach((start) => {
     const group = [...groups.get(start).values()];
     group.sort((a, b) =>
       (b.chord ? 1 : 0) - (a.chord ? 1 : 0) || b.len - a.len || (b.root ? 1 : 0) - (a.root ? 1 : 0) || a.pitch - b.pitch);
     const root = group[0];
-    const next = gi + 1 < starts.length ? starts[gi + 1] : len;
-    const rootLen = Math.max(1, Math.min(root.len, next - start));
+    const rootLen = Math.max(1, root.len);
     const snap = snaps.get(root.src) ?? group.map((g) => snaps.get(g.src)).find(Boolean) ?? null;
     if (snap) for (const k of NOTE_STEP_KEYS) if (Array.isArray(p[k]) && snap[k] !== undefined) {
       p[k][start] = Array.isArray(snap[k]) ? snap[k].slice() : snap[k];

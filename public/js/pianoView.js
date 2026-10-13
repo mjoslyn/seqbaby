@@ -9,8 +9,8 @@
  * the track is the keyboard's (`state.activeTrackId`), so the computer keys
  * play what is shown. A pattern stores notes per step (track.js), so every
  * edit here reads the pattern as a free list of notes (rollNotes.js), changes
- * the list, and folds it back: notes starting on one step stack on it, and a
- * note runs at most to the next step that starts one, as in the step grid.
+ * the list, and folds it back: notes starting on one step stack on it, and
+ * notes may overlap (a new note never shortens one it lands on).
  * Moving a note moves its step's chord, arp, ratchet and nudge with it.
  *
  * Gestures (the tools are the toolbar's, since the letters FL gives them are
@@ -30,12 +30,13 @@
  * so a note drawn is in key and a drag up or down moves by scale degree (↑ ↓
  * too). A note already off the scale sits on the row below it, outlined.
  *
- * The chord stamp makes a click (or a paint stroke) draw a chord: a chord
- * type on the row clicked, or in key, built from the scale's degree. A chord
- * type is stored as the root's chord (the step's, as the step editor sets
- * it) and drawn as dashed tones under the root; an in-key voicing that is no
- * chord type is written as the root plus extras. Picked with notes selected,
- * the stamp goes on them instead ("note" takes their chords off).
+ * Chords come from the top bar's chord mode, the same one the computer
+ * keyboard and a step click use: with it on, a click (or a paint stroke)
+ * draws the chord, in key when the scale is on. A chord type is stored as
+ * the root's chord and voicing (the step's, as the step editor sets it) and
+ * drawn as dashed tones under the root; an in-key voicing that is no chord
+ * type is written as the root plus extras. `apply chord` puts it on the
+ * selected notes (or takes their chords off when chord mode is off).
  *
  * Notes drawn past the pattern's end make it longer, to the next bar line.
  * Every edit is committed on release, so a drag is one undo step (history.js
@@ -45,7 +46,7 @@
 import { launchClip } from "./clips.js";
 import { PATTERN_COUNT } from "./constants.js";
 import { setStatus } from "./dom.js";
-import { hitOptsFor, isTypingTarget } from "./keyboard.js";
+import { chordSelectionFor, hitOptsFor, isTypingTarget } from "./keyboard.js";
 import { patternMeter, stepsPerBarForMeter, stepsPerBeatForMeter } from "./meter.js";
 import { refreshRollIfOpen } from "./pianoRoll.js";
 import { setActiveTrack } from "./render.js";
@@ -55,7 +56,7 @@ import { invertChord, state, trackSlot } from "./state.js";
 import { openStepEditor } from "./stepEditor.js";
 import { renderStepGrid } from "./stepGrid.js";
 import { liveGeneratorOf } from "./stepSource.js";
-import { CHORD_TYPES, SCALES, chordNotes, chordTypeForTones, diatonicChordNotes, midiToName, quantizeToScale } from "./theory.js";
+import { SCALES, chordNotes, midiToName } from "./theory.js";
 import { extendPatternByDuplicate, resizePattern, truncatePattern } from "./track.js";
 import { trackHue } from "./trackDetail.js";
 import { ensureAudio, wakeMasterBus } from "./transport.js";
@@ -73,11 +74,6 @@ const TOOLS = [
   ["erase", "✕ erase", "erase: click or sweep across notes to delete them (right-click and right-drag delete with any tool)"],
   ["select", "⬚ select", "select: drag a box around notes, click one to pick it (shift adds); drag the selection to move it. The arrows move it, delete removes it"],
 ];
-// The chord stamp: what a click draws. "key" chords are built from the scale
-// (stacked scale thirds, so the quality follows the degree), the rest are
-// chord types on whatever row was clicked.
-const STAMPS = [["", "note"], ["key3", "in key"], ["key4", "in key 7th"],
-  ...Object.keys(CHORD_TYPES).filter(Boolean).map((k) => [k, k])];
 const SNAPS = [["step", "step"], ["half", "½ beat"], ["beat", "beat"], ["bar", "bar"]];
 const PREF_KEY = "seqbaby.piano.v1";
 
@@ -98,7 +94,7 @@ const lastLen = new Map();       // track id -> the length a new note takes
 const scrollMem = new Map();     // track id -> {x, y}
 
 function readPref() {
-  const d = { tool: "draw", snap: "step", zx: 3, zy: 1, ghosts: true, fold: false, chord: "", inv: 0 };
+  const d = { tool: "draw", snap: "step", zx: 3, zy: 1, ghosts: true, fold: false };
   try { return { ...d, ...JSON.parse(localStorage.getItem(PREF_KEY) || "{}") }; } catch { return d; }
 }
 function savePref() { try { localStorage.setItem(PREF_KEY, JSON.stringify(pref)); } catch {} }
@@ -290,10 +286,7 @@ function render() {
         `<button type="button" data-tool="${k}" aria-pressed="${pref.tool === k}" title="${esc(title)}">${label}</button>`).join("")}</span>
       <label class="sq-pr__snap" title="where notes land and how far they move">snap <select data-act="snap">${SNAPS.map(([k, l]) =>
         `<option value="${k}"${pref.snap === k ? " selected" : ""}>${l}</option>`).join("")}</select></label>
-      <label class="sq-pr__chord" title="chord: what a click draws. In key builds the chord from the scale's degree; the rest are chord types on the row you click. With notes selected, picking one puts it on them (note takes their chords off)">chord <select data-act="chord">${STAMPS.map(([k, l]) =>
-        `<option value="${k}"${pref.chord === k ? " selected" : ""}${k.startsWith("key") && !scale ? " disabled" : ""}>${l}</option>`).join("")}</select>
-        <select data-act="inv" title="inversion: how many of the chord's lowest notes go up an octave"${pref.chord ? "" : " disabled"}>${[0, 1, 2, 3].map((v) =>
-        `<option value="${v}"${(pref.inv | 0) === v ? " selected" : ""}>${v ? `inv ${v}` : "root"}</option>`).join("")}</select></label>
+      <button type="button" class="sq-btn--ghost" data-act="chordsel" title="apply chord: put the chord bar's chord (type and voicing, or in key with the scale on) on the selected notes. With chord mode off it takes their chords away. New notes take the chord bar's chord as they are drawn">apply chord</button>
       <span class="sq-pr__len" title="the pattern's length">${len} steps · ${Number.isInteger(bars) ? bars : bars.toFixed(2)} bar${bars === 1 ? "" : "s"}
         <button type="button" class="sq-btn--ghost" data-act="len-" title="one bar shorter">−bar</button><button type="button" class="sq-btn--ghost" data-act="len+" title="one bar longer, empty">+bar</button><button type="button" class="sq-btn--ghost" data-act="x2" title="double the length, tiling what is there">x2</button></span>
       <button type="button" class="sq-pr__foldbtn" data-act="fold" aria-pressed="${fold}"${scale ? "" : " disabled"} title="${scale
@@ -374,24 +367,17 @@ function paintHead() {
 // ---- chords --------------------------------------------------------------------
 
 /**
- * What the stamp makes of a clicked pitch: the root, a chord type it plays
- * (with the inversion), and explicit extra pitches for an in-key voicing that
- * is not one of the chord types. A key stamp with no scale on is a plain note.
+ * What a click draws, from the top bar's chord mode (the keyboard's, so a
+ * click here writes what a key or a step click would): a plain note when it
+ * is off, else `chordSelectionFor`'s root, chord type, voicing and, for an
+ * in-key voicing that is no chord type, explicit extras. Drum kits sit chord
+ * mode out, as they do in the step grid.
  * @returns {{root: number, chord: string, cpx: number, extras: number[]}}
  */
-function chordFor(pitch, stamp = pref.chord) {
-  const cpx = pref.inv | 0;
-  if (stamp === "key3" || stamp === "key4") {
-    const sc = scaleIntervals();
-    if (!sc) return { root: pitch, chord: "", cpx: 0, extras: [] };
-    const r = quantizeToScale(pitch, state.scale.root, sc);
-    const tones = diatonicChordNotes(r, stamp === "key4" ? 4 : 3);
-    const type = chordTypeForTones(tones);
-    if (type) return { root: tones[0], chord: type, cpx, extras: [] };
-    return { root: tones[0], chord: "", cpx: 0, extras: tones.slice(1).filter((p) => p <= HI) };
-  }
-  if (stamp && CHORD_TYPES[stamp]) return { root: pitch, chord: stamp, cpx, extras: [] };
-  return { root: pitch, chord: "", cpx: 0, extras: [] };
+function chordFor(t, pitch) {
+  if (!state.kbdChordType || t?.isDrumKit) return { root: pitch, chord: "", cpx: 0, extras: [] };
+  const c = chordSelectionFor(pitch);
+  return { root: c.root, chord: c.chord || "", cpx: c.chord ? c.cpx | 0 : 0, extras: (c.extras || []).filter((p) => p >= LO && p <= HI) };
 }
 
 /** Every pitch a root sounds: its chord's tones, inverted, or itself. */
@@ -402,8 +388,8 @@ function tonesOf(n) {
 }
 
 /** The notes a stamp writes at a step: the root first. */
-function stampNotes(start, len, pitch) {
-  const c = chordFor(pitch);
+function stampNotes(t, start, len, pitch) {
+  const c = chordFor(t, pitch);
   const base = { start, len, vel: 0.8, src: null };
   return [{ ...base, pitch: c.root, root: true, chord: c.chord, cpx: c.cpx },
     ...c.extras.map((p) => ({ ...base, pitch: p, root: false, chord: "" }))];
@@ -416,21 +402,23 @@ function toneEls(n, i) {
     .map((p) => `<div class="sq-pr__tone" data-root="${i}" style="left:${n.start * sw}px;top:${yOf(p)}px;width:${n.len * sw - 1}px;height:${rh}px" title="${midiToName(p)}: a tone of ${midiToName(n.pitch)} ${esc(n.chord)}"></div>`).join("");
 }
 
-/** Put the stamp on the selected roots ("note" takes their chords off). */
-function applyStampToSelection(t) {
+/** Put the chord mode on the selected roots (off takes their chords away). */
+function applyChordToSelection(t) {
   const picked = notes.filter((n) => sel.has(key(n)) && n.root);
-  if (!picked.length) return false;
+  if (!picked.length) { setStatus("select notes first: apply chord puts the chord bar's chord on them"); return false; }
   const list = notes.slice();
   const out = [];
   for (const n of picked) {
-    const c = chordFor(n.pitch);
+    const c = chordFor(t, n.pitch);
     const i = list.indexOf(n);
     list[i] = { ...n, pitch: c.root, chord: c.chord, cpx: c.cpx };
     out.push(list[i]);
     for (const p of c.extras) list.push({ ...n, pitch: p, root: false, chord: "" });
   }
   commit(t, list, out);
-  setStatus(pref.chord ? `${out.length} note${out.length === 1 ? "" : "s"}: ${STAMPS.find(([k]) => k === pref.chord)?.[1]} chord` : "chords taken off");
+  setStatus(state.kbdChordType && !t.isDrumKit
+    ? `${out.length} note${out.length === 1 ? "" : "s"} made chords`
+    : "chords taken off (chord mode is off)");
   return true;
 }
 
@@ -486,6 +474,7 @@ function onClick(e) {
   const t = currentTrack();
   const act = b.dataset.act;
   if (act === "play") { document.getElementById("play")?.click(); return; }
+  if (act === "chordsel") { if (t) applyChordToSelection(t); return; }
   if (act === "ghosts") { pref.ghosts = !pref.ghosts; savePref(); render(); return; }
   if (act === "fold") {
     pref.fold = !pref.fold; savePref();
@@ -533,12 +522,6 @@ function onChange(e) {
   if (!s) return;
   const t = currentTrack();
   if (s.dataset.act === "snap") { pref.snap = s.value; savePref(); return; }
-  if (s.dataset.act === "chord" || s.dataset.act === "inv") {
-    pref[s.dataset.act] = s.dataset.act === "inv" ? Number(s.value) : s.value;
-    savePref();
-    if (!(t && applyStampToSelection(t))) render();
-    return;
-  }
   if (s.dataset.act === "track") {
     const o = state.tracks.find((x) => String(x.id) === s.value);
     if (o) { setActiveTrack(o); render(); }
@@ -655,7 +638,7 @@ function startGesture(e) {
   // draw: a new note, dragged into place from here
   const start = Math.floor(pt.step / u) * u;
   if (start >= MAX_LEN) { drag = { ...base, kind: "noop" }; return; }
-  const made = stampNotes(start, Math.min(lenFor(t), MAX_LEN - start), pt.pitch);
+  const made = stampNotes(t, start, Math.min(lenFor(t), MAX_LEN - start), pt.pitch);
   const ids = made.map((n) => {
     notes.push(n);
     const i = notes.length - 1;
@@ -690,7 +673,7 @@ function paintAt(pt) {
   for (let k = a; k <= b; k++) {
     const start = drag.start0 + k * len;
     if (start < 0 || start >= MAX_LEN || drag.placed.has(start)) continue;
-    const made = stampNotes(start, Math.min(len, MAX_LEN - start), pt.pitch);
+    const made = stampNotes(t, start, Math.min(len, MAX_LEN - start), pt.pitch);
     drag.placed.set(start, made);
     for (const n of made) {
       drag.field.insertAdjacentHTML("beforeend", `<div class="sq-pr__note is-new" style="left:${start * SW()}px;top:${yOf(n.pitch)}px;width:${n.len * SW() - 1}px;height:${RH()}px;--vel:0.8"><span></span></div>`);

@@ -77,10 +77,10 @@ test("a chord's root stays the root, extras clamped to it", () => {
   assert.deepEqual(p.extraLengths[0], [2]);
 });
 
-test("a note is cut at the next anchor and at the end", () => {
+test("notes overlap; only the end cuts one", () => {
   const p = pattern(8);
   const out = writeNotes(p, [{ start: 0, len: 8, pitch: 60 }, { start: 3, len: 9, pitch: 64 }, { start: 12, len: 1, pitch: 50 }]);
-  assert.deepEqual(out.map((x) => [x.start, x.len]), [[0, 3], [3, 5]]);
+  assert.deepEqual(out.map((x) => [x.start, x.len]), [[0, 8], [3, 5]]);
 });
 
 test("duplicates on one step and pitch merge into the longer", () => {
