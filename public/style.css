@@ -4459,8 +4459,6 @@ body.view-clips .sq-pattern-bar, body.view-arrange .sq-pattern-bar, body.view-pi
 
 /* clips: a toolbar, then a row of 32 cells per track, scenes above */
 .sq-clips__bar { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; font-size: 12px; }
-.sq-clips__play { min-width: 64px; }
-.sq-clips__play.is-playing { background: var(--accent-2); color: #0b0d10; border-color: var(--accent-2); }
 .sq-clips__mode[aria-pressed="true"], .sq-clips__switch[aria-pressed="true"] { background: var(--accent-2); color: #0b0d10; border-color: var(--accent-2); }
 .sq-clips__head, .sq-clips__row { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
 .sq-clips__head { margin-bottom: 8px; }
@@ -4542,7 +4540,6 @@ body.sq-playing .sq-clip.is-now::after { content: ""; position: absolute; left: 
 /* arrange: a ruler, a lane per track, blocks on it */
 .sq-arr__bar-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 12px; }
 .sq-arr__bar-row .sq-arr__len { color: var(--fg-dim); margin-left: auto; }
-.sq-arr__play.is-playing { background: var(--accent-2); color: #0b0d10; border-color: var(--accent-2); }
 .sq-arr__zoom { display: inline-flex; gap: 2px; }
 .sq-arr__scroll { overflow-x: auto; padding-bottom: 6px; }
 .sq-arr__grid { position: relative; min-width: max-content; --arr-bar-w: 48px; }
@@ -4609,7 +4606,7 @@ body.sq-playing .sq-clip.is-now::after { content: ""; position: absolute; left: 
    keyboard down the left and bar ruler across the top inside one scroller,
    the notes absolutely placed on the field, the velocity stalks under it
    scrolled sideways with it. */
-.sq-piano { max-width: 1600px; margin: 0 auto; padding: 12px 16px; --pr-keys: 66px; --pr-ruler: 22px; }
+.sq-piano { max-width: 1600px; margin: 0 auto; padding: 12px 16px; --pr-keys: 66px; --pr-ruler: 40px; }
 .sq-pr__empty { color: var(--fg-dim); font-size: 12px; }
 .sq-pr__bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 12px; }
 .sq-pr__bar select { font-size: 12px; }
@@ -4620,10 +4617,15 @@ body.sq-playing .sq-clip.is-now::after { content: ""; position: absolute; left: 
 .sq-pr__tools button[aria-pressed="true"] { background: var(--accent); color: #0b0d10; }
 .sq-pr__snap, .sq-pr__nudge, .sq-pr__len, .sq-pr__zoom { display: inline-flex; align-items: center; gap: 3px; color: var(--fg-dim); }
 .sq-pr__nudge button, .sq-pr__len button, .sq-pr__zoom button { padding: 2px 6px; font-size: 11px; min-width: 22px; }
-.sq-pr__foldbtn[aria-pressed="true"], .sq-pr__ghostbtn[aria-pressed="true"] { background: var(--accent-2); color: #0b0d10; border-color: var(--accent-2); }
-.sq-pr__play { min-width: 56px; margin-left: auto; }
-.sq-pr__play.is-playing { background: var(--accent-2); color: #0b0d10; border-color: var(--accent-2); }
+.sq-pr__ghostbtn[aria-pressed="true"] { background: var(--accent-2); color: #0b0d10; border-color: var(--accent-2); }
 .sq-pr__warn { color: var(--danger); }
+.sq-pr__sound { border-color: var(--accent); color: var(--accent); }
+
+/* the track's card in a window over the roll (openSoundModal) */
+.sq-pr__soundmodal { width: min(1100px, 96vw); max-width: none; max-height: 90vh; overflow-y: auto; padding: 14px; }
+.sq-pr__soundmodal > .sq-track { margin: 0; border-left: 3px solid var(--track-color); }
+.sq-pr__soundmodal .sq-steps { display: none; }
+.sq-pr__soundmodal .sq-panel__modal-close { position: sticky; bottom: 0; padding: 10px; background: var(--accent); color: #0b0d10; border-color: var(--accent); font-weight: 600; min-height: 40px; }
 
 .sq-pr__scroll {
   overflow: auto; height: max(380px, calc(100vh - var(--sq-topbar-h, 0px) - 260px));
@@ -4633,9 +4635,16 @@ body.sq-playing .sq-clip.is-now::after { content: ""; position: absolute; left: 
 .sq-pr__corner { position: sticky; top: 0; left: 0; z-index: 6; background: var(--bg-2); border-right: 1px solid var(--border); border-bottom: 1px solid var(--border);
   font-size: 10px; color: var(--track-color); padding: 4px 6px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; box-sizing: border-box; }
 .sq-pr__ruler { position: sticky; top: 0; z-index: 5; background: var(--bg-2); border-bottom: 1px solid var(--border); overflow: hidden; }
-.sq-pr__rbar { position: absolute; top: 0; bottom: 0; border-left: 1px solid var(--fg-dim); box-sizing: border-box; padding: 3px 4px; font-size: 10px; color: var(--fg);
+/* a pattern in the ruler: its header on top, its bars under it */
+.sq-pr__sec { position: absolute; top: 0; bottom: 0; border-left: 2px solid var(--fg-dim); box-sizing: border-box; overflow: hidden; }
+.sq-pr__sec.is-now { border-left-color: var(--track-color); background: color-mix(in oklab, var(--track-color) 10%, transparent); }
+.sq-pr__sec-h { position: absolute; top: 0; left: 0; right: 0; height: 20px; display: flex; align-items: center; gap: 3px; padding: 0 4px; font-size: 10px; color: var(--fg-dim); white-space: nowrap; border-bottom: 1px solid var(--border); }
+.sq-pr__sec-h button { padding: 0 5px; font-size: 10px; min-width: 0; height: 16px; line-height: 14px; }
+.sq-pr__sec-play { color: var(--fg); font-weight: 600; }
+.sq-pr__sec.is-now .sq-pr__sec-play { background: var(--track-color); color: #0b0d10; border-color: var(--track-color); }
+.sq-pr__sec-len { margin-right: 2px; }
+.sq-pr__rbar { position: absolute; top: 20px; bottom: 0; border-left: 1px solid var(--fg-dim); box-sizing: border-box; padding: 3px 4px; font-size: 10px; color: var(--fg);
   background-image: linear-gradient(to right, var(--border) 1px, transparent 1px); background-size: calc(var(--sw) * var(--beat)) 100%; background-position: calc(var(--sw) * var(--beat) - 1px) 0; }
-.sq-pr__rbar.is-past { color: var(--fg-dim); opacity: 0.6; }
 
 /* the keyboard: white keys, shorter black ones over them, C named */
 .sq-pr__keys { position: sticky; left: 0; z-index: 4; background: #d9d6cc; border-right: 1px solid var(--border); }
@@ -4654,13 +4663,14 @@ body.sq-playing .sq-clip.is-now::after { content: ""; position: absolute; left: 
 .sq-pr__row.is-c { border-bottom-color: #2c3039; }
 .sq-pr__row.is-out { background: #121318; }
 .sq-pr__row.is-root { background: color-mix(in oklab, var(--accent) 9%, #1c1f26); }
-.sq-pr__lines { position: absolute; inset: 0; pointer-events: none;
+.sq-pr__lines { position: absolute; top: 0; bottom: 0; pointer-events: none;
   background-image:
     linear-gradient(to right, #4a4f5c 1px, transparent 1px),
     linear-gradient(to right, #2f333d 1px, transparent 1px),
     linear-gradient(to right, #22252d 1px, transparent 1px);
   background-size: calc(var(--sw) * var(--barn)) 100%, calc(var(--sw) * var(--beat)) 100%, var(--sw) 100%; }
-.sq-pr__past { position: absolute; top: 0; bottom: 0; background: rgb(0 0 0 / 0.35); pointer-events: none; border-left: 2px solid var(--fg-dim); }
+.sq-pr__lines.is-alt { background-color: rgb(255 255 255 / 0.025); }
+.sq-pr__secline { position: absolute; top: 0; bottom: 0; width: 0; border-left: 2px solid #5a6070; pointer-events: none; }
 .sq-pr__ghost { position: absolute; box-sizing: border-box; border-radius: 2px; pointer-events: none;
   background: color-mix(in oklab, var(--g-c) 22%, transparent); border: 1px solid color-mix(in oklab, var(--g-c) 35%, transparent); }
 .sq-pr__tone { position: absolute; box-sizing: border-box; border-radius: 3px; pointer-events: none;
@@ -4673,7 +4683,10 @@ body.sq-playing .sq-clip.is-now::after { content: ""; position: absolute; left: 
 }
 .sq-pr__note.is-extra { background: color-mix(in oklab, var(--track-color) calc(40% + var(--vel) * 40%), #0b0d10); }
 .sq-pr__note.is-sel { background: color-mix(in oklab, var(--track-color) 35%, #fff); border-color: #fff; z-index: 2; }
-.sq-pr__foldbtn:disabled { opacity: 0.4; cursor: not-allowed; }
+/* the scale row's "scale only" box is the piano view's (pianoView.js) */
+#scale-fold-wrap { display: none; }
+body.view-piano #scale-fold-wrap { display: inline-flex; }
+#scale-fold-wrap:has(input:disabled) { opacity: 0.4; cursor: not-allowed; }
 .sq-pr__note.is-lifted { opacity: 0.55; border-style: dashed; }
 .sq-pr__note.is-off { outline: 1px dashed var(--danger); outline-offset: -1px; }
 .sq-pr__note.is-new { opacity: 0.85; z-index: 3; }
@@ -4686,7 +4699,8 @@ body.sq-playing .sq-clip.is-now::after { content: ""; position: absolute; left: 
 .sq-pr__vel { display: flex; height: 72px; border: 1px solid var(--border); border-top: 0; border-radius: 0 0 6px 6px; background: var(--bg-2); overflow: hidden; }
 .sq-pr__vel-label { flex: 0 0 var(--pr-keys); box-sizing: border-box; border-right: 1px solid var(--border); font-size: 10px; color: var(--fg-dim); padding: 4px 6px; }
 .sq-pr__vel-clip { flex: 1 1 0; overflow: hidden; position: relative; }
-.sq-pr__vel-inner { position: relative; height: 100%; touch-action: none; cursor: ns-resize;
+.sq-pr__vel-inner { position: relative; height: 100%; touch-action: none; cursor: ns-resize; }
+.sq-pr__vel-lines { position: absolute; top: 0; bottom: 0; pointer-events: none; border-left: 2px solid #4a4f5c; box-sizing: border-box;
   background-image: linear-gradient(to right, #3a3e49 1px, transparent 1px), linear-gradient(to right, #262933 1px, transparent 1px);
   background-size: calc(var(--sw) * var(--barn)) 100%, calc(var(--sw) * var(--beat)) 100%; }
 .sq-pr__stalk { position: absolute; bottom: 0; width: 0; border-left: 2px solid var(--track-color); margin-left: 2px; pointer-events: none; }

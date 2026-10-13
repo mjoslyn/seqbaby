@@ -45,6 +45,9 @@ export const BLANK_STEP = {
 const EPS = 1e-6;
 
 /**
+ * A note may carry `snap` (stepSnapshot of another pattern's step) instead of
+ * a `src` in the pattern it is written to: that is a note moved between
+ * patterns, bringing its step's fields along.
  * @typedef {{start: number, len: number, pitch: number, vel: number, off?: number,
  *   root: boolean, src: number|null, chord: string, cpx?: number}} RollNote
  * `off` is the step's nudge, a fraction of a step either side of the grid
@@ -91,15 +94,15 @@ export function readNotes(p, len = p?.steps?.length ?? 0) {
  * @returns {RollNote[]} the notes as written (readNotes of the result)
  */
 export function writeNotes(p, notes, len = p.steps.length) {
-  // What each source step carried, taken before anything is cleared.
+  // What each source step carried, taken before anything is cleared. A note
+  // from another pattern brings its own (`snap`, from stepSnapshot).
   const snaps = new Map();
   for (const nt of notes) {
     const s = nt.src;
-    if (s == null || snaps.has(s) || s < 0 || s >= p.steps.length) continue;
-    const snap = {};
-    for (const k of NOTE_STEP_KEYS) if (Array.isArray(p[k])) snap[k] = p[k][s];
-    snaps.set(s, snap);
+    if (nt.snap || s == null || snaps.has(s) || s < 0 || s >= p.steps.length) continue;
+    snaps.set(s, stepSnapshot(p, s));
   }
+  const snapOf = (nt) => nt?.snap ?? (nt?.src != null ? snaps.get(nt.src) : undefined);
   for (let i = 0; i < len; i++) {
     for (const k of ["steps", ...NOTE_STEP_KEYS]) if (Array.isArray(p[k])) p[k][i] = BLANK_STEP[k];
   }
@@ -124,7 +127,7 @@ export function writeNotes(p, notes, len = p.steps.length) {
       (b.chord ? 1 : 0) - (a.chord ? 1 : 0) || b.len - a.len || (b.root ? 1 : 0) - (a.root ? 1 : 0) || a.pitch - b.pitch);
     const root = group[0];
     const rootLen = Math.max(1, root.len);
-    const snap = snaps.get(root.src) ?? group.map((g) => snaps.get(g.src)).find(Boolean) ?? null;
+    const snap = snapOf(root) ?? group.map(snapOf).find(Boolean) ?? null;
     if (snap) for (const k of NOTE_STEP_KEYS) if (Array.isArray(p[k]) && snap[k] !== undefined) {
       p[k][start] = Array.isArray(snap[k]) ? snap[k].slice() : snap[k];
     }
@@ -143,6 +146,21 @@ export function writeNotes(p, notes, len = p.steps.length) {
     if (Array.isArray(p.extraLengths)) p.extraLengths[start] = extras.length ? extras.map((e) => Math.min(rootLen, e.len)) : null;
   });
   return readNotes(p, len);
+}
+
+/**
+ * Everything a step carries, by value, for a note moving to another pattern
+ * (pass it on the note as `snap`, with `src` null).
+ * @param {Record<string, any[]>} p @param {number} i
+ */
+export function stepSnapshot(p, i) {
+  const snap = {};
+  for (const k of NOTE_STEP_KEYS) {
+    if (!Array.isArray(p?.[k])) continue;
+    const v = p[k][i];
+    snap[k] = Array.isArray(v) ? v.slice() : v;
+  }
+  return snap;
 }
 
 /**

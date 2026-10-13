@@ -1,13 +1,19 @@
 /**
- * The piano view: one track's pattern as a full-height piano roll, in the
- * manner of FL Studio's. A keyboard down the left (click a key to hear it),
+ * The piano view: one track's patterns as a full-height piano roll, in the
+ * manner of FL Studio's, every pattern the song uses laid end to end across
+ * the timeline (and one more, empty, to draw into). A keyboard down the left (click a key to hear it),
  * bars across the top, the notes as bars you draw, drag, stretch and paint,
  * the other tracks' notes behind them as ghosts, and the velocity stalks
  * under it all. The fourth view beside groove, clips and arrange (views.js).
  *
- * What it edits is the track's pattern, the one it is on (`trackSlot`), and
- * the track is the keyboard's (`state.activeTrackId`), so the computer keys
- * play what is shown. A pattern stores notes per step (track.js), so every
+ * What it edits is the track's patterns, all of them at once: each is a
+ * section with its own header (its number, its length and the buttons that
+ * change it, and a ▶ that launches it on this track), its own meter's grid,
+ * and the other tracks' notes for the same pattern as ghosts. A note dragged
+ * across a section line moves to that pattern, its step's fields with it
+ * (stepSnapshot). The track is the keyboard's (`state.activeTrackId`), so the
+ * computer keys play what is shown, and the playhead runs in the section of
+ * the pattern the track is on. A pattern stores notes per step (track.js), so every
  * edit here reads the pattern as a free list of notes (rollNotes.js), changes
  * the list, and folds it back: notes starting on one step stack on it, and
  * notes may overlap (a new note never shortens one it lands on).
@@ -27,7 +33,8 @@
  * selects all, ctrl/⌘-B duplicates the selection after itself, alt + ← →
  * nudges it off the grid (the nudge buttons do too), escape lets go.
  *
- * "scale only", with a scale switched on, folds the roll to the scale's rows,
+ * "scale only" (a box in the top bar's scale row, shown in this view only),
+ * with a scale switched on, folds the roll to the scale's rows,
  * so a note drawn is in key and a drag up or down moves by scale degree (↑ ↓
  * too). A note already off the scale sits on the row below it, outlined.
  *
@@ -39,7 +46,10 @@
  * type is written as the root plus extras. `apply chord` puts it on the
  * selected notes (or takes their chords off when chord mode is off).
  *
- * Notes drawn past the pattern's end make it longer, to the next bar line.
+ * `sound` opens the track's own card in a window over the roll: the
+ * instrument, the fx, the filter, the mod matrix and the automation lanes.
+ *
+ * A note is cut at its pattern's end; a pattern's length is its header's.
  * Every edit is committed on release, so a drag is one undo step (history.js
  * watches the pointerup) and the view is rebuilt from the pattern afterwards.
  */
@@ -51,15 +61,15 @@ import { chordSelectionFor, hitOptsFor, isTypingTarget } from "./keyboard.js";
 import { patternMeter, stepsPerBarForMeter, stepsPerBeatForMeter } from "./meter.js";
 import { refreshRollIfOpen } from "./pianoRoll.js";
 import { setActiveTrack } from "./render.js";
-import { pitchesAt, readNotes, writeNotes } from "./rollNotes.js";
+import { pitchesAt, readNotes, stepSnapshot, writeNotes } from "./rollNotes.js";
 import { holdNoiseBed } from "./signal.js";
-import { invertChord, state, trackSlot } from "./state.js";
+import { invertChord, isPatternNonEmpty, state, trackSlot } from "./state.js";
 import { openStepEditor } from "./stepEditor.js";
 import { renderStepGrid } from "./stepGrid.js";
 import { liveGeneratorOf } from "./stepSource.js";
 import { SCALES, chordNotes, midiToName } from "./theory.js";
 import { extendPatternByDuplicate, resizePattern, truncatePattern } from "./track.js";
-import { trackHue } from "./trackDetail.js";
+import { restoreTrackCard, trackHue } from "./trackDetail.js";
 import { ensureAudio, wakeMasterBus } from "./transport.js";
 import { onViewChange } from "./views.js";
 
@@ -89,6 +99,7 @@ let sel = new Set();
 let drag = null;
 let shownId = null;
 let litKey = "";
+let headSlot = -1;
 let keepMem = false;
 let lastDown = { at: 0, key: "" };             // a zoom has already written where the scroll goes
 const lastLen = new Map();       // track id -> the length a new note takes
@@ -152,27 +163,56 @@ function currentTrack() {
   if (!t || t.engineKey === "bus") t = rows()[0] || null;
   return t;
 }
+/**
+ * The patterns laid across the timeline: every slot up to the last any track
+ * has notes in (or the one this track is on), and one more to draw into.
+ * Rebuilt per render, so they hold still through a drag.
+ * @type {{slot: number, off: number, len: number, bar: number, beat: number}[]}
+ */
+let sections = [];
+let secBySlot = new Map();
+function buildSections(t) {
+  let last = trackSlot(t);
+  for (let i = 0; i < PATTERN_COUNT; i++) if (isPatternNonEmpty(i)) last = Math.max(last, i);
+  last = Math.min(PATTERN_COUNT - 1, last + 1);
+  sections = [];
+  let off = 0;
+  for (let slot = 0; slot <= last; slot++) {
+    const p = t.patterns?.[slot];
+    if (!p?.steps) continue;
+    const m = patternMeter(slot);
+    sections.push({ slot, off, len: p.steps.length, bar: stepsPerBarForMeter(m), beat: stepsPerBeatForMeter(m) });
+    off += p.steps.length;
+  }
+  secBySlot = new Map(sections.map((sec) => [sec.slot, sec]));
+}
+const totalSteps = () => { const l = sections[sections.length - 1]; return l ? l.off + l.len : 0; };
+/** The pattern a global step falls in. */
+function sectionAt(g) {
+  for (const sec of sections) if (g >= sec.off && g < sec.off + sec.len) return sec;
+  return null;
+}
 function meterOf(t) {
   const m = patternMeter(trackSlot(t));
   return { bar: stepsPerBarForMeter(m), beat: stepsPerBeatForMeter(m) };
 }
-function snapUnit(t) {
-  const { bar, beat } = meterOf(t);
+function snapUnit(sec) {
+  const bar = sec?.bar ?? 16, beat = sec?.beat ?? 4;
   if (pref.snap === "bar") return bar;
   if (pref.snap === "beat") return beat;
   if (pref.snap === "half") return Math.max(1, Math.round(beat / 2));
   return 1;
 }
-/**
- * Steps drawn: the pattern, then two bars past the next bar line to draw
- * into, and whole bars beyond that to fill the view's width.
- */
-function viewSteps(t) {
-  const { bar } = meterOf(t);
-  const len = t.steps.length;
-  const fit = Math.ceil(Math.max(0, (root?.clientWidth ?? 0) - 100) / SW() / bar) * bar;
-  return Math.min(MAX_LEN, Math.max(len, Math.ceil(len / bar) * bar + 2 * bar, fit));
+/** A global step snapped on its own pattern's grid: floored (a click) or rounded (a drag). */
+function snapG(g, how = "round") {
+  const sec = sectionAt(Math.max(0, Math.min(totalSteps() - 1e-6, g))) || sections[0];
+  if (!sec) return Math.round(g);
+  const u = snapUnit(sec);
+  const local = (g - sec.off) / u;
+  return sec.off + (how === "floor" ? Math.floor(local) : Math.round(local)) * u;
 }
+/** Where the pattern holding a global step ends. */
+const secEnd = (g) => { const sec = sectionAt(g); return sec ? sec.off + sec.len : totalSteps(); };
 const lenFor = (t) => lastLen.get(t.id) ?? Math.max(1, Math.min(4, meterOf(t).beat));
 
 export function installPianoView() {
@@ -188,9 +228,17 @@ export function installPianoView() {
   window.addEventListener("pointerup", onPointerUp);
   window.addEventListener("pointercancel", onPointerUp);
   window.addEventListener("keydown", onKey);
+  // "scale only" lives in the top bar's scale row (shown in this view only)
+  const fold = document.getElementById("scale-fold");
+  fold?.addEventListener("change", () => {
+    pref.fold = fold.checked; savePref();
+    const t = currentTrack();
+    if (t) { scrollMem.delete(t.id); keepMem = true; }    // the rows moved: centre on the notes again
+    render();
+  });
   // the scale decides the folded rows and which rows are tinted
   document.addEventListener("change", (e) => { if (/^scale-(on|root|mode)$/.test(e.target?.id || "")) schedulePianoPaint(); });
-  onViewChange((v) => { if (v === "piano") { render(); headLoop(); } });
+  onViewChange((v) => { if (v === "piano") { render(); headLoop(); } else soundModal?.close(); });
   for (const ev of ["seqbaby:clips", "seqbaby:songedited", "seqbaby:setapplied", "seqbaby:newset", "seqbaby:transport"]) {
     window.addEventListener(ev, schedulePianoPaint);
   }
@@ -213,14 +261,14 @@ function render() {
   if (!t) { root.innerHTML = `<p class="sq-pr__empty">no tracks to edit</p>`; shownId = null; return; }
   if (t.id !== shownId) sel = new Set();
   buildRows();
-  notes = readNotes(t);
+  buildSections(t);
+  // every pattern's notes, at global steps; slot0 / src say where each came from
+  notes = sections.flatMap((sec) => readNotes(t.patterns[sec.slot]).map((n) => ({ ...n, start: n.start + sec.off, slot0: sec.slot })));
   const have = new Set(notes.map(key));
   sel = new Set([...sel].filter((k) => have.has(k)));
 
   const sw = SW(), rh = RH();
-  const steps = viewSteps(t);
-  const len = t.steps.length;
-  const { bar, beat } = meterOf(t);
+  const steps = totalSteps();
   const W = steps * sw, H = rowPitches.length * rh;
   const [hue, color] = trackHue(t);
   const slot = trackSlot(t);
@@ -238,28 +286,42 @@ function render() {
     keys += `<div class="sq-pr__key${black ? " is-black" : ""}${pc === 0 ? " is-c" : ""}" data-p="${p}" style="top:${y}px;height:${rh}px" title="${midiToName(p)}">${pc === 0 && rh >= 10 ? midiToName(p) : ""}</div>`;
     lanes += `<div class="sq-pr__row${black ? " is-black" : ""}${pc === 0 ? " is-c" : ""}${out ? " is-out" : ""}${isRoot ? " is-root" : ""}" style="top:${y}px;height:${rh}px"></div>`;
   }
-  let ruler = "";
-  for (let b = 0; b * bar < steps; b++) {
-    ruler += `<div class="sq-pr__rbar${b * bar >= len ? " is-past" : ""}" style="left:${b * bar * sw}px;width:${bar * sw}px">${b + 1}</div>`;
-  }
+  // per pattern: a header and bar numbers in the ruler, a grid and a line in the field
+  let ruler = "", grids = "", velGrids = "";
+  sections.forEach((sec, si) => {
+    const x = sec.off * sw, w = sec.len * sw;
+    const empty = !t.patterns[sec.slot].steps.some(Boolean);
+    const bars = sec.len / sec.bar;
+    ruler += `<div class="sq-pr__sec${sec.slot === slot ? " is-now" : ""}" data-slot="${sec.slot}" style="left:${x}px;width:${w}px">
+      <div class="sq-pr__sec-h"><button type="button" class="sq-pr__sec-play" data-act="sec-play" data-slot="${sec.slot}" title="play pattern ${sec.slot + 1} on this track">▶ ${sec.slot + 1}</button><span class="sq-pr__sec-len">${Number.isInteger(bars) ? bars : bars.toFixed(2)} bar${bars === 1 ? "" : "s"}${empty ? " · empty" : ""}</span><button type="button" data-act="sec-len-" data-slot="${sec.slot}" title="pattern ${sec.slot + 1}: one bar shorter">−</button><button type="button" data-act="sec-len+" data-slot="${sec.slot}" title="pattern ${sec.slot + 1}: one bar longer, empty">+</button><button type="button" data-act="sec-x2" data-slot="${sec.slot}" title="pattern ${sec.slot + 1}: double the length, tiling what is there">x2</button></div>
+      ${Array.from({ length: Math.ceil(sec.len / sec.bar) }, (_, b) => `<div class="sq-pr__rbar" style="left:${b * sec.bar * sw}px;width:${Math.min(sec.bar, sec.len - b * sec.bar) * sw}px">${b + 1}</div>`).join("")}
+    </div>`;
+    grids += `<div class="sq-pr__lines${si % 2 ? " is-alt" : ""}" style="left:${x}px;width:${w}px;--beat:${sec.beat};--barn:${sec.bar}"></div><div class="sq-pr__secline" style="left:${x}px"></div>`;
+    velGrids += `<div class="sq-pr__vel-lines" style="left:${x}px;width:${w}px;--beat:${sec.beat};--barn:${sec.bar}"></div>`;
+  });
 
-  // the other tracks' notes, behind, tiled as each loops
+  // the other tracks' notes for the same pattern, behind, tiled as each loops
   let ghosts = "";
   if (pref.ghosts) {
     for (const o of rows()) {
-      if (o === t || o.isDrumKit || !o.steps?.length) continue;
-      const on = readNotes(o);
-      if (!on.length) continue;
+      if (o === t || o.isDrumKit) continue;
       const k = (t.speed ?? 1) / Math.max(0.0001, o.speed ?? 1);    // o's steps in t's
-      const period = o.steps.length * k;
       const gc = trackHue(o)[1];
-      let count = 0;
-      for (let rep = 0; rep * period < steps && count < 800; rep++) {
-        for (const n of on) {
-          const x = (rep * period + n.start * k) * sw;
-          if (x >= W || hidden(n.pitch)) continue;
-          ghosts += `<div class="sq-pr__ghost" data-track="${o.id}" style="left:${x}px;top:${yOf(n.pitch)}px;width:${Math.max(2, n.len * k * sw - 1)}px;height:${rh}px;--g-c:${gc}" title="${esc(o.name)}"></div>`;
-          count++;
+      for (const sec of sections) {
+        const op = o.patterns?.[sec.slot];
+        if (!op?.steps?.length) continue;
+        const on = readNotes(op);
+        if (!on.length) continue;
+        const period = op.steps.length * k;
+        let count = 0;
+        for (let rep = 0; rep * period < sec.len && count < 400; rep++) {
+          for (const n of on) {
+            const at = rep * period + n.start * k;
+            if (at >= sec.len || hidden(n.pitch)) continue;
+            const w = Math.min(n.len * k, sec.len - at);
+            ghosts += `<div class="sq-pr__ghost" style="left:${(sec.off + at) * sw}px;top:${yOf(n.pitch)}px;width:${Math.max(2, w * sw - 1)}px;height:${rh}px;--g-c:${gc}" title="${esc(o.name)}"></div>`;
+            count++;
+          }
         }
       }
     }
@@ -277,43 +339,35 @@ function render() {
   const stalks = notes.filter((n) => n.root).map((n) =>
     `<i class="sq-pr__stalk" data-s="${n.start}" style="left:${xOf(n)}px;height:${Math.round(n.vel * 100)}%"></i>`).join("");
 
+  const foldBox = document.getElementById("scale-fold");
+  if (foldBox) { foldBox.checked = !!pref.fold; foldBox.disabled = !scale; }
   const gen = liveGeneratorOf(t);
   const trackOpts = rows().map((o) => `<option value="${o.id}"${o === t ? " selected" : ""}>${esc(o.name || "track")}</option>`).join("");
-  const slotOpts = Array.from({ length: PATTERN_COUNT }, (_, i) =>
-    `<option value="${i}"${i === slot ? " selected" : ""}>pattern ${i + 1}${t.patterns?.[i]?.steps?.some(Boolean) ? " •" : ""}</option>`).join("");
-  const bars = len / bar;
 
   root.innerHTML = `
     <div class="sq-pr__bar">
       <select class="sq-pr__track" data-act="track" title="the track being edited (the computer keyboard plays it too)" aria-label="track">${trackOpts}</select>
-      <select class="sq-pr__slot" data-act="slot" title="the pattern this track is on; picking another launches it on this track" aria-label="pattern">${slotOpts}</select>
       <span class="sq-pr__tools" role="group" aria-label="tool">${TOOLS.map(([k, label, title]) =>
         `<button type="button" data-tool="${k}" aria-pressed="${pref.tool === k}" title="${esc(title)}">${label}</button>`).join("")}</span>
-      <label class="sq-pr__snap" title="where notes land and how far they move">snap <select data-act="snap">${SNAPS.map(([k, l]) =>
+      <label class="sq-pr__snap" title="where notes land and how far they move, on each pattern's own grid">snap <select data-act="snap">${SNAPS.map(([k, l]) =>
         `<option value="${k}"${pref.snap === k ? " selected" : ""}>${l}</option>`).join("")}</select></label>
       <span class="sq-pr__nudge" title="nudge: move the selected notes off the grid, early or late, by 1/24 of a step (shift-click: a quarter step). 0 puts them back on it. alt + ← → does the same">nudge<button type="button" class="sq-btn--ghost" data-act="nudge-" aria-label="nudge earlier">‹</button><button type="button" class="sq-btn--ghost" data-act="nudge0" aria-label="back on the grid">0</button><button type="button" class="sq-btn--ghost" data-act="nudge+" aria-label="nudge later">›</button></span>
       <button type="button" class="sq-btn--ghost" data-act="chordsel" title="apply chord: put the chord bar's chord (type and voicing, or in key with the scale on) on the selected notes. With chord mode off it takes their chords away. New notes take the chord bar's chord as they are drawn">apply chord</button>
-      <span class="sq-pr__len" title="the pattern's length">${len} steps · ${Number.isInteger(bars) ? bars : bars.toFixed(2)} bar${bars === 1 ? "" : "s"}
-        <button type="button" class="sq-btn--ghost" data-act="len-" title="one bar shorter">−bar</button><button type="button" class="sq-btn--ghost" data-act="len+" title="one bar longer, empty">+bar</button><button type="button" class="sq-btn--ghost" data-act="x2" title="double the length, tiling what is there">x2</button></span>
-      <button type="button" class="sq-pr__foldbtn" data-act="fold" aria-pressed="${fold}"${scale ? "" : " disabled"} title="${scale
-        ? "scale only: show just the scale's rows, so every note you draw is in key and dragging up or down moves by scale degree"
-        : "scale only: switch the scale on (top bar) to fold the roll to its notes"}">scale only</button>
-      <button type="button" class="sq-pr__ghostbtn" data-act="ghosts" aria-pressed="${!!pref.ghosts}" title="ghosts: the other melodic tracks' notes, faint, behind this one's">ghosts</button>
+      <button type="button" class="sq-pr__sound" data-act="sound" title="sound: this track's instrument, effects, filter, modulation and automation lanes, in a window over the roll (its own track card, so every control is the one in the groove view)">sound</button>
+      <button type="button" class="sq-pr__ghostbtn" data-act="ghosts" aria-pressed="${!!pref.ghosts}" title="ghosts: the other melodic tracks' notes for the same pattern, faint, behind this one's">ghosts</button>
       <span class="sq-pr__zoom" title="zoom (ctrl/⌘-wheel zooms across)">↔<button type="button" class="sq-btn--ghost" data-act="zx-">−</button><button type="button" class="sq-btn--ghost" data-act="zx+">+</button>
         ↕<button type="button" class="sq-btn--ghost" data-act="zy-">−</button><button type="button" class="sq-btn--ghost" data-act="zy+">+</button></span>
-      <button type="button" class="sq-pr__play${state.playing ? " is-playing" : ""}" data-act="play">${state.playing ? "stop" : "play"}</button>
       ${gen ? `<span class="sq-pr__warn">live ${gen} is on: it decides the rhythm, not these notes</span>` : ""}
       ${t._clipOff ? `<span class="sq-pr__warn">this track's clip is stopped</span>` : ""}
     </div>
     <div class="sq-pr__scroll">
-      <div class="sq-pr__canvas" style="--sw:${sw}px;--rh:${rh}px;--beat:${beat};--barn:${bar};--track-hue:${hue};--track-color:${color};grid-template-columns:var(--pr-keys) ${W}px;grid-template-rows:var(--pr-ruler) ${H}px">
+      <div class="sq-pr__canvas" style="--sw:${sw}px;--rh:${rh}px;--track-hue:${hue};--track-color:${color};grid-template-columns:var(--pr-keys) ${W}px;grid-template-rows:var(--pr-ruler) ${H}px">
         <div class="sq-pr__corner">${esc(t.name || "track")}</div>
         <div class="sq-pr__ruler">${ruler}</div>
         <div class="sq-pr__keys" title="click or drag down the keys to hear them">${keys}</div>
         <div class="sq-pr__field">
           ${lanes}
-          <div class="sq-pr__lines"></div>
-          ${len < steps ? `<div class="sq-pr__past" style="left:${len * sw}px;width:${(steps - len) * sw}px" title="past the pattern's end: a note drawn here makes it longer"></div>` : ""}
+          ${grids}
           ${ghosts}${tones}${noteEls}
           <div class="sq-pr__marquee" hidden></div>
           <div class="sq-pr__head" hidden></div>
@@ -322,7 +376,7 @@ function render() {
     </div>
     <div class="sq-pr__vel">
       <div class="sq-pr__vel-label" title="each step's velocity: drag across the stalks to draw it">velocity</div>
-      <div class="sq-pr__vel-clip"><div class="sq-pr__vel-inner" style="width:${W}px;--sw:${sw}px;--beat:${beat};--barn:${bar};--track-color:${color}">${stalks}</div></div>
+      <div class="sq-pr__vel-clip"><div class="sq-pr__vel-inner" style="width:${W}px;--sw:${sw}px;--track-color:${color}">${velGrids}${stalks}</div></div>
     </div>`;
 
   const nsc = root.querySelector(".sq-pr__scroll");
@@ -332,10 +386,12 @@ function render() {
     const ps = notes.map((n) => n.pitch);
     const mid = ps.length ? (Math.min(...ps) + Math.max(...ps)) / 2 : (t.isDrumKit ? 40 : 60);
     nsc.scrollTop = Math.max(0, yOf(mid) - nsc.clientHeight / 2);
+    nsc.scrollLeft = (secBySlot.get(slot)?.off ?? 0) * sw;
   }
   shownId = t.id;
   syncVelScroll();
   litKey = "";
+  headSlot = slot;
   paintHead();
 }
 
@@ -359,9 +415,15 @@ function paintHead() {
   const head = root?.querySelector(".sq-pr__head");
   const t = currentTrack();
   if (!head || !t || t.id !== shownId) return;
-  const idx = state.playing && !t._clipOff && t._nowIdx >= 0 ? t._nowIdx : -1;
+  const sec = secBySlot.get(trackSlot(t));
+  const idx = sec && state.playing && !t._clipOff && t._nowIdx >= 0 ? sec.off + t._nowIdx : -1;
   head.hidden = idx < 0;
   if (idx >= 0) head.style.transform = `translateX(${idx * SW()}px)`;
+  const nowSlot = sec ? sec.slot : -1;
+  if (nowSlot !== headSlot) {
+    headSlot = nowSlot;
+    root.querySelectorAll(".sq-pr__sec").forEach((el) => el.classList.toggle("is-now", Number(el.dataset.slot) === nowSlot));
+  }
   const on = idx < 0 ? [] : pitchesAt(notes, idx);
   const k = on.join(",");
   if (k === litKey) return;
@@ -428,6 +490,59 @@ function applyChordToSelection(t) {
   return true;
 }
 
+// ---- the track's sound, in a modal -------------------------------------------------
+
+let soundModal = null;
+
+/**
+ * The track's own card (its instrument row, panel buttons and inline fx / mod
+ * / filter, and the automation lanes behind its aut button) moved into a
+ * window over the roll, as the clip and arrangement views move it into their
+ * detail. Nothing is copied: every listener and `data-track-id` lookup keeps
+ * working. The step grid is hidden in here, since the roll is the editor; a
+ * panel the card opens stacks its own modal on top, and escape closes that
+ * one first. Closing puts the card back in #tracks and redraws the roll (the
+ * engine, the drum kit flag or the notes may have changed).
+ */
+function openSoundModal(t) {
+  if (soundModal || !t.el) return;
+  const overlay = document.createElement("div");
+  overlay.className = "sq-modal-overlay";
+  const modal = document.createElement("div");
+  modal.className = "sq-modal sq-pr__soundmodal";
+  modal.setAttribute("role", "dialog");
+  modal.setAttribute("aria-modal", "true");
+  modal.setAttribute("aria-label", `${t.name || "track"}: sound`);
+  const [hue, color] = trackHue(t);
+  modal.style.setProperty("--track-hue", String(hue));
+  modal.style.setProperty("--track-color", color);
+  const done = document.createElement("button");
+  done.type = "button";
+  done.className = "sq-panel__modal-close";
+  done.textContent = "done";
+  modal.append(t.el, done);
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
+  const close = () => {
+    if (!soundModal) return;
+    soundModal = null;
+    document.removeEventListener("keydown", onEsc);
+    restoreTrackCard(t);
+    overlay.remove();
+    render();
+  };
+  // only when this is the top window: a panel opened from the card sits over it
+  const onEsc = (e) => {
+    if (e.key !== "Escape") return;
+    const all = document.querySelectorAll(".sq-modal-overlay");
+    if (all[all.length - 1] === overlay) close();
+  };
+  done.addEventListener("click", close);
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
+  document.addEventListener("keydown", onEsc);
+  soundModal = { overlay, close, t };
+}
+
 // ---- nudge -----------------------------------------------------------------------
 
 /**
@@ -474,17 +589,23 @@ function auditionChord(t, made, dur = 0.3) {
 // ---- committing --------------------------------------------------------------
 
 /**
- * Write a new list of notes into the track's pattern, growing the pattern to
- * the next bar line when a note runs past its end, then select `select`
- * (notes, matched by start and pitch after the fold) and repaint.
+ * Write a new list of notes (at global steps) back into the track's patterns:
+ * each note goes to the pattern its start falls in, cut at that pattern's
+ * end. A note that moved between patterns brings its step's fields
+ * (stepSnapshot, taken before anything is written). Then select `select`
+ * (matched by start and pitch after the fold) and repaint.
  */
 function commit(t, list, select = null) {
-  const end = list.reduce((m, n) => Math.max(m, n.start + n.len), 0);
-  if (end > t.steps.length) {
-    const { bar } = meterOf(t);
-    resizePattern(t, trackSlot(t), Math.min(MAX_LEN, Math.ceil(end / bar) * bar));
+  const bySlot = new Map(sections.map((sec) => [sec.slot, []]));
+  for (const n of list) {
+    const sec = sectionAt(n.start);
+    if (!sec) continue;
+    const moved = n.slot0 != null && n.slot0 !== sec.slot && n.src != null;
+    const local = { ...n, start: n.start - sec.off };
+    if (moved) { local.snap = stepSnapshot(t.patterns[n.slot0], n.src); local.src = null; }
+    bySlot.get(sec.slot).push(local);
   }
-  writeNotes(t, list, t.steps.length);
+  for (const sec of sections) writeNotes(t.patterns[sec.slot], bySlot.get(sec.slot), t.patterns[sec.slot].steps.length);
   if (select) sel = new Set(select.map(key));
   const last = select?.[select.length - 1];
   if (last && !t.isDrumKit) t.lastEditedNote = last.pitch;
@@ -502,32 +623,32 @@ function onClick(e) {
   if (!b) return;
   const t = currentTrack();
   const act = b.dataset.act;
-  if (act === "play") { document.getElementById("play")?.click(); return; }
+  if (act === "sound") { if (t) openSoundModal(t); return; }
   if (act === "chordsel") { if (t) applyChordToSelection(t); return; }
   if (act.startsWith("nudge")) {
     if (t) nudgeSelection(t, act === "nudge0" ? 0 : (e.shiftKey ? 6 : 1) * (act === "nudge-" ? -1 : 1), act === "nudge0" ? 0 : null);
     return;
   }
   if (act === "ghosts") { pref.ghosts = !pref.ghosts; savePref(); render(); return; }
-  if (act === "fold") {
-    pref.fold = !pref.fold; savePref();
-    if (t) { scrollMem.delete(t.id); keepMem = true; }    // the rows moved: centre on the notes again
-    render();
-    return;
-  }
   if (/^z[xy][+-]$/.test(act)) {
     const axis = act[1] === "x" ? "zx" : "zy";
     const max = (axis === "zx" ? ZX : ZY).length - 1;
     zoomTo(axis, Math.max(0, Math.min(max, pref[axis] + (act[2] === "+" ? 1 : -1))));
     return;
   }
-  if (!t) return;
-  const slot = trackSlot(t);
-  const { bar } = meterOf(t);
-  const len = t.steps.length;
-  if (act === "len+") resizePattern(t, slot, Math.min(MAX_LEN, len + bar));
-  else if (act === "len-") truncatePattern(t, slot, Math.max(1, len - bar));
-  else if (act === "x2") extendPatternByDuplicate(t, slot, Math.min(MAX_LEN, len * 2));
+  if (!t || !act.startsWith("sec-")) return;
+  const slot = Number(b.dataset.slot);
+  const sec = secBySlot.get(slot);
+  if (!sec) return;
+  if (act === "sec-play") {
+    launchClip(t, slot);
+    setStatus(`${t.name?.trim() || "track"}: pattern ${slot + 1}`);
+    render();
+    return;
+  }
+  if (act === "sec-len+") resizePattern(t, slot, Math.min(MAX_LEN, sec.len + sec.bar));
+  else if (act === "sec-len-") truncatePattern(t, slot, Math.max(1, sec.len - sec.bar));
+  else if (act === "sec-x2") extendPatternByDuplicate(t, slot, Math.min(MAX_LEN, sec.len * 2));
   else return;
   refreshRollIfOpen(t);
   render();
@@ -558,12 +679,6 @@ function onChange(e) {
   if (s.dataset.act === "track") {
     const o = state.tracks.find((x) => String(x.id) === s.value);
     if (o) { setActiveTrack(o); render(); }
-    return;
-  }
-  if (s.dataset.act === "slot" && t) {
-    launchClip(t, Number(s.value));
-    setStatus(`${t.name?.trim() || "track"}: pattern ${Number(s.value) + 1}`);
-    render();
   }
 }
 
@@ -595,7 +710,14 @@ function onPointerDown(e) {
   if (k && k === lastDown.key && now - lastDown.at < 350) {
     lastDown = { at: 0, key: "" };
     e.preventDefault();
-    openStepEditor(t, n.start, nEl);
+    // the step editor edits the pattern the track is on, so a note in
+    // another pattern puts the track there first
+    const sec = sectionAt(n.start);
+    if (sec && sec.slot !== trackSlot(t)) {
+      launchClip(t, sec.slot);
+      setStatus(`${t.name?.trim() || "track"}: pattern ${sec.slot + 1}, to edit its step`);
+    }
+    if (sec) openStepEditor(t, n.start - sec.off, nEl);
     return;
   }
   lastDown = { at: now, key: k };
@@ -662,16 +784,15 @@ function startGesture(e) {
     return;
   }
   // empty space
-  const u = snapUnit(t);
   if (pref.tool === "paint") {
-    drag = { ...base, kind: "paint", start0: Math.floor(pt.step / u) * u, placed: new Map() };
+    drag = { ...base, kind: "paint", start0: snapG(pt.step, "floor"), placed: new Map() };
     paintAt(pt);
     return;
   }
   // draw: a new note, dragged into place from here
-  const start = Math.floor(pt.step / u) * u;
-  if (start >= MAX_LEN) { drag = { ...base, kind: "noop" }; return; }
-  const made = stampNotes(t, start, Math.min(lenFor(t), MAX_LEN - start), pt.pitch);
+  const start = snapG(pt.step, "floor");
+  if (start >= totalSteps()) { drag = { ...base, kind: "noop" }; return; }
+  const made = stampNotes(t, start, Math.min(lenFor(t), secEnd(start) - start), pt.pitch);
   const ids = made.map((n) => {
     notes.push(n);
     const i = notes.length - 1;
@@ -705,8 +826,8 @@ function paintAt(pt) {
   const [a, b] = k1 >= 0 ? [0, k1] : [k1, 0];
   for (let k = a; k <= b; k++) {
     const start = drag.start0 + k * len;
-    if (start < 0 || start >= MAX_LEN || drag.placed.has(start)) continue;
-    const made = stampNotes(t, start, Math.min(len, MAX_LEN - start), pt.pitch);
+    if (start < 0 || start >= totalSteps() || drag.placed.has(start)) continue;
+    const made = stampNotes(t, start, Math.min(len, secEnd(start) - start), pt.pitch);
     drag.placed.set(start, made);
     for (const n of made) {
       drag.field.insertAdjacentHTML("beforeend", `<div class="sq-pr__note is-new" style="left:${start * SW()}px;top:${yOf(n.pitch)}px;width:${n.len * SW() - 1}px;height:${RH()}px;--vel:0.8"><span></span></div>`);
@@ -723,7 +844,8 @@ function velAt(e) {
   const v = Math.max(0.05, Math.min(1, 1 - (e.clientY - r.top) / r.height));
   // the stalk in this column, or the nearest one within half a beat to its left
   let s = -1;
-  for (const n of notes) if (n.root && n.start <= step && n.start > s && step - n.start < Math.max(1, meterOf(drag.t).beat / 2)) s = n.start;
+  const beat = sectionAt(step)?.beat ?? 4;
+  for (const n of notes) if (n.root && n.start <= step && n.start > s && step - n.start < Math.max(1, beat / 2)) s = n.start;
   if (s < 0) return;
   drag.changes.set(s, v);
   const stalk = inner.querySelector(`.sq-pr__stalk[data-s="${s}"]`);
@@ -767,15 +889,13 @@ function onPointerMove(e) {
     paintSel();
     return;
   }
-  const u = snapUnit(t);
-  const snapR = (x) => Math.round(x / u) * u;
   if (drag.kind === "resize") {
-    const end = Math.max(drag.grabStart + 1, snapR(drag.grabEnd + pt.step - drag.x0));
+    const end = Math.min(secEnd(drag.grabStart), Math.max(drag.grabStart + 1, snapG(drag.grabEnd + pt.step - drag.x0)));
     const d = end - drag.grabEnd;
     drag.d = d;
     drag.ids.forEach((i, j) => {
       const o = drag.orig[j];
-      const l = Math.max(1, Math.min(MAX_LEN - o.start, o.len + d));
+      const l = Math.max(1, Math.min(secEnd(o.start) - o.start, o.len + d));
       const el = noteEl(i);
       if (el) el.style.width = `${l * sw - 1}px`;
       drag.field.querySelectorAll(`.sq-pr__tone[data-root="${i}"]`).forEach((tEl) => { tEl.style.width = `${l * sw - 1}px`; });
@@ -785,7 +905,7 @@ function onPointerMove(e) {
   if (drag.kind === "move") {
     const minStart = Math.min(...drag.orig.map((o) => o.start));
     const maxEnd = Math.max(...drag.orig.map((o) => o.start + o.len));
-    const dStep = Math.max(-minStart, Math.min(MAX_LEN - maxEnd, snapR(drag.grab.start + pt.step - drag.x0) - drag.grab.start));
+    const dStep = Math.max(-minStart, Math.min(totalSteps() - maxEnd, snapG(drag.grab.start + pt.step - drag.x0) - drag.grab.start));
     const dRow = clampRows(drag.orig.map((o) => o.pitch), pt.row - drag.r0);
     if (dRow !== drag.dRow && drag.ids.length <= 4) {
       auditionChord(t, drag.orig.map((o) => ({ ...o, pitch: shiftRows(o.pitch, dRow) })), 0.2);
@@ -824,7 +944,11 @@ function onPointerUp(e) {
   if (d.kind === "keys" || d.kind === "noop") return;
   if (d.kind === "vel") {
     if (!d.changes.size) return;
-    for (const [s, v] of d.changes) if (t.steps[s]) t.velocities[s] = v;
+    for (const [g, v] of d.changes) {
+      const sec = sectionAt(g);
+      const p = sec && t.patterns[sec.slot];
+      if (p?.steps[g - sec.off]) p.velocities[g - sec.off] = v;
+    }
     renderStepGrid(t); refreshRollIfOpen(t); render();
     return;
   }
@@ -848,7 +972,7 @@ function onPointerUp(e) {
     const moved = [];
     d.ids.forEach((i, j) => {
       const o = d.orig[j];
-      list[i] = { ...o, len: Math.max(1, Math.min(MAX_LEN - o.start, o.len + d.d)) };
+      list[i] = { ...o, len: Math.max(1, Math.min(secEnd(o.start) - o.start, o.len + d.d)) };
       moved.push(list[i]);
       if (i === d.grabbed) lastLen.set(t.id, list[i].len);
     });
@@ -892,7 +1016,7 @@ function onKey(e) {
   if (mod && (e.key === "b" || e.key === "B")) {
     const ps = picked();
     const span = Math.max(...ps.map((n) => n.start + n.len)) - Math.min(...ps.map((n) => n.start));
-    const copies = ps.map((n) => ({ ...n, start: n.start + span })).filter((n) => n.start < MAX_LEN);
+    const copies = ps.map((n) => ({ ...n, start: n.start + span })).filter((n) => n.start < totalSteps());
     if (copies.length) commit(t, [...notes, ...copies], copies);
     e.preventDefault();
     return;
@@ -907,14 +1031,14 @@ function onKey(e) {
   let dS = 0, dP = 0, dRow = 0;
   if (e.key === "ArrowUp") { if (e.shiftKey) dP = 12; else dRow = -1; }
   else if (e.key === "ArrowDown") { if (e.shiftKey) dP = -12; else dRow = 1; }
-  else if (e.key === "ArrowRight") dS = e.shiftKey ? meterOf(t).bar : snapUnit(t);
-  else if (e.key === "ArrowLeft") dS = -(e.shiftKey ? meterOf(t).bar : snapUnit(t));
+  else if (e.key === "ArrowRight") dS = e.shiftKey ? meterOf(t).bar : snapUnit(secBySlot.get(trackSlot(t)));
+  else if (e.key === "ArrowLeft") dS = -(e.shiftKey ? meterOf(t).bar : snapUnit(secBySlot.get(trackSlot(t))));
   else return;
   e.preventDefault();
   const ps = picked();
   const minS = Math.min(...ps.map((n) => n.start)), maxE = Math.max(...ps.map((n) => n.start + n.len));
   const minP = Math.min(...ps.map((n) => n.pitch)), maxP = Math.max(...ps.map((n) => n.pitch));
-  dS = Math.max(-minS, Math.min(MAX_LEN - maxE, dS));
+  dS = Math.max(-minS, Math.min(totalSteps() - maxE, dS));
   dP = Math.max(LO - minP, Math.min(HI - maxP, dP));
   dRow = clampRows(ps.map((n) => n.pitch), dRow);
   if (!dS && !dP && !dRow) return;

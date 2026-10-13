@@ -2374,9 +2374,9 @@ block   t.arrangement[i]    ─── { slot, start, bars }: a clip at a bar, fo
   WHILE playing raises `state._viewSwitched` (views.js) and the same rule
   runs at the next bar line, seeding the arrangement from the start marker
   when it lands in arrange mode: a flag rather than a mode write at the
-  switch, so a jam peer's mode is never fought over. The arrangement view's
-  `play` is the transport's own button, as the clip view's is; there is no
-  mode toggle in either. The mode is the song's, so a jam hears the
+  switch, so a jam peer's mode is never fought over. No view has a play
+  button of its own: the transport's is the one for every view, and there
+  is no mode toggle in either. The mode is the song's, so a jam hears the
   change as any edit.
 - **A loop section** (`state.arrLoop` `{start, end}`, end exclusive, and
   `state.arrLoopOn`; neither saved, like the start marker): dragged across
@@ -2437,15 +2437,13 @@ block   t.arrangement[i]    ─── { slot, start, bars }: a clip at a bar, fo
   clip (the track stops, as its ■ does; stopped, that square is a ▶ that
   plays the clip again through `requestClipLaunch`, so finish mode waits
   for the bar), a name selects alone; in the arrangement a block or a name
-  selects. The clip view's toolbar carries
-  `play` (it `.click()`s the transport's own button, so a jam's shared start
-  goes the same way), the repeat / chain toggle and the now / finish switch
+  selects. The clip view's toolbar carries the repeat / chain toggle and the now / finish switch
   (drawn with the pattern bar's own icons, `MODE_UI` / `SWITCH_UI` in
   patternBar.js; the switch `.click()`s the bar's button so a queued switch
   commits there too) and `rec`, since the pattern bar is hidden there; a
   double-click on a scene number plays that scene now and starts the
   transport if it is stopped. The transport announces `seqbaby:transport`
-  on start and stop so the views' play buttons follow. The selected track is the
+  on start and stop so the views repaint. The selected track is the
   keyboard's (`setActiveTrack`). A view repaints by `innerHTML` on a SIBLING
   of the detail, never on the detail or their parent, which would take the
   card out of the document; `sync` re-seats the card after every paint
@@ -2510,17 +2508,26 @@ block   t.arrangement[i]    ─── { slot, start, bars }: a clip at a bar, fo
 ## The piano view (`pianoView.js` + `rollNotes.js`)
 
 The fourth view (`groove | clips | arrange | piano`, Tab cycles all four,
-desktop only like the other two): the keyboard track's pattern as a piano
-roll in the manner of FL Studio's. A sticky keyboard down the left (click or
+desktop only like the other two): the keyboard track's patterns as a piano
+roll in the manner of FL Studio's, every pattern the song uses laid end to
+end (`sections`: slot 1 up to the last slot any track has notes in, or the
+one this track is on, plus one empty to draw into), each with a header in
+the ruler (▶ launches it on this track, its length, − / + a bar, x2), its own
+meter's grid, and the other tracks' notes for the SAME pattern as ghosts.
+Notes are held at global steps (`start` plus the section's `off`); `commit`
+puts each back in the pattern its start falls in, cut at that pattern's end,
+and a note that crossed a section line brings its step's fields as a `snap`
+(`stepSnapshot`, rollNotes.js, taken before any pattern is written). The
+playhead runs in the section of the pattern the track is on. A sticky keyboard down the left (click or
 drag down it to hear the track), a bar ruler across the top, the notes as
 bars, the other melodic tracks' notes faint behind them (ghosts, tiled as each
 loops, scaled by speed), a root's chord tones dashed under it, and velocity
 stalks underneath. No track card under it, unlike clips and arrange: the
 roll takes the height.
 
-- **What it edits is the track's own slot** (`trackSlot`), and the track is
-  `state.activeTrackId`, so the computer keys play what is shown. The slot
-  select launches another pattern on the track (`launchClip`, now).
+- **The track is `state.activeTrackId`**, so the computer keys play what is
+  shown. A double-click on a note in a pattern the track is not on launches
+  that pattern first, since the step editor edits the track's own slot.
 - **Every edit is read, change, fold.** `readNotes` flattens the steps
   (roots and extras) into `{start, len, pitch, vel, root, src, chord}`; the
   view changes the list; `writeNotes` folds it back in place (a track's arrays
@@ -2564,8 +2571,8 @@ roll takes the height.
   step, vim's and the step editor's unit. It is the step's `offsets` entry
   (`off` on every note read from the step, written back by the root), and
   notes are drawn where they play (`xOf`: step plus offset).
-- **A note past the end grows the pattern** to the next bar line
-  (`resizePattern`, capped at 128). The snap (step / ½ beat / beat / bar),
+- **A pattern's length is its header's**, not the notes': a note is cut at
+  its pattern's end. The snap (step / ½ beat / beat / bar, on each pattern's own grid),
   zoom, ghosts, tool and fold are per browser (`seqbaby.piano.v1`), the scroll per
   track per page.
 

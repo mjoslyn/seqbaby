@@ -3,7 +3,7 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
-import { BLANK_STEP, NOTE_STEP_KEYS, pitchesAt, readNotes, writeNotes } from "../public/js/rollNotes.js";
+import { BLANK_STEP, NOTE_STEP_KEYS, pitchesAt, readNotes, stepSnapshot, writeNotes } from "../public/js/rollNotes.js";
 
 function pattern(len) {
   const p = {};
@@ -114,4 +114,18 @@ test("a nudge is read onto every note of its step and written back by the root",
   assert.deepEqual(n.map((x) => x.off), [0.25, 0.25]);
   writeNotes(p, [{ ...n[0], off: -0.9 }, n[1]]);
   assert.equal(p.offsets[1], -0.5);
+});
+
+test("a note moved from another pattern brings its step's fields", () => {
+  const a = pattern(8), b = pattern(8);
+  a.steps[2] = 1; a.notes[2] = 60; a.lengths[2] = 2; a.ratchets[2] = 3; a.chords[2] = "min";
+  const [n] = readNotes(a);
+  const snap = stepSnapshot(a, n.src);
+  writeNotes(a, []);
+  writeNotes(b, [{ ...n, start: 5, src: null, snap }]);
+  assert.equal(a.steps[2], 0);
+  assert.equal(b.steps[5], 1);
+  assert.equal(b.ratchets[5], 3);
+  assert.equal(b.chords[5], "min");
+  assert.equal(b.lengths[5], 2);
 });

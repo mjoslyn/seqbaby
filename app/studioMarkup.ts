@@ -613,6 +613,7 @@ export const STUDIO_BODY = String.raw`
       <label class="sq-scale__toggle" title="lock to a scale. The keyboard's white keys (q w e r t y u i o p [ ]) play its degrees and the black keys go silent"><input id="scale-on" type="checkbox" /> scale</label>
       <select id="scale-root"></select>
       <select id="scale-mode"></select>
+      <label id="scale-fold-wrap" class="sq-scale__toggle" title="scale only: fold the piano roll to the scale's rows, so every note drawn is in key and dragging up or down moves by scale degree. Switch the scale on to use it"><input id="scale-fold" type="checkbox" /> scale only</label>
       <label id="scale-fit-wrap" class="sq-scale__toggle" title="only list the roots and scales that hold every note the song's instruments play (drum kits left out)"><input id="scale-fit" type="checkbox" /> <span id="scale-fit-lbl">fits song</span></label>
       <button id="note-colors" class="sq-btn--ghost sq-icon-btn" aria-pressed="false" aria-label="note colors" title="toggle diatonic note coloring on the piano roll + step grid"></button>
     </div>

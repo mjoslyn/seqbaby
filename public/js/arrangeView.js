@@ -4,8 +4,8 @@
  * which bar, for how long — drawn to a bar width you can zoom. Arrange mode
  * (`patternMode === "arrange"`) is what plays it, and the transport's play
  * goes there on its own in this view (and comes to it at the next bar line
- * when the view is opened while playing: transport.js); `play` here is the
- * transport's own button. `rec` arms the recorder so clip launches in the
+ * when the view is opened while playing: transport.js); the transport's play
+ * is the only one. `rec` arms the recorder so clip launches in the
  * other views write blocks here.
  *
  * Editing is pointer events on the lanes: drag a block to move it (snapped to
@@ -185,7 +185,6 @@ function render({ scrollX } = {}) {
   }).join("");
   grid.innerHTML = `
     <div class="sq-arr__bar-row">
-      <button type="button" class="sq-arr__play${state.playing ? " is-playing" : ""}" data-act="play" title="${state.playing ? "stop the transport" : "play the arrangement: each track follows its blocks"}">${state.playing ? "stop" : "play"}</button>
       <button type="button" class="sq-arr__rec" data-act="rec" aria-pressed="${!!state.arrRecord}" title="record: play plays the clips while this is armed, and each bar is written here as it plays; over an existing arrangement you are asked whether the recording replaces it or goes after it">● rec</button>
       <button type="button" class="sq-btn--ghost" data-act="fromchain" title="lay out the chain as blocks on every track: the non-empty patterns in order, each for its repeat count">from chain</button>
       <button type="button" class="sq-btn--ghost" data-act="clear" title="remove every block">clear</button>
@@ -279,7 +278,6 @@ function onClick(e) {
     return;
   }
   const act = e.target.closest("[data-act]")?.dataset.act;
-  if (act === "play") { document.getElementById("play")?.click(); return; }
   if (act === "rec") { setArrangeRecord(!state.arrRecord); scheduleArrangePaint(); return; }
   if (act === "zoom+" || act === "zoom-") {
     // keep the bar at the left edge where it was
