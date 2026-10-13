@@ -45,7 +45,9 @@ const EPS = 1e-6;
 
 /**
  * @typedef {{start: number, len: number, pitch: number, vel: number,
- *   root: boolean, src: number|null, chord: string}} RollNote
+ *   root: boolean, src: number|null, chord: string, cpx?: number}} RollNote
+ * `chord` is a chord type the root plays (theoryData.js's CHORD_TYPES) and
+ * `cpx` its inversion; both are the step's, so only a root carries them.
  */
 
 /**
@@ -62,7 +64,7 @@ export function readNotes(p, len = p?.steps?.length ?? 0) {
     if (!p.steps[i] || p.notes?.[i] == null) continue;
     const rootLen = Math.max(1, Math.min(n - i, p.lengths?.[i] || 1));
     const vel = Number.isFinite(p.velocities?.[i]) ? p.velocities[i] : 0.5;
-    out.push({ start: i, len: rootLen, pitch: p.notes[i], vel, root: true, src: i, chord: p.chords?.[i] || "" });
+    out.push({ start: i, len: rootLen, pitch: p.notes[i], vel, root: true, src: i, chord: p.chords?.[i] || "", cpx: p.complexities?.[i] || 0 });
     const extras = p.extraNotes?.[i];
     const eLens = p.extraLengths?.[i];
     if (!Array.isArray(extras)) continue;
@@ -132,6 +134,7 @@ export function writeNotes(p, notes, len = p.steps.length) {
       p.velocities[start] = Number.isFinite(v) ? Math.max(0.05, Math.min(1, v)) : (snap?.velocities ?? 0.5);
     }
     if (Array.isArray(p.chords)) p.chords[start] = root.chord || "";
+    if (Array.isArray(p.complexities) && root.cpx != null) p.complexities[start] = root.chord ? root.cpx | 0 : 0;
     const extras = group.slice(1);
     if (Array.isArray(p.extraNotes)) p.extraNotes[start] = extras.length ? extras.map((e) => e.pitch) : null;
     if (Array.isArray(p.extraLengths)) p.extraLengths[start] = extras.length ? extras.map((e) => Math.min(rootLen, e.len)) : null;

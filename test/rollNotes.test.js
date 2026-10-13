@@ -95,3 +95,14 @@ test("pitchesAt", () => {
   assert.deepEqual(pitchesAt(n, 3), [60]);
   assert.deepEqual(pitchesAt(n, 4), []);
 });
+
+test("a fresh chord root writes its chord and inversion", () => {
+  const p = pattern(8);
+  writeNotes(p, [{ start: 2, len: 2, pitch: 60, chord: "min7", cpx: 1 }]);
+  assert.equal(p.chords[2], "min7");
+  assert.equal(p.complexities[2], 1);
+  const back = readNotes(p);
+  assert.equal(back[0].cpx, 1);
+  writeNotes(p, [{ ...back[0], chord: "" }]);
+  assert.equal(p.complexities[2], 0);
+});

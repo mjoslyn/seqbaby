@@ -2543,9 +2543,23 @@ roll takes the height.
   step editor. With a selection: delete, ↑ ↓ (shift an octave), ← → (by the
   snap, shift a bar), ctrl/⌘-B duplicate after itself; ctrl/⌘-A all,
   escape lets go. Skipped while vim is in insert or command mode.
+- **scale only** (`pref.fold`, needs the scale on) folds the roll to the
+  scale's rows, FL's fold: the rows are `rowPitches`, rebuilt per render, so
+  every y and every vertical move goes through `rowOf` / `shiftRows`, and a
+  drag or ↑ ↓ moves a scale degree (shift is still an octave). A note
+  already off the scale sits on the row below it, outlined.
+- **The chord stamp** (`pref.chord`, `pref.inv`): a click or a paint stroke
+  draws a chord. A chord type is the root's `chord` and inversion (`cpx`,
+  which `writeNotes` writes for a root that carries it), drawn as dashed
+  tones that ride along with the root; `in key` / `in key 7th` stack the
+  scale's thirds (`diatonicChordNotes`), stored as a chord type when the
+  tones are one, else as root plus extras. Picked with notes selected, the
+  stamp goes on their roots; `note` takes chords off. An inverted root's bar
+  is drawn faint, since it sounds an octave up. Independent of the
+  keyboard's chord mode.
 - **A note past the end grows the pattern** to the next bar line
   (`resizePattern`, capped at 128). The snap (step / ½ beat / beat / bar),
-  zoom, ghosts and tool are per browser (`seqbaby.piano.v1`), the scroll per
+  zoom, ghosts, tool, fold and chord stamp are per browser (`seqbaby.piano.v1`), the scroll per
   track per page.
 
 ## Knobs (`knob.js`) — a skin over the range inputs

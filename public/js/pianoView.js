@@ -26,6 +26,17 @@
  * (shift: an octave), ← → move it by the snap (shift: a bar), ctrl/⌘-A
  * selects all, ctrl/⌘-B duplicates the selection after itself, escape lets go.
  *
+ * "scale only", with a scale switched on, folds the roll to the scale's rows,
+ * so a note drawn is in key and a drag up or down moves by scale degree (↑ ↓
+ * too). A note already off the scale sits on the row below it, outlined.
+ *
+ * The chord stamp makes a click (or a paint stroke) draw a chord: a chord
+ * type on the row clicked, or in key, built from the scale's degree. A chord
+ * type is stored as the root's chord (the step's, as the step editor sets
+ * it) and drawn as dashed tones under the root; an in-key voicing that is no
+ * chord type is written as the root plus extras. Picked with notes selected,
+ * the stamp goes on them instead ("note" takes their chords off).
+ *
  * Notes drawn past the pattern's end make it longer, to the next bar line.
  * Every edit is committed on release, so a drag is one undo step (history.js
  * watches the pointerup) and the view is rebuilt from the pattern afterwards.
@@ -44,7 +55,7 @@ import { invertChord, state, trackSlot } from "./state.js";
 import { openStepEditor } from "./stepEditor.js";
 import { renderStepGrid } from "./stepGrid.js";
 import { liveGeneratorOf } from "./stepSource.js";
-import { SCALES, chordNotes, midiToName } from "./theory.js";
+import { CHORD_TYPES, SCALES, chordNotes, chordTypeForTones, diatonicChordNotes, midiToName, quantizeToScale } from "./theory.js";
 import { extendPatternByDuplicate, resizePattern, truncatePattern } from "./track.js";
 import { trackHue } from "./trackDetail.js";
 import { ensureAudio, wakeMasterBus } from "./transport.js";
@@ -52,7 +63,6 @@ import { onViewChange } from "./views.js";
 
 const LO = 24;                 // C1
 const HI = 108;                // C8
-const ROWS = HI - LO + 1;
 const ZX = [8, 12, 16, 22, 30, 42];   // px per step
 const ZY = [9, 12, 15, 19];           // px per row
 const MAX_LEN = 128;
@@ -63,6 +73,11 @@ const TOOLS = [
   ["erase", "✕ erase", "erase: click or sweep across notes to delete them (right-click and right-drag delete with any tool)"],
   ["select", "⬚ select", "select: drag a box around notes, click one to pick it (shift adds); drag the selection to move it. The arrows move it, delete removes it"],
 ];
+// The chord stamp: what a click draws. "key" chords are built from the scale
+// (stacked scale thirds, so the quality follows the degree), the rest are
+// chord types on whatever row was clicked.
+const STAMPS = [["", "note"], ["key3", "in key"], ["key4", "in key 7th"],
+  ...Object.keys(CHORD_TYPES).filter(Boolean).map((k) => [k, k])];
 const SNAPS = [["step", "step"], ["half", "½ beat"], ["beat", "beat"], ["bar", "bar"]];
 const PREF_KEY = "seqbaby.piano.v1";
 
@@ -83,7 +98,7 @@ const lastLen = new Map();       // track id -> the length a new note takes
 const scrollMem = new Map();     // track id -> {x, y}
 
 function readPref() {
-  const d = { tool: "draw", snap: "step", zx: 3, zy: 1, ghosts: true };
+  const d = { tool: "draw", snap: "step", zx: 3, zy: 1, ghosts: true, fold: false, chord: "", inv: 0 };
   try { return { ...d, ...JSON.parse(localStorage.getItem(PREF_KEY) || "{}") }; } catch { return d; }
 }
 function savePref() { try { localStorage.setItem(PREF_KEY, JSON.stringify(pref)); } catch {} }
@@ -93,8 +108,43 @@ const rows = () => state.tracks.filter((t) => t.engineKey !== "bus");
 const key = (n) => `${n.start}:${n.pitch}`;
 const SW = () => ZX[Math.max(0, Math.min(ZX.length - 1, pref.zx))];
 const RH = () => ZY[Math.max(0, Math.min(ZY.length - 1, pref.zy))];
-const yOf = (p) => (HI - p) * RH();
-const clampP = (p) => Math.max(LO, Math.min(HI, p));
+
+// The pitches drawn as rows, top down: every semitone, or with "scale only"
+// on (and a scale switched on) only the scale's, FL's fold. Rebuilt by each
+// render, so they hold still through a drag.
+let rowPitches = [];
+let rowIdx = new Map();
+const scaleIntervals = () => (state.scale.active ? (SCALES[state.scale.mode] || null) : null);
+function inScale(p) {
+  const sc = scaleIntervals();
+  return !sc || sc.some((i) => Math.abs(i - (((p - state.scale.root) % 12) + 12) % 12) < 1e-6);
+}
+const folded = () => !!(pref.fold && scaleIntervals());
+function buildRows() {
+  rowPitches = [];
+  for (let p = HI; p >= LO; p--) if (!folded() || inScale(p)) rowPitches.push(p);
+  if (!rowPitches.length) for (let p = HI; p >= LO; p--) rowPitches.push(p);
+  rowIdx = new Map(rowPitches.map((p, i) => [p, i]));
+}
+/** A pitch's row; one off the rows (off the scale) sits on the row below it. */
+function rowOf(p) {
+  const i = rowIdx.get(p);
+  if (i != null) return i;
+  for (let j = 0; j < rowPitches.length; j++) if (rowPitches[j] <= p) return j;
+  return rowPitches.length - 1;
+}
+const onRow = (p) => rowIdx.has(p);
+const yOf = (p) => rowOf(p) * RH();
+/** A pitch moved `d` rows down (up when negative): semitones, or scale degrees when folded. */
+function shiftRows(p, d) {
+  if (!folded()) return p - d;
+  return rowPitches[Math.max(0, Math.min(rowPitches.length - 1, rowOf(p) + d))];
+}
+/** The row move a group can make without any note leaving the rows. */
+function clampRows(ps, d) {
+  const idx = ps.map(rowOf);
+  return Math.max(-Math.min(...idx), Math.min(rowPitches.length - 1 - Math.max(...idx), d));
+}
 
 function currentTrack() {
   let t = state.tracks.find((o) => o.id === state.activeTrackId);
@@ -137,6 +187,8 @@ export function installPianoView() {
   window.addEventListener("pointerup", onPointerUp);
   window.addEventListener("pointercancel", onPointerUp);
   window.addEventListener("keydown", onKey);
+  // the scale decides the folded rows and which rows are tinted
+  document.addEventListener("change", (e) => { if (/^scale-(on|root|mode)$/.test(e.target?.id || "")) schedulePianoPaint(); });
   onViewChange((v) => { if (v === "piano") { render(); headLoop(); } });
   for (const ev of ["seqbaby:clips", "seqbaby:songedited", "seqbaby:setapplied", "seqbaby:newset", "seqbaby:transport"]) {
     window.addEventListener(ev, schedulePianoPaint);
@@ -159,6 +211,7 @@ function render() {
   const t = currentTrack();
   if (!t) { root.innerHTML = `<p class="sq-pr__empty">no tracks to edit</p>`; shownId = null; return; }
   if (t.id !== shownId) sel = new Set();
+  buildRows();
   notes = readNotes(t);
   const have = new Set(notes.map(key));
   sel = new Set([...sel].filter((k) => have.has(k)));
@@ -167,14 +220,15 @@ function render() {
   const steps = viewSteps(t);
   const len = t.steps.length;
   const { bar, beat } = meterOf(t);
-  const W = steps * sw, H = ROWS * rh;
+  const W = steps * sw, H = rowPitches.length * rh;
   const [hue, color] = trackHue(t);
   const slot = trackSlot(t);
-  const scale = state.scale.active ? (SCALES[state.scale.mode] || null) : null;
-  const inScale = (p) => !scale || scale.some((i) => Math.abs(i - (((p - state.scale.root) % 12) + 12) % 12) < 1e-6);
+  const scale = scaleIntervals();
+  const fold = folded();
+  const hidden = (p) => p < LO || p > HI || (fold && !onRow(p));
 
   let keys = "", lanes = "";
-  for (let p = HI; p >= LO; p--) {
+  for (const p of rowPitches) {
     const pc = ((p % 12) + 12) % 12;
     const black = BLACK.has(pc);
     const out = !inScale(p);
@@ -202,7 +256,7 @@ function render() {
       for (let rep = 0; rep * period < steps && count < 800; rep++) {
         for (const n of on) {
           const x = (rep * period + n.start * k) * sw;
-          if (x >= W || n.pitch < LO || n.pitch > HI) continue;
+          if (x >= W || hidden(n.pitch)) continue;
           ghosts += `<div class="sq-pr__ghost" data-track="${o.id}" style="left:${x}px;top:${yOf(n.pitch)}px;width:${Math.max(2, n.len * k * sw - 1)}px;height:${rh}px;--g-c:${gc}" title="${esc(o.name)}"></div>`;
           count++;
         }
@@ -210,21 +264,14 @@ function render() {
     }
   }
   // chord tones a root plays, drawn under it (not editable: they are the chord's)
-  let tones = "";
-  for (const n of notes) {
-    if (!n.root || !n.chord) continue;
-    let ns = chordNotes(n.pitch, n.chord);
-    const cpx = t.complexities?.[n.start] || 0;
-    if (cpx) ns = invertChord(ns, cpx);
-    for (const p of ns) {
-      if (Math.abs(p - n.pitch) < 1e-6 || p < LO || p > HI) continue;
-      tones += `<div class="sq-pr__tone" style="left:${n.start * sw}px;top:${yOf(p)}px;width:${n.len * sw - 1}px;height:${rh}px" title="${midiToName(p)}: a tone of ${midiToName(n.pitch)} ${esc(n.chord)}"></div>`;
-    }
-  }
+  const tones = notes.map((n, i) => (n.root && n.chord ? toneEls(n, i) : "")).join("");
   const noteEls = notes.map((n, i) => {
     const w = n.len * sw - 1;
     const label = w >= 24 && rh >= 11 ? `${midiToName(n.pitch)}${n.chord ? ` ${n.chord}` : ""}` : "";
-    return `<div class="sq-pr__note${sel.has(key(n)) ? " is-sel" : ""}${n.root ? "" : " is-extra"}" data-i="${i}" style="left:${n.start * sw}px;top:${yOf(n.pitch)}px;width:${w}px;height:${rh}px;--vel:${n.vel.toFixed(3)}"><span>${esc(label)}</span><i class="sq-pr__edge"></i></div>`;
+    const off = fold && !onRow(n.pitch);
+    // an inversion lifts the root an octave: its bar is where it is written, not what sounds
+    const lifted = n.root && n.chord && !tonesOf(n).some((p) => Math.abs(p - n.pitch) < 1e-6);
+    return `<div class="sq-pr__note${sel.has(key(n)) ? " is-sel" : ""}${n.root ? "" : " is-extra"}${off ? " is-off" : ""}${lifted ? " is-lifted" : ""}" data-i="${i}"${off ? ` title="${midiToName(n.pitch)} is off the scale: drawn on the row below it"` : lifted ? ` title="${midiToName(n.pitch)} ${esc(n.chord)}, inversion ${n.cpx}: the root sounds an octave up"` : ""} style="left:${n.start * sw}px;top:${yOf(n.pitch)}px;width:${w}px;height:${rh}px;--vel:${n.vel.toFixed(3)}"><span>${esc(label)}</span><i class="sq-pr__edge"></i></div>`;
   }).join("");
   const stalks = notes.filter((n) => n.root).map((n) =>
     `<i class="sq-pr__stalk" data-s="${n.start}" style="left:${n.start * sw}px;height:${Math.round(n.vel * 100)}%"></i>`).join("");
@@ -243,8 +290,15 @@ function render() {
         `<button type="button" data-tool="${k}" aria-pressed="${pref.tool === k}" title="${esc(title)}">${label}</button>`).join("")}</span>
       <label class="sq-pr__snap" title="where notes land and how far they move">snap <select data-act="snap">${SNAPS.map(([k, l]) =>
         `<option value="${k}"${pref.snap === k ? " selected" : ""}>${l}</option>`).join("")}</select></label>
+      <label class="sq-pr__chord" title="chord: what a click draws. In key builds the chord from the scale's degree; the rest are chord types on the row you click. With notes selected, picking one puts it on them (note takes their chords off)">chord <select data-act="chord">${STAMPS.map(([k, l]) =>
+        `<option value="${k}"${pref.chord === k ? " selected" : ""}${k.startsWith("key") && !scale ? " disabled" : ""}>${l}</option>`).join("")}</select>
+        <select data-act="inv" title="inversion: how many of the chord's lowest notes go up an octave"${pref.chord ? "" : " disabled"}>${[0, 1, 2, 3].map((v) =>
+        `<option value="${v}"${(pref.inv | 0) === v ? " selected" : ""}>${v ? `inv ${v}` : "root"}</option>`).join("")}</select></label>
       <span class="sq-pr__len" title="the pattern's length">${len} steps · ${Number.isInteger(bars) ? bars : bars.toFixed(2)} bar${bars === 1 ? "" : "s"}
         <button type="button" class="sq-btn--ghost" data-act="len-" title="one bar shorter">−bar</button><button type="button" class="sq-btn--ghost" data-act="len+" title="one bar longer, empty">+bar</button><button type="button" class="sq-btn--ghost" data-act="x2" title="double the length, tiling what is there">x2</button></span>
+      <button type="button" class="sq-pr__foldbtn" data-act="fold" aria-pressed="${fold}"${scale ? "" : " disabled"} title="${scale
+        ? "scale only: show just the scale's rows, so every note you draw is in key and dragging up or down moves by scale degree"
+        : "scale only: switch the scale on (top bar) to fold the roll to its notes"}">scale only</button>
       <button type="button" class="sq-pr__ghostbtn" data-act="ghosts" aria-pressed="${!!pref.ghosts}" title="ghosts: the other melodic tracks' notes, faint, behind this one's">ghosts</button>
       <span class="sq-pr__zoom" title="zoom (ctrl/⌘-wheel zooms across)">↔<button type="button" class="sq-btn--ghost" data-act="zx-">−</button><button type="button" class="sq-btn--ghost" data-act="zx+">+</button>
         ↕<button type="button" class="sq-btn--ghost" data-act="zy-">−</button><button type="button" class="sq-btn--ghost" data-act="zy+">+</button></span>
@@ -317,6 +371,69 @@ function paintHead() {
   for (const p of on) root.querySelector(`.sq-pr__key[data-p="${Math.round(p)}"]`)?.classList.add("is-lit");
 }
 
+// ---- chords --------------------------------------------------------------------
+
+/**
+ * What the stamp makes of a clicked pitch: the root, a chord type it plays
+ * (with the inversion), and explicit extra pitches for an in-key voicing that
+ * is not one of the chord types. A key stamp with no scale on is a plain note.
+ * @returns {{root: number, chord: string, cpx: number, extras: number[]}}
+ */
+function chordFor(pitch, stamp = pref.chord) {
+  const cpx = pref.inv | 0;
+  if (stamp === "key3" || stamp === "key4") {
+    const sc = scaleIntervals();
+    if (!sc) return { root: pitch, chord: "", cpx: 0, extras: [] };
+    const r = quantizeToScale(pitch, state.scale.root, sc);
+    const tones = diatonicChordNotes(r, stamp === "key4" ? 4 : 3);
+    const type = chordTypeForTones(tones);
+    if (type) return { root: tones[0], chord: type, cpx, extras: [] };
+    return { root: tones[0], chord: "", cpx: 0, extras: tones.slice(1).filter((p) => p <= HI) };
+  }
+  if (stamp && CHORD_TYPES[stamp]) return { root: pitch, chord: stamp, cpx, extras: [] };
+  return { root: pitch, chord: "", cpx: 0, extras: [] };
+}
+
+/** Every pitch a root sounds: its chord's tones, inverted, or itself. */
+function tonesOf(n) {
+  if (!n.chord) return [n.pitch];
+  const ns = chordNotes(n.pitch, n.chord);
+  return n.cpx ? invertChord(ns, n.cpx) : ns;
+}
+
+/** The notes a stamp writes at a step: the root first. */
+function stampNotes(start, len, pitch) {
+  const c = chordFor(pitch);
+  const base = { start, len, vel: 0.8, src: null };
+  return [{ ...base, pitch: c.root, root: true, chord: c.chord, cpx: c.cpx },
+    ...c.extras.map((p) => ({ ...base, pitch: p, root: false, chord: "" }))];
+}
+
+/** The dashed chord tones of a root, for the field (`data-root` ties them to it while it moves). */
+function toneEls(n, i) {
+  const sw = SW(), rh = RH();
+  return tonesOf(n).filter((p) => Math.abs(p - n.pitch) > 1e-6 && p >= LO && p <= HI && (!folded() || onRow(p)))
+    .map((p) => `<div class="sq-pr__tone" data-root="${i}" style="left:${n.start * sw}px;top:${yOf(p)}px;width:${n.len * sw - 1}px;height:${rh}px" title="${midiToName(p)}: a tone of ${midiToName(n.pitch)} ${esc(n.chord)}"></div>`).join("");
+}
+
+/** Put the stamp on the selected roots ("note" takes their chords off). */
+function applyStampToSelection(t) {
+  const picked = notes.filter((n) => sel.has(key(n)) && n.root);
+  if (!picked.length) return false;
+  const list = notes.slice();
+  const out = [];
+  for (const n of picked) {
+    const c = chordFor(n.pitch);
+    const i = list.indexOf(n);
+    list[i] = { ...n, pitch: c.root, chord: c.chord, cpx: c.cpx };
+    out.push(list[i]);
+    for (const p of c.extras) list.push({ ...n, pitch: p, root: false, chord: "" });
+  }
+  commit(t, list, out);
+  setStatus(pref.chord ? `${out.length} note${out.length === 1 ? "" : "s"}: ${STAMPS.find(([k]) => k === pref.chord)?.[1]} chord` : "chords taken off");
+  return true;
+}
+
 // ---- hearing a note ----------------------------------------------------------
 
 async function audition(t, midi, dur = 0.3, vel = 0.8) {
@@ -328,6 +445,13 @@ async function audition(t, midi, dur = 0.3, vel = 0.8) {
   wakeMasterBus();
   holdNoiseBed(t, dur);
   try { t.voice.hit(midi, state.audioCtx.currentTime + 0.01, dur, vel, hitOptsFor(t)); } catch (e) { console.warn("piano audition", e); }
+}
+
+/** Hear what a stamp wrote: every tone of every root, and the extras. */
+function auditionChord(t, made, dur = 0.3) {
+  const ps = new Set();
+  for (const n of made) for (const p of (n.root ? tonesOf(n) : [n.pitch])) ps.add(p);
+  for (const p of ps) audition(t, p, dur, 0.7);
 }
 
 // ---- committing --------------------------------------------------------------
@@ -363,6 +487,12 @@ function onClick(e) {
   const act = b.dataset.act;
   if (act === "play") { document.getElementById("play")?.click(); return; }
   if (act === "ghosts") { pref.ghosts = !pref.ghosts; savePref(); render(); return; }
+  if (act === "fold") {
+    pref.fold = !pref.fold; savePref();
+    if (t) { scrollMem.delete(t.id); keepMem = true; }    // the rows moved: centre on the notes again
+    render();
+    return;
+  }
   if (/^z[xy][+-]$/.test(act)) {
     const axis = act[1] === "x" ? "zx" : "zy";
     const max = (axis === "zx" ? ZX : ZY).length - 1;
@@ -403,6 +533,12 @@ function onChange(e) {
   if (!s) return;
   const t = currentTrack();
   if (s.dataset.act === "snap") { pref.snap = s.value; savePref(); return; }
+  if (s.dataset.act === "chord" || s.dataset.act === "inv") {
+    pref[s.dataset.act] = s.dataset.act === "inv" ? Number(s.value) : s.value;
+    savePref();
+    if (!(t && applyStampToSelection(t))) render();
+    return;
+  }
   if (s.dataset.act === "track") {
     const o = state.tracks.find((x) => String(x.id) === s.value);
     if (o) { setActiveTrack(o); render(); }
@@ -426,7 +562,8 @@ function onWheel(e) {
 function fieldPoint(e, field) {
   const r = field.getBoundingClientRect();
   const x = e.clientX - r.left, y = e.clientY - r.top;
-  return { x, y, step: x / SW(), pitch: clampP(HI - Math.floor(y / RH())) };
+  const row = Math.max(0, Math.min(rowPitches.length - 1, Math.floor(y / RH())));
+  return { x, y, step: x / SW(), row, pitch: rowPitches[row] };
 }
 const noteEl = (i) => root.querySelector(`.sq-pr__note[data-i="${i}"]`);
 
@@ -473,7 +610,7 @@ function startGesture(e) {
   const nEl = e.target.closest(".sq-pr__note");
   const idx = nEl ? Number(nEl.dataset.i) : -1;
   const n = idx >= 0 ? notes[idx] : null;
-  const base = { t, field, pointerId: e.pointerId, x0: pt.step, y0: pt.y, px0: pt.x, p0: pt.pitch, moved: false };
+  const base = { t, field, pointerId: e.pointerId, x0: pt.step, y0: pt.y, px0: pt.x, r0: pt.row, moved: false };
   e.preventDefault();
 
   if (e.button === 2 || pref.tool === "erase") {
@@ -503,7 +640,7 @@ function startGesture(e) {
       drag = { ...base, kind: "resize", ids, orig: ids.map((i) => ({ ...notes[i] })), grabStart: n.start, grabEnd: n.start + n.len, grabbed: idx, grouped };
       return;
     }
-    drag = { ...base, kind: "move", ids, orig: ids.map((i) => ({ ...notes[i] })), grab: n, copy: e.shiftKey, grouped, dStep: 0, dPitch: 0 };
+    drag = { ...base, kind: "move", ids, orig: ids.map((i) => ({ ...notes[i] })), grab: n, copy: e.shiftKey, grouped, dStep: 0, dRow: 0 };
     lastLen.set(t.id, n.len);
     audition(t, n.pitch, 0.25, n.vel);
     return;
@@ -518,13 +655,17 @@ function startGesture(e) {
   // draw: a new note, dragged into place from here
   const start = Math.floor(pt.step / u) * u;
   if (start >= MAX_LEN) { drag = { ...base, kind: "noop" }; return; }
-  const fresh = { start, len: Math.min(lenFor(t), MAX_LEN - start), pitch: pt.pitch, vel: 0.8, root: false, src: null, chord: "" };
-  notes.push(fresh);
-  const i = notes.length - 1;
-  field.insertAdjacentHTML("beforeend", `<div class="sq-pr__note is-new" data-i="${i}" style="left:${start * SW()}px;top:${yOf(fresh.pitch)}px;width:${fresh.len * SW() - 1}px;height:${RH()}px;--vel:0.8"><span></span></div>`);
+  const made = stampNotes(start, Math.min(lenFor(t), MAX_LEN - start), pt.pitch);
+  const ids = made.map((n) => {
+    notes.push(n);
+    const i = notes.length - 1;
+    field.insertAdjacentHTML("beforeend", `<div class="sq-pr__note is-new" data-i="${i}" style="left:${start * SW()}px;top:${yOf(n.pitch)}px;width:${n.len * SW() - 1}px;height:${RH()}px;--vel:0.8"><span>${n.chord && n.len * SW() >= 24 ? esc(`${midiToName(n.pitch)} ${n.chord}`) : ""}</span></div>`);
+    if (n.chord) field.insertAdjacentHTML("beforeend", toneEls(n, i));
+    return i;
+  });
   sel = new Set(); paintSel();
-  drag = { ...base, kind: "move", ids: [i], orig: [{ ...fresh }], grab: fresh, copy: false, created: true, dStep: 0, dPitch: 0 };
-  audition(t, fresh.pitch, 0.25);
+  drag = { ...base, kind: "move", ids, orig: made.map((n) => ({ ...n })), grab: made[0], copy: false, created: true, dStep: 0, dRow: 0 };
+  auditionChord(t, made);
 }
 
 function paintSel() {
@@ -549,10 +690,13 @@ function paintAt(pt) {
   for (let k = a; k <= b; k++) {
     const start = drag.start0 + k * len;
     if (start < 0 || start >= MAX_LEN || drag.placed.has(start)) continue;
-    const n = { start, len: Math.min(len, MAX_LEN - start), pitch: pt.pitch, vel: 0.8, root: false, src: null, chord: "" };
-    drag.placed.set(start, n);
-    drag.field.insertAdjacentHTML("beforeend", `<div class="sq-pr__note is-new" style="left:${start * SW()}px;top:${yOf(n.pitch)}px;width:${n.len * SW() - 1}px;height:${RH()}px;--vel:0.8"><span></span></div>`);
-    if (k === k1) audition(t, n.pitch, 0.15);
+    const made = stampNotes(start, Math.min(len, MAX_LEN - start), pt.pitch);
+    drag.placed.set(start, made);
+    for (const n of made) {
+      drag.field.insertAdjacentHTML("beforeend", `<div class="sq-pr__note is-new" style="left:${start * SW()}px;top:${yOf(n.pitch)}px;width:${n.len * SW() - 1}px;height:${RH()}px;--vel:0.8"><span></span></div>`);
+      if (n.chord) drag.field.insertAdjacentHTML("beforeend", toneEls(n, -1));
+    }
+    if (k === k1) auditionChord(t, made, 0.15);
   }
 }
 
@@ -618,17 +762,19 @@ function onPointerMove(e) {
       const l = Math.max(1, Math.min(MAX_LEN - o.start, o.len + d));
       const el = noteEl(i);
       if (el) el.style.width = `${l * sw - 1}px`;
+      drag.field.querySelectorAll(`.sq-pr__tone[data-root="${i}"]`).forEach((tEl) => { tEl.style.width = `${l * sw - 1}px`; });
     });
     return;
   }
   if (drag.kind === "move") {
     const minStart = Math.min(...drag.orig.map((o) => o.start));
     const maxEnd = Math.max(...drag.orig.map((o) => o.start + o.len));
-    const minP = Math.min(...drag.orig.map((o) => o.pitch)), maxP = Math.max(...drag.orig.map((o) => o.pitch));
     const dStep = Math.max(-minStart, Math.min(MAX_LEN - maxEnd, snapR(drag.grab.start + pt.step - drag.x0) - drag.grab.start));
-    const dPitch = Math.max(LO - minP, Math.min(HI - maxP, pt.pitch - drag.p0));
-    if (dPitch !== drag.dPitch && drag.ids.length <= 4) audition(t, drag.grab.pitch + dPitch, 0.2, drag.grab.vel);
-    drag.dStep = dStep; drag.dPitch = dPitch;
+    const dRow = clampRows(drag.orig.map((o) => o.pitch), pt.row - drag.r0);
+    if (dRow !== drag.dRow && drag.ids.length <= 4) {
+      auditionChord(t, drag.orig.map((o) => ({ ...o, pitch: shiftRows(o.pitch, dRow) })), 0.2);
+    }
+    drag.dStep = dStep; drag.dRow = dRow;
     if (drag.copy && !drag.clones) {
       drag.clones = drag.ids.map((i) => {
         const c = noteEl(i)?.cloneNode(true);
@@ -641,7 +787,15 @@ function onPointerMove(e) {
       const el = drag.copy ? drag.clones[j] : noteEl(i);
       if (!el) return;
       el.style.left = `${(o.start + dStep) * sw}px`;
-      el.style.top = `${yOf(o.pitch + dPitch)}px`;
+      el.style.top = `${yOf(shiftRows(o.pitch, dRow))}px`;
+      if (drag.copy || !o.chord) return;
+      // its chord tones ride along, by the root's own move
+      const dy = yOf(shiftRows(o.pitch, dRow)) - yOf(o.pitch);
+      drag.field.querySelectorAll(`.sq-pr__tone[data-root="${i}"]`).forEach((tEl) => {
+        if (tEl._x0 == null) { tEl._x0 = parseFloat(tEl.style.left); tEl._y0 = parseFloat(tEl.style.top); }
+        tEl.style.left = `${tEl._x0 + dStep * sw}px`;
+        tEl.style.top = `${tEl._y0 + dy}px`;
+      });
     });
   }
 }
@@ -665,7 +819,7 @@ function onPointerUp(e) {
   }
   if (d.kind === "paint") {
     if (!d.placed.size) return;
-    commit(t, [...notes, ...d.placed.values()]);
+    commit(t, [...notes, ...[...d.placed.values()].flat()]);
     return;
   }
   if (d.kind === "marquee") {
@@ -686,12 +840,12 @@ function onPointerUp(e) {
     return;
   }
   if (d.kind === "move") {
-    if (!d.created && (!d.moved || (!d.dStep && !d.dPitch))) { d.clones?.forEach((c) => c?.remove()); render(); return; }
+    if (!d.created && (!d.moved || (!d.dStep && !d.dRow))) { d.clones?.forEach((c) => c?.remove()); render(); return; }
     const list = notes.slice();
     const moved = [];
     d.ids.forEach((i, j) => {
       const o = d.orig[j];
-      const m = { ...o, start: o.start + d.dStep, pitch: o.pitch + d.dPitch };
+      const m = { ...o, start: o.start + d.dStep, pitch: shiftRows(o.pitch, d.dRow) };
       if (d.copy) list.push(m); else list[i] = m;
       moved.push(m);
     });
@@ -728,9 +882,10 @@ function onKey(e) {
     return;
   }
   if (mod || e.altKey) return;
-  let dS = 0, dP = 0;
-  if (e.key === "ArrowUp") dP = e.shiftKey ? 12 : 1;
-  else if (e.key === "ArrowDown") dP = e.shiftKey ? -12 : -1;
+  // ↑ ↓ move a row (a semitone, or a scale degree when folded), shift an octave
+  let dS = 0, dP = 0, dRow = 0;
+  if (e.key === "ArrowUp") { if (e.shiftKey) dP = 12; else dRow = -1; }
+  else if (e.key === "ArrowDown") { if (e.shiftKey) dP = -12; else dRow = 1; }
   else if (e.key === "ArrowRight") dS = e.shiftKey ? meterOf(t).bar : snapUnit(t);
   else if (e.key === "ArrowLeft") dS = -(e.shiftKey ? meterOf(t).bar : snapUnit(t));
   else return;
@@ -740,14 +895,15 @@ function onKey(e) {
   const minP = Math.min(...ps.map((n) => n.pitch)), maxP = Math.max(...ps.map((n) => n.pitch));
   dS = Math.max(-minS, Math.min(MAX_LEN - maxE, dS));
   dP = Math.max(LO - minP, Math.min(HI - maxP, dP));
-  if (!dS && !dP) return;
+  dRow = clampRows(ps.map((n) => n.pitch), dRow);
+  if (!dS && !dP && !dRow) return;
   const moved = [];
   const list = notes.map((n) => {
     if (!sel.has(key(n))) return n;
-    const m = { ...n, start: n.start + dS, pitch: n.pitch + dP };
+    const m = { ...n, start: n.start + dS, pitch: dP ? n.pitch + dP : shiftRows(n.pitch, dRow) };
     moved.push(m);
     return m;
   });
-  if (dP && moved.length <= 4) moved.forEach((m) => audition(t, m.pitch, 0.2, m.vel));
+  if ((dP || dRow) && moved.length <= 4) moved.forEach((m) => audition(t, m.pitch, 0.2, m.vel));
   commit(t, list, moved);
 }
