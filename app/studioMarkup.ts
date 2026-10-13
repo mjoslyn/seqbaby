@@ -464,6 +464,35 @@ const LANCET_PANEL = `
           </div>
         </div>`;
 
+// The halo's panel: the cymbal (a complete preset), the model and the choke,
+// the hit (tune, velocity amount, stick, bloom) and the space (width, vary).
+// Same arrangement as the panels above: the cymbal dropdown ships empty and is
+// filled at runtime from HALO_TONE_NAMES, and the ranges and defaults must
+// match HALO_NUM_CTLS in engineData.js; the select option VALUES are
+// HALO_SEL_CTLS' (test/halo.test.js holds them together). Classes are `p-hlo*`.
+const HALO_PANEL = `
+        <div class="sq-param-group sq-param-group--halo" hidden>
+          <div class="sq-halo__row">
+            <span class="sq-halo__lbl">cymbal</span>
+            <select class="sq-halo__tone" title="load a cymbal: the model, the choke, every panel control and the four sliders"></select>
+            <span class="sq-halo__lbl">model</span>
+            <select class="p-hlomodel" title="the synthesis model. What spread does depends on it: the status line says, when one is picked"><option value="metal" selected>metal</option><option value="fm">fm</option><option value="modal">modal</option><option value="noise">noise</option></select>
+            <select class="p-hlochoke" title="trig lets every hit ring its decay over the ones before, as crashes do. Choke makes it a hi-hat: a hit is cut as its step ends, as a pedal closing, and the next hit cuts the one before. Write short steps for a closed hat and tied ones for an open hat, on one track"><option value="trig" selected>trig</option><option value="choke">choke</option></select>
+          </div>
+          <div class="sq-halo__row">
+            <span class="sq-halo__lbl">hit</span>
+            <label class="sq-halo__f"><span>tune</span><input class="p-hlotune" type="range" min="-12" max="12" step="1" value="0" title="a trim on the pitch, in semitones. C2 is the nominal cymbal; the note moves it a semitone a semitone" /></label>
+            <label class="sq-halo__f"><span>velocity</span><input class="p-hlodyn" type="range" min="0" max="1" step="0.01" value="0.6" title="how much a step's velocity does: the level, and a little of the brightness with it. At zero every hit is the same" /></label>
+            <label class="sq-halo__f"><span>stick</span><input class="p-hlostick" type="range" min="0" max="1" step="0.01" value="0.4" title="the strike: a tick of bandpassed noise on the front of the hit, brighter and louder the harder the stick. Zero is a soft mallet" /></label>
+            <label class="sq-halo__f"><span>bloom</span><input class="p-hlobloom" type="range" min="0" max="1" step="0.01" value="0" title="the swell: a struck crash gets louder after the hit as its energy moves up into the high partials. Rises over 40 to 300ms, slower the further up; on the modal model it drives the partials with noise. At the top, a cymbal that rises into the beat" /></label>
+          </div>
+          <div class="sq-halo__row">
+            <span class="sq-halo__lbl">space</span>
+            <label class="sq-halo__f"><span>width</span><input class="p-hlowidth" type="range" min="0" max="1" step="0.01" value="0.5" title="the stereo width: a decorrelated copy added to one side and taken from the other, so the two still sum to the cymbal on a mono speaker" /></label>
+            <label class="sq-halo__f"><span>vary</span><input class="p-hlovary" type="range" min="0" max="1" step="0.01" value="0.1" title="how much every hit differs: the tone, the pitch, the decay, the stick and the level thrown a little, so a ride pattern is not one sample played eight times" /></label>
+          </div>
+        </div>`;
+
 // The drone's panel, laid out like the Grone it is modelled on: the equation
 // oscillator, the VCF, the LFO, the delay and the cloud, left to right on the
 // hardware and top to bottom here. Same arrangement as the panels above — the
@@ -830,6 +859,7 @@ ${SUB_PANEL}
 ${DRONE_PANEL}
 ${VOX_PANEL}
 ${LANCET_PANEL}
+${HALO_PANEL}
 ${SIEGE_PANEL}
 ${ORACLE_PANEL}
         <div class="sq-param-group sq-param-group--silverbox" hidden>

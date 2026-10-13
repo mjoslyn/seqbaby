@@ -45,6 +45,7 @@ const EMULATORS = [
   ["drone", "an oscillator that is a formula and a counter, into an ms-20 style filter, a delay that can run backwards, and a cloud of grains. notes hold until the next one arrives."],
   ["vox", "a singing voice: a glottal pulse through five formants, with consonants and a choir of copies. type a lyric in the panel and it sings the words."],
   ["lancet", "a snare drum, seven different ways, under four knobs. a randomizer can throw the knobs on every hit."],
+  ["halo", "cymbals: hats, rides, crashes, a gong, four different ways. choke it and a short step is a closed hat and a long one opens it."],
   ["siege", "a bass drum. a sine under a pitch envelope, with a wavefolder after the amp envelope, so the attack gets crushed and the tail stays clean."],
   ["tines", "an electric piano. a hammer, a tine and a tone bar, with chorus on the way out."],
   ["oracle", "a polyphonic analog synth. two oscillators that morph from triangle to pulse, a little out of tune with each other the way six voice cards are, a sub, noise, a drive on the summed voices, and a chorus."],

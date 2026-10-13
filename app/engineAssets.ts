@@ -80,6 +80,7 @@ export const ENGINE_MODULES = [
   "reverb.js",
   "generate.js",
   "guitar.js",
+  "halo.js",
   "hexop.js",
   "history.js",
   "historyStore.js",

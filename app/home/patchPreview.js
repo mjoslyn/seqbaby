@@ -18,7 +18,7 @@ export const PREVIEW_BPM = 120;
 /** @typedef {{ i: number, note: number | null, len: number, vel: number, chord?: string }} PhraseStep */
 /** @typedef {{ kind: "drum" | "bass" | "pad" | "lead", root: number, steps: PhraseStep[] }} Phrase */
 
-const DRUM_RE = /\b(kick|siege|snare|(open)?hat|hi-?hat|chat|ohat|clap|tom\d*|ride|crash|cymbal|perc|drum|cowbell|rim|kit|lancet)\b/;
+const DRUM_RE = /\b(kick|siege|snare|(open)?hat|hi-?hat|chat|ohat|clap|tom\d*|ride|crash|cymbal|perc|drum|cowbell|rim|kit|lancet|halo)\b/;
 
 /** The key a patch card plays under (enginePlayer.ts). Share slugs never
  *  carry a colon. Here rather than there so a server component can call it. */
@@ -82,6 +82,8 @@ function drumPhrase(key, hint) {
   else if (/ride/.test(k)) pat = "X.x.x.xoX.x.x.xo";
   else if (/crash|cymbal/.test(k)) pat = "X.......X.......";
   else if (/cowbell|perc|tom/.test(k)) pat = "x..x..x...x.x...";
+  // A halo patch whose name says nothing more is played as a hat.
+  else if (/halo/.test(k)) pat = "xoXoxoxoxoXoxoxx";
   return { kind: "drum", root: 0, steps: hits(pat, v) };
 }
 

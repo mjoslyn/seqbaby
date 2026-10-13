@@ -6,6 +6,7 @@ import { SUB_MOD_KEYS, SUB_MOD_LABELS } from "./subbass.js";
 import { DRONE_MOD_KEYS, DRONE_MOD_LABELS } from "./drone.js";
 import { VOX_MOD_KEYS, VOX_MOD_LABELS } from "./vox.js";
 import { LANCET_MOD_KEYS, LANCET_MOD_LABELS } from "./lancet.js";
+import { HALO_MOD_KEYS, HALO_MOD_LABELS } from "./halo.js";
 import { SIEGE_MOD_KEYS, SIEGE_MOD_LABELS } from "./siege.js";
 import { LADDER_MOD_KEYS, LADDER_MOD_LABELS } from "./ladder.js";
 import { ORACLE_MOD_KEYS, ORACLE_MOD_LABELS } from "./oracle.js";
@@ -74,6 +75,8 @@ for (const k of DRONE_MOD_KEYS) def(`p-drn${k}`, `drone_${k}`, `drone.${k}`);
 for (const k of VOX_MOD_KEYS) def(`p-sng${k}`, `vox_${k}`, `vox.${k}`);
 // The lancet — likewise, `p-lnc*`.
 for (const k of LANCET_MOD_KEYS) def(`p-lnc${k}`, `lancet_${k}`, `lancet.${k}`);
+// The halo — likewise, `p-hlo*`.
+for (const k of HALO_MOD_KEYS) def(`p-hlo${k}`, `halo_${k}`, `halo.${k}`);
 // The siege — likewise, `p-sge*`.
 for (const k of SIEGE_MOD_KEYS) def(`p-sge${k}`, `siege_${k}`, `siege.${k}`);
 // The ladder — likewise, `p-ldr*`.
@@ -296,6 +299,8 @@ export const CONTROL_LABELS = {
   "p-sngcons": "consonant", "p-sngwords": "words", "p-sngmode": "poly or mono", "p-sngtext": "lyric", "sq-vox__tone": "vox voice",
   ...Object.fromEntries(LANCET_MOD_KEYS.map(k => [`p-lnc${k}`, LANCET_MOD_LABELS[k]])),
   "p-lncmodel": "lancet model", "sq-lancet__tone": "lancet strike",
+  ...Object.fromEntries(HALO_MOD_KEYS.map(k => [`p-hlo${k}`, HALO_MOD_LABELS[k]])),
+  "p-hlomodel": "halo model", "p-hlochoke": "trig or choke", "sq-halo__tone": "halo cymbal",
   ...Object.fromEntries(SIEGE_MOD_KEYS.map(k => [`p-sge${k}`, SIEGE_MOD_LABELS[k]])),
   "p-sgemode": "drive type", "p-sgegate": "trig or gate", "p-sgehpf": "low cut", "p-sgelock": "pitch lock", "sq-siege__tone": "siege kick",
   ...Object.fromEntries(LADDER_MOD_KEYS.map(k => [`p-ldr${k}`, LADDER_MOD_LABELS[k]])),

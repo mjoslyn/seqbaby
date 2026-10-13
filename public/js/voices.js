@@ -15,6 +15,7 @@ import { buildSubBassVoice, SUB_NUM_KEYS, SUB_SEL_KEYS } from "./subbass.js";
 import { buildDroneVoice, DRONE_NUM_KEYS, DRONE_SEL_KEYS } from "./drone.js";
 import { buildVoxVoice, VOX_NUM_KEYS, VOX_SEL_KEYS, VOX_TEXT_KEYS } from "./vox.js";
 import { buildLancetVoice, LANCET_NUM_KEYS, LANCET_SEL_KEYS } from "./lancet.js";
+import { buildHaloVoice, HALO_NUM_KEYS, HALO_SEL_KEYS } from "./halo.js";
 import { buildSiegeVoice, SIEGE_NUM_KEYS, SIEGE_SEL_KEYS } from "./siege.js";
 import { buildLadderWorkletVoice, LADDER_NUM_KEYS, LADDER_SEL_KEYS } from "./ladder.js";
 import { buildOracleWorkletVoice, ORACLE_NUM_KEYS, ORACLE_SEL_KEYS } from "./oracle.js";
@@ -787,6 +788,13 @@ export function buildDrumSynthNode(kind, output) {
       if (v) return v;
       return buildDrumSynthNode("808-snare", output);
     }
+    // Halo: a cymbal synthesizer with four models in one AudioWorklet — see
+    // halo.js. The fallback is the 808's open hat, so a track is never silent.
+    case "halo": {
+      const v = buildHaloVoice(output);
+      if (v) return v;
+      return buildDrumSynthNode("808-ohat", output);
+    }
     // Siege: the bass drum synth, one AudioWorklet — see siege.js. The fallback is
     // a sine with a pitch drop through a MembraneSynth: a kick, not the kick,
     // but never a silent track.
@@ -1446,7 +1454,8 @@ export class DrumSynthVoice {
                      ...SIEGE_NUM_KEYS, ...SIEGE_SEL_KEYS,
                      ...LADDER_NUM_KEYS, ...LADDER_SEL_KEYS,
                      ...ORACLE_NUM_KEYS, ...ORACLE_SEL_KEYS,
-                     ...LANCET_NUM_KEYS, ...LANCET_SEL_KEYS]) {
+                     ...LANCET_NUM_KEYS, ...LANCET_SEL_KEYS,
+                     ...HALO_NUM_KEYS, ...HALO_SEL_KEYS]) {
       if (this.params?.[k] != null) this.built.setParam(k, this.params[k]);
     }
   }
@@ -1512,7 +1521,9 @@ export class DrumSynthVoice {
   }
   silence(now) {
     this._heldNotes?.clear();
-    try { this.built.release?.(now); } catch {}
+    // A builder can tell a stop from a key let go (the halo: a key closes a
+    // choked hat, a stop fades a crash too); the rest release either way.
+    try { if (this.built.silence) this.built.silence(now); else this.built.release?.(now); } catch {}
   }
   // Latched notes only (releaseSilencedTracks, signal.js): a builder whose
   // notes end on their own has nothing to let go of.

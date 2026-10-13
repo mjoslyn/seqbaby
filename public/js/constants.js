@@ -9,6 +9,7 @@ import {
   DRONE_MOD_KEYS, DRONE_MOD_LABELS, DRONE_MOD_RANGE,
   VOX_MOD_KEYS, VOX_MOD_LABELS, VOX_MOD_RANGE,
   LANCET_MOD_KEYS, LANCET_MOD_LABELS, LANCET_MOD_RANGE,
+  HALO_MOD_KEYS, HALO_MOD_LABELS, HALO_MOD_RANGE,
   SIEGE_MOD_KEYS, SIEGE_MOD_LABELS, SIEGE_MOD_RANGE,
   LADDER_MOD_KEYS, LADDER_MOD_LABELS, LADDER_MOD_RANGE,
   ORACLE_MOD_KEYS, ORACLE_MOD_LABELS, ORACLE_MOD_RANGE,
@@ -104,6 +105,9 @@ export const LFO_KEYS = [
   ...VOX_MOD_KEYS.map(k => `vox_${k}`),
   // Lancet: the tune, the velocity amount and the randomizer's amounts. Lancet only.
   ...LANCET_MOD_KEYS.map(k => `lancet_${k}`),
+  // Halo: the tune, the velocity amount, the stick, the bloom, the width and
+  // the variation. Halo only.
+  ...HALO_MOD_KEYS.map(k => `halo_${k}`),
   // Siege: the kick's tune and velocity floor. Siege only.
   ...SIEGE_MOD_KEYS.map(k => `siege_${k}`),
   // Ladder: the two contours, the mod wheel, the drift and the tune. Ladder only.
@@ -166,6 +170,7 @@ export const LFO_LABELS = {
   ...Object.fromEntries(DRONE_MOD_KEYS.map(k => [`drone_${k}`, DRONE_MOD_LABELS[k]])),
   ...Object.fromEntries(VOX_MOD_KEYS.map(k => [`vox_${k}`, VOX_MOD_LABELS[k]])),
   ...Object.fromEntries(LANCET_MOD_KEYS.map(k => [`lancet_${k}`, LANCET_MOD_LABELS[k]])),
+  ...Object.fromEntries(HALO_MOD_KEYS.map(k => [`halo_${k}`, HALO_MOD_LABELS[k]])),
   ...Object.fromEntries(SIEGE_MOD_KEYS.map(k => [`siege_${k}`, SIEGE_MOD_LABELS[k]])),
   ...Object.fromEntries(LADDER_MOD_KEYS.map(k => [`ladder_${k}`, LADDER_MOD_LABELS[k]])),
   ...Object.fromEntries(ORACLE_MOD_KEYS.map(k => [`oracle_${k}`, ORACLE_MOD_LABELS[k]])),
@@ -267,6 +272,10 @@ export const LFO_AMP_SCALE = {
   ...Object.fromEntries(LANCET_MOD_KEYS.map(k => {
     const [lo, hi] = LANCET_MOD_RANGE[k];
     return [`lancet_${k}`, hi - lo];
+  })),
+  ...Object.fromEntries(HALO_MOD_KEYS.map(k => {
+    const [lo, hi] = HALO_MOD_RANGE[k];
+    return [`halo_${k}`, hi - lo];
   })),
   ...Object.fromEntries(SIEGE_MOD_KEYS.map(k => {
     const [lo, hi] = SIEGE_MOD_RANGE[k];
@@ -629,6 +638,8 @@ export const AUTOMATION_TARGETS = {
   ...Object.fromEntries(VOX_MOD_KEYS.map(k => [`vox.${k}`, { label: VOX_MOD_LABELS[k] }])),
   // Lancet (lancet engine only) — tune, velocity amount, the randomizer.
   ...Object.fromEntries(LANCET_MOD_KEYS.map(k => [`lancet.${k}`, { label: LANCET_MOD_LABELS[k] }])),
+  // Halo (halo engine only) — tune, velocity, stick, bloom, width, vary.
+  ...Object.fromEntries(HALO_MOD_KEYS.map(k => [`halo.${k}`, { label: HALO_MOD_LABELS[k] }])),
   // Siege (siege engine only) — tune, velocity floor.
   ...Object.fromEntries(SIEGE_MOD_KEYS.map(k => [`siege.${k}`, { label: SIEGE_MOD_LABELS[k] }])),
   // Ladder (ladder engine only) — the contours, the mod wheel, drift, tune.
@@ -723,6 +734,7 @@ export function voiceAutoKeysForEngineKey(engineKey) {
     case "dm:drone":     return ["vol", "harm", "timb", "morph", "decay"];
     case "dm:vox":       return ["vol", "harm", "timb", "morph", "decay"];
     case "dm:lancet":      return ["vol", "harm", "timb", "morph", "decay"];
+    case "dm:halo":        return ["vol", "harm", "timb", "morph", "decay"];
     case "dm:siege":       return ["vol", "harm", "timb", "morph", "decay"];
     case "dm:tines":     return ["vol", "harm", "timb", "morph", "decay"];
     case "dm:oracle":   return ["vol", "harm", "timb", "morph", "decay", "osc1", "osc2", "osc3", "osc4"];
@@ -762,6 +774,7 @@ export function canAutomateKey(engineKey, key, live = {}) {
   if (key.startsWith("drone.")) return t.engineKey === "dm:drone";
   if (key.startsWith("vox.")) return t.engineKey === "dm:vox";
   if (key.startsWith("lancet.")) return t.engineKey === "dm:lancet";
+  if (key.startsWith("halo.")) return t.engineKey === "dm:halo";
   if (key.startsWith("siege.")) return t.engineKey === "dm:siege";
   if (key.startsWith("ladder.")) return t.engineKey === "dm:ladder";
   if (key.startsWith("oracle.")) return t.engineKey === "dm:oracle";
@@ -806,6 +819,8 @@ export function canModulateKey(engineKey, key, live = {}) {
   if (key.startsWith("vox_")) return t.engineKey === "dm:vox";
   // The lancet panel — lancet only.
   if (key.startsWith("lancet_")) return t.engineKey === "dm:lancet";
+  // The halo panel — halo only.
+  if (key.startsWith("halo_")) return t.engineKey === "dm:halo";
   // The siege panel — siege only.
   if (key.startsWith("siege_")) return t.engineKey === "dm:siege";
   // The ladder panel — ladder only.
@@ -845,6 +860,10 @@ export function canModulateKey(engineKey, key, live = {}) {
     // reads them when it lands (fx live), so an LFO on one is a different
     // snare every hit, which is the randomizer by other means.
     case "dm:lancet":  return ["harm", "timb", "morph", "decay"].includes(key);
+    // Tone, size, spread and decay: AudioParams on the worklet node. Tone is
+    // read live, so an LFO on it opens and closes a ringing crash; the other
+    // three are read per hit.
+    case "dm:halo":    return ["harm", "timb", "morph", "decay"].includes(key);
     // Drive, click, depth and decay are the worklet's own AudioParams, one
     // voice. An LFO on the click is a kick that changes its attack per hit.
     case "dm:siege":   return ["harm", "timb", "morph", "decay"].includes(key);

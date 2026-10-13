@@ -256,6 +256,10 @@ export const ANALOG_ENGINES = [
   // four hits sounding at once inside the worklet. C2, the note a drum kit's
   // blank steps get, is the pitch knob's middle.
   { key: "dm:lancet",      label: "lancet",            defaultNote: 36, poly: false, melodic: false },
+  // A cymbal synthesizer with four models (halo.js): hats, rides, crashes,
+  // gongs. Up to six hits ring at once inside the worklet; C2, the note a
+  // drum kit's blank steps get, is the nominal cymbal.
+  { key: "dm:halo",        label: "halo",              defaultNote: 36, poly: false, melodic: false },
   // The bass drum synth: a sine under a pitch envelope, a drive that folds
   // or clips after the amplitude envelope. One voice, a kick (siege.js). Not
   // melodic: its blank steps are C2, though it plays V/oct.
@@ -444,6 +448,7 @@ export function engineSliderLabels(engineKey) {
     case "dm:drone":     return { harm: "cutoff",   timb: "a0",     morph: "a1",        decay: "a2" };
     case "dm:vox":       return { harm: "vowel",    timb: "size",   morph: "breath",    decay: "release" };
     case "dm:lancet":      return { harm: "timbre",   timb: "color",  morph: "fx",        decay: "decay" };
+    case "dm:halo":        return { harm: "tone",     timb: "size",   morph: "spread",    decay: "decay" };
     case "dm:tines":     return { harm: "tine",     timb: "bite",   morph: "chorus",    decay: "decay" };
     case "dm:oracle":    return { harm: "detune",   timb: "shape",  morph: "drive",     decay: "decay" };
     case "dm:granular":  return { harm: "grain",    timb: "dense",  morph: "pos",       decay: "spray" };
@@ -1888,6 +1893,157 @@ export function lancetTone(name) {
   for (const [k, val] of Object.entries(v.p)) out[`lnc${k}`] = val;
   out.lncmodel = v.model;
   out.harm = v.timbre; out.timb = v.color; out.morph = v.fx; out.decay = v.decay;
+  return out;
+}
+
+// ---- halo (halo.js) -------------------------------------------------------------
+// A cymbal synthesizer with four models: four knobs (TONE, SIZE, SPREAD,
+// DECAY) whose SPREAD means something of its own on each model, a strike, a
+// bloom, a choke, a width and a per-hit variation. The sound as DATA, so the
+// song builder and the tests read the same tables the panel is built from.
+
+/** The four models. The select stores the name. */
+export const HALO_MODELS = ["metal", "fm", "modal", "noise"];
+
+/** What each model is, and what SPREAD does on it. */
+export const HALO_MODEL_TIPS = {
+  metal: "the 808's six square waves at the circuit's own frequencies through two bandpasses: the drum machine hat and cymbal. spread stretches the ratios between the six (the middle is the 808's); a small size drops the cymbal band and leaves the hat",
+  fm:    "three inharmonic carrier and modulator pairs at a high index: the digital cymbal, glassy to a wall of sidebands. spread is the index, which falls with the hit",
+  modal: "forty partials on a plate's stretched series, each decaying faster the higher it sits: the acoustic one. spread is how far apart they sit, dense and trashy (a china) to sparse (a bell, and with the size down a gong)",
+  noise: "two bands of noise: a shaker, a trashy splash, the cheapest hat there is. spread is the bandwidth, two narrow ringing bands to plain hiss",
+};
+export function haloModelTip(name) { return HALO_MODEL_TIPS[name] ?? ""; }
+
+/** Numeric panel controls: [short key, min, max, default, label]. */
+export const HALO_NUM_CTLS = [
+  ["tune",  -12, 12, 0, "tune"],
+  ["dyn",   0, 1, 0.6,  "velocity amount"],
+  ["stick", 0, 1, 0.4,  "stick"],
+  ["bloom", 0, 1, 0,    "bloom"],
+  ["width", 0, 1, 0.5,  "width"],
+  ["vary",  0, 1, 0.1,  "vary"],
+];
+
+/** Select controls: [short key, default, [values]]. */
+export const HALO_SEL_CTLS = [
+  ["model", "metal", HALO_MODELS],
+  ["choke", "trig", ["trig", "choke"]],
+];
+
+export const HALO_MOD_KEYS = HALO_NUM_CTLS.map(c => c[0]);
+export const HALO_NUM_KEYS = HALO_MOD_KEYS.map(k => `hlo${k}`);
+export const HALO_SEL_KEYS = HALO_SEL_CTLS.map(c => `hlo${c[0]}`);
+
+export const HALO_MOD_RANGE = Object.fromEntries(HALO_NUM_CTLS.map(c => [c[0], [c[1], c[2]]]));
+
+export const HALO_MOD_LABELS = Object.fromEntries(
+  HALO_NUM_CTLS.map(([k, , , , label]) => [k, `halo ${label}`]));
+
+export const HALO_DEFAULTS = {
+  ...Object.fromEntries(HALO_NUM_CTLS.map(c => [`hlo${c[0]}`, c[3]])),
+  ...Object.fromEntries(HALO_SEL_CTLS.map(c => [`hlo${c[0]}`, c[1]])),
+};
+
+/** A 0..1 lane value in this control's own units. @param {string} k short key */
+export function haloFromUnit(k, u) {
+  const [lo, hi] = HALO_MOD_RANGE[k] ?? [0, 1];
+  return lo + Math.max(0, Math.min(1, u)) * (hi - lo);
+}
+
+// ---- the cymbals --------------------------------------------------------------
+// Complete patches: the model, the choke, every panel control and the four
+// track sliders (tone, size, spread, decay), so nothing of the last survives.
+const HALO_TONES = {
+  "808 closed": {
+    d: "the drum machine's closed hat: six squares, the high band, short, choked",
+    model: "metal", choke: "choke", tone: 0.6, size: 0.75, spread: 0.5, decay: 0.22,
+    p: { stick: 0.3, width: 0.3, vary: 0.1 },
+  },
+  "808 open": {
+    d: "the same six squares let ring: the open hat",
+    model: "metal", choke: "trig", tone: 0.6, size: 0.75, spread: 0.5, decay: 0.55,
+    p: { stick: 0.3, width: 0.4, vary: 0.1 },
+  },
+  "pedal hat": {
+    d: "one hat, the step's length the pedal: a short step is closed, a tied one opens. Choked by the next hit",
+    model: "metal", choke: "choke", tone: 0.65, size: 0.7, spread: 0.5, decay: 0.7,
+    p: { stick: 0.5, width: 0.4, vary: 0.12 },
+  },
+  "fm hat": {
+    d: "a bright digital hat on the fm pairs, tight and glassy",
+    model: "fm", choke: "choke", tone: 0.75, size: 0.85, spread: 0.55, decay: 0.25,
+    p: { stick: 0.35, width: 0.3, vary: 0.1 },
+  },
+  "ride": {
+    d: "the modal model with a hard stick and a long, even ring: a ride pattern that is not one sample eight times",
+    model: "modal", choke: "trig", tone: 0.55, size: 0.5, spread: 0.45, decay: 0.8,
+    p: { stick: 0.7, bloom: 0.1, width: 0.6, vary: 0.15 },
+  },
+  "ride bell": {
+    d: "the bell of the ride: sparse partials, a small size, the stick forward",
+    model: "modal", choke: "trig", tone: 0.6, size: 0.68, spread: 0.92, decay: 0.75,
+    p: { stick: 0.8, width: 0.4, vary: 0.1 },
+  },
+  "crash": {
+    d: "a big modal crash with the bloom half in: it swells after the hit and spreads across the stereo field",
+    model: "modal", choke: "trig", tone: 0.55, size: 0.38, spread: 0.35, decay: 0.85,
+    p: { stick: 0.4, bloom: 0.5, width: 0.85, vary: 0.1 },
+  },
+  "china": {
+    d: "dense, trashy partials, bright and a little swollen: the china's snarl",
+    model: "modal", choke: "trig", tone: 0.68, size: 0.45, spread: 0.08, decay: 0.7,
+    p: { stick: 0.5, bloom: 0.3, width: 0.7, vary: 0.12 },
+  },
+  "splash": {
+    d: "a small, quick, bright modal splash",
+    model: "modal", choke: "trig", tone: 0.65, size: 0.75, spread: 0.3, decay: 0.5,
+    p: { stick: 0.45, bloom: 0.2, width: 0.6, vary: 0.1 },
+  },
+  "gong": {
+    d: "sparse partials at the bottom of the size, a soft mallet and the full bloom: a gong that swells and rings for seconds",
+    model: "modal", choke: "trig", tone: 0.3, size: 0.02, spread: 0.95, decay: 1,
+    p: { stick: 0.05, bloom: 0.75, width: 0.9, vary: 0 },
+  },
+  "fm crash": {
+    d: "the fm pairs at a high index, long and wide: the digital crash",
+    model: "fm", choke: "trig", tone: 0.5, size: 0.45, spread: 0.85, decay: 0.85,
+    p: { stick: 0.35, bloom: 0.3, width: 0.85, vary: 0.1 },
+  },
+  "shaker": {
+    d: "wide noise, high and short, choked: a shaker to play in sixteenths",
+    model: "noise", choke: "choke", tone: 0.72, size: 0.8, spread: 0.85, decay: 0.16,
+    p: { stick: 0.1, width: 0.5, vary: 0.25 },
+  },
+  "trash": {
+    d: "two narrow bands of noise ringing like a cracked cymbal",
+    model: "noise", choke: "trig", tone: 0.5, size: 0.55, spread: 0.12, decay: 0.5,
+    p: { stick: 0.4, width: 0.6, vary: 0.15 },
+  },
+  "reverse swell": {
+    d: "the six squares under the full bloom and no stick: a cymbal that rises into the beat",
+    model: "metal", choke: "trig", tone: 0.5, size: 0.4, spread: 0.6, decay: 0.75,
+    p: { stick: 0, bloom: 1, width: 0.9, vary: 0 },
+  },
+};
+
+export const HALO_TONE_NAMES = Object.keys(HALO_TONES);
+
+/** One line saying what a cymbal is reaching for. @param {string} name */
+export function haloToneDescription(name) { return HALO_TONES[name]?.d ?? ""; }
+
+/**
+ * A cymbal as a complete set of track params: the model, the choke, every
+ * panel control and the four track sliders, so nothing of the last survives.
+ * @param {string} name
+ * @returns {Record<string, number|string>|null}
+ */
+export function haloTone(name) {
+  const v = HALO_TONES[name];
+  if (!v) return null;
+  const out = { ...HALO_DEFAULTS };
+  for (const [k, val] of Object.entries(v.p)) out[`hlo${k}`] = val;
+  out.hlomodel = v.model; out.hlochoke = v.choke;
+  out.harm = v.tone; out.timb = v.size; out.morph = v.spread; out.decay = v.decay;
   return out;
 }
 

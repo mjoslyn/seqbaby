@@ -9,7 +9,7 @@
 // The engine modules that owned these (fxRack.js, signal.js, track.js,
 // euclid.js) import and re-export them, so nothing else in the engine changed.
 
-import { BASS_DEFAULTS, CONTAGION_DEFAULTS, DRONE_DEFAULTS, GUITAR_DEFAULTS, HEXOP_DEFAULTS, LADDER_DEFAULTS, LANCET_DEFAULTS, ORACLE_DEFAULTS, SIEGE_DEFAULTS, SUB_DEFAULTS, VOX_DEFAULTS } from "./engineData.js";
+import { BASS_DEFAULTS, CONTAGION_DEFAULTS, DRONE_DEFAULTS, GUITAR_DEFAULTS, HALO_DEFAULTS, HEXOP_DEFAULTS, LADDER_DEFAULTS, LANCET_DEFAULTS, ORACLE_DEFAULTS, SIEGE_DEFAULTS, SUB_DEFAULTS, VOX_DEFAULTS } from "./engineData.js";
 
 /** The rack's stages, in chain order, and each one's controls at rest. */
 export function defaultFxConfig() {
@@ -124,6 +124,8 @@ export function defaultTrackParams() {
       ...VOX_DEFAULTS,
       // Lancet: the model, the tune, the velocity amount, the randomizer (see lancet.js)
       ...LANCET_DEFAULTS,
+      // Halo: the model, the choke, the strike, the bloom, the width (see halo.js)
+      ...HALO_DEFAULTS,
       // Siege: the bass drum synth's tune, floor and four buttons (see siege.js)
       ...SIEGE_DEFAULTS,
       // Oracle: VCO 1's shape, the widths, slop, chorus and the envelope, and

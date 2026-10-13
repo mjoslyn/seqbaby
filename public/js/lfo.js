@@ -247,6 +247,8 @@ export function getModTarget(t, key) {
   if (key.startsWith("vox_")) return t.voice?.getAudioParam?.("sng" + after(key, "vox_")) ?? null;
   // Lancet: lancet_tune is the tune, lnctune on the voice.
   if (key.startsWith("lancet_")) return t.voice?.getAudioParam?.("lnc" + after(key, "lancet_")) ?? null;
+  // Halo: halo_bloom is the swell, hlobloom on the voice.
+  if (key.startsWith("halo_")) return t.voice?.getAudioParam?.("hlo" + after(key, "halo_")) ?? null;
   // Siege: siege_tune is the kick's tuning, sgetune on the voice.
   if (key.startsWith("siege_")) return t.voice?.getAudioParam?.("sge" + after(key, "siege_")) ?? null;
   // Ladder: ladder_fdec is the filter contour's decay, ldrfdec on the voice.

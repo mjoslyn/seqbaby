@@ -101,7 +101,19 @@ is a drummer, `lncrmodel` 0.5 is a different snare every hit.
 "piccolo", "tin head", "fm clap", "metal fm", "coins on the head", "boom
 bap", "dusty funk", "roll the dice". Hats: `dm:808-chat` /
 `dm:808-ohat` / `dm:909-chat` / `dm:909-ohat`, `plaits:15` (morph is closed
-to open). Clap:
+to open), and `dm:halo`, a cymbal synthesizer for every hat and cymbal
+there is, four models (`hlomodel`: "metal", the 808's six squares; "fm";
+"modal", forty partials, the acoustic one and the gong; "noise", a shaker):
+harm is TONE (read live, so a lane opens a ringing crash), timb SIZE (bigger
+is lower: a hat small, a crash big), morph SPREAD (the model's own
+character), decay the length. `hlochoke` "choke" makes it one hi-hat: a hit
+is cut when its step ends and the next hit cuts the one before, so write
+`x` for a closed hat and `x___` for an open one on the SAME track, rather
+than two tracks. `hlobloom` swells a crash after the hit (1 is a reverse
+swell), `hlostick` is the strike's tick, `hlowidth` the stereo width,
+`hlovary` humanizes every hit. `apply_preset` "808 closed", "808 open",
+"pedal hat", "fm hat", "ride", "ride bell", "crash", "china", "splash",
+"gong", "fm crash", "shaker", "trash", "reverse swell". Clap:
 `dm:808-clap`, `dm:909-clap`. Cowbell: `dm:808-cowbell`. The 808 / 909 voices
 ignore the step's note except the kick's tune. Every drum kit track plays C2
 on a blank note, and `drumKit` is guessed from the name.

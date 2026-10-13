@@ -121,6 +121,7 @@ export function updatePlaitsControlsVisibility(t) {
   const isDrone     = t.engineKey === "dm:drone";
   const isVox       = t.engineKey === "dm:vox";
   const isLancet      = t.engineKey === "dm:lancet";
+  const isHalo        = t.engineKey === "dm:halo";
   const isSiege       = t.engineKey === "dm:siege";
   const isTines    = t.engineKey === "dm:tines";
   const isOracle  = t.engineKey === "dm:oracle";
@@ -133,7 +134,7 @@ export function updatePlaitsControlsVisibility(t) {
   // its panel knobs (see buildDrumSynthNode).
   const is808 = t.engineKey.startsWith("dm:808-");
   const is909 = t.engineKey.startsWith("dm:909-");
-  const showTimbre = isPlaits || isSnarl || isLadder || isDrift || isGuitar || isBass || isSub || isDrone || isVox || isLancet || isSiege || isTines || isOracle || isGranular || isWavetable || isSilverbox || isContagion || isHexop || is808 || is909;
+  const showTimbre = isPlaits || isSnarl || isLadder || isDrift || isGuitar || isBass || isSub || isDrone || isVox || isLancet || isHalo || isSiege || isTines || isOracle || isGranular || isWavetable || isSilverbox || isContagion || isHexop || is808 || is909;
   const group = t._timbreGroupEl || t.el.querySelector(".sq-param-group--timbre");
   if (group) {
     group.hidden = !showTimbre;
@@ -216,6 +217,13 @@ export function updatePlaitsControlsVisibility(t) {
           morph: "the fx amount: each model's own stage, from clean at the bottom. Read live, so a lane sweeps it",
           decay: "how long the hit lasts, 60ms to 2.4s",
         }
+      : isHalo
+      ? {
+          harm: "tone: a highpass and a lowpass rising together, dark to bright. Read live, so a lane on it opens a crash that is already ringing",
+          timb: "size: every partial scaled together, an octave and a half either way. Small is a hat or a splash, big a crash or a gong",
+          morph: "spread: each model's own character. The metal's ratios, the fm's index, how far apart the modal partials sit, the noise's bandwidth",
+          decay: "how long it rings, 30ms to nine seconds. In choke mode the step's length cuts it first",
+        }
       : isSiege
       ? {
           harm: "the drive, after the envelope: it crushes the attack, leaves the tail a clean sub, and lifts that tail up to twelve times. Fold or clip is the panel's choice",
@@ -272,7 +280,7 @@ export function updatePlaitsControlsVisibility(t) {
     // Randomize button only makes sense for Plaits' generic harm/timb/morph/decay —
     // hide it for the analog engines where those sliders do engine-specific things.
     const randBtn = group.querySelector(".track-rand");
-    if (randBtn) randBtn.hidden = isSnarl || isLadder || isDrift || isGuitar || isBass || isSub || isDrone || isVox || isLancet || isSiege || isTines || isOracle || isGranular || isWavetable || isSilverbox || isContagion || isHexop || is808 || is909;
+    if (randBtn) randBtn.hidden = isSnarl || isLadder || isDrift || isGuitar || isBass || isSub || isDrone || isVox || isLancet || isHalo || isSiege || isTines || isOracle || isGranular || isWavetable || isSilverbox || isContagion || isHexop || is808 || is909;
   }
   // Per-oscillator volume sliders: only shown for the analog mono engines.
   const oscGroup = t._oscMixGroupEl || t.el.querySelector(".sq-param-group--osc-mix");
@@ -347,6 +355,9 @@ export function updatePlaitsControlsVisibility(t) {
   // The lancet's model, tune, velocity amount and randomizer.
   const lancetGroup = t._lancetGroupEl || t.el.querySelector(".sq-param-group--lancet");
   if (lancetGroup) lancetGroup.hidden = !isLancet;
+  // The halo's model, choke, strike, bloom, width and variation.
+  const haloGroup = t._haloGroupEl || t.el.querySelector(".sq-param-group--halo");
+  if (haloGroup) haloGroup.hidden = !isHalo;
   // The siege's drive type, tune, lock, low cut and velocity floor.
   const siegeGroup = t._siegeGroupEl || t.el.querySelector(".sq-param-group--siege");
   if (siegeGroup) siegeGroup.hidden = !isSiege;

@@ -16,7 +16,7 @@ env / fx / eq / comp / mod / automation per track.
   `public/woscillators.js` →
   `public/js/main.js` (ES module). `middleware.ts` refreshes the Supabase
   session on every request *except* static engine assets.
-- **Engine**: ~84 dependency-free vanilla ES modules in `public/js/`. No
+- **Engine**: ~85 dependency-free vanilla ES modules in `public/js/`. No
   bundler — edit, reload. `window.seqbaby` (from `appApi.js`) exposes `state`
   and serialize/apply hooks to the React shell (typed in `app/seqbaby.d.ts`).
 - **Accounts + data**: Supabase (Postgres + Auth + RLS). Tables: `profiles`,
@@ -308,6 +308,10 @@ env / fx / eq / comp / mod / automation per track.
   slap, modal, physical, fm, granular, blend) under four knobs and an fx
   amount, a velocity amount and a per-hit randomizer, in one AudioWorklet.
   See the lancet section.
+- `halo.js` — **halo**, a cymbal synthesizer: four models (metal, fm, modal,
+  noise) under four knobs, a strike, a bloom, a choke that makes the step's
+  length a hi-hat's pedal, a mono-safe width and a per-hit variation, in one
+  AudioWorklet. See the halo section.
 - `siege.js` — **siege**, the bass drum synth, a siege engine for the low end: a
   sine under a pitch envelope, with a drive (a two-stage wavefolder or a
   clipper) AFTER the amplitude envelope, a 3-pole 30Hz low cut, gate mode
@@ -356,7 +360,7 @@ npm test               # node --test: the pure modules (session format, chance g
                        #   version tree, song names, share card copy, the song builder, the jam diff,
                        #   song previews, grid avatars, the songs and people explorers,
                        #   the Strudel bridge, the reverb, the filter models, the guitar, the contagion,
-                       #   the vox and its phonetic reader, the lancet, the prism, the repeat,
+                       #   the vox and its phonetic reader, the lancet, the halo, the prism, the repeat,
                        #   the ladder, the oracle, the arrangement)
 npm run mcp            # the MCP server on stdio (mcp/server.mjs) — an agent writes songs
 npm run test:rls       # RLS policy tests — builds a throwaway Postgres in docker
@@ -824,7 +828,7 @@ Voice interface: `hit(midi, time, dur, vel, opts?)`, `setParam`,
 
 All engine type `drum-synth`. The three Tone.js analog-mono presets are each
 wrapped in `makePolyPool(size, buildOne)`; the silverbox, the contagion, the hexop, the
-guitar, the bass, subby, the drone, the vox, the siege, the lancet, the ladder and the oracle are the odd ones out — AudioWorklet models that handle
+guitar, the bass, subby, the drone, the vox, the siege, the lancet, the halo, the ladder and the oracle are the odd ones out — AudioWorklet models that handle
 their own voicing (the silverbox, subby and the siege are mono, deliberately; the rest
 polyphonic, the ladder by a switch). See their
 sections below. The guitar, bass, ladder and oracle keep their old Tone builders in voices.js
@@ -844,6 +848,7 @@ sections below. The guitar, bass, ladder and oracle keep their old Tone builders
 | `dm:drone`     | `buildDroneVoice`     | 6 (internal) | equation-oscillator drone, filter, delay, cloud, AudioWorklet (`drone.js`) |
 | `dm:vox`       | `buildVoxVoice`       | 8 (internal) | singing voice: glottis, formants, consonants, choir, AudioWorklet (`vox.js`) |
 | `dm:lancet`    | `buildLancetVoice`    | 4 (internal) | snare synthesizer, seven models, per-hit randomizer, AudioWorklet (`lancet.js`) |
+| `dm:halo`      | `buildHaloVoice`      | 6 (internal) | cymbal synthesizer, four models, choke, bloom, stereo width, AudioWorklet (`halo.js`) |
 | `dm:siege`       | `buildSiegeVoice`       | mono | the bass drum synth: sine, pitch envelope, fold / clip drive after the envelope, AudioWorklet (`siege.js`) |
 | `dm:tines`     | `buildTinesVoice`     | 6 | electric piano |
 | `dm:oracle`    | `buildOracleWorkletVoice` | 6 (internal) | the poly analog: morphing VCOs with slop, drive on the sum, chorus, AudioWorklet (`oracle.js`) |
@@ -1793,6 +1798,80 @@ TRIG ─▶ randomizer ─▶ MODEL (one of seven) ─▶ that model's FX ─▶
   trip.
 - **Loading** — Blob-URL registration from `loadWorklet()`; a failure falls
   back to the 808 snare (`buildDrumSynthNode("808-snare")`).
+
+## Halo (`dm:halo`, `public/js/halo.js`)
+
+A cymbal synthesizer: hats, rides, crashes, chinas, splashes and a gong from
+one voice. Named for what it does, like the other emulators: a halo is a
+ring of light, which is what a cymbal is to the ear.
+
+```
+TRIG ─▶ vary ─▶ MODEL ─────────▶ AMP ─▶ TONE (hp + lp) ─▶ + ─▶ WIDTH ─▶ L/R
+                metal · fm ·      ▲      read live         ▲    (mono-safe side)
+                modal · noise     │                        │
+                   ▲ BLOOM ───────┘               STICK ───┘
+```
+
+- **Four models** (`hlomodel`, `HALO_MODELS`): *metal* is the 808's six
+  square oscillators at the circuit's own frequencies (205.3 .. 800Hz,
+  polyBLEP) through its 3.44k and 7.1k bandpasses, the low band fading as the
+  size goes down so a small one is a hat; *fm* three inharmonic carrier /
+  modulator pairs whose index falls with the hit; *modal* forty resonators on
+  `(1 + 0.35m)^p` over a 420Hz bottom, each nudged by a fixed hash, each
+  decaying as `ratio^-0.4` of the knob, struck at fixed per-partial phases
+  (in phase, forty of them summed to one spike four times the cymbal's
+  level); *noise* two bandpasses whose width is the spread, the level put
+  back as `sqrt(Q)`. SPREAD is each model's own character (the metal's ratio
+  exponent, the fm's index, the modal `p` from 1.2 to 2, the noise's Q);
+  SIZE scales every partial, an octave and a half either way, bigger lower.
+  `HALO_MODEL_TIPS` is the status line. **Reasoned, not measured** beyond
+  the 808's oscillator values.
+- **Tone is read live, the rest latched per hit.** The hp (150Hz..2.4kHz)
+  and lp (1.6kHz..up) after the model, both two-pole, are recomputed every
+  control block, so a lane on the tone opens a ringing crash. Size, spread,
+  decay, the model and the hit's random offsets are read when it lands.
+- **Two-speed envelope**: half the level falls at a seventh of the decay,
+  half at the decay (30ms..9s, `0.03·300^decay`). The modal model uses its
+  partials' own decays instead.
+- **The bloom** (`hlobloom`) is a second envelope that rises over 40..300ms
+  and decays at the knob, with the strike turned down under it; on the modal
+  model it drives noise into the partials (scaled `sqrt(1 - r²)` per partial,
+  so a held partial rings at about its struck level).
+- **Choke mode** (`hlochoke` "choke") makes one hi-hat: the note message
+  carries the step's length (`dur`), and the hit fades 18ms after it, and a
+  new hit fades every hit before it over 8ms. Trig mode ignores both and
+  rings up to six hits at once (eight slots, the oldest faded over 3ms past
+  six). `release` (a computer-keyboard key let go) closes a choked hat and
+  leaves a trig one ringing; the transport's stop goes through a new
+  `silence` hook on the builder (`DrumSynthVoice.silence` prefers it to
+  `release`) and fades everything over 30ms.
+- **The width is mono-safe**: a side signal from three short Schroeder
+  allpasses (1.3 / 2.1 / 3.1ms, g 0.45; a longer chain smeared a choked hat
+  into a 50ms tail) is added to L and taken from R, so L + R is the cymbal
+  exactly (tested sample for sample).
+- **Velocity** is a level and a little tone (`hlodyn`); `hlovary` throws the
+  tone, pitch, decay, stick and level per hit from a seeded xorshift, so a
+  render in the tests is a render. The note is the pitch, C2 the nominal
+  cymbal; `hlotune` trims ±12.
+- **Controls** — the four sliders are TONE / SIZE / SPREAD / DECAY. The panel
+  (`sq-param-group--halo`) is the cymbal dropdown (filled from
+  `HALO_TONE_NAMES`), model, choke, tune, velocity, stick, bloom, width,
+  vary. Keys are `hlo` + short key → `halo_<short>` / `halo.<short>`, from
+  `HALO_NUM_CTLS` / `HALO_SEL_CTLS`. Fourteen cymbals via `haloTone(name)`,
+  complete; panel markup `HALO_PANEL` in `app/studioMarkup.ts`.
+- **A drum kit by default**: `guessIsDrumKit`, the builder's `DRUM_RE` and
+  the patch preview's know `halo` (a halo patch with no other word in its
+  name previews as a hat). Strudel: `s("halo")` (it used to fall through to
+  the pad rule); the portable export is `hh`, or `cr` when the decay is over
+  0.6. There is no `.bank("halo")`: a bank maps roles to engines, and a
+  closed and an open hat on one engine would merge into one track.
+- `test/halo.test.js` renders the processor in Node: the tables against the
+  processor and the markup, every model at every corner, the level spread
+  across models, pitch by note / tune / size, tone (live), decay, choke and
+  release, bloom, the width's mono sum, velocity and vary, stop and a roll,
+  every cymbal's level, the builder and the Strudel round trip.
+- **Loading** — Blob-URL registration from `loadWorklet()`; a failure falls
+  back to the 808 open hat.
 
 ## Siege (`dm:siege`, `public/js/siege.js`)
 
@@ -4496,7 +4575,7 @@ fails. Real-time capture — see Known limitations.
 ## Engines catalog (`buildEngineCatalog`)
 
 Groups in order: `plaits` (16) · `drum / synth` (808/909 kit + poly-saw /
-fm-bell / pad) · `Emulators` (silverbox + contagion + hexop + guitar + bass + subby + drone + vox + lancet + siege + ladder + oracle + 3 analog-mono) · `texture` (`dm:granular`) ·
+fm-bell / pad) · `Emulators` (silverbox + contagion + hexop + guitar + bass + subby + drone + vox + lancet + halo + siege + ladder + oracle + 3 analog-mono) · `texture` (`dm:granular`) ·
 `wavetable` (`wt:akwf`) · `sampler` (single unified entry) · `saved patches`
 (`saved:<name>`) · `midi` · `bus` (the fx bus — not an instrument, see below).
 The engine key string is the source of truth.
@@ -4725,7 +4804,7 @@ through a 6ms fade on its gain).
   do the same, or use `currentBpm()` (lfo.js) as the sync helpers do.
 - **Worklet processor sources are template literals** (`silverbox.js`,
   `contagion.js`, `hexop.js`, `guitar.js`, `bass.js`, `subbass.js`,
-  `drone.js`, `vox.js`, `lancet.js`, `siege.js`, `ladder.js`, `oracle.js`, `crusher.js`, `reverb.js`, `prism.js`, `repeat.js`),
+  `drone.js`, `vox.js`, `lancet.js`, `halo.js`, `siege.js`, `ladder.js`, `oracle.js`, `crusher.js`, `reverb.js`, `prism.js`, `repeat.js`),
   so a stray backtick or `${` inside one — including in a comment — truncates
   the string. The module still parses, `node --check` still passes, and the
   failure only shows up as a SyntaxError at engine boot. When editing inside a
@@ -4811,7 +4890,7 @@ Repo: https://github.com/mjoslyn/seqbaby.
   An inline marker (`window.__seqbabyServerBoot`) tells the paths apart, and
   `ScriptLoader.tsx` keeps its onload-chained injection for the soft-nav case
   (e.g. arriving from `/login`).
-- `app/EnginePreload.tsx` emits `modulepreload` for all 84 modules listed in
+- `app/EnginePreload.tsx` emits `modulepreload` for all 85 modules listed in
   `app/engineAssets.ts` (at `engineAsset("/js/<name>")`; the hints used to
   point at the site root and 404). The graph is 8 levels deep, so without it the browser
   needs up to eight sequential round trips just to discover the code.

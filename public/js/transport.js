@@ -10,6 +10,7 @@ import { loadSubBassWorklet } from "./subbass.js";
 import { loadDroneWorklet } from "./drone.js";
 import { loadVoxWorklet } from "./vox.js";
 import { loadLancetWorklet } from "./lancet.js";
+import { loadHaloWorklet } from "./halo.js";
 import { loadSiegeWorklet } from "./siege.js";
 import { loadLadderWorklet } from "./ladder.js";
 import { loadOracleWorklet } from "./oracle.js";
@@ -275,6 +276,7 @@ export function loadWorklet() {
   const drone = loadDroneWorklet(state.audioCtx).catch(e => { console.warn("drone worklet load failed", e); });
   const vox = loadVoxWorklet(state.audioCtx).catch(e => { console.warn("vox worklet load failed", e); });
   const lancet = loadLancetWorklet(state.audioCtx).catch(e => { console.warn("lancet worklet load failed", e); });
+  const halo = loadHaloWorklet(state.audioCtx).catch(e => { console.warn("halo worklet load failed", e); });
   const siege = loadSiegeWorklet(state.audioCtx).catch(e => { console.warn("siege worklet load failed", e); });
   const ladder = loadLadderWorklet(state.audioCtx).catch(e => { console.warn("ladder worklet load failed", e); });
   const oracle = loadOracleWorklet(state.audioCtx).catch(e => { console.warn("oracle worklet load failed", e); });
@@ -291,7 +293,7 @@ export function loadWorklet() {
   const prism = loadPrismWorklet(state.audioCtx).catch(e => { console.warn("prism worklet load failed", e); });
   // The beat repeat / slicer: a buffer and a read head on the transport's clock.
   const repeat = loadRepeatWorklet(state.audioCtx).catch(e => { console.warn("repeat worklet load failed", e); });
-  return Promise.all([state.woscLoad, silverbox, contagion, hexop, guitar, bass, sub, drone, vox, lancet, siege, ladder, oracle, crusher, reverb, analogFilter, prism, repeat]);
+  return Promise.all([state.woscLoad, silverbox, contagion, hexop, guitar, bass, sub, drone, vox, lancet, halo, siege, ladder, oracle, crusher, reverb, analogFilter, prism, repeat]);
 }
 
 /**

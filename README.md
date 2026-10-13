@@ -64,6 +64,10 @@ site, sharing, the compose panel and the jam room. The two meet only through
   - **lancet**: a snare synthesizer with seven models (analog, slap, modal,
     physical, fm, granular, blend), each carrying its own fx stage, plus a
     per-hit randomizer.
+  - **halo**: a cymbal synthesizer with four models (metal, fm, modal,
+    noise): hats, rides, crashes, chinas and gongs, with a bloom that swells
+    after the hit, a choke that makes the step's length a hi-hat's pedal, and a
+    mono-safe stereo width.
   - **siege**: the bass drum synth. A sine under a pitch envelope, with a
     wavefolder or clipper drive after the amplitude envelope, pitch lock and a
     gate mode that turns it into a bassline.

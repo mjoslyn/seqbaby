@@ -48,6 +48,7 @@ import {
   DRONE_NUM_CTLS, DRONE_SEL_CTLS, DRONE_TONE_NAMES, droneTone, droneToneDescription,
   VOX_NUM_CTLS, VOX_SEL_CTLS, VOX_TEXT_CTLS, VOX_TONE_NAMES, voxTone, voxToneDescription,
   LANCET_NUM_CTLS, LANCET_SEL_CTLS, LANCET_TONE_NAMES, lancetTone, lancetToneDescription,
+  HALO_NUM_CTLS, HALO_SEL_CTLS, HALO_TONE_NAMES, haloTone, haloToneDescription,
   SIEGE_NUM_CTLS, SIEGE_SEL_CTLS, SIEGE_TONE_NAMES, siegeTone, siegeToneDescription,
   LADDER_NUM_CTLS, LADDER_SEL_CTLS, LADDER_OSC_NUM_CTLS, LADDER_OSC_SEL_CTLS, LADDER_TONE_NAMES, ladderTone, ladderToneDescription,
   ORACLE_NUM_CTLS, ORACLE_SEL_CTLS, ORACLE_TONE_NAMES, oracleTone, oracleToneDescription,
@@ -107,7 +108,7 @@ const NAMES_SHARP = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#",
 
 // The same regex guessIsDrumKit (meter.js) uses; that module reads the live
 // catalog, so it is spelled again here rather than imported.
-const DRUM_RE = /\b(kick|siege|snare|rim|(open)?hat|hi-?hat|clap|tom\d*|ride|crash|cymbal|perc|drum|lancet)\b/;
+const DRUM_RE = /\b(kick|siege|snare|rim|(open)?hat|hi-?hat|clap|tom\d*|ride|crash|cymbal|perc|drum|lancet|halo)\b/;
 
 // ---- engines ---------------------------------------------------------------
 
@@ -186,6 +187,7 @@ const SLIDER_TIPS = {
   "dm:drone": { harm: "cutoff of the MS-20 style lowpass", timb: "A0: the equation's multiplier, 1..16. Changes how fast its slow terms run against the pitch, not the pitch", morph: "A1: the equation's first shift, 2..15", decay: "A2: the equation's second shift, 2..15" },
   "dm:vox": { harm: "the vowel: u, o, a, e, i across the slider (0, 0.25, 0.5, 0.75, 1). A lane on it sings a lyric", timb: "throat size: soprano (0), alto, tenor, bass (1)", morph: "breath: air in the voice; above 0.75 it fades to a whisper", decay: "release" },
   "dm:lancet": { harm: "timbre: on most models the noise (level, brightness, length); what it does per model is in lncmodel's tips", timb: "color: the pitch envelope and shell balance (analog), the shaper (slap), the partials (modal), the body (physical), the modulator ratios (fm), the grains (granular), the bodies (blend)", morph: "fx amount: each model's own stage, clean at 0 (clipping, multiband drive, a fold, a compressor, an old sampler)", decay: "how long the hit lasts, 60ms to 2.4s" },
+  "dm:halo": { harm: "tone: a highpass and a lowpass rising together, dark to bright; read live, so a lane opens a ringing crash", timb: "size: every partial scaled together, an octave and a half either way. Small is a hat or a splash, big a crash or a gong", morph: "spread: the model's own character (hlomodel): the metal's ratios, the fm's index, the modes' spacing, the noise's bandwidth", decay: "how long it rings, 30ms to 9s. In choke mode (hlochoke) the step's length cuts it first" },
   "dm:siege": { harm: "drive, after the envelope: crushes the attack, lifts the tail. fold or clip is `sgemode`", timb: "click: how far above the note the pitch starts, up to six octaves", morph: "depth: how long the pitch takes to fall onto the note, 1ms to 250ms", decay: "how long the body rings, 50ms to 4s" },
   "dm:ladder": { harm: "the ladder filter's cutoff, 30Hz..20kHz; `ldrkbd` is how much it follows the keyboard", timb: "emphasis (resonance): the passband thins as it climbs, past ~0.75 the filter whistles on its own", morph: "amount of contour: how far the filter envelope (`ldrfatk` / `ldrfdec` / `ldrfsus`) opens the filter, up to five octaves", decay: "the loudness contour's decay, and the release while `ldrdecsw` is on" },
   "dm:oracle": { harm: "VCO 2's detune against VCO 1, 30 cents either way, 0.5 unison (the slop keeps even unison beating)", timb: "VCO 2's shape: 0 triangle, 0.5 saw, 1 pulse (its width is `orcpw2`; VCO 1's shape is `orcshape1`)", morph: "drive on the summed voices: a gain into a knee, so chords compress and tails clean up. 0 is a wire, 0.5 warm, 1 crushed", decay: "the envelope's decay to its sustain, 50ms to 2s; `orcatk` / `orcsus` / `orcrel` are the rest of it" },
@@ -209,6 +211,7 @@ const PANELS = {
   "dm:drone":  { prefix: "drn", num: DRONE_NUM_CTLS, sel: DRONE_SEL_CTLS, tones: DRONE_TONE_NAMES, tone: droneTone, describe: droneToneDescription },
   "dm:vox":    { prefix: "sng", num: VOX_NUM_CTLS, sel: VOX_SEL_CTLS, text: VOX_TEXT_CTLS, tones: VOX_TONE_NAMES, tone: voxTone, describe: voxToneDescription },
   "dm:lancet":   { prefix: "lnc", num: LANCET_NUM_CTLS, sel: LANCET_SEL_CTLS, tones: LANCET_TONE_NAMES, tone: lancetTone, describe: lancetToneDescription },
+  "dm:halo":     { prefix: "hlo", num: HALO_NUM_CTLS, sel: HALO_SEL_CTLS, tones: HALO_TONE_NAMES, tone: haloTone, describe: haloToneDescription },
   "dm:siege":    { prefix: "sge", num: SIEGE_NUM_CTLS, sel: SIEGE_SEL_CTLS, tones: SIEGE_TONE_NAMES, tone: siegeTone, describe: siegeToneDescription },
   "dm:oracle":   { prefix: "orc", num: ORACLE_NUM_CTLS, sel: ORACLE_SEL_CTLS, tones: ORACLE_TONE_NAMES, tone: oracleTone, describe: oracleToneDescription },
   "dm:hexop": {

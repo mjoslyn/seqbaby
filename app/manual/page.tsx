@@ -29,6 +29,7 @@ const SECTIONS = [
   ["subby", "Subby"],
   ["vox", "Vox"],
   ["lancet", "Lancet"],
+  ["halo", "Halo"],
   ["siege", "Siege"],
   ["sampler", "Samples"],
   ["wavetable", "The wavetable editor"],
@@ -744,7 +745,7 @@ export default function ManualPage() {
               <tbody>
                 <tr><td>plaits</td><td>Sixteen synthesis models from the Mutable Instruments Plaits oscillator: virtual analogue, FM, wavetable, granular, noise and physical models.</td></tr>
                 <tr><td>drum / synth</td><td>An 808 and 909 kit, a poly saw, an FM bell and a pad.</td></tr>
-                <tr><td>Emulators</td><td>The <a href="#silverbox">silverbox</a>, the <a href="#contagion">contagion</a>, the <a href="#hexop">hexop</a>, an <a href="#guitar">electric guitar and bass</a>, <a href="#subby">subby</a>, <a href="#vox">vox</a>, a singing voice, <a href="#siege">siege</a>, a bass drum synth, and <a href="#lancet">lancet</a>, a snare synthesizer, the <a href="#ladder">ladder</a>, the transistor-ladder monosynth, and the oracle, the poly analog (two morphing VCOs with slop, a drive on the summed voices, a chorus), all modelled rather than sampled. Then three voices in the spirit of classic hardware: snarl, drift and tines.</td></tr>
+                <tr><td>Emulators</td><td>The <a href="#silverbox">silverbox</a>, the <a href="#contagion">contagion</a>, the <a href="#hexop">hexop</a>, an <a href="#guitar">electric guitar and bass</a>, <a href="#subby">subby</a>, <a href="#vox">vox</a>, a singing voice, <a href="#siege">siege</a>, a bass drum synth, and <a href="#lancet">lancet</a>, a snare synthesizer, <a href="#halo">halo</a>, a cymbal synthesizer, the <a href="#ladder">ladder</a>, the transistor-ladder monosynth, and the oracle, the poly analog (two morphing VCOs with slop, a drive on the summed voices, a chorus), all modelled rather than sampled. Then three voices in the spirit of classic hardware: snarl, drift and tines.</td></tr>
                 <tr><td>texture</td><td>A granular engine that plays a sample as a cloud of tiny grains. Load your own, or pick from the bundled library of pads and drones.</td></tr>
                 <tr><td>wavetable</td><td>A wavetable synth with its own <a href="#wavetable">editor</a>.</td></tr>
                 <tr><td>sampler</td><td>Your own audio, or one of the bundled kits. See <a href="#sampler">samples</a>.</td></tr>
@@ -1155,6 +1156,56 @@ export default function ManualPage() {
             setup: a tight or fat analog snare, a slap crack, a wood or piccolo
             modal, a tin head, an fm clap, a metal fm, coins on the head, boom bap,
             dusty funk, and one that rolls the dice.
+          </p>
+        </section>
+
+        <section className={styles.section} id="halo">
+          <h2>Halo</h2>
+          <p>
+            A cymbal synthesizer: hats, rides, crashes, chinas, splashes and a
+            gong from one instrument, four ways, picked with the{" "}
+            <span className={styles.ui}>model</span> dropdown: metal (the
+            808&apos;s six square waves through two bandpasses, the drum machine
+            hat), fm (inharmonic carrier and modulator pairs, the digital
+            cymbal), modal (forty partials on a plate&apos;s series, each dying
+            faster the higher it sits, the acoustic one) and noise (two bands of
+            noise, a shaker or a trashy splash).
+          </p>
+          <ul>
+            <li>
+              <strong>The four knobs</strong> are{" "}
+              <span className={styles.ui}>tone</span>,{" "}
+              <span className={styles.ui}>size</span>,{" "}
+              <span className={styles.ui}>spread</span> and{" "}
+              <span className={styles.ui}>decay</span>. Tone is dark to bright, and
+              it is read while a cymbal rings, so a lane on it opens a crash that
+              is already sounding. Size scales every partial together: small is a
+              hat, big a crash, the bottom a gong. Spread is each model&apos;s own
+              character (the status line says, when you pick one). The step&apos;s
+              note is the pitch, and <span className={styles.ui}>tune</span> trims it.
+            </li>
+            <li>
+              <strong><span className={styles.ui}>trig</span> or{" "}
+              <span className={styles.ui}>choke</span></strong>. Trig lets hits ring
+              over each other, as crashes do. Choke makes it a hi-hat: a hit is cut
+              when its step ends and the next hit cuts the one before, so a short
+              step is a closed hat and a tied one is open, on one track.
+            </li>
+            <li>
+              <strong><span className={styles.ui}>stick</span></strong> is the tick
+              of the strike, <span className={styles.ui}>bloom</span> the swell a
+              crash makes after the hit (all the way up, a cymbal that rises into
+              the beat), <span className={styles.ui}>width</span> the stereo spread
+              (it still sums to the cymbal on a mono speaker) and{" "}
+              <span className={styles.ui}>vary</span> how much every hit differs, so
+              a ride pattern is not one sample eight times.
+            </li>
+          </ul>
+          <p>
+            The <span className={styles.ui}>cymbal</span> dropdown loads a complete
+            setup: 808 closed and open hats, a pedal hat, an fm hat, a ride and its
+            bell, a crash, a china, a splash, a gong, an fm crash, a shaker, trash,
+            and a reverse swell.
           </p>
         </section>
 

@@ -391,7 +391,7 @@ const MELODIC_RULES = [
 // Engines a sound name can't make: a sampler and a granular track need a
 // sample picked in the studio, and midi / bus are not instruments.
 const NOT_FROM_CODE = new Set(["sampler", "granular", "midi", "bus"]);
-const NATIVE_DRUM = /^(dm:(808|909)-|dm:lancet$|dm:siege$|plaits:1[345]$)/;
+const NATIVE_DRUM = /^(dm:(808|909)-|dm:lancet$|dm:halo$|dm:siege$|plaits:1[345]$)/;
 /**
  * A seqbaby engine named directly: its key (`dm:silverbox`, `plaits:3`), a
  * key from before the emulator rename (`dm:303`), or its name as the engine
@@ -1569,7 +1569,9 @@ const NATIVE_KIT_BANK = {
 const PART_SOUND = { kick: "bd", snare: "sd", rim: "rim", hihat: "hh", openhat: "oh", tom2: "lt", ride: "rd", crash: "cr" };
 function soundForTrack(t, native = false) {
   if (native && /^plaits:1[345]$/.test(t.engineKey)) return { s: t.engineKey, drum: true };
-  if (native && t.engineKey === "dm:lancet") return { s: nativeName(t.engineKey), drum: true };
+  if (native && (t.engineKey === "dm:lancet" || t.engineKey === "dm:halo")) return { s: nativeName(t.engineKey), drum: true };
+  // A halo has no one stock sound: a long one is a crash, anything shorter a hat.
+  if (t.engineKey === "dm:halo") return { s: (t.params?.decay ?? 0.4) > 0.6 ? "cr" : "hh", bank: null, drum: true };
   if (DRUM_EXPORT[t.engineKey]) { const [s, bank] = DRUM_EXPORT[t.engineKey]; return { s, bank, drum: true }; }
   if (t.engineKey === "sampler" && t.sampleSource?.kind === "bundled") {
     const [kit, part] = String(t.sampleSource.id).split("/");

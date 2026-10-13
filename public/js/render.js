@@ -11,6 +11,7 @@ import { SUB_DEFAULTS, SUB_NUM_KEYS, SUB_SEL_KEYS, SUB_TONE_NAMES, subTone, subT
 import { DRONE_DEFAULTS, DRONE_NUM_KEYS, DRONE_SEL_KEYS, DRONE_TONE_NAMES, droneTone, droneToneDescription } from "./drone.js";
 import { VOX_DEFAULTS, VOX_NUM_KEYS, VOX_SEL_KEYS, VOX_TEXT_KEYS, VOX_TONE_NAMES, voxTone, voxToneDescription } from "./vox.js";
 import { LANCET_DEFAULTS, LANCET_NUM_KEYS, LANCET_SEL_KEYS, LANCET_TONE_NAMES, lancetModelTip, lancetTone, lancetToneDescription } from "./lancet.js";
+import { HALO_DEFAULTS, HALO_NUM_KEYS, HALO_SEL_KEYS, HALO_TONE_NAMES, haloModelTip, haloTone, haloToneDescription } from "./halo.js";
 import { SIEGE_DEFAULTS, SIEGE_NUM_KEYS, SIEGE_SEL_KEYS, SIEGE_TONE_NAMES, siegeTone, siegeToneDescription } from "./siege.js";
 import { LADDER_DEFAULTS, LADDER_NUM_KEYS, LADDER_SEL_KEYS, LADDER_TONE_NAMES, ladderTone, ladderToneDescription } from "./ladder.js";
 import { ORACLE_DEFAULTS, ORACLE_NUM_KEYS, ORACLE_SEL_KEYS, ORACLE_TONE_NAMES, oracleTone, oracleToneDescription } from "./oracle.js";
@@ -221,7 +222,8 @@ export function syncTrackSoundUI(t) {
                    ...SIEGE_NUM_KEYS, ...SIEGE_SEL_KEYS,
                    ...LADDER_NUM_KEYS, ...LADDER_SEL_KEYS,
                    ...ORACLE_NUM_KEYS, ...ORACLE_SEL_KEYS,
-                   ...LANCET_NUM_KEYS, ...LANCET_SEL_KEYS]) {
+                   ...LANCET_NUM_KEYS, ...LANCET_SEL_KEYS,
+                   ...HALO_NUM_KEYS, ...HALO_SEL_KEYS]) {
     const el = q(`.p-${k}`);
     if (el && t.params[k] != null) {
       if (el.type === "checkbox") el.checked = t.params[k] === "on";
@@ -390,6 +392,25 @@ export function syncLancetPanel(t) {
   const root = t._lancetGroupEl || t.el?.querySelector(".sq-param-group--lancet");
   if (root) {
     for (const k of [...LANCET_NUM_KEYS, ...LANCET_SEL_KEYS]) {
+      const el = root.querySelector(`.p-${k}`);
+      if (el && t.params[k] != null) el.value = t.params[k];
+    }
+  }
+  const timbre = t._timbreGroupEl || t.el;
+  for (const k of ["harm", "timb", "morph", "decay"]) {
+    const el = timbre?.querySelector(`.p-${k}`);
+    if (el && t.params[k] != null) el.value = t.params[k];
+  }
+}
+
+/**
+ * The same, for the halo's panel.
+ * @param {Track} t
+ */
+export function syncHaloPanel(t) {
+  const root = t._haloGroupEl || t.el?.querySelector(".sq-param-group--halo");
+  if (root) {
+    for (const k of [...HALO_NUM_KEYS, ...HALO_SEL_KEYS]) {
       const el = root.querySelector(`.p-${k}`);
       if (el && t.params[k] != null) el.value = t.params[k];
     }
@@ -750,6 +771,20 @@ export function renderTrack(t) {
     const el = node.querySelector(`.p-${k}`);
     if (el) el.value = t.params[k] ?? LANCET_DEFAULTS[k];
   }
+  const haloToneSel = node.querySelector(".sq-halo__tone");
+  if (haloToneSel && !haloToneSel.options.length) {
+    for (const name of ["", ...HALO_TONE_NAMES]) {
+      const o = document.createElement("option");
+      o.value = name;
+      o.textContent = name || "—";
+      o.title = haloToneDescription(name);
+      haloToneSel.appendChild(o);
+    }
+  }
+  for (const k of [...HALO_NUM_KEYS, ...HALO_SEL_KEYS]) {
+    const el = node.querySelector(`.p-${k}`);
+    if (el) el.value = t.params[k] ?? HALO_DEFAULTS[k];
+  }
   const siegeToneSel = node.querySelector(".sq-siege__tone");
   if (siegeToneSel && !siegeToneSel.options.length) {
     for (const name of ["", ...SIEGE_TONE_NAMES]) {
@@ -1031,6 +1066,30 @@ export function renderTrack(t) {
       syncLancetPanel(t);
       refreshParamIndicators(t);
       setStatus(`lancet "${name}" — ${lancetToneDescription(name)}`);
+    });
+  }
+  // The halo: its knobs, its model (the status line says what spread means on
+  // it), its choke, and its cymbals.
+  for (const k of HALO_NUM_KEYS) {
+    const el = node.querySelector(`.p-${k}`);
+    if (el) el.addEventListener("input", e => setParam(t, k, Number(e.target.value)));
+  }
+  for (const k of HALO_SEL_KEYS) {
+    const el = node.querySelector(`.p-${k}`);
+    if (el) el.addEventListener("change", e => {
+      setParam(t, k, e.target.value);
+      if (k === "hlomodel") setStatus(`halo ${e.target.value} — ${haloModelTip(e.target.value)}`);
+    });
+  }
+  if (haloToneSel) {
+    haloToneSel.addEventListener("change", e => {
+      const name = e.target.value;
+      const tone = haloTone(name);
+      if (!tone) return;
+      for (const [key, val] of Object.entries(tone)) setParam(t, key, val);
+      syncHaloPanel(t);
+      refreshParamIndicators(t);
+      setStatus(`halo "${name}" — ${haloToneDescription(name)}`);
     });
   }
   // The siege: its two knobs, its four buttons, and the kicks.
@@ -1329,6 +1388,7 @@ export function renderTrack(t) {
   t._droneGroupEl   = node.querySelector(".sq-param-group--drone");
   t._voxGroupEl     = node.querySelector(".sq-param-group--vox");
   t._lancetGroupEl    = node.querySelector(".sq-param-group--lancet");
+  t._haloGroupEl      = node.querySelector(".sq-param-group--halo");
   t._siegeGroupEl     = node.querySelector(".sq-param-group--siege");
   t._oracleGroupEl    = node.querySelector(".sq-param-group--oracle");
   t._granGroupEl    = node.querySelector(".sq-param-group--granular");
@@ -1343,7 +1403,7 @@ export function renderTrack(t) {
                     t._timbreGroupEl, t._oscMixGroupEl, t._oscModGroupEl,
                     t._ladderOscGroupEl, t._silverboxGroupEl, t._contagionGroupEl,
                     t._hexopGroupEl, t._guitarGroupEl, t._bassGroupEl, t._subGroupEl,
-                    t._droneGroupEl, t._voxGroupEl, t._lancetGroupEl, t._siegeGroupEl, t._oracleGroupEl, t._granGroupEl]) {
+                    t._droneGroupEl, t._voxGroupEl, t._lancetGroupEl, t._haloGroupEl, t._siegeGroupEl, t._oracleGroupEl, t._granGroupEl]) {
     if (el) el.dataset.trackId = String(t.id);
   }
 
