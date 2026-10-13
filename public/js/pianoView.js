@@ -67,7 +67,7 @@
 
 import { PATTERN_COUNT } from "./constants.js";
 import { setStatus } from "./dom.js";
-import { chordSelectionFor, hitOptsFor, isTypingTarget } from "./keyboard.js";
+import { chordSelectionFor, hitOptsFor, isTypingTarget, noteForKey } from "./keyboard.js";
 import { patternMeter, stepsPerBarForMeter, stepsPerBeatForMeter } from "./meter.js";
 import { refreshRollIfOpen } from "./pianoRoll.js";
 import { setActiveTrack } from "./render.js";
@@ -254,6 +254,29 @@ export function installPianoView() {
   for (const ev of ["seqbaby:clips", "seqbaby:songedited", "seqbaby:setapplied", "seqbaby:newset", "seqbaby:transport"]) {
     window.addEventListener(ev, schedulePianoPaint);
   }
+  window.addEventListener("seqbaby:kbdoctave", paintOct);
+}
+
+/**
+ * The computer keyboard's reach (q up to ], z / x move it an octave) as a
+ * band on the keys, named by the note q plays: so it is plain which keys
+ * the letters land on, in or out of a scale.
+ */
+function octBand() {
+  const lo = noteForKey("q"), hi = noteForKey("]");
+  if (lo == null || hi == null) return "";
+  const top = yOf(hi), bottom = yOf(lo) + RH();
+  return `<div class="sq-pr__oct" style="top:${top}px;height:${Math.max(RH(), bottom - top)}px" title="the computer keyboard plays these: q is ${midiToName(lo)}, ] is ${midiToName(hi)}. z / x move it an octave"><span>${midiToName(lo)}</span></div>`;
+}
+
+function paintOct() {
+  if (state.view !== "piano" || !root) return;
+  const keys = root.querySelector(".sq-pr__keys");
+  if (!keys) return;
+  keys.querySelector(".sq-pr__oct")?.remove();
+  keys.insertAdjacentHTML("beforeend", octBand());
+  const oct = root.querySelector(".sq-pr__corner i");
+  if (oct) oct.textContent = `keys ${midiToName(noteForKey("q") ?? 60)}`;
 }
 
 /** Repaint on the next frame, if this is the open view. */
@@ -378,9 +401,9 @@ function render() {
     </div>
     <div class="sq-pr__scroll">
       <div class="sq-pr__canvas" style="--sw:${sw}px;--rh:${rh}px;--track-hue:${hue};--track-color:${color};grid-template-columns:var(--pr-keys) ${W}px;grid-template-rows:var(--pr-ruler) ${H}px">
-        <div class="sq-pr__corner">${esc(t.name || "track")}</div>
+        <div class="sq-pr__corner">${esc(t.name || "track")}<i title="the note the computer keyboard's q plays (z / x move it an octave)">keys ${midiToName(noteForKey("q") ?? 60)}</i></div>
         <div class="sq-pr__ruler">${ruler}${loopEls(true)}</div>
-        <div class="sq-pr__keys" title="click or drag down the keys to hear them">${keys}</div>
+        <div class="sq-pr__keys" title="click or drag down the keys to hear them">${keys}${octBand()}</div>
         <div class="sq-pr__field">
           ${lanes}
           ${grids}

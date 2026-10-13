@@ -2482,7 +2482,11 @@ block   t.arrangement[i]    ─── { slot, start, bars }: a clip at a bar, fo
   arrangement.js, so a drag that comes back where it started changes
   nothing; a pointerup / keyup is what history watches, so every edit is one
   undo step without the view knowing. `from chain` is `chainToBlocks` on
-  every track. A scene number's edges carry a `+` on hover: a new empty
+  every track. **An empty arrangement lays itself out**: opening the view by
+  hand with no blocks (and no take) runs `seedFromPatterns`, every non-empty
+  pattern in order at its repeat count, each track's blocks only where it has
+  notes, one undo step with the click; never on a load, which would mark the
+  song edited. The empty view's `lay out the patterns` button does the same. A scene number's edges carry a `+` on hover: a new empty
   column there (`insertEmptyPattern`, patternBar.js). The bank is a fixed
   32, so the column is a FREE slot (no steps, no arrangement block) moved in
   with `movePattern`, so slots, queues and blocks renumber: the farthest free
@@ -2541,7 +2545,8 @@ playhead runs in the section of the pattern the track is on.
 - **`follow`** (per browser, on by default) turns the page when the playhead
   nears the right edge; a sideways scroll the view did not make, while
   playing, switches it off (`autoScroll`), as the arrangement's does. A sticky keyboard down the left (click or
-drag down it to hear the track), a bar ruler across the top, the notes as
+drag down it to hear the track, a band on it marking what the computer keys
+q..] play, named in the corner, moved by z / x through `seqbaby:kbdoctave`), a bar ruler across the top, the notes as
 bars, the other melodic tracks' notes faint behind them (ghosts, tiled as each
 loops, scaled by speed), a root's chord tones dashed under it, and velocity
 stalks underneath. No track card under it, unlike clips and arrange: the

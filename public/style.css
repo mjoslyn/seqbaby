@@ -4598,6 +4598,8 @@ body.sq-playing .sq-clip.is-now::after { content: ""; position: absolute; left: 
 .sq-arr__loop.is-on { opacity: 1; }
 .sq-arr__loop-shade { position: absolute; top: 26px; bottom: 6px; pointer-events: none; z-index: 1;
   background: color-mix(in oklab, var(--accent-2) 7%, transparent); border-left: 1px dashed var(--accent-2); border-right: 1px dashed var(--accent-2); }
+.sq-arr__empty { padding: 18px 12px 6px 162px; color: var(--fg-dim); font-size: 12px; }
+.sq-arr__empty button { margin: 0 4px; border-color: var(--accent); color: var(--accent); }
 .sq-arr__follow[aria-pressed="true"], .sq-arr__loopbtn[aria-pressed="true"] { background: var(--accent-2); color: #0b0d10; border-color: var(--accent-2); }
 .sq-arr__picker { position: fixed; z-index: 210; display: grid; grid-template-columns: repeat(8, 32px); gap: 3px; padding: 6px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 8px 24px rgb(0 0 0 / 0.4); }
 .sq-arr__picker .sq-pattern__cell { min-height: 24px; }
@@ -4619,7 +4621,6 @@ body.sq-playing .sq-clip.is-now::after { content: ""; position: absolute; left: 
 .sq-pr__nudge button, .sq-pr__len button, .sq-pr__zoom button { padding: 2px 6px; font-size: 11px; min-width: 22px; }
 .sq-pr__loopbtn[aria-pressed="true"], .sq-pr__followbtn[aria-pressed="true"], .sq-pr__ghostbtn[aria-pressed="true"] { background: var(--accent-2); color: #0b0d10; border-color: var(--accent-2); }
 .sq-pr__warn { color: var(--danger); }
-.sq-pr__sound { border-color: var(--accent); color: var(--accent); }
 
 /* the track's card in a window over the roll (openSoundModal) */
 .sq-pr__soundmodal { width: min(1100px, 96vw); max-width: none; max-height: 90vh; overflow-y: auto; padding: 14px; }
@@ -4634,6 +4635,10 @@ body.sq-playing .sq-clip.is-now::after { content: ""; position: absolute; left: 
 .sq-pr__canvas { display: grid; position: relative; width: max-content; user-select: none; -webkit-user-select: none; }
 .sq-pr__corner { position: sticky; top: 0; left: 0; z-index: 6; background: var(--bg-2); border-right: 1px solid var(--border); border-bottom: 1px solid var(--border);
   font-size: 10px; color: var(--track-color); padding: 4px 6px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; box-sizing: border-box; }
+.sq-pr__corner i { display: block; font-style: normal; color: var(--fg-dim); margin-top: 2px; }
+/* the computer keyboard's reach (octBand) */
+.sq-pr__oct { position: absolute; right: 0; width: 5px; z-index: 2; background: var(--accent); opacity: 0.85; pointer-events: auto; border-radius: 2px 0 0 2px; }
+.sq-pr__oct span { position: absolute; bottom: 0; right: 7px; font-size: 9px; line-height: 1; padding: 2px 3px; border-radius: 3px; background: var(--accent); color: #0b0d10; white-space: nowrap; pointer-events: none; }
 .sq-pr__ruler { position: sticky; top: 0; z-index: 5; background: var(--bg-2); border-bottom: 1px solid var(--border); overflow: hidden; }
 /* a pattern in the ruler: its header on top, its bars under it */
 .sq-pr__sec { position: absolute; top: 0; bottom: 0; border-left: 2px solid var(--fg-dim); box-sizing: border-box; overflow: hidden; }

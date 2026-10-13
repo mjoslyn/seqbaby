@@ -100,7 +100,7 @@ export function installArrangeView() {
   root.addEventListener("pointerdown", onPointerDown);
   root.addEventListener("scroll", onScroll, true);   // scroll does not bubble: caught on the way down
   window.addEventListener("keydown", onKey);
-  onViewChange((v) => { if (v === "arrange") { render(); headLoop(); } else { stopHead(); detail.release(); } });
+  onViewChange((v) => { if (v === "arrange") { seedFromPatterns(); render(); headLoop(); } else { stopHead(); detail.release(); } });
   for (const ev of ["seqbaby:clips", "seqbaby:songedited", "seqbaby:setapplied", "seqbaby:newset", "seqbaby:transport"]) {
     window.addEventListener(ev, scheduleArrangePaint);
   }
@@ -197,6 +197,9 @@ function render({ scrollX } = {}) {
       <div class="sq-arr__grid" style="--arr-bar-w:${w}px">
         <div class="sq-arr__ruler"><div class="sq-arr__strip"></div><div class="sq-arr__lane sq-arr__lane--ruler" style="width:${bars * w}px" title="click: play starts here. Drag across bars: loop them">${loopR ? `<div class="sq-arr__loop${state.arrLoopOn ? " is-on" : ""}" style="left:${loopR.start * w}px;width:${(loopR.end - loopR.start) * w}px"></div>` : ""}${ruler}</div></div>
         <div class="sq-arr__rows">${trackRows}</div>
+        ${!state.tracks.some((t) => t.arrangement?.length) && !state.tracks.some((t) => t._take?.length) ? `<div class="sq-arr__empty">${anyPatterns()
+          ? `no arrangement yet. <button type="button" data-act="seed">lay out the patterns</button> puts them in order, each track's blocks only where it has notes`
+          : "no arrangement yet: write some patterns, then lay them out here, or drag across a lane to draw a block"}</div>` : ""}
         <div class="sq-arr__end" style="left:${STRIP_W + len * w}px" title="the arrangement loops here"></div>
         <div class="sq-arr__start" style="left:${STRIP_W + state.arrStartBar * w}px" title="play starts here (click the ruler to move it)"></div>
         ${state.arrLoopOn && loopR ? `<div class="sq-arr__loop-shade" style="left:${STRIP_W + loopR.start * w}px;width:${(loopR.end - loopR.start) * w}px"></div>` : ""}
@@ -295,6 +298,7 @@ function onClick(e) {
   if (act === "loop") { toggleLoop(); return; }
   if (act === "fromchain") { fromChain(); return; }
   if (act === "clear") { clearAll(); return; }
+  if (act === "seed") { seedFromPatterns(true); return; }
   const row = e.target.closest(".sq-arr__row");
   const t = row && trackById(row.dataset.trackId);
   if (!t) return;
@@ -326,6 +330,30 @@ function toggleLoop() {
     setStatus(`looping bars ${b.start + 1}-${b.start + b.bars}`);
   }
   render();
+}
+
+const anyPatterns = () => { for (let i = 0; i < PATTERN_COUNT; i++) if (isPatternNonEmpty(i)) return true; return false; };
+
+/**
+ * An empty arrangement shows what the sequencer has: the non-empty patterns
+ * in order, each for its chain repeat (chainToBlocks, as `from chain` lays
+ * them), every track's blocks only where that track has notes, so the view
+ * mirrors the patterns instead of opening blank. Done when the view is
+ * opened by hand (a click or Tab, so history banks it as one step with the
+ * interaction) or by the empty view's own button; not on a load or at boot,
+ * where writing the song would mark a song just opened as edited.
+ */
+function seedFromPatterns(force = false) {
+  if (state.tracks.some((t) => t.arrangement?.length) || state.tracks.some((t) => t._take?.length)) return;
+  if (!force && !state.ready && !state.tracks.length) return;
+  const slots = [];
+  for (let i = 0; i < PATTERN_COUNT; i++) if (isPatternNonEmpty(i)) slots.push(i);
+  if (!slots.length) return;
+  const blocks = chainToBlocks(state.patternRepeats, slots);
+  for (const t of rows()) t.arrangement = blocks.filter((b) => t.patterns?.[b.slot]?.steps?.some(Boolean)).map((b) => ({ ...b }));
+  sel = null;
+  if (force) commit(`laid out ${slots.length} pattern${slots.length === 1 ? "" : "s"} as the arrangement`);
+  else { announceClips(); setStatus(`laid out the ${slots.length} pattern${slots.length === 1 ? "" : "s"} as the arrangement (undo takes it back)`); }
 }
 
 async function fromChain() {

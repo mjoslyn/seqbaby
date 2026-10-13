@@ -597,6 +597,7 @@ export function updateKbdOctaveLabel() {
   if (!el) return;
   const b = Math.round(state.kbdBase);
   el.textContent = _OCT_NAMES[((b % 12) + 12) % 12] + (Math.floor(b / 12) - 1);
+  window.dispatchEvent(new Event("seqbaby:kbdoctave"));
 }
 
 let _installed = false;
