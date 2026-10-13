@@ -2559,6 +2559,11 @@ roll takes the height.
   puts it on the selected roots (chord mode off takes chords away). An
   inverted root's bar is drawn faint, since it sounds an octave up. Drum
   kits sit it out.
+- **Nudge** (the `nudge ‹ 0 ›` buttons, alt + ← →): the selected notes' steps
+  move off the grid by 1/24 of a step (shift: a quarter), clamped to half a
+  step, vim's and the step editor's unit. It is the step's `offsets` entry
+  (`off` on every note read from the step, written back by the root), and
+  notes are drawn where they play (`xOf`: step plus offset).
 - **A note past the end grows the pattern** to the next bar line
   (`resizePattern`, capped at 128). The snap (step / ½ beat / beat / bar),
   zoom, ghosts, tool and fold are per browser (`seqbaby.piano.v1`), the scroll per

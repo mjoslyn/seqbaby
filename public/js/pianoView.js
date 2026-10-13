@@ -24,7 +24,8 @@
  *   any     ctrl/⌘-drag: a box   double-click a note: its step editor
  * Keys, with nothing focused: delete removes the selection, ↑ ↓ transpose it
  * (shift: an octave), ← → move it by the snap (shift: a bar), ctrl/⌘-A
- * selects all, ctrl/⌘-B duplicates the selection after itself, escape lets go.
+ * selects all, ctrl/⌘-B duplicates the selection after itself, alt + ← →
+ * nudges it off the grid (the nudge buttons do too), escape lets go.
  *
  * "scale only", with a scale switched on, folds the roll to the scale's rows,
  * so a note drawn is in key and a drag up or down moves by scale degree (↑ ↓
@@ -102,6 +103,10 @@ function savePref() { try { localStorage.setItem(PREF_KEY, JSON.stringify(pref))
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const rows = () => state.tracks.filter((t) => t.engineKey !== "bus");
 const key = (n) => `${n.start}:${n.pitch}`;
+/** Where a note is drawn: its step plus its nudge (the step's offset). */
+const xOf = (n, start = n.start) => (start + (n.off || 0)) * SW();
+const MICRO = 1 / 24;            // a nudge step: 1/24 of a step, vim's and the step editor's unit
+const MICRO_MAX = 12;            // half a step either way
 const SW = () => ZX[Math.max(0, Math.min(ZX.length - 1, pref.zx))];
 const RH = () => ZY[Math.max(0, Math.min(ZY.length - 1, pref.zy))];
 
@@ -267,10 +272,10 @@ function render() {
     const off = fold && !onRow(n.pitch);
     // an inversion lifts the root an octave: its bar is where it is written, not what sounds
     const lifted = n.root && n.chord && !tonesOf(n).some((p) => Math.abs(p - n.pitch) < 1e-6);
-    return `<div class="sq-pr__note${sel.has(key(n)) ? " is-sel" : ""}${n.root ? "" : " is-extra"}${off ? " is-off" : ""}${lifted ? " is-lifted" : ""}" data-i="${i}"${off ? ` title="${midiToName(n.pitch)} is off the scale: drawn on the row below it"` : lifted ? ` title="${midiToName(n.pitch)} ${esc(n.chord)}, inversion ${n.cpx}: the root sounds an octave up"` : ""} style="left:${n.start * sw}px;top:${yOf(n.pitch)}px;width:${w}px;height:${rh}px;--vel:${n.vel.toFixed(3)}"><span>${esc(label)}</span><i class="sq-pr__edge"></i></div>`;
+    return `<div class="sq-pr__note${sel.has(key(n)) ? " is-sel" : ""}${n.root ? "" : " is-extra"}${off ? " is-off" : ""}${lifted ? " is-lifted" : ""}" data-i="${i}"${off ? ` title="${midiToName(n.pitch)} is off the scale: drawn on the row below it"` : lifted ? ` title="${midiToName(n.pitch)} ${esc(n.chord)}, inversion ${n.cpx}: the root sounds an octave up"` : ""} style="left:${xOf(n)}px;top:${yOf(n.pitch)}px;width:${w}px;height:${rh}px;--vel:${n.vel.toFixed(3)}"><span>${esc(label)}</span><i class="sq-pr__edge"></i></div>`;
   }).join("");
   const stalks = notes.filter((n) => n.root).map((n) =>
-    `<i class="sq-pr__stalk" data-s="${n.start}" style="left:${n.start * sw}px;height:${Math.round(n.vel * 100)}%"></i>`).join("");
+    `<i class="sq-pr__stalk" data-s="${n.start}" style="left:${xOf(n)}px;height:${Math.round(n.vel * 100)}%"></i>`).join("");
 
   const gen = liveGeneratorOf(t);
   const trackOpts = rows().map((o) => `<option value="${o.id}"${o === t ? " selected" : ""}>${esc(o.name || "track")}</option>`).join("");
@@ -286,6 +291,7 @@ function render() {
         `<button type="button" data-tool="${k}" aria-pressed="${pref.tool === k}" title="${esc(title)}">${label}</button>`).join("")}</span>
       <label class="sq-pr__snap" title="where notes land and how far they move">snap <select data-act="snap">${SNAPS.map(([k, l]) =>
         `<option value="${k}"${pref.snap === k ? " selected" : ""}>${l}</option>`).join("")}</select></label>
+      <span class="sq-pr__nudge" title="nudge: move the selected notes off the grid, early or late, by 1/24 of a step (shift-click: a quarter step). 0 puts them back on it. alt + ← → does the same">nudge<button type="button" class="sq-btn--ghost" data-act="nudge-" aria-label="nudge earlier">‹</button><button type="button" class="sq-btn--ghost" data-act="nudge0" aria-label="back on the grid">0</button><button type="button" class="sq-btn--ghost" data-act="nudge+" aria-label="nudge later">›</button></span>
       <button type="button" class="sq-btn--ghost" data-act="chordsel" title="apply chord: put the chord bar's chord (type and voicing, or in key with the scale on) on the selected notes. With chord mode off it takes their chords away. New notes take the chord bar's chord as they are drawn">apply chord</button>
       <span class="sq-pr__len" title="the pattern's length">${len} steps · ${Number.isInteger(bars) ? bars : bars.toFixed(2)} bar${bars === 1 ? "" : "s"}
         <button type="button" class="sq-btn--ghost" data-act="len-" title="one bar shorter">−bar</button><button type="button" class="sq-btn--ghost" data-act="len+" title="one bar longer, empty">+bar</button><button type="button" class="sq-btn--ghost" data-act="x2" title="double the length, tiling what is there">x2</button></span>
@@ -399,7 +405,7 @@ function stampNotes(t, start, len, pitch) {
 function toneEls(n, i) {
   const sw = SW(), rh = RH();
   return tonesOf(n).filter((p) => Math.abs(p - n.pitch) > 1e-6 && p >= LO && p <= HI && (!folded() || onRow(p)))
-    .map((p) => `<div class="sq-pr__tone" data-root="${i}" style="left:${n.start * sw}px;top:${yOf(p)}px;width:${n.len * sw - 1}px;height:${rh}px" title="${midiToName(p)}: a tone of ${midiToName(n.pitch)} ${esc(n.chord)}"></div>`).join("");
+    .map((p) => `<div class="sq-pr__tone" data-root="${i}" style="left:${xOf(n)}px;top:${yOf(p)}px;width:${n.len * sw - 1}px;height:${rh}px" title="${midiToName(p)}: a tone of ${midiToName(n.pitch)} ${esc(n.chord)}"></div>`).join("");
 }
 
 /** Put the chord mode on the selected roots (off takes their chords away). */
@@ -420,6 +426,29 @@ function applyChordToSelection(t) {
     ? `${out.length} note${out.length === 1 ? "" : "s"} made chords`
     : "chords taken off (chord mode is off)");
   return true;
+}
+
+// ---- nudge -----------------------------------------------------------------------
+
+/**
+ * Nudge the selected notes' steps by `micro` microsteps (or to `to`), off the
+ * grid: the step's offset, which the transport plays and the step grid ticks.
+ * A nudge is the step's, so every note starting on a selected note's step
+ * moves with it.
+ */
+function nudgeSelection(t, micro, to = null) {
+  const picked = notes.filter((n) => sel.has(key(n)));
+  if (!picked.length) { setStatus("select notes first: nudge moves them off the grid by 1/24 of a step"); return; }
+  const starts = new Set(picked.map((n) => n.start));
+  let last = 0;
+  const list = notes.map((n) => {
+    if (!starts.has(n.start)) return n;
+    const cur = Math.round((n.off || 0) / MICRO);
+    last = Math.max(-MICRO_MAX, Math.min(MICRO_MAX, to ?? cur + micro));
+    return { ...n, off: Math.round(last * MICRO * 10000) / 10000 };
+  });
+  commit(t, list, picked);
+  setStatus(last ? `nudged ${last > 0 ? "+" : ""}${last}/24 of a step ${last < 0 ? "early" : "late"}` : "on the grid");
 }
 
 // ---- hearing a note ----------------------------------------------------------
@@ -475,6 +504,10 @@ function onClick(e) {
   const act = b.dataset.act;
   if (act === "play") { document.getElementById("play")?.click(); return; }
   if (act === "chordsel") { if (t) applyChordToSelection(t); return; }
+  if (act.startsWith("nudge")) {
+    if (t) nudgeSelection(t, act === "nudge0" ? 0 : (e.shiftKey ? 6 : 1) * (act === "nudge-" ? -1 : 1), act === "nudge0" ? 0 : null);
+    return;
+  }
   if (act === "ghosts") { pref.ghosts = !pref.ghosts; savePref(); render(); return; }
   if (act === "fold") {
     pref.fold = !pref.fold; savePref();
@@ -617,7 +650,7 @@ function startGesture(e) {
     const grouped = sel.has(key(n));
     if (!grouped) { sel = pref.tool === "select" ? new Set([key(n)]) : new Set(); paintSel(); }
     const ids = grouped ? notes.map((x, i) => (sel.has(key(x)) ? i : -1)).filter((i) => i >= 0) : [idx];
-    const right = (n.start + n.len) * SW();
+    const right = xOf(n) + n.len * SW();
     const edge = right - pt.x <= Math.max(4, Math.min(8, n.len * SW() * 0.3));
     if (edge && !e.shiftKey) {
       drag = { ...base, kind: "resize", ids, orig: ids.map((i) => ({ ...notes[i] })), grabStart: n.start, grabEnd: n.start + n.len, grabbed: idx, grouped };
@@ -728,7 +761,7 @@ function onPointerMove(e) {
     m.hidden = false;
     sel = new Set(drag.keep);
     for (const n of notes) {
-      const nx1 = n.start * sw, nx2 = (n.start + n.len) * sw, ny1 = yOf(n.pitch), ny2 = ny1 + RH();
+      const nx1 = xOf(n), nx2 = nx1 + n.len * sw, ny1 = yOf(n.pitch), ny2 = ny1 + RH();
       if (nx2 > x1 && nx1 < x2 && ny2 > y1 && ny1 < y2) sel.add(key(n));
     }
     paintSel();
@@ -769,7 +802,7 @@ function onPointerMove(e) {
       const o = drag.orig[j];
       const el = drag.copy ? drag.clones[j] : noteEl(i);
       if (!el) return;
-      el.style.left = `${(o.start + dStep) * sw}px`;
+      el.style.left = `${xOf(o, o.start + dStep)}px`;
       el.style.top = `${yOf(shiftRows(o.pitch, dRow))}px`;
       if (drag.copy || !o.chord) return;
       // its chord tones ride along, by the root's own move
@@ -861,6 +894,11 @@ function onKey(e) {
     const span = Math.max(...ps.map((n) => n.start + n.len)) - Math.min(...ps.map((n) => n.start));
     const copies = ps.map((n) => ({ ...n, start: n.start + span })).filter((n) => n.start < MAX_LEN);
     if (copies.length) commit(t, [...notes, ...copies], copies);
+    e.preventDefault();
+    return;
+  }
+  if (e.altKey && !mod && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
+    nudgeSelection(t, (e.shiftKey ? 6 : 1) * (e.key === "ArrowLeft" ? -1 : 1));
     e.preventDefault();
     return;
   }

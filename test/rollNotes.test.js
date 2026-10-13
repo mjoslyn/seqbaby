@@ -106,3 +106,12 @@ test("a fresh chord root writes its chord and inversion", () => {
   writeNotes(p, [{ ...back[0], chord: "" }]);
   assert.equal(p.complexities[2], 0);
 });
+
+test("a nudge is read onto every note of its step and written back by the root", () => {
+  const p = pattern(8);
+  p.steps[1] = 1; p.notes[1] = 60; p.lengths[1] = 1; p.offsets[1] = 0.25; p.extraNotes[1] = [64]; p.extraLengths[1] = [1];
+  const n = readNotes(p);
+  assert.deepEqual(n.map((x) => x.off), [0.25, 0.25]);
+  writeNotes(p, [{ ...n[0], off: -0.9 }, n[1]]);
+  assert.equal(p.offsets[1], -0.5);
+});
