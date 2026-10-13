@@ -4617,7 +4617,7 @@ body.sq-playing .sq-clip.is-now::after { content: ""; position: absolute; left: 
 .sq-pr__tools button[aria-pressed="true"] { background: var(--accent); color: #0b0d10; }
 .sq-pr__snap, .sq-pr__nudge, .sq-pr__len, .sq-pr__zoom { display: inline-flex; align-items: center; gap: 3px; color: var(--fg-dim); }
 .sq-pr__nudge button, .sq-pr__len button, .sq-pr__zoom button { padding: 2px 6px; font-size: 11px; min-width: 22px; }
-.sq-pr__ghostbtn[aria-pressed="true"] { background: var(--accent-2); color: #0b0d10; border-color: var(--accent-2); }
+.sq-pr__loopbtn[aria-pressed="true"], .sq-pr__followbtn[aria-pressed="true"], .sq-pr__ghostbtn[aria-pressed="true"] { background: var(--accent-2); color: #0b0d10; border-color: var(--accent-2); }
 .sq-pr__warn { color: var(--danger); }
 .sq-pr__sound { border-color: var(--accent); color: var(--accent); }
 
@@ -4670,6 +4670,14 @@ body.sq-playing .sq-clip.is-now::after { content: ""; position: absolute; left: 
     linear-gradient(to right, #22252d 1px, transparent 1px);
   background-size: calc(var(--sw) * var(--barn)) 100%, calc(var(--sw) * var(--beat)) 100%, var(--sw) 100%; }
 .sq-pr__lines.is-alt { background-color: rgb(255 255 255 / 0.025); }
+/* the loop of patterns: a band in the ruler's header row, a shade over the field */
+.sq-pr__sec-h { cursor: col-resize; }
+.sq-pr__loop { position: absolute; top: 0; height: 20px; pointer-events: none; z-index: 1; box-sizing: border-box; opacity: 0.45;
+  background: color-mix(in oklab, var(--accent-2) 30%, transparent); border-left: 2px solid var(--accent-2); border-right: 2px solid var(--accent-2); }
+.sq-pr__loop.is-on { opacity: 1; }
+.sq-pr__loopshade { position: absolute; top: 0; bottom: 0; pointer-events: none; opacity: 0.4;
+  background: color-mix(in oklab, var(--accent-2) 6%, transparent); border-left: 1px dashed var(--accent-2); border-right: 1px dashed var(--accent-2); }
+.sq-pr__loopshade.is-on { opacity: 1; }
 .sq-pr__secline { position: absolute; top: 0; bottom: 0; width: 0; border-left: 2px solid #5a6070; pointer-events: none; }
 .sq-pr__ghost { position: absolute; box-sizing: border-box; border-radius: 2px; pointer-events: none;
   background: color-mix(in oklab, var(--g-c) 22%, transparent); border: 1px solid color-mix(in oklab, var(--g-c) 35%, transparent); }

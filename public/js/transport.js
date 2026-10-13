@@ -25,7 +25,7 @@ import { init, needsResume, primeAudioForIOS } from "./main.js";
 import { applyBusMute, updateMidiUI } from "./render.js";
 import { ensureFxRack, fireFilterEnv, refreshAllTrackOutputs, refreshNoiseBeds, routeVoiceToRack, soloAudibleTracks } from "./signal.js";
 import { stepsPerBarForMeter, stepsPerBeatForMeter, transportMeter } from "./meter.js";
-import { findNextNonEmptyPattern, invertChord, state, switchPattern } from "./state.js";
+import { invertChord, nextChainPattern, state, switchPattern } from "./state.js";
 import { advanceArrangement, clearQueuedClips, commitQueuedClips, recordArrangementBar, restartTrackCount, seedArrangement, seedTrackCount, setArrangeRecord } from "./clips.js";
 import { setPatternMode } from "./patternBar.js";
 import { loadSilverboxWorklet } from "./silverbox.js";
@@ -758,9 +758,12 @@ export async function startPlayback(opts = {}) {
     if (state.patternMode === "chain" && barLine) {
       state.chainBarCount++;
       const needed = Math.max(1, state.patternRepeats[state.activePattern] ?? 1);
-      if (state.chainBarCount >= needed) {
+      // a scene outside the piano view's loop goes into it at the next bar line
+      const r = state.patLoopOn ? state.patLoop : null;
+      const outside = r && (state.activePattern < r.start || state.activePattern >= r.end);
+      if (state.chainBarCount >= needed || outside) {
         state.chainBarCount = 0;
-        const next = findNextNonEmptyPattern(state.activePattern);
+        const next = nextChainPattern(state.activePattern);
         if (next >= 0 && next !== state.activePattern) {
           switchPattern(next, { deferUi: true }); // synchronous — same reasoning as the manual queue above
           restartTrackCounts();

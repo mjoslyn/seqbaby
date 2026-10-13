@@ -2242,7 +2242,9 @@ Single `Tone.getTransport().scheduleRepeat` at `"16n"`. Each callback, per track
 4. Visuals: `Tone.Draw.schedule` at `time + visualOutputLatency()` (playhead +
    beat indicator). Metronome fires on quarters when enabled.
 5. Bar boundaries: manual-queue commit (`patternSwitchMode === "finish"`) and
-   chain-mode advance honoring `patternRepeats` / `patternMeters`. A bar is
+   chain-mode advance honoring `patternRepeats` / `patternMeters` (to
+   `nextChainPattern`: the next non-empty pattern, or the next slot of the
+   piano view's loop of patterns while that is on). A bar is
    the ACTIVE pattern's meter in sixteenths (`state.barTick` counts into it,
    wrapping at `stepsPerBarForMeter`), never a fixed 16: a fixed 16 cut a
    chained 7/4 pattern off after four beats, so its last 12 steps never
@@ -2518,7 +2520,27 @@ Notes are held at global steps (`start` plus the section's `off`); `commit`
 puts each back in the pattern its start falls in, cut at that pattern's end,
 and a note that crossed a section line brings its step's fields as a `snap`
 (`stepSnapshot`, rollNotes.js, taken before any pattern is written). The
-playhead runs in the section of the pattern the track is on. A sticky keyboard down the left (click or
+playhead runs in the section of the pattern the track is on.
+
+- **The patterns are the sequencer's: switching one switches the scene.** A
+  header's ▶ is `requestPatternSwitch` (every track, now or at the bar line
+  by the switch setting), as the pattern bar and the clip view's scene row
+  are, so the four views always show and play the same pattern. A
+  double-click on a note in another pattern `switchPattern`s there at once,
+  since the step editor edits the track's own slot.
+- **The loop is a range of patterns** (`state.patLoop` `{start, end}`, end
+  exclusive, and `state.patLoopOn`; neither saved), dragged across the
+  headers, or the `loop` button (which loops the scene alone when no range
+  is drawn). Chain mode plays it: `nextChainPattern` (state.js) is the slot
+  after the scene inside the range, wrapping, every slot in it empty or not,
+  and a scene outside it goes in at the next bar line. Switching it on puts
+  the transport in chain mode and off puts back the mode it changed
+  (`_patLoopPrevMode`). Chain mode counts a pattern's repeat in BARS, so a
+  header's − / + / x2 moves `patternRepeats[slot]` with the length when the
+  two agreed, or a two-bar pattern would play its first bar only.
+- **`follow`** (per browser, on by default) turns the page when the playhead
+  nears the right edge; a sideways scroll the view did not make, while
+  playing, switches it off (`autoScroll`), as the arrangement's does. A sticky keyboard down the left (click or
 drag down it to hear the track), a bar ruler across the top, the notes as
 bars, the other melodic tracks' notes faint behind them (ghosts, tiled as each
 loops, scaled by speed), a root's chord tones dashed under it, and velocity
@@ -2573,7 +2595,7 @@ roll takes the height.
   notes are drawn where they play (`xOf`: step plus offset).
 - **A pattern's length is its header's**, not the notes': a note is cut at
   its pattern's end. The snap (step / ½ beat / beat / bar, on each pattern's own grid),
-  zoom, ghosts, tool and fold are per browser (`seqbaby.piano.v1`), the scroll per
+  zoom, ghosts, tool, fold and follow are per browser (`seqbaby.piano.v1`), the scroll per
   track per page.
 
 ## Knobs (`knob.js`) — a skin over the range inputs

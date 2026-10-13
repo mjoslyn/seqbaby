@@ -49,12 +49,22 @@
  * `sound` opens the track's own card in a window over the roll: the
  * instrument, the fx, the filter, the mod matrix and the automation lanes.
  *
- * A note is cut at its pattern's end; a pattern's length is its header's.
+ * The patterns are the sequencer's, and switching one is switching the scene
+ * for every track, as the pattern bar does: a header's ▶ is
+ * `requestPatternSwitch` (so it honours now / finish). Dragging across the
+ * headers marks a LOOP of patterns (`state.patLoop`, not saved): with `loop`
+ * on, chain mode plays that range round (`nextChainPattern`, state.js), and
+ * switching it on puts the transport in chain mode. `follow` (per browser)
+ * keeps the playhead in view, turning the page as it nears the edge; a
+ * scroll by hand while playing switches it off, as the arrangement's does.
+ *
+ * A note is cut at its pattern's end; a pattern's length is its header's,
+ * and changing it there moves the pattern's chain repeat with it when the
+ * two agreed (chain mode counts a pattern's repeat in bars).
  * Every edit is committed on release, so a drag is one undo step (history.js
  * watches the pointerup) and the view is rebuilt from the pattern afterwards.
  */
 
-import { launchClip } from "./clips.js";
 import { PATTERN_COUNT } from "./constants.js";
 import { setStatus } from "./dom.js";
 import { chordSelectionFor, hitOptsFor, isTypingTarget } from "./keyboard.js";
@@ -63,7 +73,8 @@ import { refreshRollIfOpen } from "./pianoRoll.js";
 import { setActiveTrack } from "./render.js";
 import { pitchesAt, readNotes, stepSnapshot, writeNotes } from "./rollNotes.js";
 import { holdNoiseBed } from "./signal.js";
-import { invertChord, isPatternNonEmpty, state, trackSlot } from "./state.js";
+import { setPatternMode } from "./patternBar.js";
+import { invertChord, isPatternNonEmpty, requestPatternSwitch, state, switchPattern, trackSlot } from "./state.js";
 import { openStepEditor } from "./stepEditor.js";
 import { renderStepGrid } from "./stepGrid.js";
 import { liveGeneratorOf } from "./stepSource.js";
@@ -100,13 +111,14 @@ let drag = null;
 let shownId = null;
 let litKey = "";
 let headSlot = -1;
+let autoScroll = -1;             // the scrollLeft this view last set, so its own scroll is not taken for a hand
 let keepMem = false;
 let lastDown = { at: 0, key: "" };             // a zoom has already written where the scroll goes
 const lastLen = new Map();       // track id -> the length a new note takes
 const scrollMem = new Map();     // track id -> {x, y}
 
 function readPref() {
-  const d = { tool: "draw", snap: "step", zx: 3, zy: 1, ghosts: true, fold: false };
+  const d = { tool: "draw", snap: "step", zx: 3, zy: 1, ghosts: true, fold: false, follow: true };
   try { return { ...d, ...JSON.parse(localStorage.getItem(PREF_KEY) || "{}") }; } catch { return d; }
 }
 function savePref() { try { localStorage.setItem(PREF_KEY, JSON.stringify(pref)); } catch {} }
@@ -293,7 +305,7 @@ function render() {
     const empty = !t.patterns[sec.slot].steps.some(Boolean);
     const bars = sec.len / sec.bar;
     ruler += `<div class="sq-pr__sec${sec.slot === slot ? " is-now" : ""}" data-slot="${sec.slot}" style="left:${x}px;width:${w}px">
-      <div class="sq-pr__sec-h"><button type="button" class="sq-pr__sec-play" data-act="sec-play" data-slot="${sec.slot}" title="play pattern ${sec.slot + 1} on this track">▶ ${sec.slot + 1}</button><span class="sq-pr__sec-len">${Number.isInteger(bars) ? bars : bars.toFixed(2)} bar${bars === 1 ? "" : "s"}${empty ? " · empty" : ""}</span><button type="button" data-act="sec-len-" data-slot="${sec.slot}" title="pattern ${sec.slot + 1}: one bar shorter">−</button><button type="button" data-act="sec-len+" data-slot="${sec.slot}" title="pattern ${sec.slot + 1}: one bar longer, empty">+</button><button type="button" data-act="sec-x2" data-slot="${sec.slot}" title="pattern ${sec.slot + 1}: double the length, tiling what is there">x2</button></div>
+      <div class="sq-pr__sec-h" title="pattern ${sec.slot + 1}. Drag across headers to loop those patterns"><button type="button" class="sq-pr__sec-play" data-act="sec-play" data-slot="${sec.slot}" title="play pattern ${sec.slot + 1}: every track switches to it, as the pattern bar does (now or at the bar line, by the switch setting)">▶ ${sec.slot + 1}</button><span class="sq-pr__sec-len">${Number.isInteger(bars) ? bars : bars.toFixed(2)} bar${bars === 1 ? "" : "s"}${empty ? " · empty" : ""}</span><button type="button" data-act="sec-len-" data-slot="${sec.slot}" title="pattern ${sec.slot + 1}: one bar shorter">−</button><button type="button" data-act="sec-len+" data-slot="${sec.slot}" title="pattern ${sec.slot + 1}: one bar longer, empty">+</button><button type="button" data-act="sec-x2" data-slot="${sec.slot}" title="pattern ${sec.slot + 1}: double the length, tiling what is there">x2</button></div>
       ${Array.from({ length: Math.ceil(sec.len / sec.bar) }, (_, b) => `<div class="sq-pr__rbar" style="left:${b * sec.bar * sw}px;width:${Math.min(sec.bar, sec.len - b * sec.bar) * sw}px">${b + 1}</div>`).join("")}
     </div>`;
     grids += `<div class="sq-pr__lines${si % 2 ? " is-alt" : ""}" style="left:${x}px;width:${w}px;--beat:${sec.beat};--barn:${sec.bar}"></div><div class="sq-pr__secline" style="left:${x}px"></div>`;
@@ -354,6 +366,10 @@ function render() {
       <span class="sq-pr__nudge" title="nudge: move the selected notes off the grid, early or late, by 1/24 of a step (shift-click: a quarter step). 0 puts them back on it. alt + ← → does the same">nudge<button type="button" class="sq-btn--ghost" data-act="nudge-" aria-label="nudge earlier">‹</button><button type="button" class="sq-btn--ghost" data-act="nudge0" aria-label="back on the grid">0</button><button type="button" class="sq-btn--ghost" data-act="nudge+" aria-label="nudge later">›</button></span>
       <button type="button" class="sq-btn--ghost" data-act="chordsel" title="apply chord: put the chord bar's chord (type and voicing, or in key with the scale on) on the selected notes. With chord mode off it takes their chords away. New notes take the chord bar's chord as they are drawn">apply chord</button>
       <button type="button" class="sq-pr__sound" data-act="sound" title="sound: this track's instrument, effects, filter, modulation and automation lanes, in a window over the roll (its own track card, so every control is the one in the groove view)">sound</button>
+      <button type="button" class="sq-pr__loopbtn" data-act="loop" aria-pressed="${!!(state.patLoopOn && state.patLoop)}" title="${state.patLoop
+        ? `loop patterns ${state.patLoop.start + 1}-${state.patLoop.end}: chain mode plays them round. Drag across the pattern headers to mark another range`
+        : "loop: drag across the pattern headers to mark the patterns to loop (or press this to loop the pattern playing)"}">loop</button>
+      <button type="button" class="sq-pr__followbtn" data-act="follow" aria-pressed="${!!pref.follow}" title="follow: keep the playhead in view while it plays (scrolling by hand switches it off)">follow</button>
       <button type="button" class="sq-pr__ghostbtn" data-act="ghosts" aria-pressed="${!!pref.ghosts}" title="ghosts: the other melodic tracks' notes for the same pattern, faint, behind this one's">ghosts</button>
       <span class="sq-pr__zoom" title="zoom (ctrl/⌘-wheel zooms across)">↔<button type="button" class="sq-btn--ghost" data-act="zx-">−</button><button type="button" class="sq-btn--ghost" data-act="zx+">+</button>
         ↕<button type="button" class="sq-btn--ghost" data-act="zy-">−</button><button type="button" class="sq-btn--ghost" data-act="zy+">+</button></span>
@@ -363,12 +379,12 @@ function render() {
     <div class="sq-pr__scroll">
       <div class="sq-pr__canvas" style="--sw:${sw}px;--rh:${rh}px;--track-hue:${hue};--track-color:${color};grid-template-columns:var(--pr-keys) ${W}px;grid-template-rows:var(--pr-ruler) ${H}px">
         <div class="sq-pr__corner">${esc(t.name || "track")}</div>
-        <div class="sq-pr__ruler">${ruler}</div>
+        <div class="sq-pr__ruler">${ruler}${loopEls(true)}</div>
         <div class="sq-pr__keys" title="click or drag down the keys to hear them">${keys}</div>
         <div class="sq-pr__field">
           ${lanes}
           ${grids}
-          ${ghosts}${tones}${noteEls}
+          ${loopEls(false)}${ghosts}${tones}${noteEls}
           <div class="sq-pr__marquee" hidden></div>
           <div class="sq-pr__head" hidden></div>
         </div>
@@ -388,6 +404,7 @@ function render() {
     nsc.scrollTop = Math.max(0, yOf(mid) - nsc.clientHeight / 2);
     nsc.scrollLeft = (secBySlot.get(slot)?.off ?? 0) * sw;
   }
+  autoScroll = nsc.scrollLeft;
   shownId = t.id;
   syncVelScroll();
   litKey = "";
@@ -401,7 +418,53 @@ function syncVelScroll() {
   if (sc && inner) inner.style.transform = `translateX(${-sc.scrollLeft}px)`;
 }
 function onScroll(e) {
-  if (e.target?.classList?.contains("sq-pr__scroll")) syncVelScroll();
+  const sc = e.target;
+  if (!sc?.classList?.contains("sq-pr__scroll")) return;
+  syncVelScroll();
+  // a sideways scroll this view did not make, while playing, switches follow off
+  if (pref.follow && state.playing && autoScroll >= 0 && Math.abs(sc.scrollLeft - autoScroll) > 4) {
+    pref.follow = false; savePref();
+    root.querySelector('[data-act="follow"]')?.setAttribute("aria-pressed", "false");
+  }
+}
+
+// ---- the loop of patterns ------------------------------------------------------
+
+/** The loop's marks: in the ruler (the range) or the field (a shade), from state.patLoop. */
+function loopEls(inRuler, range = state.patLoop) {
+  if (!range) return "";
+  const a = secBySlot.get(range.start), b = secBySlot.get(range.end - 1);
+  if (!a || !b) return "";
+  const x = a.off * SW(), w = (b.off + b.len - a.off) * SW();
+  const on = state.patLoopOn ? " is-on" : "";
+  return inRuler
+    ? `<div class="sq-pr__loop${on}" style="left:${x}px;width:${w}px"></div>`
+    : `<div class="sq-pr__loopshade${on}" style="left:${x}px;width:${w}px"></div>`;
+}
+function paintLoopPreview(range) {
+  root.querySelectorAll(".sq-pr__loop, .sq-pr__loopshade").forEach((el) => el.remove());
+  root.querySelector(".sq-pr__ruler")?.insertAdjacentHTML("beforeend", loopEls(true, range));
+  root.querySelector(".sq-pr__field")?.insertAdjacentHTML("afterbegin", loopEls(false, range));
+}
+
+/**
+ * Loop a range of patterns (or stop looping): on puts the transport in chain
+ * mode, which is what plays a range of patterns; off puts back the mode it
+ * was in before, if the loop is what changed it.
+ */
+function setPatLoop(range, on) {
+  if (range) state.patLoop = range;
+  const want = !!on && !!state.patLoop;
+  if (want && !state.patLoopOn) {
+    state._patLoopPrevMode = state.patternMode === "chain" ? null : state.patternMode;
+    if (state.patternMode !== "chain") setPatternMode("chain");
+  } else if (!want && state.patLoopOn && state._patLoopPrevMode) {
+    setPatternMode(state._patLoopPrevMode);
+    state._patLoopPrevMode = null;
+  }
+  state.patLoopOn = want;
+  setStatus(want ? `looping pattern${state.patLoop.end - state.patLoop.start > 1 ? `s ${state.patLoop.start + 1}-${state.patLoop.end}` : ` ${state.patLoop.start + 1}`} (chain mode)` : "loop off");
+  render();
 }
 
 // ---- the playhead, and the keys lit under it --------------------------------
@@ -418,7 +481,20 @@ function paintHead() {
   const sec = secBySlot.get(trackSlot(t));
   const idx = sec && state.playing && !t._clipOff && t._nowIdx >= 0 ? sec.off + t._nowIdx : -1;
   head.hidden = idx < 0;
-  if (idx >= 0) head.style.transform = `translateX(${idx * SW()}px)`;
+  if (idx >= 0) {
+    const x = idx * SW();
+    head.style.transform = `translateX(${x}px)`;
+    // follow: turn the page as the head nears the right edge (or has gone off the left)
+    const sc = root.querySelector(".sq-pr__scroll");
+    if (pref.follow && sc && !drag) {
+      const keysW = root.querySelector(".sq-pr__keys")?.offsetWidth || 66;
+      const viewW = sc.clientWidth - keysW;
+      if (x > sc.scrollLeft + viewW - 24 || x < sc.scrollLeft) {
+        sc.scrollLeft = Math.max(0, x - 24);
+        autoScroll = sc.scrollLeft;
+      }
+    }
+  }
   const nowSlot = sec ? sec.slot : -1;
   if (nowSlot !== headSlot) {
     headSlot = nowSlot;
@@ -630,6 +706,18 @@ function onClick(e) {
     return;
   }
   if (act === "ghosts") { pref.ghosts = !pref.ghosts; savePref(); render(); return; }
+  if (act === "follow") {
+    pref.follow = !pref.follow; savePref();
+    const sc = root.querySelector(".sq-pr__scroll");
+    if (sc) autoScroll = sc.scrollLeft;
+    b.setAttribute("aria-pressed", String(pref.follow));
+    return;
+  }
+  if (act === "loop") {
+    if (state.patLoopOn) setPatLoop(null, false);
+    else setPatLoop(state.patLoop ?? { start: state.activePattern, end: state.activePattern + 1 }, true);
+    return;
+  }
   if (/^z[xy][+-]$/.test(act)) {
     const axis = act[1] === "x" ? "zx" : "zy";
     const max = (axis === "zx" ? ZX : ZY).length - 1;
@@ -641,15 +729,19 @@ function onClick(e) {
   const sec = secBySlot.get(slot);
   if (!sec) return;
   if (act === "sec-play") {
-    launchClip(t, slot);
-    setStatus(`${t.name?.trim() || "track"}: pattern ${slot + 1}`);
+    requestPatternSwitch(slot);
     render();
     return;
   }
+  const oldBars = Math.ceil(sec.len / sec.bar);
   if (act === "sec-len+") resizePattern(t, slot, Math.min(MAX_LEN, sec.len + sec.bar));
   else if (act === "sec-len-") truncatePattern(t, slot, Math.max(1, sec.len - sec.bar));
   else if (act === "sec-x2") extendPatternByDuplicate(t, slot, Math.min(MAX_LEN, sec.len * 2));
   else return;
+  // chain mode plays a pattern for its repeat count in bars: keep that with
+  // the length when the two agreed, or a longer pattern would be cut short
+  const newBars = Math.ceil(t.patterns[slot].steps.length / sec.bar);
+  if ((state.patternRepeats[slot] ?? 1) === oldBars) state.patternRepeats[slot] = Math.max(1, Math.min(16, newBars));
   refreshRollIfOpen(t);
   render();
 }
@@ -714,8 +806,8 @@ function onPointerDown(e) {
     // another pattern puts the track there first
     const sec = sectionAt(n.start);
     if (sec && sec.slot !== trackSlot(t)) {
-      launchClip(t, sec.slot);
-      setStatus(`${t.name?.trim() || "track"}: pattern ${sec.slot + 1}, to edit its step`);
+      switchPattern(sec.slot);
+      setStatus(`pattern ${sec.slot + 1}, to edit its step`);
     }
     if (sec) openStepEditor(t, n.start - sec.off, nEl);
     return;
@@ -732,6 +824,14 @@ function startGesture(e) {
     const p = Number(key_.dataset.p);
     drag = { kind: "keys", t, last: p, pointerId: e.pointerId };
     audition(t, p, 0.45);
+    e.preventDefault();
+    return;
+  }
+  const head_ = e.target.closest(".sq-pr__sec-h");
+  if (head_ && e.button === 0 && !e.target.closest("button")) {
+    const slot = Number(head_.parentElement.dataset.slot);
+    drag = { kind: "loop", t, a: slot, b: slot, pointerId: e.pointerId };
+    paintLoopPreview({ start: slot, end: slot + 1 });
     e.preventDefault();
     return;
   }
@@ -863,6 +963,12 @@ function onPointerMove(e) {
     return;
   }
   if (drag.kind === "vel") { velAt(e); return; }
+  if (drag.kind === "loop") {
+    const el = document.elementFromPoint(e.clientX, e.clientY)?.closest?.(".sq-pr__sec");
+    const b = el ? Number(el.dataset.slot) : drag.b;
+    if (b !== drag.b) { drag.b = b; paintLoopPreview({ start: Math.min(drag.a, b), end: Math.max(drag.a, b) + 1 }); }
+    return;
+  }
   if (!drag.field) return;
   const pt = fieldPoint(e, drag.field);
   if (!drag.moved && Math.hypot(pt.x - drag.px0, pt.y - drag.y0) < 3) return;
@@ -942,6 +1048,7 @@ function onPointerUp(e) {
   drag = null;
   const t = d.t;
   if (d.kind === "keys" || d.kind === "noop") return;
+  if (d.kind === "loop") { setPatLoop({ start: Math.min(d.a, d.b), end: Math.max(d.a, d.b) + 1 }, true); return; }
   if (d.kind === "vel") {
     if (!d.changes.size) return;
     for (const [g, v] of d.changes) {

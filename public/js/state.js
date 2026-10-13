@@ -99,6 +99,8 @@ export const state = {
   arrStartBar: 0,       // the ruler bar a play press starts the arrangement from (the view's marker)
   arrLoop: null,        // a section of the ruler, {start, end} in bars (end exclusive), drawn on the ruler
   arrLoopOn: false,     // whether arrange mode loops that section instead of the whole arrangement
+  patLoop: null,        // the piano view's loop: a range of pattern slots, {start, end} (end exclusive)
+  patLoopOn: false,     // whether chain mode plays that range round instead of every non-empty pattern
   _loopMode: "repeat",  // the last repeat / chain mode, which the clip view's play returns to
   _arrJump: null,       // a bar to jump to at the next bar line while the arrangement plays
   _viewSwitched: false, // a view opened while playing: the mode follows it at the next bar line (transport.js)
@@ -266,6 +268,18 @@ export function isPatternNonEmpty(idx) {
     for (let i = 0; i < p.steps.length; i++) { if (p.steps[i]) return true; }
   }
   return false;
+}
+
+/**
+ * The pattern chain mode goes to after `fromIdx`. With the piano view's loop
+ * on (`state.patLoop`), the next slot of that range, wrapping to its start
+ * (every slot in it, empty or not: the range is what was asked for); a scene
+ * outside the range goes to its start. Otherwise the next non-empty pattern.
+ */
+export function nextChainPattern(fromIdx) {
+  const r = state.patLoopOn ? state.patLoop : null;
+  if (r && r.end > r.start) return fromIdx >= r.start && fromIdx + 1 < r.end ? fromIdx + 1 : r.start;
+  return findNextNonEmptyPattern(fromIdx);
 }
 
 export function findNextNonEmptyPattern(fromIdx) {
