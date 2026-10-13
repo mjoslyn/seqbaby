@@ -15,6 +15,7 @@ import { installViews } from "./views.js";
 import { installClipView } from "./clipView.js";
 import { installArrangeView } from "./arrangeView.js";
 import { installPianoView } from "./pianoView.js";
+import { announceClips } from "./clips.js";
 import { applySampleSpeed, attachBpmDrag, lfoRateLabel, retuneSyncedLFOs } from "./lfo.js";
 import { captureSequence, initComputerKeyboard, isDesktopKeyboard, resetKbdKeys, setKbdRecord } from "./keyboard.js";
 import { initVim } from "./vim.js";
@@ -879,6 +880,10 @@ export function init() {
   // starter kit — the same list newSet() rebuilds, so "new song" and a fresh
   // page load land on the same session (session.js).
   for (const t of STARTER_TRACKS) createTrack({ ...t });
+  // The views were installed (and the remembered one drawn) before any track
+  // existed: a studio reopened on clips, arrange or piano would stay empty
+  // until something else repainted it. Tell them the tracks are here.
+  announceClips();
 
   setStatus("ready");
   // Undo/redo starts watching here, after the starter tracks exist: the floor
