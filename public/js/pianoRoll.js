@@ -192,7 +192,7 @@ export function renderRollPanel(t, panel) {
     const isRoot = scaleIntervals && !isMicrotonal && basePc === state.scale.root;
 
     const label = document.createElement("div");
-    label.className = "sq-roll__label" + (isBlack ? " black" : "") + (isRoot ? " root" : "") + (isMicrotonal ? " micro" : "");
+    label.className = "sq-roll__label" + (isBlack ? " is-black" : "") + (isRoot ? " is-root" : "") + (isMicrotonal ? " is-micro" : "");
     label.textContent = midiToName(m);
     // Diatonic pitch-class color: same hue as the corresponding note cells.
     if (!isMicrotonal) {
@@ -211,7 +211,7 @@ export function renderRollPanel(t, panel) {
     }
     for (let i = 0; i < steps; i++) {
       const cell = document.createElement("div");
-      cell.className = "sq-roll__cell" + (isBlack ? " row-black" : "") + (isMicrotonal ? " row-micro" : "");
+      cell.className = "sq-roll__cell" + (isBlack ? " sq-roll__row--black" : "") + (isMicrotonal ? " sq-roll__row--micro" : "");
       if (i % 4 === 0) cell.classList.add("is-beat");
       cell.dataset.step = String(i);
       cell.dataset.note = String(m);

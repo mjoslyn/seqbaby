@@ -441,11 +441,16 @@ function runCommand(line) {
       return setUnit(fxControl(t, id), v) ? `${t.name}: ${fxIdLabel(id)} ${v}` : "E: no such control on this track";
     }
     case "w": {
-      // Saving is the shell's (the account bar), so this opens its save panel.
-      const btn = [...document.querySelectorAll("button")].find(b => b.textContent?.trim() === "save");
+      // Saving is the shell's (the account bar): its button, found by a hook
+      // rather than its text, which reads "saved v5" for a moment after a save.
+      // With a song of your own open it saves the next version on the spot and
+      // says so on itself; otherwise it opens the panel that names the song.
+      const btn = document.querySelector("[data-sq-save]");
       if (!btn) return "E: sign in to save";
+      if (btn.disabled) return "already saving";
+      const quick = btn.dataset.sqSave === "quick";
       btn.click();
-      return "save: name it and press save";
+      return quick ? "saving the next version" : "save: name it and press save";
     }
   }
   return `E: not a command: ${cmd}. Try :k :bpm :p :len :cut :res :fx :nudge :view :w :q :h`;

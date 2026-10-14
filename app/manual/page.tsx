@@ -689,7 +689,7 @@ export default function ManualPage() {
                 <tr><td><span className={styles.ui}>:nudge 3</span></td><td>Puts the note under the cursor 3/24 of a step late (negative is early, <span className={styles.ui}>:nudge 0</span> back on the grid).</td></tr>
                 <tr><td><span className={styles.ui}>:view clips</span></td><td>Opens the clips, arrange or groove view (<span className={styles.key}>tab</span> cycles them).</td></tr>
                 <tr><td><span className={styles.ui}>:12</span></td><td>Moves the cursor to step 12.</td></tr>
-                <tr><td><span className={styles.ui}>:w</span></td><td>Opens the save panel (you need to be signed in).</td></tr>
+                <tr><td><span className={styles.ui}>:w</span></td><td>Saves. With a song of yours open it saves the next version straight away; otherwise it opens the save panel to name it. You need to be signed in.</td></tr>
                 <tr><td><span className={styles.ui}>:h</span></td><td>Lists every vim key.</td></tr>
                 <tr><td><span className={styles.ui}>:q</span></td><td>Switches vim mode off.</td></tr>
               </tbody>

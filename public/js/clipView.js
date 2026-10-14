@@ -250,8 +250,8 @@ function render() {
     return `<div class="sq-clips__row${t.muted ? " is-muted" : ""}" data-track-id="${t.id}">
       <div class="sq-clips__strip">
         <button type="button" class="sq-clips__name" data-act="select" title="${esc(t.name)}: show this track's instrument, effects and pattern below">${esc(t.name)}</button>
-        <button type="button" class="sq-clips__mute" data-act="mute" aria-pressed="${!!t.muted}" title="mute">m</button>
-        <button type="button" class="sq-clips__solo" data-act="solo" aria-pressed="${!!t.soloed}" title="solo">s</button>
+        <button type="button" class="sq-clips__mute" data-act="mute" aria-pressed="${!!t.muted}"${t.soloed ? ' disabled title="mute (unsolo it first)"' : ' title="mute"'}>m</button>
+        <button type="button" class="sq-clips__solo" data-act="solo" aria-pressed="${!!t.soloed}"${t.muted ? ' disabled title="solo (unmute it first)"' : ' title="solo"'}>s</button>
         <button type="button" class="sq-clips__stop${t._clipOff ? " is-on" : ""}" data-act="stop" title="${t._clipOff ? `play this track's clip again (pattern ${slot + 1})` : "stop this track's clip"}">${t._clipOff ? "▶" : "■"}</button>
       </div>
       <div class="sq-clips__cells">${cells.join("")}</div>

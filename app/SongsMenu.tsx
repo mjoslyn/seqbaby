@@ -67,6 +67,12 @@ export default function SongsMenu() {
   const [status, setStatus] = useState<{ text: string; err?: boolean }>({
     text: "",
   });
+  // What the button says for a moment after an action that closes the panel
+  // (save, open, remix): a status written inside a closed panel is never seen.
+  const [flash, setFlash] = useState("");
+  const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // A public link the clipboard refused, shown in the panel to copy by hand.
+  const [linkUrl, setLinkUrl] = useState("");
   const openSong = useSyncExternalStore(
     subscribeOpenSong,
     getOpenSong,
@@ -127,6 +133,20 @@ export default function SongsMenu() {
     setLoaded(true);
   }, []);
 
+  useEffect(() => () => {
+    if (flashTimer.current) clearTimeout(flashTimer.current);
+  }, []);
+
+  // Close the panel and say how it went on the button instead.
+  const closeWith = useCallback((text: string, ms = 2500) => {
+    setOpen(false);
+    setStatus({ text: "" });
+    setLinkUrl("");
+    if (flashTimer.current) clearTimeout(flashTimer.current);
+    setFlash(text);
+    flashTimer.current = setTimeout(() => setFlash(""), ms);
+  }, []);
+
   // Fetch the list as soon as the engine is up rather than on the first open,
   // so the panel opens on the songs instead of an empty list that fills in a
   // round trip later. Opening still refreshes it, behind what is shown.
@@ -137,6 +157,9 @@ export default function SongsMenu() {
   // Close on outside click.
   useEffect(() => {
     if (!open) return;
+    // What the last opening said is not news on this one.
+    setStatus({ text: "" });
+    setLinkUrl("");
     refresh();
     const onDown = (e: MouseEvent) => {
       if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) {
@@ -163,7 +186,7 @@ export default function SongsMenu() {
       // user's own.
       const generated = !carried && (!typed || typed === suggestedRef.current);
       const t = typed || carried || generateSongName(data);
-      setStatus({ text: "Saving…" });
+      setStatus({ text: "saving…" });
       const fromTemplate = openSong.isTemplate;
       const res = await trySave(data, () => saveSong({
         id: asNew || fromTemplate ? undefined : (currentId ?? undefined),
@@ -191,14 +214,16 @@ export default function SongsMenu() {
         versionId: res.versionId ?? null,
         isTemplate: false,
       });
-      setStatus({
-        text: res.unchanged
-          ? `No changes since v${res.versionSeq}`
+      // A name the app picked is said in full, and held longer: it is the one
+      // thing about this save the user has not seen yet.
+      closeWith(
+        res.unchanged
+          ? `no changes · v${res.versionSeq}`
           : generated
-            ? `Saved “${saved}” as v${res.versionSeq}`
-            : `Saved as v${res.versionSeq}`,
-      });
-      setOpen(false);
+            ? `saved \u201c${saved}\u201d v${res.versionSeq}`
+            : `saved v${res.versionSeq}`,
+        generated ? 5000 : 2500,
+      );
       refresh();
     },
     [
@@ -208,6 +233,7 @@ export default function SongsMenu() {
       openSong.title,
       openSong.isTemplate,
       refresh,
+      closeWith,
     ],
   );
 
@@ -224,19 +250,17 @@ export default function SongsMenu() {
         isTemplate: !!res.isTemplate,
       });
       syncSongUrl(song.id);
-      setStatus({
-        text: res.isTemplate
-          ? `Started from "${song.title}" — saving makes a new song`
-          : `Loaded "${song.title}"`,
-      });
-      setOpen(false);
+      closeWith(res.isTemplate ? "from template: saving makes a new song" : "opened", 3000);
     } catch (e) {
-      setStatus({ text: `Load failed: ${(e as Error).message}`, err: true });
+      setStatus({ text: `could not open it: ${(e as Error).message}`, err: true });
     }
-  }, []);
+  }, [closeWith]);
 
   const doDelete = useCallback(
     async (song: SongListItem) => {
+      // Deleting a song takes every version of it with it, and nothing brings
+      // it back: undo does not reach the server.
+      if (!window.confirm(`Delete \u201c${song.title}\u201d and its whole version history? This can't be undone.`)) return;
       const res = await deleteSong(song.id);
       if (res.error) return setStatus({ text: res.error, err: true });
       if (currentId === song.id) {
@@ -244,8 +268,7 @@ export default function SongsMenu() {
         syncSongUrl(null);
       }
       if (treeFor === song.id) setTreeFor(null);
-      setStatus({ text: "Deleted" });
-      setOpen(false);
+      setStatus({ text: `deleted \u201c${song.title}\u201d` });
       refresh();
     },
     [currentId, treeFor, refresh],
@@ -256,23 +279,22 @@ export default function SongsMenu() {
       // A remix of another song is loaded over this one (adoptRemix), so ask
       // before the remix is made rather than leave one made and not opened.
       if (currentId !== song.id && !(await confirmOpen(`a remix of "${song.title}"`))) return;
-      setStatus({ text: "Remixing…" });
+      setStatus({ text: "remixing…" });
       const res = await remixSong(song.id);
       if (res.error || !res.id)
-        return setStatus({ text: res.error ?? "Remix failed", err: true });
+        return setStatus({ text: res.error ?? "remix failed", err: true });
       try {
         await adoptRemix(
           { id: res.id, title: res.title ?? song.title, versionId: res.versionId },
           currentId === song.id,
         );
       } catch (e) {
-        return setStatus({ text: `Remixed, but could not open it: ${(e as Error).message}`, err: true });
+        return setStatus({ text: `remixed, but could not open it: ${(e as Error).message}`, err: true });
       }
-      setStatus({ text: `Remixed "${song.title}"` });
-      setOpen(false);
+      closeWith("remixed: it is open", 3000);
       refresh();
     },
-    [currentId, refresh],
+    [currentId, refresh, closeWith],
   );
 
   const doToggleTemplate = useCallback(
@@ -285,10 +307,9 @@ export default function SongsMenu() {
         setOpenSong({ isTemplate: !song.is_template });
       setStatus({
         text: song.is_template
-          ? `"${song.title}" is a song again`
-          : `"${song.title}" is a template`,
+          ? `\u201c${song.title}\u201d is a song again`
+          : `\u201c${song.title}\u201d is a template`,
       });
-      setOpen(false);
       refresh();
     },
     [currentId, refresh],
@@ -302,10 +323,9 @@ export default function SongsMenu() {
       if (res.error) return setStatus({ text: res.error, err: true });
       setStatus({
         text: song.is_default_template
-          ? "New songs start blank again"
-          : `New songs start from "${song.title}"`,
+          ? "new songs start blank again"
+          : `new songs start from \u201c${song.title}\u201d`,
       });
-      setOpen(false);
       refresh();
     },
     [refresh],
@@ -315,15 +335,16 @@ export default function SongsMenu() {
     async (song: SongListItem) => {
       const res = await publishSong(song.id);
       if (res.error || !res.slug)
-        return setStatus({ text: res.error ?? "Publish failed", err: true });
+        return setStatus({ text: res.error ?? "publish failed", err: true });
       const url = `${location.origin}/studio?s=${res.slug}`;
       try {
         await navigator.clipboard.writeText(url);
-        setStatus({ text: "Public link copied" });
+        setLinkUrl("");
+        setStatus({ text: `public link to \u201c${song.title}\u201d copied` });
       } catch {
-        setStatus({ text: url });
+        setStatus({ text: "the clipboard said no; copy the link from here" });
+        setLinkUrl(url);
       }
-      setOpen(false);
       refresh();
     },
     [refresh],
@@ -338,8 +359,8 @@ export default function SongsMenu() {
       if (res.error) return setStatus({ text: res.error, err: true });
       setStatus({
         text: song.is_public
-          ? `"${song.title}" is private`
-          : `"${song.title}" is public: on your page and the homepage`,
+          ? `\u201c${song.title}\u201d is private`
+          : `\u201c${song.title}\u201d is public: on your page and the homepage`,
       });
       refresh();
     },
@@ -504,8 +525,10 @@ export default function SongsMenu() {
         className={styles.accountBtn}
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
+        aria-haspopup="true"
+        aria-live="polite"
       >
-        songs
+        {flash || "songs"}
       </button>
       {open && (
         <div className={styles.panel}>
@@ -581,6 +604,17 @@ export default function SongsMenu() {
           >
             {status.text}
           </div>
+          {linkUrl && (
+            <input
+              className={styles.saveInput}
+              style={{ width: "100%", marginTop: 6 }}
+              readOnly
+              value={linkUrl}
+              aria-label="public link"
+              autoFocus
+              onFocus={(e) => e.currentTarget.select()}
+            />
+          )}
         </div>
       )}
     </div>

@@ -45,8 +45,14 @@ export default function SaveButton() {
   const [status, setStatus] = useState<{ text: string; err?: boolean }>({
     text: "",
   });
-  // What the button says after a quick save ("saved v5"), for a moment.
+  // What the button says after a save ("saved v5"), for a moment. The popup's
+  // save says it here too: the popup has closed by then (the song it made is
+  // open, so the next press is a quick save), and a status inside it was
+  // never seen.
   const [flash, setFlash] = useState<{ text: string; err?: string } | null>(null);
+  // A public link the clipboard refused, kept on screen until dismissed
+  // rather than lost with the closed popup.
+  const [shareUrl, setShareUrl] = useState("");
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   // The name this popup offered, so save can tell an offer left alone from a
@@ -98,19 +104,31 @@ export default function SaveButton() {
   }, []);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open && !shareUrl) return;
     const onDown = (e: MouseEvent) => {
-      if (wrapRef.current && !wrapRef.current.contains(e.target as Node))
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) {
         setOpen(false);
+        setShareUrl("");
+      }
     };
     document.addEventListener("mousedown", onDown);
     return () => document.removeEventListener("mousedown", onDown);
-  }, [open]);
+  }, [open, shareUrl]);
+
+  useEffect(() => () => {
+    if (flashTimer.current) clearTimeout(flashTimer.current);
+  }, []);
+
+  const showFlash = useCallback((next: { text: string; err?: string }, ms: number) => {
+    if (flashTimer.current) clearTimeout(flashTimer.current);
+    setFlash(next);
+    flashTimer.current = setTimeout(() => setFlash(null), ms);
+  }, []);
 
   const save = useCallback(async () => {
     if (!window.seqbaby) return;
     setSaving(true);
-    setStatus({ text: "Saving…" });
+    setStatus({ text: "saving…" });
     const data = window.seqbaby.serializeSet();
     // Nothing typed and nothing open: the session names itself from what is in
     // it, rather than joining a list of rows all called "untitled". Falling
@@ -152,22 +170,28 @@ export default function SaveButton() {
       isTemplate: false,
     });
     setOpen(false);
+    setStatus({ text: "" });
+    const v = `v${res.versionSeq}`;
     if (isPublic && res.slug) {
       const url = `${location.origin}/studio?s=${res.slug}`;
       try {
         await navigator.clipboard.writeText(url);
-        setStatus({ text: "Saved · public link copied" });
+        showFlash({ text: `saved ${v} · link copied` }, 3000);
       } catch {
-        setStatus({ text: "Saved (public)" });
+        showFlash({ text: `saved ${v}` }, 3000);
+        setShareUrl(url);
       }
     } else {
-      setStatus({
-        text: res.unchanged
-          ? `No changes since v${res.versionSeq}`
+      // A name the app picked is said in full, and held longer: it is the one
+      // thing about this save the user has not seen yet.
+      showFlash(
+        res.unchanged
+          ? { text: `no changes · ${v}` }
           : generated
-            ? `Saved “${saved}” as v${res.versionSeq}`
-            : `Saved as v${res.versionSeq}`,
-      });
+            ? { text: `saved \u201c${saved}\u201d ${v}` }
+            : { text: `saved ${v}` },
+        generated ? 5000 : 2500,
+      );
     }
   }, [
     title,
@@ -176,17 +200,8 @@ export default function SaveButton() {
     openSong.title,
     openSong.versionId,
     openSong.isTemplate,
+    showFlash,
   ]);
-
-  useEffect(() => () => {
-    if (flashTimer.current) clearTimeout(flashTimer.current);
-  }, []);
-
-  const showFlash = useCallback((next: { text: string; err?: string }, ms: number) => {
-    if (flashTimer.current) clearTimeout(flashTimer.current);
-    setFlash(next);
-    flashTimer.current = setTimeout(() => setFlash(null), ms);
-  }, []);
 
   // A song of your own is open: its next version, no questions. By id rather
   // than by title, so it lands on this song whatever the field last held.
@@ -224,6 +239,8 @@ export default function SaveButton() {
     <div className={styles.songsWrap} ref={wrapRef}>
       <button
         className={styles.accountBtn}
+        // vim's :w presses this, and says which kind of save it was
+        data-sq-save={canQuickSave ? "quick" : "panel"}
         onClick={canQuickSave ? quickSave : () => setOpen((v) => !v)}
         disabled={canQuickSave && saving}
         aria-live="polite"
@@ -279,13 +296,31 @@ export default function SaveButton() {
             onClick={save}
             disabled={saving}
           >
-            {saving ? "Saving…" : "save"}
+            {saving ? "saving…" : "save"}
           </button>
           <div
             className={`${styles.status} ${status.err ? styles.statusErr : ""}`}
           >
             {status.text}
           </div>
+        </div>
+      )}
+      {shareUrl && (
+        <div className={styles.panel}>
+          <div className={styles.panelTitle}>public link</div>
+          <div className={styles.treeHint}>the clipboard said no; copy it from here</div>
+          <input
+            className={styles.saveInput}
+            style={{ width: "100%", marginBottom: 8 }}
+            readOnly
+            value={shareUrl}
+            aria-label="public link"
+            autoFocus
+            onFocus={(e) => e.currentTarget.select()}
+          />
+          <button className={styles.smallBtn} style={{ width: "100%" }} onClick={() => setShareUrl("")}>
+            done
+          </button>
         </div>
       )}
     </div>

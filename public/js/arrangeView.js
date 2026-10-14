@@ -176,8 +176,8 @@ function render({ scrollX } = {}) {
     return `<div class="sq-arr__row${t.muted ? " is-muted" : ""}" data-track-id="${t.id}">
       <div class="sq-arr__strip">
         <button type="button" class="sq-arr__name" data-act="select" title="${esc(t.name)}: show this track's instrument, effects and pattern below">${esc(t.name)}</button>
-        <button type="button" class="sq-arr__mute" data-act="mute" aria-pressed="${!!t.muted}" title="mute">m</button>
-        <button type="button" class="sq-arr__solo" data-act="solo" aria-pressed="${!!t.soloed}" title="solo">s</button>
+        <button type="button" class="sq-arr__mute" data-act="mute" aria-pressed="${!!t.muted}"${t.soloed ? ' disabled title="mute (unsolo it first)"' : ' title="mute"'}>m</button>
+        <button type="button" class="sq-arr__solo" data-act="solo" aria-pressed="${!!t.soloed}"${t.muted ? ' disabled title="solo (unmute it first)"' : ' title="solo"'}>s</button>
         <span class="sq-arr__on" title="the pattern this track is on">p${trackSlot(t) + 1}</span>
       </div>
       <div class="sq-arr__lane" style="width:${bars * w}px" title="drag across empty space to add a block of pattern ${trackSlot(t) + 1}">${blocks}${ghosts}</div>
