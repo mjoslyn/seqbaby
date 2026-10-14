@@ -81,6 +81,8 @@ for (const k of HALO_MOD_KEYS) def(`p-hlo${k}`, `halo_${k}`, `halo.${k}`);
 for (const k of SIEGE_MOD_KEYS) def(`p-sge${k}`, `siege_${k}`, `siege.${k}`);
 // The ladder — likewise, `p-ldr*`.
 for (const k of LADDER_MOD_KEYS) def(`p-ldr${k}`, `ladder_${k}`, `ladder.${k}`);
+// ...and osc 2 / 3's detune, whose controls keep the bank's unprefixed class.
+for (const k of ["osc2freq", "osc3freq"]) def(`p-${k}`, `ladder_${k}`, `ladder.${k}`);
 // The oracle — likewise, `p-orc*`.
 for (const k of ORACLE_MOD_KEYS) def(`p-orc${k}`, `oracle_${k}`, `oracle.${k}`);
 // Euclid's three counts — one list, three namespaces, as in hexop.js.
@@ -304,6 +306,7 @@ export const CONTROL_LABELS = {
   ...Object.fromEntries(SIEGE_MOD_KEYS.map(k => [`p-sge${k}`, SIEGE_MOD_LABELS[k]])),
   "p-sgemode": "drive type", "p-sgegate": "trig or gate", "p-sgehpf": "low cut", "p-sgelock": "pitch lock", "sq-siege__tone": "siege kick",
   ...Object.fromEntries(LADDER_MOD_KEYS.map(k => [`p-ldr${k}`, LADDER_MOD_LABELS[k]])),
+  "p-osc2freq": LADDER_MOD_LABELS.osc2freq, "p-osc3freq": LADDER_MOD_LABELS.osc3freq,
   ...Object.fromEntries(ORACLE_MOD_KEYS.map(k => [`p-orc${k}`, ORACLE_MOD_LABELS[k]])),
   "sq-oracle__tone": "oracle patch",
   "p-ldrkbd": "keyboard tracking", "p-ldrosc3kbd": "osc 3 keyboard control", "p-ldroscmod": "oscillator modulation",

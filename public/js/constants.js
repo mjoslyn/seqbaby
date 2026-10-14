@@ -11,7 +11,7 @@ import {
   LANCET_MOD_KEYS, LANCET_MOD_LABELS, LANCET_MOD_RANGE,
   HALO_MOD_KEYS, HALO_MOD_LABELS, HALO_MOD_RANGE,
   SIEGE_MOD_KEYS, SIEGE_MOD_LABELS, SIEGE_MOD_RANGE,
-  LADDER_MOD_KEYS, LADDER_MOD_LABELS, LADDER_MOD_RANGE,
+  LADDER_TARGET_KEYS, LADDER_MOD_LABELS, LADDER_MOD_RANGE,
   ORACLE_MOD_KEYS, ORACLE_MOD_LABELS, ORACLE_MOD_RANGE,
 } from "./engineData.js";
 import { CHANCE_MOD_KEYS, CHANCE_MOD_LABELS } from "./chanceGen.js";
@@ -110,8 +110,9 @@ export const LFO_KEYS = [
   ...HALO_MOD_KEYS.map(k => `halo_${k}`),
   // Siege: the kick's tune and velocity floor. Siege only.
   ...SIEGE_MOD_KEYS.map(k => `siege_${k}`),
-  // Ladder: the two contours, the mod wheel, the drift and the tune. Ladder only.
-  ...LADDER_MOD_KEYS.map(k => `ladder_${k}`),
+  // Ladder: the two contours, the mod wheel, the drift, the tune and osc 2 / 3's
+  // detune. Ladder only.
+  ...LADDER_TARGET_KEYS.map(k => `ladder_${k}`),
   // Oracle: VCO 1's shape, the widths, the slop, the chorus, the envelope. Oracle only.
   ...ORACLE_MOD_KEYS.map(k => `oracle_${k}`),
 ];
@@ -172,7 +173,7 @@ export const LFO_LABELS = {
   ...Object.fromEntries(LANCET_MOD_KEYS.map(k => [`lancet_${k}`, LANCET_MOD_LABELS[k]])),
   ...Object.fromEntries(HALO_MOD_KEYS.map(k => [`halo_${k}`, HALO_MOD_LABELS[k]])),
   ...Object.fromEntries(SIEGE_MOD_KEYS.map(k => [`siege_${k}`, SIEGE_MOD_LABELS[k]])),
-  ...Object.fromEntries(LADDER_MOD_KEYS.map(k => [`ladder_${k}`, LADDER_MOD_LABELS[k]])),
+  ...Object.fromEntries(LADDER_TARGET_KEYS.map(k => [`ladder_${k}`, LADDER_MOD_LABELS[k]])),
   ...Object.fromEntries(ORACLE_MOD_KEYS.map(k => [`oracle_${k}`, ORACLE_MOD_LABELS[k]])),
 };
 export const lfoLabel = (k) => {
@@ -281,7 +282,7 @@ export const LFO_AMP_SCALE = {
     const [lo, hi] = SIEGE_MOD_RANGE[k];
     return [`siege_${k}`, hi - lo];
   })),
-  ...Object.fromEntries(LADDER_MOD_KEYS.map(k => {
+  ...Object.fromEntries(LADDER_TARGET_KEYS.map(k => {
     const [lo, hi] = LADDER_MOD_RANGE[k];
     return [`ladder_${k}`, hi - lo];
   })),
@@ -659,8 +660,8 @@ export const AUTOMATION_TARGETS = {
   ...Object.fromEntries(HALO_MOD_KEYS.map(k => [`halo.${k}`, { label: HALO_MOD_LABELS[k] }])),
   // Siege (siege engine only) — tune, velocity floor.
   ...Object.fromEntries(SIEGE_MOD_KEYS.map(k => [`siege.${k}`, { label: SIEGE_MOD_LABELS[k] }])),
-  // Ladder (ladder engine only) — the contours, the mod wheel, drift, tune.
-  ...Object.fromEntries(LADDER_MOD_KEYS.map(k => [`ladder.${k}`, { label: LADDER_MOD_LABELS[k] }])),
+  // Ladder (ladder engine only) — the contours, the mod wheel, drift, tune, detunes.
+  ...Object.fromEntries(LADDER_TARGET_KEYS.map(k => [`ladder.${k}`, { label: LADDER_MOD_LABELS[k] }])),
   // Oracle (oracle engine only) — VCO 1's shape, the widths, slop, chorus, the envelope.
   ...Object.fromEntries(ORACLE_MOD_KEYS.map(k => [`oracle.${k}`, { label: ORACLE_MOD_LABELS[k] }])),
   // fx

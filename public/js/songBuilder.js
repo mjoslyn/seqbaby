@@ -156,7 +156,7 @@ export function describeEngine(engineKey) {
     oscMix: tips.osc || null,
     oscMod: tips.oscMod || null,
     panel: panel ? {
-      numeric: panel.num.map(([k, lo, hi, d, label]) => ({ key: panel.prefix + k, label, min: lo, max: hi, default: d })),
+      numeric: panel.num.map(([k, lo, hi, d, label, values]) => ({ key: panel.prefix + k, label, min: lo, max: hi, default: d, ...(values ? { values } : {}) })),
       select: panel.sel.map(([k, d, vals]) => ({ key: panel.prefix + k, default: d, values: vals })),
       ...(panel.text ? { text: panel.text.map(([k, d, max, label]) => ({ key: panel.prefix + k, label, default: d, maxLength: max })) } : {}),
     } : null,
@@ -674,7 +674,12 @@ export function setParams(song, index, params = {}) {
     const numCtl = p.num.find(c => c[0] === short);
     const selCtl = p.sel.find(c => c[0] === short);
     const textCtl = p.text?.find(c => c[0] === short);
-    if (numCtl) t.params[key] = num(raw, key, numCtl[1], numCtl[2]);
+    if (numCtl) {
+      const v = num(raw, key, numCtl[1], numCtl[2]);
+      // a switch with numbered positions (the ladder's footages): only those
+      if (numCtl[5] && !numCtl[5].includes(v)) fail(`${key} must be one of ${numCtl[5].join(", ")}, got ${JSON.stringify(raw)}`);
+      t.params[key] = v;
+    }
     else if (selCtl) t.params[key] = oneOf(raw, key, selCtl[2]);
     else if (textCtl) {
       if (raw != null && typeof raw !== "string") fail(`${key} is text, e.g. "la di da"`);

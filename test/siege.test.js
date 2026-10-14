@@ -331,3 +331,17 @@ test("siege: the song builder, the MCP description and Strudel know it", () => {
     assert.equal(again.params[k], t.params[k], `${k} did not round-trip`);
   }
 });
+
+test("siege: the portable export is a stock kick, or a sine at its notes when it plays a bassline", () => {
+  const song = B.newSong({ bpm: 128 });
+  const { index: i } = B.addTrack(song, { engine: "siege", name: "kick" });
+  B.setSteps(song, i, { steps: "x...x...x...x..." });
+  let r = sessionToCode(song, {});
+  assert.match(r.code, /kick: s\("bd /, "a siege kick exports as bd");
+  assert.ok(!r.warnings.some(w => /siege/.test(w)), "no 'has no Strudel sound' warning");
+  song.tracks[i].isDrumKit = false;               // gate mode, a bassline
+  r = sessionToCode(song, {});
+  assert.match(r.code, /kick: note\("c2[^)]*\)\.s\("sine"\)/);
+  // the native form still writes it by name, with its notes
+  assert.match(sessionToCode(song, { native: true }).code, /\.s\("siege"\)/);
+});
