@@ -866,6 +866,32 @@ begin
 end $$;
 rollback;
 
+\echo ''
+\echo '== from_template: a song started from a template is not a remix =='
+
+-- Alice's private template, and a public song she started from it. Inserted
+-- as the table owner, after every test that counts songs.
+insert into public.songs (id, owner_id, title, data, is_template) values
+  ('a0000000-0000-4000-8000-0000000000f1', 'a11ce000-0000-4000-8000-000000000001', 'alice starter', '{}', true);
+insert into public.songs (id, owner_id, title, data, is_public, forked_from) values
+  ('a0000000-0000-4000-8000-0000000000f2', 'a11ce000-0000-4000-8000-000000000001', 'alice from starter', '{}', true,
+   'a0000000-0000-4000-8000-0000000000f1');
+
+begin;
+set local role anon;
+do $$
+declare b boolean;
+begin
+  select s.from_template into b from public.songs s where s.id = 'a0000000-0000-4000-8000-0000000000f2';
+  if b is not true then raise exception 'FAIL  a song started from a private template reads as %', b; end if;
+  raise notice 'PASS  a visitor can tell a public song came from its owner''s template';
+
+  select s.from_template into b from public.songs s where s.id = 'a0000000-0000-4000-8000-00000000000a';
+  if b is not false then raise exception 'FAIL  a song made from nothing reads as from a template'; end if;
+  raise notice 'PASS  a song made from nothing is not from a template';
+end $$;
+rollback;
+
 -- ---------------------------------------------------------------------------
 -- Teardown. Cascades to profiles, songs and patches.
 -- ---------------------------------------------------------------------------

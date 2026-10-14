@@ -2,20 +2,8 @@ import { type EmailOtpType } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { RECOVERY_COOKIE, RECOVERY_MAX_AGE } from "@/lib/recoveryCookie";
-
-// Only a path on this site. `new URL(next, origin)` takes an absolute URL (or a
-// protocol-relative `//host`) over the origin, which would make this route an
-// open redirect wearing the site's own domain.
-function safeNext(next: string | null): string {
-  if (
-    !next ||
-    !next.startsWith("/") ||
-    next.startsWith("//") ||
-    next.startsWith("/\\")
-  )
-    return "/studio";
-  return next;
-}
+// Only a path on this site: see lib/safeNext.js.
+import { safeNext } from "@/lib/safeNext";
 
 // Handles email-confirmation, magic-link and password-reset callbacks. Supabase
 // may send either a PKCE `code` (exchangeCodeForSession) or a `token_hash`+`type`

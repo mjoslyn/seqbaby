@@ -1,4 +1,4 @@
-import { runAutomationForStep } from "./automation.js";
+import { restoreLaneBases, runAutomationForStep } from "./automation.js";
 import { fireMetronome, paintBeatIndicator } from "./beat.js";
 import { engineByKey } from "./catalog.js";
 import { setStatus } from "./dom.js";
@@ -395,6 +395,8 @@ export async function stopPlayback() {
   // over the top of the silence you just asked for.
   silenceAllVoices();
   for (const t of state.tracks) t.fxRack?.clockStop();
+  // The lanes let go: each field one wrote goes back to its knob (automation.js).
+  for (const t of state.tracks) restoreLaneBases(t);
   state.playing = false;
   document.body.classList.remove("sq-playing");   // step input's cursor shows while stopped (style.css)
   state._transportStartTime = null;
@@ -418,7 +420,15 @@ export async function stopPlayback() {
 // played three times came in on its second bar. Same starting point as a play
 // press (the speed < 1 accumulator included). An immediate switch from a click
 // keeps counting, since it lands mid-bar.
+/** One global tick of a track withheld from playing: its count moves on, nothing fires. */
+function skipTrackStep(t) {
+  t.speedAccum = (t.speedAccum ?? 0) + Math.max(0.0001, t.speed ?? 1);
+  while (t.speedAccum >= 1) { t.speedAccum -= 1; t.trackTick = (t.trackTick ?? 0) + 1; }
+}
+
 function restartTrackCounts() {
+  // Where every track's count starts from now (seedFromTransport, clips.js).
+  state._countOrigin = state.tick;
   for (const t of state.tracks) restartTrackCount(t);
 }
 
@@ -492,6 +502,7 @@ export async function startPlayback(opts = {}) {
   // A track slower than the transport (speed < 1) starts its accumulator one
   // tick's worth short of full, so its first step fires ON the downbeat rather
   // than a tick after it: with 0 a half-speed track played every odd sixteenth.
+  state._countOrigin = 0;
   for (const t of state.tracks) seedTrackCount(t, startTick);
   // Arrange mode lands in the arrangement where the tick says (clips.js),
   // from the view's start marker when this screen pressed play on its own (a
@@ -539,7 +550,9 @@ export async function startPlayback(opts = {}) {
       // bus cuts its audio instead (BusVoice.setMuted, via applyBusMute).
       // A stopped clip (clips.js: the clip view's stop, or a gap in the
       // arrangement) withholds the track exactly as mute does.
-      if (!isBus && (t._clipOff || (soloAudible ? !soloAudible.has(t) : t.muted))) continue;
+      // It keeps COUNTING, though: left frozen, a muted track came back on the
+      // step it was muted on rather than the one everyone else is on.
+      if (!isBus && (t._clipOff || (soloAudible ? !soloAudible.has(t) : t.muted))) { skipTrackStep(t); continue; }
       const speed = Math.max(0.0001, t.speed ?? 1);
       const effDur = baseStepDur / speed;
       t.speedAccum = (t.speedAccum ?? 0) + speed;

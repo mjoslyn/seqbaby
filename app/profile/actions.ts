@@ -28,6 +28,9 @@ export type ProfileSong = {
   preview?: unknown;
   /** Hearts (migration 0016), absent before that has run. */
   likes?: number;
+  /** Started from its owner's template, so `forked_from` is no remix
+   *  (migration 0024), absent before that has run. */
+  from_template?: boolean;
 };
 export type ProfilePatch = {
   id: string;
@@ -210,7 +213,7 @@ export async function getPublicProfile(
   const PATCH_COLS =
     "id,name,engine_type,created_at,kind:config->>_kind,engine:config->>engineKey,drum:config->isDrumKit,sample:config->sampleSource->>id";
   const [songsRes, patchesRes] = await Promise.all([
-    songsQuery(`${SONG_COLS},preview,likes`),
+    songsQuery(`${SONG_COLS},preview,likes,from_template`),
     patchesQuery(`${PATCH_COLS},likes`),
   ]);
   // `likes` on patches is 0017's; without it, ask again without.
@@ -218,14 +221,18 @@ export async function getPublicProfile(
 
   // Resolve remix lineage (source title + author handle) for any remixed sessions,
   // limited to sources the viewer can read (public or owned).
+  // Each optional column is a migration of its own (from_template 0024, likes
+  // 0016, preview 0012): without one, ask again without it.
   let songs = songsRes.data;
-  if (songsRes.error) {
-    const noLikes = await songsQuery(`${SONG_COLS},preview`);
-    songs = noLikes.error ? (await songsQuery(SONG_COLS)).data : noLikes.data;
+  for (const cols of [`${SONG_COLS},preview,likes`, `${SONG_COLS},preview`, SONG_COLS]) {
+    if (songs) break;
+    const res = await songsQuery(cols);
+    if (!res.error) songs = res.data;
   }
   const songRows = songs ?? [];
+  // A song started from its owner's template is not a remix (0024).
   const remixIds = [
-    ...new Set(songRows.map((s) => s.forked_from).filter(Boolean)),
+    ...new Set(songRows.filter((s) => !s.from_template).map((s) => s.forked_from).filter(Boolean)),
   ] as string[];
   const lineage = new Map<string, { title: string; username: string | null }>();
   if (remixIds.length) {
@@ -256,7 +263,7 @@ export async function getPublicProfile(
     isOwner,
     songs: songRows.map((s) => ({
       ...s,
-      remixedFrom: s.forked_from ? (lineage.get(s.forked_from) ?? null) : null,
+      remixedFrom: s.forked_from && !s.from_template ? (lineage.get(s.forked_from) ?? null) : null,
     })),
     patches: patches ?? [],
   };

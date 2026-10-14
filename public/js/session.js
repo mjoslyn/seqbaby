@@ -1,4 +1,4 @@
-import { AUTOMATION_TARGETS } from "./automation.js";
+import { AUTOMATION_TARGETS, laneBases } from "./automation.js";
 import { loadBuffer, normalizeAudioBuffer } from "./buffers.js";
 import { GRANULAR_SAMPLE_BASE } from "./catalog.js";
 import { PATTERN_COUNT, baseModKey, fxInstanceIds } from "./constants.js";
@@ -19,7 +19,7 @@ import { syncScaleUI } from "./scaleUI.js";
 import { migrateLegacyNames, migrateTrackNames, SET_VERSION, validateSet } from "./sessionFormat.js";
 import { applyCompressorConfig, ensureFxRack, EQ_BANDS, refreshAllTrackOutputs, refreshCompSourceDropdowns, refreshNoiseBeds, refreshOutputSelects, routeVoiceToRack, setFilter, wouldFeedback } from "./signal.js";
 import { applyMacroPads, serializeMacroPads } from "./macro.js";
-import { aliasPattern, state, syncMeterUI, syncRepeatsUI } from "./state.js";
+import { aliasPattern, state, syncMeterUI, syncRepeatsUI, trackSlot } from "./state.js";
 import { renderStepGrid } from "./stepGrid.js";
 import { createTrack, removeTrack } from "./track.js";
 import { ensureAudio, requestMidiIfNeeded, silenceAllVoices } from "./transport.js";
@@ -69,6 +69,28 @@ export function serializeSet() {
  * @param {Track} t
  */
 export function serializeTrack(t) {
+  const out = serializeTrackFields(t);
+  // While the transport runs, a field an automation lane owns holds wherever
+  // the lane had got to; the song's value is its knob's (automation.js). In
+  // the live fields and in whichever store the flush just wrote them to.
+  if (state.playing) {
+    const bases = laneBases(t);
+    if (bases.length) {
+      const own = out.patterns?.[trackSlot(t)];
+      const stores = [out, own?.soundLocked ? own.sound : out.baseSound];
+      for (const [path, v] of bases) {
+        for (const root of stores) {
+          let node = root;
+          for (const k of path.slice(0, -1)) node = node?.[k];
+          if (node && typeof node === "object") node[path[path.length - 1]] = v;
+        }
+      }
+    }
+  }
+  return out;
+}
+
+function serializeTrackFields(t) {
   return {
     name: t.name,
     engineKey: t.engineKey,

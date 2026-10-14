@@ -14,8 +14,11 @@
 // sample is sent once, when it arrives, and never again.
 //
 // The diff is a plain recursive one over the serialized session: per key for
-// objects, per index for arrays of objects of the same length, and a whole
-// replacement for anything else (a step lane is an array of numbers, and
+// objects, per index for arrays of objects of the same length, a list of
+// references into the old array for arrays of objects whose length changed (a
+// track added or removed: the tracks that stayed are named by their old index,
+// so their samples are not sent again), and a whole replacement for anything
+// else (a step lane is an array of numbers, and
 // replacing 32 numbers is cheaper than describing which three moved). That
 // shape is what makes concurrent edits compose: two peers turning knobs on
 // different tracks send diffs touching different subtrees, and each applies
@@ -41,7 +44,7 @@ import { sameTree } from "./historyStore.js";
 
 /** The patch format's version, so a peer on an older build refuses rather
  *  than misreads. */
-export const JAM_PATCH_VERSION = 1;
+export const JAM_PATCH_VERSION = 2;   // 2: the `list` node
 
 const isPlainObject = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
 
@@ -51,6 +54,9 @@ const isPlainObject = (v) => v !== null && typeof v === "object" && !Array.isArr
  *   { set: v }               replace outright
  *   { obj: {k: node}, del }  a plain object, key by key; `del` lists keys gone
  *   { arr: {i: node} }       an array of objects of the same length, by index
+ *   { list: [entry] }        an array of objects whose length changed: each
+ *                            entry is {from: i, d?: node} (the old element i,
+ *                            changed by d) or {set: v} (a new one)
  *   null                     no difference
  *
  * @returns {Object|null}
@@ -84,7 +90,39 @@ export function diffValue(a, b) {
     }
     return any ? { arr } : null;
   }
+  if (Array.isArray(a) && Array.isArray(b) && a.length !== b.length
+      && b.every(isPlainObject) && a.every(isPlainObject)) {
+    return diffList(a, b);
+  }
   return sameTree(a, b) ? null : { set: b };
+}
+
+/** What makes two elements of a list the same one: a track's engine and
+ *  name (what the studio shows down its left), else nothing (compared whole). */
+const listKey = (v) => ("engineKey" in v || "name" in v)
+  ? JSON.stringify([v.engineKey ?? null, v.name ?? null]) : null;
+
+/**
+ * An array of objects whose length changed, as references into the old one.
+ * Each new element is matched to an old one (its own slot first, the common
+ * case of a track appended or removed at the end, then the first unused match)
+ * and sent as that old index plus its diff; only an element with no match is
+ * sent whole. Sending the list whole instead put every track's base64 sample
+ * back on the wire whenever a track was added or removed.
+ */
+function diffList(a, b) {
+  const same = (x, y) => { const k = listKey(y); return k !== null ? listKey(x) === k : sameTree(x, y); };
+  const used = new Set();
+  const list = [];
+  for (let j = 0; j < b.length; j++) {
+    let i = j < a.length && same(a[j], b[j]) ? j : -1;
+    if (i < 0) for (let k = 0; k < a.length; k++) if (!used.has(k) && same(a[k], b[j])) { i = k; break; }
+    if (i < 0 || used.has(i)) { list.push({ set: b[j] }); continue; }
+    used.add(i);
+    const d = diffValue(a[i], b[j]);
+    list.push(d ? { from: i, d } : { from: i });
+  }
+  return { list };
 }
 
 /**
@@ -105,6 +143,10 @@ export function patchValue(a, node) {
     const out = Array.isArray(a) ? a.slice() : [];
     for (const [i, sub] of Object.entries(node.arr)) out[Number(i)] = patchValue(out[Number(i)], sub);
     return out;
+  }
+  if (node.list) {
+    const old = Array.isArray(a) ? a : [];
+    return node.list.map(e => Object.prototype.hasOwnProperty.call(e, "set") ? e.set : patchValue(old[e.from], e.d));
   }
   return a;
 }
@@ -138,6 +180,10 @@ export function diffSession(base, next) {
   const tracksNode = d.obj?.tracks;
   if (tracksNode?.arr) {
     for (const i of Object.keys(tracksNode.arr)) keys[i] = trackKey(a.tracks[Number(i)]);
+  }
+  // A list names old tracks by index too: every one it keeps is guarded.
+  if (tracksNode?.list) {
+    for (const e of tracksNode.list) if (Number.isInteger(e.from)) keys[e.from] = trackKey(a.tracks[e.from]);
   }
   return { v: JAM_PATCH_VERSION, from, n, keys, d };
 }

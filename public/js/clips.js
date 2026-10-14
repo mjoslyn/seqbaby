@@ -43,6 +43,20 @@ export function seedTrackCount(t, ticks) {
   t.speedAccum = sp < 1 ? 1 - sp : 0;
 }
 
+/**
+ * A track that appears while the transport runs (added, duplicated from
+ * nothing, made by a merge: an undo, a compose turn, a code run, a jam peer)
+ * joins on the step the others are on: the global ticks since every track's
+ * count last started (`state._countOrigin`, set at play and at each bar-line
+ * restart), at ITS speed. Seeded from `state.tick` alone it ignored both, so a
+ * 2x track, or any track after a chain switch, came in out of phase.
+ * @param {Track} t
+ */
+export function seedFromTransport(t) {
+  if (!state.playing) return;
+  seedTrackCount(t, state.tick - (state._countOrigin ?? 0));
+}
+
 /** A pattern switched in on a bar line starts the track from its first step. */
 export function restartTrackCount(t) { seedTrackCount(t, 0); }
 

@@ -2663,7 +2663,13 @@ it; the input is still the value, the focus target and the pointer target.
 - **Automation** (`automation.js`, aut panel): per-step value lanes stored in
   the pattern (`automation` field), applied at step time via `setParam`-style
   setters. `canAutomate` is broader than `canModulate` since it doesn't need
-  an AudioParam.
+  an AudioParam. A lane writes the stored field it automates (the cutoff, a
+  voice param with no AudioParam, an fx stage's config, which the rack reads to
+  decide whether a stage is wired in) and leaves the knob's slider alone, so
+  the slider is the base: `serializeTrack` writes the slider's value for a
+  lane-owned field while playing (`laneBases`), and `stopPlayback` puts the
+  field back on it (`restoreLaneBases`). Before, the lane's last value was what
+  a save kept.
 - **Recording knob moves** (`knobRecord.js`): record armed (the transport's
   record button or vim insert) with the transport playing, turning any knob
   writes that track's lane for the parameter on the current pattern, creating

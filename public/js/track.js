@@ -69,9 +69,10 @@ export function createTrack({ name, engineKey, length = totalSteps(), params = n
     // track's rhythm comes from one generator at a time — stepSource.js.
     chance: null,
     speed: 1,
-    // A track added mid-play joins on the step everyone else is on, not at 0.
-    // At 1x the per-track counter advances once per 16n, so it tracks state.tick.
-    trackTick: state.playing ? state.tick : 0,
+    // A track added mid-play joins on the step everyone else is on, not at 0:
+    // the ticks since every count last started (clips.js, seedFromTransport),
+    // at 1x. A loader that sets another speed reseeds it.
+    trackTick: state.playing ? state.tick - (state._countOrigin ?? 0) : 0,
     repeatId: null,
     soundPromptText: "",
     promptText: "",

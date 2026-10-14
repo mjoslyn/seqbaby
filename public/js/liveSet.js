@@ -36,7 +36,7 @@
 
 import { PATTERN_COUNT } from "./constants.js";
 import { normalizeBlocks } from "./arrangement.js";
-import { announceClips } from "./clips.js";
+import { announceClips, seedFromTransport } from "./clips.js";
 import { cloneChance, refreshChanceScale, refreshChanceUI, renderChancePanel } from "./chance.js";
 import { setStatus } from "./dom.js";
 import { refreshEuclidUI, renderEuclidPanel } from "./euclid.js";
@@ -426,6 +426,7 @@ export function mergeSet(s) {
     fresh[i] = true;
     const built = createTrack(trackShellFor(td));
     loadTrackFromData(built, td);
+    seedFromTransport(built);       // at the speed it loaded with, in phase
     return built;
   });
 

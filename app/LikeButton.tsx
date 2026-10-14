@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { setLike } from "@/app/songs/actions";
 import { setPatchLike } from "@/app/patches/actions";
+import { loginHref } from "@/lib/safeNext";
 
 // The heart on a song or patch card: the homepage feed and a profile page.
 //
@@ -102,7 +103,7 @@ export default function LikeButton({
     try {
       const res = await SET_LIKE[kind](songId, next);
       if (res.error === "not signed in") {
-        window.location.href = "/login";
+        window.location.href = loginHref(location.pathname + location.search);
         return;
       }
       if (res.error) throw new Error(res.error);

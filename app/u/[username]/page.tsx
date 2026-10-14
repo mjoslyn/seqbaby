@@ -103,7 +103,7 @@ export default async function ProfilePage({
                 ) : (
                   <span className={styles.repoName}>{named(s.title)}</span>
                 )}
-                {s.remixedFrom || s.forked_from ? (
+                {s.remixedFrom || (s.forked_from && !s.from_template) ? (
                   <div className={styles.repoMeta}>
                     {s.remixedFrom ? (
                       <>
