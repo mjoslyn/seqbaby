@@ -2609,8 +2609,11 @@ roll takes the height.
   step, vim's and the step editor's unit. It is the step's `offsets` entry
   (`off` on every note read from the step, written back by the root), and
   notes are drawn where they play (`xOf`: step plus offset).
-- **A pattern's length is its header's**, not the notes': a note is cut at
-  its pattern's end. The snap (step / ½ beat / beat / bar, on each pattern's own grid),
+- **A pattern's length is its header's**, not the notes'. A note belongs to
+  the pattern its start is in, and its tail may run over the section line
+  (moved or stretched there): the transport plays a step's whole length, so
+  it holds into the next pattern. `readNotes` / `writeNotes` take a `reach`
+  for it (0 elsewhere, which cuts at the end as before). The snap (step / ½ beat / beat / bar, on each pattern's own grid),
   zoom, ghosts, tool, fold and follow are per browser (`seqbaby.piano.v1`), the scroll per
   track per page.
 
