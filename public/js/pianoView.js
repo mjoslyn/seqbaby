@@ -59,7 +59,10 @@
  * keeps the playhead in view, turning the page as it nears the edge; a
  * scroll by hand while playing switches it off, as the arrangement's does.
  *
- * A note is cut at its pattern's end; a pattern's length is its header's,
+ * A note belongs to the pattern its start is in, and may run past that
+ * pattern's end, over the section line (dragged there, or stretched): the
+ * transport plays a step's whole length, so it holds into the next pattern
+ * in chain mode, over the loop's top in repeat. A pattern's length is its header's,
  * and changing it there moves the pattern's chain repeat with it when the
  * two agreed (chain mode counts a pattern's repeat in bars).
  * Every edit is committed on release, so a drag is one undo step (history.js
@@ -227,6 +230,23 @@ function snapG(g, how = "round") {
 }
 /** Where the pattern holding a global step ends. */
 const secEnd = (g) => { const sec = sectionAt(g); return sec ? sec.off + sec.len : totalSteps(); };
+/**
+ * How far a note starting at global step `g` may end: past its pattern's end,
+ * over the section line, to the end of the timeline (at most MAX_LEN long).
+ * The transport plays a step's whole length, so the tail sounds into the
+ * next pattern in chain mode, and over the loop's top in repeat.
+ */
+const noteEnd = (g) => Math.min(totalSteps(), g + MAX_LEN);
+/**
+ * How many steps a note may run past its pattern's end when it is read and
+ * written (rollNotes' `reach`). Not the timeline's end: what is laid out
+ * changes with the song, and a commit rewrites every pattern, so a tail past
+ * the last section must survive an edit somewhere else. Only drawing and the
+ * gestures stop at the timeline (`noteEnd`, `shownLen`).
+ */
+const REACH = MAX_LEN;
+/** A note's length as drawn: no further than the timeline. */
+const shownLen = (n) => Math.max(1, Math.min(n.len, totalSteps() - n.start));
 const lenFor = (t) => lastLen.get(t.id) ?? Math.max(1, Math.min(4, meterOf(t).beat));
 
 export function installPianoView() {
@@ -300,7 +320,7 @@ function render() {
   buildRows();
   buildSections(t);
   // every pattern's notes, at global steps; slot0 / src say where each came from
-  notes = sections.flatMap((sec) => readNotes(t.patterns[sec.slot]).map((n) => ({ ...n, start: n.start + sec.off, slot0: sec.slot })));
+  notes = sections.flatMap((sec) => readNotes(t.patterns[sec.slot], undefined, REACH).map((n) => ({ ...n, start: n.start + sec.off, slot0: sec.slot })));
   const have = new Set(notes.map(key));
   sel = new Set([...sel].filter((k) => have.has(k)));
 
@@ -366,7 +386,7 @@ function render() {
   // chord tones a root plays, drawn under it (not editable: they are the chord's)
   const tones = notes.map((n, i) => (n.root && n.chord ? toneEls(n, i) : "")).join("");
   const noteEls = notes.map((n, i) => {
-    const w = n.len * sw - 1;
+    const w = shownLen(n) * sw - 1;
     const label = w >= 24 && rh >= 11 ? `${midiToName(n.pitch)}${n.chord ? ` ${n.chord}` : ""}` : "";
     const off = fold && !onRow(n.pitch);
     // an inversion lifts the root an octave: its bar is where it is written, not what sounds
@@ -569,7 +589,7 @@ function stampNotes(t, start, len, pitch) {
 function toneEls(n, i) {
   const sw = SW(), rh = RH();
   return tonesOf(n).filter((p) => Math.abs(p - n.pitch) > 1e-6 && p >= LO && p <= HI && (!folded() || onRow(p)))
-    .map((p) => `<div class="sq-pr__tone" data-root="${i}" style="left:${xOf(n)}px;top:${yOf(p)}px;width:${n.len * sw - 1}px;height:${rh}px" title="${midiToName(p)}: a tone of ${midiToName(n.pitch)} ${esc(n.chord)}"></div>`).join("");
+    .map((p) => `<div class="sq-pr__tone" data-root="${i}" style="left:${xOf(n)}px;top:${yOf(p)}px;width:${shownLen(n) * sw - 1}px;height:${rh}px" title="${midiToName(p)}: a tone of ${midiToName(n.pitch)} ${esc(n.chord)}"></div>`).join("");
 }
 
 /** Put the chord mode on the selected roots (off takes their chords away). */
@@ -692,8 +712,8 @@ function auditionChord(t, made, dur = 0.3) {
 
 /**
  * Write a new list of notes (at global steps) back into the track's patterns:
- * each note goes to the pattern its start falls in, cut at that pattern's
- * end. A note that moved between patterns brings its step's fields
+ * each note goes to the pattern its start falls in, its tail free to run
+ * past that pattern's end. A note that moved between patterns brings its step's fields
  * (stepSnapshot, taken before anything is written). Then select `select`
  * (matched by start and pitch after the fold) and repaint.
  */
@@ -707,7 +727,7 @@ function commit(t, list, select = null) {
     if (moved) { local.snap = stepSnapshot(t.patterns[n.slot0], n.src); local.src = null; }
     bySlot.get(sec.slot).push(local);
   }
-  for (const sec of sections) writeNotes(t.patterns[sec.slot], bySlot.get(sec.slot), t.patterns[sec.slot].steps.length);
+  for (const sec of sections) writeNotes(t.patterns[sec.slot], bySlot.get(sec.slot), t.patterns[sec.slot].steps.length, REACH);
   if (select) sel = new Set(select.map(key));
   const last = select?.[select.length - 1];
   if (last && !t.isDrumKit) t.lastEditedNote = last.pitch;
@@ -917,10 +937,10 @@ function startGesture(e) {
     const grouped = sel.has(key(n));
     if (!grouped) { sel = pref.tool === "select" ? new Set([key(n)]) : new Set(); paintSel(); }
     const ids = grouped ? notes.map((x, i) => (sel.has(key(x)) ? i : -1)).filter((i) => i >= 0) : [idx];
-    const right = xOf(n) + n.len * SW();
-    const edge = right - pt.x <= Math.max(4, Math.min(8, n.len * SW() * 0.3));
+    const right = xOf(n) + shownLen(n) * SW();
+    const edge = right - pt.x <= Math.max(4, Math.min(8, shownLen(n) * SW() * 0.3));
     if (edge && !e.shiftKey) {
-      drag = { ...base, kind: "resize", ids, orig: ids.map((i) => ({ ...notes[i] })), grabStart: n.start, grabEnd: n.start + n.len, grabbed: idx, grouped };
+      drag = { ...base, kind: "resize", ids, orig: ids.map((i) => ({ ...notes[i] })), grabStart: n.start, grabEnd: n.start + shownLen(n), grabbed: idx, grouped };
       return;
     }
     drag = { ...base, kind: "move", ids, orig: ids.map((i) => ({ ...notes[i] })), grab: n, copy: e.shiftKey, grouped, dStep: 0, dRow: 0 };
@@ -1034,19 +1054,19 @@ function onPointerMove(e) {
     m.hidden = false;
     sel = new Set(drag.keep);
     for (const n of notes) {
-      const nx1 = xOf(n), nx2 = nx1 + n.len * sw, ny1 = yOf(n.pitch), ny2 = ny1 + RH();
+      const nx1 = xOf(n), nx2 = nx1 + shownLen(n) * sw, ny1 = yOf(n.pitch), ny2 = ny1 + RH();
       if (nx2 > x1 && nx1 < x2 && ny2 > y1 && ny1 < y2) sel.add(key(n));
     }
     paintSel();
     return;
   }
   if (drag.kind === "resize") {
-    const end = Math.min(secEnd(drag.grabStart), Math.max(drag.grabStart + 1, snapG(drag.grabEnd + pt.step - drag.x0)));
+    const end = Math.min(noteEnd(drag.grabStart), Math.max(drag.grabStart + 1, snapG(drag.grabEnd + pt.step - drag.x0)));
     const d = end - drag.grabEnd;
     drag.d = d;
     drag.ids.forEach((i, j) => {
       const o = drag.orig[j];
-      const l = Math.max(1, Math.min(secEnd(o.start) - o.start, o.len + d));
+      const l = Math.max(1, Math.min(noteEnd(o.start) - o.start, o.len + d));
       const el = noteEl(i);
       if (el) el.style.width = `${l * sw - 1}px`;
       drag.field.querySelectorAll(`.sq-pr__tone[data-root="${i}"]`).forEach((tEl) => { tEl.style.width = `${l * sw - 1}px`; });
@@ -1055,8 +1075,10 @@ function onPointerMove(e) {
   }
   if (drag.kind === "move") {
     const minStart = Math.min(...drag.orig.map((o) => o.start));
-    const maxEnd = Math.max(...drag.orig.map((o) => o.start + o.len));
-    const dStep = Math.max(-minStart, Math.min(totalSteps() - maxEnd, snapG(drag.grab.start + pt.step - drag.x0) - drag.grab.start));
+    // only the starts have to stay on the timeline: a tail runs over section
+    // lines, and past the last one it is kept, just not drawn
+    const maxStart = Math.max(...drag.orig.map((o) => o.start));
+    const dStep = Math.max(-minStart, Math.min(totalSteps() - 1 - maxStart, snapG(drag.grab.start + pt.step - drag.x0) - drag.grab.start));
     const dRow = clampRows(drag.orig.map((o) => o.pitch), pt.row - drag.r0);
     if (dRow !== drag.dRow && drag.ids.length <= 4) {
       auditionChord(t, drag.orig.map((o) => ({ ...o, pitch: shiftRows(o.pitch, dRow) })), 0.2);
@@ -1073,8 +1095,10 @@ function onPointerMove(e) {
       const o = drag.orig[j];
       const el = drag.copy ? drag.clones[j] : noteEl(i);
       if (!el) return;
+      const w = `${shownLen({ start: o.start + dStep, len: o.len }) * sw - 1}px`;
       el.style.left = `${xOf(o, o.start + dStep)}px`;
       el.style.top = `${yOf(shiftRows(o.pitch, dRow))}px`;
+      el.style.width = w;
       if (drag.copy || !o.chord) return;
       // its chord tones ride along, by the root's own move
       const dy = yOf(shiftRows(o.pitch, dRow)) - yOf(o.pitch);
@@ -1082,6 +1106,7 @@ function onPointerMove(e) {
         if (tEl._x0 == null) { tEl._x0 = parseFloat(tEl.style.left); tEl._y0 = parseFloat(tEl.style.top); }
         tEl.style.left = `${tEl._x0 + dStep * sw}px`;
         tEl.style.top = `${tEl._y0 + dy}px`;
+        tEl.style.width = w;
       });
     });
   }
@@ -1124,7 +1149,7 @@ function onPointerUp(e) {
     const moved = [];
     d.ids.forEach((i, j) => {
       const o = d.orig[j];
-      list[i] = { ...o, len: Math.max(1, Math.min(secEnd(o.start) - o.start, o.len + d.d)) };
+      list[i] = { ...o, len: Math.max(1, Math.min(noteEnd(o.start) - o.start, o.len + d.d)) };
       moved.push(list[i]);
       if (i === d.grabbed) lastLen.set(t.id, list[i].len);
     });
@@ -1188,9 +1213,9 @@ function onKey(e) {
   else return;
   e.preventDefault();
   const ps = picked();
-  const minS = Math.min(...ps.map((n) => n.start)), maxE = Math.max(...ps.map((n) => n.start + n.len));
+  const minS = Math.min(...ps.map((n) => n.start)), maxS = Math.max(...ps.map((n) => n.start));
   const minP = Math.min(...ps.map((n) => n.pitch)), maxP = Math.max(...ps.map((n) => n.pitch));
-  dS = Math.max(-minS, Math.min(totalSteps() - maxE, dS));
+  dS = Math.max(-minS, Math.min(totalSteps() - 1 - maxS, dS));
   dP = Math.max(LO - minP, Math.min(HI - maxP, dP));
   dRow = clampRows(ps.map((n) => n.pitch), dRow);
   if (!dS && !dP && !dRow) return;

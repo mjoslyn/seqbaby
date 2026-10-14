@@ -23,7 +23,11 @@
  * - The velocity is per step, so a stack takes its root's.
  * - Notes may overlap: a long note keeps its length under a later one (the
  *   transport plays each step's own length; the step grid draws it to the
- *   next note). Only the pattern's end cuts a note.
+ *   next note). Only the pattern's end cuts a note, and only by default:
+ *   `reach` lets a note run that many steps past it (the transport plays a
+ *   step's whole length whatever comes next, so a note held over the end
+ *   sounds into the next pattern, or the loop's top), which is how the piano
+ *   view keeps a note that straddles a section line.
  */
 
 /** Every per-step array a note's step carries (the pattern's own list). */
@@ -59,15 +63,16 @@ const EPS = 1e-6;
  * The notes a pattern plays, roots and extras alike, in step order.
  * @param {Record<string, any[]>} p  a pattern, or a track aliased to one
  * @param {number} [len]  steps to read (the pattern's own length by default)
+ * @param {number} [reach]  how far past `len` a note may run (0: cut at the end)
  * @returns {RollNote[]}
  */
-export function readNotes(p, len = p?.steps?.length ?? 0) {
+export function readNotes(p, len = p?.steps?.length ?? 0, reach = 0) {
   const out = [];
   if (!p?.steps) return out;
   const n = Math.min(len, p.steps.length);
   for (let i = 0; i < n; i++) {
     if (!p.steps[i] || p.notes?.[i] == null) continue;
-    const rootLen = Math.max(1, Math.min(n - i, p.lengths?.[i] || 1));
+    const rootLen = Math.max(1, Math.min(n - i + Math.max(0, reach), p.lengths?.[i] || 1));
     const vel = Number.isFinite(p.velocities?.[i]) ? p.velocities[i] : 0.5;
     const off = Number(p.offsets?.[i]) || 0;
     out.push({ start: i, len: rootLen, pitch: p.notes[i], vel, off, root: true, src: i, chord: p.chords?.[i] || "", cpx: p.complexities?.[i] || 0 });
@@ -91,9 +96,11 @@ export function readNotes(p, len = p?.steps?.length ?? 0) {
  * @param {Record<string, any[]>} p
  * @param {Array<Partial<RollNote> & {start: number, len: number, pitch: number}>} notes
  * @param {number} [len]
+ * @param {number} [reach]  how far past `len` a note may run (0: cut at the end)
  * @returns {RollNote[]} the notes as written (readNotes of the result)
  */
-export function writeNotes(p, notes, len = p.steps.length) {
+export function writeNotes(p, notes, len = p.steps.length, reach = 0) {
+  reach = Math.max(0, reach | 0);
   // What each source step carried, taken before anything is cleared. A note
   // from another pattern brings its own (`snap`, from stepSnapshot).
   const snaps = new Map();
@@ -113,7 +120,7 @@ export function writeNotes(p, notes, len = p.steps.length) {
   for (const raw of notes) {
     const start = Math.round(raw.start);
     if (!(start >= 0 && start < len) || !Number.isFinite(raw.pitch)) continue;
-    const nt = { ...raw, start, len: Math.max(1, Math.min(len - start, Math.round(raw.len) || 1)) };
+    const nt = { ...raw, start, len: Math.max(1, Math.min(len - start + reach, Math.round(raw.len) || 1)) };
     let g = groups.get(start);
     if (!g) groups.set(start, (g = new Map()));
     const key = Math.round(nt.pitch / EPS);
@@ -145,7 +152,7 @@ export function writeNotes(p, notes, len = p.steps.length) {
     if (Array.isArray(p.extraNotes)) p.extraNotes[start] = extras.length ? extras.map((e) => e.pitch) : null;
     if (Array.isArray(p.extraLengths)) p.extraLengths[start] = extras.length ? extras.map((e) => Math.min(rootLen, e.len)) : null;
   });
-  return readNotes(p, len);
+  return readNotes(p, len, reach);
 }
 
 /**

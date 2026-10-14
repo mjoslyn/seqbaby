@@ -129,3 +129,20 @@ test("a note moved from another pattern brings its step's fields", () => {
   assert.equal(b.chords[5], "min");
   assert.equal(b.lengths[5], 2);
 });
+
+test("reach lets a note (and its chord) run past the pattern's end", () => {
+  const p = pattern(8);
+  // cut at the end by default, as before
+  writeNotes(p, [{ start: 6, len: 5, pitch: 60, chord: "maj", root: true }, { start: 6, len: 5, pitch: 72 }]);
+  assert.equal(p.lengths[6], 2);
+  // with reach, the tail holds over the line, extras with it
+  writeNotes(p, [{ start: 6, len: 5, pitch: 60, chord: "maj", root: true }, { start: 6, len: 5, pitch: 72 }], 8, 16);
+  assert.equal(p.lengths[6], 5);
+  assert.deepEqual(p.extraLengths[6], [5]);
+  assert.deepEqual(readNotes(p).map((x) => x.len), [2, 2], "read without reach: cut as drawn before");
+  assert.deepEqual(readNotes(p, 8, 16).map((x) => [x.start, x.len, x.pitch, x.chord]), [[6, 5, 60, "maj"], [6, 5, 72, ""]]);
+  // reach caps it, and a start past the end is still dropped
+  writeNotes(p, [{ start: 6, len: 40, pitch: 60 }, { start: 9, len: 1, pitch: 50 }], 8, 4);
+  assert.equal(p.lengths[6], 6);
+  assert.equal(readNotes(p, 8, 4).length, 1);
+});
