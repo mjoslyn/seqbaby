@@ -2600,8 +2600,7 @@ roll takes the height.
   stroke draws the chord, diatonic when the scale is on. A chord type is the
   root's `chord` and voicing (`cpx`, which `writeNotes` writes for a root
   that carries it), drawn as dashed tones that ride along with the root; an
-  in-key voicing that is no chord type is root plus extras. `apply chord`
-  puts it on the selected roots (chord mode off takes chords away). An
+  in-key voicing that is no chord type is root plus extras. An
   inverted root's bar is drawn faint, since it sounds an octave up. Drum
   kits sit it out.
 - **Nudge** (the `nudge ‹ 0 ›` buttons, alt + ← →): the selected notes' steps

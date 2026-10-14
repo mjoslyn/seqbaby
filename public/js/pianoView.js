@@ -44,8 +44,7 @@
  * draws the chord, in key when the scale is on. A chord type is stored as
  * the root's chord and voicing (the step's, as the step editor sets it) and
  * drawn as dashed tones under the root; an in-key voicing that is no chord
- * type is written as the root plus extras. `apply chord` puts it on the
- * selected notes (or takes their chords off when chord mode is off).
+ * type is written as the root plus extras.
  *
  * `sound` opens the track's own card in a window over the roll: the
  * instrument, the fx, the filter, the mod matrix and the automation lanes.
@@ -389,7 +388,6 @@ function render() {
       <label class="sq-pr__snap" title="where notes land and how far they move, on each pattern's own grid">snap <select data-act="snap">${SNAPS.map(([k, l]) =>
         `<option value="${k}"${pref.snap === k ? " selected" : ""}>${l}</option>`).join("")}</select></label>
       <span class="sq-pr__nudge" title="nudge: move the selected notes off the grid, early or late, by 1/24 of a step (shift-click: a quarter step). 0 puts them back on it. alt + ← → does the same">nudge<button type="button" class="sq-btn--ghost" data-act="nudge-" aria-label="nudge earlier">‹</button><button type="button" class="sq-btn--ghost" data-act="nudge0" aria-label="back on the grid">0</button><button type="button" class="sq-btn--ghost" data-act="nudge+" aria-label="nudge later">›</button></span>
-      <button type="button" class="sq-btn--ghost" data-act="chordsel" title="apply chord: put the chord bar's chord (type and voicing, or in key with the scale on) on the selected notes. With chord mode off it takes their chords away. New notes take the chord bar's chord as they are drawn">apply chord</button>
       <button type="button" class="sq-pr__sound" data-act="sound" title="sound: this track's instrument, effects, filter, modulation and automation lanes, in a window over the roll (its own track card, so every control is the one in the groove view)">sound</button>
       <button type="button" class="sq-pr__loopbtn" data-act="loop" aria-pressed="${looping()}" title="${looping()
         ? `loop: going round${state.patLoop && state.patLoop.end - state.patLoop.start > 1 ? ` patterns ${state.patLoop.start + 1}-${state.patLoop.end}` : " the pattern playing"}. Press for chain, playing through every pattern. Drag across the pattern headers to mark patterns to loop`
@@ -572,26 +570,6 @@ function toneEls(n, i) {
     .map((p) => `<div class="sq-pr__tone" data-root="${i}" style="left:${xOf(n)}px;top:${yOf(p)}px;width:${n.len * sw - 1}px;height:${rh}px" title="${midiToName(p)}: a tone of ${midiToName(n.pitch)} ${esc(n.chord)}"></div>`).join("");
 }
 
-/** Put the chord mode on the selected roots (off takes their chords away). */
-function applyChordToSelection(t) {
-  const picked = notes.filter((n) => sel.has(key(n)) && n.root);
-  if (!picked.length) { setStatus("select notes first: apply chord puts the chord bar's chord on them"); return false; }
-  const list = notes.slice();
-  const out = [];
-  for (const n of picked) {
-    const c = chordFor(t, n.pitch);
-    const i = list.indexOf(n);
-    list[i] = { ...n, pitch: c.root, chord: c.chord, cpx: c.cpx };
-    out.push(list[i]);
-    for (const p of c.extras) list.push({ ...n, pitch: p, root: false, chord: "" });
-  }
-  commit(t, list, out);
-  setStatus(state.kbdChordType && !t.isDrumKit
-    ? `${out.length} note${out.length === 1 ? "" : "s"} made chords`
-    : "chords taken off (chord mode is off)");
-  return true;
-}
-
 // ---- the track's sound, in a modal -------------------------------------------------
 
 let soundModal = null;
@@ -726,7 +704,6 @@ function onClick(e) {
   const t = currentTrack();
   const act = b.dataset.act;
   if (act === "sound") { if (t) openSoundModal(t); return; }
-  if (act === "chordsel") { if (t) applyChordToSelection(t); return; }
   if (act.startsWith("nudge")) {
     if (t) nudgeSelection(t, act === "nudge0" ? 0 : (e.shiftKey ? 6 : 1) * (act === "nudge-" ? -1 : 1), act === "nudge0" ? 0 : null);
     return;
