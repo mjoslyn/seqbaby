@@ -216,7 +216,7 @@ function render() {
     if (i === ap) cls.push("is-active");
     if (i === state.queuedPattern) cls.push("is-queued");
     if (inLoop(i)) cls.push("is-looped");
-    scenes.push(`<button type="button" class="${cls.join(" ")}" data-scene="${i}" title="scene ${i + 1}: every track to pattern ${i + 1}. Double-click to play it now. The + at either edge opens an empty column there">${i + 1}<span class="sq-clips__ins is-left" data-ins="${i}" title="new empty column left of ${i + 1}: the columns from here on move right">+</span><span class="sq-clips__ins is-right" data-ins="${i + 1}" title="new empty column right of ${i + 1}: the columns after it move right">+</span></button>`);
+    scenes.push(`<button type="button" class="${cls.join(" ")}" data-scene="${i}" title="scene ${i + 1}: every track to pattern ${i + 1}, starting the transport if it is stopped (playing, it switches now or at the bar line by the switch setting). Double-click to play it now. The + at either edge opens an empty column there">${i + 1}<span class="sq-clips__ins is-left" data-ins="${i}" title="new empty column left of ${i + 1}: the columns from here on move right">+</span><span class="sq-clips__ins is-right" data-ins="${i + 1}" title="new empty column right of ${i + 1}: the columns after it move right">+</span></button>`);
   }
   // each column's repeat count (state.patternRepeats, the pattern bar's `rep`):
   // the bars chain mode plays it for before moving on
@@ -296,7 +296,14 @@ function onClick(e) {
   const ins = e.target.closest("[data-ins]");
   if (ins) { insertEmptyPattern(Number(ins.dataset.ins)); return; }
   const scene = e.target.closest("[data-scene]");
-  if (scene) { requestPatternSwitch(Number(scene.dataset.scene)); return; }
+  if (scene) {
+    // stopped: start the transport on this scene (its own play button, as the
+    // piano view's pattern ▶ does); playing: switch now or at the bar line
+    const n = Number(scene.dataset.scene);
+    if (state.playing) requestPatternSwitch(n);
+    else { switchPattern(n); document.getElementById("play")?.click(); }
+    return;
+  }
   const act = e.target.closest("[data-act]")?.dataset.act;
   if (act === "zoom+" || act === "zoom-") { setZoom(zoom + (act === "zoom+" ? 1 : -1)); return; }
   if (act === "rec") { setArrangeRecord(!state.arrRecord); setStatus(state.arrRecord ? "recording the arrangement: launch clips, each bar is written as it plays" : "arrangement record off"); return; }

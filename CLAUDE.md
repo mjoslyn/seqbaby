@@ -2443,8 +2443,10 @@ block   t.arrangement[i]    ─── { slot, start, bars }: a clip at a bar, fo
   (drawn with the pattern bar's own icons, `MODE_UI` / `SWITCH_UI` in
   patternBar.js; the switch `.click()`s the bar's button so a queued switch
   commits there too) and `rec`, since the pattern bar is hidden there; a
-  double-click on a scene number plays that scene now and starts the
-  transport if it is stopped. The transport announces `seqbaby:transport`
+  scene number starts the transport on that scene when it is stopped (the
+  transport's own play button, as the piano view's pattern ▶ does) and
+  switches to it now or at the bar line while playing; a double-click plays
+  it now whatever the switch setting. The transport announces `seqbaby:transport`
   on start and stop so the views repaint. The selected track is the
   keyboard's (`setActiveTrack`). A view repaints by `innerHTML` on a SIBLING
   of the detail, never on the detail or their parent, which would take the
