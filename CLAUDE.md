@@ -2536,7 +2536,7 @@ index drew the head at the next pattern's end for a step.
   transport's own play button) and is `requestPatternSwitch` while playing
   (every track, now or at the bar line by the switch setting), as the pattern bar and the clip view's scene row
   are, so the four views always show and play the same pattern. A
-  double-click on a note in another pattern `switchPattern`s there at once,
+  right-click on a note in another pattern `switchPattern`s there at once,
   since the step editor edits the track's own slot.
 - **Loop is repeat mode, in every view.** The piano view's loop / chain
   toggle (the pattern bar's own icons, `MODE_UI`, and the mode's name) is
@@ -2563,7 +2563,7 @@ stalks underneath. No track card under it, unlike clips and arrange: the
 roll takes the height.
 
 - **The track is `state.activeTrackId`**, so the computer keys play what is
-  shown. A double-click on a note in a pattern the track is not on launches
+  shown. A right-click on a note in a pattern the track is not on launches
   that pattern first, since the step editor edits the track's own slot.
 - **Every edit is read, change, fold.** `readNotes` flattens the steps
   (roots and extras) into `{start, len, pitch, vel, root, src, chord}`; the
@@ -2583,9 +2583,10 @@ roll takes the height.
 - **Tools are toolbar buttons, not letters**: FL's P / E / B are the computer
   keyboard's piano keys here. draw (click places a note of the last length
   used and drags it into place; drag moves, the right edge resizes, shift
-  copies), paint, erase (right-click / right-drag in any tool), select
-  (box, shift adds; ctrl/⌘-drag boxes in any tool). Double-click a note: the
-  step editor. With a selection: delete, ↑ ↓ (shift an octave), ← → (by the
+  copies), paint, erase (right-drag from empty space in any tool), select
+  (box, shift adds; ctrl/⌘-drag boxes in any tool). Double-click a note:
+  delete it; right-click a note: the step editor (the groove view's roll
+  does the same). With a selection: delete, ↑ ↓ (shift an octave), ← → (by the
   snap, shift a bar), ctrl/⌘-B duplicate after itself; ctrl/⌘-A all,
   escape lets go. Skipped while vim is in insert or command mode.
 - **scale only** (`pref.fold`, needs the scale on) folds the roll to the

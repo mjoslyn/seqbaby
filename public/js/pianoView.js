@@ -25,9 +25,10 @@
  *           drag a note: move it (a selected note moves the selection)
  *           drag its right edge: resize   shift-drag: copy
  *   paint   drag across: a note every length, at the row under the pointer
- *   erase   click or sweep: delete (right-click and right-drag, any tool)
+ *   erase   click or sweep: delete (right-drag from empty space, any tool)
  *   select  drag: a box; click a note: select it (shift adds)
- *   any     ctrl/⌘-drag: a box   double-click a note: its step editor
+ *   any     ctrl/⌘-drag: a box   double-click a note: delete it
+ *           right-click a note: its step editor
  * Keys, with nothing focused: delete removes the selection, ↑ ↓ transpose it
  * (shift: an octave), ← → move it by the snap (shift: a bar), ctrl/⌘-A
  * selects all, ctrl/⌘-B duplicates the selection after itself, alt + ← →
@@ -92,9 +93,9 @@ const ZY = [9, 12, 15, 19];           // px per row
 const MAX_LEN = 128;
 const BLACK = new Set([1, 3, 6, 8, 10]);
 const TOOLS = [
-  ["draw", "✎ draw", "draw: click to place a note of the last length you used and drag it into place; drag a note to move it, its right edge to resize; shift-drag copies; double-click opens its step editor"],
+  ["draw", "✎ draw", "draw: click to place a note of the last length you used and drag it into place; drag a note to move it, its right edge to resize; shift-drag copies; double-click deletes a note, right-click opens its step editor"],
   ["paint", "▤ paint", "paint: drag across to lay a note every length, at the row under the pointer"],
-  ["erase", "✕ erase", "erase: click or sweep across notes to delete them (right-click and right-drag delete with any tool)"],
+  ["erase", "✕ erase", "erase: click or sweep across notes to delete them (right-drag from empty space does too, with any tool)"],
   ["select", "⬚ select", "select: drag a box around notes, click one to pick it (shift adds); drag the selection to move it. The arrows move it, delete removes it"],
 ];
 const SNAPS = [["step", "step"], ["half", "½ beat"], ["beat", "beat"], ["bar", "bar"]];
@@ -822,28 +823,43 @@ const noteEl = (i) => root.querySelector(`.sq-pr__note[data-i="${i}"]`);
 function onPointerDown(e) {
   const t = currentTrack();
   if (!t || drag) return;
-  // A double-click on a note opens its step editor. Timed here rather than
-  // left to dblclick, which the pointer capture below retargets to the view.
   const nEl = e.target.closest(".sq-pr__note");
-  const n = nEl ? notes[Number(nEl.dataset.i)] : null;
+  const idx = nEl ? Number(nEl.dataset.i) : -1;
+  const n = idx >= 0 ? notes[idx] : null;
+  // A right-click on a note opens its step editor (the field's contextmenu
+  // is suppressed, so the browser's menu stays shut).
+  if (n && e.button === 2) {
+    e.preventDefault();
+    lastDown = { at: 0, key: "" };
+    openNoteEditor(t, n, nEl);
+    return;
+  }
+  // A double-click on a note deletes it. Timed here rather than left to
+  // dblclick, which the pointer capture below retargets to the view.
   const k = n && e.button === 0 ? key(n) : "";
   const now = performance.now();
   if (k && k === lastDown.key && now - lastDown.at < 350) {
     lastDown = { at: 0, key: "" };
     e.preventDefault();
-    // the step editor edits the pattern the track is on, so a note in
-    // another pattern puts the track there first
-    const sec = sectionAt(n.start);
-    if (sec && sec.slot !== trackSlot(t)) {
-      switchPattern(sec.slot);
-      setStatus(`pattern ${sec.slot + 1}, to edit its step`);
-    }
-    if (sec) openStepEditor(t, n.start - sec.off, nEl);
+    sel.delete(k);
+    commit(t, notes.filter((_, i) => i !== idx));
     return;
   }
   lastDown = { at: now, key: k };
   startGesture(e);
   if (drag) try { root.setPointerCapture(e.pointerId); } catch {}
+}
+
+// The step editor edits the pattern the track is on, so a note in another
+// pattern puts the track there first.
+function openNoteEditor(t, n, nEl) {
+  const sec = sectionAt(n.start);
+  if (!sec) return;
+  if (sec.slot !== trackSlot(t)) {
+    switchPattern(sec.slot);
+    setStatus(`pattern ${sec.slot + 1}, to edit its step`);
+  }
+  openStepEditor(t, n.start - sec.off, nEl);
 }
 
 function startGesture(e) {
