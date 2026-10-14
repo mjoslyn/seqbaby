@@ -34,8 +34,10 @@ export function renderStepGrid(t) {
   while (i < total) {
     const gate = stepGateAt(t, i);
     if (gate) {
+      // Drawn to the next note at most, since the grid has one cell per
+      // step. The written length is left alone: a note may overlap the next
+      // one (the piano view draws them that way) and plays its whole length.
       const span = live ? gate.span : Math.max(1, Math.min(t.lengths[i] || 1, maxLengthAt(t, i)));
-      if (!live) t.lengths[i] = span;
       // Visually split a held note that crosses row boundaries. Each chunk
       // points at the same data anchor (data-idx=i); only the first chunk
       // renders the note-name label.

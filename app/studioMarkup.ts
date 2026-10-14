@@ -575,6 +575,7 @@ export const STUDIO_BODY = String.raw`
       <button type="button" data-view="groove" aria-pressed="true" title="groove: every track's step grid (tab cycles the views)">groove</button>
       <button type="button" data-view="clips" aria-pressed="false" title="clips: the 32 patterns of every track as clips, launched one track at a time">clips</button>
       <button type="button" data-view="arrange" aria-pressed="false" title="arrange: a timeline of pattern blocks per track">arrange</button>
+      <button type="button" data-view="piano" aria-pressed="false" title="piano: the selected track's pattern as a full piano roll, the other tracks' notes behind it">piano</button>
     </div>
     <!-- The code drawer (codePanel.js): Strudel live coding, run into
          the song without stopping the transport. -->
@@ -612,6 +613,7 @@ export const STUDIO_BODY = String.raw`
       <label class="sq-scale__toggle" title="lock to a scale. The keyboard's white keys (q w e r t y u i o p [ ]) play its degrees and the black keys go silent"><input id="scale-on" type="checkbox" /> scale</label>
       <select id="scale-root"></select>
       <select id="scale-mode"></select>
+      <label id="scale-fold-wrap" class="sq-scale__toggle" title="scale only: fold the piano roll to the scale's rows, so every note drawn is in key and dragging up or down moves by scale degree. Switch the scale on to use it"><input id="scale-fold" type="checkbox" /> scale only</label>
       <label id="scale-fit-wrap" class="sq-scale__toggle" title="only list the roots and scales that hold every note the song's instruments play (drum kits left out)"><input id="scale-fit" type="checkbox" /> <span id="scale-fit-lbl">fits song</span></label>
       <button id="note-colors" class="sq-btn--ghost sq-icon-btn" aria-pressed="false" aria-label="note colors" title="toggle diatonic note coloring on the piano roll + step grid"></button>
     </div>
@@ -716,6 +718,7 @@ export const STUDIO_BODY = String.raw`
        drawn into when open; views.js shows one of the three. -->
   <section id="clips" class="sq-clips" hidden aria-label="clips"></section>
   <section id="arrange" class="sq-arrange" hidden aria-label="arrangement"></section>
+  <section id="piano" class="sq-piano" hidden aria-label="piano roll"></section>
   <div class="sq-add-track-row">
     <button id="add-track" class="sq-btn--ghost">+ add track</button>
     <button id="add-bus" class="sq-btn--ghost" title="add an fx bus: a track with no instrument that others are sent into, so one filter, one fx rack, one mod matrix and one set of automation lanes shape all of them">+ add fx bus</button>

@@ -4,8 +4,8 @@
  * which bar, for how long — drawn to a bar width you can zoom. Arrange mode
  * (`patternMode === "arrange"`) is what plays it, and the transport's play
  * goes there on its own in this view (and comes to it at the next bar line
- * when the view is opened while playing: transport.js); `play` here is the
- * transport's own button. `rec` arms the recorder so clip launches in the
+ * when the view is opened while playing: transport.js); the transport's play
+ * is the only one. `rec` arms the recorder so clip launches in the
  * other views write blocks here.
  *
  * Editing is pointer events on the lanes: drag a block to move it (snapped to
@@ -137,7 +137,7 @@ export function installArrangeView() {
   root.addEventListener("scroll", onScroll, true);   // scroll does not bubble: caught on the way down
   root.addEventListener("wheel", onWheel, { passive: false });
   window.addEventListener("keydown", onKey);
-  onViewChange((v) => { if (v === "arrange") { render(); headLoop(); } else { stopHead(); detail.release(); } });
+  onViewChange((v) => { if (v === "arrange") { seedFromPatterns(); render(); headLoop(); } else { stopHead(); detail.release(); } });
   for (const ev of ["seqbaby:clips", "seqbaby:songedited", "seqbaby:setapplied", "seqbaby:newset", "seqbaby:transport"]) {
     window.addEventListener(ev, scheduleArrangePaint);
   }
@@ -222,7 +222,6 @@ function render({ scrollX } = {}) {
   }).join("");
   grid.innerHTML = `
     <div class="sq-arr__bar-row">
-      <button type="button" class="sq-arr__play${state.playing ? " is-playing" : ""}" data-act="play" title="${state.playing ? "stop the transport" : "play the arrangement: each track follows its blocks"}">${state.playing ? "stop" : "play"}</button>
       <button type="button" class="sq-arr__rec" data-act="rec" aria-pressed="${!!state.arrRecord}" title="record: play plays the clips while this is armed, and each bar is written here as it plays; over an existing arrangement you are asked whether the recording replaces it or goes after it">● rec</button>
       <button type="button" class="sq-btn--ghost" data-act="fromchain" title="lay out the chain as blocks on every track: the non-empty patterns in order, each for its repeat count">from chain</button>
       <button type="button" class="sq-btn--ghost" data-act="clear" title="remove every block">clear</button>
@@ -235,6 +234,9 @@ function render({ scrollX } = {}) {
       <div class="sq-arr__grid" style="--arr-bar-w:${w}px">
         <div class="sq-arr__ruler"><div class="sq-arr__strip"></div><div class="sq-arr__lane sq-arr__lane--ruler" style="width:${bars * w}px" title="click: play starts here. Drag across bars: loop them">${loopR ? `<div class="sq-arr__loop${state.arrLoopOn ? " is-on" : ""}" style="left:${loopR.start * w}px;width:${(loopR.end - loopR.start) * w}px"></div>` : ""}${ruler}</div></div>
         <div class="sq-arr__rows">${trackRows}</div>
+        ${!state.tracks.some((t) => t.arrangement?.length) && !state.tracks.some((t) => t._take?.length) ? `<div class="sq-arr__empty">${anyPatterns()
+          ? `no arrangement yet. <button type="button" data-act="seed">lay out the patterns</button> puts them in order, each track's blocks only where it has notes`
+          : "no arrangement yet: write some patterns, then lay them out here, or drag across a lane to draw a block"}</div>` : ""}
         <div class="sq-arr__end" style="left:${STRIP_W + len * w}px" title="the arrangement loops here"></div>
         <div class="sq-arr__start" style="left:${STRIP_W + state.arrStartBar * w}px" title="play starts here (click the ruler to move it)"></div>
         ${state.arrLoopOn && loopR ? `<div class="sq-arr__loop-shade" style="left:${STRIP_W + loopR.start * w}px;width:${(loopR.end - loopR.start) * w}px"></div>` : ""}
@@ -316,7 +318,6 @@ function onClick(e) {
     return;
   }
   const act = e.target.closest("[data-act]")?.dataset.act;
-  if (act === "play") { document.getElementById("play")?.click(); return; }
   if (act === "rec") { setArrangeRecord(!state.arrRecord); scheduleArrangePaint(); return; }
   if (act === "zoom+" || act === "zoom-") { setZoom(zoom + (act === "zoom+" ? 1 : -1)); return; }
   if (act === "follow") {
@@ -328,6 +329,7 @@ function onClick(e) {
   if (act === "loop") { toggleLoop(); return; }
   if (act === "fromchain") { fromChain(); return; }
   if (act === "clear") { clearAll(); return; }
+  if (act === "seed") { seedFromPatterns(true); return; }
   const row = e.target.closest(".sq-arr__row");
   const t = row && trackById(row.dataset.trackId);
   if (!t) return;
@@ -359,6 +361,30 @@ function toggleLoop() {
     setStatus(`looping bars ${b.start + 1}-${b.start + b.bars}`);
   }
   render();
+}
+
+const anyPatterns = () => { for (let i = 0; i < PATTERN_COUNT; i++) if (isPatternNonEmpty(i)) return true; return false; };
+
+/**
+ * An empty arrangement shows what the sequencer has: the non-empty patterns
+ * in order, each for its chain repeat (chainToBlocks, as `from chain` lays
+ * them), every track's blocks only where that track has notes, so the view
+ * mirrors the patterns instead of opening blank. Done when the view is
+ * opened by hand (a click or Tab, so history banks it as one step with the
+ * interaction) or by the empty view's own button; not on a load or at boot,
+ * where writing the song would mark a song just opened as edited.
+ */
+function seedFromPatterns(force = false) {
+  if (state.tracks.some((t) => t.arrangement?.length) || state.tracks.some((t) => t._take?.length)) return;
+  if (!force && !state.ready && !state.tracks.length) return;
+  const slots = [];
+  for (let i = 0; i < PATTERN_COUNT; i++) if (isPatternNonEmpty(i)) slots.push(i);
+  if (!slots.length) return;
+  const blocks = chainToBlocks(state.patternRepeats, slots);
+  for (const t of rows()) t.arrangement = blocks.filter((b) => t.patterns?.[b.slot]?.steps?.some(Boolean)).map((b) => ({ ...b }));
+  sel = null;
+  if (force) commit(`laid out ${slots.length} pattern${slots.length === 1 ? "" : "s"} as the arrangement`);
+  else { announceClips(); setStatus(`laid out the ${slots.length} pattern${slots.length === 1 ? "" : "s"} as the arrangement (undo takes it back)`); }
 }
 
 async function fromChain() {

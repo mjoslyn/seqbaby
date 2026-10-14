@@ -27,6 +27,11 @@ const HUES = [[35, "hsl(35 85% 58%)"], [232, "hsl(232 70% 68%)"], [297, "hsl(297
 const trackById = (id) => state.tracks.find((t) => String(t.id) === String(id));
 const rows = () => state.tracks.filter((t) => t.engineKey !== "bus");
 
+/** A track's hue and colour, as its row in the views wears it. @returns {[number, string]} */
+export function trackHue(t) {
+  return HUES[Math.max(0, rows().indexOf(t)) % HUES.length];
+}
+
 /** A track's card goes back to its place in #tracks, by state.tracks order. */
 export function restoreTrackCard(t) {
   const host = document.getElementById("tracks");
@@ -85,7 +90,7 @@ export function makeTrackDetail(container, onChange) {
     if (!t?.el) { title.textContent = ""; el.hidden = true; return null; }
     el.hidden = false;
     if (t.el.parentElement !== el) el.appendChild(t.el);
-    const [hue, color] = HUES[rows().indexOf(t) % HUES.length] || HUES[0];
+    const [hue, color] = trackHue(t);
     el.style.setProperty("--track-hue", String(hue));
     el.style.setProperty("--track-color", color);
     title.textContent = `${t.name || "track"} · pattern ${trackSlot(t) + 1}${t._clipOff ? " (stopped)" : ""}`;

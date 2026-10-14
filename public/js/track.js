@@ -563,6 +563,15 @@ export function applyKbdArpToStep(t, idx, hasChord) {
  */
 export function startNote(t, anchor, noteHint = null) {
   clearRange(t, anchor, anchor, -1);
+  // A note started under an earlier one ends that one here, which is what the
+  // step grid draws. (The step grid used to do this by writing its drawn
+  // length back on every render; the piano view lets notes overlap, so the
+  // trim is the step editors' own now.)
+  for (let j = anchor - 1; j >= 0; j--) {
+    if (!t.steps[j]) continue;
+    if (j + Math.max(1, t.lengths[j] || 1) > anchor) t.lengths[j] = anchor - j;
+    break;
+  }
   t.steps[anchor] = 1;
   t.lengths[anchor] = 1;
   if (t.notes[anchor] == null) {

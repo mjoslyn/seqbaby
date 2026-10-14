@@ -56,7 +56,7 @@ import { announceClips, requestClipLaunch, setArrangeRecord, stopClip } from "./
 import { MODE_UI, SWITCH_UI, insertEmptyPattern, setPatternMode } from "./patternBar.js";
 import { patternSvg, svgUrl } from "./patternPicture.js";
 import { patternLocked } from "./patternSound.js";
-import { isPatternNonEmpty, requestPatternSwitch, state, switchPattern, trackSlot } from "./state.js";
+import { inLoop, isPatternNonEmpty, requestPatternSwitch, state, switchPattern, trackSlot } from "./state.js";
 import { extendPatternByDuplicate, truncatePattern, writePatternOnto } from "./track.js";
 import { patternMeter, stepsPerBarForMeter } from "./meter.js";
 import { makeTrackDetail } from "./trackDetail.js";
@@ -215,7 +215,8 @@ function render() {
     if (isPatternNonEmpty(i)) cls.push("is-filled");
     if (i === ap) cls.push("is-active");
     if (i === state.queuedPattern) cls.push("is-queued");
-    scenes.push(`<button type="button" class="${cls.join(" ")}" data-scene="${i}" title="scene ${i + 1}: every track to pattern ${i + 1}. Double-click to play it now. The + at either edge opens an empty column there">${i + 1}<span class="sq-clips__ins is-left" data-ins="${i}" title="new empty column left of ${i + 1}: the columns from here on move right">+</span><span class="sq-clips__ins is-right" data-ins="${i + 1}" title="new empty column right of ${i + 1}: the columns after it move right">+</span></button>`);
+    if (inLoop(i)) cls.push("is-looped");
+    scenes.push(`<button type="button" class="${cls.join(" ")}" data-scene="${i}" title="scene ${i + 1}: every track to pattern ${i + 1}, starting the transport if it is stopped (playing, it switches now or at the bar line by the switch setting). Double-click to play it now. The + at either edge opens an empty column there">${i + 1}<span class="sq-clips__ins is-left" data-ins="${i}" title="new empty column left of ${i + 1}: the columns from here on move right">+</span><span class="sq-clips__ins is-right" data-ins="${i + 1}" title="new empty column right of ${i + 1}: the columns after it move right">+</span></button>`);
   }
   // each column's repeat count (state.patternRepeats, the pattern bar's `rep`):
   // the bars chain mode plays it for before moving on
@@ -266,7 +267,6 @@ function render() {
   grid.style.setProperty("--clip-h", `${rowH}px`);
   grid.innerHTML = `
     <div class="sq-clips__bar">
-      <button type="button" class="sq-clips__play${state.playing ? " is-playing" : ""}" data-act="play" title="${state.playing ? "stop the transport" : "play"}">${state.playing ? "stop" : "play"}</button>
       <button type="button" class="sq-clips__mode sq-btn--ghost sq-icon-btn" data-act="mode" aria-pressed="${mode !== "repeat"}" title="${MODE_UI[mode].title}">${MODE_UI[mode].icon}</button>
       <button type="button" class="sq-clips__switch sq-btn--ghost sq-icon-btn" data-act="switch" aria-pressed="${state.patternSwitchMode === "finish"}" title="${SWITCH_UI[state.patternSwitchMode === "finish" ? "finish" : "immediate"].title}">${SWITCH_UI[state.patternSwitchMode === "finish" ? "finish" : "immediate"].icon}</button>
       <button type="button" class="sq-clips__rec" data-act="rec" aria-pressed="${!!state.arrRecord}" title="record: write the clips you launch into the arrangement, bar by bar; over an existing arrangement you are asked whether the recording replaces it or goes after it">● rec</button>
@@ -296,12 +296,18 @@ function onClick(e) {
   const ins = e.target.closest("[data-ins]");
   if (ins) { insertEmptyPattern(Number(ins.dataset.ins)); return; }
   const scene = e.target.closest("[data-scene]");
-  if (scene) { requestPatternSwitch(Number(scene.dataset.scene)); return; }
+  if (scene) {
+    // stopped: start the transport on this scene (its own play button, as the
+    // piano view's pattern ▶ does); playing: switch now or at the bar line
+    const n = Number(scene.dataset.scene);
+    if (state.playing) requestPatternSwitch(n);
+    else { switchPattern(n); document.getElementById("play")?.click(); }
+    return;
+  }
   const act = e.target.closest("[data-act]")?.dataset.act;
   if (act === "zoom+" || act === "zoom-") { setZoom(zoom + (act === "zoom+" ? 1 : -1)); return; }
   if (act === "rec") { setArrangeRecord(!state.arrRecord); setStatus(state.arrRecord ? "recording the arrangement: launch clips, each bar is written as it plays" : "arrangement record off"); return; }
   // the transport's own button, so a jam's shared start goes the same way
-  if (act === "play") { document.getElementById("play")?.click(); return; }
   if (act === "mode") { setPatternMode(state.patternMode === "repeat" ? "chain" : "repeat"); announceClips(); return; }
   // the pattern bar's own switch button, so flipping to "now" commits a queued switch there too
   if (act === "switch") { document.getElementById("pattern-switch")?.click(); announceClips(); return; }

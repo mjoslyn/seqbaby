@@ -16,7 +16,7 @@ env / fx / eq / comp / mod / automation per track.
   `public/woscillators.js` →
   `public/js/main.js` (ES module). `middleware.ts` refreshes the Supabase
   session on every request *except* static engine assets.
-- **Engine**: ~85 dependency-free vanilla ES modules in `public/js/`. No
+- **Engine**: ~87 dependency-free vanilla ES modules in `public/js/`. No
   bundler — edit, reload. `window.seqbaby` (from `appApi.js`) exposes `state`
   and serialize/apply hooks to the React shell (typed in `app/seqbaby.d.ts`).
 - **Accounts + data**: Supabase (Postgres + Auth + RLS). Tables: `profiles`,
@@ -211,6 +211,11 @@ env / fx / eq / comp / mod / automation per track.
   (cuts what it lands on), `writeBar` (the recorder), `remapSlots`,
   `chainToBlocks`. Tested in `test/arrangement.test.js`; songBuilder.js
   validates an agent's blocks through it.
+- `pianoView.js` / `rollNotes.js` — the piano view: one track's pattern as a
+  full-height, FL Studio style piano roll (the fourth view). `rollNotes.js`
+  reads a pattern's step arrays as a free list of notes and folds a list
+  back, **no imports**, tested in `test/rollNotes.test.js`. See the piano
+  view section.
 - `patternPicture.js` — a pattern as a picture (`patternSvg`): one pass of
   its notes, pitch against time, as an SVG the clip cells and the
   arrangement's blocks wear as a CSS mask. **No imports**; tested in
@@ -361,7 +366,7 @@ npm test               # node --test: the pure modules (session format, chance g
                        #   song previews, grid avatars, the songs and people explorers,
                        #   the Strudel bridge, the reverb, the filter models, the guitar, the contagion,
                        #   the vox and its phonetic reader, the lancet, the halo, the prism, the repeat,
-                       #   the ladder, the oracle, the arrangement)
+                       #   the ladder, the oracle, the arrangement, the piano view's notes)
 npm run mcp            # the MCP server on stdio (mcp/server.mjs) — an agent writes songs
 npm run test:rls       # RLS policy tests — builds a throwaway Postgres in docker
 ```
@@ -2237,7 +2242,9 @@ Single `Tone.getTransport().scheduleRepeat` at `"16n"`. Each callback, per track
 4. Visuals: `Tone.Draw.schedule` at `time + visualOutputLatency()` (playhead +
    beat indicator). Metronome fires on quarters when enabled.
 5. Bar boundaries: manual-queue commit (`patternSwitchMode === "finish"`) and
-   chain-mode advance honoring `patternRepeats` / `patternMeters`. A bar is
+   chain-mode advance honoring `patternRepeats` / `patternMeters` (to
+   `nextChainPattern`: the next non-empty pattern, or the next slot of the
+   piano view's loop of patterns while that is on). A bar is
    the ACTIVE pattern's meter in sixteenths (`state.barTick` counts into it,
    wrapping at `stepsPerBarForMeter`), never a fixed 16: a fixed 16 cut a
    chained 7/4 pattern off after four beats, so its last 12 steps never
@@ -2369,9 +2376,9 @@ block   t.arrangement[i]    ─── { slot, start, bars }: a clip at a bar, fo
   WHILE playing raises `state._viewSwitched` (views.js) and the same rule
   runs at the next bar line, seeding the arrangement from the start marker
   when it lands in arrange mode: a flag rather than a mode write at the
-  switch, so a jam peer's mode is never fought over. The arrangement view's
-  `play` is the transport's own button, as the clip view's is; there is no
-  mode toggle in either. The mode is the song's, so a jam hears the
+  switch, so a jam peer's mode is never fought over. No view has a play
+  button of its own: the transport's is the one for every view, and there
+  is no mode toggle in either. The mode is the song's, so a jam hears the
   change as any edit.
 - **A loop section** (`state.arrLoop` `{start, end}`, end exclusive, and
   `state.arrLoopOn`; neither saved, like the start marker): dragged across
@@ -2432,15 +2439,15 @@ block   t.arrangement[i]    ─── { slot, start, bars }: a clip at a bar, fo
   clip (the track stops, as its ■ does; stopped, that square is a ▶ that
   plays the clip again through `requestClipLaunch`, so finish mode waits
   for the bar), a name selects alone; in the arrangement a block or a name
-  selects. The clip view's toolbar carries
-  `play` (it `.click()`s the transport's own button, so a jam's shared start
-  goes the same way), the repeat / chain toggle and the now / finish switch
+  selects. The clip view's toolbar carries the repeat / chain toggle and the now / finish switch
   (drawn with the pattern bar's own icons, `MODE_UI` / `SWITCH_UI` in
   patternBar.js; the switch `.click()`s the bar's button so a queued switch
   commits there too) and `rec`, since the pattern bar is hidden there; a
-  double-click on a scene number plays that scene now and starts the
-  transport if it is stopped. The transport announces `seqbaby:transport`
-  on start and stop so the views' play buttons follow. The selected track is the
+  scene number starts the transport on that scene when it is stopped (the
+  transport's own play button, as the piano view's pattern ▶ does) and
+  switches to it now or at the bar line while playing; a double-click plays
+  it now whatever the switch setting. The transport announces `seqbaby:transport`
+  on start and stop so the views repaint. The selected track is the
   keyboard's (`setActiveTrack`). A view repaints by `innerHTML` on a SIBLING
   of the detail, never on the detail or their parent, which would take the
   card out of the document; `sync` re-seats the card after every paint
@@ -2477,7 +2484,11 @@ block   t.arrangement[i]    ─── { slot, start, bars }: a clip at a bar, fo
   arrangement.js, so a drag that comes back where it started changes
   nothing; a pointerup / keyup is what history watches, so every edit is one
   undo step without the view knowing. `from chain` is `chainToBlocks` on
-  every track. A scene number's edges carry a `+` on hover: a new empty
+  every track. **An empty arrangement lays itself out**: opening the view by
+  hand with no blocks (and no take) runs `seedFromPatterns`, every non-empty
+  pattern in order at its repeat count, each track's blocks only where it has
+  notes, one undo step with the click; never on a load, which would mark the
+  song edited. The empty view's `lay out the patterns` button does the same. A scene number's edges carry a `+` on hover: a new empty
   column there (`insertEmptyPattern`, patternBar.js). The bank is a fixed
   32, so the column is a FREE slot (no steps, no arrangement block) moved in
   with `movePattern`, so slots, queues and blocks renumber: the farthest free
@@ -2501,6 +2512,107 @@ block   t.arrangement[i]    ─── { slot, start, bars }: a clip at a bar, fo
   the ruler's meter and leaves the mode alone.
 - Not shared in a jam: which clip each peer has launched, like play / stop and
   the scene. The blocks are the song's and travel.
+
+## The piano view (`pianoView.js` + `rollNotes.js`)
+
+The fourth view (`groove | clips | arrange | piano`, Tab cycles all four,
+desktop only like the other two): the keyboard track's patterns as a piano
+roll in the manner of FL Studio's, every pattern the song uses laid end to
+end (`sections`: slot 1 up to the last slot any track has notes in, or the
+one this track is on, plus one empty to draw into), each with a header in
+the ruler (▶ launches it on this track, its length, − / + a bar, x2), its own
+meter's grid, and the other tracks' notes for the SAME pattern as ghosts.
+Notes are held at global steps (`start` plus the section's `off`); `commit`
+puts each back in the pattern its start falls in, cut at that pattern's end,
+and a note that crossed a section line brings its step's fields as a `snap`
+(`stepSnapshot`, rollNotes.js, taken before any pattern is written). The
+playhead runs in the section of the pattern being HEARD (`t._nowSlot`,
+written with `_nowIdx` by paintTrackNow from the slot the step was scheduled
+in): a bar line switches a lookahead early, and the new slot with the old
+index drew the head at the next pattern's end for a step.
+
+- **The patterns are the sequencer's: switching one switches the scene.** A
+  header's ▶ starts the transport on that pattern when it is stopped (the
+  transport's own play button) and is `requestPatternSwitch` while playing
+  (every track, now or at the bar line by the switch setting), as the pattern bar and the clip view's scene row
+  are, so the four views always show and play the same pattern. A
+  right-click on a note in another pattern `switchPattern`s there at once,
+  since the step editor edits the track's own slot.
+- **Loop is repeat mode, in every view.** The piano view's loop / chain
+  toggle (the pattern bar's own icons, `MODE_UI`, and the mode's name) is
+  the pattern mode: lit is `repeat`, off is `chain` (through every pattern),
+  so it, the pattern bar's mode button and the clip view's toggle always say
+  the same thing (the mode is the song's). The range (`state.patLoop`
+  `{start, end}`, end exclusive, not saved) is dragged across the headers;
+  repeat mode plays it round (`loopRange` / `nextChainPattern`, state.js:
+  the slot after the scene inside it, wrapping, every slot in it empty or
+  not) while the scene is inside it, and a scene picked outside it by hand
+  just repeats. Turning the loop on with the scene outside takes it in. The
+  slots going round are marked `is-looped` on the pattern bar and the clip
+  view's scene row (`inLoop`). Chain mode counts a pattern's repeat in BARS, so a
+  header's − / + / x2 moves `patternRepeats[slot]` with the length when the
+  two agreed, or a two-bar pattern would play its first bar only.
+- **`follow`** (per browser, on by default) turns the page when the playhead
+  nears the right edge; a sideways scroll the view did not make, while
+  playing, switches it off (`autoScroll`), as the arrangement's does. A sticky keyboard down the left (click or
+drag down it to hear the track, a band on it marking what the computer keys
+q..] play, named in the corner, moved by z / x through `seqbaby:kbdoctave`), a bar ruler across the top, the notes as
+bars, the other melodic tracks' notes faint behind them (ghosts, tiled as each
+loops, scaled by speed), a root's chord tones dashed under it, and velocity
+stalks underneath. No track card under it, unlike clips and arrange: the
+roll takes the height.
+
+- **The track is `state.activeTrackId`**, so the computer keys play what is
+  shown. A right-click on a note in a pattern the track is not on launches
+  that pattern first, since the step editor edits the track's own slot.
+- **Every edit is read, change, fold.** `readNotes` flattens the steps
+  (roots and extras) into `{start, len, pitch, vel, root, src, chord}`; the
+  view changes the list; `writeNotes` folds it back in place (a track's arrays
+  are its pattern's), under the step model's rules: notes starting on one step
+  stack (root = the chord carrier, else the longest), extras clamp to the
+  root, notes may overlap (a long note keeps its length under a later one:
+  the transport plays each step's own length, and the step grid only DRAWS
+  it to the next note, no longer writing the clamp back into `lengths`),
+  velocity is per step, and a step's per-step fields travel with its root
+  from `src`, so a moved note keeps its chord, arp, ratchet and nudge.
+- **Committed on release**: a drag previews on the elements and writes once,
+  so it is one undo step (history.js hears the pointerup) and the view is
+  rebuilt from the pattern afterwards. Repaints never land mid-drag. Every
+  drag holds pointer capture on the view, so a double-click is timed in
+  pointerdown (a dblclick would be retargeted).
+- **Tools are toolbar buttons, not letters**: FL's P / E / B are the computer
+  keyboard's piano keys here. draw (click places a note of the last length
+  used and drags it into place; drag moves, the right edge resizes, shift
+  copies), paint, erase, select
+  (box, shift adds; ctrl/⌘-drag boxes in any tool). Double-click a note:
+  delete it; right-click a note: the step editor (the groove view's roll
+  does the same). With a selection: delete, ↑ ↓ (shift an octave), ← → (by the
+  snap, shift a bar), ctrl/⌘-B duplicate after itself; ctrl/⌘-A all,
+  escape lets go. Skipped while vim is in insert or command mode.
+- **scale only** (`pref.fold`, needs the scale on) folds the roll to the
+  scale's rows, FL's fold: the rows are `rowPitches`, rebuilt per render, so
+  every y and every vertical move goes through `rowOf` / `shiftRows`, and a
+  drag or ↑ ↓ moves a scale degree (shift is still an octave). A note
+  already off the scale sits on the row below it, outlined.
+- **Chords come from the top bar's chord mode** (`state.kbdChordType` /
+  `kbdChordCpx`, through `chordSelectionFor`, keyboard.js), the one the
+  computer keyboard and a step click use: with it on, a click or a paint
+  stroke draws the chord, diatonic when the scale is on. A chord type is the
+  root's `chord` and voicing (`cpx`, which `writeNotes` writes for a root
+  that carries it), drawn as dashed tones that ride along with the root; an
+  in-key voicing that is no chord type is root plus extras. `apply chord`
+  puts it on the selected roots (chord mode off takes chords away). An
+  inverted root's bar is drawn faint, since it sounds an octave up. Drum
+  kits sit it out.
+- **Nudge** (the `nudge ‹ 0 ›` buttons, alt + ← →): the selected notes' steps
+  move off the grid by 1/24 of a step (shift: a quarter), clamped to half a
+  step, vim's and the step editor's unit. It is the step's `offsets` entry
+  (`off` on every note read from the step, written back by the root), and
+  notes are drawn where they play (`xOf`: step plus offset).
+- **A pattern's length is its header's**, not the notes': a note is cut at
+  its pattern's end. The snap (step / ½ beat / beat / bar, on each pattern's own grid),
+  zoom, ghosts, tool, fold and follow are per browser (`seqbaby.piano.v1`), the scroll per
+  track per page.
 
 ## Knobs (`knob.js`) — a skin over the range inputs
 
@@ -4796,7 +4908,7 @@ through a 6ms fade on its gain).
   place the dispatch lives, or the second one has to import the first.
 - **`engineData.js`, `soundDefaults.js`, `theoryData.js`, `constants.js`,
   `chanceGen.js`, `sessionFormat.js`, `historyStore.js`, `songBuilder.js`,
-  `miniNotation.js`, `strudel.js`, `arrangement.js`, `patternPicture.js` and `voxPhonetic.js` must stay importable from Node** — no DOM, no Tone, no `window`. The tests
+  `miniNotation.js`, `strudel.js`, `arrangement.js`, `patternPicture.js`, `rollNotes.js` and `voxPhonetic.js` must stay importable from Node** — no DOM, no Tone, no `window`. The tests
   and the MCP server run them; an import of state.js or catalog.js in any of
   them breaks `npm test` at load, which is the guard.
 - **React must never re-set the studio's `innerHTML`** (`app/StudioBody.tsx`).
@@ -4908,7 +5020,7 @@ Repo: https://github.com/mjoslyn/seqbaby.
   An inline marker (`window.__seqbabyServerBoot`) tells the paths apart, and
   `ScriptLoader.tsx` keeps its onload-chained injection for the soft-nav case
   (e.g. arriving from `/login`).
-- `app/EnginePreload.tsx` emits `modulepreload` for all 85 modules listed in
+- `app/EnginePreload.tsx` emits `modulepreload` for all 87 modules listed in
   `app/engineAssets.ts` (at `engineAsset("/js/<name>")`; the hints used to
   point at the site root and 404). The graph is 8 levels deep, so without it the browser
   needs up to eight sequential round trips just to discover the code.

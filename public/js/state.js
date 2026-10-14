@@ -99,6 +99,7 @@ export const state = {
   arrStartBar: 0,       // the ruler bar a play press starts the arrangement from (the view's marker)
   arrLoop: null,        // a section of the ruler, {start, end} in bars (end exclusive), drawn on the ruler
   arrLoopOn: false,     // whether arrange mode loops that section instead of the whole arrangement
+  patLoop: null,        // the loop: a range of pattern slots, {start, end} (end exclusive), that repeat mode plays round
   _loopMode: "repeat",  // the last repeat / chain mode, which the clip view's play returns to
   _arrJump: null,       // a bar to jump to at the next bar line while the arrangement plays
   _viewSwitched: false, // a view opened while playing: the mode follows it at the next bar line (transport.js)
@@ -266,6 +267,37 @@ export function isPatternNonEmpty(idx) {
     for (let i = 0; i < p.steps.length; i++) { if (p.steps[i]) return true; }
   }
   return false;
+}
+
+/**
+ * The pattern the transport goes to after `fromIdx`: the next slot of the loop
+ * range in repeat mode (`loopRange`, wrapping, every slot in it empty or not:
+ * the range is what was asked for), else chain mode's next non-empty pattern.
+ */
+export function nextChainPattern(fromIdx) {
+  const r = loopRange();
+  if (r) return fromIdx >= r.start && fromIdx + 1 < r.end ? fromIdx + 1 : r.start;
+  return findNextNonEmptyPattern(fromIdx);
+}
+
+/**
+ * The patterns repeat mode goes round, when it goes round more than one:
+ * `state.patLoop` (drawn across the piano view's headers) in repeat mode,
+ * with the scene inside it. Repeat is LOOP in every view, chain plays
+ * through every pattern, so the two modes mean the same thing on the pattern
+ * bar, the clip view's toggle and the piano view's loop button. A scene
+ * outside the range (picked by hand) just repeats.
+ */
+export function loopRange() {
+  const r = state.patLoop;
+  if (state.patternMode !== "repeat" || !r || r.end - r.start < 2) return null;
+  return state.activePattern >= r.start && state.activePattern < r.end ? r : null;
+}
+
+/** Whether slot `i` is in the loop going round (for the slots' marks). */
+export function inLoop(i) {
+  const r = loopRange();
+  return !!r && i >= r.start && i < r.end;
 }
 
 export function findNextNonEmptyPattern(fromIdx) {
