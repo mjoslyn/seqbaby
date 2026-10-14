@@ -56,7 +56,7 @@ import { announceClips, requestClipLaunch, setArrangeRecord, stopClip } from "./
 import { MODE_UI, SWITCH_UI, insertEmptyPattern, setPatternMode } from "./patternBar.js";
 import { patternSvg, svgUrl } from "./patternPicture.js";
 import { patternLocked } from "./patternSound.js";
-import { isPatternNonEmpty, requestPatternSwitch, state, switchPattern, trackSlot } from "./state.js";
+import { inLoop, isPatternNonEmpty, requestPatternSwitch, state, switchPattern, trackSlot } from "./state.js";
 import { extendPatternByDuplicate, truncatePattern, writePatternOnto } from "./track.js";
 import { patternMeter, stepsPerBarForMeter } from "./meter.js";
 import { makeTrackDetail } from "./trackDetail.js";
@@ -215,6 +215,7 @@ function render() {
     if (isPatternNonEmpty(i)) cls.push("is-filled");
     if (i === ap) cls.push("is-active");
     if (i === state.queuedPattern) cls.push("is-queued");
+    if (inLoop(i)) cls.push("is-looped");
     scenes.push(`<button type="button" class="${cls.join(" ")}" data-scene="${i}" title="scene ${i + 1}: every track to pattern ${i + 1}. Double-click to play it now. The + at either edge opens an empty column there">${i + 1}<span class="sq-clips__ins is-left" data-ins="${i}" title="new empty column left of ${i + 1}: the columns from here on move right">+</span><span class="sq-clips__ins is-right" data-ins="${i + 1}" title="new empty column right of ${i + 1}: the columns after it move right">+</span></button>`);
   }
   // each column's repeat count (state.patternRepeats, the pattern bar's `rep`):

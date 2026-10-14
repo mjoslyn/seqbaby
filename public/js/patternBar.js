@@ -2,7 +2,7 @@ import { PATTERN_COUNT, PATTERN_MODES, patternModeOf } from "./constants.js";
 import { setStatus } from "./dom.js";
 import { ICON_ARRANGE, ICON_CHAIN, ICON_FINISH, ICON_NOW, ICON_REPEAT } from "./icons.js";
 import { flushPatternSound, recallPatternSound, refreshPatternSoundUI } from "./patternSound.js";
-import { aliasPattern, clonePattern, emptyPattern, isPatternNonEmpty, repaintPatternUI, requestPatternSwitch, state, trackSlot } from "./state.js";
+import { aliasPattern, clonePattern, emptyPattern, inLoop, isPatternNonEmpty, repaintPatternUI, requestPatternSwitch, state, trackSlot } from "./state.js";
 import { remapSlots } from "./arrangement.js";
 import { renderStepGrid } from "./stepGrid.js";
 import { maxLengthAt } from "./track.js";
@@ -30,6 +30,7 @@ export function syncPatternModeUI() {
   // above is a hover nobody can reach. It names the mode the button is IN, not
   // the one it switches to, so it reads as a state and not a verb.
   btn.dataset.label = mode;
+  renderPatternGrid();   // the loop range shows on the slots in repeat mode only
 }
 
 /** The switch button's icon and title per setting (main.js and the clip view's toolbar). */
@@ -160,6 +161,7 @@ export function renderPatternGrid() {
     if (isPatternNonEmpty(i)) cell.classList.add("is-filled");
     if (i === state.activePattern) cell.classList.add("is-active");
     if (i === state.queuedPattern) cell.classList.add("is-queued");
+    if (inLoop(i)) cell.classList.add("is-looped");
     cell.textContent = String(i + 1);
     cell.title = `pattern ${i + 1}. Drag onto the middle of another slot to copy it there, or onto its left or right edge to move it before or after`;
     cell.draggable = true;

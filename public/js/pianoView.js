@@ -52,9 +52,9 @@
  * The patterns are the sequencer's, and switching one is switching the scene
  * for every track, as the pattern bar does: a header's ▶ is
  * `requestPatternSwitch` (so it honours now / finish). Dragging across the
- * headers marks a LOOP of patterns (`state.patLoop`, not saved): with `loop`
- * on, chain mode plays that range round (`nextChainPattern`, state.js), and
- * switching it on puts the transport in chain mode. `follow` (per browser)
+ * headers marks a LOOP of patterns (`state.patLoop`, not saved): `loop` is
+ * repeat mode, which plays that range round (`loopRange`, state.js), and off
+ * is chain, so it reads the same as the pattern bar and the clip view. `follow` (per browser)
  * keeps the playhead in view, turning the page as it nears the edge; a
  * scroll by hand while playing switches it off, as the arrangement's does.
  *
@@ -65,6 +65,7 @@
  * watches the pointerup) and the view is rebuilt from the pattern afterwards.
  */
 
+import { announceClips } from "./clips.js";
 import { PATTERN_COUNT } from "./constants.js";
 import { setStatus } from "./dom.js";
 import { chordSelectionFor, hitOptsFor, isTypingTarget, noteForKey } from "./keyboard.js";
@@ -73,7 +74,7 @@ import { refreshRollIfOpen } from "./pianoRoll.js";
 import { setActiveTrack } from "./render.js";
 import { pitchesAt, readNotes, stepSnapshot, writeNotes } from "./rollNotes.js";
 import { holdNoiseBed } from "./signal.js";
-import { setPatternMode } from "./patternBar.js";
+import { MODE_UI, setPatternMode } from "./patternBar.js";
 import { invertChord, isPatternNonEmpty, requestPatternSwitch, state, switchPattern, trackSlot } from "./state.js";
 import { openStepEditor } from "./stepEditor.js";
 import { renderStepGrid } from "./stepGrid.js";
@@ -390,10 +391,8 @@ function render() {
       <button type="button" class="sq-btn--ghost" data-act="chordsel" title="apply chord: put the chord bar's chord (type and voicing, or in key with the scale on) on the selected notes. With chord mode off it takes their chords away. New notes take the chord bar's chord as they are drawn">apply chord</button>
       <button type="button" class="sq-pr__sound" data-act="sound" title="sound: this track's instrument, effects, filter, modulation and automation lanes, in a window over the roll (its own track card, so every control is the one in the groove view)">sound</button>
       <button type="button" class="sq-pr__loopbtn" data-act="loop" aria-pressed="${looping()}" title="${looping()
-        ? "loop: going round. Press for chain, playing through every pattern"
-        : state.patLoop
-          ? `chain: playing through every pattern. Press to loop patterns ${state.patLoop.start + 1}-${state.patLoop.end} (drag across the pattern headers to mark another range)`
-          : "chain: playing through every pattern. Press to loop the pattern playing, or drag across the pattern headers to mark patterns to loop"}">loop</button>
+        ? `loop: going round${state.patLoop && state.patLoop.end - state.patLoop.start > 1 ? ` patterns ${state.patLoop.start + 1}-${state.patLoop.end}` : " the pattern playing"}. Press for chain, playing through every pattern. Drag across the pattern headers to mark patterns to loop`
+        : "chain: playing through every pattern. Press to loop (the patterns marked across the headers, or the one playing)"}">${MODE_UI[looping() ? "repeat" : state.patternMode].icon}<span>${looping() ? "loop" : state.patternMode}</span></button>
       <button type="button" class="sq-pr__followbtn" data-act="follow" aria-pressed="${!!pref.follow}" title="follow: keep the playhead in view while it plays (scrolling by hand switches it off)">follow</button>
       <button type="button" class="sq-pr__ghostbtn" data-act="ghosts" aria-pressed="${!!pref.ghosts}" title="ghosts: the other melodic tracks' notes for the same pattern, faint, behind this one's">ghosts</button>
       <span class="sq-pr__zoom" title="zoom (ctrl/⌘-wheel zooms across)">↔<button type="button" class="sq-btn--ghost" data-act="zx-">−</button><button type="button" class="sq-btn--ghost" data-act="zx+">+</button>
@@ -461,7 +460,7 @@ function loopEls(inRuler, range = state.patLoop) {
   const a = secBySlot.get(range.start), b = secBySlot.get(range.end - 1);
   if (!a || !b) return "";
   const x = a.off * SW(), w = (b.off + b.len - a.off) * SW();
-  const on = looping() && state.patternMode === "chain" ? " is-on" : "";
+  const on = looping() && state.activePattern >= range.start && state.activePattern < range.end ? " is-on" : "";
   return inRuler
     ? `<div class="sq-pr__loop${on}" style="left:${x}px;width:${w}px"></div>`
     : `<div class="sq-pr__loopshade${on}" style="left:${x}px;width:${w}px"></div>`;
@@ -473,24 +472,25 @@ function paintLoopPreview(range) {
 }
 
 /**
- * Loop a range of patterns (or stop looping): on puts the transport in chain
- * mode, which is what plays a range of patterns; off puts back the mode it
- * was in before, if the loop is what changed it.
+ * Loop (repeat mode, round the range if one is drawn) or chain (through every
+ * pattern). The mode is the song's, so the pattern bar's mode button and the
+ * clip view's toggle show the same thing; the range shows on their slots.
+ * Turning the loop on with the scene outside the range takes it in.
  */
 function setPatLoop(range, on) {
   if (range) state.patLoop = range;
-  const want = !!on && !!state.patLoop;
-  // the button switches between the two ways chain mode plays: round the
-  // loop, or through every pattern. Repeat mode is a loop too, so off from
-  // there is chain as well
-  if (state.patternMode !== "chain") setPatternMode("chain");
-  state.patLoopOn = want;
-  setStatus(want ? `looping pattern${state.patLoop.end - state.patLoop.start > 1 ? `s ${state.patLoop.start + 1}-${state.patLoop.end}` : ` ${state.patLoop.start + 1}`}` : "chain: playing through every pattern");
+  setPatternMode(on ? "repeat" : "chain");
+  const r = state.patLoop;
+  if (on && r && (state.activePattern < r.start || state.activePattern >= r.end)) requestPatternSwitch(r.start);
+  const span = r && on ? r.end - r.start : 0;
+  setStatus(!on ? "chain: playing through every pattern"
+    : span > 1 ? `looping patterns ${r.start + 1}-${r.end}` : `looping pattern ${(r ? r.start : state.activePattern) + 1}`);
+  announceClips();
   render();
 }
 
-/** Whether the transport is going round (a loop range, or repeat mode's one pattern). */
-const looping = () => state.patternMode === "repeat" || (state.patternMode === "chain" && state.patLoopOn && !!state.patLoop);
+/** Whether the transport is going round: repeat mode, which is the loop in every view. */
+const looping = () => state.patternMode === "repeat";
 
 // ---- the playhead, and the keys lit under it --------------------------------
 
@@ -503,8 +503,8 @@ function paintHead() {
   const head = root?.querySelector(".sq-pr__head");
   const t = currentTrack();
   if (!head || !t || t.id !== shownId) return;
-  const sec = secBySlot.get(trackSlot(t));
-  const idx = sec && state.playing && !t._clipOff && t._nowIdx >= 0 ? sec.off + t._nowIdx : -1;
+  const sec = secBySlot.get(t._nowSlot ?? trackSlot(t));
+  const idx = sec && state.playing && !t._clipOff && t._nowIdx >= 0 && t._nowIdx < sec.len ? sec.off + t._nowIdx : -1;
   head.hidden = idx < 0;
   if (idx >= 0) {
     const x = idx * SW();

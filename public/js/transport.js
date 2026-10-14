@@ -25,7 +25,7 @@ import { init, needsResume, primeAudioForIOS } from "./main.js";
 import { applyBusMute, updateMidiUI } from "./render.js";
 import { ensureFxRack, fireFilterEnv, refreshAllTrackOutputs, refreshNoiseBeds, routeVoiceToRack, soloAudibleTracks } from "./signal.js";
 import { stepsPerBarForMeter, stepsPerBeatForMeter, transportMeter } from "./meter.js";
-import { invertChord, nextChainPattern, state, switchPattern } from "./state.js";
+import { invertChord, loopRange, nextChainPattern, state, switchPattern, trackSlot } from "./state.js";
 import { advanceArrangement, clearQueuedClips, commitQueuedClips, recordArrangementBar, restartTrackCount, seedArrangement, seedTrackCount, setArrangeRecord } from "./clips.js";
 import { setPatternMode } from "./patternBar.js";
 import { loadSilverboxWorklet } from "./silverbox.js";
@@ -42,12 +42,17 @@ import { buildVoiceForEngine, wosc } from "./voices.js";
  * for the whole rig: swing, per-step nudges and per-track speed all move a
  * step off the grid, so each track's playhead is scheduled on its own time.
  * @param {Track} t @param {number} idx
+ * @param {number} [slot]  the pattern the step belongs to, taken when it was
+ *   scheduled: the track may have switched pattern since (a bar line runs a
+ *   lookahead before it is heard)
  */
-export function paintTrackNow(t, idx) {
+export function paintTrackNow(t, idx, slot = trackSlot(t)) {
   const on = idx >= 0;
   // what is sounding, for anything else that follows the playhead (the code
-  // drawer lights up the tokens that wrote this step)
+  // drawer lights up the tokens that wrote this step; the piano view places
+  // its playhead in the pattern being heard, not the one already switched to)
   t._nowIdx = idx;
+  t._nowSlot = slot;
   // The cells are cached on the track (renderStepGrid drops the cache when it
   // rebuilds them) and only the cells that change are touched: this runs per
   // track per step, and querying and toggling every cell each time was the
@@ -565,7 +570,8 @@ export async function startPlayback(opts = {}) {
         // The `playing` guard matters because these are scheduled up to the
         // lookahead plus a swung step ahead: stop clears the highlights, and
         // without it a paint still in flight would re-light a step afterwards.
-        scheduleAtAudible(() => { if (state.playing) paintTrackNow(t, idx); }, stepTime, lat);
+        const nowSlot = trackSlot(t);
+        scheduleAtAudible(() => { if (state.playing) paintTrackNow(t, idx, nowSlot); }, stepTime, lat);
         // A bus stops here every step: it has just run its automation, and
         // everything below this line is about firing a note.
         // What this step plays, and which of the three things decided it —
@@ -754,14 +760,12 @@ export async function startPlayback(opts = {}) {
       // when both are set: switchPattern clears the per-track queue.
       commitQueuedClips();
     }
-    // pattern chaining: advance at bar boundaries when chain mode is on, respecting per-pattern repeats
-    if (state.patternMode === "chain" && barLine) {
+    // pattern chaining: advance at bar boundaries in chain mode, or round the
+    // loop range in repeat mode (loopRange), respecting per-pattern repeats
+    if ((state.patternMode === "chain" || loopRange()) && barLine) {
       state.chainBarCount++;
       const needed = Math.max(1, state.patternRepeats[state.activePattern] ?? 1);
-      // a scene outside the piano view's loop goes into it at the next bar line
-      const r = state.patLoopOn ? state.patLoop : null;
-      const outside = r && (state.activePattern < r.start || state.activePattern >= r.end);
-      if (state.chainBarCount >= needed || outside) {
+      if (state.chainBarCount >= needed) {
         state.chainBarCount = 0;
         const next = nextChainPattern(state.activePattern);
         if (next >= 0 && next !== state.activePattern) {
