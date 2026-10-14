@@ -602,8 +602,8 @@ export function init() {
       const pct = Math.round(state.metronomeLevel * 100);
       metroBtn.style.setProperty("--metro-level", `${pct}%`);
       metroBtn.title = state.metronome
-        ? `metronome on — ${pct}% (drag up/down to set volume)`
-        : "metronome click on the downbeat";
+        ? `metronome on, ${pct}% (drag up or down for its volume)`
+        : "metronome: a click on every beat, the downbeat accented";
       metroBtn.setAttribute("aria-valuenow", String(pct));
     };
     paintMetroLevel();
@@ -639,7 +639,7 @@ export function init() {
         bars: opts.bars,
         format: opts.format,
         chainWhole: mode === "track",
-        fileStem: mode === "track" ? "session" : "pattern",
+        fileStem: mode === "track" ? "song" : "pattern",
         filename: opts.filename,
       });
       setStatus(`render ready — downloaded`);

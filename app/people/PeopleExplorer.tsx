@@ -166,7 +166,7 @@ export default function PeopleExplorer({
 
         {chips.length ? (
           <div className={styles.row}>
-            <span className={styles.label}>uses</span>
+            <span className={styles.label}>with</span>
             <span className={styles.chips}>
               {chips.map(({ name, count }) => {
                 const on = query.with.includes(name);

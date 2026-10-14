@@ -425,7 +425,7 @@ export default function SongsMenu() {
             aria-pressed={song.is_default_template}
             title={
               song.is_default_template
-                ? "new songs start from this — click to stop"
+                ? "new songs start from this. click to stop"
                 : "make this what a new song starts from"
             }
             aria-label="default template"
@@ -442,7 +442,7 @@ export default function SongsMenu() {
           title={
             song.is_template
               ? "stop being a template"
-              : "make a template — saving from it makes a new song"
+              : "make a template: saving from it makes a new song"
           }
           aria-label="template"
         >
@@ -462,7 +462,7 @@ export default function SongsMenu() {
         <button
           className={styles.iconBtn}
           onClick={() => doRemix(song)}
-          title="remix into a new session"
+          title="remix into a new song"
           aria-label="remix"
         >
           <IconRemix />
@@ -567,7 +567,7 @@ export default function SongsMenu() {
           </div>
           {openSong.isTemplate && (
             <div className={styles.treeHint}>
-              started from template &ldquo;{openSong.title}&rdquo; — saving makes
+              started from template &ldquo;{openSong.title}&rdquo;: saving makes
               a new song
             </div>
           )}

@@ -596,7 +596,7 @@ export const STUDIO_BODY = String.raw`
     <button id="chord-menu-btn" class="sq-mobile-only sq-btn--ghost sq-icon-btn" data-label="scale" type="button" aria-pressed="false" aria-label="scale and chord settings" title="scale and chord: which notes a tapped step snaps to, and what chord it writes"></button>
     </div><!-- /sq-transport__main -->
     <div class="sq-transport__right">
-      <button id="metronome" class="sq-btn--ghost sq-icon-btn" data-label="metro" aria-pressed="false" aria-label="metronome" title="metronome click on the downbeat"></button>
+      <button id="metronome" class="sq-btn--ghost sq-icon-btn" data-label="metro" aria-pressed="false" aria-label="metronome" title="metronome: a click on every beat, the downbeat accented"></button>
       <!-- Mobile only: opens the pattern bar as a modal (openPatternMenu). It
            lives here, beside the metronome, so on a phone it joins the undo /
            redo / scale / metronome group; the bar itself is hidden there. -->
@@ -684,8 +684,8 @@ export const STUDIO_BODY = String.raw`
 
   <div class="sq-pattern-bar">
     <div class="sq-set__stack">
-      <button id="bounce-audio" class="sq-btn--ghost sq-dl__btn" title="render the current pattern to audio and download it"><span class="sq-dl__icon"></span><span class="sq-dl__label">Pattern</span></button>
-      <button id="bounce-track" class="sq-btn--ghost sq-dl__btn" title="chain through all non-empty patterns and render the whole arrangement"><span class="sq-dl__icon"></span><span class="sq-dl__label">Session</span></button>
+      <button id="bounce-audio" class="sq-btn--ghost sq-dl__btn" title="render the current pattern to audio and download it"><span class="sq-dl__icon"></span><span class="sq-dl__label">pattern</span></button>
+      <button id="bounce-track" class="sq-btn--ghost sq-dl__btn" title="render the whole song: its chain of non-empty patterns, or its arrangement in arrange mode"><span class="sq-dl__icon"></span><span class="sq-dl__label">song</span></button>
     </div>
     <div class="sq-mode__stack">
       <div class="sq-mode__row">
@@ -929,7 +929,7 @@ ${ORACLE_PANEL}
           <button class="sq-track__filter sq-btn--ghost" aria-pressed="false" title="filter">filter</button>
           <button class="sq-track__env sq-btn--ghost" aria-pressed="false" title="envelope → cutoff">env</button>
           <button class="sq-track__fx sq-btn--ghost" aria-pressed="false" title="fx rack">fx</button>
-          <button class="sq-track__eq sq-btn--ghost" aria-pressed="false" title="3-band eq">eq</button>
+          <button class="sq-track__eq sq-btn--ghost" aria-pressed="false" title="5-band eq">eq</button>
           <button class="sq-track__comp sq-btn--ghost" aria-pressed="false" title="compressor + sidechain">comp</button>
           <button class="sq-track__mod sq-btn--ghost" aria-pressed="false">mod</button>
           <button class="track-aut sq-btn--ghost" aria-pressed="false" title="per-step automation">aut</button>
@@ -1126,7 +1126,7 @@ ${ORACLE_PANEL}
       <div class="sq-track__filter-panel" hidden>
         <div class="sq-fx__row" data-fx="filter">
           <span class="sq-fx__title">filter (resonant)</span>
-          <label class="sq-fx__ctl"><span>type</span><select class="p-filtertype" title="the filter's shape: lowpass keeps what's below the cutoff, highpass what's above it, bandpass a narrow band around it, notch everything but that band — plus eight analog-modeled characters further down the list">
+          <label class="sq-fx__ctl"><span>type</span><select class="p-filtertype" title="the filter's shape: lowpass keeps what's below the cutoff, highpass what's above it, bandpass a narrow band around it, notch everything but that band; plus eight analog-modeled characters further down the list">
             <option value="lowpass">lowpass</option>
             <option value="highpass">highpass</option>
             <option value="bandpass">bandpass</option>
@@ -1185,20 +1185,20 @@ ${ORACLE_PANEL}
           <label class="sq-fx__ctl" title="a clean gain at this point in the chain: the stages after it are hit harder (fuzz, shaper, cassette sat, crush) or softer. Centre is unity, full is +18dB, left fades down"><span>drive</span><input class="fx-gain-drive" type="range" min="0" max="1" step="0.01" value="0.5" /></label>
         </div>
         <div class="sq-fx__row" data-fx="vinyl">
-          <span class="sq-fx__title">vinyl sim</span>
-          <label class="sq-fx__ctl"><span>amt</span><input class="fx-vinyl-amount" type="range" min="0" max="1" step="0.01" value="0" /></label>
+          <span class="sq-fx__title">vinyl</span>
+          <label class="sq-fx__ctl"><span>wet</span><input class="fx-vinyl-amount" type="range" min="0" max="1" step="0.01" value="0" /></label>
           <label class="sq-fx__ctl"><span>warmth</span><input class="fx-vinyl-warmth" type="range" min="0" max="1" step="0.01" value="0.4" /></label>
           <label class="sq-fx__ctl"><span>wow</span><input class="fx-vinyl-wow" type="range" min="0" max="1" step="0.01" value="0.3" /></label>
         </div>
         <div class="sq-fx__row" data-fx="cassette">
           <span class="sq-fx__title">cassette</span>
-          <label class="sq-fx__ctl"><span>amt</span><input class="fx-cassette-amount" type="range" min="0" max="1" step="0.01" value="0" /></label>
+          <label class="sq-fx__ctl"><span>wet</span><input class="fx-cassette-amount" type="range" min="0" max="1" step="0.01" value="0" /></label>
           <label class="sq-fx__ctl"><span>flutter</span><input class="fx-cassette-flutter" type="range" min="0" max="1" step="0.01" value="0.3" /></label>
           <label class="sq-fx__ctl"><span>sat</span><input class="fx-cassette-sat" type="range" min="0" max="1" step="0.01" value="0.4" /></label>
         </div>
         <div class="sq-fx__row" data-fx="fuzz">
-          <span class="sq-fx__title">fuzz (dba-style)</span>
-          <label class="sq-fx__ctl"><span>amt</span><input class="fx-fuzz-amount" type="range" min="0" max="1" step="0.01" value="0" /></label>
+          <span class="sq-fx__title">fuzz</span>
+          <label class="sq-fx__ctl"><span>wet</span><input class="fx-fuzz-amount" type="range" min="0" max="1" step="0.01" value="0" /></label>
           <label class="sq-fx__ctl"><span>drive</span><input class="fx-fuzz-drive" type="range" min="0" max="1" step="0.01" value="0.7" /></label>
           <label class="sq-fx__ctl"><span>tone</span><input class="fx-fuzz-tone" type="range" min="0" max="1" step="0.01" value="0.4" /></label>
           <label class="sq-fx__ctl"><span>level</span><input class="fx-fuzz-level" type="range" min="0" max="1" step="0.01" value="0.5" /></label>
@@ -1209,7 +1209,7 @@ ${ORACLE_PANEL}
           <label class="sq-fx__ctl"><span>freq</span><input class="fx-ringmod-freq" type="range" min="0" max="1" step="0.01" value="0.35" /></label>
         </div>
         <div class="sq-fx__row" data-fx="shaper">
-          <span class="sq-fx__title">wave shaper</span>
+          <span class="sq-fx__title">shaper</span>
           <label class="sq-fx__ctl"><span>wet</span><input class="fx-shaper-wet" type="range" min="0" max="1" step="0.01" value="0" /></label>
           <label class="sq-fx__ctl"><span>pre</span><input class="fx-shaper-preamp" type="range" min="0" max="1" step="0.01" value="0.5" /></label>
           <label class="sq-fx__ctl"><span>amt</span><input class="fx-shaper-amt" type="range" min="0" max="1" step="0.01" value="0.5" /></label>
@@ -1223,7 +1223,7 @@ ${ORACLE_PANEL}
           </select></label>
         </div>
         <div class="sq-fx__row" data-fx="crush">
-          <span class="sq-fx__title">bitcrush</span>
+          <span class="sq-fx__title">crush</span>
           <label class="sq-fx__ctl"><span>wet</span><input class="fx-crush-wet" type="range" min="0" max="1" step="0.01" value="0" /></label>
           <label class="sq-fx__ctl"><span>bits</span><input class="fx-crush-bits" type="range" min="1" max="16" step="1" value="8" /></label>
           <label class="sq-fx__ctl" title="the sample rate the crusher runs at, 48k down to 250Hz. Anything above half of it folds back down out of tune"><span>rate</span><input class="fx-crush-rate" type="range" min="0" max="1" step="0.005" value="1" /></label>
@@ -1259,7 +1259,7 @@ ${ORACLE_PANEL}
         </div>
         <div class="sq-fx__row" data-fx="repeat">
           <span class="sq-fx__title">beat repeat</span>
-          <label class="sq-fx__ctl" title="how much of the repeat is in the signal: all the way is an insert (a repeat replaces the beat), less mixes it over"><span>mix</span><input class="fx-repeat-wet" type="range" min="0" max="1" step="0.01" value="0" /></label>
+          <label class="sq-fx__ctl" title="how much of the repeat is in the signal: all the way is an insert (a repeat replaces the beat), less mixes it over"><span>wet</span><input class="fx-repeat-wet" type="range" min="0" max="1" step="0.01" value="0" /></label>
           <label class="sq-fx__ctl" title="repeat: capture a slice where it fires and repeat it (a beat repeat). slice: cut the track into slices as it plays and swap them for others from the window before (a live slicer)"><span>mode</span><select class="fx-repeat-mode">
             <option value="repeat" selected>repeat</option>
             <option value="slice">slice</option>
@@ -1275,7 +1275,7 @@ ${ORACLE_PANEL}
         </div>
         <div class="sq-fx__row" data-fx="prism">
           <span class="sq-fx__title">prism</span>
-          <label class="sq-fx__ctl" title="how much of the whole console is in the signal"><span>mix</span><input class="fx-prism-wet" type="range" min="0" max="1" step="0.01" value="0" /></label>
+          <label class="sq-fx__ctl" title="how much of the whole console is in the signal"><span>wet</span><input class="fx-prism-wet" type="range" min="0" max="1" step="0.01" value="0" /></label>
           <label class="sq-fx__ctl" title="character: drive (a mid-humped overdrive), sweeten (a little compression and air), fuzz (gated, the gate set by sens), howl (a resonant band fed back, following the playing), swell (every note fades in)"><span>char</span><select class="fx-prism-charmode">
             <option value="drive" selected>drive</option>
             <option value="sweeten">sweeten</option>
@@ -1367,7 +1367,7 @@ ${ORACLE_PANEL}
       <div class="sq-field sq-lfo__rate-field">
         <label class="sq-lfo__rate-name">length</label>
         <input class="sq-lfo__rate" type="range" min="0" max="1" step="0.001" value="0.35" title="free-running speed in hz, ignoring the tempo" />
-        <input class="sq-lfo__div" type="range" min="0" max="7" step="1" value="3" title="how long one cycle is, counted in sequencer steps" />
+        <input class="sq-lfo__div" type="range" min="0" max="9" step="1" value="3" title="how long one cycle is, counted in beats" />
         <span class="sq-lfo__rate-label">1.00 hz</span>
       </div>
       <div class="sq-field sq-lfo__amt-field">

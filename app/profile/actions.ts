@@ -85,13 +85,13 @@ export async function updateProfile(input: {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return { error: "Not signed in" };
+  if (!user) return { error: "not signed in" };
 
   const patch: Record<string, unknown> = {};
   if (input.username !== undefined) {
     const u = input.username.trim();
     if (!USERNAME_RE.test(u))
-      return { error: "Name: 2–30 chars, letters/numbers/-/_ only" };
+      return { error: "name: 2–30 chars, letters/numbers/-/_ only" };
     patch.username = u;
     patch.display_name = u;
   }
@@ -102,12 +102,12 @@ export async function updateProfile(input: {
     // screens, so a plain-http one would be mixed content on every page it
     // appeared on, and anything that is not a URL is a broken image.
     if (a && !/^https:\/\/[^\s]+$/i.test(a))
-      return { error: "Avatar: an https:// image URL, or upload one" };
+      return { error: "avatar: an https:// image URL, or upload one" };
     patch.avatar_url = a || null;
   }
   if (input.avatar_grid !== undefined) {
     if (input.avatar_grid !== null && !AVATAR_GRID_RE.test(input.avatar_grid))
-      return { error: "That avatar is not a grid this app can draw" };
+      return { error: "that avatar is not a grid this app can draw" };
     patch.avatar_grid = input.avatar_grid;
   }
   if (input.is_public !== undefined) patch.is_public = !!input.is_public;
@@ -119,12 +119,12 @@ export async function updateProfile(input: {
     .select("id");
   if (error) {
     if (/duplicate key|unique/i.test(error.message))
-      return { error: "That name is taken" };
+      return { error: "that name is taken" };
     return { error: error.message };
   }
   // The signup trigger creates this row, so a miss here means it is genuinely
   // absent -- report that rather than a save that silently did nothing.
-  if (!rows?.length) return { error: "Profile not found" };
+  if (!rows?.length) return { error: "profile not found" };
   revalidatePath("/", "layout");
   return { ok: true };
 }

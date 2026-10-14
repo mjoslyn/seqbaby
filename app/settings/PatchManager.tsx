@@ -31,7 +31,7 @@ export default function PatchManager() {
   async function togglePublic(p: MyPatch) {
     const res = await setPatchPublic(p.id, !p.is_public);
     if (res.error) return setStatus({ text: res.error, err: true });
-    setStatus({ text: p.is_public ? `Unpublished "${p.name}"` : `Published "${p.name}"` });
+    setStatus({ text: p.is_public ? `unpublished "${p.name}"` : `published "${p.name}"` });
     refresh();
   }
 
@@ -39,7 +39,7 @@ export default function PatchManager() {
     if (!window.confirm(`Delete "${p.name}" from your patches?`)) return;
     const res = await deletePatch(p.id);
     if (res.error) return setStatus({ text: res.error, err: true });
-    setStatus({ text: `Deleted "${p.name}"` });
+    setStatus({ text: `deleted "${p.name}"` });
     refresh();
   }
 

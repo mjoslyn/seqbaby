@@ -3214,9 +3214,10 @@ to say hello), the songs people have published, and who made them.
   it (migration 0007).
 - **Who is looking is a client island** (`Who.tsx`): a local session read,
   then one `profile_cards` read for the handle. A cached page cannot know.
-- **Twelve of each**: songs, people, patches (`FEED_SIZE` in feed.ts).
+- **Four of each**: songs, people, patches (`FEED_SIZE` / `HOME_PATCHES` in
+  feed.ts); /songs, /people and /patches hold the rest.
 - **Patches are laid out like the songs** (`app/home/PatchCard.tsx`): the
-  newest twelve in the public gallery, each with a play button on the same
+  newest four in the public gallery, each with a play button on the same
   hidden engine the song cards use. A patch is a sound with no notes, so
   `patchPreview.js` (pure, tested) writes it a phrase by what the engine is
   for: a drum voice a rhythm that suits the drum (from the engine key, or a
@@ -3873,7 +3874,8 @@ agent ──▶ mcp/server.mjs ──▶ songBuilder.js ──▶ { _version, bp
   a shorter string tiling a longer pattern. `describePattern` reads one back
   the same way, so `get_song` shows an agent what it wrote in the notation
   it wrote it in.
-- **The MCP server holds one song** and keeps the tool list short (39 tools:
+- **The MCP server holds one song** and keeps the tool list short (38 tools on stdio, 36 of them shared with the compose panel, which lacks
+  `share_song` and `audition_song`:
   song / engines / tracks / steps / sound / modulation / generators / code /
   out). `write_code` takes Strudel code (strudel.js, the same reader as
   the studio's code drawer), which is the tersest way an agent has to spell a
@@ -4813,7 +4815,8 @@ through a 6ms fade on its gain).
   do the same, or use `currentBpm()` (lfo.js) as the sync helpers do.
 - **Worklet processor sources are template literals** (`silverbox.js`,
   `contagion.js`, `hexop.js`, `guitar.js`, `bass.js`, `subbass.js`,
-  `drone.js`, `vox.js`, `lancet.js`, `halo.js`, `siege.js`, `ladder.js`, `oracle.js`, `crusher.js`, `reverb.js`, `prism.js`, `repeat.js`),
+  `drone.js`, `vox.js`, `lancet.js`, `halo.js`, `siege.js`, `ladder.js`, `oracle.js`, `crusher.js`, `reverb.js`, `prism.js`, `repeat.js`,
+  `filterModels.js`),
   so a stray backtick or `${` inside one — including in a comment — truncates
   the string. The module still parses, `node --check` still passes, and the
   failure only shows up as a SyntaxError at engine boot. When editing inside a

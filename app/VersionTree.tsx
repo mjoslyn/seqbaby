@@ -66,12 +66,12 @@ export default function VersionTree({
       if (!(await confirmOpen(`v${v.seq}`))) return;
       const res = await loadVersion(v.id);
       if (res.error || res.data === undefined)
-        return setStatus({ text: res.error ?? "Version not found", err: true });
+        return setStatus({ text: res.error ?? "version not found", err: true });
       try {
         window.seqbaby?.applySet(res.data);
       } catch (e) {
         return setStatus({
-          text: `Load failed: ${(e as Error).message}`,
+          text: `could not open it: ${(e as Error).message}`,
           err: true,
         });
       }
@@ -79,8 +79,8 @@ export default function VersionTree({
       setStatus({
         text:
           v.id === currentId
-            ? `Loaded v${v.seq}`
-            : `Loaded v${v.seq} — saving branches from here`,
+            ? `opened v${v.seq}`
+            : `opened v${v.seq}: saving branches from here`,
       });
     },
     [currentId, onOpen, setStatus],
@@ -100,17 +100,17 @@ export default function VersionTree({
   const remix = useCallback(
     async (v: SongVersion) => {
       if (v.id !== baseVersionId && !(await confirmOpen(`a remix of v${v.seq}`))) return;
-      setStatus({ text: "Remixing…" });
+      setStatus({ text: "remixing…" });
       const res = await remixSong(songId, v.id);
       if (res.error || !res.id)
-        return setStatus({ text: res.error ?? "Remix failed", err: true });
+        return setStatus({ text: res.error ?? "remix failed", err: true });
       try {
         await adoptRemix(
           { id: res.id, title: res.title, versionId: res.versionId },
           v.id === baseVersionId,
         );
       } catch (e) {
-        setStatus({ text: `Remixed, but could not open it: ${(e as Error).message}`, err: true });
+        setStatus({ text: `remixed, but could not open it: ${(e as Error).message}`, err: true });
         return onChanged();
       }
       setStatus({ text: `v${v.seq} remixed into "${res.title}"` });
@@ -123,7 +123,7 @@ export default function VersionTree({
     async (v: SongVersion) => {
       const res = await deleteVersion(v.id);
       if (res.error) return setStatus({ text: res.error, err: true });
-      setStatus({ text: `Deleted v${v.seq}` });
+      setStatus({ text: `deleted v${v.seq}` });
       refresh();
     },
     [refresh, setStatus],

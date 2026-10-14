@@ -89,10 +89,10 @@ export default function ManualPage() {
             cell in a track&apos;s row of squares to add or remove a hit. After that:
           </p>
           <ul>
-            <li>The dropdown next to a track&apos;s name changes what it sounds like.</li>
+            <li>The instrument button next to a track&apos;s name changes what it sounds like: it opens a searchable picker of every engine and preset.</li>
             <li><span className={styles.ui}>+ add track</span> at the bottom gets you another instrument.</li>
             <li>The numbered buttons above the tracks are 32 pattern slots.</li>
-            <li>Right-click anything you don&apos;t recognise. You get what it does and whatever movement is on it.</li>
+            <li>Right-click anything you don&apos;t recognise (long-press on a touchscreen). You get what it does and whatever movement is on it.</li>
           </ul>
           <div className={styles.note}>
             The studio works on a phone, but it is built for a desktop or laptop.
@@ -109,7 +109,7 @@ export default function ManualPage() {
                 <tr><th>Control</th><th>What it does</th></tr>
               </thead>
               <tbody>
-                <tr><td>play</td><td>Starts and stops the sequencer. Playback always restarts from the top.</td></tr>
+                <tr><td>play</td><td>Starts and stops the sequencer. Playback starts from the top, except in arrange mode, where it starts from the ruler&apos;s start marker, and in a jam, where it lands on the room&apos;s beat.</td></tr>
                 <tr><td>record</td><td>With the sequencer running, anything you play on your computer keyboard is written into the active track.</td></tr>
                 <tr><td>capture</td><td>Writes the phrase you just played into the active track even though you weren&apos;t recording. It keeps the last 32 seconds, takes the run of notes since your last pause, and keeps the lengths you held.</td></tr>
                 <tr><td>bpm</td><td>Tempo. Type a number, or drag the field up and down.</td></tr>
@@ -117,7 +117,7 @@ export default function ManualPage() {
                 <tr><td>macro</td><td>Opens the XY <a href="#macro">macro pads</a>.</td></tr>
                 <tr><td>undo / redo</td><td>Steps back and forward through your edits. See <a href="#undo">undo</a>.</td></tr>
                 <tr><td>vim</td><td>Switches <a href="#vim">vim mode</a> on and off, for driving the studio from the keyboard. Desktop only.</td></tr>
-                <tr><td>metronome</td><td>A click on each downbeat, for playing along. It never ends up in an export.</td></tr>
+                <tr><td>metronome</td><td>A click on every beat, the downbeat accented, for playing along. Drag it up or down for its volume. It never ends up in an export.</td></tr>
                 <tr><td>meter</td><td>Output level, over on the right. If it sits pinned at the top, turn some tracks down.</td></tr>
               </tbody>
             </table>
@@ -150,7 +150,7 @@ export default function ManualPage() {
                 <tr><td>Drag</td><td>Grab anywhere on the knob. The value doesn&apos;t jump to your click, it follows the pointer from wherever it already was.</td></tr>
                 <tr><td>Drag out sideways</td><td>Fine trim. The further from the knob your pointer travels, the smaller each pixel gets, so one gesture does the sweep and the trim. Shift forces fine mode.</td></tr>
                 <tr><td>Wheel</td><td>Nudges the value a step at a time.</td></tr>
-                <tr><td>Double-click</td><td>Back to the default.</td></tr>
+                <tr><td>Double-click</td><td>Back to the default. On a touchscreen it is <span className={styles.ui}>reset to default</span> in the long-press menu instead, so two quick taps never throw away a setting.</td></tr>
                 <tr><td>Right-click, or long press</td><td>Opens the <a href="#motion">parameter menu</a>: what the control does, and any modulation on it.</td></tr>
               </tbody>
             </table>
@@ -181,7 +181,7 @@ export default function ManualPage() {
                 <tr><td>drag a number</td><td>Drops a copy of that pattern onto any other slot and takes you there. In finish mode while playing it waits for the bar, like any other switch.</td></tr>
                 <tr><td>sig</td><td>Time signature for this pattern, from 4/4 through 5/4, 7/8 and the compound meters.</td></tr>
                 <tr><td>rep</td><td>In chain mode, how many bars this pattern gets before the next one.</td></tr>
-                <tr><td>Pattern / Session</td><td>Render audio and download a WAV. See <a href="#saving">export</a>.</td></tr>
+                <tr><td>pattern / song</td><td>Render audio and download a WAV. See <a href="#saving">export</a>.</td></tr>
               </tbody>
             </table>
           </div>
@@ -203,8 +203,11 @@ export default function ManualPage() {
             grids you know; the <span className={styles.ui}>clips</span> view, every
             track&apos;s 32 patterns laid out as clips to launch one track at a
             time; and the <span className={styles.ui}>arrange</span> view, a
-            timeline of pattern blocks per track. Switching views changes nothing
-            about what plays. Desktop only for now.
+            timeline of pattern blocks per track. Play plays what the open view
+            shows: the arrangement in the arrange view, the clips in the clips
+            view, and whatever the pattern bar says in the groove view. Switching
+            views while playing takes effect at the next bar line. Desktop only for
+            now.
           </p>
           <h3>Clips</h3>
           <div className={styles.tableWrap}>
@@ -216,7 +219,7 @@ export default function ManualPage() {
                 <tr><td>a cell</td><td>Launches that pattern on that track alone, now, or on the bar line in <em>finish</em> mode (the pattern bar&apos;s switch setting). The other tracks keep playing what they were. The lit cell is the pattern the track is on; a dot marks a p-locked one. Each different clip on a track wears its own shade of the track&apos;s colour, so copies of one pattern match and a pattern that differs stands out. Double-click a cell to mute the clip (the track stops; a click plays it again).</td></tr>
                 <tr><td>the detail</td><td>Under the grid: the selected track&apos;s instrument, its effects and modulation, and the step grid of the clip it is on, exactly as in the groove view. Clicking a cell selects its track; clicking a track&apos;s name selects it without launching anything. The pattern bar is hidden in this view and the arrangement: the scene row and the toolbar do its jobs there.</td></tr>
                 <tr><td>the scene row</td><td>The numbers along the top launch a whole column: every track to that pattern, which is exactly what the pattern bar does. Double-click one to play it now, whatever the switch setting, starting the transport if it is stopped. A track launched off the scene shows a <span className={styles.ui}>p5</span> badge beside its length in the groove view; click it to bring the track back.</td></tr>
-                <tr><td>a cell&apos;s right edge</td><td>Drag it across the cells beside it, either way, and the clip is copied into each of those scenes when you let go, like a spreadsheet&apos;s fill handle. The cells it will fill light up while you drag. A scene that already has a sound locked to it keeps that sound. Hold <span className={styles.key}>shift</span> and the same drag changes the clip&apos;s length instead, a bar at a time: longer repeats what is there (as the track head&apos;s <span className={styles.ui}>x2</span> does), shorter cuts the end off. A clip more than a bar long wears its bar count in the corner.</td></tr>
+                <tr><td>a cell&apos;s right edge</td><td>Drag it across the cells beside it, either way, and the clip is copied into each of those slots on this track when you let go, like a spreadsheet&apos;s fill handle. The cells it will fill light up while you drag. A slot that already has a sound locked to it keeps that sound. Hold <span className={styles.key}>shift</span> and the same drag changes the clip&apos;s length instead, a bar at a time: longer repeats what is there (as the track head&apos;s <span className={styles.ui}>x2</span> does), shorter cuts the end off. A clip more than a bar long wears its bar count in the corner.</td></tr>
                 <tr><td>■ / ▶</td><td>Stops that track&apos;s clip: it plays nothing until a clip is launched on it or a scene is. Stopped, the same button is a play that brings its clip back.</td></tr>
                 <tr><td>drag a cell</td><td>Copies the pattern onto another cell, on the same track or another (lanes the other engine cannot play are dropped, as paste does).</td></tr>
                 <tr><td>play, repeat / chain, now / finish</td><td>The transport&apos;s play button, the pattern mode and the switch setting, here too since the pattern bar is hidden in this view: <em>repeat</em> loops the scene, <em>chain</em> walks the non-empty patterns in order with every track together; <em>finish</em> makes every launch wait for the bar line, <em>now</em> lands it at once.</td></tr>
@@ -650,7 +653,7 @@ export default function ManualPage() {
                 <tr><th>To pick</th><th>Type</th></tr>
               </thead>
               <tbody>
-                <tr><td>The fx rack</td><td><span className={styles.key}>f</span>. It opens with its first knob picked. <span className={styles.key}>f</span> again closes it.</td></tr>
+                <tr><td>The fx picker</td><td><span className={styles.key}>f</span> opens the effect picker: pick a stage to put it on the track. To turn one of its knobs, name it: <span className={styles.ui}>:k delay time</span>.</td></tr>
                 <tr><td>The filter</td><td><span className={styles.key}>c</span>. It opens on cutoff.</td></tr>
                 <tr><td>Any knob by name</td><td><span className={styles.ui}>:k</span> and its name: <span className={styles.ui}>:k morph</span>, <span className={styles.ui}>:k reverb decay</span>, <span className={styles.ui}>:k fx.delay.time</span>. Part of a name is enough. A knob in a closed panel opens that panel.</td></tr>
                 <tr><td>Set it at once</td><td>Add a value from 0 to 1: <span className={styles.ui}>:k cutoff .3</span>.</td></tr>
@@ -734,8 +737,8 @@ export default function ManualPage() {
         <section className={styles.section} id="engines">
           <h2>Sound engines</h2>
           <p>
-            The dropdown beside a track&apos;s name picks its instrument. They come in
-            groups:
+            The instrument button beside a track&apos;s name picks its instrument, from a
+            searchable picker. They come in groups:
           </p>
           <div className={styles.tableWrap}>
             <table className={styles.table}>
@@ -2027,13 +2030,15 @@ bass: note("<eb2 g2>*8").s("sawtooth").lpf(2000).lock()`}</div>
             <span className={styles.ui}>jam</span> in the top bar starts a room from
             the song that is open and gives you a link. Everyone who opens it edits
             the same song with you, live: steps, knobs, tracks added and removed,
-            generators, a song opened from the menu. Nobody needs an account, only
-            the link.
+            generators, undo. Nobody needs an account, only the link. Opening a
+            different song, or pressing <span className={styles.ui}>new</span>,
+            leaves the jam: the song you open is yours, not the room&apos;s.
           </p>
           <p>
             Each of you plays it on your own machine, so press play wherever you
-            are; the transport is not shared, and neither is which pattern you are
-            looking at. Everything else is one song. Undo steps back over the
+            are. Play and stop are yours alone, but a start lands on the room&apos;s
+            beat, so two people pressing play hear the same step. Which pattern you
+            are looking at is not shared. Everything else is one song. Undo steps back over the
             others&apos; edits as well as your own, and an undo goes out to the room
             like any other edit.
           </p>
@@ -2054,14 +2059,14 @@ bass: note("<eb2 g2>*8").s("sawtooth").lpf(2000).lock()`}</div>
               </thead>
               <tbody>
                 <tr><td>new</td><td>Blanks the session. Undo brings it back, until the tab goes. If your account has a default template, a new session starts from that instead of from the starter tracks.</td></tr>
-                <tr><td>save</td><td>Stores the session to your account. Saving a song you already have keeps the older one: each save is a new version.</td></tr>
+                <tr><td>save</td><td>Stores the song in your account. Saving a song you already have keeps the older one: each save is a new version.</td></tr>
                 <tr><td>songs</td><td>Your library. Click a title to load it. The row icons are version history, remix, public link, delete, and the two template toggles.</td></tr>
                 <tr><td>history</td><td>A song&apos;s versions, drawn as the tree they are. Open any version to hear it again; save after that and the new version branches off the one you opened. <span className={styles.ui}>name</span> labels a version, <span className={styles.ui}>remix</span> copies one into a song of its own.</td></tr>
                 <tr><td>template</td><td>Marks a song as a starting point. The first save from an open template makes a new song instead of another version of the template. The second icon makes one the default, which is what <span className={styles.ui}>new</span> loads.</td></tr>
                 <tr><td>share</td><td>Makes a link anyone can open. They get a playable copy and your original is untouched.</td></tr>
                 <tr><td>public link</td><td>Publishes a song to your profile at <span className={styles.ui}>/u/yourname</span>, where anyone can remix it.</td></tr>
                 <tr><td>patch</td><td>The save icon in a track header stores that instrument&apos;s sound, which then shows up under saved patches for any track. Signed in, you can publish patches to the gallery.</td></tr>
-                <tr><td>Pattern / Session</td><td>Renders audio and downloads a WAV, either the current pattern or the whole chained arrangement. Recording happens in real time, so a long session takes as long as it plays.</td></tr>
+                <tr><td>pattern / song</td><td>Renders audio and downloads a WAV, either the current pattern or the whole song (its chain, or its arrangement in arrange mode). Recording happens in real time, so a long song takes as long as it plays.</td></tr>
               </tbody>
             </table>
           </div>

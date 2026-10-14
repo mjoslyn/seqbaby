@@ -250,18 +250,18 @@ export default function SaveButton() {
             ? `not saved: ${flash.err}. Press to try again`
             : canQuickSave
               ? `save as the next version of \u201c${openSong.title}\u201d`
-              : "save this session as a song"
+              : "save this as a song"
         }
       >
         {flash?.text ?? "save"}
       </button>
       {open && !canQuickSave && (
         <div className={styles.panel}>
-          <div className={styles.panelTitle}>save session</div>
+          <div className={styles.panelTitle}>save song</div>
           <input
             className={styles.saveInput}
             style={{ width: "100%", marginBottom: 8 }}
-            placeholder="session name (or leave blank)"
+            placeholder="song name (or leave blank)"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             autoFocus
@@ -275,11 +275,11 @@ export default function SaveButton() {
               checked={isPublic}
               onChange={(e) => setIsPublic(e.target.checked)}
             />
-            public — shareable + shown on your profile
+            public: shareable, and shown on your profile
           </label>
           {openSong.isTemplate ? (
             <div className={styles.treeHint}>
-              starting from template &ldquo;{openSong.title}&rdquo; — this saves
+              starting from template &ldquo;{openSong.title}&rdquo;: this saves
               as a new song
             </div>
           ) : (

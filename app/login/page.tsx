@@ -64,14 +64,14 @@ export default function LoginPage() {
             className={`${styles.tab} ${isSignin ? styles.tabActive : ""}`}
             onClick={() => setMode("signin")}
           >
-            Sign in
+            sign in
           </button>
           <button
             type="button"
             className={`${styles.tab} ${mode === "signup" ? styles.tabActive : ""}`}
             onClick={() => setMode("signup")}
           >
-            Create account
+            create account
           </button>
         </div>
 
@@ -133,15 +133,15 @@ export default function LoginPage() {
           >
             {isReset
               ? resetPending
-                ? "Sending…"
-                : "Send reset link"
+                ? "sending…"
+                : "send reset link"
               : isSignin
                 ? signInPending
-                  ? "Signing in…"
-                  : "Sign in"
+                  ? "signing in…"
+                  : "sign in"
                 : signUpPending
-                  ? "Creating…"
-                  : "Create account"}
+                  ? "creating…"
+                  : "create account"}
           </button>
         </form>
 
@@ -162,7 +162,7 @@ export default function LoginPage() {
                 if (hidden) hidden.value = email ?? "";
               }}
             >
-              {magicPending ? "Sending…" : "Email me a magic link"}
+              {magicPending ? "sending…" : "email me a magic link"}
             </button>
           </form>
         )}

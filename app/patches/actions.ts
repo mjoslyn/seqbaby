@@ -20,7 +20,7 @@ export async function savePatchToBay(
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return { error: "Not signed in" };
+  if (!user) return { error: "not signed in" };
 
   const { data: src, error: readErr } = await supabase
     .from("patches")
@@ -28,7 +28,7 @@ export async function savePatchToBay(
     .eq("id", sourceId)
     .maybeSingle();
   if (readErr) return { error: readErr.message };
-  if (!src) return { error: "Patch not found" };
+  if (!src) return { error: "patch not found" };
   if (src.owner_id === user.id) return { id: src.id, name: src.name, already: true };
 
   const { data: prior } = await supabase
@@ -73,7 +73,7 @@ export async function setPatchPublic(
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return { error: "Not signed in" };
+  if (!user) return { error: "not signed in" };
   const { data: rows, error } = await supabase
     .from("patches")
     .update({ is_public: isPublic })
@@ -81,7 +81,7 @@ export async function setPatchPublic(
     .eq("owner_id", user.id)
     .select("id");
   if (error) return { error: error.message };
-  if (!rows?.length) return { error: "Patch not found" };
+  if (!rows?.length) return { error: "patch not found" };
   return { ok: true };
 }
 
@@ -110,7 +110,7 @@ export async function deletePatch(
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return { error: "Not signed in" };
+  if (!user) return { error: "not signed in" };
   // Zero rows deleted is not an error to PostgREST -- check what was affected
   // rather than reporting a delete that never happened.
   const { data: rows, error } = await supabase
@@ -120,7 +120,7 @@ export async function deletePatch(
     .eq("owner_id", user.id)
     .select("id");
   if (error) return { error: error.message };
-  if (!rows?.length) return { error: "Patch not found" };
+  if (!rows?.length) return { error: "patch not found" };
   return { ok: true };
 }
 
@@ -134,7 +134,7 @@ export async function setPatchLike(
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return { error: "Not signed in" };
+  if (!user) return { error: "not signed in" };
 
   if (liked) {
     const { error } = await supabase

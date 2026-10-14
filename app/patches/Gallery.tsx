@@ -109,7 +109,7 @@ export default function Gallery({ patches }: { patches: FeedPatch[] }) {
         </div>
       ) : (
         <p className={homeStyles.emptyLine}>
-          no patches yet. <a href="/studio">make a sound</a>, save it as a patch, and publish it from the patches menu.
+          no patches yet. <a href="/studio">make a sound</a>, save it as a patch, and publish it from <a href="/settings">settings</a>.
         </p>
       )}
     </div>

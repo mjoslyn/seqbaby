@@ -222,7 +222,7 @@ listed rather than dropped.
 
 The repo ships an [MCP server](mcp/README.md) (`npm run mcp`, or
 `npx -y github:mjoslyn/seqbaby` with no clone) that exposes the song format as
-36 tools: add a track, spell its rhythm as a step string (`x..X.o_.`), set its
+38 tools: add a track, spell its rhythm as a step string (`x..X.o_.`), set its
 sound, put an LFO on the filter, turn on a euclidean or chance generator, write
 a part as Strudel code, audition it in headless Chromium and read the meters,
 then export the JSON or post it for a share link. Every call is validated

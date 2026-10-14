@@ -73,7 +73,7 @@ export default function SavePatchButton({
     setState("busy");
     try {
       const res = await savePatchToBay(patchId);
-      if (res.error === "Not signed in") {
+      if (res.error === "not signed in") {
         window.location.href = "/login";
         return;
       }

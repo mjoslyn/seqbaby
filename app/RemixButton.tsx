@@ -33,7 +33,7 @@ export default function RemixButton({
     setFailed(false);
     try {
       const res = await remixSong(songId);
-      if (res.error === "Not signed in") {
+      if (res.error === "not signed in") {
         window.location.href = "/login";
         return;
       }

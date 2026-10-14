@@ -101,7 +101,7 @@ export default function LikeButton({
     setBusy(true);
     try {
       const res = await SET_LIKE[kind](songId, next);
-      if (res.error === "Not signed in") {
+      if (res.error === "not signed in") {
         window.location.href = "/login";
         return;
       }

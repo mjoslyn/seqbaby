@@ -17,7 +17,7 @@ export default function ProfileForm({ profile }: { profile: Profile }) {
 
   async function save() {
     setSaving(true);
-    setStatus({ text: "Saving…" });
+    setStatus({ text: "saving…" });
     const res = await updateProfile({
       username,
       bio,
@@ -26,7 +26,7 @@ export default function ProfileForm({ profile }: { profile: Profile }) {
     });
     setSaving(false);
     setStatus(
-      res.error ? { text: res.error, err: true } : { text: "Saved" },
+      res.error ? { text: res.error, err: true } : { text: "saved" },
     );
   }
 
@@ -51,7 +51,7 @@ export default function ProfileForm({ profile }: { profile: Profile }) {
         />
         <div className={styles.hintText}>
           {username
-            ? `Shown on your songs, and your page is /u/${username}`
+            ? `shown on your songs, and your page is /u/${username}`
             : "2–30 chars: letters, numbers, - and _"}
         </div>
       </div>
@@ -75,7 +75,7 @@ export default function ProfileForm({ profile }: { profile: Profile }) {
           checked={isPublic}
           onChange={(e) => setIsPublic(e.target.checked)}
         />
-        public profile — anyone can view your page
+        public profile: anyone can view your page
       </label>
 
       <button
@@ -84,7 +84,7 @@ export default function ProfileForm({ profile }: { profile: Profile }) {
         disabled={saving}
         style={{ maxWidth: 200 }}
       >
-        {saving ? "Saving…" : "Save profile"}
+        {saving ? "saving…" : "save profile"}
       </button>
 
       <div className={`${styles.status} ${status.err ? styles.statusErr : ""}`}>

@@ -29,9 +29,12 @@ the call, do not guess around it.
 6. For a song: `copy_section` the full section into the others' slots and
    carve each into what it is (Song structure below), then
    `set_arrangement` chain with the bar counts.
-7. `validate_song`, read the warnings. `audition_song` if a browser is
-   available: a track whose peak is under -40 dB is not being heard.
-8. `export_song` or `share_song`.
+7. `validate_song`, read the warnings. `audition_song` if you have it (the
+   MCP server does; the studio's compose panel does not, and there the
+   person listening is the audition): a track whose peak is under -40 dB is
+   not being heard.
+8. `export_song`, or `share_song` where it is offered (the MCP server). In
+   the compose panel the song lands in the studio for review; nothing to do.
 
 Use `get_song` to read back what exists before changing it. Keep track names
 short and about their role (kick, bass, keys), not their engine.

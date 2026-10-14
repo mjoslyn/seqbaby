@@ -80,10 +80,10 @@ function describeFailure(status: number, raw: string, data: ComposeResponse | nu
   // 502/504 with an HTML body is the hosting layer, not the route: nothing
   // the route says ever gets this far, so the status is all there is to go on.
   if (status === 504 || status === 408) {
-    return `that took too long and the server cut it off (${status}). A big request can run past the hosting timeout — try asking for one change at a time.`;
+    return `that took too long and the server cut it off (${status}). A big request can run past the hosting timeout, so try asking for one change at a time.`;
   }
   if (status === 502 || status === 503) {
-    return `the server couldn't complete the request (${status}) — it may have run too long or run out of memory.`;
+    return `the server couldn't complete the request (${status}); it may have run too long or run out of memory.`;
   }
   const snippet = raw.trim().slice(0, 160);
   if (snippet.startsWith("<")) return `the server returned a ${status} page instead of a reply.`;
@@ -222,7 +222,7 @@ export default function ComposeChat({
   const saveKey = useCallback(() => {
     const k = keyDraft.trim();
     if (!looksLikeApiKey(k)) {
-      setKeyError("that doesn't look like an Anthropic API key — they start sk-ant-");
+      setKeyError("that doesn't look like an Anthropic API key: they start sk-ant-");
       return;
     }
     setApiKey(k);
@@ -473,7 +473,7 @@ export default function ComposeChat({
       for (;;) {
         await sleep(POLL_INTERVAL_MS);
         if (Date.now() > until) {
-          land({ role: "error", text: "gave up waiting on that one — it may still be running." });
+          land({ role: "error", text: "gave up waiting on that one; it may still be running." });
           return;
         }
 
@@ -500,7 +500,7 @@ export default function ComposeChat({
           continue;
         }
         if (pollRes.status === 401) {
-          land({ role: "error", text: "signed out while that was running — sign in and the song may still be there." });
+          land({ role: "error", text: "signed out while that was running; sign in and the song may still be there." });
           return;
         }
         if (pollRes.status === 404) {
@@ -613,8 +613,8 @@ export default function ComposeChat({
   const autosaveKept = useCallback(async () => {
     const now = getOpenSong();
     if (!signedIn) return setSaveNote("");
-    if (now.isTemplate) return setSaveNote("kept — press save to make this a song of its own");
-    if (!now.id) return setSaveNote("kept — press save to keep it for good");
+    if (now.isTemplate) return setSaveNote("kept. press save to make this a song of its own");
+    if (!now.id) return setSaveNote("kept. press save to keep it for good");
     if (!window.seqbaby) return;
     setSaveNote("saving…");
     // What is in the ENGINE, not the turn's session: mid-audition that is the
@@ -643,7 +643,7 @@ export default function ComposeChat({
     if (res.versionId) setOpenSong({ versionId: res.versionId });
     setSaveNote(
       res.unchanged
-        ? `kept — nothing to save, still v${res.versionSeq}`
+        ? `kept, nothing to save: still v${res.versionSeq}`
         : `kept · saved as v${res.versionSeq}`,
     );
   }, [signedIn]);
@@ -690,8 +690,8 @@ export default function ComposeChat({
           ? SITE_OUT_OF_BUDGET
           : review
           ? (review.before
-              ? "auditioning changes — open to keep or stop them"
-              : "changes waiting — open to audition or keep them")
+              ? "auditioning changes: open to keep or stop them"
+              : "changes waiting: open to audition or keep them")
           : "ask for changes to this song"}
       >
         compose{review ? " ·" : ""}
@@ -705,15 +705,15 @@ export default function ComposeChat({
           <div className={styles.chatLog} ref={logRef}>
             {messages.length === 0 && (
               <div className={styles.chatEmpty}>
-                Tell it what to make or change — “add a dubby bassline on the
+                tell it what to make or change: “add a dubby bassline on the
                 silverbox”, “make the hats swing more”, “put a reverb on the
-                bus”. It edits the song that&apos;s open, live.
+                bus”. it edits the song that&apos;s open, live.
                 {needsKey && (
                   <>
                     {" "}
                     {siteKeyOffered
-                      ? "You've chosen to run this on your own Anthropic key — add it below."
-                      : "Add your own Anthropic key below and it runs on that; no account needed."}
+                      ? "you've chosen to run this on your own Anthropic key: add it below."
+                      : "add your own Anthropic key below and it runs on that; no account needed."}
                   </>
                 )}
               </div>
@@ -752,7 +752,7 @@ export default function ComposeChat({
             <div className={`${styles.chatReview} ${review.before ? styles.chatReviewLive : ""}`}>
               <div className={styles.chatReviewText}>
                 {review.before
-                  ? "auditioning — you are hearing the changes, but the song does not have them yet."
+                  ? "auditioning: you are hearing the changes, but the song does not have them yet."
                   : "these changes aren't in the song yet. audition drops them into what's playing; keep makes them the song."}
               </div>
               <div className={styles.chatReviewBtns}>
@@ -797,7 +797,7 @@ export default function ComposeChat({
                 <option value="site" title="this site's key, shared between accounts and rate limited">
                   this site
                 </option>
-                <option value="own" title="your own Anthropic key — your usage, your limits">
+                <option value="own" title="your own Anthropic key: your usage, your limits">
                   your own
                 </option>
               </select>

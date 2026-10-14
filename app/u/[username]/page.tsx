@@ -11,6 +11,7 @@ import PlayableAvatar from "@/app/PlayableAvatar";
 import SongPreview from "@/app/SongPreview";
 import PatchRoll from "@/app/home/PatchRoll";
 import { canPreview, engineLabel, patchEngineKey, patchKey } from "@/app/home/patchPreview";
+import { named } from "@/app/home/feed";
 import styles from "@/app/ui.module.css";
 
 export const dynamic = "force-dynamic";
@@ -46,7 +47,7 @@ export default async function ProfilePage({
             <Link href="/studio">← studio</Link>
           </nav>
           <h1 className={styles.pageTitle}>@{res.username}</h1>
-          <p className={styles.pageSub}>This profile is private.</p>
+          <p className={styles.pageSub}>this profile is private.</p>
         </div>
       </div>
     );
@@ -80,11 +81,11 @@ export default async function ProfilePage({
         {profile.bio && <p className={styles.profileBio}>{profile.bio}</p>}
 
         <div className={styles.sectionHead}>
-          <h3>sessions</h3>
+          <h3>songs</h3>
           <span className={styles.sectionCount}>{songs.length}</span>
         </div>
         {songs.length === 0 ? (
-          <div className={styles.emptyBig}>no published sessions yet</div>
+          <div className={styles.emptyBig}>no published songs yet</div>
         ) : (
           songs.map((s) => (
             <div className={styles.repoRow} key={s.id}>
@@ -96,11 +97,11 @@ export default async function ProfilePage({
               ) : null}
               <div className={styles.repoMain}>
                 {s.share_slug ? (
-                  <Link className={styles.repoName} href={`/studio?s=${s.share_slug}`}>
-                    {s.title}
+                  <Link className={styles.repoName} href={`/studio?s=${encodeURIComponent(s.share_slug)}`}>
+                    {named(s.title)}
                   </Link>
                 ) : (
-                  <span className={styles.repoName}>{s.title}</span>
+                  <span className={styles.repoName}>{named(s.title)}</span>
                 )}
                 {s.remixedFrom || s.forked_from ? (
                   <div className={styles.repoMeta}>
@@ -130,7 +131,7 @@ export default async function ProfilePage({
               />
               <RemixButton songId={s.id} className={styles.repoAction} remixedClassName={styles.repoSaved} />
               {s.share_slug && (
-                <Link className={styles.repoAction} href={`/studio?s=${s.share_slug}`}>
+                <Link className={styles.repoAction} href={`/studio?s=${encodeURIComponent(s.share_slug)}`}>
                   open
                 </Link>
               )}

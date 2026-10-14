@@ -271,9 +271,9 @@ export const CONTROL_LABELS = {
   // The prism's four amount knobs are all drawn "amt" beside their module's
   // select, so the menu and the undo label need the module named.
   ...Object.fromEntries(PRISM_KNOBS.map(k => [`fx-prism-${k}`, PRISM_KNOB_LABELS[k]])),
-  "fx-prism-wet": "prism mix",
+  "fx-prism-wet": "prism wet",
   ...Object.fromEntries(REPEAT_KNOBS.map(k => [`fx-repeat-${k}`, REPEAT_KNOB_LABELS[k]])),
-  "fx-repeat-wet": "repeat mix", "fx-repeat-mode": "repeat mode",
+  "fx-repeat-wet": "repeat wet", "fx-repeat-mode": "repeat mode",
   "fx-prism-charmode": "prism character", "fx-prism-movemode": "prism movement",
   "fx-prism-diffmode": "prism diffusion", "fx-prism-texmode": "prism texture",
   "p-gplay": "grain play mode", "p-gloop": "grain loop mode",

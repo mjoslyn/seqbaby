@@ -29,7 +29,7 @@ export default async function SettingsPage() {
         </nav>
         <h1 className={styles.pageTitle}>profile settings</h1>
         <p className={styles.pageSub}>
-          Your profile showcases the sessions and patches you publish.
+          Your profile showcases the songs and patches you publish.
         </p>
         <ProfileForm profile={profile} />
         <AccountSettings email={user?.email ?? ""} />

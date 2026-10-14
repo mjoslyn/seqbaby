@@ -600,7 +600,7 @@ const HELP_ROWS = [
   ["`", "vim mode on / off"],
   ["esc", "back to normal (in normal: let go of a knob)"],
   ["h l / j k", "cursor along the steps / between tracks (a count first: 4l)"],
-  ["w b 0 $ N|", "next / previous note, first / last step, step N"],
+  ["w b 0 ^ $ N|", "next / previous note, first step / first note, last step, step N"],
   ["gg G", "first / last track (NG: track N)"],
   ["space", "play / stop"],
   ["i / a / v", "insert (keys write) / play (keys only sound) / select steps"],
@@ -612,10 +612,10 @@ const HELP_ROWS = [
   ["v … y d p > < [ ]", "copy / delete / paste over / transpose / nudge the selected steps"],
   ["u / U, ctrl r", "undo / redo"],
   ["m s", "mute / solo the track"],
-  ["f c", "fx / filter panel. hjkl walk its knobs"],
+  ["f c", "the fx picker / the filter panel, hjkl walking its knobs. :k <stage knob> picks an fx knob"],
   [":k cutoff", "pick any knob by name (:k reverb decay, :k fx.delay.time; add a 0..1 value to set it)"],
   ["scroll, - =", "turn the picked knob: trackpad (shift: finer), or 1% a key (10= is 10%)"],
-  [":", ":bpm 128  :p 3  :len 32  :cut .4  :res .6  :fx reverb .5  :nudge 3  :12  :w  :q  :h"],
+  [":", ":bpm 128  :p 3  :len 32  :cut .4  :res .6  :fx reverb .5  :nudge 3  :view clips  :12  :w  :q  :h"],
   ["tab / shift tab", "on the command line: take the next / previous match (commands, :fx stages, :k knobs)"],
 ];
 

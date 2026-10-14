@@ -252,7 +252,7 @@ export function onExportSet() {
     a.remove();
     URL.revokeObjectURL(url);
     markSaved(data);
-    setStatus("exported session");
+    setStatus("exported song");
   } catch (err) {
     console.error(err);
     setStatus("export failed — see console", true);
@@ -267,7 +267,7 @@ export function onExportSet() {
 export async function onShareSet(title) {
   const btn = document.getElementById("set-share");
   if (btn) btn.disabled = true;
-  setStatus("packing session…");
+  setStatus("packing song…");
   try {
     const body = { session: serializeSet() };
     if (typeof title === "string" && title.trim()) body.title = title;
@@ -295,14 +295,14 @@ export async function loadShareFromUrl() {
   const qs = new URLSearchParams(location.search);
   const id = qs.get("s");
   if (!id) return;
-  setStatus(`loading shared session ${id}…`);
+  setStatus(`loading shared song ${id}…`);
   try {
     const r = await fetch(`/api/share?id=${encodeURIComponent(id)}`);
     if (!r.ok) throw new Error(await r.text());
     const { session } = await r.json();
     if (!session) throw new Error("empty session");
     applySet(session);
-    setStatus(`loaded shared session ${id}`);
+    setStatus(`loaded shared song ${id}`);
     // Clear the query so subsequent reloads don't keep reapplying it.
     try { history.replaceState({}, "", location.origin + location.pathname); } catch {}
   } catch (err) {
@@ -865,7 +865,7 @@ export function newSet() {
   });
   state.currentSetName = null;
   state.songName = null;
-  setStatus("new session");
+  setStatus("new song");
   // The React shell keeps its own answer to "which cloud song is open", and
   // after this nothing is. Announced from here rather than left to each caller
   // so every route into a reset lands the shell in the same place.
