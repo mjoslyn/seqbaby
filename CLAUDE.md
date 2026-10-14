@@ -4463,13 +4463,17 @@ edit ──▶ (420ms of quiet) ──▶ serializeSet() ──▶ fold onto the
   monotonic throughout, a track added and a track removed included.
 - **A parameter under an automation lane is pinned** (`pinAutomated`). While the
   transport runs, an enabled lane rewrites the field it automates on every step
-  (`t.filter.cutoff`, and `t.params[k]` for a voice with no AudioParam behind
-  that key), and that is not a value anybody can hold — the lane overwrites it a
-  sixteenth later. Left alone it would fill the stack with entries nobody made
-  and hand an undo back whatever the lane happened to be at. So those fields are
-  pinned to the previous snapshot's, in `baseSound` and the locked pattern's
-  `sound` as well, because `serializeSet` flushes the live sound into those on
-  its way out. Only while playing: stopped, the snapshot is exact.
+  (`t.filter.cutoff`, `t.params[k]` for a voice with no AudioParam behind
+  that key, and the fx stage's config field, `fxLanePath` in constants.js,
+  which the rack reads to decide whether a stage is wired in), and that is not
+  a value anybody can hold — the lane overwrites it a sixteenth later. Left
+  alone it would fill the stack with entries nobody made and hand an undo back
+  whatever the lane happened to be at. So those fields are pinned to the
+  previous snapshot's, in `baseSound` and the locked pattern's `sound` as well,
+  because `serializeSet` flushes the live sound into those on its way out. For
+  as long as the lane is on, playing or not: stopping leaves each field where
+  its lane last put it, and pinned only while playing, the stop click itself
+  was an undo entry and the song read as unsaved.
 - **Which pattern you are LOOKING at is not in the history.** Chain mode advances
   it from inside the transport's scheduler and a queued switch commits a bar
   after the click asking for it — neither is an edit, and both would otherwise

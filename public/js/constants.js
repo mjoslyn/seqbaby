@@ -512,6 +512,23 @@ export function splitFxInstanceKey(key) {
 export function baseModKey(key) {
   return splitFxInstanceKey(key)?.base ?? key;
 }
+// The two fx lanes whose last word is not the config field's name.
+const FX_LANE_FIELD = { "shaper.amt": "amount", "pitchshift.semi": "semitones" };
+
+/**
+ * Where in a sound an fx automation lane writes, as a path: ["fxConfig",
+ * stage or copy id, field]; null for a key that is not an fx lane. The lanes
+ * write the stage's config (the rack reads it to decide whether a stage is
+ * wired in), and history pins that field while the lane owns it.
+ */
+export function fxLanePath(key) {
+  const inst = splitFxInstanceKey(key);
+  const m = /^fx\.([a-z]+)(?:\.([a-z]+))?$/.exec(inst ? inst.base : key);
+  if (!m || !FX_STAGE_LEVEL_KEY[m[1]]) return null;
+  const field = m[2] ? (FX_LANE_FIELD[`${m[1]}.${m[2]}`] ?? m[2]) : FX_STAGE_LEVEL_KEY[m[1]];
+  return ["fxConfig", inst ? `${m[1]}#${inst.n}` : m[1], field];
+}
+
 /** The fx stage (or copy) an LFO or automation key reaches, or null. */
 export function fxStageOfModKey(key) {
   const inst = splitFxInstanceKey(key);

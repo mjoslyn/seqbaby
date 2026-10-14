@@ -48,7 +48,7 @@ import { parseMeter } from "./meter.js";
 import { refreshParamIndicators } from "./paramTargets.js";
 import { updateGranularSpeedEnabled, updatePlaitsControlsVisibility } from "./params.js";
 import { renderPatternGrid, setPatternMode } from "./patternBar.js";
-import { applyPatternSound, recallLoadedPatternSound, refreshAllPatternLockUI, refreshPatternSoundUI } from "./patternSound.js";
+import { applyPatternSound, recallLoadedPatternSound, refreshAllPatternLockUI, refreshPatternSoundUI, resolveSoundSources } from "./patternSound.js";
 import { refreshAutIfOpen, refreshRollIfOpen } from "./pianoRoll.js";
 import { applyBusMute, paintDiceDensity, placeBusesLast, refreshMuteSoloUI } from "./render.js";
 import { syncScaleUI } from "./scaleUI.js";
@@ -460,6 +460,9 @@ export function mergeSet(s) {
     const j = Number.isInteger(td.outIndex) ? td.outIndex : -1;
     const bus = j >= 0 ? made[j] : null;
     t.out = bus && bus !== t && bus.engineKey === "bus" ? String(bus.id) : "master";
+    // The p-lock sounds' sidechain sources carry indices into the incoming
+    // session too, on every track (a kept track's were copied in whole).
+    resolveSoundSources(t, made);
     // A fresh track's compressor still carries whatever raw id the blob held;
     // the ones that stayed had theirs resolved by applyTrackInPlace above.
     if (!fresh[i]) return;

@@ -348,8 +348,10 @@ export function applyAutomationAtStep(t, key, v, time, vNext, stepDur) {
       ramp(rack.flangerFeedback?.gain, vv * 0.9, vn * 0.9);
       return;
     case "fx.delay.time":
+      // The time only: a synced delay stays synced, so the next write through
+      // applyDelay (a tempo change, a turn of its knobs, a load) puts it back
+      // on the beat. This used to switch sync off for good.
       rack.config.delay.time = 0.05 + vv * 0.95;
-      rack.config.delay.sync = false;
       ramp(rack.delay?.delayTime, 0.05 + vv * 0.95, 0.05 + vn * 0.95);
       return;
     case "fx.delay.fbk":

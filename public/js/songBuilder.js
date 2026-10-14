@@ -684,6 +684,9 @@ export function setParams(song, index, params = {}) {
     }
     if (owner !== t.engineKey) warnings.push(`${key} belongs to ${owner}'s panel; this track is ${t.engineKey}, so it does nothing here`);
   }
+  // gspeed's format marker, as the studio writes it (stampGranularParams):
+  // without it the loader reads the value as the old 0..1 knob and doubles it.
+  if (t.params.gspeed != null) t.params.gspeedV = 2;
   return { params: t.params, warnings };
 }
 function panelKeys(engineKey) {

@@ -2,16 +2,16 @@ import { PATTERN_COUNT } from "./constants.js";
 import { setStatus } from "./dom.js";
 import { defaultFxConfig } from "./fxRack.js";
 import { chordSelectionFor } from "./keyboard.js";
-import { applySampleSpeed, defaultLFOConfig, disposeLFOs, syncAllLFOs } from "./lfo.js";
+import { applySampleSpeed, defaultLFOConfig, disposeLFOs } from "./lfo.js";
 import { autoAccents, guessIsDrumKit, patternMeter, stepsPerBarForMeter, totalSteps } from "./meter.js";
-import { updatePlaitsControlsVisibility } from "./params.js";
 import { renderPatternGrid } from "./patternBar.js";
 import { refreshAutIfOpen, refreshRollIfOpen } from "./pianoRoll.js";
-import { refreshEuclidUI, renderEuclidPanel } from "./euclid.js";
-import { cloneChance, refreshChanceUI, renderChancePanel } from "./chance.js";
-import { paintDiceDensity, placeBusesLast, refreshFxPanelUI, refreshMuteSoloUI, renderModPanel, renderTrack } from "./render.js";
-import { applySet } from "./session.js";
-import { defaultCompConfig, ensureFxRack, refreshAllTrackOutputs, refreshCompSourceDropdowns, refreshNoiseBeds, refreshOutputSelects, routeVoiceToRack, setFilter } from "./signal.js";
+import { renderEuclidPanel } from "./euclid.js";
+import { renderChancePanel } from "./chance.js";
+import { applyBusMute, placeBusesLast, renderTrack } from "./render.js";
+import { flushPatternSound, recallPatternSound, refreshPatternSoundUI } from "./patternSound.js";
+import { applySet, loadTrackFromData, migrateTrackData, serializeTrack, trackShellFor } from "./session.js";
+import { applyCompressorConfig, defaultCompConfig, ensureFxRack, refreshAllTrackOutputs, refreshCompSourceDropdowns, refreshNoiseBeds, refreshOutputSelects, routeVoiceToRack } from "./signal.js";
 import { aliasPattern, clonePattern, emptyPattern, state, trackSlot } from "./state.js";
 import { canAutomate } from "./automation.js";
 import { refreshParamIndicators } from "./paramTargets.js";
@@ -137,13 +137,13 @@ export function createTrack({ name, engineKey, length = totalSteps(), params = n
   return t;
 }
 
-// Deep-clone a track's state onto a new track placed after it in DOM +
-// state order. Mirrors the per-track apply logic in applySet: createTrack +
-// field fill + audio rebuild. Audio-node refs / DOM handles aren't copied —
-// they're freshly built. Sample buffers (eleven / upload) are shared since
-// they're immutable decoded AudioBuffers.
 /**
- * Deep-clone a track (patterns, params, fx, sample payload) with a new id.
+ * Copy a track (patterns, sound, fx chain and copies, generators, sample) onto
+ * a new one placed after it. The copy goes through the session format and the
+ * loader a song's track does (serializeTrack, loadTrackFromData), rather than a
+ * field list of its own: that list is how a copy came to hold an fx config the
+ * rack was not built on (edits to it never reached a save), and to miss the
+ * wavetable, the granular texture, the eq, the compressor and the fx copies.
  * @param {Track} src @returns {Track}
  */
 export function duplicateTrack(src) {
@@ -152,88 +152,35 @@ export function duplicateTrack(src) {
   let name = `${baseName} copy`;
   for (let i = 2; existing.has(name); i++) name = `${baseName} copy ${i}`;
 
-  const dup = createTrack({ name, engineKey: src.engineKey, length: src.length });
-
-  Object.assign(dup.params, src.params);
-  Object.assign(dup.filter, src.filter);
-  Object.assign(dup.eq, src.eq);
-  Object.assign(dup.midi, src.midi);
-  dup.fxConfig = JSON.parse(JSON.stringify(src.fxConfig));
-  dup.comp = JSON.parse(JSON.stringify(src.comp));
-  dup.customConfig = src.customConfig ? JSON.parse(JSON.stringify(src.customConfig)) : null;
-  dup.sampleSource = src.sampleSource ? { ...src.sampleSource } : null;
-  dup.uploadAudio = src.uploadAudio || null;
-  dup.uploadAudioMime = src.uploadAudioMime || null;
-  dup.uploadFileName = src.uploadFileName || null;
+  // The live sound is only written back to its store (baseSound, or a locked
+  // pattern's own) on the way out of a pattern; flush so the copy has it.
+  const slot = trackSlot(src);
+  flushPatternSound(src, slot);
+  const td = migrateTrackData({ ...serializeTrack(src), name });
+  const dup = createTrack(trackShellFor(td));
+  // A decoded sample is an immutable AudioBuffer: share it, so the copy plays
+  // at once rather than after its own decode of the same payload.
   dup.uploadBuffer = src.uploadBuffer || null;
-  dup.soundPromptText = src.soundPromptText || "";
-  dup.promptText = src.promptText || "";
-  dup.sampleDefaults = src.sampleDefaults ? { ...src.sampleDefaults } : dup.sampleDefaults;
-  dup.slices = Array.isArray(src.slices) ? src.slices.slice() : [];
-  dup.sliceOn = !!src.sliceOn;
-  dup.sliceBase = src.sliceBase ?? 60;
-  dup.slicePlayMode = src.slicePlayMode === "toend" ? "toend" : "region";
-  dup.sliceSensitivity = src.sliceSensitivity ?? 0.5;
-  dup.muted = !!src.muted;
-  dup.soloed = !!src.soloed;
-  // The copy sends where the original does — duplicating a track feeding a
-  // reverb bus and having it land dry on the master would be a surprise.
+  loadTrackFromData(dup, td);
+  // The copy sends where the original does (duplicating a track that feeds a
+  // reverb bus and having it land dry on the master would be a surprise), and
+  // keeps its sidechain: both are ids into this same session.
   dup.out = src.out || "master";
-  dup.isDrumKit = !!src.isDrumKit;
-  dup.glide = src.glide ?? 0;
-  dup.speed = src.speed ?? 1;
-  // Land the copy on the step its source is on. trackTick is the per-track step
-  // counter the transport reads; createTrack starts it at 0, so duplicating
-  // mid-play would drop the copy in at step 0 while the original is mid-pattern
-  // — the two run out of phase, audibly and in the playhead. speedAccum is the
-  // sub-step remainder for tracks that aren't at 1× and has to travel with it.
+  dup.comp.source = src.comp?.source ?? "self";
+
+  // On the pattern its source is on, which a launched clip may have put off
+  // the scene (the loader put it on the scene); stopped if its source is.
+  dup._clipOff = !!src._clipOff;
+  if (slot !== state.activePattern) {
+    aliasPattern(dup, slot);
+    if (recallPatternSound(dup, slot)) refreshPatternSoundUI(dup);
+    renderStepGrid(dup);
+  }
+  // Land the copy on the step its source is on: duplicating mid-play would
+  // otherwise drop it in wherever createTrack seeded it, out of phase with the
+  // original. speedAccum is the sub-step remainder at speeds other than 1x.
   dup.trackTick = src.trackTick ?? 0;
   dup.speedAccum = src.speedAccum ?? 0;
-  dup.density = src.density ?? 0.5;
-  dup.euclid = src.euclid ? { ...src.euclid } : null;
-  // cloneChance and not a spread: `pcs` is an array, and a copy sharing it
-  // would move the original's semitone probabilities with the duplicate's.
-  dup.chance = cloneChance(src.chance);
-  dup.sampleSpeedMode = src.sampleSpeedMode ?? "native";
-  dup.pitchLock = src.pitchLock ?? true;
-  for (const k of Object.keys(dup.lfoConfig)) {
-    if (src.lfoConfig?.[k]) dup.lfoConfig[k] = { ...src.lfoConfig[k] };
-  }
-  for (let i = 0; i < PATTERN_COUNT; i++) {
-    const sp = src.patterns[i];
-    if (!sp) continue;
-    dup.patterns[i] = clonePattern(sp);
-  }
-  // On the pattern its source is on, which a launched clip may have put off the
-  // scene; its stopped state and its arrangement travel too.
-  dup._clipOff = !!src._clipOff;
-  dup.arrangement = (src.arrangement || []).map(b => ({ ...b }));
-  aliasPattern(dup, trackSlot(src));
-
-  if (dup.el) {
-    const q = sel => dup.el.querySelector(sel);
-    q(".sq-track__name").value = dup.name;
-    q(".sq-track__len").value = dup.length;
-    q(".sq-track__engine").value = dup.engineKey;
-    const spd = q(".sq-track__speed"); if (spd) spd.value = String(dup.speed);
-    q(".p-vol").value = dup.params.vol;
-    q(".p-harm").value = dup.params.harm;
-    q(".p-timb").value = dup.params.timb;
-    q(".p-morph").value = dup.params.morph;
-    q(".p-decay").value = dup.params.decay;
-    q(".p-filtertype").value = dup.filter.type;
-    q(".p-cutoff").value = dup.filter.cutoff;
-    q(".p-reson").value = dup.filter.reson;
-    q(".p-envamt").value = dup.filter.env;
-    q(".p-envatk").value = dup.filter.attack;
-    q(".p-envdec").value = dup.filter.decay;
-    q(".p-envsus").value = dup.filter.sustain;
-    q(".p-envrel").value = dup.filter.release;
-    refreshMuteSoloUI(dup);
-    refreshNoiseBeds();                  // a duplicated solo changes who is audible
-    refreshFxPanelUI(dup);
-    renderModPanel(dup, dup._modPanelEl || dup.el.querySelector(".sq-track__mod-panel"));
-  }
 
   // Move the duplicate right after the source in DOM + state order. It isn't
   // necessarily last: createTrack has already dropped it above any buses.
@@ -248,56 +195,15 @@ export function duplicateTrack(src) {
   // the splice above is the one place track order is written by hand.
   placeBusesLast();
 
-  if (state.ready) {
-    disposeLFOs(dup);
-    if (dup.voice) dup.voice.dispose();
-    ensureFxRack(dup);
-    if (dup.fxRack) {
-      if (dup.fxConfig.vinyl)      dup.fxRack.applyVinyl(dup.fxConfig.vinyl);
-      if (dup.fxConfig.cassette)   dup.fxRack.applyCassette(dup.fxConfig.cassette);
-      dup.fxRack.applyFuzz(dup.fxConfig.fuzz);
-      if (dup.fxConfig.ringmod)    dup.fxRack.applyRingMod(dup.fxConfig.ringmod);
-      if (dup.fxConfig.crush)      dup.fxRack.applyCrush(dup.fxConfig.crush);
-      if (dup.fxConfig.autowah)    dup.fxRack.applyAutoWah(dup.fxConfig.autowah);
-      if (dup.fxConfig.chorus)     dup.fxRack.applyChorus(dup.fxConfig.chorus);
-      if (dup.fxConfig.phaser)     dup.fxRack.applyPhaser(dup.fxConfig.phaser);
-      if (dup.fxConfig.flanger)    dup.fxRack.applyFlanger(dup.fxConfig.flanger);
-      if (dup.fxConfig.pitchshift) dup.fxRack.applyPitchShift(dup.fxConfig.pitchshift);
-      if (dup.fxConfig.repeat)     dup.fxRack.applyRepeat(dup.fxConfig.repeat);
-      if (dup.fxConfig.prism)      dup.fxRack.applyPrism(dup.fxConfig.prism);
-      dup.fxRack.applyDelay(dup.fxConfig.delay);
-      dup.fxRack.applyReverb(dup.fxConfig.reverb);
-    }
-    dup.voice = buildVoiceForEngine(state.audioCtx, dup.engineKey, dup.params, dup);
-    if (dup.voice.type === "midi") {
-      dup.voice.setChannel(dup.midi.channel);
-      const out = state.midi?.outputs.get(dup.midi.outputId);
-      if (out) dup.voice.setOutput(out);
-    }
-    if (dup.voice.setGlide) dup.voice.setGlide(dup.glide);
-    routeVoiceToRack(dup);
-    // createTrack (above) built the filter node before the source's filter was
-    // copied onto it, and ensureFilter only sets a node's fields at
-    // construction — push the real values on now, or a duplicate mid-session
-    // keeps the default filter until something else happens to touch it.
-    if (dup.filterNode) {
-      setFilter(dup, "type",   dup.filter.type);
-      setFilter(dup, "cutoff", dup.filter.cutoff);
-      setFilter(dup, "reson",  dup.filter.reson);
-    }
-    applySampleSpeed(dup);
-    syncAllLFOs(dup);
-  }
   refreshCompSourceDropdowns();
   refreshOutputSelects();
-  if (state.ready) refreshAllTrackOutputs();
-  updatePlaitsControlsVisibility(dup);
-  paintDiceDensity(dup);          // density is copied after the row is rendered
-  renderEuclidPanel(dup);         // same: the euclid settings arrive after renderTrack
-  refreshEuclidUI(dup);
-  renderChancePanel(dup);
-  refreshChanceUI(dup);
-  renderStepGrid(dup);
+  if (state.ready) {
+    refreshAllTrackOutputs();
+    applyBusMute(dup);
+    applyCompressorConfig(dup);
+    applySampleSpeed(dup);
+  }
+  refreshNoiseBeds();                    // a duplicated solo changes who is audible
   return dup;
 }
 

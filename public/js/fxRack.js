@@ -579,6 +579,25 @@ export class FXRack {
     this.softSwitch(() => { this._buildExtras(); this._rewire(); });
   }
 
+  /**
+   * Push the whole of this.config onto the nodes: every stage FX_APPLY knows,
+   * then the chain (order and copies), then each copy's own config. For a
+   * config written onto a rack that already exists (a song or patch loaded
+   * after the first play, a duplicate): the constructor applied the defaults
+   * it was built with, and a hand-kept list of stages here is how gain, pan
+   * and amp kept coming out at their defaults.
+   */
+  applyConfig() {
+    for (const [stage, fn] of Object.entries(FX_APPLY)) {
+      const cfg = this.config[stage];
+      if (!cfg) continue;
+      try { this[fn]({ ...cfg }); } catch (e) { console.warn("fx " + stage, e); }
+    }
+    if (this._sub) return;
+    this.syncChain();
+    for (const id of fxInstanceIds(this.config)) this.applyInstance(id, this.config[id]);
+  }
+
   /** Apply an instance's config to its sub-rack (the panel already wrote it). */
   applyInstance(id, cfg) {
     let sub = this._extra[id];

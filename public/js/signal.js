@@ -497,6 +497,13 @@ export function routeVoiceToRack(t) {
   }
   const firstIn = nodes[0]?.in || dest;
   if (t.voice.setDestination) t.voice.setDestination(firstIn);
+  // A compressor keyed off this track taps its voice's output node, connected
+  // once when that compressor was configured. Every voice rebuild (an engine
+  // switch, a patch, the first play building voices in list order) comes
+  // through here, and left alone each one silently dropped the ducking.
+  for (const x of state.tracks) {
+    if (x !== t && x.comp?.enabled && String(x.comp.source) === String(t.id)) applyCompressorConfig(x);
+  }
 }
 
 /**
