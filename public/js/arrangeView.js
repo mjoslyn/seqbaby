@@ -70,7 +70,11 @@ let grid = null;      // the rebuilt half: ruler, lanes, blocks
 let detail = null;    // the persistent half: the selected track's card (trackDetail.js)
 let raf = 0;
 let headRaf = 0;
-let zoom = 1;
+// The zoom is remembered per browser, as the clip view's is (clipView.js).
+const ZOOM_KEY = "seqbaby.arrZoom.v1";
+const FOLLOW_KEY = "seqbaby.arrFollow.v1";
+let zoom = readZoom();
+let wheelAcc = 0;
 /** @type {{trackId: number, i: number}|null} the selected block */
 let sel = null;
 let drag = null;
@@ -78,10 +82,42 @@ let follow = readFollow();
 let autoScroll = -1;      // the scrollLeft this view last set itself, so a scroll event from it is not taken for a hand
 let suppressClick = false; // a loop drawn on the ruler is not also a click on it
 let headShown = false;
-const FOLLOW_KEY = "seqbaby.arrFollow.v1";
-
 function readFollow() {
-  try { return localStorage.getItem("seqbaby.arrFollow.v1") !== "0"; } catch { return true; }
+  try { return localStorage.getItem(FOLLOW_KEY) !== "0"; } catch { return true; }
+}
+function readZoom() {
+  try {
+    const raw = localStorage.getItem(ZOOM_KEY);
+    const z = raw == null ? 1 : Number(raw);
+    return Number.isInteger(z) && z >= 0 && z < ZOOMS.length ? z : 1;
+  } catch { return 1; }
+}
+
+/**
+ * Change the zoom, keeping the bar under `clientX` where it is on screen (the
+ * one at the left edge of the lanes when absent: the toolbar's buttons).
+ */
+function setZoom(z, clientX) {
+  z = Math.max(0, Math.min(ZOOMS.length - 1, z));
+  if (z === zoom) return;
+  const sc = scroller();
+  const offset = sc && clientX != null ? Math.max(0, clientX - sc.getBoundingClientRect().left - STRIP_W) : 0;
+  const bar = ((sc?.scrollLeft ?? 0) + offset) / barW();
+  zoom = z;
+  try { localStorage.setItem(ZOOM_KEY, String(zoom)); } catch {}
+  render({ scrollX: Math.max(0, bar * barW() - offset) });
+  setStatus(`arrangement zoom ${zoom + 1} of ${ZOOMS.length}`);
+}
+
+/** ctrl/⌘-wheel (a trackpad pinch arrives as one) over the timeline zooms it. */
+function onWheel(e) {
+  if (!(e.ctrlKey || e.metaKey) || !e.target.closest?.(".sq-arr__scroll")) return;
+  e.preventDefault();          // not the page's own zoom
+  wheelAcc += e.deltaY;
+  if (Math.abs(wheelAcc) < 40) return;
+  const dir = wheelAcc < 0 ? 1 : -1;
+  wheelAcc = 0;
+  setZoom(zoom + dir, e.clientX);
 }
 function setFollow(on) {
   follow = !!on;
@@ -99,6 +135,7 @@ export function installArrangeView() {
   root.addEventListener("click", onClick);
   root.addEventListener("pointerdown", onPointerDown);
   root.addEventListener("scroll", onScroll, true);   // scroll does not bubble: caught on the way down
+  root.addEventListener("wheel", onWheel, { passive: false });
   window.addEventListener("keydown", onKey);
   onViewChange((v) => { if (v === "arrange") { seedFromPatterns(); render(); headLoop(); } else { stopHead(); detail.release(); } });
   for (const ev of ["seqbaby:clips", "seqbaby:songedited", "seqbaby:setapplied", "seqbaby:newset", "seqbaby:transport"]) {
@@ -176,8 +213,8 @@ function render({ scrollX } = {}) {
     return `<div class="sq-arr__row${t.muted ? " is-muted" : ""}" data-track-id="${t.id}">
       <div class="sq-arr__strip">
         <button type="button" class="sq-arr__name" data-act="select" title="${esc(t.name)}: show this track's instrument, effects and pattern below">${esc(t.name)}</button>
-        <button type="button" class="sq-arr__mute" data-act="mute" aria-pressed="${!!t.muted}" title="mute">m</button>
-        <button type="button" class="sq-arr__solo" data-act="solo" aria-pressed="${!!t.soloed}" title="solo">s</button>
+        <button type="button" class="sq-arr__mute" data-act="mute" aria-pressed="${!!t.muted}"${t.soloed ? ' disabled title="mute (unsolo it first)"' : ' title="mute"'}>m</button>
+        <button type="button" class="sq-arr__solo" data-act="solo" aria-pressed="${!!t.soloed}"${t.muted ? ' disabled title="solo (unmute it first)"' : ' title="solo"'}>s</button>
         <span class="sq-arr__on" title="the pattern this track is on">p${trackSlot(t) + 1}</span>
       </div>
       <div class="sq-arr__lane" style="width:${bars * w}px" title="drag across empty space to add a block of pattern ${trackSlot(t) + 1}">${blocks}${ghosts}</div>
@@ -190,7 +227,7 @@ function render({ scrollX } = {}) {
       <button type="button" class="sq-btn--ghost" data-act="clear" title="remove every block">clear</button>
       <button type="button" class="sq-arr__follow" data-act="follow" aria-pressed="${follow}" title="follow: keep the playhead in view while it plays (scrolling by hand switches it off)">follow</button>
       <button type="button" class="sq-arr__loopbtn" data-act="loop" aria-pressed="${!!(state.arrLoopOn && loopR)}" title="${loopR ? `loop bars ${loopR.start + 1}-${loopR.end}: arrange mode plays them round instead of the whole arrangement. Drag across the ruler to draw another section` : "loop a section: drag across the ruler to pick its bars (or select a block and press this to loop its bars)"}">loop</button>
-      <span class="sq-arr__zoom"><button type="button" class="sq-btn--ghost" data-act="zoom-" title="zoom out">−</button><button type="button" class="sq-btn--ghost" data-act="zoom+" title="zoom in">+</button></span>
+      <span class="sq-arr__zoom"><button type="button" class="sq-btn--ghost" data-act="zoom-" title="zoom out (or ctrl/⌘-scroll, or pinch, over the timeline)"${zoom ? "" : " disabled"}>−</button><button type="button" class="sq-btn--ghost" data-act="zoom+" title="zoom in (or ctrl/⌘-scroll, or pinch, over the timeline)"${zoom < ZOOMS.length - 1 ? "" : " disabled"}>+</button></span>
       <span class="sq-arr__len">${len} bar${len === 1 ? "" : "s"}${state.arrStartBar ? ` · starts at bar ${state.arrStartBar + 1}` : ""}${state.arrLoopOn && loopR ? ` · looping bars ${loopR.start + 1}-${loopR.end}` : ""}${state.playing && !arrange ? " · playing the clips: the arrangement takes over at the bar line" : ""}</span>
     </div>
     <div class="sq-arr__scroll">
@@ -282,13 +319,7 @@ function onClick(e) {
   }
   const act = e.target.closest("[data-act]")?.dataset.act;
   if (act === "rec") { setArrangeRecord(!state.arrRecord); scheduleArrangePaint(); return; }
-  if (act === "zoom+" || act === "zoom-") {
-    // keep the bar at the left edge where it was
-    const bar0 = (scroller()?.scrollLeft ?? 0) / barW();
-    zoom = Math.max(0, Math.min(ZOOMS.length - 1, zoom + (act === "zoom+" ? 1 : -1)));
-    render({ scrollX: bar0 * barW() });
-    return;
-  }
+  if (act === "zoom+" || act === "zoom-") { setZoom(zoom + (act === "zoom+" ? 1 : -1)); return; }
   if (act === "follow") {
     setFollow(!follow);
     setStatus(follow ? "follow on: the view keeps up with the playhead" : "follow off");

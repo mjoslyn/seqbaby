@@ -163,7 +163,7 @@ export default async function HomePage() {
             turn the knobs. all of them. <span className={styles.wobble}>at once.</span>
           </h1>
           <p className={styles.lede}>
-            seqbaby is a step sequencer that runs in a browser tab. it has fifteen modelled
+            seqbaby is a step sequencer that runs in a browser tab. it has sixteen modelled
             instruments, 808 and 909 kits, a sampler, a mod matrix and an fx rack. share a song with a
             link, or jam on one with a friend.
           </p>
@@ -257,8 +257,7 @@ export default async function HomePage() {
           </ul>
         ) : (
           <p className={styles.emptyLine}>
-            no patches yet. <a href="/studio">make a sound</a>, save it as a patch, and publish it from the patches
-            menu.
+            no patches yet. <a href="/studio">make a sound</a>, save it as a patch, and publish it from <a href="/settings">settings</a>.
           </p>
         )}
       </section>
@@ -266,7 +265,7 @@ export default async function HomePage() {
       <section className={styles.section}>
         <div className={styles.sectionHead}>
           <h2>the instruments</h2>
-          <span className={styles.sectionSub}>fifteen emulators, each one a working model of the thing that makes the sound: a circuit, a string, a drum head, a voice. then the rest of the catalog.</span>
+          <span className={styles.sectionSub}>sixteen emulators, each one a working model of the thing that makes the sound: a circuit, a string, a drum head, a voice. then the rest of the catalog.</span>
         </div>
         <ul className={styles.stack}>
           {byName([...EMULATORS, ...INSTRUMENTS]).map(([name, line]) => (

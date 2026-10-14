@@ -2778,7 +2778,13 @@ it; the input is still the value, the focus target and the pointer target.
 - **Automation** (`automation.js`, aut panel): per-step value lanes stored in
   the pattern (`automation` field), applied at step time via `setParam`-style
   setters. `canAutomate` is broader than `canModulate` since it doesn't need
-  an AudioParam.
+  an AudioParam. A lane writes the stored field it automates (the cutoff, a
+  voice param with no AudioParam, an fx stage's config, which the rack reads to
+  decide whether a stage is wired in) and leaves the knob's slider alone, so
+  the slider is the base: `serializeTrack` writes the slider's value for a
+  lane-owned field while playing (`laneBases`), and `stopPlayback` puts the
+  field back on it (`restoreLaneBases`). Before, the lane's last value was what
+  a save kept.
 - **Recording knob moves** (`knobRecord.js`): record armed (the transport's
   record button or vim insert) with the transport playing, turning any knob
   writes that track's lane for the parameter on the current pattern, creating
@@ -3329,9 +3335,10 @@ to say hello), the songs people have published, and who made them.
   it (migration 0007).
 - **Who is looking is a client island** (`Who.tsx`): a local session read,
   then one `profile_cards` read for the handle. A cached page cannot know.
-- **Twelve of each**: songs, people, patches (`FEED_SIZE` in feed.ts).
+- **Four of each**: songs, people, patches (`FEED_SIZE` / `HOME_PATCHES` in
+  feed.ts); /songs, /people and /patches hold the rest.
 - **Patches are laid out like the songs** (`app/home/PatchCard.tsx`): the
-  newest twelve in the public gallery, each with a play button on the same
+  newest four in the public gallery, each with a play button on the same
   hidden engine the song cards use. A patch is a sound with no notes, so
   `patchPreview.js` (pure, tested) writes it a phrase by what the engine is
   for: a drum voice a rhythm that suits the drum (from the engine key, or a
@@ -3988,7 +3995,8 @@ agent ──▶ mcp/server.mjs ──▶ songBuilder.js ──▶ { _version, bp
   a shorter string tiling a longer pattern. `describePattern` reads one back
   the same way, so `get_song` shows an agent what it wrote in the notation
   it wrote it in.
-- **The MCP server holds one song** and keeps the tool list short (39 tools:
+- **The MCP server holds one song** and keeps the tool list short (38 tools on stdio, 36 of them shared with the compose panel, which lacks
+  `share_song` and `audition_song`:
   song / engines / tracks / steps / sound / modulation / generators / code /
   out). `write_code` takes Strudel code (strudel.js, the same reader as
   the studio's code drawer), which is the tersest way an agent has to spell a
@@ -4578,13 +4586,17 @@ edit ──▶ (420ms of quiet) ──▶ serializeSet() ──▶ fold onto the
   monotonic throughout, a track added and a track removed included.
 - **A parameter under an automation lane is pinned** (`pinAutomated`). While the
   transport runs, an enabled lane rewrites the field it automates on every step
-  (`t.filter.cutoff`, and `t.params[k]` for a voice with no AudioParam behind
-  that key), and that is not a value anybody can hold — the lane overwrites it a
-  sixteenth later. Left alone it would fill the stack with entries nobody made
-  and hand an undo back whatever the lane happened to be at. So those fields are
-  pinned to the previous snapshot's, in `baseSound` and the locked pattern's
-  `sound` as well, because `serializeSet` flushes the live sound into those on
-  its way out. Only while playing: stopped, the snapshot is exact.
+  (`t.filter.cutoff`, `t.params[k]` for a voice with no AudioParam behind
+  that key, and the fx stage's config field, `fxLanePath` in constants.js,
+  which the rack reads to decide whether a stage is wired in), and that is not
+  a value anybody can hold — the lane overwrites it a sixteenth later. Left
+  alone it would fill the stack with entries nobody made and hand an undo back
+  whatever the lane happened to be at. So those fields are pinned to the
+  previous snapshot's, in `baseSound` and the locked pattern's `sound` as well,
+  because `serializeSet` flushes the live sound into those on its way out. For
+  as long as the lane is on, playing or not: stopping leaves each field where
+  its lane last put it, and pinned only while playing, the stop click itself
+  was an undo entry and the song read as unsaved.
 - **Which pattern you are LOOKING at is not in the history.** Chain mode advances
   it from inside the transport's scheduler and a queued switch commits a bar
   after the click asking for it — neither is an edit, and both would otherwise
@@ -4924,7 +4936,8 @@ through a 6ms fade on its gain).
   do the same, or use `currentBpm()` (lfo.js) as the sync helpers do.
 - **Worklet processor sources are template literals** (`silverbox.js`,
   `contagion.js`, `hexop.js`, `guitar.js`, `bass.js`, `subbass.js`,
-  `drone.js`, `vox.js`, `lancet.js`, `halo.js`, `siege.js`, `ladder.js`, `oracle.js`, `crusher.js`, `reverb.js`, `prism.js`, `repeat.js`),
+  `drone.js`, `vox.js`, `lancet.js`, `halo.js`, `siege.js`, `ladder.js`, `oracle.js`, `crusher.js`, `reverb.js`, `prism.js`, `repeat.js`,
+  `filterModels.js`),
   so a stray backtick or `${` inside one — including in a comment — truncates
   the string. The module still parses, `node --check` still passes, and the
   failure only shows up as a SyntaxError at engine boot. When editing inside a

@@ -49,7 +49,7 @@ export async function POST(req: Request) {
   const brought = typeof body.apiKey === "string" ? body.apiKey.trim() : "";
   if (brought && !looksLikeApiKey(brought)) {
     return NextResponse.json(
-      { error: "that doesn't look like an Anthropic API key — they start sk-ant-" },
+      { error: "that doesn't look like an Anthropic API key: they start sk-ant-" },
       { status: 400 },
     );
   }
@@ -66,7 +66,7 @@ export async function POST(req: Request) {
     }
     if (!process.env.ANTHROPIC_API_KEY) {
       return NextResponse.json(
-        { error: "this deploy has no Anthropic key of its own — add your own key to compose" },
+        { error: "this deploy has no Anthropic key of its own: add your own key to compose" },
         { status: 400 },
       );
     }

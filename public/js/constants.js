@@ -11,7 +11,7 @@ import {
   LANCET_MOD_KEYS, LANCET_MOD_LABELS, LANCET_MOD_RANGE,
   HALO_MOD_KEYS, HALO_MOD_LABELS, HALO_MOD_RANGE,
   SIEGE_MOD_KEYS, SIEGE_MOD_LABELS, SIEGE_MOD_RANGE,
-  LADDER_MOD_KEYS, LADDER_MOD_LABELS, LADDER_MOD_RANGE,
+  LADDER_TARGET_KEYS, LADDER_MOD_LABELS, LADDER_MOD_RANGE,
   ORACLE_MOD_KEYS, ORACLE_MOD_LABELS, ORACLE_MOD_RANGE,
 } from "./engineData.js";
 import { CHANCE_MOD_KEYS, CHANCE_MOD_LABELS } from "./chanceGen.js";
@@ -110,8 +110,9 @@ export const LFO_KEYS = [
   ...HALO_MOD_KEYS.map(k => `halo_${k}`),
   // Siege: the kick's tune and velocity floor. Siege only.
   ...SIEGE_MOD_KEYS.map(k => `siege_${k}`),
-  // Ladder: the two contours, the mod wheel, the drift and the tune. Ladder only.
-  ...LADDER_MOD_KEYS.map(k => `ladder_${k}`),
+  // Ladder: the two contours, the mod wheel, the drift, the tune and osc 2 / 3's
+  // detune. Ladder only.
+  ...LADDER_TARGET_KEYS.map(k => `ladder_${k}`),
   // Oracle: VCO 1's shape, the widths, the slop, the chorus, the envelope. Oracle only.
   ...ORACLE_MOD_KEYS.map(k => `oracle_${k}`),
 ];
@@ -124,26 +125,26 @@ export const LFO_LABELS = {
   euclid_pulses: "euclid pulses", euclid_steps: "euclid cycle", euclid_rotate: "euclid rotate",
   ...Object.fromEntries(CHANCE_MOD_KEYS.map(k => [`chance_${k}`, CHANCE_MOD_LABELS[k]])),
   vol: "volume", cutoff: "filter cutoff", reson: "filter reson",
-  fuzz: "fuzz amt", delay: "delay wet", verb: "reverb wet", pan: "pan",
-  vinyl: "vinyl amt", cassette: "cassette amt", ringmod: "ring mod wet",
-  shaper: "wave folder wet", shaper_amt: "wave folder amt",
-  crush: "bitcrush wet", autowah: "auto-wah wet", chorus: "chorus wet",
+  fuzz: "fuzz wet", delay: "delay wet", verb: "reverb wet", pan: "pan",
+  vinyl: "vinyl wet", cassette: "cassette wet", ringmod: "ring mod wet",
+  shaper: "shaper wet", shaper_amt: "shaper amt",
+  crush: "crush wet", autowah: "auto-wah wet", chorus: "chorus wet",
   phaser: "phaser wet", flanger: "flanger wet", pitch: "pitch shift wet",
-  repeat: "repeat mix",
+  repeat: "repeat wet",
   ...Object.fromEntries(REPEAT_KNOBS.map(k => [`repeat_${k}`, REPEAT_KNOB_LABELS[k]])),
-  prism: "prism mix",
+  prism: "prism wet",
   ...Object.fromEntries(PRISM_KNOBS.map(k => [`prism_${k}`, PRISM_KNOB_LABELS[k]])),
   fuzz_drive: "fuzz drive", fuzz_tone: "fuzz tone", fuzz_level: "fuzz level",
   vinyl_warmth: "vinyl warmth", vinyl_wow: "vinyl wow",
-  shaper_preamp: "wave shaper preamp",
+  shaper_preamp: "shaper preamp",
   cassette_flutter: "cassette flutter", cassette_sat: "cassette sat",
   ring_freq: "ring mod freq",
-  crush_bits: "bitcrush bits", crush_rate: "bitcrush rate",
+  crush_bits: "crush bits", crush_rate: "crush rate",
   autowah_sens: "auto-wah sens", autowah_range: "auto-wah range",
   chorus_rate: "chorus rate", chorus_depth: "chorus depth",
   phaser_rate: "phaser rate", phaser_depth: "phaser depth",
   flanger_rate: "flanger rate", flanger_fbk: "flanger fbk",
-  pitch_semi: "pitch semi",
+  pitch_semi: "pitch shift semi",
   wt_scan_start: "wave scan start", wt_scan_range: "wave scan range",
   gran_speed: "grain speed", gran_pitch: "grain pitch",
   gran_window: "grain window", gran_jitter: "grain jitter",
@@ -172,7 +173,7 @@ export const LFO_LABELS = {
   ...Object.fromEntries(LANCET_MOD_KEYS.map(k => [`lancet_${k}`, LANCET_MOD_LABELS[k]])),
   ...Object.fromEntries(HALO_MOD_KEYS.map(k => [`halo_${k}`, HALO_MOD_LABELS[k]])),
   ...Object.fromEntries(SIEGE_MOD_KEYS.map(k => [`siege_${k}`, SIEGE_MOD_LABELS[k]])),
-  ...Object.fromEntries(LADDER_MOD_KEYS.map(k => [`ladder_${k}`, LADDER_MOD_LABELS[k]])),
+  ...Object.fromEntries(LADDER_TARGET_KEYS.map(k => [`ladder_${k}`, LADDER_MOD_LABELS[k]])),
   ...Object.fromEntries(ORACLE_MOD_KEYS.map(k => [`oracle_${k}`, ORACLE_MOD_LABELS[k]])),
 };
 export const lfoLabel = (k) => {
@@ -281,7 +282,7 @@ export const LFO_AMP_SCALE = {
     const [lo, hi] = SIEGE_MOD_RANGE[k];
     return [`siege_${k}`, hi - lo];
   })),
-  ...Object.fromEntries(LADDER_MOD_KEYS.map(k => {
+  ...Object.fromEntries(LADDER_TARGET_KEYS.map(k => {
     const [lo, hi] = LADDER_MOD_RANGE[k];
     return [`ladder_${k}`, hi - lo];
   })),
@@ -512,6 +513,23 @@ export function splitFxInstanceKey(key) {
 export function baseModKey(key) {
   return splitFxInstanceKey(key)?.base ?? key;
 }
+// The two fx lanes whose last word is not the config field's name.
+const FX_LANE_FIELD = { "shaper.amt": "amount", "pitchshift.semi": "semitones" };
+
+/**
+ * Where in a sound an fx automation lane writes, as a path: ["fxConfig",
+ * stage or copy id, field]; null for a key that is not an fx lane. The lanes
+ * write the stage's config (the rack reads it to decide whether a stage is
+ * wired in), and history pins that field while the lane owns it.
+ */
+export function fxLanePath(key) {
+  const inst = splitFxInstanceKey(key);
+  const m = /^fx\.([a-z]+)(?:\.([a-z]+))?$/.exec(inst ? inst.base : key);
+  if (!m || !FX_STAGE_LEVEL_KEY[m[1]]) return null;
+  const field = m[2] ? (FX_LANE_FIELD[`${m[1]}.${m[2]}`] ?? m[2]) : FX_STAGE_LEVEL_KEY[m[1]];
+  return ["fxConfig", inst ? `${m[1]}#${inst.n}` : m[1], field];
+}
+
 /** The fx stage (or copy) an LFO or automation key reaches, or null. */
 export function fxStageOfModKey(key) {
   const inst = splitFxInstanceKey(key);
@@ -642,31 +660,31 @@ export const AUTOMATION_TARGETS = {
   ...Object.fromEntries(HALO_MOD_KEYS.map(k => [`halo.${k}`, { label: HALO_MOD_LABELS[k] }])),
   // Siege (siege engine only) — tune, velocity floor.
   ...Object.fromEntries(SIEGE_MOD_KEYS.map(k => [`siege.${k}`, { label: SIEGE_MOD_LABELS[k] }])),
-  // Ladder (ladder engine only) — the contours, the mod wheel, drift, tune.
-  ...Object.fromEntries(LADDER_MOD_KEYS.map(k => [`ladder.${k}`, { label: LADDER_MOD_LABELS[k] }])),
+  // Ladder (ladder engine only) — the contours, the mod wheel, drift, tune, detunes.
+  ...Object.fromEntries(LADDER_TARGET_KEYS.map(k => [`ladder.${k}`, { label: LADDER_MOD_LABELS[k] }])),
   // Oracle (oracle engine only) — VCO 1's shape, the widths, slop, chorus, the envelope.
   ...Object.fromEntries(ORACLE_MOD_KEYS.map(k => [`oracle.${k}`, { label: ORACLE_MOD_LABELS[k] }])),
   // fx
   "fx.gain":            { label: "gain drive" },
   "fx.pan":             { label: "pan" },
-  "fx.vinyl":           { label: "vinyl amt" },
+  "fx.vinyl":           { label: "vinyl wet" },
   "fx.vinyl.warmth":    { label: "vinyl warmth" },
   "fx.vinyl.wow":       { label: "vinyl wow" },
-  "fx.cassette":        { label: "cassette amt" },
+  "fx.cassette":        { label: "cassette wet" },
   "fx.cassette.flutter":{ label: "cassette flutter" },
   "fx.cassette.sat":    { label: "cassette sat" },
-  "fx.fuzz":            { label: "fuzz amt" },
+  "fx.fuzz":            { label: "fuzz wet" },
   "fx.fuzz.drive":      { label: "fuzz drive" },
   "fx.fuzz.tone":       { label: "fuzz tone" },
   "fx.fuzz.level":      { label: "fuzz level" },
   "fx.ringmod":         { label: "ring mod wet" },
   "fx.ringmod.freq":    { label: "ring mod freq" },
-  "fx.shaper":          { label: "wave shaper wet" },
-  "fx.shaper.preamp":   { label: "wave shaper preamp" },
-  "fx.shaper.amt":      { label: "wave shaper amt" },
-  "fx.crush":           { label: "bitcrush wet" },
-  "fx.crush.bits":      { label: "bitcrush bits" },
-  "fx.crush.rate":      { label: "bitcrush rate" },
+  "fx.shaper":          { label: "shaper wet" },
+  "fx.shaper.preamp":   { label: "shaper preamp" },
+  "fx.shaper.amt":      { label: "shaper amt" },
+  "fx.crush":           { label: "crush wet" },
+  "fx.crush.bits":      { label: "crush bits" },
+  "fx.crush.rate":      { label: "crush rate" },
   "fx.autowah":         { label: "auto-wah wet" },
   "fx.autowah.sens":    { label: "auto-wah sens" },
   "fx.autowah.range":   { label: "auto-wah range" },
@@ -680,10 +698,10 @@ export const AUTOMATION_TARGETS = {
   "fx.flanger.rate":    { label: "flanger rate" },
   "fx.flanger.fbk":     { label: "flanger fbk" },
   "fx.pitchshift":      { label: "pitch shift wet" },
-  "fx.pitchshift.semi": { label: "pitch semi" },
-  "fx.repeat":          { label: "repeat mix" },
+  "fx.pitchshift.semi": { label: "pitch shift semi" },
+  "fx.repeat":          { label: "repeat wet" },
   ...Object.fromEntries(REPEAT_KNOBS.map(k => [`fx.repeat.${k}`, { label: REPEAT_KNOB_LABELS[k] }])),
-  "fx.prism":           { label: "prism mix" },
+  "fx.prism":           { label: "prism wet" },
   ...Object.fromEntries(PRISM_KNOBS.map(k => [`fx.prism.${k}`, { label: PRISM_KNOB_LABELS[k] }])),
   "fx.delay":           { label: "delay wet" },
   "fx.delay.time":      { label: "delay time" },

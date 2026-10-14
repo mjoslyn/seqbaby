@@ -66,7 +66,7 @@ export default function AccountSettings({ email }: { email: string }) {
           disabled={emailPending}
           style={{ maxWidth: 220 }}
         >
-          {emailPending ? "Updating…" : "Update email"}
+          {emailPending ? "updating…" : "update email"}
         </button>
         {emailState.error && <p className={styles.error}>{emailState.error}</p>}
         {emailState.message && (
@@ -108,7 +108,7 @@ export default function AccountSettings({ email }: { email: string }) {
           disabled={pwPending}
           style={{ maxWidth: 220 }}
         >
-          {pwPending ? "Updating…" : "Update password"}
+          {pwPending ? "updating…" : "update password"}
         </button>
         {pwState.error && <p className={styles.error}>{pwState.error}</p>}
         {pwState.message && <p className={styles.message}>{pwState.message}</p>}
@@ -127,7 +127,7 @@ export default function AccountSettings({ email }: { email: string }) {
       ) : (
         <div className={styles.dangerBox}>
           <p className={styles.dangerText}>
-            This permanently deletes your account, profile, sessions, and
+            This permanently deletes your account, profile, songs, and
             patches. This cannot be undone. Type <b>DELETE</b> to confirm.
           </p>
           <input
@@ -143,7 +143,7 @@ export default function AccountSettings({ email }: { email: string }) {
               onClick={doDelete}
               disabled={deleting || confirmText !== "DELETE"}
             >
-              {deleting ? "Deleting…" : "Permanently delete"}
+              {deleting ? "deleting…" : "permanently delete"}
             </button>
             <button
               className={styles.repoAction}

@@ -11,7 +11,7 @@ export const SITE_URL = "https://www.playseqbaby.com/";
 export const SHARE_IMAGE = `${SITE_URL}share.png`;
 
 export const SITE_DESCRIPTION =
-  "Prompt-driven step sequencer — Plaits, 808/909 kits, hand-built emulations, samples, MIDI.";
+  "Prompt-driven step sequencer: Plaits, 808/909 kits, hand-built emulations, samples, MIDI.";
 
 /** og + twitter for one card. `image` is the song or jam's own picture
  *  (app/api/og), absolute; the site's share.png when there is none. `url` is

@@ -28,6 +28,9 @@ export type ProfileSong = {
   preview?: unknown;
   /** Hearts (migration 0016), absent before that has run. */
   likes?: number;
+  /** Started from its owner's template, so `forked_from` is no remix
+   *  (migration 0024), absent before that has run. */
+  from_template?: boolean;
 };
 export type ProfilePatch = {
   id: string;
@@ -85,13 +88,13 @@ export async function updateProfile(input: {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return { error: "Not signed in" };
+  if (!user) return { error: "not signed in" };
 
   const patch: Record<string, unknown> = {};
   if (input.username !== undefined) {
     const u = input.username.trim();
     if (!USERNAME_RE.test(u))
-      return { error: "Name: 2–30 chars, letters/numbers/-/_ only" };
+      return { error: "name: 2–30 chars, letters/numbers/-/_ only" };
     patch.username = u;
     patch.display_name = u;
   }
@@ -102,12 +105,12 @@ export async function updateProfile(input: {
     // screens, so a plain-http one would be mixed content on every page it
     // appeared on, and anything that is not a URL is a broken image.
     if (a && !/^https:\/\/[^\s]+$/i.test(a))
-      return { error: "Avatar: an https:// image URL, or upload one" };
+      return { error: "avatar: an https:// image URL, or upload one" };
     patch.avatar_url = a || null;
   }
   if (input.avatar_grid !== undefined) {
     if (input.avatar_grid !== null && !AVATAR_GRID_RE.test(input.avatar_grid))
-      return { error: "That avatar is not a grid this app can draw" };
+      return { error: "that avatar is not a grid this app can draw" };
     patch.avatar_grid = input.avatar_grid;
   }
   if (input.is_public !== undefined) patch.is_public = !!input.is_public;
@@ -119,12 +122,12 @@ export async function updateProfile(input: {
     .select("id");
   if (error) {
     if (/duplicate key|unique/i.test(error.message))
-      return { error: "That name is taken" };
+      return { error: "that name is taken" };
     return { error: error.message };
   }
   // The signup trigger creates this row, so a miss here means it is genuinely
   // absent -- report that rather than a save that silently did nothing.
-  if (!rows?.length) return { error: "Profile not found" };
+  if (!rows?.length) return { error: "profile not found" };
   revalidatePath("/", "layout");
   return { ok: true };
 }
@@ -210,7 +213,7 @@ export async function getPublicProfile(
   const PATCH_COLS =
     "id,name,engine_type,created_at,kind:config->>_kind,engine:config->>engineKey,drum:config->isDrumKit,sample:config->sampleSource->>id";
   const [songsRes, patchesRes] = await Promise.all([
-    songsQuery(`${SONG_COLS},preview,likes`),
+    songsQuery(`${SONG_COLS},preview,likes,from_template`),
     patchesQuery(`${PATCH_COLS},likes`),
   ]);
   // `likes` on patches is 0017's; without it, ask again without.
@@ -218,14 +221,18 @@ export async function getPublicProfile(
 
   // Resolve remix lineage (source title + author handle) for any remixed sessions,
   // limited to sources the viewer can read (public or owned).
+  // Each optional column is a migration of its own (from_template 0024, likes
+  // 0016, preview 0012): without one, ask again without it.
   let songs = songsRes.data;
-  if (songsRes.error) {
-    const noLikes = await songsQuery(`${SONG_COLS},preview`);
-    songs = noLikes.error ? (await songsQuery(SONG_COLS)).data : noLikes.data;
+  for (const cols of [`${SONG_COLS},preview,likes`, `${SONG_COLS},preview`, SONG_COLS]) {
+    if (songs) break;
+    const res = await songsQuery(cols);
+    if (!res.error) songs = res.data;
   }
   const songRows = songs ?? [];
+  // A song started from its owner's template is not a remix (0024).
   const remixIds = [
-    ...new Set(songRows.map((s) => s.forked_from).filter(Boolean)),
+    ...new Set(songRows.filter((s) => !s.from_template).map((s) => s.forked_from).filter(Boolean)),
   ] as string[];
   const lineage = new Map<string, { title: string; username: string | null }>();
   if (remixIds.length) {
@@ -256,7 +263,7 @@ export async function getPublicProfile(
     isOwner,
     songs: songRows.map((s) => ({
       ...s,
-      remixedFrom: s.forked_from ? (lineage.get(s.forked_from) ?? null) : null,
+      remixedFrom: s.forked_from && !s.from_template ? (lineage.get(s.forked_from) ?? null) : null,
     })),
     patches: patches ?? [],
   };

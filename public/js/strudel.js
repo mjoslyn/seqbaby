@@ -1572,6 +1572,10 @@ function soundForTrack(t, native = false) {
   if (native && (t.engineKey === "dm:lancet" || t.engineKey === "dm:halo")) return { s: nativeName(t.engineKey), drum: true };
   // A halo has no one stock sound: a long one is a crash, anything shorter a hat.
   if (t.engineKey === "dm:halo") return { s: (t.params?.decay ?? 0.4) > 0.6 ? "cr" : "hh", bank: null, drum: true };
+  // A siege is a kick that takes a note (V/oct, which is why the native form
+  // writes its notes): a kit's kick is the stock bd, and one playing a
+  // bassline (drum kit off) a sine at its notes, which is what its body is.
+  if (!native && t.engineKey === "dm:siege") return t.isDrumKit === false ? { s: "sine", drum: false } : { s: "bd", bank: null, drum: true };
   if (DRUM_EXPORT[t.engineKey]) { const [s, bank] = DRUM_EXPORT[t.engineKey]; return { s, bank, drum: true }; }
   if (t.engineKey === "sampler" && t.sampleSource?.kind === "bundled") {
     const [kit, part] = String(t.sampleSource.id).split("/");

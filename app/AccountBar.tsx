@@ -194,7 +194,7 @@ export function AccountBar({
         <button
           className={styles.shareBtn}
           onClick={() => window.seqbaby?.onShareSet?.(getOpenSong().title)}
-          title="create a shareable link for this session"
+          title="create a shareable link for this song"
         >
           share
         </button>

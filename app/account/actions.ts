@@ -10,13 +10,13 @@ export async function updateEmail(
   formData: FormData,
 ): Promise<State> {
   const email = String(formData.get("email") || "").trim();
-  if (!email) return { error: "Enter a new email address" };
+  if (!email) return { error: "enter a new email address" };
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return { error: "Not signed in" };
-  if (email === user.email) return { error: "That's already your email" };
+  if (!user) return { error: "not signed in" };
+  if (email === user.email) return { error: "that's already your email" };
 
   const origin = (await headers()).get("origin") ?? "";
   const { error } = await supabase.auth.updateUser(
@@ -26,7 +26,7 @@ export async function updateEmail(
   if (error) return { error: error.message };
   return {
     message:
-      "Confirmation sent — check your new email (and current one) to complete the change.",
+      "confirmation sent: check your new email (and the current one) to complete the change.",
   };
 }
 
@@ -37,24 +37,24 @@ export async function updatePassword(
   const current = String(formData.get("current") || "");
   const next = String(formData.get("next") || "");
   if (next.length < 6)
-    return { error: "New password must be at least 6 characters" };
+    return { error: "new password must be at least 6 characters" };
 
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user?.email) return { error: "Not signed in" };
+  if (!user?.email) return { error: "not signed in" };
 
   // Re-verify identity with the current password before changing it.
   const { error: verifyErr } = await supabase.auth.signInWithPassword({
     email: user.email,
     password: current,
   });
-  if (verifyErr) return { error: "Current password is incorrect" };
+  if (verifyErr) return { error: "current password is incorrect" };
 
   const { error } = await supabase.auth.updateUser({ password: next });
   if (error) return { error: error.message };
-  return { message: "Password updated." };
+  return { message: "password updated." };
 }
 
 // Permanently delete the signed-in user's account and all their data (cascades
@@ -67,7 +67,7 @@ export async function deleteAccount(
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return { error: "Not signed in" };
+  if (!user) return { error: "not signed in" };
 
   const { error } = await supabase.rpc("delete_own_account");
   if (error) return { error: error.message };

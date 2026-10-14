@@ -464,3 +464,33 @@ test("ladder: a song from before the model keeps what it played", () => {
   const loaded = migrateTrackNames(JSON.parse(JSON.stringify(song.tracks[i])));
   assert.equal(loaded.params.harm, 0.3);
 });
+
+test("ladder: a range is one of the six footages, and osc 2 / 3's detune take an LFO and a lane", async () => {
+  const { LFO_KEYS, LFO_AMP_SCALE, AUTOMATION_TARGETS, canModulateKey, canAutomateKey } = await import("../public/js/constants.js");
+  const song = B.newSong({ bpm: 120 });
+  const { index: i } = B.addTrack(song, { engine: "ladder", name: "bass" });
+  // between two footages is a fraction of an octave off: refused, with the choices
+  assert.throws(() => B.setParams(song, i, { osc1range: -4.5 }), /osc1range must be one of -7, -2, -1, 0, 1, 2/);
+  B.setParams(song, i, { osc1range: -2 });
+  assert.equal(song.tracks[i].params.osc1range, -2);
+  const d = B.describeEngine("dm:ladder");
+  assert.deepEqual(d.panel.numeric.find(c => c.key === "osc3range").values, LADDER_RANGES);
+  // and from code it is a warning, not a failed run
+  const bad = writeTracks(B.newSong({ bpm: 120 }), realize(readCode(`bass: s("ladder*4").knob("osc3range", -4.5)`)));
+  assert.ok(bad.warnings.some(w => /osc3range/.test(w)), "the off-footage range was not reported");
+
+  for (const k of ["osc2freq", "osc3freq"]) {
+    assert.ok(LFO_KEYS.includes(`ladder_${k}`), `no LFO target for ${k}`);
+    assert.equal(LFO_AMP_SCALE[`ladder_${k}`], 14, `${k}: depth 100% is the whole ±7 knob`);
+    assert.ok(AUTOMATION_TARGETS[`ladder.${k}`], `no lane for ${k}`);
+    assert.equal(canModulateKey("dm:ladder", `ladder_${k}`), true);
+    assert.equal(canModulateKey("dm:oracle", `ladder_${k}`), false);
+    assert.equal(canAutomateKey?.("dm:ladder", `ladder.${k}`) ?? true, true);
+  }
+  B.addLfo(song, i, { target: "ladder_osc2freq", shape: "sine", amount: 0.1 });
+  B.setAutomation(song, i, { target: "ladder.osc3freq", values: [0, 0.5, 1, 0.5] });
+  // the voice reaches the detune params under the ldr-prefixed key the dispatchers build
+  const src = fs.readFileSync("public/js/ladder.js", "utf8");
+  assert.match(src, /for \(const k of LADDER_TARGET_KEYS\) PARAM_OF\[`ldr\$\{k\}`\] = k;/);
+  assert.match(src, /osc2freq: "osc2freq", osc3freq: "osc3freq"/);
+});

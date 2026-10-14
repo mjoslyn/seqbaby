@@ -2194,10 +2194,20 @@ export const LADDER_MOD_KEYS = LADDER_NUM_CTLS.map(c => c[0]);
 export const LADDER_NUM_KEYS = LADDER_MOD_KEYS.map(k => `ldr${k}`);
 export const LADDER_SEL_KEYS = LADDER_SEL_CTLS.map(c => `ldr${c[0]}`);
 
-export const LADDER_MOD_RANGE = Object.fromEntries(LADDER_NUM_CTLS.map(c => [c[0], [c[1], c[2]]]));
+/** Osc 2 and 3's tuning: the oscillator bank's unprefixed panel keys, but
+ *  AudioParams like the front plate's, so they take an LFO and a lane too
+ *  (`ladder_osc2freq` / `ladder.osc2freq`), the way the oracle's detune does. */
+export const LADDER_DETUNE_CTLS = [
+  ["osc2freq", -7, 7, 0, "osc 2 semitones"], ["osc3freq", -7, 7, 0, "osc 3 semitones"],
+];
+/** Every ladder control with a mod target: the front plate's and the detunes. */
+export const LADDER_TARGET_KEYS = [...LADDER_MOD_KEYS, ...LADDER_DETUNE_CTLS.map(c => c[0])];
+
+export const LADDER_MOD_RANGE = Object.fromEntries(
+  [...LADDER_NUM_CTLS, ...LADDER_DETUNE_CTLS].map(c => [c[0], [c[1], c[2]]]));
 
 export const LADDER_MOD_LABELS = Object.fromEntries(
-  LADDER_NUM_CTLS.map(([k, , , , label]) => [k, `ladder ${label}`]));
+  [...LADDER_NUM_CTLS, ...LADDER_DETUNE_CTLS].map(([k, , , , label]) => [k, `ladder ${label}`]));
 
 export const LADDER_DEFAULTS = {
   ...Object.fromEntries(LADDER_NUM_CTLS.map(c => [`ldr${c[0]}`, c[3]])),
@@ -2217,9 +2227,12 @@ export function ladderFromUnit(k, u) {
  *  in semitones, continuous. */
 export const LADDER_WAVES = ["triangle", "shark", "sawtooth", "square", "pulse", "narrow", "sine"];
 export const LADDER_RANGES = [-7, -2, -1, 0, 1, 2];
+// A range is a footage switch, not a knob: the sixth field lists the values
+// it takes (the song builder refuses anything else; -4.5 is a tritone off).
 export const LADDER_OSC_NUM_CTLS = [
-  ["osc1range", -7, 2, 0, "osc 1 range"], ["osc2range", -7, 2, 0, "osc 2 range"], ["osc3range", -7, 2, -1, "osc 3 range"],
-  ["osc2freq", -7, 7, 0, "osc 2 semitones"], ["osc3freq", -7, 7, 0, "osc 3 semitones"],
+  ["osc1range", -7, 2, 0, "osc 1 range", LADDER_RANGES], ["osc2range", -7, 2, 0, "osc 2 range", LADDER_RANGES],
+  ["osc3range", -7, 2, -1, "osc 3 range", LADDER_RANGES],
+  ...LADDER_DETUNE_CTLS,
 ];
 export const LADDER_OSC_SEL_CTLS = [
   ["osc1wave", "sawtooth", LADDER_WAVES], ["osc2wave", "sawtooth", LADDER_WAVES],

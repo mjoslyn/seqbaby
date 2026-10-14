@@ -17,6 +17,9 @@ export default function LoginPage() {
   const [mode, setMode] = useState<Mode>("signin");
   // Set when /auth/confirm could not use the link it was handed.
   const [linkFailed, setLinkFailed] = useState(false);
+  // Where to land after signing in (`?next=`, from a heart, a remix or a
+  // patch save); the actions check it is a path on this site (lib/safeNext.js).
+  const [next, setNext] = useState("");
   // `/login?mode=signup` opens on the create-account tab: the homepage's
   // "make an account" goes there. `?mode=reset` opens on the reset form, from
   // an expired reset link. Read after mount rather than through
@@ -27,6 +30,7 @@ export default function LoginPage() {
     const m = q.get("mode");
     if (m === "signup" || m === "reset") setMode(m);
     if (q.get("error") === "confirm") setLinkFailed(true);
+    setNext(q.get("next") ?? "");
   }, []);
   const [signInState, signInAction, signInPending] = useActionState(
     signIn,
@@ -64,14 +68,14 @@ export default function LoginPage() {
             className={`${styles.tab} ${isSignin ? styles.tabActive : ""}`}
             onClick={() => setMode("signin")}
           >
-            Sign in
+            sign in
           </button>
           <button
             type="button"
             className={`${styles.tab} ${mode === "signup" ? styles.tabActive : ""}`}
             onClick={() => setMode("signup")}
           >
-            Create account
+            create account
           </button>
         </div>
 
@@ -86,6 +90,7 @@ export default function LoginPage() {
             isReset ? resetAction : isSignin ? signInAction : signUpAction
           }
         >
+          <input type="hidden" name="next" value={next} />
           <div className={styles.field}>
             <label className={styles.label} htmlFor="email">
               email
@@ -133,21 +138,22 @@ export default function LoginPage() {
           >
             {isReset
               ? resetPending
-                ? "Sending…"
-                : "Send reset link"
+                ? "sending…"
+                : "send reset link"
               : isSignin
                 ? signInPending
-                  ? "Signing in…"
-                  : "Sign in"
+                  ? "signing in…"
+                  : "sign in"
                 : signUpPending
-                  ? "Creating…"
-                  : "Create account"}
+                  ? "creating…"
+                  : "create account"}
           </button>
         </form>
 
         {isSignin && (
           <form action={magicAction}>
             <input type="hidden" name="email" value="" id="magic-email" />
+            <input type="hidden" name="next" value={next} />
             <button
               className={styles.ghost}
               type="submit"
@@ -162,7 +168,7 @@ export default function LoginPage() {
                 if (hidden) hidden.value = email ?? "";
               }}
             >
-              {magicPending ? "Sending…" : "Email me a magic link"}
+              {magicPending ? "sending…" : "email me a magic link"}
             </button>
           </form>
         )}

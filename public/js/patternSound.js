@@ -25,6 +25,7 @@
 // share a sound costs almost nothing.
 
 import { fxInstanceIds, isFxInstanceId, splitFxInstanceKey } from "./constants.js";
+import { FX_APPLY } from "./fxRack.js";      // the rack's own table: a copy here once lacked gain and pan
 import { defaultLFOConfig, freshLfoEntry, syncLFO } from "./lfo.js";
 import { setParam, updateGranularSpeedEnabled } from "./params.js";
 import { refreshParamIndicators } from "./paramTargets.js";
@@ -77,15 +78,6 @@ export function capturePatternSound(t) {
   };
 }
 
-// fxConfig key → the rack method that installs it.
-const FX_APPLY = {
-  amp: "applyAmp", vinyl: "applyVinyl", cassette: "applyCassette", fuzz: "applyFuzz",
-  ringmod: "applyRingMod", shaper: "applyWaveShaper", crush: "applyCrush",
-  autowah: "applyAutoWah", chorus: "applyChorus", phaser: "applyPhaser",
-  flanger: "applyFlanger", pitchshift: "applyPitchShift", repeat: "applyRepeat", prism: "applyPrism",
-  delay: "applyDelay", reverb: "applyReverb",
-};
-
 /**
  * Install a snapshot onto the live track, touching only what differs.
  * @param {Track} t @param {ReturnType<capturePatternSound>} snap
@@ -116,10 +108,15 @@ export function applyPatternSound(t, snap) {
       touched = true;
     }
   }
-  if (snap.comp && !same(t.comp, snap.comp)) {
-    Object.assign(t.comp, snap.comp);
-    applyCompressorConfig(t);
-    touched = true;
+  if (snap.comp) {
+    // sourceIndex is the session format's, for a load to resolve (see
+    // resolveSoundSources); the live compressor only ever holds the id.
+    const { sourceIndex, ...comp } = snap.comp;
+    if (!same(t.comp, comp)) {
+      Object.assign(t.comp, comp);
+      applyCompressorConfig(t);
+      touched = true;
+    }
   }
   if (snap.fxConfig) {
     // The chain (order) and the extra copies of a stage (instances) belong to
@@ -164,6 +161,30 @@ export function applyPatternSound(t, snap) {
     }
   }
   return touched;
+}
+
+/**
+ * Turn the sidechain sources in a track's sound snapshots (its shared sound
+ * and every locked pattern's) back into ids, from the track indices the
+ * session format carries beside them (`comp.sourceIndex`), resolved against
+ * the tracks a load made in the session's order. `strict` is for a session
+ * from elsewhere (applySet): there an id with no index beside it names nothing
+ * here, and falls back to self as the track's own does. A merge of this
+ * session's own state (an undo, an audition) keeps such an id.
+ * @param {Track} t @param {Track[]} made @param {boolean} [strict]
+ */
+export function resolveSoundSources(t, made, strict = false) {
+  const fix = (snap) => {
+    const c = snap?.comp;
+    if (!c) return;
+    if (Number.isInteger(c.sourceIndex)) {
+      const src = made[c.sourceIndex];
+      c.source = src && src !== t ? String(src.id) : "self";
+    } else if (strict && c.source && c.source !== "self") c.source = "self";
+    delete c.sourceIndex;
+  };
+  fix(t.baseSound);
+  for (const p of t.patterns || []) fix(p?.sound);
 }
 
 /**

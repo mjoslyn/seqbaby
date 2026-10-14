@@ -4,6 +4,7 @@ import { useState } from "react";
 import { remixSong } from "@/app/songs/actions";
 import { adoptRemix } from "@/app/songs/adoptRemix";
 import { IconRemix } from "./menuIcons";
+import { loginHref } from "@/lib/safeNext";
 
 // Remix someone's song into your own songs, beside its heart: the studio
 // byline and a profile page's rows. On a profile the remix is saved and that
@@ -33,8 +34,8 @@ export default function RemixButton({
     setFailed(false);
     try {
       const res = await remixSong(songId);
-      if (res.error === "Not signed in") {
-        window.location.href = "/login";
+      if (res.error === "not signed in") {
+        window.location.href = loginHref(location.pathname + location.search);
         return;
       }
       // An id with an error is a remix whose first version failed: the song

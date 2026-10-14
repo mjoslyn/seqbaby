@@ -119,7 +119,7 @@ async function appendVersion(
     if (!error) return { versionId: row.id, seq };
     if (!/duplicate key|unique/i.test(error.message)) return { error: error.message };
   }
-  return { error: "Could not allocate a version number" };
+  return { error: "could not allocate a version number" };
 }
 
 // A free title for a name the USER DID NOT CHOOSE.
@@ -222,7 +222,7 @@ export async function saveSong(input: {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return { error: "Not signed in" };
+  if (!user) return { error: "not signed in" };
 
   // A template is a starting point, so the first save off one is a new song --
   // never a version of the template. The id and the parent version the client
@@ -250,7 +250,7 @@ export async function saveSong(input: {
       .eq("owner_id", user.id)
       .maybeSingle();
     if (readErr) return { error: readErr.message };
-    if (!song) return { error: "Song not found" };
+    if (!song) return { error: "song not found" };
     const sampleErr = await putSamples(supabase, songId, samples);
     if (sampleErr) return { id: songId, error: sampleErr };
 
@@ -280,7 +280,7 @@ export async function saveSong(input: {
       .eq("owner_id", user.id)
       .select("id");
     if (error) return { error: error.message };
-    if (!rows?.length) return { error: "Song not found" };
+    if (!rows?.length) return { error: "song not found" };
     return {
       id: songId,
       title,
@@ -345,7 +345,7 @@ export async function remixSong(
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return { error: "Not signed in" };
+  if (!user) return { error: "not signed in" };
 
   const { data: src, error: readErr } = await supabase
     .from("songs")
@@ -353,7 +353,7 @@ export async function remixSong(
     .eq("id", sourceId)
     .maybeSingle();
   if (readErr) return { error: readErr.message };
-  if (!src) return { error: "Source session not found" };
+  if (!src) return { error: "that song was not found" };
 
   let data = src.data;
   let suffix = "remix";
@@ -367,7 +367,7 @@ export async function remixSong(
       .eq("song_id", sourceId)
       .maybeSingle();
     if (verErr) return { error: verErr.message };
-    if (!ver) return { error: "Version not found" };
+    if (!ver) return { error: "version not found" };
     data = ver.data;
     suffix = `v${ver.seq}`;
   }
@@ -431,7 +431,7 @@ export async function saveNamedSong(input: {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return { error: "Not signed in" };
+  if (!user) return { error: "not signed in" };
 
   // A template is a starting point, so the first save off one is a new song.
   // Here that means more than dropping the id: this action upserts BY TITLE, so
@@ -491,7 +491,7 @@ export async function saveNamedSong(input: {
     if (error) return { error: error.message };
     // The SELECT above and this UPDATE are not atomic: the row can go away in
     // between.
-    if (!rows?.length) return { error: "Song not found" };
+    if (!rows?.length) return { error: "song not found" };
   } else {
     const { data: row, error } = await supabase
       .from("songs")
@@ -527,7 +527,7 @@ export async function saveNamedSong(input: {
       .eq("owner_id", user.id)
       .select("id");
     if (error) return { error: error.message };
-    if (!rows?.length) return { error: "Song not found" };
+    if (!rows?.length) return { error: "song not found" };
     return { id, title, slug: slug ?? undefined, versionId, versionSeq, unchanged };
   }
   const { data: privRows, error: privErr } = await supabase
@@ -537,7 +537,7 @@ export async function saveNamedSong(input: {
     .eq("owner_id", user.id)
     .select("id");
   if (privErr) return { error: privErr.message };
-  if (!privRows?.length) return { error: "Song not found" };
+  if (!privRows?.length) return { error: "song not found" };
   return { id, title, versionId, versionSeq, unchanged };
 }
 
@@ -591,7 +591,7 @@ export async function loadSong(
     .eq("id", id)
     .maybeSingle();
   if (error) return { error: error.message };
-  if (!data) return { error: "Song not found" };
+  if (!data) return { error: "song not found" };
   const owned = !!user && data.owner_id === user.id;
   return {
     title: data.title,
@@ -617,7 +617,7 @@ export async function setSongTemplate(
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return { error: "Not signed in" };
+  if (!user) return { error: "not signed in" };
   const { data: rows, error } = await supabase
     .from("songs")
     .update(
@@ -629,7 +629,7 @@ export async function setSongTemplate(
     .eq("owner_id", user.id)
     .select("id");
   if (error) return { error: error.message };
-  if (!rows?.length) return { error: "Song not found" };
+  if (!rows?.length) return { error: "song not found" };
   return { ok: true };
 }
 
@@ -647,7 +647,7 @@ export async function setDefaultTemplate(
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return { error: "Not signed in" };
+  if (!user) return { error: "not signed in" };
 
   const { error: clearErr } = await supabase
     .from("songs")
@@ -667,7 +667,7 @@ export async function setDefaultTemplate(
     .eq("owner_id", user.id)
     .select("id");
   if (error) return { error: error.message };
-  if (!rows?.length) return { error: "Song not found" };
+  if (!rows?.length) return { error: "song not found" };
   return { ok: true };
 }
 
@@ -722,7 +722,7 @@ export async function getVersionSeq(
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return { error: "Not signed in" };
+  if (!user) return { error: "not signed in" };
   const { data, error } = await supabase
     .from("song_versions")
     .select("seq")
@@ -730,7 +730,7 @@ export async function getVersionSeq(
     .eq("owner_id", user.id)
     .maybeSingle();
   if (error) return { error: error.message };
-  if (!data) return { error: "Version not found" };
+  if (!data) return { error: "version not found" };
   return { seq: data.seq as number };
 }
 
@@ -776,7 +776,7 @@ export async function loadVersion(
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return { error: "Not signed in" };
+  if (!user) return { error: "not signed in" };
   const { data, error } = await supabase
     .from("song_versions")
     .select("song_id,seq,data")
@@ -784,7 +784,7 @@ export async function loadVersion(
     .eq("owner_id", user.id)
     .maybeSingle();
   if (error) return { error: error.message };
-  if (!data) return { error: "Version not found" };
+  if (!data) return { error: "version not found" };
   const { data: song } = await supabase
     .from("songs")
     .select("title")
@@ -809,7 +809,7 @@ export async function labelVersion(
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return { error: "Not signed in" };
+  if (!user) return { error: "not signed in" };
   const trimmed = label.trim().slice(0, 120);
   const { data: rows, error } = await supabase
     .from("song_versions")
@@ -818,7 +818,7 @@ export async function labelVersion(
     .eq("owner_id", user.id)
     .select("id");
   if (error) return { error: error.message };
-  if (!rows?.length) return { error: "Version not found" };
+  if (!rows?.length) return { error: "version not found" };
   return { ok: true };
 }
 
@@ -832,7 +832,7 @@ export async function deleteVersion(
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return { error: "Not signed in" };
+  if (!user) return { error: "not signed in" };
 
   const { data: ver, error: readErr } = await supabase
     .from("song_versions")
@@ -841,7 +841,7 @@ export async function deleteVersion(
     .eq("owner_id", user.id)
     .maybeSingle();
   if (readErr) return { error: readErr.message };
-  if (!ver) return { error: "Version not found" };
+  if (!ver) return { error: "version not found" };
 
   const { data: song } = await supabase
     .from("songs")
@@ -850,7 +850,7 @@ export async function deleteVersion(
     .eq("owner_id", user.id)
     .maybeSingle();
   if (song?.current_version_id === versionId)
-    return { error: "That is the current version" };
+    return { error: "that is the current version" };
 
   const { data: kids, error: kidErr } = await supabase
     .from("song_versions")
@@ -858,7 +858,7 @@ export async function deleteVersion(
     .eq("parent_id", versionId)
     .limit(1);
   if (kidErr) return { error: kidErr.message };
-  if (kids?.length) return { error: "Delete the branches off it first" };
+  if (kids?.length) return { error: "delete the branches off it first" };
 
   const { data: rows, error } = await supabase
     .from("song_versions")
@@ -867,7 +867,7 @@ export async function deleteVersion(
     .eq("owner_id", user.id)
     .select("id");
   if (error) return { error: error.message };
-  if (!rows?.length) return { error: "Version not found" };
+  if (!rows?.length) return { error: "version not found" };
   return { ok: true };
 }
 
@@ -879,7 +879,7 @@ export async function renameSong(
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return { error: "Not signed in" };
+  if (!user) return { error: "not signed in" };
   const { data: rows, error } = await supabase
     .from("songs")
     .update({ title: (title || "untitled").slice(0, 200) })
@@ -887,7 +887,7 @@ export async function renameSong(
     .eq("owner_id", user.id)
     .select("id");
   if (error) return { error: error.message };
-  if (!rows?.length) return { error: "Song not found" };
+  if (!rows?.length) return { error: "song not found" };
   return { ok: true };
 }
 
@@ -898,7 +898,7 @@ export async function deleteSong(
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return { error: "Not signed in" };
+  if (!user) return { error: "not signed in" };
   const { data: rows, error } = await supabase
     .from("songs")
     .delete()
@@ -906,7 +906,7 @@ export async function deleteSong(
     .eq("owner_id", user.id)
     .select("id");
   if (error) return { error: error.message };
-  if (!rows?.length) return { error: "Song not found" };
+  if (!rows?.length) return { error: "song not found" };
   return { ok: true };
 }
 
@@ -918,7 +918,7 @@ export async function publishSong(
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return { error: "Not signed in" };
+  if (!user) return { error: "not signed in" };
 
   const { data: existing, error: readErr } = await supabase
     .from("songs")
@@ -927,7 +927,7 @@ export async function publishSong(
     .eq("owner_id", user.id)
     .maybeSingle();
   if (readErr) return { error: readErr.message };
-  if (!existing) return { error: "Song not found" };
+  if (!existing) return { error: "song not found" };
 
   let slug = existing.share_slug as string | null;
   // Assign a fresh unique slug if none, retrying on the unique constraint.
@@ -942,13 +942,13 @@ export async function publishSong(
     if (!error) {
       // Clean, but nothing written: the song went away between the read above
       // and this write. Handing back a share link for it would be a lie.
-      if (!rows?.length) return { error: "Song not found" };
+      if (!rows?.length) return { error: "song not found" };
       slug = candidate;
       break;
     }
     if (!/duplicate key|unique/i.test(error.message)) return { error: error.message };
   }
-  if (!slug) return { error: "Could not allocate a share link" };
+  if (!slug) return { error: "could not allocate a share link" };
 
   // Ensure is_public is set even when a slug already existed.
   const { data: pubRows, error: pubErr } = await supabase
@@ -958,7 +958,7 @@ export async function publishSong(
     .eq("owner_id", user.id)
     .select("id");
   if (pubErr) return { error: pubErr.message };
-  if (!pubRows?.length) return { error: "Song not found" };
+  if (!pubRows?.length) return { error: "song not found" };
 
   return { slug };
 }
@@ -970,7 +970,7 @@ export async function unpublishSong(
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return { error: "Not signed in" };
+  if (!user) return { error: "not signed in" };
   const { data: rows, error } = await supabase
     .from("songs")
     .update({ is_public: false })
@@ -978,7 +978,7 @@ export async function unpublishSong(
     .eq("owner_id", user.id)
     .select("id");
   if (error) return { error: error.message };
-  if (!rows?.length) return { error: "Song not found" };
+  if (!rows?.length) return { error: "song not found" };
   return { ok: true };
 }
 
@@ -1004,7 +1004,7 @@ export async function loadSongChat(
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return { error: "Not signed in" };
+  if (!user) return { error: "not signed in" };
   const { data, error } = await supabase
     .from("song_chats")
     .select("messages")
@@ -1026,7 +1026,7 @@ export async function saveSongChat(
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return { error: "Not signed in" };
+  if (!user) return { error: "not signed in" };
   // Upsert on the primary key: one chat per song, so two tabs saving turns
   // can't produce two rows. RLS still checks the song is this user's.
   const { error } = await supabase.from("song_chats").upsert(
@@ -1059,7 +1059,7 @@ export async function setLike(
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return { error: "Not signed in" };
+  if (!user) return { error: "not signed in" };
 
   if (liked) {
     const { error } = await supabase

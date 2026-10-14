@@ -364,8 +364,8 @@ export default function JamPanel({
           setStatus("error");
           setError(
             state === "CLOSED"
-              ? "lost the connection to the room — retrying."
-              : `could not reach the room${err?.message ? ` (${err.message})` : ""} — retrying.`,
+              ? "lost the connection to the room; retrying."
+              : `could not reach the room${err?.message ? ` (${err.message})` : ""}; retrying.`,
           );
         }
       });
@@ -434,7 +434,7 @@ export default function JamPanel({
   const others = peers.filter((p) => p.id !== meRef.current);
   const btnTitle = inRoom
     ? status === "syncing"
-      ? "joining — taking the room's song"
+      ? "joining: taking the room's song"
       : status === "error"
         ? "jam: connection trouble"
         : `jamming with ${others.length} other${others.length === 1 ? "" : "s"}`
@@ -455,8 +455,8 @@ export default function JamPanel({
           <div className={styles.panelTitle}>{inRoom ? "jamming" : "jam with others"}</div>
           {!inRoom && (
             <div className={styles.jamIntro}>
-              Start a jam and send the link. Everyone who opens it edits this song
-              with you — steps, knobs, tracks, all of it, as it happens. Press play
+              start a jam and send the link. everyone who opens it edits this song
+              with you: steps, knobs, tracks, all of it, as it happens. press play
               whenever you like; you'll land on the same step as everyone else who
               has.
             </div>
@@ -470,7 +470,7 @@ export default function JamPanel({
                   value={link}
                   readOnly
                   onFocus={(e) => e.currentTarget.select()}
-                  title="the invite link — anyone who opens it joins this jam"
+                  title="the invite link: anyone who opens it joins this jam"
                 />
                 <button className={`${styles.smallBtn} ${styles.smallBtnPrimary}`} onClick={copyLink}>
                   {copied ? "copied" : "copy"}
@@ -479,7 +479,7 @@ export default function JamPanel({
               <div className={styles.jamStatus}>
                 {status === "connecting" && "connecting…"}
                 {status === "syncing" && "taking the room's song…"}
-                {status === "live" && (others.length === 0 ? "nobody else here yet — send the link." : "live")}
+                {status === "live" && (others.length === 0 ? "nobody else here yet. send the link." : "live")}
               </div>
               <ul className={styles.jamPeers}>
                 {peers.map((p) => (
@@ -526,9 +526,9 @@ export default function JamPanel({
           </div>
           {inRoom && (
             <div className={styles.jamNote}>
-              Anyone with the link can join. Leaving keeps the song as it is on your
-              screen; the room carries on without you. Undo steps back over the
-              others&apos; edits too — there is one song.
+              anyone with the link can join. leaving keeps the song as it is on your
+              screen; the room carries on without you. undo steps back over the
+              others&apos; edits too: there is one song.
             </div>
           )}
         </div>

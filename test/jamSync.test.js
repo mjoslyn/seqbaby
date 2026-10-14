@@ -123,17 +123,40 @@ test("two peers editing different tracks both land, in either order", () => {
   assert.equal(atA.session.tracks[1].patterns[0].steps[3], 1);
 });
 
-test("a track added or removed sends the track list whole", () => {
+test("a track added or removed names the tracks that stayed; their samples stay home", () => {
   const a = session();
+  // added at the end
   const b = clone(a);
   b.tracks.push({ name: "hat", engineKey: "dm:909-chat", params: {}, fxConfig: {}, uploadAudio: null, patterns: [] });
-  const patch = diffSession(a, b);
+  let patch = diffSession(a, b);
   assert.equal(patch.from, 2);
   assert.equal(patch.n, 3);
-  assert.ok(patch.d.obj.tracks.set, "whole list");
-  const r = applySessionPatch(a, patch);
+  assert.deepEqual(patch.d.obj.tracks.list.slice(0, 2), [{ from: 0 }, { from: 1 }]);
+  assert.ok(patch.d.obj.tracks.list[2].set, "the new track goes whole");
+  assert.ok(JSON.stringify(patch).length < 2000, "the bass's sample was not sent again");
+  assert.deepEqual(patch.keys, { 0: ["dm:808-kick", "kick"], 1: ["dm:silverbox", "bass"] });
+  let r = applySessionPatch(a, patch);
   assert.equal(r.ok, true);
-  assert.equal(r.session.tracks.length, 3);
+  assert.deepEqual(r.session, stripView(b));
+  assert.equal(r.session.tracks[1], a.tracks[1], "the untouched track is shared with the base");
+
+  // removed from the top, with an edit to the one that stayed
+  const c = clone(a);
+  c.tracks.shift();
+  c.tracks[0].params.vol = 0.3;
+  patch = diffSession(a, c);
+  assert.equal(patch.d.obj.tracks.list.length, 1);
+  assert.equal(patch.d.obj.tracks.list[0].from, 1);
+  assert.ok(patch.d.obj.tracks.list[0].d, "the edit rides along");
+  assert.ok(JSON.stringify(patch).length < 2000, "no sample on the wire");
+  r = applySessionPatch(a, patch);
+  assert.equal(r.ok, true);
+  assert.deepEqual(r.session, stripView(c));
+
+  // the guard still holds: a receiver whose kept track is another one refuses
+  const swapped = clone(a);
+  swapped.tracks[1] = { ...swapped.tracks[1], name: "lead" };
+  assert.equal(applySessionPatch(swapped, patch).ok, false);
 });
 
 test("a patch written against a different track count is refused", () => {

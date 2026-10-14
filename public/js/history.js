@@ -35,6 +35,7 @@
 // **An automated parameter is pinned.** See `pinAutomated` below.
 
 import { VOICE_AUTO_KEYS } from "./automation.js";
+import { fxLanePath } from "./constants.js";
 import { setStatus } from "./dom.js";
 import { HistoryStack, sameTree, shareStructure } from "./historyStore.js";
 import { ICON_REDO, ICON_UNDO } from "./icons.js";
@@ -89,10 +90,13 @@ let savedOnSettle = false;
  * — so letting it into the history would fill the stack with entries nobody
  * made, and hand an undo back whatever the lane happened to be at.
  *
- * So those fields are pinned to what the previous snapshot had. They stop
- * moving in the history while the lane owns them, and the moment the lane is
- * switched off the live value enters as an ordinary edit. Only while playing:
- * stopped, nothing drifts and the snapshot is exact.
+ * So those fields are pinned to what the previous snapshot had, for as long
+ * as the lane is on: the fx lanes too, which write the stage's config because
+ * that is what the rack reads to decide whether a stage is wired in. Playing
+ * or not: stopping leaves each field wherever its lane last put it, and with
+ * the pin only while playing, the stop click itself became an undo entry and
+ * the song read as unsaved. The moment the lane is switched off the live value
+ * enters as an ordinary edit.
  *
  * The pin has to reach the p-lock stores as well as the live fields, because
  * `serializeSet` flushes the live sound into `baseSound` (or the locked
@@ -100,29 +104,30 @@ let savedOnSettle = false;
  * the back door.
  */
 export function pinAutomated(prev, snap) {
-  if (!prev || !state.playing) return snap;
+  if (!prev) return snap;
   state.tracks.forEach((t, i) => {
     const a = prev.tracks?.[i], b = snap.tracks?.[i];
     if (!a || !b) return;
     const ap = trackSlot(t);                       // the pattern THIS track is on
     for (const [key, lane] of Object.entries(t.automation || {})) {
       if (!lane?.enabled) continue;
-      const group = (key === "cutoff" || key === "reson") ? "filter"
-                  : VOICE_AUTO_KEYS.includes(key) ? "params"
-                  : null;
-      if (!group) continue;                      // the rest never touch a store
-      pinField(a, b, group, key);
-      pinField(a.baseSound, b.baseSound, group, key);
-      pinField(a.patterns?.[ap]?.sound, b.patterns?.[ap]?.sound, group, key);
+      const path = (key === "cutoff" || key === "reson") ? ["filter", key]
+                 : VOICE_AUTO_KEYS.includes(key) ? ["params", key]
+                 : fxLanePath(key);
+      if (!path) continue;                       // the rest never touch a store
+      pinPath(a, b, path);
+      pinPath(a.baseSound, b.baseSound, path);
+      pinPath(a.patterns?.[ap]?.sound, b.patterns?.[ap]?.sound, path);
     }
   });
   return snap;
 }
 
-function pinField(from, to, group, key) {
-  const src = from?.[group], dst = to?.[group];
-  if (!src || !dst) return;
-  if (Object.prototype.hasOwnProperty.call(src, key)) dst[key] = src[key];
+function pinPath(from, to, path) {
+  const last = path[path.length - 1];
+  for (const k of path.slice(0, -1)) { from = from?.[k]; to = to?.[k]; }
+  if (!from || !to || typeof from !== "object" || typeof to !== "object") return;
+  if (Object.prototype.hasOwnProperty.call(from, last)) to[last] = from[last];
 }
 
 /** The live session, as a snapshot folded onto `prev` (see historyStore.js). */

@@ -11,7 +11,7 @@ import { upgradeKnobs } from "./knob.js";
 import { startModMotion } from "./modMotion.js";
 import { openMacroPads } from "./macro.js";
 import { installCodePanel } from "./codePanel.js";
-import { installViews } from "./views.js";
+import { installViews, isMobileLayout } from "./views.js";
 import { installClipView } from "./clipView.js";
 import { installArrangeView } from "./arrangeView.js";
 import { installPianoView } from "./pianoView.js";
@@ -604,8 +604,8 @@ export function init() {
       const pct = Math.round(state.metronomeLevel * 100);
       metroBtn.style.setProperty("--metro-level", `${pct}%`);
       metroBtn.title = state.metronome
-        ? `metronome on — ${pct}% (drag up/down to set volume)`
-        : "metronome click on the downbeat";
+        ? `metronome on, ${pct}% (drag up or down for its volume)`
+        : "metronome: a click on every beat, the downbeat accented";
       metroBtn.setAttribute("aria-valuenow", String(pct));
     };
     paintMetroLevel();
@@ -630,15 +630,18 @@ export function init() {
     if (!opts) return;
     const btn = document.getElementById(btnId);
     btn.disabled = true;
-    const prev = btn.textContent;
-    btn.textContent = "rendering…";
+    // The caption only: the button is an icon and a label, and writing its
+    // textContent took the icon with it for good.
+    const label = btn.querySelector(".sq-dl__label") || btn;
+    const prev = label.textContent;
+    label.textContent = "rendering…";
     setStatus(`rendering ${opts.bars} bar${opts.bars === 1 ? "" : "s"} to ${opts.format}…`);
     try {
       await bounceAudio({
         bars: opts.bars,
         format: opts.format,
         chainWhole: mode === "track",
-        fileStem: mode === "track" ? "session" : "pattern",
+        fileStem: mode === "track" ? "song" : "pattern",
         filename: opts.filename,
       });
       setStatus(`render ready — downloaded`);
@@ -647,7 +650,7 @@ export function init() {
       setStatus(`render failed — see console`, true);
     } finally {
       btn.disabled = false;
-      btn.textContent = prev;
+      label.textContent = prev;
     }
   };
   document.getElementById("bounce-audio")?.addEventListener("click", () => runBounce("bounce-audio", "pattern"));
@@ -781,8 +784,16 @@ export function init() {
 
   const modeBtn = document.getElementById("pattern-mode");
   syncPatternModeUI();
-  // repeat → chain → arrange → repeat (patternBar.js draws it)
-  modeBtn.addEventListener("click", () => setPatternMode(nextPatternMode(state.patternMode)));
+  // repeat → chain → arrange → repeat (patternBar.js draws it). On a phone the
+  // arrangement view does not exist, so blocks can be neither seen nor made
+  // there: with none in the song, arrange would put every track in a gap and
+  // play silence, so the phone's cycle skips it. A song that already has
+  // blocks still plays them.
+  modeBtn.addEventListener("click", () => {
+    let next = nextPatternMode(state.patternMode);
+    if (next === "arrange" && isMobileLayout() && !state.tracks.some(t => t.arrangement?.length)) next = nextPatternMode(next);
+    setPatternMode(next);
+  });
   const switchBtn = document.getElementById("pattern-switch");
   if (switchBtn) {
     const syncSwitchLabel = () => {

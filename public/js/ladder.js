@@ -565,9 +565,9 @@ export function ladderReady(ctx) { return !!ctx && _ready.has(ctx); }
 // Keys are `ldr` + short key -> `ladder_<short>` / `ladder.<short>`; the
 // oscillator bank's are its old unprefixed ones. The lists, the ranges, the
 // defaults and the patches are data in engineData.js; re-exported here.
-import { LADDER_MOD_KEYS, LADDER_WAVES } from "./engineData.js";
+import { LADDER_RANGES, LADDER_TARGET_KEYS, LADDER_WAVES } from "./engineData.js";
 export {
-  LADDER_NUM_CTLS, LADDER_SEL_CTLS, LADDER_MOD_KEYS, LADDER_NUM_KEYS, LADDER_SEL_KEYS,
+  LADDER_NUM_CTLS, LADDER_SEL_CTLS, LADDER_MOD_KEYS, LADDER_TARGET_KEYS, LADDER_DETUNE_CTLS, LADDER_NUM_KEYS, LADDER_SEL_KEYS,
   LADDER_MOD_RANGE, LADDER_MOD_LABELS, LADDER_DEFAULTS, ladderFromUnit,
   LADDER_WAVES, LADDER_RANGES, LADDER_OSC_NUM_CTLS, LADDER_OSC_SEL_CTLS,
   LADDER_TONE_NAMES, ladderToneDescription, ladderTone,
@@ -600,7 +600,9 @@ export function buildLadderWorkletVoice(output) {
     osc1: "osc1", osc2: "osc2", osc3: "osc3", noise: "noise",
     osc2freq: "osc2freq", osc3freq: "osc3freq",
   };
-  for (const k of LADDER_MOD_KEYS) PARAM_OF[`ldr${k}`] = k;
+  // `ladder_<k>` reaches `ldr<k>`; for the detunes that is an alias of the
+  // bank's own key (ldrosc2freq -> osc2freq).
+  for (const k of LADDER_TARGET_KEYS) PARAM_OF[`ldr${k}`] = k;
 
   const P = {};
   for (const name of Object.values(PARAM_OF)) P[name] = node.parameters.get(name);
@@ -621,7 +623,14 @@ export function buildLadderWorkletVoice(output) {
       if (osc) {
         const i = Number(osc[1]) - 1;
         if (osc[2] === "wave") { waves[i] = waveIdx(val); post({ type: "set", waves }); }
-        else { const r = Number(val); if (Number.isFinite(r)) { ranges[i] = r; post({ type: "set", ranges }); } }
+        else {
+          // A range is a footage: a value between two (a hand-edited song) is
+          // snapped to the nearest, never played a fraction of an octave off.
+          const r = Number(val);
+          if (!Number.isFinite(r)) return;
+          ranges[i] = LADDER_RANGES.reduce((a, b) => Math.abs(b - r) < Math.abs(a - r) ? b : a);
+          post({ type: "set", ranges });
+        }
         return;
       }
       switch (key) {

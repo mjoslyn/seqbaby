@@ -246,13 +246,13 @@ function render() {
       if (i === t._queuedSlot) cls.push("is-queued");
       if (patternLocked(t, i)) cls.push("is-locked");
       if (i === ap) cls.push("is-scene");
-      cells.push(`<button type="button" class="${cls.join(" ")}" data-slot="${i}"${style} draggable="true" title="${esc(t.name)}: pattern ${i + 1}, ${bars} bar${bars === 1 ? "" : "s"}. Click to launch it on this track, double-click to mute it; drag onto another cell to copy it there; drag its right edge across the cells beside it to copy it into those scenes, or shift-drag it to make it longer or shorter">${svg ? '<i class="sq-clip__notes"></i>' : ""}<span class="sq-clip__n">${i + 1}</span>${bars > 1 ? `<i class="sq-clip__bars">${bars}</i>` : ""}<span class="sq-clip__fill"></span></button>`);
+      cells.push(`<button type="button" class="${cls.join(" ")}" data-slot="${i}"${style} draggable="true" title="${esc(t.name)}: pattern ${i + 1}, ${bars} bar${bars === 1 ? "" : "s"}. Click to launch it on this track, double-click to mute it; drag onto another cell to copy it there; drag its right edge across the cells beside it to copy it into those slots, or shift-drag it to make it longer or shorter">${svg ? '<i class="sq-clip__notes"></i>' : ""}<span class="sq-clip__n">${i + 1}</span>${bars > 1 ? `<i class="sq-clip__bars">${bars}</i>` : ""}<span class="sq-clip__fill"></span></button>`);
     }
     return `<div class="sq-clips__row${t.muted ? " is-muted" : ""}" data-track-id="${t.id}">
       <div class="sq-clips__strip">
         <button type="button" class="sq-clips__name" data-act="select" title="${esc(t.name)}: show this track's instrument, effects and pattern below">${esc(t.name)}</button>
-        <button type="button" class="sq-clips__mute" data-act="mute" aria-pressed="${!!t.muted}" title="mute">m</button>
-        <button type="button" class="sq-clips__solo" data-act="solo" aria-pressed="${!!t.soloed}" title="solo">s</button>
+        <button type="button" class="sq-clips__mute" data-act="mute" aria-pressed="${!!t.muted}"${t.soloed ? ' disabled title="mute (unsolo it first)"' : ' title="mute"'}>m</button>
+        <button type="button" class="sq-clips__solo" data-act="solo" aria-pressed="${!!t.soloed}"${t.muted ? ' disabled title="solo (unmute it first)"' : ' title="solo"'}>s</button>
         <button type="button" class="sq-clips__stop${t._clipOff ? " is-on" : ""}" data-act="stop" title="${t._clipOff ? `play this track's clip again (pattern ${slot + 1})` : "stop this track's clip"}">${t._clipOff ? "▶" : "■"}</button>
       </div>
       <div class="sq-clips__cells">${cells.join("")}</div>

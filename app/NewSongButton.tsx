@@ -31,7 +31,7 @@ export default function NewSongButton() {
     <a
       className={styles.accountBtn}
       href="/studio"
-      title="start a new song — a blank editor"
+      title="start a new song: a blank editor"
       onClick={(e) => {
         if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
         if (!window.seqbaby?.onNewSet) return; // engine not up: let the link navigate

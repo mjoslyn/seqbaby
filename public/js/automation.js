@@ -1,5 +1,6 @@
-import { AUTOMATION_TARGETS, VOICE_AUTO_KEYS, afterPrefix as after, baseModKey, canAutomateKey, fxStageOfModKey, splitFxInstanceKey, voiceAutoKeysForEngineKey } from "./constants.js";
-import { driveGain } from "./fxRack.js";
+import { AUTOMATION_TARGETS, VOICE_AUTO_KEYS, afterPrefix as after, baseModKey, canAutomateKey, fxLanePath, fxStageOfModKey, isFxInstanceId, splitFxInstanceKey, voiceAutoKeysForEngineKey } from "./constants.js";
+import { FX_APPLY, driveGain } from "./fxRack.js";
+import { controlForKey } from "./paramTargets.js";
 import { makeFuzzCurve, shaperPreampGain } from "./curves.js";
 import { bassFromUnit, droneFromUnit, guitarFromUnit, haloFromUnit, hexopFromUnit, ladderFromUnit, lancetFromUnit, oracleFromUnit, siegeFromUnit, subFromUnit, voxFromUnit } from "./engineData.js";
 import { euclidFromUnit, setEuclidLive } from "./euclid.js";
@@ -7,7 +8,7 @@ import { setChanceLive } from "./chance.js";
 import { chanceFromUnit } from "./chanceGen.js";
 import { canModulate, fxCopyView } from "./lfo.js";
 import { setParam } from "./params.js";
-import { cutoffToHz, resonToQ } from "./signal.js";
+import { cutoffToHz, resonToQ, setFilter } from "./signal.js";
 import { granFromUnit } from "./voices.js";
 
 
@@ -348,8 +349,10 @@ export function applyAutomationAtStep(t, key, v, time, vNext, stepDur) {
       ramp(rack.flangerFeedback?.gain, vv * 0.9, vn * 0.9);
       return;
     case "fx.delay.time":
+      // The time only: a synced delay stays synced, so the next write through
+      // applyDelay (a tempo change, a turn of its knobs, a load) puts it back
+      // on the beat. This used to switch sync off for good.
       rack.config.delay.time = 0.05 + vv * 0.95;
-      rack.config.delay.sync = false;
       ramp(rack.delay?.delayTime, 0.05 + vv * 0.95, 0.05 + vn * 0.95);
       return;
     case "fx.delay.fbk":
@@ -411,3 +414,57 @@ export function runAutomationForStep(t, stepIdx, time, stepDur) {
 
 // ---- track params / randomize ------------------------------------------
 
+
+// ---- the base a lane plays around -----------------------------------------
+//
+// A lane writes the stored field it automates (the cutoff, a voice param with
+// no AudioParam behind it, an fx stage's config, which the rack reads to decide
+// whether a stage is wired in), and leaves the knob's slider where it was: the
+// slider is the base, the needle beside it is the lane (modMotion.js). So
+// the slider is what a save writes while the lane runs (serializeTrack), and
+// what the stored field goes back to when the transport stops; before, the
+// lane's last value was left in the song, and a reload put the knob there.
+
+/** The stored field a lane writes, as a path into the track, or null. */
+export function laneStorePath(key) {
+  if (key === "cutoff" || key === "reson") return ["filter", key];
+  if (VOICE_AUTO_KEYS.includes(key)) return ["params", key];
+  return fxLanePath(key);
+}
+
+/**
+ * Every enabled lane on the pattern this track is on that writes a stored
+ * field, with that field's base read off its control: [[path, value], ...].
+ * @param {Track} t
+ */
+export function laneBases(t) {
+  const out = [];
+  for (const [key, lane] of Object.entries(t.automation || {})) {
+    if (!lane?.enabled) continue;
+    const path = laneStorePath(key);
+    if (!path) continue;
+    const el = controlForKey(t, key);
+    if (!el || el.type !== "range") continue;
+    const v = Number(el.value);
+    if (Number.isFinite(v)) out.push([path, v]);
+  }
+  return out;
+}
+
+/** Put every lane-owned field back on its knob's value, stored and sounding:
+ *  the transport has stopped and the lanes have let go. @param {Track} t */
+export function restoreLaneBases(t) {
+  for (const [[group, a, b], v] of laneBases(t)) {
+    try {
+      if (group === "filter") setFilter(t, a, v);
+      else if (group === "params") setParam(t, a, v);
+      else {
+        const cfg = t.fxConfig?.[a];
+        if (!cfg || cfg[b] === v) continue;
+        cfg[b] = v;
+        if (isFxInstanceId(a)) t.fxRack?.applyInstance(a, cfg);
+        else t.fxRack?.[FX_APPLY[a]]?.({ ...cfg });
+      }
+    } catch (e) { console.warn("lane base " + a, e); }
+  }
+}

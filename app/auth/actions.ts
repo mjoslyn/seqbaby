@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { cookies, headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { RECOVERY_COOKIE } from "@/lib/recoveryCookie";
+import { safeNext } from "@/lib/safeNext";
 
 type ActionState = { error?: string; message?: string };
 
@@ -18,7 +19,8 @@ export async function signIn(
   const { error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) return { error: error.message };
   revalidatePath("/", "layout");
-  redirect("/studio");
+  // Back where the visitor was when a heart, a remix or a save sent them here.
+  redirect(safeNext(formData.get("next")));
 }
 
 export async function signUp(
@@ -29,19 +31,20 @@ export async function signUp(
   const password = String(formData.get("password") || "");
   const supabase = await createClient();
   const origin = (await headers()).get("origin") ?? "";
+  const next = safeNext(formData.get("next"));
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
-    options: { emailRedirectTo: `${origin}/auth/confirm` },
+    options: { emailRedirectTo: `${origin}/auth/confirm?next=${encodeURIComponent(next)}` },
   });
   if (error) return { error: error.message };
   // If email confirmation is disabled in Supabase, a session is returned and the
   // user is already signed in; otherwise they must confirm via email first.
   if (data.session) {
     revalidatePath("/", "layout");
-    redirect("/studio");
+    redirect(next);
   }
-  return { message: "Check your email to confirm your account, then sign in." };
+  return { message: "check your email to confirm your account, then sign in." };
 }
 
 export async function signInWithMagicLink(
@@ -51,12 +54,13 @@ export async function signInWithMagicLink(
   const email = String(formData.get("email") || "").trim();
   const supabase = await createClient();
   const origin = (await headers()).get("origin") ?? "";
+  const next = safeNext(formData.get("next"));
   const { error } = await supabase.auth.signInWithOtp({
     email,
-    options: { emailRedirectTo: `${origin}/auth/confirm` },
+    options: { emailRedirectTo: `${origin}/auth/confirm?next=${encodeURIComponent(next)}` },
   });
   if (error) return { error: error.message };
-  return { message: "Magic link sent — check your email." };
+  return { message: "magic link sent: check your email." };
 }
 
 // Emails a password reset link. The link lands on /auth/confirm, which signs
@@ -68,7 +72,7 @@ export async function requestPasswordReset(
   formData: FormData,
 ): Promise<ActionState> {
   const email = String(formData.get("email") || "").trim();
-  if (!email) return { error: "Enter the email you signed up with." };
+  if (!email) return { error: "enter the email you signed up with." };
   const supabase = await createClient();
   const origin = (await headers()).get("origin") ?? "";
   const { error } = await supabase.auth.resetPasswordForEmail(email, {
@@ -78,7 +82,7 @@ export async function requestPasswordReset(
   if (error?.status === 429) return { error: error.message };
   return {
     message:
-      "If there's an account for that email, a reset link is on its way.",
+      "if there's an account for that email, a reset link is on its way.",
   };
 }
 
@@ -93,8 +97,8 @@ export async function setNewPassword(
   const password = String(formData.get("password") || "");
   const confirm = String(formData.get("confirm") || "");
   if (password.length < 6)
-    return { error: "Password must be at least 6 characters." };
-  if (password !== confirm) return { error: "Those two don't match." };
+    return { error: "password must be at least 6 characters." };
+  if (password !== confirm) return { error: "those two don't match." };
 
   const jar = await cookies();
   const supabase = await createClient();
@@ -102,7 +106,7 @@ export async function setNewPassword(
     data: { user },
   } = await supabase.auth.getUser();
   if (!user || !jar.get(RECOVERY_COOKIE))
-    return { error: "This reset link has expired. Ask for a new one." };
+    return { error: "this reset link has expired. Ask for a new one." };
 
   const { error } = await supabase.auth.updateUser({ password });
   if (error) return { error: error.message };
