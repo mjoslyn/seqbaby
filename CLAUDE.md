@@ -2583,7 +2583,7 @@ roll takes the height.
 - **Tools are toolbar buttons, not letters**: FL's P / E / B are the computer
   keyboard's piano keys here. draw (click places a note of the last length
   used and drags it into place; drag moves, the right edge resizes, shift
-  copies), paint, erase (right-drag from empty space in any tool), select
+  copies), paint, erase, select
   (box, shift adds; ctrl/⌘-drag boxes in any tool). Double-click a note:
   delete it; right-click a note: the step editor (the groove view's roll
   does the same). With a selection: delete, ↑ ↓ (shift an octave), ← → (by the

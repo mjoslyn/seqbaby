@@ -25,7 +25,7 @@
  *           drag a note: move it (a selected note moves the selection)
  *           drag its right edge: resize   shift-drag: copy
  *   paint   drag across: a note every length, at the row under the pointer
- *   erase   click or sweep: delete (right-drag from empty space, any tool)
+ *   erase   click or sweep: delete
  *   select  drag: a box; click a note: select it (shift adds)
  *   any     ctrl/⌘-drag: a box   double-click a note: delete it
  *           right-click a note: its step editor
@@ -95,7 +95,7 @@ const BLACK = new Set([1, 3, 6, 8, 10]);
 const TOOLS = [
   ["draw", "✎ draw", "draw: click to place a note of the last length you used and drag it into place; drag a note to move it, its right edge to resize; shift-drag copies; double-click deletes a note, right-click opens its step editor"],
   ["paint", "▤ paint", "paint: drag across to lay a note every length, at the row under the pointer"],
-  ["erase", "✕ erase", "erase: click or sweep across notes to delete them (right-drag from empty space does too, with any tool)"],
+  ["erase", "✕ erase", "erase: click or sweep across notes to delete them"],
   ["select", "⬚ select", "select: drag a box around notes, click one to pick it (shift adds); drag the selection to move it. The arrows move it, delete removes it"],
 ];
 const SNAPS = [["step", "step"], ["half", "½ beat"], ["beat", "beat"], ["bar", "bar"]];
@@ -888,7 +888,7 @@ function startGesture(e) {
     return;
   }
   const field = e.target.closest(".sq-pr__field");
-  if (!field || (e.button !== 0 && e.button !== 2)) return;
+  if (!field || e.button !== 0) return;
   const pt = fieldPoint(e, field);
   const nEl = e.target.closest(".sq-pr__note");
   const idx = nEl ? Number(nEl.dataset.i) : -1;
@@ -896,7 +896,7 @@ function startGesture(e) {
   const base = { t, field, pointerId: e.pointerId, x0: pt.step, y0: pt.y, px0: pt.x, r0: pt.row, moved: false };
   e.preventDefault();
 
-  if (e.button === 2 || pref.tool === "erase") {
+  if (pref.tool === "erase") {
     drag = { ...base, kind: "erase", gone: new Set() };
     if (n) eraseOne(idx);
     return;
