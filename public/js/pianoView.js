@@ -329,7 +329,7 @@ function render() {
     const empty = !t.patterns[sec.slot].steps.some(Boolean);
     const bars = sec.len / sec.bar;
     ruler += `<div class="sq-pr__sec${sec.slot === slot ? " is-now" : ""}" data-slot="${sec.slot}" style="left:${x}px;width:${w}px">
-      <div class="sq-pr__sec-h" title="pattern ${sec.slot + 1}. Drag across headers to loop those patterns"><button type="button" class="sq-pr__sec-play" data-act="sec-play" data-slot="${sec.slot}" title="play pattern ${sec.slot + 1}: every track switches to it, as the pattern bar does (now or at the bar line, by the switch setting)">▶ ${sec.slot + 1}</button><span class="sq-pr__sec-len">${Number.isInteger(bars) ? bars : bars.toFixed(2)} bar${bars === 1 ? "" : "s"}${empty ? " · empty" : ""}</span><button type="button" data-act="sec-len-" data-slot="${sec.slot}" title="pattern ${sec.slot + 1}: one bar shorter">−</button><button type="button" data-act="sec-len+" data-slot="${sec.slot}" title="pattern ${sec.slot + 1}: one bar longer, empty">+</button><button type="button" data-act="sec-x2" data-slot="${sec.slot}" title="pattern ${sec.slot + 1}: double the length, tiling what is there">x2</button></div>
+      <div class="sq-pr__sec-h" title="pattern ${sec.slot + 1}. Drag across headers to loop those patterns"><button type="button" class="sq-pr__sec-play" data-act="sec-play" data-slot="${sec.slot}" title="play pattern ${sec.slot + 1}: starts the transport here when stopped; while playing, every track switches to it, as the pattern bar does (now or at the bar line, by the switch setting)">▶ ${sec.slot + 1}</button><span class="sq-pr__sec-len">${Number.isInteger(bars) ? bars : bars.toFixed(2)} bar${bars === 1 ? "" : "s"}${empty ? " · empty" : ""}</span><button type="button" data-act="sec-len-" data-slot="${sec.slot}" title="pattern ${sec.slot + 1}: one bar shorter">−</button><button type="button" data-act="sec-len+" data-slot="${sec.slot}" title="pattern ${sec.slot + 1}: one bar longer, empty">+</button><button type="button" data-act="sec-x2" data-slot="${sec.slot}" title="pattern ${sec.slot + 1}: double the length, tiling what is there">x2</button></div>
       ${Array.from({ length: Math.ceil(sec.len / sec.bar) }, (_, b) => `<div class="sq-pr__rbar" style="left:${b * sec.bar * sw}px;width:${Math.min(sec.bar, sec.len - b * sec.bar) * sw}px">${b + 1}</div>`).join("")}
     </div>`;
     grids += `<div class="sq-pr__lines${si % 2 ? " is-alt" : ""}" style="left:${x}px;width:${w}px;--beat:${sec.beat};--barn:${sec.bar}"></div><div class="sq-pr__secline" style="left:${x}px"></div>`;
@@ -754,7 +754,11 @@ function onClick(e) {
   const sec = secBySlot.get(slot);
   if (!sec) return;
   if (act === "sec-play") {
-    requestPatternSwitch(slot);
+    // stopped: start the transport on this pattern (the transport's own play
+    // button, as the clip view's scene double-click does); playing: switch to
+    // it, now or at the bar line by the switch setting
+    if (state.playing) requestPatternSwitch(slot);
+    else { switchPattern(slot); document.getElementById("play")?.click(); }
     render();
     return;
   }

@@ -2530,8 +2530,9 @@ in): a bar line switches a lookahead early, and the new slot with the old
 index drew the head at the next pattern's end for a step.
 
 - **The patterns are the sequencer's: switching one switches the scene.** A
-  header's ▶ is `requestPatternSwitch` (every track, now or at the bar line
-  by the switch setting), as the pattern bar and the clip view's scene row
+  header's ▶ starts the transport on that pattern when it is stopped (the
+  transport's own play button) and is `requestPatternSwitch` while playing
+  (every track, now or at the bar line by the switch setting), as the pattern bar and the clip view's scene row
   are, so the four views always show and play the same pattern. A
   double-click on a note in another pattern `switchPattern`s there at once,
   since the step editor edits the track's own slot.
