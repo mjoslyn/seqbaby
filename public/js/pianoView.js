@@ -119,7 +119,7 @@ const lastLen = new Map();       // track id -> the length a new note takes
 const scrollMem = new Map();     // track id -> {x, y}
 
 function readPref() {
-  const d = { tool: "draw", snap: "step", zx: 3, zy: 1, ghosts: true, fold: false, follow: true };
+  const d = { tool: "draw", snap: "step", zx: 3, zy: 1, ghosts: true, fold: false, follow: true, hear: true };
   try { return { ...d, ...JSON.parse(localStorage.getItem(PREF_KEY) || "{}") }; } catch { return d; }
 }
 function savePref() { try { localStorage.setItem(PREF_KEY, JSON.stringify(pref)); } catch {} }
@@ -396,6 +396,7 @@ function render() {
         ? `loop: going round${state.patLoop && state.patLoop.end - state.patLoop.start > 1 ? ` patterns ${state.patLoop.start + 1}-${state.patLoop.end}` : " the pattern playing"}. Press for chain, playing through every pattern. Drag across the pattern headers to mark patterns to loop`
         : "chain: playing through every pattern. Press to loop (the patterns marked across the headers, or the one playing)"}">${MODE_UI[looping() ? "repeat" : state.patternMode].icon}<span>${looping() ? "loop" : state.patternMode}</span></button>
       <button type="button" class="sq-pr__followbtn" data-act="follow" aria-pressed="${!!pref.follow}" title="follow: keep the playhead in view while it plays (scrolling by hand switches it off)">follow</button>
+      <button type="button" class="sq-pr__hearbtn" data-act="hear" aria-pressed="${pref.hear !== false}" title="hear: sound the notes you place, move or paint (the keyboard down the left always sounds)">hear</button>
       <button type="button" class="sq-pr__ghostbtn" data-act="ghosts" aria-pressed="${!!pref.ghosts}" title="ghosts: the other melodic tracks' notes for the same pattern, faint, behind this one's">ghosts</button>
       <span class="sq-pr__zoom" title="zoom (ctrl/⌘-wheel zooms across)">↔<button type="button" class="sq-btn--ghost" data-act="zx-">−</button><button type="button" class="sq-btn--ghost" data-act="zx+">+</button>
         ↕<button type="button" class="sq-btn--ghost" data-act="zy-">−</button><button type="button" class="sq-btn--ghost" data-act="zy+">+</button></span>
@@ -651,8 +652,14 @@ function nudgeSelection(t, micro, to = null) {
 
 // ---- hearing a note ----------------------------------------------------------
 
-async function audition(t, midi, dur = 0.3, vel = 0.8) {
+/**
+ * Sound a note on the track. Edits (placing, moving, painting notes) only
+ * sound with `hear` on; the keyboard down the left always does (`force`),
+ * since hearing the track is all it is for.
+ */
+async function audition(t, midi, dur = 0.3, vel = 0.8, force = false) {
   if (!t || t.muted || !Number.isFinite(midi)) return;
+  if (!pref.hear && !force) return;
   const k = root?.querySelector(`.sq-pr__key[data-p="${Math.round(midi)}"]`);
   if (k) { k.classList.add("is-down"); setTimeout(() => k.classList.remove("is-down"), dur * 1000); }
   await ensureAudio();
@@ -712,6 +719,12 @@ function onClick(e) {
     return;
   }
   if (act === "ghosts") { pref.ghosts = !pref.ghosts; savePref(); render(); return; }
+  if (act === "hear") {
+    pref.hear = pref.hear === false; savePref();
+    b.setAttribute("aria-pressed", String(pref.hear));
+    setStatus(pref.hear ? "piano: notes sound as you place them" : "piano: notes are placed silently (the keyboard still sounds)");
+    return;
+  }
   if (act === "follow") {
     pref.follow = !pref.follow; savePref();
     const sc = root.querySelector(".sq-pr__scroll");
@@ -852,7 +865,7 @@ function startGesture(e) {
   if (key_ && e.button === 0) {
     const p = Number(key_.dataset.p);
     drag = { kind: "keys", t, last: p, pointerId: e.pointerId };
-    audition(t, p, 0.45);
+    audition(t, p, 0.45, 0.8, true);
     e.preventDefault();
     return;
   }
@@ -988,7 +1001,7 @@ function onPointerMove(e) {
   if (drag.kind === "keys") {
     const k = document.elementFromPoint(e.clientX, e.clientY)?.closest?.(".sq-pr__key");
     const p = k ? Number(k.dataset.p) : null;
-    if (p != null && p !== drag.last) { drag.last = p; audition(t, p, 0.35); }
+    if (p != null && p !== drag.last) { drag.last = p; audition(t, p, 0.35, 0.8, true); }
     return;
   }
   if (drag.kind === "vel") { velAt(e); return; }

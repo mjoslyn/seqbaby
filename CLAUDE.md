@@ -2565,6 +2565,9 @@ index drew the head at the next pattern's end for a step.
   view's scene row (`inLoop`). Chain mode counts a pattern's repeat in BARS, so a
   header's − / + / x2 moves `patternRepeats[slot]` with the length when the
   two agreed, or a two-bar pattern would play its first bar only.
+- **`hear`** (per browser, on by default): placing, moving and painting
+  notes sound them; off, edits are silent. The keyboard down the left always
+  sounds (`audition`'s `force`), since hearing the track is all it is for.
 - **`follow`** (per browser, on by default) turns the page when the playhead
   nears the right edge; a sideways scroll the view did not make, while
   playing, switches it off (`autoScroll`), as the arrangement's does. A sticky keyboard down the left (click or
