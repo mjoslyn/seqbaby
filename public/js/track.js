@@ -389,6 +389,38 @@ export function resizePattern(t, patIdx, len) {
   renderPatternGrid();
 }
 
+/**
+ * Shift a pattern `by` steps, later when positive, wrapping round its own
+ * length: every per-step array moves (notes, chords, arps, nudges, sample
+ * regions...) and every automation lane with it, so the part is the same part,
+ * starting somewhere else. A note that would now run past the end is cut there.
+ * @param {Track} t @param {number} patIdx @param {number} by
+ */
+export function shiftPattern(t, patIdx, by) {
+  const p = t.patterns?.[patIdx];
+  const len = p?.steps?.length | 0;
+  if (!p || len < 2) return;
+  const k = ((Math.round(by) % len) + len) % len;
+  if (!k) return;
+  const rot = (arr) => arr.map((_, i) => arr[(i - k + len) % len]);
+  for (const key of Object.keys(p)) {
+    if (Array.isArray(p[key]) && p[key].length === len) p[key] = rot(p[key]);
+  }
+  for (const lane of Object.values(p.automation || {})) {
+    if (lane && Array.isArray(lane.values) && lane.values.length === len) lane.values = rot(lane.values);
+  }
+  for (let i = 0; i < len; i++) {
+    if (p.steps[i]) p.lengths[i] = Math.max(1, Math.min(p.lengths[i] || 1, len - i));
+  }
+  if (trackSlot(t) === patIdx) {
+    aliasPattern(t, patIdx);
+    renderStepGrid(t);
+    refreshAutIfOpen(t);
+    refreshRollIfOpen(t);
+  }
+  renderPatternGrid();
+}
+
 // resizeTrack now resizes only the active pattern (per-pattern lengths).
 export function resizeTrack(t, len) {
   resizePattern(t, t._patternIdx ?? state.activePattern, len);

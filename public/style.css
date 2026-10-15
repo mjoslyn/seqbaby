@@ -568,6 +568,7 @@ button.sq-btn--danger { color: var(--danger); }
 .sq-track__slot { padding: 2px 7px; font-size: 11px; border-radius: 10px; border: 1px solid var(--accent-2); color: var(--accent-2); background: color-mix(in oklab, var(--accent-2) 14%, transparent); }
 .sq-track__slot.is-off { border-color: var(--fg-dim); color: var(--fg-dim); background: transparent; text-decoration: line-through; }
 .sq-track__len-extend button { padding: 3px 8px; font-size: 11px; min-width: 36px; }
+.sq-track__len-extend .track-shift-left { margin-left: 6px; }
 /* Phone-only quick row (render.js's applyQuickRow): fx / filter / +1 / /2 /
    speed, pulled out of the head and dropped in right after it — a sibling,
    not a head child, so none of the head's own mobile hiding rules (which
@@ -910,6 +911,8 @@ main {
    container-level rule above no longer reaches them there. */
 .sq-track.is-bus .track-len-plus1,
 .sq-track.is-bus .track-len-half,
+.sq-track.is-bus .track-shift-left,
+.sq-track.is-bus .track-shift-right,
 .sq-track.is-bus .sq-track__save,
 .sq-track.is-bus .sq-track__load-patch,
 .sq-track.is-bus .sq-track__wav { display: none !important; }

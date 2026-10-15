@@ -278,7 +278,9 @@ env / fx / eq / comp / mod / automation per track.
   patch touched — so a border here and a peer's dot in the jam panel are
   always the same colour, from the same id, without the two agreeing on it.
   The room itself is the shell's (`app/JamPanel.tsx`). See the jam section.
-- `track.js` — track lifecycle (create/resize/clone), and the track head's
+- `track.js` — track lifecycle (create/resize/clone), `shiftPattern` (the
+  track head's ◂ ▸: a pattern rotated a step, or a beat with shift, every
+  per-step array and lane moving with it, wrapping), and the track head's
   `copy` / `paste`: one page-wide clipboard holding a track's current pattern
   (`clonePattern`), pasted over the pattern another track is on. Notes and
   lanes travel; the sound (p-lock) stays the target's, and lanes its engine

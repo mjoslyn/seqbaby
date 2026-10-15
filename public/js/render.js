@@ -32,7 +32,7 @@ import {
   REPEAT_KNOBS, REPEAT_MODES, repeatGateLabel, repeatGridLabel, repeatIntervalLabel, repeatOffsetLabel,
   repeatPercentLabel, repeatPitchLabel,
 } from "./repeat.js";
-import { patternMeter, redetectDrumKit, stepsPerBarForMeter } from "./meter.js";
+import { patternMeter, redetectDrumKit, stepsPerBarForMeter, stepsPerBeatForMeter } from "./meter.js";
 import { refreshHexopAlgorithm, setEngineKey, setParam, updateGranularSpeedEnabled, updatePlaitsControlsVisibility, refreshVoxLyric } from "./params.js";
 import { bestRollViewOct } from "./pianoRoll.js";
 import { applyCompressorConfig, EQ_BANDS, refreshCompSourceDropdowns, refreshNoiseBeds, refreshOutputSelects, releaseSilencedTracks, setEQ, setFilter, setTrackOutput } from "./signal.js";
@@ -42,7 +42,7 @@ import { launchClip } from "./clips.js";
 import { openAutAsModal, openChanceAsModal, openCompAsModal, openEnvAsModal, openEqAsModal, openFilterAsModal, openFxAsModal, openGranularWavModal, openModAsModal, openEuclidAsModal, openRollAsModal, openSampleEditorModal, openTrackMenu } from "./stepEditor.js";
 import { openWavetableEditor } from "./wavetableEditor.js";
 import { attachGridInteraction, paintStepCursor, renderStepGrid } from "./stepGrid.js";
-import { copyTrackPattern, duplicateTrack, hasTrackClip, pasteTrackPattern, extendPatternByDuplicate, removeTrack, resizePattern, resizeTrack, shiftTrackOctave, truncatePattern } from "./track.js";
+import { copyTrackPattern, duplicateTrack, hasTrackClip, pasteTrackPattern, extendPatternByDuplicate, removeTrack, resizePattern, resizeTrack, shiftPattern, shiftTrackOctave, truncatePattern } from "./track.js";
 import { CONTAGION_NUM_KEYS, CONTAGION_SEL_KEYS } from "./contagion.js";
 import { GRAN_DEFAULTS, GRAN_NUM_KEYS, GRAN_SEL_KEYS } from "./voices.js";
 
@@ -1298,6 +1298,15 @@ export function renderTrack(t) {
   node.querySelector(".track-len-quarter")?.addEventListener("click", () => {
     truncatePattern(t, trackSlot(t), Math.max(1, Math.floor(t.length / 4)));
   });
+  // shift the pattern a step (shift-click: a beat of its meter), wrapping
+  for (const [sel, dir] of [[".track-shift-left", -1], [".track-shift-right", 1]]) {
+    node.querySelector(sel)?.addEventListener("click", (e) => {
+      const slot = trackSlot(t);
+      const by = e.shiftKey ? stepsPerBeatForMeter(patternMeter(slot)) : 1;
+      shiftPattern(t, slot, dir * by);
+      setStatus(`${t.name?.trim() || "track"}: pattern ${slot + 1} shifted ${by} step${by === 1 ? "" : "s"} ${dir < 0 ? "earlier" : "later"}`);
+    });
+  }
 
   const soloBtn = node.querySelector(".sq-track__solo");
   soloBtn.addEventListener("click", () => {

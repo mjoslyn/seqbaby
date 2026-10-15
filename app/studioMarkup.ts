@@ -740,6 +740,8 @@ export const STUDIO_BODY = String.raw`
           <button class="track-len-4x sq-btn--ghost" type="button" title="quadruple this track's pattern length, duplicating what is there">x4</button>
           <button class="track-len-half sq-btn--ghost" type="button" title="halve this track's pattern length, keeping the first half">/2</button>
           <button class="track-len-quarter sq-btn--ghost" type="button" title="quarter this track's pattern length, keeping the first quarter">/4</button>
+          <button class="track-shift-left sq-btn--ghost" type="button" title="shift this track's pattern one step earlier, the first step wrapping round to the end (shift-click: a beat)" aria-label="shift pattern earlier">◂</button>
+          <button class="track-shift-right sq-btn--ghost" type="button" title="shift this track's pattern one step later, the last step wrapping round to the start (shift-click: a beat)" aria-label="shift pattern later">▸</button>
         </div>
         <div class="sq-field"><label>spd</label>
           <select class="sq-track__speed">
