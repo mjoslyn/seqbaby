@@ -2,10 +2,13 @@ import { PATTERN_COUNT, PATTERN_MODES, patternModeOf } from "./constants.js";
 import { setStatus } from "./dom.js";
 import { ICON_ARRANGE, ICON_CHAIN, ICON_FINISH, ICON_NOW, ICON_REPEAT } from "./icons.js";
 import { flushPatternSound, recallPatternSound, refreshPatternSoundUI } from "./patternSound.js";
-import { aliasPattern, clonePattern, emptyPattern, inLoop, isPatternNonEmpty, repaintPatternUI, requestPatternSwitch, state, trackSlot } from "./state.js";
+import { aliasPattern, clonePattern, emptyPattern, inLoop, isPatternNonEmpty, repaintPatternUI, requestPatternSwitch, state, syncMeterUI, trackSlot } from "./state.js";
 import { remapSlots } from "./arrangement.js";
 import { renderStepGrid } from "./stepGrid.js";
-import { maxLengthAt } from "./track.js";
+import { maxLengthAt, resizePattern } from "./track.js";
+import { COMMON_METERS, autoAccents, parseMeter, patternMeter, stepsPerBarForMeter } from "./meter.js";
+import { paintBeatIndicator } from "./beat.js";
+import { announceClips } from "./clips.js";
 
 /** The pattern-mode button's icon and title per mode; the clip view's toolbar draws the same. */
 export const MODE_UI = {
@@ -149,6 +152,65 @@ export function insertEmptyPattern(at) {
   repaintPatternUI();
   setStatus(`new empty pattern ${dest + 1}`);
   return dest;
+}
+
+/**
+ * Set one pattern's time signature: the pattern bar's `sig`, the clip view's
+ * meter row, the piano view's section headers and the arrangement's toolbar
+ * all come here. Every track's copy of the pattern is resized to keep its bar
+ * count (1 bar of 4/4 = 16 steps -> 1 bar of 7/4 = 28). Pattern 1 is the
+ * song's default: its meter follows into every slot not set by hand; setting
+ * any other slot marks it as its own.
+ * @param {number} patIdx @param {string|{num:number,den:number}} meter
+ * @returns {boolean} whether anything changed
+ */
+export function setPatternMeter(patIdx, meter) {
+  const m = typeof meter === "string" ? parseMeter(meter) : meter;
+  if (!m || patIdx < 0 || patIdx >= PATTERN_COUNT) return false;
+  const prev = patternMeter(patIdx);
+  if (prev.num === m.num && prev.den === m.den) return false;
+  // every slot that follows pattern 1, with its meter before the change
+  const moved = [patIdx];
+  if (patIdx === 0) {
+    for (let i = 1; i < PATTERN_COUNT; i++) {
+      if (!state.patternMeterCustomized[i]) { moved.push(i); state.patternMeters[i] = { num: m.num, den: m.den }; }
+    }
+  } else {
+    state.patternMeterCustomized[patIdx] = true;
+  }
+  state.patternMeters[patIdx] = { num: m.num, den: m.den };
+  // Resize every track's copy of THIS pattern (its own length, not t.length:
+  // a track with a clip launched is on another slot). The slots following
+  // pattern 1 keep their step counts, as they always have.
+  const oldSpb = stepsPerBarForMeter(prev);
+  const newSpb = stepsPerBarForMeter(m);
+  for (const t of state.tracks) {
+    const curLen = t.patterns?.[patIdx]?.steps.length || newSpb;
+    const bars = Math.max(1, Math.round(curLen / oldSpb));
+    const newLen = Math.max(1, Math.min(128, bars * newSpb));
+    if (newLen !== curLen) resizePattern(t, patIdx, newLen);
+    else if (moved.includes(trackSlot(t))) {
+      t.accents = autoAccents(t.length, patternMeter(trackSlot(t)));
+      renderStepGrid(t);
+    }
+  }
+  syncMeterUI();
+  paintBeatIndicator(state.tick);
+  announceClips();
+  setStatus(`pattern ${patIdx + 1}: ${m.num}/${m.den}${patIdx === 0 ? " (and every pattern not set on its own)" : ""}`);
+  return true;
+}
+
+/**
+ * The options of a meter picker: the common meters, plus the slot's own when
+ * it is not one of them (a song or code can set any N/D).
+ * @param {number} patIdx
+ */
+export function meterOptions(patIdx) {
+  const cur = patternMeter(patIdx);
+  const v = `${cur.num}/${cur.den}`;
+  const list = COMMON_METERS.includes(v) ? COMMON_METERS : [v, ...COMMON_METERS];
+  return list.map((o) => `<option value="${o}"${o === v ? " selected" : ""}>${o}</option>`).join("");
 }
 
 export function renderPatternGrid() {

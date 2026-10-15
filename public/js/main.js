@@ -20,18 +20,18 @@ import { applySampleSpeed, attachBpmDrag, lfoRateLabel, retuneSyncedLFOs } from 
 import { captureSequence, initComputerKeyboard, isDesktopKeyboard, resetKbdKeys, setKbdRecord } from "./keyboard.js";
 import { initVim } from "./vim.js";
 import { installKnobRecord } from "./knobRecord.js";
-import { activeMeter, autoAccents, parseMeter, redetectDrumKit, stepsPerBarForMeter } from "./meter.js";
+import { activeMeter, redetectDrumKit, stepsPerBarForMeter } from "./meter.js";
 import { meterTick } from "./meters.js";
 import { setEngineKey } from "./params.js";
 import { installParamContextMenu } from "./paramMenu.js";
-import { copyPattern, nextPatternMode, openPatternMenu, renderPatternGrid, setPatternMode, syncPatternModeUI } from "./patternBar.js";
+import { copyPattern, nextPatternMode, openPatternMenu, renderPatternGrid, setPatternMeter, setPatternMode, syncPatternModeUI } from "./patternBar.js";
 import { attachLevelDrag, setActiveTrack } from "./render.js";
 import { initScaleUI, openChordMenu, syncChordUI } from "./scaleUI.js";
 import { inJam, jamTogglePlay } from "./jam.js";
 import { installLeaveGuard, loadShareFromUrl, onExportSet, onImportSet, onLeaveStudio, onLoadSet, onSaveSet, onShareSet, STARTER_TRACKS } from "./session.js";
-import { state, switchPattern, trackSlot } from "./state.js";
+import { state, switchPattern } from "./state.js";
 import { renderStepGrid } from "./stepGrid.js";
-import { createTrack, resizePattern } from "./track.js";
+import { createTrack } from "./track.js";
 import { ensureAudio, loadWorklet, togglePlay } from "./transport.js";
 
 export function showAudioGateDialog() {
@@ -846,44 +846,7 @@ export function init() {
     state.patternRepeats[state.activePattern] = v;
   });
   const meterSel = document.getElementById("pattern-meter");
-  if (meterSel) {
-    meterSel.addEventListener("change", () => {
-      const m = parseMeter(meterSel.value);
-      if (!m) return;
-      const patIdx = state.activePattern;
-      const prev = state.patternMeters[patIdx] || { num: 4, den: 4 };
-      state.patternMeters[patIdx] = m;
-      if (patIdx === 0) {
-        // Pattern 1 is the source: sync the meter (only) into every slot that
-        // hasn't been explicitly customized. Their step counts stay put.
-        for (let i = 1; i < PATTERN_COUNT; i++) {
-          if (!state.patternMeterCustomized[i]) state.patternMeters[i] = { num: m.num, den: m.den };
-        }
-      } else {
-        // User set a non-#1 pattern's meter explicitly — lock it off from #1.
-        state.patternMeterCustomized[patIdx] = true;
-      }
-      // Resize every track's copy of this pattern to preserve its bar count
-      // under the new meter (e.g. 1 bar of 4/4 = 16 steps → 1 bar of 7/8 = 14).
-      // The pattern's OWN length, not t.length: a track with a clip launched is
-      // on another slot, and t.length mirrors that one. A track that already
-      // matches and is on this pattern just gets its accents + grid refreshed.
-      const oldSpb = stepsPerBarForMeter(prev);
-      const newSpb = stepsPerBarForMeter(m);
-      for (const t of state.tracks) {
-        const curLen = t.patterns?.[patIdx]?.steps.length || newSpb;
-        const bars = Math.max(1, Math.round(curLen / oldSpb));
-        const newLen = Math.max(1, Math.min(128, bars * newSpb));
-        if (newLen !== curLen) {
-          resizePattern(t, patIdx, newLen);
-        } else if (trackSlot(t) === patIdx) {
-          t.accents = autoAccents(t.length, m);
-          renderStepGrid(t);
-        }
-      }
-      paintBeatIndicator(state.tick);
-    });
-  }
+  meterSel?.addEventListener("change", () => setPatternMeter(state.activePattern, meterSel.value));
   renderPatternGrid();
 
   initScaleUI();

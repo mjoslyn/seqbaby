@@ -60,6 +60,7 @@ import { patternLocked } from "./patternSound.js";
 import { isPatternNonEmpty, state, trackSlot } from "./state.js";
 import { makeTrackDetail } from "./trackDetail.js";
 import { onViewChange } from "./views.js";
+import { meterOptions, setPatternMeter } from "./patternBar.js";
 
 const ZOOMS = [24, 48, 96, 160];
 const STRIP_W = 150;            // the strip column, in px (style.css agrees)
@@ -133,6 +134,7 @@ export function installArrangeView() {
   root.appendChild(grid);
   detail = makeTrackDetail(root, scheduleArrangePaint);
   root.addEventListener("click", onClick);
+  root.addEventListener("change", onMeterChange);
   root.addEventListener("pointerdown", onPointerDown);
   root.addEventListener("scroll", onScroll, true);   // scroll does not bubble: caught on the way down
   root.addEventListener("wheel", onWheel, { passive: false });
@@ -148,6 +150,10 @@ export function installArrangeView() {
 /** Repaint on the next frame, if this is the open view. */
 export function scheduleArrangePaint() {
   if (state.view !== "arrange" || !root || raf) return;
+  // the meter picker held open: a repaint (every bar line while playing)
+  // would close it under the pointer
+  const held = document.activeElement?.closest?.("#arrange .sq-arr__meter select");
+  if (held) { held.addEventListener("blur", scheduleArrangePaint, { once: true }); return; }
   raf = requestAnimationFrame(() => { raf = 0; render(); });
 }
 
@@ -220,6 +226,10 @@ function render({ scrollX } = {}) {
       <div class="sq-arr__lane" style="width:${bars * w}px" title="drag across empty space to add a block of pattern ${trackSlot(t) + 1}">${blocks}${ghosts}</div>
     </div>`;
   }).join("");
+  // the meter picker: the selected block's pattern, else pattern 1 (the
+  // ruler's meter, and the song's default)
+  const mSlot = meterSlot();
+  const meterPick = `<label class="sq-arr__meter" title="${mSlot ? `pattern ${mSlot + 1}'s time signature (the selected block's pattern)` : "pattern 1's time signature: the ruler's bars, and every pattern not set on its own. Select a block to set its pattern's"}"><span>sig p${mSlot + 1}</span><select aria-label="pattern ${mSlot + 1} time signature">${meterOptions(mSlot)}</select></label>`;
   grid.innerHTML = `
     <div class="sq-arr__bar-row">
       <button type="button" class="sq-arr__rec" data-act="rec" aria-pressed="${!!state.arrRecord}" title="record: play plays the clips while this is armed, and each bar is written here as it plays; over an existing arrangement you are asked whether the recording replaces it or goes after it">● rec</button>
@@ -227,6 +237,7 @@ function render({ scrollX } = {}) {
       <button type="button" class="sq-btn--ghost" data-act="clear" title="remove every block">clear</button>
       <button type="button" class="sq-arr__follow" data-act="follow" aria-pressed="${follow}" title="follow: keep the playhead in view while it plays (scrolling by hand switches it off)">follow</button>
       <button type="button" class="sq-arr__loopbtn" data-act="loop" aria-pressed="${!!(state.arrLoopOn && loopR)}" title="${loopR ? `loop bars ${loopR.start + 1}-${loopR.end}: arrange mode plays them round instead of the whole arrangement. Drag across the ruler to draw another section` : "loop a section: drag across the ruler to pick its bars (or select a block and press this to loop its bars)"}">loop</button>
+      ${meterPick}
       <span class="sq-arr__zoom"><button type="button" class="sq-btn--ghost" data-act="zoom-" title="zoom out (or ctrl/⌘-scroll, or pinch, over the timeline)"${zoom ? "" : " disabled"}>−</button><button type="button" class="sq-btn--ghost" data-act="zoom+" title="zoom in (or ctrl/⌘-scroll, or pinch, over the timeline)"${zoom < ZOOMS.length - 1 ? "" : " disabled"}>+</button></span>
       <span class="sq-arr__len">${len} bar${len === 1 ? "" : "s"}${state.arrStartBar ? ` · starts at bar ${state.arrStartBar + 1}` : ""}${state.arrLoopOn && loopR ? ` · looping bars ${loopR.start + 1}-${loopR.end}` : ""}${state.playing && !arrange ? " · playing the clips: the arrangement takes over at the bar line" : ""}</span>
     </div>
@@ -343,6 +354,18 @@ function onClick(e) {
     const block = e.target.closest(".sq-arr__block");
     if (block) openSlotPicker(t, Number(block.dataset.i), e.target);
   }
+}
+
+/** The slot the toolbar's meter picker sets: the selected block's, else pattern 1. */
+function meterSlot() {
+  const t = sel && trackById(sel.trackId);
+  return t?.arrangement?.[sel.i]?.slot ?? 0;
+}
+
+function onMeterChange(e) {
+  const s = e.target.closest?.(".sq-arr__meter select");
+  if (!s) return;
+  if (setPatternMeter(meterSlot(), s.value)) render();
 }
 
 function toggleLoop() {

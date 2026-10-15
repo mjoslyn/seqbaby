@@ -74,7 +74,7 @@ import { refreshRollIfOpen } from "./pianoRoll.js";
 import { setActiveTrack } from "./render.js";
 import { pitchesAt, readNotes, stepSnapshot, writeNotes } from "./rollNotes.js";
 import { holdNoiseBed } from "./signal.js";
-import { MODE_UI, setPatternMode } from "./patternBar.js";
+import { MODE_UI, meterOptions, setPatternMeter, setPatternMode } from "./patternBar.js";
 import { invertChord, isPatternNonEmpty, requestPatternSwitch, state, switchPattern, trackSlot } from "./state.js";
 import { openStepEditor } from "./stepEditor.js";
 import { renderStepGrid } from "./stepGrid.js";
@@ -283,6 +283,9 @@ function paintOct() {
 /** Repaint on the next frame, if this is the open view. */
 export function schedulePianoPaint() {
   if (state.view !== "piano" || !root || raf) return;
+  // a header's meter picker held open: a repaint would close it under the pointer
+  const held = document.activeElement?.closest?.("#piano .sq-pr__sec-meter");
+  if (held) { held.addEventListener("blur", schedulePianoPaint, { once: true }); return; }
   raf = requestAnimationFrame(() => { raf = 0; render(); });
 }
 
@@ -329,7 +332,7 @@ function render() {
     const empty = !t.patterns[sec.slot].steps.some(Boolean);
     const bars = sec.len / sec.bar;
     ruler += `<div class="sq-pr__sec${sec.slot === slot ? " is-now" : ""}" data-slot="${sec.slot}" style="left:${x}px;width:${w}px">
-      <div class="sq-pr__sec-h" title="pattern ${sec.slot + 1}. Drag across headers to loop those patterns"><button type="button" class="sq-pr__sec-play" data-act="sec-play" data-slot="${sec.slot}" title="play pattern ${sec.slot + 1}: starts the transport here when stopped; while playing, every track switches to it, as the pattern bar does (now or at the bar line, by the switch setting)">▶ ${sec.slot + 1}</button><span class="sq-pr__sec-len">${Number.isInteger(bars) ? bars : bars.toFixed(2)} bar${bars === 1 ? "" : "s"}${empty ? " · empty" : ""}</span><button type="button" data-act="sec-len-" data-slot="${sec.slot}" title="pattern ${sec.slot + 1}: one bar shorter">−</button><button type="button" data-act="sec-len+" data-slot="${sec.slot}" title="pattern ${sec.slot + 1}: one bar longer, empty">+</button><button type="button" data-act="sec-x2" data-slot="${sec.slot}" title="pattern ${sec.slot + 1}: double the length, tiling what is there">x2</button></div>
+      <div class="sq-pr__sec-h" title="pattern ${sec.slot + 1}. Drag across headers to loop those patterns"><button type="button" class="sq-pr__sec-play" data-act="sec-play" data-slot="${sec.slot}" title="play pattern ${sec.slot + 1}: starts the transport here when stopped; while playing, every track switches to it, as the pattern bar does (now or at the bar line, by the switch setting)">▶ ${sec.slot + 1}</button><span class="sq-pr__sec-len">${Number.isInteger(bars) ? bars : bars.toFixed(2)} bar${bars === 1 ? "" : "s"}${empty ? " · empty" : ""}</span><button type="button" data-act="sec-len-" data-slot="${sec.slot}" title="pattern ${sec.slot + 1}: one bar shorter">−</button><button type="button" data-act="sec-len+" data-slot="${sec.slot}" title="pattern ${sec.slot + 1}: one bar longer, empty">+</button><button type="button" data-act="sec-x2" data-slot="${sec.slot}" title="pattern ${sec.slot + 1}: double the length, tiling what is there">x2</button><select class="sq-pr__sec-meter" data-act="sec-meter" data-slot="${sec.slot}" title="pattern ${sec.slot + 1}: its time signature, for every track (each one's copy is resized to keep its bars)" aria-label="pattern ${sec.slot + 1} time signature">${meterOptions(sec.slot)}</select></div>
       ${Array.from({ length: Math.ceil(sec.len / sec.bar) }, (_, b) => `<div class="sq-pr__rbar" style="left:${b * sec.bar * sw}px;width:${Math.min(sec.bar, sec.len - b * sec.bar) * sw}px">${b + 1}</div>`).join("")}
     </div>`;
     grids += `<div class="sq-pr__lines${si % 2 ? " is-alt" : ""}" style="left:${x}px;width:${w}px;--beat:${sec.beat};--barn:${sec.bar}"></div><div class="sq-pr__secline" style="left:${x}px"></div>`;
@@ -775,6 +778,10 @@ function onChange(e) {
   if (!s) return;
   const t = currentTrack();
   if (s.dataset.act === "snap") { pref.snap = s.value; savePref(); return; }
+  if (s.dataset.act === "sec-meter") {
+    if (setPatternMeter(Number(s.dataset.slot), s.value)) { if (t) refreshRollIfOpen(t); render(); }
+    return;
+  }
   if (s.dataset.act === "track") {
     const o = state.tracks.find((x) => String(x.id) === s.value);
     if (o) { setActiveTrack(o); render(); }
@@ -850,7 +857,7 @@ function startGesture(e) {
     return;
   }
   const head_ = e.target.closest(".sq-pr__sec-h");
-  if (head_ && e.button === 0 && !e.target.closest("button")) {
+  if (head_ && e.button === 0 && !e.target.closest("button, select")) {
     const slot = Number(head_.parentElement.dataset.slot);
     drag = { kind: "loop", t, a: slot, b: slot, pointerId: e.pointerId };
     paintLoopPreview({ start: slot, end: slot + 1 });

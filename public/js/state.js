@@ -469,7 +469,10 @@ export function syncMeterUI() {
   const sel = document.getElementById("pattern-meter");
   if (sel) {
     const m = activeMeter();
-    sel.value = `${m.num}/${m.den}`;
+    const v = `${m.num}/${m.den}`;
+    // a song or code can set any N/D: give the select the one it holds
+    if (![...sel.options].some((o) => o.value === v)) sel.add(new Option(v, v), 0);
+    sel.value = v;
   }
   paintBeatIndicator(state.tick);
 }

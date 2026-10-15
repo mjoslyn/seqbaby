@@ -53,7 +53,7 @@
 import { PATTERN_COUNT } from "./constants.js";
 import { setStatus } from "./dom.js";
 import { announceClips, requestClipLaunch, setArrangeRecord, stopClip } from "./clips.js";
-import { MODE_UI, SWITCH_UI, insertEmptyPattern, setPatternMode } from "./patternBar.js";
+import { MODE_UI, SWITCH_UI, insertEmptyPattern, meterOptions, setPatternMeter, setPatternMode } from "./patternBar.js";
 import { patternSvg, svgUrl } from "./patternPicture.js";
 import { patternLocked } from "./patternSound.js";
 import { inLoop, isPatternNonEmpty, requestPatternSwitch, state, switchPattern, trackSlot } from "./state.js";
@@ -118,6 +118,8 @@ function onWheel(e) {
 
 /** A column's repeat count changed: the song's, so undo, save and a jam see it. */
 function onRepChange(e) {
+  const met = e.target.closest?.("[data-meter]");
+  if (met) { setPatternMeter(Number(met.dataset.meter), met.value); scheduleClipPaint(); return; }
   const sel = e.target.closest?.("[data-rep]");
   if (!sel) return;
   const i = Number(sel.dataset.rep);
@@ -206,7 +208,7 @@ function render() {
   if (!root) return;
   // a repeat picker held open: a repaint (every chain advance while playing)
   // would close it under the pointer, so wait until it lets go
-  const held = document.activeElement?.closest?.("#clips [data-rep]");
+  const held = document.activeElement?.closest?.("#clips [data-rep], #clips [data-meter]");
   if (held) { held.addEventListener("blur", () => scheduleClipPaint(), { once: true }); return; }
   const ap = state.activePattern;
   const scenes = [];
@@ -225,6 +227,13 @@ function render() {
     const r = Math.max(1, Math.min(16, state.patternRepeats[i] ?? 1));
     const opts = Array.from({ length: 16 }, (_, k) => `<option value="${k + 1}"${k + 1 === r ? " selected" : ""}>×${k + 1}</option>`).join("");
     repeats.push(`<select class="sq-clips__rep${r > 1 ? " is-set" : ""}" data-rep="${i}" title="column ${i + 1}: chain mode plays it for ${r} bar${r === 1 ? "" : "s"} before the next column" aria-label="column ${i + 1} repeat">${opts}</select>`);
+  }
+  // each column's time signature (state.patternMeters, the pattern bar's `sig`)
+  const meters = [];
+  for (let i = 0; i < PATTERN_COUNT; i++) {
+    const m = patternMeter(i);
+    const own = i === 0 || state.patternMeterCustomized[i];
+    meters.push(`<select class="sq-clips__rep sq-clips__meter${own && (m.num !== 4 || m.den !== 4) ? " is-set" : ""}" data-meter="${i}" title="column ${i + 1}: ${m.num}/${m.den}${i === 0 ? ". Pattern 1's meter is the song's: every column not set on its own follows it" : own ? "" : " (follows pattern 1)"}. Every track's copy is resized to keep its bars" aria-label="column ${i + 1} time signature">${meterOptions(i)}</select>`);
   }
   const trackRows = rows().map((t) => {
     const slot = trackSlot(t);
@@ -280,6 +289,10 @@ function render() {
     <div class="sq-clips__head sq-clips__reps">
       <div class="sq-clips__strip" title="how many bars chain mode plays each column for before moving on">repeat</div>
       <div class="sq-clips__cells">${repeats.join("")}</div>
+    </div>
+    <div class="sq-clips__head sq-clips__reps">
+      <div class="sq-clips__strip" title="each column's time signature">meter</div>
+      <div class="sq-clips__cells">${meters.join("")}</div>
     </div>
     <div class="sq-clips__rows">${trackRows}</div>
     </div></div>`;

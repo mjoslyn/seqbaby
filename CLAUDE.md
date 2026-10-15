@@ -2408,7 +2408,13 @@ block   t.arrangement[i]    ─── { slot, start, bars }: a clip at a bar, fo
   repeat pickers, one per column: `state.patternRepeats`, the bars chain
   mode plays that column for (the pattern bar's `rep`, which only reaches
   the active pattern). The view skips a repaint while one is held open, or
-  a chain advance would close it under the pointer.
+  a chain advance would close it under the pointer. Under those, a row of
+  meter pickers, one per column. **Every view sets a pattern's meter through
+  `setPatternMeter`** (patternBar.js): the pattern bar's `sig`, the clip
+  view's meter row, the piano view's section headers and the arrangement
+  toolbar's `sig` (the selected block's pattern, else pattern 1, the
+  ruler's). It resizes every track's copy to keep its bars and keeps
+  pattern 1 the default the unset slots follow.
 - **Recording is a bar-line write into a TAKE** (`recordArrangementBar`):
   with `rec` armed (clip view or arrangement view), every bar line in a
   non-arrange mode writes what each track just played — its slot, or nothing
