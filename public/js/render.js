@@ -5,6 +5,7 @@ import { FX_STAGE_LABELS, FX_STAGE_LEVEL_KEY, FX_STAGE_NEUTRAL, LFO_DIVS, fxChai
 import { showInputDialog, showSavedPatchPicker } from "./dialogs.js";
 import { upgradeEngineSelect } from "./enginePicker.js";
 import { isMobileDevice, setStatus } from "./dom.js";
+import { flushHistory, markExternalEdit } from "./history.js";
 import { HEXOP_ALG_LABELS, HEXOP_DEFAULTS, HEXOP_NUM_KEYS, HEXOP_PRESET_NAMES, HEXOP_SEL_KEYS, hexopPreset } from "./hexop.js";
 import { BASS_DEFAULTS, BASS_NUM_KEYS, BASS_SEL_KEYS, BASS_TONE_NAMES, bassTone, bassToneDescription } from "./bass.js";
 import { SUB_DEFAULTS, SUB_NUM_KEYS, SUB_SEL_KEYS, SUB_TONE_NAMES, subTone, subToneDescription } from "./subbass.js";
@@ -1303,7 +1304,11 @@ export function renderTrack(t) {
     node.querySelector(sel)?.addEventListener("click", (e) => {
       const slot = trackSlot(t);
       const by = e.shiftKey ? stepsPerBeatForMeter(patternMeter(slot)) : 1;
+      // one undo step per click: quick clicks would otherwise settle into one
+      flushHistory();
       shiftPattern(t, slot, dir * by);
+      const what = `shift ${t.name?.trim() || "track"} ${dir < 0 ? "earlier" : "later"}`;
+      markExternalEdit(what);
       setStatus(`${t.name?.trim() || "track"}: pattern ${slot + 1} shifted ${by} step${by === 1 ? "" : "s"} ${dir < 0 ? "earlier" : "later"}`);
     });
   }
