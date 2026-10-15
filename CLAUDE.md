@@ -3227,7 +3227,8 @@ the wheel is never taken.
 
 **Vim mode** (`vim.js`) is a toggle, off by default and remembered per
 browser (`seqbaby.vim.v1`). NORMAL makes the letters commands: `hjkl` (count
-first, `4l`), `w b 0 $ ^ gg G`, `x o r > < + - dd yy p .`, `u U ctrl-r`,
+first, `4l`), `w b 0 $ ^ gg G`, `x o r > < + - dd yy p .`, `H L` (shift the
+whole pattern a step, `shiftPattern`; lowercase h / l stay the cursor), `u U ctrl-r`,
 `m s f c`, `N|` a step, space play / stop. INSERT (`i`) is recording armed, so step input stopped and live
 record playing; PLAY (`a`) only sounds the keys; VISUAL (`v`) is a step range
 on the track for `y d p > <`; `:` is a command line (`:k :bpm :p :len :cut
@@ -3250,6 +3251,12 @@ current value). Prefix matches first, then substring, and one letter matches
 only a start. Tab / ↓ and shift-Tab / ↑ take a match into the line, a click
 too (on mousedown, kept from blurring the line, since a blur closes it); what
 runs is always the line, so a match is only ever a way of typing it.
+- **alt + , / . shifts the keyboard track's pattern** a step earlier / later
+  (shift: a beat), vim on or off (`patternShiftKey`, keyboard.js, matched on
+  `e.code` since the Mac option layer remaps , and .). Alt keeps it clear of
+  the piano, which ignores modified keys, and of vim, whose commands are bare.
+  One undo step a press (`shiftPatternEdit`, track.js, which the track head's
+  ◂ ▸ also use).
 - **It is the only keyboard layer, and it goes first.** There were global
   shortcuts before it (space, arrows for tracks, fx throws on the numbers,
   opt + number steps, shift-F / C); they were removed so that with vim off the

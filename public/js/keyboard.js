@@ -17,7 +17,8 @@ import { currentBpm } from "./lfo.js";
 import { invertChord, state } from "./state.js";
 import { paintStepCursor, renderStepGrid } from "./stepGrid.js";
 import { liveGeneratorOf } from "./stepSource.js";
-import { anchorCovering, applyKbdArpToStep, applySampleDefaultsToStep, removeNote, resizeTrack, startNote } from "./track.js";
+import { anchorCovering, applyKbdArpToStep, applySampleDefaultsToStep, removeNote, resizeTrack, shiftPatternEdit, startNote } from "./track.js";
+import { patternMeter, stepsPerBeatForMeter } from "./meter.js";
 import { setStatus } from "./dom.js";
 import { CHORD_TYPES, SCALES, chordNotes, chordTypeForTones, diatonicChordNotes, midiToScaleIndex, quantizeToScale, scaleIndexToMidi } from "./theory.js";
 import { strumOffsets } from "./theoryData.js";
@@ -543,9 +544,30 @@ export function setKbdRecord(on) {
   if (t) paintStepCursor(t);
 }
 
+/**
+ * alt + , / . shifts the keyboard track's pattern a step earlier / later (with
+ * shift: a beat), vim on or off. Matched on the physical key (`code`): on a Mac
+ * the option layer turns , and . into other characters. Alt is what keeps it
+ * clear of the piano (which ignores any modifier) and of vim (whose commands
+ * are bare keys).
+ * @returns {boolean} whether the key was taken
+ */
+function patternShiftKey(e) {
+  if (!e.altKey || e.metaKey || e.ctrlKey) return false;
+  if (e.code !== "Comma" && e.code !== "Period") return false;
+  if (isTypingTarget(e.target)) return false;
+  const t = targetTrack();
+  if (!t || t.engineKey === "bus") return false;
+  e.preventDefault();
+  const by = e.shiftKey ? stepsPerBeatForMeter(patternMeter(t._patternIdx ?? state.activePattern)) : 1;
+  shiftPatternEdit(t, e.code === "Comma" ? -by : by);
+  return true;
+}
+
 function onKeyDown(e) {
   // A key vim mode already took (vim.js listens on window capture, first).
   if (e.defaultPrevented) return;
+  if (patternShiftKey(e)) return;
   // Vim mode (vim.js): the letters are commands except in insert and play.
   if (state.vimMode && state.vimMode !== "insert" && state.vimMode !== "play") return;
   if (e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;

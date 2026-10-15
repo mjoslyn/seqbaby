@@ -30,12 +30,12 @@ import { PANELS, initKnobNav, knobActive, knobArrow, knobNames, pickKnob, releas
 import { controlForKey } from "./paramTargets.js";
 import { setActiveTrack } from "./render.js";
 import { FX_STAGE_LABELS, FX_STAGE_LEVEL_KEY, fxIdLabel, fxInstanceIds } from "./constants.js";
-import { emptyPattern, requestPatternSwitch, state } from "./state.js";
+import { emptyPattern, requestPatternSwitch, state, trackSlot } from "./state.js";
 import { VIEWS, setView } from "./views.js";
 import { paintStepCursor, renderStepGrid } from "./stepGrid.js";
 import { liveGeneratorOf } from "./stepSource.js";
 import { SCALES, midiToScaleIndex, scaleIndexToMidi } from "./theory.js";
-import { anchorCovering, removeNote, startNote } from "./track.js";
+import { anchorCovering, removeNote, shiftPattern, startNote } from "./track.js";
 
 /** @typedef {import("./types.js").Track} Track */
 
@@ -291,6 +291,9 @@ const EDITS = {
   "<": (t, n) => { const i = anchorCovering(t, cursor(t)); return i >= 0 && shiftPitch(t, i, -n) ? null : "no note under the cursor"; },
   "[": (t, n) => { const i = anchorCovering(t, cursor(t)); const m = i >= 0 ? nudgeNote(t, i, -n) : null; return m == null ? "no note under the cursor" : `${t.name}: step ${i + 1} ${microLabel(m)}`; },
   "]": (t, n) => { const i = anchorCovering(t, cursor(t)); const m = i >= 0 ? nudgeNote(t, i, n) : null; return m == null ? "no note under the cursor" : `${t.name}: step ${i + 1} ${microLabel(m)}`; },
+  // the whole pattern a step (a count: that many) earlier / later, wrapping
+  H: (t, n) => { shiftPattern(t, trackSlot(t), -n); return `${t.name}: pattern shifted ${n} step${n === 1 ? "" : "s"} earlier`; },
+  L: (t, n) => { shiftPattern(t, trackSlot(t), n); return `${t.name}: pattern shifted ${n} step${n === 1 ? "" : "s"} later`; },
   "+": (t, n) => velocity(t, 0.1 * n),
   "-": (t, n) => velocity(t, -0.1 * n),
 };
@@ -608,6 +611,7 @@ const HELP_ROWS = [
   ["x o r", "delete / add a note, r then a piano key: that note's pitch"],
   ["> < + -", "pitch up / down, velocity up / down"],
   ["[ ]", "nudge the note a microstep (1/24 of a step) earlier / later. :nudge 0 puts it back"],
+  ["H L", "shift the whole pattern a step earlier / later, wrapping (4L: four steps). Vim off: alt + , / . (shift: a beat)"],
   ["dd yy p .", "clear the track, copy it, paste at the cursor, repeat the last edit"],
   ["v … y d p > < [ ]", "copy / delete / paste over / transpose / nudge the selected steps"],
   ["u / U, ctrl r", "undo / redo"],
@@ -704,6 +708,7 @@ function normalKey(e) {
     case "p": edit(EDITS.p, n, "p"); return done();
     case ">": case "<": case "+": case "-": case "[": case "]": edit(EDITS[k], n, k); return done();
     case "=": edit(EDITS["+"], n, "+"); return done();
+    case "H": case "L": edit(EDITS[k], n, k); return done();
     case ".":
       if (!lastEdit) { setStatus("nothing to repeat"); return done(); }
       edit(lastEdit.fn, n, lastEdit.label); return done();

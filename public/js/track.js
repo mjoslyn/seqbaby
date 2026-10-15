@@ -14,6 +14,7 @@ import { applySet, loadTrackFromData, migrateTrackData, serializeTrack, trackShe
 import { applyCompressorConfig, defaultCompConfig, ensureFxRack, refreshAllTrackOutputs, refreshCompSourceDropdowns, refreshNoiseBeds, refreshOutputSelects, routeVoiceToRack } from "./signal.js";
 import { aliasPattern, clonePattern, emptyPattern, state, trackSlot } from "./state.js";
 import { canAutomate } from "./automation.js";
+import { flushHistory, markExternalEdit } from "./history.js";
 import { refreshParamIndicators } from "./paramTargets.js";
 import { renderStepGrid } from "./stepGrid.js";
 import { SCALES, midiToScaleIndex, scaleIndexToMidi } from "./theory.js";
@@ -419,6 +420,23 @@ export function shiftPattern(t, patIdx, by) {
     refreshRollIfOpen(t);
   }
   renderPatternGrid();
+}
+
+/**
+ * shiftPattern on the pattern `t` is on, as its own undo step (quick presses
+ * would otherwise settle into one), with a status line. The track head's
+ * buttons and alt + , / . come here; vim's H / L are one vim edit each.
+ * @param {Track} t @param {number} by steps, later when positive
+ */
+export function shiftPatternEdit(t, by) {
+  if (!t || t.engineKey === "bus" || !by) return;
+  const slot = trackSlot(t);
+  const name = t.name?.trim() || "track";
+  const n = Math.abs(by);
+  flushHistory();
+  shiftPattern(t, slot, by);
+  markExternalEdit(`shift ${name} ${by < 0 ? "earlier" : "later"}`);
+  setStatus(`${name}: pattern ${slot + 1} shifted ${n} step${n === 1 ? "" : "s"} ${by < 0 ? "earlier" : "later"}`);
 }
 
 // resizeTrack now resizes only the active pattern (per-pattern lengths).
