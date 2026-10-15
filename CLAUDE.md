@@ -2110,6 +2110,14 @@ WINDOW   first step · last step
   `chanceThrowIndex(rep, pass)`, the pass count divided by the hold, which the
   panel's plan cache is keyed on so a plan only rebuilds when the throw moves.
   The builder takes `rhythmRepeat` / `melodyRepeat` (and still the two flags).
+- **Each section keeps a history of its throws** (`rhist` / `mhist` on the
+  track's chance settings, seeds oldest first, `CHANCE_HISTORY_MAX` 32), with
+  ‹ › beside its `roll` and a `3/5` readout. A throw is a seed, so going back
+  is one number and the part returns note for note. `recordThrow` puts the
+  pre-roll seed in first and adds a roll made after going back at the END,
+  so nothing rolled is lost; `stepThrow` / `throwPosition` walk it. Saved
+  with the song (`cloneChance` copies the arrays), and a step is an edit
+  like a roll, so undo and a jam see it.
 - **A throw is only accepted if it changes the part.** A seed only matters where
   a decision is left to make with it, so on a fresh track — variation, legato and
   rest all at zero, which is the panel's default — the rhythm dice rolled a new

@@ -5,7 +5,7 @@ import {
   CHANCE_DEFAULT_PCS, CHANCE_DEFAULTS, CHANCE_MOD_KEYS, CHANCE_MOD_RANGE, CHANCE_NOTE_VALUES, CHANCE_REPEATS,
   CHANCE_REPEAT_MAX, buildChancePlan, chanceCandidates, chanceDiceDead, chanceFromUnit,
   chancePlanSignature, chanceThrowIndex, chanceToUnit, chanceWindow, cloneChance,
-  normalizeChance, throwChanceDice,
+  normalizeChance, throwChanceDice, recordThrow, stepThrow, throwPosition, CHANCE_HISTORY_MAX,
 } from "../public/js/chanceGen.js";
 
 // The chance generator is the one part of this app whose output is *random*, and
@@ -483,4 +483,37 @@ test("a throw that moves on its own still lets the dice report", () => {
   assert.notEqual(seed, null);
   assert.notEqual(
     chancePlanSignature(buildChancePlan({ ...c, rseed: seed }, opts), "rhythm"), before);
+});
+
+test("throw history: back and forward through what was rolled, nothing lost", () => {
+  // the part before the first roll is a throw too
+  let h = recordThrow(undefined, 1, 111);
+  assert.deepEqual(h, [1, 111]);
+  h = recordThrow(h, 111, 222);
+  assert.deepEqual(h, [1, 111, 222]);
+  assert.equal(stepThrow(h, 222, -1), 111);
+  assert.equal(stepThrow(h, 111, -1), 1);
+  assert.equal(stepThrow(h, 1, -1), null);
+  assert.equal(stepThrow(h, 222, 1), null);
+  assert.equal(stepThrow(h, 1, 1), 111);
+  assert.deepEqual(throwPosition(h, 111), { i: 1, n: 3 });
+  // rolling after going back keeps what came after, the new throw at the end
+  h = recordThrow(h, 1, 333);
+  assert.deepEqual(h, [1, 111, 222, 333]);
+  // a seed set some other way: back is the newest throw, forward nowhere
+  assert.equal(stepThrow(h, 999, -1), 333);
+  assert.equal(stepThrow(h, 999, 1), null);
+  assert.equal(throwPosition(h, 999).i, -1);
+  // capped, oldest out
+  let big = [];
+  let cur = 1;
+  for (let k = 2; k < CHANCE_HISTORY_MAX + 10; k++) { big = recordThrow(big, cur, k); cur = k; }
+  assert.equal(big.length, CHANCE_HISTORY_MAX);
+  assert.equal(big[big.length - 1], cur);
+  // the history travels with a copy and is not shared with it
+  const c = cloneChance({ ...CHANCE_DEFAULTS, rhist: [1, 2], mhist: [3] });
+  assert.deepEqual(c.rhist, [1, 2]);
+  const d = cloneChance(c);
+  d.rhist.push(9);
+  assert.deepEqual(c.rhist, [1, 2]);
 });

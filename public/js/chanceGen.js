@@ -183,7 +183,55 @@ function repeatOf(rep, free) {
  */
 export function cloneChance(c) {
   if (!c) return null;
-  return { ...c, pcs: Array.isArray(c.pcs) ? c.pcs.slice() : null };
+  const out = { ...c, pcs: Array.isArray(c.pcs) ? c.pcs.slice() : null };
+  if (Array.isArray(c.rhist)) out.rhist = c.rhist.slice();
+  if (Array.isArray(c.mhist)) out.mhist = c.mhist.slice();
+  return out;
+}
+
+/** How many throws a section remembers; the oldest drop off past it. */
+export const CHANCE_HISTORY_MAX = 32;
+
+const seedsOf = (hist) => (Array.isArray(hist) ? hist.filter((v) => Number.isInteger(v) && v !== 0) : []);
+
+/**
+ * A section's throw history after rolling `seed` while `cur` was playing: a
+ * seed list, oldest first. `cur` goes in first if it is not there yet (the
+ * part before the first roll is a throw too, so it can be gone back to). A
+ * roll made after going back is added at the END, not over what came after:
+ * nothing rolled is ever lost, only pushed out past CHANCE_HISTORY_MAX.
+ * @param {number[]|undefined} hist @param {number} cur @param {number} seed
+ * @returns {number[]}
+ */
+export function recordThrow(hist, cur, seed) {
+  const h = seedsOf(hist);
+  if (!h.includes(cur)) h.push(cur);
+  h.push(seed);
+  return h.slice(-CHANCE_HISTORY_MAX);
+}
+
+/**
+ * Where `cur` sits in a history: `{ i, n }`, `i` -1 when it is not in it (a
+ * seed set some other way, or no history yet).
+ * @param {number[]|undefined} hist @param {number} cur
+ */
+export function throwPosition(hist, cur) {
+  const h = seedsOf(hist);
+  return { i: h.lastIndexOf(cur), n: h.length };
+}
+
+/**
+ * The seed one step back (`dir` -1) or forward (+1) from `cur`, or null at
+ * either end. From a seed not in the history, back is its newest throw.
+ * @param {number[]|undefined} hist @param {number} cur @param {number} dir
+ * @returns {number|null}
+ */
+export function stepThrow(hist, cur, dir) {
+  const h = seedsOf(hist);
+  const i = h.lastIndexOf(cur);
+  if (i < 0) return dir < 0 && h.length ? h[h.length - 1] : null;
+  const j = i + (dir < 0 ? -1 : 1);
+  return j >= 0 && j < h.length ? h[j] : null;
 }
 
 /**

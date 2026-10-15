@@ -57,7 +57,7 @@ import {
   CHANCE_DEFAULTS, CHANCE_MOD_INT, CHANCE_MOD_KEYS, CHANCE_MOD_RANGE, CHANCE_NOTE_MAX,
   CHANCE_NOTE_MIN, CHANCE_NOTE_VALUES, CHANCE_REPEAT_MAX, CHANCE_SPAN_MAX, buildChancePlan,
   chanceCandidates, chanceDiceDead, chanceThrowIndex, chanceWindow, cloneChance,
-  normalizeChance, throwChanceDice,
+  normalizeChance, throwChanceDice, recordThrow, stepThrow, throwPosition,
 } from "./chanceGen.js";
 import { setStatus } from "./dom.js";
 import { refreshPanelBadges } from "./paramTargets.js";
@@ -506,6 +506,14 @@ function syncChanceControls(t, panelEl) {
   setRepeat(panel.querySelector(".sq-chance__rrep"), c.rrep);
   setRepeat(panel.querySelector(".sq-chance__mrep"), c.mrep);
   set(".sq-chance__on", "checked", c.on);
+  // where each section is in its throws: "3/5", and the arrows only where there is somewhere to go
+  for (const [sfx, key, hk] of [["r", "rseed", "rhist"], ["m", "mseed", "mhist"]]) {
+    const hist = t.chance?.[hk];
+    const { i, n } = throwPosition(hist, c[key]);
+    set(`.sq-chance__pos-${sfx}`, "textContent", n > 1 && i >= 0 ? `${i + 1}/${n}` : "");
+    set(`.sq-chance__prev-${sfx}`, "disabled", stepThrow(hist, c[key], -1) == null);
+    set(`.sq-chance__next-${sfx}`, "disabled", stepThrow(hist, c[key], 1) == null);
+  }
 }
 
 /**
@@ -701,12 +709,32 @@ export function wireChancePanel(t, panel) {
       setStatus(`"${t.name}" — ${DEAD_DICE[why] || DEAD_DICE.same}`);
       return;
     }
+    const hk = key === "rseed" ? "rhist" : "mhist";
+    c[hk] = recordThrow(c[hk], trackChance(t)[key], seed);
     c[key] = seed;
     changed();
-    setStatus(`"${t.name}" — new ${which} throw`);
+    const { i, n } = throwPosition(c[hk], seed);
+    setStatus(`"${t.name}" — new ${which} throw (${i + 1} of ${n})`);
   });
   dice(".sq-chance__dice-r", "rseed", "rhythm");
   dice(".sq-chance__dice-m", "mseed", "melody");
+
+  // Back and forward through the throws a section has rolled. A throw is a
+  // seed, so going back is one number and the part comes back note for note.
+  const step = (sel, key, which, dir) => panel.querySelector(sel)?.addEventListener("click", () => {
+    const c = ensureChance(t);
+    const hk = key === "rseed" ? "rhist" : "mhist";
+    const seed = stepThrow(c[hk], trackChance(t)[key], dir);
+    if (seed == null) return;
+    c[key] = seed;
+    changed();
+    const { i, n } = throwPosition(c[hk], seed);
+    setStatus(`"${t.name}" — ${which} throw ${i + 1} of ${n}`);
+  });
+  step(".sq-chance__prev-r", "rseed", "rhythm", -1);
+  step(".sq-chance__next-r", "rseed", "rhythm", 1);
+  step(".sq-chance__prev-m", "mseed", "melody", -1);
+  step(".sq-chance__next-m", "mseed", "melody", 1);
 
   panel.querySelector(".sq-chance__scale")?.addEventListener("click", () => {
     if (loadScaleIntoChance(t)) {

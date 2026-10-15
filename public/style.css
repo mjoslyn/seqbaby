@@ -2619,6 +2619,9 @@ body.kbd-recording:not(.sq-playing) .sq-track.is-kbd-active .sq-step.is-cursor {
 .sq-chance__sec button { font-size: 11px; }
 /* The section's options sit beside its name; the dice and the hold go right. */
 .sq-chance__sec > button { margin-left: auto; }
+.sq-chance__throws { margin-left: auto; display: inline-flex; align-items: center; gap: 2px; }
+.sq-chance__throws > button:disabled { opacity: 0.35; }
+.sq-chance__pos { min-width: 3ch; color: var(--fg-dim); font-size: 10px; font-variant-numeric: tabular-nums; }
 /* A dice with nothing to decide. Not `disabled`: the button is how you find out
    why, and on a touch screen its title is out of reach — pressing it puts the
    reason in the status bar. Same strike-through the unreachable semitones get. */
