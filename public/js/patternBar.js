@@ -169,27 +169,31 @@ export function setPatternMeter(patIdx, meter) {
   if (!m || patIdx < 0 || patIdx >= PATTERN_COUNT) return false;
   const prev = patternMeter(patIdx);
   if (prev.num === m.num && prev.den === m.den) return false;
-  // every slot that follows pattern 1, with its meter before the change
-  const moved = [patIdx];
+  // The meter belongs to the pattern NUMBER, every track alike: the slot set,
+  // plus (for pattern 1) every slot following it, each with its meter before
+  // the change, so every track's copy of each can be resized to keep its bars.
+  const moved = [[patIdx, prev]];
   if (patIdx === 0) {
     for (let i = 1; i < PATTERN_COUNT; i++) {
-      if (!state.patternMeterCustomized[i]) { moved.push(i); state.patternMeters[i] = { num: m.num, den: m.den }; }
+      if (!state.patternMeterCustomized[i]) moved.push([i, patternMeter(i)]);
     }
   } else {
     state.patternMeterCustomized[patIdx] = true;
   }
-  state.patternMeters[patIdx] = { num: m.num, den: m.den };
-  // Resize every track's copy of THIS pattern (its own length, not t.length:
-  // a track with a clip launched is on another slot). The slots following
-  // pattern 1 keep their step counts, as they always have.
-  const oldSpb = stepsPerBarForMeter(prev);
+  for (const [i] of moved) state.patternMeters[i] = { num: m.num, den: m.den };
   const newSpb = stepsPerBarForMeter(m);
   for (const t of state.tracks) {
-    const curLen = t.patterns?.[patIdx]?.steps.length || newSpb;
-    const bars = Math.max(1, Math.round(curLen / oldSpb));
-    const newLen = Math.max(1, Math.min(128, bars * newSpb));
-    if (newLen !== curLen) resizePattern(t, patIdx, newLen);
-    else if (moved.includes(trackSlot(t))) {
+    for (const [i, was] of moved) {
+      const oldSpb = stepsPerBarForMeter(was);
+      if (oldSpb === newSpb) continue;
+      // the pattern's OWN length, not t.length: a track with a clip launched
+      // is on another slot, and t.length mirrors that one
+      const curLen = t.patterns?.[i]?.steps.length || newSpb;
+      const bars = Math.max(1, Math.round(curLen / oldSpb));
+      const newLen = Math.max(1, Math.min(128, bars * newSpb));
+      if (newLen !== curLen) resizePattern(t, i, newLen);
+    }
+    if (moved.some(([i]) => i === trackSlot(t))) {
       t.accents = autoAccents(t.length, patternMeter(trackSlot(t)));
       renderStepGrid(t);
     }

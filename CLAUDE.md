@@ -2413,8 +2413,15 @@ block   t.arrangement[i]    ─── { slot, start, bars }: a clip at a bar, fo
   `setPatternMeter`** (patternBar.js): the pattern bar's `sig`, the clip
   view's meter row, the piano view's section headers and the arrangement
   toolbar's `sig` (the selected block's pattern, else pattern 1, the
-  ruler's). It resizes every track's copy to keep its bars and keeps
-  pattern 1 the default the unset slots follow.
+  ruler's). It resizes every track's copy to keep its bars (the slots
+  following pattern 1 included) and keeps pattern 1 the default the unset
+  slots follow. **A meter belongs to the pattern NUMBER, never to a track,
+  and never mixes across tracks**: a clip launched from a column in another
+  meter than the scene's takes every track with it (`requestClipLaunch`
+  becomes a scene switch); a clip copied into a column in another meter
+  (drag, fill, the track head's paste) is fitted to the nearest whole number
+  of that column's bars (`fitLength`, `writePatternOnto`'s `fromSlot`); a
+  new track gets a bar of each slot's own meter.
 - **Recording is a bar-line write into a TAKE** (`recordArrangementBar`):
   with `rec` armed (clip view or arrangement view), every bar line in a
   non-arrange mode writes what each track just played — its slot, or nothing

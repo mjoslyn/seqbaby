@@ -20,12 +20,12 @@ import { PATTERN_COUNT } from "./constants.js";
 import { arrangementBars, blockAt, blocksEnd, nextArrangeBar, normalizeLoop, placeBlock, writeBar } from "./arrangement.js";
 import { showChoiceDialog } from "./dialogs.js";
 import { markExternalEdit } from "./history.js";
-import { stepsPerBarForMeter, transportMeter } from "./meter.js";
+import { patternMeter, stepsPerBarForMeter, transportMeter } from "./meter.js";
 import { setStatus } from "./dom.js";
 import { flushPatternSound, recallPatternSound } from "./patternSound.js";
 import { releaseSilencedTracks } from "./signal.js";
 import { renderPatternGrid } from "./patternBar.js";
-import { aliasPattern, paintTrackPatternUINow, paintTrackSlotBadge, queueTrackPaint, state, trackSlot } from "./state.js";
+import { aliasPattern, paintTrackPatternUINow, paintTrackSlotBadge, queueTrackPaint, requestPatternSwitch, state, trackSlot } from "./state.js";
 
 /**
  * Land a track's step counter where it would be had it counted from global
@@ -102,6 +102,15 @@ export function launchClip(t, slot, { restart = false, deferUi = false } = {}) {
  */
 export function requestClipLaunch(t, slot) {
   if (!t || slot < 0 || slot >= PATTERN_COUNT) return;
+  // A meter belongs to the pattern NUMBER, not the track: a clip whose meter
+  // is not the scene's would have tracks counting different bars at once, so
+  // it takes every track with it (a scene switch, by the same switch mode).
+  const m = patternMeter(slot), sm = patternMeter(state.activePattern);
+  if (m.num !== sm.num || m.den !== sm.den) {
+    requestPatternSwitch(slot);
+    setStatus(`pattern ${slot + 1} is ${m.num}/${m.den}: every track goes to it, so the meters do not mix`);
+    return;
+  }
   if (state.patternSwitchMode === "finish" && state.playing) {
     t._queuedSlot = slot;
     renderPatternGrid();

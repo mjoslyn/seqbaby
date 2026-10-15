@@ -287,12 +287,12 @@ function render() {
       <div class="sq-clips__cells sq-clips__scenes">${scenes.join("")}</div>
     </div>
     <div class="sq-clips__head sq-clips__reps">
-      <div class="sq-clips__strip" title="how many bars chain mode plays each column for before moving on">repeat</div>
-      <div class="sq-clips__cells">${repeats.join("")}</div>
+      <div class="sq-clips__strip" title="each column's time signature, for every track in it. A clip copied in from another meter is fitted to this one; a clip launched from a column in another meter takes every track with it">meter</div>
+      <div class="sq-clips__cells">${meters.join("")}</div>
     </div>
     <div class="sq-clips__head sq-clips__reps">
-      <div class="sq-clips__strip" title="each column's time signature">meter</div>
-      <div class="sq-clips__cells">${meters.join("")}</div>
+      <div class="sq-clips__strip" title="how many bars chain mode plays each column for before moving on">repeat</div>
+      <div class="sq-clips__cells">${repeats.join("")}</div>
     </div>
     <div class="sq-clips__rows">${trackRows}</div>
     </div></div>`;
@@ -444,7 +444,7 @@ function onFillEnd() {
   for (let i = f.from; i <= f.to; i++) if (i !== slot) targets.push(i);
   if (!targets.length) { scheduleClipPaint(); return; }
   const pattern = t.patterns[slot];
-  for (const i of targets) writePatternOnto(t, i, pattern);
+  for (const i of targets) writePatternOnto(t, i, pattern, slot);
   announceClips();
   setStatus(`${t.name}: pattern ${slot + 1} copied to ${targets.length === 1 ? `pattern ${targets[0] + 1}` : `patterns ${targets[0] + 1} to ${targets[targets.length - 1] + 1}`}`);
 }
@@ -479,7 +479,10 @@ function onDrop(e) {
   if (!src || !dst || !Number.isInteger(from) || (src === dst && from === to)) return;
   const pattern = src.patterns?.[from];
   if (!pattern) return;
-  writePatternOnto(dst, to, pattern);
+  const len = pattern.steps.length;
+  writePatternOnto(dst, to, pattern, from);
   scheduleClipPaint();
-  setStatus(`copied ${src.name} pattern ${from + 1} → ${dst.name} pattern ${to + 1}`);
+  const fitted = dst.patterns[to].steps.length !== len;
+  const m = patternMeter(to);
+  setStatus(`copied ${src.name} pattern ${from + 1} → ${dst.name} pattern ${to + 1}${fitted ? `, fitted to ${m.num}/${m.den}` : ""}`);
 }

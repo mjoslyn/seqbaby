@@ -36,7 +36,7 @@ export function createTrack({ name, engineKey, length = totalSteps(), params = n
     name,
     engineKey,
     length: len,
-    accents: autoAccents(len, { num: 4, den: 4 }),
+    accents: autoAccents(len, patternMeter(state.activePattern)),
     // steps/lengths/notes/velocities/chords are aliased to t.patterns[activePattern].*
     steps:      null,
     lengths:    null,
@@ -112,7 +112,14 @@ export function createTrack({ name, engineKey, length = totalSteps(), params = n
     fxRack: null,
     el: null,
   };
-  t.patterns = Array(PATTERN_COUNT).fill(null).map(() => emptyPattern(len));
+  // A slot in another meter than the scene's gets a bar of ITS meter: a meter
+  // belongs to the pattern number, so a new track in a 7/4 pattern is 28
+  // steps like the rest there. Slots in the scene's meter take `len`.
+  const sceneSpb = stepsPerBarForMeter(patternMeter(state.activePattern));
+  t.patterns = Array(PATTERN_COUNT).fill(null).map((_, i) => {
+    const spb = stepsPerBarForMeter(patternMeter(i));
+    return emptyPattern(spb === sceneSpb ? len : spb);
+  });
   aliasPattern(t, state.activePattern);
   state.tracks.push(t);
   renderTrack(t);
@@ -241,7 +248,7 @@ export function copyTrackPattern(t) {
  * clip view's drag both come through here.
  * @param {Track} t @param {number} idx @param {import("./types.js").Pattern} pattern
  */
-export function writePatternOnto(t, idx, pattern) {
+export function writePatternOnto(t, idx, pattern, fromSlot = null) {
   const old = t.patterns[idx];
   const p = clonePattern(pattern);
   p.soundLocked = !!old?.soundLocked;
@@ -250,6 +257,11 @@ export function writePatternOnto(t, idx, pattern) {
     if (!canAutomate(t, key)) delete p.automation[key];
   }
   t.patterns[idx] = p;
+  // A clip from a column in another meter is fitted to this column's: the
+  // nearest whole number of its bars (at the track's speed), padded with
+  // rests or cut. A meter belongs to the pattern number, every track alike.
+  const fit = fromSlot != null ? fitLength(t, p.steps.length, fromSlot, idx) : 0;
+  if (fit && fit !== p.steps.length) { resizePattern(t, idx, fit); return; }
   if (trackSlot(t) === idx) {
     aliasPattern(t, idx);
     renderEuclidPanel(t);
@@ -262,11 +274,23 @@ export function writePatternOnto(t, idx, pattern) {
   renderPatternGrid();
 }
 
+/**
+ * The best-fit length for `len` steps moving from slot `from`'s meter to slot
+ * `to`'s, or 0 when the two meters' bars are the same length.
+ * @param {Track} t @param {number} len @param {number} from @param {number} to
+ */
+export function fitLength(t, len, from, to) {
+  const a = stepsPerBarForMeter(patternMeter(from)), b = stepsPerBarForMeter(patternMeter(to));
+  if (a === b) return 0;
+  const bar = Math.max(1, Math.round(b * (t.speed || 1)));
+  return Math.max(1, Math.min(128, Math.max(1, Math.round(len / bar)) * bar));
+}
+
 /** Paste the clipboard over the pattern `t` is on. */
 export function pasteTrackPattern(t) {
   if (!trackClip) { setStatus("nothing copied yet: press copy on a track first", true); return false; }
   const idx = t._patternIdx ?? state.activePattern;
-  writePatternOnto(t, idx, trackClip.pattern);
+  writePatternOnto(t, idx, trackClip.pattern, trackClip.patIdx);
   const kitNote = trackClip.isDrumKit !== !!t.isDrumKit
     ? (t.isDrumKit ? " (melodic notes on a drum kit)" : " (drum notes on a melodic track)") : "";
   setStatus(`pasted ${trackClip.name} pattern ${trackClip.patIdx + 1} → ${t.name?.trim() || "track"} pattern ${idx + 1}${kitNote}`);
