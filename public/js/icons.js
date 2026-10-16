@@ -86,3 +86,9 @@ export const ICON_LEN_HALF = `<svg class="sq-btn-icon" viewBox="0 0 16 16" width
 
 // ---- state --------------------------------------------------------------
 
+// The phone's quick row (render.js's applyQuickRow): the instrument's own
+// controls, the mod matrix and the automation lanes, each opened as a modal.
+// A dial for the instrument, a wave for the LFOs, a step lane for the lanes.
+export const ICON_INSTRUMENT = `<svg class="sq-btn-icon" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="8.5" r="5.2"/><line x1="8" y1="8.5" x2="10.8" y2="5.2"/><line x1="2.2" y1="13.2" x2="3.6" y2="12.1" opacity="0.5"/><line x1="13.8" y1="13.2" x2="12.4" y2="12.1" opacity="0.5"/></svg>`;
+export const ICON_MOD = `<svg class="sq-btn-icon" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1.5 8c1.6-5 3.2-5 4.8 0s3.2 5 4.8 0 3.2-5 4.4 0"/></svg>`;
+export const ICON_AUT = `<svg class="sq-btn-icon" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="1.5" y="9" width="2.6" height="5" rx="0.5" fill="currentColor" stroke="none"/><rect x="5.3" y="5" width="2.6" height="9" rx="0.5" fill="currentColor" stroke="none"/><rect x="9.1" y="7" width="2.6" height="7" rx="0.5" fill="currentColor" stroke="none"/><rect x="12.9" y="2.5" width="2.6" height="11.5" rx="0.5" fill="currentColor" stroke="none"/></svg>`;

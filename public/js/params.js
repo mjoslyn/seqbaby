@@ -4,6 +4,7 @@ import { applySampleSpeed, disposeLFOs, syncAllLFOs } from "./lfo.js";
 import { redetectDrumKit } from "./meter.js";
 import { applyBusMute, placeBusesLast, refreshFxPanelUI, updateMidiUI } from "./render.js";
 import { ensureFxRack, refreshAllTrackOutputs, refreshOutputSelects, routeVoiceToRack } from "./signal.js";
+import { trackControl } from "./paramTargets.js";
 import { state } from "./state.js";
 import { requestMidiIfNeeded } from "./transport.js";
 import { buildVoiceForEngine, GRAN_DEFAULTS } from "./voices.js";
@@ -20,7 +21,7 @@ import { loadVoxDict, voxDictReady } from "./voxPhonetic.js";
  */
 export function updateGranularSpeedEnabled(t) {
   const moving = (t.params.gplay ?? GRAN_DEFAULTS.gplay) === "moving";
-  const el = t.el?.querySelector(".p-gspeed");
+  const el = trackControl(t, ".p-gspeed");
   if (el) el.disabled = !moving;
   const modalEl = t._gWavModal?.overlay?.querySelector(".gw-gspeed");
   if (modalEl) modalEl.disabled = !moving;
@@ -40,7 +41,7 @@ export function updateGranularSpeedEnabled(t) {
  * @param {Track} t
  */
 export function refreshVoxLyric(t) {
-  const el = t.el?.querySelector(".p-sngcons");
+  const el = trackControl(t, ".p-sngcons");
   if (!el) return;
   if (el.dataset.title == null) el.dataset.title = el.title;
   const text = t.params.sngtext ?? "";
@@ -52,7 +53,7 @@ export function refreshVoxLyric(t) {
     : words ? "off while the words are on: each syllable carries its own consonant. Set the words to off to use this"
     : el.dataset.title;
 
-  const said = t.el.querySelector(".sq-vox__said");
+  const said = trackControl(t, ".sq-vox__said");
   if (!said) return;
   said.hidden = !phon || !text.trim();
   if (said.hidden) return;

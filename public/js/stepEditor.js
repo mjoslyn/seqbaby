@@ -1,14 +1,14 @@
 import { FX_STAGE_LEVEL_KEY } from "./constants.js";
 import { BUNDLED_SAMPLES, GRANULAR_SAMPLES, GRANULAR_SAMPLE_BASE, SAMPLE_KIT_LABELS, bundledSampleUrl, engineByKey } from "./catalog.js";
 import { loadBuffer } from "./buffers.js";
-import { setStatus } from "./dom.js";
+import { isPhoneLayout, setStatus } from "./dom.js";
 import { renderEuclidPanel } from "./euclid.js";
 import { renderChancePanel } from "./chance.js";
 import { upgradeKnobs } from "./knob.js";
 import { applySampleSpeed, currentBpm } from "./lfo.js";
 import { renderRollPanel } from "./pianoRoll.js";
 import { updateGranularSpeedEnabled } from "./params.js";
-import { refreshPanelBadges, refreshParamIndicators } from "./paramTargets.js";
+import { refreshPanelBadges, refreshParamIndicators, trackControl } from "./paramTargets.js";
 import { FX_PICK_LABELS, FX_PICK_ORDER, fxStageAdd, fxStageCount, fxStageOff, renderAutomationPanel } from "./render.js";
 import { invertChord, state } from "./state.js";
 import { renderStepGrid, repaintNudge } from "./stepGrid.js";
@@ -30,10 +30,19 @@ export function openPanelAsModal(t, opts) {
   // actually names — every other modal in the app is `sq-<thing>__modal`, and
   // for a while these eight were not, which quietly left all of them at the
   // generic 1100px.
-  const { panel, modalClass, btnSel, modalKey, afterMount } = opts;
+  // `title` puts a heading over the panel (the instrument modal names the
+  // track and its engine, since the synth row carries no name of its own);
+  // `tools` are extra buttons between the panel and `done` (the phone's fx
+  // modal has an add button there).
+  const { panel, modalClass, btnSel, modalKey, afterMount, title, tools } = opts;
   if (!panel || t[modalKey]) return;
   const anchor = document.createComment("panel-anchor");
   panel.replaceWith(anchor);
+  // Most panels are hidden on the track until something in them is on, and
+  // go back that way; the synth row is never hidden there. So the state it
+  // had is what it gets back, not `true` — for the panels refreshPanelBadges
+  // decides again at the end anyway.
+  const wasHidden = panel.hidden;
 
   const overlay = document.createElement("div");
   overlay.className = "sq-modal-overlay";
@@ -41,9 +50,17 @@ export function openPanelAsModal(t, opts) {
   modal.className = "sq-modal sq-panel__modal " + modalClass;
   modal.setAttribute("role", "dialog");
   modal.setAttribute("aria-modal", "true");
+  if (title) {
+    const h = document.createElement("div");
+    h.className = "sq-panel__modal-title";
+    h.textContent = title;
+    modal.appendChild(h);
+    modal.setAttribute("aria-label", title);
+  }
 
   panel.hidden = false;
   modal.appendChild(panel);
+  for (const b of tools || []) modal.appendChild(b);
 
   const closeBtn = document.createElement("button");
   closeBtn.type = "button";
@@ -54,7 +71,7 @@ export function openPanelAsModal(t, opts) {
   const close = () => {
     if (!t[modalKey]) return;
     anchor.replaceWith(panel);
-    panel.hidden = true;
+    panel.hidden = wasHidden;
     overlay.remove();
     const btn = t.el?.querySelector(btnSel);
     if (btn) btn.setAttribute("aria-pressed", "false");
@@ -63,7 +80,9 @@ export function openPanelAsModal(t, opts) {
     // Whatever was switched on in here goes back to being shown on the track.
     refreshPanelBadges(t);
   };
-  const escHandler = (e) => { if (e.key === "Escape") close(); };
+  // Escape closes the TOP modal only: the fx picker opens over the phone's fx
+  // modal, and one key taking both would close the rack the pick was for.
+  const escHandler = (e) => { if (e.key === "Escape" && isTopOverlay(overlay)) close(); };
   closeBtn.addEventListener("click", close);
   overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
   document.addEventListener("keydown", escHandler);
@@ -73,6 +92,38 @@ export function openPanelAsModal(t, opts) {
   upgradeKnobs(overlay);
   t[modalKey] = { overlay, close };
   if (afterMount) afterMount();
+}
+
+/** Is this the overlay on top — the last one in the document? */
+function isTopOverlay(overlay) {
+  const all = document.querySelectorAll(".sq-modal-overlay");
+  return all[all.length - 1] === overlay;
+}
+
+// The instrument's own controls — the four macros, the osc rows and the
+// engine's panel, which on desktop sit inline in the track head — as a modal.
+// The phone's way in (the quick row's `instrument` button, render.js): a
+// synth panel that was inline on a phone was most of the track's height, so
+// the step grid of the next track was a screen away. The row is MOVED, as the
+// panels are, so every listener, the engine switch (updatePlaitsControlsVisibility
+// reads the stashed group refs) and a patch load keep writing the same
+// controls. Named for the track and its engine, since the row has no title.
+export function openInstrumentAsModal(t) {
+  const row = t._synthRowEl;
+  if (!row) return;
+  openPanelAsModal(t, {
+    panel: row,
+    modalClass: "sq-inst__modal",
+    btnSel: ".sq-track__inst",
+    modalKey: "_instModal",
+    title: `${t.name?.trim() || "track"} \u00b7 ${engineByKey(t.engineKey)?.label ?? ""}`,
+    afterMount: () => {
+      // A midi track or a bus has no controls here: say so rather than open
+      // an empty sheet.
+      const any = [...row.children].some(g => !g.hidden);
+      row.classList.toggle("is-empty", !any);
+    },
+  });
 }
 
 export function openRollAsModal(t) {
@@ -129,8 +180,48 @@ export function openEnvAsModal(t) {
 // and taken off. glide and amp are not in the chain: they toggle. The rack
 // panel itself never leaves the track, so the knobs are only ever where the
 // sound is being shaped.
+//
+// On a phone the knobs are NOT on the track (the live panels are hidden
+// there, see the quick row in render.js), so the button opens the rack
+// panel as a modal instead — the same inline-filtered view, only the stages
+// on the track, each with its × and ‹ › — and the picker sits behind an
+// `add` button in it, opened over it. A pick lands in the rack behind the
+// picker as it lands on the track on desktop: refreshPanelBadges keeps
+// rebuilding the rows while the panel is away, since the fx entry names no
+// modal to pause on.
 export function openFxAsModal(t) {
   if (t._fxModal) return;
+  if (isPhoneLayout()) {
+    const add = document.createElement("button");
+    add.type = "button";
+    add.className = "sq-fxrack__add";
+    add.textContent = "+ add an effect";
+    add.addEventListener("click", () => openFxPicker(t, "_fxPickModal"));
+    const empty = document.createElement("div");
+    empty.className = "sq-fxrack__empty";
+    empty.textContent = "nothing on this track yet";
+    openPanelAsModal(t, {
+      panel: t._fxPanelEl,
+      modalClass: "sq-fxrack__modal",
+      btnSel: ".sq-track__fx",
+      modalKey: "_fxModal",
+      title: `${t.name?.trim() || "track"} \u00b7 fx`,
+      tools: [empty, add],
+      // openPanelAsModal shows the panel whole; the rows that are on the
+      // track are refreshPanelBadges's answer, and it also hides the panel
+      // again when there are none, which is what the empty line reads.
+      afterMount: () => refreshPanelBadges(t),
+    });
+    return;
+  }
+  openFxPicker(t, "_fxModal");
+}
+
+// The picker itself. Under `_fxModal` it IS the fx button's modal (desktop)
+// and un-presses the button on close; under any other key it is a sheet over
+// the phone's fx modal, which keeps the button pressed.
+function openFxPicker(t, key) {
+  if (t[key]) return;
   const overlay = document.createElement("div");
   overlay.className = "sq-modal-overlay";
   const modal = document.createElement("div");
@@ -186,20 +277,22 @@ export function openFxAsModal(t) {
   modal.appendChild(closeBtn);
 
   const close = () => {
-    if (!t._fxModal) return;
+    if (!t[key]) return;
     overlay.remove();
-    (t._panelBtns?.[".sq-track__fx"] || t.el?.querySelector(".sq-track__fx"))?.setAttribute("aria-pressed", "false");
+    if (key === "_fxModal") {
+      (t._panelBtns?.[".sq-track__fx"] || t.el?.querySelector(".sq-track__fx"))?.setAttribute("aria-pressed", "false");
+    }
     document.removeEventListener("keydown", escHandler);
-    t._fxModal = null;
+    t[key] = null;
   };
-  const escHandler = (e) => { if (e.key === "Escape") close(); };
+  const escHandler = (e) => { if (e.key === "Escape" && isTopOverlay(overlay)) close(); };
   closeBtn.addEventListener("click", close);
   overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
   document.addEventListener("keydown", escHandler);
 
   overlay.appendChild(modal);
   document.body.appendChild(overlay);
-  t._fxModal = { overlay, close };
+  t[key] = { overlay, close };
 }
 
 export function openEqAsModal(t) {
@@ -433,7 +526,7 @@ export function openGranularWavModal(t) {
   // control in sync, and redraws so the window band / play head react at once.
   const setP = (k, v) => {
     t.params[k] = v; t.voice?.setParam(k, v);
-    const gEl = t.el?.querySelector(".p-" + k);
+    const gEl = trackControl(t, ".p-" + k);
     if (gEl) { if (gEl.type === "checkbox") gEl.checked = !!v; else gEl.value = v; }
     const mEl = modal.querySelector(".gw-" + k);
     if (mEl && mEl !== document.activeElement) { if (mEl.type === "checkbox") mEl.checked = !!v; else mEl.value = v; }
@@ -904,9 +997,9 @@ export function openSampleEditorModal(t) {
 // track-head into a centered modal so the user can reach the rarely-used
 // controls (panel buttons, save/load patch, len resize, oct/semi shift,
 // dup, remove) without horizontal scrolling. The synth params (harm/timb/
-// morph/etc.) stay inline in the head — they're the primary sound controls
-// on mobile. Restored to their original DOM positions on close so the
-// desktop layout is unaffected.
+// morph/etc.) are not in here: on a phone they are the instrument modal's
+// (openInstrumentAsModal, from the quick row). Restored to their original
+// DOM positions on close so the desktop layout is unaffected.
 export function openTrackMenu(t) {
   if (t._trackMenuModal) return;
   const head = t.el?.querySelector(".sq-track__head");
@@ -964,11 +1057,13 @@ export function openTrackMenu(t) {
   title.append(nameEl, engEl);
   modal.appendChild(title);
 
-  // sound-shaping panels first — the most-used controls in here. fx and
-  // filter are left out on purpose: on a phone (the only place this menu
+  // sound-shaping panels first — the most-used controls in here. fx, filter,
+  // mod and aut are left out on purpose: on a phone (the only place this menu
   // opens) render.js's applyQuickRow has already pulled them, +1, /2 and the
   // speed field out of the head into the quick-access row that sits below the
   // generator icons — inline like roll, never funneled through this modal.
+  // (The capture finds nothing for them and skips; the list is what the
+  // menu shows when the row has not been built, a resize mid-modal.)
   addLabel("sound");
   const panelWrap = document.createElement("div");
   panelWrap.className = "sq-track__menu-panels";
