@@ -2355,7 +2355,7 @@ the pattern slot the pattern bar is on. It has three now, of the same tracks —
 columns, every cell a clip launched on that track alone, a scene row on top)
 and **arrange** (a timeline of pattern blocks per track) — switched by the
 transport's `groove | clips | arrange` control, Tab (with nothing focused) or
-vim's `:view`, and remembered per browser (`seqbaby.view.v1`). Desktop only in
+vim's `:view`. Not remembered: the studio always opens on groove. Desktop only in
 this cut: below 768px the switcher is hidden and the groove view stands.
 
 ```

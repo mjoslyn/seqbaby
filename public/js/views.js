@@ -6,9 +6,9 @@
  *
  * One song, three pictures of it: switching views changes nothing about what
  * plays. The open view is `state.view`, a body class `view-<name>` (style.css
- * hides `#tracks` under the others and their sections under groove),
- * remembered per browser rather than in the song — which view you were in is
- * not part of the music. Desktop only in this cut: below 768px the switcher is
+ * hides `#tracks` under the others and their sections under groove). It
+ * is not remembered: the studio always opens on groove, and which view you
+ * were in is not part of the music either. Desktop only in this cut: below 768px the switcher is
  * hidden and the groove view stands.
  *
  * Tab cycles the views, as it does in the software this is modelled on, but
@@ -19,7 +19,6 @@
 import { state } from "./state.js";
 
 export const VIEWS = ["groove", "clips", "arrange", "piano"];
-const KEY = "seqbaby.view.v1";
 const MOBILE = "(max-width: 768px)";
 
 /** @type {Array<(view: string) => void>} */
@@ -53,7 +52,6 @@ export function setView(view) {
   if (clips) clips.hidden = view !== "clips";
   if (arr) arr.hidden = view !== "arrange";
   if (piano) piano.hidden = view !== "piano";
-  try { localStorage.setItem(KEY, view); } catch {}
   for (const fn of listeners) fn(view);          // a repaint on the way in, even to the same view
 }
 
@@ -76,7 +74,8 @@ export function installViews() {
     const i = VIEWS.indexOf(state.view);
     setView(VIEWS[(i + (e.shiftKey ? VIEWS.length - 1 : 1)) % VIEWS.length]);
   });
-  let remembered = "groove";
-  try { remembered = localStorage.getItem(KEY) || "groove"; } catch {}
-  setView(VIEWS.includes(remembered) ? remembered : "groove");
+  // The studio opens on groove. The view used to be remembered per browser;
+  // drop what an older build left behind.
+  try { localStorage.removeItem("seqbaby.view.v1"); } catch {}
+  setView("groove");
 }
