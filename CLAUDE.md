@@ -3062,8 +3062,9 @@ line with the knobs wrapping under; the mod panel spans the row, since an LFO
 row is an eight-column grid too wide for a third of a track. The wrapper is
 invisible to everything else: `gap: inherit` keeps the track's own spacing, it
 hides itself when nothing in it is live, and the modals reparent a panel
-through an anchor at its own position. Below 768px the phone block's
-one-per-line layout stands, and the modal is untouched.
+through an anchor at its own position. Below 768px the six sound panels are
+not inline at all: each is a modal from its button (see the phone section),
+and only a live generator's card stays on the track.
 
 **Right-click a parameter** opens `paramMenu.js`: what the control does, its
 LFO row, its automation lane and its macro assignment — the same widgets the panels use
@@ -3848,7 +3849,8 @@ line — which is the only way to put a break at a chosen point in a wrapping ro
 without adding a wrapper to the markup, and the track head's children are
 queried from a dozen places by their position in it. `order` places it, and the
 head's children carry explicit orders around it: name / engine / len, then vol
-beside solo / mute / p-lock, then the synth row, then the generator buttons.
+beside solo / mute / p-lock and speed, then the synth row, then the generator
+buttons.
 Vol used to hold a line of its own — one 44px control centred in 374px of
 nothing — with those three buttons pushed underneath it.
 
@@ -3876,6 +3878,40 @@ it decides what a tapped step writes — hence that one's hide rule is scoped
 `.sq-transport` and this one's is not. `#kbd-octave` is a sibling of
 `#kbd-chord` rather than inside it, so `openChordMenu` does not carry it into
 the modal and the flat rule is safe.
+
+**The track card on a phone is the head, a quick row and the step grid.**
+The instrument's controls (the synth row), the rack's engaged stages and the
+mod matrix's enabled rows are inline on the track on desktop (the live
+panels, above) and NOT on a phone: a track with a contagion panel, three
+stages and two LFOs was a screen and a half between one step grid and the
+next. Each is a modal there, opened from the quick row `applyQuickRow`
+(render.js) builds under the head: `inst` (`openInstrumentAsModal`,
+stepEditor.js: the synth row MOVED into a modal through `openPanelAsModal`,
+titled with the track and its engine, so every listener and
+`updatePlaitsControlsVisibility`'s stashed group refs keep working), `fx`
+(`openFxAsModal`'s phone branch: the rack panel moved into a modal, filtered
+to the stages on the track exactly as the inline view is, × and ‹ › included,
+with the picker behind an `+ add an effect` button opened over it), `filter`,
+`eq`, `mod` and `aut` (their own modals; eq, mod and aut moved here from the
+"more" menu, which keeps env / comp). Its second line is the pattern's own
+controls: semi − / +, shift ◂ / ▸, +1 and /2, pulled from the oct and
+len-extend clusters (the "more" menu keeps oct − / + and x2 / x4 / /4), two
+rows of six equal squares. The speed field stays in the head, on the vol
+line after p-lock at a fixed width, so that line never wraps. The
+`inst` button is the one node the row makes itself, since it has no desktop
+home. The quick row's buttons
+carry the `data-on` dot with `::before`, because on a phone `::after` is the
+caption. What is hidden is decided by the stylesheet's mobile block (the
+head's synth row, and the six sound panels inside `.sq-track__live`; the two
+generators' cards stay, since a live ring is what the track is playing), and
+what is opened by `isPhoneLayout()` (dom.js, the same `(max-width: 768px)`
+query, `PHONE_MQ`), so the two cannot disagree about what a phone is. Any
+write that reaches a control by class rather than through a stashed element
+goes through `trackControl(t, sel)` (paramTargets.js), which looks in the
+track and then in anything reparented out of it, so a p-lock recall or a
+session load lands while the instrument modal is open. `openPanelAsModal`
+puts a panel's `hidden` back as it found it, not `true`: the synth row is
+never hidden on the track.
 
 **Copy that names a gesture has to name the right one.** The mod panel's hint
 goes through `isMobileDevice()` (`long-press` / `right-click`); the preloader's

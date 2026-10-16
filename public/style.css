@@ -582,23 +582,73 @@ button.sq-btn--danger { color: var(--danger); }
    rows read as one family. speed is the one non-button here and keeps its
    own field styling. */
 .sq-track__quickrow .sq-icon-btn {
+  position: relative;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 2px;
-  min-width: 56px;
+  /* Two lines, on purpose. The six sound buttons (inst / fx / filter /
+     eq / mod / aut) share the first, each an equal share of it rather than a
+     fixed 56px — seven of those plus the speed field were a line and a half
+     on a 390px phone, the break landing wherever it fell. The pattern's own
+     controls (semi − / +, shift ◂ / ▸, +1, /2) take the second, after the
+     zero-height break the track head uses (`::before`, ordered between the
+     two groups), sharing it the same way: two rows of six equal squares.
+     Speed is not here: it sits in the head beside p-lock. */
+  flex: 1 1 44px;
+  min-width: 44px;
   width: auto;
   height: auto;
   min-height: 56px;
-  padding: 5px 4px;
+  padding: 5px 2px;
   line-height: 1.1;
 }
+.sq-track__quickrow::before {
+  content: "";
+  order: 1;
+  flex: 0 0 100%;
+  height: 0;
+}
+.sq-track__quickrow > .track-semi-down,
+.sq-track__quickrow > .track-semi-up,
+.sq-track__quickrow > .track-shift-left,
+.sq-track__quickrow > .track-shift-right,
+.sq-track__quickrow > .track-len-plus1,
+.sq-track__quickrow > .track-len-half { order: 2; }
+/* The len-extend cluster gives shift ◂ a margin to stand apart from /4; here
+   it is one square among the others. */
+.sq-track__quickrow > .track-shift-left { margin-left: 0; }
 .sq-track__quickrow .sq-icon-btn .sq-btn-icon { width: 18px; height: 18px; }
 .sq-track__quickrow [data-label]::after {
   content: attr(data-label);
   font-size: 10px;
   letter-spacing: 0;
   text-transform: lowercase;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* The dot that says something is on behind a button (data-on, the same
+   refreshPanelBadges stamp the desktop panel buttons wear): drawn with
+   ::before here, because on a phone ::after is the caption under the icon.
+   The "more" button, whose caption took its dot the same way, gets one too. */
+.sq-track__quickrow > button[data-on]::before,
+.sq-track__head .sq-track__more[data-on]::before {
+  content: "";
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--badge, var(--accent));
+  box-shadow: 0 0 0 1.5px var(--bg-3);
+  pointer-events: none;
+}
+.sq-track__quickrow > button[aria-pressed="true"][data-on]::before,
+.sq-track__head .sq-track__more[aria-pressed="true"][data-on]::before {
+  background: #0b0d10;
+  box-shadow: none;
 }
 .sq-meter--master { width: 80px; height: 12px; }
 .sq-track__meter  { width: 100%; height: 100%; }
@@ -1380,6 +1430,7 @@ main {
    that control. */
 .sq-fx__off { display: none; }
 .sq-track .sq-track__fx-panel.is-live > .sq-fx__row.is-live > .sq-fx__off,
+.sq-fxrack__modal > .sq-track__fx-panel > .sq-fx__row.is-live > .sq-fx__off,
 .sq-track .sq-track__env-panel.is-live > .sq-fx__row > .sq-fx__off {
   display: inline-flex;
   align-items: center;
@@ -1395,6 +1446,7 @@ main {
   border-color: transparent;
 }
 .sq-track .sq-track__fx-panel.is-live > .sq-fx__row.is-live > .sq-fx__off:hover,
+.sq-fxrack__modal > .sq-track__fx-panel > .sq-fx__row.is-live > .sq-fx__off:hover,
 .sq-track .sq-track__env-panel.is-live > .sq-fx__row > .sq-fx__off:hover {
   color: var(--danger);
   border-color: var(--danger);
@@ -1402,11 +1454,13 @@ main {
 /* ‹ › move a stage along the chain (addFxRowControls). Inline only, like the
    ×, and just before it; the name is also a drag handle. */
 .sq-fx__move { display: none; }
-.sq-track .sq-track__fx-panel.is-live > .sq-fx__row.is-live > .sq-fx__move {
+.sq-track .sq-track__fx-panel.is-live > .sq-fx__row.is-live > .sq-fx__move,
+.sq-fxrack__modal > .sq-track__fx-panel > .sq-fx__row.is-live > .sq-fx__move {
   display: inline-flex;
   margin-left: auto;
 }
-.sq-track .sq-track__fx-panel.is-live > .sq-fx__row.is-live > .sq-fx__move + .sq-fx__off { margin-left: 0; }
+.sq-track .sq-track__fx-panel.is-live > .sq-fx__row.is-live > .sq-fx__move + .sq-fx__off,
+.sq-fxrack__modal > .sq-track__fx-panel > .sq-fx__row.is-live > .sq-fx__move + .sq-fx__off { margin-left: 0; }
 .sq-fx__mv {
   min-width: 22px;
   height: 22px;
@@ -1418,7 +1472,8 @@ main {
   border-color: transparent;
 }
 .sq-fx__mv:hover { color: var(--fg); border-color: var(--border); }
-.sq-track .sq-track__fx-panel.is-live > .sq-fx__row.is-live > .sq-fx__title[draggable="true"] { cursor: grab; }
+.sq-track .sq-track__fx-panel.is-live > .sq-fx__row.is-live > .sq-fx__title[draggable="true"],
+.sq-fxrack__modal > .sq-track__fx-panel > .sq-fx__row.is-live > .sq-fx__title[draggable="true"] { cursor: grab; }
 .sq-fx__row.is-dragging { opacity: 0.5; }
 .sq-fx__row[data-drop-at="before"] { box-shadow: inset 3px 0 0 var(--accent); }
 .sq-fx__row[data-drop-at="after"] { box-shadow: inset -3px 0 0 var(--accent); }
@@ -1426,6 +1481,7 @@ main {
 @media (any-pointer: coarse), (max-width: 768px) {
   .sq-fx__mv { min-width: 44px; height: 44px; font-size: 18px; }
   .sq-track .sq-track__fx-panel.is-live > .sq-fx__row.is-live > .sq-fx__off,
+  .sq-fxrack__modal > .sq-track__fx-panel > .sq-fx__row.is-live > .sq-fx__off,
   .sq-track .sq-track__env-panel.is-live > .sq-fx__row > .sq-fx__off {
     min-width: 44px;
     height: 44px;
@@ -1451,8 +1507,9 @@ main {
    same; only where the title breaks and where the ×/remove sits changes:
    name on the card's top line, controls wrapping under. Scoped to the
    inline view (`.sq-track ... .is-live`), as the row filter above is: in the
-   modal each panel is the whole panel again, and below 768px the phone
-   block's one-per-line layout stands.
+   modal each panel is the whole panel again, and below 768px the six sound
+   panels are not inline at all (the mobile block hides them; each is a
+   modal from its button there), only a live generator's card.
 
    `gap: inherit` takes the track's own gap, so the wrapper is invisible in
    the stack; with nothing live in it (or every panel away in a modal) it is
@@ -2729,6 +2786,18 @@ body.kbd-recording:not(.sq-playing) .sq-track.is-kbd-active .sq-step.is-cursor {
   font-weight: 600;
   min-height: 40px;
 }
+/* A heading over a panel that carries no name of its own (openPanelAsModal's
+   `title`): the instrument modal says which track and engine it is. */
+.sq-panel__modal-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg);
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 /* Chord settings as a modal (the mobile route in — see openChordMenu). The
    panel is the transport's own element moved here, so everything below is a
    restyle of the same controls: stacked, named, and at a finger's size. */
@@ -2827,6 +2896,44 @@ body.kbd-recording:not(.sq-playing) .sq-track.is-kbd-active .sq-step.is-cursor {
    on the track. */
 .sq-fx__modal {
   width: min(96vw, 560px);
+}
+/* The instrument modal (openInstrumentAsModal): the track's synth row, moved
+   here from the head. A phone's way to the instrument's controls, since the
+   row is not inline on the track there (see the mobile block). Stacked, one
+   group a line, scrolling inside; the hexop's operator grid scrolls sideways
+   in its own panel as it does in the head. */
+.sq-inst__modal { width: min(96vw, 900px); }
+.sq-inst__modal > .sq-track__synth-row {
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  gap: 6px;
+  overflow-y: auto;
+  max-height: calc(92vh - 110px);
+  min-height: 0;
+}
+.sq-inst__modal > .sq-track__synth-row.is-empty::after {
+  content: "nothing to set on this instrument";
+  color: var(--fg-dim);
+  font-size: 12px;
+  padding: 12px 2px;
+}
+/* The phone's fx modal (openFxAsModal's phone branch): the rack panel moved
+   here, filtered to the stages on the track exactly as the inline view
+   filters it (same `is-live` rows, same × and ‹ ›), with the picker behind
+   `add`. With no stage on the track the panel is hidden (refreshPanelBadges)
+   and the line after it says so. */
+.sq-fxrack__modal { width: min(96vw, 900px); }
+.sq-fxrack__modal > .sq-track__fx-panel { max-height: calc(92vh - 150px); }
+.sq-fxrack__modal > .sq-track__fx-panel > .sq-fx__row:not(.is-live) { display: none; }
+.sq-fxrack__empty { display: none; color: var(--fg-dim); font-size: 12px; padding: 10px 2px; }
+.sq-fxrack__modal > .sq-track__fx-panel[hidden] + .sq-fxrack__empty { display: block; }
+.sq-fxrack__add {
+  align-self: stretch;
+  min-height: 44px;
+  padding: 10px;
+  font-weight: 600;
+  border-style: dashed;
 }
 .sq-fxpick {
   display: grid;
@@ -3428,6 +3535,17 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not
     height: 0;
     margin: 0;
   }
+  /* And the one between the vol row and the generator buttons. The synth row
+     (order 20, full width) used to be that break by being there; with it
+     hidden on a phone, the dice and its neighbours flowed up beside vol and
+     squeezed solo / mute / p-lock to nothing. The head's other pseudo. */
+  .sq-track__head::after {
+    content: "";
+    order: 20;
+    flex: 0 0 100%;
+    height: 0;
+    margin: 0;
+  }
   /* Vol used to take a line of its own — one 44px control centred in 374px of
      nothing, with the three buttons that follow it pushed onto a line of their
      own underneath. Given a fixed column it keeps its size and solo / mute /
@@ -3474,10 +3592,10 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not
   /* Hide-by-default extras inside the track-head; the "more" button opens
      these in a centered modal instead (.sq-track__menu-modal). The selectors
      are scoped to .sq-track__head so when nodes are reparented into the modal
-     they become visible again automatically. The synth-row (harm/timb/morph/
-     decay + engine groups) stays inline — it's the primary sound surface on
-     mobile; the sound-shaping panel buttons (filter/env/fx/eq/comp/mod/aut)
-     move to the modal instead. roll keeps its inline spot. */
+     they become visible again automatically. The sound-shaping panel buttons
+     (env/comp) move to that modal; fx, filter, eq, mod and aut go to the
+     quick row under the head (render.js's applyQuickRow). roll keeps its inline
+     spot. */
   .sq-track__head .sq-track__save,
   .sq-track__head .sq-track__load-patch,
   .sq-track__head .sq-track__copy,
@@ -3486,21 +3604,43 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not
   .sq-track__head .sq-track__remove,
   .sq-track__head .sq-track__oct,
   .sq-track__head .sq-track__len-extend,
-  .sq-track__head .sq-panel__btn-group > button:not(.sq-track__roll),
-  .sq-track__head .sq-field:has(.sq-track__speed) {
+  .sq-track__head .sq-panel__btn-group > button:not(.sq-track__roll) {
     display: none;
   }
+  /* Speed sits on the vol line after p-lock, at a fixed width: solo / mute /
+     p-lock are `flex: 1 1 0`, so they take what is left and the line never
+     wraps. The select is the buttons' height. */
+  .sq-track__head .sq-field:has(.sq-track__speed) { order: 11; flex: 0 0 auto; }
+  .sq-track__head .sq-track__speed { min-height: 44px; width: 58px; padding: 4px 2px; font-size: 12px; }
 
-  /* synth-row inline: full-width sliders sized for fingers */
-  .sq-track__head .sq-track__synth-row { flex: 1 1 100%; }
+  /* The synth row (harm/timb/morph/decay + the engine's groups) is not inline
+     on a phone: it is the instrument modal's (openInstrumentAsModal, from the
+     quick row's `instrument` button), where this rule, scoped to the head,
+     lets go of it. Inline it was most of a track's height — a contagion or a
+     hexop panel alone is a screen — so the next track's steps were a long
+     scroll away, and the controls you reach for are the step grid's. */
+  .sq-track__head .sq-track__synth-row { display: none; }
   /* Four knobs fit across a phone where four sliders never did — 4x44px plus
-     gaps is under 200px — so the timbre macros stay on one row and the step
-     grid keeps its place on screen. */
-  .sq-track__head .sq-param-group .sq-field {
+     gaps is under 200px — so the timbre macros sit on one row of the modal. */
+  .sq-param-group .sq-field {
     flex: 1 1 20%;
     min-width: 0;
   }
-  .sq-track__head .sq-param-group .sq-field .sq-knob { --knob-size: 44px; }
+  /* The live panels — filter, env, eq, comp, the rack's engaged stages and the
+     mod matrix's enabled rows — are not inline either (each panel's button
+     carries a dot and opens it as a modal: filter, eq, mod, aut and the
+     rack's stages from the quick row, env / comp from the "more" menu). The two
+     generators stay: a live ring or a chance part is a picture of what the
+     track is playing, and the grid under it is read-only while it is. The
+     wrapper hides itself when a generator is not what is live in it, or an
+     empty grid would still cost the track's gap. */
+  .sq-track .sq-track__live > .sq-track__filter-panel,
+  .sq-track .sq-track__live > .sq-track__env-panel,
+  .sq-track .sq-track__live > .sq-track__eq-panel,
+  .sq-track .sq-track__live > .sq-track__comp-panel,
+  .sq-track .sq-track__live > .sq-track__fx-panel,
+  .sq-track .sq-track__live > .sq-track__mod-panel { display: none !important; }
+  .sq-track__live:not(:has(> .sq-track__euclid-panel.is-live, > .sq-track__chance-panel.is-live)) { display: none; }
 
   /* ---------- ICON BUTTONS NAME THEMSELVES ON A PHONE ----------------------
      A title attribute is a hover, and a finger cannot hover — so the dice, the
