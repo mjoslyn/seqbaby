@@ -59,6 +59,7 @@ import { patternSvg, svgUrl } from "./patternPicture.js";
 import { patternLocked } from "./patternSound.js";
 import { isPatternNonEmpty, state, trackSlot } from "./state.js";
 import { makeTrackDetail } from "./trackDetail.js";
+import { makeViewSplit } from "./viewSplit.js";
 import { onViewChange } from "./views.js";
 import { meterOptions, setPatternMeter } from "./patternBar.js";
 
@@ -129,10 +130,11 @@ function setFollow(on) {
 export function installArrangeView() {
   root = document.getElementById("arrange");
   if (!root) return;
+  const panes = makeViewSplit(root, "arrange");
   grid = document.createElement("div");
   grid.className = "sq-arr__view";
-  root.appendChild(grid);
-  detail = makeTrackDetail(root, scheduleArrangePaint);
+  panes.top.appendChild(grid);
+  detail = makeTrackDetail(panes.bottom, scheduleArrangePaint);
   root.addEventListener("click", onClick);
   root.addEventListener("change", onMeterChange);
   root.addEventListener("pointerdown", onPointerDown);

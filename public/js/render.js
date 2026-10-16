@@ -2,9 +2,9 @@ import { AUTOMATION_KEYS, AUTOMATION_TARGETS, canAutomate } from "./automation.j
 import { canSavePatches, engineByKey, getPatchConfig, populateEngineSelect, savePatch } from "./catalog.js";
 import { applyTrackPatch, serializeTrackPatch } from "./session.js";
 import { FX_STAGE_LABELS, FX_STAGE_LEVEL_KEY, FX_STAGE_NEUTRAL, LFO_DIVS, fxChainOrder, fxInstanceIds, autoLabel, baseModKey, fxInstanceAutoKeys, fxStageLevel, fxStageOf, fxStageOfModKey, isFxInstanceId, LFO_KEYS, lfoDivIndex, lfoLabel, rateToSlider, sliderToRate } from "./constants.js";
-import { showInputDialog, showSavedPatchPicker } from "./dialogs.js";
+import { showConfirmDialog, showInputDialog, showSavedPatchPicker } from "./dialogs.js";
 import { upgradeEngineSelect } from "./enginePicker.js";
-import { isMobileDevice, setStatus } from "./dom.js";
+import { PHONE_MQ, isMobileDevice, setStatus } from "./dom.js";
 import { HEXOP_ALG_LABELS, HEXOP_DEFAULTS, HEXOP_NUM_KEYS, HEXOP_PRESET_NAMES, HEXOP_SEL_KEYS, hexopPreset } from "./hexop.js";
 import { BASS_DEFAULTS, BASS_NUM_KEYS, BASS_SEL_KEYS, BASS_TONE_NAMES, bassTone, bassToneDescription } from "./bass.js";
 import { SUB_DEFAULTS, SUB_NUM_KEYS, SUB_SEL_KEYS, SUB_TONE_NAMES, subTone, subToneDescription } from "./subbass.js";
@@ -19,10 +19,10 @@ import { euclideanRhythm, refreshEuclidUI, renderEuclidPanel, wireEuclidPanel } 
 import { refreshChanceUI, renderChancePanel, wireChancePanel } from "./chance.js";
 import { randomizeMelody, randomizeTimbre } from "./generate.js";
 import { GUITAR_DEFAULTS, GUITAR_NUM_KEYS, GUITAR_SEL_KEYS, GUITAR_TONE_NAMES, guitarTone, guitarToneDescription } from "./guitar.js";
-import { ICON_CHANCE, ICON_CLEAR, ICON_DICE, ICON_EUCLID, ICON_FILTER, ICON_FX, ICON_LEN_HALF, ICON_LEN_PLUS1, ICON_LOAD, ICON_ROLL, ICON_SAVE, ICON_SLIDERS, ICON_WAV } from "./icons.js";
+import { ICON_CHANCE, ICON_CLEAR, ICON_DICE, ICON_EUCLID, ICON_FILTER, ICON_FX, ICON_LEN_HALF, ICON_LEN_PLUS1, ICON_LOAD, ICON_ROLL, ICON_SAVE, ICON_SLIDERS, ICON_WAV, ICON_AUT, ICON_EQ, ICON_INSTRUMENT, ICON_MOD, ICON_SEMI_DOWN, ICON_SEMI_UP, ICON_SHIFT_LEFT, ICON_SHIFT_RIGHT } from "./icons.js";
 import { refreshKnobRange, setKnobReadout, upgradeKnobs } from "./knob.js";
 import { canModulate, freshLfoEntry, lfoBipolar, lfoEuclid, lfoPhase, lfoRateLabel, syncLFO, trackLfoKeys } from "./lfo.js";
-import { autoOwns, fxShown, modOwns, refreshPanelBadges, refreshParamIndicators } from "./paramTargets.js";
+import { autoOwns, fxShown, modOwns, refreshPanelBadges, refreshParamIndicators, trackControl } from "./paramTargets.js";
 import { patternLocked, refreshPatternLockUI, refreshPatternSoundUI, setPatternLock } from "./patternSound.js";
 import { loadBundledSample, loadGranularTexture, openGranularSourceModal, openSamplerSourceModal, pickAudioFileForTrack } from "./main.js";
 import { defaultFxConfig, driveGainLabel, panLabel } from "./fxRack.js";
@@ -38,7 +38,7 @@ import { applyCompressorConfig, EQ_BANDS, refreshCompSourceDropdowns, refreshNoi
 import { ANALOG_FILTER_INFO, ANALOG_FILTER_TYPES } from "./soundDefaults.js";
 import { state, trackSlot } from "./state.js";
 import { launchClip } from "./clips.js";
-import { openAutAsModal, openChanceAsModal, openCompAsModal, openEnvAsModal, openEqAsModal, openFilterAsModal, openFxAsModal, openGranularWavModal, openModAsModal, openEuclidAsModal, openRollAsModal, openSampleEditorModal, openTrackMenu } from "./stepEditor.js";
+import { openAutAsModal, openChanceAsModal, openCompAsModal, openEnvAsModal, openEqAsModal, openFilterAsModal, openFxAsModal, openGranularWavModal, openInstrumentAsModal, openModAsModal, openEuclidAsModal, openRollAsModal, openSampleEditorModal, openTrackMenu } from "./stepEditor.js";
 import { openWavetableEditor } from "./wavetableEditor.js";
 import { attachGridInteraction, paintStepCursor, renderStepGrid } from "./stepGrid.js";
 import { copyTrackPattern, duplicateTrack, hasTrackClip, pasteTrackPattern, extendPatternByDuplicate, removeTrack, resizePattern, resizeTrack, shiftPatternEdit, shiftTrackOctave, truncatePattern } from "./track.js";
@@ -198,7 +198,10 @@ function attachDiceDensity(t, btn) {
  */
 export function syncTrackSoundUI(t) {
   if (!t?.el) return;
-  const q = (s) => (t.el.querySelector(s));
+  // Wherever the control is: the synth row and the panels leave the track for
+  // a modal (the instrument modal on a phone, the filter's anywhere), and a
+  // p-lock recall or a peer's edit can land while one is open.
+  const q = (s) => trackControl(t, s);
   const set = (sel, val) => { const el = q(sel); if (el != null && val != null) el.value = val; };
   set(".p-vol",   t.params.vol);
   set(".p-harm",  t.params.harm);
@@ -539,28 +542,46 @@ export function placeBusesLast() {
   return true;
 }
 
-// A phone-only quick-access row: fx / filter / +1 / /2 / speed, pulled out of
-// their desktop homes (the panel button group, the len-extend cluster, and
-// the speed field) into one row of their own right after the head — visually
-// below the generator icons, since everything else in the head past that
-// point is hidden into the "more" menu on a phone. Built from the SAME
-// matchMedia breakpoint the head's own mobile CSS uses, not isMobileDevice()
-// (which also fires for a touchscreen laptop at full width, where there's no
-// need for it). Desktop keeps the original markup untouched — nothing here
-// runs unless the query matches.
-const QUICKROW_MQ = typeof window !== "undefined" && window.matchMedia
-  ? window.matchMedia("(max-width: 768px)")
-  : null;
+// A phone-only quick-access row: instrument / fx / filter / eq / mod / aut on
+// one line, then semi − / semi + / shift ◂ / shift ▸ / +1 / /2 on the next,
+// pulled out of their desktop homes (the panel button group, the oct cluster
+// and the len-extend cluster) into one row of their own right after the head — visually below the generator icons, since everything else
+// in the head past that point is hidden into the "more" menu on a phone.
+// Built from the SAME matchMedia breakpoint the head's own mobile CSS uses
+// (PHONE_MQ, dom.js), not isMobileDevice() (which also fires for a
+// touchscreen laptop at full width, where there's no need for it). Desktop
+// keeps the original markup untouched — nothing here runs unless the query
+// matches.
+//
+// On a phone the track card holds nothing but the head, this row and the
+// step grid: the instrument's controls (the synth row), the rack's engaged
+// stages and the mod matrix's enabled rows are not inline on the track as
+// they are on desktop, since a track with a contagion panel, three stages and
+// two LFOs on it was a screen and a half to scroll past to reach the next
+// track's steps. Each is a modal instead, opened from this row: `instrument`
+// (the synth row, openInstrumentAsModal), `fx` (the engaged stages with the
+// picker behind an add button — openFxAsModal's phone branch), `mod` and
+// `aut` and `eq` (the panels' own modals, moved here from the "more" menu so
+// the dot that says something is on is in sight). filter, env, eq and comp
+// were modals from their buttons already; env and comp stay in the menu.
+const QUICKROW_MQ = PHONE_MQ;
 
-// The four buttons in the row (not the speed field) get the same icon-plus-
-// caption treatment as the generator row above them on a phone — square,
+// The buttons in the row get the same icon-plus-caption treatment as the generator row above them on a phone — square,
 // icon-first, named underneath via [data-label] — instead of the desktop's
 // plain text ghost buttons. Swapped in place, both directions, so the same
 // node keeps its listeners and aria-pressed state; only its class and
-// innerHTML change.
+// innerHTML change. `instrument` is the one node the row makes itself: it
+// has no desktop home, the synth row being inline there.
 const QUICKROW_ICON_BTNS = [
   { sel: ".sq-track__fx", icon: ICON_FX, label: "fx" },
   { sel: ".sq-track__filter", icon: ICON_FILTER, label: "filter" },
+  { sel: ".sq-track__eq", icon: ICON_EQ, label: "eq" },
+  { sel: ".sq-track__mod", icon: ICON_MOD, label: "mod" },
+  { sel: ".track-aut", icon: ICON_AUT, label: "aut" },
+  { sel: ".track-semi-down", icon: ICON_SEMI_DOWN, label: "semi −" },
+  { sel: ".track-semi-up", icon: ICON_SEMI_UP, label: "semi +" },
+  { sel: ".track-shift-left", icon: ICON_SHIFT_LEFT, label: "shift ◂" },
+  { sel: ".track-shift-right", icon: ICON_SHIFT_RIGHT, label: "shift ▸" },
   { sel: ".track-len-plus1", icon: ICON_LEN_PLUS1, label: "+1" },
   { sel: ".track-len-half", icon: ICON_LEN_HALF, label: "/2" },
 ];
@@ -576,12 +597,25 @@ function applyQuickRow(t) {
     // next matchMedia change (or the next render) tries again.
     if (t._trackMenuModal || t._filterModal || t._fxModal) return;
     const iconEls = QUICKROW_ICON_BTNS.map(({ sel }) => head.querySelector(sel));
-    const speedField = head.querySelector(".sq-track__speed")?.closest(".sq-field");
-    if (iconEls.some(el => !el) || !speedField) return;
+    if (iconEls.some(el => !el)) return;
     const restore = iconEls.map(el => ({ el, parent: el.parentNode, nextSibling: el.nextSibling }));
-    restore.push({ el: speedField, parent: speedField.parentNode, nextSibling: speedField.nextSibling });
     const row = document.createElement("div");
     row.className = "sq-track__quickrow";
+    const instBtn = document.createElement("button");
+    instBtn.type = "button";
+    instBtn.className = "sq-track__inst sq-icon-btn sq-btn--ghost";
+    instBtn.setAttribute("aria-pressed", "false");
+    instBtn.setAttribute("aria-label", "instrument controls");
+    instBtn.title = "the instrument's own controls";
+    instBtn.dataset.label = "inst";
+    instBtn.innerHTML = ICON_INSTRUMENT;
+    instBtn.addEventListener("click", () => {
+      if (t._instModal) { t._instModal.close(); return; }
+      t._trackMenuModal?.close();
+      openInstrumentAsModal(t);
+      instBtn.setAttribute("aria-pressed", "true");
+    });
+    row.appendChild(instBtn);
     for (const { el } of restore) row.appendChild(el);
     head.insertAdjacentElement("afterend", row);
     t._quickRowEl = row;
@@ -605,6 +639,9 @@ function applyQuickRow(t) {
       if (nextSibling && nextSibling.parentNode === parent) parent.insertBefore(el, nextSibling);
       else parent.appendChild(el);
     }
+    // The instrument modal holds the synth row, which the desktop head wants
+    // back inline; closing it puts it there.
+    t._instModal?.close();
     t._quickRowEl.remove();
     t._quickRowEl = null;
     t._quickRowRestore = null;
@@ -1377,10 +1414,12 @@ export function renderTrack(t) {
   t._compModal   = null;
   t._euclidModal = null;
   t._chanceModal = null;
+  t._instModal   = null;
 
-  // Same idea for the synth-row sub-groups — they're reparented into the
-  // track-menu-modal on mobile, so updatePlaitsControlsVisibility queries
-  // these stashed refs instead of t.el.querySelector.
+  // Same idea for the synth row and its sub-groups — the row is reparented
+  // into the instrument modal on a phone, so updatePlaitsControlsVisibility
+  // queries these stashed refs instead of t.el.querySelector.
+  t._synthRowEl     = node.querySelector(".sq-track__synth-row");
   t._timbreGroupEl  = node.querySelector(".sq-param-group--timbre");
   t._oscMixGroupEl  = node.querySelector(".sq-param-group--osc-mix");
   t._oscModGroupEl  = node.querySelector(".sq-param-group--osc-mod");
@@ -1405,7 +1444,7 @@ export function renderTrack(t) {
   // so stamp each one rather than relying on the track node being an ancestor.
   for (const el of [t._modPanelEl, t._autPanelEl, t._rollPanelEl, t._filterPanelEl,
                     t._envPanelEl, t._fxPanelEl, t._eqPanelEl, t._compPanelEl,
-                    t._euclidPanelEl, t._chancePanelEl,
+                    t._euclidPanelEl, t._chancePanelEl, t._synthRowEl,
                     t._timbreGroupEl, t._oscMixGroupEl, t._oscModGroupEl,
                     t._ladderOscGroupEl, t._silverboxGroupEl, t._contagionGroupEl,
                     t._hexopGroupEl, t._guitarGroupEl, t._bassGroupEl, t._subGroupEl,
@@ -1507,7 +1546,18 @@ export function renderTrack(t) {
   // mobile shows the icon (see the roll rules in the mobile media block)
   const rollBtn = node.querySelector(".sq-track__roll");
   if (rollBtn) rollBtn.innerHTML = `${ICON_ROLL}<span class="sq-btn__label">roll</span>`;
-  node.querySelector(".sq-track__remove").addEventListener("click", () => removeTrack(t));
+  // remove asks first. Undo brings a track back, but one tap is not the
+  // place to find that out.
+  const removeBtn = node.querySelector(".sq-track__remove");
+  removeBtn.addEventListener("click", async () => {
+    const name = t.name?.trim() || "this track";
+    const ok = await showConfirmDialog({
+      title: `remove ${name}?`,
+      body: "the track, its patterns and its sound go. undo brings it back until the tab closes.",
+      confirmLabel: "remove",
+    });
+    if (ok && state.tracks.includes(t)) removeTrack(t);
+  });
   const dupBtn = node.querySelector(".sq-track__dup");
   if (dupBtn) dupBtn.addEventListener("click", () => duplicateTrack(t));
   node.querySelector(".sq-track__copy")?.addEventListener("click", () => copyTrackPattern(t));

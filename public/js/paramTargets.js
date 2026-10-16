@@ -229,6 +229,21 @@ export function controlForKey(t, autoKey) {
     || document.querySelector(`[data-track-id="${CSS.escape(String(t.id))}"] ${sel}`);
 }
 
+/**
+ * A control of the track by selector, wherever it is: in the track, or in a
+ * panel or the synth row reparented into a modal (each is stamped with its
+ * track id on the way out, renderTrack). For every write that reaches a
+ * control by class rather than through a stashed element — a session load
+ * writing the sliders, the granular modal mirroring a knob, the dice — so
+ * the instrument modal on a phone is not a place those writes miss.
+ * @param {Track} t @param {string} sel @returns {HTMLElement|null}
+ */
+export function trackControl(t, sel) {
+  if (!t?.el || !sel) return null;
+  return t.el.querySelector(sel)
+    || document.querySelector(`[data-track-id="${CSS.escape(String(t.id))}"] ${sel}`);
+}
+
 /** Does this track have an LFO running on `lfoKey`? @param {Track} t */
 export function hasMod(t, lfoKey) { return !!(lfoKey && t.lfoConfig?.[lfoKey]?.enabled); }
 /** Does this track have an automation lane on `autoKey`? @param {Track} t */
@@ -605,8 +620,12 @@ export function fxShown(t) {
   return t._fxShown || (t._fxShown = new Set());
 }
 
+// `noTotal`: left out of the phone's "more" button sum, which hides the
+// buttons that are NOT in sight there — env and comp. filter, fx, eq, mod and
+// aut sit in the quick row under the head with dots of their own, and the
+// generators' buttons are in the head.
 const PANEL_BADGES = [
-  { sel: ".sq-track__filter", panel: "_filterPanelEl", modal: "_filterModal", on: (t) => {
+  { sel: ".sq-track__filter", panel: "_filterPanelEl", modal: "_filterModal", noTotal: true, on: (t) => {
       const f = t.filter || {};
       const on = [];
       if ((f.type || "lowpass") !== "lowpass") on.push(f.type);
@@ -627,7 +646,7 @@ const PANEL_BADGES = [
     } },
   // No `modal`: the fx button opens a picker of names, not this panel, so the
   // inline view stays live behind it and follows each pick.
-  { sel: ".sq-track__fx", panel: "_fxPanelEl",
+  { sel: ".sq-track__fx", panel: "_fxPanelEl", noTotal: true,
     on: (t) => fxChainOrder(t.fxConfig).filter(k => fxStageLevel(t.fxConfig, k) > 0),
     label: (k) => fxIdLabel(k),
     // Only the stages this track SHOWS. Shown is not the same as on — see
@@ -651,7 +670,7 @@ const PANEL_BADGES = [
       }
       return any;
     } },
-  { sel: ".sq-track__eq", panel: "_eqPanelEl", modal: "_eqModal",
+  { sel: ".sq-track__eq", panel: "_eqPanelEl", modal: "_eqModal", noTotal: true,
     on: (t) => EQ_BANDS.map(b => b.key).filter(b => Math.abs(t.eq?.[b] ?? 0) >= 0.5) },
   { sel: ".sq-track__comp", panel: "_compPanelEl", modal: "_compModal", on: (t) => {
       if (!t.comp?.enabled) return [];
@@ -660,7 +679,7 @@ const PANEL_BADGES = [
       const from = state.tracks.find(x => String(x.id) === String(src));
       return [from ? `sidechain from ${from.name || "track"}` : "sidechain"];
     } },
-  { sel: ".sq-track__mod", panel: "_modPanelEl", modal: "_modModal",
+  { sel: ".sq-track__mod", panel: "_modPanelEl", modal: "_modModal", noTotal: true,
     on: (t) => Object.keys(t.lfoConfig || {}).filter(k => t.lfoConfig[k]?.enabled),
     label: (k) => lfoLabel(k),
     // Each enabled LFO gets its own row-turned-card, like a rack stage — a row
@@ -684,7 +703,7 @@ const PANEL_BADGES = [
     on: (t) => (t.euclid?.on ? ["live"] : []) },
   { sel: ".track-chance", panel: "_chancePanelEl", modal: "_chanceModal", noTotal: true,
     on: (t) => (t.chance?.on ? ["live"] : []) },
-  { sel: ".track-aut",
+  { sel: ".track-aut", noTotal: true,
     on: (t) => Object.keys(t.automation || {}).filter(k => t.automation[k]?.enabled),
     label: (k) => { const l = lfoForAuto(k); return l ? lfoLabel(l) : autoLabel(k); } },
 ];
@@ -733,7 +752,8 @@ export function refreshPanelBadges(t) {
     panel.classList.toggle("is-live", live);
     panel.hidden = !live;
   }
-  // The mobile "more" button hides all seven behind it, so it carries the sum.
+  // The mobile "more" button hides env / comp behind it, so it carries their
+  // sum (the rest are `noTotal`, above).
   const more = t._trackMoreBtn;
   if (more) {
     if (total) more.dataset.on = String(total);

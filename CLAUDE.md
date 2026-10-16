@@ -16,7 +16,7 @@ env / fx / eq / comp / mod / automation per track.
   `public/woscillators.js` →
   `public/js/main.js` (ES module). `middleware.ts` refreshes the Supabase
   session on every request *except* static engine assets.
-- **Engine**: ~88 dependency-free vanilla ES modules in `public/js/`. No
+- **Engine**: ~89 dependency-free vanilla ES modules in `public/js/`. No
   bundler — edit, reload. `window.seqbaby` (from `appApi.js`) exposes `state`
   and serialize/apply hooks to the React shell (typed in `app/seqbaby.d.ts`).
 - **Accounts + data**: Supabase (Postgres + Auth + RLS). Tables: `profiles`,
@@ -230,6 +230,12 @@ env / fx / eq / comp / mod / automation per track.
   track's own card under it (trackDetail.js, the card moved out of `#tracks`
   and back). Both are rebuilt whole from engine state on `seqbaby:clips` and
   the session events, only while open.
+- `viewSplit.js` — the clip, arrangement and piano views as two panes, one
+  over the other: the view on top, the selected track's card (trackDetail.js)
+  below, a handle between them dragged (or arrowed, double-click resets) to
+  share the height. The section fills what the pinned bar and transport
+  leave (`--sq-transport-h`, measured here), each pane scrolls on its own,
+  and the split is a fraction per view per browser (`seqbaby.split.v1`).
 - `engineData.js` / `soundDefaults.js` / `theoryData.js` — the engine as DATA,
   with **no imports** (engineData none at all; the other two only each other
   and constants.js): the engine catalog, the four sliders' labels per engine,
@@ -2679,8 +2685,10 @@ drag down it to hear the track, a band on it marking what the computer keys
 q..] play, named in the corner, moved by z / x through `seqbaby:kbdoctave`), a bar ruler across the top, the notes as
 bars, the other melodic tracks' notes faint behind them (ghosts, tiled as each
 loops, scaled by speed), a root's chord tones dashed under it, and velocity
-stalks underneath. No track card under it, unlike clips and arrange: the
-roll takes the height.
+stalks underneath. The keyboard track's card sits under it past the
+split's handle (viewSplit.js), as in clips and arrange, with its step grid
+hidden (the roll is the step editor) and the toolbar's `sound` window off,
+since the card it opened is on screen.
 
 - **The track is `state.activeTrackId`**, so the computer keys play what is
   shown. A right-click on a note in a pattern the track is not on launches
@@ -3064,8 +3072,9 @@ line with the knobs wrapping under; the mod panel spans the row, since an LFO
 row is an eight-column grid too wide for a third of a track. The wrapper is
 invisible to everything else: `gap: inherit` keeps the track's own spacing, it
 hides itself when nothing in it is live, and the modals reparent a panel
-through an anchor at its own position. Below 768px the phone block's
-one-per-line layout stands, and the modal is untouched.
+through an anchor at its own position. Below 768px the six sound panels are
+not inline at all: each is a modal from its button (see the phone section),
+and only a live generator's card stays on the track.
 
 **Right-click a parameter** opens `paramMenu.js`: what the control does, its
 LFO row, its automation lane and its macro assignment — the same widgets the panels use
@@ -3842,7 +3851,11 @@ six of those do not fit across a phone, where icon-over-caption is 44px wide —
 which is the target size they needed anyway. `clear` and `roll` already carried
 a `.sq-btn__label` span for their desktop text, so they use that instead of a
 second attribute. The `::after` that prints it is inside the 768px block, so
-desktop is untouched.
+desktop is untouched. The six on that line (clear, dice, euclid, chance, roll,
+more) are the quick row's square exactly (56px tall, `flex: 1 1 44px`, the
+head's 4px gap), so a track's three lines of buttons are one grid. `remove`
+(in the "more" menu on a phone) asks first through `showConfirmDialog`
+everywhere: undo brings a track back, but one tap is not where to learn that.
 
 **`.sq-track__head::before` is a line break.** A flex container's own
 pseudo-element IS a flex item, so a zero-height one with a 100% basis breaks the
@@ -3850,7 +3863,8 @@ line — which is the only way to put a break at a chosen point in a wrapping ro
 without adding a wrapper to the markup, and the track head's children are
 queried from a dozen places by their position in it. `order` places it, and the
 head's children carry explicit orders around it: name / engine / len, then vol
-beside solo / mute / p-lock, then the synth row, then the generator buttons.
+beside solo / mute / p-lock and speed, then the synth row, then the generator
+buttons.
 Vol used to hold a line of its own — one 44px control centred in 374px of
 nothing — with those three buttons pushed underneath it.
 
@@ -3878,6 +3892,40 @@ it decides what a tapped step writes — hence that one's hide rule is scoped
 `.sq-transport` and this one's is not. `#kbd-octave` is a sibling of
 `#kbd-chord` rather than inside it, so `openChordMenu` does not carry it into
 the modal and the flat rule is safe.
+
+**The track card on a phone is the head, a quick row and the step grid.**
+The instrument's controls (the synth row), the rack's engaged stages and the
+mod matrix's enabled rows are inline on the track on desktop (the live
+panels, above) and NOT on a phone: a track with a contagion panel, three
+stages and two LFOs was a screen and a half between one step grid and the
+next. Each is a modal there, opened from the quick row `applyQuickRow`
+(render.js) builds under the head: `inst` (`openInstrumentAsModal`,
+stepEditor.js: the synth row MOVED into a modal through `openPanelAsModal`,
+titled with the track and its engine, so every listener and
+`updatePlaitsControlsVisibility`'s stashed group refs keep working), `fx`
+(`openFxAsModal`'s phone branch: the rack panel moved into a modal, filtered
+to the stages on the track exactly as the inline view is, × and ‹ › included,
+with the picker behind an `+ add an effect` button opened over it), `filter`,
+`eq`, `mod` and `aut` (their own modals; eq, mod and aut moved here from the
+"more" menu, which keeps env / comp). Its second line is the pattern's own
+controls: semi − / +, shift ◂ / ▸, +1 and /2, pulled from the oct and
+len-extend clusters (the "more" menu keeps oct − / + and x2 / x4 / /4), two
+rows of six equal squares. The speed field stays in the head, on the vol
+line after p-lock at a fixed width, so that line never wraps. The
+`inst` button is the one node the row makes itself, since it has no desktop
+home. The quick row's buttons
+carry the `data-on` dot with `::before`, because on a phone `::after` is the
+caption. What is hidden is decided by the stylesheet's mobile block (the
+head's synth row, and the six sound panels inside `.sq-track__live`; the two
+generators' cards stay, since a live ring is what the track is playing), and
+what is opened by `isPhoneLayout()` (dom.js, the same `(max-width: 768px)`
+query, `PHONE_MQ`), so the two cannot disagree about what a phone is. Any
+write that reaches a control by class rather than through a stashed element
+goes through `trackControl(t, sel)` (paramTargets.js), which looks in the
+track and then in anything reparented out of it, so a p-lock recall or a
+session load lands while the instrument modal is open. `openPanelAsModal`
+puts a panel's `hidden` back as it found it, not `true`: the synth row is
+never hidden on the track.
 
 **Copy that names a gesture has to name the right one.** The mod panel's hint
 goes through `isMobileDevice()` (`long-press` / `right-click`); the preloader's
@@ -5151,7 +5199,7 @@ Repo: https://github.com/mjoslyn/seqbaby.
   An inline marker (`window.__seqbabyServerBoot`) tells the paths apart, and
   `ScriptLoader.tsx` keeps its onload-chained injection for the soft-nav case
   (e.g. arriving from `/login`).
-- `app/EnginePreload.tsx` emits `modulepreload` for all 88 modules listed in
+- `app/EnginePreload.tsx` emits `modulepreload` for all 89 modules listed in
   `app/engineAssets.ts` (at `engineAsset("/js/<name>")`; the hints used to
   point at the site root and 404). The graph is 8 levels deep, so without it the browser
   needs up to eight sequential round trips just to discover the code.

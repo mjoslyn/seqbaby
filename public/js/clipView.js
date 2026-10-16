@@ -60,6 +60,7 @@ import { inLoop, isPatternNonEmpty, requestPatternSwitch, state, switchPattern, 
 import { extendPatternByDuplicate, truncatePattern, writePatternOnto } from "./track.js";
 import { patternMeter, stepsPerBarForMeter } from "./meter.js";
 import { makeTrackDetail } from "./trackDetail.js";
+import { makeViewSplit } from "./viewSplit.js";
 import { onViewChange } from "./views.js";
 
 let root = null;
@@ -136,10 +137,11 @@ function onRepChange(e) {
 export function installClipView() {
   root = document.getElementById("clips");
   if (!root) return;
+  const panes = makeViewSplit(root, "clips");
   grid = document.createElement("div");
   grid.className = "sq-clips__grid";
-  root.appendChild(grid);
-  detail = makeTrackDetail(root, scheduleClipPaint);
+  panes.top.appendChild(grid);
+  detail = makeTrackDetail(panes.bottom, scheduleClipPaint);
   root.addEventListener("click", onClick);
   root.addEventListener("dblclick", onDblClick);
   root.addEventListener("pointerdown", onFillStart);

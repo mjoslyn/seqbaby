@@ -1,6 +1,7 @@
 import { setStatus } from "./dom.js";
 import { patternMeter, stepsPerBeatForMeter } from "./meter.js";
 import { setParam } from "./params.js";
+import { trackControl } from "./paramTargets.js";
 import { state } from "./state.js";
 import { renderStepGrid } from "./stepGrid.js";
 import { SCALES, midiToScaleIndex, quantizeToScale, scaleIndexToMidi } from "./theory.js";
@@ -13,7 +14,7 @@ export function randomizeTimbre(t) {
   for (const k of RAND_KEYS) {
     const v = Math.random();
     setParam(t, k, v);
-    const input = t.el.querySelector(`.p-${k}`);
+    const input = trackControl(t, `.p-${k}`);
     if (input) input.value = String(v);
   }
 }
