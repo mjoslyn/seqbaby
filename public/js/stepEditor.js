@@ -6,7 +6,7 @@ import { renderEuclidPanel } from "./euclid.js";
 import { renderChancePanel } from "./chance.js";
 import { upgradeKnobs } from "./knob.js";
 import { applySampleSpeed, currentBpm } from "./lfo.js";
-import { renderRollPanel } from "./pianoRoll.js";
+import { closeRollEditor, openRollEditor } from "./pianoRoll.js";
 import { updateGranularSpeedEnabled } from "./params.js";
 import { refreshPanelBadges, refreshParamIndicators } from "./paramTargets.js";
 import { FX_PICK_LABELS, FX_PICK_ORDER, fxStageAdd, fxStageCount, fxStageOff, renderAutomationPanel } from "./render.js";
@@ -30,7 +30,7 @@ export function openPanelAsModal(t, opts) {
   // actually names — every other modal in the app is `sq-<thing>__modal`, and
   // for a while these eight were not, which quietly left all of them at the
   // generic 1100px.
-  const { panel, modalClass, btnSel, modalKey, afterMount } = opts;
+  const { panel, modalClass, btnSel, modalKey, afterMount, onClose } = opts;
   if (!panel || t[modalKey]) return;
   const anchor = document.createComment("panel-anchor");
   panel.replaceWith(anchor);
@@ -62,6 +62,7 @@ export function openPanelAsModal(t, opts) {
     t[modalKey] = null;
     // Whatever was switched on in here goes back to being shown on the track.
     refreshPanelBadges(t);
+    if (onClose) onClose();
   };
   const escHandler = (e) => { if (e.key === "Escape") close(); };
   closeBtn.addEventListener("click", close);
@@ -81,7 +82,9 @@ export function openRollAsModal(t) {
     modalClass: "sq-roll__modal",
     btnSel: ".sq-track__roll",
     modalKey: "_rollModal",
-    afterMount: () => renderRollPanel(t, t._rollPanelEl),
+    // the piano editor (pianoEditor.js), on this track's current pattern
+    afterMount: () => openRollEditor(t, t._rollPanelEl),
+    onClose: () => closeRollEditor(t),
   });
 }
 

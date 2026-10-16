@@ -10,31 +10,44 @@
 //
 // So the model is that chain, not a pluck through a distortion box:
 //
-// - **The string is a waveguide.** A delay line the length of one period, with
-//   the losses of a real string in the loop: a damping filter (highs die first,
-//   which is why a guitar note gets duller as it rings, not just quieter), an
-//   allpass pair for stiffness (the harmonics of a wound string sit sharp of
-//   where the maths says, and that inharmonicity is most of "wound string"), and
-//   a fractional-delay allpass so it is actually in tune. The losses are set
-//   from TIMES, per note (a ring time and a shorter dulling time, both from the
-//   sustain slider), not from a per-lap gain: a per-lap gain is what made the
-//   top of the neck plink while the low E droned. The pluck is the velocity
-//   wave a released string actually has — a bipolar pulse with the pick
-//   position's comb built in, its corners rounded by how fast the pick lets
-//   go, a little scrape of noise under it, and a few cents of sharpness that
-//   settle as the string's tension does. It used to be a noise burst, which is
-//   where most of the "synthesised" came from (see pluck()).
+// - **The string is a waveguide, in two planes.** A delay line the length of
+//   one period, with the losses of a real string in the loop: a damping filter
+//   (highs die first, which is why a guitar note gets duller as it rings, not
+//   just quieter), a cascade of allpasses for stiffness — a real inharmonicity
+//   coefficient, solved per note, so a wound low E's partials run sharp by
+//   what a wound string's do and a plain high E's barely at all (see
+//   dispCoef) — and a fractional-delay allpass so it is actually in tune. The
+//   losses are set from TIMES, per note (a ring time and a shorter dulling
+//   time, both from the sustain slider), not from a per-lap gain: a per-lap
+//   gain is what made the top of the neck plink while the low E droned. And
+//   there are two of these per string, because a string vibrates in two
+//   planes that the bridge and the pickup treat differently: the plane the
+//   pickup senses is lost into the body fastest, the other rings on, sensed
+//   about half as well and a fraction of a hertz away. That is the two-stage
+//   decay every plucked note has (quick, then long) and the slow swell under
+//   a held one; one line gives one exponential, which is a synth (see
+//   makeString). The pluck is the velocity wave a released string actually
+//   has — a bipolar pulse with the pick position's comb built in, its corners
+//   rounded by how fast the pick lets go (and velocity decides most of that,
+//   which is what makes a hard note bright and not only loud), a scrape of
+//   noise on its edge, and a few cents of sharpness that settle as the
+//   string's tension does. It used to be a noise burst, which is where most
+//   of the "synthesised" came from (see pluck()).
 // - **The pickup is a comb and a resonance.** It reads the string at one point,
 //   which combs the spectrum again, and its own inductance rings: a single coil
 //   peaks around 6kHz, a humbucker around 3, and that peak is the single biggest
-//   difference between the two.
+//   difference between the two. The tone pot loads that coil, so rolling it
+//   down slides the peak toward 1-2kHz as well as taking the top off: the
+//   rolled-off hump is the pot's doing, not a lowpass's.
 // - **The amp is gain stages around a tone stack**, and the order matters: the
 //   first stage clips asymmetrically (even harmonics, the "warmth"), the stack
 //   sits after it so the tone controls shape what was already distorted, and the
 //   power amp clips again into a supply that sags under load.
 // - **The cab is the biggest filter in the chain.** Nothing below ~90Hz and
-//   nothing above ~5kHz survives a guitar speaker, which is the only reason a
-//   distorted guitar is listenable at all.
+//   nothing above ~5kHz survives a guitar speaker — and the cliff above 5kHz
+//   is steep (24dB/oct here), which is the only reason a distorted guitar is
+//   listenable at all. Under that, the cone's own resonance and a ripple
+//   where it stops moving as a piston.
 // - **And then the loop closes.** Air couples the speaker back to the string:
 //   at volume a note stops decaying and starts blooming, and eventually the
 //   string gives up its fundamental and sings a harmonic instead. That is
@@ -46,14 +59,16 @@
 // instrument's rather than voice 0's (the limitation the pooled emulators have).
 //
 // Simplifications, stated plainly: the six strings are a voice pool rather than
-// a real fretboard, so nothing stops two notes landing on the same "string" and
-// nothing sympathetically rings; the tone stack is three shelving filters rather
-// than the passive RC network's interacting one; the cab is five biquads rather
-// than a measured impulse response; the amp runs 2x oversampled (the gain
-// stages, not the strings or the cab), which is enough to keep the fold-back
-// 60dB under the note on the hi-gain amp but not to make it vanish; and a
-// chord's notes are staggered 4ms apart as a pick would, not voiced as a hand
-// shape.
+// a real fretboard, so nothing stops two notes landing on the same "string",
+// nothing sympathetically rings, and a note's stiffness is guessed from its
+// pitch rather than from which string a hand would put it on; the two planes
+// of a string are independent lines rather than coupled through the bridge;
+// the tone stack is three shelving filters rather than the passive RC
+// network's interacting one; the cab is seven biquads rather than a measured
+// impulse response; the amp runs 2x oversampled (the gain stages, not the
+// strings or the cab), which is enough to keep the fold-back 60dB under the
+// note on the hi-gain amp but not to make it vanish; and a chord's notes are
+// staggered 4ms apart as a pick would, not voiced as a hand shape.
 
 /** @typedef {import("./types.js").Track} Track */
 
@@ -66,6 +81,7 @@ const MAXV = 6;        // six strings
 const BLK  = 16;       // control-block size: envelopes, coefficients, events
 const DLEN = 4096;     // string delay line (down to ~11Hz at 48k)
 const DMASK = DLEN - 1;
+const NAP  = 8;        // dispersion allpasses per polarization (see dispCoef)
 
 // ---- biquads (RBJ cookbook) --------------------------------------------
 // Transposed direct form II: one multiply-add chain, and the state stays small
@@ -152,13 +168,19 @@ const AMPS = [
 
 // ---- the cabs -----------------------------------------------------------
 // hp/lp: what the speaker simply cannot reproduce; peak: the presence bump
-// every guitar speaker has around 2-4kHz; notch: the dip that stops it honking.
+// every guitar speaker has around 2-4kHz; notch: the dip that stops it honking;
+// rf/rg: the cone's own resonance, the thump a closed back puts under a
+// chord; bf/bg: a ripple in the breakup region, where a paper cone stops
+// moving as a piston and the response goes ragged. The lp is two sections
+// (24dB/oct): a guitar speaker falls off a cliff above 5kHz, and the single
+// section this had (12dB/oct) let through enough of a driven amp's top that
+// every distorted tone carried a fizz no cab ever passed.
 const CABS = [
-  { hp: 85,  lp: 4200,  pf: 2400, pg: 5,   nf: 1150, ng: -4 },   // 4x12
-  { hp: 95,  lp: 4700,  pf: 2700, pg: 4.5, nf: 1050, ng: -3 },   // 2x12
-  { hp: 105, lp: 5100,  pf: 3000, pg: 4,   nf: 950,  ng: -3 },   // 1x12
-  { hp: 190, lp: 5800,  pf: 3400, pg: 3.5, nf: 850,  ng: -2 },   // 1x8 (small)
-  { hp: 25,  lp: 15000, pf: 3000, pg: 0,   nf: 1000, ng: 0 },    // di — no cab
+  { hp: 85,  lp: 4200,  pf: 2400, pg: 5,   nf: 1150, ng: -4, rf: 110, rg: 3.5, bf: 1700, bg: -2.5 },   // 4x12
+  { hp: 95,  lp: 4700,  pf: 2700, pg: 4.5, nf: 1050, ng: -3, rf: 120, rg: 3,   bf: 1900, bg: -2 },     // 2x12
+  { hp: 105, lp: 5100,  pf: 3000, pg: 4,   nf: 950,  ng: -3, rf: 135, rg: 2.5, bf: 2100, bg: -2 },     // 1x12
+  { hp: 190, lp: 5800,  pf: 3400, pg: 3.5, nf: 850,  ng: -2, rf: 240, rg: 2,   bf: 2400, bg: -1.5 },   // 1x8 (small)
+  { hp: 25,  lp: 15000, pf: 3000, pg: 0,   nf: 1000, ng: 0,  rf: 100, rg: 0,   bf: 2000, bg: 0 },      // di — no cab
 ];
 
 // Pickups: where the resonance sits and how sharp it is. This peak, and not the
@@ -178,23 +200,139 @@ function softClip(x) {
   const x2 = x * x;
   return x * (27 + x2) / (27 + 9 * x2);
 }
+// A wire up to k, then a smooth bend that never passes 1. The preamp stages
+// are softClip, whose knee starts almost at zero, which is what a triode does;
+// a power amp and an output limiter are not: they are linear until the rails.
+// Measured, the output safety used to be softClip behind a 2.6x trim, and on
+// a CLEAN amp a hard-picked note had its harmonics above 1kHz squeezed by the
+// knee on every peak — a hard pick came out no brighter than a soft one.
+function knee(x, k) {
+  const ax = x < 0 ? -x : x;
+  if (ax <= k) return x;
+  const t = (ax - k) / (1 - k);
+  const y = k + (1 - k) * t / (1 + t);
+  return x < 0 ? -y : y;
+}
 
+// One polarization of a string: a delay line, the fractional-delay allpass
+// that tunes it, the dispersion cascade, and the loss filter. A string has two.
+function makeLine() {
+  return {
+    buf: new Float32Array(DLEN), w: 0,
+    len: 200, eta: 0, apX: 0, apZ: 0,     // fractional-delay allpass
+    c: 0, ap: new Float64Array(NAP * 2),   // dispersion cascade (stiffness)
+    lp: 0, damp: 0.5, g: 0.96,             // loop damping and loss
+    pkTap: 8,
+  };
+}
+function resetLine(ln) {
+  ln.buf.fill(0); ln.lp = 0; ln.apX = 0; ln.apZ = 0; ln.ap.fill(0);
+}
+
+// A string vibrates in two planes, and the pickup and the bridge do not treat
+// them alike. The plane towards the pickup is the one it senses, and it is
+// also the plane the bridge gives way in, so it is lost into the body faster;
+// the plane across the top is sensed about half as well, rings longer, and
+// sits a fraction of a hertz away because the bridge is not equally stiff in
+// both directions. Together that is what gives a real note its two-stage
+// decay — a quick fall as the plane the pick set moving gives its energy up,
+// then the long ring of the other — and the slow swell under a held note as
+// the two drift in and out of phase. One line gives one exponential, and a
+// single exponential is one of the things the ear reads as a synth: measured
+// before this, the envelope fell in a dead straight line from the first
+// 50ms to the last.
 function makeString() {
   return {
     id: -1, active: false, gate: false, age: 0,
     note: 60, freq: 110, target: 110, glide: 1, vel: 1,
-    buf: new Float32Array(DLEN), w: 0,
-    len: 200, eta: 0, apX: 0, apZ: 0,     // fractional-delay allpass
-    lp: 0,                                 // loop damping
-    disp: 0,                               // dispersion allpass coefficient
-    d1x: 0, d1y: 0, d2x: 0, d2y: 0,        // dispersion allpasses (stiffness)
+    a: makeLine(), b: makeLine(),
     dcX: 0, dcY: 0,                        // dc blocker on the way out
-    g: 0.96, damp: 0.5, relG: 1,
-    lossKey: -1,                           // (sustain, mute) the losses were set for
+    damp: 0.5, relG: 1,
+    lossKey: -1,                           // (sustain, mute, stiff) the losses were set for
     bend: 0,                               // tension-modulation pitch offset, decaying
-    pkTap: 8,
     env: 0, quiet: 0,
   };
+}
+
+// ---- dispersion ---------------------------------------------------------
+// A stiff string's partials run sharp: partial n sits at n*f0*sqrt(1 + B*n*n),
+// B the inharmonicity coefficient. On a guitar that is about 2e-4 for the
+// wound low E (its 10th partial ~15 cents sharp, the 16th ~45: the clank of
+// a wound string) and a tenth of that on the plain strings, where it is
+// barely a shimmer. In a waveguide that is a loop whose delay FALLS with
+// frequency, and a cascade of NAP identical first-order allpasses does that:
+// each one's delay is (1-c)/(1+c) at DC and falls towards one sample. The
+// coefficient is solved (bisection) to put ONE partial exactly where the law
+// says; the partials either side follow it as closely as a first-order
+// cascade's shape allows. The two allpasses at a fixed coefficient this
+// replaces swung under a sample over the whole band: measured, every partial
+// of a low E came out dead harmonic at the default stiffness.
+//
+// The phase delay of one stage at w, in samples (its group delay at DC is
+// (1-c)/(1+c); the phase delay is what the loop's resonances actually follow,
+// and solving from the group delay instead lands at a third of the stretch).
+function apPhaseDelay(c, w) {
+  const cw = Math.cos(w), sw = Math.sin(w);
+  const ph = Math.atan2(-sw, c + cw) - Math.atan2(-c * sw, 1 + c * cw);
+  return -ph / w;
+}
+// Solve c so the cascade's phase delay at wRef is drop samples short of its
+// delay at DC. Monotonic in c, so bisection. The cap keeps the cascade's own
+// DC delay inside a short loop's budget: a note at the top of the neck has
+// fewer samples to spend than the stretch would like.
+function dispCoef(drop, wRef, maxDelay) {
+  if (drop <= 0 || maxDelay < NAP) return 0;
+  const tau = maxDelay / NAP;
+  let lo = Math.max(-0.95, (1 - tau) / (1 + tau)), hi = 0;
+  for (let i = 0; i < 28; i++) {
+    const c = 0.5 * (lo + hi);
+    const d = NAP * ((1 - c) / (1 + c) - apPhaseDelay(c, wRef));
+    if (d > drop) lo = c; else hi = c;
+  }
+  return 0.5 * (lo + hi);
+}
+
+// The loop's filters, in order, on one sample read off the line: the
+// fractional-delay allpass (so the string is in tune between samples too),
+// the dispersion cascade (stiffness: it stretches the upper partials sharp)
+// and the damping one-pole. What comes out is what goes back on the line,
+// less the loop's loss.
+function lineFilter(ln, xi) {
+  let y = ln.eta * (xi - ln.apZ) + ln.apX;
+  ln.apX = xi; ln.apZ = y;
+  const c = ln.c;
+  if (c !== 0) {
+    const ap = ln.ap;
+    for (let k = 0; k < NAP * 2; k += 2) {
+      const yk = c * y + ap[k] - c * ap[k + 1];
+      ap[k] = y; ap[k + 1] = yk; y = yk;
+    }
+  }
+  ln.lp += ln.damp * (y - ln.lp);
+  return ln.lp;
+}
+
+// One sample round one polarization: read the line, run the loop's filters,
+// write back with the loss and whatever is being pushed in from outside.
+// Returns what the pickup senses of this plane — the wave at the pickup
+// combed against the tap under it.
+function lineStep(ln, relG, inject) {
+  const buf = ln.buf, w = ln.w, len = ln.len;
+  const xi = buf[(w - len + DLEN) & DMASK];
+  let fed = lineFilter(ln, xi) * ln.g * relG + inject;
+  if (fed > 4) fed = 4; else if (fed < -4) fed = -4;
+  buf[w] = fed;
+  ln.w = (w + 1) & DMASK;
+  // The pickup reads one point of the string, which combs it again: the wave
+  // arriving at the pickup against the one that passed it on the way to the
+  // bridge, a tap further back in the same line. BOTH are read off the line,
+  // not one off the line and one from after the dispersion cascade: the
+  // cascade holds the lows back twenty samples longer than the highs, so a
+  // tap of the raw line against the cascade's output was no comb at all
+  // but a different filter for every partial (measured: the 1-2kHz band
+  // 9dB down and the mids 4dB up against the same string with no stiffness,
+  // and a hard pick's edge gone with it).
+  return xi - buf[(w - len + ln.pkTap + DLEN) & DMASK] * 0.78;
 }
 
 // ---------------------------------------------------------------------------
@@ -359,7 +497,8 @@ class GuitarProcessor extends AudioWorkletProcessor {
     // gain stage to the power amp sits between them.
     this.up = [bq(), bq(), bq()]; this.dn = [bq(), bq(), bq()];
     // Cab
-    this.cabHP = bq(); this.cabPeak = bq(); this.cabLP = bq(); this.cabNotch = bq();
+    this.cabHP = bq(); this.cabPeak = bq(); this.cabLP = bq(); this.cabLP2 = bq(); this.cabNotch = bq();
+    this.cabRes = bq(); this.cabRip = bq();
     this.outDC = 0; this.outDCx = 0;
     // Tremolo
     this.tremPh = 0;
@@ -434,38 +573,86 @@ class GuitarProcessor extends AudioWorkletProcessor {
   //
   // A string already ringing keeps some of what it had — that is what
   // re-picking a held note sounds like, and it is free here.
+  //
+  // The scrape of the pick is a BURST at the pick point, a couple of
+  // milliseconds of noise on the pulse's edge, not a hiss laid round the
+  // whole loop: spread round the loop it rang with the string as a noise
+  // floor under every partial, which is a breathy synth and not a scratch.
+  // No two picks land in quite the same place or quite as hard, so each
+  // note moves the position and the hardness by a few percent — enough that
+  // a run of equal notes is not one sample eight times, and far under what
+  // the ear reads as a different note.
   pluck(v, hard, vel) {
-    const L = v.len;
-    const off = Math.max(1, Math.min(L - 1, Math.round(this.pickPos * L)));
-    const p = off / L;
-    const h = Math.max(0, Math.min(1, hard * (0.6 + 0.4 * vel)));
-    // The release's corner: ~400Hz for a thumb (half a millisecond of letting
+    const h = Math.max(0, Math.min(1, hard * (0.15 + 0.85 * vel) * (1 + (Math.random() - 0.5) * 0.08)));
+    const pos = Math.max(0.02, Math.min(0.5, this.pickPos * (1 + (Math.random() - 0.5) * 0.06)));
+    // The release's corner: ~300Hz for a thumb (half a millisecond of letting
     // go), 5kHz for a hard plectrum, exponential between like every brightness.
-    const fcEx = Math.min(5000, 400 * Math.pow(2, h * 4));
+    // Velocity has most of its say here: a light stroke lets the string slide
+    // off the pick, a hard one snaps it, so a soft note is round and a hard
+    // one has an edge, which is the one thing a sequenced guitar part most
+    // needs to read as played.
+    const fcEx = Math.min(5000, 300 * Math.pow(2, h * 4.5));
     const aEx = 1 - Math.exp(-2 * Math.PI * fcEx / this.sr);
-    const scrape = 0.03 + h * h * 0.14;
+    const keep = v.env > 1e-4 ? 0.5 : 0;
+    // Level follows the hit. The two planes together carry what the one line
+    // used to, so the amps' gain structure is unchanged.
+    const amp = 1.1 * (0.06 + Math.pow(vel, 1.25) * 0.94);
     const tmp = this.scratch;
-    let z = 0, nz = 0;
-    for (let lap = 0; lap < 2; lap++) {
-      for (let i = 0; i < L; i++) {
-        const pulse = i < off ? (1 - p) : -p;
-        z += aEx * (pulse - z);
-        if (lap === 1) {
-          // The scrape: a little broadband noise, highpassed by taking it
-          // against its own smoothed copy so it stays a scratch and not a hiss.
-          const r = Math.random() * 2 - 1;
-          nz += 0.35 * (r - nz);
-          tmp[i] = z + (r - nz) * scrape;
+    const f = Math.max(20, v.freq * (1 + v.bend));
+    for (let side = 0; side < 2; side++) {
+      const ln = side ? v.b : v.a;
+      const L = ln.len;
+      // The pulse spans the whole PERIOD, not the delay line. The loop is the
+      // line plus its filters, and the dispersion cascade is a long one: at
+      // DC it holds a sixth of a stiff low E's period. Written over the line
+      // alone the pulse was short by that much, with a hard step where the
+      // missing piece should have been — a step the pick's release never
+      // rounded, so every note had the same edge whatever the velocity
+      // (measured: a hard pick no brighter than a soft one in the 1-2kHz
+      // band, and that band 7dB up on an unstiff string's). So the part of
+      // the period the cascade holds is fed THROUGH the cascade first, as if
+      // it had already entered, and the line gets the rest: one consistent
+      // period, no seam.
+      const P = Math.max(L, Math.round(this.sr / f));
+      const G = P - L;
+      // The plane across the pickup is set moving by the pick's edge rather
+      // than its release, so it gets a rounder pulse from a little further up
+      // the string: close enough to be the same note, far enough that its
+      // partials are not the other plane's in a different proportion. With
+      // identical pulses the two planes crossed in level with every partial
+      // at once, and every partial's beat went through its null together — a
+      // tremolo, measured as a 10dB hole in the mids a tenth of a second in.
+      const off = Math.max(1, Math.min(P - 1, Math.round((side ? Math.min(0.5, pos * 1.18) : pos) * P)));
+      const p = off / P;
+      const ae = side ? aEx * 0.7 : aEx;
+      let z = 0;
+      for (let lap = 0; lap < 2; lap++) {
+        for (let i = 0; i < P; i++) {
+          z += ae * ((i < off ? (1 - p) : -p) - z);
+          if (lap === 1) tmp[i] = z;
         }
       }
-    }
-    const keep = v.env > 1e-4 ? 0.5 : 0;
-    // Level follows the hit; the 1.6 brings the rectangle's rms up to where the
-    // old burst sat so the amps' gain structure is unchanged.
-    const amp = 1.6 * (0.06 + Math.pow(vel, 1.25) * 0.94);
-    for (let i = 0; i < L; i++) {
-      const idx = (v.w - L + i + DLEN * 2) & DMASK;
-      v.buf[idx] = v.buf[idx] * keep + tmp[i] * amp;
+      // The pick lets go at an angle: most of the energy goes into the plane
+      // it was moving in, some into the other.
+      const g = amp * (side ? 0.8 : 1);
+      for (let i = 0; i < G; i++) lineFilter(ln, tmp[i] * g);
+      for (let i = G; i < P; i++) {
+        const idx = (ln.w - L + (i - G) + DLEN * 2) & DMASK;
+        ln.buf[idx] = ln.buf[idx] * keep + tmp[i] * g;
+      }
+      if (side) break;
+      // The scrape, on the pulse's edge, in the plane towards the pickup:
+      // shorter and brighter the harder the pick.
+      const nb = Math.min(L, Math.max(8, Math.round(this.sr * (0.003 - h * 0.002))));
+      const sc = amp * (0.05 + h * h * 0.3);
+      const a2 = Math.min(0.95, aEx * 3);
+      const o0 = Math.max(0, off - G);
+      z = 0;
+      for (let i = 0; i < nb; i++) {
+        z += a2 * ((Math.random() * 2 - 1) - z);
+        const idx = (ln.w - L + o0 + i + DLEN * 2) & DMASK;
+        ln.buf[idx] += z * sc;
+      }
     }
     v.env = amp * 0.5;
     v.quiet = 0;
@@ -489,15 +676,25 @@ class GuitarProcessor extends AudioWorkletProcessor {
   // and the loop gain makes that back.
   //
   // Palm muting is the same two numbers, both pulled hard down.
-  setLosses(v, sustain, mute) {
+  //
+  // The sustain slider's time is the ring of the plane ACROSS the pickup, the
+  // one that lasts; the plane towards it, the one the pickup mostly hears,
+  // is lost into the bridge in well under half that. So a note falls quickly for
+  // its first few hundred milliseconds and then settles onto the long tail,
+  // which is the shape every plucked string has and no single loop gives.
+  setLosses(v, sustain, mute, stiff) {
     const f = Math.max(20, v.freq * (1 + v.bend));
     const Tp = 1 / f;
-    const T = 0.35 * Math.pow(2, sustain * 4.6) * Math.pow(82.4 / f, 0.2) * (1 - mute * 0.9);
-    const Th = T * (0.25 - mute * 0.2);
+    const T = 0.42 * Math.pow(2, sustain * 4.6) * Math.pow(82.4 / f, 0.2) * (1 - mute * 0.9);
+    const Th = T * (0.2 - mute * 0.16);
     const g0 = Math.pow(10, -3 * Tp / T);
     const gh = Math.min(0.9999, Math.pow(10, -3 * Tp / Th) / g0);
-    // |H(w)| = gh for the one-pole lp += a (x - lp), at w = 2 pi 4000 / sr.
-    const c = Math.cos(2 * Math.PI * Math.min(4000, this.sr * 0.4) / this.sr);
+    // |H(w)| = gh for the one-pole lp += a (x - lp), at w = 2 pi 3000 / sr: the
+    // partials up there die in a fifth of the ring, and the ones at 1kHz in
+    // about half of it, which is the dulling of a real note (it was solved
+    // at 4kHz for a quarter, and a low E's 12th partial then rang nearly as
+    // long as its fundamental).
+    const c = Math.cos(2 * Math.PI * Math.min(3000, this.sr * 0.4) / this.sr);
     const g2 = gh * gh;
     const b = 1 - g2 * c, A = 1 - g2;
     const disc = b * b - A * A;
@@ -507,10 +704,12 @@ class GuitarProcessor extends AudioWorkletProcessor {
     // (bounded: the loop must stay lossy at every frequency).
     const w0 = 2 * Math.PI * f / this.sr;
     const rr = 1 - a;
-    const h0 = a / Math.sqrt(1 - 2 * rr * Math.cos(w0) + rr * rr);
+    const h0 = Math.max(a / Math.sqrt(1 - 2 * rr * Math.cos(w0) + rr * rr), 0.6);
     v.damp = a;
-    v.g = Math.min(0.9998, g0 / Math.max(h0, 0.6));
-    v.lossKey = sustain * 4 + mute;
+    v.a.damp = a; v.b.damp = a;
+    v.b.g = Math.min(0.9998, g0 / h0);
+    v.a.g = Math.min(0.9998, Math.pow(10, -3 * Tp / (T * 0.38)) / h0);
+    v.lossKey = sustain * 4 + mute + stiff * 16;
   }
 
   noteOn(ev, sustain, stiff) {
@@ -525,7 +724,7 @@ class GuitarProcessor extends AudioWorkletProcessor {
       // in the loop, which is what plucking a sounding string does. Zeroing
       // the delay line here dropped a ringing string to silence in one sample.
     }
-    if (!v.active) { v.buf.fill(0); v.lp = 0; v.apX = 0; v.apZ = 0; v.d1x = v.d1y = v.d2x = v.d2y = 0; }
+    if (!v.active) { resetLine(v.a); resetLine(v.b); }
     v.id = ev.id; v.note = ev.note; v.vel = ev.vel;
     v.active = true; v.gate = true; v.age = ++this.tick;
     v.target = ev.freq;
@@ -535,7 +734,7 @@ class GuitarProcessor extends AudioWorkletProcessor {
     this.lastFreq = ev.freq;
     v.relG = 1;
     v.bend = 0;
-    this.setLosses(v, sustain, this.palm);
+    this.setLosses(v, sustain, this.palm, stiff);
     this.retune(v, stiff);
     this.pluck(v, this.pickHard, ev.vel);
   }
@@ -549,39 +748,78 @@ class GuitarProcessor extends AudioWorkletProcessor {
       if (!v.active || v.id !== id || !v.gate) continue;
       v.gate = false;
       const T = 0.05 + sustain * 0.55;
-      v.relG = Math.exp(-6.9 / Math.max(1, v.freq * T)) / Math.max(1e-6, v.g);
+      v.relG = Math.exp(-6.9 / Math.max(1, v.freq * T)) / Math.max(1e-6, v.b.g);
       if (v.relG > 1) v.relG = 1;
     }
   }
 
-  // Delay length for the note, minus the phase delay everything else in the loop
-  // adds — without that subtraction the string plays flat, and further flat the
-  // darker it is set.
-  retune(v, stiff) {
-    const f = Math.max(20, v.freq * (1 + v.bend));
-    const w = 2 * Math.PI * f / this.sr;
-    const sw = Math.sin(w), cw = Math.cos(w);
-    const c = -stiff * 0.42;                       // dispersion allpass coefficient
-    // Phase delay of each loop filter AT THE NOTE, not at DC: the DC figure is
-    // out by most of a sample for a note at the top of the neck.
-    const apD = -(Math.atan2(-sw, c + cw) - Math.atan2(-c * sw, 1 + c * cw)) / w;
-    const a = Math.max(0.03, v.damp), r = 1 - a;
-    const lpD = Math.atan2(r * sw, 1 - r * cw) / w;
-    let D = this.sr / f - lpD - 2 * apD;
+  // Tune one polarization: the dispersion cascade for the string's stiffness,
+  // then the integer and fractional delay that make up the rest of the period
+  // once the cascade's and the loss filter's own delays are paid — without
+  // that subtraction the string plays flat, and further flat the darker it is
+  // set. Both are the phase delay AT THE NOTE, not at DC: the DC figure is out
+  // by most of a sample for a note at the top of the neck.
+  tuneLine(ln, f, B) {
+    const sr = this.sr;
+    const Dtot = sr / f;
+    const w = 2 * Math.PI * f / sr;
+    // Partial nref must sit at nref*f0*sqrt(1 + B*nref*nref): a loop that is
+    // Dtot*(1 - 1/sqrt(1 + B*nref*nref)) samples shorter at that frequency.
+    const nref = Math.min(12, Math.max(2, Math.floor(0.9 / w)));
+    const drop = Dtot * (1 - 1 / Math.sqrt(1 + B * nref * nref));
+    const c = dispCoef(drop, nref * w, Dtot * 0.35);
+    const apD = c !== 0 ? NAP * apPhaseDelay(c, w) : 0;
+    const a = Math.max(0.03, ln.damp), r = 1 - a;
+    const lpD = Math.atan2(r * Math.sin(w), 1 - r * Math.cos(w)) / w;
+    let D = Dtot - lpD - apD;
     if (D < 8) D = 8;
     if (D > DLEN - 4) D = DLEN - 4;
-    const len = Math.floor(D - 0.1);
+    // The fraction is kept between a half and one and a half: a first-order
+    // allpass is a clean fractional delay only near one whole sample, and
+    // with the fraction allowed down to a tenth (what this had) its delay at
+    // 4kHz was several times its delay at DC. That went unheard until the
+    // attack's pitch bend started retuning the loop every block, when every
+    // crossing of a whole sample threw the upper partials' tuning about and
+    // a hard pick came out DULLER than a soft one (measured: -2dB in the
+    // 1-2kHz band for the plane across the pickup, +3.5dB once fixed).
+    const len = Math.floor(D - 0.5);
     const frac = D - len;
-    v.len = len;
-    v.eta = (1 - frac) / (1 + frac);
-    v.disp = c;
+    ln.len = len;
+    ln.eta = (1 - frac) / (1 + frac);
+    ln.c = c;
     // Where along the string the pickup sits, as a tap into the same line. A
     // point a fraction p of the way along the string is p of a PERIOD back in
     // the line (the line is the round trip, the string is half of it, and the
     // reflection doubles the distance again), so a bridge humbucker's first
     // notch is up around the eighth harmonic, where it belongs. It used to be
     // 2p, which put that notch on the fourth and hollowed every pickup out.
-    v.pkTap = Math.max(1, Math.min(len - 1, Math.round(this.pkupPos * len)));
+    ln.pkTap = Math.max(1, Math.min(len - 1, Math.round(this.pkupPos * len)));
+  }
+
+  retune(v, stiff) {
+    const f = Math.max(20, v.freq * (1 + v.bend));
+    // The inharmonicity coefficient of the string this note would be played
+    // on. The three wound strings sit around 1e-4 to 2.5e-4, the three plain
+    // ones around 2e-5 to 4e-5, and the step between them is real: a wound D
+    // and a plain G are a semitone-and-a-half apart in pitch and a factor of
+    // four apart in stiffness. A note has no string of its own here, so the
+    // step is crossfaded over the octave where the set changes over, and
+    // within each family B falls as the strings get thinner. The stiff knob
+    // scales the whole thing, its default (0.25) being a standard set.
+    const wound = 1 / (1 + Math.exp((f - 175) / 22));
+    const Bw = 2.5e-4 * Math.pow(82.4 / f, 1.2);
+    const Bp = 2.5e-5 * Math.pow(330 / f, 0.6);
+    const B = (stiff / 0.25) * (wound * Bw + (1 - wound) * Bp);
+    // The plane towards the body is the one the bridge gives way in, so it
+    // sits a fraction of a hertz FLAT of the other: a slow beat under the
+    // note, the same whatever the pitch, as the bridge's asymmetry is. The
+    // long-ringing plane is the one at pitch, since it is the one a player
+    // tunes to.
+    // Partial n beats at n times the split, so it is kept small: a tenth of
+    // a hertz is an eight-second swell on the fundamental and under a second
+    // on the tenth partial, where the shimmer belongs.
+    this.tuneLine(v.a, Math.max(20, f - 0.09), B);
+    this.tuneLine(v.b, f + 0.03, B);
   }
 
   process(inputs, outputs, params) {
@@ -639,7 +877,14 @@ class GuitarProcessor extends AudioWorkletProcessor {
       for (const q of [tone, bass, mid, treb, pres, mic]) key = key * 100 + (q * 99 | 0);
       if (key !== this.coefKey) {
         this.coefKey = key;
-        bqPeak(this.pkPeak, sr, PK.f, PK.q, PK.g);
+        // The tone pot is a capacitor across the pickup, and turning it down
+        // does not only roll the top off: it LOADS the coil, so the resonant
+        // peak slides down from where the pickup put it (6kHz on a single
+        // coil) towards 1-2kHz and sits there as a hump. That hump is the
+        // whole of the rolled-off "woman tone", and a plain lowpass (what the
+        // pot was here) has no hump to give.
+        const load = 1 - tone;
+        bqPeak(this.pkPeak, sr, PK.f / (1 + 2.2 * load * load), PK.q * (0.7 + 0.3 * tone), PK.g);
         bqLP(this.pkLP, sr, PK.lp, 0.7);
         // The amp's own filters are designed at the oversampled rate.
         bqHP(this.inHP, sr2, 60 + A.lo * 0.4, 0.7);
@@ -656,18 +901,23 @@ class GuitarProcessor extends AudioWorkletProcessor {
         // goes first. One control standing in for the whole dance in front of a
         // speaker, because that dance is mostly a lowpass.
         bqHP(this.cabHP, sr, C.hp, 0.72);
+        bqPeak(this.cabRes, sr, C.rf, 1.6, C.rg);
         bqPeak(this.cabPeak, sr, C.pf, 1.3, C.pg * (0.4 + mic));
-        bqLP(this.cabLP, sr, C.lp * (0.62 + mic * 0.8), 0.9);
+        bqPeak(this.cabRip, sr, C.bf, 2.5, C.bg);
+        const cabFc = C.lp * (0.62 + mic * 0.8);
+        bqLP(this.cabLP, sr, cabFc, 0.54);
+        bqLP(this.cabLP2, sr, cabFc, 1.31);
         bqPeak(this.cabNotch, sr, C.nf, 1.1, C.ng);
         bqHP(this.spHP, sr, 320, 0.7);
         bqLP(this.spLP, sr, 3600, 0.7);
         bqLP(this.fbBP, sr, 2600, 0.6);
       }
 
-      // The guitar's tone pot: a plain one-pole between the pickup and the amp.
-      // Rolled right down it is the darkest sound the instrument has; wide open
-      // it is barely there at all.
-      const toneFc = 700 * Math.pow(2, tone * 4.8);
+      // The guitar's tone pot, the other half of it: the cap's own roll-off
+      // above the hump, a one-pole between the pickup and the amp. Rolled
+      // right down it is the darkest sound the instrument has; wide open it is
+      // barely there at all.
+      const toneFc = 1100 * Math.pow(2, tone * 4.2);
       const toneA = 1 - Math.exp(-2 * Math.PI * Math.min(toneFc, sr * 0.45) / sr);
 
       // String losses (setLosses: a ring time and a dulling time, per note).
@@ -675,7 +925,7 @@ class GuitarProcessor extends AudioWorkletProcessor {
       // palm controls, a glide, the attack's pitch settling — since each one
       // is a retune, and a retune moves the read head.
       this.palm = mute;
-      const lossKey = sustain * 4 + mute;
+      const lossKey = sustain * 4 + mute + stiff * 16;
       // The attack's sharpness settles with the string's amplitude: ~60ms.
       const bendDecay = Math.exp(-blk / (0.06 * sr));
       for (const v of this.voices) {
@@ -691,36 +941,52 @@ class GuitarProcessor extends AudioWorkletProcessor {
           if (v.bend < 1e-4) v.bend = 0;
           moved = true;
         }
-        if (moved) { this.setLosses(v, sustain, mute); this.retune(v, stiff); }
+        if (moved) { this.setLosses(v, sustain, mute, stiff); this.retune(v, stiff); }
       }
 
       // Gain structure. Exponential in the slider, because that is what a gain
       // pot is: half way up a hundred-times amp is not fifty times, it is ten,
       // and every useful setting would otherwise live in the bottom tenth.
       const dr = drive * drive;
-      // 0.45 puts a single note at drive 0 about 6dB under the first stage's
-      // knee, so the bottom of the slider is clean on every amp and a hard
-      // strum is what first makes it give — it was 2.2, which clipped the
-      // attack of every note on the cleanest setting there was, and squashed
-      // a hard pick duller than a soft one.
-      const inG = 0.45 * Math.pow(A.g, dr);
+      // The bottom of the slider puts a single hard note about 12dB under
+      // the first stage's knee, so drive 0 is clean on every amp and a hard
+      // strum is what first makes it give. It was 0.45 (and 2.2 before that),
+      // and at 0.45 a hard pick's edges still sat on the triode's curve on
+      // the cleanest amp there was — measured, a hard note came out no
+      // brighter than a soft one, its edge compressed off on every peak. The
+      // top of the slider is unchanged, so the cranked tones are what they
+      // were.
+      const inG = 0.45 * Math.pow(A.g, dr) * (0.55 + 0.45 * dr);
       const s2G = Math.pow(A.s2, dr);
-      const pwrG = (0.6 + mast * mast * 2.4) * A.pwr;
+      // The master has a floor well under the first stage's level, so a
+      // plexi with its master at two is a clean plexi (it was 1.3x into the
+      // power amp at master ZERO, which clipped a single note on the amp
+      // whose whole character is power-amp distortion at ten).
+      const pwrG = (0.25 + mast * mast * 2.75) * A.pwr;
       // Distortion compresses, so a cranked amp is louder as well as dirtier.
       // Trim it back on the way out so drive changes the tone more than the
       // level, and a clean setting is still audible next to a saturated one.
       // The trim follows the gain the rig is actually applying (preamp, second
       // stage, power amp) through the same knee the clippers have, so a clean
       // amp and a saturated one land at about the same level and a louder
-      // setting reads louder only by what the saturation itself adds.
+      // setting reads louder only by what the saturation itself adds. Set so
+      // one hard note peaks near half scale on every amp: it used to be 2.6x
+      // on a clean amp, which put a hard note's attack into the output limit
+      // and took the top off it.
       const est = inG * s2G * pwrG * 0.2;
       const sat = est / Math.sqrt(1 + est * est);
-      const outTrim = Math.max(0.3, Math.min(2.6, 0.32 / sat));
+      const outTrim = Math.max(0.3, Math.min(5, 0.6 / (0.06 + 1.74 * sat)));
       // Bloom is cubed. Every engine's morph slider defaults to 0.5, and a rig
       // that howls the moment you load it would be a joke; at 0.5 this is the
       // faint lift a loud amp gives a held note, and the top of the slider is
       // where you stand in front of the speaker.
-      const fbAmt = bloom * bloom * bloom * 0.6;
+      // The plane the pickup senses is lost into the bridge far faster than
+      // the one line the loop used to be, and the gate below reads that
+      // plane's level, so the injection is scaled up (it was 0.6) and the
+      // gate's knee lowered to put the threshold back where it was:
+      // measured, a tweed that bloomed on a held note at 0.5 of the slider
+      // decayed under the old numbers and needed 0.7.
+      const fbAmt = bloom * bloom * bloom * 1.5;
       const tremHz = 1.5 + tremr * tremr * 12;
       const tremInc = tremHz / sr;
       const sagC = 1 - Math.exp(-1 / (0.012 * sr2));
@@ -731,19 +997,6 @@ class GuitarProcessor extends AudioWorkletProcessor {
         for (let vi = 0; vi < MAXV; vi++) {
           const v = this.voices[vi];
           if (!v.active) continue;
-          const buf = v.buf, w = v.w, len = v.len;
-          const xi = buf[(w - len + DLEN) & DMASK];
-          // Fractional delay, so the string is in tune between samples too.
-          let y = v.eta * (xi - v.apZ) + v.apX;
-          v.apX = xi; v.apZ = y;
-          // Stiffness: two allpasses stretch the upper partials sharp, which is
-          // what a wound string does and a mathematical string does not.
-          const c = v.disp;
-          const y1 = c * y + v.d1x - c * v.d1y; v.d1x = y; v.d1y = y1;
-          const y2 = c * y1 + v.d2x - c * v.d2y; v.d2x = y1; v.d2y = y2;
-          // Damping + loss.
-          v.lp += v.damp * (y2 - v.lp);
-          let fed = v.lp * v.g * v.relG;
           // The air path back from the speaker. Scaled by how hard this string
           // is already moving, which is both true (the speaker drives loudest
           // what is already resonating) and what makes BLOOM a threshold rather
@@ -753,14 +1006,11 @@ class GuitarProcessor extends AudioWorkletProcessor {
           // line far earlier than a clean one, exactly as a real rig does.
           // Only into a note that is still being held: taking the hand off the
           // string is how a player stops feedback, and without that a bloomed
-          // note would ring for the rest of the session.
-          if (fbAmt > 0.0005 && v.gate) fed += this.fbSig * fbAmt * (v.env < 0.5 ? v.env * 2 : 1);
-          if (fed > 4) fed = 4; else if (fed < -4) fed = -4;
-          buf[w] = fed;
-          v.w = (w + 1) & DMASK;
-          // The pickup reads one point of the string, which combs it again.
-          const tap = buf[(w - len + v.pkTap + DLEN) & DMASK];
-          let s = y - tap * 0.78;
+          // note would ring for the rest of the session. The air moves the
+          // whole string: both planes, the one facing the speaker the more.
+          const inject = (fbAmt > 0.0005 && v.gate) ? this.fbSig * fbAmt * (v.env < 0.25 ? v.env * 4 : 1) : 0;
+          // The two planes, the second sensed about half as well.
+          let s = lineStep(v.a, v.relG, inject) + 0.55 * lineStep(v.b, v.relG, inject);
           // DC blocker: the comb and the pluck both leave an offset behind.
           const dy = s - v.dcX + 0.9995 * v.dcY;
           v.dcX = s; v.dcY = dy;
@@ -768,7 +1018,7 @@ class GuitarProcessor extends AudioWorkletProcessor {
           const as = s < 0 ? -s : s;
           v.env += 0.0008 * (as - v.env);
           if (!v.gate || v.relG < 1) {
-            if (v.env < 2e-5) { if (++v.quiet > 3000) { v.active = false; v.buf.fill(0); v.env = 0; } }
+            if (v.env < 2e-5) { if (++v.quiet > 3000) { v.active = false; resetLine(v.a); resetLine(v.b); v.env = 0; } }
             else v.quiet = 0;
           }
           mono += s;
@@ -811,7 +1061,8 @@ class GuitarProcessor extends AudioWorkletProcessor {
           this.sagEnv += sagC * (ap - this.sagEnv);
           // A power supply that droops under load: the note ducks as it is struck
           // and swells back as it decays, which is the "give" of a small amp.
-          pp = softClip(pp * (1 - sag * Math.min(0.85, this.sagEnv * 1.4)));
+          // The clip is a rail, not a triode's curve: linear until it is not.
+          pp = knee(pp * (1 - sag * Math.min(0.85, this.sagEnv * 1.4)), 0.55);
 
           p = bqRun(this.dn[2], bqRun(this.dn[1], bqRun(this.dn[0], pp)));
         }
@@ -826,7 +1077,7 @@ class GuitarProcessor extends AudioWorkletProcessor {
         }
 
         // ---- cab ----
-        let y = bqRun(this.cabNotch, bqRun(this.cabLP, bqRun(this.cabPeak, bqRun(this.cabHP, p))));
+        let y = bqRun(this.cabNotch, bqRun(this.cabLP2, bqRun(this.cabLP, bqRun(this.cabRip, bqRun(this.cabPeak, bqRun(this.cabRes, bqRun(this.cabHP, p)))))));
 
         // ---- spring reverb, on the amp side of everything ----
         if (sprg > 0.001 || (this.spOut > 1e-6 || this.spOut < -1e-6)) {
@@ -867,10 +1118,12 @@ class GuitarProcessor extends AudioWorkletProcessor {
 
         // Output trim + a final safety limit. Six strings into a cranked amp is
         // a lot of signal, and drive should change the tone, not the level.
+        // The limit is a knee at 0.85: a wire for everything a single note
+        // does, there for the chord that would have gone past full scale.
         let z = y * outTrim;
         const dz = z - this.outDCx + 0.9995 * this.outDC;
         this.outDCx = z; this.outDC = dz;
-        o[base + n] = softClip(dz);
+        o[base + n] = knee(dz, 0.85);
       }
     }
     return true;

@@ -294,7 +294,7 @@ function labelForEvent(e) {
   // pointer, so by the time the pointer comes up the cell it went down on no
   // longer exists and the event lands on the container.
   if (target.closest(".sq-steps, .sq-step")) return "step";
-  if (target.closest(".sq-roll__grid, .sq-roll__cells")) return "note";
+  if (target.closest(".sq-pr")) return "note";          // the piano roll, in the view or a track's modal
   if (target.closest("#pattern-grid, .sq-pattern__cell")) return "pattern";
   return "";
 }

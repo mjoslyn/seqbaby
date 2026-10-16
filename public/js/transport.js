@@ -69,16 +69,8 @@ export function paintTrackNow(t, idx, slot = trackSlot(t)) {
   if (prev) for (const c of prev) if (!next.includes(c)) c.el.classList.remove("is-now");
   for (const c of next) if (!prev || !prev.includes(c)) c.el.classList.add("is-now");
   t._nowCells = next;
-  // Piano roll: highlight the column for the current step, if the roll is open.
-  const rollPanel = t._rollPanelEl || t.el.querySelector(".sq-track__roll-panel");
-  if (rollPanel && !rollPanel.hidden) {
-    rollPanel.querySelectorAll(".sq-roll__cell.is-now, .sq-roll__vel-cell.is-now")
-      .forEach(c => c.classList.remove("is-now"));
-    if (on) {
-      rollPanel.querySelectorAll(`.sq-roll__cell[data-step="${idx}"], .sq-roll__vel-cell[data-step="${idx}"]`)
-        .forEach(c => c.classList.add("is-now"));
-    }
-  }
+  // The piano roll, open on this track or in the piano view, draws its own
+  // playhead from _nowIdx / _nowSlot (pianoEditor.js).
 }
 
 /**

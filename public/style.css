@@ -24,13 +24,6 @@ html, body, button, input, select, textarea, label, a,
 .sq-step, .sq-pattern__cell, .sq-se__pad {
   touch-action: manipulation;
 }
-/* Piano roll cells: JS owns the gesture (tap to add, drag right to extend
-   length, drag up/down to repitch). `manipulation` here would let the browser
-   pan the horizontally-scrollable .sq-roll__grid and cancel the drag mid-gesture,
-   so notes never grow past length 1 on touch. Users still scroll horizontally
-   by touching the sticky label column or beat ruler row, which keep the
-   default touch-action. Same for the velocity lane. */
-.sq-roll__cell, .sq-roll__vel-cell { touch-action: none; }
 
 html, body {
   margin: 0;
@@ -1283,174 +1276,6 @@ main {
   color: #0b0d10;
   border-color: #8ec7ff;
 }
-.sq-roll__head {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  font-size: 11px;
-  color: var(--fg-dim);
-}
-.sq-roll__head .sq-roll__title { color: #8ec7ff; font-weight: 600; }
-.sq-roll__head .sq-roll__hint { font-size: 10px; color: var(--fg-dim); font-style: italic; }
-.sq-roll__head label { display: inline-flex; align-items: center; gap: 6px; }
-.sq-roll__head .sq-roll__oct-btns { display: inline-flex; gap: 4px; }
-.sq-roll__head .sq-roll__oct-btns button { padding: 2px 8px; font-size: 11px; }
-.sq-roll__head .sq-roll__range { color: var(--fg-dim); font-variant-numeric: tabular-nums; }
-.sq-roll__head .sq-roll__transforms { display: inline-flex; gap: 4px; margin-left: auto; }
-.sq-roll__head .sq-roll__transforms button {
-  padding: 2px 8px;
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-}
-
-.sq-roll__grid {
-  display: grid;
-  grid-template-columns: 42px minmax(0, 1fr);
-  gap: 2px;
-  max-height: 320px;
-  overflow: auto;
-  overscroll-behavior: contain;
-  background: var(--bg-2);
-  border-radius: 4px;
-  padding: 2px;
-}
-.sq-roll__row {
-  display: contents;
-}
-.sq-roll__label {
-  font-size: 10px;
-  color: var(--fg-dim);
-  padding: 2px 6px;
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-  background: var(--bg-3);
-  border-radius: 3px;
-  line-height: 1.4;
-  user-select: none;
-  position: sticky;
-  left: 0;
-  z-index: 2;
-}
-.sq-roll__label { color: var(--note-color, var(--fg-dim)); }
-.sq-roll__label.is-black { color: var(--note-color, var(--fg-dim)); background: var(--bg-2); }
-.sq-roll__label.is-root { color: var(--note-color, #8ec7ff); font-weight: 600; }
-.sq-roll__label.is-micro { color: color-mix(in oklab, var(--fg-dim) 60%, transparent); font-size: 9px; padding-inline: 3px; }
-.sq-roll__cells {
-  display: grid;
-  gap: 1px;
-  min-width: max-content;
-}
-.sq-roll__beat-label {
-  background: transparent;
-  border: none;
-}
-.sq-roll__beat-row {
-  font-size: 10px;
-  color: var(--fg-dim);
-  font-variant-numeric: tabular-nums;
-}
-.sq-roll__beat-cell {
-  text-align: left;
-  padding: 0 2px;
-  line-height: 14px;
-  min-height: 14px;
-}
-.sq-roll__beat-cell.is-beat-start { color: var(--fg); }
-.sq-roll__cell {
-  height: 16px;
-  background: var(--bg-3);
-  border-radius: 2px;
-  cursor: pointer;
-  border: 1px solid transparent;
-  transition: background 40ms linear, border-color 40ms linear;
-  position: relative;
-  font-family: ui-monospace, monospace;
-  font-size: 9px;
-  line-height: 14px;
-  color: #0b0d10;
-  text-align: center;
-  white-space: nowrap;
-  overflow: hidden;
-}
-.sq-roll__cell:hover { background: color-mix(in srgb, var(--row-color, var(--bg-4, #30363d)) 32%, var(--bg-3)); }
-.sq-roll__cell.is-on:hover { background: color-mix(in srgb, var(--note-color, var(--accent)) 88%, #fff 12%); }
-.sq-roll__cell.is-beat { border-left: 1px solid var(--border); }
-.sq-roll__cell.sq-roll__row--black { background: var(--bg-2); }
-.sq-roll__cell.sq-roll__row--micro { background: color-mix(in oklab, var(--bg-3) 70%, var(--bg-2)); }
-.sq-roll__cell.is-on {
-  background: var(--note-color, var(--accent));
-  border-color: var(--note-color, var(--accent));
-  cursor: move;        /* body of a note: drag moves it (step + pitch) */
-}
-.sq-roll__cell.is-on.is-edge { cursor: ew-resize; }   /* head / tail: drag resizes */
-.sq-roll__cell.is-on.is-tail-zone { cursor: ew-resize; }   /* length-1 note: its right sliver */
-/* Multi-step notes: square the adjoining corners and bridge the 1px grid gap so
-   a held note reads as a single continuous bar. */
-.sq-roll__cell.is-on.is-held {
-  border-top-left-radius: 0;
-  border-bottom-left-radius: 0;
-}
-.sq-roll__cell.is-on.is-note-joins-next {
-  border-top-right-radius: 0;
-  border-bottom-right-radius: 0;
-  /* Fill the 1px grid gap to the next column. This has to be a box-shadow on the
-     cell itself — a pseudo-element bridge gets clipped by the cell's own
-     overflow: hidden (which is there to keep note labels inside their column). */
-  box-shadow: 2px 0 0 var(--note-color, var(--accent));
-}
-.sq-roll__cell.is-on.is-chord { background: var(--note-color, #8ec7ff); border-color: var(--note-color, #8ec7ff); }
-.sq-roll__cell.is-on.is-chord.is-note-joins-next { box-shadow: 2px 0 0 var(--note-color, #8ec7ff); }
-.sq-roll__cell.is-now { outline: 1px solid #fff6; }
-
-.sq-roll__vel-lane {
-  display: grid;
-  grid-template-columns: 42px minmax(0, 1fr);
-  gap: 2px;
-  background: var(--bg-2);
-  border-radius: 4px;
-  padding: 2px;
-  overflow-x: auto;
-  overscroll-behavior: contain;
-}
-.sq-roll__vel-spacer {
-  font-size: 10px;
-  color: var(--fg-dim);
-  padding: 2px 6px;
-  text-align: right;
-  background: var(--bg-3);
-  border-radius: 3px;
-  align-self: end;
-  user-select: none;
-  position: sticky;
-  left: 0;
-  z-index: 2;
-}
-.sq-roll__vel-cells {
-  display: grid;
-  gap: 1px;
-  height: 48px;
-  min-width: max-content;
-}
-.sq-roll__vel-cell {
-  background: var(--bg-3);
-  border-radius: 2px;
-  position: relative;
-  cursor: ns-resize;
-  overflow: hidden;
-}
-.sq-roll__vel-cell.is-beat { border-left: 1px solid var(--border); }
-.sq-roll__vel-cell.is-on { background: var(--bg-2); }
-.sq-roll__vel-bar {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: linear-gradient(to top, var(--accent), #8ec7ff);
-  pointer-events: none;
-  min-height: 2px;
-}
-.sq-roll__vel-cell.is-now { outline: 1px solid #fff6; }
-
 .sq-track__fx-panel {
   background: var(--bg-3);
   border: 1px solid var(--border);
@@ -2075,11 +1900,11 @@ body.kbd-recording .sq-track.is-kbd-active { border-color: #e5484d; box-shadow: 
 }
 .sq-step.is-beat { outline: 1px solid rgba(255,255,255,0.06); }
 .sq-step.is-now { border-color: var(--step-now); box-shadow: 0 0 0 1px var(--step-now) inset; }
-/* A nudged note's tick (stepGrid.js's markNudge, on the step grid and the piano
-   roll): where in the step it lands, 50% being on the grid. Divided by the span
-   so a held note's tick sits in its first step. */
-.sq-steps .sq-step.is-on.is-nudged,
-.sq-roll__cell.is-on.is-nudged {
+/* A nudged note's tick (stepGrid.js's markNudge, on the step grid; the piano
+   roll draws a nudged note where it plays instead): where in the step it lands,
+   50% being on the grid. Divided by the span so a held note's tick sits in its
+   first step. */
+.sq-steps .sq-step.is-on.is-nudged {
   --nudge-x: calc((0.5 + var(--nudge, 0)) * 100% / var(--hspan, 1));
   background-image: linear-gradient(to right,
     transparent calc(var(--nudge-x) - 1px), rgba(255,255,255,0.9) calc(var(--nudge-x) - 1px),
@@ -2980,8 +2805,13 @@ body.kbd-recording:not(.sq-playing) .sq-track.is-kbd-active .sq-step.is-cursor {
 
 .euclid-modal { width: min(94vw, 460px); }
 .chance-modal { width: min(94vw, 540px); }
-.sq-roll__modal .sq-roll__head { flex-wrap: wrap; }
-.sq-roll__modal .sq-roll__grid { max-height: calc(80vh - 80px); }
+/* the roll modal hosts the piano editor (pianoEditor.js) on one track: the
+   scroller takes what the window leaves after the toolbar, the velocity lane
+   and the close button */
+.sq-roll__modal { height: 92vh; }
+.sq-roll__modal > .sq-track__roll-panel { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 0; overflow: hidden; }
+.sq-roll__modal .sq-pr__bar, .sq-roll__modal .sq-pr__vel { flex: 0 0 auto; }
+.sq-roll__modal .sq-pr__scroll { flex: 1 1 auto; min-height: 120px; }
 .sq-mod__modal,
 .sq-aut__modal {
   width: min(96vw, 820px);
@@ -4009,29 +3839,6 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not
   .sq-track > * { min-width: 0; }
   .sq-track__roll-panel { min-width: 0; overflow: hidden; }
 
-  /* piano roll: allow horizontal scroll INSIDE the roll-grid only.
-     Sticky labels keep pitch names visible while scrolling steps. */
-  .sq-roll__grid {
-    grid-template-columns: 36px minmax(0, 1fr);
-    max-height: 260px;
-    overflow: auto;
-    overscroll-behavior: contain;
-  }
-  .sq-roll__label {
-    font-size: 9px;
-    padding: 2px 4px;
-    line-height: 1.3;
-    position: sticky;
-    left: 0;
-    z-index: 2;
-  }
-  .sq-roll__cells { min-width: max-content; }
-  .sq-roll__cell { height: 18px; min-width: 30px; }
-  .sq-roll__vel-lane { grid-template-columns: 36px minmax(0, 1fr); }
-  .sq-roll__vel-spacer { position: sticky; left: 0; z-index: 2; }
-  .sq-roll__vel-cells { height: 96px; min-width: max-content; }
-  .sq-roll__vel-cell { min-width: 30px; }
-
   /* ---------- STEP GRID (no horizontal scroll) ---------- */
   /* 16 cols stay; cells are tall to compensate for narrow width. */
   .sq-steps {
@@ -4620,7 +4427,9 @@ body.sq-playing .sq-clip.is-now::after { content: ""; position: absolute; left: 
    keyboard down the left and bar ruler across the top inside one scroller,
    the notes absolutely placed on the field, the velocity stalks under it
    scrolled sideways with it. */
-.sq-piano { max-width: 1600px; margin: 0 auto; padding: 12px 16px; --pr-keys: 66px; --pr-ruler: 40px; }
+.sq-piano { max-width: 1600px; margin: 0 auto; padding: 12px 16px; }
+/* the editor's root, in the view or in a track's roll modal (pianoEditor.js adds the class) */
+.sq-pr { --pr-keys: 66px; --pr-ruler: 40px; --pr-sech: 20px; }
 .sq-pr__empty { color: var(--fg-dim); font-size: 12px; }
 .sq-pr__bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 12px; }
 .sq-pr__bar select { font-size: 12px; }
@@ -4633,7 +4442,8 @@ body.sq-playing .sq-clip.is-now::after { content: ""; position: absolute; left: 
 .sq-pr__nudge button, .sq-pr__len button, .sq-pr__zoom button { padding: 2px 6px; font-size: 11px; min-width: 22px; }
 .sq-pr__loopbtn { display: inline-flex; align-items: center; gap: 4px; }
 .sq-pr__loopbtn svg { width: 14px; height: 14px; }
-.sq-pr__loopbtn[aria-pressed="true"], .sq-pr__followbtn[aria-pressed="true"], .sq-pr__ghostbtn[aria-pressed="true"], .sq-pr__hearbtn[aria-pressed="true"] { background: var(--accent-2); color: #0b0d10; border-color: var(--accent-2); }
+.sq-pr__loopbtn[aria-pressed="true"], .sq-pr__followbtn[aria-pressed="true"], .sq-pr__ghostbtn[aria-pressed="true"], .sq-pr__hearbtn[aria-pressed="true"], .sq-pr__foldbtn[aria-pressed="true"] { background: var(--accent-2); color: #0b0d10; border-color: var(--accent-2); }
+.sq-pr__delbtn:disabled { opacity: 0.4; cursor: default; }
 .sq-pr__warn { color: var(--danger); }
 
 /* the track's card in a window over the roll (openSoundModal) */
@@ -4642,10 +4452,8 @@ body.sq-playing .sq-clip.is-now::after { content: ""; position: absolute; left: 
 .sq-pr__soundmodal .sq-steps { display: none; }
 .sq-pr__soundmodal .sq-panel__modal-close { position: sticky; bottom: 0; padding: 10px; background: var(--accent); color: #0b0d10; border-color: var(--accent); font-weight: 600; min-height: 40px; }
 
-.sq-pr__scroll {
-  overflow: auto; height: max(380px, calc(100vh - var(--sq-topbar-h, 0px) - 260px));
-  border: 1px solid var(--border); border-radius: 6px 6px 0 0; background: var(--bg); overscroll-behavior: contain;
-}
+.sq-pr__scroll { overflow: auto; border: 1px solid var(--border); border-radius: 6px 6px 0 0; background: var(--bg); overscroll-behavior: contain; }
+.sq-piano .sq-pr__scroll { height: max(380px, calc(100vh - var(--sq-topbar-h, 0px) - 260px)); }
 .sq-pr__canvas { display: grid; position: relative; width: max-content; user-select: none; -webkit-user-select: none; }
 .sq-pr__corner { position: sticky; top: 0; left: 0; z-index: 6; background: var(--bg-2); border-right: 1px solid var(--border); border-bottom: 1px solid var(--border);
   font-size: 10px; color: var(--track-color); padding: 4px 6px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; box-sizing: border-box; }
@@ -4653,22 +4461,22 @@ body.sq-playing .sq-clip.is-now::after { content: ""; position: absolute; left: 
 /* the computer keyboard's reach (octBand) */
 .sq-pr__oct { position: absolute; right: 0; width: 5px; z-index: 2; background: var(--accent); opacity: 0.85; pointer-events: auto; border-radius: 2px 0 0 2px; }
 .sq-pr__oct span { position: absolute; bottom: 0; right: 7px; font-size: 9px; line-height: 1; padding: 2px 3px; border-radius: 3px; background: var(--accent); color: #0b0d10; white-space: nowrap; pointer-events: none; }
-.sq-pr__ruler { position: sticky; top: 0; z-index: 5; background: var(--bg-2); border-bottom: 1px solid var(--border); overflow: hidden; }
+.sq-pr__ruler { position: sticky; top: 0; z-index: 5; background: var(--bg-2); border-bottom: 1px solid var(--border); overflow: hidden; touch-action: none; }
 /* a pattern in the ruler: its header on top, its bars under it */
 .sq-pr__sec { position: absolute; top: 0; bottom: 0; border-left: 2px solid var(--fg-dim); box-sizing: border-box; overflow: hidden; }
 .sq-pr__sec.is-now { border-left-color: var(--track-color); background: color-mix(in oklab, var(--track-color) 10%, transparent); }
-.sq-pr__sec-h { position: absolute; top: 0; left: 0; right: 0; height: 20px; display: flex; align-items: center; gap: 3px; padding: 0 4px; font-size: 10px; color: var(--fg-dim); white-space: nowrap; border-bottom: 1px solid var(--border); }
+.sq-pr__sec-h { position: absolute; top: 0; left: 0; right: 0; height: var(--pr-sech); display: flex; align-items: center; gap: 3px; padding: 0 4px; font-size: 10px; color: var(--fg-dim); white-space: nowrap; border-bottom: 1px solid var(--border); }
 .sq-pr__sec-h button { padding: 0 5px; font-size: 10px; min-width: 0; height: 16px; line-height: 14px; }
 .sq-pr__sec-play { color: var(--fg); font-weight: 600; }
 .sq-pr__sec.is-now .sq-pr__sec-play { background: var(--track-color); color: #0b0d10; border-color: var(--track-color); }
 .sq-pr__sec-len { margin-right: 2px; }
 .sq-pr__sec-meter { height: 16px; padding: 0 2px; font-size: 10px; min-width: 0; width: auto; background: transparent; color: var(--fg-dim); border: 1px solid var(--border); border-radius: 3px; cursor: pointer; }
 .sq-pr__sec-meter:hover, .sq-pr__sec-meter:focus { color: var(--fg); background: var(--bg-2); }
-.sq-pr__rbar { position: absolute; top: 20px; bottom: 0; border-left: 1px solid var(--fg-dim); box-sizing: border-box; padding: 3px 4px; font-size: 10px; color: var(--fg);
+.sq-pr__rbar { position: absolute; top: var(--pr-sech); bottom: 0; border-left: 1px solid var(--fg-dim); box-sizing: border-box; padding: 3px 4px; font-size: 10px; color: var(--fg);
   background-image: linear-gradient(to right, var(--border) 1px, transparent 1px); background-size: calc(var(--sw) * var(--beat)) 100%; background-position: calc(var(--sw) * var(--beat) - 1px) 0; }
 
 /* the keyboard: white keys, shorter black ones over them, C named */
-.sq-pr__keys { position: sticky; left: 0; z-index: 4; background: #d9d6cc; border-right: 1px solid var(--border); }
+.sq-pr__keys { position: sticky; left: 0; z-index: 4; background: #d9d6cc; border-right: 1px solid var(--border); touch-action: none; }
 .sq-pr__key { position: absolute; left: 0; right: 0; box-sizing: border-box; background: #ecebe4; border-bottom: 1px solid #b9b6ac;
   font-size: 9px; line-height: 1; color: #555; display: flex; align-items: flex-end; justify-content: flex-end; padding: 0 4px 1px 0; cursor: pointer; }
 .sq-pr__key.is-black { right: 38%; background: #24262c; border-bottom-color: #111; border-radius: 0 3px 3px 0; z-index: 1; }
@@ -4679,6 +4487,10 @@ body.sq-playing .sq-clip.is-now::after { content: ""; position: absolute; left: 
 
 /* the field: a row per pitch, the lines over them, then ghosts, chord tones, notes */
 .sq-pr__field { position: relative; overflow: hidden; touch-action: none; cursor: crosshair; }
+/* the pan tool: a finger scrolls the roll natively, a pointer drags it */
+.sq-pr__field.is-pan { touch-action: pan-x pan-y; cursor: grab; }
+.sq-pr__field.is-pan .sq-pr__note { cursor: grab; }
+.sq-pr__field.is-pan .sq-pr__edge { cursor: grab; }
 .sq-pr__row { position: absolute; left: 0; right: 0; background: #1c1f26; border-bottom: 1px solid #15171c; box-sizing: border-box; }
 .sq-pr__row.is-black { background: #16181e; }
 .sq-pr__row.is-c { border-bottom-color: #2c3039; }
@@ -4693,7 +4505,7 @@ body.sq-playing .sq-clip.is-now::after { content: ""; position: absolute; left: 
 .sq-pr__lines.is-alt { background-color: rgb(255 255 255 / 0.025); }
 /* the loop of patterns: a band in the ruler's header row, a shade over the field */
 .sq-pr__sec-h { cursor: col-resize; }
-.sq-pr__loop { position: absolute; top: 0; height: 20px; pointer-events: none; z-index: 1; box-sizing: border-box; opacity: 0.45;
+.sq-pr__loop { position: absolute; top: 0; height: var(--pr-sech); pointer-events: none; z-index: 1; box-sizing: border-box; opacity: 0.45;
   background: color-mix(in oklab, var(--accent-2) 30%, transparent); border-left: 2px solid var(--accent-2); border-right: 2px solid var(--accent-2); }
 .sq-pr__loop.is-on { opacity: 1; }
 .sq-pr__loopshade { position: absolute; top: 0; bottom: 0; pointer-events: none; opacity: 0.4;
@@ -4736,7 +4548,27 @@ body.view-piano #scale-fold-wrap { display: inline-flex; }
 .sq-pr__stalk::before { content: ""; position: absolute; top: -4px; left: -5px; width: 6px; height: 6px; border-radius: 50%;
   border: 2px solid var(--track-color); background: var(--bg-2); }
 
+/* the piano editor under a finger: a narrower keyboard, a header row and
+   toolbar at a finger's size, a wider tail to grab a note's end by. The roll
+   modal is the piano roll on a phone, and a touchscreen laptop in the piano
+   view wants the same room */
+@media (max-width: 768px), (pointer: coarse) {
+  .sq-pr { --pr-keys: 44px; --pr-ruler: 54px; --pr-sech: 30px; }
+  .sq-pr__bar { gap: 6px; }
+  .sq-pr__bar > button, .sq-pr__bar select, .sq-pr__tools button, .sq-pr__nudge button, .sq-pr__zoom button { min-height: 36px; }
+  .sq-pr__tools button { padding: 6px 8px; }
+  .sq-pr__nudge button, .sq-pr__zoom button { min-width: 32px; }
+  .sq-pr__sec-h { gap: 5px; }
+  .sq-pr__sec-h button, .sq-pr__sec-meter { height: 26px; line-height: 24px; font-size: 11px; padding: 0 8px; }
+  .sq-pr__edge { width: max(12px, min(22px, 40%)); }
+  .sq-pr__vel { height: 84px; }
+}
 @media (max-width: 768px) {
+  /* a phone's toolbar: the tools by their glyphs, the pattern's length readout
+     folded into its buttons, so the roll keeps the height */
+  .sq-pr__tools button span { display: none; }
+  .sq-pr__tools button { padding: 6px 10px; font-size: 15px; }
+  .sq-pr__sec-len { display: none; }
   /* desktop only in this cut: the groove view stands whatever was remembered */
   #view-switch, .sq-clips, .sq-arrange, .sq-piano { display: none !important; }
   body.view-clips #tracks, body.view-arrange #tracks, body.view-piano #tracks { display: grid; }

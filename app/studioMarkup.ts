@@ -930,7 +930,7 @@ ${ORACLE_PANEL}
           <button class="track-semi-up sq-btn--ghost" type="button" title="shift every step up a semitone">semi +</button>
         </div>
         <div class="sq-panel__btn-group">
-          <button class="sq-track__roll sq-btn--ghost" aria-pressed="false" title="piano roll: click cells to place notes per step">roll</button>
+          <button class="sq-track__roll sq-btn--ghost" aria-pressed="false" title="piano roll: draw, drag and paint this pattern's notes (the piano view's editor, on this track)">roll</button>
           <button class="sq-track__filter sq-btn--ghost" aria-pressed="false" title="filter">filter</button>
           <button class="sq-track__env sq-btn--ghost" aria-pressed="false" title="envelope → cutoff">env</button>
           <button class="sq-track__fx sq-btn--ghost" aria-pressed="false" title="fx rack">fx</button>

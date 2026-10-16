@@ -156,15 +156,62 @@ function brightness(a, from) {
   return 10 * Math.log10(hi / tot);
 }
 
-test("tuning: within a cent across four octaves, stiff or not", () => {
+/** Where the partial nearest n*f0 actually sits, in cents off it. */
+function partialOff(a, f0, n, from, to, span = 80) {
+  let best = 0, bc = 0;
+  for (let c = -span; c <= span; c += 0.5) { const m = tone_at(a, n * f0 * 2 ** (c / 1200), from, to); if (m > best) { best = m; bc = c; } }
+  return bc;
+}
+
+test("tuning: the fundamental within a cent across four octaves, stiff or not", () => {
+  // The fundamental's own frequency, not an autocorrelation pitch: a stiff
+  // string's upper partials run sharp by design (below), and an
+  // autocorrelation reads that stretch as the whole note being sharp.
   for (const stiff of [0, 0.25, 0.5]) {
     for (const midi of [40, 52, 64, 76, 88]) {
       const g = rig({ drive: 0, sustain: 0.8, stiff });
       note(g, midi, 0, 3);
       const a = render(g, 1.2);
-      const off = centsOff(a, 440 * 2 ** ((midi - 69) / 12), sec(0.5));
+      const off = partialOff(a, 440 * 2 ** ((midi - 69) / 12), 1, sec(0.4), sec(1.0), 30);
       assert.ok(Math.abs(off) < 1.5, `midi ${midi} stiff ${stiff}: ${off.toFixed(2)} cents`);
     }
+  }
+});
+
+test("a wound string's partials run sharp, a plain string's barely: inharmonicity by string", () => {
+  // Partial n sits at n*f0*sqrt(1 + B*n*n). At the default stiffness the low
+  // E is a wound string at B ~ 2.5e-4 (its 8th partial ~14 cents sharp) and
+  // the high E a plain one at B ~ 2.5e-5 (under 2 cents on the 8th). The two
+  // fixed allpasses this replaced left every partial dead harmonic.
+  const want = (B, n) => 1200 * Math.log2(Math.sqrt(1 + B * n * n));
+  const lowE = rig({ drive: 0, sustain: 1, stiff: 0.25, tone: 1 }); note(lowE, 40, 0, 3);
+  const a = render(lowE, 1);
+  for (const n of [4, 6, 8, 10]) {
+    const got = partialOff(a, 82.41, n, sec(0.1), sec(0.6));
+    assert.ok(Math.abs(got - want(2.5e-4, n)) < 5, `low E partial ${n}: ${got.toFixed(1)} cents sharp, law says ${want(2.5e-4, n).toFixed(1)}`);
+  }
+  const highE = rig({ drive: 0, sustain: 1, stiff: 0.25, tone: 1 }); note(highE, 64, 0, 3);
+  const b = render(highE, 1);
+  const h8 = partialOff(b, 329.63, 8, sec(0.1), sec(0.6));
+  assert.ok(h8 > -1 && h8 < 4, `high E partial 8: ${h8.toFixed(1)} cents (plain string, nearly harmonic)`);
+  const stiff0 = rig({ drive: 0, sustain: 1, stiff: 0, tone: 1 }); note(stiff0, 40, 0, 3);
+  const c = render(stiff0, 1);
+  assert.ok(Math.abs(partialOff(c, 82.41, 8, sec(0.1), sec(0.6))) < 3, "stiff 0 is a mathematical string");
+});
+
+test("a note decays in two stages: fast at first, then the long ring", () => {
+  // Two polarizations: the plane the pickup senses is lost into the bridge
+  // faster than the plane across it. One line gave one exponential — the
+  // envelope fell in a dead straight line from the first 50ms to the last.
+  for (const sustain of [0.4, 0.8]) {
+    const g = rig({ drive: 0, sustain, bloom: 0, stiff: 0 });
+    note(g, 45, 0, 8);
+    const a = render(g, 4);
+    const lvl = (t) => db(rms(a, sec(t), sec(t + 0.05)));
+    const early = (lvl(0.05) - lvl(0.35)) / 0.3;      // dB/s over the first stage
+    const late = (lvl(1.5) - lvl(2.5)) / 1.0;         // dB/s on the tail
+    assert.ok(early > late * 1.4, `sustain ${sustain}: first stage ${early.toFixed(0)}dB/s, tail ${late.toFixed(0)}dB/s`);
+    assert.ok(late > 2, `sustain ${sustain}: the tail still decays (${late.toFixed(1)}dB/s)`);
   }
 });
 
@@ -192,9 +239,12 @@ test("the sustain slider is a T60 in seconds", () => {
 
 test("the attack is the same note twice, not a fresh roll of the dice", () => {
   // The noise burst made identical notes differ by 3dB in their first 100ms.
+  // What is left is deliberate: a few percent of pick position and hardness
+  // per note, under a decibel, so a run of equal notes is not one sample
+  // eight times.
   const levels = [];
   for (let k = 0; k < 5; k++) { const g = rig({ drive: 0 }); note(g, 64, 0, 1); levels.push(db(rms(render(g, 0.3), 0, sec(0.1)))); }
-  assert.ok(Math.max(...levels) - Math.min(...levels) < 0.3, `attack levels: ${levels.map(l => l.toFixed(2)).join(" ")}`);
+  assert.ok(Math.max(...levels) - Math.min(...levels) < 0.8, `attack levels: ${levels.map(l => l.toFixed(2)).join(" ")}`);
 });
 
 test("harder is louder AND brighter", () => {
@@ -235,10 +285,14 @@ test("a hard pluck starts sharp and settles", () => {
 
 test("the pickup's comb sits at its position: a pickup at 1/8 notches the 8th harmonic", () => {
   // It was at 2p, which put this notch on the 4th.
-  const g = rig({ drive: 0, pkup: 0.125, pick: 0.3, sustain: 1, tone: 1, stiff: 0 });
+  // The pick at 0.4 combs the 5th and 10th and nothing else this reads (at
+  // 0.3 it sat on the 7th, next door to the 8th being looked for).
+  const g = rig({ drive: 0, pkup: 0.125, pick: 0.4, sustain: 1, tone: 1, stiff: 0 });
   note(g, 45, 0, 3);
   const a = render(g, 1);
-  const h = (n) => db(tone_at(a, 110 * n, sec(0.1), sec(0.6)));
+  // A short window: the two polarizations beat at n times their split on
+  // partial n, so a half-second read of the 7th can land on a null of its own.
+  const h = (n) => db(tone_at(a, 110 * n, sec(0.05), sec(0.25)));
   // The tap is an integer sample, so the notch lands near the 8th rather than
   // on it; what is asserted is a dip there and none at the 4th.
   const dip = (n) => (h(n - 1) + h(n + 1)) / 2 - h(n);
@@ -258,12 +312,18 @@ test("a chord is a strum: six notes at one instant land one after another", () =
   const g = rig({ drive: 0, sustain: 0.6 });
   for (const n of [40, 47, 52, 56, 59, 64]) note(g, n, 0, 1);
   const a = render(g, 0.2);
-  // First sound within a millisecond, and the chord's full level only after
-  // the last string has been reached (5 x 4ms).
+  const one = rig({ drive: 0, sustain: 0.6 });
+  note(one, 40, 0, 1);
+  const b = render(one, 0.2);
+  // First sound within a millisecond; for its first 4ms the chord is the
+  // first string alone; and the chord's full level only after the last
+  // string has been reached (5 x 4ms).
   let first = -1; for (let i = 0; i < a.length; i++) if (Math.abs(a[i]) > 1e-4) { first = i; break; }
   assert.ok(first >= 0 && first < sec(0.001), `first sound at ${first}`);
-  const early = rms(a, 0, sec(0.004)), full = rms(a, sec(0.02), sec(0.03));
-  assert.ok(full > early * 1.5, `early ${early.toFixed(3)} full ${full.toFixed(3)}`);
+  const early = rms(a, 0, sec(0.004)), earlyOne = rms(b, 0, sec(0.004));
+  assert.ok(Math.abs(db(early) - db(earlyOne)) < 0.5, `the first 4ms is one string: ${early.toFixed(3)} vs ${earlyOne.toFixed(3)} alone`);
+  const full = rms(a, sec(0.02), sec(0.03)), fullOne = rms(b, sec(0.02), sec(0.03));
+  assert.ok(full > fullOne * 1.5, `full ${full.toFixed(3)} vs one string ${fullOne.toFixed(3)}`);
 });
 
 test("bloom holds a note up without running away, and release still ends it", () => {

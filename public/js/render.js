@@ -34,7 +34,6 @@ import {
 } from "./repeat.js";
 import { patternMeter, redetectDrumKit, stepsPerBarForMeter, stepsPerBeatForMeter } from "./meter.js";
 import { refreshHexopAlgorithm, setEngineKey, setParam, updateGranularSpeedEnabled, updatePlaitsControlsVisibility, refreshVoxLyric } from "./params.js";
-import { bestRollViewOct } from "./pianoRoll.js";
 import { applyCompressorConfig, EQ_BANDS, refreshCompSourceDropdowns, refreshNoiseBeds, refreshOutputSelects, releaseSilencedTracks, setEQ, setFilter, setTrackOutput } from "./signal.js";
 import { ANALOG_FILTER_INFO, ANALOG_FILTER_TYPES } from "./soundDefaults.js";
 import { state, trackSlot } from "./state.js";
@@ -1444,9 +1443,7 @@ export function renderTrack(t) {
   };
   bindModalOpen(".sq-track__mod",    openModAsModal,    "_modModal");
   bindModalOpen(".track-aut",    openAutAsModal,    "_autModal");
-  bindModalOpen(".sq-track__roll",   openRollAsModal,   "_rollModal", () => {
-    if (t.steps.some(s => s)) t.rollViewOct = bestRollViewOct(t);
-  });
+  bindModalOpen(".sq-track__roll",   openRollAsModal,   "_rollModal");
   bindModalOpen(".sq-track__filter", openFilterAsModal, "_filterModal");
   bindModalOpen(".sq-track__env",    openEnvAsModal,    "_envModal");
   bindModalOpen(".sq-track__fx",     openFxAsModal,     "_fxModal");
