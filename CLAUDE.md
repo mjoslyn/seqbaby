@@ -2626,8 +2626,10 @@ since the same columns are narrower there and a finger wants taller rows.
   gesture under way and redrawing from the pattern, so nothing half-dragged
   is written), a finger held on a note for `LONG_PRESS_MS` opens its step
   editor (the right-click), a note's resize edge is a finger wide
-  (`edgeW`), the drag threshold is wider, and a `delete` button on the
-  toolbar stands in for the key. The keys and the ruler are
+  (`edgeW`), the drag threshold is wider, a `delete` button on the
+  toolbar stands in for the key, and `‹ › ▲ ▼` scroll buttons
+  (`navScroll`, most of a page at a time, shown under the touch query
+  only) move about where there is no scrollbar and one finger draws. The keys and the ruler are
   `touch-action: none`, since both are gestures. The modal fills the
   window's height and the scroller takes what the toolbar leaves (flex,
   style.css); on a phone the tools show their glyphs alone.
