@@ -793,8 +793,8 @@ const GUITAR_TONES = {
   },
   "funk clean": {
     d: "bridge single coil into a clean amp with the mids pulled out, picked hard and short",
-    drive: 0.22, tone: 0.8, bloom: 0.05, sustain: 0.18,
-    p: { pick: 0.08, pnoise: 0.9, stiff: 0.35, pkup: 0.05, mute: 0.3,
+    drive: 0.22, tone: 0.8, bloom: 0.05, sustain: 0.3,
+    p: { pick: 0.08, pnoise: 0.8, stiff: 0.35, pkup: 0.05, mute: 0.2,
          bass: 0.35, mid: 0.3, treb: 0.75, pres: 0.6, mast: 0.45, sag: 0.2,
          mic: 0.65, trem: 0, tremr: 0.4, sprg: 0.1,
          amp: "clean", cab: "1x12", pkupt: "single", tremw: "sine" },
