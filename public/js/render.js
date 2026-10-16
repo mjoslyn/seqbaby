@@ -2,7 +2,7 @@ import { AUTOMATION_KEYS, AUTOMATION_TARGETS, canAutomate } from "./automation.j
 import { canSavePatches, engineByKey, getPatchConfig, populateEngineSelect, savePatch } from "./catalog.js";
 import { applyTrackPatch, serializeTrackPatch } from "./session.js";
 import { FX_STAGE_LABELS, FX_STAGE_LEVEL_KEY, FX_STAGE_NEUTRAL, LFO_DIVS, fxChainOrder, fxInstanceIds, autoLabel, baseModKey, fxInstanceAutoKeys, fxStageLevel, fxStageOf, fxStageOfModKey, isFxInstanceId, LFO_KEYS, lfoDivIndex, lfoLabel, rateToSlider, sliderToRate } from "./constants.js";
-import { showInputDialog, showSavedPatchPicker } from "./dialogs.js";
+import { showConfirmDialog, showInputDialog, showSavedPatchPicker } from "./dialogs.js";
 import { upgradeEngineSelect } from "./enginePicker.js";
 import { PHONE_MQ, isMobileDevice, setStatus } from "./dom.js";
 import { HEXOP_ALG_LABELS, HEXOP_DEFAULTS, HEXOP_NUM_KEYS, HEXOP_PRESET_NAMES, HEXOP_SEL_KEYS, hexopPreset } from "./hexop.js";
@@ -19,7 +19,7 @@ import { euclideanRhythm, refreshEuclidUI, renderEuclidPanel, wireEuclidPanel } 
 import { refreshChanceUI, renderChancePanel, wireChancePanel } from "./chance.js";
 import { randomizeMelody, randomizeTimbre } from "./generate.js";
 import { GUITAR_DEFAULTS, GUITAR_NUM_KEYS, GUITAR_SEL_KEYS, GUITAR_TONE_NAMES, guitarTone, guitarToneDescription } from "./guitar.js";
-import { ICON_CHANCE, ICON_CLEAR, ICON_DICE, ICON_EUCLID, ICON_FILTER, ICON_FX, ICON_LEN_HALF, ICON_LEN_PLUS1, ICON_LOAD, ICON_ROLL, ICON_SAVE, ICON_SLIDERS, ICON_WAV, ICON_AUT, ICON_EQ, ICON_INSTRUMENT, ICON_MOD, ICON_SEMI_DOWN, ICON_SEMI_UP, ICON_SHIFT_LEFT, ICON_SHIFT_RIGHT } from "./icons.js";
+import { ICON_CHANCE, ICON_CLEAR, ICON_DICE, ICON_EUCLID, ICON_FILTER, ICON_FX, ICON_LEN_HALF, ICON_LEN_PLUS1, ICON_LOAD, ICON_ROLL, ICON_SAVE, ICON_SLIDERS, ICON_WAV, ICON_AUT, ICON_EQ, ICON_INSTRUMENT, ICON_MOD, ICON_SEMI_DOWN, ICON_SEMI_UP, ICON_SHIFT_LEFT, ICON_SHIFT_RIGHT, ICON_REMOVE } from "./icons.js";
 import { refreshKnobRange, setKnobReadout, upgradeKnobs } from "./knob.js";
 import { canModulate, freshLfoEntry, lfoBipolar, lfoEuclid, lfoPhase, lfoRateLabel, syncLFO, trackLfoKeys } from "./lfo.js";
 import { autoOwns, fxShown, modOwns, refreshPanelBadges, refreshParamIndicators, trackControl } from "./paramTargets.js";
@@ -1546,7 +1546,21 @@ export function renderTrack(t) {
   // mobile shows the icon (see the roll rules in the mobile media block)
   const rollBtn = node.querySelector(".sq-track__roll");
   if (rollBtn) rollBtn.innerHTML = `${ICON_ROLL}<span class="sq-btn__label">roll</span>`;
-  node.querySelector(".sq-track__remove").addEventListener("click", () => removeTrack(t));
+  // remove: icon + label like clear (text on desktop, icon over caption on a
+  // phone, where it sits in the head just before clear), and it asks first.
+  // Undo brings a track back, but one tap on a 50px square beside clear is
+  // not the place to find that out.
+  const removeBtn = node.querySelector(".sq-track__remove");
+  removeBtn.innerHTML = `${ICON_REMOVE}<span class="sq-btn__label">remove</span>`;
+  removeBtn.addEventListener("click", async () => {
+    const name = t.name?.trim() || "this track";
+    const ok = await showConfirmDialog({
+      title: `remove ${name}?`,
+      body: "the track, its patterns and its sound go. undo brings it back until the tab closes.",
+      confirmLabel: "remove",
+    });
+    if (ok && state.tracks.includes(t)) removeTrack(t);
+  });
   const dupBtn = node.querySelector(".sq-track__dup");
   if (dupBtn) dupBtn.addEventListener("click", () => duplicateTrack(t));
   node.querySelector(".sq-track__copy")?.addEventListener("click", () => copyTrackPattern(t));
