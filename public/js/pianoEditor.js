@@ -476,6 +476,7 @@ export function createPianoEditor(opts) {
         ${chrome.trackPicker ? `<select class="sq-pr__track" data-act="track" title="the track being edited (the computer keyboard plays it too)" aria-label="track">${trackOpts}</select>` : ""}
         <span class="sq-pr__tools" role="group" aria-label="tool">${TOOLS.map(([k, label, title]) =>
           `<button type="button" data-tool="${k}" aria-pressed="${pref.tool === k}" aria-label="${k}" title="${esc(title)}">${label.slice(0, label.indexOf(" "))} <span>${label.slice(label.indexOf(" ") + 1)}</span></button>`).join("")}</span>
+        <span class="sq-pr__nav" role="group" aria-label="scroll the roll" title="scroll the roll: back and forward across, up and down the keys (a phone's way to move about; two fingers or the pan tool do too)"><button type="button" class="sq-btn--ghost" data-act="nav-l" aria-label="scroll back">‹</button><button type="button" class="sq-btn--ghost" data-act="nav-r" aria-label="scroll forward">›</button><button type="button" class="sq-btn--ghost" data-act="nav-u" aria-label="scroll up">▲</button><button type="button" class="sq-btn--ghost" data-act="nav-d" aria-label="scroll down">▼</button></span>
         <label class="sq-pr__snap" title="where notes land and how far they move, on each pattern's own grid">snap <select data-act="snap">${SNAPS.map(([k, l]) =>
           `<option value="${k}"${pref.snap === k ? " selected" : ""}>${l}</option>`).join("")}</select></label>
         <span class="sq-pr__nudge" title="nudge: move the selected notes off the grid, early or late, by 1/24 of a step (shift-click: a quarter step). 0 puts them back on it. alt + ← → does the same">nudge<button type="button" class="sq-btn--ghost" data-act="nudge-" aria-label="nudge earlier">‹</button><button type="button" class="sq-btn--ghost" data-act="nudge0" aria-label="back on the grid">0</button><button type="button" class="sq-btn--ghost" data-act="nudge+" aria-label="nudge later">›</button></span>
@@ -804,6 +805,7 @@ export function createPianoEditor(opts) {
       return;
     }
     if (act === "del") { if (t) deleteSelection(t); return; }
+    if (act.startsWith("nav-")) { navScroll(act[4]); return; }
     if (act === "ghosts") { pref.ghosts = !pref.ghosts; savePref(); repaintAll(); render(); return; }
     if (act === "fold") { if (t) { scrollMem.delete(t.id); keepMem = true; } setFold(!pref.fold); render(); return; }
     if (act === "hear") {
@@ -854,6 +856,25 @@ export function createPianoEditor(opts) {
     if ((state.patternRepeats[slot] ?? 1) === oldBars) state.patternRepeats[slot] = Math.max(1, Math.min(16, newBars));
     repaintOthers(api, t);
     render();
+  }
+
+  /**
+   * The toolbar's scroll buttons: most of a page across or down. A phone has
+   * no scrollbar and one finger draws, so these are how to move about there
+   * (with two fingers and the pan tool). A press is a scroll by hand, so
+   * follow lets go as it does for one.
+   */
+  function navScroll(dir) {
+    const sc = root.querySelector(".sq-pr__scroll");
+    if (!sc) return;
+    const keysW = root.querySelector(".sq-pr__keys")?.offsetWidth || 0;
+    const rulerH = root.querySelector(".sq-pr__ruler")?.offsetHeight || 0;
+    const dx = Math.max(SW() * 4, Math.round((sc.clientWidth - keysW) * 0.8));
+    const dy = Math.max(RH() * 4, Math.round((sc.clientHeight - rulerH) * 0.8));
+    const by = { l: [-dx, 0], r: [dx, 0], u: [0, -dy], d: [0, dy] }[dir];
+    if (!by) return;
+    try { sc.scrollBy({ left: by[0], top: by[1], behavior: "smooth" }); }
+    catch { sc.scrollLeft += by[0]; sc.scrollTop += by[1]; }
   }
 
   function deleteSelection(t) {
