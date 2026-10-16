@@ -209,6 +209,7 @@ export function createPianoEditor(opts) {
   let pinch = null;
   const touches = new Map();       // pointerId -> {x, y} of every touch pointer down on the root
   let soundModal = null;
+  let moreOpen = false;            // the phone's `⋯` panel (the secondary buttons) is open
 
   // The pitches drawn as rows, top down: every semitone, or with "scale only"
   // on (and a scale switched on) only the scale's, FL's fold. Rebuilt by each
@@ -474,14 +475,20 @@ export function createPianoEditor(opts) {
 
     root.innerHTML = `
       <div class="sq-pr__bar">
+        <div class="sq-pr__bar-main">
         ${chrome.trackPicker ? `<select class="sq-pr__track" data-act="track" title="the track being edited (the computer keyboard plays it too)" aria-label="track">${trackOpts}</select>` : ""}
         <span class="sq-pr__tools" role="group" aria-label="tool">${TOOLS.map(([k, label, title]) =>
           `<button type="button" data-tool="${k}" aria-pressed="${pref.tool === k}" aria-label="${k}" title="${esc(title)}">${label.slice(0, label.indexOf(" "))} <span>${label.slice(label.indexOf(" ") + 1)}</span></button>`).join("")}</span>
         <span class="sq-pr__nav" role="group" aria-label="scroll the roll" title="scroll the roll: back and forward across, up and down the keys (a phone's way to move about; two fingers or the pan tool do too)"><button type="button" class="sq-btn--ghost" data-act="nav-l" aria-label="scroll back">‹</button><button type="button" class="sq-btn--ghost" data-act="nav-r" aria-label="scroll forward">›</button><button type="button" class="sq-btn--ghost" data-act="nav-u" aria-label="scroll up">▲</button><button type="button" class="sq-btn--ghost" data-act="nav-d" aria-label="scroll down">▼</button></span>
+        <button type="button" class="sq-pr__delbtn sq-btn--ghost sq-btn--danger" data-act="del" ${sel.size ? "" : "disabled"} title="delete the selected notes (the delete key does too)">delete</button>
+        <button type="button" class="sq-pr__morebtn sq-btn--ghost" data-act="more" aria-pressed="${moreOpen}" aria-expanded="${moreOpen}" aria-label="more" title="more: snap, nudge, follow, hear, ghosts, in key, zoom">⋯</button>
+        ${gen ? `<span class="sq-pr__warn">live ${gen} is on: it decides the rhythm, not these notes</span>` : ""}
+        ${t._clipOff ? `<span class="sq-pr__warn">this track's clip is stopped</span>` : ""}
+        </div>
+        <div class="sq-pr__bar-more${moreOpen ? " is-open" : ""}">
         <label class="sq-pr__snap" title="where notes land and how far they move, on each pattern's own grid">snap <select data-act="snap">${SNAPS.map(([k, l]) =>
           `<option value="${k}"${pref.snap === k ? " selected" : ""}>${l}</option>`).join("")}</select></label>
         <span class="sq-pr__nudge" title="nudge: move the selected notes off the grid, early or late, by 1/24 of a step (shift-click: a quarter step). 0 puts them back on it. alt + ← → does the same">nudge<button type="button" class="sq-btn--ghost" data-act="nudge-" aria-label="nudge earlier">‹</button><button type="button" class="sq-btn--ghost" data-act="nudge0" aria-label="back on the grid">0</button><button type="button" class="sq-btn--ghost" data-act="nudge+" aria-label="nudge later">›</button></span>
-        <button type="button" class="sq-pr__delbtn sq-btn--ghost sq-btn--danger" data-act="del" ${sel.size ? "" : "disabled"} title="delete the selected notes (the delete key does too)">delete</button>
         ${chrome.sound ? `<button type="button" class="sq-pr__sound" data-act="sound" title="sound: this track's instrument, effects, filter, modulation and automation lanes, in a window over the roll (its own track card, so every control is the one in the groove view)">sound</button>` : ""}
         ${loopBtn}
         <button type="button" class="sq-pr__followbtn" data-act="follow" aria-pressed="${!!pref.follow}" title="follow: keep the playhead in view while it plays (scrolling by hand switches it off)">follow</button>
@@ -490,8 +497,7 @@ export function createPianoEditor(opts) {
         ${chrome.fold ? `<button type="button" class="sq-pr__foldbtn" data-act="fold" aria-pressed="${!!pref.fold}" ${scale ? "" : "disabled"} title="in key: fold the roll to the scale's rows, so every note drawn is in key and dragging up or down moves by scale degree. Switch the scale on to use it">in key</button>` : ""}
         <span class="sq-pr__zoom" title="zoom (ctrl/⌘-wheel zooms across; two fingers pinch)">↔<button type="button" class="sq-btn--ghost" data-act="zx-" aria-label="zoom out across">−</button><button type="button" class="sq-btn--ghost" data-act="zx+" aria-label="zoom in across">+</button>
           ↕<button type="button" class="sq-btn--ghost" data-act="zy-" aria-label="shorter rows">−</button><button type="button" class="sq-btn--ghost" data-act="zy+" aria-label="taller rows">+</button></span>
-        ${gen ? `<span class="sq-pr__warn">live ${gen} is on: it decides the rhythm, not these notes</span>` : ""}
-        ${t._clipOff ? `<span class="sq-pr__warn">this track's clip is stopped</span>` : ""}
+        </div>
       </div>
       <div class="sq-pr__scroll">
         <div class="sq-pr__canvas" style="--sw:${sw}px;--rh:${rh}px;--track-hue:${hue};--track-color:${color};grid-template-columns:var(--pr-keys) ${W}px;grid-template-rows:var(--pr-ruler) ${H}px">
@@ -808,6 +814,13 @@ export function createPianoEditor(opts) {
     }
     if (act === "del") { if (t) deleteSelection(t); return; }
     if (act.startsWith("nav-")) { navScroll(act[4]); return; }
+    if (act === "more") {
+      moreOpen = !moreOpen;
+      root.querySelector(".sq-pr__bar-more")?.classList.toggle("is-open", moreOpen);
+      b.setAttribute("aria-pressed", String(moreOpen));
+      b.setAttribute("aria-expanded", String(moreOpen));
+      return;
+    }
     if (act === "ghosts") { pref.ghosts = !pref.ghosts; savePref(); repaintAll(); render(); return; }
     if (act === "fold") { if (t) { scrollMem.delete(t.id); keepMem = true; } setFold(!pref.fold); render(); return; }
     if (act === "hear") {
