@@ -3805,7 +3805,8 @@ line — which is the only way to put a break at a chosen point in a wrapping ro
 without adding a wrapper to the markup, and the track head's children are
 queried from a dozen places by their position in it. `order` places it, and the
 head's children carry explicit orders around it: name / engine / len, then vol
-beside solo / mute / p-lock, then the synth row, then the generator buttons.
+beside solo / mute / p-lock and speed, then the synth row, then the generator
+buttons.
 Vol used to hold a line of its own — one 44px control centred in 374px of
 nothing — with those three buttons pushed underneath it.
 
@@ -3851,7 +3852,8 @@ with the picker behind an `+ add an effect` button opened over it), `filter`,
 "more" menu, which keeps env / comp). Its second line is the pattern's own
 controls: semi − / +, shift ◂ / ▸, +1 and /2, pulled from the oct and
 len-extend clusters (the "more" menu keeps oct − / + and x2 / x4 / /4), two
-rows of six equal squares with the speed field on a line under them. The
+rows of six equal squares. The speed field stays in the head, on the vol
+line after p-lock at a fixed width, so that line never wraps. The
 `inst` button is the one node the row makes itself, since it has no desktop
 home. The quick row's buttons
 carry the `data-on` dot with `::before`, because on a phone `::after` is the

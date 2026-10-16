@@ -600,8 +600,8 @@ button.sq-btn--danger { color: var(--danger); }
      on a 390px phone, the break landing wherever it fell. The pattern's own
      controls (semi − / +, shift ◂ / ▸, +1, /2) take the second, after the
      zero-height break the track head uses (`::before`, ordered between the
-     two groups), sharing it the same way: two rows of six equal squares,
-     with the speed field on a line of its own under them. */
+     two groups), sharing it the same way: two rows of six equal squares.
+     Speed is not here: it sits in the head beside p-lock. */
   flex: 1 1 44px;
   min-width: 44px;
   width: auto;
@@ -621,8 +621,7 @@ button.sq-btn--danger { color: var(--danger); }
 .sq-track__quickrow > .track-shift-left,
 .sq-track__quickrow > .track-shift-right,
 .sq-track__quickrow > .track-len-plus1,
-.sq-track__quickrow > .track-len-half,
-.sq-track__quickrow > .sq-field { order: 2; }
+.sq-track__quickrow > .track-len-half { order: 2; }
 /* The len-extend cluster gives shift ◂ a margin to stand apart from /4; here
    it is one square among the others. */
 .sq-track__quickrow > .track-shift-left { margin-left: 0; }
@@ -3775,10 +3774,14 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not
   .sq-track__head .sq-track__remove,
   .sq-track__head .sq-track__oct,
   .sq-track__head .sq-track__len-extend,
-  .sq-track__head .sq-panel__btn-group > button:not(.sq-track__roll),
-  .sq-track__head .sq-field:has(.sq-track__speed) {
+  .sq-track__head .sq-panel__btn-group > button:not(.sq-track__roll) {
     display: none;
   }
+  /* Speed sits on the vol line after p-lock, at a fixed width: solo / mute /
+     p-lock are `flex: 1 1 0`, so they take what is left and the line never
+     wraps. The select is the buttons' height. */
+  .sq-track__head .sq-field:has(.sq-track__speed) { order: 11; flex: 0 0 auto; }
+  .sq-track__head .sq-track__speed { min-height: 44px; width: 58px; padding: 4px 2px; font-size: 12px; }
 
   /* The synth row (harm/timb/morph/decay + the engine's groups) is not inline
      on a phone: it is the instrument modal's (openInstrumentAsModal, from the

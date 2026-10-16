@@ -544,10 +544,9 @@ export function placeBusesLast() {
 }
 
 // A phone-only quick-access row: instrument / fx / filter / eq / mod / aut on
-// one line, then semi − / semi + / shift ◂ / shift ▸ / +1 / /2 / speed on the
-// next, pulled out of their desktop homes (the panel button group, the oct
-// cluster, the len-extend cluster, and the speed field) into one row of their
-// own right after the head — visually below the generator icons, since everything else
+// one line, then semi − / semi + / shift ◂ / shift ▸ / +1 / /2 on the next,
+// pulled out of their desktop homes (the panel button group, the oct cluster
+// and the len-extend cluster) into one row of their own right after the head — visually below the generator icons, since everything else
 // in the head past that point is hidden into the "more" menu on a phone.
 // Built from the SAME matchMedia breakpoint the head's own mobile CSS uses
 // (PHONE_MQ, dom.js), not isMobileDevice() (which also fires for a
@@ -568,8 +567,7 @@ export function placeBusesLast() {
 // were modals from their buttons already; env and comp stay in the menu.
 const QUICKROW_MQ = PHONE_MQ;
 
-// The buttons in the row (not the speed field) get the same icon-plus-
-// caption treatment as the generator row above them on a phone — square,
+// The buttons in the row get the same icon-plus-caption treatment as the generator row above them on a phone — square,
 // icon-first, named underneath via [data-label] — instead of the desktop's
 // plain text ghost buttons. Swapped in place, both directions, so the same
 // node keeps its listeners and aria-pressed state; only its class and
@@ -600,10 +598,8 @@ function applyQuickRow(t) {
     // next matchMedia change (or the next render) tries again.
     if (t._trackMenuModal || t._filterModal || t._fxModal) return;
     const iconEls = QUICKROW_ICON_BTNS.map(({ sel }) => head.querySelector(sel));
-    const speedField = head.querySelector(".sq-track__speed")?.closest(".sq-field");
-    if (iconEls.some(el => !el) || !speedField) return;
+    if (iconEls.some(el => !el)) return;
     const restore = iconEls.map(el => ({ el, parent: el.parentNode, nextSibling: el.nextSibling }));
-    restore.push({ el: speedField, parent: speedField.parentNode, nextSibling: speedField.nextSibling });
     const row = document.createElement("div");
     row.className = "sq-track__quickrow";
     const instBtn = document.createElement("button");
