@@ -244,20 +244,30 @@ export function copyTrackPattern(t) {
 
 /**
  * Write a copy of `pattern` over slot `idx` of track `t`. The notes and lanes
- * travel; the sound (p-lock) stays the target slot's, and lanes `t`'s engine
- * cannot play are dropped. The one copy routine: the track head's paste and the
- * clip view's drag both come through here.
+ * travel; lanes `t`'s engine cannot play are dropped. The sound (p-lock) stays
+ * the target slot's, unless `withSound`: a copy within one track (the clip
+ * view's fill and a drag along a row) is a duplicate, and carries the lock and
+ * its sound (preset included, it is params) so it plays exactly as the source.
+ * Across tracks a sound belongs to its engine, so it never travels. The one
+ * copy routine: the track head's paste and the clip view's drag both come
+ * through here.
  * @param {Track} t @param {number} idx @param {import("./types.js").Pattern} pattern
  */
-export function writePatternOnto(t, idx, pattern, fromSlot = null) {
+export function writePatternOnto(t, idx, pattern, fromSlot = null, { withSound = false } = {}) {
   const old = t.patterns[idx];
+  // A locked sound is only written back when its pattern is left: flush the
+  // slot the track is on, so a duplicate of it carries what is audible.
+  if (withSound) flushPatternSound(t, trackSlot(t));
   const p = clonePattern(pattern);
-  p.soundLocked = !!old?.soundLocked;
-  p.sound = old?.sound ?? null;
+  if (!withSound) {
+    p.soundLocked = !!old?.soundLocked;
+    p.sound = old?.sound ?? null;
+  }
   for (const key of Object.keys(p.automation)) {
     if (!canAutomate(t, key)) delete p.automation[key];
   }
   t.patterns[idx] = p;
+  if (withSound && trackSlot(t) === idx && recallPatternSound(t, idx)) refreshPatternSoundUI(t);
   // A clip from a column in another meter is fitted to this column's: the
   // nearest whole number of its bars (at the track's speed), padded with
   // rests or cut. A meter belongs to the pattern number, every track alike.

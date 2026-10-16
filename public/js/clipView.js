@@ -35,7 +35,8 @@
  * A clip's length in bars is written on its cell, and the cell's right edge
  * is a FILL handle: drag it across the cells beside it and the clip is copied
  * into each of those scenes on release (a spreadsheet's fill handle), through
- * `writePatternOnto` again, so a p-lock a target already holds stays its own.
+ * `writePatternOnto` again, carrying the clip's p-lock and sound with it: a
+ * fill is a duplicate, so every copy plays exactly as the source does.
  * Either direction; the cells it will fill are marked while the drag lasts.
  * SHIFT-drag the same handle to change the clip's LENGTH instead, a bar at a
  * time (grown by duplicating what is there, as the track head's x2 does;
@@ -446,7 +447,7 @@ function onFillEnd() {
   for (let i = f.from; i <= f.to; i++) if (i !== slot) targets.push(i);
   if (!targets.length) { scheduleClipPaint(); return; }
   const pattern = t.patterns[slot];
-  for (const i of targets) writePatternOnto(t, i, pattern, slot);
+  for (const i of targets) writePatternOnto(t, i, pattern, slot, { withSound: true });
   announceClips();
   setStatus(`${t.name}: pattern ${slot + 1} copied to ${targets.length === 1 ? `pattern ${targets[0] + 1}` : `patterns ${targets[0] + 1} to ${targets[targets.length - 1] + 1}`}`);
 }
@@ -482,7 +483,7 @@ function onDrop(e) {
   const pattern = src.patterns?.[from];
   if (!pattern) return;
   const len = pattern.steps.length;
-  writePatternOnto(dst, to, pattern, from);
+  writePatternOnto(dst, to, pattern, from, { withSound: src === dst });
   scheduleClipPaint();
   const fitted = dst.patterns[to].steps.length !== len;
   const m = patternMeter(to);

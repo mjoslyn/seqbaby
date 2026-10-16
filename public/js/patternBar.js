@@ -57,6 +57,11 @@ export function nextPatternMode(mode) {
 
 export function copyPattern(from, to) {
   if (from === to) return;
+  // A duplicate is an exact copy, p-lock sound (and the preset in it) included.
+  // A locked sound is only written back when its pattern is left, so flush
+  // each track at ITS slot first, or the copy gets the sound as it was when
+  // the source was last left rather than what is playing now.
+  for (const t of state.tracks) flushPatternSound(t, trackSlot(t));
   for (const t of state.tracks) {
     const src = t.patterns?.[from];
     if (!src) continue;
@@ -66,6 +71,7 @@ export function copyPattern(from, to) {
   // time signature and stays independent from pattern 1's meter.
   const srcMeter = state.patternMeters[from];
   if (srcMeter) state.patternMeters[to] = { num: srcMeter.num, den: srcMeter.den };
+  state.patternRepeats[to] = state.patternRepeats[from];
   if (to !== 0) state.patternMeterCustomized[to] = !!state.patternMeterCustomized[from]
     || (srcMeter && (srcMeter.num !== state.patternMeters[0].num || srcMeter.den !== state.patternMeters[0].den));
   // Copying over the pattern a track is standing on: nothing switches, so

@@ -2558,8 +2558,9 @@ block   t.arrangement[i]    ─── { slot, start, bars }: a clip at a bar, fo
   lanes the target engine cannot play are dropped the same way. A cell's
   right edge (`.sq-clip__fill`) is a fill handle: dragged across the cells
   beside it, either way, the clip is copied into each of those slots on
-  release through the same `writePatternOnto` (so a target's own p-lock
-  stays), the targets marked `is-fill-target` while it lasts; SHIFT-dragged
+  release through the same `writePatternOnto` with `withSound` (a fill is a
+  duplicate, so each copy carries the clip's p-lock and sound, as a drag
+  along the same row does; across tracks the target's sound stays), the targets marked `is-fill-target` while it lasts; SHIFT-dragged
   it changes the clip's LENGTH a bar at a time instead (`is-growing`, the
   cell previewing its width over its neighbours; the release is
   `extendPatternByDuplicate` / `truncatePattern`, the `x2` / `/2` buttons'
@@ -3289,7 +3290,10 @@ bass   pattern 1  unlocked -> t.baseSound   \ these two move together
   point, so `recallPatternSound` keeps it.
 - `clonePattern` copies `soundLocked` and deep-copies `sound`, so duplicating a
   locked pattern (button or drag) gives a locked duplicate that sounds the same
-  and then diverges.
+  and then diverges. `copyPattern` flushes every track's live sound first: a
+  locked pattern's snapshot is only written when it is left, so duplicating
+  the one you are on copied the sound (and the preset, which is params) as it
+  was when you last arrived. It copies the slot's repeat count with its meter.
 
 ## Keyboard performance mode (`keyboard.js`)
 
