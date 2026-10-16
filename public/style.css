@@ -4403,6 +4403,35 @@ body.view-clips #tracks, body.view-arrange #tracks, body.view-piano #tracks { di
 body.view-clips .sq-pattern-bar, body.view-arrange .sq-pattern-bar, body.view-piano .sq-pattern-bar { display: none; }
 .sq-clips, .sq-arrange { max-width: 1400px; margin: 0 auto; padding: 12px 16px; }
 
+/* The three views as two panes (viewSplit.js): the view on top, the selected
+   track's card under it, a handle between them dragged to share the height.
+   The section is what the pinned bar and transport leave of the window, so
+   each pane scrolls on its own. --split-top is the top pane's share. */
+.sq-split:not([hidden]) {
+  display: flex; flex-direction: column;
+  height: calc(100vh - var(--sq-topbar-h, 0px) - var(--sq-transport-h, 0px) - 8px);
+  height: calc(100dvh - var(--sq-topbar-h, 0px) - var(--sq-transport-h, 0px) - 8px);
+  min-height: 360px;
+}
+.sq-split__top { flex: 0 0 var(--split-top, 50%); min-height: 0; overflow: auto; overscroll-behavior: contain; }
+.sq-split__bottom { flex: 1 1 0; min-height: 0; overflow: auto; overscroll-behavior: contain; }
+.sq-split__handle {
+  flex: 0 0 12px; position: relative; cursor: row-resize; touch-action: none;
+  margin: 2px 0; border-radius: 4px;
+}
+.sq-split__handle::before {
+  content: ""; position: absolute; left: 0; right: 0; top: 50%; height: 1px; background: var(--border);
+}
+.sq-split__handle::after {
+  content: ""; position: absolute; left: 50%; top: 50%; width: 44px; height: 4px; margin: -2px 0 0 -22px;
+  border-radius: 2px; background: var(--fg-dim); opacity: 0.5;
+}
+.sq-split__handle:hover::after, .sq-split__handle:focus-visible::after, .sq-split.is-resizing .sq-split__handle::after { background: var(--accent); opacity: 1; }
+.sq-split__handle:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; }
+.sq-split.is-resizing { user-select: none; -webkit-user-select: none; cursor: row-resize; }
+/* the toolbars stay in sight as their pane scrolls */
+.sq-split__top .sq-clips__bar, .sq-split__top .sq-arr__bar-row { position: sticky; top: 0; z-index: 7; background: var(--bg); padding: 2px 0; }
+
 /* The eight track hues, as #tracks has them, for the two views' rows (buses
    are never rows here and sit last in state.tracks, so the counts line up). */
 .sq-clips__rows > :nth-child(8n+1), .sq-arr__rows > :nth-child(8n+1) { --track-hue: 35;  --track-color: hsl(35 85% 58%); }
@@ -4504,7 +4533,9 @@ body.sq-playing .sq-clip.is-now::after { content: ""; position: absolute; left: 
 .sq-clips__name, .sq-arr__name { text-align: left; background: transparent; border: 0; padding: 2px 4px; cursor: pointer; }
 .sq-clips__name:hover, .sq-arr__name:hover { color: var(--accent); }
 /* the selected track's own card, moved in from #tracks (trackDetail.js) */
-.sq-track-detail { margin-top: 14px; display: grid; gap: 8px; }
+.sq-track-detail { margin-top: 6px; display: grid; gap: 8px; }
+/* the roll is the piano view's step editor: its card shows the sound alone */
+.sq-piano .sq-track-detail .sq-steps { display: none; }
 .sq-track-detail__title { font-size: 12px; color: var(--fg-dim); padding-left: 4px; }
 .sq-track-detail > .sq-track::before { background: var(--track-color, var(--accent)); }
 
@@ -4607,7 +4638,11 @@ body.sq-playing .sq-clip.is-now::after { content: ""; position: absolute; left: 
 .sq-pr__soundmodal .sq-panel__modal-close { position: sticky; bottom: 0; padding: 10px; background: var(--accent); color: #0b0d10; border-color: var(--accent); font-weight: 600; min-height: 40px; }
 
 .sq-pr__scroll { overflow: auto; border: 1px solid var(--border); border-radius: 6px 6px 0 0; background: var(--bg); overscroll-behavior: contain; }
-.sq-piano .sq-pr__scroll { height: max(380px, calc(100vh - var(--sq-topbar-h, 0px) - 260px)); }
+/* the roll fills its pane: the toolbar and the velocity stalks keep their
+   height, the scroller takes the rest */
+.sq-piano .sq-split__top { display: flex; flex-direction: column; overflow: hidden; }
+.sq-piano .sq-split__top > .sq-pr__bar, .sq-piano .sq-split__top > .sq-pr__vel { flex: 0 0 auto; }
+.sq-piano .sq-pr__scroll { flex: 1 1 0; min-height: 60px; }
 .sq-pr__canvas { display: grid; position: relative; width: max-content; user-select: none; -webkit-user-select: none; }
 .sq-pr__corner { position: sticky; top: 0; left: 0; z-index: 6; background: var(--bg-2); border-right: 1px solid var(--border); border-bottom: 1px solid var(--border);
   font-size: 10px; color: var(--track-color); padding: 4px 6px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; box-sizing: border-box; }

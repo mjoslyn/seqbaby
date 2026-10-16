@@ -1,5 +1,6 @@
 /**
- * The detail under the clip grid and the arrangement: the selected track's
+ * The detail under the clip grid, the arrangement and the piano roll (the
+ * bottom pane of each, viewSplit.js): the selected track's
  * own card — its instrument row, inline fx / mod / filter panels and the step
  * grid of the pattern it is on — which is the track's real `.sq-track`
  * element MOVED out of `#tracks` (hidden under those views) and put back in
@@ -97,5 +98,14 @@ export function makeTrackDetail(container, onChange) {
     return t;
   }
 
-  return { el, select, release, sync, get selectedId() { return selectedId; } };
+  /**
+   * Show a track without selecting it (the piano view, whose track is the
+   * keyboard's already): its card in the detail, as `sync` puts it.
+   */
+  function show(t) {
+    selectedId = t?.id ?? null;
+    return sync();
+  }
+
+  return { el, select, release, sync, show, get selectedId() { return selectedId; } };
 }

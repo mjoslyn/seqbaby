@@ -16,7 +16,7 @@ env / fx / eq / comp / mod / automation per track.
   `public/woscillators.js` →
   `public/js/main.js` (ES module). `middleware.ts` refreshes the Supabase
   session on every request *except* static engine assets.
-- **Engine**: ~88 dependency-free vanilla ES modules in `public/js/`. No
+- **Engine**: ~89 dependency-free vanilla ES modules in `public/js/`. No
   bundler — edit, reload. `window.seqbaby` (from `appApi.js`) exposes `state`
   and serialize/apply hooks to the React shell (typed in `app/seqbaby.d.ts`).
 - **Accounts + data**: Supabase (Postgres + Auth + RLS). Tables: `profiles`,
@@ -230,6 +230,12 @@ env / fx / eq / comp / mod / automation per track.
   track's own card under it (trackDetail.js, the card moved out of `#tracks`
   and back). Both are rebuilt whole from engine state on `seqbaby:clips` and
   the session events, only while open.
+- `viewSplit.js` — the clip, arrangement and piano views as two panes, one
+  over the other: the view on top, the selected track's card (trackDetail.js)
+  below, a handle between them dragged (or arrowed, double-click resets) to
+  share the height. The section fills what the pinned bar and transport
+  leave (`--sq-transport-h`, measured here), each pane scrolls on its own,
+  and the split is a fraction per view per browser (`seqbaby.split.v1`).
 - `engineData.js` / `soundDefaults.js` / `theoryData.js` — the engine as DATA,
   with **no imports** (engineData none at all; the other two only each other
   and constants.js): the engine catalog, the four sliders' labels per engine,
@@ -2677,8 +2683,10 @@ drag down it to hear the track, a band on it marking what the computer keys
 q..] play, named in the corner, moved by z / x through `seqbaby:kbdoctave`), a bar ruler across the top, the notes as
 bars, the other melodic tracks' notes faint behind them (ghosts, tiled as each
 loops, scaled by speed), a root's chord tones dashed under it, and velocity
-stalks underneath. No track card under it, unlike clips and arrange: the
-roll takes the height.
+stalks underneath. The keyboard track's card sits under it past the
+split's handle (viewSplit.js), as in clips and arrange, with its step grid
+hidden (the roll is the step editor) and the toolbar's `sound` window off,
+since the card it opened is on screen.
 
 - **The track is `state.activeTrackId`**, so the computer keys play what is
   shown. A right-click on a note in a pattern the track is not on launches
@@ -5189,7 +5197,7 @@ Repo: https://github.com/mjoslyn/seqbaby.
   An inline marker (`window.__seqbabyServerBoot`) tells the paths apart, and
   `ScriptLoader.tsx` keeps its onload-chained injection for the soft-nav case
   (e.g. arriving from `/login`).
-- `app/EnginePreload.tsx` emits `modulepreload` for all 88 modules listed in
+- `app/EnginePreload.tsx` emits `modulepreload` for all 89 modules listed in
   `app/engineAssets.ts` (at `engineAsset("/js/<name>")`; the hints used to
   point at the site root and 404). The graph is 8 levels deep, so without it the browser
   needs up to eight sequential round trips just to discover the code.

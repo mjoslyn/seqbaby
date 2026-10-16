@@ -133,6 +133,7 @@ export const ENGINE_MODULES = [
   "track.js",
   "trackDetail.js",
   "transport.js",
+  "viewSplit.js",
   "views.js",
   "vim.js",
   "voices.js",

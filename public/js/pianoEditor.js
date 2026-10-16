@@ -175,6 +175,7 @@ function installShared() {
  * @property {"all"|"slot"} [scope]  every pattern end to end (the view) or the track's slot alone (the modal)
  * @property {{trackPicker?: boolean, sound?: boolean, loop?: boolean, fold?: boolean}} [chrome]  toolbar pieces
  * @property {(e: Event) => void} [onClick]  extra toolbar clicks (a data-act this editor does not know)
+ * @property {(t: any) => void} [onRender]  after each full render, with the track it drew
  */
 
 /**
@@ -381,7 +382,7 @@ export function createPianoEditor(opts) {
     if (sc && shownId != null && !keepMem) scrollMem.set(shownId, { x: sc.scrollLeft, y: sc.scrollTop });
     keepMem = false;
     const t = currentTrack();
-    if (!t) { root.innerHTML = `<p class="sq-pr__empty">no tracks to edit</p>`; shownId = null; return; }
+    if (!t) { root.innerHTML = `<p class="sq-pr__empty">no tracks to edit</p>`; shownId = null; opts.onRender?.(null); return; }
     if (t.id !== shownId) sel = new Set();
     buildRows();
     buildSections(t);
@@ -526,6 +527,7 @@ export function createPianoEditor(opts) {
     headSlot = slot;
     paintHead();
     headLoop();
+    opts.onRender?.(t);
   }
 
   function syncVelScroll() {
