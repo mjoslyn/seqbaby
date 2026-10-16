@@ -975,12 +975,18 @@ class GuitarProcessor extends AudioWorkletProcessor {
       // and took the top off it.
       const est = inG * s2G * pwrG * 0.2;
       const sat = est / Math.sqrt(1 + est * est);
-      const outTrim = Math.max(0.3, Math.min(3.6, 0.6 / (0.1 + 1.7 * sat)));
+      const outTrim = Math.max(0.3, Math.min(5, 0.6 / (0.06 + 1.74 * sat)));
       // Bloom is cubed. Every engine's morph slider defaults to 0.5, and a rig
       // that howls the moment you load it would be a joke; at 0.5 this is the
       // faint lift a loud amp gives a held note, and the top of the slider is
       // where you stand in front of the speaker.
-      const fbAmt = bloom * bloom * bloom * 0.6;
+      // The plane the pickup senses is lost into the bridge far faster than
+      // the one line the loop used to be, and the gate below reads that
+      // plane's level, so the injection is scaled up (it was 0.6) and the
+      // gate's knee lowered to put the threshold back where it was:
+      // measured, a tweed that bloomed on a held note at 0.5 of the slider
+      // decayed under the old numbers and needed 0.7.
+      const fbAmt = bloom * bloom * bloom * 1.5;
       const tremHz = 1.5 + tremr * tremr * 12;
       const tremInc = tremHz / sr;
       const sagC = 1 - Math.exp(-1 / (0.012 * sr2));
@@ -1000,11 +1006,11 @@ class GuitarProcessor extends AudioWorkletProcessor {
           // line far earlier than a clean one, exactly as a real rig does.
           // Only into a note that is still being held: taking the hand off the
           // string is how a player stops feedback, and without that a bloomed
-          // note would ring for the rest of the session. It pushes the plane
-          // towards the pickup, which is the plane the speaker faces.
-          const inject = (fbAmt > 0.0005 && v.gate) ? this.fbSig * fbAmt * (v.env < 0.5 ? v.env * 2 : 1) : 0;
+          // note would ring for the rest of the session. The air moves the
+          // whole string: both planes, the one facing the speaker the more.
+          const inject = (fbAmt > 0.0005 && v.gate) ? this.fbSig * fbAmt * (v.env < 0.25 ? v.env * 4 : 1) : 0;
           // The two planes, the second sensed about half as well.
-          let s = lineStep(v.a, v.relG, inject) + 0.55 * lineStep(v.b, v.relG, 0);
+          let s = lineStep(v.a, v.relG, inject) + 0.55 * lineStep(v.b, v.relG, inject);
           // DC blocker: the comb and the pluck both leave an offset behind.
           const dy = s - v.dcX + 0.9995 * v.dcY;
           v.dcX = s; v.dcY = dy;

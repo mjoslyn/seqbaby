@@ -1393,7 +1393,12 @@ STRING ──▶ PICKUP ──▶ tone pot ──▶ AMP ──▶ CAB ──▶
   injection is smaller than the string's losses and the note decays, above it
   they swap over and the note grows into a howl. Gated-only, or a bloomed note
   would ring for the rest of the session. `bloom` is cubed (morph defaults to
-  0.5 on every engine and a rig that howls on load would be a joke).
+  0.5 on every engine and a rig that howls on load would be a joke). It goes
+  into both planes, scaled 1.5 with the gate's knee at a quarter of the
+  sensed level: the sensed plane dies fast now, so the old 0.6 and a knee at
+  a half put the threshold at 0.7 of the slider. Measured, the thresholds sit
+  where they did: a cranked tweed blooms at 0.5, a dark plexi sustains at
+  0.55, a plexi at 0.42 only lifts.
 - **Controls** — the four sliders are DRIVE / TONE (the knob on the guitar, a
   passive lowpass 700Hz→open) / BLOOM / SUSTAIN. The rest is
   `sq-param-group--guitar`: string row, amp row, cab row, plus the tone dropdown.
