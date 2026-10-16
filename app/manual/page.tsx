@@ -325,9 +325,20 @@ export default function ManualPage() {
         <section className={styles.section} id="roll">
           <h2>The piano roll</h2>
           <p>
-            <span className={styles.ui}>roll</span> opens a pitch-by-time grid: pitch
-            up the side, steps across. It is the best place to write a melody, and
-            the only place to stack notes into a chord you voice by hand.
+            <span className={styles.ui}>roll</span> opens the piano roll on that
+            track, on the pattern it is playing: a keyboard up the side, bars
+            across, the notes as bars you draw, drag, stretch and paint. It is the
+            same editor as the piano view, so everything below is true there too,
+            and it works with a finger on a phone. It is the best place to write a
+            melody, and the only place to stack notes into a chord you voice by hand.
+          </p>
+          <p>
+            The tools along the top decide what a drag does: <span className={styles.ui}>pan</span>{" "}
+            scrolls, <span className={styles.ui}>draw</span> places and moves notes,{" "}
+            <span className={styles.ui}>paint</span> lays a note every length as you sweep,{" "}
+            <span className={styles.ui}>erase</span> deletes what you sweep over and{" "}
+            <span className={styles.ui}>select</span> boxes notes to move or delete
+            together. <span className={styles.ui}>snap</span> is the grid notes land on.
           </p>
           <div className={styles.tableWrap}>
             <table className={styles.table}>
@@ -335,20 +346,27 @@ export default function ManualPage() {
                 <tr><th>Gesture</th><th>Result</th></tr>
               </thead>
               <tbody>
-                <tr><td>Click empty space</td><td>Adds a one-step note. Keep dragging right to lengthen it as you go.</td></tr>
-                <tr><td>Drag a note&apos;s middle</td><td>Moves the whole note in time and pitch. The length stays put.</td></tr>
-                <tr><td>Drag a note&apos;s edge</td><td>Resizes it. Left edge moves the start, right edge the end.</td></tr>
-                <tr><td>Drag a one-step note</td><td>The thin right-hand sliver resizes, the rest moves. The cursor tells you which one you are on.</td></tr>
-                <tr><td>Double-click a note</td><td>Deletes it. On a stacked note it deletes only the row you clicked.</td></tr>
-                <tr><td>Click an empty row above a note</td><td>Stacks another pitch onto that step, for chords you voice yourself.</td></tr>
-                <tr><td>Right-click / long press</td><td>Opens the step editor for that note.</td></tr>
+                <tr><td>Click empty space (draw)</td><td>Adds a note of the last length you used. Keep dragging to put it where you want it.</td></tr>
+                <tr><td>Drag a note&apos;s middle</td><td>Moves the whole note in time and pitch. Shift-drag copies it.</td></tr>
+                <tr><td>Drag a note&apos;s right edge</td><td>Resizes it. On a phone the edge is a finger wide.</td></tr>
+                <tr><td>Double-click a note</td><td>Deletes it.</td></tr>
+                <tr><td>Draw on a row above a note</td><td>Stacks another pitch onto that step, for chords you voice yourself. With chord mode on, one click draws the chord.</td></tr>
+                <tr><td>Right-click, or hold a finger on a note</td><td>Opens the step editor for that note.</td></tr>
+                <tr><td>Two fingers</td><td>Scroll the roll, and pinch to zoom in or out across.</td></tr>
+                <tr><td>Click the keys</td><td>Plays the track at that pitch, so you can find a note before you draw it.</td></tr>
               </tbody>
             </table>
           </div>
           <p>
-            The lane underneath is velocity: drag a bar to make that step harder or
-            softer. The buttons along the top shift every note up a step, double or
-            halve the pattern length, or roll a new melody.
+            The lane underneath is velocity: drag across the stalks to make steps
+            harder or softer. With notes selected, the arrow keys move them (shift:
+            an octave, or a bar), <span className={styles.ui}>nudge</span> pushes
+            them off the grid, and <span className={styles.ui}>delete</span> removes
+            them. The pattern&apos;s header above the grid makes it a bar shorter or
+            longer, doubles it, or sets its time signature;{" "}
+            <span className={styles.ui}>in key</span> folds the rows to the scale
+            when one is on, and <span className={styles.ui}>hear</span> sounds the
+            notes as you place them.
           </p>
           <div className={styles.note}>
             A track plays one note at a time per step, so a note stops where the next

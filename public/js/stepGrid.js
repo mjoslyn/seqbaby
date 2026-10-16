@@ -1,6 +1,6 @@
 import { liveGeneratorOf, stepGateAt } from "./stepSource.js";
 import { updatePatternCell } from "./patternBar.js";
-import { refreshRollIfOpen, rollViewOcts } from "./pianoRoll.js";
+import { refreshRollIfOpen } from "./pianoRoll.js";
 import { state } from "./state.js";
 import { closeStepEditor, openStepEditor } from "./stepEditor.js";
 import { SCALES, applyScale, midiToName, midiToScaleIndex, noteColor, scaleIndexToMidi } from "./theory.js";
@@ -112,12 +112,7 @@ export function paintStepCursor(t) {
   }
 }
 
-// Piano roll panel: a pitches × steps grid per track. Clicking a cell places
-// (or moves) a note at that pitch on that step; clicking an already-active cell
-// clears the step; double-clicking an active cell sets velocity to full. Shows
-// scale pitches only when a scale is active and "all notes" is off; chromatic
-// otherwise. Viewport spans rollViewOcts() octaves starting at t.rollViewOct
-// (1 on mobile to fit the screen without vertical scroll, 2 on desktop).
+// One cell of the step grid: a hit (and the steps it holds for), or a rest.
 export function makeCell(t, idx, span, on, isContinuation = false, velOverride, noteOverride) {
   const cell = document.createElement("div");
   cell.className = "sq-step";

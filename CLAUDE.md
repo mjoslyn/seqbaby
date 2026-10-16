@@ -16,7 +16,7 @@ env / fx / eq / comp / mod / automation per track.
   `public/woscillators.js` →
   `public/js/main.js` (ES module). `middleware.ts` refreshes the Supabase
   session on every request *except* static engine assets.
-- **Engine**: ~87 dependency-free vanilla ES modules in `public/js/`. No
+- **Engine**: ~88 dependency-free vanilla ES modules in `public/js/`. No
   bundler — edit, reload. `window.seqbaby` (from `appApi.js`) exposes `state`
   and serialize/apply hooks to the React shell (typed in `app/seqbaby.d.ts`).
 - **Accounts + data**: Supabase (Postgres + Auth + RLS). Tables: `profiles`,
@@ -148,7 +148,7 @@ env / fx / eq / comp / mod / automation per track.
   the sidechain-source select, which is in the p-lock snapshot, was missing from
   all three). It writes the source select's VALUE only; the options belong to
   `refreshCompSourceDropdowns`, which is the one that knows the track list.
-- `render.js` / `stepGrid.js` / `stepEditor.js` / `pianoRoll.js` /
+- `render.js` / `stepGrid.js` / `stepEditor.js` /
   `patternBar.js` / `scaleUI.js` / `meters.js` / `beat.js` — UI.
 - `keyboard.js` — computer-keyboard performance mode + capture.
 - `vim.js` — vim mode, a toggle (`` ` `` or the transport's `vim`): normal /
@@ -211,11 +211,15 @@ env / fx / eq / comp / mod / automation per track.
   (cuts what it lands on), `writeBar` (the recorder), `remapSlots`,
   `chainToBlocks`. Tested in `test/arrangement.test.js`; songBuilder.js
   validates an agent's blocks through it.
-- `pianoView.js` / `rollNotes.js` — the piano view: one track's pattern as a
-  full-height, FL Studio style piano roll (the fourth view). `rollNotes.js`
-  reads a pattern's step arrays as a free list of notes and folds a list
-  back, **no imports**, tested in `test/rollNotes.test.js`. See the piano
-  view section.
+- `pianoEditor.js` / `pianoView.js` / `pianoRoll.js` / `rollNotes.js` —
+  the piano roll. `pianoEditor.js` is the editor itself (an FL Studio style
+  roll, `createPianoEditor`), with two homes: `pianoView.js` is the
+  instance in `#piano`, the fourth view, every pattern end to end;
+  `pianoRoll.js` is the instance a track's `roll` button opens in a modal,
+  on that track's current pattern, which is the piano roll on a phone.
+  `rollNotes.js` reads a pattern's step arrays as a free list of notes and
+  folds a list back, **no imports**, tested in `test/rollNotes.test.js`.
+  See the piano roll section.
 - `patternPicture.js` — a pattern as a picture (`patternSvg`): one pass of
   its notes, pitch against time, as an SVG the clip cells and the
   arrangement's blocks wear as a CSS mask. **No imports**; tested in
@@ -2589,11 +2593,46 @@ block   t.arrangement[i]    ─── { slot, start, bars }: a clip at a bar, fo
 - Not shared in a jam: which clip each peer has launched, like play / stop and
   the scene. The blocks are the song's and travel.
 
-## The piano view (`pianoView.js` + `rollNotes.js`)
+## The piano roll (`pianoEditor.js` + `pianoView.js` + `pianoRoll.js` + `rollNotes.js`)
 
-The fourth view (`groove | clips | arrange | piano`, Tab cycles all four,
-desktop only like the other two): the keyboard track's patterns as a piano
-roll in the manner of FL Studio's, every pattern the song uses laid end to
+One editor, two homes. `pianoEditor.js` is a piano roll in the manner of
+FL Studio's, made by `createPianoEditor(opts)` into any root: `track()` is
+the track it shows, `isOpen()` whether it is on screen (nothing paints
+while it is not), `scope` whether every pattern is laid end to end or the
+track's slot alone, and `chrome` which toolbar pieces it carries. The
+**piano view** (`pianoView.js`, the fourth view, `groove | clips | arrange
+| piano`, Tab cycles all four, desktop only like the other two) is the
+instance in `#piano` on the keyboard track with every pattern. The
+**groove view's `roll` button** (`pianoRoll.js`, `openRollEditor` from
+stepEditor.js's `openRollAsModal`) is an instance made into the track's
+roll panel when its modal opens and destroyed when it closes (so a shut
+roll holds no listeners), scoped to that track's current slot, with no
+track picker, sound button or loop button and an `in key` button where the
+view has the scale row's box. It replaced a cell grid of its own (two
+octaves of rows, its own gestures, its own CSS): one editor, so a gesture
+learnt in one place is the gesture in the other, and the groove view is the
+only view on a phone, so this is the piano roll there. `refreshRollIfOpen(t)`
+is how the rest of the engine asks the modal to redraw; a commit in either
+instance repaints the other (`repaintOthers`). The preferences (tool,
+snap, zoom, ghosts, fold, follow, hear: `seqbaby.piano.v1`), the length a
+new note takes and the scroll are shared across instances, per track where
+they are per track; the zoom is a pair, desktop and phone (`zx` / `zxm`),
+since the same columns are narrower there and a finger wants taller rows.
+
+- **Touch**: a `pan` tool (a finger scrolls natively through
+  `touch-action: pan-x pan-y` on the field, a pointer drags the scroller),
+  two fingers on the scroller pan by their midpoint and pinch to zoom across
+  in every tool (`startPinch` / `movePinch`, dropping any one-finger
+  gesture under way and redrawing from the pattern, so nothing half-dragged
+  is written), a finger held on a note for `LONG_PRESS_MS` opens its step
+  editor (the right-click), a note's resize edge is a finger wide
+  (`edgeW`), the drag threshold is wider, and a `delete` button on the
+  toolbar stands in for the key. The keys and the ruler are
+  `touch-action: none`, since both are gestures. The modal fills the
+  window's height and the scroller takes what the toolbar leaves (flex,
+  style.css); on a phone the tools show their glyphs alone.
+
+The view lays out every pattern the song uses end to
 end (`sections`: slot 1 up to the last slot any track has notes in, or the
 one this track is on, plus one empty to draw into), each with a header in
 the ruler (▶ launches it on this track, its length, − / + a bar, x2), its own
@@ -2660,14 +2699,16 @@ roll takes the height.
   drag holds pointer capture on the view, so a double-click is timed in
   pointerdown (a dblclick would be retargeted).
 - **Tools are toolbar buttons, not letters**: FL's P / E / B are the computer
-  keyboard's piano keys here. draw (click places a note of the last length
+  keyboard's piano keys here. pan, draw (click places a note of the last length
   used and drags it into place; drag moves, the right edge resizes, shift
   copies), paint, erase, select
   (box, shift adds; ctrl/⌘-drag boxes in any tool). Double-click a note:
-  delete it; right-click a note: the step editor (the groove view's roll
-  does the same). With a selection: delete, ↑ ↓ (shift an octave), ← → (by the
+  delete it; right-click a note: the step editor. With a selection: delete
+  (the key or the toolbar's button), ↑ ↓ (shift an octave), ← → (by the
   snap, shift a bar), ctrl/⌘-B duplicate after itself; ctrl/⌘-A all,
-  escape lets go. Skipped while vim is in insert or command mode.
+  escape lets go. Skipped while vim is in insert or command mode, and only
+  in the instance last pointed at or opened (`active`), since the view and a
+  track's modal can both be open.
 - **scale only** (`pref.fold`, needs the scale on) folds the roll to the
   scale's rows, FL's fold: the rows are `rowPitches`, rebuilt per render, so
   every y and every vertical move goes through `rowOf` / `shiftRows`, and a
@@ -2691,6 +2732,9 @@ roll takes the height.
   its pattern's end. The snap (step / ½ beat / beat / bar, on each pattern's own grid),
   zoom, ghosts, tool, fold and follow are per browser (`seqbaby.piano.v1`), the scroll per
   track per page.
+- **The transport paints no playhead into the roll**: each instance's
+  `headLoop` reads `t._nowIdx` / `t._nowSlot` (written by paintTrackNow) on
+  its own frame while it is open.
 
 ## Knobs (`knob.js`) — a skin over the range inputs
 
@@ -5105,7 +5149,7 @@ Repo: https://github.com/mjoslyn/seqbaby.
   An inline marker (`window.__seqbabyServerBoot`) tells the paths apart, and
   `ScriptLoader.tsx` keeps its onload-chained injection for the soft-nav case
   (e.g. arriving from `/login`).
-- `app/EnginePreload.tsx` emits `modulepreload` for all 87 modules listed in
+- `app/EnginePreload.tsx` emits `modulepreload` for all 88 modules listed in
   `app/engineAssets.ts` (at `engineAsset("/js/<name>")`; the hints used to
   point at the site root and 404). The graph is 8 levels deep, so without it the browser
   needs up to eight sequential round trips just to discover the code.
