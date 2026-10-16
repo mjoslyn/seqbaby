@@ -19,7 +19,7 @@ import { euclideanRhythm, refreshEuclidUI, renderEuclidPanel, wireEuclidPanel } 
 import { refreshChanceUI, renderChancePanel, wireChancePanel } from "./chance.js";
 import { randomizeMelody, randomizeTimbre } from "./generate.js";
 import { GUITAR_DEFAULTS, GUITAR_NUM_KEYS, GUITAR_SEL_KEYS, GUITAR_TONE_NAMES, guitarTone, guitarToneDescription } from "./guitar.js";
-import { ICON_CHANCE, ICON_CLEAR, ICON_DICE, ICON_EUCLID, ICON_FILTER, ICON_FX, ICON_LEN_HALF, ICON_LEN_PLUS1, ICON_LOAD, ICON_ROLL, ICON_SAVE, ICON_SLIDERS, ICON_WAV, ICON_AUT, ICON_EQ, ICON_INSTRUMENT, ICON_MOD, ICON_SEMI_DOWN, ICON_SEMI_UP, ICON_SHIFT_LEFT, ICON_SHIFT_RIGHT, ICON_REMOVE } from "./icons.js";
+import { ICON_CHANCE, ICON_CLEAR, ICON_DICE, ICON_EUCLID, ICON_FILTER, ICON_FX, ICON_LEN_HALF, ICON_LEN_PLUS1, ICON_LOAD, ICON_ROLL, ICON_SAVE, ICON_SLIDERS, ICON_WAV, ICON_AUT, ICON_EQ, ICON_INSTRUMENT, ICON_MOD, ICON_SEMI_DOWN, ICON_SEMI_UP, ICON_SHIFT_LEFT, ICON_SHIFT_RIGHT } from "./icons.js";
 import { refreshKnobRange, setKnobReadout, upgradeKnobs } from "./knob.js";
 import { canModulate, freshLfoEntry, lfoBipolar, lfoEuclid, lfoPhase, lfoRateLabel, syncLFO, trackLfoKeys } from "./lfo.js";
 import { autoOwns, fxShown, modOwns, refreshPanelBadges, refreshParamIndicators, trackControl } from "./paramTargets.js";
@@ -1546,12 +1546,9 @@ export function renderTrack(t) {
   // mobile shows the icon (see the roll rules in the mobile media block)
   const rollBtn = node.querySelector(".sq-track__roll");
   if (rollBtn) rollBtn.innerHTML = `${ICON_ROLL}<span class="sq-btn__label">roll</span>`;
-  // remove: icon + label like clear (text on desktop, icon over caption on a
-  // phone, where it sits in the head just before clear), and it asks first.
-  // Undo brings a track back, but one tap on a 50px square beside clear is
-  // not the place to find that out.
+  // remove asks first. Undo brings a track back, but one tap is not the
+  // place to find that out.
   const removeBtn = node.querySelector(".sq-track__remove");
-  removeBtn.innerHTML = `${ICON_REMOVE}<span class="sq-btn__label">remove</span>`;
   removeBtn.addEventListener("click", async () => {
     const name = t.name?.trim() || "this track";
     const ok = await showConfirmDialog({

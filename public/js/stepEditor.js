@@ -998,8 +998,8 @@ export function openSampleEditorModal(t) {
 
 // Mobile track menu: physically move the "extras" nodes out of the
 // track-head into a centered modal so the user can reach the rarely-used
-// controls (panel buttons, save/load patch, len resize, oct shift, dup)
-// without horizontal scrolling. The synth params (harm/timb/
+// controls (panel buttons, save/load patch, len resize, oct shift, dup,
+// remove) without horizontal scrolling. The synth params (harm/timb/
 // morph/etc.) are not in here: on a phone they are the instrument modal's
 // (openInstrumentAsModal, from the quick row). Restored to their original
 // DOM positions on close so the desktop layout is unaffected.
@@ -1104,15 +1104,15 @@ export function openTrackMenu(t) {
 
   const copyBtn = capture(head, ".sq-track__copy");
   const pasteBtn = capture(head, ".sq-track__paste");
-  // remove is not in here: on a phone it sits in the head before clear.
   const dupBtn = capture(head, ".sq-track__dup");
+  const removeBtn = capture(head, ".sq-track__remove");
   if (copyBtn || pasteBtn) {
     addLabel("pattern");
     addRow([copyBtn, pasteBtn]);
   }
-  if (dupBtn) {
+  if (dupBtn || removeBtn) {
     addLabel("track");
-    addRow([dupBtn]);
+    addRow([dupBtn, removeBtn]);
   }
 
   const closeBtn = document.createElement("button");

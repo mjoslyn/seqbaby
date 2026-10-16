@@ -758,10 +758,9 @@ button.sq-btn--danger { color: var(--danger); }
 }
 .track-dice .sq-btn-icon { position: relative; }
 .track-euclid[aria-pressed="true"] { background: var(--accent); color: #0b0d10; border-color: var(--accent); }
-/* roll + clear + remove: text on desktop, icon on mobile (media block flips these) */
+/* roll + clear: text on desktop, icon on mobile (media block flips these) */
 .sq-track__roll .sq-btn-icon,
 .sq-track__clear .sq-btn-icon,
-.sq-track__remove .sq-btn-icon,
 #macro-pads .sq-btn-icon { display: none; }
 .sq-ai__btn { display: inline-flex; align-items: center; gap: 5px; }
 .sq-ai__btn .sq-ai__icon { display: inline-flex; color: inherit; }
@@ -3493,7 +3492,7 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not
   .sq-track::before { border-radius: 6px 0 0 6px; }
 
   /* ---------- TRACK HEAD ---------- */
-  .sq-track__head { gap: 6px; row-gap: 4px; }
+  .sq-track__head { gap: 4px; }
   .sq-track__head .sq-field .sq-knob { --knob-size: 44px; }
   .sq-track__head .sq-field label { font-size: 10px; }
 
@@ -3561,7 +3560,6 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not
      is stated rather than left to DOM order because the vol field sits BEFORE
      the synth row in the markup and the buttons after it. */
   .sq-track__head .sq-track__synth-row { order: 20; }
-  .sq-track__head .sq-track__remove { order: 29; }
   .sq-track__head .sq-track__clear,
   .sq-track__head .track-dice,
   .sq-track__head .track-euclid,
@@ -3604,6 +3602,7 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not
   .sq-track__head .sq-track__copy,
   .sq-track__head .sq-track__paste,
   .sq-track__head .sq-track__dup,
+  .sq-track__head .sq-track__remove,
   .sq-track__head .sq-track__oct,
   .sq-track__head .sq-track__len-extend,
   .sq-track__head .sq-panel__btn-group > button:not(.sq-track__roll) {
@@ -3656,21 +3655,21 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not
      anyway. The two shapes are the same rule because they are the same button:
      `data-label` for the ones drawn from an icon alone (studioMarkup.ts, and
      render.js for the ones it builds), and the `.sq-btn__label` span that
-     clear, roll and remove carry for their desktop text. remove sits first
-     on this line (order 29), before clear, and asks before it acts. */
+     clear and roll carry for their desktop text. The same square as the
+     quick row's under the head (56px tall, 2px side padding), so the three
+     lines of buttons on a track read as one grid. */
   .sq-track__head .sq-icon-btn,
   .sq-track__head .sq-track__roll,
-  .sq-track__head .sq-track__clear,
-  .sq-track__head .sq-track__remove {
+  .sq-track__head .sq-track__clear {
     flex-direction: column;
     align-items: center;
     justify-content: center;
     gap: 2px;
-    min-width: 50px;
+    min-width: 44px;
     width: auto;
     height: auto;
-    min-height: 50px;
-    padding: 5px 4px;
+    min-height: 56px;
+    padding: 5px 2px;
     line-height: 1.1;
   }
   /* Icons are drawn at a fixed width/height attribute (icons.js); a CSS
@@ -3678,24 +3677,19 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not
      the bigger button rather than leaving them adrift in the middle of it. */
   .sq-track__head .sq-icon-btn .sq-btn-icon,
   .sq-track__head .sq-track__roll .sq-btn-icon,
-  .sq-track__head .sq-track__clear .sq-btn-icon,
-  .sq-track__head .sq-track__remove .sq-btn-icon { width: 18px; height: 18px; }
-  /* display only on these three: `.sq-icon-btn` is already inline-flex, and
-     setting it here as well would resurrect save / load / dup, which the
-     block above hides so the track menu can host them. */
+  .sq-track__head .sq-track__clear .sq-btn-icon { width: 18px; height: 18px; }
+  /* display only on these two: `.sq-icon-btn` is already inline-flex, and
+     setting it here as well would resurrect save / load / dup / remove, which
+     the block above hides so the track menu can host them. */
   .sq-track__head .sq-track__roll,
-  .sq-track__head .sq-track__clear,
-  .sq-track__head .sq-track__remove { display: inline-flex; }
+  .sq-track__head .sq-track__clear { display: inline-flex; }
   .sq-track__head .sq-track__roll .sq-btn-icon,
-  .sq-track__head .sq-track__clear .sq-btn-icon,
-  .sq-track__head .sq-track__remove .sq-btn-icon { display: block; }
+  .sq-track__head .sq-track__clear .sq-btn-icon { display: block; }
   .sq-track__head .sq-track__roll .sq-btn__label,
   .sq-track__head .sq-track__clear .sq-btn__label,
-  .sq-track__head .sq-track__remove .sq-btn__label,
   .sq-track__head [data-label]::after { font-size: 10px; letter-spacing: 0; text-transform: lowercase; }
   .sq-track__head .sq-track__roll .sq-btn__label,
-  .sq-track__head .sq-track__clear .sq-btn__label,
-  .sq-track__head .sq-track__remove .sq-btn__label { display: block; }
+  .sq-track__head .sq-track__clear .sq-btn__label { display: block; }
   .sq-track__head [data-label]::after { content: attr(data-label); }
   .sq-track__head .sq-track__more[aria-pressed="true"] {
     background: var(--accent);
@@ -3755,7 +3749,8 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not
   .sq-track__menu-modal .sq-track__load-patch,
   .sq-track__menu-modal .sq-track__copy,
   .sq-track__menu-modal .sq-track__paste,
-  .sq-track__menu-modal .sq-track__dup {
+  .sq-track__menu-modal .sq-track__dup,
+  .sq-track__menu-modal .sq-track__remove {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -3855,17 +3850,17 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not
     border-right: 1px solid var(--border);
   }
   .sq-track__head .sq-panel__btn-group > .sq-track__roll { border-right: none; }
-  /* Seven on that line (remove / clear / dice / euclid / chance / roll /
-     more): at a fixed 50px they were a line and a seventh, `more` alone
-     underneath. They share the line instead, down to a finger's width. */
-  .sq-track__head .sq-track__remove,
+  /* The six on that line (clear / dice / euclid / chance / roll / more) share
+     it exactly as the quick row's six do (`flex: 1 1 44px`, the same 4px
+     gap), so the three lines of buttons on a track are one grid of equal
+     squares. */
   .sq-track__head .sq-track__clear,
   .sq-track__head .track-dice,
   .sq-track__head .track-euclid,
   .sq-track__head .track-chance,
   .sq-track__head .sq-panel__btn-group,
-  .sq-track__head .sq-track__more { flex: 1 1 0; min-width: 44px; }
-  .sq-track__head .sq-panel__btn-group > .sq-track__roll { width: 100%; min-width: 0; }
+  .sq-track__head .sq-track__more { flex: 1 1 44px; min-width: 44px; }
+  .sq-track__head .sq-panel__btn-group > .sq-track__roll { width: 100%; min-width: 0; min-height: 54px; padding: 5px 2px; }
 
   /* ---------- FX / FILTER / EQ / COMP / ENV panels ---------- */
   .sq-track__fx-panel,

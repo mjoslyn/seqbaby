@@ -3838,13 +3838,14 @@ button (studioMarkup.ts, plus render.js for the two it builds and main.js for
 the session menu's mode / switch pair, whose captions track their state). Under
 rather than beside: a caption beside the glyph doubles the button's width and
 six of those do not fit across a phone, where icon-over-caption is 44px wide —
-which is the target size they needed anyway. `clear`, `roll` and `remove` carry
+which is the target size they needed anyway. `clear` and `roll` already carried
 a `.sq-btn__label` span for their desktop text, so they use that instead of a
 second attribute. The `::after` that prints it is inside the 768px block, so
-desktop is untouched. `remove` sits in the head just before `clear` on a phone
-(order 29; it is out of the "more" menu, which keeps `dup`) and asks first
-through `showConfirmDialog` everywhere: undo brings a track back, but one tap
-on a square beside `clear` is not where to learn that.
+desktop is untouched. The six on that line (clear, dice, euclid, chance, roll,
+more) are the quick row's square exactly (56px tall, `flex: 1 1 44px`, the
+head's 4px gap), so a track's three lines of buttons are one grid. `remove`
+(in the "more" menu on a phone) asks first through `showConfirmDialog`
+everywhere: undo brings a track back, but one tap is not where to learn that.
 
 **`.sq-track__head::before` is a line break.** A flex container's own
 pseudo-element IS a flex item, so a zero-height one with a 100% basis breaks the
