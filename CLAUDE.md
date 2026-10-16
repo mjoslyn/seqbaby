@@ -2635,7 +2635,13 @@ since the same columns are narrower there and a finger wants taller rows.
   (`edgeW`), the drag threshold is wider, a `delete` button on the
   toolbar stands in for the key, and `‹ › ▲ ▼` scroll buttons
   (`navScroll`, most of a page at a time, shown under the touch query
-  only) move about where there is no scrollbar and one finger draws. The keys and the ruler are
+  only) move about where there is no scrollbar and one finger draws. The
+  bar is two groups (`.sq-pr__bar-main` / `.sq-pr__bar-more`, inline on
+  desktop through `display: contents`): on a phone the first is two rows
+  of same-height buttons, the tools and `⋯`, then scroll and delete, and
+  the rest (snap, nudge, follow, hear, ghosts, in key, zoom, the view's
+  sound and loop) is a panel `⋯` opens under them (`moreOpen`, kept
+  across repaints, toggled without one so a switch inside leaves it open). The keys and the ruler are
   `touch-action: none`, since both are gestures. The modal fills the
   window's height and the scroller takes what the toolbar leaves (flex,
   style.css); on a phone the tools show their glyphs alone.

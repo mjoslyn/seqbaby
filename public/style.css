@@ -4632,6 +4632,10 @@ body.sq-playing .sq-clip.is-now::after { content: ""; position: absolute; left: 
 /* the scroll buttons: a phone's, where there is no scrollbar and one finger draws */
 .sq-pr__nav { display: none; gap: 3px; }
 .sq-pr__nav button { padding: 2px 8px; font-size: 13px; min-width: 32px; }
+/* the bar is two groups, inline on desktop: what a phone shows (the tools,
+   the scroll buttons, delete) and what it keeps behind the ⋯ button */
+.sq-pr__bar-main, .sq-pr__bar-more { display: contents; }
+.sq-pr__morebtn { display: none; }
 .sq-pr__warn { color: var(--danger); }
 
 /* the track's card in a window over the roll (openSoundModal) */
@@ -4750,6 +4754,17 @@ body.view-piano #scale-fold-wrap { display: inline-flex; }
   .sq-pr__bar > button, .sq-pr__bar select, .sq-pr__tools button, .sq-pr__nudge button, .sq-pr__zoom button, .sq-pr__nav button { min-height: 36px; }
   .sq-pr__nav { display: inline-flex; }
   .sq-pr__nav button { min-width: 40px; font-size: 16px; }
+  /* two rows, every button the same height: the tools and ⋯, then scroll
+     and delete; the rest in a panel ⋯ opens under them */
+  .sq-pr__bar { gap: 6px 0; }
+  .sq-pr__bar-main { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; width: 100%; }
+  .sq-pr__bar-main .sq-pr__track { flex: 1 1 100%; }
+  .sq-pr__morebtn { display: inline-flex; align-items: center; justify-content: center; min-width: 40px; font-size: 18px; line-height: 1; margin-left: auto; }
+  .sq-pr__morebtn[aria-pressed="true"] { background: var(--accent); color: #0b0d10; border-color: var(--accent); }
+  .sq-pr__delbtn { margin-left: auto; }
+  .sq-pr__bar-main .sq-pr__warn { flex: 1 1 100%; font-size: 11px; }
+  .sq-pr__bar-more { display: none; }
+  .sq-pr__bar-more.is-open { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; width: 100%; box-sizing: border-box; padding: 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-3); }
   .sq-pr__tools button { padding: 6px 8px; }
   .sq-pr__nudge button, .sq-pr__zoom button { min-width: 32px; }
   .sq-pr__sec-h { gap: 5px; }
