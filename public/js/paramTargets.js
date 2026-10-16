@@ -621,7 +621,7 @@ export function fxShown(t) {
 }
 
 // `noTotal`: left out of the phone's "more" button sum, which hides the
-// buttons that are NOT in sight there — env, eq and comp. filter, fx, mod and
+// buttons that are NOT in sight there — env and comp. filter, fx, eq, mod and
 // aut sit in the quick row under the head with dots of their own, and the
 // generators' buttons are in the head.
 const PANEL_BADGES = [
@@ -670,7 +670,7 @@ const PANEL_BADGES = [
       }
       return any;
     } },
-  { sel: ".sq-track__eq", panel: "_eqPanelEl", modal: "_eqModal",
+  { sel: ".sq-track__eq", panel: "_eqPanelEl", modal: "_eqModal", noTotal: true,
     on: (t) => EQ_BANDS.map(b => b.key).filter(b => Math.abs(t.eq?.[b] ?? 0) >= 0.5) },
   { sel: ".sq-track__comp", panel: "_compPanelEl", modal: "_compModal", on: (t) => {
       if (!t.comp?.enabled) return [];
@@ -752,8 +752,8 @@ export function refreshPanelBadges(t) {
     panel.classList.toggle("is-live", live);
     panel.hidden = !live;
   }
-  // The mobile "more" button hides env / eq / comp behind it, so it carries
-  // their sum (the rest are `noTotal`, above).
+  // The mobile "more" button hides env / comp behind it, so it carries their
+  // sum (the rest are `noTotal`, above).
   const more = t._trackMoreBtn;
   if (more) {
     if (total) more.dataset.on = String(total);

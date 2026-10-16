@@ -594,12 +594,14 @@ button.sq-btn--danger { color: var(--danger); }
   align-items: center;
   justify-content: center;
   gap: 2px;
-  /* Two lines, on purpose. The five sound buttons (instrument / fx / filter /
-     mod / aut) share the first, each an equal share of it rather than a
+  /* Two lines, on purpose. The six sound buttons (inst / fx / filter /
+     eq / mod / aut) share the first, each an equal share of it rather than a
      fixed 56px — seven of those plus the speed field were a line and a half
      on a 390px phone, the break landing wherever it fell. The pattern's own
-     controls (+1, /2, speed) take the second, after the zero-height break
-     the track head uses (`::before`, ordered between the two groups). */
+     controls (semi − / +, shift ◂ / ▸, +1, /2) take the second, after the
+     zero-height break the track head uses (`::before`, ordered between the
+     two groups), sharing it the same way: two rows of six equal squares,
+     with the speed field on a line of its own under them. */
   flex: 1 1 44px;
   min-width: 44px;
   width: auto;
@@ -614,9 +616,16 @@ button.sq-btn--danger { color: var(--danger); }
   flex: 0 0 100%;
   height: 0;
 }
+.sq-track__quickrow > .track-semi-down,
+.sq-track__quickrow > .track-semi-up,
+.sq-track__quickrow > .track-shift-left,
+.sq-track__quickrow > .track-shift-right,
 .sq-track__quickrow > .track-len-plus1,
-.sq-track__quickrow > .track-len-half { order: 2; flex: 0 0 auto; min-width: 56px; }
+.sq-track__quickrow > .track-len-half,
 .sq-track__quickrow > .sq-field { order: 2; }
+/* The len-extend cluster gives shift ◂ a margin to stand apart from /4; here
+   it is one square among the others. */
+.sq-track__quickrow > .track-shift-left { margin-left: 0; }
 .sq-track__quickrow .sq-icon-btn .sq-btn-icon { width: 18px; height: 18px; }
 .sq-track__quickrow [data-label]::after {
   content: attr(data-label);
@@ -3755,8 +3764,8 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not
      these in a centered modal instead (.sq-track__menu-modal). The selectors
      are scoped to .sq-track__head so when nodes are reparented into the modal
      they become visible again automatically. The sound-shaping panel buttons
-     (env/eq/comp) move to that modal; fx, filter, mod and aut go to the quick
-     row under the head (render.js's applyQuickRow). roll keeps its inline
+     (env/comp) move to that modal; fx, filter, eq, mod and aut go to the
+     quick row under the head (render.js's applyQuickRow). roll keeps its inline
      spot. */
   .sq-track__head .sq-track__save,
   .sq-track__head .sq-track__load-patch,
@@ -3786,8 +3795,8 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not
   }
   /* The live panels — filter, env, eq, comp, the rack's engaged stages and the
      mod matrix's enabled rows — are not inline either (each panel's button
-     carries a dot and opens it as a modal: filter, mod, aut and the rack's
-     stages from the quick row, env / eq / comp from the "more" menu). The two
+     carries a dot and opens it as a modal: filter, eq, mod, aut and the
+     rack's stages from the quick row, env / comp from the "more" menu). The two
      generators stay: a live ring or a chance part is a picture of what the
      track is playing, and the grid under it is read-only while it is. The
      wrapper hides itself when a generator is not what is live in it, or an

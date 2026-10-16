@@ -1058,7 +1058,7 @@ export function openTrackMenu(t) {
   modal.appendChild(title);
 
   // sound-shaping panels first — the most-used controls in here. fx, filter,
-  // mod and aut are left out on purpose: on a phone (the only place this menu
+  // eq, mod and aut are left out on purpose: on a phone (the only place this menu
   // opens) render.js's applyQuickRow has already pulled them, +1, /2 and the
   // speed field out of the head into the quick-access row that sits below the
   // generator icons — inline like roll, never funneled through this modal.

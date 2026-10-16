@@ -19,7 +19,7 @@ import { euclideanRhythm, refreshEuclidUI, renderEuclidPanel, wireEuclidPanel } 
 import { refreshChanceUI, renderChancePanel, wireChancePanel } from "./chance.js";
 import { randomizeMelody, randomizeTimbre } from "./generate.js";
 import { GUITAR_DEFAULTS, GUITAR_NUM_KEYS, GUITAR_SEL_KEYS, GUITAR_TONE_NAMES, guitarTone, guitarToneDescription } from "./guitar.js";
-import { ICON_CHANCE, ICON_CLEAR, ICON_DICE, ICON_EUCLID, ICON_FILTER, ICON_FX, ICON_LEN_HALF, ICON_LEN_PLUS1, ICON_LOAD, ICON_ROLL, ICON_SAVE, ICON_SLIDERS, ICON_WAV, ICON_AUT, ICON_INSTRUMENT, ICON_MOD } from "./icons.js";
+import { ICON_CHANCE, ICON_CLEAR, ICON_DICE, ICON_EUCLID, ICON_FILTER, ICON_FX, ICON_LEN_HALF, ICON_LEN_PLUS1, ICON_LOAD, ICON_ROLL, ICON_SAVE, ICON_SLIDERS, ICON_WAV, ICON_AUT, ICON_EQ, ICON_INSTRUMENT, ICON_MOD, ICON_SEMI_DOWN, ICON_SEMI_UP, ICON_SHIFT_LEFT, ICON_SHIFT_RIGHT } from "./icons.js";
 import { refreshKnobRange, setKnobReadout, upgradeKnobs } from "./knob.js";
 import { canModulate, freshLfoEntry, lfoBipolar, lfoEuclid, lfoPhase, lfoRateLabel, syncLFO, trackLfoKeys } from "./lfo.js";
 import { autoOwns, fxShown, modOwns, refreshPanelBadges, refreshParamIndicators, trackControl } from "./paramTargets.js";
@@ -543,10 +543,11 @@ export function placeBusesLast() {
   return true;
 }
 
-// A phone-only quick-access row: instrument / fx / filter / mod / aut / +1 /
-// /2 / speed, pulled out of their desktop homes (the panel button group, the
-// len-extend cluster, and the speed field) into one row of their own right
-// after the head — visually below the generator icons, since everything else
+// A phone-only quick-access row: instrument / fx / filter / eq / mod / aut on
+// one line, then semi − / semi + / shift ◂ / shift ▸ / +1 / /2 / speed on the
+// next, pulled out of their desktop homes (the panel button group, the oct
+// cluster, the len-extend cluster, and the speed field) into one row of their
+// own right after the head — visually below the generator icons, since everything else
 // in the head past that point is hidden into the "more" menu on a phone.
 // Built from the SAME matchMedia breakpoint the head's own mobile CSS uses
 // (PHONE_MQ, dom.js), not isMobileDevice() (which also fires for a
@@ -562,9 +563,9 @@ export function placeBusesLast() {
 // track's steps. Each is a modal instead, opened from this row: `instrument`
 // (the synth row, openInstrumentAsModal), `fx` (the engaged stages with the
 // picker behind an add button — openFxAsModal's phone branch), `mod` and
-// `aut` (the panels' own modals, moved here from the "more" menu so the dot
-// that says something is on is in sight). filter, env, eq and comp were
-// modals from their buttons already.
+// `aut` and `eq` (the panels' own modals, moved here from the "more" menu so
+// the dot that says something is on is in sight). filter, env, eq and comp
+// were modals from their buttons already; env and comp stay in the menu.
 const QUICKROW_MQ = PHONE_MQ;
 
 // The buttons in the row (not the speed field) get the same icon-plus-
@@ -577,8 +578,13 @@ const QUICKROW_MQ = PHONE_MQ;
 const QUICKROW_ICON_BTNS = [
   { sel: ".sq-track__fx", icon: ICON_FX, label: "fx" },
   { sel: ".sq-track__filter", icon: ICON_FILTER, label: "filter" },
+  { sel: ".sq-track__eq", icon: ICON_EQ, label: "eq" },
   { sel: ".sq-track__mod", icon: ICON_MOD, label: "mod" },
   { sel: ".track-aut", icon: ICON_AUT, label: "aut" },
+  { sel: ".track-semi-down", icon: ICON_SEMI_DOWN, label: "semi −" },
+  { sel: ".track-semi-up", icon: ICON_SEMI_UP, label: "semi +" },
+  { sel: ".track-shift-left", icon: ICON_SHIFT_LEFT, label: "shift ◂" },
+  { sel: ".track-shift-right", icon: ICON_SHIFT_RIGHT, label: "shift ▸" },
   { sel: ".track-len-plus1", icon: ICON_LEN_PLUS1, label: "+1" },
   { sel: ".track-len-half", icon: ICON_LEN_HALF, label: "/2" },
 ];
@@ -606,7 +612,7 @@ function applyQuickRow(t) {
     instBtn.setAttribute("aria-pressed", "false");
     instBtn.setAttribute("aria-label", "instrument controls");
     instBtn.title = "the instrument's own controls";
-    instBtn.dataset.label = "instrument";
+    instBtn.dataset.label = "inst";
     instBtn.innerHTML = ICON_INSTRUMENT;
     instBtn.addEventListener("click", () => {
       if (t._instModal) { t._instModal.close(); return; }

@@ -3840,16 +3840,20 @@ mod matrix's enabled rows are inline on the track on desktop (the live
 panels, above) and NOT on a phone: a track with a contagion panel, three
 stages and two LFOs was a screen and a half between one step grid and the
 next. Each is a modal there, opened from the quick row `applyQuickRow`
-(render.js) builds under the head: `instrument` (`openInstrumentAsModal`,
+(render.js) builds under the head: `inst` (`openInstrumentAsModal`,
 stepEditor.js: the synth row MOVED into a modal through `openPanelAsModal`,
 titled with the track and its engine, so every listener and
 `updatePlaitsControlsVisibility`'s stashed group refs keep working), `fx`
 (`openFxAsModal`'s phone branch: the rack panel moved into a modal, filtered
 to the stages on the track exactly as the inline view is, × and ‹ › included,
 with the picker behind an `+ add an effect` button opened over it), `filter`,
-`mod` and `aut` (their own modals; mod and aut moved here from the "more"
-menu, which keeps env / eq / comp). The `instrument` button is the one node
-the row makes itself, since it has no desktop home. The quick row's buttons
+`eq`, `mod` and `aut` (their own modals; eq, mod and aut moved here from the
+"more" menu, which keeps env / comp). Its second line is the pattern's own
+controls: semi − / +, shift ◂ / ▸, +1 and /2, pulled from the oct and
+len-extend clusters (the "more" menu keeps oct − / + and x2 / x4 / /4), two
+rows of six equal squares with the speed field on a line under them. The
+`inst` button is the one node the row makes itself, since it has no desktop
+home. The quick row's buttons
 carry the `data-on` dot with `::before`, because on a phone `::after` is the
 caption. What is hidden is decided by the stylesheet's mobile block (the
 head's synth row, and the six sound panels inside `.sq-track__live`; the two
