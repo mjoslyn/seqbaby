@@ -6,13 +6,30 @@
 
 type Mail = { to: string; subject: string; text: string; html: string };
 
+/** "seqbaby <no-reply@x.com>" as the binding takes it: { email, name }, or the bare address. The
+ *  binding rejects the display-name form as a string. */
+export function senderAddress(from: string): string | { email: string; name: string } {
+  const m = from.match(/^\s*(.*?)\s*<\s*([^>\s]+)\s*>\s*$/);
+  if (!m) return from.trim();
+  const name = m[1].replace(/^"|"$/g, "");
+  return name ? { email: m[2], name } : m[2];
+}
+
 export async function sendMail(env: CloudflareEnv, mail: Mail): Promise<void> {
-  const from = env.EMAIL_FROM || "seqbaby <no-reply@playseqbaby.com>";
+  const from = senderAddress(env.EMAIL_FROM || "seqbaby <no-reply@playseqbaby.com>");
   if (!env.EMAIL) {
     console.log(`[mail] (no EMAIL binding; not sent)\nto: ${mail.to}\nsubject: ${mail.subject}\n\n${mail.text}`);
     return;
   }
-  await env.EMAIL.send({ from, to: mail.to, subject: mail.subject, text: mail.text, html: mail.html });
+  try {
+    await env.EMAIL.send({ from, to: mail.to, subject: mail.subject, text: mail.text, html: mail.html });
+  } catch (e) {
+    // The binding's errors carry their reason in `code` (E_SENDER_NOT_VERIFIED ...),
+    // and Better Auth logs only the stack.
+    const err = e as { code?: string; message?: string };
+    console.error(`[mail] send failed: ${err?.code ?? ""} ${err?.message ?? String(e)}`);
+    throw e;
+  }
 }
 
 const esc = (s: string) =>
