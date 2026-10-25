@@ -32,7 +32,7 @@
     {
       "binding": "DB",
       "database_name": "seqbaby",
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "a060ec0f-8714-4961-92ec-66aff50d3342",
       "migrations_dir": "db/migrations"
     }
   ],
