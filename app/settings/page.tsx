@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getMyProfile } from "@/app/profile/actions";
-import { createClient } from "@/lib/supabase/server";
+import { currentUser } from "@/lib/auth/session";
 import ProfileForm from "./ProfileForm";
 import AccountSettings from "./AccountSettings";
 import PatchManager from "./PatchManager";
@@ -13,10 +13,7 @@ export default async function SettingsPage() {
   const profile = await getMyProfile();
   if (!profile) redirect("/login");
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await currentUser();
 
   return (
     <div className={styles.page}>

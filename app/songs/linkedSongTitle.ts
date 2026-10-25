@@ -1,6 +1,8 @@
 import { cache } from "react";
-import { createClient } from "@/lib/supabase/server";
-import { getShareMeta } from "@/lib/api.js";
+import { cfEnv } from "@/lib/cf";
+import { currentUserId } from "@/lib/auth/session";
+import { first } from "@/lib/data/db.js";
+import { getShareMeta } from "@/lib/data/shares.js";
 
 // Not a server action file on purpose: this is read by generateMetadata, which
 // runs on the server already, and nothing on the client should be able to ask
@@ -32,36 +34,24 @@ function cardName(card: { username?: unknown; display_name?: unknown } | null): 
 }
 
 /**
- * The name to put on a card for one profile, read from `profile_cards` --
- * the attribution view, not the profiles table, for the reason the profile
- * page reads it: a public song by someone whose own page is private is still
- * theirs. Null when the view is missing (migration 0007 not applied yet) or
- * the profile has no name to show.
+ * The name to put on a card for one profile: attribution fields only, which a
+ * public song by someone whose own page is private still gets. Null when the
+ * profile has no name to show.
  */
-export async function ownerName(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  ownerId: unknown,
-): Promise<string | null> {
-  return (await ownerCard(supabase, ownerId))?.name ?? null;
+export async function ownerName(db: D1Database, ownerId: unknown): Promise<string | null> {
+  return (await ownerCard(db, ownerId))?.name ?? null;
 }
 
 type OwnerCard = { name: string; handle: string | null; avatarGrid: string | null };
 
 /** ownerName's lookup, with the handle and avatar the studio's byline draws. */
-async function ownerCard(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  ownerId: unknown,
-): Promise<OwnerCard | null> {
+async function ownerCard(db: D1Database, ownerId: unknown): Promise<OwnerCard | null> {
   if (typeof ownerId !== "string" || !UUID.test(ownerId)) return null;
-  const q = (cols: string) =>
-    supabase.from("profile_cards").select(cols).eq("id", ownerId).maybeSingle<Record<string, unknown>>();
-  // avatar_grid is 0014's; without it the select fails whole, so ask again.
-  let res = await q("username,display_name,avatar_grid");
-  if (res.error) res = await q("username,display_name");
-  const name = cardName(res.data);
+  const row = await first(db, "select username, display_name, avatar_grid from profiles where id = ?1", ownerId);
+  const name = cardName(row);
   if (!name) return null;
-  const handle = typeof res.data?.username === "string" && res.data.username.trim() ? res.data.username.trim() : null;
-  const grid = typeof res.data?.avatar_grid === "string" ? res.data.avatar_grid : null;
+  const handle = typeof row?.username === "string" && row.username.trim() ? row.username.trim() : null;
+  const grid = typeof row?.avatar_grid === "string" ? row.avatar_grid : null;
   return { name, handle, avatarGrid: grid };
 }
 
@@ -108,32 +98,30 @@ export const linkedSongCard = cache(async function linkedSongCard(
 ): Promise<LinkedSongCard | null> {
   if (!slug && !songId) return null;
   try {
-    const supabase = await createClient();
+    const env = await cfEnv();
+    const db = env.DB;
     type SongRow = { id?: unknown; title?: unknown; owner_id?: unknown; likes?: unknown };
-    // `likes` is 0016's; a database without it fails the select whole.
-    const read = async (filter: (cols: string) => PromiseLike<{ data: SongRow | null; error: unknown }>) => {
-      const first = await filter("id,title,owner_id,likes");
-      return first.error ? (await filter("id,title,owner_id")).data : first.data;
-    };
+    const COLS = "id, title, owner_id, (select count(*) from song_likes l where l.song_id = songs.id) as likes";
     let row: SongRow | null = null;
     if (slug) {
       // Same lookup as app/api/share/route.ts.
-      row = await read((cols) =>
-        supabase.from("songs").select(cols).eq("share_slug", slug).eq("is_public", true).maybeSingle<SongRow>(),
-      );
+      row = await first(db, `select ${COLS} from songs where share_slug = ?1 and is_public = 1`, slug);
     } else {
-      // A non-uuid would come back as a 400 from PostgREST; skip the round trip.
       if (!songId || !UUID.test(songId)) return null;
-      // No is_public filter: RLS decides. A crawler is anonymous and sees only
-      // published songs, while the owner following their own link gets the real
-      // title in the tab.
-      row = await read((cols) => supabase.from("songs").select(cols).eq("id", songId).maybeSingle<SongRow>());
+      // A crawler is anonymous and sees only published songs, while the owner
+      // following their own link gets the real title in the tab.
+      row = await first(
+        db,
+        `select ${COLS} from songs where id = ?1 and (is_public = 1 or owner_id = ?2)`,
+        songId,
+        (await currentUserId()) ?? "",
+      );
     }
     const title = named(row?.title);
     if (title) {
       let owner: OwnerCard | null = null;
       try {
-        owner = await ownerCard(supabase, row?.owner_id);
+        owner = await ownerCard(db, row?.owner_id);
       } catch {
         // The title is enough for a card; the name is the better half of it,
         // not the whole of it.
@@ -145,23 +133,21 @@ export const linkedSongCard = cache(async function linkedSongCard(
         ownerId: typeof row?.owner_id === "string" ? row.owner_id : null,
         ownerHandle: owner?.handle ?? null,
         ownerAvatarGrid: owner?.avatarGrid ?? null,
-        likes: typeof row?.likes === "number" ? row.likes : 0,
+        likes: Number(row?.likes) || 0,
       };
     }
     if (!slug) return null;
     // A slug that names no published song may still be a quick, anonymous
-    // share (lib/api.js's Blobs store, behind the studio's own `share`
-    // button) rather than a legacy one with nothing worth showing — those
-    // carry a generated title and, for a signed-in sharer, an owner id
-    // (see putShare). Metadata only: never pull the whole session down just
-    // to learn its name.
-    const meta = await getShareMeta({ id: slug });
+    // share (the studio's own `share` button, lib/data/shares.js), which
+    // carries a title and, for a signed-in sharer, an owner id. Metadata
+    // only: never pull the whole session down just to learn its name.
+    const meta = await getShareMeta(env, slug);
     const shareTitle = named(meta?.title);
     if (!shareTitle) return null;
     let shareOwner: OwnerCard | null = null;
     if (meta?.ownerId) {
       try {
-        shareOwner = await ownerCard(supabase, meta.ownerId);
+        shareOwner = await ownerCard(db, meta.ownerId);
       } catch {
         /* same tradeoff as above */
       }
@@ -176,31 +162,25 @@ export const linkedSongCard = cache(async function linkedSongCard(
       likes: 0,
     };
   } catch {
-    // The engine is meant to run with no Supabase env at all, where creating
-    // the client throws. A link preview is never worth failing the page over.
+    // A link preview is never worth failing the page over.
     return null;
   }
 });
 
 /**
- * The name on a jam invite's card. A jam room is a Realtime channel and
- * nothing else -- no row anywhere says who started it -- so the invite link
- * carries the host's handle (`?jam=<room>&by=<handle>`, written by
- * JamPanel.tsx for a signed-in host). Anyone can type a URL, so the handle is
- * only ever put on a card once it has been found in `profile_cards`: the
- * worst a made-up one can do is name nobody, and the card then says
- * "Someone". Null when there is no such handle, or no Supabase to ask.
+ * The name on a jam invite's card. A jam room is a Durable Object holding
+ * WebSockets and nothing else -- no row anywhere says who started it -- so
+ * the invite link carries the host's handle (`?jam=<room>&by=<handle>`,
+ * written by JamPanel.tsx for a signed-in host). Anyone can type a URL, so
+ * the handle is only ever put on a card once it has been found among the
+ * profiles: the worst a made-up one can do is name nobody, and the card then
+ * says "Someone". Null when there is no such handle.
  */
 export async function jamHostName(by: string | null): Promise<string | null> {
   if (!by || !HANDLE.test(by)) return null;
   try {
-    const supabase = await createClient();
-    const { data } = await supabase
-      .from("profile_cards")
-      .select("username,display_name")
-      .eq("username_lower", by.toLowerCase())
-      .maybeSingle();
-    return cardName(data);
+    const db = (await cfEnv()).DB;
+    return cardName(await first(db, "select username, display_name from profiles where username_lower = ?1", by.toLowerCase()));
   } catch {
     return null;
   }

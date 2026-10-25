@@ -1,8 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { RealtimeChannel } from "@supabase/supabase-js";
-import { createClient } from "@/lib/supabase/client";
 import { Reassembler, chunkMessage } from "@/lib/jamWire.js";
 import styles from "@/app/ui.module.css";
 
@@ -12,14 +10,15 @@ import styles from "@/app/ui.module.css";
 // edit is, and how a peer's edit is written onto a running sequencer, is the
 // engine's (public/js/jam.js), reached through `window.seqbaby.jam`. The split
 // is deliberate and the same one the compose panel makes: the engine knows
-// nothing about Supabase, and this file knows nothing about sessions beyond
-// "a message came in, hand it over".
+// nothing about the transport, and this file knows nothing about sessions
+// beyond "a message came in, hand it over".
 //
-// The room is a Supabase Realtime channel -- broadcast for the edits, presence
-// for who is here -- which the shell already has for accounts and needs no
-// table for. A room id is an unguessable string in `?jam=<id>`, and anyone
-// with the link can join: the same trust model as a share link, and for the
-// same reason -- the point of it is to send it to someone.
+// The room is a Durable Object (workers/jamRoom.ts) reached over a WebSocket
+// at /api/jam/<room>: it relays every message to the other members and tells
+// everyone who is here whenever that changes. A room id is an unguessable
+// string in `?jam=<id>`, and anyone with the link can join: the same trust
+// model as a share link, and for the same reason -- the point of it is to send
+// it to someone.
 //
 // **Joining takes the room's session.** A newcomer asks the member who has
 // been here longest for the whole song, and until it arrives their own edits
@@ -48,7 +47,8 @@ type Wire =
 type Outgoing = { [K in Wire["type"]]: Omit<Extract<Wire, { type: K }>, "from"> }[Wire["type"]];
 
 type Peer = { id: string; name: string; color: string; joinedAt: number };
-type Presence = { name: string; color: string; joinedAt: number };
+/** What the room sends: another member's message part, or who is here. */
+type RoomFrame = { t: "msg"; part: unknown } | { t: "presence"; peers: Peer[] };
 
 type Status =
   | "idle"
@@ -64,9 +64,16 @@ const ROOM_PARAM = "jam";
  *  it against the profiles before naming anyone. See jamHostName. */
 const BY_PARAM = "by";
 const NAME_KEY = "seqbaby.jamName.v1";
-const EVENT = "msg";
 /** How long a newcomer waits for the room's session before keeping their own. */
 const SYNC_WAIT_MS = 8000;
+/** A dropped connection is retried after this, doubling to RETRY_MAX_MS. */
+const RETRY_MS = 1000;
+const RETRY_MAX_MS = 15000;
+/** Keepalive: the room answers "ping" without waking (workers/jamRoom.ts). */
+const PING_MS = 25000;
+
+/** A socket to the room, plus what it needs to reconnect. */
+type Conn = { ws: WebSocket | null; room: string; closed: boolean; retry: number; timer: ReturnType<typeof setTimeout> | null; ping: ReturnType<typeof setInterval> | null };
 
 const randomId = (n = 12) => {
   const bytes = new Uint8Array(n);
@@ -132,8 +139,7 @@ export default function JamPanel({
   const [name, setName] = useState("");
   const [copied, setCopied] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
-  const channelRef = useRef<RealtimeChannel | null>(null);
-  const clientRef = useRef<ReturnType<typeof createClient> | null>(null);
+  const connRef = useRef<Conn | null>(null);
   const meRef = useRef<string>("");
   const nameRef = useRef<string>("");
   const reasmRef = useRef(new Reassembler());
@@ -181,29 +187,41 @@ export default function JamPanel({
   const displayName = useCallback(() => nameRef.current.trim() || `guest ${meRef.current.slice(0, 4)}`, []);
 
   const send = useCallback((msg: Outgoing) => {
-    const ch = channelRef.current;
-    if (!ch) return;
-    // In parts, because the transport caps a payload and a whole session with
+    const ws = connRef.current?.ws;
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    // In parts, because the transport caps a frame and a whole session with
     // samples in it is well over the cap; one part for a knob turn.
     for (const part of chunkMessage({ ...msg, from: meRef.current })) {
-      void ch.send({ type: "broadcast", event: EVENT, payload: part });
+      ws.send(JSON.stringify({ t: "msg", part }));
     }
   }, []);
+
+  /** Tell the room who this member is (on every connect, and after a rename). */
+  const sendPresence = useCallback((joinedAt: number) => {
+    const ws = connRef.current?.ws;
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    ws.send(JSON.stringify({ t: "join", id: meRef.current, name: displayName(), color: colorFor(meRef.current), joinedAt }));
+  }, [displayName]);
 
   const peerName = useCallback((id: string) => peersRef.current.find((p) => p.id === id)?.name || "someone", []);
 
   const leave = useCallback(() => {
-    const ch = channelRef.current;
-    channelRef.current = null;
+    const conn = connRef.current;
+    connRef.current = null;
     if (waitTimerRef.current) clearTimeout(waitTimerRef.current);
     waitTimerRef.current = null;
     waitingRef.current = false;
     askedRef.current = null;
     window.seqbaby?.jam?.stop();
-    if (ch) {
-      const supabase = clientRef.current;
-      if (supabase) void supabase.removeChannel(ch);
-      else void ch.unsubscribe();
+    if (conn) {
+      conn.closed = true;
+      if (conn.timer) clearTimeout(conn.timer);
+      if (conn.ping) clearInterval(conn.ping);
+      try {
+        conn.ws?.close(1000, "left");
+      } catch {
+        /* already closed */
+      }
     }
     setRoom(null);
     setPeers([]);
@@ -277,18 +295,6 @@ export default function JamPanel({
     [send, goLive, peerName],
   );
 
-  const readPeers = useCallback((ch: RealtimeChannel): Peer[] => {
-    const st = ch.presenceState<Presence>();
-    const out: Peer[] = [];
-    for (const [id, metas] of Object.entries(st)) {
-      const m = metas[0];
-      if (!m) continue;
-      out.push({ id, name: m.name || "guest", color: m.color || colorFor(id), joinedAt: Number(m.joinedAt) || 0 });
-    }
-    out.sort((a, b) => a.joinedAt - b.joinedAt);
-    return out;
-  }, []);
-
   /**
    * Join a room. `first` is the member who started it, who has nobody to ask
    * for the song and goes live at once; everyone else asks the longest-present
@@ -296,81 +302,94 @@ export default function JamPanel({
    */
   const join = useCallback(
     (roomId: string, first: boolean) => {
-      if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
-        setStatus("error");
-        setError("jamming needs this site's Supabase to be configured.");
-        return;
-      }
-      if (channelRef.current) leave();
+      if (connRef.current) leave();
       setRoom(roomId);
       setStatus("connecting");
       setError("");
       writeRoomToUrl(roomId, accountUsername);
 
-      const supabase = clientRef.current ?? createClient();
-      clientRef.current = supabase;
       const me = meRef.current;
-      const ch = supabase.channel(`jam:${roomId}`, {
-        config: { broadcast: { self: false }, presence: { key: me } },
-      });
-      channelRef.current = ch;
+      const conn: Conn = { ws: null, room: roomId, closed: false, retry: RETRY_MS, timer: null, ping: null };
+      connRef.current = conn;
       const reasm = reasmRef.current;
       let askedForSong = false;
+      // The same joinedAt across reconnects, so a blip does not move this
+      // member down the list.
+      const joinedAt = Date.now();
 
-      ch.on("broadcast", { event: EVENT }, ({ payload }) => {
-        if (channelRef.current !== ch) return;
-        const msg = reasm.push(payload) as Wire | undefined;
-        if (msg) onWire(msg);
-      });
-      ch.on("presence", { event: "sync" }, () => {
-        if (channelRef.current !== ch) return;
-        const list = readPeers(ch);
-        peersRef.current = list;
-        setPeers(list);
-        // The first sync is where a newcomer finds out who to ask. The
+      const onPresence = (list: Peer[]) => {
+        const peers = list
+          .map((p) => ({ ...p, name: p.name || "guest", color: p.color || colorFor(p.id) }))
+          .sort((a, b) => a.joinedAt - b.joinedAt);
+        peersRef.current = peers;
+        setPeers(peers);
+        // The first presence is where a newcomer finds out who to ask. The
         // longest-present member has the song; an empty room means the song
         // is ours.
         if (!first && !askedForSong) {
           askedForSong = true;
-          const other = list.find((p) => p.id !== me);
+          const other = peers.find((p) => p.id !== me);
           if (other) {
             waitingRef.current = true;
             setStatus("syncing");
             send({ type: "hello", to: other.id });
             waitTimerRef.current = setTimeout(() => {
-              if (channelRef.current === ch && waitingRef.current) goLive(null, null);
+              if (connRef.current === conn && waitingRef.current) goLive(null, null);
             }, SYNC_WAIT_MS);
           } else {
             goLive(null, null);
           }
         }
-      });
-      let joinedAt = 0;
-      ch.subscribe((state, err) => {
-        if (channelRef.current !== ch) return;
-        if (state === "SUBSCRIBED") {
-          // Also after a reconnect: the client rejoins a dropped channel on
-          // its own, and presence has to be told again. The same joinedAt,
-          // so a blip does not move this member down the list.
-          joinedAt = joinedAt || Date.now();
-          void ch.track({ name: displayName(), color: colorFor(me), joinedAt } satisfies Presence);
+      };
+
+      const connect = () => {
+        if (conn.closed) return;
+        const proto = location.protocol === "https:" ? "wss:" : "ws:";
+        const ws = new WebSocket(`${proto}//${location.host}/api/jam/${encodeURIComponent(roomId)}`);
+        conn.ws = ws;
+        ws.onopen = () => {
+          if (connRef.current !== conn) return ws.close();
+          conn.retry = RETRY_MS;
+          sendPresence(joinedAt);
+          if (conn.ping) clearInterval(conn.ping);
+          conn.ping = setInterval(() => ws.readyState === WebSocket.OPEN && ws.send("ping"), PING_MS);
           setError("");
           if (first) goLive(null, null);
-          else setStatus((s) => (s === "error" || s === "connecting" ? (waitingRef.current ? "syncing" : "live") : s));
-        } else if (state === "CHANNEL_ERROR" || state === "TIMED_OUT" || state === "CLOSED") {
-          // Not fatal: the client retries with backoff, and SUBSCRIBED above
-          // clears this when it gets through. The room is kept so `leave` is
-          // still on offer, and so a blip does not throw the jam away.
+          else setStatus((s) => (s === "error" || s === "connecting" ? (waitingRef.current ? "syncing" : askedForSong ? "live" : "connecting") : s));
+        };
+        ws.onmessage = (ev) => {
+          if (connRef.current !== conn || typeof ev.data !== "string" || ev.data === "pong") return;
+          let frame: RoomFrame;
+          try {
+            frame = JSON.parse(ev.data);
+          } catch {
+            return;
+          }
+          if (frame.t === "presence") onPresence(frame.peers ?? []);
+          else if (frame.t === "msg") {
+            const msg = reasm.push(frame.part as Parameters<Reassembler["push"]>[0]) as Wire | undefined;
+            if (msg) onWire(msg);
+          }
+        };
+        ws.onclose = (ev) => {
+          if (conn.ping) clearInterval(conn.ping);
+          conn.ping = null;
+          if (conn.closed || connRef.current !== conn) return;
+          // 4000: this member connected again elsewhere (a second tab took the
+          // same id); nothing to retry.
+          if (ev.code === 4000) return;
+          // Not fatal: retried with backoff, and onopen clears this. The room
+          // is kept so `leave` is still on offer, and so a blip does not throw
+          // the jam away.
           setStatus("error");
-          setError(
-            state === "CLOSED"
-              ? "lost the connection to the room; retrying."
-              : `could not reach the room${err?.message ? ` (${err.message})` : ""}; retrying.`,
-          );
-        }
-      });
+          setError(ev.code === 1006 || ev.code === 1001 ? "lost the connection to the room; retrying." : `could not reach the room (${ev.code}); retrying.`);
+          conn.timer = setTimeout(connect, conn.retry);
+          conn.retry = Math.min(conn.retry * 2, RETRY_MAX_MS);
+        };
+      };
+      connect();
     },
-    [leave, onWire, readPeers, send, goLive, displayName, accountUsername],
+    [leave, onWire, send, sendPresence, goLive, accountUsername],
   );
 
   // A link with a room in it: join on arrival, once the engine can take the
@@ -378,17 +397,21 @@ export default function JamPanel({
   useEffect(() => {
     if (!ready) return;
     const r = roomFromUrl();
-    if (r && !channelRef.current) join(r, false);
+    if (r && !connRef.current) join(r, false);
     // Only on becoming ready: `join` is stable for the life of the panel.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready]);
 
-  // Leaving the page leaves the room; presence would time out on its own, but
-  // a member that is gone should not linger in the list for half a minute.
+  // Leaving the page leaves the room: the socket closing is what takes a
+  // member off everyone's list.
   useEffect(() => {
-    const onHide = () => {
-      const ch = channelRef.current;
-      if (ch) void ch.untrack();
+    const onHide = (e: PageTransitionEvent) => {
+      if (e.persisted) return; // into the back/forward cache; it may come back
+      const conn = connRef.current;
+      if (conn) {
+        conn.closed = true;
+        conn.ws?.close(1000, "page closed");
+      }
     };
     window.addEventListener("pagehide", onHide);
     return () => window.removeEventListener("pagehide", onHide);
@@ -405,9 +428,8 @@ export default function JamPanel({
     } catch {
       /* fine */
     }
-    const ch = channelRef.current;
-    if (ch) void ch.track({ name: displayName(), color: colorFor(meRef.current), joinedAt: peersRef.current.find((p) => p.id === meRef.current)?.joinedAt || Date.now() } satisfies Presence);
-  }, [name, displayName]);
+    sendPresence(peersRef.current.find((p) => p.id === meRef.current)?.joinedAt || Date.now());
+  }, [name, sendPresence]);
 
   // Whoever copies the link is the one sharing the jam, so it carries THIS
   // member's handle, not the room starter's -- a joiner passing it on is the

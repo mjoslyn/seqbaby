@@ -4,8 +4,9 @@ Multi-engine browser step sequencer. A hand-written vanilla Web Audio engine
 (Mutable Instruments Plaits via `@vectorsize/woscillators`, Tone.js drum/synth
 recipes, worklet models of the silverbox / contagion / hexop plus nine
 analog emulators, wavetable + granular + unified sampler
-engines, Web MIDI) wrapped in a thin Next.js + Supabase shell for accounts,
-cloud songs, a patch gallery, and share links. 32-pattern bank with filter /
+engines, Web MIDI) wrapped in a thin Next.js shell on Cloudflare Workers
+(OpenNext, D1, R2, Durable Objects, Better Auth) for accounts, cloud songs, a
+patch gallery, share links, jam rooms and compose jobs. 32-pattern bank with filter /
 env / fx / eq / comp / mod / automation per track.
 
 ## Tech stack
@@ -14,25 +15,31 @@ env / fx / eq / comp / mod / automation per track.
   static DOM (`app/studioMarkup.ts`), then `app/ScriptLoader.tsx` injects the
   engine scripts in order: `public/tone.js` (Tone.js 15, vendored) →
   `public/woscillators.js` →
-  `public/js/main.js` (ES module). `middleware.ts` refreshes the Supabase
-  session on every request *except* static engine assets.
+  `public/js/main.js` (ES module). No middleware: a session is read where it
+  is needed (`lib/auth/session.ts`).
 - **Engine**: ~89 dependency-free vanilla ES modules in `public/js/`. No
   bundler — edit, reload. `window.seqbaby` (from `appApi.js`) exposes `state`
   and serialize/apply hooks to the React shell (typed in `app/seqbaby.d.ts`).
-- **Accounts + data**: Supabase (Postgres + Auth + RLS). Tables: `profiles`,
-  `songs`, `song_versions`, `patches` (see `supabase/migrations/`). Server
-  actions in `app/{songs,patches,profile,auth,account}/actions.ts`. Saving an
-  existing song appends to its version tree — see the song versions section.
-- **Anonymous sharing**: `app/api/share/route.ts` (public songs rows);
-  `lib/api.js` is the Netlify Blobs store behind it. The link preview is `app/shareCard.ts` (one card, built in one place
+- **Accounts + data**: D1 (SQLite) for the tables (`db/migrations/`), R2 for
+  samples, share links and any value too big for a D1 row, Better Auth for
+  accounts (`lib/auth/`). There is no Row Level Security: every rule about who
+  may read or write what is a WHERE clause in `lib/data/*.js`, held by
+  `test/data.test.js`. Server actions in
+  `app/{songs,patches,profile,auth,account}/actions.ts` resolve the caller and
+  hand off to `lib/data/`. Saving an existing song appends to its version tree
+  — see the song versions section. See the Cloudflare section below.
+- **Anonymous sharing**: `app/api/share/route.ts` (public songs rows, then
+  quick shares in `lib/data/shares.js`: a `shares` row plus the session in R2).
+  The link preview is `app/shareCard.ts` (one card, built in one place
   because og/twitter metadata does not inherit field-by-field between
   segments), titled with the song when the URL names one — see the share card
   section below.
 - **Persistence (local)**: localStorage `seqbaby.sets.v1` (saved sessions).
   Saved patches are the account's (see the patch bay section).
-- **Deploy**: Netlify via `@netlify/plugin-nextjs` (`netlify.toml`, Node 22).
-  Push to `main` auto-deploys production; branch pushes get deploy previews
-  (stable alias: `<branch-with-dashes>--seqbaby.netlify.app`).
+- **Deploy**: Cloudflare Workers via OpenNext (`@opennextjs/cloudflare`,
+  `wrangler.jsonc`, `open-next.config.ts`, `worker.ts`). `npm run deploy`
+  builds and deploys; Workers Builds can deploy on push to `main`, with
+  preview URLs per branch. Workers Paid plan (the bundle and CPU limits).
 
 ## Layout
 
@@ -62,12 +69,16 @@ env / fx / eq / comp / mod / automation per track.
 │   ├── Preloader.tsx + preloaderMarkup.ts  loading overlay: markup + inline driver
 │   ├── login/ settings/ u/[username]/       auth, account settings, public profiles
 │   ├── ComposeChat.tsx        the in-studio compose panel: ask for a song, in words; a turn's changes land in a review bar (audition / keep), never straight in
-│   ├── JamPanel.tsx           the jam room: who is in it, the connection (Supabase Realtime), the invite link. The engine half is public/js/jam.js
+│   ├── JamPanel.tsx           the jam room: who is in it, the connection (a WebSocket to workers/jamRoom.ts), the invite link. The engine half is public/js/jam.js
 │   ├── shareCard.ts + shareCopy.js  the link preview, and its sentences (who shared what)
 │   ├── api/share/route.ts     anonymous ?s=<slug> share endpoint
 │   ├── api/patch/[id]/route.ts  a public patch's config, for a homepage patch card to play
 │   ├── api/compose/route.ts   starts a compose turn; api/compose/status polls one
-│   └── {songs,patches,profile,auth,account}/actions.ts   Supabase server actions
+│   ├── api/auth/[...all]/     Better Auth's endpoints (the links in its emails land here)
+│   ├── api/bay/               the studio's patch bay (bodies too big for a server action)
+│   ├── api/me/route.ts        who is signed in, for islands on cached pages
+│   ├── api/admin/import/      the one-off move from Supabase (off unless MIGRATION_TOKEN is set)
+│   └── {songs,patches,profile,auth,account}/actions.ts   server actions over lib/data
 ├── public/
 │   ├── js/                    THE ENGINE — see module map below
 │   ├── woscillators.js        Plaits WASM port, exposes window.woscillators
@@ -77,17 +88,21 @@ env / fx / eq / comp / mod / automation per track.
 │   │                          by scripts/make-app-icons.mjs
 │   └── manifest.webmanifest   installed-app name / colours / icon sizes
 ├── lib/
-│   ├── supabase/{client,server,middleware}.ts   Supabase SSR helpers
+│   ├── cf.ts                  the Worker's bindings from anywhere on the server (cfEnv, cfDb)
+│   ├── auth/                  Better Auth: config.js (pure, tested), index.ts (getAuth),
+│   │                          session.ts (currentUser), mail.ts (the EMAIL binding), nameBase.js
+│   ├── data/                  every read and write of D1 and R2, plain JS taking the bindings:
+│   │                          db.js, blob.js, songs.js, patches.js, profiles.js, shares.js, importer.js
 │   ├── composeModels.js       the model a compose turn runs on (default + transcript labels)
 │   ├── composeKey.js          whose key it runs on: the shape check + the mask
 │   ├── composeJobs.js         a running turn's record, its two secrets, and the limits
 │   ├── jamWire.js             a jam message cut into parts the transport will carry, and put back together
-│   └── api.js                 legacy Blobs share put/get (+ in-memory dev fallback)
-├── middleware.ts              Supabase session refresh (skips engine assets)
-├── supabase/
-│   ├── migrations/            profiles, songs, patches, song versions, templates, delete_own_account RPC
-│   └── tests/                 negative RLS tests + the local auth stub they need
-├── test/                      node --test suites (engine-side, no browser)
+│   └── api.js                 share put/get for the legacy static server (in memory)
+├── db/migrations/             the D1 schema (0001_init.sql: auth, profiles, songs, versions, chats, likes, patches, shares)
+├── worker.ts                  the Worker's entry: OpenNext's handler + the jam socket route + the Durable Objects
+├── workers/                   jamRoom.ts (a jam room), composeJob.ts (a compose turn, and the usage limits)
+├── wrangler.jsonc  open-next.config.ts  cloudflare-env.d.ts (generated)  cloudflare-secrets.d.ts
+├── test/                      node --test suites (engine-side, no browser; the data layer on node:sqlite)
 ├── mcp/                       the MCP server: an agent writes a song through songBuilder.js
 │   ├── server.mjs             tools + resources over stdio (.mcp.json names it for Claude Code)
 │   ├── audition.mjs           plays a song in a headless browser and reads the meters
@@ -95,7 +110,7 @@ env / fx / eq / comp / mod / automation per track.
 ├── .claude/skills/compose/    the compose guide: which engine, step strings, order of work
 │                              (served by the server as seqbaby://guide)
 ├── server.js                  legacy static server (npm run legacy:dev)
-└── netlify.toml  next.config.mjs  tsconfig.json (excludes public/js from TS)
+└── next.config.mjs  tsconfig.json (excludes public/js from TS)
 ```
 
 ### Engine module map (`public/js/`)
@@ -369,28 +384,34 @@ env / fx / eq / comp / mod / automation per track.
 ## Dev commands
 
 ```
-npm run dev            # Next.js dev server on :3000 (needs the Supabase env, below)
-npm run build && npm run start   # production build + serve
-npm run netlify:dev    # full Netlify emulation on :8888
+npm run db:migrate:local   # once (and after a schema change): D1 schema into wrangler's local DB
+npm run dev            # Next.js dev server on :3000, with local D1 / R2 (not jam or compose, see below)
+npm run preview        # the real Worker build (OpenNext) under wrangler dev on :8787
+npm run deploy         # build and deploy to Cloudflare
+npm run cf-typegen     # regenerate cloudflare-env.d.ts after changing wrangler.jsonc
 npm run legacy:dev     # pre-Next static Node server on :5173 (engine assets only)
 npm test               # node --test: the pure modules (session format, chance gen,
                        #   version tree, song names, share card copy, the song builder, the jam diff,
                        #   song previews, grid avatars, the songs and people explorers,
                        #   the Strudel bridge, the reverb, the filter models, the guitar, the contagion,
                        #   the vox and its phonetic reader, the lancet, the halo, the prism, the repeat,
-                       #   the ladder, the oracle, the arrangement, the piano view's notes)
+                       #   the ladder, the oracle, the arrangement, the piano view's notes,
+                       #   the data layer's access rules, auth, the Supabase importer)
 npm run mcp            # the MCP server on stdio (mcp/server.mjs) — an agent writes songs
-npm run test:rls       # RLS policy tests — builds a throwaway Postgres in docker
 ```
 
-`NEXT_PUBLIC_SUPABASE_URL` + `NEXT_PUBLIC_SUPABASE_ANON_KEY` are required
-(see `.env.example`): without them `/studio` and the other pages 500 ("Your
-project's URL and Key are required to create a Supabase client"). The engine
-modules themselves (`public/js`, the tests, the MCP server) need no env. For
-engine work with no project, any syntactically valid pair gets the pages up
-(e.g. `NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:9
-NEXT_PUBLIC_SUPABASE_ANON_KEY=dummy`); account features then fail, the studio
-plays.
+Nothing has to be configured to run locally: `next dev` gets the Worker's
+bindings from wrangler's local simulation (`initOpenNextCloudflareForDev` in
+next.config.mjs), so D1 and R2 work with nothing deployed. The Durable
+Objects do NOT: that simulation does not load `worker.ts`, so jam rooms and
+compose jobs (and the `/api/jam` socket route, which is `worker.ts`'s) only
+work under `npm run preview`, the real Worker build. Everything else works
+under `next dev`. Run `npm run db:migrate:local` once first, or every page that reads
+the database comes up empty (they never throw). Secrets go in `.dev.vars`
+(see `.dev.vars.example`); auth email is written to a file under `.wrangler/`
+by the local email simulation, and the path is printed in the dev log. The
+engine modules themselves (`public/js`, the tests, the MCP server) need no
+env.
 
 ## Audio signal chain (per track)
 
@@ -3433,18 +3454,86 @@ desktop); macro stays in the main cluster, text on desktop and icon over its
 
 | surface | what |
 |---|---|
-| `POST/GET app/api/share/route.ts` | anonymous `?s=<slug>` share links (public `songs` rows) |
-| `POST app/api/compose/route.ts` | starts one compose turn → `{jobId, jobToken}`; the turn runs in `netlify/functions/compose-background.mjs` |
+| `POST/GET app/api/share/route.ts` | anonymous `?s=<slug>` share links (public `songs` rows, then `lib/data/shares.js`) |
+| `POST app/api/compose/route.ts` | starts one compose turn → `{jobId, jobToken}`; the turn runs in a `ComposeJob` Durable Object (`workers/composeJob.ts`) |
 | `GET app/api/compose/status/route.ts` | what the browser polls while one runs — activity, then the song |
-| `app/songs/actions.ts` | `saveSong` / `saveNamedSong` (both append a version), `listSongs`, `loadSong`, `remixSong`, `listVersions`, `loadVersion`, `labelVersion`, `deleteVersion`, `setSongTemplate`, `setDefaultTemplate`, `getDefaultTemplate` |
-| `app/patches/actions.ts` | `savePatchToBay`, `setPatchPublic`, `listMyPatches`, `deletePatch`, `setPatchLike` (the studio's own reads and writes are `app/patches/bay.ts`) |
+| `/api/jam/<room>` (WebSocket) | a jam room, routed by `worker.ts` to its `JamRoom` Durable Object before Next sees it |
+| `GET/POST app/api/bay`, `GET/DELETE app/api/bay/[id]` | the studio's patch bay (`app/patches/bay.ts`) |
+| `GET app/api/me` | who is signed in (`{id, handle}`), for islands on cached pages |
+| `app/api/auth/[...all]` | Better Auth: email verification, magic link, reset links land here |
+| `app/songs/actions.ts` | `saveSong` / `saveNamedSong` (both append a version), `listSongs`, `loadSong`, `remixSong`, `listVersions`, `loadVersion`, `labelVersion`, `deleteVersion`, `setSongTemplate`, `setDefaultTemplate`, `getDefaultTemplate`, `setLike`, `likedSongIds` |
+| `app/patches/actions.ts` | `savePatchToBay`, `setPatchPublic`, `listMyPatches`, `deletePatch`, `setPatchLike`, `likedPatchIds`, `patchesInMyBay` |
 | `app/profile/actions.ts` | `getMyProfile`, `updateProfile`, `getPublicProfile` (+ that user's public songs/patches) |
-| `app/auth/actions.ts` | `signIn`, `signUp`, `signInWithMagicLink`, `signOut` |
-| `app/account/actions.ts` | `updateEmail`, `updatePassword`, `deleteAccount` (RPC `delete_own_account`) |
+| `app/auth/actions.ts` | `signIn`, `signUp`, `signInWithMagicLink`, `requestPasswordReset`, `setNewPassword`, `signOut` |
+| `app/account/actions.ts` | `updateEmail`, `updatePassword`, `deleteAccount` (R2 by prefix, then the user row, which cascades) |
+
+Every action is a thin wrapper: resolve the caller (`currentUserId()`), get
+the bindings (`cfEnv()`), call `lib/data/*.js`. The rules live in lib/data.
 
 `/u/<username>` is the public profile page with remix buttons. The engine side
 of save/share lives in `session.js` (`serializeSet`/`applySet`) and is bridged
 through `window.seqbaby`.
+
+## Cloudflare: D1, R2, Durable Objects, Better Auth
+
+The shell moved off Supabase and Netlify. What each piece is now:
+
+| was | is |
+|---|---|
+| Postgres + RLS (24 migrations) | D1, one schema (`db/migrations/0001_init.sql`); the rules are WHERE clauses in `lib/data/*.js` |
+| computed fields (`preview`, `engines`, `likes`, `from_template`, `data->bpm`) | `preview` / `engines` / `bpm` are columns written with the song (`songColumns`); `likes` and `from_template` are subqueries |
+| `profile_cards` (attribution view) | `profileCards()` and the feeds select `username, display_name, avatar_grid` only, never `bio` |
+| Supabase Auth | Better Auth (`lib/auth/`), its tables in the same D1 |
+| Supabase Realtime (jam) | `JamRoom` Durable Object, hibernating WebSockets |
+| Netlify background function + Blobs (compose) | `ComposeJob` Durable Object running the turn in its alarm; `ComposeLimits` per usage bucket |
+| Netlify Blobs (quick shares) | `shares` table + R2 `shares/<id>.json` |
+| `song_samples` table | R2 `songs/<songId>/samples/<sha256>` |
+| `netlify.toml` headers | `public/_headers` |
+
+- **No Row Level Security, so no query is safe by default.** Every read of a
+  song, version, chat or patch says whose it may be (`owner_id = ?` or
+  `is_public = 1`), and every write says `owner_id = ?`. A new query that
+  forgets is a data leak, not a denied request. `test/data.test.js` is where
+  each rule the old RLS tests checked is held; a new table or reader needs a
+  case there.
+- **D1's limits shape the code.** A row is at most 2MB, so `packJson`
+  (`lib/data/blob.js`) puts any JSON value over `INLINE_MAX` (1M chars) in R2
+  and leaves `{"$r2": key}` in the column, and `unpackJson` reads it back;
+  every reader of `songs.data`, `song_versions.data`, `patches.config` and
+  `song_chats.messages` must go through `unpackJson`. A query takes at most
+  100 bound parameters, so a list is ONE parameter, a JSON array unpacked
+  with `json_each` (`idList`). Booleans come back 0 / 1 (`bool`).
+- **R2 is laid out by owner object**: everything of a song's under
+  `songs/<id>/`, of a patch's under `patches/<id>/`, so deleting one is
+  `dropPrefix`. D1's cascades do not reach R2: `deleteSong`, `deletePatch`
+  and `deleteAccount` drop the prefixes themselves.
+- **`updated_at` triggers fire on `update of` every other column**, so a
+  write of `updated_at` alone (the importer putting an old date back) sticks.
+- **Bindings come from `cfEnv()`** (`lib/cf.ts`, `getCloudflareContext({async:
+  true})`), which also answers during a build-time prerender (from wrangler's
+  local stand-ins, empty: a prerendered feed is empty until it revalidates).
+- **`worker.ts` is the entry**, wrapping `.open-next/worker.js`: it routes
+  `/api/jam/<room>` upgrades to the room's object and exports the Durable
+  Object classes (OpenNext's `DOQueueHandler` included). The objects are
+  bundled by wrangler, outside Next, so they import plain JS only; the
+  compose guide comes in as text (wrangler's `Text` rule, `setComposeGuide`).
+- **Auth** (`lib/auth/config.js`): email + password with required
+  confirmation, magic link, reset, email change confirmed from the old
+  address, 6-character minimum (Supabase's). Ids are uuids. A user's profile
+  is made by a database hook on create (`createProfile`, the username from
+  the email the way Supabase's `name_base` made it). The base URL is
+  `BETTER_AUTH_URL`, else the request's own host (so previews and localhost
+  each work). Sessions last 60 days, extended by use; the cookie cache
+  saves a D1 read per page for five minutes. A bcrypt hash (an account
+  brought over from Supabase) is verified as such; new ones are scrypt.
+- **Email** goes through Cloudflare Email Service (`send_email` binding
+  `EMAIL`); the domain has to be onboarded. Locally wrangler simulates it.
+- **The move from Supabase** is `scripts/migrate-from-supabase.mjs`: reads
+  Postgres directly (the password hashes are only there) and posts each kind
+  of row, in foreign-key order, to `/api/admin/import`, which writes them with
+  `lib/data/importer.js` (idempotent; samples and big values to R2; list
+  columns computed). The endpoint is off unless the `MIGRATION_TOKEN` secret
+  is set; delete it after.
 
 ## The homepage (`/`) and the studio (`/studio`)
 
@@ -3463,21 +3552,20 @@ to say hello), the songs people have published, and who made them.
   `share_song`, sign in / sign up / sign out, the email confirm fallback.
   The engine's own URLs (`onShareSet`, the jam invite, `syncSongUrl`) are
   built from `location.pathname`, so they needed nothing.
-- **The homepage is cached** (`revalidate = 60`). `app/home/feed.ts` reads
-  published songs and their owners with a plain anon client, not the cookie
-  one, because reading cookies makes a page dynamic and everything it reads
-  is public anyway. It selects `data->bpm`, never `data`: a song's data is
-  the whole session, samples included. It never throws: no env, a missing
-  migration or a dead network is an empty feed with a joke in it.
+- **The homepage is cached** (`revalidate = 60`, OpenNext's R2 incremental
+  cache). `app/home/feed.ts` reads published songs and their owners without
+  reading the session, because reading cookies makes a page dynamic and
+  everything it reads is public anyway. It selects the `bpm` column, never
+  `data`: a song's data is the whole session. It never throws: no database
+  or a dead network is an empty feed with a joke in it.
 - **The people are every public profile with at least one public song**:
   the list starts from the owners of the newest 1000 public songs, so an
   account with nothing to hear never appears, then reads their `profiles`
-  filtered on `is_public` (repeated so the list does not lean on the RLS
-  policy alone). Busiest first, then whoever published most recently.
-  `bio` comes from `profiles`, never `profile_cards`, which must not carry
-  it (migration 0007).
-- **Who is looking is a client island** (`Who.tsx`): a local session read,
-  then one `profile_cards` read for the handle. A cached page cannot know.
+  filtered on `is_public`. Busiest first, then whoever published most
+  recently. `bio` is read only for public profiles; attribution elsewhere
+  never selects it.
+- **Who is looking is a client island** (`Who.tsx`): one `/api/me` request,
+  which reads the session cookie. A cached page cannot know.
 - **Four of each**: songs, people, patches (`FEED_SIZE` / `HOME_PATCHES` in
   feed.ts); /songs, /people and /patches hold the rest.
 - **Patches are laid out like the songs** (`app/home/PatchCard.tsx`): the
@@ -3492,9 +3580,9 @@ to say hello), the songs people have published, and who made them.
   ranked like the songs (see "Likes" below). The player's key for
   a patch is `patch:<id>` (`patchKey`, in patchPreview.js so a server
   component can call it); its session is fetched from `/api/patch/<id>` only when
-  pressed (the id in the path, never `?id=`: the response is CDN-cached and
-  Netlify's cache key drops the query string, which served one patch to every
-  card), because the feed never selects `config` (a sampler patch carries
+  pressed (the id in the path, never `?id=`: the response is CDN-cached, and
+  a cache keyed on the path alone once served one patch to every card),
+  because the feed never selects `config` (a sampler patch carries
   its sample as base64), only the few fields inside it the picture needs. A
   legacy custom-Tone patch is drawn without a play button (`canPreview`): the
   studio plays one only as a `saved:` engine from the patch bay.
@@ -3502,7 +3590,7 @@ to say hello), the songs people have published, and who made them.
   card and profile row) saves it into your patch bay: `savePatchToBay`, a
   private copy in your account with `saved_from` naming the original, so a
   second save finds the first. Whether a card's patch is already yours is one
-  batched browser read per page, LikeButton's trick. See the patch bay section.
+  batched request per page (`patchesInMyBay`), LikeButton's trick. See the patch bay section.
 - **The remix beside a song's heart** (`app/RemixButton.tsx`, the studio byline
   and profile rows) is `remixSong`: a private copy in your songs. On a profile
   that is all, and it turns into a link to open the remix. In the studio (the
@@ -3511,12 +3599,12 @@ to say hello), the songs people have published, and who made them.
   next save is its v2. The engine keeps what it holds when that is what was
   remixed (hand edits included), and loads the remix otherwise.
 - **A card's step picture is the song's own** (see "Song previews" below).
-  `fingerprint` (hashed from the id) is only the fallback for a database
-  without migration 0012.
+  `fingerprint` (hashed from the id) is only the fallback for a song with no
+  preview.
 - `mcp/audition.mjs` points a bare site URL at `/studio` (`studioUrl`), so
   `SEQBABY_URL=http://localhost:3000` keeps working.
 
-## The songs explorer (`/songs`, migration 0019)
+## The songs explorer (`/songs`)
 
 Every published song, searchable by title, person and instrument, sortable
 (on repeat / newest / most liked / slowest / fastest / a to z) and filtered by
@@ -3524,20 +3612,18 @@ a bpm range and by the instruments it is made of. Linked from the homepage's
 nav, footer and the `on repeat` heading.
 
 - **Loaded once, filtered in the browser.** `exploreFeed.ts` reads the newest
-  `EXPLORE_WINDOW` (600) public songs the homepage's way (anon client, cached,
-  `revalidate = 60`, never throws), each with `bpm:data->bpm`, `likes`,
+  `EXPLORE_WINDOW` (600) public songs the homepage's way (no session read,
+  cached, `revalidate = 60`, never throws), each with `bpm`, `likes`,
   `preview` and `engines`, never `data`. `explore.js` (pure, tested in
   `test/explore.test.js`) does the rest: a search, a sort or a chip is a
   re-render, not a request. `on repeat` is rank.js's order, the homepage's own.
-- **`engines(songs)` is a computed field** (0019), like `preview`: the
-  distinct engine keys in the session, buses left out, computed on read so no
-  write path knows about it. The raw keys, not names: `instrumentOf`
+- **`engines` is a column written with the song** (`songEngines` in
+  lib/data/songs.js), like `preview`: the distinct engine keys in the
+  session, buses left out, as a JSON array. The raw keys, not names: `instrumentOf`
   (explore.js) folds them into what a person would say (every 808 voice is
   `808`, every Plaits model `plaits`, `dm:303` is `silverbox`). Its copy of
   the emulator rename is held to `LEGACY_ENGINE_KEYS` (sessionFormat.js,
-  exported for this) by the test. Without 0019 the instrument chips are
-  hidden; without 0016 / 0012 those columns go, not the page
-  (`withOptional` in feed.ts takes a list of fallbacks now).
+  exported for this) by the test.
 - **Picked instruments must ALL be in a song**, and each chip's count is how
   many songs picking it too would leave, so a chip at 0 is disabled (unless it
   is already picked, so it can be unpicked). A bpm bound leaves out a song
@@ -3566,10 +3652,10 @@ noise` heading, and from /songs.
 - **Built from the published work, not the profiles** (`peopleFeed.ts`), for
   the homepage people list's reason: an account with nothing to hear never
   appears. The newest `PEOPLE_WINDOW` (1000) public songs and public patches,
-  never `data` or `config` (only `data->bpm`, the `engines` / `likes`
-  computed fields, and a patch's `config->>engineKey`), then `profiles`
-  filtered on `is_public` in slices of 100 ids. Anon client, cached,
-  `revalidate = 60`, never throws, like every other feed.
+  never `data` or `config` (only the `bpm`, `engines` and `engine_key`
+  columns and the like counts), then `profiles` filtered on `is_public`. No
+  session read, cached, `revalidate = 60`, never throws, like every other
+  feed.
 - **`people.js` is pure and tested** (`test/people.test.js`), explore.js's
   twin: `gatherPeople` folds the rows into one record per person (counts,
   hearts across songs and patches, last published, instruments through
@@ -3579,9 +3665,6 @@ noise` heading, and from /songs.
 - **A person's tempo is the median bpm of their songs** (`medianBpm`), so one
   174bpm experiment does not move a house producer. Nobody with no bpm'd song
   passes a tempo filter.
-- **Before 0019 the instrument chips are hidden**, and so are the tags:
-  patches would be the only source, and a filter that ignores most of the
-  work is worse than none.
 - **The query is in the URL** (`?q=&sort=&bpm=&with=&makes=&page=`), read
   after mount, as on /songs. The pager is `app/songs/Pager.tsx`, shared.
 
@@ -3613,19 +3696,18 @@ it, and it loads on its own once they have.
   is raced, never awaited: Tone.start's resume does not settle without a
   gesture.
 
-## Song previews (`preview`, migration 0012)
+## Song previews (`preview`)
 
 Every song card (homepage feed, a profile page, the studio's songs menu)
 draws the song's own steps: one row per track, one cell per step of the
 pattern it was saved on.
 
-- **Computed in Postgres, on read.** `song_preview(data)` walks the saved
-  session and returns a few hundred bytes; `preview(songs)` exposes it as a
-  PostgREST computed field, so `.select("id,title,preview")` just works and
-  runs under the songs policies. `data` is the whole session, base64 samples
-  included, so pulling it out to draw a thumbnail would move megabytes to
-  throw away. Nothing on the write path knows about it, and every song saved
-  before it has one.
+- **Computed when the song is written** (`previewFromSession`, called by
+  `songColumns` in lib/data/songs.js; a line-for-line port of the Postgres
+  function it used to be), and kept in the `preview` column as a few hundred
+  bytes of JSON. `data` is the whole session, so pulling it out to draw a
+  thumbnail would move megabytes to throw away. The Supabase import computes
+  it for every song it brings over.
 - **The shape**: `{p, t: [{s: "9..5-.."}, {n, g: {...}}, {n, c: {...}}]}`.
   Written steps are a string (1-9 a hit's velocity, `-` held by the hit
   before, `.` a rest); a live euclid track sends its settings and the client
@@ -3637,10 +3719,8 @@ pattern it was saved on.
 - **Drawn by `app/SongPreview.tsx`**, no hooks, so server pages and the
   songs menu share it. Shorter tracks are tiled across the longest, because
   that is what they play.
-- Every reader asks for `preview` and, if the database refuses it (0012 not
-  applied), asks again without: a list without thumbnails beats no list.
 
-## The patch bay — saved patches in the account (migration 0018)
+## The patch bay — saved patches in the account
 
 Saved patches live in `patches`, one row each, private until published, and
 nowhere else: the browser keeps none. Publishing flips `is_public` on the row
@@ -3656,9 +3736,12 @@ nowhere else: the browser keeps none. Publishing flips `is_public` on the row
   (`backend.fetch`) and caches it. A legacy custom-Tone patch is an ENGINE
   (`saved:<name>`), built synchronously, so its (small) config comes with the
   list.
-- **Writes go straight from the browser** (`app/patches/bay.ts`, under the
-  owner RLS policy), not through server actions, whose bodies stop at 1MB.
-  Saving is by name, as it always was: the patch of that name is replaced.
+- **Reads and writes go through `/api/bay`** (`app/patches/bay.ts` in the
+  browser, `lib/data/patches.js` behind it), routes rather than server
+  actions because a sampler patch's body can be megabytes. Saving is by name,
+  as it always was: the patch of that name is replaced. The few fields a card
+  or the bay index needs (`engine_key`, `kind`, `drum`, `sample`) are columns
+  written beside `config`, so a list never pulls a config.
 - The list is re-read when the tab comes back into view (`setPatchList`), so
   a patch saved from a card elsewhere shows up.
 - **Off localStorage**: `migrateLocalPatches()` (bay.ts), run by the studio
@@ -3669,27 +3752,25 @@ nowhere else: the browser keeps none. Publishing flips `is_public` on the row
 - Settings (`app/settings/PatchManager.tsx`) lists the bay with publish /
   unpublish / delete.
 
-## Likes, and the homepage's order (migrations 0016, 0017)
+## Likes, and the homepage's order
 
 - **`song_likes`** is one row per (song, person), a table of its own because
   every write to `songs` bumps `updated_at`, which is what freshness reads.
-  Rows are readable only by whoever wrote them; the count is the `likes`
-  computed field (SECURITY DEFINER, and it checks the song is readable from
-  the table, not from the row it was handed, since /rpc takes any row).
-  Only a public song can be liked. `supabase/tests/rls_test.sql` covers it.
-- **`patch_likes`** (0017) is the same thing for patches, with the same
-  policies, and `likes(patches)` is an overload of `likes(songs)`: PostgREST
-  picks a computed field by the row type it takes.
+  The count is a subquery wherever a list shows one; who liked what is only
+  ever read for the caller (`likedSongs`). Only a public song can be liked:
+  the insert selects from `songs where is_public = 1` (`setLike`), and
+  test/data.test.js covers it.
+- **`patch_likes`** is the same thing for patches (`setPatchLike`).
 - **The heart** is `app/LikeButton.tsx`, on homepage cards, profile rows and
   the studio byline. The count comes from the server; "did I" is one batched
-  browser read per page and per kind (the homepage is cached), writes go
-  through `setLike` (app/songs/actions.ts) or, with `kind="patch"`,
-  `setPatchLike` (app/patches/actions.ts).
+  request per page and per kind (`likedSongIds` / `likedPatchIds`; the
+  homepage is cached), writes go through `setLike` (app/songs/actions.ts) or,
+  with `kind="patch"`, `setPatchLike` (app/patches/actions.ts).
 - **The order** is `app/home/rank.js` (pure, tested): `(likes + 1) /
   (days since updated_at + 1) ^ 1.5` over the newest 200 public songs, then
-  the cards are fetched for the winners only. Without 0016 it is freshness.
-  Patches go through the same `rankSongs`, with `created_at` as their
-  freshness (the clock their card's age reads); without 0017, freshness.
+  the cards are fetched for the winners only. Patches go through the same
+  `rankSongs`, with `created_at` as their freshness (the clock their card's
+  age reads).
 - **The studio byline** (`app/SongByline.tsx`): a `?s=` / `?open=` link to
   someone else's song shows "title by @owner" and a heart at the left of the
   top bar, resolved server-side by `linkedSongCard` (the same cached lookup
@@ -3704,21 +3785,22 @@ nowhere else: the browser keeps none. Publishing flips `is_public` on the row
   writers of the slot hold. It shows only once the slot has an id, which is
   exactly when the byline goes, so the two never share the bar.
 
-## One name, and a step grid for a face (migrations 0013, 0014)
+## One name, and a step grid for a face
 
 - **The username is the name.** It used to be a display name (set at
   signup from the email) plus a username (the `/u/` URL, set only in
   settings), and most accounts never set the second, so they had no page and
-  never appeared in the homepage's people list. 0013 backfills a username for
-  every profile (`name_base`: lowercased, accents folded, `-2` on a clash),
-  makes one at signup (retrying on the unique violation, since a trigger that
-  throws fails the signup), and keeps `display_name` equal to it for any
-  reader still on that column. Settings has one `name` field.
+  never appeared in the homepage's people list. Every profile has a
+  username, made at signup from the email (`createProfile` in
+  lib/auth/config.js with `nameBase`: lowercased, accents folded, `-2` on a
+  clash, retried on the unique index), and `display_name` is kept equal to it
+  for any reader still on that column. Settings has one `name` field.
 - **An avatar is a 16x16 step grid** in the studio's own colours
   (`app/profile/avatarGrid.js`, `profiles.avatar_grid`): 256 characters, one
   per cell, `0` unlit, `1`..`d` a `PALETTE` entry (every colour is one the
-  stylesheets already use; a test checks). A CHECK constraint holds the same
-  regex as `AVATAR_GRID_RE` (another test holds the two together).
+  stylesheets already use; a test checks). A CHECK constraint in the D1
+  schema holds the same rule as `AVATAR_GRID_RE`, as a length and a GLOB
+  (another test holds the two together).
 - **Nobody is without one**: null means "the one my name makes"
   (`defaultGrid`, the generator seeded by the name), which follows a rename.
   The generator is the arcade method: a mirrored 7x7 silhouette doubled to
@@ -3732,8 +3814,8 @@ nowhere else: the browser keeps none. Publishing flips `is_public` on the row
   a song is public: on your page, in the homepage feed, reachable by its
   link. It replaced the dot before the title; the link button still
   publishes AND copies.
-- `profile_cards` carries `avatar_grid` (a display field, like the others);
-  the RLS test's column list moved with it. `avatar_url` stays unused.
+- Attribution reads (`profileCards`, the feeds' `owners`) carry
+  `avatar_grid`, a display field like the handle. `avatar_url` stays unused.
 
 ## The share card (`app/shareCard.ts` + `app/shareCopy.js`)
 
@@ -3755,7 +3837,7 @@ what — `mike has shared "cold squelch" with you` — and a jam invite
   (`test/shareCopy.test.js`), and they are on the metadata path, where a
   throw is a page that fails to render. Nobody to name reads as `Someone`.
 - **The lookup only happens when the URL carries one.** Metadata is resolved
-  before the document flushes, so a Supabase round trip on every visit would
+  before the document flushes, so a database round trip on every visit would
   hold back the engine's preload hints for everyone — the same reason the
   account bar sits behind `<Suspense>`. A plain `/studio` does no work in
   `generateMetadata` at all; a `?s=` visit is already waiting on a fetch of
@@ -3763,18 +3845,18 @@ what — `mike has shared "cold squelch" with you` — and a jam invite
 - **`linkedSong`** (`app/songs/linkedSongTitle.ts`) is the song lookup, and it
   is deliberately not a server action — nothing on the client should be able
   to ask the server to resolve arbitrary slugs to titles. `?s=` filters
-  `is_public` exactly as the share route does; `?open=` leaves it to RLS, so a
-  crawler sees only published songs while the owner following their own link
-  gets the real title in the tab. The owner's name is a second read, of
-  `profile_cards` (the attribution view, so a public song by someone whose
-  page is private is still theirs), and a failure there costs the name, not
-  the card: the title is enough for one.
-- **A jam has no owner anywhere to look up.** A room is a Realtime channel and
-  nothing else, so the invite link carries the sharer's handle
+  `is_public` exactly as the share route does; `?open=` reads a public song,
+  or the caller's own, so a crawler sees only published songs while the
+  owner following their own link gets the real title in the tab. The owner's
+  name is a second read, of the attribution fields only (so a public song by
+  someone whose page is private is still theirs), and a failure there costs
+  the name, not the card: the title is enough for one.
+- **A jam has no owner anywhere to look up.** A room is a Durable Object
+  holding WebSockets and nothing else, so the invite link carries the sharer's handle
   (`&by=<handle>`, written by `JamPanel.tsx` for a signed-in member — whoever
   copies the link, not whoever started the room). Anyone can type a URL, so
-  `jamHostName` puts a handle on a card only once it has been found in
-  `profile_cards`; a made-up one names nobody and the card says `Someone`. A
+  `jamHostName` puts a handle on a card only once it has been found among
+  the profiles; a made-up one names nobody and the card says `Someone`. A
   guest's typed name is never put on the link for the same reason. `leave`
   strips `by` with the room. Written to both the invite link's `copy link`
   button and the address bar itself (`writeRoomToUrl`) — a room that only the
@@ -3784,28 +3866,26 @@ what — `mike has shared "cold squelch" with you` — and a jam invite
   title and (when signed in) an owner.** It's the top-bar `share`
   (`onShareSet`, session.js), not the account-side publish flow
   (SaveButton/SongsMenu) — no account needed, nothing typed, a bare session
-  blob in `lib/api.js`'s Blobs store (or its in-memory fallback), never a row
-  in `songs`. `putShare` tags it anyway: a title from `generateSongName`
-  (songName.js, already pure and deterministic for exactly this reuse) always,
-  and the signed-in sharer's id when `POST /api/share` resolved one — best
-  effort, since the engine has to keep working with no Supabase env at all.
-  `linkedSong` falls back to it (`getShareMeta`) only once the `songs` table
-  has no published row for the slug, and reads metadata only — a link preview
-  must not pull down a whole session, base64 samples included, to learn its
-  name. The owner id resolves to a name the same way a published song's does
-  (`ownerName` against `profile_cards`), so both paths can share one function.
+  in R2 (`shares/<id>.json`, `lib/data/shares.js`), never a row in `songs`.
+  `putShare` tags it anyway, in a `shares` row: a title from
+  `generateSongName` (songName.js, already pure and deterministic for exactly
+  this reuse) always, and the signed-in sharer's id when `POST /api/share`
+  resolved one. `linkedSong` falls back to it (`getShareMeta`) only once the
+  `songs` table has no published row for the slug, and reads the row only — a
+  link preview must not pull down a whole session, base64 samples included,
+  to learn its name. The owner id resolves to a name the same way a published
+  song's does (`ownerName`), so both paths share one function.
 - **The card's picture is the song's own steps** (`app/api/og/route.tsx`,
   a PNG through `next/og`'s ImageResponse, since link-preview crawlers do
   not render SVG). `generateMetadata` points `og:image` at `/api/og` with the
   same `s` / `open` / `jam` + `by` the page URL carries, on the host that
   served the page (so a deploy preview's card is that deploy's). A published
   song's steps are its `preview` column; a quick anonymous share never was
-  in the database, so its preview is computed from the Blobs session by
-  `previewFromSession` (songPreview.js), the SQL function ported line for
-  line and pinned to its output by `test/songPreview.test.js`. A jam has no
-  song to look up, so its card is the host's grid avatar over four euclid
-  rings seeded by the room. Middleware skips `/api/og`; responses are cached
-  an hour.
+  in the songs table, so its preview is computed from the session in R2 by
+  `previewFromSession` (songPreview.js), the same function the `preview`
+  column is written with. A jam has no song to look up, so its card is the
+  host's grid avatar over four euclid rings seeded by the room. Responses
+  are cached an hour.
 - **The homepage has a card of its own** (`app/api/og/home/route.tsx`): the
   hero line over the three latest published songs, each drawn from its
   `preview` with its owner, read through the homepage's own `loadFeed`. An
@@ -3820,9 +3900,8 @@ what — `mike has shared "cold squelch" with you` — and a jam invite
   no reads. It passes its own `og:url` (`shareCard`'s fourth argument, the
   site root by default), since a crawler that follows og:url would otherwise
   draw the homepage's card.
-- **`untitled` counts as no title**, along with an unreadable song, a Blobs
-  share written before this existed (no title in its metadata) and no
-  Supabase env at all. Every one of those falls back to the site card rather
+- **`untitled` counts as no title**, along with an unreadable song and no
+  database to ask. Every one of those falls back to the site card rather
   than failing the page: a link preview is not worth a 500.
 
 ## The studio on a phone (the mobile block in `style.css`)
@@ -4043,11 +4122,11 @@ v1 ──▶ v2 ──▶ v3 ──▶ v5      (kept editing)
 - **`seq` is the version's name** (`v4`), unique per song, and stable when a
   sibling branch appears later. `max()+1` is not atomic, so the writer retries on
   the unique violation the way `publishSong` retries a slug.
-- **No public-read policy, deliberately** — `songs_public_read` has no
-  counterpart on `song_versions`. Publishing a song publishes the state you chose
-  to publish, not every draft behind it. `supabase/tests/rls_test.sql` asserts
-  that both behaviourally and structurally, because adding one to "match" songs
-  is exactly the plausible-looking mistake.
+- **No public read, deliberately** — every version read in lib/data/songs.js
+  says `owner_id = ?`, where song reads also allow `is_public = 1`. Publishing
+  a song publishes the state you chose to publish, not every draft behind it.
+  `test/data.test.js` asserts it, because letting versions "match" songs is
+  exactly the plausible-looking mistake.
 - **Deleting a version is refused for the tip and for any version with children**
   — `parent_id` cascades, so pruning a version with a branch under it would take
   the branch too, and undo does not reach the server. Deleting the SONG still takes its
@@ -4061,22 +4140,18 @@ v1 ──▶ v2 ──▶ v3 ──▶ v5      (kept editing)
   word for the in-tree move (saving from an older version); `remix` always means
   leaving the tree.
 - **Uploaded samples are stored once per song, not once per version**
-  (`song_samples`, migration `0023`). A session carries a sample as base64 on
+  (in R2, `songs/<songId>/samples/<sha-256>`). A session carries a sample as base64 on
   its track, and every save writes the session twice (`songs.data` and a new
   version), so thirty saves of a song with a 3MB sample was 90MB of it. The
   save actions lift each payload out (`extractSamples`,
   `app/songs/sampleStore.js`, pure and tested) and leave `@sample:<sha-256>`
   in its place; every read of stored song data puts it back (`withSamples`,
-  `app/songs/sampleDb.ts`): `loadSong`, `loadVersion`, `getDefaultTemplate`,
+  `lib/data/blob.js`): `loadSong`, `loadVersion`, `getDefaultTemplate`,
   `remixSong` and the share route's GET. **A new reader of `songs.data` or
-  `song_versions.data` has to call it too**, or its sampler tracks load
-  empty. The engine and the session format know nothing about it, and rows
-  written before `0023` keep their payloads inline and load as they did.
-  Keyed by song, so samples go with their song and are readable exactly when
-  it is; a remix gets copies.
-- Migration `0009` backfills a root version for every existing song, so the
-  first save after deploying branches off something rather than starting a second
-  root.
+  `song_versions.data` has to call `unpackJson` and then `withSamples`**, or
+  its sampler tracks load empty. The engine and the session format know
+  nothing about it. Keyed by song, so samples go with their song and are
+  readable exactly when it is; a remix gets copies.
 
 ## Templates — a song you start from (`songs.is_template`)
 
@@ -4092,11 +4167,11 @@ techno starter  (template, default)
 cold squelch  v1 ──▶ v2 ──▶ v3     its own song, its own tree
 ```
 
-- **Two booleans, no new table** (migration `0010`). `is_template`, and
+- **Two booleans, no new table**. `is_template`, and
   `is_default_template` for the one a new session starts from. Templates are
   listed apart in the songs menu, but everything else you can do to a song you
   can still do to one — publish it, remix it, walk its version tree.
-- **Where a save goes is the writer's rule, not the database's.** The migration
+- **Where a save goes is the writer's rule, not the database's.** The schema
   does not stop a version being appended to a template; opening one, unmarking
   it and saving is a perfectly reasonable way to *edit* the template. What
   detaches the save is the studio saying it is holding one.
@@ -4128,8 +4203,8 @@ cold squelch  v1 ──▶ v2 ──▶ v3     its own song, its own tree
   get the blank editor they always did. It answers to `seqbaby:newset` (the top
   bar's `new`) and to a fresh load of `/studio` — skipped when the URL
   carries `?s=` or `?open=`, which load asynchronously too and would otherwise
-  race it. The fetch is caught, not just awaited: with no Supabase env the
-  action throws, and the engine is meant to run without any.
+  race it. The fetch is caught, not just awaited: a failed lookup must not
+  take the studio with it.
 
 ## Writing a song without a browser (`songBuilder.js` + `mcp/`)
 
@@ -4207,7 +4282,7 @@ agent ──▶ mcp/server.mjs ──▶ songBuilder.js ──▶ { _version, bp
 - **share_song is the anonymous share route**, `POST /api/share` with
   `{ session }`, which is unauthenticated by design: an agent needs no
   account to hand back a link. Saving into an account (`saveSong`) is a
-  server action behind Supabase auth and is deliberately not a tool.
+  server action behind a signed-in session and is deliberately not a tool.
 - Adding a tool: a function in songBuilder.js (validate, mutate the song,
   return something an agent can read), a test, and a `registerTool` in
   server.mjs with a zod shape. Adding an engine control: its table entry in
@@ -4396,17 +4471,22 @@ song lands in a review bar, to be auditioned into what is playing or kept (see
 the audition section below).
 
 ```
-panel ──▶ POST /api/compose ──▶ createJob ──▶ POST the worker {jobId, token, apiKey?}
-   │                              (record)                    │
-   └── polls /api/compose/status?id=&t= ◀── progress ◀─────────┘ runComposeTurn
+panel ──▶ POST /api/compose ──▶ ComposeLimits.take ──▶ ComposeJob.start(input, apiKey?)
+   │                              (one object per        (one object per job; the
+   │                               usage bucket)          turn runs in its alarm)
+   └── polls /api/compose/status?id=&t= ◀── ComposeJob.progress() ◀── runComposeTurn
 ```
 
 - **A turn is a job, not a request.** Writing a whole song is dozens of model
-  rounds over minutes, and a synchronous function gets 26 seconds (measured: a
-  turn died at 28s — streaming does not buy time, it only moves where the cut
-  lands). So the route starts a background function and answers immediately,
-  and the browser polls. `next dev` has no background functions and no ceiling
-  either, so there the same loop runs inline; one loop, two callers.
+  rounds over minutes, longer than a request may run. So the route starts a
+  `ComposeJob` Durable Object (`workers/composeJob.ts`, one per job) and
+  answers immediately, and the browser polls. The object runs the turn in its
+  ALARM, which may run for fifteen minutes with nobody waiting on it; the
+  session going in and the song coming out are in R2 (`compose/<id>/`), since
+  a session can be bigger than a Durable Object value, and an hour after the
+  turn a second alarm deletes all of it. An alarm that is retried after the
+  turn began reports an interruption rather than spending the tokens twice.
+  Locally it needs `npm run preview`: `next dev` has no Durable Objects.
 - **Two ways a turn is paid for, and that decides what it needs.** The
   deploy's key (`ANTHROPIC_API_KEY`) needs an account, because the spend is the
   site's. A key the visitor brings needs **nothing at all** — no account, and
@@ -4415,25 +4495,27 @@ panel ──▶ POST /api/compose ──▶ createJob ──▶ POST the worker 
   own is the one way to compose here without an account, and a deploy with no
   key of its own still has a working compose panel.
 - **A brought key is never stored.** It rides the message it pays for, and the
-  route hands it to the worker in the same fire-and-forget POST that starts
-  one. It is deliberately NOT on the job record — that record is a Netlify
-  Blob that outlives the turn, which is exactly what a key must not do. What
-  the record gets is `keyHash` (sha-256, truncated), because the limits have to
-  be counted against something and with no account that key is the only
-  something there is.
-- **Two secrets per job, because there are two readers.** The worker token says
-  an invocation came from the route that created the job (the worker endpoint
-  takes nothing but an id). The **view token** is how a browser proves a job is
-  its own to poll: a job holds somebody's song, and a signed-out visitor has no
-  account to check that against. An account still reaches its own jobs without
-  one, which is what keeps a job created before view tokens existed readable.
-  The status route tries the token first and only then resolves a session —
-  validating one costs a Supabase round trip, and this is polled every couple
-  of seconds for as long as a whole song takes.
+  route hands it to the job object in the call that starts it, which keeps it
+  in memory (never in its storage, which outlives the turn) until the alarm
+  takes it. If the object is evicted in between, the key is gone and the turn
+  says to send it again rather than running on the site's key. What is kept
+  is `keyHash` (sha-256, truncated), because the limits have to be counted
+  against something and with no account that key is the only something there
+  is.
+- **The view token is how a browser proves a job is its own** to poll: a job
+  holds somebody's song, and a signed-out visitor has no account to check
+  that against. An account still reaches its own jobs without one. The
+  status route tries the token first and only then resolves a session: this
+  is polled every couple of seconds for as long as a whole song takes. Only
+  the route can reach a job object, so there is no worker token any more.
 - **The limits ration the WORKER, not the bill.** `MAX_IN_FLIGHT` /
   `MAX_PER_HOUR` apply to a brought key as they do to an account, counted in
-  its own bucket (`keys/<hash>` beside `users/<id>`; the hash is of the caller's address when Netlify names one, since a key is only shape-checked), because a turn holds a
-  15-minute function whoever is paying for the tokens. A brought-key turn
+  its own bucket (`keys/<hash>` beside `users/<id>`; the hash is of the
+  caller's address, `cf-connecting-ip`, since a key is only shape-checked),
+  because a turn holds a 15-minute alarm whoever is paying for the tokens.
+  A bucket is a `ComposeLimits` Durable Object, single-threaded, so ten
+  requests sent together are taken one at a time and only as many as the
+  limit get a slot (`takeSlot` / `releaseSlot`, lib/composeJobs.js). A brought-key turn
   counts against the key even when an account is signed in: one person with
   their own key should not also be spending the account allowance they aren't
   using.
@@ -4444,7 +4526,7 @@ panel ──▶ POST /api/compose ──▶ createJob ──▶ POST the worker 
   someone's behalf without knowing what it costs. There is no picker.
 - **The site's key running dry switches compose off.** A turn on the deploy's
   key that fails for want of credit (or the console's spend limit) sets a flag
-  in the jobs store (`markSiteOutOfBudget`, lib/composeJobs.js); the studio
+  in D1's `site_flags` (`markSiteOutOfBudget`, lib/composeJobs.js); the studio
   reads it when drawing the bar, and the route refuses site-key turns while it
   holds. The compose button is disabled for anyone who would run on the site's
   key and has no key of their own, titled `SITE_OUT_OF_BUDGET`
@@ -4464,7 +4546,7 @@ panel ──▶ POST /api/compose ──▶ createJob ──▶ POST the worker 
 - **The conversation follows the song** (`song_chats`), so a signed-out
   visitor's turns keep no transcript beyond the tab: there is no song to attach
   one to. **A transcript is its author's alone.** `song_chats` is owner-only
-  both ways with no public read (0011, held by `rls_test.sql`), `loadSongChat`
+  both ways with no public read (held by `test/data.test.js`), `loadSongChat`
   filters on `owner_id` as well, and the panel is keyed by the signed-in
   account in `AccountBar` (`key={userId}`): sign out is a soft navigation back
   to `/studio`, which used to leave the last person's conversation on screen
@@ -4608,9 +4690,9 @@ account needed — the same trust model as a share link, because the point of
 the link is to send it to someone.
 
 ```
-studio A ──edit──▶ jam.js ──diff──▶ JamPanel ──▶ Supabase Realtime broadcast
-                     ▲                                    │
-studio B ◀──mergeSet── jam.js ◀──patch── JamPanel ◀───────┘   (presence: who is here)
+studio A ──edit──▶ jam.js ──diff──▶ JamPanel ──▶ WebSocket ──▶ JamRoom (Durable Object)
+                     ▲                                                     │
+studio B ◀──mergeSet── jam.js ◀──patch── JamPanel ◀── WebSocket ◀──────────┘   (presence: who is here)
 ```
 
 - **Nothing is instrumented, for history.js's reason.** The engine half
@@ -4706,13 +4788,23 @@ studio B ◀──mergeSet── jam.js ◀──patch── JamPanel ◀──�
   it). Automated fields are pinned as history pins them (`pinAutomated`,
   exported for this), so a lane rewriting the cutoff every step is not
   traffic.
-- **The engine knows nothing about Supabase, the panel nothing about
+- **The engine knows nothing about the transport, the panel nothing about
   sessions.** jam.js takes a `send` and is handed what comes back
-  (`window.seqbaby.jam`); JamPanel.tsx owns the channel, presence, the invite
-  link, and the message envelope. Cutting a message into parts the broadcast
-  cap will carry is `lib/jamWire.js` — the shell's, not the engine's, because
-  public/js is kept out of the Next graph. A connection error keeps the room
-  (the client retries on its own) and keeps `leave` on offer.
+  (`window.seqbaby.jam`); JamPanel.tsx owns the socket, presence, the invite
+  link, and the message envelope. Cutting a message into parts a frame will
+  carry is `lib/jamWire.js` — the shell's, not the engine's, because
+  public/js is kept out of the Next graph. A dropped socket keeps the room
+  and reconnects with backoff (1s doubling to 15s), keeping `leave` on offer.
+- **The room is a relay with a guest list** (`workers/jamRoom.ts`): one
+  Durable Object per room id (`idFromName`), reached at `/api/jam/<room>`,
+  which `worker.ts` routes before Next sees it (a route handler cannot hand
+  on an upgrade). A member's first frame is `{t: "join", id, name, color,
+  joinedAt}`, kept as the socket's attachment (hibernation-safe); every
+  `{t: "msg", part}` goes to every other member as is; the object sends
+  `{t: "presence", peers}` to everyone whenever the list changes (a join, a
+  rename, a socket closing). The same member id connecting again replaces
+  the older socket. `ping` is answered without waking the object. At most 32
+  members, 256KB a frame.
 
 ## Undo / redo (`history.js` + `historyStore.js`)
 
@@ -5099,7 +5191,7 @@ through a 6ms fade on its gain).
 - **React must never re-set the studio's `innerHTML`** (`app/StudioBody.tsx`).
   React 19 rewrites `innerHTML` whenever `dangerouslySetInnerHTML` is a new
   object, string unchanged or not, and a server action that writes a cookie
-  (Supabase refreshing a signed-in session) re-renders the page from a fresh
+  (Better Auth extending a signed-in session) re-renders the page from a fresh
   payload. Inline in the page, that put the bare skeleton back under a running
   engine: tracks gone from the screen, `state.tracks` intact, first seen as
   opening the songs menu wiping the song. StudioBody holds the first `{__html}`
@@ -5127,9 +5219,14 @@ through a 6ms fade on its gain).
   `node -e 'const s=require("fs").readFileSync("public/js/contagion.js","utf8");
   require("fs").writeFileSync("/tmp/p.js",s.match(/SOURCE = \`([\s\S]*?)\n\`;/)[1])'
   && node --check /tmp/p.js`
-- **Netlify deploy-preview hash URLs are pinned to one deploy** — retest on
-  the branch alias URL, not an old hash URL. A same-SHA force-push does not
-  trigger a rebuild; amend for a fresh SHA.
+- **No query is safe by default.** D1 has no Row Level Security: a read
+  without an `owner_id = ?` or `is_public = 1` in it returns everybody's rows
+  to whoever called the action. Keep every query in `lib/data/` and every
+  rule tested in `test/data.test.js`.
+- **The Durable Objects are bundled by wrangler, not Next** (`worker.ts`,
+  `workers/`): they can import plain JS from the repo, not `@/` aliases or
+  anything that needs Next. After changing a binding in `wrangler.jsonc`, run
+  `npm run cf-typegen`.
 
 ## Adding a feature — quick map
 
@@ -5174,7 +5271,10 @@ through a 6ms fade on its gain).
 - New macro-pad behaviour → `macro.js`; assignment targets come from
   `AUTOMATION_TARGETS` for free, so a new automation target is macro-assignable
   the moment it has a `CONTROL_TARGETS` entry.
-- New server data → Supabase migration + server action in `app/*/actions.ts`
+- New server data → a D1 migration in `db/migrations/` (`000N_name.sql`, then
+  `npm run db:migrate:local` / `db:migrate`), the reads and writes in
+  `lib/data/*.js` with their owner / public rules and a case in
+  `test/data.test.js`, and a server action in `app/*/actions.ts`
   + UI in the relevant `app/*.tsx`; keep the engine side behind
   `window.seqbaby`.
 
@@ -5191,8 +5291,29 @@ through a 6ms fade on its gain).
 
 ## Deployment
 
-Push to `main`; Netlify auto-deploys (`@netlify/plugin-nextjs`, Node 22).
-Repo: https://github.com/mjoslyn/seqbaby.
+Cloudflare Workers, Workers Paid plan (a Next build is past the free plan's
+3MB bundle, and server rendering past its 10ms CPU). Repo:
+https://github.com/mjoslyn/seqbaby.
+
+`npm run deploy` builds (`scripts/cf-build.mjs` sets the engine version from
+`WORKERS_CI_COMMIT_SHA` or the checkout's HEAD, then `opennextjs-cloudflare
+build`) and deploys. With Workers Builds connected to the repo, set the build
+command to `npm run cf:build` and the deploy command to `npx
+opennextjs-cloudflare deploy`; pushes to `main` deploy and other branches get
+preview URLs. A schema change is `npm run db:migrate` (remote) before the
+deploy that needs it.
+
+First deploy, once:
+
+```
+npx wrangler d1 create seqbaby                  # paste the id into wrangler.jsonc
+npx wrangler r2 bucket create seqbaby-blobs
+npx wrangler r2 bucket create seqbaby-next-cache
+npm run db:migrate
+npx wrangler email sending enable <domain>      # for auth email
+npx wrangler secret put BETTER_AUTH_SECRET      # + BETTER_AUTH_URL, EMAIL_FROM, ANTHROPIC_API_KEY ...
+npm run deploy
+```
 
 ### Engine asset loading (load-bearing — see also "Audio start / unlock")
 
@@ -5214,8 +5335,8 @@ Repo: https://github.com/mjoslyn/seqbaby.
   count the module tallies above quote. Recount with it rather than guessing:
   every one of those tallies had drifted before.
 - The account bar is behind `<Suspense>` in `app/studio/page.tsx`. Don't await
-  Supabase in the page body again: it blocks the whole document, including the
-  preload hints, on two sequential round trips.
+  the session or the database in the page body: it blocks the whole document,
+  including the preload hints, on two sequential round trips.
 - **The preloader** (`app/Preloader.tsx` + `app/preloaderMarkup.ts`) covers the gap
   between first paint and a booted engine — the studio's DOM is server-rendered,
   so without it the visitor gets a complete-looking sequencer with empty engine
@@ -5245,8 +5366,8 @@ Repo: https://github.com/mjoslyn/seqbaby.
     hint on a phone is an instruction the reader can't follow. Related to but
     deliberately separate from `HELP_TIPS` (icons.js), which the audio gate
     rotates after this overlay clears.
-- **Asset versioning**: Netlify's build exports
-  `NEXT_PUBLIC_ENGINE_VERSION=$COMMIT_REF`, and
+- **Asset versioning**: `scripts/cf-build.mjs` exports
+  `NEXT_PUBLIC_ENGINE_VERSION` (the commit SHA), and
   `scripts/stamp-engine-assets.mjs` publishes `public/js`, `woscillators.js`
   and `style.css` under `public/e/<sha>/` (gitignored). `engineAsset()` in
   `app/engineAssets.ts` points every URL at that prefix, and the prefix
@@ -5254,6 +5375,6 @@ Repo: https://github.com/mjoslyn/seqbaby.
   resolve against the importing module's URL. That's why the version is a path
   and not a `?query` — a query is dropped during that resolution and would
   reach only `main.js`. Per-deploy URLs are what make the `immutable`
-  cache-control in `netlify.toml` safe on an unbundled 61-module engine.
+  cache-control in `public/_headers` safe on an unbundled 61-module engine.
   Unset locally, so `npm run dev` and a plain `next build` keep the bare paths
   and the edit-and-reload loop.

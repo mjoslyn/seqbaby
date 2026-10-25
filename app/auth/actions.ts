@@ -2,122 +2,134 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { cookies, headers } from "next/headers";
-import { createClient } from "@/lib/supabase/server";
-import { RECOVERY_COOKIE } from "@/lib/recoveryCookie";
+import { headers } from "next/headers";
+import { getAuth } from "@/lib/auth";
+import { MIN_PASSWORD } from "@/lib/auth/config.js";
 import { safeNext } from "@/lib/safeNext";
 
 type ActionState = { error?: string; message?: string };
 
-export async function signIn(
-  _prev: ActionState,
-  formData: FormData,
-): Promise<ActionState> {
-  const email = String(formData.get("email") || "").trim();
-  const password = String(formData.get("password") || "");
-  const supabase = await createClient();
-  const { error } = await supabase.auth.signInWithPassword({ email, password });
-  if (error) return { error: error.message };
-  revalidatePath("/", "layout");
-  // Back where the visitor was when a heart, a remix or a save sent them here.
-  redirect(safeNext(formData.get("next")));
-}
-
-export async function signUp(
-  _prev: ActionState,
-  formData: FormData,
-): Promise<ActionState> {
-  const email = String(formData.get("email") || "").trim();
-  const password = String(formData.get("password") || "");
-  const supabase = await createClient();
-  const origin = (await headers()).get("origin") ?? "";
-  const next = safeNext(formData.get("next"));
-  const { data, error } = await supabase.auth.signUp({
-    email,
-    password,
-    options: { emailRedirectTo: `${origin}/auth/confirm?next=${encodeURIComponent(next)}` },
-  });
-  if (error) return { error: error.message };
-  // If email confirmation is disabled in Supabase, a session is returned and the
-  // user is already signed in; otherwise they must confirm via email first.
-  if (data.session) {
-    revalidatePath("/", "layout");
-    redirect(next);
-  }
-  return { message: "check your email to confirm your account, then sign in." };
-}
-
-export async function signInWithMagicLink(
-  _prev: ActionState,
-  formData: FormData,
-): Promise<ActionState> {
-  const email = String(formData.get("email") || "").trim();
-  const supabase = await createClient();
-  const origin = (await headers()).get("origin") ?? "";
-  const next = safeNext(formData.get("next"));
-  const { error } = await supabase.auth.signInWithOtp({
-    email,
-    options: { emailRedirectTo: `${origin}/auth/confirm?next=${encodeURIComponent(next)}` },
-  });
-  if (error) return { error: error.message };
-  return { message: "magic link sent: check your email." };
-}
-
-// Emails a password reset link. The link lands on /auth/confirm, which signs
-// the visitor in with a recovery session and sends them to /reset-password.
-// The reply is the same whether or not the address has an account, so this
-// form can't be used to find out who has one.
-export async function requestPasswordReset(
-  _prev: ActionState,
-  formData: FormData,
-): Promise<ActionState> {
-  const email = String(formData.get("email") || "").trim();
-  if (!email) return { error: "enter the email you signed up with." };
-  const supabase = await createClient();
-  const origin = (await headers()).get("origin") ?? "";
-  const { error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${origin}/auth/confirm?next=/reset-password`,
-  });
-  // A rate limit is worth saying; anything about the address itself is not.
-  if (error?.status === 429) return { error: error.message };
+/** Better Auth throws an APIError carrying a status and a message meant for
+ *  people; anything else is ours to word. */
+function authError(e: unknown): { status: number; code: string; message: string } {
+  const err = e as { status?: unknown; statusCode?: number; body?: { code?: string; message?: string }; message?: string };
   return {
-    message:
-      "if there's an account for that email, a reset link is on its way.",
+    status: typeof err?.statusCode === "number" ? err.statusCode : 0,
+    code: err?.body?.code ?? "",
+    message: err?.body?.message || err?.message || "something went wrong",
   };
 }
 
-// Sets a new password from /reset-password. Settings asks for the current
-// password before changing it; this can't, because forgetting it is the point.
-// So it needs the recovery cookie /auth/confirm sets when a reset link is
-// followed, or any signed-in session (a laptop left open) could skip that check.
-export async function setNewPassword(
-  _prev: ActionState,
-  formData: FormData,
-): Promise<ActionState> {
+/** Where a link in an email lands: /auth/confirm sends the visitor on to
+ *  `next`, or to the sign-in page when the link failed. */
+const confirmUrl = (next: string) => `/auth/confirm?next=${encodeURIComponent(next)}`;
+
+export async function signIn(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const email = String(formData.get("email") || "").trim();
+  const password = String(formData.get("password") || "");
+  const next = safeNext(formData.get("next"));
+  try {
+    const auth = await getAuth();
+    await auth.api.signInEmail({
+      body: { email, password, callbackURL: confirmUrl(next) },
+      headers: await headers(),
+    });
+  } catch (e) {
+    const err = authError(e);
+    if (err.code === "EMAIL_NOT_VERIFIED")
+      return { error: "confirm your email first: we've sent the link again." };
+    if (err.status === 401 || err.code === "INVALID_EMAIL_OR_PASSWORD")
+      return { error: "that email and password don't match an account." };
+    return { error: err.message };
+  }
+  revalidatePath("/", "layout");
+  // Back where the visitor was when a heart, a remix or a save sent them here.
+  redirect(next);
+}
+
+export async function signUp(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const email = String(formData.get("email") || "").trim();
+  const password = String(formData.get("password") || "");
+  const next = safeNext(formData.get("next"));
+  if (password.length < MIN_PASSWORD) return { error: `password must be at least ${MIN_PASSWORD} characters.` };
+  try {
+    const auth = await getAuth();
+    await auth.api.signUpEmail({
+      body: { email, password, name: "", callbackURL: confirmUrl(next) },
+      headers: await headers(),
+    });
+  } catch (e) {
+    const err = authError(e);
+    if (/already exists/i.test(err.message)) return { error: "there's already an account for that email: sign in instead." };
+    return { error: err.message };
+  }
+  // Email confirmation is required, so nobody is signed in yet.
+  return { message: "check your email to confirm your account, then sign in." };
+}
+
+export async function signInWithMagicLink(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const email = String(formData.get("email") || "").trim();
+  if (!email) return { error: "enter your email first." };
+  const next = safeNext(formData.get("next"));
+  try {
+    const auth = await getAuth();
+    await auth.api.signInMagicLink({
+      body: { email, callbackURL: confirmUrl(next), errorCallbackURL: "/login?error=confirm" },
+      headers: await headers(),
+    });
+  } catch (e) {
+    return { error: authError(e).message };
+  }
+  return { message: "magic link sent: check your email." };
+}
+
+// Emails a password reset link. The link goes through Better Auth's
+// /api/auth/reset-password/<token>, which sends the visitor to
+// /reset-password?token=<token>. The reply is the same whether or not the
+// address has an account, so this form can't be used to find out who has one.
+export async function requestPasswordReset(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const email = String(formData.get("email") || "").trim();
+  if (!email) return { error: "enter the email you signed up with." };
+  try {
+    const auth = await getAuth();
+    await auth.api.requestPasswordReset({
+      body: { email, redirectTo: "/reset-password" },
+      headers: await headers(),
+    });
+  } catch (e) {
+    // A rate limit is worth saying; anything about the address itself is not.
+    if (authError(e).status === 429) return { error: "too many tries: wait a minute and ask again." };
+  }
+  return { message: "if there's an account for that email, a reset link is on its way." };
+}
+
+// Sets a new password from /reset-password. The token from the emailed link is
+// the proof: it can only have come out of the account's inbox, which is why
+// this needs no current password (settings asks for one).
+export async function setNewPassword(_prev: ActionState, formData: FormData): Promise<ActionState> {
   const password = String(formData.get("password") || "");
   const confirm = String(formData.get("confirm") || "");
-  if (password.length < 6)
-    return { error: "password must be at least 6 characters." };
+  const token = String(formData.get("token") || "");
+  if (password.length < MIN_PASSWORD) return { error: `password must be at least ${MIN_PASSWORD} characters.` };
   if (password !== confirm) return { error: "those two don't match." };
-
-  const jar = await cookies();
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user || !jar.get(RECOVERY_COOKIE))
+  if (!token) return { error: "this reset link has expired. Ask for a new one." };
+  try {
+    const auth = await getAuth();
+    await auth.api.resetPassword({ body: { newPassword: password, token }, headers: await headers() });
+  } catch {
     return { error: "this reset link has expired. Ask for a new one." };
-
-  const { error } = await supabase.auth.updateUser({ password });
-  if (error) return { error: error.message };
-  jar.delete(RECOVERY_COOKIE);
-  revalidatePath("/", "layout");
-  redirect("/studio");
+  }
+  // Every session was signed out by the reset, this one included.
+  redirect("/login?reset=done");
 }
 
 export async function signOut() {
-  const supabase = await createClient();
-  await supabase.auth.signOut();
+  try {
+    const auth = await getAuth();
+    await auth.api.signOut({ headers: await headers() });
+  } catch {
+    /* already signed out */
+  }
   revalidatePath("/", "layout");
   redirect("/studio");
 }

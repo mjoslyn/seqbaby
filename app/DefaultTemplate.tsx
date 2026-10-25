@@ -37,12 +37,10 @@ export default function DefaultTemplate() {
   // One fetch per page. The blob is a whole session, base64 sample payloads
   // included, and `new` can be pressed repeatedly.
   //
-  // Caught rather than allowed to reject: the studio and the engine are meant
-  // to run with no Supabase env at all (`npm run dev` with an empty .env is the
-  // documented way to work on the engine), and there the action throws on the
-  // client it cannot build. A visitor with no account reaches the same place by
-  // a different road, and the right answer for both is the blank session that
-  // is already on screen.
+  // Caught rather than allowed to reject: a failed lookup (no database, the
+  // network down) must not take the studio with it. A visitor with no account
+  // reaches the same place by a different road, and the right answer for both
+  // is the blank session that is already on screen.
   const cached = useRef<Promise<DefaultTemplate | null> | null>(null);
 
   const apply = useCallback(async () => {

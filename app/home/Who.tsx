@@ -1,13 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
 import styles from "./home.module.css";
 
 // The homepage is cached and shared by everyone, so it cannot know who is
-// looking at it. This island asks the browser: a signed-in visitor gets their
-// own page in the corner instead of an invitation to sign in. The session read
-// is local (no round trip); the handle is one small read of profile_cards.
+// looking at it. This island asks (/api/me, which reads the session cookie):
+// a signed-in visitor gets their own page in the corner instead of an
+// invitation to sign in.
 export default function Who() {
   const [me, setMe] = useState<{ handle: string | null } | null>(null);
 
@@ -15,18 +14,12 @@ export default function Who() {
     let cancelled = false;
     (async () => {
       try {
-        const supabase = createClient();
-        const { data } = await supabase.auth.getSession();
-        const id = data.session?.user.id;
-        if (!id) return;
-        const { data: card } = await supabase
-          .from("profile_cards")
-          .select("username")
-          .eq("id", id)
-          .maybeSingle();
-        if (!cancelled) setMe({ handle: (card?.username as string) || null });
+        const res = await fetch("/api/me", { credentials: "same-origin" });
+        const body = (await res.json()) as { id: string | null; handle?: string | null };
+        if (!body.id) return;
+        if (!cancelled) setMe({ handle: body.handle || null });
       } catch {
-        // No Supabase env: the engine runs without one, and so does this page.
+        // Offline, or no database: the page still renders.
       }
     })();
     return () => {

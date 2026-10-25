@@ -1,32 +1,25 @@
 import { NextResponse } from "next/server";
-import { putShare, getShare } from "@/lib/api.js";
-import { createClient, currentUserId } from "@/lib/supabase/server";
-import { withSamples } from "@/app/songs/sampleDb";
+import { cfEnv } from "@/lib/cf";
+import { currentUserId } from "@/lib/auth/session";
+import { getShare, putShare } from "@/lib/data/shares.js";
+import { first } from "@/lib/data/db.js";
+import { unpackJson, withSamples } from "@/lib/data/blob.js";
 
-// Node runtime: lib/api.js uses node:crypto and @netlify/blobs (with an in-memory
-// fallback when no Netlify context is present, e.g. `next dev`).
-export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 // POST /api/share  { session, title? } -> { id }
 //
-// This is the studio's own quick "share" button (public/js/session.js
-// onShareSet) -- no account needed, nothing typed, works signed out. A
-// signed-in sharer still gets tagged: their id rides along so the link
-// preview (linkedSong in app/songs/linkedSongTitle.ts) can put their name on
-// the card, the same as a published song's owner_id does. `title`, when the
-// studio has a song open, is that song's own name -- so sharing an already
-// saved song doesn't hand it a freshly generated one (putShare falls back to
-// that only when no usable title rides along). Resolving the session is
-// best-effort -- the engine is meant to work with no Supabase env at all,
-// and an anonymous share is still a share.
+// The studio's own quick "share" button (public/js/session.js onShareSet):
+// no account needed, nothing typed, works signed out. A signed-in sharer
+// still gets tagged, so the link preview (app/songs/linkedSongTitle.ts) can
+// put their name on the card. `title`, when the studio has a song open, is
+// that song's own name; only a session with none gets a generated one.
 export async function POST(req: Request) {
   try {
-    const body = await req.json();
-    // No Supabase configured, or no session: null, and the share is anonymous.
-    const ownerId = await currentUserId();
+    const body = (await req.json()) as { session?: unknown; title?: unknown };
+    const [env, ownerId] = await Promise.all([cfEnv(), currentUserId()]);
     const title = typeof body?.title === "string" ? body.title : undefined;
-    const { id } = await putShare({ session: body?.session, ownerId, title });
+    const { id } = await putShare(env, { session: body?.session, ownerId, title });
     return NextResponse.json({ id });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "share failed";
@@ -35,36 +28,27 @@ export async function POST(req: Request) {
 }
 
 // GET /api/share?id=... -> { session, createdAt }
-// Resolves published cloud songs by share_slug first (RLS allows anon to read
-// public songs), then falls back to legacy Blobs shares.
+// A published song by its share slug first, then a quick share.
 export async function GET(req: Request) {
   const id = new URL(req.url).searchParams.get("id");
-  if (id) {
-    try {
-      const supabase = await createClient();
-      const { data } = await supabase
-        .from("songs")
-        .select("id,data,updated_at")
-        .eq("share_slug", id)
-        .eq("is_public", true)
-        .maybeSingle();
-      if (data) {
-        // A song's samples are stored beside it (migration 0023), not in it.
-        const session = await withSamples(supabase, data.id, data.data);
-        return NextResponse.json({ session, createdAt: data.updated_at });
-      }
-    } catch {
-      // songs table may not exist yet; fall through to Blobs.
-    }
-  }
+  if (!id) return NextResponse.json({ error: "bad id" }, { status: 404 });
+  const env = await cfEnv();
   try {
-    const { session, createdAt } = await getShare({ id });
-    // title/ownerId ride along on the stored blob for getShareMeta's sake
-    // (the link-preview path) -- not something this endpoint hands to
-    // whoever fetches the session, which was never asking for either.
-    return NextResponse.json({ session, createdAt });
+    const row = await first(
+      env.DB,
+      "select id, data, updated_at from songs where share_slug = ?1 and is_public = 1",
+      id,
+    );
+    if (row) {
+      // A song's samples are stored beside it in R2, not in it.
+      const session = await withSamples(env.BLOBS, row.id, await unpackJson(env.BLOBS, row.data));
+      return NextResponse.json({ session, createdAt: row.updated_at });
+    }
+    const share = await getShare(env, id);
+    if (share) return NextResponse.json({ session: share.session, createdAt: share.createdAt });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "not found";
     return NextResponse.json({ error: msg }, { status: 404 });
   }
+  return NextResponse.json({ error: "share not found" }, { status: 404 });
 }

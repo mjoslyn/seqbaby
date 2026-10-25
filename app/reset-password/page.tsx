@@ -1,21 +1,20 @@
 import Link from "next/link";
-import { cookies } from "next/headers";
-import { createClient } from "@/lib/supabase/server";
-import { RECOVERY_COOKIE } from "@/lib/recoveryCookie";
 import ResetForm from "./ResetForm";
 import styles from "@/app/ui.module.css";
 
 export const dynamic = "force-dynamic";
 
-// Where a password reset link lands, via /auth/confirm, already signed in.
-// Without the recovery cookie there is nothing to reset: the link expired, was
-// used, or this page was opened by hand.
-export default async function ResetPasswordPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  const recovering = !!user && !!(await cookies()).get(RECOVERY_COOKIE);
+// Where a password reset link lands, via Better Auth's
+// /api/auth/reset-password/<token>, which checks the token and sends the
+// visitor here with it (`?token=`), or with `?error=` when it has expired or
+// been used. The token itself is checked again when the new password is set.
+export default async function ResetPasswordPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const sp = await searchParams;
+  const token = typeof sp.token === "string" && !sp.error ? sp.token : "";
 
   return (
     <div className={styles.authWrap}>
@@ -25,13 +24,11 @@ export default async function ResetPasswordPage() {
           <img src="/favicon.svg" alt="" />
           seqbaby
         </div>
-        {recovering ? (
-          <ResetForm email={user.email ?? ""} />
+        {token ? (
+          <ResetForm token={token} />
         ) : (
           <>
-            <p className={styles.error}>
-              This reset link has expired or already been used.
-            </p>
+            <p className={styles.error}>This reset link has expired or already been used.</p>
             <p className={styles.hint}>
               <Link href="/login?mode=reset">Send a new one</Link>
             </p>

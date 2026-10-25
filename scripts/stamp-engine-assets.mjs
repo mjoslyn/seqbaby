@@ -1,18 +1,18 @@
 // Copies the engine's static assets to a version-stamped path under public/e/,
 // so each deploy addresses them at URLs nobody has cached before and they can be
-// served `immutable` (see netlify.toml).
+// served `immutable` (see public/_headers).
 //
 // Why a copy rather than a rewrite: the engine is 33 unbundled ES modules whose
 // relative specifiers ("./voices.js") resolve against the importing module's
 // URL, so the version has to live in the PATH — a ?query is dropped during that
 // resolution and would only ever reach main.js. A path prefix could come from a
-// Netlify rewrite instead, but rewrites are routing behaviour that can't be
+// rewrite instead, but rewrites are routing behaviour that can't be
 // verified until it's live, and the failure mode is every engine asset 404ing.
 // Real files at real paths are served straight off the CDN, get the same headers
 // as any other static asset, and can be checked locally with `next start`.
 //
-// Runs only when NEXT_PUBLIC_ENGINE_VERSION is set — i.e. in the Netlify build,
-// never in `npm run dev`. The edit-and-reload loop over public/js is untouched.
+// Runs only when NEXT_PUBLIC_ENGINE_VERSION is set — i.e. in the Cloudflare
+// build (scripts/cf-build.mjs), never in `npm run dev`. The edit-and-reload loop over public/js is untouched.
 
 import { cp, mkdir, readdir, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";

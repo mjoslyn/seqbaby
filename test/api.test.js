@@ -1,11 +1,15 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { putShare, getShare, getShareMeta } from "../lib/api.js";
+import * as shares from "../lib/data/shares.js";
+import { makeEnv } from "./helpers/cf.js";
 
-// @netlify/blobs isn't installed in this environment (nor most CI runs of
-// this suite), so every call here exercises lib/api.js's in-memory fallback
-// -- the same code path a plain `node server.js` or `next dev` takes with no
-// Netlify context. That's deliberate: it's the one guaranteed-available path.
+// The studio's quick `share` (lib/data/shares.js), over the D1 and R2
+// stand-ins in test/helpers/cf.js: the session in R2, its title and sharer in
+// the `shares` table.
+const env = makeEnv();
+const putShare = (args) => shares.putShare(env, args);
+const getShare = ({ id }) => shares.getShare(env, id);
+const getShareMeta = ({ id }) => shares.getShareMeta(env, id);
 
 test("a share is tagged with a generated title and, when given one, an owner", async () => {
   const session = { bpm: 128, tracks: [{ engineKey: "dm:silverbox", patterns: [] }] };
@@ -17,8 +21,10 @@ test("a share is tagged with a generated title and, when given one, an owner", a
 
   const full = await getShare({ id });
   assert.deepEqual(full.session, session);
-  assert.equal(full.title, meta.title);
-  assert.equal(full.ownerId, "user-1");
+  // The session object is all a fetch of it carries: the title and the
+  // sharer are the preview's, read from the row.
+  assert.equal(full.title, undefined);
+  assert.equal(full.ownerId, undefined);
 });
 
 test("an anonymous share still gets a title, but no owner", async () => {

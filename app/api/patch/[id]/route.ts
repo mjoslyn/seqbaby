@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { cfEnv } from "@/lib/cf";
+import { first } from "@/lib/data/db.js";
+import { unpackJson } from "@/lib/data/blob.js";
 
 // GET /api/patch/<uuid> -> { name, config }
 //
@@ -8,30 +10,19 @@ import { createClient } from "@supabase/supabase-js";
 // never selects `config` itself: a sampler patch carries its sample as
 // base64, so it is fetched only for the card someone presses.
 //
-// A plain anon client and only public rows, for feed.ts's reason: nothing a
+// Public rows only and no session read, for feed.ts's reason: nothing a
 // session could add to the answer, and no cookies means a cacheable response.
-//
-// The id is in the PATH, not the query, and that is load-bearing: the
-// response is CDN-cached, and Netlify's cache key leaves the query string out
-// unless told otherwise, so `?id=` served whichever patch was fetched first
-// for every id -- every card on the homepage played the same patch.
+// The id is in the PATH, not the query, so any cache keyed on the path alone
+// still tells two patches apart.
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   if (!/^[0-9a-f-]{36}$/i.test(id)) return NextResponse.json({ error: "bad id" }, { status: 400 });
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !key) return NextResponse.json({ error: "no database" }, { status: 404 });
   try {
-    const supabase = createClient(url, key, { auth: { persistSession: false } });
-    const { data, error } = await supabase
-      .from("patches")
-      .select("name,config")
-      .eq("id", id)
-      .eq("is_public", true)
-      .maybeSingle();
-    if (error || !data) return NextResponse.json({ error: "not found" }, { status: 404 });
+    const env = await cfEnv();
+    const row = await first(env.DB, "select name, config from patches where id = ?1 and is_public = 1", id);
+    if (!row) return NextResponse.json({ error: "not found" }, { status: 404 });
     return NextResponse.json(
-      { name: data.name, config: data.config },
+      { name: row.name, config: await unpackJson(env.BLOBS, row.config) },
       { headers: { "Cache-Control": "public, max-age=60, s-maxage=300" } },
     );
   } catch {

@@ -15,15 +15,15 @@ import {
   MAX_KEY_LEN,
 } from "../lib/composeKey.js";
 import {
+  bucketFor,
   canReadJob,
   clearSiteOutOfBudget,
-  createJob,
-  getJobInput,
-  getJobProgress,
   hashApiKey,
   markSiteOutOfBudget,
   siteOutOfBudget,
+  takeSlot,
 } from "../lib/composeJobs.js";
+import { makeD1 } from "./helpers/cf.js";
 
 const KEY = "sk-ant-api03-" + "a".repeat(80) + "_-AA";
 
@@ -83,37 +83,23 @@ test("a job is readable by its token, or by the account that owns it", () => {
   assert.equal(canReadJob({ userId: "user-1" }, { token: "anything" }), false);
 });
 
-test("a job started on a brought key records the hash and not the key", async () => {
+test("a job started on a brought key is counted by the hash and not the key", () => {
   const keyHash = hashApiKey(KEY);
-  const { id, token, viewToken, error } = await createJob({
-    userId: null,
-    keyHash,
-    message: "make me a techno beat",
-    history: [],
-    session: null,
-  });
-  assert.equal(error, undefined);
-  assert.ok(id && token && viewToken);
-  assert.notEqual(token, viewToken, "the worker's secret is not the browser's");
-
-  const input = await getJobInput(id);
-  assert.equal(input.keyHash, keyHash);
-  assert.equal(input.userId, null);
-  assert.equal(JSON.stringify(input).includes(KEY), false, "the key itself never reaches the store");
-
-  const progress = await getJobProgress(id);
-  assert.equal(progress.status, "running");
-  assert.equal(canReadJob(progress, { token: viewToken }), true);
-  assert.equal(canReadJob(progress, { token: "guessed" }), false);
+  const bucket = bucketFor({ userId: null, keyHash });
+  assert.equal(bucket, `keys/${keyHash}`);
+  assert.equal(bucket.includes(KEY), false, "the key itself never names anything stored");
+  // An account's own bucket is the account, whatever key it is on.
+  assert.equal(bucketFor({ userId: "user-1", keyHash: null }), "users/user-1");
+  assert.equal(bucketFor({ userId: null, keyHash: null }), null);
 });
 
-test("one key may not park unbounded turns on the worker", async () => {
-  const keyHash = hashApiKey(`${KEY}-limits`);
-  const start = () => createJob({ userId: null, keyHash, message: "hi", history: [], session: null });
-  const made = [await start(), await start(), await start()];
-  for (const m of made) assert.ok(m.id, "the first three run");
-  const fourth = await start();
-  assert.equal(fourth.id, undefined);
+test("one key may not park unbounded turns on the worker", () => {
+  let rec;
+  for (const id of ["a", "b", "c"]) {
+    rec = takeSlot(rec, id);
+    assert.ok(!rec.error, "the first three run");
+  }
+  const fourth = takeSlot(rec, "d");
   assert.match(fourth.error, /running/);
 });
 
@@ -143,9 +129,11 @@ test("the site's key running dry is one recognisable line, and a flag that clear
   assert.match(describeTurnFailure(limit, true), /your Anthropic account/, "a brought key's budget is its owner's");
   assert.ok(!SITE_OUT_OF_BUDGET.includes("\u2014"), "no em dashes");
 
-  assert.equal(await siteOutOfBudget(), false);
-  await markSiteOutOfBudget();
-  assert.equal(await siteOutOfBudget(), true);
-  await clearSiteOutOfBudget();
-  assert.equal(await siteOutOfBudget(), false);
+  const db = makeD1();
+  assert.equal(await siteOutOfBudget(db), false);
+  await markSiteOutOfBudget(db);
+  assert.equal(await siteOutOfBudget(db), true);
+  await clearSiteOutOfBudget(db);
+  assert.equal(await siteOutOfBudget(db), false);
+  assert.equal(await siteOutOfBudget(null), false, "no database is not a dry key");
 });

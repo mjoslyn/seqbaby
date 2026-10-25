@@ -1,5 +1,6 @@
-// A song's step preview, from the compact shape the database computes
-// (supabase/migrations/0012_song_preview.sql) to a grid of cells to draw.
+// A song's step preview, from the compact shape written with every song
+// (previewFromSession below, called by lib/data/songs.js) to a grid of cells
+// to draw.
 //
 // No imports, for songName.js's reason: pure, so `node --test` exercises it
 // (test/songPreview.test.js), and it is on the render path of the homepage,
@@ -144,12 +145,11 @@ export function decodePreview(raw) {
 }
 
 /**
- * The same preview, computed from a session in JS: supabase/migrations/
- * 0012_song_preview.sql's `song_preview`, line for line. The database's copy
- * is what every card reads, because it keeps the session in the database;
- * this one is for a session that never was in it -- a quick anonymous share
- * lives in the Blobs store (lib/api.js), and its link preview still wants a
- * picture. test/songPreview.test.js holds the two to the same output.
+ * The preview, computed from a session: what lib/data/songs.js writes into
+ * the `preview` column when a song is saved (a port, line for line, of the
+ * Postgres function `song_preview` this used to be, so songs moved over from
+ * Supabase draw the same picture), and what a quick anonymous share's link
+ * preview draws from its session in R2. test/songPreview.test.js pins it.
  * @param {unknown} d a serialized session
  */
 export function previewFromSession(d) {

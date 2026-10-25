@@ -1,14 +1,10 @@
 import { NextResponse } from "next/server";
-import { currentUserId } from "@/lib/supabase/server";
-import { createJob, hashApiKey, siteOutOfBudget } from "@/lib/composeJobs.js";
-import { newCtx, runComposeTurn } from "@/mcp/composeTurn.mjs";
-import { appendJobEvent, clearSiteOutOfBudget, finishJob, markSiteOutOfBudget } from "@/lib/composeJobs.js";
-import { SITE_OUT_OF_BUDGET, describeTurnFailure, isOutOfCredit, looksLikeApiKey } from "@/lib/composeKey.js";
+import { currentUserId } from "@/lib/auth/session";
+import { cfEnv } from "@/lib/cf";
+import { bucketFor, hashApiKey, newJobId, newSecret, siteOutOfBudget } from "@/lib/composeJobs.js";
+import { newCtx } from "@/mcp/composeTurn.mjs";
+import { SITE_OUT_OF_BUDGET, looksLikeApiKey } from "@/lib/composeKey.js";
 
-// Node runtime: the loop imports public/js/songBuilder.js (dependency-free --
-// the same guarantee that lets mcp/server.mjs and the tests run it under
-// plain Node) and the Anthropic SDK.
-export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 type ChatTurn = { role: "user" | "assistant"; text: string };
@@ -16,19 +12,17 @@ type ChatTurn = { role: "user" | "assistant"; text: string };
 // POST /api/compose { message, history, session, apiKey? } -> { jobId, jobToken }
 //
 // This route does NOT write the song. Writing a whole song is dozens of model
-// rounds and takes minutes; a synchronous function gets 26 seconds (measured:
-// a turn died at 28s, streaming included -- keeping the connection busy does
-// not buy time, it only changes where the cut lands). So the turn goes to a
-// background worker that nothing is waiting on, and the browser polls
-// /api/compose/status.
+// rounds and takes minutes, longer than a request may run. So the turn goes to
+// a Durable Object (workers/composeJob.ts) that runs it in an alarm nobody is
+// waiting on, and the browser polls /api/compose/status.
 //
 // Two ways a turn gets paid for, and which one it is decides what it needs:
 //
 //   the deploy's key   an account, because the spend is the site's
 //   a brought key      nothing at all, because the spend is the visitor's
 //
-// A brought key is never stored: it goes from this request into the POST that
-// starts the worker and nowhere else (see lib/composeJobs.js).
+// A brought key is never stored: it goes from this request into the call that
+// starts the job, which holds it in memory for the turn and nowhere else.
 export async function POST(req: Request) {
   let body: {
     message?: string;
@@ -43,7 +37,7 @@ export async function POST(req: Request) {
   }
 
   // A brought key decides the whole shape of the request, so it is read before
-  // anything else. Shaped-checked rather than tried: only Anthropic can say
+  // anything else. Shape-checked rather than tried: only Anthropic can say
   // whether a key works, and a typo is worth catching before it becomes a job
   // somebody has to poll for the failure of.
   const brought = typeof body.apiKey === "string" ? body.apiKey.trim() : "";
@@ -54,6 +48,7 @@ export async function POST(req: Request) {
     );
   }
 
+  const env = await cfEnv();
   const userId = brought ? null : await currentUserId();
 
   // No key of their own: the deploy's, which is the account holders'.
@@ -64,7 +59,7 @@ export async function POST(req: Request) {
         { status: 401 },
       );
     }
-    if (!process.env.ANTHROPIC_API_KEY) {
+    if (!env.ANTHROPIC_API_KEY) {
       return NextResponse.json(
         { error: "this deploy has no Anthropic key of its own: add your own key to compose" },
         { status: 400 },
@@ -72,7 +67,7 @@ export async function POST(req: Request) {
     }
     // Known to be out of credit: refuse now rather than start a job that can
     // only fail the same way a minute from now.
-    if (await siteOutOfBudget()) {
+    if (await siteOutOfBudget(env.DB)) {
       return NextResponse.json({ error: SITE_OUT_OF_BUDGET }, { status: 503 });
     }
   }
@@ -83,7 +78,7 @@ export async function POST(req: Request) {
 
   // Adopting the session validates it, so a blob the studio couldn't have
   // written is a bad request -- worth finding out now rather than inside a
-  // worker whose only way to report it is a record someone has to poll for.
+  // job whose only way to report it is a record someone has to poll for.
   try {
     newCtx(body.session);
   } catch (e) {
@@ -97,109 +92,39 @@ export async function POST(req: Request) {
     .filter((h) => h && typeof h.text === "string")
     .slice(-16)
     .map((h) => ({ role: h.role, text: h.text.slice(0, 20000) }));
-  // A brought-key turn counts against the KEY even when an account is signed
-  // in: the limits ration this site's worker, and one person with a key of
-  // their own should not also be spending the account allowance they aren't
-  // using. What is stored is the hash; the key itself stops here.
-  //
-  // The bucket is the caller's ADDRESS when Netlify names one, not the key: a
-  // key is only shape-checked here, so counted per key a script sending a
-  // fresh made-up one each time had no limit at all.
-  // shortcut: people behind one NAT share a bucket; count per key AND per
-  // address if that ever refuses someone real.
-  const ip = req.headers.get("x-nf-client-connection-ip");
-  const { id, token, viewToken, error } = await createJob({
-    userId,
-    keyHash: brought ? hashApiKey(ip || brought) : null,
-    message,
-    history,
-    session: body.session,
-  });
+
+  // A brought-key turn counts against the caller's ADDRESS when Cloudflare
+  // names one, else the key: a key is only shape-checked here, so counted per
+  // key a script sending a fresh made-up one each time had no limit at all.
+  // It counts there even when an account is signed in: one person with a key
+  // of their own should not also spend the account allowance they aren't using.
+  const ip = req.headers.get("cf-connecting-ip");
+  const keyHash = brought ? hashApiKey(ip || brought) : null;
+  const bucket = bucketFor({ userId, keyHash });
+  if (!bucket) return NextResponse.json({ error: "couldn't tell whose turn that is" }, { status: 400 });
+
+  const id = newJobId();
+  const viewToken = newSecret();
+  const limits = env.COMPOSE_LIMITS.get(env.COMPOSE_LIMITS.idFromName(bucket));
+  const slot = await limits.take(id);
   // Over this bucket's limits. 429 so the panel can say so plainly rather than
   // treating it as a failure to start.
-  if (error || !id) return NextResponse.json({ error: error ?? "couldn't start that" }, { status: 429 });
-
-  // Aim the worker at the deploy this request arrived on, rather than at
-  // whatever a site-wide env var names: a branch preview has to hand its job
-  // to its own worker, not to production's.
-  const origin = new URL(req.url).origin;
-  const workerUrl = `${origin}/.netlify/functions/compose-background`;
+  if (slot.error) return NextResponse.json({ error: slot.error }, { status: 429 });
 
   try {
-    const res = await fetch(workerUrl, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      // The key rides this hop and no other. It is not in the job record, so
-      // this POST is the only place a brought key exists outside the browser
-      // that typed it and the worker invocation that spends it.
-      body: JSON.stringify({ jobId: id, token, ...(brought ? { apiKey: brought } : {}) }),
-    });
-    // A background function answers 202 and runs on. Any 2xx means it took
-    // the job -- checking for 202 exactly would risk reading "accepted" as
-    // "missing" and running the turn a second time here, which is worse than
-    // not running it at all. A 404 is the honest miss, and what `next dev`
-    // gives, since it serves no /.netlify/ paths.
-    if (!res.ok) throw new Error(`worker answered ${res.status}`);
+    const job = env.COMPOSE_JOB.get(env.COMPOSE_JOB.idFromName(id));
+    await job.start(
+      { id, userId, keyHash, bucket, viewToken, message, history, session: body.session },
+      brought || undefined,
+    );
   } catch (e) {
-    // No worker, so run it here. That is the local case: `next dev` has no
-    // background functions and no 26-second ceiling either, so the same loop
-    // runs to completion in-process while the browser polls.
-    //
-    // In production this is a poor substitute -- the runtime is free to
-    // freeze the container once this response goes out -- so it is worth
-    // seeing in the logs rather than silently limping.
-    console.warn(`[compose] no background worker (${(e as Error).message}); running inline`);
-    runInline(id, brought || undefined);
+    console.error("[compose] could not start the job", e);
+    await limits.release(id).catch(() => {});
+    return NextResponse.json({ error: "couldn't start that" }, { status: 500 });
   }
 
   // The view token is how the browser proves this job is its own to poll --
   // the only proof a signed-out visitor has. Handed back once, held in memory
-  // for the life of the turn, and never stored anywhere.
+  // for the life of the turn, and never stored by the browser.
   return NextResponse.json({ jobId: id, jobToken: viewToken }, { status: 202 });
-}
-
-/**
- * The `next dev` path: no background functions, and no 26-second ceiling
- * either, so the turn runs right here. Deliberately NOT awaited -- the
- * response has to go back now so the browser can start polling, exactly as it
- * does against a real worker, which keeps one client path for both.
- *
- * The brought key is passed in rather than re-read from the job, because the
- * job does not have it.
- */
-function runInline(jobId: string, apiKey?: string) {
-  (async () => {
-    try {
-      const { getJobInput } = await import("@/lib/composeJobs.js");
-      const job = await getJobInput(jobId);
-      if (!job) return;
-      const key = apiKey || process.env.ANTHROPIC_API_KEY;
-      if (!key) {
-        await finishJob(jobId, { status: "error", error: "no Anthropic key to run that on" });
-        return;
-      }
-      const out = await runComposeTurn({
-        apiKey: key,
-        message: job.message,
-        history: job.history,
-        session: job.session,
-        onEvent: async (e: { type: string }) => {
-          if (e.type === "tool") await appendJobEvent(jobId, e);
-        },
-      });
-      if (!apiKey) await clearSiteOutOfBudget().catch(() => {});
-      await finishJob(jobId, {
-        status: "done",
-        reply: out.reply,
-        model: out.model,
-        session: out.session,
-        changed: out.changed,
-        warnings: out.warnings,
-        ms: out.ms,
-      });
-    } catch (e) {
-      if (!apiKey && isOutOfCredit(e)) await markSiteOutOfBudget().catch(() => {});
-      await finishJob(jobId, { status: "error", error: describeTurnFailure(e, !!apiKey) }).catch(() => {});
-    }
-  })();
 }

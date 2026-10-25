@@ -1,14 +1,13 @@
 // One compose turn: the agent loop that turns "make me a techno beat" into
 // calls against the song-editing tools, and the song that comes out.
 //
-// Plain JS on purpose, like tools.mjs beside it, because it has TWO callers
-// that cannot share a build: app/api/compose (bundled into a Next route) and
-// netlify/functions/compose-background.mjs (bundled by Netlify, outside Next
-// entirely). A whole song takes minutes, which is far longer than a request
-// is allowed to run, so in production the background worker does the work and
-// the route only starts it -- but `next dev` has no background functions and
-// no timeout either, so there the route runs this inline. Same loop either
-// way; only who calls it differs.
+// Plain JS on purpose, like tools.mjs beside it, because it has callers that
+// cannot share a build: the compose job's Durable Object (workers/composeJob.ts,
+// bundled by wrangler into the Worker, outside Next entirely) and the MCP
+// server under plain Node. A whole song takes minutes, which is far longer
+// than a request is allowed to run, so the Durable Object runs it in an alarm
+// and the route only starts it. Same loop either way; only who calls it
+// differs.
 
 import fs from "node:fs";
 import path from "node:path";
@@ -39,15 +38,20 @@ const GUIDE_FALLBACK = `The compose guide isn't available in this environment. W
 
 let cachedGuide = null;
 
+/** Hand the guide in from a caller that has it as text. The Worker imports
+ *  the skill file as a string at build time (wrangler's Text rule), since a
+ *  Worker has no files to read at runtime. */
+export function setComposeGuide(text) {
+  if (typeof text === "string" && text) cachedGuide = text.replace(/^---[\s\S]*?---\s*/, "");
+}
+
 /**
  * The compose guide, resolved the way a BUNDLED function has to resolve it.
  *
+ * The Worker hands it in as text (setComposeGuide, above). Otherwise:
  * tools.mjs's guideText() derives its path from import.meta.url, which is
- * right for `node mcp/server.mjs` and useless here: a bundler rewrites it to
- * the build machine's path (webpack) or drops it (esbuild). process.cwd() is
- * what both hosts document for reading a file shipped alongside the code --
- * Next's outputFileTracingIncludes and Netlify's included_files -- and the
- * walk up covers a runtime whose cwd sits below where that file landed.
+ * right for `node mcp/server.mjs` and useless in a bundle, so the file is
+ * looked for from process.cwd() and up, then from the module's own path.
  */
 export function composeGuide() {
   if (cachedGuide != null) return cachedGuide;

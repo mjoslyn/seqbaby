@@ -16,8 +16,8 @@ import { useRef } from "react";
 // writes `innerHTML` whenever `dangerouslySetInnerHTML` is a different object
 // -- whether or not the string inside it changed. Written inline in the page,
 // every re-render from the server brought a fresh `{__html}` object, and the
-// studio gets one whenever a server action writes a cookie, which Supabase
-// does when it refreshes a signed-in session. So opening the songs menu (its
+// studio gets one whenever a server action writes a cookie, which Better Auth
+// does when it extends a signed-in session. So opening the songs menu (its
 // list is a server action) could put the bare skeleton back under a running
 // engine: every track gone from the screen while `state.tracks` still held
 // them. Holding the first object means a re-render hands React the same one,

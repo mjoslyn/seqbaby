@@ -8,35 +8,42 @@
   "type": "module",
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "node scripts/stamp-engine-assets.mjs && next build",
     "start": "next start",
+    "cf:build": "node scripts/cf-build.mjs",
+    "preview": "node scripts/cf-build.mjs && opennextjs-cloudflare preview",
+    "deploy": "node scripts/cf-build.mjs && opennextjs-cloudflare deploy",
+    "db:migrate:local": "wrangler d1 migrations apply seqbaby --local",
+    "db:migrate": "wrangler d1 migrations apply seqbaby --remote",
+    "migrate:supabase": "node scripts/migrate-from-supabase.mjs",
     "test": "node --test \"test/**/*.test.js\"",
-    "test:rls": "bash scripts/test-rls.sh",
-    "netlify:dev": "netlify dev",
     "legacy:dev": "node --watch --env-file=.env server.js",
-    "mcp": "node mcp/server.mjs"
+    "mcp": "node mcp/server.mjs",
+    "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.126.0",
     "@modelcontextprotocol/sdk": "^1.30.0",
-    "@netlify/blobs": "^10.7.4",
-    "@supabase/ssr": "^0.12.0",
-    "@supabase/supabase-js": "^2.110.0",
     "@vectorsize/woscillators": "^2.0.1",
-    "next": "^15.1.6",
+    "bcryptjs": "^3.0.3",
+    "better-auth": "^1.7.12",
+    "next": "^15.5.28",
     "posthog-js": "^1.434.17",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "zod": "^4.6.5"
   },
   "devDependencies": {
-    "@netlify/plugin-nextjs": "^5.9.4",
+    "@cloudflare/workers-types": "^5.20261025.1",
+    "@opennextjs/cloudflare": "^1.20.13",
     "@types/node": "^22.10.7",
     "@types/react": "^19.0.7",
     "@types/react-dom": "^19.0.3",
-    "typescript": "^5.7.3"
+    "pg": "^8.23.1",
+    "typescript": "^5.7.3",
+    "wrangler": "^4.152.0"
   }
 }

@@ -2,8 +2,8 @@ import { ENGINE_MODULES, TONE_SRC, WOSC_SRC, engineAsset } from "./engineAssets"
 
 // Emitted from the studio page so the browser starts downloading the whole
 // engine while the HTML is still streaming — i.e. in parallel with the React
-// bundle, the stylesheet, and (for signed-in users) the Supabase round trips
-// that resolve the account bar. Without these, nothing engine-related is even
+// bundle, the stylesheet, and (for signed-in users) the session and profile
+// reads that resolve the account bar. Without these, nothing engine-related is even
 // requested until React has hydrated and ScriptLoader's effect runs.
 //
 // React 19 hoists <link> into <head>, so rendering these inside the page body

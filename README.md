@@ -22,8 +22,8 @@ eight analog-modeled characters), envelope, 5-band EQ, compressor with
 sidechain, a reorderable 17-stage effect rack, an LFO matrix and per-step
 automation. Patterns repeat or chain into songs, can be locked to their own
 sound per pattern, bounced to WAV, played from the computer keyboard or driven
-by vim keys, written as Strudel code, and saved to a Supabase-backed account
-with a full version tree.
+by vim keys, written as Strudel code, and saved to an account with a full
+version tree.
 
 The audio engine is ~80 hand-written, dependency-free vanilla ES modules talking
 to the Web Audio API, with no bundler: edit a file, reload. It is wrapped in a
@@ -207,8 +207,8 @@ listed rather than dropped.
   gallery if you like, and saved from anyone else's card into your own bay.
 - **Share links** (`?s=<slug>`) for published songs and anonymous quick shares,
   with link previews that name the song and who shared it.
-- **Jam rooms** (`?jam=<room>`): several studios holding one song over Supabase
-  Realtime. Edits travel as small diffs and merge into the running engine
+- **Jam rooms** (`?jam=<room>`): several studios holding one song over a
+  WebSocket to a Durable Object per room. Edits travel as small diffs and merge into the running engine
   without stopping playback; a peer's edit is an undo step in their name and
   draws a border in their colour on the control they touched. Play presses
   land on a shared beat phase.
@@ -239,12 +239,13 @@ panel runs the same tools.
 | Shell / routing / auth | Next.js 15 (App Router) + React 19 |
 | Audio engine | Vanilla ES modules + Web Audio API + AudioWorklets, Tone.js 15 (vendored) |
 | Synthesis | `@vectorsize/woscillators` (Plaits WASM) plus hand-written worklet DSP |
-| Accounts + data | Supabase (Postgres, Auth, Row-Level Security, Realtime for jams) |
-| Compose | Anthropic API, run in a Netlify background function |
-| Anonymous sharing | Netlify Blobs (in-memory fallback in dev) |
+| Data | Cloudflare D1 (SQLite) for the tables, R2 for samples, shares and big sessions |
+| Accounts | Better Auth on D1, email through Cloudflare Email Service |
+| Realtime | Durable Objects: a jam room each, a compose job each (run in an alarm) |
+| Compose | Anthropic API, run in a Durable Object |
 | Agent tooling | MCP server over stdio, Playwright for auditions |
 | Optional | PostHog analytics, Cloudflare Turnstile and a GitHub token for the bug page |
-| Deploy | Netlify (`@netlify/plugin-nextjs`, Node 22); push to `main` deploys |
+| Deploy | Cloudflare Workers via OpenNext (`@opennextjs/cloudflare`), Workers Paid plan |
 
 ## Architecture
 
@@ -282,13 +283,16 @@ lets `node --test` and the MCP server run them. The same goes for each worklet
 processor, which is why the engines have measured tests rather than described
 behaviour.
 
-**Shell.** Supabase server actions under `app/*/actions.ts` handle songs,
-versions, templates, patches, profiles and accounts; the public feeds
-(`app/home/feed.ts`, `app/songs/exploreFeed.ts`, `app/people/peopleFeed.ts`)
-read with an anonymous client so the pages stay cached. `middleware.ts`
-refreshes the auth session on every request except engine assets. The compose
-panel (`ComposeChat.tsx`), jam room (`JamPanel.tsx`) and patch bay
-(`PatchBay.tsx`) talk to the engine only through `window.seqbaby` (typed in
+**Shell.** Server actions under `app/*/actions.ts` handle songs, versions,
+templates, patches, profiles and accounts; each resolves the caller and hands
+off to `lib/data/`, plain JS over D1 and R2 where every access rule lives
+(there is no Row Level Security; `test/data.test.js` holds the rules). The
+public feeds (`app/home/feed.ts`, `app/songs/exploreFeed.ts`,
+`app/people/peopleFeed.ts`) read no session, so the pages stay cached.
+`worker.ts` wraps OpenNext's handler, routes jam WebSockets to their room and
+exports the Durable Objects (`workers/`). The compose panel
+(`ComposeChat.tsx`), jam room (`JamPanel.tsx`) and patch bay (`PatchBay.tsx`)
+talk to the engine only through `window.seqbaby` (typed in
 `app/seqbaby.d.ts`).
 
 See [`CLAUDE.md`](./CLAUDE.md) for the detailed tour: module map, data model,
@@ -299,25 +303,59 @@ behaviour.
 
 ```bash
 npm install
-npm run dev          # Next.js dev server → http://localhost:3000 (studio at /studio)
+npm run db:migrate:local   # the D1 schema into wrangler's local database (once)
+npm run dev                # Next.js dev server → http://localhost:3000 (studio at /studio)
 ```
 
-The engine itself needs no env, but the Next pages need a Supabase URL and anon
-key to render at all: copy `.env.example` and set `NEXT_PUBLIC_SUPABASE_URL`
-and `NEXT_PUBLIC_SUPABASE_ANON_KEY` (any syntactically valid pair gets the
-studio up without a project; account features then fail and the studio plays).
-Compose on the site's key needs `ANTHROPIC_API_KEY`; with your own key pasted
-into the panel it needs nothing. PostHog, Turnstile and the bug page's GitHub
-token are optional and off when unset.
+Nothing has to be deployed or configured to run locally: the dev server gets
+D1 and R2 from wrangler's local simulation. Jam rooms and compose run in
+Durable Objects, which only the real Worker build has: use `npm run preview`
+for those. Copy
+`.dev.vars.example` to `.dev.vars` for secrets. Auth email is simulated
+locally: the dev log prints the path of each message, link included. Compose
+on the site's key needs `ANTHROPIC_API_KEY`; with your own key pasted into the
+panel it needs nothing. PostHog, Turnstile and the bug page's GitHub token are
+optional and off when unset.
 
 ```bash
-npm run build && npm run start   # production build + serve
-npm run netlify:dev              # full Netlify emulation (functions + Next) on :8888
+npm run preview                  # the real Worker build, under wrangler dev on :8787
+npm run deploy                   # build and deploy to Cloudflare
 npm run legacy:dev               # pre-Next static Node server on :5173 (engine only)
-npm test                         # node --test over the pure engine modules, every worklet, and lib/
-npm run test:rls                 # Supabase RLS policy tests in a throwaway Postgres (docker)
+npm test                         # node --test: the engine, every worklet, lib/, the data layer's rules
 npm run mcp                      # the MCP server on stdio
 ```
+
+## Deploying
+
+On the Workers Paid plan (the Next build is past the free plan's bundle and
+CPU limits). Once:
+
+```bash
+npx wrangler d1 create seqbaby                  # paste the database id into wrangler.jsonc
+npx wrangler r2 bucket create seqbaby-blobs
+npx wrangler r2 bucket create seqbaby-next-cache
+npm run db:migrate                              # the schema into the remote D1
+npx wrangler email sending enable <your-domain> # auth email (sign-up, magic link, reset)
+npx wrangler secret put BETTER_AUTH_SECRET      # and BETTER_AUTH_URL, EMAIL_FROM, ANTHROPIC_API_KEY ...
+npm run deploy
+```
+
+Then `npm run deploy` for each release, or connect the repo to Workers Builds
+(build command `npm run cf:build`, deploy command
+`npx opennextjs-cloudflare deploy`).
+
+**Moving the data over from Supabase**, accounts and passwords included:
+
+```bash
+npx wrangler secret put MIGRATION_TOKEN         # any long random string
+SUPABASE_DB_URL=postgresql://postgres:...@db.<ref>.supabase.co:5432/postgres \
+SITE_URL=https://<your-site> MIGRATION_TOKEN=<same string> npm run migrate:supabase
+npx wrangler secret delete MIGRATION_TOKEN      # switches the import endpoint off
+```
+
+It reads Supabase's Postgres directly (password hashes are only there), posts
+the rows to the Worker's `/api/admin/import` in foreign-key order, and can be
+run again after a failure. Add `--dry-run` to only count.
 
 The engine has no build step: edit files under `public/js/` and reload. The
 React shell hot-reloads via `next dev`. Adding a module to `public/js/` means
@@ -337,11 +375,12 @@ app/                         Next.js App Router: shell, auth, account UI, public
   EngineScripts / EnginePreload / ScriptLoader / Preloader   engine boot
   AccountBar / SongsMenu / SaveButton / PatchBay / NewSongButton / VersionTree / LikeButton / RemixButton
   ComposeChat.tsx            the compose panel and its review bar
-  JamPanel.tsx               jam room: presence, Realtime channel, invite link
+  JamPanel.tsx               jam room: presence, the room's WebSocket, invite link
   enginePlayer.ts + PlayButton.tsx   play a listed song with the real engine in a hidden frame
   shareCard.ts + shareCopy.js + api/og/   link previews and their image cards
   api/share/  api/patch/[id]/  api/compose/  api/bugs/   share endpoint, patch config, compose job + status, bug reports
-  {songs,patches,profile,auth,account}/actions.ts   Supabase server actions
+  api/auth/  api/bay/  api/me/  api/admin/import/   Better Auth, the patch bay, who am I, the Supabase import
+  {songs,patches,profile,auth,account}/actions.ts   server actions over lib/data
 public/
   js/                        the engine: ~80 dependency-free ES modules (12 worklet instruments,
                              4 worklet fx stages, the filter models, the Strudel reader, the song builder)
@@ -351,16 +390,18 @@ public/
   wavetables/akwf/           bundled AKWF wavetables (CC0)
   style.css  icons/  manifest.webmanifest
 lib/
-  supabase/                  Supabase SSR helpers
-  composeModels / composeKey / composeJobs   compose model, key handling, jobs + limits
-  jamWire.js                 splits jam messages to fit the broadcast cap
-  api.js                     legacy Netlify Blobs share store
+  cf.ts                      the Worker's bindings from server code
+  auth/                      Better Auth config, session reads, auth email
+  data/                      every read and write of D1 and R2, and the rules on them
+  composeModels / composeKey / composeJobs   compose model, key handling, job limits
+  jamWire.js                 splits jam messages to fit a frame
+  api.js                     in-memory share store for the legacy static server
+worker.ts  workers/          the Worker entry; the jam room and compose job Durable Objects
+wrangler.jsonc  open-next.config.ts   Cloudflare bindings and OpenNext config
+db/migrations/               the D1 schema
 mcp/                         MCP server, tool definitions, the compose turn loop, headless audition
-netlify/functions/           compose-background worker, legacy share wrapper
-supabase/migrations/         profiles, songs, patches, versions, templates, chats, previews, likes, avatars
-supabase/tests/              negative RLS tests
-scripts/                     asset stamping, app icons, drum kit rendering, the vox dictionary, RLS runner
-test/                        node --test suites (format, generators, every worklet, Strudel, the explorers)
+scripts/                     the Cloudflare build, the Supabase migration, asset stamping, app icons, drum kits, the vox dictionary
+test/                        node --test suites (format, generators, every worklet, Strudel, the explorers, the data layer)
 .claude/skills/              compose (the agent's guide) and verify (driving the app to check a change)
 ```
 

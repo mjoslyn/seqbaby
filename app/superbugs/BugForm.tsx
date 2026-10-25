@@ -125,7 +125,7 @@ export default function BugForm() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      const data = await res.json().catch(() => ({}));
+      const data = (await res.json().catch(() => ({}))) as { url?: string; error?: string };
       if (res.ok && data.url) {
         setResult({ kind: "ok", url: data.url });
         form.reset();

@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
-import { savePatchToBay } from "@/app/patches/actions";
+import { patchesInMyBay, savePatchToBay } from "@/app/patches/actions";
 import { IconSave } from "./menuIcons";
 import { loginHref } from "@/lib/safeNext";
 
@@ -11,8 +10,8 @@ import { loginHref } from "@/lib/safeNext";
 // loads or comes back into view (app/PatchBay.tsx).
 //
 // Whether a card's patch is already in your bay (a copy saved from it, or your
-// own) is one batched browser read per page, the way LikeButton asks what you
-// have liked: the homepage is cached and cannot know who is looking.
+// own) is one batched request per page, the way LikeButton asks what you have
+// liked: the homepage is cached and cannot know who is looking.
 
 let pending: { ids: Set<string>; done: Promise<Set<string>> } | null = null;
 
@@ -23,20 +22,8 @@ function inMyBay(id: string): Promise<Set<string>> {
       queueMicrotask(async () => {
         pending = null;
         try {
-          const supabase = createClient();
-          const { data } = await supabase.auth.getSession();
-          const me = data.session?.user.id;
-          if (!me) return resolve(new Set());
-          const list = [...ids].join(",");
-          const { data: rows, error } = await supabase
-            .from("patches")
-            .select("id,saved_from")
-            .eq("owner_id", me)
-            .or(`id.in.(${list}),saved_from.in.(${list})`);
-          if (error) return resolve(new Set());
-          resolve(new Set((rows ?? []).flatMap((r) => [r.id as string, r.saved_from as string])));
+          resolve(new Set(await patchesInMyBay([...ids])));
         } catch {
-          // No Supabase env, or no 0018 yet: nothing is saved.
           resolve(new Set());
         }
       });

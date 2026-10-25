@@ -13,7 +13,9 @@ import StudioBreadcrumb from "@/app/StudioBreadcrumb";
 import { AccountBar } from "@/app/AccountBar";
 import { siteOutOfBudget } from "@/lib/composeJobs.js";
 import styles from "@/app/ui.module.css";
-import { createClient } from "@/lib/supabase/server";
+import { cfEnv } from "@/lib/cf";
+import { currentUser } from "@/lib/auth/session";
+import { first } from "@/lib/data/db.js";
 import { SITE_DESCRIPTION, SITE_URL, shareCard } from "@/app/shareCard";
 import { linkedSong, linkedSongCard, jamHostName } from "@/app/songs/linkedSongTitle";
 import { songShareTitle, jamShareTitle } from "@/app/shareCopy";
@@ -34,7 +36,7 @@ function one(v: string | string[] | undefined): string | null {
 // checked against the profiles before it is put on a card (see jamHostName).
 //
 // The lookup only happens when the URL carries one. Metadata is resolved
-// before the document flushes, so a Supabase round trip on every visit would
+// before the document flushes, so a database round trip on every visit would
 // hold back the engine's preload hints for everyone (the same reason the
 // account bar sits behind <Suspense> below); a plain `/` does no work here and
 // inherits the layout's card, while a `?s=` visit is already waiting on a
@@ -110,58 +112,39 @@ export async function generateMetadata({
   };
 }
 
-// Resolving the account bar costs two *sequential* Supabase round trips
-// (validate the session, then read the profile). Awaiting them in the page
-// itself held back the entire document, so signed-in visitors waited on the
-// network twice before a single byte of the studio — or of the engine's
-// preload hints — reached the browser. Isolating it behind <Suspense> lets the
-// shell stream immediately and the bar fill in when it resolves.
+// Resolving the account bar costs a session check and then a profile read.
+// Awaiting them in the page itself would hold back the entire document, so
+// signed-in visitors would wait on the database before a single byte of the
+// studio -- or of the engine's preload hints -- reached the browser. Isolating
+// it behind <Suspense> lets the shell stream immediately and the bar fill in
+// when it resolves.
 async function AccountBarSlot({ searchParams }: { searchParams: SearchParams }) {
-  // No Supabase env: a signed-out bar, not a throw from the client
-  // constructor that takes the page's error boundary with it.
-  const supabase =
-    process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-      ? await createClient()
-      : null;
+  const env = await cfEnv();
   const sp = await searchParams;
   const slug = one(sp.s);
   const openId = one(sp.open);
   // Side by side: the byline's lookup does not need the user, only the
   // decision whether to show it does.
-  const [
-    {
-      data: { user },
-    },
-    linked,
-    budgetOut,
-  ] = await Promise.all([
-    supabase ? supabase.auth.getUser() : { data: { user: null } },
+  const [user, linked, budgetOut] = await Promise.all([
+    currentUser(),
     linkedSongCard(slug, openId),
     // Whether the site's key has run dry, so compose can say so before anyone
     // types a word. Only worth asking when there is a site key at all.
-    process.env.ANTHROPIC_API_KEY ? siteOutOfBudget() : false,
+    env.ANTHROPIC_API_KEY ? siteOutOfBudget(env.DB) : false,
   ]);
   // Your own song needs no byline: the songs menu and the save button already
   // say what it is.
   const viewing = linked && linked.ownerId !== user?.id ? linked : null;
 
-  // Resolve a display name + handle. Tolerates the profiles table not existing
-  // yet (before the migration is applied) by falling back to the email.
   let name: string | null = null;
   let username: string | null = null;
   let avatarGrid: string | null = null;
-  if (user && supabase) {
-    // avatar_grid is migration 0014's; asked of a database without it, the
-    // select fails whole, so ask again without rather than lose the name.
-    const q = (cols: string) =>
-      supabase
-        .from("profiles")
-        .select(cols)
-        .eq("id", user.id)
-        .maybeSingle<{ display_name: string | null; username: string | null; avatar_grid?: string | null }>();
-    let res = await q("display_name, username, avatar_grid");
-    if (res.error) res = await q("display_name, username");
-    const profile = res.data;
+  if (user) {
+    const profile = await first(
+      env.DB,
+      "select display_name, username, avatar_grid from profiles where id = ?1",
+      user.id,
+    ).catch(() => null);
     avatarGrid = profile?.avatar_grid ?? null;
     name = profile?.username || profile?.display_name || user.email || null;
     username = profile?.username ?? null;
@@ -176,7 +159,7 @@ async function AccountBarSlot({ searchParams }: { searchParams: SearchParams }) 
       name={name}
       username={username}
       avatarGrid={avatarGrid}
-      serverKey={!!process.env.ANTHROPIC_API_KEY}
+      serverKey={!!env.ANTHROPIC_API_KEY}
       budgetOut={budgetOut}
       viewing={viewing}
     />
@@ -205,7 +188,7 @@ function AccountBarFallback() {
 //
 // `?embed` is the studio as a player: the homepage's song cards load it in a
 // hidden frame (app/enginePlayer.ts) and drive `window.seqbaby` from
-// outside. No account bar (two Supabase round trips nobody sees), and no deep
+// outside. No account bar (two database reads nobody sees), and no deep
 // link or default template, which would race the song the page hands it.
 export default async function StudioPage({ searchParams }: { searchParams: SearchParams }) {
   const embed = (await searchParams).embed !== undefined;

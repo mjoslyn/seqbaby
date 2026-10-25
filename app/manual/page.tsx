@@ -2282,9 +2282,9 @@ bus. Share it when it validates.`}</div>
                   <td>-</td>
                 </tr>
                 <tr>
-                  <td><a href="https://nextjs.org/" target="_blank" rel="noopener">Next.js</a> and <a href="https://supabase.com/" target="_blank" rel="noopener">Supabase</a></td>
-                  <td>The shell around the studio: accounts, saved songs, the patch gallery and share links</td>
-                  <td>MIT / Apache-2.0</td>
+                  <td><a href="https://nextjs.org/" target="_blank" rel="noopener">Next.js</a>, <a href="https://opennext.js.org/cloudflare" target="_blank" rel="noopener">OpenNext</a> and <a href="https://www.better-auth.com/" target="_blank" rel="noopener">Better Auth</a></td>
+                  <td>The shell around the studio, run on Cloudflare Workers: accounts, saved songs, the patch gallery and share links</td>
+                  <td>MIT</td>
                 </tr>
               </tbody>
             </table>

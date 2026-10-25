@@ -6,18 +6,11 @@ import styles from "@/app/ui.module.css";
 
 const initial = {} as { error?: string; message?: string };
 
-export default function ResetForm({ email }: { email: string }) {
+export default function ResetForm({ token }: { token: string }) {
   const [state, action, pending] = useActionState(setNewPassword, initial);
   return (
     <form action={action}>
-      {/* Lets a password manager file the new password under the right account. */}
-      <input
-        type="hidden"
-        name="username"
-        autoComplete="username"
-        value={email}
-        readOnly
-      />
+      <input type="hidden" name="token" value={token} readOnly />
       <div className={styles.field}>
         <label className={styles.label} htmlFor="password">
           new password

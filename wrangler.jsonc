@@ -1,0 +1,69 @@
+// The Cloudflare deploy. One Worker serves everything: the Next app (built by
+// OpenNext into .open-next/), the engine's static files (Workers Static
+// Assets), and the Durable Objects in workers/ (jam rooms, compose jobs).
+//
+// Before the first deploy, create the two stores and paste the D1 id below:
+//   npx wrangler d1 create seqbaby
+//   npx wrangler r2 bucket create seqbaby-blobs
+//   npx wrangler r2 bucket create seqbaby-next-cache
+//   npx wrangler d1 migrations apply seqbaby --remote
+// Secrets (npx wrangler secret put <NAME>): BETTER_AUTH_SECRET, and the
+// optional ones in .dev.vars.example.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "seqbaby",
+  // worker.ts wraps .open-next/worker.js and adds the Durable Objects.
+  "main": "worker.ts",
+  "compatibility_date": "2026-10-01",
+  // nodejs_compat: node:crypto, node:buffer, process.env for the Next app and
+  // the compose loop. global_fetch_strictly_public: a fetch to the site's own
+  // hostname goes out to the internet, not straight back into this Worker.
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  // A compose turn runs inside a Durable Object alarm for minutes; most of
+  // that is waiting on Anthropic, which costs no CPU, but a turn also parses
+  // and rewrites a whole session dozens of times. Five minutes is the paid
+  // plan's ceiling and a long way past what a turn uses.
+  "limits": { "cpu_ms": 300000 },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "seqbaby",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "db/migrations"
+    }
+  ],
+  "r2_buckets": [
+    // Samples, share links, and any value too big for a D1 row.
+    { "binding": "BLOBS", "bucket_name": "seqbaby-blobs" },
+    // OpenNext's incremental cache: the homepage and explorers revalidate
+    // every 60s (`export const revalidate = 60`).
+    { "binding": "NEXT_INC_CACHE_R2_BUCKET", "bucket_name": "seqbaby-next-cache" }
+  ],
+  "durable_objects": {
+    "bindings": [
+      { "name": "JAM_ROOM", "class_name": "JamRoom" },
+      { "name": "COMPOSE_JOB", "class_name": "ComposeJob" },
+      { "name": "COMPOSE_LIMITS", "class_name": "ComposeLimits" },
+      // OpenNext's revalidation queue (one per page being regenerated).
+      { "name": "NEXT_CACHE_DO_QUEUE", "class_name": "DOQueueHandler" }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["JamRoom", "ComposeJob", "ComposeLimits", "DOQueueHandler"]
+    }
+  ],
+  // Sign-up confirmations, magic links and password resets. The sending
+  // domain has to be onboarded first: npx wrangler email sending enable <domain>
+  "send_email": [{ "name": "EMAIL" }],
+  // The revalidation queue regenerates a page by calling this Worker.
+  "services": [{ "binding": "WORKER_SELF_REFERENCE", "service": "seqbaby" }],
+  // The compose guide is imported as text into the Worker (workers/composeJob.ts).
+  "rules": [{ "type": "Text", "globs": ["**/*.md"], "fallthrough": true }],
+  "observability": { "enabled": true }
+}

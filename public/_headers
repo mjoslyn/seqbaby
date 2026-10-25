@@ -1,0 +1,9 @@
+# Workers Static Assets headers.
+#
+# The engine's assets are published twice: at their bare paths, and under
+# /e/<commit-sha>/ (scripts/stamp-engine-assets.mjs). Each deploy addresses
+# them at URLs nobody has cached before, so a page load can only ever mix
+# assets from one deploy and the versioned copies can be cached forever.
+# The bare paths keep the default revalidating headers.
+/e/*
+  Cache-Control: public, max-age=31536000, immutable

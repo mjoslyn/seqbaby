@@ -8,8 +8,10 @@ description: How to launch and drive seqbaby to verify engine changes at runtime
 ## Launch
 
 ```
-npm run dev        # Next.js on :3000; needs NEXT_PUBLIC_SUPABASE_URL + _ANON_KEY
-                   # (dummy values are enough for engine work, see CLAUDE.md)
+npm run db:migrate:local   # once: the D1 schema into wrangler's local database
+npm run dev                # Next.js on :3000, with local D1 / R2
+npm run preview            # the real Worker on :8787: needed for jam and compose
+                           # (their Durable Objects are not in the dev server)
 ```
 
 Open `http://localhost:3000/studio` in Chrome (`/` is the homepage) (claude-in-chrome tools work well).

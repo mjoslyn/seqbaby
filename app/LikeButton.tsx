@@ -1,27 +1,25 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
-import { setLike } from "@/app/songs/actions";
-import { setPatchLike } from "@/app/patches/actions";
+import { likedSongIds, setLike } from "@/app/songs/actions";
+import { likedPatchIds, setPatchLike } from "@/app/patches/actions";
 import { loginHref } from "@/lib/safeNext";
 
 // The heart on a song or patch card: the homepage feed and a profile page.
 //
 // The count comes from the server, the "did I" from here. The homepage is
 // cached and shared by everyone (see home/feed.ts), so it cannot know who is
-// looking; this asks the browser, the way home/Who.tsx does. Twenty-four
-// hearts asking separately would be twenty-four reads, so every heart that
-// mounts in the same tick joins one query (`likedByMe`), one per kind.
+// looking; this asks from the browser, which carries the session cookie.
+// Twenty-four hearts asking separately would be twenty-four requests, so every
+// heart that mounts in the same tick joins one (`likedByMe`), one per kind.
 
 type Kind = "song" | "patch";
-const TABLE = { song: { table: "song_likes", col: "song_id" }, patch: { table: "patch_likes", col: "patch_id" } } as const;
+const LIKED = { song: likedSongIds, patch: likedPatchIds } as const;
 const SET_LIKE = { song: setLike, patch: setPatchLike } as const;
 
 const pendingBy: Record<Kind, { ids: Set<string>; done: Promise<Set<string>> } | null> = { song: null, patch: null };
 
 function likedByMe(kind: Kind, id: string): Promise<Set<string>> {
-  const { table, col } = TABLE[kind];
   let pending = pendingBy[kind];
   if (!pending) {
     const ids = new Set<string>();
@@ -29,18 +27,9 @@ function likedByMe(kind: Kind, id: string): Promise<Set<string>> {
       queueMicrotask(async () => {
         pendingBy[kind] = null;
         try {
-          const supabase = createClient();
-          const { data } = await supabase.auth.getSession();
-          const me = data.session?.user.id;
-          if (!me) return resolve(new Set());
-          const { data: rows } = await supabase
-            .from(table)
-            .select(col)
-            .eq("user_id", me)
-            .in(col, [...ids]);
-          resolve(new Set((rows ?? []).map((r) => (r as Record<string, unknown>)[col] as string)));
+          // Signed out, the answer is an empty list.
+          resolve(new Set(await LIKED[kind]([...ids])));
         } catch {
-          // No Supabase env, or no 0016 / 0017 yet: nothing is liked.
           resolve(new Set());
         }
       });

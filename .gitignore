@@ -1,7 +1,6 @@
 node_modules
 .env
 .DS_Store
-.netlify/
 .next/
 next-env.d.ts
 dist/
@@ -10,3 +9,6 @@ dist/
 # Build-time copies of the engine assets at their version-stamped paths,
 # produced by scripts/stamp-engine-assets.mjs.
 public/e/
+.dev.vars
+.wrangler/
+.open-next/

@@ -208,16 +208,16 @@ const sessions = new Map<string, Promise<unknown>>();
 function fetchSession(key: string): Promise<unknown> {
   if (key.startsWith("patch:")) {
     return fetch(`/api/patch/${encodeURIComponent(key.slice(6))}`)
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`patch ${r.status}`))))
-      .then((j: { name?: string; config?: unknown }) => {
+      .then((r) => (r.ok ? (r.json() as Promise<{ name?: string; config?: unknown }>) : Promise.reject(new Error(`patch ${r.status}`))))
+      .then((j) => {
         if (j.config == null) throw new Error("empty patch");
         return patchSession(j.config, j.name);
       });
   }
   // The same route the studio's own `?s=` load reads.
   return fetch(`/api/share?id=${encodeURIComponent(key)}`)
-    .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`share ${r.status}`))))
-    .then((j: { session?: unknown }) => {
+    .then((r) => (r.ok ? (r.json() as Promise<{ session?: unknown }>) : Promise.reject(new Error(`share ${r.status}`))))
+    .then((j) => {
       if (!j.session) throw new Error("empty session");
       return j.session;
     });

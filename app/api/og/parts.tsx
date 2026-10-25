@@ -80,9 +80,7 @@ export function clip(s: string, n: number) {
 export const HEADERS = {
   // Link previews are fetched once and cached by the platform; a song edited
   // later can wait an hour to look different there.
+  // Cloudflare's cache key includes the query string, so each `?s=` is its
+  // own picture.
   "Cache-Control": "public, max-age=3600, s-maxage=3600, stale-while-revalidate=86400",
-  // Netlify's cache key leaves the query string out unless told otherwise, so
-  // every `?s=` got whichever song's picture was drawn first (measured on
-  // production: two songs, one image). The Next plugin merges this into its own.
-  "Netlify-Vary": "query=s|open|jam|by",
 };

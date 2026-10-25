@@ -1,0 +1,30 @@
+# Local secrets for `npm run dev` / `npm run preview` (wrangler reads .dev.vars).
+# Copy to .dev.vars. In production each is a secret:
+#   npx wrangler secret put <NAME>
+
+# Signs session cookies. Required in production; any long random string.
+BETTER_AUTH_SECRET=change-me-to-a-long-random-string
+
+# The site's origin, e.g. https://seqbaby.com. Optional: without it each
+# hostname the Worker answers on (previews, localhost) uses its own.
+# BETTER_AUTH_URL=https://seqbaby.com
+
+# Who auth email comes from. The domain must be onboarded to Cloudflare Email
+# Service (npx wrangler email sending enable <domain>).
+# EMAIL_FROM=seqbaby <no-reply@seqbaby.com>
+
+# Compose chat on this site's key. Optional: without it, visitors can still
+# compose on a key of their own.
+# ANTHROPIC_API_KEY=sk-ant-xxx
+# ANTHROPIC_MODEL=claude-haiku-5-5
+
+# Superbugs page (app/superbugs, app/api/bugs) — OPTIONAL. A fine-grained GitHub
+# token with Issues: write on the repo. Without it the form falls back to a
+# prefilled github.com new-issue link. With TURNSTILE_SECRET_KEY set, /api/bugs
+# refuses a report without a valid Turnstile token.
+# GITHUB_ISSUES_TOKEN=github_pat_xxx
+# GITHUB_ISSUES_REPO=mjoslyn/seqbaby
+# TURNSTILE_SECRET_KEY=0x4AAAAAAA...
+
+# Only while moving data over from Supabase (scripts/migrate-from-supabase.mjs).
+# MIGRATION_TOKEN=

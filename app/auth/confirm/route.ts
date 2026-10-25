@@ -1,44 +1,14 @@
-import { type EmailOtpType } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
-import { RECOVERY_COOKIE, RECOVERY_MAX_AGE } from "@/lib/recoveryCookie";
 // Only a path on this site: see lib/safeNext.js.
 import { safeNext } from "@/lib/safeNext";
 
-// Handles email-confirmation, magic-link and password-reset callbacks. Supabase
-// may send either a PKCE `code` (exchangeCodeForSession) or a `token_hash`+`type`
-// (verifyOtp), depending on the flow/version. Handle both; either sets the
-// session cookies.
+// Where the links in sign-up confirmation and magic-link emails end up. Better
+// Auth checks the token at /api/auth/verify-email or /api/auth/magic-link/verify,
+// sets the session cookie, and redirects here with `next` intact -- or with
+// `error` when the token was expired, used, or made up. This sends the visitor
+// on: to where they were going, or to the sign-in page saying the link failed.
 export async function GET(request: Request) {
   const url = new URL(request.url);
-  const code = url.searchParams.get("code");
-  const token_hash = url.searchParams.get("token_hash");
-  const type = url.searchParams.get("type") as EmailOtpType | null;
-  const next = safeNext(url.searchParams.get("next"));
-
-  const supabase = await createClient();
-
-  let ok = false;
-  if (code) {
-    ok = !(await supabase.auth.exchangeCodeForSession(code)).error;
-  } else if (token_hash && type) {
-    ok = !(await supabase.auth.verifyOtp({ type, token_hash })).error;
-  }
-  if (!ok)
-    return NextResponse.redirect(new URL("/login?error=confirm", url.origin));
-
-  const res = NextResponse.redirect(new URL(next, url.origin));
-  // A reset link lets /reset-password set a password without the current one.
-  // The PKCE path carries no `type`, so `next` is what names a reset; either
-  // way the link had to come out of the account's inbox.
-  if (type === "recovery" || next === "/reset-password") {
-    res.cookies.set(RECOVERY_COOKIE, "1", {
-      httpOnly: true,
-      sameSite: "lax",
-      secure: url.protocol === "https:",
-      path: "/",
-      maxAge: RECOVERY_MAX_AGE,
-    });
-  }
-  return res;
+  if (url.searchParams.get("error")) return NextResponse.redirect(new URL("/login?error=confirm", url.origin));
+  return NextResponse.redirect(new URL(safeNext(url.searchParams.get("next")), url.origin));
 }

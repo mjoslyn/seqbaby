@@ -17,6 +17,8 @@ export default function LoginPage() {
   const [mode, setMode] = useState<Mode>("signin");
   // Set when /auth/confirm could not use the link it was handed.
   const [linkFailed, setLinkFailed] = useState(false);
+  // Set when a password reset has just gone through (/reset-password).
+  const [resetDone, setResetDone] = useState(false);
   // Where to land after signing in (`?next=`, from a heart, a remix or a
   // patch save); the actions check it is a path on this site (lib/safeNext.js).
   const [next, setNext] = useState("");
@@ -30,6 +32,7 @@ export default function LoginPage() {
     const m = q.get("mode");
     if (m === "signup" || m === "reset") setMode(m);
     if (q.get("error") === "confirm") setLinkFailed(true);
+    if (q.get("reset") === "done") setResetDone(true);
     setNext(q.get("next") ?? "");
   }, []);
   const [signInState, signInAction, signInPending] = useActionState(
@@ -187,6 +190,9 @@ export default function LoginPage() {
           <p className={styles.error}>
             That link has expired or already been used. Ask for a new one.
           </p>
+        )}
+        {resetDone && !state?.error && !state?.message && (
+          <p className={styles.message}>Password changed: sign in with the new one.</p>
         )}
         {state?.error && <p className={styles.error}>{state.error}</p>}
         {state?.message && <p className={styles.message}>{state.message}</p>}

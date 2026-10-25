@@ -1,3 +1,5 @@
+import { initOpenNextCloudflareForDev } from "@opennextjs/cloudflare";
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // The audio engine (public/js/*) is imperative, DOM- and Web-Audio-driven,
@@ -5,17 +7,6 @@ const nextConfig = {
   // as raw static ES modules from public/ and never goes through the bundler,
   // so React StrictMode double-mounting would risk double-booting the engine.
   reactStrictMode: false,
-  // /api/compose reads the compose skill (mcp/tools.mjs's guideText(), the
-  // same function mcp/server.mjs uses for its seqbaby://guide resource) via
-  // fs.readFileSync on a path built at runtime from import.meta.url. Next's
-  // build-time file tracer only follows static import/require, so a dynamic
-  // fs read like that is invisible to it -- the route worked in every local
-  // `next build` (the whole repo is on disk) and then 404'd its own guide
-  // file once deployed as a Netlify Function, which only ships whatever the
-  // tracer decided the route needed. This is the documented escape hatch:
-  // name the file explicitly so it rides along in the function's bundle,
-  // rather than inlining the guide text and losing the one-copy guarantee
-  // mcp/README.md describes.
   // The studio moved from / to /studio, and / is the homepage now. Every link
   // already sent out names the old place: a share link (`?s=`), a deep link to
   // a song (`?open=`), a jam invite (`?jam=`). Each is sent on with its query
@@ -41,13 +32,15 @@ const nextConfig = {
   },
   // A save is a server action carrying the whole session, uploaded samples
   // included as base64, and the default body limit is 1MB: a song with one
-  // real sample in it could not be saved. 6mb is Netlify's own request
-  // ceiling, so there is nothing to gain past it (app/songs/trySave.ts refuses
-  // a bigger song before it is sent).
-  experimental: { serverActions: { bodySizeLimit: "6mb" } },
-  outputFileTracingIncludes: {
-    "/api/compose": ["./.claude/skills/compose/SKILL.md"],
-  },
+  // real sample in it could not be saved. A Worker accepts far bigger bodies,
+  // but it has 128MB of memory, and a save holds the body, the parsed session
+  // and copies of both: 15mb leaves room (app/songs/trySave.ts refuses a
+  // bigger song before it is sent).
+  experimental: { serverActions: { bodySizeLimit: "15mb" } },
 };
 
 export default nextConfig;
+
+// `next dev` with the Worker's bindings (D1, R2, the Durable Objects), from
+// wrangler's local simulation of wrangler.jsonc. A no-op in a build.
+initOpenNextCloudflareForDev();

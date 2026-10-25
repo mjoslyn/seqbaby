@@ -1,5 +1,5 @@
 // Cache-busting prefix for the engine's static assets, set from the deploy's
-// commit SHA (netlify.toml passes $COMMIT_REF into the build).
+// commit SHA (scripts/cf-build.mjs sets it from the build's commit).
 // scripts/stamp-engine-assets.mjs publishes copies of the assets under
 // public/e/<sha>/, so these URLs are real static files — identical bytes, fresh
 // addresses per deploy. That's what lets them be served `immutable`.
