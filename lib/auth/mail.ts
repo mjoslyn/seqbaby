@@ -7,7 +7,7 @@
 type Mail = { to: string; subject: string; text: string; html: string };
 
 export async function sendMail(env: CloudflareEnv, mail: Mail): Promise<void> {
-  const from = env.EMAIL_FROM || "seqbaby <no-reply@seqbaby.com>";
+  const from = env.EMAIL_FROM || "seqbaby <no-reply@playseqbaby.com>";
   if (!env.EMAIL) {
     console.log(`[mail] (no EMAIL binding; not sent)\nto: ${mail.to}\nsubject: ${mail.subject}\n\n${mail.text}`);
     return;

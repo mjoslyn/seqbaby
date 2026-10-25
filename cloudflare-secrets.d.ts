@@ -6,9 +6,9 @@
 interface CloudflareEnv {
   /** Signs Better Auth's session cookies. Required in production. */
   BETTER_AUTH_SECRET?: string;
-  /** The site's own origin, e.g. https://seqbaby.com. Optional: the request's is used otherwise. */
+  /** The site's own origin, e.g. https://www.playseqbaby.com. Optional: the request's is used otherwise. */
   BETTER_AUTH_URL?: string;
-  /** Who auth email comes from, e.g. "seqbaby <hello@seqbaby.com>". */
+  /** Who auth email comes from, e.g. "seqbaby <hello@playseqbaby.com>". */
   EMAIL_FROM?: string;
   ANTHROPIC_API_KEY?: string;
   ANTHROPIC_MODEL?: string;

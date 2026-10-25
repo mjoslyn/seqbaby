@@ -12,7 +12,7 @@
 //
 //   1. npx wrangler secret put MIGRATION_TOKEN        (any long random string)
 //   2. SUPABASE_DB_URL=postgresql://postgres:...@db.<ref>.supabase.co:5432/postgres \
-//      SITE_URL=https://seqbaby.com MIGRATION_TOKEN=<the same string> \
+//      SITE_URL=https://www.playseqbaby.com MIGRATION_TOKEN=<the same string> \
 //      npm run migrate:supabase
 //   3. npx wrangler secret delete MIGRATION_TOKEN     (switches the endpoint off)
 //
