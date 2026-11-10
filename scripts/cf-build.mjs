@@ -10,7 +10,12 @@
 
 import { execSync, spawnSync } from "node:child_process";
 
-let version = process.env.NEXT_PUBLIC_ENGINE_VERSION || process.env.WORKERS_CI_COMMIT_SHA || "";
+// Only a commit hash will do: a build started by hand in Workers Builds sets
+// WORKERS_CI_COMMIT_SHA to the branch name, and a reused prefix like /e/main/
+// would hand returning visitors the last build's `immutable` engine.
+const isSha = (v) => /^[0-9a-f]{7,40}$/i.test(v || "");
+let version = process.env.NEXT_PUBLIC_ENGINE_VERSION || "";
+if (!version && isSha(process.env.WORKERS_CI_COMMIT_SHA)) version = process.env.WORKERS_CI_COMMIT_SHA;
 if (!version) {
   try {
     version = execSync("git rev-parse HEAD", { encoding: "utf8" }).trim();
