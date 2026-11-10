@@ -16,7 +16,7 @@ import {
 } from "./engineData.js";
 import { CHANCE_MOD_KEYS, CHANCE_MOD_LABELS } from "./chanceGen.js";
 import { staticEngineByKey } from "./engineData.js";
-import { EUCLID_MOD_KEYS, EUCLID_MOD_LABELS, PRISM_KNOBS, PRISM_KNOB_LABELS, REPEAT_KNOBS, REPEAT_KNOB_LABELS } from "./soundDefaults.js";
+import { EQ_KEYS, EUCLID_MOD_KEYS, EUCLID_MOD_LABELS, PRISM_KNOBS, PRISM_KNOB_LABELS, REPEAT_KNOBS, REPEAT_KNOB_LABELS, eqFromUnit, eqKeyLabel, eqRange, eqToUnit, splitEqKey } from "./soundDefaults.js";
 import { shaperPreampGain } from "./curves.js";
 
 export const STEPS_PER_BAR = 16;
@@ -31,6 +31,25 @@ export const STEPS_PER_BAR = 16;
  */
 export function afterPrefix(key, prefix) { return key.slice(prefix.length); }
 
+// ---- the eq's targets ------------------------------------------------------
+// One list, three namespaces, as the emulators' panels are: every eq key
+// (EQ_KEYS: a band's gain, `<band>Freq`, a bell's `<band>Q`) is the control
+// `.p-eq-<key>`, the LFO target `eq_<key>` and the lane `eq.<key>`. Any track
+// has an eq, so none of them is gated on the engine. They drive the band's
+// BiquadFilterNode and never `t.eq`: the panel stays the base, as the slider
+// does for every other target.
+export const EQ_LFO_KEYS = EQ_KEYS.map(k => `eq_${k}`);
+export const EQ_AUTO_KEYS = EQ_KEYS.map(k => `eq.${k}`);
+const EQ_LFO_SET = new Set(EQ_LFO_KEYS), EQ_AUTO_SET = new Set(EQ_AUTO_KEYS);
+/** The eq key an `eq_` / `eq.` target names, or null. */
+export function eqKeyOfTarget(key) {
+  const k = typeof key === "string" && (EQ_LFO_SET.has(key) || EQ_AUTO_SET.has(key)) ? key.slice(3) : null;
+  return k && splitEqKey(k) ? k : null;
+}
+/** The eq's frequency and Q targets: their travel is in octaves, so they take
+ *  the curved LFO path (see CURVED_LFO_KEYS). The gains are linear in dB. */
+const EQ_CURVED_LFO_KEYS = EQ_LFO_KEYS.filter(k => splitEqKey(k.slice(3)).field !== "gain");
+
 // Coarse mobile/touch detection — used to widen the transport lookahead and
 // throttle meter painting where the main thread is more easily starved.
 export const LFO_KEYS = [
@@ -40,6 +59,8 @@ export const LFO_KEYS = [
   "osc1", "osc2", "osc3", "osc4", "ultra", "fm", "noise",
   // Filter
   "cutoff", "reson",
+  // The eq: every band's gain, frequency and (bells) Q.
+  ...EQ_LFO_KEYS,
   // FX wets/amts (short keys preserved for backward compat).
   "fuzz", "delay", "verb",
   "vinyl", "cassette", "ringmod", "shaper", "crush", "autowah", "chorus", "phaser", "flanger", "pitch",
@@ -125,6 +146,7 @@ export const LFO_LABELS = {
   euclid_pulses: "euclid pulses", euclid_steps: "euclid cycle", euclid_rotate: "euclid rotate",
   ...Object.fromEntries(CHANCE_MOD_KEYS.map(k => [`chance_${k}`, CHANCE_MOD_LABELS[k]])),
   vol: "volume", cutoff: "filter cutoff", reson: "filter reson",
+  ...Object.fromEntries(EQ_LFO_KEYS.map(k => [k, eqKeyLabel(k.slice(3))])),
   fuzz: "fuzz wet", delay: "delay wet", verb: "reverb wet", pan: "pan",
   vinyl: "vinyl wet", cassette: "cassette wet", ringmod: "ring mod wet",
   shaper: "shaper wet", shaper_amt: "shaper amt",
@@ -191,6 +213,12 @@ export const LFO_AMP_SCALE = {
   // peak-to-peak of the full range" rule below.
   cutoff: 6000,   // Hz
   reson: 19.5,             // Q 0.5..20 (resonToQ) — full span, so depth 1 swings the whole knob
+  // An eq band's gain in dB, its full ±18. The frequencies and Qs are curved
+  // (below) and swing their travel in octaves, so their scale is 1.
+  ...Object.fromEntries(EQ_LFO_KEYS.map(k => {
+    const [lo, hi] = eqRange(k.slice(3));
+    return [k, splitEqKey(k.slice(3)).field === "gain" ? hi - lo : 1];
+  })),
   fuzz: 1, delay: 1, verb: 1,
   pan: 2,   // the knob's 0..1 is the panner's -1..1
   vinyl: 1, cassette: 1, ringmod: 1, shaper: 1, crush: 1, autowah: 1, chorus: 1, phaser: 1, flanger: 1, pitch: 1,
@@ -309,7 +337,7 @@ export const LFO_AMP_SCALE = {
 // Duplicated here rather than imported from signal.js / fxRack.js: this
 // module has to stay importable from Node, and those two reach into Tone
 // and the DOM at load time.
-export const CURVED_LFO_KEYS = new Set(["cutoff", "ring_freq", "shaper_preamp"]);
+export const CURVED_LFO_KEYS = new Set(["cutoff", "ring_freq", "shaper_preamp", ...EQ_CURVED_LFO_KEYS]);
 export const CURVED_LFO_CURVES = {
   cutoff: {                // cutoffToHz (signal.js): 60..20000 Hz, log
     to: (u) => 60 * Math.pow(20000 / 60, u),
@@ -323,6 +351,11 @@ export const CURVED_LFO_CURVES = {
     to: shaperPreampGain,
     from: (g) => (g <= 1 ? (g - 0.25) / 1.5 : 0.5 + Math.log(Math.max(1e-6, g)) / Math.log(8) / 2),
   },
+  // An eq band's frequency (20..20000 Hz) and a bell's Q (0.1..18), in octaves.
+  ...Object.fromEntries(EQ_CURVED_LFO_KEYS.map(k => {
+    const ek = k.slice(3);
+    return [k, { to: (u) => eqFromUnit(ek, u), from: (v) => eqToUnit(ek, v) }];
+  })),
 };
 
 // Non-blocking prompt dialog (browser prompt() halts the transport scheduler)
@@ -598,6 +631,8 @@ export const AUTOMATION_TARGETS = {
   // filter
   "cutoff":        { label: "filter cutoff" },
   "reson":         { label: "filter reson" },
+  // the eq's bands (any track)
+  ...Object.fromEntries(EQ_AUTO_KEYS.map(k => [k, { label: eqKeyLabel(k.slice(3)) }])),
   // fx wets / amounts
   // wavetable wave-scan window (wavetable engine only — see canAutomate)
   "wt.scan.start":      { label: "wave scan start" },
@@ -779,6 +814,7 @@ export function canAutomateKey(engineKey, key, live = {}) {
   if (inst) return inst.base.startsWith("fx.") && !!AUTOMATION_TARGETS[inst.base] && canAutomateKey(engineKey, inst.base, live);
   const t = { engineKey: String(engineKey || "") };
   if (key === "cutoff" || key === "reson") return true;
+  if (key.startsWith("eq.")) return EQ_AUTO_SET.has(key);
   if (key.startsWith("wt.scan.")) return t.engineKey === "wt:akwf";
   if (key.startsWith("euclid.")) return !!live.euclid;
   if (key.startsWith("chance.")) return !!live.chance;
@@ -807,6 +843,7 @@ export function canModulateKey(engineKey, key, live = {}) {
   const t = { engineKey: String(engineKey || "") };
   // Always-applicable: track-level fx + master vol + filter.
   if (key === "vol" || key === "cutoff" || key === "reson") return true;
+  if (EQ_LFO_SET.has(key)) return true;
   if (TRACK_FX_LFO_KEYS.has(key)) return true;
   // Wave-scan window — wavetable engine only.
   if (key === "wt_scan_start" || key === "wt_scan_range") return t.engineKey === "wt:akwf";

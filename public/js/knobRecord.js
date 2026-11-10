@@ -15,7 +15,7 @@
 
 import { canAutomate } from "./automation.js";
 import { setStatus } from "./dom.js";
-import { hasMacroOn, modOwns, refreshParamIndicators, targetsForControl, trackForControl } from "./paramTargets.js";
+import { controlUnit, hasMacroOn, modOwns, refreshParamIndicators, targetsForControl, trackForControl } from "./paramTargets.js";
 import { refreshAutIfOpen } from "./pianoRoll.js";
 import { ensureAutomationLane } from "./render.js";
 import { state } from "./state.js";
@@ -34,14 +34,9 @@ const bases = new WeakMap();
 const pointers = new Set();
 let raf = 0;
 
-/** A range input's value as a lane's 0..1: the slider's own normalisation
- *  (the lane and the slider share a range by construction, see macro.js). */
-function unitOf(el) {
-  const min = Number(el.min === "" ? 0 : el.min);
-  const max = Number(el.max === "" ? 1 : el.max);
-  if (!(max > min)) return null;
-  return Math.max(0, Math.min(1, (Number(el.value) - min) / (max - min)));
-}
+/** A range input's value as a lane's 0..1: the slider's own travel (the lane
+ *  and the slider share a range by construction, see macro.js). */
+const unitOf = (el) => controlUnit(el);
 
 export const knobRecordActive = () => !!state.kbdRecord && !!state.playing;
 

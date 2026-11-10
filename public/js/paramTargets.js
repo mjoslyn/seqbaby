@@ -1,4 +1,5 @@
 import { LFO_KEYS, LFO_LABELS, autoLabel, fxChainOrder, fxIdLabel, fxStageLevel, fxStageOfModKey, isFxInstanceId, lfoLabel, splitFxInstanceKey } from "./constants.js";
+import { EQ_KEYS, splitEqKey } from "./soundDefaults.js";
 import { EQ_BANDS } from "./signal.js";
 import { BASS_MOD_KEYS, BASS_MOD_LABELS } from "./bass.js";
 import { HEXOP_MOD_KEYS, HEXOP_MOD_LABELS } from "./hexop.js";
@@ -43,6 +44,10 @@ for (const k of ["vol", "harm", "timb", "morph", "decay",
 // Track filter.
 def("p-cutoff", "cutoff", "cutoff");
 def("p-reson",  "reson",  "reson");
+// The eq: every band's gain, frequency and (bells) Q, one key in three
+// spellings — `.p-eq-lomidQ` / `eq_lomidQ` / `eq.lomidQ`. The inputs are the
+// drawn eq's hidden values; the graph's right-click and its readouts reach them.
+for (const k of EQ_KEYS) def(`p-eq-${k}`, `eq_${k}`, `eq.${k}`);
 // Silverbox panel.
 def("p-sbaccent", "silverbox_accent", "silverbox.accent");
 def("p-sbtune",   "silverbox_tune",   "silverbox.tune");
@@ -227,6 +232,34 @@ export function controlForKey(t, autoKey) {
     : `.${cls}`;
   return t.el.querySelector(sel)
     || document.querySelector(`[data-track-id="${CSS.escape(String(t.id))}"] ${sel}`);
+}
+
+/**
+ * A range control's value as the 0..1 a lane or a macro pad speaks: its own
+ * travel, end to end. Linear, unless the input says `data-scale="log"` (the
+ * eq's frequencies and Qs), where the travel is in octaves — the same 0..1 the
+ * lane is played in (eqToUnit), so a lane recorded off it plays back where
+ * the band was. @param {HTMLInputElement} el @returns {number|null}
+ */
+export function controlUnit(el) {
+  const min = Number(el.min === "" ? 0 : el.min);
+  const max = Number(el.max === "" ? 1 : el.max);
+  if (!(max > min)) return null;
+  const v = Math.max(min, Math.min(max, Number(el.value)));
+  const u = el.dataset?.scale === "log" && min > 0
+    ? Math.log(v / min) / Math.log(max / min)
+    : (v - min) / (max - min);
+  return Number.isFinite(u) ? Math.max(0, Math.min(1, u)) : null;
+}
+/** controlUnit's inverse, snapped to the input's step. @param {HTMLInputElement} el @param {number} u */
+export function unitToControl(el, u) {
+  const min = Number(el.min === "" ? 0 : el.min);
+  const max = Number(el.max === "" ? 1 : el.max);
+  const step = Number(el.step === "" || el.step === "any" ? 0 : el.step);
+  const c = Math.max(0, Math.min(1, u));
+  let phys = el.dataset?.scale === "log" && min > 0 ? min * Math.pow(max / min, c) : min + c * (max - min);
+  if (step > 0) phys = min + Math.round((phys - min) / step) * step;
+  return Math.max(min, Math.min(max, phys));
 }
 
 /**
@@ -464,6 +497,12 @@ export const PARAM_DESCRIPTIONS = {
   "p-eq-mid":   "peaking bell gain. Drag its dot: across for frequency, up and down for gain, the wheel for width",
   "p-eq-himid": "peaking bell gain. Drag its dot: across for frequency, up and down for gain, the wheel for width",
   "p-eq-high":  "high shelf gain. Drag its dot on the curve: across for frequency, up and down for gain",
+  ...Object.fromEntries(EQ_KEYS.filter(k => splitEqKey(k).field !== "gain").map(k => {
+    const s = splitEqKey(k);
+    return [`p-eq-${k}`, s.field === "freq"
+      ? `where the ${s.band.label} ${s.band.type === "peaking" ? "bell" : "shelf"} sits, 20Hz to 20kHz. Its dot's place across the curve; an LFO or a lane sweeps it in octaves`
+      : `how narrow the ${s.band.label} bell is: low is wide, high is a notch-thin peak. The wheel over its dot`];
+  })),
   // Compressor.
   "comp-enabled":    "switches the track compressor in",
   "sq-comp__source": "what the compressor listens to",
@@ -568,7 +607,8 @@ export function refreshParamIndicators(t) {
       if (motion) wrap.dataset.motion = motion;
       else delete wrap.dataset.motion;
       // Knobs only: a select or a checkbox has no travel to draw a needle on.
-      if (el._knob && (motion === "mod" || motion === "aut")) {
+      // The drawn eq's hidden inputs carry a `_motion` sink instead (eqDraw.js).
+      if ((el._knob || el._motion) && (motion === "mod" || motion === "aut")) {
         moving.push({ el, kind: motion, key: motion === "mod" ? tg.lfo : tg.auto });
       }
     }
@@ -671,7 +711,11 @@ const PANEL_BADGES = [
       return any;
     } },
   { sel: ".sq-track__eq", panel: "_eqPanelEl", modal: "_eqModal", noTotal: true,
-    on: (t) => EQ_BANDS.map(b => b.key).filter(b => Math.abs(t.eq?.[b] ?? 0) >= 0.5) },
+    // A band counts when it is cut or boosted, or when something moves it: a
+    // swept band at 0dB is still the reason to see the curve.
+    on: (t) => EQ_BANDS.map(b => b.key).filter(b => Math.abs(t.eq?.[b] ?? 0) >= 0.5
+      || EQ_KEYS.some(k => splitEqKey(k).band.key === b
+        && (t.lfoConfig?.[`eq_${k}`]?.enabled || t.automation?.[`eq.${k}`]?.enabled))) },
   { sel: ".sq-track__comp", panel: "_compPanelEl", modal: "_compModal", on: (t) => {
       if (!t.comp?.enabled) return [];
       const src = t.comp.source;

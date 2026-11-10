@@ -220,6 +220,32 @@ export function eqRange(key) {
   return f === "freq" ? EQ_FREQ_RANGE : f === "q" ? EQ_Q_RANGE : [-18, 18];
 }
 
+// What an LFO, a lane or a macro pad means by 0..1 on an eq key: a gain's
+// travel is linear in dB, a frequency's and a Q's are in octaves (log), so a
+// sweep moves evenly across the band and the middle of a lane is ~630Hz, not
+// 10kHz. The freq and Q inputs say so (`data-scale="log"` in the markup), and
+// paramTargets' controlUnit reads them the same way.
+const eqIsLog = (key) => splitEqKey(key)?.field !== "gain";
+/** An eq key's value as 0..1 of its travel. */
+export function eqToUnit(key, v) {
+  const [lo, hi] = eqRange(key);
+  const x = Math.max(lo, Math.min(hi, Number(v)));
+  const u = eqIsLog(key) ? Math.log(x / lo) / Math.log(hi / lo) : (x - lo) / (hi - lo);
+  return Number.isFinite(u) ? u : 0;
+}
+/** 0..1 of an eq key's travel as its value. */
+export function eqFromUnit(key, u) {
+  const [lo, hi] = eqRange(key);
+  const c = Math.max(0, Math.min(1, Number(u) || 0));
+  return eqIsLog(key) ? lo * Math.pow(hi / lo, c) : lo + c * (hi - lo);
+}
+/** An eq key as the mod and lane pickers name it: "eq lo mid q". */
+export function eqKeyLabel(key) {
+  const s = splitEqKey(key);
+  if (!s) return key;
+  return `eq ${s.band.label}${s.field === "freq" ? " freq" : s.field === "q" ? " q" : ""}`;
+}
+
 export function defaultCompConfig() {
   return { enabled: false, source: "self", threshold: -20, ratio: 4, attack: 0.01, release: 0.2, knee: 6 };
 }

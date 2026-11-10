@@ -447,6 +447,25 @@ voice → filterNode → eqNode → compressor → fxRack → masterGain → mas
   knobs, as the value: the graph writes them through their own `input`
   events and repaints on any `.value` write, so save, undo, p-lock, a jam
   and the right-click menu are unchanged.
+  **Every eq key takes an LFO, a lane and a macro pad**, one key in three
+  spellings: `.p-eq-<key>` / `eq_<key>` / `eq.<key>` (`eq_lomidQ`,
+  `eq.highFreq`; `EQ_LFO_KEYS` / `EQ_AUTO_KEYS` / `eqKeyOfTarget` in
+  constants.js), on any engine, a bus included: 13 targets, since a shelf has
+  no Q. They drive the band's BiquadFilterNode (`eqParam`, lfo.js) and never
+  `t.eq`, so the panel stays the base. A gain swings its ±18dB linearly (an
+  ordinary audio-rate LFO); a frequency or a Q travels in OCTAVES
+  (`eqToUnit` / `eqFromUnit`, soundDefaults.js): curved LFO keys, log lanes
+  (the middle of a freq lane is ~630Hz, not 10kHz), and the inputs say
+  `data-scale="log"`, which `controlUnit` / `unitToControl` (paramTargets.js)
+  read for knob recording and the pads. An eq lane writes nothing stored, so
+  `runAutomationForStep` hands a band back to the panel the step its lane
+  stops playing (off, removed, another pattern), and `restoreLaneBases` on
+  stop (`releaseEqLanes`). The graph draws what is HEARD: modMotion hands each
+  driven input's `_motion` sink the live 0..1, the curve follows it, a small
+  dot trails the handle, and the handle (dashed while driven) stays the base.
+  The dot's right-click is the gain's menu; the freq / gain / Q readouts under
+  the graph are each their own control's right-click. Tests:
+  `test/eqMod.test.js`.
 - `compressor` — `TrackCompressor`: native `DynamicsCompressorNode` (self) or
   an analyser-driven envelope follower ducking a pre-output gain (sidechain
   from any track's `voice.getOutputNode()`).

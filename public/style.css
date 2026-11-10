@@ -1443,7 +1443,18 @@ main {
   margin-top: 6px; font-size: 11px; font-variant-numeric: tabular-nums;
 }
 .sq-eqdraw__name { font-weight: 600; min-width: 46px; }
-.sq-eqdraw__vals { color: var(--fg); white-space: pre; flex: 1 1 auto; }
+.sq-eqdraw__vals { color: var(--fg); flex: 1 1 auto; display: inline-flex; gap: 10px; flex-wrap: wrap; }
+/* each number is its own control's right-click; the dot says what moves it */
+.sq-eqdraw__val { cursor: context-menu; white-space: pre; }
+.sq-eqdraw__val[hidden] { display: none; }
+.sq-eqdraw__val[data-motion]::after {
+  content: ""; display: inline-block; width: 5px; height: 5px; border-radius: 50%;
+  background: var(--motion-dot); vertical-align: middle; margin: 0 0 1px 4px;
+}
+/* where an lfo or a lane has the band right now; the handle stays the base */
+.sq-eqdraw__live { fill: var(--c); stroke: #0b0c10; stroke-width: 1; opacity: 0; pointer-events: none; }
+.sq-eqdraw__band.is-driven .sq-eqdraw__live { opacity: 0.95; }
+.sq-eqdraw__band.is-driven .sq-eqdraw__dot { stroke-dasharray: 2.4 1.6; }
 .sq-eqdraw__q { display: inline-flex; gap: 4px; }
 .sq-eqdraw__q[hidden] { display: none; }
 .sq-eqdraw__info button { font-size: 10px; padding: 2px 6px; }

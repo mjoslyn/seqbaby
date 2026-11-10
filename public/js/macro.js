@@ -34,7 +34,7 @@
 import { AUTOMATION_TARGETS, applyAutomationAtStep, canAutomate } from "./automation.js";
 import { FX_STAGE_LEVEL_KEY, autoLabel, fxStageLevel } from "./constants.js";
 import { ICON_DICE } from "./icons.js";
-import { controlForKey, controlFromEventTarget, hasAutomation, hasMacroOn, modOwns, refreshParamIndicators, targetsForControl, trackForControl } from "./paramTargets.js";
+import { controlForKey, controlFromEventTarget, controlUnit, hasAutomation, hasMacroOn, modOwns, refreshParamIndicators, targetsForControl, trackForControl, unitToControl } from "./paramTargets.js";
 import { state } from "./state.js";
 
 /** @typedef {import("./types.js").Track} Track */
@@ -197,11 +197,7 @@ const controlFor = (t, key) => controlForKey(t, key);
  *  inverse is just the slider's own normalisation. */
 function readUnit(t, key) {
   const el = controlFor(t, key);
-  if (!el) return null;
-  const min = Number(el.min === "" ? 0 : el.min);
-  const max = Number(el.max === "" ? 1 : el.max);
-  if (!(max > min)) return null;
-  return Math.max(0, Math.min(1, (Number(el.value) - min) / (max - min)));
+  return el ? controlUnit(el) : null;
 }
 
 /**
@@ -214,11 +210,7 @@ function writeParam(t, key, unit, ramp, commit) {
   const v = Math.max(0, Math.min(1, unit));
   const el = controlFor(t, key);
   if (el) {
-    const min = Number(el.min === "" ? 0 : el.min);
-    const max = Number(el.max === "" ? 1 : el.max);
-    const step = Number(el.step === "" || el.step === "any" ? 0 : el.step);
-    let phys = min + v * (max - min);
-    if (step > 0) phys = min + Math.round((phys - min) / step) * step;
+    const phys = unitToControl(el, v);
     // Assigning .value repaints the knob (knob.js shadows the accessor) without
     // running the control's own handler — which is what keeps a momentary move
     // out of the track's stored sound.

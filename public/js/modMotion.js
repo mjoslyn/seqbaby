@@ -30,10 +30,16 @@
  *
  * A macro pad is deliberately absent: a pad moves the real knob (macro.js), so
  * there is nothing for a shadow to add.
+ *
+ * The drawn eq has no knobs: its inputs are hidden, and each carries a
+ * `_motion(u)` sink instead (eqDraw.js), handed the same 0..1 of the input's
+ * travel (octaves for a frequency or a Q, see controlUnit) or null, which it
+ * draws as the band's dot where the modulation has moved it.
  */
 
 import { LFO_AMP_SCALE, baseModKey } from "./constants.js";
 import { setKnobMotion } from "./knob.js";
+import { controlUnit } from "./paramTargets.js";
 import { SETTER_LFO_KEYS, lfoBipolar, lfoLiftNow } from "./lfo.js";
 import { state } from "./state.js";
 import { visualOutputLatency } from "./transport.js";
@@ -105,6 +111,8 @@ function autoUnit(t, key, audibleNow) {
 
 /** @type {Set<HTMLInputElement>} */
 const painted = new Set();
+/** Draw `u` (or nothing) on a control: its knob, or its own sink. */
+const paint = (el, u) => (el._motion ? el._motion(u) : setKnobMotion(el, u));
 let started = false;
 let lastT = 0;
 
@@ -130,14 +138,14 @@ export function startModMotion() {
         // A modal's copies of a track's controls go away with the modal, and
         // the lists are only rebuilt when something changes the modulation —
         // so drop what is no longer on the page rather than painting it.
-        if (!k || !el.isConnected) continue;
-        const knobSpan = k.max - k.min;
-        const base = knobSpan > 0 ? clamp01((Number(el.value) - k.min) / knobSpan) : 0;
+        if ((!k && !el._motion) || !el.isConnected) continue;
+        const knobSpan = k ? k.max - k.min : Number(el.max) - Number(el.min);
+        const base = k ? (knobSpan > 0 ? clamp01((Number(el.value) - k.min) / knobSpan) : 0) : (controlUnit(el) ?? 0);
         const u = kind === "mod"
           ? lfoUnit(t, key, base, knobSpan, now, dt)
           : autoUnit(t, key, audibleNow);
-        if (u == null) { setKnobMotion(el, null); painted.delete(el); continue; }
-        setKnobMotion(el, u);
+        if (u == null) { paint(el, null); painted.delete(el); continue; }
+        paint(el, u);
         painted.add(el);
         seen.add(el);
       }
@@ -147,7 +155,7 @@ export function startModMotion() {
     // whatever was drawn last frame and isn't in them now gets cleared.
     if (seen.size !== painted.size) {
       for (const el of painted) {
-        if (!seen.has(el)) { setKnobMotion(el, null); painted.delete(el); }
+        if (!seen.has(el)) { paint(el, null); painted.delete(el); }
       }
     }
   };

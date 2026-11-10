@@ -3,8 +3,9 @@ import { engineByKey } from "./catalog.js";
 import { clearEuclidLive, euclidFromUnit, euclidToUnit, euclideanRhythm, setEuclidLive, trackEuclid } from "./euclid.js";
 import { clearChanceLive, setChanceLive, trackChance } from "./chance.js";
 import { CHANCE_MOD_KEYS, chanceFromUnit, chanceToUnit } from "./chanceGen.js";
-import { afterPrefix as after, CURVED_LFO_CURVES, CURVED_LFO_KEYS, LFO_AMP_SCALE, LFO_KEYS, baseModKey, canModulateKey, fxInstanceLfoKeys, fxStageOfModKey, lfoDivLabel, splitFxInstanceKey } from "./constants.js";
+import { afterPrefix as after, CURVED_LFO_CURVES, CURVED_LFO_KEYS, LFO_AMP_SCALE, LFO_KEYS, baseModKey, canModulateKey, eqKeyOfTarget, fxInstanceLfoKeys, fxStageOfModKey, lfoDivLabel, splitFxInstanceKey } from "./constants.js";
 import { makeCassetteSatCurve, makeShaperCurve } from "./curves.js";
+import { eqToUnit, eqValue, splitEqKey } from "./soundDefaults.js";
 import { setParam } from "./params.js";
 import { aliasPattern, state } from "./state.js";
 import { GRAN_DEFAULTS, granFromUnit, granToUnit } from "./voices.js";
@@ -209,6 +210,14 @@ export function trackLfoKeys(t) {
 const isSetterKey = (key) => SETTER_LFO_KEYS.has(baseModKey(key));
 const isCurvedKey = (key) => CURVED_LFO_KEYS.has(baseModKey(key));
 
+/** An eq key's AudioParam on the track's eq chain, or null before audio. */
+export function eqParam(t, eqKey) {
+  const s = splitEqKey(eqKey);
+  const f = s && t.eqNode?.[s.band.key];
+  if (!f) return null;
+  return s.field === "freq" ? f.frequency : s.field === "q" ? f.Q : f.gain;
+}
+
 /**
  * Resolve the AudioParam / Tone.Signal an LFO key modulates for a track.
  * @param {Track} t @param {string} key @returns {(AudioParam|{value:number}|null)}
@@ -257,6 +266,9 @@ export function getModTarget(t, key) {
   if (key.startsWith("oracle_")) return t.voice?.getAudioParam?.("orc" + after(key, "oracle_")) ?? null;
   if (key === "cutoff") return t.filterNode?.frequency ?? null;
   if (key === "reson")  return t.filterNode?.Q ?? null;
+  // The eq: the band's own biquad, its gain, frequency or Q.
+  const eqKey = eqKeyOfTarget(key);
+  if (eqKey) return eqParam(t, eqKey);
   const rack = t.fxRack;
   if (!rack) return null;
   // The prism: its mix is the crossfade around the node, every knob on it an
@@ -389,6 +401,9 @@ export function setterLfoBase(t, key) {
   // Cutoff lives on the track's own filter, not the fx rack — read before the
   // rack gate below, since a track has a filter whether or not it has a rack.
   if (key === "cutoff") return t.filter?.cutoff ?? 1;
+  // An eq frequency or Q: the panel's value, in octaves of its travel.
+  const eqKey = eqKeyOfTarget(key);
+  if (eqKey) return eqToUnit(eqKey, eqValue(t.eq, eqKey));
   const c = t.fxRack?.config;
   if (!c) return 0.5;
   switch (key) {

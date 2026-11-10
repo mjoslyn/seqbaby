@@ -1,4 +1,4 @@
-import { AUTOMATION_TARGETS, VOICE_AUTO_KEYS, afterPrefix as after, baseModKey, canAutomateKey, fxLanePath, fxStageOfModKey, isFxInstanceId, splitFxInstanceKey, voiceAutoKeysForEngineKey } from "./constants.js";
+import { AUTOMATION_TARGETS, VOICE_AUTO_KEYS, afterPrefix as after, baseModKey, canAutomateKey, eqKeyOfTarget, fxLanePath, fxStageOfModKey, isFxInstanceId, splitFxInstanceKey, voiceAutoKeysForEngineKey } from "./constants.js";
 import { FX_APPLY, driveGain } from "./fxRack.js";
 import { controlForKey } from "./paramTargets.js";
 import { makeFuzzCurve, shaperPreampGain } from "./curves.js";
@@ -6,9 +6,10 @@ import { bassFromUnit, droneFromUnit, guitarFromUnit, haloFromUnit, hexopFromUni
 import { euclidFromUnit, setEuclidLive } from "./euclid.js";
 import { setChanceLive } from "./chance.js";
 import { chanceFromUnit } from "./chanceGen.js";
-import { canModulate, fxCopyView } from "./lfo.js";
+import { canModulate, eqParam, fxCopyView } from "./lfo.js";
 import { setParam } from "./params.js";
 import { cutoffToHz, resonToQ, setFilter } from "./signal.js";
+import { eqFromUnit, eqValue } from "./soundDefaults.js";
 import { granFromUnit } from "./voices.js";
 
 
@@ -79,6 +80,14 @@ export function applyAutomationAtStep(t, key, v, time, vNext, stepDur) {
   if (key === "reson") {
     t.filter.reson = vv;
     ramp(t.filterNode?.Q, resonToQ(vv), resonToQ(vn));
+    return;
+  }
+  // The eq: the band's biquad only, never `t.eq`, so the panel stays the base
+  // the lane plays around (and is what the band goes back to when the lane
+  // lets go, releaseEqLanes). A frequency or Q lane is in octaves.
+  const eqKey = eqKeyOfTarget(key);
+  if (eqKey) {
+    ramp(eqParam(t, eqKey), eqFromUnit(eqKey, vv), eqFromUnit(eqKey, vn));
     return;
   }
   // Euclid: the lane drives the generator's live override, never the stored
@@ -388,8 +397,9 @@ export function applyAutomationAtStep(t, key, v, time, vNext, stepDur) {
  */
 export function runAutomationForStep(t, stepIdx, time, stepDur) {
   const auto = t.automation;
-  if (!auto) return;
+  if (!auto) { if (t._eqLanes) releaseEqLanes(t); return; }
   const rec = t._autRec;
+  let eqNow = null;
   for (const key in auto) {
     const lane = auto[key];
     if (!lane || !lane.enabled) continue;
@@ -409,7 +419,27 @@ export function runAutomationForStep(t, stepIdx, time, stepDur) {
     // too, and a pad moves the real knob — it has nothing to shadow.
     (t._autoLive || (t._autoLive = {}))[key] = { from: v, to: next, t0: time, t1: time + stepDur };
     applyAutomationAtStep(t, key, v, time, next, stepDur);
+    if (eqKeyOfTarget(key)) (eqNow || (eqNow = new Set())).add(key);
   }
+  // An eq lane writes the biquad and nothing else, so a lane that has stopped
+  // playing (switched off, removed, or not on the pattern this step is in)
+  // would leave its band wherever it last put it. Hand those back.
+  if (t._eqLanes) for (const key of t._eqLanes) if (!eqNow?.has(key)) releaseEqLane(t, key);
+  t._eqLanes = eqNow;
+}
+
+/** Put a band an eq lane was driving back on the panel's value. */
+function releaseEqLane(t, key) {
+  const eqKey = eqKeyOfTarget(key);
+  if (eqKey) { try { t.eqNode?.setBand(eqKey, eqValue(t.eq, eqKey)); } catch {} }
+  if (t._autoLive) delete t._autoLive[key];
+}
+/** Every band an eq lane was driving, back on the panel: the transport has
+ *  stopped. @param {Track} t */
+export function releaseEqLanes(t) {
+  if (!t._eqLanes) return;
+  for (const key of t._eqLanes) releaseEqLane(t, key);
+  t._eqLanes = null;
 }
 
 // ---- track params / randomize ------------------------------------------
@@ -454,6 +484,7 @@ export function laneBases(t) {
 /** Put every lane-owned field back on its knob's value, stored and sounding:
  *  the transport has stopped and the lanes have let go. @param {Track} t */
 export function restoreLaneBases(t) {
+  releaseEqLanes(t);
   for (const [[group, a, b], v] of laneBases(t)) {
     try {
       if (group === "filter") setFilter(t, a, v);

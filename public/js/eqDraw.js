@@ -11,6 +11,12 @@
 // and turns gestures into writes on them, so save, undo, p-lock, a jam and the
 // right-click menu work as they did for the five sliders.
 //
+// An LFO or a lane on a band (`eq_lowFreq` / `eq.lowFreq`) drives the biquad
+// and leaves the inputs alone, so what is drawn there is the base. modMotion
+// hands each driven input's `_motion` sink where the modulation has got to:
+// the curve follows that (it is what is heard), a small dot in the band's
+// colour trails the handle, and the handle stays the base you drag.
+//
 // No imports and nothing at the top level touches the DOM, so the response
 // math runs under `node --test` (test/eqDraw.test.js). The bands are handed in.
 
@@ -189,7 +195,9 @@ export function mountEqDraw(panel, bands, getAnalyser) {
     const dot = el("circle", { r: 6.5, class: "sq-eqdraw__dot" });
     const num = el("text", { class: "sq-eqdraw__num", "text-anchor": "middle" });
     num.textContent = String(i + 1);
-    g.append(tip, ring, dot, num);
+    // where an LFO or a lane has moved the band to; hidden unless driven
+    const live = el("circle", { r: 3.5, class: "sq-eqdraw__live" });
+    g.append(tip, ring, dot, num, live);
     g.addEventListener("focus", () => select(i));
     g.addEventListener("keydown", (e) => {
       const s = state();
@@ -209,7 +217,7 @@ export function mountEqDraw(panel, bands, getAnalyser) {
       settle();
     });
     svg.append(g);
-    return { g, ring, dot, num };
+    return { g, ring, dot, num, live };
   });
   wrap.append(svg);
 
@@ -219,8 +227,27 @@ export function mountEqDraw(panel, bands, getAnalyser) {
   info.className = "sq-eqdraw__info";
   const infoName = document.createElement("span");
   infoName.className = "sq-eqdraw__name";
+  // The selected band's three numbers, each its own control: a right-click
+  // (a long-press on touch) opens that one's parameter menu, which is how a
+  // frequency or a Q gets an LFO or a lane — the dot itself opens the gain's.
   const infoVals = document.createElement("span");
   infoVals.className = "sq-eqdraw__vals";
+  const valSpan = (field) => {
+    const sp = document.createElement("span");
+    sp.className = `sq-eqdraw__val sq-eqdraw__val--${field}`;
+    sp.title = `right-click: modulate or automate this band's ${field === "q" ? "width (Q)" : field}`;
+    sp.addEventListener("contextmenu", (e) => {
+      const input = ins[sel][field];
+      if (!input) return;
+      e.preventDefault();
+      e.stopPropagation();
+      input.dispatchEvent(new MouseEvent("contextmenu", {
+        bubbles: true, cancelable: true, clientX: e.clientX, clientY: e.clientY }));
+    });
+    infoVals.append(sp);
+    return sp;
+  };
+  const valFreq = valSpan("freq"), valGain = valSpan("gain"), valQ = valSpan("q");
   const qBtns = document.createElement("span");
   qBtns.className = "sq-eqdraw__q";
   const mkBtn = (label, title, fn) => {
@@ -249,12 +276,36 @@ export function mountEqDraw(panel, bands, getAnalyser) {
     return bands.map(b => bandState(b, eq));
   };
 
+  // Where modulation has each band, per field, in its own units; empty when
+  // nothing drives it. Filled by the inputs' `_motion` sinks (modMotion.js).
+  const moved = bands.map(() => ({}));
+  const fromUnit = (input, u) => {
+    const lo = Number(input.min), hi = Number(input.max);
+    const c = Math.max(0, Math.min(1, u));
+    return input.dataset.scale === "log" && lo > 0 ? lo * Math.pow(hi / lo, c) : lo + c * (hi - lo);
+  };
+  bands.forEach((b, i) => {
+    for (const field of ["gain", "freq", "q"]) {
+      const input = ins[i][field];
+      if (!input) continue;
+      input._motion = (u) => {
+        const had = field in moved[i];
+        if (u == null) { if (!had) return; delete moved[i][field]; }
+        else moved[i][field] = fromUnit(input, u);
+        schedule();
+      };
+    }
+  });
+
   const paint = () => {
     const eq = read();
     const st = bands.map(b => bandState(b, eq));
+    // what is heard: the base, with whatever the modulation has moved
+    const heard = st.map((s, i) => ({ ...s, ...moved[i] }));
     const total = new Array(CURVE_FREQS.length).fill(0);
     st.forEach((s, i) => {
-      const c = bandCoefs(s);
+      // the shapes and the curve are what is heard; the handle is the base
+      const c = bandCoefs(heard[i]);
       const dbs = CURVE_FREQS.map(f => coefDb(c, f));
       dbs.forEach((d, k) => { total[k] += d; });
       bandShapes[i].setAttribute("d", areaOf(dbs));
@@ -265,6 +316,13 @@ export function mountEqDraw(panel, bands, getAnalyser) {
       n.dot.setAttribute("cx", x); n.dot.setAttribute("cy", y);
       n.num.setAttribute("x", x); n.num.setAttribute("y", y + 3);
       n.g.classList.toggle("is-on", Math.abs(s.gain) >= 0.5 || Math.abs(s.freq - bands[i].freq) > 0.5);
+      const driven = Object.keys(moved[i]).length > 0;
+      n.g.classList.toggle("is-driven", driven);
+      if (driven) {
+        const h = heard[i];
+        n.live.setAttribute("cx", xOfF(Math.max(F_LO, Math.min(F_HI, h.freq))));
+        n.live.setAttribute("cy", yOfDb(clampDb(h.gain)));
+      }
       n.g.classList.toggle("is-sel", i === sel);
       n.g.classList.toggle("is-hover", i === hover);
       n.g.setAttribute("aria-valuenow", String(s.gain));
@@ -275,7 +333,16 @@ export function mountEqDraw(panel, bands, getAnalyser) {
     const s = st[sel];
     infoName.textContent = bands[sel].label;
     infoName.style.color = EQ_BAND_COLORS[sel % EQ_BAND_COLORS.length];
-    infoVals.textContent = `${fmtHz(s.freq)}  ${fmtDb(s.gain)}${s.q != null ? `  Q ${s.q.toFixed(2)}` : ""}`;
+    valFreq.textContent = fmtHz(s.freq);
+    valGain.textContent = fmtDb(s.gain);
+    valQ.textContent = s.q != null ? `Q ${s.q.toFixed(2)}` : "";
+    valQ.hidden = s.q == null;
+    // which of the three something is moving (the input's wrapper says, as
+    // the dot beside a knob's label does)
+    for (const [sp, field] of [[valFreq, "freq"], [valGain, "gain"], [valQ, "q"]]) {
+      const m = ins[sel][field]?.closest("label")?.dataset.motion;
+      if (m) sp.dataset.motion = m; else delete sp.dataset.motion;
+    }
     qBtns.hidden = s.q == null;
   };
   let queued = false;

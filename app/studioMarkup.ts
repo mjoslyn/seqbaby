@@ -1159,14 +1159,14 @@ ${ORACLE_PANEL}
           <label class="sq-fx__ctl"><span>mid</span><input class="p-eq-mid" type="range" min="-18" max="18" step="0.5" value="0" /></label>
           <label class="sq-fx__ctl"><span>hi mid</span><input class="p-eq-himid" type="range" min="-18" max="18" step="0.5" value="0" /></label>
           <label class="sq-fx__ctl"><span>high</span><input class="p-eq-high" type="range" min="-18" max="18" step="0.5" value="0" /></label>
-          <label class="sq-fx__ctl sq-eq__shape"><span>low freq</span><input class="p-eq-lowFreq" type="range" min="20" max="20000" step="1" value="250" /></label>
-          <label class="sq-fx__ctl sq-eq__shape"><span>lo mid freq</span><input class="p-eq-lomidFreq" type="range" min="20" max="20000" step="1" value="600" /></label>
-          <label class="sq-fx__ctl sq-eq__shape"><span>lo mid q</span><input class="p-eq-lomidQ" type="range" min="0.1" max="18" step="0.01" value="1" /></label>
-          <label class="sq-fx__ctl sq-eq__shape"><span>mid freq</span><input class="p-eq-midFreq" type="range" min="20" max="20000" step="1" value="1200" /></label>
-          <label class="sq-fx__ctl sq-eq__shape"><span>mid q</span><input class="p-eq-midQ" type="range" min="0.1" max="18" step="0.01" value="0.8" /></label>
-          <label class="sq-fx__ctl sq-eq__shape"><span>hi mid freq</span><input class="p-eq-himidFreq" type="range" min="20" max="20000" step="1" value="3000" /></label>
-          <label class="sq-fx__ctl sq-eq__shape"><span>hi mid q</span><input class="p-eq-himidQ" type="range" min="0.1" max="18" step="0.01" value="1" /></label>
-          <label class="sq-fx__ctl sq-eq__shape"><span>high freq</span><input class="p-eq-highFreq" type="range" min="20" max="20000" step="1" value="5000" /></label>
+          <label class="sq-fx__ctl sq-eq__shape"><span>low freq</span><input class="p-eq-lowFreq" type="range" data-scale="log" min="20" max="20000" step="1" value="250" /></label>
+          <label class="sq-fx__ctl sq-eq__shape"><span>lo mid freq</span><input class="p-eq-lomidFreq" type="range" data-scale="log" min="20" max="20000" step="1" value="600" /></label>
+          <label class="sq-fx__ctl sq-eq__shape"><span>lo mid q</span><input class="p-eq-lomidQ" type="range" data-scale="log" min="0.1" max="18" step="0.01" value="1" /></label>
+          <label class="sq-fx__ctl sq-eq__shape"><span>mid freq</span><input class="p-eq-midFreq" type="range" data-scale="log" min="20" max="20000" step="1" value="1200" /></label>
+          <label class="sq-fx__ctl sq-eq__shape"><span>mid q</span><input class="p-eq-midQ" type="range" data-scale="log" min="0.1" max="18" step="0.01" value="0.8" /></label>
+          <label class="sq-fx__ctl sq-eq__shape"><span>hi mid freq</span><input class="p-eq-himidFreq" type="range" data-scale="log" min="20" max="20000" step="1" value="3000" /></label>
+          <label class="sq-fx__ctl sq-eq__shape"><span>hi mid q</span><input class="p-eq-himidQ" type="range" data-scale="log" min="0.1" max="18" step="0.01" value="1" /></label>
+          <label class="sq-fx__ctl sq-eq__shape"><span>high freq</span><input class="p-eq-highFreq" type="range" data-scale="log" min="20" max="20000" step="1" value="5000" /></label>
         </div>
       </div>
       <div class="sq-track__comp-panel" hidden>
