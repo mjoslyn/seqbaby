@@ -34,8 +34,9 @@ import {
 } from "./repeat.js";
 import { patternMeter, redetectDrumKit, stepsPerBarForMeter, stepsPerBeatForMeter } from "./meter.js";
 import { refreshHexopAlgorithm, setEngineKey, setParam, updateGranularSpeedEnabled, updatePlaitsControlsVisibility, refreshVoxLyric } from "./params.js";
-import { applyCompressorConfig, EQ_BANDS, refreshCompSourceDropdowns, refreshNoiseBeds, refreshOutputSelects, releaseSilencedTracks, setEQ, setFilter, setTrackOutput } from "./signal.js";
-import { ANALOG_FILTER_INFO, ANALOG_FILTER_TYPES } from "./soundDefaults.js";
+import { applyCompressorConfig, eqAnalyser, EQ_BANDS, refreshCompSourceDropdowns, refreshNoiseBeds, refreshOutputSelects, releaseSilencedTracks, setEQ, setFilter, setTrackOutput } from "./signal.js";
+import { ANALOG_FILTER_INFO, ANALOG_FILTER_TYPES, EQ_KEYS, eqValue } from "./soundDefaults.js";
+import { mountEqDraw } from "./eqDraw.js";
 import { state, trackSlot } from "./state.js";
 import { launchClip } from "./clips.js";
 import { openAutAsModal, openChanceAsModal, openCompAsModal, openEnvAsModal, openEqAsModal, openFilterAsModal, openFxAsModal, openGranularWavModal, openInstrumentAsModal, openModAsModal, openEuclidAsModal, openRollAsModal, openSampleEditorModal, openTrackMenu } from "./stepEditor.js";
@@ -245,9 +246,9 @@ export function syncTrackSoundUI(t) {
   set(".p-envrel", t.filter.release);
   const eqPanel = t._eqPanelEl || q(".sq-track__eq-panel");
   if (eqPanel) {
-    for (const { key } of EQ_BANDS) {
+    for (const key of EQ_KEYS) {
       const el = eqPanel.querySelector(`.p-eq-${key}`);
-      if (el) el.value = t.eq[key];
+      if (el) el.value = eqValue(t.eq, key);
     }
   }
   const compPanel = t._compPanelEl || q(".sq-track__comp-panel");
@@ -1455,11 +1456,12 @@ export function renderTrack(t) {
   renderModPanel(t, t._modPanelEl);
   wireFxPanel(t, t._fxPanelEl);
   const eqPanel = t._eqPanelEl;
-  for (const { key } of EQ_BANDS) {
+  for (const key of EQ_KEYS) {
     const el = eqPanel.querySelector(`.p-eq-${key}`);
-    el.value = t.eq[key];
+    el.value = eqValue(t.eq, key);
     el.addEventListener("input", e => setEQ(t, key, Number(e.target.value)));
   }
+  mountEqDraw(eqPanel, EQ_BANDS, () => eqAnalyser(t));
 
   const bindModalOpen = (btnSel, openFn, modalKey, beforeOpen) => {
     const btn = node.querySelector(btnSel);

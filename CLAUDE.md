@@ -16,7 +16,7 @@ env / fx / eq / comp / mod / automation per track.
   `public/woscillators.js` →
   `public/js/main.js` (ES module). `middleware.ts` refreshes the Supabase
   session on every request *except* static engine assets.
-- **Engine**: ~89 dependency-free vanilla ES modules in `public/js/`. No
+- **Engine**: ~90 dependency-free vanilla ES modules in `public/js/`. No
   bundler — edit, reload. `window.seqbaby` (from `appApi.js`) exposes `state`
   and serialize/apply hooks to the React shell (typed in `app/seqbaby.d.ts`).
 - **Accounts + data**: Supabase (Postgres + Auth + RLS). Tables: `profiles`,
@@ -159,6 +159,9 @@ env / fx / eq / comp / mod / automation per track.
   turning it.
 - `knobRecord.js` — recording knob moves into automation lanes while record
   is armed and the transport plays. See the modulation section.
+- `eqDraw.js` — the eq panel as a curve you drag and draw on, after Pro-Q,
+  over the panel's hidden inputs. Its response math (RBJ biquads, as a
+  BiquadFilterNode makes them) is pure and tested in `test/eqDraw.test.js`.
 - `knob.js` — the rotary knob layer, drawn over the native range inputs without
   replacing them. See the Knobs section below.
 - `enginePicker.js` — the instrument picker: a button on the track head that
@@ -411,6 +414,18 @@ voice → filterNode → eqNode → compressor → fxRack → masterGain → mas
   original three bands at their original frequencies; lomid/himid are new
   peaking bands either side of mid, defaulting to 0dB, so an old song with
   only the three original keys in `t.eq` sounds exactly as it did).
+  Each band's frequency and (bells only) Q move too: `t.eq.<band>Freq` /
+  `t.eq.<band>Q`, absent meaning the band's default (`EQ_BAND_DEFS`,
+  `eqValue`, `EQ_KEYS` in soundDefaults.js), so an old song is unchanged.
+  The panel is drawn, not sliders (`eqDraw.js`, Pro-Q style): a spectrum of
+  the eq's output behind the curve (`eqAnalyser`, signal.js, made only while
+  the graph is on screen), a coloured node per band (drag across for
+  frequency, up/down for gain, shift fine, wheel or wider/narrower for a
+  bell's Q, double-click resets), and a drag across empty space DRAWS the
+  gains. The range inputs stay in the panel, hidden and excluded from the
+  knobs, as the value: the graph writes them through their own `input`
+  events and repaints on any `.value` write, so save, undo, p-lock, a jam
+  and the right-click menu are unchanged.
 - `compressor` — `TrackCompressor`: native `DynamicsCompressorNode` (self) or
   an analyser-driven envelope follower ducking a pre-output gain (sidechain
   from any track's `voice.getOutputNode()`).
@@ -5093,7 +5108,7 @@ through a 6ms fade on its gain).
   place the dispatch lives, or the second one has to import the first.
 - **`engineData.js`, `soundDefaults.js`, `theoryData.js`, `constants.js`,
   `chanceGen.js`, `sessionFormat.js`, `historyStore.js`, `songBuilder.js`,
-  `miniNotation.js`, `strudel.js`, `arrangement.js`, `patternPicture.js`, `rollNotes.js` and `voxPhonetic.js` must stay importable from Node** — no DOM, no Tone, no `window`. The tests
+  `miniNotation.js`, `strudel.js`, `arrangement.js`, `patternPicture.js`, `rollNotes.js`, `eqDraw.js` and `voxPhonetic.js` must stay importable from Node** — no DOM, no Tone, no `window`. The tests
   and the MCP server run them; an import of state.js or catalog.js in any of
   them breaks `npm test` at load, which is the guard.
 - **React must never re-set the studio's `innerHTML`** (`app/StudioBody.tsx`).
@@ -5205,7 +5220,7 @@ Repo: https://github.com/mjoslyn/seqbaby.
   An inline marker (`window.__seqbabyServerBoot`) tells the paths apart, and
   `ScriptLoader.tsx` keeps its onload-chained injection for the soft-nav case
   (e.g. arriving from `/login`).
-- `app/EnginePreload.tsx` emits `modulepreload` for all 89 modules listed in
+- `app/EnginePreload.tsx` emits `modulepreload` for all 90 modules listed in
   `app/engineAssets.ts` (at `engineAsset("/js/<name>")`; the hints used to
   point at the site root and 404). The graph is 8 levels deep, so without it the browser
   needs up to eight sequential round trips just to discover the code.

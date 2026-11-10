@@ -17,7 +17,8 @@ import { applyBusMute, paintDiceDensity, placeBusesLast, refreshFxPanelUI, refre
 import { flushAllPatternSounds, recallLoadedPatternSound, refreshPatternLockUI, refreshPatternSoundUI, resolveSoundSources } from "./patternSound.js";
 import { syncScaleUI } from "./scaleUI.js";
 import { migrateLegacyNames, migrateTrackNames, SET_VERSION, validateSet } from "./sessionFormat.js";
-import { applyCompressorConfig, ensureFxRack, EQ_BANDS, refreshAllTrackOutputs, refreshCompSourceDropdowns, refreshNoiseBeds, refreshOutputSelects, routeVoiceToRack, setFilter, wouldFeedback } from "./signal.js";
+import { EQ_KEYS, EQ_SHAPE_KEYS, eqValue } from "./soundDefaults.js";
+import { applyCompressorConfig, ensureFxRack, refreshAllTrackOutputs, refreshCompSourceDropdowns, refreshNoiseBeds, refreshOutputSelects, routeVoiceToRack, setFilter, wouldFeedback } from "./signal.js";
 import { applyMacroPads, serializeMacroPads } from "./macro.js";
 import { aliasPattern, state, syncMeterUI, syncRepeatsUI, trackSlot } from "./state.js";
 import { renderStepGrid } from "./stepGrid.js";
@@ -600,9 +601,9 @@ export function loadTrackFromData(t, td) {
     renderModPanel(t, t._modPanelEl || t.el.querySelector(".sq-track__mod-panel"));
     const eqPanel = t._eqPanelEl || t.el.querySelector(".sq-track__eq-panel");
     if (eqPanel) {
-      for (const { key } of EQ_BANDS) {
+      for (const key of EQ_KEYS) {
         const el = eqPanel.querySelector(`.p-eq-${key}`);
-        if (el) el.value = t.eq[key];
+        if (el) el.value = eqValue(t.eq, key);
       }
     }
     const compPanel = t._compPanelEl || t.el.querySelector(".sq-track__comp-panel");
@@ -639,7 +640,7 @@ export function loadTrackFromData(t, td) {
       setFilter(t, "reson",  t.filter.reson);
     }
     if (t.eqNode) {
-      for (const { key } of EQ_BANDS) t.eqNode.setBand(key, t.eq[key]);
+      for (const key of EQ_KEYS) t.eqNode.setBand(key, eqValue(t.eq, key));
     }
     applyCompressorConfig(t);
     syncAllLFOs(t);
@@ -983,7 +984,12 @@ export function applyTrackPatch(t, patch) {
   }
   if (patch.params)   { migrateGranularParams(patch.params); Object.assign(t.params, patch.params); }
   if (patch.filter)   Object.assign(t.filter, patch.filter);
-  if (patch.eq)       Object.assign(t.eq, patch.eq);
+  if (patch.eq) {
+    // A patch from before the drawn eq says nothing about frequency or Q, and
+    // means the defaults, not whatever the last sound left there.
+    for (const k of EQ_SHAPE_KEYS) delete t.eq[k];
+    Object.assign(t.eq, patch.eq);
+  }
   if (patch.comp)     Object.assign(t.comp, patch.comp);
   if (patch.fxConfig) {
     // A patch's chain is the patch's: the order and the extra copies of the
@@ -1058,7 +1064,7 @@ export function applyTrackPatch(t, patch) {
       setFilter(t, "reson",  t.filter.reson);
     }
     if (t.eqNode) {
-      for (const { key } of EQ_BANDS) t.eqNode.setBand(key, t.eq[key]);
+      for (const key of EQ_KEYS) t.eqNode.setBand(key, eqValue(t.eq, key));
     }
     applyCompressorConfig(t);
     syncAllLFOs(t);

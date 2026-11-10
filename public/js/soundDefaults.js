@@ -175,6 +175,51 @@ export function defaultFilter() {
 
 export function defaultEq() { return { low: 0, lomid: 0, mid: 0, himid: 0, high: 0 }; }
 
+// The eq's five bands. low/mid/high are the original three at their original
+// frequencies; lomid / himid sit either side of mid. Each band's GAIN is
+// `t.eq[key]` (dB, -18..18, in defaultEq). Its frequency and (bells only) Q
+// are `t.eq[key + "Freq"]` / `t.eq[key + "Q"]`, which the drawn eq moves:
+// absent means the band's own default, so a song written before they existed
+// sounds as it did and a sparse song stays sparse. Shelves have no Q: a
+// BiquadFilterNode ignores it for them.
+export const EQ_BAND_DEFS = [
+  { key: "low",   type: "lowshelf",  freq: 250,  label: "low",    desc: "low shelf, 250Hz by default, ±18dB" },
+  { key: "lomid", type: "peaking",   freq: 600,  q: 1.0, label: "lo mid", desc: "peaking bell, 600Hz by default, ±18dB" },
+  { key: "mid",   type: "peaking",   freq: 1200, q: 0.8, label: "mid",    desc: "peaking bell, 1.2kHz by default, ±18dB" },
+  { key: "himid", type: "peaking",   freq: 3000, q: 1.0, label: "hi mid", desc: "peaking bell, 3kHz by default, ±18dB" },
+  { key: "high",  type: "highshelf", freq: 5000, label: "high",  desc: "high shelf, 5kHz by default, ±18dB" },
+];
+export const EQ_FREQ_RANGE = [20, 20000];
+export const EQ_Q_RANGE = [0.1, 18];
+/** The shape keys: every band's frequency, every bell's Q. */
+export const EQ_SHAPE_KEYS = EQ_BAND_DEFS.flatMap(b => b.q != null ? [b.key + "Freq", b.key + "Q"] : [b.key + "Freq"]);
+/** Every key `t.eq` can hold: the five gains, then the shape keys. */
+export const EQ_KEYS = [...EQ_BAND_DEFS.map(b => b.key), ...EQ_SHAPE_KEYS];
+/** Which band and which of its three fields an eq key names. */
+export function splitEqKey(key) {
+  const m = /^(\w+?)(Freq|Q)?$/.exec(key);
+  const band = EQ_BAND_DEFS.find(b => b.key === m?.[1]);
+  if (!band) return null;
+  if (m[2] === "Q" && band.q == null) return null;
+  return { band, field: m[2] === "Freq" ? "freq" : m[2] === "Q" ? "q" : "gain" };
+}
+/** An eq key's default: 0dB, or the band's own frequency / Q. */
+export function eqDefault(key) {
+  const s = splitEqKey(key);
+  if (!s) return 0;
+  return s.field === "freq" ? s.band.freq : s.field === "q" ? s.band.q : 0;
+}
+/** An eq key's value in `eq`, its default when absent. */
+export function eqValue(eq, key) {
+  const v = eq?.[key];
+  return typeof v === "number" && Number.isFinite(v) ? v : eqDefault(key);
+}
+/** An eq key's legal range. */
+export function eqRange(key) {
+  const f = splitEqKey(key)?.field;
+  return f === "freq" ? EQ_FREQ_RANGE : f === "q" ? EQ_Q_RANGE : [-18, 18];
+}
+
 export function defaultCompConfig() {
   return { enabled: false, source: "self", threshold: -20, ratio: 4, attack: 0.01, release: 0.2, knee: 6 };
 }

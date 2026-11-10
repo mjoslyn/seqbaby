@@ -459,11 +459,11 @@ export const PARAM_DESCRIPTIONS = {
   "p-envsus": "the cutoff level the sweep holds at while the note lasts",
   "p-envrel": "how long the cutoff takes to fall back once the note ends",
   // EQ.
-  "p-eq-low":   "low shelf at 250Hz",
-  "p-eq-lomid": "peaking bell at 600Hz",
-  "p-eq-mid":   "peaking bell at 1.2kHz",
-  "p-eq-himid": "peaking bell at 3kHz",
-  "p-eq-high":  "high shelf at 5kHz",
+  "p-eq-low":   "low shelf gain. Drag its dot on the curve: across for frequency, up and down for gain",
+  "p-eq-lomid": "peaking bell gain. Drag its dot: across for frequency, up and down for gain, the wheel for width",
+  "p-eq-mid":   "peaking bell gain. Drag its dot: across for frequency, up and down for gain, the wheel for width",
+  "p-eq-himid": "peaking bell gain. Drag its dot: across for frequency, up and down for gain, the wheel for width",
+  "p-eq-high":  "high shelf gain. Drag its dot on the curve: across for frequency, up and down for gain",
   // Compressor.
   "comp-enabled":    "switches the track compressor in",
   "sq-comp__source": "what the compressor listens to",

@@ -74,6 +74,7 @@ export const ENGINE_MODULES = [
   "drone.js",
   "engineData.js",
   "enginePicker.js",
+  "eqDraw.js",
   "euclid.js",
   "filterModels.js",
   "fxRack.js",

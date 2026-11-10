@@ -53,7 +53,7 @@ import {
   LADDER_NUM_CTLS, LADDER_SEL_CTLS, LADDER_OSC_NUM_CTLS, LADDER_OSC_SEL_CTLS, LADDER_TONE_NAMES, ladderTone, ladderToneDescription,
   ORACLE_NUM_CTLS, ORACLE_SEL_CTLS, ORACLE_TONE_NAMES, oracleTone, oracleToneDescription,
 } from "./engineData.js";
-import { EUCLID_DEFAULTS, FILTER_TYPES, PRISM_MODES, REPEAT_MODES, defaultCompConfig, defaultEq, defaultFilter, defaultFxConfig, defaultTrackParams } from "./soundDefaults.js";
+import { EQ_KEYS, EUCLID_DEFAULTS, FILTER_TYPES, PRISM_MODES, REPEAT_MODES, defaultCompConfig, defaultEq, eqRange, defaultFilter, defaultFxConfig, defaultTrackParams } from "./soundDefaults.js";
 import {
   AUTOMATION_TARGETS, FX_STAGE_LEVEL_KEY, LFO_DIVS, LFO_KEYS, LFO_LABELS, PATTERN_COUNT, PATTERN_MODES, STEPS_PER_BAR, fxStageLevel,
   canAutomateKey, canModulateKey, lfoDivLabel, voiceAutoKeysForEngineKey,
@@ -726,13 +726,16 @@ export function setFilter(song, index, f = {}) {
   return { ...d, ...t.filter };
 }
 /** Five-band eq in dB, -18..18: low (shelf 250Hz), lomid (peak 600Hz),
- *  mid (peak 1.2kHz), himid (peak 3kHz), high (shelf 5kHz). */
+ *  mid (peak 1.2kHz), himid (peak 3kHz), high (shelf 5kHz). Each band's
+ *  frequency is `<band>Freq` (20..20000Hz) and a bell's width `<band>Q`
+ *  (0.1..18), both optional. */
 export function setEq(song, index, eq = {}) {
   const t = trackAt(song, index);
   const d = defaultEq();
   for (const [k, v] of Object.entries(eq)) {
-    if (!(k in d)) fail(`unknown eq band ${JSON.stringify(k)}; one of ${Object.keys(d).join(", ")}`);
-    t.eq[k] = num(v, `eq.${k}`, -18, 18);
+    if (!EQ_KEYS.includes(k)) fail(`unknown eq key ${JSON.stringify(k)}; one of ${EQ_KEYS.join(", ")}`);
+    const [lo, hi] = eqRange(k);
+    t.eq[k] = num(v, `eq.${k}`, lo, hi);
   }
   return { ...d, ...t.eq };
 }

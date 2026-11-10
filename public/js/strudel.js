@@ -28,7 +28,7 @@ import { addTrack, removeTrack, setTrack, setFilter, setFx, setFxChain, setParam
 import { CURVED_LFO_CURVES, FX_STAGE_LEVEL_KEY, STEPS_PER_BAR, fxInstanceIds, fxStageLevel, fxStageOf, isFxInstanceId, voiceAutoKeysForEngineKey } from "./constants.js";
 import { SCALES, CHORD_TYPES } from "./theoryData.js";
 import { staticEngineByKey } from "./engineData.js";
-import { defaultCompConfig, defaultEq, defaultFilter, defaultFxConfig, defaultTrackParams } from "./soundDefaults.js";
+import { EQ_KEYS, EQ_SHAPE_KEYS, defaultCompConfig, defaultEq, defaultFilter, defaultFxConfig, defaultTrackParams, eqDefault, eqValue } from "./soundDefaults.js";
 import { LEGACY_ENGINE_KEYS } from "./sessionFormat.js";
 
 export class CodeError extends Error {
@@ -1524,7 +1524,7 @@ function resetSetting(song, i, path, current = new Set()) {
   const [kind, a, b] = path.split(".");
   if (kind === "params") { const d = defaultTrackParams(); if (a in d) t.params[a] = d[a]; else delete t.params[a]; }
   else if (kind === "filter") t.filter[a] = defaultFilter()[a];
-  else if (kind === "eq") t.eq[a] = 0;
+  else if (kind === "eq") { if (EQ_SHAPE_KEYS.includes(a)) delete t.eq[a]; else t.eq[a] = 0; }
   else if (kind === "comp") { if (a === "source") t.compSourceIndex = -1; else t.comp[a] = defaultCompConfig()[a]; }
   else if (kind === "fx") {
     // A copy the code no longer mentions at all goes, as a deleted line's
@@ -1838,7 +1838,7 @@ function partCode(t, k, { native, sound, withSound = true, label = null, lock = 
         }
       }
       if (Array.isArray(fx.order) && fx.order.length) ctl.push(["fxchain", [fx.order.join(" ")]]);
-      for (const [key, v] of Object.entries(sound.eq || {})) if (Math.abs(v) > 1e-6) ctl.push(["eq", [key, round3(v)]]);
+      for (const [key, v] of Object.entries(sound.eq || {})) if (EQ_KEYS.includes(key) && Math.abs(v - eqDefault(key)) > 1e-6) ctl.push(["eq", [key, round3(v)]]);
       const comp = sound.comp || {};
       if (comp.enabled) {
         ctl.push(["comp", ["enabled", true]]);
@@ -1861,7 +1861,7 @@ function partCode(t, k, { native, sound, withSound = true, label = null, lock = 
       const copies = fxInstanceIds(fx);
       if (copies.length) dropped.push(`the extra ${copies.map(id => id.replace("#", " ")).join(" / ")}`);
       if (Array.isArray(fx.order) && fx.order.length) dropped.push("the fx order");
-      if (Object.values(sound.eq || {}).some(v => Math.abs(v) > 1e-6)) dropped.push("the eq");
+      if (Object.entries(sound.eq || {}).some(([k, v]) => EQ_KEYS.includes(k) && Math.abs(v - eqDefault(k)) > 1e-6)) dropped.push("the eq");
       if (sound.comp?.enabled) dropped.push("the compressor");
       if (engineKnobKeys(t.engineKey).some(key => params[key] != null && key in DP && String(params[key]) !== String(DP[key]))) dropped.push(`the ${staticEngineByKey(t.engineKey)?.label || t.engineKey} settings`);
     }
@@ -1999,7 +1999,7 @@ export function codeForControl(cls, t, { sourceName, fxId } = {}) {
   if (cls === "p-reson") return call("lpq", f.reson * 20);
   if (cls === "p-filtertype") return call("filter", "type", f.type);
   if (ENV_CLASS[cls]) return call("filter", ENV_CLASS[cls], f[ENV_CLASS[cls]]);
-  if ((m = /^p-eq-(\w+)$/.exec(cls))) return m[1] in defaultEq() ? call("eq", m[1], t.eq?.[m[1]] ?? 0) : null;
+  if ((m = /^p-eq-(\w+)$/.exec(cls))) return EQ_KEYS.includes(m[1]) ? call("eq", m[1], eqValue(t.eq, m[1])) : null;
   if (cls === "sq-comp__source") return sourceName ? call("comp", "source", sourceName) : null;
   if ((m = /^comp-(\w+)$/.exec(cls))) {
     const c = { ...defaultCompConfig(), ...(t.comp || {}) };

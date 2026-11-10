@@ -30,7 +30,8 @@ import { defaultLFOConfig, freshLfoEntry, syncLFO } from "./lfo.js";
 import { setParam, updateGranularSpeedEnabled } from "./params.js";
 import { refreshParamIndicators } from "./paramTargets.js";
 import { refreshFxPanelUI, renderModPanel, syncTrackSoundUI } from "./render.js";
-import { applyCompressorConfig, EQ_BANDS, setEQ, setFilter } from "./signal.js";
+import { applyCompressorConfig, setEQ, setFilter } from "./signal.js";
+import { EQ_KEYS, EQ_SHAPE_KEYS, eqValue } from "./soundDefaults.js";
 import { state, trackSlot } from "./state.js";
 
 /** @typedef {import("./types.js").Track} Track */
@@ -102,9 +103,13 @@ export function applyPatternSound(t, snap) {
     }
   }
   if (snap.eq) {
-    for (const { key: band } of EQ_BANDS) {
-      if (snap.eq[band] === undefined || same(t.eq[band], snap.eq[band])) continue;
-      setEQ(t, band, snap.eq[band]);
+    for (const key of EQ_KEYS) {
+      // A gain absent from the snapshot is left alone, as it always was; a
+      // frequency or Q absent means the band's default (a sound from before
+      // they could move), so a moved band does not leak across.
+      const want = EQ_SHAPE_KEYS.includes(key) ? eqValue(snap.eq, key) : snap.eq[key];
+      if (want === undefined || same(eqValue(t.eq, key), want)) continue;
+      setEQ(t, key, want);
       touched = true;
     }
   }
