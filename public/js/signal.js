@@ -4,6 +4,7 @@ import { FXRack } from "./fxRack.js";
 import { fxStageOfModKey } from "./constants.js";
 import { ANALOG_FILTER_TYPES, buildAnalogFilterNode, disposeAnalogFilterNode, setAnalogFilterModel } from "./filterModels.js";
 import { state } from "./state.js";
+import { EQ_BAND_DEFS, eqValue, splitEqKey } from "./soundDefaults.js";
 
 
 /** @typedef {import("./types.js").Track} Track */
@@ -291,17 +292,10 @@ function disposeFilterNode(t) {
   t.filterNode = null;
 }
 
-// low/mid/high are the original three bands, unmoved — an old song with only
-// those three keys in t.eq still sounds exactly as it did. lomid and himid
-// are new peaking bands slotted either side of mid, default gain 0, so a
-// session that has never heard of them plays back unchanged.
-export const EQ_BANDS = [
-  { key: "low",   type: "lowshelf", freq: 250,  label: "low",    desc: "low shelf at 250Hz, ±18dB" },
-  { key: "lomid", type: "peaking",  freq: 600,  q: 1.0, label: "lo mid", desc: "peaking bell at 600Hz, ±18dB" },
-  { key: "mid",   type: "peaking",  freq: 1200, q: 0.8, label: "mid",    desc: "peaking bell at 1.2kHz, ±18dB" },
-  { key: "himid", type: "peaking",  freq: 3000, q: 1.0, label: "hi mid", desc: "peaking bell at 3kHz, ±18dB" },
-  { key: "high",  type: "highshelf", freq: 5000, label: "high",  desc: "high shelf at 5kHz, ±18dB" },
-];
+// The bands are data (EQ_BAND_DEFS, soundDefaults.js), so the song builder
+// and the drawn eq read the same table. Frequency and Q are per track too
+// (`lowFreq`, `lomidQ` ...), moved by dragging a band on the curve.
+export const EQ_BANDS = EQ_BAND_DEFS;
 
 export class EQChain {
   constructor(ctx, cfg) {
@@ -309,9 +303,9 @@ export class EQChain {
     for (const band of EQ_BANDS) {
       const f = ctx.createBiquadFilter();
       f.type = band.type;
-      f.frequency.value = band.freq;
-      if (band.q != null) f.Q.value = band.q;
-      f.gain.value = cfg[band.key] ?? 0;
+      f.frequency.value = eqValue(cfg, band.key + "Freq");
+      if (band.q != null) f.Q.value = eqValue(cfg, band.key + "Q");
+      f.gain.value = eqValue(cfg, band.key);
       this[band.key] = f;
       if (prev) prev.connect(f);
       else this.input = f;
@@ -319,9 +313,39 @@ export class EQChain {
     }
     this.output = prev;
   }
-  setBand(name, db) {
-    if (this[name]) this[name].gain.value = db;
+  /** Any eq key: a band's gain, `<band>Freq` or `<band>Q`. Ramped over a few
+   *  ms, since a drag moves these while the track plays. */
+  setBand(key, v) {
+    const s = splitEqKey(key);
+    const f = s && this[s.band.key];
+    if (!f) return;
+    const param = s.field === "freq" ? f.frequency : s.field === "q" ? f.Q : f.gain;
+    const now = f.context.currentTime;
+    try {
+      param.cancelScheduledValues(now);
+      param.setValueAtTime(param.value, now);
+      param.linearRampToValueAtTime(v, now + 0.012);
+    } catch { param.value = v; }
   }
+}
+
+/**
+ * An analyser on the eq's output, for the drawn eq's spectrum: made the first
+ * time the graph is on screen with audio running, and moved if the eq chain
+ * was rebuilt. A fan-out, so it changes nothing about the sound.
+ */
+export function eqAnalyser(t) {
+  const out = t.eqNode?.output;
+  if (!out || !state.audioCtx) return null;
+  if (t._eqAnalyser && t._eqAnalyserFrom === out) return t._eqAnalyser;
+  if (!t._eqAnalyser) {
+    t._eqAnalyser = state.audioCtx.createAnalyser();
+    t._eqAnalyser.fftSize = 4096;
+    t._eqAnalyser.smoothingTimeConstant = 0.8;
+  }
+  try { out.connect(t._eqAnalyser); } catch { return null; }
+  t._eqAnalyserFrom = out;
+  return t._eqAnalyser;
 }
 
 export function ensureEQ(t) {

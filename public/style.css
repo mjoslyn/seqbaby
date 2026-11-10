@@ -1382,6 +1382,74 @@ main {
   gap: 4px;
 }
 .sq-track__eq-panel[hidden] { display: none; }
+
+/* ---- the drawn eq (eqDraw.js) ----
+   The panel's range inputs stay in the DOM as the value and are hidden; the
+   curve writes them. Right-click on the graph still reaches their menu. */
+.sq-track__eq-panel.has-eqdraw .sq-fx__ctl {
+  position: absolute; width: 1px; height: 1px; overflow: hidden;
+  clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap;
+}
+.sq-track__eq-panel.has-eqdraw > .sq-fx__row { display: block; }
+.sq-eqdraw {
+  width: 100%;
+  margin-top: 4px;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.sq-eqdraw__svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 360 / 160;
+  background: radial-gradient(120% 140% at 50% 0%, #1a1d26 0%, #0b0c10 70%);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  touch-action: none;
+  cursor: crosshair;
+  overflow: hidden;
+}
+.sq-eqdraw__svg.is-over-node, .sq-eqdraw.is-dragging .sq-eqdraw__svg { cursor: grab; }
+.sq-eqdraw.is-dragging .sq-eqdraw__svg { cursor: grabbing; }
+.sq-eqdraw__grid { stroke: #ffffff10; stroke-width: 0.6; }
+.sq-eqdraw__grid--major { stroke: #ffffff1c; }
+.sq-eqdraw__zero { stroke: #ffffff33; stroke-width: 0.8; }
+.sq-eqdraw__axis {
+  fill: #ffffff55; font: 7px ui-monospace, monospace; text-anchor: middle; pointer-events: none;
+}
+.sq-eqdraw__axis--db { text-anchor: end; }
+.sq-eqdraw__spectrum { fill: #8fa3c71a; stroke: #8fa3c74d; stroke-width: 0.6; pointer-events: none; }
+.sq-eqdraw__shape {
+  fill: var(--c); fill-opacity: 0; stroke: var(--c); stroke-opacity: 0;
+  stroke-width: 0.8; pointer-events: none; transition: fill-opacity 120ms, stroke-opacity 120ms;
+}
+.sq-eqdraw__shape.is-lit { fill-opacity: 0.16; stroke-opacity: 0.55; }
+.sq-eqdraw__fill { fill: #ffa94d14; pointer-events: none; }
+.sq-eqdraw__curve {
+  fill: none; stroke: #ffe8cc; stroke-width: 1.6; stroke-linejoin: round;
+  filter: drop-shadow(0 0 2px #ffa94d88); pointer-events: none;
+}
+.sq-eqdraw__band { cursor: grab; outline: none; }
+.sq-eqdraw__ring { fill: none; stroke: var(--c); stroke-opacity: 0; stroke-width: 1.4; transition: stroke-opacity 120ms; }
+.sq-eqdraw__dot { fill: #0b0c10; stroke: var(--c); stroke-width: 1.6; }
+.sq-eqdraw__band.is-on .sq-eqdraw__dot { fill: var(--c); }
+.sq-eqdraw__band.is-hover .sq-eqdraw__ring,
+.sq-eqdraw__band.is-sel .sq-eqdraw__ring,
+.sq-eqdraw__band:focus-visible .sq-eqdraw__ring { stroke-opacity: 0.8; }
+.sq-eqdraw__num { fill: var(--c); font: 700 7.5px ui-monospace, monospace; pointer-events: none; }
+.sq-eqdraw__band.is-on .sq-eqdraw__num { fill: #0b0c10; }
+.sq-eqdraw__info {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  margin-top: 6px; font-size: 11px; font-variant-numeric: tabular-nums;
+}
+.sq-eqdraw__name { font-weight: 600; min-width: 46px; }
+.sq-eqdraw__vals { color: var(--fg); white-space: pre; flex: 1 1 auto; }
+.sq-eqdraw__q { display: inline-flex; gap: 4px; }
+.sq-eqdraw__q[hidden] { display: none; }
+.sq-eqdraw__info button { font-size: 10px; padding: 2px 6px; }
+@media (max-width: 768px) {
+  .sq-eqdraw__info button { min-height: 36px; padding: 4px 10px; }
+}
 .sq-track__eq[aria-pressed="true"] {
   background: #ffa94d;
   color: #0b0d10;
