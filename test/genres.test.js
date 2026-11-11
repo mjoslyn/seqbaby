@@ -25,7 +25,9 @@ test("search ranks a name that starts with the query first", () => {
 
 test("search finds aliases, words inside names, accents and case", () => {
   assert.equal(searchGenres("dnb")[0].id, "dnb");
-  assert.equal(searchGenres("2-step")[0].id, "garage");
+  assert.equal(searchGenres("2-step")[0].id, "2-step");
+  assert.equal(searchGenres("two step")[0].id, "2-step");
+  assert.equal(searchGenres("ukg")[0].id, "garage");
   assert.ok(searchGenres("hop").some((g) => g.id === "lofi"));
   assert.ok(searchGenres("BOSSA").some((g) => g.id === "bossa"));
   assert.deepEqual(searchGenres("zzzz"), []);
