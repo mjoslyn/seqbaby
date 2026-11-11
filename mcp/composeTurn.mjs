@@ -30,6 +30,28 @@ export const DEFAULT_EFFORT = process.env.ANTHROPIC_EFFORT || "medium";
 // stops a loop that has lost the plot from spending all of them.
 const MAX_TOOL_ROUNDS = Number(process.env.COMPOSE_MAX_ROUNDS || 60);
 const MAX_HISTORY_TURNS = 16;
+// How many times a turn that stopped short is sent back to finish.
+const MAX_NUDGES = 2;
+
+// A request that asks for music to be made or changed, as opposed to a
+// question about the song. Only these are sent back for changing nothing.
+const MAKE_RE = /\b(build|make|write|create|compose|add|give|put|turn|change|replace|remix|generate|start|song|beat|track|groove|loop|bassline|melody|chords?)\b/i;
+
+/**
+ * Why a turn that has stopped calling tools is not finished, as a message to
+ * send it back with, or null when it may stop. Two cases: asked to make
+ * something, it changed nothing; or tracks it was building will be silent.
+ */
+export function unfinished(ctx, before, toolCalls, message) {
+  const after = JSON.stringify(ctx.song);
+  if (after === before && MAKE_RE.test(String(message || ""))) {
+    return "You haven't changed the song yet. Make what was asked for with the tools now, then reply.";
+  }
+  if (toolCalls === 0) return null;
+  const silent = (sb.validate(ctx.song).warnings || []).filter((w) => /silent/.test(w));
+  if (!silent.length) return null;
+  return `Not finished: validate_song says ${silent.join("; ")}. Give those tracks parts (or remove the ones the song doesn't need), then reply.`;
+}
 
 // Enough to work with if the guide file can't be found. Deliberately NOT a
 // second copy of it -- a degraded mode that points at the tools that describe
@@ -195,6 +217,8 @@ export async function runComposeTurn({
   ];
 
   let reply = "";
+  let toolCalls = 0;
+  let nudges = 0;
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
     // The stable prefix is big -- the compose guide plus the tool schemas --
     // and the prefix renders tools -> system -> messages, so one breakpoint on
@@ -230,8 +254,21 @@ export async function runComposeTurn({
         .map((b) => b.text)
         .join("\n")
         .trim();
+      // Stopping is not the same as finishing. A smaller model handed a long
+      // brief (a whole bebop song) can stop after a few calls, or none, with
+      // the starter tracks still empty. When it stops with the song unchanged
+      // after being asked for one, or with tracks that will be silent, say so
+      // and send it back, a bounded number of times.
+      const nudge = unfinished(ctx, before, toolCalls, message);
+      if (nudge && nudges < MAX_NUDGES && round < MAX_TOOL_ROUNDS - 1) {
+        nudges++;
+        await onEvent({ type: "tool", name: "check", ok: false, summary: "not finished yet, carrying on" });
+        messages.push({ role: "user", content: nudge });
+        continue;
+      }
       break;
     }
+    toolCalls += toolUses.length;
 
     const results = [];
     for (const tu of toolUses) {
