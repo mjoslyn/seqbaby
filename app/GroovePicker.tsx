@@ -1,6 +1,7 @@
 "use client";
 
-// The compose panel's `groove` tab: browse or search a genre, pick one, and
+// The compose panel's `genre` tab (the feature is still called groove in
+// the code, the storage key and the docs): browse or search a genre, pick one, and
 // a compose turn writes a whole song in it. The genres, their plans and the
 // dice are app/songs/genres.js; this is the picker, and it is only the
 // picker: ComposeChat renders it inside its own drawer and is handed the

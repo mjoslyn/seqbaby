@@ -150,7 +150,7 @@ export default function ComposeChat({
   const [siteDry, setSiteDry] = useState(budgetOut);
   const [open, setOpen] = useState(false);
   // What the drawer shows: the conversation, or the genre picker.
-  const [tab, setTab] = useState<"chat" | "groove">("chat");
+  const [tab, setTab] = useState<"chat" | "genre">("chat");
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
@@ -591,7 +591,7 @@ export default function ComposeChat({
     setSaveNote("");
   }, [review, writeLive]);
 
-  // The groove tab (GroovePicker.tsx) starts a turn from a genre: its brief
+  // The genre tab (GroovePicker.tsx) starts a turn from a genre: its brief
   // goes in the box and is sent as an ordinary turn, so it lands in the
   // review bar like any other and stays in the box if the turn cannot run.
   const buildGroove = useCallback(
@@ -664,12 +664,12 @@ export default function ComposeChat({
               </button>
               <button
                 role="tab"
-                aria-selected={tab === "groove"}
-                className={`${styles.grooveChip} ${tab === "groove" ? styles.grooveChipOn : ""}`}
-                onClick={() => setTab("groove")}
+                aria-selected={tab === "genre"}
+                className={`${styles.grooveChip} ${tab === "genre" ? styles.grooveChipOn : ""}`}
+                onClick={() => setTab("genre")}
                 title="pick a genre and it writes a whole song in it"
               >
-                groove
+                genre
               </button>
             </div>
             <button className={styles.panelClose} onClick={() => setOpen(false)} aria-label="close" title="close">
@@ -693,7 +693,7 @@ export default function ComposeChat({
               </select>
             </label>
           )}
-          {tab === "groove" && <GroovePicker onBuild={buildGroove} busy={sending || composeOff} />}
+          {tab === "genre" && <GroovePicker onBuild={buildGroove} busy={sending || composeOff} />}
           <div className={styles.chatLog} ref={logRef} hidden={tab !== "chat"}>
             {messages.length === 0 && (
               <div className={styles.chatEmpty}>

@@ -68,7 +68,7 @@ env / fx / eq / comp / mod / automation per track.
 │   ├── songs/suggestName.ts  the name both save UIs offer in a blank name field
 │   ├── Preloader.tsx + preloaderMarkup.ts  loading overlay: markup + inline driver
 │   ├── login/ settings/ u/[username]/       auth, account settings, public profiles
-│   ├── GroovePicker.tsx + songs/genres.js  the compose panel's `groove` tab: search 150 genres by name / alias / family, pick one, and a compose turn builds a whole song in it
+│   ├── GroovePicker.tsx + songs/genres.js  the compose panel's `genre` tab: search 150 genres by name / alias / family, pick one, and a compose turn builds a whole song in it
 │   ├── ComposeChat.tsx        the in-studio compose panel: ask for a song, in words; a turn's changes land in a review bar (audition / keep), never straight in
 │   ├── JamPanel.tsx           the jam room: who is in it, the connection (a WebSocket to workers/jamRoom.ts), the invite link. The engine half is public/js/jam.js
 │   ├── shareCard.ts + shareCopy.js  the link preview, and its sentences (who shared what)
@@ -4582,7 +4582,8 @@ panel ──▶ POST /api/compose ──▶ ComposeLimits.take ──▶ Compose
 
 ### Groove — a whole song from a genre (`app/GroovePicker.tsx` + `app/songs/genres.js`)
 
-Groove is a TAB of the compose drawer (`ask | groove` in its head), not a
+Groove is a TAB of the compose drawer (`ask | genre` in its head; the tab
+says `genre` because `groove` is already the name of the track-list view), not a
 button of its own: it was one, beside `compose`, with a second drawer, a
 second model menu and an event between the two. The tab holds the picker: a
 search box with autocomplete over 150 genres (by name,
