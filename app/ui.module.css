@@ -679,12 +679,15 @@ a.bylineLike { text-decoration: none; }
     display: block;
     position: fixed;
     inset: 0;
+    top: var(--sq-topbar-h, 0px);
     z-index: 299;
     background: rgba(0, 0, 0, 0.35);
   }
+  /* Under the top bar, not over it: the bar stays in sight and in reach, and
+     the drawer takes the rest of the window's height. */
   .chatPanel {
     position: fixed;
-    top: 0;
+    top: var(--sq-topbar-h, 0px);
     right: 0;
     bottom: 0;
     z-index: 300;
@@ -692,13 +695,13 @@ a.bylineLike { text-decoration: none; }
     max-width: 90vw;
     max-height: none;
     margin: 0;
-    border-top: 0;
     border-right: 0;
     border-bottom: 0;
     border-radius: 0;
     box-shadow: -12px 0 40px rgba(0, 0, 0, 0.55);
   }
   .chatLog { max-height: none; }
+  .grooveList { max-height: none; }
 }
 
 /* ============================================================ */
@@ -841,6 +844,23 @@ a.bylineLike { text-decoration: none; }
     padding: 12px 12px calc(12px + env(safe-area-inset-bottom));
     border-radius: 14px;
   }
+  /* Compose and groove are drawers, not sheets: from under the bar to the
+     bottom of the screen, full width, so the conversation and the genre list
+     get the whole height. After `.panel` so it wins the shared properties. */
+  .chatPanel {
+    top: var(--sq-topbar-h, 0px);
+    left: 0;
+    right: 0;
+    bottom: 0;
+    max-width: none;
+    max-height: none;
+    margin: 0;
+    border-radius: 0;
+    border-left: 0;
+    border-right: 0;
+    border-bottom: 0;
+  }
+  .chatLog, .grooveList { max-height: none; }
   .saveInput, .smallBtn { font-size: 14px; padding: 10px 11px; }
   .songRow { gap: 2px; padding: 3px 0; }
   .songRowTitle { font-size: 13px; padding: 8px 0; }
@@ -854,6 +874,7 @@ a.bylineLike { text-decoration: none; }
 @media (min-width: 481px) and (max-width: 768px) {
   .barItemsOpen { max-width: 340px; margin-left: auto; }
   .panel { max-width: 420px; margin-left: auto; }
+  .chatPanel { max-width: none; margin-left: 0; }
 }
 
 /* ---- the jam panel: several studios, one song ---------------------------
