@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
-import { currentUserId } from "@/lib/auth/session";
+import { currentUser } from "@/lib/auth/session";
 import { cfEnv } from "@/lib/cf";
 import { bucketFor, newJobId, newSecret, siteOutOfBudget } from "@/lib/composeJobs.js";
 import { newCtx } from "@/mcp/composeTurn.mjs";
 import { SITE_OUT_OF_BUDGET } from "@/lib/composeKey.js";
+import { canPickModel, pickedModel } from "@/lib/composeModels.js";
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +24,7 @@ export async function POST(req: Request) {
     message?: string;
     history?: ChatTurn[];
     session?: unknown;
+    model?: string;
   };
   try {
     body = await req.json();
@@ -31,7 +33,8 @@ export async function POST(req: Request) {
   }
 
   const env = await cfEnv();
-  const userId = await currentUserId();
+  const user = await currentUser();
+  const userId = user?.id ?? null;
   if (!userId) {
     return NextResponse.json({ error: "make an account to compose" }, { status: 401 });
   }
@@ -65,6 +68,10 @@ export async function POST(req: Request) {
     .slice(-16)
     .map((h) => ({ role: h.role, text: h.text.slice(0, 20000) }));
 
+  // A model asked for is honoured only for an account on the deploy's list,
+  // and only from COMPOSE_MODELS; anything else runs on the deploy's own.
+  const model = pickedModel(body.model, canPickModel(user?.email, env.COMPOSE_MODEL_PICKERS));
+
   const bucket = bucketFor({ userId, keyHash: null });
   if (!bucket) return NextResponse.json({ error: "couldn't tell whose turn that is" }, { status: 400 });
 
@@ -79,7 +86,7 @@ export async function POST(req: Request) {
   try {
     const job = env.COMPOSE_JOB.get(env.COMPOSE_JOB.idFromName(id));
     await job.start(
-      { id, userId, keyHash: null, bucket, viewToken, message, history, session: body.session },
+      { id, userId, keyHash: null, bucket, viewToken, message, history, session: body.session, model },
     );
   } catch (e) {
     console.error("[compose] could not start the job", e);

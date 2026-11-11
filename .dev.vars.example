@@ -17,6 +17,8 @@ BETTER_AUTH_SECRET=change-me-to-a-long-random-string
 # compose on a key of their own.
 # ANTHROPIC_API_KEY=sk-ant-xxx
 # ANTHROPIC_MODEL=claude-haiku-5-5
+# Accounts (by email) that get a model menu in the compose panel:
+# COMPOSE_MODEL_PICKERS=you@example.com, friend@example.com
 
 # Superbugs page (app/superbugs, app/api/bugs) — OPTIONAL. A fine-grained GitHub
 # token with Issues: write on the repo. Without it the form falls back to a

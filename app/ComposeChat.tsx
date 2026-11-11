@@ -8,6 +8,9 @@ import { trySave } from "@/app/songs/trySave";
 import { composeModelLabel } from "@/lib/composeModels.js";
 import { signupHref } from "@/lib/safeNext.js";
 import { SITE_OUT_OF_BUDGET } from "@/lib/composeKey.js";
+import { COMPOSE_MODELS, DEFAULT_COMPOSE_MODEL } from "@/lib/composeModels.js";
+
+const MODEL_STORE = "seqbaby.composeModel.v1";
 import styles from "@/app/ui.module.css";
 
 type Msg =
@@ -111,11 +114,38 @@ export default function ComposeChat({
   signedIn,
   serverKey,
   budgetOut,
+  canPickModel = false,
+  defaultModel = DEFAULT_COMPOSE_MODEL,
 }: {
   signedIn: boolean;
   serverKey: boolean;
   budgetOut: boolean;
+  /** This account is on the deploy's COMPOSE_MODEL_PICKERS: show a model menu.
+   *  The route checks the same list, so the menu is only ever a request. */
+  canPickModel?: boolean;
+  /** The deploy's own model, what the menu starts on. */
+  defaultModel?: string;
 }) {
+  // The picked model, remembered per browser. Only sent when the account may
+  // pick; anything the route does not allow runs on the deploy's model.
+  const [model, setModel] = useState(defaultModel);
+  useEffect(() => {
+    if (!canPickModel) return;
+    try {
+      const saved = window.localStorage.getItem(MODEL_STORE);
+      if (saved && COMPOSE_MODELS.some((m) => m.id === saved)) setModel(saved);
+    } catch {
+      /* blocked storage: the default stands */
+    }
+  }, [canPickModel]);
+  const pickModel = (id: string) => {
+    setModel(id);
+    try {
+      window.localStorage.setItem(MODEL_STORE, id);
+    } catch {
+      /* blocked storage: it holds for this page */
+    }
+  };
   const [ready, setReady] = useState(false);
   // The site's key is out of budget: known from the page, or learned from a
   // turn that failed for it since.
@@ -336,7 +366,7 @@ export default function ComposeChat({
       const res = await fetch("/api/compose", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ message: text, history, session }),
+        body: JSON.stringify({ message: text, history, session, ...(canPickModel ? { model } : {}) }),
       });
       // Anything that failed before the route got to stream -- auth, a bad
       // request, a gateway page -- arrives as an ordinary body with a status
@@ -457,7 +487,7 @@ export default function ComposeChat({
       setSending(false);
       setLive([]);
     }
-  }, [input, sending, messages, signedIn]);
+  }, [input, sending, messages, signedIn, canPickModel, model]);
 
   // ---- the review bar ------------------------------------------------------
   //
@@ -634,6 +664,23 @@ export default function ComposeChat({
               ×
             </button>
           </div>
+          {canPickModel && (
+            <label className={styles.chatModelRow}>
+              <span className={styles.chatModelLabel}>model</span>
+              <select
+                className={styles.chatModelSelect}
+                value={model}
+                onChange={(e) => pickModel(e.target.value)}
+                disabled={sending}
+              >
+                {COMPOSE_MODELS.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           <div className={styles.chatLog} ref={logRef}>
             {messages.length === 0 && (
               <div className={styles.chatEmpty}>

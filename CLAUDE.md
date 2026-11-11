@@ -4551,9 +4551,16 @@ panel ──▶ POST /api/compose ──▶ ComposeLimits.take ──▶ Compose
   A bucket is a `ComposeLimits` Durable Object, single-threaded, so ten
   requests sent together are taken one at a time and only as many as the
   limit get a slot (`takeSlot` / `releaseSlot`, lib/composeJobs.js).
-- **The browser never names a model** (`lib/composeModels.js`). Every turn,
-  runs on the deploy's `ANTHROPIC_MODEL`, else `DEFAULT_COMPOSE_MODEL`,
-  because the site is billed. There is no picker.
+- **The model is the deploy's, unless the account may pick**
+  (`lib/composeModels.js`). A turn runs on `ANTHROPIC_MODEL`, else
+  `DEFAULT_COMPOSE_MODEL`, because the site is billed. An account whose email
+  is on `COMPOSE_MODEL_PICKERS` (a secret, comma or space separated, so no
+  address is committed) gets a model menu in the panel
+  (`COMPOSE_MODELS`, remembered per browser as `seqbaby.composeModel.v1`),
+  and the route honours the `model` it sends only after checking the same
+  list (`canPickModel`, `pickedModel`); anything else runs on the deploy's.
+  The job carries it in its input (`ComposeJobInput.model`).
+  `test/composeModels.test.js`.
 - **The site's key running dry switches compose off.** A turn on the deploy's
   key that fails for want of credit (or the console's spend limit) sets a flag
   in D1's `site_flags` (`markSiteOutOfBudget`, lib/composeJobs.js); the studio

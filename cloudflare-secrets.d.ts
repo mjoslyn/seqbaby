@@ -12,6 +12,8 @@ interface CloudflareEnv {
   EMAIL_FROM?: string;
   ANTHROPIC_API_KEY?: string;
   ANTHROPIC_MODEL?: string;
+  /** Emails allowed to pick their compose model (comma or space separated). */
+  COMPOSE_MODEL_PICKERS?: string;
   GITHUB_ISSUES_TOKEN?: string;
   GITHUB_ISSUES_REPO?: string;
   TURNSTILE_SECRET_KEY?: string;

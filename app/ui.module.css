@@ -533,6 +533,18 @@ a.bylineLike { text-decoration: none; }
 .chatActivity { align-self: flex-start; color: #9aa0aa; font-size: 10.5px; padding: 0 2px; }
 .chatWarn { align-self: flex-start; color: #e3c47c; font-size: 10.5px; padding: 0 2px; }
 .chatModelLabel { color: #9aa0aa; font-size: 10.5px; }
+/* The model menu, for an account on the deploy's COMPOSE_MODEL_PICKERS. */
+.chatModelRow { display: flex; align-items: center; justify-content: flex-end; gap: 6px; margin: -2px 0 6px; }
+.chatModelSelect {
+  background: #0e0f12;
+  border: 1px solid #2a2d35;
+  border-radius: 6px;
+  color: #e8e8ea;
+  font: inherit;
+  font-size: 11px;
+  padding: 4px 6px;
+}
+.chatModelSelect:focus { outline: none; border-color: #6ee7b7; }
 .chatRow { display: flex; gap: 6px; align-items: flex-end; }
 .chatTextarea {
   flex: 1;

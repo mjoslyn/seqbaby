@@ -19,6 +19,7 @@ import { first } from "@/lib/data/db.js";
 import { SITE_DESCRIPTION, SITE_URL, shareCard } from "@/app/shareCard";
 import { linkedSong, linkedSongCard, jamHostName } from "@/app/songs/linkedSongTitle";
 import { songShareTitle, jamShareTitle } from "@/app/shareCopy";
+import { DEFAULT_COMPOSE_MODEL, canPickModel } from "@/lib/composeModels.js";
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
@@ -161,6 +162,8 @@ async function AccountBarSlot({ searchParams }: { searchParams: SearchParams }) 
       avatarGrid={avatarGrid}
       serverKey={!!env.ANTHROPIC_API_KEY}
       budgetOut={budgetOut}
+      canPickModel={canPickModel(user?.email, env.COMPOSE_MODEL_PICKERS)}
+      defaultModel={env.ANTHROPIC_MODEL || DEFAULT_COMPOSE_MODEL}
       viewing={viewing}
     />
   );

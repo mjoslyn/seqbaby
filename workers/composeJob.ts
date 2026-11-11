@@ -40,6 +40,8 @@ export type ComposeJobInput = {
   message: string;
   history: { role: string; text: string }[];
   session: unknown;
+  /** A model the account picked (already checked by the route), else the deploy's. */
+  model?: string | null;
 };
 
 export type ComposeProgress = {
@@ -79,6 +81,7 @@ export class ComposeJob extends DurableObject<CloudflareEnv> {
       message: input.message,
       history: input.history,
       session: input.session,
+      model: input.model || null,
     }));
     const progress: ComposeProgress = {
       userId: input.userId,
@@ -129,9 +132,10 @@ export class ComposeJob extends DurableObject<CloudflareEnv> {
     try {
       const obj = await this.env.BLOBS.get(inputKey(id));
       if (!obj) throw new Error("that job's details were no longer on the server.");
-      const job = (await obj.json()) as { message: string; history: never[]; session: unknown };
+      const job = (await obj.json()) as { message: string; history: never[]; session: unknown; model?: string | null };
       const out = await runComposeTurn({
         apiKey,
+        ...(job.model ? { model: job.model } : {}),
         message: job.message,
         history: job.history,
         session: job.session,

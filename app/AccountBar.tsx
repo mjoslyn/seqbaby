@@ -38,6 +38,8 @@ export function AccountBar({
   avatarGrid = null,
   serverKey = false,
   budgetOut = false,
+  canPickModel = false,
+  defaultModel,
   viewing = null,
 }: {
   /** Who is signed in. The compose panel is keyed by it, so a transcript
@@ -54,6 +56,10 @@ export function AccountBar({
   serverKey?: boolean;
   /** Whether that key has run out of budget (lib/composeJobs.js). */
   budgetOut?: boolean;
+  /** This account may pick its compose model (COMPOSE_MODEL_PICKERS). */
+  canPickModel?: boolean;
+  /** The deploy's own compose model. */
+  defaultModel?: string;
   /** Someone else's song, named by the URL: drawn as "title by @owner". */
   viewing?: LinkedSongCard | null;
 }) {
@@ -194,6 +200,8 @@ export function AccountBar({
           signedIn={!!name}
           serverKey={serverKey}
           budgetOut={budgetOut}
+          canPickModel={canPickModel}
+          defaultModel={defaultModel}
         />
         <button
           className={styles.shareBtn}
