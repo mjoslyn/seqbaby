@@ -104,7 +104,8 @@ test("every family has forms chain mode can play", () => {
 
 test("a plan names only engines, presets, scales, kits and step strings that exist", () => {
   const planned = GENRES.filter((g) => g.plan);
-  assert.ok(planned.length >= 10, `rewritten genres: ${planned.length}`);
+  assert.ok(planned.length >= 40, `rewritten genres: ${planned.length}`);
+  for (const f of GENRE_FAMILIES) assert.ok(planned.some((g) => g.family === f.id), `${f.id} has a planned genre`);
   const voiceOk = (spec, where) => {
     const { engine, preset } = parseVoice(spec);
     const e = sb.resolveEngine(engine);
@@ -130,9 +131,10 @@ test("a plan names only engines, presets, scales, kits and step strings that exi
   }
   for (const g of planned) {
     const p = g.plan;
-    for (const k of p.kits) assert.ok(KITS[k], `${g.id}: kit ${k}`);
-    assert.ok(p.drums.length >= 2, `${g.id}: drum variants`);
-    for (const d of p.drums) {
+    for (const k of p.kits || []) assert.ok(KITS[k], `${g.id}: kit ${k}`);
+    // A genre may have no drums at all (ambient); one that has them has a choice.
+    if (p.drums) assert.ok(p.drums.length >= 2 && p.kits?.length, `${g.id}: drum variants and a kit`);
+    for (const d of p.drums || []) {
       for (const [role, str] of Object.entries(d)) {
         assert.equal(str.length, 16, `${g.id}: ${role} ${str}`);
         assert.ok(sb.parseSteps(str).steps.some(Boolean), `${g.id}: ${role} has a hit`);
@@ -152,6 +154,21 @@ test("a plan names only engines, presets, scales, kits and step strings that exi
       for (const sc of h.slice(0, cut).split("/")) assert.ok(sb.SCALE_NAMES.includes(sc), `${g.id}: scale ${sc}`);
     }
     for (const text of [...(p.bass || []), ...p.harmony, ...p.moves, ...p.avoid]) proseOk(text, g.id);
+    // A move tagged with a part is only drawn with it, and two are always there to draw.
+    const tagged = p.moves.map((m) => /^\[([^\]]+)\] /.exec(m)?.[1]).filter(Boolean);
+    for (const role of tagged) assert.ok(p.optional?.[role], `${g.id}: a move needs [${role}], which is no optional part`);
+    assert.ok(p.moves.length - tagged.length >= 2, `${g.id}: two moves that need no optional part`);
+    for (let seed = 1; seed <= 40; seed++) {
+      const r = rollGenre(g, seed);
+      assert.equal(r.moves.length, 2, `${g.id}: two moves`);
+      const roles = new Set(r.voices.map((v) => v.role));
+      for (const m of r.moves) {
+        assert.doesNotMatch(m, /^\[/, `${g.id}: the tag is not sent`);
+        const src = p.moves.find((x) => x.endsWith(m));
+        const need = /^\[([^\]]+)\] /.exec(src)?.[1];
+        if (need) assert.ok(roles.has(need), `${g.id}: "${m}" without ${need}`);
+      }
+    }
     for (const a of p.angles || []) assert.ok(a, `${g.id}: angle`);
     // What the dice say is a song the builder takes.
     for (let seed = 1; seed <= 20; seed++) {
@@ -184,4 +201,16 @@ test("the genre tools list, find and roll a brief without touching the song", ()
   assert.equal(rolled.brief, genrePrompt(genreById("house"), "", rolled.seed));
   assert.throws(() => tool("genre_brief")(ctx, { genre: "zzzz" }), /no genre matches/);
   assert.equal(JSON.stringify(ctx.song), before);
+});
+
+test("a genre with no drums says so, and rolls no kit", () => {
+  const g = genreById("ambient");
+  for (let seed = 1; seed <= 30; seed++) {
+    const r = rollGenre(g, seed);
+    assert.equal(r.drums, undefined);
+    assert.equal(r.kit, undefined);
+    const p = genrePrompt(g, "", seed);
+    assert.match(p, /No drum kit/);
+    assert.doesNotMatch(p, /- Drums:/);
+  }
 });
