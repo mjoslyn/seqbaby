@@ -17,6 +17,7 @@ import { fileURLToPath } from "node:url";
 import * as sb from "../public/js/songBuilder.js";
 import * as strudel from "../public/js/strudel.js";
 import { ANALOG_FILTER_INFO, ANALOG_FILTER_TYPES, FILTER_TYPES } from "../public/js/soundDefaults.js";
+import { GENRE_FAMILIES, genreById, genrePrompt, searchGenres } from "../app/songs/genres.js";
 
 /** The compose skill's path within the repo, for whoever can locate the repo. */
 export const GUIDE_RELATIVE = path.join(".claude", "skills", "compose", "SKILL.md");
@@ -147,6 +148,37 @@ export const TOOLS = [
     description: "One engine in full: what each of its four sliders does, its panel controls with ranges and defaults, its presets, and which LFO / automation targets it takes. For the sampler, every bundled sample (`samples`); for granular, every texture.",
     inputSchema: { engine: z.string().describe("engine key or name, e.g. dm:silverbox, silverbox, plaits:fm") },
     handler: (ctx, { engine }) => sb.describeEngine(sb.resolveEngine(engine).key),
+  },
+
+  // ---- genres -------------------------------------------------------------------
+  // The studio's groove picker (app/songs/genres.js), for an agent asked for
+  // "a techno track" with nothing else to go on. Neither touches the song.
+  {
+    name: "list_genres", title: "List genres",
+    description: "The genres there are briefs for: id, name, family, tempo range, and whether it has a full plan (drums, instruments, harmony and moves are then decided for you). Search by name or alias, or filter by family. Use genre_brief on one before writing a song in it.",
+    inputSchema: {
+      query: z.string().optional().describe("a name, alias or word, e.g. \"dnb\", \"house\", \"jazz\""),
+      family: z.string().optional().describe(`one of: ${GENRE_FAMILIES.map(f => f.id).join(", ")}`),
+    },
+    handler: (ctx, { query, family }) => {
+      if (family && !GENRE_FAMILIES.some(f => f.id === family)) throw new sb.SongError(`unknown family ${JSON.stringify(family)}; one of ${GENRE_FAMILIES.map(f => f.id).join(", ")}`);
+      return searchGenres(query || "", family || "").map(g => ({ id: g.id, name: g.name, family: g.family, bpm: g.bpm, planned: !!g.plan }));
+    },
+  },
+  {
+    name: "genre_brief", title: "Genre brief",
+    description: "What to build for a song in a genre: the genre's idiom plus choices already made for this one (exact tempo, key, form in bars, and for a planned genre the drum bar to start from, an engine and preset per part, the progression, two moves and what to avoid). Follow it as given. The same seed gives the same brief; leave seed out for a fresh one each time, which is what makes two songs in one genre differ.",
+    inputSchema: {
+      genre: z.string().describe("a genre id or name from list_genres, e.g. \"techno\", \"2-step\", \"lo-fi hip hop\""),
+      seed: z.number().int().optional().describe("the dice; omit for a random roll, pass one back to get the same brief again"),
+      extra: z.string().optional().describe("further wishes, which win over the rolled choices: \"in D minor\", \"no vocals\""),
+    },
+    handler: (ctx, { genre, seed, extra }) => {
+      const g = genreById(genre) || searchGenres(genre)[0];
+      if (!g) throw new sb.SongError(`no genre matches ${JSON.stringify(genre)}; list_genres has them all`);
+      const dice = seed ?? 1 + Math.floor(Math.random() * 0x7fffffff);
+      return { genre: g.id, seed: dice, brief: genrePrompt(g, extra || "", dice) };
+    },
   },
 
   // ---- tracks --------------------------------------------------------------------

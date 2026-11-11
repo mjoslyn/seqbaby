@@ -4296,10 +4296,12 @@ agent ──▶ mcp/server.mjs ──▶ songBuilder.js ──▶ { _version, bp
   a shorter string tiling a longer pattern. `describePattern` reads one back
   the same way, so `get_song` shows an agent what it wrote in the notation
   it wrote it in.
-- **The MCP server holds one song** and keeps the tool list short (38 tools on stdio, 36 of them shared with the compose panel, which lacks
+- **The MCP server holds one song** and keeps the tool list short (40 tools on stdio, 38 of them shared with the compose panel, which lacks
   `share_song` and `audition_song`:
-  song / engines / tracks / steps / sound / modulation / generators / code /
-  out). `write_code` takes Strudel code (strudel.js, the same reader as
+  song / engines / genres / tracks / steps / sound / modulation / generators / code /
+  out). `list_genres` / `genre_brief` are the groove picker for an agent:
+  the same table and the same dice (`genrePrompt`, a random seed unless one
+  is passed, which is returned so a brief can be had again), read only. `write_code` takes Strudel code (strudel.js, the same reader as
   the studio's code drawer), which is the tersest way an agent has to spell a
   part; `song_as_code` writes the song back out as Strudel.
   What an agent needs to KNOW is served as resources rather than packed into

@@ -474,8 +474,13 @@ against these before validating it:
 - **Registers.** One part in each of sub, bass, mid and top at a time; two
   parts in one octave are one part too many unless they are a unison.
 
-A message from the studio's `groove` picker comes with decisions already
-made (tempo, key, the drum bar to start from, which instrument plays which
+Asked for a genre with little else ("a dnb track", "something lo-fi"), call
+`genre_brief` first and build what it says; `list_genres` finds the id. Do
+not call it when the person has already said what they want in detail, or
+when the message is itself such a brief.
+
+A message from the studio's `groove` picker, like a `genre_brief` result,
+comes with decisions already made (tempo, key, the drum bar to start from, which instrument plays which
 part, the progression, the form). Follow them as given: they are what makes
 this build different from the last, and each engine, preset and step string
 in them has been checked against the engine.

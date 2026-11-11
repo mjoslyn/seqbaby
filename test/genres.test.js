@@ -4,6 +4,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { FAMILY_PLANS, GENRES, GENRE_FAMILIES, KITS, genreById, genrePrompt, parseForm, parseVoice, rollGenre, rollSummary, searchGenres } from "../app/songs/genres.js";
 import * as sb from "../public/js/songBuilder.js";
+import { TOOLS } from "../mcp/tools.mjs";
 
 test("every genre is whole, unique and in a known family", () => {
   assert.ok(GENRES.length >= 100, `a big list: ${GENRES.length}`);
@@ -162,4 +163,25 @@ test("a plan names only engines, presets, scales, kits and step strings that exi
       });
     }
   }
+});
+
+test("the genre tools list, find and roll a brief without touching the song", () => {
+  const tool = (name) => TOOLS.find((t) => t.name === name).handler;
+  const ctx = { song: sb.newSong({ bpm: 111 }), songName: "x" };
+  const before = JSON.stringify(ctx.song);
+  const all = tool("list_genres")(ctx, {});
+  assert.equal(all.length, GENRES.length);
+  assert.ok(all.find((g) => g.id === "techno").planned && !all.find((g) => g.id === "flamenco").planned);
+  assert.ok(tool("list_genres")(ctx, { family: "bass" }).every((g) => g.family === "bass"));
+  assert.equal(tool("list_genres")(ctx, { query: "ukg" })[0].id, "garage");
+  assert.throws(() => tool("list_genres")(ctx, { family: "nope" }), /unknown family/);
+  const a = tool("genre_brief")(ctx, { genre: "techno", seed: 7 });
+  assert.equal(a.brief, genrePrompt(genreById("techno"), "", 7));
+  assert.deepEqual(tool("genre_brief")(ctx, { genre: "techno", seed: 7 }), a);
+  assert.equal(tool("genre_brief")(ctx, { genre: "drum and bass", seed: 7 }).genre, "dnb");
+  assert.match(tool("genre_brief")(ctx, { genre: "acid", seed: 2, extra: "no claps" }).brief, /wins over anything above: no claps$/);
+  const rolled = tool("genre_brief")(ctx, { genre: "house" });
+  assert.equal(rolled.brief, genrePrompt(genreById("house"), "", rolled.seed));
+  assert.throws(() => tool("genre_brief")(ctx, { genre: "zzzz" }), /no genre matches/);
+  assert.equal(JSON.stringify(ctx.song), before);
 });
