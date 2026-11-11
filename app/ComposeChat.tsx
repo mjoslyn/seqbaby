@@ -6,6 +6,7 @@ import { loadSongChat, saveSong, saveSongChat } from "@/app/songs/actions";
 import { markSaved } from "@/app/songs/confirmDiscard";
 import { trySave } from "@/app/songs/trySave";
 import { composeModelLabel } from "@/lib/composeModels.js";
+import { signupHref } from "@/lib/safeNext.js";
 import { API_KEY_CONSOLE_URL, SITE_OUT_OF_BUDGET, looksLikeApiKey, maskApiKey } from "@/lib/composeKey.js";
 import styles from "@/app/ui.module.css";
 
@@ -703,7 +704,16 @@ export default function ComposeChat({
           way to find out why it is there. */}
       <button
         className={`${styles.accountBtn} ${review ? styles.composeBtnHolding : ""}`}
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => {
+          // Composing needs an account: a signed-out visitor is sent to make
+          // one, and comes back here after (the studio's leave guard asks
+          // first if there is unsaved work).
+          if (!signedIn) {
+            location.href = signupHref(location.pathname + location.search);
+            return;
+          }
+          setOpen((v) => !v);
+        }}
         aria-expanded={open}
         disabled={composeOff && !open}
         title={composeOff
@@ -712,7 +722,9 @@ export default function ComposeChat({
           ? (review.before
               ? "auditioning changes: open to keep or stop them"
               : "changes waiting: open to audition or keep them")
-          : "ask for changes to this song"}
+          : signedIn
+          ? "ask for changes to this song"
+          : "make an account to compose"}
       >
         compose{review ? " ·" : ""}
       </button>

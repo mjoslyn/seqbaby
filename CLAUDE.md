@@ -4537,6 +4537,12 @@ panel ──▶ POST /api/compose ──▶ ComposeLimits.take ──▶ Compose
   the panel is rendered outside `AccountBar`'s signed-in branch: a key of your
   own is the one way to compose here without an account, and a deploy with no
   key of its own still has a working compose panel.
+- **The studio asks for an account before either path.** `compose` and
+  `groove` (ComposeChat.tsx, GrooveButton.tsx) send a signed-out visitor to
+  the sign-up tab (`signupHref`, lib/safeNext.js: `/login?mode=signup&next=`
+  the studio URL, which the confirmation email carries back), so a
+  brought key no longer opens compose without an account. The route itself
+  still takes a brought key from anyone; this is the UI's gate.
 - **A brought key is never stored.** It rides the message it pays for, and the
   route hands it to the job object in the call that starts it, which keeps it
   in memory (never in its storage, which outlives the turn) until the alarm

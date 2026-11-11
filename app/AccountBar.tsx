@@ -188,7 +188,7 @@ export function AccountBar({
             history. A new identity gets a new panel, transcript and all. */}
         {/* groove: pick a genre and a compose turn writes a whole song in it
             (it hands the brief to ComposeChat, so it runs on the same key). */}
-        <GrooveButton />
+        <GrooveButton signedIn={!!name} />
         <ComposeChat
           key={userId ?? "anon"}
           signedIn={!!name}

@@ -9,13 +9,14 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { GENRES, GENRE_FAMILIES, genreById, genrePrompt, searchGenres } from "@/app/songs/genres.js";
+import { signupHref } from "@/lib/safeNext.js";
 import styles from "@/app/ui.module.css";
 
 type Genre = (typeof GENRES)[number];
 
 const familyName = (id: string) => GENRE_FAMILIES.find((f) => f.id === id)?.name ?? id;
 
-export default function GrooveButton() {
+export default function GrooveButton({ signedIn }: { signedIn: boolean }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [family, setFamily] = useState("");
@@ -84,9 +85,17 @@ export default function GrooveButton() {
     <div className={styles.songsWrap}>
       <button
         className={styles.accountBtn}
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => {
+          // Groove runs on compose, which needs an account: a signed-out
+          // visitor is sent to make one and comes back here after.
+          if (!signedIn) {
+            location.href = signupHref(location.pathname + location.search);
+            return;
+          }
+          setOpen((v) => !v);
+        }}
         aria-expanded={open}
-        title="pick a genre and compose writes a whole song in it"
+        title={signedIn ? "pick a genre and compose writes a whole song in it" : "make an account to build songs from a genre"}
       >
         groove
       </button>

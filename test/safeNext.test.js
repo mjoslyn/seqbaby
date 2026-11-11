@@ -21,3 +21,10 @@ test("the login link carries where to come back to", () => {
   assert.equal(loginHref("/studio"), "/login");
   assert.equal(loginHref("https://evil.example"), "/login");
 });
+
+test("signupHref opens the create-account tab and comes back", async () => {
+  const { signupHref } = await import("../lib/safeNext.js");
+  assert.equal(signupHref("/studio?open=abc"), "/login?mode=signup&next=%2Fstudio%3Fopen%3Dabc");
+  assert.equal(signupHref("/studio"), "/login?mode=signup");
+  assert.equal(signupHref("https://evil.example"), "/login?mode=signup");
+});
