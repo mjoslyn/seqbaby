@@ -18,6 +18,28 @@ type Genre = (typeof GENRES)[number];
 
 const familyName = (id: string) => GENRE_FAMILIES.find((f) => f.id === id)?.name ?? id;
 
+// What the panel holds between openings and reloads: the search, the filter,
+// the pick, the note, and the last few builds. Per browser, best effort.
+const STORE = "seqbaby.groove.v1";
+const MAX_RECENT = 8;
+type Recent = { id: string; extra: string };
+type Saved = { query: string; family: string; picked: string; extra: string; recent: Recent[] };
+function readSaved(): Partial<Saved> {
+  try {
+    const v = JSON.parse(window.localStorage.getItem(STORE) || "{}");
+    return v && typeof v === "object" ? v : {};
+  } catch {
+    return {};
+  }
+}
+function writeSaved(v: Saved) {
+  try {
+    window.localStorage.setItem(STORE, JSON.stringify(v));
+  } catch {
+    /* blocked storage: it holds for this page */
+  }
+}
+
 export default function GrooveButton({
   signedIn,
   canPickModel = false,
@@ -46,6 +68,23 @@ export default function GrooveButton({
   const [picked, setPicked] = useState<string>("");
   const [active, setActive] = useState(0);
   const [extra, setExtra] = useState("");
+  const [recent, setRecent] = useState<Recent[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  // Put back what the panel held last time, once, then keep it written.
+  useEffect(() => {
+    const s = readSaved();
+    if (typeof s.query === "string") setQuery(s.query);
+    if (typeof s.family === "string" && (s.family === "" || GENRE_FAMILIES.some((f) => f.id === s.family))) setFamily(s.family);
+    if (typeof s.picked === "string" && genreById(s.picked)) setPicked(s.picked);
+    if (typeof s.extra === "string") setExtra(s.extra);
+    if (Array.isArray(s.recent)) {
+      setRecent(s.recent.filter((r) => r && typeof r.id === "string" && genreById(r.id)).slice(0, MAX_RECENT));
+    }
+    setLoaded(true);
+  }, []);
+  useEffect(() => {
+    if (loaded) writeSaved({ query, family, picked, extra, recent });
+  }, [loaded, query, family, picked, extra, recent]);
   const searchRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
 
@@ -94,7 +133,10 @@ export default function GrooveButton({
       detail: { prompt: genrePrompt(genre, extra), ...(canPickModel ? { model } : {}) },
     }));
     setOpen(false);
-    setExtra("");
+    // The note stays (it is the history), and the build goes to the front of
+    // the recent row, a repeat moved up rather than listed twice.
+    const note = extra.trim();
+    setRecent((r) => [{ id: genre.id, extra: note }, ...r.filter((x) => !(x.id === genre.id && x.extra === note))].slice(0, MAX_RECENT));
   };
 
   const surprise = () => {
@@ -167,6 +209,30 @@ export default function GrooveButton({
               </button>
             ))}
           </div>
+          {recent.length > 0 && (
+            <div className={styles.grooveChips} role="group" aria-label="recent grooves">
+              <span className={styles.grooveRecentLabel}>recent</span>
+              {recent.map((r) => {
+                const g = genreById(r.id);
+                if (!g) return null;
+                return (
+                  <button
+                    key={r.id + "|" + r.extra}
+                    className={`${styles.grooveChip} ${picked === r.id && extra.trim() === r.extra ? styles.grooveChipOn : ""}`}
+                    title={r.extra ? `${g.name}: ${r.extra}` : g.name}
+                    onClick={() => {
+                      setPicked(r.id);
+                      setExtra(r.extra);
+                      setTimeout(() => listRef.current?.querySelector(`#groove-${r.id}`)?.scrollIntoView({ block: "nearest" }), 0);
+                    }}
+                  >
+                    {g.name}
+                    {r.extra ? " +" : ""}
+                  </button>
+                );
+              })}
+            </div>
+          )}
           <ul id="groove-list" className={styles.grooveList} role="listbox" ref={listRef}>
             {results.length === 0 && <li className={styles.grooveNone}>no genre matches that</li>}
             {results.map((g, i) => (

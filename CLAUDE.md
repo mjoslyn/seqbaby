@@ -4593,7 +4593,11 @@ fires `seqbaby:groove` with the prompt, and ComposeChat opens and sends it as
 an ordinary turn, so the key, the limits, the transcript and the review bar
 are compose's. The prompt is put in compose's box first, so a turn that
 cannot run yet (no key) leaves it there to send. `genres.js` is pure and
-tested (`test/genres.test.js`).
+tested (`test/genres.test.js`). The panel keeps what it held between openings and reloads
+(`seqbaby.groove.v1`: the search, the family, the pick, the "anything else"
+note, which a build no longer clears) and a `recent` row of the last eight
+builds (genre and note, a repeat moved to the front), one tap putting both
+back.
 
 ## A session onto a RUNNING engine (`liveSet.js`) — and the audition
 

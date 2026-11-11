@@ -653,6 +653,7 @@ a.bylineLike { text-decoration: none; }
 .grooveMeta { color: #9aa0aa; font-size: 10.5px; white-space: nowrap; }
 .grooveNone { color: #9aa0aa; font-size: 12px; padding: 10px; }
 .grooveDetail { display: flex; flex-direction: column; gap: 4px; }
+.grooveRecentLabel { color: #9aa0aa; font-size: 10.5px; align-self: center; margin-right: 2px; }
 .grooveDetailName { color: #e8e8ea; font-size: 13px; }
 .grooveBrief { color: #b9bec8; font-size: 11.5px; line-height: 1.45; }
 @media (pointer: coarse) {
