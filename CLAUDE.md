@@ -4555,8 +4555,10 @@ panel ──▶ POST /api/compose ──▶ ComposeLimits.take ──▶ Compose
   (`lib/composeModels.js`). A turn runs on `ANTHROPIC_MODEL`, else
   `DEFAULT_COMPOSE_MODEL`, because the site is billed. An account whose email
   is on `COMPOSE_MODEL_PICKERS` (a secret, comma or space separated, so no
-  address is committed) gets a model menu in the panel
-  (`COMPOSE_MODELS`, remembered per browser as `seqbaby.composeModel.v1`),
+  address is committed) gets a model menu in the compose panel and the
+  groove panel (`COMPOSE_MODELS`; one pick shared by both,
+  `app/composeModelPref.ts`, remembered per browser as
+  `seqbaby.composeModel.v1`, a groove build sending the one its menu shows),
   and the route honours the `model` it sends only after checking the same
   list (`canPickModel`, `pickedModel`); anything else runs on the deploy's.
   The job carries it in its input (`ComposeJobInput.model`).
