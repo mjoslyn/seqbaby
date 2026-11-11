@@ -447,6 +447,39 @@ carving the rest with the tools works well.
 `set_meter` for 7/8 or 6/8 is per slot, so a song can change meter at a
 section.
 
+## Craft
+
+What separates a song from sixteen bars that repeat. Check a finished song
+against these before validating it:
+
+- **One motif.** The hook is a short figure (three to six notes) stated,
+  repeated, and then changed: its last note moved, its rhythm displaced, an
+  answer phrase in the bar after. A lead that is new notes in every bar has
+  no hook.
+- **The second main section adds something** the first did not have (see the
+  drop / chorus entry above). A copy that is only a copy is where a listener
+  stops.
+- **A fill at the end of every eight bars**: a snare roll, a drum drop-out
+  for a beat, an open hat, a tom run. Write the drum pattern 32 steps long
+  with a different last bar, or use a one-bar fill slot.
+- **Velocity is the groove.** Hats alternate `x` and `o`, the backbeat is
+  `X`, ghost notes are `o`. A drum track at one velocity sounds like a test
+  tone.
+- **The bass and the kick share a step only on purpose.** Off the kick
+  (house, trance), on it and long (trap, dnb), or sidechained from it. A
+  bass note on every kick with no sidechain is mud.
+- **Sections differ by more than one track.** Each has its own lane on the
+  thing that moves (a cutoff, a send), and at least two of drums, bass and
+  harmony change between neighbours.
+- **Registers.** One part in each of sub, bass, mid and top at a time; two
+  parts in one octave are one part too many unless they are a unison.
+
+A message from the studio's `groove` picker comes with decisions already
+made (tempo, key, the drum bar to start from, which instrument plays which
+part, the progression, the form). Follow them as given: they are what makes
+this build different from the last, and each engine, preset and step string
+in them has been checked against the engine.
+
 ## What to check
 
 `validate_song` names silent tracks and empty buses. `audition_song` plays

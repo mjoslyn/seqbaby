@@ -4593,7 +4593,29 @@ fires `seqbaby:groove` with the prompt, and ComposeChat opens and sends it as
 an ordinary turn, so the key, the limits, the transcript and the review bar
 are compose's. The prompt is put in compose's box first, so a turn that
 cannot run yet (no key) leaves it there to send. `genres.js` is pure and
-tested (`test/genres.test.js`). The panel keeps what it held between openings and reloads
+tested (`test/genres.test.js`).
+
+**The choices are rolled in code, from a seed** (`rollGenre(g, seed)`),
+because the same sentence sent twice gets the same song back: given a tempo
+range and a list of instruments a model takes the middle of one and the first
+of the other. Every genre has its exact bpm, root note, form (`FAMILY_PLANS`,
+two to four per family, bars per section as chain mode plays them), angle and
+what the second main section adds drawn. A genre with a `plan` (`PLANS`,
+twelve so far: house, deep house, acid, techno, trance, dubstep, 2-step, dnb,
+boom bap, lo-fi, trap, synthwave) also has its drum kit and starting bar (step
+strings), an engine and preset per part, which optional parts exist at all,
+how the bass plays, the progression (which carries its scale, `scale: chords`,
+since notes snap to the scale and a progression only fits its own), two
+signature moves and the genre's `avoid` list. Each decision is a hash of
+(seed, genre, which), `chanceGen.js`'s bargain, so adding a pool does not
+reshuffle the rest. The test holds every engine key, preset, scale, sampler
+kit and backticked step string in a plan to the engine's tables through
+songBuilder, and builds each roll's tracks. An unplanned genre keeps its
+instruments in its brief, so only the neutral choices are rolled for it and
+the form is offered as a start. The panel shows the roll (`rollSummary`) with
+a `reroll`; a build takes a new seed afterwards, and a `recent` chip carries
+its seed, so it is that build again until rerolled. The typed note wins over
+the roll. The panel keeps what it held between openings and reloads
 (`seqbaby.groove.v1`: the search, the family, the pick, the "anything else"
 note, which a build no longer clears) and a `recent` row of the last eight
 builds (genre and note, a repeat moved to the front), one tap putting both

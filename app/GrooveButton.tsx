@@ -8,7 +8,7 @@
 // review bar to be auditioned or kept.
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { GENRES, GENRE_FAMILIES, genreById, genrePrompt, searchGenres } from "@/app/songs/genres.js";
+import { GENRES, GENRE_FAMILIES, genreById, genrePrompt, rollGenre, rollSummary, searchGenres } from "@/app/songs/genres.js";
 import { signupHref } from "@/lib/safeNext.js";
 import { COMPOSE_MODELS, DEFAULT_COMPOSE_MODEL } from "@/lib/composeModels.js";
 import { MODEL_EVENT, readModelPref, writeModelPref } from "@/app/composeModelPref";
@@ -22,7 +22,10 @@ const familyName = (id: string) => GENRE_FAMILIES.find((f) => f.id === id)?.name
 // the pick, the note, and the last few builds. Per browser, best effort.
 const STORE = "seqbaby.groove.v1";
 const MAX_RECENT = 8;
-type Recent = { id: string; extra: string };
+// A build's seed is its dice (rollGenre): kept with the build, so a recent
+// one can be built again exactly as it was.
+type Recent = { id: string; extra: string; seed?: number };
+const newSeed = () => 1 + Math.floor(Math.random() * 0x7fffffff);
 type Saved = { query: string; family: string; picked: string; extra: string; recent: Recent[] };
 function readSaved(): Partial<Saved> {
   try {
@@ -69,6 +72,9 @@ export default function GrooveButton({
   const [active, setActive] = useState(0);
   const [extra, setExtra] = useState("");
   const [recent, setRecent] = useState<Recent[]>([]);
+  // The dice for the next build. Drawn after mount (a random number in the
+  // first render would differ between the server's and the browser's).
+  const [seed, setSeed] = useState(1);
   const [loaded, setLoaded] = useState(false);
   // Put back what the panel held last time, once, then keep it written.
   useEffect(() => {
@@ -80,6 +86,7 @@ export default function GrooveButton({
     if (Array.isArray(s.recent)) {
       setRecent(s.recent.filter((r) => r && typeof r.id === "string" && genreById(r.id)).slice(0, MAX_RECENT));
     }
+    setSeed(newSeed());
     setLoaded(true);
   }, []);
   useEffect(() => {
@@ -90,6 +97,7 @@ export default function GrooveButton({
 
   const results: Genre[] = useMemo(() => searchGenres(query, family), [query, family]);
   const genre = picked ? genreById(picked) : undefined;
+  const roll = useMemo(() => (genre ? rollGenre(genre, seed) : null), [genre, seed]);
 
   // A new search or filter starts at the top of the list.
   useEffect(() => setActive(0), [query, family]);
@@ -108,7 +116,11 @@ export default function GrooveButton({
   }, [open]);
 
   // Picking leaves the search as it was, so the list stays to pick again.
-  const pick = (g: Genre) => setPicked(g.id);
+  // A fresh pick is a fresh roll.
+  const pick = (g: Genre) => {
+    if (g.id !== picked) setSeed(newSeed());
+    setPicked(g.id);
+  };
 
   const onSearchKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "ArrowDown") {
@@ -130,13 +142,15 @@ export default function GrooveButton({
   const build = () => {
     if (!genre) return;
     window.dispatchEvent(new CustomEvent("seqbaby:groove", {
-      detail: { prompt: genrePrompt(genre, extra), ...(canPickModel ? { model } : {}) },
+      detail: { prompt: genrePrompt(genre, extra, seed), ...(canPickModel ? { model } : {}) },
     }));
     setOpen(false);
     // The note stays (it is the history), and the build goes to the front of
     // the recent row, a repeat moved up rather than listed twice.
     const note = extra.trim();
-    setRecent((r) => [{ id: genre.id, extra: note }, ...r.filter((x) => !(x.id === genre.id && x.extra === note))].slice(0, MAX_RECENT));
+    setRecent((r) => [{ id: genre.id, extra: note, seed }, ...r.filter((x) => !(x.id === genre.id && x.extra === note))].slice(0, MAX_RECENT));
+    // The next build of the same genre is a different song.
+    setSeed(newSeed());
   };
 
   const surprise = () => {
@@ -219,10 +233,11 @@ export default function GrooveButton({
                   <button
                     key={r.id + "|" + r.extra}
                     className={`${styles.grooveChip} ${picked === r.id && extra.trim() === r.extra ? styles.grooveChipOn : ""}`}
-                    title={r.extra ? `${g.name}: ${r.extra}` : g.name}
+                    title={`${r.extra ? `${g.name}: ${r.extra}` : g.name} (the same roll as that build; reroll for another)`}
                     onClick={() => {
                       setPicked(r.id);
                       setExtra(r.extra);
+                      setSeed(typeof r.seed === "number" ? r.seed : newSeed());
                       setTimeout(() => listRef.current?.querySelector(`#groove-${r.id}`)?.scrollIntoView({ block: "nearest" }), 0);
                     }}
                   >
@@ -261,6 +276,16 @@ export default function GrooveButton({
                 {genre.name} <span className={styles.grooveMeta}>{genre.bpm[0]}-{genre.bpm[1]} bpm</span>
               </div>
               <div className={styles.grooveBrief}>{genre.brief}</div>
+              {roll && (
+                <div className={styles.grooveRoll}>
+                  <span title="what the dice chose for this build: tempo, key, the parts and the form. Each build is rolled afresh">
+                    {rollSummary(roll)}
+                  </span>
+                  <button className={styles.grooveChip} onClick={() => setSeed(newSeed())} title="roll again: another tempo, key, set of parts and form">
+                    reroll
+                  </button>
+                </div>
+              )}
             </div>
           ) : (
             <div className={styles.grooveBrief}>pick a genre from the list, or let it surprise you.</div>
