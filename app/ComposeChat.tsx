@@ -7,7 +7,7 @@ import { markSaved } from "@/app/songs/confirmDiscard";
 import { trySave } from "@/app/songs/trySave";
 import { composeModelLabel } from "@/lib/composeModels.js";
 import { signupHref } from "@/lib/safeNext.js";
-import { API_KEY_CONSOLE_URL, SITE_OUT_OF_BUDGET, looksLikeApiKey, maskApiKey } from "@/lib/composeKey.js";
+import { SITE_OUT_OF_BUDGET } from "@/lib/composeKey.js";
 import styles from "@/app/ui.module.css";
 
 type Msg =
@@ -59,19 +59,9 @@ const POLL_LIMIT_MS = 16 * 60 * 1000;
 // the interval above, roughly half a minute of no contact.
 const MAX_POLL_MISSES = 20;
 
-// The visitor's own Anthropic key, and which key they compose on. Both are
-// per browser, not per song and not on the server, and the key for a stronger
-// reason: it is a secret, and the one place it is meant to live is the machine
-// its owner typed it into. The server never stores it (see lib/composeKey.js)
-// -- it rides each message, is spent, and is gone.
-//
-// localStorage is the honest trade here and worth naming: it survives a
-// reload, which is what makes the feature usable at all, and it is readable
-// by anything that gets script into this origin. Hence `remember`, which is
-// the visitor's to turn off -- unchecked, the key lives in this tab's memory
-// and nowhere else.
-const KEY_STORE = "seqbaby.anthropicKey.v1";
-const KEY_MODE = "seqbaby.composeKeyMode.v1";
+// Where a key used to be kept when compose ran on the visitor's own key. It is
+// gone, so anything left there is cleared on the next visit.
+const OLD_KEY_STORES = ["seqbaby.anthropicKey.v1", "seqbaby.composeKeyMode.v1"];
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -93,12 +83,8 @@ function describeFailure(status: number, raw: string, data: ComposeResponse | nu
 
 // A chat panel that edits the song open in the studio, backed by
 // app/api/compose (the same songBuilder tools the MCP server exposes to an
-// external agent, run server-side against an Anthropic key).
-//
-// WHOSE key is the panel's one choice. The site's needs an
-// account and is rationed; the visitor's own needs nothing at all, which is
-// why this panel is shown to a signed-out visitor as well -- a key of your own
-// is the one way to compose here without one.
+// external agent, run server-side on the site's Anthropic key). It needs an
+// account: signed out, the button goes to sign up.
 //
 // The SONG's state is not kept here -- the studio's own session is the source
 // of truth (serializeSet) and each message resends it, so a change made by hand
@@ -114,11 +100,10 @@ function describeFailure(status: number, raw: string, data: ComposeResponse | nu
 // follows whichever song is open, which is why this reads the same open-song
 // store the save and songs menus do.
 /**
- * @param signedIn whether there is an account behind this panel at all.
- * @param serverKey whether this deploy has an Anthropic key of its own. The
- *        two together decide whether composing on the SITE's key is offered;
- *        a visitor's own key is offered always, which is what makes the panel
- *        worth showing to someone signed out.
+ * @param signedIn whether there is an account behind this panel. Compose
+ *        needs one: signed out, the button goes to sign up.
+ * @param serverKey whether this deploy has an Anthropic key, which every
+ *        turn runs on. Without one compose is switched off.
  * @param budgetOut whether that key has run out of budget, as the server
  *        knew it when the page was drawn.
  */
@@ -149,18 +134,6 @@ export default function ComposeChat({
   // has just left. Transient: it belongs to that click, so the next turn (and a
   // song arriving, or `new`) clears it.
   const [saveNote, setSaveNote] = useState("");
-  // Which key the next message runs on. "site" is only ever a choice when
-  // there is both an account and a key on the deploy, so what is offered is
-  // derived (`keyMode`) rather than trusted from storage.
-  const [keyPref, setKeyPref] = useState<"site" | "own">("site");
-  // The visitor's own key, live. Empty means they haven't given one; what is
-  // typed lives in `keyDraft` until it is accepted, so a half-typed key is
-  // never what a message goes out on.
-  const [apiKey, setApiKey] = useState("");
-  const [keyDraft, setKeyDraft] = useState("");
-  const [keyError, setKeyError] = useState("");
-  const [remember, setRemember] = useState(true);
-  const [editingKey, setEditingKey] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
   const logRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -171,82 +144,20 @@ export default function ComposeChat({
   // The transcript, readable from an async callback without making every
   // message a reason to re-run the effect that loads one.
   const messagesRef = useRef<Msg[]>([]);
-  // Composing on the site's key takes an account AND a key on the deploy.
-  // Without both there is one way to compose and no choice to offer.
-  const siteKeyOffered = signedIn && serverKey && !siteDry;
-  // Out of budget, for someone who would have composed on the site's key and
-  // has no key of their own: compose is switched off, and says why. A visitor
-  // with their own key goes on composing on it; one without an account never
-  // used the site's key to begin with.
-  const composeOff = siteDry && signedIn && serverKey && !apiKey && !review;
-  const keyMode: "site" | "own" = siteKeyOffered ? keyPref : "own";
-  const needsKey = keyMode === "own" && !apiKey;
+  // Out of budget, or no key on the deploy at all: compose is switched off,
+  // and the button says why (an open review bar still has to be reachable).
+  const composeOff = (siteDry || !serverKey) && !review;
   const openSong = useSyncExternalStore(subscribeOpenSong, getOpenSong, getOpenSong);
   const songId = openSong.id;
   const isTemplate = openSong.isTemplate;
 
-  // Read in an effect rather than in useState's initializer: this component
-  // renders on the server too (it returns null until the engine says it is
-  // ready), and a localStorage read there is a hydration mismatch waiting to
-  // happen.
+  // A key kept by an earlier version of this panel is a secret with no use
+  // left: clear it.
   useEffect(() => {
     try {
-      const mode = window.localStorage.getItem(KEY_MODE);
-      if (mode === "own" || mode === "site") setKeyPref(mode);
-      // A stored key that no longer looks like one (a truncated write, a
-      // format that has moved on) is dropped rather than sent: it can only
-      // fail, and it would fail a minute into a turn.
-      const stored = window.localStorage.getItem(KEY_STORE);
-      if (stored && looksLikeApiKey(stored)) {
-        setApiKey(stored.trim());
-      } else if (stored) {
-        window.localStorage.removeItem(KEY_STORE);
-      }
+      for (const k of OLD_KEY_STORES) window.localStorage.removeItem(k);
     } catch {
-      /* private mode, blocked storage: the defaults are a fine answer */
-    }
-  }, []);
-
-  const pickKeyMode = useCallback((mode: "site" | "own") => {
-    setKeyPref(mode);
-    try {
-      window.localStorage.setItem(KEY_MODE, mode);
-    } catch {
-      /* not worth failing a message over */
-    }
-  }, []);
-
-  // Accept what has been typed. Shape-checked here as well as in the route,
-  // because the box the key was typed into is the only place a typo can be
-  // fixed -- reported from a job, it arrives minutes later with the message
-  // that prompted it already spent.
-  const saveKey = useCallback(() => {
-    const k = keyDraft.trim();
-    if (!looksLikeApiKey(k)) {
-      setKeyError("that doesn't look like an Anthropic API key: they start sk-ant-");
-      return;
-    }
-    setApiKey(k);
-    setKeyDraft("");
-    setKeyError("");
-    setEditingKey(false);
-    try {
-      if (remember) window.localStorage.setItem(KEY_STORE, k);
-      else window.localStorage.removeItem(KEY_STORE);
-    } catch {
-      /* blocked storage: the key still works for this tab */
-    }
-  }, [keyDraft, remember]);
-
-  const forgetKey = useCallback(() => {
-    setApiKey("");
-    setKeyDraft("");
-    setKeyError("");
-    setEditingKey(false);
-    try {
-      window.localStorage.removeItem(KEY_STORE);
-    } catch {
-      /* nothing stored is the state we wanted anyway */
+      /* blocked storage: nothing was kept there either */
     }
   }, []);
 
@@ -373,14 +284,7 @@ export default function ComposeChat({
   const send = useCallback(async (prompt?: string) => {
     const text = (prompt ?? input).trim();
     if (!text || sending || !window.seqbaby) return;
-    // Nothing to run it on. Said here rather than by sending a message that
-    // can only come back refused -- and the key row is opened, since the
-    // answer is a field away.
-    if (keyMode === "own" && !apiKey) {
-      setEditingKey(true);
-      setKeyError("add your Anthropic key first");
-      return;
-    }
+    if (!signedIn) return;
     const session = window.seqbaby.serializeSet();
     // Only plain text crosses the wire between turns -- what the model called
     // and why lives entirely inside one request/response, so the transcript
@@ -432,16 +336,7 @@ export default function ComposeChat({
       const res = await fetch("/api/compose", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        // The key goes out with the message it pays for and is not kept
-        // anywhere on the way: the route hands it to the worker and forgets
-        // it. On the site's key nothing is sent, and the route decides from
-        // the account instead.
-        body: JSON.stringify({
-          message: text,
-          history,
-          session,
-          ...(keyMode === "own" ? { apiKey } : {}),
-        }),
+        body: JSON.stringify({ message: text, history, session }),
       });
       // Anything that failed before the route got to stream -- auth, a bad
       // request, a gateway page -- arrives as an ordinary body with a status
@@ -562,7 +457,7 @@ export default function ComposeChat({
       setSending(false);
       setLive([]);
     }
-  }, [input, sending, messages, keyMode, apiKey]);
+  }, [input, sending, messages, signedIn]);
 
   // ---- the review bar ------------------------------------------------------
   //
@@ -717,7 +612,7 @@ export default function ComposeChat({
         aria-expanded={open}
         disabled={composeOff && !open}
         title={composeOff
-          ? SITE_OUT_OF_BUDGET
+          ? (serverKey ? SITE_OUT_OF_BUDGET : "compose isn't set up here")
           : review
           ? (review.before
               ? "auditioning changes: open to keep or stop them"
@@ -733,21 +628,19 @@ export default function ComposeChat({
       )}
       {open && (
         <div className={`${styles.panel} ${styles.chatPanel}`}>
-          <div className={styles.panelTitle}>ask for changes to this song</div>
+          <div className={styles.panelHead}>
+            <div className={styles.panelTitle}>ask for changes to this song</div>
+            <button className={styles.panelClose} onClick={() => setOpen(false)} aria-label="close" title="close">
+              ×
+            </button>
+          </div>
           <div className={styles.chatLog} ref={logRef}>
             {messages.length === 0 && (
               <div className={styles.chatEmpty}>
-                tell it what to make or change: “add a dubby bassline on the
-                silverbox”, “make the hats swing more”, “put a reverb on the
-                bus”. it edits the song that&apos;s open, live.
-                {needsKey && (
-                  <>
-                    {" "}
-                    {siteKeyOffered
-                      ? "you've chosen to run this on your own Anthropic key: add it below."
-                      : "add your own Anthropic key below and it runs on that; no account needed."}
-                  </>
-                )}
+                say what you want and it works on the song that&apos;s open:
+                “add a dubby bassline on the silverbox”, “make the hats swing
+                more”, “put a reverb on the bus”. changes wait for you to
+                audition or keep them, so nothing is lost until you say so.
               </div>
             )}
             {messages.map((m, i) => (
@@ -814,101 +707,12 @@ export default function ComposeChat({
               </div>
             </div>
           )}
-          {siteKeyOffered && (
-            <div className={styles.chatTools}>
-              <label className={styles.chatModelLabel} htmlFor="compose-key-mode">
-                key
-              </label>
-              <select
-                id="compose-key-mode"
-                className={styles.chatModel}
-                value={keyMode}
-                onChange={(e) => pickKeyMode(e.target.value as "site" | "own")}
-                title="whose Anthropic key this runs on"
-              >
-                <option value="site" title="this site's key, shared between accounts and rate limited">
-                  this site
-                </option>
-                <option value="own" title="your own Anthropic key: your usage, your limits">
-                  your own
-                </option>
-              </select>
-            </div>
-          )}
-          {keyMode === "own" && (
-            <div className={styles.chatKey}>
-              {apiKey && !editingKey ? (
-                <div className={styles.chatKeyRow}>
-                  <span className={styles.chatKeyName} title="your key, as far as this browser will show it">
-                    {maskApiKey(apiKey)}
-                  </span>
-                  <button
-                    className={styles.smallBtn}
-                    onClick={() => {
-                      setEditingKey(true);
-                      setKeyError("");
-                    }}
-                  >
-                    change
-                  </button>
-                  <button className={styles.smallBtn} onClick={forgetKey} title="remove it from this browser">
-                    forget
-                  </button>
-                </div>
-              ) : (
-                <>
-                  <div className={styles.chatKeyRow}>
-                    <input
-                      className={styles.chatKeyInput}
-                      type="password"
-                      autoComplete="off"
-                      spellCheck={false}
-                      placeholder="sk-ant-…"
-                      aria-label="your Anthropic API key"
-                      value={keyDraft}
-                      onChange={(e) => {
-                        setKeyDraft(e.target.value);
-                        setKeyError("");
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          e.preventDefault();
-                          saveKey();
-                        }
-                      }}
-                    />
-                    <button
-                      className={`${styles.smallBtn} ${styles.smallBtnPrimary}`}
-                      onClick={saveKey}
-                      disabled={!keyDraft.trim()}
-                    >
-                      use key
-                    </button>
-                  </div>
-                  <label className={styles.chatKeyRemember}>
-                    <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
-                    remember it in this browser
-                  </label>
-                </>
-              )}
-              {keyError && <div className={styles.chatKeyError}>{keyError}</div>}
-              <div className={styles.chatKeyNote}>
-                Runs on your key and bills your Anthropic account. It is sent with each message to run
-                that turn and is never stored on the server.{" "}
-                <a href={API_KEY_CONSOLE_URL} target="_blank" rel="noreferrer noopener">
-                  get a key
-                </a>
-              </div>
-            </div>
-          )}
           <div className={styles.chatRow}>
             <textarea
               ref={inputRef}
               className={styles.chatTextarea}
               rows={2}
-              placeholder={
-                needsKey ? "add your key above to compose…" : "make me a techno beat…  (shift+enter for a new line)"
-              }
+              placeholder="make me a techno beat…  (shift+enter for a new line)"
               value={input}
               disabled={sending}
               onChange={(e) => setInput(e.target.value)}
@@ -917,7 +721,7 @@ export default function ComposeChat({
             <button
               className={`${styles.smallBtn} ${styles.smallBtnPrimary}`}
               onClick={() => send()}
-              disabled={sending || !input.trim() || needsKey}
+              disabled={sending || !input.trim() || composeOff}
             >
               send
             </button>

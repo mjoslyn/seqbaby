@@ -4530,77 +4530,44 @@ panel ──▶ POST /api/compose ──▶ ComposeLimits.take ──▶ Compose
   turn a second alarm deletes all of it. An alarm that is retried after the
   turn began reports an interruption rather than spending the tokens twice.
   Locally it needs `npm run preview`: `next dev` has no Durable Objects.
-- **Two ways a turn is paid for, and that decides what it needs.** The
-  deploy's key (`ANTHROPIC_API_KEY`) needs an account, because the spend is the
-  site's. A key the visitor brings needs **nothing at all** — no account, and
-  no key on the deploy — because the spend is theirs. That is the whole reason
-  the panel is rendered outside `AccountBar`'s signed-in branch: a key of your
-  own is the one way to compose here without an account, and a deploy with no
-  key of its own still has a working compose panel.
-- **The studio asks for an account before either path.** `compose` and
-  `groove` (ComposeChat.tsx, GrooveButton.tsx) send a signed-out visitor to
-  the sign-up tab (`signupHref`, lib/safeNext.js: `/login?mode=signup&next=`
-  the studio URL, which the confirmation email carries back), so a
-  brought key no longer opens compose without an account. The route itself
-  still takes a brought key from anyone; this is the UI's gate.
-- **A brought key is never stored.** It rides the message it pays for, and the
-  route hands it to the job object in the call that starts it, which keeps it
-  in memory (never in its storage, which outlives the turn) until the alarm
-  takes it. If the object is evicted in between, the key is gone and the turn
-  says to send it again rather than running on the site's key. What is kept
-  is `keyHash` (sha-256, truncated), because the limits have to be counted
-  against something and with no account that key is the only something there
-  is.
+- **A turn runs on the deploy's key and needs an account** (the spend is
+  the site's). The bring-your-own-key path is gone: the panel has no key
+  field, the route refuses a turn without a signed-in account (401) or with
+  no `ANTHROPIC_API_KEY` on the deploy, and a key an earlier version left in
+  localStorage (`seqbaby.anthropicKey.v1`) is cleared on the next visit.
+  `compose` and `groove` send a signed-out visitor to the sign-up tab
+  (`signupHref`, lib/safeNext.js, `next` the studio URL, which the
+  confirmation email carries back). `ComposeJob.start` still takes an
+  optional key and `lib/composeKey.js` its shape check; nothing passes one.
 - **The view token is how a browser proves a job is its own** to poll: a job
-  holds somebody's song, and a signed-out visitor has no account to check
-  that against. An account still reaches its own jobs without one. The
+  holds somebody's song. An account still reaches its own jobs without one. The
   status route tries the token first and only then resolves a session: this
   is polled every couple of seconds for as long as a whole song takes. Only
   the route can reach a job object, so there is no worker token any more.
 - **The limits ration the WORKER, not the bill.** `MAX_IN_FLIGHT` /
-  `MAX_PER_HOUR` apply to a brought key as they do to an account, counted in
-  its own bucket (`keys/<hash>` beside `users/<id>`; the hash is of the
-  caller's address, `cf-connecting-ip`, since a key is only shape-checked),
-  because a turn holds a 15-minute alarm whoever is paying for the tokens.
+  `MAX_PER_HOUR` are per account (`users/<id>`), because a turn holds a
+  15-minute alarm.
   A bucket is a `ComposeLimits` Durable Object, single-threaded, so ten
   requests sent together are taken one at a time and only as many as the
-  limit get a slot (`takeSlot` / `releaseSlot`, lib/composeJobs.js). A brought-key turn
-  counts against the key even when an account is signed in: one person with
-  their own key should not also be spending the account allowance they aren't
-  using.
+  limit get a slot (`takeSlot` / `releaseSlot`, lib/composeJobs.js).
 - **The browser never names a model** (`lib/composeModels.js`). Every turn,
-  on either key, runs on the deploy's `ANTHROPIC_MODEL`, else
-  `DEFAULT_COMPOSE_MODEL`: the site's key because the site is billed, a brought
-  key because a model nobody vetted is a request this app would be making on
-  someone's behalf without knowing what it costs. There is no picker.
+  runs on the deploy's `ANTHROPIC_MODEL`, else `DEFAULT_COMPOSE_MODEL`,
+  because the site is billed. There is no picker.
 - **The site's key running dry switches compose off.** A turn on the deploy's
   key that fails for want of credit (or the console's spend limit) sets a flag
   in D1's `site_flags` (`markSiteOutOfBudget`, lib/composeJobs.js); the studio
   reads it when drawing the bar, and the route refuses site-key turns while it
-  holds. The compose button is disabled for anyone who would run on the site's
-  key and has no key of their own, titled `SITE_OUT_OF_BUDGET`
+  holds. The compose button is disabled while it holds, titled `SITE_OUT_OF_BUDGET`
   (lib/composeKey.js), which is also the error that turn reports. The flag
   expires after 30 minutes (`COMPOSE_BUDGET_RETRY_MS`), because topping up
   happens on Anthropic's console where nothing here can see it; the next turn
   after that either succeeds and clears it or sets it again.
-- **The key lives in the browser, and the panel says so.** `localStorage`
-  (`seqbaby.anthropicKey.v1`), which survives a reload — the thing that makes
-  the feature usable — and is readable by anything that gets script into this
-  origin, which is the honest cost and why `remember` is a checkbox: unticked,
-  the key lives in the tab and nowhere else. A stored value that no longer
-  *looks* like a key is dropped rather than sent, since it can only fail, and
-  it would fail a minute into a turn. It is shape-checked in the panel as well
-  as in the route because the field it was typed into is the only place a typo
-  can be fixed.
-- **The conversation follows the song** (`song_chats`), so a signed-out
-  visitor's turns keep no transcript beyond the tab: there is no song to attach
-  one to. **A transcript is its author's alone.** `song_chats` is owner-only
+- **The conversation follows the song** (`song_chats`). **A transcript is its author's alone.** `song_chats` is owner-only
   both ways with no public read (held by `test/data.test.js`), `loadSongChat`
   filters on `owner_id` as well, and the panel is keyed by the signed-in
   account in `AccountBar` (`key={userId}`): sign out is a soft navigation back
   to `/studio`, which used to leave the last person's conversation on screen
-  and send it as history on the next person's turn. Everything else about the panel — the activity
-  line, the warnings — is the same on either key.
+  and send it as history on the next person's turn.
 
 ### Groove — a whole song from a genre (`app/GrooveButton.tsx` + `app/songs/genres.js`)
 

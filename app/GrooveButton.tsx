@@ -102,7 +102,12 @@ export default function GrooveButton({ signedIn }: { signedIn: boolean }) {
       {open && <div className={styles.chatBackdrop} onClick={() => setOpen(false)} aria-hidden />}
       {open && (
         <div className={`${styles.panel} ${styles.chatPanel} ${styles.groovePanel}`} role="dialog" aria-label="groove">
-          <div className={styles.panelTitle}>pick a groove</div>
+          <div className={styles.panelHead}>
+            <div className={styles.panelTitle}>pick a groove</div>
+            <button className={styles.panelClose} onClick={() => setOpen(false)} aria-label="close" title="close">
+              ×
+            </button>
+          </div>
           <input
             ref={searchRef}
             className={styles.grooveSearch}
