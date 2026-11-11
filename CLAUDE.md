@@ -2290,6 +2290,14 @@ WINDOW   first step · last step
 - The twelve probabilities stay **sliders**, in `KNOB_EXCLUDE` beside the
   wavetable's harmonic bars and for the same reason: side by side they are the
   pitch profile, and a row of little dials would say nothing.
+- **The panel is laid out in blocks** (studioMarkup.ts, `.sq-chance__block`):
+  the head (title, live, write), the throw's picture and summary, then RHYTHM
+  and MELODY as cards, each with its name and its dice (‹ roll › and the
+  history count, one joined control) in a header row, its controls, and a
+  footer of its lesser options on the left and `new throw` on the right. The
+  melody card ends with the range and the window, two captioned pairs of
+  knobs on one row. On a phone's track (live) only the head, the picture and
+  the summary show, and a tap opens the panel as a modal.
 - The panel's picture is **pitch against time**, not a ring: there is no evenness
   to see here, and a rest, a tie and a leap all have to read at a glance.
 

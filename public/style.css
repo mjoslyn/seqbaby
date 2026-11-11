@@ -2503,8 +2503,8 @@ body.kbd-recording:not(.sq-playing) .sq-track.is-kbd-active .sq-step.is-cursor {
   border-radius: 6px;
   padding: 8px 10px;
   display: grid;
-  gap: 8px;
-  max-width: 520px;
+  gap: 10px;
+  max-width: 560px;
 }
 .sq-track__chance-panel[hidden] { display: none; }
 .track-chance[aria-pressed="true"] { background: var(--accent); color: #0b0d10; border-color: var(--accent); }
@@ -2512,7 +2512,7 @@ body.kbd-recording:not(.sq-playing) .sq-track.is-kbd-active .sq-step.is-cursor {
    the button, which is all you can see with the panel closed. */
 .track-chance.is-live { box-shadow: 0 0 0 1px var(--accent-2) inset; color: var(--accent-2); }
 
-.sq-chance__title { color: var(--fg); font-size: 12px; }
+.sq-chance__title { color: var(--fg); font-size: 13px; font-weight: 600; }
 /* The title shares its line with live and write: the two switches that decide
    what the panel is FOR, up where they are seen before anything is scrolled. */
 .sq-chance__head {
@@ -2578,34 +2578,94 @@ body.kbd-recording:not(.sq-playing) .sq-track.is-kbd-active .sq-step.is-cursor {
   background-repeat: no-repeat, no-repeat;
 }
 
-/* A section head: which half of the machine, its dice, and how long a throw is held. */
+/* The two halves of the machine are blocks of their own, so the panel reads
+   as: what it is and whether it is live (the head), what it made (the roll),
+   then RHYTHM and MELODY, each with its dice in its header and its lesser
+   options in a footer under its controls. Nothing sits on a line alone. */
+.sq-chance__block {
+  display: grid;
+  gap: 10px;
+  padding: 10px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+/* A section head: its name on the left, its dice on the right. */
 .sq-chance__sec {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 10px;
-  padding-top: 2px;
-  border-top: 1px solid var(--border);
-  flex-wrap: wrap;
-  row-gap: 4px;
   font-size: 11px;
   color: var(--fg-dim);
 }
-.sq-chance__sec-t { color: var(--fg); letter-spacing: 0.06em; text-transform: uppercase; font-size: 10px; }
+.sq-chance__sec-t { color: var(--fg); letter-spacing: 0.08em; text-transform: uppercase; font-size: 11px; font-weight: 600; }
 .sq-chance__sec button { font-size: 11px; }
-/* The section's options sit beside its name; the dice and the hold go right. */
-.sq-chance__sec > button { margin-left: auto; }
-.sq-chance__throws { margin-left: auto; display: inline-flex; align-items: center; gap: 2px; }
+/* The dice as one control: back, roll, forward, joined, then where in the
+   history this throw is. Roll is the thing pressed, so it is the one lit. */
+.sq-chance__throws { display: inline-flex; align-items: center; }
+.sq-chance__throws > button { border-radius: 0; margin: 0; }
+.sq-chance__throws > button + button { margin-left: -1px; }
+.sq-chance__throws > button:first-of-type { border-radius: 6px 0 0 6px; }
+.sq-chance__throws > button:last-of-type { border-radius: 0 6px 6px 0; }
+.sq-chance__throws > button:nth-of-type(2) {
+  color: var(--accent);
+  border-color: color-mix(in oklab, var(--accent) 55%, var(--border));
+  position: relative;
+  z-index: 1;
+  padding-left: 14px;
+  padding-right: 14px;
+}
 .sq-chance__throws > button:disabled { opacity: 0.35; }
-.sq-chance__pos { min-width: 3ch; color: var(--fg-dim); font-size: 10px; font-variant-numeric: tabular-nums; }
+.sq-chance__pos { min-width: 4ch; margin-left: 8px; text-align: right; color: var(--fg-dim); font-size: 10px; font-variant-numeric: tabular-nums; }
 /* A dice with nothing to decide. Not `disabled`: the button is how you find out
    why, and on a touch screen its title is out of reach — pressing it puts the
    reason in the status bar. Same strike-through the unreachable semitones get. */
-.sq-chance__sec button.is-dead { color: var(--fg-dim); text-decoration: line-through; }
-.sq-chance__free { display: inline-flex; align-items: center; gap: 5px; }
-.sq-chance__free select { font-size: 11px; }
+.sq-chance__sec button.is-dead,
+.sq-chance__throws > button.is-dead { color: var(--fg-dim); text-decoration: line-through; }
+/* A section's footer: the options that shape what the dice may throw on the
+   left, how long a throw is held on the right. Quieter than the controls. */
+.sq-chance__foot {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 8px 14px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--border);
+  font-size: 11px;
+  color: var(--fg-dim);
+}
+/* Its label over the select, so the pair takes a column's width, not a row's. */
+.sq-chance__free { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 3px; font-size: 10px; }
+.sq-chance__free select { font-size: 11px; width: auto; min-width: 7.5em; }
 /* A throw that moves on its own is marked, as the realtime switch it replaced was. */
 .sq-chance__free:has(option:checked:not([value="0"])) { color: var(--accent-2); }
 .sq-chance__free:has(option:checked:not([value="0"])) select { color: var(--accent-2); }
+/* The melody's range and window close its block, under a rule of their own. */
+.sq-chance__ctls--range {
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  flex-wrap: nowrap;
+  justify-content: space-around;
+  gap: 10px;
+}
+/* Range and window: two knobs each under a caption of their own, side by side
+   on one row at any width. */
+.sq-chance__ctls--range .sq-chance__grp {
+  display: grid;
+  grid-template-columns: repeat(2, auto);
+  justify-items: center;
+  gap: 6px 16px;
+}
+.sq-chance__ctls--range .sq-chance__grp--window { padding-left: 12px; }
+.sq-chance__ctls--range .sq-chance__grp > .sq-chance__sec-t {
+  grid-column: 1 / -1;
+  writing-mode: horizontal-tb;
+  transform: none;
+  color: var(--fg-dim);
+  font-size: 10px;
+  font-weight: 400;
+}
 
 /* Knobs, like every other played control in the app, with the value written
    under the dial rather than left to the drag bubble — these read as words
@@ -2621,6 +2681,8 @@ body.kbd-recording:not(.sq-playing) .sq-track.is-kbd-active .sq-step.is-cursor {
   transform: rotate(180deg);
   align-self: center;
   color: var(--fg-dim);
+  font-size: 10px;
+  font-weight: 400;
 }
 .sq-chance__f {
   display: flex;
@@ -2679,7 +2741,7 @@ body.kbd-recording:not(.sq-playing) .sq-track.is-kbd-active .sq-step.is-cursor {
 
 .sq-chance__opts {
   display: flex;
-  gap: 14px;
+  gap: 8px 14px;
   align-items: center;
   flex-wrap: wrap;
   font-size: 11px;
@@ -3738,7 +3800,7 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not
   .sq-track .sq-track__live > .sq-track__euclid-panel.is-live,
   .sq-track .sq-track__live > .sq-track__chance-panel.is-live { cursor: pointer; }
   .sq-track .sq-track__live > .sq-track__euclid-panel.is-live :is(.sq-euclid__strip, .sq-euclid__ctls, .sq-euclid__opts, .sq-euclid__actions, .sq-euclid__hint),
-  .sq-track .sq-track__live > .sq-track__chance-panel.is-live :is(.sq-chance__actions, .sq-chance__hint, .sq-chance__sec) { display: none !important; }
+  .sq-track .sq-track__live > .sq-track__chance-panel.is-live :is(.sq-chance__actions, .sq-chance__hint, .sq-chance__block) { display: none !important; }
   .sq-track .sq-track__live > .sq-track__euclid-panel.is-live .sq-euclid__ring { width: 64px; height: 64px; }
   .sq-track .sq-track__live > .sq-track__euclid-panel.is-live .sq-euclid__title::after,
   .sq-track .sq-track__live > .sq-track__chance-panel.is-live .sq-chance__title::after {

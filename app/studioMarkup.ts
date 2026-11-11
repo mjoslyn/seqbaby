@@ -1009,16 +1009,12 @@ ${ORACLE_PANEL}
           <div class="sq-chance__hint"></div>
         </div>
 
-        <div class="sq-chance__sec">
-          <span class="sq-chance__sec-t">rhythm</span>
-          <span class="sq-chance__opts">
-            <label title="let variation reach the triplet values (1/4T, 1/8T). The grid is sixteenths, so they play as a ratcheted step: three notes evenly across the space"><input class="sq-chance__trips" type="checkbox" /> triplets</label>
-            <label title="let variation reach 1/32 notes: one step, struck twice"><input class="sq-chance__x32" type="checkbox" /> 1/32s</label>
-          </span>
-          <span class="sq-chance__throws"><button class="sq-chance__prev-r sq-btn--ghost" type="button" title="back to the rhythm throw before this one" aria-label="previous rhythm throw" disabled>‹</button><button class="sq-chance__dice-r sq-btn--ghost" type="button" title="throw the rhythm dice: new values for the note lengths, the rests and the ties. The throw is held, so the part repeats">roll</button><button class="sq-chance__next-r sq-btn--ghost" type="button" title="forward to the next rhythm throw" aria-label="next rhythm throw" disabled>›</button><span class="sq-chance__pos sq-chance__pos-r"></span></span>
-          <label class="sq-chance__free" title="how long a rhythm throw is held: hold keeps it until you roll, every pass is a fresh throw each time the window comes round, so the rhythm never repeats, and the counts in between let a phrase repeat that many times before a new one"><span>new throw</span><select class="sq-chance__rrep" aria-label="rhythm: new throw"><option value="0">hold</option><option value="1">every pass</option><option value="2">every 2 passes</option><option value="4">every 4 passes</option><option value="8">every 8 passes</option><option value="16">every 16 passes</option></select></label>
-        </div>
-        <div class="sq-chance__ctls">
+        <section class="sq-chance__block" aria-label="rhythm">
+          <div class="sq-chance__sec">
+            <span class="sq-chance__sec-t">rhythm</span>
+            <span class="sq-chance__throws"><button class="sq-chance__prev-r sq-btn--ghost" type="button" title="back to the rhythm throw before this one" aria-label="previous rhythm throw" disabled>‹</button><button class="sq-chance__dice-r sq-btn--ghost" type="button" title="throw the rhythm dice: new values for the note lengths, the rests and the ties. The throw is held, so the part repeats">roll</button><button class="sq-chance__next-r sq-btn--ghost" type="button" title="forward to the next rhythm throw" aria-label="next rhythm throw" disabled>›</button><span class="sq-chance__pos sq-chance__pos-r"></span></span>
+          </div>
+          <div class="sq-chance__ctls">
           <label class="sq-chance__f" title="the base rhythm, 1/1 down to 1/32 including the triplets. This is the grid the rest of the section varies">
             <span>note value</span>
             <input class="p-chnnote" type="range" min="0" max="7" step="1" value="4" />
@@ -1040,17 +1036,21 @@ ${ORACLE_PANEL}
             <output class="sq-chance__val sq-chance__val--rest"></output>
           </label>
         </div>
+          <div class="sq-chance__foot">
+            <span class="sq-chance__opts">
+              <label title="let variation reach the triplet values (1/4T, 1/8T). The grid is sixteenths, so they play as a ratcheted step: three notes evenly across the space"><input class="sq-chance__trips" type="checkbox" /> triplets</label>
+              <label title="let variation reach 1/32 notes: one step, struck twice"><input class="sq-chance__x32" type="checkbox" /> 1/32s</label>
+            </span>
+            <label class="sq-chance__free" title="how long a rhythm throw is held: hold keeps it until you roll, every pass is a fresh throw each time the window comes round, so the rhythm never repeats, and the counts in between let a phrase repeat that many times before a new one"><span>new throw</span><select class="sq-chance__rrep" aria-label="rhythm: new throw"><option value="0">hold</option><option value="1">every pass</option><option value="2">every 2 passes</option><option value="4">every 4 passes</option><option value="8">every 8 passes</option><option value="16">every 16 passes</option></select></label>
+          </div>
+        </section>
 
-        <div class="sq-chance__sec">
-          <span class="sq-chance__sec-t">melody</span>
-          <span class="sq-chance__opts">
-            <button class="sq-chance__scale sq-btn--ghost" type="button" title="write the session's active scale into the twelve probabilities, root loudest. Until a fader is touched they already follow the active scale; this freezes them so a later key change leaves the part alone">from scale</button>
-            <button class="sq-chance__clear-pcs sq-btn--ghost" type="button" title="put every semitone probability back to zero">none</button>
-          </span>
-          <span class="sq-chance__throws"><button class="sq-chance__prev-m sq-btn--ghost" type="button" title="back to the melody throw before this one" aria-label="previous melody throw" disabled>‹</button><button class="sq-chance__dice-m sq-btn--ghost" type="button" title="throw the melody dice: new pitches, same rhythm. Separate from the rhythm throw, so a part can repeat its rhythm while the notes keep moving">roll</button><button class="sq-chance__next-m sq-btn--ghost" type="button" title="forward to the next melody throw" aria-label="next melody throw" disabled>›</button><span class="sq-chance__pos sq-chance__pos-m"></span></span>
-          <label class="sq-chance__free" title="how long a melody throw is held: hold keeps it until you roll, every pass is a new melody each time the window comes round, so the pitches never repeat, and the counts in between let a phrase repeat that many times before a new one"><span>new throw</span><select class="sq-chance__mrep" aria-label="melody: new throw"><option value="0">hold</option><option value="1">every pass</option><option value="2">every 2 passes</option><option value="4">every 4 passes</option><option value="8">every 8 passes</option><option value="16">every 16 passes</option></select></label>
-        </div>
-        <div class="sq-chance__keys">
+        <section class="sq-chance__block" aria-label="melody">
+          <div class="sq-chance__sec">
+            <span class="sq-chance__sec-t">melody</span>
+            <span class="sq-chance__throws"><button class="sq-chance__prev-m sq-btn--ghost" type="button" title="back to the melody throw before this one" aria-label="previous melody throw" disabled>‹</button><button class="sq-chance__dice-m sq-btn--ghost" type="button" title="throw the melody dice: new pitches, same rhythm. Separate from the rhythm throw, so a part can repeat its rhythm while the notes keep moving">roll</button><button class="sq-chance__next-m sq-btn--ghost" type="button" title="forward to the next melody throw" aria-label="next melody throw" disabled>›</button><span class="sq-chance__pos sq-chance__pos-m"></span></span>
+          </div>
+          <div class="sq-chance__keys">
           <label class="sq-chance__key" title="how likely C is to turn up. A probability, not a switch, so half height means half as often. One raised fader on its own is certain wherever it sits">
             <input class="sq-chance__pc" data-pc="0" type="range" min="0" max="1" step="0.01" value="1" aria-label="C probability" />
             <span>C</span>
@@ -1100,33 +1100,42 @@ ${ORACLE_PANEL}
             <span>B</span>
           </label>
         </div>
-        <div class="sq-chance__ctls">
-          <div class="sq-chance__grp">
+          <div class="sq-chance__foot">
+            <span class="sq-chance__opts">
+              <button class="sq-chance__scale sq-btn--ghost" type="button" title="write the session's active scale into the twelve probabilities, root loudest. Until a fader is touched they already follow the active scale; this freezes them so a later key change leaves the part alone">set from scale</button>
+              <button class="sq-chance__clear-pcs sq-btn--ghost" type="button" title="put every semitone probability back to zero">clear</button>
+            </span>
+            <label class="sq-chance__free" title="how long a melody throw is held: hold keeps it until you roll, every pass is a new melody each time the window comes round, so the pitches never repeat, and the counts in between let a phrase repeat that many times before a new one"><span>new throw</span><select class="sq-chance__mrep" aria-label="melody: new throw"><option value="0">hold</option><option value="1">every pass</option><option value="2">every 2 passes</option><option value="4">every 4 passes</option><option value="8">every 8 passes</option><option value="16">every 16 passes</option></select></label>
+          </div>
+          <div class="sq-chance__ctls sq-chance__ctls--range">
+            <div class="sq-chance__grp">
+            <span class="sq-chance__sec-t">range</span>
             <label class="sq-chance__f" title="the lowest note that can be played. A semitone outside the range cannot turn up, and its fader greys out to say so">
-              <span>low note</span>
+              <span>low</span>
               <input class="p-chnlo" type="range" min="24" max="96" step="1" value="48" />
               <output class="sq-chance__val sq-chance__val--lo"></output>
             </label>
             <label class="sq-chance__f" title="the highest note that can be played. Five octaves above the low note at most">
-              <span>high note</span>
+              <span>high</span>
               <input class="p-chnhi" type="range" min="24" max="96" step="1" value="72" />
               <output class="sq-chance__val sq-chance__val--hi"></output>
             </label>
           </div>
-          <div class="sq-chance__grp sq-chance__grp--window">
+            <div class="sq-chance__grp sq-chance__grp--window">
             <span class="sq-chance__sec-t">window</span>
             <label class="sq-chance__f" title="where the generated window starts. Moving it slides the window without changing its length">
-              <span>first step</span>
+              <span>first</span>
               <input class="p-chnfirst" type="range" min="0" max="31" step="1" value="0" />
               <output class="sq-chance__val sq-chance__val--first"></output>
             </label>
             <label class="sq-chance__f" title="where the generated window ends. The window tiles across the track, so a short one repeats within a long track">
-              <span>last step</span>
+              <span>last</span>
               <input class="p-chnlast" type="range" min="0" max="31" step="1" value="15" />
               <output class="sq-chance__val sq-chance__val--last"></output>
             </label>
           </div>
-        </div>
+          </div>
+        </section>
       </div>
       <div class="sq-track__filter-panel" hidden>
         <div class="sq-fx__row" data-fx="filter">
