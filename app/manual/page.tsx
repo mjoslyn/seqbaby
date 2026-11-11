@@ -2299,7 +2299,7 @@ bus. Share it when it validates.`}</div>
                 <tr>
                   <td><a href="https://freesound.org/people/quartertone/packs/11573/" target="_blank" rel="noopener">classicalguitar multisampled</a> by quartertone, on Freesound</td>
                   <td>The nylon guitar</td>
-                  <td>Freesound</td>
+                  <td>CC BY</td>
                 </tr>
                 <tr>
                   <td><a href="https://www.karoryfer.com/karoryfer-samples" target="_blank" rel="noopener">Karoryfer Samples</a></td>

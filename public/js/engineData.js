@@ -300,7 +300,7 @@ export const INSTRUMENTS = [
   { id: "guitar-nylon", label: "nylon guitar", defaultNote: 52,
     notes: ["B1", "D2", "E2", "F#2", "G#2", "A2", "B2", "C#3", "D3", "E3", "F#3", "G3", "A3", "B3", "C#4", "D#4", "E4", "F#4", "G#4", "A4", "B4", "C#5", "D5", "E5", "F#5", "G5", "G#5", "A5", "A#5"],
     credit: { title: "classicalguitar multisampled", author: "quartertone (Freesound)",
-      url: "https://freesound.org/people/quartertone/packs/11573/", license: "Freesound" } },
+      url: "https://freesound.org/people/quartertone/packs/11573/", license: "CC BY" } },
   { id: "guitar-electric", label: "sampled electric guitar", defaultNote: 52,
     notes: ["C#2", "E2", "F#2", "A2", "C3", "D#3", "F#3", "A3", "C4", "D#4", "F#4", "A4", "C5", "D#5", "F#5", "A5", "C6"],
     credit: { title: "Karoryfer Samples", author: "Karoryfer",

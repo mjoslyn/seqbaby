@@ -5028,7 +5028,7 @@ Bundled drum kits are no longer separate engines — they live in
 recording every few notes from nbrosowsky/tonejs-instruments (code MIT; the
 acoustic from the University of Iowa's free-for-any-use samples, the
 electric guitar and bass from Karoryfer, CC0, the nylon from a Freesound pack
-by quartertone whose license is still to be confirmed). Rendered smaller by
+by quartertone, CC BY, credited with its link). Rendered smaller by
 `scripts/make-instruments.mjs` (cut to 4-5s with a fade, 96kbps mono, 4.8MB
 for the four) and served from `public/samples/inst/<id>/<note>.mp3`, a sharp
 spelled `s`. `InstrumentVoice` (voices.js) fetches every note of its
