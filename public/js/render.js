@@ -4,7 +4,7 @@ import { applyTrackPatch, serializeTrackPatch } from "./session.js";
 import { FX_STAGE_LABELS, FX_STAGE_LEVEL_KEY, FX_STAGE_NEUTRAL, LFO_DIVS, fxChainOrder, fxInstanceIds, autoLabel, baseModKey, fxInstanceAutoKeys, fxStageLevel, fxStageOf, fxStageOfModKey, isFxInstanceId, LFO_KEYS, lfoDivIndex, lfoLabel, rateToSlider, sliderToRate } from "./constants.js";
 import { showConfirmDialog, showInputDialog, showSavedPatchPicker } from "./dialogs.js";
 import { upgradeEngineSelect } from "./enginePicker.js";
-import { PHONE_MQ, isMobileDevice, setStatus } from "./dom.js";
+import { PHONE_MQ, isMobileDevice, isPhoneLayout, setStatus } from "./dom.js";
 import { HEXOP_ALG_LABELS, HEXOP_DEFAULTS, HEXOP_NUM_KEYS, HEXOP_PRESET_NAMES, HEXOP_SEL_KEYS, hexopPreset } from "./hexop.js";
 import { BASS_DEFAULTS, BASS_NUM_KEYS, BASS_SEL_KEYS, BASS_TONE_NAMES, bassTone, bassToneDescription } from "./bass.js";
 import { SUB_DEFAULTS, SUB_NUM_KEYS, SUB_SEL_KEYS, SUB_TONE_NAMES, subTone, subToneDescription } from "./subbass.js";
@@ -1492,6 +1492,21 @@ export function renderTrack(t) {
   bindModalOpen(".sq-track__comp",   openCompAsModal,   "_compModal");
   bindModalOpen(".track-euclid",     openEuclidAsModal, "_euclidModal");
   bindModalOpen(".track-chance",     openChanceAsModal, "_chanceModal");
+
+  // On a phone a live generator's card stays on the track as a summary (the
+  // ring or the part, and its formula), with its controls left to the modal.
+  // The summary opens it: the modal has the knobs and the `done`, which the
+  // card inline never had, so it read as a panel that could not be closed.
+  for (const [panelKey, btnSel] of [["_euclidPanelEl", ".track-euclid"], ["_chancePanelEl", ".track-chance"]]) {
+    const panel = t[panelKey];
+    panel?.addEventListener("click", (e) => {
+      if (!isPhoneLayout() || !panel.closest(".sq-track__live")) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const btn = node.querySelector(btnSel) || document.querySelector(`[data-track-id="${t.id}"] ${btnSel}`);
+      btn?.click();
+    });
+  }
 
   // The dot on each panel button, and the panel shown inline on the track
   // while something in it is on (refreshPanelBadges). The refs are stashed

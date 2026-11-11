@@ -13,6 +13,17 @@
   --step-now: #ffffff;
 }
 
+/* On a phone the dim grey was too dim: small text, held at arm's length, in
+   daylight. Labels, hints and readouts are all --fg-dim, so lifting it here
+   lifts every one of them (about 9:1 on the page, from 5.6:1), and --fg goes
+   up a step to stay ahead of it. */
+@media (max-width: 768px) {
+  :root {
+    --fg: #f5f3ee;
+    --fg-dim: #b6b8bf;
+  }
+}
+
 * { box-sizing: border-box; }
 
 /* Disable double-tap zoom site-wide on touch devices. `manipulation` permits
@@ -3721,6 +3732,19 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not
   .sq-track .sq-track__live > .sq-track__fx-panel,
   .sq-track .sq-track__live > .sq-track__mod-panel { display: none !important; }
   .sq-track__live:not(:has(> .sq-track__euclid-panel.is-live, > .sq-track__chance-panel.is-live)) { display: none; }
+  /* The generator's card on the track is a summary: what is playing and a
+     way in. Its knobs, options and buttons are the modal's (render.js opens
+     it on a tap), which has the `done` an inline card has no place for. */
+  .sq-track .sq-track__live > .sq-track__euclid-panel.is-live,
+  .sq-track .sq-track__live > .sq-track__chance-panel.is-live { cursor: pointer; }
+  .sq-track .sq-track__live > .sq-track__euclid-panel.is-live :is(.sq-euclid__strip, .sq-euclid__ctls, .sq-euclid__opts, .sq-euclid__actions, .sq-euclid__hint),
+  .sq-track .sq-track__live > .sq-track__chance-panel.is-live :is(.sq-chance__actions, .sq-chance__hint, .sq-chance__sec) { display: none !important; }
+  .sq-track .sq-track__live > .sq-track__euclid-panel.is-live .sq-euclid__ring { width: 64px; height: 64px; }
+  .sq-track .sq-track__live > .sq-track__euclid-panel.is-live .sq-euclid__title::after,
+  .sq-track .sq-track__live > .sq-track__chance-panel.is-live .sq-chance__title::after {
+    content: "  · tap to edit ›";
+    color: var(--accent);
+  }
 
   /* ---------- ICON BUTTONS NAME THEMSELVES ON A PHONE ----------------------
      A title attribute is a hover, and a finger cannot hover — so the dice, the
