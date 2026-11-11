@@ -104,8 +104,10 @@ test("every family has forms chain mode can play", () => {
 
 test("a plan names only engines, presets, scales, kits and step strings that exist", () => {
   const planned = GENRES.filter((g) => g.plan);
-  assert.ok(planned.length >= 40, `rewritten genres: ${planned.length}`);
+  assert.ok(planned.length >= 80, `rewritten genres: ${planned.length}`);
   for (const f of GENRE_FAMILIES) assert.ok(planned.some((g) => g.family === f.id), `${f.id} has a planned genre`);
+  const panelKeys = new Set(sb.describeEngines().flatMap((e) => JSON.stringify(sb.describeEngine(e.key).panel || {}).match(/"key":"[a-z0-9]+"/g) || []).map((k) => k.slice(7, -1)));
+  assert.ok(panelKeys.has("gtmute") && panelKeys.has("sbaccent"));
   const voiceOk = (spec, where) => {
     const { engine, preset } = parseVoice(spec);
     const e = sb.resolveEngine(engine);
@@ -120,6 +122,10 @@ test("a plan names only engines, presets, scales, kits and step strings that exi
       assert.equal(sb.parseSteps(m[1]).steps.length, 16, `${where}: \`${m[1]}\` is one bar`);
     }
     for (const m of text.matchAll(/\b(?:dm|plaits|inst|wt):[\w-]+/g)) sb.resolveEngine(m[0]);
+    // A panel control named in prose (sngbite, gtmute, sbaccent) is a real one.
+    for (const m of text.matchAll(/\b(?:sng|sge|hlo|lnc|ldr|drn|gt|sb)[a-z0-9]{3,}\b/g)) {
+      assert.ok(panelKeys.has(m[0]), `${where}: no control ${m[0]}`);
+    }
   };
   const samples = new Set(sb.BUNDLED_SAMPLE_LIST.map((x) => x.label));
   const kits = new Set(sb.BUNDLED_SAMPLE_LIST.map((x) => x.kit));

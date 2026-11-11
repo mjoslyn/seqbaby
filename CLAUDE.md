@@ -4603,7 +4603,7 @@ range and a list of instruments a model takes the middle of one and the first
 of the other. Every genre has its exact bpm, root note, form (`FAMILY_PLANS`,
 two to four per family, bars per section as chain mode plays them), angle and
 what the second main section adds drawn. A genre with a `plan` (`PLANS`,
-44 of the 150 so far, at least two in every family) also has its drum kit and starting bar (step
+82 of the 150 so far, at least two in every family) also has its drum kit and starting bar (step
 strings), an engine and preset per part, which optional parts exist at all,
 how the bass plays, the progression (which carries its scale, `scale: chords`,
 since notes snap to the scale and a progression only fits its own), two
