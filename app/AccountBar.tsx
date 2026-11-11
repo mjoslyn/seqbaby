@@ -7,7 +7,6 @@ import SongsMenu from "@/app/SongsMenu";
 import SaveButton from "@/app/SaveButton";
 import NewSongButton from "@/app/NewSongButton";
 import ComposeChat from "@/app/ComposeChat";
-import GrooveButton from "@/app/GrooveButton";
 import JamPanel from "@/app/JamPanel";
 import { getOpenSong } from "@/app/songs/openSong";
 import { IconMenu } from "@/app/menuIcons";
@@ -192,9 +191,6 @@ export function AccountBar({
             /studio, which kept this mounted with the last person's
             conversation on screen, and the next turn sent it to the model as
             history. A new identity gets a new panel, transcript and all. */}
-        {/* groove: pick a genre and a compose turn writes a whole song in it
-            (it hands the brief to ComposeChat, so it runs on the same key). */}
-        <GrooveButton signedIn={!!name} canPickModel={canPickModel} defaultModel={defaultModel} />
         <ComposeChat
           key={userId ?? "anon"}
           signedIn={!!name}

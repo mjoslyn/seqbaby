@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { getOpenSong, setOpenSong, subscribeOpenSong } from "@/app/songs/openSong";
+import GroovePicker from "@/app/GroovePicker";
 import { loadSongChat, saveSong, saveSongChat } from "@/app/songs/actions";
 import { markSaved } from "@/app/songs/confirmDiscard";
 import { trySave } from "@/app/songs/trySave";
@@ -131,7 +132,7 @@ export default function ComposeChat({
   useEffect(() => {
     if (!canPickModel) return;
     setModel(readModelPref(defaultModel));
-    // A pick in the groove panel is a pick here too.
+    // A pick made anywhere else on the page is a pick here too.
     const onPick = (e: Event) => {
       const id = (e as CustomEvent<{ model?: string }>).detail?.model;
       if (id) setModel(id);
@@ -148,6 +149,8 @@ export default function ComposeChat({
   // turn that failed for it since.
   const [siteDry, setSiteDry] = useState(budgetOut);
   const [open, setOpen] = useState(false);
+  // What the drawer shows: the conversation, or the genre picker.
+  const [tab, setTab] = useState<"chat" | "groove">("chat");
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
@@ -588,27 +591,17 @@ export default function ComposeChat({
     setSaveNote("");
   }, [review, writeLive]);
 
-  // The groove button (GrooveButton.tsx) starts a compose session from a
-  // genre: it hands the brief over as an event, and this opens and sends it as
-  // an ordinary turn, so it lands in the review bar like any other. The brief
-  // goes in the box first, so a turn that cannot run yet (no key) leaves it
-  // there to send once one is added.
-  const sendRef = useRef(send);
-  sendRef.current = send;
-  useEffect(() => {
-    const onGroove = (e: Event) => {
-      const detail = (e as CustomEvent<{ prompt?: string; model?: string }>).detail;
-      const prompt = detail?.prompt;
-      if (!prompt) return;
-      setOpen(true);
+  // The groove tab (GroovePicker.tsx) starts a turn from a genre: its brief
+  // goes in the box and is sent as an ordinary turn, so it lands in the
+  // review bar like any other and stays in the box if the turn cannot run.
+  const buildGroove = useCallback(
+    (prompt: string) => {
+      setTab("chat");
       setInput(prompt);
-      // The groove panel's menu decided this one: sent as it was shown there,
-      // not as this panel's state had last heard of it.
-      sendRef.current(prompt, detail?.model);
-    };
-    window.addEventListener("seqbaby:groove", onGroove);
-    return () => window.removeEventListener("seqbaby:groove", onGroove);
-  }, []);
+      send(prompt);
+    },
+    [send],
+  );
 
   const onKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -659,7 +652,26 @@ export default function ComposeChat({
       {open && (
         <div className={`${styles.panel} ${styles.chatPanel}`}>
           <div className={styles.panelHead}>
-            <div className={styles.panelTitle}>ask for changes to this song</div>
+            <div className={styles.chatTabs} role="tablist" aria-label="compose">
+              <button
+                role="tab"
+                aria-selected={tab === "chat"}
+                className={`${styles.grooveChip} ${tab === "chat" ? styles.grooveChipOn : ""}`}
+                onClick={() => setTab("chat")}
+                title="ask for changes to this song, in words"
+              >
+                ask
+              </button>
+              <button
+                role="tab"
+                aria-selected={tab === "groove"}
+                className={`${styles.grooveChip} ${tab === "groove" ? styles.grooveChipOn : ""}`}
+                onClick={() => setTab("groove")}
+                title="pick a genre and it writes a whole song in it"
+              >
+                groove
+              </button>
+            </div>
             <button className={styles.panelClose} onClick={() => setOpen(false)} aria-label="close" title="close">
               ×
             </button>
@@ -681,7 +693,8 @@ export default function ComposeChat({
               </select>
             </label>
           )}
-          <div className={styles.chatLog} ref={logRef}>
+          {tab === "groove" && <GroovePicker onBuild={buildGroove} busy={sending || composeOff} />}
+          <div className={styles.chatLog} ref={logRef} hidden={tab !== "chat"}>
             {messages.length === 0 && (
               <div className={styles.chatEmpty}>
                 say what you want and it works on the song that&apos;s open:
@@ -754,7 +767,7 @@ export default function ComposeChat({
               </div>
             </div>
           )}
-          <div className={styles.chatRow}>
+          <div className={styles.chatRow} hidden={tab !== "chat"}>
             <textarea
               ref={inputRef}
               className={styles.chatTextarea}

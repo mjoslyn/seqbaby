@@ -1,17 +1,14 @@
 "use client";
 
-// The top bar's `groove`: browse or search a genre, pick one, and a compose
-// session starts writing a whole song in it. The genres and their briefs are
-// app/songs/genres.js; this is the picker. Building hands the brief to the
-// compose panel as an event (ComposeChat listens for `seqbaby:groove`), so the
-// turn is an ordinary compose turn: same key, same limits, and it lands in the
-// review bar to be auditioned or kept.
+// The compose panel's `groove` tab: browse or search a genre, pick one, and
+// a compose turn writes a whole song in it. The genres, their plans and the
+// dice are app/songs/genres.js; this is the picker, and it is only the
+// picker: ComposeChat renders it inside its own drawer and is handed the
+// brief (`onBuild`), which it sends as an ordinary turn. Same model, same
+// limits, and it lands in the review bar to be auditioned or kept.
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { GENRES, GENRE_FAMILIES, genreById, genrePrompt, rollGenre, rollSummary, searchGenres } from "@/app/songs/genres.js";
-import { signupHref } from "@/lib/safeNext.js";
-import { COMPOSE_MODELS, DEFAULT_COMPOSE_MODEL } from "@/lib/composeModels.js";
-import { MODEL_EVENT, readModelPref, writeModelPref } from "@/app/composeModelPref";
 import styles from "@/app/ui.module.css";
 
 type Genre = (typeof GENRES)[number];
@@ -43,29 +40,15 @@ function writeSaved(v: Saved) {
   }
 }
 
-export default function GrooveButton({
-  signedIn,
-  canPickModel = false,
-  defaultModel = DEFAULT_COMPOSE_MODEL,
+export default function GroovePicker({
+  onBuild,
+  busy = false,
 }: {
-  signedIn: boolean;
-  /** This account is on COMPOSE_MODEL_PICKERS: the same menu compose has. */
-  canPickModel?: boolean;
-  defaultModel?: string;
+  /** The brief for the picked genre and this roll: the panel sends it. */
+  onBuild: (prompt: string) => void;
+  /** A turn is running: nothing can be built until it is done. */
+  busy?: boolean;
 }) {
-  // One remembered pick shared with compose (app/composeModelPref.ts).
-  const [model, setModel] = useState(defaultModel);
-  useEffect(() => {
-    if (!canPickModel) return;
-    setModel(readModelPref(defaultModel));
-    const onPick = (e: Event) => {
-      const id = (e as CustomEvent<{ model?: string }>).detail?.model;
-      if (id) setModel(id);
-    };
-    window.addEventListener(MODEL_EVENT, onPick);
-    return () => window.removeEventListener(MODEL_EVENT, onPick);
-  }, [canPickModel, defaultModel]);
-  const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [family, setFamily] = useState("");
   const [picked, setPicked] = useState<string>("");
@@ -101,20 +84,14 @@ export default function GrooveButton({
 
   // A new search or filter starts at the top of the list.
   useEffect(() => setActive(0), [query, family]);
+  // Mounted is shown: the tab was just opened.
   useEffect(() => {
-    if (open) setTimeout(() => searchRef.current?.focus(), 0);
-  }, [open]);
+    setTimeout(() => searchRef.current?.focus(), 0);
+  }, []);
   // Keep the highlighted row in view while arrowing through a long list.
   useEffect(() => {
     listRef.current?.querySelector<HTMLElement>(`[data-i="${active}"]`)?.scrollIntoView({ block: "nearest" });
   }, [active]);
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [open]);
-
   // Picking leaves the search as it was, so the list stays to pick again.
   // A fresh pick is a fresh roll.
   const pick = (g: Genre) => {
@@ -140,11 +117,8 @@ export default function GrooveButton({
   };
 
   const build = () => {
-    if (!genre) return;
-    window.dispatchEvent(new CustomEvent("seqbaby:groove", {
-      detail: { prompt: genrePrompt(genre, extra, seed), ...(canPickModel ? { model } : {}) },
-    }));
-    setOpen(false);
+    if (!genre || busy) return;
+    onBuild(genrePrompt(genre, extra, seed));
     // The note stays (it is the history), and the build goes to the front of
     // the recent row, a repeat moved up rather than listed twice.
     const note = extra.trim();
@@ -163,32 +137,7 @@ export default function GrooveButton({
   };
 
   return (
-    <div className={styles.songsWrap}>
-      <button
-        className={styles.accountBtn}
-        onClick={() => {
-          // Groove runs on compose, which needs an account: a signed-out
-          // visitor is sent to make one and comes back here after.
-          if (!signedIn) {
-            location.href = signupHref(location.pathname + location.search);
-            return;
-          }
-          setOpen((v) => !v);
-        }}
-        aria-expanded={open}
-        title={signedIn ? "pick a genre and compose writes a whole song in it" : "make an account to build songs from a genre"}
-      >
-        groove
-      </button>
-      {open && <div className={styles.chatBackdrop} onClick={() => setOpen(false)} aria-hidden />}
-      {open && (
-        <div className={`${styles.panel} ${styles.chatPanel} ${styles.groovePanel}`} role="dialog" aria-label="groove">
-          <div className={styles.panelHead}>
-            <div className={styles.panelTitle}>pick a groove</div>
-            <button className={styles.panelClose} onClick={() => setOpen(false)} aria-label="close" title="close">
-              ×
-            </button>
-          </div>
+    <div className={styles.groovePane}>
           <input
             ref={searchRef}
             className={styles.grooveSearch}
@@ -302,25 +251,6 @@ export default function GrooveButton({
               }
             }}
           />
-          {canPickModel && (
-            <label className={styles.chatModelRow}>
-              <span className={styles.chatModelLabel}>model</span>
-              <select
-                className={styles.chatModelSelect}
-                value={model}
-                onChange={(e) => {
-                  setModel(e.target.value);
-                  writeModelPref(e.target.value);
-                }}
-              >
-                {COMPOSE_MODELS.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
           <div className={styles.chatReviewBtns}>
             <button className={styles.smallBtn} onClick={surprise} title="pick a genre at random (from the filter, if one is on)">
               surprise me
@@ -328,14 +258,12 @@ export default function GrooveButton({
             <button
               className={`${styles.smallBtn} ${styles.smallBtnPrimary}`}
               onClick={build}
-              disabled={!genre}
-              title="open compose and write a whole song in this genre. It lands for review: nothing replaces the song until you keep it"
+              disabled={!genre || busy}
+              title="write a whole song in this genre. It lands for review: nothing replaces the song until you keep it"
             >
-              build in compose
+              build
             </button>
           </div>
-        </div>
-      )}
     </div>
   );
 }

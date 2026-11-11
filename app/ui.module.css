@@ -598,9 +598,12 @@ a.bylineLike { text-decoration: none; }
    audition that is still playing. The button does. */
 .composeBtnHolding { border-color: #6ee7b7; color: #6ee7b7; }
 
-/* The groove picker (GrooveButton.tsx): the compose drawer's shell, holding a
-   search, family chips, a long scrolling list and the picked genre's brief. */
-.groovePanel { gap: 8px; }
+/* The groove picker (GroovePicker.tsx), a tab of the compose drawer: a
+   search, family chips, a long scrolling list and the picked genre's brief.
+   It takes the room the log and the input leave when its tab is up. */
+.groovePane { display: flex; flex-direction: column; gap: 8px; flex: 1 1 auto; min-height: 0; }
+.chatTabs { display: flex; gap: 4px; }
+.chatLog[hidden], .chatRow[hidden] { display: none; }
 .grooveSearch {
   background: #0e0f12;
   border: 1px solid #2a2d35;
