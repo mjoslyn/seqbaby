@@ -368,8 +368,9 @@ export default function ComposeChat({
     el.style.height = `${el.scrollHeight}px`;
   }, [input, open]);
 
-  const send = useCallback(async () => {
-    const text = input.trim();
+  // `prompt` is sent in place of the box: the groove button's brief.
+  const send = useCallback(async (prompt?: string) => {
+    const text = (prompt ?? input).trim();
     if (!text || sending || !window.seqbaby) return;
     // Nothing to run it on. Said here rather than by sending a message that
     // can only come back refused -- and the key row is opened, since the
@@ -664,6 +665,25 @@ export default function ComposeChat({
     setSaveNote("");
   }, [review, writeLive]);
 
+  // The groove button (GrooveButton.tsx) starts a compose session from a
+  // genre: it hands the brief over as an event, and this opens and sends it as
+  // an ordinary turn, so it lands in the review bar like any other. The brief
+  // goes in the box first, so a turn that cannot run yet (no key) leaves it
+  // there to send once one is added.
+  const sendRef = useRef(send);
+  sendRef.current = send;
+  useEffect(() => {
+    const onGroove = (e: Event) => {
+      const prompt = (e as CustomEvent<{ prompt?: string }>).detail?.prompt;
+      if (!prompt) return;
+      setOpen(true);
+      setInput(prompt);
+      sendRef.current(prompt);
+    };
+    window.addEventListener("seqbaby:groove", onGroove);
+    return () => window.removeEventListener("seqbaby:groove", onGroove);
+  }, []);
+
   const onKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
       if (e.key === "Enter" && !e.shiftKey) {
@@ -884,7 +904,7 @@ export default function ComposeChat({
             />
             <button
               className={`${styles.smallBtn} ${styles.smallBtnPrimary}`}
-              onClick={send}
+              onClick={() => send()}
               disabled={sending || !input.trim() || needsKey}
             >
               send

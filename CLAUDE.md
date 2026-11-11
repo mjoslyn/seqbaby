@@ -68,6 +68,7 @@ env / fx / eq / comp / mod / automation per track.
 │   ├── songs/suggestName.ts  the name both save UIs offer in a blank name field
 │   ├── Preloader.tsx + preloaderMarkup.ts  loading overlay: markup + inline driver
 │   ├── login/ settings/ u/[username]/       auth, account settings, public profiles
+│   ├── GrooveButton.tsx + songs/genres.js  the top bar's `groove`: search ~120 genres by name / alias / family, pick one, and a compose turn builds a whole song in it
 │   ├── ComposeChat.tsx        the in-studio compose panel: ask for a song, in words; a turn's changes land in a review bar (audition / keep), never straight in
 │   ├── JamPanel.tsx           the jam room: who is in it, the connection (a WebSocket to workers/jamRoom.ts), the invite link. The engine half is public/js/jam.js
 │   ├── shareCard.ts + shareCopy.js  the link preview, and its sentences (who shared what)
@@ -4586,6 +4587,22 @@ panel ──▶ POST /api/compose ──▶ ComposeLimits.take ──▶ Compose
   to `/studio`, which used to leave the last person's conversation on screen
   and send it as history on the next person's turn. Everything else about the panel — the activity
   line, the warnings — is the same on either key.
+
+### Groove — a whole song from a genre (`app/GrooveButton.tsx` + `app/songs/genres.js`)
+
+The top bar's `groove`, beside `compose`, opens a picker in the compose
+drawer's shell: a search box with autocomplete over ~120 genres (by name,
+alias, family, then brief: `searchGenres`), family filter chips
+(`GENRE_FAMILIES`), the picked genre's tempo and brief, an optional "anything
+else" box, `surprise me` and `build in compose`. A genre is a short brief in
+the compose guide's own terms (tempo range, which engines, what makes it the
+genre), and `genrePrompt` turns it into a message asking for a complete song
+from scratch in chain mode. Building does not call the route itself: it
+fires `seqbaby:groove` with the prompt, and ComposeChat opens and sends it as
+an ordinary turn, so the key, the limits, the transcript and the review bar
+are compose's. The prompt is put in compose's box first, so a turn that
+cannot run yet (no key) leaves it there to send. `genres.js` is pure and
+tested (`test/genres.test.js`).
 
 ## A session onto a RUNNING engine (`liveSet.js`) — and the audition
 

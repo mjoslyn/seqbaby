@@ -608,6 +608,69 @@ a.bylineLike { text-decoration: none; }
    audition that is still playing. The button does. */
 .composeBtnHolding { border-color: #6ee7b7; color: #6ee7b7; }
 
+/* The groove picker (GrooveButton.tsx): the compose drawer's shell, holding a
+   search, family chips, a long scrolling list and the picked genre's brief. */
+.groovePanel { gap: 8px; }
+.grooveSearch {
+  background: #0e0f12;
+  border: 1px solid #2a2d35;
+  border-radius: 6px;
+  color: #e8e8ea;
+  font: inherit;
+  font-size: 12px;
+  padding: 7px 9px;
+  width: 100%;
+  box-sizing: border-box;
+}
+.grooveSearch:focus { outline: none; border-color: #6ee7b7; }
+.grooveChips { display: flex; flex-wrap: wrap; gap: 4px; }
+.grooveChip {
+  background: transparent;
+  border: 1px solid #2a2d35;
+  border-radius: 999px;
+  color: #b9bec8;
+  font: inherit;
+  font-size: 10.5px;
+  padding: 3px 8px;
+  cursor: pointer;
+}
+.grooveChip:hover { border-color: #4a4f5c; color: #e8e8ea; }
+.grooveChipOn { border-color: #6ee7b7; color: #6ee7b7; }
+.grooveList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  flex: 1;
+  min-height: 160px;
+  max-height: 44vh;
+  overflow-y: auto;
+  border: 1px solid #2a2d35;
+  border-radius: 6px;
+}
+.grooveItem {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  padding: 7px 9px;
+  cursor: pointer;
+  border-bottom: 1px solid #1d2027;
+}
+.grooveItemActive { background: #1d2027; }
+.grooveItemPicked { background: rgba(110, 231, 183, 0.12); }
+.grooveItemPicked .grooveName { color: #6ee7b7; }
+.grooveName { color: #e8e8ea; font-size: 12px; }
+.grooveMeta { color: #9aa0aa; font-size: 10.5px; white-space: nowrap; }
+.grooveNone { color: #9aa0aa; font-size: 12px; padding: 10px; }
+.grooveDetail { display: flex; flex-direction: column; gap: 4px; }
+.grooveDetailName { color: #e8e8ea; font-size: 13px; }
+.grooveBrief { color: #b9bec8; font-size: 11.5px; line-height: 1.45; }
+@media (pointer: coarse) {
+  .grooveItem { padding: 11px 10px; }
+  .grooveChip { padding: 6px 10px; font-size: 12px; }
+  .grooveSearch { font-size: 16px; }
+}
+
 /* Above phone width: the drawer proper, pinned to the right edge, full
    height. Higher than an engine modal (z-index 200) and the mobile bar's
    raised state (250) -- composing should stay reachable over either. */
