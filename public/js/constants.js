@@ -776,6 +776,8 @@ export function voiceAutoKeysForEngineKey(engineKey) {
   const eng = staticEngineByKey(t.engineKey);
   if (!eng) return ["vol"];
   if (eng.type === "plaits") return ["vol", "harm", "timb", "morph", "decay"];
+  // Instruments: the tone and the release, read when a note starts or ends.
+  if (eng.type === "instrument") return ["vol", "timb", "decay"];
   switch (t.engineKey) {
     case "dm:silverbox":        return ["vol", "harm", "timb", "morph", "decay"];
     case "dm:snarl": return ["vol", "harm", "timb", "osc1", "osc2", "osc3", "osc4", "ultra", "fm", "metal"];

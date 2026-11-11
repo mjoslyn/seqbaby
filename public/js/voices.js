@@ -1,5 +1,5 @@
 import { applySampleFadeEnvelope, loadBuffer, startSampleSource } from "./buffers.js";
-import { bundledSampleUrl, engineByKey } from "./catalog.js";
+import { bundledSampleUrl, engineByKey, instrumentNoteUrl, instrumentOf } from "./catalog.js";
 // The Plaits WASM port is an ambient global (public/woscillators.js, loaded
 // before the engine). Read here rather than in constants.js so that module
 // stays importable outside a browser.
@@ -1677,6 +1677,139 @@ export class SamplerVoice {
   }
 }
 
+// A multisampled instrument (`inst:<id>`, engineData.js INSTRUMENTS): a real
+// recording every few notes, each note played from the nearest one by
+// resampling, so nothing is transposed more than a couple of semitones. All of
+// an instrument's notes are fetched when the voice is built (a few hundred KB
+// for a guitar); a note asked for before its sample has arrived plays the
+// nearest one that has, and is silent only until the first does.
+// timb is a lowpass after it (300Hz at 0, open from 0.6 up); decay is how long
+// a note rings past its step (50ms damped to 3s let ring).
+const NOTE_INDEX = { C: 0, "C#": 1, D: 2, "D#": 3, E: 4, F: 5, "F#": 6, G: 7, "G#": 8, A: 9, "A#": 10, B: 11 };
+function noteNameToMidi(n) {
+  const m = /^([A-G]#?)(-?\d)$/.exec(n);
+  return m ? (Number(m[2]) + 1) * 12 + NOTE_INDEX[m[1]] : null;
+}
+export class InstrumentVoice {
+  constructor(ctx, key, params) {
+    this.ctx = ctx;
+    this.type = "instrument";
+    this.poly = true;
+    this.key = key;
+    this.tone = ctx.createBiquadFilter();
+    this.tone.type = "lowpass";
+    this.tone.Q.value = 0.5;
+    this.output = ctx.createGain();
+    this.output.gain.value = params.vol ?? 0.8;
+    this.tone.connect(this.output);
+    this.output.connect(ctx.destination);
+    this.active = new Set();
+    this._held = new Map();
+    this.release = 0.5;
+    this.zones = [];            // [{ midi, buf }] once loaded, sorted by midi
+    this.setEngine(key);
+    this.setParam("timb", params.timb ?? 0.5);
+    this.setParam("decay", params.decay ?? 0.4);
+  }
+  setEngine(key) {
+    this.key = key;
+    const inst = instrumentOf(key);
+    this.zones = [];
+    if (!inst) return;
+    const want = key;
+    for (const name of inst.notes) {
+      const midi = noteNameToMidi(name);
+      if (midi == null) continue;
+      loadBuffer(this.ctx, instrumentNoteUrl(inst.id, name)).then(buf => {
+        if (this.key !== want) return;
+        this.zones.push({ midi, buf });
+        this.zones.sort((a, b) => a.midi - b.midi);
+      }).catch(err => console.warn("instrument sample", name, err));
+    }
+  }
+  canInPlaceChange(newKey) { return String(newKey).startsWith("inst:"); }
+  getOutputNode() { return this.output; }
+  setDestination(target) {
+    try { this.output.disconnect(); } catch {}
+    this.output.connect(target);
+  }
+  setParam(key, val) {
+    const v = Number(val);
+    if (key === "vol") this.output.gain.value = v;
+    else if (key === "timb") {
+      const x = Math.max(0, Math.min(1, v / 0.6));
+      const hz = x >= 1 ? 20000 : 300 * Math.pow(20000 / 300, x);
+      holdParamAt(this.tone.frequency, this.ctx.currentTime);
+      this.tone.frequency.linearRampToValueAtTime(hz, this.ctx.currentTime + 0.02);
+    } else if (key === "decay") {
+      const d = Math.max(0, Math.min(1, v));
+      this.release = 0.05 + 3 * d * d;
+    }
+  }
+  getAudioParam(key) {
+    if (key === "vol") return this.output.gain;
+    return null;
+  }
+  _zoneFor(midi) {
+    let best = null;
+    for (const z of this.zones) if (!best || Math.abs(z.midi - midi) < Math.abs(best.midi - midi)) best = z;
+    return best;
+  }
+  _start(midi, time, velocity) {
+    const z = this._zoneFor(midi);
+    if (!z) return null;
+    const src = this.ctx.createBufferSource();
+    src.buffer = z.buf;
+    src.playbackRate.value = Math.pow(2, (midi - z.midi) / 12);
+    const g = this.ctx.createGain();
+    const level = 0.2 + 0.8 * Math.pow(Math.max(0, Math.min(1, velocity)), 1.3);
+    g.gain.setValueAtTime(0, time);
+    g.gain.linearRampToValueAtTime(level, time + 0.003);
+    src.connect(g).connect(this.tone);
+    src._g = g;
+    src.start(time);
+    this.active.add(src);
+    src.onended = () => { this.active.delete(src); try { g.disconnect(); } catch {} };
+    return { src, g, level, end: time + z.buf.duration / src.playbackRate.value };
+  }
+  _releaseAt(rec, at) {
+    const stop = Math.min(rec.end, at + this.release);
+    if (stop <= at) return;
+    try {
+      holdParamAt(rec.g.gain, at);
+      rec.g.gain.setTargetAtTime(0, at, this.release / 5);
+      rec.src.stop(stop + 0.01);
+    } catch {}
+  }
+  hit(midi, time, duration, velocity = 1) {
+    const rec = this._start(midi, time, velocity);
+    if (rec) this._releaseAt(rec, time + Math.max(0.02, duration));
+  }
+  noteOn(midi, time, velocity = 1) {
+    const rec = this._start(midi, time, velocity);
+    if (!rec) return;
+    const prev = this._held.get(midi);
+    if (prev) this._releaseAt(prev, time);
+    this._held.set(midi, rec);
+  }
+  noteOff(midi, time) {
+    const rec = this._held.get(midi);
+    if (!rec) return;
+    this._held.delete(midi);
+    this._releaseAt(rec, Math.max(time, this.ctx.currentTime));
+  }
+  silence(now) {
+    this._held.clear();
+    for (const s of this.active) fadeStop(s, s._g || null, now);
+    this.active.clear();
+  }
+  dispose() {
+    this.silence(this.ctx.currentTime);
+    try { this.tone.disconnect(); } catch {}
+    try { this.output.disconnect(); } catch {}
+  }
+}
+
 export class CustomToneVoice {
   constructor(ctx, key, params, config) {
     this.ctx = ctx;
@@ -2916,6 +3049,7 @@ export function buildVoiceForEngine(ctx, key, params, track) {
     case "saved":      return new CustomToneVoice(ctx, key, params, e.config);
     case "granular":   return new GranularVoice(ctx, key, params, track);
     case "wavetable":  return new WavetableVoice(ctx, key, params, track);
+    case "instrument": return new InstrumentVoice(ctx, key, params);
     case "bus":        return new BusVoice(ctx, key, params);
   }
   throw new Error("unknown engine type: " + e.type);

@@ -141,6 +141,10 @@ export const PLAITS_MACRO_TIPS = [
 // the 808/909 voices keep their tips inline in params.js, next to the labels
 // they go with.)
 export const ENGINE_MACRO_TIPS = {
+  ...Object.fromEntries(["guitar-acoustic", "guitar-nylon", "guitar-electric", "bass-electric"].map(id => [`inst:${id}`, {
+    timb: "a lowpass on the recording: darker to the left, wide open from about the middle up",
+    decay: "how long a note rings on after its step ends, from a damped stop to a long let-ring",
+  }])),
   "dm:snarl": {
     harm: "speed and depth of the LFO sweeping the pulse width",
     timb: "the pulse wave's resting width",
@@ -280,6 +284,50 @@ export const TEXTURE_ENGINES = [
 export const WAVETABLE_ENGINES = [
   { key: "wt:akwf", label: "wavetable", defaultNote: 60, poly: true, melodic: true },
 ].map(e => ({ ...e, group: "wavetable", type: "wavetable", poly: e.poly ?? false, melodic: e.melodic ?? false }));
+
+// Multisampled instruments: a real recording every few notes, each note played
+// from the nearest one (InstrumentVoice, voices.js). From
+// nbrosowsky/tonejs-instruments (code MIT), which edited open libraries for
+// consistency; rendered smaller by scripts/make-instruments.mjs and served
+// from public/samples/inst/<id>/<note>.mp3 (a sharp spelled `s`: Fs2).
+// `notes` are the sampled pitches; `credit` the library each came from.
+export const INSTRUMENT_SAMPLE_BASE = "/samples/inst";
+export const INSTRUMENTS = [
+  { id: "guitar-acoustic", label: "acoustic guitar", defaultNote: 52,
+    notes: ["D2", "D#2", "E2", "F2", "F#2", "G2", "G#2", "A2", "A#2", "B2", "C3", "C#3", "D3", "D#3", "E3", "F3", "F#3", "G3", "G#3", "A3", "A#3", "B3", "C4", "C#4", "D4", "D#4", "E4", "F4", "F#4", "G4", "G#4", "A4", "A#4", "B4", "C5", "C#5", "D5"],
+    credit: { title: "Musical Instrument Samples", author: "University of Iowa Electronic Music Studios",
+      url: "https://theremin.music.uiowa.edu/MIS.html", license: "free use, no restrictions" } },
+  { id: "guitar-nylon", label: "nylon guitar", defaultNote: 52,
+    notes: ["B1", "D2", "E2", "F#2", "G#2", "A2", "B2", "C#3", "D3", "E3", "F#3", "G3", "A3", "B3", "C#4", "D#4", "E4", "F#4", "G#4", "A4", "B4", "C#5", "D5", "E5", "F#5", "G5", "G#5", "A5", "A#5"],
+    credit: { title: "classicalguitar multisampled", author: "quartertone (Freesound)",
+      url: "https://freesound.org/people/quartertone/packs/11573/", license: "Freesound" } },
+  { id: "guitar-electric", label: "sampled electric guitar", defaultNote: 52,
+    notes: ["C#2", "E2", "F#2", "A2", "C3", "D#3", "F#3", "A3", "C4", "D#4", "F#4", "A4", "C5", "D#5", "F#5", "A5", "C6"],
+    credit: { title: "Karoryfer Samples", author: "Karoryfer",
+      url: "https://www.karoryfer.com/karoryfer-samples", license: "CC0" } },
+  { id: "bass-electric", label: "sampled electric bass", defaultNote: 40,
+    notes: ["C#1", "E1", "G1", "A#1", "C#2", "E2", "G2", "A#2", "C#3", "E3", "G3", "A#3", "C#4", "E4", "G4", "A#4", "C#5"],
+    credit: { title: "Karoryfer Samples", author: "Karoryfer",
+      url: "https://www.karoryfer.com/karoryfer-samples", license: "CC0" } },
+];
+/** Who put the instruments together, credited beside each library. */
+export const INSTRUMENT_SOURCE = {
+  title: "tonejs-instruments", author: "Nicholaus P. Brosowsky",
+  url: "https://github.com/nbrosowsky/tonejs-instruments", license: "MIT",
+};
+export const INSTRUMENT_ENGINES = INSTRUMENTS.map(i => ({
+  key: `inst:${i.id}`, label: i.label, group: "instruments", type: "instrument",
+  defaultNote: i.defaultNote, poly: true, melodic: true,
+}));
+/** The instrument behind an `inst:` engine key, or undefined. */
+export function instrumentOf(engineKey) {
+  const k = String(engineKey || "");
+  return k.startsWith("inst:") ? INSTRUMENTS.find(i => i.id === k.slice(5)) : undefined;
+}
+/** Where one sampled note of an instrument is fetched from. */
+export function instrumentNoteUrl(id, note) {
+  return `${INSTRUMENT_SAMPLE_BASE}/${id}/${String(note).replace("#", "s")}.mp3`;
+}
 
 export const SAMPLE_BASE = "https://tonejs.github.io/audio/drum-samples";
 // The one unified sampler engine. Absorbs the old `upload` + per-sample `smp:*`
@@ -421,7 +469,7 @@ export const UPLOAD_ENGINE = {
 // list from these plus those; this is the list a Node process can ask.
 export const STATIC_ENGINES = [
   ...plaitsEntries(), ...DRUM_SYNTH_ENGINES, ...ANALOG_ENGINES, ...TEXTURE_ENGINES,
-  ...WAVETABLE_ENGINES, SAMPLER_ENGINE, MIDI_ENGINE, BUS_ENGINE,
+  ...WAVETABLE_ENGINES, ...INSTRUMENT_ENGINES, SAMPLER_ENGINE, MIDI_ENGINE, BUS_ENGINE,
 ];
 const STATIC_ENGINE_MAP = new Map(STATIC_ENGINES.map(e => [e.key, e]));
 /** The catalog entry for an engine key, or undefined. Saved patches
@@ -452,6 +500,8 @@ export function engineSliderLabels(engineKey) {
     case "dm:tines":     return { harm: "tine",     timb: "bite",   morph: "chorus",    decay: "decay" };
     case "dm:oracle":    return { harm: "detune",   timb: "shape",  morph: "drive",     decay: "decay" };
     case "dm:granular":  return { harm: "grain",    timb: "dense",  morph: "pos",       decay: "spray" };
+    case "inst:guitar-acoustic": case "inst:guitar-nylon": case "inst:guitar-electric": case "inst:bass-electric":
+                         return { harm: null,       timb: "tone",   morph: null,        decay: "release" };
     case "wt:akwf":      return { harm: "wave",     timb: "warm",   morph: "detune",    decay: "decay" };
     case "dm:silverbox": return { harm: "cutoff",   timb: "reso",   morph: "env mod",   decay: "decay" };
     case "dm:contagion": return { harm: "cutoff",   timb: "reso",   morph: "shape 1",   decay: "decay" };

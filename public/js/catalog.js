@@ -3,7 +3,7 @@ import { quantizeToScale, scaleIndexToMidi } from "./theory.js";
 
 
 /** @typedef {import("./types.js").EngineEntry} EngineEntry */
-import { ANALOG_ENGINES, BUS_ENGINE, DRUM_SYNTH_ENGINES, MIDI_ENGINE, SAMPLER_ENGINE, TEXTURE_ENGINES, WAVETABLE_ENGINES, plaitsEntries } from "./engineData.js";
+import { ANALOG_ENGINES, BUS_ENGINE, DRUM_SYNTH_ENGINES, MIDI_ENGINE, SAMPLER_ENGINE, TEXTURE_ENGINES, WAVETABLE_ENGINES, INSTRUMENT_ENGINES, plaitsEntries } from "./engineData.js";
 // The engine tables are data and live in engineData.js (no imports, readable
 // from Node); re-exported here so every existing import from catalog.js holds.
 export {
@@ -11,6 +11,7 @@ export {
   DRUM_SYNTH_ENGINES, ANALOG_ENGINES, TEXTURE_ENGINES, WAVETABLE_ENGINES,
   SAMPLE_BASE, SAMPLER_ENGINE, SAMPLE_ENGINES, BUNDLED_SAMPLES, ACOUSTIC_KITS, SAMPLE_KIT_LABELS, bundledSampleUrl,
   GRANULAR_SAMPLE_BASE, GRANULAR_SAMPLE_CREDIT, GRANULAR_SAMPLES,
+  INSTRUMENTS, INSTRUMENT_ENGINES, INSTRUMENT_SOURCE, instrumentOf, instrumentNoteUrl,
   MIDI_ENGINE, BUS_ENGINE, UPLOAD_ENGINE, STATIC_ENGINES, staticEngineByKey, engineSliderLabels,
 } from "./engineData.js";
 
@@ -20,7 +21,7 @@ export {
  * @returns {EngineEntry[]}
  */
 export function buildEngineCatalog() {
-  return [...plaitsEntries(), ...DRUM_SYNTH_ENGINES, ...ANALOG_ENGINES, ...TEXTURE_ENGINES, ...WAVETABLE_ENGINES, SAMPLER_ENGINE, ...savedPatchEntries(), MIDI_ENGINE, BUS_ENGINE];
+  return [...plaitsEntries(), ...DRUM_SYNTH_ENGINES, ...ANALOG_ENGINES, ...TEXTURE_ENGINES, ...WAVETABLE_ENGINES, ...INSTRUMENT_ENGINES, SAMPLER_ENGINE, ...savedPatchEntries(), MIDI_ENGINE, BUS_ENGINE];
 }
 
 export let ENGINES = [];

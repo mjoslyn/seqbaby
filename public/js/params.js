@@ -128,6 +128,7 @@ export function updatePlaitsControlsVisibility(t) {
   const isOracle  = t.engineKey === "dm:oracle";
   const isGranular  = t.engineKey === "dm:granular";
   const isWavetable = t.engineKey === "wt:akwf";
+  const isInstrument = engineType === "instrument";
   const isSilverbox     = t.engineKey === "dm:silverbox";
   const isContagion     = t.engineKey === "dm:contagion";
   const isHexop       = t.engineKey === "dm:hexop";
@@ -135,7 +136,7 @@ export function updatePlaitsControlsVisibility(t) {
   // its panel knobs (see buildDrumSynthNode).
   const is808 = t.engineKey.startsWith("dm:808-");
   const is909 = t.engineKey.startsWith("dm:909-");
-  const showTimbre = isPlaits || isSnarl || isLadder || isDrift || isGuitar || isBass || isSub || isDrone || isVox || isLancet || isHalo || isSiege || isTines || isOracle || isGranular || isWavetable || isSilverbox || isContagion || isHexop || is808 || is909;
+  const showTimbre = isPlaits || isSnarl || isLadder || isDrift || isGuitar || isBass || isSub || isDrone || isVox || isLancet || isHalo || isSiege || isTines || isOracle || isGranular || isWavetable || isInstrument || isSilverbox || isContagion || isHexop || is808 || is909;
   const group = t._timbreGroupEl || t.el.querySelector(".sq-param-group--timbre");
   if (group) {
     group.hidden = !showTimbre;
@@ -281,7 +282,7 @@ export function updatePlaitsControlsVisibility(t) {
     // Randomize button only makes sense for Plaits' generic harm/timb/morph/decay —
     // hide it for the analog engines where those sliders do engine-specific things.
     const randBtn = group.querySelector(".track-rand");
-    if (randBtn) randBtn.hidden = isSnarl || isLadder || isDrift || isGuitar || isBass || isSub || isDrone || isVox || isLancet || isHalo || isSiege || isTines || isOracle || isGranular || isWavetable || isSilverbox || isContagion || isHexop || is808 || is909;
+    if (randBtn) randBtn.hidden = isSnarl || isLadder || isDrift || isGuitar || isBass || isSub || isDrone || isVox || isLancet || isHalo || isSiege || isTines || isOracle || isGranular || isWavetable || isInstrument || isSilverbox || isContagion || isHexop || is808 || is909;
   }
   // Per-oscillator volume sliders: only shown for the analog mono engines.
   const oscGroup = t._oscMixGroupEl || t.el.querySelector(".sq-param-group--osc-mix");

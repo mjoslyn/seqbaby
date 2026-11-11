@@ -58,6 +58,12 @@ export function instrumentOf(key) {
   if (k.startsWith("wt:")) return "wavetable";
   if (k.startsWith("smp:")) return "sampler";
   if (k.startsWith("saved:")) return "tone synth";
+  // The sampled instruments: the electric ones are a guitar and a bass like
+  // the modelled ones; the acoustic two are their own instruments.
+  if (k.startsWith("inst:")) {
+    const [kind, sort] = k.slice(5).split("-");
+    return sort === "electric" ? kind : `${sort} ${kind}`;
+  }
   const drum = /^dm:(808|909)-/.exec(k);
   if (drum) return drum[1];
   return k.replace(/^dm:/, "").replace(/-/g, " ").toLowerCase().slice(0, 24) || null;

@@ -57,6 +57,10 @@ test("engine keys fold into the instruments a person would name", () => {
   assert.equal(instrumentOf("dm:808-kick"), "808");
   assert.equal(instrumentOf("dm:909-ohat"), "909");
   assert.equal(instrumentOf("dm:303"), "silverbox");
+  assert.equal(instrumentOf("inst:guitar-nylon"), "nylon guitar");
+  assert.equal(instrumentOf("inst:guitar-acoustic"), "acoustic guitar");
+  assert.equal(instrumentOf("inst:guitar-electric"), "guitar");
+  assert.equal(instrumentOf("inst:bass-electric"), "bass");
   assert.equal(instrumentOf("dm:silverbox"), "silverbox");
   assert.equal(instrumentOf("dm:sub"), "subby");
   assert.equal(instrumentOf("smp:CR78/kick"), "sampler");

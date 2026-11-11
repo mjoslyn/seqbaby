@@ -1369,6 +1369,16 @@ export default function ManualPage() {
             high and a floor tom, a ride and a crash. Put each piece on its own track,
             and keep the whole part on one kit so it sounds like one room.
           </p>
+          <p>
+            For a real guitar or bass, pick one of the{" "}
+            <span className={styles.ui}>instruments</span> instead: acoustic guitar, nylon
+            guitar, sampled electric guitar and sampled electric bass. Each is a
+            recording every few notes, so every note sounds like the instrument rather
+            than one sample stretched. <span className={styles.ui}>tone</span> darkens
+            it and <span className={styles.ui}>release</span> sets how long a note rings
+            after its step. The electric guitar engine is a different thing: a model of
+            a whole rig you can drive and shape.
+          </p>
           <ul>
             <li>Trim the start and end, and fade either edge.</li>
             <li>Slice a loop and play the slices from the grid, one per note.</li>
@@ -2275,6 +2285,26 @@ bus. Share it when it validates.`}</div>
                   <td><a href="https://drumgizmo.org/wiki/doku.php?id=kits:drskit" target="_blank" rel="noopener">DRSKit</a> by DrumGizmo and DRSDrums</td>
                   <td>The drs kit in the sampler (one hit per piece, mics mixed down)</td>
                   <td>CC BY 4.0</td>
+                </tr>
+                <tr>
+                  <td><a href="https://github.com/nbrosowsky/tonejs-instruments" target="_blank" rel="noopener">tonejs-instruments</a> by Nicholaus P. Brosowsky</td>
+                  <td>The four sampled instruments (acoustic, nylon and electric guitar, electric bass), edited from the libraries below and re-encoded smaller</td>
+                  <td>MIT</td>
+                </tr>
+                <tr>
+                  <td><a href="https://theremin.music.uiowa.edu/MIS.html" target="_blank" rel="noopener">Musical Instrument Samples</a> by the University of Iowa Electronic Music Studios</td>
+                  <td>The acoustic guitar</td>
+                  <td>Free for any use</td>
+                </tr>
+                <tr>
+                  <td><a href="https://freesound.org/people/quartertone/packs/11573/" target="_blank" rel="noopener">classicalguitar multisampled</a> by quartertone, on Freesound</td>
+                  <td>The nylon guitar</td>
+                  <td>Freesound</td>
+                </tr>
+                <tr>
+                  <td><a href="https://www.karoryfer.com/karoryfer-samples" target="_blank" rel="noopener">Karoryfer Samples</a></td>
+                  <td>The sampled electric guitar and electric bass</td>
+                  <td>CC0</td>
                 </tr>
                 <tr>
                   <td><a href="https://strudel.cc" target="_blank" rel="noopener">Strudel</a> and <a href="https://tidalcycles.org" target="_blank" rel="noopener">TidalCycles</a></td>

@@ -172,6 +172,18 @@ one; its filter envelope is its own, so `vfdec` short with `vfsus` low and
 burn", "brit stack", "rolled off", "fuzz lead", "singing lead", "scooped
 metal", "djent chug", "grunge", "jazz box").
 
+Sampled instruments, when it should sound recorded rather than modelled:
+`inst:guitar-acoustic` (steel strings: strummed chords, folk, singer
+songwriter), `inst:guitar-nylon` (classical: bossa, flamenco, lofi),
+`inst:guitar-electric` (a clean electric, no amp to shape) and
+`inst:bass-electric` (a plain played bass). Each plays a real recording from
+the nearest sampled note. Only two sliders: timb is the tone (darker below
+0.6, open above) and decay the release, how long a note rings past its step
+(0.2 damped, 0.6 a let-ring chord). No presets and no panel: shape them with
+the filter, eq and rack. A chord on a step with a strum (`set_step` strum
+20..40) is a strummed guitar. Reach for `dm:guitar` / `dm:bass` instead when
+the part wants drive, an amp or bloom.
+
 Textures: `dm:granular` with a `texture` (choir, ambient pad, harmonic
 strings, sleepy tines ...; `describe_engine` `dm:granular` lists them): a
 held note (a long tie) over a whole bar, morph for the position in the

@@ -890,6 +890,7 @@ All of this lives in `main.js` `init()` and `transport.js`:
 | `granular`    | `GranularVoice`  | Granular sampler (`dm:granular`, "texture" group). See the granular section below. |
 | `wavetable`   | `WavetableVoice` | Multi-frame AKWF wavetable synth (`wt:akwf`), morphable, editable in `wavetableEditor.js`. |
 | `midi`        | `MidiVoice`      | Web MIDI out; converts audio time → DOMHighResTimeStamp for `output.send`. |
+| `instrument`  | `InstrumentVoice` | A multisampled instrument (`inst:<id>`): acoustic, nylon and electric guitar, electric bass. See the instruments section below. |
 | `bus`         | `BusVoice`       | The fx bus (`bus`). No instrument — a summing gain other tracks are routed into, plus a mute gain, then the ordinary per-track chain. See the fx bus section below. |
 
 Voice interface: `hit(midi, time, dur, vel, opts?)`, `setParam`,
@@ -5020,6 +5021,26 @@ The engine key string is the source of truth.
 Bundled drum kits are no longer separate engines — they live in
 `BUNDLED_SAMPLES` and are picked *inside* the sampler's source picker
 (legacy `smp:Kit/part` keys migrate on load).
+
+**The sampled instruments** (`INSTRUMENTS` in engineData.js, group
+`instruments`, type `instrument`, keys `inst:guitar-acoustic`,
+`inst:guitar-nylon`, `inst:guitar-electric`, `inst:bass-electric`): a real
+recording every few notes from nbrosowsky/tonejs-instruments (code MIT; the
+acoustic from the University of Iowa's free-for-any-use samples, the
+electric guitar and bass from Karoryfer, CC0, the nylon from a Freesound pack
+by quartertone whose license is still to be confirmed). Rendered smaller by
+`scripts/make-instruments.mjs` (cut to 4-5s with a fade, 96kbps mono, 4.8MB
+for the four) and served from `public/samples/inst/<id>/<note>.mp3`, a sharp
+spelled `s`. `InstrumentVoice` (voices.js) fetches every note of its
+instrument when built and plays each step from the nearest sampled note,
+resampled, so nothing moves more than a couple of semitones. Two sliders:
+`timb` a lowpass after it (300Hz at 0, open from 0.6), `decay` the release
+past the step (50ms to 3s); both take lanes, neither an LFO (no linear
+AudioParam behind them). No panel, no presets. Strudel reaches them as
+`gm_acoustic_guitar_steel` / `gm_acoustic_guitar_nylon` /
+`gm_electric_guitar_jazz` / `gm_electric_bass_pick`, plus `nylon` and
+`acoustic_guitar` by rule; a label is spelled into code, so it must not hold
+parentheses (mini-notation reads them as euclid). `test/instruments.test.js`.
 
 **The acoustic kits** (`ACOUSTIC_KITS` in engineData.js): Salamander (CC BY-SA
 3.0), Virtuosity (CC0) and DRSKit (CC BY 4.0), the same nine pieces each

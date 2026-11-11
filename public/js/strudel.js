@@ -363,6 +363,8 @@ const EXPORT_SOUND = {
   "dm:fm-bell": "gm_tubular_bells", "dm:drift": "gm_lead_2_sawtooth", "dm:sub": "gm_synth_bass_sub",
   "dm:hexop": "gm_fx_crystal", "wt:akwf": "gm_lead_8_bass_lead", "dm:granular": "gm_pad_halo",
   "dm:drone": "gm_pad_sweep", "dm:vox": "gm_choir_aahs",
+  "inst:guitar-acoustic": "gm_acoustic_guitar_steel", "inst:guitar-nylon": "gm_acoustic_guitar_nylon",
+  "inst:guitar-electric": "gm_electric_guitar_jazz", "inst:bass-electric": "gm_electric_bass_pick",
 };
 const SOUND_EXACT = Object.fromEntries(Object.entries(EXPORT_SOUND).map(([k, v]) => [v, k]));
 const MELODIC_RULES = [
@@ -376,6 +378,8 @@ const MELODIC_RULES = [
   [/^(siege|kickdrum|kicksynth)$/, "dm:siege"],
   [/(choir|voice|vox|vocal|aahs|oohs|sing)/, "dm:vox"],
   [/(piano|epiano|rhodes|wurli|clavinet|harpsichord)/, "dm:tines"],
+  [/(nylon|classical_guitar|spanish_guitar)/, "inst:guitar-nylon"],
+  [/(acoustic_guitar|steel_guitar|guitar_steel|folk_guitar)/, "inst:guitar-acoustic"],
   [/(synth_bass|synthbass|moog)/, "dm:ladder"],
   [/(bass)/, "dm:bass"],
   [/(guitar|gtr|pluck)/, "dm:guitar"],
