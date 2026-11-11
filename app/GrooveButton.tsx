@@ -10,13 +10,36 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { GENRES, GENRE_FAMILIES, genreById, genrePrompt, searchGenres } from "@/app/songs/genres.js";
 import { signupHref } from "@/lib/safeNext.js";
+import { COMPOSE_MODELS, DEFAULT_COMPOSE_MODEL } from "@/lib/composeModels.js";
+import { MODEL_EVENT, readModelPref, writeModelPref } from "@/app/composeModelPref";
 import styles from "@/app/ui.module.css";
 
 type Genre = (typeof GENRES)[number];
 
 const familyName = (id: string) => GENRE_FAMILIES.find((f) => f.id === id)?.name ?? id;
 
-export default function GrooveButton({ signedIn }: { signedIn: boolean }) {
+export default function GrooveButton({
+  signedIn,
+  canPickModel = false,
+  defaultModel = DEFAULT_COMPOSE_MODEL,
+}: {
+  signedIn: boolean;
+  /** This account is on COMPOSE_MODEL_PICKERS: the same menu compose has. */
+  canPickModel?: boolean;
+  defaultModel?: string;
+}) {
+  // One remembered pick shared with compose (app/composeModelPref.ts).
+  const [model, setModel] = useState(defaultModel);
+  useEffect(() => {
+    if (!canPickModel) return;
+    setModel(readModelPref(defaultModel));
+    const onPick = (e: Event) => {
+      const id = (e as CustomEvent<{ model?: string }>).detail?.model;
+      if (id) setModel(id);
+    };
+    window.addEventListener(MODEL_EVENT, onPick);
+    return () => window.removeEventListener(MODEL_EVENT, onPick);
+  }, [canPickModel, defaultModel]);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [family, setFamily] = useState("");
@@ -67,7 +90,9 @@ export default function GrooveButton({ signedIn }: { signedIn: boolean }) {
 
   const build = () => {
     if (!genre) return;
-    window.dispatchEvent(new CustomEvent("seqbaby:groove", { detail: { prompt: genrePrompt(genre, extra) } }));
+    window.dispatchEvent(new CustomEvent("seqbaby:groove", {
+      detail: { prompt: genrePrompt(genre, extra), ...(canPickModel ? { model } : {}) },
+    }));
     setOpen(false);
     setExtra("");
   };
@@ -186,6 +211,25 @@ export default function GrooveButton({ signedIn }: { signedIn: boolean }) {
               }
             }}
           />
+          {canPickModel && (
+            <label className={styles.chatModelRow}>
+              <span className={styles.chatModelLabel}>model</span>
+              <select
+                className={styles.chatModelSelect}
+                value={model}
+                onChange={(e) => {
+                  setModel(e.target.value);
+                  writeModelPref(e.target.value);
+                }}
+              >
+                {COMPOSE_MODELS.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           <div className={styles.chatReviewBtns}>
             <button className={styles.smallBtn} onClick={surprise} title="pick a genre at random (from the filter, if one is on)">
               surprise me

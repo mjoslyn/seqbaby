@@ -9,8 +9,7 @@ import { composeModelLabel } from "@/lib/composeModels.js";
 import { signupHref } from "@/lib/safeNext.js";
 import { SITE_OUT_OF_BUDGET } from "@/lib/composeKey.js";
 import { COMPOSE_MODELS, DEFAULT_COMPOSE_MODEL } from "@/lib/composeModels.js";
-
-const MODEL_STORE = "seqbaby.composeModel.v1";
+import { MODEL_EVENT, readModelPref, writeModelPref } from "@/app/composeModelPref";
 import styles from "@/app/ui.module.css";
 
 type Msg =
@@ -131,20 +130,18 @@ export default function ComposeChat({
   const [model, setModel] = useState(defaultModel);
   useEffect(() => {
     if (!canPickModel) return;
-    try {
-      const saved = window.localStorage.getItem(MODEL_STORE);
-      if (saved && COMPOSE_MODELS.some((m) => m.id === saved)) setModel(saved);
-    } catch {
-      /* blocked storage: the default stands */
-    }
-  }, [canPickModel]);
+    setModel(readModelPref(defaultModel));
+    // A pick in the groove panel is a pick here too.
+    const onPick = (e: Event) => {
+      const id = (e as CustomEvent<{ model?: string }>).detail?.model;
+      if (id) setModel(id);
+    };
+    window.addEventListener(MODEL_EVENT, onPick);
+    return () => window.removeEventListener(MODEL_EVENT, onPick);
+  }, [canPickModel, defaultModel]);
   const pickModel = (id: string) => {
     setModel(id);
-    try {
-      window.localStorage.setItem(MODEL_STORE, id);
-    } catch {
-      /* blocked storage: it holds for this page */
-    }
+    writeModelPref(id);
   };
   const [ready, setReady] = useState(false);
   // The site's key is out of budget: known from the page, or learned from a
@@ -311,7 +308,7 @@ export default function ComposeChat({
   }, [input, open]);
 
   // `prompt` is sent in place of the box: the groove button's brief.
-  const send = useCallback(async (prompt?: string) => {
+  const send = useCallback(async (prompt?: string, modelOverride?: string) => {
     const text = (prompt ?? input).trim();
     if (!text || sending || !window.seqbaby) return;
     if (!signedIn) return;
@@ -366,7 +363,7 @@ export default function ComposeChat({
       const res = await fetch("/api/compose", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ message: text, history, session, ...(canPickModel ? { model } : {}) }),
+        body: JSON.stringify({ message: text, history, session, ...(canPickModel ? { model: modelOverride || model } : {}) }),
       });
       // Anything that failed before the route got to stream -- auth, a bad
       // request, a gateway page -- arrives as an ordinary body with a status
@@ -600,11 +597,14 @@ export default function ComposeChat({
   sendRef.current = send;
   useEffect(() => {
     const onGroove = (e: Event) => {
-      const prompt = (e as CustomEvent<{ prompt?: string }>).detail?.prompt;
+      const detail = (e as CustomEvent<{ prompt?: string; model?: string }>).detail;
+      const prompt = detail?.prompt;
       if (!prompt) return;
       setOpen(true);
       setInput(prompt);
-      sendRef.current(prompt);
+      // The groove panel's menu decided this one: sent as it was shown there,
+      // not as this panel's state had last heard of it.
+      sendRef.current(prompt, detail?.model);
     };
     window.addEventListener("seqbaby:groove", onGroove);
     return () => window.removeEventListener("seqbaby:groove", onGroove);
