@@ -3394,7 +3394,9 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not
 
   /* respect notch / home indicator on iOS */
   body { padding-bottom: env(safe-area-inset-bottom); }
-  .sq-transport { padding-top: max(6px, env(safe-area-inset-top)); }
+  /* Only when nothing is above it: under the account bar the bar has taken
+     the inset already (--sq-topbar-h is its measured height, 0 without one). */
+  .sq-transport { padding-top: max(6px, calc(env(safe-area-inset-top) - var(--sq-topbar-h, 0px))); }
 
   /* show mobile-only elements (track "more" toggle etc.) */
   .sq-mobile-only { display: inline-flex !important; }

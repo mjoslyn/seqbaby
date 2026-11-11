@@ -248,6 +248,13 @@ button.repoAction, a.repoAction:has(svg) { display: inline-flex; align-items: ce
   justify-content: flex-end;
   gap: 8px;
   padding: 6px 16px;
+  /* Installed on an iOS homescreen the status bar is translucent and the page
+     starts under it (black-translucent, viewport-fit cover): the bar is the
+     first thing on the page, so it takes the inset. Its height is measured
+     into --sq-topbar-h, so the transport below follows. */
+  padding-top: max(6px, env(safe-area-inset-top));
+  padding-left: max(16px, env(safe-area-inset-left));
+  padding-right: max(16px, env(safe-area-inset-right));
   background: #0b0c0e;
   border-bottom: 1px solid #2a2d35;
   font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
@@ -688,7 +695,7 @@ a.bylineLike { text-decoration: none; }
 /* ============================================================ */
 
 @media (max-width: 768px) {
-  .topBar { padding: 6px 10px; gap: 6px; }
+  .topBar { padding: max(6px, env(safe-area-inset-top)) max(10px, env(safe-area-inset-right)) 6px max(10px, env(safe-area-inset-left)); gap: 6px; }
 
   /* A phone's bar has room for the title and a face, not the sentence: the
      avatar still links to their page, and its title attribute names them. */
