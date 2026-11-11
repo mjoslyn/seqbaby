@@ -81,8 +81,8 @@ export default function ManualPage() {
           <h2>Getting started</h2>
           <p>
             Press <span className={styles.ui}>play</span>. Browsers keep audio muted
-            until you have interacted with the page, so the first press is really
-            just permission. If you hear nothing, press it again.
+            until you interact with the page, so the first press only gives the
+            page permission. If you hear nothing, press it again.
           </p>
           <p>
             A new session opens with a few drum tracks already running. Click any
@@ -109,7 +109,7 @@ export default function ManualPage() {
                 <tr><th>Control</th><th>What it does</th></tr>
               </thead>
               <tbody>
-                <tr><td>play</td><td>Starts and stops the sequencer. Playback starts from the top, except in arrange mode, where it starts from the ruler&apos;s start marker, and in a jam, where it lands on the room&apos;s beat.</td></tr>
+                <tr><td>play</td><td>Starts and stops the sequencer. Playback starts from the top. In arrange mode it starts from the ruler&apos;s start marker, and in a jam it lands on the room&apos;s beat.</td></tr>
                 <tr><td>record</td><td>With the sequencer running, anything you play on your computer keyboard is written into the active track.</td></tr>
                 <tr><td>capture</td><td>Writes the phrase you just played into the active track even though you weren&apos;t recording. It keeps the last 32 seconds, takes the run of notes since your last pause, and keeps the lengths you held.</td></tr>
                 <tr><td>bpm</td><td>Tempo. Type a number, or drag the field up and down.</td></tr>
@@ -117,7 +117,7 @@ export default function ManualPage() {
                 <tr><td>macro</td><td>Opens the XY <a href="#macro">macro pads</a>.</td></tr>
                 <tr><td>undo / redo</td><td>Steps back and forward through your edits. See <a href="#undo">undo</a>.</td></tr>
                 <tr><td>vim</td><td>Switches <a href="#vim">vim mode</a> on and off, for driving the studio from the keyboard. Desktop only.</td></tr>
-                <tr><td>metronome</td><td>A click on every beat, the downbeat accented, for playing along. Drag it up or down for its volume. It never ends up in an export.</td></tr>
+                <tr><td>metronome</td><td>A click on every beat, with the downbeat accented, to play along with. Drag it up or down to set its volume. It never ends up in an export.</td></tr>
                 <tr><td>meter</td><td>Output level, over on the right. If it sits pinned at the top, turn some tracks down.</td></tr>
               </tbody>
             </table>
@@ -147,8 +147,8 @@ export default function ManualPage() {
                 <tr><th>Gesture</th><th>Result</th></tr>
               </thead>
               <tbody>
-                <tr><td>Drag</td><td>Grab anywhere on the knob. The value doesn&apos;t jump to your click, it follows the pointer from wherever it already was.</td></tr>
-                <tr><td>Drag out sideways</td><td>Fine trim. The further from the knob your pointer travels, the smaller each pixel gets, so one gesture does the sweep and the trim. Shift forces fine mode.</td></tr>
+                <tr><td>Drag</td><td>Grab anywhere on the knob. The value moves with the pointer from where it already was, so it doesn&apos;t jump to your click.</td></tr>
+                <tr><td>Drag out sideways</td><td>Fine trim. The further your pointer moves from the knob, the smaller each pixel gets, so one gesture can sweep and then trim. Shift forces fine mode.</td></tr>
                 <tr><td>Wheel</td><td>Nudges the value a step at a time.</td></tr>
                 <tr><td>Double-click</td><td>Back to the default. On a touchscreen it is <span className={styles.ui}>reset to default</span> in the long-press menu instead, so two quick taps never throw away a setting.</td></tr>
                 <tr><td>Right-click, or long press</td><td>Opens the <a href="#motion">parameter menu</a>: what the control does, and any modulation on it.</td></tr>
@@ -165,9 +165,9 @@ export default function ManualPage() {
         <section className={styles.section} id="patterns">
           <h2>Patterns</h2>
           <p>
-            Every session has 32 pattern slots. Click a number to switch to it; the
-            one you are editing is outlined. Empty slots are blank, so one slot per
-            section is an easy way to build an arrangement.
+            Every session has 32 pattern slots. Click a number to switch to it. The
+            one you are editing is outlined. Empty slots are blank, so you can give
+            each section of a song its own slot.
           </p>
           <div className={styles.tableWrap}>
             <table className={styles.table}>
@@ -178,7 +178,7 @@ export default function ManualPage() {
                 <tr><td>repeat / chain / arrange</td><td>Repeat loops the current pattern. Chain plays your non-empty patterns in order, like a song. Arrange plays each track&apos;s own timeline of pattern blocks, drawn in the <a href="#views">arrangement view</a>.</td></tr>
                 <tr><td>immediate / finish</td><td>Whether clicking another pattern switches straight away or waits out the current bar.</td></tr>
                 <tr><td>dup</td><td>Copies this pattern into the next free slot. The usual way to start a variation.</td></tr>
-                <tr><td>drag a number</td><td>Drops a copy of that pattern onto any other slot and takes you there. In finish mode while playing it waits for the bar, like any other switch.</td></tr>
+                <tr><td>drag a number</td><td>Drops a copy of that pattern onto any other slot and takes you there. In finish mode while playing, it waits for the bar like any other switch.</td></tr>
                 <tr><td>sig</td><td>Time signature for this pattern, from 4/4 through 5/4, 7/8 and the compound meters.</td></tr>
                 <tr><td>rep</td><td>In chain mode, how many bars this pattern gets before the next one.</td></tr>
                 <tr><td>pattern / song</td><td>Render audio and download a WAV. See <a href="#saving">export</a>.</td></tr>
@@ -186,28 +186,31 @@ export default function ManualPage() {
             </table>
           </div>
           <div className={styles.note}>
-            Patterns hold notes, not sounds. Switching leaves your instruments,
-            effects and mixer settings where they were, because those belong to the
-            track. If you want the opposite, a track&apos;s{" "}
-            <span className={styles.ui}>p-lock</span> button gives it a sound of its
-            own in <em>this</em> pattern. See <a href="#lock">p-lock</a>.
+            Patterns hold notes. Instruments, effects and mixer settings belong to
+            the track, so switching patterns leaves them where they were. To give a
+            track a sound of its own in <em>this</em> pattern, use its{" "}
+            <span className={styles.ui}>p-lock</span> button. See <a href="#lock">p-lock</a>.
           </div>
         </section>
 
         <section className={styles.section} id="views">
           <h2>Clips and the arrangement</h2>
           <p>
-            One song, three pictures of it. The switcher in the transport (or{" "}
-            <span className={styles.key}>tab</span>, with nothing focused) moves
-            between the <span className={styles.ui}>groove</span> view, the step
-            grids you know; the <span className={styles.ui}>clips</span> view, every
-            track&apos;s 32 patterns laid out as clips to launch one track at a
-            time; and the <span className={styles.ui}>arrange</span> view, a
-            timeline of pattern blocks per track. Play plays what the open view
-            shows: the arrangement in the arrange view, the clips in the clips
-            view, and whatever the pattern bar says in the groove view. Switching
-            views while playing takes effect at the next bar line. Desktop only for
-            now.
+            The studio shows one song in four views. The switcher in the transport
+            (or <span className={styles.key}>tab</span>, with nothing focused) moves
+            between them:
+          </p>
+          <ul>
+            <li>The <span className={styles.ui}>groove</span> view is the step grids you know.</li>
+            <li>The <span className={styles.ui}>clips</span> view lays out every track&apos;s 32 patterns as clips you launch one track at a time.</li>
+            <li>The <span className={styles.ui}>arrange</span> view is a timeline of pattern blocks for each track.</li>
+            <li>The <span className={styles.ui}>piano</span> view is the <a href="#roll">piano roll</a> on one track, every pattern end to end.</li>
+          </ul>
+          <p>
+            Play plays what the open view shows: the arrangement in the arrange view,
+            the clips in the clips view, and whatever the pattern bar says in the
+            groove view. If you switch views while playing, the change takes effect at
+            the next bar line. The clips, arrange and piano views are desktop only for now.
           </p>
           <h3>Clips</h3>
           <div className={styles.tableWrap}>
@@ -216,14 +219,14 @@ export default function ManualPage() {
                 <tr><th>Control</th><th>What it does</th></tr>
               </thead>
               <tbody>
-                <tr><td>a cell</td><td>Launches that pattern on that track alone, now, or on the bar line in <em>finish</em> mode (the pattern bar&apos;s switch setting). The other tracks keep playing what they were. The lit cell is the pattern the track is on; a dot marks a p-locked one. Each different clip on a track wears its own shade of the track&apos;s colour, so copies of one pattern match and a pattern that differs stands out. Double-click a cell to mute the clip (the track stops; a click plays it again).</td></tr>
-                <tr><td>the detail</td><td>Under the grid: the selected track&apos;s instrument, its effects and modulation, and the step grid of the clip it is on, exactly as in the groove view. Clicking a cell selects its track; clicking a track&apos;s name selects it without launching anything. The pattern bar is hidden in this view and the arrangement: the scene row and the toolbar do its jobs there.</td></tr>
-                <tr><td>the scene row</td><td>The numbers along the top launch a whole column: every track to that pattern, which is exactly what the pattern bar does. Double-click one to play it now, whatever the switch setting, starting the transport if it is stopped. A track launched off the scene shows a <span className={styles.ui}>p5</span> badge beside its length in the groove view; click it to bring the track back.</td></tr>
-                <tr><td>a cell&apos;s right edge</td><td>Drag it across the cells beside it, either way, and the clip is copied into each of those slots on this track when you let go, like a spreadsheet&apos;s fill handle. The cells it will fill light up while you drag. A slot that already has a sound locked to it keeps that sound. Hold <span className={styles.key}>shift</span> and the same drag changes the clip&apos;s length instead, a bar at a time: longer repeats what is there (as the track head&apos;s <span className={styles.ui}>x2</span> does), shorter cuts the end off. A clip more than a bar long wears its bar count in the corner.</td></tr>
-                <tr><td>■ / ▶</td><td>Stops that track&apos;s clip: it plays nothing until a clip is launched on it or a scene is. Stopped, the same button is a play that brings its clip back.</td></tr>
+                <tr><td>a cell</td><td>Launches that pattern on that track alone. It starts now, or on the bar line in <em>finish</em> mode (the pattern bar&apos;s switch setting). The other tracks keep playing what they were. The lit cell is the pattern the track is on, and a dot marks a p-locked one. Each different clip on a track has its own shade of the track&apos;s colour, so copies of one pattern match and a pattern that differs stands out. Double-click a cell to mute the clip. The track stops, and a click plays it again.</td></tr>
+                <tr><td>the detail</td><td>Under the grid you get the selected track&apos;s instrument, its effects and modulation, and the step grid of the clip it is on, as in the groove view. Clicking a cell selects its track. Clicking a track&apos;s name selects it without launching anything. The pattern bar is hidden in this view and in the arrangement, and the scene row and the toolbar do its jobs there.</td></tr>
+                <tr><td>the scene row</td><td>The numbers along the top launch a whole column, moving every track to that pattern, as the pattern bar does. Double-click one to play it now, whatever the switch setting. That starts the transport if it is stopped. A track launched away from the scene shows a <span className={styles.ui}>p5</span> badge beside its length in the groove view. Click the badge to bring the track back.</td></tr>
+                <tr><td>a cell&apos;s right edge</td><td>Drag it across the cells beside it, in either direction. When you let go, the clip is copied into each of those slots on this track, like a spreadsheet&apos;s fill handle. The cells it will fill light up while you drag. A slot that already has a sound locked to it keeps that sound. Hold <span className={styles.key}>shift</span> and the same drag changes the clip&apos;s length instead, a bar at a time. Longer repeats what is there (as the track head&apos;s <span className={styles.ui}>x2</span> does), and shorter cuts the end off. A clip longer than a bar shows its bar count in the corner.</td></tr>
+                <tr><td>■ / ▶</td><td>Stops that track&apos;s clip. The track plays nothing until you launch a clip or a scene. While it is stopped, the same button plays its clip again.</td></tr>
                 <tr><td>drag a cell</td><td>Copies the pattern onto another cell, on the same track or another (lanes the other engine cannot play are dropped, as paste does).</td></tr>
-                <tr><td>play, repeat / chain, now / finish</td><td>The transport&apos;s play button, the pattern mode and the switch setting, here too since the pattern bar is hidden in this view: <em>repeat</em> loops the scene, <em>chain</em> walks the non-empty patterns in order with every track together; <em>finish</em> makes every launch wait for the bar line, <em>now</em> lands it at once.</td></tr>
-                <tr><td>● rec</td><td>Records what you launch into the arrangement, bar by bar: play, launch clips for a while, stop, and the recording lands in the arrangement view. With rec armed, play plays the clips whichever view you are in. If an arrangement already exists you are asked whether the recording replaces it or goes on after it (or is thrown away).</td></tr>
+                <tr><td>play, repeat / chain, now / finish</td><td>The transport&apos;s play button, the pattern mode and the switch setting, repeated here because the pattern bar is hidden in this view. <em>repeat</em> loops the scene, and <em>chain</em> plays the non-empty patterns in order with every track together. <em>finish</em> makes every launch wait for the bar line, and <em>now</em> lands it at once.</td></tr>
+                <tr><td>● rec</td><td>Records what you launch into the arrangement, bar by bar. Press play, launch clips for a while, then stop, and the recording lands in the arrangement view. With rec armed, play plays the clips whichever view you are in. If an arrangement already exists, you choose whether the recording replaces it, goes on after it, or is thrown away.</td></tr>
               </tbody>
             </table>
           </div>
@@ -234,22 +237,22 @@ export default function ManualPage() {
                 <tr><th>Control</th><th>What it does</th></tr>
               </thead>
               <tbody>
-                <tr><td>play</td><td>The transport&apos;s play plays what the open view shows: in the arrangement view it plays the arrangement (switching to arrange mode), in the clip view the clips (back to repeat or chain). The groove view plays whatever the pattern bar&apos;s mode says. Switching to the arrangement view or the clip view while playing does the same at the next bar line, so the arrangement takes over from the clips without a stop. Every track follows its blocks bar by bar, the song loops at the last block on any track, and a gap is silence for that track.</td></tr>
-                <tr><td>the ruler</td><td>Click a bar to put the start marker there: play starts the arrangement from it. While the arrangement plays, the click is a jump, landed at the next bar line.</td></tr>
+                <tr><td>play</td><td>The transport&apos;s play plays what the open view shows. In the arrangement view it plays the arrangement (switching to arrange mode), and in the clip view it plays the clips (back to repeat or chain). The groove view plays whatever the pattern bar&apos;s mode says. If you switch to the arrangement or clip view while playing, the same happens at the next bar line, so the arrangement takes over from the clips without a stop. Every track follows its blocks bar by bar. The song loops at the last block on any track, and a gap is silence for that track.</td></tr>
+                <tr><td>the ruler</td><td>Click a bar to put the start marker there, and play starts the arrangement from it. While the arrangement plays, a click jumps there at the next bar line.</td></tr>
                 <tr><td>drag on empty lane</td><td>Draws a block of the pattern the track is on, as many bars as you drag.</td></tr>
-                <tr><td>drag a block</td><td>Moves it, snapped to the bar. Drag its right edge to resize; hold <span className={styles.key}>alt</span> to drag out a copy. A block dropped on another cuts it.</td></tr>
+                <tr><td>drag a block</td><td>Moves it, snapped to the bar. Drag its right edge to resize it. Hold <span className={styles.key}>alt</span> to drag out a copy. A block dropped on another cuts it.</td></tr>
                 <tr><td>the number on a block</td><td>Picks which pattern it plays.</td></tr>
                 <tr><td>delete / backspace</td><td>Removes the selected block. Every edit is one undo step.</td></tr>
                 <tr><td>from chain</td><td>Lays the chain out as blocks on every track: the non-empty patterns in order, each for its <span className={styles.ui}>rep</span> count. A starting point to pull apart.</td></tr>
                 <tr><td>− / +</td><td>Zoom.</td></tr>
-                <tr><td>the detail</td><td>Under the timeline, as in the clip view: the selected track&apos;s instrument, effects, modulation and the step grid of the clip it is on. Clicking a block or a track&apos;s name selects the track.</td></tr>
+                <tr><td>the detail</td><td>Under the timeline, as in the clip view, you get the selected track&apos;s instrument, effects, modulation and the step grid of the clip it is on. Clicking a block or a track&apos;s name selects the track.</td></tr>
               </tbody>
             </table>
           </div>
           <div className={styles.note}>
             The ruler counts bars of pattern 1&apos;s meter. A pattern with a
-            time signature of its own still loops its own length inside a block;
-            only the block&apos;s edges fall on the ruler. In code the arrangement
+            time signature of its own still loops its own length inside a block.
+            Only the block&apos;s edges fall on the ruler. In code the arrangement
             is <span className={styles.ui}>arrangement()</span> and{" "}
             <span className={styles.ui}>.blocks([[pattern, fromBar, bars], ...])</span>{" "}
             on a track&apos;s part.
@@ -268,17 +271,17 @@ export default function ManualPage() {
                 <tr><th>Control</th><th>What it does</th></tr>
               </thead>
               <tbody>
-                <tr><td>len</td><td>How many steps this track loops over in the pattern you&apos;re on. Each pattern keeps its own, so a bass can be 16 steps in the verse and 32 in the chorus. Lengths don&apos;t have to match across tracks either: a 12-step track against a 16-step one drifts in and out of phase. When chain mode or a queued switch moves to the next pattern on the bar line, every track starts it from step one.</td></tr>
+                <tr><td>len</td><td>How many steps this track loops over in the pattern you&apos;re on. Each pattern keeps its own length, so a bass can be 16 steps in the verse and 32 in the chorus. Tracks don&apos;t have to match each other either: a 12-step track against a 16-step one drifts in and out of phase. When chain mode or a queued switch moves to the next pattern on the bar line, every track starts it from step one.</td></tr>
                 <tr><td>+1 x2 x4 /2 /4</td><td>Grow or shrink the pattern. Growing copies what is already there.</td></tr>
                 <tr><td>spd</td><td>Runs this track faster or slower than the rest, from 1/16 up to 16 times.</td></tr>
                 <tr><td>out</td><td>Where the track goes: straight to the master, or into an fx bus. It only appears once a bus exists. See <a href="#bus">fx buses</a>.</td></tr>
                 <tr><td>vol</td><td>Track volume, with its level meter behind the knob.</td></tr>
-                <tr><td>the four knobs</td><td>The instrument&apos;s main tone controls. What they do, and what they are called, changes with the engine. <span className={styles.ui}>rand</span> beside them rolls all four.</td></tr>
-                <tr><td>wave / save / load icons</td><td>The sample or wavetable editor for this engine, save this sound as a patch, load a saved patch.</td></tr>
+                <tr><td>the four knobs</td><td>The instrument&apos;s main tone controls. Their names and what they do change with the engine. <span className={styles.ui}>rand</span> beside them rolls all four.</td></tr>
+                <tr><td>wave / save / load icons</td><td>Open the sample or wavetable editor for this engine, save this sound as a patch, or load a saved patch.</td></tr>
                 <tr><td>solo / mute</td><td>Hear only this track, or silence it.</td></tr>
                 <tr><td>p-lock</td><td>Gives this track a sound of its own on the pattern you are on. See <a href="#lock">p-lock</a>.</td></tr>
                 <tr><td>clear</td><td>Empties this pattern on this track.</td></tr>
-                <tr><td>dice</td><td>Rolls a new pattern. Keep pressing until one sticks; drag it up or down to set how full the rolls come out. See <a href="#generators">the three generators</a>.</td></tr>
+                <tr><td>dice</td><td>Rolls a new pattern. Keep pressing until you like one. Drag it up or down to set how full the rolls come out. See <a href="#generators">the three generators</a>.</td></tr>
                 <tr><td>ring</td><td>Euclidean rhythms. See <a href="#generators">the three generators</a>.</td></tr>
                 <tr><td>die</td><td>Chance: a whole part, rhythm and pitches, from probabilities. See <a href="#generators">the three generators</a>.</td></tr>
                 <tr><td>dup / remove</td><td>Copy the whole track, sound and all, or delete it.</td></tr>
@@ -296,10 +299,11 @@ export default function ManualPage() {
             <a href="#motion">modulation and automation</a>.
           </p>
           <p>
-            A button wears a dot with a count when something inside it is switched
-            on, and hovering it names what. Whatever is on also shows on the track
-            itself: engaged effects, enabled LFO rows, a filter you have closed, an
-            eq band you have moved. Open the panel and you get all of it again.
+            When something inside a panel is switched on, its button shows a dot with
+            a count, and hovering over it names what is on. Whatever is on also shows
+            on the track itself: engaged effects, enabled LFO rows, a filter you have
+            closed, an eq band you have moved. Open the panel to see all of its
+            controls again.
           </p>
         </section>
 
@@ -325,11 +329,11 @@ export default function ManualPage() {
         <section className={styles.section} id="roll">
           <h2>The piano roll</h2>
           <p>
-            <span className={styles.ui}>roll</span> opens the piano roll on that
-            track, on the pattern it is playing: a keyboard up the side, bars
-            across, the notes as bars you draw, drag, stretch and paint. It is the
-            same editor as the piano view, so everything below is true there too,
-            and it works with a finger on a phone. It is the best place to write a
+            <span className={styles.ui}>roll</span> opens the piano roll for that
+            track, on the pattern it is playing. It has a keyboard up the side and
+            bars across, and you draw, drag, stretch and paint the notes. It is the
+            same editor as the piano view, so everything below is true there too. It
+            also works with a finger on a phone. The roll is the best place to write a
             melody, and the only place to stack notes into a chord you voice by hand.
           </p>
           <p>
@@ -358,12 +362,12 @@ export default function ManualPage() {
             </table>
           </div>
           <p>
-            The lane underneath is velocity: drag across the stalks to make steps
-            harder or softer. With notes selected, the arrow keys move them (shift:
-            an octave, or a bar), <span className={styles.ui}>nudge</span> pushes
-            them off the grid, and <span className={styles.ui}>delete</span> removes
-            them. The pattern&apos;s header above the grid makes it a bar shorter or
-            longer, doubles it, or sets its time signature;{" "}
+            The lane underneath is velocity. Drag across the stalks to make steps
+            harder or softer. With notes selected, the arrow keys move them (with
+            shift, an octave or a bar), <span className={styles.ui}>nudge</span>{" "}
+            pushes them off the grid, and <span className={styles.ui}>delete</span>{" "}
+            removes them. The pattern&apos;s header above the grid makes it a bar
+            shorter or longer, doubles it, or sets its time signature.{" "}
             <span className={styles.ui}>in key</span> folds the rows to the scale
             when one is on, and <span className={styles.ui}>hear</span> sounds the
             notes as you place them.
@@ -389,7 +393,7 @@ export default function ManualPage() {
                 <tr><td>note</td><td>The pitch, on a small keyboard.</td></tr>
                 <tr><td>chord</td><td>Plays a whole chord from that root: major, minor, sevenths and the rest, plus an inversion.</td></tr>
                 <tr><td>arp</td><td>The chord&apos;s notes play one after another across the length of the note instead of together. Set how fast, how many octaves, and which direction.</td></tr>
-                <tr><td>ratchet</td><td>Retriggers the step up to 8 times. Drum rolls and stutters.</td></tr>
+                <tr><td>ratchet</td><td>Retriggers the step up to 8 times, for drum rolls and stutters.</td></tr>
                 <tr><td>vel</td><td>How hard the note hits.</td></tr>
                 <tr><td>offset</td><td>Nudges the step slightly early or late for a looser feel.</td></tr>
               </tbody>
@@ -397,30 +401,32 @@ export default function ManualPage() {
           </div>
           <div className={styles.note}>
             An arp fills the note&apos;s length, so give it room. A one-step note at a
-            1/16 arp rate has space for exactly one note, which sounds like nothing
-            happening. Lengthen the note or pick a faster rate.
+            1/16 arp rate has space for only one note, so the arp seems to do
+            nothing. Lengthen the note or pick a faster rate.
           </div>
         </section>
 
         <section className={styles.section} id="generators">
           <h2>The three generators</h2>
           <p>
-            Three buttons on the track row fill the grid for you: the dice rolls a
-            part, the ring divides the bar evenly, the die throws odds. All three can
-            print a result into the grid as ordinary steps you can then edit. The ring
-            and the die also run <strong>live</strong>, generating as the track plays
-            without writing anything, so their controls can take an LFO, an automation
-            lane or a macro pad; switch live off and the pattern is exactly as you left
-            it. While live is on the grid shows what is playing and goes read-only. A
-            track has one rhythm at a time, so turning one of those two on turns the
-            other off.
+            Three buttons on the track row fill the grid for you. The dice rolls a
+            part, the ring divides the bar evenly, and the die throws odds. All three
+            can print a result into the grid as ordinary steps that you can then edit.
+          </p>
+          <p>
+            The ring and the die can also run <strong>live</strong>. They generate as
+            the track plays and write nothing, so their controls can take an LFO, an
+            automation lane or a macro pad. Switch live off and the pattern is exactly
+            as you left it. While live is on, the grid shows what is playing and you
+            can&apos;t edit it. A track has one rhythm at a time, so turning one of
+            those two on turns the other off.
           </p>
 
           <h3>The dice: roll a part</h3>
           <p>
             One press replaces the pattern with a new one, rhythm and pitches both.
-            Keep pressing until something sticks; nothing is held, so each roll starts
-            from scratch. What lands in the grid is ordinary steps, yours to edit
+            Keep pressing until you like one. Nothing carries over, so each roll starts
+            from scratch. What lands in the grid is ordinary steps that you can edit
             afterwards.
           </p>
           <p>
@@ -433,54 +439,54 @@ export default function ManualPage() {
             Anywhere else it walks a melody in the session&apos;s key, mostly a step or
             two at a time with the occasional octave leap, starting from the last note
             you used on that track. It follows the root and mode even when scale
-            quantize is off. It leaves the sound alone;{" "}
-            <span className={styles.ui}>rand</span> beside the four knobs is the one
-            that rolls that.
+            quantize is off. It leaves the sound alone. To roll the sound, use{" "}
+            <span className={styles.ui}>rand</span> beside the four knobs.
           </p>
 
           <h3>The ring: euclidean rhythms</h3>
           <p>
-            A number of hits spread as evenly as possible over a cycle, which covers
-            a lot of the world&apos;s drumming. Set the hits, the cycle length and a
-            rotation, and the cycle tiles across the track. It decides only{" "}
-            <em>when</em> notes happen; the pitches stay whatever the pattern already
-            had.
+            The ring spreads a number of hits as evenly as possible over a cycle,
+            which describes a lot of the world&apos;s drumming. Set the hits, the cycle
+            length and a rotation, and the cycle repeats across the track. It decides
+            only <em>when</em> notes happen. The pitches stay whatever the pattern
+            already had.
           </p>
 
           <h3>The die: chance</h3>
           <p>
-            Chance decides the pitches as well. You write the odds of notes rather
-            than the notes, and it plays something that fits them. Two sections, each
-            with its own dice.
+            Chance decides the pitches as well. You write the odds of notes instead
+            of the notes, and it plays something that fits them. It has two sections,
+            each with its own dice.
           </p>
           <p>
             <strong>Rhythm.</strong> <span className={styles.ui}>note value</span> is
             the base rhythm, from 1/1 down to 1/32 by way of the triplets, and nothing
             random happens to it on its own.{" "}
-            <span className={styles.ui}>variation</span> is off in the middle: turn it
-            left for longer note values, right for shorter, and how far you turn it is
-            both how often another value turns up and how far from the base it strays.{" "}
+            <span className={styles.ui}>variation</span> is off in the middle. Turn it
+            left for longer note values or right for shorter ones. The further you
+            turn it, the more often another value turns up and the further it strays
+            from the base.{" "}
             <span className={styles.ui}>legato</span> is how likely a note is to be
-            tied to the one before instead of gating again; all the way up you get a
-            single held note. <span className={styles.ui}>rest</span> is how likely a
+            tied to the one before instead of starting again. All the way up, you get
+            a single held note. <span className={styles.ui}>rest</span> is how likely a
             note is to be dropped. Two checkboxes let variation reach the triplets and
             the 1/32s, which are off to start with.
           </p>
           <p>
-            <strong>Melody.</strong> The twelve faders are the probability of each
-            semitone, not a switch on each: one at half height turns up half as often
-            as one at full, and a single raised fader is certain wherever it sits.
-            That is how you write a scale here, or a scale with a bias. Until you
-            move a fader they are the session&apos;s scale, when one is switched on
-            (and follow it when you change key), and a minor pentatonic when not.{" "}
+            <strong>Melody.</strong> The twelve faders set the probability of each
+            semitone. A fader at half height turns up half as often as one at full,
+            and a single raised fader is certain wherever it sits. That is how you
+            write a scale here, or a scale with a bias. Until you move a fader, they
+            match the session&apos;s scale when one is switched on, and follow it when
+            you change key. With no scale on, they are a minor pentatonic.{" "}
             <span className={styles.ui}>from scale</span> writes the active scale into
             them as faders of the track&apos;s own, so a later key change leaves the
             part where it is. Generated notes are not snapped to the session
             scale, because these faders <em>are</em> the scale.{" "}
             <span className={styles.ui}>low note</span> and{" "}
             <span className={styles.ui}>high note</span> set the range, up to five
-            octaves; a semitone raised outside it can&apos;t play, and its label greys
-            out to say so.
+            octaves. A semitone raised outside it can&apos;t play, and its label greys
+            out to show that.
           </p>
           <p>
             <strong>The dice.</strong> Each section&apos;s{" "}
@@ -492,12 +498,12 @@ export default function ManualPage() {
             a fresh throw every time the window comes round, so that section never
             repeats, and <span className={styles.ui}>every 4 passes</span> lets a
             phrase play four times and then move on.
-            Rolling a section twice always changes something; if a throw can&apos;t
-            change anything, the button says which knob to turn instead.
+            Rolling a section always changes something. If a throw can&apos;t change
+            anything, the button says which knob to turn instead.
           </p>
           <p>
             <strong>The window</strong> is the first and last step it generates over,
-            and it tiles across the track like the ring&apos;s cycle. Until you turn{" "}
+            and it repeats across the track like the ring&apos;s cycle. Until you turn{" "}
             <span className={styles.ui}>last step</span> it is the whole track, so a
             32-step track gets a 32-step window. Moving{" "}
             <span className={styles.ui}>first step</span> slides the window without
@@ -506,23 +512,23 @@ export default function ManualPage() {
           <p>
             Six controls can be modulated while live is on: the four rhythm knobs and
             the two range knobs. An LFO on <span className={styles.ui}>rest</span>{" "}
-            breathes the part in and out; a lane on{" "}
+            makes the part thin out and fill in. A lane on{" "}
             <span className={styles.ui}>low note</span> walks it up the register over
-            a bar. The picture at the top of the panel is the part it is playing now:
-            height is pitch, width is how long a note is held, and a note in the
+            a bar. The picture at the top of the panel is the part it is playing now.
+            Height is pitch and width is how long a note is held. A note in the
             second colour is struck more than once, which is how the triplets and the
             1/32s fit a grid of sixteenths.
           </p>
           <div className={styles.note}>
             Chance is modelled on Vermona&apos;s meloDICER, a eurorack module that
             generates a part from probabilities rather than storing one. The panel
-            keeps its layout &mdash; a rhythm section of note value, variation, legato
-            and rest, twelve semitone probability faders for the melody, and a range
-            either side of them. Two things here are not on the module: each knob gets
+            keeps its layout: a rhythm section of note value, variation, legato and
+            rest, twelve semitone probability faders for the melody, and a range
+            either side of them. Two things here are not on the module. Each knob gets
             its own stream of dice, so turning{" "}
-            <span className={styles.ui}>rest</span> up only drops notes instead of
-            reshuffling the whole part, and a throw is a held seed, so a saved song
-            replays the part it was written with.
+            <span className={styles.ui}>rest</span> up only drops notes and leaves the
+            rest of the part alone. And a throw is a held seed, so a saved song replays
+            the part it was written with.
           </div>
         </section>
 
@@ -592,7 +598,7 @@ export default function ManualPage() {
               </thead>
               <tbody>
                 <tr><td>NORMAL</td><td>Letters are commands: move around, add and delete notes, pick knobs. <span className={styles.key}>Esc</span> always comes back here.</td></tr>
-                <tr><td>INSERT <span className={styles.key}>i</span></td><td>The piano keys write notes. Stopped, each note lands on the cursor and the cursor moves on; playing, notes land on the playhead, as with record.</td></tr>
+                <tr><td>INSERT <span className={styles.key}>i</span></td><td>The piano keys write notes. When stopped, each note lands on the cursor and the cursor moves on. When playing, notes land on the playhead, as with record.</td></tr>
                 <tr><td>PLAY <span className={styles.key}>a</span></td><td>The piano keys only sound. Nothing is written, so this is the one for jamming along.</td></tr>
                 <tr><td>VISUAL <span className={styles.key}>v</span></td><td>Select a run of steps, then copy, delete, paste over or transpose them.</td></tr>
                 <tr><td>COMMAND <span className={styles.key}>:</span></td><td>A line at the bottom for commands like <span className={styles.ui}>:bpm 128</span>. <span className={styles.key}>Enter</span> runs it.</td></tr>
@@ -602,7 +608,7 @@ export default function ManualPage() {
           <h3>Moving around</h3>
           <p>
             Most moves take a count typed first: <span className={styles.key}>4</span><span className={styles.key}>l</span> moves four steps,
-            a beat.
+            which is one beat.
           </p>
           <div className={styles.tableWrap}>
             <table className={styles.table}>
@@ -631,7 +637,7 @@ export default function ManualPage() {
                 <tr><td><span className={styles.key}>r</span> then a piano key</td><td>Sets the note under the cursor to that pitch, or writes one there.</td></tr>
                 <tr><td><span className={styles.key}>&gt;</span> <span className={styles.key}>&lt;</span></td><td>Moves the note up or down a step of the scale (a semitone with no scale on).</td></tr>
                 <tr><td><span className={styles.key}>+</span> <span className={styles.key}>-</span></td><td>Velocity up or down.</td></tr>
-                <tr><td><span className={styles.key}>[</span> <span className={styles.key}>]</span></td><td>Nudges the note a microstep (1/24 of a step) earlier or later, up to half a step either way. A count moves it further: <span className={styles.ui}>3</span><span className={styles.key}>]</span> is three. A nudged note shows a tick where it lands: the middle is on the grid.</td></tr>
+                <tr><td><span className={styles.key}>[</span> <span className={styles.key}>]</span></td><td>Nudges the note a microstep (1/24 of a step) earlier or later, up to half a step either way. A count moves it further: <span className={styles.ui}>3</span><span className={styles.key}>]</span> is three. A nudged note shows a tick where it lands. A tick in the middle of the cell is on the grid.</td></tr>
                 <tr><td><span className={styles.key}>d</span><span className={styles.key}>d</span> <span className={styles.key}>y</span><span className={styles.key}>y</span> <span className={styles.key}>p</span></td><td>Clears the track&apos;s pattern / copies it / pastes what you copied at the cursor.</td></tr>
                 <tr><td><span className={styles.key}>.</span></td><td>Does the last edit again, here.</td></tr>
                 <tr><td><span className={styles.key}>u</span> <span className={styles.key}>U</span></td><td>Undo and redo. <span className={styles.key}>Ctrl</span> <span className={styles.key}>r</span> also redoes.</td></tr>
@@ -645,9 +651,9 @@ export default function ManualPage() {
           </p>
           <p>
             In insert mode with the sequencer stopped, <span className={styles.key}>h</span> and <span className={styles.key}>l</span> (or <span className={styles.key}>&larr;</span> and <span className={styles.key}>&rarr;</span>) move
-            the cursor, <span className={styles.key}>l</span> while you hold a note makes that note a step
-            longer, <span className={styles.key}>Enter</span> switches the cursor&apos;s step on or off with the
-            track&apos;s usual note (C2 on a drum track) and <span className={styles.key}>Backspace</span> clears the
+            the cursor. Press <span className={styles.key}>l</span> while you hold a note to make that note a step
+            longer. <span className={styles.key}>Enter</span> switches the cursor&apos;s step on or off with the
+            track&apos;s usual note (C2 on a drum track), and <span className={styles.key}>Backspace</span> clears the
             step behind the cursor. <span className={styles.key}>j</span> and <span className={styles.key}>k</span> change track, playing or
             stopped, so you can record one part and move straight on to the next.
           </p>
@@ -681,7 +687,7 @@ export default function ManualPage() {
           <div className={styles.note}>
             <span className={styles.ui}>:k</span> takes the first knob with that name
             on the track. On a silverbox, <span className={styles.ui}>cutoff</span> is the
-            synth&apos;s own; type <span className={styles.ui}>:k filter cut</span> or press <span className={styles.key}>c</span> for
+            synth&apos;s own. Type <span className={styles.ui}>:k filter cut</span> or press <span className={styles.key}>c</span> for
             the filter panel&apos;s.
           </div>
           <h3>Commands</h3>
@@ -689,7 +695,7 @@ export default function ManualPage() {
             The command line lists what could come next as you type: every command
             on an empty line, the effects after <span className={styles.ui}>:fx</span>,
             and the active track&apos;s knobs after <span className={styles.ui}>:k</span>,
-            each with where it is set now. <span className={styles.key}>Tab</span> takes
+            each with its current value. <span className={styles.key}>Tab</span> takes
             the next match into the line and <span className={styles.key}>shift</span>{" "}
             <span className={styles.key}>Tab</span> the one before (the arrow keys do
             the same), or click one. <span className={styles.key}>Enter</span> runs
@@ -710,7 +716,7 @@ export default function ManualPage() {
                 <tr><td><span className={styles.ui}>:nudge 3</span></td><td>Puts the note under the cursor 3/24 of a step late (negative is early, <span className={styles.ui}>:nudge 0</span> back on the grid).</td></tr>
                 <tr><td><span className={styles.ui}>:view clips</span></td><td>Opens the clips, arrange or groove view (<span className={styles.key}>tab</span> cycles them).</td></tr>
                 <tr><td><span className={styles.ui}>:12</span></td><td>Moves the cursor to step 12.</td></tr>
-                <tr><td><span className={styles.ui}>:w</span></td><td>Saves. With a song of yours open it saves the next version straight away; otherwise it opens the save panel to name it. You need to be signed in.</td></tr>
+                <tr><td><span className={styles.ui}>:w</span></td><td>Saves. With a song of yours open it saves the next version straight away. Otherwise it opens the save panel to name it. You need to be signed in.</td></tr>
                 <tr><td><span className={styles.ui}>:h</span></td><td>Lists every vim key.</td></tr>
                 <tr><td><span className={styles.ui}>:q</span></td><td>Switches vim mode off.</td></tr>
               </tbody>
@@ -735,9 +741,9 @@ export default function ManualPage() {
           <p>
             With <span className={styles.ui}>chord</span> on, each key plays a whole
             chord instead of a single note. Pick the chord type and a voicing. If a
-            scale is active the choice collapses to on or off, because the chord gets
-            built from the scale itself: each degree gets the quality it should have
-            and everything stays in key.
+            scale is active, the choice is only on or off, because the scale builds
+            the chord: each degree gets the quality it should have, and every chord
+            stays in key.
           </p>
           <p>
             Chords you record or capture are stored as chords rather than loose notes,
@@ -766,9 +772,10 @@ export default function ManualPage() {
               <tbody>
                 <tr><td>plaits</td><td>Sixteen synthesis models from the Mutable Instruments Plaits oscillator: virtual analogue, FM, wavetable, granular, noise and physical models.</td></tr>
                 <tr><td>drum / synth</td><td>An 808 and 909 kit, a poly saw, an FM bell and a pad.</td></tr>
-                <tr><td>Emulators</td><td>The <a href="#silverbox">silverbox</a>, the <a href="#contagion">contagion</a>, the <a href="#hexop">hexop</a>, an <a href="#guitar">electric guitar and bass</a>, <a href="#subby">subby</a>, <a href="#vox">vox</a>, a singing voice, <a href="#siege">siege</a>, a bass drum synth, and <a href="#lancet">lancet</a>, a snare synthesizer, <a href="#halo">halo</a>, a cymbal synthesizer, the <a href="#ladder">ladder</a>, the transistor-ladder monosynth, and the oracle, the poly analog (two morphing VCOs with slop, a drive on the summed voices, a chorus), all modelled rather than sampled. Then three voices in the spirit of classic hardware: snarl, drift and tines.</td></tr>
+                <tr><td>Emulators</td><td>The <a href="#silverbox">silverbox</a>, the <a href="#contagion">contagion</a>, the <a href="#hexop">hexop</a>, an <a href="#guitar">electric guitar and bass</a>, <a href="#subby">subby</a>, <a href="#vox">vox</a>, a singing voice, <a href="#siege">siege</a>, a bass drum synth, and <a href="#lancet">lancet</a>, a snare synthesizer, <a href="#halo">halo</a>, a cymbal synthesizer, the <a href="#ladder">ladder</a>, the transistor-ladder monosynth, and the oracle, the poly analog (two morphing VCOs with slop, a drive on the summed voices, a chorus). All of these are models, with no samples. There are also three voices in the spirit of classic hardware: snarl, drift and tines.</td></tr>
                 <tr><td>texture</td><td>A granular engine that plays a sample as a cloud of tiny grains. Load your own, or pick from the bundled library of pads and drones.</td></tr>
                 <tr><td>wavetable</td><td>A wavetable synth with its own <a href="#wavetable">editor</a>.</td></tr>
+                <tr><td>instruments</td><td>Recorded instruments, a real note every few semitones: acoustic guitar, nylon guitar, sampled electric guitar and sampled electric bass. See <a href="#sampler">samples</a>.</td></tr>
                 <tr><td>sampler</td><td>Your own audio, or one of the bundled kits. See <a href="#sampler">samples</a>.</td></tr>
                 <tr><td>saved patches</td><td>Sounds you have saved yourself.</td></tr>
                 <tr><td>midi</td><td>Sends notes to external hardware or software instead of making a sound itself.</td></tr>
@@ -781,8 +788,8 @@ export default function ManualPage() {
             controls: <span className={styles.ui}>harm</span>,{" "}
             <span className={styles.ui}>timb</span>,{" "}
             <span className={styles.ui}>morph</span> and{" "}
-            <span className={styles.ui}>decay</span> on a Plaits model, something else
-            on the next engine. The labels change with the engine, and hovering one
+            <span className={styles.ui}>decay</span> on a Plaits model, and other
+            controls on other engines. The labels change with the engine, and hovering one
             says what it does on the instrument you have loaded.
           </p>
         </section>
@@ -798,13 +805,13 @@ export default function ManualPage() {
             <span className={styles.ui}>decay</span>. Next to them are the waveform
             switch, the accent depth and tuning.
           </p>
-          <p>Three behaviours are how you play it:</p>
+          <p>You play it through three behaviours:</p>
           <ul>
             <li>
               <strong>Accent comes from step velocity.</strong> Push a step past about
               two-thirds and it accents: louder, brighter, filter decay forced short.
               With the resonance up, consecutive accents stack into a rising squelch
-              rather than resetting, and that pile-up is the sound of an acid line.
+              instead of resetting. That pile-up is the sound of an acid line.
             </li>
             <li>
               <strong>Slide comes from note length.</strong> Draw a step longer than
@@ -840,24 +847,24 @@ export default function ManualPage() {
             <li>
               <strong>Shape</strong> is one continuous morph from sine through
               triangle and saw to pulse, and at the top the pulse width knob takes
-              over. Sweep it and the tone changes character, not just brightness.
-              It is osc 1&apos;s; osc 2 has its own,{" "}
+              over. Sweep it and the character of the tone changes, as well as its brightness.
+              It is osc 1&apos;s. Osc 2 has its own,{" "}
               <span className={styles.ui}>shape 2</span> and{" "}
               <span className={styles.ui}>pw 2</span>.
             </li>
             <li>
               <strong>Unison</strong> is the supersaw. Each note plays up to eight
               detuned copies of the whole oscillator section, spread across the stereo
-              field. Two or three thickens things up; eight with the detune wound on
+              field. Two or three thicken the sound. Eight with the detune wound on
               is the wide trance sound.
             </li>
             <li>
-              <strong>Two filters, not one.</strong> Each can be a low pass, high
+              <strong>Two filters.</strong> Each can be a low pass, high
               pass, band pass or notch, and you choose how they connect: in series, in
               parallel, or split so filter 1 plays the left ear and filter 2 the right.
               A low pass into a high pass gives you a band pass you can sweep from both
               ends. Filter 1 takes the <span className={styles.ui}>reso</span> knob and
-              filter 2 has its own, <span className={styles.ui}>reso 2</span>; the
+              filter 2 has its own, <span className={styles.ui}>reso 2</span>. The
               last tenth of either makes the filter whistle on its own.
             </li>
             <li>
@@ -876,7 +883,7 @@ export default function ManualPage() {
           </p>
           <p>
             The amp and the filter each have an envelope. The track&apos;s{" "}
-            <span className={styles.ui}>decay</span> knob is the amp&apos;s; the
+            <span className={styles.ui}>decay</span> knob is the amp&apos;s. The
             filter&apos;s has its own attack, decay, sustain and release, so a short
             filter decay over a long amp sustain is a pluck that keeps ringing.{" "}
             <span className={styles.ui}>env amt</span> is how far it moves the
@@ -889,8 +896,8 @@ export default function ManualPage() {
         <section className={styles.section} id="hexop">
           <h2>The hexop</h2>
           <p>
-            Six sine waves. That is the whole instrument: no filter, no sub
-            oscillator, nothing else. What comes out depends on which sines are wired
+            Six sine waves make up the whole instrument. There is no filter and no
+            sub oscillator. What comes out depends on which sines are wired
             into which, and how hard. The panel is the same six rows whatever you are
             building, one per operator, each with its level, its frequency as a ratio
             of the note, and its own envelope.
@@ -908,13 +915,13 @@ export default function ManualPage() {
             <li>
               <strong>Level is exponential.</strong> A modulator at half its knob is a
               sixteenth of full scale, so nearly all the useful range lives in the top
-              quarter. Nudging one modulator level is how you program this thing.
+              quarter. You program it mostly by nudging modulator levels.
             </li>
             <li>
               <strong>Every operator has its own envelope</strong>, so the timbre has
               an envelope. A modulator that decays fast under a carrier that
-              doesn&apos;t is a struck sound. That is the trick behind an FM electric
-              piano.
+              doesn&apos;t is a struck sound. An FM electric piano works this
+              way.
             </li>
             <li>
               <strong>Feedback</strong> is the only source of harmonics here that
@@ -938,7 +945,7 @@ export default function ManualPage() {
             than from silence: an electric piano, a bass, a bell, brass, a marimba, an
             organ and a pad. Load one and change a single operator level.{" "}
             <span className={styles.ui}>vel</span> makes playing harder raise the
-            modulation index, so hard notes come out brighter and not just louder,
+            modulation index, so hard notes come out brighter as well as louder,
             and <span className={styles.ui}>key scale</span> pulls the modulators back
             as you play up the keyboard. Without it the top octave
             screams.
@@ -954,23 +961,23 @@ export default function ManualPage() {
           </p>
           <p>
             Both start from a <span className={styles.ui}>tone</span> dropdown of
-            famous rigs. Load the nearest one, move a control, hear what that control
-            is for. Loading a tone replaces everything including the four track knobs.
+            famous rigs. Load the nearest one, then move one control at a time to
+            hear what it does. Loading a tone replaces everything including the four track knobs.
           </p>
           <h3>The guitar</h3>
           <p>
             The string has the losses of a real one: the highs die before the
-            fundamental does, so a note gets duller as it rings rather than just
-            quieter. Where you pick notches harmonics out of it, bridge thin and
-            cutting, over the neck round and full, and the pickup notches it again on
-            the way out. Choosing a pickup is choosing where its resonance sits. A
+            fundamental does, so a note gets duller as it rings, as well as
+            quieter. Where you pick notches harmonics out of the string: near the
+            bridge it sounds thin and cutting, over the neck round and full. The
+            pickup notches it again on the way out. Choosing a pickup is choosing where its resonance sits. A
             single coil peaks high and glassy, a humbucker low and fat.
           </p>
           <p>
             The four knobs are <span className={styles.ui}>drive</span> (how hard the
             amp is hit, on a log taper like the real pot),{" "}
             <span className={styles.ui}>tone</span> (the knob on the guitar itself,
-            not the amp; roll it down with a neck humbucker for the darkest sound the
+            not the amp. Roll it down with a neck humbucker for the darkest sound the
             instrument has), <span className={styles.ui}>bloom</span> and{" "}
             <span className={styles.ui}>sustain</span>.
           </p>
@@ -993,12 +1000,12 @@ export default function ManualPage() {
           </p>
           <p>
             <span className={styles.ui}>fret</span> is how hard the string is allowed
-            to clatter against the fretboard; wound up with the hand control at the
-            top, that clatter is slap.{" "}
+            to clatter against the fretboard. Wind it up with the hand control at the
+            top and that clatter is slap.{" "}
             <span className={styles.ui}>grind</span> is distortion, but only above the{" "}
             <span className={styles.ui}>xover</span> frequency, with the clean low end
             put back underneath. Distort a bass whole and the bottom vanishes, which
-            is why every bass overdrive worth owning works this way.
+            is why good bass overdrives work this way.
           </p>
           <p>
             The knobs are <span className={styles.ui}>drive</span>,{" "}
@@ -1013,8 +1020,8 @@ export default function ManualPage() {
         <section className={styles.section} id="subby">
           <h2>Subby</h2>
           <p>
-            A monosynth for the bottom two octaves and nothing else. Two notes a
-            third apart at 40Hz beat at a rate you feel as lumpiness rather than hear
+            A monosynth for the bottom two octaves only. It is mono because two
+            notes a third apart at 40Hz beat at a rate you feel as lumpiness rather than hear
             as harmony. Last note wins, and{" "}
             <span className={styles.ui}>glide</span> slides into it, either always or
             only when a note arrives while another is still sounding, which is the 808
@@ -1024,21 +1031,21 @@ export default function ManualPage() {
             Most people cannot hear a 35Hz sine. A phone speaker starts around 500Hz
             and a laptop around 180Hz. The fix is harmonics: generate them and the ear
             rebuilds the fundamental it cannot hear.{" "}
-            <span className={styles.ui}>drive</span> is that path. At zero you get a
+            <span className={styles.ui}>drive</span> controls that harmonics path. At zero you get a
             genuinely pure sine, which is the right choice when something else in the
             mix is already carrying the note.
           </p>
           <ul>
             <li>
               <strong>The shaping is parallel and high-passed.</strong>{" "}
-              <span className={styles.ui}>xover</span> is where it starts; nothing
+              <span className={styles.ui}>xover</span> is where it starts. Nothing
               below it is ever distorted, so the bottom stays clean however hard you
               drive.
             </li>
             <li>
               <strong><span className={styles.ui}>edge</span></strong> biases the
               signal before the drive, which makes the clipped pulse uneven, and an
-              uneven pulse is the even harmonics. Four shapers: tube, fold, fuzz and
+              uneven pulse adds even harmonics. Four shapers: tube, fold, fuzz and
               rect.
             </li>
             <li>
@@ -1070,9 +1077,9 @@ export default function ManualPage() {
           <p>
             A singing voice, built the way a voice works: the vocal folds make a
             train of pulses, and the throat and mouth are resonances (formants)
-            that the pulses ring. The pulses are the pitch and the effort; the
-            resonances are the vowel. A note can start with a consonant, and a
-            choir of up to eight sings each note.
+            that the pulses ring. The pulses set the pitch and the effort, and the
+            resonances set the vowel. A note can start with a consonant, and a
+            choir of up to eight can sing each note.
           </p>
           <ul>
             <li>
@@ -1080,7 +1087,7 @@ export default function ManualPage() {
               <span className={styles.ui}>vowel</span> (u, o, a, e, i across the
               knob), <span className={styles.ui}>size</span> (soprano at the
               bottom, then alto, tenor, bass), <span className={styles.ui}>breath</span>{" "}
-              (air in the voice; the top quarter fades to a whisper) and{" "}
+              (air in the voice, fading to a whisper in the top quarter) and{" "}
               <span className={styles.ui}>release</span>. An automation lane on the
               vowel sings a different vowel on each step.
             </li>
@@ -1095,27 +1102,27 @@ export default function ManualPage() {
               consonants are. Or type your own lyric in the field beside it,
               one syllable a note:{" "}
               <span className={styles.ui}>twin kel twin kel lit tel star</span>. A
-              syllable is a consonant, a vowel and a consonant; the last one is sung
-              as the note ends. Two vowels glide from one to the other (
+              syllable is a consonant, a vowel and a consonant, and the last
+              consonant is sung as the note ends. Two vowels glide from one to the other (
               <span className={styles.ui}>ai</span> for &quot;eye&quot;,{" "}
               <span className={styles.ui}>ow</span> for &quot;now&quot;),{" "}
               <span className={styles.ui}>oo</span> is u, <span className={styles.ui}>ee</span>{" "}
               is i, and <span className={styles.ui}>mmm</span> is a hum. Spell it as it
               sounds: one consonant each side of the vowel. Or tick{" "}
-              <span className={styles.ui}>phonetic</span> and type plain English:
-              each word is looked up in a pronouncing dictionary and split into its
-              syllables, one a note, and the line under the row shows what it will
-              sing (<span className={styles.ui}>the night is young</span> is sung{" "}
-              <span className={styles.ui}>da nait iz yan</span>). The dictionary is
-              fetched the first time you tick the box, and a word it does not know is
-              guessed from its letters.
+              <span className={styles.ui}>phonetic</span> and type plain English.
+              Vox looks each word up in a pronouncing dictionary and splits it into
+              syllables, one a note. The line under the row shows what it will sing
+              (<span className={styles.ui}>the night is young</span> is sung{" "}
+              <span className={styles.ui}>da nait iz yan</span>). The dictionary
+              loads the first time you tick the box, and Vox guesses any word it does
+              not know from its letters.
             </li>
             <li>
               <strong>The vibrato comes in late</strong>, after{" "}
               <span className={styles.ui}>delay</span>, and fades in.{" "}
               <span className={styles.ui}>drift</span> is the wander in pitch and the
-              scoop up into each note that make it a person; at zero it sings like
-              a machine. <span className={styles.ui}>growl</span> is the rasp of a
+              scoop up into each note that make it sound like a person. At zero it
+              sings like a machine. <span className={styles.ui}>growl</span> is the rasp of a
               pushed or chanting voice.
             </li>
             <li>
@@ -1168,8 +1175,8 @@ export default function ManualPage() {
             <li>
               <strong>The random row</strong> throws a knob on every hit: decay,
               timbre, color, pitch, fx, level, and the chance of a different model.
-              A little on timbre and level is a drummer; model at half is a
-              different snare every hit.
+              A little on timbre and level sounds like a drummer. Model at half gives
+              a different snare on every hit.
             </li>
           </ul>
           <p>
@@ -1208,9 +1215,9 @@ export default function ManualPage() {
             <li>
               <strong><span className={styles.ui}>trig</span> or{" "}
               <span className={styles.ui}>choke</span></strong>. Trig lets hits ring
-              over each other, as crashes do. Choke makes it a hi-hat: a hit is cut
-              when its step ends and the next hit cuts the one before, so a short
-              step is a closed hat and a tied one is open, on one track.
+              over each other, as crashes do. Choke makes it a hi-hat. A hit stops
+              when its step ends, and the next hit cuts off the one before. So on one
+              track, a short step is a closed hat and a tied step is an open one.
             </li>
             <li>
               <strong><span className={styles.ui}>stick</span></strong> is the tick
@@ -1233,13 +1240,13 @@ export default function ManualPage() {
         <section className={styles.section} id="siege">
           <h2>Siege</h2>
           <p>
-            A bass drum synth, a siege engine for the low end: a sine under a pitch
-            envelope, an amplitude envelope, and a drive that comes after the
-            envelope. That order is the sound. A drive in front of an envelope
-            distorts the whole note the same amount; behind it, it crushes the
-            loud start, leaves the quiet tail a clean sub, and lifts that tail up
-            to twelve times, so a driven kick reads longer and a long one turns
-            into a rumble.
+            A bass drum synth, a siege engine for the low end. It is a sine under a
+            pitch envelope and an amplitude envelope, with a drive that comes after
+            the envelope. That order makes the sound. A drive in front of an
+            envelope distorts the whole note by the same amount. Behind it, the
+            drive crushes the loud start and leaves the quiet tail a clean sub. It
+            also lifts that tail up to twelve times, so a driven kick sounds longer
+            and a long one turns into a rumble.
           </p>
           <ul>
             <li>
@@ -1256,10 +1263,11 @@ export default function ManualPage() {
               <strong>Two drives.</strong>{" "}
               <span className={styles.ui}>fold</span> is a two-stage wavefolder:
               it reflects the wave instead of flattening it, so it keeps making new
-              harmonics as it is driven, then a soft knee squashes the peaks. More
-              compression than distortion.{" "}
-              <span className={styles.ui}>clip</span> is a clipper: odd harmonics,
-              a square almost at once, the harshest and the loudest.
+              harmonics as it is driven. Then a soft knee squashes the peaks, so it
+              acts more like compression than distortion.{" "}
+              <span className={styles.ui}>clip</span> is a clipper. It makes odd
+              harmonics and turns into a square almost at once: the harshest and
+              loudest of the two.
             </li>
             <li>
               <strong>The note is the pitch</strong>, an octave either way with{" "}
@@ -1272,15 +1280,15 @@ export default function ManualPage() {
               <strong><span className={styles.ui}>trig</span> ignores the
               step&apos;s length</strong>, as a drum does.{" "}
               <span className={styles.ui}>gate</span> holds the body for as long as
-              the step is held and lets it decay when the step ends: write notes,
-              ties and a little glide and it is a bassline.
+              the step is held and lets it decay when the step ends. Write notes,
+              ties and a little glide, and it becomes a bassline.
             </li>
             <li>
               <strong><span className={styles.ui}>low cut</span></strong> is a
               third-order 30Hz filter that takes the infrasound a driven sub makes
               and leaves a C1 alone. <span className={styles.ui}>floor</span> is the
-              level a step at velocity 0 plays at; a full-velocity step always plays
-              at full.
+              level a step at velocity 0 plays at. A full-velocity step always plays
+              at full level.
             </li>
           </ul>
           <p>
@@ -1293,14 +1301,13 @@ export default function ManualPage() {
         <section className={styles.section} id="ladder">
           <h2>Ladder</h2>
           <p>
-            The transistor-ladder monosynth, after the Minimoog: three
-            oscillators and noise into a mixer, the mixer into the four-pole
-            ladder filter, the filter into the amplifier, with a contour on each.
-            The things that make it sound like itself are all in the details:
-            the mixer overloads the filter&apos;s input stage when the levels are
-            up, the filter thins out as the emphasis climbs and whistles on its
-            own past three quarters of the knob, and the oscillators drift a
-            little against each other.
+            The transistor-ladder monosynth, after the Minimoog. Three oscillators
+            and noise go into a mixer, the mixer feeds the four-pole ladder filter,
+            and the filter feeds the amplifier, with a contour on each. Its
+            character comes from the details. When the levels are up, the mixer
+            overloads the filter&apos;s input stage. The filter thins out as the
+            emphasis climbs, and past three quarters of the knob it whistles on
+            its own. The oscillators also drift a little against each other.
           </p>
           <ul>
             <li>
@@ -1317,21 +1324,21 @@ export default function ManualPage() {
               (<span className={styles.ui}>lo</span>, the LFO range, then 32&apos;
               to 2&apos;) and one of the machine&apos;s six waves: triangle, shark
               (the triangle-saw), saw, square, wide and narrow pulse. Osc 2 and
-              osc 3 tune seven semitones either way, continuously; a few
-              hundredths of a semitone is the detune. Osc 3 can be taken off the
+              osc 3 tune smoothly up to seven semitones either way, and a few
+              hundredths of a semitone gives you the detune. Osc 3 can be taken off the
               keyboard, which is how it becomes a fixed-rate LFO.
             </li>
             <li>
               <strong>The mixer is the overdrive.</strong> One oscillator at its
-              usual level arrives clean; push all three up and the filter&apos;s
-              input saturates. That is most of what fat means on this machine.
+              usual level arrives clean. Push all three up and the filter&apos;s
+              input saturates, which is most of what makes this machine sound fat.
             </li>
             <li>
               <strong>Two contours</strong>, attack, decay and sustain each, and
-              the <span className={styles.ui}>decay switch</span>: on, a note
-              releases at its decay time; off, it stops as soon as the step
-              ends. <span className={styles.ui}>kbd</span> is how much of the
-              keyboard the cutoff follows; at full, a whistling filter plays in
+              the <span className={styles.ui}>decay switch</span>. With it on, a
+              note releases at its decay time. With it off, a note stops as soon as
+              the step ends. <span className={styles.ui}>kbd</span> is how much of
+              the keyboard the cutoff follows. At full, a whistling filter plays in
               tune.
             </li>
             <li>
@@ -1342,10 +1349,10 @@ export default function ManualPage() {
               wheel up.
             </li>
             <li>
-              <strong>Mono is the machine</strong>: the lowest held note wins, a
-              note arriving while one is held changes the pitch without
-              restarting the contours, and the track&apos;s glide is the glide
-              knob. Poly plays six at once, for chords.
+              <strong>Mono plays like the machine.</strong> The lowest held note
+              wins. A note that arrives while another is held changes the pitch
+              without restarting the contours, and the track&apos;s glide is the
+              glide knob. Poly plays six notes at once, for chords.
             </li>
             <li>
               <strong>Eight patches</strong> in the panel&apos;s dropdown, from a
@@ -1372,12 +1379,11 @@ export default function ManualPage() {
           <p>
             For a real guitar or bass, pick one of the{" "}
             <span className={styles.ui}>instruments</span> instead: acoustic guitar, nylon
-            guitar, sampled electric guitar and sampled electric bass. Each is a
-            recording every few notes, so every note sounds like the instrument rather
-            than one sample stretched. <span className={styles.ui}>tone</span> darkens
+            guitar, sampled electric guitar and sampled electric bass. Each has a
+            recording every few notes, so no note is stretched far from a real one. <span className={styles.ui}>tone</span> darkens
             it and <span className={styles.ui}>release</span> sets how long a note rings
-            after its step. The electric guitar engine is a different thing: a model of
-            a whole rig you can drive and shape.
+            after its step. The electric guitar engine is something else: a model of a
+            whole rig that you can drive and shape.
           </p>
           <ul>
             <li>Trim the start and end, and fade either edge.</li>
@@ -1419,7 +1425,7 @@ export default function ManualPage() {
                 <tr><td>filter</td><td>A low-pass filter with cutoff and resonance. The classic way to open and close a sound.</td></tr>
                 <tr><td>env</td><td>An envelope that sweeps the filter on every note: how far it moves, and how it attacks, decays, sustains and releases.</td></tr>
                 <tr><td>fx</td><td>The effects chain, below.</td></tr>
-                <tr><td>eq</td><td>Five bands — low, lo mid, mid, hi mid and high — for sitting a track in the mix.</td></tr>
+                <tr><td>eq</td><td>Five bands (low, lo mid, mid, hi mid and high) for sitting a track in the mix.</td></tr>
                 <tr><td>comp</td><td>Compression, either on the track itself or ducked by another track, which is how you get a bass pumping under a kick.</td></tr>
               </tbody>
             </table>
@@ -1444,9 +1450,9 @@ export default function ManualPage() {
           <p>
             The bit crusher has a <span className={styles.ui}>rate</span> as well as{" "}
             <span className={styles.ui}>bits</span>: the sample rate it runs at, from
-            48k down to 250Hz. Bits alone is a noise floor under the sound; rate is
-            where the sampler grit comes from, because anything above half of it folds
-            back down out of tune with the track.
+            48k down to 250Hz. Bits alone only adds a noise floor under the sound. The
+            sampler grit comes from rate, because anything above half of it folds back
+            down out of tune with the track.
           </p>
           <p>
             <span className={styles.ui}>glide</span> lives here too. It slides the
@@ -1459,9 +1465,9 @@ export default function ManualPage() {
           <p>
             Everything in the panels above belongs to one track. So does the mod
             matrix, and so do the automation lanes. An{" "}
-            <span className={styles.ui}>fx bus</span> is how several tracks come to
-            share them: a track with no instrument, that other tracks are routed
-            through on the way to the master.
+            <span className={styles.ui}>fx bus</span> lets several tracks share
+            them. It is a track with no instrument, and other tracks pass through it
+            on the way to the master.
           </p>
           <p>
             Press <span className={styles.ui}>+ add fx bus</span> under the tracks, or
@@ -1496,8 +1502,8 @@ export default function ManualPage() {
           </p>
           <p>
             The <span className={styles.ui}>p-lock</span> button changes that for the
-            pattern you are on. Locked, that pattern keeps a sound of its own; every
-            pattern you leave unlocked carries on sharing the track&apos;s. So the bass
+            pattern you are on. A locked pattern keeps a sound of its own. Every
+            pattern you leave unlocked still shares the track&apos;s sound. So the bass
             can be bright and drenched in delay for the chorus while the verse and the
             middle eight are left alone, and those two still move together when you
             tweak them.
@@ -1515,9 +1521,8 @@ export default function ManualPage() {
             <li>the modulation assignments in the mod panel</li>
           </ul>
           <p>
-            What stays put is the instrument: the engine, and any sample loaded into
-            it. A locked pattern is one instrument played differently, not a different
-            instrument. Routing, macro pads and the generator settings stay put too.
+            The instrument stays put: the engine, and any sample loaded into
+            it. A locked pattern plays the same instrument with a different sound. Routing, macro pads and the generator settings stay put too.
           </p>
           <div className={styles.note}>
             Editing on an unlocked pattern edits the shared track sound, so every
@@ -1530,7 +1535,7 @@ export default function ManualPage() {
         <section className={styles.section} id="motion">
           <h2>Modulation and automation</h2>
           <p>
-            Two ways to make a sound move, both per track.
+            There are two ways to make a sound move, and both work per track.
           </p>
           <h3>mod: continuous</h3>
           <p>
@@ -1563,8 +1568,8 @@ export default function ManualPage() {
             <em>step</em> length, so &ldquo;1 step&rdquo; means one ring step per
             sixteenth, and you set the pulses, the cycle length and a rotation the way
             you would on a track. <span className={styles.ui}>decay</span> at zero
-            holds each tap for its whole step, which is a gate; turn it up and each tap
-            falls away, which is a pluck. It locks to the transport, so the rhythm it
+            holds each tap for its whole step, like a gate. Turn it up and each tap
+            falls away, like a pluck. It locks to the transport, so the rhythm it
             plays is the rhythm the sequencer is playing. Put it on a filter for a
             gated sweep, on reverb for throws that land on the offbeats, or on a live
             euclid track&apos;s <span className={styles.ui}>rotate</span> and have one
@@ -1600,8 +1605,8 @@ export default function ManualPage() {
           <div className={styles.note}>
             A parameter takes an LFO, an automation lane or a macro axis, never two.
             Two things writing the same value fight each other, and what you hear is
-            one of them dropping out at random. Whichever side is free offers to be
-            added; the others tell you what is holding the parameter. Controls that
+            one of them dropping out at random. The window offers whichever side is
+            free, and says what is holding the parameter. Controls that
             are a setting rather than a value, like a waveform or a filter mode, open
             the same window with the explanation and nothing to add.
           </div>
@@ -1612,8 +1617,8 @@ export default function ManualPage() {
           <p>
             <span className={styles.ui}>macro</span> in the transport opens a set of
             XY pads. Each axis drives a list of parameters, and that list can span
-            tracks: one thumb opening the bass filter while ducking the lead&apos;s
-            reverb.
+            tracks. One thumb can open the bass filter while it turns down the
+            lead&apos;s reverb.
           </p>
           <p>Two ways to assign a parameter to an axis:</p>
           <ul>
@@ -1635,15 +1640,15 @@ export default function ManualPage() {
           </p>
           <p>
             The assigned knobs move as you play the pad. By default the move is
-            momentary: let go and everything ramps back to where it was, so nothing is
-            committed.{" "}
-            <span className={styles.ui}>latch</span> instead leaves the parameters
-            where you put them, exactly as if you had moved the knobs yourself, so
-            they go into the patch and into a save.
+            momentary: when you let go, everything ramps back to where it was and
+            nothing is kept.{" "}
+            <span className={styles.ui}>latch</span> leaves the parameters where you
+            put them, as if you had moved the knobs yourself, so they go into the
+            patch and into a save.
           </p>
           <p>
-            Pads are global rather than per track, and they don&apos;t follow p-lock.
-            They are saved with the session.
+            Pads belong to the whole session, not to one track, and they
+            don&apos;t follow p-lock. A save keeps them.
           </p>
         </section>
 
@@ -1655,7 +1660,7 @@ export default function ManualPage() {
             <a href="https://strudel.cc" target="_blank" rel="noopener">Strudel</a>{" "}
             code. Change it and press <span className={styles.key}>Ctrl</span>/<span className={styles.key}>&#8984;</span>{" "}
             <span className={styles.key}>Enter</span>: the song takes the change
-            while it plays, without the beat stopping. <span className={styles.key}>Ctrl</span>/<span className={styles.key}>&#8984;</span>{" "}
+            and keeps playing. <span className={styles.key}>Ctrl</span>/<span className={styles.key}>&#8984;</span>{" "}
             <span className={styles.key}>.</span> stops. While it plays, the words
             in the code that wrote the sounding notes light up.
           </p>
@@ -1669,14 +1674,14 @@ bass: note("<c2 c2 eb2 g1>*8").s("silverbox")
 
 keys: chord("<Cm7 Ab^7 Fm7 G7>").voicing().s("tines").room(0.5)`}</div>
           <p>
-            Whatever the code makes are ordinary tracks. The grid shows them, you
-            can turn their knobs by hand, and a save keeps them. The code isn&apos;t
-            a second copy of the song. While the drawer is open it follows the
-            song: change a step, a knob or anything else in the studio, and the
-            code is written again to match. Once you&apos;ve typed in it, your
-            code is left alone, and{" "}
-            <span className={styles.ui}>from song</span> lights up with a dot to
-            say the song has moved on. The bar also has{" "}
+            The code makes ordinary tracks. The grid shows them, you can turn
+            their knobs by hand, and a save keeps them. The code is not a separate
+            copy of the song. While the drawer is open it follows the song: change
+            a step, a knob or anything else in the studio, and the drawer writes
+            the code again to match. Once you type in it, the drawer leaves your
+            code alone, and{" "}
+            <span className={styles.ui}>from song</span> shows a dot when the song
+            has moved on. The bar also has{" "}
             <span className={styles.ui}>examples</span>,{" "}
             <span className={styles.ui}>from song</span> (write the song out again),{" "}
             <span className={styles.ui}>copy</span>, and{" "}
@@ -1693,7 +1698,7 @@ keys: chord("<Cm7 Ab^7 Fm7 G7>").voicing().s("tines").room(0.5)`}</div>
             </li>
             <li>
               <strong>A track is named by its label.</strong>{" "}
-              <span className={styles.ui}>bass:</span> is the track called bass; an
+              <span className={styles.ui}>bass:</span> is the track called bass. An
               unlabelled <span className={styles.ui}>$:</span> takes the sound&apos;s
               name, and <span className={styles.ui}>.p(&quot;my name&quot;)</span> names
               it outright. A label playing several sounds makes several tracks
@@ -1721,7 +1726,7 @@ keys: chord("<Cm7 Ab^7 Fm7 G7>").voicing().s("tines").room(0.5)`}</div>
               type.
             </li>
             <li>
-              <strong>Running again updates, it doesn&apos;t start over.</strong>{" "}
+              <strong>Running again updates what is there.</strong>{" "}
               Tracks you didn&apos;t touch keep playing. Delete a line and run, and
               its track goes. Delete a setting and run, and it goes back to its
               default. A knob you turned by hand that the code never mentions stays
@@ -1777,8 +1782,8 @@ keys: chord("<Cm7 Ab^7 Fm7 G7>").voicing().s("tines").room(0.5)`}</div>
 
           <h3>How sounds map</h3>
           <p>
-            seqbaby has no sample library behind these names: each sound plays on
-            the nearest seqbaby instrument.
+            Most of these names have no sample library behind them in seqbaby. Each
+            one plays on the nearest seqbaby instrument.
           </p>
           <div className={styles.tableWrap}>
             <table className={styles.table}>
@@ -1803,6 +1808,9 @@ keys: chord("<Cm7 Ab^7 Fm7 G7>").voicing().s("tines").room(0.5)`}</div>
                 <tr><td>piano, epiano, rhodes, wurli</td><td>tines</td></tr>
                 <tr><td>synth_bass, moog</td><td>ladder</td></tr>
                 <tr><td>anything else with bass in it</td><td>electric bass</td></tr>
+                <tr><td>gm_acoustic_guitar_nylon, nylon</td><td>the sampled nylon guitar</td></tr>
+                <tr><td>gm_acoustic_guitar_steel, acoustic_guitar</td><td>the sampled acoustic guitar</td></tr>
+                <tr><td>gm_electric_guitar_jazz, gm_electric_bass_pick</td><td>the sampled electric guitar and bass</td></tr>
                 <tr><td>guitar, pluck</td><td>electric guitar</td></tr>
                 <tr><td>organ, strings, violin, choir</td><td>oracle</td></tr>
                 <tr><td>bell, glockenspiel, marimba, vibraphone, kalimba</td><td>fm bell</td></tr>
@@ -1816,13 +1824,13 @@ keys: chord("<Cm7 Ab^7 Fm7 G7>").voicing().s("tines").room(0.5)`}</div>
           <p>
             General MIDI names (<span className={styles.ui}>gm_epiano1</span>,{" "}
             <span className={styles.ui}>gm_electric_bass_finger</span> and so on) go
-            through the same rules. To pick a seqbaby instrument exactly, name it:{" "}
+            through the same rules. To pick a seqbaby instrument exactly, use its
+            name as the engine menu shows it, with underscores for spaces:{" "}
             <span className={styles.ui}>s(&quot;silverbox&quot;)</span>,{" "}
             <span className={styles.ui}>s(&quot;subby&quot;)</span>,{" "}
             <span className={styles.ui}>s(&quot;electric_guitar&quot;)</span>,{" "}
-            <span className={styles.ui}>s(&quot;plaits:virtual_analog&quot;)</span>, or
-            its key, <span className={styles.ui}>s(&quot;dm:contagion&quot;)</span>. Its
-            name as the engine menu shows it, with underscores for spaces.
+            <span className={styles.ui}>s(&quot;plaits:virtual_analog&quot;)</span>. Or
+            use its key, <span className={styles.ui}>s(&quot;dm:contagion&quot;)</span>.
           </p>
 
           <h3>How controls and effects map</h3>
@@ -1875,8 +1883,8 @@ keys: chord("<Cm7 Ab^7 Fm7 G7>").voicing().s("tines").room(0.5)`}</div>
           </div>
           <p>
             Every name and value is checked against the instrument&apos;s own
-            controls, so a typo comes back as a note under the code rather than a
-            broken track.
+            controls. A typo comes back as a note under the code, and the track
+            still plays.
           </p>
 
           <h3>Patterns and the arrangement</h3>
@@ -1884,9 +1892,9 @@ keys: chord("<Cm7 Ab^7 Fm7 G7>").voicing().s("tines").room(0.5)`}</div>
             A song that uses more than one pattern is written in sections.{" "}
             <span className={styles.ui}>pattern(2)</span> starts one, and the lines
             after it write pattern 2. <span className={styles.ui}>.repeat(4)</span>{" "}
-            is how many bars it plays in chain mode (leave it off and it plays as
-            long as its longest part),{" "}
-            <span className={styles.ui}>.meter(&quot;7/8&quot;)</span> its time
+            is how many bars it plays in chain mode. Leave it off and the pattern
+            plays as long as its longest part.{" "}
+            <span className={styles.ui}>.meter(&quot;7/8&quot;)</span> sets its time
             signature, and <span className={styles.ui}>chain()</span> at the top turns
             chain mode on.
           </p>
@@ -1927,11 +1935,12 @@ bass: note("<eb2 g2>*8").s("sawtooth").lpf(2000).lock()`}</div>
           <h3>Opening it on strudel.cc</h3>
           <p>
             <span className={styles.ui}>strudel.cc</span> opens the code on the
-            Strudel site. When it uses seqbaby&apos;s own names, which strudel.cc
-            doesn&apos;t know, it opens a version Strudel can play instead:
-            seqbaby&apos;s instruments as the nearest stock sounds, only the effects
-            Strudel has, a chained song as <span className={styles.ui}>arrange()</span>,
-            and a list of what was left out.
+            Strudel site. strudel.cc doesn&apos;t know seqbaby&apos;s own names, so
+            code that uses them opens as a version Strudel can play. That version
+            swaps seqbaby&apos;s instruments for the nearest stock sounds, keeps only
+            the effects Strudel has, writes a chained song as{" "}
+            <span className={styles.ui}>arrange()</span>, and lists what was left
+            out.
           </p>
 
           <h3>What doesn&apos;t translate</h3>
@@ -1975,7 +1984,7 @@ bass: note("<eb2 g2>*8").s("sawtooth").lpf(2000).lock()`}</div>
               <span className={styles.ui}>end</span>,{" "}
               <span className={styles.ui}>orbit</span>, the amplitude envelope (
               <span className={styles.ui}>attack</span>,{" "}
-              <span className={styles.ui}>release</span> and friends; use{" "}
+              <span className={styles.ui}>release</span> and the rest. Use{" "}
               <span className={styles.ui}>.knob()</span> on the instrument&apos;s own
               envelope instead) and <span className={styles.ui}>hpq</span> /{" "}
               <span className={styles.ui}>bpq</span>.
@@ -2016,17 +2025,17 @@ bass: note("<eb2 g2>*8").s("sawtooth").lpf(2000).lock()`}</div>
               <strong>Tracks the code can&apos;t hold stay as they are.</strong> A
               track with arps, chord inversions, nudged steps or sample regions,
               and a sample, granular, MIDI, fx bus or live euclid / chance track,
-              appears as a comment. Running the code leaves it exactly as it was;
-              edit it in the studio.
+              appears as a comment. Running the code leaves it exactly as it was.
+              Edit it in the studio.
             </li>
             <li>
               <strong>Only Strudel.</strong> TidalCycles&apos; Haskell isn&apos;t
               read.
             </li>
             <li>
-              <strong>The code runs here, not in Strudel.</strong> It is read
-              rather than executed, so only the functions above exist, and anything
-              else is left out with a note, never run.
+              <strong>The code runs here, not in Strudel.</strong> seqbaby reads
+              the code and never executes it, so only the functions above exist.
+              Anything else is left out with a note.
             </li>
           </ul>
         </section>
@@ -2035,8 +2044,8 @@ bass: note("<eb2 g2>*8").s("sawtooth").lpf(2000).lock()`}</div>
           <h2>Undo</h2>
           <p>
             Ctrl/&#8984; Z steps back, Ctrl/&#8984; shift Z steps forward, and the two
-            arrows in the transport do the same. It covers the whole session, not just
-            the grid: notes, knobs, tracks added and removed, generator settings,
+            arrows in the transport do the same. It covers the whole session:
+            notes, knobs, tracks added and removed, generator settings,
             a pattern you cleared, a session you loaded by accident.
           </p>
           <p>
@@ -2060,7 +2069,7 @@ bass: note("<eb2 g2>*8").s("sawtooth").lpf(2000).lock()`}</div>
             the same song with you, live: steps, knobs, tracks added and removed,
             generators, undo. Nobody needs an account, only the link. Opening a
             different song, or pressing <span className={styles.ui}>new</span>,
-            leaves the jam: the song you open is yours, not the room&apos;s.
+            leaves the jam, and the song you open stays yours.
           </p>
           <p>
             Each of you plays it on your own machine, so press play wherever you
@@ -2072,8 +2081,8 @@ bass: note("<eb2 g2>*8").s("sawtooth").lpf(2000).lock()`}</div>
           </p>
           <div className={styles.note}>
             Two people on the same knob at once is a race the later one wins.
-            Leaving keeps the song as it is on your screen; the room carries on
-            without you, and whoever is left holds the song for the next person to
+            When you leave, the song stays as it is on your screen. The room carries
+            on without you, and whoever is left holds the song for the next person to
             arrive.
           </div>
         </section>
@@ -2089,7 +2098,7 @@ bass: note("<eb2 g2>*8").s("sawtooth").lpf(2000).lock()`}</div>
                 <tr><td>new</td><td>Blanks the session. Undo brings it back, until the tab goes. If your account has a default template, a new session starts from that instead of from the starter tracks.</td></tr>
                 <tr><td>save</td><td>Stores the song in your account. Saving a song you already have keeps the older one: each save is a new version.</td></tr>
                 <tr><td>songs</td><td>Your library. Click a title to load it. The row icons are version history, remix, public link, delete, and the two template toggles.</td></tr>
-                <tr><td>history</td><td>A song&apos;s versions, drawn as the tree they are. Open any version to hear it again; save after that and the new version branches off the one you opened. <span className={styles.ui}>name</span> labels a version, <span className={styles.ui}>remix</span> copies one into a song of its own.</td></tr>
+                <tr><td>history</td><td>A song&apos;s versions, drawn as the tree they are. Open any version to hear it again. If you save after that, the new version branches off the one you opened. <span className={styles.ui}>name</span> labels a version, <span className={styles.ui}>remix</span> copies one into a song of its own.</td></tr>
                 <tr><td>template</td><td>Marks a song as a starting point. The first save from an open template makes a new song instead of another version of the template. The second icon makes one the default, which is what <span className={styles.ui}>new</span> loads.</td></tr>
                 <tr><td>share</td><td>Makes a link anyone can open. They get a playable copy and your original is untouched.</td></tr>
                 <tr><td>public link</td><td>Publishes a song to your profile at <span className={styles.ui}>/u/yourname</span>, where anyone can remix it.</td></tr>
@@ -2106,23 +2115,23 @@ bass: note("<eb2 g2>*8").s("sawtooth").lpf(2000).lock()`}</div>
             box opens, so you can read it and type over it.
           </p>
           <p>
-            A saved song is a tree, not a file that gets overwritten. Every save hangs
-            off the version you are working from, so the history keeps a straight line
-            while you go forward and branches the moment you open an older version and
-            carry on. Remixing leaves the tree and starts a new song. Sharing a song
+            A saved song is a tree of versions, and a save never overwrites one.
+            Every save hangs off the version you are working from. While you keep
+            going forward, the history is a straight line. When you open an older
+            version and carry on from it, the history branches. Remixing leaves the tree and starts a new song. Sharing a song
             shares the state you saved, never the versions behind it.
           </p>
           <p>
-            Without an account everything lives in the tab, which means a reload or a
-            clearing of site data takes it with it. An account is the way to keep it.
+            Without an account, everything lives in the tab, and a reload or clearing
+            the site data loses it. Sign in to keep your work.
           </p>
         </section>
 
         <section className={styles.section} id="agents">
           <h2>Letting an AI agent write a song</h2>
           <p>
-            seqbaby ships an MCP server, which is the plug that lets an AI agent
-            such as Claude use a tool. Connected, the agent can start a song, add
+            seqbaby comes with an MCP server. MCP is how an AI agent such as Claude
+            connects to a tool. Once connected, the agent can start a song, add
             tracks, write their rhythms and notes, shape their sound, put movement
             on them, and hand you a share link. It writes the same session the
             studio saves, so whatever it makes opens here like any other song, and
@@ -2131,23 +2140,23 @@ bass: note("<eb2 g2>*8").s("sawtooth").lpf(2000).lock()`}</div>
           <p>
             The agent works in the same vocabulary as this manual. A rhythm is a
             step string, so <span className={styles.ui}>x..x..x.</span> is a hit on
-            steps 1, 4 and 7; <span className={styles.ui}>X</span> is an accent,
-            <span className={styles.ui}>_</span> a tie; a string shorter than the
+            steps 1, 4 and 7. <span className={styles.ui}>X</span> is an accent and{" "}
+            <span className={styles.ui}>_</span> a tie, and a string shorter than the
             pattern repeats across it. Notes are names like{" "}
-            <span className={styles.ui}>C2</span>. Every engine, every panel
-            control with its range, every preset and every modulation target is
-            served to the agent as reference, and each value it sends is checked
-            against the engine&apos;s own tables, so a wrong engine name or a
-            control outside its range comes back as a correction rather than a
-            silent track. A guide tells it which engine suits which job and how
-            each one likes to be played: that a silverbox accent is a hard hit and
-            a slide is a tie, that subby needs drive to be heard on a phone, that a
+            <span className={styles.ui}>C2</span>. The agent gets every engine,
+            every panel control with its range, every preset and every modulation
+            target as reference. The server checks each value it sends against the
+            engine&apos;s own tables, so a wrong engine name or a control outside
+            its range comes back as a correction, and no track goes silent. A
+            guide tells the agent which engine suits which job and how each one
+            likes to be played. For example, a silverbox accent is a hard hit and
+            a slide is a tie, subby needs drive to be heard on a phone, and a
             reverb belongs on a bus.
           </p>
           <h3>Connecting it</h3>
           <p>
             In Claude Code, register the server once. It runs straight from the
-            repository; the first start installs it, later starts are instant.
+            repository. The first start installs it, and later starts are instant.
           </p>
           <div className={styles.pre}>{`claude mcp add -s user seqbaby -- npx -y github:mjoslyn/seqbaby`}</div>
           <p>
@@ -2156,9 +2165,9 @@ bass: note("<eb2 g2>*8").s("sawtooth").lpf(2000).lock()`}</div>
           </p>
           <div className={styles.pre}>{`{ "mcpServers": { "seqbaby": { "command": "npx", "args": ["-y", "github:mjoslyn/seqbaby"] } } }`}</div>
           <p>
-            Working inside a checkout of the repository needs no registration at
-            all: Claude Code finds the server in the project and the composing
-            guide with it.
+            If you work inside a checkout of the repository, you don&apos;t need
+            to register anything. Claude Code finds the server and the composing
+            guide in the project.
           </p>
           <h3>Asking for a song</h3>
           <p>Say what you want in plain words, and ask for a link at the end:</p>
@@ -2173,12 +2182,12 @@ bus. Share it when it validates.`}</div>
             instead and load it from the session menu&apos;s import.
           </p>
           <div className={styles.note}>
-            An agent can also listen. With a browser available to it, the{" "}
+            An agent can also listen. If it has a browser, the{" "}
             <span className={styles.ui}>audition</span> tool plays the song through
-            the real engine and reports how loud each track came out, which is how
-            it notices a track that made no sound or a mix that is too hot. The
-            server&apos;s own README in the repository has the full tool list and
-            the setup for that.
+            the real engine and reports how loud each track came out. That is how
+            the agent notices a track that made no sound or a mix that is too hot.
+            The server&apos;s README in the repository has the full tool list and
+            the setup for audition.
           </div>
         </section>
 
@@ -2196,9 +2205,9 @@ bus. Share it when it validates.`}</div>
               a muted one here, or a filter cutoff closed all the way down.
             </li>
             <li>
-              <strong>Playback stutters.</strong> Reverb, granular and pitch shift are
-              the expensive ones, and a lot of them at once on a slow machine will do
-              it. Closing other tabs helps more than you would think.
+              <strong>Playback stutters.</strong> Reverb, granular and pitch shift
+              use the most processing, and many of them at once on a slow machine
+              can cause it. Closing other tabs helps more than you would think.
             </li>
             <li>
               <strong>The playhead looks out of time with what you hear.</strong>{" "}
@@ -2226,9 +2235,9 @@ bus. Share it when it validates.`}</div>
         <section className={styles.section} id="credits">
           <h2>Credits and licences</h2>
           <p>
-            seqbaby is built on other people&apos;s work. Thank you to everyone below,
-            and if you use the sounds in something you release, these are the licences
-            that travel with them.
+            seqbaby is built on other people&apos;s work. Thank you to everyone below.
+            If you use the sounds in something you release, these licences travel
+            with them.
           </p>
           <div className={styles.tableWrap}>
             <table className={styles.table}>
@@ -2308,7 +2317,7 @@ bus. Share it when it validates.`}</div>
                 </tr>
                 <tr>
                   <td><a href="https://strudel.cc" target="_blank" rel="noopener">Strudel</a> and <a href="https://tidalcycles.org" target="_blank" rel="noopener">TidalCycles</a></td>
-                  <td>The mini-notation and the pattern ideas the code drawer reads. seqbaby has its own reader; no Strudel code ships with it</td>
+                  <td>The mini-notation and the pattern ideas the code drawer reads. seqbaby has its own reader, and no Strudel code ships with it</td>
                   <td>-</td>
                 </tr>
                 <tr>
