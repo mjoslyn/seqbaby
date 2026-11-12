@@ -4134,6 +4134,86 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not
   .sq-param-group--guitar .sq-guitar__f { justify-self: center; min-width: 0; }
   .sq-fx__ctl select { padding: 3px 4px; font-size: 11px; }
 
+  /* The instrument panels on a phone (the guitar's and the bass's have
+     their own grid, below): each row a card, each section name a heading on a
+     line of its own (several sections share a row in some panels, so the
+     heading is what breaks it, in markup order), the selects two to a line
+     and the knobs four to a line in the same columns on every card. As
+     wrapping rows of label, select and knob they fell wherever the width left
+     them: a knob alone on a line, a select alone on the next. */
+  .sq-param-group:is(.sq-param-group--contagion, .sq-param-group--drone, .sq-param-group--hexop, .sq-param-group--sub, .sq-param-group--vox, .sq-param-group--lancet, .sq-param-group--halo, .sq-param-group--siege, .sq-param-group--oracle, .sq-param-group--ladder, .sq-param-group--granular) { flex-direction: column; flex-wrap: nowrap; align-items: stretch; gap: 8px; }
+  .sq-param-group :is(.sq-contagion__row, .sq-drone__row, .sq-hexop__row, .sq-sub__row, .sq-vox__row, .sq-lancet__row, .sq-halo__row, .sq-siege__row, .sq-oracle__row, .sq-ladder__osc-row, .sq-gran__row) {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 10px 6px;
+    padding: 10px;
+    border-radius: 8px;
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+  }
+  .sq-param-group :is(.sq-contagion__lbl, .sq-drone__lbl, .sq-hexop__lbl, .sq-sub__lbl, .sq-vox__lbl, .sq-lancet__lbl, .sq-halo__lbl, .sq-siege__lbl, .sq-oracle__lbl, .sq-ladder__osc-lbl, .sq-gran__lbl) {
+    flex: 0 0 100%;
+    min-width: 0;
+    color: var(--fg);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    font-size: 11px;
+  }
+  .sq-param-group :is(.sq-contagion__lbl, .sq-drone__lbl, .sq-hexop__lbl, .sq-sub__lbl, .sq-vox__lbl, .sq-lancet__lbl, .sq-halo__lbl, .sq-siege__lbl, .sq-oracle__lbl, .sq-ladder__osc-lbl, .sq-gran__lbl):not(:first-child) { margin-top: 4px; padding-top: 10px; border-top: 1px dashed var(--border); }
+  /* A select takes a line of its own, or half of one beside another select,
+     never a slot among the knobs. And in a section with one heading the
+     selects come straight under it, whatever order the markup has them in;
+     where a row holds several sections the markup's order is what keeps each
+     select in its own section, so it is left alone. */
+  .sq-param-group :is(.sq-contagion__row, .sq-drone__row, .sq-hexop__row, .sq-sub__row, .sq-vox__row, .sq-lancet__row, .sq-halo__row, .sq-siege__row, .sq-oracle__row, .sq-ladder__osc-row, .sq-gran__row) > :is(select, label:has(> select)) { flex: 1 1 100%; min-width: 0; width: auto; }
+  .sq-param-group :is(.sq-contagion__row, .sq-drone__row, .sq-hexop__row, .sq-sub__row, .sq-vox__row, .sq-lancet__row, .sq-halo__row, .sq-siege__row, .sq-oracle__row, .sq-ladder__osc-row, .sq-gran__row) > :is(select, label:has(> select)):has(+ :is(select, label:has(> select))),
+  .sq-param-group :is(.sq-contagion__row, .sq-drone__row, .sq-hexop__row, .sq-sub__row, .sq-vox__row, .sq-lancet__row, .sq-halo__row, .sq-siege__row, .sq-oracle__row, .sq-ladder__osc-row, .sq-gran__row) > :is(select, label:has(> select)) + :is(select, label:has(> select)) { flex-basis: calc(50% - 3px); }
+  .sq-param-group :is(.sq-contagion__row, .sq-drone__row, .sq-hexop__row, .sq-sub__row, .sq-vox__row, .sq-lancet__row, .sq-halo__row, .sq-siege__row, .sq-oracle__row, .sq-ladder__osc-row, .sq-gran__row):not(:has(> :is(.sq-contagion__lbl, .sq-drone__lbl, .sq-hexop__lbl, .sq-sub__lbl, .sq-vox__lbl, .sq-lancet__lbl, .sq-halo__lbl, .sq-siege__lbl, .sq-oracle__lbl, .sq-ladder__osc-lbl, .sq-gran__lbl) ~ :is(.sq-contagion__lbl, .sq-drone__lbl, .sq-hexop__lbl, .sq-sub__lbl, .sq-vox__lbl, .sq-lancet__lbl, .sq-halo__lbl, .sq-siege__lbl, .sq-oracle__lbl, .sq-ladder__osc-lbl, .sq-gran__lbl))) > :is(.sq-contagion__lbl, .sq-drone__lbl, .sq-hexop__lbl, .sq-sub__lbl, .sq-vox__lbl, .sq-lancet__lbl, .sq-halo__lbl, .sq-siege__lbl, .sq-oracle__lbl, .sq-ladder__osc-lbl, .sq-gran__lbl) { order: -2; }
+  .sq-param-group :is(.sq-contagion__row, .sq-drone__row, .sq-hexop__row, .sq-sub__row, .sq-vox__row, .sq-lancet__row, .sq-halo__row, .sq-siege__row, .sq-oracle__row, .sq-ladder__osc-row, .sq-gran__row):not(:has(> :is(.sq-contagion__lbl, .sq-drone__lbl, .sq-hexop__lbl, .sq-sub__lbl, .sq-vox__lbl, .sq-lancet__lbl, .sq-halo__lbl, .sq-siege__lbl, .sq-oracle__lbl, .sq-ladder__osc-lbl, .sq-gran__lbl) ~ :is(.sq-contagion__lbl, .sq-drone__lbl, .sq-hexop__lbl, .sq-sub__lbl, .sq-vox__lbl, .sq-lancet__lbl, .sq-halo__lbl, .sq-siege__lbl, .sq-oracle__lbl, .sq-ladder__osc-lbl, .sq-gran__lbl))) > :is(select, label:has(> select)) { order: -1; }
+  .sq-param-group :is(.sq-contagion__row, .sq-drone__row, .sq-hexop__row, .sq-sub__row, .sq-vox__row, .sq-lancet__row, .sq-halo__row, .sq-siege__row, .sq-oracle__row, .sq-ladder__osc-row, .sq-gran__row) > input[type="text"] { flex: 1 1 100%; min-width: 0; }
+  .sq-param-group :is(.sq-contagion__f, .sq-drone__f, .sq-hexop__f, .sq-sub__f, .sq-vox__f, .sq-lancet__f, .sq-halo__f, .sq-siege__f, .sq-oracle__f, .sq-ladder__freq) { flex: 0 0 calc((100% - 18px) / 4); min-width: 0; justify-content: flex-start; }
+  .sq-param-group :is(.sq-contagion__f, .sq-drone__f, .sq-hexop__f, .sq-sub__f, .sq-vox__f, .sq-lancet__f, .sq-halo__f, .sq-siege__f, .sq-oracle__f, .sq-ladder__freq) > span:not(.sq-knob) { color: var(--fg-dim); font-size: 10px; }
+  /* The ladder's noise level and colour sit between its rows, as a card of
+     their own. */
+  .sq-param-group--ladder > .sq-ladder__noise {
+    display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px 6px;
+    padding: 10px; border-radius: 8px; background: var(--bg-2); border: 1px solid var(--border);
+  }
+  .sq-param-group--ladder > .sq-ladder__noise,
+  .sq-param-group--ladder > .sq-ladder__noise[data-knob] { flex-direction: row; align-items: flex-end; justify-content: flex-start; text-align: left; }
+  .sq-param-group--ladder > .sq-ladder__noise > label { text-align: left; flex: 0 0 100%; color: var(--fg); font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; font-size: 11px; }
+  .sq-param-group--ladder > .sq-ladder__noise > select { flex: 1 1 50%; min-width: 0; }
+
+  /* The filter, envelope and compressor as modals: the title a heading on
+     its own line, the controls shared out across the width under it. As one
+     row the title held a narrow column of its own, wrapped onto three lines,
+     and the knobs bunched at the right. (The rack keeps its name column: down
+     a dozen stages that column is what the eye runs down.) */
+  .sq-modal :is(.sq-track__filter-panel, .sq-track__env-panel, .sq-track__comp-panel) > .sq-fx__row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 10px 6px;
+    grid-template-columns: none;
+  }
+  .sq-modal :is(.sq-track__filter-panel, .sq-track__env-panel, .sq-track__comp-panel) > .sq-fx__row > .sq-fx__title {
+    flex: 0 0 100%;
+    max-width: none;
+    white-space: normal;
+    color: var(--fg);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    font-size: 11px;
+  }
+  .sq-modal :is(.sq-track__filter-panel, .sq-track__env-panel, .sq-track__comp-panel) > .sq-fx__row > .sq-fx__ctl { flex: 1 1 0; min-width: 48px; }
+  .sq-modal :is(.sq-track__filter-panel, .sq-track__env-panel, .sq-track__comp-panel) > .sq-fx__row > .sq-fx__ctl:has(select) {
+    flex: 1 1 100%; flex-direction: row; align-items: center; gap: 8px; justify-content: flex-start;
+  }
+  .sq-modal :is(.sq-track__filter-panel, .sq-track__env-panel, .sq-track__comp-panel) > .sq-fx__row > .sq-fx__ctl:has(select) > select { flex: 1 1 auto; min-width: 0; }
+
   /* lfo row: three equal columns plus a narrow one for the ×. The name and
      the × on the first line, then on / sync / shape, then the three sliders
      (length, amount, phase) side by side, each a column of label, bar and
