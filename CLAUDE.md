@@ -4372,7 +4372,7 @@ agent ──▶ mcp/server.mjs ──▶ songBuilder.js ──▶ { _version, bp
   a shorter string tiling a longer pattern. `describePattern` reads one back
   the same way, so `get_song` shows an agent what it wrote in the notation
   it wrote it in.
-- **The MCP server holds one song** and keeps the tool list short (40 tools on stdio, 38 of them shared with the compose panel, which lacks
+- **The MCP server holds one song** and keeps the tool list short (41 tools on stdio, 39 of them shared with the compose panel, which lacks
   `share_song` and `audition_song`:
   song / engines / genres / tracks / steps / sound / modulation / generators / code /
   out). `list_genres` / `genre_brief` are the groove picker for an agent:
@@ -4649,6 +4649,14 @@ panel ──▶ POST /api/compose ──▶ ComposeLimits.take ──▶ Compose
   expires after 30 minutes (`COMPOSE_BUDGET_RETRY_MS`), because topping up
   happens on Anthropic's console where nothing here can see it; the next turn
   after that either succeeds and clears it or sets it again.
+- **A turn names a song that has none** (`name_song`). The panel sends
+  `unnamed` when no song of the account's is open (or a template is, whose
+  first save makes a song), the turn's message asks for a name, and the name
+  comes back as the job's `title`. It rides on the review bar's proposal and
+  is handed to `setComposedTitle` (app/songs/suggestName.ts) on `keep` (at
+  once when the turn changed nothing else), and `suggestSongName` offers it
+  in both save boxes before the generated name. A session arriving (opened,
+  shared, `new`) clears it, so it never names another song.
 - **The conversation follows the song** (`song_chats`). **A transcript is its author's alone.** `song_chats` is owner-only
   both ways with no public read (held by `test/data.test.js`), `loadSongChat`
   filters on `owner_id` as well, and the panel is keyed by the signed-in

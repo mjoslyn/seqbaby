@@ -42,6 +42,8 @@ export type ComposeJobInput = {
   session: unknown;
   /** A model the account picked (already checked by the route), else the deploy's. */
   model?: string | null;
+  /** The song has never been saved: the turn names it. */
+  unnamed?: boolean;
 };
 
 export type ComposeProgress = {
@@ -58,6 +60,8 @@ export type ComposeProgress = {
   model?: string;
   changed?: boolean;
   warnings?: unknown;
+  /** The name the turn gave the song, if any. */
+  title?: string | null;
   ms?: number;
   error?: string;
   /** The alarm has begun the turn: a retried alarm must not run it twice. */
@@ -82,6 +86,7 @@ export class ComposeJob extends DurableObject<CloudflareEnv> {
       history: input.history,
       session: input.session,
       model: input.model || null,
+      unnamed: !!input.unnamed,
     }));
     const progress: ComposeProgress = {
       userId: input.userId,
@@ -132,13 +137,14 @@ export class ComposeJob extends DurableObject<CloudflareEnv> {
     try {
       const obj = await this.env.BLOBS.get(inputKey(id));
       if (!obj) throw new Error("that job's details were no longer on the server.");
-      const job = (await obj.json()) as { message: string; history: never[]; session: unknown; model?: string | null };
+      const job = (await obj.json()) as { message: string; history: never[]; session: unknown; model?: string | null; unnamed?: boolean };
       const out = await runComposeTurn({
         apiKey,
         ...(job.model ? { model: job.model } : {}),
         message: job.message,
         history: job.history,
         session: job.session,
+        unnamed: !!job.unnamed,
         // Persisted as it happens: the point of a job that runs for minutes is
         // being able to watch it.
         onEvent: async (e: { type: string }) => {
@@ -158,6 +164,7 @@ export class ComposeJob extends DurableObject<CloudflareEnv> {
         model: out.model,
         changed: out.changed,
         warnings: out.warnings,
+        title: out.title ?? null,
         ms: out.ms,
       });
     } catch (e) {

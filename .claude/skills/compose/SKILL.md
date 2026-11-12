@@ -19,6 +19,9 @@ the call, do not guess around it.
    the scale, so a wrong note is impossible on a scale track. Decide now
    whether this is a LOOP or a SONG (see Song structure): a song needs its
    section plan before the first note, because sections are pattern numbers.
+   Once you know what the song is, `name_song` it: two or three lowercase
+   words for what it sounds like (`cold squelch`, `basement choir`), not the
+   genre's name. The studio offers it in the save box.
 2. Drums first: kick, then snare or clap, then hats. One track per drum.
 3. Bass. Then chords or a pad, then a lead or a hook. Fewer tracks played
    with intent beat many tracks with something on each.

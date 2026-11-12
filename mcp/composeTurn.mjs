@@ -136,7 +136,7 @@ export function anthropicTools() {
 export function newCtx(session) {
   return {
     song: session && typeof session === "object" ? sb.fromBlob(session) : sb.newSong(),
-    songName: "untitled",
+    songName: null,
   };
 }
 
@@ -186,6 +186,9 @@ export async function runComposeTurn({
   message,
   history = [],
   session,
+  // The song has no name yet (never saved): the turn is asked to give it one,
+  // and hands it back as `title`, for the save box to offer.
+  unnamed = false,
   onEvent = async (_event) => {},
 }) {
   const ctx = newCtx(session);
@@ -213,7 +216,7 @@ export async function runComposeTurn({
 
   const messages = [
     ...recent.map((h) => ({ role: h.role, content: h.text })),
-    { role: "user", content: message },
+    { role: "user", content: unnamed ? `${message}\n\n(This song has no name yet. Once you know what it is, give it one with name_song.)` : message },
   ];
 
   let reply = "";
@@ -295,6 +298,8 @@ export async function runComposeTurn({
     // and leave the song exactly as it was, and that is still nothing to
     // reload for.
     changed: after !== before,
+    // The name the turn gave the song, if it gave one.
+    title: ctx.songName || null,
     warnings: sb.validate(ctx.song).warnings,
     ms: Date.now() - startedAt,
   };

@@ -25,6 +25,8 @@ export async function POST(req: Request) {
     history?: ChatTurn[];
     session?: unknown;
     model?: string;
+    /** The song has never been saved, so the turn should name it. */
+    unnamed?: boolean;
   };
   try {
     body = await req.json();
@@ -86,7 +88,7 @@ export async function POST(req: Request) {
   try {
     const job = env.COMPOSE_JOB.get(env.COMPOSE_JOB.idFromName(id));
     await job.start(
-      { id, userId, keyHash: null, bucket, viewToken, message, history, session: body.session, model },
+      { id, userId, keyHash: null, bucket, viewToken, message, history, session: body.session, model, unnamed: body.unnamed === true },
     );
   } catch (e) {
     console.error("[compose] could not start the job", e);

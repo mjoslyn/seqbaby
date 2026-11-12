@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { getOpenSong, setOpenSong, subscribeOpenSong } from "@/app/songs/openSong";
+import { setComposedTitle } from "@/app/songs/suggestName";
 import GroovePicker from "@/app/GroovePicker";
 import { loadSongChat, saveSong, saveSongChat } from "@/app/songs/actions";
 import { markSaved } from "@/app/songs/confirmDiscard";
@@ -34,7 +35,7 @@ type ComposeResponse = { jobId?: string; jobToken?: string; error?: string };
  * is the same operation in reverse. Null means the changes are not in the
  * session at all yet.
  */
-type Proposal = { session: unknown; before: unknown | null };
+type Proposal = { session: unknown; before: unknown | null; title?: string | null };
 
 type JobStatus = {
   status?: "running" | "done" | "error";
@@ -50,6 +51,8 @@ type JobStatus = {
    *  which is why the check below is `!== false` rather than truthiness. */
   changed?: boolean;
   warnings?: string[];
+  /** The name the turn gave the song, when it was asked to (unsaved). */
+  title?: string | null;
   error?: string;
 };
 
@@ -365,7 +368,9 @@ export default function ComposeChat({
       const res = await fetch("/api/compose", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ message: text, history, session, ...(canPickModel ? { model: modelOverride || model } : {}) }),
+        // A song never saved (or a template, whose first save makes a new
+        // song) has no name of its own: the turn is asked to give it one.
+        body: JSON.stringify({ message: text, history, session, unnamed: !getOpenSong().id || getOpenSong().isTemplate, ...(canPickModel ? { model: modelOverride || model } : {}) }),
       });
       // Anything that failed before the route got to stream -- auth, a bad
       // request, a gateway page -- arrives as an ordinary body with a status
@@ -464,7 +469,10 @@ export default function ComposeChat({
           // session (mergeSet: no teardown, no stopped transport) and `keep`
           // makes them the song. Writing a turn straight in is what used to
           // silence a track that was playing while you asked for another one.
-          if (job.session && job.changed !== false) setReview({ session: job.session, before: null });
+          if (job.session && job.changed !== false) setReview({ session: job.session, before: null, title: job.title ?? null });
+          // A name with nothing to review (the turn only named the song) is
+          // the song's at once; otherwise it comes with the changes, on keep.
+          else if (job.title) setComposedTitle(job.title);
           land({
             role: "assistant",
             text: job.reply || "Done.",
@@ -509,7 +517,7 @@ export default function ComposeChat({
     if (!review || review.before || !window.seqbaby) return;
     const before = window.seqbaby.serializeSet();
     writeLive(review.session);
-    setReview({ session: review.session, before });
+    setReview({ ...review, before });
   }, [review, writeLive]);
 
   // Stop: back to what was playing, with the changes still on offer. Anything
@@ -519,7 +527,7 @@ export default function ComposeChat({
   const stopAudition = useCallback(() => {
     if (!review?.before) return;
     writeLive(review.before);
-    setReview({ session: review.session, before: null });
+    setReview({ ...review, before: null });
   }, [review, writeLive]);
 
   // Keeping is a real edit to the song, so it is SAVED, as a version of its
@@ -579,6 +587,9 @@ export default function ComposeChat({
   const keepChanges = useCallback(() => {
     if (!review) return;
     if (!review.before) writeLive(review.session);
+    // After the write: an applySet fallback announces a new session, which
+    // clears any name held for the last one.
+    if (review.title) setComposedTitle(review.title);
     setReview(null);
     void autosaveKept();
   }, [review, writeLive, autosaveKept]);

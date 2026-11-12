@@ -99,13 +99,19 @@ export const TOOLS = [
     description: "Start a new, empty song. Replaces the current one. Scale is optional: { root: \"C\", mode: \"minor\" }.",
     inputSchema: { name: z.string().optional(), bpm: z.number().min(20).max(300).optional(), swing: z.number().min(0).max(1).optional(),
       scale: z.object({ root: z.union([z.string(), z.number()]), mode: z.string() }).nullable().optional() },
-    handler: (ctx, { name, bpm, swing, scale }) => { ctx.song = sb.newSong({ bpm, swing, scale: scale || null }); ctx.songName = name || "untitled"; return { name: ctx.songName, ...sb.summarize(ctx.song) }; },
+    handler: (ctx, { name, bpm, swing, scale }) => { ctx.song = sb.newSong({ bpm, swing, scale: scale || null }); ctx.songName = name || ctx.songName || null; return { name: ctx.songName || "untitled", ...sb.summarize(ctx.song) }; },
   },
   {
     name: "get_song", title: "Get song",
     description: "The current song, summarised: tempo, scale, every track with its patterns as step strings, its sound and its modulation. Pass a track index for one track in more detail.",
     inputSchema: { track: z.number().int().min(0).optional() },
-    handler: (ctx, { track }) => track == null ? { name: ctx.songName, ...sb.summarize(ctx.song) } : sb.summarizeTrack(ctx.song, track),
+    handler: (ctx, { track }) => track == null ? { name: ctx.songName || "untitled", ...sb.summarize(ctx.song) } : sb.summarizeTrack(ctx.song, track),
+  },
+  {
+    name: "name_song", title: "Name song",
+    description: "Give the song its name: two or three lowercase words that say what it sounds like (\"cold squelch\", \"basement choir\"), not the genre alone. Offered in the save box when the song has not been saved yet.",
+    inputSchema: { name: z.string().min(1).max(60) },
+    handler: (ctx, { name }) => { ctx.songName = name.trim().replace(/\s+/g, " ").slice(0, 60); return { name: ctx.songName }; },
   },
   {
     name: "set_tempo", title: "Set tempo", description: "Tempo in bpm (20..300) and swing (0..1).",
@@ -371,7 +377,7 @@ export const TOOLS = [
     name: "load_song", title: "Load song",
     description: "Adopt an existing song for editing, from its JSON text. Replaces the current song.",
     inputSchema: { json: z.string(), name: z.string().optional() },
-    handler: (ctx, { json, name }) => { ctx.song = sb.fromBlob(JSON.parse(json)); ctx.songName = name || ctx.songName; return { name: ctx.songName, ...sb.summarize(ctx.song) }; },
+    handler: (ctx, { json, name }) => { ctx.song = sb.fromBlob(JSON.parse(json)); ctx.songName = name || ctx.songName; return { name: ctx.songName || "untitled", ...sb.summarize(ctx.song) }; },
   },
 ];
 

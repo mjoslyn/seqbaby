@@ -45,7 +45,7 @@ Env:
 
 | group | tools |
 |---|---|
-| song | `new_song`, `get_song`, `set_tempo`, `set_scale`, `set_arrangement` (repeat / chain / arrange), `set_blocks` (a track's timeline for arrange mode), `set_meter`, `load_song` |
+| song | `new_song`, `get_song`, `name_song`, `set_tempo`, `set_scale`, `set_arrangement` (repeat / chain / arrange), `set_blocks` (a track's timeline for arrange mode), `set_meter`, `load_song` |
 | engines | `list_engines`, `describe_engine` |
 | genres | `list_genres`, `genre_brief` (the studio's groove picker: a genre's idiom with this build's tempo, key, parts and form already rolled) |
 | tracks | `add_track`, `remove_track`, `set_track` (name, length (every pattern, or one with `pattern`), mute, solo, glide, speed, out) |

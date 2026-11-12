@@ -40,7 +40,7 @@ export async function GET(req: Request) {
     status: p.status,
     events: p.events ?? [],
     ...(p.status === "done"
-      ? { reply: p.reply, model: p.model, session: p.session, changed: p.changed, warnings: p.warnings }
+      ? { reply: p.reply, model: p.model, session: p.session, changed: p.changed, warnings: p.warnings, title: p.title ?? null }
       : {}),
     ...(p.status === "error" ? { error: p.error } : {}),
   });
