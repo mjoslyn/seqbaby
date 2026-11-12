@@ -296,10 +296,9 @@ export default function ComposeChat({
     return () => window.removeEventListener("seqbaby:newset", onNew);
   }, []);
 
-  // Opening the drawer to type is the only reason to open it.
-  useEffect(() => {
-    if (open) inputRef.current?.focus();
-  }, [open]);
+  // Opening the drawer does not focus the input: on a phone that throws the
+  // keyboard up over the transcript and the review bar before anything has
+  // been read. A tap in the box is what asks for it.
 
   // Grow with what's typed, up to the cap in the stylesheet: it's a box you
   // write a paragraph of brief into, not a one-line search field.
