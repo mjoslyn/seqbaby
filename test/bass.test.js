@@ -32,11 +32,9 @@ function processorClass() {
 }
 const Cls = processorClass();
 
-const DEFAULTS = {
-  drive: 0.5, tone: 0.5, comp: 0.5, sustain: 0.4,
-  pick: 0.14, attack: 0.4, stiff: 0.45, pkup: 0.1, mute: 0, fret: 0.25,
-  grind: 0, xover: 0.4, sub: 0, bass: 0.5, lomid: 0.5, himid: 0.5, treb: 0.5, hpf: 0.15, mic: 0.4,
-};
+// Every parameter at its default, read off the processor so a new one is
+// never missing here.
+const DEFAULTS = Object.fromEntries(Cls.parameterDescriptors.map((d) => [d.name, d.defaultValue]));
 // The DI chain, so what is measured is the string and the pickup, not the amp.
 const CLEAN = { set: { amp: 0, cab: 4 }, params: { drive: 0, comp: 0, tone: 1 } };
 
@@ -169,8 +167,9 @@ test("bass: the partials of a roundwound run sharp, and flats less so", () => {
   };
   const stretch = (midi, flats, n) => {
     const { inst } = render(midi, { secs: 0.05, set: { flats } });
-    const v = inst.voices[0];
-    assert.ok(v.active, "the note should be sounding");
+    // Whichever string the note landed on.
+    const v = inst.voices.find((x) => x.active);
+    assert.ok(v, "the note should be sounding");
     return resonance(v.a, v.damp, hz(midi), n);
   };
   // Within a few cents of n*f0*sqrt(1 + B*n*n) for B ~ 2.9e-4 at the default.
@@ -203,4 +202,80 @@ test("bass: playing harder is louder and brighter", () => {
   const top = (a) => { let e = 0; for (let f = 1000; f < 4000; f += 25) { const m = tone(a, f, at(0.012), at(0.1)); e += m * m; } return db(Math.sqrt(e)); };
   const ratio = (a) => top(a) - level(a);
   assert.ok(ratio(hard) > ratio(soft) + 2, `top relative to level: hard ${ratio(hard).toFixed(1)}dB, soft ${ratio(soft).toFixed(1)}dB`);
+});
+
+// ---- the fretboard and the fingers ---------------------------------------
+/** Render a list of notes [midi, when, dur, vel, legato] on one processor, seeded. */
+function renderSeq(notes, { secs = 1.2, params = {}, set = {} } = {}) {
+  let s = 0x9e3779b9;
+  const rnd = () => { s ^= s << 13; s >>>= 0; s ^= s >>> 17; s ^= s << 5; s >>>= 0; return s / 4294967296; };
+  const saved = Math.random; Math.random = rnd;
+  const inst = new Cls();
+  inst.onMessage({ type: "set", ...CLEAN.set, ...set });
+  let id = 0;
+  for (const [midi, when, dur, vel = 1, legato = false] of notes) {
+    inst.onMessage({ type: "note", when, id: ++id, note: midi, freq: hz(midi), dur, vel, glide: 0, legato });
+  }
+  const P = {};
+  for (const [k, v] of Object.entries({ ...DEFAULTS, ...CLEAN.params, ...params })) P[k] = Float32Array.of(v);
+  const n = Math.round(secs * SR);
+  const out = new Float32Array(n);
+  const outs = [[new Float32Array(Q)]];
+  for (let b = 0; b * Q < n; b++) {
+    outs[0][0].fill(0);
+    globalThis.currentFrame = b * Q;
+    inst.process([], outs, P);
+    out.set(outs[0][0].subarray(0, Math.min(Q, n - b * Q)), b * Q);
+  }
+  Math.random = saved;
+  return { out, inst };
+}
+const rmsOf = (a, i0, i1) => { let q = 0; for (let i = i0; i < i1; i++) q += a[i] * a[i]; return Math.sqrt(q / (i1 - i0)); };
+
+test("bass: one string, one note: a new fret on a ringing string stops the old one", () => {
+  // E1 is only on the E string, and G1 lands there too (third fret).
+  const cut = renderSeq([[28, 0, 0.3], [31, 0.3, 1]], { params: { sustain: 0.8, fnoise: 0 } }).out;
+  const ring = renderSeq([[28, 0, 1]], { params: { sustain: 0.8, fnoise: 0 } }).out;
+  const both = renderSeq([[28, 0, 1], [33, 0.3, 1]], { params: { sustain: 0.8, fnoise: 0 } }).out;
+  const e = (a) => tone(a, hz(28), at(0.5), at(0.9));
+  // G1 alone leaks a little into a read at E1: that is the floor.
+  const floor = e(renderSeq([[31, 0.3, 1]], { params: { sustain: 0.8, fnoise: 0 } }).out);
+  assert.ok(db(e(cut)) < db(floor) + 3, `E1 under G1 ${db(e(cut)).toFixed(1)}dB vs G1's own leak ${db(floor).toFixed(1)}dB`);
+  assert.ok(db(e(cut)) < db(e(ring)) - 12, `E1 under G1 ${db(e(cut)).toFixed(1)}dB vs ringing ${db(e(ring)).toFixed(1)}dB`);
+  assert.ok(db(e(both)) > db(e(ring)) - 6, `E1 under A1 (another string) rings on: ${db(e(both)).toFixed(1)}dB`);
+});
+
+test("bass: a double stop lands on two strings, low to high", () => {
+  const { inst } = renderSeq([[33, 0, 0.5], [40, 0, 0.5]], { secs: 0.1 });
+  const on = inst.voices.map((v, s) => (v.active ? s : -1)).filter((s) => s >= 0);
+  assert.equal(on.length, 2, `two strings: ${on}`);
+  const low = inst.voices.find((v) => v.active && v.note === 33), high = inst.voices.find((v) => v.active && v.note === 40);
+  assert.ok(low.str < high.str, "the lower note on the lower string");
+});
+
+test("bass: a velocity at or under 0.1 is a ghost note: a thud as loud as a pluck, gone at once", () => {
+  const g = renderSeq([[33, 0, 0.5, 0.08]], { secs: 0.5 }).out;
+  const p = renderSeq([[33, 0, 0.5, 0.8]], { secs: 0.5 }).out;
+  const pk = (a) => { let m = 0; for (let i = 0; i < at(0.04); i++) m = Math.max(m, Math.abs(a[i])); return m; };
+  assert.ok(db(pk(g)) > db(pk(p)) - 8, `the thud ${db(pk(g)).toFixed(1)}dB vs a played note ${db(pk(p)).toFixed(1)}dB`);
+  assert.ok(db(rmsOf(g, at(0.15), at(0.25))) < db(rmsOf(p, at(0.15), at(0.25))) - 30, "and it is gone 150ms in");
+});
+
+test("bass: a tied note onto the same string is hammered, not plucked", () => {
+  const h = renderSeq([[33, 0, 0.5], [35, 0.5, 0.5, 1, true]], { params: { fnoise: 0 } }).out;
+  const p = renderSeq([[33, 0, 0.5], [35, 0.5, 0.5, 1]], { params: { fnoise: 0 } }).out;
+  const ha = rmsOf(h, at(0.5), at(0.53)), pa = rmsOf(p, at(0.5), at(0.53));
+  assert.ok(db(ha) < db(pa) - 6, `hammered ${db(ha).toFixed(1)}dB vs plucked ${db(pa).toFixed(1)}dB`);
+  const { freq } = peakNear(h, hz(35), 0.03, at(0.6), at(0.95));
+  assert.ok(Math.abs(1200 * Math.log2(freq / hz(35))) < 10, `the new note: ${freq.toFixed(2)}Hz`);
+});
+
+test("bass: a finger lifting off thumps, and only then", () => {
+  const off = renderSeq([[33, 0, 0.5, 0.9]], { params: { fnoise: 0 } }).out;
+  const on = renderSeq([[33, 0, 0.5, 0.9]], { params: { fnoise: 0.35 } }).out;
+  let d0 = 0; for (let i = 0; i < at(0.5); i++) d0 = Math.max(d0, Math.abs(on[i] - off[i]));
+  assert.equal(d0, 0, "nothing while the note is held");
+  let q = 0; for (let i = at(0.5); i < at(0.58); i++) q += (on[i] - off[i]) ** 2;
+  const d = Math.sqrt(q / (at(0.58) - at(0.5))), n = rmsOf(off, at(0.2), at(0.45));
+  assert.ok(db(d) > db(n) - 40 && db(d) < db(n) - 6, `release ${(db(d) - db(n)).toFixed(1)}dB under the note`);
 });

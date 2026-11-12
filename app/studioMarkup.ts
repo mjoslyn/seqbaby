@@ -148,19 +148,23 @@ const BASS_PANEL = `
             <select class="sq-bass__tone" title="load a rig: the bass, its strings, how it is played, the amp and the compression"></select>
           </div>
           <div class="sq-bass__row">
-            <span class="sq-bass__lbl">hand</span>
+            <span class="sq-bass__lbl">hands</span>
             <label class="sq-bass__f"><span>pluck pos</span><input class="p-bspick" type="range" min="0.02" max="0.5" step="0.01" value="0.14" title="where along the string it is plucked, bridge to neck. Bridge is nasal, neck is round" /></label>
             <label class="sq-bass__f"><span>hand</span><input class="p-bsattack" type="range" min="0" max="1" step="0.01" value="0.4" title="what is hitting the string: thumb at the bottom, fingers in the middle, plectrum at the top" /></label>
             <label class="sq-bass__f"><span>fret</span><input class="p-bsfret" type="range" min="0" max="1" step="0.01" value="0.25" title="how hard the string is allowed to clatter against the frets. Wound right up, with a thumb, it is slap" /></label>
-            <label class="sq-bass__f"><span>stiff</span><input class="p-bsstiff" type="range" min="0" max="1" step="0.01" value="0.45" title="string stiffness: how far the harmonics sit sharp of the arithmetic, and so the gap between the pitch and the clank" /></label>
-            <label class="sq-bass__f"><span>pkup pos</span><input class="p-bspkup" type="range" min="0.02" max="0.5" step="0.01" value="0.1" title="which pickup, as a position along the string: bridge at the bottom, neck at the top" /></label>
+            <label class="sq-bass__f"><span>palm</span><input class="p-bsmute" type="range" min="0" max="1" step="0.01" value="0" title="the palm resting on the strings by the bridge. Shorter and darker" /></label>
+            <label class="sq-bass__f"><span>fingers</span><input class="p-bsfnoise" type="range" min="0" max="1" step="0.01" value="0.35" title="finger noise: the squeak of a hand moving along the wound strings, and the thump and brief open ring of a finger lifting off a note" /></label>
+          </div>
+          <div class="sq-bass__row">
+            <span class="sq-bass__lbl">strings</span>
             <select class="p-bspkupt" title="which pickup, and so where its resonance sits: a jazz single coil peaks high and growls, a precision's split humbucker sits low and thick, a musicman is the hi-fi one">
               <option value="j">jazz</option><option value="p" selected>precision</option><option value="mm">musicman</option>
             </select>
             <select class="p-bsstrs" title="roundwound or flatwound. Flats lose their top almost as soon as they are struck and have far less clank">
               <option value="round" selected>roundwound</option><option value="flat">flatwound</option>
             </select>
-            <label class="sq-bass__f"><span>palm</span><input class="p-bsmute" type="range" min="0" max="1" step="0.01" value="0" title="the palm resting on the strings by the bridge. Shorter and darker" /></label>
+            <label class="sq-bass__f"><span>stiff</span><input class="p-bsstiff" type="range" min="0" max="1" step="0.01" value="0.45" title="string stiffness: how far the harmonics sit sharp of the arithmetic, and so the gap between the pitch and the clank" /></label>
+            <label class="sq-bass__f"><span>pkup pos</span><input class="p-bspkup" type="range" min="0.02" max="0.5" step="0.01" value="0.1" title="which pickup, as a position along the string: bridge at the bottom, neck at the top" /></label>
           </div>
           <div class="sq-bass__row">
             <span class="sq-bass__lbl">dirt</span>
@@ -179,6 +183,8 @@ const BASS_PANEL = `
             <label class="sq-bass__f"><span>hi mid</span><input class="p-bshimid" type="range" min="0" max="1" step="0.01" value="0.5" title="high mids, around 800Hz, where the note becomes audible on a small speaker" /></label>
             <label class="sq-bass__f"><span>treble</span><input class="p-bstreb" type="range" min="0" max="1" step="0.01" value="0.5" title="the amp's treble, which on a bass is mostly the strings rather than the notes" /></label>
             <label class="sq-bass__f"><span>low cut</span><input class="p-bshpf" type="range" min="0" max="1" step="0.01" value="0.15" title="high-pass filter, 28Hz to 150Hz" /></label>
+          </div>
+          <div class="sq-bass__row">
             <span class="sq-bass__lbl">cab</span>
             <select class="p-bscab" title="the speaker cabinet. An 8x10 pushes air and rolls off early, a fifteen is all lows and no top, a DI is no cab at all">
               <option value="8x10" selected>8x10</option><option value="4x10">4x10</option>

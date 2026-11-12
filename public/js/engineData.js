@@ -984,8 +984,6 @@ export const BASS_NUM_CTLS = [
   ["stiff",  0,    1,   0.45, "stiff"],
   ["pkup",   0.02, 0.5, 0.1,  "pkup pos"],
   ["mute",   0,    1,   0,    "palm"],
-  ["vib",    0,    1,   0.3,  "vibrato"],
-  ["symp",   0,    1,   0.3,  "sympathy"],
   ["fnoise", 0,    1,   0.35, "fingers"],
   ["fret",   0,    1,   0.25, "fret"],
   ["grind",  0,    1,   0,    "grind"],

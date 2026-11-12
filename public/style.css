@@ -4082,13 +4082,14 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not
   .sq-param-group--guitar .sq-guitar__f .sq-knob,
   .sq-param-group--bass .sq-bass__f .sq-knob,
   .sq-param-group--hexop .sq-hexop__row .sq-hexop__f .sq-knob { --knob-size: 42px; }
-  /* The guitar's rig on a phone: each section is a header line (its name,
-     then its selects, whichever order the markup has them in) over its knobs
-     in four even columns. As wrapping flex rows the labels, selects and knobs
-     fell wherever the width left them, a select alone on a line here, a knob
-     alone on a line there. */
-  .sq-param-group--guitar { gap: 8px; flex-direction: column; flex-wrap: nowrap; align-items: stretch; }
-  .sq-param-group--guitar .sq-guitar__row {
+  /* The guitar's and the bass's rigs on a phone: each section is a card,
+     its name a bold heading with its selects on the same line (whichever
+     order the markup has them in), its knobs below in columns sized so
+     every line is full. As wrapping flex rows the labels, selects and knobs
+     fell wherever the width left them. The preset picker is not a section
+     but a way to load all of them, so it sits on top as an accent bar. */
+  :is(.sq-param-group--guitar, .sq-param-group--bass) { gap: 8px; flex-direction: column; flex-wrap: nowrap; align-items: stretch; }
+  :is(.sq-param-group--guitar .sq-guitar__row, .sq-param-group--bass .sq-bass__row) {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 10px 6px;
@@ -4098,33 +4099,36 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not
     background: var(--bg-2);
     border: 1px solid var(--border);
   }
-  /* A section's name is a heading: bright and bold, over knob labels that
-     stay small and dim. */
-  .sq-param-group--guitar .sq-guitar__lbl {
+  :is(.sq-param-group--guitar, .sq-param-group--bass) :is(.sq-guitar__lbl, .sq-bass__lbl) {
     order: -2; align-self: center; min-width: 0;
     color: var(--fg); font-weight: 700;
     text-transform: uppercase; letter-spacing: 0.1em; font-size: 11px;
   }
-  .sq-param-group--guitar .sq-guitar__f > span:not(.sq-knob) { color: var(--fg-dim); font-size: 10px; }
-  .sq-param-group--guitar .sq-guitar__row:not(:has(select)) .sq-guitar__lbl { grid-column: 1 / -1; }
-  .sq-param-group--guitar .sq-guitar__row > select { order: -1; grid-column: span 3; width: 100%; min-width: 0; }
-  /* The cab row has two: the cab, and the tremolo's shape beside it. */
-  .sq-param-group--guitar .sq-guitar__row > select ~ select { grid-column: span 1; }
-  .sq-param-group--guitar .sq-guitar__row > select:has(~ select) { grid-column: span 2; }
-  /* Columns per section so every line is full: the string's five knobs in
-     one row, the amp's six in two of three. */
-  .sq-param-group--guitar .sq-guitar__row:has(.p-gtpick) { grid-template-columns: repeat(5, minmax(0, 1fr)); }
-  .sq-param-group--guitar .sq-guitar__row:has(.p-gtpick) > select { grid-column: span 4; }
-  .sq-param-group--guitar .sq-guitar__row:has(.p-gtamp),
-  .sq-param-group--guitar .sq-guitar__row:has(.p-gtvib) { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  :is(.sq-param-group--guitar, .sq-param-group--bass) :is(.sq-guitar__f, .sq-bass__f) > span:not(.sq-knob) { color: var(--fg-dim); font-size: 10px; }
+  :is(.sq-param-group--guitar .sq-guitar__row, .sq-param-group--bass .sq-bass__row):not(:has(select)) > :is(.sq-guitar__lbl, .sq-bass__lbl) { grid-column: 1 / -1; }
+  :is(.sq-param-group--guitar .sq-guitar__row, .sq-param-group--bass .sq-bass__row) > select { order: -1; grid-column: span 3; width: 100%; min-width: 0; }
+  /* Two selects on a line (the cab and the tremolo shape, the pickup and
+     the strings): the first wider. */
+  :is(.sq-param-group--guitar .sq-guitar__row, .sq-param-group--bass .sq-bass__row) > select ~ select { grid-column: span 1; }
+  :is(.sq-param-group--guitar .sq-guitar__row, .sq-param-group--bass .sq-bass__row) > select:has(~ select) { grid-column: span 2; }
+  :is(.sq-param-group--guitar, .sq-param-group--bass) :is(.sq-guitar__f, .sq-bass__f) { justify-self: center; min-width: 0; }
+  /* Columns per section so every line is full. */
+  /* The bass's strings: two selects over two knobs, a square of four under
+     the heading. Its cab: one knob, beside the select on the heading's line. */
+  .sq-param-group--bass .sq-bass__row:has(.p-bsstrs) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .sq-param-group--bass .sq-bass__row:has(.p-bsstrs) > .sq-bass__lbl { grid-column: 1 / -1; }
+  .sq-param-group--bass .sq-bass__row:has(.p-bsstrs) > select { grid-column: span 1; }
+  .sq-param-group--bass .sq-bass__row:has(.p-bscab) { align-items: center; }
+  .sq-param-group--bass .sq-bass__row:has(.p-bscab) > select { grid-column: span 2; }
+  .sq-param-group--guitar .sq-guitar__row:has(.p-gtpick), .sq-param-group--bass .sq-bass__row:has(.p-bspick), .sq-param-group--bass .sq-bass__row:has(.p-bsamp) { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  .sq-param-group--guitar .sq-guitar__row:has(.p-gtpick) > select, .sq-param-group--bass .sq-bass__row:has(.p-bsamp) > select { grid-column: span 4; }
+  .sq-param-group--guitar .sq-guitar__row:has(.p-gtamp), .sq-param-group--guitar .sq-guitar__row:has(.p-gtvib), .sq-param-group--bass .sq-bass__row:has(.p-bsgrind) { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .sq-param-group--guitar .sq-guitar__row:has(.p-gtamp) > select { grid-column: span 2; }
-  /* The preset picker is not a section of the rig but a way to load all of
-     it, so it sits above the sections as a bar of its own, in the accent. */
-  .sq-param-group--guitar .sq-guitar__row:has(.sq-guitar__tone) {
+  :is(.sq-param-group--guitar .sq-guitar__row:has(.sq-guitar__tone), .sq-param-group--bass .sq-bass__row:has(.sq-bass__tone)) {
     background: transparent; border: 0; padding: 0 0 2px;
   }
-  .sq-param-group--guitar .sq-guitar__row:has(.sq-guitar__tone) .sq-guitar__lbl { color: var(--accent); }
-  .sq-param-group--guitar .sq-guitar__tone {
+  :is(.sq-param-group--guitar .sq-guitar__row:has(.sq-guitar__tone), .sq-param-group--bass .sq-bass__row:has(.sq-bass__tone)) > :is(.sq-guitar__lbl, .sq-bass__lbl) { color: var(--accent); }
+  :is(.sq-param-group--guitar, .sq-param-group--bass) :is(.sq-guitar__tone, .sq-bass__tone) {
     border-color: var(--accent); color: var(--fg); font-weight: 600;
   }
   .sq-param-group--guitar .sq-guitar__f { justify-self: center; min-width: 0; }

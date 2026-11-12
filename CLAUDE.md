@@ -1582,6 +1582,28 @@ STRING ──▶ PICKUP ──▶ tone ──┬── clean (lows, kept clean) 
   phase response), DC, and velocity.
 - The octaver is a tracked oscillator following the string's envelope, not a
   flip-flop divider, so it never glitches (a real one does).
+- **The four voices are four strings** (E1 A1 D2 G2, `OPEN_F`), the
+  guitar's fretboard model cut down: a note goes on the string the left hand
+  reaches most easily (`placeCost`, `pickString`), one string plays one note
+  (a new fret on a ringing string stops it), a double stop is laid low to
+  high in one hand position (`placeChord`) and raked by the plucking
+  fingers 7-12ms a string. The stiffness is the string's (`B` of the open
+  string over the vibrating length squared, capped at 3x), and the pluck
+  and pickup points are fractions of the vibrating length, so a note high
+  on the E string is rounder and clankier than the same pitch on the G.
+- **The fingers** (`bsfnoise`, the `hands` row). A velocity at or under
+  `DEAD_VEL` (0.1) is a ghost note: struck as hard as a played one, its ring
+  cut to about 60ms, top first. A note tied into the next onto the same
+  string, within five frets, is hammered on or pulled off (`tryLegato`, the
+  builder posts `legato` by the silverbox's tie rule). A quick hand move of
+  two frets or more squeaks on the next fretted string (all four are
+  wound), and a finger lifting off a note the string is not about to play
+  again thumps, a fretted one ringing open for a moment (`fingerOff`). No
+  vibrato or sympathy, which the guitar has: a bass player damps the open
+  strings, and a bass line rarely wants the wobble.
+- **The panel** is one section a row (tone, hands, strings, dirt, amp, cab),
+  and on a phone the guitar's layout: cards with bold headings, the selects
+  on the heading's line, the knobs in columns that fill each line.
 - **Controls** — DRIVE / TONE / COMP / SUSTAIN plus `sq-param-group--bass`
   (hand row, dirt row, amp+cab row). Keys are `bs` + short key → `bas_<short>` /
   `bas.<short>`, generated from `BASS_NUM_CTLS`. Four amps (di / flip-top / svt /
