@@ -316,14 +316,72 @@ test("a chord is a strum: six notes at one instant land one after another", () =
   note(one, 40, 0, 1);
   const b = render(one, 0.2);
   // First sound within a millisecond; for its first 4ms the chord is the
-  // first string alone; and the chord's full level only after the last
-  // string has been reached (5 x 4ms).
+  // low string alone (a downstroke); and the chord's full level only after
+  // the pick has crossed all six.
   let first = -1; for (let i = 0; i < a.length; i++) if (Math.abs(a[i]) > 1e-4) { first = i; break; }
   assert.ok(first >= 0 && first < sec(0.001), `first sound at ${first}`);
   const early = rms(a, 0, sec(0.004)), earlyOne = rms(b, 0, sec(0.004));
   assert.ok(Math.abs(db(early) - db(earlyOne)) < 0.5, `the first 4ms is one string: ${early.toFixed(3)} vs ${earlyOne.toFixed(3)} alone`);
-  const full = rms(a, sec(0.02), sec(0.03)), fullOne = rms(b, sec(0.02), sec(0.03));
+  const full = rms(a, sec(0.04), sec(0.05)), fullOne = rms(b, sec(0.04), sec(0.05));
   assert.ok(full > fullOne * 1.5, `full ${full.toFixed(3)} vs one string ${fullOne.toFixed(3)}`);
+});
+
+test("a chord is laid on the strings as a hand would: an open E is 0 2 2 1 0 0", () => {
+  const g = rig({ drive: 0 });
+  for (const n of [40, 47, 52, 56, 59, 64]) note(g, n, 0, 1);
+  render(g, 0.1);
+  const frets = g.inst.voices.map((v) => Math.round(v.fret));
+  assert.deepEqual(frets, [0, 2, 2, 1, 0, 0]);
+  // A barre an octave up stays in one hand position, low to high.
+  const h = rig({ drive: 0 });
+  for (const n of [52, 59, 64, 68, 71, 76]) note(h, n, 0, 1);
+  render(h, 0.1);
+  const f2 = h.inst.voices.map((v) => Math.round(v.fret));
+  assert.ok(Math.max(...f2) - Math.min(...f2) <= 3, `one hand: ${f2}`);
+  assert.ok(Math.min(...f2) >= 10, `up the neck: ${f2}`);
+});
+
+test("strums alternate: a chord close after a downstroke is an upstroke, high string first", () => {
+  const g = rig({ drive: 0 });
+  const chord = [40, 47, 52, 56, 59, 64];
+  for (const n of chord) note(g, n, 0, 0.2);
+  for (const n of chord) note(g, n, 0.25, 0.2);
+  render(g, 0.4);
+  const v = g.inst.voices;
+  assert.ok(v[5].struckAt < v[0].struckAt, "second chord up");
+  assert.ok(v[0].struckAt < sec(0.3), "and it is the second chord");
+  // After a pause, down again.
+  const h = rig({ drive: 0 });
+  for (const n of chord) note(h, n, 0, 0.2);
+  for (const n of chord) note(h, n, 1.0, 0.2);
+  render(h, 1.2);
+  const w = h.inst.voices;
+  assert.ok(w[0].struckAt > sec(0.9) && w[0].struckAt < w[5].struckAt, "after a pause, down");
+});
+
+test("one string, one note: a new fret on a ringing string stops the old note", () => {
+  // E2 can only be on the low E, and F2 lands there too: it cuts E2 off.
+  const g = rig({ drive: 0, sustain: 0.8 });
+  note(g, 40, 0, 0.3);
+  note(g, 41, 0.3, 1);
+  const a = render(g, 1.0);
+  const alone = rig({ drive: 0, sustain: 0.8 });
+  note(alone, 40, 0, 1);
+  const b = render(alone, 1.0);
+  const e2cut = tone_at(a, 82.41, sec(0.5), sec(0.9)), e2ring = tone_at(b, 82.41, sec(0.5), sec(0.9));
+  // F2 alone leaks into a read at 82Hz, so that is the floor E2 should sit on.
+  const f2 = rig({ drive: 0, sustain: 0.8 });
+  note(f2, 41, 0.3, 1);
+  const floor = tone_at(render(f2, 1.0), 82.41, sec(0.5), sec(0.9));
+  assert.ok(db(e2cut) < db(e2ring) - 12, `E2 under F2 ${db(e2cut).toFixed(1)}dB vs ringing ${db(e2ring).toFixed(1)}dB`);
+  assert.ok(db(e2cut) < db(floor) + 3, `E2 under F2 ${db(e2cut).toFixed(1)}dB vs F2's own leak ${db(floor).toFixed(1)}dB`);
+  // Two notes on different strings ring together: E2 and B2.
+  const h = rig({ drive: 0, sustain: 0.8 });
+  note(h, 40, 0, 1);
+  note(h, 47, 0.3, 1);
+  const c = render(h, 1.0);
+  const e2both = tone_at(c, 82.41, sec(0.5), sec(0.9));
+  assert.ok(db(e2both) > db(e2ring) - 6, `E2 under B2 rings on: ${db(e2both).toFixed(1)} vs ${db(e2ring).toFixed(1)}`);
 });
 
 test("bloom holds a note up without running away, and release still ends it", () => {

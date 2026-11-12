@@ -1372,9 +1372,9 @@ STRING ──▶ PICKUP ──▶ tone pot ──▶ AMP ──▶ CAB ──▶
   bend retuning the loop every block scrambled the upper partials).
 - **The stiffness is a real inharmonicity coefficient** (`dispCoef`, the
   bass's solve): partial n at `n·f0·sqrt(1 + B·n²)`, B from the string the
-  note would be on — the three wound strings around 1e-4 to 2.5e-4, the
-  three plain ones 2e-5 to 4e-5, crossfaded over the octave where the set
-  changes over, scaled by the stiff knob (0.25 is a standard set). Measured
+  note IS on (see the fretboard below) — the three wound strings around
+  1e-4 to 2.5e-4 open, the three plain ones 2.5e-5 to 3.4e-5, scaled by the
+  stiff knob (0.25 is a standard set). Measured
   at the default: the low E's 8th partial 15 cents sharp, the high E's under
   2; the two fixed allpasses this replaced left every partial dead harmonic.
 - **The losses are times, not a per-lap gain** (`setLosses`). A Karplus-Strong
@@ -1446,10 +1446,28 @@ STRING ──▶ PICKUP ──▶ tone pot ──▶ AMP ──▶ CAB ──▶
   about the same level and a hard note peaks near half scale on every amp
   (it used to run a clean amp 2.6x into the limiter, which took the top off
   every hard note).
-- **A chord is a strum.** Notes posted for the same instant land 4ms apart
-  in the order they arrived (root first, as the transport sends them), since a
-  pick cannot be on six strings at once; it also takes the top off a chord's
-  attack, which six coincident pulses made 10dB above a note's.
+- **The six voices are six strings, in standard tuning** (`OPEN`, `OPEN_F`,
+  `B_OPEN`). A single note goes on the string the hand reaches most easily
+  (`placeCost`: open strings cheap, frets inside a four-fret window from
+  `hand` free, a string still held or picked in the last 60ms for another
+  note expensive, a slide kept on the string it left). One string plays one
+  note: a new fret on a ringing string stops the old one (it keeps 12% of
+  what was ringing, a re-pick of the same note half). The stiffness is the
+  STRING's (`B_OPEN[s]` over the vibrating length squared, capped at 3x), so
+  a low string played high up clanks where the same pitch on a thin string
+  does not, and the pick and pickup points are fractions of the vibrating
+  length (`pickPos / r`, `pkupPos / r`, the pickup held under 0.4: at the
+  middle the comb's slope pulled a top-fret E 1.5 cents flat).
+- **A chord is a hand shape, strummed.** Notes posted for the same instant
+  are gathered (`playGroup`), laid across the strings low to high inside one
+  hand position (`placeChord`: every position 1..19, a 6x6 dynamic program
+  per position, nearest the current hand winning a tie; more than six notes
+  or a shape no hand could make goes one note at a time), then picked in
+  string order: a downstroke low to high, or an upstroke high to low when
+  the chord follows a downstroke inside 0.4s (lighter, faster, the low
+  strings barely caught). 6ms a string at full velocity, 10ms soft. Pending
+  picks are `pAt`..`pOff`; a note let go before its string is reached is
+  picked and released at once. An open E chord comes out 0 2 2 1 0 0 (tested).
 - **Cab**: seven biquads, five cabs. It's the biggest filter in the chain:
   the low cut, the cone's own resonance, the presence peak, a ripple in the
   breakup region, a 24dB/oct cliff above 5kHz (two sections; the one

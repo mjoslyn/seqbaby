@@ -58,17 +58,23 @@
 // guitar rig is, and it also means the modulation targets are the whole
 // instrument's rather than voice 0's (the limitation the pooled emulators have).
 //
-// Simplifications, stated plainly: the six strings are a voice pool rather than
-// a real fretboard, so nothing stops two notes landing on the same "string",
-// nothing sympathetically rings, and a note's stiffness is guessed from its
-// pitch rather than from which string a hand would put it on; the two planes
-// of a string are independent lines rather than coupled through the bridge;
-// the tone stack is three shelving filters rather than the passive RC
-// network's interacting one; the cab is seven biquads rather than a measured
-// impulse response; the amp runs 2x oversampled (the gain stages, not the
-// strings or the cab), which is enough to keep the fold-back 60dB under the
-// note on the hi-gain amp but not to make it vanish; and a chord's notes are
-// staggered 4ms apart as a pick would, not voiced as a hand shape.
+// The six voices are the six strings of a guitar in standard tuning. A note
+// goes on the string a hand would choose (near where the hand already is,
+// off a string still ringing a different note), a chord is laid out as a
+// hand shape (one note per string, low to high, inside four frets) and
+// strummed across the strings in order, down or up. One string plays one
+// note: a new fret on a ringing string stops the old note. A note's
+// stiffness, pick point and pickup point come from its string and its fret.
+//
+// Simplifications, stated plainly: nothing rings sympathetically; the two
+// planes of a string are independent lines rather than coupled through the
+// bridge; the tone stack is three shelving filters rather than the passive
+// RC network's interacting one; the cab is seven biquads rather than a
+// measured impulse response; the amp runs 2x oversampled (the gain stages,
+// not the strings or the cab), which is enough to keep the fold-back 60dB
+// under the note on the hi-gain amp but not to make it vanish; and the hand
+// shapes are found by cost, not drawn from a chord book, so an unusual
+// voicing can land on a shape no player would choose.
 
 /** @typedef {import("./types.js").Track} Track */
 
@@ -191,6 +197,29 @@ const PICKUPS = [
   { f: 4400, q: 1.8, g: 6,   lp: 8500 },    // p90 — between the two
 ];
 
+// ---- the fretboard ------------------------------------------------------
+// Standard tuning, low to high, and each open string's own stiffness: the
+// three wound strings far stiffer than the three plain ones, and within each
+// set the thinner string the less stiff. These are the values the old
+// pitch-only guess gave each open string, so an open note sounds as it did.
+const OPEN = [40, 45, 50, 55, 59, 64];
+const OPEN_F = [82.41, 110.0, 146.83, 196.0, 246.94, 329.63];
+const B_OPEN = [2.5e-4, 1.77e-4, 1.25e-4, 3.4e-5, 3.0e-5, 2.5e-5];
+const NSTR = 6;
+// Where a note sits on a string, in frets (fractional for a note between
+// semitones). Negative is below the open string: not playable there.
+function fretOf(s, f) { return 12 * Math.log2(f / OPEN_F[s]); }
+// The left hand covers four frets from where the index finger is. A note in
+// that window costs nothing to reach, one outside it costs the stretch, an
+// open string is nearly free low on the neck and an odd reach high up, and
+// past the 12th fret it is a little less likely anyone goes.
+function placeCost(fret, hand) {
+  if (fret < -0.3 || fret > 24.3) return 1e9;
+  if (fret < 0.5) return 0.3 + (hand > 7 ? 0.8 : 0);
+  const d = fret < hand ? hand - fret : (fret > hand + 3 ? fret - hand - 3 : 0);
+  return d + (fret > 12 ? 0.3 : 0);
+}
+
 // The oversampling filters' section Qs: a 6th-order Butterworth as three biquads.
 const OS_Q = [0.5176, 0.7071, 1.9319];
 
@@ -249,6 +278,8 @@ function makeString() {
     dcX: 0, dcY: 0,                        // dc blocker on the way out
     damp: 0.5, relG: 1,
     lossKey: -1,                           // (sustain, mute, stiff) the losses were set for
+    str: 0, fret: 0, r: 1,                 // which string, where on it, and the vibrating length (1 open)
+    struckAt: -1e9,                        // the frame it was last picked
     bend: 0,                               // tension-modulation pitch offset, decaying
     env: 0, quiet: 0,
   };
@@ -478,7 +509,22 @@ class GuitarProcessor extends AudioWorkletProcessor {
     this.ampModel = 2; this.cabModel = 0; this.pkupType = 1; this.tremSquare = 0;
     // k-rate control values the note handlers need, read once per block.
     this.pickPos = 0.28; this.pickHard = 0.5; this.pkupPos = 0.12; this.palm = 0;
-    this.strumAt = -1; this.strumN = 0;
+    // The fretboard: where the hand is (the index finger's fret), the last
+    // string a note went to (a slide stays on it), and the last chord's
+    // onset and direction (a strum alternates down and up).
+    this.hand = 1; this.lastString = -1;
+    this.lastChordAt = -1e9; this.lastDown = true;
+    // A chord being placed, and plucks waiting for the pick to reach their
+    // string. Fixed arrays: nothing here allocates per note.
+    this.gId = new Float64Array(16); this.gNote = new Float64Array(16);
+    this.gFreq = new Float64Array(16); this.gVel = new Float64Array(16);
+    this.gGlide = new Float64Array(16); this.gStr = new Int8Array(16);
+    this.gOrd = new Int8Array(16); this.gN = 0;
+    this.dp = new Float64Array(NSTR * NSTR); this.dpFrom = new Int8Array(NSTR * NSTR);
+    this.pAt = new Float64Array(16); this.pStr = new Int8Array(16);
+    this.pId = new Float64Array(16); this.pNote = new Float64Array(16);
+    this.pFreq = new Float64Array(16); this.pVel = new Float64Array(16);
+    this.pGlide = new Float64Array(16); this.pOff = new Uint8Array(16); this.pN = 0;
     // Scratch for building a pluck. Allocating one on the audio thread per note
     // is exactly the sort of thing that shows up as a click under load.
     this.scratch = new Float32Array(DLEN);
@@ -521,19 +567,16 @@ class GuitarProcessor extends AudioWorkletProcessor {
     if (!m) return;
     if (m.type === "note") {
       if (this.queue.len > 128) this.queue.dropOldest();
-      let at = Math.max(0, Math.round(m.when * this.sr));
-      // Notes asked for at the same instant are a chord, and a pick cannot be
-      // on six strings at once: each string after the first lands a few
-      // milliseconds later, a quick downstroke. The sequencer sends a chord's
-      // tones root first, so the strum runs the way the hand does.
-      if (at === this.strumAt) at += ++this.strumN * Math.round(0.004 * this.sr);
-      else { this.strumAt = at; this.strumN = 0; }
+      // Notes asked for at the same instant are a chord: they are gathered
+      // when they come due, put on strings together, and strummed (playGroup).
+      const at = Math.max(0, Math.round(m.when * this.sr));
       this.queue.push(at, false, m.id, m.note, m.freq, m.vel, m.glide);
       this.queue.push(at + Math.max(1, Math.round(m.dur * this.sr)), true, m.id, 0, 0, 0, 0);
     } else if (m.type === "off") {
       const at = Math.max(0, Math.round(m.when * this.sr));
       this.queue.keepOffsBefore(at);
       this.allOff = at;
+      this.pN = 0;
     } else if (m.type === "set") {
       if (m.amp !== undefined) this.ampModel = Math.max(0, Math.min(AMPS.length - 1, m.amp | 0));
       if (m.cab !== undefined) this.cabModel = Math.max(0, Math.min(CABS.length - 1, m.cab | 0));
@@ -582,9 +625,14 @@ class GuitarProcessor extends AudioWorkletProcessor {
   // note moves the position and the hardness by a few percent — enough that
   // a run of equal notes is not one sample eight times, and far under what
   // the ear reads as a different note.
-  pluck(v, hard, vel) {
+  pluck(v, hard, vel, keepAmt) {
     const h = Math.max(0, Math.min(1, hard * (0.15 + 0.85 * vel) * (1 + (Math.random() - 0.5) * 0.08)));
-    const pos = Math.max(0.02, Math.min(0.5, this.pickPos * (1 + (Math.random() - 0.5) * 0.06)));
+    // The pick knob is a place on the BODY, a fraction of the open string's
+    // length from the bridge; a fretted string is shorter, so the same place
+    // is further along it (pick / r), and above the 12th fret the pick is
+    // near the middle of what is left, which is the hollow, flute-like sound
+    // of playing high on the neck over the pickups.
+    const pos = Math.max(0.02, Math.min(0.5, this.pickPos / v.r * (1 + (Math.random() - 0.5) * 0.06)));
     // The release's corner: ~300Hz for a thumb (half a millisecond of letting
     // go), 5kHz for a hard plectrum, exponential between like every brightness.
     // Velocity has most of its say here: a light stroke lets the string slide
@@ -593,7 +641,7 @@ class GuitarProcessor extends AudioWorkletProcessor {
     // needs to read as played.
     const fcEx = Math.min(5000, 300 * Math.pow(2, h * 4.5));
     const aEx = 1 - Math.exp(-2 * Math.PI * fcEx / this.sr);
-    const keep = v.env > 1e-4 ? 0.5 : 0;
+    const keep = v.env > 1e-4 ? keepAmt : 0;
     // Level follows the hit. The two planes together carry what the one line
     // used to, so the amps' gain structure is unchanged.
     const amp = 1.1 * (0.06 + Math.pow(vel, 1.25) * 0.94);
@@ -712,31 +760,191 @@ class GuitarProcessor extends AudioWorkletProcessor {
     v.lossKey = sustain * 4 + mute + stiff * 16;
   }
 
-  noteOn(ev, sustain, stiff) {
-    let v = null;
-    for (const c of this.voices) if (!c.active) { v = c; break; }
-    if (!v) {
-      // Steal the quietest — a string that has almost stopped ringing is the one
-      // nobody would miss, and on a guitar it is also the one a hand would mute.
-      let worst = Infinity;
-      for (const c of this.voices) { const s = c.gate ? c.env + 10 : c.env; if (s < worst) { worst = s; v = c; } }
-      // The string keeps ringing: pluck() mixes the new excitation over what is
-      // in the loop, which is what plucking a sounding string does. Zeroing
-      // the delay line here dropped a ringing string to silence in one sample.
-    }
+  // Play a note on string s. If the string is already sounding, the new note
+  // replaces it, as it does on a guitar: one string, one note. Re-picking the
+  // same note keeps half of what was ringing; a new fret on a ringing string
+  // keeps almost none, since the pick and the fingertip stop it first.
+  noteOn(s, id, note, freq, vel, glide, sustain, stiff, frame) {
+    const v = this.voices[s];
+    const same = v.active && Math.abs(freq / v.target - 1) < 0.003;
     if (!v.active) { resetLine(v.a); resetLine(v.b); }
-    v.id = ev.id; v.note = ev.note; v.vel = ev.vel;
+    v.id = id; v.note = note; v.vel = vel;
     v.active = true; v.gate = true; v.age = ++this.tick;
-    v.target = ev.freq;
-    const gl = ev.glide > 0 ? ev.glide : this.glideSec;
-    if (gl > 0) { v.freq = this.lastFreq; v.glide = 1 - Math.exp(-3 / (gl * this.sr / BLK)); }
-    else { v.freq = ev.freq; v.glide = 1; }
-    this.lastFreq = ev.freq;
+    v.target = freq;
+    v.str = s;
+    v.fret = Math.max(0, fretOf(s, freq));
+    v.r = Math.max(0.12, Math.min(1, Math.pow(2, -v.fret / 12)));
+    v.struckAt = frame;
+    // A slide moves along the string the last note was on, from where it was.
+    const gl = glide > 0 ? glide : this.glideSec;
+    if (gl > 0) {
+      const from = s === this.lastString && v.freq > 0 ? v.freq : this.lastFreq;
+      v.freq = from; v.glide = 1 - Math.exp(-3 / (gl * this.sr / BLK));
+    } else { v.freq = freq; v.glide = 1; }
+    this.lastFreq = freq;
+    this.lastString = s;
     v.relG = 1;
     v.bend = 0;
     this.setLosses(v, sustain, this.palm, stiff);
     this.retune(v, stiff);
-    this.pluck(v, this.pickHard, ev.vel);
+    this.pluck(v, this.pickHard, vel, same ? 0.5 : 0.12);
+  }
+
+  // Which string a single note goes on: the one the hand reaches most easily
+  // (placeCost), avoiding a string that is still being held or was picked a
+  // moment ago for another note (part of a strum or a fast arpeggio), keeping
+  // a repeated note on its own string, and a slide on the string it left.
+  pickString(freq, frame, gliding) {
+    let best = -1, bc = 1e18;
+    const recent = frame - 0.06 * this.sr;
+    for (let s = 0; s < NSTR; s++) {
+      const fret = fretOf(s, freq);
+      let c = placeCost(fret, this.hand);
+      const v = this.voices[s];
+      if (v.active) {
+        const sameNote = Math.abs(fret - v.fret) < 0.3;
+        if (sameNote) c -= 1;
+        else {
+          if (v.gate) c += 1.5;
+          if (v.struckAt > recent) c += 8;
+        }
+      }
+      if (gliding && s === this.lastString) c -= 5;
+      if (c < bc) { bc = c; best = s; }
+    }
+    // Under the low E or past the top of the neck nothing fits: the nearest
+    // string takes it, tuned to the note (r clamps, so it is played as if
+    // that string were retuned).
+    if (bc >= 1e8) best = freq < OPEN_F[0] ? 0 : NSTR - 1;
+    this.moveHand(fretOf(best, freq));
+    return best;
+  }
+
+  moveHand(fret) {
+    if (fret < 0.5) return;
+    if (fret < this.hand) this.hand = Math.max(1, Math.round(fret));
+    else if (fret > this.hand + 3) this.hand = Math.round(fret - 3);
+  }
+
+  // A chord's notes on strings: lowest note on the lowest string used, each
+  // next note on a higher string, the whole shape inside one hand position,
+  // as near to where the hand already is as the chord allows. A small
+  // search: every hand position, and for each the cheapest way to lay the
+  // notes across the strings in order (dynamic programming, 6 x 6). A chord
+  // no hand could make (more than six notes, or too wide) falls back to one
+  // note at a time.
+  placeChord(k) {
+    const ord = this.gOrd;
+    for (let i = 0; i < k; i++) ord[i] = i;
+    for (let i = 1; i < k; i++) {
+      const t = ord[i]; let j = i - 1;
+      while (j >= 0 && this.gFreq[ord[j]] > this.gFreq[t]) { ord[j + 1] = ord[j]; j--; }
+      ord[j + 1] = t;
+    }
+    let bestCost = 1e18, bestHand = -1;
+    if (k <= NSTR) {
+      for (let h = 1; h <= 19; h++) {
+        const c = this.layChord(k, h, false) + 0.15 * Math.abs(h - this.hand);
+        if (c < bestCost) { bestCost = c; bestHand = h; }
+      }
+    }
+    if (bestHand > 0 && bestCost < 1e8) {
+      this.layChord(k, bestHand, true);
+      this.hand = bestHand;
+      return;
+    }
+    for (let i = 0; i < k; i++) this.gStr[ord[i]] = this.pickString(this.gFreq[ord[i]], -1e18, false);
+  }
+
+  // The cost of laying the sorted chord across the strings at hand h, and
+  // with write set, the strings themselves (into gStr).
+  layChord(k, h, write) {
+    const dp = this.dp, from = this.dpFrom, ord = this.gOrd;
+    for (let i = 0; i < k; i++) {
+      for (let s = 0; s < NSTR; s++) {
+        const c = placeCost(fretOf(s, this.gFreq[ord[i]]), h);
+        let prev = 0, ps = -1;
+        if (i > 0) {
+          prev = 1e18;
+          for (let t = 0; t < s; t++) if (dp[(i - 1) * NSTR + t] < prev) { prev = dp[(i - 1) * NSTR + t]; ps = t; }
+        }
+        dp[i * NSTR + s] = c + prev;
+        from[i * NSTR + s] = ps;
+      }
+    }
+    let best = 1e18, bs = -1;
+    for (let s = 0; s < NSTR; s++) if (dp[(k - 1) * NSTR + s] < best) { best = dp[(k - 1) * NSTR + s]; bs = s; }
+    if (write && bs >= 0) {
+      for (let i = k - 1; i >= 0; i--) { this.gStr[ord[i]] = bs; bs = from[i * NSTR + bs]; }
+    }
+    return best;
+  }
+
+  // Everything that sounds at one instant: one note, or a chord. A chord is
+  // strummed, and a strum has a direction: chords coming quickly after one
+  // another alternate down and up, as a strumming hand does on the off-beats;
+  // a chord after a pause is a downstroke. Down runs low string to high, up
+  // high to low, a little faster and softer, the lowest strings barely
+  // caught. A harder strum is a faster one: about 6ms a string flat out,
+  // 10ms gently, so six strings take a few hundredths of a second.
+  playGroup(frame) {
+    const k = this.gN;
+    if (k === 1) {
+      const gl = this.gGlide[0] > 0 || this.glideSec > 0;
+      this.gStr[0] = this.pickString(this.gFreq[0], frame, gl);
+      this.queuePluck(0, frame, 1);
+      return;
+    }
+    this.placeChord(k);
+    let vmax = 0; for (let i = 0; i < k; i++) vmax = Math.max(vmax, this.gVel[i]);
+    const down = !(frame - this.lastChordAt < 0.4 * this.sr && this.lastDown);
+    this.lastChordAt = frame; this.lastDown = down;
+    const dt = this.sr * (0.0105 - 0.0045 * vmax) * (down ? 1 : 0.85);
+    // Order the chord by string, in the stroke's direction.
+    const ord = this.gOrd;
+    for (let i = 0; i < k; i++) ord[i] = i;
+    for (let i = 1; i < k; i++) {
+      const t = ord[i]; let j = i - 1;
+      while (j >= 0 && (down ? this.gStr[ord[j]] > this.gStr[t] : this.gStr[ord[j]] < this.gStr[t])) { ord[j + 1] = ord[j]; j--; }
+      ord[j + 1] = t;
+    }
+    for (let n = 0; n < k; n++) {
+      const i = ord[n];
+      // The pick loses a little on each string it crosses; an upstroke is
+      // lighter all through, and the low strings only get the end of it.
+      let g = 1 - 0.035 * n;
+      if (!down) g *= this.gStr[i] < 2 ? 0.6 : 0.82;
+      this.queuePluck(i, frame + Math.round(n * dt), g);
+    }
+  }
+
+  queuePluck(i, at, velScale) {
+    if (this.pN >= 16) return;
+    const p = this.pN++;
+    this.pAt[p] = at; this.pStr[p] = this.gStr[i]; this.pId[p] = this.gId[i];
+    this.pNote[p] = this.gNote[i]; this.pFreq[p] = this.gFreq[i];
+    this.pVel[p] = Math.max(0.05, this.gVel[i] * velScale); this.pGlide[p] = this.gGlide[i];
+    this.pOff[p] = 0;
+  }
+
+  // Plucks whose time has come. One whose note was already let go (a note
+  // shorter than the strum reaching it) is picked and released at once.
+  runPlucks(frame, sustain, stiff) {
+    let w = 0;
+    for (let p = 0; p < this.pN; p++) {
+      if (this.pAt[p] <= frame) {
+        this.noteOn(this.pStr[p], this.pId[p], this.pNote[p], this.pFreq[p], this.pVel[p], this.pGlide[p], sustain, stiff, frame);
+        if (this.pOff[p]) this.noteOff(this.pId[p], sustain);
+        continue;
+      }
+      if (w !== p) {
+        this.pAt[w] = this.pAt[p]; this.pStr[w] = this.pStr[p]; this.pId[w] = this.pId[p];
+        this.pNote[w] = this.pNote[p]; this.pFreq[w] = this.pFreq[p]; this.pVel[w] = this.pVel[p];
+        this.pGlide[w] = this.pGlide[p]; this.pOff[w] = this.pOff[p];
+      }
+      w++;
+    }
+    this.pN = w;
   }
 
   // Letting go of a fretted note damps the string — it does not silence it, and
@@ -744,6 +952,7 @@ class GuitarProcessor extends AudioWorkletProcessor {
   // part sound played rather than sequenced, so note-off sets a release damping
   // scaled by the sustain macro instead of cutting the voice.
   noteOff(id, sustain) {
+    for (let p = 0; p < this.pN; p++) if (this.pId[p] === id) this.pOff[p] = 1;
     for (const v of this.voices) {
       if (!v.active || v.id !== id || !v.gate) continue;
       v.gate = false;
@@ -759,7 +968,7 @@ class GuitarProcessor extends AudioWorkletProcessor {
   // that subtraction the string plays flat, and further flat the darker it is
   // set. Both are the phase delay AT THE NOTE, not at DC: the DC figure is out
   // by most of a sample for a note at the top of the neck.
-  tuneLine(ln, f, B) {
+  tuneLine(ln, f, B, vr) {
     const sr = this.sr;
     const Dtot = sr / f;
     const w = 2 * Math.PI * f / sr;
@@ -793,23 +1002,25 @@ class GuitarProcessor extends AudioWorkletProcessor {
     // reflection doubles the distance again), so a bridge humbucker's first
     // notch is up around the eighth harmonic, where it belongs. It used to be
     // 2p, which put that notch on the fourth and hollowed every pickup out.
-    ln.pkTap = Math.max(1, Math.min(len - 1, Math.round(this.pkupPos * len)));
+    // The pickup is fixed to the body, so a fretted (shorter) string has it
+    // further along: pkup / r of the vibrating length (held under 0.4: at the
+    // middle the comb's slope across the note pulled a top-fret E a cent and a
+    // half flat in a short read), its first notch moving
+    // down the harmonic series as the hand moves up the neck.
+    ln.pkTap = Math.max(1, Math.min(len - 1, Math.round(Math.min(0.4, this.pkupPos / vr) * len)));
   }
 
   retune(v, stiff) {
     const f = Math.max(20, v.freq * (1 + v.bend));
-    // The inharmonicity coefficient of the string this note would be played
-    // on. The three wound strings sit around 1e-4 to 2.5e-4, the three plain
-    // ones around 2e-5 to 4e-5, and the step between them is real: a wound D
-    // and a plain G are a semitone-and-a-half apart in pitch and a factor of
-    // four apart in stiffness. A note has no string of its own here, so the
-    // step is crossfaded over the octave where the set changes over, and
-    // within each family B falls as the strings get thinner. The stiff knob
-    // scales the whole thing, its default (0.25) being a standard set.
-    const wound = 1 / (1 + Math.exp((f - 175) / 22));
-    const Bw = 2.5e-4 * Math.pow(82.4 / f, 1.2);
-    const Bp = 2.5e-5 * Math.pow(330 / f, 0.6);
-    const B = (stiff / 0.25) * (wound * Bw + (1 - wound) * Bp);
+    // The inharmonicity coefficient of the string the note is ON. Open, the
+    // three wound strings sit around 1e-4 to 2.5e-4 and the three plain ones
+    // a tenth of that: a wound D and a plain G are a semitone-and-a-half
+    // apart in pitch and a factor of four in stiffness. B goes as one over
+    // the vibrating length squared, so a fretted note is stiffer than the same
+    // pitch open on a thinner string (the clank of a low string played high
+    // up), held to three times the open value. The stiff knob scales it all,
+    // its default (0.25) being a standard set.
+    const B = (stiff / 0.25) * B_OPEN[v.str] * Math.min(3, 1 / (v.r * v.r));
     // The plane towards the body is the one the bridge gives way in, so it
     // sits a fraction of a hertz FLAT of the other: a slow beat under the
     // note, the same whatever the pitch, as the bridge's asymmetry is. The
@@ -818,8 +1029,8 @@ class GuitarProcessor extends AudioWorkletProcessor {
     // Partial n beats at n times the split, so it is kept small: a tenth of
     // a hertz is an eight-second swell on the fundamental and under a second
     // on the tenth partial, where the shimmer belongs.
-    this.tuneLine(v.a, Math.max(20, f - 0.09), B);
-    this.tuneLine(v.b, f + 0.03, B);
+    this.tuneLine(v.a, Math.max(20, f - 0.09), B, v.r);
+    this.tuneLine(v.b, f + 0.03, B, v.r);
   }
 
   process(inputs, outputs, params) {
@@ -845,8 +1056,26 @@ class GuitarProcessor extends AudioWorkletProcessor {
 
       while (this.queue.len && this.queue.headAt() <= frame) {
         const ev = this.queue.shift();
-        if (ev.off) this.noteOff(ev.id, sustain); else this.noteOn(ev, sustain, stiff);
+        if (ev.off) { this.noteOff(ev.id, sustain); continue; }
+        // Gather every note-on at this instant: a chord is placed and
+        // strummed as one (playGroup). A note-off at the same instant (the
+        // step before letting go) is handled as it comes.
+        const at = ev.at;
+        this.gN = 0;
+        let e = ev;
+        for (;;) {
+          if (e.off) this.noteOff(e.id, sustain);
+          else if (this.gN < 16) {
+            const g = this.gN++;
+            this.gId[g] = e.id; this.gNote[g] = e.note; this.gFreq[g] = e.freq;
+            this.gVel[g] = e.vel; this.gGlide[g] = e.glide;
+          }
+          if (!this.queue.len || this.queue.headAt() !== at) break;
+          e = this.queue.shift();
+        }
+        this.playGroup(frame);
       }
+      if (this.pN) this.runPlucks(frame, sustain, stiff);
       if (this.allOff !== undefined && frame >= this.allOff) {
         for (const v of this.voices) if (v.gate) this.noteOff(v.id, sustain);
         this.allOff = undefined;
