@@ -2616,8 +2616,18 @@ body.kbd-recording:not(.sq-playing) .sq-track.is-kbd-active .sq-step.is-cursor {
   padding-left: 14px;
   padding-right: 14px;
 }
+/* Back and forward: big enough to see and to hit, lit when there is a throw
+   to go to. As thin 11px glyphs at a third opacity they read as decoration. */
+.sq-chance__throws > button:first-of-type,
+.sq-chance__throws > button:last-of-type {
+  min-width: 34px;
+  font-size: 16px;
+  line-height: 1;
+  font-weight: 700;
+}
+.sq-chance__throws > button:is(:first-of-type, :last-of-type):not(:disabled) { color: var(--accent); }
 .sq-chance__throws > button:disabled { opacity: 0.35; }
-.sq-chance__pos { min-width: 4ch; margin-left: 8px; text-align: right; color: var(--fg-dim); font-size: 10px; font-variant-numeric: tabular-nums; }
+.sq-chance__pos { min-width: 4ch; margin-left: 8px; text-align: right; color: var(--fg); font-size: 11px; font-variant-numeric: tabular-nums; }
 /* A dice with nothing to decide. Not `disabled`: the button is how you find out
    why, and on a touch screen its title is out of reach — pressing it puts the
    reason in the status bar. Same strike-through the unreachable semitones get. */

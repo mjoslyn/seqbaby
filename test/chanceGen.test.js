@@ -517,3 +517,35 @@ test("throw history: back and forward through what was rolled, nothing lost", ()
   d.rhist.push(9);
   assert.deepEqual(c.rhist, [1, 2]);
 });
+
+test("real throws step back and forth: seeds over 2^31 are found in the history", () => {
+  // As the panel does it: the stored settings, a throw against the normalized
+  // ones, the history recorded with the current (normalized) seed. Seeds from
+  // newThrow are uint32 and normalizeChance reads them as int32, so half of
+  // all throws used to miss the history: each roll appended the current seed
+  // again, the position was -1 and back went nowhere.
+  const stored = { on: true, last: 15, vari: 0.6, rest: 0.2 };
+  const seeds = [];
+  for (let k = 0; k < 12; k++) {
+    const live = normalizeChance(stored, 16);
+    const { seed } = throwChanceDice(live, "melody");
+    assert.ok(seed != null, "the melody dice has something to throw");
+    stored.mhist = recordThrow(stored.mhist, live.mseed, seed);
+    stored.mseed = seed;
+    seeds.push(seed);
+  }
+  assert.ok(seeds.some((s) => (s >>> 0) >= 2 ** 31) || seeds.some((s) => s < 0), "some throws are past 2^31");
+  const cur = normalizeChance(stored, 16).mseed;
+  assert.equal(stored.mhist.length, 13, "one entry a roll, plus the seed it started from");
+  assert.deepEqual(throwPosition(stored.mhist, cur), { i: 12, n: 13 });
+  let at = cur;
+  for (let k = 11; k >= 0; k--) {
+    at = stepThrow(stored.mhist, at, -1);
+    assert.equal(at, seeds[k - 1] ?? stored.mhist[0], `back to throw ${k}`);
+  }
+  assert.equal(stepThrow(stored.mhist, at, -1), null, "the first is the first");
+  assert.equal(stepThrow(stored.mhist, at, 1), seeds[0], "and forward again");
+  // A history saved with the unsigned spelling reads back the same.
+  const unsigned = stored.mhist.map((s) => s >>> 0);
+  assert.deepEqual(throwPosition(unsigned, cur), { i: 12, n: 13 });
+});

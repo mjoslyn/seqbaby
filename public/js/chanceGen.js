@@ -192,7 +192,12 @@ export function cloneChance(c) {
 /** How many throws a section remembers; the oldest drop off past it. */
 export const CHANCE_HISTORY_MAX = 32;
 
-const seedsOf = (hist) => (Array.isArray(hist) ? hist.filter((v) => Number.isInteger(v) && v !== 0) : []);
+// Seeds are int32, as normalizeChance reads them (`| 0`). newThrow makes a
+// uint32, and a history holding the unsigned spelling of a seed the config
+// holds signed never found it: every roll appended the current seed again,
+// the 3/5 readout stayed blank and ‹ went nowhere (half of all throws are over
+// 2^31). Histories saved that way are read back signed here.
+const seedsOf = (hist) => (Array.isArray(hist) ? hist.filter((v) => Number.isInteger(v) && v !== 0).map((v) => v | 0) : []);
 
 /**
  * A section's throw history after rolling `seed` while `cur` was playing: a
@@ -205,7 +210,8 @@ const seedsOf = (hist) => (Array.isArray(hist) ? hist.filter((v) => Number.isInt
  */
 export function recordThrow(hist, cur, seed) {
   const h = seedsOf(hist);
-  if (!h.includes(cur)) h.push(cur);
+  cur |= 0; seed |= 0;
+  if (cur && !h.includes(cur)) h.push(cur);
   h.push(seed);
   return h.slice(-CHANCE_HISTORY_MAX);
 }
@@ -217,7 +223,7 @@ export function recordThrow(hist, cur, seed) {
  */
 export function throwPosition(hist, cur) {
   const h = seedsOf(hist);
-  return { i: h.lastIndexOf(cur), n: h.length };
+  return { i: h.lastIndexOf(cur | 0), n: h.length };
 }
 
 /**
@@ -228,7 +234,7 @@ export function throwPosition(hist, cur) {
  */
 export function stepThrow(hist, cur, dir) {
   const h = seedsOf(hist);
-  const i = h.lastIndexOf(cur);
+  const i = h.lastIndexOf(cur | 0);
   if (i < 0) return dir < 0 && h.length ? h[h.length - 1] : null;
   const j = i + (dir < 0 ? -1 : 1);
   return j >= 0 && j < h.length ? h[j] : null;
@@ -490,8 +496,8 @@ export function throwChanceDice(c, which, opts = {}, tries = 48) {
   const sig = (cfg) => chancePlanSignature(buildChancePlan(cfg, opts), which);
   const before = sig(c);
   for (let i = 0; i < tries; i++) {
-    const seed = newThrow();
-    if (seed === (c[key] | 0)) continue;
+    const seed = newThrow() | 0;
+    if (!seed || seed === (c[key] | 0)) continue;
     if (sig({ ...c, [key]: seed }) !== before) return { seed, why: "" };
   }
   return { seed: null, why: chanceDiceDead(c, which, opts) || "same" };
