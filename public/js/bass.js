@@ -385,7 +385,7 @@ class BassProcessor extends AudioWorkletProcessor {
       // The four track sliders
       a("drive", 0.5, 0, 1), a("tone", 0.5, 0, 1), a("comp", 0.5, 0, 1), k("sustain", 0.4, 0, 1),
       // Right hand + string
-      k("pick", 0.14, 0.02, 0.5), k("attack", 0.4, 0, 1), k("stiff", 0.45, 0, 1),
+      k("pick", 0.22, 0.02, 0.5), k("attack", 0.4, 0, 1), k("stiff", 0.45, 0, 1),
       k("pkup", 0.1, 0.02, 0.5), a("mute", 0, 0, 1), a("fret", 0.25, 0, 1),
       k("fnoise", 0.35, 0, 1),
       // The parallel dirt, and the octave under it
@@ -506,7 +506,7 @@ class BassProcessor extends AudioWorkletProcessor {
     // The pluck position is a place on the body, so on a fretted (shorter)
     // string it is further along what vibrates: rounder up the neck.
     const pos = Math.max(0.02, Math.min(0.5, this.pickPos / v.r * (1 + (Math.random() - 0.5) * 0.08)));
-    const a = Math.min(0.9, (0.03 + h * h * 0.55) * bright * (0.6 + vel * 0.4));
+    const a = Math.min(0.9, (0.02 + h * h * 0.45) * bright * (0.1 + vel * 0.9));
     const keep = v.env > 1e-4 ? keepAmt : 0;
     const amp = 0.45 * (0.3 + vel * 0.7);
     const tmp = this.scratch;
@@ -530,7 +530,7 @@ class BassProcessor extends AudioWorkletProcessor {
       if (side) break;
       // The scrape, on the pulse's edge, in the plane towards the pickup.
       const nb = Math.min(L, Math.max(8, Math.round(sr * (0.0035 - h * 0.0025))));
-      const sc = amp * (0.08 + h * 0.3) * bright;
+      const sc = amp * (0.03 + h * 0.12) * bright * (0.3 + 0.7 * vel);
       const a2 = Math.min(0.95, a * 5);
       z = 0;
       for (let i = 0; i < nb; i++) {
@@ -763,7 +763,7 @@ class BassProcessor extends AudioWorkletProcessor {
   fingerOff(v) {
     const n = this.fnoise;
     if (n < 0.005) return;
-    this.thEnv += n * (0.2 + 0.8 * v.vel) * 0.3;
+    this.thEnv += n * (0.2 + 0.8 * v.vel) * 0.4;
     if (v.fret > 0.5) {
       const keep = 0.25 + 0.4 * n;
       for (const ln of [v.a, v.b]) for (let i = 0; i < DLEN; i++) ln.buf[i] *= keep;
@@ -843,16 +843,19 @@ class BassProcessor extends AudioWorkletProcessor {
 
   retune(v, stiff) {
     // Bass strings are wound and stiff, so the stretch is a real coefficient:
-    // the stiff knob at its default puts a roundwound E around B = 3e-4, which
-    // is where the measurements of real ones sit, and a thinner, higher string
+    // the stiff knob at its default puts a roundwound E around B = 2.25e-4,
+    // the middle of what real ones measure (it was 3e-4, the top of it, and
+    // the bass twanged), and a thinner, higher string
     // has less of it. Flatwounds' tops die so fast the clank is barely heard,
     // so the knob buys less on them.
     //
-    // It is the coefficient of the STRING the note is on, open, raised as
-    // one over the vibrating length squared when it is fretted (to three
-    // times at most): a note high on the E string clanks where the same
-    // pitch on the G does not.
-    const B = stiff * 6.5e-4 * Math.pow(41.2 / OPEN_F[v.str], 0.6) * Math.min(3, 1 / (v.r * v.r)) * (this.flats ? 0.65 : 1);
+    // A fretted note is a little stiffer than an open one at the same pitch
+    // (a shorter length of a thicker string), but only a little: raised as
+    // one over the vibrating length squared, as the physics has it, the
+    // partials of every fretted note ran two to three times sharper than
+    // before and the whole instrument twanged. So the pitch sets it, as it
+    // always did, and the fret adds a touch (r^-0.3: 13% at the seventh fret).
+    const B = stiff * 5e-4 * Math.pow(41.2 / Math.max(15, v.freq), 0.6) * Math.pow(v.r, -0.3) * (this.flats ? 0.65 : 1);
     this.tuneLine(v.a, v.freq, B, v.damp);
     // The other plane sits a fraction of a hertz up: a slow beat under the
     // note, the same whatever the pitch, as the bridge's asymmetry is.
@@ -970,7 +973,9 @@ class BassProcessor extends AudioWorkletProcessor {
       }
 
       // The tone pot on the instrument, before anything else.
-      const toneFc = 400 * Math.pow(2, tone * 4.9);
+      // 300Hz to 9kHz: the middle of the knob is 1.7kHz, a bass's tone pot
+    // half off, where 2.2kHz (what it was) left the clank in.
+    const toneFc = 300 * Math.pow(2, tone * 4.9);
       const toneA = 1 - Math.exp(-2 * Math.PI * Math.min(toneFc, sr * 0.45) / sr);
 
       for (const v of this.voices) {
@@ -1033,7 +1038,10 @@ class BassProcessor extends AudioWorkletProcessor {
             buf[w] = fed;
             ln.w = (w + 1) & DMASK;
             const tap = buf[(w - len + pkTap + DLEN) & DMASK];
-            s += (y - tap * 0.78) * (side ? 0.55 : 1);
+            // The comb the pickup makes, at 0.6 rather than the guitar's 0.78:
+            // at 0.78 the comb's peaks sat 18dB over the fundamental, a treble
+            // tilt that read as twang on every note.
+            s += (y - tap * 0.6) * (side ? 0.55 : 1);
           }
           const dy = s - v.dcX + 0.9995 * v.dcY;
           v.dcX = s; v.dcY = dy;

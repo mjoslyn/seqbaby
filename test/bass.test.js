@@ -172,8 +172,9 @@ test("bass: the partials of a roundwound run sharp, and flats less so", () => {
     assert.ok(v, "the note should be sounding");
     return resonance(v.a, v.damp, hz(midi), n);
   };
-  // Within a few cents of n*f0*sqrt(1 + B*n*n) for B ~ 2.9e-4 at the default.
-  const want = (n) => 1200 * Math.log2(Math.sqrt(1 + 2.9e-4 * n * n));
+  // Within a few cents of n*f0*sqrt(1 + B*n*n) for B ~ 2.25e-4 at the default
+  // (it was 2.9e-4, the top of what roundwounds measure, and it twanged).
+  const want = (n) => 1200 * Math.log2(Math.sqrt(1 + 2.25e-4 * n * n));
   for (const n of [4, 8, 10, 12]) {
     const got = stretch(28, 0, n);
     assert.ok(Math.abs(got - want(n)) < 4, `E1 partial ${n}: ${got.toFixed(0)} cents sharp, law says ${want(n).toFixed(0)}`);

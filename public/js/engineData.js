@@ -979,7 +979,7 @@ export function guitarTone(name) {
 
 /** Numeric panel controls: [short key, min, max, default, label]. */
 export const BASS_NUM_CTLS = [
-  ["pick",   0.02, 0.5, 0.14, "pluck pos"],
+  ["pick",   0.02, 0.5, 0.22, "pluck pos"],
   ["attack", 0,    1,   0.4,  "hand"],
   ["stiff",  0,    1,   0.45, "stiff"],
   ["pkup",   0.02, 0.5, 0.1,  "pkup pos"],

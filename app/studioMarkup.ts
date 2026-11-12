@@ -149,7 +149,7 @@ const BASS_PANEL = `
           </div>
           <div class="sq-bass__row">
             <span class="sq-bass__lbl">hands</span>
-            <label class="sq-bass__f"><span>pluck pos</span><input class="p-bspick" type="range" min="0.02" max="0.5" step="0.01" value="0.14" title="where along the string it is plucked, bridge to neck. Bridge is nasal, neck is round" /></label>
+            <label class="sq-bass__f"><span>pluck pos</span><input class="p-bspick" type="range" min="0.02" max="0.5" step="0.01" value="0.22" title="where along the string it is plucked, bridge to neck. Bridge is nasal, neck is round" /></label>
             <label class="sq-bass__f"><span>hand</span><input class="p-bsattack" type="range" min="0" max="1" step="0.01" value="0.4" title="what is hitting the string: thumb at the bottom, fingers in the middle, plectrum at the top" /></label>
             <label class="sq-bass__f"><span>fret</span><input class="p-bsfret" type="range" min="0" max="1" step="0.01" value="0.25" title="how hard the string is allowed to clatter against the frets. Wound right up, with a thumb, it is slap" /></label>
             <label class="sq-bass__f"><span>palm</span><input class="p-bsmute" type="range" min="0" max="1" step="0.01" value="0" title="the palm resting on the strings by the bridge. Shorter and darker" /></label>

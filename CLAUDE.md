@@ -1552,7 +1552,7 @@ STRING ──▶ PICKUP ──▶ tone ──┬── clean (lows, kept clean) 
   `sqrt(110/f)`, so a partial near 850Hz decays at about the same rate on E1 as
   on A2. With one coefficient for every note, E1's 1st through 20th partials all
   decayed at the same 10dB/s and the low strings rang like an organ.
-- **The stretch is a real inharmonicity coefficient**, `B ≈ 2.9e-4` for a
+- **The stretch is a real inharmonicity coefficient**, `B ≈ 2.25e-4` for a
   roundwound E at the default `stiff`, falling for higher strings: `dispCoef`
   solves the coefficient of an 8-stage first-order allpass cascade per note so
   the 10th partial sits exactly at `n·f0·sqrt(1 + B·n²)` (it is the loop's
@@ -1587,10 +1587,12 @@ STRING ──▶ PICKUP ──▶ tone ──┬── clean (lows, kept clean) 
   reaches most easily (`placeCost`, `pickString`), one string plays one note
   (a new fret on a ringing string stops it), a double stop is laid low to
   high in one hand position (`placeChord`) and raked by the plucking
-  fingers 7-12ms a string. The stiffness is the string's (`B` of the open
-  string over the vibrating length squared, capped at 3x), and the pluck
-  and pickup points are fractions of the vibrating length, so a note high
-  on the E string is rounder and clankier than the same pitch on the G.
+  fingers 7-12ms a string. The stiffness follows the pitch, as it always
+  did, with a touch more for a fretted note (`r^-0.3`, 13% at the seventh
+  fret): over the vibrating length squared, as the guitar has it, every
+  fretted note's partials ran two to three times sharper and the bass
+  twanged. The pluck and pickup points are fractions of the vibrating
+  length, so a note high on the E string is rounder than on the G.
 - **The fingers** (`bsfnoise`, the `hands` row). A velocity at or under
   `DEAD_VEL` (0.1) is a ghost note: struck as hard as a played one, its ring
   cut to about 60ms, top first. A note tied into the next onto the same
@@ -1601,6 +1603,14 @@ STRING ──▶ PICKUP ──▶ tone ──┬── clean (lows, kept clean) 
   again thumps, a fretted one ringing open for a moment (`fingerOff`). No
   vibrato or sympathy, which the guitar has: a bass player damps the open
   strings, and a bass line rarely wants the wobble.
+- **Less twang than it had**: the stiffness at the default is the middle of
+  what roundwounds measure (2.25e-4 on the open E, from 2.9e-4), the
+  pickup's comb subtracts 0.6 of the tap (at 0.78 its peaks sat 18dB over
+  the fundamental), the pluck's edge and scrape are softer and follow
+  velocity more (a soft note is round, a hard one bites), the pluck sits at
+  0.22 by default (over the pickups, from 0.14 by the bridge), and the tone
+  pot's middle is 1.7kHz. Measured on the whole chain, the first 60ms of a
+  low note carries 3.5-4dB less above 800Hz.
 - **The panel** is one section a row (tone, hands, strings, dirt, amp, cab),
   and on a phone the guitar's layout: cards with bold headings, the selects
   on the heading's line, the knobs in columns that fill each line.
