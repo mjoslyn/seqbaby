@@ -4089,8 +4089,9 @@ line after p-lock at a fixed width, so that line never wraps. The
 home. The quick row's buttons
 carry the `data-on` dot with `::before`, because on a phone `::after` is the
 caption. What is hidden is decided by the stylesheet's mobile block (the
-head's synth row, and the six sound panels inside `.sq-track__live`; the two
-generators' cards stay, since a live ring is what the track is playing), and
+head's synth row, the six sound panels inside `.sq-track__live`, and a live
+chance card; a live euclid ring's card stays, since it is a picture of what
+the track is playing), and
 what is opened by `isPhoneLayout()` (dom.js, the same `(max-width: 768px)`
 query, `PHONE_MQ`), so the two cannot disagree about what a phone is. Any
 write that reaches a control by class rather than through a stashed element
