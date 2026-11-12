@@ -2340,8 +2340,9 @@ WINDOW   first step · last step
   history count, one joined control) in a header row, its controls, and a
   footer of its lesser options on the left and `new throw` on the right. The
   melody card ends with the range and the window, two captioned pairs of
-  knobs on one row. On a phone's track (live) only the head, the picture and
-  the summary show, and a tap opens the panel as a modal.
+  knobs on one row. On a phone a live chance part shows no card on the track
+  at all (the step grid already shows its part); its lit button opens the
+  panel as a modal.
 - The panel's picture is **pitch against time**, not a ring: there is no evenness
   to see here, and a rest, a tie and a leap all have to read at a glance.
 
@@ -3188,7 +3189,7 @@ invisible to everything else: `gap: inherit` keeps the track's own spacing, it
 hides itself when nothing in it is live, and the modals reparent a panel
 through an anchor at its own position. Below 768px the six sound panels are
 not inline at all: each is a modal from its button (see the phone section),
-and only a live generator's card stays on the track.
+and only a live euclid ring's card stays on the track.
 
 **Right-click a parameter** opens `paramMenu.js`: what the control does, its
 LFO row, its automation lane and its macro assignment — the same widgets the panels use

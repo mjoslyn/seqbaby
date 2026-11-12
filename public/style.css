@@ -3784,18 +3784,21 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not
   /* The live panels — filter, env, eq, comp, the rack's engaged stages and the
      mod matrix's enabled rows — are not inline either (each panel's button
      carries a dot and opens it as a modal: filter, eq, mod, aut and the
-     rack's stages from the quick row, env / comp from the "more" menu). The two
-     generators stay: a live ring or a chance part is a picture of what the
-     track is playing, and the grid under it is read-only while it is. The
-     wrapper hides itself when a generator is not what is live in it, or an
-     empty grid would still cost the track's gap. */
+     rack's stages from the quick row, env / comp from the "more" menu). A
+     live ring stays: it is a picture of what the track is playing, and the
+     grid under it is read-only while it is. A live chance part does not: its
+     card was most of a screen of track, and the step grid under it already
+     shows the part it throws; its lit button is the way in. The wrapper hides
+     itself when nothing live is left in it, or an empty grid would still cost
+     the track's gap. */
   .sq-track .sq-track__live > .sq-track__filter-panel,
   .sq-track .sq-track__live > .sq-track__env-panel,
   .sq-track .sq-track__live > .sq-track__eq-panel,
   .sq-track .sq-track__live > .sq-track__comp-panel,
   .sq-track .sq-track__live > .sq-track__fx-panel,
-  .sq-track .sq-track__live > .sq-track__mod-panel { display: none !important; }
-  .sq-track__live:not(:has(> .sq-track__euclid-panel.is-live, > .sq-track__chance-panel.is-live)) { display: none; }
+  .sq-track .sq-track__live > .sq-track__mod-panel,
+  .sq-track .sq-track__live > .sq-track__chance-panel { display: none !important; }
+  .sq-track__live:not(:has(> .sq-track__euclid-panel.is-live)) { display: none; }
   /* The generator's card on the track is a summary: what is playing and a
      way in. Its knobs, options and buttons are the modal's (render.js opens
      it on a tap), which has the `done` an inline card has no place for. */
