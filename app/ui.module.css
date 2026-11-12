@@ -248,10 +248,10 @@ button.repoAction, a.repoAction:has(svg) { display: inline-flex; align-items: ce
   justify-content: flex-end;
   gap: 8px;
   padding: 6px 16px;
-  /* Installed on an iOS homescreen the status bar is translucent and the page
-     starts under it (black-translucent, viewport-fit cover): the bar is the
-     first thing on the page, so it takes the inset. Its height is measured
-     into --sq-topbar-h, so the transport below follows. */
+  /* The inset is for a page that starts under a status bar or a notch: the
+     homescreen app's status bar is opaque (layout.tsx), so there it is 0, but
+     a landscape notch or another browser can still have one. Its height is
+     measured into --sq-topbar-h, so the transport below follows. */
   padding-top: max(6px, env(safe-area-inset-top));
   padding-left: max(16px, env(safe-area-inset-left));
   padding-right: max(16px, env(safe-area-inset-right));

@@ -30,7 +30,12 @@ export const metadata: Metadata = {
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
-    statusBarStyle: "black-translucent",
+    // An opaque status bar, so the page starts BELOW it. Translucent, the page
+    // ran under it, and iOS lays a dark fade under the status bar that reaches
+    // further down than the safe-area inset: the account bar's buttons sat
+    // dimmed under it, in the homescreen app only (Safari has its own chrome
+    // there). The bar's padding already takes the inset, which is 0 now.
+    statusBarStyle: "black",
     title: "seqbaby",
   },
   other: { "mobile-web-app-capable": "yes" },
