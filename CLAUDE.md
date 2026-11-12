@@ -2340,9 +2340,9 @@ WINDOW   first step · last step
   history count, one joined control) in a header row, its controls, and a
   footer of its lesser options on the left and `new throw` on the right. The
   melody card ends with the range and the window, two captioned pairs of
-  knobs on one row. On a phone a live chance part shows no card on the track
-  at all (the step grid already shows its part); its lit button opens the
-  panel as a modal.
+  knobs on one row. On a phone a live generator (chance or euclid) shows no
+  card on the track at all (the step grid already shows its part); its lit
+  button opens the panel as a modal.
 - The panel's picture is **pitch against time**, not a ring: there is no evenness
   to see here, and a rest, a tie and a leap all have to read at a glance.
 
@@ -3189,7 +3189,7 @@ invisible to everything else: `gap: inherit` keeps the track's own spacing, it
 hides itself when nothing in it is live, and the modals reparent a panel
 through an anchor at its own position. Below 768px the six sound panels are
 not inline at all: each is a modal from its button (see the phone section),
-and only a live euclid ring's card stays on the track.
+and neither generator's card shows on the track.
 
 **Right-click a parameter** opens `paramMenu.js`: what the control does, its
 LFO row, its automation lane and its macro assignment — the same widgets the panels use
@@ -4089,9 +4089,8 @@ line after p-lock at a fixed width, so that line never wraps. The
 home. The quick row's buttons
 carry the `data-on` dot with `::before`, because on a phone `::after` is the
 caption. What is hidden is decided by the stylesheet's mobile block (the
-head's synth row, the six sound panels inside `.sq-track__live`, and a live
-chance card; a live euclid ring's card stays, since it is a picture of what
-the track is playing), and
+head's synth row, and the whole of `.sq-track__live`: the six sound panels
+and the two generators' cards, whose lit buttons open them), and
 what is opened by `isPhoneLayout()` (dom.js, the same `(max-width: 768px)`
 query, `PHONE_MQ`), so the two cannot disagree about what a phone is. Any
 write that reaches a control by class rather than through a stashed element
