@@ -432,6 +432,10 @@ a.bylineLike { text-decoration: none; }
 }
 .smallBtn:hover { border-color: #3a3d45; }
 .smallBtnPrimary { background: #6ee7b7; color: #0e0f12; border-color: #6ee7b7; font-weight: 700; }
+/* Disabled has to LOOK disabled: compose's send kept its full green while a
+   turn was running (and with nothing typed), so it read as pressable. */
+.smallBtn:disabled { opacity: 0.4; cursor: default; }
+.smallBtn:disabled:hover { border-color: inherit; }
 .divider { height: 1px; background: #2a2d35; margin: 10px 0; }
 .songRow { display: flex; align-items: center; gap: 4px; padding: 5px 0; }
 .songRowTitle {

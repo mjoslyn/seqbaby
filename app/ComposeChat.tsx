@@ -782,7 +782,7 @@ export default function ComposeChat({
               onClick={() => send()}
               disabled={sending || !input.trim() || composeOff}
             >
-              send
+              {sending ? "working…" : "send"}
             </button>
           </div>
         </div>
