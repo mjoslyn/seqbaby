@@ -4134,40 +4134,62 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not
   .sq-param-group--guitar .sq-guitar__f { justify-self: center; min-width: 0; }
   .sq-fx__ctl select { padding: 3px 4px; font-size: 11px; }
 
-  /* lfo row: the on/shape/sync controls stack, but the three sliders (length,
-     amount, phase) sit in one row of three columns rather than one below the
-     other — three short vertical bars side by side read at a glance and cost
-     a third the scroll of stacking them. */
-  .sq-lfo__row {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    grid-template-rows: auto auto auto;
-    gap: 6px;
-    row-gap: 4px;
-    padding: 6px 0;
+  /* lfo row: three equal columns plus a narrow one for the ×. The name and
+     the × on the first line, then on / sync / shape, then the three sliders
+     (length, amount, phase) side by side, each a column of label, bar and
+     readout so the three line up. Written for the parameter menu too: its
+     desktop grid (eight columns, unscoped by width) out-ranked the phone's and
+     laid the row out as a desktop one in 330px, the readouts over each other. */
+  .sq-lfo__row,
+  .sq-pmenu__modal .sq-lfo__row {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) 28px;
+    grid-template-rows: none;
+    gap: 8px 6px;
+    align-items: center;
+    padding: 8px 0;
     border-bottom: 1px solid var(--border);
   }
-  .sq-lfo__row .sq-lfo__target {
-    grid-column: 1 / -1;
-    font-size: 11px;
-  }
-  .sq-lfo__row .sq-lfo__enable { grid-column: 1; }
-  .sq-lfo__row .sq-lfo__shape { grid-column: 2 / -1; }
-  .sq-lfo__row .sq-lfo__sync-wrap { grid-column: 1; }
-  .sq-lfo__row .sq-lfo__rate-field {
-    grid-column: 1;
+  .sq-lfo__row .sq-lfo__target { grid-column: 1 / 4; grid-row: 1; font-size: 11px; }
+  .sq-lfo__row .sq-lfo__remove,
+  .sq-pmenu__modal .sq-lfo__row .sq-lfo__remove { grid-column: 4; grid-row: 1; justify-self: end; }
+  .sq-lfo__row .sq-lfo__enable { grid-column: 1; grid-row: 2; }
+  .sq-lfo__row .sq-lfo__sync-wrap { grid-column: 2; grid-row: 2; }
+  .sq-lfo__row .sq-lfo__shape { grid-column: 3 / 5; grid-row: 2; min-width: 0; width: 100%; }
+  .sq-lfo__row :is(.sq-lfo__rate-field, .sq-lfo__amt-field, .sq-lfo__phase-field) {
+    grid-row: 3;
     display: flex;
+    flex-direction: column;
     align-items: center;
-    gap: 6px;
-    flex-wrap: wrap;
+    justify-content: flex-start;
+    align-self: start;
+    gap: 4px;
+    min-width: 0;
+    text-align: center;
   }
+  .sq-lfo__row .sq-lfo__rate-field { grid-column: 1; }
   .sq-lfo__row .sq-lfo__amt-field { grid-column: 2; }
   .sq-lfo__row .sq-lfo__phase-field { grid-column: 3; }
-  .sq-lfo__row .sq-lfo__remove {
-    grid-row: 1;
-    grid-column: 3 / -1;
-    justify-self: end;
-    align-self: start;
+  .sq-lfo__row :is(.sq-lfo__rate-field, .sq-lfo__amt-field, .sq-lfo__phase-field) > label { font-size: 10px; color: var(--fg-dim); }
+  .sq-lfo__row .sq-lfo__rate-label,
+  .sq-pmenu__modal .sq-lfo__row .sq-lfo__rate-label,
+  .sq-lfo__row .sq-lfo__phase-label,
+  .sq-lfo__row .sq-lfo__depth-line .sq-lfo__depth-label {
+    min-width: 0;
+    font-size: 10px;
+    line-height: 1.3;
+    text-align: center;
+    overflow-wrap: anywhere;
+    text-wrap: balance;
   }
+  .sq-lfo__row .sq-lfo__depth-line { justify-content: center; gap: 4px; }
+  /* In the parameter menu the section's heading already names the target,
+     so the row starts at on / sync / shape, with the × at the end of it. */
+  .sq-pmenu__modal .sq-lfo__row .sq-lfo__target { display: none; }
+  .sq-pmenu__modal .sq-lfo__row :is(.sq-lfo__enable, .sq-lfo__sync-wrap, .sq-lfo__remove) { grid-row: 1; }
+  .sq-pmenu__modal .sq-lfo__row .sq-lfo__shape { grid-row: 1; grid-column: 3; }
+  .sq-pmenu__modal .sq-lfo__row :is(.sq-lfo__rate-field, .sq-lfo__amt-field, .sq-lfo__phase-field) { grid-row: 2; }
+  .sq-pmenu__modal .sq-lfo__row { border-bottom: 0; }
+  .sq-lfo__row .sq-lfo__euc { grid-column: 1 / -1; }
 
   /* automation lane: stack label/buttons above grid */
   .sq-aut__lane {
