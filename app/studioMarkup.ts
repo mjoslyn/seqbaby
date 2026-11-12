@@ -103,6 +103,12 @@ const GUITAR_PANEL = `
             <label class="sq-guitar__f"><span>palm</span><input class="p-gtmute" type="range" min="0" max="1" step="0.01" value="0" title="the heel of the picking hand resting on the strings at the bridge. Shorter, darker and tighter" /></label>
           </div>
           <div class="sq-guitar__row">
+            <span class="sq-guitar__lbl">hands</span>
+            <label class="sq-guitar__f"><span>vibrato</span><input class="p-gtvib" type="range" min="0" max="1" step="0.01" value="0.3" title="how far the fretting finger bends a held note up and back once it has rung for a moment. Open strings and dead notes have none" /></label>
+            <label class="sq-guitar__f"><span>sympathy</span><input class="p-gtsymp" type="range" min="0" max="1" step="0.01" value="0.3" title="how much the strings not being played ring along with the ones that are: the shimmer of open strings under a note" /></label>
+            <label class="sq-guitar__f"><span>fingers</span><input class="p-gtfnoise" type="range" min="0" max="1" step="0.01" value="0.35" title="finger noise: the squeak of a hand moving along a wound string, and the thump and brief open ring of a finger lifting off a note" /></label>
+          </div>
+          <div class="sq-guitar__row">
             <span class="sq-guitar__lbl">amp</span>
             <select class="p-gtamp" title="which amp. They differ in gain, where the tone stack works, how asymmetrically the first stage clips, and whether the distortion is preamp or power amp">
               <option value="clean">clean</option><option value="tweed">tweed</option>

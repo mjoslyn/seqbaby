@@ -169,7 +169,7 @@ test("tuning: the fundamental within a cent across four octaves, stiff or not", 
   // autocorrelation reads that stretch as the whole note being sharp.
   for (const stiff of [0, 0.25, 0.5]) {
     for (const midi of [40, 52, 64, 76, 88]) {
-      const g = rig({ drive: 0, sustain: 0.8, stiff });
+      const g = rig({ drive: 0, sustain: 0.8, stiff, vib: 0, symp: 0 });
       note(g, midi, 0, 3);
       const a = render(g, 1.2);
       const off = partialOff(a, 440 * 2 ** ((midi - 69) / 12), 1, sec(0.4), sec(1.0), 30);
@@ -220,7 +220,7 @@ test("decay is a time, not a count of periods: E6 rings at least half as long as
   for (const sustain of [0.4, 1]) {
     const T = {};
     for (const midi of [40, 64, 88]) {
-      const g = rig({ drive: 0, sustain, bloom: 0 });
+      const g = rig({ drive: 0, sustain, bloom: 0, symp: 0, vib: 0 });
       note(g, midi, 0, 12);
       T[midi] = t60(render(g, 12));
     }
@@ -230,7 +230,7 @@ test("decay is a time, not a count of periods: E6 rings at least half as long as
 });
 
 test("the sustain slider is a T60 in seconds", () => {
-  const at = (sustain) => { const g = rig({ drive: 0, sustain, bloom: 0 }); note(g, 52, 0, 12); return t60(render(g, 12)); };
+  const at = (sustain) => { const g = rig({ drive: 0, sustain, bloom: 0, symp: 0, vib: 0 }); note(g, 52, 0, 12); return t60(render(g, 12)); };
   const s0 = at(0), s4 = at(0.4), s1 = at(1);
   assert.ok(s0 > 0.2 && s0 < 0.6, `sustain 0: ${s0.toFixed(2)}s`);
   assert.ok(s4 > 0.9 && s4 < 1.8, `sustain 0.4: ${s4.toFixed(2)}s`);
@@ -302,7 +302,7 @@ test("the pickup's comb sits at its position: a pickup at 1/8 notches the 8th ha
 
 test("the oversampled amp keeps fold-back far under a hi-gain note", () => {
   // Without it this was -27dB: a fizz off the harmonic series. Measured -49.
-  const g = rig({ amp: "hi", cab: "4x12", drive: 0.9, sustain: 1, bloom: 0, stiff: 0 });
+  const g = rig({ amp: "hi", cab: "4x12", drive: 0.9, sustain: 1, bloom: 0, stiff: 0, symp: 0, vib: 0 });
   note(g, 69, 0, 3);
   const off = offHarmonicDb(render(g, 1.2), sec(0.3), 440);
   assert.ok(off < -45, `off-harmonic energy ${off.toFixed(1)}dB`);
@@ -426,4 +426,82 @@ test("a stopped note is silent: the string switches itself off", () => {
   const a = render(g, 4);
   assert.ok(rms(a, sec(3), sec(4)) < 1e-5, `tail rms ${rms(a, sec(3), sec(4))}`);
   assert.ok(g.inst.voices.every(v => !v.active), "every string retired");
+});
+
+// ---- the hands ------------------------------------------------------------
+// The processor's randomness (pick jitter, the scrape, the squeak's noise) is
+// Math.random, so two renders compared sample for sample run on one seed.
+function seeded(fn) {
+  const R = Math.random;
+  let s = 12345;
+  Math.random = () => { s = (s * 1103515245 + 12345) % 2147483648; return s / 2147483648; };
+  try { return fn(); } finally { Math.random = R; }
+}
+function diffRms(a, b, from, to) { let s = 0; for (let i = from; i < to; i++) s += (a[i] - b[i]) ** 2; return Math.sqrt(s / (to - from)); }
+function noteLeg(g, midi, when, dur, vel = 1) {
+  g.inst.port.onmessage({ data: { type: "note", when, id: ++g.nid, note: midi, freq: 440 * Math.pow(2, (midi - 69) / 12), dur, vel, glide: 0, legato: true } });
+}
+
+test("a velocity at or under 0.1 is a dead note: a chk as loud as a pick, gone at once", () => {
+  const g = rig({ drive: 0.3 }); note(g, 52, 0, 0.5, 0.08); const a = render(g, 0.5);
+  const h = rig({ drive: 0.3 }); note(h, 52, 0, 0.5, 0.8); const b = render(h, 0.5);
+  const pa = peak(a.subarray(0, sec(0.03))), pb = peak(b.subarray(0, sec(0.03)));
+  assert.ok(db(pa) > db(pb) - 6, `the chk ${db(pa).toFixed(1)}dB vs a played note ${db(pb).toFixed(1)}dB`);
+  const ta = rms(a, sec(0.06), sec(0.1)), tb = rms(b, sec(0.06), sec(0.1));
+  assert.ok(db(ta) < db(tb) - 40, `60ms in: dead ${db(ta).toFixed(1)}dB, played ${db(tb).toFixed(1)}dB`);
+});
+
+test("the open strings ring in sympathy, and the control sets how much", () => {
+  const after = (symp) => {
+    const g = rig({ drive: 0, symp, fnoise: 0, sustain: 0.6 });
+    note(g, 57, 0, 1, 0.9);
+    const a = render(g, 2.2);
+    return [rms(a, sec(0.2), sec(0.8)), rms(a, sec(1.3), sec(1.8))];
+  };
+  const [, none] = after(0), [n3, s3] = after(0.3), [, s1] = after(1);
+  assert.ok(db(none) < -95, `nothing rings on with sympathy off: ${db(none).toFixed(1)}dB`);
+  assert.ok(db(s3) > db(n3) - 45 && db(s3) < db(n3) - 25, `default: ${(db(s3) - db(n3)).toFixed(1)}dB under the note`);
+  assert.ok(db(s1) > db(s3) + 6, `more at the top: ${db(s1).toFixed(1)} vs ${db(s3).toFixed(1)}`);
+});
+
+test("a hammer-on carries the string on: a tied note onto the same string is not picked", () => {
+  const g = rig({ drive: 0 }); note(g, 57, 0, 0.5); noteLeg(g, 59, 0.5, 0.5); const a = render(g, 1);
+  const h = rig({ drive: 0 }); note(h, 57, 0, 0.5); note(h, 59, 0.5, 0.5); const b = render(h, 1);
+  const ha = rms(a, sec(0.5), sec(0.52)), pa = rms(b, sec(0.5), sec(0.52));
+  assert.ok(db(ha) < db(pa) - 8, `hammered ${db(ha).toFixed(1)}dB vs picked ${db(pa).toFixed(1)}dB`);
+  assert.ok(Math.abs(partialOff(a, 246.94, 1, sec(0.6), sec(0.95), 30)) < 3, "and it sounds the new note");
+  assert.equal(g.inst.voices.filter((v) => v.active && !v.sym).length, 1, "both notes on one string");
+});
+
+test("vibrato starts after a moment, on a held fretted note only", () => {
+  const offs = (vib, midi, f0) => {
+    const g = rig({ drive: 0, vib, symp: 0 }); note(g, midi, 0, 3); const a = render(g, 2.2);
+    const o = []; for (let t = 1.2; t < 2.0; t += 0.05) o.push(partialOff(a, f0, 1, sec(t), sec(t + 0.05), 50));
+    return [partialOff(a, f0, 1, sec(0.1), sec(0.3), 50), Math.max(...o) - Math.min(...o)];
+  };
+  const [early, swing] = offs(1, 57, 220);
+  assert.ok(Math.abs(early) < 3, `still at first: ${early}`);
+  assert.ok(swing > 10, `then it moves: ${swing} cents`);
+  assert.ok(offs(0, 57, 220)[1] < 4, "no vibrato at 0");
+  assert.ok(offs(1, 45, 110)[1] <= offs(0, 45, 110)[1] + 1, "an open string has no finger on it");
+});
+
+test("finger noise: a squeak when the hand jumps on the wound strings, a thump at a release", () => {
+  const shift = (fnoise) => seeded(() => {
+    const g = rig({ drive: 0.3, fnoise, symp: 0 });
+    for (const n of [43, 50, 55, 59, 62, 67]) note(g, n, 0, 0.4, 0.6);
+    for (const n of [48, 55, 60, 64, 67, 72]) note(g, n, 0.4, 0.5, 0.6);
+    return render(g, 1);
+  });
+  const quiet = shift(0), sq = shift(0.35);
+  assert.equal(diffRms(sq, quiet, 0, sec(0.4)), 0, "nothing before the move");
+  const d = diffRms(sq, quiet, sec(0.4), sec(0.5)), c = rms(quiet, sec(0.4), sec(0.5));
+  assert.ok(db(d) > db(c) - 40 && db(d) < db(c) - 12, `squeak ${(db(d) - db(c)).toFixed(1)}dB under the chord`);
+  const lift = (fnoise) => seeded(() => {
+    const g = rig({ drive: 0.3, fnoise, symp: 0 }); note(g, 57, 0, 0.5, 0.9); return render(g, 1);
+  });
+  const l0 = lift(0), l1 = lift(0.35);
+  assert.equal(diffRms(l1, l0, 0, sec(0.5)), 0, "nothing while the note is held");
+  const r = diffRms(l1, l0, sec(0.5), sec(0.56)), n = rms(l0, sec(0.2), sec(0.45));
+  assert.ok(db(r) > db(n) - 35 && db(r) < db(n) - 8, `release ${(db(r) - db(n)).toFixed(1)}dB under the note`);
 });

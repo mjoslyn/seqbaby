@@ -1468,6 +1468,31 @@ STRING ──▶ PICKUP ──▶ tone pot ──▶ AMP ──▶ CAB ──▶
   strings barely caught). 6ms a string at full velocity, 10ms soft. Pending
   picks are `pAt`..`pOff`; a note let go before its string is reached is
   picked and released at once. An open E chord comes out 0 2 2 1 0 0 (tested).
+- **The hands** (`gtvib`, `gtsymp`, `gtfnoise`, the panel's `hands` row).
+  A velocity at or under `DEAD_VEL` (0.1) is a dead note: struck as hard as
+  a played one (0.4 + 4 x vel), its ring time cut to 6% and its highs first,
+  so a chk with no pitch. A note tied into the next (the silverbox's rule:
+  written longer than a step, the next landing as it ends; the builder posts
+  `legato`) onto the string the last note is on, within five frets, is a
+  hammer-on (up) or pull-off (down): no pick, the string's energy carried
+  over at the new length, a light tap or pluck on top (`legatoOn`,
+  measured 14dB under a picked attack). A held fretted note grows a
+  vibrato after 0.35s, faded in over half a second, 5.3Hz, ±25 cents at the
+  top of `vib`, centred on the written pitch; open strings and dead notes
+  have none. The strings not sounding become open strings in sympathy
+  (`wakeSympathy`, `v.sym`), fed what the played strings put into the
+  bridge (`this.bridge`, `SYM_K`), so only the ones whose partials line up
+  build up a ring; they let go on their own when nothing does. Measured
+  after a released A3: 35dB under the note at the default, 25 at the top.
+  A hand that moved two frets or more since the last gesture, quickly,
+  squeaks on the first wound string it frets (`squeak`: a swept resonance,
+  about 20dB under the chord at the default). A finger lifting off a note
+  the string is not about to play again (6ms later, `relAt`, `fingerOff`)
+  thumps, and a fretted one rings open for a moment. Each string's two
+  planes are rotated into each other a little per lap (`COUPLE_RATE` 0.35
+  rad/s over the note's frequency), the bridge's coupling: energy moves,
+  none is made. The tests that measure the bare string or amp (tuning,
+  decay, fold-back) run with `symp` and `vib` at 0.
 - **Cab**: seven biquads, five cabs. It's the biggest filter in the chain:
   the low cut, the cone's own resonance, the presence peak, a ripple in the
   breakup region, a 24dB/oct cliff above 5kHz (two sections; the one
