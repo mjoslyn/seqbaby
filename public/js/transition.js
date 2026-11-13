@@ -16,8 +16,11 @@
 //   stagger  the new song arrives a group at a time across `bars`: drums,
 //            bass, harmony, lead (one a bar over four, one a beat over one),
 //            the old song's same group making way as each arrives
-//   bridge   a section the model wrote for the join (a free pattern slot of
-//            the new song) plays for `bars` bars, then the new song
+//   bridge   the song playing reaches its last `patterns` patterns and plays
+//            them as they are while the new song is worked in over them a
+//            group at a time (chords, lead, bass), the old kick out and a
+//            roll through the last bar, and the new song lands, from its own
+//            start, where the old one would have started over
 //
 // The tempo (`tempoMode`): a ramp moves the transport's bpm a step at a time
 // across the length, so the new song lands already at its own tempo; a jump
@@ -31,19 +34,25 @@
 // worked out, and every merge runs there, synchronously, for the reason the
 // queued pattern switch does: the next callback is the next step and must
 // read what it plays.
-import { announceClips } from "./clips.js";
+import { activeArrangeLoop, announceClips, arrangeLength } from "./clips.js";
+import { nextArrangeBar } from "./arrangement.js";
 import { flushJam } from "./jam.js";
 import { markExternalEdit } from "./history.js";
 import { mergeSet } from "./liveSet.js";
 import { removeTrack } from "./track.js";
 import { serializeSet } from "./session.js";
 import { releaseSilencedTracks } from "./signal.js";
-import { state, switchPattern } from "./state.js";
+import { loopRange, nextChainPattern, state, switchPattern } from "./state.js";
 import { stepsPerBarForMeter, stepsPerBeatForMeter, transportMeter } from "./meter.js";
 import {
   SWEEP_TOP,
   compositeSession,
+  freeSlot,
+  isKick,
+  isSnare,
   overlapSession,
+  rollVelocity,
+  workInEntries,
   trackKey,
   fadeGain,
   groupStages,
@@ -261,8 +270,12 @@ function densify(p, session) {
     tracks: session.tracks.map(t => {
       const d = p.dense.get(trackKey(t));
       if (!d) return t;
+      // The notes are this session's own: a staged track was read back from
+      // the new song, and a bridge's work-in gives it other slots.
       return {
         ...d,
+        ...(t.patterns ? { patterns: t.patterns } : {}),
+        ...(t.arrangement ? { arrangement: t.arrangement } : {}),
         outIndex: t.outIndex ?? -1,
         compSourceIndex: t.compSourceIndex ?? -1,
         soloed: !!t.soloed,
@@ -276,8 +289,7 @@ function densify(p, session) {
 function stageList(p) {
   const shape = p.opts.shape;
   let target = p.session;
-  if (shape === "bridge") target = p.bridge?.session;
-  else if (shape === "stagger") target = p.events.length ? compositeSession(p.old, p.session, new Set(p.events[0].groups)) : null;
+  if (shape === "stagger") target = p.events.length ? compositeSession(p.old, p.session, new Set(p.events[0].groups)) : null;
   const live = new Set(state.tracks.map(trackKey));
   return (target?.tracks || []).filter(t => t.engineKey !== "bus" && !live.has(trackKey(t)));
 }
@@ -308,6 +320,9 @@ function stageNext(p) {
   const back = serializeSet({ staged: true }).tracks.find(x => trackKey(x) === trackKey(td));
   if (back) p.dense.set(trackKey(td), back);
   if (p.toStage.length) setTimeout(() => stageNext(p), 0);
+  // A bridge can wait a whole song for its work-in: with its tracks built,
+  // the knobs need not lag that long. Stretched again when it starts.
+  else if (p.opts.shape === "bridge") restoreLookAhead();
 }
 
 function startStaging(p) {
@@ -327,18 +342,22 @@ function landFinal(p) {
   pending = null;
   releaseDropped(p);
   endOverlap(p, false);
+  unhold();
   safeMerge(p.session, p);
-  if (p.opts.shape === "bridge" && p.bridge) switchPattern(p.bridge.start, { deferUi: true });
+  if (p.opts.shape === "bridge" && state.playing) switchPattern(p.session?.activePattern ?? 0, { deferUi: true });
   told(p);
+}
+
+/** Every track held out of a work-in plays again (a landing, a cancel). */
+function unhold() {
+  for (const t of state.tracks) t._held = false;
 }
 
 /**
  * Write `session` onto the running engine on a bar line, shaped (see the top
  * of the file). Stopped, it lands at once. Resolves `{landed}`: false when the
  * transition was cancelled before it landed. A second call replaces a pending
- * one, which resolves unlanded. A bridge needs `options.bridge`:
- * `{ session, slot, start }`, the new song with the bridge written into
- * `slot`, and the slot the new song starts from after it.
+ * one, which resolves unlanded.
  */
 export function transitionTo(session, options = {}) {
   cancelTransition();
@@ -351,9 +370,8 @@ export function transitionTo(session, options = {}) {
       tempo: tempoMode(opts.tempo, from, to, opts.shape),
       wait: 0, run: 0, done: 0,
       events: [], off: new Set(), merged: false,
-      bridge: opts.shape === "bridge" ? options.bridge || null : null,
     };
-    if (!state.playing || (opts.shape === "bridge" && !p.bridge)) return landFinal(p);
+    if (!state.playing) return landFinal(p);
     const meter = transportMeter();
     const barLen = stepsPerBarForMeter(meter);
     const beatLen = stepsPerBeatForMeter(meter);
@@ -369,8 +387,8 @@ export function transitionTo(session, options = {}) {
     }
 
     if (opts.shape === "bridge") {
-      // On a bar line whatever `when` says: a section starts on the one.
-      p.wait = transitionSteps({ when: "bar", shape: "cut" }, barLen, barTick).wait;
+      // Over the song's last patterns, whatever `when` says (workInStep).
+      p.wait = 0;
       p.run = 0;
       p.phase = "wait";
     }
@@ -428,6 +446,206 @@ function runDue(p, barLine) {
   return landed;
 }
 
+// ---- bridge: the work-in ------------------------------------------------------
+
+const reps = (slot) => Math.max(1, state.patternRepeats?.[slot] ?? 1);
+
+/** The chain's slots from `from` to where it goes back round. */
+function chainTail(from) {
+  const out = [from];
+  let cur = from;
+  for (let i = 0; i < 64; i++) {
+    const n = nextChainPattern(cur);
+    if (n < 0 || n <= cur) break;
+    out.push(n);
+    cur = n;
+  }
+  return out;
+}
+
+/** The track whose part takes longest to come round: what a pass of the pattern is. */
+function longestTrack() {
+  let best = null, most = -1;
+  for (const t of state.tracks) {
+    if (t.engineKey === "bus" || t._staged || t._leaving || !t.length) continue;
+    const cycle = t.length / Math.max(0.0001, t.speed ?? 1);
+    if (cycle > most) { most = cycle; best = t; }
+  }
+  return best;
+}
+
+/**
+ * Where the song stands at the bar line the transport is on (asked before the
+ * chain or the arrangement advances): whether the bar starting here is inside
+ * its last `n` patterns, how many bars are left to its end from here, and the
+ * slots it plays on the way (null in arrange mode, where every track has its
+ * own). `{ inside: false }` when not there yet.
+ */
+function songTail(n) {
+  if (state.patternMode === "arrange") {
+    const len = arrangeLength();
+    const loop = activeArrangeLoop();
+    const from = loop?.start ?? 0, to = loop?.end ?? len;
+    const u = nextArrangeBar(state.arrBar ?? 0, len, loop);
+    // A section starts wherever any track's block does.
+    const starts = new Set([from]);
+    for (const t of state.tracks) for (const b of t.arrangement || []) if (b.start > from && b.start < to) starts.add(b.start);
+    const sorted = [...starts].sort((a, b) => a - b);
+    const begin = sorted[Math.max(0, sorted.length - n)];
+    return { inside: u >= begin, bars: Math.max(1, to - u), slots: null, bar: u };
+  }
+  if (state.patternMode === "chain" || loopRange()) {
+    const a = state.activePattern;
+    const done = (state.chainBarCount ?? 0) + 1;
+    let u = a, doneU = done;
+    if (done >= reps(a)) {
+      const nx = nextChainPattern(a);
+      u = nx < 0 ? a : nx;
+      doneU = 0;
+    }
+    const tail = chainTail(u);
+    const bars = reps(u) - doneU + tail.slice(1).reduce((s, k) => s + reps(k), 0);
+    return { inside: tail.length <= n, bars: Math.max(1, bars), slots: tail };
+  }
+  // Repeat: a pass of the pattern is a "pattern", from the top of one.
+  const t = longestTrack();
+  if (!t) return { inside: true, bars: n, slots: [state.activePattern] };
+  const barLen = stepsPerBarForMeter(transportMeter());
+  const speed = Math.max(0.0001, t.speed ?? 1);
+  const pass = Math.max(1, Math.ceil(t.length / speed / barLen));
+  const into = Math.round(((t.trackTick ?? 0) % t.length) / speed / barLen) % pass;
+  return { inside: into === 0, bars: n * pass, slots: [state.activePattern] };
+}
+
+/** One step of a bridge: waiting for the song's last patterns, then working the new song in. */
+function workInStep(p, nextTime, stepDur, barLine) {
+  if (p.phase === "wait") {
+    if (!barLine) return null;
+    if (p.endIn == null) {
+      const tail = songTail(p.opts.patterns);
+      if (!tail.inside) return null;
+      p.endIn = tail.bars;
+      p.tail = tail;
+    } else {
+      p.endIn -= 1;
+      // The arrangement's bar moves with each bar line deferred.
+      if (p.tail.bar != null) p.tail.bar += 1;
+    }
+    // The new tracks still being built: give them a bar (the work-in is a bar
+    // shorter), unless that would leave no work-in at all.
+    if (p.toStage?.length && (p.deferred ?? 0) < MAX_DEFER && p.endIn > 1) {
+      p.deferred = (p.deferred ?? 0) + 1;
+      return null;
+    }
+    startWorkIn(p);
+  } else if (barLine && ++p.barsIn >= p.endIn) {
+    landFinal(p);
+    return "land";
+  }
+  workInMoment(p, nextTime, stepDur);
+  p.into++;
+  return null;
+}
+
+/**
+ * Merge the new song's tracks the old one does not have into what is playing,
+ * held silent until their group's moment. They play the new song's start
+ * pattern in every slot the old song has left (in arrange mode, a block of a
+ * free slot to the end of the arrangement).
+ */
+function startWorkIn(p) {
+  stretchLookAhead();
+  const live = serializeSet();
+  const liveKeys = new Set(live.tracks.map(trackKey));
+  const start = p.session?.activePattern ?? 0;
+  const arrange = !p.tail.slots;
+  const free = arrange ? freeSlot({ tracks: [...live.tracks, ...(p.session?.tracks || [])] }) : -1;
+  const into = arrange ? (free >= 0 ? [free] : []) : p.tail.slots;
+  const adds = [];
+  for (const t of p.session?.tracks || []) {
+    if (t.engineKey === "bus" || liveKeys.has(trackKey(t))) continue;
+    const src = t.patterns?.[start];
+    if (!src) continue;
+    const patterns = (t.patterns || []).slice();
+    const blank = { ...src, steps: (src.steps || []).map(() => false) };
+    for (const k of into) {
+      while (patterns.length <= k) patterns.push(blank);
+      patterns[k] = src;
+    }
+    for (let k = 0; k < patterns.length; k++) if (!patterns[k]) patterns[k] = blank;
+    const out = {
+      ...t, patterns, soloed: false, outIndex: -1, compSourceIndex: -1,
+      comp: t.comp ? { ...t.comp, source: "self" } : t.comp,
+    };
+    if (arrange) out.arrangement = free >= 0 ? [{ slot: free, start: p.tail.bar, bars: p.endIn }] : [];
+    adds.push(out);
+  }
+  const addKeys = new Set(adds.map(trackKey));
+  const newKeys = new Set((p.session?.tracks || []).map(trackKey));
+  const oldSlot = state.activePattern;
+  const oldGroup = new Map(live.tracks.map(t => [trackKey(t), trackGroup(t, oldSlot)]));
+  const newGroup = new Map(adds.map(t => [trackKey(t), trackGroup(t, start)]));
+  if (adds.length) safeMerge({ ...live, tracks: [...live.tracks, ...adds] }, p);
+  p.merged = true;
+  p.phase = "work";
+  p.into = 0;
+  p.barsIn = 0;
+  // Who comes in and who makes way, as live tracks.
+  p.incoming = new Map();   // group -> tracks to let in
+  p.outgoing = new Map();   // group -> old tracks to hold
+  p.kicks = [];
+  p.rollers = [];
+  for (const t of state.tracks) {
+    const k = trackKey(t);
+    if (addKeys.has(k)) {
+      t._held = true;
+      const g = newGroup.get(k);
+      if (!p.incoming.has(g)) p.incoming.set(g, []);
+      p.incoming.get(g).push(t);
+      continue;
+    }
+    if (newKeys.has(k)) continue;   // in both songs: it carries on, then takes its new part
+    const g = oldGroup.get(k);
+    if (g === "drums") {
+      if (isKick(t)) p.kicks.push(t);
+      else if (isSnare(t)) p.rollers.push(t);
+      continue;
+    }
+    if (!p.outgoing.has(g)) p.outgoing.set(g, []);
+    p.outgoing.get(g).push(t);
+  }
+  const meter = transportMeter();
+  p.barLen = stepsPerBarForMeter(meter);
+  p.entries = workInEntries(p.endIn * p.barLen, p.barLen, stepsPerBeatForMeter(meter));
+  releaseSilencedTracks();
+}
+
+/** What changes on the step about to sound, `p.into` steps into the work-in. */
+function workInMoment(p, nextTime, stepDur) {
+  const i = p.into;
+  let moved = false;
+  for (const g of ["harmony", "lead", "bass"]) {
+    if (p.entries[g] !== i) continue;
+    for (const t of p.incoming.get(g) || []) t._held = false;
+    for (const t of p.outgoing.get(g) || []) t._held = true;
+    moved = true;
+  }
+  if (i === p.entries.last) {
+    for (const t of [...p.kicks, ...p.rollers]) t._held = true;
+    moved = true;
+  }
+  if (moved) releaseSilencedTracks();
+  if (i < p.entries.last) return;
+  const v = rollVelocity(i - p.entries.last, p.barLen);
+  if (!v) return;
+  for (const t of p.rollers) {
+    if (t.muted || !t.voice || !state.tracks.includes(t)) continue;
+    const at = t.steps?.findIndex(Boolean) ?? -1;
+    const note = at >= 0 && Number.isFinite(t.notes?.[at]) ? t.notes[at] : 36;
+    try { t.voice.hit(note, nextTime, stepDur, v); } catch {}
+  }
+}
+
 /** Drop a pending transition: nothing more lands, and what already did goes back. */
 export function cancelTransition() {
   const p = pending;
@@ -435,12 +653,10 @@ export function cancelTransition() {
   pending = null;
   releaseDropped(p);
   endOverlap(p, true);
+  unhold();
   if (!p.merged) dropStaged();
   restoreLookAhead();
-  if (p.merged && p.old) {
-    safeMerge(p.old);
-    if (p.opts.shape === "bridge") switchPattern(p.old.activePattern ?? 0, { deferUi: true });
-  }
+  if (p.merged && p.old) safeMerge(p.old);
   if (state.ready) Tone.getTransport().bpm.value = fieldBpm();
   window.dispatchEvent(new CustomEvent("seqbaby:transition", { detail: { pending: false } }));
   p.resolve({ landed: false });
@@ -465,9 +681,7 @@ export function transitionPending() {
  * Returns:
  *   "land"   a session landed on this bar line: start every track from its
  *            first step, and leave the queue and the chain alone this bar
- *   "bridge" the bridge landed: the same, but the arrangement is not seeded,
- *            since the bridge slot is not on it
- *   "hold"   a bridge or a stagger is under way: leave the queue and the
+ *   "hold"   a stagger is under way: leave the queue and the
  *            chain alone
  *   null    carry on
  */
@@ -481,27 +695,13 @@ export function transitionStep(nextTime, stepDur, barLine) {
   // bar (up to MAX_DEFER) rather than build them here, inside the scheduler,
   // which is the stall this staging exists to keep out. Every shape's moment
   // is counted from `wait`, so moving it a bar moves the whole plan a bar.
-  if (!p.merged && p.toStage?.length && p.done >= p.wait && (p.deferred ?? 0) < MAX_DEFER) {
+  if (shape !== "bridge" && !p.merged && p.toStage?.length && p.done >= p.wait && (p.deferred ?? 0) < MAX_DEFER) {
     p.deferred = (p.deferred ?? 0) + 1;
     p.wait += stepsPerBarForMeter(transportMeter());
     return null;
   }
 
-  if (shape === "bridge") {
-    if (p.phase === "wait") {
-      if (p.done < p.wait || !barLine) return null;
-      safeMerge(p.bridge.session, p);
-      switchPattern(p.bridge.slot, { deferUi: true });
-      p.merged = true;
-      p.phase = "hold";
-      p.barsLeft = p.opts.bars;
-      return "bridge";
-    }
-    if (!barLine) return null;
-    if (--p.barsLeft > 0) return "hold";
-    landFinal(p);
-    return "land";
-  }
+  if (shape === "bridge") return workInStep(p, nextTime, stepDur, barLine);
 
   if (shape === "stagger") {
     const before = p.arrived.size;

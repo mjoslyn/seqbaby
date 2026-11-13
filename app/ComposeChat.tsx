@@ -42,11 +42,8 @@ type Proposal = {
   before: unknown | null;
   title?: string | null;
   pending?: "audition" | "stop" | "keep" | null;
-  /** A bridge is being written for this proposal, and what went wrong writing one. */
-  writing?: boolean;
   note?: string;
 };
-type Bridge = { session: unknown; slot: number; start: number; bars: number };
 
 type Shape = "cut" | "sweep" | "drop" | "fade" | "stagger" | "bridge";
 const SHAPES: Shape[] = ["cut", "sweep", "drop", "fade", "stagger", "bridge"];
@@ -56,14 +53,14 @@ const SHAPE_TIPS: Record<Shape, string> = {
   drop: "the playing song thins (harmony and lead, then bass, then drums), a near-silent last bar, then the hit",
   fade: "both songs play for the length: the old one fades out as the new one fades in",
   stagger: "the new song arrives a group at a time: drums, bass, harmony, lead",
-  bridge: "the model writes a bridge exactly that long, which plays before the new song",
+  bridge: "the song plays to its end, and the new song is worked into its last patterns: chords, then lead, then bass, the old kick out and a roll in the last bar",
 };
 
 // How the review bar's writes reach what is playing: on the next bar or at
 // once, cut or swept, over how many bars, and what happens to the tempo.
-type TransitionPrefs = { when: "bar" | "now"; shape: Shape; bars: number; tempo: "auto" | "jump" | "ramp" };
+type TransitionPrefs = { when: "bar" | "now"; shape: Shape; bars: number; tempo: "auto" | "jump" | "ramp"; patterns: number };
 const TRANSITION_KEY = "seqbaby.transition.v1";
-const TRANSITION_DEFAULT: TransitionPrefs = { when: "bar", shape: "cut", bars: 2, tempo: "auto" };
+const TRANSITION_DEFAULT: TransitionPrefs = { when: "bar", shape: "cut", bars: 2, tempo: "auto", patterns: 1 };
 function loadTransition(): TransitionPrefs {
   try {
     const v = JSON.parse(window.localStorage.getItem(TRANSITION_KEY) || "null");
@@ -73,6 +70,7 @@ function loadTransition(): TransitionPrefs {
       shape: SHAPES.includes(v.shape) ? v.shape : "cut",
       bars: [1, 2, 4, 8].includes(Number(v.bars)) ? Number(v.bars) : 2,
       tempo: v.tempo === "jump" || v.tempo === "ramp" ? v.tempo : "auto",
+      patterns: [1, 2, 3, 4].includes(Number(v.patterns)) ? Number(v.patterns) : 1,
     };
   } catch {
     return TRANSITION_DEFAULT;
@@ -113,51 +111,7 @@ const OLD_KEY_STORES = ["seqbaby.anthropicKey.v1", "seqbaby.composeKeyMode.v1"];
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-/** Whether the studio holds a song with notes in it: something to bridge from. */
-function studioHasNotes(): boolean {
-  try {
-    const s = window.seqbaby?.serializeSet() as { tracks?: { patterns?: ({ steps?: unknown[] } | null)[] }[] } | undefined;
-    return !!s?.tracks?.some((t) => t.patterns?.some((p) => p?.steps?.some(Boolean)));
-  } catch {
-    return false;
-  }
-}
-
 /** What to say when the response wasn't the route's own JSON. */
-// One compose turn run to the end with no transcript of its own: the bridge's.
-// The song that comes back, or why there is none.
-async function runTurn(message: string, session: unknown, model?: string): Promise<{ session?: unknown; error?: string }> {
-  try {
-    const res = await fetch("/api/compose", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ message, history: [], session, unnamed: false, ...(model ? { model } : {}) }),
-    });
-    const raw = await res.text();
-    let started: ComposeResponse | null = null;
-    try { started = raw ? (JSON.parse(raw) as ComposeResponse) : null; } catch { started = null; }
-    if (!res.ok || !started?.jobId) return { error: res.ok ? started?.error ?? "couldn't start that" : describeFailure(res.status, raw, started) };
-    const until = Date.now() + POLL_LIMIT_MS;
-    let misses = 0;
-    for (;;) {
-      await sleep(POLL_INTERVAL_MS);
-      if (Date.now() > until) return { error: "gave up waiting on it" };
-      const q = new URLSearchParams({ id: started.jobId });
-      if (started.jobToken) q.set("t", started.jobToken);
-      let poll: Response;
-      try { poll = await fetch(`/api/compose/status?${q}`); } catch { if (++misses > MAX_POLL_MISSES) return { error: "lost contact with the server" }; continue; }
-      if (poll.status === 401 || poll.status === 404) return { error: poll.status === 401 ? "signed out" : "the job is gone" };
-      if (!poll.ok) { if (++misses > MAX_POLL_MISSES) return { error: `the server kept failing (${poll.status})` }; continue; }
-      misses = 0;
-      const job = (await poll.json()) as JobStatus;
-      if (job.status === "done") return job.session ? { session: job.session } : { error: job.reply || "it wrote nothing" };
-      if (job.status === "error") return { error: job.error ?? "that didn't work" };
-    }
-  } catch (e) {
-    return { error: (e as Error).message };
-  }
-}
-
 function describeFailure(status: number, raw: string, data: ComposeResponse | null): string {
   if (data?.error) return data.error;
   // 502/504 with an HTML body is the hosting layer, not the route: nothing
@@ -426,7 +380,6 @@ export default function ComposeChat({
     if (!canCompose) return;
     // A transition still waiting on its bar line lands now: the turn is about
     // what is playing, and an audition or keep the button already asked for.
-    bridgeRun.current++;
     window.seqbaby.finishTransition?.();
     const session = window.seqbaby.serializeSet();
     // Only plain text crosses the wire between turns -- what the model called
@@ -626,60 +579,6 @@ export default function ComposeChat({
   // (public/js/transition.js). Resolves whether it landed: false when another
   // button called it off first. Falls back to an immediate write on an engine
   // cached from before transitions shipped.
-  //
-  // A bridge is written by a turn of its own (`runTurn`), and it is started
-  // AHEAD: as soon as a proposal arrives with bridge picked (and again when the
-  // length changes), so that by the time audition or keep is pressed it is
-  // usually written and the transition only waits for the bar line. The jobs
-  // are held per proposal and per length (`bridgeJobs`), so a press awaits the
-  // one already running rather than starting another, and a failed one is
-  // dropped so the press tries again. Going BACK to what was playing (stop) has
-  // no bridge to play: it is a cut on the bar. `bridgeRun` is how a button
-  // pressed while a press is waiting on a bridge calls it off: the bridge is
-  // still kept for the next press, but that press does not go on to land it.
-  const bridgeRun = useRef(0);
-  const bridgeJobs = useRef<{ session: unknown; jobs: Map<number, Promise<Bridge | string>>; running: Set<number>; done: Map<number, Bridge> }>({
-    session: null, jobs: new Map(), running: new Set(), done: new Map(),
-  });
-  const startBridge = useCallback((r: Proposal, bars: number): Promise<Bridge | string> => {
-    const api = window.seqbaby;
-    if (!api?.bridge) return Promise.resolve("this studio can't play a bridge");
-    const reg = bridgeJobs.current;
-    if (reg.session !== r.session) {
-      reg.session = r.session;
-      reg.jobs = new Map();
-      reg.running = new Set();
-      reg.done = new Map();
-    }
-    const have = reg.jobs.get(bars);
-    if (have) return have;
-    const newS = r.session as { activePattern?: number };
-    const slot = api.bridge.freeSlot(newS);
-    if (slot < 0) return Promise.resolve("every pattern slot is in use");
-    const start = newS.activePattern ?? 0;
-    const prompt = api.bridge.bridgePrompt(api.serializeSet(), newS, slot, bars, start);
-    const mark = (patch: Partial<Proposal>) =>
-      setReview((cur) => (cur && cur.session === r.session ? { ...cur, ...patch } : cur));
-    const job = (async (): Promise<Bridge | string> => {
-      const got = await runTurn(prompt, newS, canPickModel ? model : undefined);
-      if (!got.session) return got.error ?? "nothing came back";
-      const bs = api.bridge!.bridgeSession(newS, got.session, slot);
-      if (!api.bridge!.bridgeHasNotes(bs, slot)) return "it came back empty";
-      return { session: bs, slot, start, bars };
-    })();
-    reg.jobs.set(bars, job);
-    reg.running.add(bars);
-    mark({ writing: true, note: "" });
-    void job.then((res) => {
-      if (reg.session !== r.session) return;
-      reg.running.delete(bars);
-      if (typeof res === "string" && reg.jobs.get(bars) === job) reg.jobs.delete(bars);
-      if (typeof res !== "string") reg.done.set(bars, res);
-      mark({ writing: reg.running.size > 0, ...(typeof res === "string" ? { note: `no bridge: ${res}` } : {}) });
-    });
-    return job;
-  }, [canPickModel, model]);
-
   const writeAt = useCallback(async (session: unknown, r?: Proposal, back = false): Promise<boolean> => {
     const api = window.seqbaby;
     if (!api) return false;
@@ -687,44 +586,11 @@ export default function ComposeChat({
       writeLive(session);
       return true;
     }
-    if (trans.shape !== "bridge" || !api.bridge) {
-      return (await api.transitionTo(session, trans)).landed;
-    }
-    if (back || !r) return (await api.transitionTo(session, { ...trans, shape: "cut", when: "bar" })).landed;
-    const run = ++bridgeRun.current;
-    const job = startBridge(r, trans.bars);
-    // The model's bridge if it is already written; otherwise one made at once
-    // from the new song (transitionPlan.js's codeBridge), so a press never
-    // waits on a compose turn. A press with no quick bridge to fall back on
-    // (an engine from before it) waits on the model's as it used to.
-    const ready = bridgeJobs.current.done.get(trans.bars);
-    let br: Bridge | string | undefined = ready;
-    if (!br && api.bridge.codeBridge) {
-      const newS = r.session as { activePattern?: number };
-      const slot = api.bridge.freeSlot(newS);
-      const start = newS.activePattern ?? 0;
-      if (slot >= 0) br = { session: api.bridge.codeBridge(newS, slot, trans.bars, start), slot, start, bars: trans.bars };
-    }
-    if (!br) br = await job;
-    if (run !== bridgeRun.current) return false;
-    if (typeof br === "string") {
-      setReview((cur) => (cur && cur.session === r.session ? { ...cur, note: `no bridge: ${br}` } : cur));
-      return false;
-    }
-    return (await api.transitionTo(session, { ...trans, bridge: { session: br.session, slot: br.slot, start: br.start } })).landed;
-  }, [trans, writeLive, startBridge]);
-
-  // The bridge for the proposal on offer, started before anyone asks for it:
-  // always when there is a song in the studio to bridge from (notes in it),
-  // whatever shape is picked, so picking bridge later never waits on one; and
-  // with bridge picked even when there is not. Only while the changes are not
-  // playing yet: mid-audition keep writes nothing and stop is a cut, so
-  // neither plays a bridge.
-  useEffect(() => {
-    if (!review || review.before) return;
-    if (trans.shape !== "bridge" && !studioHasNotes()) return;
-    void startBridge(review, trans.bars);
-  }, [review, trans.shape, trans.bars, startBridge]);
+    // Going BACK to what was playing has no old song's end to work into:
+    // a bridge's stop is a cut on the bar.
+    if (trans.shape === "bridge" && back) return (await api.transitionTo(session, { ...trans, shape: "cut", when: "bar" })).landed;
+    return (await api.transitionTo(session, trans)).landed;
+  }, [trans, writeLive]);
 
   // Audition: keep what is playing so it can be put back, then merge the
   // turn's session over it. Nothing is saved and nothing is torn down.
@@ -749,8 +615,7 @@ export default function ComposeChat({
     const r = review;
     if (!r) return;
     if (r.pending === "audition") {
-      bridgeRun.current++;
-      window.seqbaby?.cancelTransition?.();
+        window.seqbaby?.cancelTransition?.();
       setReview((cur) => (cur && cur.session === r.session ? { ...cur, pending: null } : cur));
       return;
     }
@@ -829,8 +694,7 @@ export default function ComposeChat({
     // An audition on its way has not landed (`before` is still null); a stop
     // on its way leaves the audition playing. Either way it is called off.
     if (r.pending) {
-      bridgeRun.current++;
-      api.cancelTransition?.();
+        api.cancelTransition?.();
     }
     if (!r.before) {
       setReview({ ...r, pending: "keep", note: "" });
@@ -851,7 +715,6 @@ export default function ComposeChat({
   const discardChanges = useCallback(() => {
     const r = review;
     if (!r) return;
-    bridgeRun.current++;
     if (r.pending) window.seqbaby?.cancelTransition?.();
     // `before` set means the changes are playing (a stop on its way included).
     if (r.before) writeLive(r.before);
@@ -1010,12 +873,12 @@ export default function ComposeChat({
                         ? "on the next bar"
                         : trans.shape === "cut"
                         ? trans.when === "now" ? "now" : "on the next bar"
+                        : trans.shape === "bridge"
+                        ? `into the song's last ${trans.patterns === 1 ? "pattern" : `${trans.patterns} patterns`}`
                         : `with a ${trans.bars}-bar ${trans.shape}`
                     }…`
                   : review.note
                   ? review.note
-                  : review.writing
-                  ? `the model is writing a ${trans.bars}-bar bridge; until it's ready, a quick one made from the new song plays instead`
                   : review.before
                   ? "auditioning: you are hearing the changes, but the song does not have them yet."
                   : "these changes aren't in the song yet. audition drops them into what's playing; keep makes them the song."}
@@ -1056,7 +919,8 @@ export default function ComposeChat({
               value={trans.when}
               onChange={(e) => setTrans({ when: e.target.value as TransitionPrefs["when"] })}
               aria-label="when"
-              title="next bar: wait for the downbeat. now: as soon as possible"
+              disabled={trans.shape === "bridge"}
+              title="next bar: wait for the downbeat. now: as soon as possible. A bridge waits for the end of the song"
             >
               <option value="bar">next bar</option>
               <option value="now">now</option>
@@ -1072,17 +936,32 @@ export default function ComposeChat({
                 <option key={k} value={k} title={SHAPE_TIPS[k]}>{k}</option>
               ))}
             </select>
-            <select
-              className={styles.chatModelSelect}
-              value={trans.bars}
-                  onChange={(e) => setTrans({ bars: Number(e.target.value) })}
-              aria-label="length"
-              title="how many bars the transition runs: how long the songs overlap on a sweep or fade, and how long a bridge is. A bridge is written in the background as soon as a turn's changes arrive, at this length, whatever shape is picked"
-            >
-              {[1, 2, 4, 8].map((b) => (
-                <option key={b} value={b}>{b} bar{b > 1 ? "s" : ""}</option>
-              ))}
-            </select>
+            {trans.shape === "bridge" ? (
+              <select
+                className={styles.chatModelSelect}
+                value={trans.patterns}
+                onChange={(e) => setTrans({ patterns: Number(e.target.value) })}
+                aria-label="patterns"
+                title="how many of the playing song's last patterns the new song is worked into: chords, then lead, then bass come in across them, and the new song lands where the old one would have started over"
+              >
+                {[1, 2, 3, 4].map((n) => (
+                  <option key={n} value={n}>last {n === 1 ? "pattern" : `${n} patterns`}</option>
+                ))}
+              </select>
+            ) : (
+              <select
+                className={styles.chatModelSelect}
+                value={trans.bars}
+                disabled={trans.shape === "cut"}
+                onChange={(e) => setTrans({ bars: Number(e.target.value) })}
+                aria-label="length"
+                title="how many bars the transition runs: how long the songs overlap on a sweep or fade, how long a drop thins or a stagger arrives"
+              >
+                {[1, 2, 4, 8].map((b) => (
+                  <option key={b} value={b}>{b} bar{b > 1 ? "s" : ""}</option>
+                ))}
+              </select>
+            )}
             <select
               className={styles.chatModelSelect}
               value={trans.tempo}

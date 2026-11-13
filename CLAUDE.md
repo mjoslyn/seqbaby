@@ -4796,6 +4796,10 @@ mergeSet(s)   validate  ->  globals  ->  tracks gone  ->  tracks made / kept
   a merge simply doesn't. `activePattern` is left alone too, the call history.js
   already makes: moving the playhead to another pattern mid-bar is not a change
   to the song.
+- **A pattern slot past the end of an incoming track's list is empty**
+  (`applyTrackInPlace`), as `applySet` would leave it: a sparse song writes
+  only the slots it uses, and a slot the live track had filled used to keep
+  its notes through the merge.
 - **A blob's own fields win over its `baseSound`**, and both loaders now say so
   — `recallLoadedPatternSound` (patternSound.js) is the one call they share.
   Only a LOCKED pattern's sound is recalled on a load; an unlocked one shares
@@ -4878,11 +4882,11 @@ discard    throw them away (putting back the pre-audition session first)
 How the review bar's writes reach what is playing, picked in the compose
 drawer above the input (always on show, so it is set before a turn is sent
 as well as in review) and kept per browser (`seqbaby.transition.v1`):
-**when** (next bar, the default, or now), **shape**, **length** (1 / 2 / 4 /
-8 bars, enabled whatever the shape, since it is also the length of the
-bridge written ahead) and **tempo** (auto / jump / ramp). Exposed as `window.seqbaby.transitionTo(session, opts)` (a Promise of
-`{landed}`), `cancelTransition`, `finishTransition`, `transitionPending`, and
-`bridge` (the bridge's paperwork, below).
+**when** (next bar, the default, or now; a bridge waits for the song's
+end), **shape**, **length** (1 / 2 / 4 / 8 bars; for a bridge, **patterns**
+instead: the last 1 / 2 / 3 / 4) and **tempo** (auto / jump / ramp).
+Exposed as `window.seqbaby.transitionTo(session, opts)` (a Promise of
+`{landed}`), `cancelTransition`, `finishTransition` and `transitionPending`.
 
 | shape | what the length is |
 |---|---|
@@ -4891,15 +4895,15 @@ bridge written ahead) and **tempo** (auto / jump / ramp). Exposed as `window.seq
 | fade | the overlap: the old tracks dip to -36dB as the new ones rise from it |
 | drop | the old song thins: harmony + lead leave, then the bass, then the drums at the start of the last bar (the last beat of a one-bar drop), the near-silence before the new song hits |
 | stagger | the new song arrives by group across it: drums, bass, harmony, lead, one a bar over four, one a beat over one, the old song's same group making way as each arrives |
-| bridge | a section the model writes exactly that long, played between the two |
+| bridge | not a length: the old song's last `patterns` patterns, played as they are, with the new song worked in over them (below), landing where the old one would start over |
 
 - **Every merge runs in the scheduler callback**, for the queued pattern
   switch's reason: the next callback is the next step. The transport calls
   `transitionStep` once per step after the bar line is worked out, and it
   answers `land` (a song landed on this bar line: every track starts from its
   first step, the queue and the chain sit the bar out; the arrangement is
-  seeded from bar 0 in arrange mode), `bridge` (the same without the seed) or
-  `hold` (two songs or a bridge are under way: the chain waits). Stopped, it
+  seeded from bar 0 in arrange mode) or `hold` (two songs are under way:
+  the chain waits). Stopped, it
   lands at once. Then `markExternalEdit("compose")` and a jam flush, since
   the click that asked for it settled bars ago.
 - **The new tracks are built before the bar line** (staging). A track costs
@@ -4959,32 +4963,31 @@ bridge written ahead) and **tempo** (auto / jump / ramp). Exposed as `window.seq
 - **A drop stops tracks the way a stopped clip is stopped** (`_clipOff`,
   performance state, never saved), so the save, undo and a jam never see the
   thinning; the landing (or a cancel) starts them again.
-- **A bridge is written by a compose turn of its own** (`runTurn`,
-  ComposeChat.tsx), when audition or keep is pressed with bridge picked and
-  the proposal has none of that length: `bridgePrompt` asks for exactly
-  `bars` bars in a free slot of the new song (`freeSlot`), leading into the
-  pattern it starts from, with a summary of the song playing now
-  (`songSummary`). Only that slot comes back (`bridgeSession`), plus any track
-  the model added for it (playing nothing else), so a turn that also touched
-  the song changes nothing more. It lands on a bar line, holds that slot for
-  `bars` bar lines, then lands the new song and switches to its start; the
-  slot is empty again after. `stop` with bridge picked is a cut on the bar:
-  there is no bridge back. **A press never waits on the model**: when its
-  bridge is not written yet, `codeBridge` (transitionPlan.js, pure, tested)
-  makes one at once from the new song: its start pattern across the bars,
-  drums kept, the kick out and a snare / clap rolling up through the last
-  bar, the bass and the lead out, the chords carried (and the start pattern
-  whole when nothing would be left). **The model's bridge is written ahead** (`startBridge`,
-  held per proposal and length in `bridgeJobs`): as soon as a turn's changes
-  arrive, whenever the studio holds a song with notes in it whatever shape is
-  picked (and with bridge picked even when it does not), and again when the
-  length changes, so a press usually finds it written and waits only for the
-  bar line. A press awaits the job already running rather than starting
-  another; a failed one is dropped so the next press tries again. A button
-  pressed while a press waits on one calls that press off (`bridgeRun`), and
-  the bridge is kept for the next.
+- **A bridge works the old song's end into the new one** (`workInStep`,
+  transition.js). It waits for the song playing to reach its last `patterns`
+  patterns (`songTail`): in chain mode (or a loop range) the chain's last
+  slots, each its repeats; in arrange mode the last sections, a section
+  starting wherever any track's block does; in repeat mode passes of the
+  pattern, from the top of one. Those patterns play as they are, and the
+  new song's tracks the old one lacks are merged in at their start
+  (`startWorkIn`), playing the new song's start pattern in every slot the
+  old one has left (in arrange mode a block of a free slot to the end),
+  held silent (`_held`, withheld by the transport like `_clipOff` but
+  surviving a pattern switch) until their group's moment: chords at a
+  quarter, the lead at half, the bass at three quarters (`workInEntries`,
+  on bar lines over four bars or more, on beats under), the old song's
+  same group held as each arrives. The old drums carry it: the kick and
+  the snare are held for the last bar while the transition rolls the snare
+  through it by hand (`rollVelocity`, `voice.hit`). New drums arrive with
+  the landing, at the old song's end, which switches to the new song's own
+  start pattern. A track in both songs carries on and takes its new part at
+  the landing. The new tracks are staged at the press; when they are not
+  built by the time the work-in is due it starts a bar later (up to
+  `MAX_DEFER`), shorter by that bar. The lookahead is relaxed once they are
+  built and stretched again for the work-in, since the wait can be a whole
+  song. `stop` with bridge picked is a cut on the bar.
 - **The tempo** (`tempoMode`): cut, stagger and bridge jump (the stagger with
-  its drums, the bridge with its first bar). Auto ramps the others when the
+  its drums, the bridge at its landing). Auto ramps the others when the
   tempos are within 15%, and jumps a half / double time pair or a bigger gap.
   A ramp moves only the TRANSPORT's bpm, a step at a time, reaching the new
   tempo on the landing: the bpm field, the synced LFOs and the synced delays

@@ -2,15 +2,15 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   GROUPS,
-  bridgeHasNotes,
-  bridgePrompt,
-  bridgeSession,
-  codeBridge,
   compositeSession,
   fadeGain,
   freeSlot,
   groupStages,
+  isKick,
+  isSnare,
   overlapSession,
+  rollVelocity,
+  workInEntries,
   trackGroup,
   SWEEP_BOTTOM,
   SWEEP_TOP,
@@ -23,9 +23,9 @@ import {
 } from "../public/js/transitionPlan.js";
 
 test("defaults: next bar, cut, 2 bars, auto tempo", () => {
-  assert.deepEqual(normalizeTransition(), { when: "bar", shape: "cut", bars: 2, tempo: "auto" });
+  assert.deepEqual(normalizeTransition(), { when: "bar", shape: "cut", bars: 2, tempo: "auto", patterns: 1 });
   assert.deepEqual(normalizeTransition({ when: "x", shape: "sweep", bars: 3, tempo: "ramp" }),
-    { when: "bar", shape: "sweep", bars: 2, tempo: "ramp" });
+    { when: "bar", shape: "sweep", bars: 2, tempo: "ramp", patterns: 1 });
   assert.equal(normalizeTransition({ bars: "8" }).bars, 8);
 });
 
@@ -137,48 +137,22 @@ test("overlap: every new track, and the old ones the new song lacks", () => {
   assert.equal(both.tracks.find(t => t.name === "bass").outIndex, 6);
 });
 
-test("bridge: a free slot, a prompt that says the length, only the slot taken back", () => {
+test("bridge: a free slot, groups worked in by quarters, a rising roll", () => {
   assert.equal(freeSlot(newS), 1);
   const full = { tracks: [{ patterns: Array.from({ length: 32 }, () => pat([true])) }] };
   assert.equal(freeSlot(full), -1);
-  const prompt = bridgePrompt(oldS, newS, 1, 4, 0);
-  assert.match(prompt, /exactly 4 bars long \(64 steps/);
-  assert.match(prompt, /pattern 2 \(index 1\)/);
-  assert.match(prompt, /120 bpm/);
-  const result = {
-    ...newS,
-    bpm: 90,
-    tracks: [
-      { ...newS.tracks[0], patterns: [pat(on(1)), pat(on(2))] },   // touched pattern 1 too: ignored
-      newS.tracks[1],
-      newS.tracks[2],
-      { name: "riser", engineKey: "dm:contagion", patterns: [pat(on(1)), pat(on(4))] },
-    ],
-  };
-  const b = bridgeSession(newS, result, 1);
-  assert.equal(b.bpm, 126, "only the slot comes back, not the tempo");
-  assert.equal(b.tracks[0].patterns[0], newS.tracks[0].patterns[0]);
-  assert.deepEqual(b.tracks[0].patterns[1].steps, on(2));
-  const riser = b.tracks.find(t => t.name === "riser");
-  assert.ok(riser && !riser.patterns[0].steps.some(Boolean), "an added track plays only the bridge");
-  assert.ok(bridgeHasNotes(b, 1));
-  assert.ok(!bridgeHasNotes(newS, 1));
-});
-
-test("the quick bridge: the new song's start, kick out and a roll in the last bar, bass and lead out", () => {
-  const roll = { name: "snare", engineKey: "dm:lancet", isDrumKit: true, patterns: [{ ...pat([false, false, false, false, true, false, false, false, false, false, false, false, true, false, false, false], Array(16).fill(38)), velocities: Array(16).fill(0.8) }] };
-  const song = { ...newS, patternMeters: [{ num: 4, den: 4 }], tracks: [T.kick, roll, T.bass, T.pad, T.lead] };
-  const b = codeBridge(song, 3, 2, 0);
-  const steps = (name) => b.tracks.find(t => t.name === name).patterns[3].steps.map(x => (x ? "x" : ".")).join("");
-  assert.equal(steps("kick"), "x...x...x...x..." + "................", "the kick sits out the last bar");
-  assert.equal(steps("snare"), "....x.......x..." + "x.x.x.x.xxxxxxxx", "the snare rolls up");
-  assert.equal(steps("bass"), ".".repeat(32));
-  assert.equal(steps("lead"), ".".repeat(32));
-  assert.equal(steps("pad"), "x.......x.......x.......x.......", "the chords carry");
-  const sn = b.tracks.find(t => t.name === "snare").patterns[3];
-  assert.ok(sn.velocities[31] > sn.velocities[16], "the roll gets louder");
-  assert.equal(b.tracks[0].patterns[0], song.tracks[0].patterns[0], "only the bridge slot is written");
-  assert.ok(bridgeHasNotes(b, 3));
-  const quiet = codeBridge({ ...newS, tracks: [T.lead] }, 2, 1, 0);
-  assert.ok(bridgeHasNotes(quiet, 2), "nothing left to thin: the start pattern as it is");
+  // Two bars: on beats. Four bars and up: on bar lines.
+  assert.deepEqual(workInEntries(32, 16, 4), { last: 16, harmony: 8, lead: 16, bass: 24 });
+  assert.deepEqual(workInEntries(96, 16, 4), { last: 80, harmony: 32, lead: 48, bass: 80 });
+  // One bar: everything inside it, the roll over the whole bar.
+  assert.deepEqual(workInEntries(16, 16, 4), { last: 0, harmony: 4, lead: 8, bass: 12 });
+  const roll = Array.from({ length: 16 }, (_, k) => (rollVelocity(k, 16) ? "x" : ".")).join("");
+  assert.equal(roll, "x.x.x.x.xxxxxxxx");
+  assert.ok(rollVelocity(15, 16) > rollVelocity(0, 16));
+  assert.equal(rollVelocity(16, 16), 0);
+  assert.ok(isKick({ name: "kick", engineKey: "dm:808-kick" }) && !isKick({ name: "hat" }));
+  assert.ok(isSnare({ name: "clap" }) && isSnare({ engineKey: "dm:lancet" }));
+  assert.equal(normalizeTransition({ shape: "bridge" }).patterns, 1);
+  assert.equal(normalizeTransition({ shape: "bridge", patterns: 3 }).patterns, 3);
+  assert.equal(normalizeTransition({ patterns: 9 }).patterns, 1);
 });

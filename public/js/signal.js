@@ -159,7 +159,7 @@ export function releaseSilencedTracks() {
   const now = state.audioCtx?.currentTime ?? 0;
   for (const t of state.tracks) {
     if (t.engineKey === "bus") continue;
-    if (!t.muted && !t._clipOff && !t._leaving && !t._staged && (!soloAudible || soloAudible.has(t))) continue;
+    if (!t.muted && !t._clipOff && !t._leaving && !t._staged && !t._held && (!soloAudible || soloAudible.has(t))) continue;
     try { t.voice?.releaseHeld?.(now); } catch {}
   }
 }

@@ -55,7 +55,7 @@ import { syncScaleUI } from "./scaleUI.js";
 import { loadTrackFromData, migrateTrackData, serializeSet, trackShellFor } from "./session.js";
 import { migrateLegacyNames, validateSet } from "./sessionFormat.js";
 import { applyCompressorConfig, refreshAllTrackOutputs, refreshCompSourceDropdowns, refreshNoiseBeds, refreshOutputSelects, releaseSilencedTracks, wouldFeedback } from "./signal.js";
-import { aliasPattern, clonePattern, state, syncMeterUI, syncRepeatsUI, trackSlot } from "./state.js";
+import { aliasPattern, clonePattern, emptyPattern, state, syncMeterUI, syncRepeatsUI, trackSlot } from "./state.js";
 import { renderStepGrid } from "./stepGrid.js";
 import { createTrack, removeTrack } from "./track.js";
 import { requestMidiIfNeeded } from "./transport.js";
@@ -163,12 +163,16 @@ export function applyTrackInPlace(t, a, b, resolveTrack = (i) => state.tracks[i]
   let grid = false, sound = false, names = false;
 
   if (!sameTree(a.patterns, b.patterns)) {
-    const n = Math.min(PATTERN_COUNT, b.patterns?.length ?? 0);
+    const n = Math.min(PATTERN_COUNT, Math.max(b.patterns?.length ?? 0, a.patterns?.length ?? 0));
     for (let i = 0; i < n; i++) {
-      if (sameTree(a.patterns?.[i], b.patterns[i])) continue;
+      const bp = b.patterns?.[i];
+      if (sameTree(a.patterns?.[i], bp)) continue;
       // clonePattern is THE one place a pattern is copied (state.js): it fills
       // in any lane the snapshot predates rather than leaving it undefined.
-      t.patterns[i] = clonePattern(b.patterns[i]);
+      // A slot past the end of `b`'s list (a sparse song writes only the slots
+      // it uses) is empty there, as applySet would leave it: left alone, a
+      // slot this track had filled kept its notes into the merged song.
+      t.patterns[i] = bp ? clonePattern(bp) : emptyPattern(b.length || t.length || 16);
     }
     // The live step arrays alias the pattern object that was just replaced, and
     // t.length / t.accents come off it too.

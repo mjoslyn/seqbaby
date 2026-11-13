@@ -13,7 +13,8 @@ export function normalizeTransition(o = {}) {
   const shape = TRANSITION_SHAPES.includes(o.shape) ? o.shape : "cut";
   const bars = TRANSITION_BARS.includes(Number(o.bars)) ? Number(o.bars) : 2;
   const tempo = TRANSITION_TEMPOS.includes(o.tempo) ? o.tempo : "auto";
-  return { when, shape, bars, tempo };
+  const patterns = [1, 2, 3, 4].includes(Number(o.patterns)) ? Number(o.patterns) : 1;
+  return { when, shape, bars, tempo, patterns };
 }
 
 /**
@@ -233,14 +234,56 @@ export function overlapSession(oldS, newS) {
   return mixSessions(oldS, newS, () => true, t => !inNew.has(trackKey(t)));
 }
 
-// ---- bridge: a section written for the join ---------------------------------
+// ---- bridge: the old song's last patterns worked into the new one ----------
 //
-// The model is asked for a bridge exactly `bars` bars long, written into a
-// free pattern slot of the NEW song with the new song's tracks, leading out of
-// the song playing now. The engine plays that slot for those bars, then the
-// new song from where it starts. Only the bridge slot is taken from what the
-// model hands back (and any track it added for the bridge), so a turn that
-// also touched the song's other patterns or its sounds changes nothing else.
+// A bridge waits for the song playing to reach its last `patterns` patterns
+// (the chain's last slots, the arrangement's last sections, or passes of the
+// pattern in repeat mode) and plays them as they are, while the new song's
+// tracks join a group at a time: chords at a quarter of the way, the lead at
+// half, the bass at three quarters, the old song's same group making way as
+// each arrives. The old drums carry it, the kick drops out for the last bar
+// while a snare (or clap) rolls up through it, and the new song lands, drums
+// and all, where the old one would have started over.
+
+export const TRANSITION_PATTERNS = [1, 2, 3, 4];
+
+/** The order the new song's groups come in, and how far along each does. */
+export const WORK_IN = [["harmony", 0.25], ["lead", 0.5], ["bass", 0.75]];
+
+/**
+ * When each group arrives, in steps from the start of a work-in `span` steps
+ * long, and where its last bar (the kick out, the roll) starts. On bar lines
+ * when the span is four bars or more, on beats under that.
+ * @returns {{harmony: number, lead: number, bass: number, last: number}}
+ */
+export function workInEntries(span, barLen, beatLen) {
+  span = Math.max(1, span | 0);
+  barLen = Math.max(1, barLen | 0);
+  const unit = span >= 4 * barLen ? barLen : Math.max(1, beatLen | 0);
+  const snap = (o) => Math.min(span - 1, Math.round(o / unit) * unit);
+  const out = { last: Math.max(0, span - barLen) };
+  for (const [g, f] of WORK_IN) out[g] = snap(span * f);
+  return /** @type {any} */ (out);
+}
+
+/**
+ * The roll's velocity on step `k` of a last bar `len` steps long, or 0 for a
+ * rest: eighths for the first half, sixteenths after, rising throughout.
+ */
+export function rollVelocity(k, len) {
+  len = Math.max(1, len | 0);
+  if (k < 0 || k >= len) return 0;
+  if (k < len / 2 && k % 2 !== 0) return 0;
+  return Math.min(1, 0.45 + 0.55 * (k / len));
+}
+
+const KICK_RE = /kick|\bbd\b|siege|808-kick|909-kick/i;
+const SNARE_RE = /snare|clap|\bsd\b|\bcp\b|lancet|rim/i;
+
+/** Whether a drum track is the kick, by its engine and name. */
+export function isKick(t) { return KICK_RE.test(`${t?.engineKey} ${t?.name}`); }
+/** Whether a drum track is a snare or clap, by its engine and name. */
+export function isSnare(t) { return SNARE_RE.test(`${t?.engineKey} ${t?.name}`); }
 
 export const BANK = 32;
 
@@ -248,166 +291,11 @@ function slotUsed(s, k) {
   return (s?.tracks || []).some(t => (t.patterns?.[k]?.steps || []).some(Boolean));
 }
 
-/** The slot a bridge goes in: the first empty one after the last used, else the first empty one. -1 when full. */
+/** The first empty slot after the last used, else the first empty one. -1 when full. */
 export function freeSlot(s) {
   let last = -1;
   for (let k = 0; k < BANK; k++) if (slotUsed(s, k)) last = k;
   if (last + 1 < BANK && !slotUsed(s, last + 1)) return last + 1;
   for (let k = 0; k < BANK; k++) if (!slotUsed(s, k)) return k;
   return -1;
-}
-
-/** Sixteenths in a bar of `slot`'s meter (an unset slot follows slot 0's). */
-export function barSteps(s, slot) {
-  const m = s?.patternMeters?.[slot] || s?.patternMeters?.[0] || { num: 4, den: 4 };
-  const num = Math.max(1, Number(m.num) || 4), den = Math.max(1, Number(m.den) || 4);
-  return Math.max(1, Math.round((num * 16) / den));
-}
-
-const NOTE = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
-
-/** A few lines saying what a song is, for a prompt. */
-export function songSummary(s) {
-  const slot = s?.activePattern ?? 0;
-  const sc = s?.scale?.active ? `${NOTE[((s.scale.root ?? 0) % 12 + 12) % 12]} ${s.scale.mode}` : "no scale set";
-  const tracks = (s?.tracks || [])
-    .filter(t => t.engineKey !== "bus")
-    .map(t => `${t.name || "track"} (${t.engineKey}, ${trackGroup(t, slot)})`);
-  return `${s?.bpm ?? 120} bpm, ${sc}; tracks: ${tracks.join(", ") || "none"}`;
-}
-
-/** What the model is asked, for a bridge into `newS` from `oldS`. */
-export function bridgePrompt(oldS, newS, slot, bars, startSlot) {
-  const steps = bars * barSteps(newS, slot);
-  return [
-    `Write a bridge: a transition section exactly ${bars} bar${bars > 1 ? "s" : ""} long (${steps} steps at speed 1), in pattern ${slot + 1} (index ${slot}), which is empty.`,
-    `It plays right after the song that is playing now and leads into this song's pattern ${startSlot + 1} (index ${startSlot}), which follows it on the downbeat.`,
-    `The song playing now: ${songSummary(oldS)}.`,
-    `This song (the one you are editing, where the bridge goes): ${songSummary(newS)}.`,
-    "Use this song's tracks. Set every track you use to exactly that length in that pattern. Build toward the downbeat that follows (a fill, a riser, thinning or a build), and carry something over from the song playing now where it helps (its tempo feel, a rhythm, a note). Do not change any other pattern, any sound, the tempo or the scale, and do not rename the song.",
-  ].join("\n");
-}
-
-/** `newS` with the bridge slot (and any track added for it) taken from `result`. */
-export function bridgeSession(newS, result, slot) {
-  const key = t => `${t.engineKey}\u0000${t.name}`;
-  const fromResult = new Map();
-  for (const t of result?.tracks || []) if (!fromResult.has(key(t))) fromResult.set(key(t), t);
-  const tracks = (newS?.tracks || []).map(t => {
-    const r = fromResult.get(key(t));
-    fromResult.delete(key(t));
-    if (!r?.patterns?.[slot]) return t;
-    const patterns = (t.patterns || []).slice();
-    patterns[slot] = r.patterns[slot];
-    return { ...t, patterns };
-  });
-  // A track the model added for the bridge plays the bridge slot only.
-  for (const r of fromResult.values()) {
-    if (!r?.patterns?.[slot] || !(r.patterns[slot].steps || []).some(Boolean)) continue;
-    const empty = (p) => ({ ...p, steps: (p.steps || []).map(() => false) });
-    const patterns = (r.patterns || []).map((p, k) => (k === slot ? p : empty(p || {})));
-    tracks.push({ ...r, patterns, outIndex: -1, compSourceIndex: -1 });
-  }
-  return { ...newS, tracks };
-}
-
-/** Whether a bridge session has anything in its slot. */
-export function bridgeHasNotes(s, slot) {
-  return slotUsed(s, slot);
-}
-
-// ---- a bridge with no wait: one made from the new song itself -------------
-//
-// The model's bridge is a compose turn of its own and takes as long as one.
-// A press must not wait on it, so until it is written this one plays: the new
-// song's start pattern carried across the bridge's bars, its drums kept, the
-// kick out and a snare (or clap) rolling up through the last bar, the bass and
-// the lead out, the chords carried. Built in code, instantly, from what the
-// new song already has; the model's replaces it once it is ready.
-
-const KICK_RE = /kick|\bbd\b|siege|808-kick|909-kick/i;
-const SNARE_RE = /snare|clap|\bsd\b|\bcp\b|lancet|rim/i;
-
-/** `len` steps of `p`, every per-step array tiled from its own length. */
-function tilePattern(p, len) {
-  const out = {};
-  for (const [k, v] of Object.entries(p || {})) {
-    if (Array.isArray(v)) {
-      const n = v.length || 1;
-      out[k] = Array.from({ length: len }, (_, i) => (v.length ? clone(v[i % n]) : null));
-    } else if (k === "automation" && v && typeof v === "object") {
-      const lanes = {};
-      for (const [lk, lane] of Object.entries(v)) {
-        const vals = Array.isArray(lane?.values) && lane.values.length ? lane.values : [0];
-        lanes[lk] = { ...lane, values: Array.from({ length: len }, (_, i) => vals[i % vals.length]) };
-      }
-      out[k] = lanes;
-    } else {
-      out[k] = clone(v);
-    }
-  }
-  if (!Array.isArray(out.steps)) out.steps = Array(len).fill(false);
-  return out;
-}
-
-function clone(v) {
-  return v && typeof v === "object" ? JSON.parse(JSON.stringify(v)) : v;
-}
-
-/**
- * The new song with a bridge written into `slot`, made from its `start`
- * pattern: `bars` bars of it, thinned and built up as above. A session in the
- * shape `bridgeSession` returns, so the engine plays it exactly as it would
- * the model's.
- */
-export function codeBridge(newS, slot, bars, start = 0) {
-  const len = Math.max(1, bars) * barSteps(newS, start);
-  const bar = barSteps(newS, start);
-  const lastBar = len - bar;
-  const tracks = (newS?.tracks || []).map(t => {
-    if (t.engineKey === "bus") return t;
-    const src = t.patterns?.[start];
-    if (!src) return t;
-    const group = trackGroup(t, start);
-    const p = tilePattern(src, len);
-    const off = typeof p.steps[0] === "boolean" ? false : 0;
-    const on = typeof p.steps[0] === "boolean" ? true : 1;
-    const words = `${t.engineKey} ${t.name}`;
-    const clear = (from, to) => { for (let i = from; i < to; i++) p.steps[i] = off; };
-    if (group === "bass" || group === "lead") clear(0, len);
-    else if (group === "drums" && KICK_RE.test(words)) clear(lastBar, len);
-    else if (group === "drums" && SNARE_RE.test(words)) {
-      const first = p.steps.findIndex(Boolean);
-      const note = first >= 0 && Number.isFinite(p.notes?.[first]) ? p.notes[first] : 36;
-      for (let i = lastBar; i < len; i++) {
-        const k = i - lastBar;
-        const hit = k < bar / 2 ? k % 2 === 0 : true;
-        p.steps[i] = hit ? on : off;
-        if (!hit) continue;
-        if (p.notes) p.notes[i] = note;
-        if (p.lengths) p.lengths[i] = 1;
-        if (p.velocities) p.velocities[i] = Math.min(1, 0.45 + 0.55 * (k / bar));
-        if (p.chords) p.chords[i] = null;
-        if (p.ratchets) p.ratchets[i] = 1;
-      }
-    }
-    const patterns = (t.patterns || []).slice();
-    while (patterns.length <= slot) patterns.push(null);
-    patterns[slot] = p;
-    return { ...t, patterns };
-  });
-  const out = { ...newS, tracks };
-  // Nothing left to play (no drums and no chords): the start pattern as it
-  // is, rather than bars of silence.
-  if (!slotUsed(out, slot)) {
-    out.tracks = (newS?.tracks || []).map(t => {
-      const src = t.patterns?.[start];
-      if (!src || t.engineKey === "bus") return t;
-      const patterns = (t.patterns || []).slice();
-      while (patterns.length <= slot) patterns.push(null);
-      patterns[slot] = tilePattern(src, len);
-      return { ...t, patterns };
-    });
-  }
-  return out;
 }

@@ -553,7 +553,7 @@ export async function startPlayback(opts = {}) {
       // arrangement) withholds the track exactly as mute does.
       // It keeps COUNTING, though: left frozen, a muted track came back on the
       // step it was muted on rather than the one everyone else is on.
-      if (!isBus && (t._clipOff || t._leaving || t._staged || (soloAudible ? !soloAudible.has(t) : t.muted))) { skipTrackStep(t); continue; }
+      if (!isBus && (t._clipOff || t._leaving || t._staged || t._held || (soloAudible ? !soloAudible.has(t) : t.muted))) { skipTrackStep(t); continue; }
       const speed = Math.max(0.0001, t.speed ?? 1);
       const effDur = baseStepDur / speed;
       t.speedAccum = (t.speedAccum ?? 0) + speed;
@@ -744,9 +744,9 @@ export async function startPlayback(opts = {}) {
     // lands the session is a different song: every track starts from its
     // first step, and the queue and the chain have no say this bar.
     const tr = transitionStep(time + baseStepDur, baseStepDur, barLine);
-    if (tr === "land" || tr === "bridge") {
+    if (tr === "land") {
       state.chainBarCount = 0;
-      if (tr === "land" && state.patternMode === "arrange") seedArrangement(state.tick, { startBar: 0, deferUi: true, fromHere: true });
+      if (state.patternMode === "arrange") seedArrangement(state.tick, { startBar: 0, deferUi: true, fromHere: true });
       else restartTrackCounts();
       return;
     }
