@@ -997,53 +997,6 @@ export default function ComposeChat({
                   ? "auditioning: you are hearing the changes, but the song does not have them yet."
                   : "these changes aren't in the song yet. audition drops them into what's playing; keep makes them the song."}
               </div>
-              <div className={styles.chatTransition} title="how the changes arrive in what is playing">
-                <select
-                  className={styles.chatModelSelect}
-                  value={trans.when}
-                  onChange={(e) => setTrans({ when: e.target.value as TransitionPrefs["when"] })}
-                  aria-label="when"
-                  title="next bar: wait for the downbeat. now: as soon as possible"
-                >
-                  <option value="bar">next bar</option>
-                  <option value="now">now</option>
-                </select>
-                <select
-                  className={styles.chatModelSelect}
-                  value={trans.shape}
-                  onChange={(e) => setTrans({ shape: e.target.value as TransitionPrefs["shape"] })}
-                  aria-label="shape"
-                  title={SHAPES.map((k) => `${k}: ${SHAPE_TIPS[k]}`).join("\n")}
-                >
-                  {SHAPES.map((k) => (
-                    <option key={k} value={k} title={SHAPE_TIPS[k]}>{k}</option>
-                  ))}
-                </select>
-                <select
-                  className={styles.chatModelSelect}
-                  value={trans.bars}
-                  disabled={trans.shape === "cut"}
-                  onChange={(e) => setTrans({ bars: Number(e.target.value) })}
-                  aria-label="length"
-                  title="how many bars the transition runs: how long the songs overlap on a sweep or fade, how long a bridge is written"
-                >
-                  {[1, 2, 4, 8].map((b) => (
-                    <option key={b} value={b}>{b} bar{b > 1 ? "s" : ""}</option>
-                  ))}
-                </select>
-                <select
-                  className={styles.chatModelSelect}
-                  value={trans.tempo}
-                  disabled={trans.shape === "cut" || trans.shape === "stagger" || trans.shape === "bridge"}
-                  onChange={(e) => setTrans({ tempo: e.target.value as TransitionPrefs["tempo"] })}
-                  aria-label="tempo"
-                  title="when the bpm differs. auto: ramp a small change across the length, jump a big one. cut, stagger and bridge jump"
-                >
-                  <option value="auto">tempo: auto</option>
-                  <option value="jump">tempo: jump</option>
-                  <option value="ramp">tempo: ramp</option>
-                </select>
-              </div>
               <div className={styles.chatReviewBtns}>
                 <button
                   className={styles.smallBtn}
@@ -1074,6 +1027,52 @@ export default function ComposeChat({
               </div>
             </div>
           )}
+          <div className={styles.chatTransition} title="how a turn's changes arrive in what is playing: picked before sending, or in review">
+            <select
+              className={styles.chatModelSelect}
+              value={trans.when}
+              onChange={(e) => setTrans({ when: e.target.value as TransitionPrefs["when"] })}
+              aria-label="when"
+              title="next bar: wait for the downbeat. now: as soon as possible"
+            >
+              <option value="bar">next bar</option>
+              <option value="now">now</option>
+            </select>
+            <select
+              className={styles.chatModelSelect}
+              value={trans.shape}
+              onChange={(e) => setTrans({ shape: e.target.value as TransitionPrefs["shape"] })}
+              aria-label="shape"
+              title={SHAPES.map((k) => `${k}: ${SHAPE_TIPS[k]}`).join("\n")}
+            >
+              {SHAPES.map((k) => (
+                <option key={k} value={k} title={SHAPE_TIPS[k]}>{k}</option>
+              ))}
+            </select>
+            <select
+              className={styles.chatModelSelect}
+              value={trans.bars}
+                  onChange={(e) => setTrans({ bars: Number(e.target.value) })}
+              aria-label="length"
+              title="how many bars the transition runs: how long the songs overlap on a sweep or fade, and how long a bridge is. A bridge is written in the background as soon as a turn's changes arrive, at this length, whatever shape is picked"
+            >
+              {[1, 2, 4, 8].map((b) => (
+                <option key={b} value={b}>{b} bar{b > 1 ? "s" : ""}</option>
+              ))}
+            </select>
+            <select
+              className={styles.chatModelSelect}
+              value={trans.tempo}
+              disabled={trans.shape === "cut" || trans.shape === "stagger" || trans.shape === "bridge"}
+              onChange={(e) => setTrans({ tempo: e.target.value as TransitionPrefs["tempo"] })}
+              aria-label="tempo"
+              title="when the bpm differs. auto: ramp a small change across the length, jump a big one. cut, stagger and bridge jump"
+            >
+              <option value="auto">tempo: auto</option>
+              <option value="jump">tempo: jump</option>
+              <option value="ramp">tempo: ramp</option>
+            </select>
+          </div>
           <div className={styles.chatRow} hidden={tab !== "chat"}>
             <textarea
               ref={inputRef}

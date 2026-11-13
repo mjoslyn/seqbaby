@@ -4859,10 +4859,12 @@ discard    throw them away (putting back the pre-audition session first)
 
 ### Transitions (`transition.js` + `transitionPlan.js`)
 
-How the review bar's writes reach what is playing, picked in the bar and kept
-per browser (`seqbaby.transition.v1`): **when** (next bar, the default, or
-now), **shape**, **length** (1 / 2 / 4 / 8 bars) and **tempo** (auto / jump
-/ ramp). Exposed as `window.seqbaby.transitionTo(session, opts)` (a Promise of
+How the review bar's writes reach what is playing, picked in the compose
+drawer above the input (always on show, so it is set before a turn is sent
+as well as in review) and kept per browser (`seqbaby.transition.v1`):
+**when** (next bar, the default, or now), **shape**, **length** (1 / 2 / 4 /
+8 bars, enabled whatever the shape, since it is also the length of the
+bridge written ahead) and **tempo** (auto / jump / ramp). Exposed as `window.seqbaby.transitionTo(session, opts)` (a Promise of
 `{landed}`), `cancelTransition`, `finishTransition`, `transitionPending`, and
 `bridge` (the bridge's paperwork, below).
 
