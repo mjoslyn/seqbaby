@@ -743,12 +743,14 @@ export async function startPlayback(opts = {}) {
     // its sweep and tempo a step at a time and lands on a bar line. When it
     // lands the session is a different song: every track starts from its
     // first step, and the queue and the chain have no say this bar.
-    if (transitionStep(time + baseStepDur, baseStepDur, barLine)) {
+    const tr = transitionStep(time + baseStepDur, baseStepDur, barLine);
+    if (tr === "land" || tr === "bridge") {
       state.chainBarCount = 0;
-      if (state.patternMode === "arrange") seedArrangement(state.tick, { startBar: 0, deferUi: true, fromHere: true });
+      if (tr === "land" && state.patternMode === "arrange") seedArrangement(state.tick, { startBar: 0, deferUi: true, fromHere: true });
       else restartTrackCounts();
       return;
     }
+    if (tr === "hold") { state.chainBarCount = 0; return; }
     // A view opened while playing takes the transport with it here (views.js
     // raised the flag): into arrange mode, the arrangement is seeded from the
     // start marker at this bar line, as a play press would seed it.

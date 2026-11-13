@@ -50,16 +50,30 @@ declare global {
         rebuilt: number;
       } | null;
       /**
-       * mergeSet on a bar line (public/js/transition.js): `cut` lands on the
-       * next bar line (`when: "now"`: at once), `sweep` closes a master
-       * lowpass over `bars` bars and lands under it. `tempo` auto ramps a
-       * small bpm difference across the sweep and jumps a large one. Stopped,
-       * it lands at once. Resolves `landed: false` when cancelled first.
+       * mergeSet on a bar line (public/js/transition.js), shaped: `cut`,
+       * `sweep` (a master lowpass), `drop` (the old song thins by group),
+       * `fade` (the level dips), `stagger` (the new song arrives by group)
+       * or `bridge` (a written section, `bridge` given). `tempo` auto ramps a
+       * small bpm difference and jumps a large one. Stopped, it lands at
+       * once. Resolves `landed: false` when cancelled first.
        */
       transitionTo?: (
         data: unknown,
-        opts?: { when?: "bar" | "now"; shape?: "cut" | "sweep"; bars?: number; tempo?: "auto" | "jump" | "ramp" },
+        opts?: {
+          when?: "bar" | "now";
+          shape?: "cut" | "sweep" | "drop" | "fade" | "stagger" | "bridge";
+          bars?: number;
+          tempo?: "auto" | "jump" | "ramp";
+          bridge?: { session: unknown; slot: number; start: number };
+        },
       ) => Promise<{ landed: boolean }>;
+      /** A bridge's paperwork (public/js/transitionPlan.js). */
+      bridge?: {
+        freeSlot: (s: unknown) => number;
+        bridgePrompt: (oldS: unknown, newS: unknown, slot: number, bars: number, startSlot: number) => string;
+        bridgeSession: (newS: unknown, result: unknown, slot: number) => unknown;
+        bridgeHasNotes: (s: unknown, slot: number) => boolean;
+      };
       /** Drop a pending transition without landing it. */
       cancelTransition?: () => boolean;
       /** Land a pending transition now. */

@@ -4855,42 +4855,72 @@ discard    throw them away (putting back the pre-audition session first)
 
 How the review bar's writes reach what is playing, picked in the bar and kept
 per browser (`seqbaby.transition.v1`): **when** (next bar, the default, or
-now), **shape** (cut, the default, or sweep), **length** (1 / 2 / 4 / 8 bars
-of sweep) and **tempo** (auto / jump / ramp). Exposed as
-`window.seqbaby.transitionTo(session, opts)` (a Promise of `{landed}`),
-`cancelTransition`, `finishTransition`, `transitionPending`.
+now), **shape**, **length** (1 / 2 / 4 / 8 bars) and **tempo** (auto / jump
+/ ramp). Exposed as `window.seqbaby.transitionTo(session, opts)` (a Promise of
+`{landed}`), `cancelTransition`, `finishTransition`, `transitionPending`, and
+`bridge` (the bridge's paperwork, below).
 
-- **It lands in the scheduler callback, on a bar line**, through `mergeSet`,
-  for the queued pattern switch's reason: the next callback is the new bar's
-  first step. The transport calls `transitionStep` once per step after the
-  bar line is worked out; on a landing every track starts from its first step
-  (`restartTrackCounts`, or the arrangement seeded from bar 0 in arrange
-  mode) and the queue and the chain sit that bar out. Stopped, it lands at
-  once. Then `markExternalEdit("compose")` and a jam flush, because the click
-  that asked for it settled bars ago.
-- **A sweep is a lowpass on the master** (between `masterGain` and
-  `masterLimiter`, made by the first sweep and left in, open at 20kHz),
-  closed step by step over whole bars (`sweepHz`: exponential in pitch, slow
-  at first, to 280Hz with the resonance rising) and opened over a bar after
-  the landing (half a bar for a one-bar sweep). Measured: highs above 2kHz
-  fall 35dB at the bottom of the dive. `when: "bar"` starts it on the next
-  bar line; `now` starts it at once and lands on the bar line that makes it
-  `bars` long, counting the bar under way only when half of it is left.
-- **The tempo** (`tempoMode`): a cut jumps on the downbeat (the merge writes
-  the bpm). Auto ramps a sweep whose tempos are within 15%, and jumps a half
-  / double time pair or a bigger gap. A ramp moves only the TRANSPORT's bpm,
-  a step at a time, reaching the new tempo on the landing: the bpm field,
-  the synced LFOs and the synced delays are retuned once, by the merge, since
-  retuning them per step would rebuild LFOs in the scheduler callback, and
-  the field holding the old song's tempo until the new one lands is what
-  keeps a history check mid-ramp quiet.
-- **Buttons while one is on its way**: stop calls a pending audition off;
-  keep over a pending audition replaces it; keep pressed twice lands at once;
-  discard, `new`, opening a song and sending the next turn cancel or land it
-  (sending lands it: the turn is about what is playing). Stopping the
-  transport lands it.
-- Not shared in a jam: the sweep and the ramp play on the screen that pressed
-  the button. Peers get the merged session, so their tempo jumps.
+| shape | what the length is |
+|---|---|
+| cut | nothing: the next bar line, or at once with `now` |
+| sweep | the overlap: the new song plays from the start, the old song's own tracks are swept down (a -36dB high shelf on each, its corner sliding 20kHz to 400Hz) and gone at the end |
+| fade | the overlap: the old tracks dip to -36dB as the new ones rise from it |
+| drop | the old song thins: harmony + lead leave, then the bass, then the drums at the start of the last bar (the last beat of a one-bar drop), the near-silence before the new song hits |
+| stagger | the new song arrives by group across it: drums, bass, harmony, lead, one a bar over four, one a beat over one, the old song's same group making way as each arrives |
+| bridge | a section the model writes exactly that long, played between the two |
+
+- **Every merge runs in the scheduler callback**, for the queued pattern
+  switch's reason: the next callback is the next step. The transport calls
+  `transitionStep` once per step after the bar line is worked out, and it
+  answers `land` (a song landed on this bar line: every track starts from its
+  first step, the queue and the chain sit the bar out; the arrangement is
+  seeded from bar 0 in arrange mode), `bridge` (the same without the seed) or
+  `hold` (two songs or a bridge are under way: the chain waits). Stopped, it
+  lands at once. Then `markExternalEdit("compose")` and a jam flush, since
+  the click that asked for it settled bars ago.
+- **Groups** (`trackGroup`, on the serialized track): a drum kit is drums; an
+  engine or name that says bass, or a part written low with no chords, is
+  bass; chords or stacked notes or a pad / keys name is harmony; the rest is
+  lead; a bus is none (it carries what feeds it). **A track's identity across
+  the two songs is engine + name** (`trackKey`), mergeSet's own: a track in
+  both switches to its new part at once rather than being faded or dropped.
+- **Two songs at once is one session** (`mixSessions`): the new song's
+  globals, the tracks each shape keeps from either, every send, sidechain and
+  pad index renumbered into the mixed list or let go. `overlapSession` (sweep,
+  fade) and `compositeSession` (stagger, by group). The old tracks play their
+  own patterns on the same slot number as the new ones.
+- **The overlap is on the old tracks' own nodes**, not the master: the eq's
+  high shelf (`t.eqNode.high`) for a sweep, the rack's output gain for a fade
+  (the new tracks rise on theirs). A filter put on a track's output would race
+  the rack's own deferred rewiring (`softSwitch`). The old tracks are removed
+  by the landing; a cancel puts their shelf and gain back as they were.
+- **A drop stops tracks the way a stopped clip is stopped** (`_clipOff`,
+  performance state, never saved), so the save, undo and a jam never see the
+  thinning; the landing (or a cancel) starts them again.
+- **A bridge is written by a compose turn of its own** (`runTurn`,
+  ComposeChat.tsx), when audition or keep is pressed with bridge picked and
+  the proposal has none of that length: `bridgePrompt` asks for exactly
+  `bars` bars in a free slot of the new song (`freeSlot`), leading into the
+  pattern it starts from, with a summary of the song playing now
+  (`songSummary`). Only that slot comes back (`bridgeSession`), plus any track
+  the model added for it (playing nothing else), so a turn that also touched
+  the song changes nothing more. It lands on a bar line, holds that slot for
+  `bars` bar lines, then lands the new song and switches to its start; the
+  slot is empty again after. `stop` with bridge picked is a cut on the bar:
+  there is no bridge back. A button pressed while one is being written drops
+  what it brings back (`bridgeRun`).
+- **The tempo** (`tempoMode`): cut, stagger and bridge jump (the stagger with
+  its drums, the bridge with its first bar). Auto ramps the others when the
+  tempos are within 15%, and jumps a half / double time pair or a bigger gap.
+  A ramp moves only the TRANSPORT's bpm, a step at a time, reaching the new
+  tempo on the landing: the bpm field, the synced LFOs and the synced delays
+  are retuned once, by the merge.
+- **Buttons while one is on its way**: stop calls a pending audition off (a
+  stagger part way puts the old song back); keep over a pending audition
+  replaces it; keep pressed twice lands at once; discard, `new`, opening a
+  song and sending the next turn cancel or land it (sending lands it: the turn
+  is about what is playing). Stopping the transport lands it.
+- Not shared in a jam as it happens: peers get the landed session.
 
 ## Jam — several studios, one song (`jam.js` + `jamSync.js` + `app/JamPanel.tsx`)
 
