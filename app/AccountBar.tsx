@@ -37,7 +37,8 @@ export function AccountBar({
   avatarGrid = null,
   serverKey = false,
   budgetOut = false,
-  canPickModel = false,
+  models = [],
+  unlocked = false,
   defaultModel,
   viewing = null,
 }: {
@@ -55,8 +56,11 @@ export function AccountBar({
   serverKey?: boolean;
   /** Whether that key has run out of budget (lib/composeJobs.js). */
   budgetOut?: boolean;
-  /** This account may pick its compose model (COMPOSE_MODEL_PICKERS). */
-  canPickModel?: boolean;
+  /** The compose models this visitor may pick (lib/composeModels.js's
+   *  allowedModels); empty means no menu. */
+  models?: { id: string; label: string }[];
+  /** Opened an unlock link (lib/unlock.js): compose without an account. */
+  unlocked?: boolean;
   /** The deploy's own compose model. */
   defaultModel?: string;
   /** Someone else's song, named by the URL: drawn as "title by @owner". */
@@ -196,7 +200,8 @@ export function AccountBar({
           signedIn={!!name}
           serverKey={serverKey}
           budgetOut={budgetOut}
-          canPickModel={canPickModel}
+          models={models}
+          unlocked={unlocked}
           defaultModel={defaultModel}
         />
         <button

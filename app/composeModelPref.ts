@@ -7,11 +7,13 @@ import { COMPOSE_MODELS } from "@/lib/composeModels.js";
 const STORE = "seqbaby.composeModel.v1";
 export const MODEL_EVENT = "seqbaby:composemodel";
 
-/** The remembered pick, or the fallback when there is none (or it is not on the menu). */
-export function readModelPref(fallback: string): string {
+/** The remembered pick, or the fallback when there is none (or it is not on
+ *  the menu this visitor gets: `allowed`, every model when left out). */
+export function readModelPref(fallback: string, allowed?: string[]): string {
   try {
     const saved = window.localStorage.getItem(STORE);
-    if (saved && COMPOSE_MODELS.some((m) => m.id === saved)) return saved;
+    const ok = allowed ? allowed : COMPOSE_MODELS.map((m) => m.id);
+    if (saved && ok.includes(saved)) return saved;
   } catch {
     /* blocked storage: the fallback stands */
   }

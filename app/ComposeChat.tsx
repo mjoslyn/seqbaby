@@ -10,7 +10,7 @@ import { trySave } from "@/app/songs/trySave";
 import { composeModelLabel } from "@/lib/composeModels.js";
 import { signupHref } from "@/lib/safeNext.js";
 import { SITE_OUT_OF_BUDGET } from "@/lib/composeKey.js";
-import { COMPOSE_MODELS, DEFAULT_COMPOSE_MODEL } from "@/lib/composeModels.js";
+import { DEFAULT_COMPOSE_MODEL } from "@/lib/composeModels.js";
 import { MODEL_EVENT, readModelPref, writeModelPref } from "@/app/composeModelPref";
 import styles from "@/app/ui.module.css";
 
@@ -193,7 +193,7 @@ function describeFailure(status: number, raw: string, data: ComposeResponse | nu
 // store the save and songs menus do.
 /**
  * @param signedIn whether there is an account behind this panel. Compose
- *        needs one: signed out, the button goes to sign up.
+ *        needs one, or an unlock link: otherwise the button goes to sign up.
  * @param serverKey whether this deploy has an Anthropic key, which every
  *        turn runs on. Without one compose is switched off.
  * @param budgetOut whether that key has run out of budget, as the server
@@ -203,32 +203,42 @@ export default function ComposeChat({
   signedIn,
   serverKey,
   budgetOut,
-  canPickModel = false,
+  models = [],
+  unlocked = false,
   defaultModel = DEFAULT_COMPOSE_MODEL,
 }: {
   signedIn: boolean;
   serverKey: boolean;
   budgetOut: boolean;
-  /** This account is on the deploy's COMPOSE_MODEL_PICKERS: show a model menu.
-   *  The route checks the same list, so the menu is only ever a request. */
-  canPickModel?: boolean;
+  /** The models this visitor may pick (lib/composeModels.js's allowedModels:
+   *  every one on COMPOSE_MODEL_PICKERS, sonnet and opus for an unlock). Two
+   *  or more is a menu. The route checks the same rule, so the menu is only
+   *  ever a request. */
+  models?: { id: string; label: string }[];
+  /** Opened an unlock link (lib/unlock.js): compose without an account. */
+  unlocked?: boolean;
   /** The deploy's own model, what the menu starts on. */
   defaultModel?: string;
 }) {
-  // The picked model, remembered per browser. Only sent when the account may
-  // pick; anything the route does not allow runs on the deploy's model.
+  // The picked model, remembered per browser. Only sent when there is a menu;
+  // anything the route does not allow runs on the deploy's model.
+  const canPickModel = models.length > 1;
+  // An account, or an unlock link's cookie: either may compose.
+  const canCompose = signedIn || unlocked;
+  const modelIds = models.map((m) => m.id).join(",");
   const [model, setModel] = useState(defaultModel);
   useEffect(() => {
     if (!canPickModel) return;
-    setModel(readModelPref(defaultModel));
+    const ids = modelIds.split(",");
+    setModel(readModelPref(defaultModel, ids));
     // A pick made anywhere else on the page is a pick here too.
     const onPick = (e: Event) => {
       const id = (e as CustomEvent<{ model?: string }>).detail?.model;
-      if (id) setModel(id);
+      if (id && ids.includes(id)) setModel(id);
     };
     window.addEventListener(MODEL_EVENT, onPick);
     return () => window.removeEventListener(MODEL_EVENT, onPick);
-  }, [canPickModel, defaultModel]);
+  }, [canPickModel, defaultModel, modelIds]);
   const pickModel = (id: string) => {
     setModel(id);
     writeModelPref(id);
@@ -413,7 +423,7 @@ export default function ComposeChat({
   const send = useCallback(async (prompt?: string, modelOverride?: string) => {
     const text = (prompt ?? input).trim();
     if (!text || sending || !window.seqbaby) return;
-    if (!signedIn) return;
+    if (!canCompose) return;
     // A transition still waiting on its bar line lands now: the turn is about
     // what is playing, and an audition or keep the button already asked for.
     bridgeRun.current++;
@@ -595,7 +605,7 @@ export default function ComposeChat({
       setSending(false);
       setLive([]);
     }
-  }, [input, sending, messages, signedIn, canPickModel, model]);
+  }, [input, sending, messages, canCompose, canPickModel, model]);
 
   // ---- the review bar ------------------------------------------------------
   //
@@ -869,7 +879,7 @@ export default function ComposeChat({
           // Composing needs an account: a signed-out visitor is sent to make
           // one, and comes back here after (the studio's leave guard asks
           // first if there is unsaved work).
-          if (!signedIn) {
+          if (!canCompose) {
             location.href = signupHref(location.pathname + location.search);
             return;
           }
@@ -883,7 +893,7 @@ export default function ComposeChat({
           ? (review.before
               ? "auditioning changes: open to keep or stop them"
               : "changes waiting: open to audition or keep them")
-          : signedIn
+          : canCompose
           ? "ask for changes to this song"
           : "make an account to compose"}
       >
@@ -928,7 +938,7 @@ export default function ComposeChat({
                 onChange={(e) => pickModel(e.target.value)}
                 disabled={sending}
               >
-                {COMPOSE_MODELS.map((m) => (
+                {models.map((m) => (
                   <option key={m.id} value={m.id}>
                     {m.label}
                   </option>

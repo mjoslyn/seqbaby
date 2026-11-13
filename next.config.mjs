@@ -22,6 +22,14 @@ const nextConfig = {
         destination: "/studio",
         permanent: false,
       })),
+      // An unlock link (lib/unlock.js): the route sets the cookie and lands
+      // on the studio with the code out of the address bar.
+      ...["/", "/studio"].map((source) => ({
+        source,
+        has: [{ type: "query", key: "unlock" }],
+        destination: "/api/unlock",
+        permanent: false,
+      })),
       {
         source: "/",
         has: [{ type: "header", key: "user-agent", value: ".*SeqbabyApp/.*" }],

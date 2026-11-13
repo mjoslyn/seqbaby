@@ -19,7 +19,9 @@ import { first } from "@/lib/data/db.js";
 import { SITE_DESCRIPTION, SITE_URL, shareCard } from "@/app/shareCard";
 import { linkedSong, linkedSongCard, jamHostName } from "@/app/songs/linkedSongTitle";
 import { songShareTitle, jamShareTitle } from "@/app/shareCopy";
-import { DEFAULT_COMPOSE_MODEL, canPickModel } from "@/lib/composeModels.js";
+import { DEFAULT_COMPOSE_MODEL, allowedModels, canPickModel } from "@/lib/composeModels.js";
+import { UNLOCK_COOKIE, readUnlock } from "@/lib/unlock.js";
+import { cookies } from "next/headers";
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
@@ -151,6 +153,12 @@ async function AccountBarSlot({ searchParams }: { searchParams: SearchParams }) 
     username = profile?.username ?? null;
   }
 
+  // The unlock code's cookie (lib/unlock.js): compose without an account, and
+  // sonnet and opus on the menu.
+  const unlocked = !!(await readUnlock((await cookies()).get(UNLOCK_COOKIE)?.value, env.COMPOSE_UNLOCK_CODE));
+  const defaultModel = env.ANTHROPIC_MODEL || DEFAULT_COMPOSE_MODEL;
+  const models = allowedModels({ picker: canPickModel(user?.email, env.COMPOSE_MODEL_PICKERS), unlocked, defaultModel });
+
   // Whether the deploy has a key of its own decides what the compose panel
   // offers: read here, in a server component, because the browser must not be
   // told anything about it beyond whether it exists.
@@ -162,8 +170,9 @@ async function AccountBarSlot({ searchParams }: { searchParams: SearchParams }) 
       avatarGrid={avatarGrid}
       serverKey={!!env.ANTHROPIC_API_KEY}
       budgetOut={budgetOut}
-      canPickModel={canPickModel(user?.email, env.COMPOSE_MODEL_PICKERS)}
-      defaultModel={env.ANTHROPIC_MODEL || DEFAULT_COMPOSE_MODEL}
+      models={models}
+      unlocked={unlocked}
+      defaultModel={defaultModel}
       viewing={viewing}
     />
   );

@@ -4,7 +4,9 @@ import { cfEnv } from "@/lib/cf";
 import { bucketFor, newJobId, newSecret, siteOutOfBudget } from "@/lib/composeJobs.js";
 import { newCtx } from "@/mcp/composeTurn.mjs";
 import { SITE_OUT_OF_BUDGET } from "@/lib/composeKey.js";
-import { canPickModel, pickedModel } from "@/lib/composeModels.js";
+import { DEFAULT_COMPOSE_MODEL, allowedModels, canPickModel, pickedModel } from "@/lib/composeModels.js";
+import { UNLOCK_COOKIE, readUnlock } from "@/lib/unlock.js";
+import { cookies } from "next/headers";
 
 export const dynamic = "force-dynamic";
 
@@ -17,8 +19,9 @@ type ChatTurn = { role: "user" | "assistant"; text: string };
 // a Durable Object (workers/composeJob.ts) that runs it in an alarm nobody is
 // waiting on, and the browser polls /api/compose/status.
 //
-// A turn runs on the deploy's key and needs an account: the spend is the
-// site's. There is no bring-your-own-key path any more.
+// A turn runs on the deploy's key and needs an account, or the unlock code's
+// cookie (lib/unlock.js): the spend is the site's. There is no
+// bring-your-own-key path any more.
 export async function POST(req: Request) {
   let body: {
     message?: string;
@@ -37,7 +40,8 @@ export async function POST(req: Request) {
   const env = await cfEnv();
   const user = await currentUser();
   const userId = user?.id ?? null;
-  if (!userId) {
+  const unlockId = await readUnlock((await cookies()).get(UNLOCK_COOKIE)?.value, env.COMPOSE_UNLOCK_CODE);
+  if (!userId && !unlockId) {
     return NextResponse.json({ error: "make an account to compose" }, { status: 401 });
   }
   if (!env.ANTHROPIC_API_KEY) {
@@ -70,11 +74,18 @@ export async function POST(req: Request) {
     .slice(-16)
     .map((h) => ({ role: h.role, text: h.text.slice(0, 20000) }));
 
-  // A model asked for is honoured only for an account on the deploy's list,
-  // and only from COMPOSE_MODELS; anything else runs on the deploy's own.
-  const model = pickedModel(body.model, canPickModel(user?.email, env.COMPOSE_MODEL_PICKERS));
+  // A model asked for is honoured only when this visitor may pick it: every
+  // model for an account on the deploy's list, sonnet and opus for an unlock;
+  // anything else runs on the deploy's own.
+  const model = pickedModel(body.model, allowedModels({
+    picker: canPickModel(user?.email, env.COMPOSE_MODEL_PICKERS),
+    unlocked: !!unlockId,
+    defaultModel: env.ANTHROPIC_MODEL || DEFAULT_COMPOSE_MODEL,
+  }));
 
-  const bucket = bucketFor({ userId, keyHash: null });
+  // An account's own limits; an unlocked visitor's own too, by the visitor id
+  // their cookie carries.
+  const bucket = bucketFor({ userId, keyHash: null, unlockId });
   if (!bucket) return NextResponse.json({ error: "couldn't tell whose turn that is" }, { status: 400 });
 
   const id = newJobId();

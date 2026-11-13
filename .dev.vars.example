@@ -19,6 +19,9 @@ BETTER_AUTH_SECRET=change-me-to-a-long-random-string
 # ANTHROPIC_MODEL=claude-haiku-5-5
 # Accounts (by email) that get a model menu in the compose panel:
 # COMPOSE_MODEL_PICKERS=you@example.com, friend@example.com
+# A code shared as /studio?unlock=<code>: compose without an account, and
+# sonnet / opus in its model menu. Change it to rotate (old links and cookies stop).
+# COMPOSE_UNLOCK_CODE=some-code
 
 # Superbugs page (app/superbugs, app/api/bugs) — OPTIONAL. A fine-grained GitHub
 # token with Issues: write on the repo. Without it the form falls back to a

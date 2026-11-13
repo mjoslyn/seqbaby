@@ -14,6 +14,10 @@ interface CloudflareEnv {
   ANTHROPIC_MODEL?: string;
   /** Emails allowed to pick their compose model (comma or space separated). */
   COMPOSE_MODEL_PICKERS?: string;
+  /** The unlock code (lib/unlock.js): /studio?unlock=<code> lets compose run
+   *  without an account and offers sonnet and opus. Rotate it to cut off every
+   *  link and cookie handed out under the old one. */
+  COMPOSE_UNLOCK_CODE?: string;
   GITHUB_ISSUES_TOKEN?: string;
   GITHUB_ISSUES_REPO?: string;
   TURNSTILE_SECRET_KEY?: string;

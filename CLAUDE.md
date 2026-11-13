@@ -78,6 +78,7 @@ env / fx / eq / comp / mod / automation per track.
 │   ├── api/auth/[...all]/     Better Auth's endpoints (the links in its emails land here)
 │   ├── api/bay/               the studio's patch bay (bodies too big for a server action)
 │   ├── api/me/route.ts        who is signed in, for islands on cached pages
+│   ├── api/unlock/route.ts    an unlock link (?unlock=<code>) sets the compose unlock cookie
 │   ├── api/admin/import/      the one-off move from Supabase (off unless MIGRATION_TOKEN is set)
 │   └── {songs,patches,profile,auth,account}/actions.ts   server actions over lib/data
 ├── public/
@@ -4629,6 +4630,21 @@ panel ──▶ POST /api/compose ──▶ ComposeLimits.take ──▶ Compose
   (`signupHref`, lib/safeNext.js, `next` the studio URL, which the
   confirmation email carries back). `ComposeJob.start` still takes an
   optional key and `lib/composeKey.js` its shape check; nothing passes one.
+- **An unlock code lets a visitor compose without an account** (`lib/unlock.js`,
+  the `COMPOSE_UNLOCK_CODE` secret). The link is `/studio?unlock=<code>` (or
+  `/?unlock=`): next.config.mjs redirects it to `/api/unlock`, which checks
+  the code, sets the `sq_unlock` cookie (httpOnly, a year) and lands on
+  `/studio` with the code out of the address bar; a wrong code just lands.
+  The cookie never holds the code: it is a random visitor id and an HMAC of
+  it keyed by the code (`mintUnlock` / `readUnlock`), so each unlocked visitor
+  has limits of their own (`bucketFor`'s `unlock/<id>`) and **rotating the
+  secret cuts off every link and cookie at once**. The compose route accepts
+  an account or a valid cookie; the studio page reads the same cookie to
+  enable the panel. An unlock also gets a model menu of the deploy's model
+  plus sonnet and opus (`allowedModels`, composeModels.js; an account on
+  `COMPOSE_MODEL_PICKERS` still gets every model), and the route honours a
+  pick only from that list. Signed out there is no song to save into, so a
+  kept turn says to press save. `test/unlock.test.js`.
 - **The view token is how a browser proves a job is its own** to poll: a job
   holds somebody's song. An account still reaches its own jobs without one. The
   status route tries the token first and only then resolves a session: this
