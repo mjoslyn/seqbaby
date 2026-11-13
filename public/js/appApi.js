@@ -10,7 +10,7 @@ import { canRedo, canUndo, hasUnsavedChanges, markSaved, redo, undo } from "./hi
 import { flushJam, inJam, jamState, jamTogglePlay, receiveJamPatch, receiveJamPhase, receiveJamState, startJam, stopJam } from "./jam.js";
 import { mergeSet } from "./liveSet.js";
 import { cancelTransition, finishTransition, transitionPending, transitionTo } from "./transition.js";
-import { bridgeHasNotes, bridgePrompt, bridgeSession, freeSlot } from "./transitionPlan.js";
+import { bridgeHasNotes, bridgePrompt, bridgeSession, codeBridge, freeSlot } from "./transitionPlan.js";
 import { primeAudioForIOS } from "./main.js";
 import { startPlayback, stopPlayback } from "./transport.js";
 import { launchClip, stopClip } from "./clips.js";
@@ -54,7 +54,7 @@ export function installAppApi() {
     transitionPending,
     // A bridge's paperwork, for the panel that asks the model for one: the
     // slot it goes in, what to ask, and the new song with it spliced in.
-    bridge: { freeSlot, bridgePrompt, bridgeSession, bridgeHasNotes },
+    bridge: { freeSlot, bridgePrompt, bridgeSession, bridgeHasNotes, codeBridge },
     // blank the session -- back to the starter tracks with nothing written.
     // `newSet` resets; `onNewSet` is the flow around it (confirms first when
     // there is something to lose), which is what a button should call.

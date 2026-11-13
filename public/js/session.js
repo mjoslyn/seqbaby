@@ -41,12 +41,13 @@ export function storeSetsMap(m) { try { localStorage.setItem(SETS_KEY, JSON.stri
  */
 export function serializeSet({ staged = false } = {}) {
   // Tracks a transition has built ahead of its bar line are not the song's
-  // yet (transition.js): written as if they were not there, so every index
+  // yet, and the ones it is letting finish their bar are not any more
+  // (transition.js): written as if they were not there, so every index
   // counts along the song's own tracks. A merge reads them (`staged`), since
   // its comparison runs parallel to state.tracks.
-  if (!staged && state.tracks.some(t => t._staged)) {
+  if (!staged && state.tracks.some(t => t._staged || t._leaving)) {
     const all = state.tracks;
-    state.tracks = all.filter(t => !t._staged);
+    state.tracks = all.filter(t => !t._staged && !t._leaving);
     try { return serializeSongNow(); } finally { state.tracks = all; }
   }
   return serializeSongNow();

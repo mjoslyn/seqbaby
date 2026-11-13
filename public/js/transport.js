@@ -553,7 +553,7 @@ export async function startPlayback(opts = {}) {
       // arrangement) withholds the track exactly as mute does.
       // It keeps COUNTING, though: left frozen, a muted track came back on the
       // step it was muted on rather than the one everyone else is on.
-      if (!isBus && (t._clipOff || (soloAudible ? !soloAudible.has(t) : t.muted))) { skipTrackStep(t); continue; }
+      if (!isBus && (t._clipOff || t._leaving || t._staged || (soloAudible ? !soloAudible.has(t) : t.muted))) { skipTrackStep(t); continue; }
       const speed = Math.max(0.0001, t.speed ?? 1);
       const effDur = baseStepDur / speed;
       t.speedAccum = (t.speedAccum ?? 0) + speed;

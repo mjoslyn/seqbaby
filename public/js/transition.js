@@ -35,6 +35,7 @@ import { announceClips } from "./clips.js";
 import { flushJam } from "./jam.js";
 import { markExternalEdit } from "./history.js";
 import { mergeSet } from "./liveSet.js";
+import { removeTrack } from "./track.js";
 import { serializeSet } from "./session.js";
 import { releaseSilencedTracks } from "./signal.js";
 import { state, switchPattern } from "./state.js";
@@ -56,6 +57,41 @@ import {
 
 /** The transition on its way, if one is. */
 let pending = null;
+/** The most bars a landing waits for its new tracks to be built. */
+const MAX_DEFER = 4;
+
+// ---- a longer lookahead while one is on its way ----------------------------
+//
+// Building tracks ahead (below) is done a track per task, but a task is still
+// tens of milliseconds of main thread (hundreds on a phone), and the landing's
+// merge more. Tone's clock ticks on the main thread and schedules
+// `lookAhead` seconds ahead, so a stall longer than that is audio that never
+// got scheduled: the choppiness. For as long as a transition is on its way the
+// lookahead is raised; raising it only schedules further ahead (the ticks in
+// between are still scheduled at their own times) and lowering it after only
+// pauses scheduling until the clock catches up, so neither skips or doubles a
+// note. Knob moves land that much later meanwhile, which is the trade.
+const TRANSITION_LOOKAHEAD = 1.0;
+let baseLookAhead = null;   // the studio's own, read the first time it is stretched
+let stretched = false;
+function stretchLookAhead() {
+  try {
+    const ctx = Tone.getContext();
+    if (baseLookAhead == null) baseLookAhead = ctx.lookAhead;
+    stretched = true;
+    ctx.lookAhead = Math.max(baseLookAhead, TRANSITION_LOOKAHEAD);
+  } catch {}
+}
+function restoreLookAhead() {
+  if (!stretched) return;
+  stretched = false;
+  // After the landing's own work has been scheduled past, and only if no
+  // other transition has stretched it again since.
+  setTimeout(() => {
+    if (stretched || pending || baseLookAhead == null) return;
+    try { Tone.getContext().lookAhead = baseLookAhead; } catch {}
+  }, TRANSITION_LOOKAHEAD * 1000 + 200);
+}
 function fieldBpm() {
   return Number(document.getElementById("bpm")?.value) || 120;
 }
@@ -127,6 +163,7 @@ function releaseDropped(p) {
 }
 
 function told(p) {
+  restoreLookAhead();
   // The click that asked for this settled long ago, so the undo stack and a
   // jam are told now, when the song actually changed.
   markExternalEdit("compose");
@@ -136,8 +173,28 @@ function told(p) {
 }
 
 function safeMerge(session, p = null) {
+  let target = densify(p, session);
+  // The tracks this merge removes are kept a little longer, stopped and
+  // hidden (`_leaving`), until the audio reaches the bar line the merge is
+  // for. The scheduler runs a lookahead in front of the audio, so removing
+  // them at once cut the end of their last bar, already scheduled: a gap
+  // before every landing, the size of the lookahead.
+  const keys = new Set((target?.tracks || []).map(trackKey));
+  for (const t of state.tracks) {
+    if (t._leaving && keys.has(trackKey(t))) unleave(t);    // wanted again (a cancel)
+  }
+  const leaving = state.playing && p?.at
+    ? state.tracks.filter(t => !t._staged && !t._leaving && t.engineKey !== "bus" && !keys.has(trackKey(t)))
+    : [];
+  if (leaving.length) {
+    const cur = serializeSet({ staged: true }).tracks;          // parallel to state.tracks
+    const extra = leaving.map(t => ({
+      ...cur[state.tracks.indexOf(t)], soloed: false, outIndex: -1, compSourceIndex: -1,
+    }));
+    target = { ...target, tracks: [...target.tracks, ...extra] };
+  }
   let out = null;
-  try { out = mergeSet(densify(p, session)); } catch (e) { console.error("transition: merge failed", e); }
+  try { out = mergeSet(target); } catch (e) { console.error("transition: merge failed", e); }
   // A track built ahead (staged, below) that the merge kept is now the song's.
   for (const t of state.tracks) {
     if (!t._staged) continue;
@@ -145,7 +202,38 @@ function safeMerge(session, p = null) {
     t._clipOff = false;
     t.el?.classList.remove("is-staged");
   }
+  if (leaving.length) {
+    for (const t of leaving) {
+      if (!state.tracks.includes(t)) continue;
+      t._leaving = true;
+      t._clipOff = true;
+      t.el?.classList.add("is-staged");
+    }
+    releaseSilencedTracks();
+    const ctx = state.audioCtx;
+    const wait = Math.max(0, (p.at - (ctx?.currentTime ?? 0)) * 1000) + LEAVE_TAIL_MS;
+    setTimeout(dropLeaving, wait);
+  }
   return out;
+}
+
+/** How long a removed track rings on past the bar line it was removed at. */
+const LEAVE_TAIL_MS = 800;
+
+function unleave(t) {
+  t._leaving = false;
+  t._clipOff = false;
+  t.el?.classList.remove("is-staged");
+}
+
+/** Remove the tracks a landing left to finish their bar. */
+function dropLeaving() {
+  const gone = state.tracks.filter(t => t._leaving);
+  if (!gone.length) return;
+  for (const t of gone) {
+    try { removeTrack(t); } catch (e) { console.error("transition: removing a track failed", e); }
+  }
+  announceClips();
 }
 
 // ---- staging: the new tracks built before the bar line ----------------------
@@ -273,7 +361,12 @@ export function transitionTo(session, options = {}) {
     const plan = transitionSteps({ ...opts, shape: opts.shape === "cut" ? "cut" : "sweep" }, barLen, barTick);
     p.wait = plan.wait;
     p.run = plan.run;
-    if (opts.shape === "cut" && p.wait === 0) return landFinal(p);
+    // On a bar line already: the next one, not this instant, so the new tracks
+    // can be built first. Only `now` lands at once, which is what it asks for.
+    if (opts.shape === "cut" && p.wait === 0) {
+      if (opts.when === "now") return landFinal(p);
+      p.wait = barLen;
+    }
 
     if (opts.shape === "bridge") {
       // On a bar line whatever `when` says: a section starts on the one.
@@ -302,6 +395,7 @@ export function transitionTo(session, options = {}) {
     }
     if (opts.shape === "bridge") p.old = serializeSet();
     pending = p;
+    stretchLookAhead();
     startStaging(p);
     window.dispatchEvent(new CustomEvent("seqbaby:transition", { detail: { pending: true, ...opts, wait: p.wait, run: p.run } }));
     // A stage due at once (a stagger started on the bar line, or `now`) runs now.
@@ -342,6 +436,7 @@ export function cancelTransition() {
   releaseDropped(p);
   endOverlap(p, true);
   if (!p.merged) dropStaged();
+  restoreLookAhead();
   if (p.merged && p.old) {
     safeMerge(p.old);
     if (p.opts.shape === "bridge") switchPattern(p.old.activePattern ?? 0, { deferUi: true });
@@ -380,7 +475,17 @@ export function transitionStep(nextTime, stepDur, barLine) {
   const p = pending;
   if (!p) return null;
   p.done++;
+  p.at = nextTime;
   const shape = p.opts.shape;
+  // Reaching the first merge with the new tracks not all built yet: wait a
+  // bar (up to MAX_DEFER) rather than build them here, inside the scheduler,
+  // which is the stall this staging exists to keep out. Every shape's moment
+  // is counted from `wait`, so moving it a bar moves the whole plan a bar.
+  if (!p.merged && p.toStage?.length && p.done >= p.wait && (p.deferred ?? 0) < MAX_DEFER) {
+    p.deferred = (p.deferred ?? 0) + 1;
+    p.wait += stepsPerBarForMeter(transportMeter());
+    return null;
+  }
 
   if (shape === "bridge") {
     if (p.phase === "wait") {
@@ -426,13 +531,6 @@ export function transitionStep(nextTime, stepDur, barLine) {
       }
       if (shape === "fade") for (const t of p.newOnly || []) rampTo(outGain(t), fadeGain(1 - prog), nextTime, true);
     }
-  }
-  // A cut asked for late in a bar can reach its bar line before the new
-  // tracks are built: it waits one more bar rather than build them here.
-  if (shape === "cut" && barLine && p.done >= p.wait + p.run && p.toStage?.length && !p.deferred) {
-    p.deferred = true;
-    p.run += stepsPerBarForMeter(transportMeter());
-    return null;
   }
   // Land on the bar line the plan counted to, or the first one after it (a
   // meter changed by hand mid-transition moves the bar lines).

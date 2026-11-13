@@ -4910,11 +4910,29 @@ bridge written ahead) and **tempo** (auto / jump / ramp). Exposed as `window.seq
   (`is-staged`, and left out of the clip and arrange rows), and the landing
   finds them made, merged as the engine read them back (`densify`) so a
   sparse builder song does not rewrite and repaint every field. A cut asked
-  for too late in a bar to finish waits one more bar. `serializeSet` leaves
-  `_staged` tracks out (the undo stack, a jam, a save and the unsaved check
-  never see them); a merge reads them (`serializeSet({ staged: true })`),
-  since its comparison is parallel to `state.tracks`. A cancel merges them
-  away. Measured, eight worklet tracks: the landing went from 1.2s of main
+  for on a bar line waits for the next one (only `now` lands at once), and
+  EVERY shape's first merge waits a bar at a time (up to `MAX_DEFER`, 4)
+  while tracks are still being built: `wait` moves, so the whole plan moves
+  with it. `serializeSet` leaves `_staged` tracks out (the undo stack, a jam,
+  a save and the unsaved check never see them); a merge reads them
+  (`serializeSet({ staged: true })`), since its comparison is parallel to
+  `state.tracks`. A cancel merges them away. The transport withholds a staged
+  track itself (as it does `_clipOff`), since a pattern switch clears
+  `_clipOff`.
+- **The tracks a landing removes finish their bar first** (`_leaving`). The
+  scheduler runs a lookahead ahead of the audio, so removing them at the
+  merge cut the end of their last bar, already scheduled: a gap before every
+  landing, the size of the lookahead. They are kept, stopped and hidden and
+  left out of `serializeSet` like staged ones, and removed (`removeTrack`)
+  `LEAVE_TAIL_MS` after the audio reaches the bar line (`p.at`, the step time
+  the scheduler handed in). A merge that wants one back (a cancel) takes it
+  back.
+- **The lookahead is stretched while one is on its way** (1s,
+  `stretchLookAhead`), so a build step that stalls the main thread (tens of
+  ms, hundreds on a phone) does not drop audio that was never scheduled.
+  Raising it schedules further ahead and lowering it after only pauses the
+  clock until it catches up, so neither skips nor doubles a note; knob moves
+  land later meanwhile. Measured, eight worklet tracks: the landing went from 1.2s of main
   thread to 90ms. Two other costs went with it: `syncAllLFOs` asks the rack
   about its stages once rather than once per key (`syncLFO`'s `refresh`),
   and Tone's `Oscillator.getInitialValue` (33 inverse FFTs per type or
@@ -4951,7 +4969,12 @@ bridge written ahead) and **tempo** (auto / jump / ramp). Exposed as `window.seq
   the song changes nothing more. It lands on a bar line, holds that slot for
   `bars` bar lines, then lands the new song and switches to its start; the
   slot is empty again after. `stop` with bridge picked is a cut on the bar:
-  there is no bridge back. **The bridge is written ahead** (`startBridge`,
+  there is no bridge back. **A press never waits on the model**: when its
+  bridge is not written yet, `codeBridge` (transitionPlan.js, pure, tested)
+  makes one at once from the new song: its start pattern across the bars,
+  drums kept, the kick out and a snare / clap rolling up through the last
+  bar, the bass and the lead out, the chords carried (and the start pattern
+  whole when nothing would be left). **The model's bridge is written ahead** (`startBridge`,
   held per proposal and length in `bridgeJobs`): as soon as a turn's changes
   arrive, whenever the studio holds a song with notes in it whatever shape is
   picked (and with bridge picked even when it does not), and again when the
@@ -5398,7 +5421,10 @@ through a 6ms fade on its gain).
 - **Graph edits go under a fade** (`FXRack.softSwitch`): engaging or bypassing a
   stage, and `routeTrackOutput` re-pointing a live output, duck a dedicated
   `switchGain` for 4ms, edit 8ms later, and come back over 6ms. Edits queued
-  during the fade join it.
+  during the fade join it. `routeTrackOutput` does nothing when the track already goes where it
+  should (`rack._routedTo` / `_routedMeter`): every merge re-points every
+  track, and re-pointing ones that were not moving ducked the whole mix
+  ~18ms on every undo, jam patch, code run and transition step.
 - **`silence()` fades**: the sampler, the granular grains and the wavetable
   notes keep their gain on the source (`src._g`, `rec.amp`) and stop through
   `fadeStop`. The stop button already hid the hard cut behind the master ramp; a

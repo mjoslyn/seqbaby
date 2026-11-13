@@ -72,6 +72,8 @@ declare global {
         freeSlot: (s: unknown) => number;
         bridgePrompt: (oldS: unknown, newS: unknown, slot: number, bars: number, startSlot: number) => string;
         bridgeSession: (newS: unknown, result: unknown, slot: number) => unknown;
+        /** A bridge made at once from the new song itself, for when the model's is not written yet. */
+        codeBridge?: (newS: unknown, slot: number, bars: number, start: number) => unknown;
         bridgeHasNotes: (s: unknown, slot: number) => boolean;
       };
       /** Drop a pending transition without landing it. */

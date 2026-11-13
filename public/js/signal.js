@@ -159,7 +159,7 @@ export function releaseSilencedTracks() {
   const now = state.audioCtx?.currentTime ?? 0;
   for (const t of state.tracks) {
     if (t.engineKey === "bus") continue;
-    if (!t.muted && !t._clipOff && (!soloAudible || soloAudible.has(t))) continue;
+    if (!t.muted && !t._clipOff && !t._leaving && !t._staged && (!soloAudible || soloAudible.has(t))) continue;
     try { t.voice?.releaseHeld?.(now); } catch {}
   }
 }
@@ -218,6 +218,15 @@ export function routeTrackOutput(t) {
   const rack = t.fxRack;
   if (!rack) return;
   const dest = outputTargetFor(t);
+  // Already going there: nothing to do. Every merge (an undo, a jam patch, a
+  // compose audition, a track built ahead of a transition) re-points every
+  // track, and each re-point ducks the track under the fade below for ~18ms,
+  // so re-pointing a track that was not moving was the whole mix dipping on
+  // every one of them. A bus rebuilt has a new summing node, so its feeders'
+  // `dest` is a different object and they are still re-pointed.
+  if (rack._routedTo === dest && rack._routedMeter === t.meterAnalyser) return;
+  rack._routedTo = dest;
+  rack._routedMeter = t.meterAnalyser;
   // Under the rack's fade (FXRack.softSwitch): this is called on a running
   // signal from track add / remove, an `out` change and a session load.
   rack.softSwitch(() => {

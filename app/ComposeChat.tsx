@@ -638,8 +638,8 @@ export default function ComposeChat({
   // pressed while a press is waiting on a bridge calls it off: the bridge is
   // still kept for the next press, but that press does not go on to land it.
   const bridgeRun = useRef(0);
-  const bridgeJobs = useRef<{ session: unknown; jobs: Map<number, Promise<Bridge | string>>; running: Set<number> }>({
-    session: null, jobs: new Map(), running: new Set(),
+  const bridgeJobs = useRef<{ session: unknown; jobs: Map<number, Promise<Bridge | string>>; running: Set<number>; done: Map<number, Bridge> }>({
+    session: null, jobs: new Map(), running: new Set(), done: new Map(),
   });
   const startBridge = useCallback((r: Proposal, bars: number): Promise<Bridge | string> => {
     const api = window.seqbaby;
@@ -649,6 +649,7 @@ export default function ComposeChat({
       reg.session = r.session;
       reg.jobs = new Map();
       reg.running = new Set();
+      reg.done = new Map();
     }
     const have = reg.jobs.get(bars);
     if (have) return have;
@@ -673,6 +674,7 @@ export default function ComposeChat({
       if (reg.session !== r.session) return;
       reg.running.delete(bars);
       if (typeof res === "string" && reg.jobs.get(bars) === job) reg.jobs.delete(bars);
+      if (typeof res !== "string") reg.done.set(bars, res);
       mark({ writing: reg.running.size > 0, ...(typeof res === "string" ? { note: `no bridge: ${res}` } : {}) });
     });
     return job;
@@ -690,7 +692,20 @@ export default function ComposeChat({
     }
     if (back || !r) return (await api.transitionTo(session, { ...trans, shape: "cut", when: "bar" })).landed;
     const run = ++bridgeRun.current;
-    const br = await startBridge(r, trans.bars);
+    const job = startBridge(r, trans.bars);
+    // The model's bridge if it is already written; otherwise one made at once
+    // from the new song (transitionPlan.js's codeBridge), so a press never
+    // waits on a compose turn. A press with no quick bridge to fall back on
+    // (an engine from before it) waits on the model's as it used to.
+    const ready = bridgeJobs.current.done.get(trans.bars);
+    let br: Bridge | string | undefined = ready;
+    if (!br && api.bridge.codeBridge) {
+      const newS = r.session as { activePattern?: number };
+      const slot = api.bridge.freeSlot(newS);
+      const start = newS.activePattern ?? 0;
+      if (slot >= 0) br = { session: api.bridge.codeBridge(newS, slot, trans.bars, start), slot, start, bars: trans.bars };
+    }
+    if (!br) br = await job;
     if (run !== bridgeRun.current) return false;
     if (typeof br === "string") {
       setReview((cur) => (cur && cur.session === r.session ? { ...cur, note: `no bridge: ${br}` } : cur));
@@ -989,9 +1004,7 @@ export default function ComposeChat({
           {review && (
             <div className={`${styles.chatReview} ${review.before ? styles.chatReviewLive : ""}`}>
               <div className={styles.chatReviewText}>
-                {review.writing && review.pending && review.pending !== "stop"
-                  ? `writing a ${trans.bars}-bar bridge into it…`
-                  : review.pending
+                {review.pending
                   ? `${review.pending === "stop" ? "going back" : review.pending === "keep" ? "keeping" : "auditioning"} ${
                       review.pending === "stop" && trans.shape === "bridge"
                         ? "on the next bar"
@@ -1002,7 +1015,7 @@ export default function ComposeChat({
                   : review.note
                   ? review.note
                   : review.writing
-                  ? `writing a ${trans.bars}-bar bridge so it's ready when you press audition or keep…`
+                  ? `the model is writing a ${trans.bars}-bar bridge; until it's ready, a quick one made from the new song plays instead`
                   : review.before
                   ? "auditioning: you are hearing the changes, but the song does not have them yet."
                   : "these changes aren't in the song yet. audition drops them into what's playing; keep makes them the song."}

@@ -315,3 +315,99 @@ export function bridgeSession(newS, result, slot) {
 export function bridgeHasNotes(s, slot) {
   return slotUsed(s, slot);
 }
+
+// ---- a bridge with no wait: one made from the new song itself -------------
+//
+// The model's bridge is a compose turn of its own and takes as long as one.
+// A press must not wait on it, so until it is written this one plays: the new
+// song's start pattern carried across the bridge's bars, its drums kept, the
+// kick out and a snare (or clap) rolling up through the last bar, the bass and
+// the lead out, the chords carried. Built in code, instantly, from what the
+// new song already has; the model's replaces it once it is ready.
+
+const KICK_RE = /kick|\bbd\b|siege|808-kick|909-kick/i;
+const SNARE_RE = /snare|clap|\bsd\b|\bcp\b|lancet|rim/i;
+
+/** `len` steps of `p`, every per-step array tiled from its own length. */
+function tilePattern(p, len) {
+  const out = {};
+  for (const [k, v] of Object.entries(p || {})) {
+    if (Array.isArray(v)) {
+      const n = v.length || 1;
+      out[k] = Array.from({ length: len }, (_, i) => (v.length ? clone(v[i % n]) : null));
+    } else if (k === "automation" && v && typeof v === "object") {
+      const lanes = {};
+      for (const [lk, lane] of Object.entries(v)) {
+        const vals = Array.isArray(lane?.values) && lane.values.length ? lane.values : [0];
+        lanes[lk] = { ...lane, values: Array.from({ length: len }, (_, i) => vals[i % vals.length]) };
+      }
+      out[k] = lanes;
+    } else {
+      out[k] = clone(v);
+    }
+  }
+  if (!Array.isArray(out.steps)) out.steps = Array(len).fill(false);
+  return out;
+}
+
+function clone(v) {
+  return v && typeof v === "object" ? JSON.parse(JSON.stringify(v)) : v;
+}
+
+/**
+ * The new song with a bridge written into `slot`, made from its `start`
+ * pattern: `bars` bars of it, thinned and built up as above. A session in the
+ * shape `bridgeSession` returns, so the engine plays it exactly as it would
+ * the model's.
+ */
+export function codeBridge(newS, slot, bars, start = 0) {
+  const len = Math.max(1, bars) * barSteps(newS, start);
+  const bar = barSteps(newS, start);
+  const lastBar = len - bar;
+  const tracks = (newS?.tracks || []).map(t => {
+    if (t.engineKey === "bus") return t;
+    const src = t.patterns?.[start];
+    if (!src) return t;
+    const group = trackGroup(t, start);
+    const p = tilePattern(src, len);
+    const off = typeof p.steps[0] === "boolean" ? false : 0;
+    const on = typeof p.steps[0] === "boolean" ? true : 1;
+    const words = `${t.engineKey} ${t.name}`;
+    const clear = (from, to) => { for (let i = from; i < to; i++) p.steps[i] = off; };
+    if (group === "bass" || group === "lead") clear(0, len);
+    else if (group === "drums" && KICK_RE.test(words)) clear(lastBar, len);
+    else if (group === "drums" && SNARE_RE.test(words)) {
+      const first = p.steps.findIndex(Boolean);
+      const note = first >= 0 && Number.isFinite(p.notes?.[first]) ? p.notes[first] : 36;
+      for (let i = lastBar; i < len; i++) {
+        const k = i - lastBar;
+        const hit = k < bar / 2 ? k % 2 === 0 : true;
+        p.steps[i] = hit ? on : off;
+        if (!hit) continue;
+        if (p.notes) p.notes[i] = note;
+        if (p.lengths) p.lengths[i] = 1;
+        if (p.velocities) p.velocities[i] = Math.min(1, 0.45 + 0.55 * (k / bar));
+        if (p.chords) p.chords[i] = null;
+        if (p.ratchets) p.ratchets[i] = 1;
+      }
+    }
+    const patterns = (t.patterns || []).slice();
+    while (patterns.length <= slot) patterns.push(null);
+    patterns[slot] = p;
+    return { ...t, patterns };
+  });
+  const out = { ...newS, tracks };
+  // Nothing left to play (no drums and no chords): the start pattern as it
+  // is, rather than bars of silence.
+  if (!slotUsed(out, slot)) {
+    out.tracks = (newS?.tracks || []).map(t => {
+      const src = t.patterns?.[start];
+      if (!src || t.engineKey === "bus") return t;
+      const patterns = (t.patterns || []).slice();
+      while (patterns.length <= slot) patterns.push(null);
+      patterns[slot] = tilePattern(src, len);
+      return { ...t, patterns };
+    });
+  }
+  return out;
+}

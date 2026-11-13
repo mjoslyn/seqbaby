@@ -5,6 +5,7 @@ import {
   bridgeHasNotes,
   bridgePrompt,
   bridgeSession,
+  codeBridge,
   compositeSession,
   fadeGain,
   freeSlot,
@@ -162,4 +163,22 @@ test("bridge: a free slot, a prompt that says the length, only the slot taken ba
   assert.ok(riser && !riser.patterns[0].steps.some(Boolean), "an added track plays only the bridge");
   assert.ok(bridgeHasNotes(b, 1));
   assert.ok(!bridgeHasNotes(newS, 1));
+});
+
+test("the quick bridge: the new song's start, kick out and a roll in the last bar, bass and lead out", () => {
+  const roll = { name: "snare", engineKey: "dm:lancet", isDrumKit: true, patterns: [{ ...pat([false, false, false, false, true, false, false, false, false, false, false, false, true, false, false, false], Array(16).fill(38)), velocities: Array(16).fill(0.8) }] };
+  const song = { ...newS, patternMeters: [{ num: 4, den: 4 }], tracks: [T.kick, roll, T.bass, T.pad, T.lead] };
+  const b = codeBridge(song, 3, 2, 0);
+  const steps = (name) => b.tracks.find(t => t.name === name).patterns[3].steps.map(x => (x ? "x" : ".")).join("");
+  assert.equal(steps("kick"), "x...x...x...x..." + "................", "the kick sits out the last bar");
+  assert.equal(steps("snare"), "....x.......x..." + "x.x.x.x.xxxxxxxx", "the snare rolls up");
+  assert.equal(steps("bass"), ".".repeat(32));
+  assert.equal(steps("lead"), ".".repeat(32));
+  assert.equal(steps("pad"), "x.......x.......x.......x.......", "the chords carry");
+  const sn = b.tracks.find(t => t.name === "snare").patterns[3];
+  assert.ok(sn.velocities[31] > sn.velocities[16], "the roll gets louder");
+  assert.equal(b.tracks[0].patterns[0], song.tracks[0].patterns[0], "only the bridge slot is written");
+  assert.ok(bridgeHasNotes(b, 3));
+  const quiet = codeBridge({ ...newS, tracks: [T.lead] }, 2, 1, 0);
+  assert.ok(bridgeHasNotes(quiet, 2), "nothing left to thin: the start pattern as it is");
 });
