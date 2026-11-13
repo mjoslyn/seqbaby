@@ -598,6 +598,10 @@ a.bylineLike { text-decoration: none; }
 .chatReviewText { color: #9aa0aa; font-size: 11px; line-height: 1.45; }
 .chatReviewLive .chatReviewText { color: #6ee7b7; }
 .chatReviewBtns { display: flex; gap: 6px; flex-wrap: wrap; }
+/* how the review bar's writes arrive (transition.js): when, shape, length, tempo */
+.chatTransition { display: flex; gap: 4px; flex-wrap: wrap; }
+.chatTransition .chatModelSelect { flex: 0 1 auto; min-width: 0; }
+.chatTransition .chatModelSelect:disabled { opacity: 0.4; }
 /* The bar is inside the drawer, so a closed drawer says nothing about an
    audition that is still playing. The button does. */
 .composeBtnHolding { border-color: #6ee7b7; color: #6ee7b7; }

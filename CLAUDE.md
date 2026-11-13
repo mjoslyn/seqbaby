@@ -220,6 +220,11 @@ env / fx / eq / comp / mod / automation per track.
   in-place restore was the first two, and the compose panel's audition needed
   the same thing, so they live here and history.js owns only when. See the
   live merge section below.
+- `transition.js` / `transitionPlan.js` — a session written onto the running
+  engine on a bar line, cut or swept, with the tempo carried across: the
+  compose panel's audition / stop / keep. `transitionPlan.js` is the
+  arithmetic (when it lands, ramp or jump, the sweep's curve), **no imports**,
+  tested in `test/transition.test.js`. See the transition section.
 - `clips.js` — a pattern slot launched on ONE track (`launchClip`,
   `requestClipLaunch`, `stopClip`), the per-track step-count seeding the
   transport shares (`seedTrackCount`), arrange mode's bar-line work
@@ -4837,11 +4842,55 @@ discard    throw them away (putting back the pre-audition session first)
 - **A closed drawer hides the bar but not the audition**, so the `compose`
   button carries a dot and says which state it is in. An extra track playing
   with nothing on screen explaining it would be a bug report.
+- **The writes arrive on a transition** (the picker in the review bar, see
+  the next section): audition, stop and keep land on the next bar line by
+  default, and the bar says what is on its way. `discard` is always at once.
 - `new`, and opening a different song, drop the proposal: `before` describes a
   session that is no longer there, and putting it back would undo the `new`.
 - `applySet` is still the fallback in `writeLive`, for an engine cached from
   before `mergeSet` shipped. It costs the transport, which is the thing the
   merge exists to avoid, but it is never silence.
+
+### Transitions (`transition.js` + `transitionPlan.js`)
+
+How the review bar's writes reach what is playing, picked in the bar and kept
+per browser (`seqbaby.transition.v1`): **when** (next bar, the default, or
+now), **shape** (cut, the default, or sweep), **length** (1 / 2 / 4 / 8 bars
+of sweep) and **tempo** (auto / jump / ramp). Exposed as
+`window.seqbaby.transitionTo(session, opts)` (a Promise of `{landed}`),
+`cancelTransition`, `finishTransition`, `transitionPending`.
+
+- **It lands in the scheduler callback, on a bar line**, through `mergeSet`,
+  for the queued pattern switch's reason: the next callback is the new bar's
+  first step. The transport calls `transitionStep` once per step after the
+  bar line is worked out; on a landing every track starts from its first step
+  (`restartTrackCounts`, or the arrangement seeded from bar 0 in arrange
+  mode) and the queue and the chain sit that bar out. Stopped, it lands at
+  once. Then `markExternalEdit("compose")` and a jam flush, because the click
+  that asked for it settled bars ago.
+- **A sweep is a lowpass on the master** (between `masterGain` and
+  `masterLimiter`, made by the first sweep and left in, open at 20kHz),
+  closed step by step over whole bars (`sweepHz`: exponential in pitch, slow
+  at first, to 280Hz with the resonance rising) and opened over a bar after
+  the landing (half a bar for a one-bar sweep). Measured: highs above 2kHz
+  fall 35dB at the bottom of the dive. `when: "bar"` starts it on the next
+  bar line; `now` starts it at once and lands on the bar line that makes it
+  `bars` long, counting the bar under way only when half of it is left.
+- **The tempo** (`tempoMode`): a cut jumps on the downbeat (the merge writes
+  the bpm). Auto ramps a sweep whose tempos are within 15%, and jumps a half
+  / double time pair or a bigger gap. A ramp moves only the TRANSPORT's bpm,
+  a step at a time, reaching the new tempo on the landing: the bpm field,
+  the synced LFOs and the synced delays are retuned once, by the merge, since
+  retuning them per step would rebuild LFOs in the scheduler callback, and
+  the field holding the old song's tempo until the new one lands is what
+  keeps a history check mid-ramp quiet.
+- **Buttons while one is on its way**: stop calls a pending audition off;
+  keep over a pending audition replaces it; keep pressed twice lands at once;
+  discard, `new`, opening a song and sending the next turn cancel or land it
+  (sending lands it: the turn is about what is playing). Stopping the
+  transport lands it.
+- Not shared in a jam: the sweep and the ramp play on the screen that pressed
+  the button. Peers get the merged session, so their tempo jumps.
 
 ## Jam — several studios, one song (`jam.js` + `jamSync.js` + `app/JamPanel.tsx`)
 
@@ -5366,7 +5415,7 @@ through a 6ms fade on its gain).
   place the dispatch lives, or the second one has to import the first.
 - **`engineData.js`, `soundDefaults.js`, `theoryData.js`, `constants.js`,
   `chanceGen.js`, `sessionFormat.js`, `historyStore.js`, `songBuilder.js`,
-  `miniNotation.js`, `strudel.js`, `arrangement.js`, `patternPicture.js`, `rollNotes.js`, `eqDraw.js` and `voxPhonetic.js` must stay importable from Node** — no DOM, no Tone, no `window`. The tests
+  `miniNotation.js`, `strudel.js`, `arrangement.js`, `patternPicture.js`, `rollNotes.js`, `eqDraw.js`, `transitionPlan.js` and `voxPhonetic.js` must stay importable from Node** — no DOM, no Tone, no `window`. The tests
   and the MCP server run them; an import of state.js or catalog.js in any of
   them breaks `npm test` at load, which is the guard.
 - **React must never re-set the studio's `innerHTML`** (`app/StudioBody.tsx`).

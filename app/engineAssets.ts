@@ -97,6 +97,8 @@ export const ENGINE_MODULES = [
   "lancet.js",
   "lfo.js",
   "liveSet.js",
+  "transition.js",
+  "transitionPlan.js",
   "macro.js",
   "main.js",
   "meter.js",

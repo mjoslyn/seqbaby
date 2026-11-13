@@ -9,6 +9,7 @@ import { setPatchBackend, setPatchList } from "./catalog.js";
 import { canRedo, canUndo, hasUnsavedChanges, markSaved, redo, undo } from "./history.js";
 import { flushJam, inJam, jamState, jamTogglePlay, receiveJamPatch, receiveJamPhase, receiveJamState, startJam, stopJam } from "./jam.js";
 import { mergeSet } from "./liveSet.js";
+import { cancelTransition, finishTransition, transitionPending, transitionTo } from "./transition.js";
 import { primeAudioForIOS } from "./main.js";
 import { startPlayback, stopPlayback } from "./transport.js";
 import { launchClip, stopClip } from "./clips.js";
@@ -44,6 +45,12 @@ export function installAppApi() {
     // is right for opening one and fatal for auditioning a change to the one
     // you are listening to.
     mergeSet,
+    // mergeSet on a bar line, with an optional sweep and the tempo carried
+    // across (transition.js): the compose panel's audition / stop / keep.
+    transitionTo,
+    cancelTransition,
+    finishTransition,
+    transitionPending,
     // blank the session -- back to the starter tracks with nothing written.
     // `newSet` resets; `onNewSet` is the flow around it (confirms first when
     // there is something to lose), which is what a button should call.

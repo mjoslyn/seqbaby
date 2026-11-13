@@ -49,6 +49,22 @@ declare global {
         removed: number;
         rebuilt: number;
       } | null;
+      /**
+       * mergeSet on a bar line (public/js/transition.js): `cut` lands on the
+       * next bar line (`when: "now"`: at once), `sweep` closes a master
+       * lowpass over `bars` bars and lands under it. `tempo` auto ramps a
+       * small bpm difference across the sweep and jumps a large one. Stopped,
+       * it lands at once. Resolves `landed: false` when cancelled first.
+       */
+      transitionTo?: (
+        data: unknown,
+        opts?: { when?: "bar" | "now"; shape?: "cut" | "sweep"; bars?: number; tempo?: "auto" | "jump" | "ramp" },
+      ) => Promise<{ landed: boolean }>;
+      /** Drop a pending transition without landing it. */
+      cancelTransition?: () => boolean;
+      /** Land a pending transition now. */
+      finishTransition?: () => boolean;
+      transitionPending?: () => boolean;
       /** Format version of the blob serializeSet() writes (not `version`). */
       setVersion: number;
       validateSet: (data: unknown) => {

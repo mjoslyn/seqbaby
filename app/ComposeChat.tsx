@@ -35,7 +35,34 @@ type ComposeResponse = { jobId?: string; jobToken?: string; error?: string };
  * is the same operation in reverse. Null means the changes are not in the
  * session at all yet.
  */
-type Proposal = { session: unknown; before: unknown | null; title?: string | null };
+// `pending`: a transition (public/js/transition.js) is on its way to a bar
+// line, and which button asked for it.
+type Proposal = {
+  session: unknown;
+  before: unknown | null;
+  title?: string | null;
+  pending?: "audition" | "stop" | "keep" | null;
+};
+
+// How the review bar's writes reach what is playing: on the next bar or at
+// once, cut or swept, over how many bars, and what happens to the tempo.
+type TransitionPrefs = { when: "bar" | "now"; shape: "cut" | "sweep"; bars: number; tempo: "auto" | "jump" | "ramp" };
+const TRANSITION_KEY = "seqbaby.transition.v1";
+const TRANSITION_DEFAULT: TransitionPrefs = { when: "bar", shape: "cut", bars: 2, tempo: "auto" };
+function loadTransition(): TransitionPrefs {
+  try {
+    const v = JSON.parse(window.localStorage.getItem(TRANSITION_KEY) || "null");
+    if (!v || typeof v !== "object") return TRANSITION_DEFAULT;
+    return {
+      when: v.when === "now" ? "now" : "bar",
+      shape: v.shape === "sweep" ? "sweep" : "cut",
+      bars: [1, 2, 4, 8].includes(Number(v.bars)) ? Number(v.bars) : 2,
+      tempo: v.tempo === "jump" || v.tempo === "ramp" ? v.tempo : "auto",
+    };
+  } catch {
+    return TRANSITION_DEFAULT;
+  }
+}
 
 type JobStatus = {
   status?: "running" | "done" | "error";
@@ -163,6 +190,15 @@ export default function ComposeChat({
   // The turn's changes, waiting to be auditioned or kept. Nothing is written to
   // the studio until one of those is pressed.
   const [review, setReview] = useState<Proposal | null>(null);
+  const [trans, setTransState] = useState<TransitionPrefs>(TRANSITION_DEFAULT);
+  useEffect(() => setTransState(loadTransition()), []);
+  const setTrans = useCallback((patch: Partial<TransitionPrefs>) => {
+    setTransState((cur) => {
+      const next = { ...cur, ...patch };
+      try { window.localStorage.setItem(TRANSITION_KEY, JSON.stringify(next)); } catch {}
+      return next;
+    });
+  }, []);
   // What the autosave did with the last thing kept, in the space the review bar
   // has just left. Transient: it belongs to that click, so the next turn (and a
   // song arriving, or `new`) clears it.
@@ -236,6 +272,7 @@ export default function ComposeChat({
     // A different song is open, so changes offered against the last one are
     // not about what is loaded now -- and `before` describes a session that is
     // no longer there. What the last keep saved was said about another song.
+    window.seqbaby?.cancelTransition?.();
     setReview(null);
     setSaveNote("");
     if (!songId || isTemplate) {
@@ -292,6 +329,7 @@ export default function ComposeChat({
       attachedRef.current = null;
       // The session it was about has just been blanked, and `before` describes
       // one that no longer exists -- putting it back would undo the `new`.
+      window.seqbaby?.cancelTransition?.();
       setReview(null);
       setSaveNote("");
     };
@@ -317,6 +355,9 @@ export default function ComposeChat({
     const text = (prompt ?? input).trim();
     if (!text || sending || !window.seqbaby) return;
     if (!signedIn) return;
+    // A transition still waiting on its bar line lands now: the turn is about
+    // what is playing, and an audition or keep the button already asked for.
+    window.seqbaby.finishTransition?.();
     const session = window.seqbaby.serializeSet();
     // Only plain text crosses the wire between turns -- what the model called
     // and why lives entirely inside one request/response, so the transcript
@@ -511,24 +552,51 @@ export default function ComposeChat({
     else api.applySet(session);
   }, []);
 
+  // A session written on the transition the bar's picker says: on the next
+  // bar line, cut or swept (public/js/transition.js). Resolves whether it
+  // landed: false when another button cancelled it first. Falls back to an
+  // immediate write on an engine cached from before transitions shipped.
+  const writeAt = useCallback(async (session: unknown): Promise<boolean> => {
+    const api = window.seqbaby;
+    if (!api) return false;
+    if (api.transitionTo) return (await api.transitionTo(session, trans)).landed;
+    writeLive(session);
+    return true;
+  }, [trans, writeLive]);
+
   // Audition: keep what is playing so it can be put back, then merge the
   // turn's session over it. Nothing is saved and nothing is torn down.
-  const audition = useCallback(() => {
-    if (!review || review.before || !window.seqbaby) return;
+  // `before` is taken at the press: what is playing then is what stop puts back.
+  const audition = useCallback(async () => {
+    const r = review;
+    if (!r || r.before || r.pending || !window.seqbaby) return;
     const before = window.seqbaby.serializeSet();
-    writeLive(review.session);
-    setReview({ ...review, before });
-  }, [review, writeLive]);
+    setReview({ ...r, pending: "audition" });
+    const landed = await writeAt(r.session);
+    setReview((cur) => (cur && cur.session === r.session && cur.pending === "audition"
+      ? { ...cur, before: landed ? before : null, pending: null }
+      : cur));
+  }, [review, writeAt]);
 
   // Stop: back to what was playing, with the changes still on offer. Anything
   // changed BY HAND during the audition goes back with it -- undo reaches it
   // (the merge lands on the stack like any other edit), which is why this is a
-  // button and not a confirm dialog.
-  const stopAudition = useCallback(() => {
-    if (!review?.before) return;
-    writeLive(review.before);
-    setReview({ ...review, before: null });
-  }, [review, writeLive]);
+  // button and not a confirm dialog. Pressed while the audition is still on
+  // its way, it calls the audition off instead.
+  const stopAudition = useCallback(async () => {
+    const r = review;
+    if (!r) return;
+    if (r.pending === "audition") {
+      window.seqbaby?.cancelTransition?.();
+      return;
+    }
+    if (!r.before || r.pending) return;
+    setReview({ ...r, pending: "stop" });
+    const landed = await writeAt(r.before);
+    setReview((cur) => (cur && cur.session === r.session && cur.pending === "stop"
+      ? { ...cur, before: landed ? null : cur.before, pending: null }
+      : cur));
+  }, [review, writeAt]);
 
   // Keeping is a real edit to the song, so it is SAVED, as a version of its
   // own. The top-bar save is a click away in another island and nobody presses
@@ -583,20 +651,42 @@ export default function ComposeChat({
   }, [signedIn]);
 
   // Keep: the changes are the song now. Mid-audition there is nothing to write
-  // -- the engine is already playing them, hand edits and all.
-  const keepChanges = useCallback(() => {
-    if (!review) return;
-    if (!review.before) writeLive(review.session);
+  // -- the engine is already playing them, hand edits and all. Otherwise they
+  // arrive on the transition, and are saved once they have. A second press
+  // while one is on its way lands it at once.
+  const keepChanges = useCallback(async () => {
+    const r = review;
+    const api = window.seqbaby;
+    if (!r || !api) return;
+    if (r.pending === "keep") {
+      api.finishTransition?.();
+      return;
+    }
+    // An audition on its way has not landed (`before` is still null); a stop
+    // on its way leaves the audition playing. Either way it is called off.
+    if (r.pending) api.cancelTransition?.();
+    if (!r.before) {
+      setReview({ ...r, pending: "keep" });
+      const landed = await writeAt(r.session);
+      if (!landed) {
+        setReview((cur) => (cur && cur.session === r.session && cur.pending === "keep" ? { ...cur, pending: null } : cur));
+        return;
+      }
+    }
     // After the write: an applySet fallback announces a new session, which
     // clears any name held for the last one.
-    if (review.title) setComposedTitle(review.title);
-    setReview(null);
+    if (r.title) setComposedTitle(r.title);
+    setReview((cur) => (cur && cur.session === r.session ? null : cur));
     void autosaveKept();
-  }, [review, writeLive, autosaveKept]);
+  }, [review, writeAt, autosaveKept]);
 
+  // Discard is never on a transition: throwing the changes away is immediate.
   const discardChanges = useCallback(() => {
-    if (!review) return;
-    if (review.before) writeLive(review.before);
+    const r = review;
+    if (!r) return;
+    if (r.pending) window.seqbaby?.cancelTransition?.();
+    // `before` set means the changes are playing (a stop on its way included).
+    if (r.before) writeLive(r.before);
     setReview(null);
     setSaveNote("");
   }, [review, writeLive]);
@@ -746,24 +836,77 @@ export default function ComposeChat({
           {review && (
             <div className={`${styles.chatReview} ${review.before ? styles.chatReviewLive : ""}`}>
               <div className={styles.chatReviewText}>
-                {review.before
+                {review.pending
+                  ? `${review.pending === "stop" ? "going back" : review.pending === "keep" ? "keeping" : "auditioning"} ${
+                      trans.shape === "sweep" ? `with a ${trans.bars}-bar sweep` : trans.when === "now" ? "now" : "on the next bar"
+                    }…`
+                  : review.before
                   ? "auditioning: you are hearing the changes, but the song does not have them yet."
                   : "these changes aren't in the song yet. audition drops them into what's playing; keep makes them the song."}
+              </div>
+              <div className={styles.chatTransition} title="how the changes arrive in what is playing">
+                <select
+                  className={styles.chatModelSelect}
+                  value={trans.when}
+                  onChange={(e) => setTrans({ when: e.target.value as TransitionPrefs["when"] })}
+                  aria-label="when"
+                  title="next bar: wait for the downbeat. now: as soon as possible"
+                >
+                  <option value="bar">next bar</option>
+                  <option value="now">now</option>
+                </select>
+                <select
+                  className={styles.chatModelSelect}
+                  value={trans.shape}
+                  onChange={(e) => setTrans({ shape: e.target.value as TransitionPrefs["shape"] })}
+                  aria-label="shape"
+                  title="cut: straight in. sweep: a lowpass closes over the playing song, and the new one lands under it"
+                >
+                  <option value="cut">cut</option>
+                  <option value="sweep">sweep</option>
+                </select>
+                <select
+                  className={styles.chatModelSelect}
+                  value={trans.bars}
+                  disabled={trans.shape === "cut"}
+                  onChange={(e) => setTrans({ bars: Number(e.target.value) })}
+                  aria-label="length"
+                  title="how many bars the sweep runs"
+                >
+                  {[1, 2, 4, 8].map((b) => (
+                    <option key={b} value={b}>{b} bar{b > 1 ? "s" : ""}</option>
+                  ))}
+                </select>
+                <select
+                  className={styles.chatModelSelect}
+                  value={trans.tempo}
+                  disabled={trans.shape === "cut"}
+                  onChange={(e) => setTrans({ tempo: e.target.value as TransitionPrefs["tempo"] })}
+                  aria-label="tempo"
+                  title="when the bpm differs. auto: ramp a small change across the sweep, jump a big one. a cut always jumps"
+                >
+                  <option value="auto">tempo: auto</option>
+                  <option value="jump">tempo: jump</option>
+                  <option value="ramp">tempo: ramp</option>
+                </select>
               </div>
               <div className={styles.chatReviewBtns}>
                 <button
                   className={styles.smallBtn}
-                  onClick={review.before ? stopAudition : audition}
-                  title={review.before
+                  onClick={review.before || review.pending === "audition" ? stopAudition : audition}
+                  disabled={review.pending === "stop" || review.pending === "keep"}
+                  title={review.pending === "audition"
+                    ? "call the audition off before it lands"
+                    : review.before
                     ? "put back what was playing before the audition"
-                    : "hear them now, without stopping the transport"}
+                    : "hear them in what is playing, without stopping the transport"}
                 >
-                  {review.before ? "stop" : "audition"}
+                  {review.before || review.pending === "audition" ? "stop" : "audition"}
                 </button>
                 <button
                   className={`${styles.smallBtn} ${styles.smallBtnPrimary}`}
                   onClick={keepChanges}
-                  title={
+                  title={review.pending === "keep" ? "land it now" : 
                     signedIn && songId && !isTemplate
                       ? "make them part of the song, and save it as a new version"
                       : "make them part of the song"
