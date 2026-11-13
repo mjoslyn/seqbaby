@@ -4933,8 +4933,15 @@ now), **shape**, **length** (1 / 2 / 4 / 8 bars) and **tempo** (auto / jump
   the song changes nothing more. It lands on a bar line, holds that slot for
   `bars` bar lines, then lands the new song and switches to its start; the
   slot is empty again after. `stop` with bridge picked is a cut on the bar:
-  there is no bridge back. A button pressed while one is being written drops
-  what it brings back (`bridgeRun`).
+  there is no bridge back. **The bridge is written ahead** (`startBridge`,
+  held per proposal and length in `bridgeJobs`): as soon as a turn's changes
+  arrive, whenever the studio holds a song with notes in it whatever shape is
+  picked (and with bridge picked even when it does not), and again when the
+  length changes, so a press usually finds it written and waits only for the
+  bar line. A press awaits the job already running rather than starting
+  another; a failed one is dropped so the next press tries again. A button
+  pressed while a press waits on one calls that press off (`bridgeRun`), and
+  the bridge is kept for the next.
 - **The tempo** (`tempoMode`): cut, stagger and bridge jump (the stagger with
   its drums, the bridge with its first bar). Auto ramps the others when the
   tempos are within 15%, and jumps a half / double time pair or a bigger gap.

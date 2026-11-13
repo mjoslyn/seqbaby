@@ -42,9 +42,8 @@ type Proposal = {
   before: unknown | null;
   title?: string | null;
   pending?: "audition" | "stop" | "keep" | null;
-  /** A bridge being written for this proposal, the one written, and what went wrong writing one. */
+  /** A bridge is being written for this proposal, and what went wrong writing one. */
   writing?: boolean;
-  bridge?: Bridge | null;
   note?: string;
 };
 type Bridge = { session: unknown; slot: number; start: number; bars: number };
@@ -113,6 +112,16 @@ const MAX_POLL_MISSES = 20;
 const OLD_KEY_STORES = ["seqbaby.anthropicKey.v1", "seqbaby.composeKeyMode.v1"];
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** Whether the studio holds a song with notes in it: something to bridge from. */
+function studioHasNotes(): boolean {
+  try {
+    const s = window.seqbaby?.serializeSet() as { tracks?: { patterns?: ({ steps?: unknown[] } | null)[] }[] } | undefined;
+    return !!s?.tracks?.some((t) => t.patterns?.some((p) => p?.steps?.some(Boolean)));
+  } catch {
+    return false;
+  }
+}
 
 /** What to say when the response wasn't the route's own JSON. */
 // One compose turn run to the end with no transcript of its own: the bridge's.
@@ -608,12 +617,57 @@ export default function ComposeChat({
   // button called it off first. Falls back to an immediate write on an engine
   // cached from before transitions shipped.
   //
-  // A bridge is written first, by a turn of its own (`runTurn`), unless this
-  // proposal already has one of that length. Going BACK to what was playing
-  // (stop) has no bridge to play: it is a cut on the bar. `bridgeRun` is how a
-  // button pressed while a bridge is being written calls it off: the turn runs
-  // on, but what it brings back is dropped.
+  // A bridge is written by a turn of its own (`runTurn`), and it is started
+  // AHEAD: as soon as a proposal arrives with bridge picked (and again when the
+  // length changes), so that by the time audition or keep is pressed it is
+  // usually written and the transition only waits for the bar line. The jobs
+  // are held per proposal and per length (`bridgeJobs`), so a press awaits the
+  // one already running rather than starting another, and a failed one is
+  // dropped so the press tries again. Going BACK to what was playing (stop) has
+  // no bridge to play: it is a cut on the bar. `bridgeRun` is how a button
+  // pressed while a press is waiting on a bridge calls it off: the bridge is
+  // still kept for the next press, but that press does not go on to land it.
   const bridgeRun = useRef(0);
+  const bridgeJobs = useRef<{ session: unknown; jobs: Map<number, Promise<Bridge | string>>; running: Set<number> }>({
+    session: null, jobs: new Map(), running: new Set(),
+  });
+  const startBridge = useCallback((r: Proposal, bars: number): Promise<Bridge | string> => {
+    const api = window.seqbaby;
+    if (!api?.bridge) return Promise.resolve("this studio can't play a bridge");
+    const reg = bridgeJobs.current;
+    if (reg.session !== r.session) {
+      reg.session = r.session;
+      reg.jobs = new Map();
+      reg.running = new Set();
+    }
+    const have = reg.jobs.get(bars);
+    if (have) return have;
+    const newS = r.session as { activePattern?: number };
+    const slot = api.bridge.freeSlot(newS);
+    if (slot < 0) return Promise.resolve("every pattern slot is in use");
+    const start = newS.activePattern ?? 0;
+    const prompt = api.bridge.bridgePrompt(api.serializeSet(), newS, slot, bars, start);
+    const mark = (patch: Partial<Proposal>) =>
+      setReview((cur) => (cur && cur.session === r.session ? { ...cur, ...patch } : cur));
+    const job = (async (): Promise<Bridge | string> => {
+      const got = await runTurn(prompt, newS, canPickModel ? model : undefined);
+      if (!got.session) return got.error ?? "nothing came back";
+      const bs = api.bridge!.bridgeSession(newS, got.session, slot);
+      if (!api.bridge!.bridgeHasNotes(bs, slot)) return "it came back empty";
+      return { session: bs, slot, start, bars };
+    })();
+    reg.jobs.set(bars, job);
+    reg.running.add(bars);
+    mark({ writing: true, note: "" });
+    void job.then((res) => {
+      if (reg.session !== r.session) return;
+      reg.running.delete(bars);
+      if (typeof res === "string" && reg.jobs.get(bars) === job) reg.jobs.delete(bars);
+      mark({ writing: reg.running.size > 0, ...(typeof res === "string" ? { note: `no bridge: ${res}` } : {}) });
+    });
+    return job;
+  }, [canPickModel, model]);
+
   const writeAt = useCallback(async (session: unknown, r?: Proposal, back = false): Promise<boolean> => {
     const api = window.seqbaby;
     if (!api) return false;
@@ -626,35 +680,26 @@ export default function ComposeChat({
     }
     if (back || !r) return (await api.transitionTo(session, { ...trans, shape: "cut", when: "bar" })).landed;
     const run = ++bridgeRun.current;
-    let br = r.bridge && r.bridge.bars === trans.bars ? r.bridge : null;
-    if (!br) {
-      const mark = (patch: Partial<Proposal>) =>
-        setReview((cur) => (cur && cur.session === r.session ? { ...cur, ...patch } : cur));
-      const newS = r.session as { activePattern?: number };
-      const slot = api.bridge.freeSlot(newS);
-      if (slot < 0) {
-        mark({ note: "no bridge: every pattern slot is in use" });
-        return false;
-      }
-      mark({ writing: true, note: "" });
-      const start = newS.activePattern ?? 0;
-      const prompt = api.bridge.bridgePrompt(api.serializeSet(), newS, slot, trans.bars, start);
-      const got = await runTurn(prompt, newS, canPickModel ? model : undefined);
-      if (run !== bridgeRun.current) return false;
-      if (!got.session) {
-        mark({ writing: false, note: `no bridge: ${got.error ?? "nothing came back"}` });
-        return false;
-      }
-      const bs = api.bridge.bridgeSession(newS, got.session, slot);
-      if (!api.bridge.bridgeHasNotes(bs, slot)) {
-        mark({ writing: false, note: "no bridge: it came back empty" });
-        return false;
-      }
-      br = { session: bs, slot, start, bars: trans.bars };
-      mark({ writing: false, bridge: br });
+    const br = await startBridge(r, trans.bars);
+    if (run !== bridgeRun.current) return false;
+    if (typeof br === "string") {
+      setReview((cur) => (cur && cur.session === r.session ? { ...cur, note: `no bridge: ${br}` } : cur));
+      return false;
     }
     return (await api.transitionTo(session, { ...trans, bridge: { session: br.session, slot: br.slot, start: br.start } })).landed;
-  }, [trans, writeLive, canPickModel, model]);
+  }, [trans, writeLive, startBridge]);
+
+  // The bridge for the proposal on offer, started before anyone asks for it:
+  // always when there is a song in the studio to bridge from (notes in it),
+  // whatever shape is picked, so picking bridge later never waits on one; and
+  // with bridge picked even when there is not. Only while the changes are not
+  // playing yet: mid-audition keep writes nothing and stop is a cut, so
+  // neither plays a bridge.
+  useEffect(() => {
+    if (!review || review.before) return;
+    if (trans.shape !== "bridge" && !studioHasNotes()) return;
+    void startBridge(review, trans.bars);
+  }, [review, trans.shape, trans.bars, startBridge]);
 
   // Audition: keep what is playing so it can be put back, then merge the
   // turn's session over it. Nothing is saved and nothing is torn down.
@@ -681,7 +726,7 @@ export default function ComposeChat({
     if (r.pending === "audition") {
       bridgeRun.current++;
       window.seqbaby?.cancelTransition?.();
-      setReview((cur) => (cur && cur.session === r.session ? { ...cur, pending: null, writing: false } : cur));
+      setReview((cur) => (cur && cur.session === r.session ? { ...cur, pending: null } : cur));
       return;
     }
     if (!r.before || r.pending) return;
@@ -934,7 +979,7 @@ export default function ComposeChat({
           {review && (
             <div className={`${styles.chatReview} ${review.before ? styles.chatReviewLive : ""}`}>
               <div className={styles.chatReviewText}>
-                {review.writing
+                {review.writing && review.pending && review.pending !== "stop"
                   ? `writing a ${trans.bars}-bar bridge into it…`
                   : review.pending
                   ? `${review.pending === "stop" ? "going back" : review.pending === "keep" ? "keeping" : "auditioning"} ${
@@ -946,6 +991,8 @@ export default function ComposeChat({
                     }…`
                   : review.note
                   ? review.note
+                  : review.writing
+                  ? `writing a ${trans.bars}-bar bridge so it's ready when you press audition or keep…`
                   : review.before
                   ? "auditioning: you are hearing the changes, but the song does not have them yet."
                   : "these changes aren't in the song yet. audition drops them into what's playing; keep makes them the song."}
