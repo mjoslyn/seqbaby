@@ -165,7 +165,7 @@ export function scheduleClipPaint() {
 
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const trackById = (id) => state.tracks.find((t) => String(t.id) === String(id));
-const rows = () => state.tracks.filter((t) => t.engineKey !== "bus");
+const rows = () => state.tracks.filter((t) => t.engineKey !== "bus" && !t._staged);
 
 // The shades a track's distinct clips wear, as [hue nudge (deg), saturation
 // %, lightness %] off the row's `--track-hue`. Shade 0 is the track's own

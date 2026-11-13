@@ -4884,6 +4884,26 @@ now), **shape**, **length** (1 / 2 / 4 / 8 bars) and **tempo** (auto / jump
   `hold` (two songs or a bridge are under way: the chain waits). Stopped, it
   lands at once. Then `markExternalEdit("compose")` and a jam flush, since
   the click that asked for it settled bars ago.
+- **The new tracks are built before the bar line** (staging). A track costs
+  50-100ms of main thread to build (voice, rack, DOM), and eight of them
+  inside the scheduler callback held Tone's clock past the lookahead: a gap
+  on the one. So the tracks the first merge will add are merged in one per
+  task while the old song plays, stopped (`_clipOff`) and hidden
+  (`is-staged`, and left out of the clip and arrange rows), and the landing
+  finds them made, merged as the engine read them back (`densify`) so a
+  sparse builder song does not rewrite and repaint every field. A cut asked
+  for too late in a bar to finish waits one more bar. `serializeSet` leaves
+  `_staged` tracks out (the undo stack, a jam, a save and the unsaved check
+  never see them); a merge reads them (`serializeSet({ staged: true })`),
+  since its comparison is parallel to `state.tracks`. A cancel merges them
+  away. Measured, eight worklet tracks: the landing went from 1.2s of main
+  thread to 90ms. Two other costs went with it: `syncAllLFOs` asks the rack
+  about its stages once rather than once per key (`syncLFO`'s `refresh`),
+  and Tone's `Oscillator.getInitialValue` (33 inverse FFTs per type or
+  phase set, several per rack) is memoised per type and phase
+  (`memoizeOscillatorInitialValue`, main.js). And `needsRebuild` (liveSet.js)
+  reads absent and null as the same, or a sparse song rebuilt every track
+  of every merge.
 - **Groups** (`trackGroup`, on the serialized track): a drum kit is drums; an
   engine or name that says bass, or a part written low with no chords, is
   bass; chords or stacked notes or a pad / keys name is harmony; the rest is

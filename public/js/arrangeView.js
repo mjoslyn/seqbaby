@@ -161,7 +161,7 @@ export function scheduleArrangePaint() {
 
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const trackById = (id) => state.tracks.find((t) => String(t.id) === String(id));
-const rows = () => state.tracks.filter((t) => t.engineKey !== "bus");
+const rows = () => state.tracks.filter((t) => t.engineKey !== "bus" && !t._staged);
 const barW = () => ZOOMS[zoom];
 const rulerBars = () => Math.max(MIN_BARS, arrangementBars(state.tracks) + 4, (normalizeLoop(state.arrLoop)?.end ?? 0) + 4,
   ...state.tracks.map((t) => blocksEnd(t._take || []) + 4));

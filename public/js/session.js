@@ -39,7 +39,20 @@ export function storeSetsMap(m) { try { localStorage.setItem(SETS_KEY, JSON.stri
  * payloads) into a plain JSON-safe object for save / export / share.
  * @returns {Object}
  */
-export function serializeSet() {
+export function serializeSet({ staged = false } = {}) {
+  // Tracks a transition has built ahead of its bar line are not the song's
+  // yet (transition.js): written as if they were not there, so every index
+  // counts along the song's own tracks. A merge reads them (`staged`), since
+  // its comparison runs parallel to state.tracks.
+  if (!staged && state.tracks.some(t => t._staged)) {
+    const all = state.tracks;
+    state.tracks = all.filter(t => !t._staged);
+    try { return serializeSongNow(); } finally { state.tracks = all; }
+  }
+  return serializeSongNow();
+}
+
+function serializeSongNow() {
   // A locked track's current pattern only gets its snapshot written when you
   // leave the pattern — flush first or the sound you can hear right now is the
   // one thing the save would miss.

@@ -949,6 +949,7 @@ main {
    away — the step grid, the roll, the dice, the octave shifts, the patch
    buttons, and the envelope, which only ever fires on a note. What is left is
    the signal chain and the two modulation panels, which is the whole point. */
+.sq-track.is-staged { display: none !important; }
 .sq-track.is-bus { border-color: color-mix(in srgb, var(--accent-2) 45%, var(--border)); }
 .sq-track.is-bus .sq-steps,
 .sq-track.is-bus .sq-track__roll,

@@ -82,7 +82,7 @@ function holdNow(prm, at) {
 function startOverlap(p) {
   const oldKeys = new Set(p.old.tracks.map(trackKey));
   const newKeys = new Set((p.session?.tracks || []).map(trackKey));
-  safeMerge(overlapSession(p.old, p.session));
+  safeMerge(overlapSession(p.old, p.session), p);
   p.merged = true;
   p.oldOnly = state.tracks.filter(t => !newKeys.has(trackKey(t)));
   p.newOnly = state.tracks.filter(t => !oldKeys.has(trackKey(t)) && t.engineKey !== "bus");
@@ -135,8 +135,103 @@ function told(p) {
   p.resolve({ landed: true });
 }
 
-function safeMerge(session) {
-  try { return mergeSet(session); } catch (e) { console.error("transition: merge failed", e); return null; }
+function safeMerge(session, p = null) {
+  let out = null;
+  try { out = mergeSet(densify(p, session)); } catch (e) { console.error("transition: merge failed", e); }
+  // A track built ahead (staged, below) that the merge kept is now the song's.
+  for (const t of state.tracks) {
+    if (!t._staged) continue;
+    t._staged = false;
+    t._clipOff = false;
+    t.el?.classList.remove("is-staged");
+  }
+  return out;
+}
+
+// ---- staging: the new tracks built before the bar line ----------------------
+//
+// Building a track (its voice, its rack, its DOM) takes 50-100ms of main
+// thread, and a landing that builds eight of them inside the scheduler
+// callback held the clock past the lookahead: the old song stopped and the new
+// one came in late, a gap on the one. So the tracks the first merge will add
+// are built while the old song is still playing, one per task, stopped
+// (`_clipOff`, as a stopped clip is) and hidden, and the merge on the bar line
+// finds them made. serializeSet leaves them out (`_staged`), so the undo
+// stack, a jam, a save and the unsaved check never see them.
+
+/**
+ * A session with each staged track as the engine read it back. A song from
+ * the builder is sparse (only what was set), and merged sparse onto the track
+ * staged from it, every field would read as moved and be written and repainted
+ * again, inside the scheduler. The routing, the solo and the mute are the
+ * session's own: staging left them out.
+ */
+function densify(p, session) {
+  if (!p?.dense?.size || !session?.tracks) return session;
+  return {
+    ...session,
+    tracks: session.tracks.map(t => {
+      const d = p.dense.get(trackKey(t));
+      if (!d) return t;
+      return {
+        ...d,
+        outIndex: t.outIndex ?? -1,
+        compSourceIndex: t.compSourceIndex ?? -1,
+        soloed: !!t.soloed,
+        muted: !!t.muted,
+      };
+    }),
+  };
+}
+
+/** The tracks of the first session this transition merges that are not playing now. */
+function stageList(p) {
+  const shape = p.opts.shape;
+  let target = p.session;
+  if (shape === "bridge") target = p.bridge?.session;
+  else if (shape === "stagger") target = p.events.length ? compositeSession(p.old, p.session, new Set(p.events[0].groups)) : null;
+  const live = new Set(state.tracks.map(trackKey));
+  return (target?.tracks || []).filter(t => t.engineKey !== "bus" && !live.has(trackKey(t)));
+}
+
+function stageNext(p) {
+  if (pending !== p || p.merged || !p.toStage?.length) return;
+  const td = p.toStage.shift();
+  // Alone and on the master: its sends and sidechain are the landing's to
+  // wire, and a solo carried in would silence the song still playing.
+  const next = {
+    ...td, soloed: false, muted: false, outIndex: -1, compSourceIndex: -1,
+    comp: td.comp ? { ...td.comp, source: "self" } : td.comp,
+  };
+  // Everything there now, the tracks staged so far included, as the engine
+  // reads them back, so the merge only has the one new track to make.
+  const live = serializeSet({ staged: true });
+  const had = new Set(state.tracks);
+  try { mergeSet({ ...live, tracks: [...live.tracks, next] }); } catch (e) {
+    console.error("transition: staging failed", e);
+    p.toStage = [];
+  }
+  for (const t of state.tracks) {
+    if (had.has(t)) continue;
+    t._staged = true;
+    t._clipOff = true;
+    t.el?.classList.add("is-staged");
+  }
+  const back = serializeSet({ staged: true }).tracks.find(x => trackKey(x) === trackKey(td));
+  if (back) p.dense.set(trackKey(td), back);
+  if (p.toStage.length) setTimeout(() => stageNext(p), 0);
+}
+
+function startStaging(p) {
+  p.dense = new Map();
+  p.toStage = stageList(p);
+  if (p.toStage.length) setTimeout(() => stageNext(p), 0);
+}
+
+/** Take back whatever was built ahead for a transition that is not landing. */
+function dropStaged() {
+  if (!state.tracks.some(t => t._staged)) return;
+  try { mergeSet(serializeSet()); } catch (e) { console.error("transition: unstaging failed", e); }
 }
 
 /** The new song, whole: the end of every shape. */
@@ -144,7 +239,7 @@ function landFinal(p) {
   pending = null;
   releaseDropped(p);
   endOverlap(p, false);
-  safeMerge(p.session);
+  safeMerge(p.session, p);
   if (p.opts.shape === "bridge" && p.bridge) switchPattern(p.bridge.start, { deferUi: true });
   told(p);
 }
@@ -207,6 +302,7 @@ export function transitionTo(session, options = {}) {
     }
     if (opts.shape === "bridge") p.old = serializeSet();
     pending = p;
+    startStaging(p);
     window.dispatchEvent(new CustomEvent("seqbaby:transition", { detail: { pending: true, ...opts, wait: p.wait, run: p.run } }));
     // A stage due at once (a stagger started on the bar line, or `now`) runs now.
     if (opts.shape === "stagger" || opts.shape === "drop") runDue(p, false);
@@ -231,7 +327,7 @@ function runDue(p, barLine) {
     } else {
       for (const g of e.groups) p.arrived.add(g);
       if (p.arrived.size >= 4) { landFinal(p); landed = true; break; }
-      safeMerge(compositeSession(p.old, p.session, p.arrived));
+      safeMerge(compositeSession(p.old, p.session, p.arrived), p);
       p.merged = true;
     }
   }
@@ -245,6 +341,7 @@ export function cancelTransition() {
   pending = null;
   releaseDropped(p);
   endOverlap(p, true);
+  if (!p.merged) dropStaged();
   if (p.merged && p.old) {
     safeMerge(p.old);
     if (p.opts.shape === "bridge") switchPattern(p.old.activePattern ?? 0, { deferUi: true });
@@ -288,7 +385,7 @@ export function transitionStep(nextTime, stepDur, barLine) {
   if (shape === "bridge") {
     if (p.phase === "wait") {
       if (p.done < p.wait || !barLine) return null;
-      safeMerge(p.bridge.session);
+      safeMerge(p.bridge.session, p);
       switchPattern(p.bridge.slot, { deferUi: true });
       p.merged = true;
       p.phase = "hold";
@@ -329,6 +426,13 @@ export function transitionStep(nextTime, stepDur, barLine) {
       }
       if (shape === "fade") for (const t of p.newOnly || []) rampTo(outGain(t), fadeGain(1 - prog), nextTime, true);
     }
+  }
+  // A cut asked for late in a bar can reach its bar line before the new
+  // tracks are built: it waits one more bar rather than build them here.
+  if (shape === "cut" && barLine && p.done >= p.wait + p.run && p.toStage?.length && !p.deferred) {
+    p.deferred = true;
+    p.run += stepsPerBarForMeter(transportMeter());
+    return null;
   }
   // Land on the bar line the plan counted to, or the first one after it (a
   // meter changed by hand mid-transition moves the bar lines).

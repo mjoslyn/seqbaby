@@ -511,6 +511,7 @@ export function init() {
   // still reaching for Tone.Transport / Tone.Draw now fails loudly instead of
   // quietly running on the wrong clock.
   Tone.setContext(state.audioCtx, true);
+  memoizeOscillatorInitialValue();
   // Widen the transport's scheduler lookahead. Tone's clock ticks on the main
   // thread; when that thread stalls (layout, GC, a heavy pattern switch — all
   // worse on mobile), callbacks fire late and every note they schedule gets
@@ -927,3 +928,25 @@ export function init() {
 
 init();
 
+
+// Tone works out where an oscillator starts (getInitialValue) with 33 inverse
+// FFTs of 2048 partials every time a type or phase is set, and every rack
+// sets several (chorus, phaser, flanger, wow, flutter...). That was a third of
+// the time a new track took to build, which lands inside the scheduler when a
+// compose transition brings tracks in. The answer depends only on the type
+// and the phase for the stock shapes, so it is worked out once per pair.
+function memoizeOscillatorInitialValue() {
+  const proto = Tone.Oscillator?.prototype;
+  const orig = proto?.getInitialValue;
+  if (typeof orig !== "function" || orig._memo) return;
+  const cache = new Map();
+  const memo = function () {
+    if (this._type === "custom") return orig.call(this);
+    const k = this._type + "|" + this._phase;
+    let v = cache.get(k);
+    if (v === undefined) { v = orig.call(this); cache.set(k, v); }
+    return v;
+  };
+  memo._memo = true;
+  proto.getInitialValue = memo;
+}

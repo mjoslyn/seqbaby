@@ -878,7 +878,7 @@ export function startSetterLfoLoopIfNeeded() {
   if (inst && !t.fxConfig?.[fxStageOfModKey(key)]) return false;
   return canModulateKey(t.engineKey, key, { euclid: !!t.euclid?.on, chance: !!t.chance?.on });
 }
-export function syncLFO(t, key) {
+export function syncLFO(t, key, { refresh = true } = {}) {
   const cfg = t.lfoConfig[key] || { enabled: false };
   let lfo = t.lfos[key];
   // The setter loop walks the global setter keys, plus any copy's.
@@ -889,7 +889,7 @@ export function syncLFO(t, key) {
 
   // FX-target LFOs must keep their stage wired into the rack's chain even at
   // wet 0 (the LFO signal adds on top of the base) — re-evaluate stage bypass.
-  try { t.fxRack?.refreshStageActivity?.(); } catch {}
+  if (refresh) { try { t.fxRack?.refreshStageActivity?.(); } catch {} }
 
   // ── curved AudioParam LFO path (cutoff, ring_freq, shaper_preamp) ──
   //
@@ -1030,7 +1030,10 @@ export function syncLFO(t, key) {
 export function syncAllLFOs(t) {
   // Anything still running that the matrix no longer names (a copy taken off,
   // a patch without it) is synced too, which switches it off.
-  for (const k of new Set([...trackLfoKeys(t), ...Object.keys(t.lfos || {})])) syncLFO(t, k);
+  // The rack's stage wiring is asked once at the end, not once per key: with
+  // ~180 keys that was 180 walks of every stage against the whole matrix.
+  for (const k of new Set([...trackLfoKeys(t), ...Object.keys(t.lfos || {})])) syncLFO(t, k, { refresh: false });
+  try { t.fxRack?.refreshStageActivity?.(); } catch {}
   try { applyWavetableScan(t); } catch (e) { console.warn("wavetable scan sync failed", e); }
 }
 

@@ -297,7 +297,10 @@ const MERGE_REBUILD_KEYS = TRACK_REBUILD_KEYS
 
 function needsRebuild(a, b) {
   if (!a) return true;
-  return MERGE_REBUILD_KEYS.some(k => !sameTree(a[k], b[k]));
+  // Absent and null are the same answer (no wavetable, no upload): a sparse
+  // song from the builder leaves them out where the engine writes null, and
+  // reading that as a change rebuilt every track of every compose turn.
+  return MERGE_REBUILD_KEYS.some(k => !sameTree(a[k] ?? null, b[k] ?? null));
 }
 
 /**
@@ -391,7 +394,7 @@ export function mergeSet(s) {
   // What is playing right now, in the same format, so every comparison below
   // is like for like. serializeSet flushes the live sound into whichever store
   // owns the pattern first, which is what makes the sound diff honest.
-  const cur = serializeSet();
+  const cur = serializeSet({ staged: true });
   const curTracks = cur.tracks || [];
   const nextTracks = (target.tracks || []).map(migrateTrackData);
   const liveTracks = [...state.tracks];          // parallel to curTracks, by index
