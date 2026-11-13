@@ -4884,7 +4884,13 @@ drawer above the input (always on show, so it is set before a turn is sent
 as well as in review) and kept per browser (`seqbaby.transition.v1`):
 **when** (next bar, the default, or now; a bridge waits for the song's
 end), **shape**, **length** (1 / 2 / 4 / 8 bars; for a bridge, **patterns**
-instead: the last 1 / 2 / 3 / 4) and **tempo** (auto / jump / ramp).
+instead: the last 1 / 2 / 3 / 4) and **tempo** (auto / jump / ramp). In
+review there is also **into**: which of the new song's patterns to land on
+(`opts.into`). Unset, a bridge lands on the new song's own start and every
+other shape on the slot playing. Set, a sweep, fade or stagger plays that
+pattern on the slot the chain is holding while the two overlap (`aimed`,
+transition.js), a bridge works it in, and every shape switches to it at the
+landing.
 Exposed as `window.seqbaby.transitionTo(session, opts)` (a Promise of
 `{landed}`), `cancelTransition`, `finishTransition` and `transitionPending`.
 

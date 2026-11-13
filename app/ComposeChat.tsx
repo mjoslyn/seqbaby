@@ -43,7 +43,17 @@ type Proposal = {
   title?: string | null;
   pending?: "audition" | "stop" | "keep" | null;
   note?: string;
+  /** The new song's pattern to transition into (0-based), or unset for the default. */
+  into?: number | null;
 };
+
+/** The patterns of a session with notes in them, by slot. */
+function filledSlots(session: unknown): number[] {
+  const s = session as { tracks?: { patterns?: ({ steps?: unknown[] } | null)[] }[] } | null;
+  const out: number[] = [];
+  for (let k = 0; k < 32; k++) if (s?.tracks?.some((t) => t.patterns?.[k]?.steps?.some(Boolean))) out.push(k);
+  return out;
+}
 
 type Shape = "cut" | "sweep" | "drop" | "fade" | "stagger" | "bridge";
 const SHAPES: Shape[] = ["cut", "sweep", "drop", "fade", "stagger", "bridge"];
@@ -589,7 +599,8 @@ export default function ComposeChat({
     // Going BACK to what was playing has no old song's end to work into:
     // a bridge's stop is a cut on the bar.
     if (trans.shape === "bridge" && back) return (await api.transitionTo(session, { ...trans, shape: "cut", when: "bar" })).landed;
-    return (await api.transitionTo(session, trans)).landed;
+    const into = !back && r?.into != null ? { into: r.into } : {};
+    return (await api.transitionTo(session, { ...trans, ...into })).landed;
   }, [trans, writeLive]);
 
   // Audition: keep what is playing so it can be put back, then merge the
@@ -974,6 +985,26 @@ export default function ComposeChat({
               <option value="jump">tempo: jump</option>
               <option value="ramp">tempo: ramp</option>
             </select>
+            {review && !review.before && filledSlots(review.session).length > 0 && (
+              <select
+                className={styles.chatModelSelect}
+                value={review.into ?? ""}
+                disabled={!!review.pending}
+                onChange={(e) => {
+                  const v = e.target.value === "" ? null : Number(e.target.value);
+                  setReview((cur) => (cur ? { ...cur, into: v } : cur));
+                }}
+                aria-label="into"
+                title={trans.shape === "bridge"
+                  ? "the new song's pattern the old one's end is worked into, and that it lands on"
+                  : "the new song's pattern it lands on. as is: whatever pattern is playing"}
+              >
+                <option value="">{trans.shape === "bridge" ? "into: its start" : "into: as is"}</option>
+                {filledSlots(review.session).map((k) => (
+                  <option key={k} value={k}>into: pattern {k + 1}</option>
+                ))}
+              </select>
+            )}
           </div>
           <div className={styles.chatRow} hidden={tab !== "chat"}>
             <textarea

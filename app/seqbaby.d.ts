@@ -66,6 +66,8 @@ declare global {
           tempo?: "auto" | "jump" | "ramp";
           /** bridge: how many of the song's last patterns the new song is worked into. */
           patterns?: number;
+          /** The new song's pattern to land on (and, for a bridge, to work in). */
+          into?: number;
         },
       ) => Promise<{ landed: boolean }>;
       /** Drop a pending transition without landing it. */

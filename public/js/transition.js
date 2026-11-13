@@ -123,11 +123,35 @@ function holdNow(prm, at) {
   try { prm.cancelScheduledValues(at); prm.setValueAtTime(Math.max(1e-4, prm.value), at); } catch {}
 }
 
+/**
+ * The new song as it plays while it overlaps the old one: on the slot the
+ * transport is on, which the chain holds until the landing, so with a target
+ * picked every track's target pattern is copied there. The landing then
+ * switches to the target itself.
+ */
+function aimed(p) {
+  const cur = state.activePattern;
+  if (p.into == null || p.into === cur || !p.session?.tracks) return p.session;
+  return {
+    ...p.session,
+    tracks: p.session.tracks.map(t => {
+      const patterns = (t.patterns || []).slice();
+      const src = patterns[p.into];
+      const here = patterns[cur];
+      if (!src && !here) return t;
+      while (patterns.length <= cur) patterns.push(null);
+      patterns[cur] = src || { ...here, steps: (here.steps || []).map(() => false) };
+      for (let k = 0; k < patterns.length; k++) if (!patterns[k]) patterns[k] = { ...patterns[cur], steps: (patterns[cur].steps || []).map(() => false) };
+      return { ...t, patterns };
+    }),
+  };
+}
+
 /** Both songs in: the merge, and which live tracks are whose. */
 function startOverlap(p) {
   const oldKeys = new Set(p.old.tracks.map(trackKey));
   const newKeys = new Set((p.session?.tracks || []).map(trackKey));
-  safeMerge(overlapSession(p.old, p.session), p);
+  safeMerge(overlapSession(p.old, aimed(p)), p);
   p.merged = true;
   p.oldOnly = state.tracks.filter(t => !newKeys.has(trackKey(t)));
   p.newOnly = state.tracks.filter(t => !oldKeys.has(trackKey(t)) && t.engineKey !== "bus");
@@ -289,7 +313,7 @@ function densify(p, session) {
 function stageList(p) {
   const shape = p.opts.shape;
   let target = p.session;
-  if (shape === "stagger") target = p.events.length ? compositeSession(p.old, p.session, new Set(p.events[0].groups)) : null;
+  if (shape === "stagger") target = p.events.length ? compositeSession(p.old, aimed(p), new Set(p.events[0].groups)) : null;
   const live = new Set(state.tracks.map(trackKey));
   return (target?.tracks || []).filter(t => t.engineKey !== "bus" && !live.has(trackKey(t)));
 }
@@ -344,7 +368,8 @@ function landFinal(p) {
   endOverlap(p, false);
   unhold();
   safeMerge(p.session, p);
-  if (p.opts.shape === "bridge" && state.playing) switchPattern(p.session?.activePattern ?? 0, { deferUi: true });
+  const to = p.opts.shape === "bridge" ? (p.into ?? p.session?.activePattern ?? 0) : p.into;
+  if (state.playing && to != null && to !== state.activePattern) switchPattern(to, { deferUi: true });
   told(p);
 }
 
@@ -370,6 +395,10 @@ export function transitionTo(session, options = {}) {
       tempo: tempoMode(opts.tempo, from, to, opts.shape),
       wait: 0, run: 0, done: 0,
       events: [], off: new Set(), merged: false,
+      // The new song's pattern to land on (`options.into`). Unset: a bridge
+      // lands on the new song's own start, every other shape on the slot
+      // playing, as it always did.
+      into: Number.isInteger(options.into) && options.into >= 0 && options.into < 32 ? options.into : null,
     };
     if (!state.playing) return landFinal(p);
     const meter = transportMeter();
@@ -439,7 +468,7 @@ function runDue(p, barLine) {
     } else {
       for (const g of e.groups) p.arrived.add(g);
       if (p.arrived.size >= 4) { landFinal(p); landed = true; break; }
-      safeMerge(compositeSession(p.old, p.session, p.arrived), p);
+      safeMerge(compositeSession(p.old, aimed(p), p.arrived), p);
       p.merged = true;
     }
   }
@@ -543,7 +572,7 @@ function workInStep(p, nextTime, stepDur, barLine) {
     return "land";
   }
   workInMoment(p, nextTime, stepDur);
-  p.into++;
+  p.step++;
   return null;
 }
 
@@ -557,7 +586,7 @@ function startWorkIn(p) {
   stretchLookAhead();
   const live = serializeSet();
   const liveKeys = new Set(live.tracks.map(trackKey));
-  const start = p.session?.activePattern ?? 0;
+  const start = p.into ?? p.session?.activePattern ?? 0;
   const arrange = !p.tail.slots;
   const free = arrange ? freeSlot({ tracks: [...live.tracks, ...(p.session?.tracks || [])] }) : -1;
   const into = arrange ? (free >= 0 ? [free] : []) : p.tail.slots;
@@ -588,7 +617,7 @@ function startWorkIn(p) {
   if (adds.length) safeMerge({ ...live, tracks: [...live.tracks, ...adds] }, p);
   p.merged = true;
   p.phase = "work";
-  p.into = 0;
+  p.step = 0;
   p.barsIn = 0;
   // Who comes in and who makes way, as live tracks.
   p.incoming = new Map();   // group -> tracks to let in
@@ -620,9 +649,9 @@ function startWorkIn(p) {
   releaseSilencedTracks();
 }
 
-/** What changes on the step about to sound, `p.into` steps into the work-in. */
+/** What changes on the step about to sound, `p.step` steps into the work-in. */
 function workInMoment(p, nextTime, stepDur) {
-  const i = p.into;
+  const i = p.step;
   let moved = false;
   for (const g of ["harmony", "lead", "bass"]) {
     if (p.entries[g] !== i) continue;
