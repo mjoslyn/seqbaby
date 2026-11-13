@@ -67,7 +67,8 @@
 // profile — and a row of little dials would say nothing about either.
 // The eq's inputs are drawn as a curve instead (eqDraw.js), so they stay plain
 // hidden ranges that curve writes.
-const KNOB_EXCLUDE = ".sq-wt__harm-bar, .sq-chance__pc, .sq-track__eq-panel input[type=range]";
+// (and the mix view's crossfader and tempo slider, which run left to right)
+const KNOB_EXCLUDE = ".sq-wt__harm-bar, .sq-chance__pc, .sq-track__eq-panel input[type=range], .sq-mix__xfade, .sq-mix__tempo-x";
 
 /** Pixels of vertical drag for the full range at normal resolution, on a dial.
  *  A slider (the phone skin) uses its own drawn height instead — `travelFor`. */

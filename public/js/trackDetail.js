@@ -46,7 +46,10 @@ export function restoreTrackCard(t) {
  * @param {HTMLElement} container  the view's root; the detail is appended to it
  * @param {() => void} onChange   called when the selection changes (the view repaints)
  */
-export function makeTrackDetail(container, onChange) {
+export function makeTrackDetail(container, onChange, { buses = false } = {}) {
+  // `buses`: the mix view's detail also shows a bus's card (a deck's bus is
+  // where its eq, its rack and its lanes are).
+  const ok = (t) => !!t && (buses || t.engineKey !== "bus");
   const el = document.createElement("div");
   el.className = "sq-track-detail";
   el.innerHTML = `<div class="sq-track-detail__title"></div>`;
@@ -56,7 +59,7 @@ export function makeTrackDetail(container, onChange) {
 
   /** Select a track: its card comes in, the previous one goes home. */
   function select(t) {
-    if (!t || t.engineKey === "bus") return;
+    if (!ok(t)) return;
     const prev = trackById(selectedId);
     if (prev && prev !== t) restoreTrackCard(prev);
     selectedId = t.id;
@@ -82,9 +85,9 @@ export function makeTrackDetail(container, onChange) {
    */
   function sync() {
     let t = trackById(selectedId);
-    if (!t || t.engineKey === "bus") {
+    if (!ok(t)) {
       t = trackById(state.activeTrackId);
-      if (!t || t.engineKey === "bus") t = rows()[0] || null;
+      if (!ok(t)) t = rows()[0] || null;
       selectedId = t?.id ?? null;
     }
     for (const o of state.tracks) if (o !== t && o.el?.parentElement === el) restoreTrackCard(o);
@@ -94,7 +97,7 @@ export function makeTrackDetail(container, onChange) {
     const [hue, color] = trackHue(t);
     el.style.setProperty("--track-hue", String(hue));
     el.style.setProperty("--track-color", color);
-    title.textContent = `${t.name || "track"} · pattern ${trackSlot(t) + 1}${t._clipOff ? " (stopped)" : ""}`;
+    title.textContent = `${t._deck === "b" ? "deck B · " : ""}${t.name || "track"} · pattern ${trackSlot(t) + 1}${t._clipOff ? " (stopped)" : ""}`;
     return t;
   }
 

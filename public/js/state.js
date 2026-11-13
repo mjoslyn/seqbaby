@@ -116,7 +116,33 @@ export const state = {
   // every pattern switch would be unplayable.
   /** @type {import("./types.js").MacroPad[]} */
   macroPads: [],
+  // The mix (mix.js): a second song on deck B, its tracks in `tracks` beside
+  // the song's own but flagged (`_deck`, `_deckBus`) and never saved. Null
+  // when no second song is loaded.
+  /** @type {any} */
+  mix: null,
 };
+
+// ---- the two decks (mix.js) -------------------------------------------------
+//
+// While a second song is loaded, `state.tracks` holds three kinds of track:
+// the SONG's (no flag: what a save, undo and a jam see), deck B's (`_deck:
+// "b"`: the other song's tracks and its own buses) and the two deck buses
+// (`_deckBus: "a" | "b"`, the B one carrying `_deck: "b"` as well, so it
+// follows deck B's scene). Anything that means "the song" asks `inSong`;
+// anything that means "what the pattern bar's scene moves" asks `onDeckA`,
+// which is the song plus deck A's bus (its lanes belong to A's patterns).
+
+/** Whether a track is the song's own: serialized, undone, shared. */
+export function inSong(t) { return !!t && !t._deck && !t._deckBus; }
+/** Whether a track follows the pattern bar's scene (the song, and deck A's bus). */
+export function onDeckA(t) { return !!t && t._deck !== "b"; }
+/** Whether a track is deck B's (its bus included). */
+export function onDeckB(t) { return !!t && t._deck === "b"; }
+/** The song's own tracks, in order. */
+export function songTracks() { return state.tracks.filter(inSong); }
+/** Deck B withheld: loaded but not started, so its tracks play nothing. */
+export function deckSilent(t) { return t?._deck === "b" && !t._deckBus && !state.mix?.on; }
 
 /**
  * Build a blank pattern with `len` per-step slots across every lane.
@@ -260,8 +286,9 @@ export function invertChord(notes, level) {
   return out;
 }
 
-export function isPatternNonEmpty(idx) {
+export function isPatternNonEmpty(idx, deck = "a") {
   for (const t of state.tracks) {
+    if ((t._deck === "b") !== (deck === "b")) continue;   // each deck's bank is its own
     const p = t.patterns?.[idx];
     if (!p) continue;
     for (let i = 0; i < p.steps.length; i++) { if (p.steps[i]) return true; }
@@ -314,7 +341,7 @@ export function requestPatternSwitch(idx) {
   if (idx < 0 || idx >= PATTERN_COUNT) return;
   // Already the scene, and every track on it: nothing to switch. A track a
   // clip put on another slot is brought back by the switch below.
-  if (idx === state.activePattern && state.tracks.every(t => trackSlot(t) === idx && !t._clipOff)) {
+  if (idx === state.activePattern && state.tracks.every(t => !onDeckA(t) || (trackSlot(t) === idx && !t._clipOff))) {
     state.queuedPattern = null; renderPatternGrid(); return;
   }
   if (state.patternSwitchMode === "finish" && state.playing) {
@@ -339,13 +366,15 @@ export function switchPattern(idx, { deferUi = false } = {}) {
   // Each track is flushed at ITS slot: a launched clip (clips.js) can have put
   // one off the scene, and flushing it at the scene's index would write its
   // live sound into a pattern it never played.
-  for (const t of state.tracks) {
+  // Deck B (mix.js) has a scene of its own: the pattern bar's moves the song.
+  const mine = state.tracks.filter(onDeckA);
+  for (const t of mine) {
     const was = trackSlot(t);
     if (was !== idx) flushPatternSound(t, was);
   }
   state.activePattern = idx;
   state.queuedPattern = null;
-  for (const t of state.tracks) {
+  for (const t of mine) {
     // A scene launch is every track together: a clip waiting for the bar is
     // overridden, a stopped track plays again.
     t._queuedSlot = null;
@@ -372,7 +401,7 @@ export function switchPattern(idx, { deferUi = false } = {}) {
   // first steps of the new bar played late: a stutter on the 1, in chain mode
   // or after a queued switch. Coalesced, so two switches paint once.
   if (deferUi) {
-    patternUiQueue = state.tracks.slice();
+    patternUiQueue = mine;
     if (patternUiTimer === null) patternUiTimer = setTimeout(paintPatternUIStep, 0);
   } else {
     paintPatternUI();

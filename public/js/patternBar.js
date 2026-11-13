@@ -2,7 +2,7 @@ import { PATTERN_COUNT, PATTERN_MODES, patternModeOf } from "./constants.js";
 import { setStatus } from "./dom.js";
 import { ICON_ARRANGE, ICON_CHAIN, ICON_FINISH, ICON_NOW, ICON_REPEAT } from "./icons.js";
 import { flushPatternSound, recallPatternSound, refreshPatternSoundUI } from "./patternSound.js";
-import { aliasPattern, clonePattern, emptyPattern, inLoop, isPatternNonEmpty, repaintPatternUI, requestPatternSwitch, state, syncMeterUI, trackSlot } from "./state.js";
+import { aliasPattern, clonePattern, emptyPattern, inLoop, isPatternNonEmpty, onDeckA, repaintPatternUI, requestPatternSwitch, state, syncMeterUI, trackSlot } from "./state.js";
 import { remapSlots } from "./arrangement.js";
 import { renderStepGrid } from "./stepGrid.js";
 import { maxLengthAt, resizePattern } from "./track.js";
@@ -55,9 +55,14 @@ export function nextPatternMode(mode) {
   return PATTERN_MODES[(PATTERN_MODES.indexOf(patternModeOf(mode)) + 1) % PATTERN_MODES.length];
 }
 
+// The tracks the pattern bank belongs to: the song's (and deck A's bus). Deck B
+// of a mix (mix.js) is another song with a bank of its own, which a copy, a
+// move or a meter change here must not renumber or resize.
+const bankTracks = () => state.tracks.filter(onDeckA);
+
 export function copyPattern(from, to) {
   if (from === to) return;
-  for (const t of state.tracks) {
+  for (const t of bankTracks()) {
     const src = t.patterns?.[from];
     if (!src) continue;
     t.patterns[to] = clonePattern(src);
@@ -73,7 +78,7 @@ export function copyPattern(from, to) {
   // it has to be recalled too or the pattern would sound like the one it
   // replaced until you next left it and came back. Per track, not "is the scene
   // `to`": a launched clip can have a track on another slot (trackSlot).
-  for (const t of state.tracks) {
+  for (const t of bankTracks()) {
     if (trackSlot(t) !== to) continue;
     aliasPattern(t, to);
     if (recallPatternSound(t, to)) refreshPatternSoundUI(t);
@@ -95,10 +100,10 @@ export function movePattern(from, at) {
   order.splice(dest, 0, from);
   // A locked pattern's sound is only written back when it is left; do it now so
   // the permuted copy holds what is audible. Each track at ITS slot (trackSlot).
-  for (const t of state.tracks) flushPatternSound(t, trackSlot(t));
+  for (const t of bankTracks()) flushPatternSound(t, trackSlot(t));
   const pick = (arr, fn = (v) => v) => order.map((i) => fn(arr[i]));
   const renumber = (i) => (i == null ? i : order.indexOf(i));
-  for (const t of state.tracks) {
+  for (const t of bankTracks()) {
     if (t.patterns) t.patterns = pick(t.patterns);
     // Everything that names a slot by number follows it: where each track is,
     // what it has queued, and its arrangement's blocks.
@@ -115,7 +120,7 @@ export function movePattern(from, at) {
   // (no sound change, so no recall) and repaint everything a switch would. Not
   // switchPattern: that would put every track on the scene, and a launched clip
   // off it has to stay where it was.
-  for (const t of state.tracks) aliasPattern(t, trackSlot(t));
+  for (const t of bankTracks()) aliasPattern(t, trackSlot(t));
   repaintPatternUI();
   setStatus(`moved pattern ${from + 1} → ${dest + 1}`);
 }
@@ -133,14 +138,14 @@ export function movePattern(from, at) {
  * @returns {number} the new empty slot, or -1 when every slot is in use
  */
 export function insertEmptyPattern(at) {
-  const free = (i) => !isPatternNonEmpty(i) && !state.tracks.some((t) => t.arrangement?.some((b) => b.slot === i));
+  const free = (i) => !isPatternNonEmpty(i) && !bankTracks().some((t) => t.arrangement?.some((b) => b.slot === i));
   let from = -1;
   for (let i = PATTERN_COUNT - 1; i > at - 1 && i >= 0; i--) if (i !== at && free(i)) { from = i; break; }
   if (from < 0) for (let i = Math.min(at, PATTERN_COUNT) - 1; i >= 0; i--) if (free(i)) { from = i; break; }
   if (from < 0) { setStatus("no room for a new column: all 32 patterns are in use", true); return -1; }
   movePattern(from, at);
   const dest = at > from ? at - 1 : at;
-  for (const t of state.tracks) {
+  for (const t of bankTracks()) {
     const p = t.patterns?.[dest];
     if (p) t.patterns[dest] = emptyPattern(p.steps.length);
   }
@@ -148,7 +153,7 @@ export function insertEmptyPattern(at) {
   state.patternMeters[dest] = { num: m0.num, den: m0.den };
   if (dest !== 0) state.patternMeterCustomized[dest] = false;
   state.patternRepeats[dest] = 1;
-  for (const t of state.tracks) if (trackSlot(t) === dest) aliasPattern(t, dest);
+  for (const t of bankTracks()) if (trackSlot(t) === dest) aliasPattern(t, dest);
   repaintPatternUI();
   setStatus(`new empty pattern ${dest + 1}`);
   return dest;
@@ -182,7 +187,7 @@ export function setPatternMeter(patIdx, meter) {
   }
   for (const [i] of moved) state.patternMeters[i] = { num: m.num, den: m.den };
   const newSpb = stepsPerBarForMeter(m);
-  for (const t of state.tracks) {
+  for (const t of bankTracks()) {
     for (const [i, was] of moved) {
       const oldSpb = stepsPerBarForMeter(was);
       if (oldSpb === newSpb) continue;

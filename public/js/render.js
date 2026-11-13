@@ -528,8 +528,13 @@ export function syncDronePanel(t) {
 /** @returns {boolean} whether anything moved */
 export function placeBusesLast() {
   const isBus = t => t.engineKey === "bus";
-  if (!state.tracks.some(isBus)) return false;
-  const sorted = [...state.tracks.filter(t => !isBus(t)), ...state.tracks.filter(isBus)];
+  // The song's tracks, then its buses, then whatever a mix has loaded beside
+  // it (mix.js: deck B's tracks, its buses, the two deck buses). The song's
+  // come first because every index in a serialized session, and every reader
+  // that walks `state.tracks` beside one, counts along the song's own.
+  const rank = t => (t._deck || t._deckBus) ? (t._deckBus ? (t._deckBus === "a" ? 4 : 5) : isBus(t) ? 3 : 2) : isBus(t) ? 1 : 0;
+  if (!state.tracks.some(t => rank(t) > 0)) return false;
+  const sorted = [0, 1, 2, 3, 4, 5].flatMap(r => state.tracks.filter(t => rank(t) === r));
   if (sorted.every((t, i) => t === state.tracks[i])) return false;
   state.tracks = sorted;
   // Only the buses need moving: appending them in order leaves every other row
@@ -537,7 +542,7 @@ export function placeBusesLast() {
   // engine dropdown that turned a track into a bus is inside one of these.
   const host = document.getElementById("tracks");
   const focused = document.activeElement;
-  if (host) for (const t of sorted) if (isBus(t) && t.el) host.appendChild(t.el);
+  if (host) for (const t of sorted) if (rank(t) > 0 && t.el && t.el.parentElement === host) host.appendChild(t.el);
   if (focused instanceof HTMLElement && document.activeElement !== focused && host?.contains(focused))
     focused.focus({ preventScroll: true });
   return true;

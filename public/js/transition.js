@@ -42,7 +42,7 @@ import { mergeSet } from "./liveSet.js";
 import { removeTrack } from "./track.js";
 import { serializeSet } from "./session.js";
 import { releaseSilencedTracks } from "./signal.js";
-import { loopRange, nextChainPattern, state, switchPattern } from "./state.js";
+import { loopRange, nextChainPattern, songTracks, state, switchPattern } from "./state.js";
 import { stepsPerBarForMeter, stepsPerBeatForMeter, transportMeter } from "./meter.js";
 import {
   SWEEP_TOP,
@@ -83,7 +83,7 @@ const MAX_DEFER = 4;
 const TRANSITION_LOOKAHEAD = 1.0;
 let baseLookAhead = null;   // the studio's own, read the first time it is stretched
 let stretched = false;
-function stretchLookAhead() {
+export function stretchLookAhead() {
   try {
     const ctx = Tone.getContext();
     if (baseLookAhead == null) baseLookAhead = ctx.lookAhead;
@@ -91,7 +91,7 @@ function stretchLookAhead() {
     ctx.lookAhead = Math.max(baseLookAhead, TRANSITION_LOOKAHEAD);
   } catch {}
 }
-function restoreLookAhead() {
+export function restoreLookAhead() {
   if (!stretched) return;
   stretched = false;
   // After the landing's own work has been scheduled past, and only if no
@@ -153,8 +153,9 @@ function startOverlap(p) {
   const newKeys = new Set((p.session?.tracks || []).map(trackKey));
   safeMerge(overlapSession(p.old, aimed(p)), p);
   p.merged = true;
-  p.oldOnly = state.tracks.filter(t => !newKeys.has(trackKey(t)));
-  p.newOnly = state.tracks.filter(t => !oldKeys.has(trackKey(t)) && t.engineKey !== "bus");
+  // The song's own tracks: a second song on deck B (mix.js) is neither.
+  p.oldOnly = songTracks().filter(t => !newKeys.has(trackKey(t)));
+  p.newOnly = songTracks().filter(t => !oldKeys.has(trackKey(t)) && t.engineKey !== "bus");
   p.saved = p.oldOnly.map(t => ({
     t,
     gain: outGain(t)?.value ?? 1,
@@ -217,12 +218,13 @@ function safeMerge(session, p = null) {
     if (t._leaving && keys.has(trackKey(t))) unleave(t);    // wanted again (a cancel)
   }
   const leaving = state.playing && p?.at
-    ? state.tracks.filter(t => !t._staged && !t._leaving && t.engineKey !== "bus" && !keys.has(trackKey(t)))
+    ? songTracks().filter(t => !t._staged && !t._leaving && t.engineKey !== "bus" && !keys.has(trackKey(t)))
     : [];
   if (leaving.length) {
     const cur = serializeSet({ staged: true }).tracks;          // parallel to state.tracks
+    const live = songTracks();                                  // what `cur` runs parallel to
     const extra = leaving.map(t => ({
-      ...cur[state.tracks.indexOf(t)], soloed: false, outIndex: -1, compSourceIndex: -1,
+      ...cur[live.indexOf(t)], soloed: false, outIndex: -1, compSourceIndex: -1,
     }));
     target = { ...target, tracks: [...target.tracks, ...extra] };
   }
@@ -314,7 +316,7 @@ function stageList(p) {
   const shape = p.opts.shape;
   let target = p.session;
   if (shape === "stagger") target = p.events.length ? compositeSession(p.old, aimed(p), new Set(p.events[0].groups)) : null;
-  const live = new Set(state.tracks.map(trackKey));
+  const live = new Set(songTracks().map(trackKey));
   return (target?.tracks || []).filter(t => t.engineKey !== "bus" && !live.has(trackKey(t)));
 }
 
@@ -430,7 +432,7 @@ export function transitionTo(session, options = {}) {
       // What is playing now, to read the old song's groups off, and (for a
       // stagger, which merges part way) to put back if it is called off.
       p.old = serializeSet();
-      p.oldTracks = state.tracks.slice();
+      p.oldTracks = songTracks();
       const slot = p.old.activePattern ?? 0;
       p.oldGroup = p.old.tracks.map(t => trackGroup(t, slot));
       p.events = groupStages(opts.shape, opts.bars, barLen, beatLen, p.run).map(e => ({ ...e, ran: false }));
@@ -495,7 +497,7 @@ function chainTail(from) {
 /** The track whose part takes longest to come round: what a pass of the pattern is. */
 function longestTrack() {
   let best = null, most = -1;
-  for (const t of state.tracks) {
+  for (const t of songTracks()) {
     if (t.engineKey === "bus" || t._staged || t._leaving || !t.length) continue;
     const cycle = t.length / Math.max(0.0001, t.speed ?? 1);
     if (cycle > most) { most = cycle; best = t; }
@@ -518,7 +520,7 @@ function songTail(n) {
     const u = nextArrangeBar(state.arrBar ?? 0, len, loop);
     // A section starts wherever any track's block does.
     const starts = new Set([from]);
-    for (const t of state.tracks) for (const b of t.arrangement || []) if (b.start > from && b.start < to) starts.add(b.start);
+    for (const t of songTracks()) for (const b of t.arrangement || []) if (b.start > from && b.start < to) starts.add(b.start);
     const sorted = [...starts].sort((a, b) => a - b);
     const begin = sorted[Math.max(0, sorted.length - n)];
     return { inside: u >= begin, bars: Math.max(1, to - u), slots: null, bar: u };
@@ -624,7 +626,7 @@ function startWorkIn(p) {
   p.outgoing = new Map();   // group -> old tracks to hold
   p.kicks = [];
   p.rollers = [];
-  for (const t of state.tracks) {
+  for (const t of songTracks()) {
     const k = trackKey(t);
     if (addKeys.has(k)) {
       t._held = true;

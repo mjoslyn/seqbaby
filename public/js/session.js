@@ -20,7 +20,7 @@ import { migrateLegacyNames, migrateTrackNames, SET_VERSION, validateSet } from 
 import { EQ_KEYS, EQ_SHAPE_KEYS, eqValue } from "./soundDefaults.js";
 import { applyCompressorConfig, ensureFxRack, refreshAllTrackOutputs, refreshCompSourceDropdowns, refreshNoiseBeds, refreshOutputSelects, routeVoiceToRack, setFilter, wouldFeedback } from "./signal.js";
 import { applyMacroPads, serializeMacroPads } from "./macro.js";
-import { aliasPattern, state, syncMeterUI, syncRepeatsUI, trackSlot } from "./state.js";
+import { aliasPattern, inSong, state, syncMeterUI, syncRepeatsUI, trackSlot } from "./state.js";
 import { renderStepGrid } from "./stepGrid.js";
 import { createTrack, removeTrack } from "./track.js";
 import { ensureAudio, requestMidiIfNeeded, silenceAllVoices } from "./transport.js";
@@ -39,15 +39,19 @@ export function storeSetsMap(m) { try { localStorage.setItem(SETS_KEY, JSON.stri
  * payloads) into a plain JSON-safe object for save / export / share.
  * @returns {Object}
  */
-export function serializeSet({ staged = false } = {}) {
+export function serializeSet({ staged = false, decks = false } = {}) {
   // Tracks a transition has built ahead of its bar line are not the song's
   // yet, and the ones it is letting finish their bar are not any more
   // (transition.js): written as if they were not there, so every index
   // counts along the song's own tracks. A merge reads them (`staged`), since
   // its comparison runs parallel to state.tracks.
-  if (!staged && state.tracks.some(t => t._staged || t._leaving)) {
+  // Deck B's tracks and the two deck buses (mix.js) are a second song being
+  // mixed in, not this one: left out the same way unless `decks` asks for
+  // everything (keeping both decks as one song).
+  const out = (t) => (!staged && (t._staged || t._leaving)) || (!decks && !inSong(t));
+  if (state.tracks.some(out)) {
     const all = state.tracks;
-    state.tracks = all.filter(t => !t._staged && !t._leaving);
+    state.tracks = all.filter(t => !out(t));
     try { return serializeSongNow(); } finally { state.tracks = all; }
   }
   return serializeSongNow();

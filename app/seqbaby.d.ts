@@ -116,6 +116,28 @@ declare global {
        *  engine its way there and the list (app/PatchBay.tsx). */
       setPatchBackend: (backend: PatchBackend, list: PatchListEntry[]) => void;
       setPatchList: (list: PatchListEntry[]) => void;
+      /**
+       * The mix (public/js/mix.js): a second song on deck B beside the open
+       * one. The shell hands the engine its way to the account's songs
+       * (app/MixSongs.tsx); null takes it away again.
+       */
+      setMixSource?: (
+        backend: {
+          list: () => Promise<Array<{ id: string; title: string; note?: string }>>;
+          load: (id: string) => Promise<{ session: unknown; title?: string; versionId?: string | null; owned?: boolean }>;
+        } | null,
+      ) => void;
+      mix?: {
+        load: (session: unknown, info?: { title?: string; source?: unknown }) => Promise<boolean>;
+        eject: () => boolean;
+        land: () => Promise<boolean>;
+        keepBoth: () => boolean;
+        play: (on: boolean) => void;
+        scene: (slot: number) => void;
+        xfade: (x: number) => void;
+        fadeTo: (deck: "a" | "b", bars: number) => void;
+        tempo: (x: number) => void;
+      };
       serializeTrackPatch: (track: unknown) => unknown;
       applyTrackPatch: (track: unknown, patch: unknown) => void;
       /**

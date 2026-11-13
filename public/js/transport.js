@@ -25,13 +25,14 @@ import { init, needsResume, primeAudioForIOS } from "./main.js";
 import { applyBusMute, updateMidiUI } from "./render.js";
 import { ensureFxRack, fireFilterEnv, refreshAllTrackOutputs, refreshNoiseBeds, routeVoiceToRack, soloAudibleTracks } from "./signal.js";
 import { stepsPerBarForMeter, stepsPerBeatForMeter, transportMeter } from "./meter.js";
-import { invertChord, loopRange, nextChainPattern, state, switchPattern, trackSlot } from "./state.js";
+import { deckSilent, invertChord, loopRange, nextChainPattern, onDeckA, state, switchPattern, trackSlot } from "./state.js";
 import { advanceArrangement, clearQueuedClips, commitQueuedClips, recordArrangementBar, restartTrackCount, seedArrangement, seedTrackCount, setArrangeRecord } from "./clips.js";
 import { setPatternMode } from "./patternBar.js";
 import { loadSilverboxWorklet } from "./silverbox.js";
 import { loadContagionWorklet } from "./contagion.js";
 import { applyScale, chordNotes, nameToMidi } from "./theory.js";
 import { finishTransition, transitionStep } from "./transition.js";
+import { mixStep } from "./mix.js";
 import { strumOffsets } from "./theoryData.js";
 import { buildVoiceForEngine, wosc } from "./voices.js";
 
@@ -430,7 +431,9 @@ function skipTrackStep(t) {
 function restartTrackCounts() {
   // Where every track's count starts from now (seedFromTransport, clips.js).
   state._countOrigin = state.tick;
-  for (const t of state.tracks) restartTrackCount(t);
+  // Deck B of a mix counts on its own (mix.js): the song's chain advancing
+  // must not send the other deck back to its first step.
+  for (const t of state.tracks) if (onDeckA(t)) restartTrackCount(t);
 }
 
 /**
@@ -553,7 +556,8 @@ export async function startPlayback(opts = {}) {
       // arrangement) withholds the track exactly as mute does.
       // It keeps COUNTING, though: left frozen, a muted track came back on the
       // step it was muted on rather than the one everyone else is on.
-      if (!isBus && (t._clipOff || t._leaving || t._staged || t._held || (soloAudible ? !soloAudible.has(t) : t.muted))) { skipTrackStep(t); continue; }
+      // Deck B of a mix that has not been started is withheld the same way.
+      if (!isBus && (t._clipOff || t._leaving || t._staged || t._held || deckSilent(t) || (soloAudible ? !soloAudible.has(t) : t.muted))) { skipTrackStep(t); continue; }
       const speed = Math.max(0.0001, t.speed ?? 1);
       const effDur = baseStepDur / speed;
       t.speedAccum = (t.speedAccum ?? 0) + speed;
@@ -739,6 +743,10 @@ export async function startPlayback(opts = {}) {
     // Recording the arrangement (clips.js): what each track played this bar,
     // written before any switch below so the slot written is the one heard.
     if (barLine && state.arrRecord) recordArrangementBar();
+    // Deck B of a mix (mix.js): its start, its queued scene and its own
+    // chain, on the same bar line. Before a transition's early returns below:
+    // the other deck carries on whatever the song is doing.
+    if (state.mix) mixStep(time + baseStepDur, barLine);
     // A transition (transition.js, the compose panel's audition / keep) moves
     // its sweep and tempo a step at a time and lands on a bar line. When it
     // lands the session is a different song: every track starts from its
@@ -848,7 +856,8 @@ export function noteForStep(t, idx, fallback) {
   if (typeof raw === "number" && Number.isFinite(raw)) n = raw;
   else if (typeof raw === "string") { const m = nameToMidi(raw); n = m != null ? m : dflt; }
   else n = dflt;
-  return applyScale(n);
+  // Deck B of a mix (mix.js) plays in its own song's scale, not the session's.
+  return applyScale(n, t._deck === "b" ? (state.mix?.scale || undefined) : undefined);
 }
 
 // ---- prompting ---------------------------------------------------------

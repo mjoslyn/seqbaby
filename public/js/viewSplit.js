@@ -18,7 +18,7 @@
 
 const KEY = "seqbaby.split.v1";
 const MIN_PX = 80;          // neither pane goes shorter than this
-const DEFAULTS = { clips: 0.5, arrange: 0.5, piano: 0.62 };
+const DEFAULTS = { clips: 0.5, arrange: 0.5, piano: 0.62, mix: 0.58 };
 
 /** @type {Record<string, number>} */
 let saved = {};

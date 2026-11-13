@@ -55,7 +55,7 @@ import { syncScaleUI } from "./scaleUI.js";
 import { loadTrackFromData, migrateTrackData, serializeSet, trackShellFor } from "./session.js";
 import { migrateLegacyNames, validateSet } from "./sessionFormat.js";
 import { applyCompressorConfig, refreshAllTrackOutputs, refreshCompSourceDropdowns, refreshNoiseBeds, refreshOutputSelects, releaseSilencedTracks, wouldFeedback } from "./signal.js";
-import { aliasPattern, clonePattern, emptyPattern, state, syncMeterUI, syncRepeatsUI, trackSlot } from "./state.js";
+import { aliasPattern, clonePattern, emptyPattern, inSong, state, syncMeterUI, syncRepeatsUI, trackSlot } from "./state.js";
 import { renderStepGrid } from "./stepGrid.js";
 import { createTrack, removeTrack } from "./track.js";
 import { requestMidiIfNeeded } from "./transport.js";
@@ -351,6 +351,9 @@ export function alignTracks(cur, next) {
  *  `placeBusesLast` moves them together for the same reason, and runs after
  *  this to have the last word). */
 function setTrackOrder(order) {
+  // A second song on deck B (mix.js) is not part of any session being merged:
+  // its tracks keep their order, after the song's.
+  order = [...order, ...state.tracks.filter(t => !inSong(t))];
   if (order.length !== state.tracks.length) return;
   if (order.every((t, i) => t === state.tracks[i])) return;
   state.tracks = [...order];
@@ -401,7 +404,10 @@ export function mergeSet(s) {
   const cur = serializeSet({ staged: true });
   const curTracks = cur.tracks || [];
   const nextTracks = (target.tracks || []).map(migrateTrackData);
-  const liveTracks = [...state.tracks];          // parallel to curTracks, by index
+  // Parallel to curTracks, by index. Only the song's own: deck B and the deck
+  // buses (mix.js) are not in the format, so a merge neither matches nor
+  // removes them, and an undo under a mix leaves the other deck playing.
+  const liveTracks = state.tracks.filter(inSong);
   const match = alignTracks(curTracks, nextTracks);
 
   // The pads are held back: their assignments are indices into the incoming
@@ -487,7 +493,7 @@ export function mergeSet(s) {
   // The order the session lists, then the buses back to the bottom. Both after
   // the index passes above, for applySet's reason: every cross-track reference
   // has to be an id before anything is allowed to move.
-  if (made.length === state.tracks.length) setTrackOrder(made);
+  setTrackOrder(made);
   placeBusesLast();
 
   refreshOutputSelects();

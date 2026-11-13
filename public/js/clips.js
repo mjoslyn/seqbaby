@@ -25,7 +25,7 @@ import { setStatus } from "./dom.js";
 import { flushPatternSound, recallPatternSound } from "./patternSound.js";
 import { releaseSilencedTracks } from "./signal.js";
 import { renderPatternGrid } from "./patternBar.js";
-import { aliasPattern, paintTrackPatternUINow, paintTrackSlotBadge, queueTrackPaint, requestPatternSwitch, state, trackSlot } from "./state.js";
+import { aliasPattern, inSong, paintTrackPatternUINow, paintTrackSlotBadge, queueTrackPaint, requestPatternSwitch, state, trackSlot } from "./state.js";
 
 /**
  * Land a track's step counter where it would be had it counted from global
@@ -105,8 +105,9 @@ export function requestClipLaunch(t, slot) {
   // A meter belongs to the pattern NUMBER, not the track: a clip whose meter
   // is not the scene's would have tracks counting different bars at once, so
   // it takes every track with it (a scene switch, by the same switch mode).
+  // (Deck B of a mix has a bank of its own, which the meters do not describe.)
   const m = patternMeter(slot), sm = patternMeter(state.activePattern);
-  if (m.num !== sm.num || m.den !== sm.den) {
+  if (t._deck !== "b" && (m.num !== sm.num || m.den !== sm.den)) {
     requestPatternSwitch(slot);
     setStatus(`pattern ${slot + 1} is ${m.num}/${m.den}: every track goes to it, so the meters do not mix`);
     return;
@@ -141,7 +142,7 @@ export function stopClip(t) {
 
 /** Stop every track's clip. */
 export function stopAllClips() {
-  for (const t of state.tracks) if (t.engineKey !== "bus") { t._clipOff = true; t._queuedSlot = null; }
+  for (const t of state.tracks) if (t.engineKey !== "bus" && !t._deck) { t._clipOff = true; t._queuedSlot = null; }
   releaseSilencedTracks();
   for (const t of state.tracks) paintTrackPatternUINow(t);
   announceClips();
@@ -175,7 +176,7 @@ export function clearQueuedClips() {
 // block covering it, or stopped in a gap.
 
 /** How long the arrangement is, in bars of the ruler. Never under one. */
-export function arrangeLength() { return arrangementBars(state.tracks); }
+export function arrangeLength() { return arrangementBars(state.tracks.filter(inSong)); }
 
 /** The loop section arrange mode is held in, or null when the loop is off. */
 export function activeArrangeLoop() {
@@ -225,7 +226,8 @@ export function setArrangeLoopOn(on) {
 export function applyArrangementBar({ deferUi = true, tickInBar = 0 } = {}) {
   const bar = state.arrBar;
   for (const t of state.tracks) {
-    if (t.engineKey === "bus") continue;
+    // the song's own tracks: deck B of a mix (mix.js) plays its scene, not a timeline
+    if (t.engineKey === "bus" || !inSong(t)) continue;
     const b = blockAt(t.arrangement || [], bar);
     if (!b) {
       if (!t._clipOff) { t._clipOff = true; t._queuedSlot = null; if (deferUi) queueTrackPaint(t); else paintTrackPatternUINow(t); }
@@ -348,7 +350,7 @@ export function recordArrangementBar() {
   if (!state.arrRecord || state.patternMode === "arrange") return;
   state.arrRecStart ??= state.arrRecBar;
   for (const t of state.tracks) {
-    if (t.engineKey === "bus") continue;
+    if (t.engineKey === "bus" || !inSong(t)) continue;
     const slot = (t._clipOff || t.muted) ? null : trackSlot(t);
     t._take = writeBar(t._take || [], state.arrRecBar, slot);
   }
@@ -374,8 +376,8 @@ async function finishTake() {
   state.arrRecStart = null;
   announceClips();
   if (!bars || !takes.some((tk) => tk.length)) { setStatus("arrangement record off: nothing recorded"); return; }
-  const existing = arrangementBars(state.tracks);
-  const hasSome = state.tracks.some((t) => t.arrangement?.length);
+  const existing = arrangeLength();
+  const hasSome = state.tracks.some((t) => inSong(t) && t.arrangement?.length);
   let how = "replace";
   if (hasSome) {
     how = await showChoiceDialog({
@@ -387,7 +389,7 @@ async function finishTake() {
   }
   const offset = how === "append" ? existing : 0;
   state.tracks.forEach((t, i) => {
-    if (t.engineKey === "bus") return;
+    if (t.engineKey === "bus" || !inSong(t)) return;
     const take = takes[i];
     if (how === "replace") t.arrangement = take;
     else t.arrangement = take.reduce((acc, b) => placeBlock(acc, { slot: b.slot, start: b.start + offset, bars: b.bars }), t.arrangement || []);

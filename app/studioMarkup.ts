@@ -588,6 +588,7 @@ export const STUDIO_BODY = String.raw`
       <button type="button" data-view="clips" aria-pressed="false" title="clips: the 32 patterns of every track as clips, launched one track at a time">clips</button>
       <button type="button" data-view="arrange" aria-pressed="false" title="arrange: a timeline of pattern blocks per track">arrange</button>
       <button type="button" data-view="piano" aria-pressed="false" title="piano: the selected track's pattern as a full piano roll, the other tracks' notes behind it">piano</button>
+      <button type="button" data-view="mix" aria-pressed="false" title="mix: a fader per track, and a second song on deck B with a crossfader, to blend two songs or move from one to the other">mix</button>
     </div>
     <!-- The code drawer (codePanel.js): Strudel live coding, run into
          the song without stopping the transport. -->
@@ -731,6 +732,7 @@ export const STUDIO_BODY = String.raw`
   <section id="clips" class="sq-clips" hidden aria-label="clips"></section>
   <section id="arrange" class="sq-arrange" hidden aria-label="arrangement"></section>
   <section id="piano" class="sq-piano" hidden aria-label="piano roll"></section>
+  <section id="mix" class="sq-mix" hidden aria-label="mixer"></section>
   <div class="sq-add-track-row">
     <button id="add-track" class="sq-btn--ghost">+ add track</button>
     <button id="add-bus" class="sq-btn--ghost" title="add an fx bus: a track with no instrument that others are sent into, so one filter, one fx rack, one mod matrix and one set of automation lanes shape all of them">+ add fx bus</button>

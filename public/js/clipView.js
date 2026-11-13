@@ -165,7 +165,8 @@ export function scheduleClipPaint() {
 
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const trackById = (id) => state.tracks.find((t) => String(t.id) === String(id));
-const rows = () => state.tracks.filter((t) => t.engineKey !== "bus" && !t._staged && !t._leaving);
+// the song's own tracks: a second song on deck B (mix.js) lives in the mix view
+const rows = () => state.tracks.filter((t) => t.engineKey !== "bus" && !t._staged && !t._leaving && !t._deck && !t._deckBus);
 
 // The shades a track's distinct clips wear, as [hue nudge (deg), saturation
 // %, lightness %] off the row's `--track-hue`. Shade 0 is the track's own

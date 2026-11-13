@@ -4698,6 +4698,133 @@ body.vim-visual .sq-vim__mode { color: var(--accent-2); }
 .sq-vim__opt--more { color: var(--fg-dim); cursor: default; }
 
 
+/* ---- THE MIX VIEW (mixView.js, mix.js) ---------------------------------
+   A channel strip per track; with a second song on deck B, two desks and a
+   crossfader. Every control is a skin over one the track already has, so the
+   only state here is layout.
+
+   A deck B track and a deck bus are real tracks with real cards, kept out of
+   the track list: their home is the mix view's detail pane, where the card of
+   the selected strip is moved (trackDetail.js). */
+#tracks > .sq-track.is-deck-b, #tracks > .sq-track.is-deck-bus { display: none !important; }
+/* the "off the scene" badge means the pattern bar's scene, which is not a deck B track's */
+.sq-track.is-deck-b .sq-track__slot, .sq-track.is-deck-bus .sq-track__slot { display: none !important; }
+/* a deck's bus is the deck: it is not removed, copied, sent anywhere or re-engined by hand */
+.sq-track.is-deck-bus .sq-track__remove, .sq-track.is-deck-bus .sq-track__dup,
+.sq-track.is-deck-bus .sq-track__engine-btn { display: none !important; }
+#view-switch [data-view="mix"][data-on]::after {
+  content: ""; display: inline-block; width: 6px; height: 6px; margin-left: 5px; border-radius: 50%;
+  background: var(--accent-2); vertical-align: middle;
+}
+.sq-mix__bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; font-size: 12px; z-index: 7; background: var(--bg); padding: 2px 0; }
+.sq-mix__bar button { padding: 4px 10px; font-size: 12px; }
+.sq-mix__grow { flex: 1 1 0; }
+.sq-mix__sep { width: 1px; align-self: stretch; background: var(--border); margin: 0 2px; }
+.sq-mix__hint { color: var(--fg-dim); font-size: 12px; }
+.sq-mix__hint.is-error { color: var(--danger); }
+.sq-mix__facts { color: var(--fg-dim); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.sq-mix__warn { color: #0b0d10; background: var(--accent-2); border-radius: 3px; padding: 0 5px; font-size: 10px; white-space: nowrap; }
+.sq-mix__check { display: inline-flex; align-items: center; gap: 4px; color: var(--fg-dim); cursor: pointer; white-space: nowrap; }
+.sq-mix__check select { font-size: 11px; padding: 2px 4px; }
+.sq-mix__play.is-on { background: var(--accent); color: #0b0d10; border-color: var(--accent); }
+.sq-mix__play.is-armed { border-color: var(--accent); color: var(--accent); animation: sq-mix-armed 0.5s steps(2) infinite; }
+@keyframes sq-mix-armed { 50% { opacity: 0.45; } }
+.sq-mix__tempo { display: inline-flex; align-items: center; gap: 6px; color: var(--fg-dim); font-variant-numeric: tabular-nums; }
+.sq-mix__tempo input { width: 130px; accent-color: var(--accent-2); }
+.sq-mix__bpm { color: var(--fg); min-width: 44px; text-align: right; }
+
+.sq-mix__decks { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 320px); gap: 12px; align-items: start; }
+.sq-mix__decks.is-two { grid-template-columns: minmax(0, 1fr) 170px minmax(0, 1fr); }
+.sq-mix__deck { min-width: 0; border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px 10px; background: var(--bg-2); }
+.sq-mix__deck[data-deck="b"] { border-color: color-mix(in oklab, var(--accent-2) 35%, var(--border)); }
+.sq-mix__deck[data-deck="b"].is-on { border-color: var(--accent-2); }
+.sq-mix__deck.is-empty { border-style: dashed; background: transparent; }
+.sq-mix__empty { display: grid; gap: 8px; justify-items: start; color: var(--fg-dim); font-size: 12px; padding: 6px 2px; }
+.sq-mix__empty b { color: var(--fg); font-size: 13px; }
+.sq-mix__empty p { margin: 0; line-height: 1.5; }
+.sq-mix__head { display: flex; align-items: baseline; gap: 8px; font-size: 12px; margin-bottom: 6px; min-width: 0; }
+.sq-mix__head > b { color: var(--accent); font-size: 13px; }
+.sq-mix__deck[data-deck="b"] .sq-mix__head > b { color: var(--accent-2); }
+.sq-mix__title { color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.sq-mix__scenes { display: flex; flex-wrap: wrap; gap: 3px; margin-bottom: 8px; min-height: 22px; }
+.sq-mix__scene { min-width: 24px; padding: 2px 5px; font-size: 11px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg-3); color: var(--fg-dim); cursor: pointer; }
+.sq-mix__scene:hover { color: var(--fg); border-color: var(--fg-dim); }
+.sq-mix__scene.is-empty { opacity: 0.55; }
+.sq-mix__scene.is-active { background: var(--accent); color: #0b0d10; border-color: var(--accent); opacity: 1; }
+.sq-mix__deck[data-deck="b"] .sq-mix__scene.is-active { background: var(--accent-2); border-color: var(--accent-2); }
+.sq-mix__scene.is-queued { border-color: var(--accent); color: var(--accent); animation: sq-mix-armed 0.5s steps(2) infinite; }
+.sq-mix__strips { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; }
+.sq-mix__deck[data-deck="b"] .sq-mix__strips { flex-direction: row; }
+
+/* one strip: name, tone, the meter beside the fader, mute / solo, where it is */
+.sq-mix__strip {
+  flex: 0 0 62px; display: grid; justify-items: center; align-content: start; gap: 5px;
+  padding: 6px 4px 6px; border-radius: 6px; background: var(--bg);
+  border: 1px solid var(--border); border-top: 3px solid var(--track-color, var(--border));
+}
+.sq-mix__strip.is-bus { background: var(--bg-3); }
+.sq-mix__strip.is-deck-bus { flex-basis: 132px; border-top-color: var(--accent); background: color-mix(in oklab, var(--accent) 7%, var(--bg)); }
+.sq-mix__deck[data-deck="b"] .sq-mix__strip.is-deck-bus { border-top-color: var(--accent-2); background: color-mix(in oklab, var(--accent-2) 7%, var(--bg)); }
+.sq-mix__strip.is-selected { border-color: var(--track-color, var(--accent)); box-shadow: 0 0 0 1px var(--track-color, var(--accent)) inset; }
+.sq-mix__strip.is-muted .sq-mix__fader, .sq-mix__strip.is-muted .sq-mix__tone { opacity: 0.45; }
+.sq-mix__name {
+  width: 100%; border: 0; background: transparent; color: var(--fg); font-size: 11px; padding: 1px 0; cursor: pointer;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center;
+}
+.sq-mix__name:hover { color: var(--accent); }
+.sq-mix__tone { display: flex; gap: 2px; justify-content: center; min-height: 44px; }
+.sq-mix__ctl { display: grid; justify-items: center; gap: 1px; font-size: 9px; color: var(--fg-dim); }
+.sq-mix__ctl .sq-knob { --knob-size: 26px; --knob-thickness: 4px; }
+.sq-mix__ctl > span { line-height: 1; }
+.sq-mix__fader { display: flex; align-items: stretch; gap: 5px; justify-content: center; }
+.sq-mix__meter { position: relative; width: 5px; height: 132px; border-radius: 2px; background: var(--bg-3); overflow: hidden; }
+.sq-mix__meter i { position: absolute; left: 0; right: 0; bottom: 0; height: 0; background: var(--accent); }
+.sq-mix__meter i.is-clip { background: var(--danger); }
+.sq-mix__ms { display: flex; gap: 3px; }
+.sq-mix__ms button { padding: 1px 0; width: 24px; font-size: 10px; }
+.sq-mix__mute[aria-pressed="true"] { background: var(--danger); color: #0b0d10; border-color: var(--danger); }
+.sq-mix__solo[aria-pressed="true"] { background: var(--accent); color: #0b0d10; border-color: var(--accent); }
+.sq-mix__ms button:disabled { opacity: 0.35; cursor: not-allowed; }
+.sq-mix__slot { font-size: 9px; color: var(--fg-dim); font-variant-numeric: tabular-nums; }
+
+/* The fader: knob.js's wrapper drawn as a vertical bar, as every knob is on a
+   phone (the KNOBS ON A PHONE block above). knob.js finds the dial taller than
+   wide and takes its height as the travel, so the thumb follows the pointer. */
+.sq-mix__ctl.is-fader .sq-knob { --knob-size: 30px; --knob-len: 132px; --knob-bar: 10px; width: var(--knob-size); height: var(--knob-len); }
+.sq-mix__ctl.is-fader .sq-knob > .sq-knob__dial {
+  inset: 3px auto; left: 50%; width: var(--knob-bar); min-width: 0; margin-left: calc(var(--knob-bar) / -2);
+  border-radius: calc(var(--knob-bar) / 2); box-sizing: border-box; border: 1px solid var(--border);
+  background: linear-gradient(to top,
+    var(--track-color, var(--knob-fill)) 0%, var(--track-color, var(--knob-fill)) calc(var(--knob-v, 0) * 100%),
+    var(--knob-track) calc(var(--knob-v, 0) * 100%), var(--knob-track) 100%);
+  -webkit-mask: none; mask: none;
+}
+.sq-mix__ctl.is-fader .sq-knob__dial::before { content: none; }
+.sq-mix__ctl.is-fader .sq-knob__dial::after {
+  left: 50%; top: calc((1 - var(--knob-v, 0)) * 100%); width: calc(var(--knob-bar) + 14px); height: 6px;
+  margin-left: calc((var(--knob-bar) + 14px) / -2); border-radius: 2px; background: var(--fg);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.55); transform-origin: 50% 50%; transform: translateY(-50%);
+}
+.sq-mix__ctl.is-fader .sq-knob input[type="range"] { width: var(--knob-size); height: var(--knob-len); }
+.sq-mix__ctl.is-fader .sq-knob[data-moving]::after { content: none; }
+
+/* the crossfader, between the decks */
+.sq-mix__center { display: grid; gap: 8px; justify-items: center; align-content: center; padding-top: 34px; font-size: 11px; }
+.sq-mix__xlabels { display: flex; justify-content: space-between; width: 100%; color: var(--fg-dim); font-size: 12px; }
+.sq-mix__xlabels span:first-child { color: var(--accent); }
+.sq-mix__xlabels span:last-child { color: var(--accent-2); }
+.sq-mix__xfade { width: 100%; height: 28px; accent-color: var(--fg); cursor: ew-resize; }
+.sq-mix__fade { display: flex; gap: 3px; align-items: center; }
+.sq-mix__fade button { padding: 3px 6px; font-size: 11px; }
+.sq-mix__fade select { font-size: 10px; padding: 2px; }
+
+/* the picker: a song for deck B */
+.sq-mix__picker { width: min(460px, 92vw); }
+.sq-mix__list { display: grid; gap: 3px; max-height: 44vh; overflow: auto; margin: 8px 0; }
+.sq-mix__pick { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; text-align: left; padding: 7px 9px; font-size: 12px; }
+.sq-mix__pick b { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sq-mix__pick span { color: var(--fg-dim); font-size: 10px; white-space: nowrap; }
+
 /* ---- THE VIEWS: groove / clips / arrange / piano (views.js) -------------
    One song, four pictures. `body.view-<name>` says which is open; the groove
    view is `#tracks` as it always was, the others are sections after it,
@@ -4707,11 +4834,11 @@ body.vim-visual .sq-vim__mode { color: var(--accent-2); }
 .sq-view-switch button { border: 0; border-radius: 0; padding: 4px 10px; font-size: 12px; background: transparent; color: var(--fg-dim); cursor: pointer; }
 .sq-view-switch button + button { border-left: 1px solid var(--border); }
 .sq-view-switch button[aria-pressed="true"] { background: var(--accent); color: #0b0d10; }
-body.view-clips #tracks, body.view-arrange #tracks, body.view-piano #tracks { display: none; }
+body.view-clips #tracks, body.view-arrange #tracks, body.view-piano #tracks, body.view-mix #tracks { display: none; }
 /* the pattern bar is the groove view's: the clip view's scene row and the
    arrangement's own toggle do its jobs there */
-body.view-clips .sq-pattern-bar, body.view-arrange .sq-pattern-bar, body.view-piano .sq-pattern-bar { display: none; }
-.sq-clips, .sq-arrange { max-width: 1400px; margin: 0 auto; padding: 12px 16px; }
+body.view-clips .sq-pattern-bar, body.view-arrange .sq-pattern-bar, body.view-piano .sq-pattern-bar, body.view-mix .sq-pattern-bar { display: none; }
+.sq-clips, .sq-arrange, .sq-mix { max-width: 1400px; margin: 0 auto; padding: 12px 16px; }
 
 /* The three views as two panes (viewSplit.js): the view on top, the selected
    track's card under it, a handle between them dragged to share the height.
@@ -4740,7 +4867,7 @@ body.view-clips .sq-pattern-bar, body.view-arrange .sq-pattern-bar, body.view-pi
 .sq-split__handle:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; }
 .sq-split.is-resizing { user-select: none; -webkit-user-select: none; cursor: row-resize; }
 /* the toolbars stay in sight as their pane scrolls */
-.sq-split__top .sq-clips__bar, .sq-split__top .sq-arr__bar-row { position: sticky; top: 0; z-index: 7; background: var(--bg); padding: 2px 0; }
+.sq-split__top .sq-clips__bar, .sq-split__top .sq-arr__bar-row, .sq-split__top .sq-mix__bar { position: sticky; top: 0; z-index: 7; background: var(--bg); padding: 2px 0; }
 
 /* The eight track hues, as #tracks has them, for the two views' rows (buses
    are never rows here and sit last in state.tracks, so the counts line up). */
@@ -5089,6 +5216,6 @@ body.view-piano #scale-fold-wrap { display: inline-flex; }
   .sq-pr__tools button { padding: 6px 10px; font-size: 15px; }
   .sq-pr__sec-len { display: none; }
   /* desktop only in this cut: the groove view stands whatever was remembered */
-  #view-switch, .sq-clips, .sq-arrange, .sq-piano { display: none !important; }
-  body.view-clips #tracks, body.view-arrange #tracks, body.view-piano #tracks { display: grid; }
+  #view-switch, .sq-clips, .sq-arrange, .sq-piano, .sq-mix { display: none !important; }
+  body.view-clips #tracks, body.view-arrange #tracks, body.view-piano #tracks, body.view-mix #tracks { display: grid; }
 }

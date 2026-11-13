@@ -15,6 +15,8 @@ import { installViews, isMobileLayout } from "./views.js";
 import { installClipView } from "./clipView.js";
 import { installArrangeView } from "./arrangeView.js";
 import { installPianoView } from "./pianoView.js";
+import { installMixView } from "./mixView.js";
+import { installMix } from "./mix.js";
 import { announceClips } from "./clips.js";
 import { applySampleSpeed, attachBpmDrag, lfoRateLabel, retuneSyncedLFOs } from "./lfo.js";
 import { captureSequence, initComputerKeyboard, isDesktopKeyboard, resetKbdKeys, setKbdRecord } from "./keyboard.js";
@@ -706,6 +708,8 @@ export function init() {
   installClipView();
   installArrangeView();
   installPianoView();
+  installMixView();
+  installMix();
   installViews();
   // The master swing slider has no listener on purpose: the transport loop reads
   // its value straight off the DOM each callback (~0.1 µs), so there's nothing to

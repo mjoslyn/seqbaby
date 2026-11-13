@@ -32,11 +32,16 @@ export function quantizeToScale(midi, rootPc, intervals) {
   return best;
 }
 
-export function applyScale(midi) {
-  if (!state.scale.active) return midi;
-  const intervals = SCALES[state.scale.mode];
+/**
+ * Snap a note to a scale: the session's, or `scale` when a track plays in
+ * another one (deck B of a mix keeps its own song's, mix.js).
+ * @param {number} midi @param {{active: boolean, root: number, mode: string}} [scale]
+ */
+export function applyScale(midi, scale = state.scale) {
+  if (!scale?.active) return midi;
+  const intervals = SCALES[scale.mode];
   if (!intervals) return midi;
-  return quantizeToScale(midi, state.scale.root, intervals);
+  return quantizeToScale(midi, scale.root, intervals);
 }
 
 export function midiToScaleIndex(midi, rootPc, intervals) {

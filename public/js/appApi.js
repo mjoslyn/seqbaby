@@ -29,6 +29,7 @@ import {
   serializeTrackPatch,
 } from "./session.js";
 import { SET_VERSION, validateSet } from "./sessionFormat.js";
+import { ejectDeckB, fadeToDeck, keepBothDecks, landDeckB, loadDeckB, requestDeckScene, setDeckPlaying, setMixSource, setMixTempo, setXfade } from "./mix.js";
 import { state } from "./state.js";
 
 export function installAppApi() {
@@ -125,6 +126,22 @@ export function installAppApi() {
     // track's clip stopped. For the headless audition and the verify skill.
     launchClip: (i, slot) => launchClip(state.tracks[i], slot),
     stopClip: (i) => stopClip(state.tracks[i]),
+    // The mix (mix.js): a second song on deck B beside the open one. The shell
+    // hands over its way to the account's songs (app/MixSongs.tsx), as it
+    // hands over the patch bay; the rest is for a caller with no mix view (the
+    // verify skill, a headless audition).
+    setMixSource,
+    mix: {
+      load: loadDeckB,
+      eject: ejectDeckB,
+      land: landDeckB,
+      keepBoth: keepBothDecks,
+      play: setDeckPlaying,
+      scene: requestDeckScene,
+      xfade: setXfade,
+      fadeTo: fadeToDeck,
+      tempo: setMixTempo,
+    },
     // The open song's name as the shell shows it, so a bounce is named for
     // it (bounce.js). The shell owns which song is open; null means none.
     setSongName: (name) => {

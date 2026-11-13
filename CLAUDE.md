@@ -255,7 +255,13 @@ env / fx / eq / comp / mod / automation per track.
   track's own card under it (trackDetail.js, the card moved out of `#tracks`
   and back). Both are rebuilt whole from engine state on `seqbaby:clips` and
   the session events, only while open.
-- `viewSplit.js` — the clip, arrangement and piano views as two panes, one
+- `mix.js` / `mixView.js` / `mixPlan.js` — the mix: the fifth view, a channel
+  strip per track, and a second song loaded onto deck B beside the open one
+  with a crossfader between them. `mix.js` is the engine half (loading deck
+  B, its scene and chain, the crossfader, the tempo, land / keep / eject),
+  `mixView.js` the desk, `mixPlan.js` the arithmetic, **no imports**, tested
+  in `test/mixPlan.test.js`. See the mix section.
+- `viewSplit.js` — the clip, arrangement, piano and mix views as two panes, one
   over the other: the view on top, the selected track's card (trackDetail.js)
   below, a handle between them dragged (or arrowed, double-click resets) to
   share the height. The section fills what the pinned bar and transport
@@ -2745,6 +2751,103 @@ block   t.arrangement[i]    ─── { slot, start, bars }: a clip at a bar, fo
   the ruler's meter and leaves the mode alone.
 - Not shared in a jam: which clip each peer has launched, like play / stop and
   the scene. The blocks are the song's and travel.
+
+## The mix: two songs, two decks (`mix.js`, `mixView.js`, `mixPlan.js`)
+
+The fifth view (`groove | clips | arrange | piano | mix`, desktop only). With
+one song it is a mixing desk: a strip per track (fader, pan, mute, solo, a
+meter) and one per fx bus. `load deck B…` puts a second song beside it, and
+the view becomes two desks with a crossfader between them: a transition
+(transition.js) held open and put under the hand.
+
+```
+song's tracks ─▶ deck A bus ─┐
+                             ├─▶ master     the crossfader is the two
+deck B tracks ─▶ deck B bus ─┘              buses' output gains
+```
+
+- **Three kinds of track while a mix is loaded** (`state.mix`, the helpers
+  in state.js): the SONG's (no flag), deck B's (`_deck: "b"`, the other
+  song's tracks and its own buses) and the two deck buses (`_deckBus: "a" |
+  "b"`, the B one `_deck: "b"` too). `inSong(t)` is "the song"; `onDeckA(t)`
+  is "what the pattern bar's scene moves" (the song plus deck A's bus).
+  **Anything that walks `state.tracks` meaning the song must ask one of
+  them**: `serializeSet` (so a save, undo, a jam and the unsaved check never
+  see the other deck; `{decks: true}` reads everything), `mergeSet` (it
+  neither matches nor removes deck tracks, so an undo under a mix leaves deck
+  B playing), `switchPattern` / `restartTrackCounts` / the pattern bar's copy,
+  move and meter resize (`onDeckA`), the arrangement and its recorder,
+  `isPatternNonEmpty(idx, deck)`, the clip and arrange rows, and every track
+  list in transition.js (`songTracks()`), or a compose transition would treat
+  deck B as tracks to sweep out. The song's tracks always come first in
+  `state.tracks` (`placeBusesLast`'s ranks), since every serialized index
+  counts along them.
+- **The deck buses are real `bus` tracks**, so a deck has a fader, eq,
+  filter, rack, mod matrix and automation lanes with no code of its own, and
+  a lane on a deck's fader belongs to a pattern like any lane. The routing is
+  the mix's: `t.out` stays `"master"` and `outputTargetFor` reads "master" as
+  the deck's bus (`deckBusFor`, signal.js); `sendOf` follows it too, so
+  soloing a deck bus keeps its deck. The crossfader moves the buses'
+  `fxRack.output.gain`, leaving the bus fader (`vol`) the deck's own.
+- **Each deck has a scene.** A track's slot was already its own (clips.js);
+  deck B has `mix.scene`, a queue and a chain (`mix.repeats`, B's own repeat
+  counts), committed by `mixStep`, which the transport calls once a step
+  before the song's queue and chain. A deck B start waits for the bar line.
+  The bar line, the meter and the swing are the song's: a deck B song in
+  another meter loops at its own lengths and the header says `meters differ`.
+- **Deck B plays in its own scale** (`mix.scale`, `noteForStep` hands it to
+  `applyScale`), not the session's.
+- **The tempo is the transport's alone** (`tempoX`, 0 the song's bpm, 1 deck
+  B's; `follow fader` ties it to the crossfader), as a transition's ramp is:
+  the bpm field, synced LFOs and synced delays stay on the song's tempo until
+  the mix ends.
+- **Deck B is built a track per task** (`buildNext`, with the lookahead
+  stretched as a transition stretches it), each made with
+  `state.activePattern` swapped to the deck's scene for that one synchronous
+  task, since `createTrack` and `loadTrackFromData` alias to it. A solo is
+  not carried in. Its arrangement is set aside (`_deckArrangement`) until a
+  landing: a deck plays its scene, not a timeline.
+- **Three ways out.** `eject`: deck B and the buses go, the song is as it
+  was. `land B`: deck B becomes the song, its tracks as they are playing
+  (edits made on the deck included), its scale, repeats, meters and pads, the
+  tempo the mix is at; the old tracks go; one undo step brings the old song
+  back. `keep both`: the flags come off, each master-bound track's `out` is
+  written as its deck's bus, the crossfader's gain is folded into the bus
+  faders (`bakeLevel`), deck B's scene is swapped into the song's scene slot
+  in its own bank, and when the two scales differ each deck's notes are
+  written as they sounded (`bakeScale`) and the session scale switched off.
+- **A landing has no gap.** Re-pointing every deck B track to the master
+  would duck them all at once (`softSwitch`). They are connected to a landing
+  gain as well, which rises as the deck buses fall (the same signal twice, so
+  a linear crossfade holds the level), and that gain is what "master" means
+  (`state._landGain`, signal.js) until the transport next stops and
+  everything is re-pointed in silence.
+- **The strips are skins.** A fader is a range input (knob.js's wrapper drawn
+  as a vertical bar, the phone skin's CSS) whose `input` writes the track's
+  own `.p-vol` and dispatches ITS `input`; pan is `.fx-pan-pos`, a deck bus's
+  tone is `.p-eq-high / mid / low` and `.p-cutoff`. Mute and solo `.click()`
+  the track's own buttons. The strips read the real controls back on the
+  meter's 30Hz tick, and the desk is never rebuilt while a control is held.
+- **The detail is the selected strip's own card** (trackDetail.js, with
+  `{buses: true}`): a deck B track's step grid shows the pattern that deck is
+  on, and a deck bus's card is where its rack, mod and lanes are. Deck B's
+  cards are hidden in `#tracks` (`is-deck-b`, `is-deck-bus`); the view
+  switch's `mix` carries a dot while a second song is loaded.
+- **Where a second song comes from**: the shell hands the engine the
+  account's songs (`app/MixSongs.tsx`, `setMixSource`, PatchBay's
+  arrangement); the picker also lists this browser's saved sessions, and
+  takes a file or a pasted `?s=` / `?open=` link. On `seqbaby:mixlanded` the
+  shell moves the open-song slot: onto the landed song when it is the
+  account's own (a save is its next version), else to nothing (a save asks
+  for a name). An edit to deck B is never written back to that song by the
+  mix itself.
+- A whole session arriving (`applySet`, `new`) drops the mix. Not shared in a
+  jam: peers get the landed or kept session.
+- `window.seqbaby.mix` (`load`, `eject`, `land`, `keepBoth`, `play`, `scene`,
+  `xfade`, `fadeTo`, `tempo`) drives it without the view.
+- Known limits: one bar line and one swing for both decks; synced delays and
+  LFOs stay on the song's tempo while mixing; deck B plays scenes, not its
+  arrangement; no headphone cue.
 
 ## The piano roll (`pianoEditor.js` + `pianoView.js` + `pianoRoll.js` + `rollNotes.js`)
 
@@ -5531,7 +5634,7 @@ through a 6ms fade on its gain).
   place the dispatch lives, or the second one has to import the first.
 - **`engineData.js`, `soundDefaults.js`, `theoryData.js`, `constants.js`,
   `chanceGen.js`, `sessionFormat.js`, `historyStore.js`, `songBuilder.js`,
-  `miniNotation.js`, `strudel.js`, `arrangement.js`, `patternPicture.js`, `rollNotes.js`, `eqDraw.js`, `transitionPlan.js` and `voxPhonetic.js` must stay importable from Node** — no DOM, no Tone, no `window`. The tests
+  `miniNotation.js`, `strudel.js`, `arrangement.js`, `mixPlan.js`, `patternPicture.js`, `rollNotes.js`, `eqDraw.js`, `transitionPlan.js` and `voxPhonetic.js` must stay importable from Node** — no DOM, no Tone, no `window`. The tests
   and the MCP server run them; an import of state.js or catalog.js in any of
   them breaks `npm test` at load, which is the guard.
 - **React must never re-set the studio's `innerHTML`** (`app/StudioBody.tsx`).
@@ -5672,7 +5775,7 @@ npm run deploy
   An inline marker (`window.__seqbabyServerBoot`) tells the paths apart, and
   `ScriptLoader.tsx` keeps its onload-chained injection for the soft-nav case
   (e.g. arriving from `/login`).
-- `app/EnginePreload.tsx` emits `modulepreload` for all 90 modules listed in
+- `app/EnginePreload.tsx` emits `modulepreload` for all 93 modules listed in
   `app/engineAssets.ts` (at `engineAsset("/js/<name>")`; the hints used to
   point at the site root and 404). The graph is 8 levels deep, so without it the browser
   needs up to eight sequential round trips just to discover the code.

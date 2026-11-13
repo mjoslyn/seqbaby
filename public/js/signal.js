@@ -3,7 +3,7 @@ import { holdParamAt } from "./paramHold.js";
 import { FXRack } from "./fxRack.js";
 import { fxStageOfModKey } from "./constants.js";
 import { ANALOG_FILTER_TYPES, buildAnalogFilterNode, disposeAnalogFilterNode, setAnalogFilterModel } from "./filterModels.js";
-import { state } from "./state.js";
+import { deckSilent, state } from "./state.js";
 import { EQ_BAND_DEFS, eqValue, splitEqKey } from "./soundDefaults.js";
 
 
@@ -73,7 +73,7 @@ export function noiseBedActive(t, soloAudible) {
   // A note played by hand goes through mute — mute withholds the transport's
   // triggers, and this trigger was not the transport's — so the bed follows it.
   if (held && t.engineKey !== "bus") return true;
-  if (t.muted) return false;
+  if (t.muted || deckSilent(t)) return false;
   if (!soloAudible) return true;
   if (soloAudible.has(t)) return true;
   if (t.engineKey !== "bus") return false;
@@ -81,9 +81,9 @@ export function noiseBedActive(t, soloAudible) {
   for (const src of soloAudible) {
     const seen = new Set();
     let cur = src;
-    while (cur?.out && cur.out !== "master" && !seen.has(cur.id)) {
+    while (cur && !seen.has(cur.id)) {
       seen.add(cur.id);
-      cur = trackById(cur.out);
+      cur = sendOf(cur);
       if (cur === t) return true;
       if (cur?.muted) break;
     }
@@ -159,7 +159,7 @@ export function releaseSilencedTracks() {
   const now = state.audioCtx?.currentTime ?? 0;
   for (const t of state.tracks) {
     if (t.engineKey === "bus") continue;
-    if (!t.muted && !t._clipOff && !t._leaving && !t._staged && !t._held && (!soloAudible || soloAudible.has(t))) continue;
+    if (!t.muted && !t._clipOff && !t._leaving && !t._staged && !t._held && !deckSilent(t) && (!soloAudible || soloAudible.has(t))) continue;
     try { t.voice?.releaseHeld?.(now); } catch {}
   }
 }
@@ -205,7 +205,14 @@ export function wouldFeedback(t, busId) {
  * @param {Track} t @returns {AudioNode|null}
  */
 export function outputTargetFor(t) {
-  const master = state.masterGain || state.audioCtx?.destination || null;
+  // With a second song loaded (mix.js) each deck sums into its own bus on the
+  // way to the master, so "master" means the deck's bus for everything but
+  // the deck buses themselves. `t.out` is untouched: the routing is the
+  // mix's, not the song's.
+  // `_landGain` stands in for the master after a mix has landed, until the
+  // transport next stops: the landed tracks were crossfaded onto it rather
+  // than re-pointed under a duck (mix.js, landDeckB).
+  const master = deckBusFor(t)?.voice?.getInputNode?.() || state._landGain || state.masterGain || state.audioCtx?.destination || null;
   if (!t.out || t.out === "master") return master;
   const bus = trackById(t.out);
   if (!bus || bus === t || bus.engineKey !== "bus") return master;
@@ -213,7 +220,24 @@ export function outputTargetFor(t) {
   return bus.voice?.getInputNode?.() || master;
 }
 
-/** Point a track's fx-rack output at its send target (and its own meter). */
+/**
+ * The deck bus a track's master-bound output really goes to while a mix is
+ * loaded (mix.js), or null: no mix, or `t` is a deck bus itself.
+ * @param {Track} t @returns {Track|null}
+ */
+export function deckBusFor(t) {
+  const m = state.mix;
+  if (!m || !t || t._deckBus) return null;
+  const bus = t._deck === "b" ? m.busB : m.busA;
+  return bus && state.tracks.includes(bus) ? bus : null;
+}
+
+/** The bus a track feeds: its send, else its deck's bus, else null (the master). */
+function sendOf(t) {
+  if (t?.out && t.out !== "master") return trackById(t.out) || deckBusFor(t);
+  return deckBusFor(t);
+}
+
 export function routeTrackOutput(t) {
   const rack = t.fxRack;
   if (!rack) return;
@@ -243,7 +267,9 @@ export function routeTrackOutput(t) {
  * connected to the *old* summing gain and nothing else would notice.
  */
 export function refreshAllTrackOutputs() {
-  for (const t of state.tracks) routeTrackOutput(t);
+  // A track on its way out (a transition's or a mix's `_leaving`) stays where
+  // it is until it is removed: re-pointing it could only make it heard again.
+  for (const t of state.tracks) if (!t._leaving) routeTrackOutput(t);
 }
 
 /**
@@ -645,10 +671,11 @@ export function soloAudibleTracks() {
     const seen = new Set();
     let cur = t;
     // Bounded by `seen`: a loop can't be routed through the UI, but a
-    // hand-edited song could still describe one.
-    while (cur?.out && cur.out !== "master" && !seen.has(cur.id)) {
+    // hand-edited song could still describe one. `sendOf` follows a deck's
+    // bus too (mix.js), so soloing a deck keeps everything on it.
+    while (cur && !seen.has(cur.id)) {
       seen.add(cur.id);
-      cur = trackById(cur.out);
+      cur = sendOf(cur);
       if (cur?.soloed) { audible.add(t); break; }
     }
   }
@@ -666,11 +693,12 @@ export function soloAudibleTracks() {
  * session that never uses a bus never grows a row of pointless selects.
  */
 export function refreshOutputSelects() {
-  const buses = state.tracks.filter(x => x.engineKey === "bus");
+  // A deck bus (mix.js) is never a send, and a track only sends within its deck.
+  const buses = state.tracks.filter(x => x.engineKey === "bus" && !x._deckBus);
   for (const t of state.tracks) {
     const sel = t.el?.querySelector(".sq-track__out");
     if (!sel) continue;
-    const targets = buses.filter(b => b !== t && !wouldFeedback(t, b.id));
+    const targets = t._deckBus ? [] : buses.filter(b => b !== t && (b._deck === "b") === (t._deck === "b") && !wouldFeedback(t, b.id));
     if (t.out && t.out !== "master" && !targets.some(b => String(b.id) === String(t.out))) {
       t.out = "master";
     }
@@ -700,7 +728,7 @@ function refreshBusSourceLabels() {
     const el = t.el?.querySelector(".sq-track__bus-in");
     if (!el) continue;
     if (t.engineKey !== "bus") { el.hidden = true; el.textContent = ""; continue; }
-    const feeders = state.tracks.filter(x => x !== t && String(x.out) === String(t.id));
+    const feeders = state.tracks.filter(x => x !== t && sendOf(x) === t);
     el.hidden = false;
     el.textContent = feeders.length
       ? `◂ ${feeders.map(x => x.name?.trim() || `track ${x.id}`).join(" · ")}`

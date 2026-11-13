@@ -161,7 +161,8 @@ export function scheduleArrangePaint() {
 
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const trackById = (id) => state.tracks.find((t) => String(t.id) === String(id));
-const rows = () => state.tracks.filter((t) => t.engineKey !== "bus" && !t._staged && !t._leaving);
+// the song's own tracks: a second song on deck B (mix.js) lives in the mix view
+const rows = () => state.tracks.filter((t) => t.engineKey !== "bus" && !t._staged && !t._leaving && !t._deck && !t._deckBus);
 const barW = () => ZOOMS[zoom];
 const rulerBars = () => Math.max(MIN_BARS, arrangementBars(state.tracks) + 4, (normalizeLoop(state.arrLoop)?.end ?? 0) + 4,
   ...state.tracks.map((t) => blocksEnd(t._take || []) + 4));
