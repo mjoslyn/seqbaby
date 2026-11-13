@@ -34,11 +34,15 @@ import styles from "@/app/ui.module.css";
 // With a song of your own open there is nothing to ask, so the button saves
 // straight away as its next version, branching off the version that is open,
 // and says how it went on the button itself. The popup is only for a session
-// that has no song yet (or a template, whose first save makes one). Renaming,
-// saving as a separate song and publishing are the songs menu's.
+// that has no song yet (or a template, whose first save makes one), and for
+// `save new` beside it: the session saved as a separate song with a history of
+// its own, which then becomes the song that is open. Renaming and publishing
+// are the songs menu's.
 export default function SaveButton() {
   const [ready, setReady] = useState(false);
   const [open, setOpen] = useState(false);
+  // The popup is saving a separate song (`save new`), not this one's next version.
+  const [asNew, setAsNew] = useState(false);
   const [title, setTitle] = useState("");
   const [isPublic, setIsPublic] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -108,6 +112,7 @@ export default function SaveButton() {
     const onDown = (e: MouseEvent) => {
       if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) {
         setOpen(false);
+        setAsNew(false);
         setShareUrl("");
       }
     };
@@ -203,6 +208,31 @@ export default function SaveButton() {
     showFlash,
   ]);
 
+  // `save new`: the session as a song of its own, its first version a root.
+  // The name always goes through the server's free-name check (titleGenerated),
+  // so leaving the open song's name gives "cold squelch 2" and never lands on
+  // the song it was saved from. That song is left as it was, and the new one is
+  // what the studio holds now, so the next save is its v2.
+  const saveNew = useCallback(async () => {
+    if (!window.seqbaby || saving) return;
+    setSaving(true);
+    setStatus({ text: "saving…" });
+    const data = window.seqbaby.serializeSet();
+    const now = getOpenSong();
+    const t = title.trim() || now.title.trim() || generateSongName(data);
+    const res = await trySave(data, () => saveSong({ title: t, data, titleGenerated: true }));
+    setSaving(false);
+    if (res.error) return setStatus({ text: res.error, err: true });
+    markSaved(data);
+    const saved = res.title ?? t;
+    setTitle(saved);
+    setOpenSong({ id: res.id ?? null, title: saved, versionId: res.versionId ?? null, isTemplate: false });
+    setOpen(false);
+    setAsNew(false);
+    setStatus({ text: "" });
+    showFlash({ text: `saved \u201c${saved}\u201d` }, 4000);
+  }, [saving, title, showFlash]);
+
   // A song of your own is open: its next version, no questions. By id rather
   // than by title, so it lands on this song whatever the field last held.
   const canQuickSave = !!openSong.id && !openSong.isTemplate;
@@ -255,6 +285,55 @@ export default function SaveButton() {
       >
         {flash?.text ?? "save"}
       </button>
+      {canQuickSave && (
+        <button
+          className={styles.accountBtn}
+          onClick={() => {
+            const next = !(open && asNew);
+            setAsNew(next);
+            setOpen(next);
+            setStatus({ text: "" });
+            if (next) setTitle(openSong.title);
+          }}
+          disabled={saving}
+          title={`save as a separate song, leaving \u201c${openSong.title}\u201d as it is`}
+        >
+          save new
+        </button>
+      )}
+      {open && asNew && canQuickSave && (
+        <div className={styles.panel}>
+          <div className={styles.panelTitle}>save as a new song</div>
+          <input
+            className={styles.saveInput}
+            style={{ width: "100%", marginBottom: 8 }}
+            placeholder="song name"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            autoFocus
+            onFocus={(e) => e.currentTarget.select()}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") saveNew();
+              if (e.key === "Escape") { setOpen(false); setAsNew(false); }
+            }}
+          />
+          <div className={styles.treeHint}>
+            a separate song with its own history. &ldquo;{openSong.title}&rdquo;
+            stays as it is; a name already taken gets a number.
+          </div>
+          <button
+            className={`${styles.smallBtn} ${styles.smallBtnPrimary}`}
+            style={{ width: "100%" }}
+            onClick={saveNew}
+            disabled={saving}
+          >
+            {saving ? "saving…" : "save new"}
+          </button>
+          <div className={`${styles.status} ${status.err ? styles.statusErr : ""}`}>
+            {status.text}
+          </div>
+        </div>
+      )}
       {open && !canQuickSave && (
         <div className={styles.panel}>
           <div className={styles.panelTitle}>save song</div>

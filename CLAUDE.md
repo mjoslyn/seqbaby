@@ -4236,7 +4236,13 @@ v1 ──▶ v2 ──▶ v3 ──▶ v5      (kept editing)
   (`app/SaveButton.tsx`): it saves the next version by id (`saveSong`, off
   `openSong.versionId`) and says so on the button (`saved v5`). Its name +
   public popup is only for a session with no song yet, or a template.
-  Renaming, a separate song and publishing are the songs menu's.
+  **`save new` sits beside it** while a song of yours is open: a name field
+  (the open song's name, selected) and `saveSong` with no id and no parent,
+  always `titleGenerated`, so the name goes through `freeTitle` and keeping
+  it gives `cold squelch 2` rather than landing on the song it came from
+  (the songs menu's `new` does the same). The new song is what the studio
+  holds afterwards, so the next save is its v2. Renaming and publishing are
+  the songs menu's.
 - **Which version is open is shared module state** (`app/songs/openSong.ts`),
   because two islands need the same answer — the songs menu opens versions and
   the top-bar save is what people press afterwards. Both are mounted separately
