@@ -143,7 +143,11 @@ export function deckOf(t) { return (t?._deck && state.mix?.decks?.find(d => d.id
 /** The song's own tracks, in order. */
 export function songTracks() { return state.tracks.filter(inSong); }
 /** A deck withheld: loaded but not started (or gone), so its tracks play nothing. */
-export function deckSilent(t) { return !!t?._deck && !t._deckBus && !deckOf(t)?.on; }
+export function deckSilent(t) {
+  if (!t || t._deckBus) return false;
+  if (!t._deck) return !!state.mix?.aOff;          // deck A, stopped from the mix view
+  return !deckOf(t)?.on;
+}
 
 /**
  * Build a blank pattern with `len` per-step slots across every lane.

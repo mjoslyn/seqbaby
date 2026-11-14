@@ -155,6 +155,7 @@ declare global {
         eject: (opts?: { quiet?: boolean; id?: string }) => boolean;
         /** Eject deck A: deck B becomes the song and every other deck moves back a letter. */
         ejectA?: () => Promise<boolean>;
+        playA?: (on: boolean, opts?: { when?: "now" | "pattern" }) => void;
         ejectClipSong?: () => Promise<boolean>;
         land: (id?: string) => Promise<boolean>;
         keepBoth: () => boolean;

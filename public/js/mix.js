@@ -538,6 +538,53 @@ export function setDeckPlaying(on, id, { when = "now" } = {}) {
 }
 
 /**
+ * Start or stop deck A (the song) while the mix plays on: `mix.aOff` withholds
+ * its tracks as a stopped deck's are. While the transport runs a start waits
+ * for the start setting (`aArm: true`), and a stop with `when: "pattern"`
+ * waits for its pattern to come round (`aArm: false`; asked again, called
+ * off). Stopped transport: at once.
+ */
+export function setDeckAPlaying(on, { when = "now" } = {}) {
+  const m = state.mix;
+  if (!m) return;
+  on = !!on;
+  const stop = () => { m.aOff = true; m.aArm = null; releaseSilencedTracks(); refreshNoiseBeds(); };
+  if (!on && !m.aOff && when === "pattern" && state.playing) {
+    m.aArm = m.aArm === false ? null : false;
+    setStatus(m.aArm === false ? "deck A stops when its pattern comes round (double-click: now)" : "deck A plays on");
+  } else if (on && !m.aOff) {
+    m.aArm = null;
+    setStatus("deck A plays on");
+  } else if (!on) {
+    stop();
+    setStatus("deck A stopped");
+  } else if (!state.playing) {
+    m.aOff = false; m.aArm = null;
+    setStatus("deck A starts with the transport");
+  } else {
+    m.aArm = true;
+    setStatus(startOn === "pattern" ? "deck A starts when its pattern comes round" : "deck A starts on the next bar");
+  }
+  announce();
+}
+
+/** Deck A's bar line: an armed start or stop lands here. */
+function deckABar(m, phrase) {
+  if (m.aArm === true && phrase) {
+    m.aOff = false; m.aArm = null;
+    for (const t of deckATracks()) if (t.engineKey !== "bus") seedTrackCount(t, 0);
+    refreshNoiseBeds();
+    announce();
+  } else if (m.aArm === false && patternLine()) {
+    m.aOff = true; m.aArm = null;
+    releaseSilencedTracks();
+    refreshNoiseBeds();
+    setStatus("deck A stopped");
+    announce();
+  }
+}
+
+/**
  * Wake a deck for its clips: a deck that was never started is "on" with every
  * track's clip stopped, so the first clip launched on it sounds and nothing
  * else of the deck does. A deck already on is left as it is.
@@ -648,6 +695,7 @@ export function mixStep(nextTime, barLine) {
     }
   }
   if (!barLine) return;
+  deckABar(m, phrase);
   for (const d of m.decks) deckBar(d, phrase);
 }
 
@@ -1360,6 +1408,8 @@ function promoteDeck(d) {
     t._deckArrangement = null;
   }
   m.decks = m.decks.filter(x => x !== d);
+  m.aOff = false;                                  // the new deck A plays
+  m.aArm = null;
 
   // every other deck on the desk back a letter (in order, so each letter is
   // free when taken); the clip view's songs keep their own names

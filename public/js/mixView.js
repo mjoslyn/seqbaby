@@ -31,7 +31,7 @@ import { setStatus } from "./dom.js";
 import { upgradeKnobs } from "./knob.js";
 import { samplePeak } from "./meters.js";
 import {
-  deckATracks, deckBTracks, deckLabel, ejectDeckA, deckSide, deskDecks, matchDeckTempo, setXfadeOn, deckStartMode, setDeckStartMode, ejectDeckB, ejectDeckTrack, fadeToDeck, focusDeck, keepBothDecks, loadDeckB, 
+  deckATracks, deckBTracks, deckLabel, ejectDeckA, setDeckAPlaying, deckSide, deskDecks, matchDeckTempo, setXfadeOn, deckStartMode, setDeckStartMode, ejectDeckB, ejectDeckTrack, fadeToDeck, focusDeck, keepBothDecks, loadDeckB, 
   mixSource, mixTempo, requestDeckScene, requestSongScene, setDeckChain, setDeckPlaying, setDeckRepeat, setDeckXfade, setMixTempo,
   setTempoDeck, setTempoLink, setXfade, setXfadeCurve,
 } from "./mix.js";
@@ -194,6 +194,12 @@ function deckA(shown) {
       <span class="sq-mix__facts">${bpm} bpm${key ? ` · ${esc(key)}` : ""} · ${pm.num}/${pm.den}</span>
       ${m ? `<span class="sq-mix__grow"></span><button type="button" class="sq-btn--ghost sq-mix__eject-a" data-act="eject-a" ${m.landing || deskDecks()[0]?.loading ? "disabled" : ""} title="take deck A off: its tracks go, deck B becomes deck A (and the song), and every other deck moves back a letter. One undo step brings the old song back">eject</button>` : ""}
     </div>
+    ${m ? (() => {
+      const on = !m.aOff, armed = m.aArm === true, stopping = on && m.aArm === false;
+      return `<div class="sq-mix__deckbar">
+      <button type="button" class="sq-mix__play${on ? " is-on" : ""}${armed || stopping ? " is-armed" : ""}" data-act="deck-play" title="${stopping ? "deck A stops when its pattern comes round. Click to let it play on; double-click to stop it now" : on ? "stop deck A when its pattern comes round, while the other decks play on. Double-click: stop it now" : armed ? `deck A starts ${deckStartMode() === "pattern" ? "when its pattern comes round" : "on the next bar"}` : "start deck A: on the next bar line while the transport plays, with it when it is stopped"}">${stopping ? "■…" : on ? "■" : armed ? "…" : "▶"} A</button>
+    </div>`;
+    })() : ""}
     ${scenes("a", tracks, state.activePattern, state.queuedPattern, state.patternRepeats, state.patternMode !== "repeat")}
     ${m ? `<div class="sq-mix__strips">
       ${strips.map((t) => strip(t, shown)).join("")}
@@ -535,6 +541,12 @@ function onDblClick(e) {
   // a deck's play button: a click stops it when its pattern comes round (or
   // called that off again); the double-click stops it now
   const play = e.target.closest?.("[data-act=deck-play]");
+  if (play && play.closest(".sq-mix__deck")?.dataset.deck === "a") {
+    const m = state.mix;
+    if (m && !m.aOff) setDeckAPlaying(false);
+    else if (m && m.aArm !== true) setDeckAPlaying(true);
+    return;
+  }
   if (play) {
     const d = deskDecks().find((x) => x.id === play.closest(".sq-mix__deck")?.dataset.deck);
     if (d?.on) setDeckPlaying(false, d.id);
@@ -563,6 +575,7 @@ async function onClick(e) {
   if (!act) return;
   if (act === "load") { openPicker(); return; }
   const deckId = e.target.closest(".sq-mix__deck")?.dataset.deck || undefined;
+  if (act === "deck-play" && deckId === "a") { const m = state.mix; if (m) setDeckAPlaying(!!m.aOff && m.aArm !== true, { when: "pattern" }); return; }
   if (act === "deck-play") { const d = deskDecks().find((x) => x.id === deckId); if (d) setDeckPlaying(!(d.on || d.arm === true), d.id, { when: "pattern" }); return; }
   if (act === "fade-a" || act === "fade-b") { fadeToDeck(act === "fade-a" ? "a" : "b", fadeBars); return; }
   if (act === "side") {

@@ -2965,6 +2965,12 @@ deck B tracks ─▶ deck B bus ─┘              buses' output gains
   "pattern"})`: `d.arm = false`, the button reading `■…`, and `deckBar`
   stops the deck on the bar line `deckPatternLine(d)` names; a second click
   calls the stop off). Stopped transport, or the clip view's deck ■: at once.
+- **Deck A has the same ▶ / ■ while a deck is loaded** (`setDeckAPlaying`,
+  `mix.aOff` / `mix.aArm`, `deckABar`): stopped, the song's tracks are
+  withheld as a stopped deck's are (`deckSilent`) while the transport and the
+  other decks play on; a start waits for the start setting and comes in from
+  step 0. The flags are the mix's, so they go when it ends, and an eject of
+  deck A clears them.
 - **A chain's progress is on the deck** (`chainProgress`, painted on the
   meters' 30Hz tick, never a rebuild): beside a deck's `chain` box, `3 of 8`
   over a fill, the bar of the playing pattern's repeat count and how far
