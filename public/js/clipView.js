@@ -54,7 +54,7 @@ import { PATTERN_COUNT } from "./constants.js";
 import { setStatus } from "./dom.js";
 import { announceClips, requestClipLaunch, setArrangeRecord, stopClip } from "./clips.js";
 import { MODE_UI, SWITCH_UI, insertEmptyPattern, meterOptions, setPatternMeter, setPatternMode } from "./patternBar.js";
-import { deckBTracks, deckLabel, ejectDeckB, mixDecks, requestDeckScene, setDeckPlaying } from "./mix.js";
+import { clipDecks, deckBTracks, deckLabel, deckXfadeGain, ejectDeckB, mixDecks, requestDeckScene, setDeckPlaying, setDeckXfade, wakeDeck } from "./mix.js";
 import { openDeckPicker } from "./mixView.js";
 import { patternSvg, svgUrl } from "./patternPicture.js";
 import { upgradeKnobs } from "./knob.js";
@@ -312,11 +312,12 @@ function render() {
     </div>`;
   };
   const trackRows = rows().map((t) => rowHtml(t, ap)).join("");
-  // The other songs loaded (mix.js's decks), each under a header of its own:
+  // The other songs loaded in this view (mix.js's decks), each under a header of its own:
   // its letter and title, start and eject, and its own row of pattern numbers,
   // since a deck is on a pattern of its own. Their clips launch, copy and
   // edit like the song's.
-  const decks = mixDecks();
+  // (the songs loaded HERE: the mix view's decks are its own)
+  const decks = clipDecks();
   const deckBlocks = decks.map((d) => {
     const tracks = deckBTracks(d.id).filter((t) => t.engineKey !== "bus" && !t._leaving);
     const L = deckLabel(d.id);
@@ -330,11 +331,17 @@ function render() {
       nums.push(`<button type="button" class="${cls.join(" ")}" data-dscene="${i}" title="deck ${L}: every track of this deck to pattern ${i + 1} (now, or at the bar line, by the switch setting). Double-click: now">${i + 1}</button>`);
     }
     const armed = d.arm === true;
-    return `<div class="sq-clips__head sq-clips__deckhead${d.on ? " is-on" : ""}" data-deck="${d.id}">
+    // playing: the deck is on and at least one of its clips is
+    const sounding = d.on && tracks.some((t) => !t._clipOff);
+    // on the crossfader's quiet end: launched clips would be silent, and this
+    // view has no crossfader to bring the deck in with
+    const faded = deckXfadeGain(d.id) < 0.05;
+    return `<div class="sq-clips__head sq-clips__deckhead${sounding ? " is-on" : ""}" data-deck="${d.id}">
       <div class="sq-clips__strip">
         <b class="sq-clips__deck">${L}</b>
         <span class="sq-clips__decktitle" title="${esc(d.title)}, ${d.bpm} bpm">${esc(d.title)}${d.loading ? " (loading…)" : ""}</span>
-        <button type="button" class="sq-clips__stop${d.on ? " is-on" : ""}" data-act="deck-play" ${d.loading ? "disabled" : ""} title="${d.on ? `stop deck ${L}` : armed ? `deck ${L} starts on the next bar or pattern` : `start deck ${L}`}">${d.on ? "■" : armed ? "…" : "▶"}</button>
+        ${faded ? `<button type="button" class="sq-clips__faded" data-act="deck-unfade" title="deck ${L} is on the crossfader's quiet end (the mix view), so its clips are silent. Click to take it off the crossfader: it then plays at its own fader">silent</button>` : ""}
+        <button type="button" class="sq-clips__stop${sounding ? " is-on" : ""}" data-act="deck-play" ${d.loading ? "disabled" : ""} title="${sounding ? `stop every clip on deck ${L}` : armed ? `deck ${L} starts on the next bar or pattern` : `play deck ${L}: every track on the pattern the deck is on`}">${sounding ? "■" : armed ? "…" : "▶"}</button>
         <button type="button" class="sq-clips__stop" data-act="deck-eject" title="take deck ${L} off">×</button>
       </div>
       <div class="sq-clips__cells sq-clips__scenes">${nums.join("")}</div>
@@ -398,16 +405,23 @@ function onClick(e) {
     return;
   }
   const act = e.target.closest("[data-act]")?.dataset.act;
-  if (act === "load-song") { openDeckPicker(); return; }
+  if (act === "load-song") { openDeckPicker({ clips: true }); return; }
   if (act === "deck-play" || act === "deck-eject") {
     const id = e.target.closest("[data-deck]")?.dataset.deck;
     const d = mixDecks().find((x) => x.id === id);
     if (!d) return;
     if (act === "deck-eject") ejectDeckB({ id });
-    else setDeckPlaying(!(d.on || d.arm === true), id);
+    else {
+      const sounding = d.on && deckBTracks(id).some((t) => t.engineKey !== "bus" && !t._clipOff);
+      if (sounding || d.arm === true) setDeckPlaying(false, id);
+      // awake with its clips stopped (loaded here): the whole deck, on its pattern
+      else if (d.on) requestDeckScene(d.scene, id, { when: "now" });
+      else setDeckPlaying(true, id);
+    }
     scheduleClipPaint();
     return;
   }
+  if (act === "deck-unfade") { setDeckXfade(null, e.target.closest("[data-deck]")?.dataset.deck); scheduleClipPaint(); return; }
   if (act === "zoom+" || act === "zoom-") { setZoom(zoom + (act === "zoom+" ? 1 : -1)); return; }
   if (act === "rec") { setArrangeRecord(!state.arrRecord); setStatus(state.arrRecord ? "recording the arrangement: launch clips, each bar is written as it plays" : "arrangement record off"); return; }
   // the transport's own button, so a jam's shared start goes the same way
@@ -425,6 +439,9 @@ function onClick(e) {
   }
   // the row's square is a toggle: stopped, it plays the track's clip again,
   // the way a cell click would (so in finish mode it waits for the bar)
+  // a clip on a deck that was never started: the deck wakes with its other
+  // clips stopped, or the launch would be withheld with the rest of the deck
+  if (t._deck && (act === "stop" || e.target.closest(".sq-clip"))) wakeDeck(t._deck);
   if (act === "stop") { if (t._clipOff) requestClipLaunch(t, trackSlot(t)); else stopClip(t); return; }
   if (act === "select") { detail.select(t); return; }
   // a click queues the clip for when the pattern the track is playing comes

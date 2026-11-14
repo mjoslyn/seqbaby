@@ -2757,15 +2757,28 @@ block   t.arrangement[i]    ─── { slot, start, bars }: a clip at a bar, fo
   first, or after its own length in bars for a pattern that never comes
   round on a bar line). Stopped, a click lands at once. The row's ■ is the
   way to stop a clip; the double-click no longer mutes.
-- **The clip view holds more than one song.** Its toolbar's `load a song…`
-  is the mix view's picker (`openDeckPicker`), and every loaded deck (mix.js)
-  is drawn under the song's rows: a header with the deck's letter and title,
-  its start and eject, and its OWN row of pattern numbers (a deck is on a
-  pattern of its own: `data-dscene`, `requestDeckScene`, by the switch
-  setting, double-click now), then a `.sq-clips__rows` of its tracks, so the
-  hues restart per deck. A deck track's row is the song's row: launch, stop,
-  mute, solo, drag-copy, fill and the detail card all go by track id. The
-  view repaints on `seqbaby:mix` too.
+- **The clip view holds more than one song, and they are its own.** Its
+  toolbar's `load a song…` is the mix view's picker
+  (`openDeckPicker({clips: true})`), and a song loaded there is a deck in the
+  engine (mix.js) flagged `forClips`, with an id of its own kind ("s1",
+  "s2"). The two views do not share decks: the clip view draws
+  `clipDecks()`, the mix view's desk only `deskDecks()` (its cards, its
+  crossfader chips, its tempo picker, `deskMix()` for "is a mix loaded
+  here"), and the tempo's deck (`focus`) is always the desk's. A clip song
+  is OFF the crossfader (`xf: null`, so at its own fader: a launcher has no
+  crossfader to bring it in with) and AWAKE with every clip stopped
+  (`wakeDeck`: `d.on` with each track `_clipOff`), so the first clip launched
+  on it sounds and nothing else does. That was the bug this replaced: loaded
+  on the crossfader's quiet end and never started, a clip song made no
+  sound. Under the song's rows each one has a header (its name, ▶ for the
+  whole deck on its pattern / ■ for every clip, eject, its OWN row of
+  pattern numbers: `data-dscene`, `requestDeckScene`), then a
+  `.sq-clips__rows` of its tracks, so the hues restart. A deck track's row
+  is the song's row: launch, stop, mute, solo, volume, drag-copy, fill and
+  the detail card all go by track id. A header says `silent` when its deck
+  sits on the crossfader's quiet end (`deckXfadeGain`), and a click takes it
+  off. The mix view's `keep` ejects the clip view's songs first; its `land`
+  ejects every other deck, theirs included; `eject` on deck A leaves them.
 - **Code**: `arrangement()` is the mode (as `chain()` is) and `.blocks([[pattern,
   fromBar, bars], ...])` on a part is a track's timeline, numbered from 1 as
   the pattern bar and the ruler number them; the native export writes both,

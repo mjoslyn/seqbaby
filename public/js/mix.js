@@ -89,8 +89,12 @@ const fieldBpm = () => Number(document.getElementById("bpm")?.value) || 120;
 // which is also the deck a call that names none means.
 
 const DECK_LETTERS = "bcdefghijklmnopqrstuvwxyz";
-function nextDeckId(m) {
+// A song loaded in the clip view is a deck too, but the two views do not
+// share them: the mix view's desk shows the decks loaded there (letters), the
+// clip view the songs loaded there (`forClips`, ids "s1", "s2" ...).
+function nextDeckId(m, clips = false) {
   const used = new Set(m.decks.map(d => d.id));
+  if (clips) { for (let n = 1; ; n++) if (!used.has(`s${n}`)) return `s${n}`; }
   for (const c of DECK_LETTERS) if (!used.has(c)) return c;
   for (let n = 27; ; n++) if (!used.has(`n${n}`)) return `n${n}`;
 }
@@ -99,12 +103,16 @@ export function deckLabel(id) { return String(id || "").toUpperCase(); }
 
 /** Every loaded deck, in the order they were loaded. */
 export function mixDecks() { return state.mix?.decks || []; }
-/** The deck `id` names; with none given, the tempo's deck, else the first. */
+/** The decks on the mix view's desk: the ones loaded there. */
+export function deskDecks() { return mixDecks().filter(d => !d.forClips); }
+/** The songs loaded in the clip view. */
+export function clipDecks() { return mixDecks().filter(d => d.forClips); }
+/** The deck `id` names; with none given, the tempo's deck, else the desk's first. */
 export function getDeck(id) {
   const m = state.mix;
   if (!m) return null;
   if (id != null) return m.decks.find(d => d.id === id) || null;
-  return m.decks.find(d => d.id === m.focus) || m.decks[0] || null;
+  return m.decks.find(d => d.id === m.focus) || deskDecks()[0] || m.decks[0] || null;
 }
 /** The deck the tempo slider runs to, or null. */
 export function focusDeck() {
@@ -185,7 +193,7 @@ export function loadDeckB(blob, info = {}) {
   const sum = deckSummary(s);
   const repeats = Array.from({ length: PATTERN_COUNT }, (_, i) => Math.max(1, Number(s.patternRepeats?.[i]) || 1));
   const d = {
-    id: nextDeckId(m),
+    id: nextDeckId(m, !!info.clips),
     title: String(info.title || "").trim() || "untitled",
     source: info.source || null,
     // the loaded song's globals: what landing writes, and what the header reads
@@ -201,7 +209,11 @@ export function loadDeckB(blob, info = {}) {
     scene: startSlot(s), queued: null, barCount: 0, countOrigin: state.tick,
     chain: s.patternMode === "chain" || s.patternMode === "arrange",
     on: false, arm: null,
-    xf: "r",
+    // Loaded from the clip view (`info.clips`): a launcher has no crossfader
+    // to bring a deck in with, so the deck is off it (at its own fader) and
+    // awake with every clip stopped, ready for the first one launched.
+    xf: info.clips ? null : "r",
+    forClips: !!info.clips,
     bus: null,
     loading: true,
     pending: tds.slice(), made: [],
@@ -210,7 +222,7 @@ export function loadDeckB(blob, info = {}) {
   // read by the transport for every note this deck plays (noteForStep)
   d.scale = d.globals.scale;
   m.decks.push(d);
-  if (!m.focus) m.focus = d.id;
+  if (!m.focus && !d.forClips) m.focus = d.id;
   // Nothing heavy yet. A bus is a track (50-100ms to build), and the songs
   // loaded may be playing: the scheduler is given its longer lookahead first,
   // and a moment to schedule that far ahead, and only then are the buses
@@ -335,6 +347,7 @@ function finishLoad(d) {
   renderPatternGrid();
   d.loading = false;
   d.pending = null;
+  if (d.forClips) wakeDeck(d.id);
   if (!mixDecks().some(x => x.loading)) restoreLookAhead();
   const n = deckBTracks(d.id).filter(t => t.engineKey !== "bus").length;
   const L = deckLabel(d.id);
@@ -514,6 +527,27 @@ export function setDeckPlaying(on, id) {
     setStatus(startOn === "pattern" ? `deck ${L} starts when deck A's pattern comes round` : `deck ${L} starts on the next bar`);
   }
   announce();
+}
+
+/**
+ * Wake a deck for its clips: a deck that was never started is "on" with every
+ * track's clip stopped, so the first clip launched on it sounds and nothing
+ * else of the deck does. A deck already on is left as it is.
+ */
+export function wakeDeck(id) {
+  const d = getDeck(id);
+  if (!d || d.loading || d.on) return;
+  for (const t of deckBTracks(d.id)) if (t.engineKey !== "bus") { t._clipOff = true; t._queuedSlot = null; }
+  d.on = true;
+  d.arm = null;
+  refreshNoiseBeds();
+  announceClips();
+  announce();
+}
+
+/** The crossfader's gain on a deck right now (1 for a deck on neither side). */
+export function deckXfadeGain(id) {
+  return sideGains()[deckSide(id)] ?? 1;
 }
 
 /** Every track of a deck onto `slot` (its bus too: the bus's lanes are the pattern's). */
@@ -903,7 +937,7 @@ export function ejectDeckB({ quiet = false, id } = {}) {
   else if (m.focus === d.id) {
     // The tempo's deck went: the tempo is the song's again, and the slider
     // runs to the next deck.
-    m.focus = m.decks[0]?.id ?? null;
+    m.focus = deskDecks()[0]?.id ?? null;
     m.tempoX = 0;
     m.tempoLink = false;
   }
@@ -976,7 +1010,11 @@ function bakeScale(t, scale) {
  */
 export function keepBothDecks() {
   const m = state.mix;
-  if (!m || m.landing || !m.decks.length || m.decks.some(d => d.loading)) return false;
+  if (!m || m.landing || !deskDecks().length || m.decks.some(d => d.loading)) return false;
+  // The desk's decks are what is kept. The songs loaded in the clip view are
+  // that view's own, and go: one song cannot hold a deck that is still loose.
+  const loose = clipDecks();
+  for (const c of loose) ejectDeckB({ quiet: true, id: c.id });
   flushHistory();
   const bpm = Math.round(mixTempo() * 100) / 100;
   const a = deckATracks();
@@ -1232,7 +1270,7 @@ function nameTrack(t, name) {
  */
 export function ejectDeckA() {
   const m = state.mix;
-  const d = m?.decks[0];
+  const d = deskDecks()[0];
   if (!m || !d || d.loading || m.landing) return Promise.resolve(false);
   if (m.decks.length === 1) return landDeckB(d.id);
   flushHistory();
@@ -1265,8 +1303,9 @@ export function ejectDeckA() {
   }
   m.decks = m.decks.filter(x => x !== d);
 
-  // every other deck back a letter (in order, so each letter is free when taken)
-  m.decks.forEach((x, i) => {
+  // every other deck on the desk back a letter (in order, so each letter is
+  // free when taken); the clip view's songs keep their own names
+  deskDecks().forEach((x, i) => {
     const to = DECK_LETTERS[i] || x.id;
     if (to === x.id) return;
     const from = x.id;
@@ -1277,7 +1316,7 @@ export function ejectDeckA() {
     if (new RegExp(`^deck ${deckLabel(from)}$`, "i").test(x.bus?.name || "")) nameTrack(x.bus, `deck ${deckLabel(to)}`);
     x.id = to;
   });
-  m.focus = m.decks[0]?.id ?? null;
+  m.focus = deskDecks()[0]?.id ?? null;
   m.tempoX = 0;                                    // the tempo being heard is the song's now
   m.tempoLink = false;
   m.fade = null;

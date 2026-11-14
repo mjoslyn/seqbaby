@@ -5015,6 +5015,7 @@ body.sq-playing .sq-clip.is-now::after { content: ""; position: absolute; left: 
 .sq-clips__deck.is-a { color: var(--accent); }
 .sq-clips__decktitle { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; color: var(--fg-dim); text-align: left; }
 .sq-clips__deckhead.is-on .sq-clips__decktitle { color: var(--fg); }
+.sq-clips__strip .sq-clips__faded { padding: 1px 5px; font-size: 9px; border-color: var(--danger); color: var(--danger); flex: 0 0 auto; }
 .sq-clips__load { padding: 3px 9px; font-size: 11px; }
 .sq-clip.has-notes { place-items: start; }
 .sq-clip__n { position: relative; z-index: 1; line-height: 1; }

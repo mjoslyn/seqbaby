@@ -31,7 +31,7 @@ import { setStatus } from "./dom.js";
 import { upgradeKnobs } from "./knob.js";
 import { samplePeak } from "./meters.js";
 import {
-  deckATracks, deckBTracks, deckLabel, ejectDeckA, deckSide, matchDeckTempo, deckStartMode, setDeckStartMode, ejectDeckB, ejectDeckTrack, fadeToDeck, focusDeck, keepBothDecks, landDeckB, loadDeckB, mixDecks,
+  deckATracks, deckBTracks, deckLabel, ejectDeckA, deckSide, deskDecks, matchDeckTempo, deckStartMode, setDeckStartMode, ejectDeckB, ejectDeckTrack, fadeToDeck, focusDeck, keepBothDecks, landDeckB, loadDeckB, 
   mixSource, mixTempo, requestDeckScene, requestSongScene, setDeckChain, setDeckPlaying, setDeckRepeat, setDeckXfade, setMixTempo,
   setTempoDeck, setTempoLink, setXfade, setXfadeCurve,
 } from "./mix.js";
@@ -92,8 +92,11 @@ export function installMixView() {
 /** The view switch's `mix` button says a second song is loaded, from any view. */
 function paintSwitchDot() {
   const b = document.querySelector('#view-switch [data-view="mix"]');
-  if (b) b.toggleAttribute("data-on", !!state.mix);
+  if (b) b.toggleAttribute("data-on", deskDecks().length > 0);
 }
+
+/** The mix as the desk sees it: null with no deck loaded HERE (the clip view's songs are its own). */
+const deskMix = () => (deskDecks().length ? state.mix : null);
 
 /** Repaint on the next frame, if this is the open view. */
 export function scheduleMixPaint() {
@@ -178,7 +181,7 @@ function scenes(deck, tracks, scene, queued, repeats, chain) {
 }
 
 function deckA(shown) {
-  const m = state.mix;
+  const m = deskMix();
   const tracks = deckATracks().filter((t) => !t._staged && !t._leaving);
   const strips = [...tracks.filter((t) => t.engineKey !== "bus"), ...tracks.filter((t) => t.engineKey === "bus")];
   const bpm = Number(document.getElementById("bpm")?.value) || 120;
@@ -189,7 +192,7 @@ function deckA(shown) {
       <b>${m ? "A" : "mixer"}</b>
       <span class="sq-mix__title">${esc(state.songName || (m ? "the open song" : "this song"))}</span>
       <span class="sq-mix__facts">${bpm} bpm${key ? ` · ${esc(key)}` : ""} · ${pm.num}/${pm.den}</span>
-      ${m ? `<span class="sq-mix__grow"></span><button type="button" class="sq-btn--ghost sq-mix__eject-a" data-act="eject-a" ${m.landing || mixDecks()[0]?.loading ? "disabled" : ""} title="take deck A off: its tracks go, deck B becomes deck A (and the song), and every other deck moves back a letter. One undo step brings the old song back">eject</button>` : ""}
+      ${m ? `<span class="sq-mix__grow"></span><button type="button" class="sq-btn--ghost sq-mix__eject-a" data-act="eject-a" ${m.landing || deskDecks()[0]?.loading ? "disabled" : ""} title="take deck A off: its tracks go, deck B becomes deck A (and the song), and every other deck moves back a letter. One undo step brings the old song back">eject</button>` : ""}
     </div>
     ${scenes("a", tracks, state.activePattern, state.queuedPattern, state.patternRepeats, state.patternMode !== "repeat")}
     ${m ? `<div class="sq-mix__strips">
@@ -222,7 +225,7 @@ function grid(tracks, shown) {
 
 /** One loaded deck: its header (start, crossfader assign, land, eject), its patterns, its strips. */
 function deckCard(d, shown) {
-  const m = state.mix;
+  const m = deskMix();
   const L = deckLabel(d.id);
   const tracks = deckBTracks(d.id);
   const strips = [...tracks.filter((t) => t.engineKey !== "bus"), ...tracks.filter((t) => t.engineKey === "bus")];
@@ -243,7 +246,7 @@ function deckCard(d, shown) {
     </div>
     <div class="sq-mix__deckbar">
       <button type="button" class="sq-mix__play${d.on ? " is-on" : ""}${armed ? " is-armed" : ""}" data-act="deck-play" ${dis} title="${d.on ? `stop deck ${L}` : armed ? `deck ${L} starts ${deckStartMode() === "pattern" ? "when deck A's pattern comes round" : "on the next bar"}` : `start deck ${L}: on the next bar line while the transport plays, with it when it is stopped`}">${d.on ? "■" : armed ? "…" : "▶"} ${L}</button>
-      ${mixDecks().length > 1 ? "" : `<label class="sq-mix__check" title="on the crossfader: this deck is on its far side from deck A. Off, it plays at its own fader whatever the crossfader says"><input type="checkbox" data-act="deck-xf" ${d.xf ? "checked" : ""} /> crossfader</label>`}
+      ${deskDecks().length > 1 ? "" : `<label class="sq-mix__check" title="on the crossfader: this deck is on its far side from deck A. Off, it plays at its own fader whatever the crossfader says"><input type="checkbox" data-act="deck-xf" ${d.xf ? "checked" : ""} /> crossfader</label>`}
       <button type="button" class="sq-btn--ghost" data-act="match-bpm" ${Math.abs(d.bpm - mixTempo()) < 0.01 ? "disabled" : ""} title="match the playing tempo: set deck ${L}'s tempo (${d.bpm} bpm) to the one playing now, so the tempo slider no longer pulls towards ${d.bpm} and landing it keeps this tempo">= bpm</button>
       <span class="sq-mix__grow"></span>
       <button type="button" data-act="land" ${dis} title="land: deck ${L} becomes the song (its tracks as they are playing, its scale and patterns, the tempo the mix is at); deck A's tracks and every other deck go. One undo step brings the old song back">land</button>
@@ -259,7 +262,7 @@ function deckCard(d, shown) {
 
 /** Every loaded deck, then the way to load another: there is no limit. */
 function otherDecks(shown) {
-  const decks = mixDecks();
+  const decks = deskDecks();
   if (!decks.length) {
     return `<div class="sq-mix__deck is-empty" data-deck="">
       <div class="sq-mix__empty">
@@ -274,7 +277,7 @@ function otherDecks(shown) {
 }
 
 function bar() {
-  const m = state.mix;
+  const m = deskMix();
   if (!m) {
     return `<div class="sq-mix__bar">
       <button type="button" data-act="load" title="load another song onto a deck, to mix it with this one or move over to it">load a deck…</button>
@@ -283,7 +286,7 @@ function bar() {
   }
   const a = Number(document.getElementById("bpm")?.value) || 120;
   const f = focusDeck();
-  const decks = mixDecks();
+  const decks = deskDecks();
   const busy = m.landing || decks.some((d) => d.loading);
   let tempo = "";
   if (f) {
@@ -320,13 +323,13 @@ function bar() {
 
 /** The names on a side of the crossfader ("A C"), or "none". */
 function sideNames(side) {
-  const ids = ["a", ...mixDecks().map((d) => d.id)].filter((id) => deckSide(id) === side);
+  const ids = ["a", ...deskDecks().map((d) => d.id)].filter((id) => deckSide(id) === side);
   return ids.length ? ids.map(deckLabel).join(" ") : "none";
 }
 
 /** The crossfader's own controls: the slider, the fades either way, the curve. */
 function xfadeParts() {
-  const m = state.mix;
+  const m = deskMix();
   const L = sideNames("l"), R = sideNames("r");
   const any = L !== "none" || R !== "none";
   const bars = FADE_BARS.map((b) => `<option value="${b}"${b === fadeBars ? " selected" : ""}>${b} bar${b === 1 ? "" : "s"}</option>`).join("");
@@ -347,8 +350,8 @@ function xfadeParts() {
 
 /** With one other deck: the crossfader between the two, as a column. */
 function center() {
-  const m = state.mix;
-  if (!m || mixDecks().length > 1) return "";
+  const m = deskMix();
+  if (!m || deskDecks().length > 1) return "";
   const x = xfadeParts();
   return `<div class="sq-mix__center">
     <div class="sq-mix__xlabels"><span>${esc(x.L)}</span><span>${esc(x.R)}</span></div>
@@ -366,10 +369,10 @@ function center() {
  * takes it off the crossfader, to play at its own fader.
  */
 function xfadeRow() {
-  const m = state.mix;
-  if (!m || mixDecks().length < 2) return "";
+  const m = deskMix();
+  if (!m || deskDecks().length < 2) return "";
   const x = xfadeParts();
-  const ids = ["a", ...mixDecks().map((d) => d.id)];
+  const ids = ["a", ...deskDecks().map((d) => d.id)];
   const chips = (side) => `<div class="sq-mix__assign" role="group" aria-label="decks on the crossfader's ${side === "l" ? "left" : "right"}">${ids.map((id) => {
     const on = deckSide(id) === side;
     return `<button type="button" class="sq-mix__side${on ? " is-on" : ""}${id === "a" ? " is-a" : ""}" data-act="side" data-deck-id="${id}" data-side="${side}" aria-pressed="${on}" title="deck ${deckLabel(id)}: ${on ? "on this side of the crossfader. Click to take it off: it then plays at its own fader" : `put it on the crossfader's ${side === "l" ? "left" : "right"}`}">${deckLabel(id)}</button>`;
@@ -396,7 +399,7 @@ function render() {
   const shown = detail.sync();
   const sc = desk.querySelectorAll(".sq-mix__strips");
   const scroll = [...sc].map((el) => el.scrollLeft);
-  desk.innerHTML = `${bar()}<div class="sq-mix__decks${state.mix ? " is-two" : ""}">${deckA(shown)}${center()}${otherDecks(shown)}</div>`;
+  desk.innerHTML = `${bar()}<div class="sq-mix__decks${deskMix() ? " is-two" : ""}">${deckA(shown)}${center()}${otherDecks(shown)}</div>`;
   upgradeKnobs(desk);
   desk.querySelectorAll(".sq-mix__strips").forEach((el, i) => { if (scroll[i]) el.scrollLeft = scroll[i]; });
   paintSwitchDot();
@@ -422,7 +425,7 @@ function tickMeters() {
     }
   }
   paintProgress();
-  const m = state.mix;
+  const m = deskMix();
   if (m && !holding) {
     const x = /** @type {HTMLInputElement|null} */ (desk.querySelector(".sq-mix__xfade"));
     if (x && Math.abs(Number(x.value) - m.x) > 0.002) x.value = String(m.x);          // an automatic fade
@@ -448,7 +451,7 @@ function chainProgress(deck) {
     const bar = Math.min(of - 1, state.chainBarCount ?? 0);
     return { bar: bar + 1, of, frac: (bar + into) / of };
   }
-  const d = mixDecks().find((x) => x.id === deck);
+  const d = deskDecks().find((x) => x.id === deck);
   if (!d || !d.on || !d.chain) return null;
   const of = Math.max(1, d.repeats[d.scene] ?? 1);
   const bar = Math.min(of - 1, d.barCount ?? 0);
@@ -548,7 +551,7 @@ async function onClick(e) {
   if (!act) return;
   if (act === "load") { openPicker(); return; }
   const deckId = e.target.closest(".sq-mix__deck")?.dataset.deck || undefined;
-  if (act === "deck-play") { const d = mixDecks().find((x) => x.id === deckId); if (d) setDeckPlaying(!(d.on || d.arm === true), d.id); return; }
+  if (act === "deck-play") { const d = deskDecks().find((x) => x.id === deckId); if (d) setDeckPlaying(!(d.on || d.arm === true), d.id); return; }
   if (act === "fade-a" || act === "fade-b") { fadeToDeck(act === "fade-a" ? "a" : "b", fadeBars); return; }
   if (act === "side") {
     const b = e.target.closest("[data-act=side]");
@@ -611,9 +614,9 @@ async function loadFrom(entry) {
 }
 
 /** The song picker, for another view to load a deck with (the clip view). */
-export function openDeckPicker() { return openPicker(); }
+export function openDeckPicker(info = {}) { return openPicker(info); }
 
-async function openPicker() {
+async function openPicker(extra = {}) {
   const overlay = document.createElement("div");
   overlay.className = "sq-modal-overlay";
   overlay.innerHTML = `<div class="sq-modal sq-mix__picker" role="dialog" aria-modal="true" aria-label="load a song onto a deck">
@@ -683,7 +686,7 @@ async function openPicker() {
       const got = await get();
       if (!got?.session) throw new Error("that song is empty");
       close();
-      await loadDeckB(got.session, { title: got.title, source: got.source });
+      await loadDeckB(got.session, { title: got.title, source: got.source, ...extra });
     } catch (err) {
       console.error(err);
       setStatus(`deck: ${err?.message || "that song did not load"}`, true);
