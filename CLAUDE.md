@@ -2915,7 +2915,7 @@ deck B tracks ─▶ deck B bus ─┘              buses' output gains
   it stays on its clip while the others change pattern, by hand or by the
   chain. The row's `❄ frozen on N · unfreeze` (and the groove view's slot
   badge, and the ❄ on its strip) puts it back on the pattern its deck is on.
-  The frozen clip, clicked, stops (still frozen).
+  So does a second click on the frozen clip.
 - **The detail is the selected strip's own card** (trackDetail.js, with
   `{buses: true}`): a deck B track's step grid shows the pattern that deck is
   on, and a deck bus's card is where its rack, mod and lanes are. Deck B's
