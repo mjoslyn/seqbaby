@@ -2838,7 +2838,10 @@ deck B tracks ─▶ deck B bus ─┘              buses' output gains
   `mix.sideA` for deck A; `deckSide`, `setDeckXfade(side, id)`): deck A
   starts on the left, a loaded deck on the right, and a deck on neither
   plays at its own fader. The crossfader is always in the mix bar across the top, on the
-  line the tempo and `follow fader` are on (`xfadeRow`), with a chip per
+  line the tempo and `follow` are on (`xfadeRow`; ONE line: nothing in the
+  bar wraps, the slider is what gives, and a window too narrow for all of it
+  scrolls the bar sideways. The bar has no load button once a deck is
+  loaded: each deck's own `load…` and the `+ deck` card are the ways in), with a chip per
   deck on each side: a lit chip is attached there, a click attaches a deck
   to that side (off the other), and the `xfade` box switches the whole
   crossfader off (`mix.xfOff`, `setXfadeOn`: every deck at its own fader,

@@ -314,14 +314,13 @@ function bar() {
         ${pick}
         <b class="sq-mix__bpm">${now}</b>
       </label>
-      <label class="sq-mix__check" title="the tempo rides the crossfader: all deck A at one end, all deck ${L} at the other"><input type="checkbox" data-act="link" ${m.tempoLink ? "checked" : ""} /> follow fader</label>`;
+      <label class="sq-mix__check" title="the tempo rides the crossfader: all deck A at one end, all deck ${L} at the other"><input type="checkbox" data-act="link" ${m.tempoLink ? "checked" : ""} /> follow</label>`;
   }
   const n = decks.length + 1;
   return `<div class="sq-mix__bar">
-    <button type="button" data-act="load" title="load another song onto a new deck">load a deck…</button>
     <label class="sq-mix__check" title="when a deck started while the transport plays comes in, and when an automatic crossfade begins. next bar: on the next bar line. next pattern: held until deck A's pattern comes round (its chain moves on, or its longest part starts over), so the songs' phrases line up and not only their bars"><select data-act="start-on" aria-label="when a started deck or an automatic fade begins">
-      <option value="bar"${deckStartMode() === "bar" ? " selected" : ""}>start: next bar</option>
-      <option value="pattern"${deckStartMode() === "pattern" ? " selected" : ""}>start: next pattern</option>
+      <option value="bar"${deckStartMode() === "bar" ? " selected" : ""}>start: bar</option>
+      <option value="pattern"${deckStartMode() === "pattern" ? " selected" : ""}>start: pattern</option>
     </select></label>
     <span class="sq-mix__sep"></span>
     ${tempo}
@@ -348,8 +347,8 @@ function xfadeParts() {
   const slots = [];
   for (let i = 0; i < 32; i++) if (isPatternNonEmpty(i)) slots.push(i);
   if (fadeAt != null && !slots.includes(fadeAt)) fadeAt = null;
-  const ats = `<option value=""${fadeAt == null ? " selected" : ""}>at: the ${deckStartMode() === "pattern" ? "next pattern" : "next bar"}</option>` +
-    slots.map((i) => `<option value="${i}"${i === fadeAt ? " selected" : ""}>at: A's pattern ${i + 1}</option>`).join("");
+  const ats = `<option value=""${fadeAt == null ? " selected" : ""}>at: start</option>` +
+    slots.map((i) => `<option value="${i}"${i === fadeAt ? " selected" : ""}>at: pat ${i + 1}</option>`).join("");
   const atBars = Array.from({ length: 16 }, (_, i) => `<option value="${i}"${i === fadeBar ? " selected" : ""}>bar ${i + 1}</option>`).join("");
   const shapes = XFADE_CURVES.map((c) => `<option value="${c}"${m.curve === c ? " selected" : ""} title="${esc(XFADE_CURVE_TIPS[c])}">${c}</option>`).join("");
   return {
@@ -358,7 +357,7 @@ function xfadeParts() {
     fades: `<div class="sq-mix__fade">
       <button type="button" class="${m.fade && m.fade.to === 0 ? (m.fade.wait ? "is-armed" : "is-on") : ""}" data-act="fade-a" title="fade to the left side over the length picked. A click queues it for the next bar or the next pattern (the start setting); double-click starts it now">◂ ${esc(L)}</button>
       <select data-act="fade-bars" aria-label="fade length" title="how long an automatic fade takes">${bars}</select>
-      <select data-act="fade-at" aria-label="where a fade begins" title="where a click on a fade arrow begins the fade (and starts the decks it brings in): the next bar or pattern, as the start setting says, or the bar line one of deck A's patterns begins on. Holding one pattern, deck A is sent to that pattern when the one playing comes round; a chain gets there by itself. A double-click on an arrow starts now whatever this says">${ats}</select>
+      <select data-act="fade-at" aria-label="where a fade begins" title="where a click on a fade arrow begins the fade (and starts the decks it brings in). at: start is the next bar or pattern, as the start setting says; at: pat N is the bar line deck A's pattern N begins on. Holding one pattern, deck A is sent to that pattern when the one playing comes round; a chain gets there by itself. A double-click on an arrow starts now whatever this says">${ats}</select>
       <select data-act="fade-bar" aria-label="which bar a fade begins on" title="which bar of that pattern the fade begins on: bar 1 is the pattern's first. With no pattern picked, it counts on from the next bar or pattern">${atBars}</select>
       <button type="button" class="${m.fade && m.fade.to === 1 ? (m.fade.wait ? "is-armed" : "is-on") : ""}" data-act="fade-b" title="fade to the right side over the length picked. A click queues it for the next bar or the next pattern (the start setting); double-click starts it now">${esc(R)} ▸</button>
     </div>`,
