@@ -2968,7 +2968,11 @@ deck B tracks ─▶ deck B bus ─┘              buses' output gains
   (`fadeToDeck`) starts at the same place: it waits (`fade.wait`, its button
   blinking) for the next bar line or the next pattern, then runs its bars. A
   double-click on a fade arrow starts it now (`fadeToDeck(side, bars, {now:
-  true})`), as a double-click on a pattern number switches now.
+  true})`), as a double-click on a pattern number switches now. A fade
+  towards a side also STARTS the decks on it that are not playing
+  (`startSide`: armed like their own ▶, so they come in on the line the fade
+  waits for; with the transport stopped they start with it), and calls off a
+  stop one of them was armed for.
 - **A click on a playing deck's ■ stops it at its pattern's end; a
   double-click stops it now** (`setDeckPlaying(false, id, {when:
   "pattern"})`: `d.arm = false`, the button reading `■…`, and `deckBar`
@@ -3005,6 +3009,16 @@ deck B tracks ─▶ deck B bus ─┘              buses' output gains
   started keeps its side, opposite deck A, as the next one to bring in;
   the old bus leaves with the old tracks. One deck loaded: it is a landing.
   One undo step brings the old song back.
+- **Every deck has a `load…` beside its eject** (`load-deck`, the picker
+  with a heading naming the deck). On a loaded deck it is `loadDeckB` with
+  `replace`: the old deck goes and the new one takes its place in the row,
+  its letter, its side of the crossfader and its view (desk or clips),
+  stopped; when it was the only deck, the mix is started again with the
+  crossfader, its curve and deck A's side where they were. On deck A it is
+  `loadDeckA` (`window.seqbaby.mix.loadA`): the song is loaded as a deck on
+  deck A's side and, once built, takes deck A's place through `promoteDeck`,
+  so the old song goes, the other decks keep their letters and one undo step
+  brings the old song back.
 - **A strip's × ejects that one track.** A deck's track just goes
   (`ejectDeckTrack`: faded, not in the undo stack, the deck's last track
   taking the deck with it); a track of the song's own goes through its own

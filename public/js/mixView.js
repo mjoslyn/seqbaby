@@ -31,7 +31,7 @@ import { setStatus } from "./dom.js";
 import { upgradeKnobs } from "./knob.js";
 import { samplePeak } from "./meters.js";
 import {
-  deckATracks, deckBTracks, deckLabel, ejectDeckA, setDeckAPlaying, deckSide, deskDecks, matchDeckTempo, setXfadeOn, deckStartMode, setDeckStartMode, ejectDeckB, ejectDeckTrack, fadeToDeck, focusDeck, keepBothDecks, loadDeckB, 
+  deckATracks, deckBTracks, deckLabel, ejectDeckA, setDeckAPlaying, deckSide, deskDecks, matchDeckTempo, setXfadeOn, deckStartMode, setDeckStartMode, ejectDeckB, ejectDeckTrack, fadeToDeck, focusDeck, keepBothDecks, loadDeckA, loadDeckB, 
   mixSource, mixTempo, requestDeckScene, requestSongScene, setDeckChain, setDeckPlaying, setDeckRepeat, setDeckXfade, setMixTempo,
   setTempoDeck, setTempoLink, setXfade, setXfadeCurve,
 } from "./mix.js";
@@ -192,7 +192,7 @@ function deckA(shown) {
       <b>${m ? "A" : "mixer"}</b>
       <span class="sq-mix__title">${esc(state.songName || (m ? "the open song" : "this song"))}</span>
       <span class="sq-mix__facts">${bpm} bpm${key ? ` · ${esc(key)}` : ""} · ${pm.num}/${pm.den}</span>
-      ${m ? `<span class="sq-mix__grow"></span><button type="button" class="sq-btn--ghost sq-mix__eject-a" data-act="eject-a" ${m.landing || deskDecks()[0]?.loading ? "disabled" : ""} title="take deck A off: its tracks go, deck B becomes deck A (and the song), and every other deck moves back a letter. One undo step brings the old song back">eject</button>` : ""}
+      ${m ? `<span class="sq-mix__grow"></span><button type="button" class="sq-btn--ghost" data-act="load-deck" ${m.landing ? "disabled" : ""} title="load another song onto deck A: once it has loaded it takes this song's place as deck A and the song, and the other decks stay as they are. One undo step brings this song back">load…</button><button type="button" class="sq-btn--ghost sq-mix__eject-a" data-act="eject-a" ${m.landing || deskDecks()[0]?.loading ? "disabled" : ""} title="take deck A off: its tracks go, deck B becomes deck A (and the song), and every other deck moves back a letter. One undo step brings the old song back">eject</button>` : ""}
     </div>
     ${m ? (() => {
       const on = !m.aOff, armed = m.aArm === true, stopping = on && m.aArm === false;
@@ -255,6 +255,7 @@ function deckCard(d, shown) {
       <button type="button" class="sq-mix__play${d.on ? " is-on" : ""}${armed || stopping ? " is-armed" : ""}" data-act="deck-play" ${dis} title="${stopping ? `deck ${L} stops when its pattern comes round. Click to let it play on; double-click to stop it now` : d.on ? `stop deck ${L} when its pattern comes round. Double-click: stop it now` : armed ? `deck ${L} starts ${deckStartMode() === "pattern" ? "when deck A's pattern comes round" : "on the next bar"}` : `start deck ${L}: on the next bar line while the transport plays, with it when it is stopped`}">${stopping ? "■…" : d.on ? "■" : armed ? "…" : "▶"} ${L}</button>
       <button type="button" class="sq-btn--ghost" data-act="match-bpm" ${Math.abs(d.bpm - mixTempo()) < 0.01 ? "disabled" : ""} title="match the playing tempo: set deck ${L}'s tempo (${d.bpm} bpm) to the one playing now, so the tempo slider no longer pulls towards ${d.bpm} and landing it keeps this tempo">= bpm</button>
       <span class="sq-mix__grow"></span>
+      <button type="button" class="sq-btn--ghost" data-act="load-deck" title="load another song onto deck ${L}, in place of this one: same place, same side of the crossfader">load…</button>
       <button type="button" class="sq-btn--ghost" data-act="eject" title="take deck ${L} off">eject</button>
     </div>
     ${scenes(d.id, tracks, d.scene, d.queued, d.repeats, d.chain)}
@@ -584,6 +585,11 @@ async function onClick(e) {
     setDeckXfade(deckSide(id) === side ? null : side, id);
     return;
   }
+  if (act === "load-deck") {
+    if (deckId === "a") openPicker({ asA: true, heading: "load a song onto deck A" });
+    else if (deckId) openPicker({ replace: deckId, heading: `load a song onto deck ${deckLabel(deckId)}` });
+    return;
+  }
   if (act === "eject-a") { await ejectDeckA(); return; }
   if (act === "eject") { ejectDeckB({ id: deckId }); return; }
   if (act === "match-bpm") { matchDeckTempo(deckId); return; }
@@ -640,11 +646,11 @@ async function loadFrom(entry) {
 /** The song picker, for another view to load a deck with (the clip view). */
 export function openDeckPicker(info = {}) { return openPicker(info); }
 
-async function openPicker(extra = {}) {
+async function openPicker({ asA = false, heading = "", ...extra } = {}) {
   const overlay = document.createElement("div");
   overlay.className = "sq-modal-overlay";
   overlay.innerHTML = `<div class="sq-modal sq-mix__picker" role="dialog" aria-modal="true" aria-label="load a song onto a deck">
-      <div class="sq-modal__title">load a song onto a new deck</div>
+      <div class="sq-modal__title">${esc(heading || "load a song onto a new deck")}</div>
       <input class="sq-modal__input" type="search" placeholder="search songs, or paste a share link" autocomplete="off" />
       <div class="sq-mix__list" role="listbox"><div class="sq-mix__hint">looking for songs…</div></div>
       <div class="sq-modal__actions">
@@ -710,7 +716,7 @@ async function openPicker(extra = {}) {
       const got = await get();
       if (!got?.session) throw new Error("that song is empty");
       close();
-      await loadDeckB(got.session, { title: got.title, source: got.source, ...extra });
+      await (asA ? loadDeckA : loadDeckB)(got.session, { title: got.title, source: got.source, ...extra });
     } catch (err) {
       console.error(err);
       setStatus(`deck: ${err?.message || "that song did not load"}`, true);

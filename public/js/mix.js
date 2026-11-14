@@ -178,7 +178,21 @@ export function loadDeckB(blob, info = {}) {
   migrateLegacyNames(s);
   const tds = (s.tracks || []).map(migrateTrackData);
   if (!tds.some(t => t.engineKey !== "bus")) throw new Error("that song has no tracks to play");
-  if (info.replace && state.mix) ejectDeckB({ quiet: true, id: info.replace });
+  // Replacing a deck: the new one takes its place in the row, its letter
+  // (the first one free), its side of the crossfader and its view, and the
+  // crossfader stays where it is even when that was the only deck loaded
+  // (ejecting the last deck ends the mix, and this starts it again).
+  let at = -1, side, keep = null;
+  const old = info.replace && state.mix ? state.mix.decks.find(x => x.id === info.replace) : null;
+  if (old) {
+    const o = state.mix;
+    at = o.decks.indexOf(old);
+    side = old.xf ?? null;
+    if (old.forClips) info = { ...info, clips: true };
+    keep = { x: o.x, curve: o.curve, sideA: o.sideA, xfOff: o.xfOff };
+    ejectDeckB({ quiet: true, id: old.id });
+  }
+  if (info.xf !== undefined) side = info.xf;
 
   let m = state.mix;
   if (!m) {
@@ -188,6 +202,7 @@ export function loadDeckB(blob, info = {}) {
       tempoX: 0, tempoLink: false,
       focus: null, landing: false,
       sideA: "l",
+      ...(keep || {}),
     };
   }
   const sum = deckSummary(s);
@@ -212,7 +227,7 @@ export function loadDeckB(blob, info = {}) {
     // Loaded from the clip view (`info.clips`): a launcher has no crossfader
     // to bring a deck in with, so the deck is off it (at its own fader) and
     // awake with every clip stopped, ready for the first one launched.
-    xf: info.clips ? null : "r",
+    xf: info.clips ? null : side !== undefined ? side : "r",
     forClips: !!info.clips,
     bus: null,
     loading: true,
@@ -221,7 +236,8 @@ export function loadDeckB(blob, info = {}) {
   };
   // read by the transport for every note this deck plays (noteForStep)
   d.scale = d.globals.scale;
-  m.decks.push(d);
+  if (at >= 0 && at <= m.decks.length) m.decks.splice(at, 0, d);
+  else m.decks.push(d);
   if (!m.focus && !d.forClips) m.focus = d.id;
   // Nothing heavy yet. A bus is a track (50-100ms to build), and the songs
   // loaded may be playing: the scheduler is given its longer lookahead first,
@@ -232,6 +248,22 @@ export function loadDeckB(blob, info = {}) {
   announce();
   setStatus(`deck ${deckLabel(d.id)}: loading "${d.title}"…`);
   return new Promise((resolve) => { d.resolve = resolve; setTimeout(() => buildBuses(d), state.playing ? LOOKAHEAD_SETTLE_MS : 0); });
+}
+
+/**
+ * Load a session onto deck A: it is loaded as a deck of its own (on deck A's
+ * side of the crossfader, stopped) and, once built, takes deck A's place the
+ * way an eject of deck A hands over (`promoteDeck`): the old song's tracks
+ * go, the picked song is deck A and the song, the other decks keep their
+ * letters. One undo step brings the old song back.
+ * @returns {Promise<boolean>}
+ */
+export async function loadDeckA(blob, info = {}) {
+  const had = new Set(mixDecks());
+  const p = loadDeckB(blob, { ...info, replace: undefined, clips: false, xf: state.mix ? deckSide("a") : "l" });
+  const d = mixDecks().find(x => !had.has(x));
+  if (!(await p) || !d || !deckLive(d)) return false;
+  return promoteDeck(d);
 }
 
 /** How long a stretched lookahead is given to fill before heavy work starts. */
@@ -913,12 +945,33 @@ export function fadeToDeck(deck, bars, { now = false } = {}) {
   if (!m || m.xfOff) return;
   const to = deck === "a" || deck === "l" ? 0 : 1;
   const steps = Math.max(0, Math.round(Number(bars) || 0)) * stepsPerBarForMeter(transportMeter());
+  // Fading towards a side brings in whatever is on it: a deck there that is
+  // not playing is started (armed while the transport runs, so it comes in on
+  // the line the fade itself waits for), and one armed to stop plays on.
+  const started = startSide(to ? "r" : "l");
   if (!state.playing || !steps) { m.fade = null; writeXfade(to); announce(); return; }
   // `now` (the button's double-click): it starts on the next step instead of
   // waiting for the bar or the pattern
   m.fade = { from: m.x, to, steps, done: 0, wait: !now };
-  setStatus(`fading to the crossfader's ${to ? "right" : "left"} over ${bars} bar${bars === 1 ? "" : "s"}, from ${now ? "now" : startOn === "pattern" ? "deck A's next pattern" : "the next bar"}`);
+  setStatus(`fading to the crossfader's ${to ? "right" : "left"} over ${bars} bar${bars === 1 ? "" : "s"}, from ${now ? "now" : startOn === "pattern" ? "deck A's next pattern" : "the next bar"}${started.length ? `; deck ${started.join(", ")} ${started.length > 1 ? "start" : "starts"} ${startOn === "pattern" ? "when deck A's pattern comes round" : "on the next bar"}` : ""}`);
   announce();
+}
+
+/** Start every desk deck on a crossfader side that is not playing (or is armed to stop). The labels of the ones started. */
+function startSide(side) {
+  const m = state.mix;
+  const out = [];
+  if (!m) return out;
+  if (deckSide("a") === side) {
+    if (m.aOff && m.aArm !== true) { setDeckAPlaying(true); out.push("A"); }
+    else if (m.aArm === false) setDeckAPlaying(true);
+  }
+  for (const d of deskDecks()) {
+    if (d.loading || deckSide(d.id) !== side) continue;
+    if (!d.on && d.arm !== true) { setDeckPlaying(true, d.id); out.push(deckLabel(d.id)); }
+    else if (d.on && d.arm === false) setDeckPlaying(true, d.id);
+  }
+  return out;
 }
 
 // ---- the tempo ------------------------------------------------------------------

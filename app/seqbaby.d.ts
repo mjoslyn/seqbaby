@@ -164,6 +164,7 @@ declare global {
         xfade: (x: number) => void;
         xfadeOn?: (on: boolean) => void;
         fadeTo: (deck: string, bars: number) => void;
+        loadA?: (session: unknown, info?: { title?: string; source?: unknown }) => Promise<boolean>;
         tempo: (x: number) => void;
         /** Set a deck's tempo to the one playing. */
         matchTempo?: (id?: string) => boolean;
