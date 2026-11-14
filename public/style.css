@@ -4850,10 +4850,15 @@ body.vim-visual .sq-vim__mode { color: var(--accent-2); }
 /* the crossfader, between the decks */
 .sq-mix__center { display: grid; gap: 8px; justify-items: center; align-content: center; padding-top: 34px; font-size: 11px; }
 /* More than two decks: the crossfader across the top, a chip per deck on each side. */
-.sq-mix__xrow { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-2); font-size: 11px; }
-.sq-mix__xrow .sq-mix__xfade { flex: 1 1 220px; min-width: 160px; }
-.sq-mix__assign { display: flex; gap: 3px; flex-wrap: wrap; }
-.sq-mix__side { min-width: 26px; padding: 3px 7px; font-size: 11px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg-3); color: var(--fg-dim); cursor: pointer; }
+.sq-mix__xrow { display: flex; align-items: center; gap: 8px; flex: 1 1 520px; min-width: 0; font-size: 11px; }
+.sq-mix__xrow .sq-mix__xfade { flex: 1 1 140px; min-width: 130px; }
+/* the crossfader shares the line: the tempo slider gives it room */
+.sq-mix__bar:has(.sq-mix__xrow) .sq-mix__tempo-x { width: 70px; }
+.sq-mix__bar:has(.sq-mix__xrow) { gap: 6px; }
+.sq-mix__assign { display: flex; gap: 2px; flex-wrap: nowrap; flex: 0 0 auto; }
+.sq-mix__xrow .sq-mix__fade { flex: 0 0 auto; }
+.sq-mix__xrow .sq-mix__fade button { white-space: nowrap; }
+.sq-mix__side { min-width: 20px; padding: 3px 5px; font-size: 11px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg-3); color: var(--fg-dim); cursor: pointer; }
 .sq-mix__side:hover { color: var(--fg); border-color: var(--fg-dim); }
 .sq-mix__side.is-on { background: var(--accent-2); border-color: var(--accent-2); color: #0b0d10; }
 .sq-mix__side.is-on.is-a { background: var(--accent); border-color: var(--accent); }

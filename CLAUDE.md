@@ -2790,7 +2790,7 @@ deck B tracks ─▶ deck B bus ─┘              buses' output gains
   starts on the left, a loaded deck on the right, and a deck on neither
   plays at its own fader. With one other deck the crossfader is the column
   between the two and the deck has a `crossfader` box. With MORE it moves to
-  a row across the top (`xfadeRow`) with a chip per deck on each side: a lit
+  the mix bar across the top, on the line the tempo and `follow fader` are on (`xfadeRow`), with a chip per deck on each side: a lit
   chip is attached there, a click attaches a deck to that side (off the
   other), a click on a lit one takes it off. The tempo
   slider runs from deck A's tempo to ONE deck's (`focus`, picked beside the

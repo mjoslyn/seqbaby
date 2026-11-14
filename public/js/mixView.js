@@ -311,6 +311,7 @@ function bar() {
     </select></label>
     <span class="sq-mix__sep"></span>
     ${tempo}
+    ${xfadeRow()}
     <span class="sq-mix__grow"></span>
     <button type="button" data-act="keep" ${busy ? "disabled" : ""} title="keep every deck as one song: each deck becomes a bus, with the crossfader's balance in its fader">keep ${n === 2 ? "both" : `all ${n}`}</button>
   </div>`;
@@ -357,7 +358,8 @@ function center() {
 }
 
 /**
- * With more decks than two: the crossfader across the top, and on each side
+ * With more decks than two: the crossfader in the bar across the top, on the
+ * line the tempo and `follow fader` are on, and on each side
  * of it a chip per deck. A lit chip is a deck attached to that side; a click
  * attaches it there (taking it off the other side), a click on a lit one
  * takes it off the crossfader, to play at its own fader.
@@ -371,13 +373,14 @@ function xfadeRow() {
     const on = deckSide(id) === side;
     return `<button type="button" class="sq-mix__side${on ? " is-on" : ""}${id === "a" ? " is-a" : ""}" data-act="side" data-deck-id="${id}" data-side="${side}" aria-pressed="${on}" title="deck ${deckLabel(id)}: ${on ? "on this side of the crossfader. Click to take it off: it then plays at its own fader" : `put it on the crossfader's ${side === "l" ? "left" : "right"}`}">${deckLabel(id)}</button>`;
   }).join("")}</div>`;
-  return `<div class="sq-mix__xrow">
-    ${chips("l")}
-    ${x.slider}
-    ${chips("r")}
-    ${x.fades}
-    ${x.curve}
-  </div>`;
+  return `<span class="sq-mix__sep"></span>
+    <div class="sq-mix__xrow">
+      ${chips("l")}
+      ${x.slider}
+      ${chips("r")}
+      ${x.fades}
+      ${x.curve}
+    </div>`;
 }
 
 function render() {
@@ -392,7 +395,7 @@ function render() {
   const shown = detail.sync();
   const sc = desk.querySelectorAll(".sq-mix__strips");
   const scroll = [...sc].map((el) => el.scrollLeft);
-  desk.innerHTML = `${bar()}${xfadeRow()}<div class="sq-mix__decks${state.mix ? " is-two" : ""}">${deckA(shown)}${center()}${otherDecks(shown)}</div>`;
+  desk.innerHTML = `${bar()}<div class="sq-mix__decks${state.mix ? " is-two" : ""}">${deckA(shown)}${center()}${otherDecks(shown)}</div>`;
   upgradeKnobs(desk);
   desk.querySelectorAll(".sq-mix__strips").forEach((el, i) => { if (scroll[i]) el.scrollLeft = scroll[i]; });
   paintSwitchDot();
