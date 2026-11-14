@@ -1,9 +1,9 @@
 import { SHAPER_MODES, makeCassetteSatCurve, makeFuzzCurve, makeShaperCurve, makeTapeHissBuffer, makeVinylCrackleBuffer, shaperPreampGain } from "./curves.js";
 import { buildCrusherNode } from "./crusher.js";
 import { buildReverbNode } from "./reverb.js";
-import { buildPrismNode, prismModeIndices } from "./prism.js";
+import { buildPrismNode, prismNodeModes } from "./prism.js";
 import { buildRepeatNode, repeatModeIndex } from "./repeat.js";
-import { PRISM_KNOBS, PRISM_MODES, REPEAT_KNOBS, REPEAT_MODES, defaultFxConfig as freshFxConfig } from "./soundDefaults.js";
+import { PRISM_KNOBS, PRISM_SELECTS, REPEAT_KNOBS, REPEAT_MODES, defaultFxConfig as freshFxConfig } from "./soundDefaults.js";
 import { fxChainOrder, fxInstanceIds, fxStageLevel, fxStageOf } from "./constants.js";
 import { currentBpm } from "./lfo.js";
 import { setParam } from "./params.js";
@@ -371,7 +371,7 @@ export class FXRack {
     this.prismIn     = ctx.createGain();
     this.prismNode   = buildPrismNode(ctx, config.prism);
     this.prismParams = {};
-    this._prismModes = prismModeIndices(config.prism).join();
+    this._prismModes = prismNodeModes(config.prism).join();
     if (this.prismNode) {
       for (const k of PRISM_KNOBS) this.prismParams[k] = this.prismNode.parameters.get(k);
       this.prismIn.connect(this.prismNode);
@@ -981,14 +981,14 @@ export class FXRack {
       cfg[k] = v;
       try { if (this.prismParams[k]) this.prismParams[k].value = v; } catch {}
     }
-    for (const k of Object.keys(PRISM_MODES)) {
-      if (c[k] === undefined || !PRISM_MODES[k].includes(c[k])) continue;
+    for (const k of Object.keys(PRISM_SELECTS)) {
+      if (c[k] === undefined || !PRISM_SELECTS[k].includes(c[k])) continue;
       cfg[k] = c[k];
     }
     // Compared with what the node was last told, not with the config: the
     // panel writes the config (this same object) before it calls in, so a
     // comparison against it never saw a character change.
-    const modes = prismModeIndices(cfg);
+    const modes = prismNodeModes(cfg);
     if (modes.join() !== this._prismModes) {
       this._prismModes = modes.join();
       try { this.prismNode?.port.postMessage({ type: "modes", modes }); } catch {}

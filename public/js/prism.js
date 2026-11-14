@@ -19,6 +19,11 @@
 //   drift  slow random wander across everything that moves
 //   tilt   a ±6dB see-saw around 700Hz on the way out
 //
+// - **Two routings.** `split` (the default): every module hears the INPUT and
+//   nothing else, and what each one did to it is added up, so the echo is not
+//   an echo of the fuzz and the tape does not wear the reverb down. `chain`:
+//   each feeds the next, left to right, as the diagram is drawn. One module
+//   alone sounds the same either way.
 // - **A module at amount 0 is out of the circuit**, and costs nothing: its
 //   state is skipped, and cleared when it comes back, so an old echo cannot
 //   replay out of a buffer nobody was listening to.
@@ -47,8 +52,8 @@
 // URL like the other worklets here.
 
 /** Each module's characters, in the order the processor indexes them. */
-export { PRISM_MODES, PRISM_KNOBS } from "./soundDefaults.js";
-import { PRISM_MODES } from "./soundDefaults.js";
+export { PRISM_MODES, PRISM_KNOBS, PRISM_ROUTES, PRISM_SELECTS } from "./soundDefaults.js";
+import { PRISM_MODES, PRISM_ROUTES } from "./soundDefaults.js";
 
 // The processor source. Lives here as a string; keep it free of backticks and
 // dollar-brace so the template literal stays intact (see CLAUDE.md's gotchas).
@@ -140,6 +145,8 @@ class PrismProcessor extends AudioWorkletProcessor {
     this.alive = true;
     this.mode = Array.isArray(o.modes) ? o.modes.slice(0, 4).map((m) => m | 0) : [0, 0, 2, 2];
     while (this.mode.length < 4) this.mode.push(0);
+    // the routing rides fifth in the modes: 0 split, 1 chain
+    this.split = !(Array.isArray(o.modes) && (o.modes[4] | 0) === 1);
     this.pend = [-1, -1, -1, -1];
     this.fade = [1, 1, 1, 1];
     this.on = [false, false, false, false];
@@ -211,6 +218,7 @@ class PrismProcessor extends AudioWorkletProcessor {
       if (!d) return;
       if (d.type === "dispose") this.alive = false;
       else if (d.type === "modes" && Array.isArray(d.modes)) {
+        if (d.modes.length > 4) this.split = (d.modes[4] | 0) !== 1;
         for (let k = 0; k < 4; k++) {
           const m = d.modes[k] | 0;
           if (m === this.mode[k] && this.pend[k] < 0) continue;
@@ -629,8 +637,13 @@ class PrismProcessor extends AudioWorkletProcessor {
     const on0 = this.on[0], on1 = this.on[1], on2 = this.on[2], on3 = this.on[3];
     let opk = 0;
 
+    const split = this.split;
     for (let i = 0; i < n; i++) {
       let xL = iL ? iL[i] : 0, xR = iR ? iR[i] : 0;
+      // Split: every module reads the input (dL / dR) and what it changed is
+      // summed (sL / sR). Chain: each reads what the one before left in x.
+      const dL = xL, dR = xR;
+      let sL = 0, sR = 0;
 
       // smoothed amounts, and the fades around a character change
       for (let m = 0; m < 4; m++) {
@@ -669,7 +682,8 @@ class PrismProcessor extends AudioWorkletProcessor {
         const e = Math.min(1, a * 5) * this.fade[0];
         if (e > 0) {
           const yL = this.charStep(this.ch[0], xL, a), yR = this.charStep(this.ch[1], xR, a);
-          xL += (yL - xL) * e; xR += (yR - xR) * e;
+          if (split) { sL += (yL - dL) * e; sR += (yR - dR) * e; }
+          else { xL += (yL - xL) * e; xR += (yR - xR) * e; }
         }
       }
 
@@ -682,14 +696,16 @@ class PrismProcessor extends AudioWorkletProcessor {
         if (pitch) this.pRatio += (this.pTarget - this.pRatio) * this.pRatioK;
         const e = Math.min(1, a * (pitch ? 30 : 5)) * this.fade[1];
         const yL = this.moveStep(this.ch[0], 0, xL, a, i), yR = this.moveStep(this.ch[1], 1, xR, a, i);
-        xL += (yL - xL) * e; xR += (yR - xR) * e;
+        if (split) { sL += (yL - dL) * e; sR += (yR - dR) * e; }
+        else { xL += (yL - xL) * e; xR += (yR - xR) * e; }
       }
 
       if (on2) {
         const a = sm.diff;
         const e = Math.min(1, a * 5) * this.fade[2];
         this.diffStep(xL, xR, a);
-        xL += (this.oL - xL) * e; xR += (this.oR - xR) * e;
+        if (split) { sL += (this.oL - dL) * e; sR += (this.oR - dR) * e; }
+        else { xL += (this.oL - xL) * e; xR += (this.oR - xR) * e; }
       }
 
       if (on3) {
@@ -748,8 +764,10 @@ class PrismProcessor extends AudioWorkletProcessor {
         }
         const e = Math.min(1, a * 5) * this.fade[3];
         const yL = this.texStep(this.ch[0], 0, xL, a, i), yR = this.texStep(this.ch[1], 1, xR, a, i);
-        xL += (yL - xL) * e; xR += (yR - xR) * e;
+        if (split) { sL += (yL - dL) * e; sR += (yR - dR) * e; }
+        else { xL += (yL - xL) * e; xR += (yR - xR) * e; }
       }
+      if (split) { xL = dL + sL; xR = dR + sR; }
 
       // tilt
       const cL = this.ch[0], cR = this.ch[1];
@@ -824,6 +842,11 @@ export function prismModeIndices(c) {
   });
 }
 
+/** What the node is told: the four characters, then the routing (0 split, 1 chain). */
+export function prismNodeModes(c) {
+  return [...prismModeIndices(c), c?.route === "chain" ? 1 : 0];
+}
+
 const _loads = new WeakMap();
 const _ready = new WeakSet();
 
@@ -855,7 +878,7 @@ export function buildPrismNode(ctx, config) {
       numberOfInputs: 1,
       numberOfOutputs: 1,
       outputChannelCount: [2],
-      processorOptions: { modes: prismModeIndices(config) },
+      processorOptions: { modes: prismNodeModes(config) },
     });
   } catch (e) {
     console.warn("prism worklet node failed", e);

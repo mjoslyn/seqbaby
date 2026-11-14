@@ -1312,6 +1312,10 @@ ${ORACLE_PANEL}
         <div class="sq-fx__row" data-fx="prism">
           <span class="sq-fx__title">prism</span>
           <label class="sq-fx__ctl" title="how much of the whole console is in the signal"><span>wet</span><input class="fx-prism-wet" type="range" min="0" max="1" step="0.01" value="0" /></label>
+          <label class="sq-fx__ctl" title="how the four modules are wired. split: each one works on the input by itself, side by side, and what they did is added up. chain: each feeds the next (character, movement, diffusion, texture), so the echo repeats the fuzz and the tape wears all of it down"><span>route</span><select class="fx-prism-route">
+            <option value="split" selected>split</option>
+            <option value="chain">chain</option>
+          </select></label>
           <label class="sq-fx__ctl" title="character: drive (a mid-humped overdrive), sweeten (a little compression and air), fuzz (gated, the gate set by sens), howl (a resonant band fed back, following the playing), swell (every note fades in)"><span>char</span><select class="fx-prism-charmode">
             <option value="drive" selected>drive</option>
             <option value="sweeten">sweeten</option>

@@ -30,7 +30,7 @@ import {
   serializeTrackPatch,
 } from "./session.js";
 import { SET_VERSION, validateSet } from "./sessionFormat.js";
-import { ejectDeckB, fadeToDeck, getDeck, keepBothDecks, landDeckB, loadDeckB, mergeDeckB, mixDecks, requestDeckScene, serializeDeckB, setDeckPlaying, setDeckXfade, setMixSource, setMixTempo, setTempoDeck, setXfade } from "./mix.js";
+import { ejectDeckB, ejectDeckTrack, fadeToDeck, getDeck, keepBothDecks, landDeckB, loadDeckB, mergeDeckB, mixDecks, requestDeckScene, serializeDeckB, setDeckPlaying, setDeckXfade, setMixSource, setMixTempo, setTempoDeck, setXfade } from "./mix.js";
 import { state } from "./state.js";
 
 export function installAppApi() {
@@ -156,6 +156,7 @@ export function installAppApi() {
       xfade: setXfade,
       fadeTo: fadeToDeck,
       tempo: setMixTempo,
+      ejectTrack: (i) => ejectDeckTrack(state.tracks[i]),
       deckXfade: setDeckXfade,
       tempoDeck: setTempoDeck,
       // A deck as a session, read whole and written in place: the compose

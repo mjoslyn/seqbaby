@@ -45,7 +45,7 @@ export function defaultFxConfig() {
     // `wet` is the mix around the whole of it, and what switches it on.
     prism:      { wet: 0, char: 0.25, charmode: "drive", move: 0.3, movemode: "doubler",
                   diff: 0.35, diffmode: "space", tex: 0.25, texmode: "cassette",
-                  tilt: 0.5, rate: 0.35, time: 0.4, sens: 0.5, drift: 0.2 },
+                  tilt: 0.5, rate: 0.35, time: 0.4, sens: 0.5, drift: 0.2, route: "split" },
     delay:      { time: 0.375, fbk: 0.35, wet: 0, sync: false, div: 0.5 },
     reverb:     { decay: 2, wet: 0 },
   };
@@ -77,6 +77,12 @@ export const PRISM_MODES = {
   diffmode: ["cascade", "reels", "space", "collage", "reverse"],
   texmode:  ["filter", "squash", "cassette", "broken", "interference"],
 };
+/** How the four modules are wired (`prism.route`): `split`, each one on the
+ *  input by itself, side by side; `chain`, each feeding the next, which is
+ *  what a song written before the choice plays (migratePrismRoute). */
+export const PRISM_ROUTES = ["split", "chain"];
+/** Every select on the prism's row: the four characters and the routing. */
+export const PRISM_SELECTS = { ...PRISM_MODES, route: PRISM_ROUTES };
 /** Its knobs, every one 0..1 and an AudioParam: one list, three namespaces —
  *  `fx-prism-<k>` the control, `prism_<k>` the LFO, `fx.prism.<k>` the lane. */
 export const PRISM_KNOBS = ["char", "move", "diff", "tex", "tilt", "rate", "time", "sens", "drift"];

@@ -4804,8 +4804,12 @@ body.vim-visual .sq-vim__mode { color: var(--accent-2); }
 .sq-mix__meter i.is-clip { background: var(--danger); }
 .sq-mix__ms { display: flex; gap: 3px; }
 .sq-mix__ms button { padding: 1px 0; width: 24px; font-size: 10px; }
+.sq-mix__ms:has(.sq-mix__x) { gap: 2px; }
+.sq-mix__ms:has(.sq-mix__x) button { width: 17px; }
 .sq-mix__mute[aria-pressed="true"] { background: var(--danger); color: #0b0d10; border-color: var(--danger); }
 .sq-mix__solo[aria-pressed="true"] { background: var(--accent); color: #0b0d10; border-color: var(--accent); }
+.sq-mix__ms .sq-mix__x { color: var(--fg-dim); opacity: 0.55; }
+.sq-mix__ms .sq-mix__x:hover { opacity: 1; color: var(--danger, #ff6b6b); border-color: currentColor; }
 .sq-mix__ms button:disabled { opacity: 0.35; cursor: not-allowed; }
 .sq-mix__slot { font-size: 9px; color: var(--fg-dim); font-variant-numeric: tabular-nums; }
 

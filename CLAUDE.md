@@ -669,8 +669,8 @@ in ─ dc ─ predelay ─ 4 allpass diffusers ─┬─▶ 8 delay lines ─┬
 
 ## Prism (`prism.js`) — a four-module console in one rack stage
 
-Four effects in series, each module a choice of five characters and one
-amount knob, with five knobs shared between them. The modules are voiced to be
+Four effects, side by side or in series, each module a choice of five
+characters and one amount knob, with five knobs shared between them. The modules are voiced to be
 stacked: a drive for a doubler after it, an echo a tape texture then wears
 down. Not a model of any particular pedal; the characters are reasoned
 versions of what their names say.
@@ -692,6 +692,16 @@ in ─▶ CHARACTER ─▶ MOVEMENT ─▶ DIFFUSION ─▶ TEXTURE ─▶ TILT 
   (`PRISM_KNOBS`) spells all three namespaces: `fx-prism-<k>`, `prism_<k>`,
   `fx.prism.<k>`. The mix is the rack's linear crossfade around the node
   (`prismWetBus`), like crush.
+- **Two routings** (`route`, the row's first select; `PRISM_ROUTES`, and
+  `PRISM_SELECTS` is the four characters plus it). `split`, the default:
+  every module works on the INPUT alone and what each did to it is added up
+  (`x = dry + Σ (module(dry) - dry) × amount`), so the echo is not an echo of
+  the fuzz. `chain`: each feeds the next, as the diagram is drawn. One module
+  alone is identical either way (tested). The routing rides fifth in the
+  `modes` message (`prismNodeModes`), switched at once. A prism config with
+  no `route` was written when there was only the chain, and
+  `migratePrismRoute` (sessionFormat.js) says so, copies (`prism#2`),
+  `baseSound` and locked patterns included.
 - **A module at amount 0 is out of the circuit** and costs nothing; its state is
   cleared when it comes back, so an old echo cannot replay. The first fifth of
   an amount is a crossfade from clean. On `pitch` the amount picks the interval
@@ -2851,6 +2861,10 @@ deck B tracks ─▶ deck B bus ─┘              buses' output gains
   tone is `.p-eq-high / mid / low` and `.p-cutoff`. Mute and solo `.click()`
   the track's own buttons. The strips read the real controls back on the
   meter's 30Hz tick, and the desk is never rebuilt while a control is held.
+- **A strip's × ejects that one track.** A deck's track just goes
+  (`ejectDeckTrack`: faded, not in the undo stack, the deck's last track
+  taking the deck with it); a track of the song's own goes through its own
+  `remove` button, which asks first and is an edit undo takes back.
 - **The selected track's clips sit over its card** (trackDetail.js's
   `{clips: true}`, the mix view only, which has no clip grid): every pattern
   the track has notes in, drawn as a clip cell (`clipShades`, `patternSvg`).

@@ -31,7 +31,7 @@ import { setStatus } from "./dom.js";
 import { upgradeKnobs } from "./knob.js";
 import { samplePeak } from "./meters.js";
 import {
-  deckATracks, deckBTracks, deckLabel, ejectDeckB, fadeToDeck, focusDeck, keepBothDecks, landDeckB, loadDeckB, mixDecks,
+  deckATracks, deckBTracks, deckLabel, ejectDeckB, ejectDeckTrack, fadeToDeck, focusDeck, keepBothDecks, landDeckB, loadDeckB, mixDecks,
   mixSource, mixTempo, requestDeckScene, setDeckChain, setDeckPlaying, setDeckRepeat, setDeckXfade, setMixTempo,
   setTempoDeck, setTempoLink, setXfade, setXfadeCurve,
 } from "./mix.js";
@@ -143,6 +143,7 @@ function strip(t, shown) {
     <div class="sq-mix__ms">
       <button type="button" class="sq-mix__mute" data-act="mute" aria-pressed="${!!t.muted}" ${t.soloed ? "disabled" : ""} title="mute">M</button>
       <button type="button" class="sq-mix__solo" data-act="solo" aria-pressed="${!!t.soloed}" ${t.muted ? "disabled" : ""} title="solo${deckBus ? ": hear this deck alone" : ""}">S</button>
+      ${deckBus ? "" : `<button type="button" class="sq-mix__x" data-act="eject-track" title="${esc(t._deck ? `eject ${name}: take this one track off the deck (the deck's last track takes the deck with it)` : `remove ${name} from the song (it asks first, and undo brings it back)`)}" aria-label="eject ${esc(name)}">×</button>`}
     </div>
     <span class="sq-mix__slot" title="${bus ? "a bus plays no notes" : t._clipOff ? "this track's clip is stopped" : `on pattern ${slot + 1}`}">${bus ? "bus" : t._clipOff ? "off" : `p${slot + 1}`}</span>
   </div>`;
@@ -439,6 +440,14 @@ async function onClick(e) {
   if (act === "mute" || act === "solo") {
     // the track's own button, so one piece of code owns what mute means
     trackControl(t, act === "mute" ? ".sq-track__mute" : ".sq-track__solo")?.click();
+    scheduleMixPaint();
+    return;
+  }
+  if (act === "eject-track") {
+    // a deck's track just goes; the song's own goes through its own remove
+    // button, which asks first and is an edit undo can take back
+    if (t._deck) ejectDeckTrack(t);
+    else trackControl(t, ".sq-track__remove")?.click();
     scheduleMixPaint();
     return;
   }

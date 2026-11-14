@@ -156,6 +156,19 @@ function migrateCrushRate(o) {
   if (c && typeof c === "object" && c.rate == null) c.rate = 1;
 }
 
+// The prism's four modules used to be wired one way: each into the next. They
+// run side by side by default now (`route: "split"`, prism.js), so a prism
+// config written before the choice existed says `chain`, and plays as it did.
+function migratePrismRoute(o) {
+  const fc = o?.fxConfig;
+  if (!fc || typeof fc !== "object") return;
+  for (const k of Object.keys(fc)) {
+    if (k !== "prism" && !/^prism#[0-9]+$/.test(k)) continue;
+    const c = fc[k];
+    if (c && typeof c === "object" && c.route == null) c.route = "chain";
+  }
+}
+
 // The beat repeat's pitch knob went from 0..12 semitones down (0 at the
 // bottom) to -24..+24 (0 in the middle). A repeat config written before has no
 // `pitchV`; its pitch p meant 12p down, which is 0.5 - p/4 now. Returns
@@ -268,6 +281,7 @@ function migrateSoundNames(o, engineKey) {
   renameKeys(o.params, (k) => LEGACY_PARAM_KEYS[k] || k);
   renameKeys(o.lfoConfig, migrateModKey);
   migrateCrushRate(o);
+  migratePrismRoute(o);
   migrateAmpDrive(o);
   return migrateRepeatPitch(o);
 }

@@ -53,7 +53,7 @@ import {
   LADDER_NUM_CTLS, LADDER_SEL_CTLS, LADDER_OSC_NUM_CTLS, LADDER_OSC_SEL_CTLS, LADDER_TONE_NAMES, ladderTone, ladderToneDescription,
   ORACLE_NUM_CTLS, ORACLE_SEL_CTLS, ORACLE_TONE_NAMES, oracleTone, oracleToneDescription,
 } from "./engineData.js";
-import { EQ_KEYS, EUCLID_DEFAULTS, FILTER_TYPES, PRISM_MODES, REPEAT_MODES, defaultCompConfig, defaultEq, eqRange, defaultFilter, defaultFxConfig, defaultTrackParams } from "./soundDefaults.js";
+import { EQ_KEYS, EUCLID_DEFAULTS, FILTER_TYPES, PRISM_SELECTS, REPEAT_MODES, defaultCompConfig, defaultEq, eqRange, defaultFilter, defaultFxConfig, defaultTrackParams } from "./soundDefaults.js";
 import {
   AUTOMATION_TARGETS, FX_STAGE_LEVEL_KEY, LFO_DIVS, LFO_KEYS, LFO_LABELS, PATTERN_COUNT, PATTERN_MODES, STEPS_PER_BAR, fxStageLevel,
   canAutomateKey, canModulateKey, lfoDivLabel, voiceAutoKeysForEngineKey,
@@ -765,7 +765,7 @@ const FX_RANGE = {   // anything not listed is 0..1
 };
 const FX_SELECT = {
   "shaper.mode": ["saturate", "softclip", "clip", "serge", "fold", "wrap"],
-  ...Object.fromEntries(Object.entries(PRISM_MODES).map(([k, v]) => [`prism.${k}`, v])),
+  ...Object.fromEntries(Object.entries(PRISM_SELECTS).map(([k, v]) => [`prism.${k}`, v])),
   "repeat.mode": REPEAT_MODES,
 };
 /**

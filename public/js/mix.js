@@ -745,6 +745,31 @@ export function ejectDeckB({ quiet = false, id } = {}) {
   return true;
 }
 
+/**
+ * Take ONE track off a deck: the track goes, the rest of the deck plays on.
+ * Not in the undo stack (a deck is not in the song). The deck's last track
+ * takes the deck with it. A track of the song's own is not this function's:
+ * its `remove` button is, which asks first and can be undone.
+ * @returns {boolean} whether it went
+ */
+export function ejectDeckTrack(t) {
+  const d = (t?._deck && mixDecks().find(x => x.id === t._deck)) || null;
+  if (!d || t._deckBus || d.loading || state.mix?.landing) return false;
+  const left = deckBTracks(d.id).filter(x => x !== t && x.engineKey !== "bus");
+  if (!left.length) return ejectDeckB({ id: d.id });
+  const name = t.name || "track";
+  sendOff([t]);
+  setTimeout(() => {
+    refreshOutputSelects();
+    refreshCompSourceDropdowns();
+    refreshNoiseBeds();
+  }, 90);
+  setStatus(`deck ${deckLabel(d.id)}: "${name}" ejected`);
+  announceClips();
+  announce();
+  return true;
+}
+
 /** Every note of a track snapped to `scale`, in every pattern: what it has been playing. */
 function bakeScale(t, scale) {
   const intervals = scale?.active ? SCALES[scale.mode] : null;

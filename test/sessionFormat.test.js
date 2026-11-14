@@ -316,3 +316,18 @@ test("the amp's old drive becomes a gain stage at the top of the chain", () => {
   migrateTrackNames(td);
   assert.deepEqual(td.fxConfig.order, ["gain", "delay", "reverb"]);
 });
+
+test("a prism written before the routing existed plays as the chain it was", () => {
+  const td = migrateTrackNames({
+    fxConfig: { prism: { wet: 0.5, char: 0.3 }, "prism#2": { wet: 1 }, delay: { wet: 0.2 } },
+    baseSound: { fxConfig: { prism: { wet: 0.5 } } },
+    patterns: [null, { sound: { fxConfig: { prism: { wet: 1 } } } }],
+  });
+  assert.equal(td.fxConfig.prism.route, "chain");
+  assert.equal(td.fxConfig["prism#2"].route, "chain");
+  assert.equal(td.baseSound.fxConfig.prism.route, "chain");
+  assert.equal(td.patterns[1].sound.fxConfig.prism.route, "chain");
+  assert.equal("route" in td.fxConfig.delay, false);
+  // one that names its routing keeps it
+  assert.equal(migrateTrackNames({ fxConfig: { prism: { route: "split" } } }).fxConfig.prism.route, "split");
+});

@@ -27,7 +27,7 @@ import { patternLocked, refreshPatternLockUI, refreshPatternSoundUI, setPatternL
 import { loadBundledSample, loadGranularTexture, openGranularSourceModal, openSamplerSourceModal, pickAudioFileForTrack } from "./main.js";
 import { defaultFxConfig, driveGainLabel, panLabel } from "./fxRack.js";
 import { crushRateLabel } from "./crusher.js";
-import { PRISM_KNOBS, PRISM_MODES, prismRateLabel, prismTimeLabel } from "./prism.js";
+import { PRISM_KNOBS, PRISM_SELECTS, prismRateLabel, prismTimeLabel } from "./prism.js";
 import {
   REPEAT_KNOBS, REPEAT_MODES, repeatGateLabel, repeatGridLabel, repeatIntervalLabel, repeatOffsetLabel,
   repeatPercentLabel, repeatPitchLabel,
@@ -1763,7 +1763,7 @@ export function applyFxToTrack(t, fx) {
   if (fx.prism && typeof fx.prism === "object") {
     cfg.prism = { ...defaultFxConfig().prism, ...(cfg.prism || {}) };
     readUnit("prism", ["wet", ...PRISM_KNOBS]);
-    for (const k of Object.keys(PRISM_MODES)) if (PRISM_MODES[k].includes(fx.prism[k])) cfg.prism[k] = fx.prism[k];
+    for (const k of Object.keys(PRISM_SELECTS)) if (PRISM_SELECTS[k].includes(fx.prism[k])) cfg.prism[k] = fx.prism[k];
   }
   if (fx.crush && typeof fx.crush === "object") {
     if (!cfg.crush) cfg.crush = { bits: 8, rate: 1, wet: 0 };
@@ -1862,7 +1862,7 @@ export function refreshFxPanelUI(t) {
     const r = q(".fx-crush-rate"); if (r) r.value = cfg.crush.rate ?? 1;
   }
   cfg.prism = { ...defaultFxConfig().prism, ...(cfg.prism || {}) };
-  for (const k of ["wet", ...PRISM_KNOBS, ...Object.keys(PRISM_MODES)]) set(`.fx-prism-${k}`, cfg.prism[k]);
+  for (const k of ["wet", ...PRISM_KNOBS, ...Object.keys(PRISM_SELECTS)]) set(`.fx-prism-${k}`, cfg.prism[k]);
   cfg.repeat = { ...defaultFxConfig().repeat, ...(cfg.repeat || {}) };
   for (const k of ["wet", "mode", ...REPEAT_KNOBS]) set(`.fx-repeat-${k}`, cfg.repeat[k]);
   syncFxRows(t);
@@ -1941,7 +1941,7 @@ export function wireFxPanel(t, panel) {
   { const b = q(".fx-crush-bits"); if (b) b.value = fc.crush.bits; }
   { const w = q(".fx-crush-wet");  if (w) w.value = fc.crush.wet; }
   { const r = q(".fx-crush-rate"); if (r) r.value = fc.crush.rate; }
-  for (const k of ["wet", ...PRISM_KNOBS, ...Object.keys(PRISM_MODES)]) set(`.fx-prism-${k}`, fc.prism[k]);
+  for (const k of ["wet", ...PRISM_KNOBS, ...Object.keys(PRISM_SELECTS)]) set(`.fx-prism-${k}`, fc.prism[k]);
   for (const k of ["wet", "mode", ...REPEAT_KNOBS]) set(`.fx-repeat-${k}`, fc.repeat[k]);
   wireFxReadouts(panel, "fx", (stage) => t.fxConfig[stage]);
 
@@ -2027,7 +2027,7 @@ export function wireFxPanel(t, panel) {
   const applyPrism = () => {
     if (!fc.prism) fc.prism = { ...defaultFxConfig().prism };
     for (const k of ["wet", ...PRISM_KNOBS]) { const el = q(`.fx-prism-${k}`); if (el) fc.prism[k] = Number(el.value); }
-    for (const k of Object.keys(PRISM_MODES)) { const el = q(`.fx-prism-${k}`); if (el) fc.prism[k] = el.value; }
+    for (const k of Object.keys(PRISM_SELECTS)) { const el = q(`.fx-prism-${k}`); if (el) fc.prism[k] = el.value; }
     t.fxRack?.applyPrism(fc.prism);
   };
 
@@ -2079,7 +2079,7 @@ export function wireFxPanel(t, panel) {
   { const w = q(".fx-crush-wet");  if (w) w.addEventListener("input", applyCrush); }
   { const r = q(".fx-crush-rate"); if (r) r.addEventListener("input", applyCrush); }
   for (const k of ["wet", ...PRISM_KNOBS]) q(`.fx-prism-${k}`)?.addEventListener("input", applyPrism);
-  for (const k of Object.keys(PRISM_MODES)) q(`.fx-prism-${k}`)?.addEventListener("change", applyPrism);
+  for (const k of Object.keys(PRISM_SELECTS)) q(`.fx-prism-${k}`)?.addEventListener("change", applyPrism);
   for (const k of ["wet", ...REPEAT_KNOBS]) q(`.fx-repeat-${k}`)?.addEventListener("input", applyRepeat);
   q(".fx-repeat-mode")?.addEventListener("change", applyRepeat);
 

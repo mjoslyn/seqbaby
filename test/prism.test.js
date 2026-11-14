@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { PRISM_MODES, prismProcessorSource, prismModeIndices, prismTimeSec } from "../public/js/prism.js";
+import { PRISM_MODES, prismNodeModes, prismProcessorSource, prismModeIndices, prismTimeSec } from "../public/js/prism.js";
 import { defaultFxConfig } from "../public/js/soundDefaults.js";
 
 // The prism console, rendered outside a browser, as reverb.test.js renders the
@@ -204,4 +204,38 @@ test("the idle skip waits out the longest buffer, then sleeps, then wakes on the
   const { L: back } = render(p, 0.3, sine(220), { diff: 1, time: 1 });
   assert.equal(p.sleeping, false);
   assert.ok(peak(back) > 0.1, "awake again on the next note");
+});
+
+test("split routing: each module works on the input alone, and what they did adds up", () => {
+  // drive and tremolo, both deterministic and with no memory of each other
+  const modes = (route) => [0, 3, 2, 2, route];
+  const both = { char: 0.8, move: 0.9, drift: 0 };
+  const dry = render(make(modes(0)), 1, notes, { drift: 0 }).L;
+  const drive = render(make(modes(0)), 1, notes, { char: 0.8, drift: 0 }).L;
+  const trem = render(make(modes(0)), 1, notes, { move: 0.9, drift: 0 }).L;
+  const split = render(make(modes(0)), 1, notes, both).L;
+  const chain = render(make(modes(1)), 1, notes, both).L;
+  let off = 0, apart = 0;
+  for (let i = 0; i < split.length; i++) {
+    off = Math.max(off, Math.abs(split[i] - (drive[i] + trem[i] - dry[i])));
+    apart = Math.max(apart, Math.abs(split[i] - chain[i]));
+  }
+  assert.ok(off < 1e-4, `split is the modules side by side (off by ${off})`);
+  assert.ok(apart > 0.01, `and not the chain (${apart})`);
+  // one module alone is the same either way
+  const a = render(make(modes(0)), 1, notes, { char: 0.8, drift: 0 }).L;
+  const b = render(make(modes(1)), 1, notes, { char: 0.8, drift: 0 }).L;
+  for (let i = 0; i < a.length; i++) assert.ok(Math.abs(a[i] - b[i]) < 1e-9);
+});
+
+test("the routing: split by default, chain for a config that says so, switched by message", () => {
+  assert.equal(defaultFxConfig().prism.route, "split");
+  assert.deepEqual(prismNodeModes(defaultFxConfig().prism).slice(4), [0]);
+  assert.deepEqual(prismNodeModes({ route: "chain" }).slice(4), [1]);
+  const p = make([0, 3, 2, 2]);
+  assert.equal(p.split, true, "four modes and no routing is split");
+  p.port.onmessage({ data: { type: "modes", modes: [0, 3, 2, 2, 1] } });
+  assert.equal(p.split, false);
+  p.port.onmessage({ data: { type: "modes", modes: [0, 3, 2, 2, 0] } });
+  assert.equal(p.split, true);
 });
