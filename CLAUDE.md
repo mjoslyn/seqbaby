@@ -2971,24 +2971,33 @@ deck B tracks ─▶ deck B bus ─┘              buses' output gains
   line. Arrange mode has only bar lines to go by. There was a `start:` select
   in the mix bar for this; it said twice what the fade's `at:` says, and is
   gone. An automatic crossfade (`fadeToDeck`) waits (`fade.wait`, its button
-  blinking) for what its `at:` menu says: `next bar` (the default), `next
-  pattern` (`fade.on`), or one of deck A's patterns by number. A
+  blinking) for the pattern and bar picked beside the arrows (below). A
   double-click on a fade arrow starts it now (`fadeToDeck(side, bars, {now:
   true})`), as a double-click on a pattern number switches now. A fade
   towards a side also STARTS the decks on it that are not playing
   (`startSide`: armed like their own ▶, so they come in on the line the fade
   waits for; with the transport stopped they start with it), and calls off a
-  stop one of them was armed for. **A fade can be aimed at a pattern and a
-  bar** (`fadeToDeck(side, bars, {at, bar})`, the `at:` and `bar` selects
-  beside the arrows, the view's own and not saved): it waits for the bar
-  line deck A's pattern `at` begins on (`slotAfterLine`: a queued pattern
-  landing, the chain or the loop moving on, or the held pattern coming
-  round), then `bar` more bar lines (`fade.left`). Holding one pattern, deck
-  A is queued onto the target (`requestSongScene`) so it gets there; a chain
-  arrives by itself. With `next bar` or `next pattern` picked, `bar` counts
-  on from that line. The decks the fade started carry `armFade` and come in on
-  the bar line the fade begins on, not on their own start line. Arrange mode
-  has no pattern to wait for and ignores the target.
+  stop one of them was armed for. **A fade goes by the patterns of the deck that is
+  PLAYING** (`fadeToDeck(side, bars, {at, bar, ref})`, the pattern and `bar`
+  selects beside the arrows, the view's own and not saved). The deck is
+  `fadeRefDeck()`: the playing deck on the side the crossfader is nearest
+  (deck A unless it was stopped from the desk, another deck once started), so
+  with B playing and the fader over on it, the select lists B's patterns
+  (`B: playing (3)`, `B: pat 1`...), read before the fade starts anything.
+  `at: "playing"` (the default) is whichever pattern that deck is on; a slot
+  number is one of its patterns. Either way the fade begins on the bar line
+  `refLine(ref)` says that pattern's bar `bar` starts at (0 its first, where
+  it comes round: a queued pattern landing, the chain or the loop moving on,
+  or the held pattern coming round; a later bar can fall inside the pass
+  under way, and wraps on a shorter pattern). A deck holding one pattern is
+  queued onto the target (`requestSongScene` for deck A, `requestDeckScene`
+  for another) so it gets there; a chain arrives by itself. A deck that is
+  not playing, or stops while the fade waits, has no pattern to wait for: the
+  next bar line. `at: "bar"` / `"pattern"` (the next bar line, deck A's
+  pattern round, then `bar` more bar lines, `fade.left`) remain for other
+  callers. The decks the fade started carry `armFade` and come in on the bar
+  line the fade begins on, not on their own start line. Deck A in arrange
+  mode has no pattern to wait for and ignores the target.
 - **The crossfader has six shapes** (`XFADE_CURVES` / `XFADE_CURVE_TIPS`,
   mixPlan.js, the select after the arrows): `blend` (equal power), `smooth`
   (equal power over an eased travel), `linear`, `full` (each side full on its
