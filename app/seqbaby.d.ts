@@ -163,7 +163,7 @@ declare global {
         scene: (slot: number, id?: string) => void;
         xfade: (x: number) => void;
         xfadeOn?: (on: boolean) => void;
-        fadeTo: (deck: string, bars: number) => void;
+        fadeTo: (deck: string, bars: number, opts?: { now?: boolean; at?: number | null; bar?: number }) => void;
         loadA?: (session: unknown, info?: { title?: string; source?: unknown }) => Promise<boolean>;
         tempo: (x: number) => void;
         /** Set a deck's tempo to the one playing. */

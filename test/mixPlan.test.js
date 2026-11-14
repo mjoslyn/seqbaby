@@ -4,7 +4,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   bakeLevel, deckSummary, fadeAt, filledSlots, meterOf, mixBpm, nextFilled, sameScale, scaleLabel,
-  startSlot, tempoRelation, xfadeGains,
+  startSlot, tempoRelation, xfadeGains, XFADE_CURVES, XFADE_CURVE_TIPS,
 } from "../public/js/mixPlan.js";
 
 const near = (a, b, eps = 1e-9) => assert.ok(Math.abs(a - b) <= eps, `${a} is not ${b}`);
@@ -138,4 +138,27 @@ test("keeping both decks folds the crossfader into the bus faders", () => {
   assert.equal(bakeLevel(0.8, 1), 0.8);
   assert.equal(bakeLevel(0.8, 0), 0);
   assert.equal(bakeLevel(1, 3), 1);
+});
+
+test("every crossfader shape: exact ends, a side never rises on its way out, mirrored", () => {
+  for (const c of XFADE_CURVES) {
+    assert.ok(XFADE_CURVE_TIPS[c], c);
+    assert.deepEqual(xfadeGains(0, c), { a: 1, b: 0 }, c);
+    assert.deepEqual(xfadeGains(1, c), { a: 0, b: 1 }, c);
+    let last = xfadeGains(0, c);
+    for (let x = 0.01; x <= 1.0001; x += 0.01) {
+      const g = xfadeGains(x, c);
+      assert.ok(g.a <= last.a + 1e-9 && g.b >= last.b - 1e-9, `${c} at ${x}`);
+      assert.ok(g.a >= 0 && g.a <= 1 && g.b >= 0 && g.b <= 1, `${c} at ${x}`);
+      const m = xfadeGains(1 - x, c);
+      assert.ok(Math.abs(m.a - g.b) < 1e-9 && Math.abs(m.b - g.a) < 1e-9, `${c} mirrors at ${x}`);
+      last = g;
+    }
+  }
+  assert.deepEqual(xfadeGains(0.5, "full"), { a: 1, b: 1 });
+  assert.deepEqual(xfadeGains(0.5, "linear"), { a: 0.5, b: 0.5 });
+  assert.deepEqual(xfadeGains(0.5, "dip"), { a: 0.25, b: 0.25 });
+  const s = xfadeGains(0.5, "smooth");
+  assert.ok(Math.abs(s.a * s.a + s.b * s.b - 1) < 1e-9);
+  assert.ok(xfadeGains(0.1, "smooth").b < xfadeGains(0.1, "blend").b);
 });

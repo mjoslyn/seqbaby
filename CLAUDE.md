@@ -2972,7 +2972,23 @@ deck B tracks ─▶ deck B bus ─┘              buses' output gains
   towards a side also STARTS the decks on it that are not playing
   (`startSide`: armed like their own ▶, so they come in on the line the fade
   waits for; with the transport stopped they start with it), and calls off a
-  stop one of them was armed for.
+  stop one of them was armed for. **A fade can be aimed at a pattern and a
+  bar** (`fadeToDeck(side, bars, {at, bar})`, the `at:` and `bar` selects
+  beside the arrows, the view's own and not saved): it waits for the bar
+  line deck A's pattern `at` begins on (`slotAfterLine`: a queued pattern
+  landing, the chain or the loop moving on, or the held pattern coming
+  round), then `bar` more bar lines (`fade.left`). Holding one pattern, deck
+  A is queued onto the target (`requestSongScene`) so it gets there; a chain
+  arrives by itself. With no pattern picked, `bar` counts on from the start
+  setting's line. The decks the fade started carry `armFade` and come in on
+  the bar line the fade begins on, not on their own start line. Arrange mode
+  has no pattern to wait for and ignores the target.
+- **The crossfader has six shapes** (`XFADE_CURVES` / `XFADE_CURVE_TIPS`,
+  mixPlan.js, the select after the arrows): `blend` (equal power), `smooth`
+  (equal power over an eased travel), `linear`, `full` (each side full on its
+  own half, both full in the middle), `dip` (squared, a gap between) and
+  `cut`. Every one is exactly 1 / 0 at its ends, never rises on the way out
+  and mirrors (tested), which the eject-of-deck-A mirror relies on.
 - **A click on a playing deck's ■ stops it at its pattern's end; a
   double-click stops it now** (`setDeckPlaying(false, id, {when:
   "pattern"})`: `d.arm = false`, the button reading `■…`, and `deckBar`
@@ -3051,8 +3067,12 @@ deck B tracks ─▶ deck B bus ─┘              buses' output gains
   account's own (a save is its next version), else to nothing (a save asks
   for a name). An edit to deck B is never written back to that song by the
   mix itself.
-- **Compose reaches either deck** (the `for:` select at the start of the
-  compose drawer's transition row, `app/ComposeChat.tsx`, desktop only).
+- **Compose reaches any deck** (the `for` chips under the compose box,
+  `app/ComposeChat.tsx`, desktop only: `A`, a chip per loaded deck from
+  `mix.decks()`, and `+ new deck`; a target whose deck goes falls back to A).
+  What follows says "deck B" for whichever deck is picked: the id rides on
+  the proposal (`deck`) and goes to `mix.serialize(id)` / `mix.merge(session,
+  id)`, and `+ new deck` is the fresh-song path.
   `for: this song` is compose as it always was, and deck B plays on under it.
   `for: deck B` with a song loaded there sends THAT song (`serializeDeckB`:
   the song's serializer over deck B's tracks alone, on the deck's scene, with

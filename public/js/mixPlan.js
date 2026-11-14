@@ -3,7 +3,16 @@
 // which pattern deck B's chain goes to next, and what a loaded song says about
 // itself. No imports, so `node --test` runs it (test/mixPlan.test.js).
 
-export const XFADE_CURVES = ["blend", "cut"];
+export const XFADE_CURVES = ["blend", "smooth", "linear", "full", "dip", "cut"];
+/** What each shape is for, in a line (the select's tooltip and the status line). */
+export const XFADE_CURVE_TIPS = {
+  blend: "equal power: the level holds across the travel, both sides at -3dB in the middle",
+  smooth: "equal power, eased: slow off each end and quick through the middle",
+  linear: "straight lines: both at half in the middle, so the level dips there (right for two copies of one song)",
+  full: "each side stays full until the middle and only then falls: both at full in the middle",
+  dip: "each side is nearly gone by the middle: a breath between the two songs",
+  cut: "both full across the middle, each cut at its far end: a swap on the beat",
+};
 export const FADE_BARS = [1, 2, 4, 8, 16];
 
 const clamp01 = (v) => Math.min(1, Math.max(0, Number(v) || 0));
@@ -15,6 +24,13 @@ const clamp01 = (v) => Math.min(1, Math.max(0, Number(v) || 0));
  *          at -3dB in the middle). The ends are exact: 1 and 0.
  *   cut    both decks full across the middle, each cut over the last tenth of
  *          the travel at its far end: for a swap on the beat, not a blend.
+ *   smooth blend's cos / sin over an eased travel (smoothstep), so the fader
+ *          does little near either end and most of its work in the middle.
+ *   linear 1 - x and x: the sum of two COPIES holds, two songs dip 3dB.
+ *   full   each side full on its own half and falling (cos) across the other:
+ *          both full in the middle, for a mix that should not thin.
+ *   dip    (1 - x)^2 and x^2: both a quarter in the middle, a gap between.
+ * Every shape is exactly 1 / 0 at its ends and never rises on the way out.
  * @param {number} x @param {string} [curve]
  * @returns {{a: number, b: number}}
  */
@@ -26,7 +42,16 @@ export function xfadeGains(x, curve = "blend") {
   }
   if (q <= 0) return { a: 1, b: 0 };
   if (q >= 1) return { a: 0, b: 1 };
-  return { a: Math.cos((q * Math.PI) / 2), b: Math.sin((q * Math.PI) / 2) };
+  if (curve === "linear") return { a: 1 - q, b: q };
+  if (curve === "dip") return { a: (1 - q) * (1 - q), b: q * q };
+  if (curve === "full") {
+    return {
+      a: q <= 0.5 ? 1 : Math.cos((q - 0.5) * Math.PI),
+      b: q >= 0.5 ? 1 : Math.sin(q * Math.PI),
+    };
+  }
+  const e = curve === "smooth" ? q * q * (3 - 2 * q) : q;
+  return { a: Math.cos((e * Math.PI) / 2), b: Math.sin((e * Math.PI) / 2) };
 }
 
 /**

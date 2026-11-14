@@ -52,7 +52,7 @@ import { flushJam } from "./jam.js";
 import { applyGlobalsInPlace, deepCopy, mergeSet } from "./liveSet.js";
 import { applyMacroPads } from "./macro.js";
 import { stepsPerBarForMeter, transportMeter } from "./meter.js";
-import { bakeLevel, deckSummary, fadeAt, filledSlots, meterOf, mixBpm, nextFilled, sameScale, startSlot, xfadeGains, XFADE_CURVES } from "./mixPlan.js";
+import { bakeLevel, deckSummary, fadeAt, filledSlots, meterOf, mixBpm, nextFilled, sameScale, startSlot, xfadeGains, XFADE_CURVES, XFADE_CURVE_TIPS } from "./mixPlan.js";
 import { trackControl } from "./paramTargets.js";
 import { renderPatternGrid } from "./patternBar.js";
 import { flushPatternSound, recallPatternSound, refreshAllPatternLockUI, refreshPatternSoundUI, resolveSoundSources } from "./patternSound.js";
@@ -61,7 +61,7 @@ import { syncScaleUI } from "./scaleUI.js";
 import { loadTrackFromData, migrateTrackData, serializeSet, trackShellFor } from "./session.js";
 import { migrateLegacyNames, validateSet } from "./sessionFormat.js";
 import { applyCompressorConfig, refreshAllTrackOutputs, refreshCompSourceDropdowns, refreshNoiseBeds, refreshOutputSelects, releaseSilencedTracks, wouldFeedback } from "./signal.js";
-import { aliasPattern, inSong, onDeckA, paintTrackSlotBadge, queueTrackPaint, state, switchPattern, syncMeterUI, syncRepeatsUI, trackSlot } from "./state.js";
+import { aliasPattern, inSong, nextChainPattern, onDeckA, paintTrackSlotBadge, queueTrackPaint, state, switchPattern, syncMeterUI, syncRepeatsUI, trackSlot } from "./state.js";
 import { renderStepGrid } from "./stepGrid.js";
 import { SCALES, quantizeToScale } from "./theory.js";
 import { nameToMidi } from "./theoryData.js";
@@ -541,6 +541,7 @@ export function patternLine({ queue = true } = {}) {
 export function setDeckPlaying(on, id, { when = "now" } = {}) {
   const d = getDeck(id);
   if (!d || d.loading) return;
+  d.armFade = false;                               // waiting on a fade is that fade's doing
   const L = deckLabel(d.id);
   on = !!on;
   if (!on && when === "pattern" && d.on && state.playing) {
@@ -715,11 +716,19 @@ export function mixStep(nextTime, barLine) {
   // where things that wait for the start setting may begin: the next bar
   // line, or the one deck A's pattern comes round on
   const phrase = barLine && (startOn !== "pattern" || patternLine());
+  // A fade aimed at one of deck A's patterns waits for the bar line that
+  // pattern begins on instead, and one aimed at a bar counts that many bar
+  // lines on from there (`bar`, 0 the first). The decks it started
+  // (`armFade`) come in on the bar line the fade begins on.
+  let begins = false;
   if (m.fade) {
     const f = m.fade;
     if (f.wait) {
       // an automatic fade starts where a started deck would
-      if (phrase) { f.wait = false; f.from = m.x; announce(); }
+      if (f.left == null) {
+        if (f.slot == null ? phrase : barLine && slotAfterLine() === f.slot) f.left = Math.max(0, f.bar | 0);
+      } else if (barLine) f.left--;
+      if (f.left != null && f.left <= 0) { f.wait = false; f.from = m.x; begins = true; announce(); }
     } else {
       f.done++;
       writeXfade(fadeAt(f.from, f.to, f.done, f.steps), nextTime);
@@ -727,8 +736,25 @@ export function mixStep(nextTime, barLine) {
     }
   }
   if (!barLine) return;
+  const waits = !!m.fade?.wait;
   deckABar(m, phrase);
-  for (const d of m.decks) deckBar(d, phrase);
+  for (const d of m.decks) deckBar(d, d.armFade && (waits || begins) ? begins : phrase);
+}
+
+/**
+ * The pattern deck A is on once the bar line the transport is at has passed,
+ * when that line is where a pattern BEGINS: a queued pattern landing, the
+ * chain (or the loop of patterns) moving on, or, holding one pattern, that
+ * pattern coming round. Null inside a pattern, and in arrange mode, which has
+ * a timeline rather than a pattern to wait for.
+ */
+function slotAfterLine() {
+  if (state.patternMode === "arrange") return null;
+  const round = patternLine({ queue: false });
+  if (state.queuedPattern != null && (state._queueOnPattern ? round : state.patternSwitchMode === "finish")) return state.queuedPattern;
+  if (!round) return null;
+  if (state.patternMode === "chain" || state.patLoop) return nextChainPattern(state.activePattern);
+  return state.activePattern;
 }
 
 /**
@@ -883,6 +909,7 @@ export function setXfadeCurve(curve) {
   const m = state.mix;
   if (!m || !XFADE_CURVES.includes(curve)) return;
   m.curve = curve;
+  setStatus(`crossfader: ${curve}. ${XFADE_CURVE_TIPS[curve]}`);
   applyXfade();
   announce();
 }
@@ -940,7 +967,7 @@ function foldLevel(bus, gain) {
  * left side; anything else the right.
  * @param {string} deck @param {number} bars
  */
-export function fadeToDeck(deck, bars, { now = false } = {}) {
+export function fadeToDeck(deck, bars, { now = false, at = null, bar = 0 } = {}) {
   const m = state.mix;
   if (!m || m.xfOff) return;
   const to = deck === "a" || deck === "l" ? 0 : 1;
@@ -948,20 +975,35 @@ export function fadeToDeck(deck, bars, { now = false } = {}) {
   // Fading towards a side brings in whatever is on it: a deck there that is
   // not playing is started (armed while the transport runs, so it comes in on
   // the line the fade itself waits for), and one armed to stop plays on.
-  const started = startSide(to ? "r" : "l");
+  // `at`: one of deck A's patterns to begin on, and `bar` how many bars into
+  // it (0 its first; with no pattern, that many bars past the start
+  // setting's line), the fade and the decks it starts together. Holding one pattern, deck A would never get there, so
+  // the pattern is queued for when the one playing comes round; a chain
+  // reaches it by itself (if it never does, the fade waits, and a click on
+  // the arrow again, or a double-click, moves it).
+  const slot = !now && state.playing && steps && Number.isInteger(at) && at >= 0 && at < PATTERN_COUNT && state.patternMode !== "arrange" ? at : null;
+  const late = !now && state.playing && steps ? Math.max(0, Math.min(63, Math.round(Number(bar) || 0))) : 0;
+  const started = startSide(to ? "r" : "l", slot != null || late > 0);
   if (!state.playing || !steps) { m.fade = null; writeXfade(to); announce(); return; }
+  if (slot != null && state.patternMode !== "chain" && !state.patLoop && state.activePattern !== slot && state.queuedPattern !== slot) {
+    requestSongScene(slot, { when: "pattern" });
+  }
   // `now` (the button's double-click): it starts on the next step instead of
   // waiting for the bar or the pattern
-  m.fade = { from: m.x, to, steps, done: 0, wait: !now };
-  setStatus(`fading to the crossfader's ${to ? "right" : "left"} over ${bars} bar${bars === 1 ? "" : "s"}, from ${now ? "now" : startOn === "pattern" ? "deck A's next pattern" : "the next bar"}${started.length ? `; deck ${started.join(", ")} ${started.length > 1 ? "start" : "starts"} ${startOn === "pattern" ? "when deck A's pattern comes round" : "on the next bar"}` : ""}`);
+  m.fade = { from: m.x, to, steps, done: 0, wait: !now, slot, bar: late, left: null };
+  const where = slot != null ? `when deck A reaches pattern ${slot + 1}${late ? `, bar ${late + 1}` : ""}`
+    : late ? `${late} bar${late === 1 ? "" : "s"} after ${startOn === "pattern" ? "deck A's next pattern" : "the next bar"}` : null;
+  setStatus(`fading to the crossfader's ${to ? "right" : "left"} over ${bars} bar${bars === 1 ? "" : "s"}, ${where ?? `from ${now ? "now" : startOn === "pattern" ? "deck A's next pattern" : "the next bar"}`}${started.length ? `; deck ${started.join(", ")} ${started.length > 1 ? "start" : "starts"} ${where ? "with it" : startOn === "pattern" ? "when deck A's pattern comes round" : "on the next bar"}` : ""}`);
   announce();
 }
 
 /** Start every desk deck on a crossfader side that is not playing (or is armed to stop). The labels of the ones started. */
-function startSide(side) {
+function startSide(side, withFade = false) {
   const m = state.mix;
   const out = [];
   if (!m) return out;
+  // Deck A coming back in cannot wait for one of its own patterns: it is
+  // stopped, so that pattern is not on its way.
   if (deckSide("a") === side) {
     if (m.aOff && m.aArm !== true) { setDeckAPlaying(true); out.push("A"); }
     else if (m.aArm === false) setDeckAPlaying(true);
@@ -970,6 +1012,7 @@ function startSide(side) {
     if (d.loading || deckSide(d.id) !== side) continue;
     if (!d.on && d.arm !== true) { setDeckPlaying(true, d.id); out.push(deckLabel(d.id)); }
     else if (d.on && d.arm === false) setDeckPlaying(true, d.id);
+    if (d.arm === true) d.armFade = !!withFade;
   }
   return out;
 }

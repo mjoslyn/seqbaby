@@ -4860,7 +4860,11 @@ body.vim-visual .sq-vim__mode { color: var(--accent-2); }
 .sq-mix__bar:has(.sq-mix__xrow) { gap: 6px; }
 .sq-mix__xrow.is-off .sq-mix__assign, .sq-mix__xrow.is-off .sq-mix__xfade, .sq-mix__xrow.is-off .sq-mix__fade { opacity: 0.4; }
 .sq-mix__assign { display: flex; gap: 2px; flex-wrap: nowrap; flex: 0 0 auto; }
-.sq-mix__xrow .sq-mix__fade { flex: 0 0 auto; }
+/* the fade's own controls (arrows, length, where it begins, the shape) are
+   too many for the tempo's line on a laptop: the row wraps instead of
+   running under whatever follows it */
+.sq-mix__xrow { flex-wrap: wrap; row-gap: 4px; }
+.sq-mix__xrow .sq-mix__fade { flex: 0 1 auto; flex-wrap: wrap; }
 .sq-mix__xrow .sq-mix__fade button { white-space: nowrap; }
 .sq-mix__side { min-width: 20px; padding: 3px 5px; font-size: 11px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg-3); color: var(--fg-dim); cursor: pointer; }
 .sq-mix__side:hover { color: var(--fg); border-color: var(--fg-dim); }
