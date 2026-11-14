@@ -5023,6 +5023,8 @@ body.sq-playing .sq-clip.is-now::after { content: ""; position: absolute; left: 
   background: color-mix(in oklab, var(--fg) 85%, transparent);
   -webkit-mask-image: var(--notes); mask-image: var(--notes);
   -webkit-mask-size: 100% 100%; mask-size: 100% 100%; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; }
+/* a clip turned down: a shade over the top of the cell, as much as it lost */
+.sq-clip__lvl { position: absolute; left: 0; right: 0; top: 0; background: color-mix(in oklab, var(--bg) 72%, transparent); border-bottom: 1px solid color-mix(in oklab, var(--fg) 45%, transparent); pointer-events: none; }
 .sq-clip.is-locked::before { content: ""; position: absolute; right: 3px; top: 3px; width: 5px; height: 5px; border-radius: 50%; background: var(--accent); }
 .sq-clip.is-drag-over { border-color: var(--accent); background: color-mix(in oklab, var(--accent) 25%, var(--step)); }
 .sq-clips__stop { font-size: 10px; }

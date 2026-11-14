@@ -2745,6 +2745,25 @@ block   t.arrangement[i]    ─── { slot, start, bars }: a clip at a bar, fo
   nearest to the left. It arrives fresh (no lanes or p-lock, the song's
   meter, one repeat). A view opened while playing seeds the arrangement at
   the bar line, and that bar line does not also advance it.
+- **A clip has a level, set by dragging it up and down** (the dice's
+  gesture). `pattern.level` (0..1, absent meaning 1, serialized only when it
+  is not 1, carried by `clonePattern`) is a gain of its own at the end of the
+  rack (`FXRack.clipGain`, between `switchGain` and `output`), so it is a
+  volume whatever the engine does with velocity. `applyClipLevel(t, time)`
+  (signal.js) is called by the transport for every track every step (a
+  compare when nothing moved), so a launched clip takes its level with its
+  first note. A cell is also draggable sideways to copy, and the browser
+  starts that drag whichever way the pointer went: the press is remembered
+  with the pointer's travel since (a dragstart reports the press position),
+  and a mostly vertical one is refused and taken as the level. The cell
+  wears a shade over its top, as much as it lost.
+- **A click on a clip queues it for the end of the pattern its track is
+  playing; a double-click plays it now** (`requestClipLaunch(t, slot, {when:
+  "pattern" | "now"})`, `t._queuePhrase`, `commitPhraseClips` at every bar
+  line outside arrange mode: launched when the track's next step is its
+  first, or after its own length in bars for a pattern that never comes
+  round on a bar line). Stopped, a click lands at once. The row's ■ is the
+  way to stop a clip; the double-click no longer mutes.
 - **The clip view holds more than one song.** Its toolbar's `load a song…`
   is the mix view's picker (`openDeckPicker`), and every loaded deck (mix.js)
   is drawn under the song's rows: a header with the deck's letter and title,

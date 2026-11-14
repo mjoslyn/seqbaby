@@ -431,7 +431,13 @@ export class FXRack {
     // ducks around a graph edit (see there). Its own node so the duck never
     // touches the amp level on `output`, which is a knob and a mod target.
     this.switchGain = ctx.createGain();
-    this.switchGain.connect(this.output);
+    // The level of the CLIP the track is on (a pattern's `level`, the clip
+    // view's vertical drag; signal.js applyClipLevel): a gain of its own, after
+    // the whole chain, so it is a volume whatever the engine does with velocity
+    // and never touches the fader, the amp or a transition's fade on `output`.
+    this.clipGain = ctx.createGain();
+    this.switchGain.connect(this.clipGain);
+    this.clipGain.connect(this.output);
     // Native GainNode.connect() in Tone.js 15 rejects Tone wrappers — unwrap to
     // the underlying native input node before connecting from a native source.
     const toneIn = (node) => node.input?.input ?? node.input ?? node;
@@ -1093,6 +1099,7 @@ export class FXRack {
     if (this._reverbTimer) { try { clearTimeout(this._reverbTimer); } catch {} this._reverbTimer = null; }
     if (this._softTimer) { try { clearTimeout(this._softTimer); } catch {} this._softTimer = null; this._softQueue = null; }
     try { this.switchGain.disconnect(); } catch {}
+    try { this.clipGain.disconnect(); } catch {}
     for (const k in this._bypassTimers) { try { clearTimeout(this._bypassTimers[k]); } catch {} }
     this._bypassTimers = {};
     try { this.input.disconnect(); } catch {}

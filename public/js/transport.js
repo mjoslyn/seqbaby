@@ -23,10 +23,10 @@ import { loadGuitarWorklet } from "./guitar.js";
 import { currentBpm, syncAllLFOs } from "./lfo.js";
 import { init, needsResume, primeAudioForIOS } from "./main.js";
 import { applyBusMute, updateMidiUI } from "./render.js";
-import { ensureFxRack, fireFilterEnv, refreshAllTrackOutputs, refreshNoiseBeds, routeVoiceToRack, soloAudibleTracks } from "./signal.js";
+import { ensureFxRack, fireFilterEnv, refreshAllTrackOutputs, refreshNoiseBeds, routeVoiceToRack, soloAudibleTracks, applyClipLevel } from "./signal.js";
 import { stepsPerBarForMeter, stepsPerBeatForMeter, transportMeter } from "./meter.js";
 import { deckOf, deckSilent, invertChord, loopRange, nextChainPattern, onDeckA, state, switchPattern, trackSlot } from "./state.js";
-import { advanceArrangement, clearQueuedClips, commitQueuedClips, recordArrangementBar, restartTrackCount, seedArrangement, seedTrackCount, setArrangeRecord } from "./clips.js";
+import { advanceArrangement, clearQueuedClips, commitPhraseClips, commitQueuedClips, recordArrangementBar, restartTrackCount, seedArrangement, seedTrackCount, setArrangeRecord } from "./clips.js";
 import { setPatternMode } from "./patternBar.js";
 import { loadSilverboxWorklet } from "./silverbox.js";
 import { loadContagionWorklet } from "./contagion.js";
@@ -557,6 +557,7 @@ export async function startPlayback(opts = {}) {
       // It keeps COUNTING, though: left frozen, a muted track came back on the
       // step it was muted on rather than the one everyone else is on.
       // Deck B of a mix that has not been started is withheld the same way.
+      applyClipLevel(t, time);         // the level of the clip it is on (the clip view's drag)
       if (!isBus && (t._clipOff || t._leaving || t._staged || deckSilent(t) || (soloAudible ? !soloAudible.has(t) : t.muted))) { skipTrackStep(t); continue; }
       const speed = Math.max(0.0001, t.speed ?? 1);
       const effDur = baseStepDur / speed;
@@ -773,6 +774,10 @@ export async function startPlayback(opts = {}) {
         arrSeeded = true;
       }
     }
+    // Clips queued for the end of their track's pattern (the clip view's
+    // click) land on the bar line it comes round on, whatever the switch
+    // setting. The arrangement decides for itself.
+    if (barLine && state.patternMode !== "arrange") commitPhraseClips();
     if (state.patternMode === "arrange" && barLine) {
       // The arrangement decides every track's pattern at every bar line
       // (clips.js); the scene queue and the chain have no say in this mode.

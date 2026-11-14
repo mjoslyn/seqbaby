@@ -25,7 +25,7 @@ import { setStatus } from "./dom.js";
 import { flushPatternSound, recallPatternSound } from "./patternSound.js";
 import { releaseSilencedTracks } from "./signal.js";
 import { renderPatternGrid } from "./patternBar.js";
-import { aliasPattern, inSong, paintTrackPatternUINow, paintTrackSlotBadge, queueTrackPaint, requestPatternSwitch, state, trackSlot } from "./state.js";
+import { aliasPattern, inSong, paintTrackPatternUINow, paintTrackSlotBadge, queueTrackPaint, requestPatternSwitch, state, trackSlot, switchPattern } from "./state.js";
 
 /**
  * Land a track's step counter where it would be had it counted from global
@@ -100,20 +100,33 @@ export function launchClip(t, slot, { restart = false, deferUi = false } = {}) {
  * commits `t._queuedSlot`); otherwise it lands now.
  * @param {Track} t @param {number} slot
  */
-export function requestClipLaunch(t, slot) {
+export function requestClipLaunch(t, slot, { when } = {}) {
   if (!t || slot < 0 || slot >= PATTERN_COUNT) return;
+  // `when` (the clip view's click and double-click): "pattern" queues it for
+  // when the pattern this track is playing comes round, "now" lands it at
+  // once; unset, the pattern bar's switch setting decides.
   // A meter belongs to the pattern NUMBER, not the track: a clip whose meter
   // is not the scene's would have tracks counting different bars at once, so
   // it takes every track with it (a scene switch, by the same switch mode).
   // (Deck B of a mix has a bank of its own, which the meters do not describe.)
   const m = patternMeter(slot), sm = patternMeter(state.activePattern);
   if (!t._deck && (m.num !== sm.num || m.den !== sm.den)) {
-    requestPatternSwitch(slot);
+    if (when === "now") switchPattern(slot); else requestPatternSwitch(slot);
     setStatus(`pattern ${slot + 1} is ${m.num}/${m.den}: every track goes to it, so the meters do not mix`);
     return;
   }
-  if (state.patternSwitchMode === "finish" && state.playing) {
+  if (when === "pattern" && state.playing && !t._clipOff && slot !== trackSlot(t)) {
     t._queuedSlot = slot;
+    t._queuePhrase = true;
+    t._queueWait = 0;
+    renderPatternGrid();
+    announceClips();
+    setStatus(`${t.name?.trim() || "track"}: pattern ${slot + 1} queued for when this one comes round`);
+    return;
+  }
+  if (when !== "now" && when !== "pattern" && state.patternSwitchMode === "finish" && state.playing) {
+    t._queuedSlot = slot;
+    t._queuePhrase = false;
     renderPatternGrid();
     announceClips();
     setStatus(`${t.name?.trim() || "track"}: pattern ${slot + 1} queued`);
@@ -157,7 +170,28 @@ export function stopAllClips() {
 export function commitQueuedClips() {
   for (const t of state.tracks) {
     const slot = t._queuedSlot;
-    if (slot == null) continue;
+    if (slot == null || t._queuePhrase) continue;      // a phrase queue waits for its pattern (below)
+    launchClip(t, slot, { restart: true, deferUi: true });
+  }
+}
+
+/**
+ * The bar-line commit of every clip queued for the END of the pattern its
+ * track is playing (the clip view's click): launched on the bar line that
+ * pattern comes round on, which is when the track's next step is its first.
+ * A pattern whose length is no whole number of bars never comes round ON a
+ * bar line, so it is given its own length in bars and then launched anyway.
+ */
+export function commitPhraseClips() {
+  for (const t of state.tracks) {
+    const slot = t._queuedSlot;
+    if (slot == null || !t._queuePhrase) continue;
+    const len = Math.max(1, t.length || 16);
+    const round = Math.round(t.trackTick ?? 0) % len === 0;
+    t._queueWait = (t._queueWait || 0) + 1;
+    const bars = Math.ceil(len / Math.max(0.0001, t.speed ?? 1) / 16);
+    if (!round && t._queueWait <= bars) continue;
+    t._queuePhrase = false;
     launchClip(t, slot, { restart: true, deferUi: true });
   }
 }
