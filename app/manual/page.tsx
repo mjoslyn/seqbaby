@@ -318,6 +318,7 @@ export default function ManualPage() {
           </p>
           <ul>
             <li>The crossfader is in the bar across the top. Each side has a chip for every deck. Click a chip to attach that deck to that side. Click a lit chip to take the deck off the crossfader, so it plays at its own fader.</li>
+            <li>The <span className={styles.ui}>xfade</span> box turns the crossfader off. Then every deck plays at its own fader. The sides and the slider stay as they are for when you turn it on again.</li>
             <li>When you eject deck A, the crossfader follows the shift. The deck that becomes deck A goes to the left side, and the crossfader moves to keep every level as it was. A deck you have not started stays on the right, ready to bring in.</li>
             <li><span className={styles.ui}>blend</span> is a smooth fade. In the middle both sides are a little quieter, so the level stays even. <span className={styles.ui}>cut</span> keeps both sides at full level across the middle and cuts each side at its far end.</li>
             <li>The two arrow buttons fade to one side over 1, 2, 4, 8 or 16 bars. A click queues the fade: it starts on the next bar or the next pattern, as the <span className={styles.ui}>start</span> setting says. Double-click an arrow to start the fade now.</li>

@@ -733,7 +733,9 @@ export function deckSide(id) {
 /** The crossfader's gain for a side: left, right, or unity for a deck on neither. */
 function sideGains() {
   const m = state.mix;
-  const any = !!m && (deckSide("a") || m.decks.some(d => d.xf));
+  // switched off (`xfOff`), the crossfader is out of the circuit: every deck
+  // at its own fader, wherever the slider sits
+  const any = !!m && !m.xfOff && (deckSide("a") || m.decks.some(d => d.xf));
   const g = any ? xfadeGains(m.x, m.curve) : { a: 1, b: 1 };
   return { l: g.a, r: g.b };
 }
@@ -761,6 +763,21 @@ export function setXfade(x) {
   if (!m) return;
   m.fade = null;
   writeXfade(x);
+}
+
+/**
+ * Switch the crossfader off or on. Off, every deck plays at its own fader
+ * whatever side it is on and wherever the slider sits; the sides and the
+ * slider are kept for when it comes back.
+ */
+export function setXfadeOn(on) {
+  const m = state.mix;
+  if (!m) return;
+  m.xfOff = !on;
+  if (m.xfOff) m.fade = null;
+  applyXfade();
+  setStatus(m.xfOff ? "crossfader off: every deck plays at its own fader" : "crossfader on");
+  announce();
 }
 
 export function setXfadeCurve(curve) {
@@ -826,7 +843,7 @@ function foldLevel(bus, gain) {
  */
 export function fadeToDeck(deck, bars, { now = false } = {}) {
   const m = state.mix;
-  if (!m) return;
+  if (!m || m.xfOff) return;
   const to = deck === "a" || deck === "l" ? 0 : 1;
   const steps = Math.max(0, Math.round(Number(bars) || 0)) * stepsPerBarForMeter(transportMeter());
   if (!state.playing || !steps) { m.fade = null; writeXfade(to); announce(); return; }

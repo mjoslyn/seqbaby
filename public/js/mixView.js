@@ -31,7 +31,7 @@ import { setStatus } from "./dom.js";
 import { upgradeKnobs } from "./knob.js";
 import { samplePeak } from "./meters.js";
 import {
-  deckATracks, deckBTracks, deckLabel, ejectDeckA, deckSide, deskDecks, matchDeckTempo, deckStartMode, setDeckStartMode, ejectDeckB, ejectDeckTrack, fadeToDeck, focusDeck, keepBothDecks, loadDeckB, 
+  deckATracks, deckBTracks, deckLabel, ejectDeckA, deckSide, deskDecks, matchDeckTempo, setXfadeOn, deckStartMode, setDeckStartMode, ejectDeckB, ejectDeckTrack, fadeToDeck, focusDeck, keepBothDecks, loadDeckB, 
   mixSource, mixTempo, requestDeckScene, requestSongScene, setDeckChain, setDeckPlaying, setDeckRepeat, setDeckXfade, setMixTempo,
   setTempoDeck, setTempoLink, setXfade, setXfadeCurve,
 } from "./mix.js";
@@ -329,7 +329,8 @@ function sideNames(side) {
 function xfadeParts() {
   const m = deskMix();
   const L = sideNames("l"), R = sideNames("r");
-  const any = L !== "none" || R !== "none";
+  const off = !!m.xfOff;
+  const any = !off && (L !== "none" || R !== "none");
   const bars = FADE_BARS.map((b) => `<option value="${b}"${b === fadeBars ? " selected" : ""}>${b} bar${b === 1 ? "" : "s"}</option>`).join("");
   return {
     L, R,
@@ -375,8 +376,10 @@ function xfadeRow() {
     const on = deckSide(id) === side;
     return `<button type="button" class="sq-mix__side${on ? " is-on" : ""}${id === "a" ? " is-a" : ""}" data-act="side" data-deck-id="${id}" data-side="${side}" aria-pressed="${on}" title="deck ${deckLabel(id)}: ${on ? "on this side of the crossfader. Click to take it off: it then plays at its own fader" : `put it on the crossfader's ${side === "l" ? "left" : "right"}`}">${deckLabel(id)}</button>`;
   }).join("")}</div>`;
+  const off = !!m.xfOff;
   return `<span class="sq-mix__sep"></span>
-    <div class="sq-mix__xrow">
+    <div class="sq-mix__xrow${off ? " is-off" : ""}">
+      <label class="sq-mix__check" title="the crossfader, on or off. Off, every deck plays at its own fader, whatever side it is on and wherever the slider sits"><input type="checkbox" data-act="xf-on" ${off ? "" : "checked"} /> xfade</label>
       ${chips("l")}
       ${x.slider}
       ${chips("r")}
@@ -514,6 +517,7 @@ function onChange(e) {
   if (act?.startsWith("chain-")) { setDeckChain(el.checked, act.slice(6)); return; }
   if (act === "deck-xf") { setDeckXfade(el.checked, el.closest(".sq-mix__deck")?.dataset.deck); return; }
   if (act === "tempo-deck") { setTempoDeck(el.value); return; }
+  if (act === "xf-on") { setXfadeOn(el.checked); return; }
   if (act === "start-on") { setDeckStartMode(el.value); return; }
   if (act === "link") { setTempoLink(el.checked); return; }
   if (act === "curve") { setXfadeCurve(el.value); return; }
