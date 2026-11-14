@@ -2777,7 +2777,13 @@ block   t.arrangement[i]    ─── { slot, start, bars }: a clip at a bar, fo
   is the song's row: launch, stop, mute, solo, volume, drag-copy, fill and
   the detail card all go by track id. A header says `silent` when its deck
   sits on the crossfader's quiet end (`deckXfadeGain`), and a click takes it
-  off. The mix view's `keep` ejects the clip view's songs first; its `land`
+  off. The song's own header has a × while one is loaded
+  (`ejectClipSong`, mix.js): `promoteDeck`, the routine behind the mix
+  view's eject on deck A, on the first clip song. The song's tracks go, that
+  song becomes the song (its clips as they are, its globals, the tempo
+  heard), the other clip songs move up a number, and the desk's decks and
+  crossfader are left alone. One undo step. With it the only deck, it is a
+  landing. The mix view's `keep` ejects the clip view's songs first; its `land`
   ejects every other deck, theirs included; `eject` on deck A leaves them.
 - **Code**: `arrangement()` is the mode (as `chain()` is) and `.blocks([[pattern,
   fromBar, bars], ...])` on a part is a track's timeline, numbered from 1 as

@@ -1285,10 +1285,19 @@ function nameTrack(t, name) {
  * with every level where it was. One undo step brings the old song back.
  * @returns {Promise<boolean>}
  */
-export function ejectDeckA() {
+export function ejectDeckA() { return promoteDeck(deskDecks()[0]); }
+
+/**
+ * The clip view's own version: the song goes, and the first song loaded in
+ * the clip view becomes the song (its clips stay as they are, stopped or
+ * playing), the others moving up a number. The mix view's decks stay put.
+ */
+export function ejectClipSong() { return promoteDeck(clipDecks()[0]); }
+
+function promoteDeck(d) {
   const m = state.mix;
-  const d = deskDecks()[0];
   if (!m || !d || d.loading || m.landing) return Promise.resolve(false);
+  const clips = !!d.forClips;
   if (m.decks.length === 1) return landDeckB(d.id);
   flushHistory();
   const bpm = Math.round(mixTempo() * 100) / 100;
@@ -1319,7 +1328,8 @@ export function ejectDeckA() {
   // keeps its side: it is the next one to bring in, and belongs opposite
   // deck A. So after B was brought in and A ejected, the fader is back at
   // the left with the new deck A full, and the next deck waits on the right.
-  if (side === "r") {
+  if (clips) { /* a clip song is on no side: deck A stays where it is */ }
+  else if (side === "r") {
     m.x = 1 - m.x;
     for (const x of m.decks) if (x !== d && x.xf && x.on) x.xf = x.xf === "l" ? "r" : "l";
     m.sideA = "l";
@@ -1334,8 +1344,7 @@ export function ejectDeckA() {
 
   // every other deck on the desk back a letter (in order, so each letter is
   // free when taken); the clip view's songs keep their own names
-  deskDecks().forEach((x, i) => {
-    const to = DECK_LETTERS[i] || x.id;
+  const shift = (x, to) => {
     if (to === x.id) return;
     const from = x.id;
     for (const t of state.tracks) {
@@ -1344,8 +1353,10 @@ export function ejectDeckA() {
     }
     if (new RegExp(`^deck ${deckLabel(from)}$`, "i").test(x.bus?.name || "")) nameTrack(x.bus, `deck ${deckLabel(to)}`);
     x.id = to;
-  });
-  m.focus = deskDecks()[0]?.id ?? null;
+  };
+  if (clips) clipDecks().forEach((x, i) => shift(x, `s${i + 1}`));
+  else deskDecks().forEach((x, i) => shift(x, DECK_LETTERS[i] || x.id));
+  if (!clips || !deskDecks().some(x => x.id === m.focus)) m.focus = deskDecks()[0]?.id ?? null;
   m.tempoX = 0;                                    // the tempo being heard is the song's now
   m.tempoLink = false;
   m.fade = null;
@@ -1388,7 +1399,9 @@ export function ejectDeckA() {
   refreshNoiseBeds();
   markExternalEdit("eject deck A");
   setTimeout(() => { try { flushJam(); } catch {} }, 0);
-  setStatus(`deck A ejected: "${d.title}" is deck A and the song now, at ${bpm} bpm, and the other decks moved back a letter`);
+  setStatus(clips
+    ? `song removed: "${d.title}" is the song now, at ${bpm} bpm`
+    : `deck A ejected: "${d.title}" is deck A and the song now, at ${bpm} bpm, and the other decks moved back a letter`);
   try { window.dispatchEvent(new CustomEvent("seqbaby:mixlanded", { detail: { title: d.title, source: d.source } })); } catch {}
   announceClips();
   announce();

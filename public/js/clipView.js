@@ -54,7 +54,7 @@ import { PATTERN_COUNT } from "./constants.js";
 import { setStatus } from "./dom.js";
 import { announceClips, requestClipLaunch, setArrangeRecord, stopClip } from "./clips.js";
 import { MODE_UI, SWITCH_UI, insertEmptyPattern, meterOptions, setPatternMeter, setPatternMode } from "./patternBar.js";
-import { clipDecks, deckBTracks, deckLabel, deckXfadeGain, ejectDeckB, mixDecks, requestDeckScene, setDeckPlaying, setDeckXfade, wakeDeck } from "./mix.js";
+import { clipDecks, ejectClipSong, deckBTracks, deckLabel, deckXfadeGain, ejectDeckB, mixDecks, requestDeckScene, setDeckPlaying, setDeckXfade, wakeDeck } from "./mix.js";
 import { openDeckPicker } from "./mixView.js";
 import { patternSvg, svgUrl } from "./patternPicture.js";
 import { upgradeKnobs } from "./knob.js";
@@ -365,7 +365,7 @@ function render() {
     </div>
     <div class="sq-clips__scroll"><div class="sq-clips__table">
     <div class="sq-clips__head">
-      <div class="sq-clips__strip">${decks.length ? `<b class="sq-clips__deck is-a">A</b><span class="sq-clips__decktitle">${esc(state.songName || "this song")}</span>` : ""}</div>
+      <div class="sq-clips__strip">${decks.length ? `<b class="sq-clips__deck is-a">A</b><span class="sq-clips__decktitle">${esc(state.songName || "this song")}</span><button type="button" class="sq-clips__stop" data-act="song-eject" ${decks[0].loading ? "disabled" : ""} title="remove this song: its tracks go, and ${esc(decks[0].title)} (${deckLabel(decks[0].id)}) becomes the song. One undo step brings it back">×</button>` : ""}</div>
       <div class="sq-clips__cells sq-clips__scenes">${scenes.join("")}</div>
     </div>
     <div class="sq-clips__head sq-clips__reps">
@@ -406,6 +406,7 @@ function onClick(e) {
   }
   const act = e.target.closest("[data-act]")?.dataset.act;
   if (act === "load-song") { openDeckPicker({ clips: true }); return; }
+  if (act === "song-eject") { ejectClipSong(); return; }
   if (act === "deck-play" || act === "deck-eject") {
     const id = e.target.closest("[data-deck]")?.dataset.deck;
     const d = mixDecks().find((x) => x.id === id);
