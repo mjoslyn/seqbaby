@@ -38,7 +38,7 @@ import {
 import { FADE_BARS, filledSlots, scaleLabel, tempoRelation } from "./mixPlan.js";
 import { trackControl } from "./paramTargets.js";
 import { loadSetsMap } from "./session.js";
-import { patternMeter } from "./meter.js";
+import { patternMeter, stepsPerBarForMeter } from "./meter.js";
 import { setPatternMode } from "./patternBar.js";
 import { requestPatternSwitch, state, switchPattern, trackSlot } from "./state.js";
 import { makeTrackDetail, trackHue } from "./trackDetail.js";
@@ -172,7 +172,9 @@ function scenes(deck, tracks, scene, queued, repeats, chain) {
     </span>`);
   }
   const box = `<label class="sq-mix__check sq-mix__chain" title="chain: deck ${deck.toUpperCase()} plays through its patterns, each for the bars under its number. Off, it repeats the pattern it is on"><input type="checkbox" data-act="chain-${deck}" ${chain ? "checked" : ""} /> chain</label>`;
-  return `<div class="sq-mix__scenes" role="group" aria-label="deck ${deck} patterns">${out.join("")}${box}</div>`;
+  // how far through its repeats the pattern playing is (painted by tickMeters)
+  const prog = `<span class="sq-mix__prog" data-prog="${deck}" hidden title="deck ${deck.toUpperCase()}'s chain: which bar of the pattern's repeat count is playing, and how far through them it is"><i></i><b></b></span>`;
+  return `<div class="sq-mix__scenes" role="group" aria-label="deck ${deck} patterns">${out.join("")}${box}${prog}</div>`;
 }
 
 function deckA(shown) {
@@ -189,10 +191,30 @@ function deckA(shown) {
       <span class="sq-mix__facts">${bpm} bpm${key ? ` · ${esc(key)}` : ""} · ${pm.num}/${pm.den}</span>
     </div>
     ${scenes("a", tracks, state.activePattern, state.queuedPattern, state.patternRepeats, state.patternMode !== "repeat")}
-    <div class="sq-mix__strips">
+    ${m ? `<div class="sq-mix__strips">
       ${strips.map((t) => strip(t, shown)).join("")}
-      ${m?.busA && state.tracks.includes(m.busA) ? strip(m.busA, shown) : ""}
-    </div>
+      ${m.busA && state.tracks.includes(m.busA) ? strip(m.busA, shown) : ""}
+    </div>` : grid(tracks, shown)}
+  </div>`;
+}
+
+/**
+ * The one desk (no other deck loaded) as a grid, nothing scrolling sideways:
+ * the tracks that go straight to the master, wrapping, then a block per bus
+ * with the tracks that feed it beside it. Decks kept as one song are buses,
+ * so each of them is a block of its own.
+ */
+function grid(tracks, shown) {
+  const buses = tracks.filter((t) => t.engineKey === "bus");
+  const fed = (bus) => tracks.filter((t) => t !== bus && String(t.out) === String(bus.id));
+  const free = tracks.filter((t) => t.engineKey !== "bus" && !buses.some((b) => String(t.out) === String(b.id)));
+  const block = (list, bus) => `<div class="sq-mix__group${bus ? " has-bus" : ""}">
+      ${bus ? strip(bus, shown) : ""}
+      <div class="sq-mix__strips is-wrap">${list.map((t) => strip(t, shown)).join("")}</div>
+    </div>`;
+  return `<div class="sq-mix__grid">
+    ${free.length ? block(free, null) : ""}
+    ${buses.map((b) => block(fed(b), b)).join("")}
   </div>`;
 }
 
@@ -350,6 +372,7 @@ function tickMeters() {
       if (real && p.value !== real.value) p.value = real.value;
     }
   }
+  paintProgress();
   const m = state.mix;
   if (m && !holding) {
     const x = /** @type {HTMLInputElement|null} */ (desk.querySelector(".sq-mix__xfade"));
@@ -361,6 +384,41 @@ function tickMeters() {
     if (bpm && bpm.textContent !== now) bpm.textContent = now;
   }
 }
+/**
+ * Where a deck's chain is in the pattern it is on: the bar playing, of how
+ * many, and the fraction of them gone. Null when it is not chaining (a
+ * pattern on repeat has no count to be part way through) or not playing.
+ */
+function chainProgress(deck) {
+  if (!state.playing) return null;
+  const barLen = Math.max(1, stepsPerBarForMeter(patternMeter(state.activePattern)));
+  const into = Math.min(1, (state.barTick ?? 0) / barLen);
+  if (deck === "a") {
+    if (state.patternMode !== "chain") return null;
+    const of = Math.max(1, state.patternRepeats[state.activePattern] ?? 1);
+    const bar = Math.min(of - 1, state.chainBarCount ?? 0);
+    return { bar: bar + 1, of, frac: (bar + into) / of };
+  }
+  const d = mixDecks().find((x) => x.id === deck);
+  if (!d || !d.on || !d.chain) return null;
+  const of = Math.max(1, d.repeats[d.scene] ?? 1);
+  const bar = Math.min(of - 1, d.barCount ?? 0);
+  return { bar: bar + 1, of, frac: (bar + into) / of };
+}
+
+function paintProgress() {
+  for (const el of desk.querySelectorAll("[data-prog]")) {
+    const p = chainProgress(el.dataset.prog);
+    if (!p) { if (!el.hidden) el.hidden = true; continue; }
+    if (el.hidden) el.hidden = false;
+    const text = `${p.bar} of ${p.of}`;
+    const label = el.lastElementChild, fill = el.firstElementChild;
+    if (label.textContent !== text) label.textContent = text;
+    const w = `${Math.round(p.frac * 100)}%`;
+    if (fill.style.width !== w) fill.style.width = w;
+  }
+}
+
 function startMeters() { if (!meterTimer) meterTimer = window.setInterval(tickMeters, 1000 / 30); }
 function stopMeters() { if (meterTimer) { clearInterval(meterTimer); meterTimer = 0; } }
 

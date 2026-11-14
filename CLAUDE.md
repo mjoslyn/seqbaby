@@ -2869,6 +2869,16 @@ deck B tracks ─▶ deck B bus ─┘              buses' output gains
   landing, the chain's repeat count running out, or in repeat mode the
   longest part back at its first step. So the phrases line up, not only the
   bars. Arrange mode has only bar lines to go by.
+- **A chain's progress is on the deck** (`chainProgress`, painted on the
+  meters' 30Hz tick, never a rebuild): beside a deck's `chain` box, `3 of 8`
+  over a fill, the bar of the playing pattern's repeat count and how far
+  through them it is (`chainBarCount` / `patternRepeats` for deck A, the
+  deck's `barCount` / `repeats` otherwise). Hidden when the deck is not
+  chaining or not playing: a pattern on repeat has no count.
+- **With no other deck loaded the desk is a grid** (`grid`): the tracks
+  that go straight to the master, wrapping, then a block per bus with the
+  tracks feeding it beside it. Decks kept as one song are buses, so each is
+  its own block, and nothing scrolls sideways.
 - **A strip's × ejects that one track.** A deck's track just goes
   (`ejectDeckTrack`: faded, not in the undo stack, the deck's last track
   taking the deck with it); a track of the song's own goes through its own

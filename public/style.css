@@ -4769,6 +4769,17 @@ body.vim-visual .sq-vim__mode { color: var(--accent-2); }
   border: 1px solid transparent; border-radius: 3px; background: transparent; color: var(--fg-dim); appearance: none; -webkit-appearance: none; cursor: pointer; }
 .sq-mix__rep:hover, .sq-mix__rep:focus { border-color: var(--border); background: var(--bg-2); }
 .sq-mix__rep.is-set { color: var(--accent-2); }
+/* One desk as a grid: a block per bus, strips wrapping, no sideways scroll. */
+.sq-mix__grid { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-start; }
+.sq-mix__group { display: flex; gap: 6px; align-items: flex-start; min-width: 0; max-width: 100%; }
+.sq-mix__group.has-bus { padding: 6px; border: 1px solid var(--border); border-radius: 8px; background: color-mix(in oklab, var(--fg) 3%, transparent); }
+.sq-mix__strips.is-wrap { flex-wrap: wrap; overflow-x: visible; padding-bottom: 0; }
+.sq-mix__prog { position: relative; align-self: flex-start; margin: 2px 0 0 6px; min-width: 62px; height: 18px; padding: 0 7px; display: inline-grid; place-items: center;
+  border: 1px solid var(--border); border-radius: 4px; overflow: hidden; font-size: 10px; color: var(--fg); white-space: nowrap; }
+.sq-mix__prog[hidden] { display: none; }
+.sq-mix__prog i { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: color-mix(in oklab, var(--accent) 35%, transparent); }
+.sq-mix__deck.is-other .sq-mix__prog i { background: color-mix(in oklab, var(--accent-2) 35%, transparent); }
+.sq-mix__prog b { position: relative; font-weight: 500; }
 .sq-mix__chain { margin-left: 6px; font-size: 11px; align-self: flex-start; padding-top: 3px; }
 .sq-mix__scene:hover { color: var(--fg); border-color: var(--fg-dim); }
 .sq-mix__scene.is-empty { opacity: 0.55; }
