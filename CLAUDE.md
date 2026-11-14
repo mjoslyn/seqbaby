@@ -2745,6 +2745,15 @@ block   t.arrangement[i]    ─── { slot, start, bars }: a clip at a bar, fo
   nearest to the left. It arrives fresh (no lanes or p-lock, the song's
   meter, one repeat). A view opened while playing seeds the arrangement at
   the bar line, and that bar line does not also advance it.
+- **The clip view holds more than one song.** Its toolbar's `load a song…`
+  is the mix view's picker (`openDeckPicker`), and every loaded deck (mix.js)
+  is drawn under the song's rows: a header with the deck's letter and title,
+  its start and eject, and its OWN row of pattern numbers (a deck is on a
+  pattern of its own: `data-dscene`, `requestDeckScene`, by the switch
+  setting, double-click now), then a `.sq-clips__rows` of its tracks, so the
+  hues restart per deck. A deck track's row is the song's row: launch, stop,
+  mute, solo, drag-copy, fill and the detail card all go by track id. The
+  view repaints on `seqbaby:mix` too.
 - **Code**: `arrangement()` is the mode (as `chain()` is) and `.blocks([[pattern,
   fromBar, bars], ...])` on a part is a track's timeline, numbered from 1 as
   the pattern bar and the ruler number them; the native export writes both,

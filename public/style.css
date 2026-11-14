@@ -5007,6 +5007,13 @@ body.sq-playing .sq-clip.is-now::after { content: ""; position: absolute; left: 
 /* a clip's notes, one pass squeezed into the cell (patternPicture.js); the
    number moves to the corner so the picture has the middle */
 .sq-clips__rows .sq-clip { height: var(--clip-h, 34px); }
+/* Other songs loaded into the clip view (mix.js's decks): a header per deck. */
+.sq-clips__deckhead { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--border); }
+.sq-clips__deck { color: var(--accent-2); font-size: 12px; flex: 0 0 auto; }
+.sq-clips__deck.is-a { color: var(--accent); }
+.sq-clips__decktitle { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; color: var(--fg-dim); text-align: left; }
+.sq-clips__deckhead.is-on .sq-clips__decktitle { color: var(--fg); }
+.sq-clips__load { padding: 3px 9px; font-size: 11px; }
 .sq-clip.has-notes { place-items: start; }
 .sq-clip__n { position: relative; z-index: 1; line-height: 1; }
 .sq-clip.has-notes .sq-clip__n { padding: 2px 0 0 3px; font-size: 8px; opacity: 0.75; }

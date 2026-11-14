@@ -608,6 +608,9 @@ async function loadFrom(entry) {
   throw new Error("unknown source");
 }
 
+/** The song picker, for another view to load a deck with (the clip view). */
+export function openDeckPicker() { return openPicker(); }
+
 async function openPicker() {
   const overlay = document.createElement("div");
   overlay.className = "sq-modal-overlay";

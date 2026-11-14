@@ -54,6 +54,8 @@ import { PATTERN_COUNT } from "./constants.js";
 import { setStatus } from "./dom.js";
 import { announceClips, requestClipLaunch, setArrangeRecord, stopClip } from "./clips.js";
 import { MODE_UI, SWITCH_UI, insertEmptyPattern, meterOptions, setPatternMeter, setPatternMode } from "./patternBar.js";
+import { deckBTracks, deckLabel, ejectDeckB, mixDecks, requestDeckScene, setDeckPlaying } from "./mix.js";
+import { openDeckPicker } from "./mixView.js";
 import { patternSvg, svgUrl } from "./patternPicture.js";
 import { patternLocked } from "./patternSound.js";
 import { inLoop, isPatternNonEmpty, requestPatternSwitch, state, switchPattern, trackSlot } from "./state.js";
@@ -152,7 +154,7 @@ export function installClipView() {
   root.addEventListener("change", onRepChange);
   root.addEventListener("wheel", onWheel, { passive: false });
   onViewChange((v) => { if (v === "clips") render(); else detail.release(); });
-  for (const ev of ["seqbaby:clips", "seqbaby:songedited", "seqbaby:setapplied", "seqbaby:newset", "seqbaby:transport"]) {
+  for (const ev of ["seqbaby:clips", "seqbaby:songedited", "seqbaby:setapplied", "seqbaby:newset", "seqbaby:transport", "seqbaby:mix"]) {
     window.addEventListener(ev, scheduleClipPaint);
   }
 }
@@ -165,7 +167,8 @@ export function scheduleClipPaint() {
 
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const trackById = (id) => state.tracks.find((t) => String(t.id) === String(id));
-// the song's own tracks: a second song on deck B (mix.js) lives in the mix view
+// the song's own tracks; the other songs loaded (mix.js's decks) follow, each
+// under a header of its own (render)
 const rows = () => state.tracks.filter((t) => t.engineKey !== "bus" && !t._staged && !t._leaving && !t._deck && !t._deckBus);
 
 // The shades a track's distinct clips wear, as [hue nudge (deg), saturation
@@ -238,7 +241,9 @@ function render() {
     const own = i === 0 || state.patternMeterCustomized[i];
     meters.push(`<select class="sq-clips__rep sq-clips__meter${own && (m.num !== 4 || m.den !== 4) ? " is-set" : ""}" data-meter="${i}" title="column ${i + 1}: ${m.num}/${m.den}${i === 0 ? ". Pattern 1's meter is the song's: every column not set on its own follows it" : own ? "" : " (follows pattern 1)"}. Every track's copy is resized to keep its bars" aria-label="column ${i + 1} time signature">${meterOptions(i)}</select>`);
   }
-  const trackRows = rows().map((t) => {
+  // one track's row; `scene` is the pattern its deck is on (the song's, or a
+  // loaded deck's own)
+  const rowHtml = (t, scene) => {
     const slot = trackSlot(t);
     const cells = [];
     const shades = clipShades(t);
@@ -257,7 +262,7 @@ function render() {
       if (i === slot && !t._clipOff) cls.push("is-now");
       if (i === t._queuedSlot) cls.push("is-queued");
       if (patternLocked(t, i)) cls.push("is-locked");
-      if (i === ap) cls.push("is-scene");
+      if (i === scene) cls.push("is-scene");
       cells.push(`<button type="button" class="${cls.join(" ")}" data-slot="${i}"${style} draggable="true" title="${esc(t.name)}: pattern ${i + 1}, ${bars} bar${bars === 1 ? "" : "s"}. Click to launch it on this track, double-click to mute it; drag onto another cell to copy it there; drag its right edge across the cells beside it to copy it into those slots, or shift-drag it to make it longer or shorter">${svg ? '<i class="sq-clip__notes"></i>' : ""}<span class="sq-clip__n">${i + 1}</span>${bars > 1 ? `<i class="sq-clip__bars">${bars}</i>` : ""}<span class="sq-clip__fill"></span></button>`);
     }
     return `<div class="sq-clips__row${t.muted ? " is-muted" : ""}" data-track-id="${t.id}">
@@ -269,6 +274,36 @@ function render() {
       </div>
       <div class="sq-clips__cells">${cells.join("")}</div>
     </div>`;
+  };
+  const trackRows = rows().map((t) => rowHtml(t, ap)).join("");
+  // The other songs loaded (mix.js's decks), each under a header of its own:
+  // its letter and title, start and eject, and its own row of pattern numbers,
+  // since a deck is on a pattern of its own. Their clips launch, copy and
+  // edit like the song's.
+  const decks = mixDecks();
+  const deckBlocks = decks.map((d) => {
+    const tracks = deckBTracks(d.id).filter((t) => t.engineKey !== "bus" && !t._leaving);
+    const L = deckLabel(d.id);
+    const filled = (i) => tracks.some((t) => t.patterns?.[i]?.steps?.some(Boolean));
+    const nums = [];
+    for (let i = 0; i < PATTERN_COUNT; i++) {
+      const cls = ["sq-clips__scene"];
+      if (filled(i)) cls.push("is-filled");
+      if (i === d.scene) cls.push("is-active");
+      if (i === d.queued) cls.push("is-queued");
+      nums.push(`<button type="button" class="${cls.join(" ")}" data-dscene="${i}" title="deck ${L}: every track of this deck to pattern ${i + 1} (now, or at the bar line, by the switch setting). Double-click: now">${i + 1}</button>`);
+    }
+    const armed = d.arm === true;
+    return `<div class="sq-clips__head sq-clips__deckhead${d.on ? " is-on" : ""}" data-deck="${d.id}">
+      <div class="sq-clips__strip">
+        <b class="sq-clips__deck">${L}</b>
+        <span class="sq-clips__decktitle" title="${esc(d.title)}, ${d.bpm} bpm">${esc(d.title)}${d.loading ? " (loading…)" : ""}</span>
+        <button type="button" class="sq-clips__stop${d.on ? " is-on" : ""}" data-act="deck-play" ${d.loading ? "disabled" : ""} title="${d.on ? `stop deck ${L}` : armed ? `deck ${L} starts on the next bar or pattern` : `start deck ${L}`}">${d.on ? "■" : armed ? "…" : "▶"}</button>
+        <button type="button" class="sq-clips__stop" data-act="deck-eject" title="take deck ${L} off">×</button>
+      </div>
+      <div class="sq-clips__cells sq-clips__scenes">${nums.join("")}</div>
+    </div>
+    <div class="sq-clips__rows" data-deck="${d.id}">${tracks.map((t) => rowHtml(t, d.scene)).join("")}</div>`;
   }).join("");
   const mode = state.patternMode;
   // the grid is rebuilt whole, scroller included: carry its scroll across
@@ -281,12 +316,13 @@ function render() {
     <div class="sq-clips__bar">
       <button type="button" class="sq-clips__mode sq-btn--ghost sq-icon-btn" data-act="mode" aria-pressed="${mode !== "repeat"}" title="${MODE_UI[mode].title}">${MODE_UI[mode].icon}</button>
       <button type="button" class="sq-clips__switch sq-btn--ghost sq-icon-btn" data-act="switch" aria-pressed="${state.patternSwitchMode === "finish"}" title="${SWITCH_UI[state.patternSwitchMode === "finish" ? "finish" : "immediate"].title}">${SWITCH_UI[state.patternSwitchMode === "finish" ? "finish" : "immediate"].icon}</button>
+      <button type="button" class="sq-btn--ghost sq-clips__load" data-act="load-song" title="load another song beside this one: its tracks and clips come in under the song's, on a deck of their own (the mix view's decks). Load as many as you like">load a song…</button>
       <button type="button" class="sq-clips__rec" data-act="rec" aria-pressed="${!!state.arrRecord}" title="record: write the clips you launch into the arrangement, bar by bar; over an existing arrangement you are asked whether the recording replaces it or goes after it">● rec</button>
       <span class="sq-clips__zoom"><button type="button" class="sq-btn--ghost" data-act="zoom-" title="zoom out${zoom ? "" : " (all 32 columns already fit)"}"${zoom ? "" : " disabled"}>−</button><button type="button" class="sq-btn--ghost" data-act="zoom+" title="zoom in (or ctrl/⌘-scroll, or pinch, over the grid)"${zoom < ZOOMS.length - 1 ? "" : " disabled"}>+</button></span>
     </div>
     <div class="sq-clips__scroll"><div class="sq-clips__table">
     <div class="sq-clips__head">
-      <div class="sq-clips__strip"></div>
+      <div class="sq-clips__strip">${decks.length ? `<b class="sq-clips__deck is-a">A</b><span class="sq-clips__decktitle">${esc(state.songName || "this song")}</span>` : ""}</div>
       <div class="sq-clips__cells sq-clips__scenes">${scenes.join("")}</div>
     </div>
     <div class="sq-clips__head sq-clips__reps">
@@ -298,6 +334,7 @@ function render() {
       <div class="sq-clips__cells">${repeats.join("")}</div>
     </div>
     <div class="sq-clips__rows">${trackRows}</div>
+    ${deckBlocks}
     </div></div>`;
   const sc = scroller();
   if (sc && scrollX) sc.scrollLeft = scrollX;
@@ -311,6 +348,9 @@ function onClick(e) {
   if (e.target.closest(".sq-clip__fill") || dragged) { dragged = false; return; }
   const ins = e.target.closest("[data-ins]");
   if (ins) { insertEmptyPattern(Number(ins.dataset.ins)); return; }
+  // a loaded deck's pattern number: that deck to that pattern, by the switch setting
+  const ds = e.target.closest("[data-dscene]");
+  if (ds) { requestDeckScene(Number(ds.dataset.dscene), ds.closest("[data-deck]")?.dataset.deck); scheduleClipPaint(); return; }
   const scene = e.target.closest("[data-scene]");
   if (scene) {
     // stopped: start the transport on this scene (its own play button, as the
@@ -321,6 +361,16 @@ function onClick(e) {
     return;
   }
   const act = e.target.closest("[data-act]")?.dataset.act;
+  if (act === "load-song") { openDeckPicker(); return; }
+  if (act === "deck-play" || act === "deck-eject") {
+    const id = e.target.closest("[data-deck]")?.dataset.deck;
+    const d = mixDecks().find((x) => x.id === id);
+    if (!d) return;
+    if (act === "deck-eject") ejectDeckB({ id });
+    else setDeckPlaying(!(d.on || d.arm === true), id);
+    scheduleClipPaint();
+    return;
+  }
   if (act === "zoom+" || act === "zoom-") { setZoom(zoom + (act === "zoom+" ? 1 : -1)); return; }
   if (act === "rec") { setArrangeRecord(!state.arrRecord); setStatus(state.arrRecord ? "recording the arrangement: launch clips, each bar is written as it plays" : "arrangement record off"); return; }
   // the transport's own button, so a jam's shared start goes the same way
@@ -348,6 +398,8 @@ function onDblClick(e) {
   if (e.target.closest("[data-ins]")) return;     // two quick inserts are two columns, not a play
   // a scene number: play that scene now, whatever the switch setting, and
   // start the transport if it is stopped
+  const ds = e.target.closest("[data-dscene]");
+  if (ds) { requestDeckScene(Number(ds.dataset.dscene), ds.closest("[data-deck]")?.dataset.deck, { when: "now" }); scheduleClipPaint(); return; }
   const scene = e.target.closest("[data-scene]");
   if (scene) {
     switchPattern(Number(scene.dataset.scene));
