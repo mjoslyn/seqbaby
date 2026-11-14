@@ -584,14 +584,21 @@ export function setDeckChain(on, id) {
 export function mixStep(nextTime, barLine) {
   const m = state.mix;
   if (!m) return;
+  // where things that wait for the start setting may begin: the next bar
+  // line, or the one deck A's pattern comes round on
+  const phrase = barLine && (startOn !== "pattern" || patternLine());
   if (m.fade) {
     const f = m.fade;
-    f.done++;
-    writeXfade(fadeAt(f.from, f.to, f.done, f.steps), nextTime);
-    if (f.done >= f.steps) { m.fade = null; announce(); }
+    if (f.wait) {
+      // an automatic fade starts where a started deck would
+      if (phrase) { f.wait = false; f.from = m.x; announce(); }
+    } else {
+      f.done++;
+      writeXfade(fadeAt(f.from, f.to, f.done, f.steps), nextTime);
+      if (f.done >= f.steps) { m.fade = null; announce(); }
+    }
   }
   if (!barLine) return;
-  const phrase = startOn !== "pattern" || patternLine();
   for (const d of m.decks) deckBar(d, phrase);
 }
 
@@ -735,8 +742,10 @@ function foldLevel(bus, gain) {
 /**
  * Fade to a deck over `bars` bars, a step at a time on the transport's clock
  * (the crossfader as a transition's sweep is: one press, the song does it).
- * Stopped, or with no bars, it jumps. "a" / "l" is the left side; anything
- * else the right.
+ * Stopped, or with no bars, it jumps. It starts where a started deck does
+ * (the `start:` setting): on the next bar line, or when deck A's pattern
+ * comes round, so a fade runs over whole bars of a phrase. "a" / "l" is the
+ * left side; anything else the right.
  * @param {string} deck @param {number} bars
  */
 export function fadeToDeck(deck, bars) {
@@ -745,8 +754,8 @@ export function fadeToDeck(deck, bars) {
   const to = deck === "a" || deck === "l" ? 0 : 1;
   const steps = Math.max(0, Math.round(Number(bars) || 0)) * stepsPerBarForMeter(transportMeter());
   if (!state.playing || !steps) { m.fade = null; writeXfade(to); announce(); return; }
-  m.fade = { from: m.x, to, steps, done: 0 };
-  setStatus(`fading to the crossfader's ${to ? "right" : "left"} over ${bars} bar${bars === 1 ? "" : "s"}`);
+  m.fade = { from: m.x, to, steps, done: 0, wait: true };
+  setStatus(`fading to the crossfader's ${to ? "right" : "left"} over ${bars} bar${bars === 1 ? "" : "s"}, from ${startOn === "pattern" ? "deck A's next pattern" : "the next bar"}`);
   announce();
 }
 

@@ -305,7 +305,7 @@ function bar() {
   const n = decks.length + 1;
   return `<div class="sq-mix__bar">
     <button type="button" data-act="load" title="load another song onto a new deck">load a deck…</button>
-    <label class="sq-mix__check" title="when a deck started while the transport plays comes in. next bar: on the next bar line. next pattern: held until deck A's pattern comes round (its chain moves on, or its longest part starts over), so the songs' phrases line up and not only their bars"><select data-act="start-on" aria-label="when a started deck comes in">
+    <label class="sq-mix__check" title="when a deck started while the transport plays comes in, and when an automatic crossfade begins. next bar: on the next bar line. next pattern: held until deck A's pattern comes round (its chain moves on, or its longest part starts over), so the songs' phrases line up and not only their bars"><select data-act="start-on" aria-label="when a started deck or an automatic fade begins">
       <option value="bar"${deckStartMode() === "bar" ? " selected" : ""}>start: next bar</option>
       <option value="pattern"${deckStartMode() === "pattern" ? " selected" : ""}>start: next pattern</option>
     </select></label>
@@ -333,9 +333,9 @@ function xfadeParts() {
     L, R,
     slider: `<input type="range" class="sq-mix__xfade" min="0" max="1" step="0.005" value="${m.x}" data-act="xfade" aria-label="crossfader" title="the crossfader: all of its left side (${esc(L)}) at the left, all of its right (${esc(R)}) at the right. Double-click for the middle" ${any ? "" : "disabled"} />`,
     fades: `<div class="sq-mix__fade">
-      <button type="button" data-act="fade-a" title="fade to the left side over the length picked, on the transport's clock">◂ ${esc(L)}</button>
+      <button type="button" class="${m.fade && m.fade.to === 0 ? (m.fade.wait ? "is-armed" : "is-on") : ""}" data-act="fade-a" title="fade to the left side over the length picked, starting on the next bar or the next pattern (the start setting)">◂ ${esc(L)}</button>
       <select data-act="fade-bars" aria-label="fade length" title="how long an automatic fade takes">${bars}</select>
-      <button type="button" data-act="fade-b" title="fade to the right side over the length picked">${esc(R)} ▸</button>
+      <button type="button" class="${m.fade && m.fade.to === 1 ? (m.fade.wait ? "is-armed" : "is-on") : ""}" data-act="fade-b" title="fade to the right side over the length picked, starting on the next bar or the next pattern (the start setting)">${esc(R)} ▸</button>
     </div>`,
     curve: `<label class="sq-mix__check" title="blend: equal power, both sides at -3dB in the middle. cut: both full across the middle, each cut at its far end"><select data-act="curve" aria-label="crossfader curve">
       <option value="blend"${m.curve === "blend" ? " selected" : ""}>blend</option>

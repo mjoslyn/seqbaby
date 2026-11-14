@@ -4868,6 +4868,8 @@ body.vim-visual .sq-vim__mode { color: var(--accent-2); }
 .sq-mix__xfade { width: 100%; height: 28px; accent-color: var(--fg); cursor: ew-resize; }
 .sq-mix__fade { display: flex; gap: 3px; align-items: center; }
 .sq-mix__fade button { padding: 3px 6px; font-size: 11px; }
+.sq-mix__fade button.is-armed { border-color: var(--accent); color: var(--accent); animation: sq-mix-armed 0.5s steps(2) infinite; }
+.sq-mix__fade button.is-on { background: var(--accent); border-color: var(--accent); color: #0b0d10; }
 .sq-mix__fade select { font-size: 10px; padding: 2px; }
 
 /* the picker: a song for deck B */
