@@ -506,12 +506,20 @@ export function patternLine({ queue = true } = {}) {
  * runs, so the songs' ones land together; a stop is at once. With the
  * transport stopped the deck is armed and starts with it.
  */
-export function setDeckPlaying(on, id) {
+export function setDeckPlaying(on, id, { when = "now" } = {}) {
   const d = getDeck(id);
   if (!d || d.loading) return;
   const L = deckLabel(d.id);
   on = !!on;
-  if (!on) {
+  if (!on && when === "pattern" && d.on && state.playing) {
+    // armed to stop (`arm: false`): the deck plays its pattern out and stops
+    // where it comes round (deckBar). Asked again, the stop is called off.
+    d.arm = d.arm === false ? null : false;
+    setStatus(d.arm === false ? `deck ${L} stops when its pattern comes round (double-click: now)` : `deck ${L} plays on`);
+  } else if (on && d.on && d.arm === false) {
+    d.arm = null;
+    setStatus(`deck ${L} plays on`);
+  } else if (!on) {
     d.on = false;
     d.arm = null;
     d.queued = null;
@@ -688,6 +696,17 @@ function deckBar(d, phrase) {
     return;
   }
   if (!d.on) return;
+  // armed to stop: here, if this is where its pattern comes round
+  if (d.arm === false && deckPatternLine(d)) {
+    d.on = false;
+    d.arm = null;
+    d.queued = null;
+    releaseSilencedTracks();
+    refreshNoiseBeds();
+    setStatus(`deck ${deckLabel(d.id)} stopped`);
+    announce();
+    return;
+  }
   // a pattern queued for the pattern's end waits for it; one queued for the
   // bar line lands here
   if (d.queued != null && (!d.queuePhrase || deckPatternLine(d))) {

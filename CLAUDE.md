@@ -2960,6 +2960,11 @@ deck B tracks ─▶ deck B bus ─┘              buses' output gains
   blinking) for the next bar line or the next pattern, then runs its bars. A
   double-click on a fade arrow starts it now (`fadeToDeck(side, bars, {now:
   true})`), as a double-click on a pattern number switches now.
+- **A click on a playing deck's ■ stops it at its pattern's end; a
+  double-click stops it now** (`setDeckPlaying(false, id, {when:
+  "pattern"})`: `d.arm = false`, the button reading `■…`, and `deckBar`
+  stops the deck on the bar line `deckPatternLine(d)` names; a second click
+  calls the stop off). Stopped transport, or the clip view's deck ■: at once.
 - **A chain's progress is on the deck** (`chainProgress`, painted on the
   meters' 30Hz tick, never a rebuild): beside a deck's `chain` box, `3 of 8`
   over a fill, the bar of the playing pattern's repeat count and how far
