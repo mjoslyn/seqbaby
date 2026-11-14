@@ -30,7 +30,7 @@ import {
   serializeTrackPatch,
 } from "./session.js";
 import { SET_VERSION, validateSet } from "./sessionFormat.js";
-import { ejectDeckB, fadeToDeck, keepBothDecks, landDeckB, loadDeckB, mergeDeckB, requestDeckScene, serializeDeckB, setDeckPlaying, setMixSource, setMixTempo, setXfade } from "./mix.js";
+import { ejectDeckB, fadeToDeck, getDeck, keepBothDecks, landDeckB, loadDeckB, mergeDeckB, mixDecks, requestDeckScene, serializeDeckB, setDeckPlaying, setDeckXfade, setMixSource, setMixTempo, setTempoDeck, setXfade } from "./mix.js";
 import { state } from "./state.js";
 
 export function installAppApi() {
@@ -140,7 +140,8 @@ export function installAppApi() {
     // track's clip stopped. For the headless audition and the verify skill.
     launchClip: (i, slot) => launchClip(state.tracks[i], slot),
     stopClip: (i) => stopClip(state.tracks[i]),
-    // The mix (mix.js): a second song on deck B beside the open one. The shell
+    // The mix (mix.js): other songs on decks beside the open one, as many as
+    // are loaded. A call that names no deck means the tempo's deck. The shell
     // hands over its way to the account's songs (app/MixSongs.tsx), as it
     // hands over the patch bay; the rest is for a caller with no mix view (the
     // verify skill, a headless audition).
@@ -155,10 +156,13 @@ export function installAppApi() {
       xfade: setXfade,
       fadeTo: fadeToDeck,
       tempo: setMixTempo,
-      // Deck B as a session, read whole and written in place: the compose
+      deckXfade: setDeckXfade,
+      tempoDeck: setTempoDeck,
+      // A deck as a session, read whole and written in place: the compose
       // panel's turn on the other deck (app/ComposeChat.tsx). `loaded` says
       // whether there is a deck B to read.
-      loaded: () => !!state.mix && !state.mix.loading,
+      loaded: () => { const d = getDeck(); return !!d && !d.loading; },
+      decks: () => mixDecks().map(d => ({ id: d.id, title: d.title, bpm: d.bpm, on: d.on, scene: d.scene, loading: d.loading })),
       serialize: serializeDeckB,
       merge: mergeDeckB,
     },

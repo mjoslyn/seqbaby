@@ -107,7 +107,7 @@ export function requestClipLaunch(t, slot) {
   // it takes every track with it (a scene switch, by the same switch mode).
   // (Deck B of a mix has a bank of its own, which the meters do not describe.)
   const m = patternMeter(slot), sm = patternMeter(state.activePattern);
-  if (t._deck !== "b" && (m.num !== sm.num || m.den !== sm.den)) {
+  if (!t._deck && (m.num !== sm.num || m.den !== sm.den)) {
     requestPatternSwitch(slot);
     setStatus(`pattern ${slot + 1} is ${m.num}/${m.den}: every track goes to it, so the meters do not mix`);
     return;

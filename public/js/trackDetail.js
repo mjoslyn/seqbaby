@@ -18,6 +18,10 @@
  * `setTrackOrder` (liveSet.js) appends every card back into `#tracks`.
  */
 
+import { clipShadeColor, clipShades } from "./clipView.js";
+import { announceClips, requestClipLaunch, stopClip } from "./clips.js";
+import { PATTERN_COUNT } from "./constants.js";
+import { patternSvg, svgUrl } from "./patternPicture.js";
 import { setActiveTrack } from "./render.js";
 import { state, trackSlot } from "./state.js";
 
@@ -46,15 +50,54 @@ export function restoreTrackCard(t) {
  * @param {HTMLElement} container  the view's root; the detail is appended to it
  * @param {() => void} onChange   called when the selection changes (the view repaints)
  */
-export function makeTrackDetail(container, onChange, { buses = false } = {}) {
+export function makeTrackDetail(container, onChange, { buses = false, clips = false } = {}) {
   // `buses`: the mix view's detail also shows a bus's card (a deck's bus is
   // where its eq, its rack and its lanes are).
   const ok = (t) => !!t && (buses || t.engineKey !== "bus");
   const el = document.createElement("div");
   el.className = "sq-track-detail";
-  el.innerHTML = `<div class="sq-track-detail__title"></div>`;
+  el.innerHTML = `<div class="sq-track-detail__title"></div>${clips ? `<div class="sq-track-detail__clips" role="group" aria-label="this track's clips"></div>` : ""}`;
   container.appendChild(el);
   const title = el.firstElementChild;
+  // `clips`: the selected track's own clips under the title (the mix view,
+  // which has no clip grid): every pattern it has notes in, drawn as the clip
+  // view draws a cell. A click launches that clip on this track alone, so the
+  // step grid below shows it; the one playing, clicked, stops.
+  const clipRow = clips ? el.querySelector(".sq-track-detail__clips") : null;
+  clipRow?.addEventListener("click", (e) => {
+    const b = e.target.closest?.("[data-slot]");
+    const t = trackById(selectedId);
+    if (!b || !t) return;
+    const slot = Number(b.dataset.slot);
+    if (slot === trackSlot(t) && !t._clipOff && t._queuedSlot == null) stopClip(t);
+    else requestClipLaunch(t, slot);
+    announceClips();
+    onChange?.();
+  });
+  function paintClips(t) {
+    if (!clipRow) return;
+    if (!t || t.engineKey === "bus") { clipRow.hidden = true; clipRow.innerHTML = ""; return; }
+    const shades = clipShades(t);
+    const slot = trackSlot(t);
+    const cells = [];
+    for (let i = 0; i < PATTERN_COUNT; i++) {
+      const p = t.patterns?.[i];
+      const filled = !!p?.steps?.some(Boolean);
+      if (!filled && i !== slot && i !== t._queuedSlot) continue;
+      const cls = ["sq-clip"];
+      const shade = clipShadeColor(shades[i]);
+      const svg = shades[i] >= 0 ? patternSvg(p, t.isDrumKit ? 36 : 60, { fat: 1.4 }) : "";
+      const vars = [shade && `--clip-c:${shade}`, svg && `--notes:${svgUrl(svg)}`].filter(Boolean);
+      if (filled) cls.push("is-filled");
+      if (svg) cls.push("has-notes");
+      if (i === slot && !t._clipOff) cls.push("is-now");
+      if (i === t._queuedSlot) cls.push("is-queued");
+      cells.push(`<button type="button" class="${cls.join(" ")}" data-slot="${i}"${vars.length ? ` style="${vars.join(";")}"` : ""} title="pattern ${i + 1}: play this clip on this track and edit it below${i === slot && !t._clipOff ? " (playing: click to stop it)" : ""}">${svg ? '<i class="sq-clip__notes"></i>' : ""}<span class="sq-clip__n">${i + 1}</span></button>`);
+    }
+    const html = cells.join("");
+    clipRow.hidden = !html;
+    if (clipRow._html !== html) { clipRow.innerHTML = html; clipRow._html = html; }
+  }
   let selectedId = null;
 
   /** Select a track: its card comes in, the previous one goes home. */
@@ -91,13 +134,14 @@ export function makeTrackDetail(container, onChange, { buses = false } = {}) {
       selectedId = t?.id ?? null;
     }
     for (const o of state.tracks) if (o !== t && o.el?.parentElement === el) restoreTrackCard(o);
-    if (!t?.el) { title.textContent = ""; el.hidden = true; return null; }
+    if (!t?.el) { title.textContent = ""; paintClips(null); el.hidden = true; return null; }
     el.hidden = false;
     if (t.el.parentElement !== el) el.appendChild(t.el);
     const [hue, color] = trackHue(t);
     el.style.setProperty("--track-hue", String(hue));
     el.style.setProperty("--track-color", color);
-    title.textContent = `${t._deck === "b" ? "deck B · " : ""}${t.name || "track"} · pattern ${trackSlot(t) + 1}${t._clipOff ? " (stopped)" : ""}`;
+    title.textContent = `${t._deck && t._deck !== "~" ? `deck ${t._deck.toUpperCase()} · ` : ""}${t.name || "track"} · pattern ${trackSlot(t) + 1}${t._clipOff ? " (stopped)" : ""}`;
+    paintClips(t);
     return t;
   }
 

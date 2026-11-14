@@ -2766,6 +2766,23 @@ song's tracks ─▶ deck A bus ─┐
 deck B tracks ─▶ deck B bus ─┘              buses' output gains
 ```
 
+- **Any number of decks.** `state.mix` is `{decks, busA, x, curve, fade,
+  tempoX, tempoLink, focus, landing}` and a deck (`decks[i]`) is one loaded
+  song: its id (a letter from "b"), title, globals, bpm, scale, repeats,
+  scene, queue, chain, `on`, `xf`, its bus and its load state. Its tracks
+  carry `_deck: id` and its bus `_deckBus: id` too; `deckOf(t)` (state.js)
+  is a track's deck. `loadDeckB` always adds a NEW deck (`replace` takes one
+  off first); every other call takes an optional deck id and means the
+  tempo's deck (`getDeck()`) without one, which is what "deck B" means in
+  the compose panel and in what follows. The crossfader is deck A against
+  every deck with `xf` on (the `crossfader` box in a deck's header, a mixer's
+  assign switch); a deck taken off it plays at its own fader. The tempo
+  slider runs from deck A's tempo to ONE deck's (`focus`, picked beside the
+  slider once there are two). Each deck's card has its own start, land and
+  eject; landing one takes every other deck off with deck A; `keep` keeps
+  them all, each as a bus. Ejecting the last deck ends the mix. A track on
+  its way out is `_deck: "~"`. `placeBusesLast` keeps each deck's tracks
+  together in load order, the deck buses last.
 - **Three kinds of track while a mix is loaded** (`state.mix`, the helpers
   in state.js): the SONG's (no flag), deck B's (`_deck: "b"`, the other
   song's tracks and its own buses) and the two deck buses (`_deckBus: "a" |
@@ -2834,14 +2851,23 @@ deck B tracks ─▶ deck B bus ─┘              buses' output gains
   tone is `.p-eq-high / mid / low` and `.p-cutoff`. Mute and solo `.click()`
   the track's own buttons. The strips read the real controls back on the
   meter's 30Hz tick, and the desk is never rebuilt while a control is held.
+- **The selected track's clips sit over its card** (trackDetail.js's
+  `{clips: true}`, the mix view only, which has no clip grid): every pattern
+  the track has notes in, drawn as a clip cell (`clipShades`, `patternSvg`).
+  A click launches that clip on that track alone (`requestClipLaunch`), so
+  the step grid below shows it; the one playing, clicked, stops.
 - **The detail is the selected strip's own card** (trackDetail.js, with
   `{buses: true}`): a deck B track's step grid shows the pattern that deck is
   on, and a deck bus's card is where its rack, mod and lanes are. Deck B's
   cards are hidden in `#tracks` (`is-deck-b`, `is-deck-bus`); the view
   switch's `mix` carries a dot while a second song is loaded.
-- **Where a second song comes from**: the shell hands the engine the
-  account's songs (`app/MixSongs.tsx`, `setMixSource`, PatchBay's
-  arrangement); the picker also lists this browser's saved sessions, and
+- **Where a second song comes from**: the shell hands the engine a song
+  list (`app/MixSongs.tsx`, `setMixSource`, PatchBay's arrangement): the
+  account's songs, then everybody's published ones (`listPublicSongs`,
+  the explorer's cached feed, never `data`; `loadSong` reads any public
+  song). The picker says `looking for songs…` while it waits, shows why and
+  offers `try again` when the list fails or takes over 20s, and searches
+  titles and who made them; the picker also lists this browser's saved sessions, and
   takes a file or a pasted `?s=` / `?open=` link. On `seqbaby:mixlanded` the
   shell moves the open-song slot: onto the landed song when it is the
   account's own (a save is its next version), else to nothing (a save asks

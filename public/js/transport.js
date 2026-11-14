@@ -25,7 +25,7 @@ import { init, needsResume, primeAudioForIOS } from "./main.js";
 import { applyBusMute, updateMidiUI } from "./render.js";
 import { ensureFxRack, fireFilterEnv, refreshAllTrackOutputs, refreshNoiseBeds, routeVoiceToRack, soloAudibleTracks } from "./signal.js";
 import { stepsPerBarForMeter, stepsPerBeatForMeter, transportMeter } from "./meter.js";
-import { deckSilent, invertChord, loopRange, nextChainPattern, onDeckA, state, switchPattern, trackSlot } from "./state.js";
+import { deckOf, deckSilent, invertChord, loopRange, nextChainPattern, onDeckA, state, switchPattern, trackSlot } from "./state.js";
 import { advanceArrangement, clearQueuedClips, commitQueuedClips, recordArrangementBar, restartTrackCount, seedArrangement, seedTrackCount, setArrangeRecord } from "./clips.js";
 import { setPatternMode } from "./patternBar.js";
 import { loadSilverboxWorklet } from "./silverbox.js";
@@ -858,7 +858,7 @@ export function noteForStep(t, idx, fallback) {
   else if (typeof raw === "string") { const m = nameToMidi(raw); n = m != null ? m : dflt; }
   else n = dflt;
   // Deck B of a mix (mix.js) plays in its own song's scale, not the session's.
-  return applyScale(n, t._deck === "b" ? (state.mix?.scale || undefined) : undefined);
+  return applyScale(n, t._deck ? (deckOf(t)?.scale || undefined) : undefined);
 }
 
 // ---- prompting ---------------------------------------------------------

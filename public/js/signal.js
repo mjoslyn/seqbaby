@@ -3,7 +3,7 @@ import { holdParamAt } from "./paramHold.js";
 import { FXRack } from "./fxRack.js";
 import { fxStageOfModKey } from "./constants.js";
 import { ANALOG_FILTER_TYPES, buildAnalogFilterNode, disposeAnalogFilterNode, setAnalogFilterModel } from "./filterModels.js";
-import { deckSilent, state } from "./state.js";
+import { deckOf, deckSilent, state } from "./state.js";
 import { EQ_BAND_DEFS, eqValue, splitEqKey } from "./soundDefaults.js";
 
 
@@ -228,7 +228,7 @@ export function outputTargetFor(t) {
 export function deckBusFor(t) {
   const m = state.mix;
   if (!m || !t || t._deckBus) return null;
-  const bus = t._deck === "b" ? m.busB : m.busA;
+  const bus = t._deck ? deckOf(t)?.bus : m.busA;
   return bus && state.tracks.includes(bus) ? bus : null;
 }
 
@@ -698,7 +698,7 @@ export function refreshOutputSelects() {
   for (const t of state.tracks) {
     const sel = t.el?.querySelector(".sq-track__out");
     if (!sel) continue;
-    const targets = t._deckBus ? [] : buses.filter(b => b !== t && (b._deck === "b") === (t._deck === "b") && !wouldFeedback(t, b.id));
+    const targets = t._deckBus ? [] : buses.filter(b => b !== t && (b._deck || "") === (t._deck || "") && !wouldFeedback(t, b.id));
     if (t.out && t.out !== "master" && !targets.some(b => String(b.id) === String(t.out))) {
       t.out = "master";
     }

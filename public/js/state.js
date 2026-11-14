@@ -116,33 +116,34 @@ export const state = {
   // every pattern switch would be unplayable.
   /** @type {import("./types.js").MacroPad[]} */
   macroPads: [],
-  // The mix (mix.js): a second song on deck B, its tracks in `tracks` beside
-  // the song's own but flagged (`_deck`, `_deckBus`) and never saved. Null
-  // when no second song is loaded.
+  // The mix (mix.js): other songs on decks of their own, their tracks in
+  // `tracks` beside the song's but flagged (`_deck`, `_deckBus`) and never
+  // saved. Null when none is loaded.
   /** @type {any} */
   mix: null,
 };
 
-// ---- the two decks (mix.js) -------------------------------------------------
+// ---- the decks (mix.js) -----------------------------------------------------
 //
-// While a second song is loaded, `state.tracks` holds three kinds of track:
-// the SONG's (no flag: what a save, undo and a jam see), deck B's (`_deck:
-// "b"`: the other song's tracks and its own buses) and the two deck buses
-// (`_deckBus: "a" | "b"`, the B one carrying `_deck: "b"` as well, so it
-// follows deck B's scene). Anything that means "the song" asks `inSong`;
+// While other songs are loaded, `state.tracks` holds three kinds of track:
+// the SONG's (no flag: what a save, undo and a jam see), a deck's (`_deck:
+// "b"`, "c" ...: that song's tracks and its own buses) and the deck buses
+// (`_deckBus: "a" | "b" | ...`, every one but A's carrying its `_deck` as
+// well, so it follows its deck's scene). A track on its way out is `_deck:
+// "~"`: no deck's and not the song's. Anything that means "the song" asks `inSong`;
 // anything that means "what the pattern bar's scene moves" asks `onDeckA`,
 // which is the song plus deck A's bus (its lanes belong to A's patterns).
 
 /** Whether a track is the song's own: serialized, undone, shared. */
 export function inSong(t) { return !!t && !t._deck && !t._deckBus; }
 /** Whether a track follows the pattern bar's scene (the song, and deck A's bus). */
-export function onDeckA(t) { return !!t && t._deck !== "b"; }
-/** Whether a track is deck B's (its bus included). */
-export function onDeckB(t) { return !!t && t._deck === "b"; }
+export function onDeckA(t) { return !!t && !t._deck; }
+/** The deck a track belongs to (mix.js's record of it), or null: the song's, or none. */
+export function deckOf(t) { return (t?._deck && state.mix?.decks?.find(d => d.id === t._deck)) || null; }
 /** The song's own tracks, in order. */
 export function songTracks() { return state.tracks.filter(inSong); }
-/** Deck B withheld: loaded but not started, so its tracks play nothing. */
-export function deckSilent(t) { return t?._deck === "b" && !t._deckBus && !state.mix?.on; }
+/** A deck withheld: loaded but not started (or gone), so its tracks play nothing. */
+export function deckSilent(t) { return !!t?._deck && !t._deckBus && !deckOf(t)?.on; }
 
 /**
  * Build a blank pattern with `len` per-step slots across every lane.
@@ -288,7 +289,7 @@ export function invertChord(notes, level) {
 
 export function isPatternNonEmpty(idx, deck = "a") {
   for (const t of state.tracks) {
-    if ((t._deck === "b") !== (deck === "b")) continue;   // each deck's bank is its own
+    if ((t._deck || "a") !== deck) continue;              // each deck's bank is its own
     const p = t.patterns?.[idx];
     if (!p) continue;
     for (let i = 0; i < p.steps.length; i++) { if (p.steps[i]) return true; }

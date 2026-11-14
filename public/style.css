@@ -4734,17 +4734,32 @@ body.vim-visual .sq-vim__mode { color: var(--accent-2); }
 .sq-mix__bpm { color: var(--fg); min-width: 44px; text-align: right; }
 
 .sq-mix__decks { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 320px); gap: 12px; align-items: start; }
-.sq-mix__decks.is-two { grid-template-columns: minmax(0, 1fr) 170px minmax(0, 1fr); }
+/* Any number of decks: deck A, the crossfader, then each loaded deck, side
+   by side and scrolling sideways once they no longer fit. */
+.sq-mix__decks.is-two { display: flex; align-items: flex-start; overflow-x: auto; padding-bottom: 6px; }
+.sq-mix__decks.is-two > .sq-mix__deck { flex: 1 1 420px; min-width: 380px; }
+.sq-mix__decks.is-two > .sq-mix__center { flex: 0 0 170px; }
+.sq-mix__add { flex: 0 0 54px; align-self: stretch; min-height: 120px; display: grid; place-content: center; justify-items: center; gap: 2px;
+  border: 1px dashed var(--border); border-radius: 8px; background: transparent; color: var(--fg-dim); font-size: 20px; cursor: pointer; }
+.sq-mix__add span { font-size: 10px; }
+.sq-mix__add:hover { color: var(--fg); border-color: var(--fg-dim); }
+.sq-mix__deckbar { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 11px; }
+.sq-mix__deckbar button { padding: 3px 9px; font-size: 11px; }
+.sq-mix__deckbar .sq-mix__grow { flex: 1; }
+.sq-mix__tempo select { font-size: 11px; padding: 1px 3px; }
+/* The selected track's clips, over its card (trackDetail.js, the mix view). */
+.sq-track-detail__clips { display: flex; flex-wrap: wrap; gap: 3px; padding-left: 4px; }
+.sq-track-detail__clips .sq-clip { width: 64px; height: 30px; flex: 0 0 auto; }
 .sq-mix__deck { min-width: 0; border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px 10px; background: var(--bg-2); }
-.sq-mix__deck[data-deck="b"] { border-color: color-mix(in oklab, var(--accent-2) 35%, var(--border)); }
-.sq-mix__deck[data-deck="b"].is-on { border-color: var(--accent-2); }
+.sq-mix__deck.is-other { border-color: color-mix(in oklab, var(--accent-2) 35%, var(--border)); }
+.sq-mix__deck.is-other.is-on { border-color: var(--accent-2); }
 .sq-mix__deck.is-empty { border-style: dashed; background: transparent; }
 .sq-mix__empty { display: grid; gap: 8px; justify-items: start; color: var(--fg-dim); font-size: 12px; padding: 6px 2px; }
 .sq-mix__empty b { color: var(--fg); font-size: 13px; }
 .sq-mix__empty p { margin: 0; line-height: 1.5; }
 .sq-mix__head { display: flex; align-items: baseline; gap: 8px; font-size: 12px; margin-bottom: 6px; min-width: 0; }
 .sq-mix__head > b { color: var(--accent); font-size: 13px; }
-.sq-mix__deck[data-deck="b"] .sq-mix__head > b { color: var(--accent-2); }
+.sq-mix__deck.is-other .sq-mix__head > b { color: var(--accent-2); }
 .sq-mix__title { color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .sq-mix__scenes { display: flex; flex-wrap: wrap; gap: 3px; margin-bottom: 8px; min-height: 22px; }
 .sq-mix__scene { min-width: 24px; padding: 2px 5px; font-size: 11px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg-3); color: var(--fg-dim); cursor: pointer; }
@@ -4758,10 +4773,10 @@ body.vim-visual .sq-vim__mode { color: var(--accent-2); }
 .sq-mix__scene:hover { color: var(--fg); border-color: var(--fg-dim); }
 .sq-mix__scene.is-empty { opacity: 0.55; }
 .sq-mix__scene.is-active { background: var(--accent); color: #0b0d10; border-color: var(--accent); opacity: 1; }
-.sq-mix__deck[data-deck="b"] .sq-mix__scene.is-active { background: var(--accent-2); border-color: var(--accent-2); }
+.sq-mix__deck.is-other .sq-mix__scene.is-active { background: var(--accent-2); border-color: var(--accent-2); }
 .sq-mix__scene.is-queued { border-color: var(--accent); color: var(--accent); animation: sq-mix-armed 0.5s steps(2) infinite; }
 .sq-mix__strips { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; }
-.sq-mix__deck[data-deck="b"] .sq-mix__strips { flex-direction: row; }
+.sq-mix__deck.is-other .sq-mix__strips { flex-direction: row; }
 
 /* one strip: name, tone, the meter beside the fader, mute / solo, where it is */
 .sq-mix__strip {
@@ -4771,7 +4786,7 @@ body.vim-visual .sq-vim__mode { color: var(--accent-2); }
 }
 .sq-mix__strip.is-bus { background: var(--bg-3); }
 .sq-mix__strip.is-deck-bus { flex-basis: 132px; border-top-color: var(--accent); background: color-mix(in oklab, var(--accent) 7%, var(--bg)); }
-.sq-mix__deck[data-deck="b"] .sq-mix__strip.is-deck-bus { border-top-color: var(--accent-2); background: color-mix(in oklab, var(--accent-2) 7%, var(--bg)); }
+.sq-mix__deck.is-other .sq-mix__strip.is-deck-bus { border-top-color: var(--accent-2); background: color-mix(in oklab, var(--accent-2) 7%, var(--bg)); }
 .sq-mix__strip.is-selected { border-color: var(--track-color, var(--accent)); box-shadow: 0 0 0 1px var(--track-color, var(--accent)) inset; }
 .sq-mix__strip.is-muted .sq-mix__fader, .sq-mix__strip.is-muted .sq-mix__tone { opacity: 0.45; }
 .sq-mix__name {

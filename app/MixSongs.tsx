@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { listSongs, loadSong } from "@/app/songs/actions";
+import { listPublicSongs, listSongs, loadSong } from "@/app/songs/actions";
 import { setOpenSong, syncSongUrl } from "@/app/songs/openSong";
 
 // Hands the engine the account's songs for the mix view's deck B
@@ -21,13 +21,27 @@ type Landed = { title?: string; source?: { kind?: string; id?: string; versionId
 export default function MixSongs() {
   useEffect(() => {
     const backend = {
+      // The account's songs, then everybody's published ones. Either may
+      // fail alone: one list is better than none, and both failing is an
+      // error the picker shows rather than an empty list.
       list: async () => {
-        const { songs } = await listSongs();
-        return (songs || []).map((s) => ({
-          id: s.id,
-          title: s.title,
-          note: s.is_template ? "template" : s.is_public ? "your songs · public" : "your songs",
-        }));
+        const [mine, pub] = await Promise.allSettled([listSongs(), listPublicSongs()]);
+        if (mine.status === "rejected" && pub.status === "rejected") throw new Error("the song list did not load");
+        if (mine.status === "fulfilled" && mine.value.error && pub.status === "rejected") throw new Error(mine.value.error);
+        const own = mine.status === "fulfilled" ? mine.value.songs || [] : [];
+        const seen = new Set(own.map((s) => s.id));
+        return [
+          ...own.map((s) => ({
+            id: s.id,
+            title: s.title,
+            note: s.is_template ? "yours · template" : s.is_public ? "yours · public" : "yours",
+          })),
+          ...(pub.status === "fulfilled" ? pub.value : []).filter((s) => !seen.has(s.id)).map((s) => ({
+            id: s.id,
+            title: s.title,
+            note: [s.by ? `by ${s.by}` : "published", s.bpm ? `${s.bpm} bpm` : ""].filter(Boolean).join(" · "),
+          })),
+        ];
       },
       load: async (id: string) => {
         const r = await loadSong(id);

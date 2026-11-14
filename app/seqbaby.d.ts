@@ -138,8 +138,9 @@ declare global {
       setPatchBackend: (backend: PatchBackend, list: PatchListEntry[]) => void;
       setPatchList: (list: PatchListEntry[]) => void;
       /**
-       * The mix (public/js/mix.js): a second song on deck B beside the open
-       * one. The shell hands the engine its way to the account's songs
+       * The mix (public/js/mix.js): other songs on decks beside the open
+       * one, as many as are loaded (ids "b", "c" ...). A call that names no
+       * deck means the tempo's deck. The shell hands the engine its way to the account's songs
        * (app/MixSongs.tsx); null takes it away again.
        */
       setMixSource?: (
@@ -149,21 +150,27 @@ declare global {
         } | null,
       ) => void;
       mix?: {
-        load: (session: unknown, info?: { title?: string; source?: unknown }) => Promise<boolean>;
-        eject: () => boolean;
-        land: () => Promise<boolean>;
+        /** Loads onto a NEW deck (`replace`: a deck id to take off first). */
+        load: (session: unknown, info?: { title?: string; source?: unknown; replace?: string }) => Promise<boolean>;
+        eject: (opts?: { quiet?: boolean; id?: string }) => boolean;
+        land: (id?: string) => Promise<boolean>;
         keepBoth: () => boolean;
-        play: (on: boolean) => void;
-        scene: (slot: number) => void;
+        play: (on: boolean, id?: string) => void;
+        scene: (slot: number, id?: string) => void;
         xfade: (x: number) => void;
-        fadeTo: (deck: "a" | "b", bars: number) => void;
+        fadeTo: (deck: string, bars: number) => void;
         tempo: (x: number) => void;
-        /** Whether a second song is loaded on deck B (and finished loading). */
+        /** Put a deck on the crossfader, or take it off. */
+        deckXfade?: (on: boolean, id?: string) => void;
+        /** Which deck's tempo the tempo slider runs to. */
+        tempoDeck?: (id: string) => void;
+        /** Whether another song is loaded on a deck (and finished loading). */
         loaded?: () => boolean;
-        /** Deck B's song in the session format, or null with none loaded. */
-        serialize?: () => unknown;
-        /** A session written onto deck B in place; deck A is not touched. */
-        merge?: (session: unknown) => unknown;
+        decks?: () => Array<{ id: string; title: string; bpm: number; on: boolean; scene: number; loading: boolean }>;
+        /** A deck's song in the session format, or null with none loaded. */
+        serialize?: (id?: string) => unknown;
+        /** A session written onto a deck in place; no other deck is touched. */
+        merge?: (session: unknown, id?: string) => unknown;
       };
       serializeTrackPatch: (track: unknown) => unknown;
       applyTrackPatch: (track: unknown, patch: unknown) => void;

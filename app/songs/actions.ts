@@ -3,6 +3,7 @@
 import { cfEnv } from "@/lib/cf";
 import { currentUserId } from "@/lib/auth/session";
 import * as songs from "@/lib/data/songs.js";
+import { loadExplore } from "@/app/songs/exploreFeed";
 
 // The studio's song endpoints. Each is a server action, so each is reachable
 // by anyone who can POST to the site: who is asking is resolved here, from the
@@ -101,6 +102,20 @@ export async function saveNamedSong(input: {
 export async function listSongs(): Promise<{ songs: SongListItem[]; error?: string }> {
   const { env, userId } = await who();
   return songs.listSongs(env, userId);
+}
+
+/**
+ * Published songs, newest first, for the mix view's deck picker: anyone's, by
+ * title and who made them. Never `data`: one is loaded (`loadSong`, which
+ * reads any public song) only when it is picked. Empty when the feed is.
+ */
+export async function listPublicSongs(): Promise<{ id: string; title: string; by: string | null; bpm: number | null }[]> {
+  try {
+    const { songs: list } = await loadExplore();
+    return list.slice(0, 300).map((s) => ({ id: s.id, title: s.title, by: s.owner?.handle || s.owner?.name || null, bpm: s.bpm }));
+  } catch {
+    return [];
+  }
 }
 
 /** A song's data: the owner's, or anyone's if it is public. */

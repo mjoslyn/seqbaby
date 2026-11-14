@@ -532,9 +532,15 @@ export function placeBusesLast() {
   // it (mix.js: deck B's tracks, its buses, the two deck buses). The song's
   // come first because every index in a serialized session, and every reader
   // that walks `state.tracks` beside one, counts along the song's own.
-  const rank = t => (t._deck || t._deckBus) ? (t._deckBus ? (t._deckBus === "a" ? 4 : 5) : isBus(t) ? 3 : 2) : isBus(t) ? 1 : 0;
+  // Each deck's tracks together, in the order the decks were loaded (tracks
+  // on their way out with the last), then the deck buses, A's first.
+  const decks = (state.mix?.decks || []).map(d => d.id);
+  const at = id => { const i = decks.indexOf(id); return i < 0 ? decks.length : i; };
+  const rank = t => t._deckBus ? 1e6 + (t._deckBus === "a" ? 0 : 1 + at(t._deckBus))
+    : t._deck ? 2 + 2 * at(t._deck) + (isBus(t) ? 1 : 0)
+    : isBus(t) ? 1 : 0;
   if (!state.tracks.some(t => rank(t) > 0)) return false;
-  const sorted = [0, 1, 2, 3, 4, 5].flatMap(r => state.tracks.filter(t => rank(t) === r));
+  const sorted = state.tracks.map((t, i) => ({ t, i, r: rank(t) })).sort((x, y) => x.r - y.r || x.i - y.i).map(x => x.t);
   if (sorted.every((t, i) => t === state.tracks[i])) return false;
   state.tracks = sorted;
   // Only the buses need moving: appending them in order leaves every other row
