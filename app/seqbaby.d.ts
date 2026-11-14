@@ -137,6 +137,12 @@ declare global {
         xfade: (x: number) => void;
         fadeTo: (deck: "a" | "b", bars: number) => void;
         tempo: (x: number) => void;
+        /** Whether a second song is loaded on deck B (and finished loading). */
+        loaded?: () => boolean;
+        /** Deck B's song in the session format, or null with none loaded. */
+        serialize?: () => unknown;
+        /** A session written onto deck B in place; deck A is not touched. */
+        merge?: (session: unknown) => unknown;
       };
       serializeTrackPatch: (track: unknown) => unknown;
       applyTrackPatch: (track: unknown, patch: unknown) => void;

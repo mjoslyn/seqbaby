@@ -2841,10 +2841,28 @@ deck B tracks ─▶ deck B bus ─┘              buses' output gains
   account's own (a save is its next version), else to nothing (a save asks
   for a name). An edit to deck B is never written back to that song by the
   mix itself.
+- **Compose reaches either deck** (the `for:` select at the start of the
+  compose drawer's transition row, `app/ComposeChat.tsx`, desktop only).
+  `for: this song` is compose as it always was, and deck B plays on under it.
+  `for: deck B` with a song loaded there sends THAT song (`serializeDeckB`:
+  the song's serializer over deck B's tracks alone, on the deck's scene, with
+  the deck's own tempo, scale, repeats, meters and pads) and writes the turn
+  back with `mergeDeckB`, which is `mergeSet(session, scope)`: the same merge
+  with deck B standing in for the song (`serialize`, `tracks`, `globals`,
+  `create`, `done`), so unchanged tracks keep their voices and deck A is not
+  touched. With nothing on deck B the turn is sent an EMPTY session at the
+  open song's tempo (and a line saying it is a new song to be mixed with one
+  in that key), and the review bar's one button is `load to B` (`loadDeckB`).
+  A deck B turn is written at once, never on a transition (those are the open
+  song's), is not in the undo stack (deck B is not in the format; `stop` puts
+  back the session taken at `audition`), and is never saved from the panel:
+  `keep` leaves it on the deck, and it is saved by landing it or keeping both.
+  A proposal whose deck has gone is dropped with a note.
 - A whole session arriving (`applySet`, `new`) drops the mix. Not shared in a
   jam: peers get the landed or kept session.
 - `window.seqbaby.mix` (`load`, `eject`, `land`, `keepBoth`, `play`, `scene`,
-  `xfade`, `fadeTo`, `tempo`) drives it without the view.
+  `xfade`, `fadeTo`, `tempo`, `loaded`, `serialize`, `merge`) drives it
+  without the view.
 - Known limits: one bar line and one swing for both decks; synced delays and
   LFOs stay on the song's tempo while mixing; deck B plays scenes, not its
   arrangement; no headphone cue.

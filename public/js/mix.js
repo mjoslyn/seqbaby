@@ -49,7 +49,7 @@ import { refreshChanceScale } from "./chance.js";
 import { setStatus } from "./dom.js";
 import { flushHistory, markExternalEdit } from "./history.js";
 import { flushJam } from "./jam.js";
-import { applyGlobalsInPlace, deepCopy } from "./liveSet.js";
+import { applyGlobalsInPlace, deepCopy, mergeSet } from "./liveSet.js";
 import { applyMacroPads } from "./macro.js";
 import { stepsPerBarForMeter, transportMeter } from "./meter.js";
 import { bakeLevel, deckSummary, fadeAt, filledSlots, meterOf, mixBpm, nextFilled, sameScale, startSlot, xfadeGains, XFADE_CURVES } from "./mixPlan.js";
@@ -171,15 +171,15 @@ export function loadDeckB(blob, info = {}) {
   return new Promise((resolve) => { m.resolve = resolve; setTimeout(() => buildNext(m), 0); });
 }
 
-function buildNext(m) {
-  if (state.mix !== m) { m.resolve?.(false); return; }      // ejected or replaced meanwhile
-  const td = m.pending.shift();
-  if (!td) { finishLoad(m); return; }
+/**
+ * One deck B track from its serialized form (migrated), or null when it would
+ * not load. Built as if the scene were deck B's: createTrack and the loader
+ * alias a new track to `state.activePattern` and recall that slot's locked
+ * sound, and this track's slot is the deck's. One synchronous task, put back
+ * in `finally`, as serializeSet swaps the track list.
+ */
+function makeDeckTrack(m, td) {
   let t = null;
-  // Built as if the scene were deck B's: createTrack and the loader alias a
-  // new track to `state.activePattern` and recall that slot's locked sound,
-  // and this track's slot is the deck's. One synchronous task, put back in
-  // `finally`, as serializeSet swaps the track list.
   const scene = state.activePattern;
   try {
     state.activePattern = m.scene;
@@ -199,6 +199,14 @@ function buildNext(m) {
   } finally {
     state.activePattern = scene;
   }
+  return t;
+}
+
+function buildNext(m) {
+  if (state.mix !== m) { m.resolve?.(false); return; }      // ejected or replaced meanwhile
+  const td = m.pending.shift();
+  if (!td) { finishLoad(m); return; }
+  const t = makeDeckTrack(m, td);
   if (t) paintTrackSlotBadge(t);
   m.made.push(t);
   placeBusesLast();
@@ -253,6 +261,104 @@ function finishLoad(m) {
   setStatus(`deck B: "${m.title}" loaded, ${n} track${n === 1 ? "" : "s"} at ${m.bpm} bpm. Start it, then bring the crossfader over`);
   announce();
   m.resolve?.(true);
+}
+
+// ---- deck B as a session: read whole, and written in place -----------------------
+//
+// The compose panel's turn on deck B (app/ComposeChat.tsx): the model is sent
+// deck B's song in the session format and its answer is merged back onto deck
+// B's tracks, as a turn on the open song is merged onto the song's.
+
+/**
+ * Deck B's song in the session format: its tracks (indices counted along
+ * them), its own tempo, scale, repeats, meters and pads, and the pattern the
+ * deck is on. Null with no deck loaded.
+ */
+export function serializeDeckB() {
+  const m = state.mix;
+  if (!m || m.loading) return null;
+  const all = state.tracks, scene = state.activePattern;
+  let s;
+  // The song's serializer over deck B's tracks alone, on the deck's scene: the
+  // same swap serializeSet makes to leave a staged track out.
+  try {
+    state.tracks = deckBTracks();
+    state.activePattern = m.scene;
+    s = serializeSet({ decks: true });
+  } finally {
+    state.tracks = all;
+    state.activePattern = scene;
+  }
+  s.tracks.forEach((td, i) => {
+    const blocks = deckBTracks()[i]?._deckArrangement;
+    if (blocks?.length) td.arrangement = blocks.map(b => ({ slot: b.slot, start: b.start, bars: b.bars }));
+  });
+  return {
+    ...s,
+    bpm: m.bpm,
+    swing: m.globals.swing ?? s.swing,
+    scale: { ...m.scale },
+    activePattern: m.scene,
+    patternMode: m.chain ? "chain" : "repeat",
+    patternRepeats: m.repeats.slice(),
+    patternMeters: m.globals.patternMeters || s.patternMeters,
+    macroPads: m.globals.macroPads || [],
+  };
+}
+
+/**
+ * Write a session onto deck B in place: `mergeSet` (liveSet.js) scoped to the
+ * deck, so the tracks that did not change keep the voices they are playing
+ * with, new ones join in phase, and the song on deck A is not touched. The
+ * deck's tempo, scale, repeats and meters follow; the pattern it is on does
+ * not, as a merge never moves the scene.
+ * @returns {object|null} mergeSet's summary, or null with no deck loaded
+ */
+export function mergeDeckB(session) {
+  const m = state.mix;
+  if (!m || m.loading || m.landing) return null;
+  const out = mergeSet(session, {
+    serialize: serializeDeckB,
+    tracks: deckBTracks,
+    globals(cur, target) {
+      if (Number(target.bpm) > 0) m.bpm = m.globals.bpm = Number(target.bpm);
+      if (Number.isFinite(target.swing)) m.globals.swing = target.swing;
+      if (target.scale) {
+        m.scale = m.globals.scale = { active: !!target.scale.active, root: target.scale.root | 0, mode: target.scale.mode || "minor" };
+      }
+      if (Array.isArray(target.patternRepeats)) {
+        for (let i = 0; i < PATTERN_COUNT; i++) m.repeats[i] = Math.max(1, Number(target.patternRepeats[i]) || 1);
+      }
+      if (Array.isArray(target.patternMeters)) m.globals.patternMeters = target.patternMeters;
+      if (target.patternMode && target.patternMode !== cur.patternMode) m.chain = target.patternMode !== "repeat";
+      m.globals.meter = meterOf(target, m.scene);
+      applyTempo();
+      return false;                    // the bar line's meter is deck A's
+    },
+    create(td) {
+      const t = makeDeckTrack(m, td);
+      if (!t) throw new Error(`deck B: "${td.name || "a track"}" would not load`);
+      return t;
+    },
+    done(made, target) {
+      // The blob's order is the deck's order now, and what its pads index.
+      m.made = made.slice();
+      m.globals.macroPads = Array.isArray(target.macroPads) ? target.macroPads : [];
+      (target.tracks || []).forEach((td, i) => {
+        const t = made[i];
+        if (!t) return;
+        // a deck plays its scene: any timeline waits for a landing
+        if (t.arrangement?.length || td.arrangement?.length) t._deckArrangement = td.arrangement?.length ? td.arrangement : null;
+        t.arrangement = [];
+      });
+      orderDeck(m);
+    },
+  });
+  orderDeck(m);                        // after the merge's own last reorder
+  applyXfade();
+  announceClips();
+  announce();
+  return out;
 }
 
 // ---- deck B's transport ---------------------------------------------------------

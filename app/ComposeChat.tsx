@@ -45,6 +45,14 @@ type Proposal = {
   note?: string;
   /** The new song's pattern to transition into (0-based), or unset for the default. */
   into?: number | null;
+  /**
+   * The turn was about deck B of a mix (public/js/mix.js), not the open song:
+   * its session is written onto that deck (`mix.merge`), at once, and never
+   * saved from here. `fresh`: there was no deck B, so the turn wrote a new
+   * song from nothing and it is LOADED onto the deck (`mix.load`).
+   */
+  deck?: "b";
+  fresh?: boolean;
 };
 
 /** The patterns of a session with notes in them, by slot. */
@@ -223,6 +231,21 @@ export default function ComposeChat({
   // The turn's changes, waiting to be auditioned or kept. Nothing is written to
   // the studio until one of those is pressed.
   const [review, setReview] = useState<Proposal | null>(null);
+  // Which deck a turn is about: the open song, or deck B of the mix view. And
+  // whether a second song is loaded there, which decides what a deck B turn
+  // does (edit that song, or write a new one for the empty deck).
+  const [deck, setDeck] = useState<"a" | "b">("a");
+  const [hasB, setHasB] = useState(false);
+  useEffect(() => {
+    const read = () => setHasB(!!window.seqbaby?.mix?.loaded?.());
+    read();
+    window.addEventListener("seqbaby:mix", read);
+    window.addEventListener("seqbaby:ready", read);
+    return () => {
+      window.removeEventListener("seqbaby:mix", read);
+      window.removeEventListener("seqbaby:ready", read);
+    };
+  }, []);
   const [trans, setTransState] = useState<TransitionPrefs>(TRANSITION_DEFAULT);
   useEffect(() => setTransState(loadTransition()), []);
   const setTrans = useCallback((patch: Partial<TransitionPrefs>) => {
@@ -391,7 +414,24 @@ export default function ComposeChat({
     // A transition still waiting on its bar line lands now: the turn is about
     // what is playing, and an audition or keep the button already asked for.
     window.seqbaby.finishTransition?.();
-    const session = window.seqbaby.serializeSet();
+    // A turn on deck B is sent that deck's song, or, with nothing loaded
+    // there, an empty session to write a new one in: the open song's tempo, so
+    // the two mix, and a line saying what it is for.
+    const mix = window.seqbaby.mix;
+    const toB = deck === "b" && !!mix?.merge;
+    const editB = toB && !!mix?.loaded?.();
+    const freshB = toB && !editB;
+    const open0 = freshB ? (window.seqbaby.serializeSet() as { bpm?: number; scale?: { active?: boolean; root?: number; mode?: string } }) : null;
+    const session = editB
+      ? mix!.serialize!()
+      : freshB
+      ? { _version: window.seqbaby.setVersion, bpm: open0?.bpm ?? 120, tracks: [] }
+      : window.seqbaby.serializeSet();
+    const NOTE = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+    const key = open0?.scale?.active ? ` in ${NOTE[(((open0.scale.root ?? 0) % 12) + 12) % 12]} ${open0.scale.mode ?? ""}`.trimEnd() : "";
+    const sent = freshB
+      ? `${text}\n\n(This is a NEW song, written from the empty session: it will be loaded onto a second deck and mixed with a song at ${open0?.bpm ?? 120} bpm${key}. Keep to that tempo${key ? " and a key that sits with it" : ""} unless asked otherwise.)`
+      : text;
     // Only plain text crosses the wire between turns -- what the model called
     // and why lives entirely inside one request/response, so the transcript
     // this resends stays small how ever many tool calls a turn took.
@@ -444,7 +484,7 @@ export default function ComposeChat({
         headers: { "content-type": "application/json" },
         // A song never saved (or a template, whose first save makes a new
         // song) has no name of its own: the turn is asked to give it one.
-        body: JSON.stringify({ message: text, history, session, unnamed: !getOpenSong().id || getOpenSong().isTemplate, ...(canPickModel ? { model: modelOverride || model } : {}) }),
+        body: JSON.stringify({ message: sent, history, session, unnamed: toB ? freshB : !getOpenSong().id || getOpenSong().isTemplate, ...(canPickModel ? { model: modelOverride || model } : {}) }),
       });
       // Anything that failed before the route got to stream -- auth, a bad
       // request, a gateway page -- arrives as an ordinary body with a status
@@ -543,10 +583,13 @@ export default function ComposeChat({
           // session (mergeSet: no teardown, no stopped transport) and `keep`
           // makes them the song. Writing a turn straight in is what used to
           // silence a track that was playing while you asked for another one.
-          if (job.session && job.changed !== false) setReview({ session: job.session, before: null, title: job.title ?? null });
+          if (job.session && job.changed !== false) {
+            setReview({ session: job.session, before: null, title: job.title ?? null, ...(toB ? { deck: "b" as const, fresh: freshB } : {}) });
+          }
           // A name with nothing to review (the turn only named the song) is
           // the song's at once; otherwise it comes with the changes, on keep.
-          else if (job.title) setComposedTitle(job.title);
+          // (A deck B turn never names the open song.)
+          else if (job.title && !toB) setComposedTitle(job.title);
           land({
             role: "assistant",
             text: job.reply || "Done.",
@@ -568,7 +611,7 @@ export default function ComposeChat({
       setSending(false);
       setLive([]);
     }
-  }, [input, sending, messages, canCompose, canPickModel, model]);
+  }, [input, sending, messages, canCompose, canPickModel, model, deck]);
 
   // ---- the review bar ------------------------------------------------------
   //
@@ -603,19 +646,53 @@ export default function ComposeChat({
     return (await api.transitionTo(session, { ...trans, ...into })).landed;
   }, [trans, writeLive]);
 
+  // A deck B turn's session, written onto that deck in place (mix.js,
+  // mergeDeckB): at once, with no transition, since a transition is the open
+  // song's. False when the deck has gone (ejected, landed, a song opened).
+  const writeDeckB = useCallback((session: unknown): boolean => {
+    try {
+      return !!window.seqbaby?.mix?.merge?.(session);
+    } catch (e) {
+      console.error(e);
+      return false;
+    }
+  }, []);
+  const deckGone = useCallback(() => {
+    setReview(null);
+    setSaveNote("deck B is no longer loaded, so those changes had nowhere to go");
+  }, []);
+
   // Audition: keep what is playing so it can be put back, then merge the
   // turn's session over it. Nothing is saved and nothing is torn down.
   // `before` is taken at the press: what is playing then is what stop puts back.
   const audition = useCallback(async () => {
     const r = review;
     if (!r || r.before || r.pending || !window.seqbaby) return;
+    if (r.deck === "b") {
+      // A new song for an empty deck: loaded there, stopped, ready to bring in.
+      if (r.fresh) {
+        setReview(null);
+        setSaveNote("loading onto deck B…");
+        try {
+          const ok = await window.seqbaby.mix!.load(r.session, { title: r.title || "composed", source: { kind: "compose" } });
+          setSaveNote(ok ? "on deck B: open the mix view, start it, and bring the crossfader over" : "");
+        } catch (e) {
+          setSaveNote(`could not load it onto deck B: ${(e as Error).message}`);
+        }
+        return;
+      }
+      const was = window.seqbaby.mix?.serialize?.() ?? null;
+      if (!was || !writeDeckB(r.session)) return deckGone();
+      setReview({ ...r, before: was, pending: null, note: "" });
+      return;
+    }
     const before = window.seqbaby.serializeSet();
     setReview({ ...r, pending: "audition", note: "" });
     const landed = await writeAt(r.session, r);
     setReview((cur) => (cur && cur.session === r.session && cur.pending === "audition"
       ? { ...cur, before: landed ? before : null, pending: null }
       : cur));
-  }, [review, writeAt]);
+  }, [review, writeAt, writeDeckB, deckGone]);
 
   // Stop: back to what was playing, with the changes still on offer. Anything
   // changed BY HAND during the audition goes back with it -- undo reaches it
@@ -625,6 +702,12 @@ export default function ComposeChat({
   const stopAudition = useCallback(async () => {
     const r = review;
     if (!r) return;
+    if (r.deck === "b") {
+      if (!r.before) return;
+      if (!writeDeckB(r.before)) return deckGone();
+      setReview({ ...r, before: null });
+      return;
+    }
     if (r.pending === "audition") {
         window.seqbaby?.cancelTransition?.();
       setReview((cur) => (cur && cur.session === r.session ? { ...cur, pending: null } : cur));
@@ -636,7 +719,7 @@ export default function ComposeChat({
     setReview((cur) => (cur && cur.session === r.session && cur.pending === "stop"
       ? { ...cur, before: landed ? null : cur.before, pending: null }
       : cur));
-  }, [review, writeAt]);
+  }, [review, writeAt, writeDeckB, deckGone]);
 
   // Keeping is a real edit to the song, so it is SAVED, as a version of its
   // own. The top-bar save is a click away in another island and nobody presses
@@ -698,6 +781,15 @@ export default function ComposeChat({
     const r = review;
     const api = window.seqbaby;
     if (!r || !api) return;
+    if (r.deck === "b") {
+      // Deck B is not the open song: nothing is saved from here. Its song is
+      // kept for good by landing it, or by keeping both decks, and saving.
+      if (r.fresh) return void audition();
+      if (!r.before && !writeDeckB(r.session)) return deckGone();
+      setReview(null);
+      setSaveNote("kept on deck B. It is saved once you land it or keep both decks, then save");
+      return;
+    }
     if (r.pending === "keep") {
       api.finishTransition?.();
       return;
@@ -720,7 +812,7 @@ export default function ComposeChat({
     if (r.title) setComposedTitle(r.title);
     setReview((cur) => (cur && cur.session === r.session ? null : cur));
     void autosaveKept();
-  }, [review, writeAt, autosaveKept]);
+  }, [review, writeAt, autosaveKept, writeDeckB, deckGone, audition]);
 
   // Discard is never on a transition: throwing the changes away is immediate.
   const discardChanges = useCallback(() => {
@@ -728,10 +820,11 @@ export default function ComposeChat({
     if (!r) return;
     if (r.pending) window.seqbaby?.cancelTransition?.();
     // `before` set means the changes are playing (a stop on its way included).
-    if (r.before) writeLive(r.before);
+    if (r.before && r.deck === "b") writeDeckB(r.before);
+    else if (r.before) writeLive(r.before);
     setReview(null);
     setSaveNote("");
-  }, [review, writeLive]);
+  }, [review, writeLive, writeDeckB]);
 
   // The genre tab (GroovePicker.tsx) starts a turn from a genre: its brief
   // goes in the box and is sent as an ordinary turn, so it lands in the
@@ -890,6 +983,12 @@ export default function ComposeChat({
                     }…`
                   : review.note
                   ? review.note
+                  : review.deck === "b"
+                  ? (review.fresh
+                      ? "a new song for deck B. load puts it on the deck, stopped, ready to start and bring in."
+                      : review.before
+                      ? "auditioning on deck B: the deck is playing these changes. keep leaves them there."
+                      : "these changes are for the song on deck B. audition writes them onto the deck; keep leaves them there.")
                   : review.before
                   ? "auditioning: you are hearing the changes, but the song does not have them yet."
                   : "these changes aren't in the song yet. audition drops them into what's playing; keep makes them the song."}
@@ -905,19 +1004,19 @@ export default function ComposeChat({
                     ? "put back what was playing before the audition"
                     : "hear them in what is playing, without stopping the transport"}
                 >
-                  {review.before || review.pending === "audition" ? "stop" : "audition"}
+                  {review.fresh ? "load to B" : review.before || review.pending === "audition" ? "stop" : "audition"}
                 </button>
-                <button
+                {!review.fresh && <button
                   className={`${styles.smallBtn} ${styles.smallBtnPrimary}`}
                   onClick={keepChanges}
-                  title={review.pending === "keep" ? "land it now" : 
+                  title={review.deck === "b" ? "leave them on deck B (saved once you land it or keep both decks)" : review.pending === "keep" ? "land it now" : 
                     signedIn && songId && !isTemplate
                       ? "make them part of the song, and save it as a new version"
                       : "make them part of the song"
                   }
                 >
                   keep
-                </button>
+                </button>}
                 <button className={styles.smallBtn} onClick={discardChanges} title="throw them away">
                   discard
                 </button>
@@ -925,6 +1024,19 @@ export default function ComposeChat({
             </div>
           )}
           <div className={styles.chatTransition} title="how a turn's changes arrive in what is playing: picked before sending, or in review">
+            <select
+              className={`${styles.chatModelSelect} ${styles.chatDeckSelect}`}
+              value={deck}
+              disabled={sending}
+              onChange={(e) => setDeck(e.target.value === "b" ? "b" : "a")}
+              aria-label="which deck the next turn is about"
+              title={hasB
+                ? "the open song, or the song on deck B of the mix view. A deck B turn edits that deck's song in place; the settings to the right are the open song's and do not apply to it"
+                : "the open song, or deck B of the mix view. Nothing is on deck B, so a turn there writes a NEW song at this song's tempo and loads it onto the deck to mix in"}
+            >
+              <option value="a">for: this song</option>
+              <option value="b">{hasB ? "for: deck B" : "for: deck B (new song)"}</option>
+            </select>
             <select
               className={styles.chatModelSelect}
               value={trans.when}

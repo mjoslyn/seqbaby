@@ -29,7 +29,7 @@ import {
   serializeTrackPatch,
 } from "./session.js";
 import { SET_VERSION, validateSet } from "./sessionFormat.js";
-import { ejectDeckB, fadeToDeck, keepBothDecks, landDeckB, loadDeckB, requestDeckScene, setDeckPlaying, setMixSource, setMixTempo, setXfade } from "./mix.js";
+import { ejectDeckB, fadeToDeck, keepBothDecks, landDeckB, loadDeckB, mergeDeckB, requestDeckScene, serializeDeckB, setDeckPlaying, setMixSource, setMixTempo, setXfade } from "./mix.js";
 import { state } from "./state.js";
 
 export function installAppApi() {
@@ -141,6 +141,12 @@ export function installAppApi() {
       xfade: setXfade,
       fadeTo: fadeToDeck,
       tempo: setMixTempo,
+      // Deck B as a session, read whole and written in place: the compose
+      // panel's turn on the other deck (app/ComposeChat.tsx). `loaded` says
+      // whether there is a deck B to read.
+      loaded: () => !!state.mix && !state.mix.loading,
+      serialize: serializeDeckB,
+      merge: mergeDeckB,
     },
     // The open song's name as the shell shows it, so a bounce is named for
     // it (bounce.js). The shell owns which song is open; null means none.

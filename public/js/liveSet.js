@@ -384,7 +384,13 @@ function setTrackOrder(order) {
  * @param {Object} s a session from serializeSet (or the song builder)
  * @returns {{version: number, warnings: string[], added: number, removed: number, rebuilt: number}}
  */
-export function mergeSet(s) {
+export function mergeSet(s, scope = null) {
+  // `scope`: the same merge over a set of tracks that is not the song. Deck B
+  // of a mix (mix.js, `mergeDeckB`) is a second song living beside this one,
+  // with globals of its own, so it hands in what stands for each of the
+  // song-wide pieces: `serialize()` its tracks in the format, `tracks()` the
+  // live ones parallel to that, `globals(cur, target)`, `create(td)` a track,
+  // and `done(made, target)` once every track exists.
   if (!s) return null;
   // Before anything is written, as in applySet: a blob that fails halfway
   // through this one leaves a session that is half of each.
@@ -401,18 +407,18 @@ export function mergeSet(s) {
   // What is playing right now, in the same format, so every comparison below
   // is like for like. serializeSet flushes the live sound into whichever store
   // owns the pattern first, which is what makes the sound diff honest.
-  const cur = serializeSet({ staged: true });
+  const cur = scope ? scope.serialize() : serializeSet({ staged: true });
   const curTracks = cur.tracks || [];
   const nextTracks = (target.tracks || []).map(migrateTrackData);
   // Parallel to curTracks, by index. Only the song's own: deck B and the deck
   // buses (mix.js) are not in the format, so a merge neither matches nor
   // removes them, and an undo under a mix leaves the other deck playing.
-  const liveTracks = state.tracks.filter(inSong);
+  const liveTracks = scope ? scope.tracks() : state.tracks.filter(inSong);
   const match = alignTracks(curTracks, nextTracks);
 
   // The pads are held back: their assignments are indices into the incoming
   // session's track list, so they cannot be resolved until it has been made.
-  const metersMoved = applyGlobalsInPlace(cur, target, { pads: false });
+  const metersMoved = scope ? !!scope.globals(cur, target) : applyGlobalsInPlace(cur, target, { pads: false });
 
   // The tracks nothing points at any more. First, so the send and sidechain
   // pickers are rebuilt around what is really there before anything new is
@@ -437,6 +443,7 @@ export function mergeSet(s) {
     else if (!t) added++;
     if (t) return t;
     fresh[i] = true;
+    if (scope) return scope.create(td);
     const built = createTrack(trackShellFor(td));
     loadTrackFromData(built, td);
     seedFromTransport(built);       // at the speed it loaded with, in phase
@@ -493,7 +500,8 @@ export function mergeSet(s) {
   // The order the session lists, then the buses back to the bottom. Both after
   // the index passes above, for applySet's reason: every cross-track reference
   // has to be an id before anything is allowed to move.
-  setTrackOrder(made);
+  if (scope) scope.done(made, target);
+  else setTrackOrder(made);
   placeBusesLast();
 
   refreshOutputSelects();
@@ -506,7 +514,8 @@ export function mergeSet(s) {
   // MIDI access is lazy, and this merge may have introduced the first MIDI track.
   requestMidiIfNeeded();
   // The pads store their assignments by index into the incoming session too.
-  if (!sameTree(cur.macroPads, target.macroPads)) applyMacroPads(target.macroPads, made);
+  // (A scoped merge's pads are not the session's: its `done` keeps them.)
+  if (!scope && !sameTree(cur.macroPads, target.macroPads)) applyMacroPads(target.macroPads, made);
   if (names) { refreshOutputSelects(); refreshCompSourceDropdowns(); }
   if (grid || added || removed || rebuilt) { refreshAllPatternLockUI(); renderPatternGrid(); }
   setStatus(added || removed || rebuilt
