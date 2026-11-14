@@ -491,21 +491,12 @@ export function mergeDeckB(session, id) {
 
 // ---- a deck's transport ---------------------------------------------------------
 
-// When a deck started while the transport runs comes in: on the next bar
-// line, or held until deck A's pattern comes round (`pattern`), so the two
-// songs' PHRASES line up and not only their bars. Per browser.
-const START_KEY = "seqbaby.mixStart.v1";
-export const DECK_STARTS = ["bar", "pattern"];
-let startOn = "bar";
-try { const v = window.localStorage.getItem(START_KEY); if (DECK_STARTS.includes(v)) startOn = v; } catch {}
-export function deckStartMode() { return startOn; }
-export function setDeckStartMode(mode) {
-  if (!DECK_STARTS.includes(mode)) return;
-  startOn = mode;
-  try { window.localStorage.setItem(START_KEY, mode); } catch {}
-  setStatus(mode === "pattern" ? "a deck started now comes in when deck A's pattern comes round" : "a deck started now comes in on the next bar");
-  announce();
-}
+// When a deck started while the transport runs comes in is the start's own
+// (`armOn`, from the press): held until deck A's pattern comes round
+// ("pattern": a click on its play button, so the two songs' PHRASES line up
+// and not only their bars), or on the next bar line ("bar": a double-click,
+// and any other caller). There was a setting for it in the mix bar; it was
+// the same choice the fade's `at:` makes, said twice.
 
 /**
  * Whether the bar line the transport is on (asked before its queue and chain
@@ -565,7 +556,8 @@ export function setDeckPlaying(on, id, { when = "now" } = {}) {
     setStatus(`deck ${L} armed: it starts with the transport`);
   } else if (!d.on) {
     d.arm = true;
-    setStatus(startOn === "pattern" ? `deck ${L} starts when deck A's pattern comes round` : `deck ${L} starts on the next bar`);
+    d.armOn = when === "pattern" ? "pattern" : "bar";
+    setStatus(d.armOn === "pattern" ? `deck ${L} starts when deck A's pattern comes round (double-click: on the next bar)` : `deck ${L} starts on the next bar`);
   }
   announce();
 }
@@ -596,7 +588,8 @@ export function setDeckAPlaying(on, { when = "now" } = {}) {
     setStatus("deck A starts with the transport");
   } else {
     m.aArm = true;
-    setStatus(startOn === "pattern" ? "deck A starts when its pattern comes round" : "deck A starts on the next bar");
+    m.aArmOn = when === "pattern" ? "pattern" : "bar";
+    setStatus(m.aArmOn === "pattern" ? "deck A starts when the longest part playing comes round (double-click: on the next bar)" : "deck A starts on the next bar");
   }
   announce();
 }
@@ -713,9 +706,10 @@ export function setDeckChain(on, id) {
 export function mixStep(nextTime, barLine) {
   const m = state.mix;
   if (!m) return;
-  // where things that wait for the start setting may begin: the next bar
-  // line, or the one deck A's pattern comes round on
-  const phrase = barLine && (startOn !== "pattern" || patternLine());
+  // where a start or a fade may begin: the next bar line, or the one deck
+  // A's pattern comes round on, as each asked
+  const round = barLine && patternLine();
+  const gate = (on) => (on === "pattern" ? round : barLine);
   // A fade aimed at one of deck A's patterns waits for the bar line that
   // pattern begins on instead, and one aimed at a bar counts that many bar
   // lines on from there (`bar`, 0 the first). The decks it started
@@ -726,7 +720,7 @@ export function mixStep(nextTime, barLine) {
     if (f.wait) {
       // an automatic fade starts where a started deck would
       if (f.left == null) {
-        if (f.slot == null ? phrase : barLine && slotAfterLine() === f.slot) f.left = Math.max(0, f.bar | 0);
+        if (f.slot == null ? gate(f.on) : barLine && slotAfterLine() === f.slot) f.left = Math.max(0, f.bar | 0);
       } else if (barLine) f.left--;
       if (f.left != null && f.left <= 0) { f.wait = false; f.from = m.x; begins = true; announce(); }
     } else {
@@ -737,8 +731,8 @@ export function mixStep(nextTime, barLine) {
   }
   if (!barLine) return;
   const waits = !!m.fade?.wait;
-  deckABar(m, phrase);
-  for (const d of m.decks) deckBar(d, d.armFade && (waits || begins) ? begins : phrase);
+  deckABar(m, gate(m.aArmOn));
+  for (const d of m.decks) deckBar(d, d.armFade && (waits || begins) ? begins : gate(d.armOn));
 }
 
 /**
@@ -975,25 +969,29 @@ export function fadeToDeck(deck, bars, { now = false, at = null, bar = 0 } = {})
   // Fading towards a side brings in whatever is on it: a deck there that is
   // not playing is started (armed while the transport runs, so it comes in on
   // the line the fade itself waits for), and one armed to stop plays on.
-  // `at`: one of deck A's patterns to begin on, and `bar` how many bars into
-  // it (0 its first; with no pattern, that many bars past the start
-  // setting's line), the fade and the decks it starts together. Holding one pattern, deck A would never get there, so
+  // `at`: where it begins. "bar" (the default) the next bar line, "pattern"
+  // the line deck A's pattern comes round on, or one of deck A's patterns by
+  // number; `bar` is how many bars on from there (0 the first). The fade and
+  // the decks it starts begin together. Holding one pattern, deck A would never get there, so
   // the pattern is queued for when the one playing comes round; a chain
   // reaches it by itself (if it never does, the fade waits, and a click on
   // the arrow again, or a double-click, moves it).
   const slot = !now && state.playing && steps && Number.isInteger(at) && at >= 0 && at < PATTERN_COUNT && state.patternMode !== "arrange" ? at : null;
   const late = !now && state.playing && steps ? Math.max(0, Math.min(63, Math.round(Number(bar) || 0))) : 0;
-  const started = startSide(to ? "r" : "l", slot != null || late > 0);
+  const on = at === "pattern" && state.patternMode !== "arrange" ? "pattern" : "bar";
+  const started = startSide(to ? "r" : "l", !now);
   if (!state.playing || !steps) { m.fade = null; writeXfade(to); announce(); return; }
   if (slot != null && state.patternMode !== "chain" && !state.patLoop && state.activePattern !== slot && state.queuedPattern !== slot) {
     requestSongScene(slot, { when: "pattern" });
   }
   // `now` (the button's double-click): it starts on the next step instead of
   // waiting for the bar or the pattern
-  m.fade = { from: m.x, to, steps, done: 0, wait: !now, slot, bar: late, left: null };
-  const where = slot != null ? `when deck A reaches pattern ${slot + 1}${late ? `, bar ${late + 1}` : ""}`
-    : late ? `${late} bar${late === 1 ? "" : "s"} after ${startOn === "pattern" ? "deck A's next pattern" : "the next bar"}` : null;
-  setStatus(`fading to the crossfader's ${to ? "right" : "left"} over ${bars} bar${bars === 1 ? "" : "s"}, ${where ?? `from ${now ? "now" : startOn === "pattern" ? "deck A's next pattern" : "the next bar"}`}${started.length ? `; deck ${started.join(", ")} ${started.length > 1 ? "start" : "starts"} ${where ? "with it" : startOn === "pattern" ? "when deck A's pattern comes round" : "on the next bar"}` : ""}`);
+  m.fade = { from: m.x, to, steps, done: 0, wait: !now, slot, on, bar: late, left: null };
+  const line = on === "pattern" ? "deck A's next pattern" : "the next bar";
+  const where = now ? "from now"
+    : slot != null ? `when deck A reaches pattern ${slot + 1}${late ? `, bar ${late + 1}` : ""}`
+    : late ? `${late} bar${late === 1 ? "" : "s"} after ${line}` : `from ${line}`;
+  setStatus(`fading to the crossfader's ${to ? "right" : "left"} over ${bars} bar${bars === 1 ? "" : "s"}, ${where}${started.length ? `; deck ${started.join(", ")} ${started.length > 1 ? "start" : "starts"} ${now ? "on the next bar" : "with it"}` : ""}`);
   announce();
 }
 

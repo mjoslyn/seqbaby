@@ -2960,16 +2960,19 @@ deck B tracks ─▶ deck B bus ─┘              buses' output gains
   to that deck's end when it is the tempo's deck), and landing it keeps the
   tempo being heard. Every deck already plays at the transport's tempo:
   there is one clock.
-- **A started deck comes in on the next bar, or on the next PATTERN**
-  (`start:` in the mix bar, `setDeckStartMode`, per browser as
-  `seqbaby.mixStart.v1`). On `next pattern` an armed deck is held past bar
-  lines until deck A's pattern comes round (`patternLine`, asked in
-  `mixStep` before the song's queue and chain run): a queued pattern
-  landing, the chain's repeat count running out, or in repeat mode the
-  longest part back at its first step. So the phrases line up, not only the
-  bars. Arrange mode has only bar lines to go by. An automatic crossfade
-  (`fadeToDeck`) starts at the same place: it waits (`fade.wait`, its button
-  blinking) for the next bar line or the next pattern, then runs its bars. A
+- **A started deck comes in on the next PATTERN, or on the next bar.** The
+  choice is the press's own (`armOn` / `mix.aArmOn`): a click on a deck's ▶
+  is `setDeckPlaying(true, id, {when: "pattern"})`, held past bar lines until
+  deck A's pattern comes round (`patternLine`, asked in `mixStep` before the
+  song's queue and chain run): a queued pattern landing, the chain's repeat
+  count running out, or in repeat mode the longest part back at its first
+  step. So the phrases line up, not only the bars. A double-click (and any
+  other caller: the clip view, `window.seqbaby.mix.play`) is the next bar
+  line. Arrange mode has only bar lines to go by. There was a `start:` select
+  in the mix bar for this; it said twice what the fade's `at:` says, and is
+  gone. An automatic crossfade (`fadeToDeck`) waits (`fade.wait`, its button
+  blinking) for what its `at:` menu says: `next bar` (the default), `next
+  pattern` (`fade.on`), or one of deck A's patterns by number. A
   double-click on a fade arrow starts it now (`fadeToDeck(side, bars, {now:
   true})`), as a double-click on a pattern number switches now. A fade
   towards a side also STARTS the decks on it that are not playing
@@ -2982,8 +2985,8 @@ deck B tracks ─▶ deck B bus ─┘              buses' output gains
   landing, the chain or the loop moving on, or the held pattern coming
   round), then `bar` more bar lines (`fade.left`). Holding one pattern, deck
   A is queued onto the target (`requestSongScene`) so it gets there; a chain
-  arrives by itself. With no pattern picked, `bar` counts on from the start
-  setting's line. The decks the fade started carry `armFade` and come in on
+  arrives by itself. With `next bar` or `next pattern` picked, `bar` counts
+  on from that line. The decks the fade started carry `armFade` and come in on
   the bar line the fade begins on, not on their own start line. Arrange mode
   has no pattern to wait for and ignores the target.
 - **The crossfader has six shapes** (`XFADE_CURVES` / `XFADE_CURVE_TIPS`,
@@ -3000,8 +3003,8 @@ deck B tracks ─▶ deck B bus ─┘              buses' output gains
 - **Deck A has the same ▶ / ■ while a deck is loaded** (`setDeckAPlaying`,
   `mix.aOff` / `mix.aArm`, `deckABar`): stopped, the song's tracks are
   withheld as a stopped deck's are (`deckSilent`) while the transport and the
-  other decks play on; a start waits for the start setting and comes in from
-  step 0. The flags are the mix's, so they go when it ends, and an eject of
+  other decks play on; a start waits as any deck's does (click: the pattern's round, double-click:
+  the next bar) and comes in from step 0. The flags are the mix's, so they go when it ends, and an eject of
   deck A clears them.
 - **A chain's progress is on the deck** (`chainProgress`, painted on the
   meters' 30Hz tick, never a rebuild): beside a deck's `chain` box, `3 of 8`

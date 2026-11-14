@@ -31,7 +31,7 @@ import { setStatus } from "./dom.js";
 import { upgradeKnobs } from "./knob.js";
 import { samplePeak } from "./meters.js";
 import {
-  deckATracks, deckBTracks, deckLabel, ejectDeckA, setDeckAPlaying, deckSide, deskDecks, matchDeckTempo, setXfadeOn, deckStartMode, setDeckStartMode, ejectDeckB, ejectDeckTrack, fadeToDeck, focusDeck, keepBothDecks, loadDeckA, loadDeckB, 
+  deckATracks, deckBTracks, deckLabel, ejectDeckA, setDeckAPlaying, deckSide, deskDecks, matchDeckTempo, setXfadeOn, ejectDeckB, ejectDeckTrack, fadeToDeck, focusDeck, keepBothDecks, loadDeckA, loadDeckB, 
   mixSource, mixTempo, requestDeckScene, requestSongScene, setDeckChain, setDeckPlaying, setDeckRepeat, setDeckXfade, setMixTempo,
   setTempoDeck, setTempoLink, setXfade, setXfadeCurve,
 } from "./mix.js";
@@ -52,8 +52,8 @@ let raf = 0;
 let holding = false;  // a control in the desk is held: no rebuild under the pointer
 let stale = false;    // a repaint was asked for meanwhile
 let fadeBars = 4;
-// Which of deck A's patterns an automatic fade waits for (null: the start setting).
-let fadeAt = null;
+// Where an automatic fade begins: the next bar, deck A's next pattern, or one of its patterns by number.
+let fadeAt = "bar";
 // And how many bars into it (0 its first bar).
 let fadeBar = 0;
 let meterTimer = 0;
@@ -201,7 +201,7 @@ function deckA(shown) {
     ${m ? (() => {
       const on = !m.aOff, armed = m.aArm === true, stopping = on && m.aArm === false;
       return `<div class="sq-mix__deckbar">
-      <button type="button" class="sq-mix__play${on ? " is-on" : ""}${armed || stopping ? " is-armed" : ""}" data-act="deck-play" title="${stopping ? "deck A stops when its pattern comes round. Click to let it play on; double-click to stop it now" : on ? "stop deck A when its pattern comes round, while the other decks play on. Double-click: stop it now" : armed ? `deck A starts ${deckStartMode() === "pattern" ? "when its pattern comes round" : "on the next bar"}` : "start deck A: on the next bar line while the transport plays, with it when it is stopped"}">${stopping ? "■…" : on ? "■" : armed ? "…" : "▶"} A</button>
+      <button type="button" class="sq-mix__play${on ? " is-on" : ""}${armed || stopping ? " is-armed" : ""}" data-act="deck-play" title="${stopping ? "deck A stops when its pattern comes round. Click to let it play on; double-click to stop it now" : on ? "stop deck A when its pattern comes round, while the other decks play on. Double-click: stop it now" : armed ? `deck A starts ${m.aArmOn === "pattern" ? "when the pattern playing comes round" : "on the next bar"}` : "start deck A when the pattern playing comes round (double-click: on the next bar). With the transport stopped, it starts with it"}">${stopping ? "■…" : on ? "■" : armed ? "…" : "▶"} A</button>
     </div>`;
     })() : ""}
     ${scenes("a", tracks, state.activePattern, state.queuedPattern, state.patternRepeats, state.patternMode !== "repeat")}
@@ -256,7 +256,7 @@ function deckCard(d, shown) {
       ${d.loading ? `<span class="sq-mix__warn">loading…</span>` : ""}
     </div>
     <div class="sq-mix__deckbar">
-      <button type="button" class="sq-mix__play${d.on ? " is-on" : ""}${armed || stopping ? " is-armed" : ""}" data-act="deck-play" ${dis} title="${stopping ? `deck ${L} stops when its pattern comes round. Click to let it play on; double-click to stop it now` : d.on ? `stop deck ${L} when its pattern comes round. Double-click: stop it now` : armed ? `deck ${L} starts ${deckStartMode() === "pattern" ? "when deck A's pattern comes round" : "on the next bar"}` : `start deck ${L}: on the next bar line while the transport plays, with it when it is stopped`}">${stopping ? "■…" : d.on ? "■" : armed ? "…" : "▶"} ${L}</button>
+      <button type="button" class="sq-mix__play${d.on ? " is-on" : ""}${armed || stopping ? " is-armed" : ""}" data-act="deck-play" ${dis} title="${stopping ? `deck ${L} stops when its pattern comes round. Click to let it play on; double-click to stop it now` : d.on ? `stop deck ${L} when its pattern comes round. Double-click: stop it now` : armed ? `deck ${L} starts ${d.armOn === "pattern" ? "when deck A's pattern comes round" : "on the next bar"}` : `start deck ${L} when deck A's pattern comes round (double-click: on the next bar). With the transport stopped, it starts with it`}">${stopping ? "■…" : d.on ? "■" : armed ? "…" : "▶"} ${L}</button>
       <button type="button" class="sq-btn--ghost" data-act="match-bpm" ${Math.abs(d.bpm - mixTempo()) < 0.01 ? "disabled" : ""} title="match the playing tempo: set deck ${L}'s tempo (${d.bpm} bpm) to the one playing now, so the tempo slider no longer pulls towards ${d.bpm} and landing it keeps this tempo">= bpm</button>
       <span class="sq-mix__grow"></span>
       <button type="button" class="sq-btn--ghost" data-act="load-deck" title="load another song onto deck ${L}, in place of this one: same place, same side of the crossfader">load…</button>
@@ -318,11 +318,6 @@ function bar() {
   }
   const n = decks.length + 1;
   return `<div class="sq-mix__bar">
-    <label class="sq-mix__check" title="when a deck started while the transport plays comes in, and when an automatic crossfade begins. next bar: on the next bar line. next pattern: held until deck A's pattern comes round (its chain moves on, or its longest part starts over), so the songs' phrases line up and not only their bars"><select data-act="start-on" aria-label="when a started deck or an automatic fade begins">
-      <option value="bar"${deckStartMode() === "bar" ? " selected" : ""}>start: bar</option>
-      <option value="pattern"${deckStartMode() === "pattern" ? " selected" : ""}>start: pattern</option>
-    </select></label>
-    <span class="sq-mix__sep"></span>
     ${tempo}
     ${xfadeRow()}
     <span class="sq-mix__grow"></span>
@@ -346,8 +341,8 @@ function xfadeParts() {
   // deck A's patterns with notes in them: where a fade can be told to begin
   const slots = [];
   for (let i = 0; i < 32; i++) if (isPatternNonEmpty(i)) slots.push(i);
-  if (fadeAt != null && !slots.includes(fadeAt)) fadeAt = null;
-  const ats = `<option value=""${fadeAt == null ? " selected" : ""}>at: start</option>` +
+  if (typeof fadeAt === "number" && !slots.includes(fadeAt)) fadeAt = "bar";
+  const ats = `<option value="bar"${fadeAt === "bar" ? " selected" : ""}>at: next bar</option><option value="pattern"${fadeAt === "pattern" ? " selected" : ""}>at: next pattern</option>` +
     slots.map((i) => `<option value="${i}"${i === fadeAt ? " selected" : ""}>at: pat ${i + 1}</option>`).join("");
   const atBars = Array.from({ length: 16 }, (_, i) => `<option value="${i}"${i === fadeBar ? " selected" : ""}>bar ${i + 1}</option>`).join("");
   const shapes = XFADE_CURVES.map((c) => `<option value="${c}"${m.curve === c ? " selected" : ""} title="${esc(XFADE_CURVE_TIPS[c])}">${c}</option>`).join("");
@@ -355,11 +350,11 @@ function xfadeParts() {
     L, R,
     slider: `<input type="range" class="sq-mix__xfade" min="0" max="1" step="0.005" value="${m.x}" data-act="xfade" aria-label="crossfader" title="the crossfader: all of its left side (${esc(L)}) at the left, all of its right (${esc(R)}) at the right. Click anywhere on it to go there" ${any ? "" : "disabled"} />`,
     fades: `<div class="sq-mix__fade">
-      <button type="button" class="${m.fade && m.fade.to === 0 ? (m.fade.wait ? "is-armed" : "is-on") : ""}" data-act="fade-a" title="fade to the left side over the length picked. A click queues it for the next bar or the next pattern (the start setting); double-click starts it now">◂ ${esc(L)}</button>
+      <button type="button" class="${m.fade && m.fade.to === 0 ? (m.fade.wait ? "is-armed" : "is-on") : ""}" data-act="fade-a" title="fade to the left side over the length picked. A click queues it for where the at: menu says; double-click starts it now">◂ ${esc(L)}</button>
       <select data-act="fade-bars" aria-label="fade length" title="how long an automatic fade takes">${bars}</select>
-      <select data-act="fade-at" aria-label="where a fade begins" title="where a click on a fade arrow begins the fade (and starts the decks it brings in). at: start is the next bar or pattern, as the start setting says; at: pat N is the bar line deck A's pattern N begins on. Holding one pattern, deck A is sent to that pattern when the one playing comes round; a chain gets there by itself. A double-click on an arrow starts now whatever this says">${ats}</select>
-      <select data-act="fade-bar" aria-label="which bar a fade begins on" title="which bar of that pattern the fade begins on: bar 1 is the pattern's first. With no pattern picked, it counts on from the next bar or pattern">${atBars}</select>
-      <button type="button" class="${m.fade && m.fade.to === 1 ? (m.fade.wait ? "is-armed" : "is-on") : ""}" data-act="fade-b" title="fade to the right side over the length picked. A click queues it for the next bar or the next pattern (the start setting); double-click starts it now">${esc(R)} ▸</button>
+      <select data-act="fade-at" aria-label="where a fade begins" title="where a click on a fade arrow begins the fade (and starts the decks it brings in). at: next bar is the next bar line; at: next pattern is held until deck A's pattern comes round (its chain moves on, or its longest part starts over), so the phrases line up; at: pat N is the bar line deck A's pattern N begins on. Holding one pattern, deck A is sent to that pattern when the one playing comes round; a chain gets there by itself. A double-click on an arrow starts now whatever this says">${ats}</select>
+      <select data-act="fade-bar" aria-label="which bar a fade begins on" title="which bar of that pattern the fade begins on: bar 1 is the pattern's first. With next bar or next pattern picked, it counts on from there">${atBars}</select>
+      <button type="button" class="${m.fade && m.fade.to === 1 ? (m.fade.wait ? "is-armed" : "is-on") : ""}" data-act="fade-b" title="fade to the right side over the length picked. A click queues it for where the at: menu says; double-click starts it now">${esc(R)} ▸</button>
     </div>`,
     curve: `<label class="sq-mix__check" title="the crossfader's shape. ${esc(m.curve)}: ${esc(XFADE_CURVE_TIPS[m.curve] || "")}"><select data-act="curve" aria-label="crossfader shape">${shapes}</select></label>`,
   };
@@ -536,11 +531,10 @@ function onChange(e) {
   if (act === "deck-xf") { setDeckXfade(el.checked, el.closest(".sq-mix__deck")?.dataset.deck); return; }
   if (act === "tempo-deck") { setTempoDeck(el.value); return; }
   if (act === "xf-on") { setXfadeOn(el.checked); return; }
-  if (act === "start-on") { setDeckStartMode(el.value); return; }
   if (act === "link") { setTempoLink(el.checked); return; }
   if (act === "curve") { setXfadeCurve(el.value); return; }
   if (act === "fade-bars") { fadeBars = Number(el.value) || 4; }
-  if (act === "fade-at") { fadeAt = el.value === "" ? null : Number(el.value); }
+  if (act === "fade-at") { fadeAt = el.value === "bar" || el.value === "pattern" ? el.value : Number(el.value); }
   if (act === "fade-bar") { fadeBar = Number(el.value) || 0; }
 }
 
@@ -557,13 +551,13 @@ function onDblClick(e) {
   if (play && play.closest(".sq-mix__deck")?.dataset.deck === "a") {
     const m = state.mix;
     if (m && !m.aOff) setDeckAPlaying(false);
-    else if (m && m.aArm !== true) setDeckAPlaying(true);
+    else if (m) setDeckAPlaying(true);              // the next bar, not the pattern's end
     return;
   }
   if (play) {
     const d = deskDecks().find((x) => x.id === play.closest(".sq-mix__deck")?.dataset.deck);
     if (d?.on) setDeckPlaying(false, d.id);
-    else if (d && d.arm !== true) setDeckPlaying(true, d.id);
+    else if (d) setDeckPlaying(true, d.id);         // the next bar, not the pattern's end
     return;
   }
   // a pattern number: now, whatever the switch setting
