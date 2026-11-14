@@ -58,6 +58,7 @@ export function setView(view) {
   if (mix) mix.hidden = view !== "mix";
   try { localStorage.setItem(KEY, view); } catch {}
   for (const fn of listeners) fn(view);          // a repaint on the way in, even to the same view
+  try { window.dispatchEvent(new CustomEvent("seqbaby:view", { detail: { view } })); } catch {}
 }
 
 export function installViews() {

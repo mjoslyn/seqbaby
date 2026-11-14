@@ -4925,7 +4925,7 @@ body.view-clips .sq-pattern-bar, body.view-arrange .sq-pattern-bar, body.view-pi
 .sq-split__handle:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; }
 .sq-split.is-resizing { user-select: none; -webkit-user-select: none; cursor: row-resize; }
 /* the toolbars stay in sight as their pane scrolls */
-.sq-split__top .sq-clips__bar, .sq-split__top .sq-arr__bar-row, .sq-split__top .sq-mix__bar { position: sticky; top: 0; z-index: 7; background: var(--bg); padding: 2px 0; }
+.sq-split__top .sq-clips__bar, .sq-split__top .sq-arr__bar-row, .sq-split__top .sq-mix__bar { position: sticky; top: var(--split-stick, 0px); z-index: 7; background: var(--bg); padding: 2px 0; }
 
 /* The eight track hues, as #tracks has them, for the two views' rows (buses
    are never rows here and sit last in state.tracks, so the counts line up). */

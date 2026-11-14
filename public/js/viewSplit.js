@@ -35,7 +35,27 @@ function measureTransport() {
   if (!bar) return;
   measured = true;
   const root = document.documentElement;
-  new ResizeObserver(() => root.style.setProperty("--sq-transport-h", `${bar.offsetHeight}px`)).observe(bar);
+  new ResizeObserver(() => { root.style.setProperty("--sq-transport-h", `${bar.offsetHeight}px`); stick(); }).observe(bar);
+  // A view's own toolbar sticks to the top of its pane, but the WINDOW can
+  // scroll a little too (the page is a bit taller than the section), which
+  // slides the pane's top under the pinned transport and the toolbar with
+  // it. `--split-stick` is how far under it the pane's top is, and the
+  // toolbar's sticky offset (style.css).
+  let queued = false;
+  function stick() {
+    queued = false;
+    const floor = bar.getBoundingClientRect().bottom;
+    for (const top of document.querySelectorAll(".sq-split:not([hidden]) > .sq-split__top")) {
+      const r = top.getBoundingClientRect();
+      const by = Math.max(0, Math.min(floor - r.top, r.height - 40));
+      top.style.setProperty("--split-stick", `${Math.round(by)}px`);
+    }
+  }
+  const ask = () => { if (!queued) { queued = true; requestAnimationFrame(stick); } };
+  window.addEventListener("scroll", ask, { passive: true });
+  window.addEventListener("resize", ask);
+  window.addEventListener("seqbaby:view", ask);
+  ask();
 }
 
 /**

@@ -267,6 +267,10 @@ env / fx / eq / comp / mod / automation per track.
   share the height. The section fills what the pinned bar and transport
   leave (`--sq-transport-h`, measured here), each pane scrolls on its own,
   and the split is a fraction per view per browser (`seqbaby.split.v1`).
+  A view's toolbar is sticky at `--split-stick`, which viewSplit.js writes on
+  the top pane on window scroll, resize and `seqbaby:view`: how far the
+  pane's top has slid under the pinned transport (the window scrolls a
+  little too), so the toolbar stays in sight below it.
 - `engineData.js` / `soundDefaults.js` / `theoryData.js` — the engine as DATA,
   with **no imports** (engineData none at all; the other two only each other
   and constants.js): the engine catalog, the four sliders' labels per engine,
