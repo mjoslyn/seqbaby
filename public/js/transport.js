@@ -32,7 +32,7 @@ import { loadSilverboxWorklet } from "./silverbox.js";
 import { loadContagionWorklet } from "./contagion.js";
 import { applyScale, chordNotes, nameToMidi } from "./theory.js";
 import { finishTransition, transitionStep } from "./transition.js";
-import { mixStep } from "./mix.js";
+import { mixStep, patternLine } from "./mix.js";
 import { strumOffsets } from "./theoryData.js";
 import { buildVoiceForEngine, wosc } from "./voices.js";
 
@@ -777,6 +777,16 @@ export async function startPlayback(opts = {}) {
       // The arrangement decides every track's pattern at every bar line
       // (clips.js); the scene queue and the chain have no say in this mode.
       if (!arrSeeded) advanceArrangement();
+    } else if (state.queuedPattern !== null && barLine && state._queueOnPattern) {
+      // Queued for when the pattern comes round (the mix view's click on a
+      // pattern number, mix.js): held past bar lines until it does, then
+      // committed like any queued switch, and the chain sits this bar out
+      // (the count it would add to is the new pattern's first).
+      if (patternLine({ queue: false })) {
+        switchPattern(state.queuedPattern, { deferUi: true });
+        restartTrackCounts();
+        return;
+      }
     } else if (state.patternSwitchMode === "finish" && state.queuedPattern !== null && barLine) {
       // manual pattern queue: when switch-mode is "finish" and the user queued a
       // different pattern, commit at the next bar boundary. Synchronous, NOT

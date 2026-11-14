@@ -343,10 +343,11 @@ export function requestPatternSwitch(idx) {
   // Already the scene, and every track on it: nothing to switch. A track a
   // clip put on another slot is brought back by the switch below.
   if (idx === state.activePattern && state.tracks.every(t => !onDeckA(t) || t._frozen || (trackSlot(t) === idx && !t._clipOff))) {
-    state.queuedPattern = null; renderPatternGrid(); return;
+    state.queuedPattern = null; state._queueOnPattern = false; renderPatternGrid(); return;
   }
   if (state.patternSwitchMode === "finish" && state.playing) {
     state.queuedPattern = idx;
+    state._queueOnPattern = false;        // this one is for the bar line
     renderPatternGrid();
     setStatus(`pattern ${idx + 1} queued`);
     return;
@@ -377,6 +378,7 @@ export function switchPattern(idx, { deferUi = false } = {}) {
   }
   state.activePattern = idx;
   state.queuedPattern = null;
+  state._queueOnPattern = false;
   for (const t of mine) {
     // A scene launch is every track together: a clip waiting for the bar is
     // overridden, a stopped track plays again.

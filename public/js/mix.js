@@ -61,7 +61,7 @@ import { syncScaleUI } from "./scaleUI.js";
 import { loadTrackFromData, migrateTrackData, serializeSet, trackShellFor } from "./session.js";
 import { migrateLegacyNames, validateSet } from "./sessionFormat.js";
 import { applyCompressorConfig, refreshAllTrackOutputs, refreshCompSourceDropdowns, refreshNoiseBeds, refreshOutputSelects, releaseSilencedTracks, wouldFeedback } from "./signal.js";
-import { aliasPattern, inSong, paintTrackSlotBadge, queueTrackPaint, state, syncMeterUI, syncRepeatsUI, trackSlot } from "./state.js";
+import { aliasPattern, inSong, onDeckA, paintTrackSlotBadge, queueTrackPaint, state, switchPattern, syncMeterUI, syncRepeatsUI, trackSlot } from "./state.js";
 import { renderStepGrid } from "./stepGrid.js";
 import { SCALES, quantizeToScale } from "./theory.js";
 import { nameToMidi } from "./theoryData.js";
@@ -469,9 +469,11 @@ export function setDeckStartMode(mode) {
  * mode, the longest part coming back to its first step. In arrange mode a
  * bar line is all there is to go by.
  */
-function patternLine() {
+export function patternLine({ queue = true } = {}) {
   if (state.patternMode === "arrange") return true;
-  if (state.patternSwitchMode === "finish" && state.queuedPattern != null) return true;
+  // (`queue: false`: asked on behalf of the queue itself, which is waiting
+  // for the pattern to come round rather than being the reason it does)
+  if (queue && state.queuedPattern != null && (state._queueOnPattern || state.patternSwitchMode === "finish")) return true;
   if (state.patternMode === "chain" || state.patLoop) {
     const reps = Math.max(1, state.patternRepeats?.[state.activePattern] ?? 1);
     return (state.chainBarCount ?? 0) + 1 >= reps;
@@ -541,13 +543,18 @@ function putDeckOn(d, slot, { restart = false } = {}) {
  * A deck to pattern `slot`, by the switch mode the pattern bar honours: at the
  * bar line in "finish" mode while the deck plays, otherwise now.
  */
-export function requestDeckScene(slot, id) {
+export function requestDeckScene(slot, id, { when } = {}) {
   const d = getDeck(id);
   if (!d || !Number.isInteger(slot) || slot < 0 || slot >= PATTERN_COUNT) return;
   const L = deckLabel(d.id);
-  if (state.playing && d.on && state.patternSwitchMode === "finish") {
-    d.queued = slot === d.scene && deckBTracks(d.id).every(t => trackSlot(t) === slot && !t._clipOff) ? null : slot;
-    setStatus(d.queued == null ? `deck ${L}: pattern ${slot + 1}` : `deck ${L}: pattern ${slot + 1} queued`);
+  // `when`: "pattern" queues it for when the deck's pattern comes round (the
+  // mix view's click), "now" switches at once (its double-click); unset, the
+  // pattern bar's switch setting decides, at the bar line or now.
+  const wait = when === "pattern" || (when !== "now" && state.patternSwitchMode === "finish");
+  if (state.playing && d.on && wait) {
+    d.queued = slot === d.scene && deckBTracks(d.id).every(t => t._frozen || (trackSlot(t) === slot && !t._clipOff)) ? null : slot;
+    d.queuePhrase = when === "pattern";
+    setStatus(d.queued == null ? `deck ${L}: pattern ${slot + 1}` : `deck ${L}: pattern ${slot + 1} queued${d.queuePhrase ? " for when this one comes round" : ""}`);
   } else {
     putDeckOn(d, slot);
     setStatus(`deck ${L}: pattern ${slot + 1}`);
@@ -602,6 +609,38 @@ export function mixStep(nextTime, barLine) {
   for (const d of m.decks) deckBar(d, phrase);
 }
 
+/**
+ * Whether the bar line the transport is on is where a deck's own pattern
+ * starts over or gives way to the next: its chain's repeat count running
+ * out, or, holding one pattern, its longest part back at its first step.
+ */
+function deckPatternLine(d) {
+  if (d.chain) return (d.barCount ?? 0) + 1 >= Math.max(1, d.repeats[d.scene] ?? 1);
+  let best = null, most = -1;
+  for (const t of deckBTracks(d.id)) {
+    if (t.engineKey === "bus" || t._clipOff || t._frozen || !t.length) continue;
+    const cycle = t.length / Math.max(0.0001, t.speed ?? 1);
+    if (cycle > most) { most = cycle; best = t; }
+  }
+  return !best || Math.round(best.trackTick ?? 0) % best.length === 0;
+}
+
+/**
+ * Deck A (the song) to pattern `slot` from the mix view: queued for when its
+ * pattern comes round (`when: "pattern"`, committed by the transport), or at
+ * once. Stopped, there is nothing to wait for.
+ */
+export function requestSongScene(slot, { when = "pattern" } = {}) {
+  if (!Number.isInteger(slot) || slot < 0 || slot >= PATTERN_COUNT) return;
+  if (!state.playing || when === "now") { switchPattern(slot); announce(); return; }
+  const there = slot === state.activePattern && state.tracks.every(t => !onDeckA(t) || t._frozen || (trackSlot(t) === slot && !t._clipOff));
+  state.queuedPattern = there ? null : slot;
+  state._queueOnPattern = !there;
+  renderPatternGrid();
+  setStatus(there ? `pattern ${slot + 1}` : `pattern ${slot + 1} queued for when this one comes round`);
+  announce();
+}
+
 /** One deck's bar line. `phrase`: an armed deck may start here. */
 function deckBar(d, phrase) {
   if (d.loading) return;
@@ -615,7 +654,9 @@ function deckBar(d, phrase) {
     return;
   }
   if (!d.on) return;
-  if (d.queued != null) {
+  // a pattern queued for the pattern's end waits for it; one queued for the
+  // bar line lands here
+  if (d.queued != null && (!d.queuePhrase || deckPatternLine(d))) {
     putDeckOn(d, d.queued, { restart: true });
     announce();
     return;

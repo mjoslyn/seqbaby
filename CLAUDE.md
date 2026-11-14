@@ -2861,6 +2861,15 @@ deck B tracks ─▶ deck B bus ─┘              buses' output gains
   a linear crossfade holds the level), and that gain is what "master" means
   (`state._landGain`, signal.js) until the transport next stops and
   everything is re-pointed in silence.
+- **A click on a deck's pattern number queues it for the PATTERN's end; a
+  double-click switches now.** Deck A: `requestSongScene` sets
+  `state.queuedPattern` with `state._queueOnPattern`, and the transport holds
+  it past bar lines until `patternLine({queue: false})` (the chain's count
+  running out, or the longest part back at step 0), then commits and sits
+  the chain out that bar. Another deck: `requestDeckScene(slot, id, {when:
+  "pattern"})`, `d.queuePhrase`, `deckPatternLine(d)`. Stopped, a click
+  switches at once. The pattern bar's own clicks still follow its now /
+  finish switch.
 - **A double-click on a strip's fader puts it where it was clicked**
   (knob.js's double-tap branch: any control drawn as a vertical slider, the
   mix faders and every knob under the phone skin, jumps to the click; a dial

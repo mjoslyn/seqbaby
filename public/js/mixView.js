@@ -32,7 +32,7 @@ import { upgradeKnobs } from "./knob.js";
 import { samplePeak } from "./meters.js";
 import {
   deckATracks, deckBTracks, deckLabel, deckSide, matchDeckTempo, deckStartMode, setDeckStartMode, ejectDeckB, ejectDeckTrack, fadeToDeck, focusDeck, keepBothDecks, landDeckB, loadDeckB, mixDecks,
-  mixSource, mixTempo, requestDeckScene, setDeckChain, setDeckPlaying, setDeckRepeat, setDeckXfade, setMixTempo,
+  mixSource, mixTempo, requestDeckScene, requestSongScene, setDeckChain, setDeckPlaying, setDeckRepeat, setDeckXfade, setMixTempo,
   setTempoDeck, setTempoLink, setXfade, setXfadeCurve,
 } from "./mix.js";
 import { FADE_BARS, filledSlots, scaleLabel, tempoRelation } from "./mixPlan.js";
@@ -40,7 +40,7 @@ import { trackControl } from "./paramTargets.js";
 import { loadSetsMap } from "./session.js";
 import { patternMeter, stepsPerBarForMeter } from "./meter.js";
 import { setPatternMode } from "./patternBar.js";
-import { requestPatternSwitch, state, switchPattern, trackSlot } from "./state.js";
+import { state, trackSlot } from "./state.js";
 import { makeTrackDetail, trackHue } from "./trackDetail.js";
 import { makeViewSplit } from "./viewSplit.js";
 import { onViewChange } from "./views.js";
@@ -167,7 +167,7 @@ function scenes(deck, tracks, scene, queued, repeats, chain) {
     const r = Math.max(1, Math.min(16, Number(repeats?.[i]) || 1));
     const opts = Array.from({ length: 16 }, (_, k) => `<option value="${k + 1}"${k + 1 === r ? " selected" : ""}>×${k + 1}</option>`).join("");
     out.push(`<span class="sq-mix__pat">
-      <button type="button" class="${cls.join(" ")}" data-deck="${deck}" data-scene="${i}" title="deck ${deck.toUpperCase()} to pattern ${i + 1} (now, or at the bar line, by the switch setting). Double-click: now">${i + 1}</button>
+      <button type="button" class="${cls.join(" ")}" data-deck="${deck}" data-scene="${i}" title="deck ${deck.toUpperCase()} to pattern ${i + 1}: a click queues it for when the pattern playing comes round (stopped, it switches at once). Double-click: now">${i + 1}</button>
       <select class="sq-mix__rep${r > 1 ? " is-set" : ""}" data-deck="${deck}" data-rep="${i}" title="pattern ${i + 1}: with chain on, deck ${deck.toUpperCase()} plays it for ${r} bar${r === 1 ? "" : "s"} before the next" aria-label="deck ${deck} pattern ${i + 1} repeat">${opts}</select>
     </span>`);
   }
@@ -525,15 +525,17 @@ function onDblClick(e) {
   const sc = e.target.closest?.("[data-scene]");
   if (!sc) return;
   const n = Number(sc.dataset.scene);
-  if (sc.dataset.deck === "a") switchPattern(n);
-  else { const was = state.patternSwitchMode; state.patternSwitchMode = "immediate"; try { requestDeckScene(n, sc.dataset.deck); } finally { state.patternSwitchMode = was; } }
+  if (sc.dataset.deck === "a") requestSongScene(n, { when: "now" });
+  else requestDeckScene(n, sc.dataset.deck, { when: "now" });
 }
 
 async function onClick(e) {
   const sc = e.target.closest?.("[data-scene]");
   if (sc) {
     const n = Number(sc.dataset.scene);
-    if (sc.dataset.deck === "a") requestPatternSwitch(n); else requestDeckScene(n, sc.dataset.deck);
+    // a click queues it for when the pattern playing comes round; the
+    // double-click (onDblClick) switches at once
+    if (sc.dataset.deck === "a") requestSongScene(n); else requestDeckScene(n, sc.dataset.deck, { when: "pattern" });
     scheduleMixPaint();
     return;
   }
