@@ -785,18 +785,21 @@ function foldLevel(bus, gain) {
  * (the crossfader as a transition's sweep is: one press, the song does it).
  * Stopped, or with no bars, it jumps. It starts where a started deck does
  * (the `start:` setting): on the next bar line, or when deck A's pattern
- * comes round, so a fade runs over whole bars of a phrase. "a" / "l" is the
+ * comes round, so a fade runs over whole bars of a phrase; `now` starts it
+ * at once. "a" / "l" is the
  * left side; anything else the right.
  * @param {string} deck @param {number} bars
  */
-export function fadeToDeck(deck, bars) {
+export function fadeToDeck(deck, bars, { now = false } = {}) {
   const m = state.mix;
   if (!m) return;
   const to = deck === "a" || deck === "l" ? 0 : 1;
   const steps = Math.max(0, Math.round(Number(bars) || 0)) * stepsPerBarForMeter(transportMeter());
   if (!state.playing || !steps) { m.fade = null; writeXfade(to); announce(); return; }
-  m.fade = { from: m.x, to, steps, done: 0, wait: true };
-  setStatus(`fading to the crossfader's ${to ? "right" : "left"} over ${bars} bar${bars === 1 ? "" : "s"}, from ${startOn === "pattern" ? "deck A's next pattern" : "the next bar"}`);
+  // `now` (the button's double-click): it starts on the next step instead of
+  // waiting for the bar or the pattern
+  m.fade = { from: m.x, to, steps, done: 0, wait: !now };
+  setStatus(`fading to the crossfader's ${to ? "right" : "left"} over ${bars} bar${bars === 1 ? "" : "s"}, from ${now ? "now" : startOn === "pattern" ? "deck A's next pattern" : "the next bar"}`);
   announce();
 }
 

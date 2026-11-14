@@ -333,9 +333,9 @@ function xfadeParts() {
     L, R,
     slider: `<input type="range" class="sq-mix__xfade" min="0" max="1" step="0.005" value="${m.x}" data-act="xfade" aria-label="crossfader" title="the crossfader: all of its left side (${esc(L)}) at the left, all of its right (${esc(R)}) at the right. Click anywhere on it to go there" ${any ? "" : "disabled"} />`,
     fades: `<div class="sq-mix__fade">
-      <button type="button" class="${m.fade && m.fade.to === 0 ? (m.fade.wait ? "is-armed" : "is-on") : ""}" data-act="fade-a" title="fade to the left side over the length picked, starting on the next bar or the next pattern (the start setting)">◂ ${esc(L)}</button>
+      <button type="button" class="${m.fade && m.fade.to === 0 ? (m.fade.wait ? "is-armed" : "is-on") : ""}" data-act="fade-a" title="fade to the left side over the length picked. A click queues it for the next bar or the next pattern (the start setting); double-click starts it now">◂ ${esc(L)}</button>
       <select data-act="fade-bars" aria-label="fade length" title="how long an automatic fade takes">${bars}</select>
-      <button type="button" class="${m.fade && m.fade.to === 1 ? (m.fade.wait ? "is-armed" : "is-on") : ""}" data-act="fade-b" title="fade to the right side over the length picked, starting on the next bar or the next pattern (the start setting)">${esc(R)} ▸</button>
+      <button type="button" class="${m.fade && m.fade.to === 1 ? (m.fade.wait ? "is-armed" : "is-on") : ""}" data-act="fade-b" title="fade to the right side over the length picked. A click queues it for the next bar or the next pattern (the start setting); double-click starts it now">${esc(R)} ▸</button>
     </div>`,
     curve: `<label class="sq-mix__check" title="blend: equal power, both sides at -3dB in the middle. cut: both full across the middle, each cut at its far end"><select data-act="curve" aria-label="crossfader curve">
       <option value="blend"${m.curve === "blend" ? " selected" : ""}>blend</option>
@@ -521,6 +521,10 @@ function onChange(e) {
 function onDblClick(e) {
   // (the crossfader and the tempo are plain sliders: a click already puts
   // them where it lands, so a double-click has nothing to add)
+  // a fade arrow: a click queued the fade for the bar or the pattern; the
+  // double-click starts it now
+  const fade = e.target.closest?.("[data-act=fade-a], [data-act=fade-b]");
+  if (fade) { fadeToDeck(fade.dataset.act === "fade-a" ? "a" : "b", fadeBars, { now: true }); return; }
   // a pattern number: now, whatever the switch setting
   const sc = e.target.closest?.("[data-scene]");
   if (!sc) return;
