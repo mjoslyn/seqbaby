@@ -2966,6 +2966,8 @@ deck B tracks ─▶ deck B bus ─┘              buses' output gains
   through them it is (`chainBarCount` / `patternRepeats` for deck A, the
   deck's `barCount` / `repeats` otherwise). Hidden when the deck is not
   chaining or not playing: a pattern on repeat has no count.
+- **With decks loaded the desk is two decks a row**, each half the width,
+  deck A first; a deck's strips scroll sideways inside its own card.
 - **With no other deck loaded the desk is a grid** (`grid`): the tracks
   that go straight to the master, wrapping, then a block per bus with the
   tracks feeding it beside it. Decks kept as one song are buses, so each is

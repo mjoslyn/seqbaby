@@ -276,7 +276,8 @@ export default function ManualPage() {
             You can also load other songs beside the open one. Each loaded song goes
             on a deck of its own, and all the decks play in time on one clock. Your
             open song is deck A. The songs you load are decks B, C, D and so on.
-            There is no limit on the number of decks.
+            There is no limit on the number of decks. The decks sit two to a
+            row, with deck A first. A long row of strips scrolls sideways.
           </p>
           <h3>Loading a deck</h3>
           <p>

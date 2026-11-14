@@ -4736,8 +4736,9 @@ body.vim-visual .sq-vim__mode { color: var(--accent-2); }
 .sq-mix__decks { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 320px); gap: 12px; align-items: start; }
 /* Any number of decks: deck A, the crossfader, then each loaded deck, side
    by side and scrolling sideways once they no longer fit. */
-.sq-mix__decks.is-two { display: flex; align-items: flex-start; overflow-x: auto; padding-bottom: 6px; }
-.sq-mix__decks.is-two > .sq-mix__deck { flex: 1 1 420px; min-width: 380px; }
+/* two decks a row, each half the width: its strips scroll sideways inside it */
+.sq-mix__decks.is-two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 10px; }
+.sq-mix__decks.is-two > .sq-mix__deck { min-width: 0; }
 .sq-mix__decks.is-two > .sq-mix__center { flex: 0 0 170px; }
 .sq-mix__add { flex: 0 0 54px; align-self: stretch; min-height: 120px; display: grid; place-content: center; justify-items: center; gap: 2px;
   border: 1px dashed var(--border); border-radius: 8px; background: transparent; color: var(--fg-dim); font-size: 20px; cursor: pointer; }
