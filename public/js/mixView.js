@@ -145,7 +145,7 @@ function strip(t, shown) {
       <button type="button" class="sq-mix__solo" data-act="solo" aria-pressed="${!!t.soloed}" ${t.muted ? "disabled" : ""} title="solo${deckBus ? ": hear this deck alone" : ""}">S</button>
       ${deckBus ? "" : `<button type="button" class="sq-mix__x" data-act="eject-track" title="${esc(t._deck ? `eject ${name}: take this one track off the deck (the deck's last track takes the deck with it)` : `remove ${name} from the song (it asks first, and undo brings it back)`)}" aria-label="eject ${esc(name)}">×</button>`}
     </div>
-    <span class="sq-mix__slot" title="${bus ? "a bus plays no notes" : t._clipOff ? "this track's clip is stopped" : `on pattern ${slot + 1}`}">${bus ? "bus" : t._clipOff ? "off" : `p${slot + 1}`}</span>
+    <span class="sq-mix__slot" title="${bus ? "a bus plays no notes" : t._clipOff ? "this track's clip is stopped" : `on pattern ${slot + 1}`}">${bus ? "bus" : `${t._clipOff ? "off" : `p${slot + 1}`}${t._frozen ? " ❄" : ""}`}</span>
   </div>`;
 }
 

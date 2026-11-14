@@ -342,7 +342,7 @@ export function requestPatternSwitch(idx) {
   if (idx < 0 || idx >= PATTERN_COUNT) return;
   // Already the scene, and every track on it: nothing to switch. A track a
   // clip put on another slot is brought back by the switch below.
-  if (idx === state.activePattern && state.tracks.every(t => !onDeckA(t) || (trackSlot(t) === idx && !t._clipOff))) {
+  if (idx === state.activePattern && state.tracks.every(t => !onDeckA(t) || t._frozen || (trackSlot(t) === idx && !t._clipOff))) {
     state.queuedPattern = null; renderPatternGrid(); return;
   }
   if (state.patternSwitchMode === "finish" && state.playing) {
@@ -368,7 +368,9 @@ export function switchPattern(idx, { deferUi = false } = {}) {
   // one off the scene, and flushing it at the scene's index would write its
   // live sound into a pattern it never played.
   // Deck B (mix.js) has a scene of its own: the pattern bar's moves the song.
-  const mine = state.tracks.filter(onDeckA);
+  // A track frozen on a clip (`_frozen`: the mix view's clip row) stays on it
+  // through every scene switch until it is unfrozen.
+  const mine = state.tracks.filter(t => onDeckA(t) && !t._frozen);
   for (const t of mine) {
     const was = trackSlot(t);
     if (was !== idx) flushPatternSound(t, was);
@@ -471,9 +473,11 @@ export function paintTrackSlotBadge(t) {
   const show = off || slot !== state.activePattern;
   el.hidden = !show;
   if (!show) return;
-  el.textContent = off ? "off" : `p${slot + 1}`;
+  el.textContent = `${off ? "off" : `p${slot + 1}`}${t._frozen ? " ❄" : ""}`;
   el.classList.toggle("is-off", off);
-  el.title = off
+  el.title = t._frozen
+    ? `frozen on pattern ${slot + 1}: this track stays on it while the others change pattern. Click to unfreeze it and bring it back`
+    : off
     ? `no clip playing on this track. Click to play pattern ${state.activePattern + 1} with the others`
     : `this track is on pattern ${slot + 1} while the others are on ${state.activePattern + 1}. Click to bring it back`;
 }

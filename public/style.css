@@ -4750,6 +4750,8 @@ body.vim-visual .sq-vim__mode { color: var(--accent-2); }
 /* The selected track's clips, over its card (trackDetail.js, the mix view). */
 .sq-track-detail__clips { display: flex; flex-wrap: wrap; gap: 3px; padding-left: 4px; }
 .sq-track-detail__clips .sq-clip { width: 64px; height: 30px; flex: 0 0 auto; }
+.sq-track-detail__clips .sq-clip.is-frozen { outline: 2px solid var(--accent-2); outline-offset: 1px; }
+.sq-track-detail__unfreeze { align-self: center; margin-left: 6px; padding: 3px 9px; font-size: 11px; border-color: var(--accent-2); color: var(--accent-2); }
 .sq-mix__deck { min-width: 0; border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px 10px; background: var(--bg-2); }
 .sq-mix__deck.is-other { border-color: color-mix(in oklab, var(--accent-2) 35%, var(--border)); }
 .sq-mix__deck.is-other.is-on { border-color: var(--accent-2); }

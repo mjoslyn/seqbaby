@@ -23,7 +23,7 @@ import { announceClips, requestClipLaunch, stopClip } from "./clips.js";
 import { PATTERN_COUNT } from "./constants.js";
 import { patternSvg, svgUrl } from "./patternPicture.js";
 import { setActiveTrack } from "./render.js";
-import { state, trackSlot } from "./state.js";
+import { deckOf, state, trackSlot } from "./state.js";
 
 // the track list's eight hues (style.css), for the card's stripe and borders
 const HUES = [[35, "hsl(35 85% 58%)"], [232, "hsl(232 70% 68%)"], [297, "hsl(297 55% 68%)"], [120, "hsl(120 45% 52%)"],
@@ -65,12 +65,24 @@ export function makeTrackDetail(container, onChange, { buses = false, clips = fa
   // step grid below shows it; the one playing, clicked, stops.
   const clipRow = clips ? el.querySelector(".sq-track-detail__clips") : null;
   clipRow?.addEventListener("click", (e) => {
-    const b = e.target.closest?.("[data-slot]");
     const t = trackById(selectedId);
-    if (!b || !t) return;
+    if (!t) return;
+    if (e.target.closest?.("[data-unfreeze]")) {
+      // back with the others: onto the pattern its deck (or the song) is on
+      t._frozen = false;
+      requestClipLaunch(t, deckOf(t)?.scene ?? state.activePattern);
+      announceClips();
+      onChange?.();
+      return;
+    }
+    const b = e.target.closest?.("[data-slot]");
+    if (!b) return;
     const slot = Number(b.dataset.slot);
-    if (slot === trackSlot(t) && !t._clipOff && t._queuedSlot == null) stopClip(t);
-    else requestClipLaunch(t, slot);
+    // Picking a clip FREEZES the track on it: its deck's pattern changes (a
+    // click, the chain) pass it by until it is unfrozen. Picking the one
+    // playing stops it, still frozen.
+    if (slot === trackSlot(t) && !t._clipOff && t._queuedSlot == null && t._frozen) stopClip(t);
+    else { t._frozen = true; requestClipLaunch(t, slot); }
     announceClips();
     onChange?.();
   });
@@ -92,8 +104,10 @@ export function makeTrackDetail(container, onChange, { buses = false, clips = fa
       if (svg) cls.push("has-notes");
       if (i === slot && !t._clipOff) cls.push("is-now");
       if (i === t._queuedSlot) cls.push("is-queued");
-      cells.push(`<button type="button" class="${cls.join(" ")}" data-slot="${i}"${vars.length ? ` style="${vars.join(";")}"` : ""} title="pattern ${i + 1}: play this clip on this track and edit it below${i === slot && !t._clipOff ? " (playing: click to stop it)" : ""}">${svg ? '<i class="sq-clip__notes"></i>' : ""}<span class="sq-clip__n">${i + 1}</span></button>`);
+      if (t._frozen && i === (t._queuedSlot ?? slot)) cls.push("is-frozen");
+      cells.push(`<button type="button" class="${cls.join(" ")}" data-slot="${i}"${vars.length ? ` style="${vars.join(";")}"` : ""} title="pattern ${i + 1}: freeze this track on this clip and edit it below. It stays on it while the other tracks change pattern, until it is unfrozen${i === slot && !t._clipOff && t._frozen ? " (playing: click to stop it)" : ""}">${svg ? '<i class="sq-clip__notes"></i>' : ""}<span class="sq-clip__n">${i + 1}</span></button>`);
     }
+    if (t._frozen) cells.push(`<button type="button" class="sq-track-detail__unfreeze" data-unfreeze="1" title="unfreeze: this track goes back to the pattern the others are on, and follows them again">❄ frozen on ${(t._queuedSlot ?? slot) + 1} · unfreeze</button>`);
     const html = cells.join("");
     clipRow.hidden = !html;
     if (clipRow._html !== html) { clipRow.innerHTML = html; clipRow._html = html; }

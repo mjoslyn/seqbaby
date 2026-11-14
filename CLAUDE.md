@@ -2909,7 +2909,13 @@ deck B tracks ─▶ deck B bus ─┘              buses' output gains
   `{clips: true}`, the mix view only, which has no clip grid): every pattern
   the track has notes in, drawn as a clip cell (`clipShades`, `patternSvg`).
   A click launches that clip on that track alone (`requestClipLaunch`), so
-  the step grid below shows it; the one playing, clicked, stops.
+  the step grid below shows it, and FREEZES the track on it (`t._frozen`,
+  performance state like `_clipOff`, never saved): `switchPattern`, a deck's
+  `putDeckOn` and the arrangement's bar line all pass a frozen track by, so
+  it stays on its clip while the others change pattern, by hand or by the
+  chain. The row's `❄ frozen on N · unfreeze` (and the groove view's slot
+  badge, and the ❄ on its strip) puts it back on the pattern its deck is on.
+  The frozen clip, clicked, stops (still frozen).
 - **The detail is the selected strip's own card** (trackDetail.js, with
   `{buses: true}`): a deck B track's step grid shows the pattern that deck is
   on, and a deck bus's card is where its rack, mod and lanes are. Deck B's

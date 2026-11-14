@@ -1364,7 +1364,7 @@ export function renderTrack(t) {
 
   // The slot badge: shown while a launched clip has this track off the scene
   // (clips.js); a click brings it back onto the scene's pattern.
-  node.querySelector(".sq-track__slot")?.addEventListener("click", () => launchClip(t, state.activePattern));
+  node.querySelector(".sq-track__slot")?.addEventListener("click", () => { t._frozen = false; launchClip(t, state.activePattern); });
 
   // p-lock: this track's sound becomes part of THIS pattern (patternSound.js).
   // The state belongs to the pattern, so the button is repainted on every

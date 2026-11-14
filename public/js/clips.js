@@ -227,7 +227,7 @@ export function applyArrangementBar({ deferUi = true, tickInBar = 0 } = {}) {
   const bar = state.arrBar;
   for (const t of state.tracks) {
     // the song's own tracks: deck B of a mix (mix.js) plays its scene, not a timeline
-    if (t.engineKey === "bus" || !inSong(t)) continue;
+    if (t.engineKey === "bus" || !inSong(t) || t._frozen) continue;
     const b = blockAt(t.arrangement || [], bar);
     if (!b) {
       if (!t._clipOff) { t._clipOff = true; t._queuedSlot = null; if (deferUi) queueTrackPaint(t); else paintTrackPatternUINow(t); }

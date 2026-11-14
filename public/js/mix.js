@@ -515,7 +515,7 @@ export function setDeckPlaying(on, id) {
 /** Every track of a deck onto `slot` (its bus too: the bus's lanes are the pattern's). */
 function putDeckOn(d, slot, { restart = false } = {}) {
   for (const t of state.tracks) {
-    if (t._deck !== d.id) continue;
+    if (t._deck !== d.id || t._frozen) continue;     // frozen on a clip: it stays (trackDetail.js)
     const was = trackSlot(t);
     if (was !== slot) flushPatternSound(t, was);
     t._queuedSlot = null;
