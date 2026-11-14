@@ -317,8 +317,8 @@ export default function ManualPage() {
             the right to bring the loaded decks in and take deck A out.
           </p>
           <ul>
-            <li>With one loaded deck, the crossfader sits between the two decks. The deck&apos;s <span className={styles.ui}>crossfader</span> box takes it off the crossfader, so it plays at its own fader.</li>
-            <li>With two or more loaded decks, the crossfader moves to the bar across the top. Each side has a chip for every deck. Click a chip to attach that deck to that side. Click a lit chip to take the deck off the crossfader.</li>
+            <li>The crossfader is in the bar across the top. Each side has a chip for every deck. Click a chip to attach that deck to that side. Click a lit chip to take the deck off the crossfader, so it plays at its own fader.</li>
+            <li>When you eject deck A, the crossfader follows the shift. The deck that becomes deck A goes to the left side, and the crossfader moves to keep every level as it was. A deck you have not started stays on the right, ready to bring in.</li>
             <li><span className={styles.ui}>blend</span> is a smooth fade. In the middle both sides are a little quieter, so the level stays even. <span className={styles.ui}>cut</span> keeps both sides at full level across the middle and cuts each side at its far end.</li>
             <li>The two arrow buttons fade to one side over 1, 2, 4, 8 or 16 bars. A click queues the fade: it starts on the next bar or the next pattern, as the <span className={styles.ui}>start</span> setting says. Double-click an arrow to start the fade now.</li>
           </ul>

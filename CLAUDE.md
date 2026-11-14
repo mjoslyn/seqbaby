@@ -2822,11 +2822,10 @@ deck B tracks ─▶ deck B bus ─┘              buses' output gains
   every deck, A included, is on one or on neither (`xf`: "l" / "r" / null,
   `mix.sideA` for deck A; `deckSide`, `setDeckXfade(side, id)`): deck A
   starts on the left, a loaded deck on the right, and a deck on neither
-  plays at its own fader. With one other deck the crossfader is the column
-  between the two and the deck has a `crossfader` box. With MORE it moves to
-  the mix bar across the top, on the line the tempo and `follow fader` are on (`xfadeRow`), with a chip per deck on each side: a lit
-  chip is attached there, a click attaches a deck to that side (off the
-  other), a click on a lit one takes it off. The tempo
+  plays at its own fader. The crossfader is always in the mix bar across the top, on the
+  line the tempo and `follow fader` are on (`xfadeRow`), with a chip per
+  deck on each side: a lit chip is attached there, a click attaches a deck
+  to that side (off the other), a click on a lit one takes it off. The tempo
   slider runs from deck A's tempo to ONE deck's (`focus`, picked beside the
   slider once there are two). Each deck's card has its own start, land and
   eject; landing one takes every other deck off with deck A; `keep` keeps
@@ -2968,8 +2967,12 @@ deck B tracks ─▶ deck B bus ─┘              buses' output gains
   B becomes deck A, which is the song (its tracks as playing, its globals and
   the tempo being heard, written as a landing writes them), C becomes B, and
   so on (`d.id`, every track's `_deck` / `_deckBus`, the default bus names).
-  Nothing sounding is re-pointed: the deck's own bus BECOMES `mix.busA`, on
-  the crossfader side the deck was on (`sideA`), so every level stays put;
+  Nothing sounding is re-pointed: the deck's own bus BECOMES `mix.busA`,
+  and the crossfader follows the shift: when that deck was on the right, the
+  crossfader is mirrored (`x` to `1 - x`, and every deck that is PLAYING to
+  the other side), so deck A is on the left again and everything heard stays
+  put (the two sides' curves mirror each other), while a deck not yet
+  started keeps its side, opposite deck A, as the next one to bring in;
   the old bus leaves with the old tracks. One deck loaded: it is a landing.
   One undo step brings the old song back.
 - **A strip's × ejects that one track.** A deck's track just goes

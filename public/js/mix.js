@@ -1264,8 +1264,8 @@ function nameTrack(t, name) {
  * landing and the mix ends.
  *
  * Nothing that is sounding is re-pointed: the deck's own bus BECOMES deck A's
- * bus, on the side of the crossfader the deck was on, so every level stays
- * where it was. One undo step brings the old song back.
+ * bus, and the crossfader is mirrored so that deck A is on its left again
+ * with every level where it was. One undo step brings the old song back.
  * @returns {Promise<boolean>}
  */
 export function ejectDeckA() {
@@ -1294,7 +1294,19 @@ export function ejectDeckA() {
   if (bus.el) bus.el.dataset.deck = "a";
   nameTrack(bus, "deck A");
   m.busA = bus;
-  m.sideA = side;
+  // The crossfader follows the shift. The deck that is deck A now was on the
+  // right, and deck A belongs on the left: the whole crossfader is mirrored
+  // (the fader to the other end, and a deck that is PLAYING to the other
+  // side with it), which leaves everything heard exactly where it was, since
+  // the two sides' curves mirror each other. A deck that is not playing
+  // keeps its side: it is the next one to bring in, and belongs opposite
+  // deck A. So after B was brought in and A ejected, the fader is back at
+  // the left with the new deck A full, and the next deck waits on the right.
+  if (side === "r") {
+    m.x = 1 - m.x;
+    for (const x of m.decks) if (x !== d && x.xf && x.on) x.xf = x.xf === "l" ? "r" : "l";
+    m.sideA = "l";
+  } else m.sideA = side;
   for (const t of b) {
     t._deck = undefined;
     t.el?.classList.remove("is-deck-b");

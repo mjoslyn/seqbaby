@@ -246,7 +246,6 @@ function deckCard(d, shown) {
     </div>
     <div class="sq-mix__deckbar">
       <button type="button" class="sq-mix__play${d.on ? " is-on" : ""}${armed ? " is-armed" : ""}" data-act="deck-play" ${dis} title="${d.on ? `stop deck ${L}` : armed ? `deck ${L} starts ${deckStartMode() === "pattern" ? "when deck A's pattern comes round" : "on the next bar"}` : `start deck ${L}: on the next bar line while the transport plays, with it when it is stopped`}">${d.on ? "■" : armed ? "…" : "▶"} ${L}</button>
-      ${deskDecks().length > 1 ? "" : `<label class="sq-mix__check" title="on the crossfader: this deck is on its far side from deck A. Off, it plays at its own fader whatever the crossfader says"><input type="checkbox" data-act="deck-xf" ${d.xf ? "checked" : ""} /> crossfader</label>`}
       <button type="button" class="sq-btn--ghost" data-act="match-bpm" ${Math.abs(d.bpm - mixTempo()) < 0.01 ? "disabled" : ""} title="match the playing tempo: set deck ${L}'s tempo (${d.bpm} bpm) to the one playing now, so the tempo slider no longer pulls towards ${d.bpm} and landing it keeps this tempo">= bpm</button>
       <span class="sq-mix__grow"></span>
       <button type="button" class="sq-btn--ghost" data-act="eject" title="take deck ${L} off">eject</button>
@@ -347,10 +346,10 @@ function xfadeParts() {
   };
 }
 
-/** With one other deck: the crossfader between the two, as a column. */
+/** (The crossfader used to sit between two decks as a column. It is always in the bar now.) */
 function center() {
-  const m = deskMix();
-  if (!m || deskDecks().length > 1) return "";
+  const m = null;
+  if (!m) return "";
   const x = xfadeParts();
   return `<div class="sq-mix__center">
     <div class="sq-mix__xlabels"><span>${esc(x.L)}</span><span>${esc(x.R)}</span></div>
@@ -361,15 +360,15 @@ function center() {
 }
 
 /**
- * With more decks than two: the crossfader in the bar across the top, on the
- * line the tempo and `follow fader` are on, and on each side
+ * The crossfader, always in the bar across the top, on the line the tempo
+ * and `follow fader` are on, and on each side
  * of it a chip per deck. A lit chip is a deck attached to that side; a click
  * attaches it there (taking it off the other side), a click on a lit one
  * takes it off the crossfader, to play at its own fader.
  */
 function xfadeRow() {
   const m = deskMix();
-  if (!m || deskDecks().length < 2) return "";
+  if (!m || deskDecks().length < 1) return "";
   const x = xfadeParts();
   const ids = ["a", ...deskDecks().map((d) => d.id)];
   const chips = (side) => `<div class="sq-mix__assign" role="group" aria-label="decks on the crossfader's ${side === "l" ? "left" : "right"}">${ids.map((id) => {
