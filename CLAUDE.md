@@ -4387,6 +4387,45 @@ what — `mike has shared "cold squelch" with you` — and a jam invite
   database to ask. Every one of those falls back to the site card rather
   than failing the page: a link preview is not worth a 500.
 
+## Installing it (`public/sw.js` + `app/InstallApp.tsx` + `app/installApp.ts`)
+
+seqbaby installs as an app from the browser (its own window and icon, the
+studio as its start page) and, once it has loaded on a device, starts there
+without a network.
+
+- **The manifest** (`public/manifest.webmanifest`) is what makes it
+  installable: `id` and `start_url` `/studio`, standalone, the PNG icons, two
+  shortcuts. Chrome and Edge offer the install from the address bar on their
+  own; Safari on a Mac has `Add to Dock`, iOS `Add to Home Screen`.
+- **The offer in the app is the help menu's `install app`** (`HelpMenu.tsx`),
+  shown only when there is something to do: `installApp.ts` holds the
+  browser's `beforeinstallprompt` (fired once, early, so it is a module store
+  and not a component's state) and raises it on the click; on iOS, which has
+  no dialog, the item opens a line saying which two taps to make; running as
+  the installed app, or in a browser with no install, there is no item.
+- **The service worker is three rules** (`sw.js`): cache first for what is
+  addressed by deploy or by content (`/e/<sha>/`, `/_next/static/`), the
+  cached copy now and a refresh behind it for the other static files
+  (samples, wavetables, icons, the bare engine paths), and the NETWORK for
+  `/studio` and `/`, with the last plain copy of the page as the fallback
+  when there is none. Everything else is not touched: `/api/`, POSTs (server
+  actions), RSC payloads (`?_rsc`), range requests, other origins. So nothing
+  about an account or a song is ever answered from a cache while online, and
+  a link that names a song (`?s=`, `?open=`, `?jam=`) is never what is kept.
+- **The page tells the worker what it loaded** (`warm`, from `InstallApp`
+  three seconds after `load`): on a first visit the worker arrives after the
+  engine did, and without this the app would work offline only from its
+  second visit. The same message names this deploy's `/e/<sha>` prefix, and
+  the engines of earlier deploys are dropped (plus a cap of 700 entries).
+- **Production only.** In dev the worker would hand the edit-and-reload loop
+  a cached module, so `InstallApp` registers nothing there and unregisters
+  one a production build left on localhost. `/sw.js` is served `no-cache`
+  (`public/_headers`), or a browser would keep an old app.
+- Offline, the studio is the engine and whatever is in this browser: saving
+  to the account, opening a cloud song, compose, jam and share need the
+  network and fail as any request does. Sample and instrument files are kept
+  as they are used, not ahead of time.
+
 ## The studio on a phone (the mobile block in `style.css`)
 
 Three media queries decide what "a phone" means here, and they are deliberately

@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { STYLE_SRC } from "./engineAssets";
+import InstallApp from "./InstallApp";
 import PostHogIdentify from "./PostHogIdentify";
 import { SITE_DESCRIPTION, SITE_URL, shareCard } from "./shareCard";
 
@@ -71,6 +72,7 @@ export default function RootLayout({
       </head>
       <body suppressHydrationWarning>
         <PostHogIdentify />
+        <InstallApp />
         {children}
       </body>
     </html>

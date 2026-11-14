@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { getInstallState, getServerInstallState, promptInstall, subscribeInstall, watchInstall } from "@/app/installApp";
 import { IconHelp } from "@/app/menuIcons";
 import styles from "@/app/ui.module.css";
 
@@ -13,6 +14,11 @@ import styles from "@/app/ui.module.css";
 // is the same bottom sheet, with the same backdrop, as save and songs.
 export default function HelpMenu() {
   const [open, setOpen] = useState(false);
+  // Whether this browser can install seqbaby as an app (installApp.ts): its
+  // own dialog where it has one, the two taps iOS wants where it does not.
+  const install = useSyncExternalStore(subscribeInstall, getInstallState, getServerInstallState);
+  const [iosHint, setIosHint] = useState(false);
+  useEffect(() => watchInstall(), []);
   const wrapRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -68,6 +74,38 @@ export default function HelpMenu() {
           >
             report a bug
           </a>
+          {install === "ready" && (
+            <button
+              type="button"
+              className={`${styles.helpItem} ${styles.helpItemBtn}`}
+              role="menuitem"
+              title="install seqbaby as an app: its own window and icon, and it opens without a network once it has loaded here"
+              onClick={() => {
+                setOpen(false);
+                void promptInstall();
+              }}
+            >
+              install app
+            </button>
+          )}
+          {install === "ios" && (
+            <>
+              <button
+                type="button"
+                className={`${styles.helpItem} ${styles.helpItemBtn}`}
+                role="menuitem"
+                aria-expanded={iosHint}
+                onClick={() => setIosHint((v) => !v)}
+              >
+                install app
+              </button>
+              {iosHint && (
+                <div className={styles.helpHint}>
+                  in Safari, tap Share, then “Add to Home Screen”.
+                </div>
+              )}
+            </>
+          )}
         </div>
       )}
     </div>

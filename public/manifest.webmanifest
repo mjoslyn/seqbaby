@@ -1,7 +1,8 @@
 {
+  "id": "/studio",
   "name": "seqbaby",
   "short_name": "seqbaby",
-  "description": "Prompt-driven step sequencer in the browser: Plaits, 808/909 kits, hand-built analog and FM emulations, samples, MIDI out.",
+  "description": "A step sequencer in a browser tab: Plaits, 808/909 kits, hand-built analog and FM emulations, samples, MIDI out.",
   "start_url": "/studio",
   "scope": "/",
   "display": "standalone",
@@ -9,9 +10,65 @@
   "background_color": "#0e0f12",
   "theme_color": "#0e0f12",
   "icons": [
-    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml" },
-    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
-    { "src": "/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "display_override": [
+    "standalone",
+    "minimal-ui"
+  ],
+  "categories": [
+    "music",
+    "entertainment"
+  ],
+  "launch_handler": {
+    "client_mode": "navigate-existing"
+  },
+  "shortcuts": [
+    {
+      "name": "new song",
+      "short_name": "new",
+      "url": "/studio",
+      "icons": [
+        {
+          "src": "/icons/icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "songs people made",
+      "short_name": "songs",
+      "url": "/songs",
+      "icons": [
+        {
+          "src": "/icons/icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    }
   ]
 }
