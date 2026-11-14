@@ -206,7 +206,8 @@ function deckA(shown) {
  */
 function grid(tracks, shown) {
   const buses = tracks.filter((t) => t.engineKey === "bus");
-  const fed = (bus) => tracks.filter((t) => t !== bus && String(t.out) === String(bus.id));
+  // a bus that feeds another bus is a block of its own, not a strip in two
+  const fed = (bus) => tracks.filter((t) => t.engineKey !== "bus" && String(t.out) === String(bus.id));
   const free = tracks.filter((t) => t.engineKey !== "bus" && !buses.some((b) => String(t.out) === String(b.id)));
   const block = (list, bus) => `<div class="sq-mix__group${bus ? " has-bus" : ""}">
       ${bus ? strip(bus, shown) : ""}

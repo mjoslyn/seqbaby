@@ -2844,7 +2844,7 @@ deck B tracks ─▶ deck B bus ─┘              buses' output gains
   was. `land B`: deck B becomes the song, its tracks as they are playing
   (edits made on the deck included), its scale, repeats, meters and pads, the
   tempo the mix is at; the old tracks go; one undo step brings the old song
-  back. `keep both`: the flags come off, each master-bound track's `out` is
+  back. `keep both`: each deck's own buses take its letter (`room a`, `room b`), the flags come off, each master-bound track's `out` is
   written as its deck's bus, the crossfader's gain is folded into the bus
   faders (`bakeLevel`), deck B's scene is swapped into the song's scene slot
   in its own bank, and when the two scales differ each deck's notes are

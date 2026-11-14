@@ -868,6 +868,35 @@ export function keepBothDecks() {
     const r = state.patternRepeats;
     if ((r[scene] ?? 1) === 1 && d.repeats[d.scene] > 1) r[scene] = d.repeats[d.scene];
   }
+  // Each deck's own buses say whose they are: two songs each with a "room"
+  // would otherwise be two strips called "room" in one song. One that
+  // already ends in a deck's letter (kept before) keeps its name, and a name
+  // already in the song (a song kept once, then kept again with another
+  // deck) moves on to the next letter free, the deck buses' own included.
+  const taken = new Set(a.filter(t => t.engineKey === "bus" && /\s[a-z]$/i.test(t.name || "")).map(t => t.name.trim().toLowerCase()));
+  const rename = (t, name) => {
+    taken.add(name.toLowerCase());
+    if (t.name === name) return;
+    const field = trackControl(t, ".sq-track__name");
+    if (field) { field.value = name; field.dispatchEvent(new Event("input", { bubbles: true })); }
+    t.name = name;
+  };
+  const free = (base, letter, upper) => {
+    const letters = "abcdefghijklmnopqrstuvwxyz";
+    let k = Math.max(0, letters.indexOf(letter.toLowerCase()));
+    for (let n = 0; n < 26 && taken.has(`${base} ${letters[k]}`.toLowerCase()); n++) k = (k + 1) % 26;
+    return `${base} ${upper ? letters[k].toUpperCase() : letters[k]}`;
+  };
+  const tag = (list, id) => {
+    for (const t of list) {
+      if (t.engineKey !== "bus" || /\s[a-z]$/i.test(t.name || "")) continue;
+      rename(t, free((t.name || "bus").trim(), id, false));
+    }
+  };
+  tag(a, "a");
+  for (const { d, tracks } of decks) tag(tracks, d.id);
+  rename(m.busA, free("deck", "a", true));
+  for (const d of m.decks) rename(d.bus, free("deck", d.id, true));
   // The sends become the song's own.
   for (const t of a) if (!t.out || t.out === "master") t.out = String(m.busA.id);
   for (const { d, tracks } of decks) for (const t of tracks) if (!t.out || t.out === "master") t.out = String(d.bus.id);
