@@ -13,6 +13,7 @@ const SECTIONS = [
   ["knobs", "Knobs"],
   ["patterns", "Patterns"],
   ["views", "Clips and the arrangement"],
+  ["mix", "The mix: decks and the crossfader"],
   ["tracks", "Tracks"],
   ["steps", "The step grid"],
   ["roll", "The piano roll"],
@@ -42,6 +43,7 @@ const SECTIONS = [
   ["undo", "Undo"],
   ["jam", "Jamming with other people"],
   ["saving", "Saving, sharing and export"],
+  ["compose", "Composing in the studio"],
   ["agents", "Letting an AI agent write a song"],
   ["trouble", "If something sounds wrong"],
   ["credits", "Credits and licences"],
@@ -150,7 +152,7 @@ export default function ManualPage() {
                 <tr><td>Drag</td><td>Grab anywhere on the knob. The value moves with the pointer from where it already was, so it doesn&apos;t jump to your click.</td></tr>
                 <tr><td>Drag out sideways</td><td>Fine trim. The further your pointer moves from the knob, the smaller each pixel gets, so one gesture can sweep and then trim. Shift forces fine mode.</td></tr>
                 <tr><td>Wheel</td><td>Nudges the value a step at a time.</td></tr>
-                <tr><td>Double-click</td><td>Back to the default. On a touchscreen it is <span className={styles.ui}>reset to default</span> in the long-press menu instead, so two quick taps never throw away a setting.</td></tr>
+                <tr><td>Double-click</td><td>Back to the default. A control drawn as a vertical slider goes to the place you double-clicked instead. On a touchscreen it is <span className={styles.ui}>reset to default</span> in the long-press menu instead, so two quick taps never throw away a setting.</td></tr>
                 <tr><td>Right-click, or long press</td><td>Opens the <a href="#motion">parameter menu</a>: what the control does, and any modulation on it.</td></tr>
               </tbody>
             </table>
@@ -196,7 +198,7 @@ export default function ManualPage() {
         <section className={styles.section} id="views">
           <h2>Clips and the arrangement</h2>
           <p>
-            The studio shows one song in four views. The switcher in the transport
+            The studio shows one song in five views. The switcher in the transport
             (or <span className={styles.key}>tab</span>, with nothing focused) moves
             between them:
           </p>
@@ -205,12 +207,13 @@ export default function ManualPage() {
             <li>The <span className={styles.ui}>clips</span> view lays out every track&apos;s 32 patterns as clips you launch one track at a time.</li>
             <li>The <span className={styles.ui}>arrange</span> view is a timeline of pattern blocks for each track.</li>
             <li>The <span className={styles.ui}>piano</span> view is the <a href="#roll">piano roll</a> on one track, every pattern end to end.</li>
+            <li>The <span className={styles.ui}>mix</span> view is a <a href="#mix">mixing desk</a>, with room for other songs on decks beside this one.</li>
           </ul>
           <p>
             Play plays what the open view shows: the arrangement in the arrange view,
             the clips in the clips view, and whatever the pattern bar says in the
             groove view. If you switch views while playing, the change takes effect at
-            the next bar line. The clips, arrange and piano views are desktop only for now.
+            the next bar line. The clips, arrange, piano and mix views are desktop only for now.
           </p>
           <h3>Clips</h3>
           <div className={styles.tableWrap}>
@@ -256,6 +259,106 @@ export default function ManualPage() {
             is <span className={styles.ui}>arrangement()</span> and{" "}
             <span className={styles.ui}>.blocks([[pattern, fromBar, bars], ...])</span>{" "}
             on a track&apos;s part.
+          </div>
+        </section>
+
+        <section className={styles.section} id="mix">
+          <h2>The mix: decks and the crossfader</h2>
+          <p>
+            The <span className={styles.ui}>mix</span> view is a mixing desk for the
+            song. Each track has a strip with a fader, a pan knob, mute, solo and a
+            level meter. Each fx bus has a strip too. Select a strip and that
+            track&apos;s own card opens underneath, with its instrument, effects and
+            step grid. The mix view is desktop only.
+          </p>
+          <p>
+            You can also load other songs beside the open one. Each loaded song goes
+            on a deck of its own, and all the decks play in time on one clock. Your
+            open song is deck A. The songs you load are decks B, C, D and so on.
+            There is no limit on the number of decks.
+          </p>
+          <h3>Loading a deck</h3>
+          <p>
+            Press <span className={styles.ui}>load a deck…</span>, or the{" "}
+            <span className={styles.ui}>+ deck</span> card after the last deck. The
+            picker lists your own songs first, then songs other people published.
+            Type to search titles and names. You can also paste a share link, or
+            load a song from a file. Signed out, the picker has the link and the
+            file only.
+          </p>
+          <p>
+            A deck loads stopped. Its tracks do not play until you start the deck.
+            Nothing on a deck is part of your song: a save, undo and a jam see deck
+            A only.
+          </p>
+          <h3>A deck&apos;s controls</h3>
+          <div className={styles.tableWrap}>
+            <table className={styles.table}>
+              <thead>
+                <tr><th>Control</th><th>What it does</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>▶ / ■</td><td>Starts or stops the deck. With the transport stopped, a started deck is armed and starts with the transport. With the transport playing, the deck waits for the <span className={styles.ui}>start</span> setting in the bar across the top.</td></tr>
+                <tr><td>start: next bar / next pattern</td><td>When a started deck comes in. <em>next bar</em> is the next bar line. <em>next pattern</em> waits until deck A&apos;s pattern comes round, so the phrases of the two songs line up. The automatic fade buttons wait for the same setting.</td></tr>
+                <tr><td>the pattern numbers</td><td>The patterns the deck has notes in. Click a number to queue it. The deck switches when the pattern that is playing comes round. Double-click a number to switch at once. With the transport stopped, a click switches at once.</td></tr>
+                <tr><td>×1 … ×16</td><td>Under each pattern number: the number of bars the deck plays that pattern before the next one. This applies when <span className={styles.ui}>chain</span> is on.</td></tr>
+                <tr><td>chain</td><td>On, the deck plays through its patterns in order. Off, it repeats the pattern it is on. While a chained deck plays, a readout beside the box shows the bar it is on, for example <span className={styles.ui}>3 of 8</span>.</td></tr>
+                <tr><td>= bpm</td><td>Sets the deck&apos;s tempo to the tempo that is playing now. After that, the tempo slider does not pull back towards the tempo the song was saved at.</td></tr>
+                <tr><td>× on a strip</td><td>Ejects that one track. On a deck, the track goes and the rest of the deck plays on. You cannot undo this. If you eject the last track of a deck, the deck goes too. On deck A, the same button removes the track from your song. It asks first, and undo brings the track back.</td></tr>
+                <tr><td>land</td><td>The deck becomes your song. Its tracks stay as they are playing. Deck A&apos;s tracks and every other deck go. One undo step brings the old song back.</td></tr>
+                <tr><td>eject</td><td>Takes the deck off. The other decks play on.</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <h3>The crossfader and the tempo</h3>
+          <p>
+            The crossfader has a left side and a right side. Deck A starts on the
+            left and every loaded deck starts on the right. Move the crossfader to
+            the right to bring the loaded decks in and take deck A out.
+          </p>
+          <ul>
+            <li>With one loaded deck, the crossfader sits between the two decks. The deck&apos;s <span className={styles.ui}>crossfader</span> box takes it off the crossfader, so it plays at its own fader.</li>
+            <li>With two or more loaded decks, the crossfader moves to the bar across the top. Each side has a chip for every deck. Click a chip to attach that deck to that side. Click a lit chip to take the deck off the crossfader.</li>
+            <li><span className={styles.ui}>blend</span> is a smooth fade. In the middle both sides are a little quieter, so the level stays even. <span className={styles.ui}>cut</span> keeps both sides at full level across the middle and cuts each side at its far end.</li>
+            <li>The two arrow buttons fade to one side over 1, 2, 4, 8 or 16 bars. The fade starts on the next bar or the next pattern, as the <span className={styles.ui}>start</span> setting says.</li>
+          </ul>
+          <p>
+            The tempo slider runs from deck A&apos;s tempo to one deck&apos;s tempo.
+            With two or more loaded decks, a picker beside the slider chooses that
+            deck. <span className={styles.ui}>follow fader</span> ties the tempo to
+            the crossfader. Only the tempo of playback moves. Synced delays and LFOs
+            stay on deck A&apos;s tempo until the mix ends.
+          </p>
+          <h3>A track&apos;s clips, and freezing one</h3>
+          <p>
+            When you select a strip, that track&apos;s clips show above its card. A
+            clip is one of the track&apos;s patterns. Click a clip and the track
+            plays it and freezes on it. A frozen track stays on its clip while the
+            rest of its deck changes pattern. The strip shows a ❄. Click the frozen
+            clip again, or the <span className={styles.ui}>unfreeze</span> button,
+            and the track goes back to the pattern its deck is on.
+          </p>
+          <h3>Faders</h3>
+          <p>
+            Drag a fader to move it from where it is. Double-click a fader to put
+            it where you clicked. Click anywhere on the crossfader or the tempo
+            slider to send it there.
+          </p>
+          <h3>Ending a mix</h3>
+          <ul>
+            <li><span className={styles.ui}>eject</span> every deck, and your song is as it was.</li>
+            <li><span className={styles.ui}>land</span> a deck to move over to that song.</li>
+            <li><span className={styles.ui}>keep both</span> (or <span className={styles.ui}>keep all</span>) makes one song from every deck. Each deck becomes an fx bus with its tracks sent to it, and the balance of the crossfader goes into the bus faders. The buses each song already had take the deck&apos;s letter, for example <span className={styles.ui}>room a</span> and <span className={styles.ui}>room b</span>.</li>
+          </ul>
+          <p>
+            With no deck loaded, the desk is a grid. Tracks that go straight to the
+            master come first. Then each bus has a block of its own, with the tracks
+            that feed it beside it.
+          </p>
+          <div className={styles.note}>
+            All the decks share deck A&apos;s bar line and swing. A deck in another
+            time signature loops at its own length. Each deck keeps its own scale.
+            A deck plays its patterns, not its arrangement.
           </div>
         </section>
 
@@ -1455,6 +1558,18 @@ export default function ManualPage() {
             down out of tune with the track.
           </p>
           <p>
+            <span className={styles.ui}>prism</span> is four effects in one stage:
+            character (a drive or a fuzz), movement (a doubler, a phaser, a tremolo),
+            diffusion (echoes and a reverb) and texture (tape, a filter, dropouts).
+            Each has a type and an amount, and an amount of zero takes that effect
+            out. <span className={styles.ui}>route</span> sets how the four are
+            wired. On <span className={styles.ui}>split</span>, each effect works on
+            the dry sound alone and the results add up. On{" "}
+            <span className={styles.ui}>chain</span>, each effect feeds the next,
+            so the echo repeats the fuzz. A song saved before the route control
+            opens on <span className={styles.ui}>chain</span> and sounds as it did.
+          </p>
+          <p>
             <span className={styles.ui}>glide</span> lives here too. It slides the
             pitch between notes instead of jumping, for portamento leads and basses.
           </p>
@@ -2125,6 +2240,79 @@ bass: note("<eb2 g2>*8").s("sawtooth").lpf(2000).lock()`}</div>
           <p>
             Without an account, everything lives in the tab, and a reload or clearing
             the site data loses it. Sign in to keep your work.
+          </p>
+        </section>
+
+        <section className={styles.section} id="compose">
+          <h2>Composing in the studio</h2>
+          <p>
+            The <span className={styles.ui}>compose</span> button in the top bar
+            opens a panel where you ask for music in words. You need an account to
+            use it. The <span className={styles.ui}>ask</span> tab takes any
+            request: a new bassline, busier hats, a whole song. The{" "}
+            <span className={styles.ui}>genre</span> tab builds a complete song in
+            one of 150 genres.
+          </p>
+          <p>
+            A turn never changes your song directly. Its changes go to a review
+            bar with four buttons:
+          </p>
+          <ul>
+            <li><span className={styles.ui}>audition</span> plays the changes in place of what is playing. The transport does not stop.</li>
+            <li><span className={styles.ui}>stop</span> puts back what was playing. The changes stay on offer.</li>
+            <li><span className={styles.ui}>keep</span> makes the changes your song. If a song of yours is open, a new version is saved.</li>
+            <li><span className={styles.ui}>discard</span> throws the changes away.</li>
+          </ul>
+          <h3>Transitions</h3>
+          <p>
+            The row above the input sets how an audition or a keep arrives: when it
+            starts, its shape, its length and what the tempo does. In review,{" "}
+            <span className={styles.ui}>into</span> picks which pattern of the new
+            song to land on.
+          </p>
+          <div className={styles.tableWrap}>
+            <table className={styles.table}>
+              <thead>
+                <tr><th>Shape</th><th>What you hear</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>cut</td><td>The new song starts on the next bar line.</td></tr>
+                <tr><td>sweep</td><td>Both songs play for the length. A filter closes over the old song, and the old song is gone at the end.</td></tr>
+                <tr><td>fade</td><td>Both songs play for the length. The old song fades out as the new song fades in.</td></tr>
+                <tr><td>drop</td><td>The old song thins out: chords and lead leave, then the bass, then the drums. A near-silent bar comes before the new song.</td></tr>
+                <tr><td>stagger</td><td>The new song arrives in groups: drums, bass, chords, lead. The same group of the old song leaves as each group arrives.</td></tr>
+                <tr><td>bridge</td><td>A passage written for the join. See below.</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <h3>Bridges</h3>
+          <p>
+            A bridge is a written passage that plays in place of the intro of the
+            new song. The tracks of the new song play their intro. Over them, the
+            tracks of the old song play an outro and drop out one group at a time.
+            After the bridge, the new song carries on from the section after its
+            intro.
+          </p>
+          <p>
+            With <span className={styles.ui}>bridge</span> picked, the turn writes
+            the bridge before it shows you the changes. The panel says{" "}
+            <span className={styles.ui}>writing the bridge</span> while it works.
+            This makes the turn take longer, and it counts as one more turn against
+            your limit. If the bridge is not ready, or it fails, audition plays a
+            simpler bridge that seqbaby makes itself.
+          </p>
+          <div className={styles.note}>
+            The intro is easiest to find in a song that plays its patterns in
+            chain mode. For other songs, the bridge leads in and the new song
+            starts from the top.
+          </div>
+          <h3>Composing for a deck</h3>
+          <p>
+            The <span className={styles.ui}>for:</span> select sends a turn to a
+            deck in the <a href="#mix">mix view</a> and leaves your open song
+            alone. With a deck loaded, the turn edits the song on that deck. With
+            no deck loaded, the turn writes a new song at the tempo of your song,
+            and <span className={styles.ui}>load to B</span> puts it on a deck.
           </p>
         </section>
 
