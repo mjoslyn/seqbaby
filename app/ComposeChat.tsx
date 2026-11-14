@@ -257,7 +257,7 @@ async function runTurn(
   }
 }
 
-/** A bridge being written, or written, for one proposal (see `startBridge`). */
+/** A bridge being written, or written, for one proposal (see `writeBridge`). */
 type BridgeJob = {
   /** The proposal's session and `into` it was written for. */
   for: unknown;
@@ -344,6 +344,11 @@ export default function ComposeChat({
     };
   }, []);
   const [trans, setTransState] = useState<TransitionPrefs>(TRANSITION_DEFAULT);
+  // What `send` needs of things defined after it: the shape picked when the
+  // turn LANDS (it may have been changed while it ran), and the bridge writer.
+  const shapeRef = useRef<Shape>("cut");
+  shapeRef.current = trans.shape;
+  const writeBridgeRef = useRef<((target: unknown, into: number | null, onActivity?: (a: string[]) => void) => Promise<void>) | null>(null);
   useEffect(() => setTransState(loadTransition()), []);
   const setTrans = useCallback((patch: Partial<TransitionPrefs>) => {
     setTransState((cur) => {
@@ -598,6 +603,12 @@ export default function ComposeChat({
       // makes them the song. Writing a turn straight in is what used to
       // silence a track that was playing while you asked for another one.
       if (job.session && job.changed !== false) {
+        // With bridge picked, the bridge is written before the changes are
+        // offered, so it is ready the moment they can be auditioned.
+        if (!toB && shapeRef.current === "bridge" && writeBridgeRef.current) {
+          setLive([...activity, "writing the bridge"]);
+          await writeBridgeRef.current(job.session, null, (a) => setLive([...activity, "writing the bridge", ...a])).catch(() => {});
+        }
         setReview({ session: job.session, before: null, title: job.title ?? null, ...(toB ? { deck: "b" as const, fresh: freshB } : {}) });
       }
       // A name with nothing to review (the turn only named the song) is
@@ -649,26 +660,28 @@ export default function ComposeChat({
   // turn.
   const bridgeJob = useRef<BridgeJob | null>(null);
   const [bridgeState, setBridgeState] = useState<"" | "writing" | "ready" | "failed">("");
-  const startBridge = useCallback((r: Proposal) => {
+  // Resolves when the bridge is written (or could not be): a turn waits on
+  // it before it offers its changes, so the bridge is there with the song.
+  const writeBridge = useCallback(async (target: unknown, into: number | null, onActivity?: (a: string[]) => void): Promise<void> => {
     const api = window.seqbaby;
     const b = api?.bridge;
     if (!api || !b || !canCompose) return;
-    const into = r.into ?? null;
     const cur = bridgeJob.current;
-    if (cur && cur.for === r.session && cur.into === into) return;
+    if (cur && cur.for === target && cur.into === into) return;
     const old = api.serializeSet();
-    const layout = b.layout(old, r.session, into != null ? { start: into } : {});
+    const layout = b.layout(old, target, into != null ? { start: into } : {});
     if (!layout) { bridgeJob.current = null; setBridgeState(""); return; }
-    const draft = b.draft(old, r.session, layout);
-    const job: BridgeJob = { for: r.session, into, layout, status: "writing" };
+    const draft = b.draft(old, target, layout);
+    const job: BridgeJob = { for: target, into, layout, status: "writing" };
     bridgeJob.current = job;
     setBridgeState("writing");
     const mine = () => bridgeJob.current === job;
-    runTurn(
-      { message: b.prompt(old, r.session, layout), history: [], session: draft, unnamed: false, ...(canPickModel ? { model } : {}) },
-      undefined,
-      mine,
-    ).then((out) => {
+    try {
+      const out = await runTurn(
+        { message: b.prompt(old, target, layout), history: [], session: draft, unnamed: false, ...(canPickModel ? { model } : {}) },
+        onActivity,
+        mine,
+      );
       if (!mine()) return;
       const got = "job" in out ? out.job.session : null;
       if (!got || !b.hasNotes(b.session(draft, got, layout), layout)) {
@@ -681,15 +694,16 @@ export default function ComposeChat({
       setBridgeState("ready");
       // An audition already on its way with the draft takes the written one.
       try { b.set(b.session(draft, got, layout), layout); } catch {}
-    }).catch(() => {
+    } catch {
       if (!mine()) return;
       job.status = "failed";
       setBridgeState("failed");
-    });
+    }
   }, [canCompose, canPickModel, model]);
-  // Written for a proposal on the open song that is not in the engine yet,
-  // while the transport plays (stopped, a transition lands at once and no
-  // bridge is heard).
+  writeBridgeRef.current = writeBridge;
+  // A turn writes its bridge before it offers its changes (`send`). This is
+  // for what comes after: bridge picked once a proposal is already on the
+  // bar, or another `into` chosen, each of which wants a bridge of its own.
   useEffect(() => {
     const r = review;
     const wants = !!r && !r.before && !r.pending && r.deck !== "b" && trans.shape === "bridge";
@@ -697,13 +711,8 @@ export default function ComposeChat({
       if (!r || r.deck === "b" || trans.shape !== "bridge") { bridgeJob.current = null; setBridgeState(""); }
       return;
     }
-    const playing = () => !!(window.seqbaby?.state as { playing?: boolean } | undefined)?.playing;
-    if (playing()) { startBridge(r); return; }
-    // Not playing yet: start writing when it is.
-    const onPlay = () => { if (playing()) startBridge(r); };
-    window.addEventListener("seqbaby:transport", onPlay);
-    return () => window.removeEventListener("seqbaby:transport", onPlay);
-  }, [review, trans.shape, startBridge]);
+    void writeBridge(r.session, r.into ?? null);
+  }, [review, trans.shape, writeBridge]);
   // The written bridge for a proposal, as transitionTo takes it: laid out
   // again against the song as it is NOW (it may have been edited, or moved to
   // another pattern, since the bridge was asked for) and used only when that
@@ -1157,7 +1166,7 @@ export default function ComposeChat({
             {trans.shape === "bridge" ? (
               <span
                 className={styles.chatActivity}
-                title="a bridge is as long as the new song's intro. The compose model writes it once a turn's changes are on offer and the transport is playing; until it is back, audition plays a draft made in code"
+                title="a bridge is as long as the new song's intro. The compose model writes it as part of the turn, so it is ready with the changes; picked afterwards it is written then, and until it is back audition plays a draft made in code"
               >
                 {bridgeState === "writing" ? "writing the bridge…" : bridgeState === "ready" ? "bridge written" : bridgeState === "failed" ? "bridge: draft" : "the intro's length"}
               </span>

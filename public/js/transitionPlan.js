@@ -585,9 +585,11 @@ export function codeBridge(oldS, newS, layout) {
   return out;
 }
 
-/** Whether two layouts put the same bridge in the same place. */
+/** Whether two layouts put the same bridge in the same slots, for the same intro. */
 export function sameLayout(a, b) {
-  return !!a && !!b && a.land === b.land && a.barLen === b.barLen && a.oldSlot === b.oldSlot
+  // Not `oldSlot`: a bridge written while the old song was on one pattern is
+  // still the bridge when its chain has moved to the next.
+  return !!a && !!b && a.land === b.land && a.barLen === b.barLen
     && JSON.stringify(a.segs) === JSON.stringify(b.segs);
 }
 

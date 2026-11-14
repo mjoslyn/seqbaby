@@ -5117,9 +5117,13 @@ Exposed as `window.seqbaby.transitionTo(session, opts)` (a Promise of
   through it (`rollVelocity`) unless the new song's snare is there. A track
   in both songs is the new song's.
 - **The compose model rewrites the draft** (`app/ComposeChat.tsx`,
-  `startBridge`). With bridge picked, a proposal on the open song and the
-  transport playing, the panel sends a second turn at once: the draft as the
-  session and `bridgePrompt` (which patterns are the bridge and how long,
+  `writeBridge`). With bridge picked, a turn on the open song is not offered
+  until its bridge is written: when the turn's job is done, `send` runs a
+  second turn before it sets the review bar (the activity line says `writing
+  the bridge`), so the bridge is ready the moment the changes can be
+  auditioned, playing or stopped. Bridge picked after a proposal is on the
+  bar, or another `into` chosen, writes one then (the effect). The second
+  turn is the draft as the session and `bridgePrompt` (which patterns are the bridge and how long,
   which intro patterns they stand in for, which tracks are outgoing, where
   the song carries on; rewrite the outgoing parts as an outro in the new
   key, bring the intro in gradually, never two kicks or basslines, end on a
@@ -5129,7 +5133,8 @@ Exposed as `window.seqbaby.transitionTo(session, opts)` (a Promise of
   draft's). `audition` / `keep` hand it to `transitionTo` as `opts.bridge =
   {session, layout}`, laid out again against the song as it is then
   (`writtenBridge`) and used only if the layout is still the one it was
-  written for (`sameLayout`); otherwise, or when it is not back yet or
+  written for (`sameLayout`: the same slots for the same intro, whichever
+  pattern the old song has moved on to); otherwise, or when it is not back yet or
   failed, the draft plays. A written bridge arriving while its draft is
   pending or playing takes over (`setTransitionBridge`: before the merge it
   replaces the draft, after it at the next bridge pattern). One bridge turn
