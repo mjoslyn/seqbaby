@@ -2,6 +2,15 @@
 export {};
 
 declare global {
+  /** Where a bridge is written and how it plays (bridgeLayout, public/js/transitionPlan.js). */
+  type BridgeLayout = {
+    segs: { slot: number; bars: number; from: { slot: number; bar: number }[] }[];
+    bars: number;
+    barLen: number;
+    land: number;
+    oldSlot: number;
+    intro: { sections: { slot: number; bars: number }[]; bars: number; land: number; barLen: number; leadIn: boolean };
+  };
   /** One saved patch in the list the engine is handed (app/patches/bay.ts). */
   type PatchListEntry = { name: string; engineKey: string | null; kind: string | null; config?: unknown };
   /** How the engine reaches the account's patch bay. */
@@ -53,7 +62,8 @@ declare global {
        * mergeSet on a bar line (public/js/transition.js), shaped: `cut`,
        * `sweep` (a master lowpass), `drop` (the old song thins by group),
        * `fade` (the level dips), `stagger` (the new song arrives by group)
-       * or `bridge` (the new song worked into the last `patterns` patterns). `tempo` auto ramps a
+       * or `bridge` (a written passage standing in for the new song's intro,
+       * the old song playing an outro over it). `tempo` auto ramps a
        * small bpm difference and jumps a large one. Stopped, it lands at
        * once. Resolves `landed: false` when cancelled first.
        */
@@ -64,10 +74,10 @@ declare global {
           shape?: "cut" | "sweep" | "drop" | "fade" | "stagger" | "bridge";
           bars?: number;
           tempo?: "auto" | "jump" | "ramp";
-          /** bridge: how many of the song's last patterns the new song is worked into. */
-          patterns?: number;
-          /** The new song's pattern to land on (and, for a bridge, to work in). */
+          /** The new song's pattern to land on (for a bridge, where its intro starts). */
           into?: number;
+          /** A written bridge and the layout it was written for; without one a bridge is drafted in code. */
+          bridge?: { session: unknown; layout: BridgeLayout };
         },
       ) => Promise<{ landed: boolean }>;
       /** Drop a pending transition without landing it. */
@@ -75,6 +85,17 @@ declare global {
       /** Land a pending transition now. */
       finishTransition?: () => boolean;
       transitionPending?: () => boolean;
+      /** The bridge between the song playing and another (public/js/transitionPlan.js). */
+      bridge?: {
+        layout: (oldS: unknown, newS: unknown, opts?: { start?: number }) => BridgeLayout | null;
+        draft: (oldS: unknown, newS: unknown, layout: BridgeLayout) => unknown;
+        prompt: (oldS: unknown, newS: unknown, layout: BridgeLayout) => string;
+        session: (draft: unknown, result: unknown, layout: BridgeLayout) => unknown;
+        hasNotes: (session: unknown, layout: BridgeLayout) => boolean;
+        same: (a: BridgeLayout | null, b: BridgeLayout | null) => boolean;
+        /** Hand a pending bridge its written version. False when none is pending for that layout. */
+        set: (session: unknown, layout: BridgeLayout) => boolean;
+      };
       /** Format version of the blob serializeSet() writes (not `version`). */
       setVersion: number;
       validateSet: (data: unknown) => {

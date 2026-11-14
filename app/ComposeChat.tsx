@@ -71,14 +71,14 @@ const SHAPE_TIPS: Record<Shape, string> = {
   drop: "the playing song thins (harmony and lead, then bass, then drums), a near-silent last bar, then the hit",
   fade: "both songs play for the length: the old one fades out as the new one fades in",
   stagger: "the new song arrives a group at a time: drums, bass, harmony, lead",
-  bridge: "the song plays to its end, and the new song is worked into its last patterns: chords, then lead, then bass, the old kick out and a roll in the last bar",
+  bridge: "a passage written for the join: the new song's intro works its way in while the playing song plays an outro over it, then the new song carries on from the section after its intro",
 };
 
 // How the review bar's writes reach what is playing: on the next bar or at
 // once, cut or swept, over how many bars, and what happens to the tempo.
-type TransitionPrefs = { when: "bar" | "now"; shape: Shape; bars: number; tempo: "auto" | "jump" | "ramp"; patterns: number };
+type TransitionPrefs = { when: "bar" | "now"; shape: Shape; bars: number; tempo: "auto" | "jump" | "ramp" };
 const TRANSITION_KEY = "seqbaby.transition.v1";
-const TRANSITION_DEFAULT: TransitionPrefs = { when: "bar", shape: "cut", bars: 2, tempo: "auto", patterns: 1 };
+const TRANSITION_DEFAULT: TransitionPrefs = { when: "bar", shape: "cut", bars: 2, tempo: "auto" };
 function loadTransition(): TransitionPrefs {
   try {
     const v = JSON.parse(window.localStorage.getItem(TRANSITION_KEY) || "null");
@@ -88,7 +88,6 @@ function loadTransition(): TransitionPrefs {
       shape: SHAPES.includes(v.shape) ? v.shape : "cut",
       bars: [1, 2, 4, 8].includes(Number(v.bars)) ? Number(v.bars) : 2,
       tempo: v.tempo === "jump" || v.tempo === "ramp" ? v.tempo : "auto",
-      patterns: [1, 2, 3, 4].includes(Number(v.patterns)) ? Number(v.patterns) : 1,
     };
   } catch {
     return TRANSITION_DEFAULT;
@@ -171,6 +170,104 @@ function describeFailure(status: number, raw: string, data: ComposeResponse | nu
  * @param budgetOut whether that key has run out of budget, as the server
  *        knew it when the page was drawn.
  */
+/**
+ * One compose turn, start to finish: posted, then polled until the job says
+ * done or failed. Resolves the finished job, or the sentence to show instead.
+ * `onActivity` is handed the tool summaries as they grow; `live` returning
+ * false stops the polling (the job itself runs on: nothing can call it back).
+ */
+async function runTurn(
+  body: Record<string, unknown>,
+  onActivity?: (summaries: string[]) => void,
+  live?: () => boolean,
+): Promise<{ job: JobStatus; activity: string[] } | { error: string }> {
+  const res = await fetch("/api/compose", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  // Anything that failed before the route got to stream -- auth, a bad
+  // request, a gateway page -- arrives as an ordinary body with a status
+  // worth reading. Parse it by hand: res.json() on an HTML error page
+  // throws about an unexpected "<", which reports on the parser rather
+  // than on what went wrong.
+  if (!res.ok || !res.body) {
+    const raw = await res.text();
+    let data: ComposeResponse | null = null;
+    try {
+      data = raw ? (JSON.parse(raw) as ComposeResponse) : null;
+    } catch {
+      data = null;
+    }
+    return { error: describeFailure(res.status, raw, data) };
+  }
+
+  const started = (await res.json()) as ComposeResponse;
+  if (!started.jobId) return { error: started.error ?? "couldn't start that" };
+
+  // The turn is running somewhere nothing is waiting on, so from here it
+  // is polled rather than awaited -- which is what lets it take the
+  // minutes a whole song takes.
+  const activity: string[] = [];
+  const until = Date.now() + POLL_LIMIT_MS;
+  let misses = 0;
+  for (;;) {
+    await sleep(POLL_INTERVAL_MS);
+    if (live && !live()) return { error: "dropped" };
+    if (Date.now() > until) return { error: "gave up waiting on that one; it may still be running." };
+
+    // A failed poll is usually not the job failing -- a blip must not throw
+    // away a song still being written -- but "keep asking" is only right
+    // for something that might recover. A 404 (no such job, or not this
+    // account's) and a 401 (signed out) are answers, not blips: asking
+    // again gets the same reply until the 16-minute limit reports a
+    // timeout that never happened.
+    let pollRes: Response;
+    try {
+      // The job token is how this browser proves the job is its own to
+      // read. An account's session would do for a signed-in visitor, and
+      // still does server-side, but an unlocked visitor has no account.
+      const q = new URLSearchParams({ id: started.jobId });
+      if (started.jobToken) q.set("t", started.jobToken);
+      pollRes = await fetch(`/api/compose/status?${q}`);
+    } catch {
+      if (++misses > MAX_POLL_MISSES) return { error: "lost contact with the server while that was running." };
+      continue;
+    }
+    if (pollRes.status === 401) return { error: "signed out while that was running; sign in and the song may still be there." };
+    if (pollRes.status === 404) return { error: "that job is no longer on the server." };
+    if (!pollRes.ok) {
+      // Anything else (a 5xx, a rate limit) might pass, but not forever.
+      if (++misses > MAX_POLL_MISSES) return { error: `the server kept failing to report on that (${pollRes.status}).` };
+      continue;
+    }
+    misses = 0;
+    const job = (await pollRes.json()) as JobStatus;
+
+    const summaries = (job.events ?? [])
+      .filter((e) => e.type === "tool" && e.summary)
+      .map((e) => e.summary!);
+    if (summaries.length !== activity.length) {
+      activity.length = 0;
+      activity.push(...summaries);
+      onActivity?.([...activity]);
+    }
+    if (job.status === "done") return { job, activity };
+    if (job.status === "error") return { error: job.error ?? "that didn't work" };
+  }
+}
+
+/** A bridge being written, or written, for one proposal (see `startBridge`). */
+type BridgeJob = {
+  /** The proposal's session and `into` it was written for. */
+  for: unknown;
+  into: number | null;
+  layout: BridgeLayout;
+  status: "writing" | "ready" | "failed";
+  /** The model's session, once ready: its bridge patterns are what is used. */
+  result?: unknown;
+};
+
 export default function ComposeChat({
   signedIn,
   serverKey,
@@ -479,132 +576,42 @@ export default function ComposeChat({
     };
 
     try {
-      const res = await fetch("/api/compose", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        // A song never saved (or a template, whose first save makes a new
-        // song) has no name of its own: the turn is asked to give it one.
-        body: JSON.stringify({ message: sent, history, session, unnamed: toB ? freshB : !getOpenSong().id || getOpenSong().isTemplate, ...(canPickModel ? { model: modelOverride || model } : {}) }),
+      // A song never saved (or a template, whose first save makes a new
+      // song) has no name of its own: the turn is asked to give it one.
+      const out = await runTurn(
+        { message: sent, history, session, unnamed: toB ? freshB : !getOpenSong().id || getOpenSong().isTemplate, ...(canPickModel ? { model: modelOverride || model } : {}) },
+        setLive,
+      );
+      if ("error" in out) {
+        land({ role: "error", text: out.error });
+        return;
+      }
+      const { job, activity } = out;
+      // Only when the turn actually changed the song: a question changes
+      // nothing, and the session it hands back was captured when the
+      // message was SENT, which on a turn that takes minutes means writing
+      // it would throw away anything done by hand since.
+      //
+      // And even then it is not written -- it is offered. The changes go
+      // into the review bar, where `audition` drops them into the playing
+      // session (mergeSet: no teardown, no stopped transport) and `keep`
+      // makes them the song. Writing a turn straight in is what used to
+      // silence a track that was playing while you asked for another one.
+      if (job.session && job.changed !== false) {
+        setReview({ session: job.session, before: null, title: job.title ?? null, ...(toB ? { deck: "b" as const, fresh: freshB } : {}) });
+      }
+      // A name with nothing to review (the turn only named the song) is
+      // the song's at once; otherwise it comes with the changes, on keep.
+      // (A deck B turn never names the open song.)
+      else if (job.title && !toB) setComposedTitle(job.title);
+      land({
+        role: "assistant",
+        text: job.reply || "Done.",
+        // What it actually ran on, as the worker reported it.
+        model: job.model,
+        activity,
+        warnings: job.warnings,
       });
-      // Anything that failed before the route got to stream -- auth, a bad
-      // request, a gateway page -- arrives as an ordinary body with a status
-      // worth reading. Parse it by hand: res.json() on an HTML error page
-      // throws about an unexpected "<", which reports on the parser rather
-      // than on what went wrong.
-      if (!res.ok || !res.body) {
-        const raw = await res.text();
-        let data: ComposeResponse | null = null;
-        try {
-          data = raw ? (JSON.parse(raw) as ComposeResponse) : null;
-        } catch {
-          data = null;
-        }
-        land({ role: "error", text: describeFailure(res.status, raw, data) });
-        return;
-      }
-
-      const started = (await res.json()) as ComposeResponse;
-      if (!started.jobId) {
-        land({ role: "error", text: started.error ?? "couldn't start that" });
-        return;
-      }
-
-      // The turn is running somewhere nothing is waiting on, so from here it
-      // is polled rather than awaited -- which is what lets it take the
-      // minutes a whole song takes.
-      const activity: string[] = [];
-      const until = Date.now() + POLL_LIMIT_MS;
-      let misses = 0;
-      for (;;) {
-        await sleep(POLL_INTERVAL_MS);
-        if (Date.now() > until) {
-          land({ role: "error", text: "gave up waiting on that one; it may still be running." });
-          return;
-        }
-
-        // A failed poll is usually not the job failing -- a blip must not throw
-        // away a song still being written -- but "keep asking" is only right
-        // for something that might recover. A 404 (no such job, or not this
-        // account's) and a 401 (signed out) are answers, not blips: asking
-        // again gets the same reply until the 16-minute limit reports a
-        // timeout that never happened.
-        let pollRes: Response;
-        try {
-          // The job token is how this browser proves the job is its own to
-          // read. An account's session would do for a signed-in visitor, and
-          // still does server-side, but a turn on a brought key has no
-          // account behind it at all.
-          const q = new URLSearchParams({ id: started.jobId });
-          if (started.jobToken) q.set("t", started.jobToken);
-          pollRes = await fetch(`/api/compose/status?${q}`);
-        } catch {
-          if (++misses > MAX_POLL_MISSES) {
-            land({ role: "error", text: "lost contact with the server while that was running." });
-            return;
-          }
-          continue;
-        }
-        if (pollRes.status === 401) {
-          land({ role: "error", text: "signed out while that was running; sign in and the song may still be there." });
-          return;
-        }
-        if (pollRes.status === 404) {
-          land({ role: "error", text: "that job is no longer on the server." });
-          return;
-        }
-        if (!pollRes.ok) {
-          // Anything else (a 5xx, a rate limit) might pass, but not forever.
-          if (++misses > MAX_POLL_MISSES) {
-            land({ role: "error", text: `the server kept failing to report on that (${pollRes.status}).` });
-            return;
-          }
-          continue;
-        }
-        misses = 0;
-        const job = (await pollRes.json()) as JobStatus;
-
-        const summaries = (job.events ?? [])
-          .filter((e) => e.type === "tool" && e.summary)
-          .map((e) => e.summary!);
-        if (summaries.length !== activity.length) {
-          activity.length = 0;
-          activity.push(...summaries);
-          setLive([...activity]);
-        }
-
-        if (job.status === "done") {
-          // Only when the turn actually changed the song: a question changes
-          // nothing, and the session it hands back was captured when the
-          // message was SENT, which on a turn that takes minutes means writing
-          // it would throw away anything done by hand since.
-          //
-          // And even then it is not written -- it is offered. The changes go
-          // into the review bar, where `audition` drops them into the playing
-          // session (mergeSet: no teardown, no stopped transport) and `keep`
-          // makes them the song. Writing a turn straight in is what used to
-          // silence a track that was playing while you asked for another one.
-          if (job.session && job.changed !== false) {
-            setReview({ session: job.session, before: null, title: job.title ?? null, ...(toB ? { deck: "b" as const, fresh: freshB } : {}) });
-          }
-          // A name with nothing to review (the turn only named the song) is
-          // the song's at once; otherwise it comes with the changes, on keep.
-          // (A deck B turn never names the open song.)
-          else if (job.title && !toB) setComposedTitle(job.title);
-          land({
-            role: "assistant",
-            text: job.reply || "Done.",
-            // What it actually ran on, as the worker reported it.
-            model: job.model,
-            activity: [...activity],
-            warnings: job.warnings,
-          });
-          return;
-        }
-        if (job.status === "error") {
-          land({ role: "error", text: job.error ?? "that didn't work" });
-          return;
-        }
-      }
     } catch (e) {
       land({ role: "error", text: `couldn't reach compose chat: ${(e as Error).message}` });
     } finally {
@@ -628,6 +635,94 @@ export default function ComposeChat({
     else api.applySet(session);
   }, []);
 
+  // ---- the written bridge ---------------------------------------------------
+  //
+  // With `bridge` picked, a proposal's bridge is WRITTEN: a second turn, sent
+  // the moment the proposal is on the bar, that is handed the engine's draft
+  // (both songs' tracks, the new song's intro and the old song's parts cut
+  // short, in free pattern slots) and asked to make a transition of it. It is
+  // written ahead because it takes a model the better part of a minute and an
+  // audition should not wait for one: pressed before it is back, the audition
+  // plays the draft, and the written one takes over if it arrives in time.
+  // Only its bridge patterns are ever used (bridgeSession). One per proposal
+  // and target pattern, and only while bridge is the shape picked: it costs a
+  // turn.
+  const bridgeJob = useRef<BridgeJob | null>(null);
+  const [bridgeState, setBridgeState] = useState<"" | "writing" | "ready" | "failed">("");
+  const startBridge = useCallback((r: Proposal) => {
+    const api = window.seqbaby;
+    const b = api?.bridge;
+    if (!api || !b || !canCompose) return;
+    const into = r.into ?? null;
+    const cur = bridgeJob.current;
+    if (cur && cur.for === r.session && cur.into === into) return;
+    const old = api.serializeSet();
+    const layout = b.layout(old, r.session, into != null ? { start: into } : {});
+    if (!layout) { bridgeJob.current = null; setBridgeState(""); return; }
+    const draft = b.draft(old, r.session, layout);
+    const job: BridgeJob = { for: r.session, into, layout, status: "writing" };
+    bridgeJob.current = job;
+    setBridgeState("writing");
+    const mine = () => bridgeJob.current === job;
+    runTurn(
+      { message: b.prompt(old, r.session, layout), history: [], session: draft, unnamed: false, ...(canPickModel ? { model } : {}) },
+      undefined,
+      mine,
+    ).then((out) => {
+      if (!mine()) return;
+      const got = "job" in out ? out.job.session : null;
+      if (!got || !b.hasNotes(b.session(draft, got, layout), layout)) {
+        job.status = "failed";
+        setBridgeState("failed");
+        return;
+      }
+      job.result = got;
+      job.status = "ready";
+      setBridgeState("ready");
+      // An audition already on its way with the draft takes the written one.
+      try { b.set(b.session(draft, got, layout), layout); } catch {}
+    }).catch(() => {
+      if (!mine()) return;
+      job.status = "failed";
+      setBridgeState("failed");
+    });
+  }, [canCompose, canPickModel, model]);
+  // Written for a proposal on the open song that is not in the engine yet,
+  // while the transport plays (stopped, a transition lands at once and no
+  // bridge is heard).
+  useEffect(() => {
+    const r = review;
+    const wants = !!r && !r.before && !r.pending && r.deck !== "b" && trans.shape === "bridge";
+    if (!wants) {
+      if (!r || r.deck === "b" || trans.shape !== "bridge") { bridgeJob.current = null; setBridgeState(""); }
+      return;
+    }
+    const playing = () => !!(window.seqbaby?.state as { playing?: boolean } | undefined)?.playing;
+    if (playing()) { startBridge(r); return; }
+    // Not playing yet: start writing when it is.
+    const onPlay = () => { if (playing()) startBridge(r); };
+    window.addEventListener("seqbaby:transport", onPlay);
+    return () => window.removeEventListener("seqbaby:transport", onPlay);
+  }, [review, trans.shape, startBridge]);
+  // The written bridge for a proposal, as transitionTo takes it: laid out
+  // again against the song as it is NOW (it may have been edited, or moved to
+  // another pattern, since the bridge was asked for) and used only when that
+  // is still the layout it was written for.
+  const writtenBridge = useCallback((r: Proposal) => {
+    const api = window.seqbaby;
+    const b = api?.bridge;
+    const job = bridgeJob.current;
+    if (!api || !b || !job || job.status !== "ready" || job.for !== r.session || job.into !== (r.into ?? null)) return {};
+    try {
+      const old = api.serializeSet();
+      const layout = b.layout(old, r.session, job.into != null ? { start: job.into } : {});
+      if (!layout || !b.same(layout, job.layout)) return {};
+      return { bridge: { session: b.session(b.draft(old, r.session, layout), job.result, layout), layout } };
+    } catch {
+      return {};
+    }
+  }, []);
+
   // A session written on the transition the bar's picker says
   // (public/js/transition.js). Resolves whether it landed: false when another
   // button called it off first. Falls back to an immediate write on an engine
@@ -639,12 +734,12 @@ export default function ComposeChat({
       writeLive(session);
       return true;
     }
-    // Going BACK to what was playing has no old song's end to work into:
-    // a bridge's stop is a cut on the bar.
+    // Going BACK to what was playing is not a song with an intro to work
+    // through: a bridge's stop is a cut on the bar.
     if (trans.shape === "bridge" && back) return (await api.transitionTo(session, { ...trans, shape: "cut", when: "bar" })).landed;
     const into = !back && r?.into != null ? { into: r.into } : {};
-    return (await api.transitionTo(session, { ...trans, ...into })).landed;
-  }, [trans, writeLive]);
+    return (await api.transitionTo(session, { ...trans, ...into, ...(trans.shape === "bridge" && r ? writtenBridge(r) : {}) })).landed;
+  }, [trans, writeLive, writtenBridge]);
 
   // A deck B turn's session, written onto that deck in place (mix.js,
   // mergeDeckB): at once, with no transition, since a transition is the open
@@ -978,7 +1073,7 @@ export default function ComposeChat({
                         : trans.shape === "cut"
                         ? trans.when === "now" ? "now" : "on the next bar"
                         : trans.shape === "bridge"
-                        ? `into the song's last ${trans.patterns === 1 ? "pattern" : `${trans.patterns} patterns`}`
+                        ? `over a ${bridgeState === "ready" ? "written" : "drafted"} bridge`
                         : `with a ${trans.bars}-bar ${trans.shape}`
                     }…`
                   : review.note
@@ -1043,7 +1138,7 @@ export default function ComposeChat({
               onChange={(e) => setTrans({ when: e.target.value as TransitionPrefs["when"] })}
               aria-label="when"
               disabled={trans.shape === "bridge"}
-              title="next bar: wait for the downbeat. now: as soon as possible. A bridge waits for the end of the song"
+              title="next bar: wait for the downbeat. now: as soon as possible. A bridge starts on the next bar"
             >
               <option value="bar">next bar</option>
               <option value="now">now</option>
@@ -1060,17 +1155,12 @@ export default function ComposeChat({
               ))}
             </select>
             {trans.shape === "bridge" ? (
-              <select
-                className={styles.chatModelSelect}
-                value={trans.patterns}
-                onChange={(e) => setTrans({ patterns: Number(e.target.value) })}
-                aria-label="patterns"
-                title="how many of the playing song's last patterns the new song is worked into: chords, then lead, then bass come in across them, and the new song lands where the old one would have started over"
+              <span
+                className={styles.chatActivity}
+                title="a bridge is as long as the new song's intro. The compose model writes it once a turn's changes are on offer and the transport is playing; until it is back, audition plays a draft made in code"
               >
-                {[1, 2, 3, 4].map((n) => (
-                  <option key={n} value={n}>last {n === 1 ? "pattern" : `${n} patterns`}</option>
-                ))}
-              </select>
+                {bridgeState === "writing" ? "writing the bridge…" : bridgeState === "ready" ? "bridge written" : bridgeState === "failed" ? "bridge: draft" : "the intro's length"}
+              </span>
             ) : (
               <select
                 className={styles.chatModelSelect}
@@ -1088,10 +1178,10 @@ export default function ComposeChat({
             <select
               className={styles.chatModelSelect}
               value={trans.tempo}
-              disabled={trans.shape === "cut" || trans.shape === "stagger" || trans.shape === "bridge"}
+              disabled={trans.shape === "cut" || trans.shape === "stagger"}
               onChange={(e) => setTrans({ tempo: e.target.value as TransitionPrefs["tempo"] })}
               aria-label="tempo"
-              title="when the bpm differs. auto: ramp a small change across the length, jump a big one. cut, stagger and bridge jump"
+              title="when the bpm differs. auto: ramp a small change across the length (a bridge: across the bridge), jump a big one. cut and stagger jump"
             >
               <option value="auto">tempo: auto</option>
               <option value="jump">tempo: jump</option>
@@ -1108,7 +1198,7 @@ export default function ComposeChat({
                 }}
                 aria-label="into"
                 title={trans.shape === "bridge"
-                  ? "the new song's pattern the old one's end is worked into, and that it lands on"
+                  ? "the new song's pattern its intro starts on: the bridge stands in for the intro from there, and the song carries on after it"
                   : "the new song's pattern it lands on. as is: whatever pattern is playing"}
               >
                 <option value="">{trans.shape === "bridge" ? "into: its start" : "into: as is"}</option>

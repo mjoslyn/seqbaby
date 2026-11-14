@@ -93,7 +93,8 @@ function snapshot(prev) {
 export function flushJam() {
   clearTimeout(settleTimer);
   settleTimer = null;
-  if (!room || applying) return;
+  // Not part way through a transition: peers get the landed song.
+  if (!room || applying || state._transitioning) return;
   const next = snapshot(base);
   const patch = diffSession(base, next);
   if (!patch) return;

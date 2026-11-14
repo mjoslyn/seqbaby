@@ -210,7 +210,10 @@ function checkForEdit() {
   clearTimeout(settleTimer);
   settleTimer = null;
   cancelIdle();
-  if (restoring) return;
+  // A transition part way (transition.js) is two songs in one session, and
+  // its merge writes the bpm field with an `input` event like a hand's: not a
+  // state anybody made. The landing asks again (markExternalEdit).
+  if (restoring || state._transitioning) return;
   const { label, key } = pending;
   pending = { label: "", key: null };
   const fresh = snapshot(live);

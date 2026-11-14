@@ -9,7 +9,8 @@ import { setPatchBackend, setPatchList } from "./catalog.js";
 import { canRedo, canUndo, hasUnsavedChanges, markSaved, redo, undo } from "./history.js";
 import { flushJam, inJam, jamState, jamTogglePlay, receiveJamPatch, receiveJamPhase, receiveJamState, startJam, stopJam } from "./jam.js";
 import { mergeSet } from "./liveSet.js";
-import { cancelTransition, finishTransition, transitionPending, transitionTo } from "./transition.js";
+import { cancelTransition, finishTransition, setTransitionBridge, transitionPending, transitionTo } from "./transition.js";
+import { bridgeHasNotes, bridgeLayout, bridgePrompt, bridgeSession, codeBridge, sameLayout } from "./transitionPlan.js";
 import { primeAudioForIOS } from "./main.js";
 import { startPlayback, stopPlayback } from "./transport.js";
 import { launchClip, stopClip } from "./clips.js";
@@ -52,6 +53,19 @@ export function installAppApi() {
     cancelTransition,
     finishTransition,
     transitionPending,
+    // A bridge between the song playing and another (transitionPlan.js): where
+    // it is written, the draft made in code, what the compose model is asked
+    // to make of it, and its answer folded back in. The compose panel has the
+    // bridge written ahead and hands it to transitionTo.
+    bridge: {
+      layout: bridgeLayout,
+      draft: codeBridge,
+      prompt: bridgePrompt,
+      session: bridgeSession,
+      hasNotes: bridgeHasNotes,
+      same: sameLayout,
+      set: setTransitionBridge,
+    },
     // blank the session -- back to the starter tracks with nothing written.
     // `newSet` resets; `onNewSet` is the flow around it (confirms first when
     // there is something to lose), which is what a button should call.

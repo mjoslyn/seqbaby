@@ -557,7 +557,7 @@ export async function startPlayback(opts = {}) {
       // It keeps COUNTING, though: left frozen, a muted track came back on the
       // step it was muted on rather than the one everyone else is on.
       // Deck B of a mix that has not been started is withheld the same way.
-      if (!isBus && (t._clipOff || t._leaving || t._staged || t._held || deckSilent(t) || (soloAudible ? !soloAudible.has(t) : t.muted))) { skipTrackStep(t); continue; }
+      if (!isBus && (t._clipOff || t._leaving || t._staged || deckSilent(t) || (soloAudible ? !soloAudible.has(t) : t.muted))) { skipTrackStep(t); continue; }
       const speed = Math.max(0.0001, t.speed ?? 1);
       const effDur = baseStepDur / speed;
       t.speedAccum = (t.speedAccum ?? 0) + speed;
@@ -758,6 +758,7 @@ export async function startPlayback(opts = {}) {
       else restartTrackCounts();
       return;
     }
+    if (tr === "bridge") { state.chainBarCount = 0; restartTrackCounts(); return; }
     if (tr === "hold") { state.chainBarCount = 0; return; }
     // A view opened while playing takes the transport with it here (views.js
     // raised the flag): into arrange mode, the arrangement is seeded from the
