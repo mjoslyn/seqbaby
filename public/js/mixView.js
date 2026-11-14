@@ -109,7 +109,7 @@ function proxy(t, sel, { cls = "", label = "", title = "" } = {}) {
   if (!real) return "";
   const a = (k) => esc(real.getAttribute(k) ?? "");
   return `<label class="sq-mix__ctl ${cls}" title="${esc(title)}">
-    <input type="range" min="${a("min")}" max="${a("max")}" step="${a("step")}" value="${esc(real.value)}" data-ctl="${esc(sel)}" aria-label="${esc(`${t.name || "track"} ${label}`)}" />
+    <input type="range" min="${a("min")}" max="${a("max")}" step="${a("step")}" value="${esc(real.value)}" data-ctl="${esc(sel)}"${cls.includes("is-fader") ? ' data-dbl="jump"' : ""} aria-label="${esc(`${t.name || "track"} ${label}`)}" />
     ${label ? `<span>${esc(label)}</span>` : ""}</label>`;
 }
 
@@ -138,7 +138,7 @@ function strip(t, shown) {
     ${tone}
     <div class="sq-mix__fader">
       <div class="sq-mix__meter" aria-hidden="true"><i></i></div>
-      ${proxy(t, ".p-vol", { cls: "is-fader", title: `${name}: level` })}
+      ${proxy(t, ".p-vol", { cls: "is-fader", title: `${name}: level. Drag to move it; double-click to put it where you clicked` })}
     </div>
     <div class="sq-mix__ms">
       <button type="button" class="sq-mix__mute" data-act="mute" aria-pressed="${!!t.muted}" ${t.soloed ? "disabled" : ""} title="mute">M</button>
@@ -331,7 +331,7 @@ function xfadeParts() {
   const bars = FADE_BARS.map((b) => `<option value="${b}"${b === fadeBars ? " selected" : ""}>${b} bar${b === 1 ? "" : "s"}</option>`).join("");
   return {
     L, R,
-    slider: `<input type="range" class="sq-mix__xfade" min="0" max="1" step="0.005" value="${m.x}" data-act="xfade" aria-label="crossfader" title="the crossfader: all of its left side (${esc(L)}) at the left, all of its right (${esc(R)}) at the right. Double-click for the middle" ${any ? "" : "disabled"} />`,
+    slider: `<input type="range" class="sq-mix__xfade" min="0" max="1" step="0.005" value="${m.x}" data-act="xfade" aria-label="crossfader" title="the crossfader: all of its left side (${esc(L)}) at the left, all of its right (${esc(R)}) at the right. Click anywhere on it to go there" ${any ? "" : "disabled"} />`,
     fades: `<div class="sq-mix__fade">
       <button type="button" class="${m.fade && m.fade.to === 0 ? (m.fade.wait ? "is-armed" : "is-on") : ""}" data-act="fade-a" title="fade to the left side over the length picked, starting on the next bar or the next pattern (the start setting)">◂ ${esc(L)}</button>
       <select data-act="fade-bars" aria-label="fade length" title="how long an automatic fade takes">${bars}</select>
@@ -519,7 +519,8 @@ function onChange(e) {
 }
 
 function onDblClick(e) {
-  if (e.target.closest?.(".sq-mix__xfade")) { setXfade(0.5); scheduleMixPaint(); return; }
+  // (the crossfader and the tempo are plain sliders: a click already puts
+  // them where it lands, so a double-click has nothing to add)
   // a pattern number: now, whatever the switch setting
   const sc = e.target.closest?.("[data-scene]");
   if (!sc) return;

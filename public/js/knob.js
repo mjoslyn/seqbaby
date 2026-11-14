@@ -408,7 +408,15 @@ function attachDrag(input) {
     // drag for the value, long press for the parameter menu, where the reset
     // now lives as a button you can read.
     if (!adjusted && drag.isDouble && !drag.touchLike) {
-      writeValue(input, Number(input.defaultValue));
+      // A control drawn as a fader may ask for the other meaning of a double
+      // click (`data-dbl="jump"`, the mix view's faders): go to where it was
+      // clicked, at once, rather than back to the default.
+      if (input.dataset.dbl === "jump") {
+        const r = (input.closest(".sq-knob") || input).getBoundingClientRect();
+        const min = Number(input.min) || 0, max = input.max === "" ? 1 : Number(input.max);
+        const frac = r.height > 0 ? Math.min(1, Math.max(0, 1 - (e.clientY - r.top) / r.height)) : 0;
+        writeValue(input, min + frac * (max - min));
+      } else writeValue(input, Number(input.defaultValue));
       k.lastTapAt = 0;
     } else {
       k.lastTapAt = e.timeStamp;

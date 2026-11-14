@@ -2861,6 +2861,11 @@ deck B tracks ─▶ deck B bus ─┘              buses' output gains
   a linear crossfade holds the level), and that gain is what "master" means
   (`state._landGain`, signal.js) until the transport next stops and
   everything is re-pointed in silence.
+- **A double-click on a strip's fader puts it where it was clicked**
+  (`data-dbl="jump"`, read by knob.js's double-tap branch, which otherwise
+  resets to the default): a drag is still relative, so this is the way to go
+  straight to a level. The crossfader and the tempo are native sliders,
+  where a single click already does that.
 - **The strips are skins.** A fader is a range input (knob.js's wrapper drawn
   as a vertical bar, the phone skin's CSS) whose `input` writes the track's
   own `.p-vol` and dispatches ITS `input`; pan is `.fx-pan-pos`, a deck bus's
