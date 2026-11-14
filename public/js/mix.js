@@ -419,6 +419,46 @@ export function mergeDeckB(session, id) {
 
 // ---- a deck's transport ---------------------------------------------------------
 
+// When a deck started while the transport runs comes in: on the next bar
+// line, or held until deck A's pattern comes round (`pattern`), so the two
+// songs' PHRASES line up and not only their bars. Per browser.
+const START_KEY = "seqbaby.mixStart.v1";
+export const DECK_STARTS = ["bar", "pattern"];
+let startOn = "bar";
+try { const v = window.localStorage.getItem(START_KEY); if (DECK_STARTS.includes(v)) startOn = v; } catch {}
+export function deckStartMode() { return startOn; }
+export function setDeckStartMode(mode) {
+  if (!DECK_STARTS.includes(mode)) return;
+  startOn = mode;
+  try { window.localStorage.setItem(START_KEY, mode); } catch {}
+  setStatus(mode === "pattern" ? "a deck started now comes in when deck A's pattern comes round" : "a deck started now comes in on the next bar");
+  announce();
+}
+
+/**
+ * Whether the bar line the transport is on (asked before its queue and chain
+ * run) is where deck A's pattern starts over or gives way to the next: a
+ * queued pattern landing, the chain's repeat count running out, or, in repeat
+ * mode, the longest part coming back to its first step. In arrange mode a
+ * bar line is all there is to go by.
+ */
+function patternLine() {
+  if (state.patternMode === "arrange") return true;
+  if (state.patternSwitchMode === "finish" && state.queuedPattern != null) return true;
+  if (state.patternMode === "chain" || state.patLoop) {
+    const reps = Math.max(1, state.patternRepeats?.[state.activePattern] ?? 1);
+    return (state.chainBarCount ?? 0) + 1 >= reps;
+  }
+  let best = null, most = -1;
+  for (const t of deckATracks()) {
+    if (t.engineKey === "bus" || t._staged || t._leaving || t._clipOff || !t.length) continue;
+    const cycle = t.length / Math.max(0.0001, t.speed ?? 1);
+    if (cycle > most) { most = cycle; best = t; }
+  }
+  if (!best) return true;
+  return Math.round((best.trackTick ?? 0)) % best.length === 0;
+}
+
 /**
  * Start or stop a deck. A start waits for the bar line while the transport
  * runs, so the songs' ones land together; a stop is at once. With the
@@ -442,7 +482,7 @@ export function setDeckPlaying(on, id) {
     setStatus(`deck ${L} armed: it starts with the transport`);
   } else if (!d.on) {
     d.arm = true;
-    setStatus(`deck ${L} starts on the next bar`);
+    setStatus(startOn === "pattern" ? `deck ${L} starts when deck A's pattern comes round` : `deck ${L} starts on the next bar`);
   }
   announce();
 }
@@ -524,13 +564,15 @@ export function mixStep(nextTime, barLine) {
     if (f.done >= f.steps) { m.fade = null; announce(); }
   }
   if (!barLine) return;
-  for (const d of m.decks) deckBar(d);
+  const phrase = startOn !== "pattern" || patternLine();
+  for (const d of m.decks) deckBar(d, phrase);
 }
 
-/** One deck's bar line. */
-function deckBar(d) {
+/** One deck's bar line. `phrase`: an armed deck may start here. */
+function deckBar(d, phrase) {
   if (d.loading) return;
   if (d.arm === true) {
+    if (!phrase) return;
     d.arm = null;
     d.on = true;
     putDeckOn(d, d.queued ?? d.scene, { restart: true });

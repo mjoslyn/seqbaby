@@ -31,7 +31,7 @@ import { setStatus } from "./dom.js";
 import { upgradeKnobs } from "./knob.js";
 import { samplePeak } from "./meters.js";
 import {
-  deckATracks, deckBTracks, deckLabel, ejectDeckB, ejectDeckTrack, fadeToDeck, focusDeck, keepBothDecks, landDeckB, loadDeckB, mixDecks,
+  deckATracks, deckBTracks, deckLabel, deckStartMode, setDeckStartMode, ejectDeckB, ejectDeckTrack, fadeToDeck, focusDeck, keepBothDecks, landDeckB, loadDeckB, mixDecks,
   mixSource, mixTempo, requestDeckScene, setDeckChain, setDeckPlaying, setDeckRepeat, setDeckXfade, setMixTempo,
   setTempoDeck, setTempoLink, setXfade, setXfadeCurve,
 } from "./mix.js";
@@ -218,7 +218,7 @@ function deckCard(d, shown) {
       ${d.loading ? `<span class="sq-mix__warn">loading…</span>` : ""}
     </div>
     <div class="sq-mix__deckbar">
-      <button type="button" class="sq-mix__play${d.on ? " is-on" : ""}${armed ? " is-armed" : ""}" data-act="deck-play" ${dis} title="${d.on ? `stop deck ${L}` : armed ? `deck ${L} starts on the next bar` : `start deck ${L}: on the next bar line while the transport plays, with it when it is stopped`}">${d.on ? "■" : armed ? "…" : "▶"} ${L}</button>
+      <button type="button" class="sq-mix__play${d.on ? " is-on" : ""}${armed ? " is-armed" : ""}" data-act="deck-play" ${dis} title="${d.on ? `stop deck ${L}` : armed ? `deck ${L} starts ${deckStartMode() === "pattern" ? "when deck A's pattern comes round" : "on the next bar"}` : `start deck ${L}: on the next bar line while the transport plays, with it when it is stopped`}">${d.on ? "■" : armed ? "…" : "▶"} ${L}</button>
       <label class="sq-mix__check" title="on the crossfader: this deck is on its far side from deck A. Off, it plays at its own fader whatever the crossfader says"><input type="checkbox" data-act="deck-xf" ${d.xf ? "checked" : ""} /> crossfader</label>
       <span class="sq-mix__grow"></span>
       <button type="button" data-act="land" ${dis} title="land: deck ${L} becomes the song (its tracks as they are playing, its scale and patterns, the tempo the mix is at); deck A's tracks and every other deck go. One undo step brings the old song back">land</button>
@@ -281,6 +281,10 @@ function bar() {
   const n = decks.length + 1;
   return `<div class="sq-mix__bar">
     <button type="button" data-act="load" title="load another song onto a new deck">load a deck…</button>
+    <label class="sq-mix__check" title="when a deck started while the transport plays comes in. next bar: on the next bar line. next pattern: held until deck A's pattern comes round (its chain moves on, or its longest part starts over), so the songs' phrases line up and not only their bars"><select data-act="start-on" aria-label="when a started deck comes in">
+      <option value="bar"${deckStartMode() === "bar" ? " selected" : ""}>start: next bar</option>
+      <option value="pattern"${deckStartMode() === "pattern" ? " selected" : ""}>start: next pattern</option>
+    </select></label>
     <span class="sq-mix__sep"></span>
     ${tempo}
     <span class="sq-mix__grow"></span>
@@ -402,6 +406,7 @@ function onChange(e) {
   if (act?.startsWith("chain-")) { setDeckChain(el.checked, act.slice(6)); return; }
   if (act === "deck-xf") { setDeckXfade(el.checked, el.closest(".sq-mix__deck")?.dataset.deck); return; }
   if (act === "tempo-deck") { setTempoDeck(el.value); return; }
+  if (act === "start-on") { setDeckStartMode(el.value); return; }
   if (act === "link") { setTempoLink(el.checked); return; }
   if (act === "curve") { setXfadeCurve(el.value); return; }
   if (act === "fade-bars") { fadeBars = Number(el.value) || 4; }

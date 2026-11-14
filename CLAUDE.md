@@ -2861,6 +2861,14 @@ deck B tracks ─▶ deck B bus ─┘              buses' output gains
   tone is `.p-eq-high / mid / low` and `.p-cutoff`. Mute and solo `.click()`
   the track's own buttons. The strips read the real controls back on the
   meter's 30Hz tick, and the desk is never rebuilt while a control is held.
+- **A started deck comes in on the next bar, or on the next PATTERN**
+  (`start:` in the mix bar, `setDeckStartMode`, per browser as
+  `seqbaby.mixStart.v1`). On `next pattern` an armed deck is held past bar
+  lines until deck A's pattern comes round (`patternLine`, asked in
+  `mixStep` before the song's queue and chain run): a queued pattern
+  landing, the chain's repeat count running out, or in repeat mode the
+  longest part back at its first step. So the phrases line up, not only the
+  bars. Arrange mode has only bar lines to go by.
 - **A strip's × ejects that one track.** A deck's track just goes
   (`ejectDeckTrack`: faded, not in the undo stack, the deck's last track
   taking the deck with it); a track of the song's own goes through its own
