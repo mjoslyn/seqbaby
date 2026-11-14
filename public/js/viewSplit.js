@@ -52,10 +52,26 @@ function measureTransport() {
     }
   }
   const ask = () => { if (!queued) { queued = true; requestAnimationFrame(stick); } };
+  // Better still, the window does not scroll at all: `--split-trim` is what
+  // the page has under the section (the add-track row, the page's own
+  // padding), taken off the section's height so the whole view fits the
+  // window and the toolbar is pinned for good. Measured, since it is
+  // whatever those rows come out at; the sticky offset above is what is left
+  // for a window too short for the section's minimum height.
+  function fit() {
+    const open = document.querySelector(".sq-split:not([hidden])");
+    if (open) {
+      root.style.setProperty("--split-trim", "0px");
+      const over = root.scrollHeight - root.clientHeight;
+      root.style.setProperty("--split-trim", `${Math.max(0, over)}px`);
+    } else root.style.removeProperty("--split-trim");
+    ask();
+  }
   window.addEventListener("scroll", ask, { passive: true });
-  window.addEventListener("resize", ask);
-  window.addEventListener("seqbaby:view", ask);
-  ask();
+  window.addEventListener("resize", fit);
+  window.addEventListener("seqbaby:view", fit);
+  new ResizeObserver(fit).observe(bar);
+  fit();
 }
 
 /**

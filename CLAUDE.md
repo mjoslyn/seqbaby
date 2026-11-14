@@ -270,7 +270,12 @@ env / fx / eq / comp / mod / automation per track.
   A view's toolbar is sticky at `--split-stick`, which viewSplit.js writes on
   the top pane on window scroll, resize and `seqbaby:view`: how far the
   pane's top has slid under the pinned transport (the window scrolls a
-  little too), so the toolbar stays in sight below it.
+  little too), so the toolbar stays in sight below it. That is the fallback:
+  the window should not scroll at all in these views, since `--split-trim`
+  (measured by `fit`: whatever the page has under the section, the add-track
+  row and the page's padding) comes off the section's height, and the
+  section has no top padding, so a toolbar sits flush under the transport
+  with the view scrolling beneath it.
 - `engineData.js` / `soundDefaults.js` / `theoryData.js` — the engine as DATA,
   with **no imports** (engineData none at all; the other two only each other
   and constants.js): the engine catalog, the four sliders' labels per engine,
