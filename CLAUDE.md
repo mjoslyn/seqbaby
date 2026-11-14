@@ -2971,19 +2971,23 @@ deck B tracks ─▶ deck B bus ─┘              buses' output gains
   line. Arrange mode has only bar lines to go by. There was a `start:` select
   in the mix bar for this; it said twice what the fade's `at:` says, and is
   gone. An automatic crossfade (`fadeToDeck`) waits (`fade.wait`, its button
-  blinking) for the pattern and bar picked beside the arrows (below). A
+  blinking). **Each side of the slider has two fade buttons**, `bar` and
+  `pat` (`◂ bar ◂ pat` on the left, `pat ▸ bar ▸` on the right, the length
+  and shape selects after the right side's chips): `bar` begins on the next
+  bar line (`at: "bar"`), `pat` when the pattern the playing deck is on comes
+  round (`at: "playing"`, below). The button lit is the one asked for. A
   double-click on a fade arrow starts it now (`fadeToDeck(side, bars, {now:
   true})`), as a double-click on a pattern number switches now. A fade
   towards a side also STARTS the decks on it that are not playing
   (`startSide`: armed like their own ▶, so they come in on the line the fade
   waits for; with the transport stopped they start with it), and calls off a
-  stop one of them was armed for. **A fade goes by the patterns of the deck that is
-  PLAYING** (`fadeToDeck(side, bars, {at, bar, ref})`, the pattern and `bar`
-  selects beside the arrows, the view's own and not saved). The deck is
+  stop one of them was armed for. **A `pat` fade goes by the patterns of the deck that is
+  PLAYING** (`fadeToDeck(side, bars, {at, bar, ref})`; a slot and a bar are
+  the API's, the desk has no selects for them). The deck is
   `fadeRefDeck()`: the playing deck on the side the crossfader is nearest
   (deck A unless it was stopped from the desk, another deck once started), so
-  with B playing and the fader over on it, the select lists B's patterns
-  (`B: playing (3)`, `B: pat 1`...), read before the fade starts anything.
+  with B playing and the fader over on it, `pat` waits for B's pattern,
+  read before the fade starts anything.
   `at: "playing"` (the default) is whichever pattern that deck is on; a slot
   number is one of its patterns. Either way the fade begins on the bar line
   `refLine(ref)` says that pattern's bar `bar` starts at (0 its first, where
