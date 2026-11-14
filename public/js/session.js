@@ -200,9 +200,6 @@ function serializeTrackFields(t) {
       // p-lock, per track per pattern (patternSound.js).
       soundLocked: !!p.soundLocked,
       sound: p.sound ? writeSound(p.sound) : null,
-      // the clip's level: written only when it is not the default, so every
-      // song without one serializes as it always did
-      ...(Number.isFinite(p.level) && p.level !== 1 ? { level: p.level } : {}),
     })),
   };
 }
@@ -596,7 +593,6 @@ export function loadTrackFromData(t, td) {
         // any pattern that got a snapshot under it was, in effect, locked.
         soundLocked: !!p.soundLocked || (!!td.patternLock && !!p.sound),
         sound: p.sound && typeof p.sound === "object" ? JSON.parse(JSON.stringify(p.sound)) : null,
-        ...(Number.isFinite(p.level) && p.level !== 1 ? { level: Math.min(1, Math.max(0, p.level)) } : {}),
       };
     }
   }

@@ -219,8 +219,6 @@ export function clonePattern(src) {
   // mod config by reference.
   out.soundLocked = !!src?.soundLocked;
   out.sound = src?.sound ? JSON.parse(JSON.stringify(src.sound)) : null;
-  // the clip's level (the clip view's vertical drag); absent means 1
-  if (Number.isFinite(src?.level) && src.level !== 1) out.level = Math.min(1, Math.max(0, src.level));
   return out;
 }
 

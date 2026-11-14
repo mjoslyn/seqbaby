@@ -254,7 +254,6 @@ export function writePatternOnto(t, idx, pattern, fromSlot = null) {
   const p = clonePattern(pattern);
   p.soundLocked = !!old?.soundLocked;
   p.sound = old?.sound ?? null;
-  // a copy keeps its own level; the clip it lands on keeps nothing of the old
   for (const key of Object.keys(p.automation)) {
     if (!canAutomate(t, key)) delete p.automation[key];
   }

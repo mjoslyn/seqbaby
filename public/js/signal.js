@@ -238,28 +238,6 @@ function sendOf(t) {
   return deckBusFor(t);
 }
 
-/**
- * A track's clip level: the `level` of the pattern it is on (0..1, absent
- * meaning 1), on the rack's `clipGain`. Called by the transport for every
- * track every step, at the step's time, so a clip launched on a bar line
- * takes its level with its first note; and at once by the clip view's drag.
- * A compare when nothing moved.
- * @param {Track} t @param {number} [at] audio time; now when absent
- */
-export function applyClipLevel(t, at) {
-  const rack = t?.fxRack;
-  const g = rack?.clipGain?.gain;
-  if (!g) return;
-  const raw = t.patterns?.[t._patternIdx ?? state.activePattern]?.level;
-  const lv = Number.isFinite(raw) ? Math.min(1, Math.max(0, raw)) : 1;
-  if (rack._clipLevel === lv) return;
-  rack._clipLevel = lv;
-  const now = rack.ctx?.currentTime ?? 0;
-  const when = Math.max(now, at ?? now);
-  try { g.cancelScheduledValues(when); g.setTargetAtTime(lv, when, 0.008); }
-  catch { try { g.value = lv; } catch {} }
-}
-
 export function routeTrackOutput(t, swap = false) {
   const rack = t.fxRack;
   if (!rack) return;

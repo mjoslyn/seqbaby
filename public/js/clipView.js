@@ -57,8 +57,9 @@ import { MODE_UI, SWITCH_UI, insertEmptyPattern, meterOptions, setPatternMeter, 
 import { deckBTracks, deckLabel, ejectDeckB, mixDecks, requestDeckScene, setDeckPlaying } from "./mix.js";
 import { openDeckPicker } from "./mixView.js";
 import { patternSvg, svgUrl } from "./patternPicture.js";
+import { upgradeKnobs } from "./knob.js";
+import { trackControl } from "./paramTargets.js";
 import { patternLocked } from "./patternSound.js";
-import { applyClipLevel } from "./signal.js";
 import { inLoop, isPatternNonEmpty, requestPatternSwitch, state, switchPattern, trackSlot } from "./state.js";
 import { extendPatternByDuplicate, truncatePattern, writePatternOnto } from "./track.js";
 import { patternMeter, stepsPerBarForMeter } from "./meter.js";
@@ -148,15 +149,22 @@ export function installClipView() {
   root.addEventListener("click", onClick);
   root.addEventListener("dblclick", onDblClick);
   root.addEventListener("pointerdown", onFillStart);
-  root.addEventListener("pointerdown", onClipPress);
-  root.addEventListener("pointermove", onLevelMove);
-  root.addEventListener("pointerup", onLevelEnd);
-  root.addEventListener("pointercancel", onLevelEnd);
-  // a clip's level has to hold with the transport stopped too (the keys, a
-  // step audition): whenever a track's clip changes, its level follows
-  for (const ev of ["seqbaby:clips", "seqbaby:setapplied", "seqbaby:songedited"]) {
-    window.addEventListener(ev, () => { if (!state.playing) for (const t of state.tracks) applyClipLevel(t); });
-  }
+  root.addEventListener("input", onVolInput);
+  // A held knob keeps the grid it is in: a rebuild (every bar line while
+  // playing) would take it out from under the pointer mid-drag.
+  grid.addEventListener("pointerdown", (e) => { if (e.target.closest("input[type=range]")) holding = true; }, true);
+  const release = () => { if (!holding) return; holding = false; if (stale) scheduleClipPaint(); };
+  window.addEventListener("pointerup", release, true);
+  window.addEventListener("pointercancel", release, true);
+  // the knobs follow the track's own (its fader moved in another view, an undo)
+  setInterval(() => {
+    if (state.view !== "clips" || holding || !grid) return;
+    for (const el of grid.querySelectorAll(".sq-clips__vol input")) {
+      const t = trackById(el.closest(".sq-clips__row")?.dataset.trackId);
+      const real = t && trackControl(t, ".p-vol");
+      if (real && el.value !== real.value) el.value = real.value;
+    }
+  }, 250);
   root.addEventListener("dragstart", onDragStart);
   root.addEventListener("dragover", onDragOver);
   root.addEventListener("dragleave", onDragLeave);
@@ -220,8 +228,23 @@ export function clipShades(t) {
   return out;
 }
 
+let holding = false;   // a knob is held: no rebuild under it
+let stale = false;
+
+/** A row's volume knob: the track's own fader, through its own event. */
+function onVolInput(e) {
+  const el = e.target.closest?.(".sq-clips__vol input");
+  const t = el && trackById(el.closest(".sq-clips__row")?.dataset.trackId);
+  const real = t && trackControl(t, ".p-vol");
+  if (!real || real.value === el.value) return;
+  real.value = el.value;
+  real.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
 function render() {
   if (!root) return;
+  if (holding) { stale = true; return; }
+  stale = false;
   // a repeat picker held open: a repaint (every chain advance while playing)
   // would close it under the pointer, so wait until it lets go
   const held = document.activeElement?.closest?.("#clips [data-rep], #clips [data-meter]");
@@ -273,13 +296,14 @@ function render() {
       if (i === t._queuedSlot) cls.push("is-queued");
       if (patternLocked(t, i)) cls.push("is-locked");
       if (i === scene) cls.push("is-scene");
-      const level = Number.isFinite(p?.level) ? Math.min(1, Math.max(0, p.level)) : 1;
-      const lvlEl = level < 1 ? `<i class="sq-clip__lvl" style="height:${Math.round((1 - level) * 100)}%"></i>` : "";
-      cells.push(`<button type="button" class="${cls.join(" ")}" data-slot="${i}"${style} draggable="true" title="${esc(t.name)}: pattern ${i + 1}, ${bars} bar${bars === 1 ? "" : "s"}. ${level < 1 ? `Level ${Math.round(level * 100)}%. ` : ""}Click to queue it on this track for when the pattern playing comes round, double-click to play it now; drag up or down to set its level; drag onto another cell to copy it there; drag its right edge across the cells beside it to copy it into those slots, or shift-drag it to make it longer or shorter">${svg ? '<i class="sq-clip__notes"></i>' : ""}<span class="sq-clip__n">${i + 1}</span>${bars > 1 ? `<i class="sq-clip__bars">${bars}</i>` : ""}${lvlEl}<span class="sq-clip__fill"></span></button>`);
+      cells.push(`<button type="button" class="${cls.join(" ")}" data-slot="${i}"${style} draggable="true" title="${esc(t.name)}: pattern ${i + 1}, ${bars} bar${bars === 1 ? "" : "s"}. Click to queue it on this track for when the pattern playing comes round, double-click to play it now; drag onto another cell to copy it there; drag its right edge across the cells beside it to copy it into those slots, or shift-drag it to make it longer or shorter">${svg ? '<i class="sq-clip__notes"></i>' : ""}<span class="sq-clip__n">${i + 1}</span>${bars > 1 ? `<i class="sq-clip__bars">${bars}</i>` : ""}<span class="sq-clip__fill"></span></button>`);
     }
+    const vol = trackControl(t, ".p-vol");
+    const volKnob = vol ? `<label class="sq-clips__vol" title="${esc(t.name)}: volume (the track's own fader)"><input type="range" min="${esc(vol.getAttribute("min") ?? "0")}" max="${esc(vol.getAttribute("max") ?? "1")}" step="${esc(vol.getAttribute("step") ?? "0.01")}" value="${esc(vol.value)}" aria-label="${esc(t.name)} volume" /></label>` : "";
     return `<div class="sq-clips__row${t.muted ? " is-muted" : ""}" data-track-id="${t.id}">
       <div class="sq-clips__strip">
         <button type="button" class="sq-clips__name" data-act="select" title="${esc(t.name)}: show this track's instrument, effects and pattern below">${esc(t.name)}</button>
+        ${volKnob}
         <button type="button" class="sq-clips__mute" data-act="mute" aria-pressed="${!!t.muted}"${t.soloed ? ' disabled title="mute (unsolo it first)"' : ' title="mute"'}>m</button>
         <button type="button" class="sq-clips__solo" data-act="solo" aria-pressed="${!!t.soloed}"${t.muted ? ' disabled title="solo (unmute it first)"' : ' title="solo"'}>s</button>
         <button type="button" class="sq-clips__stop${t._clipOff ? " is-on" : ""}" data-act="stop" title="${t._clipOff ? `play this track's clip again (pattern ${slot + 1})` : "stop this track's clip"}">${t._clipOff ? "▶" : "■"}</button>
@@ -348,6 +372,7 @@ function render() {
     <div class="sq-clips__rows">${trackRows}</div>
     ${deckBlocks}
     </div></div>`;
+  upgradeKnobs(grid);
   const sc = scroller();
   if (sc && scrollX) sc.scrollLeft = scrollX;
   const shown = detail.sync();
@@ -518,73 +543,8 @@ function onFillEnd() {
   setStatus(`${t.name}: pattern ${slot + 1} copied to ${targets.length === 1 ? `pattern ${targets[0] + 1}` : `patterns ${targets[0] + 1} to ${targets[targets.length - 1] + 1}`}`);
 }
 
-// ---- a clip's level: drag it up and down --------------------------------------
-//
-// As the dice's density is: press a filled clip and drag vertically, and its
-// level follows (a pattern's `level`, 0..1, on the rack's clip gain:
-// signal.js). A cell is also draggable sideways, to copy it, and the browser
-// starts that drag after a few pixels whichever way they went. So the press
-// is remembered, and when the drag starts mostly VERTICALLY it is refused and
-// taken as the level instead.
-
-let press = null;   // { t, slot, cell, x, y, level, id }
-let lvl = null;     // the level drag under way: press, plus the element it paints
-
-function onClipPress(e) {
-  if (e.button !== 0 || e.target.classList.contains("sq-clip__fill")) return;
-  const cell = e.target.closest(".sq-clip.is-filled");
-  const row = cell?.closest(".sq-clips__row");
-  const t = row && trackById(row.dataset.trackId);
-  if (!t) { press = null; return; }
-  const slot = Number(cell.dataset.slot);
-  const p = t.patterns?.[slot];
-  press = { t, slot, cell, x: e.clientX, y: e.clientY, id: e.pointerId, level: Number.isFinite(p?.level) ? p.level : 1 };
-}
-
-const LEVEL_TRAVEL = 90;   // px of drag for the whole range
-
-function onLevelMove(e) {
-  // before the drag is decided: where the pointer has got to (a dragstart
-  // reports where the press was, not where the pointer is)
-  if (press && e.pointerId === press.id) { press.lx = e.clientX; press.ly = e.clientY; }
-  if (!lvl || e.pointerId !== lvl.id) return;
-  const level = Math.round(Math.min(1, Math.max(0, lvl.level + (lvl.y - e.clientY) / LEVEL_TRAVEL)) * 100) / 100;
-  const p = lvl.t.patterns?.[lvl.slot];
-  if (!p) return;
-  if (level === 1) delete p.level; else p.level = level;
-  paintLevel(lvl.cell, level);
-  applyClipLevel(lvl.t);
-  setStatus(`${lvl.t.name || "track"}: pattern ${lvl.slot + 1} at ${Math.round(level * 100)}%`);
-}
-
-function onLevelEnd(e) {
-  if (!lvl || e.pointerId !== lvl.id) return;
-  try { root.releasePointerCapture(e.pointerId); } catch {}
-  lvl = null;
-  dragged = true;              // the click this leaves behind is not a launch
-  setTimeout(() => { dragged = false; }, 0);
-  scheduleClipPaint();
-}
-
-/** A cell's level, drawn: a shade over the top of it, as much as is turned down. */
-function paintLevel(cell, level) {
-  let el = cell.querySelector(".sq-clip__lvl");
-  if (level >= 1) { el?.remove(); return; }
-  if (!el) { el = document.createElement("i"); el.className = "sq-clip__lvl"; cell.appendChild(el); }
-  el.style.height = `${Math.round((1 - level) * 100)}%`;
-}
-
 function onDragStart(e) {
   if (fill) { e.preventDefault(); return; }
-  // mostly up or down since the press: the clip's level, not a copy
-  if (press && e.target.closest(".sq-clip") === press.cell
-      && Math.abs((press.ly ?? e.clientY) - press.y) > Math.abs((press.lx ?? e.clientX) - press.x)) {
-    e.preventDefault();
-    lvl = press;
-    press = null;
-    try { root.setPointerCapture(lvl.id); } catch {}
-    return;
-  }
   const cell = e.target.closest(".sq-clip");
   const row = e.target.closest(".sq-clips__row");
   if (!cell || !row) return;
