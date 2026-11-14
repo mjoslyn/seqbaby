@@ -2935,6 +2935,15 @@ deck B tracks ─▶ deck B bus ─┘              buses' output gains
   that go straight to the master, wrapping, then a block per bus with the
   tracks feeding it beside it. Decks kept as one song are buses, so each is
   its own block, and nothing scrolls sideways.
+- **Deck A can be ejected, and the others move back a letter**
+  (`ejectDeckA`, the `eject` in deck A's header). The song's tracks go; deck
+  B becomes deck A, which is the song (its tracks as playing, its globals and
+  the tempo being heard, written as a landing writes them), C becomes B, and
+  so on (`d.id`, every track's `_deck` / `_deckBus`, the default bus names).
+  Nothing sounding is re-pointed: the deck's own bus BECOMES `mix.busA`, on
+  the crossfader side the deck was on (`sideA`), so every level stays put;
+  the old bus leaves with the old tracks. One deck loaded: it is a landing.
+  One undo step brings the old song back.
 - **A strip's × ejects that one track.** A deck's track just goes
   (`ejectDeckTrack`: faded, not in the undo stack, the deck's last track
   taking the deck with it); a track of the song's own goes through its own

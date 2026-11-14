@@ -153,6 +153,8 @@ declare global {
         /** Loads onto a NEW deck (`replace`: a deck id to take off first). */
         load: (session: unknown, info?: { title?: string; source?: unknown; replace?: string }) => Promise<boolean>;
         eject: (opts?: { quiet?: boolean; id?: string }) => boolean;
+        /** Eject deck A: deck B becomes the song and every other deck moves back a letter. */
+        ejectA?: () => Promise<boolean>;
         land: (id?: string) => Promise<boolean>;
         keepBoth: () => boolean;
         play: (on: boolean, id?: string) => void;

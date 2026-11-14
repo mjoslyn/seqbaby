@@ -307,7 +307,7 @@ export default function ManualPage() {
                 <tr><td>= bpm</td><td>Sets the deck&apos;s tempo to the tempo that is playing now. After that, the tempo slider does not pull back towards the tempo the song was saved at.</td></tr>
                 <tr><td>× on a strip</td><td>Ejects that one track. On a deck, the track goes and the rest of the deck plays on. You cannot undo this. If you eject the last track of a deck, the deck goes too. On deck A, the same button removes the track from your song. It asks first, and undo brings the track back.</td></tr>
                 <tr><td>land</td><td>The deck becomes your song. Its tracks stay as they are playing. Deck A&apos;s tracks and every other deck go. One undo step brings the old song back.</td></tr>
-                <tr><td>eject</td><td>Takes the deck off. The other decks play on.</td></tr>
+                <tr><td>eject</td><td>Takes the deck off. The other decks play on. Deck A has an eject too: your song&apos;s tracks go, deck B becomes deck A and your song, and every other deck moves back a letter. The levels stay as they were. One undo step brings the old song back.</td></tr>
               </tbody>
             </table>
           </div>

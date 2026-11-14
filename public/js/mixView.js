@@ -31,7 +31,7 @@ import { setStatus } from "./dom.js";
 import { upgradeKnobs } from "./knob.js";
 import { samplePeak } from "./meters.js";
 import {
-  deckATracks, deckBTracks, deckLabel, deckSide, matchDeckTempo, deckStartMode, setDeckStartMode, ejectDeckB, ejectDeckTrack, fadeToDeck, focusDeck, keepBothDecks, landDeckB, loadDeckB, mixDecks,
+  deckATracks, deckBTracks, deckLabel, ejectDeckA, deckSide, matchDeckTempo, deckStartMode, setDeckStartMode, ejectDeckB, ejectDeckTrack, fadeToDeck, focusDeck, keepBothDecks, landDeckB, loadDeckB, mixDecks,
   mixSource, mixTempo, requestDeckScene, requestSongScene, setDeckChain, setDeckPlaying, setDeckRepeat, setDeckXfade, setMixTempo,
   setTempoDeck, setTempoLink, setXfade, setXfadeCurve,
 } from "./mix.js";
@@ -189,6 +189,7 @@ function deckA(shown) {
       <b>${m ? "A" : "mixer"}</b>
       <span class="sq-mix__title">${esc(state.songName || (m ? "the open song" : "this song"))}</span>
       <span class="sq-mix__facts">${bpm} bpm${key ? ` · ${esc(key)}` : ""} · ${pm.num}/${pm.den}</span>
+      ${m ? `<span class="sq-mix__grow"></span><button type="button" class="sq-btn--ghost sq-mix__eject-a" data-act="eject-a" ${m.landing || mixDecks()[0]?.loading ? "disabled" : ""} title="take deck A off: its tracks go, deck B becomes deck A (and the song), and every other deck moves back a letter. One undo step brings the old song back">eject</button>` : ""}
     </div>
     ${scenes("a", tracks, state.activePattern, state.queuedPattern, state.patternRepeats, state.patternMode !== "repeat")}
     ${m ? `<div class="sq-mix__strips">
@@ -555,6 +556,7 @@ async function onClick(e) {
     setDeckXfade(deckSide(id) === side ? null : side, id);
     return;
   }
+  if (act === "eject-a") { await ejectDeckA(); return; }
   if (act === "eject") { ejectDeckB({ id: deckId }); return; }
   if (act === "match-bpm") { matchDeckTempo(deckId); return; }
   if (act === "keep") { keepBothDecks(); return; }

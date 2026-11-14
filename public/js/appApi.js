@@ -30,7 +30,7 @@ import {
   serializeTrackPatch,
 } from "./session.js";
 import { SET_VERSION, validateSet } from "./sessionFormat.js";
-import { ejectDeckB, ejectDeckTrack, matchDeckTempo, fadeToDeck, getDeck, keepBothDecks, landDeckB, loadDeckB, mergeDeckB, mixDecks, requestDeckScene, serializeDeckB, setDeckPlaying, setDeckXfade, setMixSource, setMixTempo, setTempoDeck, setXfade } from "./mix.js";
+import { ejectDeckA, ejectDeckB, ejectDeckTrack, matchDeckTempo, fadeToDeck, getDeck, keepBothDecks, landDeckB, loadDeckB, mergeDeckB, mixDecks, requestDeckScene, serializeDeckB, setDeckPlaying, setDeckXfade, setMixSource, setMixTempo, setTempoDeck, setXfade } from "./mix.js";
 import { state } from "./state.js";
 
 export function installAppApi() {
@@ -149,6 +149,7 @@ export function installAppApi() {
     mix: {
       load: loadDeckB,
       eject: ejectDeckB,
+      ejectA: ejectDeckA,
       land: landDeckB,
       keepBoth: keepBothDecks,
       play: setDeckPlaying,

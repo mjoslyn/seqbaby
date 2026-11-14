@@ -4743,6 +4743,8 @@ body.vim-visual .sq-vim__mode { color: var(--accent-2); }
   border: 1px dashed var(--border); border-radius: 8px; background: transparent; color: var(--fg-dim); font-size: 20px; cursor: pointer; }
 .sq-mix__add span { font-size: 10px; }
 .sq-mix__add:hover { color: var(--fg); border-color: var(--fg-dim); }
+.sq-mix__head .sq-mix__grow { flex: 1; }
+.sq-mix__eject-a { padding: 2px 9px; font-size: 11px; align-self: center; }
 .sq-mix__deckbar { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 11px; }
 .sq-mix__deckbar button { padding: 3px 9px; font-size: 11px; }
 .sq-mix__deckbar .sq-mix__grow { flex: 1; }

@@ -1210,6 +1210,123 @@ function finishLanding(m, d, land, bpm) {
   return true;
 }
 
+/** Write a track's name, and the field that shows it. */
+function nameTrack(t, name) {
+  if (!t || t.name === name) return;
+  const field = trackControl(t, ".sq-track__name");
+  if (field) { field.value = name; field.dispatchEvent(new Event("input", { bubbles: true })); }
+  t.name = name;
+}
+
+/**
+ * Eject deck A: the open song's tracks go, and every deck moves back a
+ * letter. Deck B becomes deck A, which is to say the song (its tracks as they
+ * are playing, its scale, bank, pads and the tempo being heard, as a landing
+ * brings them), C becomes B, and so on. With one deck loaded that is a
+ * landing and the mix ends.
+ *
+ * Nothing that is sounding is re-pointed: the deck's own bus BECOMES deck A's
+ * bus, on the side of the crossfader the deck was on, so every level stays
+ * where it was. One undo step brings the old song back.
+ * @returns {Promise<boolean>}
+ */
+export function ejectDeckA() {
+  const m = state.mix;
+  const d = m?.decks[0];
+  if (!m || !d || d.loading || m.landing) return Promise.resolve(false);
+  if (m.decks.length === 1) return landDeckB(d.id);
+  flushHistory();
+  const bpm = Math.round(mixTempo() * 100) / 100;
+  if (state.playing) stretchLookAhead();
+  const b = deckBTracks(d.id);
+  const oldSong = state.tracks.filter(inSong);
+  const oldBus = m.busA;
+  const order = [...d.made.filter(t => t && b.includes(t)), ...b.filter(t => !d.made.includes(t))];
+  const side = deckSide(d.id);
+
+  // the old song leaves under its own bus, which goes with it
+  glide(busOut(oldBus), 0);
+  if (oldBus) { oldBus._deck = "~"; oldBus._deckBus = "~"; }
+  for (const t of oldSong) { try { t.voice?.silence?.(state.audioCtx?.currentTime ?? 0); } catch {} }
+
+  // the deck is the song, and its bus is deck A's
+  const bus = d.bus;
+  bus._deck = undefined;
+  bus._deckBus = "a";
+  if (bus.el) bus.el.dataset.deck = "a";
+  nameTrack(bus, "deck A");
+  m.busA = bus;
+  m.sideA = side;
+  for (const t of b) {
+    t._deck = undefined;
+    t.el?.classList.remove("is-deck-b");
+    if (t._deckArrangement) t.arrangement = t._deckArrangement;
+    t._deckArrangement = null;
+  }
+  m.decks = m.decks.filter(x => x !== d);
+
+  // every other deck back a letter (in order, so each letter is free when taken)
+  m.decks.forEach((x, i) => {
+    const to = DECK_LETTERS[i] || x.id;
+    if (to === x.id) return;
+    const from = x.id;
+    for (const t of state.tracks) {
+      if (t._deck === from) t._deck = to;
+      if (t._deckBus === from) { t._deckBus = to; if (t.el) t.el.dataset.deck = to; }
+    }
+    if (new RegExp(`^deck ${deckLabel(from)}$`, "i").test(x.bus?.name || "")) nameTrack(x.bus, `deck ${deckLabel(to)}`);
+    x.id = to;
+  });
+  m.focus = m.decks[0]?.id ?? null;
+  m.tempoX = 0;                                    // the tempo being heard is the song's now
+  m.tempoLink = false;
+  m.fade = null;
+
+  sendOff([...oldSong, ...(oldBus ? [oldBus] : [])], 0, () => { settle(); restoreLookAhead(); });
+
+  // The deck's globals, each guarded on having moved (liveSet.js), as a landing writes them.
+  const cur = serializeSet();
+  const g = d.globals;
+  const target = {
+    ...cur,
+    bpm,
+    swing: g.swing ?? cur.swing,
+    scale: g.scale,
+    patternMode: d.chain ? "chain" : "repeat",
+    patternRepeats: d.repeats,
+    patternMeters: g.patternMeters || cur.patternMeters,
+  };
+  const metersMoved = applyGlobalsInPlace(cur, target, { pads: false });
+  state.activePattern = d.scene;
+  state.queuedPattern = null;
+  state._queueOnPattern = false;
+  state.patLoop = null;
+  state.chainBarCount = d.barCount;
+  if (state.playing) {
+    if (d.on) state._countOrigin = d.countOrigin;
+    else {
+      state._countOrigin = state.tick - (state.barTick ?? 0);
+      for (const t of order) seedTrackCount(t, state.barTick ?? 0);
+    }
+  }
+  if (metersMoved) for (const t of order) { aliasPattern(t, trackSlot(t)); renderStepGrid(t); }
+  applyMacroPads(g.macroPads, d.made.map(t => (t && order.includes(t) ? t : undefined)));
+  placeBusesLast();
+  const first = order.find(t => t.engineKey !== "bus");
+  if (first) setActiveTrack(first);
+  for (const t of order) if (t._soundUiStale) { t._soundUiStale = false; refreshPatternSoundUI(t); }
+  applyTempo();
+  applyXfade();
+  refreshNoiseBeds();
+  markExternalEdit("eject deck A");
+  setTimeout(() => { try { flushJam(); } catch {} }, 0);
+  setStatus(`deck A ejected: "${d.title}" is deck A and the song now, at ${bpm} bpm, and the other decks moved back a letter`);
+  try { window.dispatchEvent(new CustomEvent("seqbaby:mixlanded", { detail: { title: d.title, source: d.source } })); } catch {}
+  announceClips();
+  announce();
+  return Promise.resolve(true);
+}
+
 // ---- keeping it honest ------------------------------------------------------------
 
 export function installMix() {
