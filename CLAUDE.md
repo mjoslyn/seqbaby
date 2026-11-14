@@ -2972,7 +2972,7 @@ deck B tracks ─▶ deck B bus ─┘              buses' output gains
   in the mix bar for this; it said twice what the fade's `at:` says, and is
   gone. An automatic crossfade (`fadeToDeck`) waits (`fade.wait`, its button
   blinking). **Each side of the slider has two fade buttons**, `bar` and
-  `pat` (`◂ bar ◂ pat` on the left, `pat ▸ bar ▸` on the right, the length
+  `pat` (`◂ pat ◂ bar` on the left, `pat ▸ bar ▸` on the right, the length
   and shape selects after the right side's chips): `bar` begins on the next
   bar line (`at: "bar"`), `pat` when the pattern the playing deck is on comes
   round (`at: "playing"`, below). The button lit is the one asked for. A
@@ -3075,8 +3075,11 @@ deck B tracks ─▶ deck B bus ─┘              buses' output gains
   cards are hidden in `#tracks` (`is-deck-b`, `is-deck-bus`); the view
   switch's `mix` carries a dot while a second song is loaded.
 - **Where a second song comes from**: the shell hands the engine a song
-  list (`app/MixSongs.tsx`, `setMixSource`, PatchBay's arrangement): the
-  account's songs, then everybody's published ones (`listPublicSongs`,
+  list (`app/MixSongs.tsx`, `setMixSource`, PatchBay's arrangement), for
+  the mix view and the clip view alike and for every visitor: mounted
+  outside the account bar's signed-in branch, so signed out the list is
+  everybody's published songs and a pasted `?open=` link of a public song
+  loads too. Signed in: the account's songs, then everybody's published ones (`listPublicSongs`,
   the explorer's cached feed, never `data`; `loadSong` reads any public
   song). The picker says `looking for songs…` while it waits, shows why and
   offers `try again` when the list fails or takes over 20s, and searches

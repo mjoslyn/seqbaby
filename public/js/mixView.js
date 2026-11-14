@@ -351,7 +351,7 @@ function xfadeParts() {
   return {
     L, R,
     slider: `<input type="range" class="sq-mix__xfade" min="0" max="1" step="0.005" value="${m.x}" data-act="xfade" aria-label="crossfader" title="the crossfader: all of its left side (${esc(L)}) at the left, all of its right (${esc(R)}) at the right. Click anywhere on it to go there" ${any ? "" : "disabled"} />`,
-    fadeL: `<div class="sq-mix__fade" role="group" aria-label="fade to the left">${btn("l", "bar")}${btn("l", "pattern")}</div>`,
+    fadeL: `<div class="sq-mix__fade" role="group" aria-label="fade to the left">${btn("l", "pattern")}${btn("l", "bar")}</div>`,
     fadeR: `<div class="sq-mix__fade" role="group" aria-label="fade to the right">${btn("r", "pattern")}${btn("r", "bar")}</div>`,
     length: `<select data-act="fade-bars" aria-label="fade length" title="how long an automatic fade takes">${bars}</select>`,
     curve: `<label class="sq-mix__check" title="the crossfader's shape. ${esc(m.curve)}: ${esc(XFADE_CURVE_TIPS[m.curve] || "")}"><select data-act="curve" aria-label="crossfader shape">${shapes}</select></label>`,
@@ -689,7 +689,7 @@ async function openPicker({ asA = false, heading = "", ...extra } = {}) {
     const note = remote === "loading" ? `<div class="sq-mix__hint">looking for songs…</div>`
       : remote === "failed" ? `<div class="sq-mix__hint is-error">${esc(remoteError)} <button type="button" class="sq-btn--ghost" data-pick="retry">try again</button></div>`
       : hits.length ? ""
-      : `<div class="sq-mix__hint">${entries.length ? "nothing matches" : remote === "none" ? "sign in to mix your saved songs. Signed out: paste a share link, or load a song exported as a file" : "no songs yet: save one, paste a share link, or load a file"}</div>`;
+      : `<div class="sq-mix__hint">${entries.length ? "nothing matches" : remote === "none" ? "paste a share link, or load a song exported as a file" : "no songs here yet: publish one, save one, paste a share link, or load a file"}</div>`;
     list.innerHTML = rows + note;
   };
   draw();

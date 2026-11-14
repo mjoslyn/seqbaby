@@ -216,10 +216,13 @@ export function AccountBar({
             account, only the link. The account's name is what a signed-in
             member is called in the room. */}
         <JamPanel accountName={name} accountUsername={username ?? null} />
+        {/* Outside the signed-in branch: published songs load into the mix
+            and the clip view for anyone. Signed in, the account's own come
+            first. Keyed so signing in or out hands the engine a new list. */}
+        <MixSongs key={`mix-${userId ?? "anon"}`} signedIn={!!name} />
         {name ? (
           <>
             <PatchBay />
-            <MixSongs />
             <SongsMenu />
             {/* Your face and name ARE the way into your settings; the page
                 you show other people is one link further, from there. */}

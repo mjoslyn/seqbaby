@@ -4,11 +4,12 @@ import { useEffect } from "react";
 import { listPublicSongs, listSongs, loadSong } from "@/app/songs/actions";
 import { setOpenSong, syncSongUrl } from "@/app/songs/openSong";
 
-// Hands the engine the account's songs for the mix view's deck B
-// (public/js/mix.js, setMixSource), the way PatchBay hands it the patch bay:
-// the engine cannot call a server action, so the shell gives it `list` and
-// `load`. Mounted by the account bar for a signed-in visitor only; signed out
-// the picker still has this browser's saved sessions, a file and a share link.
+// Hands the engine the songs a deck can be loaded from, for the mix view and
+// the clip view (public/js/mix.js, setMixSource), the way PatchBay hands it the
+// patch bay: the engine cannot call a server action, so the shell gives it
+// `list` and `load`. Mounted for every visitor: everybody's published songs
+// load signed out too (`loadSong` reads any public song), and a signed-in
+// account's own come first.
 //
 // And the shell's half of a landing. When deck B becomes the song
 // (`seqbaby:mixlanded`), the open-song slot still names the song that was
@@ -18,14 +19,17 @@ import { setOpenSong, syncSongUrl } from "@/app/songs/openSong";
 // save asks for a name). Draws nothing.
 type Landed = { title?: string; source?: { kind?: string; id?: string; versionId?: string | null; owned?: boolean } | null };
 
-export default function MixSongs() {
+export default function MixSongs({ signedIn = false }: { signedIn?: boolean }) {
   useEffect(() => {
     const backend = {
       // The account's songs, then everybody's published ones. Either may
       // fail alone: one list is better than none, and both failing is an
       // error the picker shows rather than an empty list.
       list: async () => {
-        const [mine, pub] = await Promise.allSettled([listSongs(), listPublicSongs()]);
+        const [mine, pub] = await Promise.allSettled([
+          signedIn ? listSongs() : Promise.resolve({ songs: [] } as Awaited<ReturnType<typeof listSongs>>),
+          listPublicSongs(),
+        ]);
         if (mine.status === "rejected" && pub.status === "rejected") throw new Error("the song list did not load");
         if (mine.status === "fulfilled" && mine.value.error && pub.status === "rejected") throw new Error(mine.value.error);
         const own = mine.status === "fulfilled" ? mine.value.songs || [] : [];
@@ -70,6 +74,6 @@ export default function MixSongs() {
       window.removeEventListener("seqbaby:mixlanded", onLanded);
       window.seqbaby?.setMixSource?.(null);
     };
-  }, []);
+  }, [signedIn]);
   return null;
 }
