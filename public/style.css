@@ -4849,6 +4849,14 @@ body.vim-visual .sq-vim__mode { color: var(--accent-2); }
 
 /* the crossfader, between the decks */
 .sq-mix__center { display: grid; gap: 8px; justify-items: center; align-content: center; padding-top: 34px; font-size: 11px; }
+/* More than two decks: the crossfader across the top, a chip per deck on each side. */
+.sq-mix__xrow { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-2); font-size: 11px; }
+.sq-mix__xrow .sq-mix__xfade { flex: 1 1 220px; min-width: 160px; }
+.sq-mix__assign { display: flex; gap: 3px; flex-wrap: wrap; }
+.sq-mix__side { min-width: 26px; padding: 3px 7px; font-size: 11px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg-3); color: var(--fg-dim); cursor: pointer; }
+.sq-mix__side:hover { color: var(--fg); border-color: var(--fg-dim); }
+.sq-mix__side.is-on { background: var(--accent-2); border-color: var(--accent-2); color: #0b0d10; }
+.sq-mix__side.is-on.is-a { background: var(--accent); border-color: var(--accent); }
 .sq-mix__xlabels { display: flex; justify-content: space-between; width: 100%; color: var(--fg-dim); font-size: 12px; }
 .sq-mix__xlabels span:first-child { color: var(--accent); }
 .sq-mix__xlabels span:last-child { color: var(--accent-2); }

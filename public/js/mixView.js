@@ -31,7 +31,7 @@ import { setStatus } from "./dom.js";
 import { upgradeKnobs } from "./knob.js";
 import { samplePeak } from "./meters.js";
 import {
-  deckATracks, deckBTracks, deckLabel, matchDeckTempo, deckStartMode, setDeckStartMode, ejectDeckB, ejectDeckTrack, fadeToDeck, focusDeck, keepBothDecks, landDeckB, loadDeckB, mixDecks,
+  deckATracks, deckBTracks, deckLabel, deckSide, matchDeckTempo, deckStartMode, setDeckStartMode, ejectDeckB, ejectDeckTrack, fadeToDeck, focusDeck, keepBothDecks, landDeckB, loadDeckB, mixDecks,
   mixSource, mixTempo, requestDeckScene, setDeckChain, setDeckPlaying, setDeckRepeat, setDeckXfade, setMixTempo,
   setTempoDeck, setTempoLink, setXfade, setXfadeCurve,
 } from "./mix.js";
@@ -242,7 +242,7 @@ function deckCard(d, shown) {
     </div>
     <div class="sq-mix__deckbar">
       <button type="button" class="sq-mix__play${d.on ? " is-on" : ""}${armed ? " is-armed" : ""}" data-act="deck-play" ${dis} title="${d.on ? `stop deck ${L}` : armed ? `deck ${L} starts ${deckStartMode() === "pattern" ? "when deck A's pattern comes round" : "on the next bar"}` : `start deck ${L}: on the next bar line while the transport plays, with it when it is stopped`}">${d.on ? "■" : armed ? "…" : "▶"} ${L}</button>
-      <label class="sq-mix__check" title="on the crossfader: this deck is on its far side from deck A. Off, it plays at its own fader whatever the crossfader says"><input type="checkbox" data-act="deck-xf" ${d.xf ? "checked" : ""} /> crossfader</label>
+      ${mixDecks().length > 1 ? "" : `<label class="sq-mix__check" title="on the crossfader: this deck is on its far side from deck A. Off, it plays at its own fader whatever the crossfader says"><input type="checkbox" data-act="deck-xf" ${d.xf ? "checked" : ""} /> crossfader</label>`}
       <button type="button" class="sq-btn--ghost" data-act="match-bpm" ${Math.abs(d.bpm - mixTempo()) < 0.01 ? "disabled" : ""} title="match the playing tempo: set deck ${L}'s tempo (${d.bpm} bpm) to the one playing now, so the tempo slider no longer pulls towards ${d.bpm} and landing it keeps this tempo">= bpm</button>
       <span class="sq-mix__grow"></span>
       <button type="button" data-act="land" ${dis} title="land: deck ${L} becomes the song (its tracks as they are playing, its scale and patterns, the tempo the mix is at); deck A's tracks and every other deck go. One undo step brings the old song back">land</button>
@@ -316,24 +316,67 @@ function bar() {
   </div>`;
 }
 
-function center() {
+/** The names on a side of the crossfader ("A C"), or "none". */
+function sideNames(side) {
+  const ids = ["a", ...mixDecks().map((d) => d.id)].filter((id) => deckSide(id) === side);
+  return ids.length ? ids.map(deckLabel).join(" ") : "none";
+}
+
+/** The crossfader's own controls: the slider, the fades either way, the curve. */
+function xfadeParts() {
   const m = state.mix;
-  if (!m) return "";
-  const on = mixDecks().filter((d) => d.xf);
-  const side = on.length ? on.map((d) => deckLabel(d.id)).join(" ") : "none";
+  const L = sideNames("l"), R = sideNames("r");
+  const any = L !== "none" || R !== "none";
   const bars = FADE_BARS.map((b) => `<option value="${b}"${b === fadeBars ? " selected" : ""}>${b} bar${b === 1 ? "" : "s"}</option>`).join("");
-  return `<div class="sq-mix__center">
-    <div class="sq-mix__xlabels"><span>A</span><span>${esc(side)}</span></div>
-    <input type="range" class="sq-mix__xfade" min="0" max="1" step="0.005" value="${m.x}" data-act="xfade" aria-label="crossfader: deck A to the decks on it" title="the crossfader: all deck A at the left, the decks on its far side (${esc(side)}) at the right. Double-click for the middle" ${on.length ? "" : "disabled"} />
-    <div class="sq-mix__fade">
-      <button type="button" data-act="fade-a" title="fade to deck A over the length picked, on the transport's clock">◂ A</button>
+  return {
+    L, R,
+    slider: `<input type="range" class="sq-mix__xfade" min="0" max="1" step="0.005" value="${m.x}" data-act="xfade" aria-label="crossfader" title="the crossfader: all of its left side (${esc(L)}) at the left, all of its right (${esc(R)}) at the right. Double-click for the middle" ${any ? "" : "disabled"} />`,
+    fades: `<div class="sq-mix__fade">
+      <button type="button" data-act="fade-a" title="fade to the left side over the length picked, on the transport's clock">◂ ${esc(L)}</button>
       <select data-act="fade-bars" aria-label="fade length" title="how long an automatic fade takes">${bars}</select>
-      <button type="button" data-act="fade-b" title="fade to the decks on the crossfader's far side over the length picked">${esc(side)} ▸</button>
-    </div>
-    <label class="sq-mix__check" title="blend: equal power, both decks at -3dB in the middle. cut: both full across the middle, each cut at its far end"><select data-act="curve" aria-label="crossfader curve">
+      <button type="button" data-act="fade-b" title="fade to the right side over the length picked">${esc(R)} ▸</button>
+    </div>`,
+    curve: `<label class="sq-mix__check" title="blend: equal power, both sides at -3dB in the middle. cut: both full across the middle, each cut at its far end"><select data-act="curve" aria-label="crossfader curve">
       <option value="blend"${m.curve === "blend" ? " selected" : ""}>blend</option>
       <option value="cut"${m.curve === "cut" ? " selected" : ""}>cut</option>
-    </select></label>
+    </select></label>`,
+  };
+}
+
+/** With one other deck: the crossfader between the two, as a column. */
+function center() {
+  const m = state.mix;
+  if (!m || mixDecks().length > 1) return "";
+  const x = xfadeParts();
+  return `<div class="sq-mix__center">
+    <div class="sq-mix__xlabels"><span>${esc(x.L)}</span><span>${esc(x.R)}</span></div>
+    ${x.slider}
+    ${x.fades}
+    ${x.curve}
+  </div>`;
+}
+
+/**
+ * With more decks than two: the crossfader across the top, and on each side
+ * of it a chip per deck. A lit chip is a deck attached to that side; a click
+ * attaches it there (taking it off the other side), a click on a lit one
+ * takes it off the crossfader, to play at its own fader.
+ */
+function xfadeRow() {
+  const m = state.mix;
+  if (!m || mixDecks().length < 2) return "";
+  const x = xfadeParts();
+  const ids = ["a", ...mixDecks().map((d) => d.id)];
+  const chips = (side) => `<div class="sq-mix__assign" role="group" aria-label="decks on the crossfader's ${side === "l" ? "left" : "right"}">${ids.map((id) => {
+    const on = deckSide(id) === side;
+    return `<button type="button" class="sq-mix__side${on ? " is-on" : ""}${id === "a" ? " is-a" : ""}" data-act="side" data-deck-id="${id}" data-side="${side}" aria-pressed="${on}" title="deck ${deckLabel(id)}: ${on ? "on this side of the crossfader. Click to take it off: it then plays at its own fader" : `put it on the crossfader's ${side === "l" ? "left" : "right"}`}">${deckLabel(id)}</button>`;
+  }).join("")}</div>`;
+  return `<div class="sq-mix__xrow">
+    ${chips("l")}
+    ${x.slider}
+    ${chips("r")}
+    ${x.fades}
+    ${x.curve}
   </div>`;
 }
 
@@ -349,7 +392,7 @@ function render() {
   const shown = detail.sync();
   const sc = desk.querySelectorAll(".sq-mix__strips");
   const scroll = [...sc].map((el) => el.scrollLeft);
-  desk.innerHTML = `${bar()}<div class="sq-mix__decks${state.mix ? " is-two" : ""}">${deckA(shown)}${center()}${otherDecks(shown)}</div>`;
+  desk.innerHTML = `${bar()}${xfadeRow()}<div class="sq-mix__decks${state.mix ? " is-two" : ""}">${deckA(shown)}${center()}${otherDecks(shown)}</div>`;
   upgradeKnobs(desk);
   desk.querySelectorAll(".sq-mix__strips").forEach((el, i) => { if (scroll[i]) el.scrollLeft = scroll[i]; });
   paintSwitchDot();
@@ -496,6 +539,12 @@ async function onClick(e) {
   const deckId = e.target.closest(".sq-mix__deck")?.dataset.deck || undefined;
   if (act === "deck-play") { const d = mixDecks().find((x) => x.id === deckId); if (d) setDeckPlaying(!(d.on || d.arm === true), d.id); return; }
   if (act === "fade-a" || act === "fade-b") { fadeToDeck(act === "fade-a" ? "a" : "b", fadeBars); return; }
+  if (act === "side") {
+    const b = e.target.closest("[data-act=side]");
+    const id = b.dataset.deckId, side = b.dataset.side;
+    setDeckXfade(deckSide(id) === side ? null : side, id);
+    return;
+  }
   if (act === "eject") { ejectDeckB({ id: deckId }); return; }
   if (act === "match-bpm") { matchDeckTempo(deckId); return; }
   if (act === "keep") { keepBothDecks(); return; }

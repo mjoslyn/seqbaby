@@ -2784,9 +2784,15 @@ deck B tracks ─▶ deck B bus ─┘              buses' output gains
   is a track's deck. `loadDeckB` always adds a NEW deck (`replace` takes one
   off first); every other call takes an optional deck id and means the
   tempo's deck (`getDeck()`) without one, which is what "deck B" means in
-  the compose panel and in what follows. The crossfader is deck A against
-  every deck with `xf` on (the `crossfader` box in a deck's header, a mixer's
-  assign switch); a deck taken off it plays at its own fader. The tempo
+  the compose panel and in what follows. The crossfader has two sides, and
+  every deck, A included, is on one or on neither (`xf`: "l" / "r" / null,
+  `mix.sideA` for deck A; `deckSide`, `setDeckXfade(side, id)`): deck A
+  starts on the left, a loaded deck on the right, and a deck on neither
+  plays at its own fader. With one other deck the crossfader is the column
+  between the two and the deck has a `crossfader` box. With MORE it moves to
+  a row across the top (`xfadeRow`) with a chip per deck on each side: a lit
+  chip is attached there, a click attaches a deck to that side (off the
+  other), a click on a lit one takes it off. The tempo
   slider runs from deck A's tempo to ONE deck's (`focus`, picked beside the
   slider once there are two). Each deck's card has its own start, land and
   eject; landing one takes every other deck off with deck A; `keep` keeps

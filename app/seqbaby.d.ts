@@ -165,7 +165,7 @@ declare global {
         /** Take one track (by its index in state.tracks) off its deck. */
         ejectTrack?: (index: number) => boolean;
         /** Put a deck on the crossfader, or take it off. */
-        deckXfade?: (on: boolean, id?: string) => void;
+        deckXfade?: (side: boolean | "l" | "r" | null, id?: string) => void;
         /** Which deck's tempo the tempo slider runs to. */
         tempoDeck?: (id: string) => void;
         /** Whether another song is loaded on a deck (and finished loading). */

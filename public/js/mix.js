@@ -81,10 +81,11 @@ const fieldBpm = () => Number(document.getElementById("bpm")?.value) || 120;
 // globals, bpm, scale, repeats, scene, queued, barCount, countOrigin, chain,
 // on, arm, bus, loading, pending, made, refs }`. Its id is a letter from "b"
 // on; its tracks carry `_deck: id`, its bus `_deckBus: id` as well. There is
-// no limit on how many there are. The crossfader is deck A against every
-// deck assigned to it (`xf`, on by default: a mixer's crossfader-assign
-// switch); a deck taken off it plays at its own fader whatever the crossfader
-// says. The tempo slider runs from deck A's tempo to ONE deck's, `focus`,
+// no limit on how many there are. The crossfader has two sides and every
+// deck, A included, is on one of them or on neither (`xf`: "l", "r" or null;
+// `mix.sideA` for deck A: a mixer's crossfader-assign switch). Deck A starts
+// on the left and a loaded deck on the right; a deck on neither plays at its
+// own fader whatever the crossfader says. The tempo slider runs from deck A's tempo to ONE deck's, `focus`,
 // which is also the deck a call that names none means.
 
 const DECK_LETTERS = "bcdefghijklmnopqrstuvwxyz";
@@ -178,6 +179,7 @@ export function loadDeckB(blob, info = {}) {
       x: 0, curve: "blend", fade: null,
       tempoX: 0, tempoLink: false,
       focus: null, landing: false,
+      sideA: "l",
     };
   }
   const sum = deckSummary(s);
@@ -199,7 +201,7 @@ export function loadDeckB(blob, info = {}) {
     scene: startSlot(s), queued: null, barCount: 0, countOrigin: state.tick,
     chain: s.patternMode === "chain" || s.patternMode === "arrange",
     on: false, arm: null,
-    xf: true,
+    xf: "r",
     bus: null,
     loading: true,
     pending: tds.slice(), made: [],
@@ -637,13 +639,30 @@ function glide(prm, v, at) {
   catch { try { prm.value = v; } catch {} }
 }
 
-/** Deck A and the decks on the crossfader at its gains; a deck taken off it at unity. */
+/** A deck's side of the crossfader: "l", "r" or null. `id` "a" is deck A. */
+export function deckSide(id) {
+  const m = state.mix;
+  if (!m) return null;
+  if (id === "a") return m.sideA === "l" || m.sideA === "r" ? m.sideA : null;
+  const x = getDeck(id)?.xf;
+  return x === "l" ? "l" : x ? "r" : null;
+}
+
+/** The crossfader's gain for a side: left, right, or unity for a deck on neither. */
+function sideGains() {
+  const m = state.mix;
+  const any = !!m && (deckSide("a") || m.decks.some(d => d.xf));
+  const g = any ? xfadeGains(m.x, m.curve) : { a: 1, b: 1 };
+  return { l: g.a, r: g.b };
+}
+
+/** Every deck at its side's gain; a deck on neither side at unity. */
 function applyXfade(at) {
   const m = state.mix;
   if (!m) return;
-  const g = m.decks.some(d => d.xf) ? xfadeGains(m.x, m.curve) : { a: 1, b: 1 };
-  glide(busOut(m.busA), g.a, at);
-  for (const d of m.decks) glide(busOut(d.bus), d.xf ? g.b : 1, at);
+  const g = sideGains();
+  glide(busOut(m.busA), g[deckSide("a")] ?? 1, at);
+  for (const d of m.decks) glide(busOut(d.bus), g[deckSide(d.id)] ?? 1, at);
 }
 
 function writeXfade(x, at) {
@@ -671,15 +690,24 @@ export function setXfadeCurve(curve) {
 }
 
 /**
- * Put a deck on the crossfader or take it off (a mixer's assign switch). Off,
- * it plays at its own fader whatever the crossfader says.
+ * Put a deck on a side of the crossfader, or take it off (a mixer's assign
+ * switch). `side`: "l", "r", or false / null for off (true is the right, as
+ * it was). `id` "a" is deck A. Off, a deck plays at its own fader whatever
+ * the crossfader says.
  */
-export function setDeckXfade(on, id) {
-  const d = getDeck(id);
-  if (!d) return;
-  d.xf = !!on;
+export function setDeckXfade(side, id) {
+  const m = state.mix;
+  if (!m) return;
+  const to = side === "l" ? "l" : side === "r" || side === true ? "r" : null;
+  if (id === "a") m.sideA = to;
+  else {
+    const d = getDeck(id);
+    if (!d) return;
+    d.xf = to;
+    id = d.id;
+  }
   applyXfade();
-  setStatus(`deck ${deckLabel(d.id)} is ${d.xf ? "on the crossfader" : "off the crossfader: it plays at its own fader"}`);
+  setStatus(`deck ${deckLabel(id)} is ${to ? `on the crossfader's ${to === "l" ? "left" : "right"}` : "off the crossfader: it plays at its own fader"}`);
   announce();
 }
 
@@ -707,18 +735,18 @@ function foldLevel(bus, gain) {
 /**
  * Fade to a deck over `bars` bars, a step at a time on the transport's clock
  * (the crossfader as a transition's sweep is: one press, the song does it).
- * Stopped, or with no bars, it jumps. "a" is deck A; anything else the
- * decks on the crossfader's far side.
+ * Stopped, or with no bars, it jumps. "a" / "l" is the left side; anything
+ * else the right.
  * @param {string} deck @param {number} bars
  */
 export function fadeToDeck(deck, bars) {
   const m = state.mix;
   if (!m) return;
-  const to = deck === "a" ? 0 : 1;
+  const to = deck === "a" || deck === "l" ? 0 : 1;
   const steps = Math.max(0, Math.round(Number(bars) || 0)) * stepsPerBarForMeter(transportMeter());
   if (!state.playing || !steps) { m.fade = null; writeXfade(to); announce(); return; }
   m.fade = { from: m.x, to, steps, done: 0 };
-  setStatus(`fading to ${to ? "the other side" : "deck A"} over ${bars} bar${bars === 1 ? "" : "s"}`);
+  setStatus(`fading to the crossfader's ${to ? "right" : "left"} over ${bars} bar${bars === 1 ? "" : "s"}`);
   announce();
 }
 
@@ -958,9 +986,9 @@ export function keepBothDecks() {
   for (const t of a) if (!t.out || t.out === "master") t.out = String(m.busA.id);
   for (const { d, tracks } of decks) for (const t of tracks) if (!t.out || t.out === "master") t.out = String(d.bus.id);
   // The crossfader goes; its balance stays, in the faders it was between.
-  const g = m.decks.some(d => d.xf) ? xfadeGains(m.x, m.curve) : { a: 1, b: 1 };
-  foldLevel(m.busA, g.a);
-  for (const d of m.decks) if (d.xf) foldLevel(d.bus, g.b);
+  const g = sideGains();
+  foldLevel(m.busA, g[deckSide("a")] ?? 1);
+  for (const d of m.decks) foldLevel(d.bus, g[deckSide(d.id)] ?? 1);
   for (const bus of [m.busA, ...m.decks.map(d => d.bus)]) glide(busOut(bus), 1);
   for (const t of [...decks.flatMap(x => x.tracks), m.busA, ...m.decks.map(d => d.bus)]) {
     t._deck = undefined;
