@@ -238,10 +238,11 @@ function sendOf(t) {
   return deckBusFor(t);
 }
 
-export function routeTrackOutput(t) {
+export function routeTrackOutput(t, swap = false) {
   const rack = t.fxRack;
   if (!rack) return;
   const dest = outputTargetFor(t);
+  const from = rack._routedTo;
   // Already going there: nothing to do. Every merge (an undo, a jam patch, a
   // compose audition, a track built ahead of a transition) re-points every
   // track, and each re-point ducks the track under the fade below for ~18ms,
@@ -249,6 +250,17 @@ export function routeTrackOutput(t) {
   // every one of them. A bus rebuilt has a new summing node, so its feeders'
   // `dest` is a different object and they are still re-pointed.
   if (rack._routedTo === dest && rack._routedMeter === t.meterAnalyser) return;
+  // `swap`: the new path carries the same signal at the same level as the
+  // old one (the master, or a deck's bus at unity: mix.js), so there is
+  // nothing to hide under a fade, and the fade itself, on every track of a
+  // song at once, was a dip in the whole mix. The new connection is made
+  // before the old one is taken away, in one task.
+  if (swap && from && dest && rack._routedMeter === t.meterAnalyser && !rack._softTimer) {
+    rack._routedTo = dest;
+    try { rack.output.connect(dest); } catch {}
+    try { rack.output.disconnect(from); } catch {}
+    return;
+  }
   rack._routedTo = dest;
   rack._routedMeter = t.meterAnalyser;
   // Under the rack's fade (FXRack.softSwitch): this is called on a running
@@ -266,10 +278,10 @@ export function routeTrackOutput(t) {
  * voice is rebuilt (engine switch, session load, audio init) — the feeders were
  * connected to the *old* summing gain and nothing else would notice.
  */
-export function refreshAllTrackOutputs() {
+export function refreshAllTrackOutputs({ swap = false } = {}) {
   // A track on its way out (a transition's or a mix's `_leaving`) stays where
   // it is until it is removed: re-pointing it could only make it heard again.
-  for (const t of state.tracks) if (!t._leaving) routeTrackOutput(t);
+  for (const t of state.tracks) if (!t._leaving) routeTrackOutput(t, swap);
 }
 
 /**

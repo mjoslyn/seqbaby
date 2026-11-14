@@ -31,7 +31,7 @@ import { setStatus } from "./dom.js";
 import { upgradeKnobs } from "./knob.js";
 import { samplePeak } from "./meters.js";
 import {
-  deckATracks, deckBTracks, deckLabel, deckStartMode, setDeckStartMode, ejectDeckB, ejectDeckTrack, fadeToDeck, focusDeck, keepBothDecks, landDeckB, loadDeckB, mixDecks,
+  deckATracks, deckBTracks, deckLabel, matchDeckTempo, deckStartMode, setDeckStartMode, ejectDeckB, ejectDeckTrack, fadeToDeck, focusDeck, keepBothDecks, landDeckB, loadDeckB, mixDecks,
   mixSource, mixTempo, requestDeckScene, setDeckChain, setDeckPlaying, setDeckRepeat, setDeckXfade, setMixTempo,
   setTempoDeck, setTempoLink, setXfade, setXfadeCurve,
 } from "./mix.js";
@@ -243,6 +243,7 @@ function deckCard(d, shown) {
     <div class="sq-mix__deckbar">
       <button type="button" class="sq-mix__play${d.on ? " is-on" : ""}${armed ? " is-armed" : ""}" data-act="deck-play" ${dis} title="${d.on ? `stop deck ${L}` : armed ? `deck ${L} starts ${deckStartMode() === "pattern" ? "when deck A's pattern comes round" : "on the next bar"}` : `start deck ${L}: on the next bar line while the transport plays, with it when it is stopped`}">${d.on ? "■" : armed ? "…" : "▶"} ${L}</button>
       <label class="sq-mix__check" title="on the crossfader: this deck is on its far side from deck A. Off, it plays at its own fader whatever the crossfader says"><input type="checkbox" data-act="deck-xf" ${d.xf ? "checked" : ""} /> crossfader</label>
+      <button type="button" class="sq-btn--ghost" data-act="match-bpm" ${Math.abs(d.bpm - mixTempo()) < 0.01 ? "disabled" : ""} title="match the playing tempo: set deck ${L}'s tempo (${d.bpm} bpm) to the one playing now, so the tempo slider no longer pulls towards ${d.bpm} and landing it keeps this tempo">= bpm</button>
       <span class="sq-mix__grow"></span>
       <button type="button" data-act="land" ${dis} title="land: deck ${L} becomes the song (its tracks as they are playing, its scale and patterns, the tempo the mix is at); deck A's tracks and every other deck go. One undo step brings the old song back">land</button>
       <button type="button" class="sq-btn--ghost" data-act="eject" title="take deck ${L} off">eject</button>
@@ -496,6 +497,7 @@ async function onClick(e) {
   if (act === "deck-play") { const d = mixDecks().find((x) => x.id === deckId); if (d) setDeckPlaying(!(d.on || d.arm === true), d.id); return; }
   if (act === "fade-a" || act === "fade-b") { fadeToDeck(act === "fade-a" ? "a" : "b", fadeBars); return; }
   if (act === "eject") { ejectDeckB({ id: deckId }); return; }
+  if (act === "match-bpm") { matchDeckTempo(deckId); return; }
   if (act === "keep") { keepBothDecks(); return; }
   if (act === "land") { await landDeckB(deckId); return; }
   const el = e.target.closest(".sq-mix__strip");

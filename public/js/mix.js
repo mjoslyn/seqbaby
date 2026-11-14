@@ -172,7 +172,6 @@ export function loadDeckB(blob, info = {}) {
   if (info.replace && state.mix) ejectDeckB({ quiet: true, id: info.replace });
 
   let m = state.mix;
-  const fresh = !m;
   if (!m) {
     m = state.mix = {
       decks: [], busA: null,
@@ -180,7 +179,6 @@ export function loadDeckB(blob, info = {}) {
       tempoX: 0, tempoLink: false,
       focus: null, landing: false,
     };
-    m.busA = makeDeckBus("a");
   }
   const sum = deckSummary(s);
   const repeats = Array.from({ length: PATTERN_COUNT }, (_, i) => Math.max(1, Number(s.patternRepeats?.[i]) || 1));
@@ -210,17 +208,44 @@ export function loadDeckB(blob, info = {}) {
   // read by the transport for every note this deck plays (noteForStep)
   d.scale = d.globals.scale;
   m.decks.push(d);
-  d.bus = makeDeckBus(d.id);
-  aliasPattern(d.bus, d.scene);
   if (!m.focus) m.focus = d.id;
-  placeBusesLast();
-  refreshOutputSelects();
-  if (state.ready && fresh) refreshAllTrackOutputs();     // the song's tracks, through deck A's bus
-  applyXfade();
+  // Nothing heavy yet. A bus is a track (50-100ms to build), and the songs
+  // loaded may be playing: the scheduler is given its longer lookahead first,
+  // and a moment to schedule that far ahead, and only then are the buses
+  // built, one a task, like the tracks after them. Built here at once, the
+  // two buses alone held the clock past the lookahead it had: late steps.
   stretchLookAhead();
   announce();
   setStatus(`deck ${deckLabel(d.id)}: loading "${d.title}"…`);
-  return new Promise((resolve) => { d.resolve = resolve; setTimeout(() => buildNext(d), 0); });
+  return new Promise((resolve) => { d.resolve = resolve; setTimeout(() => buildBuses(d), state.playing ? LOOKAHEAD_SETTLE_MS : 0); });
+}
+
+/** How long a stretched lookahead is given to fill before heavy work starts. */
+const LOOKAHEAD_SETTLE_MS = 160;
+
+/** The deck buses, one a task: deck A's (the first deck loaded makes it), then this deck's. */
+function buildBuses(d) {
+  const m = state.mix;
+  if (!deckLive(d)) { d.resolve?.(false); return; }
+  if (!m.busA) {
+    m.busA = makeDeckBus("a");
+    placeBusesLast();
+    refreshOutputSelects();
+    // the song's tracks, through deck A's bus: the same level by another
+    // path, so swapped rather than ducked
+    if (state.ready) refreshAllTrackOutputs({ swap: true });
+    applyXfade();
+    announce();
+    setTimeout(() => buildBuses(d), 0);
+    return;
+  }
+  d.bus = makeDeckBus(d.id);
+  aliasPattern(d.bus, d.scene);
+  placeBusesLast();
+  refreshOutputSelects();
+  applyXfade();
+  announce();
+  setTimeout(() => buildNext(d), 0);
 }
 
 /**
@@ -719,6 +744,26 @@ export function setMixTempo(x) {
   applyTempo();
 }
 
+/**
+ * Set a deck's tempo to the one playing: the deck is then "at" this tempo, so
+ * its header says so, the tempo slider no longer pulls away from it towards
+ * what the song was saved at, and landing it keeps the tempo being heard.
+ * (Every deck already PLAYS at the transport's tempo: there is one clock.)
+ */
+export function matchDeckTempo(id) {
+  const m = state.mix;
+  const d = getDeck(id);
+  if (!m || !d) return false;
+  const bpm = Math.round(mixTempo() * 100) / 100;
+  d.bpm = bpm;
+  // the slider runs to this deck: it is at the deck's end now, and stays put
+  if (m.focus === d.id) { m.tempoX = 1; m.tempoLink = false; }
+  applyTempo();
+  setStatus(`deck ${deckLabel(d.id)} is at ${bpm} bpm now, the tempo playing`);
+  announce();
+  return true;
+}
+
 /** Whether the tempo rides the crossfader. */
 export function setTempoLink(on) {
   const m = state.mix;
@@ -730,8 +775,13 @@ export function setTempoLink(on) {
 
 // ---- ending the mix -------------------------------------------------------------
 
-/** Tracks on their way out: withheld, hidden from every reader, removed once faded. */
-function sendOff(tracks, afterMs = 70) {
+/**
+ * Tracks on their way out: withheld, hidden from every reader, removed once
+ * faded, ONE PER TASK (removing a track is tens of milliseconds of main
+ * thread, and a deck's worth in one task held the scheduler past its
+ * lookahead). `done` runs after the last has gone.
+ */
+function sendOff(tracks, afterMs = 70, done = null) {
   const now = state.audioCtx?.currentTime ?? 0;
   for (const t of tracks) {
     t._leaving = true;
@@ -740,11 +790,18 @@ function sendOff(tracks, afterMs = 70) {
     if (t._deck || !t._deckBus) t._deck = "~";
     try { t.voice?.releaseHeld?.(now); } catch {}
   }
-  setTimeout(() => {
-    for (const t of tracks) if (state.tracks.includes(t)) { try { removeTrack(t); } catch (e) { console.error("mix: removing a track failed", e); } }
-    announceClips();
-    announce();
-  }, afterMs);
+  const next = () => {
+    const t = tracks.find(x => state.tracks.includes(x));
+    if (!t) {
+      announceClips();
+      announce();
+      try { done?.(); } catch (e) { console.error(e); }
+      return;
+    }
+    try { removeTrack(t); } catch (e) { console.error("mix: removing a track failed", e); }
+    setTimeout(next, 0);
+  };
+  setTimeout(next, afterMs);
 }
 
 /**
@@ -769,17 +826,17 @@ export function ejectDeckB({ quiet = false, id } = {}) {
     m.tempoX = 0;
     m.tempoLink = false;
   }
-  sendOff(gone);
+  if (state.playing) stretchLookAhead();
+  sendOff(gone, 70, () => { if (!mixDecks().some(x => x.loading)) restoreLookAhead(); });
   if (state.ready) {
     if (last) {
-      refreshAllTrackOutputs();                    // the song's tracks, back to the master
+      refreshAllTrackOutputs({ swap: true });      // the song's tracks, back to the master
       try { Tone.getTransport().bpm.value = fieldBpm(); } catch {}
     } else { applyXfade(); applyTempo(); }
   }
   refreshOutputSelects();
   refreshCompSourceDropdowns();
   refreshNoiseBeds();
-  if (!mixDecks().some(x => x.loading)) restoreLookAhead();
   d.resolve?.(false);
   if (!quiet) setStatus(`deck ${deckLabel(d.id)} ejected: "${d.title}" is gone${last ? ", the song is as it was" : ""}`);
   announceClips();
@@ -968,6 +1025,9 @@ export function landDeckB(id) {
   if (!m || !d || d.loading || m.landing) return Promise.resolve(false);
   flushHistory();
   const bpm = Math.round(mixTempo() * 100) / 100;      // before the other decks go: the tempo being heard
+  // The landing's own work (the old song's tracks taken down, the globals,
+  // every list repainted) is main thread the scheduler has to see past.
+  if (state.playing) stretchLookAhead();
   for (const other of m.decks.slice()) if (other !== d) ejectDeckB({ quiet: true, id: other.id });
   m.landing = true;
   m.fade = null;
@@ -998,7 +1058,9 @@ export function landDeckB(id) {
     d._landDirect = was ? [] : direct;
   }
   return new Promise((resolve) => {
-    setTimeout(() => { resolve(finishLanding(m, d, land, bpm)); }, live ? LAND_MS + 15 : 0);
+    // What is HEARD changes over LAND_MS (the gains above); the bookkeeping
+    // waits for the lookahead to have filled.
+    setTimeout(() => { resolve(finishLanding(m, d, land, bpm)); }, live ? Math.max(LAND_MS + 15, state.playing ? LOOKAHEAD_SETTLE_MS : 0) : 0);
   });
 }
 
@@ -1022,7 +1084,7 @@ function finishLanding(m, d, land, bpm) {
     t._deckArrangement = null;
   }
   state.mix = null;
-  sendOff(old, 0);
+  sendOff(old, 0, () => { settle(); restoreLookAhead(); });
   // the old song's tracks are still in the list until the timer above runs;
   // every write below is to the new song's
   for (const t of old) { try { t.voice?.silence?.(state.audioCtx?.currentTime ?? 0); } catch {} }
@@ -1058,7 +1120,6 @@ function finishLanding(m, d, land, bpm) {
   const first = order.find(t => t.engineKey !== "bus");
   if (first) setActiveTrack(first);
   for (const t of order) if (t._soundUiStale) { t._soundUiStale = false; refreshPatternSoundUI(t); }
-  setTimeout(settle, 0);                           // after the old tracks are gone
   markExternalEdit(`land deck ${deckLabel(d.id)}`);
   setTimeout(() => { try { flushJam(); } catch {} }, 0);
   setStatus(`landed: "${d.title}" is the song now, at ${bpm} bpm`);

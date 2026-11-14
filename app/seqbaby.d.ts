@@ -160,6 +160,10 @@ declare global {
         xfade: (x: number) => void;
         fadeTo: (deck: string, bars: number) => void;
         tempo: (x: number) => void;
+        /** Set a deck's tempo to the one playing. */
+        matchTempo?: (id?: string) => boolean;
+        /** Take one track (by its index in state.tracks) off its deck. */
+        ejectTrack?: (index: number) => boolean;
         /** Put a deck on the crossfader, or take it off. */
         deckXfade?: (on: boolean, id?: string) => void;
         /** Which deck's tempo the tempo slider runs to. */

@@ -2861,6 +2861,28 @@ deck B tracks ─▶ deck B bus ─┘              buses' output gains
   tone is `.p-eq-high / mid / low` and `.p-cutoff`. Mute and solo `.click()`
   the track's own buttons. The strips read the real controls back on the
   meter's 30Hz tick, and the desk is never rebuilt while a control is held.
+- **Loading and landing stay ahead of the scheduler.** Measured at a 3x CPU
+  slowdown with eight worklet tracks a deck: `loadDeckB` used to build both
+  deck buses (two tracks, ~190ms) before the lookahead was stretched, and a
+  landing took the old song's tracks down in one ~130ms task with no stretch
+  at all, so steps were scheduled up to 220ms late: the stutter. Now the
+  lookahead is stretched FIRST and given `LOOKAHEAD_SETTLE_MS` (160) to fill,
+  the buses are built one a task (`buildBuses`) like the tracks after them,
+  a landing's bookkeeping waits the same settle after its 45ms crossfade,
+  and `sendOff` removes tracks one per task (its `done` runs `settle` and
+  restores the lookahead). No late steps at 3x; a handful within 15ms at 6x.
+- **Routing a song through deck A's bus is a swap, not a duck**
+  (`routeTrackOutput(t, swap)`, `refreshAllTrackOutputs({swap: true})`):
+  the bus at unity is the same level by another path, so the new connection
+  is made and the old one removed in one task. Under `softSwitch` every
+  track of the song dipped ~18ms at once when the first deck loaded and when
+  the last was ejected.
+- **`= bpm` on a deck matches it to the tempo playing** (`matchDeckTempo`):
+  the deck's own bpm becomes the transport's, so its header says so, the
+  tempo slider stops pulling towards what it was saved at (the slider goes
+  to that deck's end when it is the tempo's deck), and landing it keeps the
+  tempo being heard. Every deck already plays at the transport's tempo:
+  there is one clock.
 - **A started deck comes in on the next bar, or on the next PATTERN**
   (`start:` in the mix bar, `setDeckStartMode`, per browser as
   `seqbaby.mixStart.v1`). On `next pattern` an armed deck is held past bar
