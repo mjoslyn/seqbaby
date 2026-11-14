@@ -433,6 +433,14 @@ export function requestDeckScene(slot) {
   announce();
 }
 
+/** How many bars deck B's chain plays pattern `slot` for (1..16). */
+export function setDeckRepeat(slot, bars) {
+  const m = state.mix;
+  if (!m || !(slot >= 0 && slot < PATTERN_COUNT)) return;
+  m.repeats[slot] = Math.max(1, Math.min(16, Math.round(Number(bars)) || 1));
+  announce();
+}
+
 /** Whether deck B plays through its patterns (its chain) or holds its scene. */
 export function setDeckChain(on) {
   const m = state.mix;

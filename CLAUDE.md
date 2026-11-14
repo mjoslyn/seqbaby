@@ -2793,6 +2793,12 @@ deck B tracks ─▶ deck B bus ─┘              buses' output gains
   deck B has `mix.scene`, a queue and a chain (`mix.repeats`, B's own repeat
   counts), committed by `mixStep`, which the transport calls once a step
   before the song's queue and chain. A deck B start waits for the bar line.
+  Under each pattern number in a deck's header is how many bars the deck's
+  chain plays it for (deck A's is the song's `patternRepeats`, so undo, save
+  and a jam see it; deck B's is `setDeckRepeat`, the deck's own), and each
+  header has a `chain` box (deck A's is the pattern mode, repeat or chain;
+  deck B's `setDeckChain`). The desk waits out a repaint while a picker is
+  held open, as the clip view does.
   The bar line, the meter and the swing are the song's: a deck B song in
   another meter loops at its own lengths and the header says `meters differ`.
 - **Deck B plays in its own scale** (`mix.scale`, `noteForStep` hands it to

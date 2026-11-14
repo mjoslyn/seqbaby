@@ -32,12 +32,13 @@ import { upgradeKnobs } from "./knob.js";
 import { samplePeak } from "./meters.js";
 import {
   deckATracks, deckBTracks, ejectDeckB, fadeToDeck, keepBothDecks, landDeckB, loadDeckB, mixSource, mixTempo,
-  requestDeckScene, setDeckChain, setDeckPlaying, setMixTempo, setTempoLink, setXfade, setXfadeCurve,
+  requestDeckScene, setDeckChain, setDeckPlaying, setDeckRepeat, setMixTempo, setTempoLink, setXfade, setXfadeCurve,
 } from "./mix.js";
 import { FADE_BARS, filledSlots, scaleLabel, tempoRelation } from "./mixPlan.js";
 import { trackControl } from "./paramTargets.js";
 import { loadSetsMap } from "./session.js";
 import { patternMeter } from "./meter.js";
+import { setPatternMode } from "./patternBar.js";
 import { requestPatternSwitch, state, switchPattern, trackSlot } from "./state.js";
 import { makeTrackDetail, trackHue } from "./trackDetail.js";
 import { makeViewSplit } from "./viewSplit.js";
@@ -146,8 +147,13 @@ function strip(t, shown) {
   </div>`;
 }
 
-/** A deck's patterns: the filled slots, the one it is on, the one waiting. */
-function scenes(deck, tracks, scene, queued) {
+/**
+ * A deck's patterns: the filled slots, the one it is on, the one waiting, and
+ * under each number how many bars the deck's chain plays it for (deck A's is
+ * the song's `patternRepeats`, deck B's its own). The `chain` box is the
+ * deck's mode: through its patterns, or round the one it is on.
+ */
+function scenes(deck, tracks, scene, queued, repeats, chain) {
   const filled = filledSlots(tracks, PATTERN_COUNT);
   const out = [];
   for (let i = 0; i < PATTERN_COUNT; i++) {
@@ -156,9 +162,15 @@ function scenes(deck, tracks, scene, queued) {
     if (i === scene) cls.push("is-active");
     if (i === queued) cls.push("is-queued");
     if (!filled[i]) cls.push("is-empty");
-    out.push(`<button type="button" class="${cls.join(" ")}" data-deck="${deck}" data-scene="${i}" title="deck ${deck.toUpperCase()} to pattern ${i + 1} (now, or at the bar line, by the switch setting). Double-click: now">${i + 1}</button>`);
+    const r = Math.max(1, Math.min(16, Number(repeats?.[i]) || 1));
+    const opts = Array.from({ length: 16 }, (_, k) => `<option value="${k + 1}"${k + 1 === r ? " selected" : ""}>×${k + 1}</option>`).join("");
+    out.push(`<span class="sq-mix__pat">
+      <button type="button" class="${cls.join(" ")}" data-deck="${deck}" data-scene="${i}" title="deck ${deck.toUpperCase()} to pattern ${i + 1} (now, or at the bar line, by the switch setting). Double-click: now">${i + 1}</button>
+      <select class="sq-mix__rep${r > 1 ? " is-set" : ""}" data-deck="${deck}" data-rep="${i}" title="pattern ${i + 1}: with chain on, deck ${deck.toUpperCase()} plays it for ${r} bar${r === 1 ? "" : "s"} before the next" aria-label="deck ${deck} pattern ${i + 1} repeat">${opts}</select>
+    </span>`);
   }
-  return `<div class="sq-mix__scenes" role="group" aria-label="deck ${deck} patterns">${out.join("")}</div>`;
+  const box = `<label class="sq-mix__check sq-mix__chain" title="chain: deck ${deck.toUpperCase()} plays through its patterns, each for the bars under its number. Off, it repeats the pattern it is on"><input type="checkbox" data-act="chain-${deck}" ${chain ? "checked" : ""} /> chain</label>`;
+  return `<div class="sq-mix__scenes" role="group" aria-label="deck ${deck} patterns">${out.join("")}${box}</div>`;
 }
 
 function deckA(shown) {
@@ -174,7 +186,7 @@ function deckA(shown) {
       <span class="sq-mix__title">${esc(state.songName || (m ? "the open song" : "this song"))}</span>
       <span class="sq-mix__facts">${bpm} bpm${key ? ` · ${esc(key)}` : ""} · ${pm.num}/${pm.den}</span>
     </div>
-    ${scenes("a", tracks, state.activePattern, state.queuedPattern)}
+    ${scenes("a", tracks, state.activePattern, state.queuedPattern, state.patternRepeats, state.patternMode !== "repeat")}
     <div class="sq-mix__strips">
       ${strips.map((t) => strip(t, shown)).join("")}
       ${m?.busA && state.tracks.includes(m.busA) ? strip(m.busA, shown) : ""}
@@ -207,7 +219,7 @@ function deckB(shown) {
       ${clash ? `<span class="sq-mix__warn" title="deck B was written in ${g.meter.num}/${g.meter.den} and the bar line is deck A's (${tm.num}/${tm.den}): its patterns loop at their own length, and its pattern switches land on deck A's bars">meters differ</span>` : ""}
       ${m.loading ? `<span class="sq-mix__warn">loading…</span>` : ""}
     </div>
-    ${scenes("b", tracks, m.scene, m.queued)}
+    ${scenes("b", tracks, m.scene, m.queued, m.repeats, m.chain)}
     <div class="sq-mix__strips">
       ${state.tracks.includes(m.busB) ? strip(m.busB, shown) : ""}
       ${strips.map((t) => strip(t, shown)).join("")}
@@ -240,7 +252,6 @@ function bar() {
   return `<div class="sq-mix__bar">
     <button type="button" data-act="load" title="load a different song onto deck B" ${busy ? "disabled" : ""}>load…</button>
     <button type="button" class="sq-mix__play${m.on ? " is-on" : ""}${armed ? " is-armed" : ""}" data-act="deck-play" ${busy ? "disabled" : ""} title="${m.on ? "stop deck B" : armed ? "deck B starts on the next bar" : "start deck B: on the next bar line while the transport plays, with it when it is stopped"}">${m.on ? "■ B" : armed ? "… B" : "▶ B"}</button>
-    <label class="sq-mix__check" title="deck B plays through its patterns, each for its own repeat count, instead of repeating the one it is on"><input type="checkbox" data-act="chain" ${m.chain ? "checked" : ""} /> chain</label>
     <span class="sq-mix__sep"></span>
     ${tempo}
     <span class="sq-mix__sep"></span>
@@ -273,6 +284,10 @@ function center() {
 function render() {
   if (!desk || !isOpen()) return;
   if (holding) { stale = true; return; }
+  // a repeat picker held open: a repaint (every bar line while playing)
+  // would close it under the pointer
+  const held = document.activeElement?.closest?.("#mix [data-rep]");
+  if (held) { stale = true; held.addEventListener("blur", () => scheduleMixPaint(), { once: true }); return; }
   stale = false;
   // the selection first, so the strips can mark it; the card is seated after
   const shown = detail.sync();
@@ -339,7 +354,24 @@ function onInput(e) {
 function onChange(e) {
   const el = e.target;
   const act = el?.dataset?.act;
-  if (act === "chain") { setDeckChain(el.checked); return; }
+  // a pattern's repeat count: deck A's is the song's (undo, save and a jam
+  // see it, as from the clip view's row), deck B's is the deck's own
+  if (el?.dataset?.rep != null) {
+    const i = Number(el.dataset.rep);
+    const v = Math.max(1, Math.min(16, Number(el.value) || 1));
+    if (el.dataset.deck === "a") {
+      state.patternRepeats[i] = v;
+      if (i === state.activePattern) {
+        const input = document.getElementById("pattern-repeats");
+        if (input) input.value = String(v);
+      }
+    } else setDeckRepeat(i, v);
+    el.blur();
+    scheduleMixPaint();
+    return;
+  }
+  if (act === "chain-b") { setDeckChain(el.checked); return; }
+  if (act === "chain-a") { setPatternMode(el.checked ? "chain" : "repeat"); scheduleMixPaint(); return; }
   if (act === "link") { setTempoLink(el.checked); return; }
   if (act === "curve") { setXfadeCurve(el.value); return; }
   if (act === "fade-bars") { fadeBars = Number(el.value) || 4; }
