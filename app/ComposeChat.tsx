@@ -12,12 +12,57 @@ import { signupHref } from "@/lib/safeNext.js";
 import { SITE_OUT_OF_BUDGET } from "@/lib/composeKey.js";
 import { DEFAULT_COMPOSE_MODEL } from "@/lib/composeModels.js";
 import { MODEL_EVENT, readModelPref, writeModelPref } from "@/app/composeModelPref";
+import { diffHeadline, diffSessions } from "@/app/songs/sessionDiff.js";
 import styles from "@/app/ui.module.css";
 
+/** One tool call of a turn: what it did in a few words, and whether it worked. */
+type Step = { t: string; ok: boolean };
+type Diff = ReturnType<typeof diffSessions>;
+
 type Msg =
-  | { role: "user"; text: string }
-  | { role: "assistant"; text: string; model?: string; activity?: string[]; warnings?: string[] }
+  | { role: "user"; text: string; deck?: "b" }
+  | {
+      role: "assistant";
+      text: string;
+      model?: string;
+      /** The tool summaries, as a transcript saved before `log` kept them. */
+      activity?: string[];
+      /** The turn's work, call by call. */
+      log?: Step[];
+      /** What the turn changed in the song (sessionDiff.js), when it changed it. */
+      changes?: Diff;
+      /** How long the turn took. */
+      ms?: number;
+      warnings?: string[];
+    }
   | { role: "error"; text: string };
+
+/** A turn's work, runs of the same call folded into one line with a count. */
+function foldSteps(steps: Step[]): { t: string; ok: boolean; n: number }[] {
+  const out: { t: string; ok: boolean; n: number }[] = [];
+  for (const s of steps) {
+    const last = out[out.length - 1];
+    if (last && last.t === s.t && last.ok === s.ok) last.n++;
+    else out.push({ ...s, n: 1 });
+  }
+  return out;
+}
+
+function clock(ms: number): string {
+  const s = Math.max(0, Math.round(ms / 1000));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+}
+
+// What the panel can be asked for, as things to press: each fills the box
+// with a request to edit, so the first turn is not a blank page.
+const STARTERS: { label: string; text: string }[] = [
+  { label: "a whole song", text: "write me a whole song: a dark, driving techno track with an intro, a build, a drop and an outro" },
+  { label: "add a part", text: "add a dubby bassline on the silverbox that answers the kick" },
+  { label: "change a sound", text: "make the hats swing more and open the filter on the bass" },
+  { label: "arrange it", text: "turn this loop into a full song: intro, verse, drop, breakdown, outro, chained" },
+  { label: "mix it", text: "put a reverb on a bus, send the snare and lead to it, and duck the bass under the kick" },
+  { label: "ask about it", text: "what would make this groove hit harder?" },
+];
 
 type ComposeResponse = { jobId?: string; jobToken?: string; error?: string };
 
@@ -43,6 +88,8 @@ type Proposal = {
   title?: string | null;
   pending?: "audition" | "stop" | "keep" | null;
   note?: string;
+  /** What the turn changed, for the card. */
+  changes?: Diff;
   /** The new song's pattern to transition into (0-based), or unset for the default. */
   into?: number | null;
   /**
@@ -96,7 +143,9 @@ function loadTransition(): TransitionPrefs {
 
 type JobStatus = {
   status?: "running" | "done" | "error";
-  events?: { type: string; summary?: string }[];
+  events?: { type: string; summary?: string; ok?: boolean }[];
+  /** How long the turn ran, on the worker's clock. */
+  ms?: number;
   reply?: string;
   /** Which model ran the turn. Absent on a record written before the panel
    *  could ask for one, which is why the transcript prints it only when it
@@ -178,9 +227,9 @@ function describeFailure(status: number, raw: string, data: ComposeResponse | nu
  */
 async function runTurn(
   body: Record<string, unknown>,
-  onActivity?: (summaries: string[]) => void,
+  onActivity?: (steps: Step[]) => void,
   live?: () => boolean,
-): Promise<{ job: JobStatus; activity: string[] } | { error: string }> {
+): Promise<{ job: JobStatus; activity: Step[] } | { error: string }> {
   const res = await fetch("/api/compose", {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -208,7 +257,7 @@ async function runTurn(
   // The turn is running somewhere nothing is waiting on, so from here it
   // is polled rather than awaited -- which is what lets it take the
   // minutes a whole song takes.
-  const activity: string[] = [];
+  const activity: Step[] = [];
   const until = Date.now() + POLL_LIMIT_MS;
   let misses = 0;
   for (;;) {
@@ -246,7 +295,7 @@ async function runTurn(
 
     const summaries = (job.events ?? [])
       .filter((e) => e.type === "tool" && e.summary)
-      .map((e) => e.summary!);
+      .map((e) => ({ t: e.summary!, ok: e.ok !== false }));
     if (summaries.length !== activity.length) {
       activity.length = 0;
       activity.push(...summaries);
@@ -267,6 +316,97 @@ type BridgeJob = {
   /** The model's session, once ready: its bridge patterns are what is used. */
   result?: unknown;
 };
+
+/** What a turn changed, track by track: + added, - removed, ~ changed. */
+function Changes({ d }: { d?: Diff }) {
+  if (!d || d.empty || !Array.isArray(d.tracks) || !Array.isArray(d.globals)) return null;
+  return (
+    <div className={styles.cxChanges}>
+      {d.globals.length > 0 && (
+        <div className={styles.cxGlobals}>
+          {d.globals.map((g) => (
+            <span key={g} className={styles.cxGlobal}>{g}</span>
+          ))}
+        </div>
+      )}
+      {d.tracks.length > 0 && (
+        <ul className={styles.cxTracks}>
+          {d.tracks.map((t, i) => (
+            <li
+              key={i}
+              className={`${styles.cxTrack} ${t.kind === "added" ? styles.cxAdded : t.kind === "removed" ? styles.cxRemoved : ""}`}
+            >
+              <span className={styles.cxMark} aria-hidden>
+                {t.kind === "added" ? "+" : t.kind === "removed" ? "−" : "~"}
+              </span>
+              <span className={styles.cxName}>
+                {t.name}
+                {t.engine && t.engine !== t.name ? <span className={styles.cxEngine}> {t.engine}</span> : null}
+              </span>
+              <span className={styles.cxParts}>
+                {t.kind === "removed" ? "removed" : `${t.kind === "added" ? "new · " : ""}${t.parts.join(" · ")}`}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+/** A turn's work, call by call, a failed call (one it then retried) marked. */
+function WorkLog({ steps, tail }: { steps: Step[]; tail?: number }) {
+  const folded = foldSteps(steps);
+  const shown = tail ? folded.slice(-tail) : folded;
+  if (!shown.length) return null;
+  return (
+    <ol className={styles.cxLog}>
+      {tail && folded.length > shown.length ? <li className={styles.cxLogMore}>… {folded.length - shown.length} earlier</li> : null}
+      {shown.map((st, i) => (
+        <li key={i} className={st.ok ? "" : styles.cxLogBad}>
+          <span aria-hidden>{st.ok ? "✓" : "✕"}</span> {st.t}
+          {st.n > 1 ? <span className={styles.cxLogN}> ×{st.n}</span> : null}
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+/** A labelled row of choices, one lit: a select with every option in sight. */
+function Seg<T extends string | number>({
+  label,
+  value,
+  options,
+  onPick,
+  disabled,
+  title,
+}: {
+  label: string;
+  value: T;
+  options: { v: T; label: string; title?: string }[];
+  onPick: (v: T) => void;
+  disabled?: boolean;
+  title?: string;
+}) {
+  return (
+    <div className={`${styles.cxSeg} ${disabled ? styles.cxSegOff : ""}`} role="group" aria-label={label} title={title}>
+      <span className={styles.cxSegLabel}>{label}</span>
+      {options.map((o) => (
+        <button
+          key={String(o.v)}
+          type="button"
+          className={`${styles.grooveChip} ${o.v === value ? styles.grooveChipOn : ""}`}
+          aria-pressed={o.v === value}
+          disabled={disabled}
+          title={o.title}
+          onClick={() => onPick(o.v)}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 export default function ComposeChat({
   signedIn,
@@ -324,7 +464,22 @@ export default function ComposeChat({
   const [sending, setSending] = useState(false);
   // Tool activity for the turn in flight, filled in as it happens. It moves
   // onto the finished message when the turn lands.
-  const [live, setLive] = useState<string[]>([]);
+  const [live, setLive] = useState<Step[]>([]);
+  // When the turn in flight was sent, and a clock that ticks while it runs: a
+  // whole song is minutes, and a panel that only says "working" for that long
+  // reads as stuck.
+  const [startedAt, setStartedAt] = useState(0);
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    if (!sending) return;
+    const id = setInterval(() => setTick((n) => n + 1), 1000);
+    return () => clearInterval(id);
+  }, [sending]);
+  // Which finished turns have their work log open, and whether the arrival
+  // settings are: shut, they are one line saying what is set, so the reply
+  // keeps the room.
+  const [openLogs, setOpenLogs] = useState<Set<number>>(new Set());
+  const [arrivalOpen, setArrivalOpen] = useState(false);
   // The turn's changes, waiting to be auditioned or kept. Nothing is written to
   // the studio until one of those is pressed.
   const [review, setReview] = useState<Proposal | null>(null);
@@ -348,7 +503,7 @@ export default function ComposeChat({
   // turn LANDS (it may have been changed while it ran), and the bridge writer.
   const shapeRef = useRef<Shape>("cut");
   shapeRef.current = trans.shape;
-  const writeBridgeRef = useRef<((target: unknown, into: number | null, onActivity?: (a: string[]) => void) => Promise<void>) | null>(null);
+  const writeBridgeRef = useRef<((target: unknown, into: number | null, onActivity?: (a: Step[]) => void) => Promise<void>) | null>(null);
   useEffect(() => setTransState(loadTransition()), []);
   const setTrans = useCallback((patch: Partial<TransitionPrefs>) => {
     setTransState((cur) => {
@@ -407,9 +562,19 @@ export default function ComposeChat({
     return () => document.removeEventListener("mousedown", onDown);
   }, [open]);
 
+  // The log follows the turn in flight to its newest line. A finished turn is
+  // shown from its TOP: the reply is the thing to read, and a result taller
+  // than the log used to arrive scrolled to its last line.
   useEffect(() => {
-    logRef.current?.scrollTo({ top: logRef.current.scrollHeight });
-  }, [messages, sending, live]);
+    const log = logRef.current;
+    if (!log) return;
+    const last = log.lastElementChild as HTMLElement | null;
+    if (!sending && last && messages[messages.length - 1]?.role === "assistant") {
+      log.scrollTo({ top: Math.max(0, last.offsetTop - log.offsetTop - 4) });
+    } else {
+      log.scrollTo({ top: log.scrollHeight });
+    }
+  }, [messages, sending, live, open, tab]);
 
   useEffect(() => {
     messagesRef.current = messages;
@@ -433,6 +598,7 @@ export default function ComposeChat({
     window.seqbaby?.cancelTransition?.();
     setReview(null);
     setSaveNote("");
+    setOpenLogs(new Set());
     if (!songId || isTemplate) {
       setMessages([]);
       attachedRef.current = null;
@@ -544,10 +710,12 @@ export default function ComposeChat({
     // The transcript is tracked as a value as well as in state, because the
     // turn that ends this one has to be PERSISTED, and setMessages callbacks
     // can't hand anything back to do that with.
-    const withUser: Msg[] = [...messages, { role: "user", text }];
+    const withUser: Msg[] = [...messages, { role: "user", text, ...(toB ? { deck: "b" as const } : {}) }];
     setMessages(withUser);
     setInput("");
     setSending(true);
+    setStartedAt(Date.now());
+    const sentAt = Date.now();
     setLive([]);
     // Asking for the next thing settles the last one. The session just
     // serialized is what the model is being asked about, so whatever is in the
@@ -602,14 +770,16 @@ export default function ComposeChat({
       // session (mergeSet: no teardown, no stopped transport) and `keep`
       // makes them the song. Writing a turn straight in is what used to
       // silence a track that was playing while you asked for another one.
+      const changes = job.session && job.changed !== false ? diffSessions(session, job.session) : undefined;
       if (job.session && job.changed !== false) {
         // With bridge picked, the bridge is written before the changes are
         // offered, so it is ready the moment they can be auditioned.
         if (!toB && shapeRef.current === "bridge" && writeBridgeRef.current) {
-          setLive([...activity, "writing the bridge"]);
-          await writeBridgeRef.current(job.session, null, (a) => setLive([...activity, "writing the bridge", ...a])).catch(() => {});
+          const mark = { t: "writing the bridge", ok: true };
+          setLive([...activity, mark]);
+          await writeBridgeRef.current(job.session, null, (a) => setLive([...activity, mark, ...a])).catch(() => {});
         }
-        setReview({ session: job.session, before: null, title: job.title ?? null, ...(toB ? { deck: "b" as const, fresh: freshB } : {}) });
+        setReview({ session: job.session, before: null, title: job.title ?? null, changes, ...(toB ? { deck: "b" as const, fresh: freshB } : {}) });
       }
       // A name with nothing to review (the turn only named the song) is
       // the song's at once; otherwise it comes with the changes, on keep.
@@ -620,7 +790,9 @@ export default function ComposeChat({
         text: job.reply || "Done.",
         // What it actually ran on, as the worker reported it.
         model: job.model,
-        activity,
+        log: activity,
+        ...(changes && !changes.empty ? { changes } : {}),
+        ms: job.ms ?? Date.now() - sentAt,
         warnings: job.warnings,
       });
     } catch (e) {
@@ -662,7 +834,7 @@ export default function ComposeChat({
   const [bridgeState, setBridgeState] = useState<"" | "writing" | "ready" | "failed">("");
   // Resolves when the bridge is written (or could not be): a turn waits on
   // it before it offers its changes, so the bridge is there with the song.
-  const writeBridge = useCallback(async (target: unknown, into: number | null, onActivity?: (a: string[]) => void): Promise<void> => {
+  const writeBridge = useCallback(async (target: unknown, into: number | null, onActivity?: (a: Step[]) => void): Promise<void> => {
     const api = window.seqbaby;
     const b = api?.bridge;
     if (!api || !b || !canCompose) return;
@@ -954,6 +1126,140 @@ export default function ComposeChat({
 
   if (!ready) return null;
 
+  const slots = review && !review.before ? filledSlots(review.session) : [];
+  // The arrival settings are the open song's: a deck B turn lands at once.
+  const forB = review ? review.deck === "b" : deck === "b";
+  const arrivalShown = arrivalOpen;
+  const bridgeNote =
+    bridgeState === "writing" ? "being written…" : bridgeState === "ready" ? "written" : bridgeState === "failed" ? "a draft (the written one failed)" : "";
+  const arrivalSummary = [
+    trans.shape === "cut"
+      ? trans.when === "now" ? "straight in, now" : "straight in, on the next bar"
+      : trans.shape === "bridge"
+      ? `over a bridge${bridgeNote ? `, ${bridgeNote}` : ", written with the turn"}`
+      : `a ${trans.bars}-bar ${trans.shape}, ${trans.when === "now" ? "from now" : "from the next bar"}`,
+    ...(trans.tempo !== "auto" && trans.shape !== "cut" && trans.shape !== "stagger" ? [`tempo ${trans.tempo}s`] : []),
+    ...(review?.into != null ? [`into pattern ${review.into + 1}`] : []),
+  ].join(" · ");
+  const arrival = forB ? (
+    <div className={styles.cxArrivalNote}>deck B takes its changes at once: transitions are the open song&apos;s.</div>
+  ) : (
+    <div className={styles.cxArrival}>
+      <button
+        type="button"
+        className={styles.cxArrivalSum}
+        aria-expanded={arrivalShown}
+        onClick={() => setArrivalOpen(!arrivalShown)}
+        title="how a turn's changes arrive in what is playing: set before sending, or while reviewing"
+      >
+        <span className={styles.cxSegLabel}>arrives</span>
+        <span className={styles.cxArrivalText}>{arrivalSummary}</span>
+        <span aria-hidden>{arrivalShown ? "▴" : "▾"}</span>
+      </button>
+      {arrivalShown && (
+        <div className={styles.cxArrivalBody}>
+          <Seg
+            label="shape"
+            value={trans.shape}
+            options={SHAPES.map((k) => ({ v: k, label: k, title: SHAPE_TIPS[k] }))}
+            onPick={(v) => setTrans({ shape: v })}
+          />
+          <div className={styles.cxTip}>{SHAPE_TIPS[trans.shape]}.</div>
+          <Seg
+            label="when"
+            value={trans.when}
+            disabled={trans.shape === "bridge"}
+            title="next bar: wait for the downbeat. now: as soon as possible. A bridge starts on the next bar"
+            options={[{ v: "bar", label: "next bar" }, { v: "now", label: "now" }]}
+            onPick={(v) => setTrans({ when: v })}
+          />
+          {trans.shape === "bridge" ? (
+            <div
+              className={styles.cxTip}
+              title="the compose model writes the bridge as part of the turn, so it is ready with the changes; picked afterwards it is written then, and until it is back audition plays a draft made in code"
+            >
+              a bridge is as long as the new song&apos;s intro{bridgeNote ? `: ${bridgeNote}` : ""}. writing one costs a second turn.
+            </div>
+          ) : (
+            <Seg
+              label="over"
+              value={trans.bars}
+              disabled={trans.shape === "cut"}
+              title="how many bars the transition runs: how long the songs overlap on a sweep or fade, how long a drop thins or a stagger arrives"
+              options={[1, 2, 4, 8].map((b) => ({ v: b, label: `${b} bar${b > 1 ? "s" : ""}` }))}
+              onPick={(v) => setTrans({ bars: v })}
+            />
+          )}
+          <Seg
+            label="tempo"
+            value={trans.tempo}
+            disabled={trans.shape === "cut" || trans.shape === "stagger"}
+            title="when the bpm differs. auto: ramp a small change across the length (a bridge: across the bridge), jump a big one. cut and stagger jump"
+            options={[{ v: "auto", label: "auto" }, { v: "jump", label: "jump" }, { v: "ramp", label: "ramp" }]}
+            onPick={(v) => setTrans({ tempo: v })}
+          />
+          {review && slots.length > 0 && (
+            <label
+              className={styles.cxSeg}
+              title={trans.shape === "bridge"
+                ? "the new song's pattern its intro starts on: the bridge stands in for the intro from there, and the song carries on after it"
+                : "the new song's pattern it lands on. as is: whatever pattern is playing"}
+            >
+              <span className={styles.cxSegLabel}>into</span>
+              <select
+                className={styles.chatModelSelect}
+                value={review.into ?? ""}
+                disabled={!!review.pending}
+                onChange={(e) => {
+                  const v = e.target.value === "" ? null : Number(e.target.value);
+                  setReview((cur) => (cur ? { ...cur, into: v } : cur));
+                }}
+              >
+                <option value="">{trans.shape === "bridge" ? "its start" : "the pattern playing"}</option>
+                {slots.map((k) => (
+                  <option key={k} value={k}>pattern {k + 1}</option>
+                ))}
+              </select>
+            </label>
+          )}
+        </div>
+      )}
+    </div>
+  );
+
+  const reviewTitle = !review
+    ? ""
+    : review.pending
+    ? `${review.pending === "stop" ? "going back" : review.pending === "keep" ? "keeping" : "auditioning"} ${
+        review.pending === "stop" && trans.shape === "bridge"
+          ? "on the next bar"
+          : trans.shape === "cut"
+          ? trans.when === "now" ? "now" : "on the next bar"
+          : trans.shape === "bridge"
+          ? `over a ${bridgeState === "ready" ? "written" : "drafted"} bridge`
+          : `with a ${trans.bars}-bar ${trans.shape}`
+      }…`
+    : review.fresh
+    ? "a new song for deck B"
+    : review.before
+    ? review.deck === "b" ? "auditioning on deck B" : "auditioning"
+    : review.deck === "b" ? "changes ready for deck B" : "changes ready";
+  const reviewText = !review
+    ? ""
+    : review.note
+    ? review.note
+    : review.deck === "b"
+    ? (review.fresh
+        ? "load puts it on the deck, stopped, ready to start and bring in."
+        : review.before
+        ? "the deck is playing these changes. keep leaves them there."
+        : "audition writes them onto the deck; keep leaves them there.")
+    : review.before
+    ? "you are hearing the changes, but the song does not have them yet."
+    : "not in the song yet. audition drops them into what's playing; keep makes them the song.";
+
+  const mixable = typeof window !== "undefined" && !!window.seqbaby?.mix?.merge;
+
   return (
     <div className={styles.songsWrap} ref={wrapRef}>
       {/* A closed drawer hides the review bar but not the audition: the extra
@@ -990,39 +1296,35 @@ export default function ComposeChat({
       )}
       {open && (
         <div className={`${styles.panel} ${styles.chatPanel}`}>
-          <div className={styles.panelHead}>
+          <div className={styles.cxHead}>
             <div className={styles.chatTabs} role="tablist" aria-label="compose">
               <button
                 role="tab"
                 aria-selected={tab === "chat"}
-                className={`${styles.grooveChip} ${tab === "chat" ? styles.grooveChipOn : ""}`}
+                className={`${styles.cxTab} ${tab === "chat" ? styles.cxTabOn : ""}`}
                 onClick={() => setTab("chat")}
-                title="ask for changes to this song, in words"
+                title="say what you want, in words: a part, a sound, an arrangement, a whole song, or a question"
               >
                 ask
               </button>
               <button
                 role="tab"
                 aria-selected={tab === "genre"}
-                className={`${styles.grooveChip} ${tab === "genre" ? styles.grooveChipOn : ""}`}
+                className={`${styles.cxTab} ${tab === "genre" ? styles.cxTabOn : ""}`}
                 onClick={() => setTab("genre")}
                 title="pick a genre and it writes a whole song in it"
               >
                 genre
               </button>
             </div>
-            <button className={styles.panelClose} onClick={() => setOpen(false)} aria-label="close" title="close">
-              ×
-            </button>
-          </div>
-          {canPickModel && (
-            <label className={styles.chatModelRow}>
-              <span className={styles.chatModelLabel}>model</span>
+            {canPickModel && (
               <select
                 className={styles.chatModelSelect}
                 value={model}
                 onChange={(e) => pickModel(e.target.value)}
                 disabled={sending}
+                aria-label="model"
+                title="the model the next turn runs on"
               >
                 {models.map((m) => (
                   <option key={m.id} value={m.id}>
@@ -1030,76 +1332,134 @@ export default function ComposeChat({
                   </option>
                 ))}
               </select>
-            </label>
-          )}
+            )}
+            <button className={styles.panelClose} onClick={() => setOpen(false)} aria-label="close" title="close (a turn in flight carries on)">
+              ×
+            </button>
+          </div>
           {tab === "genre" && <GroovePicker onBuild={buildGroove} busy={sending || composeOff} />}
           <div className={styles.chatLog} ref={logRef} hidden={tab !== "chat"}>
-            {messages.length === 0 && (
-              <div className={styles.chatEmpty}>
-                say what you want and it works on the song that&apos;s open:
-                “add a dubby bassline on the silverbox”, “make the hats swing
-                more”, “put a reverb on the bus”. changes wait for you to
-                audition or keep them, so nothing is lost until you say so.
+            {messages.length === 0 && !sending && (
+              <div className={styles.cxEmpty}>
+                <div className={styles.cxEmptyLead}>
+                  say what you want and it is written into the song that&apos;s open.
+                </div>
+                <div className={styles.cxStarters}>
+                  {STARTERS.map((st) => (
+                    <button
+                      key={st.label}
+                      type="button"
+                      className={styles.cxStarter}
+                      title={`“${st.text}” (put in the box to edit, not sent)`}
+                      onClick={() => {
+                        setInput(st.text);
+                        inputRef.current?.focus();
+                      }}
+                    >
+                      {st.label}
+                    </button>
+                  ))}
+                </div>
+                <ul className={styles.cxEmptyList}>
+                  <li>it adds tracks, writes parts, sets sounds, fx, modulation and automation, and arranges sections.</li>
+                  <li>each reply says what it did and lists what changed. nothing lands until you audition or keep it.</li>
+                  <li>the <b>genre</b> tab builds a whole song from one of 150 genres.</li>
+                </ul>
               </div>
             )}
-            {messages.map((m, i) => (
-              <div key={i}>
-                <div
-                  className={`${styles.chatMsg} ${
-                    m.role === "user"
-                      ? styles.chatMsgUser
-                      : m.role === "error"
-                        ? styles.chatMsgError
-                        : styles.chatMsgAssistant
-                  }`}
-                >
+            {messages.map((m, i) =>
+              m.role === "user" ? (
+                <div key={i} className={styles.cxAsk}>
+                  {m.deck === "b" && <span className={styles.cxAskTag}>deck B</span>}
                   {m.text}
                 </div>
-                {m.role === "assistant" && (m.model || (m.activity && m.activity.length > 0)) && (
-                  <div className={styles.chatActivity}>
-                    {[...(m.model ? [composeModelLabel(m.model)] : []), ...(m.activity ?? [])].join(" · ")}
-                  </div>
-                )}
-                {m.role === "assistant" && m.warnings && m.warnings.length > 0 && (
-                  <div className={styles.chatWarn}>{m.warnings.join(" · ")}</div>
-                )}
-              </div>
-            ))}
+              ) : m.role === "error" ? (
+                <div key={i} className={styles.cxError} role="alert">
+                  {m.text}
+                </div>
+              ) : (
+                (() => {
+                  const steps: Step[] = m.log ?? (m.activity ?? []).map((t) => ({ t, ok: true }));
+                  const failed = steps.filter((st) => !st.ok).length;
+                  const logOpen = openLogs.has(i);
+                  return (
+                    <article key={i} className={styles.cxResult}>
+                      <div className={styles.cxReply}>{m.text}</div>
+                      <Changes d={m.changes} />
+                      {m.warnings && m.warnings.length > 0 && (
+                        <div className={styles.cxWarn}>
+                          <div className={styles.cxWarnHead}>worth a look</div>
+                          <ul>
+                            {m.warnings.map((w, k) => (
+                              <li key={k}>{w}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      {(m.model || m.ms || steps.length > 0) && (
+                        <div className={styles.cxFoot}>
+                          {m.model && <span>{composeModelLabel(m.model)}</span>}
+                          {m.ms ? <span>{clock(m.ms)}</span> : null}
+                          {steps.length > 0 && (
+                            <button
+                              type="button"
+                              className={styles.cxFootBtn}
+                              aria-expanded={logOpen}
+                              onClick={() =>
+                                setOpenLogs((cur) => {
+                                  const next = new Set(cur);
+                                  if (next.has(i)) next.delete(i);
+                                  else next.add(i);
+                                  return next;
+                                })
+                              }
+                              title="every call the turn made into the song, in order"
+                            >
+                              {steps.length} step{steps.length === 1 ? "" : "s"}
+                              {failed ? ` · ${failed} retried` : ""} {logOpen ? "▴" : "▾"}
+                            </button>
+                          )}
+                        </div>
+                      )}
+                      {logOpen && <WorkLog steps={steps} />}
+                    </article>
+                  );
+                })()
+              ),
+            )}
             {sending && (
-              <div className={styles.chatActivity}>
-                {live.length > 0 ? `${live.join(" · ")} …` : "working…"}
-              </div>
+              <article className={`${styles.cxResult} ${styles.cxRunning}`} aria-live="polite">
+                <div className={styles.cxRunHead}>
+                  <span className={styles.cxPulse} aria-hidden />
+                  <span className={styles.cxRunWhat}>
+                    {live.length === 0 ? "reading the song" : live[live.length - 1].t === "writing the bridge" || bridgeState === "writing" ? "writing the bridge" : "writing"}
+                  </span>
+                  <span>{clock(Date.now() - startedAt)}</span>
+                  {live.length > 0 && <span>{live.length} step{live.length === 1 ? "" : "s"}</span>}
+                </div>
+                <WorkLog steps={live} tail={7} />
+                <div className={styles.cxHint}>
+                  a part takes under a minute, a whole song a few. it carries on with this closed; what you change by hand meanwhile is not in what comes back.
+                </div>
+              </article>
             )}
           </div>
-          {!review && saveNote && <div className={styles.chatActivity}>{saveNote}</div>}
+          {!review && saveNote && <div className={styles.cxNote}>{saveNote}</div>}
           {review && (
-            <div className={`${styles.chatReview} ${review.before ? styles.chatReviewLive : ""}`}>
-              <div className={styles.chatReviewText}>
-                {review.pending
-                  ? `${review.pending === "stop" ? "going back" : review.pending === "keep" ? "keeping" : "auditioning"} ${
-                      review.pending === "stop" && trans.shape === "bridge"
-                        ? "on the next bar"
-                        : trans.shape === "cut"
-                        ? trans.when === "now" ? "now" : "on the next bar"
-                        : trans.shape === "bridge"
-                        ? `over a ${bridgeState === "ready" ? "written" : "drafted"} bridge`
-                        : `with a ${trans.bars}-bar ${trans.shape}`
-                    }…`
-                  : review.note
-                  ? review.note
-                  : review.deck === "b"
-                  ? (review.fresh
-                      ? "a new song for deck B. load puts it on the deck, stopped, ready to start and bring in."
-                      : review.before
-                      ? "auditioning on deck B: the deck is playing these changes. keep leaves them there."
-                      : "these changes are for the song on deck B. audition writes them onto the deck; keep leaves them there.")
-                  : review.before
-                  ? "auditioning: you are hearing the changes, but the song does not have them yet."
-                  : "these changes aren't in the song yet. audition drops them into what's playing; keep makes them the song."}
+            <section className={`${styles.chatReview} ${review.before ? styles.chatReviewLive : ""}`} aria-label="changes to review">
+              <div className={styles.cxReviewHead}>
+                <span className={styles.cxReviewTitle}>
+                  {reviewTitle}
+                  {review.title ? <span className={styles.cxReviewName}> “{review.title}”</span> : null}
+                </span>
+                {review.changes && !review.changes.empty && <span className={styles.cxReviewSum}>{diffHeadline(review.changes)}</span>}
               </div>
+              {/* Under the genre picker the card is its head and its buttons:
+                  the list needs the room, and the rest is a tab away. */}
+              {tab === "chat" && <div className={styles.chatReviewText}>{reviewText}</div>}
               <div className={styles.chatReviewBtns}>
                 <button
-                  className={styles.smallBtn}
+                  className={`${styles.smallBtn} ${review.fresh ? styles.smallBtnPrimary : ""}`}
                   onClick={review.before || review.pending === "audition" ? stopAudition : audition}
                   disabled={review.pending === "stop" || review.pending === "keep"}
                   title={review.pending === "audition"
@@ -1108,133 +1468,75 @@ export default function ComposeChat({
                     ? "put back what was playing before the audition"
                     : "hear them in what is playing, without stopping the transport"}
                 >
-                  {review.fresh ? "load to B" : review.before || review.pending === "audition" ? "stop" : "audition"}
+                  {review.fresh ? "load to B" : review.before || review.pending === "audition" ? "■ stop" : "▶ audition"}
                 </button>
                 {!review.fresh && <button
                   className={`${styles.smallBtn} ${styles.smallBtnPrimary}`}
                   onClick={keepChanges}
-                  title={review.deck === "b" ? "leave them on deck B (saved once you land it or keep both decks)" : review.pending === "keep" ? "land it now" : 
+                  title={review.deck === "b" ? "leave them on deck B (saved once you land it or keep both decks)" : review.pending === "keep" ? "land it now" :
                     signedIn && songId && !isTemplate
                       ? "make them part of the song, and save it as a new version"
                       : "make them part of the song"
                   }
                 >
-                  keep
+                  {review.pending === "keep" ? "keep now" : signedIn && songId && !isTemplate && review.deck !== "b" ? "keep + save" : "keep"}
                 </button>}
-                <button className={styles.smallBtn} onClick={discardChanges} title="throw them away">
+                <button className={`${styles.smallBtn} ${styles.cxDiscard}`} onClick={discardChanges} title="throw them away">
                   discard
                 </button>
               </div>
-            </div>
+              {!review.fresh && tab === "chat" && arrival}
+            </section>
           )}
-          <div className={styles.chatTransition} title="how a turn's changes arrive in what is playing: picked before sending, or in review">
-            <select
-              className={`${styles.chatModelSelect} ${styles.chatDeckSelect}`}
-              value={deck}
-              disabled={sending}
-              onChange={(e) => setDeck(e.target.value === "b" ? "b" : "a")}
-              aria-label="which deck the next turn is about"
-              title={hasB
-                ? "the open song, or the song on deck B of the mix view. A deck B turn edits that deck's song in place; the settings to the right are the open song's and do not apply to it"
-                : "the open song, or deck B of the mix view. Nothing is on deck B, so a turn there writes a NEW song at this song's tempo and loads it onto the deck to mix in"}
-            >
-              <option value="a">for: this song</option>
-              <option value="b">{hasB ? "for: deck B" : "for: deck B (new song)"}</option>
-            </select>
-            <select
-              className={styles.chatModelSelect}
-              value={trans.when}
-              onChange={(e) => setTrans({ when: e.target.value as TransitionPrefs["when"] })}
-              aria-label="when"
-              disabled={trans.shape === "bridge"}
-              title="next bar: wait for the downbeat. now: as soon as possible. A bridge starts on the next bar"
-            >
-              <option value="bar">next bar</option>
-              <option value="now">now</option>
-            </select>
-            <select
-              className={styles.chatModelSelect}
-              value={trans.shape}
-              onChange={(e) => setTrans({ shape: e.target.value as TransitionPrefs["shape"] })}
-              aria-label="shape"
-              title={SHAPES.map((k) => `${k}: ${SHAPE_TIPS[k]}`).join("\n")}
-            >
-              {SHAPES.map((k) => (
-                <option key={k} value={k} title={SHAPE_TIPS[k]}>{k}</option>
-              ))}
-            </select>
-            {trans.shape === "bridge" ? (
-              <span
-                className={styles.chatActivity}
-                title="a bridge is as long as the new song's intro. The compose model writes it as part of the turn, so it is ready with the changes; picked afterwards it is written then, and until it is back audition plays a draft made in code"
-              >
-                {bridgeState === "writing" ? "writing the bridge…" : bridgeState === "ready" ? "bridge written" : bridgeState === "failed" ? "bridge: draft" : "the intro's length"}
-              </span>
-            ) : (
-              <select
-                className={styles.chatModelSelect}
-                value={trans.bars}
-                disabled={trans.shape === "cut"}
-                onChange={(e) => setTrans({ bars: Number(e.target.value) })}
-                aria-label="length"
-                title="how many bars the transition runs: how long the songs overlap on a sweep or fade, how long a drop thins or a stagger arrives"
-              >
-                {[1, 2, 4, 8].map((b) => (
-                  <option key={b} value={b}>{b} bar{b > 1 ? "s" : ""}</option>
-                ))}
-              </select>
-            )}
-            <select
-              className={styles.chatModelSelect}
-              value={trans.tempo}
-              disabled={trans.shape === "cut" || trans.shape === "stagger"}
-              onChange={(e) => setTrans({ tempo: e.target.value as TransitionPrefs["tempo"] })}
-              aria-label="tempo"
-              title="when the bpm differs. auto: ramp a small change across the length (a bridge: across the bridge), jump a big one. cut and stagger jump"
-            >
-              <option value="auto">tempo: auto</option>
-              <option value="jump">tempo: jump</option>
-              <option value="ramp">tempo: ramp</option>
-            </select>
-            {review && !review.before && filledSlots(review.session).length > 0 && (
-              <select
-                className={styles.chatModelSelect}
-                value={review.into ?? ""}
-                disabled={!!review.pending}
-                onChange={(e) => {
-                  const v = e.target.value === "" ? null : Number(e.target.value);
-                  setReview((cur) => (cur ? { ...cur, into: v } : cur));
-                }}
-                aria-label="into"
-                title={trans.shape === "bridge"
-                  ? "the new song's pattern its intro starts on: the bridge stands in for the intro from there, and the song carries on after it"
-                  : "the new song's pattern it lands on. as is: whatever pattern is playing"}
-              >
-                <option value="">{trans.shape === "bridge" ? "into: its start" : "into: as is"}</option>
-                {filledSlots(review.session).map((k) => (
-                  <option key={k} value={k}>into: pattern {k + 1}</option>
-                ))}
-              </select>
-            )}
-          </div>
-          <div className={styles.chatRow} hidden={tab !== "chat"}>
+          <div className={styles.cxComposer} hidden={tab !== "chat"}>
+            {!review && arrival}
             <textarea
               ref={inputRef}
               className={styles.chatTextarea}
-              rows={2}
-              placeholder="make me a techno beat…  (shift+enter for a new line)"
+              rows={4}
+              placeholder={
+                composeOff
+                  ? (serverKey ? "compose is resting: the site's budget has run out" : "compose isn't set up here")
+                  : deck === "b"
+                  ? hasB ? "what should change on deck B?" : "describe a new song for deck B…"
+                  : review
+                  ? "ask for more (it builds on what is playing, and settles these changes)…"
+                  : messages.length
+                  ? "what next?"
+                  : "a part, a sound, a whole song, a question…"
+              }
               value={input}
               disabled={sending}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={onKeyDown}
             />
-            <button
-              className={`${styles.smallBtn} ${styles.smallBtnPrimary}`}
-              onClick={() => send()}
-              disabled={sending || !input.trim() || composeOff}
-            >
-              {sending ? "working…" : "send"}
-            </button>
+            <div className={styles.cxComposerRow}>
+              {mixable && (
+                <div className={styles.chatDeckSelect}>
+                  <Seg
+                    label="for"
+                    value={deck}
+                    disabled={sending}
+                    title={hasB
+                      ? "the open song, or the song on deck B of the mix view. A deck B turn edits that deck's song in place"
+                      : "the open song, or deck B of the mix view. Nothing is on deck B, so a turn there writes a NEW song at this song's tempo and loads it onto the deck to mix in"}
+                    options={[
+                      { v: "a" as const, label: "this song" },
+                      { v: "b" as const, label: hasB ? "deck B" : "deck B (new)" },
+                    ]}
+                    onPick={(v) => setDeck(v)}
+                  />
+                </div>
+              )}
+              <span className={styles.cxKeys} title="shift+enter for a new line">enter sends</span>
+              <button
+                className={`${styles.smallBtn} ${styles.smallBtnPrimary}`}
+                onClick={() => send()}
+                disabled={sending || !input.trim() || composeOff}
+              >
+                {sending ? "working…" : "send"}
+              </button>
+            </div>
           </div>
         </div>
       )}

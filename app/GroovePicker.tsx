@@ -139,6 +139,7 @@ export default function GroovePicker({
 
   return (
     <div className={styles.groovePane}>
+      <div className={styles.grooveBody}>
           <input
             ref={searchRef}
             className={styles.grooveSearch}
@@ -220,51 +221,56 @@ export default function GroovePicker({
               </li>
             ))}
           </ul>
-          {genre ? (
-            <div className={styles.grooveDetail}>
-              <div className={styles.grooveDetailName}>
-                {genre.name} <span className={styles.grooveMeta}>{genre.bpm[0]}-{genre.bpm[1]} bpm</span>
-              </div>
-              <div className={styles.grooveBrief}>{genre.brief}</div>
-              {roll && (
-                <div className={styles.grooveRoll}>
-                  <span title="what the dice chose for this build: tempo, key, the parts and the form. Each build is rolled afresh">
-                    {rollSummary(roll)}
-                  </span>
-                  <button className={styles.grooveChip} onClick={() => setSeed(newSeed())} title="roll again: another tempo, key, set of parts and form">
-                    reroll
-                  </button>
-                </div>
-              )}
+      </div>
+      {/* Pinned under the list: what is picked, the note and the two buttons
+          are always in reach, however long the list or short the window. */}
+      <div className={styles.grooveFoot}>
+        {genre ? (
+          <div className={styles.grooveDetail}>
+            <div className={styles.grooveDetailName}>
+              {genre.name} <span className={styles.grooveMeta}>{genre.bpm[0]}-{genre.bpm[1]} bpm</span>
             </div>
-          ) : (
-            <div className={styles.grooveBrief}>pick a genre from the list, or let it surprise you.</div>
-          )}
-          <input
-            className={styles.grooveSearch}
-            placeholder="anything else? (optional: “in D minor”, “add a vocal”)"
-            value={extra}
-            onChange={(e) => setExtra(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                build();
-              }
-            }}
-          />
-          <div className={styles.chatReviewBtns}>
-            <button className={styles.smallBtn} onClick={surprise} title="pick a genre at random (from the filter, if one is on)">
-              surprise me
-            </button>
-            <button
-              className={`${styles.smallBtn} ${styles.smallBtnPrimary}`}
-              onClick={build}
-              disabled={!genre || busy}
-              title="write a whole song in this genre. It lands for review: nothing replaces the song until you keep it"
-            >
-              build
-            </button>
+            <div className={styles.grooveBrief}>{genre.brief}</div>
+            {roll && (
+              <div className={styles.grooveRoll}>
+                <span title="what the dice chose for this build: tempo, key, the parts and the form. Each build is rolled afresh">
+                  {rollSummary(roll)}
+                </span>
+                <button className={styles.grooveChip} onClick={() => setSeed(newSeed())} title="roll again: another tempo, key, set of parts and form">
+                  reroll
+                </button>
+              </div>
+            )}
           </div>
+        ) : (
+          <div className={styles.grooveBrief}>pick a genre from the list, or let it surprise you.</div>
+        )}
+        <input
+          className={styles.grooveSearch}
+          placeholder="anything else? (optional: “in D minor”, “add a vocal”)"
+          value={extra}
+          onChange={(e) => setExtra(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              build();
+            }
+          }}
+        />
+        <div className={styles.grooveActions}>
+          <button className={styles.smallBtn} onClick={surprise} title="pick a genre at random (from the filter, if one is on)">
+            surprise me
+          </button>
+          <button
+            className={`${styles.smallBtn} ${styles.smallBtnPrimary}`}
+            onClick={build}
+            disabled={!genre || busy}
+            title="write a whole song in this genre. It lands for review: nothing replaces the song until you keep it"
+          >
+            {genre ? `build ${genre.name}` : "build"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

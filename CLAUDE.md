@@ -417,7 +417,7 @@ npm run cf-typegen     # regenerate cloudflare-env.d.ts after changing wrangler.
 npm run legacy:dev     # pre-Next static Node server on :5173 (engine assets only)
 npm test               # node --test: the pure modules (session format, chance gen,
                        #   version tree, song names, share card copy, the song builder, the jam diff,
-                       #   song previews, grid avatars, the songs and people explorers,
+                       #   song previews, a compose turn's change summary, grid avatars, the songs and people explorers,
                        #   the Strudel bridge, the reverb, the filter models, the guitar, the contagion,
                        #   the vox and its phonetic reader, the lancet, the halo, the prism, the repeat,
                        #   the ladder, the oracle, the arrangement, the piano view's notes,
@@ -5008,6 +5008,46 @@ panel ──▶ POST /api/compose ──▶ ComposeLimits.take ──▶ Compose
   to `/studio`, which used to leave the last person's conversation on screen
   and send it as history on the next person's turn.
 
+### The drawer: what was asked, and what came back (`app/ComposeChat.tsx`)
+
+The drawer is laid out around the turn's RESULT, not around a chat log:
+
+- **A reply is a result block**, the width of the drawer: the model's words
+  at reading size, then **what changed** (`app/songs/sessionDiff.js`, pure,
+  `test/sessionDiff.test.js`: the session sent against the one that came
+  back, tracks matched by engine + name as the merge matches them, `+` added,
+  `−` removed, `~` changed with which patterns were written / edited /
+  cleared and whether the sound, filter, eq, fx, modulation, lanes or routing
+  moved, plus the tempo, scale, mode and pattern count), then the turn's
+  warnings as a block of their own, then a foot: model, how long, and `N
+  steps` opening the work log. The diff is stored on the message
+  (`changes`), so a transcript read back a week later still says what each
+  turn did. Key order is ignored (`canon`): the builder and the engine write
+  the same object in different orders.
+- **The work log is every tool call** (`log: {t, ok}[]`, from the job's
+  events), runs of the same call folded (`set params ×6`), a failed call
+  (one the model then retried) marked. `activity: string[]` is what a
+  transcript saved before it carries, and still reads.
+- **A turn in flight is the same block**, with a clock, a step count and the
+  last seven calls, and a line saying it carries on with the drawer shut and
+  that hand edits made meanwhile are not in what comes back.
+- **A finished turn is scrolled to its top**, not its last line.
+- **The review card** (pinned under the log) is headed by its state
+  (`changes ready` / `auditioning` / `keeping on the next bar…`), the name
+  the turn gave the song and the diff's headline (`diffHeadline`), over the
+  buttons. `keep` reads `keep + save` when it will save a version.
+- **How changes arrive** is one line that says what is set (`arrives a 4-bar
+  sweep, from the next bar`), opened into labelled rows of chips (`Seg`):
+  shape with its sentence under it (they were tooltips, which a finger cannot
+  read), when, over, tempo, into. In the review card while there is one,
+  above the box otherwise, shut by default so the reply keeps the room.
+- **The box** is five lines to start and grows to a third of the window;
+  under it `for: this song | deck B` (desktop, while the mix API is there)
+  and `send`. An empty conversation offers starters (`STARTERS`) that fill
+  the box rather than send.
+- None of this changes what a turn is SENT: the history is still the plain
+  text of each side.
+
 ### Groove — a whole song from a genre (`app/GroovePicker.tsx` + `app/songs/genres.js`)
 
 Groove is a TAB of the compose drawer (`ask | genre` in its head; the tab
@@ -5025,7 +5065,10 @@ from scratch in chain mode. Building does not call the route itself:
 back to the `ask` tab and sends it as an ordinary turn, so the model, the
 limits, the transcript and the review bar are compose's. The picker is
 mounted only while its tab is up and keeps its state in localStorage, so
-nothing is lost between. The review bar shows under either tab. `genres.js` is pure and
+nothing is lost between. The review bar shows under either tab (its head and
+buttons only under the picker). The picker's foot (the picked genre and its
+roll, the note, `surprise me` and `build <genre>`) is pinned: the LIST
+scrolls (`.grooveBody` / `.grooveFoot`), so the buttons are never below it. `genres.js` is pure and
 tested (`test/genres.test.js`).
 
 **The choices are rolled in code, from a seed** (`rollGenre(g, seed)`),
@@ -5197,8 +5240,8 @@ discard    throw them away (putting back the pre-audition session first)
 ### Transitions (`transition.js` + `transitionPlan.js`)
 
 How the review bar's writes reach what is playing, picked in the compose
-drawer above the input (always on show, so it is set before a turn is sent
-as well as in review) and kept per browser (`seqbaby.transition.v1`):
+drawer's `arrives` line (always on show, above the box or in the review card,
+so it is set before a turn is sent as well as in review) and kept per browser (`seqbaby.transition.v1`):
 **when** (next bar, the default, or now; a bridge starts on the next
 bar), **shape**, **length** (1 / 2 / 4 / 8 bars; a bridge is as long as the
 new song's intro) and **tempo** (auto / jump / ramp). In
