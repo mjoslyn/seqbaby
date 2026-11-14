@@ -2880,6 +2880,9 @@ deck B tracks ─▶ deck B bus ─┘              buses' output gains
   task, since `createTrack` and `loadTrackFromData` alias to it. A solo is
   not carried in. Its arrangement is set aside (`_deckArrangement`) until a
   landing: a deck plays its scene, not a timeline.
+- **The desk has no `land` button any more.** Moving over to another song is
+  `eject` on deck A (`ejectDeckA`, which with one deck loaded is
+  `landDeckB`). `landDeckB` stays in the engine and on `window.seqbaby.mix`.
 - **Three ways out.** `eject`: deck B and the buses go, the song is as it
   was. `land B`: deck B becomes the song, its tracks as they are playing
   (edits made on the deck included), its scale, repeats, meters and pads, the

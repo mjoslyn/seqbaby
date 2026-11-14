@@ -31,7 +31,7 @@ import { setStatus } from "./dom.js";
 import { upgradeKnobs } from "./knob.js";
 import { samplePeak } from "./meters.js";
 import {
-  deckATracks, deckBTracks, deckLabel, ejectDeckA, deckSide, deskDecks, matchDeckTempo, deckStartMode, setDeckStartMode, ejectDeckB, ejectDeckTrack, fadeToDeck, focusDeck, keepBothDecks, landDeckB, loadDeckB, 
+  deckATracks, deckBTracks, deckLabel, ejectDeckA, deckSide, deskDecks, matchDeckTempo, deckStartMode, setDeckStartMode, ejectDeckB, ejectDeckTrack, fadeToDeck, focusDeck, keepBothDecks, loadDeckB, 
   mixSource, mixTempo, requestDeckScene, requestSongScene, setDeckChain, setDeckPlaying, setDeckRepeat, setDeckXfade, setMixTempo,
   setTempoDeck, setTempoLink, setXfade, setXfadeCurve,
 } from "./mix.js";
@@ -249,7 +249,6 @@ function deckCard(d, shown) {
       ${deskDecks().length > 1 ? "" : `<label class="sq-mix__check" title="on the crossfader: this deck is on its far side from deck A. Off, it plays at its own fader whatever the crossfader says"><input type="checkbox" data-act="deck-xf" ${d.xf ? "checked" : ""} /> crossfader</label>`}
       <button type="button" class="sq-btn--ghost" data-act="match-bpm" ${Math.abs(d.bpm - mixTempo()) < 0.01 ? "disabled" : ""} title="match the playing tempo: set deck ${L}'s tempo (${d.bpm} bpm) to the one playing now, so the tempo slider no longer pulls towards ${d.bpm} and landing it keeps this tempo">= bpm</button>
       <span class="sq-mix__grow"></span>
-      <button type="button" data-act="land" ${dis} title="land: deck ${L} becomes the song (its tracks as they are playing, its scale and patterns, the tempo the mix is at); deck A's tracks and every other deck go. One undo step brings the old song back">land</button>
       <button type="button" class="sq-btn--ghost" data-act="eject" title="take deck ${L} off">eject</button>
     </div>
     ${scenes(d.id, tracks, d.scene, d.queued, d.repeats, d.chain)}
@@ -563,7 +562,6 @@ async function onClick(e) {
   if (act === "eject") { ejectDeckB({ id: deckId }); return; }
   if (act === "match-bpm") { matchDeckTempo(deckId); return; }
   if (act === "keep") { keepBothDecks(); return; }
-  if (act === "land") { await landDeckB(deckId); return; }
   const el = e.target.closest(".sq-mix__strip");
   const t = el && trackById(el.dataset.trackId);
   if (!t) return;
