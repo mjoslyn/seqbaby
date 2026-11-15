@@ -2971,22 +2971,23 @@ deck B tracks ─▶ deck B bus ─┘              buses' output gains
   line. Arrange mode has only bar lines to go by. There was a `start:` select
   in the mix bar for this; it said twice what the fade's `at:` says, and is
   gone. An automatic crossfade (`fadeToDeck`) waits (`fade.wait`, its button
-  blinking). **Each side of the slider has a `pat` / `bar` select and
-  an arrow** (`[pat] ◂` slider `▸ [bar]`, the length and shape selects
-  after the right side's chips; `fadeAt`, `queueFade` in mixView.js): a click
-  on the arrow queues a fade that way, beginning where that side's select
-  says, `bar` on the next bar line (`at: "bar"`), `pat` when the pattern the
-  playing deck is on comes round (`at: "playing"`, below); a double-click
-  starts it now (`{now: true}`), as a double-click on a pattern number
-  switches now. With the transport stopped the arrow starts it (the
-  transport's own play button) and asks for the fade once it plays. The
+  blinking). **Each side of the slider has a pattern select, a bar
+  select and an arrow** (`[pat] [bar] ◂` slider `▸ [pat] [bar]`, the length
+  and shape selects after the right side's chips; `fadeAt`, `queueFade` in
+  mixView.js): the pattern is `any` (the next bar line, `at: "bar"`, the bar
+  then counting bar lines on from it), `pat (N)` (the pattern the playing
+  deck is on, when it comes round, `at: "playing"`, below) or one of that
+  deck's patterns by number; the bar is which bar of it. A click on the
+  arrow queues a fade that way there; a double-click starts it now
+  (`{now: true}`), as a double-click on a pattern number switches now. With
+  the transport stopped the arrow starts it (the transport's own play
+  button) and asks for the fade once it plays. The
   arrow is lit while its fade waits or runs. A fade
   towards a side also STARTS the decks on it that are not playing
   (`startSide`: armed like their own ▶, so they come in on the line the fade
   waits for; with the transport stopped they start with it), and calls off a
   stop one of them was armed for. **A `pat` fade goes by the patterns of the deck that is
-  PLAYING** (`fadeToDeck(side, bars, {at, bar, ref})`; a slot and a bar are
-  the API's, the desk has no selects for them). The deck is
+  PLAYING** (`fadeToDeck(side, bars, {at, bar, ref})`). The deck is
   `fadeRefDeck()`: the playing deck on the side the crossfader is nearest
   (deck A unless it was stopped from the desk, another deck once started), so
   with B playing and the fader over on it, `pat` waits for B's pattern,
