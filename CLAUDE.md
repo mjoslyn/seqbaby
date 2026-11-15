@@ -2981,7 +2981,10 @@ deck B tracks ─▶ deck B bus ─┘              buses' output gains
   arrow queues a fade that way there; a double-click starts it now
   (`{now: true}`), as a double-click on a pattern number switches now. With
   the transport stopped the arrow starts it (the transport's own play
-  button) and asks for the fade once it plays. The
+  button) and asks for the fade once it plays. The length select changes a
+  fade already queued or running (`setFadeLength`): queued, it is the new
+  length; running, the new length counts from where the fade began, and
+  what is left runs on from where the crossfader is. The
   arrow is lit while its fade waits or runs. A fade
   towards a side also STARTS the decks on it that are not playing
   (`startSide`: armed like their own ▶, so they come in on the line the fade

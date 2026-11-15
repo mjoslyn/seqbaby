@@ -31,7 +31,7 @@ import { setStatus } from "./dom.js";
 import { upgradeKnobs } from "./knob.js";
 import { samplePeak } from "./meters.js";
 import {
-  deckATracks, deckBTracks, deckLabel, ejectDeckA, setDeckAPlaying, deckSide, deskDecks, matchDeckTempo, setXfadeOn, ejectDeckB, ejectDeckTrack, fadeToDeck, fadeRefDeck, deckSceneOf, focusDeck, moveTrack, keepBothDecks, loadDeckA, loadDeckB, 
+  deckATracks, deckBTracks, deckLabel, ejectDeckA, setDeckAPlaying, deckSide, deskDecks, matchDeckTempo, setXfadeOn, ejectDeckB, ejectDeckTrack, fadeToDeck, fadeRefDeck, setFadeLength, deckSceneOf, focusDeck, moveTrack, keepBothDecks, loadDeckA, loadDeckB, 
   mixSource, mixTempo, requestDeckScene, requestSongScene, setDeckChain, setDeckPlaying, setDeckRepeat, setDeckXfade, setMixTempo,
   setTempoDeck, setTempoLink, setXfade, setXfadeCurve,
 } from "./mix.js";
@@ -471,7 +471,7 @@ function xfadeParts() {
     slider: `<input type="range" class="sq-mix__xfade" min="0" max="1" step="0.005" value="${m.x}" data-act="xfade" aria-label="crossfader" title="the crossfader: all of its left side (${esc(L)}) at the left, all of its right (${esc(R)}) at the right. Click anywhere on it to go there" ${any ? "" : "disabled"} />`,
     fadeL: `<div class="sq-mix__fade" role="group" aria-label="fade to the left">${patSel("l")}${barSel("l")}${arrow("l")}</div>`,
     fadeR: `<div class="sq-mix__fade" role="group" aria-label="fade to the right">${arrow("r")}${patSel("r")}${barSel("r")}</div>`,
-    length: `<select data-act="fade-bars" aria-label="fade length" title="how long an automatic fade takes">${bars}</select>`,
+    length: `<select data-act="fade-bars" aria-label="fade length" title="how long an automatic fade takes. Changed while a fade is queued or running, it changes that fade too">${bars}</select>`,
     curve: `<label class="sq-mix__check" title="the crossfader's shape. ${esc(m.curve)}: ${esc(XFADE_CURVE_TIPS[m.curve] || "")}"><select data-act="curve" aria-label="crossfader shape">${shapes}</select></label>`,
   };
 }
@@ -650,7 +650,7 @@ function onChange(e) {
   if (act === "xf-on") { setXfadeOn(el.checked); return; }
   if (act === "link") { setTempoLink(el.checked); return; }
   if (act === "curve") { setXfadeCurve(el.value); return; }
-  if (act === "fade-bars") { fadeBars = Number(el.value) || 4; }
+  if (act === "fade-bars") { fadeBars = Number(el.value) || 4; setFadeLength(fadeBars); }
   if (act === "fade-pat") { const v = el.value; fadeAt[el.dataset.side === "r" ? "r" : "l"].pat = v === "bar" || v === "playing" ? v : Number(v); scheduleMixPaint(); }
   if (act === "fade-bar") { fadeAt[el.dataset.side === "r" ? "r" : "l"].bar = Number(el.value) || 0; scheduleMixPaint(); }
 }

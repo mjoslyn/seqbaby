@@ -1101,6 +1101,24 @@ export function fadeToDeck(deck, bars, { now = false, at = "playing", bar = 0, r
   announce();
 }
 
+/**
+ * Change the length of the fade under way or queued, in bars. Queued, it is
+ * simply the new length. Running, the new length counts from where the fade
+ * began: what is left of it runs on from where the crossfader is now (at
+ * least one step), so nothing jumps.
+ * @param {number} bars
+ */
+export function setFadeLength(bars) {
+  const m = state.mix;
+  const f = m?.fade;
+  if (!f) return;
+  const steps = Math.max(1, Math.round(Number(bars) || 0)) * stepsPerBarForMeter(transportMeter());
+  if (f.wait) { f.steps = steps; }
+  else { f.from = m.x; f.steps = Math.max(1, steps - f.done); f.done = 0; }
+  setStatus(`fade length: ${bars} bar${bars === 1 ? "" : "s"}${f.wait ? "" : `, ${Math.ceil(f.steps / stepsPerBarForMeter(transportMeter()))} to go`}`);
+  announce();
+}
+
 /** Start every desk deck on a crossfader side that is not playing (or is armed to stop). The labels of the ones started. */
 function startSide(side, withFade = false) {
   const m = state.mix;
