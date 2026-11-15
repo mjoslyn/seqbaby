@@ -2984,7 +2984,9 @@ deck B tracks ─▶ deck B bus ─┘              buses' output gains
   button) and asks for the fade once it plays. The length select changes a
   fade already queued or running (`setFadeLength`): queued, it is the new
   length; running, the new length counts from where the fade began, and
-  what is left runs on from where the crossfader is. The
+  what is left runs on from where the crossfader is. Changing a side's pattern or
+  bar while a fade that way is still waiting queues it again where they now
+  say (a running fade is left alone). The
   arrow is lit while its fade waits or runs. A fade
   towards a side also STARTS the decks on it that are not playing
   (`startSide`: armed like their own ▶, so they come in on the line the fade

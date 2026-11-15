@@ -651,8 +651,15 @@ function onChange(e) {
   if (act === "link") { setTempoLink(el.checked); return; }
   if (act === "curve") { setXfadeCurve(el.value); return; }
   if (act === "fade-bars") { fadeBars = Number(el.value) || 4; setFadeLength(fadeBars); }
-  if (act === "fade-pat") { const v = el.value; fadeAt[el.dataset.side === "r" ? "r" : "l"].pat = v === "bar" || v === "playing" ? v : Number(v); scheduleMixPaint(); }
-  if (act === "fade-bar") { fadeAt[el.dataset.side === "r" ? "r" : "l"].bar = Number(el.value) || 0; scheduleMixPaint(); }
+  if (act === "fade-pat" || act === "fade-bar") {
+    const side = el.dataset.side === "r" ? "r" : "l";
+    if (act === "fade-pat") { const v = el.value; fadeAt[side].pat = v === "bar" || v === "playing" ? v : Number(v); }
+    else fadeAt[side].bar = Number(el.value) || 0;
+    // a fade that way still waiting is queued again where the selects now say
+    const f = state.mix?.fade;
+    if (f?.wait && f.to === (side === "r" ? 1 : 0)) queueFade(side);
+    scheduleMixPaint();
+  }
 }
 
 function onDblClick(e) {
