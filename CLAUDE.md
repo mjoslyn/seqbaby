@@ -2971,13 +2971,16 @@ deck B tracks ─▶ deck B bus ─┘              buses' output gains
   line. Arrange mode has only bar lines to go by. There was a `start:` select
   in the mix bar for this; it said twice what the fade's `at:` says, and is
   gone. An automatic crossfade (`fadeToDeck`) waits (`fade.wait`, its button
-  blinking). **Each side of the slider has two fade buttons**, `bar` and
-  `pat` (`◂ pat ◂ bar` on the left, `pat ▸ bar ▸` on the right, the length
-  and shape selects after the right side's chips): `bar` begins on the next
-  bar line (`at: "bar"`), `pat` when the pattern the playing deck is on comes
-  round (`at: "playing"`, below). The button lit is the one asked for. A
-  double-click on a fade arrow starts it now (`fadeToDeck(side, bars, {now:
-  true})`), as a double-click on a pattern number switches now. A fade
+  blinking). **Each side of the slider has a `pat` / `bar` select and
+  an arrow** (`[pat] ◂` slider `▸ [bar]`, the length and shape selects
+  after the right side's chips; `fadeAt`, `queueFade` in mixView.js): a click
+  on the arrow queues a fade that way, beginning where that side's select
+  says, `bar` on the next bar line (`at: "bar"`), `pat` when the pattern the
+  playing deck is on comes round (`at: "playing"`, below); a double-click
+  starts it now (`{now: true}`), as a double-click on a pattern number
+  switches now. With the transport stopped the arrow starts it (the
+  transport's own play button) and asks for the fade once it plays. The
+  arrow is lit while its fade waits or runs. A fade
   towards a side also STARTS the decks on it that are not playing
   (`startSide`: armed like their own ▶, so they come in on the line the fade
   waits for; with the transport stopped they start with it), and calls off a
