@@ -31,7 +31,7 @@ import { setStatus } from "./dom.js";
 import { upgradeKnobs } from "./knob.js";
 import { samplePeak } from "./meters.js";
 import {
-  deckATracks, deckBTracks, deckLabel, ejectDeckA, setDeckAPlaying, deckSide, deskDecks, matchDeckTempo, setXfadeOn, ejectDeckB, ejectDeckTrack, fadeToDeck, fadeRefDeck, focusDeck, keepBothDecks, loadDeckA, loadDeckB, 
+  deckATracks, deckBTracks, deckLabel, ejectDeckA, setDeckAPlaying, deckSide, deskDecks, matchDeckTempo, setXfadeOn, ejectDeckB, ejectDeckTrack, fadeToDeck, fadeRefDeck, focusDeck, moveTrack, keepBothDecks, loadDeckA, loadDeckB, 
   mixSource, mixTempo, requestDeckScene, requestSongScene, setDeckChain, setDeckPlaying, setDeckRepeat, setDeckXfade, setMixTempo,
   setTempoDeck, setTempoLink, setXfade, setXfadeCurve,
 } from "./mix.js";
@@ -79,6 +79,7 @@ export function installMixView() {
     if (stale) scheduleMixPaint();
   };
   window.addEventListener("pointerup", release, true);
+  wireStripDrag(desk, release);
   window.addEventListener("pointercancel", release, true);
   onViewChange((v) => {
     if (v === "mix") { render(); startMeters(); }
@@ -116,6 +117,83 @@ function proxy(t, sel, { cls = "", label = "", title = "" } = {}) {
     ${label ? `<span>${esc(label)}</span>` : ""}</label>`;
 }
 
+/**
+ * Rearranging a deck's strips: drag a strip by its name onto another strip of
+ * the same deck (before it on the left half, after it on the right half), or
+ * alt + ← / → on a focused name. A strip only moves inside its own deck, and a
+ * bus only among the buses (moveTrack, mix.js, holds both rules). The desk is
+ * held still while a drag is under way, as it is for a knob.
+ */
+function wireStripDrag(desk, release) {
+  let dragId = null;
+  const clear = () => desk.querySelectorAll(".is-drop-before, .is-drop-after").forEach((el) => el.classList.remove("is-drop-before", "is-drop-after"));
+  // where a drop on strip `el` puts the dragged track: before which track
+  const target = (e) => {
+    const el = e.target.closest?.(".sq-mix__strip");
+    const t = dragId && trackById(dragId);
+    const over = el && trackById(el.dataset.trackId);
+    if (!t || !over || over === t || over._deckBus || (over._deck || null) !== (t._deck || null)
+      || (over.engineKey === "bus") !== (t.engineKey === "bus")) return null;
+    const r = el.getBoundingClientRect();
+    const after = e.clientX > r.left + r.width / 2;
+    let before = over;
+    if (after) {
+      const group = state.tracks.filter((x) => x !== t && !x._deckBus && (x._deck || null) === (t._deck || null)
+        && (x.engineKey === "bus") === (t.engineKey === "bus") && !x._staged && !x._leaving);
+      before = group[group.indexOf(over) + 1] || null;
+    }
+    return { el, after, before };
+  };
+  desk.addEventListener("dragstart", (e) => {
+    const name = e.target.closest?.(".sq-mix__name[draggable]");
+    const el = name?.closest(".sq-mix__strip");
+    if (!el) return;
+    dragId = el.dataset.trackId;
+    holding = true;
+    el.classList.add("is-dragging");
+    try { e.dataTransfer.setData("text/plain", dragId); e.dataTransfer.effectAllowed = "move"; } catch { /* some browsers refuse */ }
+  });
+  desk.addEventListener("dragover", (e) => {
+    const at = dragId && target(e);
+    clear();
+    if (!at) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    at.el.classList.add(at.after ? "is-drop-after" : "is-drop-before");
+  });
+  desk.addEventListener("drop", (e) => {
+    const at = dragId && target(e);
+    const t = dragId && trackById(dragId);
+    clear();
+    if (!at || !t) return;
+    e.preventDefault();
+    moveTrack(t, at.before);
+  });
+  desk.addEventListener("dragend", () => {
+    clear();
+    desk.querySelectorAll(".is-dragging").forEach((el) => el.classList.remove("is-dragging"));
+    dragId = null;
+    holding = true;
+    release();
+    scheduleMixPaint();
+  });
+  desk.addEventListener("keydown", (e) => {
+    if (!e.altKey || (e.key !== "ArrowLeft" && e.key !== "ArrowRight")) return;
+    const el = e.target.closest?.(".sq-mix__name[draggable]")?.closest(".sq-mix__strip");
+    const t = el && trackById(el.dataset.trackId);
+    if (!t) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const group = state.tracks.filter((x) => !x._deckBus && (x._deck || null) === (t._deck || null)
+      && (x.engineKey === "bus") === (t.engineKey === "bus") && !x._staged && !x._leaving);
+    const i = group.indexOf(t);
+    const moved = e.key === "ArrowLeft"
+      ? i > 0 && moveTrack(t, group[i - 1])
+      : i < group.length - 1 && moveTrack(t, group[i + 2] || null);
+    if (moved) requestAnimationFrame(() => document.querySelector(`#mix .sq-mix__strip[data-track-id="${t.id}"] .sq-mix__name`)?.focus());
+  });
+}
+
 function strip(t, shown) {
   const bus = t.engineKey === "bus";
   const deckBus = !!t._deckBus;
@@ -135,9 +213,9 @@ function strip(t, shown) {
       ${proxy(t, ".p-cutoff", { label: "filter", title: "a lowpass over the whole deck (the bus's own filter)" })}
     </div>` : `<div class="sq-mix__tone">${bus ? "" : proxy(t, ".fx-pan-pos", { label: "pan", title: "where this track sits, left to right (its pan stage)" })}</div>`;
   return `<div class="${cls.join(" ")}" data-track-id="${t.id}" style="--track-hue:${hue};--track-color:${color}">
-    <button type="button" class="sq-mix__name" data-act="select" title="${esc(deckBus
+    <button type="button" class="sq-mix__name" data-act="select"${deckBus ? "" : ' draggable="true"'} title="${esc(deckBus
       ? `${name}: everything on this deck sums here. Select it to open its eq, rack, mod and lanes below`
-      : `${name}: select it to edit its ${bus ? "rack and lanes" : "notes and sound"} below`)}">${esc(name)}</button>
+      : `${name}: select it to edit its ${bus ? "rack and lanes" : "notes and sound"} below. Drag it along the deck (or alt + ← →) to move it`)}">${esc(name)}</button>
     ${tone}
     <div class="sq-mix__fader">
       <div class="sq-mix__meter" aria-hidden="true"><i></i></div>

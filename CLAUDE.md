@@ -3054,6 +3054,15 @@ deck B tracks ─▶ deck B bus ─┘              buses' output gains
   deck A's side and, once built, takes deck A's place through `promoteDeck`,
   so the old song goes, the other decks keep their letters and one undo step
   brings the old song back.
+- **A strip moves along its own deck** (`moveTrack`, mix.js): dragged by
+  its name onto another strip of the same deck (before it on the left half,
+  after it on the right), or alt + ← / → on a focused name. Never into
+  another deck, never a bus past the tracks, never the deck bus.
+  `state.tracks` and the groove view's cards move together; a deck's load
+  order (`d.made`, which a merge onto it restores and its macro pads index)
+  moves too, the pads' track indices remapped with it. A song track's move
+  changes the saved order, so it is an edit (undo, a jam); a deck's is not.
+  The desk is held still while a drag is under way.
 - **A strip's × ejects that one track.** A deck's track just goes
   (`ejectDeckTrack`: faded, not in the undo stack, the deck's last track
   taking the deck with it); a track of the song's own goes through its own

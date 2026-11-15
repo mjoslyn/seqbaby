@@ -4801,6 +4801,15 @@ body.vim-visual .sq-vim__mode { color: var(--accent-2); }
   border: 1px solid var(--border); border-top: 3px solid var(--track-color, var(--border));
 }
 .sq-mix__strip.is-bus { background: var(--bg-3); }
+/* rearranging a deck: the strip being dragged, and where it will land */
+.sq-mix__strip { position: relative; }
+.sq-mix__strip.is-dragging { opacity: 0.4; }
+.sq-mix__strip.is-drop-before::before, .sq-mix__strip.is-drop-after::after {
+  content: ""; position: absolute; top: -2px; bottom: -2px; width: 3px; border-radius: 2px; background: var(--accent);
+}
+.sq-mix__strip.is-drop-before::before { left: -5px; }
+.sq-mix__strip.is-drop-after::after { right: -5px; }
+.sq-mix__name[draggable="true"] { cursor: grab; }
 .sq-mix__strip.is-deck-bus { flex-basis: 132px; border-top-color: var(--accent); background: color-mix(in oklab, var(--accent) 7%, var(--bg)); }
 .sq-mix__deck.is-other .sq-mix__strip.is-deck-bus { border-top-color: var(--accent-2); background: color-mix(in oklab, var(--accent-2) 7%, var(--bg)); }
 .sq-mix__strip.is-selected { border-color: var(--track-color, var(--accent)); box-shadow: 0 0 0 1px var(--track-color, var(--accent)) inset; }

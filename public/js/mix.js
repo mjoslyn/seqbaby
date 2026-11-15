@@ -1268,6 +1268,59 @@ export function ejectDeckTrack(t) {
   return true;
 }
 
+/**
+ * Move a track to just before `before` (or to the end of its group when
+ * `before` is null), inside the deck it belongs to: the song's own tracks
+ * among themselves, a deck's among its own, never a bus past the tracks or
+ * into another deck. `state.tracks` and the groove view's cards move
+ * together (every serialized index counts along the first), and a deck's
+ * load order (`d.made`, which a merge onto the deck restores) moves with it.
+ * A song track's move changes the saved order, so it is an edit: undo and a
+ * jam see it, as they see any reorder.
+ */
+export function moveTrack(t, before = null) {
+  if (!t || t._deckBus || state.mix?.landing) return false;
+  const same = (x) => x !== t && !x._deckBus && (x._deck || null) === (t._deck || null)
+    && (x.engineKey === "bus") === (t.engineKey === "bus") && !x._staged && !x._leaving;
+  if (before && (before === t || !same(before))) return false;
+  const rest = state.tracks.filter(x => x !== t);
+  let at;
+  if (before) at = rest.indexOf(before);
+  else {
+    // after the last of its group
+    let last = -1;
+    rest.forEach((x, i) => { if (same(x)) last = i; });
+    at = last + 1;
+    if (last < 0) return false;
+  }
+  const next = [...rest.slice(0, at), t, ...rest.slice(at)];
+  if (next.every((x, i) => x === state.tracks[i])) return false;
+  state.tracks = next;
+  placeBusesLast();
+  const d = t._deck ? mixDecks().find(x => x.id === t._deck) : null;
+  if (d?.made) {
+    // The deck's pads index into its load order, so they follow the move.
+    const was = d.made;
+    const order = state.tracks.filter(x => was.includes(x));
+    d.made = [...order, ...was.filter(x => !order.includes(x))];
+    const to = new Map(was.map((x, i) => [i, d.made.indexOf(x)]));
+    for (const pad of d.globals?.macroPads || []) {
+      for (const list of [pad?.x, pad?.y]) for (const a of list || []) {
+        if (Number.isInteger(a?.track) && to.has(a.track) && to.get(a.track) >= 0) a.track = to.get(a.track);
+      }
+    }
+  }
+  const host = document.getElementById("tracks");
+  const focused = document.activeElement;
+  if (host) for (const x of state.tracks) if (x.el && x.el.parentElement === host) host.appendChild(x.el);
+  if (focused instanceof HTMLElement && document.activeElement !== focused && host?.contains(focused))
+    focused.focus({ preventScroll: true });
+  setStatus(`"${t.name || "track"}" moved`);
+  announceClips();
+  announce();
+  return true;
+}
+
 /** Every note of a track snapped to `scale`, in every pattern: what it has been playing. */
 function bakeScale(t, scale) {
   const intervals = scale?.active ? SCALES[scale.mode] : null;
