@@ -500,9 +500,9 @@ export function mergeSet(s, scope = null) {
   // The order the session lists, then the buses back to the bottom. Both after
   // the index passes above, for applySet's reason: every cross-track reference
   // has to be an id before anything is allowed to move.
-  // A track this session names is the song's again, even one a transition
-  // had left to finish its bar before removing it (transition.js `_leaving`):
-  // an undo straight after a landing reuses those tracks, and the removal
+  // A track this session names is the song's again, even one left to finish
+  // its bar before removing it (`_leaving`, mix.js): an undo straight after a
+  // landing reuses those tracks, and the removal
   // still on its timer took the whole song away.
   for (const t of made) {
     if (!t?._leaving) continue;

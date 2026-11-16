@@ -1,9 +1,7 @@
 /**
  * The mix: a second song on deck B, played beside the one that is open.
  *
- * A transition (transition.js) takes the studio from one song to another on a
- * plan: both songs in for a few bars, a curve, a landing. This is the same
- * overlap held open and put under the hand. The second song's tracks are built
+ * Two songs at once, held open and put under the hand. The second song's tracks are built
  * into `state.tracks` beside the song's own, flagged (`_deck: "b"`), and each
  * deck sums into a bus of its own on the way to the master:
  *
@@ -66,7 +64,7 @@ import { renderStepGrid } from "./stepGrid.js";
 import { SCALES, quantizeToScale } from "./theory.js";
 import { nameToMidi } from "./theoryData.js";
 import { createTrack, removeTrack } from "./track.js";
-import { restoreLookAhead, stretchLookAhead } from "./transition.js";
+import { restoreLookAhead, stretchLookAhead } from "./lookahead.js";
 import { requestMidiIfNeeded } from "./transport.js";
 
 /** @typedef {import("./types.js").Track} Track */

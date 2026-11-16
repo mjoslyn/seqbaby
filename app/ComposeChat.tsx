@@ -80,18 +80,13 @@ type ComposeResponse = { jobId?: string; jobToken?: string; error?: string };
  * is the same operation in reverse. Null means the changes are not in the
  * session at all yet.
  */
-// `pending`: a transition (public/js/transition.js) is on its way to a bar
-// line, and which button asked for it.
 type Proposal = {
   session: unknown;
   before: unknown | null;
   title?: string | null;
-  pending?: "audition" | "stop" | "keep" | null;
   note?: string;
   /** What the turn changed, for the card. */
   changes?: Diff;
-  /** The new song's pattern to transition into (0-based), or unset for the default. */
-  into?: number | null;
   /**
    * The turn was about another deck of a mix (public/js/mix.js), not the open
    * song: `deck` is that deck's id, and the session is written onto it
@@ -102,45 +97,6 @@ type Proposal = {
   deck?: string;
   fresh?: boolean;
 };
-
-/** The patterns of a session with notes in them, by slot. */
-function filledSlots(session: unknown): number[] {
-  const s = session as { tracks?: { patterns?: ({ steps?: unknown[] } | null)[] }[] } | null;
-  const out: number[] = [];
-  for (let k = 0; k < 32; k++) if (s?.tracks?.some((t) => t.patterns?.[k]?.steps?.some(Boolean))) out.push(k);
-  return out;
-}
-
-type Shape = "cut" | "sweep" | "drop" | "fade" | "stagger" | "bridge";
-const SHAPES: Shape[] = ["cut", "sweep", "drop", "fade", "stagger", "bridge"];
-const SHAPE_TIPS: Record<Shape, string> = {
-  cut: "straight in, on the bar",
-  sweep: "both songs play for the length: the new one from the start, the old one swept down and gone at the end",
-  drop: "the playing song thins (harmony and lead, then bass, then drums), a near-silent last bar, then the hit",
-  fade: "both songs play for the length: the old one fades out as the new one fades in",
-  stagger: "the new song arrives a group at a time: drums, bass, harmony, lead",
-  bridge: "a passage written for the join: the new song's intro works its way in while the playing song plays an outro over it, then the new song carries on from the section after its intro",
-};
-
-// How the review bar's writes reach what is playing: on the next bar or at
-// once, cut or swept, over how many bars, and what happens to the tempo.
-type TransitionPrefs = { when: "bar" | "now"; shape: Shape; bars: number; tempo: "auto" | "jump" | "ramp" };
-const TRANSITION_KEY = "seqbaby.transition.v1";
-const TRANSITION_DEFAULT: TransitionPrefs = { when: "bar", shape: "cut", bars: 2, tempo: "auto" };
-function loadTransition(): TransitionPrefs {
-  try {
-    const v = JSON.parse(window.localStorage.getItem(TRANSITION_KEY) || "null");
-    if (!v || typeof v !== "object") return TRANSITION_DEFAULT;
-    return {
-      when: v.when === "now" ? "now" : "bar",
-      shape: SHAPES.includes(v.shape) ? v.shape : "cut",
-      bars: [1, 2, 4, 8].includes(Number(v.bars)) ? Number(v.bars) : 2,
-      tempo: v.tempo === "jump" || v.tempo === "ramp" ? v.tempo : "auto",
-    };
-  } catch {
-    return TRANSITION_DEFAULT;
-  }
-}
 
 type JobStatus = {
   status?: "running" | "done" | "error";
@@ -307,17 +263,6 @@ async function runTurn(
   }
 }
 
-/** A bridge being written, or written, for one proposal (see `writeBridge`). */
-type BridgeJob = {
-  /** The proposal's session and `into` it was written for. */
-  for: unknown;
-  into: number | null;
-  layout: BridgeLayout;
-  status: "writing" | "ready" | "failed";
-  /** The model's session, once ready: its bridge patterns are what is used. */
-  result?: unknown;
-};
-
 /** What a turn changed, track by track: + added, - removed, ~ changed. */
 function Changes({ d }: { d?: Diff }) {
   if (!d || d.empty || !Array.isArray(d.tracks) || !Array.isArray(d.globals)) return null;
@@ -476,11 +421,8 @@ export default function ComposeChat({
     const id = setInterval(() => setTick((n) => n + 1), 1000);
     return () => clearInterval(id);
   }, [sending]);
-  // Which finished turns have their work log open, and whether the arrival
-  // settings are: shut, they are one line saying what is set, so the reply
-  // keeps the room.
+  // Which finished turns have their work log open.
   const [openLogs, setOpenLogs] = useState<Set<number>>(new Set());
-  const [arrivalOpen, setArrivalOpen] = useState(false);
   // The turn's changes, waiting to be auditioned or kept. Nothing is written to
   // the studio until one of those is pressed.
   const [review, setReview] = useState<Proposal | null>(null);
@@ -505,20 +447,6 @@ export default function ComposeChat({
       window.removeEventListener("seqbaby:mix", read);
       window.removeEventListener("seqbaby:ready", read);
     };
-  }, []);
-  const [trans, setTransState] = useState<TransitionPrefs>(TRANSITION_DEFAULT);
-  // What `send` needs of things defined after it: the shape picked when the
-  // turn LANDS (it may have been changed while it ran), and the bridge writer.
-  const shapeRef = useRef<Shape>("cut");
-  shapeRef.current = trans.shape;
-  const writeBridgeRef = useRef<((target: unknown, into: number | null, onActivity?: (a: Step[]) => void) => Promise<void>) | null>(null);
-  useEffect(() => setTransState(loadTransition()), []);
-  const setTrans = useCallback((patch: Partial<TransitionPrefs>) => {
-    setTransState((cur) => {
-      const next = { ...cur, ...patch };
-      try { window.localStorage.setItem(TRANSITION_KEY, JSON.stringify(next)); } catch {}
-      return next;
-    });
   }, []);
   // What the autosave did with the last thing kept, in the space the review bar
   // has just left. Transient: it belongs to that click, so the next turn (and a
@@ -603,7 +531,6 @@ export default function ComposeChat({
     // A different song is open, so changes offered against the last one are
     // not about what is loaded now -- and `before` describes a session that is
     // no longer there. What the last keep saved was said about another song.
-    window.seqbaby?.cancelTransition?.();
     setReview(null);
     setSaveNote("");
     setOpenLogs(new Set());
@@ -661,7 +588,6 @@ export default function ComposeChat({
       attachedRef.current = null;
       // The session it was about has just been blanked, and `before` describes
       // one that no longer exists -- putting it back would undo the `new`.
-      window.seqbaby?.cancelTransition?.();
       setReview(null);
       setSaveNote("");
     };
@@ -687,9 +613,6 @@ export default function ComposeChat({
     const text = (prompt ?? input).trim();
     if (!text || sending || !window.seqbaby) return;
     if (!canCompose) return;
-    // A transition still waiting on its bar line lands now: the turn is about
-    // what is playing, and an audition or keep the button already asked for.
-    window.seqbaby.finishTransition?.();
     // A turn on deck B is sent that deck's song, or, with nothing loaded
     // there, an empty session to write a new one in: the open song's tempo, so
     // the two mix, and a line saying what it is for.
@@ -781,13 +704,6 @@ export default function ComposeChat({
       // silence a track that was playing while you asked for another one.
       const changes = job.session && job.changed !== false ? diffSessions(session, job.session) : undefined;
       if (job.session && job.changed !== false) {
-        // With bridge picked, the bridge is written before the changes are
-        // offered, so it is ready the moment they can be auditioned.
-        if (!toB && shapeRef.current === "bridge" && writeBridgeRef.current) {
-          const mark = { t: "writing the bridge", ok: true };
-          setLive([...activity, mark]);
-          await writeBridgeRef.current(job.session, null, (a) => setLive([...activity, mark, ...a])).catch(() => {});
-        }
         setReview({ session: job.session, before: null, title: job.title ?? null, changes, ...(toB ? { deck: deckId, fresh: freshB } : {}) });
       }
       // A name with nothing to review (the turn only named the song) is
@@ -827,113 +743,8 @@ export default function ComposeChat({
     else api.applySet(session);
   }, []);
 
-  // ---- the written bridge ---------------------------------------------------
-  //
-  // With `bridge` picked, a proposal's bridge is WRITTEN: a second turn, sent
-  // the moment the proposal is on the bar, that is handed the engine's draft
-  // (both songs' tracks, the new song's intro and the old song's parts cut
-  // short, in free pattern slots) and asked to make a transition of it. It is
-  // written ahead because it takes a model the better part of a minute and an
-  // audition should not wait for one: pressed before it is back, the audition
-  // plays the draft, and the written one takes over if it arrives in time.
-  // Only its bridge patterns are ever used (bridgeSession). One per proposal
-  // and target pattern, and only while bridge is the shape picked: it costs a
-  // turn.
-  const bridgeJob = useRef<BridgeJob | null>(null);
-  const [bridgeState, setBridgeState] = useState<"" | "writing" | "ready" | "failed">("");
-  // Resolves when the bridge is written (or could not be): a turn waits on
-  // it before it offers its changes, so the bridge is there with the song.
-  const writeBridge = useCallback(async (target: unknown, into: number | null, onActivity?: (a: Step[]) => void): Promise<void> => {
-    const api = window.seqbaby;
-    const b = api?.bridge;
-    if (!api || !b || !canCompose) return;
-    const cur = bridgeJob.current;
-    if (cur && cur.for === target && cur.into === into) return;
-    const old = api.serializeSet();
-    const layout = b.layout(old, target, into != null ? { start: into } : {});
-    if (!layout) { bridgeJob.current = null; setBridgeState(""); return; }
-    const draft = b.draft(old, target, layout);
-    const job: BridgeJob = { for: target, into, layout, status: "writing" };
-    bridgeJob.current = job;
-    setBridgeState("writing");
-    const mine = () => bridgeJob.current === job;
-    try {
-      const out = await runTurn(
-        { message: b.prompt(old, target, layout), history: [], session: draft, unnamed: false, ...(canPickModel ? { model } : {}) },
-        onActivity,
-        mine,
-      );
-      if (!mine()) return;
-      const got = "job" in out ? out.job.session : null;
-      if (!got || !b.hasNotes(b.session(draft, got, layout), layout)) {
-        job.status = "failed";
-        setBridgeState("failed");
-        return;
-      }
-      job.result = got;
-      job.status = "ready";
-      setBridgeState("ready");
-      // An audition already on its way with the draft takes the written one.
-      try { b.set(b.session(draft, got, layout), layout); } catch {}
-    } catch {
-      if (!mine()) return;
-      job.status = "failed";
-      setBridgeState("failed");
-    }
-  }, [canCompose, canPickModel, model]);
-  writeBridgeRef.current = writeBridge;
-  // A turn writes its bridge before it offers its changes (`send`). This is
-  // for what comes after: bridge picked once a proposal is already on the
-  // bar, or another `into` chosen, each of which wants a bridge of its own.
-  useEffect(() => {
-    const r = review;
-    const wants = !!r && !r.before && !r.pending && !r.deck && trans.shape === "bridge";
-    if (!wants) {
-      if (!r || r.deck || trans.shape !== "bridge") { bridgeJob.current = null; setBridgeState(""); }
-      return;
-    }
-    void writeBridge(r.session, r.into ?? null);
-  }, [review, trans.shape, writeBridge]);
-  // The written bridge for a proposal, as transitionTo takes it: laid out
-  // again against the song as it is NOW (it may have been edited, or moved to
-  // another pattern, since the bridge was asked for) and used only when that
-  // is still the layout it was written for.
-  const writtenBridge = useCallback((r: Proposal) => {
-    const api = window.seqbaby;
-    const b = api?.bridge;
-    const job = bridgeJob.current;
-    if (!api || !b || !job || job.status !== "ready" || job.for !== r.session || job.into !== (r.into ?? null)) return {};
-    try {
-      const old = api.serializeSet();
-      const layout = b.layout(old, r.session, job.into != null ? { start: job.into } : {});
-      if (!layout || !b.same(layout, job.layout)) return {};
-      return { bridge: { session: b.session(b.draft(old, r.session, layout), job.result, layout), layout } };
-    } catch {
-      return {};
-    }
-  }, []);
-
-  // A session written on the transition the bar's picker says
-  // (public/js/transition.js). Resolves whether it landed: false when another
-  // button called it off first. Falls back to an immediate write on an engine
-  // cached from before transitions shipped.
-  const writeAt = useCallback(async (session: unknown, r?: Proposal, back = false): Promise<boolean> => {
-    const api = window.seqbaby;
-    if (!api) return false;
-    if (!api.transitionTo) {
-      writeLive(session);
-      return true;
-    }
-    // Going BACK to what was playing is not a song with an intro to work
-    // through: a bridge's stop is a cut on the bar.
-    if (trans.shape === "bridge" && back) return (await api.transitionTo(session, { ...trans, shape: "cut", when: "bar" })).landed;
-    const into = !back && r?.into != null ? { into: r.into } : {};
-    return (await api.transitionTo(session, { ...trans, ...into, ...(trans.shape === "bridge" && r ? writtenBridge(r) : {}) })).landed;
-  }, [trans, writeLive, writtenBridge]);
-
   // A deck B turn's session, written onto that deck in place (mix.js,
-  // mergeDeckB): at once, with no transition, since a transition is the open
-  // song's. False when the deck has gone (ejected, landed, a song opened).
+  // mergeDeckB). False when the deck has gone (ejected, landed, a song opened).
   const writeDeckB = useCallback((session: unknown, id?: string): boolean => {
     try {
       if (!id || !window.seqbaby?.mix?.decks?.().some((d) => d.id === id)) return false;
@@ -953,7 +764,7 @@ export default function ComposeChat({
   // `before` is taken at the press: what is playing then is what stop puts back.
   const audition = useCallback(async () => {
     const r = review;
-    if (!r || r.before || r.pending || !window.seqbaby) return;
+    if (!r || r.before || !window.seqbaby) return;
     if (r.deck) {
       // A new song for a new deck: loaded there, stopped, ready to bring in.
       if (r.fresh) {
@@ -970,22 +781,18 @@ export default function ComposeChat({
       const there = !!window.seqbaby.mix?.decks?.().some((d) => d.id === r.deck);
       const was = there ? window.seqbaby.mix?.serialize?.(r.deck) ?? null : null;
       if (!was || !writeDeckB(r.session, r.deck)) return deckGone();
-      setReview({ ...r, before: was, pending: null, note: "" });
+      setReview({ ...r, before: was, note: "" });
       return;
     }
     const before = window.seqbaby.serializeSet();
-    setReview({ ...r, pending: "audition", note: "" });
-    const landed = await writeAt(r.session, r);
-    setReview((cur) => (cur && cur.session === r.session && cur.pending === "audition"
-      ? { ...cur, before: landed ? before : null, pending: null }
-      : cur));
-  }, [review, writeAt, writeDeckB, deckGone]);
+    writeLive(r.session);
+    setReview({ ...r, before, note: "" });
+  }, [review, writeLive, writeDeckB, deckGone]);
 
   // Stop: back to what was playing, with the changes still on offer. Anything
   // changed BY HAND during the audition goes back with it -- undo reaches it
   // (the merge lands on the stack like any other edit), which is why this is a
-  // button and not a confirm dialog. Pressed while the audition is still on
-  // its way, it calls the audition off instead.
+  // button and not a confirm dialog.
   const stopAudition = useCallback(async () => {
     const r = review;
     if (!r) return;
@@ -995,18 +802,10 @@ export default function ComposeChat({
       setReview({ ...r, before: null });
       return;
     }
-    if (r.pending === "audition") {
-        window.seqbaby?.cancelTransition?.();
-      setReview((cur) => (cur && cur.session === r.session ? { ...cur, pending: null } : cur));
-      return;
-    }
-    if (!r.before || r.pending) return;
-    setReview({ ...r, pending: "stop" });
-    const landed = await writeAt(r.before, r, true);
-    setReview((cur) => (cur && cur.session === r.session && cur.pending === "stop"
-      ? { ...cur, before: landed ? null : cur.before, pending: null }
-      : cur));
-  }, [review, writeAt, writeDeckB, deckGone]);
+    if (!r.before) return;
+    writeLive(r.before);
+    setReview({ ...r, before: null });
+  }, [review, writeLive, writeDeckB, deckGone]);
 
   // Keeping is a real edit to the song, so it is SAVED, as a version of its
   // own. The top-bar save is a click away in another island and nobody presses
@@ -1062,8 +861,7 @@ export default function ComposeChat({
 
   // Keep: the changes are the song now. Mid-audition there is nothing to write
   // -- the engine is already playing them, hand edits and all. Otherwise they
-  // arrive on the transition, and are saved once they have. A second press
-  // while one is on its way lands it at once.
+  // are written in now, and saved.
   const keepChanges = useCallback(async () => {
     const r = review;
     const api = window.seqbaby;
@@ -1077,35 +875,17 @@ export default function ComposeChat({
       setSaveNote(`kept on deck ${r.deck.toUpperCase()}. It is saved once that deck is the song (eject deck A) or you keep the decks as one song, then save`);
       return;
     }
-    if (r.pending === "keep") {
-      api.finishTransition?.();
-      return;
-    }
-    // An audition on its way has not landed (`before` is still null); a stop
-    // on its way leaves the audition playing. Either way it is called off.
-    if (r.pending) {
-        api.cancelTransition?.();
-    }
-    if (!r.before) {
-      setReview({ ...r, pending: "keep", note: "" });
-      const landed = await writeAt(r.session, r);
-      if (!landed) {
-        setReview((cur) => (cur && cur.session === r.session && cur.pending === "keep" ? { ...cur, pending: null } : cur));
-        return;
-      }
-    }
+    if (!r.before) writeLive(r.session);
     // After the write: an applySet fallback announces a new session, which
     // clears any name held for the last one.
     if (r.title) setComposedTitle(r.title);
     setReview((cur) => (cur && cur.session === r.session ? null : cur));
     void autosaveKept();
-  }, [review, writeAt, autosaveKept, writeDeckB, deckGone, audition]);
+  }, [review, writeLive, autosaveKept, writeDeckB, deckGone, audition]);
 
-  // Discard is never on a transition: throwing the changes away is immediate.
   const discardChanges = useCallback(() => {
     const r = review;
     if (!r) return;
-    if (r.pending) window.seqbaby?.cancelTransition?.();
     // `before` set means the changes are playing (a stop on its way included).
     if (r.before && r.deck) writeDeckB(r.before, r.deck);
     else if (r.before) writeLive(r.before);
@@ -1137,120 +917,10 @@ export default function ComposeChat({
 
   if (!ready) return null;
 
-  const slots = review && !review.before ? filledSlots(review.session) : [];
-  // The arrival settings are the open song's: a turn on another deck lands at once.
-  const forB = review ? !!review.deck : deck !== "a";
   const DK = review?.deck && !review.fresh ? `deck ${review.deck.toUpperCase()}` : "the deck";
-  const arrivalShown = arrivalOpen;
-  const bridgeNote =
-    bridgeState === "writing" ? "being written…" : bridgeState === "ready" ? "written" : bridgeState === "failed" ? "a draft (the written one failed)" : "";
-  const arrivalSummary = [
-    trans.shape === "cut"
-      ? trans.when === "now" ? "straight in, now" : "straight in, on the next bar"
-      : trans.shape === "bridge"
-      ? `over a bridge${bridgeNote ? `, ${bridgeNote}` : ", written with the turn"}`
-      : `a ${trans.bars}-bar ${trans.shape}, ${trans.when === "now" ? "from now" : "from the next bar"}`,
-    ...(trans.tempo !== "auto" && trans.shape !== "cut" && trans.shape !== "stagger" ? [`tempo ${trans.tempo}s`] : []),
-    ...(review?.into != null ? [`into pattern ${review.into + 1}`] : []),
-  ].join(" · ");
-  const arrival = forB ? (
-    <div className={styles.cxArrivalNote}>another deck takes its changes at once: transitions are the open song&apos;s.</div>
-  ) : (
-    <div className={styles.cxArrival}>
-      <button
-        type="button"
-        className={styles.cxArrivalSum}
-        aria-expanded={arrivalShown}
-        onClick={() => setArrivalOpen(!arrivalShown)}
-        title="how a turn's changes arrive in what is playing: set before sending, or while reviewing"
-      >
-        <span className={styles.cxSegLabel}>arrives</span>
-        <span className={styles.cxArrivalText}>{arrivalSummary}</span>
-        <span aria-hidden>{arrivalShown ? "▴" : "▾"}</span>
-      </button>
-      {arrivalShown && (
-        <div className={styles.cxArrivalBody}>
-          <Seg
-            label="shape"
-            value={trans.shape}
-            options={SHAPES.map((k) => ({ v: k, label: k, title: SHAPE_TIPS[k] }))}
-            onPick={(v) => setTrans({ shape: v })}
-          />
-          <div className={styles.cxTip}>{SHAPE_TIPS[trans.shape]}.</div>
-          <Seg
-            label="when"
-            value={trans.when}
-            disabled={trans.shape === "bridge"}
-            title="next bar: wait for the downbeat. now: as soon as possible. A bridge starts on the next bar"
-            options={[{ v: "bar", label: "next bar" }, { v: "now", label: "now" }]}
-            onPick={(v) => setTrans({ when: v })}
-          />
-          {trans.shape === "bridge" ? (
-            <div
-              className={styles.cxTip}
-              title="the compose model writes the bridge as part of the turn, so it is ready with the changes; picked afterwards it is written then, and until it is back audition plays a draft made in code"
-            >
-              a bridge is as long as the new song&apos;s intro{bridgeNote ? `: ${bridgeNote}` : ""}. writing one costs a second turn.
-            </div>
-          ) : (
-            <Seg
-              label="over"
-              value={trans.bars}
-              disabled={trans.shape === "cut"}
-              title="how many bars the transition runs: how long the songs overlap on a sweep or fade, how long a drop thins or a stagger arrives"
-              options={[1, 2, 4, 8].map((b) => ({ v: b, label: `${b} bar${b > 1 ? "s" : ""}` }))}
-              onPick={(v) => setTrans({ bars: v })}
-            />
-          )}
-          <Seg
-            label="tempo"
-            value={trans.tempo}
-            disabled={trans.shape === "cut" || trans.shape === "stagger"}
-            title="when the bpm differs. auto: ramp a small change across the length (a bridge: across the bridge), jump a big one. cut and stagger jump"
-            options={[{ v: "auto", label: "auto" }, { v: "jump", label: "jump" }, { v: "ramp", label: "ramp" }]}
-            onPick={(v) => setTrans({ tempo: v })}
-          />
-          {review && slots.length > 0 && (
-            <label
-              className={styles.cxSeg}
-              title={trans.shape === "bridge"
-                ? "the new song's pattern its intro starts on: the bridge stands in for the intro from there, and the song carries on after it"
-                : "the new song's pattern it lands on. as is: whatever pattern is playing"}
-            >
-              <span className={styles.cxSegLabel}>into</span>
-              <select
-                className={styles.chatModelSelect}
-                value={review.into ?? ""}
-                disabled={!!review.pending}
-                onChange={(e) => {
-                  const v = e.target.value === "" ? null : Number(e.target.value);
-                  setReview((cur) => (cur ? { ...cur, into: v } : cur));
-                }}
-              >
-                <option value="">{trans.shape === "bridge" ? "its start" : "the pattern playing"}</option>
-                {slots.map((k) => (
-                  <option key={k} value={k}>pattern {k + 1}</option>
-                ))}
-              </select>
-            </label>
-          )}
-        </div>
-      )}
-    </div>
-  );
 
   const reviewTitle = !review
     ? ""
-    : review.pending
-    ? `${review.pending === "stop" ? "going back" : review.pending === "keep" ? "keeping" : "auditioning"} ${
-        review.pending === "stop" && trans.shape === "bridge"
-          ? "on the next bar"
-          : trans.shape === "cut"
-          ? trans.when === "now" ? "now" : "on the next bar"
-          : trans.shape === "bridge"
-          ? `over a ${bridgeState === "ready" ? "written" : "drafted"} bridge`
-          : `with a ${trans.bars}-bar ${trans.shape}`
-      }…`
     : review.fresh
     ? "a new song for a new deck"
     : review.before
@@ -1444,7 +1114,7 @@ export default function ComposeChat({
                 <div className={styles.cxRunHead}>
                   <span className={styles.cxPulse} aria-hidden />
                   <span className={styles.cxRunWhat}>
-                    {live.length === 0 ? "reading the song" : live[live.length - 1].t === "writing the bridge" || bridgeState === "writing" ? "writing the bridge" : "writing"}
+                    {live.length === 0 ? "reading the song" : "writing"}
                   </span>
                   <span>{clock(Date.now() - startedAt)}</span>
                   {live.length > 0 && <span>{live.length} step{live.length === 1 ? "" : "s"}</span>}
@@ -1472,36 +1142,31 @@ export default function ComposeChat({
               <div className={styles.chatReviewBtns}>
                 <button
                   className={`${styles.smallBtn} ${review.fresh ? styles.smallBtnPrimary : ""}`}
-                  onClick={review.before || review.pending === "audition" ? stopAudition : audition}
-                  disabled={review.pending === "stop" || review.pending === "keep"}
-                  title={review.pending === "audition"
-                    ? "call the audition off before it lands"
-                    : review.before
+                  onClick={review.before ? stopAudition : audition}
+                  title={review.before
                     ? "put back what was playing before the audition"
                     : "hear them in what is playing, without stopping the transport"}
                 >
-                  {review.fresh ? "load to a deck" : review.before || review.pending === "audition" ? "■ stop" : "▶ audition"}
+                  {review.fresh ? "load to a deck" : review.before ? "■ stop" : "▶ audition"}
                 </button>
                 {!review.fresh && <button
                   className={`${styles.smallBtn} ${styles.smallBtnPrimary}`}
                   onClick={keepChanges}
-                  title={review.deck ? "leave them on the deck (saved once it is the song, or the decks are kept as one)" : review.pending === "keep" ? "land it now" :
+                  title={review.deck ? "leave them on the deck (saved once it is the song, or the decks are kept as one)" :
                     signedIn && songId && !isTemplate
                       ? "make them part of the song, and save it as a new version"
                       : "make them part of the song"
                   }
                 >
-                  {review.pending === "keep" ? "keep now" : signedIn && songId && !isTemplate && !review.deck ? "keep + save" : "keep"}
+                  {signedIn && songId && !isTemplate && !review.deck ? "keep + save" : "keep"}
                 </button>}
                 <button className={`${styles.smallBtn} ${styles.cxDiscard}`} onClick={discardChanges} title="throw them away">
                   discard
                 </button>
               </div>
-              {!review.fresh && tab === "chat" && arrival}
             </section>
           )}
           <div className={styles.cxComposer} hidden={tab !== "chat"}>
-            {!review && arrival}
             <textarea
               ref={inputRef}
               className={styles.chatTextarea}

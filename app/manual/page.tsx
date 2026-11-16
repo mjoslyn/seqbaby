@@ -2260,54 +2260,11 @@ bass: note("<eb2 g2>*8").s("sawtooth").lpf(2000).lock()`}</div>
             bar with four buttons:
           </p>
           <ul>
-            <li><span className={styles.ui}>audition</span> plays the changes in place of what is playing. The transport does not stop.</li>
+            <li><span className={styles.ui}>audition</span> plays the changes in place of what is playing, straight away. The transport does not stop.</li>
             <li><span className={styles.ui}>stop</span> puts back what was playing. The changes stay on offer.</li>
             <li><span className={styles.ui}>keep</span> makes the changes your song. If a song of yours is open, a new version is saved.</li>
             <li><span className={styles.ui}>discard</span> throws the changes away.</li>
           </ul>
-          <h3>Transitions</h3>
-          <p>
-            The row above the input sets how an audition or a keep arrives: when it
-            starts, its shape, its length and what the tempo does. In review,{" "}
-            <span className={styles.ui}>into</span> picks which pattern of the new
-            song to land on.
-          </p>
-          <div className={styles.tableWrap}>
-            <table className={styles.table}>
-              <thead>
-                <tr><th>Shape</th><th>What you hear</th></tr>
-              </thead>
-              <tbody>
-                <tr><td>cut</td><td>The new song starts on the next bar line.</td></tr>
-                <tr><td>sweep</td><td>Both songs play for the length. A filter closes over the old song, and the old song is gone at the end.</td></tr>
-                <tr><td>fade</td><td>Both songs play for the length. The old song fades out as the new song fades in.</td></tr>
-                <tr><td>drop</td><td>The old song thins out: chords and lead leave, then the bass, then the drums. A near-silent bar comes before the new song.</td></tr>
-                <tr><td>stagger</td><td>The new song arrives in groups: drums, bass, chords, lead. The same group of the old song leaves as each group arrives.</td></tr>
-                <tr><td>bridge</td><td>A passage written for the join. See below.</td></tr>
-              </tbody>
-            </table>
-          </div>
-          <h3>Bridges</h3>
-          <p>
-            A bridge is a written passage that plays in place of the intro of the
-            new song. The tracks of the new song play their intro. Over them, the
-            tracks of the old song play an outro and drop out one group at a time.
-            After the bridge, the new song carries on from the section after its
-            intro.
-          </p>
-          <p>
-            With <span className={styles.ui}>bridge</span> picked, the turn writes
-            the bridge before it shows you the changes. The panel says{" "}
-            <span className={styles.ui}>writing the bridge</span> while it works.
-            This makes the turn take longer, and it counts as one more turn against
-            your limit. If the bridge is not ready, or it fails, audition plays a
-            simpler bridge that seqbaby makes itself.
-          </p>
-          <div className={styles.note}>
-            The intro is easiest to find in a song that plays its patterns in
-            chain mode. For other songs, the bridge leads in and the new song
-            starts from the top.
-          </div>
           <h3>Composing for a deck</h3>
           <p>
             The <span className={styles.ui}>for:</span> select sends a turn to a

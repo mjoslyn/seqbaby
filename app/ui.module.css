@@ -681,14 +681,7 @@ a.bylineLike { text-decoration: none; }
 .cxStarter:hover { border-color: #6ee7b7; color: #6ee7b7; }
 .cxEmptyList { margin: 0; padding-left: 16px; color: #9aa0aa; font-size: 11.5px; line-height: 1.55; }
 .cxEmptyList b { color: #dfe3ea; font-weight: 400; }
-/* how a turn's changes arrive: one line that says it, opened to set it */
-.cxArrival { display: flex; flex-direction: column; gap: 6px; }
-.cxArrivalSum { display: flex; align-items: baseline; gap: 8px; width: 100%; background: none; border: 0; padding: 2px 0; color: #b9bec8; font: inherit; font-size: 11px; text-align: left; cursor: pointer; }
-.cxArrivalSum:hover .cxArrivalText { color: #e8e8ea; }
-.cxArrivalText { flex: 1; min-width: 0; }
-.cxArrivalBody { display: flex; flex-direction: column; gap: 6px; }
-.cxArrivalNote, .cxTip { color: #9aa0aa; font-size: 10.5px; line-height: 1.45; }
-.cxTip { padding-left: 48px; }
+/* a labelled row of chips (the composer's `for`) */
 .cxSeg { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
 .cxSegLabel { flex: none; width: 44px; color: #7f8692; font-size: 10.5px; }
 .cxSegOff { opacity: 0.4; }

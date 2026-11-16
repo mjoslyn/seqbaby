@@ -40,9 +40,8 @@ export function storeSetsMap(m) { try { localStorage.setItem(SETS_KEY, JSON.stri
  * @returns {Object}
  */
 export function serializeSet({ staged = false, decks = false } = {}) {
-  // Tracks a transition has built ahead of its bar line are not the song's
-  // yet, and the ones it is letting finish their bar are not any more
-  // (transition.js): written as if they were not there, so every index
+  // Tracks on their way out, letting their bar finish (`_leaving`, mix.js),
+  // are not the song's any more: written as if they were not there, so every index
   // counts along the song's own tracks. A merge reads them (`staged`), since
   // its comparison runs parallel to state.tracks.
   // Deck B's tracks and the two deck buses (mix.js) are a second song being

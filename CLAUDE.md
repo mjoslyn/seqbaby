@@ -221,11 +221,10 @@ env / fx / eq / comp / mod / automation per track.
   in-place restore was the first two, and the compose panel's audition needed
   the same thing, so they live here and history.js owns only when. See the
   live merge section below.
-- `transition.js` / `transitionPlan.js` — a session written onto the running
-  engine on a bar line, cut or swept, with the tempo carried across: the
-  compose panel's audition / stop / keep. `transitionPlan.js` is the
-  arithmetic (when it lands, ramp or jump, the sweep's curve), **no imports**,
-  tested in `test/transition.test.js`. See the transition section.
+- `lookahead.js` — `stretchLookAhead` / `restoreLookAhead`: Tone's lookahead
+  raised to 1s while a mix deck is built, landed or ejected with the
+  transport running, so a main-thread stall does not drop audio. See the mix
+  section.
 - `clips.js` — a pattern slot launched on ONE track (`launchClip`,
   `requestClipLaunch`, `stopClip`), the per-track step-count seeding the
   transport shares (`seedTrackCount`), arrange mode's bar-line work
@@ -2816,8 +2815,8 @@ block   t.arrangement[i]    ─── { slot, start, bars }: a clip at a bar, fo
 The fifth view (`groove | clips | arrange | piano | mix`, desktop only). With
 one song it is a mixing desk: a strip per track (fader, pan, mute, solo, a
 meter) and one per fx bus. `load deck B…` puts a second song beside it, and
-the view becomes two desks with a crossfader between them: a transition
-(transition.js) held open and put under the hand.
+the view becomes two desks with a crossfader between them: two songs at once,
+held open and put under the hand.
 
 ```
 song's tracks ─▶ deck A bus ─┐
@@ -2863,9 +2862,7 @@ deck B tracks ─▶ deck B bus ─┘              buses' output gains
   neither matches nor removes deck tracks, so an undo under a mix leaves deck
   B playing), `switchPattern` / `restartTrackCounts` / the pattern bar's copy,
   move and meter resize (`onDeckA`), the arrangement and its recorder,
-  `isPatternNonEmpty(idx, deck)`, the clip and arrange rows, and every track
-  list in transition.js (`songTracks()`), or a compose transition would treat
-  deck B as tracks to sweep out. The song's tracks always come first in
+  `isPatternNonEmpty(idx, deck)` and the clip and arrange rows. The song's tracks always come first in
   `state.tracks` (`placeBusesLast`'s ranks), since every serialized index
   counts along them.
 - **The deck buses are real `bus` tracks**, so a deck has a fader, eq,
@@ -2890,11 +2887,10 @@ deck B tracks ─▶ deck B bus ─┘              buses' output gains
 - **Deck B plays in its own scale** (`mix.scale`, `noteForStep` hands it to
   `applyScale`), not the session's.
 - **The tempo is the transport's alone** (`tempoX`, 0 the song's bpm, 1 deck
-  B's; `follow fader` ties it to the crossfader), as a transition's ramp is:
-  the bpm field, synced LFOs and synced delays stay on the song's tempo until
+  B's; `follow fader` ties it to the crossfader): the bpm field, synced LFOs and synced delays stay on the song's tempo until
   the mix ends.
 - **Deck B is built a track per task** (`buildNext`, with the lookahead
-  stretched as a transition stretches it), each made with
+  stretched, `lookahead.js`), each made with
   `state.activePattern` swapped to the deck's scene for that one synchronous
   task, since `createTrack` and `loadTrackFromData` alias to it. A solo is
   not carried in. Its arrangement is set aside (`_deckArrangement`) until a
@@ -3159,8 +3155,7 @@ deck B tracks ─▶ deck B bus ─┘              buses' output gains
   touched. With nothing on deck B the turn is sent an EMPTY session at the
   open song's tempo (and a line saying it is a new song to be mixed with one
   in that key), and the review bar's one button is `load to B` (`loadDeckB`).
-  A deck B turn is written at once, never on a transition (those are the open
-  song's), is not in the undo stack (deck B is not in the format; `stop` puts
+  A deck B turn is not in the undo stack (deck B is not in the format; `stop` puts
   back the session taken at `audition`), and is never saved from the panel:
   `keep` leaves it on the deck, and it is saved by landing it or keeping both.
   A proposal whose deck has gone is dropped with a note.
@@ -5182,14 +5177,9 @@ The drawer is laid out around the turn's RESULT, not around a chat log:
   that hand edits made meanwhile are not in what comes back.
 - **A finished turn is scrolled to its top**, not its last line.
 - **The review card** (pinned under the log) is headed by its state
-  (`changes ready` / `auditioning` / `keeping on the next bar…`), the name
+  (`changes ready` / `auditioning`), the name
   the turn gave the song and the diff's headline (`diffHeadline`), over the
   buttons. `keep` reads `keep + save` when it will save a version.
-- **How changes arrive** is one line that says what is set (`arrives a 4-bar
-  sweep, from the next bar`), opened into labelled rows of chips (`Seg`):
-  shape with its sentence under it (they were tooltips, which a finger cannot
-  read), when, over, tempo, into. In the review card while there is one,
-  above the box otherwise, shut by default so the reply keeps the room.
 - **The box** is five lines to start and grows to a third of the window;
   under it `for: this song | deck B` (desktop, while the mix API is there)
   and `send`. An empty conversation offers starters (`STARTERS`) that fill
@@ -5377,175 +5367,15 @@ discard    throw them away (putting back the pre-audition session first)
 - **A closed drawer hides the bar but not the audition**, so the `compose`
   button carries a dot and says which state it is in. An extra track playing
   with nothing on screen explaining it would be a bug report.
-- **The writes arrive on a transition** (the picker in the review bar, see
-  the next section): audition, stop and keep land on the next bar line by
-  default, and the bar says what is on its way. `discard` is always at once.
+- **Every write is at once**: audition, stop, keep and discard each merge
+  their session the moment they are pressed. There used to be a picker for
+  landing them on a bar line with a sweep, a fade or a written bridge
+  (`transition.js`); it was taken out.
 - `new`, and opening a different song, drop the proposal: `before` describes a
   session that is no longer there, and putting it back would undo the `new`.
 - `applySet` is still the fallback in `writeLive`, for an engine cached from
   before `mergeSet` shipped. It costs the transport, which is the thing the
   merge exists to avoid, but it is never silence.
-
-### Transitions (`transition.js` + `transitionPlan.js`)
-
-How the review bar's writes reach what is playing, picked in the compose
-drawer's `arrives` line (always on show, above the box or in the review card,
-so it is set before a turn is sent as well as in review) and kept per browser (`seqbaby.transition.v1`):
-**when** (next bar, the default, or now; a bridge starts on the next
-bar), **shape**, **length** (1 / 2 / 4 / 8 bars; a bridge is as long as the
-new song's intro) and **tempo** (auto / jump / ramp). In
-review there is also **into**: which of the new song's patterns to land on
-(`opts.into`). Unset, every shape lands on the slot playing. Set, a sweep,
-fade or stagger plays that pattern on the slot the chain is holding while the
-two overlap (`aimed`, transition.js) and switches to it at the landing; for a
-bridge it is where the new song's intro starts.
-Exposed as `window.seqbaby.transitionTo(session, opts)` (a Promise of
-`{landed}`), `cancelTransition`, `finishTransition`, `transitionPending` and `bridge`
-(the pure bridge helpers and `set`).
-
-| shape | what the length is |
-|---|---|
-| cut | nothing: the next bar line, or at once with `now` |
-| sweep | the overlap: the new song plays from the start, the old song's own tracks are swept down (a -36dB high shelf on each, its corner sliding 20kHz to 400Hz) and gone at the end |
-| fade | the overlap: the old tracks dip to -36dB as the new ones rise from it |
-| drop | the old song thins: harmony + lead leave, then the bass, then the drums at the start of the last bar (the last beat of a one-bar drop), the near-silence before the new song hits |
-| stagger | the new song arrives by group across it: drums, bass, harmony, lead, one a bar over four, one a beat over one, the old song's same group making way as each arrives |
-| bridge | not a length: a passage WRITTEN for the join, as long as the new song's intro, in which that intro works its way in under the old song's outro; the new song then carries on from the section after its intro (below) |
-
-- **Every merge runs in the scheduler callback**, for the queued pattern
-  switch's reason: the next callback is the next step. The transport calls
-  `transitionStep` once per step after the bar line is worked out, and it
-  answers `land` (a song landed on this bar line: every track starts from its
-  first step, the queue and the chain sit the bar out; the arrangement is
-  seeded from bar 0 in arrange mode) or `hold` (two songs are under way:
-  the chain waits). Stopped, it
-  lands at once. Then `markExternalEdit("compose")` and a jam flush, since
-  the click that asked for it settled bars ago.
-- **The new tracks are built before the bar line** (staging). A track costs
-  50-100ms of main thread to build (voice, rack, DOM), and eight of them
-  inside the scheduler callback held Tone's clock past the lookahead: a gap
-  on the one. So the tracks the first merge will add are merged in one per
-  task while the old song plays, stopped (`_clipOff`) and hidden
-  (`is-staged`, and left out of the clip and arrange rows), and the landing
-  finds them made, merged as the engine read them back (`densify`) so a
-  sparse builder song does not rewrite and repaint every field. A cut asked
-  for on a bar line waits for the next one (only `now` lands at once), and
-  EVERY shape's first merge waits a bar at a time (up to `MAX_DEFER`, 4)
-  while tracks are still being built: `wait` moves, so the whole plan moves
-  with it. `serializeSet` leaves `_staged` tracks out (the undo stack, a jam,
-  a save and the unsaved check never see them); a merge reads them
-  (`serializeSet({ staged: true })`), since its comparison is parallel to
-  `state.tracks`. A cancel merges them away. The transport withholds a staged
-  track itself (as it does `_clipOff`), since a pattern switch clears
-  `_clipOff`.
-- **The tracks a landing removes finish their bar first** (`_leaving`). The
-  scheduler runs a lookahead ahead of the audio, so removing them at the
-  merge cut the end of their last bar, already scheduled: a gap before every
-  landing, the size of the lookahead. They are kept, stopped and hidden and
-  left out of `serializeSet` like staged ones, and removed (`removeTrack`)
-  `LEAVE_TAIL_MS` after the audio reaches the bar line (`p.at`, the step time
-  the scheduler handed in). A merge that wants one back (a cancel) takes it
-  back.
-- **The lookahead is stretched while one is on its way** (1s,
-  `stretchLookAhead`), so a build step that stalls the main thread (tens of
-  ms, hundreds on a phone) does not drop audio that was never scheduled.
-  Raising it schedules further ahead and lowering it after only pauses the
-  clock until it catches up, so neither skips nor doubles a note; knob moves
-  land later meanwhile. Measured, eight worklet tracks: the landing went from 1.2s of main
-  thread to 90ms. Two other costs went with it: `syncAllLFOs` asks the rack
-  about its stages once rather than once per key (`syncLFO`'s `refresh`),
-  and Tone's `Oscillator.getInitialValue` (33 inverse FFTs per type or
-  phase set, several per rack) is memoised per type and phase
-  (`memoizeOscillatorInitialValue`, main.js). And `needsRebuild` (liveSet.js)
-  reads absent and null as the same, or a sparse song rebuilt every track
-  of every merge.
-- **Groups** (`trackGroup`, on the serialized track): a drum kit is drums; an
-  engine or name that says bass, or a part written low with no chords, is
-  bass; chords or stacked notes or a pad / keys name is harmony; the rest is
-  lead; a bus is none (it carries what feeds it). **A track's identity across
-  the two songs is engine + name** (`trackKey`), mergeSet's own: a track in
-  both switches to its new part at once rather than being faded or dropped.
-- **Two songs at once is one session** (`mixSessions`): the new song's
-  globals, the tracks each shape keeps from either, every send, sidechain and
-  pad index renumbered into the mixed list or let go. `overlapSession` (sweep,
-  fade) and `compositeSession` (stagger, by group). The old tracks play their
-  own patterns on the same slot number as the new ones.
-- **The overlap is on the old tracks' own nodes**, not the master: the eq's
-  high shelf (`t.eqNode.high`) for a sweep, the rack's output gain for a fade
-  (the new tracks rise on theirs). A filter put on a track's output would race
-  the rack's own deferred rewiring (`softSwitch`). The old tracks are removed
-  by the landing; a cancel puts their shelf and gain back as they were.
-- **A drop stops tracks the way a stopped clip is stopped** (`_clipOff`,
-  performance state, never saved), so the save, undo and a jam never see the
-  thinning; the landing (or a cancel) starts them again.
-- **A bridge is a written passage that stands in for the new song's intro.**
-  `introPlan` (transitionPlan.js) reads the intro off the new song: in chain
-  mode its first section plus every section after it still sparser than the
-  song at its fullest, each for its repeat count; a song that does not chain
-  (or an intro over `BRIDGE_MAX_BARS`, 16) is only led into, and starts from
-  the top afterwards (`leadIn`). `bridgeLayout` cuts those bars into
-  segments a pattern can hold (`BRIDGE_SEG_STEPS`, 64, the compose tools'
-  cap, at the fastest track's speed) and gives each a slot free in BOTH
-  songs; no free slot, no bridge, and the transition is a cut. The bridge
-  session is `overlapSession` (the new song's globals and tracks, then the
-  old song's own) with the bridge written in those slots, in the intro's
-  meter. `transitionTo` merges it on the next bar line (its tracks staged
-  first, like any shape), puts the transport on each bridge slot for its
-  bars (`bridgeStep`; the transport's `"bridge"` restarts the counts and
-  seeds no arrangement, `"hold"` keeps the chain and the arrangement out),
-  then lands the new song and switches to `layout.land`. The old tracks
-  leave at the landing (`_leaving`), and so do the bridge slots, which the
-  new song never had.
-- **The draft is made in code** (`codeBridge`): the new song's tracks play
-  their intro as it plays (`partOver`, lanes and a locked sound included),
-  the outgoing tracks play the pattern they were on as an outro: the lead
-  gone a quarter of the way through, the chords at half, the bass at three
-  quarters (`OUTRO`), the bass, kick and snare resting in any bar the new
-  song plays its own, the kick out for the last bar and the snare rolling
-  through it (`rollVelocity`) unless the new song's snare is there. A track
-  in both songs is the new song's.
-- **The compose model rewrites the draft** (`app/ComposeChat.tsx`,
-  `writeBridge`). With bridge picked, a turn on the open song is not offered
-  until its bridge is written: when the turn's job is done, `send` runs a
-  second turn before it sets the review bar (the activity line says `writing
-  the bridge`), so the bridge is ready the moment the changes can be
-  auditioned, playing or stopped. Bridge picked after a proposal is on the
-  bar, or another `into` chosen, writes one then (the effect). The second
-  turn is the draft as the session and `bridgePrompt` (which patterns are the bridge and how long,
-  which intro patterns they stand in for, which tracks are outgoing, where
-  the song carries on; rewrite the outgoing parts as an outro in the new
-  key, bring the intro in gradually, never two kicks or basslines, end on a
-  fill, change only the bridge patterns). The row says `writing the bridge…`
-  / `bridge written`. Only the bridge slots of what comes back are used
-  (`bridgeSession`: matched by track, a part of the wrong length keeps the
-  draft's). `audition` / `keep` hand it to `transitionTo` as `opts.bridge =
-  {session, layout}`, laid out again against the song as it is then
-  (`writtenBridge`) and used only if the layout is still the one it was
-  written for (`sameLayout`: the same slots for the same intro, whichever
-  pattern the old song has moved on to); otherwise, or when it is not back yet or
-  failed, the draft plays. A written bridge arriving while its draft is
-  pending or playing takes over (`setTransitionBridge`: before the merge it
-  replaces the draft, after it at the next bridge pattern). One bridge turn
-  per proposal and `into`, never for deck B, and it counts against the
-  compose limits like any turn. `stop` with bridge picked is a cut on the
-  bar.
-- **Undo and a jam never see a transition part way.** A merge writes the bpm
-  field with an `input` event, which history and jam took for an edit and
-  banked the two-songs-at-once session as an undo step. `state._transitioning`
-  is up while one is pending; `checkForEdit` (history.js) and `flushJam`
-  skip under it, and the landing asks again.
-- **The tempo** (`tempoMode`): cut and stagger jump (the stagger with its
-  drums). A bridge ramps across its own bars, or jumps where it starts. Auto ramps the others when the
-  tempos are within 15%, and jumps a half / double time pair or a bigger gap.
-  A ramp moves only the TRANSPORT's bpm, a step at a time, reaching the new
-  tempo on the landing: the bpm field, the synced LFOs and the synced delays
-  are retuned once, by the merge.
-- **Buttons while one is on its way**: stop calls a pending audition off (a
-  stagger part way puts the old song back); keep over a pending audition
-  replaces it; keep pressed twice lands at once; discard, `new`, opening a
-  song and sending the next turn cancel or land it (sending lands it: the turn
-  is about what is playing). Stopping the transport lands it.
-- Not shared in a jam as it happens: peers get the landed session.
 
 ## Jam — several studios, one song (`jam.js` + `jamSync.js` + `app/JamPanel.tsx`)
 
@@ -5975,7 +5805,7 @@ through a 6ms fade on its gain).
   during the fade join it. `routeTrackOutput` does nothing when the track already goes where it
   should (`rack._routedTo` / `_routedMeter`): every merge re-points every
   track, and re-pointing ones that were not moving ducked the whole mix
-  ~18ms on every undo, jam patch, code run and transition step.
+  ~18ms on every undo, jam patch and code run.
 - **`silence()` fades**: the sampler, the granular grains and the wavetable
   notes keep their gain on the source (`src._g`, `rec.amp`) and stop through
   `fadeStop`. The stop button already hid the hard cut behind the master ramp; a
@@ -6073,7 +5903,7 @@ through a 6ms fade on its gain).
   place the dispatch lives, or the second one has to import the first.
 - **`engineData.js`, `soundDefaults.js`, `theoryData.js`, `constants.js`,
   `chanceGen.js`, `sessionFormat.js`, `historyStore.js`, `songBuilder.js`,
-  `miniNotation.js`, `strudel.js`, `arrangement.js`, `mixPlan.js`, `patternPicture.js`, `rollNotes.js`, `eqDraw.js`, `transitionPlan.js` and `voxPhonetic.js` must stay importable from Node** — no DOM, no Tone, no `window`. The tests
+  `miniNotation.js`, `strudel.js`, `arrangement.js`, `mixPlan.js`, `patternPicture.js`, `rollNotes.js`, `eqDraw.js` and `voxPhonetic.js` must stay importable from Node** — no DOM, no Tone, no `window`. The tests
   and the MCP server run them; an import of state.js or catalog.js in any of
   them breaks `npm test` at load, which is the guard.
 - **React must never re-set the studio's `innerHTML`** (`app/StudioBody.tsx`).
