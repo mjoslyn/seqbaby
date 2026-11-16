@@ -2978,10 +2978,10 @@ deck B tracks ─▶ deck B bus ─┘              buses' output gains
   line. Arrange mode has only bar lines to go by. There was a `start:` select
   in the mix bar for this; it said twice what the fade's `at:` says, and is
   gone. An automatic crossfade (`fadeToDeck`) waits (`fade.wait`, its button
-  blinking). **Each side of the slider has a pattern select, a bar
-  select and an arrow** (`[pat] [bar] ◂` slider `▸ [pat] [bar]`, the length
-  and shape selects after the right side's chips; `fadeAt`, `queueFade` in
-  mixView.js): the pattern is `any` (the next bar line, `at: "bar"`, the bar
+  blinking). **An arrow each side of the slider, and one pattern select
+  and one bar select after the right side's chips for both** (`◂` slider
+  `▸`, then `[pat] [bar]` and the length and shape selects; `fadeAt`,
+  `queueFade` in mixView.js): the pattern is `any` (the next bar line, `at: "bar"`, the bar
   then counting bar lines on from it), `pat (N)` (the pattern the playing
   deck is on, when it comes round, `at: "playing"`, below) or one of that
   deck's patterns by number; the bar is which bar of it. Both name the deck
@@ -2992,20 +2992,20 @@ deck B tracks ─▶ deck B bus ─┘              buses' output gains
   button) and asks for the fade once it plays. The length select changes a
   fade already queued or running (`setFadeLength`): queued, it is the new
   length; running, the new length counts from where the fade began, and
-  what is left runs on from where the crossfader is. Changing a side's pattern or
-  bar while a fade that way is still waiting queues it again where they now
+  what is left runs on from where the crossfader is. Changing the pattern or
+  bar while a fade is still waiting queues it again where they now
   say (a running fade is left alone). The
   arrow is lit while its fade waits or runs. A fade
   towards a side also STARTS the decks on it that are not playing
   (`startSide`: armed like their own ▶, so they come in on the line the fade
   waits for; with the transport stopped they start with it), and calls off a
   stop one of them was armed for. **A `pat` fade goes by the patterns of the deck that is
-  PLAYING** (`fadeToDeck(side, bars, {at, bar, ref})`). Each side's selects
-  go by the deck being faded AWAY from (`fadeRefFor(side)`): a deck playing
-  on the other side, so the left side's selects read `B pat` / `B bar` and
-  the right side's `A pat` / `A bar`; with nothing playing over there,
-  `fadeRefDeck()`, the playing deck on the side the crossfader is nearest.
-  Read before the fade starts anything.
+  PLAYING** (`fadeToDeck(side, bars, {at, bar, ref})`). The deck is
+  `fadeRefDeck()`: the playing deck on the side the crossfader is nearest,
+  which is the deck a fade moves away from (deck A unless it was stopped
+  from the desk). With two decks playing and the fader over on A, the selects
+  read `A pat`; once it is over on B, `B pat`. Read before the fade starts
+  anything.
   `at: "playing"` (the default) is whichever pattern that deck is on; a slot
   number is one of its patterns. Either way the fade begins on the bar line
   `refLine(ref)` says that pattern's bar `bar` starts at (0 its first, where
