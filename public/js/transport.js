@@ -806,7 +806,9 @@ export async function startPlayback(opts = {}) {
     }
     // pattern chaining: advance at bar boundaries in chain mode, or round the
     // loop range in repeat mode (loopRange), respecting per-pattern repeats
-    if ((state.patternMode === "chain" || loopRange()) && barLine) {
+    // Deck A stopped from the mix view (state.mix.aOff) holds its place: its
+    // chain does not run on while nothing of it is heard.
+    if ((state.patternMode === "chain" || loopRange()) && barLine && !state.mix?.aOff) {
       state.chainBarCount++;
       const needed = Math.max(1, state.patternRepeats[state.activePattern] ?? 1);
       if (state.chainBarCount >= needed) {

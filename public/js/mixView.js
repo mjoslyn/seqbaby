@@ -580,7 +580,7 @@ function chainProgress(deck) {
   const barLen = Math.max(1, stepsPerBarForMeter(patternMeter(state.activePattern)));
   const into = Math.min(1, (state.barTick ?? 0) / barLen);
   if (deck === "a") {
-    if (state.patternMode !== "chain") return null;
+    if (state.patternMode !== "chain" || state.mix?.aOff) return null;
     const of = Math.max(1, state.patternRepeats[state.activePattern] ?? 1);
     const bar = Math.min(of - 1, state.chainBarCount ?? 0);
     return { bar: bar + 1, of, frac: (bar + into) / of };

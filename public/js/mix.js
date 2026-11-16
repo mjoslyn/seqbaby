@@ -581,6 +581,7 @@ export function setDeckAPlaying(on, { when = "now" } = {}) {
   const m = state.mix;
   if (!m) return;
   on = !!on;
+  m.aArmFade = false;                              // waiting on a fade is that fade's doing
   const stop = () => { m.aOff = true; m.aArm = null; releaseSilencedTracks(); refreshNoiseBeds(); };
   if (!on && !m.aOff && when === "pattern" && state.playing) {
     m.aArm = m.aArm === false ? null : false;
@@ -605,7 +606,8 @@ export function setDeckAPlaying(on, { when = "now" } = {}) {
 /** Deck A's bar line: an armed start or stop lands here. */
 function deckABar(m, phrase) {
   if (m.aArm === true && phrase) {
-    m.aOff = false; m.aArm = null;
+    m.aOff = false; m.aArm = null; m.aArmFade = false;
+    state.chainBarCount = 0;                        // its chain starts from the pattern's first bar
     for (const t of deckATracks()) if (t.engineKey !== "bus") seedTrackCount(t, 0);
     refreshNoiseBeds();
     announce();
@@ -748,7 +750,7 @@ export function mixStep(nextTime, barLine) {
   }
   if (!barLine) return;
   const waits = !!m.fade?.wait;
-  deckABar(m, gate(m.aArmOn));
+  deckABar(m, m.aArmFade && (waits || begins) ? begins : gate(m.aArmOn));
   for (const d of m.decks) deckBar(d, d.armFade && (waits || begins) ? begins : gate(d.armOn));
 }
 
@@ -1166,6 +1168,8 @@ function startSide(side, withFade = false) {
   if (deckSide("a") === side) {
     if (m.aOff && m.aArm !== true) { setDeckAPlaying(true); out.push("A"); }
     else if (m.aArm === false) setDeckAPlaying(true);
+    // armed by the fade, deck A comes in where the fade begins, as the others do
+    if (m.aArm === true) m.aArmFade = !!withFade;
   }
   for (const d of deskDecks()) {
     if (d.loading || deckSide(d.id) !== side) continue;

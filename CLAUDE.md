@@ -3048,7 +3048,11 @@ deck B tracks ─▶ deck B bus ─┘              buses' output gains
   `mix.aOff` / `mix.aArm`, `deckABar`): stopped, the song's tracks are
   withheld as a stopped deck's are (`deckSilent`) while the transport and the
   other decks play on; a start waits as any deck's does (click: the pattern's round, double-click:
-  the next bar) and comes in from step 0. The flags are the mix's, so they go when it ends, and an eject of
+  the next bar) and comes in from step 0. Stopped, its chain holds (the
+  transport's chain count does not run, and the deck's `3 of 8` hides), so it
+  starts from the first bar of the pattern it is on. Started by a fade
+  towards its side it waits for the bar line the fade begins on
+  (`aArmFade`), as the other decks do. The flags are the mix's, so they go when it ends, and an eject of
   deck A clears them.
 - **A chain's progress is on the deck** (`chainProgress`, painted on the
   meters' 30Hz tick, never a rebuild): beside a deck's `chain` box, `3 of 8`
