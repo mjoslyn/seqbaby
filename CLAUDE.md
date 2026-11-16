@@ -3046,6 +3046,10 @@ deck B tracks ─▶ deck B bus ─┘              buses' output gains
   "pattern"})`: `d.arm = false`, the button reading `■…`, and `deckBar`
   stops the deck on the bar line `deckPatternLine(d)` names; a second click
   calls the stop off). Stopped transport, or the clip view's deck ■: at once.
+  **Every deck's ▶ and ■ are two buttons** (`playStop`, mixView.js): ▶ is
+  lit while the deck plays, and a click on it lets a deck stopping at its
+  pattern's end play on; ■ is greyed while the deck is stopped, and calls
+  off a start it is armed for.
 - **Deck A has the same ▶ / ■ while a deck is loaded** (`setDeckAPlaying`,
   `mix.aOff` / `mix.aArm`, `deckABar`): stopped, the song's tracks are
   withheld as a stopped deck's are (`deckSilent`) while the transport and the

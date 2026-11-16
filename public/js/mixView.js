@@ -58,6 +58,24 @@ const fadeAt = { l: { pat: "playing", bar: 0 }, r: { pat: "playing", bar: 0 } };
 let pendingFade = null;
 
 /**
+ * A deck's ▶ and ■. ▶ starts it when `whose` pattern comes round (double-
+ * click: the next bar), or lets a deck stopping at its pattern's end play on;
+ * ■ stops it when its pattern comes round (again: calls that off; double-
+ * click: now), or calls off a start it was armed for.
+ */
+function playStop(L, on, armed, stopping, dis, whose, armOn) {
+  const playTip = stopping ? `deck ${L} stops when its pattern comes round: click to let it play on`
+    : on ? `deck ${L} is playing`
+    : armed ? `deck ${L} starts ${armOn === "pattern" ? `when ${whose} comes round` : "on the next bar"} (double-click: on the next bar)`
+    : `start deck ${L} when ${whose} comes round (double-click: on the next bar). With the transport stopped, it starts with it`;
+  const stopTip = stopping ? `deck ${L} stops when its pattern comes round. Click to let it play on; double-click to stop it now`
+    : on ? `stop deck ${L} when its pattern comes round. Double-click: stop it now`
+    : armed ? `call off deck ${L}'s start` : `deck ${L} is stopped`;
+  return `<button type="button" class="sq-mix__play${on && !stopping ? " is-on" : ""}${armed ? " is-armed" : ""}" data-act="deck-play" ${dis} title="${esc(playTip)}">${armed ? "…" : "▶"} ${L}</button>`
+    + `<button type="button" class="sq-mix__play sq-mix__stop${stopping ? " is-armed" : ""}" data-act="deck-stop" ${dis || (!on && !armed ? "disabled" : "")} title="${esc(stopTip)}">${stopping ? "■…" : "■"}</button>`;
+}
+
+/**
  * Fade towards a side: queued (on the side's select) or `now`. Stopped, the
  * transport is started first (its own play button) and the fade asked for
  * once it plays; clicks made meanwhile only replace what is asked.
@@ -296,7 +314,7 @@ function deckA(shown) {
     ${m ? (() => {
       const on = !m.aOff, armed = m.aArm === true, stopping = on && m.aArm === false;
       return `<div class="sq-mix__deckbar">
-      <button type="button" class="sq-mix__play${on ? " is-on" : ""}${armed || stopping ? " is-armed" : ""}" data-act="deck-play" title="${stopping ? "deck A stops when its pattern comes round. Click to let it play on; double-click to stop it now" : on ? "stop deck A when its pattern comes round, while the other decks play on. Double-click: stop it now" : armed ? `deck A starts ${m.aArmOn === "pattern" ? "when the pattern playing comes round" : "on the next bar"}` : "start deck A when the pattern playing comes round (double-click: on the next bar). With the transport stopped, it starts with it"}">${stopping ? "■…" : on ? "■" : armed ? "…" : "▶"} A</button>
+      ${playStop("A", on, armed, stopping, "", "the pattern playing", m.aArmOn)}
       <button type="button" class="sq-btn--ghost" data-act="match-bpm" ${Math.abs(bpm - mixTempo()) < 0.01 ? "disabled" : ""} title="match the playing tempo: set deck A's tempo (the song's, ${bpm} bpm) to the one playing now, so the tempo slider no longer pulls towards ${bpm}">= bpm</button>
     </div>`;
     })() : ""}
@@ -352,7 +370,7 @@ function deckCard(d, shown) {
       ${d.loading ? `<span class="sq-mix__warn">loading…</span>` : ""}
     </div>
     <div class="sq-mix__deckbar">
-      <button type="button" class="sq-mix__play${d.on ? " is-on" : ""}${armed || stopping ? " is-armed" : ""}" data-act="deck-play" ${dis} title="${stopping ? `deck ${L} stops when its pattern comes round. Click to let it play on; double-click to stop it now` : d.on ? `stop deck ${L} when its pattern comes round. Double-click: stop it now` : armed ? `deck ${L} starts ${d.armOn === "pattern" ? "when deck A's pattern comes round" : "on the next bar"}` : `start deck ${L} when deck A's pattern comes round (double-click: on the next bar). With the transport stopped, it starts with it`}">${stopping ? "■…" : d.on ? "■" : armed ? "…" : "▶"} ${L}</button>
+      ${playStop(L, d.on, armed, stopping, dis, "deck A's pattern", d.armOn)}
       <button type="button" class="sq-btn--ghost" data-act="match-bpm" ${Math.abs(d.bpm - mixTempo()) < 0.01 ? "disabled" : ""} title="match the playing tempo: set deck ${L}'s tempo (${d.bpm} bpm) to the one playing now, so the tempo slider no longer pulls towards ${d.bpm} and landing it keeps this tempo">= bpm</button>
       <span class="sq-mix__grow"></span>
       <button type="button" class="sq-btn--ghost" data-act="load-deck" title="load another song onto deck ${L}, in place of this one: same place, same side of the crossfader">load…</button>
@@ -676,19 +694,13 @@ function onDblClick(e) {
   // double-click starts it now
   const fade = e.target.closest?.("[data-act=fade-a], [data-act=fade-b]");
   if (fade) { queueFade(fade.dataset.act === "fade-a" ? "l" : "r", true); return; }
-  // a deck's play button: a click stops it when its pattern comes round (or
-  // called that off again); the double-click stops it now
-  const play = e.target.closest?.("[data-act=deck-play]");
-  if (play && play.closest(".sq-mix__deck")?.dataset.deck === "a") {
-    const m = state.mix;
-    if (m && !m.aOff) setDeckAPlaying(false);
-    else if (m) setDeckAPlaying(true);              // the next bar, not the pattern's end
-    return;
-  }
-  if (play) {
-    const d = deskDecks().find((x) => x.id === play.closest(".sq-mix__deck")?.dataset.deck);
-    if (d?.on) setDeckPlaying(false, d.id);
-    else if (d) setDeckPlaying(true, d.id);         // the next bar, not the pattern's end
+  // a deck's ▶: the double-click starts it on the next bar (or lets a
+  // stopping deck play on); its ■: the double-click stops it now
+  const btn = e.target.closest?.("[data-act=deck-play], [data-act=deck-stop]");
+  if (btn) {
+    const go = btn.dataset.act === "deck-play", id = btn.closest(".sq-mix__deck")?.dataset.deck;
+    if (id === "a") { if (state.mix) setDeckAPlaying(go); }
+    else if (deskDecks().some((x) => x.id === id)) setDeckPlaying(go, id);
     return;
   }
   // a pattern number: now, whatever the switch setting
@@ -713,8 +725,17 @@ async function onClick(e) {
   if (!act) return;
   if (act === "load") { openPicker(); return; }
   const deckId = e.target.closest(".sq-mix__deck")?.dataset.deck || undefined;
-  if (act === "deck-play" && deckId === "a") { const m = state.mix; if (m) setDeckAPlaying(!!m.aOff && m.aArm !== true, { when: "pattern" }); return; }
-  if (act === "deck-play") { const d = deskDecks().find((x) => x.id === deckId); if (d) setDeckPlaying(!(d.on || d.arm === true), d.id, { when: "pattern" }); return; }
+  if (act === "deck-play" || act === "deck-stop") {
+    const go = act === "deck-play";
+    if (deckId === "a") {
+      const m = state.mix;
+      if (m && (go ? m.aOff || m.aArm === false : !m.aOff || m.aArm === true)) setDeckAPlaying(go, { when: go || !m.aOff ? "pattern" : "now" });
+    } else {
+      const d = deskDecks().find((x) => x.id === deckId);
+      if (d && (go ? !d.on || d.arm === false : d.on || d.arm === true)) setDeckPlaying(go, d.id, { when: go || d.on ? "pattern" : "now" });
+    }
+    return;
+  }
   if (act === "fade-a" || act === "fade-b") { queueFade(act === "fade-a" ? "l" : "r"); return; }
   if (act === "side") {
     const b = e.target.closest("[data-act=side]");
