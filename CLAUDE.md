@@ -2984,7 +2984,8 @@ deck B tracks ─▶ deck B bus ─┘              buses' output gains
   mixView.js): the pattern is `any` (the next bar line, `at: "bar"`, the bar
   then counting bar lines on from it), `pat (N)` (the pattern the playing
   deck is on, when it comes round, `at: "playing"`, below) or one of that
-  deck's patterns by number; the bar is which bar of it. A click on the
+  deck's patterns by number; the bar is which bar of it. Both name the deck
+  they go by (`A pat 3`, `B bar 2`; the bar plain under `any`). A click on the
   arrow queues a fade that way there; a double-click starts it now
   (`{now: true}`), as a double-click on a pattern number switches now. With
   the transport stopped the arrow starts it (the transport's own play

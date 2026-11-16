@@ -460,11 +460,11 @@ function xfadeParts() {
     const v = fadeAt[side];
     if (typeof v.pat === "number" && !slots.includes(v.pat)) v.pat = "playing";
     const opt = (val, label) => `<option value="${val}"${String(v.pat) === String(val) ? " selected" : ""}>${label}</option>`;
-    return `<select data-act="fade-pat" data-side="${side}" aria-label="the pattern a fade to the ${side === "l" ? "left" : "right"} begins in" title="the pattern a fade to the ${side === "l" ? "left" : "right"} begins in. any: the next bar line. pat: the pattern deck ${esc(RL)} is playing, when it comes round. A number: that pattern of deck ${esc(RL)}; a deck holding one pattern is sent to it, a chain arrives by itself">${opt("bar", "any")}${opt("playing", `pat (${playingNow + 1})`)}${slots.map((i) => opt(i, `pat ${i + 1}`)).join("")}</select>`;
+    return `<select data-act="fade-pat" data-side="${side}" aria-label="the pattern a fade to the ${side === "l" ? "left" : "right"} begins in" title="the pattern a fade to the ${side === "l" ? "left" : "right"} begins in. any: the next bar line. pat: the pattern deck ${esc(RL)} is playing, when it comes round. A number: that pattern of deck ${esc(RL)}; a deck holding one pattern is sent to it, a chain arrives by itself">${opt("bar", "any")}${opt("playing", `${esc(RL)} pat (${playingNow + 1})`)}${slots.map((i) => opt(i, `${esc(RL)} pat ${i + 1}`)).join("")}</select>`;
   };
   const barSel = (side) => {
     const v = fadeAt[side];
-    return `<select data-act="fade-bar" data-side="${side}" aria-label="the bar a fade to the ${side === "l" ? "left" : "right"} begins on" title="the bar of that pattern a fade begins on: bar 1 is where it comes round, a later bar can fall inside the pass under way, a shorter pattern wraps. With any pattern, how many bar lines on from the next">${Array.from({ length: 16 }, (_, i) => `<option value="${i}"${i === v.bar ? " selected" : ""}>bar ${i + 1}</option>`).join("")}</select>`;
+    return `<select data-act="fade-bar" data-side="${side}" aria-label="the bar a fade to the ${side === "l" ? "left" : "right"} begins on" title="the bar of that pattern a fade begins on: bar 1 is where it comes round, a later bar can fall inside the pass under way, a shorter pattern wraps. With any pattern, how many bar lines on from the next">${Array.from({ length: 16 }, (_, i) => `<option value="${i}"${i === v.bar ? " selected" : ""}>${v.pat === "bar" ? "" : `${esc(RL)} `}bar ${i + 1}</option>`).join("")}</select>`;
   };
   const shapes = XFADE_CURVES.map((c) => `<option value="${c}"${m.curve === c ? " selected" : ""} title="${esc(XFADE_CURVE_TIPS[c])}">${c}</option>`).join("");
   return {
