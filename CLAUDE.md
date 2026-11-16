@@ -2980,7 +2980,7 @@ deck B tracks ─▶ deck B bus ─┘              buses' output gains
   gone. An automatic crossfade (`fadeToDeck`) waits (`fade.wait`, its button
   blinking). **An arrow each side of the slider, and one pattern select
   and one bar select after the right side's chips for both** (`◂` slider
-  `▸`, then `[pat] [bar]` and the length and shape selects; `fadeAt`,
+  `▸`, then `xfade at [pat] [bar]` and the length and shape selects; `fadeAt`,
   `queueFade` in mixView.js): the pattern is `any` (the next bar line, `at: "bar"`, the bar
   then counting bar lines on from it), `pat (N)` (the pattern the playing
   deck is on, when it comes round, `at: "playing"`, below) or one of that

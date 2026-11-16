@@ -497,7 +497,7 @@ function xfadeParts() {
     slider: `<input type="range" class="sq-mix__xfade" min="0" max="1" step="0.005" value="${m.x}" data-act="xfade" aria-label="crossfader" title="the crossfader: all of its left side (${esc(L)}) at the left, all of its right (${esc(R)}) at the right. Click anywhere on it to go there" ${any ? "" : "disabled"} />`,
     fadeL: arrow("l"),
     fadeR: arrow("r"),
-    at: `<div class="sq-mix__fade" role="group" aria-label="where a fade begins">${patSel}${barSel}</div>`,
+    at: `<div class="sq-mix__fade" role="group" aria-label="where a fade begins"><span class="sq-mix__fadeat">xfade at</span>${patSel}${barSel}</div>`,
     length: `<select data-act="fade-bars" aria-label="fade length" title="how long an automatic fade takes. Changed while a fade is queued or running, it changes that fade too">${bars}</select>`,
     curve: `<label class="sq-mix__check" title="the crossfader's shape. ${esc(m.curve)}: ${esc(XFADE_CURVE_TIPS[m.curve] || "")}"><select data-act="curve" aria-label="crossfader shape">${shapes}</select></label>`,
     bands: `<label class="sq-mix__check" title="how the crossfader moves the bass, mids and highs. ${esc(m.bands || "together")}: ${esc(XFADE_BAND_TIPS[m.bands || "together"] || "")}"><select data-act="xf-bands" aria-label="crossfader bands">${XFADE_BANDS.map((b) => `<option value="${b}"${(m.bands || "together") === b ? " selected" : ""} title="${esc(XFADE_BAND_TIPS[b])}">${b}</option>`).join("")}</select></label>`,

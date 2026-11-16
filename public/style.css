@@ -4880,6 +4880,7 @@ body.vim-visual .sq-vim__mode { color: var(--accent-2); }
 .sq-mix__bar:has(.sq-mix__xrow) > .sq-mix__grow { display: none; }
 .sq-mix__xrow .sq-mix__xfade { flex: 1 1 60px; min-width: 60px; }
 .sq-mix__xrow .sq-mix__fade { flex: 0 0 auto; flex-wrap: nowrap; }
+.sq-mix__fadeat { color: var(--fg-dim); white-space: nowrap; align-self: center; }
 .sq-mix__xrow .sq-mix__check { flex: 0 0 auto; }
 /* and the rest of the line is cut to what it says, so the row fits a laptop */
 .sq-mix__bar:has(.sq-mix__xrow) select { width: auto; max-width: none; padding: 2px 2px; font-size: 10.5px; }
