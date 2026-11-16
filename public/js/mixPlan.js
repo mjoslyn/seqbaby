@@ -55,6 +55,45 @@ export function xfadeGains(x, curve = "blend") {
 }
 
 /**
+ * How the crossfader moves the bass, mids and highs. Each band crossfades over
+ * its own window of the travel, centred on the middle, through the curve, so
+ * every one is exact at the ends and mirrors (a band's left gain at x is its
+ * right gain at 1 - x), which the eject-of-deck-A mirror relies on.
+ *   together   every band over the whole travel: the plain crossfader.
+ *   bass swap  mids and highs over the whole travel, the bass swapped in the
+ *              middle: never two basslines at once.
+ *   staggered  highs over the whole travel, mids over its middle half, bass
+ *              swapped in the middle: the new song's top end leads it in.
+ *   highs swap bass and mids over the whole travel, the highs swapped in the
+ *              middle: one set of hats at a time.
+ */
+export const XFADE_BANDS = ["together", "bass swap", "staggered", "highs swap"];
+export const XFADE_BAND_TIPS = {
+  together: "bass, mids and highs move together",
+  "bass swap": "mids and highs blend across the travel, the bass swaps in the middle: never two basslines at once",
+  staggered: "highs blend across the whole travel, mids across the middle half, the bass swaps in the middle",
+  "highs swap": "bass and mids blend across the travel, the highs swap in the middle: one set of hats at a time",
+};
+const BAND_WIDTHS = {
+  together: { lo: 1, mid: 1, hi: 1 },
+  "bass swap": { lo: 0.06, mid: 1, hi: 1 },
+  staggered: { lo: 0.06, mid: 0.5, hi: 1 },
+  "highs swap": { lo: 1, mid: 1, hi: 0.06 },
+};
+
+/**
+ * Each band's gains for a crossfader at `x`: `{lo: {a, b}, mid: {a, b}, hi:
+ * {a, b}}`, `a` the left side, `b` the right.
+ * @param {number} x @param {string} [curve] @param {string} [bands]
+ */
+export function xfadeBandGains(x, curve = "blend", bands = "together") {
+  const w = BAND_WIDTHS[bands] || BAND_WIDTHS.together;
+  const q = clamp01(x);
+  const at = (width) => xfadeGains(width >= 1 ? q : clamp01((q - 0.5 + width / 2) / width), curve);
+  return { lo: at(w.lo), mid: at(w.mid), hi: at(w.hi) };
+}
+
+/**
  * The tempo `x` of the way from deck A's to deck B's. Linear in bpm, as a
  * pitch fader is. A missing tempo on either side is the other's.
  */

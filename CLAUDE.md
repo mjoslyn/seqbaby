@@ -2954,7 +2954,14 @@ deck B tracks ─▶ deck B bus ─┘              buses' output gains
   is made and the old one removed in one task. Under `softSwitch` every
   track of the song dipped ~18ms at once when the first deck loaded and when
   the last was ejected.
-- **`= bpm` on a deck matches it to the tempo playing** (`matchDeckTempo`):
+- **Every song opens on pattern 1, and every deck comes in on it.**
+  `applySet` loads on the pattern a song was saved on (its track-level sound
+  is that pattern's) and then `switchPattern(0)`s, so a locked pattern's
+  sound goes back to its store; a deck is built on its saved scene
+  (`startSlot`) and `finishLoad` puts it on slot 0 (`putDeckOn`).
+- **`= bpm` on deck A** writes the tempo playing into the bpm field (an
+  edit to the song, so undo and a jam see it) with the slider at deck A's
+  end. - **`= bpm` on a deck matches it to the tempo playing** (`matchDeckTempo`):
   the deck's own bpm becomes the transport's, so its header says so, the
   tempo slider stops pulling towards what it was saved at (the slider goes
   to that deck's end when it is the tempo's deck), and landing it keeps the
@@ -3017,6 +3024,21 @@ deck B tracks ─▶ deck B bus ─┘              buses' output gains
   own half, both full in the middle), `dip` (squared, a gap between) and
   `cut`. Every one is exactly 1 / 0 at its ends, never rises on the way out
   and mirrors (tested), which the eject-of-deck-A mirror relies on.
+  Changing the shape changes a fade waiting or under way too: a fade reads
+  `m.curve` every step.
+- **The bands can move separately** (`m.bands`, the select after the shape;
+  `XFADE_BANDS` / `xfadeBandGains`, mixPlan.js): `together` (the plain
+  crossfader), `bass swap` (mids and highs over the travel, the bass swapped
+  in the middle), `staggered` (highs over the travel, mids over its middle
+  half, bass swapped in the middle) and `highs swap`. Each band crossfades
+  over its own window centred on the middle, through the shape, so every one
+  is exact at the ends and mirrors (tested). The sound side is a three-band
+  split on each deck bus (`FXRack.setBands`, built the first time a band
+  leaves unity): two 250Hz lowpasses and two 4kHz highpasses, the mids what
+  is left, wired as `mid · in + (lo - mid) · L + (hi - mid) · H`, so equal
+  gains are exactly that gain whatever the filters' phase. With the bands
+  split the bus's output gain stays at unity; `together` puts the split back
+  to unity and moves the output gain as before, and `keep both` resets it.
 - **A click on a playing deck's ■ stops it at its pattern's end; a
   double-click stops it now** (`setDeckPlaying(false, id, {when:
   "pattern"})`: `d.arm = false`, the button reading `■…`, and `deckBar`

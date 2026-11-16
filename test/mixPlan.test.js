@@ -4,7 +4,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   bakeLevel, deckSummary, fadeAt, filledSlots, meterOf, mixBpm, nextFilled, sameScale, scaleLabel,
-  startSlot, tempoRelation, xfadeGains, XFADE_CURVES, XFADE_CURVE_TIPS,
+  startSlot, tempoRelation, xfadeGains, xfadeBandGains, XFADE_BANDS, XFADE_BAND_TIPS, XFADE_CURVES, XFADE_CURVE_TIPS,
 } from "../public/js/mixPlan.js";
 
 const near = (a, b, eps = 1e-9) => assert.ok(Math.abs(a - b) <= eps, `${a} is not ${b}`);
@@ -161,4 +161,33 @@ test("every crossfader shape: exact ends, a side never rises on its way out, mir
   const s = xfadeGains(0.5, "smooth");
   assert.ok(Math.abs(s.a * s.a + s.b * s.b - 1) < 1e-9);
   assert.ok(xfadeGains(0.1, "smooth").b < xfadeGains(0.1, "blend").b);
+});
+
+test("the crossfader's bands: exact at the ends, mirrored, together is the plain crossfader", () => {
+  for (const bands of XFADE_BANDS) {
+    assert.ok(XFADE_BAND_TIPS[bands]);
+    for (const curve of XFADE_CURVES) {
+      const a = xfadeBandGains(0, curve, bands), b = xfadeBandGains(1, curve, bands);
+      for (const k of ["lo", "mid", "hi"]) {
+        assert.deepEqual(a[k], { a: 1, b: 0 });
+        assert.deepEqual(b[k], { a: 0, b: 1 });
+      }
+      for (let x = 0; x <= 1.0001; x += 0.05) {
+        const g = xfadeBandGains(x, curve, bands), m = xfadeBandGains(1 - x, curve, bands);
+        for (const k of ["lo", "mid", "hi"]) { near(g[k].a, m[k].b, 1e-9); near(g[k].b, m[k].a, 1e-9); }
+        if (bands === "together") for (const k of ["lo", "mid", "hi"]) assert.deepEqual(g[k], xfadeGains(x, curve));
+      }
+    }
+  }
+});
+
+test("bass swap: never two basses past the middle's window, the mids blending", () => {
+  for (let x = 0; x <= 1.0001; x += 0.01) {
+    const g = xfadeBandGains(x, "blend", "bass swap");
+    if (Math.abs(x - 0.5) > 0.03) assert.ok(g.lo.a === 0 || g.lo.b === 0, `x ${x}`);
+    near(g.mid.a, xfadeGains(x).a);
+  }
+  const s = xfadeBandGains(0.3, "blend", "staggered");
+  assert.equal(s.lo.a, 1);
+  assert.ok(s.mid.b < s.hi.b && s.mid.b > 0, "the mids come in after the highs, before the bass");
 });

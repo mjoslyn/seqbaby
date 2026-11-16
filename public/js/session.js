@@ -20,7 +20,7 @@ import { migrateLegacyNames, migrateTrackNames, SET_VERSION, validateSet } from 
 import { EQ_KEYS, EQ_SHAPE_KEYS, eqValue } from "./soundDefaults.js";
 import { applyCompressorConfig, ensureFxRack, refreshAllTrackOutputs, refreshCompSourceDropdowns, refreshNoiseBeds, refreshOutputSelects, routeVoiceToRack, setFilter, wouldFeedback } from "./signal.js";
 import { applyMacroPads, serializeMacroPads } from "./macro.js";
-import { aliasPattern, inSong, state, syncMeterUI, syncRepeatsUI, trackSlot } from "./state.js";
+import { aliasPattern, inSong, state, switchPattern, syncMeterUI, syncRepeatsUI, trackSlot } from "./state.js";
 import { renderStepGrid } from "./stepGrid.js";
 import { createTrack, removeTrack } from "./track.js";
 import { ensureAudio, requestMidiIfNeeded, silenceAllVoices } from "./transport.js";
@@ -799,6 +799,10 @@ export function applySet(s) {
   // Every cross-track reference is an id by now, so the list can be reordered:
   // fx buses to the bottom, once, rather than under the loop above.
   placeBusesLast();
+  // A song always opens on pattern 1. Loaded on the pattern it was saved on
+  // first (the blob's track-level sound is that pattern's), then switched,
+  // so a locked pattern's sound goes back to its store and pattern 1's comes.
+  if (state.activePattern !== 0) switchPattern(0);
   renderPatternGrid();
   syncRepeatsUI();
   syncMeterUI();

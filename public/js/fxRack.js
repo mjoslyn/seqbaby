@@ -697,6 +697,39 @@ export class FXRack {
     this.output.gain.value = ampGain(c.level ?? 0.5, 2);     // silent .. 2x (   ..+6 dB)
   }
 
+  /**
+   * A three-band split between the chain and `output`, for the mix's
+   * crossfader (mix.js), which moves the bass, mids and highs of a deck bus
+   * separately. Built the first time a band is asked for something other than
+   * unity. The low band is two 250Hz lowpasses, the high two 4kHz highpasses
+   * (Linkwitz-Riley), and the mids are what is left: the output is
+   *   mid · in + (lo - mid) · L + (hi - mid) · H
+   * which is lo · L + mid · (in - L - H) + hi · H, so with every band at the
+   * same gain it is exactly that gain times the input, whatever the filters'
+   * phase. `at` is an audio time; the gains glide there.
+   */
+  setBands(lo, mid, hi, at) {
+    const ctx = this.ctx;
+    if (!this._bands) {
+      if (lo === mid && hi === mid && mid === 1) return;
+      const biq = (type, f) => { const b = ctx.createBiquadFilter(); b.type = type; b.frequency.value = f; b.Q.value = Math.SQRT1_2; return b; };
+      const l1 = biq("lowpass", 250), l2 = biq("lowpass", 250), h1 = biq("highpass", 4000), h2 = biq("highpass", 4000);
+      const direct = ctx.createGain(), dLo = ctx.createGain(), dHi = ctx.createGain();
+      dLo.gain.value = 0; dHi.gain.value = 0;
+      try { this.switchGain.disconnect(this.output); } catch {}
+      this.switchGain.connect(direct); direct.connect(this.output);
+      this.switchGain.connect(l1); l1.connect(l2); l2.connect(dLo); dLo.connect(this.output);
+      this.switchGain.connect(h1); h1.connect(h2); h2.connect(dHi); dHi.connect(this.output);
+      this._bands = { direct, dLo, dHi, nodes: [l1, l2, h1, h2, direct, dLo, dHi] };
+    }
+    const b = this._bands;
+    const now = ctx.currentTime, when = Math.max(now, at ?? now);
+    const go = (prm, v) => { try { prm.cancelScheduledValues(when); prm.setTargetAtTime(v, when, 0.012); } catch { try { prm.value = v; } catch {} } };
+    go(b.direct.gain, mid);
+    go(b.dLo.gain, lo - mid);
+    go(b.dHi.gain, hi - mid);
+  }
+
   // Both tape/vinyl stages scale their *character* with amount, not just the
   // wet/dry mix: at 10% you want a hint of a worn record, not 10% of a destroyed
   // one. So the tone rolls off from clean, the warble opens up from none, and the
@@ -1093,6 +1126,7 @@ export class FXRack {
     if (this._reverbTimer) { try { clearTimeout(this._reverbTimer); } catch {} this._reverbTimer = null; }
     if (this._softTimer) { try { clearTimeout(this._softTimer); } catch {} this._softTimer = null; this._softQueue = null; }
     try { this.switchGain.disconnect(); } catch {}
+    if (this._bands) { for (const n of this._bands.nodes) { try { n.disconnect(); } catch {} } this._bands = null; }
     for (const k in this._bypassTimers) { try { clearTimeout(this._bypassTimers[k]); } catch {} }
     this._bypassTimers = {};
     try { this.input.disconnect(); } catch {}

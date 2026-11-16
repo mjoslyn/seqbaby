@@ -52,7 +52,7 @@ import { flushJam } from "./jam.js";
 import { applyGlobalsInPlace, deepCopy, mergeSet } from "./liveSet.js";
 import { applyMacroPads } from "./macro.js";
 import { stepsPerBarForMeter, transportMeter } from "./meter.js";
-import { bakeLevel, deckSummary, fadeAt, filledSlots, meterOf, mixBpm, nextFilled, sameScale, startSlot, xfadeGains, XFADE_CURVES, XFADE_CURVE_TIPS } from "./mixPlan.js";
+import { bakeLevel, deckSummary, fadeAt, filledSlots, meterOf, mixBpm, nextFilled, sameScale, startSlot, xfadeGains, xfadeBandGains, XFADE_BANDS, XFADE_BAND_TIPS, XFADE_CURVES, XFADE_CURVE_TIPS } from "./mixPlan.js";
 import { trackControl } from "./paramTargets.js";
 import { renderPatternGrid } from "./patternBar.js";
 import { flushPatternSound, recallPatternSound, refreshAllPatternLockUI, refreshPatternSoundUI, resolveSoundSources } from "./patternSound.js";
@@ -189,7 +189,7 @@ export function loadDeckB(blob, info = {}) {
     at = o.decks.indexOf(old);
     side = old.xf ?? null;
     if (old.forClips) info = { ...info, clips: true };
-    keep = { x: o.x, curve: o.curve, sideA: o.sideA, xfOff: o.xfOff };
+    keep = { x: o.x, curve: o.curve, bands: o.bands, sideA: o.sideA, xfOff: o.xfOff };
     ejectDeckB({ quiet: true, id: old.id });
   }
   if (info.xf !== undefined) side = info.xf;
@@ -198,7 +198,7 @@ export function loadDeckB(blob, info = {}) {
   if (!m) {
     m = state.mix = {
       decks: [], busA: null,
-      x: 0, curve: "blend", fade: null,
+      x: 0, curve: "blend", bands: "together", fade: null,
       tempoX: 0, tempoLink: false,
       focus: null, landing: false,
       sideA: "l",
@@ -376,6 +376,14 @@ function finishLoad(d) {
   }
   requestMidiIfNeeded();
   applyXfade();
+  // A deck always comes in on pattern 1: built on the pattern it was saved on
+  // (its track-level sound is that pattern's), then moved, so a locked
+  // pattern's sound is flushed and recalled as any switch does.
+  if (d.scene !== 0) {
+    putDeckOn(d, 0, { restart: true });
+    d.scene = 0;
+    d.globals.meter = meterOf(d.globals, 0);
+  }
   renderPatternGrid();
   d.loading = false;
   d.pending = null;
@@ -949,13 +957,42 @@ function sideGains() {
   return { l: g.a, r: g.b };
 }
 
-/** Every deck at its side's gain; a deck on neither side at unity. */
+/**
+ * Every deck at its side's gain; a deck on neither side at unity. With the
+ * bands moving separately (`m.bands`, not "together") the output gain stays
+ * at unity and each side's bass, mids and highs are set on the bus's band
+ * split (FXRack.setBands); together, the split is put back to unity and the
+ * output gain carries it, as it always did.
+ */
 function applyXfade(at) {
   const m = state.mix;
   if (!m) return;
   const g = sideGains();
-  glide(busOut(m.busA), g[deckSide("a")] ?? 1, at);
-  for (const d of m.decks) glide(busOut(d.bus), g[deckSide(d.id)] ?? 1, at);
+  const split = !!m.bands && m.bands !== "together" && !m.xfOff;
+  const bg = split ? xfadeBandGains(m.x, m.curve, m.bands) : null;
+  const put = (bus, side) => {
+    if (!bus?.fxRack) return;
+    if (split && side) {
+      const k = side === "l" ? "a" : "b";
+      glide(busOut(bus), 1, at);
+      bus.fxRack.setBands?.(bg.lo[k], bg.mid[k], bg.hi[k], at);
+    } else {
+      glide(busOut(bus), g[side] ?? 1, at);
+      if (bus.fxRack._bands) bus.fxRack.setBands(1, 1, 1, at);
+    }
+  };
+  put(m.busA, deckSide("a"));
+  for (const d of m.decks) put(d.bus, deckSide(d.id));
+}
+
+/** How the crossfader moves the bass, mids and highs (XFADE_BANDS). */
+export function setXfadeBands(bands) {
+  const m = state.mix;
+  if (!m || !XFADE_BANDS.includes(bands)) return;
+  m.bands = bands;
+  setStatus(`crossfader bands: ${bands}. ${XFADE_BAND_TIPS[bands]}`);
+  applyXfade();
+  announce();
 }
 
 function writeXfade(x, at) {
@@ -993,7 +1030,7 @@ export function setXfadeCurve(curve) {
   const m = state.mix;
   if (!m || !XFADE_CURVES.includes(curve)) return;
   m.curve = curve;
-  setStatus(`crossfader: ${curve}. ${XFADE_CURVE_TIPS[curve]}`);
+  setStatus(`crossfader: ${curve}. ${XFADE_CURVE_TIPS[curve]}${m.fade ? (m.fade.wait ? " (the fade waiting takes it)" : " (the fade under way goes on in it)") : ""}`);
   applyXfade();
   announce();
 }
@@ -1169,6 +1206,25 @@ export function setMixTempo(x) {
  */
 export function matchDeckTempo(id) {
   const m = state.mix;
+  if (id === "a") {
+    // Deck A is the song: its tempo is the bpm field. Written there (an
+    // edit to the song, so undo and a jam see it), with the slider at deck
+    // A's end so the tempo heard does not move.
+    if (!m) return false;
+    const bpm = Math.round(mixTempo() * 100) / 100;
+    m.tempoX = 0;
+    m.tempoLink = false;
+    const field = /** @type {HTMLInputElement|null} */ (document.getElementById("bpm"));
+    if (field && Number(field.value) !== bpm) {
+      field.value = String(bpm);
+      field.dispatchEvent(new Event("input", { bubbles: true }));
+      field.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+    applyTempo();
+    setStatus(`deck A is at ${bpm} bpm now, the tempo playing`);
+    announce();
+    return true;
+  }
   const d = getDeck(id);
   if (!m || !d) return false;
   const bpm = Math.round(mixTempo() * 100) / 100;
@@ -1435,7 +1491,7 @@ export function keepBothDecks() {
   const g = sideGains();
   foldLevel(m.busA, g[deckSide("a")] ?? 1);
   for (const d of m.decks) foldLevel(d.bus, g[deckSide(d.id)] ?? 1);
-  for (const bus of [m.busA, ...m.decks.map(d => d.bus)]) glide(busOut(bus), 1);
+  for (const bus of [m.busA, ...m.decks.map(d => d.bus)]) { glide(busOut(bus), 1); if (bus?.fxRack?._bands) bus.fxRack.setBands(1, 1, 1); }
   for (const t of [...decks.flatMap(x => x.tracks), m.busA, ...m.decks.map(d => d.bus)]) {
     t._deck = undefined;
     t._deckBus = undefined;

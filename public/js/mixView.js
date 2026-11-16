@@ -33,9 +33,9 @@ import { samplePeak } from "./meters.js";
 import {
   deckATracks, deckBTracks, deckLabel, ejectDeckA, setDeckAPlaying, deckSide, deskDecks, matchDeckTempo, setXfadeOn, ejectDeckB, ejectDeckTrack, fadeToDeck, fadeRefDeck, setFadeLength, deckSceneOf, focusDeck, moveTrack, keepBothDecks, loadDeckA, loadDeckB, 
   mixSource, mixTempo, requestDeckScene, requestSongScene, setDeckChain, setDeckPlaying, setDeckRepeat, setDeckXfade, setMixTempo,
-  setTempoDeck, setTempoLink, setXfade, setXfadeCurve,
+  setTempoDeck, setTempoLink, setXfade, setXfadeCurve, setXfadeBands,
 } from "./mix.js";
-import { FADE_BARS, XFADE_CURVES, XFADE_CURVE_TIPS, filledSlots, scaleLabel, tempoRelation } from "./mixPlan.js";
+import { FADE_BARS, XFADE_BANDS, XFADE_BAND_TIPS, XFADE_CURVES, XFADE_CURVE_TIPS, filledSlots, scaleLabel, tempoRelation } from "./mixPlan.js";
 import { trackControl } from "./paramTargets.js";
 import { loadSetsMap } from "./session.js";
 import { patternMeter, stepsPerBarForMeter } from "./meter.js";
@@ -297,6 +297,7 @@ function deckA(shown) {
       const on = !m.aOff, armed = m.aArm === true, stopping = on && m.aArm === false;
       return `<div class="sq-mix__deckbar">
       <button type="button" class="sq-mix__play${on ? " is-on" : ""}${armed || stopping ? " is-armed" : ""}" data-act="deck-play" title="${stopping ? "deck A stops when its pattern comes round. Click to let it play on; double-click to stop it now" : on ? "stop deck A when its pattern comes round, while the other decks play on. Double-click: stop it now" : armed ? `deck A starts ${m.aArmOn === "pattern" ? "when the pattern playing comes round" : "on the next bar"}` : "start deck A when the pattern playing comes round (double-click: on the next bar). With the transport stopped, it starts with it"}">${stopping ? "■…" : on ? "■" : armed ? "…" : "▶"} A</button>
+      <button type="button" class="sq-btn--ghost" data-act="match-bpm" ${Math.abs(bpm - mixTempo()) < 0.01 ? "disabled" : ""} title="match the playing tempo: set deck A's tempo (the song's, ${bpm} bpm) to the one playing now, so the tempo slider no longer pulls towards ${bpm}">= bpm</button>
     </div>`;
     })() : ""}
     ${scenes("a", tracks, state.activePattern, state.queuedPattern, state.patternRepeats, state.patternMode !== "repeat")}
@@ -473,6 +474,7 @@ function xfadeParts() {
     fadeR: `<div class="sq-mix__fade" role="group" aria-label="fade to the right">${arrow("r")}${patSel("r")}${barSel("r")}</div>`,
     length: `<select data-act="fade-bars" aria-label="fade length" title="how long an automatic fade takes. Changed while a fade is queued or running, it changes that fade too">${bars}</select>`,
     curve: `<label class="sq-mix__check" title="the crossfader's shape. ${esc(m.curve)}: ${esc(XFADE_CURVE_TIPS[m.curve] || "")}"><select data-act="curve" aria-label="crossfader shape">${shapes}</select></label>`,
+    bands: `<label class="sq-mix__check" title="how the crossfader moves the bass, mids and highs. ${esc(m.bands || "together")}: ${esc(XFADE_BAND_TIPS[m.bands || "together"] || "")}"><select data-act="xf-bands" aria-label="crossfader bands">${XFADE_BANDS.map((b) => `<option value="${b}"${(m.bands || "together") === b ? " selected" : ""} title="${esc(XFADE_BAND_TIPS[b])}">${b}</option>`).join("")}</select></label>`,
   };
 }
 
@@ -515,6 +517,7 @@ function xfadeRow() {
       ${chips("r")}
       ${x.length}
       ${x.curve}
+      ${x.bands}
     </div>`;
 }
 
@@ -650,6 +653,7 @@ function onChange(e) {
   if (act === "xf-on") { setXfadeOn(el.checked); return; }
   if (act === "link") { setTempoLink(el.checked); return; }
   if (act === "curve") { setXfadeCurve(el.value); return; }
+  if (act === "xf-bands") { setXfadeBands(el.value); return; }
   if (act === "fade-bars") { fadeBars = Number(el.value) || 4; setFadeLength(fadeBars); }
   if (act === "fade-pat" || act === "fade-bar") {
     const side = el.dataset.side === "r" ? "r" : "l";
