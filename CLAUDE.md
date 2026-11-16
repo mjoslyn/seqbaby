@@ -3005,7 +3005,11 @@ deck B tracks ─▶ deck B bus ─┘              buses' output gains
   which is the deck a fade moves away from (deck A unless it was stopped
   from the desk). With two decks playing and the fader over on A, the selects
   read `A pat`; once it is over on B, `B pat`. Read before the fade starts
-  anything.
+  anything. The pattern select lists every playing deck's patterns, grouped
+  by deck (that deck first), so with three playing the fade can go by any of
+  them: picking `C pat 2` makes C the deck (`fadeAt.deck`, `fadeDeck()` in
+  mixView.js) and the bar select follows it. The pick holds while that deck
+  plays and until a fade has run, then it is the nearest deck again.
   `at: "playing"` (the default) is whichever pattern that deck is on; a slot
   number is one of its patterns. Either way the fade begins on the bar line
   `refLine(ref)` says that pattern's bar `bar` starts at (0 its first, where

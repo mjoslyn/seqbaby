@@ -765,7 +765,7 @@ export function mixStep(nextTime, barLine) {
  * Whether a deck is sounding its patterns: deck A unless it was stopped from
  * the desk, another deck once started.
  */
-function deckPlaying(id) {
+export function deckPlaying(id) {
   const m = state.mix;
   if (!m || !state.playing) return false;
   if (id === "a" || id == null) return !m.aOff;
