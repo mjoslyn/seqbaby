@@ -31,7 +31,7 @@ import { setStatus } from "./dom.js";
 import { upgradeKnobs } from "./knob.js";
 import { samplePeak } from "./meters.js";
 import {
-  deckATracks, deckBTracks, deckLabel, ejectDeckA, setDeckAPlaying, deckSide, deskDecks, matchDeckTempo, setXfadeOn, ejectDeckB, ejectDeckTrack, fadeToDeck, fadeRefDeck, setFadeLength, deckSceneOf, focusDeck, moveTrack, keepBothDecks, loadDeckA, loadDeckB, 
+  deckATracks, deckBTracks, deckLabel, ejectDeckA, setDeckAPlaying, deckSide, deskDecks, matchDeckTempo, setXfadeOn, ejectDeckB, ejectDeckTrack, fadeToDeck, fadeRefFor, setFadeLength, deckSceneOf, focusDeck, moveTrack, keepBothDecks, loadDeckA, loadDeckB, 
   mixSource, mixTempo, requestDeckScene, requestSongScene, setDeckChain, setDeckPlaying, setDeckRepeat, setDeckXfade, setMixTempo,
   setTempoDeck, setTempoLink, setXfade, setXfadeCurve, setXfadeBands,
 } from "./mix.js";
@@ -63,7 +63,7 @@ let pendingFade = null;
  * once it plays; clicks made meanwhile only replace what is asked.
  */
 function queueFade(side, now = false) {
-  const run = () => fadeToDeck(side === "l" ? "a" : "b", fadeBars, now ? { now: true } : { at: fadeAt[side].pat, bar: fadeAt[side].bar, ref: fadeRefDeck() });
+  const run = () => fadeToDeck(side === "l" ? "a" : "b", fadeBars, now ? { now: true } : { at: fadeAt[side].pat, bar: fadeAt[side].bar, ref: fadeRefFor(side) });
   if (state.playing) { pendingFade = null; run(); return; }
   const starting = !!pendingFade;
   pendingFade = run;
@@ -436,14 +436,17 @@ function xfadeParts() {
   const bars = FADE_BARS.map((b) => `<option value="${b}"${b === fadeBars ? " selected" : ""}>${b} bar${b === 1 ? "" : "s"}</option>`).join("");
   // Each side of the slider: two selects for where a fade that way begins,
   // the pattern (any: the next bar line; playing: the pattern the playing
-  // deck is on, fadeRefDeck, B's when B is playing; or one of that deck's
+  // deck on the OTHER side is on (fadeRefFor: the deck faded away from); or one of that deck's
   // patterns) and the bar of it, and an arrow that queues the fade there; a
   // double-click on the arrow starts it now.
-  const ref = fadeRefDeck(), RL = deckLabel(ref), playingNow = deckSceneOf(ref);
-  const slots = [];
-  for (let i = 0; i < PATTERN_COUNT; i++) if (isPatternNonEmpty(i, ref)) slots.push(i);
+  const refs = {};
+  for (const side of ["l", "r"]) {
+    const ref = fadeRefFor(side), slots = [];
+    for (let i = 0; i < PATTERN_COUNT; i++) if (isPatternNonEmpty(i, ref)) slots.push(i);
+    refs[side] = { ref, RL: deckLabel(ref), playingNow: deckSceneOf(ref), slots };
+  }
   const whenText = (side) => {
-    const { pat, bar } = fadeAt[side];
+    const { pat, bar } = fadeAt[side], { RL } = refs[side];
     const b = bar ? `bar ${bar + 1} of ` : "";
     return pat === "bar" ? (bar ? `${bar} bar${bar === 1 ? "" : "s"} after the next bar line` : "on the next bar line")
       : pat === "playing" ? `on ${b || "the start of "}the pattern deck ${RL} is playing, when it comes round`
@@ -457,13 +460,13 @@ function xfadeParts() {
     return `<button type="button" class="sq-mix__fadebtn${mine ? (f.wait ? " is-armed" : " is-on") : ""}" data-act="fade-${side === "l" ? "a" : "b"}" title="fade to the ${side === "l" ? "left" : "right"} side (${esc(name)}) over the length picked, starting ${esc(whenText(side))}. Starts the transport when it is stopped. Double-click starts the fade now">${side === "l" ? "◂" : "▸"}</button>`;
   };
   const patSel = (side) => {
-    const v = fadeAt[side];
+    const v = fadeAt[side], { RL, playingNow, slots } = refs[side];
     if (typeof v.pat === "number" && !slots.includes(v.pat)) v.pat = "playing";
     const opt = (val, label) => `<option value="${val}"${String(v.pat) === String(val) ? " selected" : ""}>${label}</option>`;
     return `<select data-act="fade-pat" data-side="${side}" aria-label="the pattern a fade to the ${side === "l" ? "left" : "right"} begins in" title="the pattern a fade to the ${side === "l" ? "left" : "right"} begins in. any: the next bar line. pat: the pattern deck ${esc(RL)} is playing, when it comes round. A number: that pattern of deck ${esc(RL)}; a deck holding one pattern is sent to it, a chain arrives by itself">${opt("bar", "any")}${opt("playing", `${esc(RL)} pat (${playingNow + 1})`)}${slots.map((i) => opt(i, `${esc(RL)} pat ${i + 1}`)).join("")}</select>`;
   };
   const barSel = (side) => {
-    const v = fadeAt[side];
+    const v = fadeAt[side], { RL } = refs[side];
     return `<select data-act="fade-bar" data-side="${side}" aria-label="the bar a fade to the ${side === "l" ? "left" : "right"} begins on" title="the bar of that pattern a fade begins on: bar 1 is where it comes round, a later bar can fall inside the pass under way, a shorter pattern wraps. With any pattern, how many bar lines on from the next">${Array.from({ length: 16 }, (_, i) => `<option value="${i}"${i === v.bar ? " selected" : ""}>${v.pat === "bar" ? "" : `${esc(RL)} `}bar ${i + 1}</option>`).join("")}</select>`;
   };
   const shapes = XFADE_CURVES.map((c) => `<option value="${c}"${m.curve === c ? " selected" : ""} title="${esc(XFADE_CURVE_TIPS[c])}">${c}</option>`).join("");

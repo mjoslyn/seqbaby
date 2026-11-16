@@ -3000,11 +3000,12 @@ deck B tracks ─▶ deck B bus ─┘              buses' output gains
   (`startSide`: armed like their own ▶, so they come in on the line the fade
   waits for; with the transport stopped they start with it), and calls off a
   stop one of them was armed for. **A `pat` fade goes by the patterns of the deck that is
-  PLAYING** (`fadeToDeck(side, bars, {at, bar, ref})`). The deck is
-  `fadeRefDeck()`: the playing deck on the side the crossfader is nearest
-  (deck A unless it was stopped from the desk, another deck once started), so
-  with B playing and the fader over on it, `pat` waits for B's pattern,
-  read before the fade starts anything.
+  PLAYING** (`fadeToDeck(side, bars, {at, bar, ref})`). Each side's selects
+  go by the deck being faded AWAY from (`fadeRefFor(side)`): a deck playing
+  on the other side, so the left side's selects read `B pat` / `B bar` and
+  the right side's `A pat` / `A bar`; with nothing playing over there,
+  `fadeRefDeck()`, the playing deck on the side the crossfader is nearest.
+  Read before the fade starts anything.
   `at: "playing"` (the default) is whichever pattern that deck is on; a slot
   number is one of its patterns. Either way the fade begins on the bar line
   `refLine(ref)` says that pattern's bar `bar` starts at (0 its first, where

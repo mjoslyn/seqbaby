@@ -786,6 +786,18 @@ export function fadeRefDeck() {
   return ids.find(id => deckSide(id) === near) ?? ids.find(id => deckSide(id) == null) ?? ids[0] ?? "a";
 }
 
+/**
+ * The deck a fade towards `side` goes by: one playing on the OTHER side (the
+ * side being faded away from), else fadeRefDeck.
+ */
+export function fadeRefFor(side) {
+  const m = state.mix;
+  if (!m) return "a";
+  const away = side === "l" ? "r" : "l";
+  const ids = ["a", ...deskDecks().map(d => d.id)].filter(deckPlaying);
+  return ids.find(id => deckSide(id) === away) ?? fadeRefDeck();
+}
+
 /** The pattern a deck is on (the scene, for deck A). */
 export function deckSceneOf(id) {
   return id === "a" || id == null ? state.activePattern : (getDeck(id)?.scene ?? 0);
