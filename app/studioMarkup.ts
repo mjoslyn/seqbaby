@@ -721,7 +721,7 @@ export const STUDIO_BODY = String.raw`
       <option value="5/8">5/8</option>
       <option value="7/8">7/8</option>
     </select></label>
-    <label class="sq-repeat__wrap" title="bars this pattern plays for before chain advances"><span>rep</span><input id="pattern-repeats" type="number" min="1" max="16" value="1" /></label>
+    <label class="sq-repeat__wrap" title="bars this pattern plays for before chain advances"><span>rep</span><input id="pattern-repeats" type="number" min="1" max="16" value="1" /><span id="pattern-prog" class="sq-mix__prog sq-pattern__prog" hidden title="the chain: which bar of this pattern's repeat count is playing, and how far through them it is"><i></i><b></b></span></label>
     <div id="pattern-grid" class="sq-pattern__grid"></div>
   </div>
 

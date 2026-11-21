@@ -355,3 +355,37 @@ export function openPatternMenu() {
   _patternMenuOpen = { overlay, close };
 }
 
+
+// ---- the repeat meter ----------------------------------------------------------
+//
+// Beside `rep` in chain mode while playing: `3 of 8` over a fill, which bar of
+// the pattern's repeat count is playing and how far through them it is. The
+// mix view's deck A meter, for the groove view (mixView.js chainProgress).
+// Painted on its own interval while the transport plays, never by a rebuild.
+let repTimer = 0;
+function paintRepeatMeter() {
+  const el = document.getElementById("pattern-prog");
+  if (!el) return;
+  const on = state.playing && state.patternMode === "chain" && !state.mix?.aOff;
+  if (!on) { if (!el.hidden) el.hidden = true; return; }
+  const of = Math.max(1, state.patternRepeats[state.activePattern] ?? 1);
+  const bar = Math.min(of - 1, state.chainBarCount ?? 0);
+  const barLen = Math.max(1, stepsPerBarForMeter(patternMeter(state.activePattern)));
+  const into = Math.min(1, (state.barTick ?? 0) / barLen);
+  if (el.hidden) el.hidden = false;
+  const text = `${bar + 1} of ${of}`;
+  const fill = el.firstElementChild, label = el.lastElementChild;
+  if (label.textContent !== text) label.textContent = text;
+  const w = `${Math.round(((bar + into) / of) * 100)}%`;
+  if (fill.style.width !== w) fill.style.width = w;
+}
+function syncRepeatMeter() {
+  if (state.playing && !repTimer) repTimer = window.setInterval(paintRepeatMeter, 1000 / 20);
+  if (!state.playing && repTimer) { clearInterval(repTimer); repTimer = 0; }
+  paintRepeatMeter();
+}
+/** Called once from init(). */
+export function installRepeatMeter() {
+  window.addEventListener("seqbaby:transport", syncRepeatMeter);
+  syncRepeatMeter();
+}

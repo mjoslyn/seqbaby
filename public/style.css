@@ -5318,3 +5318,8 @@ body.view-piano #scale-fold-wrap { display: inline-flex; }
   #view-switch, .sq-clips, .sq-arrange, .sq-piano, .sq-mix { display: none !important; }
   body.view-clips #tracks, body.view-arrange #tracks, body.view-piano #tracks, body.view-mix #tracks { display: grid; }
 }
+
+/* The groove view's repeat meter, under `rep` (patternBar.js). Its space is
+   kept while hidden so the pattern bar never jumps when play starts. */
+.sq-pattern__prog { align-self: center; margin: 0; min-width: 48px; height: 14px; padding: 0 4px; font-size: 9px; }
+.sq-pattern__prog[hidden] { display: inline-grid; visibility: hidden; }
