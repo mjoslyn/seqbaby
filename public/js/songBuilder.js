@@ -96,6 +96,24 @@ export function toMidi(v, what = "note") {
   }
   fail(`${what} must be a MIDI number or a note name like C2 or F#3, got ${JSON.stringify(v)}`);
 }
+/**
+ * A list of notes from what an agent sends. A model will sometimes hand over
+ * a list written as a STRING -- the JSON of an array (`"[\"Db2\", \"Ab1\"]"`),
+ * or names separated by spaces or commas (`"C2 Eb2 G2"`) -- and read whole,
+ * that is one note name that does not exist. A single name stays a single
+ * note. Anything else is passed through as it came.
+ */
+export function noteList(v) {
+  if (typeof v !== "string") return v;
+  const str = v.trim();
+  if (str.startsWith("[")) {
+    try { const a = JSON.parse(str); if (Array.isArray(a)) return a; } catch { /* not JSON: read below */ }
+    const inner = str.replace(/^\[|\]$/g, "");
+    return inner.split(/[\s,]+/).filter(Boolean).map((x) => x.replace(/^["']|["']$/g, "")).map((x) => x === "null" ? null : x);
+  }
+  const parts = str.split(/[\s,]+/).filter(Boolean);
+  return parts.length > 1 ? parts : v;
+}
 const NOTE_PC = { c: 0, d: 2, e: 4, f: 5, g: 7, a: 9, b: 11 };
 /** A pitch class 0..11 from a number or a name ("C", "Eb", "f#"). */
 export function toPitchClass(v, what = "root") {
@@ -573,6 +591,7 @@ export function setNotes(song, index, { pattern = 0, notes } = {}) {
   const t = trackAt(song, index);
   const pat = patternOf(t, pattern);
   const n = patternLength(pat);
+  notes = noteList(notes);
   const list = Array.isArray(notes) ? notes : [notes];
   if (!list.length) fail("notes is empty");
   const toVal = (v) => v == null || v === "-" || v === "." ? null : toMidi(v);
@@ -620,7 +639,7 @@ export function setStep(song, index, opts = {}) {
     pat.strums[i] = num(opts.strum, "strum", -80, 80);
   }
   if (opts.extraNotes !== undefined) {
-    pat.extraNotes[i] = opts.extraNotes == null ? null : [].concat(opts.extraNotes).map(v => toMidi(v, "extraNotes"));
+    pat.extraNotes[i] = opts.extraNotes == null ? null : [].concat(noteList(opts.extraNotes)).map(v => toMidi(v, "extraNotes"));
     pat.extraLengths[i] = null;
   }
   return describeStep(pat, i);

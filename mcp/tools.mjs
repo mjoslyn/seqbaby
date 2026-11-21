@@ -213,7 +213,7 @@ export const TOOLS = [
   {
     name: "set_steps", title: "Set steps",
     description: "Write a pattern's rhythm from a step string: x hit, X accent, o soft, 1-9 velocity, . rest, _ tie; spaces and | ignored; a shorter string tiles. Optional `notes` go to the hits in order (cycling), `velocity` scales every hit. Replaces the pattern's steps.",
-    inputSchema: { track: trackArg, pattern: patternArg, steps: z.string(), notes: z.array(z.union([z.string(), z.number(), z.null()])).optional(), velocity: z.number().min(0).max(1).optional() },
+    inputSchema: { track: trackArg, pattern: patternArg, steps: z.string(), notes: z.union([z.array(z.union([z.string(), z.number(), z.null()])), z.string(), z.number()]).optional(), velocity: z.number().min(0).max(1).optional() },
     handler: (ctx, { track, ...a }) => sb.setSteps(ctx.song, track, a),
   },
   {
@@ -228,7 +228,7 @@ export const TOOLS = [
     inputSchema: { track: trackArg, pattern: patternArg, step: z.number().int().min(0), on: z.boolean().optional(), note: z.union([z.string(), z.number(), z.null()]).optional(),
       velocity: z.number().optional(), length: z.number().int().optional(), chord: z.string().optional(), complexity: z.number().int().optional(), ratchet: z.number().int().optional(),
       offset: z.number().optional(), arp: z.boolean().optional(), arpRate: z.number().optional(), arpRange: z.number().int().optional(), arpDir: z.enum(["up", "down", "updown", "random"]).optional(),
-      strum: z.number().optional(), extraNotes: z.array(z.union([z.string(), z.number()])).nullable().optional() },
+      strum: z.number().optional(), extraNotes: z.union([z.array(z.union([z.string(), z.number()])), z.string()]).nullable().optional() },
     handler: (ctx, { track, ...a }) => sb.setStep(ctx.song, track, a),
   },
   {
