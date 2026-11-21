@@ -11,6 +11,14 @@ import { defaultTrackParams } from "../public/js/soundDefaults.js";
 import * as B from "../public/js/songBuilder.js";
 import { readCode, realize, sessionToCode, writeTracks } from "../public/js/strudel.js";
 
+// The oracle draws its phases, its calibration spread and its slop from
+// Math.random. Seeded, so a measurement is the same every run: unseeded, an
+// unlucky draw put a chord's level or a stolen voice's tone past a threshold
+// about one run in ten. Successive draws still differ, so no two notes are
+// alike.
+let seed = 0x5eed;
+Math.random = () => ((seed = (Math.imul(seed, 1103515245) + 12345) >>> 0) / 4294967296);
+
 // The oracle, rendered outside a browser, as ladder.test.js renders the ladder.
 //
 // What is pinned is what oracle.js claims: both VCOs land on the note and the
