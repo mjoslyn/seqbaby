@@ -84,6 +84,29 @@ order, which is how a bassline is usually written: `notes: ["C2","C2","Eb2","G1"
 
 ## Which engine
 
+**Choose by sound, not by the first key in the list.** Every engine has a
+`character` in `describe_engine` (what it sounds like, what it is for, the
+settings that make it sound played, and what makes it sound cheap) and a
+`kind` in `list_engines`. From most to least like a record:
+
+- **recorded**: `sampler` (the acoustic kits, breaks), `inst:guitar-acoustic`,
+  `inst:guitar-nylon`, `inst:guitar-electric`, `inst:bass-electric`.
+- **modelled**: `dm:guitar`, `dm:bass`, `dm:vox`, `plaits:11`. Played
+  instruments; use their hand controls (ghost notes, ties, vibrato, finger
+  noise).
+- **analog**: `dm:oracle`, `dm:ladder`, `dm:contagion`, `dm:drift`,
+  `dm:silverbox`, `dm:sub`, `dm:snarl`. Synths with drift, filters and
+  envelopes of their own: the default for any synth part.
+- **digital**: `dm:hexop`, `dm:tines`, `dm:drone`, plaits 2..10 and 12. Clean
+  and exact by nature; give them velocity, chorus and space.
+- **raw**: `plaits:0`, `plaits:1`, `dm:poly-saw`, `dm:pad`, `dm:fm-bell`,
+  `wt:akwf`. Bare oscillators. Used as they come they sound like a video game
+  or a computer demo. Reach for them only when that is the point (chiptune),
+  or set the track filter, an envelope and the rack on them first.
+
+`plaits:12` (modal) is a struck-bar sound effect: a bell, a music box, a
+click. It is not a lead, a hook, a pluck or an arp: those read as a toy.
+
 Drums: `dm:siege` (the bass drum synth: see below, the first choice for a
 techno or house kick), `dm:808-kick` (long, tuned, drive for a distorted
 808), `dm:909-kick` (punch, attack click), `plaits:13` (bass drum model,
@@ -152,25 +175,28 @@ Minimoog bass and lead: `apply_preset` "model d bass", "funk lead", "brass",
 the cutoff (0.3..0.5 for bass), timb the emphasis (it whistles past 0.75),
 morph the contour amount, decay the decay; `ldrmode` "mono" for a line (low
 note wins, a tie is legato), the osc levels up together for the overdrive.
-`plaits:0` for a plainer analog synth bass with the filter closed to 0.3..0.5.
+`plaits:0` only for a plain chip-like bass, the filter closed to 0.3..0.5.
 
 Chords and keys: `dm:tines` (electric piano), `dm:hexop` with a preset
 ("e.piano", "bell", "brass", "marimba", "organ", "pad", "bass"), `dm:pad`
-(slow), `dm:drift` (chorused analog), `dm:oracle` (the poly analog: harm
+(slow and plain: prefer `dm:oracle` "warm pad" or "strings"), `dm:drift` (chorused analog), `dm:oracle` (the poly analog: harm
 detunes VCO 2, timb is its shape, morph the drive on the summed voices;
 `orcslop` is the analog in it, `orcchorus` the width, `orcatk` / `orcsus` /
 `orcrel` the envelope; presets "poly brass", "strings", "warm pad", "pulse
 keys", "unison bass", "glass", "dirty stab"), `wt:akwf` (wavetable), `plaits:6` (the chord model: one note plays a
-chord, harm picks which). `dm:poly-saw` for supersaw stabs. Put a chord on
+chord, harm picks which). `dm:contagion` with unison for supersaw stabs (`dm:poly-saw` is a bare saw). Put a chord on
 the step (`set_step` chord "min7") on any poly engine.
 
-Leads and hooks: `plaits:0` (virtual analog), `plaits:1` (waveshaping:
-timb folds, morph skews), `plaits:2` (fm), `plaits:4` (additive),
-`plaits:5` (wavetable: timb and morph walk the map), `plaits:11` (string,
-plucked), `plaits:12` (modal, mallets),
-`dm:contagion` (the supersaw: `vuni` 4..8 and `vunidet` 0.3 for the wide
+Leads and hooks, first choices: `dm:ladder` (a singing mono lead with
+glide), `dm:oracle` (warm poly leads), `dm:vox` (a sung hook), `dm:guitar`
+and the `inst:` guitars, `dm:hexop` with a preset. Then, when the genre wants
+something more digital: `plaits:11` (string, plucked), `plaits:1`
+(waveshaping: timb folds, morph skews), `plaits:2` (fm), `plaits:4`
+(additive), `plaits:5` (wavetable: timb and morph walk the map), and
+`plaits:0` (virtual analog, raw: filter it). `plaits:12` only as a bell or
+music-box colour. Also `dm:contagion` (the supersaw: `vuni` 4..8 and `vunidet` 0.3 for the wide
 one; its filter envelope is its own, so `vfdec` short with `vfsus` low and
-`venvamt` up is a pluck over whatever the amp sustains), `dm:snarl` (aggressive mono), `dm:fm-bell`, `dm:guitar` with a tone
+`venvamt` up is a pluck over whatever the amp sustains), `dm:snarl` (aggressive mono), `dm:guitar` with a tone
 ("surf twang", "funk clean", "jangle", "chime", "country twang", "blues
 burn", "brit stack", "rolled off", "fuzz lead", "singing lead", "scooped
 metal", "djent chug", "grunge", "jazz box").

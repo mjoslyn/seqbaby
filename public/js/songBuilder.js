@@ -38,7 +38,7 @@
 
 import {
   BASS_NUM_CTLS, BASS_SEL_CTLS, BASS_TONE_NAMES, bassTone, bassToneDescription,
-  ACOUSTIC_KITS, BUNDLED_SAMPLES, CONTAGION_NUM_KEYS, CONTAGION_SEL_KEYS,
+  ACOUSTIC_KITS, BUNDLED_SAMPLES, engineCharacter, hexopPresetDescription, CONTAGION_NUM_KEYS, CONTAGION_SEL_KEYS,
   GRANULAR_SAMPLES, GRAN_MOD_RANGE, GRAN_NUM_KEYS, GRAN_RATE_BEATS, GRAN_SEL_KEYS,
   GUITAR_NUM_CTLS, GUITAR_SEL_CTLS, GUITAR_TONE_NAMES, guitarTone, guitarToneDescription,
   HEXOP_MOD_RANGE, HEXOP_NUM_KEYS, HEXOP_OPS, HEXOP_PRESET_NAMES, hexopPreset,
@@ -152,6 +152,9 @@ export function describeEngine(engineKey) {
   return {
     key: e.key, label: e.label, group: e.group, type: e.type,
     poly: !!e.poly, melodic: !!e.melodic, defaultNote: e.defaultNote,
+    // What it sounds like, what it is for, and how it sounds played rather than
+    // programmed (ENGINE_CHARACTER, engineData.js).
+    character: engineCharacter(e.key),
     sliders,
     oscMix: tips.osc || null,
     oscMod: tips.oscMod || null,
@@ -223,7 +226,7 @@ const PANELS = {
       ["lfok", "on", ["on", "off"]],
       ...HEXOP_OPS.map(i => [`${i}fix`, "ratio", ["ratio", "fixed"]]),
     ],
-    tones: HEXOP_PRESET_NAMES, tone: hexopPreset, describe: () => "",
+    tones: HEXOP_PRESET_NAMES, tone: hexopPreset, describe: hexopPresetDescription,
   },
   "dm:contagion": {
     prefix: "v",

@@ -145,13 +145,13 @@ export const TOOLS = [
   // ---- engines -----------------------------------------------------------------
   {
     name: "list_engines", title: "List engines",
-    description: "Every sound engine: key, label, group. Use describe_engine for what a given one's sliders and panel do. The compose guide says which to reach for.",
+    description: "Every sound engine: key, label, group, what it sounds like (`sound`) and how recorded it sounds (`kind`: recorded, modelled, analog, digital, raw, drum, utility; a raw one needs the filter, an envelope and the rack or it sounds like a video game). Use describe_engine for what a given one's sliders and panel do. The compose guide says which to reach for.",
     inputSchema: { group: z.string().optional().describe("filter by group: plaits, drum / synth, Emulators, texture, wavetable, sampler, midi, bus") },
-    handler: (ctx, { group }) => sb.describeEngines().filter(e => !group || e.group.toLowerCase() === group.toLowerCase()).map(e => ({ key: e.key, label: e.label, group: e.group, sliders: Object.fromEntries(Object.entries(e.sliders).map(([k, v]) => [k, v.label])), presets: e.presets.map(p => p.name) })),
+    handler: (ctx, { group }) => sb.describeEngines().filter(e => !group || e.group.toLowerCase() === group.toLowerCase()).map(e => ({ key: e.key, label: e.label, group: e.group, kind: e.character?.kind, sound: e.character?.sound, sliders: Object.fromEntries(Object.entries(e.sliders).map(([k, v]) => [k, v.label])), presets: e.presets.map(p => p.name) })),
   },
   {
     name: "describe_engine", title: "Describe engine",
-    description: "One engine in full: what each of its four sliders does, its panel controls with ranges and defaults, its presets, and which LFO / automation targets it takes. For the sampler, every bundled sample (`samples`); for granular, every texture.",
+    description: "One engine in full: its character (what it sounds like, what it is for, the settings that make it sound played, and what makes it sound cheap), what each of its four sliders does, its panel controls with ranges and defaults, its presets, and which LFO / automation targets it takes. For the sampler, every bundled sample (`samples`); for granular, every texture.",
     inputSchema: { engine: z.string().describe("engine key or name, e.g. dm:silverbox, silverbox, plaits:fm") },
     handler: (ctx, { engine }) => sb.describeEngine(sb.resolveEngine(engine).key),
   },

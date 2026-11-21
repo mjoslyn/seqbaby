@@ -2531,3 +2531,99 @@ export function granToUnit(key, x) {
 // render.js, session.js and stepEditor.js walk these.
 export const GRAN_NUM_KEYS = ["gspeed", "gpitch", "gwindow", "gjitter", "gdetune", "gpan"];
 export const GRAN_SEL_KEYS = ["gplay", "gloop", "gpattern", "grate"];
+
+// ---- what each engine sounds like -----------------------------------------------
+//
+// describe_engine says what every knob does; this says what the engine is FOR,
+// in musical terms, so an agent picks by sound rather than by the first key in
+// the list. Read by songBuilder.describeEngine (as `character`) and
+// list_engines (as `sound` and `kind`), and summarised in the compose guide.
+//
+//   kind     how recorded it sounds, from most to least:
+//            "recorded" (a real recording), "modelled" (a physical or circuit
+//            model that behaves like a played instrument), "analog" (a synth
+//            with drift, a filter and an envelope of its own), "digital" (fm,
+//            wavetable or resonator: clean and exact by nature), "raw" (a bare
+//            oscillator with little shaping: needs the track's filter, an
+//            envelope and the rack, or it sounds like a video game), "drum",
+//            "utility".
+//   sound    what it sounds like.
+//   use      what it is good at, and where it belongs.
+//   human    the settings that make it sound played and produced.
+//   cheap    what makes it sound like a computer or a game.
+/** @type {Record<string, { kind: string, sound: string, use: string, human: string, cheap: string }>} */
+export const ENGINE_CHARACTER = {
+  "plaits:0": { kind: "raw", sound: "two detuned oscillators, a variable square and a saw: the plain analog-synth starting point", use: "chiptune leads, quick sketches, a buzzy layer under something richer", human: "the track filter well closed with an envelope, glide, chorus and a little drive, velocity on every note", cheap: "a bare square lead, short equal notes, no filter: the single most game-like sound in the app. For a synth lead reach for dm:ladder, dm:oracle or dm:contagion first" },
+  "plaits:1": { kind: "raw", sound: "a wavefolder: soft and hollow at rest, metallic and buzzy as timb folds it", use: "west-coast bleeps and plucks, aggressive leads, a moving texture under a lane on timb", human: "a lane or LFO on timb so the tone moves, a short envelope, delay on a bus", cheap: "a static fold on every note, played as a sustained lead" },
+  "plaits:2": { kind: "digital", sound: "two-operator fm: bells, glassy tines, clangs and metallic bass", use: "metallic stabs, idm blips, an inharmonic hit, screeches", human: "velocity driving the brightness, short notes with long reverb, a slow lane on the ratio", cheap: "fixed ratio and index for the whole song; as a melody it reads as a ringtone. dm:hexop is the fuller fm instrument" },
+  "plaits:3": { kind: "digital", sound: "granular formants: vocal, nasal, buzzing and swarming", use: "textures, eerie vocal-like drones, glitch beds", human: "slow lanes on timb and morph, low in the mix, reverb", cheap: "used as a lead melody" },
+  "plaits:4": { kind: "digital", sound: "additive harmonics: drawbar organ to hollow flute, very clean", use: "organ pads, soft background tones, a sine-like sub layer", human: "a slow LFO on timb, chorus, a gentle attack", cheap: "dry and unmoving, it sounds like a test tone" },
+  "plaits:5": { kind: "digital", sound: "wavetable scanning: digital, glassy and shifting", use: "evolving digital pads, modern bass layers, idm", human: "lanes on timb and morph so the table moves, filter and chorus", cheap: "a parked wavetable played as a lead" },
+  "plaits:6": { kind: "digital", sound: "a string machine: one note plays a whole chord, slightly organ-like", use: "quick chord pads, rave and trance chord stabs, ambient beds", human: "a slow attack, chorus and a long reverb, the track filter breathing", cheap: "short dry stabs with no envelope" },
+  "plaits:7": { kind: "digital", sound: "robotic speech synthesis, a talking computer", use: "a vocoder-like hook, a robot voice, a scratch-like chop", human: "short words, effects on a bus, used as a feature rather than a part", cheap: "as a lead or a sung vocal: use dm:vox to sing" },
+  "plaits:8": { kind: "digital", sound: "a swarm of eight detuned saws, wide and buzzing", use: "supersaw-ish pads and big stabs, noisy rises", human: "the track filter with an envelope, sidechain from the kick, reverb", cheap: "dry, unfiltered and full volume; dm:contagion with unison is the better supersaw" },
+  "plaits:9": { kind: "utility", sound: "filtered noise, from hiss to a whistling resonant band", use: "risers, sweeps, wind, hiss beds, snare layers", human: "a cutoff lane for a riser, low level, reverb", cheap: "unshaped noise left on" },
+  "plaits:10": { kind: "digital", sound: "dust and particles through a resonator: crackle, drips, rain", use: "texture, crackle beds, glitch ear candy", human: "quiet, panned, in the background", cheap: "featured up front" },
+  "plaits:11": { kind: "modelled", sound: "a plucked string model: harp, koto, a muted pluck, struck metal at extremes", use: "harp arpeggios, plucked ostinatos, delicate melodies", human: "velocity varying, notes ringing their length, reverb on a bus; for guitar, use inst:guitar-nylon, inst:guitar-acoustic or dm:guitar instead", cheap: "fast equal-velocity runs" },
+  "plaits:12": { kind: "digital", sound: "a modal resonator: struck bars, bells, a music box, wood blocks and small metal", use: "sparing: a bell, a music box, a mallet colour, a click in a glitch track. It is a sound effect more than an instrument", human: "few notes, uneven velocities, long reverb, space around it", cheap: "using it as the go-to melody, hook, pluck or arp: it reads instantly as a toy or a game chime. For a mallet choose dm:hexop/marimba, for a bell dm:hexop/bell, for a pluck inst:guitar-nylon or plaits:11, for a melody a real lead" },
+  "plaits:13": { kind: "drum", sound: "a synthetic bass drum, tunable, drive on harm", use: "a quick electronic kick", human: "velocity accents, a little drive", cheap: "dm:siege or a sampler kit is better for a featured kick" },
+  "plaits:14": { kind: "drum", sound: "a synthetic snare, tone against noise", use: "electronic snares and rims", human: "ghost notes at o, accents at X", cheap: "every hit the same; dm:lancet is the fuller snare" },
+  "plaits:15": { kind: "drum", sound: "a synthetic hi-hat, closed to open on morph", use: "electronic hats", human: "alternate x and o, swing", cheap: "equal-velocity sixteenths; dm:halo is the fuller cymbal" },
+
+  "dm:808-kick": { kind: "drum", sound: "the 808 bass drum: a long tuned boom", use: "hip hop, trap, electro, miami bass, house", human: "tune it to the key, drive a touch, velocity accents", cheap: "nothing much: it is the record" },
+  "dm:808-snare": { kind: "drum", sound: "the 808 snare: a thin tone and a hiss", use: "electro, hip hop, 80s pop", human: "snappy balanced, ghost notes", cheap: "flat velocity" },
+  "dm:808-chat": { kind: "drum", sound: "the 808 closed hat: short, metallic, tick", use: "hip hop, trap rolls, electro", human: "velocity swells, ratchets that start soft", cheap: "machine-gun equal sixteenths" },
+  "dm:808-ohat": { kind: "drum", sound: "the 808 open hat: a short sizzle", use: "offbeat lifts", human: "on offbeats, not every bar", cheap: "on every offbeat all song" },
+  "dm:808-clap": { kind: "drum", sound: "the 808 clap: a dry spread clap", use: "backbeats in electro, house, hip hop", human: "layered with a snare, a short reverb", cheap: "fine as it is" },
+  "dm:808-cowbell": { kind: "drum", sound: "the 808 cowbell: two detuned squares, a clank", use: "electro, miami bass, phonk melodies, latin accents", human: "sparse, accented", cheap: "on every step" },
+  "dm:909-kick": { kind: "drum", sound: "the 909 kick: punchy with a beater click", use: "house, techno, trance", human: "a touch of drive, sidechain other parts to it", cheap: "fine as it is" },
+  "dm:909-snare": { kind: "drum", sound: "the 909 snare: bright, noisy, cracking", use: "house fills, trance rolls, techno", human: "rolls that rise in velocity", cheap: "flat velocity rolls" },
+  "dm:909-chat": { kind: "drum", sound: "the 909 closed hat: crisp sampled metal", use: "house and techno hat lines", human: "x and o alternating, swing", cheap: "equal sixteenths" },
+  "dm:909-ohat": { kind: "drum", sound: "the 909 open hat: the offbeat sizzle of house", use: "offbeats in house, techno, trance", human: "a little velocity movement", cheap: "fine as it is" },
+  "dm:909-clap": { kind: "drum", sound: "the 909 clap: a bright layered clap", use: "house and techno backbeats", human: "a short room reverb, a flam before a drop", cheap: "fine as it is" },
+
+  "dm:poly-saw": { kind: "raw", sound: "a bare polyphonic sawtooth with a plain envelope: no filter, no detune, no movement", use: "a quick stab only when the track filter and rack are set on it", human: "close the track filter and give it an envelope, chorus, a little drive, sidechain; better, use dm:oracle or dm:contagion", cheap: "used as it comes: a dry saw sounds like a computer demo" },
+  "dm:fm-bell": { kind: "raw", sound: "a simple two-operator fm bell with a fixed patch", use: "a quick bell accent", human: "reverb, sparse notes; better, dm:hexop/bell", cheap: "as a melody or arp it sounds like a ringtone" },
+  "dm:pad": { kind: "raw", sound: "a plain AM synth pad with a slow envelope, thin and static", use: "a placeholder pad", human: "chorus, filter movement and reverb; better, dm:oracle/warm pad, dm:oracle/strings or dm:drone", cheap: "left as it is under a song: thin and synthetic" },
+  "dm:contagion": { kind: "analog", sound: "a virtual analog powerhouse: two oscillators, two multimode filters with saturation between, unison to 8 for the supersaw", use: "supersaw chords and leads, trance, reese and neuro basses, plucks", human: "unison on with detune, the filter envelope doing the pluck, lanes on cutoff, chorus and reverb", cheap: "unison off with a bare pulse and no filter movement" },
+  "dm:drift": { kind: "analog", sound: "a chorused DCO poly: warm pulse, square sub, noise, a built-in chorus, 80s", use: "80s pads and stabs, synthpop, house chords, grime leads", human: "chorus up, a slow pwm, a soft attack", cheap: "chorus off with a narrow pulse: bare and video-gamey" },
+  "dm:snarl": { kind: "analog", sound: "an aggressive mono-ish synth: saw, ultrasaw, pwm pulse, a metallic fold, sub, soft clip", use: "growling basses, screaming leads, techno and electro riffs", human: "the track filter moving, drive, delay", cheap: "a raw pulse with nothing moving" },
+  "dm:drone": { kind: "digital", sound: "an equation oscillator into a screaming filter, a reverse delay and a granular cloud, notes latching on", use: "drones, noise walls, dark ambient, industrial and experimental textures", human: "slow lanes on the filter and cloud, presets as a start", cheap: "as a melodic lead: it is a texture machine" },
+  "dm:bass": { kind: "modelled", sound: "an electric bass rig: a stiff wound string, pickups, a compressor, an amp and a cab; fingers, picks and slap", use: "any bass that should sound played: funk, soul, rock, reggae, disco, jazz, pop", human: "ghost notes (velocity at or under 0.1), ties for hammer-ons and slides, bsfnoise for finger noise, notes held, a preset", cheap: "every note the same velocity and length" },
+  "dm:guitar": { kind: "modelled", sound: "an electric guitar rig: six strings, a pickup, an amp, a cab and feedback; chords strummed, hammer-ons, vibrato, sympathy", use: "rock, funk, surf, blues, indie, metal, psych, any electric guitar", human: "a tone preset, chords left to ring, gtvib for vibrato, gtsymp for sympathetic strings, gtfnoise for finger squeaks, dead notes for chk", cheap: "single equal notes on a grid with no amp drive" },
+  "dm:halo": { kind: "drum", sound: "a cymbal synthesizer: hats, rides, crashes, chinas, a gong, a shaker", use: "every hat and cymbal in any electronic style", human: "hlovary for per-hit variation, hlochoke so one track is a played hat, ride bell accents", cheap: "equal-velocity sixteenths with hlovary at zero" },
+  "dm:hexop": { kind: "digital", sound: "a six-operator fm synth: electric piano, bass, bells, brass, marimba, organ, pads", use: "80s keys and basses, bells, mallets, organ, brass stabs", human: "a preset, velocity driving brightness (it does, through the modulators), chorus and reverb", cheap: "the init patch, or fm brass as a melody played dry" },
+  "dm:ladder": { kind: "analog", sound: "a transistor-ladder monosynth after the minimoog: fat oscillators, the 24dB ladder, contours, drift", use: "fat basses, singing glide leads, g-funk whines, analog brass", human: "ldrdrift up, glide on legato notes, the filter contour, vibrato from the mod wheel", cheap: "drift at zero and a bare square" },
+  "dm:lancet": { kind: "drum", sound: "a snare synthesizer with seven models, from analog to physical to a granular rattle", use: "the snare in any electronic kit, claps, rims", human: "lncdyn up so ghost notes are quieter and softer, lncrtimbre and lncrlevel around 0.2 so no two hits match", cheap: "one velocity and the randomizer off" },
+  "dm:oracle": { kind: "analog", sound: "a poly analog after the prophet: two morphing VCOs with slop, a sub, drive and chorus", use: "warm pads, strings, brass, keys, chords in almost any genre", human: "orcslop up for analog drift, orcchorus for width, a preset", cheap: "slop and chorus at zero" },
+  "dm:siege": { kind: "drum", sound: "the bass drum synth: a sine with a pitch envelope and a drive after it", use: "techno, house, hard dance and trap kicks, rumbles", human: "tune it, sgefloor under 1 so velocity matters, a preset", cheap: "fine as it is" },
+  "dm:silverbox": { kind: "analog", sound: "the acid box: a saw or square through a squelching diode ladder with accent and slide", use: "acid lines, techno basses, squelchy hooks", human: "accents (velocity over 0.6), slides (ties), lanes on cutoff and resonance that move every section", cheap: "no accents, no slides, a parked filter" },
+  "dm:sub": { kind: "analog", sound: "the sub bass: an 808, a pure sine, a reese, a drill slide, with harmonics that make it heard on small speakers", use: "808 bass, trap and drill slides, dub and house subs, reese", human: "drive so it is heard on a phone, glide on legato notes, a preset", cheap: "a pure sine with no drive: inaudible on most speakers" },
+  "dm:tines": { kind: "digital", sound: "an fm electric piano with a chorus, velocity making it bark", use: "soul, r&b, lo-fi, house and jazz chords", human: "real velocity variation, chords held, a little cassette or vinyl", cheap: "equal velocities: it loses the bark that makes it a piano" },
+  "dm:vox": { kind: "modelled", sound: "a singing voice: glottis, formants, consonants, a choir; it can sing words", use: "hooks, choirs, oohs and aahs, chants, a sung lyric", human: "sngtext with real syllables, sngvib and sngdrift up, notes held, a preset", cheap: "a robot choir as the main vocal of a warm genre" },
+  "dm:granular": { kind: "recorded", sound: "a grain cloud read from a sample or a bundled texture", use: "ambient beds, frozen textures, glitch", human: "slow lanes on position and spray, reverb", cheap: "short grains on a melody" },
+  "wt:akwf": { kind: "raw", sound: "single-cycle wavetables, morphable: anything from a sine to a buzzy chip wave", use: "digital and chip tones, a morphing layer", human: "the track filter and an envelope, chorus, a lane on the scan", cheap: "a bare single-cycle wave played as a lead" },
+  "inst:guitar-acoustic": { kind: "recorded", sound: "a sampled steel-string acoustic guitar", use: "folk, singer-songwriter, pop strums, la pompe", human: "strums on chords, velocity varied, notes ringing", cheap: "fast single-note runs at one velocity" },
+  "inst:guitar-nylon": { kind: "recorded", sound: "a sampled classical nylon guitar", use: "bossa, flamenco, lo-fi, trap melodies, ballads", human: "chords strummed gently, velocity and timing loose", cheap: "machine-gun arpeggios" },
+  "inst:guitar-electric": { kind: "recorded", sound: "a sampled clean electric guitar", use: "clean jazz, funk and pop parts, chord stabs", human: "the rack for amp colour, velocity varied", cheap: "dry equal hits" },
+  "inst:bass-electric": { kind: "recorded", sound: "a sampled picked electric bass", use: "rock, pop and funk bass that should sound recorded", human: "velocity varied, rests, notes held", cheap: "a note on every step" },
+  sampler: { kind: "recorded", sound: "a sample: the bundled drum kits (three acoustic kits among them) or an upload", use: "acoustic drums, breaks, any recorded sound", human: "one acoustic kit per song, ghost notes, ride and hat carrying the time", cheap: "mixing kits from different rooms" },
+  midi: { kind: "utility", sound: "no sound here: notes go out to a MIDI device", use: "driving external hardware", human: "", cheap: "" },
+  bus: { kind: "utility", sound: "no instrument: a summing track other tracks route into", use: "a shared reverb or delay room, group compression", human: "put the parts in one room on it", cheap: "" },
+};
+
+/** An engine's character, or null. @param {string} key */
+export function engineCharacter(key) { return ENGINE_CHARACTER[key] || null; }
+
+const HEXOP_PRESET_DESCRIPTIONS = {
+  init: "one sine carrier with a light modulator: a blank voice to build from, not a sound to use",
+  "e.piano": "the 80s fm electric piano: a bark on the attack from a high-ratio modulator, a warm tine underneath, brighter the harder it is hit",
+  bass: "a punchy fm bass with feedback grit: slap-like and present, for 80s pop, funk and house",
+  bell: "inharmonic bells with a long tail: tubular bells, glass, a celesta; sparse notes and reverb",
+  brass: "fm brass whose spectrum opens after the note: stabs and swells, 80s and new jack swing",
+  marimba: "a wooden mallet: a quick knock that decays fully, for afro, latin and gentle hooks",
+  organ: "a drawbar organ: six operators tuned in octaves and fifths, sustaining, for gospel, house and soul",
+  pad: "a detuned feedback pad that opens slowly: soft 80s and ambient chords",
+};
+/** @param {string} name */
+export function hexopPresetDescription(name) { return HEXOP_PRESET_DESCRIPTIONS[name] || ""; }
