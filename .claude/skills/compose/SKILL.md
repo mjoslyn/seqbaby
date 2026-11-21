@@ -188,7 +188,9 @@ chord, harm picks which). `dm:contagion` with unison for supersaw stabs (`dm:pol
 the step (`set_step` chord "min7") on any poly engine.
 
 Leads and hooks, first choices: `dm:ladder` (a singing mono lead with
-glide), `dm:oracle` (warm poly leads), `dm:vox` (a sung hook), `dm:guitar`
+glide; start from a preset, keep it between C3 and C5, mono, `ldrmod`
+under about 0.1: a deep wheel or octave 5 is a toy whistle), `dm:oracle`
+(warm poly leads), `dm:vox` (a sung hook), `dm:guitar`
 and the `inst:` guitars, `dm:hexop` with a preset. Then, when the genre wants
 something more digital: `plaits:11` (string, plucked), `plaits:1`
 (waveshaping: timb folds, morph skews), `plaits:2` (fm), `plaits:4`

@@ -2339,11 +2339,14 @@ const LADDER_TONES = {
          kbd: "off", osc3kbd: "on", oscmod: "off", filtmod: "off", decsw: "off", mode: "mono" },
   },
   "vibrato lead": {
-    d: "osc 3 taken out of the mix and dropped to LO, the wheel half up onto the oscillators: the singing lead",
-    osc: { osc1wave: "sawtooth", osc1range: 0, osc2wave: "sawtooth", osc2range: 0, osc2freq: 0.1, osc3wave: "triangle", osc3range: -7, osc3freq: 3,
+    // The wheel is a touch up, not half: its full travel is ±5 semitones, and
+    // at 0.4 every note swung ±2 at four hertz, a siren that read as a toy.
+    // 0.07 is about ±0.35 semitones, a singer's vibrato.
+    d: "osc 3 taken out of the mix and dropped to LO, the wheel a touch up onto the oscillators: a gentle vibrato, the singing lead",
+    osc: { osc1wave: "sawtooth", osc1range: 0, osc2wave: "sawtooth", osc2range: 0, osc2freq: 0.1, osc3wave: "triangle", osc3range: -7, osc3freq: 5,
            osc1: 0.7, osc2: 0.55, osc3: 0, noise: 0, noisetype: "white" },
     cutoff: 0.55, emph: 0.5, amt: 0.5, decay: 0.65,
-    p: { fatk: 0, fdec: 0.6, fsus: 0.35, atk: 0.03, sus: 0.85, mod: 0.4, modmix: 0, drift: 0.3, tune: 0,
+    p: { fatk: 0, fdec: 0.6, fsus: 0.35, atk: 0.03, sus: 0.85, mod: 0.07, modmix: 0, drift: 0.3, tune: 0,
          kbd: "2/3", osc3kbd: "off", oscmod: "on", filtmod: "off", decsw: "on", mode: "mono" },
   },
   "percussive": {
@@ -2593,9 +2596,9 @@ export const ENGINE_CHARACTER = {
   "dm:guitar": { kind: "modelled", sound: "an electric guitar rig: six strings, a pickup, an amp, a cab and feedback; chords strummed, hammer-ons, vibrato, sympathy", use: "rock, funk, surf, blues, indie, metal, psych, any electric guitar", human: "a tone preset, chords left to ring, gtvib for vibrato, gtsymp for sympathetic strings, gtfnoise for finger squeaks, dead notes for chk", cheap: "single equal notes on a grid with no amp drive" },
   "dm:halo": { kind: "drum", sound: "a cymbal synthesizer: hats, rides, crashes, chinas, a gong, a shaker", use: "every hat and cymbal in any electronic style", human: "hlovary for per-hit variation, hlochoke so one track is a played hat, ride bell accents", cheap: "equal-velocity sixteenths with hlovary at zero" },
   "dm:hexop": { kind: "digital", sound: "a six-operator fm synth: electric piano, bass, bells, brass, marimba, organ, pads", use: "80s keys and basses, bells, mallets, organ, brass stabs", human: "a preset, velocity driving brightness (it does, through the modulators), chorus and reverb", cheap: "the init patch, or fm brass as a melody played dry" },
-  "dm:ladder": { kind: "analog", sound: "a transistor-ladder monosynth after the minimoog: fat oscillators, the 24dB ladder, contours, drift", use: "fat basses, singing glide leads, g-funk whines, analog brass", human: "ldrdrift up, glide on legato notes, the filter contour, vibrato from the mod wheel", cheap: "drift at zero and a bare square" },
+  "dm:ladder": { kind: "analog", sound: "a transistor-ladder monosynth after the minimoog: fat oscillators, the 24dB ladder, contours, drift", use: "fat basses, singing glide leads, g-funk whines, analog brass", human: "a preset first (model d bass, funk lead, vibrato lead), leads between C3 and C5, ldrmode mono with the track glide on tied notes, the filter half shut with the contour opening it, ldrmod no higher than about 0.1 for vibrato, delay and reverb on a bus", cheap: "a lead in octave 5 or above with the filter open, which beeps like a toy; the wheel deep onto the oscillators (ldrmod 0.3 and up swings notes by semitones, a siren); poly mode with no glide; a bare square" },
   "dm:lancet": { kind: "drum", sound: "a snare synthesizer with seven models, from analog to physical to a granular rattle", use: "the snare in any electronic kit, claps, rims", human: "lncdyn up so ghost notes are quieter and softer, lncrtimbre and lncrlevel around 0.2 so no two hits match", cheap: "one velocity and the randomizer off" },
-  "dm:oracle": { kind: "analog", sound: "a poly analog after the prophet: two morphing VCOs with slop, a sub, drive and chorus", use: "warm pads, strings, brass, keys, chords in almost any genre", human: "orcslop up for analog drift, orcchorus for width, a preset", cheap: "slop and chorus at zero" },
+  "dm:oracle": { kind: "analog", sound: "a poly analog after the prophet: two morphing VCOs with slop, a sub, drive and chorus", use: "warm pads, strings, brass, keys, chords in almost any genre", human: "orcslop up for analog drift, orcchorus for width, a preset, chords voiced between C3 and C5 with notes spread rather than stacked tight", cheap: "slop and chorus at zero; close triads up in octave 5, which sound like a toy organ" },
   "dm:siege": { kind: "drum", sound: "the bass drum synth: a sine with a pitch envelope and a drive after it", use: "techno, house, hard dance and trap kicks, rumbles", human: "tune it, sgefloor under 1 so velocity matters, a preset", cheap: "fine as it is" },
   "dm:silverbox": { kind: "analog", sound: "the acid box: a saw or square through a squelching diode ladder with accent and slide", use: "acid lines, techno basses, squelchy hooks", human: "accents (velocity over 0.6), slides (ties), lanes on cutoff and resonance that move every section", cheap: "no accents, no slides, a parked filter" },
   "dm:sub": { kind: "analog", sound: "the sub bass: an 808, a pure sine, a reese, a drill slide, with harmonics that make it heard on small speakers", use: "808 bass, trap and drill slides, dub and house subs, reese", human: "drive so it is heard on a phone, glide on legato notes, a preset", cheap: "a pure sine with no drive: inaudible on most speakers" },

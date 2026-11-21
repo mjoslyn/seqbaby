@@ -40,3 +40,12 @@ test("it is advice: a song full of notes still validates", () => {
   const v = sb.validate(song());
   assert.ok(v.ok && v.production.length > 0);
 });
+
+test("a synth sitting in octave 5 is told to come down", () => {
+  const s = sb.newSong({ bpm: 120 });
+  sb.addTrack(s, { engine: "dm:ladder", name: "lead" });
+  sb.setSteps(s, 0, { steps: "x.x.x.x.x.x.x.x.", notes: ["D#5", "F#5", "F5", "G#5", "A#5", "F#5", "F5", "D#5"] });
+  assert.match(sb.productionNotes(s).join("\n"), /lead\): its notes sit around (D#5|F5|F#5)/);
+  sb.setSteps(s, 0, { steps: "x.x.x.x.x.x.x.x.", notes: ["D#4", "F#4", "F4", "G#4", "A#4", "F#4", "F4", "D#4"] });
+  assert.doesNotMatch(sb.productionNotes(s).join("\n"), /sit around/);
+});

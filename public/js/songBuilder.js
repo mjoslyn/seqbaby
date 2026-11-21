@@ -1261,6 +1261,7 @@ export function productionNotes(song) {
     const pats = (t.patterns || []).filter((p) => p?.steps?.some(Boolean));
     if (!pats.length) continue;
     const vels = new Set();
+    const pitches = [];
     let hits = 0, short = 0, maxRun = 0;
     const lanes = new Set();
     for (const p of pats) {
@@ -1270,6 +1271,8 @@ export function productionNotes(song) {
         if (!on) { run = 0; return; }
         hits++;
         vels.add(Math.round((p.velocities?.[s] ?? 0.5) * 100));
+        const n = p.notes?.[s];
+        if (typeof n === "number") pitches.push(n);
         if ((p.lengths?.[s] || 1) <= 1) short++;
         // A held note counts as a run too: what matters is that nothing rests.
         run += Math.max(1, p.lengths?.[s] || 1);
@@ -1286,6 +1289,13 @@ export function productionNotes(song) {
     const swept = lanes.has("cutoff") || t.lfoConfig?.cutoff?.enabled;
     const open = (t.filter?.cutoff ?? 1) >= 0.9 && !(Number(t.filter?.env) > 0);
     if (char?.kind === "raw" && open && !swept) notes.push(`${label}: ${t.engineKey} is a bare oscillator with the filter open and still. It sounds like a video game unless that is the point: close the filter with an envelope or a lane, add chorus or drive, or use ${t.engineKey === "dm:pad" ? "dm:oracle (warm pad, strings)" : "dm:oracle, dm:ladder or dm:contagion"}`);
+    // A synth up in octave 5 and above, through an open-ish filter, is a beep:
+    // where a lead or a pad on one of these reads as a toy. A bell or a
+    // sample is not asked.
+    if (melodic && (char?.kind === "analog" || char?.kind === "raw") && pitches.length >= 8) {
+      const mid = [...pitches].sort((a, b) => a - b)[pitches.length >> 1];
+      if (mid >= 75) notes.push(`${label}: its notes sit around ${midiToName(mid)}. A synth up there reads as a toy beep: an octave down (two for chords) is where a lead or a pad on ${t.engineKey} sings`);
+    }
     if (t.engineKey === "plaits:12" && hits > 12) notes.push(`${label}: plaits:12 (modal) plays ${hits} notes. It is a bell or music-box colour, and as a melody it reads as a toy: dm:hexop (marimba, bell), inst:guitar-nylon or a real lead instead`);
   }
   if (playing.length >= 2 && !anySpace) notes.push("no track has reverb or delay: the parts are in no room together. Put a reverb (and a delay) on a bus and send the melodic parts to it");
