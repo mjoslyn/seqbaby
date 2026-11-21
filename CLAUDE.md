@@ -68,7 +68,7 @@ env / fx / eq / comp / mod / automation per track.
 │   ├── songs/suggestName.ts  the name both save UIs offer in a blank name field
 │   ├── Preloader.tsx + preloaderMarkup.ts  loading overlay: markup + inline driver
 │   ├── login/ settings/ u/[username]/       auth, account settings, public profiles
-│   ├── GroovePicker.tsx + songs/genres.js  the compose panel's `genre` tab: search 153 genres by name / alias / family, pick one, and a compose turn builds a whole song in it
+│   ├── GroovePicker.tsx + songs/genres.js (+ genrePlansMore.js, the second half of the plans)  the compose panel's `genre` tab: search 153 genres by name / alias / family, pick one, and a compose turn builds a whole song in it
 │   ├── ComposeChat.tsx        the in-studio compose panel: ask for a song, in words; a turn's changes land in a review bar (audition / keep), never straight in
 │   ├── JamPanel.tsx           the jam room: who is in it, the connection (a WebSocket to workers/jamRoom.ts), the invite link. The engine half is public/js/jam.js
 │   ├── shareCard.ts + shareCopy.js  the link preview, and its sentences (who shared what)
@@ -5300,23 +5300,31 @@ because the same sentence sent twice gets the same song back: given a tempo
 range and a list of instruments a model takes the middle of one and the first
 of the other. Every genre has its exact bpm, root note, form (`FAMILY_PLANS`,
 two to four per family, bars per section as chain mode plays them), angle and
-what the second main section adds drawn. A genre with a `plan` (`PLANS`,
-85 of the 153 so far, at least two in every family) also has its drum kit and starting bar (step
+what the second main section adds drawn. A genre with a `plan` (every one
+of the 153: `PLANS` in genres.js and `MORE_PLANS` in genrePlansMore.js, the
+same shape, split only for size) also has its drum kit and starting bar (step
 strings), an engine and preset per part, which optional parts exist at all,
 how the bass plays, the progression (which carries its scale, `scale: chords`,
-since notes snap to the scale and a progression only fits its own), two
-signature moves and the genre's `avoid` list. A move that needs an optional
-part is written `[role] ...` and only drawn in a build that has the part; a
-plan with no `drums` (ambient) rolls no kit and says so. Not planned yet, on
-purpose: jazz, blues, swing, bossa and salsa, whose feel is swung or claved
-EIGHTHS. Master swing moves odd sixteenths only, so they need a plan that
-writes a step as an eighth (half the tempo, a bar in eight steps) first. Each decision is a hash of
+since notes snap to the scale and a progression only fits its own; `chromatic`
+where a style lives on passing notes, as bebop does), two signature moves and
+the genre's `avoid` list. A move that needs an optional part is written
+`[role] ...` and only drawn in a build that has the part; a plan with no
+`drums` (ambient, ragtime, gypsy jazz) rolls no kit and says so.
+**A plan may have a grid of its own.** `eighths: true` writes the song a step
+to an EIGHTH note, every track at speed 0.5: master swing delays a track's
+odd steps by a fraction of ITS step, so at half speed it lands on the offbeat
+eighths, which is the only way jazz, blues and a shuffle swing (0.33 is a
+triplet), and the tempo stays the one heard. Its step strings are then two
+bars each. `meter` is the song's when it is not 4/4 and `steps` how long the
+plan's step strings are (`7/8` and 14 for math rock and balkan, `3/4` in
+eighths and 12 for a jazz waltz, `12/8` in eighths and 12 for flamenco's
+compás). The prompt says how to set either up (`set_track` speed,
+`set_meter`), and the test holds each plan's strings to whole bars of its
+grid. Each decision is a hash of
 (seed, genre, which), `chanceGen.js`'s bargain, so adding a pool does not
 reshuffle the rest. The test holds every engine key, preset, scale, sampler
 kit and backticked step string in a plan to the engine's tables through
-songBuilder, and builds each roll's tracks. An unplanned genre keeps its
-instruments in its brief, so only the neutral choices are rolled for it and
-the form is offered as a start. The panel shows the roll (`rollSummary`) with
+songBuilder, and builds each roll's tracks. The panel shows the roll (`rollSummary`) with
 a `reroll`; a build takes a new seed afterwards, and a `recent` chip carries
 its seed, so it is that build again until rerolled. The typed note wins over
 the roll. The panel keeps what it held between openings and reloads

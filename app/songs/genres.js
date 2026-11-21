@@ -6,6 +6,8 @@
 // No imports: pure, so test/genres.test.js pins the table, the search and
 // the prompt.
 
+import { MORE_PLANS } from "./genrePlansMore.js";
+
 /** @typedef {{ id: string, name: string, family: string, bpm: [number, number], tags?: string[], brief: string, plan?: GenrePlan }} Genre */
 
 /**
@@ -23,7 +25,14 @@
  *   core: Record<string, string[]>, optional?: Record<string, string[]>, extras?: [number, number],
  *   bass?: string[], harmony: string[], moves: string[], avoid: string[],
  *   forms?: string[], angles?: string[], layered?: boolean,
+ *   eighths?: boolean, meter?: string, steps?: number,
  * }} GenrePlan
+ *
+ * `eighths`: the song is written a step to an EIGHTH note (every track at
+ * speed 0.5), so master swing, which delays a track's odd steps, lands on the
+ * offbeat eighths: the only way jazz, blues and a shuffle swing. `meter` is
+ * the song's when it is not 4/4, and `steps` how long the plan's step strings
+ * are when that is not 16.
  */
 
 /** The filter chips, in the order they are drawn. */
@@ -1723,6 +1732,7 @@ Object.assign(PLANS, {
     avoid: ["a beat", "melody", "anything that happens more than once a bar"],
   },
 });
+Object.assign(PLANS, MORE_PLANS);
 for (const g of GENRES) {
   if (PLANS[g.id]) g.plan = PLANS[g.id];
 }
@@ -1780,6 +1790,9 @@ export function rollGenre(g, seed = 0) {
   const cut = harmony.indexOf(": ");
   roll.scale = pick("scale", harmony.slice(0, cut).split("/"));
   roll.harmony = harmony.slice(cut + 2);
+  if (plan.eighths) roll.eighths = true;
+  if (plan.meter) roll.meter = plan.meter;
+  roll.steps = plan.steps || 16;
   if (plan.swing) roll.swing = Math.round((plan.swing[0] + r("swing") * (plan.swing[1] - plan.swing[0])) * 100) / 100;
   if (plan.drums?.length) {
     roll.kit = pick("kit", plan.kits);
@@ -1827,8 +1840,17 @@ export function genrePrompt(g, extra = "", seed = 0) {
   if (roll.scale) add(`${roll.bpm} bpm${roll.swing ? `, swing ${roll.swing}` : ""}, in ${roll.root} ${roll.scale}.`);
   else add(`${roll.bpm} bpm, rooted on ${roll.root} (the scale is the genre's).`);
   add(`Angle: ${roll.angle}.`);
+  if (roll.eighths || roll.meter) {
+    const [num, den] = (roll.meter || "4/4").split("/").map(Number);
+    const bar = (num * 16) / den / (roll.eighths ? 2 : 1);
+    const parts = [];
+    if (roll.eighths) parts.push("Write it on an EIGHTH-note grid, which is what lets it swing: every track at speed 0.5 (set_track), so a step is an eighth note and swing delays the offbeat eighths (0.33 is a triplet shuffle). Sixteenths or a triplet inside a beat are a ratchet on that step");
+    if (roll.meter) parts.push(`It is in ${roll.meter}: set_meter on every pattern you use`);
+    parts.push(`A bar is ${bar} steps, so each step string here (${roll.steps} steps) is ${roll.steps / bar === 1 ? "one bar" : `${roll.steps / bar} bars`}, and pattern lengths are multiples of ${bar}`);
+    add(parts.join(". ") + ".");
+  }
   if (roll.drums) {
-    add(`Drums: ${KITS[roll.kit]}. Start the main section from this bar, one track per line, and vary it by section: ${
+    add(`Drums: ${KITS[roll.kit]}. Start the main section from ${roll.steps === 16 && !roll.eighths && !roll.meter ? "this bar" : "these steps"}, one track per line, and vary it by section: ${
       Object.entries(roll.drums).map(([k, v]) => `${k} \`${v}\``).join(", ")}.`);
   }
   if (roll.voices && !roll.drums) add("No drum kit: a faint pulse at most.");

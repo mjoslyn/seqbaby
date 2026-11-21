@@ -117,9 +117,9 @@ test("a plan names only engines, presets, scales, kits and step strings that exi
       assert.ok(names.includes(preset), `${where}: ${engine} has no preset ${JSON.stringify(preset)} (${names.join(", ")})`);
     }
   };
-  const proseOk = (text, where) => {
+  const proseOk = (text, where, steps = 16) => {
     for (const m of text.matchAll(/`([^`]+)`/g)) {
-      assert.equal(sb.parseSteps(m[1]).steps.length, 16, `${where}: \`${m[1]}\` is one bar`);
+      assert.equal(sb.parseSteps(m[1]).steps.length, steps, `${where}: \`${m[1]}\` is ${steps} steps`);
     }
     for (const m of text.matchAll(/\b(?:dm|plaits|inst|wt):[\w-]+/g)) sb.resolveEngine(m[0]);
     // A panel control named in prose (sngbite, gtmute, sbaccent) is a real one.
@@ -142,7 +142,7 @@ test("a plan names only engines, presets, scales, kits and step strings that exi
     if (p.drums) assert.ok(p.drums.length >= 2 && p.kits?.length, `${g.id}: drum variants and a kit`);
     for (const d of p.drums || []) {
       for (const [role, str] of Object.entries(d)) {
-        assert.equal(str.length, 16, `${g.id}: ${role} ${str}`);
+        assert.equal(str.length, p.steps || 16, `${g.id}: ${role} ${str}`);
         assert.ok(sb.parseSteps(str).steps.some(Boolean), `${g.id}: ${role} has a hit`);
       }
     }
@@ -159,7 +159,17 @@ test("a plan names only engines, presets, scales, kits and step strings that exi
       assert.ok(cut > 0, `${g.id}: harmony ${h} names its scale`);
       for (const sc of h.slice(0, cut).split("/")) assert.ok(sb.SCALE_NAMES.includes(sc), `${g.id}: scale ${sc}`);
     }
-    for (const text of [...(p.bass || []), ...p.harmony, ...p.moves, ...p.avoid]) proseOk(text, g.id);
+    for (const text of [...(p.bass || []), ...p.harmony, ...p.moves, ...p.avoid]) proseOk(text, g.id, p.steps || 16);
+    // A grid of its own: the step strings are whole bars of it, and the
+    // prompt says how to set it up.
+    if (p.eighths || p.meter) {
+      const [num, den] = (p.meter || "4/4").split("/").map(Number);
+      const bar = (num * 16) / den / (p.eighths ? 2 : 1);
+      assert.ok(Number.isInteger(bar) && Number.isInteger((p.steps || 16) / bar), `${g.id}: ${p.steps || 16} steps is whole bars of ${bar}`);
+      const text = genrePrompt(g, "", 5);
+      if (p.eighths) assert.match(text, /speed 0\.5/, `${g.id}: the prompt sets the grid`);
+      if (p.meter) { assert.match(text, new RegExp(`It is in ${p.meter}`)); sb.setMeter(sb.newSong(), 0, p.meter); }
+    } else assert.equal(p.steps || 16, 16, `${g.id}: sixteen steps unless the grid says otherwise`);
     // A move tagged with a part is only drawn with it, and two are always there to draw.
     const tagged = p.moves.map((m) => /^\[([^\]]+)\] /.exec(m)?.[1]).filter(Boolean);
     for (const role of tagged) assert.ok(p.optional?.[role], `${g.id}: a move needs [${role}], which is no optional part`);
@@ -194,7 +204,7 @@ test("the genre tools list, find and roll a brief without touching the song", ()
   const before = JSON.stringify(ctx.song);
   const all = tool("list_genres")(ctx, {});
   assert.equal(all.length, GENRES.length);
-  assert.ok(all.find((g) => g.id === "techno").planned && !all.find((g) => g.id === "flamenco").planned);
+  assert.ok(all.every((g) => g.planned), "every genre has a plan");
   assert.ok(tool("list_genres")(ctx, { family: "bass" }).every((g) => g.family === "bass"));
   assert.equal(tool("list_genres")(ctx, { query: "ukg" })[0].id, "garage");
   assert.throws(() => tool("list_genres")(ctx, { family: "nope" }), /unknown family/);
