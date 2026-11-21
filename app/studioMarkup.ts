@@ -404,7 +404,7 @@ const BREATH_PANEL = `
           </div>
           <div class="sq-breath__row">
             <span class="sq-breath__lbl">breath</span>
-            <label class="sq-breath__f"><span>attack</span><input class="p-brtatk" type="range" min="0" max="1" step="0.01" value="0.25" title="how long the breath takes to arrive, 4ms to 400ms. The tone opens as it does" /></label>
+            <label class="sq-breath__f"><span>attack</span><input class="p-brtatk" type="range" min="0" max="1" step="0.01" value="0.4" title="how long the breath takes to arrive, 4ms to 400ms. The tone opens as it does" /></label>
             <label class="sq-breath__f"><span>tongue</span><input class="p-brttongue" type="range" min="0" max="1" step="0.01" value="0.4" title="how hard the note is tongued: the pressure overshoots and a burst of air comes with it. Zero is a ha, the top is a ta. On a jet it is the chiff" /></label>
             <label class="sq-breath__f"><span>dynamics</span><input class="p-brtdyn" type="range" min="0" max="1" step="0.01" value="0.5" title="how much blowing harder brightens the tone. Velocity is the blowing pressure, and the pressure rises through the attack and falls through the release, so this is also how much each note opens and closes. Lips move furthest" /></label>
             <label class="sq-breath__f"><span>swell</span><input class="p-brtswell" type="range" min="0" max="1" step="0.01" value="0.5" title="what a held note does: the middle holds, below it the note falls away after the attack (a stab, an fp), above it the note grows" /></label>

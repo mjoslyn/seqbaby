@@ -63,6 +63,18 @@
 //   ends) is taken over by the voice that played the last one, with no
 //   attack, the pitch sliding there (the track's glide, else 35ms). `mode`
 //   mono is a solo instrument: one voice, the last note wins.
+// - **What keeps it from being an organ stop.** A sum of harmonics on a smooth
+//   curve, in phase, dead steady, is a filtered sawtooth however the curve is
+//   drawn. So: each harmonic has a fixed phase of its own (a second, cosine
+//   recurrence beside the sine one); each harmonic of each note sits up to
+//   3dB off the curve, the same way every time (a hash of harmonic and note);
+//   each wavers slowly by itself; the breath's turbulence shakes the tone's
+//   level (noise under 200Hz on the gain, so every harmonic has a skirt of
+//   air round it, scaled with the air slider); the brightness trails the
+//   pressure by 25..40ms, so the top of the tone is the last thing to arrive;
+//   a note starts a few cents off and settles, wavers a couple of cents while
+//   held, and its vibrato is never quite the same depth or speed twice.
+//   All but the phases, the 3dB and the lag are scaled by `drift` or `air`.
 // - **Reasoned, not measured.** The formant positions are the published
 //   ones for each family; the rest (rolloff orders, how far the break moves,
 //   the noise levels) are honest character with no instrument under test.
@@ -81,6 +93,22 @@ const TBL_LO = Math.log2(40);
 const TBL_K = (TBL - 1) / 9;
 const TAU = 6.283185307179586;
 
+// A hash of two integers, 0..1: the same harmonic of the same note always
+// gets the same answer, with no state.
+function hash2(a, b) {
+  let x = (Math.imul(a, 374761393) + Math.imul(b, 668265263)) | 0;
+  x = Math.imul(x ^ (x >>> 13), 1274126177);
+  x ^= x >>> 16;
+  return (x >>> 0) / 4294967296;
+}
+// Each harmonic's fixed phase, up to a quarter turn either way. Summed in
+// sine phase a spectrum is a sawtooth, whatever its levels: the buzz of a
+// synth. No instrument's partials line up like that.
+const PHC = new Float64Array(NH + 1), PHS = new Float64Array(NH + 1);
+PHC[1] = 1;
+for (let n = 2; n <= NH; n++) { const ph = (hash2(n, 7919) - 0.5) * Math.PI; PHC[n] = Math.cos(ph); PHS[n] = Math.sin(ph); }
+// How far a harmonic may sit off the smooth curve, in dB either way.
+const IRR_DB = 3;
 const LNN = new Float64Array(NH + 1);
 const LOG2N = new Float64Array(NH + 1);
 for (let n = 1; n <= NH; n++) { LNN[n] = Math.log(n); LOG2N[n] = Math.log2(n); }
@@ -91,9 +119,11 @@ const DYN_OCT = [2.5, 5, 2];        // octaves the break moves across the pressu
 const VIB_CENTS = [60, 50, 25];     // vibrato in pitch, at the top of the knob
 const VIB_PRESS = [0.2, 0.15, 0.5]; // and in breath
 const SCOOP_ST = [2.5, 1.5, 1];     // how far under the note a full scoop starts
-const AIR_K   = [1, 0.5, 2.2];      // breath noise against the tone
+const AIR_K   = [1, 0.5, 1.8];      // breath noise against the tone
 const ATK_K   = [1, 1, 1.5];        // a jet speaks a little later
 const CHIFF_T = [0.010, 0.008, 0.030];
+const LAG_T   = [0.025, 0.035, 0.040];  // how far the brightness trails the breath
+const TURB_K  = [1, 0.6, 1.2];          // how much the air roughens the tone
 // Each player's fixed place in the section: tuning, vibrato rate, pan.
 const P_TUNE = [0, 1, -0.8, 0.45];
 const P_RATE = [1, 1.05, 0.96, 1.08];
@@ -192,6 +222,9 @@ class Voice {
     this.gain = 0; this.nGain = 0;
     this.growlPh = 0; this.flutPh = 0; this.growlW = 0;
     this.pj = 0; this.pjT = 0;            // the breath is never quite steady
+    this.pb = 0;                          // the pressure the brightness has caught up with
+    this.jit = 0; this.onErr = 0;         // the pitch: a fast waver, and where the note started
+    this.tz = 0;                          // the turbulence riding on the tone
     this.H = 0;
     this.a = new Float64Array(NH + 1);    // the harmonics' levels, ramped
     this.da = new Float64Array(NH + 1);
@@ -219,7 +252,7 @@ class BreathProcessor extends AudioWorkletProcessor {
       // The body.
       k("bore", 1), k("edge", 0.5), k("f1", 0.52), k("f2", 0.44), k("res", 0.5), k("mute", 0),
       // The breath.
-      k("atk", 0.25), k("tongue", 0.4), k("dyn", 0.5), k("swell", 0.5), k("growl", 0), k("flutter", 0),
+      k("atk", 0.4), k("tongue", 0.4), k("dyn", 0.5), k("swell", 0.5), k("growl", 0), k("flutter", 0),
       // The pitch.
       k("vrate", 0.45), k("vdelay", 0.35), k("scoop", 0.2), k("fall", 0), k("drift", 0.3),
       // The section.
@@ -243,6 +276,7 @@ class BreathProcessor extends AudioWorkletProcessor {
     this.tg = new Float64Array(NH + 1);   // scratch: a block's target spectrum
     this.bL = new Float64Array(BLK); this.bR = new Float64Array(BLK);
     this.tmp = new Float64Array(BLK);
+    this.tb = new Float64Array(BLK);
     this.port.onmessage = (e) => this.onMessage(e.data);
   }
 
@@ -297,7 +331,7 @@ class BreathProcessor extends AudioWorkletProcessor {
 
   // One block's spectrum for a note at f0 blown at pressure p, into this.tg,
   // normalised to unit power. Returns the highest harmonic worth running.
-  spectrum(f0, p, tone, edge, bore, dyn, chiffBoost) {
+  spectrum(f0, p, tone, edge, bore, dyn, chiffBoost, noteKey, shim, secs) {
     const kind = this.kind, tg = this.tg;
     let fb = 250 * Math.pow(2, 5 * tone + DYN_OCT[kind] * dyn * (p - 0.8)) * Math.pow(f0 / 261.63, 0.35);
     if (fb < 120) fb = 120; else if (fb > 18000) fb = 18000;
@@ -324,6 +358,13 @@ class BreathProcessor extends AudioWorkletProcessor {
       if (ti < 0) ti = 0; else if (ti > TBL - 1.001) ti = TBL - 1.001;
       const i0 = ti | 0;
       a *= body[i0] + (body[i0 + 1] - body[i0]) * (ti - i0);
+      if (n > 1) {
+        // No instrument's spectrum is a smooth curve: each harmonic of each
+        // note sits a few dB off it, the same way every time that note is
+        // played. And none holds still: each wavers slowly on its own.
+        a *= Math.exp((hash2(n, noteKey) - 0.5) * 2 * IRR_DB * 0.1151292546497023);
+        if (shim > 0) a *= 1 + shim * (n < 10 ? 1 + n * 0.1 : 2) * Math.sin(TAU * (secs * (0.7 + (n * 0.37) % 3.1) + n * 0.61));
+      }
       tg[n] = a;
     }
     const count = n - 1;
@@ -409,6 +450,7 @@ class BreathProcessor extends AudioWorkletProcessor {
     v.chiff = tongue;
     for (let i = 0; i < NP; i++) {
       v.cal[i] = (Math.random() * 2 - 1) * drift;
+      if (i === 0) v.onErr = (Math.random() * 2 - 1) * drift * 30;
       v.delay[i] = i === 0 ? 0 : Math.random() * 0.022 * this.sr;
       if (!was) {
         // A voice at rest starts each player somewhere of their own; one
@@ -420,7 +462,7 @@ class BreathProcessor extends AudioWorkletProcessor {
       }
     }
     if (!was) {
-      v.e = 0; v.gain = 0; v.nGain = 0; v.H = 0;
+      v.e = 0; v.gain = 0; v.nGain = 0; v.H = 0; v.pb = 0; v.tz = 0;
       v.a.fill(0);
       v.n1.fill(0); v.n2.fill(0);
     }
@@ -473,8 +515,11 @@ class BreathProcessor extends AudioWorkletProcessor {
     const scoopC = Math.exp(-dtB / (0.025 + 0.06 * P.scoop[0]));
     const blipC = Math.exp(-dtB / 0.012);
     const chiffC = Math.exp(-dtB / CHIFF_T[kind]);
+    const onErrC = Math.exp(-dtB / 0.06);
+    const lagC = 1 - Math.exp(-dtB / LAG_T[kind]);
+    const turbC = 1 - Math.exp(-TAU * 200 / sr);
     const muteLvl = 1 - 0.45 * mute;
-    const airLvl = air * air * 4 * AIR_K[kind] * 0.2;
+    const airLvl = air * air * 4 * AIR_K[kind] * 0.04;
     const plNorm = 1 / Math.sqrt(np);
     const pgStep = 1 / (0.004 * sr);
     // The air's three bands: the body's for a valve, the tube's modes for a jet.
@@ -523,20 +568,31 @@ class BreathProcessor extends AudioWorkletProcessor {
           v.logF += (v.logT - v.logF) * v.glideC;
           if (Math.abs(v.logT - v.logF) < 1e-5) { v.logF = v.logT; v.glideC = 1; }
         }
-        const bend = (v.scoop + v.blip + v.fall) / 12;
-        const vib0 = Math.sin(TAU * v.vibPh[0]) * v.vibAmt;
+        // A player never lands exactly on a note or sits exactly still on it:
+        // the note starts a few cents off and settles, and wavers a couple of
+        // cents, quickly, while it is held. Both are drift's.
+        v.onErr *= onErrC;
+        v.jit += (Math.random() * 2 - 1 - v.jit) * 0.02;
+        const bend = (v.scoop + v.blip + v.fall) / 12 + (v.onErr + v.jit * drift * 120) / 1200;
         const b = 0.3 + 0.7 * v.vel;
         // A breath wavers: a few percent, slowly, by as much as drift says.
         v.pjT += (Math.random() * 2 - 1) * 0.08;
         if (v.pjT > 1) v.pjT = 1; else if (v.pjT < -1) v.pjT = -1;
         v.pj += (v.pjT - v.pj) * 0.01;
+        // And so does a vibrato: its depth is never the same twice round.
+        const wav = drift < 0.34 ? drift * 3 : 1;
+        const vib0 = Math.sin(TAU * v.vibPh[0]) * v.vibAmt * (1 - 0.3 * wav * v.pj);
         let p = b * v.e * (1 + vibPr * vib0 + 0.12 * drift * v.pj);
         if (p < 0) p = 0;
+        // The tone opens a little after the breath arrives: the upper
+        // harmonics are the last to speak. It closes with it.
+        if (p > v.pb) v.pb += (p - v.pb) * lagC; else v.pb = p;
         const f0 = Math.pow(2, v.logF + bend + vibOct * vib0);
 
         // ---- the spectrum, and a ramp to it ----
         const toneK = tone + 0.14 * growl;
-        const Hn = this.spectrum(f0, p, toneK < 1 ? toneK : 1, edge, bore, dyn, v.chiff * tongue);
+        const Hn = this.spectrum(f0, v.pb, toneK < 1 ? toneK : 1, edge, bore, dyn, v.chiff * tongue,
+          Math.round(v.logT * 12), 0.25 * drift, v.age / sr);
         const H = Hn > v.H ? Hn : v.H;
         const a = v.a, da = v.da, tg = this.tg;
         const inv = 1 / blk;
@@ -558,8 +614,20 @@ class BreathProcessor extends AudioWorkletProcessor {
         const gStep = (gT - v.gain) * inv;
         // The air follows the pressure less steeply than the tone, so a soft
         // note is the breathier one; the chiff is a burst of it on the attack.
-        const nT = 0.17 * (airLvl * Math.pow(p, 0.6) * (1 + 0.6 * growl) + v.chiff * (0.3 + air) * 0.05 * b * (kind === 2 ? 2 : 1)) * am * muteLvl;
+        const nT = 0.17 * (airLvl * Math.pow(p, 0.6) * (1 + 0.6 * growl) + v.chiff * (0.3 + air) * 0.025 * b * (kind === 2 ? 2 : 1)) * am * muteLvl;
         const nStep = (nT - v.nGain) * inv;
+
+        // ---- the turbulence ----
+        // The air does not only sit beside the note, it shakes it: the breath
+        // is rough, so the tone's level is too, and every harmonic carries a
+        // skirt of noise. Scaled with the air; none at zero.
+        const tb = this.tb;
+        const turb = air * air * TURB_K[kind] * 0.8 / Math.sqrt(p > 0.25 ? p : 0.25);   // a soft breath is the rougher
+        if (turb > 0) {
+          let tz = v.tz;
+          for (let i = 0; i < blk; i++) { tz += (Math.random() * 2 - 1 - tz) * turbC; tb[i] = 1 + turb * tz; }
+          v.tz = tz;
+        }
 
         // ---- the players ----
         for (let i = 0; i < blk; i++) tmp[i] = 0;
@@ -568,7 +636,7 @@ class BreathProcessor extends AudioWorkletProcessor {
           v.driftT[pl] += (Math.random() * 2 - 1) * 0.03;
           if (v.driftT[pl] > 1) v.driftT[pl] = 1; else if (v.driftT[pl] < -1) v.driftT[pl] = -1;
           v.drift[pl] += (v.driftT[pl] - v.drift[pl]) * 0.003;
-          v.vibPh[pl] += vibHz * P_RATE[pl] * dtB; if (v.vibPh[pl] >= 1) v.vibPh[pl] -= 1;
+          v.vibPh[pl] += vibHz * P_RATE[pl] * (1 + 0.1 * wav * v.pj) * dtB; if (v.vibPh[pl] >= 1) v.vibPh[pl] -= 1;
           const vb = pl === 0 ? vib0 : Math.sin(TAU * v.vibPh[pl]) * v.vibAmt;
           const cents = P_TUNE[pl] * detune * 20 + v.cal[pl] * 5 + v.drift[pl] * drift * 10;
           const f = Math.pow(2, v.logF + bend + vibOct * vb + cents / 1200);
@@ -588,15 +656,16 @@ class BreathProcessor extends AudioWorkletProcessor {
             let acc = 0;
             if (two) {
               const k2 = c + c;
-              let sp = 0, sc = s;
+              let sp = 0, sc = s, cp = 1, cc = c;
               for (let n = 1; n <= H; n++) {
-                acc += (a[n] + da[n] * i) * sc;
-                const t = k2 * sc - sp; sp = sc; sc = t;
+                acc += (a[n] + da[n] * i) * (PHC[n] * sc + PHS[n] * cc);
+                let t = k2 * sc - sp; sp = sc; sc = t;
+                t = k2 * cc - cp; cp = cc; cc = t;
               }
             }
             if (entering && pg < 1) { pg += pgStep; if (pg > 1) pg = 1; }
             g += gStep;
-            const y = acc * g * pg;
+            const y = turb > 0 ? acc * g * pg * tb[i] : acc * g * pg;
             bL[i] += y * gl; bR[i] += y * gr;
             if (pl === 0) tmp[i] = c;
           }

@@ -2010,9 +2010,27 @@ swell)        └─ AIR (noise through the tube)
   region and 3kHz for a valve, pulsed by the first player's phase (a valve
   lets air through in puffs); the note and its octave (Q 9) plus a broad
   3.5kHz for a jet. It goes as `p^0.6` against the tone's `p^1.25`, so a soft
-  note is the breathier one. Measured against the tone at air 0.5: reed
-  about -30dB, lips -36, jet -20; `air` squared, 12dB more at the top.
-- **The breath**: `atk` 4..400ms, `tongue` (pressure overshoot of up to 35%
+  note is the breathier one. Measured against the tone at air 0.5 (the
+  slider's default on every engine, so it has to be modest): reed about
+  -36dB, lips -41, jet -33; `air` squared, 12dB more at the top. It was 10dB
+  louder at first and read as hiss.
+- **What keeps it from being an organ stop.** A sum of harmonics on a smooth
+  curve, in sine phase and dead steady, is a filtered sawtooth however the
+  curve is drawn, and that is what the first cut sounded like. So: each
+  harmonic has a fixed phase of its own (`PHC` / `PHS`, a cosine recurrence
+  beside the sine one; it also takes a quarter off the peaks); each harmonic
+  of each NOTE sits up to 3dB off the curve, the same way every time
+  (`hash2(n, noteKey)`, `IRR_DB`); each wavers slowly by itself (`shim`);
+  the breath's turbulence shakes the tone's level (noise under 200Hz on the
+  gain, `turb`, scaled with the air and stronger on a soft note), so every
+  harmonic carries a skirt of air; the brightness trails the pressure by
+  25..40ms (`v.pb`, `LAG_T`), so the top of the tone arrives last; a note
+  starts up to 30 cents x drift off and settles in 60ms (`onErr`), wavers a
+  couple of cents while held (`jit`), and its vibrato's depth and speed
+  wander. The presets' attacks are 17..55ms, not 10. Everything but the
+  phases, the 3dB and the lag is zero at drift 0 / air 0, which is how the
+  tests still measure the bare spectrum.
+- **The breath**: `atk` 4..400ms (default 0.4, 25ms), `tongue` (pressure overshoot of up to 35%
   and a burst of air), `swell` (a held note falls to 0.35 or grows to 1.35
   over 0.6s), release 20ms..1.5s to -60dB (the decay slider), `growl` (AM
   near 80Hz, wandering, and a brighter tone), `flutter` (AM at 24Hz), and a
