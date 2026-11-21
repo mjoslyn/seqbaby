@@ -13,6 +13,7 @@ import { SITE_OUT_OF_BUDGET } from "@/lib/composeKey.js";
 import { DEFAULT_COMPOSE_MODEL } from "@/lib/composeModels.js";
 import { MODEL_EVENT, readModelPref, writeModelPref } from "@/app/composeModelPref";
 import { diffHeadline, diffSessions } from "@/app/songs/sessionDiff.js";
+import { canHear, hearForJob, reportOutcome } from "@/app/composeHear";
 import styles from "@/app/ui.module.css";
 
 /** One tool call of a turn: what it did in a few words, and whether it worked. */
@@ -96,10 +97,16 @@ type Proposal = {
    */
   deck?: string;
   fresh?: boolean;
+  /** The job that made it, for saying what became of it (reportOutcome). */
+  job?: { id: string; t?: string };
+  /** It has been auditioned at least once. */
+  auditioned?: boolean;
 };
 
 type JobStatus = {
   status?: "running" | "done" | "error";
+  /** The turn is waiting for this browser to play its song back: which listen. */
+  hear?: number;
   events?: { type: string; summary?: string; ok?: boolean }[];
   /** How long the turn ran, on the worker's clock. */
   ms?: number;
@@ -186,7 +193,7 @@ async function runTurn(
   body: Record<string, unknown>,
   onActivity?: (steps: Step[]) => void,
   live?: () => boolean,
-): Promise<{ job: JobStatus; activity: Step[] } | { error: string }> {
+): Promise<{ job: JobStatus; activity: Step[]; ref: { id: string; t?: string } } | { error: string }> {
   const res = await fetch("/api/compose", {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -215,6 +222,10 @@ async function runTurn(
   // is polled rather than awaited -- which is what lets it take the
   // minutes a whole song takes.
   const activity: Step[] = [];
+  const ref = { id: started.jobId, t: started.jobToken };
+  // Which listen has been answered: the turn asks once, and is polled many
+  // times while it waits.
+  let heardSeq = 0;
   const until = Date.now() + POLL_LIMIT_MS;
   let misses = 0;
   for (;;) {
@@ -258,7 +269,13 @@ async function runTurn(
       activity.push(...summaries);
       onActivity?.([...activity]);
     }
-    if (job.status === "done") return { job, activity };
+    // The turn wants its song played back (app/composeHear.ts). Answered on
+    // the side: the polling goes on, and shows the listen as a step.
+    if (job.status === "running" && job.hear && job.hear !== heardSeq) {
+      heardSeq = job.hear;
+      void hearForJob(ref.id, ref.t, job.hear);
+    }
+    if (job.status === "done") return { job, activity, ref };
     if (job.status === "error") return { error: job.error ?? "that didn't work" };
   }
 }
@@ -426,6 +443,15 @@ export default function ComposeChat({
   // The turn's changes, waiting to be auditioned or kept. Nothing is written to
   // the studio until one of those is pressed.
   const [review, setReview] = useState<Proposal | null>(null);
+  // The same, for the places that let a proposal go without having it in
+  // their closure (the next send, a song arriving): each says what became of
+  // the turn before dropping it.
+  const reviewRef = useRef<Proposal | null>(null);
+  useEffect(() => { reviewRef.current = review; }, [review]);
+  const letGo = useCallback((outcome: "superseded" | "dropped") => {
+    const r = reviewRef.current;
+    if (r) reportOutcome(r.job, outcome, !!r.auditioned);
+  }, []);
   // Which deck a turn is about: the open song, or deck B of the mix view. And
   // whether a second song is loaded there, which decides what a deck B turn
   // does (edit that song, or write a new one for the empty deck).
@@ -543,6 +569,7 @@ export default function ComposeChat({
     // A different song is open, so changes offered against the last one are
     // not about what is loaded now -- and `before` describes a session that is
     // no longer there. What the last keep saved was said about another song.
+    letGo("dropped");
     setReview(null);
     setSaveNote("");
     setOpenLogs(new Set());
@@ -586,7 +613,7 @@ export default function ComposeChat({
     return () => {
       alive = false;
     };
-  }, [songId, isTemplate]);
+  }, [songId, isTemplate, letGo]);
 
   // `new` (and the logo, which is the same thing) blanks the session. The
   // conversation about the song that was open is not about the blank one, so
@@ -600,12 +627,13 @@ export default function ComposeChat({
       attachedRef.current = null;
       // The session it was about has just been blanked, and `before` describes
       // one that no longer exists -- putting it back would undo the `new`.
+      letGo("dropped");
       setReview(null);
       setSaveNote("");
     };
     window.addEventListener("seqbaby:newset", onNew);
     return () => window.removeEventListener("seqbaby:newset", onNew);
-  }, []);
+  }, [letGo]);
 
   // Opening the drawer does not focus the input: on a phone that throws the
   // keyboard up over the transcript and the review bar before anything has
@@ -621,7 +649,8 @@ export default function ComposeChat({
   }, [input, open]);
 
   // `prompt` is sent in place of the box: the groove button's brief.
-  const send = useCallback(async (prompt?: string, modelOverride?: string) => {
+  // `meta` is what kind of turn it is, for its record: the genre and roll.
+  const send = useCallback(async (prompt?: string, modelOverride?: string, meta?: { genre: string; seed: number }) => {
     const text = (prompt ?? input).trim();
     if (!text || sending || !window.seqbaby) return;
     if (!canCompose) return;
@@ -665,6 +694,7 @@ export default function ComposeChat({
     // serialized is what the model is being asked about, so whatever is in the
     // engine -- an audition included -- is what this turn builds on, and there
     // is nothing left to put back to.
+    letGo("superseded");
     setReview(null);
     setSaveNote("");
 
@@ -696,14 +726,21 @@ export default function ComposeChat({
       // A song never saved (or a template, whose first save makes a new
       // song) has no name of its own: the turn is asked to give it one.
       const out = await runTurn(
-        { message: sent, history, session, unnamed: toB ? freshB : !getOpenSong().id || getOpenSong().isTemplate, ...(canPickModel ? { model: modelOverride || model } : {}) },
+        {
+          message: sent, history, session,
+          unnamed: toB ? freshB : !getOpenSong().id || getOpenSong().isTemplate,
+          ...(canPickModel ? { model: modelOverride || model } : {}),
+          // This browser will play the turn's song back when asked.
+          canHear: canHear(),
+          meta: meta ? { kind: "genre", ...meta } : { kind: toB ? "deck" : "ask" },
+        },
         setLive,
       );
       if ("error" in out) {
         land({ role: "error", text: out.error });
         return;
       }
-      const { job, activity } = out;
+      const { job, activity, ref } = out;
       // Only when the turn actually changed the song: a question changes
       // nothing, and the session it hands back was captured when the
       // message was SENT, which on a turn that takes minutes means writing
@@ -716,7 +753,7 @@ export default function ComposeChat({
       // silence a track that was playing while you asked for another one.
       const changes = job.session && job.changed !== false ? diffSessions(session, job.session) : undefined;
       if (job.session && job.changed !== false) {
-        setReview({ session: job.session, before: null, title: job.title ?? null, changes, ...(toB ? { deck: deckId, fresh: freshB } : {}) });
+        setReview({ session: job.session, before: null, title: job.title ?? null, changes, job: ref, ...(toB ? { deck: deckId, fresh: freshB } : {}) });
       }
       // A name with nothing to review (the turn only named the song) is
       // the song's at once; otherwise it comes with the changes, on keep.
@@ -738,7 +775,7 @@ export default function ComposeChat({
       setSending(false);
       setLive([]);
     }
-  }, [input, sending, messages, canCompose, canPickModel, model, deck]);
+  }, [input, sending, messages, canCompose, canPickModel, model, deck, letGo]);
 
   // ---- the review bar ------------------------------------------------------
   //
@@ -767,9 +804,10 @@ export default function ComposeChat({
     }
   }, []);
   const deckGone = useCallback(() => {
+    letGo("dropped");
     setReview(null);
     setSaveNote("that deck is no longer loaded, so those changes had nowhere to go");
-  }, []);
+  }, [letGo]);
 
   // Audition: keep what is playing so it can be put back, then merge the
   // turn's session over it. Nothing is saved and nothing is torn down.
@@ -780,6 +818,8 @@ export default function ComposeChat({
     if (r.deck) {
       // A new song for a new deck: loaded there, stopped, ready to bring in.
       if (r.fresh) {
+        // Loading it onto a deck is what keeping a new song is.
+        reportOutcome(r.job, "kept");
         setReview(null);
         setSaveNote("loading onto a new deck…");
         try {
@@ -793,12 +833,12 @@ export default function ComposeChat({
       const there = !!window.seqbaby.mix?.decks?.().some((d) => d.id === r.deck);
       const was = there ? window.seqbaby.mix?.serialize?.(r.deck) ?? null : null;
       if (!was || !writeDeckB(r.session, r.deck)) return deckGone();
-      setReview({ ...r, before: was, note: "" });
+      setReview({ ...r, before: was, note: "", auditioned: true });
       return;
     }
     const before = window.seqbaby.serializeSet();
     writeLive(r.session);
-    setReview({ ...r, before, note: "" });
+    setReview({ ...r, before, note: "", auditioned: true });
   }, [review, writeLive, writeDeckB, deckGone]);
 
   // Stop: back to what was playing, with the changes still on offer. Anything
@@ -883,12 +923,14 @@ export default function ComposeChat({
       // kept for good by landing it, or by keeping both decks, and saving.
       if (r.fresh) return void audition();
       if (!r.before && !writeDeckB(r.session, r.deck)) return deckGone();
+      reportOutcome(r.job, "kept", !!r.auditioned);
       setReview(null);
       setOpen(false);
       setSaveNote(`kept on deck ${r.deck.toUpperCase()}. It is saved once that deck is the song (eject deck A) or you keep the decks as one song, then save`);
       return;
     }
     if (!r.before) writeLive(r.session);
+    reportOutcome(r.job, "kept", !!r.auditioned);
     // After the write: an applySet fallback announces a new session, which
     // clears any name held for the last one.
     if (r.title) setComposedTitle(r.title);
@@ -906,6 +948,7 @@ export default function ComposeChat({
     // `before` set means the changes are playing (a stop on its way included).
     if (r.before && r.deck) writeDeckB(r.before, r.deck);
     else if (r.before) writeLive(r.before);
+    reportOutcome(r.job, "discarded", !!r.auditioned);
     setReview(null);
     setSaveNote("");
   }, [review, writeLive, writeDeckB]);
@@ -914,10 +957,10 @@ export default function ComposeChat({
   // goes in the box and is sent as an ordinary turn, so it lands in the
   // review bar like any other and stays in the box if the turn cannot run.
   const buildGroove = useCallback(
-    (prompt: string) => {
+    (prompt: string, meta?: { genre: string; seed: number }) => {
       setTab("chat");
       setInput(prompt);
-      send(prompt);
+      send(prompt, undefined, meta);
     },
     [send],
   );

@@ -74,7 +74,9 @@ env / fx / eq / comp / mod / automation per track.
 │   ├── shareCard.ts + shareCopy.js  the link preview, and its sentences (who shared what)
 │   ├── api/share/route.ts     anonymous ?s=<slug> share endpoint
 │   ├── api/patch/[id]/route.ts  a public patch's config, for a homepage patch card to play
-│   ├── api/compose/route.ts   starts a compose turn; api/compose/status polls one
+│   ├── api/compose/route.ts   starts a compose turn; api/compose/status polls one;
+│   │                          api/compose/heard takes the panel's listen, api/compose/outcome what became of a turn
+│   ├── composeHear.ts         the panel's ears: plays a turn's song silently in the hidden engine, posts the meters
 │   ├── api/auth/[...all]/     Better Auth's endpoints (the links in its emails land here)
 │   ├── api/bay/               the studio's patch bay (bodies too big for a server action)
 │   ├── api/me/route.ts        who is signed in, for islands on cached pages
@@ -98,9 +100,11 @@ env / fx / eq / comp / mod / automation per track.
 │   ├── composeModels.js       the model a compose turn runs on (default + transcript labels)
 │   ├── composeKey.js          whose key it runs on: the shape check + the mask
 │   ├── composeJobs.js         a running turn's record, its two secrets, and the limits
+│   ├── data/composeTurns.js   how each turn went and whether it was kept (compose_turns)
 │   ├── jamWire.js             a jam message cut into parts the transport will carry, and put back together
 │   └── api.js                 share put/get for the legacy static server (in memory)
-├── db/migrations/             the D1 schema (0001_init.sql: auth, profiles, songs, versions, chats, likes, patches, shares)
+├── db/migrations/             the D1 schema (0001_init.sql: auth, profiles, songs, versions, chats, likes, patches, shares;
+│                              0002_compose_turns.sql: how compose turns went)
 ├── worker.ts                  the Worker's entry: OpenNext's handler + the jam socket route + the Durable Objects
 ├── workers/                   jamRoom.ts (a jam room), composeJob.ts (a compose turn, and the usage limits)
 ├── wrangler.jsonc  open-next.config.ts  cloudflare-env.d.ts (generated)  cloudflare-secrets.d.ts
@@ -108,6 +112,8 @@ env / fx / eq / comp / mod / automation per track.
 ├── mcp/                       the MCP server: an agent writes a song through songBuilder.js
 │   ├── server.mjs             tools + resources over stdio (.mcp.json names it for Claude Code)
 │   ├── audition.mjs           plays a song in a headless browser and reads the meters
+│   ├── polish.mjs             a compose turn's mix and feel pass, in code (levels by role, dynamics, nudges)
+│   ├── hearing.mjs            the studio's meter report, checked and read as notes for the model
 │   └── README.md              connecting a client, the tool list, env
 ├── .claude/skills/compose/    the compose guide: which engine, step strings, order of work
 │                              (served by the server as seqbaby://guide)
@@ -335,6 +341,10 @@ env / fx / eq / comp / mod / automation per track.
   lanes travel; the sound (p-lock) stays the target's, and lanes its engine
   cannot play are dropped.
 - `bounce.js` — WAV render via MediaRecorder.
+- `measure.js` — `measureSet(session)`: a session played with the master
+  disconnected from the output, each section on its own, every track's meter
+  read. For the compose panel's listen; it replaces the engine's session, so
+  it only ever runs in the hidden `/studio?embed` frame.
 - `buffers.js` — sample decode/normalize cache, `startSampleSource`.
 - `wavetableEditor.js` — in-app wavetable frame editor for `wt:akwf`.
 - `silverbox.js` — the silverbox circuit model: AudioWorklet processor source +
@@ -420,7 +430,9 @@ npm test               # node --test: the pure modules (session format, chance g
                        #   the Strudel bridge, the reverb, the filter models, the guitar, the contagion,
                        #   the vox and its phonetic reader, the lancet, the halo, the prism, the repeat,
                        #   the ladder, the oracle, the arrangement, the piano view's notes,
-                       #   the data layer's access rules, auth, the Supabase importer)
+                       #   the data layer's access rules, auth, the Supabase importer,
+                       #   the compose turn's polish pass and hearing notes)
+npm run compose:eval   # a fixed set of compose turns, run and scored (real tokens; see the compose section)
 npm run mcp            # the MCP server on stdio (mcp/server.mjs) — an agent writes songs
 ```
 
@@ -5152,6 +5164,79 @@ panel ──▶ POST /api/compose ──▶ ComposeLimits.take ──▶ Compose
   to `/studio`, which used to leave the last person's conversation on screen
   and send it as history on the next person's turn.
 
+### What a turn gets besides the model: checks, polish, a listen, a record
+
+The model writes blind and from a description, so four things around it are
+code. In the order a turn meets them (`runComposeTurn`, when the model stops
+calling tools):
+
+```
+model stops ─▶ unfinished? ─▶ production check ─▶ polish ─▶ listen ─▶ (one fix-up) ─▶ polish ─▶ done
+               (nudge, ≤3)    (once, advisory)    (code)    (browser)                           └▶ compose_turns
+```
+
+- **The production check is `productionNotes`** (songBuilder.js, also
+  `validate().production` for an MCP agent). Besides the per-track habits
+  (flat velocity, one-step notes, no rests, a bare oscillator, a toy register)
+  it reads the song as a mix and an arrangement: a bass on the kick's steps
+  with no sidechain from it (`mixNotes`), subby with no drive, notes the
+  session scale will snap, chained sections that are identical or all have the
+  same parts playing, and no fill at any section's end (`arrangementNotes`).
+  Advice, sent back once. `trackRole(t)` (kick, snare, hat, cymbal, perc,
+  bass, sub, pad, keys, lead, vox, texture, part) is the one reading of what a
+  track is, from its engine and name, shared with the two below.
+- **The polish pass** (`mcp/polish.mjs`, `polishSong(song, before)`) fills in
+  what the turn left unset on what the turn wrote, and nothing else: a level
+  by role (`ROLE_LEVEL`) on a track it ADDED and never set `vol` on; dynamics
+  (beat over eighth over sixteenth, plus a hash's worth of wobble) on a
+  pattern it wrote at ONE velocity; offbeat hats and percussion 1-2/24 of a
+  step late where nothing in the pattern is off the grid. Kicks, live
+  generators, ghost notes (≤0.1) and the accent line (0.6) are respected, a
+  backbeat is left flat, and a request that reads as mechanical
+  (`wantsMechanical`: chiptune, 8-bit, robotic...) gets levels only. Every
+  number is a hash of (track, pattern, step), so it is the same every time,
+  and each rule switches itself off once applied, so the second pass at the
+  end of the turn only touches what was written after the listen. The system
+  prompt tells the model it happens.
+- **The listen.** The panel sends `canHear` (`app/composeHear.ts`: not on a
+  phone, not on Save-Data) and the job hands the turn a `listen`. When the
+  turn says it is done, the job (`ComposeJob.listen`) puts the song at
+  `compose/<id>/hear.json`, sets `progress.hear = seq` and WAITS in its alarm
+  (75s at most) on a promise that `heard(seq, report)` resolves; a Durable
+  Object takes other calls while one awaits. The panel's poll sees `hear`,
+  fetches the song once (`status?hear=<seq>`), plays it in the hidden engine
+  with the output disconnected (`measureInFrame` in enginePlayer.ts,
+  `measureSet` in public/js/measure.js: each chained section looping on its
+  own, 2-5s each, six at most) and posts the meters to `/api/compose/heard`.
+  The report is untrusted input: `sanitizeReport` keeps numbers only, clamped,
+  with indices checked against the song, and `hearingNotes` turns it into
+  sentences (a part with notes that made no sound, one 12dB over the middle of
+  the mix or 22 under it, a master well into the limiter). Anything found is
+  one more user message with the readings; nothing found, or nobody able to
+  listen, and the turn ends. The frame is removed afterwards (a second engine
+  is not left in memory), and the studio's lookahead is stretched while the
+  frame builds the song if the studio is playing. Safari may refuse to start
+  the frame's audio without a gesture; that is a null report, not an error.
+- **The record** (`compose_turns`, `lib/data/composeTurns.js`). The job writes
+  a row when a turn ends: model, the genre picker's id and seed when it built
+  the prompt (`meta`, cut down by `turnMeta`), time, rounds, tool calls and
+  errors, nudges, production notes at first stop and at the end, whether it
+  was heard and how many things that found, what the polish did. The panel
+  answers it through `/api/compose/outcome` when the review bar is
+  (`reportOutcome`: kept, discarded, superseded by the next ask, dropped when
+  another song arrived; a decision replaces the absence of one, then stands).
+  Only the turn's starter may: the row's account, or the job's view token (its
+  hash is on the row). **Never the words of a turn**, for `song_chats`'s
+  reason. Nothing serves it to a browser; `composeReport(db, {by})` is the
+  query, and so is `wrangler d1 execute seqbaby --remote --command "select
+  model, count(*), avg(outcome = 'kept') from compose_turns group by 1"`.
+- **`npm run compose:eval`** (`scripts/compose-eval.mjs`) runs a fixed set of
+  turns (fifteen genres with pinned seeds, four asks) through the same loop
+  from an empty song and prints what the code can score: seconds, rounds,
+  production notes before and after, and with `--audition` which tracks are
+  silent. Real tokens; run it before and after a change to the guide, a plan
+  or the model.
+
 ### The drawer: what was asked, and what came back (`app/ComposeChat.tsx`)
 
 The drawer is laid out around the turn's RESULT, not around a chat log:
@@ -6044,7 +6129,7 @@ npm run deploy
   An inline marker (`window.__seqbabyServerBoot`) tells the paths apart, and
   `ScriptLoader.tsx` keeps its onload-chained injection for the soft-nav case
   (e.g. arriving from `/login`).
-- `app/EnginePreload.tsx` emits `modulepreload` for all 93 modules listed in
+- `app/EnginePreload.tsx` emits `modulepreload` for all 94 modules listed in
   `app/engineAssets.ts` (at `engineAsset("/js/<name>")`; the hints used to
   point at the site root and 404). The graph is 8 levels deep, so without it the browser
   needs up to eight sequential round trips just to discover the code.

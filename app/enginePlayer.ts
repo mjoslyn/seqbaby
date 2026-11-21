@@ -203,6 +203,31 @@ export function scheduleWarm(): void {
   else window.addEventListener("load", go, { once: true });
 }
 
+/**
+ * Play `session` silently in the hidden engine and read its meters
+ * (public/js/measure.js): the compose panel's listen. Resolves the engine's
+ * report, or null when it could not be done (no engine, an old one, a locked
+ * AudioContext). `onLoaded` fires once the song is built and before it plays.
+ *
+ * The frame is this page's to keep only while a play button is mounted; in
+ * the studio there is none, so it is taken down again afterwards rather than
+ * leaving a second engine in memory beside the one being worked in.
+ */
+export async function measureInFrame(session: unknown, onLoaded?: () => void): Promise<unknown | null> {
+  if (typeof window === "undefined") return null;
+  try {
+    const api = await loadEngine();
+    if (!api.measure) return null;
+    if (current.slug !== null) stopNow();
+    return await api.measure(session, { onLoaded });
+  } catch {
+    return null;
+  } finally {
+    onLoaded?.();
+    if (mounted === 0) teardown();
+  }
+}
+
 const sessions = new Map<string, Promise<unknown>>();
 
 function fetchSession(key: string): Promise<unknown> {

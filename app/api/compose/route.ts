@@ -7,6 +7,7 @@ import { SITE_OUT_OF_BUDGET } from "@/lib/composeKey.js";
 import { DEFAULT_COMPOSE_MODEL, allowedModels, canPickModel, pickedModel } from "@/lib/composeModels.js";
 import { UNLOCK_COOKIE, readUnlock } from "@/lib/unlock.js";
 import { cookies } from "next/headers";
+import { turnMeta } from "@/lib/data/composeTurns.js";
 
 export const dynamic = "force-dynamic";
 
@@ -30,6 +31,11 @@ export async function POST(req: Request) {
     model?: string;
     /** The song has never been saved, so the turn should name it. */
     unnamed?: boolean;
+    /** The panel can play the turn's song back in a hidden engine and report
+     *  the meters (mcp/hearing.mjs), so the turn may ask it to. */
+    canHear?: boolean;
+    /** What kind of turn this is, for its record: the genre picker's choice. */
+    meta?: unknown;
   };
   try {
     body = await req.json();
@@ -99,7 +105,7 @@ export async function POST(req: Request) {
   try {
     const job = env.COMPOSE_JOB.get(env.COMPOSE_JOB.idFromName(id));
     await job.start(
-      { id, userId, keyHash: null, bucket, viewToken, message, history, session: body.session, model, unnamed: body.unnamed === true },
+      { id, userId, keyHash: null, bucket, viewToken, message, history, session: body.session, model, unnamed: body.unnamed === true, canHear: body.canHear === true, meta: turnMeta(body.meta) },
     );
   } catch (e) {
     console.error("[compose] could not start the job", e);

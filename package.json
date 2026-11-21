@@ -19,6 +19,7 @@
     "test": "node --test \"test/**/*.test.js\"",
     "legacy:dev": "node --watch --env-file=.env server.js",
     "mcp": "node mcp/server.mjs",
+    "compose:eval": "node scripts/compose-eval.mjs",
     "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts"
   },
   "engines": {

@@ -11,6 +11,7 @@ import * as songs from "../lib/data/songs.js";
 import * as patches from "../lib/data/patches.js";
 import * as profiles from "../lib/data/profiles.js";
 import { INLINE_MAX } from "../lib/data/blob.js";
+import * as turns from "../lib/data/composeTurns.js";
 
 async function user(env, id, email) {
   env.DB.sqlite
@@ -272,4 +273,49 @@ test("deleting a user takes everything of theirs with it", async () => {
     assert.equal(n, 0, t);
   }
   assert.ok(await profiles.getMyProfile(env, bob), "nobody else's");
+});
+
+test("a compose turn's outcome is set by its starter only, and holds no words", async () => {
+  const { env, alice, bob } = await world();
+  const stats = { rounds: 12, toolCalls: 30, toolErrors: 1, nudges: 1, lintFirst: 4, lintLast: 1, heard: true, hearNotes: 2, polished: 3, tracks: 6, sections: 4 };
+  await turns.recordTurn(env.DB, { id: "job-alice-0001", userId: alice, viewToken: "tok-a", status: "done", changed: true, model: "m1", ms: 90000, messageLen: 40, meta: { kind: "genre", genre: "acid-house", seed: 7 }, stats });
+  await turns.recordTurn(env.DB, { id: "job-guest-0001", userId: null, viewToken: "tok-g", status: "done", changed: true, model: "m1", ms: 50000, messageLen: 12, meta: { genre: "DROP TABLE", seed: 1 }, stats });
+  // a second record of the same job changes nothing
+  await turns.recordTurn(env.DB, { id: "job-alice-0001", userId: bob, viewToken: "x", status: "error" });
+
+  const row = (id) => env.DB.sqlite.prepare("select * from compose_turns where id = ?").get(id);
+  assert.equal(row("job-alice-0001").user_id, alice);
+  assert.equal(row("job-alice-0001").genre, "acid-house");
+  assert.equal(row("job-alice-0001").heard, 1);
+  // a genre that is not an id is not kept, and neither is the token itself
+  assert.equal(row("job-guest-0001").genre, null);
+  assert.equal(row("job-guest-0001").kind, "ask");
+  assert.notEqual(row("job-guest-0001").token_hash, "tok-g");
+  assert.ok(!Object.keys(row("job-alice-0001")).some((k) => /message$|prompt|text/.test(k)), "no column holds what was asked");
+
+  // somebody else, a wrong token, and a made-up outcome all write nothing
+  assert.equal(await turns.setTurnOutcome(env.DB, { id: "job-alice-0001", userId: bob }, { outcome: "kept" }), false);
+  assert.equal(await turns.setTurnOutcome(env.DB, { id: "job-alice-0001", token: "tok-g" }, { outcome: "kept" }), false);
+  assert.equal(await turns.setTurnOutcome(env.DB, { id: "job-alice-0001", userId: null, token: "" }, { outcome: "kept" }), false);
+  assert.equal(await turns.setTurnOutcome(env.DB, { id: "job-alice-0001", userId: alice }, { outcome: "loved" }), false);
+  assert.equal(row("job-alice-0001").outcome, null);
+
+  // the account, or the token's holder
+  assert.equal(await turns.setTurnOutcome(env.DB, { id: "job-alice-0001", userId: alice }, { outcome: "superseded", auditioned: true }), true);
+  assert.equal(await turns.setTurnOutcome(env.DB, { id: "job-guest-0001", token: "tok-g" }, { outcome: "discarded" }), true);
+  // a decision replaces the absence of one, and then stands
+  assert.equal(await turns.setTurnOutcome(env.DB, { id: "job-alice-0001", userId: alice }, { outcome: "kept" }), true);
+  assert.equal(await turns.setTurnOutcome(env.DB, { id: "job-alice-0001", userId: alice }, { outcome: "discarded" }), false);
+  assert.equal(row("job-alice-0001").outcome, "kept");
+  assert.equal(row("job-alice-0001").auditioned, 1);
+
+  const report = await turns.composeReport(env.DB, { by: "model" });
+  assert.equal(report.length, 1);
+  assert.equal(report[0].turns, 2);
+  assert.equal(report[0].kept, 1);
+  assert.equal(report[0].keep_rate, 0.5);
+
+  // deleting the account keeps the numbers and lets go of whose they were
+  env.DB.sqlite.prepare(`delete from "user" where id = ?`).run(alice);
+  assert.equal(row("job-alice-0001").user_id, null);
 });
