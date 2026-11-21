@@ -100,6 +100,7 @@ export const ENGINE_MODULES = [
   "lookahead.js",
   "macro.js",
   "main.js",
+  "measure.js",
   "meter.js",
   "meters.js",
   "mix.js",

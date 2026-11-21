@@ -46,7 +46,7 @@ export default function GroovePicker({
   busy = false,
 }: {
   /** The brief for the picked genre and this roll: the panel sends it. */
-  onBuild: (prompt: string) => void;
+  onBuild: (prompt: string, meta?: { genre: string; seed: number }) => void;
   /** A turn is running: nothing can be built until it is done. */
   busy?: boolean;
 }) {
@@ -119,7 +119,7 @@ export default function GroovePicker({
 
   const build = () => {
     if (!genre || busy) return;
-    onBuild(genrePrompt(genre, extra, seed));
+    onBuild(genrePrompt(genre, extra, seed), { genre: genre.id, seed });
     // The note stays (it is the history), and the build goes to the front of
     // the recent row, a repeat moved up rather than listed twice.
     const note = extra.trim();

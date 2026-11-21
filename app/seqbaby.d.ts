@@ -20,6 +20,12 @@ declare global {
       stop: () => Promise<void>;
       /** Prime a suspended AudioContext; call inside a user gesture. */
       unlock: () => void;
+      /** Play a session silently and read the meters per section
+       *  (measure.js). Replaces the engine's session: the hidden frame only. */
+      measure?: (session: unknown, opts?: { maxSections?: number; maxSeconds?: number; budgetMs?: number; onLoaded?: () => void }) => Promise<unknown>;
+      /** A longer scheduling lookahead while heavy work shares the main thread. */
+      stretchLookAhead?: () => void;
+      restoreLookAhead?: () => void;
       /** Launch pattern `slot` on track `i` alone, now (clips.js). */
       launchClip: (i: number, slot: number) => boolean;
       /** Stop track `i`'s clip: it plays nothing until one is launched. */

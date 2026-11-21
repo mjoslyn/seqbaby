@@ -1317,8 +1317,133 @@ export function productionNotes(song) {
     }
     if (t.engineKey === "plaits:12" && hits > 12) notes.push(`${label}: plaits:12 (modal) plays ${hits} notes. It is a bell or music-box colour, and as a melody it reads as a toy: dm:hexop (marimba, bell), inst:guitar-nylon or a real lead instead`);
   }
+  notes.push(...mixNotes(song, playing), ...arrangementNotes(song, playing));
   if (playing.length >= 2 && !anySpace) notes.push("no track has reverb or delay: the parts are in no room together. Put a reverb (and a delay) on a bus and send the melodic parts to it");
   if (playing.length >= 2 && !anyOffset && !(Number(song.swing) > 0)) notes.push("nothing is off the grid and swing is 0: a little swing, or a few notes nudged (offsets) late or early, makes it feel played");
+  return notes;
+}
+
+// ---- what a track is in the mix, by its engine and its name ---------------------------
+
+/**
+ * A track's role, for the checks below and the polish pass (mcp/polish.mjs):
+ * kick, snare, hat, cymbal, perc, bass, sub, pad, keys, lead, vox, texture,
+ * bus, or "part" when nothing says.
+ * @returns {string}
+ */
+export function trackRole(t) {
+  const key = String(t?.engineKey || "");
+  const name = String(t?.name || "").toLowerCase();
+  const sample = String(t?.sampleSource?.id || "").toLowerCase();
+  const said = `${name} ${sample}`;
+  if (key === "bus") return "bus";
+  if (/kick|siege|plaits:13/.test(key) || /\b(kick|bd|bass ?drum)\b/.test(said)) return "kick";
+  if (/snare|clap|lancet|plaits:14/.test(key) || /\b(snare|sd|clap|cp|rim)\b/.test(said)) return "snare";
+  if (/ohat/.test(key) || /\b(open ?hat|openhat|oh|ride|crash|cymbal|china|splash|gong)\b/.test(said)) return "cymbal";
+  if (/chat|halo|plaits:15/.test(key) || /\b(hats?|hh|hi-?hats?|hihat|shaker|tamb\w*)\b/.test(said)) return "hat";
+  const char = ENGINE_CHARACTER[key];
+  if (t?.isDrumKit || char?.kind === "drum" || /\b(perc\w*|tom\d?|conga|bongo|cowbell|clave|wood\w*)\b/.test(said)) return "perc";
+  if (key === "dm:sub" || /\b(sub|808)\b/.test(name)) return "sub";
+  if (key === "dm:bass" || key === "inst:bass-electric" || /bass/.test(name)) return "bass";
+  if (key === "dm:vox" || /\b(vox|vocal|voice|choir)\b/.test(name)) return "vox";
+  if (key === "dm:drone" || key === "dm:granular" || /\b(drone|texture|noise|riser|sweep|fx|atmos\w*)\b/.test(name)) return "texture";
+  if (/\b(pad|strings?)\b/.test(name) || key === "dm:pad") return "pad";
+  if (/\b(chords?|keys|piano|organ|stabs?|rhodes|comp)\b/.test(name) || key === "dm:tines") return "keys";
+  if (/\b(lead|melody|hook|arp|pluck|acid|riff)\b/.test(name)) return "lead";
+  return "part";
+}
+
+const LOW_ROLES = new Set(["bass", "sub"]);
+
+/** What two parts do to each other, and what a small speaker will lose. */
+function mixNotes(song, playing) {
+  const notes = [];
+  const kicks = playing.filter(({ t }) => trackRole(t) === "kick");
+  const basses = playing.filter(({ t }) => LOW_ROLES.has(trackRole(t)));
+  for (const { t: b, i: bi } of basses) {
+    for (const { t: k, i: ki } of kicks) {
+      if ((b.speed || 1) !== (k.speed || 1)) continue;
+      if (b.comp?.enabled && b.compSourceIndex === ki) continue;
+      let worst = null;
+      for (let p = 0; p < PATTERN_COUNT; p++) {
+        const kp = k.patterns?.[p], bp = b.patterns?.[p];
+        if (!kp?.steps?.some(Boolean) || !bp?.steps?.some(Boolean)) continue;
+        const n = Math.max(kp.steps.length, bp.steps.length);
+        let kickHits = 0, both = 0;
+        for (let s = 0; s < n; s++) {
+          if (!kp.steps[s % kp.steps.length]) continue;
+          kickHits++;
+          if (bp.steps[s % bp.steps.length]) both++;
+        }
+        if (both >= 3 && both >= 0.75 * kickHits && (!worst || both > worst.both)) worst = { p, both, kickHits };
+      }
+      if (worst) notes.push(`track ${bi} (${b.name}) plays a note on ${worst.both} of the ${worst.kickHits} kicks in pattern ${worst.p} with no sidechain: the two fight for the low end. Duck it under the kick (set_comp source ${ki}), or move its notes off the kick`);
+    }
+  }
+  for (const { t, i } of playing) {
+    if (t.engineKey === "dm:sub" && typeof t.params?.harm === "number" && t.params.harm < 0.12)
+      notes.push(`track ${i} (${t.name}): the sub has almost no drive (${t.params.harm}), so it is silent on a phone or a laptop. Raise the drive unless a pure sine is the point`);
+  }
+  // Notes the session scale will move: the studio snaps every written note to
+  // the scale on its way out, so one outside it does not sound as written.
+  const pcs = song.scale?.active ? SCALES[song.scale.mode] : null;
+  if (pcs) {
+    const ok = new Set(pcs.map((x) => (x + (song.scale.root || 0)) % 12));
+    let out = 0, first = "";
+    for (const { t, i } of playing) {
+      if (t.isDrumKit || ENGINE_CHARACTER[t.engineKey]?.kind === "drum") continue;
+      for (const p of t.patterns || []) {
+        if (!p?.steps) continue;
+        p.steps.forEach((on, s) => {
+          if (!on) return;
+          for (const n of [p.notes?.[s], ...(p.extraNotes?.[s] || [])]) {
+            if (typeof n !== "number" || ok.has(((n % 12) + 12) % 12)) continue;
+            out++;
+            if (!first) first = `${midiToName(n)} on track ${i} (${t.name})`;
+          }
+        });
+      }
+    }
+    if (out) notes.push(`${out} note${out === 1 ? " is" : "s are"} outside ${NAMES_SHARP[song.scale.root || 0]} ${song.scale.mode} (the first: ${first}). The studio snaps notes to the scale, so ${out === 1 ? "it" : "they"} will not sound as written: rewrite ${out === 1 ? "it" : "them"}, or set the scale the song is really in`);
+  }
+  return notes;
+}
+
+const patSig = (p) => (p?.steps?.some(Boolean) ? JSON.stringify([p.steps, p.notes, p.velocities, p.lengths, p.ratchets, p.extraNotes]) : "");
+
+/** What a chained song needs to be an arrangement rather than a loop played N times. */
+function arrangementNotes(song, playing) {
+  const notes = [];
+  if (song.patternMode !== "chain") return notes;
+  const slots = [...new Set(songSections(song).map((s) => s.pattern))];
+  if (slots.length < 2) return notes;
+  const sigs = slots.map((p) => playing.map(({ t }) => patSig(t.patterns?.[p])).join("|"));
+  if (new Set(sigs).size === 1) {
+    notes.push(`patterns ${slots.join(", ")} are identical on every track: the song is one loop. Carve the sections apart (drop parts for an intro, strip the drums for a breakdown, add a part for the drop)`);
+    return notes;
+  }
+  if (slots.length >= 3 && playing.length >= 3) {
+    const sets = slots.map((p) => playing.filter(({ t }) => t.patterns?.[p]?.steps?.some(Boolean)).map(({ i }) => i).join(","));
+    if (new Set(sets).size === 1) notes.push(`every section has the same ${playing.length} parts playing. An arrangement brings parts in and takes them out: an intro without the bass, a breakdown without the kick, the full set only at the peak`);
+  }
+  // A fill: some drum track's last bar differing from its first, in any section.
+  const drums = playing.filter(({ t }) => ["kick", "snare", "hat", "cymbal", "perc"].includes(trackRole(t)));
+  if (drums.length) {
+    const fill = slots.some((p) => {
+      const bar = stepsPerBar(song, p);
+      return drums.some(({ t }) => {
+        const pat = t.patterns?.[p];
+        if (!pat?.steps?.some(Boolean) || pat.steps.length < bar * 2) return false;
+        const at = pat.steps.length - bar;
+        for (let s = 0; s < bar; s++) {
+          if (!!pat.steps[s] !== !!pat.steps[at + s]) return true;
+          if (pat.steps[s] && ((pat.ratchets?.[s] || 1) !== (pat.ratchets?.[at + s] || 1) || Math.abs((pat.velocities?.[s] ?? 0.5) - (pat.velocities?.[at + s] ?? 0.5)) > 0.2)) return true;
+        }
+        return false;
+      });
+    });
+    if (!fill) notes.push("no section ends with a fill: every drum part repeats its first bar to the end. Make a section's drum patterns as long as the section (resize or x2), then change the last bar: a snare roll, a dropped kick, an open hat into the next section");
+  }
   return notes;
 }
 

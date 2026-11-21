@@ -30,6 +30,8 @@ import {
 import { SET_VERSION, validateSet } from "./sessionFormat.js";
 import { loadDeckA, setDeckAPlaying, setXfadeOn, ejectClipSong, ejectDeckA, ejectDeckB, ejectDeckTrack, matchDeckTempo, fadeToDeck, getDeck, keepBothDecks, landDeckB, loadDeckB, mergeDeckB, mixDecks, requestDeckScene, serializeDeckB, setDeckPlaying, setDeckXfade, setMixSource, setMixTempo, setTempoDeck, setXfade } from "./mix.js";
 import { state } from "./state.js";
+import { measureSet } from "./measure.js";
+import { restoreLookAhead, stretchLookAhead } from "./lookahead.js";
 
 export function installAppApi() {
   if (typeof window === "undefined") return;
@@ -115,6 +117,15 @@ export function installAppApi() {
     play: () => startPlayback(),
     stop: () => stopPlayback(),
     unlock: primeAudioForIOS,
+    // Play a session with the output disconnected and read every meter, a
+    // section at a time (measure.js). It REPLACES this engine's session, so it
+    // is for the hidden player frame only: the compose panel's listen.
+    measure: measureSet,
+    // A longer scheduling lookahead while something heavy shares this main
+    // thread (lookahead.js): the hidden frame above building a song while
+    // this studio plays.
+    stretchLookAhead,
+    restoreLookAhead,
     // Clips (clips.js), by track index: a slot on one track, now; and a
     // track's clip stopped. For the headless audition and the verify skill.
     launchClip: (i, slot) => launchClip(state.tracks[i], slot),

@@ -42,6 +42,9 @@ test("a song with nothing to fix passes the production check", () => {
   sb.setSteps(ctx.song, 0, { steps: "x...x...x...x..." });
   sb.setSteps(ctx.song, 1, { steps: "X.x_o.X_..x.Xo.." });
   sb.setFx(ctx.song, 1, "delay", { wet: 0.2 });
+  // a bass on the kick's steps wants ducking under it
+  assert.match(sb.productionNotes(ctx.song).join("\n"), /no sidechain/);
+  sb.setComp(ctx.song, 1, { source: 0, threshold: -24 });
   assert.deepEqual(sb.productionNotes(ctx.song), []);
   assert.equal(unfinished(ctx, before, 3, "make it acid"), null);
 });

@@ -16,6 +16,8 @@ import { z } from "zod";
 import * as sb from "../public/js/songBuilder.js";
 import { TOOLS, FORMAT_NOTES, GUIDE_RELATIVE, guideText } from "./tools.mjs";
 import { DEFAULT_COMPOSE_MODEL } from "../lib/composeModels.js";
+import { polishSong, wantsMechanical } from "./polish.mjs";
+import { hearingNudge, sanitizeReport } from "./hearing.mjs";
 
 // What a turn runs on when its caller doesn't say, which is every compose
 // chat turn: the deploy's ANTHROPIC_MODEL, else the shared default.
@@ -121,6 +123,8 @@ ${FORMAT_NOTES}
 
 The tools operate on the song currently open in the studio (already loaded for you -- call get_song if you need to see it before editing). Asked for a whole song, work in the order the guide gives: plan its sections first (the guide's Song structure), write the fullest section track by track, then copy_section it into the other slots and carve each one, and chain them. Asked for a beat or a loop, one pattern is the answer.
 
+Two things happen after you stop, so you need not do them by hand. A polish pass in code fills in what you left unset on what you wrote this turn: a level by role on a track you added and never set vol on, dynamics on a part you wrote at a single velocity, and offbeat hats a touch late. Set those yourself wherever you want something specific and it leaves them alone. And where the studio can, it plays the song back and reads the meters; if a part is silent or far out of balance you are told once, with the readings, and asked to fix it.
+
 When you're done, stop calling tools and reply in plain, friendly, non-technical language: a sentence or two on what you made or changed, not a list of tool calls. If a tool call fails, read the error, fix the call and try again rather than giving up silently.`;
   }
   return cachedSystem;
@@ -198,6 +202,10 @@ export async function runComposeTurn({
   // The song has no name yet (never saved): the turn is asked to give it one,
   // and hands it back as `title`, for the save box to offer.
   unnamed = false,
+  // Play the song back and say what was heard: handed the song as it stands,
+  // resolves the browser's meter report (mcp/hearing.mjs) or null when nobody
+  // could listen. Called at most once a turn. Absent, the turn is not heard.
+  listen = /** @type {null | ((session: unknown) => Promise<unknown>)} */ (null),
   onEvent = async (_event) => {},
 }) {
   const ctx = newCtx(session);
@@ -230,7 +238,24 @@ export async function runComposeTurn({
 
   let reply = "";
   let toolCalls = 0;
+  let toolErrors = 0;
   let nudges = 0;
+  let rounds = 0;
+  // What the production check found the first time the turn stopped, and how
+  // the listen went: both are kept with the turn's record (compose_turns).
+  let lintFirst = null;
+  let heard = null;
+  let hearNotes = 0;
+  let listened = false;
+  const polished = [];
+  const feel = !wantsMechanical(message);
+  const polish = async () => {
+    const did = polishSong(ctx.song, session, { feel });
+    for (const line of did) {
+      polished.push(line);
+      await onEvent({ type: "tool", name: "polish", ok: true, summary: `polish: ${line}` });
+    }
+  };
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
     // The stable prefix is big -- the compose guide plus the tool schemas --
     // and the prefix renders tools -> system -> messages, so one breakpoint on
@@ -258,6 +283,7 @@ export async function runComposeTurn({
     );
 
     messages.push({ role: "assistant", content: res.content });
+    rounds++;
 
     const toolUses = res.content.filter((b) => b.type === "tool_use");
     if (toolUses.length === 0) {
@@ -271,12 +297,37 @@ export async function runComposeTurn({
       // the starter tracks still empty. When it stops with the song unchanged
       // after being asked for one, or with tracks that will be silent, say so
       // and send it back, a bounded number of times.
+      const changedNow = JSON.stringify(ctx.song) !== before;
+      if (lintFirst == null && changedNow) lintFirst = sb.productionNotes(ctx.song).length;
+      const canGoOn = round < MAX_TOOL_ROUNDS - 1;
       const nudge = unfinished(ctx, before, toolCalls, message);
-      if (nudge && nudges < MAX_NUDGES && round < MAX_TOOL_ROUNDS - 1) {
+      if (nudge && nudges < MAX_NUDGES && canGoOn) {
         nudges++;
         await onEvent({ type: "tool", name: "check", ok: false, summary: "not finished yet, carrying on" });
         messages.push({ role: "user", content: nudge });
         continue;
+      }
+      // It says it is done. The polish pass first, so what is heard is what
+      // will land; then one listen, and one more go if something is wrong.
+      if (changedNow) await polish();
+      if (changedNow && listen && !listened && canGoOn) {
+        listened = true;
+        await onEvent({ type: "tool", name: "listen", ok: true, summary: "listening back" });
+        let report = null;
+        try {
+          report = sanitizeReport(await listen(serializeCtx(ctx)), ctx.song);
+        } catch (e) {
+          console.error("[compose] listen failed", e);
+        }
+        heard = !!report;
+        const back = report ? hearingNudge(ctx.song, report) : null;
+        if (back) {
+          hearNotes = back.split("\n- ").length - 1;
+          await onEvent({ type: "tool", name: "listen", ok: false, summary: `heard ${hearNotes} thing${hearNotes === 1 ? "" : "s"} to fix` });
+          messages.push({ role: "user", content: back });
+          continue;
+        }
+        await onEvent({ type: "tool", name: "listen", ok: true, summary: report ? "heard it: nothing silent, levels in balance" : "couldn't listen this time" });
       }
       break;
     }
@@ -285,6 +336,7 @@ export async function runComposeTurn({
     const results = [];
     for (const tu of toolUses) {
       const r = runTool(ctx, tu.name, tu.input);
+      if (!r.ok) toolErrors++;
       await onEvent({ type: "tool", name: tu.name, ok: r.ok, summary: r.ok ? summarize(tu.name, r.result) : r.error });
       const text = r.ok ? (typeof r.result === "string" ? r.result : JSON.stringify(r.result)) : r.error;
       results.push({ type: "tool_result", tool_use_id: tu.id, content: text, is_error: !r.ok });
@@ -297,6 +349,9 @@ export async function runComposeTurn({
     }
   }
 
+  // Again at the very end: whatever the turn wrote after its listen gets the
+  // same pass, and what was already polished is left as it is.
+  if (JSON.stringify(ctx.song) !== before) await polish();
   const after = JSON.stringify(ctx.song);
   return {
     reply: reply || "Done.",
@@ -310,6 +365,14 @@ export async function runComposeTurn({
     // The name the turn gave the song, if it gave one.
     title: ctx.songName || null,
     warnings: sb.validate(ctx.song).warnings,
+    // How the turn went, in numbers: kept with its record so one change to
+    // the guide or the model can be told from another.
+    stats: {
+      rounds, toolCalls, toolErrors, nudges,
+      lintFirst, lintLast: after !== before ? sb.productionNotes(ctx.song).length : null,
+      heard, hearNotes, polished: polished.length,
+      tracks: ctx.song.tracks?.length ?? 0, sections: sb.songSections(ctx.song).length,
+    },
     ms: Date.now() - startedAt,
   };
 }

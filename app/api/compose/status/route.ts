@@ -36,8 +36,17 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "no such job" }, { status: 404 });
   }
 
+  // The song a pending listen is of, asked for once by the panel that will
+  // play it (it is megabytes, and this route is polled).
+  const hear = Number(url.searchParams.get("hear"));
+  if (hear > 0) {
+    const session = await env.COMPOSE_JOB.get(env.COMPOSE_JOB.idFromName(id)).hearSession(hear);
+    return session ? NextResponse.json({ session }) : NextResponse.json({ error: "nothing to hear" }, { status: 404 });
+  }
+
   return NextResponse.json({
     status: p.status,
+    ...(p.status === "running" && p.hear ? { hear: p.hear } : {}),
     events: p.events ?? [],
     ...(p.status === "done"
       ? { reply: p.reply, model: p.model, session: p.session, changed: p.changed, warnings: p.warnings, title: p.title ?? null, ms: p.ms }
