@@ -121,7 +121,9 @@ ${composeGuide()}
 
 ${FORMAT_NOTES}
 
-The tools operate on the song currently open in the studio (already loaded for you -- call get_song if you need to see it before editing). Asked for a whole song, work in the order the guide gives: plan its sections first (the guide's Song structure), write the fullest section track by track, then copy_section it into the other slots and carve each one, and chain them. Asked for a beat or a loop, one pattern is the answer.
+The tools operate on the song currently open in the studio (already loaded for you -- call get_song if you need to see it before editing).
+
+Call many tools in ONE reply, not one at a time: they run in the order you write them, and every reply re-reads this whole conversation, so a reply per call is the slow and costly way to work. A whole track is one reply (add_track, apply_preset, set_steps, set_params, set_fx: a new track's index is the number of tracks before it, so you can address it in the same reply), and so is a whole section, or every lookup you need (several describe_engine calls together). Look an engine up only when you need a control the guide does not already name. Asked for a whole song, work in the order the guide gives: plan its sections first (the guide's Song structure), write the fullest section track by track, then copy_section it into the other slots and carve each one, and chain them. Asked for a beat or a loop, one pattern is the answer.
 
 Two things happen after you stop, so you need not do them by hand. A polish pass in code fills in what you left unset on what you wrote this turn: a level by role on a track you added and never set vol on, dynamics on a part you wrote at a single velocity, and offbeat hats a touch late. Set those yourself wherever you want something specific and it leaves them alone. And where the studio can, it plays the song back and reads the meters; if a part is silent or far out of balance you are told once, with the readings, and asked to fix it.
 
@@ -170,6 +172,55 @@ export function runTool(ctx, name, args) {
   } catch (e) {
     return { ok: false, error: e?.name === "SongError" ? e.message : `error: ${e?.message ?? e}` };
   }
+}
+
+// ---- what a tool result costs ---------------------------------------------
+// A result stays in the conversation for the rest of the turn and is read
+// again on every round after it, so the big lookups are sent in a tighter
+// form than the MCP server's (an outside agent reads them once; this loop
+// reads them thirty times). Nothing the model acts on is dropped: the target
+// lists are the ones every engine shares, said once in a sentence, plus this
+// engine's own.
+let commonLfo = null, commonAuto = null;
+function commonTargets() {
+  if (!commonLfo) {
+    const bus = sb.describeEngine("bus");
+    commonLfo = new Set(bus.lfoTargets); commonAuto = new Set(bus.automationTargets);
+  }
+  return { commonLfo, commonAuto };
+}
+const ctl = (c) => `${c.key} (${c.label}) ${c.min}..${c.max}, default ${c.default}`;
+
+/** A tool's result as the text the model is sent. */
+export function resultText(name, result) {
+  if (typeof result === "string") return result;
+  if (!result || typeof result !== "object") return JSON.stringify(result);
+  if (name === "describe_engine" && result.key) {
+    const { commonLfo, commonAuto } = commonTargets();
+    const out = { key: result.key, label: result.label, poly: result.poly, melodic: result.melodic, defaultNote: result.defaultNote };
+    for (const k of ["character", "sliders", "oscMix", "oscMod", "presets", "samples", "textures"]) if (result[k] != null) out[k] = result[k];
+    if (result.panel) {
+      out.panel = {};
+      if (result.panel.numeric?.length) out.panel.numeric = result.panel.numeric.map(c => c.values ? { ...c } : ctl(c));
+      if (result.panel.select?.length) out.panel.select = result.panel.select.map(c => `${c.key}: ${c.values.join(" | ")} (default ${c.default})`);
+      if (result.panel.text?.length) out.panel.text = result.panel.text;
+    }
+    out.lfoTargets = (result.lfoTargets || []).filter(k => !commonLfo.has(k)).join(" ");
+    out.automationTargets = (result.automationTargets || []).filter(k => !commonAuto.has(k)).join(" ");
+    out.targetsNote = "plus the targets every track has: vol, cutoff, reson, the eq keys and every fx key (LFO keys use _, lanes use a dot: delay_time / fx.delay.time)";
+    return JSON.stringify(out);
+  }
+  if (name === "list_engines" && Array.isArray(result)) {
+    return result.map(e => `${e.key} [${e.kind ?? e.group}] ${e.sound ?? e.label}${e.presets?.length ? ` | presets: ${e.presets.join(", ")}` : ""}`).join("\n");
+  }
+  if (name === "list_genres" && Array.isArray(result)) {
+    return result.map(g => `${g.id} (${g.family}, ${Array.isArray(g.bpm) ? g.bpm.join("-") : g.bpm} bpm)`).join("; ");
+  }
+  if (name === "set_steps" && result.detail) {
+    const { detail, ...rest } = result;
+    return JSON.stringify(rest);
+  }
+  return JSON.stringify(result);
 }
 
 /** A one-line status for the activity log, so someone watching can follow
@@ -247,6 +298,8 @@ export async function runComposeTurn({
   let heard = null;
   let hearNotes = 0;
   let listened = false;
+  // What the turn cost, summed over its rounds.
+  const usage = { in: 0, out: 0, cacheRead: 0, cacheWrite: 0 };
   const polished = [];
   const feel = !wantsMechanical(message);
   const polish = async () => {
@@ -278,6 +331,8 @@ export async function runComposeTurn({
       .finalMessage();
 
     const u = res.usage;
+    usage.in += u.input_tokens || 0; usage.out += u.output_tokens || 0;
+    usage.cacheRead += u.cache_read_input_tokens || 0; usage.cacheWrite += u.cache_creation_input_tokens || 0;
     console.log(
       `[compose] round ${round} ${Date.now() - startedAt}ms in=${u.input_tokens} cache_read=${u.cache_read_input_tokens ?? 0} cache_write=${u.cache_creation_input_tokens ?? 0} out=${u.output_tokens}`,
     );
@@ -338,7 +393,7 @@ export async function runComposeTurn({
       const r = runTool(ctx, tu.name, tu.input);
       if (!r.ok) toolErrors++;
       await onEvent({ type: "tool", name: tu.name, ok: r.ok, summary: r.ok ? summarize(tu.name, r.result) : r.error });
-      const text = r.ok ? (typeof r.result === "string" ? r.result : JSON.stringify(r.result)) : r.error;
+      const text = r.ok ? resultText(tu.name, r.result) : r.error;
       results.push({ type: "tool_result", tool_use_id: tu.id, content: text, is_error: !r.ok });
     }
     messages.push({ role: "user", content: results });
@@ -353,6 +408,7 @@ export async function runComposeTurn({
   // same pass, and what was already polished is left as it is.
   if (JSON.stringify(ctx.song) !== before) await polish();
   const after = JSON.stringify(ctx.song);
+  console.log(`[compose] turn ${rounds} rounds in=${usage.in} cache_read=${usage.cacheRead} cache_write=${usage.cacheWrite} out=${usage.out}`);
   return {
     reply: reply || "Done.",
     // Which model actually ran it, so the transcript can say so.
@@ -373,6 +429,7 @@ export async function runComposeTurn({
       heard, hearNotes, polished: polished.length,
       tracks: ctx.song.tracks?.length ?? 0, sections: sb.songSections(ctx.song).length,
     },
+    usage,
     ms: Date.now() - startedAt,
   };
 }

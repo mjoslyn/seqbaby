@@ -77,7 +77,7 @@ for (const c of picked) {
       row.silent = heard.tracks.filter((t) => t.silent && !t.muted && t.engine !== "bus").map((t) => t.name);
       row.master = heard.master;
     }
-    process.stderr.write(`${row.seconds}s, ${row.rounds} rounds, ${notes.length} notes left${row.silent?.length ? `, silent: ${row.silent.join(", ")}` : ""}\n`);
+    process.stderr.write(`${row.seconds}s, ${row.rounds} rounds, ${out.usage ? `in ${out.usage.in} + read ${out.usage.cacheRead} + write ${out.usage.cacheWrite}, out ${out.usage.out}, ` : ""} ${notes.length} notes left${row.silent?.length ? `, silent: ${row.silent.join(", ")}` : ""}\n`);
   } catch (e) {
     row.error = String(e?.message || e);
     process.stderr.write(`failed: ${row.error}\n`);
