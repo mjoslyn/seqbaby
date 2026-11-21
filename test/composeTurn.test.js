@@ -30,5 +30,18 @@ test("silent tracks after editing are sent back, a finished song is not", () => 
   assert.match(unfinished(ctx, before, 1, "make it bebop"), /silent/);
   sb.setSteps(ctx.song, 0, { steps: "x...x...x...x..." });
   sb.setSteps(ctx.song, 1, { steps: "x.x.x.x.x.x.x.x." });
-  assert.equal(unfinished(ctx, before, 3, "make it bebop"), null);
+  // Once it plays, the production check sends it back once, and only once.
+  assert.match(unfinished(ctx, before, 3, "make it bebop"), /production check/);
+  assert.equal(unfinished(ctx, before, 4, "make it bebop"), null);
+});
+
+test("a song with nothing to fix passes the production check", () => {
+  const ctx = newCtx(starter());
+  const before = JSON.stringify(ctx.song);
+  sb.setTempo(ctx.song, { bpm: 124, swing: 0.12 });
+  sb.setSteps(ctx.song, 0, { steps: "x...x...x...x..." });
+  sb.setSteps(ctx.song, 1, { steps: "X.x_o.X_..x.Xo.." });
+  sb.setFx(ctx.song, 1, "delay", { wet: 0.2 });
+  assert.deepEqual(sb.productionNotes(ctx.song), []);
+  assert.equal(unfinished(ctx, before, 3, "make it acid"), null);
 });

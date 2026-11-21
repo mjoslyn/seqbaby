@@ -31,7 +31,7 @@ export const DEFAULT_EFFORT = process.env.ANTHROPIC_EFFORT || "medium";
 const MAX_TOOL_ROUNDS = Number(process.env.COMPOSE_MAX_ROUNDS || 60);
 const MAX_HISTORY_TURNS = 16;
 // How many times a turn that stopped short is sent back to finish.
-const MAX_NUDGES = 2;
+const MAX_NUDGES = 3;
 
 // A request that asks for music to be made or changed, as opposed to a
 // question about the song. Only these are sent back for changing nothing.
@@ -41,6 +41,7 @@ const MAKE_RE = /\b(build|make|write|create|compose|add|give|put|turn|change|rep
  * Why a turn that has stopped calling tools is not finished, as a message to
  * send it back with, or null when it may stop. Two cases: asked to make
  * something, it changed nothing; or tracks it was building will be silent.
+ * And once, after it changed the song, the production check (productionNotes).
  */
 export function unfinished(ctx, before, toolCalls, message) {
   const after = JSON.stringify(ctx.song);
@@ -49,8 +50,16 @@ export function unfinished(ctx, before, toolCalls, message) {
   }
   if (toolCalls === 0) return null;
   const silent = (sb.validate(ctx.song).warnings || []).filter((w) => /silent/.test(w));
-  if (!silent.length) return null;
-  return `Not finished: validate_song says ${silent.join("; ")}. Give those tracks parts (or remove the ones the song doesn't need), then reply.`;
+  if (silent.length) return `Not finished: validate_song says ${silent.join("; ")}. Give those tracks parts (or remove the ones the song doesn't need), then reply.`;
+  // Once a turn, and only when it changed the song: the production check,
+  // the habits that make a sequenced song sound like a video game. The model
+  // cannot hear, so this is the closest it gets to listening back.
+  if (after !== before && !ctx.productionChecked) {
+    ctx.productionChecked = true;
+    const notes = sb.productionNotes(ctx.song);
+    if (notes.length) return `Before you reply, a production check on the song as it stands (it should sound like a produced record, not video game music, unless the request is chiptune or something deliberately mechanical):\n- ${notes.join("\n- ")}\nFix the ones that apply to what was asked, leave the rest, then reply.`;
+  }
+  return null;
 }
 
 // Enough to work with if the guide file can't be found. Deliberately NOT a

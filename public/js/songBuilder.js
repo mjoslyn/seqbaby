@@ -38,7 +38,7 @@
 
 import {
   BASS_NUM_CTLS, BASS_SEL_CTLS, BASS_TONE_NAMES, bassTone, bassToneDescription,
-  ACOUSTIC_KITS, BUNDLED_SAMPLES, engineCharacter, hexopPresetDescription, CONTAGION_NUM_KEYS, CONTAGION_SEL_KEYS,
+  ACOUSTIC_KITS, BUNDLED_SAMPLES, ENGINE_CHARACTER, engineCharacter, hexopPresetDescription, CONTAGION_NUM_KEYS, CONTAGION_SEL_KEYS,
   GRANULAR_SAMPLES, GRAN_MOD_RANGE, GRAN_NUM_KEYS, GRAN_RATE_BEATS, GRAN_SEL_KEYS,
   GUITAR_NUM_CTLS, GUITAR_SEL_CTLS, GUITAR_TONE_NAMES, guitarTone, guitarToneDescription,
   HEXOP_MOD_RANGE, HEXOP_NUM_KEYS, HEXOP_OPS, HEXOP_PRESET_NAMES, hexopPreset,
@@ -1237,7 +1237,60 @@ export function validate(song) {
     for (let p = 0; p < PATTERN_COUNT; p++) if (slotHasSteps(song, p)) used.push(p);
     if (used.length > 1) warnings.push(`patterns ${used.join(", ")} hold steps but the arrangement is "repeat", so only pattern ${song.activePattern} plays: set_arrangement mode "chain" to play them in order, or "arrange" with set_blocks for a timeline per track`);
   }
-  return { ok: check.ok && errors.length === 0, version: check.version, errors, warnings };
+  return { ok: check.ok && errors.length === 0, version: check.version, errors, warnings, production: productionNotes(song) };
+}
+
+/**
+ * What will make the song sound programmed, like a video game or a computer
+ * demo, rather than played and produced. Advice, never an error: chiptune
+ * wants most of it. The agent cannot hear, so this is its ear for the habits
+ * that give a sequenced song away (the compose guide's "a record, not a video
+ * game").
+ * @returns {string[]}
+ */
+export function productionNotes(song) {
+  const notes = [];
+  const tracks = song.tracks || [];
+  const playing = tracks.map((t, i) => ({ t, i })).filter(({ t }) => t.engineKey !== "bus");
+  let anyOffset = false;
+  let anySpace = false;
+  const wetOf = (cfg) => Object.entries(cfg || {}).some(([k, v]) => /^(reverb|delay)(#\d+)?$/.test(k) && Number(v?.wet) > 0.02);
+  for (const t of tracks) if (wetOf(t.fxConfig)) anySpace = true;
+  for (const { t, i } of playing) {
+    const label = `track ${i} (${t.name})`;
+    const pats = (t.patterns || []).filter((p) => p?.steps?.some(Boolean));
+    if (!pats.length) continue;
+    const vels = new Set();
+    let hits = 0, short = 0, maxRun = 0;
+    const lanes = new Set();
+    for (const p of pats) {
+      let run = 0;
+      p.steps.forEach((on, s) => {
+        if (p.offsets?.[s]) anyOffset = true;
+        if (!on) { run = 0; return; }
+        hits++;
+        vels.add(Math.round((p.velocities?.[s] ?? 0.5) * 100));
+        if ((p.lengths?.[s] || 1) <= 1) short++;
+        // A held note counts as a run too: what matters is that nothing rests.
+        run += Math.max(1, p.lengths?.[s] || 1);
+        maxRun = Math.max(maxRun, run);
+      });
+      for (const [k, l] of Object.entries(p.automation || {})) if (l?.enabled) lanes.add(k);
+    }
+    const char = ENGINE_CHARACTER[t.engineKey];
+    const melodic = !t.isDrumKit && char?.kind !== "drum";
+    const kick = /kick|siege|plaits:13/.test(t.engineKey) || /\b(kick|bd)\b/i.test(t.name || "");
+    if (hits >= 8 && vels.size === 1 && !kick) notes.push(`${label}: all ${hits} hits are the same velocity. Vary them: accents (X), ghosts (o), a few in between`);
+    if (melodic && hits >= 8 && short === hits && !t.euclid?.on && !t.chance?.on) notes.push(`${label}: every note is one step long, which reads as blips unless the part is staccato on purpose. Tie some (_) so notes are held for their length`);
+    if (melodic && maxRun >= 16 && hits >= 16) notes.push(`${label}: plays ${maxRun} steps without a rest. Unless it is a rolling ostinato, leave space at phrase ends`);
+    const swept = lanes.has("cutoff") || t.lfoConfig?.cutoff?.enabled;
+    const open = (t.filter?.cutoff ?? 1) >= 0.9 && !(Number(t.filter?.env) > 0);
+    if (char?.kind === "raw" && open && !swept) notes.push(`${label}: ${t.engineKey} is a bare oscillator with the filter open and still. It sounds like a video game unless that is the point: close the filter with an envelope or a lane, add chorus or drive, or use ${t.engineKey === "dm:pad" ? "dm:oracle (warm pad, strings)" : "dm:oracle, dm:ladder or dm:contagion"}`);
+    if (t.engineKey === "plaits:12" && hits > 12) notes.push(`${label}: plaits:12 (modal) plays ${hits} notes. It is a bell or music-box colour, and as a melody it reads as a toy: dm:hexop (marimba, bell), inst:guitar-nylon or a real lead instead`);
+  }
+  if (playing.length >= 2 && !anySpace) notes.push("no track has reverb or delay: the parts are in no room together. Put a reverb (and a delay) on a bus and send the melodic parts to it");
+  if (playing.length >= 2 && !anyOffset && !(Number(song.swing) > 0)) notes.push("nothing is off the grid and swing is 0: a little swing, or a few notes nudged (offsets) late or early, makes it feel played");
+  return notes;
 }
 
 /** The song as the JSON the studio loads: applySet(JSON.parse(text)), the

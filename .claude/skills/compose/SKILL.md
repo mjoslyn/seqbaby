@@ -527,7 +527,12 @@ in them has been checked against the engine.
 
 ## What to check
 
-`validate_song` names silent tracks and empty buses. `audition_song` plays
+`validate_song` names silent tracks and empty buses, and its `production`
+list names what will make the song sound programmed rather than produced:
+flat velocities, one-step blips, parts with no rests, a bare oscillator
+with the filter open, modal as a melody, no reverb or delay, nothing off
+the grid. Fix what applies (chiptune wants some of it). In the studio's
+compose panel the turn is sent back with this list once before it replies. `audition_song` plays
 the song in the real engine and reports per-track rms / peak in dB: a track
 under -40 dB peak is effectively silent (a closed filter, a sub on a
 speaker, a euclid with 0 pulses); a master near the limiter means the levels

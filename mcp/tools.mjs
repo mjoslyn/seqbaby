@@ -363,7 +363,7 @@ export const TOOLS = [
 
   // ---- out ---------------------------------------------------------------------------
   {
-    name: "validate_song", title: "Validate song", description: "Check the song will load, and name silent tracks and unused buses. Run before exporting.",
+    name: "validate_song", title: "Validate song", description: "Check the song will load, and name silent tracks and unused buses. `production` lists what will make it sound programmed rather than produced (flat velocities, one-step blips, no rests, a bare oscillator unfiltered, modal as a melody, no reverb or delay, nothing off the grid): advice, fix what applies. Run before exporting.",
     inputSchema: {},
     handler: (ctx) => sb.validate(ctx.song),
   },
