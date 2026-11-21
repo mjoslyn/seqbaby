@@ -1848,6 +1848,9 @@ export function genrePrompt(g, extra = "", seed = 0) {
     ? "Lay it out in arrange mode: each layer on its own timeline, entering and leaving at different bars across that plan."
     : "Lay it out in chain mode, one slot per section.");
   add(`The second time the main section comes round it adds ${roll.lift}.`);
+  if (g.id !== "chiptune") {
+    add("Make it sound like a produced record, not video game music: velocity varied on every part, a few notes nudged off the grid, notes held for their real length with rests at phrase ends, every oscillator shaped (filter, saturation, chorus or tape), and the parts sharing a reverb or delay bus.");
+  }
   if (more) lines.push(`Also, and this wins over anything above: ${more}`);
   return lines.join("\n");
 }

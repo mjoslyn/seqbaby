@@ -476,6 +476,17 @@ against these before validating it:
   harmony change between neighbours.
 - **Registers.** One part in each of sub, bass, mid and top at a time; two
   parts in one octave are one part too many unless they are a unison.
+- **A record, not a video game.** The default failure is a song that sounds
+  like a game soundtrack: bare square and pulse leads, every note one step
+  long, every hit the same velocity, everything dead on the grid and dry.
+  Unless chiptune is the point: vary velocity on every part, not only the
+  drums; nudge a few notes off the grid (a late snare, an early pickup) on
+  top of the swing; hold notes for their real length and leave rests at
+  phrase ends; reach for sources with a body (the sampler's acoustic kits,
+  `inst:` guitars and bass, dm:guitar, dm:bass, dm:tines, dm:vox, oracle
+  and contagion over plaits:0); shape every oscillator (a filter model, a
+  little saturation, chorus, cassette or vinyl where the genre is warm);
+  and put the parts in one room with a shared reverb or delay on a bus.
 
 Asked for a genre with little else ("a dnb track", "something lo-fi"), call
 `genre_brief` first and build what it says; `list_genres` finds the id. Do
