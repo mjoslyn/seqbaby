@@ -452,6 +452,18 @@ export default function ComposeChat({
   // has just left. Transient: it belongs to that click, so the next turn (and a
   // song arriving, or `new`) clears it.
   const [saveNote, setSaveNote] = useState("");
+  // With the drawer shut (keep closes it), the save note goes to the studio's
+  // own status line too, or "press save to keep it for good" would be said to
+  // nobody. Written straight to #status, as the engine's setStatus does.
+  const openRef = useRef(false);
+  useEffect(() => { openRef.current = open; }, [open]);
+  useEffect(() => {
+    if (openRef.current || !saveNote) return;
+    const el = document.getElementById("status");
+    if (!el) return;
+    el.textContent = saveNote;
+    el.classList.toggle("is-err", saveNote.startsWith("kept, but not saved"));
+  }, [saveNote]);
   const wrapRef = useRef<HTMLDivElement>(null);
   const logRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -872,6 +884,7 @@ export default function ComposeChat({
       if (r.fresh) return void audition();
       if (!r.before && !writeDeckB(r.session, r.deck)) return deckGone();
       setReview(null);
+      setOpen(false);
       setSaveNote(`kept on deck ${r.deck.toUpperCase()}. It is saved once that deck is the song (eject deck A) or you keep the decks as one song, then save`);
       return;
     }
@@ -880,6 +893,10 @@ export default function ComposeChat({
     // clears any name held for the last one.
     if (r.title) setComposedTitle(r.title);
     setReview((cur) => (cur && cur.session === r.session ? null : cur));
+    // Keeping is the end of the conversation's business with this turn: the
+    // drawer goes, and what the save did is said in the studio's status line
+    // (the effect on saveNote below), where it is still seen.
+    setOpen(false);
     void autosaveKept();
   }, [review, writeLive, autosaveKept, writeDeckB, deckGone, audition]);
 
