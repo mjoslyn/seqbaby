@@ -2,7 +2,7 @@ import { AUTOMATION_TARGETS, VOICE_AUTO_KEYS, afterPrefix as after, baseModKey, 
 import { FX_APPLY, driveGain } from "./fxRack.js";
 import { controlForKey } from "./paramTargets.js";
 import { makeFuzzCurve, shaperPreampGain } from "./curves.js";
-import { bassFromUnit, droneFromUnit, guitarFromUnit, haloFromUnit, hexopFromUnit, ladderFromUnit, lancetFromUnit, oracleFromUnit, siegeFromUnit, subFromUnit, voxFromUnit } from "./engineData.js";
+import { bassFromUnit, breathFromUnit, droneFromUnit, guitarFromUnit, haloFromUnit, hexopFromUnit, ladderFromUnit, lancetFromUnit, oracleFromUnit, siegeFromUnit, subFromUnit, voxFromUnit } from "./engineData.js";
 import { euclidFromUnit, setEuclidLive } from "./euclid.js";
 import { setChanceLive } from "./chance.js";
 import { chanceFromUnit } from "./chanceGen.js";
@@ -212,6 +212,12 @@ export function applyAutomationAtStep(t, key, v, time, vNext, stepDur) {
     return;
   }
   // The ladder, same again; `tune` is -1..1 semitones, so it maps through its range.
+  // The breath, same again; `players` is 1..4, so it maps through its range.
+  if (key.startsWith("breath.")) {
+    const which = after(key, "breath.");
+    ramp(t.voice?.getAudioParam?.("brt" + which), breathFromUnit(which, vv), breathFromUnit(which, vn));
+    return;
+  }
   if (key.startsWith("oracle.")) {
     const which = after(key, "oracle.");
     ramp(t.voice?.getAudioParam?.("orc" + which), oracleFromUnit(which, vv), oracleFromUnit(which, vn));

@@ -366,6 +366,37 @@ const EXPORT_SOUND = {
   "inst:guitar-acoustic": "gm_acoustic_guitar_steel", "inst:guitar-nylon": "gm_acoustic_guitar_nylon",
   "inst:guitar-electric": "gm_electric_guitar_jazz", "inst:bass-electric": "gm_electric_bass_pick",
 };
+// Wind names (General MIDI's and the plain ones) land on the breath with the
+// instrument they name loaded. First match wins, so the particular come
+// before the general (a muted trumpet before a trumpet, a bassoon before
+// anything with "bass" in it, which is why these are tried before the rules
+// below).
+const WIND_SOUNDS = [
+  [/muted_?trumpet|harmon/, "muted trumpet"],
+  [/trumpet|cornet/, "trumpet"],
+  [/flugel/, "flugelhorn"],
+  [/trombone/, "trombone"],
+  [/tuba|sousaphone|euphonium/, "tuba"],
+  [/bari(tone)?_?sax/, "bari sax"],
+  [/tenor_?sax/, "tenor sax"],
+  [/soprano_?sax/, "soprano sax"],
+  [/sax_?section/, "sax section"],
+  [/sax/, "alto sax"],
+  [/bass_?clarinet/, "bass clarinet"],
+  [/clarinet/, "clarinet"],
+  [/oboe|english_?horn|cor_?anglais/, "oboe"],
+  [/bassoon/, "bassoon"],
+  [/french_?horn|^horn$/, "french horn"],
+  [/brass|^horns$/, "brass section"],
+  [/piccolo/, "piccolo"],
+  [/pan_?flute|panpipe/, "pan flute"],
+  [/recorder|whistle|ocarina/, "recorder"],
+  [/shakuhachi/, "shakuhachi"],
+  [/bottle/, "bottle"],
+  [/flute/, "flute"],
+];
+/** What a breath track is called in portable code: one name per exciter. */
+const WIND_EXPORT = { reed: "gm_alto_sax", lips: "gm_trumpet", jet: "gm_flute" };
 const SOUND_EXACT = Object.fromEntries(Object.entries(EXPORT_SOUND).map(([k, v]) => [v, k]));
 const MELODIC_RULES = [
   [/^(supersaw|superhoover)$/, "dm:contagion"],
@@ -451,6 +482,7 @@ export function voiceFor(sound, { bank, notes = [], fm = false } = {}) {
     const low = notes.length && notes.reduce((a, b) => a + b, 0) / notes.length < 48;
     return { engine: low ? "dm:sub" : "plaits:0", drum: false, exact: true };
   }
+  for (const [re, preset] of WIND_SOUNDS) if (re.test(name)) return { engine: "dm:breath", preset, drum: false, exact: true };
   for (const [re, engine] of MELODIC_RULES) if (re.test(name)) return { engine, drum: false, exact: /^(triangle|tri|sawtooth|saw|square|supersaw)$/.test(name) || engine !== "plaits:0" };
   return { engine: "plaits:0", drum: false, exact: false };
 }
@@ -1011,7 +1043,7 @@ export function realize(read) {
     const groups = new Map();
     for (const h of sounding) {
       const voice = voiceFor(h.sound, { bank: h.v.bank, notes: h.notes, fm: h.v.fm != null });
-      const key = `${voice.engine}|${voice.sample || ""}`;
+      const key = `${voice.engine}|${voice.sample || ""}|${voice.preset || ""}`;
       if (!groups.has(key)) groups.set(key, { voice, sounds: new Set(), haps: [] });
       const g = groups.get(key);
       g.sounds.add(h.sound.replace(/:\d+$/, ""));
@@ -1032,9 +1064,13 @@ export function realize(read) {
     for (const g of groups.values()) {
       const soundName = [...g.sounds].join("+");
       const base = out.label ? (many ? `${out.label} ${soundName}` : out.label) : soundName;
-      const nat = g.haps.reduce((acc, h) => mergeNative(acc, h.v._native), null) || {};
+      let nat = g.haps.reduce((acc, h) => mergeNative(acc, h.v._native), null) || {};
+      const isNative = !!g.voice.native || Object.keys(nat).length > 0;
+      // A sound that names an instrument of an engine's (a trumpet, on the
+      // breath) loads it, unless the code names a preset itself.
+      if (g.voice.preset && !nat.preset) nat = { ...nat, preset: { name: g.voice.preset } };
       parts.push({ g, name: uniqueName(trackNameOf(base), used), slot, label: out.label, muted, engine: g.voice.engine, sample: g.voice.sample, drum: g.voice.drum,
-        native: nat, lock: g.haps.some(h => h.v._lock), isNative: !!g.voice.native || Object.keys(nat).length > 0,
+        native: nat, lock: g.haps.some(h => h.v._lock), isNative,
         blocks: out.blocks ?? g.haps.find(h => h.v._blocks)?.v._blocks ?? null });
     }
   }
@@ -1588,6 +1624,7 @@ function soundForTrack(t, native = false) {
     return { s, bank: SAMPLE_BANK[kit] || (native ? NATIVE_KIT_BANK[kit] : null) || null, drum: true };
   }
   if (native && staticEngineByKey(t.engineKey)) return { s: nativeName(t.engineKey), drum: false };
+  if (t.engineKey === "dm:breath") return { s: WIND_EXPORT[t.params?.brtkind] || WIND_EXPORT.reed, drum: false };
   if (EXPORT_SOUND[t.engineKey]) return { s: EXPORT_SOUND[t.engineKey], drum: false };
   if (t.engineKey === "plaits:9") return { s: "white", drum: false };
   if (String(t.engineKey).startsWith("plaits:")) return { s: "triangle", drum: false };

@@ -2,7 +2,7 @@
 
 Multi-engine browser step sequencer. A hand-written vanilla Web Audio engine
 (Mutable Instruments Plaits via `@vectorsize/woscillators`, Tone.js drum/synth
-recipes, worklet models of the silverbox / contagion / hexop plus nine
+recipes, worklet models of the silverbox / contagion / hexop plus ten
 analog emulators, wavetable + granular + unified sampler
 engines, Web MIDI) wrapped in a thin Next.js shell on Cloudflare Workers
 (OpenNext, D1, R2, Durable Objects, Better Auth) for accounts, cloud songs, a
@@ -370,6 +370,9 @@ env / fx / eq / comp / mod / automation per track.
   and a choir of copies per note, in one AudioWorklet. See the vox section.
   `voxPhonetic.js` is its lyric's English reader (CMUdict + letter-to-sound),
   pure, its dictionary fetched only when the phonetic box is ticked.
+- `breath.js` — **breath**, the wind instruments: a reed, lips or a jet,
+  a body of two formants, breath noise and a section of up to four players
+  a note, additive, in one AudioWorklet. See the breath section.
 - `lancet.js` — **lancet**, a snare drum synthesizer: seven models (analog,
   slap, modal, physical, fm, granular, blend) under four knobs and an fx
   amount, a velocity amount and a per-hit randomizer, in one AudioWorklet.
@@ -428,7 +431,7 @@ npm test               # node --test: the pure modules (session format, chance g
                        #   version tree, song names, share card copy, the song builder, the jam diff,
                        #   song previews, a compose turn's change summary, grid avatars, the songs and people explorers,
                        #   the Strudel bridge, the reverb, the filter models, the guitar, the contagion,
-                       #   the vox and its phonetic reader, the lancet, the halo, the prism, the repeat,
+                       #   the vox and its phonetic reader, the breath, the lancet, the halo, the prism, the repeat,
                        #   the ladder, the oracle, the arrangement, the piano view's notes,
                        #   the data layer's access rules, auth, the Supabase importer,
                        #   the compose turn's polish pass and hearing notes)
@@ -944,7 +947,7 @@ Voice interface: `hit(midi, time, dur, vel, opts?)`, `setParam`,
 
 All engine type `drum-synth`. The three Tone.js analog-mono presets are each
 wrapped in `makePolyPool(size, buildOne)`; the silverbox, the contagion, the hexop, the
-guitar, the bass, subby, the drone, the vox, the siege, the lancet, the halo, the ladder and the oracle are the odd ones out — AudioWorklet models that handle
+guitar, the bass, subby, the drone, the vox, the breath, the siege, the lancet, the halo, the ladder and the oracle are the odd ones out — AudioWorklet models that handle
 their own voicing (the silverbox, subby and the siege are mono, deliberately; the rest
 polyphonic, the ladder by a switch). See their
 sections below. The guitar, bass, ladder and oracle keep their old Tone builders in voices.js
@@ -963,6 +966,7 @@ sections below. The guitar, bass, ladder and oracle keep their old Tone builders
 | `dm:sub`       | `buildSubBassVoice`   | mono | subby, the sub bass, AudioWorklet (`subbass.js`) |
 | `dm:drone`     | `buildDroneVoice`     | 6 (internal) | equation-oscillator drone, filter, delay, cloud, AudioWorklet (`drone.js`) |
 | `dm:vox`       | `buildVoxVoice`       | 8 (internal) | singing voice: glottis, formants, consonants, choir, AudioWorklet (`vox.js`) |
+| `dm:breath`    | `buildBreathVoice`    | 6 (internal) | wind instruments: reed / lips / jet, formants, breath, a section of players, AudioWorklet (`breath.js`) |
 | `dm:lancet`    | `buildLancetVoice`    | 4 (internal) | snare synthesizer, seven models, per-hit randomizer, AudioWorklet (`lancet.js`) |
 | `dm:halo`      | `buildHaloVoice`      | 6 (internal) | cymbal synthesizer, four models, choke, bloom, stereo width, AudioWorklet (`halo.js`) |
 | `dm:siege`       | `buildSiegeVoice`       | mono | the bass drum synth: sine, pitch envelope, fold / clip drive after the envelope, AudioWorklet (`siege.js`) |
@@ -1955,6 +1959,104 @@ CONSONANT (hiss, burst, murmur, formant glide) ───┘
   and the markup against the tables.
 - **Loading** — Blob-URL registration from `loadWorklet()`; a failure falls
   back to a fat-triangle PolySynth through a fixed "ah" bandpass.
+
+## Breath (`dm:breath`, `public/js/breath.js`)
+
+The wind instruments: saxes, clarinets, oboes, bassoons, trumpets, trombones,
+horns, tubas, flutes and pipes, and sections of them. Named for what it does,
+like the other emulators.
+
+```
+BREATH ──▶ EXCITER ──▶ BODY ──▶ SECTION ──▶ L/R
+pressure    reed        two        1..4
+(attack,    lips        formants,  players
+tongue,     jet         a mute
+swell)        └─ AIR (noise through the tube)
+```
+
+- **Additive, and that is the design.** Up to 48 harmonics of the note, each
+  with a level recomputed every 16 samples (`spectrum()`) and ramped per
+  sample. A tube locks its partials to exact multiples of the note, so
+  nothing is lost, the pitch is the note to the cent with no loop to tune
+  (tested, G1 to A6, every exciter), nothing can alias (a harmonic past 0.47
+  of the sample rate is not generated; tested under -80dB), and the spectrum
+  is a formula the tests read back. Every harmonic of a player is one phase
+  rotor through a Chebyshev recurrence, one multiply and one subtract each;
+  measured in Node a note is about 1% of realtime.
+- **Brightness follows the breath.** The spectrum is `n^-alpha` (alpha from
+  `edge`) under a break frequency (the tone slider, 250Hz..8kHz, tracking the
+  note by the 0.35 power) with a rolloff above it (`ORDER`: reed 18, lips 12,
+  jet 24dB/oct), and the break moves with the pressure by `DYN_OCT x dyn`
+  octaves (reed 2.5, lips 5, jet 2). The pressure is `(0.3 + 0.7 vel) x env`,
+  so velocity is loudness AND brightness, and every note opens through its
+  attack and closes through its release. The level law is `p^1.25` on a
+  spectrum normalised to unit power, so a preset's formants never move its
+  level.
+- **Three exciters** (`brtkind`, a message, live): `reed`, `lips` (a flatter
+  spectrum under the break, a pitch blip with the tongue) and `jet` (alpha
+  rises by `3.5 x (1.1 - p)`, so a soft flute is near a sine; past p 0.95 the
+  fundamental gives way to the octave; the chiff lifts harmonics 2 and 3 for
+  30ms). `BREATH_KIND_TIPS` is the status line.
+- **The bore is odd / even** (`bore`): at 0 the even harmonics are 0.06 of
+  themselves below ~1.8kHz and come back above it (a clarinet, a pan pipe).
+- **The body is a gain curve, not filters** (`buildBody`, a 256-point table
+  over nine octaves, rebuilt only when `f1` / `f2` / `res` / `mute` move):
+  two fixed peaks (`f1` 150Hz..2.5kHz, `f2` 500Hz..6kHz, exponential;
+  `breathF1` / `breathF2` in engineData.js turn Hz into knob positions and the
+  presets are written in Hz), up to 18dB. The harmonics are read off it, so
+  vibrato moves each harmonic across the peaks. `mute` is a highpass, a peak
+  at 1.9kHz and a level drop.
+- **The air** is noise through three TPT band-passes per note: the body's
+  region and 3kHz for a valve, pulsed by the first player's phase (a valve
+  lets air through in puffs); the note and its octave (Q 9) plus a broad
+  3.5kHz for a jet. It goes as `p^0.6` against the tone's `p^1.25`, so a soft
+  note is the breathier one. Measured against the tone at air 0.5: reed
+  about -30dB, lips -36, jet -20; `air` squared, 12dB more at the top.
+- **The breath**: `atk` 4..400ms, `tongue` (pressure overshoot of up to 35%
+  and a burst of air), `swell` (a held note falls to 0.35 or grows to 1.35
+  over 0.6s), release 20ms..1.5s to -60dB (the decay slider), `growl` (AM
+  near 80Hz, wandering, and a brighter tone), `flutter` (AM at 24Hz), and a
+  slow waver scaled by `drift`.
+- **The pitch**: `scoop` (up to 2.5 semitones under on a reed, gone in
+  25..85ms), `fall` (in the release the pitch heads down up to an octave and
+  the release is stretched up to 4x to fit it), vibrato after `vdelay`
+  (`VIB_CENTS` / `VIB_PRESS`: a reed's is pitch, a jet's mostly breath).
+- **A section** (`players` 1..4, `detune`, `spread`): each player has a rotor,
+  a fixed tuning offset (`P_TUNE`), a vibrato rate trim, a drift walk, an
+  entry up to 22ms late, and an equal-power pan. Normalised by
+  `1/sqrt(players)`: four are within 3dB of one (tested). They share the
+  note's spectrum.
+- **A slur keeps the breath going.** The builder posts `legato` by the
+  silverbox's tie rule (as guitar.js does; every note of a chord gets its
+  first note's answer), and the processor hands a slurred note to the voice
+  nearest in pitch that is held or was let go inside 50ms and has not been
+  claimed at this instant (`slurVoice`, so a tied chord slurs voice for
+  voice): no attack, the pitch glides (the track's glide, else 35ms).
+  `brtmode` mono is one voice, last note wins.
+- **Six voices stolen quietest first**; a stolen or retriggered voice keeps
+  its phases and its envelope level. Idle is digital silence.
+- **Controls** — the four sliders are TONE / AIR / VIBRATO / RELEASE. Keys
+  are `brt` + short key -> `breath_<short>` / `breath.<short>`, from
+  `BREATH_NUM_CTLS` / `BREATH_SEL_CTLS` in engineData.js (`brt`, not `b` or
+  `bs`: the bass's is `bs`). Every numeric control is a k-rate AudioParam.
+  `players` is 1..4, so its lane maps through its range. 27 instruments via
+  `breathTone(name)`, complete; panel markup `BREATH_PANEL` in
+  `app/studioMarkup.ts`, the dropdown filled from `BREATH_TONE_NAMES`.
+- **Strudel**: `s("breath")` by name; a wind's name (`gm_trumpet`, `gm_tuba`,
+  `sax`, `gm_flute` ..., `WIND_SOUNDS` in strudel.js, tried before the
+  melodic rules so a bassoon is not a bass) is the breath with that
+  instrument loaded (`voiceFor` returns a `preset`, which `realize` puts in
+  the part's native settings unless the code names one). The portable export
+  is one name per exciter (`WIND_EXPORT`).
+- **Reasoned, not measured**: the formant positions are the published ones
+  per family; the rolloffs, the dynamics and the noise levels are honest
+  character. No bore, reed or lip is simulated: a waveguide would be the
+  "real" model and would have to be tuned per note per exciter.
+- `test/breath.test.js` renders the processor in Node and pins all of the
+  above, plus the tables against the processor and the markup, every
+  instrument's level and tuning, the builder and the Strudel round trip.
+- **Loading** — Blob-URL registration from `loadWorklet()`; a failure falls
+  back to a filtered saw `PolySynth`.
 
 ## Lancet (`dm:lancet`, `public/js/lancet.js`)
 
@@ -5769,7 +5871,7 @@ fails. Real-time capture — see Known limitations.
 ## Engines catalog (`buildEngineCatalog`)
 
 Groups in order: `plaits` (16) · `drum / synth` (808/909 kit + poly-saw /
-fm-bell / pad) · `Emulators` (silverbox + contagion + hexop + guitar + bass + subby + drone + vox + lancet + halo + siege + ladder + oracle + 3 analog-mono) · `texture` (`dm:granular`) ·
+fm-bell / pad) · `Emulators` (silverbox + contagion + hexop + guitar + bass + subby + drone + vox + breath + lancet + halo + siege + ladder + oracle + 3 analog-mono) · `texture` (`dm:granular`) ·
 `wavetable` (`wt:akwf`) · `sampler` (single unified entry) · `saved patches`
 (`saved:<name>`) · `midi` · `bus` (the fx bus — not an instrument, see below).
 The engine key string is the source of truth.
@@ -6021,7 +6123,7 @@ through a 6ms fade on its gain).
   do the same, or use `currentBpm()` (lfo.js) as the sync helpers do.
 - **Worklet processor sources are template literals** (`silverbox.js`,
   `contagion.js`, `hexop.js`, `guitar.js`, `bass.js`, `subbass.js`,
-  `drone.js`, `vox.js`, `lancet.js`, `halo.js`, `siege.js`, `ladder.js`, `oracle.js`, `crusher.js`, `reverb.js`, `prism.js`, `repeat.js`,
+  `drone.js`, `vox.js`, `breath.js`, `lancet.js`, `halo.js`, `siege.js`, `ladder.js`, `oracle.js`, `crusher.js`, `reverb.js`, `prism.js`, `repeat.js`,
   `filterModels.js`),
   so a stray backtick or `${` inside one — including in a comment — truncates
   the string. The module still parses, `node --check` still passes, and the
@@ -6137,7 +6239,7 @@ npm run deploy
   An inline marker (`window.__seqbabyServerBoot`) tells the paths apart, and
   `ScriptLoader.tsx` keeps its onload-chained injection for the soft-nav case
   (e.g. arriving from `/login`).
-- `app/EnginePreload.tsx` emits `modulepreload` for all 94 modules listed in
+- `app/EnginePreload.tsx` emits `modulepreload` for all 96 modules listed in
   `app/engineAssets.ts` (at `engineAsset("/js/<name>")`; the hints used to
   point at the site root and 404). The graph is 8 levels deep, so without it the browser
   needs up to eight sequential round trips just to discover the code.

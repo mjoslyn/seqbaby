@@ -52,6 +52,7 @@ import {
   SIEGE_NUM_CTLS, SIEGE_SEL_CTLS, SIEGE_TONE_NAMES, siegeTone, siegeToneDescription,
   LADDER_NUM_CTLS, LADDER_SEL_CTLS, LADDER_OSC_NUM_CTLS, LADDER_OSC_SEL_CTLS, LADDER_TONE_NAMES, ladderTone, ladderToneDescription,
   ORACLE_NUM_CTLS, ORACLE_SEL_CTLS, ORACLE_TONE_NAMES, oracleTone, oracleToneDescription,
+  BREATH_NUM_CTLS, BREATH_SEL_CTLS, BREATH_TONE_NAMES, breathTone, breathToneDescription,
 } from "./engineData.js";
 import { EQ_KEYS, EUCLID_DEFAULTS, FILTER_TYPES, PRISM_SELECTS, REPEAT_MODES, defaultCompConfig, defaultEq, eqRange, defaultFilter, defaultFxConfig, defaultTrackParams } from "./soundDefaults.js";
 import {
@@ -211,6 +212,7 @@ const SLIDER_TIPS = {
   "dm:halo": { harm: "tone: a highpass and a lowpass rising together, dark to bright; read live, so a lane opens a ringing crash", timb: "size: every partial scaled together, an octave and a half either way. Small is a hat or a splash, big a crash or a gong", morph: "spread: the model's own character (hlomodel): the metal's ratios, the fm's index, the modes' spacing, the noise's bandwidth", decay: "how long it rings, 30ms to 9s. In choke mode (hlochoke) the step's length cuts it first" },
   "dm:siege": { harm: "drive, after the envelope: crushes the attack, lifts the tail. fold or clip is `sgemode`", timb: "click: how far above the note the pitch starts, up to six octaves", morph: "depth: how long the pitch takes to fall onto the note, 1ms to 250ms", decay: "how long the body rings, 50ms to 4s" },
   "dm:ladder": { harm: "the ladder filter's cutoff, 30Hz..20kHz; `ldrkbd` is how much it follows the keyboard", timb: "emphasis (resonance): the passband thins as it climbs, past ~0.75 the filter whistles on its own", morph: "amount of contour: how far the filter envelope (`ldrfatk` / `ldrfdec` / `ldrfsus`) opens the filter, up to five octaves", decay: "the loudness contour's decay, and the release while `ldrdecsw` is on" },
+  "dm:breath": { harm: "the tone: where the harmonics start to fall away, 250Hz (0) to 8kHz (1). Velocity opens it further, by `brtdyn`", timb: "air: how much breath is heard beside the note. 0.2 a clean trumpet, 0.5 a sax, 0.9 a breathy flute", morph: "vibrato depth, coming in after `brtvdelay`. 0 none, 0.5 a player's, 1 wide", decay: "release: how long a note takes to stop after its step, 20ms (0) to 1.5s (1)" },
   "dm:oracle": { harm: "VCO 2's detune against VCO 1, 30 cents either way, 0.5 unison (the slop keeps even unison beating)", timb: "VCO 2's shape: 0 triangle, 0.5 saw, 1 pulse (its width is `orcpw2`; VCO 1's shape is `orcshape1`)", morph: "drive on the summed voices: a gain into a knee, so chords compress and tails clean up. 0 is a wire, 0.5 warm, 1 crushed", decay: "the envelope's decay to its sustain, 50ms to 2s; `orcatk` / `orcsus` / `orcrel` are the rest of it" },
   "dm:granular": { harm: "grain size", timb: "grain density", morph: "play position in the sample", decay: "spray: window, detune and jitter together" },
   "dm:808-kick": { harm: "tune", timb: "attack click", morph: "drive", decay: "decay" },
@@ -234,6 +236,7 @@ const PANELS = {
   "dm:lancet":   { prefix: "lnc", num: LANCET_NUM_CTLS, sel: LANCET_SEL_CTLS, tones: LANCET_TONE_NAMES, tone: lancetTone, describe: lancetToneDescription },
   "dm:halo":     { prefix: "hlo", num: HALO_NUM_CTLS, sel: HALO_SEL_CTLS, tones: HALO_TONE_NAMES, tone: haloTone, describe: haloToneDescription },
   "dm:siege":    { prefix: "sge", num: SIEGE_NUM_CTLS, sel: SIEGE_SEL_CTLS, tones: SIEGE_TONE_NAMES, tone: siegeTone, describe: siegeToneDescription },
+  "dm:breath":   { prefix: "brt", num: BREATH_NUM_CTLS, sel: BREATH_SEL_CTLS, tones: BREATH_TONE_NAMES, tone: breathTone, describe: breathToneDescription },
   "dm:oracle":   { prefix: "orc", num: ORACLE_NUM_CTLS, sel: ORACLE_SEL_CTLS, tones: ORACLE_TONE_NAMES, tone: oracleTone, describe: oracleToneDescription },
   "dm:hexop": {
     prefix: "d",
@@ -1344,12 +1347,12 @@ export function trackRole(t) {
   const char = ENGINE_CHARACTER[key];
   if (t?.isDrumKit || char?.kind === "drum" || /\b(perc\w*|tom\d?|conga|bongo|cowbell|clave|wood\w*)\b/.test(said)) return "perc";
   if (key === "dm:sub" || /\b(sub|808)\b/.test(name)) return "sub";
-  if (key === "dm:bass" || key === "inst:bass-electric" || /bass/.test(name)) return "bass";
+  if (key === "dm:bass" || key === "inst:bass-electric" || /bass/.test(name) || /\b(tuba|sousaphone)\b/.test(name)) return "bass";
   if (key === "dm:vox" || /\b(vox|vocal|voice|choir)\b/.test(name)) return "vox";
   if (key === "dm:drone" || key === "dm:granular" || /\b(drone|texture|noise|riser|sweep|fx|atmos\w*)\b/.test(name)) return "texture";
   if (/\b(pad|strings?)\b/.test(name) || key === "dm:pad") return "pad";
   if (/\b(chords?|keys|piano|organ|stabs?|rhodes|comp)\b/.test(name) || key === "dm:tines") return "keys";
-  if (/\b(lead|melody|hook|arp|pluck|acid|riff)\b/.test(name)) return "lead";
+  if (/\b(lead|melody|hook|arp|pluck|acid|riff|sax|trumpet|flute|clarinet|oboe|solo)\b/.test(name)) return "lead";
   return "part";
 }
 

@@ -13,6 +13,7 @@ import {
   SIEGE_MOD_KEYS, SIEGE_MOD_LABELS, SIEGE_MOD_RANGE,
   LADDER_TARGET_KEYS, LADDER_MOD_LABELS, LADDER_MOD_RANGE,
   ORACLE_MOD_KEYS, ORACLE_MOD_LABELS, ORACLE_MOD_RANGE,
+  BREATH_MOD_KEYS, BREATH_MOD_LABELS, BREATH_MOD_RANGE,
 } from "./engineData.js";
 import { CHANCE_MOD_KEYS, CHANCE_MOD_LABELS } from "./chanceGen.js";
 import { staticEngineByKey } from "./engineData.js";
@@ -136,6 +137,8 @@ export const LFO_KEYS = [
   ...LADDER_TARGET_KEYS.map(k => `ladder_${k}`),
   // Oracle: VCO 1's shape, the widths, the slop, the chorus, the envelope. Oracle only.
   ...ORACLE_MOD_KEYS.map(k => `oracle_${k}`),
+  // Breath: the body, the breath, the pitch, the section. Breath only.
+  ...BREATH_MOD_KEYS.map(k => `breath_${k}`),
 ];
 // How much each target swings per unit of depth:
 //  - 0..1 unit params: amp = depth/2 (swings ±0.5)
@@ -197,6 +200,7 @@ export const LFO_LABELS = {
   ...Object.fromEntries(SIEGE_MOD_KEYS.map(k => [`siege_${k}`, SIEGE_MOD_LABELS[k]])),
   ...Object.fromEntries(LADDER_TARGET_KEYS.map(k => [`ladder_${k}`, LADDER_MOD_LABELS[k]])),
   ...Object.fromEntries(ORACLE_MOD_KEYS.map(k => [`oracle_${k}`, ORACLE_MOD_LABELS[k]])),
+  ...Object.fromEntries(BREATH_MOD_KEYS.map(k => [`breath_${k}`, BREATH_MOD_LABELS[k]])),
 };
 export const lfoLabel = (k) => {
   const inst = splitFxInstanceKey(k);
@@ -317,6 +321,10 @@ export const LFO_AMP_SCALE = {
   ...Object.fromEntries(ORACLE_MOD_KEYS.map(k => {
     const [lo, hi] = ORACLE_MOD_RANGE[k];
     return [`oracle_${k}`, hi - lo];
+  })),
+  ...Object.fromEntries(BREATH_MOD_KEYS.map(k => {
+    const [lo, hi] = BREATH_MOD_RANGE[k];
+    return [`breath_${k}`, hi - lo];
   })),
 };
 
@@ -699,6 +707,8 @@ export const AUTOMATION_TARGETS = {
   ...Object.fromEntries(LADDER_TARGET_KEYS.map(k => [`ladder.${k}`, { label: LADDER_MOD_LABELS[k] }])),
   // Oracle (oracle engine only) — VCO 1's shape, the widths, slop, chorus, the envelope.
   ...Object.fromEntries(ORACLE_MOD_KEYS.map(k => [`oracle.${k}`, { label: ORACLE_MOD_LABELS[k] }])),
+  // Breath (breath engine only) — the body, the breath, the pitch, the section.
+  ...Object.fromEntries(BREATH_MOD_KEYS.map(k => [`breath.${k}`, { label: BREATH_MOD_LABELS[k] }])),
   // fx
   "fx.gain":            { label: "gain drive" },
   "fx.pan":             { label: "pan" },
@@ -793,6 +803,7 @@ export function voiceAutoKeysForEngineKey(engineKey) {
     case "dm:siege":       return ["vol", "harm", "timb", "morph", "decay"];
     case "dm:tines":     return ["vol", "harm", "timb", "morph", "decay"];
     case "dm:oracle":   return ["vol", "harm", "timb", "morph", "decay", "osc1", "osc2", "osc3", "osc4"];
+    case "dm:breath":   return ["vol", "harm", "timb", "morph", "decay"];
     case "dm:granular":   return ["vol", "harm", "timb", "morph", "decay"];
     case "dm:contagion":      return ["vol", "harm", "timb", "morph", "decay", "osc1", "osc2", "osc3", "osc4", "noise"];
     case "dm:hexop":        return ["vol", "harm", "timb", "morph", "decay"];
@@ -834,6 +845,7 @@ export function canAutomateKey(engineKey, key, live = {}) {
   if (key.startsWith("siege.")) return t.engineKey === "dm:siege";
   if (key.startsWith("ladder.")) return t.engineKey === "dm:ladder";
   if (key.startsWith("oracle.")) return t.engineKey === "dm:oracle";
+  if (key.startsWith("breath.")) return t.engineKey === "dm:breath";
   if (key.startsWith("fx.")) return true;
   if (VOICE_AUTO_KEYS.includes(key)) return voiceAutoKeysForEngineKey(t.engineKey).includes(key);
   return false;
@@ -884,6 +896,8 @@ export function canModulateKey(engineKey, key, live = {}) {
   if (key.startsWith("ladder_")) return t.engineKey === "dm:ladder";
   // The oracle panel — oracle only.
   if (key.startsWith("oracle_")) return t.engineKey === "dm:oracle";
+  // The breath panel — breath only.
+  if (key.startsWith("breath_")) return t.engineKey === "dm:breath";
   const eng = staticEngineByKey(t.engineKey);
   if (!eng) return false;
   // Plaits exposes harm/timb/morph/decay as voice params.
@@ -932,6 +946,9 @@ export function canModulateKey(engineKey, key, live = {}) {
     // One worklet node: the detune, VCO 2's shape and the drive are a-rate
     // AudioParams on it, the decay and the four mixer levels k-rate ones.
     case "dm:oracle":   return ["harm", "timb", "morph", "decay", "osc1", "osc2", "osc3", "osc4"].includes(key);
+    // Tone, air, vibrato and release: k-rate AudioParams on the worklet node,
+    // read every 16 samples, so an LFO on the tone is a swell in brightness.
+    case "dm:breath":   return ["harm", "timb", "morph", "decay"].includes(key);
     // Tines has no per-voice AudioParam targets beyond vol+track fx; its
     // timbre params are still automatable via setParam (see canAutomate).
   }

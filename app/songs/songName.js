@@ -91,6 +91,7 @@ const NOUNS = {
   rig: ["amp", "feedback", "pickup", "string", "fretwork", "strum", "riff", "tube", "cabinet", "twang", "lick", "fret"],
   sub: ["sub", "bottom", "tremor", "rumble", "subfloor", "lowend", "quake", "woofer", "depth", "boom", "trench", "fathom"],
   drone: ["drone", "hum", "dirge", "monolith", "undertow", "equation", "bytebeat", "ritual", "mantra", "ohm", "swell", "tide"],
+  wind: ["fanfare", "reed", "brass", "horn", "embouchure", "mouthpiece", "bellows", "gust", "zephyr", "woodwind", "bugle", "serenade"],
   voice: ["choir", "chorus", "hymn", "chant", "refrain", "vowel", "lyric", "syllable", "canticle", "harmony", "breath", "lullaby"],
   analog: ["filter", "sweep", "detune", "circuit", "voltage", "oscillator", "envelope", "saw", "pulse", "unison", "transistor", "capacitor"],
   plaits: ["model", "particle", "swarm", "chord", "wavefold", "macro", "braid", "harmonic", "formant", "waveguide", "plait", "lattice"],
@@ -149,6 +150,7 @@ function familyFor(engineKey, isDrumKit) {
   if (key === "dm:sub") return "sub";
   if (key === "dm:drone") return "drone";
   if (key === "dm:vox") return "voice";
+  if (key === "dm:breath") return "wind";
   if (key === "dm:lancet") return "drums";
   if (key === "dm:halo") return "drums";
   if (key === "dm:siege") return "drums";

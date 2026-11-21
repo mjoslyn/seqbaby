@@ -188,6 +188,12 @@ export const ENGINE_MACRO_TIPS = {
     morph: "how much chorus is on the output",
     decay: "how long each note rings, and how long it takes to let go",
   },
+  "dm:breath": {
+    harm: "how bright the instrument is: where its harmonics start to fall away. Blowing harder (velocity) opens it further, by as much as dyn says",
+    timb: "how much breath you hear beside the note. A soft note is the breathier one",
+    morph: "vibrato depth, after the delay the panel sets: pitch for a reed or brass, mostly breath for a flute. Zero is none",
+    decay: "how long a note takes to stop once the step ends, 20ms to 1.5s (longer with a fall on it)",
+  },
   "dm:oracle": {
     harm: "detunes VCO2 against VCO1, 30 cents either way. The middle is unison, which still beats a little: the two never sit exactly together",
     timb: "VCO2's shape: triangle, saw in the middle, pulse at the top (its width is the panel's)",
@@ -253,6 +259,10 @@ export const ANALOG_ENGINES = [
   // delay and a granular cloud, after the Grone. Polyphony lives in
   // the worklet (drone.js), so a held chord can fade under the next one.
   { key: "dm:drone",     label: "drone",           defaultNote: 36, poly: true, melodic: true },
+  // The wind instruments: saxes, clarinets, oboes, brass, flutes. A reed,
+  // lips or a jet, a body of two formants, breath noise and a section of up
+  // to four players a note, additive, in one AudioWorklet (breath.js).
+  { key: "dm:breath",    label: "breath",          defaultNote: 60, poly: true, melodic: true },
   // A singing voice: a glottal pulse through five formants, consonants in
   // front of the vowel, a choir of up to eight per note (vox.js).
   { key: "dm:vox",       label: "vox",             defaultNote: 60, poly: true, melodic: true },
@@ -495,6 +505,7 @@ export function engineSliderLabels(engineKey) {
     case "dm:siege":       return { harm: "drive",    timb: "click",  morph: "depth",     decay: "decay" };
     case "dm:drone":     return { harm: "cutoff",   timb: "a0",     morph: "a1",        decay: "a2" };
     case "dm:vox":       return { harm: "vowel",    timb: "size",   morph: "breath",    decay: "release" };
+    case "dm:breath":    return { harm: "tone",     timb: "air",    morph: "vibrato",   decay: "release" };
     case "dm:lancet":      return { harm: "timbre",   timb: "color",  morph: "fx",        decay: "decay" };
     case "dm:halo":        return { harm: "tone",     timb: "size",   morph: "spread",    decay: "decay" };
     case "dm:tines":     return { harm: "tine",     timb: "bite",   morph: "chorus",    decay: "decay" };
@@ -2494,6 +2505,247 @@ export function oracleTone(name) {
   return out;
 }
 
+// ---- breath (breath.js) ------------------------------------------------------
+// The wind instruments' panel. The four track sliders are the tone (where the
+// harmonics start to fall away), the air, the vibrato depth and the release;
+// the panel is the instrument (exciter, bore, the body's two formants, a
+// mute), the breath (attack, tongue, how far blowing opens the tone, swell,
+// growl, flutter), the pitch (vibrato rate and delay, scoop, fall, drift)
+// and the section. Keys are `brt` + short key -> `breath_<short>` /
+// `breath.<short>`. `brt`, not `b` or `bs`: the bass's prefix is `bs`.
+
+/** The exciters, in the order the processor numbers them. */
+export const BREATH_KINDS = ["reed", "lips", "jet"];
+
+/** One line per exciter, for the status bar when it is picked. */
+export const BREATH_KIND_TIPS = {
+  reed: "a reed: saxes, clarinets (bore at the bottom), oboes and bassoons (edge up). Scoops, growls, a breathy subtone when blown softly",
+  lips: "lips in a mouthpiece: trumpets, trombones, horns, tubas. Blowing harder brightens it further than anything else here",
+  jet: "a jet of air over an edge: flutes, pipes, bottles. Near a sine when soft, onto its octave when overblown, a chiff on the attack",
+};
+
+/** Numeric panel controls: [short key, min, max, default, label]. */
+export const BREATH_NUM_CTLS = [
+  ["bore",    0, 1, 1,    "bore"],
+  ["edge",    0, 1, 0.5,  "edge"],
+  ["f1",      0, 1, 0.52, "formant 1"],
+  ["f2",      0, 1, 0.44, "formant 2"],
+  ["res",     0, 1, 0.5,  "formant depth"],
+  ["mute",    0, 1, 0,    "mute"],
+  ["atk",     0, 1, 0.25, "attack"],
+  ["tongue",  0, 1, 0.4,  "tongue"],
+  ["dyn",     0, 1, 0.5,  "dynamics"],
+  ["swell",   0, 1, 0.5,  "swell"],
+  ["growl",   0, 1, 0,    "growl"],
+  ["flutter", 0, 1, 0,    "flutter"],
+  ["vrate",   0, 1, 0.45, "vibrato rate"],
+  ["vdelay",  0, 1, 0.35, "vibrato delay"],
+  ["scoop",   0, 1, 0.2,  "scoop"],
+  ["fall",    0, 1, 0,    "fall"],
+  ["drift",   0, 1, 0.3,  "drift"],
+  ["players", 1, 4, 1,    "players"],
+  ["detune",  0, 1, 0.3,  "section detune"],
+  ["spread",  0, 1, 0.5,  "section spread"],
+];
+
+/** Select controls: [short key, default, [values]]. */
+export const BREATH_SEL_CTLS = [
+  ["kind", "reed", BREATH_KINDS],
+  ["mode", "poly", ["poly", "mono"]],
+];
+
+export const BREATH_MOD_KEYS = BREATH_NUM_CTLS.map(c => c[0]);
+export const BREATH_NUM_KEYS = BREATH_MOD_KEYS.map(k => `brt${k}`);
+export const BREATH_SEL_KEYS = BREATH_SEL_CTLS.map(c => `brt${c[0]}`);
+
+export const BREATH_MOD_RANGE = Object.fromEntries(BREATH_NUM_CTLS.map(c => [c[0], [c[1], c[2]]]));
+
+export const BREATH_MOD_LABELS = Object.fromEntries(
+  BREATH_NUM_CTLS.map(([k, , , , label]) => [k, `breath ${label}`]));
+
+export const BREATH_DEFAULTS = {
+  ...Object.fromEntries(BREATH_NUM_CTLS.map(c => [`brt${c[0]}`, c[3]])),
+  ...Object.fromEntries(BREATH_SEL_CTLS.map(c => [`brt${c[0]}`, c[1]])),
+};
+
+/** A 0..1 lane value in this control's own units. @param {string} k short key */
+export function breathFromUnit(k, u) {
+  const [lo, hi] = BREATH_MOD_RANGE[k] ?? [0, 1];
+  return lo + Math.max(0, Math.min(1, u)) * (hi - lo);
+}
+
+/** The formant knobs' positions for a frequency in Hz: formant 1 runs
+ *  150Hz..2.5kHz, formant 2 500Hz..6kHz, both exponential (breath.js's
+ *  buildBody is the other half of this). */
+export function breathF1(hz) { return Math.round(1000 * Math.max(0, Math.min(1, Math.log(hz / 150) / Math.log(2500 / 150)))) / 1000; }
+export function breathF2(hz) { return Math.round(1000 * Math.max(0, Math.min(1, Math.log(hz / 500) / Math.log(12)))) / 1000; }
+/** And back: where a formant knob puts its peak, in Hz. */
+export function breathF1Hz(k) { return 150 * Math.pow(2500 / 150, k); }
+export function breathF2Hz(k) { return 500 * Math.pow(12, k); }
+
+// ---- the instruments ---------------------------------------------------------
+// Complete: the exciter, every panel control and the four track sliders, so
+// nothing of the last one survives a load. `f1` / `f2` are written in Hz and
+// turned into knob positions. The formant positions are the ones published
+// for each family; everything else is set by what the instrument does.
+const BREATH_TONES = {
+  "alto sax": {
+    d: "a reed on a cone with peaks at 650Hz and 1.5kHz: the alto, a little scoop into each note, vibrato late",
+    kind: "reed", tone: 0.5, air: 0.45, vib: 0.5, rel: 0.35,
+    p: { f1: 650, f2: 1500, res: 0.55, edge: 0.55, atk: 0.2, tongue: 0.45, dyn: 0.55, scoop: 0.3, vdelay: 0.4, vrate: 0.5, drift: 0.35 },
+  },
+  "tenor sax": {
+    d: "the alto's body a fourth lower, breathier, a trace of growl: the tenor",
+    kind: "reed", tone: 0.46, air: 0.55, vib: 0.5, rel: 0.35,
+    p: { f1: 480, f2: 1300, res: 0.55, edge: 0.55, atk: 0.2, tongue: 0.45, dyn: 0.55, growl: 0.08, scoop: 0.35, vdelay: 0.4, vrate: 0.45, drift: 0.35 },
+  },
+  "bari sax": {
+    d: "the low sax: peaks at 330Hz and 1kHz, more edge, a harder tongue. For honking bass lines",
+    kind: "reed", tone: 0.45, air: 0.5, vib: 0.3, rel: 0.3,
+    p: { f1: 330, f2: 1000, res: 0.5, edge: 0.6, atk: 0.15, tongue: 0.55, dyn: 0.6, growl: 0.1, scoop: 0.2, vdelay: 0.5, vrate: 0.4 },
+  },
+  "soprano sax": {
+    d: "the straight one: peaks at 900Hz and 2.2kHz, less air, a quick vibrato",
+    kind: "reed", tone: 0.55, air: 0.35, vib: 0.5, rel: 0.3,
+    p: { f1: 900, f2: 2200, res: 0.5, edge: 0.5, atk: 0.2, tongue: 0.4, dyn: 0.5, scoop: 0.25, vdelay: 0.35, vrate: 0.55 },
+  },
+  "growl sax": {
+    d: "a tenor blown hard with the growl up and a deep scoop: the rock and roll honk",
+    kind: "reed", tone: 0.6, air: 0.5, vib: 0.4, rel: 0.3,
+    p: { f1: 520, f2: 1400, res: 0.6, edge: 0.6, atk: 0.12, tongue: 0.6, dyn: 0.7, growl: 0.6, scoop: 0.5, vdelay: 0.3, vrate: 0.5, drift: 0.4 },
+  },
+  "subtone sax": {
+    d: "a tenor barely blown: dark, half air, no tongue, a slow wide vibrato. The ballad",
+    kind: "reed", tone: 0.3, air: 0.85, vib: 0.6, rel: 0.45,
+    p: { f1: 480, f2: 1300, res: 0.5, edge: 0.45, atk: 0.4, tongue: 0.1, dyn: 0.4, scoop: 0.3, vdelay: 0.3, vrate: 0.35, drift: 0.4 },
+  },
+  "sax section": {
+    d: "four saxes on every note, a few cents and a few milliseconds apart, across the stereo field",
+    kind: "reed", tone: 0.5, air: 0.4, vib: 0.35, rel: 0.3,
+    p: { f1: 550, f2: 1400, res: 0.5, edge: 0.55, atk: 0.15, tongue: 0.55, dyn: 0.6, scoop: 0.2, vdelay: 0.4, players: 4, detune: 0.5, spread: 0.7 },
+  },
+  "clarinet": {
+    d: "a reed on a cylinder: the even harmonics gone below 1.8kHz, which is the hollow, woody sound. Clean attack, little vibrato",
+    kind: "reed", tone: 0.5, air: 0.3, vib: 0.25, rel: 0.3,
+    p: { bore: 0, f1: 1500, f2: 3700, res: 0.25, edge: 0.5, atk: 0.25, tongue: 0.3, dyn: 0.45, scoop: 0.05, vdelay: 0.5, drift: 0.2 },
+  },
+  "bass clarinet": {
+    d: "the cylinder an octave down: hollow and dark, with more air in it",
+    kind: "reed", tone: 0.42, air: 0.42, vib: 0.2, rel: 0.3,
+    p: { bore: 0, f1: 600, f2: 2400, res: 0.3, edge: 0.55, atk: 0.25, tongue: 0.35, dyn: 0.5, scoop: 0.05, vdelay: 0.5, drift: 0.2 },
+  },
+  "oboe": {
+    d: "a double reed: the edge most of the way up and strong peaks at 1.1kHz and 2.7kHz, so the fundamental is the quiet part. Nasal, penetrating",
+    kind: "reed", tone: 0.6, air: 0.2, vib: 0.45, rel: 0.25,
+    p: { f1: 1100, f2: 2700, res: 0.75, edge: 0.85, atk: 0.15, tongue: 0.5, dyn: 0.35, scoop: 0.05, vdelay: 0.4, vrate: 0.55, drift: 0.2 },
+  },
+  "bassoon": {
+    d: "the low double reed: the same edge with its peaks at 470Hz and 1.2kHz. Dry and reedy",
+    kind: "reed", tone: 0.45, air: 0.25, vib: 0.3, rel: 0.25,
+    p: { f1: 470, f2: 1200, res: 0.7, edge: 0.8, atk: 0.15, tongue: 0.5, dyn: 0.4, scoop: 0.05, vdelay: 0.5, drift: 0.2 },
+  },
+  "trumpet": {
+    d: "lips into a bell that peaks at 1.2kHz: mellow played softly, brilliant played hard, a tongued attack",
+    kind: "lips", tone: 0.5, air: 0.2, vib: 0.4, rel: 0.3,
+    p: { f1: 1200, f2: 2400, res: 0.55, edge: 0.5, atk: 0.15, tongue: 0.6, dyn: 0.7, scoop: 0.1, vdelay: 0.45, vrate: 0.5, drift: 0.25 },
+  },
+  "muted trumpet": {
+    d: "the trumpet with the mute in: the lows gone, a nasal peak near 1.9kHz, quiet and close",
+    kind: "lips", tone: 0.6, air: 0.25, vib: 0.3, rel: 0.25,
+    p: { f1: 1200, f2: 2400, res: 0.5, edge: 0.55, mute: 0.85, atk: 0.15, tongue: 0.5, dyn: 0.5, scoop: 0.15, vdelay: 0.5, drift: 0.25 },
+  },
+  "flugelhorn": {
+    d: "a wider, darker trumpet: the peak down at 800Hz, a soft tongue, some air",
+    kind: "lips", tone: 0.38, air: 0.32, vib: 0.4, rel: 0.35,
+    p: { f1: 800, f2: 1700, res: 0.45, edge: 0.45, atk: 0.25, tongue: 0.35, dyn: 0.5, scoop: 0.15, vdelay: 0.4, vrate: 0.4, drift: 0.25 },
+  },
+  "french horn": {
+    d: "the round one: a peak at 420Hz, the tone held back, a slow attack and almost no vibrato",
+    kind: "lips", tone: 0.33, air: 0.2, vib: 0.15, rel: 0.4,
+    p: { f1: 420, f2: 1000, res: 0.5, edge: 0.45, atk: 0.35, tongue: 0.3, dyn: 0.6, scoop: 0.05, vdelay: 0.6, drift: 0.2 },
+  },
+  "trombone": {
+    d: "the trumpet's body an octave down, peaks at 520Hz and 1.5kHz, with the slide's scoop into the note",
+    kind: "lips", tone: 0.45, air: 0.2, vib: 0.35, rel: 0.3,
+    p: { f1: 520, f2: 1500, res: 0.5, edge: 0.5, atk: 0.2, tongue: 0.5, dyn: 0.7, scoop: 0.25, vdelay: 0.45, vrate: 0.4, drift: 0.25 },
+  },
+  "tuba": {
+    d: "the bottom of the brass: a peak at 230Hz, dark, a broad attack, steady. For bass lines an octave or two under middle C",
+    kind: "lips", tone: 0.3, air: 0.3, vib: 0.1, rel: 0.3,
+    p: { f1: 230, f2: 600, res: 0.5, edge: 0.5, atk: 0.3, tongue: 0.45, dyn: 0.55, scoop: 0.05, vdelay: 0.7, drift: 0.2 },
+  },
+  "brass section": {
+    d: "four players on every note, spread wide and a few cents apart: trumpets and trombones together",
+    kind: "lips", tone: 0.5, air: 0.2, vib: 0.25, rel: 0.3,
+    p: { f1: 1000, f2: 2200, res: 0.5, edge: 0.5, atk: 0.15, tongue: 0.7, dyn: 0.75, scoop: 0.1, vdelay: 0.5, players: 4, detune: 0.45, spread: 0.7 },
+  },
+  "horn stabs": {
+    d: "the section hit hard and let go: a hard tongue, the level dropping straight after it, and a fall off the end of every note",
+    kind: "lips", tone: 0.55, air: 0.2, vib: 0.1, rel: 0.3,
+    p: { f1: 900, f2: 2200, res: 0.5, edge: 0.55, atk: 0.08, tongue: 0.9, dyn: 0.85, swell: 0.2, scoop: 0.1, fall: 0.35, vdelay: 0.8, players: 4, detune: 0.5, spread: 0.7 },
+  },
+  "low brass": {
+    d: "three players low down, trombones and a tuba: the peak at 350Hz, dark until pushed",
+    kind: "lips", tone: 0.38, air: 0.22, vib: 0.15, rel: 0.35,
+    p: { f1: 350, f2: 900, res: 0.5, edge: 0.5, atk: 0.25, tongue: 0.5, dyn: 0.7, scoop: 0.1, vdelay: 0.6, players: 3, detune: 0.4, spread: 0.6 },
+  },
+  "flute": {
+    d: "a jet: nearly a sine with the air around it, a chiff as it speaks, a vibrato that is mostly breath",
+    kind: "jet", tone: 0.5, air: 0.55, vib: 0.6, rel: 0.3,
+    p: { f1: 800, f2: 2000, res: 0.25, edge: 0.3, atk: 0.3, tongue: 0.45, dyn: 0.5, scoop: 0, vdelay: 0.3, vrate: 0.5, drift: 0.25 },
+  },
+  "piccolo": {
+    d: "the small flute: brighter, less air, for the top two octaves",
+    kind: "jet", tone: 0.62, air: 0.45, vib: 0.5, rel: 0.25,
+    p: { f1: 1700, f2: 3500, res: 0.25, edge: 0.3, atk: 0.2, tongue: 0.5, dyn: 0.5, scoop: 0, vdelay: 0.3, vrate: 0.55, drift: 0.2 },
+  },
+  "breathy flute": {
+    d: "a low flute blown gently: dark, as much air as note, no tongue",
+    kind: "jet", tone: 0.4, air: 0.9, vib: 0.55, rel: 0.4,
+    p: { f1: 600, f2: 1600, res: 0.25, edge: 0.3, atk: 0.4, tongue: 0.2, dyn: 0.45, scoop: 0, vdelay: 0.3, vrate: 0.4, drift: 0.3 },
+  },
+  "pan flute": {
+    d: "a stopped pipe: odd harmonics only, a lot of air, a strong chiff on every note",
+    kind: "jet", tone: 0.45, air: 0.85, vib: 0.35, rel: 0.3,
+    p: { bore: 0, f1: 800, f2: 2000, res: 0.2, edge: 0.35, atk: 0.2, tongue: 0.7, dyn: 0.5, scoop: 0.1, vdelay: 0.4, drift: 0.3 },
+  },
+  "recorder": {
+    d: "a fipple flute: clean and plain, little air, hardly any vibrato, hardly any dynamics",
+    kind: "jet", tone: 0.45, air: 0.25, vib: 0.15, rel: 0.2,
+    p: { bore: 0.8, f1: 900, f2: 2200, res: 0.2, edge: 0.35, atk: 0.15, tongue: 0.5, dyn: 0.3, scoop: 0, vdelay: 0.6, drift: 0.15 },
+  },
+  "shakuhachi": {
+    d: "bamboo, blown across the end: all the air, a hard chiff, a long scoop up into the note and a wide late vibrato",
+    kind: "jet", tone: 0.5, air: 1, vib: 0.7, rel: 0.45,
+    p: { f1: 700, f2: 1800, res: 0.3, edge: 0.35, atk: 0.25, tongue: 0.8, dyn: 0.8, scoop: 0.6, vdelay: 0.5, vrate: 0.35, drift: 0.4 },
+  },
+  "bottle": {
+    d: "a breath across a bottle: one dark note inside a lot of air",
+    kind: "jet", tone: 0.25, air: 0.9, vib: 0, rel: 0.3,
+    p: { bore: 0, f1: 400, f2: 1200, res: 0.15, edge: 0.2, atk: 0.3, tongue: 0.5, dyn: 0.4, scoop: 0, drift: 0.3 },
+  },
+};
+
+export const BREATH_TONE_NAMES = Object.keys(BREATH_TONES);
+
+/** One line saying what an instrument is. @param {string} name */
+export function breathToneDescription(name) { return BREATH_TONES[name]?.d ?? ""; }
+
+/**
+ * An instrument as a complete set of track params: the exciter, every panel
+ * control and the four track sliders.
+ * @param {string} name
+ * @returns {Record<string, number|string>|null}
+ */
+export function breathTone(name) {
+  const v = BREATH_TONES[name];
+  if (!v) return null;
+  const out = { ...BREATH_DEFAULTS, brtkind: v.kind };
+  for (const [k, val] of Object.entries(v.p)) out[`brt${k}`] = k === "f1" ? breathF1(val) : k === "f2" ? breathF2(val) : val;
+  out.harm = v.tone; out.timb = v.air; out.morph = v.vib; out.decay = v.rel;
+  return out;
+}
+
 // ---- granular (voices.js) ---------------------------------------------------
 // Musical division → beats (quarter note = 1 beat) for beat-synced grain rate.
 export const GRAN_RATE_BEATS = {
@@ -2603,6 +2855,7 @@ export const ENGINE_CHARACTER = {
   "dm:silverbox": { kind: "analog", sound: "the acid box: a saw or square through a squelching diode ladder with accent and slide", use: "acid lines, techno basses, squelchy hooks", human: "accents (velocity over 0.6), slides (ties), lanes on cutoff and resonance that move every section", cheap: "no accents, no slides, a parked filter" },
   "dm:sub": { kind: "analog", sound: "the sub bass: an 808, a pure sine, a reese, a drill slide, with harmonics that make it heard on small speakers", use: "808 bass, trap and drill slides, dub and house subs, reese", human: "drive so it is heard on a phone, glide on legato notes, a preset", cheap: "a pure sine with no drive: inaudible on most speakers" },
   "dm:tines": { kind: "digital", sound: "an fm electric piano with a chorus, velocity making it bark", use: "soul, r&b, lo-fi, house and jazz chords", human: "real velocity variation, chords held, a little cassette or vinyl", cheap: "equal velocities: it loses the bark that makes it a piano" },
+  "dm:breath": { kind: "modelled", sound: "wind instruments: saxes, clarinet, oboe, bassoon, trumpet, trombone, french horn, tuba, flutes, and sections of them, with breath, tongue, scoops, falls and growl", use: "horn lines and stabs, a sax or trumpet lead, a tuba or bari sax bass, flute melodies, brass pads", human: "a preset first; velocity is loudness AND brightness, so vary it; tie notes to slur them; brtscoop and brtfall on a lead, brtplayers 3-4 for a section", cheap: "every note at one velocity, or a solo sax playing six-note chords" },
   "dm:vox": { kind: "modelled", sound: "a singing voice: glottis, formants, consonants, a choir; it can sing words", use: "hooks, choirs, oohs and aahs, chants, a sung lyric", human: "sngtext with real syllables, sngvib and sngdrift up, notes held, a preset", cheap: "a robot choir as the main vocal of a warm genre" },
   "dm:granular": { kind: "recorded", sound: "a grain cloud read from a sample or a bundled texture", use: "ambient beds, frozen textures, glitch", human: "slow lanes on position and spray, reverb", cheap: "short grains on a melody" },
   "wt:akwf": { kind: "raw", sound: "single-cycle wavetables, morphable: anything from a sine to a buzzy chip wave", use: "digital and chip tones, a morphing layer", human: "the track filter and an envelope, chorus, a lane on the scan", cheap: "a bare single-cycle wave played as a lead" },

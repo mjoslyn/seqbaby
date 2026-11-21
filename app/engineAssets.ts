@@ -108,6 +108,7 @@ export const ENGINE_MODULES = [
   "mixView.js",
   "modMotion.js",
   "oracle.js",
+  "breath.js",
   "paramHold.js",
   "paramMenu.js",
   "paramTargets.js",

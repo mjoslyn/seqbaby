@@ -379,6 +379,54 @@ const SIEGE_PANEL = `
           </div>
         </div>`;
 
+// The breath's panel: the wind instruments. The exciter, the body, the
+// breath, the pitch and the section; the four sliders are the tone, the air,
+// the vibrato and the release. The instrument dropdown ships empty and is
+// filled at runtime from BREATH_TONE_NAMES; the ranges and defaults must match
+// BREATH_NUM_CTLS in engineData.js (test/breath.test.js holds them to it).
+// Classes are `p-brt*`.
+const BREATH_PANEL = `
+        <div class="sq-param-group sq-param-group--breath" hidden>
+          <div class="sq-breath__row">
+            <span class="sq-breath__lbl">inst</span>
+            <select class="sq-breath__tone" title="load an instrument: the exciter, every panel control and the four sliders"></select>
+            <select class="p-brtkind" title="what makes the tube sound. reed: saxes, clarinets, oboes. lips: trumpets, trombones, horns, tubas. jet: flutes and pipes"><option value="reed" selected>reed</option><option value="lips">lips</option><option value="jet">jet</option></select>
+            <select class="p-brtmode" title="poly plays chords. mono is a solo instrument: one voice, the last note wins. Either way a note tied into the next is slurred: no new attack, the pitch slides there"><option value="poly" selected>poly</option><option value="mono">mono</option></select>
+          </div>
+          <div class="sq-breath__row">
+            <span class="sq-breath__lbl">body</span>
+            <label class="sq-breath__f"><span>bore</span><input class="p-brtbore" type="range" min="0" max="1" step="0.01" value="1" title="the tube: a cylinder at the bottom (no even harmonics below 1.8kHz: a clarinet, a pan pipe), a cone at the top (all of them: a sax, an oboe, every brass)" /></label>
+            <label class="sq-breath__f"><span>edge</span><input class="p-brtedge" type="range" min="0" max="1" step="0.01" value="0.5" title="how much of the tone is above the fundamental before the tone slider cuts in. Low is round, high is reedy and nasal: a double reed, a tight embouchure" /></label>
+            <label class="sq-breath__f"><span>formant 1</span><input class="p-brtf1" type="range" min="0" max="1" step="0.01" value="0.52" title="the body's lower peak, 150Hz to 2.5kHz. It does not move with the note, and where it sits is which instrument this is: 230Hz a tuba, 500Hz a trombone, 650Hz an alto sax, 1.2kHz a trumpet" /></label>
+            <label class="sq-breath__f"><span>formant 2</span><input class="p-brtf2" type="range" min="0" max="1" step="0.01" value="0.44" title="the body's upper peak, 500Hz to 6kHz: 1.5kHz on an alto sax, 2.7kHz on an oboe" /></label>
+            <label class="sq-breath__f"><span>depth</span><input class="p-brtres" type="range" min="0" max="1" step="0.01" value="0.5" title="how far the two peaks stand out of the spectrum, up to 18dB. Zero is no body at all" /></label>
+            <label class="sq-breath__f"><span>mute</span><input class="p-brtmute" type="range" min="0" max="1" step="0.01" value="0" title="a brass mute: the lows go, a nasal peak comes in near 1.9kHz, and the level drops" /></label>
+          </div>
+          <div class="sq-breath__row">
+            <span class="sq-breath__lbl">breath</span>
+            <label class="sq-breath__f"><span>attack</span><input class="p-brtatk" type="range" min="0" max="1" step="0.01" value="0.25" title="how long the breath takes to arrive, 4ms to 400ms. The tone opens as it does" /></label>
+            <label class="sq-breath__f"><span>tongue</span><input class="p-brttongue" type="range" min="0" max="1" step="0.01" value="0.4" title="how hard the note is tongued: the pressure overshoots and a burst of air comes with it. Zero is a ha, the top is a ta. On a jet it is the chiff" /></label>
+            <label class="sq-breath__f"><span>dynamics</span><input class="p-brtdyn" type="range" min="0" max="1" step="0.01" value="0.5" title="how much blowing harder brightens the tone. Velocity is the blowing pressure, and the pressure rises through the attack and falls through the release, so this is also how much each note opens and closes. Lips move furthest" /></label>
+            <label class="sq-breath__f"><span>swell</span><input class="p-brtswell" type="range" min="0" max="1" step="0.01" value="0.5" title="what a held note does: the middle holds, below it the note falls away after the attack (a stab, an fp), above it the note grows" /></label>
+            <label class="sq-breath__f"><span>growl</span><input class="p-brtgrowl" type="range" min="0" max="1" step="0.01" value="0" title="roughens the tone at around 80Hz and pushes it brighter: the growl a sax player sings into the horn" /></label>
+            <label class="sq-breath__f"><span>flutter</span><input class="p-brtflutter" type="range" min="0" max="1" step="0.01" value="0" title="flutter tongue: the breath interrupted 24 times a second" /></label>
+          </div>
+          <div class="sq-breath__row">
+            <span class="sq-breath__lbl">pitch</span>
+            <label class="sq-breath__f"><span>vib rate</span><input class="p-brtvrate" type="range" min="0" max="1" step="0.01" value="0.45" title="vibrato speed, 3.5 to 8Hz. The depth is the vibrato slider" /></label>
+            <label class="sq-breath__f"><span>vib delay</span><input class="p-brtvdelay" type="range" min="0" max="1" step="0.01" value="0.35" title="how long a note is held before the vibrato starts, up to 1.2s. Short notes get none" /></label>
+            <label class="sq-breath__f"><span>scoop</span><input class="p-brtscoop" type="range" min="0" max="1" step="0.01" value="0.2" title="each note starts under its pitch and slides up into it, up to 2.5 semitones on a reed" /></label>
+            <label class="sq-breath__f"><span>fall</span><input class="p-brtfall" type="range" min="0" max="1" step="0.01" value="0" title="the pitch drops off the end of every note as it is let go, up to an octave, and the release is stretched to fit it: a horn section fall" /></label>
+            <label class="sq-breath__f"><span>drift</span><input class="p-brtdrift" type="range" min="0" max="1" step="0.01" value="0.3" title="how unsteady the player is: the tuning of each note, a slow wander in pitch, and the breath wavering" /></label>
+          </div>
+          <div class="sq-breath__row">
+            <span class="sq-breath__lbl">section</span>
+            <label class="sq-breath__f"><span>players</span><input class="p-brtplayers" type="range" min="1" max="4" step="1" value="1" title="how many players are on every note, 1 to 4, each with their own tuning, vibrato, entry and place in the stereo field" /></label>
+            <label class="sq-breath__f"><span>detune</span><input class="p-brtdetune" type="range" min="0" max="1" step="0.01" value="0.3" title="how far apart the players are tuned, up to 20 cents" /></label>
+            <label class="sq-breath__f"><span>spread</span><input class="p-brtspread" type="range" min="0" max="1" step="0.01" value="0.5" title="how wide the players sit across the stereo field" /></label>
+          </div>
+        </div>`;
+
 // The oracle's panel: the poly analog's front plate minus the four sliders
 // (detune / VCO 2 shape / drive / decay) and the mixer row. The patch
 // dropdown ships empty and is filled at runtime from ORACLE_TONE_NAMES; the
@@ -881,6 +929,7 @@ ${LANCET_PANEL}
 ${HALO_PANEL}
 ${SIEGE_PANEL}
 ${ORACLE_PANEL}
+${BREATH_PANEL}
         <div class="sq-param-group sq-param-group--silverbox" hidden>
           <div class="sq-field"><label>wave</label>
             <select class="p-sbwave" title="the two waveforms. Saw is brighter, square is hollower and sits lower">

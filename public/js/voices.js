@@ -18,6 +18,7 @@ import { buildLancetVoice, LANCET_NUM_KEYS, LANCET_SEL_KEYS } from "./lancet.js"
 import { buildHaloVoice, HALO_NUM_KEYS, HALO_SEL_KEYS } from "./halo.js";
 import { buildSiegeVoice, SIEGE_NUM_KEYS, SIEGE_SEL_KEYS } from "./siege.js";
 import { buildLadderWorkletVoice, LADDER_NUM_KEYS, LADDER_SEL_KEYS } from "./ladder.js";
+import { buildBreathVoice, BREATH_NUM_KEYS, BREATH_SEL_KEYS } from "./breath.js";
 import { buildOracleWorkletVoice, ORACLE_NUM_KEYS, ORACLE_SEL_KEYS } from "./oracle.js";
 import { buildHexopVoice, HEXOP_NUM_KEYS, HEXOP_SEL_KEYS } from "./hexop.js";
 import { buildGuitarVoice, GUITAR_NUM_KEYS, GUITAR_SEL_KEYS } from "./guitar.js";
@@ -781,6 +782,25 @@ export function buildDrumSynthNode(kind, output) {
         release: (time) => s.releaseAll(time),
       };
     }
+    // Breath: the wind instruments, additive, in one AudioWorklet — see
+    // breath.js. The fallback is a filtered saw with a soft attack: a horn
+    // patch, not the model, never a silent track.
+    case "breath": {
+      const v = buildBreathVoice(output);
+      if (v) return v;
+      const f = new Tone.Filter({ type: "lowpass", frequency: 1800, Q: 1 }).connect(output);
+      const s = new Tone.PolySynth(Tone.Synth, {
+        oscillator: { type: "sawtooth" },
+        envelope: { attack: 0.04, decay: 0.1, sustain: 0.85, release: 0.12 },
+      });
+      s.volume.value = -10;
+      s.connect(f);
+      return {
+        nodes: [s, f],
+        trigger: (note, time, dur, vel) => s.triggerAttackRelease(Tone.Frequency(note, "midi"), dur, time, vel),
+        release: (time) => s.releaseAll(time),
+      };
+    }
     // Lancet: a snare synthesizer with seven models in one AudioWorklet — see
     // lancet.js. The fallback is the 808 snare, so a track is never silent.
     case "lancet": {
@@ -1454,6 +1474,7 @@ export class DrumSynthVoice {
                      ...SIEGE_NUM_KEYS, ...SIEGE_SEL_KEYS,
                      ...LADDER_NUM_KEYS, ...LADDER_SEL_KEYS,
                      ...ORACLE_NUM_KEYS, ...ORACLE_SEL_KEYS,
+                     ...BREATH_NUM_KEYS, ...BREATH_SEL_KEYS,
                      ...LANCET_NUM_KEYS, ...LANCET_SEL_KEYS,
                      ...HALO_NUM_KEYS, ...HALO_SEL_KEYS]) {
       if (this.params?.[k] != null) this.built.setParam(k, this.params[k]);

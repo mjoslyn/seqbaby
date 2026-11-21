@@ -877,7 +877,7 @@ export default function ManualPage() {
               <tbody>
                 <tr><td>plaits</td><td>Sixteen synthesis models from the Mutable Instruments Plaits oscillator: virtual analogue, FM, wavetable, granular, noise and physical models.</td></tr>
                 <tr><td>drum / synth</td><td>An 808 and 909 kit, a poly saw, an FM bell and a pad.</td></tr>
-                <tr><td>Emulators</td><td>The <a href="#silverbox">silverbox</a>, the <a href="#contagion">contagion</a>, the <a href="#hexop">hexop</a>, an <a href="#guitar">electric guitar and bass</a>, <a href="#subby">subby</a>, <a href="#vox">vox</a>, a singing voice, <a href="#siege">siege</a>, a bass drum synth, and <a href="#lancet">lancet</a>, a snare synthesizer, <a href="#halo">halo</a>, a cymbal synthesizer, the <a href="#ladder">ladder</a>, the transistor-ladder monosynth, and the oracle, the poly analog (two morphing VCOs with slop, a drive on the summed voices, a chorus). All of these are models, with no samples. There are also three voices in the spirit of classic hardware: snarl, drift and tines.</td></tr>
+                <tr><td>Emulators</td><td>The <a href="#silverbox">silverbox</a>, the <a href="#contagion">contagion</a>, the <a href="#hexop">hexop</a>, an <a href="#guitar">electric guitar and bass</a>, <a href="#subby">subby</a>, <a href="#vox">vox</a>, a singing voice, <a href="#siege">siege</a>, a bass drum synth, and <a href="#lancet">lancet</a>, a snare synthesizer, <a href="#halo">halo</a>, a cymbal synthesizer, the <a href="#ladder">ladder</a>, the transistor-ladder monosynth, <a href="#breath">breath</a>, the wind instruments, and the oracle, the poly analog (two morphing VCOs with slop, a drive on the summed voices, a chorus). All of these are models, with no samples. There are also three voices in the spirit of classic hardware: snarl, drift and tines.</td></tr>
                 <tr><td>texture</td><td>A granular engine that plays a sample as a cloud of tiny grains. Load your own, or pick from the bundled library of pads and drones.</td></tr>
                 <tr><td>wavetable</td><td>A wavetable synth with its own <a href="#wavetable">editor</a>.</td></tr>
                 <tr><td>instruments</td><td>Recorded instruments, a real note every few semitones: acoustic guitar, nylon guitar, sampled electric guitar and sampled electric bass. See <a href="#sampler">samples</a>.</td></tr>
@@ -1174,6 +1174,47 @@ export default function ManualPage() {
             <span className={styles.ui}>tone</span> dropdown loads a complete patch:
             the trap 808, a distorted one, a pure sine, a reese, an acid sub and a dub
             sub.
+          </p>
+        </section>
+
+        <section className={styles.section} id="breath">
+          <h2>Breath</h2>
+          <p>
+            The wind instruments: saxes, clarinets, oboes and bassoons, trumpets,
+            trombones, horns and tubas, flutes and pipes. Pick one from the
+            instrument dropdown and play it; everything below is for changing it.
+          </p>
+          <p>
+            A wind instrument is a breath, something the breath sets vibrating,
+            and a tube. The <strong>exciter</strong> select is the second of
+            those: a <em>reed</em> (saxes, clarinets, double reeds),{" "}
+            <em>lips</em> (all the brass) or a <em>jet</em> of air over an edge
+            (flutes). The body row is the tube: <em>bore</em> is a cylinder at the
+            bottom, which has no even harmonics low down and is the hollow sound
+            of a clarinet or a pan pipe, and a cone at the top; the two{" "}
+            <em>formants</em> are peaks that stay put while the notes move, and
+            where they sit is which instrument it is (230Hz a tuba, 500Hz a
+            trombone, 650Hz an alto sax, 1.2kHz a trumpet); <em>mute</em> is a
+            brass mute.
+          </p>
+          <p>
+            <strong>Velocity is how hard you blow</strong>, so it is loudness and
+            brightness together: a soft note is round and breathy, a hard one is
+            brilliant. <em>dynamics</em> sets how much. The four sliders are the{" "}
+            <em>tone</em>, the <em>air</em> you hear beside the note, the{" "}
+            <em>vibrato</em> depth and the <em>release</em>. In the breath row,{" "}
+            <em>tongue</em> is the difference between a ha and a ta,{" "}
+            <em>swell</em> lets a held note fall away or grow, <em>growl</em>{" "}
+            roughens it and <em>flutter</em> is a flutter tongue.
+          </p>
+          <p>
+            The pitch row is what a player does to a note: vibrato that arrives
+            late, a <em>scoop</em> up into the note, a <em>fall</em> off the end
+            of it. <strong>Tie a note into the next one and it is slurred</strong>:
+            no new attack, the pitch slides there. Set the mode to mono for a solo
+            line. <em>players</em> puts up to four on every note, a few cents and
+            a few milliseconds apart and spread across the stereo field: a horn
+            section from one track.
           </p>
         </section>
 
@@ -1929,6 +1970,7 @@ keys: chord("<Cm7 Ab^7 Fm7 G7>").voicing().s("tines").room(0.5)`}</div>
                 <tr><td>gm_acoustic_guitar_steel, acoustic_guitar</td><td>the sampled acoustic guitar</td></tr>
                 <tr><td>gm_electric_guitar_jazz, gm_electric_bass_pick</td><td>the sampled electric guitar and bass</td></tr>
                 <tr><td>guitar, pluck</td><td>electric guitar</td></tr>
+                <tr><td>sax, trumpet, trombone, tuba, horn, brass, clarinet, oboe, bassoon, flute, piccolo, recorder (and their gm_ names)</td><td>breath, with that instrument loaded</td></tr>
                 <tr><td>organ, strings, violin, choir</td><td>oracle</td></tr>
                 <tr><td>bell, glockenspiel, marimba, vibraphone, kalimba</td><td>fm bell</td></tr>
                 <tr><td>pad</td><td>pad</td></tr>

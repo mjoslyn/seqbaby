@@ -48,6 +48,7 @@ const EMULATORS = [
   ["halo", "cymbals: hats, rides, crashes, a gong, four different ways. choke it and a short step is a closed hat and a long one opens it."],
   ["siege", "a bass drum. a sine under a pitch envelope, with a wavefolder after the amp envelope, so the attack gets crushed and the tail stays clean."],
   ["tines", "an electric piano. a hammer, a tine and a tone bar, with chorus on the way out."],
+  ["breath", "wind instruments. a reed, lips or a jet of air into a tube with a body of its own: saxes, clarinets, trumpets, trombones, tubas, flutes. blow harder and it gets brighter. scoops, falls, growl, and a section of four players if one is not enough."],
   ["oracle", "a polyphonic analog synth. two oscillators that morph from triangle to pulse, a little out of tune with each other the way six voice cards are, a sub, noise, a drive on the summed voices, and a chorus."],
 ] as const;
 

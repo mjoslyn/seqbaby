@@ -75,6 +75,10 @@ site, sharing, the compose panel and the jam room. The two meet only through
     and six ranges, a mixer that overloads the filter, the 4-pole feedback
     ladder with the saturator in its loop, two contours, the mod wheel, drift,
     and a mono mode with low-note priority.
+  - **breath**: the wind instruments (saxes, clarinet, oboe, bassoon, trumpet,
+    trombone, french horn, tuba, flutes): a reed, lips or a jet, a body of two
+    formants, breath noise, scoops, falls, growl, and a section of up to four
+    players a note. Additive, so the pitch is exact and nothing aliases.
   - **oracle**: the poly analog after the Prophet-6: two morphing VCOs with
     slop, a sub, noise, an ADSR, a drive on the summed voices and a stereo
     chorus, six voices.
@@ -371,7 +375,7 @@ app/                         Next.js App Router: shell, auth, account UI, public
   songs/ people/ patches/    the explorers, their pure filter/sort modules, and the songs/patches actions
   manual/ superbugs/         the manual, and the bug page that opens a GitHub issue
   login/ settings/ u/[username]/ reset-password/   auth, settings (profile, avatar editor, patch manager), profiles
-  studioMarkup.ts            the engine's static DOM skeleton (hexop/guitar/.../oracle panels generated)
+  studioMarkup.ts            the engine's static DOM skeleton (hexop/guitar/.../oracle/breath panels generated)
   EngineScripts / EnginePreload / ScriptLoader / Preloader   engine boot
   AccountBar / SongsMenu / SaveButton / PatchBay / NewSongButton / VersionTree / LikeButton / RemixButton
   ComposeChat.tsx            the compose panel and its review bar

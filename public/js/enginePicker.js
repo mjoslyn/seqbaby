@@ -22,7 +22,7 @@
 // and switches the engine to the sampler (or granular) on the way, without the
 // source modal a plain engine pick opens.
 
-import { BUNDLED_SAMPLES, GRANULAR_SAMPLES, SAMPLE_KIT_LABELS, BASS_TONE_NAMES, DRONE_TONE_NAMES, GUITAR_TONE_NAMES, HEXOP_PRESET_NAMES, HALO_TONE_NAMES, LADDER_TONE_NAMES, LANCET_TONE_NAMES, ORACLE_TONE_NAMES, SIEGE_TONE_NAMES, SUB_TONE_NAMES, VOX_TONE_NAMES } from "./engineData.js";
+import { BUNDLED_SAMPLES, GRANULAR_SAMPLES, SAMPLE_KIT_LABELS, BASS_TONE_NAMES, BREATH_TONE_NAMES, DRONE_TONE_NAMES, GUITAR_TONE_NAMES, HEXOP_PRESET_NAMES, HALO_TONE_NAMES, LADDER_TONE_NAMES, LANCET_TONE_NAMES, ORACLE_TONE_NAMES, SIEGE_TONE_NAMES, SUB_TONE_NAMES, VOX_TONE_NAMES } from "./engineData.js";
 
 /** Engine key -> its presets, the track dropdown that applies them, and what
  *  the engine calls them. */
@@ -38,6 +38,7 @@ const PRESET_TABLES = {
   "dm:siege":    { noun: "kicks",   sel: ".sq-siege__tone",    names: SIEGE_TONE_NAMES },
   "dm:ladder":   { noun: "patches", sel: ".sq-ladder__tone",   names: LADDER_TONE_NAMES },
   "dm:oracle":   { noun: "patches", sel: ".sq-oracle__tone",   names: ORACLE_TONE_NAMES },
+  "dm:breath":   { noun: "instruments", sel: ".sq-breath__tone", names: BREATH_TONE_NAMES },
 };
 
 function currentLabel(sel) {

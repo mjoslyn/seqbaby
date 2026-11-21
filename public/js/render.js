@@ -14,6 +14,7 @@ import { LANCET_DEFAULTS, LANCET_NUM_KEYS, LANCET_SEL_KEYS, LANCET_TONE_NAMES, l
 import { HALO_DEFAULTS, HALO_NUM_KEYS, HALO_SEL_KEYS, HALO_TONE_NAMES, haloModelTip, haloTone, haloToneDescription } from "./halo.js";
 import { SIEGE_DEFAULTS, SIEGE_NUM_KEYS, SIEGE_SEL_KEYS, SIEGE_TONE_NAMES, siegeTone, siegeToneDescription } from "./siege.js";
 import { LADDER_DEFAULTS, LADDER_NUM_KEYS, LADDER_SEL_KEYS, LADDER_TONE_NAMES, ladderTone, ladderToneDescription } from "./ladder.js";
+import { BREATH_DEFAULTS, BREATH_KIND_TIPS, BREATH_NUM_KEYS, BREATH_SEL_KEYS, BREATH_TONE_NAMES, breathTone, breathToneDescription } from "./engineData.js";
 import { ORACLE_DEFAULTS, ORACLE_NUM_KEYS, ORACLE_SEL_KEYS, ORACLE_TONE_NAMES, oracleTone, oracleToneDescription } from "./oracle.js";
 import { euclideanRhythm, refreshEuclidUI, renderEuclidPanel, wireEuclidPanel } from "./euclid.js";
 import { refreshChanceUI, renderChancePanel, wireChancePanel } from "./chance.js";
@@ -225,6 +226,7 @@ export function syncTrackSoundUI(t) {
                    ...SIEGE_NUM_KEYS, ...SIEGE_SEL_KEYS,
                    ...LADDER_NUM_KEYS, ...LADDER_SEL_KEYS,
                    ...ORACLE_NUM_KEYS, ...ORACLE_SEL_KEYS,
+                   ...BREATH_NUM_KEYS, ...BREATH_SEL_KEYS,
                    ...LANCET_NUM_KEYS, ...LANCET_SEL_KEYS,
                    ...HALO_NUM_KEYS, ...HALO_SEL_KEYS]) {
     const el = q(`.p-${k}`);
@@ -395,6 +397,25 @@ export function syncLancetPanel(t) {
   const root = t._lancetGroupEl || t.el?.querySelector(".sq-param-group--lancet");
   if (root) {
     for (const k of [...LANCET_NUM_KEYS, ...LANCET_SEL_KEYS]) {
+      const el = root.querySelector(`.p-${k}`);
+      if (el && t.params[k] != null) el.value = t.params[k];
+    }
+  }
+  const timbre = t._timbreGroupEl || t.el;
+  for (const k of ["harm", "timb", "morph", "decay"]) {
+    const el = timbre?.querySelector(`.p-${k}`);
+    if (el && t.params[k] != null) el.value = t.params[k];
+  }
+}
+
+/**
+ * The same, for the breath's panel.
+ * @param {Track} t
+ */
+export function syncBreathPanel(t) {
+  const root = t._breathGroupEl || t.el?.querySelector(".sq-param-group--breath");
+  if (root) {
+    for (const k of [...BREATH_NUM_KEYS, ...BREATH_SEL_KEYS]) {
       const el = root.querySelector(`.p-${k}`);
       if (el && t.params[k] != null) el.value = t.params[k];
     }
@@ -847,6 +868,20 @@ export function renderTrack(t) {
     const el = node.querySelector(`.p-${k}`);
     if (el) el.value = t.params[k] ?? SIEGE_DEFAULTS[k];
   }
+  const breathToneSel = node.querySelector(".sq-breath__tone");
+  if (breathToneSel && !breathToneSel.options.length) {
+    for (const name of ["", ...BREATH_TONE_NAMES]) {
+      const o = document.createElement("option");
+      o.value = name;
+      o.textContent = name || "— instrument —";
+      o.title = breathToneDescription(name);
+      breathToneSel.appendChild(o);
+    }
+  }
+  for (const k of [...BREATH_NUM_KEYS, ...BREATH_SEL_KEYS]) {
+    const el = node.querySelector(`.p-${k}`);
+    if (el) el.value = t.params[k] ?? BREATH_DEFAULTS[k];
+  }
   const oracleToneSel = node.querySelector(".sq-oracle__tone");
   if (oracleToneSel && !oracleToneSel.options.length) {
     for (const name of ["", ...ORACLE_TONE_NAMES]) {
@@ -1160,6 +1195,30 @@ export function renderTrack(t) {
       setStatus(`siege "${name}" — ${siegeToneDescription(name)}`);
     });
   }
+  // The breath: the body, the breath, the pitch, the section, the exciter
+  // (the status line says what it is) and the instruments.
+  for (const k of BREATH_NUM_KEYS) {
+    const el = node.querySelector(`.p-${k}`);
+    if (el) el.addEventListener("input", e => setParam(t, k, Number(e.target.value)));
+  }
+  for (const k of BREATH_SEL_KEYS) {
+    const el = node.querySelector(`.p-${k}`);
+    if (el) el.addEventListener("change", e => {
+      setParam(t, k, e.target.value);
+      if (k === "brtkind") setStatus(`breath ${e.target.value} — ${BREATH_KIND_TIPS[e.target.value] ?? ""}`);
+    });
+  }
+  if (breathToneSel) {
+    breathToneSel.addEventListener("change", e => {
+      const name = e.target.value;
+      const tone = breathTone(name);
+      if (!tone) return;
+      for (const [key, val] of Object.entries(tone)) setParam(t, key, val);
+      syncBreathPanel(t);
+      refreshParamIndicators(t);
+      setStatus(`breath "${name}" — ${breathToneDescription(name)}`);
+    });
+  }
   // The oracle: VCO 1's shape, the widths, slop, chorus, the envelope, and
   // the patches.
   for (const k of ORACLE_NUM_KEYS) {
@@ -1448,6 +1507,7 @@ export function renderTrack(t) {
   t._haloGroupEl      = node.querySelector(".sq-param-group--halo");
   t._siegeGroupEl     = node.querySelector(".sq-param-group--siege");
   t._oracleGroupEl    = node.querySelector(".sq-param-group--oracle");
+  t._breathGroupEl    = node.querySelector(".sq-param-group--breath");
   t._granGroupEl    = node.querySelector(".sq-param-group--granular");
 
   // Everything above can be reparented out of the track (panels into their
@@ -1460,7 +1520,7 @@ export function renderTrack(t) {
                     t._timbreGroupEl, t._oscMixGroupEl, t._oscModGroupEl,
                     t._ladderOscGroupEl, t._silverboxGroupEl, t._contagionGroupEl,
                     t._hexopGroupEl, t._guitarGroupEl, t._bassGroupEl, t._subGroupEl,
-                    t._droneGroupEl, t._voxGroupEl, t._lancetGroupEl, t._haloGroupEl, t._siegeGroupEl, t._oracleGroupEl, t._granGroupEl]) {
+                    t._droneGroupEl, t._voxGroupEl, t._lancetGroupEl, t._haloGroupEl, t._siegeGroupEl, t._oracleGroupEl, t._breathGroupEl, t._granGroupEl]) {
     if (el) el.dataset.trackId = String(t.id);
   }
 

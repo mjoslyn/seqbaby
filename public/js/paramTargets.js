@@ -11,6 +11,7 @@ import { HALO_MOD_KEYS, HALO_MOD_LABELS } from "./halo.js";
 import { SIEGE_MOD_KEYS, SIEGE_MOD_LABELS } from "./siege.js";
 import { LADDER_MOD_KEYS, LADDER_MOD_LABELS } from "./ladder.js";
 import { ORACLE_MOD_KEYS, ORACLE_MOD_LABELS } from "./oracle.js";
+import { BREATH_MOD_KEYS, BREATH_MOD_LABELS } from "./engineData.js";
 import { GUITAR_MOD_KEYS, GUITAR_MOD_LABELS } from "./guitar.js";
 import { CHANCE_MOD_KEYS, CHANCE_MOD_LABELS } from "./chanceGen.js";
 import { PRISM_KNOBS, PRISM_KNOB_LABELS, REPEAT_KNOBS, REPEAT_KNOB_LABELS } from "./soundDefaults.js";
@@ -88,6 +89,8 @@ for (const k of SIEGE_MOD_KEYS) def(`p-sge${k}`, `siege_${k}`, `siege.${k}`);
 for (const k of LADDER_MOD_KEYS) def(`p-ldr${k}`, `ladder_${k}`, `ladder.${k}`);
 // ...and osc 2 / 3's detune, whose controls keep the bank's unprefixed class.
 for (const k of ["osc2freq", "osc3freq"]) def(`p-${k}`, `ladder_${k}`, `ladder.${k}`);
+// The breath — likewise, `p-brt*`.
+for (const k of BREATH_MOD_KEYS) def(`p-brt${k}`, `breath_${k}`, `breath.${k}`);
 // The oracle — likewise, `p-orc*`.
 for (const k of ORACLE_MOD_KEYS) def(`p-orc${k}`, `oracle_${k}`, `oracle.${k}`);
 // Euclid's three counts — one list, three namespaces, as in hexop.js.
@@ -357,6 +360,8 @@ export const CONTROL_LABELS = {
   "p-osc2freq": LADDER_MOD_LABELS.osc2freq, "p-osc3freq": LADDER_MOD_LABELS.osc3freq,
   ...Object.fromEntries(ORACLE_MOD_KEYS.map(k => [`p-orc${k}`, ORACLE_MOD_LABELS[k]])),
   "sq-oracle__tone": "oracle patch",
+  ...Object.fromEntries(BREATH_MOD_KEYS.map(k => [`p-brt${k}`, BREATH_MOD_LABELS[k]])),
+  "p-brtkind": "breath exciter", "p-brtmode": "poly or mono", "sq-breath__tone": "breath instrument",
   "p-ldrkbd": "keyboard tracking", "p-ldrosc3kbd": "osc 3 keyboard control", "p-ldroscmod": "oscillator modulation",
   "p-ldrfiltmod": "filter modulation", "p-ldrdecsw": "decay switch", "p-ldrmode": "poly or mono", "sq-ladder__tone": "ladder patch",
   "p-bsamp": "bass amp", "p-bscab": "bass cabinet",

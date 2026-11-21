@@ -93,7 +93,7 @@ settings that make it sound played, and what makes it sound cheap) and a
   `inst:guitar-nylon`, `inst:guitar-electric`, `inst:bass-electric`.
 - **modelled**: `dm:guitar`, `dm:bass`, `dm:vox`, `plaits:11`. Played
   instruments; use their hand controls (ghost notes, ties, vibrato, finger
-  noise).
+  noise). `dm:breath` is every wind instrument (below).
 - **analog**: `dm:oracle`, `dm:ladder`, `dm:contagion`, `dm:drift`,
   `dm:silverbox`, `dm:sub`, `dm:snarl`. Synths with drift, filters and
   envelopes of their own: the default for any synth part.
@@ -187,10 +187,28 @@ keys", "unison bass", "glass", "dirty stab"), `wt:akwf` (wavetable), `plaits:6` 
 chord, harm picks which). `dm:contagion` with unison for supersaw stabs (`dm:poly-saw` is a bare saw). Put a chord on
 the step (`set_step` chord "min7") on any poly engine.
 
+Horns and winds: `dm:breath`, always from a preset (`apply_preset`): "alto
+sax", "tenor sax", "bari sax", "soprano sax", "growl sax", "subtone sax",
+"clarinet", "bass clarinet", "oboe", "bassoon", "trumpet", "muted trumpet",
+"flugelhorn", "french horn", "trombone", "tuba", "flute", "piccolo",
+"breathy flute", "pan flute", "recorder", "shakuhachi", "bottle", and the
+sections "brass section", "sax section", "low brass", "horn stabs" (four
+players a note, the stabs with a fall). Velocity is the blowing pressure:
+loudness AND brightness, so a line at one velocity is the tell; accent the
+top of a phrase (X), ghost the pickups (o). A tie (`_`) into the next note
+slurs it (no new attack), which is how a sax line breathes: tongue the first
+note of a phrase, slur inside it, rest at the end. Write each instrument in
+its range (tuba and bari sax C1..C3, trombone and tenor E2..C5, trumpet and
+alto G3..C6, flute C4..C7). Section stabs are short chords on the offbeats
+with a rest after; a tuba or bari sax can be the bass. Knobs worth knowing:
+`brtscoop` (jazz and soul leads 0.3..0.5), `brtfall` (0.3 on stabs),
+`brtgrowl` (rock and roll sax), `brtplayers` 1..4, `brtmode` "mono" for a
+solo line with `set_track` glide. A little reverb on a bus; no chorus.
+
 Leads and hooks, first choices: `dm:ladder` (a singing mono lead with
 glide; start from a preset, keep it between C3 and C5, mono, `ldrmod`
 under about 0.1: a deep wheel or octave 5 is a toy whistle), `dm:oracle`
-(warm poly leads), `dm:vox` (a sung hook), `dm:guitar`
+(warm poly leads), `dm:breath` (a sax, trumpet or flute lead), `dm:vox` (a sung hook), `dm:guitar`
 and the `inst:` guitars, `dm:hexop` with a preset. Then, when the genre wants
 something more digital: `plaits:11` (string, plucked), `plaits:1`
 (waveshaping: timb folds, morph skews), `plaits:2` (fm), `plaits:4`
@@ -511,7 +529,7 @@ against these before validating it:
   drums; nudge a few notes off the grid (a late snare, an early pickup) on
   top of the swing; hold notes for their real length and leave rests at
   phrase ends; reach for sources with a body (the sampler's acoustic kits,
-  `inst:` guitars and bass, dm:guitar, dm:bass, dm:tines, dm:vox, oracle
+  `inst:` guitars and bass, dm:guitar, dm:bass, dm:tines, dm:vox, dm:breath, oracle
   and contagion over plaits:0); shape every oscillator (a filter model, a
   little saturation, chorus, cassette or vinyl where the genre is warm);
   and put the parts in one room with a shared reverb or delay on a bus.
