@@ -710,6 +710,18 @@ button.sq-btn--danger { color: var(--danger); }
   border-bottom: 1px solid var(--border);
   align-items: center;
 }
+/* Pinned under the transport on desktop (the groove view is the only one that
+   shows it), so the pattern slots stay in reach however far down the tracks
+   you are. The offset is the bar's and the transport's measured heights
+   (AccountBar.tsx, viewSplit.js). Below the transport's z-index, so a
+   transport popover still opens over it. On a phone the bar is hidden. */
+@media (min-width: 769px) {
+  .sq-pattern-bar {
+    position: sticky;
+    top: calc(var(--sq-topbar-h, 0px) + var(--sq-transport-h, 0px));
+    z-index: 9;
+  }
+}
 .sq-pattern__grid {
   display: grid;
   grid-template-columns: repeat(16, minmax(0, 1fr));
@@ -756,6 +768,8 @@ button.sq-btn--danger { color: var(--danger); }
 /* Undo / redo sit as a pair — closer to each other than to anything else in the
    transport, so the two read as one control with two directions. */
 .sq-history { display: inline-flex; align-items: center; gap: 2px; }
+/* At the end of the note row on desktop (studioMarkup.ts). */
+.sq-transport__kbd-row > .sq-history { margin-left: auto; }
 #undo:disabled, #redo:disabled { opacity: 0.3; cursor: not-allowed; }
 /* The dice button doubles as the density control: it fills from the bottom to
    show how full the next roll will be, and drags up/down to set it. */
@@ -3443,7 +3457,7 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not
      "C4" in the middle of the transport that nothing on a phone could change or
      act on. It is a sibling of #kbd-chord rather than inside it, so the modal
      does not carry it along. */
-  #kbd-label, #kbd-record, #kbd-capture, #kbd-icon, #vim-toggle,
+  #kbd-label, #kbd-record, #kbd-capture, #kbd-icon, #vim-toggle, #code-btn,
   #kbd-octave { display: none !important; }
   .sq-transport #kbd-chord, .sq-transport #kbd-arp { display: none !important; }
   .sq-transport .sq-logo { padding-right: 4px; gap: 6px; }
@@ -3486,12 +3500,14 @@ label[data-motion]:not(.sq-fx__ctl):not(.sq-contagion__f):not(.sq-guitar__f):not
      basis, ordered in front of the group, which (with the clock and the meter
      after it) then always starts a line of its own. */
   .sq-transport::before { content: ""; flex: 0 0 100%; height: 0; order: 1; }
-  .sq-transport .sq-history,
+  /* Undo / redo sit in the note row in the markup, after the others, so they
+     are ordered ahead of them explicitly: first in the group. */
+  .sq-transport .sq-history { order: 1; margin-left: 0; }
   .sq-transport #chord-menu-btn,
-  .sq-transport__right > * { order: 1; }
+  .sq-transport__right > * { order: 2; }
   /* Macro sits in the main cluster, ahead of the others in the markup, so it
      is ordered after them explicitly: last in the group, after session. */
-  .sq-transport #macro-pads { order: 2; }
+  .sq-transport #macro-pads { order: 3; }
   .sq-transport .sq-history button,
   .sq-transport #chord-menu-btn,
   .sq-transport #metronome,

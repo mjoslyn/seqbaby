@@ -11,7 +11,7 @@ import { upgradeKnobs } from "./knob.js";
 import { startModMotion } from "./modMotion.js";
 import { openMacroPads } from "./macro.js";
 import { installCodePanel } from "./codePanel.js";
-import { installViews, isMobileLayout } from "./views.js";
+import { installViews } from "./views.js";
 import { installClipView } from "./clipView.js";
 import { installArrangeView } from "./arrangeView.js";
 import { installPianoView } from "./pianoView.js";
@@ -26,7 +26,7 @@ import { activeMeter, redetectDrumKit, stepsPerBarForMeter } from "./meter.js";
 import { meterTick } from "./meters.js";
 import { setEngineKey } from "./params.js";
 import { installParamContextMenu } from "./paramMenu.js";
-import { copyPattern, installRepeatMeter, nextPatternMode, openPatternMenu, renderPatternGrid, setPatternMeter, setPatternMode, syncPatternModeUI } from "./patternBar.js";
+import { copyPattern, installRepeatMeter, openPatternMenu, renderPatternGrid, setPatternMeter, setPatternMode, syncPatternModeUI } from "./patternBar.js";
 import { attachLevelDrag, setActiveTrack } from "./render.js";
 import { initScaleUI, openChordMenu, syncChordUI } from "./scaleUI.js";
 import { inJam, jamTogglePlay } from "./jam.js";
@@ -789,14 +789,12 @@ export function init() {
 
   const modeBtn = document.getElementById("pattern-mode");
   syncPatternModeUI();
-  // repeat → chain → arrange → repeat (patternBar.js draws it). On a phone the
-  // arrangement view does not exist, so blocks can be neither seen nor made
-  // there: with none in the song, arrange would put every track in a gap and
-  // play silence, so the phone's cycle skips it. A song that already has
-  // blocks still plays them.
+  // repeat ↔ chain (patternBar.js draws it). The bar is the groove view's,
+  // and arrange mode belongs to the arrangement view (play there switches to
+  // it, followView in transport.js), so this button never cycles into it; a
+  // song left in arrange mode goes back to repeat.
   modeBtn.addEventListener("click", () => {
-    let next = nextPatternMode(state.patternMode);
-    if (next === "arrange" && isMobileLayout() && !state.tracks.some(t => t.arrangement?.length)) next = nextPatternMode(next);
+    const next = state.patternMode === "repeat" ? "chain" : "repeat";
     setPatternMode(next);
   });
   const switchBtn = document.getElementById("pattern-switch");

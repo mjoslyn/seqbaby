@@ -642,13 +642,6 @@ export const STUDIO_BODY = String.raw`
          the song without stopping the transport. -->
     <button id="code-btn" class="sq-btn--ghost" type="button" aria-pressed="false" title="live code: write Strudel patterns, ctrl/⌘ enter runs them into the song"><span class="sq-btn__label">code</span></button>
     <button id="vim-toggle" class="sq-btn--ghost" type="button" aria-pressed="false" title="vim mode (\`): hjkl move, i insert, a play, v select, : commands">vim</button>
-    <!-- Undo / redo. Wired and painted by history.js, which also owns the
-         ctrl/cmd-Z keys; they ship disabled because at boot there is nothing
-         behind them yet. -->
-    <span class="sq-history">
-      <button id="undo" class="sq-btn--ghost sq-icon-btn" data-label="undo" type="button" aria-label="undo" title="nothing to undo (ctrl/⌘ Z)" disabled></button>
-      <button id="redo" class="sq-btn--ghost sq-icon-btn" data-label="redo" type="button" aria-label="redo" title="nothing to redo (ctrl/⌘ shift Z)" disabled></button>
-    </span>
     <!-- Mobile only: the scale row and the chord cluster are hidden below 768px
          and this button hosts both in one modal (openChordMenu). Chord mode is
          not only a keyboard feature (a tapped step takes the chord too, see
@@ -742,6 +735,15 @@ export const STUDIO_BODY = String.raw`
       </span>
     </div>
     <div id="status" class="sq-status sq-status--bar">click play to unlock audio</div>
+    <!-- Undo / redo. Wired and painted by history.js, which also owns the
+         ctrl/cmd-Z keys; they ship disabled because at boot there is nothing
+         behind them yet. On desktop they sit at the end of the note row
+         (scale, chord); on a phone the row dissolves and order puts them
+         first in the icon-button group. -->
+    <span class="sq-history">
+      <button id="undo" class="sq-btn--ghost sq-icon-btn" data-label="undo" type="button" aria-label="undo" title="nothing to undo (ctrl/⌘ Z)" disabled></button>
+      <button id="redo" class="sq-btn--ghost sq-icon-btn" data-label="redo" type="button" aria-label="redo" title="nothing to redo (ctrl/⌘ shift Z)" disabled></button>
+    </span>
     </div><!-- /sq-transport__kbd-row -->
   </header>
 

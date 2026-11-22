@@ -407,6 +407,7 @@ export async function stopPlayback() {
   state.barTick = 0;
   for (const t of state.tracks) { t.trackTick = 0; t.speedAccum = 0; }
   window.dispatchEvent(new CustomEvent("seqbaby:transport"));   // the views' play buttons follow
+  syncWakeLock();
   clearQueuedClips();
   state._arrJump = null;                              // a clip waiting for a bar that will not come
   setArrangeRecord(false);                         // recording stops with the transport, and the take lands
@@ -837,6 +838,7 @@ export async function startPlayback(opts = {}) {
   btn.textContent = "stop";
   btn.classList.add("is-playing");
   window.dispatchEvent(new CustomEvent("seqbaby:transport"));   // the views' play buttons follow
+  syncWakeLock();
   setStatus("playing");
 }
 
@@ -863,3 +865,32 @@ export function noteForStep(t, idx, fallback) {
 
 // ---- prompting ---------------------------------------------------------
 
+
+// ---- screen wake lock ----------------------------------------------------
+// A phone dims and sleeps after its timeout whatever is playing, and asleep
+// the audio stops. While the transport runs the screen is held on with the
+// Screen Wake Lock API; stopping lets it go. The browser drops a lock on its
+// own when the page is hidden, so it is asked for again on coming back.
+// Unsupported browsers, or a refusal (low battery mode), just sleep as before.
+let wakeLock = null;
+let wakeWatch = false;
+function syncWakeLock() {
+  if (!("wakeLock" in navigator)) return;
+  if (!wakeWatch) {
+    wakeWatch = true;
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") syncWakeLock();
+    });
+  }
+  if (state.playing && document.visibilityState === "visible") {
+    if (wakeLock && !wakeLock.released) return;
+    navigator.wakeLock.request("screen").then((lock) => {
+      if (!state.playing) { lock.release().catch(() => {}); return; }
+      wakeLock = lock;
+    }).catch(() => {});
+  } else if (!state.playing && wakeLock) {
+    const lock = wakeLock;
+    wakeLock = null;
+    lock.release().catch(() => {});
+  }
+}

@@ -2718,7 +2718,7 @@ block   t.arrangement[i]    ─── { slot, start, bars }: a clip at a bar, fo
   pure for `chanceGen.js`'s reasons and the song builder validates an
   agent's blocks through it (`setBlocks`, MCP `set_blocks`).
 - **Arrange mode is the third pattern mode.** `patternMode === "arrange"`
-  (the pattern bar's button cycles repeat → chain → arrange, `setPatternMode`
+  (the pattern bar's button toggles repeat ↔ chain only, arrange belonging to the arrangement view; `setPatternMode`
   in patternBar.js is the one place the button is drawn, and the three
   places that used to coerce the mode to two values — `applySet`,
   `applyGlobalsInPlace`, the builder — pass it through, since any one of
