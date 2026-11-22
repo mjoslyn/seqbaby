@@ -37,12 +37,10 @@
  * (see `--knob-v` / `--knob-a` below), which is why a rack that reads badly as
  * dials can become bars without touching this file.
  *
- * And on a phone it does: style.css draws every knob as a vertical slider
- * there (the KNOBS ON A PHONE block). The one thing this file does about it is
- * measure the dial when a drag starts and, finding it taller than wide, take
- * its height as the travel — so the thumb follows the finger 1:1 and the
- * control feels like the slider it looks like, rather than a dial that
- * happens to be drawn as a bar. The drag stays relative for the reason above.
+ * The mix view's faders do: style.css draws them as vertical bars. The one
+ * thing this file does about it is measure the dial when a drag starts and,
+ * finding it taller than wide, take its height as the travel, so the thumb
+ * follows the pointer 1:1. The drag stays relative for the reason above.
  *
  * A finger is not a small mouse, and three things here are decided by which one
  * is driving (`drag.touchLike`):
@@ -71,7 +69,7 @@
 const KNOB_EXCLUDE = ".sq-wt__harm-bar, .sq-chance__pc, .sq-track__eq-panel input[type=range], .sq-mix__xfade, .sq-mix__tempo-x";
 
 /** Pixels of vertical drag for the full range at normal resolution, on a dial.
- *  A slider (the phone skin) uses its own drawn height instead — `travelFor`. */
+ *  A slider (the mix faders) uses its own drawn height instead — `travelFor`. */
 const PX_FULL_TRAVEL = 140;
 /** Horizontal distance at which resolution has halved (see `fineFactor`). */
 const PX_FINE_FALLOFF = 90;
@@ -83,7 +81,7 @@ const FINE_SHIFT = 0.15;
 const LONG_PRESS_MS = 500;
 /** Movement over this many px cancels a long press and counts as a drag — and,
  *  on touch, is the dead zone the value stays still inside. A finger resting on
- *  a control is never still, and the phone skin puts the whole range in 72px,
+ *  a control is never still, and on a small control a few pixels are a step,
  *  so without it a press meant as a long press had already retuned the
  *  parameter by the time the menu opened. */
 const LONG_PRESS_SLOP = 8;
@@ -307,8 +305,7 @@ function attachDrag(input) {
       travel: travelFor(input),
       moved: false,
       // Whether this gesture has written anything. Distance alone is not that
-      // question: the phone skin maps the whole range onto a 72px bar, so a
-      // two-pixel wobble is already a couple of steps of value.
+      // question: a finger's two-pixel wobble can already be a step of value.
       changed: false,
       // A finger rather than a mouse, which changes two things: the value is
       // held still until the gesture has cleared the slop (see `onMove`), and
@@ -408,8 +405,7 @@ function attachDrag(input) {
     // drag for the value, long press for the parameter menu, where the reset
     // now lives as a button you can read.
     if (!adjusted && drag.isDouble && !drag.touchLike) {
-      // A control drawn as a vertical slider (the mix view's faders, and
-      // every knob under the phone skin) takes the other meaning of a double
+      // A control drawn as a vertical slider (the mix view's faders) takes the other meaning of a double
       // click: go to where it was clicked, at once. A slider has a position
       // to click; a dial does not, so a dial goes back to its default.
       const r = k.dial.getBoundingClientRect();
@@ -482,9 +478,6 @@ function upgradeOne(input) {
   // A control that runs through zero reads from twelve o'clock — the silverbox's
   // tuning and the hexop's pitch envelope are the whole point of the variant.
   if (min < 0 && max > 0) wrap.dataset.bipolar = "1";
-  // `data-knob-shape="dial"` keeps a knob a dial on a phone too (style.css's
-  // phone skin skips `.sq-knob--dial`): the transport's swing, beside play.
-  if (input.dataset.knobShape === "dial") wrap.classList.add("sq-knob--dial");
   const dial = document.createElement("span");
   dial.className = "sq-knob__dial";
   dial.setAttribute("aria-hidden", "true");

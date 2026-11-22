@@ -3056,12 +3056,12 @@ deck B tracks ─▶ deck B bus ─┘              buses' output gains
   finish switch.
 - **A double-click on a strip's fader puts it where it was clicked**
   (knob.js's double-tap branch: any control drawn as a vertical slider, the
-  mix faders and every knob under the phone skin, jumps to the click; a dial
+  mix faders, jumps to the click; a dial
   has no position to click and still resets to its default): a drag is still relative, so this is the way to go
   straight to a level. The crossfader and the tempo are native sliders,
   where a single click already does that.
 - **The strips are skins.** A fader is a range input (knob.js's wrapper drawn
-  as a vertical bar, the phone skin's CSS) whose `input` writes the track's
+  as a vertical bar in style.css) whose `input` writes the track's
   own `.p-vol` and dispatches ITS `input`; pan is `.fx-pan-pos`, a deck bus's
   tone is `.p-eq-high / mid / low` and `.p-cutoff`. Mute and solo `.click()`
   the track's own buttons. The strips read the real controls back on the
@@ -3526,16 +3526,14 @@ it; the input is still the value, the focus target and the pointer target.
   layout has gone mobile** even when the dial is drawn smaller — keyed on
   `(any-pointer: coarse), (max-width: 768px)`, because a touchscreen laptop and
   a phone-width layout both need fingers' room.
-- **On a phone every knob is a vertical slider** (the KNOBS ON A PHONE block in
-  style.css, keyed on `(pointer: coarse), (max-width: 768px)` — the PRIMARY
-  pointer, so a touchscreen laptop keeps its dials). Same wrapper, same
-  `--knob-v`; `--knob-len` is the bar's height (72px, shorter in the hexop grid
-  and the transport) and `--knob-bar` the drawn track's width. knob.js's one
-  concession is `travelFor`: it measures the dial at the start of a drag and,
-  finding it taller than wide, takes its height as the full-range travel, so the
-  thumb follows the finger 1:1. The drag is still relative — a slider that
-  jumped to the touch would be the native range's fault all over again — and
-  the horizontal fine-trim, long-press and double-tap are unchanged.
+- **On a phone every knob is a dial, as on desktop**, the track's vol and
+  the transport's bpm (`#bpm-dial`, phone only, mirroring the hidden `#bpm`
+  field through a shadowed value accessor in main.js) and swing included.
+  They were vertical sliders while the knobs were packed into the track card;
+  with the sound panels in modals there is room for a dial, whose 140px of
+  drag travel is finer than a 72px bar's. Only the mix view's faders are
+  drawn as bars, and `travelFor` takes a taller-than-wide dial's height as its
+  travel for them.
 - `KNOB_EXCLUDE` keeps the wavetable's 16 harmonic bars as sliders: side by side
   they *are* the waveform, and a row of little dials would say nothing.
 - Called from `renderTrack`, from every modal that builds controls
