@@ -1012,3 +1012,14 @@ a.bylineLike { text-decoration: none; }
 .jamNameRow { display: flex; align-items: center; gap: 8px; }
 .jamNameRow .saveInput { flex: 1; }
 .jamActions { display: flex; gap: 6px; justify-content: flex-end; }
+
+/* The homescreen app on iOS. layout.tsx asks for an opaque status bar, but
+   iOS reads that once, when the app is added to the home screen: an app
+   added while it was translucent keeps running the page under the status
+   bar, with a dark fade under the clock that reaches about 40pt past the
+   safe-area inset and dimmed the menu. So under a status bar (an inset above
+   0) the bar's buttons go below the fade too; with the opaque bar the inset
+   is 0 and nothing changes. */
+@media (display-mode: standalone) {
+  .topBar { padding-top: max(6px, calc(env(safe-area-inset-top) + min(env(safe-area-inset-top), 40px))); }
+}
